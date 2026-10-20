@@ -12,8 +12,13 @@ import { IslandPrefsSchema } from './island.js';
 import { ProjectsSchema } from './projects.js';
 import { ThreadItemSchema } from './thread.js';
 import { DecisionSchema, NOTE_MAX } from './decisions.js';
+import { MobileStateSchema, RelayUrlSchema } from './mobile.js';
 
 export const PROTOCOL_PORT = 47831;
+
+/** Why the daemon refused a front's command. Travels as the `code` of an `error`, which stays a free string so that an older front ignores a new one. */
+export const RefusalCodeSchema = z.enum(['stale', 'read_only', 'no_prompt', 'not_taken', 'busy', 'unknown_session', 'nothing_to_decide', 'not_offered', 'free_text', 'note_not_typed', 'unavailable', 'invalid']);
+export type RefusalCode = z.infer<typeof RefusalCodeSchema>;
 
 export const SessionEventSchema = z.object({
   name: z.enum(['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'Notification', 'Stop', 'SessionEnd', 'PaneChanged', 'PaneGone', 'PanePrompt', 'PaneIdle', 'InjectFailed', 'Decided', 'PostToolUse', 'PostToolUseFailure', 'StopFailure', 'SubagentStart', 'SubagentStop', 'PaneTitle', 'Renamed', 'NativeRequest', 'AgentMessage', 'QueueUpdate']),
@@ -71,7 +76,7 @@ export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(
   /** Takes `model` and `effort` on `session.launch` and answers `models.list` (#58). */ models: z.boolean().optional(),
   /** Drives OMP over its RPC: launching `omp` sessions is possible when the binary is there (`models.list` says so). */ omp: z.boolean().optional(),
   /** Takes `session.model`: a live session's model and effort changed (#58, lot 2). */ modelSwitch: z.boolean().optional(),
-  /** Its home folder, so a client shows the folders under it as `~` (absent from older daemons). */ home: z.string().optional() });
+  /** Its home folder, so a client shows the folders under it as `~` (absent from older daemons). */ home: z.string().optional(), mobile: z.boolean().optional() });
 export type DaemonInfo = z.infer<typeof DaemonInfoSchema>;
 export const UpdateFailureSchema = z.enum(['git-install', 'no-systemd', 'sessions-at-risk', 'npm-failed', 'busy']);
 export type UpdateFailure = z.infer<typeof UpdateFailureSchema>;
@@ -120,6 +125,8 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('projects'), projects: ProjectsSchema }),
   /** The island's settings shared by the local fronts; null until a front sets them (the island then sends its own). Local clients only. */
   z.object({ type: z.literal('island'), prefs: IslandPrefsSchema.nullable() }),
+  /** Mobile access (lot 3), after the island in each snapshot and on every change. Local clients only. */
+  z.object({ type: z.literal('mobile'), state: MobileStateSchema }),
   /** The daemon's immediate answer to a `session.message`: delivered (`accepted`), held for later (`queued`), left to Claude's own SendMessage (`native`), or refused with a `reason`. */
   z.object({ type: z.literal('message.ack'), rid: z.string(), outcome: z.enum(['accepted', 'queued', 'native', 'refused']), reason: z.string().optional() }),
   z.object({ type: z.literal('error'), message: z.string(), id: z.string().optional(), /** Le type du message client refusé. */ request: z.string().optional(),
@@ -208,10 +215,23 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('projects.set'), projects: ProjectsSchema }),
   /** Replaces the island's settings as a whole; refused unless valid. */
   z.object({ type: z.literal('island.set'), prefs: IslandPrefsSchema }),
+  /** Mobile access (lot 3), local fronts only. A changed `relayUrl` drops the relay session. */
+  z.object({ type: z.literal('mobile.set'), enabled: z.boolean(), relayUrl: RelayUrlSchema }),
+  z.object({ type: z.literal('mobile.signin') }),
+  z.object({ type: z.literal('mobile.signin.cancel') }),
+  z.object({ type: z.literal('mobile.signout') }),
+  /** While the link is offline: try again now. */
+  z.object({ type: z.literal('mobile.retry') }),
+  z.object({ type: z.literal('mobile.pairing.approve'), id: z.string().min(1).max(100) }),
+  z.object({ type: z.literal('mobile.pairing.deny'), id: z.string().min(1).max(100) }),
+  /** `id`: the device's fingerprint. */
+  z.object({ type: z.literal('mobile.device.revoke'), id: z.string().min(1).max(100) }),
   /** One session writing to another by Ledge name (`to` may end in ` [ref]`); `intercept` (the Claude hook): answer `native` unless `to` is a live non-Claude session. */
   z.object({ type: z.literal('session.message'), rid: z.string().min(1), from: z.string().min(1), to: z.string().min(1), text: z.string().min(1).max(MESSAGE_MAX), summary: z.string().max(SUMMARY_MAX).optional(), intercept: z.boolean().optional() })
 ]);
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
+/** The commands of the mobile access service. */
+export type MobileClientMessage = Extract<ClientMessage, { type: `mobile.${string}` }>;
 
 export function parseClientMessage(raw: unknown): ClientMessage {
   return ClientMessageSchema.parse(raw);

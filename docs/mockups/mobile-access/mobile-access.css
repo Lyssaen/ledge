@@ -1,0 +1,66 @@
+/* Settings › Accès mobile (mockup): only what the new pieces need, on the desktop's own tokens. */
+
+/* ── The mockup page around the window (not app UI). ── */
+#root { padding: 12px 18px 10px; gap: 10px; background: color-mix(in srgb, var(--background) 88%, var(--foreground)); }
+.mock-bar { flex-shrink: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 8px 10px; border: 1px dashed color-mix(in srgb, var(--info) 55%, var(--border)); border-radius: 10px; background: color-mix(in srgb, var(--info) 7%, var(--background)); font-size: 12px; }
+.mock-tag { height: 20px; padding: 0 8px; display: inline-flex; align-items: center; border-radius: 999px; background: var(--info); color: var(--background); font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.mock-group { display: flex; flex-wrap: wrap; gap: 4px; }
+.mock-group.sub { padding-left: 12px; border-left: 1px solid var(--border); }
+.mock-group button, .mock-theme { height: 26px; padding: 0 10px; border-radius: 999px !important; border: 1px solid var(--border) !important; font-size: 12px; color: var(--muted-foreground); white-space: nowrap; }
+.mock-group button:hover, .mock-theme:hover { color: var(--foreground); border-color: var(--input) !important; }
+.mock-group button[aria-checked=true] { background: var(--info) !important; border-color: transparent !important; color: var(--background); font-weight: 500; }
+.mock-window { flex: 1; min-height: 0; width: 100%; max-width: 1360px; margin: 0 auto; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--input); border-radius: 10px; background: var(--background); box-shadow: var(--shadow-overlay); transform: translateZ(0); }
+.mock-window .application { height: auto; }
+.mock-caption { flex-shrink: 0; margin: 0 auto; max-width: 1360px; width: 100%; font-size: 12px; color: var(--muted-foreground); text-align: center; }
+.inline-link { font-size: inherit; text-decoration: underline; text-underline-offset: 3px; }
+
+/* ── Section tab: a request waiting (the brand colour, where Machines' offline dot is amber). ── */
+.side-alert.mob-ask { background: var(--sidebar-primary); }
+
+/* ── Card « Connexion ». ── */
+.relay-url { width: 290px; max-width: 100%; border: 1px solid var(--input); border-radius: var(--radius-md); color: var(--foreground); }
+.set-fieldset:disabled .relay-url { cursor: not-allowed; }
+.gh-account { display: inline-flex; align-items: center; gap: 8px; margin-right: 4px; font-size: 13px; }
+.gh-account strong { font-weight: 500; }
+.gh-avatar { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; background: var(--accent); border: 1px solid var(--input); font-size: 11px; font-weight: 600; color: var(--muted-foreground); }
+.set-row:not(.stack) .set-control:has(.gh-account) { gap: 4px; }
+.device-flow { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 14px 16px; border-radius: var(--radius-lg); background: var(--well); border: 1px solid var(--input); }
+.device-flow-lead { font-size: 12px; color: var(--muted-foreground); }
+.user-code { font-size: 30px; line-height: 38px; font-weight: 500; letter-spacing: .14em; color: var(--foreground); user-select: all; }
+.device-flow .set-actions { margin-top: 0; gap: 8px; }
+.device-flow-wait { align-self: stretch; display: flex; align-items: center; gap: 8px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted-foreground); }
+.device-flow-wait .ledge-spin { display: inline-flex; }
+.relay-status { display: flex; align-items: center; gap: 12px; }
+.raw-error { display: block; width: max-content; max-width: 100%; margin-top: 6px; }
+
+/* ── Card « Appareils ». ── */
+.set-rows > .devices-off { margin: 10px 0 4px; color: var(--muted-foreground); }
+.devices-off > svg { color: var(--muted-foreground); }
+.devices-empty { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 12px; padding: 14px 0; }
+.devices-empty p { margin: 0; font-size: 12px; line-height: 18px; color: var(--muted-foreground); }
+.devices-empty strong { display: block; margin-bottom: 2px; font-size: 13px; font-weight: 500; color: var(--foreground); }
+.devices-empty code { font: 11px 'Geist Mono', monospace; color: var(--foreground); background: var(--well); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; }
+.pending-entry { margin: 0 -18px; padding: 14px 18px; background: color-mix(in srgb, var(--sidebar-primary) 7%, transparent); }
+.set-rows > .pending-entry:first-child { border-top: 0; }
+.pending-entry .machine-glyph { color: var(--sidebar-primary); border-color: color-mix(in srgb, var(--sidebar-primary) 40%, var(--input)); }
+.pending-entry .machine-main > .set-actions { margin-left: 0; }
+.pending-what { font-size: 13px; color: var(--muted-foreground); }
+
+/* ── « Lier un appareil » (shell/Modal.tsx, as ConfirmDialog's .confirm-modal). ── */
+.modal.pair-modal { width: 440px; }
+.pair-content { display: flex; flex-direction: column; gap: 12px; padding: 16px 20px 18px; }
+.pair-content p { margin: 0; font-size: 13px; line-height: 20px; }
+.pair-content p strong { font-weight: 600; }
+.pair-device { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.pair-device strong { font-weight: 600; }
+.pair-code { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 14px 12px 16px; border-radius: var(--radius-lg); background: var(--well); border: 1px solid var(--input); transition: opacity .2s; }
+.pair-code.dim { opacity: .55; }
+.pair-code-label { font-size: 11px; color: var(--muted-foreground); }
+.pair-code output { font-size: 46px; line-height: 54px; font-weight: 500; letter-spacing: .08em; color: var(--foreground); font-variant-numeric: tabular-nums; }
+.pair-gap { display: inline-block; width: .45em; }
+.pair-content .pair-warn { padding-left: 10px; border-left: 2px solid var(--warning); font-size: 12px; line-height: 18px; color: var(--muted-foreground); }
+.pair-actions { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.pair-expiry { font-variant-numeric: tabular-nums; }
+.set-well.pair-wait { margin: 0; align-items: center; cursor: pointer; font-size: 13px; }
+.set-well.pair-result { margin: 0; font-size: 13px; line-height: 20px; }
+.set-well.pair-result > svg { margin-top: 2px; }

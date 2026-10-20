@@ -22,7 +22,7 @@ describe('the Settings page', () => {
     expect(tab('General')).toHaveAttribute('aria-current', 'page');
     expect(nav().getAllByRole('button', { current: 'page' })).toHaveLength(1);
     expect(nav().getAllByRole('button').map(b => b.textContent)).toEqual([
-      'Back to the atelierEsc', 'General', 'Appearance', 'Notch', 'Notifications', 'Sounds', 'Machines', 'Projects', 'Keyboard shortcuts', 'About'
+      'Back to the atelierEsc', 'General', 'Appearance', 'Notch', 'Notifications', 'Sounds', 'Machines', 'Mobile access', 'Projects', 'Keyboard shortcuts', 'About'
     ]);
   });
 

@@ -11,7 +11,7 @@ import { transition } from '../motion';
 import { MarkdownDocument } from '../documents/MarkdownDocument';
 import { useI18n, type Messages } from '../i18n/lang';
 import { canDismiss } from './SessionList';
-import { parseReply } from '../reply/parse';
+import { parseReply } from '@ledge/ui/reply/parse';
 import { BranchChip } from '../ui/BranchChip';
 import { ReplyCard, inline } from './ReplyCard';
 import { Thread } from './Thread';

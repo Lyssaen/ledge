@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Clé du PC changée</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;display=swap">
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#000}
+a{color:#fafafa;text-decoration:none}a:hover{color:#fff}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.ico{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:56px;padding:0 16px;border-radius:12px;font:600 16px/20px 'Geist',system-ui,sans-serif;box-sizing:border-box;cursor:pointer}
+.btn-primary{background:#9f0712;color:#fef2f2;border:0}.btn-primary:hover{background:#82181a}.btn-outline{background:transparent;color:#fafafa;border:1px solid #ffffff26}.btn-outline:hover{background:#171717}
+</style>
+</helmet>
+<div style="width: 390px; height: 100vh; max-height: 844px; box-sizing: border-box; background: #000; color: #fafafa; font-family: 'Geist', system-ui, sans-serif; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; gap: 20px; padding: 96px 20px 34px; overflow: hidden;">
+  <div style="display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center;">
+    <span aria-hidden="true" style="width: 64px; height: 64px; border-radius: 9999px; background: #450a0a; color: #ff6467; display: grid; place-items: center;">
+      <svg class="ico" viewBox="0 0 24 24" style="width: 30px; height: 30px;"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"></path><path d="M12 8v4"></path><path d="M12 16h.01"></path></svg>
+    </span>
+    <h1 style="margin: 0; font-size: 24px; line-height: 32px; font-weight: 600; letter-spacing: -0.025em;">La clé de PC-Desan a changé</h1>
+    <p style="margin: 0; color: #a1a1a1; max-width: 310px;">Ce téléphone a coupé la connexion. Il n'envoie plus rien et n'affiche plus rien de ce PC tant que vous n'avez pas refait la liaison.</p>
+  </div>
+
+  <dl style="margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; padding: 16px; border-radius: 16px; background: #0a0a0a; border: 1px solid #ffffff1a; font-size: 13px;">
+    <dt style="color: #a1a1a1;">Connue</dt><dd class="mono" style="margin: 0;">7c41 e09a · liée le 16 oct.</dd>
+    <dt style="color: #a1a1a1;">Reçue</dt><dd class="mono" style="margin: 0; color: #ff6467;">b2f8 113d · inconnue</dd>
+  </dl>
+
+  <div style="display: flex; flex-direction: column; gap: 10px; color: #d4d4d4;">
+    <p style="margin: 0;"><strong style="color: #fafafa; font-weight: 600;">Vous avez réinstallé Ledge ou changé de PC ?</strong> C'est normal : refaites la liaison et comparez le nouveau code.</p>
+    <p style="margin: 0;"><strong style="color: #fafafa; font-weight: 600;">Sinon,</strong> n'allez pas plus loin et prévenez l'administrateur du serveur.</p>
+  </div>
+
+  <div style="flex-grow: 1;"></div>
+  <div style="display: flex; flex-direction: column; gap: 10px;">
+    <a href="Compare.dc.html" class="btn btn-primary">Refaire la liaison</a>
+    <a href="Login.dc.html" class="btn btn-outline">Se déconnecter</a>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

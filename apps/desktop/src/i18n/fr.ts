@@ -72,7 +72,7 @@ export const fr = {
   },
   foot: { sessions: 'Sessions locales et SSH', islandOn: 'Encoche active', islandOff: 'Encoche masquée', islandTitle: 'Réglages de l’encoche' },
   daemonOutdated: { title: 'Le démon Ledge doit être mis à jour', body: 'Ce Ledge Desktop a besoin d’un démon plus récent dans WSL. Lancez une de ces commandes dans WSL ; Ledge se reconnecte tout seul.', npm: 'Installé avec npm', git: 'Installé depuis un clone git' },
-  sections: { general: 'Général', appearance: 'Apparence', island: 'Encoche', notifications: 'Notifications', sounds: 'Sons', machines: 'Machines', projects: 'Projets', shortcuts: 'Raccourcis clavier', about: 'À propos' } as Record<SectionId, string>,
+  sections: { general: 'Général', appearance: 'Apparence', island: 'Encoche', notifications: 'Notifications', sounds: 'Sons', machines: 'Machines', mobile: 'Accès mobile', projects: 'Projets', shortcuts: 'Raccourcis clavier', about: 'À propos' } as Record<SectionId, string>,
   settings: {
     nav: 'Sections des réglages', back: 'Retour à l’atelier',
     saved: (what: string) => `Réglage enregistré · ${what}`,
@@ -83,11 +83,13 @@ export const fr = {
       notifications: 'Qui vous prévient, et quand vous laisser tranquille.',
       sounds: 'Les signaux sonores de votre équipe.',
       machines: 'Cette machine et vos serveurs SSH. Une seule liste pour l’encoche et Ledge Desktop.',
+      mobile: 'Piloter vos agents depuis votre téléphone, via le serveur relais. Le contenu est chiffré de bout en bout : le serveur ne peut ni le lire ni le modifier.',
       projects: 'Projets, dépôts et dossiers mémorisés.',
       shortcuts: 'Dans l’application, et partout dans Windows.',
       about: 'Versions et mises à jour.'
     } as Record<SectionId, string>,
     machineOffline: 'Une machine est hors ligne', updateWaiting: 'Une mise à jour est disponible',
+    mobileOffline: "L'accès mobile est hors ligne", mobileAsks: "Un appareil demande l'accès",
     general: {
       lang: 'Langue', langHint: 'S’applique tout de suite, menu de la zone de notification compris.',
       langs: { fr: 'Français', en: 'English' } as Record<'fr' | 'en', string>,
@@ -203,6 +205,41 @@ export const fr = {
       edited: (label: string) => `${label} modifiée`,
       removed: (label: string) => `${label} retirée`,
       confirm: { before: 'Retirer ', after: ' ? Ses sessions disparaissent de la liste, dans l’encoche comme ici. Rien n’est arrêté ni supprimé sur le serveur.' }
+    },
+    mobile: {
+      connection: 'Connexion',
+      access: 'Accès mobile', accessHint: "Ce PC garde une connexion sortante vers le serveur relais. Aucun port n'est ouvert.",
+      relay: 'Serveur relais', relayHint: "L'adresse du serveur que vous et votre téléphone utilisez.",
+      relayInvalid: 'Adresse refusée : https://, ou http:// pour localhost seulement, sans chemin.',
+      account: 'Compte GitHub', accountHint: 'Le compte qui relie ce PC et vos téléphones.',
+      codeLead: 'Saisissez ce code sur GitHub :',
+      codeLabel: (spelled: string) => `Code à saisir sur GitHub : ${spelled}`,
+      open: (where: string) => `Ouvrir ${where}`, copy: 'Copier le code', copied: 'Copié',
+      waiting: (min: number) => `En attente de la confirmation sur GitHub… · expire dans ${min} min`, cancel: 'Annuler',
+      signin: 'Se connecter avec GitHub', signout: 'Se déconnecter',
+      notAllowed: "Ce compte GitHub n'est pas autorisé sur ce serveur. Demandez à son administrateur de l'ajouter.", otherAccount: 'Réessayer avec un autre compte',
+      signedOut: { other_pc: "Ce PC a été déconnecté : un autre PC s'est connecté avec ce compte. Un compte n'a qu'un PC.", session_invalid: "Ce PC a été déconnecté : la session n'est plus valide." },
+      reconnect: 'Se reconnecter',
+      /** Why the last sign-in ended without a session; not_allowed has its own well (notAllowed). */
+      signinEnded: { failed: 'La connexion à GitHub a échoué. Vérifiez le serveur relais, puis réessayez.', expired: 'Le code a expiré. Recommencez la connexion.', denied: 'La connexion a été refusée sur GitHub.', not_allowed: null } as Record<'failed' | 'expired' | 'denied' | 'not_allowed', string | null>,
+      status: 'État',
+      states: { off: 'Désactivé', idle: 'Pas encore connecté', online: 'Connecté au relais', connecting: 'Connexion…', offline: 'Hors ligne' },
+      retryIn: (s: number) => `Hors ligne · nouvel essai dans ${s} s`,
+      idleHint: 'La connexion démarre une fois le compte GitHub confirmé.',
+      refusedHint: 'Le serveur a refusé ce compte.',
+      outHint: { other_pc: 'Un autre PC a pris la place de celui-ci.', session_invalid: "La session n'est plus valide." },
+      unreachable: "Le serveur relais ne répond pas. Vérifiez l'adresse et votre connexion ; Ledge réessaie tout seul.", retry: 'Réessayer',
+      devices: 'Appareils', devicesHint: "Un appareil lié peut tout faire : lire, approuver, répondre, écrire. Révoquez-le s'il est perdu.",
+      devicesOff: "L'accès mobile est désactivé : vos appareils liés ne peuvent pas se connecter.",
+      revoked: ' est révoqué.',
+      asks: "demande l'accès", asksLabel: (label: string) => `${label} demande l'accès`, waitingTag: 'En attente', via: (login: string) => `Connecté avec @${login}`,
+      compare: 'Comparer le code',
+      online: 'En ligne', offline: 'Hors ligne', seenNow: "Vu à l'instant", seenAgo: (d: string) => `Vu il y a ${d}`, linkedOn: (date: string) => `Lié le ${date}`,
+      revoke: 'Révoquer', revokeAsk: { before: 'Révoquer ', after: " ? Il perd l'accès tout de suite et devra être lié à nouveau pour revenir." },
+      emptyTitle: 'Aucun appareil lié.', emptyBefore: ' Sur votre téléphone, ouvrez ', emptyAfter: " et connectez-vous avec le même compte GitHub. Un code s'affichera ici et sur le téléphone.",
+      unavailable: (error: string) => `L'accès mobile n'a pas démarré sur ce PC : ${error}`,
+      outdated: 'Le daemon local est trop ancien pour l’accès mobile : mettez-le à jour.',
+      refused: { offline: 'Le daemon local est hors ligne : rien n’a changé.', outdated: 'Le daemon local est trop ancien pour l’accès mobile : mettez-le à jour.' }
     },
     projects: {
       title: 'Projets',
@@ -321,7 +358,25 @@ export const fr = {
     finished: (name: string) => `${name} a terminé`,
     failed: (name: string) => `${name} a rencontré une erreur`,
     manyTitle: 'Votre équipe',
-    many: (n: number) => `${n} sessions vous attendent ou ont terminé`
+    many: (n: number) => `${n} sessions vous attendent ou ont terminé`,
+    /** A pairing waits for its code to be compared (the dialog « Lier un appareil »); the body is the device's label. */
+    pairing: "Un appareil demande l'accès"
+  },
+  /** The dialog « Lier un appareil » (docs/mockups/mobile-access, scenario « pairing »). */
+  pairing: {
+    title: 'Lier un appareil',
+    intro: { before: 'Un appareil connecté avec votre compte ', after: " demande l'accès à vos agents." },
+    introNoAccount: "Un appareil demande l'accès à vos agents.",
+    codeLabel: 'Code de liaison',
+    codeSpelled: (spelled: string) => `Code de liaison : ${spelled}`,
+    check: 'Vérifiez que le téléphone affiche exactement ce code. Approuvez ici, puis confirmez sur le téléphone.',
+    warn: "Si les codes diffèrent, refusez : quelqu'un d'autre tente de se lier.",
+    expiresIn: (left: string) => `expire dans ${left}`,
+    deny: 'Refuser', approve: 'Approuver',
+    approved: { strong: 'Approuvé sur ce PC.', rest: ' Confirmez maintenant sur le téléphone.' },
+    linked: { strong: (label: string) => `${label} est lié.`, rest: ' Il apparaît dans Réglages › Accès mobile › Appareils.' },
+    expired: 'La demande a expiré. Recommencez depuis le téléphone.',
+    close: 'Fermer'
   },
   atelier: {
     table: (name: string) => `Table ${name}`,

@@ -1,4 +1,4 @@
-import { NO_ALWAYS, NO_NOTE, assertDialogIs, flatten, shownCommand, type Adapter, type KeyPlan, type PanePromptMatch } from './types.js';
+import { NO_ALWAYS, NO_NOTE, Refusal, assertDialogIs, flatten, shownCommand, type Adapter, type KeyPlan, type PanePromptMatch } from './types.js';
 
 // Codex CLI 0.162 draws its dialogs at the bottom of the pane, without a box, the footer on the last line:
 //
@@ -199,7 +199,7 @@ const ALWAYS = /don['’]t ask again/i;
 function alwaysKeys(d: Dialog | null): KeyPlan {
   const i = d?.kind === 'approval' ? d.raw.findIndex(o => ALWAYS.test(o)) : -1;
   const key = i < 0 ? undefined : d!.raw[i]!.match(/\(([a-z])\)\s*$/)?.[1];
-  if (!key) throw new Error(NO_ALWAYS);
+  if (!key) throw new Refusal(NO_ALWAYS, 'not_offered');
   return [{ text: key }];
 }
 
@@ -208,7 +208,7 @@ function alwaysKeys(d: Dialog | null): KeyPlan {
  * prompt, typed once the input box is back. On the plan question Esc only goes back: « No, stay in Plan mode » first.
  */
 function noteKeys(d: Dialog | null, note: string): KeyPlan {
-  if (d?.kind === 'confirm') throw new Error(NO_NOTE);
+  if (d?.kind === 'confirm') throw new Refusal(NO_NOTE, 'not_offered');
   const no = d?.kind === 'plan' ? optionNumber(d.options, /^No\b/) : null;
   return [...(no ? digit(no) : [{ keys: ['Escape'] }]), { until: atRest, denied: true }, { text: flatten(note) }, { waitMs: REPLY_ENTER_DELAY_MS }, { keys: ['Enter'] }];
 }
@@ -233,7 +233,7 @@ export const codexAdapter: Adapter = {
     if (d?.kind === 'confirm') {
       // A digit only moves the cursor in this list: Enter confirms.
       const trust = optionNumber(d.options, /^Trust all\b|^Yes\b/i);
-      if (!trust) throw new Error('no trust option in this dialog, answer in the terminal');
+      if (!trust) throw new Refusal('no trust option in this dialog, answer in the terminal', 'not_offered');
       return [{ text: String(trust) }, { keys: ['Enter'] }];
     }
     if (d?.kind === 'plan' || pending.kind === 'plan') {

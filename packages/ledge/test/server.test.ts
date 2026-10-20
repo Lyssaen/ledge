@@ -20,6 +20,7 @@ import { authHeaders, until } from './helpers.js';
 import { paths } from '../src/paths.js';
 import { writeMachines } from '../src/daemon/machines.js';
 import { writeProjects } from '../src/daemon/projects.js';
+import { createMobileService } from '../src/mobile/service.js';
 
 const T0 = '2026-10-09T18:00:00.000Z';
 const fx = (n: string) => readFileSync(new URL(`./fixtures/panes/${n}.txt`, import.meta.url), 'utf8');
@@ -405,7 +406,7 @@ describe('server', () => {
     expect(upd.session.state).toBe('error');
     expect(upd.session.pending?.text).toBe('npm test');
     expect(tmux.sent.length).toBe(1);
-    expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'the terminal did not take it', request: 'session.decide' });
+    expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'the terminal did not take it', request: 'session.decide', code: 'not_taken' });
     c.close();
   });
 
@@ -417,7 +418,7 @@ describe('server', () => {
     expect(await c.next('error', 3000)).toMatchObject({ id: 'a' });
     expect(store.get('a')?.state).toBe('error');
     c.send({ type: 'session.decide', id: 'a', decision: 'accept' });
-    expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'the terminal did not take it', request: 'session.decide' });
+    expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'the terminal did not take it', request: 'session.decide', code: 'not_taken' });
     expect(tmux.sent.length).toBe(2);
     c.close();
   });
@@ -515,7 +516,7 @@ describe('server', () => {
     store.upsert(mk('a', { tool: 'cursor', state: 'waiting_permission', pending: { kind: 'permission', text: 'echo hi', source: 'pane' } }));
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'session.decide', id: 'a', decision: 'always' });
-    expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'this answer is not offered for this request, answer in the terminal', request: 'session.decide' });
+    expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'this answer is not offered for this request, answer in the terminal', request: 'session.decide', code: 'not_offered' });
     c.send({ type: 'session.decide', id: 'a', decision: 'accept', note: 'why' });
     expect((await c.next('error', 3000)).message).toBe('this answer is not offered for this request, answer in the terminal');
     expect(tmux.sent).toEqual([]);
@@ -529,7 +530,7 @@ describe('server', () => {
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     // The user saw a Bash permission; the plan dialog is up now: « always » would type « Yes, and use auto mode ».
     c.send({ type: 'session.decide', id: 'a', decision: 'always', expect: { kind: 'permission', text: 'npm test' } });
-    expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'the request changed, look again', request: 'session.decide' });
+    expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'the request changed, look again', request: 'session.decide', code: 'stale' });
     c.send({ type: 'session.decide', id: 'a', decision: 'accept', expect: { kind: 'plan', text: '# Plan, v2' } });
     expect((await c.next('error', 3000)).message).toBe('the request changed, look again');
     expect(tmux.sent).toEqual([]);
@@ -555,7 +556,7 @@ describe('server', () => {
     store.upsert(mk('a', { state: 'waiting_permission', pending: { kind: 'permission', text: 'npm test', tool: 'Bash', source: 'hook' } }));
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'session.decide', id: 'a', decision: 'accept', expect: { kind: 'permission', text: 'npm test' } });
-    expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'the request changed, look again', request: 'session.decide' });
+    expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'the request changed, look again', request: 'session.decide', code: 'stale' });
     expect(tmux.sent).toEqual([]);
     expect(store.get('a')).toMatchObject({ state: 'waiting_permission', pending: { text: 'rm -rf dist' } });
     c.close();
@@ -593,7 +594,7 @@ describe('server', () => {
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     // The terminal asks for `mkdir zz-ledge-probe`; the daemon still holds `pnpm test`, the request the user approves.
     c.send({ type: 'session.decide', id: 'a', decision: 'accept', expect: { kind: 'permission', text: 'pnpm test', key: pendingKey(seen) } });
-    expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'the request changed, look again', request: 'session.decide' });
+    expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'the request changed, look again', request: 'session.decide', code: 'stale' });
     expect(tmux.sent).toEqual([]);
     expect(store.get('a')).toMatchObject({ state: 'waiting_permission', pending: { text: 'pnpm test' } });
     c.close();
@@ -636,7 +637,7 @@ describe('server', () => {
     c.send({ type: 'session.decide', id: 'a', decision: 'deny', note: 'Neither' });
     expect(await c.next('error', 3000)).toMatchObject({ message: 'this answer is not offered for this request, answer in the terminal', request: 'session.decide' });
     c.send({ type: 'session.reply', id: 'a', text: '   ' });
-    expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'empty reply', request: 'session.reply' });
+    expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'empty reply', request: 'session.reply', code: 'invalid' });
     expect(tmux.sent).toEqual([]);
     c.close();
   });
@@ -731,7 +732,7 @@ describe('server', () => {
     });
     it('Esc not taken (the dialog stays): nothing was denied, the usual failure', async () => {
       const { c } = await denyWithNote([fx('claude2-permission-bash')]);
-      expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'the terminal did not take it', request: 'session.decide' });
+      expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'the terminal did not take it', request: 'session.decide', code: 'not_taken' });
       expect(tmux.sent).toEqual([['keys', 'ledge-a', 'Escape']]);
       expect(store.get('a')).toMatchObject({ state: 'error', pending: { text: 'mkdir zz-ledge-probe' } });
       c.close();
@@ -747,7 +748,7 @@ describe('server', () => {
       store.upsert(before);
       const c = await connect({ port: srv.port }); await c.next('snapshot');
       c.send(msg as never);
-      expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: NO_PROMPT, request: (msg as { type: string }).type });
+      expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: NO_PROMPT, request: (msg as { type: string }).type, code: 'no_prompt' });
       expect(tmux.sent).toEqual([]);
       expect(store.get('a')).toEqual(before);
       await expect(c.next('session.updated', 200)).rejects.toThrow(/timeout/);
@@ -782,7 +783,7 @@ describe('server', () => {
     });
     it('never sends Enter when the skip field does not come: the decision fails', async () => {
       const c = await deny([fx('cursor-permission')]);
-      expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'the terminal did not take it', request: 'session.decide' });
+      expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'the terminal did not take it', request: 'session.decide', code: 'not_taken' });
       expect(tmux.sent).toEqual([['text', 'ledge-a', 'n']]);
       expect(store.get('a')?.state).toBe('error');
       c.close();
@@ -957,7 +958,7 @@ describe('server', () => {
     store.upsert(before);
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'session.reply', id: 'a', text });
-    expect(await c.next('error')).toEqual({ type: 'error', id: 'a', message: 'free-text answers are not supported yet, answer in the terminal', request: 'session.reply' });
+    expect(await c.next('error')).toEqual({ type: 'error', id: 'a', message: 'free-text answers are not supported yet, answer in the terminal', request: 'session.reply', code: 'free_text' });
     expect(tmux.sent).toEqual([]);
     expect(store.get('a')).toEqual(before);
     await expect(c.next('session.updated', 200)).rejects.toThrow(/timeout/);
@@ -1061,10 +1062,10 @@ describe('server', () => {
       store.upsert(mk('a'));
       const c = await connect({ port: srv.port }); await c.next('snapshot');
       c.send({ type: 'session.dismiss', id: 'a' });
-      expect(await c.next('error')).toEqual({ type: 'error', id: 'a', message: 'the session is still running, kill it first', request: 'session.dismiss' });
+      expect(await c.next('error')).toEqual({ type: 'error', id: 'a', message: 'the session is still running, kill it first', request: 'session.dismiss', code: 'busy' });
       expect(store.get('a')).toBeDefined();
       c.send({ type: 'session.dismiss', id: 'nope' });
-      expect(await c.next('error')).toEqual({ type: 'error', id: 'nope', message: 'unknown session', request: 'session.dismiss' });
+      expect(await c.next('error')).toEqual({ type: 'error', id: 'nope', message: 'unknown session', request: 'session.dismiss', code: 'unknown_session' });
       await expect(c.next('session.removed', 100)).rejects.toThrow(/timeout/);
       c.close();
     });
@@ -1170,7 +1171,7 @@ describe('server', () => {
       const c = await connect({ port: srv.port }); await c.next('snapshot');
       for (const type of ['session.archive', 'session.restore', 'session.delete'] as const) {
         c.send({ type, id: 'nope' });
-        expect(await c.next('error')).toEqual({ type: 'error', id: 'nope', message: 'unknown session', request: type });
+        expect(await c.next('error')).toEqual({ type: 'error', id: 'nope', message: 'unknown session', request: type, code: 'unknown_session' });
       }
       c.close();
     });
@@ -1216,7 +1217,7 @@ describe('server', () => {
     it('refuses a live session and one without a conversation id', async () => {
       store.upsert(mk('live', { cwd: cwd(), agentSessionId: 'u-1' })); store.upsert(ended('none')); store.upsert(ended('cx', { tool: 'codex', transcriptPath: '/h/u-9.jsonl' }));
       const c = await resume('live');
-      expect(await c.next('error')).toEqual({ type: 'error', id: 'live', message: 'the session is still running', request: 'session.resume' });
+      expect(await c.next('error')).toEqual({ type: 'error', id: 'live', message: 'the session is still running', request: 'session.resume', code: 'busy' });
       c.send({ type: 'session.resume', id: 'none' });
       expect(await c.next('error')).toEqual({ type: 'error', id: 'none', message: 'no conversation to resume', request: 'session.resume' });
       c.send({ type: 'session.resume', id: 'cx' });
@@ -1727,12 +1728,40 @@ describe('server', () => {
     for (const m of msgs) {
       c.send(m);
       const err = await c.next('error');
-      expect(err).toEqual({ type: 'error', id: 'h', message: 'session started without ledge, read only', request: m.type });
+      expect(err).toEqual({ type: 'error', id: 'h', message: 'session started without ledge, read only', request: m.type, code: 'read_only' });
     }
     expect(store.get('h')).toEqual(ro);
     expect(tmux.sent).toEqual([]);
     await expect(c.next('session.updated', 200)).rejects.toThrow(/timeout/);
     c.close();
+  });
+
+  describe('refusal codes', () => {
+    it('a decision whose expected key is not the current one is refused as stale, its text unchanged', async () => {
+      store.upsert(mk('a', { state: 'waiting_permission', pending: { kind: 'permission', text: 'npm test', tool: 'Bash', source: 'hook' } }));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.decide', id: 'a', decision: 'accept', expect: { kind: 'permission', text: 'npm test', key: 'not-the-key' } });
+      expect(await c.next('error', 3000)).toEqual({ type: 'error', id: 'a', message: 'the request changed, look again', request: 'session.decide', code: 'stale' });
+      expect(tmux.sent).toEqual([]);
+      c.close();
+    });
+    it('a reply to a hook_only session is refused as read_only', async () => {
+      store.upsert(mk('h', { tmuxSession: null, source: 'hook_only' }));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.reply', id: 'h', text: 'hello' });
+      expect(await c.next('error')).toEqual({ type: 'error', id: 'h', message: 'session started without ledge, read only', request: 'session.reply', code: 'read_only' });
+      c.close();
+    });
+    it('a decision with no request is nothing_to_decide; one for an unknown id is unknown_session', async () => {
+      store.upsert(mk('a'));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.decide', id: 'a', decision: 'accept' });
+      expect(await c.next('error')).toEqual({ type: 'error', id: 'a', message: 'nothing to decide', request: 'session.decide', code: 'nothing_to_decide' });
+      c.send({ type: 'session.decide', id: 'nope', decision: 'accept' });
+      expect(await c.next('error')).toEqual({ type: 'error', id: 'nope', message: 'unknown session', request: 'session.decide', code: 'unknown_session' });
+      expect(tmux.sent).toEqual([]);
+      c.close();
+    });
   });
 
   it('answers bad input with an error message and keeps serving', async () => {
@@ -1743,9 +1772,9 @@ describe('server', () => {
     expect(err.request).toBe('session.decide'); // the type it carried, though the message did not parse
     expect(err.id).toBe('zzz'); // and its id: the front refuses that very send at once
     c.send({ type: 'session.reply', id: 'y'.repeat(201), text: 42 } as never);
-    expect(await c.next('error')).toEqual({ type: 'error', message: 'invalid message', request: 'session.reply' }); // too long an id is not echoed
+    expect(await c.next('error')).toEqual({ type: 'error', message: 'invalid message', request: 'session.reply', code: 'invalid' }); // too long an id is not echoed
     c.send({ type: 'session.reply', id: 7, text: 'x' } as never);
-    expect(await c.next('error')).toEqual({ type: 'error', message: 'invalid message', request: 'session.reply' }); // nor one that is not a string
+    expect(await c.next('error')).toEqual({ type: 'error', message: 'invalid message', request: 'session.reply', code: 'invalid' }); // nor one that is not a string
     c.send({ type: 'snapshot.request' });
     await c.next('snapshot');
     c.close();
@@ -2101,6 +2130,71 @@ describe('island settings', () => {
     expect(gotB.filter(m => m.type === 'island')).toHaveLength(1);
     expect(existsSync(paths().island)).toBe(false);
     a.close(); b.close(); await s.close();
+  });
+});
+
+describe('mobile access', () => {
+  const withMobile = async () => {
+    const mobile = await createMobileService();
+    const s = await startServer({ store: new Store(), tmux: fakeTmux({}), port: 0, mobile, daemon: { version: '0.2.2', install: 'npm', systemd: true } });
+    return { s, mobile, close: async () => { await s.close(); await mobile.stop(); } };
+  };
+  it('a local client gets the mobile state right after the island, and the daemon info says mobile: true', async () => {
+    const m = await withMobile();
+    const ws = await open(m.s.port); const got = collect(ws);
+    await until(() => got.some(x => x.type === 'mobile'));
+    expect(got.map(x => x.type).slice(0, 5)).toEqual(['snapshot', 'machines', 'projects', 'island', 'mobile']);
+    expect(got.find(x => x.type === 'mobile')).toMatchObject({ type: 'mobile', state: { enabled: false, account: null, link: { state: 'off' }, devices: [], pairings: [] } });
+    const snap = got.find(x => x.type === 'snapshot');
+    expect(snap?.type === 'snapshot' && snap.daemon?.mobile).toBe(true);
+    ws.close(); await m.close();
+  });
+  it('a mobile service that failed to start shows as unavailable, and its commands are refused with code unavailable and no id', async () => {
+    const s = await startServer({ store: new Store(), tmux: fakeTmux({}), port: 0, mobileUnavailable: 'EACCES', daemon: { version: '0.2.2', install: 'npm', systemd: true } });
+    const ws = await open(s.port); const got = collect(ws);
+    await until(() => got.some(x => x.type === 'mobile'));
+    expect(got.find(x => x.type === 'mobile')).toMatchObject({ state: { enabled: false, link: { state: 'unavailable', error: 'EACCES' }, devices: [], pairings: [] } });
+    const snap = got.find(x => x.type === 'snapshot');
+    expect(snap?.type === 'snapshot' && snap.daemon?.mobile).toBe(true);
+    ws.send(JSON.stringify({ type: 'mobile.signin' }));
+    await until(() => got.some(x => x.type === 'error'));
+    const err = got.find(x => x.type === 'error');
+    expect(err).toMatchObject({ type: 'error', request: 'mobile.signin', code: 'unavailable' });
+    expect(err).not.toHaveProperty('id');
+    ws.close(); await s.close();
+  });
+  it('mobile.pairing.approve on an unknown id is refused with request: mobile.pairing.approve', async () => {
+    const m = await withMobile();
+    const ws = await open(m.s.port); const got = collect(ws);
+    await until(() => got.some(x => x.type === 'mobile'));
+    ws.send(JSON.stringify({ type: 'mobile.pairing.approve', id: 'nope' }));
+    await until(() => got.some(x => x.type === 'error'));
+    const err = got.find(x => x.type === 'error');
+    expect(err).toMatchObject({ type: 'error', request: 'mobile.pairing.approve' });
+    expect(err).not.toHaveProperty('id'); // a pairing id is not a session's: a front must not fail a session with it
+    ws.close(); await m.close();
+  });
+  it('a change is broadcast to local clients, never to a /ssh/ client', async () => {
+    const mobile = await createMobileService();
+    const s = await startServer({ store: new Store(), tmux: fakeTmux({}), port: 0, mobile, ssh: async () => {} });
+    const r = await open(s.port, '/ssh/dev-server'); const gotR = collect(r);
+    const a = await open(s.port); const gotA = collect(a);
+    await until(() => gotA.some(x => x.type === 'mobile'));
+    a.send(JSON.stringify({ type: 'mobile.set', enabled: false, relayUrl: 'http://localhost:1' }));
+    await until(() => gotA.filter(x => x.type === 'mobile').length >= 2);
+    expect(gotA.filter(x => x.type === 'mobile').at(-1)).toMatchObject({ state: { relayUrl: 'http://localhost:1' } });
+    await new Promise(res => setTimeout(res, 100));
+    expect(gotR.some(x => x.type === 'mobile')).toBe(false);
+    r.close(); a.close(); await s.close(); await mobile.stop();
+  });
+  it('without the service, mobile messages are refused as not available', async () => {
+    const ws = await open(srv.port); const got = collect(ws);
+    await until(() => got.some(x => x.type === 'island'));
+    ws.send(JSON.stringify({ type: 'mobile.signin' }));
+    await until(() => got.some(x => x.type === 'error'));
+    expect(got.find(x => x.type === 'error')).toMatchObject({ message: 'mobile access is not available', request: 'mobile.signin' });
+    expect(got.some(x => x.type === 'mobile')).toBe(false);
+    ws.close();
   });
 });
 

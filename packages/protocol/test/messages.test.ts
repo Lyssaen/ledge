@@ -380,6 +380,28 @@ describe('session management messages', () => {
   });
 });
 
+describe('mobile access messages', () => {
+  const state = {
+    enabled: true, relayUrl: 'https://server.ledge.paradow.dev', account: { login: 'octocat', accountId: 'A' }, signin: null, signinError: null,
+    link: { state: 'offline', retryAt: T0, error: 'connection closed (1006)' },
+    devices: [{ id: 'f'.repeat(22), label: 'Pixel', approvedAt: T0, online: false }],
+    pairings: [{ id: 'p1', label: 'Pixel', code: '123456', expiresAt: T0, state: 'confirm' }]
+  };
+  it('parses the state message and refuses an unknown link state', () => {
+    expect(parseServerMessage({ type: 'mobile', state })).toEqual({ type: 'mobile', state });
+    expect(() => parseServerMessage({ type: 'mobile', state: { ...state, link: { state: 'sleeping' } } })).toThrow();
+  });
+  it('parses the commands; mobile.set reduces relayUrl to its origin and refuses plain http elsewhere than localhost', () => {
+    expect(parseClientMessage({ type: 'mobile.set', enabled: true, relayUrl: 'https://relay.example/' })).toEqual({ type: 'mobile.set', enabled: true, relayUrl: 'https://relay.example' });
+    expect(() => parseClientMessage({ type: 'mobile.set', enabled: true, relayUrl: 'http://relay.example' })).toThrow();
+    for (const type of ['mobile.signin', 'mobile.signin.cancel', 'mobile.signout', 'mobile.retry']) expect(parseClientMessage({ type }).type).toBe(type);
+    for (const type of ['mobile.pairing.approve', 'mobile.pairing.deny', 'mobile.device.revoke']) {
+      expect(parseClientMessage({ type, id: 'x' })).toEqual({ type, id: 'x' });
+      expect(() => parseClientMessage({ type, id: '' })).toThrow();
+    }
+  });
+});
+
 describe('session.message and message.ack', () => {
   const message = { type: 'session.message', rid: 'r1', from: 'ab12', to: 'Otto [fce8]', text: 'Vas-y', summary: 'OK', intercept: true };
   it('parses a full session.message and refuses an empty text', () => {

@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { daemonStore, projectOf, useDaemon, useIsland, useProjects, useTokenMissing, type DaemonClient } from '@ledge/fleet';
+import { daemonStore, projectOf, useDaemon, useIsland, useMobile, useMobileError, useProjects, useTokenMissing, type DaemonClient } from '@ledge/fleet';
 import type { Project, Projects, Session } from '@ledge/protocol';
 import { LangProvider, loadLang, messagesFor, saveLang, useI18n, type Lang } from './i18n/lang';
 import { loadMessages } from './i18n/messages';
 import { useFleet } from './fleet/useFleet';
 import { useDecisions } from './fleet/decisions';
 import { useWaits } from './fleet/waits';
-import { useAlerts } from './notify/useAlerts';
+import { useAlerts, usePairingAlerts } from './notify/useAlerts';
 import { watchedSession } from './notify/watching';
 import { getDnd, setDnd, useDnd } from './notify/prefs';
 import { MarkdownLinks } from '@ledge/ui/documents/links';
@@ -61,6 +61,7 @@ import { TermStoreContext } from './term/useTerms';
 import { isNative } from './term/mode';
 import { ProjectDialog } from './projects/ProjectDialog';
 import { useDefaultTool } from './settings/tool';
+import { PairingDialog, usePairingDialogState } from './settings/PairingDialog';
 
 const NO_PROJECTS: readonly Project[] = [];
 
@@ -110,6 +111,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const termStore = useTermStore(fleetClient);
   const projects = useProjects(fleetClient);
   const island = useIsland(fleetClient);
+  const mobile = useMobile(fleetClient);
+  const mobileError = useMobileError(fleetClient);
   const tokenMissing = useTokenMissing(daemonTokenSource());
   const { t, lang } = useI18n();
   const [nav, dispatch] = useReducer(shellReducer, undefined, () => initialNav(loadOverview()));
@@ -127,6 +130,10 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // Read at the moment an alert fires, never captured: set below once the place and the prefs are known.
   const watching = useRef<() => string | null>(() => null);
   const alerts = useAlerts({ sessions, machines, status, daemonUpdating: daemonUpdates.updating.has('local') }, { watching: () => watching.current() });
+  // A device asking to be linked: the dialog below opens on any screen, the notification only while Desktop is behind.
+  usePairingAlerts(mobile);
+  // Decided here, at render: the dialog and the `inert` below change in one commit, so the Modal's focus return is not refused.
+  const pairing = usePairingDialogState(mobile);
   // The tray's « Nouvelle session » opens its dialog; « Ne pas déranger » switches without showing the window.
   useEffect(() => onTrayAction(action => {
     if (action === 'dnd') setDnd(!getDnd());
@@ -215,7 +222,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     requestAnimationFrame(() => termStore.surface(termStore.active(id))?.focus());
     return true;
   };
-  useKeys(dispatch, { state: nav, order, screen: screenKeys, undo, confirming: actions.pending ? { cancel: actions.cancel } : null, toTerminal });
+  // The pairing dialog, like a confirmation, owns the keyboard while it shows (it takes Escape itself, before this listener).
+  useKeys(dispatch, { state: nav, order, screen: screenKeys, undo, confirming: actions.pending ? { cancel: actions.cancel } : pairing ? { cancel: pairing.dismiss } : null, toTerminal });
   const close = () => dispatch({ type: 'modal', modal: null });
   const onOverview = place.kind === 'overview' || (place.kind === 'session' && !session);
   // The New session form starts on the overview's project filter (a project id, not « all » nor « none »).
@@ -279,13 +287,13 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // What the Settings page's sections receive; « Setting saved · … » goes through the app's toast, once per accepted change
   // (in the language just chosen, for the language itself: the render that speaks it has not happened yet).
   const settings: SettingsContext = {
-    notify, saved: (what, l) => notify((l ? messagesFor(l) : t).settings.saved(what)), fleet, client: fleetClient, machines, projects, island, projectIdOf, sessions, dispatch, alerts, daemonUpdates,
+    notify, saved: (what, l) => notify((l ? messagesFor(l) : t).settings.saved(what)), fleet, client: fleetClient, machines, projects, island, mobile, mobileError, projectIdOf, sessions, dispatch, alerts, daemonUpdates,
     lang, setLang, paused: nav.paused
   };
 
   // A dialog over the application (a modal, a confirmation, the rename dialog): what lies behind it, the title bar's controls
   // included, takes neither clicks nor the focus.
-  const blocked = nav.modal !== null || actions.pending !== null || sessionMenu.renaming !== null || whatsNew;
+  const blocked = nav.modal !== null || actions.pending !== null || sessionMenu.renaming !== null || whatsNew || pairing !== null;
   return (
     <ScreenKeysContext.Provider value={screenKeys}><TermStoreContext.Provider value={termStore}>
       {!nav.fullscreen && <TitleBar dispatch={dispatch} sessions={sessions} waits={waits} blocked={blocked} />}
@@ -329,6 +337,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       <SessionMenuHost state={sessionMenu} actions={actions} filing={filing} projects={projects?.projects ?? NO_PROJECTS} currentOf={projectIdOf} onOpen={s => dispatch({ type: 'open', id: s.id })} />
       <WhatsNew />
       {actions.pending && <ConfirmDialog c={actions.pending} onConfirm={actions.confirm} onCancel={actions.cancel} />}
+      <PairingDialog shown={pairing} mobile={mobile} fleet={fleet} notify={notify} />
       <Toast notice={notice} action={noticeAction} onAction={undo} />
     </TermStoreContext.Provider></ScreenKeysContext.Provider>
   );

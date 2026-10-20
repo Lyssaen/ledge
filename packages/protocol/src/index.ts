@@ -15,3 +15,7 @@ export * from './topic.js';
 export * from './routing.js';
 export * from './ssh.js';
 export * from './thread.js';
+export * from './relay.js';
+export * from './relayAuth.js';
+export * from './mobile.js';
+export * from './phone.js';

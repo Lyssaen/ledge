@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { SessionView, measureSessionH, shownReply } from '../src/surface/SessionView';
 import { fakeSession, T0 } from './mockDaemon';
-import { parseReply } from '../src/reply/parse';
+import { parseReply } from '@ledge/ui/reply/parse';
 
 const text = `## Three reducer findings fixed
 

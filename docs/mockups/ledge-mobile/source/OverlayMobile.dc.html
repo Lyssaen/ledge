@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Overlay · Accès mobile</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;display=swap">
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#0a0a0a}
+a{color:#fafafa;text-decoration:none}a:hover{color:#fff}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.ico{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.title{font-size:14px;line-height:18px;font-weight:600}
+.hint{font-size:12px;line-height:16px;color:#a1a1a1}
+.row{padding:12px 0;border-bottom:1px solid #ffffff1a}
+.b{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 12px;border-radius:8px;font:500 13px/18px 'Geist',system-ui,sans-serif;box-sizing:border-box;cursor:pointer;white-space:nowrap}
+.b-primary{background:#9f0712;color:#fef2f2;border:0}.b-primary:hover{background:#82181a}
+.b-outline{background:transparent;color:#fafafa;border:1px solid #ffffff26}.b-outline:hover{background:#262626}
+.b-ghost{background:transparent;color:#fafafa;border:0}.b-ghost:hover{background:#262626}
+.tab{height:28px;padding:0 10px;border:0;border-radius:6px;background:transparent;color:#a1a1a1;font:500 12px/16px 'Geist',system-ui,sans-serif;cursor:pointer}
+.tab-on{background:#0a0a0a;color:#fafafa;box-shadow:0 1px 2px rgb(0 0 0 / .2)}
+@keyframes spin{to{transform:rotate(360deg)}}.spin{animation:spin 1s linear infinite}
+</style>
+</helmet>
+<div style="width: 420px; height: 100vh; max-height: 680px; box-sizing: border-box; background: #0a0a0a; color: #fafafa; font-family: 'Geist', system-ui, sans-serif; font-size: 13px; line-height: 20px; padding: 0 12px 12px; overflow: hidden;">
+  <div aria-hidden="true" style="width: 180px; height: 30px; margin: 0 auto; background: #000; border-radius: 0 0 16px 16px;"></div>
+  <section aria-label="Réglages" style="margin-top: 8px; border-radius: 14px; background: #171717; border: 1px solid #ffffff1a; box-shadow: 0 20px 40px -12px rgba(0,0,0,0.7); padding: 12px 16px 4px;">
+    <header style="display: flex; align-items: center; gap: 8px; padding-bottom: 10px;">
+      <button type="button" class="b b-ghost" aria-label="Retour" style="width: 32px; padding: 0;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg></button>
+      <h1 style="margin: 0; font-size: 15px; line-height: 20px; font-weight: 600; flex-grow: 1;">Réglages</h1>
+    </header>
+    <div role="tablist" aria-label="Sections" style="display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: #262626; border: 1px solid #ffffff26;">
+      <button type="button" role="tab" class="tab" aria-selected="false" style="flex: 1;">Général</button>
+      <button type="button" role="tab" class="tab" aria-selected="false" style="flex: 1;">Sons</button>
+      <button type="button" role="tab" class="tab tab-on" aria-selected="true" style="flex: 1;">Mobile</button>
+      <button type="button" role="tab" class="tab" aria-selected="false" style="flex: 1;">À propos</button>
+    </div>
+
+    <div class="row" style="display: flex; align-items: center; gap: 12px;">
+      <span style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1;">
+        <span class="title">Accès mobile</span>
+        <span class="hint">Le daemon se connecte au serveur pour relayer vos sessions vers vos téléphones.</span>
+      </span>
+      <span aria-hidden="true" style="flex-shrink: 0; position: relative; width: 32px; height: 18px; border-radius: 9999px; background: #fb2c36; border: 1px solid #ffffff26; box-sizing: border-box;"><span style="position: absolute; left: 16px; top: 2px; width: 12px; height: 12px; border-radius: 9999px; background: #fef2f2;"></span></span>
+    </div>
+
+    <div class="row" style="display: flex; flex-direction: column; gap: 8px;">
+      <span class="title">Serveur</span>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <code class="mono" style="flex-grow: 1; padding: 6px 10px; border-radius: 8px; background: #0a0a0a; border: 1px solid #ffffff26; font-size: 12px; line-height: 18px;">server.ledge.paradow.dev</code>
+        <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: {{ statusColor }};"><span style="width: 8px; height: 8px; border-radius: 9999px; background: {{ statusColor }};"></span>{{ statusText }}</span>
+      </div>
+    </div>
+
+    <sc-if value="{{ isOut }}" hint-placeholder-val="{{ false }}">
+      <div class="row" style="display: flex; align-items: center; gap: 12px;">
+        <span style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1;">
+          <span class="title">Compte</span>
+          <span class="hint">Le même compte GitHub que sur votre téléphone.</span>
+        </span>
+        <button type="button" class="b b-primary" onClick="{{ signIn }}">Se connecter avec GitHub</button>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isCode }}" hint-placeholder-val="{{ false }}">
+      <div class="row" style="display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center;">
+        <span class="hint">Saisissez ce code sur github.com/login/device</span>
+        <div class="mono" aria-label="Code GitHub WDJB-MJHT" style="font-size: 26px; line-height: 32px; font-weight: 600; letter-spacing: 0.08em;">WDJB-MJHT</div>
+        <div style="display: flex; gap: 8px;">
+          <button type="button" class="b b-outline"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>Copier</button>
+          <button type="button" class="b b-primary">Ouvrir GitHub</button>
+        </div>
+        <span class="hint" style="display: inline-flex; align-items: center; gap: 6px;"><svg class="ico spin" viewBox="0 0 24 24" aria-hidden="true" style="width: 12px; height: 12px;"><path d="M21 12a9 9 0 1 1-6.22-8.56"></path></svg>En attente de GitHub…</span>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isIn }}" hint-placeholder-val="{{ true }}">
+      <div class="row" style="display: flex; align-items: center; gap: 12px;">
+        <span aria-hidden="true" style="width: 28px; height: 28px; border-radius: 9999px; background: #262626; display: grid; place-items: center; font-size: 12px; font-weight: 600;">P</span>
+        <span style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1;">
+          <span style="font-size: 13px; line-height: 18px; font-weight: 500;">@paradow</span>
+          <span class="hint">Connecté via GitHub · PC-Desan</span>
+        </span>
+        <button type="button" class="b b-ghost" onClick="{{ signOut }}">Se déconnecter</button>
+      </div>
+      <div style="padding: 12px 0 8px;">
+        <span class="title">Appareils</span>
+        <ul style="list-style: none; margin: 4px 0 0; padding: 0;">
+          <li style="display: flex; align-items: center; gap: 12px; min-height: 48px;">
+            <span style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1; min-width: 0;">
+              <span style="font-size: 13px; line-height: 18px; font-weight: 500;">iPhone · Safari</span>
+              <span class="hint">Lié le 16 oct. · vu il y a 2 min</span>
+            </span>
+            <button type="button" class="b b-ghost" aria-label="Révoquer iPhone · Safari">Révoquer</button>
+          </li>
+          <li style="display: flex; align-items: center; gap: 12px; min-height: 48px;">
+            <span style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1; min-width: 0;">
+              <span style="font-size: 13px; line-height: 18px; font-weight: 500;">iPad · Safari</span>
+              <span class="hint" style="color: #fbbf24;">Attend votre confirmation</span>
+            </span>
+            <a href="OverlayConfirm.dc.html" class="b b-outline">Vérifier le code</a>
+          </li>
+        </ul>
+      </div>
+    </sc-if>
+
+    <p class="hint" style="display: flex; gap: 8px; margin: 0; padding: 10px 0 12px; border-top: 1px solid #ffffff1a;">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 14px; height: 14px; margin-top: 1px; color: #fafafa;"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+      <span>Le serveur ne voit que des messages chiffrés. Il ne peut ni les lire, ni ajouter un appareil sans votre accord ici.</span>
+    </p>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":420,"height":680}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { step: 'in' };
+  }
+  renderVals() {
+    const step = this.state.step;
+    const status = { out: ['Pas connecté', '#a1a1a1'], code: ['Connexion…', '#fbbf24'], in: ['Connecté', '#34d399'] }[step];
+    return {
+      isOut: step === 'out',
+      isCode: step === 'code',
+      isIn: step === 'in',
+      statusText: status[0],
+      statusColor: status[1],
+      signIn: () => {
+        this.setState({ step: 'code' });
+        clearTimeout(this.timer);
+        this.timer = setTimeout(() => { if (this.state.step === 'code') this.setState({ step: 'in' }); }, 3000);
+      },
+      signOut: () => { clearTimeout(this.timer); this.setState({ step: 'out' }); },
+    };
+  }
+}
+</script>
+</body>
+</html>

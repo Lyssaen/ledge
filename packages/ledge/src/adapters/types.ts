@@ -1,4 +1,4 @@
-import type { Decision, Pending, Tool } from '@ledge/protocol';
+import type { Decision, Pending, RefusalCode, Tool } from '@ledge/protocol';
 
 /**
  * Steps sent to the pane in order: literal text, tmux key names, a pause (some TUIs need one before Enter), or
@@ -51,6 +51,11 @@ export interface Adapter {
   promptGone?(pane: string, pending: Pending): boolean;
 }
 
+/** A request refused before it was applied, with the code a front reads (the text is what the desktop shows). */
+export class Refusal extends Error {
+  constructor(message: string, readonly code: RefusalCode) { super(message); this.name = 'Refusal'; }
+}
+
 /** `always` asked of a dialog that has no option to stop asking (or no dialog Ledge can read). */
 export const NO_ALWAYS = 'no "always" option in this dialog, answer in the terminal';
 /** A note asked of a dialog where nothing typed would reach the agent (a trust dialog). */
@@ -65,7 +70,7 @@ export const STALE = 'the request changed, look again';
 export function assertDialogIs(pending: Pending, shown: PanePromptMatch['kind'] | null): void {
   if (shown === null) return;
   const want = pending.kind === 'diff' ? 'permission' : pending.kind;
-  if (shown !== want) throw new Error(STALE);
+  if (shown !== want) throw new Refusal(STALE, 'stale');
 }
 /** The dialog on screen cannot be read whole (taller than the pane, a command cut with `…`): nothing is typed. */
 export const UNCHECKED = 'the request on screen cannot be checked, answer in the terminal';

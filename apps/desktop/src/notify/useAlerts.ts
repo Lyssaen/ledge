@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { DaemonStatus, MachineState, SessionChange } from '@ledge/fleet';
-import type { Session } from '@ledge/protocol';
+import type { MobileState, Session } from '@ledge/protocol';
 import type { Cue } from '@ledge/ui/sounds/cues';
 import { decideSound } from '@ledge/ui/sounds/decide';
 import type { SoundPlayer } from '@ledge/ui/sounds/player';
@@ -104,4 +104,28 @@ export function useAlerts(input: { sessions: readonly Session[]; machines: reado
   }, [input.status, api]);
 
   return useMemo(() => ({ user: api.user, test: api.test }), [api]);
+}
+
+/**
+ * « Un appareil demande l'accès »: the Windows notification for a pairing that comes to `confirm` (its code to compare), through
+ * the session alerts' toast. Once per pairing, only while Desktop is behind or in the tray, never in Do not disturb; a pairing
+ * seen while the window had the focus is not announced later. The dialog itself opens on any screen (settings/PairingDialog).
+ */
+export function usePairingAlerts(mobile: MobileState | undefined, deps: Pick<AlertDeps, 'toast' | 'focused'> = {}): void {
+  const [dnd] = useDnd();
+  const { t } = useI18n();
+  const live = useRef({ dnd, title: t.notify.pairing, deps });
+  live.current = { dnd, title: t.notify.pairing, deps };
+  const seen = useRef(new Set<string>());
+  const asking = mobile?.enabled ? mobile.pairings.filter(p => p.state === 'confirm') : [];
+  const key = asking.map(p => p.id).join('\n');
+  useEffect(() => {
+    const l = live.current;
+    for (const p of asking) {
+      if (seen.current.has(p.id)) continue;
+      seen.current.add(p.id);
+      if (l.dnd || (l.deps.focused ?? windowFocused)()) continue;
+      (l.deps.toast ?? nativeToast)(l.title, p.label);
+    }
+  }, [key]);
 }

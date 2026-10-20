@@ -4,8 +4,8 @@ import type { Overview } from './overview';
 export type View = 'atelier';
 /** 'all', 'none' (Sans projet) or a project id. */
 export type ProjectFilter = string;
-export type SectionId = 'general' | 'appearance' | 'island' | 'notifications' | 'sounds' | 'machines' | 'projects' | 'shortcuts' | 'about';
-export const SECTIONS: readonly SectionId[] = ['general', 'appearance', 'island', 'notifications', 'sounds', 'machines', 'projects', 'shortcuts', 'about'];
+export type SectionId = 'general' | 'appearance' | 'island' | 'notifications' | 'sounds' | 'machines' | 'mobile' | 'projects' | 'shortcuts' | 'about';
+export const SECTIONS: readonly SectionId[] = ['general', 'appearance', 'island', 'notifications', 'sounds', 'machines', 'mobile', 'projects', 'shortcuts', 'about'];
 export type Place =
   | { kind: 'overview'; view: View; project: ProjectFilter }
   /** helper : la page d'un sous-agent de `id` ; focus : la réponse prend le focus à l'arrivée (« Répondre ») ; item : le message (id du fil) que la page met en vue et allume (« Voir dans le fil de X »). */

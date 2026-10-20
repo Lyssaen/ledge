@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, type JSX } from 'react';
 import type { DaemonClient, Fleet, MachineState } from '@ledge/fleet';
-import type { IslandPrefs, Projects as ProjectsState, Session } from '@ledge/protocol';
+import type { IslandPrefs, MobileState, Projects as ProjectsState, Session } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
 import { Kbd } from '@ledge/ui/ui/Kbd';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
@@ -16,16 +16,18 @@ import { Island } from './Island';
 import { Notifications } from './Notifications';
 import { Sounds } from './Sounds';
 import { Machines } from './Machines';
+import { Mobile, mobileAsks, mobileDown, PHONE } from './Mobile';
 import { Projects } from './Projects';
 import { Shortcuts } from './Shortcuts';
 import { About } from './About';
 import { shownOf } from './machineDrafts';
+import { usePairingDialogOpen } from './pairingRequest';
 import { EscapeLayersContext, escapeLayers, type EscapeLayers } from './escape';
 
 /** What the sections receive from the shell: the app's toast (`saved` says « Setting saved · … » once a change is accepted,
  *  in `lang` when given), the fleet, its client (what a machine says of its folders) and its machines, the projects, the island's settings
  *  (undefined until the local daemon speaks of them, null while none was set), the sessions, navigation, the alerts (the Sounds' Test), the
- *  daemons' updates (one per machine), the language and how to change it (its strings load first: 'failed' leaves the language as it is),
+ *  local daemon's mobile access (undefined until it speaks of it), the daemons' updates (one per machine), the language and how to change it (its strings load first: 'failed' leaves the language as it is),
  *  and whether the animations are frozen. */
 export interface SettingsContext {
   notify(text: string): void;
@@ -35,6 +37,9 @@ export interface SettingsContext {
   machines: readonly MachineState[];
   projects: ProjectsState | null;
   island: IslandPrefs | null | undefined;
+  mobile: MobileState | undefined;
+  /** The local daemon's last refused mobile.* command, shown by Settings › Mobile access. */
+  mobileError?: { request: string; message: string; code?: string };
   projectIdOf(s: Session): string | null;
   sessions: readonly Session[];
   dispatch(a: NavAction): void;
@@ -53,6 +58,7 @@ const SECTION_ICONS: Record<SectionId, readonly string[]> = {
   notifications: ['M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9', 'M10.3 21a1.94 1.94 0 0 0 3.4 0'],
   sounds: ['M11 5 6 9H2v6h4l5 4V5Z', 'M15.5 8.5a5 5 0 0 1 0 7', 'M19 5a10 10 0 0 1 0 14'],
   machines: ['M3 4h18v12H3z', 'M12 16v4', 'M8 20h8'],
+  mobile: PHONE,
   projects: ICONS.folder.d,
   shortcuts: ['M2 6h20v12H2z', 'M6 10h.01', 'M10 10h.01', 'M14 10h.01', 'M18 10h.01', 'M7 14h10'],
   about: ['M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z', 'M12 16v-4', 'M12 8h.01']
@@ -66,13 +72,15 @@ function SectionBody({ section, ctx }: { section: SectionId; ctx: SettingsContex
   if (section === 'notifications') return <Notifications ctx={ctx} />;
   if (section === 'sounds') return <Sounds ctx={ctx} />;
   if (section === 'machines') return <Machines ctx={ctx} />;
+  if (section === 'mobile') return <Mobile ctx={ctx} />;
   if (section === 'projects') return <Projects ctx={ctx} />;
   if (section === 'shortcuts') return <Shortcuts ctx={ctx} />;
   return <About ctx={ctx} />;
 }
 
 /** The mockup's Settings page: the sections on the left (« Back to the atelier » first, as Escape; a dot on Machines while a
- *  machine shows offline (not while it connects), on About while an update of the app or of the local daemon waits), the section's title, hint and cards
+ *  machine shows offline (not while it connects), on Mobile access while its link is down (and in the brand colour while a device
+ *  asks for access), on About while an update of the app or of the local daemon waits), the section's title, hint and cards
  *  on the right, scrolled back to the top at each change of section. */
 export function SettingsPage({ section, ctx }: { section: SectionId; ctx: SettingsContext }): JSX.Element {
   const { t } = useI18n();
@@ -88,9 +96,11 @@ export function SettingsPage({ section, ctx }: { section: SectionId; ctx: Settin
   // Escape closes the one thing its first press did, no more, and never leaves the page (its repeats are taken and do nothing).
   const layers = useRef<EscapeLayers>({ list: [] }).current;
   useScreenKeys(e => e.key === 'Escape' && (e.repeat || escapeLayers(layers)));
+  const pairingOpen = usePairingDialogOpen();
   const alert = (id: SectionId): string | null =>
     // A machine whose daemon restarts for its update is not « offline » (#48).
     id === 'machines' && ctx.machines.some(m => shownOf(m) === 'offline' && !ctx.daemonUpdates.updating.has(m.id)) ? s.machineOffline
+    : id === 'mobile' && mobileDown(ctx.mobile) ? s.mobileOffline
     : id === 'about' && (updateReady(update) || ctx.machines.some(m => ctx.daemonUpdates.of(m.id).offer !== 'none')) ? s.updateWaiting
     : null;
 
@@ -104,6 +114,7 @@ export function SettingsPage({ section, ctx }: { section: SectionId; ctx: Settin
             <button key={id} type="button" className={id === section ? 'settings-tab active' : 'settings-tab'} aria-current={id === section ? 'page' : undefined}
               onClick={() => dispatch({ type: 'settings', section: id })}>
               <Icon d={SECTION_ICONS[id]} size={15} /><span>{t.sections[id]}</span>{note && <b className="side-alert" role="img" aria-label={note} />}
+              {id === 'mobile' && mobileAsks(ctx.mobile, pairingOpen) && <b className="side-alert mob-ask" role="img" aria-label={s.mobileAsks} />}
             </button>
           );
         })}

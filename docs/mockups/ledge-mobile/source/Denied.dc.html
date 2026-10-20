@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Compte non autorisé</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;display=swap">
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#000}
+a{color:#fafafa;text-decoration:none}a:hover{color:#fff}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.bot .shell{fill:url(#sig);stroke:#859397;stroke-width:.8}.bot .visor{fill:#172124;stroke:#00000055;stroke-width:1}.bot .foot{fill:#273238}.bot .ant{stroke:#273238;stroke-width:2;stroke-linecap:round}.bot .lamp,.bot .eye{fill:var(--eye)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:56px;padding:0 16px;border-radius:12px;font:600 16px/20px 'Geist',system-ui,sans-serif;box-sizing:border-box;cursor:pointer}
+.btn-outline{background:transparent;color:#fafafa;border:1px solid #ffffff26}.btn-outline:hover{background:#171717}
+.resident{overflow:visible;filter:drop-shadow(0 0 4px #ee9c87a6) drop-shadow(0 0 12px #8bc7b661)}.r-shell{fill:#566365;stroke:#91a2a272;stroke-width:1.2}.r-foot{fill:#313b3e}.r-ant{fill:none;stroke:#313b3e;stroke-width:3;stroke-linecap:round}.r-visor{fill:#182224}.r-eye{fill:#ffc3a8}.r-shine{fill:none;stroke:#ffffff50;stroke-width:1.5;stroke-linecap:round}.r-line{fill:none;stroke:#ffc3a8;stroke-width:3;stroke-linecap:round}.resident.off{filter:none}.resident.off .r-eye{fill:#a8abaa}.resident.off .r-line{stroke:#a8abaa}
+</style>
+</helmet>
+<div style="width: 390px; height: 100vh; max-height: 844px; box-sizing: border-box; background: #000; color: #fafafa; font-family: 'Geist', system-ui, sans-serif; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; gap: 24px; padding: 96px 20px 34px; overflow: hidden;">
+  <svg width="0" height="0" style="position: absolute;" aria-hidden="true"><defs><linearGradient id="sig" x1=".2" y1="0" x2=".75" y2="1"><stop stop-color="#34434b"></stop><stop offset="1" stop-color="#273238"></stop></linearGradient></defs></svg>
+  <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center; flex-grow: 1;">
+    <svg class="resident off" width="80" height="80" viewBox="0 0 96 96" role="img" aria-label="Ledge"><path class="r-ant" d="M48 23v-9"></path><circle class="r-eye" cx="48" cy="12" r="3"></circle><rect class="r-foot" x="30" y="74" width="12" height="8" rx="4"></rect><rect class="r-foot" x="54" y="74" width="12" height="8" rx="4"></rect><path class="r-shell" d="M23 33Q25 21 40 21h16q15 0 17 12l5 23q4 22-17 22H35Q14 78 18 56Z"></path><path class="r-shine" d="M28 34q3-7 14-7h12"></path><rect class="r-visor" x="25" y="37" width="46" height="27" rx="12"></rect><path class="r-line" d="M34 50q4 4 8 0m12 0q4 4 8 0"></path></svg>
+    <h1 style="margin: 0; font-size: 24px; line-height: 32px; font-weight: 600; letter-spacing: -0.025em;">Ce compte n'a pas accès</h1>
+    <p style="margin: 0; color: #a1a1a1; max-width: 300px;"><span class="mono" style="color: #fafafa;">@collegue</span> n'est pas dans la liste de ce serveur. Demandez à son administrateur de vous ajouter.</p>
+  </div>
+  <a href="Login.dc.html" class="btn btn-outline">Utiliser un autre compte</a>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

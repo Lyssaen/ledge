@@ -1,5 +1,5 @@
 import { useId, useState, type FormEvent, type ReactNode } from 'react';
-import type { Block, Item, ReplyDoc, Section } from '../reply/parse';
+import type { Block, Item, ReplyDoc, Section } from '@ledge/ui/reply/parse';
 import { Button } from '../ui/Button';
 import { Icon, ICONS } from '../ui/icons';
 import { transition } from '../motion';

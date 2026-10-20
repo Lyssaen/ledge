@@ -1,0 +1,29 @@
+{
+  "pc": {
+    "pkcs8": "MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgVo05GtfgTyNJrTGwELwoE1QAcrDPTMrRrKny1OvEnKmhRANCAAQFlqzniBAH9ozpQNC5iv3RzDT04xNag_zcocXteeV9paFIcdw2lWXZ5fUL4wae4UQV-Obn5yvpx1ApiSbLM9ba",
+    "publicKey": "BAWWrOeIEAf2jOlA0LmK_dHMNPTjE1qD_Nyhxe155X2loUhx3DaVZdnl9QvjBp7hRBX45ufnK-nHUCmJJssz1to"
+  },
+  "device": {
+    "pkcs8": "MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgnPXROXhAc8k0CEzaswbe27kwjfo0hdRSChoy_KUOvOWhRANCAATvtFd5kMCoscyqBN201LG1L8jYQXH34jz1Rro3xl1w0DrwEzD2PIfzX7tFrj7pcxxCyRaGS1Rz3prsoDSnytfz",
+    "publicKey": "BO-0V3mQwKixzKoE3bTUsbUvyNhBcffiPPVGujfGXXDQOvATMPY8h_Nfu0WuPulzHELJFoZLVHPemuygNKfK1_M"
+  },
+  "pcEphemeral": {
+    "pkcs8": "MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgQJZno7rfm2ww6CCJkQMLt7EcQXeq_DqahKrSrsTdhgyhRANCAARDEXXWyNS4liJdqNRvX5IBoZ3s1AMmGzyoKUlMvcCXFgeKz02vTHqWm1pHpTLhKlb_vmRryvLzp2IYbdYSzMWt"
+  },
+  "deviceEphemeral": {
+    "pkcs8": "MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgEokh-zz62NgrfQn1FBoOzELOKuqhD1OsPbOeWgQDbPChRANCAATxkEscyLT6lF7WUnn-7fhMcITxzzkby0akG9-AFvwRl_fHrMaA8yXvUSlLLjv3w1bpUuGmzynw1v6bu0hnalix"
+  },
+  "pcNonce": "lkTv6PychJqtDScuYV3W9VZBUimQFovDFnzBtYD3wuE",
+  "deviceNonce": "ck1l6AlrpXwKt_5o2m7Yh9ZAiJ0kVO9HT8e7YTC2q1M",
+  "expected": {
+    "pcFingerprint": "KBLRD3sd5nhBOh-bKLPe1i",
+    "deviceFingerprint": "adCUyTqbESULsudEJICTNr",
+    "commit": "vMnFU72Lb0rOz47gWmeezU_K-0KPI1HvC2KnKyjM-jM",
+    "pairingCode": "432 305",
+    "sealed": {
+      "pcToDevice": "AAAAAAAAAADaa_1aSKsvne3cywrG4Zk40tj7wWo1HwADnkZhsg",
+      "deviceToPc": "AAAAAAAAAAC4apvPBw8YUTZgu2piTq8U2FDZI3iWWSloxkgjoA"
+    }
+  },
+  "offCurve": "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAE"
+}

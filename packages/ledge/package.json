@@ -23,6 +23,7 @@
   },
   "devDependencies": {
     "@ledge/protocol": "workspace:*",
+    "@ledge/seal": "workspace:*",
     "@types/node": "^22.7.0",
     "@types/ws": "^8.5.12",
     "tsup": "^8.3.0"
