@@ -18,7 +18,35 @@ export const copy = {
     emptyFilterHint: 'Les autres demandes restent dans « Tout ».',
     offlineNote: 'Vous pouvez consulter les demandes. Aucune décision ne sera envoyée hors connexion.'
   },
-  nav: { label: 'Navigation principale', inbox: 'À traiter', agents: 'Agents' },
+  nav: { label: 'Navigation principale', inbox: 'À traiter', agents: 'Agents', chat: 'Demander à Ledge' },
+  chat: {
+    title: 'Ledge',
+    subtitle: (agents: number, repos: number) => `Fil du téléphone · ${agents} ${agents > 1 ? 'agents' : 'agent'}, ${repos} ${repos > 1 ? 'repos' : 'repo'}`,
+    reset: 'Nouvelle conversation',
+    empty: 'Posez une question sur vos agents et vos repos. Ce fil est propre à ce téléphone.',
+    suggestions: {
+      waiting: 'Qui attend quelque chose de moi ?',
+      session: (name: string) => `Où en est ${name} sur le badge d'attente ?`,
+      repo: (repo: string) => `Qu'est-ce qui a changé dans ${repo} aujourd'hui ?`
+    },
+    stop: 'Arrêter',
+    sources: 'Sources : ',
+    field: 'Question pour Ledge',
+    placeholder: 'Demander à Ledge…',
+    send: 'Envoyer la question',
+    busy: 'Ledge répond déjà à d\'autres questions. Réessayez dans un instant.',
+    timeout: 'Ledge n\'a pas répondu à temps.',
+    failed: 'Ledge n\'a pas pu répondre.',
+    cancelled: 'Question arrêtée.',
+    offline: 'Hors ligne : posez la question quand le PC sera joignable.',
+    cut: 'Réponse coupée : la suite est sur le PC.',
+    steps: {
+      sessions: (n: number) => `Lit les ${n} sessions…`,
+      pane: (name: string) => `Regarde le terminal de ${name}…`,
+      reply: (name: string) => `Lit la dernière réponse de ${name}…`,
+      look: (name: string) => `Regarde ${name}…`
+    }
+  },
   agents: {
     title: 'Agents',
     subtitle: (sessions: number, projects: number) => `${sessions} ${sessions > 1 ? 'sessions' : 'session'} · ${projects} ${projects > 1 ? 'projets' : 'projet'} sur ce PC`,

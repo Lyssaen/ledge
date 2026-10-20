@@ -4,6 +4,7 @@ import { useSyncExternalStore } from 'react';
 export type Route =
   | { name: 'inbox' }
   | { name: 'agents' }
+  | { name: 'chat' }
   | { name: 'thread'; sessionId: string }
   | { name: 'terminal'; sessionId: string }
   | { name: 'request'; sessionId: string; key: string }
@@ -13,7 +14,7 @@ export type Route =
   | { name: 'key-changed' }
   | { name: 'update' };
 
-const SIMPLE = ['agents', 'connection', 'login', 'link', 'key-changed', 'update'] as const;
+const SIMPLE = ['agents', 'chat', 'connection', 'login', 'link', 'key-changed', 'update'] as const;
 
 export function parseRoute(hash: string): Route {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean);

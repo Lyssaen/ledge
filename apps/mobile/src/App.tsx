@@ -3,8 +3,9 @@
 import { useEffect, useReducer, useRef, useState } from 'react';
 import { MeResponseSchema } from '@ledge/protocol';
 import type { LinkState, PhoneLink } from './link/link';
-import { openFromWorker, useRoute } from './router';
+import { navigate, openFromWorker, useRoute } from './router';
 import { Agents } from './screens/Agents';
+import { Chat } from './screens/Chat';
 import { Compare } from './screens/Compare';
 import { ProtectStep } from './screens/Enroll';
 import { Connection } from './screens/Connection';
@@ -133,6 +134,10 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
     return () => sw.removeEventListener('message', onMessage);
   }, []);
 
+  // `#/chat` without the chat announced goes to the inbox; before the PC's first snapshot nothing is known, so the address stays.
+  const chatOff = route.name === 'chat' && mobile.fresh && !mobile.device?.chat;
+  useEffect(() => { if (chatOff) navigate({ name: 'inbox' }); }, [chatOff]);
+
   const pinned = link.pinned();
   // The pinned PC only while pairing: the name the old PC gave is not the one being paired.
   const pairingName = pinned?.name ?? null;
@@ -185,6 +190,7 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
     }
     switch (route.name) {
       case 'agents': return <Agents store={store} onReconnect={retry} />;
+      case 'chat': return mobile.device?.chat ? <Chat store={store} onReconnect={retry} /> : <Inbox store={store} onReconnect={retry} />;
       case 'thread': return <Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} />;
       case 'terminal': return <Terminal key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} />;
       // Keyed by the session only: a request replaced in place rewrites the address, and must not start the screen over.

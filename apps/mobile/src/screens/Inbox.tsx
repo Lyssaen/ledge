@@ -73,7 +73,7 @@ export function Inbox({ store, onReconnect, notice }: { store: MobileStore; onRe
         )}
         {offline && <p className="mt-4 text-xs text-muted">{copy.inbox.offlineNote}</p>}
       </main>
-      <TabBar count={all.length} />
+      <TabBar count={all.length} chat={!!state.device?.chat} />
     </>
   );
 }

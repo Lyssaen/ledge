@@ -56,7 +56,7 @@ export function Agents({ store, onReconnect }: { store: MobileStore; onReconnect
           </div>
         )}
       </main>
-      <TabBar count={requestsOf(sessions).length} active="agents" />
+      <TabBar count={requestsOf(sessions).length} active="agents" chat={!!state.device?.chat} />
     </>
   );
 }
