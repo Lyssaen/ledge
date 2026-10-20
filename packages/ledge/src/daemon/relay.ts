@@ -14,10 +14,14 @@ export interface RelayDeps {
    */
   replyTo: (id: string, text: string) => Promise<string | null>;
   broadcast: (m: ChatMessage) => void; now?: () => string;
+  /** Sessions being typed into, shared with the mailbox so the two never type into one session at once. */
+  typing?: Set<string>;
+  /** A refused delivery left the session free with no card queued for it: whatever else waits for it (the mailbox) goes now. */
+  next?: (id: string) => void;
 }
 
 /** Free to take a typed instruction: its turn (or in error, where session.reply types too), nothing pending. */
-const free = (s: Session | undefined): s is Session => !!s && (s.state === 'idle' || s.state === 'error') && !s.pending;
+export const free = (s: Session | undefined): s is Session => !!s && (s.state === 'idle' || s.state === 'error') && !s.pending;
 const stopped = (name: string) => `${name} stopped before it got the instruction`;
 
 /**
@@ -27,7 +31,7 @@ const stopped = (name: string) => `${name} stopped before it got the instruction
 export function createRelay(d: RelayDeps): Relay {
   const now = d.now ?? (() => new Date().toISOString());
   // A session stays idle while its instruction is being typed: these keep a second one, or the same one twice, from following it.
-  const typing = new Set<string>(); const sending = new Set<string>();
+  const typing = d.typing ?? new Set<string>(); const sending = new Set<string>();
 
   async function deliver(qid: string, r: ChatRelay): Promise<string | null> {
     typing.add(r.id); sending.add(qid);
@@ -49,7 +53,10 @@ export function createRelay(d: RelayDeps): Relay {
   /** After a refused delivery the session is still free: the next queued card must not wait for an unrelated store change. */
   async function deliverAndKick(qid: string, r: ChatRelay): Promise<string | null> {
     const refused = await deliver(qid, r);
-    if (refused) kick(r.id);
+    if (refused) {
+      if (d.chat.queuedRelays().some(q => q.relay.id === r.id)) kick(r.id);
+      else if (free(d.store.get(r.id)) && !typing.has(r.id)) d.next?.(r.id);
+    }
     return refused;
   }
 

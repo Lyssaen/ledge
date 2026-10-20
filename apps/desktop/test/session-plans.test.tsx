@@ -1,8 +1,8 @@
 import { afterEach, expect, it } from 'vitest';
 import { cleanup, screen, waitFor, within } from '@testing-library/react';
-import type { ToolItem } from '@ledge/protocol';
+import type { ThreadItem, ToolItem } from '@ledge/protocol';
 import { fakeSession, T0 } from '@ledge/fleet/test/mockDaemon';
-import { boot, closeDaemons, declarations, listSessions, ottoThread } from './helpers';
+import { boot, closeDaemons, declarations, listSessions, ottoThread, unfoldPast } from './helpers';
 
 afterEach(async () => { cleanup(); localStorage.clear(); await closeDaemons(); });
 
@@ -91,7 +91,8 @@ it('the keys are not offered where the plan cannot be answered: read only, offli
   const sub = await boot({ sessions: [otto, ...listSessions().slice(1)], list: true });
   sub.d.thread('otto', [...ottoThread(), { ...exit('hp', 'running'), turn: 1, helperId: 'h1' }]);
   await sub.user.click(screen.getByRole('button', { name: /^Otto,/ }));
-  await sub.user.click(await screen.findByRole('button', { name: 'Open Explore: Lire le code' }));
+  await unfoldPast(sub.user);
+  await sub.user.click(screen.getByRole('button', { name: "Open Explore's thread" }));
   await screen.findByText('Proposed plan');
   await sub.user.click(card('hp').getByRole('button', { name: /Read the plan/ }));
   expect(side().getByText('Plan proposed by Explore')).toBeVisible();
@@ -109,14 +110,17 @@ it('a request tab opened before its action arrived keeps its keys', async () => 
   await screen.findByText('Proposed plan');
   expect(status()).toBe(HINT);
 });
-it('a decided plan is a chip', async () => {
+it('a decided plan is a chip, its node in the colour of its fate', async () => {
   const { d, user } = await boot({ sessions: listSessions(), list: true });
-  d.thread('otto', [...ottoThread(), { kind: 'permission', id: 'perm-plan', at: new Date().toISOString(), turn: 2, tool: 'ExitPlanMode', text: '# Plan : version 0.6.0', decision: 'always' }]);
+  const decided = (id: string, decision: 'always' | 'unknown'): ThreadItem => ({ kind: 'permission', id, at: new Date().toISOString(), turn: 2, tool: 'ExitPlanMode', text: '# Plan : version 0.6.0', decision });
+  d.thread('otto', [...ottoThread(), decided('perm-plan', 'always'), decided('perm-plan-2', 'unknown')]);
   await user.click(screen.getByRole('button', { name: /^Otto,/ }));
-  await screen.findByText('Câble la liste');
-  expect(document.querySelector('.decision-chip.plan.always')).toHaveTextContent('✓Plan approved · auto modePlan : version 0.6.0');
+  await screen.findByText('Corrige-les');
+  const always = document.querySelector('.decision-chip.plan.always')!;
+  expect(always).toHaveTextContent('You approved the plan in auto mode“Plan : version 0.6.0”');
+  expect(always.closest('.r')!.querySelector('.n')).toHaveClass('success');
   // Answered in the terminal, its fate is not known: no success colour.
-  expect(declarations('session.css', '.decision-chip.plan.unknown .chip-mark')).toBe('color:var(--muted-foreground)');
+  expect(document.querySelector('.decision-chip.plan.unknown')!.closest('.r')!.querySelector('.n')).not.toHaveClass('success');
 });
 it('a plan without its action (Codex) is read from the request; once answered, its tab keeps the plan, its fate untold', async () => {
   const cora = fakeSession('cora', { name: 'Cora', tool: 'codex', cwd: '/w/ledge', state: 'waiting_permission', pending: { kind: 'plan', text: '# Plan : version 0.6.0', body: md, source: 'pane' } });

@@ -17,13 +17,13 @@ const open = async (page: Page, name: string) => { await page.getByRole('tree').
 const thread = (page: Page) => page.locator('.session-thread');
 const gap = (page: Page) => thread(page).evaluate(el => el.scrollHeight - el.scrollTop - el.clientHeight);
 
-test('the session reads as a flat thread; actions unfold; Y allows the pinned request once', async ({ page }) => {
+test('the session reads as a rail; the past exchange unfolds; Y allows the pinned request once', async ({ page }) => {
   const daemon = await fakeDaemon(page, fleet, { projects: twoProjects, threads: { otto: ottoThread } });
   await page.goto('/');
   await open(page, 'Otto');
-  await expect(thread(page).getByText('Câble la liste')).toBeVisible();
-  await thread(page).getByRole('button', { name: /^3 actions/ }).click();
-  await expect(thread(page).locator('.action-list:not(.compact) .action-row')).toHaveCount(3);
+  await thread(page).getByRole('button', { name: /Câble la liste/ }).click();
+  await expect(thread(page).getByText('Câble la liste', { exact: true })).toBeVisible();
+  await expect(thread(page).locator('.turn').first().locator('li.action-row')).toHaveCount(4);
   await page.keyboard.press('y');
   await expect.poll(() => daemon.received.filter(m => m.type === 'session.decide')).toEqual([{ type: 'session.decide', id: 'otto', decision: 'accept', expect: { kind: 'permission', text: 'npm test', key: expect.any(String) } }]);
   await expect(page.getByRole('region', { name: 'Approval requested' })).toHaveCount(0);
@@ -84,13 +84,13 @@ test('the terminal on O follows from agent to agent and survives a reload', asyn
   await open(page, 'Otto');
   await expect(page.getByRole('region', { name: 'Terminal' })).toBeVisible();
 });
-test('under 1000 px the reading column stays centred at 760 px at most, beside no rail of agents', async ({ page }) => {
+test("under 1000 px the thread's rail stays centred at 820 px at most (the mockup's), beside no rail of agents", async ({ page }) => {
   await fakeDaemon(page, fleet, { projects: twoProjects, threads: { otto: ottoThread } });
   await page.setViewportSize({ width: 960, height: 800 });
   await page.goto('/');
   await open(page, 'Otto');
   await expect(page.locator('.project-rail')).toHaveCount(0);
-  const turn = (await thread(page).locator('.turn').first().boundingBox())!;
-  expect(turn.width).toBeLessThanOrEqual(760);
+  const rail = (await thread(page).locator('.rail').boundingBox())!;
+  expect(rail.width).toBeLessThanOrEqual(820);
   expect(await page.locator('.session-page').evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
 });

@@ -1,7 +1,7 @@
-/* The session page (docs/mockups/desktop-observatory/session.css, ported whole): the flat thread, Modifications, the side pane,
-   plans, the task list, the pinned request and the reply. Tokens only, both themes. Deliberate departures from the mockup:
-   - a flat thread only: the folded-turn rules (.turn-head, .turn-n, .turn-toggle, .turn.folded, .folded-note) are not ported,
-     the mockup cancels them itself;
+/* The session page (docs/mockups/desktop-observatory/session.css, ported whole): the thread's rail (issue #34, track B of
+   https://claude.ai/artifact/XKxXpf68zvDLp9x1VGXi43), Modifications, the side pane, plans, the task list, the pinned request
+   and the reply. Tokens only, both themes. Deliberate departures from the mockups:
+   - a rail node masks the line with the conversation's background (--sidebar), so its tints are mixed opaque with it;
    - « Voir » under 600 px comes from the link's data-short attribute (translated), not from a French string in the CSS. */
 
 /* The session place (observatory.css: .conversation-workspace, .conversation, .pane-heading, .messages, the terminal; office.css:
@@ -34,7 +34,7 @@
 /* Session page content */
 .session-page{position:relative;min-width:0;container-type:inline-size;container-name:session}
 .session-page .kids-pill{white-space:nowrap}
-@container session (max-width:600px){.session-page .pane-meta{display:none}.reply-hint{display:none}.summary-meta:not(.mono){display:none}.action-verb{display:none}.action-link{font-size:0}.action-link:after{content:attr(data-short);font-size:11px}.session-thread{padding:16px 16px 24px}.msg-body{padding-left:0}.document-card{width:100%;margin-left:0}}
+@container session (max-width:600px){.session-page .pane-meta{display:none}.reply-hint{display:none}.action-verb{display:none}.vb{width:auto}.action-link{font-size:0}.action-link:after{content:attr(data-short);font-size:11px}.session-thread{padding:16px 16px 24px}.r{grid-template-columns:32px minmax(0,1fr) 44px;column-gap:10px}.rail:before{left:15.5px}.doc{max-width:none}.message-card,.message-card.sent{max-width:100%}.pane-heading .tags{display:none}}
 .session-page .pane-heading{gap:10px;padding:0 14px 0 12px}
 .session-page .pane-meta{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .view-switch{display:flex;gap:2px;padding:2px;border:1px solid var(--input);border-radius:var(--radius-md);background:var(--muted);flex-shrink:0}
@@ -47,97 +47,162 @@
 .session-body:focus,.side-pane:focus{outline:none}
 .session-thread{position:relative;flex:1;min-height:0;overflow:auto;padding:18px 24px 28px;max-height:none}
 
-/* Turns */
-.turn{position:relative;padding:0 0 18px;margin:0 0 18px;border-bottom:1px solid var(--border)}
-.turn:last-child{border-bottom:0;margin-bottom:0}
-.turn-live{display:inline-flex;align-items:center;gap:5px;color:var(--info)}
-.turn-live i{width:6px;height:6px;border-radius:50%;background:var(--info);animation:session-pulse 1.4s ease-in-out infinite}
-@keyframes session-pulse{50%{opacity:.35}}
-.prompt-block{margin:0 0 12px;padding:10px 12px;background:var(--secondary);border:1px solid var(--border);border-radius:var(--radius-lg)}
-.prompt-block p{margin:0;font-size:13px;line-height:20px;white-space:pre-wrap;overflow-wrap:anywhere}
-.prompt-author{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted-foreground);margin-bottom:3px}
-.prompt-block.from-agent{background:var(--well)}
+/* The rail (issue #34, the mockup's track B): one list of exchanges, each a list of rows `node · content · time` whose nodes
+   are strung on one 1 px line. A node masks the line with the page's own background (the conversation's, --sidebar), so its
+   tints are mixed opaque. */
+.rail{list-style:none;margin:0 auto;padding:10px 0 24px;max-width:calc(var(--col) + 60px);position:relative;display:flex;flex-direction:column}
+.rail:before{content:'';position:absolute;left:19.5px;top:22px;bottom:36px;width:1px;background:var(--border)}
+.turn{list-style:none;margin:0 0 6px}
+.turn-rows{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.r{display:grid;grid-template-columns:40px minmax(0,1fr) 56px;column-gap:14px;align-items:start;padding:4px 0}
+.r>.n{justify-self:center;z-index:1}
+.r>.tm{font:11px/20px 'Geist Mono',monospace;color:var(--muted-foreground);text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 
-/* Agent messages */
-.agent-message{margin:12px 0}
-.msg-author{display:flex;align-items:center;gap:7px;font-size:12px;margin-bottom:4px}
-.msg-author strong{font-weight:600}
-.msg-tag{font-size:10px;color:var(--muted-foreground);border:1px solid var(--border);border-radius:4px;padding:0 5px;line-height:16px}
-.msg-body{font-size:13px;line-height:21px;padding-left:27px}
+/* Nodes: a disc for what matters (its tone), a pip for a quiet action, your avatar, the agent's bot. */
+.node{width:24px;height:24px;margin-top:-2px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:var(--sidebar);border:1px solid var(--border);color:var(--muted-foreground)}
+.node.info{color:var(--info);border-color:color-mix(in srgb,var(--info) 35%,var(--border));background:color-mix(in srgb,var(--info) 10%,var(--sidebar))}
+.node.success{color:var(--success);border-color:color-mix(in srgb,var(--success) 35%,var(--border));background:color-mix(in srgb,var(--success) 10%,var(--sidebar))}
+.node.warning{color:var(--warning);border-color:color-mix(in srgb,var(--warning) 35%,var(--border));background:color-mix(in srgb,var(--warning) 10%,var(--sidebar))}
+.node.danger{color:var(--danger-text);border-color:color-mix(in srgb,var(--danger-text) 35%,var(--border));background:color-mix(in srgb,var(--danger-text) 10%,var(--sidebar))}
+.pip{width:5px;height:5px;margin-top:8px;border-radius:50%;background:color-mix(in srgb,var(--muted-foreground) 35%,var(--sidebar))}
+.av,.botn{width:28px;height:28px;margin-top:-3px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center}
+.av{background:var(--foreground);color:var(--background)}
+/* Your profile photo (#50): it fills the disc, cropped round. */
+.av img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
+.botn{background:var(--sidebar)}
+.new-dot{width:8px;height:8px;margin-top:6px;border-radius:50%;background:var(--sidebar-primary)}
+
+/* A folded exchange, a folded run of actions: one row, its chevron on the rail. */
+.r-fold{align-items:center}
+.r-fold>.node{margin-top:0}
+.fold-row{display:block;width:100%;min-width:0;padding:2px 0;border:0;background:none;text-align:left;font-size:13px;line-height:20px;color:var(--muted-foreground);cursor:pointer}
+.fold-row:hover{color:var(--foreground)}
+.fold-row strong{font-weight:500;color:var(--foreground)}
+.fold-text{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fold-failed{color:var(--danger-text)}
+.fold-row:focus-visible,.tg:focus-visible,.lnk:focus-visible,.doc:focus-visible{outline:2px solid var(--ring);outline-offset:2px;border-radius:4px}
+
+/* Your prompt (or the parent's), with the Story / Objectif it carried. */
+.prompt-row{padding:12px 0 8px}
+.prompt-col{min-width:0}
+.who{display:flex;align-items:center;flex-wrap:wrap;gap:6px;font-size:11px;font-weight:500;line-height:20px;color:var(--muted-foreground)}
+.prompt-text{margin:2px 0 0;font-size:15px;line-height:24px;font-weight:500;white-space:pre-wrap;overflow-wrap:anywhere}
+.tags{display:inline-flex;align-items:center;flex-wrap:wrap;gap:6px}
+.tag{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 8px;border:1px solid var(--border);border-radius:999px;font-size:11px;font-weight:400;color:var(--muted-foreground);white-space:nowrap}
+.tag b{font-weight:500;color:var(--foreground)}
+.pane-heading .tags{min-width:0;flex-wrap:nowrap;overflow:hidden}
+
+/* What the agent said, and the documents it names. */
+.say-row{padding:6px 0}
+.say{min-width:0;padding-top:1px}
+.msg-body{font-size:14px;line-height:22px;color:color-mix(in srgb,var(--foreground) 92%,var(--muted-foreground));overflow-wrap:anywhere}
 .msg-body .ledge-thread-md{display:block}
 .msg-body .ledge-thread-md>p:first-child{display:block;margin-top:0}
 .msg-body .ledge-thread-md a{color:var(--foreground)}
-.document-card{display:flex;align-items:center;gap:10px;width:calc(100% - 27px);margin:10px 0 0 27px;padding:10px 12px;background:var(--well);border:1px solid var(--border);border-radius:var(--radius-md);font-size:12px;color:var(--muted-foreground)}
-.document-card:hover{border-color:var(--ring);color:var(--foreground)}
-.document-card>span:nth-child(2){flex:1;min-width:0;display:flex;flex-direction:column}
-.document-card strong{font-weight:500;color:var(--foreground)}
-.document-card small{font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.doc-open{display:inline-flex;align-items:center;gap:3px;font-size:11px}
+.msg-body p{margin:0 0 8px}
+.msg-body li{margin:2px 0}
+.msg-body pre{font-size:12px}
+.doc{display:flex;align-items:center;gap:12px;width:100%;max-width:460px;margin-top:10px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--card);text-align:left;font-size:12px;color:var(--muted-foreground)}
+.doc:hover{border-color:var(--ring);color:var(--foreground)}
+.doc-ico{flex:none;width:34px;height:34px;border-radius:var(--radius-md);background:var(--muted);color:var(--muted-foreground);display:inline-flex;align-items:center;justify-content:center}
+.doc-name{flex:1;min-width:0;display:flex;flex-direction:column}
+.doc-name strong{font-size:13px;font-weight:500;color:var(--foreground)}
+.doc-name small{font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.doc-open{display:inline-flex;align-items:center;gap:4px;font-size:12px;white-space:nowrap}
 
-/* Actions */
-.action-group{margin:8px 0}
-.action-summary{display:flex;align-items:center;gap:8px;width:100%;min-height:32px;padding:5px 10px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--background);font-size:12px;color:var(--muted-foreground)}
-.action-summary:hover:not(:disabled){border-color:var(--input);color:var(--foreground)}
-.action-summary>svg{transform:rotate(-90deg);transition:transform .15s}
-.action-summary.open>svg{transform:none}
-.action-summary.open{border-bottom-left-radius:0;border-bottom-right-radius:0}
-.summary-count{color:var(--foreground);font-weight:500;white-space:nowrap}
-.summary-failed{white-space:nowrap}
-.kind-chips{display:inline-flex;gap:8px}
-.kind-chip{display:inline-flex;align-items:center;gap:3px;font:11px 'Geist Mono',monospace}
-.summary-failed{color:var(--danger-text)}
-.summary-meta{white-space:nowrap}
-.summary-meta.mono{font-size:11px}
-.action-list{border:1px solid var(--border);border-top:0;border-radius:0 0 var(--radius-md) var(--radius-md);padding:4px 0;background:var(--background)}
-.action-list.compact{border-top:0;margin-top:-1px}
-.action-row{padding:0 10px}
-.action-row.flash{animation:session-flash 1.8s ease-out}
+/* Actions: a row each, its verb in a fixed column so the targets line up; failed, it shows its output; running, a ring. */
+.action-row{padding:2px 0}
+.action-row.flash{animation:session-flash 1.8s ease-out;border-radius:var(--radius-md)}
 @keyframes session-flash{0%,40%{background:color-mix(in srgb,var(--info) 16%,transparent)}100%{background:transparent}}
-.action-line{display:flex;align-items:center;gap:8px;min-height:26px;font-size:12px}
-.action-mark{width:14px;text-align:center;font:600 12px 'Geist Mono',monospace;flex-shrink:0}
-.mark-success{color:var(--success)}.mark-failed{color:var(--danger-text)}.mark-running{color:var(--info)}.mark-unknown{color:var(--muted-foreground)}
-.action-kind{display:inline-flex;color:var(--muted-foreground)}
-.action-verb{width:86px;flex-shrink:0;color:var(--muted-foreground)}
-.action-target{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--foreground);padding:2px 0}
-.action-target:not(:disabled):hover{text-decoration:underline;text-underline-offset:3px;text-decoration-color:var(--muted-foreground)}
-.action-target:disabled{cursor:default}
-.status-failed .action-target,.status-failed .action-verb{color:var(--danger-text)}
-.status-unknown .action-target{color:var(--muted-foreground)}
-.action-link{font-size:11px;color:var(--muted-foreground);text-decoration:underline;text-underline-offset:3px;white-space:nowrap}
-.action-link:hover{color:var(--foreground)}
-.action-time{min-width:66px;white-space:nowrap;text-align:right;font-size:11px;color:var(--muted-foreground);flex-shrink:0;font-variant-numeric:tabular-nums}
-.action-output{margin:2px 0 8px 30px;padding:8px 10px;max-height:200px;overflow:auto;font:11px/17px 'Geist Mono',monospace;white-space:pre-wrap;background:var(--well);border:1px solid var(--border);border-radius:var(--radius-md);color:var(--muted-foreground)}
+.act-col{min-width:0}
+.act{display:flex;align-items:center;gap:8px;min-width:0;font-size:12px;line-height:20px}
+.action-mark{display:inline-flex;align-items:center;justify-content:center;flex:none}
+.mark-success{color:var(--success)}
+.mark-unknown{width:13px;font-weight:700;color:var(--muted-foreground)}
+.vb{display:inline-flex;align-items:center;gap:6px;width:86px;flex:none;color:var(--muted-foreground)}
+.tg{flex:0 1 auto;min-width:0;padding:0;border:0;background:none;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:12px 'Geist Mono',monospace;color:var(--foreground)}
+button.tg:not(:disabled){cursor:pointer}
+button.tg:not(:disabled):hover{text-decoration:underline;text-underline-offset:3px;text-decoration-color:var(--muted-foreground)}
+button.tg:disabled{cursor:default}
+.status-unknown .tg{color:var(--muted-foreground)}
+.action-row.status-failed{padding:6px 0 14px}
+.status-failed .act{font-size:13px}
+.status-failed .vb{color:var(--danger-text)}
+.status-running .vb,.status-running>.tm{color:var(--info)}
+.lnk{display:inline-flex;align-items:center;gap:4px;padding:0;border:0;background:none;font:inherit;font-size:12px;color:var(--muted-foreground);text-decoration:none;white-space:nowrap;cursor:pointer}
+.lnk:hover{color:var(--foreground)}
+.pre{margin:6px 0 0;padding:8px 10px;background:var(--well);border:1px solid var(--border);border-radius:var(--radius-md);font:12px/18px 'Geist Mono',monospace;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--muted-foreground)}
+.action-output{max-height:200px;overflow:auto}
 .action-output.is-error{color:var(--danger-text);border-color:color-mix(in srgb,var(--destructive) 35%,var(--border))}
 .delta{display:inline-flex;gap:6px;font-size:11px;white-space:nowrap}
 .delta .plus{color:var(--success)}.delta .minus{color:var(--danger-text)}
-.live-line{display:flex;align-items:center;gap:8px;min-height:30px;padding:0 10px;margin-top:6px;font-size:12px;color:var(--muted-foreground);border:1px dashed color-mix(in srgb,var(--info) 40%,var(--border));border-radius:var(--radius-md);background:color-mix(in srgb,var(--info) 5%,transparent)}
-.live-line strong{font-weight:500;color:var(--foreground)}
-.live-target{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}
+.spin{display:inline-block;flex:none;width:12px;height:12px;border:1.5px solid var(--info);border-top-color:transparent;border-radius:50%;animation:session-spin .9s linear infinite}
+/* Not in the mockup: offline, or under the app's reduced motion, the ring stands still (the OS's setting is the media query). */
+.spin.still{animation:none}
+@keyframes session-spin{to{transform:rotate(360deg)}}
+@keyframes session-pulse{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.spin,.todo-dot{animation:none}}
 
-/* Decisions and sub-agents inline */
-.decision-chip{display:inline-flex;align-items:center;gap:6px;max-width:100%;margin:6px 0;padding:3px 9px;border-radius:999px;border:1px solid var(--border);font-size:11px;color:var(--muted-foreground);background:var(--background)}
-.decision-chip code{font:11px 'Geist Mono',monospace;color:var(--foreground);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+/* Decisions: your answer to a request (its badge, the command), a plan approved or sent back. */
+.decision-row{padding:10px 0 14px}
+.decision-chip{display:flex;align-items:center;flex-wrap:wrap;gap:8px;min-width:0;font-size:13px;line-height:20px;color:var(--muted-foreground)}
+.decision-chip code{min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:12px 'Geist Mono',monospace;color:var(--foreground)}
 .decision-chip strong{font-weight:500;color:var(--foreground)}
-.chip-mark{font-weight:700}
-.decision-chip.accept .chip-mark,.decision-chip.always .chip-mark{color:var(--success)}
-.decision-chip.deny .chip-mark{color:var(--danger-text)}
-.decision-chip+.decision-chip{margin-left:6px}
-.helper-card{display:flex;align-items:center;gap:10px;width:100%;margin:8px 0;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--background);color:var(--muted-foreground)}
-.helper-card:hover{border-color:var(--ring);color:var(--foreground)}
-.helper-icon{display:inline-flex;align-items:center;gap:5px;font-size:10px;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;padding-right:10px;border-right:1px solid var(--border)}
-.helper-copy{flex:1;min-width:0;display:flex;flex-direction:column}
-.helper-copy strong{font-size:12px;font-weight:500;color:var(--foreground)}
-.helper-copy small{font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.plan-row{padding:8px 0}
+.plan-row .plan-card{margin:0;min-width:0}
 
-/* Markers */
-.unread-marker{display:flex;align-items:center;gap:10px;margin:14px 0 10px;color:var(--danger-text);font-size:10px;font-weight:500;letter-spacing:.06em;text-transform:uppercase}
-.unread-marker:before,.unread-marker:after{content:'';flex:1;height:1px;background:color-mix(in srgb,var(--destructive) 45%,transparent)}
-.unread-marker:before{flex:0 0 12px}
+/* Subagents launched together: one card, a row each. */
+.helpers-row{padding:8px 0}
+.helpers-row>.node{margin-top:8px}
+.card{min-width:0;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--card)}
+.helpers-card{padding:0 14px}
+.helpers-card.many{padding:10px 14px 4px}
+.helpers-head{display:flex;gap:4px;padding-bottom:10px;font-size:12px;line-height:20px}
+.helpers-head .muted{color:var(--muted-foreground)}
+.helper-card{display:grid;grid-template-columns:20px minmax(0,1fr) auto;column-gap:10px;row-gap:4px;align-items:center;padding:10px 0}
+.helper-card+.helper-card,.helpers-head+.helper-card{border-top:1px solid var(--border)}
+.helper-bot{grid-row:span 3;align-self:start;display:inline-flex}
+.helper-name{display:flex;align-items:baseline;gap:6px;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:13px}
+.helper-name strong{font-weight:500}
+.helper-name .muted{font-size:12px;color:var(--muted-foreground)}
+.helper-task{grid-column:2/4;min-width:0;font-size:13px;line-height:20px;overflow-wrap:anywhere}
+.helper-live{margin-top:4px}
+.helper-live .vb{color:var(--info)}
+.helper-foot{grid-column:2/4;display:flex;align-items:center;flex-wrap:wrap;gap:12px;font-size:11px;color:var(--muted-foreground)}
+
+/* A task notification (`<task-notification>`): « Tâche », its state, what it was about, the raw XML folded. */
+.task-row{padding:8px 0}
+.task-head{display:flex;align-items:center;gap:8px}
+.task-head .kicker{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-foreground)}
+.task-text{margin:6px 0 0;font-size:13px;line-height:20px}
+.task-text strong{font-weight:500}
+.task-text code{padding:0 4px;border-radius:4px;background:var(--muted);font:12px 'Geist Mono',monospace}
+.task-meta{margin-top:4px;font-size:11px;color:var(--muted-foreground);overflow-wrap:anywhere}
+.raw{margin-top:8px}
+.raw summary{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--muted-foreground);cursor:pointer;list-style:none}
+.raw summary::-webkit-details-marker{display:none}
+.raw summary svg{transition:transform .15s}
+.raw[open] summary svg{transform:rotate(90deg)}
+.raw .pre{max-height:220px;overflow:auto}
+
+/* The objective an agent noted: the old one struck out, the new one, who noted it. */
+.objective-row{padding:6px 0}
+.objective{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-width:0;font-size:12px;line-height:22px;color:var(--muted-foreground)}
+.objective .muted{color:var(--muted-foreground)}
+.tag.was{opacity:.7}
+
+/* Markers: what is new since your last visit, the request the thread waits on, an exchange's end, the session's end. */
+.unread-marker{padding:8px 0}
+.newsep{display:flex;align-items:center;gap:10px;font-size:11px;font-weight:500;line-height:20px;color:var(--sidebar-primary)}
+.newsep:after{content:'';flex:1;height:1px;background:color-mix(in srgb,var(--sidebar-primary) 40%,transparent)}
+.waiting-row{padding:8px 0}
+.waiting-text{font-size:13px;line-height:20px;color:var(--danger-text)}
+.end-row,.turn-end,.frozen-end{padding:6px 0 10px}
+.end-text{font-size:12px;line-height:20px;color:var(--muted-foreground)}
+.end-failed{color:var(--danger-text)}
 .frozen-banner{display:flex;gap:10px;align-items:flex-start;margin:0 0 18px;padding:10px 12px;border:1px dashed var(--input);border-radius:var(--radius-md);font-size:12px;line-height:18px;color:var(--muted-foreground);background:var(--well)}
 .frozen-banner strong{color:var(--foreground);font-weight:500}
 .frozen-banner svg{margin-top:1px}
-.frozen-end,.turn-end{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:11px;color:var(--muted-foreground)}
-.turn-end:before,.turn-end:after{content:'';flex:1;height:1px;background:var(--border)}
 .source-note{font-size:11px;margin:4px 0 0}
 .to-latest{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:999px!important;border:1px solid var(--input)!important;background:var(--popover)!important;font-size:12px;box-shadow:0 6px 20px rgb(0 0 0/.25);z-index:2}
 .to-latest:hover{border-color:var(--ring)!important}
@@ -242,40 +307,9 @@
 /* Narrow window: the conversation pane stacks (observatory.css @850px) and caps the thread. */
 @media(max-width:850px){.session-thread{max-height:520px}}
 
-/* Flat thread: no turn boxes, no folding, no clipped replies; only a quiet time mark before each prompt. */
-.turn{padding:0;margin:0 0 22px;border:0!important}
-.turn-time{display:flex;align-items:center;gap:10px;margin:0 0 10px;font-size:10px;color:var(--muted-foreground)}
-.turn-time:before,.turn-time:after{content:'';flex:1;height:1px;background:color-mix(in srgb,var(--border) 70%,transparent)}
-
-/* Readability pass: a centred reading column (~72 characters), your prompts as compact bubbles on the right,
-   the agent on the left with everything it did aligned under its text, and quieter chrome. */
-.session-thread{--col:760px;--gutter:28px;padding-inline:24px}
-.session-thread>.turn,.session-thread>.frozen-banner,.session-thread>.source-note{max-width:var(--col);margin-inline:auto}
-.turn{margin-bottom:28px}
-.turn-time{max-width:var(--col);font-size:10px;opacity:.75}
-.prompt-block{width:fit-content;max-width:min(78%,600px);margin:0 0 14px auto;padding:9px 13px;border-radius:14px 14px 4px 14px;background:var(--secondary);border-color:transparent}
-.prompt-block p{font-size:14px;line-height:22px}
-.prompt-author{font-size:10px;text-align:right}
-.prompt-block.from-agent{margin-left:0;margin-right:auto;border-radius:14px 14px 14px 4px;border:1px dashed var(--input);background:transparent}
-.prompt-block.from-agent .prompt-author{text-align:left}
-.agent-message{margin:14px 0 10px}
-.msg-author{margin-bottom:2px}
-.msg-body{font-size:14px;line-height:23px;padding-left:var(--gutter);color:color-mix(in srgb,var(--foreground) 92%,var(--muted-foreground))}
-.msg-body p{margin:0 0 8px}
-.msg-body li{margin:2px 0}
-.msg-body pre{font-size:12px}
-.session-thread .action-group,.session-thread .decision-chip,.session-thread .helper-card,.session-thread .live-line,.session-thread .unread-marker{margin-left:var(--gutter)}
-.session-thread .action-group{max-width:calc(var(--col) - var(--gutter))}
-.session-thread .helper-card{width:calc(100% - var(--gutter))}
-.action-summary{min-height:30px;border-color:color-mix(in srgb,var(--border) 70%,transparent);background:transparent}
-.action-summary:not(.open){border-style:dashed}
-.decision-chip{margin-top:4px;margin-bottom:4px}
-.decision-chip+.decision-chip{margin-left:6px}
-/* The agent is named once, at the head of its part of the exchange; what it did and said follows under it. */
-.turn-author{display:flex;align-items:center;gap:7px;font-size:12px;margin:4px 0 6px}
-.turn-author strong{font-weight:600}
-.session-thread .agent-message .msg-author{display:none}
-.session-thread .agent-message{margin:8px 0 10px}
+/* The reading column: the rail centred (~72 characters between its nodes and its times), the reply under it. */
+.session-thread{--col:760px;padding-inline:24px}
+.session-thread>.frozen-banner,.session-thread>.source-note{max-width:var(--col);margin-inline:auto}
 .session-reply>*{width:100%;max-width:760px;margin-inline:auto}
 .session-reply textarea{font-size:13px;line-height:20px}
 
@@ -333,9 +367,6 @@
 .plan-doc .ledge-document ol>li{counter-increment:step;position:relative;padding:8px 0 8px 36px;margin:0;border-bottom:1px solid var(--border)}
 .plan-doc .ledge-document ol>li:before{content:counter(step);position:absolute;left:0;top:8px;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font:600 11px 'Geist Mono',monospace;background:var(--secondary);border:1px solid var(--border)}
 .plan-doc.status-approved .ledge-document ol>li:before{color:var(--success)}
-.decision-chip.plan .chip-mark{color:var(--success)}
-.decision-chip.plan.deny .chip-mark{color:var(--warning)}
-.decision-chip.plan.unknown .chip-mark{color:var(--muted-foreground)}
 .todo-bar{position:sticky;top:-18px;z-index:3;max-width:var(--col,760px);margin:-18px auto 16px;padding-top:10px;background:var(--sidebar)}
 .todo-head{display:flex;align-items:center;gap:10px;width:100%;height:36px;padding:0 12px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--popover);font-size:12px;color:var(--muted-foreground);box-shadow:0 4px 14px rgb(0 0 0/.12)}
 .todo-head:hover{border-color:var(--input)}
@@ -370,55 +401,48 @@
 .archived-banner .ledge-btn{height:28px!important;font-size:12px!important;padding:0 10px!important;white-space:nowrap}
 .archived-banner .danger-outline{color:var(--danger-text)!important}
 .archived-pill{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:999px;border:1px solid var(--border);font-size:11px;color:var(--muted-foreground)}
-/* Messages between agents (MessageCard, the mockup's exchange.css « Thread »): neutral on purpose, the state colours stay
-   for what the agents need from you. A received one opens its exchange like a prompt; a sent one sits under the agent. */
-.message-head{display:flex;align-items:center;gap:6px;margin:14px 0 6px;font-size:11px;color:var(--muted-foreground)}
+/* Messages between agents (MessageCard, the mockup's bubbles): neutral on purpose, the state colours stay for what the agents
+   need from you. Received on the left, its tail at the bottom left; sent on the right, filled, its tail at the bottom right. */
+.message-head-row{padding:10px 0 2px}
+.message-head{display:flex;align-items:center;gap:6px;min-width:0;font-size:11px;line-height:22px;color:var(--muted-foreground)}
 .message-head strong{color:var(--foreground);font-weight:500}
-.message-fold{display:inline-flex;align-items:center;gap:3px;height:22px;padding:0 7px;border:1px solid var(--border);border-radius:999px;background:transparent;color:var(--muted-foreground);font:inherit;cursor:pointer}
-.message-fold:hover{color:var(--foreground);background:var(--accent)}
+.message-head .spacer{flex:1}
+.lnk.message-fold{height:22px;padding:0 7px;gap:3px;border:1px solid var(--border);border-radius:999px;font-size:11px}
+.lnk.message-fold:hover{background:var(--accent)}
 .message-fold[aria-expanded=false] svg{transform:rotate(-90deg)}
-
-.message-card{position:relative;margin:10px 0;padding:10px 12px 8px 14px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--card);transition:box-shadow .3s,border-color .3s}
-/* The edge tells the direction at a glance: a solid edge for what this agent sent, a dashed one for what came in. */
-.message-card:before{content:'';position:absolute;left:-1px;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--foreground);opacity:.55}
-.message-card.received{background:transparent;border-style:dashed;border-color:var(--input)}
-.message-card.received:before{background:repeating-linear-gradient(var(--muted-foreground) 0 4px,transparent 4px 7px);opacity:.8}
-.message-card.lit{border-color:var(--ring);box-shadow:0 0 0 3px color-mix(in srgb,var(--ring) 28%,transparent)}
-.message-card-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-height:22px}
-.message-card-head .spacer,.message-foot .spacer,.message-head .spacer{flex:1}
-.message-kicker{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:500;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-foreground)}
-.message-route{display:inline-flex;align-items:center;gap:5px;font-size:12px}
-.message-route strong{font-weight:500}
-.message-route>svg{color:var(--muted-foreground)}
-.message-summary{margin:6px 0 0;font-size:13px;font-weight:500;line-height:19px}
-.message-body{margin-top:4px;font-size:13px;line-height:20px;color:var(--foreground)}
+.message-row{padding:6px 0}
+.message-card{justify-self:start;max-width:86%;min-width:0;display:flex;flex-direction:column;gap:4px;padding:9px 13px;border:1px solid var(--border);border-radius:14px 14px 14px 4px;background:var(--card);transition:box-shadow .3s,border-color .3s}
+.message-card.sent{justify-self:end;max-width:78%;background:var(--secondary);border-color:transparent;border-radius:14px 14px 4px 14px}
+.message-card.lit,.message-line.lit{border-color:var(--ring)!important;box-shadow:0 0 0 3px color-mix(in srgb,var(--ring) 28%,transparent)}
+.message-card .who{gap:4px}
+.who strong{font-weight:500;color:var(--foreground)}
+.who .lnk{font-size:11px}
+.message-summary{margin:0;font-size:13px;font-weight:500;line-height:19px}
+.message-body{font-size:14px;line-height:21px;color:var(--foreground);overflow-wrap:anywhere}
 .message-body>*:first-child{margin-top:0}.message-body>*:last-child{margin-bottom:0}
-.message-body.clamped{max-height:62px;overflow:hidden;-webkit-mask-image:linear-gradient(#000 60%,transparent);mask-image:linear-gradient(#000 60%,transparent)}
-.message-foot{display:flex;align-items:center;gap:8px;margin-top:6px;font-size:11px}
-.message-foot:empty{display:none}
-.message-link{display:inline-flex;align-items:center;gap:3px;padding:2px 0;border:0;background:none;color:var(--muted-foreground);font:inherit;cursor:pointer}
-.message-link:hover{color:var(--foreground);text-decoration:underline;text-underline-offset:3px}
-.message-read{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--muted-foreground);white-space:nowrap}
+.message-body.clamped{max-height:63px;overflow:hidden;-webkit-mask-image:linear-gradient(#000 60%,transparent);mask-image:linear-gradient(#000 60%,transparent)}
+.message-card>.lnk{align-self:flex-start}
+.message-read{display:inline-flex;align-items:center;gap:4px;color:var(--muted-foreground);white-space:nowrap}
 .message-read i{font-style:normal;font-size:10px;letter-spacing:-2px;padding-right:2px}
 .message-read.is-read i{color:var(--foreground)}
 
-/* Folded: one line per message, still in its place in the thread. */
-.message-line{display:flex;align-items:center;gap:8px;width:100%;margin:4px 0;padding:5px 10px;border:1px solid var(--border)!important;border-radius:var(--radius-md);background:transparent;color:var(--foreground);font:inherit;font-size:12px;text-align:left;cursor:pointer}
-.message-line.received{border-style:dashed!important}
-.message-line .message-route{flex:none;gap:3px;font-size:11px;color:var(--muted-foreground)}
-.message-line .message-route strong{color:var(--foreground)}
+/* Folded: one line per message, still in its place on the rail. */
+.message-line{display:flex;align-items:center;gap:8px;width:100%;min-width:0;padding:5px 10px;border:1px solid var(--border)!important;border-radius:var(--radius-md);background:transparent;color:var(--foreground);font:inherit;font-size:12px;text-align:left;cursor:pointer}
+.message-line.sent{background:var(--secondary)}
+.message-line .message-route{display:inline-flex;align-items:center;flex:none;gap:3px;font-size:11px;color:var(--muted-foreground)}
+.message-line .message-route strong{font-weight:500;color:var(--foreground)}
 .message-line:hover{background:var(--accent)}
 .message-line-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-/* What this agent sent sits in its column, under its name, as the rest of what it did. */
-.session-thread .message-head.sent,.session-thread .message-card.sent,.session-thread .message-line.sent{margin-left:var(--gutter)}
-.session-thread .message-line.sent{width:calc(100% - var(--gutter))}
 
-/* Claude Code's automated cross-session notices (NoticeLine): a quiet system line, not a card nor a prompt. */
-.notice-line{margin:8px 0;padding:6px 10px;border-left:2px solid var(--border);font-size:12px;color:var(--muted-foreground)}
+/* Claude Code's automated cross-session notices (NoticeLine): a quiet system line on the rail, not a card nor a prompt. */
+.notice-row{padding:6px 0}
+.notice-line{min-width:0;padding:2px 0 2px 10px;border-left:2px solid var(--border);font-size:12px;line-height:20px;color:var(--muted-foreground)}
 .notice-line.warn{border-left-color:var(--warning)}
 .notice-line.warn .notice-title{color:var(--warning)}
 .notice-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .notice-head .spacer{flex:1}
+.notice-head .message-link{display:inline-flex;align-items:center;gap:3px;color:var(--muted-foreground)}
+.notice-head .message-link:hover{color:var(--foreground)}
 .notice-kicker{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:500;letter-spacing:.04em;text-transform:uppercase}
 .notice-title{color:var(--foreground);font-weight:500}
 .notice-summary{margin:4px 0 0;padding-left:8px;border-left:2px solid var(--input);font-style:italic;line-height:18px;white-space:pre-wrap}

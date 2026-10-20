@@ -190,19 +190,15 @@ export function Tree(p: {
     const done = list.filter(isFinished);
     const all = !p.hideDone || shown.has(key);
     const rows = list.filter(s => all || !isFinished(s)).flatMap(s => agentRows(s, depth, parentKey));
-    if (p.hideDone && done.length > 0) {
+    // Once shown, the finished ones stay until H hides them all again: no « Hide finished » link. Archiving stays per session.
+    if (!all && done.length > 0) {
       const moreKey = `${key}:more`;
-      // Once shown, the finished ones stay until H hides them all again: no « Hide finished » link.
-      if (!all) nav.current.set(moreKey, { parent: parentKey });
+      nav.current.set(moreKey, { parent: parentKey });
       rows.push(
         <div key={moreKey} className="st-row st-more" style={{ '--d': depth } as CSSProperties}>
           <span className="st-gap" />
-          {!all && <button type="button" data-tree-key={moreKey} tabIndex={tabOf(moreKey)} aria-expanded={false} onClick={() => flip(shown, setShown, key)}>
+          <button type="button" data-tree-key={moreKey} tabIndex={tabOf(moreKey)} aria-expanded={false} onClick={() => flip(shown, setShown, key)}>
             {t.side.moreDone(done.length)}
-          </button>}
-          <span className="st-fill" />
-          <button type="button" tabIndex={-1} className="st-link" title={t.side.archiveDone} onClick={() => p.onArchive(done.map(s => s.id))}>
-            <Icon d={SHELL_ICONS.archive} size={12} />{t.manage.menu.archive}
           </button>
         </div>
       );

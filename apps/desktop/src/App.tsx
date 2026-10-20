@@ -28,7 +28,7 @@ import { LaunchPlace } from './launch/lazy';
 import { ChatPlace } from './chat/lazy';
 import { SettingsPlace } from './settings/lazy';
 import type { SettingsContext } from './settings/SettingsPage';
-import { daemonTarget, useDaemonUpdate } from './update/daemon';
+import { daemonTarget, useDaemonUpdates } from './update/daemon';
 import { useUpdate } from './update/store';
 import { takeWhatsNew } from './update/notes';
 import { openWhatsNew, useWhatsNew } from './update/whatsNewView';
@@ -40,7 +40,7 @@ import { atelierOpen, attachAtelier, canDetach, detachAtelier, onAtelier, showMa
 import { Modal } from './shell/Modal';
 import { SearchPalette } from './shell/SearchPalette';
 import { ShortcutsHelp } from './shell/ShortcutsHelp';
-import { onFullscreenLeft, setWindowFullscreen } from './shell/fullscreen';
+import { useWindowFullscreen } from './shell/useWindowFullscreen';
 import { Toast, useToast } from './shell/Toast';
 import { preloadPlaces } from './shell/preload';
 import { useFiling } from './atelier/filing';
@@ -78,14 +78,14 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const [revealArchives, setRevealArchives] = useState(0);
   // The session page's « N sous-agents » bumps this; the tree unfolds that session and scrolls to it (0 never counts).
   const [revealCurrent, setRevealCurrent] = useState(0);
-  // The local daemon's update, started from Settings › About; while it runs, the daemon's restart is expected and silent.
+  // Every machine's daemon follows Desktop on its own, or from Settings › About (#48); while one updates, its restart is expected and silent.
   const update = useUpdate();
-  const daemonUpdate = useDaemonUpdate(fleet, machines, daemonTarget(update));
+  const daemonUpdates = useDaemonUpdates(fleet, machines, daemonTarget(update), update.app);
   // The first launch on a new version shows its notes, once (#26).
   useEffect(() => { const w = takeWhatsNew(update.app); if (w) openWhatsNew({ mode: 'updated', ...w }); }, [update.app]);
   const whatsNew = useWhatsNew() !== null;
   // Toasts and sounds from session changes (spec 2026-10-14 §10); `test()` is the Sounds section's Test.
-  const alerts = useAlerts({ sessions, machines, status, daemonUpdating: daemonUpdate.running });
+  const alerts = useAlerts({ sessions, machines, status, daemonUpdating: daemonUpdates.updating.has('local') });
   // A device asking to be linked: the dialog below opens on any screen, the notification only while Desktop is behind.
   usePairingAlerts(mobile);
   // Decided here, at render: the dialog and the `inert` below change in one commit, so the Modal's focus return is not refused.
@@ -150,15 +150,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const memory = useRef(createSessionMemory()).current;
   // The pairing dialog, like a confirmation, owns the keyboard while it shows (it takes Escape itself, before this listener).
   useKeys(dispatch, { state: nav, order, screen: screenKeys, undo, confirming: actions.pending ? { cancel: actions.cancel } : pairing ? { cancel: pairing.dismiss } : null });
-  // The window may leave full screen by itself (Escape in a browser, the OS): the layout follows.
-  useEffect(() => onFullscreenLeft(() => dispatch({ type: 'fullscreen', on: false })), []);
-  // The window follows the full screen state (not at mount: nothing was asked yet).
-  const fullscreenSeen = useRef(nav.fullscreen);
-  useEffect(() => {
-    if (fullscreenSeen.current === nav.fullscreen) return;
-    fullscreenSeen.current = nav.fullscreen;
-    void setWindowFullscreen(nav.fullscreen);
-  }, [nav.fullscreen]);
+  useWindowFullscreen(nav.fullscreen, () => dispatch({ type: 'fullscreen', on: false }));
   const session = place.kind === 'session' ? known.find(s => s.id === place.id) ?? null : null;
   // The subagent whose page is open, found as the Workspace finds it (live, else its thread row), for the top bar.
   const { threads } = useDaemon();
@@ -230,7 +222,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // What the Settings page's sections receive; « Setting saved · … » goes through the app's toast, once per accepted change
   // (in the language just chosen, for the language itself: the render that speaks it has not happened yet).
   const settings: SettingsContext = {
-    notify, saved: (what, l) => notify((l ? messagesFor(l) : t).settings.saved(what)), fleet, client: fleetClient, machines, projects, island, mobile, projectIdOf, sessions, dispatch, alerts, daemonUpdate,
+    notify, saved: (what, l) => notify((l ? messagesFor(l) : t).settings.saved(what)), fleet, client: fleetClient, machines, projects, island, mobile, projectIdOf, sessions, dispatch, alerts, daemonUpdates,
     lang, setLang, paused: nav.paused
   };
 
@@ -241,7 +233,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     <ScreenKeysContext.Provider value={screenKeys}>
       {!nav.fullscreen && <TitleBar dispatch={dispatch} sessions={sessions} waits={waits} blocked={blocked} />}
       <div className={`application ${nav.fullscreen ? 'immersive' : ''} ${filing.dragging ? 'is-dragging' : ''}`} data-readonly={localDown ? 'true' : undefined} inert={blocked}>
-        <Sidebar nav={nav} dispatch={dispatch} sessions={sessions} archived={fleetView.archived} machines={machines} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing}
+        <Sidebar nav={nav} dispatch={dispatch} sessions={sessions} archived={fleetView.archived} machines={machines} updating={daemonUpdates.updating} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing}
           actions={actions} decisions={decisions} waits={waits} menu={{ open: (id, at, opener) => sessionMenu.open(id, at, opener ?? null) }}
           onAsk={askLedge} onTerminal={sessionMenu.terminal} revealArchives={revealArchives} revealCurrent={revealCurrent} />
         <section className="workspace">

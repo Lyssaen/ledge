@@ -71,7 +71,7 @@ describe('the atelier', () => {
   // Beyond the brief: the review ledger's carried items.
   it('the tables, the desk and the zone sit inside .office-shell (the label rules are scoped there); the legend outside', async () => {
     await boot();
-    const shell = document.querySelector<HTMLElement>('.overview-scroll.atelier > .office-shell')!;
+    const shell = document.querySelector<HTMLElement>('.overview-scroll.atelier > .atelier-floor > .office-shell')!;
     expect(shell).not.toBeNull();
     for (const name of ['Ledge table', 'Payment Service Platform Migration Europe table', 'No project']) expect(shell).toContainElement(screen.getByRole('region', { name }));
     expect(shell).toContainElement(screen.getByRole('button', { name: 'Talk to Ledge' }));
@@ -110,6 +110,14 @@ describe('the atelier', () => {
     // The name shrinks inside a row capped at the seat's width; the « Alt n » hint keeps its size.
     for (const decl of ['display:flex', 'max-width:100%']) expect(declarations('atelier.css', '.agent-seat>strong')).toContain(decl);
     expect(declarations('atelier.css', '.agent-seat .seat-shortcut')).toContain('flex-shrink:0');
+  });
+  it('the atelier view shows no scrollbars, but still scrolls so the floor can be panned (#49)', () => {
+    const rule = declarations('atelier.css', '.overview-scroll.atelier');
+    expect(rule).toContain('scrollbar-width:none');
+    expect(declarations('atelier.css', '.overview-scroll.atelier::-webkit-scrollbar')).toContain('display:none');
+    // Panning moves scrollLeft / scrollTop: only the fitted view clips its overflow.
+    expect(rule).not.toContain('overflow:hidden');
+    expect(declarations('atelier.css', '.overview-scroll.atelier:not(.fitted)')).not.toContain('overflow:hidden');
   });
   it('Enter on a focused button keeps its own action: the chosen agent is not opened', async () => {
     const { user } = await boot();

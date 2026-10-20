@@ -15,6 +15,8 @@ type PlanStatus = PlanDoc['status'];
 
 /** French counts 0 and 1 as singular. */
 const plural = (n: number, one: string, many: string) => (n > 1 ? many : one);
+/** « de Otto », « d’Iris ». */
+const deName = (n: string) => (/^[aeiouyhàâéèêîôûAEIOUYHÀÂÉÈÊÎÔÛ]/.test(n) ? `d’${n}` : `de ${n}`);
 const andList = (xs: readonly string[]) => new Intl.ListFormat('fr', { type: 'conjunction' }).format(xs);
 
 /** Desktop's copy in French: the source of truth, whose shape is `Messages` (see messages.ts, which loads it on demand). */
@@ -22,7 +24,7 @@ export const fr = {
   side: {
     label: 'Barre latérale', newSession: 'Nouvelle session', searchLabel: 'Rechercher une session',
     views: 'Vues', atelier: 'Atelier', chat: 'Chat Ledge', projects: 'Projets', newProject: 'Nouveau projet', unassigned: 'Sans projet',
-    machines: 'Machines', manageMachines: 'Gérer les machines', agents: (n: number) => plural(n, `${n} agent`, `${n} agents`), offline: 'hors ligne', settings: 'Réglages',
+    machines: 'Machines', manageMachines: 'Gérer les machines', agents: (n: number) => plural(n, `${n} agent`, `${n} agents`), offline: 'hors ligne', daemonUpdating: 'mise à jour du daemon', settings: 'Réglages', shortcuts: 'Raccourcis clavier',
     ask: 'Demander à Ledge', askPlaceholder: 'Demander à Ledge…',
     openChat: 'Ouvrir la conversation avec Ledge',
     active: (n: number) => plural(n, `${n} actif`, `${n} actifs`),
@@ -39,7 +41,6 @@ export const fr = {
     newOn: (branch: string) => `Nouvelle session sur ${branch}`,
     filterProject: (name: string) => `N’afficher que ${name} dans l’atelier`,
     moreDone: (n: number) => `+${n} ${plural(n, 'terminée', 'terminées')}`,
-    archiveDone: 'Archiver les sessions terminées de cette branche',
     archiveOne: (name: string) => `Archiver ${name}`,
     manageOne: (name: string) => `Gérer la session ${name}`,
     terminalOne: (name: string) => `Ouvrir le terminal de ${name}`,
@@ -53,7 +54,6 @@ export const fr = {
     resumeOne: (name: string) => `Reprendre ${name}`,
     deleteOne: (name: string) => `Supprimer ${name}`,
     dropHelp: (name: string) => `Déposez sur un projet pour y ranger ${name}.`,
-    hint: { newSession: 'nouvelle session', move: 'parcourir', fold: 'plier', archive: 'archiver', done: 'terminées', focus: 'focus' },
     state: {
       approval: 'attend ton accord', question: 'te pose une question', error: 'en erreur',
       working: 'au travail', starting: 'démarre', idle: 'au repos', done: 'terminée', offline: 'hors ligne'
@@ -70,7 +70,7 @@ export const fr = {
     chat: 'Chat Ledge', shortcuts: 'Raccourcis clavier (?)', fullscreen: 'Plein écran', fullscreenExit: 'Quitter le plein écran',
     terminalShow: 'Afficher le terminal', terminalHide: 'Masquer le terminal', terminalShowTitle: 'Afficher le terminal (O)', terminalHideTitle: 'Masquer le terminal (O)'
   },
-  foot: { sessions: 'Sessions locales et SSH', search: 'Une session', chat: 'Chat Ledge', shortcuts: 'Raccourcis', islandOn: 'Encoche active', islandOff: 'Encoche masquée', islandTitle: 'Réglages de l’encoche' },
+  foot: { sessions: 'Sessions locales et SSH', islandOn: 'Encoche active', islandOff: 'Encoche masquée', islandTitle: 'Réglages de l’encoche' },
   daemonOutdated: { title: 'Le démon Ledge doit être mis à jour', body: 'Ce Ledge Desktop a besoin d’un démon plus récent dans WSL. Lancez une de ces commandes dans WSL ; Ledge se reconnecte tout seul.', npm: 'Installé avec npm', git: 'Installé depuis un clone git' },
   sections: { general: 'Général', appearance: 'Apparence', island: 'Encoche', notifications: 'Notifications', sounds: 'Sons', machines: 'Machines', mobile: 'Accès mobile', projects: 'Projets', shortcuts: 'Raccourcis clavier', about: 'À propos' } as Record<SectionId, string>,
   settings: {
@@ -121,6 +121,10 @@ export const fr = {
       source: 'Sur les releases GitHub de Lyssaen/ledge.', check: 'Vérifier'
     },
     appearance: {
+      profile: 'Profil', avatar: 'Photo de profil', avatarHint: 'À côté de « Vous » dans le fil d’une session. Choisissez une image ou déposez-la sur le rond. Elle reste sur ce PC.',
+      avatarFile: 'Fichier de la photo de profil', avatarChoose: 'Choisir une image…', avatarRemove: 'Retirer la photo',
+      avatarSaved: 'Photo de profil', avatarRemoved: 'Photo de profil retirée',
+      avatarRefused: { notImage: 'Ce fichier n’est pas une image.', tooLarge: 'Image trop lourde : 8 Mo au plus.', unreadable: 'Cette image n’a pas pu être lue.' },
       theme: 'Thème', themeHint: 'Change aussi la matière des mascottes.',
       themes: { light: ['Clair', 'Galet'], dark: ['Sombre', 'Signal'] } as Record<'light' | 'dark', readonly [string, string]>,
       themeSaved: { light: 'Thème clair · Galet', dark: 'Thème sombre · Signal' } as Record<'light' | 'dark', string>,
@@ -312,10 +316,10 @@ export const fr = {
       install: { npm: 'npm', git: 'clone git', unknown: 'installation inconnue' } as Record<DaemonInfo['install'], string>,
       unknown: 'Version inconnue', behindTag: 'À mettre à jour', latest: 'Dernière version', latestUnknown: 'Pas encore vérifiée',
       behind: (names: readonly string[]) => `${new Intl.ListFormat('fr', { type: 'conjunction' }).format(names)} ${plural(names.length, 'n’a', 'n’ont')} pas la dernière version.`,
-      updateDaemon: 'Mettre à jour le daemon', updateDaemonHint: (v: string) => `Le daemon local passe à Ledge ${v}, puis redémarre.`, update: 'Mettre à jour',
-      log: 'Journal du daemon',
+      updateDaemon: (label: string) => `Mettre à jour le daemon · ${label}`, updateDaemonHint: (label: string, v: string) => `Le daemon de ${label} passe à Ledge ${v}, puis redémarre.`, update: 'Mettre à jour',
+      log: (label: string) => `Journal du daemon · ${label}`,
       step: {
-        sent: (v: string) => `Demande envoyée au daemon local : ${v}`,
+        sent: (label: string, v: string, auto: boolean) => auto ? `Mise à jour automatique du daemon de ${label} : ${v}` : `Demande envoyée au daemon de ${label} : ${v}`,
         installing: 'Installation de la nouvelle version…',
         restarting: 'Redémarrage du daemon…',
         done: (v: string) => `Daemon à jour : ${v}`
@@ -326,7 +330,7 @@ export const fr = {
         'sessions-at-risk': 'Vos sessions tournent dans le service du daemon : un redémarrage les fermerait. Fermez-les, ou redémarrez WSL, puis réessayez.',
         'npm-failed': 'Le daemon n’a pas pu se mettre à jour. Rien n’a changé.',
         busy: 'Une mise à jour est déjà en cours.',
-        offline: 'Le daemon local n’est pas connecté : rien n’a été envoyé.',
+        offline: 'Ce daemon n’est pas connecté : rien n’a été envoyé.',
         timeout: 'Le daemon ne répond plus.'
       } as Record<UpdateFailure | 'offline' | 'timeout', string>,
       timeoutCommand: 'systemctl --user status ledge-daemon',
@@ -344,7 +348,7 @@ export const fr = {
     title: 'Raccourcis clavier',
     intro: 'Actifs lorsque la fenêtre a le focus. Les touches de navigation restent disponibles pour la saisie et le terminal lorsqu’ils ont le focus.',
     outro: 'Ctrl / ⌘ K ouvre la recherche depuis n’importe quelle vue. Y et N n’agissent que sur la demande épinglée de la session ouverte, jamais pendant la saisie.',
-    rows: [['Ctrl / ⌘ K','Rechercher et ouvrir une session'],['Ctrl ,','Ouvrir les réglages'],['Alt 1…9','Accès direct aux sessions principales'],['Alt ← / →','Session précédente / suivante'],['J / K ou ↓ / ↑','Parcourir les sessions (atelier)'],['Entrée','Ouvrir la session sélectionnée'],['N','Nouvelle session'],['+ / −','Zoomer / dézoomer l’atelier'],['0','Ajuster l’atelier à l’écran'],['Ctrl + molette / pincer','Zoomer sous le pointeur ou les doigts'],['Espace + glisser','Déplacer la vue'],['/','Demander à Ledge'],['R','Écrire une réponse à l’agent'],['Y / N','Autoriser / refuser la demande en attente'],['1…9','Choisir une réponse proposée'],['J / K','Fichier suivant / précédent (Modifications)'],['O','Afficher ou masquer le terminal'],['Échap','Fermer le panneau ou revenir à l’atelier'],['?','Afficher ces raccourcis']] as ReadonlyArray<readonly [string, string]>
+    rows: [['Ctrl / ⌘ K','Rechercher et ouvrir une session'],['Ctrl ,','Ouvrir les réglages'],['Alt 1…9','Accès direct aux sessions principales'],['Alt ← / →','Session précédente / suivante'],['J / K ou ↓ / ↑','Parcourir les sessions (atelier)'],['Entrée','Ouvrir la session sélectionnée'],['← / →','Plier / déplier un projet (barre latérale)'],['E','Archiver la session sélectionnée'],['H','Afficher / masquer les sessions terminées'],['Ctrl ⇧ E','Aller à la barre latérale'],['N','Nouvelle session'],['+ / −','Zoomer / dézoomer l’atelier'],['0','Ajuster l’atelier à l’écran'],['Ctrl + molette / pincer','Zoomer sous le pointeur ou les doigts'],['Espace + glisser','Déplacer la vue'],['/','Demander à Ledge'],['R','Écrire une réponse à l’agent'],['Y / N','Autoriser / refuser la demande en attente'],['1…9','Choisir une réponse proposée'],['J / K','Fichier suivant / précédent (Modifications)'],['O','Afficher ou masquer le terminal'],['Échap','Fermer le panneau ou revenir à l’atelier'],['?','Afficher ces raccourcis']] as ReadonlyArray<readonly [string, string]>
   },
   tray: { open: 'Ouvrir Ledge Desktop', newSession: 'Nouvelle session', dnd: 'Ne pas déranger', dndOff: 'Réactiver les alertes', quit: 'Quitter Ledge Desktop' },
   notify: {
@@ -571,7 +575,7 @@ export const fr = {
     thread: {
       label: 'Fil de la session',
       you: 'Vous', fromParent: (n: string) => `Consigne de ${n}`,
-      exchange: (at: string) => `Échange de ${at}`, live: 'en cours',
+      exchange: (at: string) => `Échange de ${at}`,
       actions: (n: number) => plural(n, `${n} action`, `${n} actions`),
       kinds: {
         read: (n: number) => plural(n, `${n} lecture`, `${n} lectures`), search: (n: number) => plural(n, `${n} recherche`, `${n} recherches`),
@@ -585,20 +589,48 @@ export const fr = {
       verbs: { create: 'Création', delete: 'Suppression', read: 'Lecture', search: 'Recherche', command: 'Commande', edit: 'Modification' } as Record<Verb, string>,
       // `unknown` : seul un historique écrit avant le lot 6b le porte (un Decided sans décision ne marque plus de permission).
       decided: { accept: 'Accordé', always: 'Toujours autorisé', deny: 'Refusé', unknown: 'Répondu dans le terminal' } as Record<'accept' | 'always' | 'deny' | 'unknown', string>,
-      helperLaunched: 'Sous-agent lancé', openHelper: (n: string, task: string) => `Ouvrir ${n} : ${task}`,
       seeChange: 'Voir la modification', seeChangeShort: 'Voir',
       read: 'Lire',
       unread: 'Nouveau depuis votre dernière visite', latest: 'Aller au dernier message',
       lost: (m: string) => `Connexion perdue avec ${m}`,
       lostBody: 'Le fil est figé : ce qui suit est le dernier état connu, l’activité actuelle n’est pas connue.',
-      frozenEnd: (s: string) => `Plus aucune nouvelle depuis la perte de connexion · ${s}`, ended: (s: string) => `Session terminée · ${s}`,
+      frozenEnd: (s: string) => `Plus aucune nouvelle depuis la perte de connexion · ${s}`, ended: (at: string, s: string) => `Session terminée à ${at} · ${s}`,
+      // The rail (issue #34, maquette B): a folded exchange or run, the end of an exchange, a subagent's card, the waiting row,
+      // the Story / Objectif markers and the task card.
+      endOf: 'Fin de l’échange',
+      endFailed: (n: number, recovered: boolean) => plural(n, `${n} échec`, `${n} échecs`) + (recovered ? plural(n, ' rattrapé', ' rattrapés') : ''),
+      subagent: 'sous-agent', openThread: (n: string) => `Ouvrir le fil ${deName(n)}`,
+      launched: (n: number) => plural(n, 'Sous-agent lancé', 'Sous-agents lancés'),
+      tally: {
+        done: (n: number) => plural(n, `${n} terminé`, `${n} terminés`), working: (n: number) => `${n} en cours`, error: (n: number) => `${n} en échec`
+      } as Record<'done' | 'working' | 'error', (n: number) => string>,
+      quote: (s: string) => `« ${s} »`,
+      waits: {
+        permission: (n: string) => `${n} attend votre accord pour une commande.`, question: (n: string) => `${n} attend votre réponse à une question.`,
+        plan: (n: string) => `${n} attend votre accord sur son plan.`, diff: (n: string) => `${n} attend votre accord sur une modification.`
+      } as Record<'permission' | 'question' | 'plan' | 'diff', (n: string) => string>,
+      resumes: 'Le fil reprend après votre réponse.',
+      planDecided: {
+        accept: 'Vous avez approuvé le plan', always: 'Vous avez approuvé le plan en mode automatique', deny: 'Vous avez renvoyé le plan à revoir', unknown: 'Plan répondu dans le terminal'
+      } as Record<'accept' | 'always' | 'deny' | 'unknown', string>,
+      objective: 'Objectif de la session', notedBy: (n: string) => `· noté par ${n}`,
+      tags: { story: 'Story', objectif: 'Objectif' },
+      tagValues: { 'hors-story': 'Hors story', analyse: 'Analyse', correction: 'Correction', implementation: 'Implémentation' } as Record<string, string>,
+      task: {
+        kicker: 'Tâche', statuses: { killed: 'Arrêtée', completed: 'Terminée', failed: 'En échec', other: 'Notifiée' } as Record<'killed' | 'completed' | 'failed' | 'other', string>,
+        agent: 'L’agent', command: 'La commande',
+        agentDid: { killed: 'a été arrêté. Il peut reprendre si vous lui écrivez.', completed: 'a terminé en arrière-plan.', failed: 'a échoué en arrière-plan.', other: 's’est arrêté.' } as Record<'killed' | 'completed' | 'failed' | 'other', string>,
+        commandDid: { killed: 'a été arrêtée.', completed: 's’est terminée en arrière-plan.', failed: 'a échoué en arrière-plan.', other: 's’est arrêtée.' } as Record<'killed' | 'completed' | 'failed' | 'other', string>,
+        code: (c: string) => `code ${c}`, raw: 'Notification brute'
+      },
       loading: 'Chargement du fil…', empty: 'Rien dans le fil pour l’instant.', notLoaded: 'Le fil n’a pas été chargé avant la perte de connexion.'
     },
     message: {
       sent: 'Message envoyé', received: 'Message reçu',
       readBy: (n: string) => `Lu par ${n}`, delivered: 'Remis, pas encore lu', sending: 'Envoi…', failed: 'Non remis',
       conversation: (n: string, k: number) => `Échange avec ${n} · ${k} messages`, fold: 'Replier', unfold: 'Déplier',
-      readAll: 'Lire tout le message', showLess: 'Réduire', seeIn: (n: string) => `Voir dans le fil de ${n}`
+      readAll: 'Lire tout le message', showLess: 'Réduire', seeIn: (n: string) => `Voir dans le fil de ${n}`,
+      to: 'À', from: 'De', seeTheirs: 'voir son fil', seen: 'lu'
     },
     /** Claude Code's automated cross-session notices (NoticeLine): system events, never the user's words. */
     notice: {
@@ -631,7 +663,7 @@ export const fr = {
       summary: (n: number, s: string) => plural(n, `${n} étape : ${s}`, `${n} étapes : ${s}`)
     },
     todos: {
-      workPlan: 'Plan de travail', workPlanUpdated: 'Plan de travail mis à jour', updated: 'plan de travail mis à jour',
+      workPlan: 'Plan de travail', updated: 'plan de travail mis à jour',
       allDone: 'Tout est fait', paused: 'En pause',
       doneOf: (d: number, n: number) => `${d}/${n} faites`, inProgress: (t: string) => `en cours : ${t}`,
       boxes: { completed: 'Fait', in_progress: 'En cours', pending: 'À faire' } as Record<TodoStatus, string>
@@ -650,7 +682,16 @@ export const fr = {
     missing: { tool: 'Choisissez un agent', prompt: 'Écrivez la consigne', machine: 'Aucune machine en ligne', repos: 'Choisissez au moins un dossier ou un dépôt' } as Record<'tool' | 'prompt' | 'machine' | 'repos', string>,
     cancel: 'Annuler', launch: 'Lancer', launching: 'Lancement…',
     started: (n: string, t: string) => `${n} démarre à la table ${t}.`, startedNoTable: (n: string) => `${n} démarre, sans projet.`, refused: (m: string) => `Démarrage refusé : ${m}`,
-    timeout: 'Le démarrage n’a pas répondu. Vérifiez la machine puis réessayez.'
+    timeout: 'Le démarrage n’a pas répondu. Vérifiez la machine puis réessayez.',
+    modelOf: (t: string) => `Modèle de ${t}`, remembered: 'Dernier choix pour ce projet retenu',
+    byDefault: 'Par défaut', byDefaultHint: 'Celui que l’agent prend de lui-même', defaultBadge: 'défaut',
+    otherModel: 'Autre…', otherModelHint: 'Un identifiant exact', otherPlaceholder: 'Identifiant du modèle, passé tel quel',
+    modelsLoading: 'Lecture des modèles de la machine…', modelsUnavailable: (e: string) => `Liste des modèles indisponible (${e}) : le défaut et « Autre… » restent possibles.`,
+    modelsOutdated: 'Mettez à jour Ledge sur cette machine pour choisir le modèle.',
+    effort: 'Effort', effortHint: 'Temps de réflexion par tour', cursorEffort: 'Pour Cursor, l’effort fait partie du nom du modèle.',
+    efforts: { low: 'Bas', medium: 'Moyen', high: 'Élevé', xhigh: 'Très élevé', max: 'Max', ultra: 'Ultra' } as Record<string, string>,
+    modelHints: { 'claude:fable': 'Le plus capable', 'claude:opus': 'Très capable, plus lent', 'claude:sonnet': 'Équilibré, usage courant', 'claude:haiku': 'Rapide et économique' } as Record<string, string>,
+    pickSummary: (m: string, e?: string) => (e ? `${m} · ${e}` : m)
   },
   projects: {
     titles: {

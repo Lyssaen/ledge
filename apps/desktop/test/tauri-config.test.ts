@@ -51,8 +51,8 @@ describe('Desktop Tauri config', () => {
     expect(commands).toContain('take_open_target');
     expect(readFileSync(resolve(root, 'src-tauri/Cargo.toml'), 'utf8')).toMatch(/^tauri-plugin-single-instance = "2"$/m);
   });
-  it('reaches only the daemon and the fonts, and updates from its own manifest, signed with our key', () => {
-    expect(conf.app.security.csp).toBe("default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src ipc: http://ipc.localhost ws://127.0.0.1:47831");
+  it('reaches only the daemon and the fonts, shows the profile photo kept as a data URL (#50), and updates from its own manifest, signed with our key', () => {
+    expect(conf.app.security.csp).toBe("default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src ipc: http://ipc.localhost ws://127.0.0.1:47831");
     expect(Buffer.from(conf.plugins.updater.pubkey, 'base64').toString()).toMatch(/^untrusted comment: minisign public key: 763CCCF3D01336AD\n/);
     expect(conf.plugins.updater.endpoints).toEqual(['https://github.com/Lyssaen/ledge/releases/latest/download/latest-desktop.json']);
     expect(conf.plugins.updater.windows.installMode).toBe('passive');
@@ -101,6 +101,11 @@ describe('Desktop Tauri config', () => {
   it('may switch the window to full screen and ask whether it is', () => {
     expect(caps.permissions).toContain('core:window:allow-set-fullscreen');
     expect(caps.permissions).toContain('core:window:allow-is-fullscreen');
+  });
+  it('lets the detached Atelier go full screen on its own (#41); a new one never opens full screen', () => {
+    for (const p of ['set-fullscreen', 'is-fullscreen']) expect(atelierCaps.permissions).toContain(`core:window:allow-${p}`);
+    // the window-state plugin would bring back a full screen left by Alt+F4, with the Atelier's bar showing over it
+    expect(main).toMatch(/fn open_atelier[\s\S]*?set_fullscreen\(false\)[\s\S]*?window\.show\(\)/);
   });
   it('may unmaximise the window before full screen and maximise it back after (#18)', () => {
     for (const p of ['unmaximize', 'maximize']) expect(caps.permissions).toContain(`core:window:allow-${p}`);

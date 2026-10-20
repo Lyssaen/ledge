@@ -28,7 +28,9 @@ import { readMachines, writeMachines } from './machines.js';
 import { readProjects, writeProjects } from './projects.js';
 import { readIsland, writeIsland } from './island.js';
 import { readDocument } from './documents.js';
+import { createModels, type Models } from './models.js';
 import { createRelay } from './relay.js';
+import { createMailbox } from './mailbox.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
 import { createRouter } from '../chat/routing.js';
 import { serveSsh } from '../transport/ssh.js';
@@ -50,12 +52,19 @@ export function resumeKey(s: Session): string | undefined {
 /** The harnesses that take extra folders, and how. Claude only (verified: `claude --add-dir a b -- "prompt"`). */
 export const MULTI_DIR_ARGS: Partial<Record<Tool, (dirs: string[]) => string[]>> = { claude: dirs => ['--add-dir', ...dirs] };
 
-/** The agent's arguments for a `session.launch`: the resume flag, then the first instruction as the positional prompt. */
-export function launchArgs(msg: { tool: Tool; prompt?: string; continue?: boolean; dirs?: string[] }): string[] {
+/** How each agent takes a model (#58): Claude Code `--model`, Codex `-m` (also after `resume`), Cursor Agent `--model`. */
+export const MODEL_ARGS: Record<Tool, (model: string) => string[]> = { claude: m => ['--model', m], codex: m => ['-m', m], cursor: m => ['--model', m] };
+/** How each agent takes an effort; Cursor Agent has none apart from its model id (`gpt-5.3-codex-high`). */
+export const EFFORT_ARGS: Partial<Record<Tool, (effort: string) => string[]>> = { claude: e => ['--effort', e], codex: e => ['-c', `model_reasoning_effort="${e}"`] };
+
+/** The agent's arguments for a `session.launch`: the resume flag, the model and effort, then the first instruction as the positional prompt. */
+export function launchArgs(msg: { tool: Tool; prompt?: string; continue?: boolean; dirs?: string[]; model?: string; effort?: string }): string[] {
   const prompt = msg.prompt?.trim();
   const more = msg.dirs?.length ? MULTI_DIR_ARGS[msg.tool]?.(msg.dirs) : undefined;
+  const model = msg.model ? MODEL_ARGS[msg.tool](msg.model) : [];
+  const effort = msg.effort ? EFFORT_ARGS[msg.tool]?.(msg.effort) ?? [] : [];
   // The `--` only follows --add-dir: the option is variadic and would swallow the prompt.
-  return [...(msg.continue ? CONTINUE_ARGS[msg.tool] : []), ...(more ?? []), ...(prompt ? [...(more ? ['--'] : []), prompt] : [])];
+  return [...(msg.continue ? CONTINUE_ARGS[msg.tool] : []), ...model, ...effort, ...(more ?? []), ...(prompt ? [...(more ? ['--'] : []), prompt] : [])];
 }
 
 export { resolveFolder };
@@ -129,7 +138,7 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; scan?: typeof scanRepos; mobile?: MobileService }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; scan?: typeof scanRepos; models?: Models; mobile?: MobileService }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -138,6 +147,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const agentEnv = opts.agentEnv ?? (async () => ({ ...process.env, ...(await loginShellEnv()) }));
   const chat = opts.chat ?? createChat({ store, tmux, home: paths().dir, userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now, projects: () => projects, forge: createForge({ env: agentEnv }) });
   const router = createRouter({ env: agentEnv });
+  const models = opts.models ?? createModels({ env: agentEnv });
   const token = await ensureDaemonToken();
   const httpServer = createServer(unauthorized);
   const sockets = new Set<Socket>();
@@ -196,7 +206,14 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   ] : [];
   // Mobile access: local fronts only, never a remote peer.
   const unsubscribeMobile = mobile?.onChange(() => broadcast({ type: 'mobile', state: mobile.state() }));
-  const relay = createRelay({ chat, store, replyTo, broadcast, now });
+  // One lock for both: a session is never typed into by the relay and the mailbox at once.
+  const typing = new Set<string>();
+  const mailbox = createMailbox({
+    store, replyTo, typing, now,
+    relayQueued: id => chat.queuedRelays().some(q => q.relay.id === id),
+    sent: { record: (id, m) => { history?.recordSent(id, m); }, mark: (id, rid, status) => history?.markSent(id, rid, status) }
+  });
+  const relay = createRelay({ chat, store, replyTo, broadcast, now, typing, next: id => mailbox.kick(id) });
   /** The last preview per session, replayed after every snapshot so a late client does not wait for the agent to write. */
   const previews = new Map<string, string[]>();
   /** The title last pushed to each session's tmux tab, so tmux is told only when it changes. */
@@ -211,7 +228,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const sendSnapshot = (ws: WebSocket) => {
-    send(ws, { type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, ...(mobile ? { mobile: true } : {}) } } : {}) });
+    send(ws, { type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, ...(mobile ? { mobile: true } : {}) } } : {}) });
     send(ws, machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
     send(ws, projectsMsg()); // then the shared projects (build spec §5)
     send(ws, islandMsg()); // then the island's settings
@@ -395,13 +412,15 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** The chat cards being launched: a second click, or another overlay, is refused until the first one has answered. */
   const chatLaunches = new Set<string>();
   /** Spawns the agent as `ledge <tool>` would and records it; throws the reason (bad folder, tmux). */
-  async function launch(req: { tool: Tool; cwd: string; name?: string; prompt?: string; continue?: boolean; dirs?: string[] }): Promise<Session> {
+  async function launch(req: { tool: Tool; cwd: string; name?: string; prompt?: string; continue?: boolean; dirs?: string[]; model?: string; effort?: string }): Promise<Session> {
     if (req.dirs?.length && !MULTI_DIR_ARGS[req.tool]) throw new Error(`launch: ${req.tool} takes one folder`);
+    if (req.effort && !EFFORT_ARGS[req.tool]) throw new Error(`launch: ${req.tool} takes its effort in the model id`);
     const cwd = await resolveFolder(req.cwd, opts.home);
     const dirs = req.dirs?.length ? await Promise.all(req.dirs.map(d => resolveFolder(d, opts.home))) : undefined;
     const live = store.all();
     const env = await agentEnv();
-    const session = await spawnSession({ tool: req.tool, args: launchArgs({ ...req, dirs }), name: req.name, cwd, tmux, now, env, taken: { names: live.filter(s => s.state !== 'exited').map(s => s.name), ids: live.map(s => s.id) } });
+    const spawned = await spawnSession({ tool: req.tool, args: launchArgs({ ...req, dirs }), name: req.name, cwd, tmux, now, env, taken: { names: live.filter(s => s.state !== 'exited').map(s => s.name), ids: live.map(s => s.id) } });
+    const session: Session = { ...spawned, ...(req.model ? { model: req.model } : {}), ...(req.effort ? { effort: req.effort } : {}) };
     store.upsert(session);
     store.touchRecent(session.cwd, session.project, session.startedAt);
     log(`launched ${session.name} (${session.tool}) in ${session.cwd} as ${session.id}`);
@@ -423,7 +442,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'document.read': {
         const session = msg.sessionId ? store.get(msg.sessionId) : undefined;
         if (msg.sessionId && !session) return send(ws, { type: 'document.error', requestId: msg.requestId, path: msg.path, code: 'session_missing' });
-        return send(ws, await readDocument(msg, { cwd: session?.cwd, home: opts.home ?? process.env.HOME ?? '' }));
+        return send(ws, await readDocument(msg, { cwd: session?.cwd, workdir: session?.workdir, home: opts.home ?? process.env.HOME ?? '' }));
       }
       case 'repos.inspect': return send(ws, { type: 'repos.info', requestId: msg.requestId, repos: await inspectRepos(msg.paths, { home: opts.home }) });
       // Lot 11: home, then the parents of the recent and live folders outside it. Answered even when it fails: an `error` for
@@ -432,6 +451,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         try { return send(ws, { type: 'repos.found', requestId: msg.requestId, ...await sharedScan() }); }
         catch (e) { log(`repos.scan failed: ${(e as Error).message}`); return send(ws, { type: 'repos.found', requestId: msg.requestId, repos: [], truncated: false, error: 'scan failed' }); }
       }
+      // #58: answered even when the agent cannot be asked, so the form falls back to the agent's default and « Other… ».
+      case 'models.list': return send(ws, { type: 'models.listing', requestId: msg.requestId, tool: msg.tool, ...await models.list(msg.tool) });
       case 'snapshot.request': return sendSnapshot(ws);
       case 'machines.set': {
         writeMachines(msg.machines, machinesFile); // first: a failing write leaves memory unchanged and reaches the sender
@@ -472,7 +493,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'session.launch': {
         // Any failure (bad folder, tmux) reaches the requester as an `error` without id, through the caller's catch.
         if (msg.qid === undefined) return send(ws, { type: 'session.launched', id: (await launch(msg)).id });
-        // A chat card (spec 2026-10-12 §4): the proposal's own fields, never the message's. Its rows (#24) start one after the other,
+        // A chat card (spec 2026-10-12 §4): the proposal's own fields, never the message's but the model chosen on the card (#58). Its rows (#24) start one after the other,
         // so each launch registers its bot before the next picks a name; a launched row, or one in flight, is passed over.
         const qid = msg.qid; const rows = msg.rows ?? [0];
         const todo = rows.filter(r => { const p = chat.proposal(qid, r); return p && !p.launchedId && !chatLaunches.has(`${qid}#${r}`); });
@@ -483,7 +504,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
           for (const r of todo) {
             const p = chat.proposal(qid, r)!;
             try {
-              const session = await launch({ tool: p.tool, cwd: p.cwd, prompt: p.prompt });
+              const session = await launch({ tool: p.tool, cwd: p.cwd, prompt: p.prompt, model: msg.model, effort: msg.effort });
               send(ws, { type: 'session.launched', id: session.id });
               chat.markLaunched(qid, session.id, broadcast, r);
             } catch (e) { chat.markFailed(qid, (e as Error).message, broadcast, r); failure = e; }
@@ -523,7 +544,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
           const base: Session = { id: msg.id, name: pickName(taken), tool: msg.agent ?? 'claude', cwd, project: basename(cwd) || 'unknown', title: 'untracked session', tmuxSession: null, state: 'working', helpers: [], startedAt: msg.event.at, lastActivityAt: msg.event.at, source: 'hook_only' };
           store.upsert(base);
           store.apply(msg.id, msg.event); // through apply, so the history sees the session's first event too
-        } else { settleByHook(msg.id, ev); store.apply(msg.id, msg.event); }
+        } else {
+          // The agent may have left its launch folder (a worktree it entered): its documents' relative links start there.
+          if (msg.cwd) store.patch(msg.id, { workdir: msg.cwd });
+          settleByHook(msg.id, ev); store.apply(msg.id, msg.event);
+        }
         logDroppedRequest(msg.id, msg.event, before, store.get(msg.id));
         return;
       }
@@ -603,7 +628,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         try {
           const cwd = await resolveFolder(s.cwd, opts.home);
           const env = await agentEnv();
-          const spawned = await spawnSession({ tool: s.tool, id: s.id, name: s.name, args: RESUME_ARGS[s.tool](key), cwd, tmux, now, env, taken: { names: store.all().filter(o => o.id !== s.id && o.state !== 'exited').map(o => o.name), ids: [] } });
+          const spawned = await spawnSession({ tool: s.tool, id: s.id, name: s.name, args: [...RESUME_ARGS[s.tool](key), ...(s.model ? MODEL_ARGS[s.tool](s.model) : []), ...(s.effort ? EFFORT_ARGS[s.tool]?.(s.effort) ?? [] : [])], cwd, tmux, now, env, taken: { names: store.all().filter(o => o.id !== s.id && o.state !== 'exited').map(o => o.name), ids: [] } });
           // Deleted or archived while it spawned: that request wins, the agent just started is stopped and not recorded.
           const cur = store.get(s.id);
           if (!cur || cur.archivedAt !== undefined) {
@@ -611,8 +636,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
             log(`resume of ${s.id} dropped: the session was ${cur ? 'archived' : 'deleted'} meanwhile`);
             return;
           }
-          const { topic, topicSource, repo, repoPath, branch, worktree, repoId, project, transcriptPath } = s;
-          store.upsert({ ...spawned, agentSessionId: key, ...(transcriptPath ? { transcriptPath } : {}), ...(topic ? { topic } : {}), ...(topicSource ? { topicSource } : {}), ...(repo ? { repo } : {}), ...(repoPath ? { repoPath } : {}), ...(branch ? { branch } : {}), ...(worktree !== undefined ? { worktree } : {}), ...(repoId ? { repoId } : {}), project });
+          const { topic, topicSource, repo, repoPath, branch, worktree, repoId, project, transcriptPath, model, effort } = s;
+          store.upsert({ ...spawned, agentSessionId: key, ...(model ? { model } : {}), ...(effort ? { effort } : {}), ...(transcriptPath ? { transcriptPath } : {}), ...(topic ? { topic } : {}), ...(topicSource ? { topicSource } : {}), ...(repo ? { repo } : {}), ...(repoPath ? { repoPath } : {}), ...(branch ? { branch } : {}), ...(worktree !== undefined ? { worktree } : {}), ...(repoId ? { repoId } : {}), project });
           log(`resumed ${spawned.name} (${spawned.tool}) in ${spawned.cwd} as ${spawned.id}`);
         } catch (e) {
           // Put the old record back only over the interim one: a delete or an archive since then stands.
@@ -630,6 +655,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         store.remove(msg.id);
         return;
       }
+      // An agent's message to another session: acked at once, typed when the target is free.
+      case 'session.message': return send(ws, mailbox.submit(msg));
       // A chat card's instruction: a refusal reaches the requester as an `error`, the card's state everyone through chat.history.
       case 'session.relay': return relay.request(msg.qid);
       case 'session.relay.cancel': return relay.cancel(msg.qid);
@@ -693,6 +720,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     port,
     broadcast,
     preview,
-    close: () => new Promise(res => { unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); relay.close(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
+    close: () => new Promise(res => { unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); relay.close(); mailbox.close(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
   };
 }

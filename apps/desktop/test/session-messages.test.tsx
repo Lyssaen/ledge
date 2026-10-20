@@ -8,7 +8,7 @@ import { App } from '../src/App';
 import { activeCount } from '../src/nav/agents';
 import { createDesktopFleet } from '../src/fleet/useFleet';
 import { loadWorkspace } from '../src/session/lazy';
-import { listSessions, PROJECTS, type MockDaemon } from './helpers';
+import { listSessions, PROJECTS, type MockDaemon, unfoldPast } from './helpers';
 
 const daemons: MockDaemon[] = [];
 afterEach(async () => { delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView; cleanup(); localStorage.clear(); for (const d of daemons.splice(0)) await d.close(); });
@@ -52,23 +52,21 @@ describe('messages between agents in the thread', () => {
     expect(card).not.toBeNull();
     expect(document.querySelector('.session-thread .prompt-block')).toBeNull();
     expect(card).toHaveTextContent('Message reçu');
+    expect(card).toHaveTextContent(/^Message reçuDe Nova · voir son fil/);
     expect(within(card).getByText('Nova', { selector: 'strong' })).toBeVisible();
-    expect(within(card).getByText('Otto', { selector: 'strong' })).toBeVisible();
     expect(thread().queryByText('Vous')).toBeNull();
-    // Opened by received messages only, with nothing after them: no author line.
-    expect(document.querySelector('.session-thread .turn-author')).toBeNull();
-    expect(within(card).getByRole('button', { name: /Voir dans le fil de Nova/ })).toBeVisible();
+    expect(within(card).getByRole('button', { name: 'voir son fil' })).toHaveAttribute('title', 'Voir dans le fil de Nova');
   });
 
-  it('a sent message shows its summary and « Lu par Nova »', async () => {
+  it('a sent message shows its summary and « lu », « Lu par Nova » in full', async () => {
     await openOtto([prompt('p1', 0, 1, 'Préviens Nova'), sent('s1', 5, 1, { summary: 'Le schéma est prêt', text: 'Tout est dans docs/schema.md.', status: 'read', received: 'r1' })]);
     const card = (await thread().findByText('Le schéma est prêt')).closest<HTMLElement>('[data-message="s1"]')!;
     expect(card).toHaveTextContent('Message envoyé');
-    expect(card).toHaveTextContent('Lu par Nova');
-    expect(card).toHaveTextContent('✓✓');
+    expect(card).toHaveTextContent(/^Message envoyéÀ Nova · ✓✓lu · voir son fil/);
+    expect(card.querySelector('.message-read')).toHaveAttribute('title', 'Lu par Nova');
     expect(within(card).getByText('Tout est dans docs/schema.md.')).toBeVisible();
-    // The sent card follows the agent's author line, in its exchange.
-    expect(card.closest('.turn')!.querySelector('.turn-author')).not.toBeNull();
+    // The sent card is in its exchange, after its prompt.
+    expect(card.closest('.turn')!.querySelector('.prompt-block')).toHaveTextContent('Préviens Nova');
   });
 
   it('a sent message waiting, failed or delivered says so', async () => {
@@ -87,6 +85,7 @@ describe('messages between agents in the thread', () => {
       prompt('p2', 10, 2, 'Continue'),
       received('r2', 15, 2, { text: 'Merci !\nJe regarde.' })
     ]);
+    await unfoldPast(user, /Tu as le schéma/);
     await thread().findByText('Oui, le voici');
     const heads = document.querySelectorAll('.session-thread .message-head');
     expect(heads).toHaveLength(1);
@@ -125,38 +124,38 @@ describe('messages between agents in the thread', () => {
     expect(within(card).queryByRole('button', { name: 'Lire tout le message' })).toBeNull();
   });
 
-  it('a peer outside Ledge: its name, no « Voir dans le fil »', async () => {
+  it('a peer outside Ledge: its name, no « voir son fil »', async () => {
     await openOtto([received('r1', 0, 1, { from: 'zed', peer: undefined, text: 'Bonjour de loin.' })]);
     const card = (await thread().findByText('Bonjour de loin.')).closest<HTMLElement>('[data-message="r1"]')!;
     expect(within(card).getByText('zed', { selector: 'strong' })).toBeVisible();
-    expect(within(card).queryByRole('button', { name: /Voir dans le fil/ })).toBeNull();
+    expect(within(card).queryByRole('button', { name: 'voir son fil' })).toBeNull();
   });
 
-  it('« Voir dans le fil de Nova » opens Nova’s session', async () => {
+  it('« voir son fil » opens Nova’s session', async () => {
     const { user } = await openOtto([received('r1', 0, 1, { text: 'Coucou.', sent: 's9' })]);
-    await user.click(await thread().findByRole('button', { name: /Voir dans le fil de Nova/ }));
+    await user.click(await thread().findByRole('button', { name: 'voir son fil' }));
     expect(await screen.findByRole('tabpanel', { name: 'Fil de la session' })).toBeVisible();
     expect(document.querySelector('.session-page')).toHaveAttribute('data-session', 'local:nova');
   });
 
-  it('« Voir dans le fil de Nova » opens Nova on the paired message, lit', async () => {
+  it('« voir son fil » opens Nova on the paired message, lit', async () => {
     const scroll = vi.fn();
     Element.prototype.scrollIntoView = scroll;
     const { d, user } = await openOtto([prompt('p1', 0, 1, 'Préviens Nova'), sent('s1', 1, 1, { received: 'recv-1-0' }), sent('s2', 2, 1, { received: 'recv-1-1' })]);
     d.thread('nova', [received('recv-1-0', 3, 1, { from: 'otto', peer: 'otto', sent: 's1' }), received('recv-1-1', 4, 1, { from: 'otto', peer: 'otto', sent: 's2' })]);
-    await user.click((await thread().findAllByRole('button', { name: /Voir dans le fil de Nova/ }))[0]!);
+    await user.click((await thread().findAllByRole('button', { name: 'voir son fil' }))[0]!);
     await waitFor(() => expect(document.querySelector('.session-page')).toHaveAttribute('data-session', 'local:nova'));
     await waitFor(() => expect(document.querySelector('.message-card.lit[data-message="recv-1-0"]')).not.toBeNull());
     await waitFor(() => expect(scroll).toHaveBeenCalled());
     await waitFor(() => expect(document.querySelector('.message-card.lit')).toBeNull(), { timeout: 4000 });
   });
 
-  it('« Voir dans le fil de Nova » lights the paired message once Nova\u2019s thread arrives after the page mounted', async () => {
+  it('« voir son fil » lights the paired message once Nova\u2019s thread arrives after the page mounted', async () => {
     const scroll = vi.fn();
     Element.prototype.scrollIntoView = scroll;
     const { d, user } = await openOtto([prompt('p1', 0, 1, 'Préviens Nova'), sent('s1', 1, 1, { received: 'recv-1-0' })]);
     d.thread('nova', []); // Nova's page mounts on an empty thread; the paired message is pushed afterwards
-    await user.click(await thread().findByRole('button', { name: /Voir dans le fil de Nova/ }));
+    await user.click(await thread().findByRole('button', { name: 'voir son fil' }));
     await waitFor(() => expect(document.querySelector('.session-page')).toHaveAttribute('data-session', 'local:nova'));
     expect(document.querySelector('.message-card.lit')).toBeNull();
     d.threadItem('nova', received('recv-1-0', 3, 1, { from: 'otto', peer: 'otto', sent: 's1' }));
@@ -178,15 +177,15 @@ describe('messages between agents in the thread', () => {
     await user.click(within(screen.getByRole('tree')).getByRole('button', { name: /^Otto/ }));
     await screen.findByRole('tabpanel', { name: 'Fil de la session' });
     const marker = await thread().findByRole('separator', { name: 'Nouveau depuis votre dernière visite' });
-    expect(marker.nextElementSibling).toHaveAttribute('data-message', 's1');
+    expect(marker.nextElementSibling!.querySelector('[data-message]')).toHaveAttribute('data-message', 's1');
     await user.keyboard('{Escape}');
     d.threadItem('otto', received('r1', 10, 2, { text: 'Reçu pendant ton absence' }));
     await user.click(within(screen.getByRole('tree')).getByRole('button', { name: /^Otto/ }));
     await screen.findByRole('tabpanel', { name: 'Fil de la session' });
     const next = await thread().findByRole('separator', { name: 'Nouveau depuis votre dernière visite' });
-    // It opens its exchange as a prompt would: above the exchange's time.
-    expect(next.nextElementSibling).toHaveClass('turn-time');
-    expect(next.parentElement!.querySelector('[data-message]')).toHaveAttribute('data-message', 'r1');
+    // It opens its exchange as a prompt would: its first row.
+    expect(next.parentElement!.firstElementChild).toBe(next);
+    expect(next.nextElementSibling!.querySelector('[data-message]')).toHaveAttribute('data-message', 'r1');
   });
 
   it('a cross-session notice is a system event, never « Vous »: who finished, when, what its harness said, a way to that session', async () => {

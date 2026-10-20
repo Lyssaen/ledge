@@ -9,7 +9,7 @@ export const en: Messages = {
   side: {
     label: 'Sidebar', newSession: 'New session', searchLabel: 'Search a session',
     views: 'Views', atelier: 'Atelier', chat: 'Chat Ledge', projects: 'Projects', newProject: 'New project', unassigned: 'No project',
-    machines: 'Machines', manageMachines: 'Manage machines', agents: (n) => pluralEn(n, `${n} agent`, `${n} agents`), offline: 'offline', settings: 'Settings',
+    machines: 'Machines', manageMachines: 'Manage machines', agents: (n) => pluralEn(n, `${n} agent`, `${n} agents`), offline: 'offline', daemonUpdating: 'daemon updating', settings: 'Settings', shortcuts: 'Keyboard shortcuts',
     ask: 'Ask Ledge', askPlaceholder: 'Ask Ledge…',
     openChat: 'Open the conversation with Ledge',
     active: (n) => `${n} active`,
@@ -26,7 +26,6 @@ export const en: Messages = {
     newOn: (branch) => `New session on ${branch}`,
     filterProject: (name) => `Show only ${name} in the atelier`,
     moreDone: (n) => `+${n} finished`,
-    archiveDone: 'Archive this branch’s finished sessions',
     archiveOne: (name) => `Archive ${name}`,
     manageOne: (name) => `Manage ${name}’s session`,
     terminalOne: (name) => `Open ${name}’s terminal`,
@@ -40,7 +39,6 @@ export const en: Messages = {
     resumeOne: (name) => `Resume ${name}`,
     deleteOne: (name) => `Delete ${name}`,
     dropHelp: (name) => `Drop on a project to file ${name}.`,
-    hint: { newSession: 'new session', move: 'move', fold: 'fold', archive: 'archive', done: 'finished', focus: 'focus' },
     state: {
       approval: 'is waiting for you', question: 'has a question', error: 'has an error',
       working: 'is working', starting: 'is starting', idle: 'is idle', done: 'finished', offline: 'offline'
@@ -57,7 +55,7 @@ export const en: Messages = {
     chat: 'Chat Ledge', shortcuts: 'Keyboard shortcuts (?)', fullscreen: 'Full screen', fullscreenExit: 'Exit full screen',
     terminalShow: 'Show the terminal', terminalHide: 'Hide the terminal', terminalShowTitle: 'Show the terminal (O)', terminalHideTitle: 'Hide the terminal (O)'
   },
-  foot: { sessions: 'Local and SSH sessions', search: 'A session', chat: 'Chat Ledge', shortcuts: 'Shortcuts', islandOn: 'Notch active', islandOff: 'Notch hidden', islandTitle: 'Notch settings' },
+  foot: { sessions: 'Local and SSH sessions', islandOn: 'Notch active', islandOff: 'Notch hidden', islandTitle: 'Notch settings' },
   daemonOutdated: { title: 'The Ledge daemon must be updated', body: 'This Ledge Desktop needs a newer daemon in WSL. Run one of these commands in WSL; Ledge reconnects by itself.', npm: 'Installed with npm', git: 'Installed from a git clone' },
   sections: { general: 'General', appearance: 'Appearance', island: 'Notch', notifications: 'Notifications', sounds: 'Sounds', machines: 'Machines', mobile: 'Mobile access', projects: 'Projects', shortcuts: 'Keyboard shortcuts', about: 'About' },
   settings: {
@@ -107,6 +105,10 @@ export const en: Messages = {
       source: 'From the GitHub releases of Lyssaen/ledge.', check: 'Check'
     },
     appearance: {
+      profile: 'Profile', avatar: 'Profile photo', avatarHint: 'Beside « You » in a session’s thread. Choose an image or drop it on the disc. It stays on this PC.',
+      avatarFile: 'Profile photo file', avatarChoose: 'Choose an image…', avatarRemove: 'Remove the photo',
+      avatarSaved: 'Profile photo', avatarRemoved: 'Profile photo removed',
+      avatarRefused: { notImage: 'This file is not an image.', tooLarge: 'This image is too large: 8 MB at most.', unreadable: 'This image could not be read.' },
       theme: 'Theme', themeHint: 'Also changes the mascots’ material.',
       themes: { light: ['Light', 'Pebble'], dark: ['Dark', 'Signal'] },
       themeSaved: { light: 'Light theme · Pebble', dark: 'Dark theme · Signal' },
@@ -296,10 +298,10 @@ export const en: Messages = {
       install: { npm: 'npm', git: 'git clone', unknown: 'unknown install' },
       unknown: 'Unknown version', behindTag: 'Update needed', latest: 'Latest version', latestUnknown: 'Not checked yet',
       behind: (names) => `${new Intl.ListFormat('en', { type: 'conjunction' }).format(names)} ${pluralEn(names.length, 'does', 'do')} not have the latest version.`,
-      updateDaemon: 'Update the daemon', updateDaemonHint: (v) => `The local daemon moves to Ledge ${v}, then restarts.`, update: 'Update',
-      log: 'Daemon log',
+      updateDaemon: (label) => `Update the daemon · ${label}`, updateDaemonHint: (label, v) => `The daemon of ${label} moves to Ledge ${v}, then restarts.`, update: 'Update',
+      log: (label) => `Daemon log · ${label}`,
       step: {
-        sent: (v) => `Request sent to the local daemon: ${v}`,
+        sent: (label, v, auto) => auto ? `Automatic update of the daemon of ${label}: ${v}` : `Request sent to the daemon of ${label}: ${v}`,
         installing: 'Installing the new version…',
         restarting: 'Restarting the daemon…',
         done: (v) => `Daemon up to date: ${v}`
@@ -310,7 +312,7 @@ export const en: Messages = {
         'sessions-at-risk': 'Your sessions run inside the daemon service: a restart would close them. Close them, or restart WSL, then retry.',
         'npm-failed': 'The daemon could not update. Nothing changed.',
         busy: 'An update is already running.',
-        offline: 'The local daemon is not connected: nothing was sent.',
+        offline: 'This daemon is not connected: nothing was sent.',
         timeout: 'The daemon is not answering.'
       },
       timeoutCommand: 'systemctl --user status ledge-daemon',
@@ -328,7 +330,7 @@ export const en: Messages = {
     title: 'Keyboard shortcuts',
     intro: 'Active while the window has focus. Navigation keys stay available for typing and the terminal when they have focus.',
     outro: 'Ctrl / ⌘ K opens the search from any view. Y and N only act on the pinned request of the open session, never while typing.',
-    rows: [['Ctrl / ⌘ K','Search and open a session'],['Ctrl ,','Open the settings'],['Alt 1…9','Jump to the main sessions'],['Alt ← / →','Previous / next session'],['J / K or ↓ / ↑','Walk through the sessions (atelier)'],['Enter','Open the selected session'],['N','New session'],['+ / −','Zoom the atelier in / out'],['0','Fit the atelier to the screen'],['Ctrl + wheel / pinch','Zoom under the pointer or the fingers'],['Space + drag','Pan the view'],['/','Focus Ask Ledge'],['R','Write a reply to the agent'],['Y / N','Allow / deny the pending request'],['1…9','Pick a suggested answer'],['J / K','Next / previous file (Changes)'],['O','Show or hide the terminal'],['Esc','Close the panel or go back to the atelier'],['?','Show these shortcuts']]
+    rows: [['Ctrl / ⌘ K','Search and open a session'],['Ctrl ,','Open the settings'],['Alt 1…9','Jump to the main sessions'],['Alt ← / →','Previous / next session'],['J / K or ↓ / ↑','Walk through the sessions (atelier)'],['Enter','Open the selected session'],['← / →','Fold / unfold a project (sidebar)'],['E','Archive the selected session'],['H','Show / hide the finished sessions'],['Ctrl ⇧ E','Focus the sidebar'],['N','New session'],['+ / −','Zoom the atelier in / out'],['0','Fit the atelier to the screen'],['Ctrl + wheel / pinch','Zoom under the pointer or the fingers'],['Space + drag','Pan the view'],['/','Focus Ask Ledge'],['R','Write a reply to the agent'],['Y / N','Allow / deny the pending request'],['1…9','Pick a suggested answer'],['J / K','Next / previous file (Changes)'],['O','Show or hide the terminal'],['Esc','Close the panel or go back to the atelier'],['?','Show these shortcuts']]
   },
   tray: { open: 'Open Ledge Desktop', newSession: 'New session', dnd: 'Do not disturb', dndOff: 'Resume alerts', quit: 'Quit Ledge Desktop' },
   notify: {
@@ -547,7 +549,7 @@ export const en: Messages = {
     thread: {
       label: 'Session thread',
       you: 'You', fromParent: (n) => `Instruction from ${n}`,
-      exchange: (at) => `Exchange at ${at}`, live: 'running',
+      exchange: (at) => `Exchange at ${at}`,
       actions: (n) => pluralEn(n, '1 action', `${n} actions`),
       kinds: {
         read: (n) => pluralEn(n, `${n} read`, `${n} reads`), search: (n) => pluralEn(n, `${n} search`, `${n} searches`),
@@ -560,20 +562,42 @@ export const en: Messages = {
       marks: { running: 'Running', success: 'Succeeded', failed: 'Failed', unknown: 'Interrupted' },
       verbs: { create: 'Create', delete: 'Delete', read: 'Read', search: 'Search', command: 'Command', edit: 'Edit' },
       decided: { accept: 'Allowed', always: 'Always allowed', deny: 'Denied', unknown: 'Answered in the terminal' },
-      helperLaunched: 'Subagent started', openHelper: (n, task) => `Open ${n}: ${task}`,
       seeChange: 'View the change', seeChangeShort: 'View',
       read: 'Read',
       unread: 'New since your last visit', latest: 'Go to the latest message',
       lost: (m) => `Connection lost with ${m}`,
       lostBody: 'The thread is frozen: what follows is the last known state; what the agent is doing now is not known.',
-      frozenEnd: (s) => `No news since the connection was lost · ${s}`, ended: (s) => `Session ended · ${s}`,
+      frozenEnd: (s) => `No news since the connection was lost · ${s}`, ended: (at, s) => `Session ended at ${at} · ${s}`,
+      endOf: 'End of the exchange',
+      endFailed: (n, recovered) => `${n} failed` + (recovered ? ', recovered' : ''),
+      subagent: 'subagent', openThread: (n) => `Open ${n}'s thread`,
+      launched: (n) => pluralEn(n, 'Subagent launched', 'Subagents launched'),
+      tally: { done: (n) => `${n} done`, working: (n) => `${n} running`, error: (n) => `${n} failed` },
+      quote: (s) => `“${s}”`,
+      waits: {
+        permission: (n) => `${n} is waiting for your approval of a command.`, question: (n) => `${n} is waiting for your answer to a question.`,
+        plan: (n) => `${n} is waiting for your approval of its plan.`, diff: (n) => `${n} is waiting for your approval of a change.`
+      },
+      resumes: 'The thread resumes after your answer.',
+      planDecided: { accept: 'You approved the plan', always: 'You approved the plan in auto mode', deny: 'You sent the plan back for revision', unknown: 'Plan answered in the terminal' },
+      objective: 'Session objective', notedBy: (n) => `· noted by ${n}`,
+      tags: { story: 'Story', objectif: 'Objective' },
+      tagValues: { 'hors-story': 'No story', analyse: 'Analysis', correction: 'Fix', implementation: 'Implementation' },
+      task: {
+        kicker: 'Task', statuses: { killed: 'Stopped', completed: 'Done', failed: 'Failed', other: 'Notified' },
+        agent: 'The agent', command: 'The command',
+        agentDid: { killed: 'was stopped. It can resume if you write to it.', completed: 'finished in the background.', failed: 'failed in the background.', other: 'stopped.' },
+        commandDid: { killed: 'was stopped.', completed: 'finished in the background.', failed: 'failed in the background.', other: 'stopped.' },
+        code: (c) => `exit ${c}`, raw: 'Raw notification'
+      },
       loading: 'Loading the thread…', empty: 'Nothing in the thread yet.', notLoaded: 'The thread was not loaded before the connection was lost.'
     },
     message: {
       sent: 'Message sent', received: 'Message received',
       readBy: (n) => `Read by ${n}`, delivered: 'Delivered, not read yet', sending: 'Sending…', failed: 'Not delivered',
       conversation: (n, k) => `Conversation with ${n} · ${k} messages`, fold: 'Fold', unfold: 'Unfold',
-      readAll: 'Read the whole message', showLess: 'Show less', seeIn: (n) => `See it in ${n}'s thread`
+      readAll: 'Read the whole message', showLess: 'Show less', seeIn: (n) => `See it in ${n}'s thread`,
+      to: 'To', from: 'From', seeTheirs: 'see their thread', seen: 'read'
     },
     /** Claude Code's automated cross-session notices (NoticeLine): system events, never the user's words. */
     notice: {
@@ -605,7 +629,7 @@ export const en: Messages = {
       summary: (n, s) => pluralEn(n, `1 step: ${s}`, `${n} steps: ${s}`)
     },
     todos: {
-      workPlan: 'Work plan', workPlanUpdated: 'Work plan updated', updated: 'work plan updated',
+      workPlan: 'Work plan', updated: 'work plan updated',
       allDone: 'All done', paused: 'Paused',
       doneOf: (d, n) => `${d}/${n} done`, inProgress: (t) => `in progress: ${t}`,
       boxes: { completed: 'Done', in_progress: 'In progress', pending: 'To do' }
@@ -624,7 +648,16 @@ export const en: Messages = {
     missing: { tool: 'Choose an agent', prompt: 'Write the instruction', machine: 'No machine online', repos: 'Choose at least one folder or repository' },
     cancel: 'Cancel', launch: 'Launch', launching: 'Launching…',
     started: (n, t) => `${n} is starting at the ${t} table.`, startedNoTable: (n) => `${n} is starting, with no project.`, refused: (m) => `Launch refused: ${m}`,
-    timeout: 'The launch did not answer. Check the machine, then try again.'
+    timeout: 'The launch did not answer. Check the machine, then try again.',
+    modelOf: (t: string) => `${t} model`, remembered: 'Last choice for this project kept',
+    byDefault: 'Default', byDefaultHint: 'The one the agent picks by itself', defaultBadge: 'default',
+    otherModel: 'Other…', otherModelHint: 'An exact id', otherPlaceholder: 'Model id, passed as is',
+    modelsLoading: 'Reading the machine’s models…', modelsUnavailable: (e: string) => `Model list unavailable (${e}): the default and « Other… » still work.`,
+    modelsOutdated: 'Update Ledge on this machine to choose the model.',
+    effort: 'Effort', effortHint: 'Thinking time per turn', cursorEffort: 'For Cursor, the effort is part of the model name.',
+    efforts: { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max', ultra: 'Ultra' } as Record<string, string>,
+    modelHints: { 'claude:fable': 'The most capable', 'claude:opus': 'Very capable, slower', 'claude:sonnet': 'Balanced, everyday use', 'claude:haiku': 'Fast and economical' } as Record<string, string>,
+    pickSummary: (m: string, e?: string) => (e ? `${m} · ${e}` : m)
   },
   projects: {
     titles: {

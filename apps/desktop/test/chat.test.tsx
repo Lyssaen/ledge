@@ -7,6 +7,7 @@ import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { boot, closeDaemons, declarations, DEFAULT_SESSIONS, LAUNCH_PROJECTS, recordToasts, type MockDaemon } from './helpers';
 import { loadChat } from '../src/chat/lazy';
 import { useChatCards } from '../src/chat/useChatCards';
+import { forgetModels } from '../src/launch/useModels';
 import { useProjectReview } from '../src/chat/projectReview';
 import { LangProvider } from '../src/i18n/lang';
 import { proposalOf } from '../src/projects/proposals';
@@ -253,6 +254,25 @@ describe('the Ledge chat docked on the right', () => {
     expect(panel().queryByRole('button', { name: /Start the session|Retry/ })).toBeNull();
     expect(launches(d)).toHaveLength(1);
     expect(screen.getByRole('complementary', { name: 'Chat Ledge' })).toBeVisible();   // the chat stays open
+  });
+
+  it('a card offers the agent\'s models once its machine lists them, and launches with the one chosen (#58)', async () => {
+    forgetModels();
+    const env = await openChat();
+    const { d, user } = env;
+    const turn = await ask(env, 'Lance une session', 'Voici.', { proposal: PROPOSAL });
+    const card = within(panel().getByRole('region', { name: 'Proposed session' }));
+    const list = await waitFor(() => { const m = d.received.find((x): x is Extract<ClientMessage, { type: 'models.list' }> => x.type === 'models.list'); expect(m).toBeDefined(); return m!; });
+    expect(list).toMatchObject({ tool: 'codex' });
+    expect(card.queryByRole('combobox', { name: 'Codex model' })).toBeNull();
+    d.reply({ type: 'models.listing', requestId: list.requestId, tool: 'codex', models: [{ id: 'sol', label: 'Sol', efforts: ['low', 'ultra'], isDefault: true }, { id: 'luna', label: 'Luna', efforts: ['low', 'max'] }] });
+    const model = await card.findByRole('combobox', { name: 'Codex model' });
+    expect(within(model).getAllByRole('option').map(o => o.textContent)).toEqual(['Sol · default', 'Luna']);
+    await user.selectOptions(model, 'luna');
+    await user.selectOptions(card.getByRole('combobox', { name: 'Effort' }), 'max');
+    await user.click(card.getByRole('button', { name: 'Start the session' }));
+    await waitFor(() => expect(launches(d)).toHaveLength(1));
+    expect(launches(d)[0]).toEqual({ type: 'session.launch', tool: 'codex', cwd: '/w/ledge/app', prompt: 'Relis la PR', qid: turn.qid, model: 'luna', effort: 'max' });
   });
 
   it('a launch the daemon marks failed shows its error on the card, which can be launched again', async () => {

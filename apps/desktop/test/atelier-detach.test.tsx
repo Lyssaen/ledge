@@ -38,11 +38,19 @@ vi.mock('../src/tauri/bridge', async importOriginal => ({
   onWindowResized: (fn: () => void) => { caps.resize = fn; return () => { caps.resize = null; }; }
 }));
 
+// Full screen acts on the current window (here, the detached one): the test plays the window leaving it by itself.
+const full = vi.hoisted(() => ({ set: vi.fn(async (_on: boolean) => {}), left: null as null | (() => void) }));
+vi.mock('../src/shell/fullscreen', async importOriginal => ({
+  ...(await importOriginal<typeof import('../src/shell/fullscreen')>()),
+  setWindowFullscreen: (on: boolean) => full.set(on),
+  onFullscreenLeft: (cb: () => void) => { full.left = cb; return () => { full.left = null; }; }
+}));
+
 import { createDesktopFleet } from '../src/fleet/useFleet';
 import { AtelierApp } from '../src/atelier/AtelierWindow';
 import { boot, closeDaemons } from './helpers';
 
-beforeEach(() => { localStorage.clear(); win.open = false; caps.maximized = false; for (const f of [win.detach, win.attach, win.show, win.toMain, win.close, caps.minimize, caps.toggle]) f.mockClear(); });
+beforeEach(() => { localStorage.clear(); win.open = false; caps.maximized = false; for (const f of [win.detach, win.attach, win.show, win.toMain, win.close, caps.minimize, caps.toggle, full.set]) f.mockClear(); });
 afterEach(async () => { cleanup(); await closeDaemons(); });
 
 const away = () => screen.queryByRole('region', { name: 'The Atelier is in its own window' });
@@ -177,6 +185,37 @@ describe('the detached Atelier’s window (#21)', () => {
       expect(await bar.findByRole('button', { name: 'Restore' })).toBeVisible();
       await user.click(bar.getByRole('button', { name: 'Close' }));
       expect(win.close).toHaveBeenCalledTimes(1);
+    } finally { await close(); }
+  });
+
+  it('goes full screen on its own (#41): no window bar, a way out, and nothing asked of the main window', async () => {
+    const { user, close } = await atelier();
+    try {
+      await user.click(within(screen.getByRole('group', { name: 'Window bar' })).getByRole('button', { name: 'Full screen' }));
+      expect(full.set).toHaveBeenLastCalledWith(true);
+      expect(screen.queryByRole('group', { name: 'Window bar' })).toBeNull();
+      expect(document.querySelector('.atelier-alone')).toHaveClass('immersive');
+      expect(screen.getByRole('region', { name: 'Ledge table' })).toBeVisible();
+      await user.click(screen.getByRole('button', { name: 'Exit full screen' }));
+      expect(full.set).toHaveBeenLastCalledWith(false);
+      expect(screen.getByRole('group', { name: 'Window bar' })).toBeVisible();
+      expect(document.querySelector('.atelier-alone')).not.toHaveClass('immersive');
+      expect(screen.queryByRole('button', { name: 'Exit full screen' })).toBeNull();
+      expect(win.toMain).not.toHaveBeenCalled();
+    } finally { await close(); }
+  });
+
+  it('Escape, or the window leaving full screen by itself, brings its bar back', async () => {
+    const { user, close } = await atelier();
+    try {
+      await user.click(screen.getByRole('button', { name: 'Full screen' }));
+      await user.keyboard('{Escape}');
+      expect(full.set).toHaveBeenLastCalledWith(false);
+      expect(screen.getByRole('group', { name: 'Window bar' })).toBeVisible();
+      await user.click(screen.getByRole('button', { name: 'Full screen' }));
+      act(() => full.left!());
+      expect(screen.getByRole('group', { name: 'Window bar' })).toBeVisible();
+      expect(win.toMain).not.toHaveBeenCalled();
     } finally { await close(); }
   });
 

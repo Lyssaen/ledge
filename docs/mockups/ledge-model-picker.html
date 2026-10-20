@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Choix du modèle</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#f5f5f5;--background:#fff;--card:#fff;--well:#f5f5f5;--fg:#0a0a0a;--muted:#f5f5f5;--muted-fg:#737373;
+  --border:#e5e5e5;--input:#e5e5e5;--primary:#c10007;--primary-fg:#fef2f2;--primary-soft:#fef2f2;
+  --info:#2563eb;--info-soft:#eff6ff;--warning:#b45309;--warning-soft:#fffbeb;--success:#059669;
+  --chip-on:#0a0a0a;--shadow:0 20px 40px -12px rgba(0,0,0,.25);--visor:#22292b;--shell:#d6d4cc;
+}
+[data-theme="dark"]{
+  --bg:#050505;--background:#0a0a0a;--card:#171717;--well:#0a0a0a;--fg:#fafafa;--muted:#262626;--muted-fg:#a1a1a1;
+  --border:#ffffff1a;--input:#ffffff26;--primary:#9f0712;--primary-fg:#fef2f2;--primary-soft:#450a0a;
+  --info:#60a5fa;--info-soft:#172554;--warning:#fbbf24;--warning-soft:#422006;--success:#34d399;
+  --chip-on:#fafafa;--shadow:0 20px 40px -12px rgba(0,0,0,.7);--visor:#172124;--shell:#34434b;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:13px/19px Geist,ui-sans-serif,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.muted{color:var(--muted-fg)}
+.spacer{flex:1}
+
+/* Barre de la maquette */
+.mock-bar{position:sticky;top:0;z-index:20;display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;padding:10px 20px;background:var(--background);border-bottom:1px solid var(--border)}
+.mock-bar h1{margin:0;font-size:13px;font-weight:600}
+.seg{display:inline-flex;gap:2px;padding:2px;border:1px solid var(--border);border-radius:8px;background:var(--well)}
+.seg button{border:0;background:none;padding:3px 10px;border-radius:6px;color:var(--muted-fg);cursor:pointer;font-size:12px}
+.seg button[aria-pressed="true"]{background:var(--muted);color:var(--fg)}
+.seg-label{font-size:11px;color:var(--muted-fg);margin-right:4px}
+.ctl{display:inline-flex;align-items:center}
+
+.stage{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:24px;padding:24px;max-width:1500px;margin:0 auto}
+@media (max-width:1100px){.stage{grid-template-columns:1fr}}
+
+/* Éléments communs */
+.btn{height:32px;display:inline-flex;align-items:center;gap:6px;padding:0 12px;border-radius:8px;border:1px solid transparent;font-size:13px;font-weight:500;cursor:pointer;background:none}
+.btn.primary{background:var(--primary);color:var(--primary-fg)}
+.btn.outline{border-color:var(--input)}
+.btn.ghost:hover{background:var(--muted)}
+.btn.sm{height:28px;font-size:12px;padding:0 10px}
+.kbd{font-family:'Geist Mono',monospace;font-size:10px;padding:0 4px;border-radius:4px;border:1px solid currentColor;opacity:.6;line-height:14px}
+.label{font-size:12px;color:var(--muted-fg);font-weight:500;margin:0 0 8px}
+.chip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border:1px solid var(--input);border-radius:8px;background:none;cursor:pointer;font-size:12.5px;white-space:nowrap}
+.chip.on{border-color:var(--chip-on);box-shadow:inset 0 0 0 1px var(--chip-on)}
+.chip small{color:var(--muted-fg);font-size:11px}
+.dot{width:8px;height:8px;border-radius:2px;display:inline-block}
+.new{display:inline-block;font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--primary-fg);background:var(--primary);border-radius:4px;padding:0 5px;line-height:15px;vertical-align:1px}
+
+/* Bot simplifié */
+.bot{position:relative;flex:none;border-radius:32%;background:linear-gradient(var(--shell),color-mix(in srgb,var(--shell),#000 25%));display:grid;place-items:center}
+.bot::before{content:"";width:72%;height:46%;border-radius:40%;background:var(--visor)}
+.bot::after{content:"";position:absolute;width:44%;height:12%;top:46%;left:28%;background:radial-gradient(circle at 15% 50%,var(--eye,#a9dfc7) 0 32%,transparent 36%),radial-gradient(circle at 85% 50%,var(--eye,#a9dfc7) 0 32%,transparent 36%)}
+.bot.working{--eye:#90c7f2}.bot.done{--eye:#a3aaa9}
+.bot.cursor{border-radius:50% 50% 30% 30%}
+
+/* ───────── Écran 1 : Nouvelle session ───────── */
+.backdrop{background:color-mix(in srgb,var(--bg),#000 20%);border-radius:14px;padding:40px 24px;display:flex;justify-content:center;border:1px solid var(--border)}
+.modal{width:640px;max-width:100%;background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+.modal-head{display:flex;align-items:center;height:64px;padding:0 18px;border-bottom:1px solid var(--border)}
+.modal-head h2{margin:0;font-size:16px;font-weight:600}
+.modal-body{padding:20px 20px 4px;display:flex;flex-direction:column;gap:18px}
+textarea.prompt{width:100%;min-height:96px;resize:none;padding:12px 14px;border-radius:10px;border:1px solid var(--input);background:var(--well);color:var(--fg);font:inherit;font-size:14px}
+.tools{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.tile{display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--border);border-radius:10px;background:none;cursor:pointer;text-align:left}
+.tile.on{border-color:var(--chip-on);box-shadow:inset 0 0 0 1px var(--chip-on)}
+.tile strong{display:block;font-weight:600}.tile small{color:var(--muted-fg)}
+
+.model-box{border:1px solid var(--border);border-radius:10px;background:var(--well);padding:14px 14px 12px;display:flex;flex-direction:column;gap:12px;position:relative}
+.model-box.fresh{animation:glow 1.2s ease-out}
+@keyframes glow{from{box-shadow:0 0 0 3px color-mix(in srgb,var(--info),transparent 60%)}to{box-shadow:0 0 0 3px transparent}}
+.model-head{display:flex;align-items:baseline;gap:8px}
+.model-head .label{margin:0}
+.model-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(136px,1fr));gap:6px}
+.mcard{display:flex;flex-direction:column;align-items:flex-start;gap:1px;padding:8px 10px;border:1px solid var(--input);border-radius:8px;background:var(--card);cursor:pointer;text-align:left;min-height:52px}
+.mcard strong{font-weight:600;font-size:12.5px;display:flex;gap:6px;align-items:center}
+.mcard small{color:var(--muted-fg);font-size:11px;line-height:15px}
+.mcard.on{border-color:var(--chip-on);box-shadow:inset 0 0 0 1px var(--chip-on)}
+.mcard.default strong::after{content:"défaut";font-weight:500;font-size:10px;color:var(--muted-fg);border:1px solid var(--input);border-radius:4px;padding:0 4px;line-height:14px}
+.mcard.other{border-style:dashed}
+.custom{display:flex;gap:8px;align-items:center}
+.custom input{flex:1;height:30px;border-radius:8px;border:1px solid var(--input);background:var(--card);color:var(--fg);padding:0 10px;font:12px 'Geist Mono',monospace}
+.effort-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.effort-row .label{margin:0;min-width:52px}
+.model-note{font-size:11.5px;color:var(--muted-fg);margin:0;display:flex;gap:6px;align-items:flex-start}
+.model-empty{font-size:12px;color:var(--muted-fg);padding:4px 0}
+.where{border:1px solid var(--border);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:12px}
+.where .row{display:flex;flex-wrap:wrap;gap:6px}
+.modal-foot{display:flex;align-items:center;gap:10px;padding:14px 20px;margin-top:16px;border-top:1px solid var(--border)}
+.preview{display:flex;align-items:center;gap:10px;flex:1;min-width:0}
+.preview .line{font-size:13px}.preview small{display:block;color:var(--muted-fg);font-size:11.5px}
+.pill{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;padding:0 6px;border-radius:6px;background:var(--muted);line-height:18px}
+
+/* ───────── Écran 2 : session existante ───────── */
+.app{border:1px solid var(--border);border-radius:14px;overflow:hidden;background:var(--background);display:flex;flex-direction:column;height:760px}
+.crumbs{display:flex;align-items:center;gap:10px;height:56px;padding:0 18px;border-bottom:1px solid var(--border);font-size:13px}
+.crumbs .sep{color:var(--muted-fg)}
+.badge{font-size:12px;font-weight:500;border-radius:6px;padding:1px 8px}
+.badge.working{color:var(--info);background:var(--info-soft)}
+.badge.idle{color:var(--success);background:color-mix(in srgb,var(--success),transparent 85%)}
+.badge.ro{color:var(--muted-fg);background:var(--muted)}
+.pane-heading{display:flex;align-items:center;gap:12px;height:44px;padding:0 14px;border-bottom:1px solid var(--border)}
+.view-switch{display:inline-flex;padding:2px;border:1px solid var(--border);border-radius:8px}
+.view-switch span{padding:2px 10px;border-radius:6px;font-size:12.5px;color:var(--muted-fg)}
+.view-switch span.on{background:var(--muted);color:var(--fg)}
+.meta{font:11.5px 'Geist Mono',monospace;color:var(--muted-fg);display:flex;align-items:center;gap:6px}
+.meta .model-meta{color:var(--fg);display:inline-flex;align-items:center;gap:4px}
+.thread{flex:1;overflow:auto;padding:20px 0}
+.col{max-width:760px;margin:0 auto;padding:0 24px;display:flex;flex-direction:column;gap:14px}
+.you{align-self:flex-end;max-width:80%;background:var(--muted);border-radius:14px;padding:10px 14px}
+.you small{display:block;color:var(--muted-fg);font-size:11px}
+.agent-name{display:flex;align-items:center;gap:8px;font-weight:600}
+.actions{color:var(--muted-fg);font-size:12.5px;padding-left:28px}
+.text{margin:0;font-size:14px;line-height:22px}
+.notice{display:flex;align-items:center;gap:10px;font-size:11.5px;color:var(--muted-fg)}
+.notice::before,.notice::after{content:"";flex:1;height:1px;background:var(--border)}
+.notice b{color:var(--fg);font-weight:500}
+.notice.flash{animation:glowtxt 1.6s ease-out}
+@keyframes glowtxt{from{color:var(--info)}to{color:var(--muted-fg)}}
+
+.reply-area{padding:12px 24px 16px;border-top:1px solid var(--border)}
+.reply{max-width:760px;margin:0 auto;border:1px solid var(--input);border-radius:12px;background:var(--well);position:relative}
+.reply textarea{display:block;width:100%;border:0;background:none;color:var(--fg);font:inherit;font-size:14px;padding:12px 14px 4px;resize:none;outline:none}
+.reply-bar{display:flex;align-items:center;gap:8px;padding:6px 8px 8px 8px}
+.reply-hint{font-size:11.5px;color:var(--muted-fg);display:flex;gap:6px;align-items:center}
+.send{width:32px;height:32px;border:0;border-radius:8px;background:var(--primary);color:var(--primary-fg);display:grid;place-items:center;opacity:.55}
+
+.mchip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 8px 0 9px;border:1px solid var(--input);border-radius:8px;background:var(--card);cursor:pointer;font-size:12px}
+.mchip:hover{border-color:var(--muted-fg)}
+.mchip[aria-expanded="true"]{border-color:var(--chip-on)}
+.mchip .eff{color:var(--muted-fg)}
+.mchip.queued{border-color:var(--info);color:var(--info)}
+.mchip.queued .eff{color:inherit;opacity:.8}
+.mchip.static{cursor:default;background:none;border-style:dashed}
+.mchip .x{margin-left:2px;width:16px;height:16px;border-radius:4px;display:grid;place-items:center}
+.mchip .x:hover{background:var(--muted)}
+
+.pop{position:absolute;left:0;bottom:calc(100% + 8px);width:380px;background:var(--card);border:1px solid var(--input);border-radius:12px;box-shadow:var(--shadow);z-index:5;overflow:hidden}
+.pop-head{padding:12px 14px 8px;display:flex;align-items:baseline;gap:8px}
+.pop-head strong{font-size:13px}
+.pop-list{list-style:none;margin:0;padding:4px 6px}
+.pop-list li button{width:100%;display:grid;grid-template-columns:18px 1fr auto;gap:8px;align-items:center;padding:7px 8px;border:0;border-radius:8px;background:none;text-align:left;cursor:pointer}
+.pop-list li button:hover,.pop-list li button.focus{background:var(--muted)}
+.pop-list li button:disabled{cursor:not-allowed;opacity:.5}
+.pop-list strong{font-weight:500;font-size:13px}
+.pop-list small{display:block;color:var(--muted-fg);font-size:11px;line-height:14px}
+.pop-list .cur{font-size:10.5px;color:var(--muted-fg);border:1px solid var(--input);border-radius:4px;padding:0 5px}
+.pop-sec{padding:10px 14px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px}
+.pop-foot{padding:10px 14px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;background:var(--well)}
+.pop-foot{flex-wrap:wrap;justify-content:flex-end}
+.pop-foot p{margin:0;font-size:11.5px;line-height:16px;color:var(--muted-fg);flex:1 0 100%}
+.pop-ro{padding:6px 14px 14px;font-size:12.5px;color:var(--muted-fg)}
+.radio{width:14px;height:14px;border-radius:50%;border:1.5px solid var(--input);display:grid;place-items:center}
+.radio.on{border-color:var(--chip-on)}.radio.on::after{content:"";width:6px;height:6px;border-radius:50%;background:var(--chip-on)}
+
+/* Notes */
+.notes{position:sticky;top:76px;align-self:start;display:flex;flex-direction:column;gap:14px}
+.note{border:1px solid var(--border);border-radius:12px;background:var(--card);padding:14px 16px}
+.note h3{margin:0 0 8px;font-size:13px}
+.note ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:18px}
+.note code{font:11.5px 'Geist Mono',monospace;background:var(--muted);border-radius:4px;padding:0 4px}
+.eyebrow{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--primary);margin:0 0 4px}
+[data-theme="dark"] .eyebrow{color:#ff6467}
+</style>
+</head>
+<body>
+<div class="mock-bar">
+  <h1>Maquette · Choix du modèle</h1>
+  <span class="ctl"><span class="seg-label">Écran</span><span class="seg" id="screenSeg"></span></span>
+  <span class="ctl" id="sessionCtl"><span class="seg-label">Agent</span><span class="seg" id="toolSeg"></span></span>
+  <span class="ctl" id="stateCtl"><span class="seg-label">État</span><span class="seg" id="stateSeg"></span></span>
+  <span class="spacer"></span>
+  <span class="ctl"><span class="seg" id="themeSeg"></span></span>
+</div>
+
+<div class="stage">
+  <main id="screen"></main>
+  <aside class="notes" id="notes"></aside>
+</div>
+
+<script>
+// Données simulées : la liste réelle viendrait du daemon, par harness (alias connus + « Autre… »).
+const TOOLS = {
+  claude: { label: 'Claude Code', hint: 'Conception, revue', defaultId: 'sonnet', live: true, cmd: m => `/model ${m}`,
+    models: [
+      { id: 'opus', name: 'Opus 5.5', hint: 'Le plus capable, plus lent' },
+      { id: 'sonnet', name: 'Sonnet 5.5', hint: 'Équilibré, usage courant' },
+      { id: 'haiku', name: 'Haiku 5.5', hint: 'Rapide et économique' },
+    ],
+    efforts: ['Bas', 'Moyen', 'Élevé', 'Très élevé', 'Max'], defaultEffort: 2 },
+  codex: { label: 'Codex', hint: 'Code et tests', defaultId: 'gpt-5.6', live: true, cmd: m => `/model ${m}`,
+    models: [
+      { id: 'gpt-5.6-sol', name: 'GPT-5.6 Sol', hint: 'Raisonnement poussé' },
+      { id: 'gpt-5.6', name: 'GPT-5.6', hint: 'Polyvalent' },
+      { id: 'gpt-5.6-mini', name: 'GPT-5.6 mini', hint: 'Rapide' },
+    ],
+    efforts: ['Bas', 'Moyen', 'Élevé'], defaultEffort: 1 },
+  cursor: { label: 'Cursor Agent', hint: 'Dans l’éditeur', defaultId: 'auto', live: false,
+    models: [
+      { id: 'auto', name: 'Auto', hint: 'Cursor choisit à chaque tour' },
+      { id: 'sonnet-5.5', name: 'Sonnet 5.5', hint: 'Anthropic' },
+      { id: 'gpt-5.6', name: 'GPT-5.6', hint: 'OpenAI' },
+    ],
+    efforts: null },
+};
+const PROJECTS = [['Ledge', '#3b82f6'], ['Payment Service', '#10b981'], ['Paper Channel', '#f59e0b'], ['Software Factory', '#8b5cf6']];
+
+const S = {
+  screen: 'launch', theme: 'dark',
+  launch: { tool: null, model: null, custom: '', effort: null, fresh: false, project: 'Ledge' },
+  session: { tool: 'claude', state: 'idle', model: 'sonnet', effort: 2, open: false, draft: null, draftEffort: null, queued: null, notices: [] },
+};
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const modelOf = (tool, id) => TOOLS[tool].models.find(m => m.id === id) ?? { id, name: id, hint: 'Identifiant libre' };
+const icon = {
+  chev: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 15 6-6 6 6"/></svg>',
+  spark: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/></svg>',
+  clock: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  x: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+  info: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex:none;margin-top:2px"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>',
+  send: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
+  plus: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>',
+  close: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+};
+const bot = (tool, size, cls = '') => `<span class="bot ${tool === 'cursor' ? 'cursor' : ''} ${cls}" style="width:${size}px;height:${size}px" aria-hidden="true"></span>`;
+const seg = (el, items, cur, on) => {
+  el.innerHTML = items.map(([v, l]) => `<button aria-pressed="${v === cur}" data-v="${v}">${l}</button>`).join('');
+  el.onclick = e => { const b = e.target.closest('button'); if (b) on(b.dataset.v); };
+};
+
+/* ───────── Nouvelle session ───────── */
+function renderLaunch() {
+  const L = S.launch, T = L.tool && TOOLS[L.tool];
+  const chosen = T && (L.model === 'other' ? { name: L.custom || 'Autre…' } : modelOf(L.tool, L.model ?? T.defaultId));
+  const effort = T?.efforts ? T.efforts[L.effort ?? T.defaultEffort] : null;
+  const modelBox = !T ? `<div class="model-box"><div class="model-head"><p class="label">Modèle</p></div><p class="model-empty">Choisissez un agent : ses modèles s’affichent ici.</p></div>` : `
+    <div class="model-box ${L.fresh ? 'fresh' : ''}">
+      <div class="model-head"><p class="label">Modèle de ${T.label}</p><span class="spacer"></span><span class="muted" style="font-size:11.5px">Dernier choix pour ${L.project} retenu</span></div>
+      <div class="model-grid">
+        ${T.models.map(m => {
+          const on = (L.model ?? T.defaultId) === m.id;
+          return `<button type="button" class="mcard ${on ? 'on' : ''} ${m.id === T.defaultId ? 'default' : ''}" data-model="${m.id}"><strong>${m.name}</strong><small>${m.hint}</small></button>`;
+        }).join('')}
+        <button type="button" class="mcard other ${L.model === 'other' ? 'on' : ''}" data-model="other"><strong>Autre…</strong><small>Un identifiant exact</small></button>
+      </div>
+      ${L.model === 'other' ? `<div class="custom"><input id="customModel" placeholder="${L.tool === 'claude' ? 'claude-opus-5-5' : L.tool === 'codex' ? 'gpt-5.6-sol' : 'nom du modèle'}" value="${esc(L.custom)}"><span class="muted" style="font-size:11.5px">passé tel quel à <span class="mono">--model</span></span></div>` : ''}
+      ${T.efforts ? `<div class="effort-row"><p class="label">Effort</p><span class="seg" id="effortSeg"></span><span class="muted" style="font-size:11.5px">${L.tool === 'claude' ? 'Temps de réflexion par tour' : 'Effort de raisonnement'}</span></div>`
+        : `<p class="model-note">${icon.info}<span>Cursor Agent garde ce modèle pour toute la session : il ne pourra pas être changé ensuite depuis Ledge.</span></p>`}
+    </div>`;
+  $('#screen').innerHTML = `
+  <div class="backdrop">
+    <form class="modal" onsubmit="return false">
+      <div class="modal-head"><h2>Nouvelle session</h2><span class="spacer"></span><button class="btn ghost sm" type="button" aria-label="Fermer">${icon.close}</button></div>
+      <div class="modal-body">
+        <div><p class="label">Consigne</p><textarea class="prompt">Relancer la suite overlay et corriger les tests qui échouent.</textarea></div>
+        <div><p class="label">Agent</p><div class="tools">${Object.entries(TOOLS).map(([id, t]) => `<button type="button" class="tile ${L.tool === id ? 'on' : ''}" data-tool="${id}">${bot(id, 40, L.tool === id ? 'working' : '')}<span><strong>${t.label}</strong><small>${t.hint}</small></span></button>`).join('')}</div></div>
+        ${modelBox}
+        <div class="where">
+          <div><p class="label">Projet</p><div class="row">${PROJECTS.map(([n, c]) => `<button type="button" class="chip ${L.project === n ? 'on' : ''}" data-project="${n}"><i class="dot" style="background:${c}"></i>${n}</button>`).join('')}</div></div>
+          <div><p class="label">Machine</p><div class="row"><span class="chip on"><i class="dot" style="background:var(--success);border-radius:50%"></i>PC local</span><span class="chip">Dev SSH</span></div></div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <div class="preview">${L.tool ? bot(L.tool, 28) : '<span style="width:28px;height:28px;border-radius:50%;border:1px dashed var(--input)"></span>'}
+          <span><span class="line"><strong>${L.tool ? 'Otto' : 'Un nouvel agent'}</strong> rejoindra la table <strong>${L.project}</strong></span>
+          <small>Place 4 · PC local · application${chosen ? ` · <span class="pill">${icon.spark}${esc(chosen.name)}${effort ? ' · ' + effort.toLowerCase() : ''}</span>` : ''}</small></span></div>
+        <button class="btn ghost" type="button">Annuler</button>
+        <button class="btn primary" type="button">${icon.plus}Lancer <span class="kbd">Ctrl ↵</span></button>
+      </div>
+    </form>
+  </div>`;
+  document.querySelectorAll('[data-tool]').forEach(b => b.onclick = () => { const id = b.dataset.tool; Object.assign(L, { tool: id, model: null, effort: null, custom: '', fresh: L.tool !== id }); render(); });
+  document.querySelectorAll('[data-model]').forEach(b => b.onclick = () => { L.model = b.dataset.model; L.fresh = false; render(); if (L.model === 'other') $('#customModel')?.focus(); });
+  document.querySelectorAll('[data-project]').forEach(b => b.onclick = () => { L.project = b.dataset.project; L.fresh = false; render(); });
+  const ci = $('#customModel'); if (ci) ci.oninput = () => { L.custom = ci.value; const pill = document.querySelector('.preview .pill'); if (pill) pill.innerHTML = icon.spark + esc(L.custom || 'Autre…') + (effort ? ' · ' + effort.toLowerCase() : ''); };
+  if (T?.efforts) seg($('#effortSeg'), T.efforts.map((e, i) => [String(i), e]), String(L.effort ?? T.defaultEffort), v => { L.effort = +v; L.fresh = false; render(); });
+}
+
+/* ───────── Session existante ───────── */
+function renderSession() {
+  const X = S.session, T = TOOLS[X.tool];
+  const ro = X.state === 'ro';
+  const cur = modelOf(X.tool, X.model);
+  const eff = T.efforts ? T.efforts[X.effort] : null;
+  const label = (m, e) => `${esc(m.name)}${e ? `<span class="eff">· ${e.toLowerCase()}</span>` : ''}`;
+  let chip;
+  if (ro) chip = `<span class="mchip static" title="Session suivie par ses hooks : Ledge lit le modèle dans le transcript mais ne pilote pas l’agent.">${icon.spark}${label(cur, eff)}</span>`;
+  else if (X.queued) {
+    const q = modelOf(X.tool, X.queued.model), qe = T.efforts ? T.efforts[X.queued.effort] : null;
+    chip = `<button class="mchip queued" id="mchip" aria-expanded="${X.open}" title="Partira à la fin du tour en cours">${icon.clock}${esc(cur.name)} → ${label(q, qe)}<span class="x" id="unqueue" role="button" aria-label="Annuler le changement">${icon.x}</span></button>`;
+  } else chip = `<button class="mchip" id="mchip" aria-expanded="${X.open}" aria-haspopup="dialog">${icon.spark}${label(cur, eff)}${icon.chev}</button>`;
+
+  const dm = X.draft ?? X.queued?.model ?? X.model, de = X.draftEffort ?? X.queued?.effort ?? X.effort;
+  const changed = dm !== X.model || (T.efforts && de !== X.effort);
+  const working = X.state === 'working';
+  const pop = !X.open || ro ? '' : !T.live ? `
+    <div class="pop" role="dialog" aria-label="Modèle de Otto">
+      <div class="pop-head"><strong>Modèle de Otto</strong><span class="spacer"></span><span class="muted" style="font-size:11.5px">${T.label}</span></div>
+      <ul class="pop-list">${T.models.map(m => `<li><button disabled><span class="radio ${m.id === X.model ? 'on' : ''}"></span><span><strong>${m.name}</strong><small>${m.hint}</small></span>${m.id === X.model ? '<span class="cur">actuel</span>' : '<span></span>'}</button></li>`).join('')}</ul>
+      <div class="pop-foot"><p>Cursor Agent ne change pas de modèle en cours de session. Relancez une session pour en prendre un autre ; le fil actuel reste consultable.</p><button class="btn outline sm" type="button">Relancer avec…</button></div>
+    </div>` : `
+    <div class="pop" role="dialog" aria-label="Modèle de Otto">
+      <div class="pop-head"><strong>Modèle de Otto</strong><span class="spacer"></span><span class="muted" style="font-size:11.5px">${T.label}</span></div>
+      <ul class="pop-list">${T.models.map(m => `<li><button data-pick="${m.id}"><span class="radio ${m.id === dm ? 'on' : ''}"></span><span><strong>${m.name}</strong><small>${m.hint}</small></span>${m.id === X.model ? '<span class="cur">actuel</span>' : '<span></span>'}</button></li>`).join('')}</ul>
+      ${T.efforts ? `<div class="pop-sec"><p class="label" style="margin:0">Effort</p><span class="seg" id="popEffort"></span></div>` : ''}
+      <div class="pop-foot">
+        <p>${working ? `Otto est au travail : le changement partira <b>à la fin de son tour</b>.` : `S’applique tout de suite. La conversation et son contexte sont conservés.`}<br><span class="mono">${T.cmd(dm)}</span></p>
+        <button class="btn ghost sm" type="button" id="popCancel">Annuler</button>
+        <button class="btn primary sm" type="button" id="popApply" ${changed ? '' : 'disabled style="opacity:.5"'}>${working ? 'Au prochain tour' : 'Appliquer'}</button>
+      </div>
+    </div>`;
+
+  const notices = X.notices.map((n, i) => `<div class="notice ${i === X.notices.length - 1 ? 'flash' : ''}"><span>${n}</span></div>`).join('');
+  $('#screen').innerHTML = `
+  <div class="app">
+    <div class="crumbs"><span class="muted">Atelier</span><span class="sep">/</span><span class="muted">Ledge</span><span class="sep">/</span>${bot(X.tool, 22, working ? 'working' : '')}<strong>Otto</strong><span class="muted">· Concevoir la navigation desktop</span><span class="spacer"></span>
+      <span class="badge ${ro ? 'ro' : working ? 'working' : 'idle'}">${ro ? 'Lecture seule' : working ? 'Au travail' : 'Disponible'}</span></div>
+    <div class="pane-heading"><span class="view-switch"><span class="on">Fil</span><span>Modifications <span class="mono">6</span></span></span>
+      <span class="meta">PC local · application · documentation · <span class="model-meta" title="Modèle actuel">${icon.spark}${esc(cur.name)}</span></span></div>
+    <div class="thread"><div class="col">
+      <div class="you"><small>Vous</small>Ajoute le raccourci O dans l’aide, puis relance toute la suite overlay avant que je relise.</div>
+      <div class="agent-name">${bot(X.tool, 20)}Otto</div>
+      <div class="actions">› 4 actions · 2 fichiers modifiés · plan de travail mis à jour</div>
+      <p class="text">Le raccourci est documenté en français et en anglais. La suite overlay passe : 48 fichiers, 412 tests.</p>
+      ${notices}
+      ${working ? `<div class="actions" style="color:var(--info)">● Otto relit les parcours clavier…</div>` : ''}
+    </div></div>
+    <div class="reply-area">
+      <form class="reply" onsubmit="return false">
+        ${pop}
+        <textarea rows="2" placeholder="${ro ? 'Session suivie en lecture seule' : 'Répondre à Otto…'}" ${ro ? 'disabled' : ''}></textarea>
+        <div class="reply-bar">${chip}<span class="spacer"></span><span class="reply-hint">${ro ? 'Ledge ne pilote pas cette session' : '<span class="kbd">R</span> écrire · <span class="kbd">M</span> modèle'}</span><button class="send" type="button" aria-label="Envoyer">${icon.send}</button></div>
+      </form>
+    </div>
+  </div>`;
+
+  const mchip = $('#mchip');
+  if (mchip) mchip.onclick = e => { if (e.target.closest('#unqueue')) return; X.open = !X.open; X.draft = null; X.draftEffort = null; render(); };
+  const un = $('#unqueue'); if (un) un.onclick = e => { e.stopPropagation(); X.queued = null; X.open = false; render(); };
+  document.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => { X.draft = b.dataset.pick; render(); });
+  if ($('#popEffort')) seg($('#popEffort'), T.efforts.map((e, i) => [String(i), e]), String(de), v => { X.draftEffort = +v; render(); });
+  const cancel = $('#popCancel'); if (cancel) cancel.onclick = () => { X.open = false; render(); };
+  const apply = $('#popApply'); if (apply) apply.onclick = () => {
+    if (working) X.queued = { model: dm, effort: de };
+    else commit(dm, de);
+    X.open = false; render();
+  };
+}
+function commit(model, effort) {
+  const X = S.session, T = TOOLS[X.tool];
+  const from = modelOf(X.tool, X.model).name, to = modelOf(X.tool, model).name;
+  const fe = T.efforts?.[X.effort], te = T.efforts?.[effort];
+  const what = model !== X.model ? `<b>${from}</b> → <b>${to}</b>` : `effort <b>${fe?.toLowerCase()}</b> → <b>${te?.toLowerCase()}</b>`;
+  X.notices.push(`Modèle : ${what} · par vous · ${new Date().toTimeString().slice(0, 5)}`);
+  X.model = model; X.effort = effort; X.queued = null;
+}
+
+/* ───────── Notes de conception ───────── */
+const NOTES = {
+  launch: `
+    <div class="note"><p class="eyebrow">Nouvelle session</p><h3>Le modèle suit l’agent</h3><ul>
+      <li>Le bloc <b>Modèle</b> apparaît sous les tuiles dès qu’un agent est choisi ; changer d’agent remet son modèle par défaut.</li>
+      <li>La carte <b>défaut</b> est celle que l’outil prendrait sans <code>--model</code> : rien n’est passé si on n’y touche pas.</li>
+      <li><b>Autre…</b> accepte un identifiant exact, passé tel quel (nouveaux modèles sans mise à jour de Ledge).</li>
+      <li>L’<b>effort</b> n’existe que pour Claude Code et Codex ; pour Cursor, une note dit que le choix est figé.</li>
+      <li>Le pied de formulaire résume le choix dans l’aperçu « Otto rejoindra la table… ».</li>
+      <li>Le dernier choix est retenu <b>par projet et par agent</b> (préférence locale du desktop).</li>
+    </ul></div>
+    <div class="note"><h3>À trancher</h3><ul>
+      <li>Liste des modèles : figée dans Ledge, ou fournie par le daemon selon la version de chaque outil ?</li>
+      <li>Lancer avec <code>--model</code> / <code>-c model_reasoning_effort</code> : à ajouter à <code>session.launch</code> (champs <code>model</code>, <code>effort</code>).</li>
+      <li>Le chat Ledge (« lancer depuis le chat ») doit-il proposer le modèle dans sa carte de relais ?</li>
+    </ul></div>`,
+  session: `
+    <div class="note"><p class="eyebrow">Session existante</p><h3>Une puce dans la barre de réponse</h3><ul>
+      <li>Le modèle actuel est lu dans la barre de réponse : il compte pour le <b>prochain message</b>, c’est là qu’on le change. Il est aussi rappelé dans la ligne de méta.</li>
+      <li>Clic ou <code>M</code> : un panneau avec les modèles, l’effort, et la commande que Ledge enverra (<code>/model …</code>).</li>
+      <li><b>Disponible</b> : appliqué tout de suite, une ligne discrète l’inscrit dans le fil.</li>
+      <li><b>Au travail</b> : le changement attend la fin du tour ; la puce passe en bleu « Sonnet → Opus » avec une croix pour annuler.</li>
+      <li><b>Lecture seule</b> (suivie par hooks) : la puce montre le modèle vu dans le transcript, sans action.</li>
+      <li><b>Cursor</b> : liste grisée et « Relancer avec… », qui ouvre Nouvelle session pré-remplie.</li>
+    </ul></div>
+    <div class="note"><h3>À vérifier</h3><ul>
+      <li>Codex accepte-t-il <code>/model</code> envoyé dans son terminal pendant une session ?</li>
+      <li>Source du modèle « actuel » : le transcript (<code>message.model</code>) plutôt que ce que Ledge a demandé, pour rester juste si l’utilisateur tape <code>/model</code> lui-même.</li>
+      <li>Sous-agents : modèle propre affiché, non modifiable (choisi par l’agent parent).</li>
+    </ul></div>`,
+};
+
+function render() {
+  document.documentElement.dataset.theme = S.theme;
+  seg($('#screenSeg'), [['launch', 'Nouvelle session'], ['session', 'Session existante']], S.screen, v => { S.screen = v; render(); });
+  seg($('#themeSeg'), [['dark', 'Sombre'], ['light', 'Clair']], S.theme, v => { S.theme = v; render(); });
+  const inSession = S.screen === 'session';
+  $('#sessionCtl').style.display = $('#stateCtl').style.display = inSession ? '' : 'none';
+  seg($('#toolSeg'), Object.entries(TOOLS).map(([id, t]) => [id, t.label]), S.session.tool, v => {
+    Object.assign(S.session, { tool: v, model: TOOLS[v].defaultId, effort: TOOLS[v].defaultEffort ?? 0, open: false, queued: null, notices: [] }); render();
+  });
+  seg($('#stateSeg'), [['idle', 'Disponible'], ['working', 'Au travail'], ['ro', 'Lecture seule']], S.session.state, v => {
+    const X = S.session;
+    if (X.state === 'working' && v === 'idle' && X.queued) commit(X.queued.model, X.queued.effort); // le tour finit : le changement part
+    X.state = v; X.open = false; render();
+  });
+  inSession ? renderSession() : renderLaunch();
+  $('#notes').innerHTML = NOTES[S.screen];
+}
+document.addEventListener('keydown', e => {
+  if (S.screen !== 'session' || e.target.matches('textarea,input')) return;
+  if (e.key.toLowerCase() === 'm' && S.session.state !== 'ro') { S.session.open = !S.session.open; render(); }
+  if (e.key === 'Escape' && S.session.open) { S.session.open = false; render(); }
+});
+render();
+</script>
+</body>
+</html>

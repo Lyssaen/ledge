@@ -394,3 +394,37 @@ describe('mobile access messages', () => {
     }
   });
 });
+
+describe('session.message and message.ack', () => {
+  const message = { type: 'session.message', rid: 'r1', from: 'ab12', to: 'Otto [fce8]', text: 'Vas-y', summary: 'OK', intercept: true };
+  it('parses a full session.message and refuses an empty text', () => {
+    expect(parseClientMessage(message)).toEqual(message);
+    expect(() => parseClientMessage({ ...message, text: '' })).toThrow();
+  });
+  it('caps a session.message: 20000 characters of text, 500 of summary', () => {
+    expect(parseClientMessage({ ...message, text: 'x'.repeat(20000), summary: 's'.repeat(500) })).toBeTruthy();
+    expect(() => parseClientMessage({ ...message, text: 'x'.repeat(20001) })).toThrow();
+    expect(() => parseClientMessage({ ...message, summary: 's'.repeat(501) })).toThrow();
+  });
+  it('parses a message.ack and refuses an unknown outcome', () => {
+    const ack = { type: 'message.ack', rid: 'r1', outcome: 'refused', reason: 'x' };
+    expect(parseServerMessage(ack)).toEqual(ack);
+    expect(() => parseServerMessage({ ...ack, outcome: 'sent' })).toThrow();
+  });
+});
+
+describe('protocol: model and effort (#58)', () => {
+  it('session.launch carries a model and an effort, never one that reads as a flag', () => {
+    expect(parseClientMessage({ type: 'session.launch', tool: 'claude', cwd: '/w', model: 'opus', effort: 'high' })).toMatchObject({ model: 'opus', effort: 'high' });
+    expect(parseClientMessage({ type: 'session.launch', tool: 'cursor', cwd: '/w', model: 'claude-opus-4-8[effort=high,fast=false]' })).toMatchObject({ model: 'claude-opus-4-8[effort=high,fast=false]' });
+    for (const model of ['', '-p', '--dangerously-skip-permissions', 'a b', 'x;rm']) expect(() => parseClientMessage({ type: 'session.launch', tool: 'claude', cwd: '/w', model })).toThrow();
+    for (const effort of ['', 'HIGH', '-x', 'very high']) expect(() => parseClientMessage({ type: 'session.launch', tool: 'claude', cwd: '/w', effort })).toThrow();
+  });
+  it('models.list asks a machine, models.listing answers with the choices or why not', () => {
+    expect(parseClientMessage({ type: 'models.list', requestId: 'm1', tool: 'codex', machineId: 'dev' })).toEqual({ type: 'models.list', requestId: 'm1', tool: 'codex', machineId: 'dev' });
+    const models = [{ id: 'gpt-6.1-sol', label: 'GPT-6.1-Sol', efforts: ['low', 'ultra'], defaultEffort: 'low', isDefault: true }];
+    expect(parseServerMessage({ type: 'models.listing', requestId: 'm1', tool: 'codex', models })).toEqual({ type: 'models.listing', requestId: 'm1', tool: 'codex', models });
+    expect(parseServerMessage({ type: 'models.listing', requestId: 'm1', tool: 'codex', models: [], error: 'offline' })).toMatchObject({ error: 'offline' });
+    expect(() => parseClientMessage({ type: 'models.list', requestId: 'm1', tool: 'vim' })).toThrow();
+  });
+});

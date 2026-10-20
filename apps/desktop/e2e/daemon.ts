@@ -1,5 +1,5 @@
 import type { Page, WebSocketRoute } from '@playwright/test';
-import type { ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, FoundRepo, IslandPrefs, Machines, Projects, Recent, Session, ThreadItem } from '@ledge/protocol';
+import type { ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, FoundRepo, IslandPrefs, Machines, ModelChoice, Projects, Recent, Session, ThreadItem, Tool } from '@ledge/protocol';
 
 /** How long a launched session stays `starting` in the fake daemon before it is `working`. */
 export const LAUNCH_SETTLE_MS = 1500;
@@ -34,7 +34,7 @@ export type Found = { repos: FoundRepo[]; truncated?: boolean } | 'offline' | 'o
  *  Like the daemon it keeps the island's settings (`extras.island`, default null: none set yet), sent after the projects, and an `island.set`
  *  replaces them and is broadcast back as `island`; `island: 'unknown'` plays a daemon too old to speak of them.
  *  The route is anchored so it never catches `/ssh/<alias>` (see `fakeRemote`). Register before `page.goto`. */
-export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual'; chat?: ChatReply; found?: Record<string, Found>; scanDelayMs?: number; island?: IslandPrefs | null | 'unknown' } = {}) {
+export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual'; chat?: ChatReply; found?: Record<string, Found>; scanDelayMs?: number; island?: IslandPrefs | null | 'unknown'; models?: Partial<Record<Tool, ModelChoice[]>> } = {}) {
   const threads = new Map(Object.entries(extras.threads ?? {}).map(([id, items]) => [id, [...items]]));
   const sessions = new Map(initial.map(s => [s.id, s]));
   const received: ClientMessage[] = [];
@@ -67,6 +67,8 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
           : { type: 'document.content', requestId: msg.requestId, path: msg.path, text, bytes: new TextEncoder().encode(text).length, modifiedAt: T0 }));
       }
       if (msg.type === 'machines.set') { machines = msg.machines; ws.send(JSON.stringify({ type: 'machines', machines })); }
+      // #58: the agent's models from `extras.models`; without an entry, an empty list.
+      if (msg.type === 'models.list') ws.send(JSON.stringify({ type: 'models.listing', requestId: msg.requestId, tool: msg.tool, models: extras.models?.[msg.tool] ?? [] }));
       if (msg.type === 'repos.inspect') {
         ws.send(JSON.stringify({ type: 'repos.info', requestId: msg.requestId, repos: msg.paths.map(path => ({ path, ...(extras.repoInfo?.[path] ?? { exists: true, branch: 'main' }) })) }));
       }
@@ -151,15 +153,16 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
 
 /** A second machine reached through the daemon's `/ssh/<alias>` relay. `close()` drops it and refuses new connections until `reopen()`,
  *  after which the fleet's own retry gets through. */
-export async function fakeRemote(page: Page, alias: string, initial: Session[], extras: { recents?: Recent[] } = {}) {
+export async function fakeRemote(page: Page, alias: string, initial: Session[], extras: { recents?: Recent[]; daemon?: DaemonInfo } = {}) {
   let sessions = initial;
+  let daemon = extras.daemon;
   let up = true;
   let socket: WebSocketRoute | null = null;
   const received: ClientMessage[] = [];
   await page.routeWebSocket(new RegExp(`127\\.0\\.0\\.1:47831/ssh/${alias}$`), ws => {
     if (!up) { ws.close(); return; }
     socket = ws;
-    ws.send(JSON.stringify({ type: 'snapshot', sshAlias: alias, sessions, ...(extras.recents ? { recents: extras.recents } : {}) }));
+    ws.send(JSON.stringify({ type: 'snapshot', sshAlias: alias, sessions, ...(extras.recents ? { recents: extras.recents } : {}), ...(daemon ? { daemon } : {}) }));
     ws.onMessage(m => { try { received.push(JSON.parse(String(m))); } catch { /* ignore */ } });
   });
   const push = (m: unknown) => socket?.send(JSON.stringify(m));
@@ -169,7 +172,8 @@ export async function fakeRemote(page: Page, alias: string, initial: Session[], 
     /** Answers a `session.launch` sent to this machine (raw id; the fleet qualifies it with the machine). */
     launched(s: Session) { sessions = [...sessions.filter(x => x.id !== s.id), s]; push({ type: 'session.updated', session: s }); push({ type: 'session.launched', id: s.id }); },
     close() { up = false; socket?.close(); socket = null; },
-    reopen(next: Session[] = sessions) { sessions = next; up = true; }
+    /** Accepts connections again; `nextDaemon`: what the daemon says of itself from now on (a daemon back from its update). */
+    reopen(next: Session[] = sessions, nextDaemon: DaemonInfo | undefined = daemon) { sessions = next; daemon = nextDaemon; up = true; }
   };
 }
 

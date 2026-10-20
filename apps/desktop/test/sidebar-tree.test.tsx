@@ -24,7 +24,7 @@ describe('the sidebar tree', () => {
     expect(tree.getByRole('treeitem', { name: /Otto/ })).toHaveAttribute('aria-level', '3');
     await user.click(tree.getByRole('button', { name: '+1 finished' }));
     expect(tree.getByRole('button', { name: /^Bix/ })).toBeVisible();
-    expect(tree.getByRole('button', { name: 'Archive' })).toBeVisible();
+    expect(tree.queryByRole('button', { name: 'Archive' })).toBeNull();
   });
 
   it('a stored list preference opens the atelier', async () => {
