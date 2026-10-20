@@ -541,6 +541,16 @@ describe('phone gateway: writes', () => {
     expect(g.dispatched).toEqual([{ type: 'session.interrupt', id: 'b' }]);
   });
 
+  it('an interrupt on an OMP session goes through: OMP stops over its RPC, not a terminal', async () => {
+    const g = setup();
+    g.sessions.set('o', mk('o', { tool: 'omp', tmuxSession: null, backend: 'omp-rpc' }));
+    const op = randomUUID();
+    g.send('dev1', { type: 'session.interrupt', op, id: 'o' });
+    await flush();
+    expect(g.results('dev1').filter(r => r.type === 'operation.result' && r.status !== 'received')).toEqual([{ type: 'operation.result', op, status: 'applied' }]);
+    expect(g.dispatched).toEqual([{ type: 'session.interrupt', id: 'o' }]);
+  });
+
   it('a result goes to the requesting device only', async () => {
     const g = setup();
     g.send('dev1', { type: 'snapshot.request' });

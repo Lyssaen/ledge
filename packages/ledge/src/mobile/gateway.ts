@@ -3,7 +3,7 @@
 // the devices that follow it. Logs carry a type, a code or an error's name, never a message's content.
 import { hostname } from 'node:os';
 import {
-  PHONE_PROTOCOL, PhoneClientMessageSchema, RefusalCodeSchema, UNTYPABLE, isArchived, pendingKey,
+  PHONE_PROTOCOL, PhoneClientMessageSchema, RefusalCodeSchema, UNTYPABLE, backendOf, isArchived, pendingKey,
   type ClientMessage, type OperationReason, type OperationStatus, type PhoneClientMessage, type PhoneServerMessage, type ServerMessage, type Session, type ThreadItem
 } from '@ledge/protocol';
 import type { MobileService } from './service.js';
@@ -112,8 +112,8 @@ export function createPhoneGateway(deps: {
         return UNTYPABLE.test(msg.text) ? { status: 'rejected', reason: 'untypable' } : undefined;
       }
       case 'session.interrupt':
-        // The local handler returns silently there: the phone would read a no-op as applied.
-        return s.tmuxSession ? undefined : { status: 'rejected', reason: 'read_only' };
+        // The local handler returns silently without a terminal: the phone would read a no-op as applied. OMP stops over its RPC.
+        return s.tmuxSession || backendOf(s) === 'omp-rpc' ? undefined : { status: 'rejected', reason: 'read_only' };
     }
   };
 

@@ -11,4 +11,4 @@ export function relativeTime(iso: string, now: number, time: ChatCopy['time']): 
   if (h < 24) return time.hours(h);
   return new Date(iso).toLocaleDateString(time.locale, { month: 'short', day: 'numeric' });
 }
-export const toolName = (t: Tool): string => ({ claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor Agent' })[t];
+export const toolName = (t: Tool): string => ({ claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor Agent', omp: 'OMP' })[t];

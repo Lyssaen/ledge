@@ -7,8 +7,9 @@ export const IslandScaleSchema = z.union([z.literal('auto'), z.literal(1), z.lit
 export const IslandPrefsSchema = z.object({
   /** Shown at the top of the screen; hidden, Desktop still notifies. */
   visible: z.boolean(),
-  /** The primary screen, or the first other one. */
-  screen: z.enum(['primary', 'second']),
+  /** `primary` (whichever it is after a reconfiguration), or a monitor's id as the shell lists it (`list_monitors`: the OS
+   *  name, `#index` without one). `second`, written by older fronts, is the first monitor that is not the primary. */
+  screen: z.string().trim().min(1).max(200),
   position: z.enum(['center', 'left', 'right']),
   /** A strip under a maximised window. */
   discreet: z.boolean(),

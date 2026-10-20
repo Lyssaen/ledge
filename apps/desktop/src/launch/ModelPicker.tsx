@@ -1,11 +1,11 @@
-import { useId, useState, type JSX } from 'react';
-import { ModelIdSchema, type ModelChoice } from '@ledge/protocol';
+import { useRef, useState, type JSX } from 'react';
+import type { ModelChoice } from '@ledge/protocol';
+import { Icon } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
+import { cls } from '../shell/cls';
 import type { ModelPick, Tool } from './model';
+import { EffortStepper, ModelMenu, MODEL_ICONS, type MenuModel } from './ModelMenu';
 import type { ModelsState } from './useModels';
-
-/** Cards shown before « Other… »: Cursor offers hundreds of models, the rest is searched in « Other… ». */
-const CARDS = 4;
 
 /** The model the agent picks by itself, when it says which. */
 export const defaultModel = (models: readonly ModelChoice[]) => models.find(m => m.isDefault);
@@ -15,7 +15,7 @@ export function effective(models: readonly ModelChoice[], pick: ModelPick): { mo
   const effort = pick.effort ?? (model && 'defaultEffort' in model ? model.defaultEffort : undefined);
   return { ...(model ? { model } : {}), ...(effort ? { effort } : {}) };
 }
-/** The efforts offered beside a model: its own, else every effort the agent's models take (a model typed in « Other… »). */
+/** The efforts offered beside a model: its own, else every effort the agent's models take (a model typed as is). */
 export function effortsFor(models: readonly ModelChoice[], pick: ModelPick): string[] {
   const model = pick.model === null ? defaultModel(models) : models.find(m => m.id === pick.model);
   if (model?.efforts) return model.efforts;
@@ -24,84 +24,63 @@ export function effortsFor(models: readonly ModelChoice[], pick: ModelPick): str
   return all;
 }
 
-/** The New session form's « Model » block (#58, mockup ledge-model-picker): the agent's models as cards, its default marked (picking it
- *  passes nothing), « Other… » for an exact id, then the effort where the agent has one. */
+/** The menu's rows for an agent: its default first (« Default » when it names none), then the others in its order. */
+export function menuModels(models: readonly ModelChoice[], tool: Tool, t: ReturnType<typeof useI18n>['t']): MenuModel[] {
+  const fallback = defaultModel(models);
+  const hint = (m: ModelChoice) => (t.launch.modelHints as Record<string, string | undefined>)[`${tool}:${m.id}`] ?? m.description;
+  return [
+    fallback ? { id: fallback.id, label: fallback.label, description: hint(fallback), isDefault: true } : { id: null, label: t.launch.byDefault, description: t.launch.byDefaultHint, isDefault: true },
+    ...models.filter(m => m !== fallback).map(m => ({ id: m.id, label: m.label, description: hint(m) }))
+  ];
+}
+
+/** A pick with a new model: an effort that model does not take goes back to its default. */
+export function withModel(models: readonly ModelChoice[], pick: ModelPick, id: string | null): ModelPick {
+  const model = id !== null && id === defaultModel(models)?.id ? null : id;
+  const next = { model, effort: pick.effort };
+  return next.effort && !effortsFor(models, next).includes(next.effort) ? { model, effort: null } : next;
+}
+/** A pick with a new effort: the model's own default effort passes nothing. */
+export function withEffort(models: readonly ModelChoice[], pick: ModelPick, effort: string): ModelPick {
+  return { model: pick.model, effort: effort === effective(models, { ...pick, effort: null }).effort ? null : effort };
+}
+
+/** The New session form's « Model » block (#58, mockup ledge-model-picker v2): one field naming the model, which opens the
+ *  searchable list, and the effort's stepper beside it where the agent has one. */
 export function ModelPicker(p: { tool: Tool; state: ModelsState; pick: ModelPick; remembered: boolean; onPick(pick: ModelPick): void }): JSX.Element {
   const { t } = useI18n();
-  const listId = useId();
+  const tl = t.launch;
   const { models } = p.state;
-  const fallback = defaultModel(models);
-  const known = p.pick.model === null || models.some(m => m.id === p.pick.model);
-  const [other, setOther] = useState(!known);
-  const [typed, setTyped] = useState(known ? '' : p.pick.model ?? '');
-  // The default first, then the others in the agent's order; a chosen model beyond the cards stays in « Other… ».
-  const cards = [...(fallback ? [fallback] : []), ...models.filter(m => m !== fallback)].slice(0, CARDS);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const rows = menuModels(models, p.tool, t);
+  const selected = p.pick.model ?? rows[0]!.id;
+  const shown = rows.find(m => m.id === selected) ?? { id: selected, label: selected ?? tl.byDefault, description: tl.exactId };
   const efforts = effortsFor(models, p.pick);
-  const shownEffort = effective(models, p.pick).effort;
-  const choose = (model: string | null) => {
-    setOther(false);
-    const id = model !== null && model === fallback?.id ? null : model;
-    const next = { model: id, effort: p.pick.effort };
-    // An effort the new model does not take goes back to that model's default.
-    if (next.effort && !effortsFor(models, next).includes(next.effort)) next.effort = null;
-    p.onPick(next);
-  };
-  const type = (value: string) => {
-    setTyped(value);
-    const id = value.trim();
-    p.onPick({ model: id && ModelIdSchema.safeParse(id).success ? (id === fallback?.id ? null : id) : null, effort: p.pick.effort });
-  };
-  const hint = (m: ModelChoice) => (t.launch.modelHints as Record<string, string | undefined>)[`${p.tool}:${m.id}`] ?? m.description;
-  const effortLabel = (e: string) => (t.launch.efforts as Record<string, string | undefined>)[e] ?? e;
-  const selected = (id: string | null) => !other && (p.pick.model === null ? id === null || id === fallback?.id : p.pick.model === id);
+  const legend = tl.modelOf(tl.tools[p.tool][0]);
 
   return (
     <fieldset className="composer-models">
-      <legend className="composer-label">{t.launch.modelOf(t.launch.tools[p.tool][0])}</legend>
-      {p.remembered && <small className="models-remembered">{t.launch.remembered}</small>}
-      <div className="model-cards" role="radiogroup" aria-label={t.launch.modelOf(t.launch.tools[p.tool][0])}>
-        {!fallback && (
-          <label className={`model-card ${selected(null) ? 'selected' : ''}`}>
-            <input type="radio" name="model" checked={selected(null)} onChange={() => choose(null)} />
-            <strong>{t.launch.byDefault}</strong><small>{t.launch.byDefaultHint}</small>
-          </label>
-        )}
-        {cards.map(m => (
-          <label key={m.id} className={`model-card ${selected(m.id) ? 'selected' : ''}`}>
-            <input type="radio" name="model" checked={selected(m.id)} onChange={() => choose(m.id)} />
-            <strong>{m.label}{m === fallback && <span className="model-badge">{t.launch.defaultBadge}</span>}</strong>
-            {hint(m) && <small>{hint(m)}</small>}
-          </label>
-        ))}
-        <label className={`model-card other ${other ? 'selected' : ''}`}>
-          <input type="radio" name="model" checked={other} onChange={() => { setOther(true); type(typed); }} />
-          <strong>{t.launch.otherModel}</strong><small>{t.launch.otherModelHint}</small>
-        </label>
+      <legend className="composer-label">{legend}</legend>
+      {p.remembered && <small className="models-remembered">{tl.remembered}</small>}
+      <div className="model-row">
+        <button ref={trigger} type="button" className={cls('model-trigger', open && 'open')} aria-haspopup="dialog" aria-expanded={open}
+          aria-label={`${legend} : ${shown.label}`} onClick={() => setOpen(o => !o)}>
+          <Icon d={MODEL_ICONS.chip} size={15} />
+          <strong>{shown.label}</strong>
+          {shown.isDefault && <span className="model-badge">{tl.defaultBadge}</span>}
+          <span className="model-desc">{shown.description}</span>
+          <Icon d={MODEL_ICONS.upDown} size={15} />
+        </button>
+        {efforts.length > 0 ? <EffortStepper efforts={efforts} value={effective(models, p.pick).effort} onChange={e => p.onPick(withEffort(models, p.pick, e))} />
+          : p.tool === 'cursor' && <span className="effort-none">{tl.cursorEffort}</span>}
       </div>
-      {other && (
-        <>
-          <input className="model-other" list={listId} value={typed} autoFocus spellCheck={false} placeholder={t.launch.otherPlaceholder}
-            aria-label={t.launch.otherModel} aria-invalid={!!typed.trim() && !ModelIdSchema.safeParse(typed.trim()).success} onChange={e => type(e.target.value)} />
-          <datalist id={listId}>{models.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</datalist>
-        </>
+      {open && trigger.current && (
+        <ModelMenu anchor={trigger.current} label={legend} models={rows} selected={selected} total={models.length >= 20 ? models.length : undefined}
+          onPick={id => { p.onPick(withModel(models, p.pick, id)); setOpen(false); trigger.current?.focus(); }} onClose={() => setOpen(false)} />
       )}
-      {p.state.status === 'loading' && <small className="models-note">{t.launch.modelsLoading}</small>}
-      {p.state.error && <small className="models-note">{t.launch.modelsUnavailable(p.state.error)}</small>}
-      {efforts.length > 0 ? (
-        <div className="model-effort">
-          <span className="composer-label">{t.launch.effort}</span>
-          <div className="segmented" role="radiogroup" aria-label={t.launch.effort}>
-            {efforts.map(e => (
-              <label key={e} className={shownEffort === e ? 'selected' : ''}>
-                <input type="radio" name="effort" checked={shownEffort === e}
-                  onChange={() => p.onPick({ model: p.pick.model, effort: e === effective(models, { ...p.pick, effort: null }).effort ? null : e })} />
-                {effortLabel(e)}
-              </label>
-            ))}
-          </div>
-          <small>{t.launch.effortHint}</small>
-        </div>
-      ) : p.tool === 'cursor' && <small className="models-note">{t.launch.cursorEffort}</small>}
+      {p.state.status === 'loading' && <small className="models-note">{tl.modelsLoading}</small>}
+      {p.state.error && <small className="models-note">{tl.modelsUnavailable(p.state.error)}</small>}
     </fieldset>
   );
 }

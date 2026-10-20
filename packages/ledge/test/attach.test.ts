@@ -35,6 +35,25 @@ describe('ledge attach', () => {
     expect(args).toEqual(tmux.attachArgs('ledge-ab12'));
     expect(env.TMUX).toBeUndefined();
   });
+  it('--read-only attaches with tmux -r', async () => {
+    await tmux.newSession({ name: 'ledge-ef56', cwd: '/tmp', env: {}, command: ['sleep', '60'] });
+    const attachFn = vi.fn(async () => 0);
+    expect(await attach('ef56', { port: 1, tmuxSocket: socket, readOnly: true, attach: attachFn, write: () => {} })).toBe(0);
+    const [args] = attachFn.mock.calls[0] as unknown as [string[]];
+    expect(args).toEqual(tmux.attachArgs('ledge-ef56', { readOnly: true }));
+    expect(args).toContain('-r');
+  });
+  it('an OMP session has no terminal: it says so by name, and attaches nothing', async () => {
+    store.upsert(mk('om01', { name: 'Noor', tool: 'omp', backend: 'omp-rpc', tmuxSession: null }));
+    const errors: string[] = []; vi.spyOn(console, 'error').mockImplementation((m: string) => { errors.push(String(m)); });
+    const attachFn = vi.fn(async () => 0);
+    expect(await attach('om01', { port: srv.port, tmuxSocket: socket, attach: attachFn, write: () => {} })).toBe(1);
+    expect(attachFn).not.toHaveBeenCalled();
+    expect(errors[0]).toMatch(/Noor is driven by Ledge over OMP's own protocol: there is no terminal to attach to/);
+    errors.length = 0;
+    expect(await attach('nope', { port: srv.port, tmuxSocket: socket, attach: attachFn, write: () => {} })).toBe(1);
+    expect(errors[0]).toBe('ledge attach: no session nope');
+  });
   it('still attaches without a daemon, under the pane name', async () => {
     await tmux.newSession({ name: 'ledge-cd34', cwd: '/tmp', env: {}, command: ['sleep', '60'] });
     const written: string[] = [];

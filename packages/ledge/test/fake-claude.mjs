@@ -16,6 +16,14 @@ if (agent === 'codex') {
   say({ type: 'item.started', item: { id: 'i1', type: 'command_execution', command: 'cat ' + process.cwd() + '/sessions.md' } });
   if (mode === 'slow') await new Promise(r => setTimeout(r, 5000));
   say({ type: 'item.completed', item: { id: 'i3', type: 'agent_message', text: 'Deux compagnons travaillent. Question : ' + q.trim() } });
+} else if (agent === 'omp') {
+  // OMP `-p --mode json`: the session line, a read, text deltas, then the assistant message (its text is the answer).
+  say({ type: 'session', version: 3, id: sid === 'none' ? 'omp-session' : sid, cwd: process.cwd() });
+  say({ type: 'tool_execution_start', toolCallId: 't1', toolName: 'read', args: { path: process.cwd() + '/sessions.md' } });
+  if (mode === 'slow') await new Promise(r => setTimeout(r, 5000));
+  for (const t of ['Deux ', 'sessions ', ': Nova travaille.']) say({ type: 'message_update', assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: t } });
+  const answer = env.FAKE_ANSWER ?? 'Deux sessions : Nova travaille.';
+  say({ type: 'message_end', message: { role: 'assistant', content: [{ type: 'text', text: answer }] } });
 } else if (agent === 'cursor') {
   say({ type: 'system', subtype: 'init', session_id: sid === 'none' ? 'cursor-thread' : sid, cwd: process.cwd() });
   say({ type: 'tool_call', subtype: 'started', tool_call: { readToolCall: { args: { path: process.cwd() + '/sessions.md' } } } });

@@ -6,7 +6,7 @@ import { PROTOCOL_PORT } from '@ledge/protocol';
 import { connect, DaemonRefusedError, type Client } from '../client.js';
 import { realTmux, type Tmux } from '../tmux.js';
 import { ensureLedgeDir } from '../paths.js';
-import { exitFile, spawnSession } from '../spawn.js';
+import { exitFile, spawnSession, type TmuxTool } from '../spawn.js';
 import { log } from '../log.js';
 
 export { agentEnv, exitFile } from '../spawn.js';
@@ -86,7 +86,7 @@ export async function ensureDaemon(opts: { port?: number; spawnDaemon?: () => vo
 export class DaemonError extends Error {}
 
 /** Spawns the agent's tmux session (see `spawnSession`) with names and ids free in the daemon's snapshot, then registers it. */
-export async function createSession(opts: { tool: Tool; args: string[]; command?: string[]; recordExit?: boolean; name?: string; cwd: string; tmux: Tmux; client: Client | null; now?: () => string; env?: NodeJS.ProcessEnv }): Promise<Session> {
+export async function createSession(opts: { tool: TmuxTool; args: string[]; command?: string[]; recordExit?: boolean; name?: string; cwd: string; tmux: Tmux; client: Client | null; now?: () => string; env?: NodeJS.ProcessEnv }): Promise<Session> {
   const names: string[] = []; const ids: string[] = [];
   if (opts.client) {
     let snap;
@@ -143,7 +143,7 @@ const UNTRACKED: Record<'foreign' | 'unauthorized' | 'unresponsive' | 'unreachab
   unreachable: () => 'ledge: daemon not running, session not tracked'
 };
 
-export async function launch(tool: Tool, argv: string[], opts: LaunchOptions = {}): Promise<number> {
+export async function launch(tool: TmuxTool, argv: string[], opts: LaunchOptions = {}): Promise<number> {
   await ensureLedgeDir();
   const { name, args } = parseLaunchArgs(argv);
   const port = opts.port ?? PROTOCOL_PORT;

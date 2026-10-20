@@ -117,6 +117,9 @@ describe('commandOf', () => {
     expect(m?.kind).toBe('permission');
     expect(commandOf({ kind: 'permission', text: m!.text, source: 'pane' })).toBe('mkdir zz-ledge-probe');
   });
+  it('is undefined for an OMP dialog: its text is a prompt, never a command', () => {
+    expect(commandOf({ kind: 'permission', text: 'ls', source: 'rpc' })).toBeUndefined();
+  });
   it('is undefined for a non-shell hook tool, a blank text, or a question', () => {
     expect(commandOf({ kind: 'permission', tool: 'WebFetch', text: 'https://x', source: 'hook' })).toBeUndefined();
     expect(commandOf(bash('  '))).toBeUndefined();

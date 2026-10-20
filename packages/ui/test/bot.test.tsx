@@ -3,7 +3,7 @@ import { render, cleanup } from '@testing-library/react';
 import { fakeSession } from './fixtures';
 import { botState, poseFor, type BotState } from '../src/bots/poseFor';
 import { materialFor } from '../src/bots/material';
-import { Bot } from '../src/bots/Bot';
+import { Bot, type BotProps } from '../src/bots/Bot';
 
 // ms() scales by VITE_LEDGE_MOTION (0 in tests) through a lookup vi.stubEnv does not reach; a test can unscale it.
 const motion = vi.hoisted(() => ({ unscaled: false }));
@@ -66,16 +66,43 @@ describe('Bot', () => {
     ['.pose', '.gaze', '.eye-open', '.eye-happy', '.eye-error', '.eye-sleep', '.arm'].forEach((s, i) => expect(container.querySelector(s)).toBe(layers[i]));
   });
 
-  it('draws a distinct silhouette per tool', () => {
-    const shell = (tool: 'claude' | 'codex' | 'cursor') => {
+  it('draws a distinct logo-inspired silhouette per tool, omp included', () => {
+    const shell = (tool: BotProps['tool']) => {
       const { container } = render(<Bot {...props} tool={tool} theme="dark" />);
       const svg = container.querySelector('svg')!;
       expect(svg).toHaveAttribute('data-tool', tool);
-      return svg.querySelector('.shell')!.tagName.toLowerCase();
+      return svg.querySelector('.shell')!.getAttribute('d')!;
     };
-    expect(shell('claude')).toBe('rect');
-    expect(shell('codex')).toBe('ellipse');
-    expect(shell('cursor')).toBe('path');
+    const shells = (['claude', 'codex', 'cursor', 'omp'] as const).map(shell);
+    expect(new Set(shells).size).toBe(4);
+    shells.forEach(d => expect(d).toMatch(/^M/));
+  });
+
+  it('draws Cursor as a cube with facets, and none of the other three', () => {
+    for (const tool of ['claude', 'codex', 'cursor', 'omp'] as const) {
+      const { container } = render(<Bot {...props} tool={tool} size={48} theme="dark" />);
+      const facets = ['.cube-top', '.cube-side', '.cube-edge'].map(s => container.querySelector(s));
+      facets.forEach(f => (tool === 'cursor' ? expect(f).not.toBeNull() : expect(f).toBeNull()));
+      cleanup();
+    }
+  });
+
+  it('keeps the Ledge face on every silhouette: rounded eyes in a visor, no antenna or feet of the old bots', () => {
+    for (const tool of ['claude', 'codex', 'cursor', 'omp'] as const) {
+      const { container } = render(<Bot {...props} tool={tool} size={48} theme="dark" />);
+      const eyes = [...container.querySelectorAll('.eye-open rect')];
+      expect(eyes).toHaveLength(2);
+      eyes.forEach(e => expect(e.getAttribute('rx')).toBe('3'));
+      expect(container.querySelector('.visor')).not.toBeNull();
+      for (const old of ['.antenna', '.antenna-light', '.feet']) expect(container.querySelector(old), `${tool} ${old}`).toBeNull();
+      cleanup();
+    }
+  });
+
+  it('gives Claude Code a squared arm and the others a rounded hand', () => {
+    const arm = (tool: BotProps['tool']) => render(<Bot {...props} tool={tool} size={48} theme="dark" />).container.querySelector('.arm')!.tagName.toLowerCase();
+    expect(arm('claude')).toBe('rect');
+    for (const tool of ['codex', 'cursor', 'omp'] as const) expect(arm(tool)).toBe('ellipse');
   });
 
   it('gives each of the seven semantic states its own expression and eye token', () => {
@@ -124,12 +151,16 @@ describe('Bot', () => {
     shells.forEach((s, i) => expect(s.getAttribute('fill')).toBe(`url(#${ids[i]})`));
   });
 
-  it('crops a 12 px avatar to the head', () => {
-    const { container } = render(<Bot {...props} size={12} theme="dark" />);
-    const svg = container.querySelector('svg')!;
-    expect(svg).toHaveAttribute('data-simplified', 'true');
-    expect(svg).toHaveAttribute('viewBox', '12 16 72 68');
-    expect(svg).toHaveAttribute('width', '12');
+  it('crops a 12 px avatar to its silhouette, whatever the tool', () => {
+    const boxes = { claude: '10 18 76 64', codex: '5 7 87 82', cursor: '11 8 74 82', omp: '10 18 76 68' };
+    for (const [tool, box] of Object.entries(boxes) as [BotProps['tool'], string][]) {
+      const { container } = render(<Bot {...props} tool={tool} size={12} theme="dark" />);
+      const svg = container.querySelector('svg')!;
+      expect(svg).toHaveAttribute('data-simplified', 'true');
+      expect(svg).toHaveAttribute('viewBox', box);
+      expect(svg).toHaveAttribute('width', '12');
+      cleanup();
+    }
   });
 
   it('keeps the detailed figure at 48 px', () => {
@@ -137,7 +168,7 @@ describe('Bot', () => {
     const svg = container.querySelector('svg')!;
     expect(svg).toHaveAttribute('data-simplified', 'false');
     expect(svg).toHaveAttribute('viewBox', '0 0 96 96');
-    for (const layer of ['.feet', '.antenna', '.arm', '.ground', '.shine']) expect(svg.querySelector(layer)).not.toBeNull();
+    for (const layer of ['.arm', '.ground', '.shine']) expect(svg.querySelector(layer)).not.toBeNull();
   });
 
   it('styles read-only without losing the known state', () => {
@@ -210,9 +241,9 @@ describe('Bot', () => {
     });
 
     it('sizes the hop in SVG units from clamp(2, size * 0.12, 7) px and cycles every 3.6 to 4.4 s', () => {
-      // ≤ 20 px draws the head-only viewBox (72 units wide): 2 px of a 12 px bot is 2 / 12 * 72 = 12 units.
+      // ≤ 20 px draws the head-only viewBox (76 units wide for Claude Code): 2 px of a 12 px bot is 2 / 12 * 76 = 12.67 units.
       render(<Bot seed="s1" tool="claude" state="working" pose={1} size={12} theme="dark" />);
-      expect(vars()['--bot-hop']).toBe('12.00px');
+      expect(vars()['--bot-hop']).toBe('12.67px');
       cleanup();
       render(<Bot seed="s1" tool="claude" state="working" pose={1} size={48} theme="dark" />);
       expect(vars()['--bot-hop']).toBe('11.52px');

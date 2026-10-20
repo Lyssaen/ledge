@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { PendingSchema, SessionSchema, ToolSchema } from './session.js';
+import { AskQuestionSchema, PendingSchema, SessionSchema, ToolSchema } from './session.js';
 import { ChatStepSchema, ChatTurnSchema, ChatProposalSchema, ChatProposalsSchema, ChatRelaySchema, MAX_PROPOSALS, ChatProjectProposalSchema } from './chat.js';
 import { ReposInspectSchema, ReposInfoSchema } from './repos.js';
 import { ModelsListSchema, ModelsListingSchema, ModelIdSchema, EffortSchema } from './models.js';
@@ -21,7 +21,7 @@ export const RefusalCodeSchema = z.enum(['stale', 'read_only', 'no_prompt', 'not
 export type RefusalCode = z.infer<typeof RefusalCodeSchema>;
 
 export const SessionEventSchema = z.object({
-  name: z.enum(['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'Notification', 'Stop', 'SessionEnd', 'PaneChanged', 'PaneGone', 'PanePrompt', 'PaneIdle', 'InjectFailed', 'Decided', 'PostToolUse', 'PostToolUseFailure', 'StopFailure', 'SubagentStart', 'SubagentStop', 'PaneTitle', 'Renamed']),
+  name: z.enum(['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'Notification', 'Stop', 'SessionEnd', 'PaneChanged', 'PaneGone', 'PanePrompt', 'PaneIdle', 'InjectFailed', 'Decided', 'PostToolUse', 'PostToolUseFailure', 'StopFailure', 'SubagentStart', 'SubagentStop', 'PaneTitle', 'Renamed', 'NativeRequest', 'AgentMessage', 'QueueUpdate']),
   at: z.string().datetime(),
   source: z.enum(['hook', 'pane', 'daemon']),
   tool: z.string().optional(),
@@ -38,6 +38,14 @@ export const SessionEventSchema = z.object({
   task: z.string().optional(),
   /** PostToolUseFailure: the user interrupted the turn (Esc); Claude then waits for input with no Stop. */
   interrupt: z.boolean().optional(),
+  /** QueueUpdate: OMP's queue as it stands. */
+  queue: z.array(z.object({ text: z.string(), mode: z.enum(['steer', 'follow_up']) })).optional(),
+  /** AgentMessage: the harness's own message, its text so far (`streaming`) or whole. `messageId` is unique for the session's life. */
+  messageId: z.string().optional(), streaming: z.boolean().optional(),
+  /** NativeRequest: the dialog's id, and OMP's `ask` questions when it is one. */
+  requestId: z.string().optional(), questions: z.array(AskQuestionSchema).optional(),
+  /** Stop: its text is already in the thread as AgentMessage cards, which the reply card must not repeat. */
+  streamed: z.boolean().optional(),
   /** Native tracking (spec 2026-10-13 §2): the harness's id of the tool call, so its result lands on the same row. */
   toolUseId: z.string().optional(),
   /** The tool's input as the harness gave it, every string capped by the hook. */
@@ -65,7 +73,10 @@ export const SEMVER = /^\d+\.\d+\.\d+$/;
 /** What the daemon knows of itself (spec 2026-10-12 auto-update §6): its version, how it was installed, whether it runs
  *  as the systemd service, and the command a person runs by hand when it cannot update itself. */
 export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(['npm', 'git', 'unknown']), systemd: z.boolean(), manual: z.string().optional(), routing: z.boolean().optional(), archive: z.boolean().optional(),
-  /** Takes `model` and `effort` on `session.launch` and answers `models.list` (#58). */ models: z.boolean().optional(), mobile: z.boolean().optional() });
+  /** Takes `model` and `effort` on `session.launch` and answers `models.list` (#58). */ models: z.boolean().optional(),
+  /** Drives OMP over its RPC: launching `omp` sessions is possible when the binary is there (`models.list` says so). */ omp: z.boolean().optional(),
+  /** Takes `session.model`: a live session's model and effort changed (#58, lot 2). */ modelSwitch: z.boolean().optional(),
+  /** Its home folder, so a client shows the folders under it as `~` (absent from older daemons). */ home: z.string().optional(), mobile: z.boolean().optional() });
 export type DaemonInfo = z.infer<typeof DaemonInfoSchema>;
 export const UpdateFailureSchema = z.enum(['git-install', 'no-systemd', 'sessions-at-risk', 'npm-failed', 'busy']);
 export type UpdateFailure = z.infer<typeof UpdateFailureSchema>;
@@ -82,6 +93,8 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
    *  from daemons older than the auto-update. */
   z.object({ type: z.literal('snapshot'), sessions: z.array(SessionSchema), recents: z.array(RecentSchema).optional(), launcher: z.array(z.string()).optional(), daemon: DaemonInfoSchema.optional(), sshAlias: SshAliasSchema.optional() }),
   z.object({ type: z.literal('session.updated'), session: SessionSchema }),
+  /** OMP: the instructions taken back from its queue by an interrupt that restores it; the asker puts them back in its draft. */
+  z.object({ type: z.literal('session.queue.restored'), id: z.string(), texts: z.array(z.string()) }),
   z.object({ type: z.literal('session.removed'), id: z.string() }),
   z.object({ type: z.literal('session.preview'), id: z.string(), lines: z.array(z.string()) }),
   /** A session's thread, on request (spec 2026-10-13 §5); then each created or updated item, broadcast. */
@@ -150,7 +163,10 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
     /** Copied into the `folder.listing` that answers; the fleet relays only that listing, from the machine asked. */ requestId: z.string().min(1).max(100).optional() }),
   z.object({ type: z.literal('folder.create'), parent: z.string().min(1), name: z.string().min(1),
     /** As for `folder.list`: routing by the fleet, and the request its `folder.listing` answers. */ machineId: z.string().optional(), requestId: z.string().min(1).max(100).optional() }),
-  z.object({ type: z.literal('session.reply'), id: z.string(), text: z.string().min(1) }),
+  /** `steer`: OMP only, redirect the turn running now instead of queueing the text after it. */
+  /** OMP's `ask`: the answers to every question of the dialog `requestId`, in order (`selected` labels, and/or free `text`); `cancel` declines it. */
+  z.object({ type: z.literal('session.answer'), id: z.string(), requestId: z.string().min(1).max(200), answers: z.array(z.object({ id: z.string(), selected: z.array(z.string().max(2000)).max(100), text: z.string().max(20000).optional() })).max(50), cancel: z.boolean().optional() }),
+  z.object({ type: z.literal('session.reply'), id: z.string(), text: z.string().min(1), steer: z.boolean().optional() }),
   /** The chat card's instruction (spec 2026-10-12 relay §4): sent now if the session is free, else queued until it is. */
   z.object({ type: z.literal('session.relay'), qid: z.string().min(1) }),
   /** Takes the card's queued instruction back out of the queue. */
@@ -164,7 +180,8 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   }),
   z.object({ type: z.literal('session.focus'), id: z.string() }),
   z.object({ type: z.literal('session.kill'), id: z.string() }),
-  z.object({ type: z.literal('session.interrupt'), id: z.string() }),
+  /** `restoreQueue` (OMP): also take back what waits in its queue, returned as `session.queue.restored` to put in the draft. */
+  z.object({ type: z.literal('session.interrupt'), id: z.string(), restoreQueue: z.boolean().optional() }),
   /** Removes a finished (exited) or read-only (hook_only) session from the list; refused for a live launcher session. */
   z.object({ type: z.literal('session.dismiss'), id: z.string() }),
   /** Puts a session in the archive: it leaves the live list but is kept. */
@@ -173,6 +190,9 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session.restore'), id: z.string() }),
   /** Starts the agent again on an archived session's conversation. */
   z.object({ type: z.literal('session.resume'), id: z.string() }),
+  /** Changes a live session's model and effort (#58, lot 2), `null` for the agent's own default: the daemon restarts the
+   *  agent on the same conversation with them, at once when the session is free, else at its next free moment. */
+  z.object({ type: z.literal('session.model'), id: z.string(), model: ModelIdSchema.nullable(), effort: EffortSchema.nullable() }),
   /** Deletes a session for good, archived or not. */
   z.object({ type: z.literal('session.delete'), id: z.string() }),
   /** The user names the session's topic from the overlay (500 characters at most, the hook's prompt cap); an empty topic hands back to the automatic sources. */

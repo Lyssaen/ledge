@@ -41,7 +41,7 @@ export const copy = {
     reconnecting: 'Reconnexion…'
   },
   kind: { permission: 'Autorisation', question: 'Question', plan: 'Plan', diff: 'Modification' },
-  tools: { claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor Agent' },
+  tools: { claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor Agent', omp: 'OMP' },
   detail: {
     back: 'Retour aux demandes',
     heading: { permission: 'Une autorisation', question: 'Une question', plan: 'Un plan', diff: 'Des modifications' },

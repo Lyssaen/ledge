@@ -4,12 +4,29 @@ export type TodoStatus = 'pending' | 'in_progress' | 'completed';
 export interface Todo { text: string; status: TodoStatus }
 
 /** The actions that write the agent's work plan: TodoWrite (Claude Code), update_plan (Codex). Cursor keeps none. */
-export const TODO_TOOLS: ReadonlySet<string> = new Set(['TodoWrite', 'update_plan']);
+export const TODO_TOOLS: ReadonlySet<string> = new Set(['TodoWrite', 'update_plan', 'todo']);
 
 const STATUSES: ReadonlySet<string> = new Set<TodoStatus>(['pending', 'in_progress', 'completed']);
 const statusOf = (s: unknown): TodoStatus => (typeof s === 'string' && STATUSES.has(s) ? s as TodoStatus : 'pending');
 const text = (s: unknown): string | null => (typeof s === 'string' && s.trim() !== '' ? s : null);
 const record = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? v as Record<string, unknown> : {});
+
+/** OMP's todo, once done: `{ phases: [{ name, tasks: [{ content, status, blocker? }] }] }`, the whole plan. A blocked task reads as
+ *  pending with its blocker said; with several phases each task names its phase. A call still running has no phases: undefined. */
+function omp(input: Record<string, unknown>): Todo[] | undefined {
+  if (!Array.isArray(input.phases)) return undefined;
+  const phases = input.phases.map(record);
+  const out: Todo[] = [];
+  for (const ph of phases) {
+    for (const raw of Array.isArray(ph.tasks) ? ph.tasks : []) {
+      const e = record(raw); const said = text(e.content); if (said === null) continue;
+      const blocked = e.status === 'blocked';
+      const name = phases.length > 1 ? text(ph.name) : null;
+      out.push({ text: `${name ? `${name} · ` : ''}${said}${blocked && text(e.blocker) ? ` (blocked: ${e.blocker as string})` : ''}`, status: blocked ? 'pending' : statusOf(e.status) });
+    }
+  }
+  return out;
+}
 
 /** An update's list, entries without a text left out (possibly none); undefined when its input is unreadable (no JSON, or
  *  no list in it) or it is no update. */
@@ -17,6 +34,7 @@ function listOf(t: ToolItem): Todo[] | undefined {
   if (!TODO_TOOLS.has(t.tool) || t.input === undefined) return undefined;
   let input: Record<string, unknown>;
   try { input = record(JSON.parse(t.input)); } catch { return undefined; }
+  if (t.tool === 'todo') return omp(input);
   const claude = t.tool === 'TodoWrite';
   const list = claude ? input.todos : input.plan;
   if (!Array.isArray(list)) return undefined;

@@ -6,7 +6,9 @@ import { paths } from './paths.js';
 import type { Tmux } from './tmux.js';
 import { claudeTranscriptPath } from './daemon/transcript.js';
 
-export const AGENT_BIN: Record<Tool, string> = { claude: 'claude', codex: 'codex', cursor: 'cursor-agent' };
+/** The harnesses Ledge drives through a tmux pane: OMP is driven over its own protocol (daemon/omp), never typed into. */
+export type TmuxTool = Exclude<Tool, 'omp'>;
+export const AGENT_BIN: Record<Tool, string> = { claude: 'claude', codex: 'codex', cursor: 'cursor-agent', omp: 'omp' };
 
 /**
  * How a Codex hook learns its Ledge session. Codex runs hooks either inside the `codex` process (they get its
@@ -64,7 +66,7 @@ export function agentEnv(base: NodeJS.ProcessEnv, extra: Record<string, string>)
 }
 
 export interface SpawnOptions {
-  tool: Tool;
+  tool: TmuxTool;
   /** The agent's own arguments. */
   args: string[];
   /** Replaces the agent binary entirely (tests run a fake agent); `args` are always agent args. */

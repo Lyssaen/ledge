@@ -93,6 +93,8 @@ export interface ModelsDeps {
   run?: ModelsRun; env?: () => Promise<NodeJS.ProcessEnv>;
   /** Reads a config file, '' when it is missing. */ readText?: (path: string) => Promise<string>;
   now?: () => number; ttlMs?: number;
+  /** OMP's catalog, from a process of its own (daemon/omp): the daemon passes it; without it OMP lists nothing. */
+  omp?: () => Promise<ModelChoice[]>;
 }
 export interface Models { list(tool: Tool): Promise<{ models: ModelChoice[]; error?: string }> }
 
@@ -112,6 +114,7 @@ export function createModels(deps: ModelsDeps = {}): Models {
       let model: unknown; try { model = settings ? (JSON.parse(settings) as { model?: unknown }).model : undefined; } catch { /* not JSON: no default */ }
       return claudeModels(typeof model === 'string' ? model : undefined);
     }
+    if (tool === 'omp') { if (!deps.omp) throw new Error('not available'); return deps.omp(); }
     const r = tool === 'codex' ? await run('codex', ['debug', 'models']) : await run('cursor-agent', ['models']);
     if (r.code === null) throw new Error('not installed');
     if (r.code !== 0) throw new Error(r.stderr.trim().split('\n').pop() || `exit ${r.code}`);

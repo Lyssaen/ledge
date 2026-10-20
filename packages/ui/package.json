@@ -31,7 +31,7 @@
     "./styles/*": "./src/styles/*",
     "./test/*": "./test/*.ts"
   },
-  "scripts": { "test": "vitest run", "typecheck": "tsc --noEmit" },
+  "scripts": { "dev:mascots": "vite --open /mascots-logos.html", "test": "vitest run", "typecheck": "tsc --noEmit" },
   "peerDependencies": { "react": "^19.0.0", "react-dom": "^19.0.0" },
   "dependencies": { "@ledge/fleet": "workspace:*", "@ledge/protocol": "workspace:*", "react-markdown": "10.1.0", "remark-gfm": "4.0.1" },
   "devDependencies": {

@@ -1,0 +1,63 @@
+
+ ▐▛███▛█   Claude Code v2.1.304
+▝▜██████▀  Haiku 5.5 · Claude Team
+ ▝▝   ▝▝   /…/5b38fa97-15ea-4747-baa5-64f044b11bff/scratchpad/probe
+
+
+❯ Appelle l'outil AskUserQuestion une seule fois avec exactement deux questions. Q1 'Quelle est la clé de la
+  story Jira (ex. ST7-162), ou s'agit-il d'un travail hors story ?' header Story, options 'Hors story'
+  (description 'Travail hors story Jira') et 'Préciser la story' (description 'Indiquer la clé via « Other »').
+  Q2 'Quel est l'objectif de cette session ?' header Objectif, options Correction, Analyse avec une description
+  d'un mot. Rien d'autre, puis réponds OK.
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+←  ☒ Story  ☐ Objectif  ✔ Submit  →
+
+Quel est l'objectif de cette session ?
+
+❯ 1. Correction
+     Corriger un défaut
+  2. Analyse
+     Comprendre et examiner
+  3. Type something.
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  4. Chat about this
+
+Enter to select · Tab/Arrow keys to navigate · Esc to cancel
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+─────────────────────────────────────────────────────────────────────────────────────────────────────── Zzprobe ─

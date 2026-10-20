@@ -9,6 +9,7 @@ import { loadLang } from './i18n/lang';
 import { loadMessages } from './i18n/messages';
 import { bootLanguages, BOOT_FAILURE } from './i18n/boot';
 import { recordToastsForTests } from './shell/Toast';
+import type { PtyBackend } from './term/backend';
 import { isAtelierWindow } from './atelier/detach';
 
 purgeObsolete();
@@ -16,6 +17,24 @@ purgeObsolete();
 // The e2e build only (VITE_LEDGE_E2E, dropped from the release build): every notice is recorded where Playwright can read it,
 // since a notice replaces the previous one on screen and the DOM cannot count them.
 if (import.meta.env.VITE_LEDGE_E2E) (window as unknown as { __ledgeToasts?: string[] }).__ledgeToasts = recordToastsForTests();
+
+// The e2e build only: a stand-in shell that prints a `$ ` prompt and echoes what is typed, and records each write for Playwright.
+if (import.meta.env.VITE_LEDGE_E2E) {
+  const w = window as unknown as { __ledgePtyWrites?: string[]; __ledgeFakePty?: PtyBackend };
+  const writes: string[] = w.__ledgePtyWrites = [];
+  const enc = new TextEncoder();
+  w.__ledgeFakePty = {
+    open: async (_argv, _size, on) => {
+      let closed = false;
+      queueMicrotask(() => { if (!closed) on.data(enc.encode('$ ')); });
+      return {
+        write: data => { writes.push(data); if (!closed) on.data(enc.encode(data)); },
+        resize: () => {},
+        close: () => { closed = true; },
+      };
+    },
+  };
+}
 
 // The chosen language's strings and French (the fallback) come first, each in its own chunk, read locally: the window
 // stays empty only for that instant. The other language loads when it is asked for. If no table loads, a bilingual line says so.

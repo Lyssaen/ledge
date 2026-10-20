@@ -141,6 +141,16 @@ describe('reduce: pending rules', () => {
     const next = reduce(s, ev('PanePrompt', { source: 'pane', kind: 'permission', text: 'Do you want to proceed?', at: later(9000) }));
     expect(next).toBe(s);
   });
+  it('a hook question gives way to the next question the pane shows, answered in the terminal (#31)', () => {
+    const s = reduce(session('working'), ev('PreToolUse', { tool: 'AskUserQuestion', text: 'Quelle est la clé de la story ?', options: ['Hors story', 'Préciser la story'] }));
+    // The same question on screen (wrapped, cut) keeps the hook's request.
+    expect(reduce(s, ev('PanePrompt', { source: 'pane', kind: 'question', text: 'Quelle est la clé', at: later(9000) }))).toBe(s);
+    // Inside the priority window too: no hook will report the next tab before the last one is sent.
+    const next = reduce(s, ev('PanePrompt', { source: 'pane', kind: 'question', text: 'Quel est l objectif ?', options: ['Correction', 'Analyse', 'Type something.', 'Chat about this'], at: later(5500) }));
+    expect(next).toMatchObject({ state: 'waiting_input', pending: { kind: 'question', text: 'Quel est l objectif ?', source: 'pane' } });
+    const review = reduce(next, ev('PanePrompt', { source: 'pane', kind: 'question', text: 'Ready to submit your answers?', options: ['Submit answers', 'Cancel'], at: later(9500) }));
+    expect(review.pending).toMatchObject({ text: 'Ready to submit your answers?', options: ['Submit answers', 'Cancel'], source: 'pane' });
+  });
   it('a pane prompt within HOOK_PRIORITY_MS of the last hook event is ignored', () => {
     const s = reduce(session('working'), ev('UserPromptSubmit', { at: later(5000) }));
     const next = reduce(s, ev('PanePrompt', { source: 'pane', kind: 'permission', text: 'Do you want to proceed?', at: later(5000 + HOOK_PRIORITY_MS - 1) }));

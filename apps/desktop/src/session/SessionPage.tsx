@@ -75,9 +75,10 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   const unread = useRef<string | null | undefined>(undefined);
   if (unread.current === undefined && items !== undefined) unread.current = unreadFrom(ids, memo.seen);
 
-  // The clock: every second while an action runs (online), every 30 s otherwise (« il y a » keeps up). The spinner turns on
-  // its own (Spinner), so neither tick renders more than the times.
-  const running = !offline && xs.some(x => x.segments.some(s => s.kind === 'tools' && s.tools.some(tool => tool.status === 'running')));
+  // The clock: every second while an action runs or the agent works (online: the waiting line counts), every 30 s otherwise
+  // (« il y a » keeps up). The spinner turns on its own (Spinner), so neither tick renders more than the times.
+  const running = !offline && ((helper ?? session).state === 'working'
+    || xs.some(x => x.segments.some(s => s.kind === 'tools' && s.tools.some(tool => tool.status === 'running'))));
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
     const clock = setInterval(() => setNow(Date.now()), running ? 1000 : 30_000);
@@ -397,7 +398,7 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
         <div className="session-main" ref={main}>
           {/* On the thread, the panel keeps its lot 6a name (« Fil de la session »); on the changes, the tab names it. */}
           <div className="session-body" role="tabpanel" tabIndex={-1} {...(view === 'thread' ? { 'aria-label': th.label } : { 'aria-labelledby': 'session-tab-changes' })}>
-            <div className="messages session-thread" ref={scroller} onScroll={onScroll} hidden={view !== 'thread'}>
+            <div className="messages session-thread" ref={scroller} data-thread-focus tabIndex={-1} onScroll={onScroll} hidden={view !== 'thread'}>
               {todos && <TodoBar todos={todos} open={todoOpen} onToggle={toggleTodos} live={!offline} />}
               {offline && (
                 <div className="frozen-banner" role="status">
@@ -419,7 +420,7 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
             {view === 'thread' && !atBottom && <button type="button" className="to-latest" onClick={toLatest}><Icon d={SHELL_ICONS.arrowDown} size={13} />{th.latest}</button>}
           </div>
           {!archived && <Reply session={session} helper={helper} asker={asker} since={waitedFor} decisions={p.decisions} memory={memory} memoKey={key}
-            notify={p.notify} dispatch={p.dispatch} focusOnArrival={place.kind === 'session' && place.focus === 'reply'} keys={replyKeys} onReadPlan={readPlan} />}
+            notify={p.notify} dispatch={p.dispatch} focusOnArrival={place.kind === 'session' && place.focus === 'reply'} keys={replyKeys} onReadPlan={readPlan} client={p.client} />}
         </div>
         {paneShown && (
           <SidePane tabs={tabs} active={activeTab!} onActive={setActiveTab} onClose={closeTab} split={p.split} onSplit={onSplit}

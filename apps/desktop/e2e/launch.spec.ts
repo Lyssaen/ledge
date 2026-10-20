@@ -133,12 +133,44 @@ test('the model (#58): the block under the agents, Sonnet and High chosen, sent 
   await tile(form, 'Claude Code').click();
   const models = form.getByRole('group', { name: 'Claude Code model' });
   await expect(models).toBeVisible();
-  await models.locator('label.model-card', { hasText: 'Sonnet' }).click();
-  await models.locator('.segmented label', { hasText: /^High$/ }).click();
+  await models.getByRole('button', { name: /^Claude Code model : / }).click();
+  const menu = page.getByRole('dialog', { name: 'Claude Code model' });
+  await menu.getByRole('option', { name: /Sonnet/ }).click();
+  await expect(menu).toBeHidden();
+  for (let i = 0; i < 3; i++) await models.getByRole('button', { name: 'More effort' }).click();
   await expect(form.locator('.preview-model')).toHaveText('Sonnet · high');
   expect(await noSideScroll(form)).toBe(true);
   await form.screenshot({ path: test.info().outputPath('model-picker.png') });
   await page.keyboard.press('Control+Enter');
   await expect.poll(() => launchesOf(daemon.received).length).toBe(1);
   expect(launchesOf(daemon.received)[0]).toMatchObject({ tool: 'claude', model: 'sonnet', effort: 'high' });
+});
+
+test('the model (#58 v2): Codex\'s long names and six efforts stay inside the form, its eleven models in one searchable list', async ({ page }) => {
+  const efforts = ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
+  const codex = [
+    ['gpt-6.1-sol', 'GPT-6.1-Sol', 'Latest workhorse model for coding and everyday work.'], ['gpt-6-astra', 'GPT-6-Astra', 'Frontier intelligence for the most demanding work.'],
+    ['gpt-6-sol', 'GPT-6-Sol', 'Previous generation workhorse model.'], ['gpt-6-luna', 'GPT-6-Luna', 'Fast and affordable model for easier tasks.'],
+    ['gpt-5.6-sol', 'GPT-5.6-Sol', 'Older generation workhorse model.'], ['gpt-5.6-terra', 'GPT-5.6-Terra', 'Older balanced model for straightforward work.'],
+    ['gpt-5.6-luna', 'GPT-5.6-Luna', 'Older fast and efficient model.'], ['gpt-daybreak-blue-latest', 'Daybreak Blue', 'Latest frontier agentic coding model for broad defensive cybersecurity work.'],
+    ['gpt-daybreak-red-latest', 'Daybreak Red', 'Cyber-permissive variant of our latest frontier agentic coding model for advanced, authorized work.'],
+    ['gpt-5.5', 'GPT-5.5', 'Legacy coding model.'], ['codex-auto-review', 'Codex Auto Review', 'Automatic approval review model for Codex.']
+  ].map(([id, label, description], i) => ({ id: id!, label: label!, description, efforts, defaultEffort: 'medium', ...(i === 0 ? { isDefault: true } : {}) }));
+  await fakeDaemon(page, fleet, { projects, models: { codex } });
+  await open(page);
+  const form = dialog(page);
+  await tile(form, 'Codex').click();
+  const models = form.getByRole('group', { name: 'Codex model' });
+  for (let i = 0; i < 4; i++) await models.getByRole('button', { name: 'More effort' }).click();
+  await expect(models.getByRole('group', { name: 'Effort' }).getByRole('status')).toHaveText('Ultra');
+  // Nothing in the block is wider than the block.
+  expect(await models.evaluate(el => [...el.querySelectorAll('*')].every(c => c.getBoundingClientRect().right <= el.getBoundingClientRect().right + 0.5))).toBe(true);
+  expect(await noSideScroll(form)).toBe(true);
+  await models.getByRole('button', { name: /^Codex model : / }).click();
+  const menu = page.getByRole('dialog', { name: 'Codex model' });
+  await expect(menu.getByRole('option')).toHaveCount(11);
+  await page.screenshot({ path: test.info().outputPath('model-picker-codex.png') });
+  await page.keyboard.type('daybreak');
+  await expect(menu.getByRole('option', { name: /Daybreak/ })).toHaveCount(2);
+  await expect(menu.getByRole('option').last()).toHaveText(/Use as is/);
 });

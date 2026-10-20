@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type JSX, type KeyboardEvent, type MutableRefObject } from 'react';
+import type { DaemonClient } from '@ledge/fleet';
 import { NOTE_MAX, offers, type Helper, type Session } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
@@ -11,8 +12,10 @@ import type { NavAction } from '../nav/state';
 import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
 import { SessionBot } from '../shell/SessionBot';
+import { isNative } from '../term/mode';
 import type { SessionMemory } from './memory';
-import { alwaysScope, PendingCard, sortOf, type PendingActions } from './PendingCard';
+import { SessionModel } from './SessionModel';
+import { alwaysScope, isFreeRow, PendingCard, sortOf, type PendingActions } from './PendingCard';
 
 export interface ReplyProps {
   /** The parent on a subagent's page. */
@@ -29,11 +32,13 @@ export interface ReplyProps {
   keys: MutableRefObject<ScreenKeyHandler | null>;
   /** The pinned plan's « Lire le plan ». */
   onReadPlan(): void;
+  /** For the model chip (#58 lot 2); left out, no chip. */
+  client?: DaemonClient;
 }
 
 /** The reply area under the thread (session.tsx `replyArea`): the pinned request, then the field, or a note saying why
  *  there is none (offline, read only, a subagent's page). The draft lives in the shell's memory, written at each keystroke. */
-export function Reply({ session, helper, asker, since, decisions, memory, memoKey: key, notify, dispatch, focusOnArrival, keys, onReadPlan }: ReplyProps): JSX.Element {
+export function Reply({ session, helper, asker, since, decisions, memory, memoKey: key, notify, dispatch, focusOnArrival, keys, onReadPlan, client }: ReplyProps): JSX.Element {
   const { t } = useI18n();
   const tp = t.session.pending;
   const tr = t.session.reply;
@@ -53,6 +58,14 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => { if (focusOnArrival) input.current?.focus(); }, []); // once, on arrival
 
+  // What an interrupt that takes back OMP's queue returns: the instructions that were waiting, back in the draft (never re-sent).
+  useEffect(() => client?.onMessage(m => {
+    if (m.type !== 'session.queue.restored' || m.id !== session.id || !mounted.current) return;
+    const back = m.texts.join('\n\n'); if (!back) return;
+    const cur = memory.get(key).draft;
+    setDraft(cur ? `${cur}\n\n${back}` : back);
+  }), [client, session.id, key]);
+
   const text = draft.trim();
   // A permission, a diff or a plan takes the text as a refusal's note: only where the harness carries one, at most NOTE_MAX.
   const isNote = sort === 'approval' || sort === 'plan';
@@ -60,13 +73,24 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
   const tooLong = isNote && text.length > NOTE_MAX;
   // A question with options on a harness without free answers (the daemon refuses free text there): the digits only.
   const optionsOnly = sort === 'question' && (pending!.options?.length ?? 0) > 0 && session.tool !== 'claude';
-  const shut = noteless || optionsOnly;
+  // OMP's `ask`: its card answers every question at once; the field would answer one blind.
+  const askCard = sort === 'question' && !!pending?.questions;
+  const shut = noteless || optionsOnly || askCard;
+  // OMP is driven over its protocol: what is typed while it works is queued for the turn's end, or redirects the turn now, and
+  // « Interrompre » is its own command (spec 2026-10-20 §3.2).
+  const native = isNative(session) && !offline;
+  const working = native && session.state === 'working' && !pending;
+  const stoppable = native && (session.state === 'working' || session.state === 'waiting_input' || session.state === 'waiting_permission');
 
   /** A refused send gives its text back, if nothing was written since (the memory holds the draft even once the page closed). */
   const restore = (back: string) => {
     if (memory.get(key).draft !== '') return;
     memory.set(key, { draft: back });
     if (mounted.current) setDraftState(back);
+  };
+  const steer = () => {
+    if (!text || !canAct || shut || !working) return;
+    if (decisions.reply(session, text, restore, { steer: true })) setDraft('');
   };
   const submit = () => {
     if (!text || !canAct || shut || tooLong) return;
@@ -85,7 +109,9 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
     alwaysScope: alwaysScope(session.tool, pending),
     decide: d => { decisions.decide(session, d); },
     keepPlanning: () => { if (text && !noteless) submit(); else askRevision(tp.revise); },
-    choose: i => { decisions.reply(session, String(i + 1)); }
+    choose: i => { decisions.reply(session, String(i + 1)); },
+    ...(sort === 'question' && !shut ? { writeOwn: () => { input.current?.focus(); } } : {}),
+    ...(pending.questions ? { answer: (answers: ReadonlyArray<{ id: string; selected: string[]; text?: string }>, cancel?: boolean) => { decisions.answer(session, answers, cancel); } } : {})
   } : null;
 
   // R, Y / N and 1…9 (never while typing: useKeys); none offline, read only or on a subagent's page.
@@ -105,7 +131,8 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
       if (k === 'y') decisions.decide(session, 'accept'); else askRevision(tp.reviseKey);
       return true;
     }
-    if (sort === 'question' && /^[1-9]$/.test(k) && pending.options?.[Number(k) - 1] !== undefined) { decisions.reply(session, k); return true; }
+    const option = /^[1-9]$/.test(k) ? pending.options?.[Number(k) - 1] : undefined;
+    if (sort === 'question' && option !== undefined && !isFreeRow(option)) { decisions.reply(session, k); return true; }
     return false;
   };
   useEffect(() => { keys.current = onScreenKey; });
@@ -119,9 +146,9 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
   };
 
   const name = session.name;
-  const placeholder = sort === 'plan' ? tr.placeholder.plan : sort === 'approval' ? tr.placeholder.approval : sort === 'question' ? tr.placeholder.question(name)
+  const placeholder = working ? tr.placeholder.queued(name) : sort === 'plan' ? tr.placeholder.plan : sort === 'approval' ? tr.placeholder.approval : sort === 'question' ? tr.placeholder.question(name)
     : session.state === 'exited' || session.state === 'idle' ? tr.placeholder.done(name) : tr.placeholder.idle(name);
-  const hint = optionsOnly ? tr.optionsOnly : noteless ? tr.noNote : tooLong ? tr.tooLong(NOTE_MAX)
+  const hint = working && text ? tr.afterTurn : askCard ? tr.askCard : optionsOnly ? tr.optionsOnly : noteless ? tr.noNote : tooLong ? tr.tooLong(NOTE_MAX)
     : sort === 'approval' && text ? tr.denyHint : sort === 'plan' && text ? tr.planHint : <><Kbd>R</Kbd> {tr.write}</>;
 
   return (
@@ -142,13 +169,25 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
           <Button variant="outline" size="sm" onClick={() => dispatch({ type: 'open', id: session.id })}>{tr.openParent(session.name)}</Button>
         </div>
       ) : (
+        <>
+        {native && (session.queue?.length ?? 0) > 0 && (
+          <div className="reply-queue" role="status" aria-label={tr.queueLabel}>
+            <strong>{tr.queued(session.queue!.length)}</strong>
+            <ul>{session.queue!.map((q, i) => <li key={i} title={q.text}><small>{q.mode === 'steer' ? tr.queueSteer : tr.queueAfter}</small>{q.text}</li>)}</ul>
+            {client && <Button variant="ghost" size="sm" type="button" onClick={() => client.send({ type: 'session.interrupt', id: session.id, restoreQueue: true })} title={tr.restoreTitle}>{tr.restore}</Button>}
+          </div>
+        )}
         <form className={cls(pending && 'with-pending')} onSubmit={e => { e.preventDefault(); submit(); }}>
           <textarea ref={input} rows={1} aria-label={tr.label} placeholder={placeholder} value={draft} disabled={shut}
             maxLength={isNote ? NOTE_MAX : undefined} onChange={e => setDraft(e.target.value)} onKeyDown={onKeyDown} />
+          {client && <SessionModel client={client} session={session} notify={notify} />}
           <span className="reply-hint">{hint}</span>
-          <Button variant="primary" size="icon" type="submit" aria-label={sort === 'approval' ? tr.denyWith : tr.send}
+          {working && text && <Button variant="outline" size="sm" type="button" onClick={steer} title={tr.steerTitle}>{tr.steer}</Button>}
+          {stoppable && client && <Button variant="outline" size="sm" type="button" onClick={() => client.send({ type: 'session.interrupt', id: session.id })} title={tr.interruptTitle}>{tr.interrupt}</Button>}
+          <Button variant="primary" size="icon" type="submit" aria-label={sort === 'approval' ? tr.denyWith : working ? tr.queue : tr.send}
             disabled={!text || shut || tooLong || busy} style={{ width: 32, height: 32 }}><Icon d={ICONS.send.d} /></Button>
         </form>
+        </>
       )}
     </div>
   );

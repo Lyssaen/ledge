@@ -1,8 +1,11 @@
 [package]
 name = "ledge-native"
-version = "0.11.0"
+version = "0.13.0"
 edition = "2021"
 description = "Win32 helpers shared by the Ledge island and Ledge Desktop"
+
+[dependencies]
+portable-pty = "0.9"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }

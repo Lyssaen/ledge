@@ -2,7 +2,7 @@
 
 # Ledge
 
-A living island on the top edge of your Windows screen, centred like a dynamic island, that follows every agentic session running in WSL2 (Claude Code, Codex, Cursor Agent), shows which ones are waiting for you, and lets you answer or approve without hunting for the right terminal tab. From the list you can also ask Ledge about the running sessions: it reads, it never types into a pane.
+A living island on the top edge of your Windows screen, centred like a dynamic island, that follows every agentic session running in WSL2 (Claude Code, Codex, Cursor Agent, OMP), shows which ones are waiting for you, and lets you answer or approve without hunting for the right terminal tab. From the list you can also ask Ledge about the running sessions: it reads, it never types into a pane.
 
 Personal project. Windows host + WSL2 only.
 
@@ -34,7 +34,7 @@ Personal project. Windows host + WSL2 only.
 2. The agent's own hooks (installed once by `ledge setup`) call `ledge hook <Event>` (Codex: `ledge hook codex <Event>`, Cursor Agent: `ledge hook cursor <event>`) on every lifecycle event. Each call forwards one message to the daemon and exits in a few milliseconds.
 3. The daemon keeps the state of every session, polls each tmux pane once a second to detect prompts the hooks do not report and to build a terminal preview, and pushes every change over a local WebSocket.
 4. The Windows overlay shows one mascot per session in the island, stretches it into a bubble when a session waits for you, and sends your decision back. The daemon types it into the right pane and checks that the prompt went away.
-5. From the list, "Ask Ledge" sends a question to the daemon. The daemon writes a read-only context folder and runs the chosen harness headless (Claude Code, Codex or Cursor Agent). The overlay streams the steps and the answer. Ledge never types into a session from the chat.
+5. From the list, "Ask Ledge" sends a question to the daemon. The daemon writes a read-only context folder and runs the chosen harness headless (Claude Code, Codex, Cursor Agent or OMP). The overlay streams the steps and the answer. Ledge never types into a session from the chat.
 
 ## Architecture
 
@@ -188,11 +188,17 @@ Points worth knowing:
 - **Helpers (subagents).** Hook events that carry `agent_id` update the helper list on the parent session. A helper's permission request is shown on the parent only when nothing else is pending there, and the parent's underlying state is restored when it is answered.
 - **Restart.** The journal is reloaded when the daemon restarts; sessions whose tmux session no longer exists are pruned. The launcher opens a fresh connection to unregister, so a daemon restarted while the agent ran still learns about the exit.
 
+## OMP
+
+OMP is the one harness Ledge does not type into. The daemon starts `omp --mode rpc-ui` (always-ask approvals, a session directory of its own per Ledge session, `--resume <exact file>` to continue) and talks JSONL to it: protocol 2 when announced (`rpc_chunk` reassembled strictly), `set_ask_dialog`, `set_subagent_subscription events`. Its frames become the same `SessionEvent`s the hooks of the others send (`daemon/omp/project.ts`), so state, thread, notch and helpers need no special case: a turn is `working` until `session_settled`, messages are cards that grow while OMP writes them, a write or edit lists its file only once its result says so, OMP's dialogs are a pending question answered on its request id (`session.reply`, or `session.answer` for the several questions of one `ask`), the plan of its `todo` feeds the work-plan bar, its subagents are helpers, its queue is shown and can be taken back. A session has `backend: 'omp-rpc'` and no pane: the terminal pane holds shells only, `ledge attach` says there is nothing to attach to.
+
+The daemon owns the processes: a restart ends its OMP sessions (resumable from their journal), the auto-update waits while one is live, and a process a dead daemon left is ended before its session is resumed. Models are OMP's own (`provider/id`, from `get_available_models`); the model and effort change in place. Ask Ledge runs on OMP with `omp -p --mode json --tools read,grep,glob` and nothing loaded from outside. Design: `docs/superpowers/specs/2026-10-20-omp-rpc-integration-design.md`.
+
 ## Asking Ledge
 
 The list's "Ask Ledge" field sits above the sessions, matching the island's mascot ahead of the bots. `/` focuses it, `Enter` on a question sends it, `Enter` on the empty field (or a click on the field's mascot) opens today's conversation without asking. A `+` in the chat header starts a new conversation (`chat.reset`): the day's turns are cleared and the next question opens a fresh harness session.
 
-The overlay sends `chat.ask { qid, text, tool? }`. `tool` is the default harness from Settings (Claude Code, Codex or Cursor Agent). The daemon:
+The overlay sends `chat.ask { qid, text, tool? }`. `tool` is the default harness from Settings (Claude Code, Codex, Cursor Agent or OMP). The daemon:
 
 1. writes `~/.ledge/chat/context/` (`sessions.md`, `pane-<id>.txt`, `reply-<id>.md`, `git-<id>.txt`) and adds each session's repository with `--add-dir`;
 2. runs one headless, read-only process: `claude -p --restricted` (tools `Read,Grep,Glob` only), `codex exec --sandbox read-only`, or `cursor-agent -p --mode ask`;
@@ -498,6 +504,7 @@ The Desktop and overlay packages, the two crates and the npm package always carr
 - Design canvas (mockups and playable prototype): https://claude.ai/artifact/57oDjsKdabQBmPgAXn15mc
 - Design system "Shadcn Red": https://claude.ai/artifact/QBv4bfYYVqV2aAfDjPW3JV
 - Initial mascot exploration: [docs/mockups/mascots.html](docs/mockups/mascots.html), a historical comparison of three directions.
+- **Mascots in production (issue #61):** Ledge's session mascots are the approved logo-inspired ones, drawn by `packages/ui/src/bots/Bot.tsx`: Claude Code as a softened Clawd (pixel body, legs, arms), Codex as the terminal cloud, Cursor as a rounded cube with soft facets, omp as an asymmetric pi. All four wear Ledge's rounded eyes and visor, the same expressions, the semantic eye and halo colours, and one tint per harness and theme (Signal in dark, Galet in light). They are Ledge's interpretations, not the harnesses' official logos. omp is a visual identity only: its launch, RPC and daemon integration are separate work. The resident Ledge mascot (`ResidentMascot`) is Ledge's own character and is unchanged. Run `pnpm --filter @ledge/ui dev:mascots` to open the live gallery at `/mascots-logos.html` (theme, expressions, reduced motion, lost connection, sizes 12 to 92 px); the previous mascots stay in the historical gallery at `/mascots.html` (`src/preview/LegacyBot.tsx`, never rendered by the app).
 - Mascot halo study: [docs/mockups/mascots-halo.html](docs/mockups/mascots-halo.html), three renderings compared in both themes; the validated choice (contour, normal intensity, every live state, badge colours, breathing while waiting) is implemented in `apps/overlay/src/bots`. Approved resident mascot and halo: [ledge-mascot.html](docs/mockups/ledge-mascot.html), [ledge-mascot-halo.html](docs/mockups/ledge-mascot-halo.html).
 - The island, **implemented on 2026-10-12**: [spec](docs/superpowers/specs/2026-10-12-island-design.md), [implementation plan](docs/superpowers/plans/2026-10-12-island.md) and [mockup](docs/mockups/ledge-island.html). The handle left the left edge for the top centre of the screen, like a dynamic island, with concave fillets where it meets the edge; the bubble is the island stretched to 440 px; every view hangs down from it. Two settings came with it (island position, discreet mode under a maximised window). Twenty-one simulated scenarios on the mockup cover every screen.
 - **Approved interactive design (revision 2):** [navigable prototype](docs/mockups/ledge-prototype.html) (keep its adjacent `prototype/` folder), or [standalone HTML](docs/mockups/ledge-prototype-standalone.html) requiring no server. Twelve scenarios, **Signal in dark mode / Galet in light mode**, with subdued motion and accessible keyboard navigation. Sessions and outcomes in the prototype are simulated.
@@ -505,7 +512,7 @@ The Desktop and overlay packages, the two crates and the npm package always carr
 
 ## Status and known limits
 
-- Claude Code, Codex and Cursor Agent have adapters. The same three harnesses can answer Ask Ledge (Settings › Default harness); the launch form opens on that choice too.
+- Claude Code, Codex and Cursor Agent have tmux adapters; OMP is driven over its own protocol (see « OMP »). All four can answer Ask Ledge (Settings › Default harness).
 - An `AskUserQuestion` with several questions can be answered from Ledge, one dialog at a time, including the review screen.
 - Cursor Agent (verified on 2026.10.01): hooks give the turn (prompt, tools, `stop`) and the last reply (`afterAgentResponse`, rebuilt from the transcript so the turn's text blocks stay apart). They never report an approval, a question or a plan, so the pane gives them: the shell approval ("Run this command?", `y` runs once, `n` then an empty Enter skips), the workspace trust (`a` trusts, `q` quits), AskQuestion (an option number moves to it, ticks it with Space and goes on with Enter; Esc skips; a question that follows is a new prompt, not a failed answer) and Plan mode's "Ready to build?" (`b` builds locally, never in the cloud; refusing opens "Describe how to revise the plan", which reads as your turn: the next reply goes there). Keys that must not reach the agent in one read wait for the screen they are meant for (`until` steps). Ctrl-C interrupts (`stop` aborted, then a stray `error` that is ignored). Subagents fire no hook of their own kind: the parent's Task call names a helper, the subagent's hooks (its own `session_id`, but the parent's transcript in `CURSOR_TRANSCRIPT_PATH`) take it over, and the parent's next step ends it. Not covered: the "Other" free-text answer of a question, and the cloud build.
 - Codex (verified on 0.162): hooks give the state, approvals (`y` runs once, Esc refuses), `request_user_input` questions and the last reply; the pane gives the Plan mode approval ("Implement this plan?", which has no hook) and the startup hooks review. Codex may run hooks in a shared app-server daemon that keeps the environment of the `codex` that started it, so a launched session names itself to its hooks through `-c shell_environment_policy.set.LEDGE_CODEX_HOOK_SESSION=<id>`, and `LEDGE_CODEX_SESSION` in the environment is trusted only when no app-server runs the hook. Plan mode itself is switched in the terminal (Shift+Tab).

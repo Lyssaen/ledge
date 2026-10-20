@@ -1,6 +1,6 @@
 import { ChatTurnSchema, isArchived, IslandPrefsSchema, ProjectsSchema, type IslandPrefs, type MobileState, type ChatTurn, type ChatProposal, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session, type Tool } from '@ledge/protocol';
 import { createDaemonClient, type DaemonClient, type DaemonStatus } from './client';
-import { loadMachines, machineUrl, parseMachines, probeMachine, qualify, splitId, terminalCommand, type MachineConfig, type MobileError, type MachineState } from './machines';
+import { loadMachines, machineUrl, parseMachines, probeMachine, qualify, shellCommand, splitId, terminalCommand, type MachineConfig, type MobileError, type MachineState } from './machines';
 import type { TokenSource } from './token';
 
 type Snapshot = Extract<ServerMessage, { type: 'snapshot' }>;
@@ -9,7 +9,7 @@ const toWire = (list: MachineConfig[]): Machine[] => list.map(({ id, label, ssh 
 type Binding = { machine: string; raw: string };
 /** The commands tracked as a machine's operation in flight (`operations`, set in `send`): their answer, their refusal or the machine's drop ends it. */
 const OPERATIONS: ReadonlySet<string> = new Set(['session.launch', 'session.relay', 'session.relay.cancel']);
-type PendingRoute = { qid: string; text: string; tool?: 'claude' | 'codex' | 'cursor'; coordinator: string };
+type PendingRoute = { qid: string; text: string; tool?: Tool; coordinator: string };
 
 export interface FleetOptions {
   /** Storage key prefix: `ledge` (island) or `desktop` (spec §7). */
@@ -190,7 +190,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     if (m.type === 'session.removed') { if (p.snapshot) p.snapshot = { ...p.snapshot, sessions: p.snapshot.sessions.filter(s => s.id !== m.id) }; p.previews.delete(m.id); emit({ ...m, id: qualify(machine, m.id) }); refresh(); return; }
     if (m.type === 'recents') { if (p.snapshot) p.snapshot = { ...p.snapshot, recents: m.recents }; if (machine === selected && available(p)) emit(m); refresh(); return; }
     if (m.type === 'session.preview') { p.previews.set(m.id, m.lines); if (available(p)) emit({ ...m, id: qualify(machine, m.id) }); return; }
-    if (m.type === 'session.thread' || m.type === 'session.thread.item') { if (available(p)) emit({ ...m, id: qualify(machine, m.id) }); return; }
+    if (m.type === 'session.thread' || m.type === 'session.thread.item' || m.type === 'session.queue.restored') { if (available(p)) emit({ ...m, id: qualify(machine, m.id) }); return; }
     if (m.type === 'session.launched') { operations.delete(machine); emit({ ...m, id: qualify(machine, m.id) }); return; }
     if (m.type === 'folder.listing') {
       if (m.requestId !== undefined && listings.has(m.requestId)) { if (listings.get(m.requestId)!.machine === machine) { listings.delete(m.requestId); emit(m); } return; }
@@ -382,7 +382,12 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       probe: ssh => probeMachine(configs[0]!.url!, ssh, { token: opts.token }),
       // The last try's error is forgotten: the machine is « connecting » until its next answer (a snapshot, or an error again).
       retry(id) { const p = peers.get(id); if (!p || !connected) return; p.error = undefined; p.client.connect(); publish(); },
-      terminal(id) { const origin = splitId(id); const m = state.find(x => x.id === origin?.machine); return origin && m ? terminalCommand(m, origin.id) : null; },
+      terminal(id, opts) { const origin = splitId(id); const m = state.find(x => x.id === origin?.machine); return origin && m ? terminalCommand(m, origin.id, opts) : null; },
+      shell(id) {
+        const origin = splitId(id); const m = state.find(x => x.id === origin?.machine);
+        const s = m?.sessions.find(x => x.id === origin?.id);
+        return m && s ? shellCommand(m, s.workdir ?? s.cwd) : null;
+      },
       turnMachine(qid) { return state.find(m => m.id === bindings.get(qid)?.machine); },
       documentMachine(id) { return splitId(id)?.machine; },
       localSnapshot: () => peers.get('local')?.snapshot ?? null,

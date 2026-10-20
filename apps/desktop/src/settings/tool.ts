@@ -5,7 +5,7 @@ import { readJson, writeJson } from '../state/storage';
 /** The default agent (Settings › General), ported from origin/feat/desktop (launch/form.ts): it feeds Ledge's chat and its
  *  cards. The New session form keeps no default (spec §5). */
 export const TOOL_KEY = 'desktop.tool';
-export const TOOLS: readonly Tool[] = ['claude', 'codex', 'cursor'];
+export const TOOLS: readonly Tool[] = ['claude', 'codex', 'cursor', 'omp'];
 const isTool = (v: unknown): v is Tool => typeof v === 'string' && (TOOLS as readonly string[]).includes(v);
 
 /** The stored default agent; Claude Code when none is stored or the stored value is unknown. */

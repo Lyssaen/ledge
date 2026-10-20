@@ -1,10 +1,22 @@
 import { z } from 'zod';
 
-export const ToolSchema = z.enum(['claude', 'codex', 'cursor']);
+export const ToolSchema = z.enum(['claude', 'codex', 'cursor', 'omp']);
 export type Tool = z.infer<typeof ToolSchema>;
+
+/** How Ledge drives a session's agent: through a tmux pane (Claude Code, Codex, Cursor Agent), or through the agent's own
+ *  JSONL protocol with the daemon owning the process (OMP, spec 2026-10-20 §4). A session without it is a tmux one. */
+export const BackendSchema = z.enum(['tmux', 'omp-rpc']);
+export type Backend = z.infer<typeof BackendSchema>;
 
 export const SessionStateSchema = z.enum(['starting', 'working', 'waiting_input', 'waiting_permission', 'idle', 'exited', 'error']);
 export type SessionState = z.infer<typeof SessionStateSchema>;
+
+/** One question of OMP's `ask` tool: its choices (each may say more), whether several can be picked; a free answer is always possible. */
+export const AskQuestionSchema = z.object({
+  id: z.string(), question: z.string(), header: z.string().optional(), multi: z.boolean().optional(),
+  options: z.array(z.object({ label: z.string(), description: z.string().optional() }))
+});
+export type AskQuestion = z.infer<typeof AskQuestionSchema>;
 
 export const PendingSchema = z.object({
   kind: z.enum(['question', 'permission', 'plan', 'diff']),
@@ -15,7 +27,10 @@ export const PendingSchema = z.object({
   options: z.array(z.string()).optional(),
   /** Each option's description, by index ('' when it has none); left out when no option has one. */
   optionDetails: z.array(z.string()).optional(),
-  source: z.enum(['hook', 'pane']),
+  /** `rpc`: the harness's own protocol asked (OMP): answered on its request id, never by typing. */
+  source: z.enum(['hook', 'pane', 'rpc']),
+  /** OMP: every question of one `ask` call, answered together with `session.answer`; `requestId` is the dialog it answers. */
+  questions: z.array(AskQuestionSchema).optional(), requestId: z.string().optional(),
   /** Set when the request comes from a helper (subagent): it is routed through its parent. */
   helperId: z.string().optional(),
   /** For a helper-routed request: the state the parent returns to once it is answered (main thread may stop meanwhile). */
@@ -68,9 +83,13 @@ export const SessionSchema =z.object({
   /** The folder the agent works in now, as its last hook reported it: `cwd` stays where it started, this follows a worktree it entered. */
   workdir: z.string().optional(),
   tmuxSession: z.string().nullable(),
+  /** Left out for a tmux session. `omp-rpc`: no pane, nothing to attach to; the daemon holds the process (see `agentSessionFile`). */
+  backend: BackendSchema.optional(),
   state: SessionStateSchema,
   pending: PendingSchema.optional(),
   helpers: z.array(HelperSchema).default([]),
+  /** OMP: the instructions waiting in its own queue (typed while it works), as it reports them; left out when none. */
+  queue: z.array(z.object({ text: z.string(), mode: z.enum(['steer', 'follow_up']) })).optional(),
   lastReply: ReplySchema.optional(),
   /** The last message this session sent to another agent: its tool_use_id, the address, the peer's Ledge session id, a one-line summary. */
   lastMessage: z.object({ id: z.string(), to: z.string(), peer: z.string().optional(), summary: z.string(), at: z.string().datetime() }).optional(),
@@ -80,8 +99,12 @@ export const SessionSchema =z.object({
   /** The model and effort Ledge launched the agent with (#58); left out, the agent's own default. */
   model: z.string().optional(),
   effort: z.string().optional(),
+  /** A model change asked while the agent worked (`session.model`), applied at its next free moment; a field left out is the agent's default. */
+  modelNext: z.object({ model: z.string().optional(), effort: z.string().optional() }).optional(),
   /** The agent's own session id when Ledge chose it at launch (Claude Code `--session-id`). */
   agentSessionId: z.string().optional(),
+  /** OMP: the exact journal file of the conversation, what a resume names (never "the latest of the folder"). */
+  agentSessionFile: z.string().optional(),
   /** The agent's transcript: the latest one a hook named (it follows /clear and --resume), else the one the launch implies. */
   transcriptPath: z.string().optional(),
   exitCode: z.number().int().nullable().optional(),
@@ -94,6 +117,11 @@ export const SessionSchema =z.object({
   restoredAt: z.string().datetime().optional()
 });
 export type Session = z.infer<typeof SessionSchema>;
+
+/** The transport a session's agent is driven through. */
+export function backendOf(s: Pick<Session, 'backend'>): Backend {
+  return s.backend ?? 'tmux';
+}
 
 /** Whether the session sits in the archive. */
 export function isArchived(s: Pick<Session, 'archivedAt'>): boolean {

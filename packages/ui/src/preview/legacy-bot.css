@@ -1,0 +1,26 @@
+/* The previous mascots' own layers (feet and antenna), kept for the historical gallery only. bots.css carries the
+   shared layers; the production bots no longer draw these. */
+.legacy-bot .feet { fill: var(--bot-shell-bottom); }
+.legacy-bot .antenna { stroke: var(--bot-shell-bottom); stroke-width: 2; stroke-linecap: round; }
+.legacy-bot .antenna-light { fill: var(--bot-eye); }
+.legacy-bot[data-simplified="true"] :is(.feet, .antenna-group) { display: none; }
+.legacy-bot[data-detailed="true"] .antenna-light { filter: drop-shadow(0 0 2px var(--bot-eye)); }
+.legacy-bot[data-detailed="true"][data-reduced="true"][data-state="working"]:not([data-frozen="true"]):not([data-paused="true"]):not([data-readonly="true"]) .antenna-light {
+  animation: bot-pulse 1.2s ease-in-out infinite !important;
+}
+.legacy-bot[data-detailed="true"][data-hop="true"] .antenna-group {
+  transform-origin: 49px 22px; animation: bot-antenna var(--bot-hop-cycle, 3.6s) linear infinite; animation-delay: var(--bot-phase, 0s);
+}
+.legacy-bot[data-detailed="true"][data-hop="true"][data-transition="working"] .antenna-group { animation: bot-entry-antenna var(--bot-entry-hop-ms, 480ms) linear; }
+@keyframes bot-antenna {
+  0%, 13.3%, 100% { transform: rotate(0deg); }
+  1.9% { transform: rotate(0deg); }
+  5.9% { transform: rotate(-3deg); }
+  9.3% { transform: rotate(3deg); }
+}
+@keyframes bot-entry-antenna {
+  0%, 100% { transform: rotate(0deg); }
+  14% { transform: rotate(0deg); }
+  44% { transform: rotate(-3deg); }
+  70% { transform: rotate(3deg); }
+}

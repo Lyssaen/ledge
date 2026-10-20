@@ -141,7 +141,7 @@ export const en: Messages = {
       when: 'Play a sound when',
       categories: { requests: 'A bot needs you · approval, question', finished: 'A bot or Ledge has finished its task', errors: 'Something fails', decisions: 'You allow or deny', team: 'A bot arrives or leaves' },
       categorySaved: (label, on) => `${label}: ${on ? 'on' : 'off'}`,
-      behind: 'Only when the terminal is behind', behindHint: 'If Windows Terminal is the front window, you are already looking: no sound, the bubble still shows.',
+      behind: 'Only when the terminal is behind', behindHint: 'If Windows Terminal is the front window, or Ledge is showing the agent’s screen, you are already looking: no sound, the bubble still shows.',
       behindSaved: (on) => (on ? 'Sounds only when the terminal is behind' : 'Sounds even when the terminal is in front'),
       note: 'One sound at a time, for the notch and Ledge Desktop together: a burst of requests plays once. Opening, closing and hovering stay silent.'
     },
@@ -264,9 +264,9 @@ export const en: Messages = {
         hidden: 'The notch is hidden. Ledge Desktop still lets you know.'
       },
       cover: 'Simulate a maximised window', uncover: 'Remove the window',
-      screen: 'Screen', screens: { primary: 'Main', second: 'Screen 2' },
+      screen: 'Screen', screens: { primary: 'Main', nth: (n) => `Screen ${n}`, missing: 'Unplugged' },
       screenHint: (size) => (size ? `The notch sits at the top of this screen (${size}).` : 'The notch sits at the top of this screen.'),
-      screenSaved: { primary: 'Main screen', second: 'Screen 2' },
+      screenSaved: { primary: 'Main screen', nth: (n) => `Screen ${n}` },
       position: 'Notch position', positionHint: 'At the centre of the top edge, or a quarter of the way along to keep titles and tabs clear.',
       positions: { left: 'Left', center: 'Centre', right: 'Right' }, positionSaved: (p) => `Position: ${p}`,
       discreet: 'Discreet under a window', discreetHint: 'A simple line when a maximised window fills the screen; hovering unfolds it.', discreetOn: 'Discreet mode', discreetOff: 'Notch always whole',
@@ -331,7 +331,7 @@ export const en: Messages = {
     title: 'Keyboard shortcuts',
     intro: 'Active while the window has focus. Navigation keys stay available for typing and the terminal when they have focus.',
     outro: 'Ctrl / ⌘ K opens the search from any view. Y and N only act on the pinned request of the open session, never while typing.',
-    rows: [['Ctrl / ⌘ K','Search and open a session'],['Ctrl ,','Open the settings'],['Alt 1…9','Jump to the main sessions'],['Alt ← / →','Previous / next session'],['J / K or ↓ / ↑','Walk through the sessions (atelier)'],['Enter','Open the selected session'],['← / →','Fold / unfold a project (sidebar)'],['E','Archive the selected session'],['H','Show / hide the finished sessions'],['Ctrl ⇧ E','Focus the sidebar'],['N','New session'],['+ / −','Zoom the atelier in / out'],['0','Fit the atelier to the screen'],['Ctrl + wheel / pinch','Zoom under the pointer or the fingers'],['Space + drag','Pan the view'],['/','Focus Ask Ledge'],['R','Write a reply to the agent'],['Y / N','Allow / deny the pending request'],['1…9','Pick a suggested answer'],['J / K','Next / previous file (Changes)'],['O','Show or hide the terminal'],['Esc','Close the panel or go back to the atelier'],['?','Show these shortcuts']]
+    rows: [['Ctrl / ⌘ K','Search and open a session'],['Ctrl ,','Open the settings'],['Alt 1…9','Jump to the main sessions'],['Alt ← / →','Previous / next session'],['J / K or ↓ / ↑','Walk through the sessions (atelier)'],['Enter','Open the selected session'],['← / →','Fold / unfold a project (sidebar)'],['E','Archive the selected session'],['H','Show / hide the finished sessions'],['Ctrl ⇧ E','Focus the sidebar'],['N','New session'],['+ / −','Zoom the atelier in / out'],['0','Fit the atelier to the screen'],['Ctrl + wheel / pinch','Zoom under the pointer or the fingers'],['Space + drag','Pan the view'],['/','Focus Ask Ledge'],['R','Write a reply to the agent'],['Y / N','Allow / deny the pending request'],['1…9','Pick a suggested answer'],['J / K','Next / previous file (Changes)'],['O','Show or hide the terminal'],['Ctrl `','Move between the thread and the terminal'],['Esc','Close the panel or go back to the atelier'],['?','Show these shortcuts']]
   },
   tray: { open: 'Open Ledge Desktop', newSession: 'New session', dnd: 'Do not disturb', dndOff: 'Resume alerts', quit: 'Quit Ledge Desktop' },
   notify: {
@@ -449,7 +449,6 @@ export const en: Messages = {
       open: 'Open session', terminal: 'Terminal', rename: 'Rename…', moveTo: 'Move to…', end: 'End session', resume: 'Resume session',
       archive: 'Archive', endAndArchive: 'End and archive…', delete: 'Delete…',
       kids: (n, name) => `${n} ${pluralEn(n, 'subagent leaves', 'subagents leave')} with ${name}.`,
-      offline: (machine) => `${machine} is unreachable.`,
       cannotEnd: (machine) => `${machine} is unreachable: Ledge cannot stop it.`,
       outsideLedge: 'Launched outside Ledge: Ledge cannot stop it.',
       deleteKey: 'Del', archiveFinished: 'Archive finished'
@@ -517,10 +516,36 @@ export const en: Messages = {
       }
     },
     terminal: {
-      title: 'Terminal', empty: 'No output received yet.', readOnly: 'Read-only preview', offline: 'Offline',
-      open: 'Open in a terminal', openFailed: (n) => `${n}’s terminal could not open.`
+      title: 'Terminal', empty: 'No output received yet.',
+      resize: 'Terminal width', openFailed: (n) => `${n}’s terminal could not open.`,
+      agentTab: (n) => `${n} · agent`, shellTab: (n, dir) => `${n === 1 ? 'Shell' : `Shell ${n}`} · ${dir}`,
+      addShell: 'New shell', closeTab: (label) => `Close ${label}`,
+      local: 'wsl', remote: (host) => `ssh · ${host}`,
+      external: 'Open in an external terminal', max: 'Enlarge the terminal', unmax: 'Shrink the terminal',
+      attached: 'Attached', attachedSsh: 'Attached over SSH', reconnecting: 'Reconnecting…', readOnly: 'Read only', offline: 'Offline', preview: 'Preview · read only',
+      connecting: 'Connecting…', shell: 'Shell',
+      tmuxTarget: (session, host) => (host ? `ssh ${host} · tmux · ${session}` : `tmux · ${session}`),
+      shellTarget: (host, shell) => `${host ? `ssh ${host}` : 'wsl'}${shell ? ` · ${shell}` : ''}`,
+      detached: (name, s, attempt) => `${name}’s screen was detached. Trying again in ${s} s (attempt ${attempt}).`,
+      shellEndedNoCode: 'Shell ended',
+      noTmux: 'no tmux session',
+      lost: (host, s, attempt, name) => `Connection to ${host} lost. Trying again in ${s} s (attempt ${attempt}). ${name} keeps working on the server.`,
+      reconnect: 'Reconnect',
+      offlineBanner: (host, time) => (time ? `${host} has not answered since ${time}. Last output kept; nothing can be typed.` : `${host} does not answer. Last output kept; nothing can be typed.`),
+      retry: 'Retry',
+      subagent: (h, p) => `${h} is a subagent of ${p} and has no terminal of its own: this is ${p}’s screen, read only.`,
+      goParent: (p) => `Go to ${p}`,
+      outside: (n) => `${n} was started outside Ledge: no screen to attach. Here are its last lines, read only. Your shell is still available.`,
+      ended: (n) => `${n} has ended: here are its last lines, read only. Your shell is still available.`,
+      shellIntro: (n, dir) => `Shell opened in ${n}’s folder: ${dir}`,
+      shellIntroSsh: (host, n, dir) => `Shell on ${host}, in ${n}’s folder: ${dir}`,
+      shellEnded: (code) => `Shell ended (code ${code})`, shellLost: 'Shell ended: connection lost',
+      reopen: 'Reopen', shellUnavailable: 'This folder cannot be opened in a shell.',
+      toTerminal: (k) => `Give the keyboard to the terminal · Ctrl ${k}`, toThread: (k) => `The keyboard goes to the terminal · back to the thread: Ctrl ${k}`
     },
     pending: {
+      writeOwn: 'Write your own answer', writeOwnHint: 'In the field below, then Enter',
+      ask: { send: 'Send the answers', decline: 'Decline', other: (q: string) => `Another answer to “${q}”`, otherPlaceholder: 'Another answer…' },
       regions: { approval: 'Approval requested', plan: 'Plan to approve', question: 'Question from the agent' },
       command: (n) => `${n} wants to run a command`, edit: (n) => `${n} wants to change a file`, approval: (n) => `${n} wants your approval`,
       question: (n) => `${n} asks you a question`, plan: (n, title) => `${n} proposes a plan · ${title}`, planBadge: 'Plan to approve',
@@ -539,13 +564,23 @@ export const en: Messages = {
       label: 'Reply to the agent', send: 'Send', denyWith: 'Deny with this message',
       placeholder: {
         plan: 'What to revise in the plan… (Enter: keep planning)', approval: 'Or deny and say what to do instead…',
-        question: (n) => `Or answer ${n} freely…`, done: (n) => `Start ${n} again with a new instruction…`, idle: (n) => `Reply to ${n}…`
+        queued: (n) => `For ${n}, after this turn…`, question: (n) => `Or answer ${n} freely…`, done: (n) => `Start ${n} again with a new instruction…`, idle: (n) => `Reply to ${n}…`
       },
       denyHint: 'Enter denies with this message', planHint: 'Enter sends the plan back to planning', write: 'write',
       offline: (m) => `${m} is offline.`, offlineBody: ' The thread is frozen at the last known activity; you can reply once it reconnects.', seeMachine: 'See the machine',
       viaParent: (n, p) => `Replies to ${n} go through ${p}, who started it.`, openParent: (p) => `Open ${p}`,
       readOnly: 'Session started without Ledge: read only.', optionsOnly: 'Choose one of the proposed answers (1–9).',
+      askCard: 'Answer from the card above.',
+      afterTurn: 'Enter: after this turn', queue: 'Send after this turn', steer: 'Redirect now', steerTitle: 'Redirects the turn running now instead of waiting for its end',
+      interrupt: 'Interrupt', interruptTitle: 'Stops the work in progress; the session and its conversation stay',
+      queueLabel: 'Waiting instructions', queued: (n: number) => `Waiting (${n})`, queueSteer: 'redirect', queueAfter: 'after this turn', restore: 'Interrupt and take back', restoreTitle: 'Stops the work and puts the waiting instructions back in the field',
       noNote: 'This agent takes no message with a refusal: deny with N.', tooLong: (max) => `A note holds ${max} characters at most.`
+    },
+    model: {
+      label: 'Model and effort', apply: 'Apply', schedule: 'Schedule', cancel: 'Cancel', nextTurn: 'next turn',
+      applyHint: (n) => `${n} restarts on the same conversation and keeps its context.`,
+      scheduleHint: (n) => `${n} is working: the change applies at the end of this turn.`,
+      refused: (m) => `Model change refused: ${m}`
     },
     thread: {
       label: 'Session thread',
@@ -580,6 +615,17 @@ export const en: Messages = {
         plan: (n) => `${n} is waiting for your approval of its plan.`, diff: (n) => `${n} is waiting for your approval of a change.`
       },
       resumes: 'The thread resumes after your answer.',
+      working: {
+        label: 'The agent is working',
+        prompt: { you: 'Reading your message…', parent: 'Reading its instruction…' },
+        received: (n) => `Reading ${n}’s message…`,
+        tool: { read: ['Just read ', '…'], search: ['Going through the results for ', '…'], command: ['Looking at the output of ', '…'], edit: ['Reviewing its change to ', '…'] },
+        failed: ['Looking into why ', ' failed…'],
+        helper: (n) => `Taking up ${n}’s report…`,
+        decision: 'Resuming after your answer…', said: 'Carrying on…',
+        bank: ['Choosing its words…', 'Checking its notes…', 'Pulling on a thread…', 'Weighing the options…', 'Scribbling away…', 'Warming up the neurons…', 'Looking for the right word…', 'Reading it over once more…'],
+        long: 'Taking its time, thinking hard…'
+      },
       planDecided: { accept: 'You approved the plan', always: 'You approved the plan in auto mode', deny: 'You sent the plan back for revision', unknown: 'Plan answered in the terminal' },
       objective: 'Session objective', notedBy: (n) => `· noted by ${n}`,
       tags: { story: 'Story', objectif: 'Objective' },
@@ -640,7 +686,7 @@ export const en: Messages = {
     prompt: 'Instruction', placeholder: 'What should the agent do? Describe the expected result.',
     suggestions: 'Suggestions', ideas: ['Review the latest pull request', 'Fix the failing tests', 'Update the documentation'],
     agent: 'Agent',
-    tools: { claude: ['Claude Code', 'Design, review'], codex: ['Codex', 'Code and tests'], cursor: ['Cursor Agent', 'In the editor'] },
+    tools: { claude: ['Claude Code', 'Design, review'], codex: ['Codex', 'Code and tests'], cursor: ['Cursor Agent', 'In the editor'], omp: ['OMP', 'Driven natively'] },
     project: 'Project', machine: 'Machine', offline: 'offline', offlineTitle: 'Offline: reconnect the machine in Settings',
     repos: (m) => `Folders and repositories on ${m}`, noGit: 'Folder without Git', notFound: 'not found', oneRepo: (t) => `One folder or repository only for ${t}`,
     noRepos: (p, m) => `No folder or repository of ${p} on ${m}.`, editProject: 'Edit the project',
@@ -652,10 +698,13 @@ export const en: Messages = {
     timeout: 'The launch did not answer. Check the machine, then try again.',
     modelOf: (t: string) => `${t} model`, remembered: 'Last choice for this project kept',
     byDefault: 'Default', byDefaultHint: 'The one the agent picks by itself', defaultBadge: 'default',
-    otherModel: 'Other…', otherModelHint: 'An exact id', otherPlaceholder: 'Model id, passed as is',
-    modelsLoading: 'Reading the machine’s models…', modelsUnavailable: (e: string) => `Model list unavailable (${e}): the default and « Other… » still work.`,
+    exactId: 'An exact id, passed as is', currentBadge: 'current',
+    searchModel: 'Search a model or type an id', searchFew: 'Search, or type an id', searchMany: (n: number) => `Search ${n} models, or type an id`, resultCount: (n: number, total: number) => `${n} of ${total}`,
+    useAsIs: 'Use as is', noMatch: 'No model matches.', notAnId: 'No model matches, and this is not a model id.', moreModels: (n: number) => `${n} more: type to search them`,
+    modelsLoading: 'Reading the machine’s models…', modelsUnavailable: (e: string) => `Model list unavailable (${e}): the default and an exact id still work.`,
+    ompOutdated: 'OMP cannot be launched here: update Ledge on this machine.', ompUnavailable: (e: string) => `OMP cannot be launched on this machine (${e}). Pick another agent or fix OMP there; nothing is switched for you.`,
     modelsOutdated: 'Update Ledge on this machine to choose the model.',
-    effort: 'Effort', effortHint: 'Thinking time per turn', cursorEffort: 'For Cursor, the effort is part of the model name.',
+    effort: 'Effort', effortHint: 'Thinking time per turn', cursorEffort: 'Effort is in the model name', lessEffort: 'Less effort', moreEffort: 'More effort',
     efforts: { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max', ultra: 'Ultra' } as Record<string, string>,
     modelHints: { 'claude:fable': 'The most capable', 'claude:opus': 'Very capable, slower', 'claude:sonnet': 'Balanced, everyday use', 'claude:haiku': 'Fast and economical' } as Record<string, string>,
     pickSummary: (m: string, e?: string) => (e ? `${m} · ${e}` : m)

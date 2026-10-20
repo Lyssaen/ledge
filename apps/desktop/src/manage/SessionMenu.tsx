@@ -53,7 +53,7 @@ export function SessionMenu({ session: s, at, actions, filing, projects, current
     <Menu open onOpenChange={o => { if (!o) onClose(); }} label={m.label(s.name)} className="session-menu-wrap" menuClassName="session-menu" at={at} trigger={() => null}>
       <div className="session-menu-head"><strong>{s.name}</strong><small>{s.topic ?? s.title}</small></div>
       {item(m.open, ICONS.external.d, () => onOpen(s), { hint: '↵' })}
-      {item(m.terminal, SHELL_ICONS.terminal, () => onTerminal(s), { hint: 'T', key: 't', disabled: s.offline ? m.offline(machine) : undefined })}
+      {item(m.terminal, SHELL_ICONS.terminal, () => onTerminal(s), { hint: 'T', key: 't' })}
       {item(m.rename, SHELL_ICONS.pencil, () => onRename(s), { hint: 'F2', key: 'F2', disabled: exited || s.offline || undefined })}
       <button type="button" role="menuitem" aria-label={t.filing.moveTo} aria-haspopup="menu" aria-expanded={filingOpen} onClick={() => setFilingOpen(o => !o)}>
         <span><Icon d={ICONS.folder.d} size={14} />{m.moveTo}</span><Icon d={ICONS.chevronRight.d} size={12} />

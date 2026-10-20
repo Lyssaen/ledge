@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { claudeAdapter } from '../src/adapters/claude.js';
 import { adapterFor } from '../src/adapters/index.js';
-import { bottomLines } from '../src/adapters/types.js';
+import { bottomLines, dialogMismatch } from '../src/adapters/types.js';
 
 const fx = (n: string) => readFileSync(new URL(`./fixtures/panes/${n}.txt`, import.meta.url), 'utf8');
 /** The last `n` lines, trailing whitespace trimmed like Tmux.capture (the server reads its non-blank ones: bottomLines). */
@@ -215,6 +215,27 @@ describe('claude adapter: fullscreen, a dialog over a short conversation (Claude
   });
   it('chat quoting a dialog above the idle input box is still no dialog', () => {
     expect(claudeAdapter.promptStillVisible(bottomLines(`${gap}\n${fx('claude2-fullscreen-idle')}`))).toBe(false);
+  });
+});
+
+describe('claude adapter: fullscreen, two questions in one AskUserQuestion (Claude Code 2.1.304 captures)', () => {
+  const story = { kind: 'question' as const, text: "Quelle est la clé de la story Jira (ex. ST7-162), ou s'agit-il d'un travail hors story ?", options: ['Hors story', 'Préciser la story'], source: 'hook' as const };
+  it('reads a question drawn behind a gutter as its own text', () => {
+    expect(claudeAdapter.detectPrompt(fx('claude2-question-gutter'))).toMatchObject({ kind: 'question', text: story.text });
+    expect(dialogMismatch(claudeAdapter.detectPrompt(fx('claude2-question-gutter')), story, 113)).toBeNull();
+    expect(claudeAdapter.promptGone!(fx('claude2-question-gutter'), story)).toBe(false);
+    expect(claudeAdapter.promptGone!(fx('claude2-question-fullscreen-second'), story)).toBe(true);
+  });
+  it('detects the review screen over the titled input rule', () => {
+    const review = fx('claude2-question-multi-review-fullscreen');
+    expect(claudeAdapter.detectPrompt(review)).toEqual({ kind: 'question', text: 'Ready to submit your answers?', options: ['Submit answers', 'Cancel'] });
+    expect(claudeAdapter.promptStillVisible(bottomLines(review))).toBe(true);
+    expect(claudeAdapter.atRest!(review)).toBe(false);
+    expect(claudeAdapter.replyPlan('1', { kind: 'question', text: 'Ready to submit your answers?', source: 'pane' }, review)).toEqual([{ text: '1' }]);
+  });
+  it('still takes no chat quoting the review screen above the idle input box for one', () => {
+    const pane = `${fx('claude2-question-multi-review-fullscreen')}\n${fx('claude2-fullscreen-idle')}`;
+    expect(claudeAdapter.detectPrompt(pane)).toBeNull();
   });
 });
 

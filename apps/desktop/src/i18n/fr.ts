@@ -157,7 +157,7 @@ export const fr = {
       when: 'Jouer un son quand',
       categories: { requests: 'Un bot a besoin de vous · accord, question', finished: 'Un bot ou Ledge a terminé sa tâche', errors: 'Quelque chose échoue', decisions: 'Vous acceptez ou refusez', team: 'Un bot arrive ou part' } as Record<SoundCategory, string>,
       categorySaved: (label: string, on: boolean): string => `${label} : ${on ? 'activé' : 'désactivé'}`,
-      behind: 'Seulement quand le terminal est derrière', behindHint: 'Si Windows Terminal est la fenêtre au premier plan, vous regardez déjà : pas de son, la bulle s’affiche quand même.',
+      behind: 'Seulement quand le terminal est derrière', behindHint: 'Si Windows Terminal est au premier plan, ou si Ledge montre l’écran de l’agent, vous regardez déjà : pas de son, la bulle s’affiche quand même.',
       behindSaved: (on: boolean): string => (on ? 'Sons seulement terminal derrière' : 'Sons toujours'),
       note: 'Un seul son à la fois, pour l’encoche et Ledge Desktop ensemble : une rafale de demandes ne joue qu’une fois. Ouvrir, fermer et survoler restent silencieux.'
     },
@@ -281,9 +281,9 @@ export const fr = {
         hidden: 'L’encoche est masquée. Ledge Desktop continue de vous prévenir.'
       },
       cover: 'Simuler une fenêtre maximisée', uncover: 'Retirer la fenêtre',
-      screen: 'Écran', screens: { primary: 'Principal', second: 'Écran 2' } as Record<'primary' | 'second', string>,
+      screen: 'Écran', screens: { primary: 'Principal', nth: (n: number) => `Écran ${n}`, missing: 'Débranché' },
       screenHint: (size: string | null) => (size ? `L’encoche se pose en haut de cet écran (${size}).` : 'L’encoche se pose en haut de cet écran.'),
-      screenSaved: { primary: 'Écran principal', second: 'Écran 2' } as Record<'primary' | 'second', string>,
+      screenSaved: { primary: 'Écran principal', nth: (n: number) => `Écran ${n}` },
       position: 'Position de l’encoche', positionHint: 'Au centre du bord supérieur, ou décalée au quart de l’écran pour laisser libres les titres et les onglets.',
       positions: { left: 'À gauche', center: 'Centre', right: 'À droite' } as Record<'left' | 'center' | 'right', string>, positionSaved: (p: string) => `Position : ${p}`,
       discreet: 'Mode discret sous une fenêtre', discreetHint: 'Un simple trait quand une fenêtre maximisée occupe l’écran ; un survol la redéploie.', discreetOn: 'Mode discret', discreetOff: 'Encoche toujours entière',
@@ -349,7 +349,7 @@ export const fr = {
     title: 'Raccourcis clavier',
     intro: 'Actifs lorsque la fenêtre a le focus. Les touches de navigation restent disponibles pour la saisie et le terminal lorsqu’ils ont le focus.',
     outro: 'Ctrl / ⌘ K ouvre la recherche depuis n’importe quelle vue. Y et N n’agissent que sur la demande épinglée de la session ouverte, jamais pendant la saisie.',
-    rows: [['Ctrl / ⌘ K','Rechercher et ouvrir une session'],['Ctrl ,','Ouvrir les réglages'],['Alt 1…9','Accès direct aux sessions principales'],['Alt ← / →','Session précédente / suivante'],['J / K ou ↓ / ↑','Parcourir les sessions (atelier)'],['Entrée','Ouvrir la session sélectionnée'],['← / →','Plier / déplier un projet (barre latérale)'],['E','Archiver la session sélectionnée'],['H','Afficher / masquer les sessions terminées'],['Ctrl ⇧ E','Aller à la barre latérale'],['N','Nouvelle session'],['+ / −','Zoomer / dézoomer l’atelier'],['0','Ajuster l’atelier à l’écran'],['Ctrl + molette / pincer','Zoomer sous le pointeur ou les doigts'],['Espace + glisser','Déplacer la vue'],['/','Demander à Ledge'],['R','Écrire une réponse à l’agent'],['Y / N','Autoriser / refuser la demande en attente'],['1…9','Choisir une réponse proposée'],['J / K','Fichier suivant / précédent (Modifications)'],['O','Afficher ou masquer le terminal'],['Échap','Fermer le panneau ou revenir à l’atelier'],['?','Afficher ces raccourcis']] as ReadonlyArray<readonly [string, string]>
+    rows: [['Ctrl / ⌘ K','Rechercher et ouvrir une session'],['Ctrl ,','Ouvrir les réglages'],['Alt 1…9','Accès direct aux sessions principales'],['Alt ← / →','Session précédente / suivante'],['J / K ou ↓ / ↑','Parcourir les sessions (atelier)'],['Entrée','Ouvrir la session sélectionnée'],['← / →','Plier / déplier un projet (barre latérale)'],['E','Archiver la session sélectionnée'],['H','Afficher / masquer les sessions terminées'],['Ctrl ⇧ E','Aller à la barre latérale'],['N','Nouvelle session'],['+ / −','Zoomer / dézoomer l’atelier'],['0','Ajuster l’atelier à l’écran'],['Ctrl + molette / pincer','Zoomer sous le pointeur ou les doigts'],['Espace + glisser','Déplacer la vue'],['/','Demander à Ledge'],['R','Écrire une réponse à l’agent'],['Y / N','Autoriser / refuser la demande en attente'],['1…9','Choisir une réponse proposée'],['J / K','Fichier suivant / précédent (Modifications)'],['O','Afficher ou masquer le terminal'],['Ctrl `','Passer du fil au terminal et retour'],['Échap','Fermer le panneau ou revenir à l’atelier'],['?','Afficher ces raccourcis']] as ReadonlyArray<readonly [string, string]>
   },
   tray: { open: 'Ouvrir Ledge Desktop', newSession: 'Nouvelle session', dnd: 'Ne pas déranger', dndOff: 'Réactiver les alertes', quit: 'Quitter Ledge Desktop' },
   notify: {
@@ -473,7 +473,6 @@ export const fr = {
       open: 'Ouvrir la session', terminal: 'Terminal', rename: 'Renommer…', moveTo: 'Ranger dans…', end: 'Terminer la session', resume: 'Reprendre la session',
       archive: 'Archiver', endAndArchive: 'Terminer et archiver…', delete: 'Supprimer…',
       kids: (n: number, name: string): string => `${n} ${plural(n, 'sous-agent part', 'sous-agents partent')} avec ${name}.`,
-      offline: (machine: string): string => `${machine} est injoignable.`,
       cannotEnd: (machine: string): string => `${machine} est injoignable : Ledge ne peut pas l’arrêter.`,
       outsideLedge: 'Lancée hors de Ledge : Ledge ne peut pas l’arrêter.',
       deleteKey: 'Suppr', archiveFinished: 'Archiver les terminées'
@@ -542,10 +541,36 @@ export const fr = {
       } as Record<'not_found' | 'too_large' | 'offline' | 'timeout' | 'other', string>
     },
     terminal: {
-      title: 'Terminal', empty: 'Aucune sortie reçue pour l’instant.', readOnly: 'Aperçu en lecture seule', offline: 'Hors ligne',
-      open: 'Ouvrir dans un terminal', openFailed: (n: string) => `Le terminal de ${n} n’a pas pu s’ouvrir.`
+      title: 'Terminal', empty: 'Aucune sortie reçue pour l’instant.',
+      resize: 'Largeur du terminal', openFailed: (n: string) => `Le terminal de ${n} n’a pas pu s’ouvrir.`,
+      agentTab: (n: string) => `${n} · agent`, shellTab: (n: number, dir: string) => `${n === 1 ? 'Shell' : `Shell ${n}`} · ${dir}`,
+      addShell: 'Nouveau shell', closeTab: (label: string) => `Fermer ${label}`,
+      local: 'wsl', remote: (host: string) => `ssh · ${host}`,
+      external: 'Ouvrir dans un terminal externe', max: 'Agrandir le terminal', unmax: 'Réduire le terminal',
+      attached: 'Attaché', attachedSsh: 'Attaché par SSH', reconnecting: 'Reconnexion…', readOnly: 'Lecture seule', offline: 'Hors ligne', preview: 'Aperçu · lecture seule',
+      connecting: 'Connexion…', shell: 'Shell',
+      tmuxTarget: (session: string, host?: string) => (host ? `ssh ${host} · tmux · ${session}` : `tmux · ${session}`),
+      shellTarget: (host?: string, shell?: string) => `${host ? `ssh ${host}` : 'wsl'}${shell ? ` · ${shell}` : ''}`,
+      detached: (name: string, s: number, attempt: number) => `L’écran de ${name} s’est détaché. Nouvelle tentative dans ${s} s (essai ${attempt}).`,
+      shellEndedNoCode: 'Shell terminé',
+      noTmux: 'aucune session tmux',
+      lost: (host: string, s: number, attempt: number, name: string) => `Connexion à ${host} perdue. Nouvelle tentative dans ${s} s (essai ${attempt}). ${name} continue de travailler sur le serveur.`,
+      reconnect: 'Reconnecter',
+      offlineBanner: (host: string, time?: string) => (time ? `${host} ne répond plus depuis ${time}. Dernière sortie conservée ; rien ne peut être tapé.` : `${host} ne répond plus. Dernière sortie conservée ; rien ne peut être tapé.`),
+      retry: 'Réessayer',
+      subagent: (h: string, p: string) => `${h} est un sous-agent de ${p} et n’a pas de terminal à lui : voici l’écran de ${p}, en lecture seule.`,
+      goParent: (p: string) => `Aller à ${p}`,
+      outside: (n: string) => `${n} a été lancée hors de Ledge : pas d’écran à rattacher. Voici ses dernières lignes, en lecture seule. Votre shell reste disponible.`,
+      ended: (n: string) => `${n} est terminée : voici ses dernières lignes, en lecture seule. Votre shell reste disponible.`,
+      shellIntro: (n: string, dir: string) => `Shell ouvert dans le dossier de ${n} : ${dir}`,
+      shellIntroSsh: (host: string, n: string, dir: string) => `Shell sur ${host}, dans le dossier de ${n} : ${dir}`,
+      shellEnded: (code: number | null) => `Shell terminé (code ${code})`, shellLost: 'Shell terminé : connexion perdue',
+      reopen: 'Rouvrir', shellUnavailable: 'Ce dossier ne peut pas être ouvert dans un shell.',
+      toTerminal: (k: string) => `Donner le clavier au terminal · Ctrl ${k}`, toThread: (k: string) => `Le clavier va au terminal · revenir au fil : Ctrl ${k}`
     },
     pending: {
+      writeOwn: 'Écrire ma propre réponse', writeOwnHint: 'Dans le champ ci-dessous, puis Entrée',
+      ask: { send: 'Envoyer les réponses', decline: 'Décliner', other: (q: string) => `Autre réponse à « ${q} »`, otherPlaceholder: 'Autre réponse…' },
       regions: { approval: 'Autorisation demandée', plan: 'Plan à approuver', question: 'Question de l’agent' } as Record<'approval' | 'plan' | 'question', string>,
       command: (n: string) => `${n} veut exécuter une commande`, edit: (n: string) => `${n} veut modifier un fichier`, approval: (n: string) => `${n} veut votre accord`,
       question: (n: string) => `${n} vous pose une question`, plan: (n: string, title: string) => `${n} propose un plan · ${title}`, planBadge: 'Plan à approuver',
@@ -565,13 +590,23 @@ export const fr = {
       label: 'Répondre à l’agent', send: 'Envoyer', denyWith: 'Refuser avec ce message',
       placeholder: {
         plan: 'Ce qu’il faut revoir dans le plan… (Entrée : continuer à planifier)', approval: 'Ou refusez en expliquant quoi faire autrement…',
-        question: (n: string) => `Ou répondez librement à ${n}…`, done: (n: string) => `Relancer ${n} avec une nouvelle consigne…`, idle: (n: string) => `Répondre à ${n}…`
+        queued: (n: string) => `Pour ${n}, après ce tour…`, question: (n: string) => `Ou répondez librement à ${n}…`, done: (n: string) => `Relancer ${n} avec une nouvelle consigne…`, idle: (n: string) => `Répondre à ${n}…`
       },
       denyHint: 'Entrée refuse avec ce message', planHint: 'Entrée renvoie le plan en préparation', write: 'écrire',
       offline: (m: string) => `${m} est hors ligne.`, offlineBody: ' Le fil est figé à la dernière activité connue ; vous pourrez répondre à la reconnexion.', seeMachine: 'Voir la machine',
       viaParent: (n: string, p: string) => `Les réponses à ${n} passent par ${p}, qui l’a lancé.`, openParent: (p: string) => `Ouvrir ${p}`,
       readOnly: 'Session démarrée sans Ledge : lecture seule.', optionsOnly: 'Choisissez une des réponses proposées (1–9).',
+      askCard: 'Répondez depuis la carte ci-dessus.',
+      afterTurn: 'Entrée : après ce tour', queue: 'Envoyer après ce tour', steer: 'Réorienter maintenant', steerTitle: 'Dévie le tour en cours au lieu d’attendre sa fin',
+      interrupt: 'Interrompre', interruptTitle: 'Arrête le travail en cours ; la session et sa conversation restent',
+      queueLabel: 'Consignes en attente', queued: (n: number) => `En attente (${n})`, queueSteer: 'réorienter', queueAfter: 'après ce tour', restore: 'Interrompre et récupérer', restoreTitle: 'Arrête le travail et remet les consignes en attente dans le champ',
       noNote: 'Cet agent ne prend pas de message avec un refus : refusez avec N.', tooLong: (max: number) => `Une note tient en ${max} caractères au plus.`
+    },
+    model: {
+      label: 'Modèle et effort', apply: 'Appliquer', schedule: 'Programmer', cancel: 'Annuler', nextTurn: 'au prochain tour',
+      applyHint: (n: string) => `${n} redémarre sur la même conversation et garde son contexte.`,
+      scheduleHint: (n: string) => `${n} travaille : le changement s’appliquera à la fin de ce tour.`,
+      refused: (m: string) => `Changement de modèle refusé : ${m}`
     },
     thread: {
       label: 'Fil de la session',
@@ -611,6 +646,19 @@ export const fr = {
         plan: (n: string) => `${n} attend votre accord sur son plan.`, diff: (n: string) => `${n} attend votre accord sur une modification.`
       } as Record<'permission' | 'question' | 'plan' | 'diff', (n: string) => string>,
       resumes: 'Le fil reprend après votre réponse.',
+      // La ligne d'attente : l'agent travaille sans action en cours. D'abord ce que montre le fil, puis la banque, puis le temps.
+      working: {
+        label: 'L’agent travaille',
+        prompt: { you: 'Lit votre message…', parent: 'Lit sa consigne…' } as Record<'you' | 'parent', string>,
+        received: (n: string) => `Lit le message de ${n}…`,
+        // [avant, après] la cible de l'action, en code.
+        tool: { read: ['Vient de lire ', '…'], search: ['Parcourt les résultats de ', '…'], command: ['Regarde le résultat de ', '…'], edit: ['Relit sa modification de ', '…'] } as Record<ToolKind, readonly [string, string]>,
+        failed: ['Regarde pourquoi ', ' a échoué…'] as readonly [string, string],
+        helper: (n: string) => `Reprend le rapport ${/^[aeiouyhéèêàâîôû]/i.test(n) ? `d’${n}` : `de ${n}`}…`,
+        decision: 'Reprend après votre réponse…', said: 'Enchaîne…',
+        bank: ['Tourne sept fois sa langue…', 'Consulte ses notes…', 'Tire sur un fil…', 'Pèse le pour et le contre…', 'Gratte le papier…', 'Fait chauffer les neurones…', 'Cherche le mot juste…', 'Relit une dernière fois…'] as readonly string[],
+        long: 'Prend son temps, ça cogite…'
+      },
       planDecided: {
         accept: 'Vous avez approuvé le plan', always: 'Vous avez approuvé le plan en mode automatique', deny: 'Vous avez renvoyé le plan à revoir', unknown: 'Plan répondu dans le terminal'
       } as Record<'accept' | 'always' | 'deny' | 'unknown', string>,
@@ -674,7 +722,7 @@ export const fr = {
     prompt: 'Consigne', placeholder: 'Que doit faire l’agent ? Décrivez le résultat attendu.',
     suggestions: 'Suggestions', ideas: ['Relire la dernière pull request', 'Corriger les tests qui échouent', 'Mettre à jour la documentation'] as readonly string[],
     agent: 'Agent',
-    tools: { claude: ['Claude Code', 'Conception, revue'], codex: ['Codex', 'Code et tests'], cursor: ['Cursor Agent', 'Dans l’éditeur'] } as Record<'claude' | 'codex' | 'cursor', readonly [string, string]>,
+    tools: { claude: ['Claude Code', 'Conception, revue'], codex: ['Codex', 'Code et tests'], cursor: ['Cursor Agent', 'Dans l’éditeur'], omp: ['OMP', 'Piloté en natif'] } as Record<'claude' | 'codex' | 'cursor' | 'omp', readonly [string, string]>,
     project: 'Projet', machine: 'Machine', offline: 'hors ligne', offlineTitle: 'Hors ligne : reconnectez la machine dans les réglages',
     repos: (m: string) => `Dossiers et dépôts sur ${m}`, noGit: 'Dossier sans Git', notFound: 'introuvable', oneRepo: (t: string) => `Un seul dossier ou dépôt pour ${t}`,
     noRepos: (p: string, m: string) => `Aucun dossier ni dépôt de ${p} sur ${m}.`, editProject: 'Modifier le projet',
@@ -686,10 +734,13 @@ export const fr = {
     timeout: 'Le démarrage n’a pas répondu. Vérifiez la machine puis réessayez.',
     modelOf: (t: string) => `Modèle de ${t}`, remembered: 'Dernier choix pour ce projet retenu',
     byDefault: 'Par défaut', byDefaultHint: 'Celui que l’agent prend de lui-même', defaultBadge: 'défaut',
-    otherModel: 'Autre…', otherModelHint: 'Un identifiant exact', otherPlaceholder: 'Identifiant du modèle, passé tel quel',
-    modelsLoading: 'Lecture des modèles de la machine…', modelsUnavailable: (e: string) => `Liste des modèles indisponible (${e}) : le défaut et « Autre… » restent possibles.`,
+    exactId: 'Identifiant exact, passé tel quel', currentBadge: 'actuel',
+    searchModel: 'Chercher un modèle ou taper un identifiant', searchFew: 'Chercher, ou taper un identifiant', searchMany: (n: number) => `Chercher parmi ${n} modèles, ou taper un identifiant`, resultCount: (n: number, total: number) => `${n} sur ${total}`,
+    useAsIs: 'Utiliser tel quel', noMatch: 'Aucun modèle ne correspond.', notAnId: 'Aucun modèle ne correspond, et ce n’est pas un identifiant de modèle.', moreModels: (n: number) => `${n} autres : tapez pour les chercher`,
+    modelsLoading: 'Lecture des modèles de la machine…', modelsUnavailable: (e: string) => `Liste des modèles indisponible (${e}) : le défaut et un identifiant exact restent possibles.`,
+    ompOutdated: 'OMP ne peut pas être lancé ici : mettez à jour Ledge sur cette machine.', ompUnavailable: (e: string) => `OMP ne peut pas être lancé sur cette machine (${e}). Choisissez un autre agent ou réparez OMP là-bas ; rien n’est changé à votre place.`,
     modelsOutdated: 'Mettez à jour Ledge sur cette machine pour choisir le modèle.',
-    effort: 'Effort', effortHint: 'Temps de réflexion par tour', cursorEffort: 'Pour Cursor, l’effort fait partie du nom du modèle.',
+    effort: 'Effort', effortHint: 'Temps de réflexion par tour', cursorEffort: 'Effort compris dans le nom du modèle', lessEffort: 'Moins d’effort', moreEffort: 'Plus d’effort',
     efforts: { low: 'Bas', medium: 'Moyen', high: 'Élevé', xhigh: 'Très élevé', max: 'Max', ultra: 'Ultra' } as Record<string, string>,
     modelHints: { 'claude:fable': 'Le plus capable', 'claude:opus': 'Très capable, plus lent', 'claude:sonnet': 'Équilibré, usage courant', 'claude:haiku': 'Rapide et économique' } as Record<string, string>,
     pickSummary: (m: string, e?: string) => (e ? `${m} · ${e}` : m)

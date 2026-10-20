@@ -67,7 +67,7 @@ export type Capabilities = z.infer<typeof CapabilitiesSchema>;
 export const UNTYPABLE = /[\u0000-\u001f\u007f-\u009f\u200b\u200e\u200f\u2028-\u202e\u2066-\u2069\ufeff]/;
 
 /** Every tool's capabilities, in the phone's snapshot. */
-export const CapabilitiesByToolSchema = z.object({ claude: CapabilitiesSchema, codex: CapabilitiesSchema, cursor: CapabilitiesSchema });
+export const CapabilitiesByToolSchema = z.object({ claude: CapabilitiesSchema, codex: CapabilitiesSchema, cursor: CapabilitiesSchema, omp: CapabilitiesSchema });
 export type CapabilitiesByTool = z.infer<typeof CapabilitiesByToolSchema>;
 // A tool added to ToolSchema without its entry here (or the reverse) fails to compile.
 type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;

@@ -43,7 +43,7 @@ export function saveIslandPrefs(p: IslandPrefs): void {
 }
 
 /** The island's own values as one set of settings, for a daemon that holds none yet: what the island stored before Desktop
- *  held them (a chosen monitor reads as the second screen), the rest as last kept or the defaults. */
+ *  held them (the chosen monitor by its id), the rest as last kept or the defaults. */
 export function localIslandPrefs(): IslandPrefs {
-  return { ...(loadIslandPrefs() ?? DEFAULT_ISLAND_PREFS), position: loadIslandPosition(), discreet: loadDiscreet(), screen: loadMonitor() !== null ? 'second' : 'primary', islandScale: loadScale('handle'), panelScale: loadScale('panel') };
+  return { ...(loadIslandPrefs() ?? DEFAULT_ISLAND_PREFS), position: loadIslandPosition(), discreet: loadDiscreet(), screen: loadMonitor() ?? 'primary', islandScale: loadScale('handle'), panelScale: loadScale('panel') };
 }

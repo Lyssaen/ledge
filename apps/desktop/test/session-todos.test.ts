@@ -32,3 +32,12 @@ it('list updates are not actions: they fold into the summary', () => {
   expect(x!.segments).toEqual([{ kind: 'tools', key: 'tools-d1', tools: [read], todos: [v1, { ...v1, id: 'd2' }] }]);
   expect(summarize([read], 0, true).count).toBe(1);
 });
+
+it('OMP\'s todo reports the whole plan once done: phases flattened, a blocked task says why, a call still running is no list', () => {
+  const phases = [{ name: 'Tasks', tasks: [{ content: 'alpha', status: 'completed' }, { content: 'beta', status: 'blocked', blocker: 'out of scope' }, { content: 'gamma', status: 'in_progress' }] }];
+  expect(todosOf(todo('o1', { phases }, 'todo'))).toEqual([{ text: 'alpha', status: 'completed' }, { text: 'beta (blocked: out of scope)', status: 'pending' }, { text: 'gamma', status: 'in_progress' }]);
+  expect(todosOf(todo('o2', { phases: [{ name: 'A', tasks: [{ content: 'x', status: 'pending' }] }, { name: 'B', tasks: [{ content: 'y', status: 'pending' }] }] }, 'todo')))
+    .toEqual([{ text: 'A · x', status: 'pending' }, { text: 'B · y', status: 'pending' }]);
+  expect(todosOf(todo('o3', { op: 'init', items: ['alpha'] }, 'todo'))).toBeNull(); // the running call carries its arguments, not the plan
+  expect(latestTodos([todo('o1', { phases }, 'todo'), todo('o3', { op: 'init', items: ['alpha'] }, 'todo')])).toEqual(todosOf(todo('o1', { phases }, 'todo')));
+});

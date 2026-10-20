@@ -24,7 +24,7 @@ import { SessionMenuHost } from '../manage/SessionMenu';
 import { ConfirmDialog } from '../manage/ConfirmDialog';
 import { Atelier } from './Atelier';
 import { useFiling } from './filing';
-import { closeAtelierWindow, toMain, watchAtelierWindow } from './detach';
+import { closeAtelierWindow, terminalToMain, toMain, watchAtelierWindow } from './detach';
 
 /** What the detached Atelier keeps for itself: its filter, the subagents shown, the animations, its full screen (#41); the
  *  rest (a session, a dialog, the chat, Settings) is the main window's. */
@@ -73,7 +73,7 @@ function AtelierAlone({ client }: { client?: DaemonClient }) {
   const { notice, action: noticeAction, notify, undo } = useToast();
   const filing = useFiling({ fleet, projects, sessions, projectIdOf, notify });
   const actions = useSessionActions({ client: fleetClient, sessions, archived: fleetView.archived, machines, errors, notify });
-  const sessionMenu = useSessionMenu({ client: fleetClient, sessions, notify });
+  const sessionMenu = useSessionMenu({ client: fleetClient, sessions, onShowTerminal: terminalToMain });
   const screenKeys = useRef<ScreenKeys>({ current: null }).current;
   useKeys(dispatch, { state: nav, order, screen: screenKeys, undo, confirming: actions.pending ? { cancel: actions.cancel } : null });
   const blocked = actions.pending !== null || sessionMenu.renaming !== null;

@@ -1,6 +1,7 @@
 import { cleanTopic, sessionTitle, type Session, type SessionEvent, type Pending, type Helper, type SessionState, type TopicSource } from '@ledge/protocol';
 
 import { crossSession, crossSessionNotices } from './crossSession.js';
+import { sameQuestion } from '../adapters/types.js';
 
 export const HOOK_PRIORITY_MS = 2000;
 
@@ -37,6 +38,10 @@ function pendingFor(ev: SessionEvent): Pending | undefined {
   }
   if (ev.name === 'Notification' && ev.kind === 'permission') {
     return { kind: 'permission', text: ev.text ?? '', source: 'hook' };
+  }
+  if (ev.name === 'NativeRequest') {
+    // OMP's own dialog (spec 2026-10-20 §3.3): its exact text and options, nothing inferred about permission.
+    return { kind: 'question', text: ev.text ?? '', ...(ev.options?.length ? { options: ev.options } : {}), ...(ev.questions ? { questions: ev.questions } : {}), ...(ev.requestId ? { requestId: ev.requestId } : {}), source: 'rpc', tool: 'omp' };
   }
   if (ev.name === 'PanePrompt') {
     return { kind: ev.kind ?? 'permission', text: ev.text ?? '', ...(ev.body ? { body: ev.body } : {}), options: ev.options, ...details(ev), source: 'pane' };
@@ -284,14 +289,26 @@ function reduceEvent(s: Session, ev: SessionEvent): Session {
       return { ...s, state: rest, pending: undefined, lastHookAt: at, lastActivityAt: at };
     }
     case 'PanePrompt': {
-      if (s.pending?.source === 'hook') return s;
-      if (hooksReportPrompts(s) && lastHookAt && Date.parse(at) - Date.parse(lastHookAt) < HOOK_PRIORITY_MS) return s;
-      let pending = mergePending(s.pending, pendingFor(ev)!);
+      const incoming = pendingFor(ev)!;
+      // A hook question the pane has moved past (the next question of an AskUserQuestion, its review: the last one
+      // answered in the terminal) gives way to what the pane asks. No hook reports the next one: only the end of all.
+      const moved = s.pending?.source === 'hook' && s.pending.kind === 'question' && incoming.kind === 'question'
+        && !sameQuestion(incoming.text, s.pending.text);
+      if (s.pending?.source === 'hook' && !moved) return s;
+      if (!moved && hooksReportPrompts(s) && lastHookAt && Date.parse(at) - Date.parse(lastHookAt) < HOOK_PRIORITY_MS) return s;
+      let pending = moved ? { ...incoming, ...(s.pending!.helperId ? { helperId: s.pending!.helperId } : {}) } : mergePending(s.pending, incoming);
       // Codex asks "Implement this plan?" under the plan it just proposed: its last reply is what to review.
       if (pending.kind === 'plan' && !pending.body && s.tool === 'codex' && s.lastReply) pending = { ...pending, body: s.lastReply.text };
       if (s.pending && samePending(s.pending, pending)) return s;
       const state = pending.kind === 'question' ? 'waiting_input' : 'waiting_permission';
       return { ...s, state, pending, lastActivityAt: at };
+    }
+    case 'QueueUpdate': { const { queue: _q, ...rest } = s; return ev.queue?.length ? { ...rest, queue: ev.queue } : s.queue ? rest : s; }
+    case 'AgentMessage': return s.lastActivityAt === at ? s : { ...s, lastActivityAt: at };
+    case 'NativeRequest': {
+      // A second dialog waits in the harness's queue (the host keeps it): the first request holds the card until it is answered.
+      if (s.pending) return s;
+      return { ...s, state: 'waiting_input', pending: pendingFor(ev)!, lastActivityAt: at };
     }
     case 'SessionStart':
     case 'UserPromptSubmit':
@@ -301,6 +318,9 @@ function reduceEvent(s: Session, ev: SessionEvent): Session {
       // The harness's cross-session notices are not the user's words: no topic, and the last reply still waits for the user.
       const notice = ev.name === 'UserPromptSubmit' && !!ev.text && !!crossSessionNotices(ev.text);
       if (ev.name === 'UserPromptSubmit' && ev.text && !s.topic && !notice && !crossSession(ev.text)) s = withTopic(s, ev.text, 'prompt');
+      // OMP's dialog is closed by OMP's own word (a cancel) or by the answer: an action starting meanwhile (its `ask` call is
+      // announced after its dialog) is not the end of the request.
+      if (s.pending?.source === 'rpc' && ev.name === 'PreToolUse') return { ...s, lastHookAt: at, lastActivityAt: at };
       const incoming = pendingFor(ev);
       if (incoming) {
         // A Notification never overwrites an existing pending, a hook's or the pane's (question 2 of an AskUserQuestion,

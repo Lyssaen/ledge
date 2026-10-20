@@ -20,6 +20,8 @@ export interface ChatPanelProps {
   /** Changes each time the chat is asked for (/, an open button), even already open: the field takes the focus again. */
   focus?: number;
   onClose(): void; onOpenSession(id: string): void; onLaunched(id: string): void;
+  /** A launch card's « Terminal »: the session's page with its terminal pane (the app's `showTerminal`). */
+  onTerminal(id: string): void;
   /** The projects as the daemon holds them, for a project card (lot 11): « Complete X », the folders already taken. */
   projects: Projects | null;
   /** The app's toast (« This proposal no longer exists. »). */
@@ -32,7 +34,7 @@ export interface ChatPanelProps {
  *  the real fleet. Questions go to the daemon with the default agent (Settings › General); nothing is sent while the local daemon is offline. A name hovered or
  *  focused lights its agent; a session card launches in one click and seats the agent (`onLaunched`); a relay card sends as in the island; a project card's « Review the proposal »
  *  opens the project editor prefilled (nothing is created before its button). */
-export function ChatPanel({ client, view, paused, focus, onClose, onOpenSession, onLaunched, projects, notify, onProposal }: ChatPanelProps): JSX.Element {
+export function ChatPanel({ client, view, paused, focus, onClose, onOpenSession, onLaunched, onTerminal, projects, notify, onProposal }: ChatPanelProps): JSX.Element {
   const { t } = useI18n();
   const copy = useMemo(() => chatCopy(t), [t]);
   const theme = useTheme();
@@ -62,6 +64,7 @@ export function ChatPanel({ client, view, paused, focus, onClose, onOpenSession,
   };
   // Opening a name opens the agent's page, which closes the chat (the mockup's `open`); the light goes out first.
   const open = (id: string) => { setHovered(null); onOpenSession(id); };
+  const terminal = (id: string) => { setHovered(null); onTerminal(id); };
 
   return (
     // Escape anywhere in the panel, its field included (which keeps Escape from the window's shortcuts, as in the island), closes
@@ -74,7 +77,7 @@ export function ChatPanel({ client, view, paused, focus, onClose, onOpenSession,
         <ChatCopyProvider value={copy}>
           <ChatView docked visible turns={chat} live={chatLive} sessions={view.sessions} offline={offline}
             onAsk={ask} onCancel={qid => send({ type: 'chat.cancel', qid })} onReset={() => send({ type: 'chat.reset' })} onBack={onClose} onClose={onClose}
-            onOpenSession={open} onTerminal={open} turnAvailable={turnReady}
+            onOpenSession={open} onTerminal={terminal} turnAvailable={turnReady}
             launchingQid={cards.launchingQid} launchingRows={cards.launchingRows} onLaunchProposal={cards.launch}
             renderModel={(qid, agent, busy) => <CardModelPick client={client} machine={turnMachine(qid)} tool={agent} pick={cards.pick(qid)} disabled={busy} onPick={next => cards.setPick(qid, next)} />}
             relayingQid={cards.relayingQid} onRelay={cards.relay} onRelayCancel={cards.cancelRelay}

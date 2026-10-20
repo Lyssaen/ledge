@@ -78,6 +78,11 @@ export const UNCHECKED = 'the request on screen cannot be checked, answer in the
 const COMMAND_TOOLS: ReadonlySet<string> = new Set(['Bash', 'shell', 'Shell']);
 /** Whitespace aside: the pane wraps a long question at its width, mid-word too. */
 const compact = (t: string) => t.replace(/\s+/g, '');
+/** The question on screen (`shown`) is the one `asked`: the pane wraps a long one and cuts it, so one starting as the other is the same. */
+export function sameQuestion(shown: string, asked: string): boolean {
+  const screen = compact(shown), want = compact(asked);
+  return !want || screen === want || (!!screen && (want.startsWith(screen) || screen.startsWith(want)));
+}
 /** Columns a dialog may keep clear at the pane's right edge (its border, its padding): a line ending left of them was not wrapped. */
 const EDGE = 4;
 const WIDE = /[\u1100-\u115f\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\ufe4f\uff00-\uff60\uffe0-\uffe6\u{1f300}-\u{1faff}\u{20000}-\u{3fffd}]/u;
@@ -127,10 +132,7 @@ function commandMismatch({ lines, ends }: ShownCommand, asked: string, width: nu
 export function dialogMismatch(shown: PanePromptMatch | null, pending: Pending, width?: number): string | null {
   if (!shown) return UNCHECKED;
   if (shown.kind !== (pending.kind === 'diff' ? 'permission' : pending.kind)) return STALE;
-  if (pending.kind === 'question') {
-    const screen = compact(shown.text), asked = compact(pending.text);
-    return !asked || screen === asked || (!!screen && (asked.startsWith(screen) || screen.startsWith(asked))) ? null : STALE;
-  }
+  if (pending.kind === 'question') return sameQuestion(shown.text, pending.text) ? null : STALE;
   if (pending.source === 'pane') return shown.text === pending.text ? null : STALE;
   if (pending.tool !== undefined && COMMAND_TOOLS.has(pending.tool)) return shown.command ? commandMismatch(shown.command, pending.text, width) : UNCHECKED;
   return null;

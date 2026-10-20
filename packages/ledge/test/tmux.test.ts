@@ -99,6 +99,7 @@ describe('tmux', () => {
     expect(await tmux.hasSession(name)).toBe(false);
   });
   it('builds attach args for the dedicated server', () => {
+    expect(tmux.attachArgs('ledge-a', { readOnly: true }).slice(-4)).toEqual(['attach-session', '-r', '-t', '=ledge-a']);
     expect(tmux.attachArgs('ledge-x')).toEqual(['-L', socket, '-f', expect.stringContaining('tmux.conf'), 'attach-session', '-t', '=ledge-x']);
   });
 });

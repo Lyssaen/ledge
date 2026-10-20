@@ -78,5 +78,5 @@ export function fakeLink(initial: LinkState = 'ready') {
 const caps = { freeTextAnswer: true };
 export const snapshot = (sessions: PhoneSession[], name = 'Atelier'): PhoneServerMessage => ({
   type: 'snapshot', protocol: PHONE_PROTOCOL, sessions,
-  capabilities: { claude: caps, codex: caps, cursor: { freeTextAnswer: false } }, daemon: { version: '0.9.0', name }
+  capabilities: { claude: caps, codex: caps, cursor: { freeTextAnswer: false }, omp: { freeTextAnswer: false } }, daemon: { version: '0.9.0', name }
 });

@@ -2,7 +2,7 @@ import { homedir } from 'node:os';
 import { resolve, sep, join } from 'node:path';
 import type { Pending, Risk, RiskReason, Session } from '@ledge/protocol';
 
-export interface RiskInput { kind: Pending['kind']; tool?: string; command?: string; text: string; cwd: string; source: 'hook' | 'pane' }
+export interface RiskInput { kind: Pending['kind']; tool?: string; command?: string; text: string; cwd: string; source: Pending['source'] }
 export interface RiskVerdict { risk: Risk; reason: RiskReason }
 
 /** Tools whose request text is a shell command. Codex's shell tool joins them only once a real capture is in `test/fixtures`. */
@@ -97,10 +97,11 @@ export function classify(input: RiskInput): RiskVerdict {
 
 /**
  * The shell command a request asks to run. A hook's text is the command itself (`tool_input.command`); a pane's text is
- * the dialog's dashed body, the command as drawn. Undefined when the request is no permission, or shows nothing.
+ * the dialog's dashed body, the command as drawn. Undefined when the request is no permission, or shows nothing. An OMP
+ * (`rpc`) dialog's text is its prompt, never a command, so it stays high/unknown.
  */
 export function commandOf(p: Pending): string | undefined {
-  if (p.kind !== 'permission') return undefined;
+  if (p.kind !== 'permission' || p.source === 'rpc') return undefined;
   if (p.source === 'hook' && !(p.tool && SHELL_TOOLS.has(p.tool))) return undefined;
   return p.text.trim() === '' ? undefined : p.text;
 }

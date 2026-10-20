@@ -20,6 +20,8 @@ import { firstLine, MessageCard } from './MessageCard';
 import { NoticeLine } from './NoticeLine';
 import { nameOf } from './changedFiles';
 import { PlanCard } from './PlanCard';
+import { WaitLine } from './WaitLine';
+import { waitOf, type Wait } from './waiting';
 import { clock, displayIds, docRefs, fmtDur, helperOf, kindOf, peerKey, planTitle, summarize, timeMark, verbOf, type Exchange, type Segment } from './exchanges';
 import { marksOf, tagLabel, taskOf, type Marked, type SynapseTags, type TaskNotice } from './markers';
 
@@ -237,12 +239,14 @@ interface TurnProps {
   /** The thread's `[synapse-obs]` markers, by item id. */
   marks: ReadonlyMap<string, Marked>;
   waiting: Waiting | null;
+  /** The last exchange's wait when the agent works with no action running (waitOf), else null. */
+  wait: Wait | null;
 }
 
 /** One exchange on the rail: its prompt (or the task it was told of), then what the agent said, decided and did, a row each,
  *  and its end. A past one folds to one row. Rendered again only when what it shows changes: the clock's tick reaches the
  *  exchange whose action runs, not the ones before it. */
-const Turn = memo(function Turn({ session, helper, items, x, at, last, folded, onUnfold, now, unread, since, dispatch, flash, onChange, onDocument, planOpen, onPlan, peers, convs, folded2, onFold, marks, waiting }: TurnProps): JSX.Element {
+const Turn = memo(function Turn({ session, helper, items, x, at, last, folded, onUnfold, now, unread, since, dispatch, flash, onChange, onDocument, planOpen, onPlan, peers, convs, folded2, onFold, marks, waiting, wait }: TurnProps): JSX.Element {
   const { t } = useI18n();
   const th = t.session.thread;
   const offline = session.offline === true;
@@ -382,6 +386,7 @@ const Turn = memo(function Turn({ session, helper, items, x, at, last, folded, o
         {x.received.map(r => <Fragment key={r.id}>{r.id !== opener && marker(r.id)}{message(r)}</Fragment>)}
         {x.notices.map(n => <Fragment key={n.id}>{n.id !== opener && marker(n.id)}{notice(n)}</Fragment>)}
         {grouped(x.segments).map(segment)}
+        {wait && <WaitLine wait={wait} seedKey={x.key} now={now} />}
         {last && waiting && (
           <li className="r waiting-row">
             <span className="n node danger" aria-hidden="true"><Icon d={SHELL_ICONS.stop} size={10} /></span>
@@ -422,6 +427,22 @@ const Turn = memo(function Turn({ session, helper, items, x, at, last, folded, o
 const ticks = (x: Exchange) => x.segments.some(s => s.kind === 'tools' && s.tools.some(tool => tool.durationMs === undefined));
 const holds = (x: Exchange, id: string) => x.segments.some(s => s.kind === 'tools' && s.tools.some(tool => tool.id === id)) || messagesOf(x).some(m => m.id === id);
 const holdsPlan = (x: Exchange, key: string) => x.segments.some(s => s.kind === 'plan' && s.plan.key === key);
+/** The wait at the end of the rail: the agent (or the subagent shown) works, online, asks nothing, and nothing in its last
+ *  exchange says so already: no action runs, no subagent it launched still works (their card carries the state). */
+function useWait(session: Session, helper: Helper | null, items: readonly ThreadItem[], xs: readonly Exchange[], asking: Waiting | null, unnamed: string): Wait | null {
+  const x = xs[xs.length - 1];
+  const working = session.offline !== true && asking === null && (helper ?? session).state === 'working';
+  return useMemo(() => {
+    if (!working || !x || x.segments.some(s => s.kind === 'tools' && s.tools.some(tool => tool.status === 'running'))) return null;
+    const sub = (item: HelperItem) => helperOf(session, items, item.id, unnamed);
+    if (x.segments.some(s => s.kind === 'helper' && sub(s.item)?.state === 'working')) return null;
+    return waitOf(x, item => sub(item)?.kind ?? unnamed, item => {
+      const end = sub(item)?.finishedAt;
+      return end !== undefined ? Date.parse(end) : undefined;
+    });
+  }, [working, x, session, items, unnamed]);
+}
+
 /** What keeps a past exchange open: an action still running, a plan still waiting for its answer. */
 const pending = (x: Exchange, live: boolean) => x.segments.some(s => (live && s.kind === 'tools' && s.tools.some(tool => tool.status === 'running')) || (s.kind === 'plan' && s.plan.status === 'proposed'));
 
@@ -473,8 +494,9 @@ function useKeys(id: string): [ReadonlySet<string>, (key: string) => void] {
  *  to. Memoised: the store's changes elsewhere (another session's preview, the chat, an error) leave it alone, its props
  *  being the session, its items and their exchanges, the clock and the page's stable callbacks. */
 export const Thread = memo(function Thread({ session, helper, items, xs, now, unread, since, dispatch, flash, onChange, onDocument, planOpen, onPlan, waiting = null }: ThreadProps): JSX.Element {
-  const { lang } = useI18n();
+  const { t, lang } = useI18n();
   const offline = session.offline === true;
+  const wait = useWait(session, helper, items, xs, waiting, t.session.subagent);
   const convs = useMemo(() => conversations(xs), [xs]);
   const peers = usePeers(session, xs);
   const marks = useMemo(() => marksOf(xs).byId, [xs]);
@@ -491,10 +513,10 @@ export const Thread = memo(function Thread({ session, helper, items, xs, now, un
         return (
           <Turn key={x.key} session={session} helper={helper} items={items} x={x} at={timeMark(x.at, now, lang)} last={last}
             folded={open ? null : !unfolded.has(x.key)} onUnfold={onUnfold}
-            now={ticks(x) ? now : 0} unread={unread} since={since} dispatch={dispatch}
+            now={ticks(x) || (last && wait !== null) ? now : 0} unread={unread} since={since} dispatch={dispatch}
             flash={lit ? flash : null} onChange={onChange} onDocument={onDocument}
             planOpen={planOpen !== null && holdsPlan(x, planOpen) ? planOpen : null} onPlan={onPlan}
-            peers={peers} convs={convs} folded2={folded} onFold={onFold} marks={marks} waiting={last ? waiting : null} />
+            peers={peers} convs={convs} folded2={folded} onFold={onFold} marks={marks} waiting={last ? waiting : null} wait={last ? wait : null} />
         );
       })}
     </ol>

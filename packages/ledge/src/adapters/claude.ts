@@ -33,9 +33,12 @@ import { NO_ALWAYS, NO_NOTE, Refusal, assertDialogIs, bottomLines, flatten, show
 const OPTION = /^\s*(?:❯\s*)?(\d+)\.\s+(\S.*?)\s*$/;
 const FOOTER = /^\s*(?:(?:Enter to select\b.*)?Esc to cancel\b|ctrl\+g to edit\b)/;
 const PLAN_FOOTER = /^\s*ctrl\+g to edit\b/;
+const GUTTER = /^│\s*/;
 const REVIEW_QUESTION = /^\s*Ready to submit your answers\?$/;
 const RULE = /^─{10,}$/;
 const DASHED = /^╌{10,}$/;
+/** The input box's top rule, titled once the conversation has a title: `───── add-readme-file ─`. */
+const INPUT_TOP = /^─{10,}(?: \S.* ─+)?$/;
 /** The footer may have at most this many non-blank lines below it. */
 const FOOTER_SLACK = 2;
 // No span limit inside the dialog: the poller's capture (DETECT_LINES) bounds the search, and a
@@ -57,11 +60,16 @@ function footerIndex(lines: string[]): number {
 
 /**
  * The end of the multi-question review (the line after its last option), or -1: options 1 and 2 are the last lines
- * on the pane, right under the review's question.
+ * on the pane (an input rule or two aside), right under the review's question.
  */
 function reviewEnd(lines: string[]): number {
+  // Fullscreen keeps the input box's top rule (`───── Otto ─`) at the bottom of the pane, under the review (#31).
   let last = lines.length - 1;
-  while (last >= 0 && isBlank(lines[last]!)) last--;
+  for (let rules = 0; last >= 0; last--) {
+    if (isBlank(lines[last]!)) continue;
+    if (rules < FOOTER_SLACK && INPUT_TOP.test(lines[last]!.trim())) { rules++; continue; }
+    break;
+  }
   if (last < 1 || lines[last]!.match(OPTION)?.[1] !== '2' || lines[last - 1]!.match(OPTION)?.[1] !== '1') return -1;
   let q = last - 2;
   while (q >= 0 && isBlank(lines[q]!)) q--;
@@ -102,11 +110,12 @@ function parseDialog(pane: string): Dialog | null {
   if (first < 0) return null;
   const { options, details } = optionsBetween(lines, first, footer);
 
-  // The question is the block of text right above option 1 (wrapped lines joined).
+  // The question is the block of text right above option 1 (wrapped lines joined). 2.1.304 draws some behind a `│ `
+  // gutter, which is not part of it.
   let q = first - 1;
   while (q >= 0 && isBlank(lines[q]!)) q--;
   const questionLines: string[] = [];
-  while (q >= 0 && !isBlank(lines[q]!) && !isRule(lines[q]!) && questionLines.length < 3) questionLines.unshift(lines[q--]!.trim());
+  while (q >= 0 && !isBlank(lines[q]!) && !isRule(lines[q]!) && questionLines.length < 3) questionLines.unshift(lines[q--]!.trim().replace(GUTTER, ''));
   if (questionLines.length === 0) return null;
 
   let top = q;
@@ -231,8 +240,7 @@ const STATUS_SLACK = 3;
 /** The tallest draft the input box can hold before it is no longer recognised as one. */
 const INPUT_MAX = 12;
 const isInputRule = (l: string) => /^─{10,}$/.test(l.trim());
-/** The top rule can carry the conversation's title once it has one: `───── add-readme-file ─`. */
-const isInputTop = (l: string) => /^─{10,}(?: \S.* ─+)?$/.test(l.trim());
+const isInputTop = (l: string) => INPUT_TOP.test(l.trim());
 
 /** The input box's top and bottom rules, or null when the bottom of the pane is not the input box. */
 function inputBox(lines: string[]): { top: number; bottom: number } | null {

@@ -7,9 +7,15 @@
 /* The session place (observatory.css: .conversation-workspace, .conversation, .pane-heading, .messages, the terminal; office.css:
    the « N sous-agents » pill, .pane-meta). Departure: no rail of the project's agents on the left, the sidebar tree has them.
    First, so the session's own rules below win as in the mockup. The mockup's !important (office.css over observatory.css)
-   is not needed: the grid is declared once, here. Departure: the terminal shows the daemon's read-only preview, no prompt. */
+   is not needed: the grid is declared once, here. The terminal's column is --term-width of the place (Workspace), its handle
+   in a zero-wide track on the thread's border; enlarged, the column is alone. */
 .conversation-workspace{display:grid;grid-template-columns:minmax(0,1fr);flex:1;min-height:0}
-.conversation-workspace.with-terminal{grid-template-columns:minmax(0,1.15fr) minmax(0,1fr)}
+.conversation-workspace.with-terminal{grid-template-columns:minmax(0,1fr) 0 minmax(0,calc(var(--term-width) * 100%))}
+.conversation-workspace.term-maxed{grid-template-columns:minmax(0,1fr)}
+.term-maxed>.conversation{display:none}
+.term-handle{width:7px;margin-left:-4px;z-index:4;cursor:col-resize;position:relative;outline:none}
+.term-handle:after{content:'';position:absolute;inset:0 3px;transition:background .15s}
+.term-handle:hover:after,.term-handle:focus-visible:after,.term-handle:active:after{background:var(--ring)}
 .conversation,.terminal-pane{min-width:0;min-height:0;display:flex;flex-direction:column}
 .conversation{border-right:1px solid var(--border);background:var(--sidebar)}
 .pane-heading{height:43px;flex-shrink:0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;padding:0 20px;font-size:12px}
@@ -19,15 +25,35 @@
 .terminal-pane{background:var(--well)}
 .terminal-content{padding:18px 20px;flex:1;overflow:auto;font-size:11px;line-height:21px}
 .terminal-content>.muted:first-child{font-size:10px}
-.terminal-prompt{color:var(--success)}
 .terminal-output{white-space:pre-wrap;overflow-wrap:anywhere;margin:25px 0}
 .terminal-content>.terminal-output:first-child{margin-top:0}
 .terminal-footer{border-top:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;gap:7px;font-size:10px;color:var(--muted-foreground)}
-.terminal-footer .ledge-btn{height:26px!important;font-size:11px!important;padding:0 8px!important}
+/* The embedded terminal (the mockup's TermPane): tabs in the heading, a banner under it, the xterm in the body. */
+.pane-heading.term-heading{gap:4px;padding:0 8px 0 0}
+.term-title{display:flex;align-items:center;gap:8px;padding-left:20px}
+.term-tabs{display:flex;align-items:stretch;align-self:stretch;min-width:0;overflow-x:auto}
+.term-tab{display:flex;align-items:center;max-width:220px;border-right:1px solid var(--border);color:var(--muted-foreground)}
+.term-tab>button:first-child{display:flex;align-items:center;gap:6px;min-width:0;height:100%;padding:0 10px 0 14px;font-size:12px}
+.term-tab>button:first-child span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.term-tab.current{background:var(--term-bg);color:var(--foreground);box-shadow:inset 0 -2px 0 var(--ring)}
+.term-tab:hover{color:var(--foreground)}
+.term-add{display:inline-flex;align-items:center;justify-content:center;width:32px;color:var(--muted-foreground)}
+.term-add:hover{color:var(--foreground);background:var(--sidebar-accent)}
+.term-chip{font-size:10px;padding:2px 7px;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--muted-foreground);white-space:nowrap}
+.term-heading .term-icon{width:28px!important;height:28px!important;color:var(--muted-foreground)}
+.term-banner{display:flex;align-items:center;gap:10px;padding:9px 14px 9px 20px;border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--secondary) 70%,transparent);font-size:12px;line-height:18px;flex-shrink:0}
+.term-banner>span{flex:1;min-width:0}
+.term-banner.warn{background:var(--status-warning-soft);border-bottom-color:color-mix(in srgb,var(--warning) 35%,var(--border))}
+.term-banner .ledge-btn{height:28px!important;font-size:12px!important;padding:0 10px!important;white-space:nowrap}
+.terminal-screen{flex:1;min-height:0;padding:8px 0 0 12px;background:var(--term-bg)}
+.terminal-screen>[data-terminal]{width:100%;height:100%}
+.term-dot.on{color:var(--success)}
+.term-dot.wait{color:var(--warning)}
+.term-dot.off{color:var(--muted-foreground)}
 .kids-pill{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px;border:1px solid var(--border);border-radius:999px;font-size:11px;color:var(--muted-foreground)}
 .kids-pill:hover{color:var(--foreground);border-color:var(--input)}
 .kids-pill:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
-@media(max-width:1000px){.conversation-workspace.with-terminal{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:1000px){.conversation-workspace.with-terminal{grid-template-columns:minmax(0,1fr)}.term-handle{display:none}}
 @media(max-width:850px){.conversation-workspace{grid-template-columns:1fr;overflow:auto;display:flex;flex-direction:column}.conversation{min-height:520px;flex-shrink:0}.terminal-pane{min-height:310px;flex-shrink:0;border-top:1px solid var(--border)}.messages{max-height:480px}}
 @media(max-width:540px){.messages{padding:18px}}
 
@@ -196,6 +222,13 @@ button.tg:disabled{cursor:default}
 .newsep{display:flex;align-items:center;gap:10px;font-size:11px;font-weight:500;line-height:20px;color:var(--sidebar-primary)}
 .newsep:after{content:'';flex:1;height:1px;background:color-mix(in srgb,var(--sidebar-primary) 40%,transparent)}
 .waiting-row{padding:8px 0}
+/* The waiting row (mockup C): the agent works and no action runs. Shaped like a running action, quieter. */
+.wait-row{padding:4px 0}
+.wait-phrase{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;line-height:20px;color:var(--muted-foreground);animation:wait-rise .18s ease-out}
+.wait-phrase code{font:12px 'Geist Mono',monospace;color:var(--foreground);background:var(--muted);padding:1px 5px;border-radius:var(--radius-sm)}
+.wait-phrase.still{animation:none}
+@keyframes wait-rise{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.wait-phrase{animation:none}}
 .waiting-text{font-size:13px;line-height:20px;color:var(--danger-text)}
 .end-row,.turn-end,.frozen-end{padding:6px 0 10px}
 .end-text{font-size:12px;line-height:20px;color:var(--muted-foreground)}
@@ -228,11 +261,17 @@ button.tg:disabled{cursor:default}
 .pending-choices button>span{display:flex;flex-direction:column;min-width:0}
 .pending-choices strong{font-size:12px;font-weight:500}
 .pending-choices small{font-size:11px;color:var(--muted-foreground)}
+.pending-choices .pending-own button{border-style:dashed}
 .pending-relay{font-size:11px;margin:8px 0 0}
 .session-reply form{display:flex;align-items:flex-end;gap:8px;padding:6px;background:var(--well);border:1px solid var(--input);border-radius:var(--radius-lg)}
 .session-reply form:focus-within{border-color:var(--ring)}
 .session-reply textarea{flex:1;min-width:0;resize:none;background:none;border:0;font-size:12px;line-height:18px;padding:7px 6px;max-height:120px;field-sizing:content}
 .session-reply textarea:focus-visible{outline:none}
+/* #58 lot 2: the session's model and effort beside the field (launch.css draws the chip and its list). */
+.session-reply .model-chip{flex:none;height:28px;max-width:240px;margin-bottom:2px;padding:0 8px 0 10px;gap:6px;font-size:12px;background:var(--background)}
+.model-chip-text{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-weight:500}
+.model-chip-next{flex:none;font-size:11px;color:var(--info)}
+.model-chip.scheduled{border-color:color-mix(in srgb,var(--info) 45%,var(--input))}
 .reply-hint{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--muted-foreground);white-space:nowrap;padding-bottom:7px}
 .reply-note{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--well);font-size:12px;line-height:18px;color:var(--muted-foreground)}
 .reply-note>span{flex:1}
@@ -446,3 +485,17 @@ button.tg:disabled{cursor:default}
 .notice-kicker{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:500;letter-spacing:.04em;text-transform:uppercase}
 .notice-title{color:var(--foreground);font-weight:500}
 .notice-summary{margin:4px 0 0;padding-left:8px;border-left:2px solid var(--input);font-style:italic;line-height:18px;white-space:pre-wrap}
+.ask-form{display:grid;gap:12px}
+.ask-question{display:grid;gap:6px;margin:0;padding:0;border:0;min-width:0}
+.ask-question legend{display:flex;flex-direction:column;gap:2px;padding:0;margin-bottom:6px}
+.ask-question legend small{color:var(--muted-foreground);text-transform:uppercase;letter-spacing:.04em;font-size:.68rem}
+.ask-question label{display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--background);cursor:pointer}
+.ask-question label:hover{border-color:var(--ring)}
+.ask-question label.selected{border-color:var(--primary)}
+.ask-question label>span{display:flex;flex-direction:column;min-width:0}
+.ask-question label small{color:var(--muted-foreground)}
+.ask-other{padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--background);color:inherit;font:inherit}
+.reply-queue{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:6px 10px;margin-bottom:6px;border:1px dashed var(--border);border-radius:var(--radius-md);font-size:.8rem;color:var(--muted-foreground)}
+.reply-queue ul{display:flex;gap:6px;flex-wrap:wrap;list-style:none;margin:0;padding:0;min-width:0;flex:1}
+.reply-queue li{display:flex;gap:6px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 8px;border-radius:999px;background:var(--muted)}
+.reply-queue li small{opacity:.7}

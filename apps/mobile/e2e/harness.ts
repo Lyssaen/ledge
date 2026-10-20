@@ -61,7 +61,7 @@ function runDaemon(pc: FakePc): FakeDaemon {
   };
   const snapshot = (): PhoneServerMessage => ({
     type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: d.sessions,
-    capabilities: { claude: CAPS, codex: CAPS, cursor: CAPS }, daemon: { version: '0.0.0-e2e', name: PC_NAME }
+    capabilities: { claude: CAPS, codex: CAPS, cursor: CAPS, omp: { freeTextAnswer: false } }, daemon: { version: '0.0.0-e2e', name: PC_NAME }
   });
   const handle = async (m: PhoneClientMessage) => {
     if (m.type === 'snapshot.request') return pc.send(snapshot());

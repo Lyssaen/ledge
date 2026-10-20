@@ -5,6 +5,7 @@ import { Button } from '@ledge/ui/ui/Button';
 import { Kbd } from '@ledge/ui/ui/Kbd';
 import { useI18n } from '../i18n/lang';
 import { planTitle, stepsOf } from './exchanges';
+import { AskForm } from './AskForm';
 
 /** The mockup's three sorts of request: a permission or a diff is an « approval ». */
 export type Sort = 'approval' | 'plan' | 'question';
@@ -24,6 +25,10 @@ export function alwaysScope(tool: Tool, p: Pending): 'project' | 'edits' | 'sess
   return p.kind === 'diff' || EDITS.has(p.tool ?? '') ? 'edits' : 'project';
 }
 
+/** Claude Code's own free-text row in a question's dialog (adapters/claude.ts FREE_ROW): its digit only moves the cursor
+ *  there, so it is no answer to pick; « Write your own answer » takes its place. */
+export const isFreeRow = (label: string) => /^Type something\.?$/.test(label);
+
 /** The pinned plan sums up this many steps, then « … ». */
 const SUMMED_STEPS = 4;
 
@@ -37,6 +42,10 @@ export interface PendingActions {
   /** « Continuer à planifier » : sends the draft back as the note, else asks for one (a plain deny where no note is taken). */
   keepPlanning(): void;
   choose(i: number): void;
+  /** A question that takes a free answer: the reply field takes the focus. */
+  writeOwn?(): void;
+  /** OMP's `ask`: all the answers at once, or declining the dialog. */
+  answer?(answers: ReadonlyArray<{ id: string; selected: string[]; text?: string }>, cancel?: boolean): void;
 }
 
 /** The request pinned above the reply field (session.tsx `pendingCard`): who asks what, since when, and its answers;
@@ -72,17 +81,25 @@ export function PendingCard({ pending, asker, since, actions, relay, onReadPlan 
       {sort === 'approval' && (
         <div className="pending-command">{pending.tool && <span className="tool-tag">{pending.tool}</span>}<code>{pending.text}</code></div>
       )}
-      {sort === 'question' && <>
+      {sort === 'question' && pending.questions && actions?.answer && <AskForm key={pending.requestId} questions={pending.questions} busy={busy} onSend={actions.answer} />}
+      {sort === 'question' && !(pending.questions && actions?.answer) && <>
         <p className="pending-question">{pending.text}</p>
-        {(pending.options?.length ?? 0) > 0 && (
+        {((pending.options?.length ?? 0) > 0 || actions?.writeOwn) && (
           <ol className="pending-choices">
-            {pending.options!.map((label, i) => (
+            {(pending.options ?? []).map((label, i) => isFreeRow(label) ? null : (
               <li key={`${i}:${label}`}>
                 <button type="button" disabled={!actions || busy} onClick={() => actions?.choose(i)}>
                   <Kbd>{i + 1}</Kbd><span><strong>{label}</strong>{pending.optionDetails?.[i] ? <small>{pending.optionDetails[i]}</small> : null}</span>
                 </button>
               </li>
             ))}
+            {actions?.writeOwn && (
+              <li className="pending-own">
+                <button type="button" disabled={busy} onClick={actions.writeOwn}>
+                  <Kbd>R</Kbd><span><strong>{tp.writeOwn}</strong><small>{tp.writeOwnHint}</small></span>
+                </button>
+              </li>
+            )}
           </ol>
         )}
       </>}

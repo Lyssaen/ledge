@@ -1287,6 +1287,82 @@ describe('server', () => {
     });
   });
 
+  describe('session.model: a live session changes model (#58, lot 2)', () => {
+    const live = (id: string, extra: Partial<Session> = {}) => mk(id, { cwd: tmpdir(), project: 'p', agentSessionId: 'u-1', state: 'idle', model: 'opus', effort: 'high', ...extra });
+    const ask = async (msg: { id: string; model: string | null; effort: string | null }) => {
+      const c = await connect({ port: srv.port }); await c.next('snapshot'); c.send({ type: 'session.model', ...msg }); return c;
+    };
+    it('a free session is stopped and resumed on the same conversation with the new model and effort', async () => {
+      store.upsert(live('ab12'));
+      const c = await ask({ id: 'ab12', model: 'sonnet', effort: 'max' });
+      await until(() => tmux.created.length === 1);
+      expect(tmux.sent).toContainEqual(['kill', 'ledge-ab12']);
+      expect(tmux.created[0]!.command.slice(-6)).toEqual(['--resume', 'u-1', '--model', 'sonnet', '--effort', 'max']);
+      await until(() => store.get('ab12')?.model === 'sonnet');
+      expect(store.get('ab12')).toMatchObject({ id: 'ab12', name: 'Otto', state: 'starting', model: 'sonnet', effort: 'max' });
+      expect(store.get('ab12')?.modelNext).toBeUndefined();
+      c.close();
+    });
+    it('null goes back to the agent\'s default: no --model, no --effort', async () => {
+      store.upsert(live('cx', { tool: 'codex', agentSessionId: 'cx-1', model: 'gpt-6-astra', effort: 'ultra' }));
+      const c = await ask({ id: 'cx', model: null, effort: null });
+      await until(() => tmux.created.length === 1);
+      expect(tmux.created[0]!.command.slice(-2)).toEqual(['resume', 'cx-1']);
+      await until(() => store.get('cx')?.state === 'starting');
+      expect(store.get('cx')?.model).toBeUndefined(); expect(store.get('cx')?.effort).toBeUndefined();
+      c.close();
+    });
+    it('while the agent works the change waits, then applies at its next free moment', async () => {
+      store.upsert(live('ab12', { state: 'working' }));
+      const c = await ask({ id: 'ab12', model: 'fable', effort: null });
+      await until(() => !!store.get('ab12')?.modelNext);
+      expect(store.get('ab12')?.modelNext).toEqual({ model: 'fable' });
+      expect(tmux.created).toEqual([]); expect(tmux.sent).not.toContainEqual(['kill', 'ledge-ab12']);
+      store.apply('ab12', { name: 'Stop', at: T0, source: 'hook' });
+      await until(() => tmux.created.length === 1);
+      expect(tmux.created[0]!.command.slice(-4)).toEqual(['--resume', 'u-1', '--model', 'fable']);
+      await until(() => store.get('ab12')?.model === 'fable');
+      expect(store.get('ab12')?.modelNext).toBeUndefined();
+      c.close();
+    });
+    it('asking for the model it runs drops a waiting change and restarts nothing', async () => {
+      store.upsert(live('ab12', { state: 'working', modelNext: { model: 'haiku' } }));
+      const c = await ask({ id: 'ab12', model: 'opus', effort: 'high' });
+      await until(() => !store.get('ab12')?.modelNext);
+      store.apply('ab12', { name: 'Stop', at: T0, source: 'hook' });
+      await c.next('session.updated');
+      expect(tmux.created).toEqual([]);
+      c.close();
+    });
+    it('the replaced agent\'s late end hooks do not end the one resumed in its place', async () => {
+      store.upsert(live('ab12'));
+      const c = await ask({ id: 'ab12', model: 'sonnet', effort: null });
+      await until(() => store.get('ab12')?.model === 'sonnet');
+      c.send({ type: 'session.event', id: 'ab12', event: { name: 'SessionEnd', at: T0, source: 'hook', exitCode: null } });
+      c.send({ type: 'session.unregister', id: 'ab12', exitCode: 0 });
+      c.send({ type: 'session.event', id: 'ab12', event: { name: 'Stop', at: T0, source: 'hook' } });
+      await until(() => store.get('ab12')?.state === 'idle');
+      expect(store.get('ab12')?.state).toBe('idle');
+      c.close();
+    });
+    it('refuses a read-only, an ended, an unknown session, one without a conversation, and an effort apart for Cursor', async () => {
+      store.upsert(live('ro', { source: 'hook_only' })); store.upsert(live('end', { state: 'exited', tmuxSession: null }));
+      store.upsert(live('nokey', { agentSessionId: undefined })); store.upsert(live('cu', { tool: 'cursor', model: 'auto', effort: undefined }));
+      const c = await ask({ id: 'ro', model: 'opus', effort: null });
+      expect(await c.next('error')).toMatchObject({ id: 'ro', request: 'session.model' });
+      c.send({ type: 'session.model', id: 'end', model: 'opus', effort: null });
+      expect(await c.next('error')).toMatchObject({ id: 'end', message: 'the session has ended' });
+      c.send({ type: 'session.model', id: 'nope', model: 'opus', effort: null });
+      expect(await c.next('error')).toMatchObject({ id: 'nope', message: 'unknown session' });
+      c.send({ type: 'session.model', id: 'nokey', model: 'opus', effort: null });
+      expect(await c.next('error')).toMatchObject({ id: 'nokey', message: 'no conversation to resume' });
+      c.send({ type: 'session.model', id: 'cu', model: 'gpt-5.3-codex', effort: 'high' });
+      expect(await c.next('error')).toMatchObject({ id: 'cu', message: 'cursor takes its effort in the model id' });
+      expect(tmux.created).toEqual([]);
+      c.close();
+    });
+  });
+
   describe('launch from a chat card', () => {
     const home = () => process.env.LEDGE_HOME!;
     /** A chat holding one proposal for `q1`; the marks are recorded and broadcast as a history, like the real one. */
@@ -1762,7 +1838,7 @@ describe('update.daemon', () => {
       updater: { running: () => false, update: async (v, send) => { seen.push(v); send({ type: 'update.progress', version: v, step: 'installing' }); } } });
     const c = await connect({ port: srv.port });
     const snap = await c.next('snapshot');
-    expect(snap.daemon).toEqual({ version: '0.2.2', install: 'npm', systemd: true, routing: true, archive: true, models: true });
+    expect(snap.daemon).toEqual({ version: '0.2.2', install: 'npm', systemd: true, routing: true, archive: true, models: true, modelSwitch: true, omp: true });
     c.send({ type: 'update.daemon', version: '0.3.0' });
     expect(await c.next('update.progress')).toMatchObject({ step: 'installing' });
     expect(seen).toEqual(['0.3.0']);

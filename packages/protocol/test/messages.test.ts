@@ -275,6 +275,13 @@ describe('update messages', () => {
     const m = parseServerMessage({ type: 'snapshot', sessions: [], daemon: { version: '0.3.0', install: 'git', systemd: true, manual: 'cd ~/x && git pull' } });
     expect(m).toMatchObject({ daemon: { version: '0.3.0', install: 'git', systemd: true } });
   });
+  it("carries the daemon's home when it gives one, and stays valid without it (older daemons)", () => {
+    const withHome = parseServerMessage({ type: 'snapshot', sessions: [], daemon: { version: '0.3.0', install: 'npm', systemd: true, home: '/home/u' } });
+    expect(withHome).toMatchObject({ daemon: { home: '/home/u' } });
+    const without = parseServerMessage({ type: 'snapshot', sessions: [], daemon: { version: '0.3.0', install: 'npm', systemd: true } });
+    expect(without).toMatchObject({ daemon: { version: '0.3.0' } });
+    expect((without as { daemon: { home?: string } }).daemon.home).toBeUndefined();
+  });
   it('parses progress and failures', () => {
     expect(parseServerMessage({ type: 'update.progress', version: '0.3.0', step: 'restarting' })).toMatchObject({ step: 'restarting' });
     expect(parseServerMessage({ type: 'update.failed', version: '0.3.0', reason: 'npm-failed', detail: 'EACCES', command: 'npm i -g @paradow/ledge@0.3.0' })).toMatchObject({ reason: 'npm-failed' });
@@ -426,5 +433,11 @@ describe('protocol: model and effort (#58)', () => {
     expect(parseServerMessage({ type: 'models.listing', requestId: 'm1', tool: 'codex', models })).toEqual({ type: 'models.listing', requestId: 'm1', tool: 'codex', models });
     expect(parseServerMessage({ type: 'models.listing', requestId: 'm1', tool: 'codex', models: [], error: 'offline' })).toMatchObject({ error: 'offline' });
     expect(() => parseClientMessage({ type: 'models.list', requestId: 'm1', tool: 'vim' })).toThrow();
+  });
+  it('session.model changes a live session\'s model and effort, null for the agent\'s default (lot 2)', () => {
+    expect(parseClientMessage({ type: 'session.model', id: 's1', model: 'gpt-6-astra', effort: 'high' })).toEqual({ type: 'session.model', id: 's1', model: 'gpt-6-astra', effort: 'high' });
+    expect(parseClientMessage({ type: 'session.model', id: 's1', model: null, effort: null })).toMatchObject({ model: null, effort: null });
+    expect(() => parseClientMessage({ type: 'session.model', id: 's1', model: '--yolo', effort: null })).toThrow();
+    expect(() => parseClientMessage({ type: 'session.model', id: 's1', model: 'opus' })).toThrow();
   });
 });

@@ -87,4 +87,7 @@ describe('capabilities', () => {
     expect(() => CapabilitiesByToolSchema.parse(c)).not.toThrow();
     expect(c.claude.freeTextAnswer).toBe(!!adapterFor('claude').freeText);
   });
+  it('gives OMP, which has no adapter, no free text: its dialogs take one of their options', () => {
+    expect(capabilities().omp).toEqual({ freeTextAnswer: false });
+  });
 });

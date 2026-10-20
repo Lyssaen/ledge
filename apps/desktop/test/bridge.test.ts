@@ -1,13 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const core = vi.hoisted(() => ({ invoke: vi.fn() }));
-vi.mock('@tauri-apps/api/core', () => ({ invoke: core.invoke }));
+const channels = vi.hoisted(() => [] as Array<{ onmessage: (m: unknown) => void }>);
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: core.invoke,
+  Channel: class { onmessage: (m: unknown) => void = () => {}; constructor() { channels.push(this); } },
+}));
 const notification = vi.hoisted(() => ({ isPermissionGranted: vi.fn(), requestPermission: vi.fn(), sendNotification: vi.fn() }));
 vi.mock('@tauri-apps/plugin-notification', () => notification);
-import { foregroundIsTerminal, setTrayLabels, showToast } from '../src/tauri/bridge';
+import { foregroundIsTerminal, openPty, setTrayLabels, showToast } from '../src/tauri/bridge';
 
 const inTauri = () => { (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {}; };
-afterEach(() => { delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__; vi.clearAllMocks(); });
+afterEach(() => { channels.length = 0; delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__; vi.clearAllMocks(); });
 
 describe('outside the app', () => {
   it('every call is a quiet no-op', async () => {
@@ -73,5 +77,37 @@ describe('the daemon token source', () => {
     expect(await source.get(false)).toEqual({ kind: 'absent' });
     expect(core.invoke).toHaveBeenCalledWith('daemon_token', undefined);
     expect(source.missing()).toBe(true);
+  });
+});
+
+describe('the pseudo-terminal', () => {
+  it('opens a pty with the Rust argument names and streams raw bytes', async () => {
+    inTauri(); core.invoke.mockResolvedValueOnce(0);
+    const data = vi.fn(), exit = vi.fn();
+    const pty = await openPty(['sh'], { cols: 80, rows: 24 }, { data, exit });
+    expect(core.invoke).toHaveBeenCalledWith('pty_open', expect.objectContaining({ argv: ['sh'], cols: 80, rows: 24 }));
+    channels[0]!.onmessage(new Uint8Array([104, 105]).buffer); expect(data).toHaveBeenCalledWith(new Uint8Array([104, 105]));
+    channels[1]!.onmessage(3); expect(exit).toHaveBeenCalledWith(3);
+    core.invoke.mockResolvedValue(undefined);
+    pty!.write('ls\r'); expect(core.invoke).toHaveBeenCalledWith('pty_write', { id: 0, data: 'ls\r' });
+    pty!.resize(100, 30); expect(core.invoke).toHaveBeenCalledWith('pty_resize', { id: 0, cols: 100, rows: 30 });
+  });
+
+  it('closes once and then stops delivering output', async () => {
+    inTauri(); core.invoke.mockResolvedValueOnce(5);
+    const data = vi.fn();
+    const pty = await openPty(['sh'], { cols: 80, rows: 24 }, { data, exit: vi.fn() });
+    core.invoke.mockResolvedValue(undefined);
+    pty!.close(); pty!.close();
+    expect(core.invoke.mock.calls.filter(c => c[0] === 'pty_close')).toEqual([['pty_close', { id: 5 }]]);
+    channels[0]!.onmessage(new Uint8Array([1]).buffer); expect(data).not.toHaveBeenCalled();
+  });
+
+  it('null when the shell refuses, and outside the app', async () => {
+    inTauri(); core.invoke.mockRejectedValueOnce('no wsl');
+    expect(await openPty(['sh'], { cols: 80, rows: 24 }, { data: vi.fn(), exit: vi.fn() })).toBeNull();
+    delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__; core.invoke.mockClear();
+    expect(await openPty(['sh'], { cols: 80, rows: 24 }, { data: vi.fn(), exit: vi.fn() })).toBeNull();
+    expect(core.invoke).not.toHaveBeenCalled();
   });
 });

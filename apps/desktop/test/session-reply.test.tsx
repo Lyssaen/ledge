@@ -96,6 +96,19 @@ describe('the pinned request and the reply', () => {
     expect(sent(d, 'session.reply')[1]).toEqual({ type: 'session.reply', id: 'kit', text: 'Port 9000' });
   });
 
+  it('a Claude question takes an answer of one\'s own: « Write your own answer » opens the field, the dialog\'s free-text row is no choice', async () => {
+    const kit = { ...listSessions()[4]!, tool: 'claude' as const, pending: { kind: 'question' as const, text: 'Quelle story ?', options: ['Hors story', 'Préciser la story', 'Type something.', 'Chat about this'], source: 'pane' as const } };
+    const { d, user } = await open('Kit', [...listSessions().slice(0, 4), kit]);
+    const q = card('Question from the agent');
+    expect(q.queryByRole('button', { name: /Type something/ })).toBeNull();
+    expect(q.getByRole('button', { name: /^4\s*Chat about this/ })).toBeVisible();
+    fireEvent.keyDown(document.body, { key: '3' });
+    await user.click(q.getByRole('button', { name: /^R\s*Write your own answer/ }));
+    expect(field()).toHaveFocus();
+    await user.keyboard('ST7-162{Enter}');
+    await waitFor(() => expect(sent(d, 'session.reply')).toEqual([{ type: 'session.reply', id: 'kit', text: 'ST7-162' }]));
+  });
+
   it('a refused reply gives its text back', async () => {
     const { d, user } = await open('Nova');
     await user.type(field(), 'Continue{Enter}');
@@ -252,6 +265,7 @@ describe('the reply, beyond the brief (carried items)', () => {
     await open('Kit', [...listSessions().slice(0, 4), kit]);
     expect(field()).toBeDisabled();
     expect(screen.getByText('Choose one of the proposed answers (1–9).')).toHaveClass('reply-hint');
+    expect(screen.queryByRole('button', { name: /^R\s*Write your own answer/ })).toBeNull();
   });
 
   it('a refusal the harness takes without a note: N still works, the field says why it is shut', async () => {
@@ -276,5 +290,78 @@ describe('the reply, beyond the brief (carried items)', () => {
     // A request of the parent itself is not shown on the subagent's page.
     d.upsert({ ...otto, pending: { kind: 'permission', text: 'npm test', source: 'hook' } });
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Approval requested' })).toBeNull());
+  });
+});
+
+describe('OMP: queued, redirected, interrupted (spec 2026-10-20 §3.2)', () => {
+  const omp = (extra = {}) => fakeSession('omp1', { name: 'Noor', tool: 'omp', backend: 'omp-rpc', tmuxSession: null, state: 'working', ...extra });
+  it('while it works, Enter queues the text after the turn, with no steer', async () => {
+    const { d, user } = await open('Noor', [omp(), ...listSessions()]);
+    await user.click(field()); await user.type(field(), 'then add tests');
+    expect(screen.getByText('Enter: after this turn')).toBeVisible();
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(sent(d, 'session.reply')).toEqual([{ type: 'session.reply', id: 'omp1', text: 'then add tests' }]));
+  });
+  it('« Redirect now » steers the running turn; Interrupt is its own command', async () => {
+    const { d, user } = await open('Noor', [omp(), ...listSessions()]);
+    await user.click(field()); await user.type(field(), 'stop, do this instead');
+    await user.click(screen.getByRole('button', { name: 'Redirect now' }));
+    await waitFor(() => expect(sent(d, 'session.reply')).toEqual([{ type: 'session.reply', id: 'omp1', text: 'stop, do this instead', steer: true }]));
+    await user.click(screen.getByRole('button', { name: 'Interrupt' }));
+    await waitFor(() => expect(sent(d, 'session.interrupt')).toEqual([{ type: 'session.interrupt', id: 'omp1' }]));
+  });
+  it('at rest there is nothing to interrupt or redirect, and Claude Code never shows them', async () => {
+    await open('Noor', [omp({ state: 'idle' }), ...listSessions()]);
+    expect(screen.queryByRole('button', { name: 'Interrupt' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Redirect now' })).toBeNull();
+  });
+  it('a dialog of OMP is a question with its own options, answered by number', async () => {
+    const asking = omp({ state: 'waiting_input', pending: { kind: 'question', text: 'Allow tool: bash\nCommand: ls', options: ['Approve', 'Approve bash for this session', 'Deny'], source: 'rpc', tool: 'omp' } });
+    const { d, user } = await open('Noor', [asking, ...listSessions()]);
+    await user.click(within(screen.getByRole('region', { name: 'Question from the agent' })).getByRole('button', { name: /Deny/ }));
+    await waitFor(() => expect(sent(d, 'session.reply')).toEqual([{ type: 'session.reply', id: 'omp1', text: '3' }]));
+  });
+});
+
+describe('OMP: the waiting queue', () => {
+  const queued = () => fakeSession('omp1', { name: 'Noor', tool: 'omp', backend: 'omp-rpc', tmuxSession: null, state: 'working', queue: [{ text: 'hurry', mode: 'steer' as const }, { text: 'then the tests', mode: 'follow_up' as const }] });
+  it('shows what waits as OMP reports it; « Interrupt and take back » asks for it and the texts return to the field, appended to what is typed', async () => {
+    const { d, user } = await open('Noor', [queued(), ...listSessions()]);
+    const q = within(screen.getByRole('status', { name: 'Waiting instructions' }));
+    expect(q.getByText('Waiting (2)')).toBeVisible(); expect(q.getByText('hurry')).toBeVisible(); expect(q.getByText('then the tests')).toBeVisible();
+    await user.click(field()); await user.type(field(), 'mine');
+    await user.click(q.getByRole('button', { name: 'Interrupt and take back' }));
+    await waitFor(() => expect(sent(d, 'session.interrupt')).toEqual([{ type: 'session.interrupt', id: 'omp1', restoreQueue: true }]));
+    d.push({ type: 'session.queue.restored', id: 'omp1', texts: ['hurry', 'then the tests'] });
+    await waitFor(() => expect(field()).toHaveValue('mine\n\nhurry\n\nthen the tests'));
+  });
+});
+
+describe('OMP: the ask card (one call, several questions)', () => {
+  const asking = (extra = {}) => fakeSession('omp1', { name: 'Noor', tool: 'omp', backend: 'omp-rpc', tmuxSession: null, state: 'waiting_input', pending: {
+    kind: 'question' as const, text: 'Favorite color? · Your name?', source: 'rpc' as const, tool: 'omp', requestId: 'ask1',
+    questions: [{ id: 'color', question: 'Favorite color?', header: 'Color', multi: true, options: [{ label: 'red' }, { label: 'blue', description: 'the sea' }] }, { id: 'name', question: 'Your name?', options: [{ label: 'skip' }] }] }, ...extra });
+  it('shows every question, sends nothing until each has an answer, then all together; the reply field says to use the card', async () => {
+    const { d, user } = await open('Noor', [asking(), ...listSessions()]);
+    const card = within(screen.getByRole('region', { name: 'Question from the agent' }));
+    expect(card.getByText('Favorite color?')).toBeVisible(); expect(card.getByText('the sea')).toBeVisible();
+    expect(field()).toBeDisabled(); expect(screen.getByText('Answer from the card above.')).toBeVisible();
+    const send = card.getByRole('button', { name: 'Send the answers' });
+    expect(send).toBeDisabled();
+    await user.click(card.getByRole('checkbox', { name: /red/ })); await user.click(card.getByRole('checkbox', { name: /blue/ }));
+    expect(send).toBeDisabled();
+    await user.type(card.getByRole('textbox', { name: 'Another answer to “Your name?”' }), ' Joe ');
+    expect(send).toBeEnabled();
+    await user.click(send);
+    await waitFor(() => expect(sent(d, 'session.answer')).toEqual([{ type: 'session.answer', id: 'omp1', requestId: 'ask1', answers: [{ id: 'color', selected: ['red', 'blue'] }, { id: 'name', selected: [], text: 'Joe' }] }]));
+    expect(sent(d, 'session.reply')).toEqual([]);
+  });
+  it('a single-choice question takes one choice at a time; declining sends the cancel', async () => {
+    const { d, user } = await open('Noor', [asking(), ...listSessions()]);
+    const card = within(screen.getByRole('region', { name: 'Question from the agent' }));
+    await user.click(card.getByRole('radio', { name: /skip/ }));
+    expect(card.getByRole('radio', { name: /skip/ })).toBeChecked();
+    await user.click(card.getByRole('button', { name: 'Decline' }));
+    await waitFor(() => expect(sent(d, 'session.answer')).toEqual([{ type: 'session.answer', id: 'omp1', requestId: 'ask1', answers: [], cancel: true }]));
   });
 });
