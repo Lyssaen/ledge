@@ -32,9 +32,11 @@ export function asked(s: ChatState, turn: PhoneChatTurn): ChatState {
 export function reduceChat(s: ChatState, m: ChatServerMessage): ChatState {
   switch (m.type) {
     case 'chat.history': {
-      // The PC's thread is the truth: a question it does not know (never reached it) leaves no bubble and no live.
-      const live = s.live && m.turns.some(t => t.qid === s.live?.qid && !finished(t)) ? s.live : null;
-      return { ...s, turns: m.turns, live };
+      // The PC's thread is the truth, except for a question just asked that its reply was built before seeing: that
+      // bubble stays after the history, with its live, until its own done or error.
+      const fresh = s.live ? s.turns.find(t => t.qid === s.live?.qid && !finished(t) && !m.turns.some(h => h.qid === t.qid)) : undefined;
+      const known = s.live && m.turns.some(t => t.qid === s.live?.qid && !finished(t));
+      return { ...s, turns: fresh ? [...m.turns, fresh] : m.turns, live: fresh || known ? s.live : null };
     }
     case 'chat.step': {
       const live = liveFor(s, m.qid);
@@ -52,6 +54,9 @@ export function reduceChat(s: ChatState, m: ChatServerMessage): ChatState {
       return { ...s, turns, live: s.live?.qid === m.qid ? null : s.live };
     }
     case 'chat.error': {
+      const known = s.turns.find(t => t.qid === m.qid);
+      // An error for a question the phone does not know, or that already has its answer, changes nothing.
+      if (!known || (m.code !== 'busy' && finished(known))) return s;
       const live = s.live?.qid === m.qid ? null : s.live;
       if (m.code === 'busy') {
         // The PC made no turn for it: the bubble goes, and the text comes back to the field.

@@ -191,4 +191,33 @@ describe('the phone chat in the store', () => {
     expect(Object.values(t.store.getState().ops).map(o => o.message.type)).toEqual(['chat.relay']);
     expect(JSON.parse(t.storage.getItem(OPS_KEY) ?? '{}')).toEqual({});
   });
+
+  it('a history built before the ask keeps the fresh bubble and its live', () => {
+    const t = setup();
+    const qid = t.store.ask('Neuve');
+    t.deliver(chat.history(chat.turn('11111111-1111-4111-8111-111111111111', { answer: 'Ancien.' })));
+    expect(t.store.chat().turns.map(x => x.qid)).toEqual(['11111111-1111-4111-8111-111111111111', qid]);
+    expect(t.store.chat().live?.qid).toBe(qid);
+    t.deliver(chat.delta(qid, 'En route'));
+    expect(t.store.chat().live?.text).toBe('En route');
+  });
+
+  it('a late non-busy error leaves a finished turn alone, and an unknown qid raises nothing', () => {
+    const t = setup();
+    const qid = t.store.ask('q');
+    t.deliver(chat.done(qid));
+    t.deliver(chat.error(qid, 'timeout'));
+    expect(t.store.chat().turns).toMatchObject([{ qid, answer: 'Fini.' }]);
+    expect(t.store.chat().turns[0]?.error).toBeUndefined();
+    expect(t.store.chat().error).toBeNull();
+    t.deliver(chat.error('22222222-2222-4222-8222-222222222222', 'failed'));
+    expect(t.store.chat().error).toBeNull();
+  });
+
+  it('close resolves a pending relay as expired', async () => {
+    const t = setup();
+    const done = t.store.relay('0b0e6f4c-27e6-4c1a-9a53-0d8a7d2a3c11');
+    t.store.close();
+    await expect(done).resolves.toEqual({ status: 'expired' });
+  });
 });

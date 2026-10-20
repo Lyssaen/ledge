@@ -152,6 +152,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
   /** `chat.history` was asked since the last ready; the snapshot of a first connection asks it when the ready could not. */
   let historyAsked = false;
   /** The relay or launch of a turn that is under way, shared by a second tap. */
+  const expirers = new Set<() => void>();
   const chatActions = new Map<string, Promise<ChatAction>>();
   /** The `prepareConfirm` waiting for its challenge. */
   let preparing: { purpose: ConfirmChallenge['purpose']; resolve: (c: ConfirmChallenge) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> } | null = null;
@@ -378,8 +379,10 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         resolve(out);
         return true;
       };
-      const off = () => { listeners.delete(check); };
+      const expire = () => { off(); resolve({ status: 'expired' }); };
+      const off = () => { listeners.delete(check); expirers.delete(expire); };
       listeners.add(check);
+      expirers.add(expire);
       check();
     });
   }
@@ -583,6 +586,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     close() {
       if (closed) return;
       closed = true;
+      for (const expire of [...expirers]) expire();
       settleForget(false);
       settle(new Error('lost'));
       if (previewsDirty) persist();
