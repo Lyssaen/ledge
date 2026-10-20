@@ -764,3 +764,179 @@ describe('phone gateway: device key', () => {
     expect(g.got('dev1').find(m => m.type === 'snapshot')).toMatchObject({ device: { confirm: false } });
   });
 });
+
+describe('phone gateway: a high-impact accept carries a device assertion', () => {
+  const rp = { rpId: 'relay.test', origin: 'https://relay.test' };
+  const RPC: Pending = { kind: 'permission', text: 'Allow the edit?', source: 'rpc' };
+  type G = ReturnType<typeof setup>;
+  const challengeFor = async (g: G, id: string, pending: Pending, key = pendingKey(pending), purpose: 'decide' | 'register' = 'decide'): Promise<string> => {
+    const before = g.got('dev1').length;
+    g.send('dev1', purpose === 'register'
+      ? { type: 'confirm.prepare', purpose }
+      : { type: 'confirm.prepare', purpose, id, expect: { kind: pending.kind, text: pending.text, key } });
+    await flush();
+    const m = g.got('dev1').slice(before).find(x => x.type === 'confirm.challenge');
+    if (m?.type !== 'confirm.challenge') throw new Error('no challenge');
+    return m.challenge;
+  };
+  /** A device with a registered passkey. */
+  const enrolled = async () => {
+    const g = setup();
+    g.sessions.set('r', mk('r', { state: 'waiting_permission', pending: { ...RPC } }));
+    const auth = softAuthenticator();
+    const c = await challengeFor(g, '', RPC, '', 'register');
+    g.send('dev1', { type: 'credential.register', op: randomUUID(), credential: auth.create(rp, c) });
+    await flush();
+    g.stored.length = 0;
+    return { g, auth };
+  };
+  const last = (g: G) => g.results('dev1').at(-1);
+  const withAssertion = (m: object, assertion: unknown) => ({ ...m, assertion });
+
+  it('confirm.prepare decide without id or expect is invalid; for an unknown session unknown_session; without a credential invalid', async () => {
+    const { g } = await enrolled();
+    g.send('dev1', { type: 'confirm.prepare', purpose: 'decide' });
+    g.send('dev1', { type: 'confirm.prepare', purpose: 'decide', id: 'a' });
+    g.send('dev1', { type: 'confirm.prepare', purpose: 'decide', id: 'nope', expect: seen(PUSH) });
+    g.send('dev2', { type: 'confirm.prepare', purpose: 'decide', id: 'a', expect: seen(PUSH) });
+    await flush();
+    expect(g.got('dev1').slice(-3)).toEqual([
+      { type: 'error', code: 'invalid', request: 'confirm.prepare' },
+      { type: 'error', code: 'invalid', request: 'confirm.prepare' },
+      { type: 'error', code: 'unknown_session', request: 'confirm.prepare' }
+    ]);
+    expect(g.got('dev2')).toEqual([{ type: 'error', code: 'invalid', request: 'confirm.prepare' }]);
+  });
+
+  it('answers confirm.prepare decide with a challenge, the credential id and the relay host', async () => {
+    const { g, auth } = await enrolled();
+    g.send('dev1', { type: 'confirm.prepare', purpose: 'decide', id: 'a', expect: seen(PUSH) });
+    await flush();
+    expect(g.got('dev1').at(-1)).toMatchObject({ type: 'confirm.challenge', purpose: 'decide', rpId: 'relay.test', credentialId: auth.id, expiresInMs: 60_000 });
+  });
+
+  it('accepts a high request with a valid assertion: applied, the local front gets no assertion, the counter is stored', async () => {
+    const { g, auth } = await enrolled();
+    const m = decide('a', 'accept', PUSH);
+    const challenge = await challengeFor(g, 'a', PUSH);
+    g.send('dev1', withAssertion(m, auth.get(rp, challenge, { counter: 1 })));
+    await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: m.op, status: 'applied' });
+    expect(g.dispatched).toEqual([{ type: 'session.decide', id: 'a', decision: 'accept', expect: { kind: 'permission', text: 'git push', key: pendingKey(PUSH) } }]);
+    expect(g.dispatched[0]).not.toHaveProperty('assertion');
+    expect(g.stored).toEqual(['dev1']);
+    expect(g.creds.get('dev1')?.counter).toBe(1);
+  });
+
+  it('refuses always on a high request without an assertion, or without a credential; deny and a low accept need none', async () => {
+    const { g } = await enrolled();
+    const always = decide('a', 'always', PUSH);
+    g.send('dev1', always);
+    const bare = setup();
+    const m = decide('a', 'accept', PUSH);
+    bare.send('dev1', m);
+    await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: always.op, status: 'rejected', reason: 'confirm_required' });
+    expect(last(bare)).toEqual({ type: 'operation.result', op: m.op, status: 'rejected', reason: 'confirm_required' });
+    expect(g.dispatched).toEqual([]);
+    const deny = decide('a', 'deny', PUSH);
+    const low = decide('b', 'accept', LS);
+    g.send('dev1', deny);
+    g.send('dev1', low);
+    await flush();
+    expect(g.results('dev1').filter(r => r.type === 'operation.result' && r.status === 'applied').map(r => r.type === 'operation.result' && r.op).slice(-2)).toEqual([deny.op, low.op]);
+  });
+
+  it('a stale expect.key is stale even with a valid assertion, and the challenge stays usable', async () => {
+    const { g, auth } = await enrolled();
+    const challenge = await challengeFor(g, 'a', PUSH);
+    const assertion = auth.get(rp, challenge, { counter: 1 });
+    const old = decide('a', 'accept', PUSH, { key: 'old-key' });
+    g.send('dev1', withAssertion(old, assertion));
+    await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: old.op, status: 'rejected', reason: 'stale' });
+    const fresh = decide('a', 'accept', PUSH);
+    g.send('dev1', withAssertion(fresh, assertion));
+    await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: fresh.op, status: 'applied' });
+  });
+
+  it('an assertion bound to another request is assertion_invalid', async () => {
+    const { g, auth } = await enrolled();
+    g.sessions.set('p2', mk('p2', { state: 'waiting_permission', pending: { ...PUSH, text: 'git push -f' } }));
+    const challenge = await challengeFor(g, 'p2', { ...PUSH, text: 'git push -f' });
+    const m = decide('a', 'accept', PUSH);
+    g.send('dev1', withAssertion(m, auth.get(rp, challenge, { counter: 1 })));
+    await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: m.op, status: 'rejected', reason: 'assertion_invalid' });
+    expect(g.dispatched).toEqual([]);
+  });
+
+  it('the same assertion under a new op is assertion_invalid (challenge spent); the same op again replays applied', async () => {
+    const { g, auth } = await enrolled();
+    const challenge = await challengeFor(g, 'a', PUSH);
+    const assertion = auth.get(rp, challenge, { counter: 1 });
+    const m = decide('a', 'accept', PUSH);
+    g.send('dev1', withAssertion(m, assertion));
+    await flush();
+    g.send('dev1', withAssertion(m, assertion));
+    await flush();
+    expect(g.results('dev1').slice(-2).map(r => r.type === 'operation.result' && r.status)).toEqual(['applied', 'applied']);
+    expect(g.dispatched).toHaveLength(1);
+    expect(g.stored).toEqual(['dev1']);
+    const again = decide('a', 'accept', PUSH);
+    g.send('dev1', withAssertion(again, assertion));
+    await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: again.op, status: 'rejected', reason: 'assertion_invalid' });
+    expect(g.dispatched).toHaveLength(1);
+  });
+
+  it('an expired challenge is assertion_expired', async () => {
+    const { g, auth } = await enrolled();
+    const challenge = await challengeFor(g, 'a', PUSH);
+    g.clock.t += 61_000;
+    const m = decide('a', 'accept', PUSH);
+    g.send('dev1', withAssertion(m, auth.get(rp, challenge, { counter: 1 })));
+    await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: m.op, status: 'rejected', reason: 'assertion_expired' });
+  });
+
+  it('a replayed counter is assertion_invalid and the stored counter does not move', async () => {
+    const { g, auth } = await enrolled();
+    const first = decide('a', 'accept', PUSH);
+    g.send('dev1', withAssertion(first, auth.get(rp, await challengeFor(g, 'a', PUSH), { counter: 5 })));
+    await flush();
+    g.sessions.get('a')!.pending = { ...PUSH };
+    const second = decide('a', 'accept', PUSH);
+    g.send('dev1', withAssertion(second, auth.get(rp, await challengeFor(g, 'a', PUSH), { counter: 5 })));
+    await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: second.op, status: 'rejected', reason: 'assertion_invalid' });
+    expect(g.creds.get('dev1')?.counter).toBe(5);
+    expect(g.stored).toEqual(['dev1']);
+  });
+
+  it('a reply to an OMP rpc request needs an assertion; with one it goes through', async () => {
+    const { g, auth } = await enrolled();
+    const expect_ = seen(RPC);
+    const bare = { type: 'session.reply', op: randomUUID(), id: 'r', text: 'yes', expect: { ...expect_, key: pendingKey(RPC) } };
+    g.send('dev1', bare);
+    await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: bare.op, status: 'rejected', reason: 'confirm_required' });
+    expect(g.dispatched).toEqual([]);
+    const m = { ...bare, op: randomUUID() };
+    g.send('dev1', withAssertion(m, auth.get(rp, await challengeFor(g, 'r', RPC), { counter: 1 })));
+    await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: m.op, status: 'applied' });
+    expect(g.dispatched).toEqual([{ type: 'session.reply', id: 'r', text: 'yes' }]);
+  });
+
+  it('logs carry neither the challenge nor the signature', async () => {
+    const { g, auth } = await enrolled();
+    const challenge = await challengeFor(g, 'a', PUSH);
+    const assertion = auth.get(rp, challenge, { counter: 1 });
+    g.send('dev1', withAssertion(decide('a', 'accept', PUSH), assertion));
+    g.send('dev1', withAssertion(decide('a', 'accept', PUSH), assertion));
+    await flush();
+    for (const secret of [challenge, assertion.signature, assertion.clientDataJSON, assertion.authenticatorData]) expect(g.logs.some(l => l.includes(secret))).toBe(false);
+  });
+});

@@ -12,7 +12,7 @@ import { fingerprint, OperationRegistry, type PhoneOperation } from './operation
 import { capabilities, clip, toPhoneFullRequest, toPhoneItem, toPhoneSession, toPhoneThread } from './project.js';
 import { riskOf } from './risk.js';
 import { CHALLENGE_TTL_MS, type ChallengeStore } from './challenges.js';
-import { challengeOf, verifyRegistration, type DeviceCredential, type Rp } from './webauthn.js';
+import { challengeOf, verifyAssertion, verifyRegistration, type DeviceCredential, type Rp } from './webauthn.js';
 
 export interface PhoneGateway {
   /** Passes a message the daemon broadcast to the local fronts on to the devices concerned; anything else is ignored. */
@@ -101,15 +101,42 @@ export function createPhoneGateway(deps: {
     push(deviceId, { type: 'operation.result', op, status, ...(reason ? { reason } : {}) });
   };
 
+  /** Whether the operation needs the device's own check: an accept of a request that is not low, or an answer to an OMP dialog. */
+  const needsAssertion = (msg: Exclude<PhoneOperation, { type: 'credential.register' }>, s: Session): boolean => {
+    if (msg.type === 'session.decide') return msg.decision !== 'deny' && riskOf(s)?.risk !== 'low';
+    if (msg.type === 'session.reply') return !!msg.expect && s.pending?.source === 'rpc' && riskOf(s)?.risk !== 'low';
+    return false;
+  };
+
+  /** The device check of a decision: its challenge is spent first, whatever the verdict, and the counter is kept once it verifies. */
+  const assertionOutcome = (deviceId: string, msg: Extract<PhoneOperation, { type: 'session.decide' | 'session.reply' }>): Outcome | undefined => {
+    const cred = deps.credential(deviceId);
+    const rp = deps.rp();
+    const key = msg.expect?.key;
+    if (!cred || !rp || !msg.assertion || key === undefined) return { status: 'rejected', reason: 'confirm_required' };
+    const invalid: Outcome = { status: 'rejected', reason: 'assertion_invalid' };
+    const challenge = challengeOf(msg.assertion.clientDataJSON);
+    if (challenge === null) return invalid;
+    const verdict = deps.challenges.consume(challenge, { deviceId, purpose: 'decide', subject: `${msg.id}:${key}` });
+    if (verdict === 'expired') return { status: 'rejected', reason: 'assertion_expired' };
+    if (verdict !== 'ok') return invalid;
+    const verified = verifyAssertion(msg.assertion, cred, rp, challenge);
+    if (!verified.ok) {
+      log(`phone: assertion refused for device ${deviceId}`);
+      return invalid;
+    }
+    deps.setCredential(deviceId, { ...cred, counter: verified.counter });
+    return undefined;
+  };
+
   /** The checks only a phone meets, in order; undefined lets the operation through. */
-  const precheck = (msg: Exclude<PhoneOperation, { type: 'credential.register' }>): Outcome | undefined => {
+  const precheck = (deviceId: string, msg: Exclude<PhoneOperation, { type: 'credential.register' }>): Outcome | undefined => {
     const s = live(msg.id);
     if (!s) return { status: 'rejected', reason: 'unknown_session' };
     switch (msg.type) {
       case 'session.decide':
         if (!s.pending || pendingKey(s.pending) !== msg.expect.key) return { status: 'rejected', reason: 'stale' };
-        // Until a device check exists (lot 6), a high request is only refused from the phone.
-        if (msg.decision !== 'deny' && riskOf(s)?.risk !== 'low') return { status: 'rejected', reason: 'confirm_required' };
+        if (needsAssertion(msg, s)) { const refused = assertionOutcome(deviceId, msg); if (refused) return refused; }
         // The note is typed into the terminal like a reply.
         return msg.note !== undefined && UNTYPABLE.test(msg.note) ? { status: 'rejected', reason: 'untypable' } : undefined;
       case 'session.reply': {
@@ -117,6 +144,7 @@ export function createPhoneGateway(deps: {
         if (msg.expect ? !s.pending || pendingKey(s.pending) !== msg.expect.key : !!s.pending) return { status: 'rejected', reason: 'stale' };
         const options = s.pending?.kind === 'question' ? s.pending.options : undefined;
         if (options?.length && /^[1-9]$/.test(msg.text) && Number(msg.text) > options.length) return { status: 'rejected', reason: 'invalid' };
+        if (needsAssertion(msg, s)) { const refused = assertionOutcome(deviceId, msg); if (refused) return refused; }
         return UNTYPABLE.test(msg.text) ? { status: 'rejected', reason: 'untypable' } : undefined;
       }
       case 'session.interrupt':
@@ -160,7 +188,7 @@ export function createPhoneGateway(deps: {
 
   const run = async (deviceId: string, msg: PhoneOperation): Promise<Outcome> => {
     if (msg.type === 'credential.register') return register(deviceId, msg);
-    const refused = precheck(msg);
+    const refused = precheck(deviceId, msg);
     if (refused) return refused;
     const out = local(msg);
     let error: { code?: string } | undefined;
@@ -213,9 +241,17 @@ export function createPhoneGateway(deps: {
         return;
       }
       case 'confirm.prepare': {
-        // Challenges for a decision come with the device check itself (a later task).
         const rp = deps.rp();
-        if (msg.purpose !== 'register' || !rp) return push(deviceId, { type: 'error', code: 'invalid', request: msg.type });
+        const invalid = () => push(deviceId, { type: 'error', code: 'invalid', request: msg.type });
+        if (!rp) return invalid();
+        if (msg.purpose === 'decide') {
+          if (!msg.id || !msg.expect) return invalid();
+          if (!live(msg.id)) return push(deviceId, { type: 'error', code: 'unknown_session', request: msg.type });
+          const cred = deps.credential(deviceId);
+          if (!cred || cred.rpId !== rp.rpId) return invalid();
+          const challenge = deps.challenges.issue({ deviceId, purpose: 'decide', subject: `${msg.id}:${msg.expect.key}` });
+          return push(deviceId, { type: 'confirm.challenge', purpose: 'decide', challenge, rpId: rp.rpId, credentialId: cred.id, expiresInMs: CHALLENGE_TTL_MS });
+        }
         const challenge = deps.challenges.issue({ deviceId, purpose: 'register', subject: '' });
         return push(deviceId, { type: 'confirm.challenge', purpose: 'register', challenge, rpId: rp.rpId, expiresInMs: CHALLENGE_TTL_MS });
       }
