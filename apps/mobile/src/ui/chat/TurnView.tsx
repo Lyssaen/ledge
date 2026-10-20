@@ -1,5 +1,9 @@
 import type { ChatErrorCode, PhoneChatStep, PhoneChatTurn } from '@ledge/protocol';
 import { copy } from '../../copy';
+import type { MobileStore } from '../../state/store';
+import { Answer, Sources } from './Answer';
+import { LaunchCards } from './LaunchCard';
+import { RelayCard } from './RelayCard';
 
 const ICON = 'size-3.5 flex-none fill-none stroke-current [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:1.6]';
 
@@ -14,10 +18,10 @@ export function stepLabel(step: PhoneChatStep, sessions: number): string {
   }
 }
 
-/** The steps' names, once each, for « Sources : ». */
-function sourcesOf(steps: PhoneChatStep[]): string {
-  const names = steps.map(s => s.kind === 'sessions' ? 'sessions' : s.name ?? s.id).filter((n): n is string => !!n);
-  return [...new Set(names)].join(', ');
+/** The names of the sessions whose terminal or reply Ledge read, once each: « Sources : ». */
+function sourcesOf(steps: PhoneChatStep[]): string[] {
+  const names = steps.filter(s => s.kind === 'pane' || s.kind === 'reply').map(s => s.name ?? s.id).filter((n): n is string => !!n);
+  return [...new Set(names)];
 }
 
 function Steps({ steps, sessions, running }: { steps: PhoneChatStep[]; sessions: number; running: boolean }) {
@@ -45,17 +49,22 @@ const ERROR: Record<ChatErrorCode, string> = { busy: copy.chat.busy, timeout: co
  * One question and what came of it. `live` is the question being answered: its steps and the text so far
  * (the answer's Markdown comes later, the text is shown as it is).
  */
-export function TurnView({ turn, live, sessions, onStop }: { turn: PhoneChatTurn; live: { steps: PhoneChatStep[]; text: string } | null; sessions: number; onStop: () => void }) {
+export function TurnView({ store, turn, live, sessions, list, canConfirm, onStop }: { store: MobileStore; turn: PhoneChatTurn; live: { steps: PhoneChatStep[]; text: string } | null; sessions: number; list: { id: string; name: string; repo?: string }[]; canConfirm: boolean; onStop: () => void }) {
   const steps = live?.steps ?? turn.steps;
   const text = live ? live.text : turn.answer;
+  const names = new Map(list.filter(x => x.name).map(x => [x.name, x.id] as const));
+  const relay = turn.relay;
   return (
     <div className="flex flex-col gap-3">
       <div className="max-w-[80%] self-end whitespace-pre-wrap break-words rounded-[18px_18px_4px_18px] bg-raised px-3.5 py-2.5">{turn.question}</div>
       <Steps steps={steps} sessions={sessions} running={!!live && !live.text} />
-      {text && <p aria-live={live ? 'polite' : undefined} className="px-1 whitespace-pre-wrap break-words">{text}</p>}
-      {!live && turn.answer && steps.length > 0 && <span className="px-1 text-xs text-muted">{copy.chat.sources}{sourcesOf(steps)}</span>}
+      {live && text && <p aria-live="polite" className="px-1 whitespace-pre-wrap break-words">{text}</p>}
+      {!live && text && <Answer text={text} names={names} />}
+      {!live && turn.answer && <Sources names={sourcesOf(steps)} ids={names} />}
       {!live && turn.cut && <span className="px-1 text-xs text-muted">{copy.chat.cut}</span>}
       {!live && turn.error && <p role="status" className="px-1 text-[13px] text-danger-fg">{ERROR[turn.error]}</p>}
+      {!live && relay && <RelayCard store={store} qid={turn.qid} relay={relay} repo={list.find(x => x.id === relay.id)?.repo} known={list.some(x => x.id === relay.id)} />}
+      {!live && turn.proposals && turn.proposals.length > 0 && <LaunchCards store={store} qid={turn.qid} proposals={turn.proposals} canConfirm={canConfirm} sessionIds={new Set(list.map(x => x.id))} />}
       {live && (
         <button type="button" onClick={onStop} className="inline-flex h-9 items-center gap-2 self-start rounded-control border border-white/15 px-3.5 text-[13px] font-medium">
           <svg className={ICON} viewBox="0 0 24 24" aria-hidden="true"><rect width="12" height="12" x="6" y="6" rx="1" /></svg>

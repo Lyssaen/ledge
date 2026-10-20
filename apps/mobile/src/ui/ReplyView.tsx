@@ -1,29 +1,35 @@
-import type { ReactNode } from 'react';
+import { createContext, Fragment, useContext, type ReactNode } from 'react';
 import type { Block, ReplyDoc, Section } from '@ledge/ui/reply/parse';
 import { copy } from '../copy';
 
 /** `code`, **bold** and *italic* in a line; anything else (links included) stays text: nothing in a reply is actionable here. */
 const TOKEN = /(?<code>`[^`\n]+`)|\*\*(?<b>\S(?:.*?\S)?)\*\*(?!\*)|(?<![\w*])\*(?<i>[^\s*](?:[^*\n]*?[^\s*])?)\*(?![\w*])/g;
-export function inline(text: string, depth = 0): ReactNode[] {
-  if (depth > 2) return [text];
+/** What a plain stretch of text becomes (the chat links the session names in it); the text itself by default. */
+export type Plain = (text: string) => ReactNode;
+const PlainText = createContext<Plain | undefined>(undefined);
+export function inline(text: string, depth = 0, plain?: Plain): ReactNode[] {
+  let n = 0;
+  const T = (t: string): ReactNode[] => plain ? [<Fragment key={`t${n++}`}>{plain(t)}</Fragment>] : [t];
+  if (depth > 2) return T(text);
   const out: ReactNode[] = [];
   let last = 0;
   for (const m of text.matchAll(TOKEN)) {
     const at = m.index;
-    if (at > last) out.push(text.slice(last, at));
+    if (at > last) out.push(...T(text.slice(last, at)));
     const g = m.groups!;
     if (g.code) out.push(<code key={at} className="rounded-md bg-white/[0.06] px-[5px] py-px font-mono text-[.92em] [overflow-wrap:anywhere]">{g.code.slice(1, -1)}</code>);
-    else if (g.b) out.push(<strong key={at} className="font-semibold">{inline(g.b, depth + 1)}</strong>);
-    else out.push(<em key={at}>{inline(g.i!, depth + 1)}</em>);
+    else if (g.b) out.push(<strong key={at} className="font-semibold">{inline(g.b, depth + 1, plain)}</strong>);
+    else out.push(<em key={at}>{inline(g.i!, depth + 1, plain)}</em>);
     last = at + m[0].length;
   }
-  if (last < text.length) out.push(text.slice(last));
+  if (last < text.length) out.push(...T(text.slice(last)));
   return out;
 }
 
 function BlockView({ b }: { b: Block }) {
+  const plain = useContext(PlainText);
   switch (b.type) {
-    case 'p': return <p className="[&+*]:mt-2.5">{inline(b.text)}</p>;
+    case 'p': return <p className="[&+*]:mt-2.5">{inline(b.text, 0, plain)}</p>;
     case 'code': return <pre className="my-2.5 overflow-x-auto rounded-lg bg-black/30 p-2.5 font-mono text-xs leading-[1.6] whitespace-pre">{b.text}</pre>;
     case 'list': {
       const L = b.ordered ? 'ol' : 'ul';
@@ -31,8 +37,8 @@ function BlockView({ b }: { b: Block }) {
         <L className={`my-2.5 flex flex-col gap-1 pl-[18px] text-[#c8cbce] ${b.ordered ? 'list-decimal' : 'list-disc'}`}>
           {b.items.map((it, i) => (
             <li key={i}>
-              {it.checked !== undefined && <span aria-hidden="true">{it.checked ? '☑ ' : '☐ '}</span>}{inline(it.text)}
-              {it.sub.length > 0 && <ul className="mt-1 flex list-[circle] flex-col gap-1 pl-4">{it.sub.map((x, j) => <li key={j}>{inline(x)}</li>)}</ul>}
+              {it.checked !== undefined && <span aria-hidden="true">{it.checked ? '☑ ' : '☐ '}</span>}{inline(it.text, 0, plain)}
+              {it.sub.length > 0 && <ul className="mt-1 flex list-[circle] flex-col gap-1 pl-4">{it.sub.map((x, j) => <li key={j}>{inline(x, 0, plain)}</li>)}</ul>}
             </li>
           ))}
         </L>
@@ -41,8 +47,8 @@ function BlockView({ b }: { b: Block }) {
     case 'table': return (
       <div className="my-2.5 overflow-x-auto" tabIndex={0}>
         <table className="w-full border-collapse text-xs">
-          <thead><tr>{b.header.map((h, i) => <th key={i} className="border-b border-line px-2 py-1.5 font-semibold" style={{ textAlign: b.align[i] ?? 'left' }}>{inline(h)}</th>)}</tr></thead>
-          <tbody>{b.rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j} className="border-b border-line px-2 py-1.5 align-top" style={{ textAlign: b.align[j] ?? 'left' }}>{inline(c)}</td>)}</tr>)}</tbody>
+          <thead><tr>{b.header.map((h, i) => <th key={i} className="border-b border-line px-2 py-1.5 font-semibold" style={{ textAlign: b.align[i] ?? 'left' }}>{inline(h, 0, plain)}</th>)}</tr></thead>
+          <tbody>{b.rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j} className="border-b border-line px-2 py-1.5 align-top" style={{ textAlign: b.align[j] ?? 'left' }}>{inline(c, 0, plain)}</td>)}</tr>)}</tbody>
         </table>
       </div>
     );
@@ -52,6 +58,7 @@ function BlockView({ b }: { b: Block }) {
 
 /** The « suite » section is a suggestion to read, never a button: it sends nothing. */
 function SectionView({ s }: { s: Section }) {
+  const plain = useContext(PlainText);
   const body = s.blocks.map((b, i) => <BlockView key={i} b={b} />);
   if (s.kind === 'next') {
     return (
@@ -63,19 +70,19 @@ function SectionView({ s }: { s: Section }) {
   }
   return (
     <section className="mt-2.5">
-      {s.title && <h3 className="mb-1 text-[13px] font-semibold">{inline(s.title)}</h3>}
+      {s.title && <h3 className="mb-1 text-[13px] font-semibold">{inline(s.title, 0, plain)}</h3>}
       {body}
     </section>
   );
 }
 
 /** What the agent said, read the way the PC reads it: a title, a lead, then its sections. */
-export function ReplyView({ doc }: { doc: ReplyDoc }) {
+export function ReplyView({ doc, plain }: { doc: ReplyDoc; plain?: Plain }) {
   return (
-    <>
-      {doc.title && <strong className="block text-[13px] font-semibold">{inline(doc.title)}</strong>}
-      {doc.lead && <p className="mt-1.5">{inline(doc.lead)}</p>}
+    <PlainText.Provider value={plain}>
+      {doc.title && <strong className="block text-[13px] font-semibold">{inline(doc.title, 0, plain)}</strong>}
+      {doc.lead && <p className="mt-1.5">{inline(doc.lead, 0, plain)}</p>}
       {doc.sections.map((s, i) => <SectionView key={i} s={s} />)}
-    </>
+    </PlainText.Provider>
   );
 }
