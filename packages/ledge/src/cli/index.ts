@@ -7,6 +7,7 @@ ledge setup                                                  install hooks and ~
 ledge uninstall [--purge]                                    remove hooks, service and link (--purge: ~/.ledge too)
 ledge status                                                 list sessions
 ledge who                                                    list the live sessions (name, tool, state, project, branch, topic)
+ledge send <nom> "<message>" [--summary <texte>]             write to another Ledge session
 ledge bridge                                                 exchange Ledge messages over SSH stdio
 ledge --version                                              print the installed version`;
 
@@ -38,6 +39,7 @@ async function main(argv: string[]): Promise<number> {
     case 'uninstall': { const { runUninstall } = await import('./uninstall.js'); const r = await runUninstall({ purge: rest.includes('--purge') }); for (const l of r.lines) console.log(l); return r.ok ? 0 : 1; }
     case 'status': { const { printStatus } = await import('./status.js'); console.log(await printStatus()); return 0; }
     case 'who': { const { printWho } = await import('./who.js'); console.log(await printWho()); return 0; }
+    case 'send': { const { sendMessage } = await import('./send.js'); const r = await sendMessage(rest); console.log(r.line); return r.code; }
     case 'bridge': { const { bridge } = await import('./bridge.js'); await bridge(); return 0; }
     case 'claude': case 'codex': case 'cursor': { const { launch } = await import('./launch.js'); return launch(cmd, rest); }
     case 'attach': { const { attach } = await import('./attach.js'); return attach(rest.find(a => !a.startsWith('--')) ?? '', { readOnly: rest.includes('--read-only') }); }

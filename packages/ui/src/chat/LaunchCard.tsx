@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { ChatProposal, Session } from '@ledge/protocol';
 import { Button } from '../ui/Button';
 import { Icon, ICONS } from '../ui/icons';
@@ -9,6 +10,8 @@ export interface LaunchCardProps {
   /** The launched session, once `launchedId` names one the overlay knows. */
   session?: Session;
   busy: boolean; disabled: boolean;
+  /** The front's model chooser for this card (#58); without it the agent's default, as before. */
+  model?: ReactNode;
   onLaunch: () => void; onOpenSession: (id: string) => void; onTerminal: (id: string) => void;
 }
 
@@ -32,7 +35,7 @@ export function LaunchCard(p: LaunchCardProps) {
         <>
           <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 12px', padding: '10px 12px' }}>
             <dt style={muted}>{c.folder}</dt><dd style={{ margin: 0, minWidth: 0 }}><strong>{pr.project}</strong> <span style={mono}>{pr.cwd}</span></dd>
-            <dt style={muted}>{c.tool}</dt><dd style={{ margin: 0 }}>{c.byDefault(toolName(pr.tool))}</dd>
+            <dt style={muted}>{c.tool}</dt><dd style={{ margin: 0, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>{p.model ? <>{toolName(pr.tool)}{p.model}</> : c.byDefault(toolName(pr.tool))}</dd>
             <dt style={muted}>{c.prompt}</dt><dd style={{ margin: 0, overflowWrap: 'anywhere' }}>{pr.prompt ?? <span style={muted}>{c.noPrompt}</span>}</dd>
           </dl>
           {state === 'failed' && <div role="alert" style={{ padding: '6px 12px', color: 'var(--destructive)', background: 'color-mix(in srgb, var(--destructive) 12%, transparent)' }}>{c.failed(pr.error!)}</div>}

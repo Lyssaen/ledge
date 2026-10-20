@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { ChatProposal, Session } from '@ledge/protocol';
 import { Button } from '../ui/Button';
 import { Icon, ICONS } from '../ui/icons';
@@ -11,6 +11,8 @@ export interface LaunchGroupCardProps {
   sessions: readonly Session[];
   /** The rows being launched now: their buttons say so; `busy` holds the whole card. */
   busy: boolean; busyRows: readonly number[]; disabled: boolean;
+  /** The front's model chooser (#58), one for every row launched (the rows share the question's agent); without it the agent's default. */
+  model?: ReactNode;
   onLaunch: (rows: number[]) => void; onOpenSession: (id: string) => void; onTerminal: (id: string) => void;
 }
 
@@ -44,7 +46,7 @@ export function LaunchGroupCard(p: LaunchGroupCardProps) {
                 </Button>
               )}
             </div>
-            <div style={{ ...muted, overflowWrap: 'anywhere' }}>{c.byDefault(toolName(pr.tool))} · {pr.prompt ?? c.noPrompt}</div>
+            <div style={{ ...muted, overflowWrap: 'anywhere' }}>{p.model ? toolName(pr.tool) : c.byDefault(toolName(pr.tool))} · {pr.prompt ?? c.noPrompt}</div>
             {state === 'launched' && (
               <div>{session ? <><a href={`ledge://session/${pr.launchedId}`} onClick={e => { e.preventDefault(); p.onOpenSession(pr.launchedId!); }} style={{ fontWeight: 600, color: 'inherit' }}>{session.name}</a> {c.started}</> : c.startedUnknown}</div>
             )}
@@ -57,6 +59,7 @@ export function LaunchGroupCard(p: LaunchGroupCardProps) {
           <Button variant="primary" size="sm" disabled={p.busy || p.disabled || picked.length === 0} onClick={() => p.onLaunch(picked)} style={{ height: 28, padding: '0 10px', gap: 6, fontSize: 12 }}>
             <Icon size={12} {...ICONS.rocket} />{t.group.launchAll(picked.length)}
           </Button>
+          {p.model}
           <span style={{ ...muted, fontSize: 12 }}>{c.orRephrase}</span>
         </div>
       )}

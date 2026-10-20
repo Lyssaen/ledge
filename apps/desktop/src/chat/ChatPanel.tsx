@@ -10,6 +10,7 @@ import { useTheme } from '../shell/theme';
 import { useDefaultTool } from '../settings/tool';
 import { useAgentHighlight } from './useAgentHighlight';
 import { useChatCards } from './useChatCards';
+import { CardModelPick } from './CardModelPick';
 import { useProjectReview } from './projectReview';
 
 export interface ChatPanelProps {
@@ -78,6 +79,7 @@ export function ChatPanel({ client, view, paused, focus, onClose, onOpenSession,
             onAsk={ask} onCancel={qid => send({ type: 'chat.cancel', qid })} onReset={() => send({ type: 'chat.reset' })} onBack={onClose} onClose={onClose}
             onOpenSession={open} onTerminal={terminal} turnAvailable={turnReady}
             launchingQid={cards.launchingQid} launchingRows={cards.launchingRows} onLaunchProposal={cards.launch}
+            renderModel={(qid, agent, busy) => <CardModelPick client={client} machine={turnMachine(qid)} tool={agent} pick={cards.pick(qid)} disabled={busy} onPick={next => cards.setPick(qid, next)} />}
             relayingQid={cards.relayingQid} onRelay={cards.relay} onRelayCancel={cards.cancelRelay}
             onProject={project.review} projectNamed={project.projectNamed}
             onAgentHover={setHovered} inputRef={inputRef}

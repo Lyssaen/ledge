@@ -551,6 +551,17 @@ export const en: Messages = {
         plan: (n) => `${n} is waiting for your approval of its plan.`, diff: (n) => `${n} is waiting for your approval of a change.`
       },
       resumes: 'The thread resumes after your answer.',
+      working: {
+        label: 'The agent is working',
+        prompt: { you: 'Reading your message…', parent: 'Reading its instruction…' },
+        received: (n) => `Reading ${n}’s message…`,
+        tool: { read: ['Just read ', '…'], search: ['Going through the results for ', '…'], command: ['Looking at the output of ', '…'], edit: ['Reviewing its change to ', '…'] },
+        failed: ['Looking into why ', ' failed…'],
+        helper: (n) => `Taking up ${n}’s report…`,
+        decision: 'Resuming after your answer…', said: 'Carrying on…',
+        bank: ['Choosing its words…', 'Checking its notes…', 'Pulling on a thread…', 'Weighing the options…', 'Scribbling away…', 'Warming up the neurons…', 'Looking for the right word…', 'Reading it over once more…'],
+        long: 'Taking its time, thinking hard…'
+      },
       planDecided: { accept: 'You approved the plan', always: 'You approved the plan in auto mode', deny: 'You sent the plan back for revision', unknown: 'Plan answered in the terminal' },
       objective: 'Session objective', notedBy: (n) => `· noted by ${n}`,
       tags: { story: 'Story', objectif: 'Objective' },
@@ -620,7 +631,16 @@ export const en: Messages = {
     missing: { tool: 'Choose an agent', prompt: 'Write the instruction', machine: 'No machine online', repos: 'Choose at least one folder or repository' },
     cancel: 'Cancel', launch: 'Launch', launching: 'Launching…',
     started: (n, t) => `${n} is starting at the ${t} table.`, startedNoTable: (n) => `${n} is starting, with no project.`, refused: (m) => `Launch refused: ${m}`,
-    timeout: 'The launch did not answer. Check the machine, then try again.'
+    timeout: 'The launch did not answer. Check the machine, then try again.',
+    modelOf: (t: string) => `${t} model`, remembered: 'Last choice for this project kept',
+    byDefault: 'Default', byDefaultHint: 'The one the agent picks by itself', defaultBadge: 'default',
+    otherModel: 'Other…', otherModelHint: 'An exact id', otherPlaceholder: 'Model id, passed as is',
+    modelsLoading: 'Reading the machine’s models…', modelsUnavailable: (e: string) => `Model list unavailable (${e}): the default and « Other… » still work.`,
+    modelsOutdated: 'Update Ledge on this machine to choose the model.',
+    effort: 'Effort', effortHint: 'Thinking time per turn', cursorEffort: 'For Cursor, the effort is part of the model name.',
+    efforts: { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max', ultra: 'Ultra' } as Record<string, string>,
+    modelHints: { 'claude:fable': 'The most capable', 'claude:opus': 'Very capable, slower', 'claude:sonnet': 'Balanced, everyday use', 'claude:haiku': 'Fast and economical' } as Record<string, string>,
+    pickSummary: (m: string, e?: string) => (e ? `${m} · ${e}` : m)
   },
   projects: {
     titles: {

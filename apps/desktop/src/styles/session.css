@@ -222,6 +222,13 @@ button.tg:disabled{cursor:default}
 .newsep{display:flex;align-items:center;gap:10px;font-size:11px;font-weight:500;line-height:20px;color:var(--sidebar-primary)}
 .newsep:after{content:'';flex:1;height:1px;background:color-mix(in srgb,var(--sidebar-primary) 40%,transparent)}
 .waiting-row{padding:8px 0}
+/* The waiting row (mockup C): the agent works and no action runs. Shaped like a running action, quieter. */
+.wait-row{padding:4px 0}
+.wait-phrase{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;line-height:20px;color:var(--muted-foreground);animation:wait-rise .18s ease-out}
+.wait-phrase code{font:12px 'Geist Mono',monospace;color:var(--foreground);background:var(--muted);padding:1px 5px;border-radius:var(--radius-sm)}
+.wait-phrase.still{animation:none}
+@keyframes wait-rise{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.wait-phrase{animation:none}}
 .waiting-text{font-size:13px;line-height:20px;color:var(--danger-text)}
 .end-row,.turn-end,.frozen-end{padding:6px 0 10px}
 .end-text{font-size:12px;line-height:20px;color:var(--muted-foreground)}

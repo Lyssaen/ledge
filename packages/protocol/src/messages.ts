@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { PendingSchema, SessionSchema, ToolSchema } from './session.js';
 import { ChatStepSchema, ChatTurnSchema, ChatProposalSchema, ChatProposalsSchema, ChatRelaySchema, MAX_PROPOSALS, ChatProjectProposalSchema } from './chat.js';
 import { ReposInspectSchema, ReposInfoSchema } from './repos.js';
+import { ModelsListSchema, ModelsListingSchema, ModelIdSchema, EffortSchema } from './models.js';
 import { ReposScanSchema, ReposFoundSchema } from './scan.js';
 import { DocumentReadSchema, DocumentContentSchema, DocumentErrorSchema } from './documents.js';
 import { RoutingContextSchema, RouteResultSchema } from './routing.js';
@@ -58,8 +59,9 @@ export type Recent = z.infer<typeof RecentSchema>;
 export const SEMVER = /^\d+\.\d+\.\d+$/;
 /** What the daemon knows of itself (spec 2026-10-12 auto-update §6): its version, how it was installed, whether it runs
  *  as the systemd service, and the command a person runs by hand when it cannot update itself. */
-/** `home`: the daemon's home folder, so a client can show the folders under it as `~` (absent from older daemons). */
-export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(['npm', 'git', 'unknown']), systemd: z.boolean(), manual: z.string().optional(), routing: z.boolean().optional(), archive: z.boolean().optional(), home: z.string().optional() });
+export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(['npm', 'git', 'unknown']), systemd: z.boolean(), manual: z.string().optional(), routing: z.boolean().optional(), archive: z.boolean().optional(),
+  /** Takes `model` and `effort` on `session.launch` and answers `models.list` (#58). */ models: z.boolean().optional(),
+  /** Its home folder, so a client shows the folders under it as `~` (absent from older daemons). */ home: z.string().optional() });
 export type DaemonInfo = z.infer<typeof DaemonInfoSchema>;
 export const UpdateFailureSchema = z.enum(['git-install', 'no-systemd', 'sessions-at-risk', 'npm-failed', 'busy']);
 export type UpdateFailure = z.infer<typeof UpdateFailureSchema>;
@@ -70,6 +72,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   DocumentErrorSchema,
   ReposInfoSchema,
   ReposFoundSchema,
+  ModelsListingSchema,
   /** `recents`: the folders of past sessions, most recent first. `launcher`: the command that runs `ledge` inside WSL
    *  (`[node, cli]`), so the overlay can attach a terminal to a session with `<launcher> attach <id>`. `daemon`: absent
    *  from daemons older than the auto-update. */
@@ -105,23 +108,34 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('projects'), projects: ProjectsSchema }),
   /** The island's settings shared by the local fronts; null until a front sets them (the island then sends its own). Local clients only. */
   z.object({ type: z.literal('island'), prefs: IslandPrefsSchema.nullable() }),
+  /** The daemon's immediate answer to a `session.message`: delivered (`accepted`), held for later (`queued`), left to Claude's own SendMessage (`native`), or refused with a `reason`. */
+  z.object({ type: z.literal('message.ack'), rid: z.string(), outcome: z.enum(['accepted', 'queued', 'native', 'refused']), reason: z.string().optional() }),
   z.object({ type: z.literal('error'), message: z.string(), id: z.string().optional(), /** Le type du message client refusé. */ request: z.string().optional(),
     /** Ce que le front doit reconnaître au-delà du texte (NOTE_NOT_TYPED) ; une chaîne libre, qu'un front plus ancien ignore. */ code: z.string().optional() })
 ]);
 export type ServerMessage = z.infer<typeof ServerMessageSchema>;
+export type MessageAck = Extract<ServerMessage, { type: 'message.ack' }>;
+
+/** The longest text and summary a `session.message` may carry (as `chat.route` caps a routed text). */
+export const MESSAGE_MAX = 20000;
+export const SUMMARY_MAX = 500;
 
 export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('chat.route'), qid: z.string().min(1).max(100), text: z.string().min(1).max(20000), tool: ToolSchema.optional(), context: RoutingContextSchema }),
   DocumentReadSchema,
   ReposInspectSchema,
   ReposScanSchema,
+  ModelsListSchema,
   /** The overlay starts a session: `cwd` is a WSL path (`~` allowed), `name` a preferred bot name (the daemon picks a
    *  free one otherwise), `prompt` the agent's first instruction, `continue` resumes the folder's last conversation.
-   *  With `qid` it is the chat card of that turn: the daemon launches the turn's proposal and ignores the other fields. */
+   *  With `qid` it is the chat card of that turn: the daemon launches the turn's proposal and ignores the other fields
+   *  but `rows`, `model` and `effort`. */
   z.object({ type: z.literal('session.launch'), tool: ToolSchema, cwd: z.string().min(1), name: z.string().optional(), prompt: z.string().optional(), continue: z.boolean().optional(), qid: z.string().min(1).optional(),
     /** With `qid`: the card's rows to launch (#24), indexes into the turn's `proposals`, each once; the first row without it. */
     rows: z.array(z.number().int().min(0).max(MAX_PROPOSALS - 1)).min(1).max(MAX_PROPOSALS).refine(r => new Set(r).size === r.length, 'a row twice').optional(),
     /** Folders in addition to `cwd` (Claude: `--add-dir`); resolved like `cwd`. */ dirs: z.array(z.string().min(1)).max(20).optional(),
+    /** The agent's model and effort (#58), the agent's own default when left out; with `qid`, for every row launched. */
+    model: ModelIdSchema.optional(), effort: EffortSchema.optional(),
     /** Routing by the fleet, removed before the message reaches the daemon. */ machineId: z.string().optional() }),
   /** The launch form's folder browser: list a folder's subfolders (home when no `path`), or make `name` inside `parent`
    *  and list it. Both are answered with a `folder.listing`. */
@@ -174,7 +188,9 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   /** Replaces the local daemon's projects and rules as a whole; refused unless valid. */
   z.object({ type: z.literal('projects.set'), projects: ProjectsSchema }),
   /** Replaces the island's settings as a whole; refused unless valid. */
-  z.object({ type: z.literal('island.set'), prefs: IslandPrefsSchema })
+  z.object({ type: z.literal('island.set'), prefs: IslandPrefsSchema }),
+  /** One session writing to another by Ledge name (`to` may end in ` [ref]`); `intercept` (the Claude hook): answer `native` unless `to` is a live non-Claude session. */
+  z.object({ type: z.literal('session.message'), rid: z.string().min(1), from: z.string().min(1), to: z.string().min(1), text: z.string().min(1).max(MESSAGE_MAX), summary: z.string().max(SUMMARY_MAX).optional(), intercept: z.boolean().optional() })
 ]);
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 

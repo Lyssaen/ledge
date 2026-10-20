@@ -579,6 +579,19 @@ export const fr = {
         plan: (n: string) => `${n} attend votre accord sur son plan.`, diff: (n: string) => `${n} attend votre accord sur une modification.`
       } as Record<'permission' | 'question' | 'plan' | 'diff', (n: string) => string>,
       resumes: 'Le fil reprend après votre réponse.',
+      // La ligne d'attente : l'agent travaille sans action en cours. D'abord ce que montre le fil, puis la banque, puis le temps.
+      working: {
+        label: 'L’agent travaille',
+        prompt: { you: 'Lit votre message…', parent: 'Lit sa consigne…' } as Record<'you' | 'parent', string>,
+        received: (n: string) => `Lit le message de ${n}…`,
+        // [avant, après] la cible de l'action, en code.
+        tool: { read: ['Vient de lire ', '…'], search: ['Parcourt les résultats de ', '…'], command: ['Regarde le résultat de ', '…'], edit: ['Relit sa modification de ', '…'] } as Record<ToolKind, readonly [string, string]>,
+        failed: ['Regarde pourquoi ', ' a échoué…'] as readonly [string, string],
+        helper: (n: string) => `Reprend le rapport ${/^[aeiouyhéèêàâîôû]/i.test(n) ? `d’${n}` : `de ${n}`}…`,
+        decision: 'Reprend après votre réponse…', said: 'Enchaîne…',
+        bank: ['Tourne sept fois sa langue…', 'Consulte ses notes…', 'Tire sur un fil…', 'Pèse le pour et le contre…', 'Gratte le papier…', 'Fait chauffer les neurones…', 'Cherche le mot juste…', 'Relit une dernière fois…'] as readonly string[],
+        long: 'Prend son temps, ça cogite…'
+      },
       planDecided: {
         accept: 'Vous avez approuvé le plan', always: 'Vous avez approuvé le plan en mode automatique', deny: 'Vous avez renvoyé le plan à revoir', unknown: 'Plan répondu dans le terminal'
       } as Record<'accept' | 'always' | 'deny' | 'unknown', string>,
@@ -651,7 +664,16 @@ export const fr = {
     missing: { tool: 'Choisissez un agent', prompt: 'Écrivez la consigne', machine: 'Aucune machine en ligne', repos: 'Choisissez au moins un dossier ou un dépôt' } as Record<'tool' | 'prompt' | 'machine' | 'repos', string>,
     cancel: 'Annuler', launch: 'Lancer', launching: 'Lancement…',
     started: (n: string, t: string) => `${n} démarre à la table ${t}.`, startedNoTable: (n: string) => `${n} démarre, sans projet.`, refused: (m: string) => `Démarrage refusé : ${m}`,
-    timeout: 'Le démarrage n’a pas répondu. Vérifiez la machine puis réessayez.'
+    timeout: 'Le démarrage n’a pas répondu. Vérifiez la machine puis réessayez.',
+    modelOf: (t: string) => `Modèle de ${t}`, remembered: 'Dernier choix pour ce projet retenu',
+    byDefault: 'Par défaut', byDefaultHint: 'Celui que l’agent prend de lui-même', defaultBadge: 'défaut',
+    otherModel: 'Autre…', otherModelHint: 'Un identifiant exact', otherPlaceholder: 'Identifiant du modèle, passé tel quel',
+    modelsLoading: 'Lecture des modèles de la machine…', modelsUnavailable: (e: string) => `Liste des modèles indisponible (${e}) : le défaut et « Autre… » restent possibles.`,
+    modelsOutdated: 'Mettez à jour Ledge sur cette machine pour choisir le modèle.',
+    effort: 'Effort', effortHint: 'Temps de réflexion par tour', cursorEffort: 'Pour Cursor, l’effort fait partie du nom du modèle.',
+    efforts: { low: 'Bas', medium: 'Moyen', high: 'Élevé', xhigh: 'Très élevé', max: 'Max', ultra: 'Ultra' } as Record<string, string>,
+    modelHints: { 'claude:fable': 'Le plus capable', 'claude:opus': 'Très capable, plus lent', 'claude:sonnet': 'Équilibré, usage courant', 'claude:haiku': 'Rapide et économique' } as Record<string, string>,
+    pickSummary: (m: string, e?: string) => (e ? `${m} · ${e}` : m)
   },
   projects: {
     titles: {
