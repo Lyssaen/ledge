@@ -151,10 +151,10 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
   let chatState: ChatState = emptyChat();
   /** `chat.history` was asked since the last ready; the snapshot of a first connection asks it when the ready could not. */
   let historyAsked = false;
-  /** The relay or launch of a turn that is under way, shared by a second tap. */
   /** The questions asked since the last ready: only these may be newer than a history reply. */
   const askedSinceReady = new Set<string>();
   const expirers = new Set<() => void>();
+  /** The relay or launch of a turn that is under way, shared by a second tap. */
   const chatActions = new Map<string, Promise<ChatAction>>();
   /** The `prepareConfirm` waiting for its challenge. */
   let preparing: { purpose: ConfirmChallenge['purpose']; resolve: (c: ConfirmChallenge) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> } | null = null;
@@ -570,7 +570,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     },
 
     launch(qid, rows) {
-      return chatAction(`launch:${qid}`, async () => {
+      return chatAction(`launch:${qid}:${rows?.join(',') ?? '*'}`, async () => {
         // A phone without a passkey cannot confirm: the PC would refuse, and no prompt is worth showing.
         if (!state.device?.confirm) return { status: 'rejected', reason: 'confirm_required' };
         let challenge: ConfirmChallenge;
@@ -584,7 +584,8 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         // Good for a minute: after that the PC would only refuse it.
         if (Date.now() - at >= challenge.expiresInMs) return { status: 'expired' };
         const op = write(o => ({ type: 'chat.launch', op: o, qid, ...(rows ? { rows } : {}), assertion: signed }));
-        return op === null ? { status: 'failed' } : finalOf(op);
+        // The link dropped after the passkey: the PC never got it, so the card stays as it was and can be tapped again.
+        return op === null ? { status: 'expired' } : finalOf(op);
       });
     },
 

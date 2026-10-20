@@ -157,6 +157,38 @@ describe('the phone chat in the store', () => {
     await expect(done).resolves.toEqual({ status: 'rejected', reason: 'assertion_invalid' });
   });
 
+  it('two rows of one card launched back to back are two launches, not one shared result', async () => {
+    const t = setup();
+    const qid = '0b0e6f4c-27e6-4c1a-9a53-0d8a7d2a3c11';
+    vi.mocked(getAssertion).mockResolvedValue(ASSERTION);
+    const first = t.store.launch(qid, [0]);
+    t.deliver(CHALLENGE);
+    await flush();
+    const second = t.store.launch(qid, [1]);
+    expect(t.of('confirm.prepare')).toHaveLength(2);
+    t.deliver(CHALLENGE);
+    await flush();
+    const sent = t.of('chat.launch');
+    expect(sent).toMatchObject([{ rows: [0] }, { rows: [1] }]);
+    t.deliver({ type: 'operation.result', op: sent[0]!.op, status: 'applied' });
+    await expect(first).resolves.toEqual({ status: 'applied' });
+    let settled = false;
+    void second.then(() => { settled = true; });
+    await flush();
+    expect(settled).toBe(false);
+    t.deliver({ type: 'operation.result', op: sent[1]!.op, status: 'rejected', reason: 'invalid' });
+    await expect(second).resolves.toEqual({ status: 'rejected', reason: 'invalid' });
+  });
+
+  it('launch: a link that dropped after the passkey is expired, not failed', async () => {
+    const t = setup();
+    vi.mocked(getAssertion).mockImplementation(async () => { t.set('connecting' as never); return ASSERTION; });
+    const done = t.store.launch('0b0e6f4c-27e6-4c1a-9a53-0d8a7d2a3c11');
+    t.deliver(CHALLENGE);
+    await expect(done).resolves.toEqual({ status: 'expired' });
+    expect(t.of('chat.launch')).toEqual([]);
+  });
+
   it('launch: the user cancelling the prompt gives cancelled, nothing is sent', async () => {
     const t = setup();
     vi.mocked(getAssertion).mockResolvedValue('cancelled');
@@ -200,6 +232,12 @@ describe('the phone chat in the store', () => {
     expect(t.store.chat().live?.qid).toBe(qid);
     t.deliver(chat.delta(qid, 'En route'));
     expect(t.store.chat().live?.text).toBe('En route');
+  });
+
+  it('a chat.done for a question the phone does not know is ignored', () => {
+    const t = setup();
+    t.deliver(chat.done('22222222-2222-4222-8222-222222222222'));
+    expect(t.store.chat().turns).toEqual([]);
   });
 
   it('a late non-busy error leaves a finished turn alone, and an unknown qid raises nothing', () => {

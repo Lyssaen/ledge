@@ -51,6 +51,8 @@ export function reduceChat(s: ChatState, m: ChatServerMessage, fresh: ReadonlySe
     }
     case 'chat.done': {
       const has = s.turns.some(t => t.qid === m.qid);
+      // A done for a question the phone neither shows nor follows (a reset removed it): it must not bring the turn back.
+      if (!has && s.live?.qid !== m.qid) return s;
       const turns = has ? s.turns.map(t => t.qid === m.qid ? m.turn : t) : [...s.turns, m.turn];
       return { ...s, turns, live: s.live?.qid === m.qid ? null : s.live };
     }

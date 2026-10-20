@@ -32,7 +32,7 @@ test('the phone chat: a question, its steps and answer, the instruction sent, th
     const text = m.text();
     const before = !signedIn && (text.startsWith('WebSocket connection to ') || (text.startsWith('Failed to load resource: ') && m.location().url.endsWith('/auth/me')));
     // The relay going down on purpose (step 4) is logged by the browser itself.
-    const dropped = dropping && text.startsWith('WebSocket connection to ') || text.startsWith('Failed to load resource: ');
+    const dropped = dropping && (text.startsWith('WebSocket connection to ') || text.startsWith('Failed to load resource: '));
     if (!before && !dropped) problems.push(`console: ${text} (${m.location().url})`);
   });
 
