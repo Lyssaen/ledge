@@ -397,7 +397,6 @@ export const en: Messages = {
       open: 'Open session', terminal: 'Terminal', rename: 'Rename…', moveTo: 'Move to…', end: 'End session', resume: 'Resume session',
       archive: 'Archive', endAndArchive: 'End and archive…', delete: 'Delete…',
       kids: (n, name) => `${n} ${pluralEn(n, 'subagent leaves', 'subagents leave')} with ${name}.`,
-      offline: (machine) => `${machine} is unreachable.`,
       cannotEnd: (machine) => `${machine} is unreachable: Ledge cannot stop it.`,
       outsideLedge: 'Launched outside Ledge: Ledge cannot stop it.',
       deleteKey: 'Del', archiveFinished: 'Archive finished'

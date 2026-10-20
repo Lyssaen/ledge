@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
-import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import WebSocket from 'ws';
 import { createMockDaemon, fakeSession } from '@ledge/fleet/test/mockDaemon';
@@ -7,13 +7,14 @@ import type { NavAction } from '../src/nav/state';
 
 // The two windows talk through Tauri events: the test plays the other window with the handlers each one registers.
 const win = vi.hoisted(() => ({
-  hub: null as null | { action(a: NavAction): void; closed(): void },
+  hub: null as null | { action(a: NavAction): void; terminal(id: string): void; closed(): void },
   open: false,
   detach: null as unknown as Mock<() => Promise<boolean>>, attach: null as unknown as Mock<() => void>,
-  show: null as unknown as Mock<() => void>, toMain: null as unknown as Mock<(a: NavAction) => void>, close: null as unknown as Mock<() => void>
+  show: null as unknown as Mock<() => void>, toMain: null as unknown as Mock<(a: NavAction) => void>, close: null as unknown as Mock<() => void>,
+  terminalToMain: null as unknown as Mock<(id: string) => void>
 }));
 vi.mock('../src/atelier/detach', async importOriginal => {
-  win.detach = vi.fn(async () => true); win.attach = vi.fn(); win.show = vi.fn(); win.toMain = vi.fn(); win.close = vi.fn();
+  win.detach = vi.fn(async () => true); win.attach = vi.fn(); win.show = vi.fn(); win.toMain = vi.fn(); win.close = vi.fn(); win.terminalToMain = vi.fn();
   return {
     ...(await importOriginal<typeof import('../src/atelier/detach')>()),
     canDetach: () => true,
@@ -23,6 +24,7 @@ vi.mock('../src/atelier/detach', async importOriginal => {
     onAtelier: (fn: NonNullable<typeof win.hub>) => { win.hub = fn; return () => { win.hub = null; }; },
     showMainWindow: () => win.show(),
     toMain: (a: NavAction) => win.toMain(a),
+    terminalToMain: (id: string) => win.terminalToMain(id),
     closeAtelierWindow: () => win.close(),
     watchAtelierWindow: () => () => {}
   };
@@ -50,7 +52,7 @@ import { createDesktopFleet } from '../src/fleet/useFleet';
 import { AtelierApp } from '../src/atelier/AtelierWindow';
 import { boot, closeDaemons } from './helpers';
 
-beforeEach(() => { localStorage.clear(); win.open = false; caps.maximized = false; for (const f of [win.detach, win.attach, win.show, win.toMain, win.close, caps.minimize, caps.toggle, full.set]) f.mockClear(); });
+beforeEach(() => { localStorage.clear(); win.open = false; caps.maximized = false; for (const f of [win.detach, win.attach, win.show, win.toMain, win.close, win.terminalToMain, caps.minimize, caps.toggle, full.set]) f.mockClear(); });
 afterEach(async () => { cleanup(); await closeDaemons(); });
 
 const away = () => screen.queryByRole('region', { name: 'The Atelier is in its own window' });
@@ -76,6 +78,17 @@ describe('the main window with the Atelier detached (#21)', () => {
     expect(win.show).toHaveBeenCalled();
     act(() => win.hub!.action({ type: 'modal', modal: { kind: 'launch' } }));
     expect(screen.getByRole('dialog', { name: 'New session' })).toBeVisible();
+  });
+
+  it('a « Terminal » from the detached Atelier shows the session here with its pane, the window brought forward', async () => {
+    const { user } = await boot();
+    await user.click(screen.getByRole('button', { name: 'Detach the Atelier' }));
+    await screen.findByRole('region', { name: 'The Atelier is in its own window' });
+    act(() => win.hub!.terminal('local:nova'));
+    expect(within(screen.getByRole('banner')).getByText('Nova')).toBeVisible();
+    expect(await screen.findByRole('region', { name: 'Terminal' })).toBeVisible();
+    expect(JSON.parse(localStorage.getItem('desktop.session')!)).toMatchObject({ terminal: true });
+    expect(win.show).toHaveBeenCalled();
   });
 
   it('closing the detached window gives the Atelier back, and the session open here stays', async () => {
@@ -141,6 +154,17 @@ describe('the detached Atelier’s window (#21)', () => {
       await user.keyboard('n');
       expect(win.toMain).toHaveBeenCalledWith({ type: 'modal', modal: { kind: 'launch' } });
       expect(screen.queryByRole('dialog')).toBeNull();
+    } finally { await close(); }
+  });
+
+  it('its menu\'s « Terminal » asks the main window for the session with its pane', async () => {
+    const { user, close } = await atelier();
+    try {
+      fireEvent.contextMenu(screen.getByRole('button', { name: /^Otto,/ }));
+      const menu = await screen.findByRole('menu', { name: 'Manage Otto' });
+      await user.click(within(menu).getByRole('menuitem', { name: 'Terminal' }));
+      expect(win.terminalToMain).toHaveBeenCalledWith('local:otto');
+      expect(win.toMain).not.toHaveBeenCalled();
     } finally { await close(); }
   });
 

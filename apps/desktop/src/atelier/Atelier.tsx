@@ -103,7 +103,7 @@ export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf,
       if (key === 'e') { actions.request('archive', [chosen.id]); return true; }
       if (key === 'delete') { actions.request('delete', [chosen.id]); return true; }
       if (key === 'f2' && !chosen.offline) { menu.rename(chosen); return true; }
-      if (key === 't' && !chosen.offline) { menu.terminal(chosen); return true; }
+      if (key === 't') { menu.terminal(chosen); return true; }
     }
     // A focused button or link keeps its own Entrée.
     if (e.key === 'Enter' && focusedId !== null && !target?.closest('button,a')) {

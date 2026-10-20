@@ -54,7 +54,7 @@ import { loadSessionPrefs, saveSessionPrefs } from './session/prefs';
 import { subagentOf } from './session/exchanges';
 import { useStored } from './state/useStored';
 import { ptyBackend } from './term/backend';
-import { TermStore } from './term/store';
+import { agentTabId, TermStore } from './term/store';
 import { termTheme } from './term/theme';
 import { TermStoreContext } from './term/useTerms';
 import { ProjectDialog } from './projects/ProjectDialog';
@@ -128,14 +128,26 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     if (action === 'dnd') setDnd(!getDnd());
     else if (action === 'new') dispatch({ type: 'modal', modal: { kind: 'launch' } });
   }), []);
+  // Whether the terminal shows beside a session: it follows from one agent to the next and survives a restart.
+  const [sessionPrefs, setSessionPrefs] = useStored(loadSessionPrefs, saveSessionPrefs);
+  // Every « Terminal » (the session menu, a chat card, the island) opens the session's page with its pane, on the agent's tab.
+  const showTerminal = useCallback((id: string) => {
+    dispatch({ type: 'open', id });
+    setSessionPrefs(x => ({ ...x, terminal: true }));
+    termStore.select(id, agentTabId(id));
+  }, [setSessionPrefs, termStore]);
   // « Open in Ledge » from the island: the shell has already brought the window forward; this shows what was asked.
-  useEffect(() => onOpenTarget(raw => { const target = parseTarget(raw); if (target) dispatch(targetAction(target)); }), []);
+  useEffect(() => onOpenTarget(raw => {
+    const target = parseTarget(raw);
+    if (target?.kind === 'terminal') showTerminal(target.id);
+    else if (target) dispatch(targetAction(target));
+  }), [showTerminal]);
   // The Atelier in its own window (#21): what it opens shows here, this window brought forward; its closing gives it back.
   const [detached, setDetached] = useState(false);
   useEffect(() => {
     void atelierOpen().then(open => { if (open) setDetached(true); });
-    return onAtelier({ action: a => { dispatch(a); showMainWindow(); }, closed: () => setDetached(false) });
-  }, []);
+    return onAtelier({ action: a => { dispatch(a); showMainWindow(); }, terminal: id => { showTerminal(id); showMainWindow(); }, closed: () => setDetached(false) });
+  }, [showTerminal]);
   const detach = () => { void detachAtelier().then(ok => { if (ok) setDetached(true); }); };
   const attach = () => { attachAtelier(); setDetached(false); };
   // The tray speaks the app's language and names the way back from do not disturb.
@@ -168,7 +180,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // End, archive, resume, restore, delete (lot 8): the confirmation below; the atelier and the session page hand it their menus.
   const actions = useSessionActions({ client: fleetClient, sessions, archived: fleetView.archived, machines, errors, notify });
   // The session menu, from the atelier's seats and the session page's header « … » (one at a time).
-  const sessionMenu = useSessionMenu({ client: fleetClient, sessions, notify });
+  const sessionMenu = useSessionMenu({ client: fleetClient, sessions, onShowTerminal: showTerminal });
   const decisions = useDecisions({ client: fleetClient, sessions, errors, notify });
   // The sidebar's Ask Ledge, the same send as the chat panel: nothing goes out while the local daemon is offline (the chat still opens).
   const [tool] = useDefaultTool();
@@ -186,8 +198,6 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // The subagent whose page is open, found as the Workspace finds it (live, else its thread row), for the top bar.
   const { threads } = useDaemon();
   const helper = session && place.kind === 'session' && place.helper !== undefined ? subagentOf(session, threads.get(session.id), place.helper, t.session.subagent) : null;
-  // Whether the terminal shows beside a session: it follows from one agent to the next and survives a restart.
-  const [sessionPrefs, setSessionPrefs] = useStored(loadSessionPrefs, saveSessionPrefs);
   useEffect(preloadPlaces, []);
   const toggleTerminal = useCallback(() => setSessionPrefs(p => ({ ...p, terminal: !p.terminal })), [setSessionPrefs]);
   // Ctrl + ² from outside the terminal: it shows if hidden, then its open tab takes the keyboard. A pane just asked for draws
@@ -291,7 +301,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         </section>
         {nav.chat && (
           <ChatPlace label={t.side.chat} client={fleetClient} view={fleetView} paused={nav.paused} focus={nav.chatFocus} onClose={() => dispatch({ type: 'chat', open: false })}
-            onOpenSession={id => dispatch({ type: 'open', id })} onLaunched={chatLaunched}
+            onOpenSession={id => dispatch({ type: 'open', id })} onTerminal={showTerminal} onLaunched={chatLaunched}
             projects={projects} notify={notify} onProposal={openProposal} />
         )}
       </div>
