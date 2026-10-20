@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Comparer le code</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;display=swap">
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#000}
+a{color:#fafafa;text-decoration:none}a:hover{color:#fff}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.ico{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.bot .shell{fill:url(#sig);stroke:#859397;stroke-width:.8}.bot .visor{fill:#172124;stroke:#00000055;stroke-width:1}.bot .foot{fill:#273238}.bot .ant{stroke:#273238;stroke-width:2;stroke-linecap:round}.bot .lamp,.bot .eye{fill:var(--eye)}.bot .happy{fill:none;stroke:var(--eye);stroke-width:3.4;stroke-linecap:round}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:56px;padding:0 16px;border-radius:12px;font:600 16px/20px 'Geist',system-ui,sans-serif;box-sizing:border-box;cursor:pointer}
+.btn-primary{background:#9f0712;color:#fef2f2;border:0}.btn-primary:hover{background:#82181a}.btn-outline{background:transparent;color:#fafafa;border:1px solid #ffffff26}.btn-outline:hover{background:#171717}
+.digits{display:flex;justify-content:center;gap:14px;font:600 40px/48px 'Geist Mono',ui-monospace,monospace;letter-spacing:.06em}
+@keyframes spin{to{transform:rotate(360deg)}}.spin{animation:spin 1s linear infinite}
+.resident{overflow:visible;filter:drop-shadow(0 0 4px #ee9c87a6) drop-shadow(0 0 12px #8bc7b661)}.r-shell{fill:#566365;stroke:#91a2a272;stroke-width:1.2}.r-foot{fill:#313b3e}.r-ant{fill:none;stroke:#313b3e;stroke-width:3;stroke-linecap:round}.r-visor{fill:#182224}.r-eye{fill:#ffc3a8}.r-shine{fill:none;stroke:#ffffff50;stroke-width:1.5;stroke-linecap:round}.r-line{fill:none;stroke:#ffc3a8;stroke-width:3;stroke-linecap:round}.resident.off{filter:none}.resident.off .r-eye{fill:#a8abaa}.resident.off .r-line{stroke:#a8abaa}
+</style>
+</helmet>
+<div style="width: 390px; height: 100vh; max-height: 844px; box-sizing: border-box; background: #000; color: #fafafa; font-family: 'Geist', system-ui, sans-serif; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; gap: 24px; padding: 64px 20px 34px; overflow: hidden;">
+  <svg width="0" height="0" style="position: absolute;" aria-hidden="true"><defs><linearGradient id="sig" x1=".2" y1="0" x2=".75" y2="1"><stop stop-color="#34434b"></stop><stop offset="1" stop-color="#273238"></stop></linearGradient></defs></svg>
+
+  <div style="display: flex; align-items: center; gap: 10px; align-self: center; height: 32px; padding: 0 12px 0 4px; border-radius: 9999px; border: 1px solid #ffffff1a; font-size: 13px; color: #d4d4d4;">
+    <span aria-hidden="true" style="width: 24px; height: 24px; border-radius: 9999px; background: #262626; display: grid; place-items: center; font-size: 11px; font-weight: 600;">P</span>
+    @paradow
+  </div>
+
+  <sc-if value="{{ isCompare }}" hint-placeholder-val="{{ true }}">
+    <div style="display: flex; flex-direction: column; gap: 24px; flex-grow: 1;">
+      <div style="display: flex; flex-direction: column; gap: 8px; text-align: center;">
+        <h1 style="margin: 0; font-size: 24px; line-height: 32px; font-weight: 600; letter-spacing: -0.025em;">Comparez ce code</h1>
+        <p style="margin: 0; color: #a1a1a1;">Ledge vient d'afficher un code sur <strong style="color: #fafafa; font-weight: 500;">PC-Desan</strong>. Il doit être identique à celui-ci.</p>
+      </div>
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 28px 16px; border-radius: 20px; background: #0a0a0a; border: 1px solid #ffffff1a;">
+        <div class="digits" aria-label="Code de liaison 482 107"><span>482</span><span>107</span></div>
+        <span style="font-size: 12px; line-height: 16px; color: #a1a1a1;">Calculé à partir des clés du PC et de ce téléphone</span>
+      </div>
+      <div style="flex-grow: 1;"></div>
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <button type="button" class="btn btn-primary" onClick="{{ same }}">Les codes sont identiques</button>
+        <button type="button" class="btn btn-outline" onClick="{{ differ }}">Ils sont différents</button>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isWaiting }}" hint-placeholder-val="{{ false }}">
+    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center; flex-grow: 1; padding-bottom: 80px;">
+      <svg class="ico spin" viewBox="0 0 24 24" aria-hidden="true" style="width: 32px; height: 32px; color: #a1a1a1;"><path d="M21 12a9 9 0 1 1-6.22-8.56"></path></svg>
+      <h1 style="margin: 0; font-size: 24px; line-height: 32px; font-weight: 600; letter-spacing: -0.025em;">Confirmez sur le PC</h1>
+      <p style="margin: 0; color: #a1a1a1; max-width: 290px;">Dans Ledge sur PC-Desan, cliquez sur Approuver sous le même code <span class="mono" style="color: #fafafa;">482 107</span>.</p>
+      <button type="button" class="btn btn-outline" onClick="{{ restart }}" style="height: 44px; margin-top: 8px; font-size: 14px; font-weight: 500;">Annuler</button>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isLinked }}" hint-placeholder-val="{{ false }}">
+    <div style="display: flex; flex-direction: column; gap: 24px; flex-grow: 1;">
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center; flex-grow: 1;">
+        <svg class="resident" width="88" height="88" viewBox="0 0 96 96" role="img" aria-label="Ledge"><path class="r-ant" d="M48 23v-9"></path><circle class="r-eye" cx="48" cy="12" r="3"></circle><rect class="r-foot" x="30" y="74" width="12" height="8" rx="4"></rect><rect class="r-foot" x="54" y="74" width="12" height="8" rx="4"></rect><path class="r-shell" d="M23 33Q25 21 40 21h16q15 0 17 12l5 23q4 22-17 22H35Q14 78 18 56Z"></path><path class="r-shine" d="M28 34q3-7 14-7h12"></path><rect class="r-visor" x="25" y="37" width="46" height="27" rx="12"></rect><path class="r-line" d="M34 51q4-8 8 0m12 0q4-8 8 0"></path></svg>
+        <h1 style="margin: 0; font-size: 24px; line-height: 32px; font-weight: 600; letter-spacing: -0.025em;">Téléphone lié à PC-Desan</h1>
+        <p style="margin: 0; color: #a1a1a1; max-width: 290px;">Vous pouvez lire, approuver et écrire. Retirez ce téléphone à tout moment depuis Ledge sur le PC.</p>
+      </div>
+      <a href="Inbox.dc.html" class="btn btn-primary">Voir ce qui attend</a>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isMismatch }}" hint-placeholder-val="{{ false }}">
+    <div style="display: flex; flex-direction: column; gap: 24px; flex-grow: 1;">
+      <section role="alert" style="display: flex; flex-direction: column; gap: 12px; padding: 18px; border-radius: 20px; background: #450a0a; border: 1px solid #ff646740;">
+        <div style="display: flex; align-items: center; gap: 10px; color: #ff6467;">
+          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg>
+          <strong style="font-size: 16px;">Liaison annulée</strong>
+        </div>
+        <p style="margin: 0; color: #fecaca;">Des codes différents signifient que ce téléphone et le PC ne voient pas les mêmes clés. Quelqu'un tente peut-être de s'interposer. Refusez aussi sur le PC.</p>
+      </section>
+      <div style="flex-grow: 1;"></div>
+      <button type="button" class="btn btn-outline" onClick="{{ restart }}">Recommencer</button>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { step: 'compare' };
+  }
+  renderVals() {
+    const step = this.state.step;
+    return {
+      isCompare: step === 'compare',
+      isWaiting: step === 'waiting',
+      isLinked: step === 'linked',
+      isMismatch: step === 'mismatch',
+      same: () => {
+        this.setState({ step: 'waiting' });
+        clearTimeout(this.timer);
+        this.timer = setTimeout(() => { if (this.state.step === 'waiting') this.setState({ step: 'linked' }); }, 2500);
+      },
+      differ: () => this.setState({ step: 'mismatch' }),
+      restart: () => { clearTimeout(this.timer); this.setState({ step: 'compare' }); },
+    };
+  }
+}
+</script>
+</body>
+</html>

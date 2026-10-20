@@ -100,6 +100,64 @@ importers:
         specifier: ^8.18.0
         version: 8.22.0
 
+  apps/mobile:
+    dependencies:
+      '@ledge/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+      '@ledge/seal':
+        specifier: workspace:*
+        version: link:../../packages/seal
+      '@ledge/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      react:
+        specifier: ^19.0.0
+        version: 19.3.0
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.3.0(react@19.3.0)
+      zod:
+        specifier: ^3.23.8
+        version: 3.25.76
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.64.1
+        version: 1.64.1
+      '@tailwindcss/vite':
+        specifier: ^4.0.0
+        version: 4.3.3(vite@6.4.4(@types/node@22.20.5)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.15))
+      '@testing-library/jest-dom':
+        specifier: ^6.6.0
+        version: 6.10.0(@testing-library/dom@10.4.2)
+      '@testing-library/react':
+        specifier: ^16.1.0
+        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@types/node':
+        specifier: ^22.7.0
+        version: 22.20.5
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.3.0(@types/react@19.3.0)
+      '@vitejs/plugin-react':
+        specifier: ^4.3.0
+        version: 4.7.0(vite@6.4.4(@types/node@22.20.5)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.15))
+      jsdom:
+        specifier: ^25.0.0
+        version: 25.0.1
+      tailwindcss:
+        specifier: ^4.0.0
+        version: 4.3.3
+      vite:
+        specifier: ^6.0.0
+        version: 6.4.4(@types/node@22.20.5)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.15)
+      vitest:
+        specifier: ^4.1.12
+        version: 4.1.12(@types/node@22.20.5)(jsdom@25.0.1)(vite@6.4.4(@types/node@22.20.5)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.15))
+
   apps/overlay:
     dependencies:
       '@ledge/fleet':

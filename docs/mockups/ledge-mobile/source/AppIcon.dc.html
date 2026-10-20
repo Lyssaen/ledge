@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Icône de l'app</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;display=swap">
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#000}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.resident{overflow:visible;filter:drop-shadow(0 0 4px #ee9c87a6) drop-shadow(0 0 12px #8bc7b661)}.r-shell{fill:#566365;stroke:#91a2a272;stroke-width:1.2}.r-foot{fill:#313b3e}.r-ant{fill:none;stroke:#313b3e;stroke-width:3;stroke-linecap:round}.r-visor{fill:#182224}.r-eye{fill:#ffc3a8}.r-shine{fill:none;stroke:#ffffff50;stroke-width:1.5;stroke-linecap:round}.r-line{fill:none;stroke:#ffc3a8;stroke-width:3;stroke-linecap:round}.resident.off{filter:none}.resident.off .r-eye{fill:#a8abaa}.resident.off .r-line{stroke:#a8abaa}
+.resident.flat{filter:none}
+.cap{font-size:12px;line-height:16px;color:#a1a1a1}
+.app{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:12px;line-height:16px;color:#fafafa}
+.ph{width:60px;height:60px;border-radius:14px;background:#262626}
+</style>
+</helmet>
+<div style="width: 390px; height: 100vh; max-height: 844px; box-sizing: border-box; background: #000; color: #fafafa; font-family: 'Geist', system-ui, sans-serif; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; gap: 32px; padding: 64px 20px 34px; overflow: hidden;">
+  <section style="display: flex; flex-direction: column; gap: 14px;">
+    <h1 style="margin: 0; font-size: 20px; line-height: 26px; font-weight: 600; letter-spacing: -0.02em;">Écran d'accueil</h1>
+    <div style="display: grid; grid-template-columns: repeat(4, 60px); justify-content: space-between; row-gap: 18px; padding: 20px 18px; border-radius: 24px; background: linear-gradient(160deg, #1f2a30, #11161a);">
+      <span class="app"><span class="ph"></span><span class="cap">Mail</span></span>
+      <span class="app"><span class="ph"></span><span class="cap">Agenda</span></span>
+      <span class="app"><span style="width: 60px; height: 60px; border-radius: 14px; background: #0c0d0e; display: grid; place-items: center; box-shadow: 0 0 0 1px #ffffff14;"><svg class="resident flat" width="52" height="52" viewBox="0 0 96 96" role="img" aria-label="Ledge"><path class="r-ant" d="M48 23v-9"></path><circle class="r-eye" cx="48" cy="12" r="3"></circle><rect class="r-foot" x="30" y="74" width="12" height="8" rx="4"></rect><rect class="r-foot" x="54" y="74" width="12" height="8" rx="4"></rect><path class="r-shell" d="M23 33Q25 21 40 21h16q15 0 17 12l5 23q4 22-17 22H35Q14 78 18 56Z"></path><path class="r-shine" d="M28 34q3-7 14-7h12"></path><rect class="r-visor" x="25" y="37" width="46" height="27" rx="12"></rect><g class="r-eye"><rect x="35" y="44" width="6" height="12" rx="3"></rect><rect x="55" y="44" width="6" height="12" rx="3"></rect></g></svg></span><span>Ledge</span></span>
+      <span class="app"><span class="ph"></span><span class="cap">Photos</span></span>
+    </div>
+    <p class="cap" style="margin: 0;">La mascotte Ledge sur fond <span class="mono">#0c0d0e</span>, comme la couleur de l'app. 180, 192 et 512 px, plus une version « maskable » avec marge pour Android.</p>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 14px;">
+    <h1 style="margin: 0; font-size: 20px; line-height: 26px; font-weight: 600; letter-spacing: -0.02em;">Onglet du navigateur</h1>
+    <div style="display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 14px; border-radius: 12px; background: #171717; border: 1px solid #ffffff1a;">
+      <svg class="resident flat" width="20" height="20" viewBox="0 0 96 96" role="img" aria-label="Ledge"><path class="r-ant" d="M48 23v-9"></path><circle class="r-eye" cx="48" cy="12" r="3"></circle><rect class="r-foot" x="30" y="74" width="12" height="8" rx="4"></rect><rect class="r-foot" x="54" y="74" width="12" height="8" rx="4"></rect><path class="r-shell" d="M23 33Q25 21 40 21h16q15 0 17 12l5 23q4 22-17 22H35Q14 78 18 56Z"></path><path class="r-shine" d="M28 34q3-7 14-7h12"></path><rect class="r-visor" x="25" y="37" width="46" height="27" rx="12"></rect><g class="r-eye"><rect x="35" y="44" width="6" height="12" rx="3"></rect><rect x="55" y="44" width="6" height="12" rx="3"></rect></g></svg>
+      <span style="font-weight: 500;">Ledge</span>
+      <span class="mono cap" style="margin-left: auto;">server.ledge.paradow.dev</span>
+    </div>
+    <div style="display: flex; align-items: flex-end; gap: 20px;">
+      <span style="display: flex; flex-direction: column; align-items: center; gap: 6px;"><svg class="resident flat" width="16" height="16" viewBox="0 0 96 96" role="img" aria-label="Ledge"><path class="r-ant" d="M48 23v-9"></path><circle class="r-eye" cx="48" cy="12" r="3"></circle><rect class="r-foot" x="30" y="74" width="12" height="8" rx="4"></rect><rect class="r-foot" x="54" y="74" width="12" height="8" rx="4"></rect><path class="r-shell" d="M23 33Q25 21 40 21h16q15 0 17 12l5 23q4 22-17 22H35Q14 78 18 56Z"></path><path class="r-shine" d="M28 34q3-7 14-7h12"></path><rect class="r-visor" x="25" y="37" width="46" height="27" rx="12"></rect><g class="r-eye"><rect x="35" y="44" width="6" height="12" rx="3"></rect><rect x="55" y="44" width="6" height="12" rx="3"></rect></g></svg><span class="cap">16</span></span>
+      <span style="display: flex; flex-direction: column; align-items: center; gap: 6px;"><svg class="resident flat" width="32" height="32" viewBox="0 0 96 96" role="img" aria-label="Ledge"><path class="r-ant" d="M48 23v-9"></path><circle class="r-eye" cx="48" cy="12" r="3"></circle><rect class="r-foot" x="30" y="74" width="12" height="8" rx="4"></rect><rect class="r-foot" x="54" y="74" width="12" height="8" rx="4"></rect><path class="r-shell" d="M23 33Q25 21 40 21h16q15 0 17 12l5 23q4 22-17 22H35Q14 78 18 56Z"></path><path class="r-shine" d="M28 34q3-7 14-7h12"></path><rect class="r-visor" x="25" y="37" width="46" height="27" rx="12"></rect><g class="r-eye"><rect x="35" y="44" width="6" height="12" rx="3"></rect><rect x="55" y="44" width="6" height="12" rx="3"></rect></g></svg><span class="cap">32</span></span>
+      <span style="display: flex; flex-direction: column; align-items: center; gap: 6px;"><svg class="resident flat" width="64" height="64" viewBox="0 0 96 96" role="img" aria-label="Ledge"><path class="r-ant" d="M48 23v-9"></path><circle class="r-eye" cx="48" cy="12" r="3"></circle><rect class="r-foot" x="30" y="74" width="12" height="8" rx="4"></rect><rect class="r-foot" x="54" y="74" width="12" height="8" rx="4"></rect><path class="r-shell" d="M23 33Q25 21 40 21h16q15 0 17 12l5 23q4 22-17 22H35Q14 78 18 56Z"></path><path class="r-shine" d="M28 34q3-7 14-7h12"></path><rect class="r-visor" x="25" y="37" width="46" height="27" rx="12"></rect><g class="r-eye"><rect x="35" y="44" width="6" height="12" rx="3"></rect><rect x="55" y="44" width="6" height="12" rx="3"></rect></g></svg><span class="cap">SVG</span></span>
+    </div>
+    <p class="cap" style="margin: 0;">Favicon en SVG (la mascotte seule, sans halo), avec un repli PNG 32 px.</p>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
