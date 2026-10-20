@@ -2,13 +2,18 @@
 // (packages/ledge/test/mobile-fake-device.ts). Node only: it authenticates with an Authorization header (ruling R1).
 import {
   RelayServerMessageSchema, SealedFrameSchema, padPlain,
-  type PhoneServerMessage, type RelayServerMessage, type SealedFrame
+  type PhoneClientMessage, type PhoneServerMessage, type RelayServerMessage, type SealedFrame
 } from '@ledge/protocol';
 import {
   checkCommitment, fingerprint, generateIdentity, pairingCode, randomNonce, SealError, startHandshake,
   type Channel, type Identity
 } from '@ledge/seal';
 import { startTestRelay, type TestRelay } from '../../../packages/ledge/test/mobile-relay-harness';
+// The daemon's own verification, not a copy: both modules import only node:crypto.
+import { createChallengeStore, CHALLENGE_TTL_MS } from '../../../packages/ledge/src/mobile/challenges';
+import {
+  challengeOf, rpOf, verifyAssertion, verifyRegistration, type DeviceCredential
+} from '../../../packages/ledge/src/mobile/webauthn';
 
 const READY = '{"t":"ready"}';
 const ONLINE_WITHIN_MS = 3000;
@@ -303,3 +308,58 @@ export async function startFakePc(opts: {
     }
   };
 }
+
+type Reason = 'confirm_required' | 'assertion_invalid' | 'assertion_expired';
+
+/**
+ * The daemon's device check (packages/ledge/src/mobile/gateway.ts) around the real `verifyRegistration`,
+ * `verifyAssertion` and challenge store, for one phone. A test double: no persistence, no revocation.
+ */
+export function createDeviceCheck(publicUrl: string) {
+  const rp = rpOf(publicUrl);
+  const challenges = createChallengeStore();
+  const deviceId = 'phone';
+  let credential: DeviceCredential | null = null;
+  return {
+    /** The phone has registered a passkey: what the snapshot's `device.confirm` says. */
+    get registered() { return credential !== null; },
+    /** `confirm.prepare`, answered as the gateway does. `live` says whether the session exists. */
+    prepare(m: Extract<PhoneClientMessage, { type: 'confirm.prepare' }>, live: boolean): PhoneServerMessage | 'invalid' | 'unknown_session' {
+      if (!rp) return 'invalid';
+      if (m.purpose === 'register') {
+        return { type: 'confirm.challenge', purpose: 'register', challenge: challenges.issue({ deviceId, purpose: 'register', subject: '' }), rpId: rp.rpId, expiresInMs: CHALLENGE_TTL_MS };
+      }
+      if (!m.id || !m.expect) return 'invalid';
+      if (!live) return 'unknown_session';
+      if (!credential || credential.rpId !== rp.rpId) return 'invalid';
+      const challenge = challenges.issue({ deviceId, purpose: 'decide', subject: `${m.id}:${m.expect.key}` });
+      return { type: 'confirm.challenge', purpose: 'decide', challenge, rpId: rp.rpId, credentialId: credential.id, expiresInMs: CHALLENGE_TTL_MS };
+    },
+    /** `credential.register`: the verdict, the passkey kept when it verifies. */
+    register(m: Extract<PhoneClientMessage, { type: 'credential.register' }>): 'applied' | Reason {
+      const challenge = challengeOf(m.credential.clientDataJSON);
+      if (challenge === null || !rp) return 'assertion_invalid';
+      const verdict = challenges.consume(challenge, { deviceId, purpose: 'register', subject: '' });
+      if (verdict === 'expired') return 'assertion_expired';
+      if (verdict !== 'ok') return 'assertion_invalid';
+      const verified = verifyRegistration(m.credential, rp, challenge);
+      if (!verified.ok) return 'assertion_invalid';
+      credential = verified.credential;
+      return 'applied';
+    },
+    /** The assertion of an accept of request `key` of session `id`; undefined lets it through. The challenge is spent first. */
+    assert(m: Extract<PhoneClientMessage, { type: 'session.decide' }>): Reason | undefined {
+      if (!credential || !rp || !m.assertion) return 'confirm_required';
+      const challenge = challengeOf(m.assertion.clientDataJSON);
+      if (challenge === null) return 'assertion_invalid';
+      const verdict = challenges.consume(challenge, { deviceId, purpose: 'decide', subject: `${m.id}:${m.expect.key}` });
+      if (verdict === 'expired') return 'assertion_expired';
+      if (verdict !== 'ok') return 'assertion_invalid';
+      const verified = verifyAssertion(m.assertion, credential, rp, challenge);
+      if (!verified.ok) return 'assertion_invalid';
+      credential = { ...credential, counter: verified.counter };
+      return undefined;
+    }
+  };
+}
+export type DeviceCheck = ReturnType<typeof createDeviceCheck>;

@@ -44,6 +44,7 @@ Chaque plan de lot reprend ces points à son début.
   - la clé publique est dérivée du PKCS8 stocké, pas lue d'une copie.
 - **Lot 4** (décidé) : chaque message PC → téléphone est bourré avant d'être scellé (dans la file d'envoi), par paliers `PAD_TIERS` (1 Ko, 4 Ko, 16 Ko, 64 Ko, 256 Ko, 640 Ko) mesurés en octets UTF-8 du JSON clair. Le bourrage ajoute des espaces en fin de JSON, que `JSON.parse` ignore. Un message plus grand que `PLAIN_MAX` (640 Ko) n'est pas envoyé : le téléphone reçoit `error { code: 'too_large' }`. `PLAIN_MAX` reste sous `SEALED_MAX` (1 Mio) une fois scellé et passé en base64. Le relais ne voit donc qu'un palier, jamais la longueur exacte, pour ce sens. Le sens téléphone → PC n'est pas bourré dans ce lot : la PWA (lot 5) bourrera ses messages aux mêmes paliers.
 - **Lot 5** (fait) : un test qui vérifie que le WebCrypto de Safari et de Chrome rejette un point hors courbe, et un vecteur de test de dérivation de clés commun au navigateur et au daemon (`apps/mobile/e2e/crypto.spec.ts` ; Safari seulement là où WebKit est installé).
+- **Lot 6a** (fait) : la confirmation d'un accord à impact élevé par l'appareil (passkey WebAuthn), de bout en bout dans `apps/mobile/e2e/confirm.spec.ts` (Chromium, authentificateur virtuel CDP ; WebKit ignoré comme au lot 5).
 
 ## Décidé au lot 5
 
@@ -57,8 +58,19 @@ Chaque plan de lot reprend ces points à son début.
 - **Réponses libres** : un seul chiffre de 1 à 9 est refusé sur le téléphone, car le PC le lirait comme un numéro d'option. Une demande à haut risque reste « À accepter sur le PC » (WebAuthn au lot 6).
 - **Bout en bout** : `apps/mobile/e2e/phone.spec.ts` joue le téléphone contre le vrai relais (comptes, PGlite) et un faux PC scellé ; `pnpm --filter @ledge/mobile serve:local` lance le même monde à la main.
 
+## Décidé au lot 6a
+
+- **Vérification sans bibliothèque** : le daemon vérifie l'enregistrement et les assertions avec `node:crypto` seul (`packages/ledge/src/mobile/webauthn.ts`, `challenges.ts`), ES256 et RS256 ; ni `@simplewebauthn/*` ni `cbor-x`. Ces deux modules n'importent rien d'autre, pour que le faux PC de l'e2e les utilise tels quels.
+- **Confiance par le canal scellé** : l'attestation est `none`. La clé publique arrive sur le canal scellé et apparié, qui est déjà la racine de confiance ; un téléphone qui perd sa passkey en enregistre une nouvelle sans se re-lier.
+- **RP = hôte de `relayUrl`** : `rpId` est le nom d'hôte, `origin` l'origine ; pas de RP hors `https:` et hors `localhost`. Un credential d'un autre `rpId` compte comme absent.
+- **Boot id** : le snapshot porte `daemon.boot`, un identifiant de démarrage. Une opération reçue d'un autre démarrage n'est jamais renvoyée en silence : elle reste incertaine.
+- **Ordre des contrôles** : session inconnue, puis `stale`, puis capacité, puis assertion, puis `untypable`. Une demande changée n'use jamais un défi ; un défi est à usage unique, lié à l'appareil, à l'usage et à `session:clé`.
+- **Une demande OMP est toujours `high`** (jamais lue comme `low`, son texte n'est pas interprété) : on y répond par une passkey, sans Autoriser/Refuser. Un téléphone qui ne peut pas confirmer voit ses options désactivées, avec « À accepter sur le PC ». Un `ask` à plusieurs questions se répond depuis le téléphone (`session.answer`), et une option par sa position.
+- **Se déconnecter** envoie `device.forget` : le PC retire le téléphone, et les révocations qui échouent sont retentées.
+- **Navigateur** : si l'appareil ne vérifie pas son utilisateur (`userVerification: 'required'`), Chromium ne signe rien : le téléphone dit « Vérification annulée » et n'envoie rien. `assertion_invalid` vient donc d'un défi remplacé ou d'une signature fausse, pas de ce cas.
+
 ## Reporté par le lot 5
 
-- **Lot 6** : WebAuthn, qui permettra d'accepter une demande `high` depuis le téléphone ; Web Push ; le chat « Demander à Ledge », multi-fil.
-- **Lot 7** : le domaine `ledge.paradow.dev` ; le déploiement Railway, avec `LEDGE_RELAY_WEB_DIR` qui pointe sur le build ; la publication de `build.json` dans `release.yml` ; la version de la PWA tamponnée par `scripts/set-version.mjs`.
-- **Restent ouverts** : la `Max-Age` du cookie, jamais prolongée par l'usage (la session expire 90 jours après la connexion, et le téléphone revient à l'écran de connexion) ; les tests WebKit, là où son navigateur n'est pas installé.
+- **Lot 6** : WebAuthn (fait au lot 6a) ; Web Push (lot 6b) ; le chat « Demander à Ledge », multi-fil (lot 6c), qui réutilise `challenges.ts` (`purpose: 'launch'`) et la carte de confirmation.
+- **Lot 7** : le domaine `ledge.paradow.dev` ; le déploiement Railway, avec `LEDGE_RELAY_WEB_DIR` qui pointe sur le build ; la publication de `build.json` dans `release.yml` ; la version de la PWA tamponnée par `scripts/set-version.mjs` ; un essai sur un vrai iPhone (Face ID, passkey iCloud).
+- **Restent ouverts** : la `Max-Age` du cookie, jamais prolongée par l'usage (la session expire 90 jours après la connexion, et le téléphone revient à l'écran de connexion) ; les tests WebKit, là où son navigateur n'est pas installé ; le drapeau `other` pour les réponses libres sur plusieurs lignes.

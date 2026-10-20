@@ -2,6 +2,7 @@
 // reachable over HTTP) serving the built PWA from apps/mobile/dist, and a fake PC of the same account on it.
 import { PGlite } from '@electric-sql/pglite';
 import { existsSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
@@ -15,7 +16,7 @@ import type { AccountsConfig } from '../../relay/src/config';
 import type { RelayLogEvent } from '../../relay/src/log';
 import { fakeGitHub } from '../../relay/test/fakeGithub';
 import type { TestRelay } from '../../../packages/ledge/test/mobile-relay-harness';
-import { startFakePc, type FakePc } from '../test/fakePc';
+import { startFakePc, type DeviceCheck, type FakePc } from '../test/fakePc';
 
 /** The GitHub account of the PC and of the phone. */
 export const USER = { id: '4242', login: 'desan' };
@@ -43,16 +44,19 @@ export interface FakeDaemon {
   typed: string[];
   /** False: decisions are typed but not answered, as when the relay goes down right after one. */
   answer: boolean;
+  /** The device check, once a test turns it on: the snapshot then says `device`, and a risky accept needs an assertion. */
+  device: DeviceCheck | null;
   /** Replaces a session (or adds it) and tells the phone. */
   update(s: PhoneSession): Promise<void>;
   stop(): void;
 }
 
 function runDaemon(pc: FakePc): FakeDaemon {
+  const boot = randomUUID();
   let seen = 0;
   let busy = false;
   const d: FakeDaemon = {
-    sessions: [waiting()], typed: [], answer: true,
+    sessions: [waiting()], typed: [], answer: true, device: null,
     async update(s) {
       d.sessions = [...d.sessions.filter((x) => x.id !== s.id), s];
       await pc.send({ type: 'session.updated', session: s });
@@ -61,17 +65,38 @@ function runDaemon(pc: FakePc): FakeDaemon {
   };
   const snapshot = (): PhoneServerMessage => ({
     type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: d.sessions,
-    capabilities: { claude: CAPS, codex: CAPS, cursor: CAPS, omp: { freeTextAnswer: false } }, daemon: { version: '0.0.0-e2e', name: PC_NAME }
+    capabilities: { claude: CAPS, codex: CAPS, cursor: CAPS, omp: { freeTextAnswer: false } }, daemon: { version: '0.0.0-e2e', name: PC_NAME, boot },
+    ...(d.device ? { device: { confirm: d.device.registered } } : {})
   });
   const handle = async (m: PhoneClientMessage) => {
     if (m.type === 'snapshot.request') return pc.send(snapshot());
+    if (m.type === 'session.pending') {
+      const s = d.sessions.find((x) => x.id === m.id);
+      return s && pc.send({ type: 'session.updated', session: s });
+    }
+    if (m.type === 'confirm.prepare') {
+      const r = d.device?.prepare(m, d.sessions.some((x) => x.id === m.id));
+      if (r === undefined) return;
+      return pc.send(typeof r === 'string' ? { type: 'error', code: r, request: m.type } : r);
+    }
+    if (m.type === 'credential.register') {
+      const r = d.device?.register(m);
+      if (r === undefined) return;
+      await pc.send({ type: 'operation.result', op: m.op, status: r === 'applied' ? 'applied' : 'rejected', ...(r === 'applied' ? {} : { reason: r }) });
+      return r === 'applied' ? pc.send(snapshot()) : undefined;
+    }
     if (m.type !== 'session.decide') return;
     if (d.typed.includes(m.op)) {
       if (d.answer) await pc.send({ type: 'operation.result', op: m.op, status: 'applied' });
       return;
     }
     const s = d.sessions.find((x) => x.id === m.id);
-    if (!s?.pending || s.pending.key !== m.expect.key) return pc.send({ type: 'operation.result', op: m.op, status: 'rejected', reason: 'conflict' });
+    if (!s?.pending || s.pending.key !== m.expect.key) return pc.send({ type: 'operation.result', op: m.op, status: 'rejected', reason: 'stale' });
+    // As the gateway: a changed request is stale first, then the device check, which spends its challenge.
+    if (d.device && m.decision !== 'deny' && s.pending.risk !== 'low') {
+      const refused = d.device.assert(m);
+      if (refused) return pc.send({ type: 'operation.result', op: m.op, status: 'rejected', reason: refused });
+    }
     d.typed.push(m.op);
     const { pending: _answered, ...rest } = s;
     const after: PhoneSession = { ...rest, state: 'working' };
