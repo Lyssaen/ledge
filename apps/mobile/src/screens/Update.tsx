@@ -15,7 +15,7 @@ export function Update({ next, current, onLater, onApply }: { next: BuildInfo; c
     <div className="fixed inset-0 z-20">
       <div className="absolute inset-0 bg-black/65" aria-hidden="true" />
       <section role="dialog" aria-modal="true" aria-labelledby="update-title" className="absolute inset-x-0 bottom-0 mx-auto flex max-w-[480px] flex-col gap-4 rounded-t-[28px] border-t border-line bg-surface px-5 pt-3 pb-[calc(34px+env(safe-area-inset-bottom))]">
-        <span className="h-[5px] w-9 self-center rounded-full bg-[#525252]" aria-hidden="true" />
+        <span className="h-[5px] w-9 self-center rounded-full bg-muted/40" aria-hidden="true" />
         <div className="flex flex-col gap-1.5">
           <h2 id="update-title" className="text-xl leading-[26px] font-semibold tracking-[-.02em]">{U.version(next.version)}</h2>
           <p className="text-muted">{U.body}</p>

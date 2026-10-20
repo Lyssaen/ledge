@@ -50,6 +50,10 @@ test.beforeAll(async () => {
   const index = path.join(v2, 'index.html');
   writeFileSync(index, readFileSync(index, 'utf8').replace('<title>Ledge</title>', '<title>Ledge v2</title>'));
   builds = { v1: built1, v2: finish(v2) };
+  // Each worker carries its own build id, so v1 and v2 never share a cache.
+  const script = (dir: string) => readFileSync(path.join(dir, 'sw.js'), 'utf8');
+  expect(script(v1)).not.toContain('LEDGE_SW_BUILD_ID');
+  expect(script(v2)).not.toBe(script(v1));
   serve('v1');
 
   port = await freePort();
@@ -68,6 +72,8 @@ test.afterAll(() => {
   relay?.kill();
   if (work) rmSync(work, { recursive: true, force: true });
 });
+
+test.beforeEach(() => serve('v1'));
 
 test('a new build waits for consent: « Plus tard » keeps v1 across a reload, « Mettre à jour » moves to v2', async ({ page }) => {
   expect(builds.v2.fingerprint).not.toBe(builds.v1.fingerprint);
@@ -95,4 +101,32 @@ test('a new build waits for consent: « Plus tard » keeps v1 across a reload, �
   await sheet.getByRole('button', { name: 'Mettre à jour' }).click();
   await expect(page).toHaveTitle('Ledge v2');
   await expect(sheet).toBeHidden();
+});
+
+test('closing every page lets the browser run v2\'s worker, yet v1 is served until « Mettre à jour »', async ({ context, page }) => {
+  const sheet = page.getByRole('dialog', { name: `Nouvelle version · ${builds.v2.version}` });
+  await page.goto(`http://127.0.0.1:${port}/`);
+  await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
+  serve('v2');
+  await page.reload();
+  await expect(sheet).toBeVisible();
+
+  // Every page of the app closed (swiped away): the browser activates the waiting worker without asking.
+  const later = await context.newPage();
+  await page.close();
+  await later.goto(`http://127.0.0.1:${port}/`);
+  await later.waitForFunction(async () => {
+    const reg = await navigator.serviceWorker.getRegistration();
+    return reg?.waiting === null && reg.active !== null;
+  });
+  await later.reload();
+  const again = later.getByRole('dialog', { name: `Nouvelle version · ${builds.v2.version}` });
+  await expect(later).toHaveTitle('Ledge');
+  await expect(again).toBeVisible();
+  await expect(again.getByText(formatFingerprint(builds.v2.fingerprint))).toBeVisible();
+  await expect(again).toContainText(`Actuelle : ${builds.v1.version} · ${shortFingerprint(builds.v1.fingerprint)}`);
+
+  await again.getByRole('button', { name: 'Mettre à jour' }).click();
+  await expect(later).toHaveTitle('Ledge v2');
+  await expect(again).toBeHidden();
 });
