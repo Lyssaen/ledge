@@ -8,7 +8,7 @@ import type { Store } from './store.js';
 import type { History } from './history.js';
 import type { Tmux } from '../tmux.js';
 import { adapterFor, type KeyPlan } from '../adapters/index.js';
-import { STALE, bottomLines, dialogMismatch } from '../adapters/types.js';
+import { Refusal, STALE, bottomLines, dialogMismatch } from '../adapters/types.js';
 import { verifyGone } from '../adapters/verify.js';
 import { DETECT_LINES } from './poller.js';
 import { answeredBy, pendingTool } from './state.js';
@@ -70,7 +70,10 @@ export function launchArgs(msg: { tool: Tool; prompt?: string; continue?: boolea
 export { resolveFolder };
 
 /** A deny with a note whose deny keys went but whose input box never came back: refused, the note not typed (NOTE_NOT_TYPED). */
-class NoteNotTyped extends Error { constructor() { super('denied, but the note could not be typed'); } }
+class NoteNotTyped extends Refusal { constructor() { super('denied, but the note could not be typed', NOTE_NOT_TYPED); } }
+
+/** Where `handle` sends its answers: the one socket that asked, or the phone gateway's device. */
+type Reply = (m: ServerMessage) => void;
 
 /**
  * Origins allowed to open a WebSocket: the Tauri overlay (packaged and dev server). A browser always
@@ -208,12 +211,14 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const unsubscribeMobile = mobile?.onChange(() => broadcast({ type: 'mobile', state: mobile.state() }));
   // One lock for both: a session is never typed into by the relay and the mailbox at once.
   const typing = new Set<string>();
+  /** `replyTo` for the mailbox and the relay, which keep the refusal's text. */
+  const replyText = async (id: string, text: string) => (await replyTo(id, text))?.message ?? null;
   const mailbox = createMailbox({
-    store, replyTo, typing, now,
+    store, replyTo: replyText, typing, now,
     relayQueued: id => chat.queuedRelays().some(q => q.relay.id === id),
     sent: { record: (id, m) => { history?.recordSent(id, m); }, mark: (id, rid, status) => history?.markSent(id, rid, status) }
   });
-  const relay = createRelay({ chat, store, replyTo, broadcast, now, typing, next: id => mailbox.kick(id) });
+  const relay = createRelay({ chat, store, replyTo: replyText, broadcast, now, typing, next: id => mailbox.kick(id) });
   /** The last preview per session, replayed after every snapshot so a late client does not wait for the agent to write. */
   const previews = new Map<string, string[]>();
   /** The title last pushed to each session's tmux tab, so tmux is told only when it changes. */
@@ -227,14 +232,14 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     if (c.type === 'removed') { previews.delete(c.id); titles.delete(c.id); }
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
-  const sendSnapshot = (ws: WebSocket) => {
-    send(ws, { type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, ...(mobile ? { mobile: true } : {}) } } : {}) });
-    send(ws, machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
-    send(ws, projectsMsg()); // then the shared projects (build spec §5)
-    send(ws, islandMsg()); // then the island's settings
-    if (mobile) send(ws, { type: 'mobile', state: mobile.state() }); // then mobile access
-    for (const [id, lines] of previews) if (store.get(id)) send(ws, { type: 'session.preview', id, lines });
-    send(ws, { type: 'chat.history', turns: chat.history() });
+  const sendSnapshot = (reply: Reply) => {
+    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, ...(mobile ? { mobile: true } : {}) } } : {}) });
+    reply(machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
+    reply(projectsMsg()); // then the shared projects (build spec §5)
+    reply(islandMsg()); // then the island's settings
+    if (mobile) reply({ type: 'mobile', state: mobile.state() }); // then mobile access
+    for (const [id, lines] of previews) if (store.get(id)) reply({ type: 'session.preview', id, lines });
+    reply({ type: 'chat.history', turns: chat.history() });
   };
   const preview = (id: string, lines: string[]) => {
     if (!store.get(id)) return;
@@ -251,7 +256,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const CHECK_LINES = 500;
 
   async function runPlan(s: Session, plan: KeyPlan): Promise<void> {
-    if (!s.tmuxSession) throw new Error('session has no terminal (started without ledge)');
+    if (!s.tmuxSession) throw new Refusal('session has no terminal (started without ledge)', 'read_only');
     for (const step of plan) {
       if ('text' in step) await tmux.sendText(s.tmuxSession, step.text);
       else if ('waitMs' in step) await new Promise(r => setTimeout(r, step.waitMs));
@@ -261,7 +266,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         for (;;) {
           const pane = await tmux.capture(s.tmuxSession, UNTIL_LINES);
           if (pane !== null && step.until(pane)) break;
-          if (Date.now() >= end) throw step.denied ? new NoteNotTyped() : new Error(NOT_TAKEN);
+          if (Date.now() >= end) throw step.denied ? new NoteNotTyped() : new Refusal(NOT_TAKEN, 'not_taken');
           await new Promise(r => setTimeout(r, UNTIL_POLL_MS));
         }
       }
@@ -294,8 +299,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
    */
   async function injectAndVerify(id: string, planFor: KeyPlan | ((pane: string) => KeyPlan), requirePrompt: boolean, decision?: Decision): Promise<boolean> {
     const s = store.get(id);
-    if (!s) throw new Error(`unknown session ${id}`);
-    if (inFlight.has(id)) throw new Error('a decision is already in progress');
+    if (!s) throw new Refusal(`unknown session ${id}`, 'unknown_session');
+    if (inFlight.has(id)) throw new Refusal('a decision is already in progress', 'busy');
     inFlight.add(id);
     try {
       const adapter = adapterFor(s.tool);
@@ -307,15 +312,16 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       let before: string | null = null;
       if (requirePrompt) {
         before = s.tmuxSession ? await tmux.capture(s.tmuxSession, DETECT_LINES) : null;
-        if (before === null || !adapter.promptStillVisible(bottomLines(before))) throw new Error(NO_PROMPT);
+        if (before === null || !adapter.promptStillVisible(bottomLines(before))) throw new Refusal(NO_PROMPT, 'no_prompt');
         // The request checked before the capture may have been replaced while it ran: no key for one the user did not see.
-        if (!stillTheSame()) throw new Error(STALE);
+        if (!stillTheSame()) throw new Refusal(STALE, 'stale');
         // Nor for another dialog already on screen whose hook has not come yet: the daemon still holds the old request.
         // One taller than the capture is read whole, or gets no key.
         if (decided) {
           const shown = adapter.detectPrompt(before) ?? adapter.detectPrompt(await tmux.capture(s.tmuxSession!, CHECK_LINES) ?? '');
           const refused = dialogMismatch(shown, decided, await tmux.width?.(s.tmuxSession!) ?? undefined);
-          if (refused) throw new Error(refused);
+          // STALE, or a dialog it cannot read whole (UNCHECKED): the closest code is that no prompt it can read is there.
+          if (refused) throw new Refusal(refused, refused === STALE ? 'stale' : 'no_prompt');
         }
       }
       const plan = typeof planFor === 'function' ? planFor(before ?? '') : planFor;
@@ -350,7 +356,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
             if (!answer?.byHook && stillTheSame()) store.apply(id, { name: 'Decided', at: now(), source: 'daemon', ...(decision ? { decision } : {}) });
             throw e;
           }
-          e = new Error(NOT_TAKEN);
+          e = new Refusal(NOT_TAKEN, 'not_taken');
         }
         if (answer?.byHook) return true; // a later step failed, but the agent took the answer: its hook says so
         store.apply(id, { name: 'InjectFailed', at: now(), source: 'daemon', text: (e as Error).message });
@@ -363,7 +369,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       if (gone) { store.apply(id, { name: 'Decided', at: now(), source: 'daemon', ...(decision ? { decision } : {}) }); return true; }
       // The client gets an `error` reply for that id (via the caller's catch), so a retry from `error` reads as failed.
       store.apply(id, { name: 'InjectFailed', at: now(), source: 'daemon', text: NOT_TAKEN });
-      throw new Error(NOT_TAKEN);
+      throw new Refusal(NOT_TAKEN, 'not_taken');
     } finally { inFlight.delete(id); awaited.delete(id); }
   }
 
@@ -372,6 +378,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const NOT_TAKEN = 'the terminal did not take it';
   const FREE_TEXT = 'free-text answers are not supported yet, answer in the terminal';
   const NOT_OFFERED = 'this answer is not offered for this request, answer in the terminal';
+  const unknownSession = () => new Refusal('unknown session', 'unknown_session');
+  const readOnly = () => new Refusal(READ_ONLY, 'read_only');
 
   /** A live session Ledge launched is stopped (its tmux killed, a failure only logged) and marked exited; any other is left as it is. */
   async function endSession(s: Session): Promise<void> {
@@ -381,16 +389,16 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   }
 
   /** session.reply's checks and typing (shared with the chat's relay): null once typed, the refusal otherwise; rejects when the injection fails. */
-  async function replyTo(id: string, text: string): Promise<string | null> {
-    const s = store.get(id); if (!s) return 'unknown session';
-    if (s.source === 'hook_only') return READ_ONLY;
+  async function replyTo(id: string, text: string): Promise<Refusal | null> {
+    const s = store.get(id); if (!s) return unknownSession();
+    if (s.source === 'hook_only') return readOnly();
     // A select dialog ignores typed text and Enter would pick option 1: those take decide only.
-    if (s.pending && s.pending.kind !== 'question') return `a ${s.pending.kind} prompt takes accept or deny, not a reply`;
-    if (text.trim() === '') return 'empty reply';
+    if (s.pending && s.pending.kind !== 'question') return new Refusal(`a ${s.pending.kind} prompt takes accept or deny, not a reply`, 'not_offered');
+    if (text.trim() === '') return new Refusal('empty reply', 'invalid');
     // A question dialog is a select: typed text then Enter would silently pick the highlighted option, unless the
     // adapter knows the dialog's own free-text field.
     const pending = s.pending; const adapter = adapterFor(s.tool);
-    if (pending?.kind === 'question' && !/^[1-9]$/.test(text.trim()) && !adapter.freeText) return FREE_TEXT;
+    if (pending?.kind === 'question' && !/^[1-9]$/.test(text.trim()) && !adapter.freeText) return new Refusal(FREE_TEXT, 'free_text');
     // With no pending (idle, your turn) the text goes to the input line: no prompt to check for.
     await injectAndVerify(id, pane => adapter.replyPlan(text, pending, pane || undefined), !!pending);
     return null;
@@ -435,25 +443,29 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     const walk = (opts.scan ?? scanRepos)({ home, extra }).finally(() => { if (scanning === walk) scanning = null; });
     return (scanning = walk);
   }
-  async function handle(ws: WebSocket, msg: ClientMessage): Promise<void> {
-    /** A refusal names the request it answers, so a front can tell a refused reply from a refused decision. */
-    const refuse = (message: string, id?: string) => send(ws, { type: 'error', ...(id !== undefined ? { id } : {}), message, request: msg.type });
+  /**
+   * Applies one message from a local front or the phone gateway, answering the sender through `reply` only. Settles once
+   * the action is applied or refused: a decision, a reply or an interrupt has been typed (or refused) by then.
+   */
+  async function handle(msg: ClientMessage, reply: Reply): Promise<void> {
+    /** A refusal names the request it answers, so a front can tell a refused reply from a refused decision; a coded one says why. */
+    const refuse = (r: Refusal | string, id?: string) => reply({ type: 'error', ...(id !== undefined ? { id } : {}), message: typeof r === 'string' ? r : r.message, request: msg.type, ...(typeof r === 'string' ? {} : { code: r.code }) });
     switch (msg.type) {
       case 'document.read': {
         const session = msg.sessionId ? store.get(msg.sessionId) : undefined;
-        if (msg.sessionId && !session) return send(ws, { type: 'document.error', requestId: msg.requestId, path: msg.path, code: 'session_missing' });
-        return send(ws, await readDocument(msg, { cwd: session?.cwd, workdir: session?.workdir, home: opts.home ?? process.env.HOME ?? '' }));
+        if (msg.sessionId && !session) return reply({ type: 'document.error', requestId: msg.requestId, path: msg.path, code: 'session_missing' });
+        return reply(await readDocument(msg, { cwd: session?.cwd, workdir: session?.workdir, home: opts.home ?? process.env.HOME ?? '' }));
       }
-      case 'repos.inspect': return send(ws, { type: 'repos.info', requestId: msg.requestId, repos: await inspectRepos(msg.paths, { home: opts.home }) });
+      case 'repos.inspect': return reply({ type: 'repos.info', requestId: msg.requestId, repos: await inspectRepos(msg.paths, { home: opts.home }) });
       // Lot 11: home, then the parents of the recent and live folders outside it. Answered even when it fails: an `error` for
       // repos.scan reads, to the fleet, as a daemon too old to know it. The remotes it carries are never logged.
       case 'repos.scan': {
-        try { return send(ws, { type: 'repos.found', requestId: msg.requestId, ...await sharedScan() }); }
-        catch (e) { log(`repos.scan failed: ${(e as Error).message}`); return send(ws, { type: 'repos.found', requestId: msg.requestId, repos: [], truncated: false, error: 'scan failed' }); }
+        try { return reply({ type: 'repos.found', requestId: msg.requestId, ...await sharedScan() }); }
+        catch (e) { log(`repos.scan failed: ${(e as Error).message}`); return reply({ type: 'repos.found', requestId: msg.requestId, repos: [], truncated: false, error: 'scan failed' }); }
       }
       // #58: answered even when the agent cannot be asked, so the form falls back to the agent's default and « Other… ».
-      case 'models.list': return send(ws, { type: 'models.listing', requestId: msg.requestId, tool: msg.tool, ...await models.list(msg.tool) });
-      case 'snapshot.request': return sendSnapshot(ws);
+      case 'models.list': return reply({ type: 'models.listing', requestId: msg.requestId, tool: msg.tool, ...await models.list(msg.tool) });
+      case 'snapshot.request': return sendSnapshot(reply);
       case 'machines.set': {
         writeMachines(msg.machines, machinesFile); // first: a failing write leaves memory unchanged and reaches the sender
         machines = msg.machines; // already validated by parseClientMessage
@@ -492,7 +504,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       case 'session.launch': {
         // Any failure (bad folder, tmux) reaches the requester as an `error` without id, through the caller's catch.
-        if (msg.qid === undefined) return send(ws, { type: 'session.launched', id: (await launch(msg)).id });
+        if (msg.qid === undefined) return reply({ type: 'session.launched', id: (await launch(msg)).id });
         // A chat card (spec 2026-10-12 §4): the proposal's own fields, never the message's but the model chosen on the card (#58). Its rows (#24) start one after the other,
         // so each launch registers its bot before the next picks a name; a launched row, or one in flight, is passed over.
         const qid = msg.qid; const rows = msg.rows ?? [0];
@@ -505,7 +517,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
             const p = chat.proposal(qid, r)!;
             try {
               const session = await launch({ tool: p.tool, cwd: p.cwd, prompt: p.prompt, model: msg.model, effort: msg.effort });
-              send(ws, { type: 'session.launched', id: session.id });
+              reply({ type: 'session.launched', id: session.id });
               chat.markLaunched(qid, session.id, broadcast, r);
             } catch (e) { chat.markFailed(qid, (e as Error).message, broadcast, r); failure = e; }
             finally { chatLaunches.delete(`${qid}#${r}`); }
@@ -514,11 +526,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         if (failure) throw failure;
         return;
       }
-      case 'folder.list': return send(ws, await listFolder(msg.path, opts.home, msg.requestId));
+      case 'folder.list': return reply(await listFolder(msg.path, opts.home, msg.requestId));
       case 'folder.create': {
         const listing = await createFolder(msg.parent, msg.name, opts.home, msg.requestId);
         if (!listing.error) log(`created folder ${listing.path}`);
-        return send(ws, listing);
+        return reply(listing);
       }
       case 'session.event': {
         const ev = msg.event;
@@ -553,9 +565,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return;
       }
       case 'session.thread':
-        return send(ws, { type: 'session.thread', id: msg.id, items: history?.items(msg.id) ?? [] });
+        return reply({ type: 'session.thread', id: msg.id, items: history?.items(msg.id) ?? [] });
       case 'session.rename': {
-        if (!store.get(msg.id)) return refuse('unknown session', msg.id);
+        if (!store.get(msg.id)) return refuse(unknownSession(), msg.id);
         store.apply(msg.id, { name: 'Renamed', at: now(), source: 'daemon', text: msg.topic });
         return;
       }
@@ -563,16 +575,16 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         store.apply(msg.id, { name: 'SessionEnd', at: now(), source: 'hook', exitCode: msg.exitCode });
         return;
       case 'session.decide': {
-        const s = store.get(msg.id); if (!s) return refuse('unknown session', msg.id);
-        if (s.source === 'hook_only') return refuse(READ_ONLY, msg.id);
+        const s = store.get(msg.id); if (!s) return refuse(unknownSession(), msg.id);
+        if (s.source === 'hook_only') return refuse(readOnly(), msg.id);
         // A decision is for the request the user saw: another one (or none) since is refused before any key.
         if (msg.expect && (s.pending?.kind !== msg.expect.kind || s.pending.text !== msg.expect.text
-          || (msg.expect.key !== undefined && pendingKey(s.pending) !== msg.expect.key))) return refuse(STALE, msg.id);
-        if (!s.pending) return refuse('nothing to decide', msg.id);
+          || (msg.expect.key !== undefined && pendingKey(s.pending) !== msg.expect.key))) return refuse(new Refusal(STALE, 'stale'), msg.id);
+        if (!s.pending) return refuse(new Refusal('nothing to decide', 'nothing_to_decide'), msg.id);
         const pending = s.pending; const adapter = adapterFor(s.tool);
         // What the harness cannot do is refused before any key (a question never takes `always` or a note).
-        if (msg.decision === 'always' && !offers(s.tool, pending.kind, 'always')) return refuse(NOT_OFFERED, msg.id);
-        if (msg.note !== undefined && (msg.decision !== 'deny' || !offers(s.tool, pending.kind, 'note'))) return refuse(NOT_OFFERED, msg.id);
+        if (msg.decision === 'always' && !offers(s.tool, pending.kind, 'always')) return refuse(new Refusal(NOT_OFFERED, 'not_offered'), msg.id);
+        if (msg.note !== undefined && (msg.decision !== 'deny' || !offers(s.tool, pending.kind, 'note'))) return refuse(new Refusal(NOT_OFFERED, 'not_offered'), msg.id);
         const { decision, note } = msg;
         // Only a decision the terminal took lands in the thread, through the `Decided` it carries: that settles the
         // permission it answered and no other (an older one answered in the terminal keeps its own state).
@@ -586,21 +598,21 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       case 'session.interrupt': {
         const s = store.get(msg.id);
-        if (s?.source === 'hook_only') return refuse(READ_ONLY, msg.id);
+        if (s?.source === 'hook_only') return refuse(readOnly(), msg.id);
         if (!s?.tmuxSession) return;
         await tmux.sendKeys(s.tmuxSession, adapterFor(s.tool).interruptKeys());
         return;
       }
       case 'session.kill': {
         const s = store.get(msg.id); if (!s) return;
-        if (s.source === 'hook_only') return refuse(READ_ONLY, msg.id);
+        if (s.source === 'hook_only') return refuse(readOnly(), msg.id);
         if (s.tmuxSession) await tmux.killSession(s.tmuxSession);
         store.apply(msg.id, { name: 'PaneGone', at: now(), source: 'daemon' });
         return;
       }
       case 'session.dismiss': {
-        const s = store.get(msg.id); if (!s) return refuse('unknown session', msg.id);
-        if (s.state !== 'exited' && s.source !== 'hook_only') return refuse('the session is still running, kill it first', msg.id);
+        const s = store.get(msg.id); if (!s) return refuse(unknownSession(), msg.id);
+        if (s.state !== 'exited' && s.source !== 'hook_only') return refuse(new Refusal('the session is still running, kill it first', 'busy'), msg.id);
         // Removal broadcasts session.removed, drops the remembered preview and is saved to the journal.
         // A dismissed hook_only session that is in fact still alive comes back on its next hook (the
         // hook-before-register path in session.event recreates it): acceptable, it is still running.
@@ -608,19 +620,19 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return;
       }
       case 'session.archive': {
-        const s = store.get(msg.id); if (!s) return refuse('unknown session', msg.id);
+        const s = store.get(msg.id); if (!s) return refuse(unknownSession(), msg.id);
         await endSession(s);
         store.archive(msg.id, now());
         return;
       }
       case 'session.restore': {
-        if (!store.get(msg.id)) return refuse('unknown session', msg.id);
+        if (!store.get(msg.id)) return refuse(unknownSession(), msg.id);
         store.unarchive(msg.id, now());
         return;
       }
       case 'session.resume': {
-        const s = store.get(msg.id); if (!s) return refuse('unknown session', msg.id);
-        if (s.state !== 'exited') return refuse('the session is still running', msg.id);
+        const s = store.get(msg.id); if (!s) return refuse(unknownSession(), msg.id);
+        if (s.state !== 'exited') return refuse(new Refusal('the session is still running', 'busy'), msg.id);
         const key = resumeKey(s); if (!key) return refuse('no conversation to resume', msg.id);
         // Marked live before the first await: a second resume arriving while this one spawns is then refused above.
         const { archivedAt: _a, exitedAt: _e, exitCode: _c, ...rest } = s;
@@ -648,7 +660,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return;
       }
       case 'session.delete': {
-        const s = store.get(msg.id); if (!s) return refuse('unknown session', msg.id);
+        const s = store.get(msg.id); if (!s) return refuse(unknownSession(), msg.id);
         // A running hook_only session is not stopped by Ledge: like a dismissed one, its next hook brings it back.
         if (s.source === 'launcher' || s.state === 'exited') markDeleted(msg.id);
         await endSession(s);
@@ -656,19 +668,19 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return;
       }
       // An agent's message to another session: acked at once, typed when the target is free.
-      case 'session.message': return send(ws, mailbox.submit(msg));
+      case 'session.message': return reply(mailbox.submit(msg));
       // A chat card's instruction: a refusal reaches the requester as an `error`, the card's state everyone through chat.history.
       case 'session.relay': return relay.request(msg.qid);
       case 'session.relay.cancel': return relay.cancel(msg.qid);
       // Broadcast: every overlay shows the same progress, and the one that asked may be the one that reconnects.
       // A busy refusal goes to the asker only: it must not fail the flow the other overlays follow.
       case 'update.daemon':
-        if (!opts.updater) return send(ws, { type: 'update.failed', version: msg.version, reason: 'no-systemd' });
-        return opts.updater.update(msg.version, broadcast, m => send(ws, m));
+        if (!opts.updater) return reply({ type: 'update.failed', version: msg.version, reason: 'no-systemd' });
+        return opts.updater.update(msg.version, broadcast, reply);
       case 'chat.ask': return chat.ask(msg.qid, msg.text, broadcast, msg.tool);
       case 'chat.route':
-        try { send(ws, { type: 'chat.routed', qid: msg.qid, result: await router.route(msg) }); }
-        catch (e) { send(ws, { type: 'chat.error', qid: msg.qid, message: (e as Error).message }); }
+        try { reply({ type: 'chat.routed', qid: msg.qid, result: await router.route(msg) }); }
+        catch (e) { reply({ type: 'chat.error', qid: msg.qid, message: (e as Error).message }); }
         return;
       case 'chat.cancel': router.cancel(msg.qid); return chat.cancel(msg.qid);
       case 'chat.reset': return chat.reset(broadcast);
@@ -677,9 +689,21 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       // A refusal of the service (an unknown pairing, a sign-in while disabled) reaches the sender as an `error`.
       case 'mobile.set': case 'mobile.signin': case 'mobile.signin.cancel': case 'mobile.signout': case 'mobile.retry':
       case 'mobile.pairing.approve': case 'mobile.pairing.deny': case 'mobile.device.revoke':
-        if (!mobile) return refuse('mobile access is not available');
+        if (!mobile) return refuse(new Refusal('mobile access is not available', 'unavailable'));
         return mobile.handle(msg);
     }
+  }
+
+  /**
+   * `handle`, its failure answered through `reply` too: a refusal with its code, any other error without one. The `id`
+   * is only a session's (a mobile.* id names a pairing or a device). Never rejects.
+   */
+  function dispatch(msg: ClientMessage, reply: Reply): Promise<void> {
+    return handle(msg, reply).catch(e => {
+      if (msg.type === 'document.read') return reply({ type: 'document.error', requestId: msg.requestId, path: msg.path, code: 'read_failed' });
+      log(`${msg.type} failed: ${(e as Error).message}`);
+      reply({ type: 'error', ...(msg.type.startsWith('session.') && 'id' in msg ? { id: msg.id } : {}), message: (e as Error).message, request: msg.type, ...(e instanceof Refusal ? { code: e.code } : {}) });
+    });
   }
 
   wss.on('connection', (ws, req) => {
@@ -696,7 +720,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       return;
     }
     localClients.add(ws); ws.once('close', () => localClients.delete(ws));
-    sendSnapshot(ws);
+    const reply: Reply = m => send(ws, m);
+    sendSnapshot(reply);
     ws.on('message', data => {
       let msg: ClientMessage;
       let raw: unknown;
@@ -705,14 +730,12 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         log(`invalid message: ${(e as Error).message}`);
         // The type and the id it carried, when it has them: a newer front's value this daemon does not know is refused by
         // name, for that very session, at once (not left to the front's own timeout).
+        // Only a session's id: a mobile.* id names a pairing or a device, never a session a front would fail.
         const { type, id } = (raw ?? {}) as { type?: unknown; id?: unknown };
-        return send(ws, { type: 'error', message: 'invalid message', ...(typeof id === 'string' && id.length <= 200 ? { id } : {}), ...(typeof type === 'string' && type.length <= 64 ? { request: type } : {}) });
+        const named = typeof type === 'string' && type.length <= 64 ? type : undefined;
+        return reply({ type: 'error', message: 'invalid message', ...(named?.startsWith('session.') && typeof id === 'string' && id.length <= 200 ? { id } : {}), ...(named ? { request: named } : {}), code: 'invalid' });
       }
-      handle(ws, msg).catch(e => {
-        if (msg.type === 'document.read') return send(ws, { type: 'document.error', requestId: msg.requestId, path: msg.path, code: 'read_failed' });
-        log(`${msg.type} failed: ${(e as Error).message}`);
-        send(ws, { type: 'error', id: 'id' in msg ? msg.id : undefined, message: (e as Error).message, request: msg.type, ...(e instanceof NoteNotTyped ? { code: NOTE_NOT_TYPED } : {}) });
-      });
+      void dispatch(msg, reply);
     });
   });
 

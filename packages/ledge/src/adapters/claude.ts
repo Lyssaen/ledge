@@ -1,5 +1,5 @@
 import type { Pending } from '@ledge/protocol';
-import { NO_ALWAYS, NO_NOTE, assertDialogIs, bottomLines, flatten, shownCommand, type Adapter, type KeyPlan, type PanePromptMatch, type ShownCommand } from './types.js';
+import { NO_ALWAYS, NO_NOTE, Refusal, assertDialogIs, bottomLines, flatten, shownCommand, type Adapter, type KeyPlan, type PanePromptMatch, type ShownCommand } from './types.js';
 
 // Claude Code 2.x draws a dialog at the bottom of the pane, without a box:
 //
@@ -311,7 +311,7 @@ function rowPlan(n: number, text: string): KeyPlan {
 function freeTextPlan(text: string, pane: string | undefined): KeyPlan {
   const d = pane ? parseDialog(pane) : null;
   const i = d?.kind === 'question' ? d.options.findIndex(o => FREE_ROW.test(o)) : -1;
-  if (i < 0) throw new Error(NO_FREE_ROW);
+  if (i < 0) throw new Refusal(NO_FREE_ROW, 'free_text');
   return rowPlan(i + 1, text);
 }
 
@@ -340,7 +340,7 @@ function alwaysOption(pane: string | undefined): number {
   const full = d ? d.options.map((o, i) => `${o} ${d.details[i] ?? ''}`) : [];
   const i = d?.kind === 'plan' ? full.findIndex(o => PLAN_ALWAYS.test(o) && !CLEAR_CONTEXT.test(o))
     : d?.kind === 'permission' ? full.findIndex(o => ALWAYS.test(o) && !AUTO_MODE.test(o)) : -1;
-  if (i < 0) throw new Error(NO_ALWAYS);
+  if (i < 0) throw new Refusal(NO_ALWAYS, 'not_offered');
   return i + 1;
 }
 
@@ -349,7 +349,7 @@ function alwaysOption(pane: string | undefined): number {
  * prompt, typed once the input box is back.
  */
 function notePlan(note: string, pane: string | undefined): KeyPlan {
-  if (pane && parseTrust(pane)) throw new Error(NO_NOTE);
+  if (pane && parseTrust(pane)) throw new Refusal(NO_NOTE, 'not_offered');
   const text = flatten(note);
   const d = pane ? parseDialog(pane) : null;
   const row = d?.kind === 'plan' ? d.options.findIndex(o => PLAN_NOTE_ROW.test(o)) : -1;

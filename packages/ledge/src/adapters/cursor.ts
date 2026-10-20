@@ -1,5 +1,5 @@
 import type { Pending } from '@ledge/protocol';
-import { NO_ALWAYS, NO_NOTE, assertDialogIs, flatten, shownCommand, type Adapter, type KeyPlan, type PanePromptMatch, type ShownCommand } from './types.js';
+import { NO_ALWAYS, NO_NOTE, Refusal, assertDialogIs, flatten, shownCommand, type Adapter, type KeyPlan, type PanePromptMatch, type ShownCommand } from './types.js';
 
 const rtrim = (l: string) => l.replace(/\s+$/, '');
 const isBlank = (l: string) => l.trim() === '';
@@ -279,7 +279,7 @@ const onChoice = (i: number, what: 'cursor' | 'checked') => (lastLines: string) 
 /** Ticks option `n` (1-based) of the question on screen and moves on: to it, Space unless already ticked, Enter. */
 function answerPlan(q: Question, n: number): KeyPlan {
   const i = n - 1;
-  if (i < 0 || i >= q.options.length) throw new Error(`the question has no option ${n}`);
+  if (i < 0 || i >= q.options.length) throw new Refusal(`the question has no option ${n}`, 'not_offered');
   const from = q.cursor < 0 ? 0 : q.cursor;
   const moves = Array<string>(Math.abs(i - from)).fill(i > from ? 'Down' : 'Up');
   return [
@@ -309,7 +309,7 @@ function atRest(pane: string): boolean {
  * screen, Enter once the field holds it (sent with the text, Enter is lost in the paste).
  */
 function notePlan(lines: string[], note: string): KeyPlan {
-  if (parseTrust(lines) || parseQuestion(lines)) throw new Error(NO_NOTE);
+  if (parseTrust(lines) || parseQuestion(lines)) throw new Refusal(NO_NOTE, 'not_offered');
   const text = flatten(note);
   const typeIt: KeyPlan = [{ text }, { until: typed(text) }, { keys: ['Enter'] }];
   if (lines.some(l => TELL_INSTEAD.test(l))) return typeIt; // already in the skip field
@@ -328,7 +328,7 @@ export const cursorAdapter: Adapter = {
     const lines = pane ? toLines(pane) : [];
     if (pane) assertDialogIs(pending, shownKind(lines));
     // « Add … to allowlist » is permanent and « Run Everything » opens everything: no « for this session » here.
-    if (decision === 'always') throw new Error(NO_ALWAYS);
+    if (decision === 'always') throw new Refusal(NO_ALWAYS, 'not_offered');
     if (decision === 'deny' && note) return notePlan(lines, note);
     if (parseTrust(lines)) return [{ text: decision === 'accept' ? 'a' : 'q' }];
     const q = parseQuestion(lines);
