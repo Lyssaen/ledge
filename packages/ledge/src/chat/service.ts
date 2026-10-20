@@ -13,6 +13,7 @@ import { asksForge, type Forge } from './forge.js';
 import { runClaude, type ClaudeEvent, type RunHandle, type RunOptions } from './claude.js';
 import { runCodex } from './codex.js';
 import { runCursor } from './cursor.js';
+import { runOmp } from './omp.js';
 import { log } from '../log.js';
 
 export type ChatMessage = Extract<ServerMessage, { type: 'chat.history' | 'chat.step' | 'chat.delta' | 'chat.done' | 'chat.error' }>;
@@ -44,7 +45,7 @@ export interface ChatDeps {
 
 const TOOL_LABEL: Record<Tool, string> = { claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor Agent', omp: 'OMP' };
 const runTool = (tool: Tool, o: RunOptions, onEvent: (e: ClaudeEvent) => void, spawn?: typeof nodeSpawn) =>
-  tool === 'codex' ? runCodex(o, onEvent, spawn) : tool === 'cursor' ? runCursor(o, onEvent, spawn) : runClaude(o, onEvent, spawn);
+  tool === 'omp' ? runOmp(o, onEvent, spawn) : tool === 'codex' ? runCodex(o, onEvent, spawn) : tool === 'cursor' ? runCursor(o, onEvent, spawn) : runClaude(o, onEvent, spawn);
 
 export const ONE_AT_A_TIME = 'one question at a time: wait for the answer';
 /** How many of the day's turns are kept for a client that connects later. */
@@ -171,7 +172,7 @@ export function createChat(deps: ChatDeps): Chat {
     const env: NodeJS.ProcessEnv = { ...(await deps.env()), LEDGE_CHAT: '1' }; delete env.LEDGE_SESSION; delete env.LEDGE_NAME; delete env.ANTHROPIC_API_KEY;
     if (mine.cancelled) return CANCELLED;
     let answer = ''; let resultError: string | null = null;
-    const handle = runTool(tool, { question: turn.question, cwd: ctx.dir, addDirs: ctx.repoPaths, sessionId, resume, env, bin: deps.bins?.[tool] ?? deps.bin }, e => {
+    const handle = runTool(tool, { question: turn.question, cwd: ctx.dir, addDirs: ctx.repoPaths, sessionId, resume, env, bin: deps.bins?.[tool] ?? deps.bin, ...(tool === 'omp' ? { sessionDir: join(deps.home, 'chat', 'omp', sessionId) } : {}) }, e => {
       if (e.type === 'tool') { const step = e.path ? stepFor(e.path, ctx) : null; if (step && !turn.steps.some(s => sameStep(s, step))) { turn.steps.push(step); emit({ type: 'chat.step', qid: turn.qid, step }); } }
       else if (e.type === 'delta') { answer += e.text; emit({ type: 'chat.delta', qid: turn.qid, text: e.text }); }
       else if (e.type === 'result') { if (e.text) answer = e.text; if (e.isError) resultError = e.text || `${label} reported an error`; }
@@ -233,8 +234,6 @@ export function createChat(deps: ChatDeps): Chat {
       await rm(dayFile, { force: true }).catch(e => log(`chat reset: day file not removed: ${(e as Error).message}`));
     },
     async ask(qid, text, emit, tool = 'claude') {
-      // Ask Ledge run by OMP is a path of its own (read-only runner, spec 2026-10-20 §7): the harness being a session's does not make it the assistant's.
-      if (tool === 'omp') return emit({ type: 'chat.error', qid, message: 'Ask Ledge cannot run on OMP yet' });
       if (busy) return emit({ type: 'chat.error', qid, message: ONE_AT_A_TIME });
       busy = true;
       const mine: Running = current = { qid, handle: null, cancelled: false };

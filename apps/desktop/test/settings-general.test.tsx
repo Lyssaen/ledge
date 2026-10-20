@@ -205,6 +205,13 @@ describe('Settings › General: the default agent', () => {
     await user.type(field(), 'And now?{Enter}');
     await waitFor(() => expect(asks(d)).toHaveLength(2));
     expect(asks(d)[1]).toMatchObject({ text: 'And now?', tool: 'cursor' });
+    d.push({ type: 'chat.done', qid: asks(d)[1]!.qid, text: 'Nova.', at: new Date().toISOString() });
+    await screen.findByText('Nova.');
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Default agent' })).getByRole('radio', { name: 'OMP' }));
+    expect(localStorage.getItem('desktop.tool')).toBe('"omp"');
+    await user.type(field(), 'And with OMP?{Enter}');
+    await waitFor(() => expect(asks(d)).toHaveLength(3));
+    expect(asks(d)[2]).toMatchObject({ text: 'And with OMP?', tool: 'omp' });
   });
 
   it('an unknown stored value falls back to Claude Code', async () => {

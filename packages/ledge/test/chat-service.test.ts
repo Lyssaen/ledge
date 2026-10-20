@@ -205,6 +205,22 @@ describe('chat service', () => {
     expect(chat.history()[0]?.qid).toBe('q1');
   });
 
+  it('runs OMP when asked: read-only whitelist, its conversation in a directory of its own, continued by the next question of the day', async () => {
+    const args: string[][] = [];
+    const spawn = ((file: string, a: string[], o: object) => { args.push(a); return nodeSpawn(file, a, o as never); }) as unknown as typeof nodeSpawn;
+    const { chat, home } = setup({ spawn, env: async () => ({ ...process.env, FAKE_AGENT: 'omp' }) });
+    const out: ServerMessage[] = [];
+    await chat.ask('q1', 'x', m => out.push(m), 'omp');
+    expect(out.at(-1)).toMatchObject({ type: 'chat.done', text: 'Deux sessions : Nova travaille.' });
+    expect(out.some(m => m.type === 'chat.delta')).toBe(true);
+    expect(args[0]![args[0]!.indexOf('--tools') + 1]).toBe('read,grep,glob');
+    const { sessionId } = JSON.parse(readFileSync(join(home, 'chat.json'), 'utf8')) as { sessionId: string };
+    expect(args[0]![args[0]!.indexOf('--session-dir') + 1]).toBe(join(home, 'chat', 'omp', sessionId));
+    expect(args[0]).not.toContain('--continue'); // the day's first OMP question starts its conversation
+    expect(JSON.parse(readFileSync(join(home, 'chat.json'), 'utf8'))).toMatchObject({ tool: 'omp' });
+    await chat.ask('q2', 'y', () => {}, 'omp');
+    expect(args[1]).toContain('--continue');
+  });
   it('runs Codex when asked, and a later Claude question starts a new session', async () => {
     const args: string[][] = [];
     const spawn = ((file: string, a: string[], o: object) => { args.push(a); return nodeSpawn(file, a, o as never); }) as unknown as typeof nodeSpawn;
