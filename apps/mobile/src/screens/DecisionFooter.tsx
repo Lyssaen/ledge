@@ -41,7 +41,7 @@ export interface DecisionFooterProps {
    * An OMP dialog answered with an option (the options are in the page): `canConfirm` is whether this phone can sign for the
    * PC (else the PC answers); `picked` the option tapped, awaiting the device's confirmation; `onReply` sends it with the assertion.
    */
-  optionReply?: { canConfirm: boolean; picked: string | null; onBack: () => void; onReply: (assertion: Assertion) => string | null } | undefined;
+  optionReply?: { canConfirm: boolean; picked: number | null; onBack: () => void; onReply: (assertion: Assertion) => string | null } | undefined;
   /** An OMP `ask` of several questions: how many have no choice yet, and what sending or declining does. */
   multi?: { missing: number; onSend: () => void; onCancel: () => void } | undefined;
 }

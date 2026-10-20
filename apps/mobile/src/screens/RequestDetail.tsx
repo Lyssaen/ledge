@@ -49,8 +49,8 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect }: { s
   const [changed, setChanged] = useState(false);
   const [choice, setChoice] = useState<number | null>(null);
   const [otherText, setOtherText] = useState('');
-  // OMP: the option tapped, waiting for the device's confirmation; the choices of an `ask`, kept with the questions they answer.
-  const [picked, setPicked] = useState<string | null>(null);
+  // OMP: the position of the option tapped, waiting for the device's confirmation; the choices of an `ask`, kept with the questions they answer.
+  const [picked, setPicked] = useState<number | null>(null);
   const [chosen, setChosen] = useState<{ sig: string; v: string[][] }>({ sig: '', v: [] });
   const platform = usePlatform();
   // The last tap sent nothing (the store refused the write): said in the footer until the next tap.
@@ -135,14 +135,15 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect }: { s
     setRefused(!store.answer(sessionId, req.requestId, answers, { expect, ...(cancel ? { cancel: true } : {}) }));
   };
   const optionsLive = fresh && !changed && item !== undefined && outcome.kind !== 'sending' && outcome.kind !== 'uncertain' && (canConfirm || !guarded);
-  const tapOption = (label: string) => {
-    if (guarded) { setPicked(label); setRefused(false); } else setRefused(!store.reply(sessionId, label));
+  // An option is answered by its 1-based position: a label could be a digit read as another option, or appear twice.
+  const tapOption = (i: number) => {
+    if (guarded) { setPicked(i); setRefused(false); } else setRefused(!store.reply(sessionId, String(i + 1)));
   };
   const optionList = (
     <ul aria-label={copy.answers.legend} className="my-3.5 flex list-none flex-col gap-2 p-0">
       {options.map((o, i) => (
         <li key={`${i}:${o}`}>
-          <button type="button" disabled={!optionsLive} aria-pressed={picked === o} onClick={() => tapOption(o)}
+          <button type="button" disabled={!optionsLive} aria-pressed={picked === i} onClick={() => tapOption(i)}
             className="flex min-h-12 w-full flex-col items-start justify-center rounded-control border border-line bg-surface px-3 py-3 text-left text-[13px] [overflow-wrap:anywhere] disabled:opacity-45 aria-pressed:border-fg/40 aria-pressed:bg-raised">
             {o}
             {req.optionDetails?.[i] && <small className="mt-0.5 text-[11px] text-muted">{req.optionDetails[i]}</small>}
@@ -225,7 +226,7 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect }: { s
         answerable={answerable} choice={choosingOther ? options.length : choice} onAnswer={send}
         answerBlocked={choosingOther ? free.problem !== null : choice === null || choice >= options.length}
         onCheck={onReconnect} refused={refused} store={store} deviceConfirm={state.device?.confirm === true}
-        optionReply={optionMode ? { canConfirm: guarded ? canConfirm : true, picked: guarded ? picked : null, onBack: () => setPicked(null), onReply: a => picked === null ? null : store.reply(sessionId, picked, { assertion: a }) } : undefined}
+        optionReply={optionMode ? { canConfirm: guarded ? canConfirm : true, picked: guarded ? picked : null, onBack: () => setPicked(null), onReply: a => picked === null ? null : store.reply(sessionId, String(picked + 1), { assertion: a }) } : undefined}
         multi={askQuestions ? { missing, onSend: () => sendAnswers(false), onCancel: () => sendAnswers(true) } : undefined}
       />
     </>

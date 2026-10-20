@@ -261,7 +261,21 @@ describe('an OMP dialog with options', () => {
     act(() => t.deliver(challenge));
     fireEvent.click(await screen.findByRole('button', { name: 'Confirmer avec mon appareil' }));
     await waitFor(() => expect(t.of('session.reply')).toHaveLength(1));
-    expect(t.of('session.reply')).toMatchObject([{ id: 'a', text: 'Précis', expect: { key: 'p1', kind: 'question' }, assertion }]);
+    expect(t.of('session.reply')).toMatchObject([{ id: 'a', text: '2', expect: { key: 'p1', kind: 'question' }, assertion }]);
+  });
+
+  it('answers by the option\'s position, whatever its label says', async () => {
+    vi.mocked(getAssertion).mockResolvedValue(assertion);
+    const t = omp(dialog({ options: ['3', '1', '2'] }));
+    await waitFor(() => expect(screen.getByRole('button', { name: '1' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: '1' }));
+    expect(screen.getByRole('button', { name: '1' })).toHaveAttribute('aria-pressed', 'true');
+    await waitFor(() => expect(t.of('confirm.prepare')).toHaveLength(1));
+    act(() => t.deliver(challenge));
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirmer avec mon appareil' }));
+    await waitFor(() => expect(t.of('session.reply')).toHaveLength(1));
+    expect(t.of('session.reply')).toMatchObject([{ text: '2' }]);
+    expect(screen.getByRole('button', { name: '1' })).toBeInTheDocument();
   });
 
   it('a cancelled confirmation sends nothing, and another option can be chosen', async () => {
