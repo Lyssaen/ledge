@@ -5,6 +5,8 @@ import { hostname } from 'node:os';
 import { createPhoneGateway } from '../src/mobile/gateway.js';
 import { createChallengeStore } from '../src/mobile/challenges.js';
 import { challengeOf, rpOf, type DeviceCredential } from '../src/mobile/webauthn.js';
+import { launchFromChat } from '../src/chat/launch.js';
+import { tooWide } from '../src/chat/service.js';
 import { softAuthenticator } from './mobile-soft-authenticator.js';
 
 const T0 = '2026-10-20T08:00:00.000Z';
@@ -61,7 +63,7 @@ const flush = async () => { for (let i = 0; i < 5; i++) await new Promise(r => s
 const stops: Array<() => void> = [];
 afterEach(() => { for (const s of stops.splice(0)) s(); });
 
-function setup(opts: { boot?: string; dispatch?: (msg: ClientMessage, reply: (m: ServerMessage) => void) => Promise<void>; relayUrl?: string; chats?: Parameters<typeof createPhoneGateway>[0]['chats']; devices?: string[] } = {}) {
+function setup(opts: { boot?: string; dispatch?: (msg: ClientMessage, reply: (m: ServerMessage) => void) => Promise<void>; relayUrl?: string; chats?: Parameters<typeof createPhoneGateway>[0]['chats']; relay?: Parameters<typeof createPhoneGateway>[0]['relay']; launchChat?: Parameters<typeof createPhoneGateway>[0]['launchChat']; devices?: string[] } = {}) {
   const fm = fakeMobile(opts.devices ?? ['dev1', 'dev2'], opts.relayUrl);
   const clock = { t: 1_000_000 };
   const challenges = createChallengeStore({ now: () => clock.t });
@@ -81,6 +83,8 @@ function setup(opts: { boot?: string; dispatch?: (msg: ClientMessage, reply: (m:
   const gw = createPhoneGateway({
     mobile: fm.mobile,
     ...(opts.chats ? { chats: opts.chats } : {}),
+    ...(opts.relay ? { relay: opts.relay } : {}),
+    ...(opts.launchChat ? { launchChat: opts.launchChat } : {}),
     sessions: () => [...sessions.values()],
     session: id => sessions.get(id),
     thread: id => threads.get(id),
@@ -1362,5 +1366,157 @@ describe('phone gateway: chat', () => {
     g.send('dev1', { type: 'device.forget', op: randomUUID() });
     await new Promise(r => setTimeout(r, 50));
     expect(c.drops).toEqual(['dev1']);
+  });
+});
+
+describe('phone gateway: chat cards', () => {
+  const rp = { rpId: 'relay.test', origin: 'https://relay.test' };
+  const QA = randomUUID(); const QB = randomUUID(); const QPC = randomUUID();
+  type Row = { project: string; tool: 'claude'; cwd: string; prompt: string; launchedId?: string; error?: string };
+  const row = (cwd: string, prompt = 'do it'): Row => ({ project: 'repo', tool: 'claude', cwd, prompt });
+
+  /** The device's thread holds QA (a card of `rows`, an instruction) and QB; the PC's QPC is not the device's. */
+  function cards(rows: Row[]) {
+    const c = fakeChats();
+    const turn = (qid: string) => ({ qid, question: 'q', askedAt: T0, steps: [] as never[], proposals: rows, relay: { id: 'sess', name: 'bot', tool: 'claude', text: 'go on' } });
+    c.turns.set('dev1', [turn(QA)] as never);
+    c.turns.set('dev2', [turn(QB)] as never);
+    const launches: Array<{ cwd: string; prompt?: string }> = [];
+    const relays: string[] = [];
+    const inFlight = new Set<string>();
+    const live = (qid: string) => ({ ...(c.chats.device('dev1') as object), proposal: (_q: string, r = 0) => rows[r], markLaunched: (_q: string, id: string, _e: unknown, r = 0) => { rows[r] = { ...rows[r]!, launchedId: id }; }, markFailed: (_q: string, m: string, _e: unknown, r = 0) => { rows[r] = { ...rows[r]!, error: m }; } }) as never;
+    const owner = c.chats.owner;
+    c.chats.owner = (qid: string) => (qid === QPC ? 'desktop' as never : owner(qid));
+    const launchChat = (_thread: string, qid: string, r?: number[]) => launchFromChat({
+      chat: live(qid), emit: () => {}, inFlight,
+      launch: async p => { launches.push({ cwd: p.cwd, prompt: p.prompt }); return `s${launches.length}`; },
+      refuse: p => { const w = tooWide(p.cwd, '/home/me'); return w ? `the folder is ${w}` : null; }
+    }, qid, r);
+    return { c, rows, launches, relays, launchChat, relay: { async request(qid: string) { relays.push(qid); } } };
+  }
+  const enroll = async (g: ReturnType<typeof setup>) => {
+    const auth = softAuthenticator();
+    g.send('dev1', { type: 'confirm.prepare', purpose: 'register' });
+    await flush();
+    const reg = g.got('dev1').find(m => m.type === 'confirm.challenge');
+    if (reg?.type !== 'confirm.challenge') throw new Error('no challenge');
+    g.send('dev1', { type: 'credential.register', op: randomUUID(), credential: auth.create(rp, reg.challenge) });
+    await flush();
+    return auth;
+  };
+  const prepare = async (g: ReturnType<typeof setup>, qid: string) => {
+    const before = g.got('dev1').length;
+    g.send('dev1', { type: 'confirm.prepare', purpose: 'launch', qid });
+    await flush();
+    const m = g.got('dev1').slice(before).find(x => x.type === 'confirm.challenge');
+    if (m?.type !== 'confirm.challenge') throw new Error('no challenge');
+    return m;
+  };
+  const last = (g: ReturnType<typeof setup>) => g.results('dev1').at(-1);
+  const RELAYUrl = 'https://relay.test';
+  const make = (rows: Row[]) => { const k = cards(rows); return { k, g: setup({ chats: k.c.chats, relay: k.relay, launchChat: k.launchChat, relayUrl: RELAYUrl }) }; };
+
+  it('chat.relay on a turn of the device is applied; on the PC\'s or another device\'s turn unknown_session', async () => {
+    const { k, g } = make([row('/w/repo')]);
+    const op = randomUUID();
+    g.send('dev1', { type: 'chat.relay', op, qid: QA });
+    g.send('dev1', { type: 'chat.relay', op: randomUUID(), qid: QPC });
+    g.send('dev1', { type: 'chat.relay', op: randomUUID(), qid: QB });
+    await flush();
+    expect(g.results('dev1').filter(r => r.status !== 'received').map(r => r.status === 'applied' ? 'applied' : r.reason)).toEqual(['applied', 'unknown_session', 'unknown_session']);
+    expect(k.relays).toEqual([QA]);
+  });
+
+  it('chat.relay is invalid for an over-long instruction and failed when the relay throws', async () => {
+    const long = make([]);
+    (long.k.c.turns.get('dev1')![0] as unknown as { relay: { text: string } }).relay.text = 'x'.repeat(2049);
+    long.g.send('dev1', { type: 'chat.relay', op: randomUUID(), qid: QA });
+    await flush();
+    expect(last(long.g)).toMatchObject({ status: 'rejected', reason: 'invalid' });
+    const k = cards([]);
+    const g = setup({ chats: k.c.chats, relay: { async request() { throw new Error('already sent'); } } });
+    g.send('dev1', { type: 'chat.relay', op: randomUUID(), qid: QA });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'failed' });
+  });
+
+  it('confirm.prepare launch without qid or with another thread\'s qid is invalid; with the device\'s a launch challenge', async () => {
+    const { g } = make([row('/w/repo')]);
+    await enroll(g);
+    const before = g.got('dev1').length;
+    g.send('dev1', { type: 'confirm.prepare', purpose: 'launch' });
+    g.send('dev1', { type: 'confirm.prepare', purpose: 'launch', qid: QB });
+    g.send('dev1', { type: 'confirm.prepare', purpose: 'launch', qid: QPC });
+    await flush();
+    expect(g.got('dev1').slice(before)).toEqual(Array(3).fill({ type: 'error', code: 'invalid', request: 'confirm.prepare' }));
+    expect(await prepare(g, QA)).toMatchObject({ type: 'confirm.challenge', purpose: 'launch', rpId: 'relay.test' });
+  });
+
+  it('chat.launch needs an assertion: none is confirm_required, a device without credential too', async () => {
+    const { k, g } = make([row('/w/repo')]);
+    g.send('dev1', { type: 'chat.launch', op: randomUUID(), qid: QA });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'rejected', reason: 'confirm_required' });
+    await enroll(g);
+    g.send('dev1', { type: 'chat.launch', op: randomUUID(), qid: QA });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'rejected', reason: 'confirm_required' });
+    expect(k.launches).toEqual([]);
+  });
+
+  it('chat.launch with an assertion bound to its qid is applied and launches; the replay does not launch twice', async () => {
+    const { k, g } = make([row('/w/repo', 'first')]);
+    const auth = await enroll(g);
+    const ch = await prepare(g, QA);
+    const m = { type: 'chat.launch', op: randomUUID(), qid: QA, assertion: auth.get(rp, ch.challenge, { counter: 1 }) };
+    g.send('dev1', m);
+    await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: m.op, status: 'applied' });
+    expect(k.launches).toEqual([{ cwd: '/w/repo', prompt: 'first' }]);
+    g.send('dev1', m);
+    await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: m.op, status: 'applied' });
+    expect(k.launches).toHaveLength(1);
+  });
+
+  it('an assertion bound to another qid is assertion_invalid, nothing is launched', async () => {
+    const { k, g } = make([row('/w/repo')]);
+    const auth = await enroll(g);
+    k.c.turns.get('dev1')!.push({ qid: QB, question: 'q', askedAt: T0, steps: [] } as never);
+    const other = await prepare(g, QB);
+    g.send('dev1', { type: 'chat.launch', op: randomUUID(), qid: QA, assertion: auth.get(rp, other.challenge, { counter: 1 }) });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'rejected', reason: 'assertion_invalid' });
+    expect(k.launches).toEqual([]);
+  });
+
+  it('chat.launch on the PC\'s qid is unknown_session and launches nothing', async () => {
+    const { k, g } = make([row('/w/repo')]);
+    await enroll(g);
+    g.send('dev1', { type: 'chat.launch', op: randomUUID(), qid: QPC });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'rejected', reason: 'unknown_session' });
+    expect(k.launches).toEqual([]);
+  });
+
+  it('a missing or over-long row is invalid before any challenge is spent', async () => {
+    const { k, g } = make([row('/w/repo', 'x'.repeat(2049))]);
+    await enroll(g);
+    g.send('dev1', { type: 'chat.launch', op: randomUUID(), qid: QA });
+    g.send('dev1', { type: 'chat.launch', op: randomUUID(), qid: QA, rows: [2] });
+    await flush();
+    expect(g.results('dev1').filter(r => r.status === 'rejected').map(r => r.reason)).toEqual(['invalid', 'invalid']);
+    expect(k.launches).toEqual([]);
+  });
+
+  it('a proposal in a folder too wide is failed and the card shows it', async () => {
+    const { k, g } = make([row('/home/me')]);
+    const auth = await enroll(g);
+    const ch = await prepare(g, QA);
+    g.send('dev1', { type: 'chat.launch', op: randomUUID(), qid: QA, assertion: auth.get(rp, ch.challenge, { counter: 1 }) });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'failed' });
+    expect(k.launches).toEqual([]);
+    expect(k.rows[0]!.error).toBeDefined();
   });
 });

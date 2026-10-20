@@ -3,11 +3,11 @@
 // the devices that follow it. Logs carry a type, a code or an error's name, never a message's content.
 import { hostname } from 'node:os';
 import {
-  OperationIdSchema, PHONE_PROTOCOL, PhoneClientMessageSchema, pushEndpointAllowed, RefusalCodeSchema, UNTYPABLE, backendOf, isArchived, pendingKey,
-  type ChatErrorCode, type ClientMessage, type OperationReason, type OperationStatus, type PhoneClientMessage, type PhoneServerMessage, type ServerMessage, type Session, type ThreadItem
+  OperationIdSchema, PHONE_PROTOCOL, TOOL_TEXT_MAX, proposalRows, PhoneClientMessageSchema, pushEndpointAllowed, RefusalCodeSchema, UNTYPABLE, backendOf, isArchived, pendingKey,
+  type ChatErrorCode, type ChatTurn, type ClientMessage, type OperationReason, type OperationStatus, type PhoneClientMessage, type PhoneServerMessage, type ServerMessage, type Session, type ThreadItem
 } from '@ledge/protocol';
 import type { MobileService } from './service.js';
-import type { ChatThreads } from '../chat/threads.js';
+import type { ChatThreads, ChatThreadId } from '../chat/threads.js';
 import { phoneEmitter, toPhoneHistory } from './chat.js';
 import type { ChatMessage } from '../chat/service.js';
 import { createOutbox } from './outbox.js';
@@ -69,6 +69,10 @@ export function createPhoneGateway(deps: {
   outbox?: { now?: () => number; frames?: number; bytes?: number; windowMs?: number };
   /** The chat threads: each device talks to its own. Without them the phone has no chat. */
   chats?: Pick<ChatThreads, 'device' | 'deviceTool' | 'owner' | 'drop' | 'setEmitter'>;
+  /** The chat relay: hands a turn's instruction to its session. */
+  relay?: { request(qid: string): Promise<void> };
+  /** Starts the sessions of a turn's card, on that thread (its own emitter and refusals). */
+  launchChat?: (thread: ChatThreadId, qid: string, rows?: number[]) => Promise<{ launched: string[]; failed: number }>;
   /** A device's question ended (answered, or with a code). */
   onChatEnd?: (deviceId: string, end: { qid: string; code?: ChatErrorCode }) => void;
   chatThrottleMs?: number;
@@ -159,7 +163,7 @@ export function createPhoneGateway(deps: {
     push(deviceId, { type: 'operation.result', op, status, ...(reason ? { reason } : {}) });
   };
 
-  /** The operations that act on a tracked session (the chat ones are the gateway's own, Task 5). */
+  /** The operations that act on a tracked session: the registry's own, the credential's, the device's and the chat's are handled before it. */
   type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.launch' }>;
   /** Whether the operation needs the device's own check: an accept of a request that is not low, or a reply to an OMP (rpc) dialog, which is never low. */
   const needsAssertion = (msg: SessionOperation, s: Session): boolean => {
@@ -172,19 +176,18 @@ export function createPhoneGateway(deps: {
   const subjectOf = (id: string, key: string, s: Session | undefined): string =>
     `${id}:${key}${s?.pending?.source === 'rpc' && s.pending.requestId ? `:${s.pending.requestId}` : ''}`;
 
-  /** The device check of a decision: its challenge is spent first, whatever the verdict, and the counter is kept once it verifies. */
-  const assertionOutcome = (deviceId: string, msg: Extract<PhoneOperation, { type: 'session.decide' | 'session.reply' }>, s: Session): Outcome | undefined => {
+  /** The device check: the challenge is spent first, whatever the verdict, then the signature is verified and the counter kept. */
+  const checkAssertion = (deviceId: string, assertion: NonNullable<Extract<PhoneOperation, { type: 'session.decide' }>['assertion']> | undefined, purpose: 'decide' | 'launch', subject: string | undefined): Outcome | undefined => {
     const cred = deps.credential(deviceId);
     const rp = deps.rp();
-    const key = msg.expect?.key;
-    if (!cred || !rp || !msg.assertion || key === undefined) return { status: 'rejected', reason: 'confirm_required' };
+    if (!cred || !rp || !assertion || subject === undefined) return { status: 'rejected', reason: 'confirm_required' };
     const invalid: Outcome = { status: 'rejected', reason: 'assertion_invalid' };
-    const challenge = challengeOf(msg.assertion.clientDataJSON);
+    const challenge = challengeOf(assertion.clientDataJSON);
     if (challenge === null) return invalid;
-    const verdict = deps.challenges.consume(challenge, { deviceId, purpose: 'decide', subject: subjectOf(msg.id, key, s) });
+    const verdict = deps.challenges.consume(challenge, { deviceId, purpose, subject });
     if (verdict === 'expired') return { status: 'rejected', reason: 'assertion_expired' };
     if (verdict !== 'ok') return invalid;
-    const verified = verifyAssertion(msg.assertion, cred, rp, challenge);
+    const verified = verifyAssertion(assertion, cred, rp, challenge);
     if (!verified.ok) {
       log(`phone: assertion refused for device ${deviceId}`);
       return invalid;
@@ -192,6 +195,16 @@ export function createPhoneGateway(deps: {
     deps.setCredential(deviceId, { ...cred, counter: verified.counter });
     return undefined;
   };
+
+  /** The device check of a decision. */
+  const assertionOutcome = (deviceId: string, msg: Extract<PhoneOperation, { type: 'session.decide' | 'session.reply' }>, s: Session): Outcome | undefined => {
+    const key = msg.expect?.key;
+    return checkAssertion(deviceId, msg.assertion, 'decide', key === undefined ? undefined : subjectOf(msg.id, key, s));
+  };
+
+  /** The device check of a launch, bound to the turn. */
+  const launchAssertionOutcome = (deviceId: string, qid: string, assertion: Extract<PhoneOperation, { type: 'chat.launch' }>['assertion']): Outcome | undefined =>
+    checkAssertion(deviceId, assertion, 'launch', qid);
 
   /** The checks only a phone meets, in order; undefined lets the operation through. */
   const precheck = (deviceId: string, msg: SessionOperation): Outcome | undefined => {
@@ -260,6 +273,42 @@ export function createPhoneGateway(deps: {
     return { status: 'applied' };
   };
 
+  /** The thread's turn the device may act on: its own thread's, never the PC's or another device's. A thread that cannot be reached is refused too. */
+  const ownTurn = (deviceId: string, qid: string): ChatTurn | undefined => {
+    const chats = deps.chats;
+    if (!chats) return undefined;
+    try {
+      if (chats.owner(qid) !== `device:${deviceId}`) return undefined;
+      return chats.device(deviceId).history().find(t => t.qid === qid);
+    } catch { return undefined; }
+  };
+
+  const chatRelay = async (deviceId: string, msg: Extract<PhoneOperation, { type: 'chat.relay' }>): Promise<Outcome> => {
+    const turn = ownTurn(deviceId, msg.qid);
+    if (!turn || !deps.relay) return { status: 'rejected', reason: 'unknown_session' };
+    if (!turn.relay || turn.relay.text.length > TOOL_TEXT_MAX) return { status: 'rejected', reason: 'invalid' };
+    try { await deps.relay.request(msg.qid); } catch (e) { log(`phone chat.relay failed (${e instanceof Error ? e.name : 'error'})`); return { status: 'failed' }; }
+    return { status: 'applied' };
+  };
+
+  const chatLaunch = async (deviceId: string, msg: Extract<PhoneOperation, { type: 'chat.launch' }>): Promise<Outcome> => {
+    const turn = ownTurn(deviceId, msg.qid);
+    if (!turn || !deps.launchChat) return { status: 'rejected', reason: 'unknown_session' };
+    // Every targeted row must exist and fit the phone's card: it never confirms a text it did not see.
+    const rows = proposalRows(turn);
+    const targets = msg.rows ?? [...rows.keys()];
+    if (targets.length === 0) return { status: 'rejected', reason: 'invalid' };
+    for (const r of targets) {
+      const p = rows[r];
+      if (!p || (p.prompt?.length ?? 0) > TOOL_TEXT_MAX) return { status: 'rejected', reason: 'invalid' };
+    }
+    if (deps.credential(deviceId) === null) return { status: 'rejected', reason: 'confirm_required' };
+    const refused = launchAssertionOutcome(deviceId, msg.qid, msg.assertion);
+    if (refused) return refused;
+    const done = await deps.launchChat(`device:${deviceId}`, msg.qid, targets);
+    return done.launched.length > 0 ? { status: 'applied' } : { status: 'failed' };
+  };
+
   const run = async (deviceId: string, msg: PhoneOperation): Promise<Outcome> => {
     if (msg.type === 'credential.register') return register(deviceId, msg);
     // Applied here; the device is revoked by `write`, once the answer has left.
@@ -274,8 +323,8 @@ export function createPhoneGateway(deps: {
       mobile.setPush(deviceId, null);
       return { status: 'applied' };
     }
-    // The phone's chat is not served yet: refused rather than read as a session operation.
-    if (msg.type === 'chat.relay' || msg.type === 'chat.launch') return { status: 'rejected', reason: 'invalid' };
+    if (msg.type === 'chat.relay') return chatRelay(deviceId, msg);
+    if (msg.type === 'chat.launch') return chatLaunch(deviceId, msg);
     const refused = precheck(deviceId, msg);
     if (refused) return refused;
     const out = local(msg);
@@ -379,6 +428,13 @@ export function createPhoneGateway(deps: {
           if (!cred || cred.rpId !== rp.rpId) return invalid();
           const challenge = deps.challenges.issue({ deviceId, purpose: 'decide', subject: subjectOf(msg.id, msg.expect.key, live(msg.id)) });
           return push(deviceId, { type: 'confirm.challenge', purpose: 'decide', challenge, rpId: rp.rpId, credentialId: cred.id, expiresInMs: CHALLENGE_TTL_MS });
+        }
+        if (msg.purpose === 'launch') {
+          if (msg.qid === undefined || !ownTurn(deviceId, msg.qid)) return invalid();
+          const cred = deps.credential(deviceId);
+          if (!cred || cred.rpId !== rp.rpId) return invalid();
+          const challenge = deps.challenges.issue({ deviceId, purpose: 'launch', subject: msg.qid });
+          return push(deviceId, { type: 'confirm.challenge', purpose: 'launch', challenge, rpId: rp.rpId, credentialId: cred.id, expiresInMs: CHALLENGE_TTL_MS });
         }
         const challenge = deps.challenges.issue({ deviceId, purpose: 'register', subject: '' });
         return push(deviceId, { type: 'confirm.challenge', purpose: 'register', challenge, rpId: rp.rpId, expiresInMs: CHALLENGE_TTL_MS });

@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import type { Socket } from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
-import { basename, join } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
 import { DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, backendOf } from '@ledge/protocol';
 import type { Store } from './store.js';
@@ -23,7 +23,7 @@ import { extraRoots, scanRepos } from './scan.js';
 import { createFolder, listFolder, resolveFolder } from './folders.js';
 import { loginShellEnv } from '../shell-path.js';
 import { log } from '../log.js';
-import { type Chat } from '../chat/service.js';
+import { tooWide, type Chat } from '../chat/service.js';
 import { createChatThreads } from '../chat/threads.js';
 import { createForge } from '../chat/forge.js';
 import { paths } from '../paths.js';
@@ -34,6 +34,7 @@ import { readIsland, writeIsland } from './island.js';
 import { readDocument } from './documents.js';
 import { createModels, type Models } from './models.js';
 import { createRelay, free } from './relay.js';
+import { launchFromChat, LaunchRefused } from '../chat/launch.js';
 import { createMailbox } from './mailbox.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
 import { createRouter } from '../chat/routing.js';
@@ -660,25 +661,21 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'session.launch': {
         // Any failure (bad folder, tmux) reaches the requester as an `error` without id, through the caller's catch.
         if (msg.qid === undefined) return reply({ type: 'session.launched', id: (await launch(msg)).id });
-        // A chat card (spec 2026-10-12 §4): the proposal's own fields, never the message's but the model chosen on the card (#58). Its rows (#24) start one after the other,
-        // so each launch registers its bot before the next picks a name; a launched row, or one in flight, is passed over.
-        const qid = msg.qid; const rows = msg.rows ?? [0];
-        const todo = rows.filter(r => { const p = chat.proposal(qid, r); return p && !p.launchedId && !chatLaunches.has(`${qid}#${r}`); });
-        if (todo.length === 0) return refuse(rows.some(r => chat.proposal(qid, r)) ? 'already launched' : 'unknown proposal');
-        for (const r of todo) chatLaunches.add(`${qid}#${r}`);
+        // A chat card (spec 2026-10-12 §4): the proposal's own fields, never the message's but the model chosen on the card (#58).
         let failure: unknown = null;
         try {
-          for (const r of todo) {
-            const p = chat.proposal(qid, r)!;
-            try {
-              const session = await launch({ tool: p.tool, cwd: p.cwd, prompt: p.prompt, model: msg.model, effort: msg.effort });
-              reply({ type: 'session.launched', id: session.id });
-              chat.markLaunched(qid, session.id, broadcast, r);
-            } catch (e) { chat.markFailed(qid, (e as Error).message, broadcast, r); failure = e; }
-            finally { chatLaunches.delete(`${qid}#${r}`); }
-          }
-        } finally { for (const r of todo) chatLaunches.delete(`${qid}#${r}`); }
-        if (failure) throw failure;
+          const done = await launchFromChat({
+            chat, emit: broadcast, inFlight: chatLaunches,
+            launch: async p => {
+              try {
+                const session = await launch({ tool: p.tool, cwd: p.cwd, prompt: p.prompt, model: msg.model, effort: msg.effort });
+                reply({ type: 'session.launched', id: session.id });
+                return session.id;
+              } catch (e) { failure = e; throw e; }
+            }
+          }, msg.qid, msg.rows);
+          if (done.failed > 0 && failure) throw failure;
+        } catch (e) { if (e instanceof LaunchRefused) return refuse(e.message); throw e; }
         return;
       }
       case 'folder.list': return reply(await listFolder(msg.path, opts.home, msg.requestId));
@@ -884,6 +881,16 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     thread: id => history?.items(id),
     preview: id => previews.get(id),
     dispatch,
+    relay,
+    launchChat: (thread, qid, rows) => {
+      const c = thread === 'desktop' ? threads.desktop : threads.device(thread.slice('device:'.length));
+      const userHome = resolve(opts.home ?? homedir());
+      return launchFromChat({
+        chat: c, emit: threads.emitterOf(thread) ?? (() => {}), inFlight: chatLaunches,
+        launch: async p => (await launch({ tool: p.tool, cwd: p.cwd, prompt: p.prompt })).id,
+        refuse: p => { const wide = tooWide(resolve(p.cwd), userHome); return wide ? `the folder is ${wide}` : null; }
+      }, qid, rows);
+    },
     version: opts.daemon?.version ?? 'unknown',
     boot: randomUUID(),
     log,
