@@ -102,6 +102,8 @@ mod tests {
         let sink = out.clone();
         let (tx, rx) = mpsc::channel();
         let pty = Pty::spawn(program, &s(args), 80, 24, move |b| sink.lock().unwrap().extend_from_slice(b), move |code| { let _ = tx.send(code); }).unwrap();
+        // ConPTY asks where the cursor is (ESC [6n) and starts the child only once answered, as xterm.js does in the app.
+        if cfg!(windows) { pty.write(b"\x1b[1;1R").unwrap(); }
         (pty, out, rx)
     }
 
@@ -120,18 +122,19 @@ mod tests {
         assert_eq!(wsl_command(&[]), None);
         assert_eq!(wsl_command(&["a\"b".into()]), None);
     }
+    // The children are Unix tools, or cmd.exe on Windows, whose runners have no sh, cat or sleep on the PATH.
     #[test] fn streams_output_then_exit_code() {
-        let (_pty, out, rx) = run("sh", &["-c", "printf hi; exit 3"]);
+        let (_pty, out, rx) = if cfg!(windows) { run("cmd", &["/c", "echo hi& exit 3"]) } else { run("sh", &["-c", "printf hi; exit 3"]) };
         assert_eq!(rx.recv_timeout(Duration::from_secs(5)), Ok(Some(3)));
         assert!(wait_for(&out, b"hi"));
     }
     #[test] fn input_reaches_the_child() {
-        let (pty, out, _rx) = run("cat", &[]);
-        pty.write(b"ping\n").unwrap();
+        let (pty, out, _rx) = if cfg!(windows) { run("cmd", &[]) } else { run("cat", &[]) };
+        pty.write(if cfg!(windows) { b"echo ping\r" } else { b"ping\n" }).unwrap();
         assert!(wait_for(&out, b"ping"));
     }
     #[test] fn kill_ends_it() {
-        let (pty, _out, rx) = run("sleep", &["30"]);
+        let (pty, _out, rx) = if cfg!(windows) { run("ping", &["-n", "30", "127.0.0.1"]) } else { run("sleep", &["30"]) };
         pty.kill();
         assert_eq!(rx.recv_timeout(Duration::from_secs(2)), Ok(None));
     }
