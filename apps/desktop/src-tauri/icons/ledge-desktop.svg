@@ -1,11 +1,19 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="6 3 84 84">
-  <path fill="none" stroke="#546265" stroke-width="4" stroke-linecap="round" d="M48 23v-9"/>
-  <circle cx="48" cy="12" r="4" fill="#ffc3a8"/>
-  <rect x="30" y="74" width="12" height="8" rx="4" fill="#313b3e"/>
-  <rect x="54" y="74" width="12" height="8" rx="4" fill="#313b3e"/>
-  <path fill="#566365" stroke="#91a2a2" stroke-width="1.4" d="M23 33Q25 21 40 21h16q15 0 17 12l5 23q4 22-17 22H35Q14 78 18 56Z"/>
-  <path fill="none" stroke="#ffffff60" stroke-width="2" stroke-linecap="round" d="M28 34q3-7 14-7h12"/>
-  <rect x="25" y="37" width="46" height="27" rx="12" fill="#182224"/>
-  <rect x="35" y="44" width="6" height="12" rx="3" fill="#ffc3a8"/>
-  <rect x="55" y="44" width="6" height="12" rx="3" fill="#ffc3a8"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="4 1 88 88">
+  <defs>
+    <linearGradient id="shell" x1=".15" y1="0" x2=".75" y2="1"><stop offset="0" stop-color="#dd7f78"/><stop offset="1" stop-color="#a63c37"/></linearGradient>
+    <radialGradient id="sheen" cx=".3" cy=".2" r=".75"><stop offset="0" stop-color="#fff" stop-opacity=".22"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+  </defs>
+  <path fill="none" stroke="#6a2422" stroke-width="2.4" stroke-linecap="round" d="M48 23v-7"/>
+  <circle cx="48" cy="14" r="2.6" fill="#f0b2ac"/>
+  <path fill="url(#shell)" stroke="#f3c2bd" stroke-width="1.2" d="M25 60V41C25 28 35 23 48 23C61 23 71 28 71 41V60Z"/>
+  <path fill="url(#sheen)" d="M25 60V41C25 28 35 23 48 23C61 23 71 28 71 41V60Z"/>
+  <rect x="37" y="35" width="6" height="12" rx="3" fill="#2a0e0d"/>
+  <rect x="53" y="35" width="6" height="12" rx="3" fill="#2a0e0d"/>
+  <circle cx="38.8" cy="37.8" r="1.5" fill="#fff"/>
+  <circle cx="54.8" cy="37.8" r="1.5" fill="#fff"/>
+  <rect x="9" y="59" width="78" height="20" rx="6" fill="#6a2422"/>
+  <rect x="6" y="55" width="84" height="7" rx="3.5" fill="#cf6b64" stroke="#f3c2bd" stroke-width="1"/>
+  <path fill="none" stroke="#f0b2ac" stroke-width="1.3" stroke-linecap="round" opacity=".8" d="M12 56.4H84"/>
+  <rect x="26" y="50" width="12" height="9" rx="4.5" fill="url(#shell)" stroke="#f3c2bd" stroke-width="1.2"/>
+  <rect x="58" y="50" width="12" height="9" rx="4.5" fill="url(#shell)" stroke="#f3c2bd" stroke-width="1.2"/>
 </svg>

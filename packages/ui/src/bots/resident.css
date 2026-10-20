@@ -1,31 +1,32 @@
-.resident{display:block;overflow:visible;--resident-shell:#566365;--resident-foot:#313b3e;--resident-visor:#182224;--resident-eye:var(--ledge-eye,#ffc3a8);--resident-line:#91a2a272}
-.resident[data-theme="light"]{--resident-shell:#f5eee2;--resident-foot:#c8bda9;--resident-visor:#384340;--resident-eye:var(--ledge-eye,#ffceb5);--resident-line:#968875}
-/* A warm silhouette glow marks Ledge's permanent presence; the larger empty-state portrait also carries two rings.
-   --ledge-glow / --ledge-eye come from the colour setting; the hex fallbacks are the factory coral. */
-.resident{--resident-glow:var(--ledge-glow,#ee9c87);--resident-glow-soft:var(--ledge-glow-soft,#8bc7b6);filter:drop-shadow(0 0 2px color-mix(in srgb,var(--resident-glow) 68%,transparent)) drop-shadow(0 0 7px color-mix(in srgb,var(--resident-glow) 32%,transparent))}
-.resident[data-theme="light"]{--resident-glow:var(--ledge-glow,#bb6047);--resident-glow-soft:var(--ledge-glow-soft,#538e79)}
-.resident[data-large="true"]{filter:drop-shadow(0 0 4px color-mix(in srgb,var(--resident-glow) 65%,transparent)) drop-shadow(0 0 12px color-mix(in srgb,var(--resident-glow-soft) 38%,transparent))}
-.resident[data-dnd="true"],.resident[data-frozen="true"]{filter:none}
-.resident-light{filter:drop-shadow(0 0 3px var(--resident-glow))}
-.resident[data-frozen="true"] .resident-light{filter:none}
+/* The watcher's own deep red; the colour setting only reaches the halo (--ledge-glow) and the antenna light (--ledge-eye).
+   The hex fallbacks are the factory red. */
+.resident{display:block;overflow:visible;--resident-top:#dd7f78;--resident-bottom:#a63c37;--resident-line:#f3c2bd;--resident-wall:#6a2422;--resident-slab:#cf6b64;--resident-eye:#2a0e0d;--resident-light:var(--ledge-eye,#f0b2ac)}
+.resident{--resident-glow:var(--ledge-glow,#c45a54);--resident-glow-soft:var(--ledge-glow-soft,#e39a94);filter:drop-shadow(0 0 1.5px color-mix(in srgb,var(--resident-glow) 40%,transparent)) drop-shadow(0 5px 12px color-mix(in srgb,var(--resident-glow) 18%,transparent))}
+.resident[data-theme="light"]{--resident-glow:var(--ledge-glow,#b04a44);--resident-glow-soft:var(--ledge-glow-soft,#d98a84)}
+.resident[data-large="false"]{filter:drop-shadow(0 0 1px color-mix(in srgb,var(--resident-glow) 45%,transparent))}
+.resident[data-dnd="true"]{filter:none}
+.resident[data-frozen="true"]{filter:grayscale(.85)}
 .resident-halo-stage{position:relative;display:grid;place-items:center;flex-shrink:0;width:44px;height:44px;isolation:isolate}
 .resident-halo-stage .resident{position:relative;z-index:1}
 .resident-halo-stage::before,.resident-halo-stage::after{content:"";position:absolute;border-radius:50%;pointer-events:none;transition:opacity .2s ease}
 .resident-halo-stage::before{width:72px;height:72px;border:1px solid color-mix(in srgb,var(--resident-glow) 35%,transparent);background:radial-gradient(circle,color-mix(in srgb,var(--resident-glow) 17%,transparent),color-mix(in srgb,var(--resident-glow-soft) 10%,transparent) 45%,transparent 72%);box-shadow:0 0 10px color-mix(in srgb,var(--resident-glow) 17%,transparent)}
 .resident-halo-stage::after{width:56px;height:56px;border:1px solid color-mix(in srgb,var(--resident-glow-soft) 45%,transparent);box-shadow:0 0 9px color-mix(in srgb,var(--resident-glow-soft) 19%,transparent)}
-.resident-halo-stage:has(.resident[data-theme="light"]){--resident-glow:var(--ledge-glow,#bb6047);--resident-glow-soft:var(--ledge-glow-soft,#538e79)}
+.resident-halo-stage:has(.resident[data-theme="light"]){--resident-glow:var(--ledge-glow,#b04a44);--resident-glow-soft:var(--ledge-glow-soft,#d98a84)}
 .resident-halo-stage[data-dnd="true"]::before,.resident-halo-stage[data-frozen="true"]::before{opacity:.22}
 .resident-halo-stage[data-dnd="true"]::after,.resident-halo-stage[data-frozen="true"]::after{opacity:.35;box-shadow:none}
-.resident-body{transform-origin:48px 75px;animation:resident-breathe 5.5s ease-in-out infinite}
-.resident-pose{transform-origin:48px 64px;transform:rotate(var(--resident-tilt,0deg));transition:transform .3s cubic-bezier(.22,1,.36,1)}
+.resident-body{transform-origin:48px 60px;animation:resident-breathe 5.5s ease-in-out infinite}
+.resident-pose{transform-origin:48px 60px;transform:rotate(var(--resident-tilt,0deg));transition:transform .3s cubic-bezier(.22,1,.36,1)}
 .resident-gaze{transform:translate(var(--resident-gx,0px),var(--resident-gy,0px));transition:transform .15s ease-out}
-.resident-shell{fill:var(--resident-shell);stroke:var(--resident-line);stroke-width:1.2}
-.resident-foot,.resident-antenna,.resident-hand{fill:var(--resident-foot)}
-.resident-antenna{fill:none;stroke:var(--resident-foot);stroke-width:3;stroke-linecap:round}
-.resident-light{fill:var(--resident-eye)}.resident-shine{fill:none;stroke:#ffffff50;stroke-width:1.5;stroke-linecap:round}
-.resident-visor{fill:var(--resident-visor)}.resident-eyes{fill:var(--resident-eye)}
+.resident-top{stop-color:var(--resident-top)}.resident-bottom{stop-color:var(--resident-bottom)}.resident-sheen{stop-color:#fff;stop-opacity:.22}
+.resident-shell{stroke:var(--resident-line);stroke-width:1.2}
+.resident-wall{fill:var(--resident-wall)}
+.resident-slab{fill:var(--resident-slab);stroke:var(--resident-line);stroke-width:1}
+.resident-rim{fill:none;stroke:var(--resident-light);stroke-width:1.3;stroke-linecap:round;opacity:.8}
+.resident-antenna{fill:none;stroke:var(--resident-wall);stroke-width:2.4;stroke-linecap:round}
+.resident-light{fill:var(--resident-light)}
+.resident-eyes{fill:var(--resident-eye)}.resident-glint{fill:#fff}
 .resident-smile,.resident-sleep{fill:none;stroke:var(--resident-eye);stroke-width:3;stroke-linecap:round;opacity:0}
-.resident-hand{opacity:0;transform-origin:76px 66px}.resident-blink{transform-origin:48px 48px}
+.resident-hand{transform-origin:64px 56px}.resident-blink{transform-origin:48px 41px}
 .resident[data-gesture="blink"] .resident-blink{animation:resident-blink .18s ease-in-out}
 .resident[data-gesture="happy"] .resident-eyes,.resident[data-gesture="sleep"] .resident-eyes{opacity:0}
 .resident[data-gesture="happy"] .resident-smile,.resident[data-gesture="sleep"] .resident-sleep{opacity:1}
@@ -33,24 +34,25 @@
 .resident[data-gesture="curious"] .resident-pose{transform:rotate(-9deg)}
 .resident[data-gesture="look"] .resident-gaze{animation:resident-look 1.8s ease-in-out}
 .resident[data-gesture="stretch"] .resident-pose{animation:resident-stretch 1.6s ease-in-out}
-.resident[data-gesture="sleep"] .resident-pose{transform:rotate(7deg) translateY(3px)}
-.resident[data-gesture="hello"] .resident-hand{opacity:1;animation:resident-wave .55s ease-in-out 2}
-.resident[data-gesture="tap"] .resident-hand{opacity:1;animation:resident-tap .38s ease-in-out 3}
+/* Asleep, the watcher sinks behind its rebord. */
+.resident[data-gesture="sleep"] .resident-pose{transform:translateY(6px) rotate(4deg)}
+.resident[data-gesture="hello"] .resident-hand{animation:resident-wave .55s ease-in-out 2}
+.resident[data-gesture="tap"] .resident-hand{animation:resident-tap .38s ease-in-out 3}
 .resident[data-gesture="pulse"] .resident-light{animation:resident-pulse .7s ease-in-out 2}
 .resident[data-gesture="nod"] .resident-pose{animation:resident-nod .7s ease-in-out}
 .resident[data-gesture="yawn"] .resident-pose{animation:resident-stretch 1.7s ease-in-out}
 .resident[data-gesture="yawn"] .resident-eyes{opacity:0}.resident[data-gesture="yawn"] .resident-sleep{opacity:1}
-.resident[data-frozen="true"] .resident-light{opacity:.25}.resident[data-frozen="true"] .resident-eyes{fill:#a8abaa}
+.resident[data-frozen="true"] .resident-light{opacity:.25}
 .resident[data-quiet="true"],.resident[data-quiet="true"] *{animation:none!important;transition:none!important}
 .resident[data-quiet="true"] .resident-pose,.resident[data-quiet="true"] .resident-gaze{transform:none!important}
 [inert] .resident,[inert] .resident *, .resident[data-frozen="true"],.resident[data-frozen="true"] *{animation-play-state:paused!important}
 @media(prefers-reduced-motion:reduce){.resident,.resident *{animation:none!important;transition:none!important}.resident-pose,.resident-gaze{transform:none!important}}
-@keyframes resident-breathe{0%,100%{transform:translateY(0) scaleY(1)}50%{transform:translateY(-1px) scaleY(1.018)}}
+@keyframes resident-breathe{0%,100%{transform:translateY(0) scaleY(1)}50%{transform:translateY(-.7px) scaleY(1.015)}}
 @keyframes resident-blink{0%,100%{transform:scaleY(1)}50%{transform:scaleY(.08)}}
-@keyframes resident-boop{0%,100%{transform:scale(1)}20%{transform:translateY(3px) scale(1.1,.85)}55%{transform:translateY(-8px) scale(.94,1.07)}80%{transform:translateY(1px) scale(1.03,.97)}}
+@keyframes resident-boop{0%,100%{transform:scale(1)}20%{transform:translateY(2px) scale(1.08,.88)}55%{transform:translateY(-6px) scale(.95,1.06)}80%{transform:translateY(1px) scale(1.02,.98)}}
 @keyframes resident-look{0%,100%{transform:translate(0,0)}25%,40%{transform:translate(-4px,-1px)}65%,80%{transform:translate(4px,-1px)}}
-@keyframes resident-stretch{0%,100%{transform:scale(1)}45%{transform:translateY(-3px) scale(.94,1.1) rotate(-4deg)}75%{transform:scale(1.03,.97)}}
-@keyframes resident-wave{0%,100%{transform:rotate(-20deg) translateY(-5px)}35%{transform:rotate(-65deg) translateY(-7px)}70%{transform:rotate(-28deg) translateY(-5px)}}
-@keyframes resident-tap{0%,100%{transform:translate(-57px,0) rotate(15deg)}50%{transform:translate(-60px,-2px) rotate(30deg)}}
-@keyframes resident-pulse{50%{filter:drop-shadow(0 0 5px var(--resident-eye));opacity:.4}}
-@keyframes resident-nod{0%,100%{transform:rotate(0)}40%{transform:translateY(3px) rotate(6deg)}70%{transform:translateY(-1px) rotate(-2deg)}}
+@keyframes resident-stretch{0%,100%{transform:scale(1)}45%{transform:translateY(-4px) scale(.96,1.08)}75%{transform:scale(1.02,.98)}}
+@keyframes resident-wave{0%,100%{transform:translate(0,0)}25%,75%{transform:translate(4px,-15px) rotate(-12deg)}50%{transform:translate(6px,-17px) rotate(22deg)}}
+@keyframes resident-tap{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+@keyframes resident-pulse{50%{filter:drop-shadow(0 0 4px var(--resident-light));opacity:.4}}
+@keyframes resident-nod{0%,100%{transform:rotate(0)}40%{transform:translateY(3px) rotate(5deg)}70%{transform:translateY(-1px) rotate(-2deg)}}
