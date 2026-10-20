@@ -17,8 +17,23 @@ const SSH_LOST = 255;
 const HELD_MS = 15000;
 
 type Entry = { tabs: readonly Tab[]; active: string; next: number; link: AgentLink; offlineSince?: number; native: boolean };
-/** One open (or opening) pseudo-terminal; it is current while the store still points at it, stale once replaced or dropped. */
-type Run = { handle: PtyHandle | null };
+/** One open (or opening) pseudo-terminal; it is current while the store still points at it, stale once replaced or dropped.
+ *  `typed` holds what the xterm sends before the handle is there: ConPTY asks for the cursor as it starts and draws nothing,
+ *  reads no key, until that answer comes. */
+type Run = { handle: PtyHandle | null; typed: string[] };
+
+/** Sends `data` to the run's process, or keeps it until the process is there. */
+function type(run: Run | null, data: string): void {
+  if (!run) return;
+  if (run.handle) run.handle.write(data);
+  else run.typed.push(data);
+}
+
+/** The run's process is there: what was typed while it opened goes first. */
+function adoptHandle(run: Run, h: PtyHandle): void {
+  run.handle = h;
+  for (const d of run.typed.splice(0)) h.write(d);
+}
 
 /** The pane fits while the open is pending, with no handle to resize: the process learns the size as soon as it has one. */
 function syncSize(h: PtyHandle, surface: TermSurface): void {
@@ -166,7 +181,7 @@ export class TermStore {
     let s = this.surfaces.get(tabId);
     if (!s) {
       s = this.deps.surface();
-      s.onInput(d => run()?.handle?.write(d));
+      s.onInput(d => type(run(), d));
       s.onResize((c, r) => run()?.handle?.resize(c, r));
       this.surfaces.set(tabId, s);
     }
@@ -179,13 +194,13 @@ export class TermStore {
     if (!backend || !argv) { this.setTab(sessionId, tab.id, { status: 'unavailable', end: undefined }); return; }
     const id = tab.id;
     const surface = this.surfaceFor(id, () => this.shells.get(id) ?? null);
-    const run: Run = { handle: null };
+    const run: Run = { handle: null, typed: [] };
     const current = () => this.shells.get(id) === run;
     this.shells.set(id, run);
     this.setTab(sessionId, id, { status: 'running', end: undefined });
     const adopt = (h: PtyHandle | null) => {
       if (!current()) { h?.close(); return; }
-      if (h) { run.handle = h; syncSize(h, surface); return; }
+      if (h) { adoptHandle(run, h); syncSize(h, surface); return; }
       this.shells.delete(id);
       this.setTab(sessionId, id, { status: 'unavailable' });
       this.emit();
@@ -219,14 +234,14 @@ export class TermStore {
     if (!argv) { this.setLink(sid, OFF); return; }
     const surface = this.surfaceFor(agentTabId(sid), () => (this.shown?.sid === sid ? this.attachment : null));
     surface.setReadOnly(readOnly);
-    const run: Run = { handle: null };
+    const run: Run = { handle: null, typed: [] };
     const current = () => this.attachment === run;
     this.attachment = run;
     this.openedAt = this.now();
     const adopt = (h: PtyHandle | null) => {
       if (!current()) { h?.close(); return; }
       if (!h) { this.dropped(); return; }
-      run.handle = h;
+      adoptHandle(run, h);
       syncSize(h, surface);
       this.setLink(sid, { state: 'attached', attempt: 0 });
       this.emit();

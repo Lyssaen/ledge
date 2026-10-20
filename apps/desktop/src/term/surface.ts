@@ -22,6 +22,8 @@ export interface TermSurface {
 
 /** Ctrl V with nothing to paste: the raw byte, so Claude Code can read an image from the clipboard itself. */
 const PASTE_BYTE = '\x16';
+/** What xterm answers on its own: a cursor position report, its device attributes. ConPTY waits for the first before it draws. */
+const REPORT = /^\x1b\[(?:\d+;\d+R|[?>][\d;]*c)$/;
 
 export function createSurface(opts: { theme: TermTheme; onThread(): void; openUrl(url: string): void }): TermSurface {
   const host = document.createElement('div');
@@ -46,7 +48,8 @@ export function createSurface(opts: { theme: TermTheme; onThread(): void; openUr
   let theme = opts.theme;
   let readOnly = false;
   const inputs: ((data: string) => void)[] = [];
-  const send = (data: string) => { if (!readOnly) for (const fn of inputs) fn(data); };
+  // Read-only drops the keys, not the replies: disableStdin would drop both, and the screen would wait forever.
+  const send = (data: string) => { if (!readOnly || REPORT.test(data)) for (const fn of inputs) fn(data); };
   term.onData(send);
 
   // A read-only screen hides its cursor in the background's colour; the text under a block cursor keeps its own.
@@ -85,7 +88,7 @@ export function createSurface(opts: { theme: TermTheme; onThread(): void; openUr
     size: () => ({ cols: term.cols, rows: term.rows }),
     fit: () => fitter.fit(),
     focus: () => term.focus(),
-    setReadOnly: on => { readOnly = on; term.options.disableStdin = on; applyTheme(); },
+    setReadOnly: on => { readOnly = on; applyTheme(); },
     setTheme: t => { theme = t; applyTheme(); },
     dispose: () => term.dispose()
   };

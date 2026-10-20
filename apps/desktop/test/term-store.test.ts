@@ -428,3 +428,40 @@ describe('a native session (OMP): shells only', () => {
     expect(st.active('omp1')).toBe('omp1#shell-2');
   });
 });
+
+describe('TermStore input while opening', () => {
+  // ConPTY asks for the cursor (ESC [ 6 n) as it starts and prints nothing, reads no key, until the xterm answers.
+  const REPORT = '\x1b[1;1R';
+
+  it('the agent screen\'s answer, sent before the attachment opens, reaches it once open, before later keys', async () => {
+    backend.hold(true);
+    const st = store();
+    st.showAgent('local:a', { kind: 'live' });
+    const s = st.surface(agentTabId('local:a')) as FakeSurface;
+    s.type(REPORT);
+    backend.opens[0]!.resolve(true); await tick();
+    s.type('y');
+    expect(backend.opens[0]!.writes).toEqual([REPORT, 'y']);
+  });
+
+  it('a shell\'s answer, sent before it opens, reaches it once open', async () => {
+    backend.hold(true);
+    const st = store();
+    const [, shell] = st.tabs('local:a');
+    st.select('local:a', shell!.id);
+    (st.surface(shell!.id) as FakeSurface).type(REPORT);
+    backend.opens[0]!.resolve(true); await tick();
+    expect(backend.opens[0]!.writes).toEqual([REPORT]);
+  });
+
+  it('what was sent to an attachment that never opened does not go to the next one', async () => {
+    backend.hold(true);
+    const st = store();
+    st.showAgent('local:a', { kind: 'live' });
+    (st.surface(agentTabId('local:a')) as FakeSurface).type('lost');
+    backend.opens[0]!.resolve(false); await tick();
+    await vi.advanceTimersByTimeAsync(1000);
+    backend.opens[1]!.resolve(true); await tick();
+    expect(backend.opens[1]!.writes).toEqual([]);
+  });
+});
