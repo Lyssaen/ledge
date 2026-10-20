@@ -28,7 +28,7 @@ export interface Chat {
   /** The card's state: queued, sent, failed, or `{}` back to proposed; every client gets the new history. */
   markRelay(qid: string, patch: Pick<ChatRelay, 'status' | 'sentAt' | 'error'>, emit: (m: ChatMessage) => void): void;
   /** Today's queued relays, oldest turn first. */
-  queuedRelays(emit?: (m: ChatMessage) => void): Array<{ qid: string; relay: ChatRelay }>;
+  queuedRelays(emit?: (m: ChatMessage) => void): Array<{ qid: string; relay: ChatRelay; askedAt: string }>;
   /** Resolves once no question is running (at once when there is none). */
   idle(): Promise<void>;
 }
@@ -229,7 +229,7 @@ export function createChat(deps: ChatDeps): Chat {
       emit({ type: 'chat.history', turns });
     },
     // A roll caught here is silent otherwise: the overlays would keep showing yesterday's queued card.
-    queuedRelays(emit) { if (rollDay()) emit?.({ type: 'chat.history', turns }); return turns.flatMap(t => (t.relay?.status === 'queued' ? [{ qid: t.qid, relay: t.relay }] : [])); },
+    queuedRelays(emit) { if (rollDay()) emit?.({ type: 'chat.history', turns }); return turns.flatMap(t => (t.relay?.status === 'queued' ? [{ qid: t.qid, relay: t.relay, askedAt: t.askedAt }] : [])); },
     idle: () => (busy ? new Promise<void>(res => { idleWaiters.push(res); }) : Promise.resolve()),
     cancel(qid) { if (current?.qid === qid) { current.cancelled = true; current.handle?.kill(); } },
     async reset(emit) {

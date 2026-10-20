@@ -4,7 +4,7 @@ import type { ChatThreadId, ChatThreads } from '../chat/threads.js';
 import type { Store } from './store.js';
 import { log } from '../log.js';
 
-export interface Relay { request(qid: string): Promise<void>; cancel(qid: string): void; close(): void }
+export interface Relay { request(qid: string): Promise<void>; /** Hands the session on to whatever waits for it (its next queued card, else the mailbox): after a thread's cards vanished. */ settle(id: string): void; cancel(qid: string): void; close(): void }
 export interface RelayDeps {
   /** Every chat thread (the PC's and each device's): an instruction lives in, and answers to, the thread that owns its qid. */
   threads: Pick<ChatThreads, 'all' | 'owner' | 'emitterOf'>; store: Pick<Store, 'get' | 'onChange'>;
@@ -41,17 +41,15 @@ export function createRelay(d: RelayDeps): Relay {
   };
   const chatOf = (thread: ChatThreadId): Pick<Chat, 'relay' | 'markRelay' | 'queuedRelays'> | undefined => d.threads.all().find(([id]) => id === thread)?.[1];
   const mark = (thread: ChatThreadId, qid: string, patch: Parameters<Chat['markRelay']>[1]) => chatOf(thread)?.markRelay(qid, patch, emitTo(thread));
-  /** The order cards were queued in this process, across threads; cards queued before (a restart) keep their thread's order and go first. */
-  const queuedAt = new Map<string, number>(); let seq = 0;
-  /** Every thread's queued cards, oldest first. */
-  function queued(): Array<{ thread: ChatThreadId; qid: string; relay: ChatRelay }> {
+  /** Every thread's queued cards, oldest turn first (desktop's thread, then the thread's own order, break a tie). */
+  function queued(): Array<{ thread: ChatThreadId; qid: string; relay: ChatRelay; askedAt: string }> {
     const out = d.threads.all().flatMap(([thread, c]) => c.queuedRelays(emitTo(thread)).map(q => ({ thread, ...q })));
-    return out.map((q, i) => ({ q, i })).sort((a, b) => (queuedAt.get(a.q.qid) ?? -1) - (queuedAt.get(b.q.qid) ?? -1) || a.i - b.i).map(x => x.q);
+    return out.map((q, i) => ({ q, i })).sort((a, b) => (a.q.askedAt < b.q.askedAt ? -1 : a.q.askedAt > b.q.askedAt ? 1 : 0) || a.i - b.i).map(x => x.q);
   }
-  const markQueued = (thread: ChatThreadId, qid: string) => { queuedAt.set(qid, seq++); mark(thread, qid, { status: 'queued' }); };
+  const markQueued = (thread: ChatThreadId, qid: string) => mark(thread, qid, { status: 'queued' });
 
   async function deliver(thread: ChatThreadId, qid: string, r: ChatRelay): Promise<string | null> {
-    typing.add(r.id); sending.add(qid); queuedAt.delete(qid);
+    typing.add(r.id); sending.add(qid);
     try {
       let refused: string | null;
       try { refused = await d.replyTo(r.id, r.text); } catch (e) { refused = (e as Error).message; }
@@ -84,7 +82,7 @@ export function createRelay(d: RelayDeps): Relay {
       const q = queued().filter(x => x.relay.id === id);
       if (q.length === 0) return;
       const s = c.type === 'updated' ? c.session : undefined;
-      if (!s || s.state === 'exited') { for (const x of q) if (!sending.has(x.qid)) { queuedAt.delete(x.qid); mark(x.thread, x.qid, { error: stopped(x.relay.name) }); } return; }
+      if (!s || s.state === 'exited') { for (const x of q) if (!sending.has(x.qid)) { mark(x.thread, x.qid, { error: stopped(x.relay.name) }); } return; }
       if (free(s) && !typing.has(id)) kick(id);
     } catch (e) { log(`relay change handler failed: ${(e as Error).message}`); }
   });
@@ -108,7 +106,13 @@ export function createRelay(d: RelayDeps): Relay {
       if (sending.has(qid)) throw new Error('already sent');
       const thread = d.threads.owner(qid);
       if (!thread || chatOf(thread)?.relay(qid)?.status !== 'queued') throw new Error('nothing queued');
-      queuedAt.delete(qid); mark(thread, qid, {});
+      mark(thread, qid, {});
+    },
+    settle(id) {
+      try {
+        if (queued().some(q => q.relay.id === id)) kick(id);
+        else if (free(d.store.get(id)) && !typing.has(id)) d.next?.(id);
+      } catch (e) { log(`relay settle failed: ${(e as Error).message}`); }
     },
     close: unsubscribe
   };

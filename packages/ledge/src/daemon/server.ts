@@ -874,7 +874,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
 
   if (mobile) gateway = createPhoneGateway({
     mobile,
-    chats: threads,
+    // A dropped device thread takes its queued cards with it: the sessions they waited for go on to what else waits.
+    chats: { ...threads, async drop(id: string) {
+      const waiting = [...new Set(threads.queuedRelays().filter(q => q.thread === `device:${id}`).map(q => q.relay.id))];
+      try { await threads.drop(id); } finally { for (const sid of waiting) relay.settle(sid); }
+    } },
     sessions: () => store.all(),
     session: id => store.get(id),
     thread: id => history?.items(id),

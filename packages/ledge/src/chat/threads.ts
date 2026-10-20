@@ -65,7 +65,7 @@ export function createChatThreads(deps: Omit<ChatDeps, 'slots'> & { max?: number
       return p;
     },
     /** Every thread's queued instructions (each thread's day roll is told to its own emitter), the desktop's first. */
-    queuedRelays(): Array<{ thread: ChatThreadId; qid: string; relay: ChatRelay }> {
+    queuedRelays(): Array<{ thread: ChatThreadId; qid: string; relay: ChatRelay; askedAt: string }> {
       return all().flatMap(([thread, c]) => c.queuedRelays(emitters.get(thread)).map(q => ({ thread, ...q })));
     },
     owner(qid: string): ChatThreadId | undefined {

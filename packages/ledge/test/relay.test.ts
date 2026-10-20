@@ -14,19 +14,19 @@ const mk = (id: string, extra: Partial<Session> = {}): Session => ({ id, name: '
   tmuxSession: `ledge-${id}`, state: 'working', helpers: [], startedAt: T0, lastActivityAt: T0, source: 'launcher', ...extra });
 
 /** One thread's chat holding relays by qid, in question order, as the service does. */
-function fakeThread(relays: Record<string, ChatRelay>) {
+function fakeThread(relays: Record<string, ChatRelay>, asked: Record<string, string> = {}) {
   const map = new Map(Object.entries(relays));
   const chat = {
     history: () => [...map.keys()].map(qid => ({ qid })),
     relay: (qid: string) => map.get(qid),
     markRelay(qid: string, patch: Partial<ChatRelay>, emit: (m: ChatMessage) => void) { const r = map.get(qid); if (!r) return; const { id, name, tool, text } = r; map.set(qid, { id, name, tool, text, ...patch }); emit({ type: 'chat.history', turns: [] }); },
-    queuedRelays: () => [...map].filter(([, r]) => r.status === 'queued').map(([qid, relay]) => ({ qid, relay }))
+    queuedRelays: () => [...map].filter(([, r]) => r.status === 'queued').map(([qid, relay]) => ({ qid, relay, askedAt: asked[qid] ?? '2026-10-20T08:00:00.000Z' }))
   };
   return { chat: chat as unknown as Chat & { history(): Array<{ qid: string }> }, map };
 }
 /** Threads by id (the desktop first), each with its own emitter; `emitted` records which one heard what. */
-function fakeThreads(spec: Record<string, Record<string, ChatRelay>>) {
-  const parts = Object.entries(spec).map(([id, relays]) => [id as ChatThreadId, fakeThread(relays)] as const);
+function fakeThreads(spec: Record<string, Record<string, ChatRelay>>, asked: Record<string, string> = {}) {
+  const parts = Object.entries(spec).map(([id, relays]) => [id as ChatThreadId, fakeThread(relays, asked)] as const);
   const emitted: ThreadEmits = {}; const emitters = new Map<ChatThreadId, (m: ChatMessage) => void>();
   for (const [id] of parts) { emitted[id] = 0; emitters.set(id, () => { emitted[id]!++; }); }
   const threads: RelayDeps['threads'] = {
@@ -300,23 +300,53 @@ describe('createRelay (spec 2026-10-12 relay §4)', () => {
       relay.close();
     });
 
-    it('a phone card queued for a session, then the PC\'s: one per free moment, in the order queued', async () => {
+    const free1 = () => { store.upsert(mk('s1', { state: 'idle' })); return flush(); };
+    const busy1 = () => { store.upsert(mk('s1', { state: 'working' })); store.upsert(mk('s1', { state: 'idle' })); return flush(); };
+
+    it('the PC\'s turn is older than the phone\'s: its card goes first although the phone\'s was queued first', async () => {
       store.upsert(mk('s1', { state: 'working' }));
-      const f = fakeThreads({ desktop: { q2: otto('pc') }, 'device:abc': { q1: otto('phone') } });
+      const f = fakeThreads({ desktop: { q2: otto('pc') }, 'device:abc': { q1: otto('phone') } }, { q2: '2026-10-20T08:00:00.000Z', q1: '2026-10-20T08:05:00.000Z' });
       const relay = createRelay({ threads: f.threads, store, replyTo });
       await relay.request('q1'); await relay.request('q2');
-      expect(f.map('device:abc').get('q1')?.status).toBe('queued'); expect(f.map('desktop').get('q2')?.status).toBe('queued');
-      store.upsert(mk('s1', { state: 'idle' })); await flush();
-      expect(typed).toEqual([['s1', 'phone']]);
-      expect(f.map('desktop').get('q2')?.status).toBe('queued');
-      store.upsert(mk('s1', { state: 'working' })); store.upsert(mk('s1', { state: 'idle' })); await flush();
-      expect(typed).toEqual([['s1', 'phone'], ['s1', 'pc']]);
+      await free1(); expect(typed).toEqual([['s1', 'pc']]);
+      expect(f.map('device:abc').get('q1')?.status).toBe('queued');
+      await busy1(); expect(typed).toEqual([['s1', 'pc'], ['s1', 'phone']]);
+      relay.close();
+    });
+
+    it('within one thread, q2 queued before q1: q1 (the older turn) goes first', async () => {
+      store.upsert(mk('s1', { state: 'working' }));
+      const f = fakeThreads({ desktop: { q1: otto('one'), q2: otto('two') } }, { q1: '2026-10-20T08:00:00.000Z', q2: '2026-10-20T08:01:00.000Z' });
+      const relay = createRelay({ threads: f.threads, store, replyTo });
+      await relay.request('q2'); await relay.request('q1');
+      await free1(); expect(typed).toEqual([['s1', 'one']]);
+      relay.close();
+    });
+
+    it('the order survives a fresh relay over the same threads (a restart)', async () => {
+      store.upsert(mk('s1', { state: 'working' }));
+      const f = fakeThreads({ desktop: { q2: otto('pc') }, 'device:abc': { q1: otto('phone') } }, { q2: '2026-10-20T08:00:00.000Z', q1: '2026-10-20T08:05:00.000Z' });
+      const first = createRelay({ threads: f.threads, store, replyTo });
+      await first.request('q1'); await first.request('q2'); first.close();
+      const second = createRelay({ threads: f.threads, store, replyTo });
+      await free1(); expect(typed).toEqual([['s1', 'pc']]);
+      second.close();
+    });
+
+    it('settle hands a session whose queued card vanished to the next card, else to next()', async () => {
+      store.upsert(mk('s1', { state: 'idle' }));
+      const next: string[] = [];
+      const f = fakeThreads({ desktop: { q2: { ...otto('pc'), status: 'queued' } }, 'device:abc': {} });
+      const relay = createRelay({ threads: f.threads, store, replyTo, next: id => next.push(id) });
+      relay.settle('s1'); await flush();
+      expect(typed).toEqual([['s1', 'pc']]);
+      relay.settle('s1'); expect(next).toEqual(['s1']);
       relay.close();
     });
 
     it('a free session with a card queued on another thread queues the new one behind it', async () => {
       store.upsert(mk('s1', { state: 'idle' }));
-      const f = fakeThreads({ desktop: { q2: otto('pc') }, 'device:abc': { q1: { ...otto('phone'), status: 'queued' } } });
+      const f = fakeThreads({ desktop: { q2: otto('pc') }, 'device:abc': { q1: { ...otto('phone'), status: 'queued' } } }, { q1: '2026-10-20T07:00:00.000Z' });
       const relay = createRelay({ threads: f.threads, store, replyTo });
       await relay.request('q2'); await flush();
       expect(typed[0]).toEqual(['s1', 'phone']);

@@ -184,6 +184,7 @@ describe('chat threads', { timeout: 20_000 }, () => {
     threads.setEmitter('desktop', () => { heard.desktop!++; }); threads.setEmitter('device:d1', () => { heard['device:d1']!++; });
     threads.device('d1').markRelay('qd', { status: 'queued' }, () => {}); threads.desktop.markRelay('qp', { status: 'queued' }, () => {});
     expect(threads.queuedRelays().map(q => [q.thread, q.qid, q.relay.text])).toEqual([['desktop', 'qp', 'from pc'], ['device:d1', 'qd', 'from phone']]);
+    expect(threads.queuedRelays().every(q => typeof q.askedAt === 'string')).toBe(true);
     expect(threads.owner('qd')).toBe('device:d1');
   });
 });

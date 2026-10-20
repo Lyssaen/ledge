@@ -1499,7 +1499,7 @@ describe('server', () => {
         async ask() {}, cancel() {}, async reset() {}, history: () => [], proposal: () => undefined, markLaunched() {}, markFailed() {},
         relay: qid => (qid === 'q1' ? r : undefined),
         markRelay(_qid, patch, emit) { const { id, name, tool, text } = r!; r = { id, name, tool, text, ...patch }; emit({ type: 'chat.history', turns: [] }); },
-        queuedRelays: () => (r?.status === 'queued' ? [{ qid: 'q1', relay: r }] : []),
+        queuedRelays: () => (r?.status === 'queued' ? [{ qid: 'q1', relay: r, askedAt: '2026-10-12T08:00:00.000Z' }] : []),
         idle: async () => {}
       };
       return { chat, current: () => r };
