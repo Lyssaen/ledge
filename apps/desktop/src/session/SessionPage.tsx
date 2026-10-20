@@ -75,9 +75,10 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   const unread = useRef<string | null | undefined>(undefined);
   if (unread.current === undefined && items !== undefined) unread.current = unreadFrom(ids, memo.seen);
 
-  // The clock: every second while an action runs (online), every 30 s otherwise (« il y a » keeps up). The spinner turns on
-  // its own (Spinner), so neither tick renders more than the times.
-  const running = !offline && xs.some(x => x.segments.some(s => s.kind === 'tools' && s.tools.some(tool => tool.status === 'running')));
+  // The clock: every second while an action runs or the agent works (online: the waiting line counts), every 30 s otherwise
+  // (« il y a » keeps up). The spinner turns on its own (Spinner), so neither tick renders more than the times.
+  const running = !offline && ((helper ?? session).state === 'working'
+    || xs.some(x => x.segments.some(s => s.kind === 'tools' && s.tools.some(tool => tool.status === 'running'))));
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
     const clock = setInterval(() => setNow(Date.now()), running ? 1000 : 30_000);

@@ -528,6 +528,17 @@ export const en: Messages = {
         plan: (n) => `${n} is waiting for your approval of its plan.`, diff: (n) => `${n} is waiting for your approval of a change.`
       },
       resumes: 'The thread resumes after your answer.',
+      working: {
+        label: 'The agent is working',
+        prompt: { you: 'Reading your message…', parent: 'Reading its instruction…' },
+        received: (n) => `Reading ${n}’s message…`,
+        tool: { read: ['Just read ', '…'], search: ['Going through the results for ', '…'], command: ['Looking at the output of ', '…'], edit: ['Reviewing its change to ', '…'] },
+        failed: ['Looking into why ', ' failed…'],
+        helper: (n) => `Taking up ${n}’s report…`,
+        decision: 'Resuming after your answer…', said: 'Carrying on…',
+        bank: ['Choosing its words…', 'Checking its notes…', 'Pulling on a thread…', 'Weighing the options…', 'Scribbling away…', 'Warming up the neurons…', 'Looking for the right word…', 'Reading it over once more…'],
+        long: 'Taking its time, thinking hard…'
+      },
       planDecided: { accept: 'You approved the plan', always: 'You approved the plan in auto mode', deny: 'You sent the plan back for revision', unknown: 'Plan answered in the terminal' },
       objective: 'Session objective', notedBy: (n) => `· noted by ${n}`,
       tags: { story: 'Story', objectif: 'Objective' },

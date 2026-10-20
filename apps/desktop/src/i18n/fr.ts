@@ -556,6 +556,19 @@ export const fr = {
         plan: (n: string) => `${n} attend votre accord sur son plan.`, diff: (n: string) => `${n} attend votre accord sur une modification.`
       } as Record<'permission' | 'question' | 'plan' | 'diff', (n: string) => string>,
       resumes: 'Le fil reprend après votre réponse.',
+      // La ligne d'attente : l'agent travaille sans action en cours. D'abord ce que montre le fil, puis la banque, puis le temps.
+      working: {
+        label: 'L’agent travaille',
+        prompt: { you: 'Lit votre message…', parent: 'Lit sa consigne…' } as Record<'you' | 'parent', string>,
+        received: (n: string) => `Lit le message de ${n}…`,
+        // [avant, après] la cible de l'action, en code.
+        tool: { read: ['Vient de lire ', '…'], search: ['Parcourt les résultats de ', '…'], command: ['Regarde le résultat de ', '…'], edit: ['Relit sa modification de ', '…'] } as Record<ToolKind, readonly [string, string]>,
+        failed: ['Regarde pourquoi ', ' a échoué…'] as readonly [string, string],
+        helper: (n: string) => `Reprend le rapport ${/^[aeiouyhéèêàâîôû]/i.test(n) ? `d’${n}` : `de ${n}`}…`,
+        decision: 'Reprend après votre réponse…', said: 'Enchaîne…',
+        bank: ['Tourne sept fois sa langue…', 'Consulte ses notes…', 'Tire sur un fil…', 'Pèse le pour et le contre…', 'Gratte le papier…', 'Fait chauffer les neurones…', 'Cherche le mot juste…', 'Relit une dernière fois…'] as readonly string[],
+        long: 'Prend son temps, ça cogite…'
+      },
       planDecided: {
         accept: 'Vous avez approuvé le plan', always: 'Vous avez approuvé le plan en mode automatique', deny: 'Vous avez renvoyé le plan à revoir', unknown: 'Plan répondu dans le terminal'
       } as Record<'accept' | 'always' | 'deny' | 'unknown', string>,
