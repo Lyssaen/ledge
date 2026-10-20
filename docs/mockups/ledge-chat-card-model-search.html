@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Carte du chat, recherche du modèle</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#050505;--background:#0a0a0a;--card:#171717;--popover:#171717;--well:#0f0f0f;--sidebar:#171717;--fg:#fafafa;--muted:#262626;--muted-fg:#a1a1a1;
+  --border:#ffffff1a;--input:#ffffff26;--ring:#737373;--primary:#9f0712;--primary-fg:#fef2f2;--secondary:#27272a;--info:#60a5fa;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:13px/19px Geist,ui-sans-serif,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+h1{margin:0;font-size:15px;font-weight:600}
+.page{padding:28px 28px 40px;max-width:1440px;margin:0 auto}
+.intro{display:flex;flex-direction:column;gap:4px;margin-bottom:24px}
+.intro p{margin:0;color:var(--muted-fg);max-width:900px}
+.boards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:28px;align-items:start}
+@media(max-width:1200px){.boards{grid-template-columns:1fr}}
+.board{display:flex;flex-direction:column;gap:10px}
+.board>h2{margin:0;font-size:12px;font-weight:600;letter-spacing:.02em;color:var(--muted-fg)}
+.board>h2 b{color:var(--fg);font-weight:600}
+.board>p{margin:0;font-size:12px;color:var(--muted-fg)}
+/* Le panneau du chat de Ledge, à sa largeur réelle. */
+.chat{position:relative;width:420px;max-width:100%;height:560px;background:var(--sidebar);border:1px solid var(--border);border-radius:14px;display:flex;flex-direction:column;overflow:visible}
+.chat-head{display:flex;align-items:center;gap:8px;height:44px;padding:0 14px;border-bottom:1px solid var(--border);font-weight:600;font-size:13px}
+.chat-body{flex:1;padding:14px;display:flex;flex-direction:column;gap:12px;min-height:0}
+.you{align-self:flex-end;max-width:85%;background:var(--muted);border-radius:12px;padding:8px 12px;font-size:12.5px}
+.ledge{font-size:12.5px;color:var(--fg)}
+.lcard{border:1px solid var(--border);border-radius:8px;background:var(--well);font-size:12.5px;line-height:18px}
+.lcard dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:6px 12px;padding:10px 12px}
+.lcard dt{color:var(--muted-fg)}
+.lcard dd{margin:0;min-width:0}
+.lcard .tool{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.lcard .foot{display:flex;align-items:center;gap:8px;padding:8px 12px;border-top:1px solid var(--border)}
+.btn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:8px;border:1px solid transparent;font:500 12px Geist,sans-serif;background:none;color:var(--fg)}
+.btn.primary{background:var(--primary);color:var(--primary-fg)}
+.btn.ghost{color:var(--fg)}
+.muted{color:var(--muted-fg)}
+/* Avant : les deux listes natives. */
+select{height:24px;max-width:180px;padding:0 6px;font:inherit;font-size:11.5px;border:1px solid var(--input);border-radius:6px;background:var(--background);color:var(--fg)}
+.native{position:absolute;left:96px;top:208px;width:230px;background:#2b2b2b;border:1px solid #555;border-radius:4px;box-shadow:0 6px 18px rgba(0,0,0,.6);font-size:12px;padding:2px 0}
+.native div{padding:2px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.native div.on{background:#2f6fde;color:#fff}
+.flag{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:999px;background:#fbbf24;color:#0a0a0a;font:600 10.5px Geist,sans-serif;flex:none}
+.issues{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px;font-size:12px;color:#d4d4d4}
+.issues li{display:flex;gap:8px;align-items:flex-start}
+/* Proposition : la puce du modèle et la liste de la v2. */
+.chip{display:inline-flex;align-items:center;gap:6px;height:26px;max-width:100%;padding:0 8px 0 9px;border:1px solid var(--input);border-radius:8px;background:var(--background);font-size:12px;min-width:0}
+.chip.open{border-color:var(--ring);box-shadow:0 0 0 3px #73737340}
+.chip .t{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-weight:500}
+.chip svg{flex:none;color:var(--muted-fg)}
+.menu{position:absolute;left:14px;right:14px;z-index:5;display:flex;flex-direction:column;background:var(--popover);border:1px solid var(--border);border-radius:10px;box-shadow:0 20px 40px -12px rgba(0,0,0,.7);overflow:hidden}
+.search{display:flex;align-items:center;gap:8px;padding:0 12px;height:38px;border-bottom:1px solid var(--border);color:var(--muted-fg)}
+.search span{flex:1;color:var(--fg);font-size:13px}
+.search span.ph{color:var(--muted-fg)}
+.caret{display:inline-block;width:1px;height:15px;background:var(--fg);vertical-align:-3px;margin-left:1px}
+.opts{padding:4px;display:flex;flex-direction:column;gap:1px;max-height:190px;overflow:hidden}
+.opt{display:flex;align-items:center;gap:8px;min-height:34px;padding:0 10px;border-radius:6px;min-width:0}
+.opt.active{background:var(--muted)}
+.opt.sel{background:var(--secondary)}
+.opt .n{flex:none;max-width:55%;font-weight:500;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.opt .d{flex:1;min-width:0;font-size:12px;color:var(--muted-fg);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.opt.raw{border-top:1px solid var(--border);border-radius:0 0 6px 6px}
+.opt.raw .n{font-weight:400;color:var(--muted-fg)}
+.opt.raw .d{color:var(--fg);font-family:'Geist Mono',monospace}
+.badge{flex:none;padding:0 5px;border:1px solid var(--input);border-radius:4px;font-size:10px;line-height:15px;color:var(--muted-fg)}
+mark{background:none;color:var(--fg);text-decoration:underline;text-underline-offset:2px;text-decoration-color:var(--muted-fg)}
+.note{margin:0;padding:8px 10px;font-size:12px;color:var(--muted-fg)}
+.mfoot{display:flex;align-items:center;gap:10px;padding:8px 10px;border-top:1px solid var(--border);font-size:12px;font-weight:500;color:var(--muted-fg)}
+.stepper{margin-left:auto;display:flex;align-items:center;gap:2px;width:168px;height:34px;padding:0 3px;border:1px solid var(--input);border-radius:8px;background:var(--background);color:var(--fg)}
+.stepper i{display:grid;place-items:center;width:28px;height:28px;border-radius:6px;font-style:normal}
+.stepper .v{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:12px;line-height:14px}
+.dots{display:flex;gap:3px}.dots b{width:6px;height:6px;border-radius:999px;background:var(--input)}.dots b.on{background:var(--fg)}
+.cursor-note{margin-left:auto;font-weight:400;font-size:11px;color:var(--muted-fg)}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="intro">
+    <h1>Carte de lancement du chat : un modèle qu'on peut chercher</h1>
+    <p>Aujourd'hui, la carte que propose le chat de Ledge offre deux listes déroulantes natives (modèle, effort), sans recherche : 11 modèles chez Codex, 266 chez Cursor. On y reprend la liste du formulaire « Nouvelle session » (#58, maquette v2) : une puce qui ouvre la liste avec son champ de recherche, l'effort en bas de la liste.</p>
+  </div>
+  <div class="boards">
+
+    <section class="board">
+      <h2><b>Avant</b> · deux listes natives</h2>
+      <div class="chat">
+        <div class="chat-head">Ledge</div>
+        <div class="chat-body">
+          <div class="you">Lance un agent pour corriger les tests du daemon</div>
+          <div class="ledge">Je propose de lancer Cursor Agent dans ledge :</div>
+          <div class="lcard">
+            <dl>
+              <dt>Dossier</dt><dd><strong>Ledge</strong> <span class="mono muted" style="font-size:11.5px">~/Workspace/ledge</span></dd>
+              <dt>Agent</dt><dd class="tool">Cursor Agent <select aria-label="Modèle de Cursor Agent"><option>Auto · défaut</option></select></dd>
+              <dt>Consigne</dt><dd>Corrige les tests du daemon qui échouent depuis Node 24.</dd>
+            </dl>
+            <div class="foot"><span class="btn primary">Lancer</span><span class="muted" style="font-size:12px">ou reformulez</span></div>
+          </div>
+        </div>
+        <div class="native" aria-hidden="true">
+          <div class="on">Auto · défaut</div><div>Codex 5.3 Low</div><div>Codex 5.3 Low Fast</div><div>Codex 5.3</div><div>Codex 5.3 Fast</div><div>Codex 5.3 High</div><div>Codex 5.3 High Fast</div><div>Codex 5.3 Extra High</div><div>Codex 5.3 Extra High Fast</div><div>GPT-5.2</div><div>Composer 2.5</div><div>Claude Opus 5 1M Thinking</div><div>Claude Opus 5 1M Thinking Fast</div><div>GPT-5.6 Sol 1M High</div><div>… 252 autres</div>
+        </div>
+      </div>
+      <ul class="issues">
+        <li><span class="flag">1</span>Pas de recherche : trouver « Opus » parmi 266 modèles Cursor oblige à faire défiler.</li>
+        <li><span class="flag">2</span>Pas de description, pas d'identifiant exact possible (« Autre… » n'existe que dans le formulaire).</li>
+        <li><span class="flag">3</span>L'effort est une seconde liste à part, différente du compteur du formulaire.</li>
+      </ul>
+    </section>
+
+    <section class="board">
+      <h2><b>Proposition</b> · Codex, la liste ouverte</h2>
+      <div class="chat">
+        <div class="chat-head">Ledge</div>
+        <div class="chat-body">
+          <div class="you">Lance un agent pour corriger les tests du daemon</div>
+          <div class="ledge">Je propose de lancer Codex dans ledge :</div>
+          <div class="lcard">
+            <dl>
+              <dt>Dossier</dt><dd><strong>Ledge</strong> <span class="mono muted" style="font-size:11.5px">~/Workspace/ledge</span></dd>
+              <dt>Agent</dt><dd class="tool">Codex
+                <span class="chip open"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2M20 14h2M15 13v2M9 13v2"/></svg><span class="t">GPT-6.1-Sol · Moyen</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span>
+              </dd>
+              <dt>Consigne</dt><dd>Corrige les tests du daemon qui échouent depuis Node 24.</dd>
+            </dl>
+            <div class="foot"><span class="btn primary">Lancer</span><span class="muted" style="font-size:12px">ou reformulez</span></div>
+          </div>
+        </div>
+        <div class="menu" style="top:256px">
+          <div class="search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span class="ph">Chercher, ou taper un identifiant<i class="caret"></i></span></div>
+          <div class="opts">
+            <div class="opt sel"><span class="n">GPT-6.1-Sol</span><span class="badge">défaut</span><span class="d">Latest workhorse model for coding and everyday work.</span><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></div>
+            <div class="opt"><span class="n">GPT-6-Astra</span><span class="d">Frontier intelligence for the most demanding work.</span></div>
+            <div class="opt"><span class="n">GPT-6-Sol</span><span class="d">Previous generation workhorse model.</span></div>
+            <div class="opt"><span class="n">GPT-6-Luna</span><span class="d">Fast and affordable model for easier tasks.</span></div>
+            <div class="opt"><span class="n">GPT-5.6-Sol</span><span class="d">Older generation workhorse model.</span></div>
+            <div class="opt"><span class="n">GPT-5.6-Terra</span><span class="d">Older balanced model for straightforward work.</span></div>
+            <div class="opt"><span class="n">GPT-5.6-Luna</span><span class="d">Older fast and efficient model.</span></div>
+          </div>
+          <div class="mfoot">Effort
+            <span class="stepper"><i>−</i><span class="v">Moyen<span class="dots"><b class="on"></b><b class="on"></b><b></b><b></b><b></b><b></b></span></span><i>+</i></span>
+          </div>
+        </div>
+      </div>
+      <p>La puce remplace les deux listes et dit modèle et effort d'un coup. Elle ouvre la liste de la v2 sous la carte : la recherche d'abord (focus dedans), une ligne par modèle avec sa description, l'effort en bas. Choisir un modèle ne ferme pas la liste tant qu'on règle l'effort ; Échap ou un clic dehors la ferme.</p>
+    </section>
+
+    <section class="board">
+      <h2><b>Proposition</b> · Cursor, une recherche</h2>
+      <div class="chat">
+        <div class="chat-head">Ledge</div>
+        <div class="chat-body">
+          <div class="you">Lance un agent pour corriger les tests du daemon</div>
+          <div class="ledge">Je propose de lancer Cursor Agent dans ledge :</div>
+          <div class="lcard">
+            <dl>
+              <dt>Dossier</dt><dd><strong>Ledge</strong> <span class="mono muted" style="font-size:11.5px">~/Workspace/ledge</span></dd>
+              <dt>Agent</dt><dd class="tool">Cursor Agent
+                <span class="chip open"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2M20 14h2M15 13v2M9 13v2"/></svg><span class="t">Auto</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span>
+              </dd>
+              <dt>Consigne</dt><dd>Corrige les tests du daemon qui échouent depuis Node 24.</dd>
+            </dl>
+            <div class="foot"><span class="btn primary">Lancer</span><span class="muted" style="font-size:12px">ou reformulez</span></div>
+          </div>
+        </div>
+        <div class="menu" style="top:256px">
+          <div class="search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>opus<i class="caret"></i></span><span class="muted" style="flex:none;font-size:11px">2 sur 266</span></div>
+          <div class="opts">
+            <div class="opt active"><span class="n">Claude <mark>Opus</mark> 5 1M Thinking</span><span class="d mono" style="font-size:11px">claude-opus-5-thinking-high</span></div>
+            <div class="opt"><span class="n">Claude <mark>Opus</mark> 5 1M Thinking Fast</span><span class="d mono" style="font-size:11px">claude-opus-5-thinking-high-fast</span></div>
+            <div class="opt raw"><span class="n">Utiliser tel quel</span><span class="d">opus</span></div>
+          </div>
+          <div class="mfoot">Effort <span class="cursor-note">compris dans le nom du modèle</span></div>
+        </div>
+      </div>
+      <p>Avec 266 modèles, la liste montre les 50 premiers puis « tapez pour chercher » ; ici « opus » en garde deux, ↑ ↓ et Entrée choisissent. Un identifiant absent de la liste reste possible (« Utiliser tel quel »). Le compte « 2 sur 266 » est nouveau, proposé aussi pour le formulaire.</p>
+    </section>
+
+  </div>
+</div>
+</body>
+</html>
