@@ -397,7 +397,7 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
         <div className="session-main" ref={main}>
           {/* On the thread, the panel keeps its lot 6a name (« Fil de la session »); on the changes, the tab names it. */}
           <div className="session-body" role="tabpanel" tabIndex={-1} {...(view === 'thread' ? { 'aria-label': th.label } : { 'aria-labelledby': 'session-tab-changes' })}>
-            <div className="messages session-thread" ref={scroller} onScroll={onScroll} hidden={view !== 'thread'}>
+            <div className="messages session-thread" ref={scroller} data-thread-focus tabIndex={-1} onScroll={onScroll} hidden={view !== 'thread'}>
               {todos && <TodoBar todos={todos} open={todoOpen} onToggle={toggleTodos} live={!offline} />}
               {offline && (
                 <div className="frozen-banner" role="status">

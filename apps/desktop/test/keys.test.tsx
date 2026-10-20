@@ -6,6 +6,7 @@ import { initialNav } from '../src/nav/state';
 import type { Overview } from '../src/nav/overview';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { ConfirmDialog } from '../src/manage/ConfirmDialog';
+import { ShortcutsHelp } from '../src/shell/ShortcutsHelp';
 import { LangProvider } from '../src/i18n/lang';
 import WebSocket from 'ws';
 import { createMockDaemon, fakeSession } from '@ledge/fleet/test/mockDaemon';
@@ -211,5 +212,52 @@ describe('an open confirmation', () => {
     expect(dispatch).not.toHaveBeenCalled();
     expect(run).not.toHaveBeenCalled();
     expect(cancel).toHaveBeenCalled();
+  });
+});
+
+describe('the terminal and the keyboard', () => {
+  function Keys({ dispatch, toTerminal }: { dispatch: () => void; toTerminal?: () => boolean }) {
+    useKeys(dispatch, { state: initialNav({ view: 'atelier', helpers: false, paused: false } as Overview), order: [fakeSession('otto', { name: 'Otto' })], screen: { current: null }, undo: () => false, toTerminal });
+    return null;
+  }
+
+  it('inside the terminal, Ledge keeps its hands off: Ctrl K, Ctrl , and Escape do nothing', () => {
+    const dispatch = vi.fn();
+    render(<Keys dispatch={dispatch} />);
+    // xterm types through a hidden textarea inside its host.
+    const host = document.createElement('div');
+    host.setAttribute('data-terminal', '');
+    const input = document.createElement('textarea');
+    host.append(input); document.body.append(host); onTestFinished(() => host.remove());
+    input.focus();
+    fireEvent.keyDown(input, { key: 'k', code: 'KeyK', ctrlKey: true });
+    fireEvent.keyDown(input, { key: ',', code: 'Comma', ctrlKey: true });
+    fireEvent.keyDown(input, { key: 'Escape', code: 'Escape' });
+    fireEvent.keyDown(input, { key: '1', code: 'Digit1', altKey: true });
+    fireEvent.keyDown(input, { key: '?', code: 'Slash', shiftKey: true });
+    expect(dispatch).not.toHaveBeenCalled();
+    input.blur();                                                         // outside it, Ctrl K is Ledge's again
+    fireEvent.keyDown(document.body, { key: 'k', code: 'KeyK', ctrlKey: true });
+    expect(dispatch).toHaveBeenCalledWith({ type: 'modal', modal: { kind: 'search' } });
+  });
+
+  it('Ctrl + the key left of 1 takes the keyboard to the terminal, on AZERTY too', () => {
+    const toTerminal = vi.fn(() => true);
+    const dispatch = vi.fn();
+    render(<Keys dispatch={dispatch} toTerminal={toTerminal} />);
+    expect(fireEvent.keyDown(document.body, { key: '²', code: 'Backquote', ctrlKey: true })).toBe(false);   // default prevented
+    expect(toTerminal).toHaveBeenCalledTimes(1);
+    expect(fireEvent.keyDown(document.body, { key: '`', code: 'Backquote', ctrlKey: true })).toBe(false);
+    expect(toTerminal).toHaveBeenCalledTimes(2);
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('the shortcuts help names the key of the user\'s layout', async () => {
+    (navigator as unknown as Record<string, unknown>).keyboard = { getLayoutMap: async () => new Map([['Backquote', '²']]) };
+    onTestFinished(() => { delete (navigator as unknown as Record<string, unknown>).keyboard; });
+    render(<LangProvider lang="fr"><ShortcutsHelp onClose={() => {}} /></LangProvider>);
+    const key = await screen.findByText('Ctrl ²');
+    expect(key.parentElement).toHaveTextContent('Passer du fil au terminal et retour');
+    expect(screen.queryByText('Ctrl `')).toBeNull();
   });
 });

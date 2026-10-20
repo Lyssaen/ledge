@@ -2,24 +2,29 @@ import { useEffect, useRef } from 'react';
 import type { Session } from '@ledge/protocol';
 import type { NavAction, NavState } from './state';
 import type { ScreenKeys } from './screenKeys';
+import { termKey } from '../term/keys';
 
 const typing = (el: Element | null): boolean => {
   if (!(el instanceof HTMLElement)) return false;
   return el.matches('input, textarea, select') || el.isContentEditable || el.getAttribute('contenteditable') === 'true';
 };
 
-/** The window's keyboard shortcuts (the mockup's `onKey`): one `keydown` listener. Ctrl/⌘ K, Ctrl , and Escape always work (Ctrl/⌘ Z too, outside a field) (Escape after the dialog and the chat, offered to the screen before navigation);
- *  the single keys stay out of the way of dialogs, fields and the chat. */
-export function useKeys(dispatch: (a: NavAction) => void, ctx: { state: NavState; order: readonly Session[]; screen: ScreenKeys; undo(): boolean; /** A confirmation is open (it is no `nav.modal`): it owns the keyboard, Escape cancels it and nothing else acts. */ confirming?: { cancel(): void } | null }): void {
+/** The window's keyboard shortcuts (the mockup's `onKey`): one `keydown` listener. Ctrl/⌘ K, Ctrl , and Escape always work (Ctrl/⌘ Z too, outside a field) (Escape after the dialog and the chat, offered to the screen before navigation),
+ *  except in the terminal, which keeps every key for its shell; Ctrl + the key left of 1 takes the keyboard there. The single keys stay out of the way of dialogs, fields and the chat. */
+export function useKeys(dispatch: (a: NavAction) => void, ctx: { state: NavState; order: readonly Session[]; screen: ScreenKeys; undo(): boolean; /** A confirmation is open (it is no `nav.modal`): it owns the keyboard, Escape cancels it and nothing else acts. */ confirming?: { cancel(): void } | null; /** Shows the terminal if hidden and focuses its tab; false off a session page. */ toTerminal?(): boolean }): void {
   const latest = useRef({ dispatch, ctx });
   latest.current = { dispatch, ctx };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.isComposing) return;
-      const { dispatch, ctx: { state, order, screen, undo, confirming } } = latest.current;
+      // In the terminal every key is the shell's (its Ctrl + ² is handled and stopped by the xterm): Ledge neither acts nor takes the focus back.
+      if (document.activeElement?.closest('[data-terminal]')) return;
+      const { dispatch, ctx: { state, order, screen, undo, confirming, toTerminal } } = latest.current;
       const mod = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
       if (confirming) { if (e.key === 'Escape') { e.preventDefault(); confirming.cancel(); } return; }
+      // The same physical key as inside the terminal (`code`, so ² on AZERTY); a dialog keeps the focus.
+      if (termKey(e, false) === 'thread') { if (!state.modal && toTerminal?.()) e.preventDefault(); return; }
       if (mod && !e.altKey && key === 'k') { e.preventDefault(); dispatch({ type: 'modal', modal: { kind: 'search' } }); return; }
       // Ctrl , opens Settings on General; inside Settings it keeps the section open (it only closes the dialog or the chat).
       // Ctrl Z takes back what the toast offers (« Annuler »); in a field it stays the field's own undo.

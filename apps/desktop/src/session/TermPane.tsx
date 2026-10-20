@@ -9,7 +9,7 @@ import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
 import { ptyBackend } from '../term/backend';
 import { tildeHome } from '../term/home';
-import { backquoteLabel } from '../term/keys';
+import { useBackquote } from '../term/keys';
 import { agentMode } from '../term/mode';
 import { agentTabId, type Tab } from '../term/store';
 import type { TermSurface } from '../term/surface';
@@ -187,15 +187,4 @@ function useCountdown(on: boolean): number {
     return () => clearInterval(id);
   }, [on]);
   return Date.now();
-}
-
-/** The focus key as the user's layout prints it (² on AZERTY). */
-function useBackquote(): string {
-  const [key, setKey] = useState('`');
-  useEffect(() => {
-    let live = true;
-    void backquoteLabel().then(k => { if (live && k !== '`') setKey(k); });
-    return () => { live = false; };
-  }, []);
-  return key;
 }

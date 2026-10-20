@@ -71,11 +71,11 @@ function useTermStore(client: DaemonClient): TermStore {
   const [store] = useState(() => new TermStore({
     backend: ptyBackend(),
     // xterm comes with the session page's chunk (out of the first bundle): only its pane and Workspace make the store draw, so
-    // the chunk is there by then. The focus key's way back to the thread comes with the keyboard's wiring.
+    // the chunk is there by then. Its Ctrl + ² gives the keyboard back to the thread.
     surface: () => {
       const chunk = loadedWorkspace();
       if (!chunk) throw new Error('a terminal is drawn only once the session page has loaded');
-      return chunk.createSurface({ theme: rootTermTheme(), onThread: () => {} });
+      return chunk.createSurface({ theme: rootTermTheme(), onThread: () => document.querySelector<HTMLElement>('[data-thread-focus]')?.focus({ preventScroll: true }) });
     },
     agentArgv: (id, readOnly) => client.fleet?.terminal(id, { readOnly }) ?? null,
     shellArgv: id => client.fleet?.shell(id) ?? null,
@@ -181,7 +181,6 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const screenKeys = useRef<ScreenKeys>({ current: null }).current;
   // Drafts, reading positions and the last item seen, per session and subagent: they survive navigation, not a restart.
   const memory = useRef(createSessionMemory()).current;
-  useKeys(dispatch, { state: nav, order, screen: screenKeys, undo, confirming: actions.pending ? { cancel: actions.cancel } : null });
   useWindowFullscreen(nav.fullscreen, () => dispatch({ type: 'fullscreen', on: false }));
   const session = place.kind === 'session' ? known.find(s => s.id === place.id) ?? null : null;
   // The subagent whose page is open, found as the Workspace finds it (live, else its thread row), for the top bar.
@@ -191,6 +190,16 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const [sessionPrefs, setSessionPrefs] = useStored(loadSessionPrefs, saveSessionPrefs);
   useEffect(preloadPlaces, []);
   const toggleTerminal = useCallback(() => setSessionPrefs(p => ({ ...p, terminal: !p.terminal })), [setSessionPrefs]);
+  // Ctrl + ² from outside the terminal: it shows if hidden, then its open tab takes the keyboard. A pane just asked for draws
+  // its xterm in the renders this key starts, so the focus waits for the next frame.
+  const toTerminal = () => {
+    if (place.kind !== 'session' || !session) return false;
+    const id = place.id;
+    if (!sessionPrefs.terminal) setSessionPrefs(p => ({ ...p, terminal: true }));
+    requestAnimationFrame(() => termStore.surface(termStore.active(id))?.focus());
+    return true;
+  };
+  useKeys(dispatch, { state: nav, order, screen: screenKeys, undo, confirming: actions.pending ? { cancel: actions.cancel } : null, toTerminal });
   const close = () => dispatch({ type: 'modal', modal: null });
   const onOverview = place.kind === 'overview' || (place.kind === 'session' && !session);
   // The New session form starts on the overview's project filter (a project id, not « all » nor « none »).
