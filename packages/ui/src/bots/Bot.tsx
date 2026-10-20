@@ -7,8 +7,6 @@ import { seedHash, type BotState } from './poseFor';
 import { useBotMotion, useBotNod, BOT_MOTION, useBotVisibility } from './useBotMotion';
 import { useUiCopy } from '../i18n/copy';
 
-/** Visual identities include omp independently of the daemon's supported harnesses: the mascot alone does not make omp launchable. */
-
 export interface BotProps {
   tool: Tool;
   state: BotState;
