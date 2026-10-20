@@ -141,6 +141,14 @@ export const copy = {
     untypable: 'La réponse doit tenir sur une ligne, sans saut de ligne ni caractère de contrôle.',
     digit: 'Un chiffre seul serait lu comme le numéro d’une option. Choisissez l’option ci-dessus, ou écrivez la réponse en toutes lettres.'
   },
+  /** OMP's dialogs: an option to tap, or every question of an `ask` answered together. */
+  answers: {
+    send: 'Envoyer les réponses',
+    cancel: 'Annuler la demande',
+    missing: (n: number) => `${n} question${n > 1 ? 's' : ''} sans réponse`,
+    change: 'Choisir une autre réponse',
+    legend: 'Choisir une option'
+  },
   consequence: {
     forceTitle: 'Peut remplacer l’historique distant',
     forceBody: (dest?: string) => `Les commits présents sur ${dest ?? 'le dépôt distant'} peuvent être écrasés. Les autres personnes travaillant sur cette branche peuvent être affectées.`,

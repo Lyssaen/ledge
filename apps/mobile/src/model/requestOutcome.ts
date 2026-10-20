@@ -29,7 +29,8 @@ export function outcomeFor(target: OutcomeTarget, sessions: PhoneSession[], ops:
       case 'applied': return {
         kind: 'applied',
         ...(m.type === 'session.decide' ? { decision: m.decision } : {}),
-        ...(m.type === 'session.reply' ? { answer: m.text } : {})
+        ...(m.type === 'session.reply' ? { answer: m.text } : {}),
+        ...(m.type === 'session.answer' ? { answer: m.answers.flatMap(a => a.selected).join(', ') } : {})
       };
       case 'rejected':
         // Another request took its place: show that one, or say this one was handled.

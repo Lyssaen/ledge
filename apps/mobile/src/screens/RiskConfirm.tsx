@@ -1,3 +1,4 @@
+import type { Assertion } from '@ledge/protocol';
 import { useEffect, useRef, useState } from 'react';
 import { copy } from '../copy';
 import { getAssertion } from '../link/webauthn';
@@ -21,16 +22,20 @@ export interface RiskConfirmProps {
   enabled: boolean;
   /** The PC refused the last accept for its device check: a new challenge is asked only when « Réessayer » is tapped. */
   reason?: ConfirmReason | undefined;
+  /** Sends what the device confirmed, with its assertion (an accept, or a reply with the option chosen): the op's id, or null when nothing was sent. */
+  onConfirm: (assertion: Assertion) => string | null;
+  /** The other way out, beside the confirmation: refusing (the default), or going back to choose again. */
   onDeny: () => void;
+  denyLabel?: string;
 }
 
 /**
  * The card of a high-impact accept: the device (Face ID, fingerprint, PIN) signs the PC's challenge, and only then is
- * the accept sent, with that assertion. The challenge is asked as soon as the card opens, so the tap that follows can
+ * the accept (or the reply with the option chosen) sent, with that assertion. The challenge is asked as soon as the card opens, so the tap that follows can
  * open the device's prompt at once. A cancelled prompt sends nothing; the PC's refusals of the check say so and offer
  * a new challenge.
  */
-export function RiskConfirm({ store, item, enabled, reason, onDeny }: RiskConfirmProps) {
+export function RiskConfirm({ store, item, enabled, reason, onConfirm, onDeny, denyLabel }: RiskConfirmProps) {
   const [challenge, setChallenge] = useState<ConfirmChallenge | null>(null);
   const [problem, setProblem] = useState<Problem | null>(null);
   const [asking, setAsking] = useState(false);
@@ -74,7 +79,7 @@ export function RiskConfirm({ store, item, enabled, reason, onDeny }: RiskConfir
     if (signed === 'failed') { setProblem('failed'); return; }
     // The challenge is spent by this accept, whatever the PC says of it.
     setChallenge(null);
-    if (store.decide(item.sessionId, 'accept', { assertion: signed }) === null) setProblem('failed');
+    if (onConfirm(signed) === null) setProblem('failed');
   };
 
   const needsNew = shown === 'expired' || shown === 'failed' || shown === 'prepareFailed';
@@ -87,7 +92,7 @@ export function RiskConfirm({ store, item, enabled, reason, onDeny }: RiskConfir
       {needsNew
         ? <button type="button" disabled={!enabled} onClick={retry} className={`${full} border-transparent bg-fg text-[#121415]`}>{C.retry}</button>
         : <button type="button" disabled={!enabled || asking || !challenge} onClick={() => { void go(); }} className={`${full} border-transparent bg-fg text-[#121415]`}>{label}</button>}
-      <button type="button" disabled={!enabled} onClick={onDeny} className={`${full} border-line`}>{copy.decide.deny}</button>
+      <button type="button" disabled={!enabled} onClick={onDeny} className={`${full} border-line`}>{denyLabel ?? copy.decide.deny}</button>
     </section>
   );
 }

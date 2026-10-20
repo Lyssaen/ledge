@@ -6,7 +6,7 @@ import { fingerprint, generateIdentity } from '@ledge/seal';
 import { createPhoneLink } from '../../src/link/link';
 import { memoryKeys } from '../../src/link/keys';
 import { createStore } from '../../src/state/store';
-import { isNew, KEEP_FINISHED, loadOps, OPS_KEY, pruneOps, resendable, RESEND_MAX_MS, saveOps, type Op, type OpPhase } from '../../src/state/operations';
+import { expectKey, isNew, KEEP_FINISHED, loadOps, OPS_KEY, pruneOps, resendable, RESEND_MAX_MS, saveOps, type Op, type OpPhase } from '../../src/state/operations';
 import { startFakePc } from '../fakePc';
 import { pending, session } from '../model/fixtures';
 import { MemoryStorage, snapshot } from './helpers';
@@ -191,5 +191,19 @@ describe('operations over a real link', () => {
 
     await pc.send({ type: 'operation.result', op: op!, status: 'applied' });
     await until(() => store.getState().ops[op!]?.phase === 'applied', 'the result');
+  });
+});
+
+describe('session.answer as an operation', () => {
+  const answer = { type: 'session.answer' as const, op: '11111111-1111-4111-8111-111111111111', id: 'a', requestId: 'r1', answers: [{ id: 'q1', selected: ['A'] }], expect: { key: 'k1', kind: 'question' as const, text: 'T' } };
+  it('is named by its request key, refused while another answer to it is live, and survives a reload', () => {
+    expect(expectKey(answer)).toBe('k1');
+    const op = { op: answer.op, message: answer, phase: 'applied' as const, at: '2026-10-14T10:00:00.000Z' };
+    expect(isNew({ [op.op]: op }, { ...answer, op: '22222222-2222-4222-8222-222222222222' }, null)).toBe(false);
+    expect(isNew({}, answer, null)).toBe(true);
+    const storage = new MemoryStorage();
+    saveOps({ [op.op]: op }, storage);
+    expect(loadOps(storage)[op.op]?.message).toEqual(answer);
+    expect(resendable({ ...op, phase: 'uncertain' }, null, Date.parse(op.at) + 10 * RESEND_MAX_MS)).toBe(true);
   });
 });

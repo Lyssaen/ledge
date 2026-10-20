@@ -1,3 +1,4 @@
+import type { Assertion } from '@ledge/protocol';
 import type { ReactNode } from 'react';
 import { copy } from '../copy';
 import type { InboxItem } from '../model/requests';
@@ -36,6 +37,13 @@ export interface DecisionFooterProps {
   /** The store, and whether the PC checks the device (`device.confirm`): a high-impact accept is then confirmed here. */
   store?: MobileStore | undefined;
   deviceConfirm?: boolean;
+  /**
+   * An OMP dialog answered with an option (the options are in the page): `canConfirm` is whether this phone can sign for the
+   * PC (else the PC answers); `picked` the option tapped, awaiting the device's confirmation; `onReply` sends it with the assertion.
+   */
+  optionReply?: { canConfirm: boolean; picked: string | null; onBack: () => void; onReply: (assertion: Assertion) => string | null } | undefined;
+  /** An OMP `ask` of several questions: how many have no choice yet, and what sending or declining does. */
+  multi?: { missing: number; onSend: () => void; onCancel: () => void } | undefined;
 }
 
 function reasonText(item: InboxItem, r: Extract<Outcome, { kind: 'rejected' | 'failed' }>['reason']): string {
@@ -58,7 +66,7 @@ function reasonText(item: InboxItem, r: Extract<Outcome, { kind: 'rejected' | 'f
  * footer never offers one it could not honour. A high-impact accept is confirmed with the device when the PC checks it (`RiskConfirm`), else done on the PC.
  */
 export function DecisionFooter(p: DecisionFooterProps) {
-  const { item, outcome, fresh, changed, stillPending, onReread, onDecide, answerable = false, choice = null, onAnswer, answerBlocked = false, onCheck, refused = false, store, deviceConfirm = false } = p;
+  const { item, outcome, fresh, changed, stillPending, onReread, onDecide, answerable = false, choice = null, onAnswer, answerBlocked = false, onCheck, refused = false, store, deviceConfirm = false, optionReply, multi } = p;
   const D = copy.decide;
   const [checking, setChecking] = useBusy();
   const platform = usePlatform();
@@ -73,16 +81,27 @@ export function DecisionFooter(p: DecisionFooterProps) {
     </footer>
   );
 
-  if (item.kind === 'question' && !answerable) return wrap(null, D.answerOnPc);
+  if (item.kind === 'question' && !answerable && !optionReply && !multi) return wrap(null, D.answerOnPc);
 
   const onPc = item.risk === 'high' || (outcome.kind === 'rejected' && outcome.reason === 'confirm_required');
   const live = fresh && !changed && stillPending;
   // The device signs the PC's challenge here; without a credential, a platform authenticator or a PC that asks, it is the PC.
   const guard = deviceConfirm && platform ? store : undefined;
-  const confirmable = onPc && !answerable && guard !== undefined;
+  const confirmable = optionReply ? optionReply.canConfirm && guard !== undefined : onPc && !answerable && guard !== undefined;
   const deviceReason: ConfirmReason | undefined = outcome.kind === 'rejected' && (outcome.reason === 'assertion_expired' || outcome.reason === 'assertion_invalid' || outcome.reason === 'confirm_required') ? outcome.reason : undefined;
-  const buttons = (enabled: boolean) => confirmable && guard ? (
-    <RiskConfirm store={guard} item={item} enabled={enabled} reason={deviceReason} onDeny={() => onDecide('deny')} />
+  const buttons = (enabled: boolean) => optionReply ? (
+    // The options are in the page; this is the card of the one tapped, or where the PC takes over.
+    !confirmable ? <OnPc /> : optionReply.picked !== null && guard ? (
+      <RiskConfirm store={guard} item={item} enabled={enabled} reason={deviceReason} onConfirm={optionReply.onReply} onDeny={optionReply.onBack} denyLabel={copy.answers.change} />
+    ) : null
+  ) : multi ? (
+    <div className="flex flex-col gap-2.5">
+      {multi.missing > 0 && <p className="text-center text-xs text-muted">{copy.answers.missing(multi.missing)}</p>}
+      <button type="button" disabled={!enabled || multi.missing > 0} onClick={multi.onSend} className={`${full} border-transparent bg-fg text-[#121415]`}>{copy.answers.send}</button>
+      <button type="button" disabled={!enabled} onClick={multi.onCancel} className={`${full} border-line`}>{copy.answers.cancel}</button>
+    </div>
+  ) : confirmable && guard ? (
+    <RiskConfirm store={guard} item={item} enabled={enabled} reason={deviceReason} onConfirm={a => guard.decide(item.sessionId, 'accept', { assertion: a })} onDeny={() => onDecide('deny')} />
   ) : answerable ? (
     <button type="button" disabled={!enabled || choice === null || answerBlocked} onClick={() => onAnswer?.()} className={`${full} border-transparent bg-fg text-[#121415]`}>{D.send}</button>
   ) : (
@@ -93,7 +112,7 @@ export function DecisionFooter(p: DecisionFooterProps) {
         : <button type="button" disabled={!enabled} onClick={() => onDecide('accept')} className={`${btn} border-transparent bg-fg text-[#121415]`}>{D.allow}</button>}
     </div>
   );
-  const linkHint = !fresh ? D.offlineHint : onPc && !answerable && !confirmable ? D.onPcHint : answerable ? D.answerHint : D.hint;
+  const linkHint = !fresh ? D.offlineHint : optionReply ? (confirmable ? D.answerHint : D.onPcHint) : multi ? D.answerHint : onPc && !answerable && !confirmable ? D.onPcHint : answerable ? D.answerHint : D.hint;
   const decide = (notice?: ReactNode) => wrap(<>{notice}{buttons(live)}</>, linkHint);
 
   // A decision in flight or of unknown delivery always comes first: a newer request never hides it.

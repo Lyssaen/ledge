@@ -45,6 +45,8 @@ export type ConfirmRequest = { purpose: 'register' } | { purpose: 'decide'; id: 
 /** How long `prepareConfirm` waits for the PC's challenge. */
 export const PREPARE_MS = 10_000;
 
+export type Answer = Extract<PhoneClientMessage, { type: 'session.answer' }>['answers'][number];
+
 export type Decision = Extract<PhoneClientMessage, { type: 'session.decide' }>['decision'];
 
 export interface MobileStore {
@@ -59,6 +61,8 @@ export interface MobileStore {
    * `error`, `timeout` after `PREPARE_MS`, `not_ready`, `superseded`, `lost`). One is pending at a time: a new call supersedes the old one.
    */
   prepareConfirm(req: ConfirmRequest): Promise<ConfirmChallenge>;
+  /** Answers the questions of OMP's dialog `requestId` together, or declines it (`cancel`). The op's id, or null when nothing was sent. */
+  answer(id: string, requestId: string, answers: Answer[], opts: { expect: PhoneExpect; cancel?: boolean }): string | null;
   /** Registers the passkey with the PC. The op's id, or null when nothing was sent. */
   registerCredential(c: Credential): string | null;
   interrupt(id: string): string | null;
@@ -339,6 +343,11 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
       // A request without a key cannot be named: the PC would refuse the reply either way.
       if (s.pending && !s.pending.key) return null;
       return write(op => ({ type: 'session.reply', op, id, text, expect: s.pending ? expectOf(s.pending) : null, ...(opts.assertion ? { assertion: opts.assertion } : {}) }));
+    },
+
+    answer(id, requestId, answers, opts) {
+      if (!state.sessions.has(id)) return null;
+      return write(op => ({ type: 'session.answer', op, id, requestId, answers, ...(opts.cancel ? { cancel: true as const } : {}), expect: opts.expect }));
     },
 
     prepareConfirm(req) {

@@ -11,8 +11,8 @@ import { localStore } from './storage';
 export type OpPhase = 'sending' | 'uncertain' | 'applied' | 'rejected' | 'failed';
 
 /** The messages that are operations. */
-// `credential.register` names no session, so it has no `id`. session.answer and device.forget join with the phone's code for them.
-export type OpMessage = Exclude<Extract<PhoneClientMessage, { op: string }>, { type: 'session.answer' | 'device.forget' }>;
+// `credential.register` names no session, so it has no `id`. device.forget joins with the phone's code for it.
+export type OpMessage = Exclude<Extract<PhoneClientMessage, { op: string }>, { type: 'device.forget' }>;
 
 export interface Op {
   op: string;

@@ -1,3 +1,4 @@
+import type { AskQuestion } from '@ledge/protocol';
 import { copy } from '../copy';
 import { OTHER_MAX, type FreeAnswerProblem } from '../model/freeAnswer';
 
@@ -51,5 +52,35 @@ export function QuestionForm({ options, value, onChange, disabled = false, botNa
         </>
       )}
     </fieldset>
+  );
+}
+
+const choice = 'flex min-h-12 cursor-pointer items-center gap-3 rounded-control border border-line bg-surface px-3 py-3 text-[13px] has-[:checked]:border-fg/40 has-[:checked]:bg-raised has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-info';
+
+/**
+ * The several questions of one OMP `ask`, a section each: radios for a single choice, checkboxes when `multi`. `selected`
+ * holds the labels chosen per question, in order; none is preselected. The buttons live in the footer (`DecisionFooter`).
+ */
+export function MultiQuestionForm({ questions, selected, onToggle, disabled = false }: {
+  questions: AskQuestion[]; selected: string[][]; onToggle: (question: number, label: string) => void; disabled?: boolean;
+}) {
+  return (
+    <div className="my-3.5 flex flex-col gap-5">
+      {questions.map((q, qi) => (
+        <fieldset key={q.id} disabled={disabled} className="flex min-w-0 flex-col gap-2 border-0 p-0">
+          <legend className="mb-2 text-[15px] leading-[1.4] font-semibold [overflow-wrap:anywhere]">{q.header ?? q.question}</legend>
+          {q.header && <p className="mb-1 text-xs text-muted [overflow-wrap:anywhere]">{q.question}</p>}
+          {q.options.map(o => (
+            <label key={o.label} className={choice}>
+              <input
+                type={q.multi ? 'checkbox' : 'radio'} name={`question-${qi}`} checked={selected[qi]?.includes(o.label) === true}
+                onChange={() => onToggle(qi, o.label)} className="size-4 flex-none accent-[#f2f1ed]"
+              />
+              <span className="min-w-0 [overflow-wrap:anywhere]">{o.label}{o.description && <small className="mt-0.5 block text-[11px] text-muted">{o.description}</small>}</span>
+            </label>
+          ))}
+        </fieldset>
+      ))}
+    </div>
   );
 }

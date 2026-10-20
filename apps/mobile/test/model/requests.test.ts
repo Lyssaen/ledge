@@ -37,6 +37,20 @@ describe('requestsOf', () => {
   });
 });
 
+describe('requestsOf, OMP requests', () => {
+  it('carries the source, the questions and the dialog id', () => {
+    const questions = [{ id: 'q1', question: 'Thème ?', options: [{ label: 'Sombre' }] }];
+    const [a, b] = requestsOf([
+      s('a', { pending: pend({ kind: 'question', source: 'rpc', requestId: 'r1', questions }) }),
+      s('b', { pending: pend() })
+    ]);
+    expect(a).toMatchObject({ source: 'rpc', requestId: 'r1', questions });
+    expect(b).toMatchObject({ source: 'hook' });
+    expect(b).not.toHaveProperty('questions');
+    expect(b).not.toHaveProperty('requestId');
+  });
+});
+
 describe('filterItems', () => {
   const mk = (kind: InboxItem['kind']) => ({ kind, filter: kind === 'question' ? 'question' : 'permission' }) as InboxItem;
   const all = [mk('permission'), mk('plan'), mk('diff'), mk('question')];
