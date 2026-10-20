@@ -20,6 +20,12 @@ type Entry = { tabs: readonly Tab[]; active: string; next: number; link: AgentLi
 /** One open (or opening) pseudo-terminal; it is current while the store still points at it, stale once replaced or dropped. */
 type Run = { handle: PtyHandle | null };
 
+/** The pane fits while the open is pending, with no handle to resize: the process learns the size as soon as it has one. */
+function syncSize(h: PtyHandle, surface: TermSurface): void {
+  const { cols, rows } = surface.size();
+  h.resize(cols, rows);
+}
+
 /** Owns the tabs, their pseudo-terminals and their xterms outside React, so a shell outlives navigation and a hidden pane. */
 export class TermStore {
   private readonly deps: TermDeps;
@@ -173,7 +179,7 @@ export class TermStore {
     this.setTab(sessionId, id, { status: 'running', end: undefined });
     const adopt = (h: PtyHandle | null) => {
       if (!current()) { h?.close(); return; }
-      if (h) { run.handle = h; return; }
+      if (h) { run.handle = h; syncSize(h, surface); return; }
       this.shells.delete(id);
       this.setTab(sessionId, id, { status: 'unavailable' });
       this.emit();
@@ -215,6 +221,7 @@ export class TermStore {
       if (!current()) { h?.close(); return; }
       if (!h) { this.dropped(); return; }
       run.handle = h;
+      syncSize(h, surface);
       this.setLink(sid, { state: 'attached', attempt: 0 });
       this.emit();
     };

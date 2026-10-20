@@ -102,7 +102,7 @@ describe('TermStore tabs and shells', () => {
     s.type('ls\r'); s.resized(100, 30);
     backend.opens[0]!.on.data(new Uint8Array([104, 105]));
     expect(backend.opens[0]!.writes).toEqual(['ls\r']);
-    expect(backend.opens[0]!.sizes).toEqual([[100, 30]]);
+    expect(backend.opens[0]!.sizes).toEqual([[80, 24], [100, 30]]);
     expect(s.written).toEqual([new Uint8Array([104, 105])]);
   });
 
@@ -377,5 +377,33 @@ describe('TermStore agent attachment', () => {
     st.showAgent('local:a', { kind: 'preview', why: 'outside' });
     st.showAgent('local:b', { kind: 'browser' }); await tick();
     expect(backend.opens).toHaveLength(0);
+  });
+});
+
+describe('TermStore size at open', () => {
+  /** A surface whose pane gets its real size while the open is pending: the fit has no handle to resize yet. */
+  const sizedSurface = () => {
+    let s!: FakeSurface; let size = { cols: 80, rows: 24 };
+    const make = () => { s = fakeSurface(); s.size = () => size; return s; };
+    return { make, fit: (cols: number, rows: number) => { size = { cols, rows }; s.resized(cols, rows); } };
+  };
+
+  it('a shell takes the pane\'s size once its process is there', async () => {
+    backend.hold(true);
+    const sz = sizedSurface(); const st = store({ surface: sz.make });
+    const [, shell] = st.tabs('local:a');
+    st.select('local:a', shell!.id);
+    sz.fit(120, 40);
+    backend.opens[0]!.resolve(true); await tick();
+    expect(backend.opens[0]!.sizes).toEqual([[120, 40]]);
+  });
+
+  it('the agent attachment takes the pane\'s size once it is attached', async () => {
+    backend.hold(true);
+    const sz = sizedSurface(); const st = store({ surface: sz.make });
+    st.showAgent('local:a', { kind: 'live' });
+    sz.fit(60, 50);
+    backend.opens[0]!.resolve(true); await tick();
+    expect(backend.opens[0]!.sizes).toEqual([[60, 50]]);
   });
 });
