@@ -167,4 +167,23 @@ describe('chat threads', { timeout: 20_000 }, () => {
     expect(fresh).not.toBe(old);
     expect(existsSync(join(s.home, 'mobile', 'chat', 'd1'))).toBe(false);
   });
+
+  it('queuedRelays sees a device thread\'s queued instruction, with its thread id, and the desktop\'s too', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'ledge-'));
+    const store = new Store({ journalPath: join(home, 'j.json') });
+    store.upsert({ id: 's1', name: 'Otto', tool: 'claude', cwd: '/w/ledge', project: 'ledge', title: 'Otto · ledge', tmuxSession: 'ledge-s1', state: 'working', helpers: [],
+      startedAt: '2026-10-20T08:00:00.000Z', lastActivityAt: '2026-10-20T08:00:00.000Z', source: 'launcher' });
+    const f = fakes();
+    const threads = createChatThreads({ store, tmux, home, today: () => '2026-10-20', env: async () => ({ ...process.env }), spawn: f.spawn });
+    const fence = (text: string) => 'Je transmets.\n\n```ledge-relay\n' + JSON.stringify({ session: 's1', text }) + '\n```';
+    const answer = (i: number, text: string) => { f.kids[i]!.stdout.write(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: fence(text), session_id: 's' }) + '\n'); setImmediate(() => f.kids[i]!.emit('close', 0)); };
+    const pd = threads.device('d1').ask('qd', 'dis à Otto', () => {}); await vi.waitFor(() => expect(f.kids).toHaveLength(1)); answer(0, 'from phone'); await pd;
+    const pp = threads.desktop.ask('qp', 'dis à Otto', () => {}); await vi.waitFor(() => expect(f.kids).toHaveLength(2)); answer(1, 'from pc'); await pp;
+    expect(threads.queuedRelays()).toEqual([]);
+    const heard: Record<string, number> = { desktop: 0, 'device:d1': 0 };
+    threads.setEmitter('desktop', () => { heard.desktop!++; }); threads.setEmitter('device:d1', () => { heard['device:d1']!++; });
+    threads.device('d1').markRelay('qd', { status: 'queued' }, () => {}); threads.desktop.markRelay('qp', { status: 'queued' }, () => {});
+    expect(threads.queuedRelays().map(q => [q.thread, q.qid, q.relay.text])).toEqual([['desktop', 'qp', 'from pc'], ['device:d1', 'qd', 'from phone']]);
+    expect(threads.owner('qd')).toBe('device:d1');
+  });
 });

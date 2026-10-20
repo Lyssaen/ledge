@@ -236,14 +236,19 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const unsubscribeMobile = mobile?.onChange(() => broadcast({ type: 'mobile', state: mobile.state() }));
   // One lock for both: a session is never typed into by the relay and the mailbox at once.
   const typing = new Set<string>();
+  // An injected chat (tests) is the only thread there is; otherwise the relay works across the PC's and every device's.
+  const relayThreads: Pick<typeof threads, 'all' | 'owner' | 'emitterOf' | 'queuedRelays'> = opts.chat ? {
+    all: () => [['desktop', chat]], owner: qid => (chat.relay(qid) ? 'desktop' : undefined), emitterOf: () => broadcast,
+    queuedRelays: () => chat.queuedRelays(broadcast).map(q => ({ thread: 'desktop' as const, ...q }))
+  } : threads;
   /** `replyTo` for the mailbox and the relay, which keep the refusal's text. */
   const replyText = async (id: string, text: string) => (await replyTo(id, text))?.message ?? null;
   const mailbox = createMailbox({
     store, replyTo: replyText, typing, now,
-    relayQueued: id => chat.queuedRelays().some(q => q.relay.id === id),
+    relayQueued: id => relayThreads.queuedRelays().some(q => q.relay.id === id),
     sent: { record: (id, m) => { history?.recordSent(id, m); }, mark: (id, rid, status) => history?.markSent(id, rid, status) }
   });
-  const relay = createRelay({ chat, store, replyTo: replyText, broadcast, now, typing, next: id => mailbox.kick(id) });
+  const relay = createRelay({ threads: relayThreads, store, replyTo: replyText, now, typing, next: id => mailbox.kick(id) });
   /** The last preview per session, replayed after every snapshot so a late client does not wait for the agent to write. */
   const previews = new Map<string, string[]>();
   /** The title last pushed to each session's tmux tab, so tmux is told only when it changes. */
@@ -530,7 +535,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** A model change waiting for the session's free moment (`modelNext`): the agent stopped and resumed on that model. */
   async function applyModelNext(id: string): Promise<void> {
     const s = store.get(id);
-    if (!s?.modelNext || !free(s) || typing.has(id) || chat.queuedRelays().some(q => q.relay.id === id)) return;
+    if (!s?.modelNext || !free(s) || typing.has(id) || relayThreads.queuedRelays().some(q => q.relay.id === id)) return;
     // OMP changes its model in place (set_model on the same process): nothing is stopped, the conversation is never left.
     if (backendOf(s) === 'omp-rpc') return applyOmpModel(s);
     const key = resumeKey(s);

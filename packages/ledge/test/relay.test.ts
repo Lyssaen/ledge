@@ -5,20 +5,43 @@ import { join } from 'node:path';
 import type { ChatRelay, Session } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
 import { createRelay, type RelayDeps } from '../src/daemon/relay.js';
+import type { Chat as Chat_, ChatMessage } from '../src/chat/service.js';
+import type { ChatThreadId } from '../src/chat/threads.js';
 
+type Chat = Pick<Chat_, 'relay' | 'markRelay' | 'queuedRelays'>;
 const T0 = '2026-10-12T08:00:00.000Z';
 const mk = (id: string, extra: Partial<Session> = {}): Session => ({ id, name: 'Otto', tool: 'claude', cwd: '/w/ledge', project: 'ledge', title: 'Otto · ledge',
   tmuxSession: `ledge-${id}`, state: 'working', helpers: [], startedAt: T0, lastActivityAt: T0, source: 'launcher', ...extra });
 
-/** A chat holding relays by qid, in question order, as the service does. */
-function fakeChat(relays: Record<string, ChatRelay>) {
-  const map = new Map(Object.entries(relays)); let histories = 0;
-  const chat: RelayDeps['chat'] = {
-    relay: qid => map.get(qid),
-    markRelay(qid, patch) { const r = map.get(qid); if (!r) return; const { id, name, tool, text } = r; map.set(qid, { id, name, tool, text, ...patch }); },
+/** One thread's chat holding relays by qid, in question order, as the service does. */
+function fakeThread(relays: Record<string, ChatRelay>) {
+  const map = new Map(Object.entries(relays));
+  const chat = {
+    history: () => [...map.keys()].map(qid => ({ qid })),
+    relay: (qid: string) => map.get(qid),
+    markRelay(qid: string, patch: Partial<ChatRelay>, emit: (m: ChatMessage) => void) { const r = map.get(qid); if (!r) return; const { id, name, tool, text } = r; map.set(qid, { id, name, tool, text, ...patch }); emit({ type: 'chat.history', turns: [] }); },
     queuedRelays: () => [...map].filter(([, r]) => r.status === 'queued').map(([qid, relay]) => ({ qid, relay }))
   };
-  return { chat, map, histories: () => histories, broadcast: () => { histories++; } };
+  return { chat: chat as unknown as Chat & { history(): Array<{ qid: string }> }, map };
+}
+/** Threads by id (the desktop first), each with its own emitter; `emitted` records which one heard what. */
+function fakeThreads(spec: Record<string, Record<string, ChatRelay>>) {
+  const parts = Object.entries(spec).map(([id, relays]) => [id as ChatThreadId, fakeThread(relays)] as const);
+  const emitted: ThreadEmits = {}; const emitters = new Map<ChatThreadId, (m: ChatMessage) => void>();
+  for (const [id] of parts) { emitted[id] = 0; emitters.set(id, () => { emitted[id]!++; }); }
+  const threads: RelayDeps['threads'] = {
+    all: () => parts.map(([id, t]) => [id, t.chat as never]),
+    owner: qid => parts.find(([, t]) => t.map.has(qid))?.[0],
+    emitterOf: id => emitters.get(id)
+  };
+  return { threads, emitted, emitters, map: (id: string) => parts.find(([i]) => i === id)![1].map };
+}
+type ThreadEmits = Partial<Record<ChatThreadId, number>>;
+/** The desktop's chat alone, as the single-chat tests had it. */
+function fakeChat(relays: Record<string, ChatRelay>) {
+  const f = fakeThreads({ desktop: relays });
+  const chat = f.threads.all()[0]![1] as Chat;
+  return { threads: f.threads, chat, map: f.map('desktop'), histories: () => f.emitted.desktop ?? 0, broadcast: f.emitters.get('desktop')! };
 }
 
 let store: Store; let typed: Array<[string, string]>;
@@ -36,7 +59,7 @@ describe('createRelay (spec 2026-10-12 relay §4)', () => {
   it('a free session gets the instruction now, and the card is sent', async () => {
     store.upsert(mk('s1', { state: 'idle' }));
     const c = fakeChat({ q1: otto('Lance les tests') });
-    const relay = createRelay({ chat: c.chat, store, replyTo, broadcast: c.broadcast, now: () => '2026-10-12T09:00:00.000Z' });
+    const relay = createRelay({ threads: c.threads, store, replyTo, now: () => '2026-10-12T09:00:00.000Z' });
     await relay.request('q1');
     expect(typed).toEqual([['s1', 'Lance les tests']]);
     expect(c.map.get('q1')).toMatchObject({ status: 'sent', sentAt: '2026-10-12T09:00:00.000Z' });
@@ -47,7 +70,7 @@ describe('createRelay (spec 2026-10-12 relay §4)', () => {
     store.upsert(mk('s1', { state: 'idle' }));
     let release!: () => void; answer = () => new Promise(r => { release = () => r(null); });
     const c = fakeChat({ q1: otto('a') });
-    const relay = createRelay({ chat: c.chat, store, replyTo, broadcast: c.broadcast });
+    const relay = createRelay({ threads: c.threads, store, replyTo });
     const first = relay.request('q1');
     await expect(relay.request('q1')).rejects.toThrow('already sent');
     release(); await first;
@@ -59,7 +82,7 @@ describe('createRelay (spec 2026-10-12 relay §4)', () => {
   it('a busy session queues it; it goes when the session is free again', async () => {
     store.upsert(mk('s1', { state: 'waiting_permission', pending: { kind: 'permission', text: 'Bash', source: 'hook' } }));
     const c = fakeChat({ q1: otto('a') });
-    const relay = createRelay({ chat: c.chat, store, replyTo, broadcast: c.broadcast });
+    const relay = createRelay({ threads: c.threads, store, replyTo });
     await relay.request('q1');
     expect(c.map.get('q1')!.status).toBe('queued');
     await expect(relay.request('q1')).rejects.toThrow('already queued');
@@ -75,7 +98,7 @@ describe('createRelay (spec 2026-10-12 relay §4)', () => {
     store.upsert(mk('s1'));
     const c = fakeChat({ q1: otto('first'), q2: otto('second') });
     let release!: () => void; answer = () => new Promise(r => { release = () => r(null); });
-    const relay = createRelay({ chat: c.chat, store, replyTo, broadcast: c.broadcast });
+    const relay = createRelay({ threads: c.threads, store, replyTo });
     await relay.request('q1'); await relay.request('q2');
     store.upsert(mk('s1', { state: 'idle' })); await flush();
     store.upsert(mk('s1', { state: 'idle', lastActivityAt: '2026-10-12T08:01:00.000Z' })); await flush();
@@ -91,7 +114,7 @@ describe('createRelay (spec 2026-10-12 relay §4)', () => {
   it('cancel puts a queued one back to proposed; nothing to cancel otherwise', async () => {
     store.upsert(mk('s1'));
     const c = fakeChat({ q1: otto('a') });
-    const relay = createRelay({ chat: c.chat, store, replyTo, broadcast: c.broadcast });
+    const relay = createRelay({ threads: c.threads, store, replyTo });
     expect(() => relay.cancel('q1')).toThrow('nothing queued');
     await relay.request('q1'); relay.cancel('q1');
     expect(c.map.get('q1')).toEqual(otto('a'));
@@ -103,7 +126,7 @@ describe('createRelay (spec 2026-10-12 relay §4)', () => {
   it.each(['exited', 'removed'] as const)('a session %s while waiting fails its queued cards', async how => {
     store.upsert(mk('s1'));
     const c = fakeChat({ q1: otto('a') });
-    const relay = createRelay({ chat: c.chat, store, replyTo, broadcast: c.broadcast });
+    const relay = createRelay({ threads: c.threads, store, replyTo });
     await relay.request('q1');
     if (how === 'exited') store.upsert(mk('s1', { state: 'exited' })); else store.remove('s1');
     await flush();
@@ -117,7 +140,7 @@ describe('createRelay (spec 2026-10-12 relay §4)', () => {
     store.upsert(mk('s1', { state: 'idle' }));
     answer = async () => { throw new Error('the agent did not take the answer'); };
     const c = fakeChat({ q1: otto('a') });
-    const relay = createRelay({ chat: c.chat, store, replyTo, broadcast: c.broadcast });
+    const relay = createRelay({ threads: c.threads, store, replyTo });
     await expect(relay.request('q1')).rejects.toThrow('the agent did not take the answer');
     expect(c.map.get('q1')).toEqual({ ...otto('a'), error: 'the agent did not take the answer' });
     answer = async () => null;
@@ -131,7 +154,7 @@ describe('createRelay (spec 2026-10-12 relay §4)', () => {
     store.upsert(mk('s1', { state: 'idle' }));
     answer = async id => { store.upsert(mk(id, { state: 'error' })); return 'the agent did not take the answer'; };
     const c = fakeChat({ q1: otto('a') });
-    const relay = createRelay({ chat: c.chat, store, replyTo, broadcast: c.broadcast });
+    const relay = createRelay({ threads: c.threads, store, replyTo });
     await expect(relay.request('q1')).rejects.toThrow('the agent did not take the answer');
     answer = async () => null;
     await relay.request('q1');
@@ -143,7 +166,7 @@ describe('createRelay (spec 2026-10-12 relay §4)', () => {
   it('a queued card goes when the session moves to error without pending', async () => {
     store.upsert(mk('s1'));
     const c = fakeChat({ q1: otto('a') });
-    const relay = createRelay({ chat: c.chat, store, replyTo, broadcast: c.broadcast });
+    const relay = createRelay({ threads: c.threads, store, replyTo });
     await relay.request('q1');
     store.upsert(mk('s1', { state: 'error' })); await flush();
     expect(typed).toEqual([['s1', 'a']]);
@@ -155,7 +178,7 @@ describe('createRelay (spec 2026-10-12 relay §4)', () => {
     store.upsert(mk('s1', { state: 'idle' }));
     let release!: () => void; answer = () => new Promise(r => { release = () => r(null); });
     const c = fakeChat({ q1: otto('a') });
-    const relay = createRelay({ chat: c.chat, store, replyTo, broadcast: c.broadcast });
+    const relay = createRelay({ threads: c.threads, store, replyTo });
     const p = relay.request('q1');
     c.chat.markRelay('q1', { status: 'queued' }, c.broadcast);
     store.upsert(mk('s1', { state: 'exited' })); await flush();
@@ -167,7 +190,7 @@ describe('createRelay (spec 2026-10-12 relay §4)', () => {
 
   it('an unknown qid, and a card the chat no longer has (reset, new day), are refused', async () => {
     const c = fakeChat({});
-    const relay = createRelay({ chat: c.chat, store, replyTo, broadcast: c.broadcast });
+    const relay = createRelay({ threads: c.threads, store, replyTo });
     await expect(relay.request('q9')).rejects.toThrow('unknown relay');
     relay.close();
   });
@@ -176,7 +199,7 @@ describe('createRelay (spec 2026-10-12 relay §4)', () => {
     store.upsert(mk('s1'));
     const c = fakeChat({ q1: otto('a') });
     let release!: () => void; answer = () => new Promise(r => { release = () => r(null); });
-    const relay = createRelay({ chat: c.chat, store, replyTo, broadcast: c.broadcast });
+    const relay = createRelay({ threads: c.threads, store, replyTo });
     await relay.request('q1');
     store.upsert(mk('s1', { state: 'idle' })); await flush();
     expect(() => relay.cancel('q1')).toThrow('already sent');
@@ -188,7 +211,7 @@ describe('createRelay (spec 2026-10-12 relay §4)', () => {
   it('a throw while marking the sent card is logged, not unhandled', async () => {
     store.upsert(mk('s1'));
     const c = fakeChat({ q1: otto('a') });
-    const relay = createRelay({ chat: c.chat, store, replyTo, broadcast: c.broadcast });
+    const relay = createRelay({ threads: c.threads, store, replyTo });
     await relay.request('q1');
     const orig = c.chat.markRelay; c.chat.markRelay = () => { throw new Error('boom'); };
     const seen: unknown[] = []; const h = (e: unknown) => seen.push(e); process.on('unhandledRejection', h);
@@ -201,7 +224,7 @@ describe('createRelay (spec 2026-10-12 relay §4)', () => {
   it('a request on a free session with older cards queued queues itself and delivers the oldest', async () => {
     store.upsert(mk('s1'));
     const c = fakeChat({ q1: otto('first'), q2: otto('second') });
-    const relay = createRelay({ chat: c.chat, store, replyTo, broadcast: c.broadcast });
+    const relay = createRelay({ threads: c.threads, store, replyTo });
     await relay.request('q1');
     store.upsert(mk('s1', { state: 'idle' })); await flush(); // q1 typed, session left idle below
     typed.length = 0; c.map.set('q1', { ...otto('first'), status: 'queued' });
@@ -215,7 +238,7 @@ describe('createRelay (spec 2026-10-12 relay §4)', () => {
     store.upsert(mk('s1', { state: 'idle' }));
     const c = fakeChat({ q1: otto('a'), q2: otto('b') });
     let release!: () => void; answer = () => new Promise(r => { release = () => r(null); });
-    const relay = createRelay({ chat: c.chat, store, replyTo, broadcast: c.broadcast });
+    const relay = createRelay({ threads: c.threads, store, replyTo });
     const first = relay.request('q1');
     await relay.request('q2');
     expect(typed).toEqual([['s1', 'a']]);
@@ -226,7 +249,7 @@ describe('createRelay (spec 2026-10-12 relay §4)', () => {
   it('after a refused delivery, the next queued card goes at once if the session is still free', async () => {
     store.upsert(mk('s1'));
     const c = fakeChat({ q1: otto('first'), q2: otto('second') });
-    const relay = createRelay({ chat: c.chat, store, replyTo, broadcast: c.broadcast });
+    const relay = createRelay({ threads: c.threads, store, replyTo });
     await relay.request('q1'); await relay.request('q2');
     answer = async (_id, t) => (t === 'first' ? 'refused' : null);
     store.upsert(mk('s1', { state: 'idle' })); await flush(); await flush();
@@ -240,7 +263,7 @@ describe('createRelay (spec 2026-10-12 relay §4)', () => {
     store.upsert(mk('s1', { state: 'idle' }));
     const c = fakeChat({ q1: otto('a') });
     const next: string[] = []; answer = async () => 'refused';
-    const relay = createRelay({ chat: c.chat, store, replyTo, broadcast: c.broadcast, next: id => next.push(id) });
+    const relay = createRelay({ threads: c.threads, store, replyTo, next: id => next.push(id) });
     await expect(relay.request('q1')).rejects.toThrow('refused');
     expect(next).toEqual(['s1']);
     relay.close();
@@ -249,10 +272,75 @@ describe('createRelay (spec 2026-10-12 relay §4)', () => {
   it('a session already being typed into by someone else (shared lock) is not delivered to', async () => {
     store.upsert(mk('s1', { state: 'idle' }));
     const c = fakeChat({ q1: otto('a') });
-    const relay = createRelay({ chat: c.chat, store, replyTo, broadcast: c.broadcast, typing: new Set(['s1']) });
+    const relay = createRelay({ threads: c.threads, store, replyTo, typing: new Set(['s1']) });
     await relay.request('q1');
     expect(c.map.get('q1')!.status).toBe('queued');
     expect(typed).toEqual([]);
     relay.close();
+  });
+
+  describe('across threads', () => {
+    it('a device thread\'s instruction is reported to that device\'s emitter, not the desktop\'s', async () => {
+      store.upsert(mk('s1', { state: 'idle' }));
+      const f = fakeThreads({ desktop: {}, 'device:abc': { q1: otto('from phone') } });
+      const relay = createRelay({ threads: f.threads, store, replyTo, now: () => '2026-10-20T09:00:00.000Z' });
+      await relay.request('q1');
+      expect(typed).toEqual([['s1', 'from phone']]);
+      expect(f.map('device:abc').get('q1')).toMatchObject({ status: 'sent', sentAt: '2026-10-20T09:00:00.000Z' });
+      expect(f.emitted).toEqual({ desktop: 0, 'device:abc': 1 });
+      relay.close();
+    });
+
+    it('the desktop\'s instruction still goes to the desktop emitter', async () => {
+      store.upsert(mk('s1', { state: 'idle' }));
+      const f = fakeThreads({ desktop: { q1: otto('from pc') }, 'device:abc': {} });
+      const relay = createRelay({ threads: f.threads, store, replyTo });
+      await relay.request('q1');
+      expect(f.emitted).toEqual({ desktop: 1, 'device:abc': 0 });
+      relay.close();
+    });
+
+    it('a phone card queued for a session, then the PC\'s: one per free moment, in the order queued', async () => {
+      store.upsert(mk('s1', { state: 'working' }));
+      const f = fakeThreads({ desktop: { q2: otto('pc') }, 'device:abc': { q1: otto('phone') } });
+      const relay = createRelay({ threads: f.threads, store, replyTo });
+      await relay.request('q1'); await relay.request('q2');
+      expect(f.map('device:abc').get('q1')?.status).toBe('queued'); expect(f.map('desktop').get('q2')?.status).toBe('queued');
+      store.upsert(mk('s1', { state: 'idle' })); await flush();
+      expect(typed).toEqual([['s1', 'phone']]);
+      expect(f.map('desktop').get('q2')?.status).toBe('queued');
+      store.upsert(mk('s1', { state: 'working' })); store.upsert(mk('s1', { state: 'idle' })); await flush();
+      expect(typed).toEqual([['s1', 'phone'], ['s1', 'pc']]);
+      relay.close();
+    });
+
+    it('a free session with a card queued on another thread queues the new one behind it', async () => {
+      store.upsert(mk('s1', { state: 'idle' }));
+      const f = fakeThreads({ desktop: { q2: otto('pc') }, 'device:abc': { q1: { ...otto('phone'), status: 'queued' } } });
+      const relay = createRelay({ threads: f.threads, store, replyTo });
+      await relay.request('q2'); await flush();
+      expect(typed[0]).toEqual(['s1', 'phone']);
+      relay.close();
+    });
+
+    it('a thread whose emitter is gone neither throws nor blocks the delivery', async () => {
+      store.upsert(mk('s1', { state: 'idle' }));
+      const f = fakeThreads({ desktop: {}, 'device:abc': { q1: otto('x') } });
+      f.emitters.delete('device:abc');
+      const relay = createRelay({ threads: f.threads, store, replyTo });
+      await relay.request('q1');
+      expect(f.map('device:abc').get('q1')?.status).toBe('sent');
+      relay.close();
+    });
+
+    it('cancel and an unknown qid go through the owning thread', async () => {
+      store.upsert(mk('s1', { state: 'working' }));
+      const f = fakeThreads({ desktop: {}, 'device:abc': { q1: otto('x') } });
+      const relay = createRelay({ threads: f.threads, store, replyTo });
+      await relay.request('q1'); relay.cancel('q1');
+      expect(f.map('device:abc').get('q1')?.status).toBeUndefined();
+      await expect(relay.request('nope')).rejects.toThrow('unknown relay');
+      relay.close();
+    });
   });
 });

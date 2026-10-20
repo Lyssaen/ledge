@@ -1,6 +1,6 @@
 import { readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { Tool } from '@ledge/protocol';
+import type { ChatRelay, Tool } from '@ledge/protocol';
 import { createChat, type Chat, type ChatDeps, type ChatMessage } from './service.js';
 
 export type ChatThreadId = 'desktop' | `device:${string}`;
@@ -63,6 +63,10 @@ export function createChatThreads(deps: Omit<ChatDeps, 'slots'> & { max?: number
       })();
       dropping.set(id, p);
       return p;
+    },
+    /** Every thread's queued instructions (each thread's day roll is told to its own emitter), the desktop's first. */
+    queuedRelays(): Array<{ thread: ChatThreadId; qid: string; relay: ChatRelay }> {
+      return all().flatMap(([thread, c]) => c.queuedRelays(emitters.get(thread)).map(q => ({ thread, ...q })));
     },
     owner(qid: string): ChatThreadId | undefined {
       for (const [id, c] of all()) if (c.history().some(t => t.qid === qid)) return id;
