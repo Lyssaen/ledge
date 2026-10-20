@@ -3,7 +3,7 @@ export const copy = {
   appName: 'Ledge',
   inbox: {
     title: 'À traiter',
-    subtitle: (n: number) => n === 0 ? 'Toutes les demandes ont été traitées.' : n === 1 ? '1 demande. Choisissez par où commencer.' : `${n} demandes. Choisissez par où commencer.`,
+    subtitle: (n: number) => n === 0 ? 'Tout est calme' : n === 1 ? '1 demande. Choisissez par où commencer.' : `${n} demandes. Choisissez par où commencer.`,
     filtersLabel: 'Filtrer les demandes',
     filters: { all: 'Tout', permission: 'Autorisations', question: 'Questions' },
     oldestFirst: 'LES PLUS ANCIENNES D’ABORD',
@@ -88,6 +88,7 @@ export const copy = {
     back: 'Retour aux agents', title: 'Conversation avec un agent',
     terminal: (bot: string) => `Ouvrir le terminal de ${bot}`,
     log: (bot: string) => `Échanges avec ${bot}`,
+    cut: 'Message raccourci', more: 'Messages plus anciens sur le PC',
     loading: 'Chargement du fil…', unavailable: 'Fil indisponible hors connexion', empty: 'Aucun échange pour le moment.',
     unknown: 'Cette session n’existe plus sur le PC.', unknownBack: 'Retour aux agents',
     suggestion: 'Suggestion pour la suite',
@@ -110,7 +111,7 @@ export const copy = {
       failTitle: 'Message non envoyé', uncertainTitle: 'Réception non confirmée',
       lost: 'Le PC est injoignable. Votre brouillon est conservé.',
       busy: 'L’agent n’est plus disponible pour une consigne. Votre brouillon est conservé.',
-      invalid: 'Le message n’a pas été accepté par le PC (4000 caractères au plus). Votre brouillon est conservé.',
+      invalid: (max: number) => `Le message n’a pas été accepté par le PC (${max} caractères au plus). Votre brouillon est conservé.`,
       readOnly: 'Cette session a été démarrée hors de Ledge : écrivez dans le terminal.',
       forbidden: 'Ce téléphone n’est plus autorisé. Votre brouillon est conservé.',
       uncertain: 'La connexion a été perdue ou le terminal n’a pas confirmé. Le message a peut-être été reçu : vérifiez le terminal avant de le renvoyer. Votre brouillon est conservé.'
@@ -126,6 +127,7 @@ export const copy = {
     note: 'Interrompre n’annule pas les actions déjà effectuées.',
     why: { waiting: 'Une décision est attendue : traitez-la d’abord.', offline: 'Reconnectez-vous pour interrompre.', idle: 'L’agent ne travaille pas.' },
     fail: 'L’interruption n’a pas été transmise. Vérifiez le terminal sur le PC.',
+    readOnly: 'Session démarrée hors de Ledge : interrompez-la dans le terminal du PC.',
     uncertain: 'Réception non confirmée : vérifiez le terminal avant de recommencer.'
   },
   question: {

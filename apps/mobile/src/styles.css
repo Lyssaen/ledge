@@ -1,4 +1,9 @@
+/* The shared tokens and mascots of @ledge/ui sit in a layer below Tailwind's, so its theme keeps its own radii. */
+@layer ledge-ui;
 @import 'tailwindcss';
+@import '@ledge/ui/styles/tokens.css' layer(ledge-ui);
+@import '@ledge/ui/bots/bots.css' layer(ledge-ui);
+@import '@ledge/ui/bots/resident.css' layer(ledge-ui);
 
 /* Tokens of the Ledge mobile UI (dark only); the background is the one of @ledge/ui. */
 @theme {

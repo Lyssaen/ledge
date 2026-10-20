@@ -8,6 +8,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./*": "./src/*.ts",
+    "./reply/parse": "./src/reply/parse.ts",
     "./bots/poseFor": "./src/bots/poseFor.ts",
     "./bots/Bot": "./src/bots/Bot.tsx",
     "./bots/ResidentMascot": "./src/bots/ResidentMascot.tsx",
