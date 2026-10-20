@@ -111,3 +111,33 @@ test('a 900 px window: the chat opens over the atelier, Escape closes it, and th
   await page.keyboard.press('n');
   await expect(page.getByRole('dialog', { name: 'New session' })).toBeVisible();
 });
+
+test('a session card\'s model is a chip opening a searchable list that stays in the window; the pick leaves with the launch (#62)', async ({ page }) => {
+  const cursor = [
+    { id: 'auto', label: 'Auto', description: 'Picks for you', isDefault: true },
+    ...Array.from({ length: 40 }, (_, i) => ({ id: `claude-4-opus-${i}`, label: `Opus ${i}`, description: i === 7 ? 'Careful and slow' : 'Fast' }))
+  ];
+  const chat: ChatReply = { steps: [{ kind: 'sessions' }], text: 'I can start Cursor in ledge.', proposal: { cwd: '/w/ledge', project: 'ledge', tool: 'cursor', prompt: 'Fix the failing tests' } };
+  const daemon = await fakeDaemon(page, fleet, { projects: twoProjects, chat, daemon: { version: '0.13.0', install: 'npm', systemd: true, models: true }, models: { cursor } });
+  await boot(page);
+  await ask(page, 'Start a session to fix the tests');
+  const card = panel(page).getByRole('region', { name: 'Proposed session' });
+  await expect(card.locator('select')).toHaveCount(0);
+  await card.getByRole('button', { name: /^Cursor Agent model : Auto/ }).click();
+  const menu = page.getByRole('dialog', { name: 'Cursor Agent model' });
+  await expect(menu.getByRole('combobox')).toBeFocused();
+  await menu.getByRole('combobox').fill('careful');
+  await expect(menu.getByText('1 of 41')).toBeVisible();
+  const box = (await menu.boundingBox())!;
+  const view = page.viewportSize()!;
+  expect(box.x).toBeGreaterThanOrEqual(0); expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(view.width); expect(box.y + box.height).toBeLessThanOrEqual(view.height);
+  await page.screenshot({ path: process.env.CARD_SHOT ?? 'test-results/chat-card-model.png' });
+  await menu.getByRole('option', { name: /Opus 7/ }).click();
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeHidden();
+  await expect(card.getByRole('button', { name: 'Cursor Agent model : Opus 7' })).toBeVisible();
+  await card.getByRole('button', { name: 'Start the session' }).click();
+  await expect.poll(() => sent(daemon.received, 'session.launch').length).toBe(1);
+  expect(sent(daemon.received, 'session.launch')[0]).toMatchObject({ tool: 'cursor', model: 'claude-4-opus-7' });
+});

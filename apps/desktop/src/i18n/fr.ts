@@ -674,7 +674,7 @@ export const fr = {
     modelOf: (t: string) => `Modèle de ${t}`, remembered: 'Dernier choix pour ce projet retenu',
     byDefault: 'Par défaut', byDefaultHint: 'Celui que l’agent prend de lui-même', defaultBadge: 'défaut',
     exactId: 'Identifiant exact, passé tel quel', currentBadge: 'actuel',
-    searchModel: 'Chercher un modèle ou taper un identifiant', searchFew: 'Chercher, ou taper un identifiant', searchMany: (n: number) => `Chercher parmi ${n} modèles, ou taper un identifiant`,
+    searchModel: 'Chercher un modèle ou taper un identifiant', searchFew: 'Chercher, ou taper un identifiant', searchMany: (n: number) => `Chercher parmi ${n} modèles, ou taper un identifiant`, resultCount: (n: number, total: number) => `${n} sur ${total}`,
     useAsIs: 'Utiliser tel quel', noMatch: 'Aucun modèle ne correspond.', notAnId: 'Aucun modèle ne correspond, et ce n’est pas un identifiant de modèle.', moreModels: (n: number) => `${n} autres : tapez pour les chercher`,
     modelsLoading: 'Lecture des modèles de la machine…', modelsUnavailable: (e: string) => `Liste des modèles indisponible (${e}) : le défaut et un identifiant exact restent possibles.`,
     modelsOutdated: 'Mettez à jour Ledge sur cette machine pour choisir le modèle.',

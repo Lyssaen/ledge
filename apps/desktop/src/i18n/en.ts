@@ -641,7 +641,7 @@ export const en: Messages = {
     modelOf: (t: string) => `${t} model`, remembered: 'Last choice for this project kept',
     byDefault: 'Default', byDefaultHint: 'The one the agent picks by itself', defaultBadge: 'default',
     exactId: 'An exact id, passed as is', currentBadge: 'current',
-    searchModel: 'Search a model or type an id', searchFew: 'Search, or type an id', searchMany: (n: number) => `Search ${n} models, or type an id`,
+    searchModel: 'Search a model or type an id', searchFew: 'Search, or type an id', searchMany: (n: number) => `Search ${n} models, or type an id`, resultCount: (n: number, total: number) => `${n} of ${total}`,
     useAsIs: 'Use as is', noMatch: 'No model matches.', notAnId: 'No model matches, and this is not a model id.', moreModels: (n: number) => `${n} more: type to search them`,
     modelsLoading: 'Reading the machine’s models…', modelsUnavailable: (e: string) => `Model list unavailable (${e}): the default and an exact id still work.`,
     modelsOutdated: 'Update Ledge on this machine to choose the model.',

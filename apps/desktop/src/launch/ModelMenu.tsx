@@ -52,8 +52,10 @@ export function ModelMenu(p: {
   useEffect(() => { field.current?.focus(); }, []);
   useEffect(() => {
     const outside = (e: MouseEvent) => { const n = e.target as Node; if (!box.current?.contains(n) && !p.anchor.contains(n)) p.onClose(); };
-    document.addEventListener('mousedown', outside);
-    return () => document.removeEventListener('mousedown', outside);
+    // Escape closes from anywhere (a disabled effort button hands the focus to the page), not only from the field.
+    const escape = (e: globalThis.KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); p.onClose(); p.anchor.focus(); } };
+    document.addEventListener('mousedown', outside); document.addEventListener('keydown', escape, true);
+    return () => { document.removeEventListener('mousedown', outside); document.removeEventListener('keydown', escape, true); };
   }, [p.anchor, p.onClose]);
 
   const typed = query.trim();
@@ -72,8 +74,8 @@ export function ModelMenu(p: {
     if (e.key === 'ArrowDown') { e.preventDefault(); setActive(a => Math.min(a + 1, options.length - 1)); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(a => Math.max(a - 1, 0)); }
     else if (e.key === 'Enter') { e.preventDefault(); const o = options[active]; if (o) p.onPick(o.id); }
-    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); p.onClose(); p.anchor.focus(); }
   };
+
 
   return createPortal(
     <div ref={box} className="model-menu" style={style} role="dialog" aria-label={p.label}>
@@ -82,6 +84,7 @@ export function ModelMenu(p: {
         <input ref={field} role="combobox" aria-expanded="true" aria-controls={listId} aria-autocomplete="list" aria-label={tl.searchModel}
           aria-activedescendant={options.length ? `${listId}-${active}` : undefined} spellCheck={false} value={query}
           placeholder={p.total ? tl.searchMany(p.total) : tl.searchFew} onChange={e => { setQuery(e.target.value); setActive(0); }} onKeyDown={onKey} />
+        {p.total && q ? <span className="model-count" aria-live="polite">{tl.resultCount(hits.length, p.total)}</span> : null}
       </div>
       <div className="model-options" role="listbox" id={listId} aria-label={p.label}>
         {rows.map((m, i) => {

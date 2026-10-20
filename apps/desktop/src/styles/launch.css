@@ -76,6 +76,7 @@ p.composer-missing{margin:0;white-space:normal;max-width:45%}
 .model-search{position:relative;flex:none;display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid var(--border);color:var(--muted-foreground)}
 .model-search input{flex:1;min-width:0;height:38px;border:0;background:transparent;color:var(--foreground);font:inherit;font-size:13px;outline:none}
 .model-search input:focus-visible{outline:none}
+.model-count{flex:none;font-size:11.5px;font-variant-numeric:tabular-nums;color:var(--muted-foreground)}
 .model-options{flex:1;min-height:0;overflow-y:auto;padding:4px;display:flex;flex-direction:column;gap:1px}
 .model-option{display:flex;align-items:center;gap:8px;min-height:34px;padding:0 10px;border-radius:calc(var(--radius-md) - 2px);cursor:pointer;min-width:0}
 .model-option.active{background:var(--accent)}
@@ -108,6 +109,5 @@ p.composer-missing{margin:0;white-space:normal;max-width:45%}
 .composer-empty strong{font-size:13px;font-weight:500}
 .composer-empty p{margin:0 0 4px;font-size:12px}
 /* #58: a chat card's model and effort, beside its agent or its « Launch all ». */
-.card-model{display:inline-flex;flex-wrap:wrap;gap:6px}
-.card-model select{height:24px;max-width:180px;padding:0 6px;font:inherit;font-size:11.5px;border:1px solid var(--input);border-radius:var(--radius-sm);background:var(--background);color:var(--foreground)}
-.card-model select:focus-visible{outline:2px solid var(--ring);outline-offset:1px}
+.card-model{display:inline-flex;max-width:100%}
+.card-model .model-chip{height:24px;max-width:100%;padding:0 6px 0 8px;gap:6px;font-size:11.5px}

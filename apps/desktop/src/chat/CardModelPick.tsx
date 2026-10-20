@@ -1,32 +1,53 @@
-import type { JSX } from 'react';
+import { useRef, useState, type JSX } from 'react';
 import type { DaemonClient } from '@ledge/fleet';
 import type { Tool } from '@ledge/protocol';
+import { Icon } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import type { ModelPick } from '../launch/model';
-import { defaultModel, effortsFor } from '../launch/ModelPicker';
+import { EffortStepper, ModelMenu, MODEL_ICONS } from '../launch/ModelMenu';
+import { effective, effortsFor, menuModels, withEffort, withModel } from '../launch/ModelPicker';
 import { useModels } from '../launch/useModels';
+import { cls } from '../shell/cls';
 
-/** A chat card's model and effort (#58): two lists, the agent's default first (nothing passed); offered once the machine has listed
- *  its models, and not at all by a daemon too old to take them. */
+/** A chat card's model and effort (#58, #62): one « model · effort » chip opening the launch form's searchable list, with the
+ *  effort's stepper at its foot; a pick keeps the list open. Offered once the machine has listed its models, and not at all by a
+ *  daemon too old to take them. */
 export function CardModelPick(p: { client: DaemonClient; machine: string | undefined; tool: Tool; pick: ModelPick; disabled: boolean; onPick(pick: ModelPick): void }): JSX.Element | null {
   const { t } = useI18n();
+  const tl = t.launch;
   const state = useModels(p.client, p.machine ?? null, p.tool);
+  const chip = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
   if (state.status !== 'ready' || state.error === 'outdated') return null;
-  const fallback = defaultModel(state.models);
-  const efforts = effortsFor(state.models, p.pick);
-  const effortLabel = (e: string) => (t.launch.efforts as Record<string, string | undefined>)[e] ?? e;
+  const { models } = state;
+  const rows = menuModels(models, p.tool, t);
+  const selected = p.pick.model ?? rows[0]!.id;
+  const name = p.pick.model === null ? rows[0]!.label : rows.find(m => m.id === p.pick.model)?.label ?? p.pick.model;
+  const e = effective(models, p.pick).effort;
+  const text = e ? `${name} · ${(tl.efforts as Record<string, string | undefined>)[e] ?? e}` : name;
+  const efforts = effortsFor(models, p.pick);
+  const legend = tl.modelOf(tl.tools[p.tool][0]);
   return (
     <span className="card-model">
-      <select aria-label={t.launch.modelOf(t.launch.tools[p.tool][0])} disabled={p.disabled} value={p.pick.model ?? ''}
-        onChange={e => { const model = e.target.value || null; const next = { model, effort: p.pick.effort }; p.onPick(next.effort && !effortsFor(state.models, next).includes(next.effort) ? { model, effort: null } : next); }}>
-        <option value="">{fallback ? `${fallback.label} · ${t.launch.defaultBadge}` : t.launch.byDefault}</option>
-        {state.models.filter(m => m !== fallback).map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-      </select>
-      {efforts.length > 0 && (
-        <select aria-label={t.launch.effort} disabled={p.disabled} value={p.pick.effort ?? ''} onChange={e => p.onPick({ model: p.pick.model, effort: e.target.value || null })}>
-          <option value="">{t.launch.effort} · {t.launch.defaultBadge}</option>
-          {efforts.map(e => <option key={e} value={e}>{effortLabel(e)}</option>)}
-        </select>
+      <button ref={chip} type="button" className={cls('model-chip', open && 'open')} disabled={p.disabled} aria-haspopup="dialog" aria-expanded={open}
+        aria-label={`${legend} : ${text}`} onClick={() => setOpen(o => !o)}>
+        <Icon d={MODEL_ICONS.chip} size={14} />
+        <span className="model-chip-text">{text}</span>
+        <Icon d={MODEL_ICONS.down} size={14} />
+      </button>
+      {open && chip.current && (
+        <ModelMenu anchor={chip.current} label={legend} models={rows} selected={selected} total={models.length >= 20 ? models.length : undefined}
+          onPick={id => p.onPick(withModel(models, p.pick, id))} onClose={() => setOpen(false)}>
+          {(efforts.length > 0 || p.tool === 'cursor') && (
+            <div className="model-menu-foot">
+              <div className="model-menu-effort">{tl.effort}
+                {efforts.length > 0
+                  ? <EffortStepper efforts={efforts} value={e} onChange={x => p.onPick(withEffort(models, p.pick, x))} />
+                  : <span className="effort-none">{tl.cursorEffort}</span>}
+              </div>
+            </div>
+          )}
+        </ModelMenu>
       )}
     </span>
   );
