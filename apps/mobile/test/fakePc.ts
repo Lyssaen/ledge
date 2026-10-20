@@ -35,12 +35,12 @@ export interface FakePc {
   /** The relay origin the phone's socket opens. */
   url: string;
   identity: Identity;
-  /** The relay peer the phone connects as, and the WebSocket class that authenticates it. */
-  phonePeer: string;
-  PhoneWebSocket: typeof WebSocket;
+  /** The relay peer the phone connects as, and the WebSocket class that authenticates it (dev tokens only). */
+  readonly phonePeer: string;
+  readonly PhoneWebSocket: typeof WebSocket;
   /** The phone's key: from its reveal, or `opts.devicePublicKey`. A hello from another key gets `denied`. */
   readonly devicePublicKey: string | null;
-  /** Resolves with the code the PC computes once a reveal matches its commitment. */
+  /** Resolves with the code the PC computes once a reveal matches its commitment, the next one if none matched yet. */
   code(): Promise<string>;
   /** Sends `pair_offer` for the last `pair_commit` (done at once unless `autoOffer: false`). */
   offer(): void;
@@ -88,10 +88,15 @@ export async function startFakePc(opts: {
   devicePublicKey?: string;
   identity?: Identity;
   phonePeer?: string;
+  /** A relay already running, the PC signed in on it (the e2e harness's accounts relay); otherwise one is started. */
+  relay?: TestRelay;
+  /** The phone signs in on its own: its peer is the first device's that sends the PC a frame. */
+  learnPeer?: boolean;
 } = {}): Promise<FakePc> {
-  const relay = await startTestRelay();
+  const relay = opts.relay ?? (await startTestRelay());
   const identity = opts.identity ?? (await generateIdentity());
-  const phonePeer = opts.phonePeer ?? 'd_phonephonephone01';
+  let phonePeer = opts.phonePeer ?? 'd_phonephonephone01';
+  let peerKnown = !opts.learnPeer;
   const autoOffer = opts.autoOffer ?? true;
 
   let devicePublicKey = opts.devicePublicKey ?? null;
@@ -101,6 +106,8 @@ export async function startFakePc(opts: {
   let channel: Channel | null = null;
   let ready = false;
   let resolveCode!: (code: string) => void;
+  /** `codeP` has resolved: the next commitment gets a new one, so a `code()` made before a commitment still waits for it. */
+  let codeSettled = false;
   let codeP = new Promise<string>((r) => { resolveCode = r; });
   const received: string[] = [];
   const plains: string[] = [];
@@ -159,12 +166,16 @@ export async function startFakePc(opts: {
   const onFrame = async (frame: SealedFrame) => {
     if (frame.k === 'pair_commit') {
       commitment = { c: frame.c, pcNonce: randomNonce() };
-      codeP = new Promise<string>((r) => { resolveCode = r; });
+      if (codeSettled) {
+        codeSettled = false;
+        codeP = new Promise<string>((r) => { resolveCode = r; });
+      }
       if (autoOffer) sendFrame({ k: 'pair_offer', pc: identity.publicKey, n: commitment.pcNonce });
     } else if (frame.k === 'pair_reveal') {
       const cm = commitment;
       if (!cm || !(await checkCommitment(cm.c, frame.d, frame.n))) { sendFrame({ k: 'pair_no' }); return; }
       devicePublicKey = frame.d;
+      codeSettled = true;
       resolveCode(await pairingCode({ pcPublicKey: identity.publicKey, devicePublicKey: frame.d, deviceNonce: frame.n, pcNonce: cm.pcNonce }));
     } else if (frame.k === 'hello') {
       await onHello(frame);
@@ -179,7 +190,9 @@ export async function startFakePc(opts: {
     let raw: unknown;
     try { raw = JSON.parse(String(ev.data)); } catch { return; }
     const m = RelayServerMessageSchema.safeParse(raw);
-    if (!m.success || m.data.type !== 'deliver' || m.data.from !== phonePeer) return;
+    if (!m.success || m.data.type !== 'deliver') return;
+    if (!peerKnown && m.data.from !== 'pc') { phonePeer = m.data.from; peerKnown = true; }
+    if (m.data.from !== phonePeer) return;
     let body: unknown;
     try { body = JSON.parse(m.data.body); } catch { return; }
     const f = SealedFrameSchema.safeParse(body);
@@ -227,8 +240,8 @@ export async function startFakePc(opts: {
     relay,
     url: relay.url,
     identity,
-    phonePeer,
-    PhoneWebSocket: bearerWebSocket(relay.deviceToken(phonePeer), phoneSockets),
+    get phonePeer() { return phonePeer; },
+    get PhoneWebSocket() { return bearerWebSocket(relay.deviceToken(phonePeer), phoneSockets); },
     get devicePublicKey() { return devicePublicKey; },
     get ready() { return ready; },
     code: () => codeP,
