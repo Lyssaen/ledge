@@ -61,8 +61,8 @@ const flush = async () => { for (let i = 0; i < 5; i++) await new Promise(r => s
 const stops: Array<() => void> = [];
 afterEach(() => { for (const s of stops.splice(0)) s(); });
 
-function setup(opts: { boot?: string; dispatch?: (msg: ClientMessage, reply: (m: ServerMessage) => void) => Promise<void>; relayUrl?: string } = {}) {
-  const fm = fakeMobile(['dev1', 'dev2'], opts.relayUrl);
+function setup(opts: { boot?: string; dispatch?: (msg: ClientMessage, reply: (m: ServerMessage) => void) => Promise<void>; relayUrl?: string; chats?: Parameters<typeof createPhoneGateway>[0]['chats']; devices?: string[] } = {}) {
+  const fm = fakeMobile(opts.devices ?? ['dev1', 'dev2'], opts.relayUrl);
   const clock = { t: 1_000_000 };
   const challenges = createChallengeStore({ now: () => clock.t });
   const creds = new Map<string, DeviceCredential>();
@@ -80,6 +80,7 @@ function setup(opts: { boot?: string; dispatch?: (msg: ClientMessage, reply: (m:
   const dispatch = opts.dispatch ?? (async (msg: ClientMessage) => { dispatched.push(msg); });
   const gw = createPhoneGateway({
     mobile: fm.mobile,
+    ...(opts.chats ? { chats: opts.chats } : {}),
     sessions: () => [...sessions.values()],
     session: id => sessions.get(id),
     thread: id => threads.get(id),
@@ -1198,5 +1199,156 @@ describe('phone gateway: push', () => {
     g.send('dev1', { type: 'presence', visible: true });
     g.send('dev1', { type: 'presence', visible: false });
     expect(g.gw.visible('dev1')).toBe(false);
+  });
+});
+
+
+/** Chat threads stand-in: one fake chat per device, a record of drops and emitters. */
+function fakeChats() {
+  const drops: string[] = [];
+  const emitters = new Map<string, unknown>();
+  const asked: Array<{ id: string; qid: string; tool: unknown }> = [];
+  const cancelled: Array<{ id: string; qid: string }> = [];
+  const resets: string[] = [];
+  const turns = new Map<string, Array<{ qid: string; question: string; askedAt: string; steps: never[]; answer?: string }>>();
+  const dropping = new Set<string>();
+  const chatOf = (id: string) => ({
+    async ask(qid: string, text: string, emit: (m: ServerMessage) => void, tool?: unknown) {
+      asked.push({ id, qid, tool });
+      const t = { qid, question: text, askedAt: T0, steps: [] as never[], answer: `answer of ${id}` };
+      turns.set(id, [...(turns.get(id) ?? []), t]);
+      emit({ type: 'chat.delta', qid, text: 'ans' } as never);
+      emit({ type: 'chat.done', qid, text: t.answer, at: T0 } as never);
+    },
+    cancel(qid: string) { cancelled.push({ id, qid }); },
+    async reset(emit: (m: ServerMessage) => void) { resets.push(id); turns.set(id, []); emit({ type: 'chat.history', turns: [] } as never); },
+    history: () => turns.get(id) ?? []
+  });
+  const chats = {
+    device(id: string) { if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) throw new Error('invalid device id'); if (dropping.has(id)) throw new Error('device thread is being dropped'); return chatOf(id) as never; },
+    async deviceTool() { return 'codex' as const; },
+    owner(qid: string) { for (const [id, ts] of turns) if (ts.some(t => t.qid === qid)) return `device:${id}` as const; return undefined; },
+    async drop(id: string) { drops.push(id); },
+    setEmitter(thread: string, e: unknown) { emitters.set(thread, e); }
+  };
+  return { chats, drops, emitters, asked, cancelled, resets, turns, dropping };
+}
+
+describe('phone gateway: chat', () => {
+  const ask = (qid: string, text = 'hello') => ({ type: 'chat.ask', qid, text });
+  const Q1 = randomUUID();
+
+  it('answers only the device that asked, with its own chat tool, and registers its emitter', async () => {
+    const c = fakeChats();
+    const g = setup({ chats: c.chats });
+    g.send('dev1', ask(Q1));
+    await flush();
+    expect(c.asked).toEqual([{ id: 'dev1', qid: Q1, tool: 'codex' }]);
+    expect([...c.emitters.keys()]).toEqual(['device:dev1']);
+    expect(g.got('dev1').map(m => m.type)).toEqual(['chat.delta', 'chat.done']);
+    expect(g.got('dev2')).toEqual([]);
+    expect(g.dispatched).toEqual([]);
+  });
+
+  it('keeps a cancel to the device that owns the question', async () => {
+    const c = fakeChats();
+    const g = setup({ chats: c.chats });
+    g.send('dev1', ask(Q1));
+    await flush();
+    g.send('dev2', { type: 'chat.cancel', qid: Q1 });
+    await flush();
+    expect(c.cancelled).toEqual([]);
+    g.send('dev1', { type: 'chat.cancel', qid: Q1 });
+    await flush();
+    expect(c.cancelled).toEqual([{ id: 'dev1', qid: Q1 }]);
+  });
+
+  it('sends chat.history and reset results to the asking device only', async () => {
+    const c = fakeChats();
+    const g = setup({ chats: c.chats });
+    g.send('dev1', { type: 'snapshot.request' });
+    g.send('dev1', ask(Q1, 'mine'));
+    g.send('dev2', ask(randomUUID(), 'theirs'));
+    await flush();
+    g.send('dev1', { type: 'chat.history' });
+    await flush();
+    const h = g.got('dev1').filter(m => m.type === 'chat.history');
+    expect(h).toHaveLength(1);
+    expect(h[0]).toMatchObject({ turns: [{ qid: Q1, question: 'mine', answer: 'answer of dev1' }] });
+    g.send('dev1', { type: 'chat.reset' });
+    await flush();
+    expect(c.resets).toEqual(['dev1']);
+    expect(g.got('dev2').filter(m => m.type === 'chat.history')).toEqual([]);
+  });
+
+  it('announces the chat in the snapshot only when threads are served', async () => {
+    const withChats = setup({ chats: fakeChats().chats });
+    withChats.send('dev1', { type: 'snapshot.request' });
+    const without = setup();
+    without.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    expect((withChats.got('dev1')[0] as { device: unknown }).device).toMatchObject({ chat: true });
+    expect((without.got('dev1')[0] as { device: object }).device).not.toHaveProperty('chat');
+  });
+
+  it('refuses without crashing when the thread cannot be reached', async () => {
+    const c = fakeChats();
+    const g = setup({ chats: c.chats });
+    c.dropping.add('dev1');
+    g.send('dev1', ask(Q1));
+    g.send('dev1', { type: 'chat.history' });
+    g.send('dev1', { type: 'chat.reset' });
+    await flush();
+    expect(g.got('dev1')).toEqual([
+      { type: 'chat.error', qid: Q1, code: 'failed' },
+      { type: 'error', code: 'invalid', request: 'chat.history' },
+      { type: 'error', code: 'invalid', request: 'chat.reset' }
+    ]);
+    const bad = setup({ chats: c.chats, devices: ['../evil'] });
+    bad.send('../evil', ask(Q1));
+    await flush();
+    expect(bad.got('../evil')).toEqual([{ type: 'chat.error', qid: Q1, code: 'failed' }]);
+  });
+
+  it('answers a chat message without threads with error invalid', async () => {
+    const g = setup();
+    g.send('dev1', { type: 'chat.history' });
+    await flush();
+    expect(g.got('dev1')).toEqual([{ type: 'error', code: 'invalid', request: 'chat.history' }]);
+  });
+
+  it('drops the thread of a revoked device, connected or not, and of a forgotten one', async () => {
+    const c = fakeChats();
+    const g = setup({ chats: c.chats });
+    g.send('dev1', ask(Q1));
+    g.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    g.fm.setDevices(['dev2']);
+    await flush();
+    expect(c.drops).toEqual(['dev1']);
+    // dev2 never connected: it goes too.
+    g.fm.setDevices([]);
+    await flush();
+    expect(c.drops).toEqual(['dev1', 'dev2']);
+  });
+
+  it('drops the thread of a device that asked and then fell offline when it is revoked', async () => {
+    const c = fakeChats();
+    const g = setup({ chats: c.chats });
+    g.send('dev1', ask(Q1));
+    await flush();
+    g.fm.setOnline('dev1', false);
+    g.fm.setDevices(['dev2']);
+    await flush();
+    expect(c.drops).toEqual(['dev1']);
+  });
+
+  it('drops the thread on device.forget', async () => {
+    const c = fakeChats();
+    const g = setup({ chats: c.chats });
+    g.send('dev1', { type: 'snapshot.request' });
+    g.send('dev1', { type: 'device.forget', op: randomUUID() });
+    await new Promise(r => setTimeout(r, 50));
+    expect(c.drops).toEqual(['dev1']);
   });
 });

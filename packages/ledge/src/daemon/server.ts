@@ -869,6 +869,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
 
   if (mobile) gateway = createPhoneGateway({
     mobile,
+    chats: threads,
     sessions: () => store.all(),
     session: id => store.get(id),
     thread: id => history?.items(id),

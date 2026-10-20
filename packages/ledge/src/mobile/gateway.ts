@@ -4,9 +4,12 @@
 import { hostname } from 'node:os';
 import {
   OperationIdSchema, PHONE_PROTOCOL, PhoneClientMessageSchema, pushEndpointAllowed, RefusalCodeSchema, UNTYPABLE, backendOf, isArchived, pendingKey,
-  type ClientMessage, type OperationReason, type OperationStatus, type PhoneClientMessage, type PhoneServerMessage, type ServerMessage, type Session, type ThreadItem
+  type ChatErrorCode, type ClientMessage, type OperationReason, type OperationStatus, type PhoneClientMessage, type PhoneServerMessage, type ServerMessage, type Session, type ThreadItem
 } from '@ledge/protocol';
 import type { MobileService } from './service.js';
+import type { ChatThreads } from '../chat/threads.js';
+import { phoneEmitter, toPhoneHistory } from './chat.js';
+import type { ChatMessage } from '../chat/service.js';
 import { createOutbox } from './outbox.js';
 import { fingerprint, OperationRegistry, type PhoneOperation } from './operations.js';
 import { capabilities, clip, toPhoneFullRequest, toPhoneItem, toPhoneSession, toPhoneThread } from './project.js';
@@ -64,6 +67,11 @@ export function createPhoneGateway(deps: {
   log: (line: string) => void;
   now?: () => string;
   outbox?: { now?: () => number; frames?: number; bytes?: number; windowMs?: number };
+  /** The chat threads: each device talks to its own. Without them the phone has no chat. */
+  chats?: Pick<ChatThreads, 'device' | 'deviceTool' | 'owner' | 'drop' | 'setEmitter'>;
+  /** A device's question ended (answered, or with a code). */
+  onChatEnd?: (deviceId: string, end: { qid: string; code?: ChatErrorCode }) => void;
+  chatThrottleMs?: number;
 }): PhoneGateway {
   const { mobile, log } = deps;
   /** The read mark of a session no device marked: what was replied before the gateway started counts as read. */
@@ -80,6 +88,31 @@ export function createPhoneGateway(deps: {
   const forget = (deviceId: string) => {
     followers.delete(deviceId);
     outbox.drop(deviceId);
+    dropThread(deviceId);
+  };
+  /** The devices approved at the last look: one that leaves the list loses its thread, connected or not. */
+  const known = new Set(mobile.state().devices.map(d => d.id));
+  const emitters = new Map<string, (m: ChatMessage) => void>();
+  /** Forgets the device's thread: its question is stopped and its folder removed. */
+  const dropThread = (deviceId: string) => {
+    emitters.delete(deviceId);
+    if (!deps.chats) return;
+    try { deps.chats.drop(deviceId).catch((e: unknown) => log(`phone chat drop failed (${e instanceof Error ? e.name : 'error'})`)); }
+    catch (e) { log(`phone chat drop failed (${e instanceof Error ? e.name : 'error'})`); }
+  };
+  /** The device's emitter, made once and registered as its thread's; what it sends goes to that device only. */
+  const emitterOf = (deviceId: string): (m: ChatMessage) => void => {
+    let e = emitters.get(deviceId);
+    if (!e) {
+      const chats = deps.chats!;
+      e = phoneEmitter((m, key) => push(deviceId, m, key), { history: () => chats.device(deviceId).history() }, {
+        ...(deps.chatThrottleMs !== undefined ? { throttleMs: deps.chatThrottleMs } : {}),
+        onEnd: end => deps.onChatEnd?.(deviceId, end)
+      });
+      emitters.set(deviceId, e);
+      chats.setEmitter(`device:${deviceId}`, e);
+    }
+    return e;
   };
   const approved = (deviceId: string) => mobile.state().devices.some(d => d.id === deviceId);
 
@@ -102,7 +135,7 @@ export function createPhoneGateway(deps: {
     if (f) f.pushStatus = push;
     return {
     type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, boot: deps.boot, name: clip(hostname(), 40).text },
-    device: { confirm: deps.credential(deviceId) !== null, push }
+    device: { confirm: deps.credential(deviceId) !== null, push, ...(deps.chats ? { chat: true as const } : {}) }
     };
   };
 
@@ -126,9 +159,9 @@ export function createPhoneGateway(deps: {
     push(deviceId, { type: 'operation.result', op, status, ...(reason ? { reason } : {}) });
   };
 
-  /** Whether the operation needs the device's own check: an accept of a request that is not low, or a reply to an OMP (rpc) dialog, which is never low. */
   /** The operations that act on a tracked session (the chat ones are the gateway's own, Task 5). */
   type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.launch' }>;
+  /** Whether the operation needs the device's own check: an accept of a request that is not low, or a reply to an OMP (rpc) dialog, which is never low. */
   const needsAssertion = (msg: SessionOperation, s: Session): boolean => {
     if (msg.type === 'session.decide') return msg.decision !== 'deny' && riskOf(s)?.risk !== 'low';
     if (msg.type === 'session.reply') return !!msg.expect && s.pending?.source === 'rpc' && riskOf(s)?.risk !== 'low';
@@ -279,8 +312,38 @@ export function createPhoneGateway(deps: {
     }
   };
 
+  /** The phone's own chat. A thread that cannot be reached (an id off the pattern, a thread being dropped) is refused, never thrown. */
+  const chatRead = async (deviceId: string, msg: Extract<PhoneClientMessage, { type: 'chat.ask' | 'chat.cancel' | 'chat.reset' | 'chat.history' }>) => {
+    const chats = deps.chats;
+    if (!chats || !approved(deviceId)) return;
+    known.add(deviceId);
+    try {
+      switch (msg.type) {
+        case 'chat.ask': {
+          const thread = chats.device(deviceId);
+          const emit = emitterOf(deviceId);
+          return await thread.ask(msg.qid, msg.text, emit, await chats.deviceTool());
+        }
+        case 'chat.cancel':
+          // Only the device's own turn: another thread's qid is nothing here.
+          if (chats.owner(msg.qid) === `device:${deviceId}`) chats.device(deviceId).cancel(msg.qid);
+          return;
+        case 'chat.reset': return await chats.device(deviceId).reset(emitterOf(deviceId));
+        case 'chat.history': return push(deviceId, { type: 'chat.history', turns: toPhoneHistory(chats.device(deviceId).history()) }, 'chat.history');
+      }
+    } catch (e) {
+      log(`phone ${msg.type} failed (${e instanceof Error ? e.name : 'error'})`);
+      if (msg.type === 'chat.ask') push(deviceId, { type: 'chat.error', qid: msg.qid, code: 'failed' });
+      else push(deviceId, { type: 'error', code: 'invalid', request: msg.type });
+    }
+  };
+
   const read = (deviceId: string, msg: Exclude<PhoneClientMessage, PhoneOperation>) => {
     switch (msg.type) {
+      case 'chat.ask': case 'chat.cancel': case 'chat.reset': case 'chat.history':
+        if (!deps.chats) return push(deviceId, { type: 'error', code: 'invalid', request: msg.type });
+        void chatRead(deviceId, msg);
+        return;
       case 'presence':
         follower(deviceId).visible = msg.visible;
         return;
@@ -359,8 +422,14 @@ export function createPhoneGateway(deps: {
 
   /** A device no longer approved is forgotten, with all it followed; one whose channel fell is no longer in front; one whose push status changed hears of it. */
   const pruneRevoked = () => {
-    if (followers.size === 0) return;
     const devices = new Map(mobile.state().devices.map(d => [d.id, d]));
+    // A device that left the list loses its thread whether or not it is connected.
+    for (const id of [...known]) {
+      if (devices.has(id)) continue;
+      known.delete(id);
+      if (!followers.has(id)) dropThread(id);
+    }
+    for (const id of devices.keys()) known.add(id);
     for (const [deviceId, f] of [...followers]) {
       const d = devices.get(deviceId);
       if (!d) { forget(deviceId); continue; }

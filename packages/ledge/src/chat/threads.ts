@@ -70,3 +70,5 @@ export function createChatThreads(deps: Omit<ChatDeps, 'slots'> & { max?: number
     }
   };
 }
+
+export type ChatThreads = ReturnType<typeof createChatThreads>;
