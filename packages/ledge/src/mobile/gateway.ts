@@ -29,7 +29,8 @@ interface Follower {
 
 type Outcome = { status: Extract<OperationStatus, 'applied' | 'rejected' | 'failed'>; reason?: OperationReason };
 
-const REQUEST_NAME_MAX = 40;
+/** The plain shape of a message type: only such a name is logged or echoed back. */
+const REQUEST_NAME = /^[a-z][a-z.]{0,39}$/;
 
 export function createPhoneGateway(deps: {
   mobile: Pick<MobileService, 'send' | 'onMessage' | 'state' | 'onChange'>;
@@ -82,7 +83,7 @@ export function createPhoneGateway(deps: {
   const push = (deviceId: string, msg: PhoneServerMessage, key?: string) => { if (!stopped) outbox.push(deviceId, msg, key); };
   const result = (deviceId: string, op: string, status: OperationStatus, reason?: OperationReason) => {
     // A device revoked while its operation ran hears nothing more.
-    if (!approved(deviceId)) return;
+    if (stopped || !approved(deviceId)) return;
     push(deviceId, { type: 'operation.result', op, status, ...(reason ? { reason } : {}) });
   };
 
@@ -95,7 +96,8 @@ export function createPhoneGateway(deps: {
         if (!s.pending || pendingKey(s.pending) !== msg.expect.key) return { status: 'rejected', reason: 'stale' };
         // Until a device check exists (lot 6), a high request is only refused from the phone.
         if (msg.decision !== 'deny' && riskOf(s)?.risk !== 'low') return { status: 'rejected', reason: 'confirm_required' };
-        return undefined;
+        // The note is typed into the terminal like a reply.
+        return msg.note !== undefined && UNTYPABLE.test(msg.note) ? { status: 'rejected', reason: 'untypable' } : undefined;
       case 'session.reply':
         return UNTYPABLE.test(msg.text) ? { status: 'rejected', reason: 'untypable' } : undefined;
       case 'session.interrupt':
@@ -137,9 +139,11 @@ export function createPhoneGateway(deps: {
     const begun = registry.begin(deviceId, msg.op, fingerprint(msg));
     if (begun.kind === 'conflict') return result(deviceId, msg.op, 'rejected', 'conflict');
     if (begun.kind === 'replay') return result(deviceId, msg.op, begun.record.status, begun.record.reason);
-    result(deviceId, msg.op, 'received');
     let outcome: Outcome;
-    try { outcome = await run(msg); }
+    try {
+      result(deviceId, msg.op, 'received');
+      outcome = await run(msg);
+    }
     catch (e) {
       log(`phone ${msg.type} failed (${e instanceof Error ? e.name : 'error'})`);
       outcome = { status: 'failed' };
@@ -184,7 +188,7 @@ export function createPhoneGateway(deps: {
     const parsed = raw === undefined ? undefined : PhoneClientMessageSchema.safeParse(raw);
     if (!parsed?.success) {
       const type = (raw as { type?: unknown } | null | undefined)?.type;
-      const request = typeof type === 'string' && type.length <= REQUEST_NAME_MAX ? type : undefined;
+      const request = typeof type === 'string' && REQUEST_NAME.test(type) ? type : undefined;
       log(`phone message refused: ${request ?? '?'}`);
       return push(deviceId, { type: 'error', code: 'invalid', ...(request !== undefined ? { request } : {}) });
     }
@@ -193,7 +197,8 @@ export function createPhoneGateway(deps: {
       void write(deviceId, msg).catch((e: unknown) => log(`phone ${msg.type} failed (${e instanceof Error ? e.name : 'error'})`));
       return;
     }
-    read(deviceId, msg);
+    try { read(deviceId, msg); }
+    catch (e) { log(`phone ${msg.type} failed (${e instanceof Error ? e.name : 'error'})`); }
   };
 
   /** A device no longer approved is forgotten, with all it followed. */
@@ -219,6 +224,7 @@ export function createPhoneGateway(deps: {
           case 'session.removed':
             for (const [deviceId, f] of followers) {
               f.reads.delete(m.id);
+              if (f.watching === m.id) f.watching = null;
               if (f.subscribed) push(deviceId, { type: 'session.removed', id: m.id });
             }
             return;

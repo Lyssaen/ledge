@@ -41,8 +41,12 @@ async function until(cond: () => boolean, what: string): Promise<void> {
 }
 
 const cleanups: Array<() => Promise<void> | void> = [];
+const ledgeHome = process.env.LEDGE_HOME;
 beforeEach(() => { process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-phone-e2e-')); });
-afterEach(async () => { for (const c of cleanups.splice(0).reverse()) await c(); });
+afterEach(async () => {
+  for (const c of cleanups.splice(0).reverse()) await c();
+  if (ledgeHome === undefined) delete process.env.LEDGE_HOME; else process.env.LEDGE_HOME = ledgeHome;
+});
 
 /** A signed-in mobile service on the real relay, the daemon over it, and a phone paired, approved and linked. */
 async function linked() {

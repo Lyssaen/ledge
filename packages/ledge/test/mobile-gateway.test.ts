@@ -97,11 +97,15 @@ describe('phone gateway: input', () => {
     expect(g.logs).toContain('phone message refused: chat.ask');
   });
 
-  it('names no request longer than 40 characters', async () => {
+  it('names no request longer than 40 characters, nor one off the plain shape of a type', async () => {
     const g = setup();
     g.send('dev1', { type: 'x'.repeat(41) });
+    g.send('dev1', { type: 'chat.ask\nphone message refused: forged' });
+    g.send('dev1', { type: 'Chat.ask' });
     await flush();
-    expect(g.got('dev1')).toEqual([{ type: 'error', code: 'invalid' }]);
+    expect(g.got('dev1')).toEqual([{ type: 'error', code: 'invalid' }, { type: 'error', code: 'invalid' }, { type: 'error', code: 'invalid' }]);
+    expect(g.logs.filter(l => l.startsWith('phone message refused'))).toEqual(['phone message refused: ?', 'phone message refused: ?', 'phone message refused: ?']);
+    expect(g.logs.some(l => l.includes('forged'))).toBe(false);
   });
 });
 
@@ -202,6 +206,58 @@ describe('phone gateway: reads and forward', () => {
     expect(g.got('dev1').at(-1)).toMatchObject({ type: 'session.updated', session: { unread: false } });
   });
 
+  it('watching an unknown session is refused and keeps the session watched before', async () => {
+    const g = setup();
+    g.send('dev1', { type: 'session.watch', id: 'a' });
+    g.send('dev1', { type: 'session.watch', id: 'zz' });
+    await flush();
+    g.gw.forward({ type: 'session.preview', id: 'a', lines: ['still'] });
+    await flush();
+    expect(g.got('dev1').slice(1)).toEqual([
+      { type: 'error', code: 'unknown_session', request: 'session.watch' },
+      { type: 'session.preview', id: 'a', lines: ['still'] }
+    ]);
+  });
+
+  it('a removed session is no longer watched', async () => {
+    const g = setup();
+    g.send('dev1', { type: 'session.watch', id: 'a' });
+    await flush();
+    g.gw.forward({ type: 'session.removed', id: 'a' });
+    g.gw.forward({ type: 'session.preview', id: 'a', lines: ['ghost'] });
+    await flush();
+    expect(g.got('dev1')).toHaveLength(1);
+  });
+
+  it('a queue that overflows is cut and the device gets a fresh snapshot', async () => {
+    const g = setup();
+    g.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    // The first send hangs, so everything after it stays queued.
+    let release!: (ok: boolean) => void;
+    const realSend = g.fm.mobile.send;
+    g.fm.mobile.send = (d, t) => { g.fm.mobile.send = realSend; g.fm.sent.push([d, t]); return new Promise<boolean>(res => { release = res; }); };
+    for (let i = 0; i < 302; i++) g.gw.forward({ type: 'session.removed', id: `gone-${i}` });
+    await flush();
+    release(true);
+    await flush();
+    const after = g.got('dev1').slice(2);
+    expect(after.map(m => m.type)).toEqual(['snapshot']);
+    expect(g.logs).toContain('phone outbox: queue overflow for device dev1');
+  });
+
+  it('after stop, nothing is received nor forwarded', async () => {
+    const g = setup();
+    g.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    const n = g.fm.sent.length;
+    g.gw.stop();
+    g.send('dev1', { type: 'snapshot.request' });
+    g.gw.forward({ type: 'session.updated', session: g.sessions.get('a')! });
+    await flush();
+    expect(g.fm.sent.length).toBe(n);
+  });
+
   it('a revoked device (onChange) gets nothing more', async () => {
     const g = setup();
     g.send('dev1', { type: 'snapshot.request' });
@@ -263,7 +319,7 @@ describe('phone gateway: writes', () => {
     ]);
   });
 
-  it('accept on a low request is dispatched with its note left out', async () => {
+  it('accept on a low request is dispatched as the local decide', async () => {
     const g = setup();
     const m = decide('b', 'accept', LS);
     g.send('dev1', m);
@@ -323,6 +379,56 @@ describe('phone gateway: writes', () => {
     await flush();
     expect(g.results('dev1').at(-1)).toEqual({ type: 'operation.result', op: m.op, status: 'rejected', reason: 'untypable' });
     expect(g.dispatched).toEqual([]);
+  });
+
+  it('a note carrying an escape sequence is untypable, even on a deny; a plain note is dispatched', async () => {
+    const g = setup();
+    const bad = { ...decide('a', 'deny', PUSH), note: 'x\x1b[2J' };
+    g.send('dev1', bad);
+    await flush();
+    expect(g.results('dev1')).toEqual([
+      { type: 'operation.result', op: bad.op, status: 'received' },
+      { type: 'operation.result', op: bad.op, status: 'rejected', reason: 'untypable' }
+    ]);
+    expect(g.dispatched).toEqual([]);
+    g.send('dev1', { ...decide('a', 'deny', PUSH), note: 'not this one' });
+    await flush();
+    expect(g.dispatched).toEqual([{ type: 'session.decide', id: 'a', decision: 'deny', note: 'not this one', expect: { kind: 'permission', text: 'git push', key: pendingKey(PUSH) } }]);
+  });
+
+  it('two operations running at once each get their own outcome', async () => {
+    const gates = new Map<string, (m?: ServerMessage) => void>();
+    const g = setup({
+      dispatch: (msg, reply) => new Promise<void>(res => {
+        gates.set(msg.type === 'session.reply' ? msg.text : '', m => { if (m) reply(m); res(); });
+      })
+    });
+    const one = { type: 'session.reply', op: randomUUID(), id: 'b', text: 'one' };
+    const two = { type: 'session.reply', op: randomUUID(), id: 'b', text: 'two' };
+    g.send('dev1', one); g.send('dev1', two);
+    await flush();
+    expect(gates.size).toBe(2);
+    gates.get('two')!();
+    await flush();
+    gates.get('one')!({ type: 'error', id: 'b', message: 'busy', request: 'session.reply', code: 'busy' });
+    await flush();
+    const finals = g.results('dev1').filter(r => r.type === 'operation.result' && r.status !== 'received');
+    expect(finals).toEqual([
+      { type: 'operation.result', op: two.op, status: 'applied' },
+      { type: 'operation.result', op: one.op, status: 'rejected', reason: 'busy' }
+    ]);
+  });
+
+  it('a device revoked while its operation runs gets no result', async () => {
+    let release!: () => void;
+    const g = setup({ dispatch: () => new Promise<void>(res => { release = res; }) });
+    g.send('dev1', { type: 'session.reply', op: randomUUID(), id: 'b', text: 'hi' });
+    await flush();
+    expect(g.results('dev1').map(r => r.type === 'operation.result' && r.status)).toEqual(['received']);
+    g.fm.setDevices(['dev2']);
+    release();
+    await flush();
+    expect(g.results('dev1').map(r => r.type === 'operation.result' && r.status)).toEqual(['received']);
   });
 
   it('an unknown session is rejected; an interrupt on a session without tmux is read_only', async () => {
