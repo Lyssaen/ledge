@@ -2,22 +2,30 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { z } from 'zod';
 import {
+  PushSendSchema,
   RelayPeerSchema,
+  pushEndpointAllowed,
   RELAY_CLOSE_SIGNED_OUT,
   RELAY_SESSION_COOKIE,
   type DevicePollResponse,
   type DeviceRevokeResponse,
   type DeviceStartResponse,
+  type PushSendResult,
   type MeResponse
 } from '@ledge/protocol';
 import { sessionOf, type AccountsDeps } from './accounts.js';
 import { parseCookies, setCookie } from './cookies.js';
 import { GitHubError, type GitHub } from './github.js';
 import { countedLog, type RelayLogEvent } from './log.js';
+import { rateLimiter, sendPush, type PushFetch, type Vapid } from './push.js';
 import type { HttpHandler } from './server.js';
 import { hashToken, newDevicePeer, newOpaque, newSessionToken } from './tokens.js';
 
 const MAX_BODY = 4096;
+/** A push message: a 4 096-byte record in base64url plus its endpoint and headers. */
+const MAX_PUSH_BODY = 8192;
+const PUSH_LIMIT = 120;
+const PUSH_WINDOW_MS = 60_000;
 const DEFAULT_MAX_GITHUB_CALLS = 16;
 const STATE_COOKIE = 'ledge_oauth_state';
 const STATE_PATH = '/auth/github';
@@ -42,9 +50,9 @@ function json(res: ServerResponse, status: number, body: unknown, headers: Recor
 }
 
 /** The body, or a 413 `Answer` past `MAX_BODY` bytes: reading stops there. */
-function readBody(req: IncomingMessage): Promise<Buffer> {
+function readBody(req: IncomingMessage, max = MAX_BODY): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    if (Number(req.headers['content-length'] ?? 0) > MAX_BODY) return reject(new Answer(413, 'too_large'));
+    if (Number(req.headers['content-length'] ?? 0) > max) return reject(new Answer(413, 'too_large'));
     const chunks: Buffer[] = [];
     let size = 0;
     const cleanup = () => {
@@ -54,7 +62,7 @@ function readBody(req: IncomingMessage): Promise<Buffer> {
     };
     const onData = (c: Buffer) => {
       size += c.length;
-      if (size > MAX_BODY) {
+      if (size > max) {
         cleanup();
         req.pause();
         return reject(new Answer(413, 'too_large'));
@@ -69,8 +77,8 @@ function readBody(req: IncomingMessage): Promise<Buffer> {
   });
 }
 
-async function readJson<T>(req: IncomingMessage, schema: z.ZodType<T>): Promise<T> {
-  const raw = await readBody(req);
+async function readJson<T>(req: IncomingMessage, schema: z.ZodType<T>, max = MAX_BODY): Promise<T> {
+  const raw = await readBody(req, max);
   let parsed: unknown;
   try { parsed = JSON.parse(raw.toString('utf8')); } catch { throw new Answer(400, 'bad_request'); }
   const r = schema.safeParse(parsed);
@@ -90,7 +98,12 @@ const PollBodySchema = z.object({ deviceCode: z.string().min(1).max(1024) });
  * `sign_in_refused` counts.
  */
 export function authRoutes(
-  deps: AccountsDeps & { github: GitHub; maxGitHubCalls?: number; refusedLogMs?: number }
+  deps: AccountsDeps & {
+    github: GitHub; maxGitHubCalls?: number; refusedLogMs?: number;
+    /** Without it, `/push/*` answers 404. */
+    vapid?: Vapid;
+    push?: { fetch?: PushFetch; now?: () => number };
+  }
 ): HttpHandler & { stop(): void } {
   const maxCalls = deps.maxGitHubCalls ?? DEFAULT_MAX_GITHUB_CALLS;
   let inFlight = 0;
@@ -252,10 +265,38 @@ export function authRoutes(
     json(res, 200, body);
   }
 
+  const pushNow = deps.push?.now ?? Date.now;
+  const pushFetch: PushFetch = deps.push?.fetch ?? ((url, init) => fetch(url, init));
+  const pushAllowed = rateLimiter(PUSH_LIMIT, PUSH_WINDOW_MS, pushNow);
+
+  function pushKey(res: ServerResponse): void {
+    if (!deps.vapid) throw new Answer(404, 'not_found');
+    json(res, 200, { publicKey: deps.vapid.publicKey });
+  }
+
+  /** The PC asks the relay to forward an encrypted push. Same credentials as a device revocation. */
+  async function pushSend(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const found = await sessionOf(req, deps, { checkOrigin: true });
+    if (!found || found.viaCookie || found.session.kind !== 'pc') throw new Answer(401, 'unauthorized');
+    if (!deps.vapid) throw new Answer(404, 'not_found');
+    const msg = await readJson(req, PushSendSchema, MAX_PUSH_BODY);
+    const { accountId } = found.session;
+    // Only the host is ever logged: the rest of the endpoint is the subscription's secret.
+    const host = pushEndpointAllowed(msg.endpoint) ? new URL(msg.endpoint).hostname : '';
+    if (!host) throw new Answer(400, 'bad_endpoint');
+    if (!pushAllowed(accountId)) {
+      deps.log({ ev: 'push', account: accountId, host, result: 'refused' });
+      throw new Answer(429, 'rate_limited');
+    }
+    const result: PushSendResult = await sendPush(pushFetch, deps.vapid, msg, pushNow);
+    deps.log({ ev: 'push', account: accountId, host, result: result.result, ...(result.status !== undefined ? { status: result.status } : {}) });
+    json(res, 200, result);
+  }
+
   const handler: HttpHandler = async (req, res, relay) => {
     let path: string;
     try { path = new URL(req.url ?? '/', 'http://relay').pathname; } catch { return false; }
-    if (!path.startsWith('/auth/')) return false;
+    if (!path.startsWith('/auth/') && !path.startsWith('/push/')) return false;
     const kick = relay.kick.bind(relay);
     const route = `${req.method ?? ''} ${path}`;
     let run: (() => Promise<void>) | undefined;
@@ -267,6 +308,8 @@ export function authRoutes(
       case 'GET /auth/me': run = () => me(req, res); break;
       case 'POST /auth/devices/revoke': run = () => revokeDevice(req, res, kick); break;
       case 'POST /auth/logout': run = () => logout(req, res, kick); break;
+      case 'GET /push/key': run = async () => pushKey(res); break;
+      case 'POST /push/send': run = () => pushSend(req, res); break;
     }
     if (!run) return false;
     try {

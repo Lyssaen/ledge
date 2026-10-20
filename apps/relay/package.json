@@ -10,7 +10,8 @@
     "dev": "tsx src/main.ts",
     "build": "tsup",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "vapid-keys": "node scripts/vapid-keys.mjs"
   },
   "dependencies": {
     "pg": "^8.23.1",
