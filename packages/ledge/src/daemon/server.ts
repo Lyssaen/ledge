@@ -35,6 +35,7 @@ import type { createDaemonUpdater } from '../update/run-update.js';
 import { createRouter } from '../chat/routing.js';
 import { serveSsh } from '../transport/ssh.js';
 import type { MobileService } from '../mobile/service.js';
+import { createPhoneGateway, type PhoneGateway } from '../mobile/gateway.js';
 import { MAX_FRAME } from '../transport/frames.js';
 
 /** How each agent resumes the folder's last conversation, all three verified (Cursor Agent: `--continue`). */
@@ -197,7 +198,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   // Remote peers must never receive local snapshots, sessions, previews or chat broadcasts.
   const localClients = new Set<WebSocket>();
   const remoteClients = new Set<WebSocket>();
-  const broadcast = (msg: ServerMessage) => { for (const c of localClients) send(c, msg); };
+  /** The approved phones' way in and out, when mobile access is up; set once `dispatch` can run. */
+  let gateway: PhoneGateway | undefined;
+  /** Every local front gets it; the phone gateway passes on only what it knows. */
+  const broadcast = (msg: ServerMessage) => { for (const c of localClients) send(c, msg); gateway?.forward(msg); };
   const history = opts.history;
   const unsubscribeHistory = history ? [
     history.onItem((id, item) => {
@@ -711,6 +715,18 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     });
   }
 
+  if (mobile) gateway = createPhoneGateway({
+    mobile,
+    sessions: () => store.all(),
+    session: id => store.get(id),
+    thread: id => history?.items(id),
+    preview: id => previews.get(id),
+    dispatch,
+    version: opts.daemon?.version ?? 'unknown',
+    log,
+    now
+  });
+
   wss.on('connection', (ws, req) => {
     ws.on('error', e => log(`socket error: ${e.message}`));
     const path = requestPath(req.url);
@@ -748,6 +764,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     port,
     broadcast,
     preview,
-    close: () => new Promise(res => { unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); relay.close(); mailbox.close(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
+    close: () => new Promise(res => { unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); gateway?.stop(); relay.close(); mailbox.close(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
   };
 }

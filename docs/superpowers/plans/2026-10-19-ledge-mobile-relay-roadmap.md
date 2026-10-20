@@ -42,5 +42,5 @@ Chaque plan de lot reprend ces points à son début.
   - une confirmation de clé, ou l'empreinte des clés statiques dans le `hello`, pour distinguer « clé du PC changée » d'une altération ;
   - la longueur des clés et des nonces est validée à la révélation du code de liaison ;
   - la clé publique est dérivée du PKCS8 stocké, pas lue d'une copie.
-- **Lot 4** : décider du bourrage des messages scellés par paliers de taille, avant de figer le format de l'enveloppe. Sans bourrage, le relais voit la longueur exacte de chaque message.
+- **Lot 4** (décidé) : chaque message téléphone ↔ PC est bourré avant d'être scellé, par paliers `PAD_TIERS` (1 Ko, 4 Ko, 16 Ko, 64 Ko, 256 Ko, 640 Ko) mesurés en octets UTF-8 du JSON clair. Le bourrage ajoute des espaces en fin de JSON, que `JSON.parse` ignore. Un message plus grand que `PLAIN_MAX` (640 Ko) n'est pas envoyé : le téléphone reçoit `error { code: 'too_large' }`. `PLAIN_MAX` reste sous `SEALED_MAX` (1 Mio) une fois scellé et passé en base64. Le relais ne voit donc qu'un palier, jamais la longueur exacte.
 - **Lot 5** : un test qui vérifie que le WebCrypto de Safari et de Chrome rejette un point hors courbe, et un vecteur de test de dérivation de clés commun au navigateur et au daemon.
