@@ -1,18 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { PhoneSession } from '@ledge/protocol';
 import { parseReply } from '@ledge/ui/reply/parse';
 import { copy } from '../copy';
 import { headline } from '../model/requests';
-import { composerState, messagesOf, MESSAGE_MAX, QUICK_REPLIES, TAKEN_WINDOW, threadItems, type Composer, type ThreadItem } from '../model/thread';
+import { composerState, messagesOf, TAKEN_WINDOW, threadItems, type ThreadItem } from '../model/thread';
 import { href } from '../router';
 import { loadDraft, markCleared, saveDraft, wasCleared } from '../state/drafts';
-import { isLive, type Op } from '../state/operations';
+import { isLive } from '../state/operations';
 import { useMobile, type MobileStore } from '../state/store';
 import { useNow } from '../useNow';
 import { LinkStatus, linkView } from '../ui/Header';
 import { MobileBot } from '../ui/MobileBot';
 import { Notice } from '../ui/Notice';
 import { ReplyView } from '../ui/ReplyView';
+import { Reply, replyFailure, replyProblem } from './Reply';
 
 const ICON = 'size-5 fill-none stroke-current [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:1.6]';
 
@@ -55,63 +55,6 @@ function Bubble({ item }: { item: ThreadItem }) {
       </Notice>
     );
   }
-}
-
-const TONE = { ok: 'text-ok', info: 'text-info', attention: 'text-attention', muted: 'text-muted' } as const;
-const C = copy.thread.composer;
-
-function failureOf(o: Op): { title: string; body: string } {
-  if (o.phase === 'uncertain' || o.reason === 'not_taken') return { title: C.uncertainTitle, body: C.uncertain };
-  const body = o.reason === 'busy' ? C.busy : o.reason === 'invalid' ? C.invalid(MESSAGE_MAX) : o.reason === 'read_only' ? C.readOnly : C.lost;
-  return { title: C.failTitle, body };
-}
-
-function Footer({ session, composer, draft, onDraft, onSend, fresh, taken, checking, error, onReconnect }: {
-  session: PhoneSession; composer: Composer; draft: string; onDraft: (t: string) => void; onSend: () => void; fresh: boolean;
-  taken: boolean; checking: boolean; error: { title: string; body: string } | null; onReconnect?: (() => void) | undefined;
-}) {
-  const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    if (!busy) return;
-    const t = setTimeout(() => setBusy(false), 4000);
-    return () => clearTimeout(t);
-  }, [busy]);
-  const status = taken ? { tone: 'ok' as const, label: C.status.taken } : checking ? { tone: 'muted' as const, label: copy.decide.checking } : composer.status;
-  const tooLong = draft.trim().length > MESSAGE_MAX;
-  const ref = useRef<HTMLTextAreaElement>(null);
-  return (
-    <footer className="flex-none border-t border-line bg-bg px-3.5 pt-2 pb-3 [@media(max-height:650px)]:pb-2">
-      <div className={`flex items-center gap-1.5 px-0.5 pb-2 text-[11px] ${TONE[status.tone]}`}><i className="inline-block size-1.5 flex-none rounded-full bg-current" />{status.label}</div>
-      {error && (
-        <div className="mb-2.5">
-          <Notice title={error.title} tone="warning" role="alert">
-            <p>{error.body}</p>
-            {!fresh && onReconnect && (
-              <button type="button" disabled={busy} onClick={() => { setBusy(true); onReconnect(); }} className="mt-2 inline-flex min-h-12 w-full items-center justify-center rounded-control border border-line bg-surface px-4 py-2.5 text-[13px] font-medium disabled:opacity-45">
-                {busy ? copy.link.reconnecting : C.reconnect}
-              </button>
-            )}
-          </Notice>
-        </div>
-      )}
-      {composer.enabled && (
-        <div role="group" aria-label={C.quickLabel} className="flex gap-1.5 overflow-x-auto pb-2 [scrollbar-width:none]">
-          {QUICK_REPLIES.map(q => (
-            <button key={q} type="button" onClick={() => { onDraft(q); ref.current?.focus(); }} className="min-h-11 flex-none rounded-[10px] border border-line px-3 text-xs whitespace-nowrap">{q}</button>
-          ))}
-        </div>
-      )}
-      <div className="flex items-end gap-2">
-        <label htmlFor="draft" className="sr-only">{C.label(session.name)}</label>
-        <textarea id="draft" ref={ref} rows={1} value={draft} disabled={!composer.enabled} placeholder={composer.placeholder} onChange={e => onDraft(e.target.value)}
-          className="max-h-[120px] min-h-12 w-full min-w-0 resize-none rounded-control border border-line bg-surface p-3 text-base leading-[22px] text-fg placeholder:text-muted disabled:opacity-60" />
-        <button type="button" disabled={!composer.enabled || !draft.trim() || tooLong} onClick={onSend} aria-label={C.send(session.name)} className="inline-flex size-12 flex-none items-center justify-center rounded-control bg-fg text-[#16181a] disabled:opacity-45">
-          <svg className={ICON} viewBox="0 0 24 24" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z" /><path d="M22 2 11 13" /></svg>
-        </button>
-      </div>
-      {tooLong && <p role="status" className="px-0.5 pt-1.5 text-[11px] text-attention">{C.tooLong(MESSAGE_MAX)}</p>}
-    </footer>
-  );
 }
 
 function BackTo({ label }: { label: string }) {
@@ -188,11 +131,11 @@ export function Thread({ store, sessionId, storage, onReconnect }: { store: Mobi
   const takenNow = last?.phase === 'applied' && reacted !== last.op && session.state === 'idle' && !session.pending && now - Date.parse(last.at) < TAKEN_WINDOW;
   const composer = composerState(session, fresh ? 'ready' : 'pc_offline', open || takenNow);
   const failed = last && (last.phase === 'rejected' || last.phase === 'failed' || last.phase === 'uncertain')
-    && (last.phase === 'uncertain' || draft.trim() === last.message.text) ? failureOf(last) : null;
-  const error = refused && !failed ? { title: C.failTitle, body: C.lost } : failed;
+    && (last.phase === 'uncertain' || draft.trim() === last.message.text) ? replyFailure(last) : null;
+  const error = refused && !failed ? { title: copy.thread.composer.failTitle, body: copy.thread.composer.lost } : failed;
   const send = () => {
     const text = draft.trim();
-    if (!text || !composer.enabled) return;
+    if (!text || !composer.enabled || replyProblem(draft)) return;
     setRefused(!store.reply(sessionId, text));
   };
   const ready = thread?.status === 'ready';
@@ -219,7 +162,7 @@ export function Thread({ store, sessionId, storage, onReconnect }: { store: Mobi
         {ready && items.length === 0 && <p className="text-center text-[11px] text-muted">{copy.thread.empty}</p>}
         {items.map(it => <Bubble key={it.key} item={it} />)}
       </main>
-      <Footer session={session} composer={composer} draft={draft} onDraft={changeDraft} onSend={send} fresh={fresh} taken={takenNow} checking={last?.phase === 'uncertain' && fresh} error={error} onReconnect={onReconnect} />
+      <Reply name={session.name} composer={composer} draft={draft} onDraft={changeDraft} onSend={send} fresh={fresh} taken={takenNow} checking={last?.phase === 'uncertain' && fresh} error={error} onReconnect={onReconnect} />
     </>
   );
 }

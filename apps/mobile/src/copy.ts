@@ -1,3 +1,5 @@
+import { MESSAGE_MAX } from '@ledge/protocol';
+
 /** Every French string of the phone app lives here (decision D13). */
 export const copy = {
   appName: 'Ledge',
@@ -42,24 +44,25 @@ export const copy = {
     back: 'Retour aux demandes',
     heading: { permission: 'Une autorisation', question: 'Une question', plan: 'Un plan', diff: 'Des modifications' },
     commandTitle: 'Commande à autoriser',
-    folder: 'Dossier', branch: 'Branche', asked: 'Demandé',
+    branch: 'Branche', asked: 'Demandé',
     ago: (age: string) => `Il y a ${age}`,
-    context: 'Contexte du terminal',
+    context: 'Contexte de la demande',
     options: 'Réponses proposées',
     editsInProject: 'Modification dans le projet',
     editsInProjectBody: 'Le fichier sera modifié dans le dossier de cette session, et nulle part ailleurs.',
     destination: 'Destination'
   },
   decide: {
-    deny: 'Refuser', allow: 'Autoriser',
+    deny: 'Refuser', allow: 'Autoriser une fois',
+    onPc: 'À accepter sur le PC',
+    onPcHint: 'Une demande à impact élevé s’accepte sur le PC. Vous pouvez la refuser d’ici.',
     hint: 'La décision sera transmise immédiatement au PC.',
     offlineHint: 'Aucune décision ne sera envoyée hors connexion.',
-    connectingHint: 'Connexion en cours…',
     readOnly: 'Session démarrée hors de Ledge : répondez dans le terminal.',
-    answerLater: 'Répondre depuis le téléphone : pas encore disponible. Répondez sur le PC.',
+    answerOnPc: 'Cet agent ne peut pas recevoir de réponse libre depuis le téléphone. Répondez sur le PC.',
     answerHint: 'La réponse sera transmise immédiatement au PC.',
     send: 'Envoyer ma réponse',
-    otherInvalid: 'Le PC n’a pas accepté cette réponse. Corrigez-la, elle tient sur une ligne de 2000 caractères au plus.',
+    otherInvalid: `Le PC n’a pas accepté cette réponse. Corrigez-la, elle tient sur une ligne de ${MESSAGE_MAX} caractères au plus.`,
     otherUnsupported: 'Cet agent ne peut pas recevoir de réponse libre depuis le téléphone. Choisissez une option ou répondez sur le PC.',
     sending: 'Transmission au PC…', sendingBody: 'En attente de confirmation du terminal.',
     uncertain: 'Réception non confirmée',
@@ -67,13 +70,9 @@ export const copy = {
     check: 'Reconnecter et vérifier', checking: 'Vérification…',
     changed: 'La demande a été mise à jour. Relisez-la avant de décider.',
     reread: 'J’ai relu la demande',
-    unknown: 'État de la décision inconnu',
-    unknownPending: 'La demande attend toujours une décision sur le PC. Vous pouvez la reprendre ci-dessous.',
-    unknownGone: 'La demande n’attend plus de décision sur le PC. Vérifiez le terminal pour connaître son état.',
     busy: 'Une autre décision est en cours sur le PC.',
     notTaken: 'Le terminal n’a pas confirmé. La demande est toujours en attente.',
     noPrompt: 'Le terminal n’affiche plus la demande. Ouvrez-le sur le PC.',
-    forbidden: 'Ce téléphone n’est plus autorisé.',
     failed: 'La décision n’a pas pu être transmise.'
   },
   result: {
@@ -108,6 +107,7 @@ export const copy = {
       placeholder: { idle: (bot: string) => `Écrire à ${bot}…`, working: 'L’agent travaille…', awaiting: 'Traitez la demande ci-dessus', offline: 'Reconnectez-vous pour écrire', connecting: 'Connexion en cours…', ended: 'Session terminée', readOnly: 'Répondez dans le terminal' },
       status: { idle: 'Disponible pour votre consigne', working: 'Au travail · consultez le terminal', awaiting: 'En attente d’une décision', offline: 'Connexion perdue · dernier état connu', connecting: 'Connexion en cours…', sending: 'Envoi au PC…', taken: 'Consigne reçue · l’agent reprend', ended: 'Session terminée', readOnly: 'Session démarrée hors de Ledge' },
       reconnect: 'Reconnecter', tooLong: (max: number) => `Le message est trop long : ${max} caractères au plus.`,
+      untypable: 'Le message doit tenir sur une ligne, sans saut de ligne ni caractère de contrôle.',
       failTitle: 'Message non envoyé', uncertainTitle: 'Réception non confirmée',
       lost: 'Le PC est injoignable. Votre brouillon est conservé.',
       busy: 'L’agent n’est plus disponible pour une consigne. Votre brouillon est conservé.',

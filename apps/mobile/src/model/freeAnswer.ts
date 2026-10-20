@@ -1,7 +1,7 @@
-import { UNTYPABLE } from '@ledge/protocol';
+import { MESSAGE_MAX, UNTYPABLE } from '@ledge/protocol';
 
-/** The longest free answer the PC accepts (the daemon's `OTHER_MAX`). */
-export const OTHER_MAX = 2_000;
+/** The longest free answer the PC accepts: a reply's text, `MESSAGE_MAX`. */
+export const OTHER_MAX = MESSAGE_MAX;
 
 export type FreeAnswerProblem = 'empty' | 'long' | 'untypable';
 
