@@ -1,7 +1,7 @@
 // Mobile access: files, relay link, sign-in, pairing and channels put together, as one state and a set of commands
 // for the local fronts. Nothing secret (relay token, device code, keys, nonces, message texts) reaches the state or the log.
 import type WebSocket from 'ws';
-import { SealedFrameSchema, type MobileClientMessage, type MobileConfig, type MobileState, type RelayServerMessage, type SealedFrame } from '@ledge/protocol';
+import { PushSendResultSchema, SealedFrameSchema, type PushSend, type PushSendResult, type MobileClientMessage, type MobileConfig, type MobileState, type RelayServerMessage, type SealedFrame } from '@ledge/protocol';
 import {
   clearRelaySession, loadPcIdentity, readDevices, readMobileConfig, readRelaySession, readRevocations, writeDevices, writeMobileConfig, writeRelaySession, writeRevocations,
   type ApprovedDevice, type RelaySession, type Revocation
@@ -12,6 +12,8 @@ import { signOut, startSignIn } from './signin.js';
 import { createPairing } from './pairing.js';
 import { createChannels } from './channels.js';
 import { log } from '../log.js';
+
+export interface PushSetting { endpoint: string; p256dh: string; auth: string; key: string }
 
 export interface MobileService {
   state(): MobileState;
@@ -27,12 +29,21 @@ export interface MobileService {
   credential(deviceId: string): DeviceCredential | null;
   /** Stores the passkey of an approved device (persisted with it). */
   setCredential(deviceId: string, c: DeviceCredential): void;
+  /** The device's push subscription, with the relay key it was made with; null if none. */
+  pushOf(deviceId: string): PushSetting | null;
+  /** Stores (or with null removes) the push subscription of an approved device. */
+  setPush(deviceId: string, p: PushSetting | null): void;
+  /** The relay's VAPID public key: undefined until read, null when the relay has push off. Read at each `online`. */
+  relayPushKey(): string | null | undefined;
+  /** Asks the relay to forward an encrypted push (`POST /push/send`, Bearer PC). Never throws. */
+  sendPush(msg: PushSend): Promise<PushSendResult>;
   /** Texts opened from approved devices' sealed messages; returns the unsubscribe. */
   onMessage(fn: (deviceId: string, text: string) => void): () => void;
   stop(): Promise<void>;
 }
 
 const REVOKE_TIMEOUT_MS = 15_000;
+const PUSH_TIMEOUT_MS = 10_000;
 /** A revocation the relay never confirmed in this long is given up. */
 const REVOCATION_MAX_AGE_MS = 30 * 86_400_000;
 
@@ -62,6 +73,7 @@ export async function createMobileService(opts: {
   let signinError: MobileState['signinError'] = null;
   let signinRun: { cancel(): void } | null = null;
   let stopped = false;
+  let pushKey: string | null | undefined;
 
   const changeListeners = new Set<() => void>();
   const messageListeners = new Set<(deviceId: string, text: string) => void>();
@@ -153,6 +165,7 @@ export async function createMobileService(opts: {
     // Pairings still to decide cannot be answered without a link; channels are reset by the next welcome.
     if (old) pairing.reset();
     linkState = { state: 'off' };
+    pushKey = undefined; // belongs to the relay of the closed link
   };
 
   const openLink = () => {
@@ -166,7 +179,7 @@ export async function createMobileService(opts: {
         if (self.link !== null && link !== self.link) return;
         linkState = s;
         changed();
-        if (s.state === 'online') void retryRevocations();
+        if (s.state === 'online') { void retryRevocations(); void readPushKey(); }
       },
       onMessage(m) {
         if (link !== self.link) return;
@@ -255,6 +268,27 @@ export async function createMobileService(opts: {
     }
   };
 
+  /** `GET /push/key`: the key, or null when the relay has push off (404). Any other answer leaves what was known. */
+  const readPushKey = async () => {
+    const at = session;
+    if (!at) return;
+    try {
+      const res = await fetchImpl(new URL('/push/key', at.relayUrl).toString(), {
+        headers: { authorization: `Bearer ${at.token}` },
+        signal: AbortSignal.timeout(PUSH_TIMEOUT_MS)
+      });
+      let next: string | null | undefined;
+      if (res.status === 404) { next = null; await res.body?.cancel(); }
+      else if (res.ok) {
+        const body = (await res.json()) as { publicKey?: unknown };
+        next = typeof body.publicKey === 'string' && body.publicKey ? body.publicKey : undefined;
+      } else await res.body?.cancel();
+      if (next !== undefined && session === at && next !== pushKey) { pushKey = next; changed(); }
+    } catch (e) {
+      log(`mobile: relay push key not read (${(e as Error).name})`);
+    }
+  };
+
   /** The whole list, each time the link comes online; an entry too old is dropped first. */
   const retryRevocations = async () => {
     const limit = now() - REVOCATION_MAX_AGE_MS;
@@ -318,6 +352,41 @@ export async function createMobileService(opts: {
     setCredential(deviceId, c) {
       if (!devices.some((d) => d.id === deviceId)) throw new Error('no such device');
       saveDevices(devices.map((d) => (d.id === deviceId ? { ...d, credential: c } : d)));
+    },
+
+    pushOf(deviceId) {
+      return devices.find((d) => d.id === deviceId)?.push ?? null;
+    },
+
+    setPush(deviceId, p) {
+      if (!devices.some((d) => d.id === deviceId)) throw new Error('no such device');
+      saveDevices(devices.map((d) => {
+        if (d.id !== deviceId) return d;
+        const { push: _old, ...rest } = d;
+        return p ? { ...rest, push: p } : rest;
+      }));
+      changed();
+    },
+
+    relayPushKey: () => pushKey,
+
+    async sendPush(msg) {
+      const at = session;
+      if (!at || linkState.state !== 'online') return { result: 'failed' };
+      try {
+        const res = await fetchImpl(new URL('/push/send', at.relayUrl).toString(), {
+          method: 'POST',
+          headers: { authorization: `Bearer ${at.token}`, 'content-type': 'application/json' },
+          body: JSON.stringify(msg),
+          signal: AbortSignal.timeout(PUSH_TIMEOUT_MS)
+        });
+        if (!res.ok) { await res.body?.cancel(); return { result: 'failed', status: res.status }; }
+        const parsed = PushSendResultSchema.safeParse(await res.json());
+        return parsed.success ? parsed.data : { result: 'failed' };
+      } catch (e) {
+        log(`mobile: push not sent (${(e as Error).name})`);
+        return { result: 'failed' };
+      }
     },
 
     onChange(fn) {

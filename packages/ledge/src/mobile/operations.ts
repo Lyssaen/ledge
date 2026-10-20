@@ -11,8 +11,8 @@ export type BeginResult = { kind: 'fresh' | 'replay'; record: OperationRecord } 
 /** What the operation does, never its id. */
 export function fingerprint(m: PhoneOperation): string {
   // Read as the union of every message's fields: a field the message lacks is null. The signed parts of a credential are not part of it.
-  const f = m as { id?: string; decision?: string; note?: string; text?: string; expect?: { key: string } | null; credential?: { id: string }; requestId?: string; answers?: unknown };
-  return JSON.stringify([m.type, f.id ?? null, f.decision ?? null, f.note ?? null, f.text ?? null, f.expect?.key ?? null, f.credential?.id ?? null, f.requestId ?? null, f.answers ?? null]);
+  const f = m as { id?: string; decision?: string; note?: string; text?: string; expect?: { key: string } | null; credential?: { id: string }; requestId?: string; answers?: unknown; subscription?: { endpoint: string }; key?: string };
+  return JSON.stringify([m.type, f.id ?? null, f.decision ?? null, f.note ?? null, f.text ?? null, f.expect?.key ?? null, f.credential?.id ?? null, f.requestId ?? null, f.answers ?? null, f.subscription?.endpoint ?? null, f.key ?? null]);
 }
 
 /** Bounded (24 h, 500 records): the oldest finished record goes first, and a record still `received` is never evicted. */

@@ -358,3 +358,74 @@ describe('relay revocations', () => {
       expect(readRevocations().length).toBe(removed ? 0 : 1);
     });
 });
+
+describe('push through the relay', () => {
+  const SUB = { endpoint: 'https://fcm.googleapis.com/fcm/send/x', p256dh: 'B'.repeat(87), auth: 'A'.repeat(22), key: 'K'.repeat(87) };
+  const MSG = { endpoint: SUB.endpoint, body: 'AAAA', ttl: 3600, urgency: 'high' as const, topic: 'api' };
+
+  /** A fetch that answers the two push routes and leaves the rest to the real one. */
+  function pushFetch(o: { key?: () => Response; send?: (body: unknown, auth: string) => Response } = {}) {
+    const calls: Array<{ path: string; auth: string; body?: unknown }> = [];
+    const impl = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input));
+      const auth = String((init?.headers as Record<string, string> | undefined)?.authorization ?? '');
+      if (url.pathname === '/push/key') {
+        calls.push({ path: url.pathname, auth });
+        return o.key ? o.key() : Response.json({ publicKey: SUB.key });
+      }
+      if (url.pathname === '/push/send') {
+        const body = JSON.parse(String(init?.body));
+        calls.push({ path: url.pathname, auth, body });
+        return o.send ? o.send(body, auth) : Response.json({ result: 'sent', status: 201 });
+      }
+      return fetch(input, init);
+    }) as typeof fetch;
+    return { impl, calls };
+  }
+
+  it('reads the relay key each time the link comes online; 404 means unavailable', async () => {
+    const f = pushFetch();
+    const ctx = await signedIn({ fetchImpl: f.impl });
+    await until(() => ctx.s.relayPushKey() === SUB.key, 'relay key');
+    expect(f.calls[0]).toEqual({ path: '/push/key', auth: `Bearer ${ctx.relay.pcToken}` });
+  });
+
+  it('a relay without push answers 404: the key is null', async () => {
+    const f = pushFetch({ key: () => new Response('{}', { status: 404 }) });
+    const ctx = await signedIn({ fetchImpl: f.impl });
+    await until(() => ctx.s.relayPushKey() === null, 'null key');
+  });
+
+  it('sendPush posts to the relay with the PC bearer and returns its answer; a refusal is failed', async () => {
+    let status = 200;
+    const f = pushFetch({ send: () => status === 200 ? Response.json({ result: 'gone', status: 410 }) : new Response('{}', { status }) });
+    const ctx = await signedIn({ fetchImpl: f.impl });
+    expect(await ctx.s.sendPush(MSG)).toEqual({ result: 'gone', status: 410 });
+    expect(f.calls.find(c => c.path === '/push/send')).toEqual({ path: '/push/send', auth: `Bearer ${ctx.relay.pcToken}`, body: MSG });
+    status = 429;
+    expect(await ctx.s.sendPush(MSG)).toEqual({ result: 'failed', status: 429 });
+  });
+
+  it('sendPush without a session fails without throwing', async () => {
+    const s = await service();
+    expect(await s.sendPush(MSG)).toEqual({ result: 'failed' });
+  });
+
+  it('setPush stores the subscription with the device (0600), removes it with null, and refuses an unknown device', async () => {
+    const ctx = await signedIn();
+    const phone = await linkedPhone(ctx);
+    const id = await fingerprint(phone.publicKey);
+    let changes = 0;
+    ctx.s.onChange(() => { changes++; });
+    ctx.s.setPush(id, SUB);
+    expect(ctx.s.pushOf(id)).toEqual(SUB);
+    expect(JSON.parse(readFileSync(paths().devices, 'utf8'))[0].push).toEqual(SUB);
+    expect(statSync(paths().devices).mode & 0o777).toBe(0o600);
+    expect(changes).toBe(1);
+    ctx.s.setPush(id, null);
+    expect(ctx.s.pushOf(id)).toBeNull();
+    expect(JSON.parse(readFileSync(paths().devices, 'utf8'))[0]).not.toHaveProperty('push');
+    expect(() => ctx.s.setPush('nope', SUB)).toThrow(/no such device/);
+    expect(JSON.stringify(ctx.s.state())).not.toContain('fcm.googleapis');
+  });
+});

@@ -39,6 +39,8 @@ import { createRouter } from '../chat/routing.js';
 import { serveSsh } from '../transport/ssh.js';
 import type { MobileService } from '../mobile/service.js';
 import { createPhoneGateway, type PhoneGateway } from '../mobile/gateway.js';
+import { createNotifier } from '../mobile/push/notifier.js';
+import { pushFor } from '../mobile/push/triggers.js';
 import { createChallengeStore } from '../mobile/challenges.js';
 import { rpOf } from '../mobile/webauthn.js';
 import { MAX_FRAME } from '../transport/frames.js';
@@ -878,6 +880,15 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     credential: id => mobile.credential(id),
     setCredential: (id, c) => mobile.setCredential(id, c)
   });
+  /** A hidden phone is told, through the relay, of what deserves it. */
+  let unsubscribePush: (() => void) | undefined;
+  if (mobile) {
+    const notifier = createNotifier({ mobile, presence: id => gateway?.visible(id) ?? false, log });
+    unsubscribePush = store.onApply((before, after) => {
+      const p = pushFor(before, after, store.all());
+      if (p) void notifier.notify(p, after.id).catch(e => log(`push failed (${e instanceof Error ? e.name : 'error'})`));
+    });
+  }
 
   wss.on('connection', (ws, req) => {
     ws.on('error', e => log(`socket error: ${e.message}`));
@@ -917,6 +928,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast,
     preview,
     omp,
-    close: () => new Promise(res => { unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); gateway?.stop(); relay.close(); mailbox.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
+    close: () => new Promise(res => { unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
   };
 }

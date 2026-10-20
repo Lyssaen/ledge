@@ -3,7 +3,7 @@
 // the devices that follow it. Logs carry a type, a code or an error's name, never a message's content.
 import { hostname } from 'node:os';
 import {
-  PHONE_PROTOCOL, PhoneClientMessageSchema, RefusalCodeSchema, UNTYPABLE, backendOf, isArchived, pendingKey,
+  OperationIdSchema, PHONE_PROTOCOL, PhoneClientMessageSchema, pushEndpointAllowed, RefusalCodeSchema, UNTYPABLE, backendOf, isArchived, pendingKey,
   type ClientMessage, type OperationReason, type OperationStatus, type PhoneClientMessage, type PhoneServerMessage, type ServerMessage, type Session, type ThreadItem
 } from '@ledge/protocol';
 import type { MobileService } from './service.js';
@@ -17,6 +17,8 @@ import { challengeOf, verifyAssertion, verifyRegistration, type DeviceCredential
 export interface PhoneGateway {
   /** Passes a message the daemon broadcast to the local fronts on to the devices concerned; anything else is ignored. */
   forward(m: ServerMessage): void;
+  /** Whether the device's app is in front right now (it said so, and its channel is still up). */
+  visible(deviceId: string): boolean;
   stop(): void;
 }
 
@@ -28,7 +30,13 @@ interface Follower {
   watching: string | null;
   /** Per session, the newest moment it read up to (ISO, normalised). */
   reads: Map<string, string>;
+  /** The phone's app is in front: it gets no push. Cleared when its channel falls. */
+  visible: boolean;
+  /** What the last snapshot sent said of push, to see when a change deserves a new one. */
+  pushStatus?: PushStatus;
 }
+
+type PushStatus = 'on' | 'off' | 'stale' | 'unavailable';
 
 type Outcome = { status: Extract<OperationStatus, 'applied' | 'rejected' | 'failed'>; reason?: OperationReason };
 
@@ -39,7 +47,7 @@ const FLUSH_BEFORE_REVOKE_MS = 5_000;
 const REQUEST_NAME = /^[a-z][a-z.]{0,39}$/;
 
 export function createPhoneGateway(deps: {
-  mobile: Pick<MobileService, 'send' | 'onMessage' | 'state' | 'onChange' | 'revoke'>;
+  mobile: Pick<MobileService, 'send' | 'onMessage' | 'state' | 'onChange' | 'revoke' | 'pushOf' | 'setPush' | 'relayPushKey'>;
   /** The relying party of the current relay; none when it is not served over https or from localhost. */
   rp: () => Rp | null;
   challenges: ChallengeStore;
@@ -66,7 +74,7 @@ export function createPhoneGateway(deps: {
 
   const follower = (deviceId: string): Follower => {
     let f = followers.get(deviceId);
-    if (!f) followers.set(deviceId, f = { subscribed: false, watching: null, reads: new Map() });
+    if (!f) followers.set(deviceId, f = { subscribed: false, watching: null, reads: new Map(), visible: false });
     return f;
   };
   const forget = (deviceId: string) => {
@@ -81,10 +89,22 @@ export function createPhoneGateway(deps: {
     return s && !isArchived(s) ? s : undefined;
   };
   const projected = (deviceId: string, s: Session) => toPhoneSession(s, followers.get(deviceId)?.reads.get(s.id) ?? startedAt);
-  const snapshot = (deviceId: string): PhoneServerMessage => ({
+  const pushStatus = (deviceId: string): PushStatus => {
+    const key = mobile.relayPushKey();
+    if (key === null) return 'unavailable';
+    const p = mobile.pushOf(deviceId);
+    if (!p) return 'off';
+    return key !== undefined && p.key !== key ? 'stale' : 'on';
+  };
+  const snapshot = (deviceId: string): PhoneServerMessage => {
+    const push = pushStatus(deviceId);
+    const f = followers.get(deviceId);
+    if (f) f.pushStatus = push;
+    return {
     type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, boot: deps.boot, name: clip(hostname(), 40).text },
-    device: { confirm: deps.credential(deviceId) !== null }
-  });
+    device: { confirm: deps.credential(deviceId) !== null, push }
+    };
+  };
 
   const outbox = createOutbox({
     send: (deviceId, text) => mobile.send(deviceId, text),
@@ -209,8 +229,16 @@ export function createPhoneGateway(deps: {
     if (msg.type === 'credential.register') return register(deviceId, msg);
     // Applied here; the device is revoked by `write`, once the answer has left.
     if (msg.type === 'device.forget') return { status: 'applied' };
-    // Push subscriptions are not handled yet (lot 6b, task 5): refused rather than typed into the terminal.
-    if (msg.type === 'push.subscribe' || msg.type === 'push.unsubscribe') return { status: 'rejected', reason: 'invalid' };
+    if (msg.type === 'push.subscribe') {
+      // Already refused by the schema; checked again here because the PC is the one that will send to it.
+      if (!pushEndpointAllowed(msg.subscription.endpoint)) return { status: 'rejected', reason: 'invalid' };
+      mobile.setPush(deviceId, { endpoint: msg.subscription.endpoint, p256dh: msg.subscription.keys.p256dh, auth: msg.subscription.keys.auth, key: msg.key });
+      return { status: 'applied' };
+    }
+    if (msg.type === 'push.unsubscribe') {
+      mobile.setPush(deviceId, null);
+      return { status: 'applied' };
+    }
     const refused = precheck(deviceId, msg);
     if (refused) return refused;
     const out = local(msg);
@@ -249,6 +277,9 @@ export function createPhoneGateway(deps: {
 
   const read = (deviceId: string, msg: Exclude<PhoneClientMessage, PhoneOperation>) => {
     switch (msg.type) {
+      case 'presence':
+        follower(deviceId).visible = msg.visible;
+        return;
       case 'snapshot.request':
         follower(deviceId).subscribed = true;
         return push(deviceId, snapshot(deviceId), 'snapshot');
@@ -308,6 +339,9 @@ export function createPhoneGateway(deps: {
       const type = (raw as { type?: unknown } | null | undefined)?.type;
       const request = typeof type === 'string' && REQUEST_NAME.test(type) ? type : undefined;
       log(`phone message refused: ${request ?? '?'}`);
+      // A subscription to an endpoint off the list is an operation the phone waits an answer for.
+      const op = OperationIdSchema.safeParse((raw as { op?: unknown } | null | undefined)?.op);
+      if (request === 'push.subscribe' && op.success && approved(deviceId)) return push(deviceId, { type: 'operation.result', op: op.data, status: 'rejected', reason: 'invalid' });
       return push(deviceId, { type: 'error', code: 'invalid', ...(request !== undefined ? { request } : {}) });
     }
     const msg = parsed.data;
@@ -319,11 +353,16 @@ export function createPhoneGateway(deps: {
     catch (e) { log(`phone ${msg.type} failed (${e instanceof Error ? e.name : 'error'})`); }
   };
 
-  /** A device no longer approved is forgotten, with all it followed. */
+  /** A device no longer approved is forgotten, with all it followed; one whose channel fell is no longer in front; one whose push status changed hears of it. */
   const pruneRevoked = () => {
     if (followers.size === 0) return;
-    const ids = new Set(mobile.state().devices.map(d => d.id));
-    for (const deviceId of [...followers.keys()]) if (!ids.has(deviceId)) forget(deviceId);
+    const devices = new Map(mobile.state().devices.map(d => [d.id, d]));
+    for (const [deviceId, f] of [...followers]) {
+      const d = devices.get(deviceId);
+      if (!d) { forget(deviceId); continue; }
+      if (!d.online) f.visible = false;
+      if (f.subscribed && f.pushStatus !== undefined && f.pushStatus !== pushStatus(deviceId)) push(deviceId, snapshot(deviceId), 'snapshot');
+    }
   };
 
   /** A session gone for the phone (removed or archived): its read mark and watch go with it. */
@@ -370,6 +409,7 @@ export function createPhoneGateway(deps: {
         log(`phone forward of ${m.type} failed (${e instanceof Error ? e.name : 'error'})`);
       }
     },
+    visible: deviceId => followers.get(deviceId)?.visible === true,
     stop() {
       if (stopped) return;
       stopped = true;

@@ -29,19 +29,28 @@ function fakeMobile(ids: string[], relayUrl = 'https://relay.test') {
   const revoked: Array<{ id: string; sentBefore: number }> = [];
   const messageFns = new Set<(d: string, t: string) => void>();
   const changeFns = new Set<() => void>();
+  const offline = new Set<string>();
+  const pushes = new Map<string, { endpoint: string; p256dh: string; auth: string; key: string }>();
+  let relayKey: string | null | undefined = 'K1';
   return {
     sent,
+    pushes,
+    setRelayKey(k: string | null | undefined) { relayKey = k; for (const fn of changeFns) fn(); },
+    setOnline(id: string, on: boolean) { if (on) offline.delete(id); else offline.add(id); for (const fn of changeFns) fn(); },
     revoked,
     receive(deviceId: string, text: string) { for (const fn of messageFns) fn(deviceId, text); },
     setDevices(next: string[]) { devices = next; for (const fn of changeFns) fn(); },
     mobile: {
       async send(deviceId: string, text: string) { sent.push([deviceId, text]); return devices.includes(deviceId); },
+      pushOf: (id: string) => pushes.get(id) ?? null,
+      setPush(id: string, p: { endpoint: string; p256dh: string; auth: string; key: string } | null) { if (p) pushes.set(id, p); else pushes.delete(id); for (const fn of changeFns) fn(); },
+      relayPushKey: () => relayKey,
       async revoke(id: string) { revoked.push({ id, sentBefore: sent.length }); devices = devices.filter(d => d !== id); for (const fn of changeFns) fn(); },
       onMessage(fn: (d: string, t: string) => void) { messageFns.add(fn); return () => { messageFns.delete(fn); }; },
       onChange(fn: () => void) { changeFns.add(fn); return () => { changeFns.delete(fn); }; },
       state: (): MobileState => ({
         enabled: true, relayUrl, account: null, signin: null, signinError: null, link: { state: 'online' },
-        devices: devices.map(id => ({ id, label: id, approvedAt: T0, online: true })), pairings: []
+        devices: devices.map(id => ({ id, label: id, approvedAt: T0, online: !offline.has(id) })), pairings: []
       })
     }
   };
@@ -1108,5 +1117,86 @@ describe('phone gateway: device.forget', () => {
     await flush();
     expect(g.fm.revoked).toHaveLength(1);
     expect(g.got('dev1').some(m => m.type === 'error')).toBe(false);
+  });
+});
+
+describe('phone gateway: push', () => {
+  const KEYS = { p256dh: 'B'.repeat(87), auth: 'A'.repeat(22) };
+  const ENDPOINT = 'https://fcm.googleapis.com/fcm/send/abc';
+  const sub = (op: string, endpoint = ENDPOINT, key = 'K1') => ({ type: 'push.subscribe', op, subscription: { endpoint, keys: KEYS }, key: key.padEnd(87, 'k') });
+  const pushOf = (g: ReturnType<typeof setup>, d: string) => {
+    const snaps = g.got(d).filter(m => m.type === 'snapshot');
+    return snaps.length ? (snaps[snaps.length - 1] as { device?: { push?: string } }).device?.push : undefined;
+  };
+
+  it('push.subscribe is applied and the next snapshot says on; push.unsubscribe says off', async () => {
+    const g = setup();
+    g.fm.setRelayKey('K1'.padEnd(87, 'k'));
+    g.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    expect(pushOf(g, 'dev1')).toBe('off');
+    const op = randomUUID();
+    g.send('dev1', sub(op));
+    await flush();
+    expect(g.results('dev1').map(r => r.type === 'operation.result' && r.status)).toEqual(['received', 'applied']);
+    g.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    expect(pushOf(g, 'dev1')).toBe('on');
+    expect(g.fm.pushes.get('dev1')).toMatchObject({ endpoint: ENDPOINT, p256dh: KEYS.p256dh, auth: KEYS.auth });
+    g.send('dev1', { type: 'push.unsubscribe', op: randomUUID() });
+    await flush();
+    g.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    expect(pushOf(g, 'dev1')).toBe('off');
+  });
+
+  it('an endpoint off the list is rejected invalid and nothing is stored', async () => {
+    const g = setup();
+    const op = randomUUID();
+    g.send('dev1', sub(op, 'https://evil.example.com/x'));
+    await flush();
+    expect(g.results('dev1')).toEqual([{ type: 'operation.result', op, status: 'rejected', reason: 'invalid' }]);
+    expect(g.fm.pushes.size).toBe(0);
+  });
+
+  it('the status is unavailable without push on the relay and stale when the relay key changed', async () => {
+    const g = setup();
+    g.send('dev1', sub(randomUUID(), ENDPOINT, 'K1'));
+    await flush();
+    g.fm.setRelayKey('K1'.padEnd(87, 'k'));
+    g.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    expect(pushOf(g, 'dev1')).toBe('on');
+    g.fm.setRelayKey('K2');
+    await flush();
+    expect(pushOf(g, 'dev1')).toBe('stale');
+    g.fm.setRelayKey(null);
+    await flush();
+    expect(pushOf(g, 'dev1')).toBe('unavailable');
+  });
+
+  it('a second subscription under the same op is a conflict', async () => {
+    const g = setup();
+    const op = randomUUID();
+    g.send('dev1', sub(op, ENDPOINT));
+    await flush();
+    g.send('dev1', sub(op, 'https://fcm.googleapis.com/fcm/send/other'));
+    await flush();
+    expect(g.results('dev1').at(-1)).toMatchObject({ status: 'rejected', reason: 'conflict' });
+  });
+
+  it('presence visible is kept until the channel falls', async () => {
+    const g = setup();
+    expect(g.gw.visible('dev1')).toBe(false);
+    g.send('dev1', { type: 'presence', visible: true });
+    expect(g.gw.visible('dev1')).toBe(true);
+    expect(g.gw.visible('dev2')).toBe(false);
+    g.fm.setOnline('dev1', false);
+    expect(g.gw.visible('dev1')).toBe(false);
+    g.fm.setOnline('dev1', true);
+    expect(g.gw.visible('dev1')).toBe(false);
+    g.send('dev1', { type: 'presence', visible: true });
+    g.send('dev1', { type: 'presence', visible: false });
+    expect(g.gw.visible('dev1')).toBe(false);
   });
 });

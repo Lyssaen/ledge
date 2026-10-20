@@ -16,7 +16,9 @@ const DeviceCredentialSchema = z.object({
 
 const ApprovedDeviceSchema = z.object({
   id: z.string().min(1), publicKey: z.string().min(1), label: z.string(), approvedAt: z.string(),
-  lastPeer: z.string().optional(), lastSeenAt: z.string().optional(), credential: DeviceCredentialSchema.optional()
+  lastPeer: z.string().optional(), lastSeenAt: z.string().optional(), credential: DeviceCredentialSchema.optional(),
+  /** The phone's push subscription and the relay's VAPID key it was made with. */
+  push: z.object({ endpoint: z.string().min(1), p256dh: z.string().min(1), auth: z.string().min(1), key: z.string().min(1) }).optional()
 });
 export type ApprovedDevice = z.infer<typeof ApprovedDeviceSchema>;
 
