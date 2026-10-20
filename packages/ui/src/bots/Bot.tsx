@@ -7,8 +7,11 @@ import { seedHash, type BotState } from './poseFor';
 import { useBotMotion, useBotNod, BOT_MOTION, useBotVisibility } from './useBotMotion';
 import { useUiCopy } from '../i18n/copy';
 
+/** Visual identities include omp independently of the daemon's supported harnesses: the mascot alone does not make omp launchable. */
+export type BotIdentity = Tool | 'omp';
+
 export interface BotProps {
-  tool: Tool;
+  tool: BotIdentity;
   state: BotState;
   pose: 1 | 2 | 3;
   size: number;
@@ -31,7 +34,7 @@ export interface BotProps {
   className?: string;
 }
 
-const TOOL_NAMES: Record<Tool, string> = { claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor Agent' };
+const TOOL_NAMES: Record<BotIdentity, string> = { claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor Agent', omp: 'omp' };
 
 type Eyes = 'open' | 'wide' | 'happy' | 'error' | 'sleep';
 interface Expression { eyes: Eyes; eye: string; tilt?: readonly [number, number, number]; lift?: number }
@@ -49,19 +52,29 @@ const EXPRESSIONS: Record<BotState, Expression> = {
 };
 
 const FULL_VIEWBOX = '0 0 96 96';
-const HEAD_VIEWBOX = '12 16 72 68';
-
-const SHINE: Record<Tool, string> = {
-  claude: 'M25 36Q27 28 38 28H59',
-  codex: 'M25 32Q35 19 51 22',
-  cursor: 'M27 41 34 24Q35 23 37 25'
+/** Head crop at ≤ 20 px, per silhouette: each shell fills the box so the visor and eyes stay as large as they can. */
+const HEAD_VIEWBOX: Record<BotIdentity, string> = {
+  claude: '10 18 76 64',
+  codex: '5 7 87 82',
+  cursor: '11 8 74 82',
+  omp: '10 18 76 68'
 };
 
-function Shell({ tool, fill }: { tool: Tool; fill: string }) {
-  if (tool === 'codex') return <ellipse className="shell" cx="48" cy="49" rx="32" ry="31" fill={fill} />;
-  if (tool === 'cursor') return <path className="shell" d="M23 77 Q14 78 17 66 L30 22 Q33 12 42 20 L79 54 Q88 63 77 67 L58 71 46 83 Q40 88 36 80 L32 73Z" fill={fill} />;
-  return <rect className="shell" x="15" y="22" width="66" height="56" rx="20" fill={fill} />;
-}
+const HEAD_WIDTH = Object.fromEntries(Object.entries(HEAD_VIEWBOX).map(([tool, box]) => [tool, Number(box.split(' ')[2])])) as Record<BotIdentity, number>;
+
+/**
+ * Approved logo-inspired silhouettes (issue #61): Clawd's pixel body with its legs and arms for Claude Code, the Codex
+ * cloud, a softened cube for Cursor, an asymmetric pi for omp. They are drawings of Ledge, not the harnesses' official logos.
+ */
+const SHELLS: Record<BotIdentity, string> = {
+  claude: 'M24 24H72Q75 24 75 27V43H82Q84 43 84 45V52Q84 54 82 54H75V62Q75 64 73 64H70V75Q70 77 68 77H66Q64 77 64 75V64H59V75Q59 77 57 77H55Q53 77 53 75V64H43V75Q43 77 41 77H39Q37 77 37 75V64H32V75Q32 77 30 77H28Q26 77 26 75V64H23Q21 64 21 62V54H14Q12 54 12 52V45Q12 43 14 43H21V27Q21 24 24 24Z',
+  codex: 'M30 25C31 13 48 10 57 20C69 14 84 23 81 37C92 46 87 62 76 65C76 80 58 86 48 77C35 85 20 78 21 66C7 61 7 45 18 38C13 28 21 20 30 25Z',
+  cursor: 'M43 13Q48 10 53 13L77 27Q82 30 82 36V64Q82 69 77 72L53 85Q48 88 43 85L19 72Q14 69 14 64V36Q14 30 19 27Z',
+  omp: 'M17 22H79Q83 22 83 26V48Q83 52 79 52H71V79Q71 83 67 83H58Q54 83 54 79V52H41V67Q41 71 37 71H28Q24 71 24 67V52H17Q13 52 13 48V26Q13 22 17 22Z'
+};
+
+/** Vertical offset of the visor and eyes, where each body has room for a face. */
+const VISOR_SHIFT: Record<BotIdentity, number> = { claude: -6, codex: 0, cursor: 5, omp: -7 };
 
 /**
  * Session mascot: one persistent SVG whose layers (shell, pose, gaze, eyes, accessories) stay mounted
@@ -84,10 +97,10 @@ export function Bot({ tool, state, pose, size, shownSize, theme, seed, readOnly 
   // converted to SVG units so a 12 px bot lifts 2 px and a 48 px bot 5.8 px; period 3.6–4.4 s, offset per bot like breathing.
   const hop = state === 'working' && !reduced && !readOnly && !frozen && !paused;
   // A parent that scales the SVG (the handle's resting bots) passes the on-screen size, so the units match what is seen;
-  // the units follow the viewBox width (72 for the head-only drawing, 96 for the full one).
+  // the units follow the viewBox width (the head crop's, or 96 for the full drawing).
   const shown = shownSize ?? size;
   const hopPx = Math.min(7, Math.max(2, shown * 0.12));
-  const hopUnits = (hopPx / shown) * (simplified ? 72 : 96);
+  const hopUnits = (hopPx / shown) * (simplified ? HEAD_WIDTH[tool] : 96);
   const hopCycle = 3600 + (h % 9) * 100;
 
   const detailed = !simplified && shown > 20;
@@ -130,7 +143,7 @@ export function Bot({ tool, state, pose, size, shownSize, theme, seed, readOnly 
       aria-label={label}
       width={size}
       height={size}
-      viewBox={simplified ? HEAD_VIEWBOX : FULL_VIEWBOX}
+      viewBox={simplified ? HEAD_VIEWBOX[tool] : FULL_VIEWBOX}
       data-tool={tool}
       data-state={state}
       data-eyes={expr.eyes}
@@ -147,42 +160,43 @@ export function Bot({ tool, state, pose, size, shownSize, theme, seed, readOnly 
       style={style}
     >
       <defs>
-        <linearGradient id={gradientId} x1=".2" y1="0" x2=".75" y2="1" gradientUnits="objectBoundingBox">
+        <linearGradient id={gradientId} x1=".1" y1="0" x2=".8" y2="1" gradientUnits="objectBoundingBox">
           <stop className="shell-top" />
           <stop className="shell-bottom" offset="1" />
         </linearGradient>
       </defs>
-      <ellipse className="ground" cx="48" cy="88" rx="25" ry="3" />
+      <ellipse className="ground" cx="48" cy="90" rx="25" ry="3" />
       <g className="hop">
         <g className="body">
           <g className="arrival">
             <g className="signature">
               <g className="touch">
                 <g className="pose">
-                  <g className="antenna-group">
-                    <path className="antenna" d="M49 22V14" />
-                    <circle className="antenna-light" cx="49" cy="12" r="3" />
-                  </g>
-                  <g className="feet">
-                    <rect x="29" y="75" width="13" height="8" rx="4" />
-                    <rect x="54" y="75" width="13" height="8" rx="4" />
-                  </g>
-                  <Shell tool={tool} fill={`url(#${gradientId})`} />
-                  <path className="shine" d={SHINE[tool]} />
-                  <rect className="visor" x="25" y="35" width="47" height="29" rx="13" />
-                  <path className="reflection" d="M39 37H60Q68 37 69 44H28Q29 37 39 37" />
-                  <g className="gaze">
-                    <g className="eye-blink">
-                      <g className="eye-open">
-                        <rect x="36" y="43" width="6" height="12" rx="3" />
-                        <rect x="55" y="43" width="6" height="12" rx="3" />
+                  <path className="shell" d={SHELLS[tool]} fill={`url(#${gradientId})`} />
+                  {tool === 'cursor' && (
+                    <g className="facets">
+                      <path className="cube-top" d="M43 13Q48 10 53 13L77 27Q80 29 81 32L48 49L15 32Q16 29 19 27Z" />
+                      <path className="cube-side" d="M48 49L81 32Q82 34 82 36V64Q82 69 77 72L53 85Q50 87 48 87Z" />
+                      <path className="cube-edge" d="M17 32L48 49L79 32M48 49V83" />
+                    </g>
+                  )}
+                  {tool === 'claude' && <path className="shine" d="M27 28H69" />}
+                  <g transform={VISOR_SHIFT[tool] ? `translate(0 ${VISOR_SHIFT[tool]})` : undefined}>
+                    <rect className="visor" x="25" y="35" width="47" height={tool === 'omp' ? 22 : 29} rx={tool === 'omp' ? 9 : 13} />
+                    <path className="reflection" d="M39 37H60Q68 37 69 44H28Q29 37 39 37" />
+                    <g className="gaze">
+                      <g className="eye-blink">
+                        <g className="eye-open">
+                          <rect x="36" y="43" width="6" height="12" rx="3" />
+                          <rect x="55" y="43" width="6" height="12" rx="3" />
+                        </g>
+                        <path className="eye-happy" d="M35 51Q39 43 43 51M54 51Q58 43 62 51" />
+                        <path className="eye-error" d="m35 45 8 3m11 0 8-3M38 54h2m16 0h2" />
+                        <path className="eye-sleep" d="M35 50q4 3 8 0m11 0q4 3 8 0" />
                       </g>
-                      <path className="eye-happy" d="M35 51Q39 43 43 51M54 51Q58 43 62 51" />
-                      <path className="eye-error" d="m35 45 8 3m11 0 8-3M38 54h2m16 0h2" />
-                      <path className="eye-sleep" d="M35 50q4 3 8 0m11 0q4 3 8 0" />
                     </g>
                   </g>
-                  <ellipse className="arm" cx="79" cy="63" rx="5" ry="8" />
+                  {tool === 'claude' ? <rect className="arm" x="75" y="56" width="8" height="12" rx="2" /> : <ellipse className="arm" cx="79" cy="63" rx="5" ry="8" />}
                 </g>
               </g>
             </g>

@@ -19,13 +19,13 @@
 }
 /* The working hop (spec §6): a 480 ms hop inside a 3.6–4.4 s cycle on the group that wraps the body, so breathing and
    the hop compose. Only data-hop="true" (working, not reduced/read-only/frozen/paused) animates; the simplified crop keeps it. */
-.bot .hop { transform-origin: 48px 83px; }
+.bot .hop { transform-origin: 48px 86px; }
 .bot[data-hop="true"] .hop {
   animation: bot-hop var(--bot-hop-cycle, 3.6s) linear infinite;
   animation-delay: var(--bot-phase, 0s);
 }
-/* Reduced motion keeps the progress signal: the antenna light pulses at the running-dot rhythm (hidden at ≤ 20 px). */
-.bot[data-detailed="true"][data-reduced="true"][data-state="working"]:not([data-frozen="true"]):not([data-paused="true"]):not([data-readonly="true"]) .antenna-light {
+/* Reduced motion keeps the progress signal: the eyes pulse at the running-dot rhythm (not at ≤ 20 px). */
+.bot[data-detailed="true"][data-reduced="true"][data-state="working"]:not([data-frozen="true"]):not([data-paused="true"]):not([data-readonly="true"]) .eye-open {
   animation: bot-pulse 1.2s ease-in-out infinite !important;
 }
 .bot .pose {
@@ -51,14 +51,26 @@
 .bot .shine { fill: none; stroke: var(--bot-shine); stroke-width: 1.25; stroke-linecap: round; }
 .bot .reflection { fill: var(--bot-reflection); opacity: .035; }
 .bot .ground { fill: var(--bot-ground); opacity: .16; }
-.bot .feet { fill: var(--bot-shell-bottom); }
-.bot .antenna { stroke: var(--bot-shell-bottom); stroke-width: 2; stroke-linecap: round; }
-.bot .antenna-light { fill: var(--bot-eye); }
 .bot .arm {
   fill: var(--bot-shell-bottom); stroke: var(--bot-shell-line); stroke-width: .7;
   transform-origin: 75px 66px; opacity: 0;
   transition: transform var(--bot-pose-ms, 300ms) var(--bot-ease), opacity 180ms;
 }
+
+/* Logo-inspired bodies (issue #61). Each harness has its own tint per material; the eyes and the halo keep the
+   semantic state colours. A bot without data-tool keeps the neutral tokens. */
+.bot .shell { stroke-linejoin: round; }
+.bot .cube-top { fill: var(--bot-shine); opacity: .35; }
+.bot .cube-side { fill: var(--bot-visor); opacity: .14; }
+.bot .cube-edge { fill: none; stroke: var(--bot-shell-line); stroke-width: 1; stroke-linejoin: round; opacity: .3; }
+.bot:not(.legacy-bot)[data-tool="claude"][data-material="signal"] { --bot-shell-top: #c78669; --bot-shell-bottom: #8c503d; --bot-shell-line: #e0ab8f; --bot-visor: #33231f; }
+.bot:not(.legacy-bot)[data-tool="claude"][data-material="pebble"] { --bot-shell-top: #eab69b; --bot-shell-bottom: #c8876a; --bot-shell-line: #f5d6c4; --bot-visor: #392824; }
+.bot:not(.legacy-bot)[data-tool="codex"][data-material="signal"] { --bot-shell-top: #7774ce; --bot-shell-bottom: #40488b; --bot-shell-line: #a9b1ee; --bot-visor: #20243f; }
+.bot:not(.legacy-bot)[data-tool="codex"][data-material="pebble"] { --bot-shell-top: #e0dffb; --bot-shell-bottom: #a5a5d8; --bot-shell-line: #eeedff; --bot-visor: #292b48; }
+.bot:not(.legacy-bot)[data-tool="cursor"][data-material="signal"] { --bot-shell-top: #656763; --bot-shell-bottom: #343733; --bot-shell-line: #bdc0b9; --bot-visor: #191d1a; }
+.bot:not(.legacy-bot)[data-tool="cursor"][data-material="pebble"] { --bot-shell-top: #faf9f3; --bot-shell-bottom: #babcb4; --bot-shell-line: #e3e4dc; --bot-visor: #232824; }
+.bot:not(.legacy-bot)[data-tool="omp"][data-material="signal"] { --bot-shell-top: #cf6bbd; --bot-shell-bottom: #6989bc; --bot-shell-line: #dba4df; --bot-visor: #2d213b; }
+.bot:not(.legacy-bot)[data-tool="omp"][data-material="pebble"] { --bot-shell-top: #f0bee3; --bot-shell-bottom: #a7c4e5; --bot-shell-line: #f8ddf4; --bot-visor: #34283e; }
 
 /* Material: Signal has a readable outline and no white shine; Galet keeps a light shine and a matte gradient. */
 .bot[data-material="signal"] .shell { stroke-width: 1.5; }
@@ -99,7 +111,7 @@
 .bot[data-frozen="true"], .bot[data-frozen="true"] * { animation-play-state: paused !important; }
 /* Inactive (inert) layers and explicitly paused views hold every loop in place, like the prototype's .paused rule. */
 [inert] .bot, [inert] .bot *, .bot[data-paused="true"], .bot[data-paused="true"] * { animation-play-state: paused !important; }
-.bot[data-simplified="true"] :is(.arm, .feet, .shine, .ground, .antenna-group) { display: none; }
+.bot[data-simplified="true"] :is(.arm, .shine, .ground, .cube-edge) { display: none; }
 .bot[data-simplified="true"] .eye-open { transform: scale(1.1); }
 .bot[data-simplified="true"] .body { animation: none; }
 
@@ -144,12 +156,12 @@
 
 /* Persistent layers compose transitions, tool signatures and interaction. */
 .bot :is(.arrival, .signature, .touch) { transform-origin: 48px 70px; }
-.bot .ground { transform-origin: 48px 88px; }
+.bot .ground { transform-origin: 48px 90px; }
 .bot[data-tool="claude"] { --bot-roll-pre: 0deg; --bot-roll-top: 0deg; --bot-roll-land: 5deg; }
 .bot[data-tool="codex"] { --bot-roll-pre: -4deg; --bot-roll-top: 5deg; --bot-roll-land: 2deg; }
 .bot[data-tool="cursor"] { --bot-roll-pre: -2deg; --bot-roll-top: 7deg; --bot-roll-land: 2deg; }
+.bot[data-tool="omp"] { --bot-roll-pre: -2deg; --bot-roll-top: 2deg; --bot-roll-land: -2deg; }
 .bot[data-detailed="true"][data-hop="true"] .signature,
-.bot[data-detailed="true"][data-hop="true"] .antenna-group,
 .bot[data-detailed="true"][data-hop="true"][data-halo="false"] .ground {
   animation-duration: var(--bot-hop-cycle, 3.6s);
   animation-delay: var(--bot-phase, 0s);
@@ -157,13 +169,10 @@
   animation-iteration-count: infinite;
 }
 .bot[data-detailed="true"][data-hop="true"] .signature { animation-name: bot-signature; }
-.bot[data-detailed="true"][data-hop="true"] .antenna-group { transform-origin: 49px 22px; animation-name: bot-antenna; }
 .bot[data-detailed="true"][data-hop="true"][data-halo="false"] .ground { animation-name: bot-shadow; }
-.bot[data-detailed="true"] .antenna-light { filter: drop-shadow(0 0 2px var(--bot-eye)); }
 .bot[data-detailed="true"][data-hop="true"][data-transition="working"] .hop { animation: none; }
-.bot[data-detailed="true"][data-hop="true"][data-transition="working"] .arrival { transform-origin: 48px 83px; animation: bot-entry-hop var(--bot-entry-hop-ms, 480ms) linear; }
+.bot[data-detailed="true"][data-hop="true"][data-transition="working"] .arrival { transform-origin: 48px 86px; animation: bot-entry-hop var(--bot-entry-hop-ms, 480ms) linear; }
 .bot[data-detailed="true"][data-hop="true"][data-transition="working"] .signature { animation: bot-entry-signature var(--bot-entry-hop-ms, 480ms) linear; }
-.bot[data-detailed="true"][data-hop="true"][data-transition="working"] .antenna-group { animation: bot-entry-antenna var(--bot-entry-hop-ms, 480ms) linear; }
 .bot[data-detailed="true"][data-hop="true"][data-transition="working"][data-halo="false"] .ground { animation: bot-entry-shadow var(--bot-entry-hop-ms, 480ms) linear; }
 .bot[data-transition="question"] .arrival { animation: bot-question var(--bot-arrival-ms, 500ms) var(--bot-ease); }
 .bot[data-transition="question"] .gaze { animation: bot-question-gaze var(--bot-question-ms, 650ms) var(--bot-ease); }
@@ -214,13 +223,6 @@
   9.3% { transform: rotate(var(--bot-roll-land)); }
 }
 
-@keyframes bot-antenna {
-  0%, 13.3%, 100% { transform: rotate(0deg); }
-  1.9% { transform: rotate(0deg); }
-  5.9% { transform: rotate(-3deg); }
-  9.3% { transform: rotate(3deg); }
-}
-
 @keyframes bot-shadow {
   0%, 13.3%, 100% { transform: scaleX(1); opacity: .16; }
   1.9% { transform: scaleX(.9); }
@@ -233,13 +235,6 @@
   14% { transform: rotate(var(--bot-roll-pre)); }
   44% { transform: rotate(var(--bot-roll-top)); }
   70% { transform: rotate(var(--bot-roll-land)); }
-}
-
-@keyframes bot-entry-antenna {
-  0%, 100% { transform: rotate(0deg); }
-  14% { transform: rotate(0deg); }
-  44% { transform: rotate(-3deg); }
-  70% { transform: rotate(3deg); }
 }
 
 @keyframes bot-entry-shadow {
