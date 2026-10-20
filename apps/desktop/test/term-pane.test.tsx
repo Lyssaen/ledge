@@ -18,7 +18,7 @@ vi.mock('../src/term/backend', () => ({ ptyBackend: () => env.backend }));
 vi.mock('../src/session/terminal', () => ({ openSessionTerminal: vi.fn(async () => env.opened) }));
 
 type Open = { argv: string[]; on: PtyEvents; resolve(ok: boolean): void };
-type FakeSurface = TermSurface & { written: (Uint8Array | string)[]; fits: number; disposed: boolean };
+type FakeSurface = TermSurface & { written: (Uint8Array | string)[]; fits: number; focuses: number; disposed: boolean };
 
 function fakeBackend() {
   const opens: Open[] = [];
@@ -39,9 +39,9 @@ function fakeSurface(): FakeSurface {
   const host = document.createElement('div');
   host.setAttribute('data-terminal', '');
   const s: FakeSurface = {
-    host, written: [], fits: 0, disposed: false,
+    host, written: [], fits: 0, focuses: 0, disposed: false,
     write: b => { s.written.push(b); }, onInput: () => {}, onResize: () => {},
-    size: () => ({ cols: 80, rows: 24 }), fit: () => { s.fits += 1; }, focus: () => {},
+    size: () => ({ cols: 80, rows: 24 }), fit: () => { s.fits += 1; }, focus: () => { s.focuses += 1; },
     setReadOnly: () => {}, setTheme: () => {}, dispose: () => { s.disposed = true; }
   };
   return s;
@@ -289,6 +289,19 @@ it('« + » opens another shell beside the first; its tab closes', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Fermer Shell 2 · ~/soft/ledge' }));
   expect(screen.queryByRole('tab', { name: 'Shell 2 · ~/soft/ledge' })).toBeNull();
   expect(screen.getByRole('tab', { name: 'Nova · agent' })).toHaveAttribute('aria-selected', 'true');
+});
+
+it('a tab clicked, or a shell just added, takes the keyboard: no second click in the screen', async () => {
+  render(<Pane session={nova} />);
+  await tick();
+  fireEvent.click(screen.getByRole('button', { name: 'Nouveau shell' }));
+  expect(surfaceOf('nova#shell-2')!.focuses).toBe(1);
+  fireEvent.click(screen.getByRole('tab', { name: 'Shell · ~/soft/ledge' }));
+  expect(surfaceOf('nova#shell-1')!.focuses).toBe(1);
+  // The tab already shown: its screen takes the keyboard again.
+  fireEvent.click(screen.getByRole('tab', { name: 'Shell · ~/soft/ledge' }));
+  expect(surfaceOf('nova#shell-1')!.focuses).toBe(2);
+  expect(surfaceOf('nova#shell-2')!.focuses).toBe(1);
 });
 
 it('the external terminal that cannot open says so', async () => {
