@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { PhoneClientMessageSchema, PhoneServerMessageSchema, PhoneSessionSchema, UNTYPABLE, PHONE_PROTOCOL, OperationReasonSchema, SessionSchema } from '../src/index.js';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { PhoneClientMessageSchema, PhoneServerMessageSchema, PhoneSessionSchema, UNTYPABLE, PHONE_PROTOCOL, OperationReasonSchema, SessionSchema, PAD_TIERS, PLAIN_MAX, padPlain } from '../src/index.js';
 
 const OP = '123e4567-e89b-42d3-a456-426614174000';
 const expectKey = { kind: 'permission', text: 'Run ls', key: 'k1' };
@@ -86,5 +86,33 @@ describe('UNTYPABLE', () => {
   });
   it('lets text, emoji and joiners through', () => {
     for (const c of ['é', '👩\u200d💻', 'a\u200db']) expect(UNTYPABLE.test(c)).toBe(false);
+  });
+});
+
+describe('padPlain', () => {
+  const size = (t: string) => new TextEncoder().encode(t).length;
+  const jsonOf = (bytes: number) => JSON.stringify({ a: 'x'.repeat(bytes - 8) });
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it('pads {} to the first tier with spaces that JSON.parse ignores', () => {
+    const p = padPlain('{}')!;
+    expect(size(p)).toBe(PAD_TIERS[0]);
+    expect(p.trimEnd()).toBe('{}');
+    expect(JSON.parse(p)).toEqual({});
+  });
+  it('moves a JSON one byte past a tier to the next one, and keeps an exact tier as is', () => {
+    expect(size(padPlain(jsonOf(1025))!)).toBe(4096);
+    expect(padPlain(jsonOf(1024))).toBe(jsonOf(1024));
+  });
+  it('counts UTF-8 bytes, not characters', () => {
+    expect(size(padPlain(JSON.stringify({ a: 'é'.repeat(1000) }))!)).toBe(4096);
+  });
+  it('refuses past PLAIN_MAX', () => {
+    expect(size(padPlain(jsonOf(PLAIN_MAX))!)).toBe(PLAIN_MAX);
+    expect(padPlain(jsonOf(PLAIN_MAX + 1))).toBeNull();
+  });
+  it('needs no Buffer, as in a browser', () => {
+    vi.stubGlobal('Buffer', undefined);
+    expect(size(padPlain('{"t":"ab"}')!)).toBe(1024);
   });
 });

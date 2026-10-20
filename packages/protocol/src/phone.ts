@@ -10,6 +10,20 @@ export const PHONE_PROTOCOL = 1;
 /** Every message is padded, before sealing, up to the next of these sizes (UTF-8 bytes of its JSON); none is larger than `PLAIN_MAX`. */
 export const PAD_TIERS = [1_024, 4_096, 16_384, 65_536, 262_144, 655_360];
 export const PLAIN_MAX = 655_360;
+
+const utf8 = new TextEncoder();
+
+/**
+ * Trailing spaces up to the smallest of `PAD_TIERS` >= the UTF-8 size of `json`, so the relay sees a tier and not an
+ * exact length; null past `PLAIN_MAX`. `JSON.parse` ignores the spaces. Measured with `TextEncoder`: it runs in a browser.
+ */
+export function padPlain(json: string): string | null {
+  const bytes = utf8.encode(json).length;
+  if (bytes > PLAIN_MAX) return null;
+  const tier = PAD_TIERS.find((t) => t >= bytes);
+  if (tier === undefined) return null;
+  return json + ' '.repeat(tier - bytes);
+}
 /** A thread sent to the phone: its item count, its whole size, and the longest text of an item and of a tool's input or output. */
 export const THREAD_ITEMS_MAX = 200;
 export const THREAD_BUDGET = 524_288;

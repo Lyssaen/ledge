@@ -1,26 +1,29 @@
 // A fake PC on the real relay (dev tokens): with @ledge/seal it plays the `pc` side of the lot 3 fake device
 // (packages/ledge/test/mobile-fake-device.ts). Node only: it authenticates with an Authorization header (ruling R1).
 import {
-  RelayServerMessageSchema, SealedFrameSchema,
+  RelayServerMessageSchema, SealedFrameSchema, padPlain,
   type PhoneServerMessage, type RelayServerMessage, type SealedFrame
 } from '@ledge/protocol';
 import {
-  checkCommitment, fingerprint, generateIdentity, pairingCode, randomNonce, startHandshake,
+  checkCommitment, fingerprint, generateIdentity, pairingCode, randomNonce, SealError, startHandshake,
   type Channel, type Identity
 } from '@ledge/seal';
 import { startTestRelay, type TestRelay } from '../../../packages/ledge/test/mobile-relay-harness';
-import { pad } from '../../../packages/ledge/src/mobile/pad';
 
 const READY = '{"t":"ready"}';
 const ONLINE_WITHIN_MS = 3000;
 /** Every wait for the phone fails after this, rather than hanging until vitest's timeout. */
 const REPLY_WITHIN_MS = 4000;
 
-/** A WebSocket class that offers `token` as `Authorization: Bearer` (Node's WebSocket takes headers; a browser's does not). */
-export function bearerWebSocket(token: string): typeof WebSocket {
+/**
+ * A WebSocket class that offers `token` as `Authorization: Bearer` (Node's WebSocket takes headers; a browser's does not).
+ * Every socket it opens is pushed to `opened`, if given.
+ */
+export function bearerWebSocket(token: string, opened?: WebSocket[]): typeof WebSocket {
   return class extends WebSocket {
     constructor(url: string | URL) {
       super(url, { headers: { authorization: `Bearer ${token}` } } as unknown as string[]);
+      opened?.push(this);
     }
   };
 }
@@ -47,12 +50,31 @@ export interface FakePc {
   readonly ready: boolean;
   /** Texts opened from the phone after its ready, padding trimmed. */
   received: string[];
+  /** Every text opened from the phone, its ready included, exactly as sealed (padding kept). */
+  plains: string[];
   /** Every sealed frame received from the phone, parsed. */
   frames: SealedFrame[];
+  /** Every sealed frame sent to the phone, in order (replay tests). */
+  sent: SealedFrame[];
+  /** Errors thrown while handling a phone frame; a waiter for that frame's kind rejects with it. */
+  errors: unknown[];
   /** Resolves with the next frame of kind `k` from the phone, once handled; rejects after `ms` (default 4 s). */
   waitFor<K extends SealedFrame['k']>(k: K, ms?: number): Promise<Extract<SealedFrame, { k: K }>>;
   /** Raw escape hatch: sends any frame to the phone. */
   sendFrame(frame: SealedFrame): void;
+  /** Answers the phone's next hellos as `identity` (a reinstalled PC, or a relay in the middle). */
+  answerAs(identity: Identity): void;
+  /** Forgets the phone's key: its next hello gets `denied` (a revoked device). */
+  forgetDevice(): void;
+  /** Seals a message on the confirmed channel and drops it, so the next one reaches the phone with a gap. */
+  skip(): Promise<void>;
+  /** Closes the PC's socket (the phone sees `presence` offline) and forgets its channel; `reconnect()` opens a new one. */
+  disconnect(): Promise<void>;
+  reconnect(): Promise<void>;
+  /** The sockets opened by `PhoneWebSocket`, in order. */
+  phoneSockets: WebSocket[];
+  /** Hands `m` to the phone's latest socket as if the relay had sent it. */
+  injectToPhone(m: RelayServerMessage): void;
   close(): Promise<void>;
 }
 
@@ -69,18 +91,24 @@ export async function startFakePc(opts: {
   const autoOffer = opts.autoOffer ?? true;
 
   let devicePublicKey = opts.devicePublicKey ?? null;
+  let helloIdentity = identity;
   let commitment: { c: string; pcNonce: string } | null = null;
   let channel: Channel | null = null;
   let ready = false;
   let resolveCode!: (code: string) => void;
   let codeP = new Promise<string>((r) => { resolveCode = r; });
   const received: string[] = [];
+  const plains: string[] = [];
   const frames: SealedFrame[] = [];
-  type Waiter = { k: SealedFrame['k']; resolve(f: SealedFrame): void; timer: ReturnType<typeof setTimeout> };
+  const sent: SealedFrame[] = [];
+  const errors: unknown[] = [];
+  const phoneSockets: WebSocket[] = [];
+  type Waiter = { k: SealedFrame['k']; resolve(f: SealedFrame): void; reject(e: unknown): void; timer: ReturnType<typeof setTimeout> };
   const waiters: Waiter[] = [];
 
-  const ws = new (bearerWebSocket(relay.pcToken))(`${relay.url.replace(/^http/, 'ws')}/ws`);
+  let ws!: WebSocket;
   const sendFrame = (frame: SealedFrame) => {
+    sent.push(frame);
     ws.send(JSON.stringify({ type: 'send', to: phonePeer, body: JSON.stringify(frame) }));
   };
 
@@ -88,16 +116,27 @@ export async function startFakePc(opts: {
     if (!devicePublicKey || frame.f !== (await fingerprint(devicePublicKey))) { sendFrame({ k: 'denied' }); return; }
     channel = null;
     ready = false;
-    const hs = await startHandshake(identity, 'pc', devicePublicKey);
+    const as = helloIdentity;
+    const hs = await startHandshake(as, 'pc', devicePublicKey);
     const ch = await hs.finish(frame.e);
     channel = ch;
-    sendFrame({ k: 'hello', e: hs.hello, f: await fingerprint(identity.publicKey) });
+    sendFrame({ k: 'hello', e: hs.hello, f: await fingerprint(as.publicKey) });
   };
 
   const onMsg = async (frame: Extract<SealedFrame, { k: 'msg' }>) => {
     const ch = channel;
     if (!ch) return;
-    const text = await ch.open(frame.s);
+    let text: string;
+    try {
+      text = await ch.open(frame.s);
+    } catch (e) {
+      // As the daemon: a replay is dropped, any other failure closes the channel and asks for a new hello.
+      if (e instanceof SealError && e.code === 'replay') return;
+      if (channel === ch) { channel = null; ready = false; }
+      sendFrame({ k: 'rekey' });
+      return;
+    }
+    plains.push(text);
     if (!ready) {
       if (text !== READY) return;
       ready = true;
@@ -126,7 +165,7 @@ export async function startFakePc(opts: {
 
   // Frames are handled one at a time, in arrival order, as the daemon does.
   let queue = Promise.resolve();
-  ws.onmessage = (ev: MessageEvent) => {
+  const onMessage = (ev: MessageEvent) => {
     let raw: unknown;
     try { raw = JSON.parse(String(ev.data)); } catch { return; }
     const m = RelayServerMessageSchema.safeParse(raw);
@@ -138,27 +177,36 @@ export async function startFakePc(opts: {
     const frame = f.data;
     frames.push(frame);
     // Waiters hear of a frame once it is handled, so `offer()` after `waitFor('pair_commit')` finds the commitment.
-    queue = queue.then(() => onFrame(frame)).catch(() => {}).then(() => {
+    const settle = (error: unknown) => {
       for (const w of waiters.filter((x) => x.k === frame.k)) {
         waiters.splice(waiters.indexOf(w), 1);
         clearTimeout(w.timer);
-        w.resolve(frame);
+        if (error === undefined) w.resolve(frame);
+        else w.reject(error);
       }
-    });
+    };
+    queue = queue.then(() => onFrame(frame)).then(() => settle(undefined), (e: unknown) => { errors.push(e); settle(e); });
   };
 
-  await new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('fake PC: no welcome from the relay')), ONLINE_WITHIN_MS);
-    ws.addEventListener('message', function onWelcome(ev: MessageEvent) {
-      let parsed: RelayServerMessage | null = null;
-      try { parsed = RelayServerMessageSchema.parse(JSON.parse(String(ev.data))); } catch { return; }
-      if (parsed.type !== 'welcome') return;
-      clearTimeout(timer);
-      ws.removeEventListener('message', onWelcome);
-      resolve();
+  /** Opens the PC's socket and resolves on the relay's welcome. */
+  const connect = async () => {
+    const sock = new (bearerWebSocket(relay.pcToken))(`${relay.url.replace(/^http/, 'ws')}/ws`);
+    ws = sock;
+    sock.onmessage = onMessage;
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('fake PC: no welcome from the relay')), ONLINE_WITHIN_MS);
+      sock.addEventListener('message', function onWelcome(ev: MessageEvent) {
+        let parsed: RelayServerMessage | null = null;
+        try { parsed = RelayServerMessageSchema.parse(JSON.parse(String(ev.data))); } catch { return; }
+        if (parsed.type !== 'welcome') return;
+        clearTimeout(timer);
+        sock.removeEventListener('message', onWelcome);
+        resolve();
+      });
+      sock.addEventListener('close', () => { clearTimeout(timer); reject(new Error('fake PC: relay refused the PC')); }, { once: true });
     });
-    ws.addEventListener('close', () => { clearTimeout(timer); reject(new Error('fake PC: relay refused the PC')); }, { once: true });
-  });
+  };
+  await connect();
 
   const offer = () => {
     if (!commitment) throw new Error('fake PC: no pair_commit to answer');
@@ -170,7 +218,7 @@ export async function startFakePc(opts: {
     url: relay.url,
     identity,
     phonePeer,
-    PhoneWebSocket: bearerWebSocket(relay.deviceToken(phonePeer)),
+    PhoneWebSocket: bearerWebSocket(relay.deviceToken(phonePeer), phoneSockets),
     get devicePublicKey() { return devicePublicKey; },
     get ready() { return ready; },
     code: () => codeP,
@@ -179,17 +227,21 @@ export async function startFakePc(opts: {
     no: () => sendFrame({ k: 'pair_no' }),
     async send(m) {
       if (!channel || !ready) throw new Error('fake PC: no confirmed channel');
-      const plain = pad(JSON.stringify(m));
+      const plain = padPlain(JSON.stringify(m));
       if (plain === null) throw new Error('fake PC: message past PLAIN_MAX');
       sendFrame({ k: 'msg', s: await channel.seal(plain) });
     },
     received,
+    plains,
     frames,
+    sent,
+    errors,
     waitFor<K extends SealedFrame['k']>(k: K, ms = REPLY_WITHIN_MS) {
       return new Promise<Extract<SealedFrame, { k: K }>>((resolve, reject) => {
         const w: Waiter = {
           k,
           resolve: resolve as (f: SealedFrame) => void,
+          reject,
           timer: setTimeout(() => {
             waiters.splice(waiters.indexOf(w), 1);
             reject(new Error(`fake PC: no ${k} within ${ms} ms`));
@@ -199,6 +251,28 @@ export async function startFakePc(opts: {
       });
     },
     sendFrame,
+    answerAs(id) { helloIdentity = id; },
+    forgetDevice() { devicePublicKey = null; },
+    async skip() {
+      if (!channel || !ready) throw new Error('fake PC: no confirmed channel');
+      await channel.seal(padPlain('{}')!);
+    },
+    async disconnect() {
+      const sock = ws;
+      channel = null;
+      ready = false;
+      await new Promise<void>((resolve) => {
+        sock.addEventListener('close', () => resolve(), { once: true });
+        sock.close();
+      });
+    },
+    reconnect: connect,
+    phoneSockets,
+    injectToPhone(m) {
+      const sock = phoneSockets[phoneSockets.length - 1];
+      if (!sock) throw new Error('fake PC: the phone opened no socket');
+      sock.onmessage?.(new MessageEvent('message', { data: JSON.stringify(m) }));
+    },
     async close() {
       ws.close();
       await relay.relay.close();
