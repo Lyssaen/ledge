@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { readFile, realpath } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { DaemonInfo } from '@ledge/protocol';
 import { LEDGE_VERSION } from '../version.js';
@@ -28,5 +29,5 @@ export async function daemonInfo(): Promise<DaemonInfo> {
   const cgroup = await readFile('/proc/self/cgroup', 'utf8').catch(() => '');
   const install = installKind(script);
   const root = install === 'git' ? gitRoot(script) : null;
-  return { version: LEDGE_VERSION, install, systemd: underSystemd(process.env, cgroup), ...(root ? { manual: manualCommand(root) } : {}) };
+  return { version: LEDGE_VERSION, install, systemd: underSystemd(process.env, cgroup), home: homedir(), ...(root ? { manual: manualCommand(root) } : {}) };
 }

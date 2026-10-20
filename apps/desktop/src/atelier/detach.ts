@@ -3,6 +3,7 @@
  * same app, which sees its label and shows the Atelier alone. Each window keeps its own connection to the daemon (the same
  * live state); between them, events:
  *   `ledge://atelier` { NavAction }   atelier → main: what the Atelier asks (open a session, a dialog, the chat…)
+ *   `ledge://atelier-terminal` { id }  atelier → main: « Terminal » on a session, shown in the main window with its pane
  *   `ledge://atelier-closed`         atelier → main: the window is closing, the main window takes the Atelier back
  *   `ledge://atelier-attach`         main → atelier: « Rattacher » from the main window, the detached one closes
  * Outside Tauri there is nothing to detach: every call is a no-op.
@@ -14,6 +15,7 @@ import type { NavAction } from '../nav/state';
 export const ATELIER_LABEL = 'atelier';
 const MAIN_LABEL = 'main';
 export const ACTION_EVENT = 'ledge://atelier';
+export const TERMINAL_EVENT = 'ledge://atelier-terminal';
 export const CLOSED_EVENT = 'ledge://atelier-closed';
 export const ATTACH_EVENT = 'ledge://atelier-attach';
 
@@ -54,11 +56,15 @@ function subscribe(register: () => Promise<Array<() => void>>): () => void {
 }
 
 /** The main window: what the detached Atelier asks, and its closing. Never fires outside Tauri. */
-export function onAtelier(fn: { action(a: NavAction): void; closed(): void }): () => void {
+export function onAtelier(fn: { action(a: NavAction): void; terminal(id: string): void; closed(): void }): () => void {
   if (!isTauri()) return () => {};
   return subscribe(async () => {
     const e = await event();
-    return Promise.all([e.listen<NavAction>(ACTION_EVENT, m => fn.action(m.payload)), e.listen(CLOSED_EVENT, () => fn.closed())]);
+    return Promise.all([
+      e.listen<NavAction>(ACTION_EVENT, m => fn.action(m.payload)),
+      e.listen<{ id: string }>(TERMINAL_EVENT, m => fn.terminal(m.payload.id)),
+      e.listen(CLOSED_EVENT, () => fn.closed())
+    ]);
   });
 }
 
@@ -71,6 +77,11 @@ export function showMainWindow(): void {
 /** The detached Atelier: hands an action to the main window. */
 export function toMain(a: NavAction): void {
   if (isTauri()) void event().then(e => e.emitTo(MAIN_LABEL, ACTION_EVENT, a)).catch(() => {});
+}
+
+/** The detached Atelier: « Terminal » on a session, which only the main window can show with its pane. */
+export function terminalToMain(id: string): void {
+  if (isTauri()) void event().then(e => e.emitTo(MAIN_LABEL, TERMINAL_EVENT, { id })).catch(() => {});
 }
 
 /** The detached Atelier closes (its « Rattacher », its ×, Alt+F4, or the main window's « Rattacher »): the main window is told first.

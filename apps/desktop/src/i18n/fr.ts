@@ -155,7 +155,7 @@ export const fr = {
       when: 'Jouer un son quand',
       categories: { requests: 'Un bot a besoin de vous · accord, question', finished: 'Un bot ou Ledge a terminé sa tâche', errors: 'Quelque chose échoue', decisions: 'Vous acceptez ou refusez', team: 'Un bot arrive ou part' } as Record<SoundCategory, string>,
       categorySaved: (label: string, on: boolean): string => `${label} : ${on ? 'activé' : 'désactivé'}`,
-      behind: 'Seulement quand le terminal est derrière', behindHint: 'Si Windows Terminal est la fenêtre au premier plan, vous regardez déjà : pas de son, la bulle s’affiche quand même.',
+      behind: 'Seulement quand le terminal est derrière', behindHint: 'Si Windows Terminal est au premier plan, ou si Ledge montre l’écran de l’agent, vous regardez déjà : pas de son, la bulle s’affiche quand même.',
       behindSaved: (on: boolean): string => (on ? 'Sons seulement terminal derrière' : 'Sons toujours'),
       note: 'Un seul son à la fois, pour l’encoche et Ledge Desktop ensemble : une rafale de demandes ne joue qu’une fois. Ouvrir, fermer et survoler restent silencieux.'
     },
@@ -312,7 +312,7 @@ export const fr = {
     title: 'Raccourcis clavier',
     intro: 'Actifs lorsque la fenêtre a le focus. Les touches de navigation restent disponibles pour la saisie et le terminal lorsqu’ils ont le focus.',
     outro: 'Ctrl / ⌘ K ouvre la recherche depuis n’importe quelle vue. Y et N n’agissent que sur la demande épinglée de la session ouverte, jamais pendant la saisie.',
-    rows: [['Ctrl / ⌘ K','Rechercher et ouvrir une session'],['Ctrl ,','Ouvrir les réglages'],['Alt 1…9','Accès direct aux sessions principales'],['Alt ← / →','Session précédente / suivante'],['J / K ou ↓ / ↑','Parcourir les sessions (atelier)'],['Entrée','Ouvrir la session sélectionnée'],['← / →','Plier / déplier un projet (barre latérale)'],['E','Archiver la session sélectionnée'],['H','Afficher / masquer les sessions terminées'],['Ctrl ⇧ E','Aller à la barre latérale'],['N','Nouvelle session'],['+ / −','Zoomer / dézoomer l’atelier'],['0','Ajuster l’atelier à l’écran'],['Ctrl + molette / pincer','Zoomer sous le pointeur ou les doigts'],['Espace + glisser','Déplacer la vue'],['/','Demander à Ledge'],['R','Écrire une réponse à l’agent'],['Y / N','Autoriser / refuser la demande en attente'],['1…9','Choisir une réponse proposée'],['J / K','Fichier suivant / précédent (Modifications)'],['O','Afficher ou masquer le terminal'],['Échap','Fermer le panneau ou revenir à l’atelier'],['?','Afficher ces raccourcis']] as ReadonlyArray<readonly [string, string]>
+    rows: [['Ctrl / ⌘ K','Rechercher et ouvrir une session'],['Ctrl ,','Ouvrir les réglages'],['Alt 1…9','Accès direct aux sessions principales'],['Alt ← / →','Session précédente / suivante'],['J / K ou ↓ / ↑','Parcourir les sessions (atelier)'],['Entrée','Ouvrir la session sélectionnée'],['← / →','Plier / déplier un projet (barre latérale)'],['E','Archiver la session sélectionnée'],['H','Afficher / masquer les sessions terminées'],['Ctrl ⇧ E','Aller à la barre latérale'],['N','Nouvelle session'],['+ / −','Zoomer / dézoomer l’atelier'],['0','Ajuster l’atelier à l’écran'],['Ctrl + molette / pincer','Zoomer sous le pointeur ou les doigts'],['Espace + glisser','Déplacer la vue'],['/','Demander à Ledge'],['R','Écrire une réponse à l’agent'],['Y / N','Autoriser / refuser la demande en attente'],['1…9','Choisir une réponse proposée'],['J / K','Fichier suivant / précédent (Modifications)'],['O','Afficher ou masquer le terminal'],['Ctrl `','Passer du fil au terminal et retour'],['Échap','Fermer le panneau ou revenir à l’atelier'],['?','Afficher ces raccourcis']] as ReadonlyArray<readonly [string, string]>
   },
   tray: { open: 'Ouvrir Ledge Desktop', newSession: 'Nouvelle session', dnd: 'Ne pas déranger', dndOff: 'Réactiver les alertes', quit: 'Quitter Ledge Desktop' },
   notify: {
@@ -418,7 +418,6 @@ export const fr = {
       open: 'Ouvrir la session', terminal: 'Terminal', rename: 'Renommer…', moveTo: 'Ranger dans…', end: 'Terminer la session', resume: 'Reprendre la session',
       archive: 'Archiver', endAndArchive: 'Terminer et archiver…', delete: 'Supprimer…',
       kids: (n: number, name: string): string => `${n} ${plural(n, 'sous-agent part', 'sous-agents partent')} avec ${name}.`,
-      offline: (machine: string): string => `${machine} est injoignable.`,
       cannotEnd: (machine: string): string => `${machine} est injoignable : Ledge ne peut pas l’arrêter.`,
       outsideLedge: 'Lancée hors de Ledge : Ledge ne peut pas l’arrêter.',
       deleteKey: 'Suppr', archiveFinished: 'Archiver les terminées'
@@ -487,8 +486,32 @@ export const fr = {
       } as Record<'not_found' | 'too_large' | 'offline' | 'timeout' | 'other', string>
     },
     terminal: {
-      title: 'Terminal', empty: 'Aucune sortie reçue pour l’instant.', readOnly: 'Aperçu en lecture seule', offline: 'Hors ligne',
-      open: 'Ouvrir dans un terminal', openFailed: (n: string) => `Le terminal de ${n} n’a pas pu s’ouvrir.`
+      title: 'Terminal', empty: 'Aucune sortie reçue pour l’instant.',
+      resize: 'Largeur du terminal', openFailed: (n: string) => `Le terminal de ${n} n’a pas pu s’ouvrir.`,
+      agentTab: (n: string) => `${n} · agent`, shellTab: (n: number, dir: string) => `${n === 1 ? 'Shell' : `Shell ${n}`} · ${dir}`,
+      addShell: 'Nouveau shell', closeTab: (label: string) => `Fermer ${label}`,
+      local: 'wsl', remote: (host: string) => `ssh · ${host}`,
+      external: 'Ouvrir dans un terminal externe', max: 'Agrandir le terminal', unmax: 'Réduire le terminal',
+      attached: 'Attaché', attachedSsh: 'Attaché par SSH', reconnecting: 'Reconnexion…', readOnly: 'Lecture seule', offline: 'Hors ligne', preview: 'Aperçu · lecture seule',
+      connecting: 'Connexion…', shell: 'Shell',
+      tmuxTarget: (session: string, host?: string) => (host ? `ssh ${host} · tmux · ${session}` : `tmux · ${session}`),
+      shellTarget: (host?: string, shell?: string) => `${host ? `ssh ${host}` : 'wsl'}${shell ? ` · ${shell}` : ''}`,
+      detached: (name: string, s: number, attempt: number) => `L’écran de ${name} s’est détaché. Nouvelle tentative dans ${s} s (essai ${attempt}).`,
+      shellEndedNoCode: 'Shell terminé',
+      noTmux: 'aucune session tmux',
+      lost: (host: string, s: number, attempt: number, name: string) => `Connexion à ${host} perdue. Nouvelle tentative dans ${s} s (essai ${attempt}). ${name} continue de travailler sur le serveur.`,
+      reconnect: 'Reconnecter',
+      offlineBanner: (host: string, time?: string) => (time ? `${host} ne répond plus depuis ${time}. Dernière sortie conservée ; rien ne peut être tapé.` : `${host} ne répond plus. Dernière sortie conservée ; rien ne peut être tapé.`),
+      retry: 'Réessayer',
+      subagent: (h: string, p: string) => `${h} est un sous-agent de ${p} et n’a pas de terminal à lui : voici l’écran de ${p}, en lecture seule.`,
+      goParent: (p: string) => `Aller à ${p}`,
+      outside: (n: string) => `${n} a été lancée hors de Ledge : pas d’écran à rattacher. Voici ses dernières lignes, en lecture seule. Votre shell reste disponible.`,
+      ended: (n: string) => `${n} est terminée : voici ses dernières lignes, en lecture seule. Votre shell reste disponible.`,
+      shellIntro: (n: string, dir: string) => `Shell ouvert dans le dossier de ${n} : ${dir}`,
+      shellIntroSsh: (host: string, n: string, dir: string) => `Shell sur ${host}, dans le dossier de ${n} : ${dir}`,
+      shellEnded: (code: number | null) => `Shell terminé (code ${code})`, shellLost: 'Shell terminé : connexion perdue',
+      reopen: 'Rouvrir', shellUnavailable: 'Ce dossier ne peut pas être ouvert dans un shell.',
+      toTerminal: (k: string) => `Donner le clavier au terminal · Ctrl ${k}`, toThread: (k: string) => `Le clavier va au terminal · revenir au fil : Ctrl ${k}`
     },
     pending: {
       regions: { approval: 'Autorisation demandée', plan: 'Plan à approuver', question: 'Question de l’agent' } as Record<'approval' | 'plan' | 'question', string>,

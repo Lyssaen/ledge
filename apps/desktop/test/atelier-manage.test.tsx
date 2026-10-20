@@ -71,8 +71,6 @@ describe('the session menu in the atelier', () => {
     await user.keyboard('e');
     await waitFor(() => expect(sent(d)).toContainEqual({ type: 'session.archive', id: 'bix' }));
     await walkTo(user, 'Cleo');
-    await user.keyboard('t');
-    await waitFor(() => expect(sent(d)).toContainEqual({ type: 'session.focus', id: 'cleo' }));
     await user.keyboard('{Delete}');
     expect(await screen.findByRole('alertdialog', { name: 'Delete Cleo?' })).toBeVisible();
     await user.keyboard('{Escape}');
@@ -95,6 +93,13 @@ describe('the session menu in the atelier', () => {
     fireEvent.contextMenu(helper);
     expect(screen.queryByRole('menu')).toBeNull();
     expect(screen.queryByRole('button', { name: /Manage Explore/ })).toBeNull();
+
+    // T shows the agent in Ledge with its terminal pane; nothing goes to an external terminal.
+    await walkTo(user, 'Cleo');
+    await user.keyboard('t');
+    expect(within(screen.getByRole('banner')).getByText('Cleo')).toBeVisible();
+    expect(await screen.findByRole('region', { name: 'Terminal' })).toBeVisible();
+    expect(sent(d).some(m => m.type === 'session.focus')).toBe(false);
   });
 
   it('a session launched outside Ledge cannot be ended from it: End is disabled with the reason, Archive archives it at once with Undo', async () => {
@@ -155,19 +160,24 @@ describe('the session menu in the atelier', () => {
     expect(sent(d)).toEqual([]);
   });
 
-  it('an offline session: Terminal and Rename… are disabled, and T and F2 do nothing', async () => {
+  it('an offline session: Rename… is disabled and F2 does nothing, but Terminal and T show its pane', async () => {
     const lost = fakeSession('lost', { name: 'Lost', cwd: '/w/ledge', state: 'working', offline: true });
     const { d, user } = await boot({ sessions: [...SESSIONS, lost], daemon: CAN });
     fireEvent.contextMenu(seat('Lost'));
     const menu = await screen.findByRole('menu', { name: 'Manage Lost' });
-    expect(within(menu).getByRole('menuitem', { name: 'Terminal' })).toBeDisabled();
+    expect(within(menu).getByRole('menuitem', { name: 'Terminal' })).toBeEnabled();
     expect(within(menu).getByRole('menuitem', { name: 'Rename…' })).toBeDisabled();
     expect(within(menu).getByRole('menuitem', { name: 'Delete…' })).toHaveTextContent('Del');
     await user.keyboard('{Escape}');
+    // The menu hands the focus back without choosing the seat: J chooses it.
+    await user.keyboard('j');
     await walkTo(user, 'Lost');
-    await user.keyboard('t');
     await user.keyboard('{F2}');
     expect(screen.queryByRole('dialog')).toBeNull();
+    // The pane says the machine is out of reach: it opens all the same.
+    await user.keyboard('t');
+    expect(within(screen.getByRole('banner')).getByText('Lost')).toBeVisible();
+    expect(await screen.findByRole('region', { name: 'Terminal' })).toBeVisible();
     expect(sent(d).some(m => m.type === 'session.focus')).toBe(false);
   });
 });

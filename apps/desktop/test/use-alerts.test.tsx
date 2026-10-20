@@ -78,6 +78,33 @@ describe('a new ask', () => {
     expect(deps.toast).not.toHaveBeenCalled();
     expect(deps.player.play).not.toHaveBeenCalled();
   });
+  it('« only when the terminal is behind »: no sound for the session whose screen Ledge shows', async () => {
+    const s = setup();
+    setSounds({ onlyWhenTerminalBehind: true });
+    const watching = vi.fn(() => 'local:a');
+    const deps = { ...s.deps, watching };
+    const h = renderHook((p: Props) => useAlerts(p, deps), { initialProps: { sessions: [fakeSession('local:a', { name: 'Otto' }), fakeSession('local:b', { name: 'Nova' })], machines: [s.local], status: 'open' } as Props });
+    h.rerender({ sessions: [ask('local:a', 'Otto'), fakeSession('local:b', { name: 'Nova' })], machines: [s.local], status: 'open' });
+    await new Promise(r => setTimeout(r, 20));
+    expect(deps.player.play).not.toHaveBeenCalled();
+    h.rerender({ sessions: [ask('local:a', 'Otto'), ask('local:b', 'Nova')], machines: [s.local], status: 'open' });
+    await vi.waitFor(() => expect(deps.player.play).toHaveBeenCalledTimes(1));
+    expect(watching).toHaveBeenCalled();
+  });
+  it('the setting off, or another tab, still plays', async () => {
+    const off = setup();
+    setSounds({ onlyWhenTerminalBehind: false });
+    const d1 = { ...off.deps, watching: () => 'local:a' };
+    const h1 = renderHook((p: Props) => useAlerts(p, d1), { initialProps: { sessions: [fakeSession('local:a', { name: 'Otto' })], machines: [off.local], status: 'open' } as Props });
+    h1.rerender({ sessions: [ask('local:a', 'Otto')], machines: [off.local], status: 'open' });
+    await vi.waitFor(() => expect(d1.player.play).toHaveBeenCalledTimes(1));
+    setSounds({ onlyWhenTerminalBehind: true });
+    const other = setup();
+    const d2 = { ...other.deps, watching: () => null };
+    const h2 = renderHook((p: Props) => useAlerts(p, d2), { initialProps: { sessions: [fakeSession('local:a', { name: 'Otto' })], machines: [other.local], status: 'open' } as Props });
+    h2.rerender({ sessions: [ask('local:a', 'Otto')], machines: [other.local], status: 'open' });
+    await vi.waitFor(() => expect(d2.player.play).toHaveBeenCalledTimes(1));
+  });
   it('no sound while the terminal is in front, the toast stays', async () => {
     const s = setup();
     s.deps.terminalInFront.mockResolvedValue(true);

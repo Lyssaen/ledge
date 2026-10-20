@@ -35,6 +35,14 @@ describe('ledge attach', () => {
     expect(args).toEqual(tmux.attachArgs('ledge-ab12'));
     expect(env.TMUX).toBeUndefined();
   });
+  it('--read-only attaches with tmux -r', async () => {
+    await tmux.newSession({ name: 'ledge-ef56', cwd: '/tmp', env: {}, command: ['sleep', '60'] });
+    const attachFn = vi.fn(async () => 0);
+    expect(await attach('ef56', { port: 1, tmuxSocket: socket, readOnly: true, attach: attachFn, write: () => {} })).toBe(0);
+    const [args] = attachFn.mock.calls[0] as unknown as [string[]];
+    expect(args).toEqual(tmux.attachArgs('ledge-ef56', { readOnly: true }));
+    expect(args).toContain('-r');
+  });
   it('still attaches without a daemon, under the pane name', async () => {
     await tmux.newSession({ name: 'ledge-cd34', cwd: '/tmp', env: {}, command: ['sleep', '60'] });
     const written: string[] = [];

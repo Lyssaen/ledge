@@ -12,6 +12,9 @@ export function loadWorkspace(): Promise<WorkspaceModule> {
   return loaded ? Promise.resolve(loaded) : import('./Workspace').then(m => (loaded = m));
 }
 
+/** The session page's chunk once loaded, else undefined. */
+export function loadedWorkspace(): WorkspaceModule | undefined { return loaded; }
+
 // A chunk already loaded is handed over synchronously: React.lazy then resolves within the same render, without suspending.
 const Page = lazy(() => (loaded
   ? { then: (ok: (m: Loaded) => void) => ok({ default: loaded!.Workspace }) } as PromiseLike<Loaded> as Promise<Loaded>

@@ -275,6 +275,13 @@ describe('update messages', () => {
     const m = parseServerMessage({ type: 'snapshot', sessions: [], daemon: { version: '0.3.0', install: 'git', systemd: true, manual: 'cd ~/x && git pull' } });
     expect(m).toMatchObject({ daemon: { version: '0.3.0', install: 'git', systemd: true } });
   });
+  it("carries the daemon's home when it gives one, and stays valid without it (older daemons)", () => {
+    const withHome = parseServerMessage({ type: 'snapshot', sessions: [], daemon: { version: '0.3.0', install: 'npm', systemd: true, home: '/home/u' } });
+    expect(withHome).toMatchObject({ daemon: { home: '/home/u' } });
+    const without = parseServerMessage({ type: 'snapshot', sessions: [], daemon: { version: '0.3.0', install: 'npm', systemd: true } });
+    expect(without).toMatchObject({ daemon: { version: '0.3.0' } });
+    expect((without as { daemon: { home?: string } }).daemon.home).toBeUndefined();
+  });
   it('parses progress and failures', () => {
     expect(parseServerMessage({ type: 'update.progress', version: '0.3.0', step: 'restarting' })).toMatchObject({ step: 'restarting' });
     expect(parseServerMessage({ type: 'update.failed', version: '0.3.0', reason: 'npm-failed', detail: 'EACCES', command: 'npm i -g @paradow/ledge@0.3.0' })).toMatchObject({ reason: 'npm-failed' });

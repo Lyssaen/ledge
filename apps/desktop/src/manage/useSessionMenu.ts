@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { DaemonClient } from '@ledge/fleet';
 import type { Session } from '@ledge/protocol';
-import { useI18n } from '../i18n/lang';
-import { openSessionTerminal } from '../session/terminal';
 
 export interface SessionMenuOpen { id: string; at: { x: number; y: number }; opener: HTMLElement | null }
 
@@ -15,17 +13,17 @@ export interface SessionMenuState {
   open(id: string, at: { x: number; y: number }, opener: HTMLElement | null): void;
   /** Closes the menu; the focus goes back to the opener unless the menu's own button already has it. */
   close(): void;
-  /** Terminal and rename are for a session that answers; a finished one cannot be renamed. */
+  /** The session's page with its terminal pane, on the agent's tab; an offline session shows its frozen screen there. */
   terminal(s: Session): void;
+  /** Rename is for a session that answers and has not finished. */
   rename(s: Session): void;
   closeRename(): void;
   sendRename(topic: string): void;
 }
 
 /** The state shared by the atelier's seats and the session page's header « … »: which session's menu is open and where, the focus going
- *  back to what opened it, the rename dialog, and the terminal. Rendered by `SessionMenuHost`. */
-export function useSessionMenu({ client, sessions, notify }: { client: DaemonClient; sessions: readonly Session[]; notify(text: string): void }): SessionMenuState {
-  const { t } = useI18n();
+ *  back to what opened it, the rename dialog, and the terminal (the app's `showTerminal`). Rendered by `SessionMenuHost`. */
+export function useSessionMenu({ client, sessions, onShowTerminal }: { client: DaemonClient; sessions: readonly Session[]; onShowTerminal(id: string): void }): SessionMenuState {
   const [menu, setMenu] = useState<SessionMenuOpen | null>(null);
   const [renaming, setRenaming] = useState<Session | null>(null);
   const session = menu ? sessions.find(s => s.id === menu.id) ?? null : null;
@@ -40,10 +38,7 @@ export function useSessionMenu({ client, sessions, notify }: { client: DaemonCli
       const active = document.activeElement;
       if (opener?.isConnected && (active === null || active === document.body || active.closest('[role=menu]'))) opener.focus();
     },
-    terminal: s => {
-      if (s.offline) return;
-      void openSessionTerminal(client, s).then(ok => { if (!ok) notify(t.session.terminal.openFailed(s.name)); });
-    },
+    terminal: s => onShowTerminal(s.id),
     rename: s => { if (s.state !== 'exited' && !s.offline) setRenaming(s); },
     closeRename: () => setRenaming(null),
     sendRename: topic => { if (renaming) client.send({ type: 'session.rename', id: renaming.id, topic }); }

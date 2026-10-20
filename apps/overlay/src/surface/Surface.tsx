@@ -682,8 +682,8 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const frame = frameOf(geo, extras, { w: screenW, h: screenH });
   useNativeFrame(visible ? frame : HIDDEN_FRAME, parseFloat(ms(SETTLE_MS)));
   useEffect(() => { setOutsideWatch(panel && visible); }, [panel, visible]);
-  // The terminal tab is the fallback for read-only and offline sessions too: only the daemon message needs the daemon.
-  const focusTab = (id: string) => { const s = byId.get(id); if (!s) return; if (!unreachable) send({ type: 'session.focus', id }); openTab(id); };
+  // « Voir l'onglet du terminal »: Ledge shows the session with its terminal pane, read-only and offline ones too; only session.focus needs the daemon.
+  const focusTab = (id: string) => { const s = byId.get(id); if (!s) return; if (!unreachable) send({ type: 'session.focus', id }); openInLedge({ kind: 'terminal', id }); };
   const chooseOption = (n: number) => {
     if (blockedFor(selected) !== null) return;
     const radios = surfaceRef.current?.querySelectorAll<HTMLInputElement>('[data-layer="session"] [data-ask] input[type="radio"]:not([data-other])');

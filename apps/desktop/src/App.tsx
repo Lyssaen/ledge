@@ -7,6 +7,7 @@ import { useFleet } from './fleet/useFleet';
 import { useDecisions } from './fleet/decisions';
 import { useWaits } from './fleet/waits';
 import { useAlerts } from './notify/useAlerts';
+import { watchedSession } from './notify/watching';
 import { getDnd, setDnd, useDnd } from './notify/prefs';
 import { MarkdownLinks } from '@ledge/ui/documents/links';
 // The reader's styles stay in the first bundle, before app.css (as when the reader itself was there): session.css overrides them.
@@ -19,7 +20,7 @@ import { initialNav, navReducer, reconcile, type NavAction, type NavState } from
 import { loadOverview, saveOverview } from './nav/overview';
 import { ScreenKeysContext, type ScreenKeys } from './nav/screenKeys';
 import { mainOrder } from './nav/agents';
-import { useKeys } from './nav/useKeys';
+import { focusThread, useKeys } from './nav/useKeys';
 import { Sidebar } from './shell/Sidebar';
 import { TitleBar } from './shell/TitleBar';
 import { TopBar } from './shell/TopBar';
@@ -48,15 +49,53 @@ import { useSessionActions } from './manage/useSessionActions';
 import { useSessionMenu } from './manage/useSessionMenu';
 import { SessionMenuHost } from './manage/SessionMenu';
 import { ConfirmDialog } from './manage/ConfirmDialog';
-import { SessionPlace } from './session/lazy';
+import { loadedWorkspace, SessionPlace } from './session/lazy';
 import { createSessionMemory } from './session/memory';
 import { loadSessionPrefs, saveSessionPrefs } from './session/prefs';
 import { subagentOf } from './session/exchanges';
 import { useStored } from './state/useStored';
+import { ptyBackend } from './term/backend';
+import { agentTabId, TermStore } from './term/store';
+import { termTheme } from './term/theme';
+import { TermStoreContext } from './term/useTerms';
 import { ProjectDialog } from './projects/ProjectDialog';
 import { useDefaultTool } from './settings/tool';
 
 const NO_PROJECTS: readonly Project[] = [];
+
+/** Ledge's terminal colours as the root's tokens give them now. */
+const rootTermTheme = () => termTheme(getComputedStyle(document.documentElement));
+
+/** The app's one terminal store: its shells and the agent's screen live as long as the window, whatever the place. Its xterms
+ *  follow the theme once the root has taken it (`data-theme`, set by useAppearance after this component's own effects). */
+function useTermStore(client: DaemonClient): TermStore {
+  const [store] = useState(() => new TermStore({
+    backend: ptyBackend(),
+    // xterm comes with the session page's chunk (out of the first bundle): only its pane and Workspace make the store draw, so
+    // the chunk is there by then. Its Ctrl + ² gives the keyboard back to the thread.
+    surface: () => {
+      const chunk = loadedWorkspace();
+      if (!chunk) throw new Error('a terminal is drawn only once the session page has loaded');
+      return chunk.createSurface({ theme: rootTermTheme(), onThread: focusThread, openUrl });
+    },
+    agentArgv: (id, readOnly) => client.fleet?.terminal(id, { readOnly }) ?? null,
+    shellArgv: id => client.fleet?.shell(id) ?? null,
+    // Shell 1 opens where the session works (its worktree, else its folder), over ssh when its machine is reached that way.
+    shellPlace: id => {
+      const { sessions, archived } = daemonStore.getState();
+      const s = sessions.find(x => x.id === id) ?? archived.find(x => x.id === id);
+      const machine = client.fleet?.machines().find(m => m.id === s?.machineId);
+      return { dir: s ? s.workdir ?? s.cwd : '~', remote: !!machine?.ssh };
+    }
+  }));
+  useEffect(() => {
+    const root = document.documentElement;
+    const mo = new MutationObserver(() => store.setTheme(rootTermTheme()));
+    mo.observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => mo.disconnect();
+  }, [store]);
+  return store;
+}
 
 /** The navigation reducer, plus the fleet's corrections: a place naming a session or a project that is gone falls back. */
 type ShellAction = NavAction | { type: 'reconcile'; sessions: readonly Session[]; projects: Projects | null };
@@ -67,6 +106,7 @@ const shellReducer = (s: NavState, a: ShellAction): NavState => (a.type === 'rec
 function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): Promise<'ok' | 'failed'> }) {
   const fleetView = useFleet(client);
   const { sessions, machines, status, localDown, fleet, client: fleetClient, errors } = fleetView;
+  const termStore = useTermStore(fleetClient);
   const projects = useProjects(fleetClient);
   const island = useIsland(fleetClient);
   const tokenMissing = useTokenMissing(daemonTokenSource());
@@ -83,20 +123,34 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   useEffect(() => { const w = takeWhatsNew(update.app); if (w) openWhatsNew({ mode: 'updated', ...w }); }, [update.app]);
   const whatsNew = useWhatsNew() !== null;
   // Toasts and sounds from session changes (spec 2026-10-14 §10); `test()` is the Sounds section's Test.
-  const alerts = useAlerts({ sessions, machines, status, daemonUpdating: daemonUpdates.updating.has('local') });
+  // Read at the moment an alert fires, never captured: set below once the place and the prefs are known.
+  const watching = useRef<() => string | null>(() => null);
+  const alerts = useAlerts({ sessions, machines, status, daemonUpdating: daemonUpdates.updating.has('local') }, { watching: () => watching.current() });
   // The tray's « Nouvelle session » opens its dialog; « Ne pas déranger » switches without showing the window.
   useEffect(() => onTrayAction(action => {
     if (action === 'dnd') setDnd(!getDnd());
     else if (action === 'new') dispatch({ type: 'modal', modal: { kind: 'launch' } });
   }), []);
+  // Whether the terminal shows beside a session: it follows from one agent to the next and survives a restart.
+  const [sessionPrefs, setSessionPrefs] = useStored(loadSessionPrefs, saveSessionPrefs);
+  // Every « Terminal » (the session menu, a chat card, the island) opens the session's page with its pane, on the agent's tab.
+  const showTerminal = useCallback((id: string) => {
+    dispatch({ type: 'open', id });
+    setSessionPrefs(x => ({ ...x, terminal: true }));
+    termStore.select(id, agentTabId(id));
+  }, [setSessionPrefs, termStore]);
   // « Open in Ledge » from the island: the shell has already brought the window forward; this shows what was asked.
-  useEffect(() => onOpenTarget(raw => { const target = parseTarget(raw); if (target) dispatch(targetAction(target)); }), []);
+  useEffect(() => onOpenTarget(raw => {
+    const target = parseTarget(raw);
+    if (target?.kind === 'terminal') showTerminal(target.id);
+    else if (target) dispatch(targetAction(target));
+  }), [showTerminal]);
   // The Atelier in its own window (#21): what it opens shows here, this window brought forward; its closing gives it back.
   const [detached, setDetached] = useState(false);
   useEffect(() => {
     void atelierOpen().then(open => { if (open) setDetached(true); });
-    return onAtelier({ action: a => { dispatch(a); showMainWindow(); }, closed: () => setDetached(false) });
-  }, []);
+    return onAtelier({ action: a => { dispatch(a); showMainWindow(); }, terminal: id => { showTerminal(id); showMainWindow(); }, closed: () => setDetached(false) });
+  }, [showTerminal]);
   const detach = () => { void detachAtelier().then(ok => { if (ok) setDetached(true); }); };
   const attach = () => { attachAtelier(); setDetached(false); };
   // The tray speaks the app's language and names the way back from do not disturb.
@@ -129,7 +183,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // End, archive, resume, restore, delete (lot 8): the confirmation below; the atelier and the session page hand it their menus.
   const actions = useSessionActions({ client: fleetClient, sessions, archived: fleetView.archived, machines, errors, notify });
   // The session menu, from the atelier's seats and the session page's header « … » (one at a time).
-  const sessionMenu = useSessionMenu({ client: fleetClient, sessions, notify });
+  const sessionMenu = useSessionMenu({ client: fleetClient, sessions, onShowTerminal: showTerminal });
   const decisions = useDecisions({ client: fleetClient, sessions, errors, notify });
   // The sidebar's Ask Ledge, the same send as the chat panel: nothing goes out while the local daemon is offline (the chat still opens).
   const [tool] = useDefaultTool();
@@ -142,16 +196,25 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const screenKeys = useRef<ScreenKeys>({ current: null }).current;
   // Drafts, reading positions and the last item seen, per session and subagent: they survive navigation, not a restart.
   const memory = useRef(createSessionMemory()).current;
-  useKeys(dispatch, { state: nav, order, screen: screenKeys, undo, confirming: actions.pending ? { cancel: actions.cancel } : null });
   useWindowFullscreen(nav.fullscreen, () => dispatch({ type: 'fullscreen', on: false }));
   const session = place.kind === 'session' ? known.find(s => s.id === place.id) ?? null : null;
+  // Ledge shows the agent's screen (focused window, pane open, agent tab active): that is the terminal in front, no sound.
+  watching.current = () => (place.kind === 'session' && session ? watchedSession({ focused: document.hasFocus(), terminal: sessionPrefs.terminal, placeId: place.id, helper: place.helper, active: termStore.active(place.id), agentTab: agentTabId(place.id) }) : null);
   // The subagent whose page is open, found as the Workspace finds it (live, else its thread row), for the top bar.
   const { threads } = useDaemon();
   const helper = session && place.kind === 'session' && place.helper !== undefined ? subagentOf(session, threads.get(session.id), place.helper, t.session.subagent) : null;
-  // Whether the terminal shows beside a session: it follows from one agent to the next and survives a restart.
-  const [sessionPrefs, setSessionPrefs] = useStored(loadSessionPrefs, saveSessionPrefs);
   useEffect(preloadPlaces, []);
   const toggleTerminal = useCallback(() => setSessionPrefs(p => ({ ...p, terminal: !p.terminal })), [setSessionPrefs]);
+  // Ctrl + ² from outside the terminal: it shows if hidden, then its open tab takes the keyboard. A pane just asked for draws
+  // its xterm in the renders this key starts, so the focus waits for the next frame.
+  const toTerminal = () => {
+    if (place.kind !== 'session' || !session) return false;
+    const id = place.id;
+    if (!sessionPrefs.terminal) setSessionPrefs(p => ({ ...p, terminal: true }));
+    requestAnimationFrame(() => termStore.surface(termStore.active(id))?.focus());
+    return true;
+  };
+  useKeys(dispatch, { state: nav, order, screen: screenKeys, undo, confirming: actions.pending ? { cancel: actions.cancel } : null, toTerminal });
   const close = () => dispatch({ type: 'modal', modal: null });
   const onOverview = place.kind === 'overview' || (place.kind === 'session' && !session);
   // The New session form starts on the overview's project filter (a project id, not « all » nor « none »).
@@ -223,7 +286,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // included, takes neither clicks nor the focus.
   const blocked = nav.modal !== null || actions.pending !== null || sessionMenu.renaming !== null || whatsNew;
   return (
-    <ScreenKeysContext.Provider value={screenKeys}>
+    <ScreenKeysContext.Provider value={screenKeys}><TermStoreContext.Provider value={termStore}>
       {!nav.fullscreen && <TitleBar dispatch={dispatch} sessions={sessions} waits={waits} blocked={blocked} />}
       <div className={`application ${nav.fullscreen ? 'immersive' : ''} ${filing.dragging ? 'is-dragging' : ''}`} data-readonly={localDown ? 'true' : undefined} inert={blocked}>
         <Sidebar nav={nav} dispatch={dispatch} sessions={sessions} archived={fleetView.archived} machines={machines} updating={daemonUpdates.updating} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing}
@@ -243,7 +306,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         </section>
         {nav.chat && (
           <ChatPlace label={t.side.chat} client={fleetClient} view={fleetView} paused={nav.paused} focus={nav.chatFocus} onClose={() => dispatch({ type: 'chat', open: false })}
-            onOpenSession={id => dispatch({ type: 'open', id })} onLaunched={chatLaunched}
+            onOpenSession={id => dispatch({ type: 'open', id })} onTerminal={showTerminal} onLaunched={chatLaunched}
             projects={projects} notify={notify} onProposal={openProposal} />
         )}
       </div>
@@ -266,7 +329,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       <WhatsNew />
       {actions.pending && <ConfirmDialog c={actions.pending} onConfirm={actions.confirm} onCancel={actions.cancel} />}
       <Toast notice={notice} action={noticeAction} onAction={undo} />
-    </ScreenKeysContext.Provider>
+    </TermStoreContext.Provider></ScreenKeysContext.Provider>
   );
 }
 

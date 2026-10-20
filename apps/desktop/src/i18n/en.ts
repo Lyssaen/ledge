@@ -139,7 +139,7 @@ export const en: Messages = {
       when: 'Play a sound when',
       categories: { requests: 'A bot needs you · approval, question', finished: 'A bot or Ledge has finished its task', errors: 'Something fails', decisions: 'You allow or deny', team: 'A bot arrives or leaves' },
       categorySaved: (label, on) => `${label}: ${on ? 'on' : 'off'}`,
-      behind: 'Only when the terminal is behind', behindHint: 'If Windows Terminal is the front window, you are already looking: no sound, the bubble still shows.',
+      behind: 'Only when the terminal is behind', behindHint: 'If Windows Terminal is the front window, or Ledge is showing the agent’s screen, you are already looking: no sound, the bubble still shows.',
       behindSaved: (on) => (on ? 'Sounds only when the terminal is behind' : 'Sounds even when the terminal is in front'),
       note: 'One sound at a time, for the notch and Ledge Desktop together: a burst of requests plays once. Opening, closing and hovering stay silent.'
     },
@@ -295,7 +295,7 @@ export const en: Messages = {
     title: 'Keyboard shortcuts',
     intro: 'Active while the window has focus. Navigation keys stay available for typing and the terminal when they have focus.',
     outro: 'Ctrl / ⌘ K opens the search from any view. Y and N only act on the pinned request of the open session, never while typing.',
-    rows: [['Ctrl / ⌘ K','Search and open a session'],['Ctrl ,','Open the settings'],['Alt 1…9','Jump to the main sessions'],['Alt ← / →','Previous / next session'],['J / K or ↓ / ↑','Walk through the sessions (atelier)'],['Enter','Open the selected session'],['← / →','Fold / unfold a project (sidebar)'],['E','Archive the selected session'],['H','Show / hide the finished sessions'],['Ctrl ⇧ E','Focus the sidebar'],['N','New session'],['+ / −','Zoom the atelier in / out'],['0','Fit the atelier to the screen'],['Ctrl + wheel / pinch','Zoom under the pointer or the fingers'],['Space + drag','Pan the view'],['/','Focus Ask Ledge'],['R','Write a reply to the agent'],['Y / N','Allow / deny the pending request'],['1…9','Pick a suggested answer'],['J / K','Next / previous file (Changes)'],['O','Show or hide the terminal'],['Esc','Close the panel or go back to the atelier'],['?','Show these shortcuts']]
+    rows: [['Ctrl / ⌘ K','Search and open a session'],['Ctrl ,','Open the settings'],['Alt 1…9','Jump to the main sessions'],['Alt ← / →','Previous / next session'],['J / K or ↓ / ↑','Walk through the sessions (atelier)'],['Enter','Open the selected session'],['← / →','Fold / unfold a project (sidebar)'],['E','Archive the selected session'],['H','Show / hide the finished sessions'],['Ctrl ⇧ E','Focus the sidebar'],['N','New session'],['+ / −','Zoom the atelier in / out'],['0','Fit the atelier to the screen'],['Ctrl + wheel / pinch','Zoom under the pointer or the fingers'],['Space + drag','Pan the view'],['/','Focus Ask Ledge'],['R','Write a reply to the agent'],['Y / N','Allow / deny the pending request'],['1…9','Pick a suggested answer'],['J / K','Next / previous file (Changes)'],['O','Show or hide the terminal'],['Ctrl `','Move between the thread and the terminal'],['Esc','Close the panel or go back to the atelier'],['?','Show these shortcuts']]
   },
   tray: { open: 'Open Ledge Desktop', newSession: 'New session', dnd: 'Do not disturb', dndOff: 'Resume alerts', quit: 'Quit Ledge Desktop' },
   notify: {
@@ -397,7 +397,6 @@ export const en: Messages = {
       open: 'Open session', terminal: 'Terminal', rename: 'Rename…', moveTo: 'Move to…', end: 'End session', resume: 'Resume session',
       archive: 'Archive', endAndArchive: 'End and archive…', delete: 'Delete…',
       kids: (n, name) => `${n} ${pluralEn(n, 'subagent leaves', 'subagents leave')} with ${name}.`,
-      offline: (machine) => `${machine} is unreachable.`,
       cannotEnd: (machine) => `${machine} is unreachable: Ledge cannot stop it.`,
       outsideLedge: 'Launched outside Ledge: Ledge cannot stop it.',
       deleteKey: 'Del', archiveFinished: 'Archive finished'
@@ -465,8 +464,32 @@ export const en: Messages = {
       }
     },
     terminal: {
-      title: 'Terminal', empty: 'No output received yet.', readOnly: 'Read-only preview', offline: 'Offline',
-      open: 'Open in a terminal', openFailed: (n) => `${n}’s terminal could not open.`
+      title: 'Terminal', empty: 'No output received yet.',
+      resize: 'Terminal width', openFailed: (n) => `${n}’s terminal could not open.`,
+      agentTab: (n) => `${n} · agent`, shellTab: (n, dir) => `${n === 1 ? 'Shell' : `Shell ${n}`} · ${dir}`,
+      addShell: 'New shell', closeTab: (label) => `Close ${label}`,
+      local: 'wsl', remote: (host) => `ssh · ${host}`,
+      external: 'Open in an external terminal', max: 'Enlarge the terminal', unmax: 'Shrink the terminal',
+      attached: 'Attached', attachedSsh: 'Attached over SSH', reconnecting: 'Reconnecting…', readOnly: 'Read only', offline: 'Offline', preview: 'Preview · read only',
+      connecting: 'Connecting…', shell: 'Shell',
+      tmuxTarget: (session, host) => (host ? `ssh ${host} · tmux · ${session}` : `tmux · ${session}`),
+      shellTarget: (host, shell) => `${host ? `ssh ${host}` : 'wsl'}${shell ? ` · ${shell}` : ''}`,
+      detached: (name, s, attempt) => `${name}’s screen was detached. Trying again in ${s} s (attempt ${attempt}).`,
+      shellEndedNoCode: 'Shell ended',
+      noTmux: 'no tmux session',
+      lost: (host, s, attempt, name) => `Connection to ${host} lost. Trying again in ${s} s (attempt ${attempt}). ${name} keeps working on the server.`,
+      reconnect: 'Reconnect',
+      offlineBanner: (host, time) => (time ? `${host} has not answered since ${time}. Last output kept; nothing can be typed.` : `${host} does not answer. Last output kept; nothing can be typed.`),
+      retry: 'Retry',
+      subagent: (h, p) => `${h} is a subagent of ${p} and has no terminal of its own: this is ${p}’s screen, read only.`,
+      goParent: (p) => `Go to ${p}`,
+      outside: (n) => `${n} was started outside Ledge: no screen to attach. Here are its last lines, read only. Your shell is still available.`,
+      ended: (n) => `${n} has ended: here are its last lines, read only. Your shell is still available.`,
+      shellIntro: (n, dir) => `Shell opened in ${n}’s folder: ${dir}`,
+      shellIntroSsh: (host, n, dir) => `Shell on ${host}, in ${n}’s folder: ${dir}`,
+      shellEnded: (code) => `Shell ended (code ${code})`, shellLost: 'Shell ended: connection lost',
+      reopen: 'Reopen', shellUnavailable: 'This folder cannot be opened in a shell.',
+      toTerminal: (k) => `Give the keyboard to the terminal · Ctrl ${k}`, toThread: (k) => `The keyboard goes to the terminal · back to the thread: Ctrl ${k}`
     },
     pending: {
       regions: { approval: 'Approval requested', plan: 'Plan to approve', question: 'Question from the agent' },

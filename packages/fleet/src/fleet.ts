@@ -1,6 +1,6 @@
 import { ChatTurnSchema, isArchived, IslandPrefsSchema, ProjectsSchema, type IslandPrefs, type ChatTurn, type ChatProposal, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session, type Tool } from '@ledge/protocol';
 import { createDaemonClient, type DaemonClient, type DaemonStatus } from './client';
-import { loadMachines, machineUrl, parseMachines, probeMachine, qualify, splitId, terminalCommand, type MachineConfig, type MachineState } from './machines';
+import { loadMachines, machineUrl, parseMachines, probeMachine, qualify, shellCommand, splitId, terminalCommand, type MachineConfig, type MachineState } from './machines';
 import type { TokenSource } from './token';
 
 type Snapshot = Extract<ServerMessage, { type: 'snapshot' }>;
@@ -367,7 +367,12 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       probe: ssh => probeMachine(configs[0]!.url!, ssh, { token: opts.token }),
       // The last try's error is forgotten: the machine is « connecting » until its next answer (a snapshot, or an error again).
       retry(id) { const p = peers.get(id); if (!p || !connected) return; p.error = undefined; p.client.connect(); publish(); },
-      terminal(id) { const origin = splitId(id); const m = state.find(x => x.id === origin?.machine); return origin && m ? terminalCommand(m, origin.id) : null; },
+      terminal(id, opts) { const origin = splitId(id); const m = state.find(x => x.id === origin?.machine); return origin && m ? terminalCommand(m, origin.id, opts) : null; },
+      shell(id) {
+        const origin = splitId(id); const m = state.find(x => x.id === origin?.machine);
+        const s = m?.sessions.find(x => x.id === origin?.id);
+        return m && s ? shellCommand(m, s.workdir ?? s.cwd) : null;
+      },
       turnMachine(qid) { return state.find(m => m.id === bindings.get(qid)?.machine); },
       documentMachine(id) { return splitId(id)?.machine; },
       localSnapshot: () => peers.get('local')?.snapshot ?? null,

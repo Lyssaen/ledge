@@ -19,7 +19,8 @@ export interface Tmux {
   killSession(name: string): Promise<void>;
   /** Sets a user option (`@name`) on the session; the tmux conf shows `@ledge_title` as the terminal tab's title. */
   setOption(name: string, option: string, value: string): Promise<void>;
-  attachArgs(name: string): string[];
+  /** `readOnly` watches the pane without sending it keys (`attach-session -r`). */
+  attachArgs(name: string, opts?: { readOnly?: boolean }): string[];
 }
 
 export function runFile(file: string, args: string[], env?: NodeJS.ProcessEnv, opts?: { timeoutMs?: number }): Promise<{ code: number; stdout: string; stderr: string }> {
@@ -106,6 +107,6 @@ export function realTmux(socket = 'ledge', opts: { scope?: () => Promise<boolean
       if (r.code !== 0) throw new Error(`tmux set-option failed: ${r.stderr.trim()}`);
     },
     async killSession(name) { await t(['kill-session', '-t', `=${name}`]); },
-    attachArgs(name) { return [...base(), 'attach-session', '-t', `=${name}`]; }
+    attachArgs(name, opts) { return [...base(), 'attach-session', ...(opts?.readOnly ? ['-r'] : []), '-t', `=${name}`]; }
   };
 }

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { gitRoot, installKind, underSystemd, manualCommand } from '../src/update/self.js';
+import { homedir } from 'node:os';
+import { daemonInfo, gitRoot, installKind, underSystemd, manualCommand } from '../src/update/self.js';
 import { LEDGE_VERSION } from '../src/version.js';
 
 const NPM = '/home/u/.local/share/nvm/v26.7.0/lib/node_modules/@paradow/ledge/dist/cli/index.js';
@@ -29,4 +30,10 @@ describe('manualCommand', () => {
 
 describe('LEDGE_VERSION', () => {
   it('falls back to a dev version when not built', () => { expect(LEDGE_VERSION).toBe('0.0.0-dev'); });
+});
+
+describe('daemonInfo', () => {
+  it("gives the daemon's home, so the desktop can show folders under it as ~", async () => {
+    expect((await daemonInfo()).home).toBe(homedir());
+  });
 });

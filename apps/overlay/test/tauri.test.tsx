@@ -264,6 +264,19 @@ describe('<Surface> under Tauri', () => {
     expect(calls('focus_terminal')).toEqual([{ title: 'Juno · api-gateway' }]);
   });
 
+  it('the island asks Ledge, not Windows Terminal', async () => {
+    await mount({ tauri: true });
+    // The session's card (a bot's peek holds it): its « Voir l'onglet du terminal » is the `o` key's focusTab.
+    fireEvent.click((await screen.findAllByRole('button', { name: /^Otto .*, / }))[0]!);
+    const focus = await waitFor(() => { const b = document.querySelector<HTMLButtonElement>('[data-layer="session"] button[aria-label="Voir l’onglet du terminal"], [data-layer="session"] button[aria-label="Focus terminal tab"]'); expect(b).not.toBeNull(); return b!; });
+    native.invoke.mockClear();
+    await act(async () => { fireEvent.click(focus); await sleep(20); });
+    expect(calls('open_in_ledge')).toEqual([{ target: '{"kind":"terminal","id":"a"}' }]);
+    expect(calls('open_terminal')).toEqual([]);
+    expect(calls('focus_terminal')).toEqual([]);
+    await vi.waitFor(() => expect(mock.received).toContainEqual({ type: 'session.focus', id: 'a' }));
+  });
+
   it('in the browser nothing goes to a shell', async () => {
     await mount({ tauri: false });
     expect(content()).toBeNull();

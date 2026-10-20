@@ -56,11 +56,16 @@ describe('archive and delete from the sidebar tree', () => {
     const fromDots = await screen.findByRole('menu', { name: 'Manage Otto' });
     expect(menuLabels(fromDots)).toEqual(labels);
     await user.keyboard('{Escape}');
+  });
 
-    // The row's terminal button is the menu's: openSessionTerminal tells the session it is focused.
+  it('the row\'s terminal button is the menu\'s: Otto\'s page with its terminal pane, no external terminal', async () => {
+    const { d, side, user } = await boot({ projects: PROJECTS, sessions: listSessions(), daemon: CAN });
+    const tree = treeOf(side);
     tree.getByRole('button', { name: /^Otto/ }).focus();
     await user.click(tree.getByRole('button', { name: /Open Otto.s terminal/ }));
-    await waitFor(() => expect(sent(d)).toContainEqual({ type: 'session.focus', id: 'otto' }));
+    expect(within(screen.getByRole('banner')).getByText('Otto')).toBeVisible();
+    expect(await screen.findByRole('region', { name: 'Terminal' })).toBeVisible();
+    expect(sent(d).some(m => m.type === 'session.focus')).toBe(false);
   });
 
   it('the +N finished row only shows the finished sessions: no group Archive button', async () => {

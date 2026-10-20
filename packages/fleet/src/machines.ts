@@ -24,7 +24,9 @@ export interface Fleet {
   probe(ssh: string): Promise<ProbeResult>;
   /** Reconnects a machine now instead of waiting for the next backoff. */
   retry(id: string): void;
-  terminal(id: string): string[] | null;
+  terminal(id: string, opts?: { readOnly?: boolean }): string[] | null;
+  /** A login shell in the session's folder (`workdir ?? cwd`), or null when it cannot be opened. */
+  shell(id: string): string[] | null;
   turnMachine(qid: string): MachineState | undefined;
   documentMachine(id: string): string | undefined;
   localSnapshot(): Extract<ServerMessage, { type: 'snapshot' }> | null;
@@ -108,11 +110,18 @@ const quote = (s: string) => "'" + s.replaceAll("'", "'\\''") + "'";
  *  Windows Terminal wrapped each one holding a space in double quotes, escaping nothing: a `"`, a control character or a
  *  final backslash would split it or run into the next one (ledge-native's `wsl_arg_ok`). */
 const wslArg = (s: string) => s !== '' && !/["\u0000-\u001f\u007f-\u009f]/.test(s) && !s.endsWith('\\');
-export function terminalCommand(machine: MachineState, rawId: string): string[] | null {
+export function terminalCommand(machine: MachineState, rawId: string, opts: { readOnly?: boolean } = {}): string[] | null {
   if (!machine.launcher || !rawId) return null;
-  const command = [...machine.launcher, 'attach', rawId];
+  const command = [...machine.launcher, 'attach', ...(opts.readOnly ? ['--read-only'] : []), rawId];
   // The launcher and the id come from the machine's daemon: through ssh, the remote shell reads them quoted.
   const argv = machine.ssh ? ['ssh', '-t', '--', machine.ssh, command.map(quote).join(' ')] : command;
+  return argv.every(wslArg) ? argv : null;
+}
+/** A login shell in `dir` (home when it is gone): the user's own shell, read from passwd here and from `$SHELL` over ssh. */
+export function shellCommand(machine: MachineState, dir: string): string[] | null {
+  if (!wslArg(dir)) return null; // empty, or one wsl.exe would mangle: no shell
+  const go = `cd ${quote(dir)} 2>/dev/null || cd; exec`;
+  const argv = machine.ssh ? ['ssh', '-t', '--', machine.ssh, `${go} $SHELL -l`] : ['sh', '-c', `${go} $(getent passwd $(id -un) | cut -d: -f7) -l`];
   return argv.every(wslArg) ? argv : null;
 }
 const EMPTY: MachineState[] = [];

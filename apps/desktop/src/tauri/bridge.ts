@@ -11,9 +11,12 @@
  *   plugin notification                Windows toasts (spec §10)
  *   event `ledge://tray` { action }    tray menu action
  *   take_open_target / event `ledge://open`   what the island asked to open (`--open`), taken once
+ *   pty_open { argv, cols, rows, onData, onExit } → id   a pseudo-terminal running argv; bytes stream back on onData, the exit code on onExit
+ *   pty_write { id, data } / pty_resize { id, cols, rows } / pty_close { id }   ids start at 0: never test one for truthiness
  *   window minimize / toggleMaximize / close / isMaximized / onResized   the title bar's buttons (decorations are off)
  */
 import { listen } from '@tauri-apps/api/event';
+import type { PtyEvents, PtyHandle } from '../term/backend';
 import { createTokenSource, type TokenRead, type TokenSource } from '@ledge/fleet';
 
 export const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -114,6 +117,27 @@ export function onOpenTarget(fn: (raw: string) => void): () => void {
   void listen(OPEN_EVENT, take).then(un => { if (disposed) un(); else off = un; });
   take();
   return () => { disposed = true; off(); };
+}
+
+/** A pseudo-terminal running `argv` in the shell, or null when it refuses to start or outside Tauri. After `close()` no
+ *  more output reaches `on.data`. */
+export async function openPty(argv: string[], size: { cols: number; rows: number }, on: PtyEvents): Promise<PtyHandle | null> {
+  if (!isTauri()) return null;
+  try {
+    core ??= import('@tauri-apps/api/core');
+    const { Channel, invoke: call } = await core;
+    let disposed = false;
+    const onData = new Channel<ArrayBuffer>(); const onExit = new Channel<number | null>();
+    onData.onmessage = buf => { if (!disposed) on.data(new Uint8Array(buf)); };
+    onExit.onmessage = code => { if (!disposed) on.exit(code); };
+    const id = await call<number>('pty_open', { argv, cols: size.cols, rows: size.rows, onData, onExit });
+    const quiet = (cmd: string, args: Record<string, unknown>) => { void call(cmd, args).catch(() => {}); };
+    return {
+      write: data => quiet('pty_write', { id, data }),
+      resize: (cols, rows) => quiet('pty_resize', { id, cols, rows }),
+      close: () => { if (disposed) return; disposed = true; quiet('pty_close', { id }); },
+    };
+  } catch { return null; }
 }
 
 /** The title bar's window buttons (the native bar is off: `decorations: false`). Without Tauri they do nothing. */

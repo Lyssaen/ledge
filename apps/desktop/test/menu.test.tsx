@@ -1,8 +1,15 @@
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { DaemonClient } from '@ledge/fleet';
+import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { Menu, MenuItem } from '../src/shell/Menu';
+import { useSessionMenu } from '../src/manage/useSessionMenu';
+
+// The external terminal's commands, watched: the session menu must never reach them.
+const bridge = vi.hoisted(() => ({ openTerminal: vi.fn(async () => true), focusTerminal: vi.fn(async () => true) }));
+vi.mock('../src/tauri/bridge', async orig => ({ ...(await orig<typeof import('../src/tauri/bridge')>()), ...bridge }));
 
 function Harness({ onSelect }: { onSelect: (v: string) => void }) {
   const [open, setOpen] = useState(false);
@@ -76,5 +83,21 @@ describe('Menu', () => {
       expect(parseFloat(menu.style.top)).toBeLessThanOrEqual(window.innerHeight - 90);
       expect(screen.getByRole('menuitem', { name: 'Archive' })).toHaveFocus();
     } finally { rect.mockRestore(); }
+  });
+});
+
+describe('the session menu', () => {
+  it('the menu\'s « Terminal » opens the pane in Ledge, on the agent tab, offline too', () => {
+    const client = { send: vi.fn(), fleet: null } as unknown as DaemonClient;
+    const onShowTerminal = vi.fn();
+    const live = fakeSession('local:otto', { name: 'Otto', state: 'working' });
+    const lost = fakeSession('local:lost', { name: 'Lost', state: 'working', offline: true });
+    const { result } = renderHook(() => useSessionMenu({ client, sessions: [live, lost], onShowTerminal }));
+    act(() => result.current.terminal(live));
+    act(() => result.current.terminal(lost));
+    expect(onShowTerminal.mock.calls).toEqual([['local:otto'], ['local:lost']]);
+    expect(bridge.openTerminal).not.toHaveBeenCalled();
+    expect(bridge.focusTerminal).not.toHaveBeenCalled();
+    expect(client.send).not.toHaveBeenCalled();
   });
 });

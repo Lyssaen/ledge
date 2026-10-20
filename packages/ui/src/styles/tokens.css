@@ -18,6 +18,13 @@
   --status-success-soft: #ecfdf5; --status-warning-soft: #fffbeb; --status-info-soft: #eff6ff; --status-danger-soft: #fef2f2;
   --shadow-overlay: 0 20px 40px -12px rgba(0,0,0,0.25);
   --well: oklch(0.97 0 0);
+  /* The embedded terminal (apps/desktop term/theme.ts): its background, text, sixteen ANSI colours, cursor and selection. */
+  --term-bg: oklch(0.99 0 0); --term-fg: oklch(0.22 0 0);
+  --term-ansi-0: #24292f; --term-ansi-1: #b91c1c; --term-ansi-2: #047857; --term-ansi-3: #a16207;
+  --term-ansi-4: #1d4ed8; --term-ansi-5: #8250df; --term-ansi-6: #1b7c83; --term-ansi-7: #6e7781;
+  --term-ansi-8: oklch(0.52 0 0); --term-ansi-9: #a40e26; --term-ansi-10: #1a7f37; --term-ansi-11: #9a6700;
+  --term-ansi-12: #0550ae; --term-ansi-13: #6639ba; --term-ansi-14: #136061; --term-ansi-15: #424a53;
+  --term-cursor: oklch(0.145 0 0); --term-selection: #0969da33;
   --edge-hot: rgba(0,0,0,.06);
 }
 :root[data-theme="dark"] {
@@ -38,6 +45,12 @@
   --status-success-soft: #052e16; --status-warning-soft: #422006; --status-info-soft: #172554; --status-danger-soft: #450a0a;
   --shadow-overlay: 0 20px 40px -12px rgba(0,0,0,0.7);
   --well: oklch(0.145 0 0);
+  --term-bg: #0c0c0d; --term-fg: #e5e5e5;
+  --term-ansi-0: #484f58; --term-ansi-1: #f87171; --term-ansi-2: #4ade80; --term-ansi-3: #facc15;
+  --term-ansi-4: #7cb3fb; --term-ansi-5: #bc8cff; --term-ansi-6: #39c5cf; --term-ansi-7: #b1bac4;
+  --term-ansi-8: #8f8f8f; --term-ansi-9: #ffa198; --term-ansi-10: #56d364; --term-ansi-11: #e3b341;
+  --term-ansi-12: #79c0ff; --term-ansi-13: #d2a8ff; --term-ansi-14: #56d4dd; --term-ansi-15: #ffffff;
+  --term-cursor: oklch(0.985 0 0); --term-selection: #58a6ff40;
   --edge-hot: rgba(255,255,255,.08);
 }
 
