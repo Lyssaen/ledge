@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /** The relay the daemon and the overlay use until the user picks another one. */
-export const DEFAULT_RELAY_URL = 'https://server.ledge.paradow.dev';
+export const DEFAULT_RELAY_URL = 'https://app.kl-ledge.dev';
 
 /** A relay URL reduced to its origin: https, or http for localhost and 127.0.0.1 only; no path, query or fragment. */
 export const RelayUrlSchema = z.string().transform((v, ctx) => {

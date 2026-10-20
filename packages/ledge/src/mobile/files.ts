@@ -49,8 +49,13 @@ function readJson<T>(file: string, name: string, schema: z.ZodType<T, z.ZodTypeD
 
 const DEFAULT_CONFIG = (): MobileConfig => ({ enabled: false, relayUrl: DEFAULT_RELAY_URL });
 
+/** The relay of the first lots: a config that still names it reads as the default relay. The file is not rewritten. */
+const LEGACY_RELAY_URL = 'https://server.ledge.paradow.dev';
+
 export function readMobileConfig(): MobileConfig {
-  return readJson(paths().mobile, 'mobile.json', MobileConfigSchema) ?? DEFAULT_CONFIG();
+  const c = readJson(paths().mobile, 'mobile.json', MobileConfigSchema);
+  if (!c) return DEFAULT_CONFIG();
+  return c.relayUrl === LEGACY_RELAY_URL ? { ...c, relayUrl: DEFAULT_RELAY_URL } : c;
 }
 
 export function writeMobileConfig(c: MobileConfig): void {

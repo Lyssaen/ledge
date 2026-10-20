@@ -16,10 +16,12 @@ Accounts are GitHub users from an allow-list. The relay keeps accounts and sessi
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | The GitHub OAuth App. |
 | `LEDGE_RELAY_ALLOWED_GITHUB_IDS` | Numeric GitHub ids, positive integers separated by commas, at least one. Checked at every authentication. |
 | `LEDGE_RELAY_PUBLIC_URL` | The relay's public origin, `http(s)://host[:port]`, no path. https is required when `NODE_ENV=production`. A cookie session is accepted only from this `Origin`. |
+| `LEDGE_RELAY_WEB_DIR` | Directory of the built phone app (`@ledge/mobile`), served as static files. Required in production, where it must hold `index.html`, `sw.js`, `build.json` and `manifest.webmanifest`. |
+| `LEDGE_RELAY_VAPID_PUBLIC_KEY`, `LEDGE_RELAY_VAPID_PRIVATE_KEY`, `LEDGE_RELAY_VAPID_SUBJECT` | Web Push identity: an uncompressed P-256 point and a 32-byte scalar (base64url), and a `mailto:` or `https:` contact. Required in production; elsewhere all three or none. |
 | `PORT` | Default `8787`. |
 | `LEDGE_RELAY_GITHUB_WEB_URL`, `LEDGE_RELAY_GITHUB_API_URL` | Point GitHub calls at another server (tests). Refused in production. |
 
-A configuration error is printed on stderr, naming the variable and never its value, and the process exits with code 1.
+In production, every missing required variable is reported at once (`missing in production: ...`). A configuration error is printed on stderr, naming the variable and never its value, and the process exits with code 1.
 
 ### Dev mode
 
@@ -60,9 +62,35 @@ For a local callback, register `http://localhost:8787/auth/github/callback` in t
 
 ## Deploy on Railway
 
-- Create the service from the repository root (not `apps/relay`), and set its config file to `apps/relay/railway.json`. It builds with `pnpm install --frozen-lockfile --prod=false && pnpm --filter @ledge/relay build` (`--prod=false`: devDependencies are needed to build even when `NODE_ENV=production` is set at build time), starts `node apps/relay/dist/main.js`, checks `/healthz` and restarts on failure.
-- Add the Railway Postgres plugin: it provides `DATABASE_URL`.
-- Set `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `LEDGE_RELAY_ALLOWED_GITHUB_IDS`, `LEDGE_RELAY_PUBLIC_URL` (the https URL of the service) and `NODE_ENV=production`. Railway provides `PORT`.
+Production runbook: one Docker image (`apps/relay/Dockerfile`, build context = the repository root) holds the relay and the built phone app, served at `https://app.kl-ledge.dev`. Run exactly one replica: the socket routing hub lives in memory.
+
+1. **VAPID keys.** `pnpm --filter @ledge/relay vapid-keys <contact email>` prints three lines (from a checkout without `pnpm install`, `node apps/relay/scripts/vapid-keys.mjs <contact email>` works too: it only imports `node:crypto`). They go into Railway variables only, never into the repository.
+2. **GitHub OAuth App.** Homepage URL `https://app.kl-ledge.dev`, Authorization callback URL `https://app.kl-ledge.dev/auth/github/callback`, tick "Enable Device Flow", then generate a client secret.
+3. **Railway project.** Hobby plan, region `europe-west4`. Create the service from the repository root (not `apps/relay`) and set its config file to `apps/relay/railway.json` (Dockerfile build, one replica, `/healthz` check, restart on failure). Add a Postgres. Once step 6 has created the branch `production`, point the service at it, with auto-deploy.
+4. **Service variables.**
+
+   | Variable | Value |
+   | --- | --- |
+   | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (Railway reference, private network). |
+   | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | From the OAuth App. |
+   | `LEDGE_RELAY_ALLOWED_GITHUB_IDS` | Numeric ids, comma-separated (`https://api.github.com/users/<login>`, field `id`). |
+   | `LEDGE_RELAY_PUBLIC_URL` | `https://app.kl-ledge.dev`, no trailing slash. |
+   | `LEDGE_RELAY_VAPID_PUBLIC_KEY` | 87 base64url characters. |
+   | `LEDGE_RELAY_VAPID_PRIVATE_KEY` | 43 base64url characters. |
+   | `LEDGE_RELAY_VAPID_SUBJECT` | `mailto:<contact>`. |
+
+   `NODE_ENV`, `LEDGE_RELAY_WEB_DIR` and `PORT` are not set: the image sets the first two, Railway provides `PORT`.
+5. **Domain.** In the service, Settings, Networking, Custom Domain: `app.kl-ledge.dev`. Create the DNS record Railway shows (CNAME `app` to the target it gives, plus a TXT verification record if asked) wherever the DNS of `kl-ledge.dev` is served: in Railway itself when the domain was bought through Railway; behind Cloudflare the record is "DNS only". Wait for the certificate.
+6. **Deploying a release.** Deploy only release commits, and only ones whose `packages/ledge/package.json` already carries the tag's version (the `chore: X.Y.Z` commit that precedes the tag). The service worker and `build.json` embed that version and the release workflow stamps it from the tag, so otherwise the served fingerprint differs from the release's. The first deploy is the first release tagged after lot 7 is merged: earlier tags have neither the Dockerfile nor a published `ledge-mobile-build.json`. Push that release commit to `production` first (this creates the branch), then select it in Railway (step 3). Advance the branch with:
+
+   ```sh
+   git push origin vX.Y.Z^{commit}:refs/heads/production
+   ```
+7. **After a deploy, check.**
+   - `https://app.kl-ledge.dev/healthz` answers `ok`.
+   - The logs show `{"ev":"listening",…,"mode":"accounts"}`.
+   - `https://app.kl-ledge.dev/build.json` is identical to the release asset `ledge-mobile-build.json`. Use curl, a browser may be answered by the service worker: `diff <(curl -s https://app.kl-ledge.dev/build.json) <(gh release download vX.Y.Z -p ledge-mobile-build.json -O -)` prints nothing when they match.
+8. **When it fails.** A missing or mistyped variable: the process exits 1 with one line naming the missing variables (never their values); the healthcheck fails and Railway keeps the previous deployment. A database not ready yet: exit 1 with `ledge-relay: cannot start: the database is unreachable…`, then Railway restarts it.
 
 ## Allow-list
 

@@ -16,7 +16,7 @@ const COPY = ['M9 9h11v11H9z', 'M5 15H4V4h11v1'];
 
 type Send = (msg: MobileClientMessage) => boolean;
 
-/** The relay as the user reads it: its host (server.ledge.paradow.dev). */
+/** The relay as the user reads it: its host (app.kl-ledge.dev). */
 const hostOf = (url: string): string => { try { return new URL(url).host; } catch { return url; } };
 
 /** Date.now(), refreshed every `every` ms while it is not null. */

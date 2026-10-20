@@ -32,6 +32,23 @@ describe('mobile files', () => {
     expect(readMobileConfig()).toEqual({ enabled: false, relayUrl: DEFAULT_RELAY_URL });
   });
 
+  it('reads the default config with the new domain when absent', () => {
+    expect(DEFAULT_RELAY_URL).toBe('https://app.kl-ledge.dev');
+    expect(readMobileConfig().relayUrl).toBe('https://app.kl-ledge.dev');
+  });
+
+  it('maps the legacy relay to the default one when reading, without rewriting the file', () => {
+    const raw = JSON.stringify({ enabled: true, relayUrl: 'https://server.ledge.paradow.dev' });
+    writeFileSync(paths().mobile, raw);
+    expect(readMobileConfig()).toEqual({ enabled: true, relayUrl: 'https://app.kl-ledge.dev' });
+    expect(readFileSync(paths().mobile, 'utf8')).toBe(raw);
+  });
+
+  it('keeps any other relay as it is', () => {
+    writeFileSync(paths().mobile, JSON.stringify({ enabled: true, relayUrl: 'https://relay.example' }));
+    expect(readMobileConfig()).toEqual({ enabled: true, relayUrl: 'https://relay.example' });
+  });
+
   it('round-trips the config, session and devices, each at 0600', () => {
     writeMobileConfig({ enabled: true, relayUrl: 'https://a.example' });
     writeRelaySession(session('https://a.example'));

@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { createPrivateKey, createPublicKey, sign, verify } from 'node:crypto';
 import { z } from 'zod';
 import { RelayPeerSchema } from '@ledge/protocol';
@@ -82,9 +84,17 @@ function optionalBase(env: NodeJS.ProcessEnv, name: string, production: boolean)
   return raw;
 }
 
+const VAPID_NAMES = ['LEDGE_RELAY_VAPID_PUBLIC_KEY', 'LEDGE_RELAY_VAPID_PRIVATE_KEY', 'LEDGE_RELAY_VAPID_SUBJECT'] as const;
+/** Production needs all of these; reported together, in this order. */
+const PRODUCTION_REQUIRED = [
+  'GITHUB_CLIENT_ID', 'GITHUB_CLIENT_SECRET', 'LEDGE_RELAY_ALLOWED_GITHUB_IDS', 'LEDGE_RELAY_PUBLIC_URL', 'LEDGE_RELAY_WEB_DIR', ...VAPID_NAMES
+] as const;
+/** What `@ledge/mobile` builds into the web directory. */
+const WEB_BUILD_FILES = ['index.html', 'sw.js', 'build.json', 'manifest.webmanifest'] as const;
+
 /** The three `LEDGE_RELAY_VAPID_*` variables, or none. Messages name a variable, never its value. */
 function parseVapid(env: NodeJS.ProcessEnv): Vapid | undefined {
-  const names = ['LEDGE_RELAY_VAPID_PUBLIC_KEY', 'LEDGE_RELAY_VAPID_PRIVATE_KEY', 'LEDGE_RELAY_VAPID_SUBJECT'] as const;
+  const names = VAPID_NAMES;
   const [pub, priv, subject] = names.map((n) => env[n] || undefined);
   if (!pub && !priv && !subject) return undefined;
   if (!pub || !priv || !subject) throw new ConfigError(`${names.join(', ')} must be set together or not at all`);
@@ -116,7 +126,15 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
   if (env.DATABASE_URL) {
     const githubWeb = optionalBase(env, 'LEDGE_RELAY_GITHUB_WEB_URL', production);
     const githubApi = optionalBase(env, 'LEDGE_RELAY_GITHUB_API_URL', production);
+    if (production) {
+      const missing = PRODUCTION_REQUIRED.filter((n) => !env[n]);
+      if (missing.length > 0) throw new ConfigError(`missing in production: ${missing.join(', ')}`);
+    }
     const vapid = parseVapid(env);
+    if (production && env.LEDGE_RELAY_WEB_DIR) {
+      const absent = WEB_BUILD_FILES.find((f) => !existsSync(join(env.LEDGE_RELAY_WEB_DIR as string, f)));
+      if (absent) throw new ConfigError(`LEDGE_RELAY_WEB_DIR has no ${absent}: build @ledge/mobile into it`);
+    }
     return {
       mode: 'accounts',
       port,

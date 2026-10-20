@@ -171,7 +171,7 @@ function RelayStatus({ st, set }: { st: MobileState; set(p: Partial<MobileState>
   const status: { cls: string; text: string; detail?: string } =
     st.link === 'off' ? { cls: '', text: 'Désactivé' }
     : st.link === 'idle' ? { cls: '', text: 'Pas encore connecté', detail: st.account === 'flow' ? 'La connexion démarre une fois le compte GitHub confirmé.' : undefined }
-    : st.link === 'online' ? { cls: 'online', text: 'Connecté au relais', detail: 'server.ledge.paradow.dev · depuis 09:14' }
+    : st.link === 'online' ? { cls: 'online', text: 'Connecté au relais', detail: 'app.kl-ledge.dev · depuis 09:14' }
     : st.link === 'connecting' ? { cls: 'connecting', text: 'Connexion…' }
     : st.account === 'denied' ? { cls: 'offline', text: 'Hors ligne', detail: 'Le serveur a refusé ce compte.' }
     : st.account === 'replaced' ? { cls: 'offline', text: 'Hors ligne', detail: 'Un autre PC a pris la place de celui-ci.' }
@@ -250,7 +250,7 @@ function Devices({ st, set, onCompare }: { st: MobileState; set(p: Partial<Mobil
       {empty && (
         <div className="devices-empty">
           <span className="machine-glyph" aria-hidden="true"><Icon d={PHONE} size={16} /></span>
-          <p><strong>Aucun appareil lié.</strong> Sur votre téléphone, ouvrez <code>server.ledge.paradow.dev</code> et connectez-vous avec le même compte GitHub. Un code s'affichera ici et sur le téléphone.</p>
+          <p><strong>Aucun appareil lié.</strong> Sur votre téléphone, ouvrez <code>app.kl-ledge.dev</code> et connectez-vous avec le même compte GitHub. Un code s'affichera ici et sur le téléphone.</p>
         </div>
       )}
     </Card>
@@ -319,7 +319,7 @@ function MobileAccess({ st, set }: { st: MobileState; set(p: Partial<MobileState
       <SwitchRow label="Accès mobile" hint="Ce PC garde une connexion sortante vers le serveur relais. Aucun port n'est ouvert." checked={st.on} onChange={toggle} />
       <fieldset className="set-fieldset" disabled={!st.on}>
         <Row label="Serveur relais" hint="L'adresse du serveur que vous et votre téléphone utilisez.">
-          {describedBy => <input className="set-input mono relay-url" aria-label="Serveur relais" aria-describedby={describedBy} defaultValue="https://server.ledge.paradow.dev" spellCheck={false} />}
+          {describedBy => <input className="set-input mono relay-url" aria-label="Serveur relais" aria-describedby={describedBy} defaultValue="https://app.kl-ledge.dev" spellCheck={false} />}
         </Row>
         <GitHubAccount st={st} set={set} />
         <RelayStatus st={st} set={set} />

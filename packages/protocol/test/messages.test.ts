@@ -382,7 +382,7 @@ describe('session management messages', () => {
 
 describe('mobile access messages', () => {
   const state = {
-    enabled: true, relayUrl: 'https://server.ledge.paradow.dev', account: { login: 'octocat', accountId: 'A' }, signin: null, signinError: null,
+    enabled: true, relayUrl: 'https://app.kl-ledge.dev', account: { login: 'octocat', accountId: 'A' }, signin: null, signinError: null,
     link: { state: 'offline', retryAt: T0, error: 'connection closed (1006)' },
     devices: [{ id: 'f'.repeat(22), label: 'Pixel', approvedAt: T0, online: false }],
     pairings: [{ id: 'p1', label: 'Pixel', code: '123456', expiresAt: T0, state: 'confirm' }]

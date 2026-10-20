@@ -1,0 +1,10 @@
+**/node_modules
+**/dist
+**/target
+.git
+.claude
+.playwright-mcp
+.worktrees
+.superpowers
+**/test-results
+**/.env*

@@ -82,9 +82,9 @@ describe('Settings › Accès mobile', () => {
     const { sent, user } = show(ONLINE);
     expect(screen.getByText('@octocat')).toBeVisible();
     expect(screen.getByText('Connecté au relais')).toBeVisible();
-    expect(card('Connexion').getByText('server.ledge.paradow.dev')).toBeVisible();
+    expect(card('Connexion').getByText('app.kl-ledge.dev')).toBeVisible();
     expect(card('Appareils').getByText('Aucun appareil lié.')).toBeVisible();
-    expect(card('Appareils').getByText('server.ledge.paradow.dev').tagName).toBe('CODE');
+    expect(card('Appareils').getByText('app.kl-ledge.dev').tagName).toBe('CODE');
     await user.click(screen.getByRole('button', { name: 'Se déconnecter' }));
     expect(sent).toEqual([{ type: 'mobile.signout' }]);
   });
