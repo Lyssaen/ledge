@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { CHAT_HISTORY_BUDGET, PhoneChatTurnSchema, PhoneServerMessageSchema, THREAD_TEXT_MAX, type ChatTurn, type PhoneServerMessage } from '@ledge/protocol';
 import { toPhoneHistory, toPhoneTurn, phoneEmitter } from '../src/mobile/chat.js';
@@ -117,11 +117,49 @@ describe('phoneEmitter', () => {
     expect(r.sent.length).toBe(n + 1);
   });
 
-  it('sends a code for an error, then ends once, with the code', () => {
+  it('sends a code for a busy refusal and does not push for it: the question never started', () => {
     const r = rig();
     r.emit({ type: 'chat.error', qid: 'q', message: TOO_MANY });
     expect(r.sent[0]![0]).toEqual({ type: 'chat.error', qid: 'q', code: 'busy' });
-    expect(r.ends).toEqual([{ qid: 'q', code: 'busy' }]);
+    expect(r.ends).toEqual([]);
+  });
+
+  it('sends a code for an error, then ends once, with the code', () => {
+    const r = rig();
+    r.emit({ type: 'chat.error', qid: 'q', message: 'cancelled' });
+    expect(r.sent[0]![0]).toEqual({ type: 'chat.error', qid: 'q', code: 'cancelled' });
+    expect(r.ends).toEqual([{ qid: 'q', code: 'cancelled' }]);
+  });
+
+  describe('trailing flush', () => {
+    afterEach(() => { vi.useRealTimers(); });
+    const timed = () => {
+      vi.useFakeTimers();
+      const sent: PhoneServerMessage[] = [];
+      const emit = phoneEmitter(m => { sent.push(m); }, { history: () => [] }, { now: () => Date.now() });
+      return { emit, texts: () => sent.filter(m => m.type === 'chat.delta').map(m => (m as { text: string }).text) };
+    };
+
+    it('a burst then silence still reaches the phone within the window', () => {
+      const r = timed();
+      r.emit({ type: 'chat.delta', qid: 'q', text: 'a' });
+      vi.advanceTimersByTime(50);
+      r.emit({ type: 'chat.delta', qid: 'q', text: 'b' });
+      r.emit({ type: 'chat.delta', qid: 'q', text: 'c' });
+      expect(r.texts()).toEqual(['a']);
+      vi.advanceTimersByTime(250);
+      expect(r.texts()).toEqual(['a', 'abc']);
+      vi.advanceTimersByTime(5_000);
+      expect(r.texts()).toEqual(['a', 'abc']);
+    });
+
+    it('is cleared by the end of the question', () => {
+      const r = timed();
+      r.emit({ type: 'chat.delta', qid: 'q', text: 'a' });
+      r.emit({ type: 'chat.delta', qid: 'q', text: 'b' });
+      r.emit({ type: 'chat.error', qid: 'q', message: 'cancelled' });
+      expect(vi.getTimerCount()).toBe(0);
+    });
   });
 
   it('projects history and steps, and a turn named by another message becomes chat.done', () => {

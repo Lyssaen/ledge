@@ -68,7 +68,7 @@ export function createPhoneGateway(deps: {
   now?: () => string;
   outbox?: { now?: () => number; frames?: number; bytes?: number; windowMs?: number };
   /** The chat threads: each device talks to its own. Without them the phone has no chat. */
-  chats?: Pick<ChatThreads, 'device' | 'deviceTool' | 'owner' | 'drop' | 'setEmitter'>;
+  chats?: Pick<ChatThreads, 'device' | 'peek' | 'deviceTool' | 'owner' | 'drop' | 'setEmitter'>;
   /** The chat relay: hands a turn's instruction to its session. */
   relay?: { request(qid: string): Promise<void> };
   /** Starts the sessions of a turn's card, on that thread (its own emitter and refusals). */
@@ -109,7 +109,9 @@ export function createPhoneGateway(deps: {
     let e = emitters.get(deviceId);
     if (!e) {
       const chats = deps.chats!;
-      e = phoneEmitter((m, key) => push(deviceId, m, key), { history: () => { try { return chats.device(deviceId).history(); } catch { return []; } } }, {
+      // A phone with no live channel gets nothing: its history on the next ready covers the gap, and the push (`onEnd`) does not pass here.
+      const online = () => mobile.state().devices.some(d => d.id === deviceId && d.online);
+      e = phoneEmitter((m, key) => { if (online()) push(deviceId, m, key); }, { history: () => chats.peek(deviceId)?.history() ?? [] }, {
         ...(deps.chatThrottleMs !== undefined ? { throttleMs: deps.chatThrottleMs } : {}),
         onEnd: end => deps.onChatEnd?.(deviceId, end)
       });
@@ -298,10 +300,9 @@ export function createPhoneGateway(deps: {
     const rows = proposalRows(turn);
     const targets = msg.rows ?? [...rows.keys()];
     if (targets.length === 0) return { status: 'rejected', reason: 'invalid' };
-    for (const r of targets) {
-      const p = rows[r];
-      if (!p || (p.prompt?.length ?? 0) > TOOL_TEXT_MAX) return { status: 'rejected', reason: 'invalid' };
-    }
+    // The projection is all or nothing: a card with any row too long is not shown at all, so no row of it is acted on.
+    if (rows.some(p => (p.prompt?.length ?? 0) > TOOL_TEXT_MAX)) return { status: 'rejected', reason: 'invalid' };
+    for (const r of targets) if (!rows[r]) return { status: 'rejected', reason: 'invalid' };
     if (deps.credential(deviceId) === null) return { status: 'rejected', reason: 'confirm_required' };
     // Nothing left to start: answered before the assertion is spent.
     if (targets.every(r => rows[r]!.launchedId)) return { status: 'failed' };

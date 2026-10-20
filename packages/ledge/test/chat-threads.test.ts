@@ -122,6 +122,17 @@ describe('chat threads', { timeout: 20_000 }, () => {
     expect(s.threads.all().map(([id]) => id)).toEqual(['desktop']);
   });
 
+  it('peek reads a device thread without creating it', async () => {
+    const s = setup();
+    expect(s.threads.peek('d1')).toBeUndefined();
+    expect(s.threads.all().map(([id]) => id)).toEqual(['desktop']);
+    const c = s.threads.device('d1');
+    expect(s.threads.peek('d1')).toBe(c);
+    await s.threads.drop('d1');
+    expect(s.threads.peek('d1')).toBeUndefined();
+    expect(s.threads.all().map(([id]) => id)).toEqual(['desktop']);
+  });
+
   it('after a drop, a new question on the same id gets a fresh thread', async () => {
     const s = setup();
     const old = s.threads.device('d1'); await s.threads.drop('d1');

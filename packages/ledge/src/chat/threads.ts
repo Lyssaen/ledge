@@ -40,6 +40,8 @@ export function createChatThreads(deps: Omit<ChatDeps, 'slots'> & { max?: number
     desktop,
     device,
     all,
+    /** The device's thread if there is one: unlike `device`, never creates it (a late message of a dropped thread must not bring it back). */
+    peek(id: string): Chat | undefined { return devices.get(id); },
     setEmitter(thread: ChatThreadId, emit: Emit): void { emitters.set(thread, emit); },
     emitterOf(thread: ChatThreadId): Emit | undefined { return emitters.get(thread); },
     /** The PC's tool of the day file, whatever its day: `claude` without one. */

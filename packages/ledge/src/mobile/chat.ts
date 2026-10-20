@@ -70,7 +70,11 @@ export function phoneEmitter(
     const l = live.get(qid);
     if (l && l.text !== l.sent) { send({ type: 'chat.delta', qid, text: l.text.slice(0, THREAD_TEXT_MAX) }, `chat.live:${qid}`); l.sent = l.text; }
   };
+  /** The one timer per question that sends what a throttled delta left unsent, once the window is over. */
+  const timers = new Map<string, ReturnType<typeof setTimeout>>();
+  const clearTimer = (qid: string) => { const t = timers.get(qid); if (t) { clearTimeout(t); timers.delete(qid); } };
   const done = (qid: string) => {
+    clearTimer(qid);
     flushLive(qid);
     live.delete(qid);
     const turn = chat.history().find(t => t.qid === qid);
@@ -91,6 +95,12 @@ export function phoneEmitter(
         live.set(m.qid, l);
         l.text += m.text;
         if (now() - l.at >= throttleMs) { l.at = now(); flushLive(m.qid); }
+        else if (!timers.has(m.qid)) {
+          // The agent may go quiet right after a burst: the tail of the text must not wait for the next delta.
+          const t = setTimeout(() => { timers.delete(m.qid); const x = live.get(m.qid); if (x) { x.at = now(); flushLive(m.qid); } }, Math.max(1, throttleMs - (now() - l.at)));
+          t.unref?.();
+          timers.set(m.qid, t);
+        }
         return;
       }
       case 'chat.done':
@@ -98,11 +108,13 @@ export function phoneEmitter(
         finish(m.qid);
         return opts.onEnd?.({ qid: m.qid });
       case 'chat.error': {
+        clearTimer(m.qid);
         live.delete(m.qid);
         finish(m.qid);
         const code = errorCode(m.message);
         send({ type: 'chat.error', qid: m.qid, code });
-        return opts.onEnd?.({ qid: m.qid, code });
+        // A question that never started ('busy') is no news for a phone that was looking a moment ago.
+        return code === 'busy' ? undefined : opts.onEnd?.({ qid: m.qid, code });
       }
       default: {
         // Anything else that names a turn (the relay's progress) is the turn as it stands now.
