@@ -30,7 +30,7 @@ export function staticRoutes(opts: { root: string; publicUrl?: string; log: Rela
   const root = path.resolve(opts.root);
   const base: Record<string, string> = {
     'Content-Security-Policy':
-      `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; ` +
+      `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; ` +
       `connect-src ${connectSrc(opts.publicUrl)}; worker-src 'self'; manifest-src 'self'; ` +
       `frame-ancestors 'none'; base-uri 'none'; form-action 'self'`,
     'X-Content-Type-Options': 'nosniff',

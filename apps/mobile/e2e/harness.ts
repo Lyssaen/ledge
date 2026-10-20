@@ -2,14 +2,14 @@
 // reachable over HTTP) serving the built PWA from apps/mobile/dist, and a fake PC of the same account on it.
 import { PGlite } from '@electric-sql/pglite';
 import { existsSync } from 'node:fs';
-import { randomUUID } from 'node:crypto';
+import { createPrivateKey, generateKeyPairSync, randomUUID } from 'node:crypto';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
   DevicePollResponseSchema, DeviceStartResponseSchema, PHONE_PROTOCOL,
-  type PhoneClientMessage, type PhoneServerMessage, type PhoneSession
+  type PhoneClientMessage, type PhoneServerMessage, type PhoneSession, type PushSubscription
 } from '@ledge/protocol';
 import { startAccountsRelay } from '../../relay/src/app';
 import type { AccountsConfig } from '../../relay/src/config';
@@ -44,6 +44,10 @@ export interface FakeDaemon {
   typed: string[];
   /** False: decisions are typed but not answered, as when the relay goes down right after one. */
   answer: boolean;
+  /** What the snapshot says of the push (`device.push`); null: it says nothing, as a PC of lot 5. `push.subscribe` makes it `on`. */
+  push: 'on' | 'off' | 'stale' | 'unavailable' | null;
+  /** The subscription of the last `push.subscribe` the PC applied. */
+  subscription: PushSubscription | null;
   /** The device check, once a test turns it on: the snapshot then says `device`, and a risky accept needs an assertion. */
   device: DeviceCheck | null;
   /** Replaces a session (or adds it) and tells the phone. */
@@ -56,7 +60,7 @@ function runDaemon(pc: FakePc): FakeDaemon {
   let seen = 0;
   let busy = false;
   const d: FakeDaemon = {
-    sessions: [waiting()], typed: [], answer: true, device: null,
+    sessions: [waiting()], typed: [], answer: true, device: null, push: null, subscription: null,
     async update(s) {
       d.sessions = [...d.sessions.filter((x) => x.id !== s.id), s];
       await pc.send({ type: 'session.updated', session: s });
@@ -66,7 +70,7 @@ function runDaemon(pc: FakePc): FakeDaemon {
   const snapshot = (): PhoneServerMessage => ({
     type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: d.sessions,
     capabilities: { claude: CAPS, codex: CAPS, cursor: CAPS, omp: { freeTextAnswer: false } }, daemon: { version: '0.0.0-e2e', name: PC_NAME, boot },
-    ...(d.device ? { device: { confirm: d.device.registered } } : {})
+    ...(d.device || d.push ? { device: { confirm: d.device ? d.device.registered : true, ...(d.push ? { push: d.push } : {}) } } : {})
   });
   const handle = async (m: PhoneClientMessage) => {
     if (m.type === 'snapshot.request') return pc.send(snapshot());
@@ -84,6 +88,18 @@ function runDaemon(pc: FakePc): FakeDaemon {
       if (r === undefined) return;
       await pc.send({ type: 'operation.result', op: m.op, status: r === 'applied' ? 'applied' : 'rejected', ...(r === 'applied' ? {} : { reason: r }) });
       return r === 'applied' ? pc.send(snapshot()) : undefined;
+    }
+    if (m.type === 'push.subscribe') {
+      d.subscription = m.subscription;
+      d.push = 'on';
+      await pc.send({ type: 'operation.result', op: m.op, status: 'applied' });
+      return pc.send(snapshot());
+    }
+    if (m.type === 'push.unsubscribe') {
+      d.subscription = null;
+      d.push = 'off';
+      await pc.send({ type: 'operation.result', op: m.op, status: 'applied' });
+      return pc.send(snapshot());
     }
     if (m.type !== 'session.decide') return;
     if (d.typed.includes(m.op)) {
@@ -186,9 +202,14 @@ export async function startHarness(opts: { webDir?: string } = {}): Promise<Harn
     const port = (probe.address() as AddressInfo).port;
     await new Promise<void>((resolve) => probe.close(() => resolve()));
     const url = `http://localhost:${port}`;
+    // The relay pushes when it has a VAPID identity: /push/key answers, which the phone asks before it subscribes.
+    const keys = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    const jwk = keys.privateKey.export({ format: 'jwk' });
+    const publicKey = Buffer.concat([Buffer.from([4]), Buffer.from(jwk.x!, 'base64url'), Buffer.from(jwk.y!, 'base64url')]).toString('base64url');
     const cfg: AccountsConfig = {
       mode: 'accounts', port, databaseUrl: 'pglite://memory', clientId: 'fake', clientSecret: 'fake',
-      allowed: new Set([USER.id]), publicUrl: url, webDir
+      allowed: new Set([USER.id]), publicUrl: url, webDir,
+      vapid: { publicKey, privateKey: createPrivateKey({ key: jwk, format: 'jwk' }), subject: 'mailto:e2e@example.com' }
     };
 
     const startRelay = async () => {

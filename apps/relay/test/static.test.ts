@@ -103,8 +103,9 @@ describe('staticRoutes', () => {
   it('puts the CSP and hardening headers on every response', async () => {
     const port = await start();
     const csp =
-      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' wss://relay.example; " +
+      "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' wss://relay.example; " +
       "worker-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
+    expect(csp).not.toContain('unsafe-inline');
     for (const [p, m] of [['/', 'GET'], ['/nope.js', 'GET'], ['/', 'POST'], ['/assets/app-abc123.js', 'GET']] as const) {
       const r = await get(port, p, m);
       expect(r.headers['content-security-policy']).toBe(csp);
