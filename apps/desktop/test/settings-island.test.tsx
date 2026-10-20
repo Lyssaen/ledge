@@ -100,7 +100,7 @@ describe('Settings › Notch', () => {
     await waitFor(() => expect(document.querySelector('.preview-notch.pos-right')).not.toBeNull());
     expect(document.querySelector('.preview-bubble.pos-right')).not.toBeNull();
     await user.click(group('Screen').getByRole('radio', { name: 'Screen 2' }));
-    expect((await confirm(d, 2))).toMatchObject({ screen: 'second', position: 'right' });
+    expect((await confirm(d, 2))).toMatchObject({ screen: '#1', position: 'right' });
     await waitFor(() => expect(screen.getByText('The notch sits at the top of this screen (1920 × 1080).')).toBeVisible());
     expect(document.querySelector('.preview-screen.here .preview-caption')).toHaveTextContent('Screen 2 1920 × 1080');
     // Auto now reads the 1080 px screen.

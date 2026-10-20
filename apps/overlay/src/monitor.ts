@@ -20,3 +20,12 @@ export function saveMonitor(id: string | null): void {
 export function resolveMonitor(choice: string | null, monitors: MonitorInfo[]): MonitorInfo | undefined {
   return (choice !== null ? monitors.find(m => m.id === choice) : undefined) ?? monitors.find(m => m.primary) ?? monitors[0];
 }
+
+/** The monitor Desktop's Screen setting names: null for `primary`, the id it holds otherwise (the shell falls back to the
+ *  primary while it is unplugged), and for `second` (older settings) the first monitor that is not the primary, none: the
+ *  primary. Undefined while `second` waits for the monitors to be listed. */
+export function monitorOfScreen(screen: string, monitors: MonitorInfo[]): string | null | undefined {
+  if (screen === 'primary') return null;
+  if (screen !== 'second') return screen;
+  return monitors.length ? monitors.find(m => !m.primary)?.id ?? null : undefined;
+}

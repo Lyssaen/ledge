@@ -1,7 +1,7 @@
 import { DEFAULT_SOUNDS } from '../src/sounds/preferences';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, within, fireEvent, cleanup } from '@testing-library/react';
-import { loadMonitor, saveMonitor, resolveMonitor, type MonitorInfo } from '../src/monitor';
+import { loadMonitor, monitorOfScreen, saveMonitor, resolveMonitor, type MonitorInfo } from '../src/monitor';
 import { SettingsView, monitorOptions } from '../src/surface/SettingsView';
 import { LangProvider } from '../src/i18n/lang';
 
@@ -30,6 +30,16 @@ describe('the Screen setting', () => {
     expect(resolveMonitor(side.id, [])).toBeUndefined();
     // No monitor reports itself primary: the first one stands in.
     expect(resolveMonitor(null, [{ ...side, primary: false }])).toEqual({ ...side, primary: false });
+  });
+
+  it('follows Desktop’s Screen setting: the primary, any monitor by its id, an older « second » as the first other one', () => {
+    const third: MonitorInfo = { ...side, id: '\\\\.\\DISPLAY3', name: '\\\\.\\DISPLAY3' };
+    expect(monitorOfScreen('primary', [main, side, third])).toBeNull();
+    expect(monitorOfScreen(third.id, [main, side, third])).toBe(third.id);
+    expect(monitorOfScreen(third.id, [])).toBe(third.id); // unplugged or not listed yet: the shell falls back to the primary
+    expect(monitorOfScreen('second', [main, side, third])).toBe(side.id);
+    expect(monitorOfScreen('second', [main])).toBeNull();
+    expect(monitorOfScreen('second', [])).toBeUndefined();
   });
 
   it('offers the primary first and numbers the others in the OS order; an unplugged choice stays visible', () => {

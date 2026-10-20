@@ -228,9 +228,9 @@ export const en: Messages = {
         hidden: 'The notch is hidden. Ledge Desktop still lets you know.'
       },
       cover: 'Simulate a maximised window', uncover: 'Remove the window',
-      screen: 'Screen', screens: { primary: 'Main', second: 'Screen 2' },
+      screen: 'Screen', screens: { primary: 'Main', nth: (n) => `Screen ${n}`, missing: 'Unplugged' },
       screenHint: (size) => (size ? `The notch sits at the top of this screen (${size}).` : 'The notch sits at the top of this screen.'),
-      screenSaved: { primary: 'Main screen', second: 'Screen 2' },
+      screenSaved: { primary: 'Main screen', nth: (n) => `Screen ${n}` },
       position: 'Notch position', positionHint: 'At the centre of the top edge, or a quarter of the way along to keep titles and tabs clear.',
       positions: { left: 'Left', center: 'Centre', right: 'Right' }, positionSaved: (p) => `Position: ${p}`,
       discreet: 'Discreet under a window', discreetHint: 'A simple line when a maximised window fills the screen; hovering unfolds it.', discreetOn: 'Discreet mode', discreetOff: 'Notch always whole',
