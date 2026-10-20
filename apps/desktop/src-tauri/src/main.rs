@@ -237,8 +237,12 @@ fn main() {
                 }
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running Ledge Desktop");
+        .build(tauri::generate_context!())
+        .expect("error while building Ledge Desktop")
+        .run(|app, event| {
+            // Managed state is never dropped on exit: the terminals' processes would be left to the OS to reap.
+            if let tauri::RunEvent::Exit = event { app.state::<pty::PtyState>().close_all(); }
+        });
 }
 
 #[cfg(test)]

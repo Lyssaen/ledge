@@ -12,6 +12,15 @@ use tauri::{AppHandle, State};
 #[derive(Default)]
 pub struct PtyState { ptys: Mutex<HashMap<u32, Pty>>, next: AtomicU32 }
 
+impl PtyState {
+    /// Ends every terminal's process (a `Pty` kills its child when dropped): what quitting Ledge owes its shells.
+    pub fn close_all(&self) {
+        // Dropped outside the lock: an exit callback takes it to remove its own entry.
+        let all = std::mem::take(&mut *self.ptys.lock().unwrap());
+        drop(all);
+    }
+}
+
 /// Starts `argv` in WSL, sized `cols`×`rows`: the output goes to `on_data` as raw bytes, the exit code to `on_exit`
 /// (`null` once closed). Blocking: spawning `wsl.exe` waits on the system.
 #[tauri::command]
