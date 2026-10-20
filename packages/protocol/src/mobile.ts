@@ -24,7 +24,9 @@ export const MobileLinkStateSchema = z.discriminatedUnion('state', [
   z.object({ state: z.literal('connecting') }),
   z.object({ state: z.literal('online') }),
   z.object({ state: z.literal('offline'), retryAt: z.string().datetime(), error: z.string() }),
-  z.object({ state: z.literal('signed_out'), reason: z.enum(['other_pc', 'session_invalid']) })
+  z.object({ state: z.literal('signed_out'), reason: z.enum(['other_pc', 'session_invalid']) }),
+  /** The mobile service did not start (a broken mobile.json, a missing key store): nothing is linked until the daemon restarts. */
+  z.object({ state: z.literal('unavailable'), error: z.string().max(200) })
 ]);
 export type MobileLinkState = z.infer<typeof MobileLinkStateSchema>;
 

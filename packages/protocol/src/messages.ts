@@ -16,6 +16,10 @@ import { MobileStateSchema, RelayUrlSchema } from './mobile.js';
 
 export const PROTOCOL_PORT = 47831;
 
+/** Why the daemon refused a front's command. Travels as the `code` of an `error`, which stays a free string so that an older front ignores a new one. */
+export const RefusalCodeSchema = z.enum(['stale', 'read_only', 'no_prompt', 'not_taken', 'busy', 'unknown_session', 'nothing_to_decide', 'not_offered', 'free_text', 'note_not_typed', 'unavailable', 'invalid']);
+export type RefusalCode = z.infer<typeof RefusalCodeSchema>;
+
 export const SessionEventSchema = z.object({
   name: z.enum(['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'Notification', 'Stop', 'SessionEnd', 'PaneChanged', 'PaneGone', 'PanePrompt', 'PaneIdle', 'InjectFailed', 'Decided', 'PostToolUse', 'PostToolUseFailure', 'StopFailure', 'SubagentStart', 'SubagentStop', 'PaneTitle', 'Renamed']),
   at: z.string().datetime(),
