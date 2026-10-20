@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="fr">
+  <head><meta charset="utf-8" /><title>keys</title></head>
+  <body>
+    <script type="module">
+      import { generateIdentity, startHandshake } from '@ledge/seal';
+      import { ensureIdentity, indexedDbKeys } from '../src/link/keys';
+
+      window.storeFresh = async () => {
+        const store = indexedDbKeys();
+        await store.forget();
+        const id = await ensureIdentity(store);
+        return { publicKey: id.publicKey, extractable: id.privateKey.extractable };
+      };
+
+      window.reloadAndHandshake = async () => {
+        const store = indexedDbKeys();
+        const id = await store.identity();
+        let exportRefused = false;
+        try { await crypto.subtle.exportKey('pkcs8', id.privateKey); } catch { exportRefused = true; }
+        const pc = await generateIdentity();
+        const hd = await startHandshake(id, 'device', pc.publicKey);
+        const hp = await startHandshake(pc, 'pc', id.publicKey);
+        const atDevice = await hd.finish(hp.hello);
+        const atPc = await hp.finish(hd.hello);
+        const ready = '{"t":"ready"}';
+        const opened = { atPc: await atPc.open(await atDevice.seal(ready)), atDevice: await atDevice.open(await atPc.seal(ready)) };
+        await store.forget();
+        return { publicKey: id.publicKey, extractable: id.privateKey.extractable, exportRefused, opened, afterForget: await store.identity() };
+      };
+      window.keysReady = true;
+    </script>
+  </body>
+</html>

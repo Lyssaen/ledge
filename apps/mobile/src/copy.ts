@@ -165,6 +165,8 @@ export const copy = {
     github: 'Continuer avec GitHub'
   },
   compare: {
+    /** The name this phone gives itself in its `pair_commit`, when its user agent names no known device. */
+    deviceLabel: 'Téléphone',
     title: 'Comparez ce code',
     intro: (pc: string) => `Ledge vient d’afficher un code sur ${pc}. Il doit être identique à celui-ci.`,
     basis: 'Calculé à partir des clés du PC et de ce téléphone',

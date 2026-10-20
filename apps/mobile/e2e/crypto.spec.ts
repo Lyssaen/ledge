@@ -1,5 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
+import { hasWebkit } from './webkit';
+
+test.skip(({ browserName }) => browserName === 'webkit' && !hasWebkit, 'WebKit is not installed');
 
 const v = JSON.parse(readFileSync(new URL('../../../packages/seal/test/vectors.json', import.meta.url), 'utf8'));
 

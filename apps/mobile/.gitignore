@@ -1,3 +1,5 @@
 e2e/.results/
 e2e/shots
 dist
+test-results/
+playwright-report/

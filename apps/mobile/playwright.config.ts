@@ -1,8 +1,4 @@
-import { existsSync } from 'node:fs';
-import { defineConfig, devices, webkit } from '@playwright/test';
-
-// WebKit only runs where its browser is installed; nothing is downloaded here.
-const hasWebkit = existsSync(webkit.executablePath());
+import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: 'e2e',
@@ -10,6 +6,7 @@ export default defineConfig({
   webServer: { command: 'pnpm exec vite', url: 'http://127.0.0.1:5299/', reuseExistingServer: !process.env.CI },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
-    ...(hasWebkit ? [{ name: 'webkit', use: { ...devices['Desktop Safari'] } }] : []),
+    // Skipped by each spec when WebKit is not installed (see e2e/webkit.ts).
+    { name: 'webkit', use: { ...devices['Desktop Safari'] } },
   ],
 });
