@@ -141,3 +141,26 @@ describe('Store archive', () => {
     expect(s.all().length).toBe(ARCHIVE_MAX);
   });
 });
+
+describe('Store.onApply', () => {
+  const ev = { name: 'Stop', at: '2026-10-09T18:01:00.000Z', source: 'hook' } as const;
+  it('gives before and after, only when apply changed the session', () => {
+    const s = new Store(); const seen: Array<[string | undefined, string]> = [];
+    s.onApply((b, a) => seen.push([b?.state, a.state]));
+    s.upsert(mk('a'));
+    s.apply('a', ev);
+    s.apply('a', { name: 'SubagentStop', at: '2026-10-09T18:02:00.000Z', source: 'hook' }); // no helper id: the reducer keeps the same session
+    expect(seen).toEqual([['working', 'idle']]);
+  });
+  it('survives a throwing listener and unsubscribes', () => {
+    const s = new Store(); let n = 0;
+    s.onApply(() => { throw new Error('boom'); });
+    const off = s.onApply(() => { n++; });
+    s.upsert(mk('a'));
+    expect(s.apply('a', ev)?.state).toBe('idle');
+    expect(n).toBe(1);
+    off();
+    s.apply('a', { name: 'UserPromptSubmit', at: '2026-10-09T18:03:00.000Z', source: 'hook' } as never);
+    expect(n).toBe(1);
+  });
+});

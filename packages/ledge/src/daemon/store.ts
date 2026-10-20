@@ -20,6 +20,7 @@ export class Store {
   private recentList: Recent[] = [];
   private listeners = new Set<(c: StoreChange) => void>();
   private eventListeners = new Set<(id: string, event: SessionEvent) => void>();
+  private applyListeners = new Set<(before: Session | undefined, after: Session) => void>();
   private timer: NodeJS.Timeout | null = null;
   private saving: Promise<void> = Promise.resolve();
   private readonly journalPath: string;
@@ -115,6 +116,12 @@ export class Store {
     return () => this.eventListeners.delete(listener);
   }
 
+  /** Every `apply` that changed a session, with the session as it was and as it is. A throwing listener cannot break `apply`. */
+  onApply(listener: (before: Session | undefined, after: Session) => void): () => void {
+    this.applyListeners.add(listener);
+    return () => this.applyListeners.delete(listener);
+  }
+
   apply(id: string, event: SessionEvent): Session | undefined {
     if (!this.sessions.has(id)) return undefined;
     for (const l of this.eventListeners) { try { l(id, event); } catch (e) { log(`event listener failed: ${(e as Error).message}`); } }
@@ -125,6 +132,7 @@ export class Store {
     if (next === cur) return cur;
     this.sessions.set(id, next);
     this.emit({ type: 'updated', session: next });
+    for (const l of this.applyListeners) { try { l(cur, next); } catch (e) { log(`apply listener failed: ${(e as Error).message}`); } }
     return next;
   }
 
