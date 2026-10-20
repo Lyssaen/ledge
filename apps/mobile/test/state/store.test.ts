@@ -261,6 +261,9 @@ describe('the store, across reconnections', () => {
     t.set('pc_offline');
     expect(t.state().ops[op]?.phase).toBe('uncertain');
     t.set('ready');
+    // An instruction names no request: it waits for the snapshot, which carries the boot.
+    expect(t.of('session.reply').map(m => m.op)).toEqual([op]);
+    t.deliver(snapshot([session('a')]));
     expect(t.of('session.reply').map(m => m.op)).toEqual([op, op]);
   });
 
@@ -326,6 +329,80 @@ describe('the store, across reconnections', () => {
     expect(t.sent).toEqual([]);
     t.set('ready');
     expect(t.of('session.read')).toEqual([{ type: 'session.read', id: 'a', at: '2026-10-14T10:05:00.000Z' }]);
+  });
+});
+
+describe('the store, across a PC restart', () => {
+  const A = '11111111-1111-4111-8111-111111111111';
+  const B = '22222222-2222-4222-8222-222222222222';
+  const reconnect = (t: ReturnType<typeof setup>, boot?: string) => {
+    t.set('pc_offline');
+    t.set('ready');
+    t.deliver(snapshot([waiting('a')], 'Atelier', boot));
+  };
+
+  it('an interrupt received under boot A is not sent again under boot B, and stays uncertain', () => {
+    const t = setup();
+    t.deliver(snapshot([waiting('a')], 'Atelier', A));
+    const op = t.store.interrupt('a')!;
+    t.deliver({ type: 'operation.result', op, status: 'received' });
+    reconnect(t, B);
+    expect(t.of('session.interrupt')).toHaveLength(1);
+    expect(t.state().ops[op]?.phase).toBe('uncertain');
+  });
+
+  it('the same interrupt is sent again once, at the snapshot, under the same boot A', () => {
+    const t = setup();
+    t.deliver(snapshot([waiting('a')], 'Atelier', A));
+    const op = t.store.interrupt('a')!;
+    t.deliver({ type: 'operation.result', op, status: 'received' });
+    t.set('pc_offline');
+    t.set('ready');
+    expect(t.of('session.interrupt')).toHaveLength(1);
+    t.deliver(snapshot([waiting('a')], 'Atelier', A));
+    expect(t.of('session.interrupt')).toHaveLength(2);
+    expect(t.state().ops[op]?.phase).toBe('sending');
+    t.deliver(snapshot([waiting('a')], 'Atelier', A));
+    expect(t.of('session.interrupt')).toHaveLength(2);
+  });
+
+  it('a decision with expect, received under A, is sent again at ready under B', () => {
+    const t = setup();
+    t.deliver(snapshot([waiting('a')], 'Atelier', A));
+    const op = t.store.decide('a', 'accept')!;
+    t.deliver({ type: 'operation.result', op, status: 'received' });
+    t.set('pc_offline');
+    t.set('ready');
+    expect(t.of('session.decide')).toHaveLength(2);
+    t.deliver(snapshot([waiting('a')], 'Atelier', B));
+    expect(t.of('session.decide')).toHaveLength(2);
+  });
+
+  it('a snapshot without boot (lot 5 daemon) keeps the lot 5 rule', () => {
+    const t = setup();
+    t.deliver(snapshot([waiting('a')], 'Atelier', A));
+    const op = t.store.interrupt('a')!;
+    t.deliver({ type: 'operation.result', op, status: 'received' });
+    reconnect(t);
+    expect(t.of('session.interrupt')).toHaveLength(2);
+  });
+
+  it('an interrupt never received is sent again under a new boot', () => {
+    const t = setup();
+    t.deliver(snapshot([waiting('a')], 'Atelier', A));
+    t.store.interrupt('a');
+    reconnect(t, B);
+    expect(t.of('session.interrupt')).toHaveLength(2);
+  });
+
+  it('the boot stamped on an op survives a reload', () => {
+    const storage = new MemoryStorage();
+    const t = setup({ storage });
+    t.deliver(snapshot([waiting('a')], 'Atelier', A));
+    const op = t.store.interrupt('a')!;
+    t.deliver({ type: 'operation.result', op, status: 'received' });
+    const raw = JSON.parse(storage.getItem(OPS_KEY)!) as Record<string, { boot?: string }>;
+    expect(raw[op]?.boot).toBe(A);
   });
 });
 

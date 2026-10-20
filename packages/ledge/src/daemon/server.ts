@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { Socket } from 'node:net';
+import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
@@ -869,6 +870,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     preview: id => previews.get(id),
     dispatch,
     version: opts.daemon?.version ?? 'unknown',
+    boot: randomUUID(),
     log,
     now,
     rp: () => rpOf(mobile.state().relayUrl),

@@ -48,7 +48,7 @@ const flush = async () => { for (let i = 0; i < 5; i++) await new Promise(r => s
 const stops: Array<() => void> = [];
 afterEach(() => { for (const s of stops.splice(0)) s(); });
 
-function setup(opts: { dispatch?: (msg: ClientMessage, reply: (m: ServerMessage) => void) => Promise<void>; relayUrl?: string } = {}) {
+function setup(opts: { boot?: string; dispatch?: (msg: ClientMessage, reply: (m: ServerMessage) => void) => Promise<void>; relayUrl?: string } = {}) {
   const fm = fakeMobile(['dev1', 'dev2'], opts.relayUrl);
   const clock = { t: 1_000_000 };
   const challenges = createChallengeStore({ now: () => clock.t });
@@ -73,6 +73,7 @@ function setup(opts: { dispatch?: (msg: ClientMessage, reply: (m: ServerMessage)
     preview: id => previews.get(id),
     dispatch: async (msg, reply) => { if (opts.dispatch) dispatched.push(msg); await dispatch(msg, reply); },
     version: '1.2.3',
+    boot: opts.boot ?? randomUUID(),
     log: line => logs.push(line),
     now: () => T0,
     rp: () => rpOf(fm.mobile.state().relayUrl),
@@ -132,6 +133,19 @@ describe('phone gateway: reads and forward', () => {
     g.gw.forward({ type: 'session.updated', session: g.sessions.get('a')! });
     await flush();
     expect(g.fm.sent).toEqual([]);
+  });
+
+  it('each gateway announces its own boot in the snapshot', async () => {
+    const boots = [randomUUID(), randomUUID()];
+    const seen: unknown[] = [];
+    for (const boot of boots) {
+      const g = setup({ boot });
+      g.send('dev1', { type: 'snapshot.request' });
+      await flush();
+      const [snap] = g.got('dev1');
+      seen.push(snap?.type === 'snapshot' ? snap.daemon.boot : undefined);
+    }
+    expect(seen).toEqual(boots);
   });
 
   it('snapshot.request subscribes: the snapshot, then each session.updated projected, without cwd or tmuxSession', async () => {

@@ -21,6 +21,10 @@ export interface Op {
   reason?: OperationReason;
   /** When the phone first sent it. */
   at: string;
+  /** The PC said `received` (or a final status): it may have applied the op. Absent on an op that never got that far. */
+  received?: boolean;
+  /** The PC's boot id known when it said so; absent when none was known (a daemon without boot ids). */
+  boot?: string;
 }
 
 export const OPS_KEY = 'ledge.mobile.operations';
@@ -52,10 +56,17 @@ export const expectKey = (m: OpMessage): string | undefined => m.type === 'sessi
  */
 export const RESEND_MAX_MS = 300_000;
 
-/** Whether an operation is sent again at the next ready. One too old stays uncertain for good (« vérifiez le terminal »). */
-export function resendable(o: Op, now: number = Date.now()): boolean {
+/**
+ * Whether an operation is sent again. One too old stays uncertain for good (« vérifiez le terminal »). The PC keeps
+ * its operation registry in memory: one without `expect` that the PC received under another boot may have been
+ * applied by the process that is gone, and nothing says so now. It stays uncertain too. Without a boot to compare
+ * (`boot` null: a daemon that sends none), the age rule alone applies.
+ */
+export function resendable(o: Op, boot: string | null, now: number = Date.now()): boolean {
   if (!isLive(o.phase)) return false;
-  return expectKey(o.message) !== undefined || now - Date.parse(o.at) < RESEND_MAX_MS;
+  if (expectKey(o.message) !== undefined) return true;
+  if (now - Date.parse(o.at) >= RESEND_MAX_MS) return false;
+  return !o.received || boot === null || o.boot === boot;
 }
 
 /**
@@ -64,13 +75,13 @@ export function resendable(o: Op, now: number = Date.now()): boolean {
  * session may still be sent again (`resendable`); a finished one, or one too old to be sent again, does not stop a
  * later, deliberate one.
  */
-export function isNew(ops: Record<string, Op>, m: OpMessage, now: number = Date.now()): boolean {
+export function isNew(ops: Record<string, Op>, m: OpMessage, boot: string | null, now: number = Date.now()): boolean {
   if (ops[m.op]) return false;
   const key = expectKey(m);
   return !Object.values(ops).some(o => {
     if (o.message.id !== m.id) return false;
     if (key !== undefined) return expectKey(o.message) === key && (isLive(o.phase) || o.phase === 'applied');
-    return o.message.type === m.type && expectKey(o.message) === undefined && resendable(o, now);
+    return o.message.type === m.type && expectKey(o.message) === undefined && resendable(o, boot, now);
   });
 }
 
@@ -79,7 +90,9 @@ const OpSchema = z.object({
   message: PhoneClientMessageSchema,
   phase: z.enum(['sending', 'uncertain', 'applied', 'rejected', 'failed']),
   reason: OperationReasonSchema.optional(),
-  at: z.string().datetime()
+  at: z.string().datetime(),
+  received: z.boolean().optional(),
+  boot: z.string().optional()
 });
 
 

@@ -6,7 +6,7 @@ import {
   type PhoneSession, type ThreadItem
 } from '@ledge/protocol';
 import type { PhoneLink } from '../link/link';
-import { clearOps, isLive, isNew, loadOps, newOperationId, pruneOps, resendable, saveOps, UNCERTAIN_MS, type Op, type OpMessage } from './operations';
+import { clearOps, expectKey, isLive, isNew, loadOps, newOperationId, pruneOps, resendable, saveOps, UNCERTAIN_MS, type Op, type OpMessage } from './operations';
 import { clearLastState, loadLastState, loadReads, saveLastState, saveReads } from './persist';
 
 /** `loading`: asked, not answered yet. `gone`: the PC no longer knows the session. */
@@ -77,6 +77,8 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     ops: loadOps(storage)
   };
   let reads = loadReads(storage);
+  /** The PC's boot id of this run, from its snapshot; null until one, and when the PC sends none. Never cached. */
+  let boot: string | null = null;
   /** The last thread opened: asked again after every ready. */
   let lastThread: string | null = null;
   /**
@@ -127,17 +129,22 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     if (t) threads.set(id, { ...t, status: 'gone' });
   };
 
+  /** Sends again the uncertain operations `pick` keeps and `resendable` allows, oldest first, each as itself. */
+  function resend(pick: (o: Op) => boolean) {
+    const now = Date.now();
+    const live = Object.values(state.ops).filter(o => pick(o) && resendable(o, boot, now)).sort((a, b) => a.at.localeCompare(b.at));
+    if (!live.length) return;
+    const ops = { ...state.ops };
+    for (const o of live) ops[o.op] = { ...o, phase: 'sending' };
+    setOps(ops);
+    for (const o of live) { send(o.message); arm(o.op); }
+  }
+
   function onReady() {
     // Every operation whose outcome is unknown goes again with its own op: the PC applies it once, and answers it again.
-    // An instruction or interrupt too old to be sent again stays uncertain (see RESEND_MAX_MS).
-    const now = Date.now();
-    const live = Object.values(state.ops).filter(o => resendable(o, now)).sort((a, b) => a.at.localeCompare(b.at));
-    if (live.length) {
-      const ops = { ...state.ops };
-      for (const o of live) ops[o.op] = { ...o, phase: 'sending' };
-      setOps(ops);
-      for (const o of live) { send(o.message); arm(o.op); }
-    }
+    // An instruction or interrupt too old to be sent again stays uncertain (see RESEND_MAX_MS). Only the answers to a
+    // request go now; the others wait for the snapshot, which tells whether the PC restarted (`resendUnnamed`).
+    resend(o => expectKey(o.message) !== undefined);
     for (const [id, at] of Object.entries(reads)) send({ type: 'session.read', id, at });
     if (lastThread && state.threads.get(lastThread)?.status !== 'gone') askThread(lastThread);
   }
@@ -161,8 +168,11 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         for (const id of threads.keys()) if (!sessions.has(id)) gone(threads, id);
         reads = Object.fromEntries(Object.entries(reads).filter(([id]) => sessions.has(id)));
         saveReads(reads, storage);
+        boot = m.daemon.boot ?? null;
         set({ sessions, previews, threads, capabilities: m.capabilities, daemon: m.daemon, fresh: true, syncedAt: now });
         persist();
+        // The instructions and interrupts left uncertain (those in flight on this link are `sending`) go again if this PC may not have applied them.
+        if (ready()) resend(o => o.phase === 'uncertain' && expectKey(o.message) === undefined);
         return;
       }
       case 'session.updated': {
@@ -218,12 +228,12 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
           // stays `sending` until the link drops (then uncertain); an instruction or interrupt stops blocking the
           // next one once older than RESEND_MAX_MS (isNew), an answer once its request is gone.
           stopTimer(m.op);
-          if (o.phase !== 'sending') patchOp(m.op, x => ({ ...x, phase: 'sending' }));
+          patchOp(m.op, x => ({ ...x, phase: 'sending', received: true, ...(boot ? { boot } : {}) }));
           return;
         }
         stopTimer(m.op);
         const { reason: _old, ...rest } = o;
-        patchOp(m.op, () => ({ ...rest, phase: m.status as Op['phase'], ...(m.status !== 'applied' && m.reason ? { reason: m.reason } : {}) }));
+        patchOp(m.op, () => ({ ...rest, received: true, ...(boot ? { boot } : {}), phase: m.status as Op['phase'], ...(m.status !== 'applied' && m.reason ? { reason: m.reason } : {}) }));
         // The request changed under this answer: ask for the one there now, with its body.
         if (m.status === 'rejected' && m.reason === 'stale' && ready()) send({ type: 'session.pending', id: o.message.id });
         return;
@@ -243,7 +253,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     // A message the PC would refuse as invalid gets an error, not an operation result: it is never sent.
     if (!parsed.success || !('op' in parsed.data)) return null;
     const message = parsed.data as OpMessage;
-    if (!isNew(state.ops, message)) return null;
+    if (!isNew(state.ops, message, boot)) return null;
     setOps({ ...state.ops, [message.op]: { op: message.op, message, phase: 'sending', at: new Date().toISOString() } });
     send(message);
     arm(message.op);
@@ -259,6 +269,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     if (!held) return;
     for (const id of [...timers.keys()]) stopTimer(id);
     reads = {};
+    boot = null;
     lastThread = null;
     threadAsks = [];
     previewsDirty = false;

@@ -48,6 +48,8 @@ export function createPhoneGateway(deps: {
   preview: (id: string) => string[] | undefined;
   dispatch: (msg: ClientMessage, reply: (m: ServerMessage) => void) => Promise<void>;
   version: string;
+  /** Fresh for each daemon start: the phone tells a restarted PC (empty registry) from the same one. */
+  boot: string;
   log: (line: string) => void;
   now?: () => string;
   outbox?: { now?: () => number; frames?: number; bytes?: number; windowMs?: number };
@@ -77,7 +79,7 @@ export function createPhoneGateway(deps: {
   };
   const projected = (deviceId: string, s: Session) => toPhoneSession(s, followers.get(deviceId)?.reads.get(s.id) ?? startedAt);
   const snapshot = (deviceId: string): PhoneServerMessage => ({
-    type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, name: clip(hostname(), 40).text },
+    type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, boot: deps.boot, name: clip(hostname(), 40).text },
     device: { confirm: deps.credential(deviceId) !== null }
   });
 
