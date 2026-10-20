@@ -1,4 +1,4 @@
-import { PHONE_PROTOCOL, type PhoneClientMessage, type PhoneServerMessage, type PhoneSession } from '@ledge/protocol';
+import { PHONE_PROTOCOL, type PhoneChatTurn, type PhoneClientMessage, type PhoneServerMessage, type PhoneSession } from '@ledge/protocol';
 import type { PinnedPc } from '../../src/link/keys';
 import type { LinkState, PhoneLink, Reach } from '../../src/link/link';
 import type { Pairing, PairingState } from '../../src/link/pairing';
@@ -76,7 +76,17 @@ export function fakeLink(initial: LinkState = 'ready') {
 }
 
 const caps = { freeTextAnswer: true };
-export const snapshot = (sessions: PhoneSession[], name = 'Atelier', boot?: string): PhoneServerMessage => ({
+export const snapshot = (sessions: PhoneSession[], name = 'Atelier', boot?: string, device?: { confirm: boolean; chat?: true }): PhoneServerMessage => ({
   type: 'snapshot', protocol: PHONE_PROTOCOL, sessions,
-  capabilities: { claude: caps, codex: caps, cursor: { freeTextAnswer: false }, omp: { freeTextAnswer: false } }, daemon: { version: '0.9.0', name, ...(boot ? { boot } : {}) }
+  capabilities: { claude: caps, codex: caps, cursor: { freeTextAnswer: false }, omp: { freeTextAnswer: false } }, daemon: { version: '0.9.0', name, ...(boot ? { boot } : {}) }, ...(device ? { device } : {})
 });
+
+/** Scripts the PC's side of a phone chat: the messages it would send for one question. */
+export const chat = {
+  /** A turn as the PC projects it; `answer` makes it finished. */
+  turn: (qid: string, extra: Partial<PhoneChatTurn> = {}): PhoneChatTurn => ({ qid, question: 'Où en est le lot 6 ?', askedAt: '2026-10-20T10:00:00.000Z', steps: [], ...extra }),
+  delta: (qid: string, text: string): PhoneServerMessage => ({ type: 'chat.delta', qid, text }),
+  done: (qid: string, extra: Partial<PhoneChatTurn> = {}): PhoneServerMessage => ({ type: 'chat.done', qid, turn: chat.turn(qid, { answer: 'Fini.', answeredAt: '2026-10-20T10:00:05.000Z', ...extra }) }),
+  history: (...turns: PhoneChatTurn[]): PhoneServerMessage => ({ type: 'chat.history', turns }),
+  error: (qid: string, code: 'busy' | 'timeout' | 'cancelled' | 'failed'): PhoneServerMessage => ({ type: 'chat.error', qid, code })
+};
