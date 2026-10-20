@@ -5,6 +5,9 @@ import { createChat, type Chat, type ChatDeps, type ChatMessage } from './servic
 
 export type ChatThreadId = 'desktop' | `device:${string}`;
 type Emit = (m: ChatMessage) => void;
+/** A device id is its key's fingerprint (base64url): never a path. */
+const SAFE_ID = /^[A-Za-z0-9_-]{1,128}$/;
+const checkId = (id: string) => { if (!SAFE_ID.test(id)) throw new Error('invalid device id'); };
 
 /** A pool of places shared by the threads: `take` is refused once `max` questions run. */
 export function createSlots(max = 3): { take(): boolean; give(): void } {
@@ -22,17 +25,21 @@ export function createChatThreads(deps: Omit<ChatDeps, 'slots'> & { max?: number
   const desktop = createChat({ ...rest, slots });
   const devices = new Map<string, Chat>();
   const emitters = new Map<ChatThreadId, Emit>();
+  const dropping = new Map<string, Promise<void>>();
   const deviceHome = (id: string) => join(deps.home, 'mobile', 'chat', id);
 
   const device = (id: string): Chat => {
+    checkId(id);
+    if (dropping.has(id)) throw new Error('device thread is being dropped');
     let c = devices.get(id);
     if (!c) { c = createChat({ ...rest, home: deviceHome(id), slots }); devices.set(id, c); }
     return c;
   };
+  const all = (): Array<[ChatThreadId, Chat]> => [['desktop', desktop], ...[...devices].map(([id, c]): [ChatThreadId, Chat] => [`device:${id}`, c])];
   return {
     desktop,
     device,
-    all(): Array<[ChatThreadId, Chat]> { return [['desktop', desktop], ...[...devices].map(([id, c]): [ChatThreadId, Chat] => [`device:${id}`, c])]; },
+    all,
     setEmitter(thread: ChatThreadId, emit: Emit): void { emitters.set(thread, emit); },
     emitterOf(thread: ChatThreadId): Emit | undefined { return emitters.get(thread); },
     /** The PC's tool of the day file, whatever its day: `claude` without one. */
@@ -43,14 +50,22 @@ export function createChatThreads(deps: Omit<ChatDeps, 'slots'> & { max?: number
       } catch { return 'claude'; }
     },
     /** Forgets the device's thread (a later question starts a fresh one), stops its question, and removes its folder once nothing runs. */
-    async drop(id: string): Promise<void> {
+    drop(id: string): Promise<void> {
+      checkId(id);
+      const running = dropping.get(id); if (running) return running;
       const c = devices.get(id);
       devices.delete(id); emitters.delete(`device:${id}`);
-      if (c) { for (const t of c.history()) c.cancel(t.qid); await c.idle(); }
-      await rm(deviceHome(id), { recursive: true, force: true });
+      const p = (async () => {
+        try {
+          if (c) { for (const t of c.history()) c.cancel(t.qid); await c.idle(); }
+          await rm(deviceHome(id), { recursive: true, force: true });
+        } finally { dropping.delete(id); }
+      })();
+      dropping.set(id, p);
+      return p;
     },
     owner(qid: string): ChatThreadId | undefined {
-      for (const [id, c] of this.all()) if (c.history().some(t => t.qid === qid)) return id;
+      for (const [id, c] of all()) if (c.history().some(t => t.qid === qid)) return id;
       return undefined;
     }
   };

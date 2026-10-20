@@ -147,4 +147,24 @@ describe('chat threads', { timeout: 20_000 }, () => {
     const s = setup(); s.threads.device('b'); s.threads.device('a');
     expect(s.threads.all().map(([id]) => id)).toEqual(['desktop', 'device:b', 'device:a']);
   });
+
+  it('refuses a device id that is not a plain name, and touches nothing outside the chat dir', async () => {
+    const s = setup();
+    for (const bad of ['..', 'a/b', '', '../x', '.']) { expect(() => s.threads.device(bad)).toThrow('invalid device id'); await expect(async () => s.threads.drop(bad)).rejects.toThrow('invalid device id'); }
+    expect(existsSync(join(s.home, 'mobile'))).toBe(false);
+  });
+
+  it('device() throws while the device is being dropped, then makes a fresh thread', async () => {
+    const s = setup(); const a = collect();
+    const old = s.threads.device('d1');
+    const p = old.ask('q1', 'x', a.emit);
+    await vi.waitFor(() => expect(s.kids).toHaveLength(1));
+    const d = s.threads.drop('d1');
+    expect(s.threads.drop('d1')).toBe(d);
+    expect(() => s.threads.device('d1')).toThrow('device thread is being dropped');
+    await p; await d;
+    const fresh = s.threads.device('d1');
+    expect(fresh).not.toBe(old);
+    expect(existsSync(join(s.home, 'mobile', 'chat', 'd1'))).toBe(false);
+  });
 });
