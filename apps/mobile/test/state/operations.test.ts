@@ -9,7 +9,7 @@ import { createStore } from '../../src/state/store';
 import { expectKey, isNew, KEEP_FINISHED, loadOps, OPS_KEY, pruneOps, resendable, RESEND_MAX_MS, saveOps, type Op, type OpPhase } from '../../src/state/operations';
 import { startFakePc } from '../fakePc';
 import { pending, session } from '../model/fixtures';
-import { MemoryStorage, snapshot } from './helpers';
+import { fakeLink, MemoryStorage, snapshot } from './helpers';
 
 const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const at = (n: number) => new Date(Date.UTC(2026, 9, 14, 10, 0, n)).toISOString();
@@ -205,5 +205,40 @@ describe('session.answer as an operation', () => {
     saveOps({ [op.op]: op }, storage);
     expect(loadOps(storage)[op.op]?.message).toEqual(answer);
     expect(resendable({ ...op, phase: 'uncertain' }, null, Date.parse(op.at) + 10 * RESEND_MAX_MS)).toBe(true);
+  });
+});
+
+describe('push operations are never persisted', () => {
+  const ENDPOINT = 'https://fcm.googleapis.com/fcm/send/secret-endpoint';
+  const subOp = (n: number): Op => ({
+    op: uuid(n), phase: 'uncertain', at: at(n),
+    message: { type: 'push.subscribe', op: uuid(n), subscription: { endpoint: ENDPOINT, keys: { p256dh: 'A'.repeat(87), auth: 'B'.repeat(22) } }, key: 'C'.repeat(87) }
+  });
+  const unsubOp = (n: number): Op => ({ op: uuid(n), phase: 'uncertain', at: at(n), message: { type: 'push.unsubscribe', op: uuid(n) } });
+
+  it('a push.subscribe is not written, and its endpoint is nowhere in storage', () => {
+    const storage = new MemoryStorage();
+    saveOps(byId(subOp(1), unsubOp(2), replyOp(3, 'uncertain')), storage);
+    const raw = storage.getItem(OPS_KEY) ?? '';
+    expect(raw).not.toContain(ENDPOINT);
+    expect(Object.keys(loadOps(storage))).toEqual([uuid(3)]);
+  });
+
+  it('one stored by an older build is dropped on load', () => {
+    const storage = new MemoryStorage();
+    storage.setItem(OPS_KEY, JSON.stringify(byId(subOp(1), unsubOp(2), decideOp(3, 'uncertain'))));
+    expect(Object.keys(loadOps(storage))).toEqual([uuid(3)]);
+  });
+
+  it('is not sent again on ready, while other operations still are', async () => {
+    const storage = new MemoryStorage();
+    storage.setItem(OPS_KEY, JSON.stringify(byId(unsubOp(1), subOp(2), decideOp(3, 'uncertain'))));
+    const f = fakeLink('pc_offline');
+    const store = createStore(f.link, storage);
+    f.set('ready');
+    expect(f.of('push.unsubscribe')).toEqual([]);
+    expect(f.of('push.subscribe')).toEqual([]);
+    expect(f.of('session.decide')).toHaveLength(1);
+    store.close();
   });
 });

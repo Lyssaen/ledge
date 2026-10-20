@@ -33,6 +33,9 @@ export const KEEP_FINISHED = 50;
 /** An operation still without a result after this long is uncertain. */
 export const UNCERTAIN_MS = 10_000;
 
+/** Push changes stay in this page's memory: replayed after a reload they could undo a later choice, and they carry the endpoint (a secret). */
+const isPush = (m: { type: string }) => m.type === 'push.subscribe' || m.type === 'push.unsubscribe';
+
 export const isLive = (p: OpPhase) => p === 'sending' || p === 'uncertain';
 
 export const newOperationId = (): string => crypto.randomUUID();
@@ -107,7 +110,7 @@ export function loadOps(storage?: Storage): Record<string, Op> {
     const ops: Record<string, Op> = {};
     for (const x of Object.values(v)) {
       const p = OpSchema.safeParse(x);
-      if (!p.success || !('op' in p.data.message) || p.data.message.op !== p.data.op) continue;
+      if (!p.success || !('op' in p.data.message) || p.data.message.op !== p.data.op || isPush(p.data.message)) continue;
       const { reason, ...rest } = p.data;
       ops[p.data.op] = { ...rest, message: p.data.message as OpMessage, phase: p.data.phase === 'sending' ? 'uncertain' : p.data.phase, ...(reason ? { reason } : {}) };
     }
@@ -116,7 +119,7 @@ export function loadOps(storage?: Storage): Record<string, Op> {
 }
 
 export function saveOps(ops: Record<string, Op>, storage?: Storage): void {
-  try { localStore(storage)?.setItem(OPS_KEY, JSON.stringify(ops)); } catch { /* storage full or blocked: the live state still works */ }
+  try { localStore(storage)?.setItem(OPS_KEY, JSON.stringify(Object.fromEntries(Object.entries(ops).filter(([, o]) => !isPush(o.message))))); } catch { /* storage full or blocked: the live state still works */ }
 }
 
 export function clearOps(storage?: Storage): void {
