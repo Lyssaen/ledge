@@ -1,5 +1,6 @@
 import { PGlite } from '@electric-sql/pglite';
 import type { AddressInfo } from 'node:net';
+import { generateKeyPairSync } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { DevicePollResponseSchema, DeviceStartResponseSchema, parseRelayServerMessage } from '@ledge/protocol';
@@ -72,5 +73,17 @@ describe('startAccountsRelay', () => {
     expect(events.filter((e) => e.ev === 'sign_in_refused')).toEqual([]);
     await app.close();
     expect(events).toContainEqual({ ev: 'sign_in_refused', reason: 'denied', count: 1 });
+  }, 30_000);
+
+  it('serves /push/key only when VAPID is configured', async () => {
+    const { privateKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    const vapid = { publicKey: 'BPUBLIC', privateKey, subject: 'mailto:ops@example.com' };
+    const off = await startAccountsRelay(cfg, { db, github: fakeGitHub(), log: () => {} });
+    const on = await startAccountsRelay({ ...cfg, vapid }, { db, github: fakeGitHub(), log: () => {} });
+    expect((await fetch(`http://${await listen(off)}/push/key`)).status).toBe(404);
+    const res = await fetch(`http://${await listen(on)}/push/key`);
+    expect(await res.json()).toEqual({ publicKey: 'BPUBLIC' });
+    await off.close();
+    await on.close();
   }, 30_000);
 });

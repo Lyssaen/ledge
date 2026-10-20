@@ -1,9 +1,10 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { Socket } from 'node:net';
+import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
-import { basename, join } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, backendOf } from '@ledge/protocol';
+import { DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type ChatErrorCode, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, backendOf } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
 import type { Tmux } from '../tmux.js';
@@ -22,7 +23,8 @@ import { extraRoots, scanRepos } from './scan.js';
 import { createFolder, listFolder, resolveFolder } from './folders.js';
 import { loginShellEnv } from '../shell-path.js';
 import { log } from '../log.js';
-import { createChat, type Chat } from '../chat/service.js';
+import { tooWide, type Chat } from '../chat/service.js';
+import { createChatThreads } from '../chat/threads.js';
 import { createForge } from '../chat/forge.js';
 import { paths } from '../paths.js';
 import { ensureDaemonToken, hostAllowed, requestAuthorized, selectDaemonProtocol } from '../auth.js';
@@ -32,12 +34,18 @@ import { readIsland, writeIsland } from './island.js';
 import { readDocument } from './documents.js';
 import { createModels, type Models } from './models.js';
 import { createRelay, free } from './relay.js';
+import { launchFromChat, LaunchRefused } from '../chat/launch.js';
 import { createMailbox } from './mailbox.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
 import { createRouter } from '../chat/routing.js';
 import { serveSsh } from '../transport/ssh.js';
 import type { MobileService } from '../mobile/service.js';
 import { createPhoneGateway, type PhoneGateway } from '../mobile/gateway.js';
+import { createNotifier } from '../mobile/push/notifier.js';
+import { chatEndPayload } from '../mobile/push/triggers.js';
+import { pushFor } from '../mobile/push/triggers.js';
+import { createChallengeStore } from '../mobile/challenges.js';
+import { rpOf } from '../mobile/webauthn.js';
 import { MAX_FRAME } from '../transport/frames.js';
 
 /** How each agent resumes the folder's last conversation, all three verified (Cursor Agent: `--continue`). */
@@ -157,7 +165,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   // Under systemd the daemon has the bare system environment (no PATH to the agents, no proxy): a launched agent gets
   // the login shell's on top of it, as a terminal would.
   const agentEnv = opts.agentEnv ?? (async () => ({ ...process.env, ...(await loginShellEnv()) }));
-  const chat = opts.chat ?? createChat({ store, tmux, home: paths().dir, userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now, projects: () => projects, forge: createForge({ env: agentEnv }) });
+  const threads = createChatThreads({ store, tmux, home: paths().dir, userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now, projects: () => projects, forge: createForge({ env: agentEnv }) });
+  const chat: Chat = opts.chat ?? threads.desktop;
   const router = createRouter({ env: agentEnv });
   const omp = opts.omp ?? createOmpHost({ store, env: agentEnv, dir: join(paths().dir, 'omp'), now });
   const models = opts.models ?? createModels({ env: agentEnv, omp: async () => ompChoices(await omp.catalog(opts.home ?? homedir())) });
@@ -209,8 +218,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const remoteClients = new Set<WebSocket>();
   /** The approved phones' way in and out, when mobile access is up; set once `dispatch` can run. */
   let gateway: PhoneGateway | undefined;
+  /** The notifier is made after the gateway: a chat end reaches it through this. */
+  let notifyChatEnd: ((deviceId: string, code?: ChatErrorCode) => void) | undefined;
   /** Every local front gets it; the phone gateway passes on only what it knows. */
   const broadcast = (msg: ServerMessage) => { for (const c of localClients) send(c, msg); gateway?.forward(msg); };
+  threads.setEmitter('desktop', broadcast);
   const history = opts.history;
   const unsubscribeHistory = history ? [
     history.onItem((id, item) => {
@@ -228,14 +240,19 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const unsubscribeMobile = mobile?.onChange(() => broadcast({ type: 'mobile', state: mobile.state() }));
   // One lock for both: a session is never typed into by the relay and the mailbox at once.
   const typing = new Set<string>();
+  // An injected chat (tests) is the only thread there is; otherwise the relay works across the PC's and every device's.
+  const relayThreads: Pick<typeof threads, 'all' | 'owner' | 'emitterOf' | 'queuedRelays'> = opts.chat ? {
+    all: () => [['desktop', chat]], owner: qid => (chat.relay(qid) ? 'desktop' : undefined), emitterOf: () => broadcast,
+    queuedRelays: () => chat.queuedRelays(broadcast).map(q => ({ thread: 'desktop' as const, ...q }))
+  } : threads;
   /** `replyTo` for the mailbox and the relay, which keep the refusal's text. */
   const replyText = async (id: string, text: string) => (await replyTo(id, text))?.message ?? null;
   const mailbox = createMailbox({
     store, replyTo: replyText, typing, now,
-    relayQueued: id => chat.queuedRelays().some(q => q.relay.id === id),
+    relayQueued: id => relayThreads.queuedRelays().some(q => q.relay.id === id),
     sent: { record: (id, m) => { history?.recordSent(id, m); }, mark: (id, rid, status) => history?.markSent(id, rid, status) }
   });
-  const relay = createRelay({ chat, store, replyTo: replyText, broadcast, now, typing, next: id => mailbox.kick(id) });
+  const relay = createRelay({ threads: relayThreads, store, replyTo: replyText, now, typing, next: id => mailbox.kick(id) });
   /** The last preview per session, replayed after every snapshot so a late client does not wait for the agent to write. */
   const previews = new Map<string, string[]>();
   /** The title last pushed to each session's tmux tab, so tmux is told only when it changes. */
@@ -522,7 +539,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** A model change waiting for the session's free moment (`modelNext`): the agent stopped and resumed on that model. */
   async function applyModelNext(id: string): Promise<void> {
     const s = store.get(id);
-    if (!s?.modelNext || !free(s) || typing.has(id) || chat.queuedRelays().some(q => q.relay.id === id)) return;
+    if (!s?.modelNext || !free(s) || typing.has(id) || relayThreads.queuedRelays().some(q => q.relay.id === id)) return;
     // OMP changes its model in place (set_model on the same process): nothing is stopped, the conversation is never left.
     if (backendOf(s) === 'omp-rpc') return applyOmpModel(s);
     const key = resumeKey(s);
@@ -648,25 +665,21 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'session.launch': {
         // Any failure (bad folder, tmux) reaches the requester as an `error` without id, through the caller's catch.
         if (msg.qid === undefined) return reply({ type: 'session.launched', id: (await launch(msg)).id });
-        // A chat card (spec 2026-10-12 §4): the proposal's own fields, never the message's but the model chosen on the card (#58). Its rows (#24) start one after the other,
-        // so each launch registers its bot before the next picks a name; a launched row, or one in flight, is passed over.
-        const qid = msg.qid; const rows = msg.rows ?? [0];
-        const todo = rows.filter(r => { const p = chat.proposal(qid, r); return p && !p.launchedId && !chatLaunches.has(`${qid}#${r}`); });
-        if (todo.length === 0) return refuse(rows.some(r => chat.proposal(qid, r)) ? 'already launched' : 'unknown proposal');
-        for (const r of todo) chatLaunches.add(`${qid}#${r}`);
+        // A chat card (spec 2026-10-12 §4): the proposal's own fields, never the message's but the model chosen on the card (#58).
         let failure: unknown = null;
         try {
-          for (const r of todo) {
-            const p = chat.proposal(qid, r)!;
-            try {
-              const session = await launch({ tool: p.tool, cwd: p.cwd, prompt: p.prompt, model: msg.model, effort: msg.effort });
-              reply({ type: 'session.launched', id: session.id });
-              chat.markLaunched(qid, session.id, broadcast, r);
-            } catch (e) { chat.markFailed(qid, (e as Error).message, broadcast, r); failure = e; }
-            finally { chatLaunches.delete(`${qid}#${r}`); }
-          }
-        } finally { for (const r of todo) chatLaunches.delete(`${qid}#${r}`); }
-        if (failure) throw failure;
+          const done = await launchFromChat({
+            chat, emit: broadcast, inFlight: chatLaunches,
+            launch: async p => {
+              try {
+                const session = await launch({ tool: p.tool, cwd: p.cwd, prompt: p.prompt, model: msg.model, effort: msg.effort });
+                reply({ type: 'session.launched', id: session.id });
+                return session.id;
+              } catch (e) { failure = e; throw e; }
+            }
+          }, msg.qid, msg.rows);
+          if (done.failed > 0 && failure) throw failure;
+        } catch (e) { if (e instanceof LaunchRefused) return refuse(e.message); throw e; }
         return;
       }
       case 'folder.list': return reply(await listFolder(msg.path, opts.home, msg.requestId));
@@ -862,15 +875,49 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
 
   if (mobile) gateway = createPhoneGateway({
     mobile,
+    // A dropped device thread takes its queued cards with it: the sessions they waited for go on to what else waits.
+    chats: { ...threads, async drop(id: string) {
+      const waiting = [...new Set(threads.queuedRelays().filter(q => q.thread === `device:${id}`).map(q => q.relay.id))];
+      try { await threads.drop(id); } finally { for (const sid of waiting) relay.settle(sid); }
+    } },
     sessions: () => store.all(),
     session: id => store.get(id),
     thread: id => history?.items(id),
     preview: id => previews.get(id),
     dispatch,
+    relay,
+    launchChat: (thread, qid, rows) => {
+      const c = thread === 'desktop' ? threads.desktop : threads.device(thread.slice('device:'.length));
+      const userHome = resolve(opts.home ?? homedir());
+      return launchFromChat({
+        chat: c, emit: threads.emitterOf(thread) ?? (() => {}), inFlight: chatLaunches,
+        launch: async p => (await launch({ tool: p.tool, cwd: p.cwd, prompt: p.prompt })).id,
+        refuse: p => { const wide = tooWide(resolve(p.cwd), userHome); return wide ? `the folder is ${wide}` : null; }
+      }, qid, rows);
+    },
+    onChatEnd: (deviceId, end) => notifyChatEnd?.(deviceId, end.code),
     version: opts.daemon?.version ?? 'unknown',
+    boot: randomUUID(),
     log,
-    now
+    now,
+    rp: () => rpOf(mobile.state().relayUrl),
+    challenges: createChallengeStore(),
+    credential: id => mobile.credential(id),
+    setCredential: (id, c) => mobile.setCredential(id, c)
   });
+  /** A hidden phone is told, through the relay, of what deserves it. */
+  let unsubscribePush: (() => void) | undefined;
+  if (mobile) {
+    const notifier = createNotifier({ mobile, presence: id => gateway?.visible(id) ?? false, log });
+    notifyChatEnd = (deviceId, code) => {
+      const badge = store.all().filter(s => s.pending).length;
+      void notifier.notify(chatEndPayload(code, badge), undefined, deviceId).catch(e => log(`push failed (${e instanceof Error ? e.name : 'error'})`));
+    };
+    unsubscribePush = store.onApply((before, after) => {
+      const p = pushFor(before, after, store.all());
+      if (p) void notifier.notify(p, after.id).catch(e => log(`push failed (${e instanceof Error ? e.name : 'error'})`));
+    });
+  }
 
   wss.on('connection', (ws, req) => {
     ws.on('error', e => log(`socket error: ${e.message}`));
@@ -910,6 +957,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast,
     preview,
     omp,
-    close: () => new Promise(res => { unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); gateway?.stop(); relay.close(); mailbox.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
+    close: () => new Promise(res => { unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
   };
 }

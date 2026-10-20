@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { PushPayloadSchema } from '@ledge/protocol';
 import { fingerprintOf } from '../../src/sw/fingerprint';
 
 const ORIGIN = 'https://relay.test';
@@ -28,7 +29,8 @@ function origin() {
       return {
         put: async (key: string, res: Response) => { store.set(key, await res.text()); },
         match: async (key: string) => (store.has(key) ? new Response(store.get(key)) : undefined),
-        keys: async () => [...store.keys()].map((k) => ({ url: `${ORIGIN}${k}` }))
+        keys: async () => [...store.keys()].map((k) => ({ url: `${ORIGIN}${k}` })),
+        delete: async (key: string) => store.delete(key)
       };
     }),
     has: async (name: string) => stores.has(name),
@@ -39,7 +41,7 @@ function origin() {
     const p = new URL(typeof input === 'string' ? input : input.url, ORIGIN).pathname;
     return served[p] !== undefined ? new Response(served[p]) : new Response('not found', { status: 404 });
   });
-  const pages = [{ postMessage: vi.fn() }, { postMessage: vi.fn() }];
+  const pages = [{ postMessage: vi.fn(), focus: vi.fn(async () => {}) }, { postMessage: vi.fn(), focus: vi.fn(async () => {}) }];
   /** The server serves `app` and its worker `script` from now on. */
   const serve = (app: App, script: string) => {
     for (const k of Object.keys(served)) delete served[k];
@@ -57,9 +59,9 @@ async function worker(o: Origin, opts: { app?: App; id?: string; active?: boolea
   const on: Record<string, Listener> = {};
   const self = {
     location: new URL(`${ORIGIN}/sw.js`),
-    registration: { active: opts.active ? {} : null },
+    registration: { active: opts.active ? {} : null, showNotification: vi.fn(async () => {}), setAppBadge: vi.fn(async () => {}) },
     skipWaiting: vi.fn(async () => {}),
-    clients: { claim: vi.fn(async () => {}), matchAll: vi.fn(async () => o.pages) },
+    clients: { claim: vi.fn(async () => {}), matchAll: vi.fn(async () => o.pages), openWindow: vi.fn(async () => null) },
     addEventListener: (type: string, fn: Listener) => { on[type] = fn; }
   };
   vi.stubGlobal('self', self);
@@ -86,8 +88,13 @@ async function worker(o: Origin, opts: { app?: App; id?: string; active?: boolea
     await dispatch('message', { data, ports: [{ postMessage }] });
     return postMessage;
   };
+  const push = (data: unknown) => dispatch('push', { data: data === undefined ? null : { json: () => { if (typeof data === 'function') return data(); return data; } } });
+  const click = (url: unknown) => {
+    const notification = { close: vi.fn(), data: url === undefined ? undefined : { url } };
+    return dispatch('notificationclick', { notification }).then(() => notification);
+  };
   const build = async () => (await message({ type: 'build' })).mock.calls[0]?.[0] as unknown;
-  return { self, dispatch, request, page, message, build };
+  return { self, dispatch, request, page, message, build, push, click };
 }
 
 /** v1 installed by the first visit and active, as the page finds it. */
@@ -230,11 +237,11 @@ describe('the pinned service worker', () => {
       expect(o.fetch).not.toHaveBeenCalled();
     });
 
-    it('/auth/*, /ws and /healthz go to the network, untouched by the cache', async () => {
+    it('/auth/*, /ws, /healthz and /push/key go to the network, untouched by the cache', async () => {
       const o = origin();
       const w = await firstVisit(o);
       o.caches.open.mockClear();
-      for (const [path, mode] of [['/auth/me', 'cors'], ['/auth/github/start', 'navigate'], ['/auth', 'navigate'], ['/ws', 'cors'], ['/healthz', 'cors']] as const) {
+      for (const [path, mode] of [['/auth/me', 'cors'], ['/auth/github/start', 'navigate'], ['/auth', 'navigate'], ['/ws', 'cors'], ['/healthz', 'cors'], ['/push/key', 'cors']] as const) {
         const { response } = await w.request(path, mode);
         expect(response, path).toBeUndefined();
       }
@@ -246,6 +253,155 @@ describe('the pinned service worker', () => {
       const w = await firstVisit(o);
       expect((await w.dispatch('fetch', { request: { url: 'https://github.com/login', mode: 'navigate', method: 'GET' } })).response).toBeUndefined();
       expect((await w.request('/index.html', 'cors', 'POST')).response).toBeUndefined();
+    });
+  });
+
+  describe('installation race', () => {
+    it('a worker installing keeps its cache when another worker accepts and prunes meanwhile', async () => {
+      const o = origin();
+      const v1 = await firstVisit(o);
+      await update(o);
+      await v1.message({ type: 'accept' });
+      expect(await o.ledgeCaches()).toEqual(expect.arrayContaining(['ledge-0.11.0-bbbbbbbbbbbbbbbb']));
+    });
+
+    it('an installation registered 25 hours ago no longer protects its cache', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        const o = origin();
+        const v1 = await firstVisit(o);
+        await update(o);
+        vi.setSystemTime(Date.now() + 25 * 3_600_000);
+        await v1.message({ type: 'accept' });
+        expect(await o.ledgeCaches()).toEqual(['ledge-0.11.0-aaaaaaaaaaaaaaaa']);
+      } finally { vi.useRealTimers(); }
+    });
+
+    it('activation and a failed installation withdraw the registration', async () => {
+      const o = origin();
+      await firstVisit(o);
+      const meta = () => [...(o.stores.get('ledge-meta')?.keys() ?? [])].filter((k) => k.startsWith('/pending/'));
+      expect(meta()).toEqual([]);
+      const v2 = await update(o);
+      expect(meta()).toEqual(['/pending/ledge-0.11.0-bbbbbbbbbbbbbbbb']);
+      await v2.dispatch('activate');
+      expect(meta()).toEqual([]);
+      o.serve({ ...V1, '/icon-192.png': 'bad' }, 'sw v3');
+      const v3 = await worker(o, { app: V1, id: 'cccccccccccccccc', active: true });
+      await expect(v3.dispatch('install')).rejects.toThrow();
+      expect(meta()).toEqual([]);
+    });
+  });
+
+  describe('notifications', () => {
+    const payload = { v: 1, kind: 'request', title: 'api attend votre accord', body: 'rm -rf build', url: '/#/request/s1/k1', badge: 3, tag: 's1-k1' };
+    const FALLBACK = ['Ledge', { body: 'Une demande attend', tag: 'ledge', renotify: true }];
+
+    it('a valid push shows its title, body and url, and sets the badge', async () => {
+      const o = origin();
+      const w = await firstVisit(o);
+      await w.push(payload);
+      expect(w.self.registration.showNotification).toHaveBeenCalledWith('api attend votre accord', { body: 'rm -rf build', tag: 's1-k1', data: { url: '/#/request/s1/k1' }, icon: '/icon-192.png', renotify: true });
+      expect(w.self.registration.setAppBadge).toHaveBeenCalledWith(3);
+    });
+
+    it('an unreadable, absent or foreign-url push shows the fallback notification', async () => {
+      const o = origin();
+      const w = await firstVisit(o);
+      const show = w.self.registration.showNotification;
+      await w.push(() => { throw new Error('not json'); });
+      await w.push(undefined);
+      await w.push({ ...payload, url: 'https://evil.example' });
+      await w.push({ ...payload, kind: 'other' });
+      expect(show).toHaveBeenCalledTimes(4);
+      for (const call of show.mock.calls) expect(call).toEqual(FALLBACK);
+    });
+
+    it('re-rings on a tag already shown, except for a finished turn', async () => {
+      const o = origin();
+      const w = await firstVisit(o);
+      const show = w.self.registration.showNotification;
+      for (const kind of ['request', 'question', 'chat', 'finished'] as const) {
+        show.mockClear();
+        await w.push({ ...payload, kind });
+        expect((show.mock.calls[0] as unknown as [string, { tag: string; renotify?: boolean }])[1]).toMatchObject({ tag: 's1-k1', ...(kind === 'finished' ? {} : { renotify: true }) });
+        if (kind === 'finished') expect((show.mock.calls[0] as unknown as [string, object])[1]).not.toHaveProperty('renotify', true);
+      }
+    });
+
+    it('a push still shows when the badge API is missing', async () => {
+      const o = origin();
+      const w = await firstVisit(o);
+      delete (w.self.registration as { setAppBadge?: unknown }).setAppBadge;
+      await w.push(payload);
+      expect(w.self.registration.showNotification).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows the real notification exactly when PushPayloadSchema accepts the payload', async () => {
+      const o = origin();
+      const w = await firstVisit(o);
+      const show = w.self.registration.showNotification;
+      const fixtures: Record<string, unknown> = {
+        valid: payload,
+        'v 2': { ...payload, v: 2 },
+        'kind chat': { ...payload, kind: 'chat', title: 'Ledge a répondu', body: 'Touchez pour lire la réponse.', url: '/#/chat', tag: 'chat' },
+        'bad kind': { ...payload, kind: 'other' },
+        'title 80': { ...payload, title: 't'.repeat(80) },
+        'title 81': { ...payload, title: 't'.repeat(81) },
+        'body 120': { ...payload, body: 'b'.repeat(120) },
+        'body 121': { ...payload, body: 'b'.repeat(121) },
+        'url //evil': { ...payload, url: '//evil' },
+        'url with space': { ...payload, url: '/#/a b' },
+        'url 300': { ...payload, url: '/#/' + 'a'.repeat(297) },
+        'url 301': { ...payload, url: '/#/' + 'a'.repeat(298) },
+        'badge -1': { ...payload, badge: -1 },
+        'badge 1.5': { ...payload, badge: 1.5 },
+        'badge 999': { ...payload, badge: 999 },
+        'badge 1000': { ...payload, badge: 1000 },
+        'bad tag': { ...payload, tag: 'a b' },
+        'extra key': { ...payload, extra: 1 }
+      };
+      for (const [name, fixture] of Object.entries(fixtures)) {
+        show.mockClear();
+        await w.push(fixture);
+        expect(show).toHaveBeenCalledTimes(1);
+        expect((show.mock.calls[0] as unknown[])[0] !== 'Ledge', name).toBe(PushPayloadSchema.safeParse(fixture).success);
+      }
+    });
+
+    it('a badge API that throws does not fail the push', async () => {
+      const o = origin();
+      const w = await firstVisit(o);
+      w.self.registration.setAppBadge.mockImplementation(() => { throw new Error('sync'); });
+      await expect(w.push(payload)).resolves.toBeDefined();
+      expect(w.self.registration.showNotification).toHaveBeenCalledTimes(1);
+    });
+
+    it('a click with a window open closes the notification, focuses it and tells it where to go', async () => {
+      const o = origin();
+      const w = await firstVisit(o);
+      const n = await w.click('/#/request/s1/k1');
+      expect(n.close).toHaveBeenCalled();
+      expect(o.pages[0]!.focus).toHaveBeenCalled();
+      expect(o.pages[0]!.postMessage).toHaveBeenCalledWith({ type: 'ledge.open', url: '/#/request/s1/k1' });
+      expect(w.self.clients.openWindow).not.toHaveBeenCalled();
+    });
+
+    it('a click with no window opens one on the page', async () => {
+      const o = origin();
+      const w = await firstVisit(o);
+      w.self.clients.matchAll.mockImplementation(async () => []);
+      await w.click('/#/request/s1/k1');
+      expect(w.self.clients.openWindow).toHaveBeenCalledWith('/#/request/s1/k1');
+    });
+
+    it('a click whose url is not inside the app goes to /#/', async () => {
+      const o = origin();
+      const w = await firstVisit(o);
+      w.self.clients.matchAll.mockImplementation(async () => []);
+      await w.click('https://evil.example');
+      await w.click(undefined);
+      expect(w.self.clients.openWindow.mock.calls).toEqual([['/#/'], ['/#/']]);
     });
   });
 

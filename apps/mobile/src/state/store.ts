@@ -2,11 +2,13 @@
 // of it. Every write is an operation named by a uuid, sent again with that same uuid after a lost connection.
 import { useSyncExternalStore } from 'react';
 import {
-  PhoneClientMessageSchema, type CapabilitiesByTool, type PhoneClientMessage, type PhonePending, type PhoneServerMessage,
-  type PhoneSession, type ThreadItem
+  PhoneClientMessageSchema, type Assertion, type CapabilitiesByTool, type Credential, type PhoneClientMessage, type PhonePending, type PhoneServerMessage,
+  type PhoneSession, type PushSubscription, type ThreadItem
 } from '@ledge/protocol';
 import type { PhoneLink } from '../link/link';
-import { clearOps, isLive, isNew, loadOps, newOperationId, pruneOps, resendable, saveOps, UNCERTAIN_MS, type Op, type OpMessage } from './operations';
+import { getAssertion } from '../link/webauthn';
+import { asked, emptyChat, reduceChat, type ChatAction, type ChatState } from './chat';
+import { clearOps, expectKey, isLive, isNew, loadOps, newOperationId, pruneOps, resendable, saveOps, UNCERTAIN_MS, type Op, type OpMessage } from './operations';
 import { clearLastState, loadLastState, loadReads, saveLastState, saveReads } from './persist';
 
 /** `loading`: asked, not answered yet. `gone`: the PC no longer knows the session. */
@@ -27,6 +29,8 @@ export interface MobileState {
   previews: Map<string, string[]>;
   /** Null until the first snapshot of this run: they are not kept on the phone. */
   capabilities: CapabilitiesByTool | null;
+  /** What the PC offers for confirming on the device; null until a snapshot, and from a PC that says nothing (lot 5). */
+  device: { confirm: boolean; push?: 'on' | 'off' | 'stale' | 'unavailable'; chat?: true } | null;
   daemon: { version: string; name: string } | null;
   /** True from a snapshot until the channel is lost: what is shown is the PC's state now, not the last known one. */
   fresh: boolean;
@@ -35,16 +39,46 @@ export interface MobileState {
   ops: Record<string, Op>;
 }
 
+/** The request a challenge is asked for, as `session.decide` names it. */
+export type PhoneExpect = Extract<PhoneClientMessage, { type: 'session.decide' }>['expect'];
+export type ConfirmChallenge = Extract<PhoneServerMessage, { type: 'confirm.challenge' }>;
+export type ConfirmRequest = { purpose: 'register' } | { purpose: 'decide'; id: string; expect: PhoneExpect } | { purpose: 'launch'; qid: string };
+
+/** How long `prepareConfirm` waits for the PC's challenge. */
+export const PREPARE_MS = 10_000;
+/** How long « Se déconnecter » waits for the PC to confirm that it removed this phone. */
+export const FORGET_MS = 5_000;
+
+export type Answer = Extract<PhoneClientMessage, { type: 'session.answer' }>['answers'][number];
+
+/** The request a challenge was prepared for: what the confirmed operation carries as its `expect`, never rebuilt from the current state. */
+export interface ConfirmedExpect { key: string; kind: PhonePending['kind']; text: string }
+
 export type Decision = Extract<PhoneClientMessage, { type: 'session.decide' }>['decision'];
 
 export interface MobileStore {
   getState(): MobileState;
   subscribe(fn: () => void): () => void;
   /** Answers the session's request. The op's id, or null when nothing was sent (no request, not ready, already answered). */
-  decide(id: string, decision: Decision, opts?: { note?: string }): string | null;
+  decide(id: string, decision: Decision, opts?: { note?: string; assertion?: Assertion; expect?: ConfirmedExpect }): string | null;
   /** An answer to the session's request when there is one, else an instruction. The op's id, or null when nothing was sent. */
-  reply(id: string, text: string): string | null;
+  reply(id: string, text: string, opts?: { assertion?: Assertion; expect?: ConfirmedExpect }): string | null;
+  /**
+   * Asks the PC for a challenge; resolves on the next `confirm.challenge` of that purpose. Rejects (Error message
+   * `error`, `timeout` after `PREPARE_MS`, `not_ready`, `superseded`, `lost`). One is pending at a time: a new call supersedes the old one.
+   */
+  prepareConfirm(req: ConfirmRequest): Promise<ConfirmChallenge>;
+  /** Answers the questions of OMP's dialog `requestId` together, or declines it (`cancel`). The op's id, or null when nothing was sent. */
+  answer(id: string, requestId: string, answers: Answer[], opts: { expect: PhoneExpect; cancel?: boolean }): string | null;
+  /** Registers the passkey with the PC. The op's id, or null when nothing was sent. */
+  registerCredential(c: Credential): string | null;
   interrupt(id: string): string | null;
+  /** Gives the PC this phone's push subscription and the VAPID key it was made with. The op's id, or null when nothing was sent. */
+  pushSubscribe(subscription: PushSubscription, key: string): string | null;
+  /** Asks the PC to stop notifying this phone. The op's id, or null when nothing was sent. */
+  pushUnsubscribe(): string | null;
+  /** Says whether the app is in front (a read, not an operation); said again after every ready. */
+  presence(visible: boolean): void;
   /** Marks the session read up to `at` (now by default); the latest mark is sent again after every ready. */
   read(id: string, at?: string): void;
   /** Asks the session's thread; its items then come as the PC pushes them, while the session is watched. */
@@ -53,6 +87,28 @@ export interface MobileStore {
   watch(id: string | null): void;
   /** Asks the session's request with its whole body. */
   loadPending(id: string): void;
+  /**
+   * Tells the PC to remove this phone (`device.forget`, not kept as an operation: the state it would belong to is
+   * about to be erased) and resolves true on its `applied`. False at once when the link is not ready, and after
+   * `FORGET_MS` without an answer, or when the link drops first.
+   */
+  forgetDevice(): Promise<boolean>;
+  /** The phone's chat with Ledge; the same object until it changes. */
+  chat(): ChatState;
+  /**
+   * Asks Ledge a question: the turn shows at once. Returns its qid. Offline, nothing is sent and `chat().error` is
+   * `offline` with the text; if the PC is busy the turn goes again and `error` is `busy` with the text.
+   */
+  ask(text: string): string;
+  /** Stops the question being answered. */
+  cancelAsk(): void;
+  /** Starts the thread over. */
+  resetChat(): void;
+  clearChatError(): void;
+  /** Sends the turn's instruction to its session; resolves when the operation is final. */
+  relay(qid: string): Promise<ChatAction>;
+  /** Launches the turn's proposals (`rows`, or all of them), after the device's confirmation. */
+  launch(qid: string, rows?: number[]): Promise<ChatAction>;
   /** Stops listening to the link and every timer. */
   close(): void;
 }
@@ -71,12 +127,17 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     threads: new Map(),
     previews: new Map(Object.entries(last?.previews ?? {})),
     capabilities: null,
+    device: null,
     daemon: last?.daemon ?? null,
     fresh: false,
     syncedAt: last?.syncedAt ?? null,
     ops: loadOps(storage)
   };
   let reads = loadReads(storage);
+  /** The PC's boot id of this run, from its snapshot; null until one, and when the PC sends none. Never cached. */
+  let boot: string | null = null;
+  /** What the phone last said about its app being in front; said again after every ready. */
+  let visible: boolean | null = null;
   /** The last thread opened: asked again after every ready. */
   let lastThread: string | null = null;
   /**
@@ -87,6 +148,33 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
   /** A preview changed since the cache was last written. */
   let previewsDirty = false;
   let closed = false;
+  let chatState: ChatState = emptyChat();
+  /** `chat.history` was asked since the last ready; the snapshot of a first connection asks it when the ready could not. */
+  let historyAsked = false;
+  /** The questions asked since the last ready: only these may be newer than a history reply. */
+  const askedSinceReady = new Set<string>();
+  const expirers = new Set<() => void>();
+  /** The relay or launch of a turn that is under way, shared by a second tap. */
+  const chatActions = new Map<string, Promise<ChatAction>>();
+  /** The `prepareConfirm` waiting for its challenge. */
+  let preparing: { purpose: ConfirmChallenge['purpose']; resolve: (c: ConfirmChallenge) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> } | null = null;
+  const settle = (outcome: ConfirmChallenge | Error) => {
+    const p = preparing;
+    if (!p) return;
+    preparing = null;
+    clearTimeout(p.timer);
+    if (outcome instanceof Error) p.reject(outcome); else p.resolve(outcome);
+  };
+  /** The `forgetDevice` waiting for its result. */
+  type Forgetting = { op: string; resolve: (applied: boolean) => void; timer: ReturnType<typeof setTimeout>; promise: Promise<boolean> };
+  let forgetting: Forgetting | null = null;
+  const settleForget = (applied: boolean) => {
+    const f = forgetting;
+    if (!f) return;
+    forgetting = null;
+    clearTimeout(f.timer);
+    f.resolve(applied);
+  };
   const timers = new Map<string, ReturnType<typeof setTimeout>>();
   const listeners = new Set<() => void>();
 
@@ -94,6 +182,8 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
   const send = (m: PhoneClientMessage) => { void link.send(m).catch(() => undefined); };
 
   const notify = () => { for (const fn of [...listeners]) fn(); };
+  const setChat = (c: ChatState) => { chatState = c; notify(); };
+  const askHistory = () => { historyAsked = true; send({ type: 'chat.history' }); };
   const set = (patch: Partial<MobileState>) => { state = { ...state, ...patch }; notify(); };
   const persist = () => {
     previewsDirty = false;
@@ -127,24 +217,37 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     if (t) threads.set(id, { ...t, status: 'gone' });
   };
 
+  /** Sends again the uncertain operations `pick` keeps and `resendable` allows, oldest first, each as itself. */
+  function resend(pick: (o: Op) => boolean) {
+    const now = Date.now();
+    const live = Object.values(state.ops).filter(o => pick(o) && resendable(o, boot, now)).sort((a, b) => a.at.localeCompare(b.at));
+    if (!live.length) return;
+    const ops = { ...state.ops };
+    for (const o of live) ops[o.op] = { ...o, phase: 'sending' };
+    setOps(ops);
+    for (const o of live) { send(o.message); arm(o.op); }
+  }
+
   function onReady() {
     // Every operation whose outcome is unknown goes again with its own op: the PC applies it once, and answers it again.
-    // An instruction or interrupt too old to be sent again stays uncertain (see RESEND_MAX_MS).
-    const now = Date.now();
-    const live = Object.values(state.ops).filter(o => resendable(o, now)).sort((a, b) => a.at.localeCompare(b.at));
-    if (live.length) {
-      const ops = { ...state.ops };
-      for (const o of live) ops[o.op] = { ...o, phase: 'sending' };
-      setOps(ops);
-      for (const o of live) { send(o.message); arm(o.op); }
-    }
+    // An instruction or interrupt too old to be sent again stays uncertain (see RESEND_MAX_MS). Only the answers to a
+    // request go now; the others wait for the snapshot, which tells whether the PC restarted (`resendUnnamed`).
+    resend(o => expectKey(o.message) !== undefined);
     for (const [id, at] of Object.entries(reads)) send({ type: 'session.read', id, at });
+    if (visible !== null) send({ type: 'presence', visible });
     if (lastThread && state.threads.get(lastThread)?.status !== 'gone') askThread(lastThread);
+    historyAsked = false;
+    askedSinceReady.clear();
+    if (state.device?.chat) askHistory();
   }
 
   function onLost() {
+    historyAsked = false;
+    askedSinceReady.clear();
+    settleForget(false);
     // Requests sent on the lost channel get no answer.
     threadAsks = [];
+    settle(new Error('lost'));
     for (const id of [...timers.keys()]) stopTimer(id);
     const ops = Object.values(state.ops).filter(o => o.phase === 'sending');
     if (ops.length) setOps({ ...state.ops, ...Object.fromEntries(ops.map(o => [o.op, { ...o, phase: 'uncertain' as const }])) });
@@ -161,8 +264,12 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         for (const id of threads.keys()) if (!sessions.has(id)) gone(threads, id);
         reads = Object.fromEntries(Object.entries(reads).filter(([id]) => sessions.has(id)));
         saveReads(reads, storage);
-        set({ sessions, previews, threads, capabilities: m.capabilities, daemon: m.daemon, fresh: true, syncedAt: now });
+        boot = m.daemon.boot ?? null;
+        set({ sessions, previews, threads, capabilities: m.capabilities, device: m.device ?? null, daemon: m.daemon, fresh: true, syncedAt: now });
         persist();
+        // The instructions and interrupts left uncertain (those in flight on this link are `sending`) go again if this PC may not have applied them.
+        if (ready()) resend(o => o.phase === 'uncertain' && expectKey(o.message) === undefined);
+        if (m.device?.chat && !historyAsked && ready()) askHistory();
         return;
       }
       case 'session.updated': {
@@ -211,6 +318,10 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         return;
       }
       case 'operation.result': {
+        if (forgetting?.op === m.op) {
+          if (m.status !== 'received') settleForget(m.status === 'applied');
+          return;
+        }
         const o = state.ops[m.op];
         if (!o || !isLive(o.phase)) return;
         if (m.status === 'received') {
@@ -218,17 +329,24 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
           // stays `sending` until the link drops (then uncertain); an instruction or interrupt stops blocking the
           // next one once older than RESEND_MAX_MS (isNew), an answer once its request is gone.
           stopTimer(m.op);
-          if (o.phase !== 'sending') patchOp(m.op, x => ({ ...x, phase: 'sending' }));
+          patchOp(m.op, x => ({ ...x, phase: 'sending', received: true, ...(boot ? { boot } : {}) }));
           return;
         }
         stopTimer(m.op);
         const { reason: _old, ...rest } = o;
-        patchOp(m.op, () => ({ ...rest, phase: m.status as Op['phase'], ...(m.status !== 'applied' && m.reason ? { reason: m.reason } : {}) }));
+        patchOp(m.op, () => ({ ...rest, received: true, ...(boot ? { boot } : {}), phase: m.status as Op['phase'], ...(m.status !== 'applied' && m.reason ? { reason: m.reason } : {}) }));
         // The request changed under this answer: ask for the one there now, with its body.
-        if (m.status === 'rejected' && m.reason === 'stale' && ready()) send({ type: 'session.pending', id: o.message.id });
+        if (m.status === 'rejected' && m.reason === 'stale' && ready() && 'id' in o.message) send({ type: 'session.pending', id: o.message.id });
         return;
       }
+      case 'chat.history': case 'chat.step': case 'chat.delta': case 'chat.done': case 'chat.error':
+        setChat(reduceChat(chatState, m, askedSinceReady));
+        return;
+      case 'confirm.challenge':
+        if (preparing?.purpose === m.purpose) settle(m);
+        return;
       case 'error':
+        settle(new Error('error'));
         if (m.code === 'unknown_session' && m.request === 'session.thread') {
           const id = threadAsks.shift();
           if (id !== undefined) setThread(id, { items: [], cut: [], more: false, ...state.threads.get(id), status: 'gone' });
@@ -243,28 +361,64 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     // A message the PC would refuse as invalid gets an error, not an operation result: it is never sent.
     if (!parsed.success || !('op' in parsed.data)) return null;
     const message = parsed.data as OpMessage;
-    if (!isNew(state.ops, message)) return null;
+    if (!isNew(state.ops, message, boot)) return null;
     setOps({ ...state.ops, [message.op]: { op: message.op, message, phase: 'sending', at: new Date().toISOString() } });
     send(message);
     arm(message.op);
     return message.op;
   }
 
+  /** Resolves when the operation is final; an op that was dropped, or stays uncertain for good, is `expired`. */
+  function finalOf(op: string): Promise<ChatAction> {
+    return new Promise<ChatAction>(resolve => {
+      const check = (): boolean => {
+        const o = state.ops[op];
+        let out: ChatAction | null = null;
+        if (!o) out = { status: 'expired' };
+        else if (o.phase === 'applied' || o.phase === 'failed') out = { status: o.phase };
+        else if (o.phase === 'rejected') out = { status: 'rejected', reason: o.reason ?? 'invalid' };
+        else if (o.phase === 'uncertain' && !resendable(o, boot)) out = { status: 'expired' };
+        if (!out) return false;
+        off();
+        resolve(out);
+        return true;
+      };
+      const expire = () => { off(); resolve({ status: 'expired' }); };
+      const off = () => { listeners.delete(check); expirers.delete(expire); };
+      listeners.add(check);
+      expirers.add(expire);
+      check();
+    });
+  }
+
+  /** One relay or launch per turn at a time: a second tap shares the first. */
+  function chatAction(key: string, run: () => Promise<ChatAction>): Promise<ChatAction> {
+    const held = chatActions.get(key);
+    if (held) return held;
+    const p = run().finally(() => { chatActions.delete(key); });
+    chatActions.set(key, p);
+    return p;
+  }
+
   const expectOf = (p: PhonePending) => ({ key: p.key, kind: p.kind, text: p.text });
 
   /** The link has no PC any more (forgotten, or pairing a new one): nothing of the old PC is kept or sent again. */
   function forget() {
-    const held = state.sessions.size || state.threads.size || state.previews.size || state.daemon || state.capabilities
-      || state.syncedAt || Object.keys(state.ops).length || Object.keys(reads).length || lastThread !== null;
+    const held = chatState.turns.length || chatState.live || chatState.error || state.sessions.size || state.threads.size || state.previews.size || state.daemon || state.capabilities
+      || state.device || state.syncedAt || Object.keys(state.ops).length || Object.keys(reads).length || lastThread !== null;
     if (!held) return;
     for (const id of [...timers.keys()]) stopTimer(id);
     reads = {};
+    boot = null;
     lastThread = null;
     threadAsks = [];
+    historyAsked = false;
+    chatState = emptyChat();
+    settle(new Error('lost'));
     previewsDirty = false;
     clearLastState(storage);
     clearOps(storage);
-    set({ sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, daemon: null, fresh: false, syncedAt: null, ops: {} });
+    set({ sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, fresh: false, syncedAt: null, ops: {} });
   }
 
   let wasReady = ready();
@@ -279,27 +433,79 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
   // Operations left uncertain by the last page are sent again as soon as they can be.
   if (wasReady) onReady();
 
-  return {
+  const store: MobileStore = {
     getState: () => state,
     subscribe(fn) { listeners.add(fn); return () => { listeners.delete(fn); }; },
 
     decide(id, decision, opts = {}) {
+      // An explicit expect is the request the user confirmed: used as is, the PC says whether it is still the one pending.
       const p = state.sessions.get(id)?.pending;
-      if (!p?.key) return null;
-      return write(op => ({ type: 'session.decide', op, id, decision, ...(opts.note !== undefined ? { note: opts.note } : {}), expect: expectOf(p) }));
+      const expect = opts.expect ?? (p?.key ? expectOf(p) : null);
+      if (!expect) return null;
+      return write(op => ({ type: 'session.decide', op, id, decision, ...(opts.note !== undefined ? { note: opts.note } : {}), expect, ...(opts.assertion ? { assertion: opts.assertion } : {}) }));
     },
 
-    reply(id, text) {
+    reply(id, text, opts = {}) {
       const s = state.sessions.get(id);
       if (!s) return null;
       // A request without a key cannot be named: the PC would refuse the reply either way.
-      if (s.pending && !s.pending.key) return null;
-      return write(op => ({ type: 'session.reply', op, id, text, expect: s.pending ? expectOf(s.pending) : null }));
+      if (!opts.expect && s.pending && !s.pending.key) return null;
+      const expect = opts.expect ?? (s.pending ? expectOf(s.pending) : null);
+      return write(op => ({ type: 'session.reply', op, id, text, expect, ...(opts.assertion ? { assertion: opts.assertion } : {}) }));
+    },
+
+    answer(id, requestId, answers, opts) {
+      if (!state.sessions.has(id)) return null;
+      return write(op => ({ type: 'session.answer', op, id, requestId, answers, ...(opts.cancel ? { cancel: true as const } : {}), expect: opts.expect }));
+    },
+
+    prepareConfirm(req) {
+      return new Promise<ConfirmChallenge>((resolve, reject) => {
+        if (closed || !ready()) { reject(new Error('not_ready')); return; }
+        const m = PhoneClientMessageSchema.safeParse({ type: 'confirm.prepare', ...req });
+        if (!m.success) { reject(new Error('invalid')); return; }
+        settle(new Error('superseded'));
+        preparing = { purpose: req.purpose, resolve, reject, timer: setTimeout(() => settle(new Error('timeout')), PREPARE_MS) };
+        send(m.data);
+      });
+    },
+
+    registerCredential(c) {
+      return write(op => ({ type: 'credential.register', op, credential: c }));
+    },
+
+    forgetDevice() {
+      if (closed || !ready()) return Promise.resolve(false);
+      // A second call while one waits shares it: one device.forget, one answer.
+      if (forgetting) return forgetting.promise;
+      let entry!: Forgetting;
+      const promise = new Promise<boolean>(resolve => {
+        const op = newOperationId();
+        entry = { op, resolve, timer: setTimeout(() => settleForget(false), FORGET_MS), promise: null as unknown as Promise<boolean> };
+        send({ type: 'device.forget', op });
+      });
+      entry.promise = promise;
+      forgetting = entry;
+      return promise;
     },
 
     interrupt(id) {
       if (!state.sessions.has(id)) return null;
       return write(op => ({ type: 'session.interrupt', op, id }));
+    },
+
+    pushSubscribe(subscription, key) {
+      return write(op => ({ type: 'push.subscribe', op, subscription, key }));
+    },
+
+    pushUnsubscribe() {
+      return write(op => ({ type: 'push.unsubscribe', op }));
+    },
+
+    presence(v) {
+      if (closed) return;
+      visible = v;
+      if (ready()) send({ type: 'presence', visible: v });
     },
 
     read(id, at = new Date().toISOString()) {
@@ -330,9 +536,65 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
 
     loadPending(id) { if (!closed && ready()) send({ type: 'session.pending', id }); },
 
+    chat: () => chatState,
+
+    ask(text) {
+      const qid = newOperationId();
+      const m = PhoneClientMessageSchema.safeParse({ type: 'chat.ask', qid, text });
+      if (!m.success || m.data.type !== 'chat.ask') { setChat({ ...chatState, error: { code: 'failed', qid, text } }); return qid; }
+      if (closed || !ready()) { setChat({ ...chatState, error: { code: 'offline', text: m.data.text } }); return qid; }
+      askedSinceReady.add(qid);
+      setChat(asked(chatState, { qid, question: m.data.text, askedAt: new Date().toISOString(), steps: [] }));
+      send(m.data);
+      return qid;
+    },
+
+    cancelAsk() {
+      const qid = chatState.live?.qid;
+      if (qid && !closed) send({ type: 'chat.cancel', qid });
+    },
+
+    resetChat() {
+      if (closed) return;
+      setChat(emptyChat());
+      if (ready()) { send({ type: 'chat.reset' }); send({ type: 'chat.history' }); }
+    },
+
+    clearChatError() { if (chatState.error) setChat({ ...chatState, error: null }); },
+
+    relay(qid) {
+      return chatAction(`relay:${qid}`, async () => {
+        const op = write(o => ({ type: 'chat.relay', op: o, qid }));
+        return op === null ? { status: 'failed' } : finalOf(op);
+      });
+    },
+
+    launch(qid, rows) {
+      return chatAction(`launch:${qid}:${rows?.join(',') ?? '*'}`, async () => {
+        // A phone without a passkey cannot confirm: the PC would refuse, and no prompt is worth showing.
+        if (!state.device?.confirm) return { status: 'rejected', reason: 'confirm_required' };
+        let challenge: ConfirmChallenge;
+        try { challenge = await store.prepareConfirm({ purpose: 'launch', qid }); }
+        catch (e) { return { status: e instanceof Error && e.message === 'timeout' ? 'expired' : 'failed' }; }
+        if (!challenge.credentialId) return { status: 'rejected', reason: 'confirm_required' };
+        const at = Date.now();
+        const signed = await getAssertion({ challenge: challenge.challenge, rpId: challenge.rpId, credentialId: challenge.credentialId }).catch(() => 'failed' as const);
+        if (signed === 'cancelled') return { status: 'cancelled' };
+        if (signed === 'failed') return { status: 'failed' };
+        // Good for a minute: after that the PC would only refuse it.
+        if (Date.now() - at >= challenge.expiresInMs) return { status: 'expired' };
+        const op = write(o => ({ type: 'chat.launch', op: o, qid, ...(rows ? { rows } : {}), assertion: signed }));
+        // The link dropped after the passkey: the PC never got it, so the card stays as it was and can be tapped again.
+        return op === null ? { status: 'expired' } : finalOf(op);
+      });
+    },
+
     close() {
       if (closed) return;
       closed = true;
+      for (const expire of [...expirers]) expire();
+      settleForget(false);
+      settle(new Error('lost'));
       if (previewsDirty) persist();
       offState();
       offMessage();
@@ -340,6 +602,12 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
       listeners.clear();
     }
   };
+  return store;
+}
+
+/** The chat in a component, re-rendered when it changes. */
+export function useChat(store: MobileStore): ChatState {
+  return useSyncExternalStore(store.subscribe, store.chat);
 }
 
 /** The store's state in a component, re-rendered on every change. */

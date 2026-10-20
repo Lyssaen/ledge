@@ -18,7 +18,7 @@ export function outcomeFor(target: OutcomeTarget, sessions: PhoneSession[], ops:
   const pending = sessions.find(s => s.id === target.sessionId)?.pending;
   const same = pending?.key === target.key;
   const mine = Object.values(ops)
-    .filter(o => o.message.id === target.sessionId && expectKey(o.message) === target.key)
+    .filter(o => 'id' in o.message && o.message.id === target.sessionId && expectKey(o.message) === target.key)
     .sort((a, b) => a.at.localeCompare(b.at));
   const o = mine.find(x => x.phase === 'applied') ?? mine[mine.length - 1];
   if (o) {
@@ -29,7 +29,8 @@ export function outcomeFor(target: OutcomeTarget, sessions: PhoneSession[], ops:
       case 'applied': return {
         kind: 'applied',
         ...(m.type === 'session.decide' ? { decision: m.decision } : {}),
-        ...(m.type === 'session.reply' ? { answer: m.text } : {})
+        ...(m.type === 'session.reply' ? { answer: m.text } : {}),
+        ...(m.type === 'session.answer' ? { answer: m.answers.flatMap(a => a.selected).join(', ') } : {})
       };
       case 'rejected':
         // Another request took its place: show that one, or say this one was handled.

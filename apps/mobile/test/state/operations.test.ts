@@ -6,10 +6,10 @@ import { fingerprint, generateIdentity } from '@ledge/seal';
 import { createPhoneLink } from '../../src/link/link';
 import { memoryKeys } from '../../src/link/keys';
 import { createStore } from '../../src/state/store';
-import { isNew, KEEP_FINISHED, loadOps, OPS_KEY, pruneOps, resendable, RESEND_MAX_MS, saveOps, type Op, type OpPhase } from '../../src/state/operations';
+import { expectKey, isNew, KEEP_FINISHED, loadOps, OPS_KEY, pruneOps, resendable, RESEND_MAX_MS, saveOps, type Op, type OpPhase } from '../../src/state/operations';
 import { startFakePc } from '../fakePc';
 import { pending, session } from '../model/fixtures';
-import { MemoryStorage, snapshot } from './helpers';
+import { fakeLink, MemoryStorage, snapshot } from './helpers';
 
 const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const at = (n: number) => new Date(Date.UTC(2026, 9, 14, 10, 0, n)).toISOString();
@@ -44,51 +44,84 @@ describe('pruneOps', () => {
 describe('isNew', () => {
   it('refuses a second answer to a request already answered or on its way, not after a refusal', () => {
     const next = decideOp(9, 'sending').message;
-    expect(isNew(byId(decideOp(1, 'sending')), next, NOW)).toBe(false);
-    expect(isNew(byId(decideOp(1, 'uncertain')), next, NOW)).toBe(false);
-    expect(isNew(byId(decideOp(1, 'applied')), next, NOW)).toBe(false);
-    expect(isNew(byId(decideOp(1, 'rejected')), next, NOW)).toBe(true);
-    expect(isNew(byId(decideOp(1, 'failed')), next, NOW)).toBe(true);
-    expect(isNew(byId(decideOp(1, 'applied', 'p0')), next, NOW)).toBe(true);
-    expect(isNew(byId(decideOp(1, 'applied', 'p1', 'b')), next, NOW)).toBe(true);
+    expect(isNew(byId(decideOp(1, 'sending')), next, null, NOW)).toBe(false);
+    expect(isNew(byId(decideOp(1, 'uncertain')), next, null, NOW)).toBe(false);
+    expect(isNew(byId(decideOp(1, 'applied')), next, null, NOW)).toBe(false);
+    expect(isNew(byId(decideOp(1, 'rejected')), next, null, NOW)).toBe(true);
+    expect(isNew(byId(decideOp(1, 'failed')), next, null, NOW)).toBe(true);
+    expect(isNew(byId(decideOp(1, 'applied', 'p0')), next, null, NOW)).toBe(true);
+    expect(isNew(byId(decideOp(1, 'applied', 'p1', 'b')), next, null, NOW)).toBe(true);
   });
   it('an instruction waits for the one before it on that session; a finished one does not stop it', () => {
     const next = replyOp(9, 'sending').message;
-    expect(isNew(byId(replyOp(1, 'sending')), next, NOW)).toBe(false);
-    expect(isNew(byId(replyOp(1, 'uncertain')), next, NOW)).toBe(false);
-    expect(isNew(byId(replyOp(1, 'applied')), next, NOW)).toBe(true);
-    expect(isNew(byId(replyOp(1, 'sending', 'b')), next, NOW)).toBe(true);
+    expect(isNew(byId(replyOp(1, 'sending')), next, null, NOW)).toBe(false);
+    expect(isNew(byId(replyOp(1, 'uncertain')), next, null, NOW)).toBe(false);
+    expect(isNew(byId(replyOp(1, 'applied')), next, null, NOW)).toBe(true);
+    expect(isNew(byId(replyOp(1, 'sending', 'b')), next, null, NOW)).toBe(true);
   });
   it('an operation id already used is never new', () => {
     const o = replyOp(1, 'applied');
-    expect(isNew(byId(o), o.message, NOW)).toBe(false);
+    expect(isNew(byId(o), o.message, null, NOW)).toBe(false);
   });
   it('an instruction or interrupt of unknown outcome stops blocking once too old to be sent again', () => {
     const next = replyOp(9, 'sending').message;
     const old = Date.parse(at(1)) + RESEND_MAX_MS;
-    expect(isNew(byId(replyOp(1, 'uncertain')), next, old - 1)).toBe(false);
-    expect(isNew(byId(replyOp(1, 'uncertain')), next, old)).toBe(true);
-    expect(isNew(byId(replyOp(1, 'sending')), next, old)).toBe(true);
+    expect(isNew(byId(replyOp(1, 'uncertain')), next, null, old - 1)).toBe(false);
+    expect(isNew(byId(replyOp(1, 'uncertain')), next, null, old)).toBe(true);
+    expect(isNew(byId(replyOp(1, 'sending')), next, null, old)).toBe(true);
     // An answer to a request is bound to it by its key: it blocks however old.
-    expect(isNew(byId(decideOp(1, 'uncertain')), decideOp(9, 'sending').message, old + 1e9)).toBe(false);
+    expect(isNew(byId(decideOp(1, 'uncertain')), decideOp(9, 'sending').message, null, old + 1e9)).toBe(false);
   });
 });
 
 describe('resendable', () => {
   const bound = Date.parse(at(1)) + RESEND_MAX_MS;
   it('an answer to a request is always sent again while its outcome is unknown', () => {
-    expect(resendable(decideOp(1, 'uncertain'), bound + 1e9)).toBe(true);
-    expect(resendable(decideOp(1, 'sending'), bound + 1e9)).toBe(true);
-    expect(resendable(decideOp(1, 'applied'), NOW)).toBe(false);
+    expect(resendable(decideOp(1, 'uncertain'), null, bound + 1e9)).toBe(true);
+    expect(resendable(decideOp(1, 'sending'), null, bound + 1e9)).toBe(true);
+    expect(resendable(decideOp(1, 'applied'), null, NOW)).toBe(false);
   });
   it('an instruction or interrupt only while younger than RESEND_MAX_MS', () => {
     const interrupt: Op = { op: uuid(1), phase: 'uncertain', at: at(1), message: { type: 'session.interrupt', op: uuid(1), id: 'a' } };
     expect(RESEND_MAX_MS).toBe(300_000);
-    expect(resendable(replyOp(1, 'uncertain'), bound - 1)).toBe(true);
-    expect(resendable(replyOp(1, 'uncertain'), bound)).toBe(false);
-    expect(resendable(interrupt, bound - 1)).toBe(true);
-    expect(resendable(interrupt, bound)).toBe(false);
-    expect(resendable(replyOp(1, 'rejected'), NOW)).toBe(false);
+    expect(resendable(replyOp(1, 'uncertain'), null, bound - 1)).toBe(true);
+    expect(resendable(replyOp(1, 'uncertain'), null, bound)).toBe(false);
+    expect(resendable(interrupt, null, bound - 1)).toBe(true);
+    expect(resendable(interrupt, null, bound)).toBe(false);
+    expect(resendable(replyOp(1, 'rejected'), null, NOW)).toBe(false);
+  });
+});
+
+describe('resendable across a PC restart', () => {
+  const A = '11111111-1111-4111-8111-111111111111';
+  const B = '22222222-2222-4222-8222-222222222222';
+  const interrupt = (extra: Partial<Op> = {}): Op => ({ op: uuid(1), phase: 'uncertain', at: at(1), message: { type: 'session.interrupt', op: uuid(1), id: 'a' }, ...extra });
+  it('an instruction or interrupt never received is sent again under any boot', () => {
+    expect(resendable(interrupt(), B, NOW)).toBe(true);
+    expect(resendable(interrupt(), null, NOW)).toBe(true);
+  });
+  it('one received under boot A is sent again under A, not under B', () => {
+    expect(resendable(interrupt({ received: true, boot: A }), A, NOW)).toBe(true);
+    expect(resendable(interrupt({ received: true, boot: A }), B, NOW)).toBe(false);
+    expect(resendable(replyOp(1, 'uncertain'), B, NOW)).toBe(true);
+  });
+  it('one received with no boot known cannot be proven to belong to a known boot', () => {
+    expect(resendable(interrupt({ received: true }), B, NOW)).toBe(false);
+  });
+  it('without a boot (lot 5 daemon) the age rule alone applies, received or not', () => {
+    expect(resendable(interrupt({ received: true, boot: A }), null, NOW)).toBe(true);
+    expect(resendable(interrupt({ received: true, boot: A }), null, Date.parse(at(1)) + RESEND_MAX_MS)).toBe(false);
+  });
+  it('an answer with expect is sent again whatever the boot', () => {
+    expect(resendable({ ...decideOp(1, 'uncertain'), received: true, boot: A }, B, NOW)).toBe(true);
+  });
+  it('boot and received survive a reload; an op from lot 5 has neither', () => {
+    const storage = new MemoryStorage();
+    saveOps(byId(interrupt({ received: true, boot: A }), replyOp(2, 'uncertain')), storage);
+    const ops = loadOps(storage);
+    expect(ops[uuid(1)]).toMatchObject({ received: true, boot: A });
+    expect(ops[uuid(2)]).not.toHaveProperty('boot');
+    expect(ops[uuid(2)]).not.toHaveProperty('received');
   });
 });
 
@@ -158,5 +191,54 @@ describe('operations over a real link', () => {
 
     await pc.send({ type: 'operation.result', op: op!, status: 'applied' });
     await until(() => store.getState().ops[op!]?.phase === 'applied', 'the result');
+  });
+});
+
+describe('session.answer as an operation', () => {
+  const answer = { type: 'session.answer' as const, op: '11111111-1111-4111-8111-111111111111', id: 'a', requestId: 'r1', answers: [{ id: 'q1', selected: ['A'] }], expect: { key: 'k1', kind: 'question' as const, text: 'T' } };
+  it('is named by its request key, refused while another answer to it is live, and survives a reload', () => {
+    expect(expectKey(answer)).toBe('k1');
+    const op = { op: answer.op, message: answer, phase: 'applied' as const, at: '2026-10-14T10:00:00.000Z' };
+    expect(isNew({ [op.op]: op }, { ...answer, op: '22222222-2222-4222-8222-222222222222' }, null)).toBe(false);
+    expect(isNew({}, answer, null)).toBe(true);
+    const storage = new MemoryStorage();
+    saveOps({ [op.op]: op }, storage);
+    expect(loadOps(storage)[op.op]?.message).toEqual(answer);
+    expect(resendable({ ...op, phase: 'uncertain' }, null, Date.parse(op.at) + 10 * RESEND_MAX_MS)).toBe(true);
+  });
+});
+
+describe('push operations are never persisted', () => {
+  const ENDPOINT = 'https://fcm.googleapis.com/fcm/send/secret-endpoint';
+  const subOp = (n: number): Op => ({
+    op: uuid(n), phase: 'uncertain', at: at(n),
+    message: { type: 'push.subscribe', op: uuid(n), subscription: { endpoint: ENDPOINT, keys: { p256dh: 'A'.repeat(87), auth: 'B'.repeat(22) } }, key: 'C'.repeat(87) }
+  });
+  const unsubOp = (n: number): Op => ({ op: uuid(n), phase: 'uncertain', at: at(n), message: { type: 'push.unsubscribe', op: uuid(n) } });
+
+  it('a push.subscribe is not written, and its endpoint is nowhere in storage', () => {
+    const storage = new MemoryStorage();
+    saveOps(byId(subOp(1), unsubOp(2), replyOp(3, 'uncertain')), storage);
+    const raw = storage.getItem(OPS_KEY) ?? '';
+    expect(raw).not.toContain(ENDPOINT);
+    expect(Object.keys(loadOps(storage))).toEqual([uuid(3)]);
+  });
+
+  it('one stored by an older build is dropped on load', () => {
+    const storage = new MemoryStorage();
+    storage.setItem(OPS_KEY, JSON.stringify(byId(subOp(1), unsubOp(2), decideOp(3, 'uncertain'))));
+    expect(Object.keys(loadOps(storage))).toEqual([uuid(3)]);
+  });
+
+  it('is not sent again on ready, while other operations still are', async () => {
+    const storage = new MemoryStorage();
+    storage.setItem(OPS_KEY, JSON.stringify(byId(unsubOp(1), subOp(2), decideOp(3, 'uncertain'))));
+    const f = fakeLink('pc_offline');
+    const store = createStore(f.link, storage);
+    f.set('ready');
+    expect(f.of('push.unsubscribe')).toEqual([]);
+    expect(f.of('push.subscribe')).toEqual([]);
+    expect(f.of('session.decide')).toHaveLength(1);
+    store.close();
   });
 });

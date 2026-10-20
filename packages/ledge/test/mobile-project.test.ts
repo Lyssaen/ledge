@@ -87,7 +87,11 @@ describe('capabilities', () => {
     expect(() => CapabilitiesByToolSchema.parse(c)).not.toThrow();
     expect(c.claude.freeTextAnswer).toBe(!!adapterFor('claude').freeText);
   });
-  it('gives OMP, which has no adapter, no free text: its dialogs take one of their options', () => {
-    expect(capabilities().omp).toEqual({ freeTextAnswer: false });
+  it('gives OMP, which has no adapter, no free text and no accept/deny, but its own questions', () => {
+    expect(capabilities().omp).toEqual({ freeTextAnswer: false, decide: false, questions: true });
+  });
+  it('lets every other tool accept and deny, and ask no OMP question', () => {
+    const c = capabilities();
+    for (const tool of ['claude', 'codex', 'cursor'] as const) expect(c[tool]).toMatchObject({ decide: true, questions: false });
   });
 });

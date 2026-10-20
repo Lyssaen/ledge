@@ -44,6 +44,9 @@ Chaque plan de lot reprend ces points à son début.
   - la clé publique est dérivée du PKCS8 stocké, pas lue d'une copie.
 - **Lot 4** (décidé) : chaque message PC → téléphone est bourré avant d'être scellé (dans la file d'envoi), par paliers `PAD_TIERS` (1 Ko, 4 Ko, 16 Ko, 64 Ko, 256 Ko, 640 Ko) mesurés en octets UTF-8 du JSON clair. Le bourrage ajoute des espaces en fin de JSON, que `JSON.parse` ignore. Un message plus grand que `PLAIN_MAX` (640 Ko) n'est pas envoyé : le téléphone reçoit `error { code: 'too_large' }`. `PLAIN_MAX` reste sous `SEALED_MAX` (1 Mio) une fois scellé et passé en base64. Le relais ne voit donc qu'un palier, jamais la longueur exacte, pour ce sens. Le sens téléphone → PC n'est pas bourré dans ce lot : la PWA (lot 5) bourrera ses messages aux mêmes paliers.
 - **Lot 5** (fait) : un test qui vérifie que le WebCrypto de Safari et de Chrome rejette un point hors courbe, et un vecteur de test de dérivation de clés commun au navigateur et au daemon (`apps/mobile/e2e/crypto.spec.ts` ; Safari seulement là où WebKit est installé).
+- **Lot 6a** (fait) : la confirmation d'un accord à impact élevé par l'appareil (passkey WebAuthn), de bout en bout dans `apps/mobile/e2e/confirm.spec.ts` (Chromium, authentificateur virtuel CDP ; WebKit ignoré comme au lot 5).
+- **Lot 6b** (fait) : Web Push. Le téléphone active les notifications à l'étape de liaison (« Être prévenu quand un agent attend ») ou à la ligne « Notifications » de Connexion ; le PC garde l'abonnement et notifie par le relais. De bout en bout dans `apps/mobile/e2e/push.spec.ts` (Chromium ; WebKit ignoré comme au lot 5).
+- **Lot 6c** (fait) : le chat « Demander à Ledge » sur le téléphone, de bout en bout dans `apps/mobile/e2e/chat.spec.ts` (Chromium, authentificateur virtuel CDP ; le faux PC de `harness.ts` joue un chat scripté ; WebKit ignoré comme au lot 5).
 
 ## Décidé au lot 5
 
@@ -57,8 +60,45 @@ Chaque plan de lot reprend ces points à son début.
 - **Réponses libres** : un seul chiffre de 1 à 9 est refusé sur le téléphone, car le PC le lirait comme un numéro d'option. Une demande à haut risque reste « À accepter sur le PC » (WebAuthn au lot 6).
 - **Bout en bout** : `apps/mobile/e2e/phone.spec.ts` joue le téléphone contre le vrai relais (comptes, PGlite) et un faux PC scellé ; `pnpm --filter @ledge/mobile serve:local` lance le même monde à la main.
 
+## Décidé au lot 6a
+
+- **Vérification sans bibliothèque** : le daemon vérifie l'enregistrement et les assertions avec `node:crypto` seul (`packages/ledge/src/mobile/webauthn.ts`, `challenges.ts`), ES256 et RS256 ; ni `@simplewebauthn/*` ni `cbor-x`. Ces deux modules n'importent rien d'autre, pour que le faux PC de l'e2e les utilise tels quels.
+- **Confiance par le canal scellé** : l'attestation est `none`. La clé publique arrive sur le canal scellé et apparié, qui est déjà la racine de confiance ; un téléphone qui perd sa passkey en enregistre une nouvelle sans se re-lier.
+- **RP = hôte de `relayUrl`** : `rpId` est le nom d'hôte, `origin` l'origine ; pas de RP hors `https:` et hors `localhost`. Un credential d'un autre `rpId` compte comme absent.
+- **Boot id** : le snapshot porte `daemon.boot`, un identifiant de démarrage. Une opération reçue d'un autre démarrage n'est jamais renvoyée en silence : elle reste incertaine.
+- **Ordre des contrôles** : session inconnue, puis `stale`, puis capacité, puis assertion, puis `untypable`. Une demande changée n'use jamais un défi ; un défi est à usage unique, lié à l'appareil, à l'usage et à `session:clé`.
+- **Une demande OMP est toujours `high`** (jamais lue comme `low`, son texte n'est pas interprété) : on y répond par une passkey, sans Autoriser/Refuser. Un téléphone qui ne peut pas confirmer voit ses options désactivées, avec « À accepter sur le PC ». Un `ask` à plusieurs questions se répond depuis le téléphone (`session.answer`), et une option par sa position.
+- **Se déconnecter** envoie `device.forget` : le PC retire le téléphone, et les révocations qui échouent sont retentées.
+- **Navigateur** : si l'appareil ne vérifie pas son utilisateur (`userVerification: 'required'`), Chromium ne signe rien : le téléphone dit « Vérification annulée » et n'envoie rien. `assertion_invalid` vient donc d'un défi remplacé ou d'une signature fausse, pas de ce cas.
+
+## Décidé au lot 6b
+
+- **Relais sans état** : il garde l'abonnement nulle part. Le PC lui envoie l'endpoint et un corps déjà chiffré, il les transmet au service push (`redirect: 'manual'`, hôtes autorisés seulement) et répond `sent`, `gone` ou `failed`. Il ne journalise ni l'endpoint ni le corps, seulement l'hôte et le résultat.
+- **Chiffrement par le PC** : le PC chiffre le payload en `aes128gcm` avec les clés de l'abonnement ; le relais ne voit jamais le contenu d'une notification. Seule la signature VAPID est de son ressort.
+- **Bourrage à 1 024 octets** : le texte clair est complété jusqu'à 1 024 octets avant chiffrement (un seul enregistrement), pour que sa longueur ne trahisse rien.
+- **Aucune notification vers une app visible** : le téléphone dit au PC si l'app est au premier plan (`presence`) ; un appareil en ligne et visible n'est pas notifié. Jamais non plus si le mobile est désactivé, et au plus une notification « tour terminé » par minute et par session.
+- **Service worker** : il valide le payload à la main (sans zod, pour garder le worker léger) ; un payload illisible affiche le repli « Ledge » / « Une demande attend », car Safari retire l'abonnement d'un site qui reste muet. Toucher la notification ouvre la demande ; les boutons Autoriser et Refuser n'y sont pas (iOS ne les gère pas, et un accord `high` exige l'appareil).
+- **CSP** : `style-src 'self'`, sans `'unsafe-inline'`. React pose ses styles par le CSSOM, que la CSP n'interdit pas ; l'e2e parcourt chaque écran sans `securitypolicyviolation` ni erreur de console.
+- **Bout en bout** : Chromium sans réseau n'a pas de service push, et son mode headless n'a pas de service de notifications (`showNotification` y est refusé). Le test remplace donc `pushManager.subscribe` par un abonnement factice, livre les pushes avec `ServiceWorker.deliverPushMessage`, et relève les appels du worker à `showNotification` plutôt que `getNotifications()`.
+
+## Décidé au lot 6c
+
+- **Un fil par appareil** : un téléphone ne voit ni le fil du PC ni celui d'un autre appareil, et le PC ne voit pas ceux des téléphones. Le retrait d'un appareil annule sa question en cours et supprime son dossier.
+- **Au plus 3 questions en même temps**, tous fils confondus (PC compris) ; au-delà, `chat.error { code: 'busy' }`. Une question à la fois par fil.
+- **Flux en texte entier** : `chat.delta` porte tout le texte jusque-là, au plus un toutes les 250 ms par question, avec une clé de coalescence : une perte en route ne laisse pas de trou.
+- **Lancement sous vérification de l'appareil** : `chat.launch` exige l'assertion (`purpose: 'launch'`, liée au `qid`), et il est refusé depuis le téléphone dans un dossier trop large.
+- **Consigne sans vérification de l'appareil** : `chat.relay` est une écriture sans assertion, comme `session.reply` sans dialogue OMP ; c'est un risque accepté, comme sur le PC.
+- **Une carte n'est jamais coupée** : une consigne ou un prompt de plus de `TOOL_TEXT_MAX` n'est pas montré au téléphone, et la gateway refuse d'agir dessus. Le téléphone ne confirme jamais un texte différent de celui que le PC exécute.
+- **Notification sans le texte de la réponse** : « Ledge a répondu » / « Touchez pour lire la réponse. », urgence normale, vers l'appareil de la question seul et seulement s'il n'est pas visible ; en cas d'erreur, le corps est la phrase du code (le daemon en garde sa propre copie).
+
+### Pour plus tard
+
+- **Historique conservé au redémarrage du daemon** : les tours restent en mémoire, comme sur le PC.
+- **Limite de fréquence des questions par appareil** : le plafond de 3 et « une à la fois » bornent déjà la charge.
+- **Hors lot** : le routage multi-machines (`chat.route`), la carte « projet proposé », le choix de l'outil depuis le téléphone, et l'essai sur un vrai iPhone (lot 7).
+
 ## Reporté par le lot 5
 
-- **Lot 6** : WebAuthn, qui permettra d'accepter une demande `high` depuis le téléphone ; Web Push ; le chat « Demander à Ledge », multi-fil.
-- **Lot 7** : le domaine `ledge.paradow.dev` ; le déploiement Railway, avec `LEDGE_RELAY_WEB_DIR` qui pointe sur le build ; la publication de `build.json` dans `release.yml` ; la version de la PWA tamponnée par `scripts/set-version.mjs`.
-- **Restent ouverts** : la `Max-Age` du cookie, jamais prolongée par l'usage (la session expire 90 jours après la connexion, et le téléphone revient à l'écran de connexion) ; les tests WebKit, là où son navigateur n'est pas installé.
+- **Lot 6** : WebAuthn (fait au lot 6a) ; Web Push (fait au lot 6b) ; le chat « Demander à Ledge », multi-fil (lot 6c), qui réutilise `challenges.ts` (`purpose: 'launch'`) et la carte de confirmation.
+- **Lot 7** : le domaine `ledge.paradow.dev` ; le déploiement Railway, avec `LEDGE_RELAY_WEB_DIR` qui pointe sur le build ; la publication de `build.json` dans `release.yml` ; la version de la PWA tamponnée par `scripts/set-version.mjs` ; un essai sur un vrai iPhone (Face ID, passkey iCloud ; PWA ajoutée à l'écran d'accueil, iOS 16.4 ou plus, pour les notifications) ; les clés VAPID de production, générées par `pnpm --filter @ledge/relay vapid-keys` et posées dans Railway (`LEDGE_RELAY_VAPID_PUBLIC_KEY`, `LEDGE_RELAY_VAPID_PRIVATE_KEY`, `LEDGE_RELAY_VAPID_SUBJECT`, les trois ou aucune).
+- **Restent ouverts** : la `Max-Age` du cookie, jamais prolongée par l'usage (la session expire 90 jours après la connexion, et le téléphone revient à l'écran de connexion) ; les tests WebKit, là où son navigateur n'est pas installé ; le drapeau `other` pour les réponses libres sur plusieurs lignes.

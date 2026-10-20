@@ -1373,7 +1373,7 @@ describe('server', () => {
         proposal: qid => (qid === 'q1' ? proposal : undefined),
         markLaunched(qid, id, emit) { marks.push(['launched', qid, id]); proposal = { ...proposal!, launchedId: id }; emit({ type: 'chat.history', turns: [] }); },
         markFailed(qid, message, emit) { marks.push(['failed', qid, message]); proposal = { ...proposal!, error: message }; emit({ type: 'chat.history', turns: [] }); },
-        relay: () => undefined, markRelay() {}, queuedRelays: () => []
+        relay: () => undefined, markRelay() {}, queuedRelays: () => [], idle: async () => {}
       };
       return { chat, marks };
     }
@@ -1446,7 +1446,7 @@ describe('server', () => {
           proposal: (qid, row = 0) => (qid === 'q1' ? rows[row] : undefined),
           markLaunched(_qid, id, emit, row = 0) { marks.push(['launched', row, id]); rows[row] = { ...rows[row]!, launchedId: id }; emit({ type: 'chat.history', turns: [] }); },
           markFailed(_qid, message, emit, row = 0) { marks.push(['failed', row, message]); rows[row] = { ...rows[row]!, error: message }; emit({ type: 'chat.history', turns: [] }); },
-          relay: () => undefined, markRelay() {}, queuedRelays: () => []
+          relay: () => undefined, markRelay() {}, queuedRelays: () => [], idle: async () => {}
         };
         return { chat, marks };
       }
@@ -1499,7 +1499,8 @@ describe('server', () => {
         async ask() {}, cancel() {}, async reset() {}, history: () => [], proposal: () => undefined, markLaunched() {}, markFailed() {},
         relay: qid => (qid === 'q1' ? r : undefined),
         markRelay(_qid, patch, emit) { const { id, name, tool, text } = r!; r = { id, name, tool, text, ...patch }; emit({ type: 'chat.history', turns: [] }); },
-        queuedRelays: () => (r?.status === 'queued' ? [{ qid: 'q1', relay: r }] : [])
+        queuedRelays: () => (r?.status === 'queued' ? [{ qid: 'q1', relay: r, askedAt: '2026-10-12T08:00:00.000Z' }] : []),
+        idle: async () => {}
       };
       return { chat, current: () => r };
     }
@@ -2186,6 +2187,47 @@ describe('mobile access', () => {
     await new Promise(res => setTimeout(res, 100));
     expect(gotR.some(x => x.type === 'mobile')).toBe(false);
     r.close(); a.close(); await s.close(); await mobile.stop();
+  });
+  it('a request on a session pushes a hidden phone and not a visible one (store.onApply -> notifier -> gateway.visible)', async () => {
+    const { createECDH, randomBytes } = await import('node:crypto');
+    const ecdh = createECDH('prime256v1'); ecdh.generateKeys();
+    const sub = { endpoint: 'https://fcm.googleapis.com/fcm/send/abc', p256dh: ecdh.getPublicKey().toString('base64url'), auth: randomBytes(16).toString('base64url'), key: 'K1' };
+    const messageFns = new Set<(d: string, t: string) => void>();
+    const sends: unknown[] = [];
+    const state = { enabled: true, relayUrl: 'https://relay.test', account: null, signin: null, signinError: null, link: { state: 'online' }, devices: [{ id: 'dev1', label: 'dev1', approvedAt: T0, online: true }], pairings: [] };
+    const mobile = {
+      state: () => state, onChange: () => () => {}, handle: async () => {}, send: async () => true, revoke: async () => {},
+      credential: () => null, setCredential: () => {}, pushOf: (id: string) => (id === 'dev1' ? sub : null), setPush: () => {}, relayPushKey: () => 'K1',
+      sendPush: async (m: unknown) => { sends.push(m); return { result: 'sent' as const }; },
+      onMessage: (fn: (d: string, t: string) => void) => { messageFns.add(fn); return () => { messageFns.delete(fn); }; },
+      stop: async () => {}
+    } as unknown as Parameters<typeof startServer>[0]['mobile'];
+    const store = new Store();
+    store.upsert(mk('s1'));
+    const s = await startServer({ store, tmux: fakeTmux({}), port: 0, mobile, daemon: { version: '0.2.2', install: 'npm', systemd: true } });
+    const ask = (n: number) => {
+      store.apply('s1', { name: 'PermissionRequest', at: `2026-10-09T18:0${n}:00.000Z`, source: 'hook', tool: 'Bash', toolInput: { command: `ls ${n}` } } as never);
+    };
+    const clear = (n: number) => { store.apply('s1', { name: 'Stop', at: `2026-10-09T18:0${n}:30.000Z`, source: 'hook' }); };
+    const presence = (visible: boolean) => { for (const fn of messageFns) fn('dev1', JSON.stringify({ type: 'presence', visible })); };
+    expect(store.get('s1')?.pending).toBeUndefined();
+    ask(1);
+    expect(store.get('s1')?.pending).toBeDefined();
+    await until(() => sends.length === 1);
+    clear(1);
+    presence(true);
+    ask(2);
+    await new Promise(res => setTimeout(res, 100));
+    expect(sends).toHaveLength(1); // the visible phone heard nothing
+    clear(2);
+    presence(false);
+    ask(3);
+    await until(() => sends.length === 2);
+    await s.close();
+    clear(3);
+    ask(4);
+    await new Promise(res => setTimeout(res, 100));
+    expect(sends).toHaveLength(2); // closing removed the listener
   });
   it('without the service, mobile messages are refused as not available', async () => {
     const ws = await open(srv.port); const got = collect(ws);

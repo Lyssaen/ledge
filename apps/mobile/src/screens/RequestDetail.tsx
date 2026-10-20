@@ -13,9 +13,10 @@ import { Command } from '../ui/Command';
 import { BackHeader, linkView } from '../ui/Header';
 import { MobileBot } from '../ui/MobileBot';
 import { Notice } from '../ui/Notice';
+import { usePlatform } from './device';
 import { DecisionFooter } from './DecisionFooter';
 import { Gone } from './Gone';
-import { QuestionForm } from './QuestionForm';
+import { MultiQuestionForm, QuestionForm } from './QuestionForm';
 import { Result } from './Result';
 
 function Lost({ onReconnect }: { onReconnect?: (() => void) | undefined }) {
@@ -48,6 +49,10 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect }: { s
   const [changed, setChanged] = useState(false);
   const [choice, setChoice] = useState<number | null>(null);
   const [otherText, setOtherText] = useState('');
+  // OMP: the position of the option tapped, waiting for the device's confirmation; the choices of an `ask`, kept with the questions they answer.
+  const [picked, setPicked] = useState<number | null>(null);
+  const [chosen, setChosen] = useState<{ sig: string; v: string[][] }>({ sig: '', v: [] });
+  const platform = usePlatform();
   // The last tap sent nothing (the store refused the write): said in the footer until the next tap.
   const [refused, setRefused] = useState(false);
   // The address this screen wrote itself (a request replaced in place) comes back as `requestKey`: nothing to reset.
@@ -55,7 +60,7 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect }: { s
   keyRef.current = key;
   useEffect(() => {
     if (requestKey === keyRef.current) return;
-    setKey(requestKey); setChanged(false); setChoice(null); setOtherText(''); setRefused(false);
+    setKey(requestKey); setChanged(false); setChoice(null); setOtherText(''); setPicked(null); setRefused(false);
   }, [requestKey]);
 
   const sessions = [...state.sessions.values()];
@@ -76,6 +81,7 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect }: { s
     setChanged(true);
     setChoice(null);
     setOtherText('');
+    setPicked(null);
     try { globalThis.history?.replaceState(null, '', href({ name: 'request', sessionId, key: next })); } catch { /* the page keeps its address */ }
   }, [outcome.kind, next, sessionId]);
 
@@ -101,8 +107,51 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect }: { s
 
   const isQuestion = req.kind === 'question';
   const options = req.options ?? [];
-  const canOther = isQuestion && capabilities?.[req.tool]?.freeTextAnswer === true;
-  const answerable = isQuestion && (options.length > 0 || canOther);
+  const caps = capabilities?.[req.tool];
+  const canOther = isQuestion && caps?.freeTextAnswer === true;
+  // OMP (capabilities say so): an ask of several questions is answered together; a dialog with options by tapping one. Else as before.
+  const askQuestions = isQuestion && caps?.questions === true && req.requestId !== undefined && req.questions?.length ? req.questions : undefined;
+  const optionMode = !askQuestions && caps?.decide === false && options.length > 0;
+  const answerable = !askQuestions && !optionMode && isQuestion && (options.length > 0 || canOther);
+  // The PC asks the device's check for any reply to an OMP dialog that is not low; a phone that cannot give it leaves it to the PC.
+  const canConfirm = state.device?.confirm === true && platform;
+  const guarded = req.risk !== 'low';
+  const sig = JSON.stringify((askQuestions ?? []).map(q => [q.id, q.options.map(o => o.label)]));
+  const selected = chosen.sig === sig ? chosen.v : [];
+  const missing = (askQuestions ?? []).filter((_, i) => !selected[i]?.length).length;
+  const toggle = (qi: number, label: string) => {
+    const q = askQuestions?.[qi];
+    if (!q) return;
+    const v = (askQuestions ?? []).map((_, i) => selected[i] ?? []);
+    const cur = v[qi] ?? [];
+    v[qi] = q.multi ? (cur.includes(label) ? cur.filter(l => l !== label) : [...cur, label]) : [label];
+    setChosen({ sig, v });
+    setRefused(false);
+  };
+  const expect = { key: req.key, kind: req.kind, text: req.text };
+  const sendAnswers = (cancel: boolean) => {
+    if (!askQuestions || req.requestId === undefined) return;
+    const answers = cancel ? [] : askQuestions.map((q, i) => ({ id: q.id, selected: selected[i] ?? [] }));
+    setRefused(!store.answer(sessionId, req.requestId, answers, { expect, ...(cancel ? { cancel: true } : {}) }));
+  };
+  const optionsLive = fresh && !changed && item !== undefined && outcome.kind !== 'sending' && outcome.kind !== 'uncertain' && (canConfirm || !guarded);
+  // An option is answered by its 1-based position: a label could be a digit read as another option, or appear twice.
+  const tapOption = (i: number) => {
+    if (guarded) { setPicked(i); setRefused(false); } else setRefused(!store.reply(sessionId, String(i + 1)));
+  };
+  const optionList = (
+    <ul aria-label={copy.answers.legend} className="my-3.5 flex list-none flex-col gap-2 p-0">
+      {options.map((o, i) => (
+        <li key={`${i}:${o}`}>
+          <button type="button" disabled={!optionsLive} aria-pressed={picked === i} onClick={() => tapOption(i)}
+            className="flex min-h-12 w-full flex-col items-start justify-center rounded-control border border-line bg-surface px-3 py-3 text-left text-[13px] [overflow-wrap:anywhere] disabled:opacity-45 aria-pressed:border-fg/40 aria-pressed:bg-raised">
+            {o}
+            {req.optionDetails?.[i] && <small className="mt-0.5 text-[11px] text-muted">{req.optionDetails[i]}</small>}
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
   const free = checkFreeAnswer(otherText);
   const choosingOther = canOther && (options.length === 0 || choice === options.length);
   const consequence = isQuestion ? null : consequenceFor(req);
@@ -133,17 +182,20 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect }: { s
         </div>
         {isQuestion ? (
           <>
+            {askQuestions && <MultiQuestionForm questions={askQuestions} selected={selected} onToggle={toggle} disabled={busy} />}
+            {optionMode && optionList}
             {answerable && (
               <QuestionForm options={options} value={choice} onChange={c => { setChoice(c); setRefused(false); }} botName={req.botName} disabled={busy}
                 other={canOther ? { text: otherText, onText: t => { setOtherText(t); setRefused(false); }, problem: free.problem } : undefined}
                 onSubmit={fresh && !changed && !busy && item !== undefined ? send : undefined} />
             )}
-            {!canOther && options.length > 0 && <p className="mb-3.5 text-xs text-muted">{copy.decide.otherUnsupported}</p>}
+            {!canOther && !optionMode && !askQuestions && options.length > 0 && <p className="mb-3.5 text-xs text-muted">{copy.decide.otherUnsupported}</p>}
           </>
         ) : (
           <>
             <Command text={req.body ?? req.text} />
-            {options.length > 0 && (
+            {optionMode && optionList}
+            {!optionMode && options.length > 0 && (
               <ul aria-label={copy.detail.options} className="my-3.5 flex list-none flex-col gap-2 p-0">
                 {options.map(o => <li key={o} className="rounded-control border border-line bg-surface px-3 py-3 text-[13px] [overflow-wrap:anywhere]">{o}</li>)}
               </ul>
@@ -170,10 +222,12 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect }: { s
       </main>
       <DecisionFooter
         item={req} outcome={outcome} fresh={fresh} changed={changed} stillPending={item !== undefined}
-        onReread={() => { setChanged(false); setChoice(null); setRefused(false); }} onDecide={d => setRefused(!store.decide(sessionId, d))}
+        onReread={() => { setChanged(false); setChoice(null); setPicked(null); setRefused(false); }} onDecide={d => setRefused(!store.decide(sessionId, d))}
         answerable={answerable} choice={choosingOther ? options.length : choice} onAnswer={send}
         answerBlocked={choosingOther ? free.problem !== null : choice === null || choice >= options.length}
-        onCheck={onReconnect} refused={refused}
+        onCheck={onReconnect} refused={refused} store={store} deviceConfirm={state.device?.confirm === true}
+        optionReply={optionMode ? { canConfirm: guarded ? canConfirm : true, picked: guarded ? picked : null, onBack: () => setPicked(null), onReply: (a, expect) => picked === null ? null : store.reply(sessionId, String(picked + 1), { assertion: a, expect }) } : undefined}
+        multi={askQuestions ? { missing, onSend: () => sendAnswers(false), onCancel: () => sendAnswers(true) } : undefined}
       />
     </>
   );

@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { ConfigError, loadConfig } from '../src/config.js';
 
@@ -106,5 +107,47 @@ describe('loadConfig, dev mode', () => {
   it('is refused in production, with or without tokens', () => {
     expect(failure({ NODE_ENV: 'production' }).message).toContain('DATABASE_URL');
     expect(failure({ NODE_ENV: 'production', LEDGE_RELAY_DEV_TOKENS: TOKENS }).message).toContain('DATABASE_URL');
+  });
+});
+
+describe('loadConfig, VAPID', () => {
+  const jwk = generateKeyPairSync('ec', { namedCurve: 'P-256' }).privateKey.export({ format: 'jwk' });
+  const raw = (k: string | undefined) => Buffer.from(k ?? '', 'base64url');
+  const publicKey = Buffer.concat([Buffer.from([4]), raw(jwk.x), raw(jwk.y)]).toString('base64url');
+  const VAPID = {
+    LEDGE_RELAY_VAPID_PUBLIC_KEY: publicKey,
+    LEDGE_RELAY_VAPID_PRIVATE_KEY: jwk.d as string,
+    LEDGE_RELAY_VAPID_SUBJECT: 'mailto:ops@example.com'
+  };
+
+  it('has no push without the variables', () => {
+    const cfg = loadConfig(FULL);
+    if (cfg.mode !== 'accounts') throw new Error('mode');
+    expect(cfg.vapid).toBeUndefined();
+  });
+
+  it('reads the three variables', () => {
+    const cfg = loadConfig({ ...FULL, ...VAPID });
+    if (cfg.mode !== 'accounts') throw new Error('mode');
+    expect(cfg.vapid).toMatchObject({ publicKey, subject: 'mailto:ops@example.com' });
+    expect(cfg.vapid?.privateKey.type).toBe('private');
+  });
+
+  it.each(Object.keys(VAPID))('refuses a partial set, without %s', (name) => {
+    const env: NodeJS.ProcessEnv = { ...FULL, ...VAPID };
+    delete env[name];
+    expect(failure(env).message).toContain('LEDGE_RELAY_VAPID');
+  });
+
+  it('refuses invalid keys and subjects, naming the variable and never the value', () => {
+    const e1 = failure({ ...FULL, ...VAPID, LEDGE_RELAY_VAPID_PUBLIC_KEY: Buffer.alloc(64, 1).toString('base64url') });
+    expect(e1.message).toContain('LEDGE_RELAY_VAPID_PUBLIC_KEY');
+    expect(failure({ ...FULL, ...VAPID, LEDGE_RELAY_VAPID_PUBLIC_KEY: Buffer.alloc(65, 4).toString('base64url') }).message).toContain('LEDGE_RELAY_VAPID_PUBLIC_KEY');
+    const e2 = failure({ ...FULL, ...VAPID, LEDGE_RELAY_VAPID_PRIVATE_KEY: Buffer.alloc(31, 1).toString('base64url') });
+    expect(e2.message).toContain('LEDGE_RELAY_VAPID_PRIVATE_KEY');
+    expect(e2.message).not.toContain(jwk.d as string);
+    const other = generateKeyPairSync('ec', { namedCurve: 'P-256' }).privateKey.export({ format: 'jwk' });
+    expect(failure({ ...FULL, ...VAPID, LEDGE_RELAY_VAPID_PRIVATE_KEY: other.d as string }).message).toContain('LEDGE_RELAY_VAPID');
+    expect(failure({ ...FULL, ...VAPID, LEDGE_RELAY_VAPID_SUBJECT: 'ops@example.com' }).message).toContain('LEDGE_RELAY_VAPID_SUBJECT');
   });
 });

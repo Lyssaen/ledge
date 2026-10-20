@@ -1,11 +1,15 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MESSAGE_MAX, type PhonePending, type PhoneSession } from '@ledge/protocol';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { getAssertion, platformAvailable } from '../../src/link/webauthn';
 import { RequestDetail } from '../../src/screens/RequestDetail';
 import type { MobileStore } from '../../src/state/store';
 import { pending, session } from '../model/fixtures';
 import { snapshot } from '../state/helpers';
 import { setup } from './setup';
+
+vi.mock('../../src/link/webauthn', () => ({ platformAvailable: vi.fn(), createCredential: vi.fn(), getAssertion: vi.fn() }));
+beforeEach(() => { vi.mocked(platformAvailable).mockResolvedValue(false); });
 
 function opened(p: PhonePending, extra: Partial<PhoneSession> = {}, props: { store?: (s: MobileStore) => MobileStore; onReconnect?: () => void } = {}) {
   const t = setup();
@@ -214,5 +218,154 @@ describe('the request context', () => {
     act(() => t.deliver({ type: 'session.preview', id: 'a', lines: ['Kai : je lance les tests.'] }));
     const summary = screen.getByText('Contexte de la demande');
     expect(summary.querySelector('svg')).not.toBeNull();
+  });
+});
+
+// OMP: the daemon never decides an OMP request (decide: false); its dialogs are answered with an option or with `session.answer`.
+const ompCaps = { freeTextAnswer: false, decide: false, questions: true };
+const assertion = { id: 'AQ', clientDataJSON: 'AQI', authenticatorData: 'Aw', signature: 'BAU' };
+const challenge = { type: 'confirm.challenge' as const, purpose: 'decide' as const, challenge: 'Y2hhbGw', rpId: 'relay.example', credentialId: 'AQ', expiresInMs: 60_000 };
+const dialog = (extra: Partial<PhonePending> = {}) => question({ source: 'rpc', risk: 'high', riskReason: 'unknown', text: 'Choisir un modèle', options: ['Rapide', 'Précis'], ...extra });
+const ask = (extra: Partial<PhonePending> = {}) => question({
+  source: 'rpc', risk: 'high', riskReason: 'unknown', text: 'Deux questions', requestId: 'req-7', options: undefined as never,
+  questions: [
+    { id: 'q1', header: 'Thème', question: 'Quel thème ?', options: [{ label: 'Sombre' }, { label: 'Clair' }] },
+    { id: 'q2', question: 'Quelles options ?', multi: true, options: [{ label: 'A' }, { label: 'B' }, { label: 'C' }] }
+  ], ...extra
+});
+
+function omp(p: PhonePending, opts: { device?: boolean } = {}) {
+  const t = setup();
+  t.deliver({ ...snapshot([session('a', { name: 'Kai', tool: 'omp', state: 'waiting_input', pending: p })]), capabilities: { claude: { freeTextAnswer: true }, codex: { freeTextAnswer: true }, cursor: { freeTextAnswer: false }, omp: ompCaps }, ...(opts.device === false ? {} : { device: { confirm: true } }) } as never);
+  render(<RequestDetail store={t.store} sessionId="a" requestKey={p.key} />);
+  return t;
+}
+
+describe('an OMP dialog with options', () => {
+  beforeEach(() => {
+    vi.mocked(platformAvailable).mockResolvedValue(true);
+    vi.mocked(getAssertion).mockReset();
+    Object.defineProperty(globalThis.navigator, 'userAgent', { value: 'Mozilla/5.0 (Linux; Android 15)', configurable: true });
+  });
+
+  it('offers its options, never Autoriser, and a tap opens the confirmation for that option', async () => {
+    vi.mocked(getAssertion).mockResolvedValue(assertion);
+    const t = omp(dialog());
+    expect(screen.queryByRole('button', { name: /Autoriser/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Refuser' })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Précis' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Précis' }));
+    expect(t.of('session.reply')).toEqual([]);
+    await waitFor(() => expect(t.of('confirm.prepare')).toHaveLength(1));
+    expect(t.of('confirm.prepare')).toMatchObject([{ purpose: 'decide', id: 'a', expect: { key: 'p1' } }]);
+    act(() => t.deliver(challenge));
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirmer avec mon appareil' }));
+    await waitFor(() => expect(t.of('session.reply')).toHaveLength(1));
+    expect(t.of('session.reply')).toMatchObject([{ id: 'a', text: '2', expect: { key: 'p1', kind: 'question' }, assertion }]);
+  });
+
+  it('answers by the option\'s position, whatever its label says', async () => {
+    vi.mocked(getAssertion).mockResolvedValue(assertion);
+    const t = omp(dialog({ options: ['3', '1', '2'] }));
+    await waitFor(() => expect(screen.getByRole('button', { name: '1' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: '1' }));
+    expect(screen.getByRole('button', { name: '1' })).toHaveAttribute('aria-pressed', 'true');
+    await waitFor(() => expect(t.of('confirm.prepare')).toHaveLength(1));
+    act(() => t.deliver(challenge));
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirmer avec mon appareil' }));
+    await waitFor(() => expect(t.of('session.reply')).toHaveLength(1));
+    expect(t.of('session.reply')).toMatchObject([{ text: '2' }]);
+    expect(screen.getByRole('button', { name: '1' })).toBeInTheDocument();
+  });
+
+  it('a cancelled confirmation sends nothing, and another option can be chosen', async () => {
+    vi.mocked(getAssertion).mockResolvedValue('cancelled');
+    const t = omp(dialog());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Rapide' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Rapide' }));
+    await waitFor(() => expect(t.of('confirm.prepare')).toHaveLength(1));
+    act(() => t.deliver(challenge));
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirmer avec mon appareil' }));
+    expect(await screen.findByText('Vérification annulée. Rien n’a été envoyé.')).toBeInTheDocument();
+    expect(t.of('session.reply')).toEqual([]);
+    fireEvent.click(screen.getByRole('button', { name: 'Choisir une autre réponse' }));
+    expect(screen.getByRole('button', { name: 'Précis' })).toBeEnabled();
+  });
+
+  it('on a phone that cannot confirm, the options are disabled and say it is for the PC', () => {
+    const t = omp(dialog(), { device: false });
+    expect(screen.getByRole('button', { name: 'Rapide' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Précis' })).toBeDisabled();
+    expect(screen.getByText('À accepter sur le PC')).toBeInTheDocument();
+    expect(screen.getByText(/s’accepte sur le PC/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Rapide' }));
+    expect(t.of('session.reply')).toEqual([]);
+  });
+
+  it('a Claude question keeps its radios and its send button', () => {
+    const t = opened(question());
+    expect(screen.getByRole('radio', { name: 'Sombre' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Sombre' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('radio', { name: 'Clair' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Envoyer ma réponse' }));
+    expect(t.of('session.reply')).toMatchObject([{ text: '2' }]);
+  });
+});
+
+describe('an OMP ask with several questions', () => {
+  it('sends only once every question has a choice, with requestId, the choices and expect', () => {
+    const t = omp(ask());
+    const send = screen.getByRole('button', { name: 'Envoyer les réponses' });
+    expect(screen.getByText('Thème')).toBeInTheDocument();
+    expect(screen.getByText('Quelles options ?')).toBeInTheDocument();
+    expect(send).toBeDisabled();
+    expect(screen.getByText('2 questions sans réponse')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('radio', { name: 'Clair' }));
+    expect(screen.getByText('1 question sans réponse')).toBeInTheDocument();
+    expect(send).toBeDisabled();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'A' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'C' }));
+    expect(send).toBeEnabled();
+    fireEvent.click(send);
+    expect(t.of('session.answer')).toMatchObject([{
+      id: 'a', requestId: 'req-7', expect: { key: 'p1', kind: 'question' },
+      answers: [{ id: 'q1', selected: ['Clair'] }, { id: 'q2', selected: ['A', 'C'] }]
+    }]);
+    expect(t.of('session.answer')[0]).not.toHaveProperty('cancel');
+    expect(t.of('session.answer')[0]).not.toHaveProperty('assertion');
+  });
+
+  it('a multiple question can be unchecked', () => {
+    omp(ask());
+    fireEvent.click(screen.getByRole('radio', { name: 'Sombre' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'B' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'B' }));
+    expect(screen.getByRole('button', { name: 'Envoyer les réponses' })).toBeDisabled();
+  });
+
+  it('« Annuler la demande » sends cancel', () => {
+    const t = omp(ask());
+    fireEvent.click(screen.getByRole('button', { name: 'Annuler la demande' }));
+    expect(t.of('session.answer')).toMatchObject([{ id: 'a', requestId: 'req-7', answers: [], cancel: true, expect: { key: 'p1' } }]);
+  });
+
+  it('a stale answer keeps the choices in the form and says the request changed', () => {
+    const t = omp(ask());
+    fireEvent.click(screen.getByRole('radio', { name: 'Clair' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'B' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Envoyer les réponses' }));
+    act(() => t.deliver({ type: 'operation.result', op: t.of('session.answer')[0]!.op, status: 'rejected', reason: 'stale' }));
+    expect(screen.getByText('La demande a été mise à jour. Relisez-la avant de décider.')).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Clair' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'B' })).toBeChecked();
+  });
+
+  it('shows the answered result once the PC applied it', () => {
+    const t = omp(ask());
+    fireEvent.click(screen.getByRole('radio', { name: 'Sombre' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'A' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Envoyer les réponses' }));
+    act(() => t.deliver({ type: 'operation.result', op: t.of('session.answer')[0]!.op, status: 'applied' }));
+    expect(screen.getByRole('heading', { name: 'Réponse prise en compte' })).toBeInTheDocument();
   });
 });

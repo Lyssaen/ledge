@@ -73,6 +73,8 @@ function classifyShell(command: string, cwd: string): RiskVerdict {
 /** How much accepting a request blindly could do, by the conservative policy table: the first applicable rule wins. Pure. */
 export function classify(input: RiskInput): RiskVerdict {
   const { kind, tool, text, cwd, command } = input;
+  // An OMP dialog's text is never interpreted (it can be a tool approval, whatever its kind).
+  if (input.source === 'rpc') return high('unknown');
   if (kind === 'question') return low('question');
   if (kind === 'plan') return high('plan');
   if (kind === 'diff') {

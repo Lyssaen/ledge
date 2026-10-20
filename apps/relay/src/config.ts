@@ -1,6 +1,8 @@
+import { createPrivateKey, createPublicKey, sign, verify } from 'node:crypto';
 import { z } from 'zod';
 import { RelayPeerSchema } from '@ledge/protocol';
 import type { Who } from './hub.js';
+import type { Vapid } from './push.js';
 
 /** A configuration problem. The message names the variable at fault, never its value. */
 export class ConfigError extends Error {
@@ -24,6 +26,8 @@ export interface AccountsConfig {
   githubApi?: string;
   /** Directory of the built phone PWA; unset, no static file is served. */
   webDir?: string;
+  /** Web Push identity; unset, push is off. */
+  vapid?: Vapid;
 }
 export interface DevConfig {
   mode: 'dev';
@@ -78,6 +82,31 @@ function optionalBase(env: NodeJS.ProcessEnv, name: string, production: boolean)
   return raw;
 }
 
+/** The three `LEDGE_RELAY_VAPID_*` variables, or none. Messages name a variable, never its value. */
+function parseVapid(env: NodeJS.ProcessEnv): Vapid | undefined {
+  const names = ['LEDGE_RELAY_VAPID_PUBLIC_KEY', 'LEDGE_RELAY_VAPID_PRIVATE_KEY', 'LEDGE_RELAY_VAPID_SUBJECT'] as const;
+  const [pub, priv, subject] = names.map((n) => env[n] || undefined);
+  if (!pub && !priv && !subject) return undefined;
+  if (!pub || !priv || !subject) throw new ConfigError(`${names.join(', ')} must be set together or not at all`);
+  const b64u = /^[A-Za-z0-9_-]+$/;
+  const pubBytes = b64u.test(pub) ? Buffer.from(pub, 'base64url') : Buffer.alloc(0);
+  if (pubBytes.length !== 65 || pubBytes[0] !== 4) throw new ConfigError('LEDGE_RELAY_VAPID_PUBLIC_KEY must be an uncompressed P-256 point (65 bytes, base64url)');
+  const privBytes = b64u.test(priv) ? Buffer.from(priv, 'base64url') : Buffer.alloc(0);
+  if (privBytes.length !== 32) throw new ConfigError('LEDGE_RELAY_VAPID_PRIVATE_KEY must be a 32-byte P-256 scalar, base64url');
+  if (!/^(mailto:|https:\/\/)\S+$/.test(subject)) throw new ConfigError('LEDGE_RELAY_VAPID_SUBJECT must be a mailto: or https: URL');
+  const jwk = { kty: 'EC', crv: 'P-256', x: pubBytes.subarray(1, 33).toString('base64url'), y: pubBytes.subarray(33).toString('base64url') };
+  try {
+    const privateKey = createPrivateKey({ key: { ...jwk, d: priv }, format: 'jwk' });
+    // The pair must match: a signature by the private key has to verify with the public point.
+    const probe = Buffer.from('ledge');
+    const sig = sign('sha256', probe, { key: privateKey, dsaEncoding: 'ieee-p1363' });
+    if (!verify('sha256', probe, { key: createPublicKey({ key: jwk, format: 'jwk' }), dsaEncoding: 'ieee-p1363' }, sig)) throw new Error('mismatch');
+    return { publicKey: pub, privateKey, subject };
+  } catch {
+    throw new ConfigError('LEDGE_RELAY_VAPID_PUBLIC_KEY and LEDGE_RELAY_VAPID_PRIVATE_KEY are not a valid P-256 key pair');
+  }
+}
+
 /** `DATABASE_URL` selects the accounts mode; without it the relay runs on dev tokens, which production refuses. */
 export function loadConfig(env: NodeJS.ProcessEnv): Config {
   const production = env.NODE_ENV === 'production';
@@ -87,6 +116,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
   if (env.DATABASE_URL) {
     const githubWeb = optionalBase(env, 'LEDGE_RELAY_GITHUB_WEB_URL', production);
     const githubApi = optionalBase(env, 'LEDGE_RELAY_GITHUB_API_URL', production);
+    const vapid = parseVapid(env);
     return {
       mode: 'accounts',
       port,
@@ -97,6 +127,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
       publicUrl: parsePublicUrl(required(env, 'LEDGE_RELAY_PUBLIC_URL'), production),
       ...(githubWeb ? { githubWeb } : {}),
       ...(githubApi ? { githubApi } : {}),
+      ...(vapid ? { vapid } : {}),
       ...webDir
     };
   }

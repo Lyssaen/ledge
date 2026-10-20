@@ -4,6 +4,7 @@ import { clearMobileStorage, indexedDbKeys, type KeyStore } from './link/keys';
 import { createPhoneLink, type PhoneLink } from './link/link';
 import { LAST_STATE_KEY } from './state/persist';
 import { localStore } from './state/storage';
+import { startPresence } from './push/presence';
 import { createStore, type MobileStore } from './state/store';
 import { registerPinnedSw, type UpdateWatch } from './sw/register';
 
@@ -63,6 +64,7 @@ export async function boot(): Promise<Booted> {
   const lost = await forgetIfKeysLost(keys);
   const link = createPhoneLink({ keys, url: globalThis.location.origin });
   const store = createStore(link);
+  startPresence(store);
   const updates = await registerPinnedSw().catch(() => null);
   return { link, store, signin, lost, updates };
 }

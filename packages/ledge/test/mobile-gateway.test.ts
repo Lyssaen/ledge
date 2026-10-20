@@ -3,6 +3,12 @@ import { randomUUID } from 'node:crypto';
 import { PAD_TIERS, PLAIN_MAX, SNAPSHOT_BODY_MAX, TOPIC_MAX, PhoneServerMessageSchema, pendingKey, type ClientMessage, type MobileState, type Pending, type PhoneServerMessage, type ServerMessage, type Session, type ThreadItem } from '@ledge/protocol';
 import { hostname } from 'node:os';
 import { createPhoneGateway } from '../src/mobile/gateway.js';
+import { createChallengeStore } from '../src/mobile/challenges.js';
+import { challengeOf, rpOf, type DeviceCredential } from '../src/mobile/webauthn.js';
+import { launchFromChat } from '../src/chat/launch.js';
+import { toPhoneTurn } from '../src/mobile/chat.js';
+import { tooWide } from '../src/chat/service.js';
+import { softAuthenticator } from './mobile-soft-authenticator.js';
 
 const T0 = '2026-10-20T08:00:00.000Z';
 const T1 = '2026-10-20T09:00:00.000Z';
@@ -19,22 +25,35 @@ const mk = (id: string, extra: Partial<Session> = {}): Session => ({
 });
 
 /** A MobileService stand-in: approved devices, sealed texts sent per device, and a hand on its message and change listeners. */
-function fakeMobile(ids: string[]) {
+function fakeMobile(ids: string[], relayUrl = 'https://relay.test') {
   let devices = ids;
   const sent: Array<[string, string]> = [];
+  /** How many texts had been sent when each device was revoked: the answer must be among them. */
+  const revoked: Array<{ id: string; sentBefore: number }> = [];
   const messageFns = new Set<(d: string, t: string) => void>();
   const changeFns = new Set<() => void>();
+  const offline = new Set<string>();
+  const pushes = new Map<string, { endpoint: string; p256dh: string; auth: string; key: string }>();
+  let relayKey: string | null | undefined = 'K1';
   return {
     sent,
+    pushes,
+    setRelayKey(k: string | null | undefined) { relayKey = k; for (const fn of changeFns) fn(); },
+    setOnline(id: string, on: boolean) { if (on) offline.delete(id); else offline.add(id); for (const fn of changeFns) fn(); },
+    revoked,
     receive(deviceId: string, text: string) { for (const fn of messageFns) fn(deviceId, text); },
     setDevices(next: string[]) { devices = next; for (const fn of changeFns) fn(); },
     mobile: {
       async send(deviceId: string, text: string) { sent.push([deviceId, text]); return devices.includes(deviceId); },
+      pushOf: (id: string) => pushes.get(id) ?? null,
+      setPush(id: string, p: { endpoint: string; p256dh: string; auth: string; key: string } | null) { if (p) pushes.set(id, p); else pushes.delete(id); for (const fn of changeFns) fn(); },
+      relayPushKey: () => relayKey,
+      async revoke(id: string) { revoked.push({ id, sentBefore: sent.length }); devices = devices.filter(d => d !== id); for (const fn of changeFns) fn(); },
       onMessage(fn: (d: string, t: string) => void) { messageFns.add(fn); return () => { messageFns.delete(fn); }; },
       onChange(fn: () => void) { changeFns.add(fn); return () => { changeFns.delete(fn); }; },
       state: (): MobileState => ({
-        enabled: true, relayUrl: 'https://relay.test', account: null, signin: null, signinError: null, link: { state: 'online' },
-        devices: devices.map(id => ({ id, label: id, approvedAt: T0, online: true })), pairings: []
+        enabled: true, relayUrl, account: null, signin: null, signinError: null, link: { state: 'online' },
+        devices: devices.map(id => ({ id, label: id, approvedAt: T0, online: !offline.has(id) })), pairings: []
       })
     }
   };
@@ -45,8 +64,12 @@ const flush = async () => { for (let i = 0; i < 5; i++) await new Promise(r => s
 const stops: Array<() => void> = [];
 afterEach(() => { for (const s of stops.splice(0)) s(); });
 
-function setup(opts: { dispatch?: (msg: ClientMessage, reply: (m: ServerMessage) => void) => Promise<void> } = {}) {
-  const fm = fakeMobile(['dev1', 'dev2']);
+function setup(opts: { boot?: string; dispatch?: (msg: ClientMessage, reply: (m: ServerMessage) => void) => Promise<void>; relayUrl?: string; chats?: Parameters<typeof createPhoneGateway>[0]['chats']; relay?: Parameters<typeof createPhoneGateway>[0]['relay']; launchChat?: Parameters<typeof createPhoneGateway>[0]['launchChat']; onChatEnd?: Parameters<typeof createPhoneGateway>[0]['onChatEnd']; devices?: string[] } = {}) {
+  const fm = fakeMobile(opts.devices ?? ['dev1', 'dev2'], opts.relayUrl);
+  const clock = { t: 1_000_000 };
+  const challenges = createChallengeStore({ now: () => clock.t });
+  const creds = new Map<string, DeviceCredential>();
+  const stored: string[] = [];
   const sessions = new Map<string, Session>([
     ['a', mk('a', { state: 'waiting_permission', pending: { ...PUSH }, lastReply: { text: 'done', at: T1 } })],
     ['b', mk('b', { state: 'waiting_permission', pending: { ...LS } })],
@@ -60,21 +83,30 @@ function setup(opts: { dispatch?: (msg: ClientMessage, reply: (m: ServerMessage)
   const dispatch = opts.dispatch ?? (async (msg: ClientMessage) => { dispatched.push(msg); });
   const gw = createPhoneGateway({
     mobile: fm.mobile,
+    ...(opts.chats ? { chats: opts.chats } : {}),
+    ...(opts.relay ? { relay: opts.relay } : {}),
+    ...(opts.launchChat ? { launchChat: opts.launchChat } : {}),
+    ...(opts.onChatEnd ? { onChatEnd: opts.onChatEnd } : {}),
     sessions: () => [...sessions.values()],
     session: id => sessions.get(id),
     thread: id => threads.get(id),
     preview: id => previews.get(id),
     dispatch: async (msg, reply) => { if (opts.dispatch) dispatched.push(msg); await dispatch(msg, reply); },
     version: '1.2.3',
+    boot: opts.boot ?? randomUUID(),
     log: line => logs.push(line),
-    now: () => T0
+    now: () => T0,
+    rp: () => rpOf(fm.mobile.state().relayUrl),
+    challenges,
+    credential: id => creds.get(id) ?? null,
+    setCredential: (id, c) => { stored.push(id); creds.set(id, c); }
   });
   stops.push(() => gw.stop());
   /** What `deviceId` received, parsed. */
   const got = (deviceId: string): PhoneServerMessage[] => fm.sent.filter(([d]) => d === deviceId).map(([, t]) => JSON.parse(t) as PhoneServerMessage);
   const results = (deviceId: string) => got(deviceId).filter(m => m.type === 'operation.result');
   const send = (deviceId: string, m: unknown) => fm.receive(deviceId, typeof m === 'string' ? m : JSON.stringify(m));
-  return { fm, gw, sessions, dispatched, logs, got, results, send };
+  return { fm, gw, sessions, dispatched, logs, got, results, send, clock, creds, stored };
 }
 
 const decide = (id: string, decision: 'accept' | 'deny' | 'always', pending: Session['pending'] & object, extra: { key?: string; op?: string } = {}) => ({
@@ -121,6 +153,19 @@ describe('phone gateway: reads and forward', () => {
     g.gw.forward({ type: 'session.updated', session: g.sessions.get('a')! });
     await flush();
     expect(g.fm.sent).toEqual([]);
+  });
+
+  it('each gateway announces its own boot in the snapshot', async () => {
+    const boots = [randomUUID(), randomUUID()];
+    const seen: unknown[] = [];
+    for (const boot of boots) {
+      const g = setup({ boot });
+      g.send('dev1', { type: 'snapshot.request' });
+      await flush();
+      const [snap] = g.got('dev1');
+      seen.push(snap?.type === 'snapshot' ? snap.daemon.boot : undefined);
+    }
+    expect(seen).toEqual(boots);
   });
 
   it('snapshot.request subscribes: the snapshot, then each session.updated projected, without cwd or tmuxSession', async () => {
@@ -647,5 +692,897 @@ describe('phone gateway: request bodies on demand', () => {
       { type: 'error', code: 'unknown_session', request: 'session.pending' },
       { type: 'error', code: 'unknown_session', request: 'session.pending' }
     ]);
+  });
+});
+
+
+describe('phone gateway: device key', () => {
+  const rp = { rpId: 'relay.test', origin: 'https://relay.test' };
+  const prepare = async (g: ReturnType<typeof setup>, deviceId = 'dev1') => {
+    const before = g.got(deviceId).length;
+    g.send(deviceId, { type: 'confirm.prepare', purpose: 'register' });
+    await flush();
+    const m = g.got(deviceId).slice(before).find(x => x.type === 'confirm.challenge');
+    if (m?.type !== 'confirm.challenge') throw new Error('no challenge');
+    return m;
+  };
+  const register = (g: ReturnType<typeof setup>, cred: unknown, op: string = randomUUID(), deviceId = 'dev1') => g.send(deviceId, { type: 'credential.register', op, credential: cred });
+
+  it('answers confirm.prepare register with a challenge for the relay host', async () => {
+    const g = setup();
+    const c = await prepare(g);
+    expect(c).toMatchObject({ purpose: 'register', rpId: 'relay.test', expiresInMs: 60_000 });
+    expect(c.challenge.length).toBeGreaterThan(20);
+  });
+
+  it('registers a passkey: applied, then a snapshot that says device.confirm', async () => {
+    const g = setup();
+    g.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    expect(g.got('dev1').find(m => m.type === 'snapshot')).toMatchObject({ device: { confirm: false } });
+    const c = await prepare(g);
+    const op = randomUUID();
+    register(g, softAuthenticator().create(rp, c.challenge), op);
+    await flush();
+    expect(g.results('dev1').map(m => m.type === 'operation.result' && m.status)).toEqual(['received', 'applied']);
+    expect(g.stored).toEqual(['dev1']);
+    expect(g.creds.get('dev1')).toMatchObject({ rpId: 'relay.test', counter: 0 });
+    const snaps = g.got('dev1').filter(m => m.type === 'snapshot');
+    expect(snaps.at(-1)).toMatchObject({ device: { confirm: true } });
+    expect(g.got('dev1').at(-1)?.type).toBe('snapshot');
+  });
+
+  it('replays the same op with the same result and stores the key once', async () => {
+    const g = setup();
+    const c = await prepare(g);
+    const op = randomUUID();
+    const cred = softAuthenticator().create(rp, c.challenge);
+    register(g, cred, op);
+    await flush();
+    register(g, cred, op);
+    await flush();
+    expect(g.results('dev1').map(m => m.type === 'operation.result' && m.status)).toEqual(['received', 'applied', 'applied']);
+    expect(g.stored).toEqual(['dev1']);
+  });
+
+  it('refuses a challenge issued to another device', async () => {
+    const g = setup();
+    const c = await prepare(g, 'dev2');
+    register(g, softAuthenticator().create(rp, c.challenge));
+    await flush();
+    expect(g.results('dev1').at(-1)).toMatchObject({ status: 'rejected', reason: 'assertion_invalid' });
+    expect(g.stored).toEqual([]);
+  });
+
+  it('refuses an unknown or unreadable challenge, and a challenge used twice', async () => {
+    const g = setup();
+    register(g, softAuthenticator().create(rp, 'never-issued'));
+    await flush();
+    expect(g.results('dev1').at(-1)).toMatchObject({ status: 'rejected', reason: 'assertion_invalid' });
+    const c = await prepare(g);
+    const cred = softAuthenticator().create(rp, c.challenge);
+    expect(challengeOf(cred.clientDataJSON)).toBe(c.challenge);
+    register(g, cred);
+    await flush();
+    register(g, cred);
+    await flush();
+    expect(g.results('dev1').slice(-4).map(m => m.type === 'operation.result' && m.status)).toEqual(['received', 'applied', 'received', 'rejected']);
+    expect(g.stored).toEqual(['dev1']);
+  });
+
+  it('refuses an expired challenge with assertion_expired', async () => {
+    const g = setup();
+    const c = await prepare(g);
+    g.clock.t += 60_001;
+    register(g, softAuthenticator().create(rp, c.challenge));
+    await flush();
+    expect(g.results('dev1').at(-1)).toMatchObject({ status: 'rejected', reason: 'assertion_expired' });
+    expect(g.stored).toEqual([]);
+  });
+
+  it('refuses a registration that does not verify', async () => {
+    const g = setup();
+    const c = await prepare(g);
+    register(g, softAuthenticator().create(rp, c.challenge, { origin: 'https://evil.test' }));
+    await flush();
+    expect(g.results('dev1').at(-1)).toMatchObject({ status: 'rejected', reason: 'assertion_invalid' });
+    expect(g.stored).toEqual([]);
+  });
+
+  it('without a secure relay URL there is no challenge and no device check', async () => {
+    const g = setup({ relayUrl: 'http://192.168.1.10' });
+    g.send('dev1', { type: 'confirm.prepare', purpose: 'register' });
+    g.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    expect(g.got('dev1')[0]).toEqual({ type: 'error', code: 'invalid', request: 'confirm.prepare' });
+    expect(g.got('dev1').find(m => m.type === 'snapshot')).toMatchObject({ device: { confirm: false } });
+  });
+});
+
+describe('phone gateway: a high-impact accept carries a device assertion', () => {
+  const rp = { rpId: 'relay.test', origin: 'https://relay.test' };
+  const RPC: Pending = { kind: 'question', text: 'Allow the edit?', tool: 'omp', options: ['Allow', 'Reject'], source: 'rpc' };
+  type G = ReturnType<typeof setup>;
+  const challengeFor = async (g: G, id: string, pending: Pending, purpose: 'decide' | 'register' = 'decide'): Promise<string> => {
+    const before = g.got('dev1').length;
+    g.send('dev1', purpose === 'register'
+      ? { type: 'confirm.prepare', purpose }
+      : { type: 'confirm.prepare', purpose, id, expect: { kind: pending.kind, text: pending.text, key: pendingKey(pending) } });
+    await flush();
+    const m = g.got('dev1').slice(before).find(x => x.type === 'confirm.challenge');
+    if (m?.type !== 'confirm.challenge') throw new Error('no challenge');
+    return m.challenge;
+  };
+  /** A device with a registered passkey. */
+  const enrolled = async () => {
+    const g = setup();
+    g.sessions.set('r', mk('r', { state: 'waiting_permission', pending: { ...RPC } }));
+    const auth = softAuthenticator();
+    const c = await challengeFor(g, '', RPC, 'register');
+    g.send('dev1', { type: 'credential.register', op: randomUUID(), credential: auth.create(rp, c) });
+    await flush();
+    g.stored.length = 0;
+    return { g, auth };
+  };
+  const last = (g: G) => g.results('dev1').at(-1);
+  const withAssertion = (m: object, assertion: unknown) => ({ ...m, assertion });
+
+  it('confirm.prepare decide without id or expect is invalid; for an unknown session unknown_session; without a credential invalid', async () => {
+    const { g } = await enrolled();
+    g.send('dev1', { type: 'confirm.prepare', purpose: 'decide' });
+    g.send('dev1', { type: 'confirm.prepare', purpose: 'decide', id: 'a' });
+    g.send('dev1', { type: 'confirm.prepare', purpose: 'decide', id: 'nope', expect: seen(PUSH) });
+    g.send('dev2', { type: 'confirm.prepare', purpose: 'decide', id: 'a', expect: seen(PUSH) });
+    await flush();
+    expect(g.got('dev1').slice(-3)).toEqual([
+      { type: 'error', code: 'invalid', request: 'confirm.prepare' },
+      { type: 'error', code: 'invalid', request: 'confirm.prepare' },
+      { type: 'error', code: 'unknown_session', request: 'confirm.prepare' }
+    ]);
+    expect(g.got('dev2')).toEqual([{ type: 'error', code: 'invalid', request: 'confirm.prepare' }]);
+  });
+
+  it('answers confirm.prepare decide with a challenge, the credential id and the relay host', async () => {
+    const { g, auth } = await enrolled();
+    g.send('dev1', { type: 'confirm.prepare', purpose: 'decide', id: 'a', expect: seen(PUSH) });
+    await flush();
+    expect(g.got('dev1').at(-1)).toMatchObject({ type: 'confirm.challenge', purpose: 'decide', rpId: 'relay.test', credentialId: auth.id, expiresInMs: 60_000 });
+  });
+
+  it('accepts a high request with a valid assertion: applied, the local front gets no assertion, the counter is stored', async () => {
+    const { g, auth } = await enrolled();
+    const m = decide('a', 'accept', PUSH);
+    const challenge = await challengeFor(g, 'a', PUSH);
+    g.send('dev1', withAssertion(m, auth.get(rp, challenge, { counter: 1 })));
+    await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: m.op, status: 'applied' });
+    expect(g.dispatched).toEqual([{ type: 'session.decide', id: 'a', decision: 'accept', expect: { kind: 'permission', text: 'git push', key: pendingKey(PUSH) } }]);
+    expect(g.dispatched[0]).not.toHaveProperty('assertion');
+    expect(g.stored).toEqual(['dev1']);
+    expect(g.creds.get('dev1')?.counter).toBe(1);
+  });
+
+  it('refuses always on a high request without an assertion, or without a credential; deny and a low accept need none', async () => {
+    const { g } = await enrolled();
+    const always = decide('a', 'always', PUSH);
+    g.send('dev1', always);
+    const bare = setup();
+    const m = decide('a', 'accept', PUSH);
+    bare.send('dev1', m);
+    await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: always.op, status: 'rejected', reason: 'confirm_required' });
+    expect(last(bare)).toEqual({ type: 'operation.result', op: m.op, status: 'rejected', reason: 'confirm_required' });
+    expect(g.dispatched).toEqual([]);
+    const deny = decide('a', 'deny', PUSH);
+    const low = decide('b', 'accept', LS);
+    g.send('dev1', deny);
+    g.send('dev1', low);
+    await flush();
+    const results = g.results('dev1');
+    expect(results).toContainEqual({ type: 'operation.result', op: deny.op, status: 'applied' });
+    expect(results).toContainEqual({ type: 'operation.result', op: low.op, status: 'applied' });
+    expect(g.dispatched.map(d => d.type === 'session.decide' && [d.id, d.decision])).toEqual([['a', 'deny'], ['b', 'accept']]);
+  });
+
+  it('a stale expect.key is stale even with a valid assertion, and the challenge stays usable', async () => {
+    const { g, auth } = await enrolled();
+    const challenge = await challengeFor(g, 'a', PUSH);
+    const assertion = auth.get(rp, challenge, { counter: 1 });
+    const old = decide('a', 'accept', PUSH, { key: 'old-key' });
+    g.send('dev1', withAssertion(old, assertion));
+    await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: old.op, status: 'rejected', reason: 'stale' });
+    const fresh = decide('a', 'accept', PUSH);
+    g.send('dev1', withAssertion(fresh, assertion));
+    await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: fresh.op, status: 'applied' });
+  });
+
+  it('an assertion bound to another request is assertion_invalid', async () => {
+    const { g, auth } = await enrolled();
+    g.sessions.set('p2', mk('p2', { state: 'waiting_permission', pending: { ...PUSH, text: 'git push -f' } }));
+    const challenge = await challengeFor(g, 'p2', { ...PUSH, text: 'git push -f' });
+    const m = decide('a', 'accept', PUSH);
+    g.send('dev1', withAssertion(m, auth.get(rp, challenge, { counter: 1 })));
+    await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: m.op, status: 'rejected', reason: 'assertion_invalid' });
+    expect(g.dispatched).toEqual([]);
+  });
+
+  it('the same assertion under a new op is assertion_invalid (challenge spent); the same op again replays applied', async () => {
+    const { g, auth } = await enrolled();
+    const challenge = await challengeFor(g, 'a', PUSH);
+    const assertion = auth.get(rp, challenge, { counter: 1 });
+    const m = decide('a', 'accept', PUSH);
+    g.send('dev1', withAssertion(m, assertion));
+    await flush();
+    // The replay answers from the registry: a re-run would find the challenge spent and answer assertion_invalid.
+    g.send('dev1', withAssertion(m, assertion));
+    await flush();
+    expect(g.results('dev1').slice(-2).map(r => r.type === 'operation.result' && r.status)).toEqual(['applied', 'applied']);
+    expect(g.dispatched).toHaveLength(1);
+    expect(g.stored).toEqual(['dev1']);
+    const again = decide('a', 'accept', PUSH);
+    g.send('dev1', withAssertion(again, assertion));
+    await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: again.op, status: 'rejected', reason: 'assertion_invalid' });
+    expect(g.dispatched).toHaveLength(1);
+  });
+
+  it('an expired challenge is assertion_expired', async () => {
+    const { g, auth } = await enrolled();
+    const challenge = await challengeFor(g, 'a', PUSH);
+    g.clock.t += 61_000;
+    const m = decide('a', 'accept', PUSH);
+    g.send('dev1', withAssertion(m, auth.get(rp, challenge, { counter: 1 })));
+    await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: m.op, status: 'rejected', reason: 'assertion_expired' });
+  });
+
+  it('a replayed counter is assertion_invalid and the stored counter does not move', async () => {
+    const { g, auth } = await enrolled();
+    const first = decide('a', 'accept', PUSH);
+    g.send('dev1', withAssertion(first, auth.get(rp, await challengeFor(g, 'a', PUSH), { counter: 5 })));
+    await flush();
+    g.sessions.get('a')!.pending = { ...PUSH };
+    const second = decide('a', 'accept', PUSH);
+    g.send('dev1', withAssertion(second, auth.get(rp, await challengeFor(g, 'a', PUSH), { counter: 5 })));
+    await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: second.op, status: 'rejected', reason: 'assertion_invalid' });
+    expect(g.creds.get('dev1')?.counter).toBe(5);
+    expect(g.stored).toEqual(['dev1']);
+  });
+
+  it('a reply to an OMP rpc request needs an assertion; with one it goes through', async () => {
+    const { g, auth } = await enrolled();
+    const expect_ = seen(RPC);
+    const bare = { type: 'session.reply', op: randomUUID(), id: 'r', text: 'yes', expect: { ...expect_, key: pendingKey(RPC) } };
+    g.send('dev1', bare);
+    await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: bare.op, status: 'rejected', reason: 'confirm_required' });
+    expect(g.dispatched).toEqual([]);
+    const m = { ...bare, op: randomUUID() };
+    g.send('dev1', withAssertion(m, auth.get(rp, await challengeFor(g, 'r', RPC), { counter: 1 })));
+    await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: m.op, status: 'applied' });
+    expect(g.dispatched).toEqual([{ type: 'session.reply', id: 'r', text: 'yes' }]);
+  });
+
+  it('an assertion no check binds is stale and spends no challenge: a reply with a null expect while idle, a decide on a low request', async () => {
+    const { g, auth } = await enrolled();
+    g.sessions.set('idle', mk('idle'));
+    const challenge = await challengeFor(g, 'a', PUSH);
+    const assertion = auth.get(rp, challenge, { counter: 1 });
+    const reply = { type: 'session.reply', op: randomUUID(), id: 'idle', text: '2', expect: null };
+    g.send('dev1', withAssertion(reply, assertion));
+    const low = decide('b', 'accept', LS);
+    g.send('dev1', withAssertion(low, assertion));
+    await flush();
+    expect(g.results('dev1')).toContainEqual({ type: 'operation.result', op: reply.op, status: 'rejected', reason: 'stale' });
+    expect(g.results('dev1')).toContainEqual({ type: 'operation.result', op: low.op, status: 'rejected', reason: 'stale' });
+    expect(g.dispatched).toEqual([]);
+    const ok = decide('a', 'accept', PUSH);
+    g.send('dev1', withAssertion(ok, assertion));
+    await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: ok.op, status: 'applied' });
+  });
+
+  it('a challenge prepared for one OMP dialog does not verify for another dialog with the same content', async () => {
+    const { g, auth } = await enrolled();
+    const A: Pending = { ...RPC, requestId: 'dlg-1' };
+    g.sessions.set('r', mk('r', { state: 'waiting_permission', pending: { ...A } }));
+    const challenge = await challengeFor(g, 'r', A);
+    g.sessions.set('r', mk('r', { state: 'waiting_permission', pending: { ...RPC, requestId: 'dlg-2' } }));
+    const m = { type: 'session.reply', op: randomUUID(), id: 'r', text: '1', expect: seen(A) };
+    g.send('dev1', withAssertion(m, auth.get(rp, challenge, { counter: 1 })));
+    await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: m.op, status: 'rejected', reason: 'assertion_invalid' });
+    expect(g.dispatched).toEqual([]);
+  });
+
+  it('logs carry neither the challenge nor the signature, even when verification fails', async () => {
+    const { g, auth } = await enrolled();
+    const challenge = await challengeFor(g, 'a', PUSH);
+    const assertion = auth.get(rp, challenge, { counter: 0, type: 'webauthn.create' });
+    const m = decide('a', 'accept', PUSH);
+    g.send('dev1', withAssertion(m, assertion));
+    await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: m.op, status: 'rejected', reason: 'assertion_invalid' });
+    expect(g.logs).toContain('phone: assertion refused for device dev1');
+    for (const secret of [challenge, assertion.signature, assertion.clientDataJSON, assertion.authenticatorData]) expect(g.logs.some(l => l.includes(secret))).toBe(false);
+  });
+});
+
+describe('phone gateway: OMP requests answered with their own questions', () => {
+  const ASK: Pending = {
+    kind: 'question', text: 'Two questions', source: 'rpc', tool: 'omp', requestId: 'ask-2',
+    questions: [
+      { id: 'q1', question: 'Which colour?', options: [{ label: 'red' }, { label: 'green' }] },
+      { id: 'q2', question: 'Which size?', multi: true, options: [{ label: 'S' }, { label: 'M' }] }
+    ]
+  };
+  const omp = () => {
+    const g = setup();
+    g.sessions.set('o', mk('o', { tool: 'omp', tmuxSession: null, backend: 'omp-rpc', state: 'waiting_input', pending: { ...ASK } }));
+    return g;
+  };
+  const answer = (extra: Record<string, unknown> = {}) => ({
+    type: 'session.answer', op: randomUUID(), id: 'o', requestId: 'ask-2',
+    answers: [{ id: 'q1', selected: ['red'] }, { id: 'q2', selected: ['S', 'M'], text: 'and XL' }],
+    expect: { kind: ASK.kind, text: ASK.text, key: pendingKey(ASK) }, ...extra
+  });
+  const final = (g: ReturnType<typeof setup>) => g.results('dev1').filter(r => r.type === 'operation.result' && r.status !== 'received');
+
+  it('the snapshot announces what each tool can do', async () => {
+    const g = setup();
+    g.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    const snap = g.got('dev1').find(m => m.type === 'snapshot');
+    expect(snap?.type === 'snapshot' && snap.capabilities.omp).toEqual({ freeTextAnswer: false, decide: false, questions: true });
+    expect(snap?.type === 'snapshot' && snap.capabilities.claude).toMatchObject({ decide: true, questions: false });
+  });
+
+  it('an answer to the ask of 2 questions reaches the local front, with no field of the phone added', async () => {
+    const g = omp();
+    const m = answer({ cancel: true });
+    g.send('dev1', m);
+    await flush();
+    expect(final(g)).toEqual([{ type: 'operation.result', op: m.op, status: 'applied' }]);
+    expect(g.dispatched).toEqual([{ type: 'session.answer', id: 'o', requestId: 'ask-2', answers: m.answers, cancel: true }]);
+    const plain = answer();
+    g.send('dev1', plain);
+    await flush();
+    expect(g.dispatched[1]).toEqual({ type: 'session.answer', id: 'o', requestId: 'ask-2', answers: plain.answers });
+    expect(Object.keys(g.dispatched[1]!).sort()).toEqual(['answers', 'id', 'requestId', 'type']);
+  });
+
+  it('the requestId of an earlier ask is stale', async () => {
+    const g = omp();
+    const m = answer({ requestId: 'ask-1' });
+    g.send('dev1', m);
+    await flush();
+    expect(final(g)).toEqual([{ type: 'operation.result', op: m.op, status: 'rejected', reason: 'stale' }]);
+    expect(g.dispatched).toEqual([]);
+  });
+
+  it('an answer to a request that changed is stale', async () => {
+    const g = omp();
+    const m = answer({ expect: { kind: ASK.kind, text: ASK.text, key: 'k-old' } });
+    g.send('dev1', m);
+    await flush();
+    expect(final(g)).toEqual([{ type: 'operation.result', op: m.op, status: 'rejected', reason: 'stale' }]);
+    expect(g.dispatched).toEqual([]);
+  });
+
+  it('an answer to a session that is not OMP is not offered', async () => {
+    const g = setup();
+    const m = answer({ id: 'q', expect: seen(PICK) });
+    g.send('dev1', m);
+    await flush();
+    expect(final(g)).toEqual([{ type: 'operation.result', op: m.op, status: 'rejected', reason: 'not_offered' }]);
+    expect(g.dispatched).toEqual([]);
+  });
+
+  it('an answer to an unknown session is refused as such', async () => {
+    const g = omp();
+    const m = answer({ id: 'nope' });
+    g.send('dev1', m);
+    await flush();
+    expect(final(g)).toEqual([{ type: 'operation.result', op: m.op, status: 'rejected', reason: 'unknown_session' }]);
+  });
+
+  it('an accept on an OMP session is not offered, never confirm_required, and spends no challenge', async () => {
+    const g = omp();
+    g.send('dev1', { type: 'confirm.prepare', purpose: 'register' });
+    await flush();
+    const m = { type: 'session.decide', op: randomUUID(), id: 'o', decision: 'accept', expect: { kind: ASK.kind, text: ASK.text, key: pendingKey(ASK) } };
+    g.send('dev1', m);
+    await flush();
+    expect(final(g)).toEqual([{ type: 'operation.result', op: m.op, status: 'rejected', reason: 'not_offered' }]);
+    expect(g.dispatched).toEqual([]);
+  });
+});
+
+describe('phone gateway: device.forget', () => {
+  it('answers applied first, then revokes the device', async () => {
+    const g = setup();
+    const op = randomUUID();
+    g.send('dev1', { type: 'device.forget', op });
+    await flush();
+    expect(g.results('dev1').map(m => m.type === 'operation.result' && m.status)).toEqual(['received', 'applied']);
+    expect(g.fm.revoked).toEqual([{ id: 'dev1', sentBefore: 2 }]);
+    expect(g.fm.mobile.state().devices.map(d => d.id)).toEqual(['dev2']);
+    expect(g.dispatched).toEqual([]);
+  });
+
+  it('a resend of the same op raises nothing and revokes once', async () => {
+    const g = setup();
+    const op = randomUUID();
+    g.send('dev1', { type: 'device.forget', op });
+    await flush();
+    g.send('dev1', { type: 'device.forget', op });
+    await flush();
+    expect(g.fm.revoked).toHaveLength(1);
+    expect(g.got('dev1').some(m => m.type === 'error')).toBe(false);
+  });
+});
+
+describe('phone gateway: push', () => {
+  const KEYS = { p256dh: 'B'.repeat(87), auth: 'A'.repeat(22) };
+  const ENDPOINT = 'https://fcm.googleapis.com/fcm/send/abc';
+  const sub = (op: string, endpoint = ENDPOINT, key = 'K1') => ({ type: 'push.subscribe', op, subscription: { endpoint, keys: KEYS }, key: key.padEnd(87, 'k') });
+  const pushOf = (g: ReturnType<typeof setup>, d: string) => {
+    const snaps = g.got(d).filter(m => m.type === 'snapshot');
+    return snaps.length ? (snaps[snaps.length - 1] as { device?: { push?: string } }).device?.push : undefined;
+  };
+
+  it('push.subscribe is applied and the next snapshot says on; push.unsubscribe says off', async () => {
+    const g = setup();
+    g.fm.setRelayKey('K1'.padEnd(87, 'k'));
+    g.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    expect(pushOf(g, 'dev1')).toBe('off');
+    const op = randomUUID();
+    g.send('dev1', sub(op));
+    await flush();
+    expect(g.results('dev1').map(r => r.type === 'operation.result' && r.status)).toEqual(['received', 'applied']);
+    g.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    expect(pushOf(g, 'dev1')).toBe('on');
+    expect(g.fm.pushes.get('dev1')).toMatchObject({ endpoint: ENDPOINT, p256dh: KEYS.p256dh, auth: KEYS.auth });
+    g.send('dev1', { type: 'push.unsubscribe', op: randomUUID() });
+    await flush();
+    g.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    expect(pushOf(g, 'dev1')).toBe('off');
+  });
+
+  it('an endpoint off the list is rejected invalid and nothing is stored', async () => {
+    const g = setup();
+    const op = randomUUID();
+    g.send('dev1', sub(op, 'https://evil.example.com/x'));
+    await flush();
+    expect(g.results('dev1')).toEqual([{ type: 'operation.result', op, status: 'rejected', reason: 'invalid' }]);
+    expect(g.fm.pushes.size).toBe(0);
+  });
+
+  it('the status is unavailable without push on the relay and stale when the relay key changed', async () => {
+    const g = setup();
+    g.send('dev1', sub(randomUUID(), ENDPOINT, 'K1'));
+    await flush();
+    g.fm.setRelayKey('K1'.padEnd(87, 'k'));
+    g.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    expect(pushOf(g, 'dev1')).toBe('on');
+    g.fm.setRelayKey('K2');
+    await flush();
+    expect(pushOf(g, 'dev1')).toBe('stale');
+    g.fm.setRelayKey(null);
+    await flush();
+    expect(pushOf(g, 'dev1')).toBe('unavailable');
+  });
+
+  it('a second subscription under the same op is a conflict', async () => {
+    const g = setup();
+    const op = randomUUID();
+    g.send('dev1', sub(op, ENDPOINT));
+    await flush();
+    g.send('dev1', sub(op, 'https://fcm.googleapis.com/fcm/send/other'));
+    await flush();
+    expect(g.results('dev1').at(-1)).toMatchObject({ status: 'rejected', reason: 'conflict' });
+  });
+
+  it('presence visible is kept until the channel falls', async () => {
+    const g = setup();
+    expect(g.gw.visible('dev1')).toBe(false);
+    g.send('dev1', { type: 'presence', visible: true });
+    expect(g.gw.visible('dev1')).toBe(true);
+    expect(g.gw.visible('dev2')).toBe(false);
+    g.fm.setOnline('dev1', false);
+    expect(g.gw.visible('dev1')).toBe(false);
+    g.fm.setOnline('dev1', true);
+    expect(g.gw.visible('dev1')).toBe(false);
+    g.send('dev1', { type: 'presence', visible: true });
+    g.send('dev1', { type: 'presence', visible: false });
+    expect(g.gw.visible('dev1')).toBe(false);
+  });
+});
+
+
+/** Chat threads stand-in: one fake chat per device, a record of drops and emitters. */
+function fakeChats() {
+  const drops: string[] = [];
+  const emitters = new Map<string, unknown>();
+  const asked: Array<{ id: string; qid: string; tool: unknown }> = [];
+  const cancelled: Array<{ id: string; qid: string }> = [];
+  const resets: string[] = [];
+  const turns = new Map<string, Array<{ qid: string; question: string; askedAt: string; steps: never[]; answer?: string }>>();
+  const dropping = new Set<string>();
+  /** Every `device(id)`: it creates the thread when absent. */
+  const touched: string[] = [];
+  const gone = new Set<string>();
+  const chatOf = (id: string) => ({
+    async ask(qid: string, text: string, emit: (m: ServerMessage) => void, tool?: unknown) {
+      asked.push({ id, qid, tool });
+      const t = { qid, question: text, askedAt: T0, steps: [] as never[], answer: `answer of ${id}` };
+      turns.set(id, [...(turns.get(id) ?? []), t]);
+      emit({ type: 'chat.delta', qid, text: 'ans' } as never);
+      emit({ type: 'chat.done', qid, text: t.answer, at: T0 } as never);
+    },
+    cancel(qid: string) { cancelled.push({ id, qid }); },
+    async reset(emit: (m: ServerMessage) => void) { resets.push(id); turns.set(id, []); emit({ type: 'chat.history', turns: [] } as never); },
+    history: () => turns.get(id) ?? []
+  });
+  const chats = {
+    device(id: string) { touched.push(id); gone.delete(id); if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) throw new Error('invalid device id'); if (dropping.has(id)) throw new Error('device thread is being dropped'); return chatOf(id) as never; },
+    async deviceTool() { return 'codex' as const; },
+    owner(qid: string) { for (const [id, ts] of turns) if (ts.some(t => t.qid === qid)) return `device:${id}` as const; return undefined; },
+    peek(id: string) { return gone.has(id) ? undefined : chatOf(id) as never; },
+    async drop(id: string) { drops.push(id); gone.add(id); turns.delete(id); },
+    setEmitter(thread: string, e: unknown) { emitters.set(thread, e); }
+  };
+  return { chats, drops, emitters, asked, cancelled, resets, turns, dropping, touched };
+}
+
+describe('phone gateway: chat', () => {
+  const ask = (qid: string, text = 'hello') => ({ type: 'chat.ask', qid, text });
+  const Q1 = randomUUID();
+
+  it('answers only the device that asked, with its own chat tool, and registers its emitter', async () => {
+    const c = fakeChats();
+    const g = setup({ chats: c.chats });
+    g.send('dev1', ask(Q1));
+    await flush();
+    expect(c.asked).toEqual([{ id: 'dev1', qid: Q1, tool: 'codex' }]);
+    expect([...c.emitters.keys()]).toEqual(['device:dev1']);
+    expect(g.got('dev1').map(m => m.type)).toEqual(['chat.delta', 'chat.done']);
+    expect(g.got('dev2')).toEqual([]);
+    expect(g.dispatched).toEqual([]);
+  });
+
+  it('keeps a cancel to the device that owns the question', async () => {
+    const c = fakeChats();
+    const g = setup({ chats: c.chats });
+    g.send('dev1', ask(Q1));
+    await flush();
+    g.send('dev2', { type: 'chat.cancel', qid: Q1 });
+    await flush();
+    expect(c.cancelled).toEqual([]);
+    g.send('dev1', { type: 'chat.cancel', qid: Q1 });
+    await flush();
+    expect(c.cancelled).toEqual([{ id: 'dev1', qid: Q1 }]);
+  });
+
+  it('sends chat.history and reset results to the asking device only', async () => {
+    const c = fakeChats();
+    const g = setup({ chats: c.chats });
+    g.send('dev1', { type: 'snapshot.request' });
+    g.send('dev1', ask(Q1, 'mine'));
+    g.send('dev2', ask(randomUUID(), 'theirs'));
+    await flush();
+    g.send('dev1', { type: 'chat.history' });
+    await flush();
+    const h = g.got('dev1').filter(m => m.type === 'chat.history');
+    expect(h).toHaveLength(1);
+    expect(h[0]).toMatchObject({ turns: [{ qid: Q1, question: 'mine', answer: 'answer of dev1' }] });
+    g.send('dev1', { type: 'chat.reset' });
+    await flush();
+    expect(c.resets).toEqual(['dev1']);
+    expect(g.got('dev2').filter(m => m.type === 'chat.history')).toEqual([]);
+  });
+
+  it('announces the chat in the snapshot only when threads are served', async () => {
+    const withChats = setup({ chats: fakeChats().chats });
+    withChats.send('dev1', { type: 'snapshot.request' });
+    const without = setup();
+    without.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    expect((withChats.got('dev1')[0] as { device: unknown }).device).toMatchObject({ chat: true });
+    expect((without.got('dev1')[0] as { device: object }).device).not.toHaveProperty('chat');
+  });
+
+  it('refuses without crashing when the thread cannot be reached', async () => {
+    const c = fakeChats();
+    const g = setup({ chats: c.chats });
+    c.dropping.add('dev1');
+    g.send('dev1', ask(Q1));
+    g.send('dev1', { type: 'chat.history' });
+    g.send('dev1', { type: 'chat.reset' });
+    await flush();
+    expect(g.got('dev1')).toEqual([
+      { type: 'chat.error', qid: Q1, code: 'failed' },
+      { type: 'error', code: 'invalid', request: 'chat.history' },
+      { type: 'error', code: 'invalid', request: 'chat.reset' }
+    ]);
+    const bad = setup({ chats: c.chats, devices: ['../evil'] });
+    bad.send('../evil', ask(Q1));
+    await flush();
+    expect(bad.got('../evil')).toEqual([{ type: 'chat.error', qid: Q1, code: 'failed' }]);
+  });
+
+  it('survives a thread dropped while its question ends', async () => {
+    const c = fakeChats();
+    const g = setup({ chats: c.chats });
+    const emit = c.chats.device('dev1');
+    g.send('dev1', ask(Q1));
+    await flush();
+    c.dropping.add('dev1');
+    const e = c.emitters.get('device:dev1') as (m: unknown) => void;
+    expect(() => e({ type: 'chat.done', qid: randomUUID(), text: '', at: T0 })).not.toThrow();
+    void emit;
+  });
+
+  it('sends nothing to a device with no live channel, and still notifies its end', async () => {
+    const c = fakeChats();
+    const ends: Array<[string, unknown]> = [];
+    const g = setup({ chats: c.chats, onChatEnd: (d, e) => ends.push([d, e]) });
+    g.fm.setOnline('dev1', false);
+    g.send('dev1', ask(Q1));
+    await flush();
+    expect(c.asked).toHaveLength(1);
+    expect(g.got('dev1')).toEqual([]);
+    expect(g.logs.filter(l => l.includes('gone'))).toEqual([]);
+    expect(ends).toEqual([['dev1', { qid: Q1 }]]);
+  });
+
+  it('does not re-create a dropped thread when a late message reaches its emitter', async () => {
+    const c = fakeChats();
+    const g = setup({ chats: c.chats });
+    g.send('dev1', ask(Q1));
+    await flush();
+    const e = c.emitters.get('device:dev1') as (m: unknown) => void;
+    g.fm.setDevices(['dev2']);
+    await flush();
+    expect(c.drops).toEqual(['dev1']);
+    c.touched.length = 0;
+    e({ type: 'chat.done', qid: Q1, text: '', at: T0 });
+    e({ type: 'chat.history', turns: [] });
+    expect(c.touched).toEqual([]);
+  });
+
+  it('answers a chat message without threads with error invalid', async () => {
+    const g = setup();
+    g.send('dev1', { type: 'chat.history' });
+    await flush();
+    expect(g.got('dev1')).toEqual([{ type: 'error', code: 'invalid', request: 'chat.history' }]);
+  });
+
+  it('drops the thread of a revoked device, connected or not, and of a forgotten one', async () => {
+    const c = fakeChats();
+    const g = setup({ chats: c.chats });
+    g.send('dev1', ask(Q1));
+    g.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    g.fm.setDevices(['dev2']);
+    await flush();
+    expect(c.drops).toEqual(['dev1']);
+    // dev2 never connected: it goes too.
+    g.fm.setDevices([]);
+    await flush();
+    expect(c.drops).toEqual(['dev1', 'dev2']);
+  });
+
+  it('drops the thread of a device that asked and then fell offline when it is revoked', async () => {
+    const c = fakeChats();
+    const g = setup({ chats: c.chats });
+    g.send('dev1', ask(Q1));
+    await flush();
+    g.fm.setOnline('dev1', false);
+    g.fm.setDevices(['dev2']);
+    await flush();
+    expect(c.drops).toEqual(['dev1']);
+  });
+
+  it('drops the thread on device.forget', async () => {
+    const c = fakeChats();
+    const g = setup({ chats: c.chats });
+    g.send('dev1', { type: 'snapshot.request' });
+    g.send('dev1', { type: 'device.forget', op: randomUUID() });
+    await new Promise(r => setTimeout(r, 50));
+    expect(c.drops).toEqual(['dev1']);
+  });
+});
+
+describe('phone gateway: chat cards', () => {
+  const rp = { rpId: 'relay.test', origin: 'https://relay.test' };
+  const QA = randomUUID(); const QB = randomUUID(); const QPC = randomUUID();
+  type Row = { project: string; tool: 'claude'; cwd: string; prompt: string; launchedId?: string; error?: string };
+  const row = (cwd: string, prompt = 'do it'): Row => ({ project: 'repo', tool: 'claude', cwd, prompt });
+
+  /** The device's thread holds QA (a card of `rows`, an instruction) and QB; the PC's QPC is not the device's. */
+  function cards(rows: Row[]) {
+    const c = fakeChats();
+    const turn = (qid: string) => ({ qid, question: 'q', askedAt: T0, steps: [] as never[], proposals: rows, relay: { id: 'sess', name: 'bot', tool: 'claude', text: 'go on' } });
+    c.turns.set('dev1', [turn(QA)] as never);
+    c.turns.set('dev2', [turn(QB)] as never);
+    const launches: Array<{ cwd: string; prompt?: string }> = [];
+    const relays: string[] = [];
+    const inFlight = new Set<string>();
+    const live = (qid: string) => ({ ...(c.chats.device('dev1') as object), proposal: (_q: string, r = 0) => rows[r], markLaunched: (_q: string, id: string, _e: unknown, r = 0) => { rows[r] = { ...rows[r]!, launchedId: id }; }, markFailed: (_q: string, m: string, _e: unknown, r = 0) => { rows[r] = { ...rows[r]!, error: m }; } }) as never;
+    const owner = c.chats.owner;
+    c.chats.owner = (qid: string) => (qid === QPC ? 'desktop' as never : owner(qid));
+    const launchChat = (_thread: string, qid: string, r?: number[]) => launchFromChat({
+      chat: live(qid), emit: () => {}, inFlight,
+      launch: async p => { launches.push({ cwd: p.cwd, prompt: p.prompt }); return `s${launches.length}`; },
+      refuse: p => { const w = tooWide(p.cwd, '/home/me'); return w ? `the folder is ${w}` : null; }
+    }, qid, r);
+    return { c, rows, launches, relays, launchChat, relay: { async request(qid: string) { relays.push(qid); } } };
+  }
+  const enroll = async (g: ReturnType<typeof setup>) => {
+    const auth = softAuthenticator();
+    g.send('dev1', { type: 'confirm.prepare', purpose: 'register' });
+    await flush();
+    const reg = g.got('dev1').find(m => m.type === 'confirm.challenge');
+    if (reg?.type !== 'confirm.challenge') throw new Error('no challenge');
+    g.send('dev1', { type: 'credential.register', op: randomUUID(), credential: auth.create(rp, reg.challenge) });
+    await flush();
+    return auth;
+  };
+  const prepare = async (g: ReturnType<typeof setup>, qid: string) => {
+    const before = g.got('dev1').length;
+    g.send('dev1', { type: 'confirm.prepare', purpose: 'launch', qid });
+    await flush();
+    const m = g.got('dev1').slice(before).find(x => x.type === 'confirm.challenge');
+    if (m?.type !== 'confirm.challenge') throw new Error('no challenge');
+    return m;
+  };
+  const last = (g: ReturnType<typeof setup>) => g.results('dev1').at(-1);
+  const RELAYUrl = 'https://relay.test';
+  const make = (rows: Row[]) => { const k = cards(rows); return { k, g: setup({ chats: k.c.chats, relay: k.relay, launchChat: k.launchChat, relayUrl: RELAYUrl }) }; };
+
+  it('chat.relay on a turn of the device is applied; on the PC\'s or another device\'s turn unknown_session', async () => {
+    const { k, g } = make([row('/w/repo')]);
+    const op = randomUUID();
+    g.send('dev1', { type: 'chat.relay', op, qid: QA });
+    g.send('dev1', { type: 'chat.relay', op: randomUUID(), qid: QPC });
+    g.send('dev1', { type: 'chat.relay', op: randomUUID(), qid: QB });
+    await flush();
+    expect(g.results('dev1').filter(r => r.status !== 'received').map(r => r.status === 'applied' ? 'applied' : r.reason)).toEqual(['applied', 'unknown_session', 'unknown_session']);
+    expect(k.relays).toEqual([QA]);
+  });
+
+  it('chat.launch on a row of a card that is not projected is invalid, even when the targeted row is short', async () => {
+    const { k, g } = make([row('/w/repo', 'short'), row('/w/other', 'x'.repeat(2049))]);
+    await enroll(g);
+    g.send('dev1', { type: 'chat.launch', op: randomUUID(), qid: QA, rows: [0] });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'rejected', reason: 'invalid' });
+    expect(k.launches).toEqual([]);
+  });
+
+  it('chat.relay is invalid for an over-long instruction and failed when the relay throws', async () => {
+    const long = make([]);
+    (long.k.c.turns.get('dev1')![0] as unknown as { relay: { text: string } }).relay.text = 'x'.repeat(2049);
+    long.g.send('dev1', { type: 'chat.relay', op: randomUUID(), qid: QA });
+    await flush();
+    expect(last(long.g)).toMatchObject({ status: 'rejected', reason: 'invalid' });
+    const k = cards([]);
+    const g = setup({ chats: k.c.chats, relay: { async request() { throw new Error('already sent'); } } });
+    g.send('dev1', { type: 'chat.relay', op: randomUUID(), qid: QA });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'failed' });
+  });
+
+  it('confirm.prepare launch without qid or with another thread\'s qid is invalid; with the device\'s a launch challenge', async () => {
+    const { g } = make([row('/w/repo')]);
+    await enroll(g);
+    const before = g.got('dev1').length;
+    g.send('dev1', { type: 'confirm.prepare', purpose: 'launch' });
+    g.send('dev1', { type: 'confirm.prepare', purpose: 'launch', qid: QB });
+    g.send('dev1', { type: 'confirm.prepare', purpose: 'launch', qid: QPC });
+    await flush();
+    expect(g.got('dev1').slice(before)).toEqual(Array(3).fill({ type: 'error', code: 'invalid', request: 'confirm.prepare' }));
+    expect(await prepare(g, QA)).toMatchObject({ type: 'confirm.challenge', purpose: 'launch', rpId: 'relay.test' });
+  });
+
+  it('chat.launch needs an assertion: none is confirm_required, a device without credential too', async () => {
+    const { k, g } = make([row('/w/repo')]);
+    g.send('dev1', { type: 'chat.launch', op: randomUUID(), qid: QA });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'rejected', reason: 'confirm_required' });
+    await enroll(g);
+    g.send('dev1', { type: 'chat.launch', op: randomUUID(), qid: QA });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'rejected', reason: 'confirm_required' });
+    expect(k.launches).toEqual([]);
+  });
+
+  it('chat.launch with an assertion bound to its qid is applied and launches; the replay does not launch twice', async () => {
+    const { k, g } = make([row('/w/repo', 'first')]);
+    const auth = await enroll(g);
+    const ch = await prepare(g, QA);
+    const m = { type: 'chat.launch', op: randomUUID(), qid: QA, assertion: auth.get(rp, ch.challenge, { counter: 1 }) };
+    g.send('dev1', m);
+    await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: m.op, status: 'applied' });
+    expect(k.launches).toEqual([{ cwd: '/w/repo', prompt: 'first' }]);
+    g.send('dev1', m);
+    await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: m.op, status: 'applied' });
+    expect(k.launches).toHaveLength(1);
+  });
+
+  it('an assertion bound to another qid is assertion_invalid, nothing is launched', async () => {
+    const { k, g } = make([row('/w/repo')]);
+    const auth = await enroll(g);
+    k.c.turns.get('dev1')!.push({ qid: QB, question: 'q', askedAt: T0, steps: [] } as never);
+    const other = await prepare(g, QB);
+    g.send('dev1', { type: 'chat.launch', op: randomUUID(), qid: QA, assertion: auth.get(rp, other.challenge, { counter: 1 }) });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'rejected', reason: 'assertion_invalid' });
+    expect(k.launches).toEqual([]);
+  });
+
+  it('chat.launch on the PC\'s qid is unknown_session and launches nothing', async () => {
+    const { k, g } = make([row('/w/repo')]);
+    await enroll(g);
+    g.send('dev1', { type: 'chat.launch', op: randomUUID(), qid: QPC });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'rejected', reason: 'unknown_session' });
+    expect(k.launches).toEqual([]);
+  });
+
+  it('a missing or over-long row is invalid before any challenge is spent', async () => {
+    const { k, g } = make([row('/w/repo', 'x'.repeat(2049))]);
+    await enroll(g);
+    g.send('dev1', { type: 'chat.launch', op: randomUUID(), qid: QA });
+    g.send('dev1', { type: 'chat.launch', op: randomUUID(), qid: QA, rows: [2] });
+    await flush();
+    expect(g.results('dev1').filter(r => r.status === 'rejected').map(r => r.reason)).toEqual(['invalid', 'invalid']);
+    expect(k.launches).toEqual([]);
+  });
+
+  it('a proposal in a folder too wide is failed and the card shows it', async () => {
+    const { k, g } = make([row('/home/me')]);
+    const auth = await enroll(g);
+    const ch = await prepare(g, QA);
+    g.send('dev1', { type: 'chat.launch', op: randomUUID(), qid: QA, assertion: auth.get(rp, ch.challenge, { counter: 1 }) });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'failed' });
+    expect(k.launches).toEqual([]);
+    expect(k.rows[0]!.error).toBeDefined();
+    expect(toPhoneTurn({ qid: QA, question: 'q', askedAt: T0, steps: [], proposals: k.rows } as never).proposals?.[0]).toMatchObject({ failed: true });
+  });
+
+  it('rows named twice are rejected invalid by the schema and launch nothing', async () => {
+    const { k, g } = make([row('/w/repo')]);
+    const auth = await enroll(g);
+    const ch = await prepare(g, QA);
+    const op = randomUUID();
+    g.send('dev1', { type: 'chat.launch', op, qid: QA, rows: [0, 0], assertion: auth.get(rp, ch.challenge, { counter: 1 }) });
+    await flush();
+    expect(g.got('dev1').at(-1)).toMatchObject({ type: 'operation.result', op, status: 'rejected', reason: 'invalid' });
+    expect(k.launches).toEqual([]);
+  });
+
+  it('a card already launched is failed before the assertion is spent', async () => {
+    const { k, g } = make([{ ...row('/w/repo'), launchedId: 'x' }]);
+    const auth = await enroll(g);
+    const ch = await prepare(g, QA);
+    g.send('dev1', { type: 'chat.launch', op: randomUUID(), qid: QA, assertion: auth.get(rp, ch.challenge, { counter: 1 }) });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'failed' });
+    expect(k.launches).toEqual([]);
+    expect(g.creds.get('dev1')?.counter).toBe(0);
   });
 });

@@ -1,4 +1,4 @@
-import type { PhonePending, PhoneSession, RiskReason, Tool } from '@ledge/protocol';
+import type { AskQuestion, PhonePending, PhoneSession, RiskReason, Tool } from '@ledge/protocol';
 
 /** One request waiting on the PC, as the inbox and the detail show it. */
 export interface InboxItem {
@@ -21,6 +21,11 @@ export interface InboxItem {
   /** `body` was shortened; the whole one is asked with `session.pending`. */
   cut?: true;
   options?: string[];
+  /** `rpc`: OMP's own protocol asked; the PC never lets the phone accept or refuse it. */
+  source?: PhonePending['source'];
+  /** OMP's `ask`: every question of the dialog `requestId`, answered together. */
+  questions?: AskQuestion[];
+  requestId?: string;
   optionDetails?: string[];
   /** `high` needs a device check before it can be accepted. */
   risk: 'low' | 'high';
@@ -43,6 +48,7 @@ export function requestsOf(sessions: PhoneSession[]): InboxItem[] {
       since: s.lastActivityAt, text: p.text,
       ...(p.body !== undefined ? { body: p.body } : {}), ...(p.cut ? { cut: true as const } : {}),
       ...(p.options ? { options: p.options } : {}), ...(p.optionDetails ? { optionDetails: p.optionDetails } : {}),
+      source: p.source, ...(p.questions ? { questions: p.questions } : {}), ...(p.requestId ? { requestId: p.requestId } : {}),
       risk: p.risk, riskReason: p.riskReason
     });
   }

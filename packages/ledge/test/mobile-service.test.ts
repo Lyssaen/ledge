@@ -7,7 +7,7 @@ import WebSocket from 'ws';
 import { fingerprint } from '@ledge/seal';
 import type { MobileState } from '@ledge/protocol';
 import { createMobileService, type MobileService } from '../src/mobile/service.js';
-import { writeMobileConfig, writeRelaySession } from '../src/mobile/files.js';
+import { readRevocations, writeDevices, writeMobileConfig, writeRelaySession, writeRevocations } from '../src/mobile/files.js';
 import { paths } from '../src/paths.js';
 import { startTestRelay, TEST_ACCOUNT, type TestRelay } from './mobile-relay-harness.js';
 import { fakeDevice, type FakeDevice } from './mobile-fake-device.js';
@@ -106,9 +106,9 @@ async function service(opts: Parameters<typeof createMobileService>[0] = {}): Pr
 }
 
 /** Enabled and signed in through the simulated device flow, link online. */
-async function signedIn() {
+async function signedIn(serviceOpts: Parameters<typeof createMobileService>[0] = {}) {
   const r = await relayWithAuth();
-  const s = await service();
+  const s = await service(serviceOpts);
   await s.handle({ type: 'mobile.set', enabled: true, relayUrl: r.relay.url });
   await s.handle({ type: 'mobile.signin' });
   await until(() => s.state().signin !== null, 'sign-in code');
@@ -266,5 +266,166 @@ describe('mobile access service', () => {
     expect(logText).not.toContain(ctx.relay.pcToken);
     expect(logText).not.toContain(DEVICE_CODE);
     expect(logText).not.toContain(pkcs8);
+  });
+});
+
+describe('device credential', () => {
+  const cred = { id: 'cid', publicKey: 'spki', alg: -7 as const, counter: 0, rpId: 'localhost' };
+  it('is the stored one for the current relay and none once the relay moves', async () => {
+    writeMobileConfig({ enabled: false, relayUrl: 'http://localhost:5173' });
+    writeDevices([{ id: 'x', publicKey: 'k', label: 'Phone', approvedAt: '2026-10-19T00:00:00Z' }]);
+    const s = await service();
+    expect(s.credential('x')).toBeNull();
+    s.setCredential('x', cred);
+    expect(s.credential('x')).toEqual(cred);
+    expect(s.credential('nobody')).toBeNull();
+    await s.handle({ type: 'mobile.set', enabled: false, relayUrl: 'https://ledge.paradow.dev' });
+    expect(s.credential('x')).toBeNull();
+  });
+  it('is persisted with the device', async () => {
+    writeMobileConfig({ enabled: false, relayUrl: 'http://localhost:5173' });
+    writeDevices([{ id: 'x', publicKey: 'k', label: 'Phone', approvedAt: '2026-10-19T00:00:00Z' }]);
+    (await service()).setCredential('x', cred);
+    expect(readFileSync(paths().devices, 'utf8')).toContain('"cid"');
+  });
+});
+
+describe('relay revocations', () => {
+  const DAY = 86_400_000;
+  /** The real fetch, except that the revoke call answers `mode.status` (200 lets it through). */
+  const revokeAnswering = (mode: { status: number | 'network' }): typeof fetch => async (input, init) => {
+    if (String(input).endsWith('/auth/devices/revoke') && mode.status !== 200) {
+      if (mode.status === 'network') throw new TypeError('fetch failed');
+      return new Response(null, { status: mode.status });
+    }
+    return fetch(input, init);
+  };
+
+  it('a relay that answers 503 keeps the entry (0600); the link online again retries, a 200 removes it', async () => {
+    const mode = { status: 503 as number | 'network' };
+    const ctx = await signedIn({ fetchImpl: revokeAnswering(mode) });
+    const phone = await linkedPhone(ctx);
+    const id = await fingerprint(phone.publicKey);
+    await ctx.s.handle({ type: 'mobile.device.revoke', id });
+    expect(readRevocations().map((r) => r.peer)).toEqual([PEER]);
+    expect(statSync(paths().revocations).mode & 0o777).toBe(0o600);
+    expect(ctx.calls.revoked).toHaveLength(0);
+    mode.status = 200;
+    await ctx.s.handle({ type: 'mobile.set', enabled: false, relayUrl: ctx.relay.url });
+    await ctx.s.handle({ type: 'mobile.set', enabled: true, relayUrl: ctx.relay.url });
+    await until(() => readRevocations().length === 0, 'entry removed after the retry');
+    expect(ctx.calls.revoked.map((c) => c.peer)).toEqual([PEER]);
+  });
+
+  it('a daemon restarted reads the file and retries', async () => {
+    const mode = { status: 503 as number | 'network' };
+    const ctx = await signedIn({ fetchImpl: revokeAnswering(mode) });
+    const phone = await linkedPhone(ctx);
+    await ctx.s.handle({ type: 'mobile.device.revoke', id: await fingerprint(phone.publicKey) });
+    expect(readRevocations()).toHaveLength(1);
+    await ctx.s.stop();
+    await service({ fetchImpl: revokeAnswering({ status: 200 }) });
+    await until(() => readRevocations().length === 0, 'entry removed after the restart');
+    expect(ctx.calls.revoked.map((c) => c.peer)).toEqual([PEER]);
+  });
+
+  it('an entry older than 30 days is dropped and logged, not sent; a younger one is', async () => {
+    writeRevocations([
+      { peer: 'd_oldoldoldoldold', at: new Date(Date.now() - 31 * DAY).toISOString() },
+      { peer: 'd_newnewnewnewnew', at: new Date(Date.now() - 29 * DAY).toISOString() }
+    ]);
+    const ctx = await signedIn();
+    await until(() => readRevocations().length === 0, 'entries settled');
+    expect(ctx.calls.revoked.map((c) => c.peer)).toEqual(['d_newnewnewnewnew']);
+  });
+
+  it('an entry whose date cannot be read is dropped, not retried forever', async () => {
+    writeRevocations([{ peer: 'd_baddatebaddate0', at: 'not a date' }]);
+    const ctx = await signedIn();
+    await until(() => readRevocations().length === 0, 'entry dropped');
+    expect(ctx.calls.revoked).toEqual([]);
+  });
+
+  it.each([[200, true], [204, true], [404, true], [401, false], [429, false], [500, false], [503, false], ['network', false]] as const)(
+    'relay answer %s: entry removed is %s', async (status, removed) => {
+      const mode = { status: status as number | 'network' };
+      writeRevocations([{ peer: PEER, at: new Date().toISOString() }]);
+      let tried = 0;
+      const inner = revokeAnswering(mode);
+      await signedIn({ fetchImpl: async (i, init) => { if (String(i).endsWith('/auth/devices/revoke')) tried++; return inner(i, init); } });
+      await until(() => tried > 0, 'a revoke attempt');
+      await settle();
+      expect(readRevocations().length).toBe(removed ? 0 : 1);
+    });
+});
+
+describe('push through the relay', () => {
+  const SUB = { endpoint: 'https://fcm.googleapis.com/fcm/send/x', p256dh: 'B'.repeat(87), auth: 'A'.repeat(22), key: 'K'.repeat(87) };
+  const MSG = { endpoint: SUB.endpoint, body: 'AAAA', ttl: 3600, urgency: 'high' as const, topic: 'api' };
+
+  /** A fetch that answers the two push routes and leaves the rest to the real one. */
+  function pushFetch(o: { key?: () => Response; send?: (body: unknown, auth: string) => Response } = {}) {
+    const calls: Array<{ path: string; auth: string; body?: unknown }> = [];
+    const impl = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input));
+      const auth = String((init?.headers as Record<string, string> | undefined)?.authorization ?? '');
+      if (url.pathname === '/push/key') {
+        calls.push({ path: url.pathname, auth });
+        return o.key ? o.key() : Response.json({ publicKey: SUB.key });
+      }
+      if (url.pathname === '/push/send') {
+        const body = JSON.parse(String(init?.body));
+        calls.push({ path: url.pathname, auth, body });
+        return o.send ? o.send(body, auth) : Response.json({ result: 'sent', status: 201 });
+      }
+      return fetch(input, init);
+    }) as typeof fetch;
+    return { impl, calls };
+  }
+
+  it('reads the relay key each time the link comes online; 404 means unavailable', async () => {
+    const f = pushFetch();
+    const ctx = await signedIn({ fetchImpl: f.impl });
+    await until(() => ctx.s.relayPushKey() === SUB.key, 'relay key');
+    expect(f.calls[0]).toEqual({ path: '/push/key', auth: `Bearer ${ctx.relay.pcToken}` });
+  });
+
+  it('a relay without push answers 404: the key is null', async () => {
+    const f = pushFetch({ key: () => new Response('{}', { status: 404 }) });
+    const ctx = await signedIn({ fetchImpl: f.impl });
+    await until(() => ctx.s.relayPushKey() === null, 'null key');
+  });
+
+  it('sendPush posts to the relay with the PC bearer and returns its answer; a refusal is failed', async () => {
+    let status = 200;
+    const f = pushFetch({ send: () => status === 200 ? Response.json({ result: 'gone', status: 410 }) : new Response('{}', { status }) });
+    const ctx = await signedIn({ fetchImpl: f.impl });
+    expect(await ctx.s.sendPush(MSG)).toEqual({ result: 'gone', status: 410 });
+    expect(f.calls.find(c => c.path === '/push/send')).toEqual({ path: '/push/send', auth: `Bearer ${ctx.relay.pcToken}`, body: MSG });
+    status = 429;
+    expect(await ctx.s.sendPush(MSG)).toEqual({ result: 'failed', status: 429 });
+  });
+
+  it('sendPush without a session fails without throwing', async () => {
+    const s = await service();
+    expect(await s.sendPush(MSG)).toEqual({ result: 'failed' });
+  });
+
+  it('setPush stores the subscription with the device (0600), removes it with null, and refuses an unknown device', async () => {
+    const ctx = await signedIn();
+    const phone = await linkedPhone(ctx);
+    const id = await fingerprint(phone.publicKey);
+    let changes = 0;
+    ctx.s.onChange(() => { changes++; });
+    ctx.s.setPush(id, SUB);
+    expect(ctx.s.pushOf(id)).toEqual(SUB);
+    expect(JSON.parse(readFileSync(paths().devices, 'utf8'))[0].push).toEqual(SUB);
+    expect(statSync(paths().devices).mode & 0o777).toBe(0o600);
+    expect(changes).toBe(1);
+    ctx.s.setPush(id, null);
+    expect(ctx.s.pushOf(id)).toBeNull();
+    expect(JSON.parse(readFileSync(paths().devices, 'utf8'))[0]).not.toHaveProperty('push');
+    expect(() => ctx.s.setPush('nope', SUB)).toThrow(/no such device/);
+    expect(JSON.stringify(ctx.s.state())).not.toContain('fcm.googleapis');
   });
 });

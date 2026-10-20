@@ -2,20 +2,21 @@
 // reachable over HTTP) serving the built PWA from apps/mobile/dist, and a fake PC of the same account on it.
 import { PGlite } from '@electric-sql/pglite';
 import { existsSync } from 'node:fs';
+import { createPrivateKey, generateKeyPairSync, randomUUID } from 'node:crypto';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
   DevicePollResponseSchema, DeviceStartResponseSchema, PHONE_PROTOCOL,
-  type PhoneClientMessage, type PhoneServerMessage, type PhoneSession
+  type PhoneChatTurn, type PhoneClientMessage, type PhoneServerMessage, type PhoneSession, type PushSubscription
 } from '@ledge/protocol';
 import { startAccountsRelay } from '../../relay/src/app';
 import type { AccountsConfig } from '../../relay/src/config';
 import type { RelayLogEvent } from '../../relay/src/log';
 import { fakeGitHub } from '../../relay/test/fakeGithub';
 import type { TestRelay } from '../../../packages/ledge/test/mobile-relay-harness';
-import { startFakePc, type FakePc } from '../test/fakePc';
+import { startFakePc, type DeviceCheck, type FakePc } from '../test/fakePc';
 
 /** The GitHub account of the PC and of the phone. */
 export const USER = { id: '4242', login: 'desan' };
@@ -25,6 +26,7 @@ export const WEB_DIR = path.resolve(path.dirname(new URL(import.meta.url).pathna
 
 const T = '2026-10-20T08:00:00.000Z';
 const CAPS = { freeTextAnswer: true };
+const CHAT_ANSWER = 'Otto attend votre accord.';
 
 /** A session waiting on a low-risk command, as the fake PC shows it first. */
 export const waiting = (): PhoneSession => ({
@@ -43,16 +45,34 @@ export interface FakeDaemon {
   typed: string[];
   /** False: decisions are typed but not answered, as when the relay goes down right after one. */
   answer: boolean;
+  /** What the snapshot says of the push (`device.push`); null: it says nothing, as a PC of lot 5. `push.subscribe` makes it `on`. */
+  push: 'on' | 'off' | 'stale' | 'unavailable' | null;
+  /** The subscription of the last `push.subscribe` the PC applied. */
+  subscription: PushSubscription | null;
+  /** The device check, once a test turns it on: the snapshot then says `device`, and a risky accept needs an assertion. */
+  device: DeviceCheck | null;
+  /** True: the snapshot says `device.chat`, and the PC answers the chat as scripted (steps, deltas, a relay card, a launch card). */
+  chat: boolean;
+  /** True: a question gets its steps and its text so far, but no `chat.done` until `finishChat()`. */
+  hold: boolean;
+  /** The turns of the phone's thread, as the PC keeps them. */
+  turns: PhoneChatTurn[];
+  /** Ends the held questions in the thread, without telling the phone (its channel may be down); `chat.history` tells. */
+  finishChat(): void;
+  /** The `qid` of every launch typed, in order. */
+  launched: string[];
   /** Replaces a session (or adds it) and tells the phone. */
   update(s: PhoneSession): Promise<void>;
   stop(): void;
 }
 
 function runDaemon(pc: FakePc): FakeDaemon {
+  const boot = randomUUID();
   let seen = 0;
   let busy = false;
   const d: FakeDaemon = {
-    sessions: [waiting()], typed: [], answer: true,
+    sessions: [waiting()], typed: [], answer: true, device: null, push: null, subscription: null, chat: false, hold: false, turns: [], launched: [],
+    finishChat() { d.turns = d.turns.map((t) => (t.answer === undefined ? finished(t) : t)); },
     async update(s) {
       d.sessions = [...d.sessions.filter((x) => x.id !== s.id), s];
       await pc.send({ type: 'session.updated', session: s });
@@ -61,17 +81,95 @@ function runDaemon(pc: FakePc): FakeDaemon {
   };
   const snapshot = (): PhoneServerMessage => ({
     type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: d.sessions,
-    capabilities: { claude: CAPS, codex: CAPS, cursor: CAPS, omp: { freeTextAnswer: false } }, daemon: { version: '0.0.0-e2e', name: PC_NAME }
+    capabilities: { claude: CAPS, codex: CAPS, cursor: CAPS, omp: { freeTextAnswer: false } }, daemon: { version: '0.0.0-e2e', name: PC_NAME, boot },
+    ...(d.device || d.push || d.chat ? { device: { confirm: d.device ? d.device.registered : true, ...(d.push ? { push: d.push } : {}), ...(d.chat ? { chat: true as const } : {}) } } : {})
   });
+  /** The scripted answer: short on purpose, a card is never cut (TOOL_TEXT_MAX). */
+  const finished = (t: PhoneChatTurn): PhoneChatTurn => ({
+    ...t, answer: CHAT_ANSWER, answeredAt: T,
+    relay: { id: 'nova', name: 'Nova', tool: 'claude', text: 'Relance les tests.' },
+    proposals: [{ project: 'ledge', tool: 'claude', prompt: 'Corriger le badge' }]
+  });
+  const replace = (t: PhoneChatTurn) => { d.turns = d.turns.map((x) => (x.qid === t.qid ? t : x)); };
+  const chatMessage = async (m: PhoneClientMessage) => {
+    if (m.type === 'chat.history') return pc.send({ type: 'chat.history', turns: d.turns });
+    if (m.type === 'chat.ask') {
+      const turn: PhoneChatTurn = { qid: m.qid, question: m.text, askedAt: T, steps: [] };
+      d.turns.push(turn);
+      await pc.send({ type: 'chat.step', qid: m.qid, step: { kind: 'sessions' } });
+      await pc.send({ type: 'chat.step', qid: m.qid, step: { kind: 'pane', id: 's1', name: 'Otto' } });
+      await pc.send({ type: 'chat.delta', qid: m.qid, text: 'Otto attend ' });
+      await pc.send({ type: 'chat.delta', qid: m.qid, text: CHAT_ANSWER });
+      if (d.hold) return;
+      const done = finished({ ...turn, steps: [{ kind: 'sessions' }, { kind: 'pane', id: 's1', name: 'Otto' }] });
+      replace(done);
+      return pc.send({ type: 'chat.done', qid: m.qid, turn: done });
+    }
+    if (m.type === 'chat.relay' || m.type === 'chat.launch') {
+      const turn = d.turns.find((t) => t.qid === m.qid);
+      if (!turn) return pc.send({ type: 'operation.result', op: m.op, status: 'rejected', reason: 'unknown_session' });
+      if (m.type === 'chat.launch') {
+        const refused = d.device?.assertLaunch(m);
+        if (refused) return pc.send({ type: 'operation.result', op: m.op, status: 'rejected', reason: refused });
+        d.launched.push(m.qid);
+      }
+      await pc.send({ type: 'operation.result', op: m.op, status: 'applied' });
+      // The card keeps its button disabled until the PC says what became of it: the updated turn.
+      const after: PhoneChatTurn = m.type === 'chat.relay'
+        ? { ...turn, relay: { ...turn.relay!, status: 'sent', sentAt: T } }
+        : { ...turn, proposals: turn.proposals!.map((p) => ({ ...p, launchedId: 'lancee' })) };
+      replace(after);
+      for (const id of m.type === 'chat.relay' ? ['nova'] : ['lancee']) {
+        if (!d.sessions.some((x) => x.id === id)) {
+          const { pending: _none, ...base } = waiting();
+          d.sessions.push({ ...base, id, name: id === 'nova' ? 'Nova' : 'Lancée', title: id, state: 'working', unread: false });
+        }
+      }
+      return pc.send({ type: 'chat.done', qid: m.qid, turn: after });
+    }
+  };
   const handle = async (m: PhoneClientMessage) => {
     if (m.type === 'snapshot.request') return pc.send(snapshot());
+    if (d.chat && (m.type === 'chat.history' || m.type === 'chat.ask' || m.type === 'chat.relay' || m.type === 'chat.launch')) return chatMessage(m);
+    if (m.type === 'session.pending') {
+      const s = d.sessions.find((x) => x.id === m.id);
+      return s && pc.send({ type: 'session.updated', session: s });
+    }
+    if (m.type === 'confirm.prepare') {
+      const r = d.device?.prepare(m, m.purpose === 'launch' ? d.turns.some((t) => t.qid === m.qid) : d.sessions.some((x) => x.id === m.id));
+      if (r === undefined) return;
+      return pc.send(typeof r === 'string' ? { type: 'error', code: r, request: m.type } : r);
+    }
+    if (m.type === 'credential.register') {
+      const r = d.device?.register(m);
+      if (r === undefined) return;
+      await pc.send({ type: 'operation.result', op: m.op, status: r === 'applied' ? 'applied' : 'rejected', ...(r === 'applied' ? {} : { reason: r }) });
+      return r === 'applied' ? pc.send(snapshot()) : undefined;
+    }
+    if (m.type === 'push.subscribe') {
+      d.subscription = m.subscription;
+      d.push = 'on';
+      await pc.send({ type: 'operation.result', op: m.op, status: 'applied' });
+      return pc.send(snapshot());
+    }
+    if (m.type === 'push.unsubscribe') {
+      d.subscription = null;
+      d.push = 'off';
+      await pc.send({ type: 'operation.result', op: m.op, status: 'applied' });
+      return pc.send(snapshot());
+    }
     if (m.type !== 'session.decide') return;
     if (d.typed.includes(m.op)) {
       if (d.answer) await pc.send({ type: 'operation.result', op: m.op, status: 'applied' });
       return;
     }
     const s = d.sessions.find((x) => x.id === m.id);
-    if (!s?.pending || s.pending.key !== m.expect.key) return pc.send({ type: 'operation.result', op: m.op, status: 'rejected', reason: 'conflict' });
+    if (!s?.pending || s.pending.key !== m.expect.key) return pc.send({ type: 'operation.result', op: m.op, status: 'rejected', reason: 'stale' });
+    // As the gateway: a changed request is stale first, then the device check, which spends its challenge.
+    if (d.device && m.decision !== 'deny' && s.pending.risk !== 'low') {
+      const refused = d.device.assert(m);
+      if (refused) return pc.send({ type: 'operation.result', op: m.op, status: 'rejected', reason: refused });
+    }
     d.typed.push(m.op);
     const { pending: _answered, ...rest } = s;
     const after: PhoneSession = { ...rest, state: 'working' };
@@ -161,9 +259,14 @@ export async function startHarness(opts: { webDir?: string } = {}): Promise<Harn
     const port = (probe.address() as AddressInfo).port;
     await new Promise<void>((resolve) => probe.close(() => resolve()));
     const url = `http://localhost:${port}`;
+    // The relay pushes when it has a VAPID identity: /push/key answers, which the phone asks before it subscribes.
+    const keys = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    const jwk = keys.privateKey.export({ format: 'jwk' });
+    const publicKey = Buffer.concat([Buffer.from([4]), Buffer.from(jwk.x!, 'base64url'), Buffer.from(jwk.y!, 'base64url')]).toString('base64url');
     const cfg: AccountsConfig = {
       mode: 'accounts', port, databaseUrl: 'pglite://memory', clientId: 'fake', clientSecret: 'fake',
-      allowed: new Set([USER.id]), publicUrl: url, webDir
+      allowed: new Set([USER.id]), publicUrl: url, webDir,
+      vapid: { publicKey, privateKey: createPrivateKey({ key: jwk, format: 'jwk' }), subject: 'mailto:e2e@example.com' }
     };
 
     const startRelay = async () => {

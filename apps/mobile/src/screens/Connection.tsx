@@ -8,13 +8,15 @@ import { useMobile, type MobileStore } from '../state/store';
 import type { BuildInfo } from '../sw/types';
 import { BackHeader, linkView } from '../ui/Header';
 import { OUTLINE } from '../ui/Board';
+import { ProtectRow } from './Enroll';
+import { NotificationsRow } from './Notifications';
 
 const N = copy.connection;
 const status = (s: LinkState): string => s === 'ready' ? N.states.online : s === 'handshaking' ? N.states.connecting : N.states.offline;
 
 /** The account, the relay, the PC this phone trusts and the app it runs, each one checkable, and the way out. */
-export function Connection({ store, login, relay, pinned, linkState, build, onSignOut }: {
-  store: MobileStore; login: string | null; relay: string; pinned: PinnedPc | null; linkState: LinkState;
+export function Connection({ store, login, relay, pinned, linkState, build, onSignOut, fetchImpl }: {
+  store: MobileStore; fetchImpl?: typeof fetch; login: string | null; relay: string; pinned: PinnedPc | null; linkState: LinkState;
   /** The running app's version and fingerprint, from the service worker; null until it gives them. */
   build: BuildInfo | null;
   onSignOut: () => void;
@@ -41,6 +43,8 @@ export function Connection({ store, login, relay, pinned, linkState, build, onSi
               <dd className={`min-w-0 text-right break-words ${mono ? 'font-mono' : ''}`}>{value}</dd>
             </div>
           ))}
+          <ProtectRow store={store} />
+          <NotificationsRow store={store} fetchImpl={fetchImpl} />
         </dl>
         <div className="flex-grow" aria-hidden="true" />
         <button type="button" onClick={onSignOut} className={OUTLINE}>{N.signOut}</button>

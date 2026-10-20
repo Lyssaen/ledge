@@ -8,9 +8,17 @@ import { log } from '../log.js';
 const RelaySessionSchema = z.object({ token: z.string().min(1), accountId: z.string().min(1), login: z.string(), relayUrl: z.string() });
 export type RelaySession = z.infer<typeof RelaySessionSchema>;
 
+/** Same fields as `DeviceCredential` (webauthn.ts, which imports nothing but node:crypto). */
+const DeviceCredentialSchema = z.object({
+  id: z.string().min(1), publicKey: z.string().min(1), alg: z.union([z.literal(-7), z.literal(-257)]), counter: z.number().int().nonnegative(),
+  rpId: z.string().min(1), transports: z.array(z.string()).optional()
+});
+
 const ApprovedDeviceSchema = z.object({
   id: z.string().min(1), publicKey: z.string().min(1), label: z.string(), approvedAt: z.string(),
-  lastPeer: z.string().optional(), lastSeenAt: z.string().optional()
+  lastPeer: z.string().optional(), lastSeenAt: z.string().optional(), credential: DeviceCredentialSchema.optional(),
+  /** The phone's push subscription and the relay's VAPID key it was made with. */
+  push: z.object({ endpoint: z.string().min(1), p256dh: z.string().min(1), auth: z.string().min(1), key: z.string().min(1) }).optional()
 });
 export type ApprovedDevice = z.infer<typeof ApprovedDeviceSchema>;
 
@@ -82,4 +90,16 @@ export function readDevices(): ApprovedDevice[] {
 
 export function writeDevices(list: ApprovedDevice[]): void {
   writePrivate(paths().devices, JSON.stringify(z.array(ApprovedDeviceSchema).parse(list), null, 2) + '\n');
+}
+
+/** A relay peer whose revocation the relay has not confirmed yet. */
+const RevocationSchema = z.object({ peer: z.string().min(1), at: z.string() });
+export type Revocation = z.infer<typeof RevocationSchema>;
+
+export function readRevocations(): Revocation[] {
+  return readJson(paths().revocations, 'revocations.json', z.array(RevocationSchema)) ?? [];
+}
+
+export function writeRevocations(list: Revocation[]): void {
+  writePrivate(paths().revocations, JSON.stringify(z.array(RevocationSchema).parse(list), null, 2) + '\n');
 }

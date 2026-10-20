@@ -261,6 +261,9 @@ describe('the store, across reconnections', () => {
     t.set('pc_offline');
     expect(t.state().ops[op]?.phase).toBe('uncertain');
     t.set('ready');
+    // An instruction names no request: it waits for the snapshot, which carries the boot.
+    expect(t.of('session.reply').map(m => m.op)).toEqual([op]);
+    t.deliver(snapshot([session('a')]));
     expect(t.of('session.reply').map(m => m.op)).toEqual([op, op]);
   });
 
@@ -326,6 +329,80 @@ describe('the store, across reconnections', () => {
     expect(t.sent).toEqual([]);
     t.set('ready');
     expect(t.of('session.read')).toEqual([{ type: 'session.read', id: 'a', at: '2026-10-14T10:05:00.000Z' }]);
+  });
+});
+
+describe('the store, across a PC restart', () => {
+  const A = '11111111-1111-4111-8111-111111111111';
+  const B = '22222222-2222-4222-8222-222222222222';
+  const reconnect = (t: ReturnType<typeof setup>, boot?: string) => {
+    t.set('pc_offline');
+    t.set('ready');
+    t.deliver(snapshot([waiting('a')], 'Atelier', boot));
+  };
+
+  it('an interrupt received under boot A is not sent again under boot B, and stays uncertain', () => {
+    const t = setup();
+    t.deliver(snapshot([waiting('a')], 'Atelier', A));
+    const op = t.store.interrupt('a')!;
+    t.deliver({ type: 'operation.result', op, status: 'received' });
+    reconnect(t, B);
+    expect(t.of('session.interrupt')).toHaveLength(1);
+    expect(t.state().ops[op]?.phase).toBe('uncertain');
+  });
+
+  it('the same interrupt is sent again once, at the snapshot, under the same boot A', () => {
+    const t = setup();
+    t.deliver(snapshot([waiting('a')], 'Atelier', A));
+    const op = t.store.interrupt('a')!;
+    t.deliver({ type: 'operation.result', op, status: 'received' });
+    t.set('pc_offline');
+    t.set('ready');
+    expect(t.of('session.interrupt')).toHaveLength(1);
+    t.deliver(snapshot([waiting('a')], 'Atelier', A));
+    expect(t.of('session.interrupt')).toHaveLength(2);
+    expect(t.state().ops[op]?.phase).toBe('sending');
+    t.deliver(snapshot([waiting('a')], 'Atelier', A));
+    expect(t.of('session.interrupt')).toHaveLength(2);
+  });
+
+  it('a decision with expect, received under A, is sent again at ready under B', () => {
+    const t = setup();
+    t.deliver(snapshot([waiting('a')], 'Atelier', A));
+    const op = t.store.decide('a', 'accept')!;
+    t.deliver({ type: 'operation.result', op, status: 'received' });
+    t.set('pc_offline');
+    t.set('ready');
+    expect(t.of('session.decide')).toHaveLength(2);
+    t.deliver(snapshot([waiting('a')], 'Atelier', B));
+    expect(t.of('session.decide')).toHaveLength(2);
+  });
+
+  it('a snapshot without boot (lot 5 daemon) keeps the lot 5 rule', () => {
+    const t = setup();
+    t.deliver(snapshot([waiting('a')], 'Atelier', A));
+    const op = t.store.interrupt('a')!;
+    t.deliver({ type: 'operation.result', op, status: 'received' });
+    reconnect(t);
+    expect(t.of('session.interrupt')).toHaveLength(2);
+  });
+
+  it('an interrupt never received is sent again under a new boot', () => {
+    const t = setup();
+    t.deliver(snapshot([waiting('a')], 'Atelier', A));
+    t.store.interrupt('a');
+    reconnect(t, B);
+    expect(t.of('session.interrupt')).toHaveLength(2);
+  });
+
+  it('the boot stamped on an op survives a reload', () => {
+    const storage = new MemoryStorage();
+    const t = setup({ storage });
+    t.deliver(snapshot([waiting('a')], 'Atelier', A));
+    const op = t.store.interrupt('a')!;
+    t.deliver({ type: 'operation.result', op, status: 'received' });
+    const raw = JSON.parse(storage.getItem(OPS_KEY)!) as Record<string, { boot?: string }>;
+    expect(raw[op]?.boot).toBe(A);
   });
 });
 
@@ -438,5 +515,132 @@ describe('the store, when the link has no PC any more', () => {
     const t = setup({ state: 'unpaired' });
     t.set('pairing');
     expect(t.storage.length).toBe(0);
+  });
+});
+
+describe('the store, device confirmation', () => {
+  const assertion = { id: 'AQ', clientDataJSON: 'AQI', authenticatorData: 'Aw', signature: 'BAU' };
+  const credential = { id: 'AQ', publicKey: 'AQID', alg: -7 as const, clientDataJSON: 'AQI', authenticatorData: 'Aw' };
+  const challenge = (purpose: 'register' | 'decide') => ({ type: 'confirm.challenge' as const, purpose, challenge: 'Y2hhbGw', rpId: 'relay.example', expiresInMs: 60_000 });
+
+  it('a snapshot with device puts it in the state, and one without leaves null (a lot 5 daemon)', () => {
+    const t = setup();
+    expect(t.state().device).toBeNull();
+    t.deliver({ ...snapshot([session('a')]), device: { confirm: true } } as never);
+    expect(t.state().device).toEqual({ confirm: true });
+    t.deliver(snapshot([session('a')]));
+    expect(t.state().device).toBeNull();
+  });
+
+  it('forgetting the PC resets device', () => {
+    const t = setup();
+    t.deliver({ ...snapshot([session('a')]), device: { confirm: false } } as never);
+    t.set('unpaired');
+    expect(t.state().device).toBeNull();
+  });
+
+  it('prepareConfirm sends confirm.prepare and resolves on the next challenge of that purpose', async () => {
+    const t = setup();
+    const expectOf = { key: 'p1', kind: 'permission' as const, text: 'pnpm test' };
+    const p = t.store.prepareConfirm({ purpose: 'decide', id: 'a', expect: expectOf });
+    expect(t.of('confirm.prepare')).toEqual([{ type: 'confirm.prepare', purpose: 'decide', id: 'a', expect: expectOf }]);
+    t.deliver(challenge('register'));
+    t.deliver(challenge('decide'));
+    await expect(p).resolves.toMatchObject({ type: 'confirm.challenge', purpose: 'decide', challenge: 'Y2hhbGw' });
+  });
+
+  it('prepareConfirm for register sends no id or expect', async () => {
+    const t = setup();
+    const p = t.store.prepareConfirm({ purpose: 'register' });
+    expect(t.of('confirm.prepare')).toEqual([{ type: 'confirm.prepare', purpose: 'register' }]);
+    t.deliver(challenge('register'));
+    await expect(p).resolves.toMatchObject({ purpose: 'register' });
+  });
+
+  it('prepareConfirm rejects after 10 s without an answer', async () => {
+    vi.useFakeTimers();
+    const t = setup();
+    const p = t.store.prepareConfirm({ purpose: 'register' });
+    const seen = expect(p).rejects.toThrow('timeout');
+    await vi.advanceTimersByTimeAsync(9_999);
+    t.deliver(challenge('decide'));
+    await vi.advanceTimersByTimeAsync(1);
+    await seen;
+    // a late challenge changes nothing
+    t.deliver(challenge('register'));
+  });
+
+  it('prepareConfirm rejects on an error message, and a second call supersedes the first', async () => {
+    const t = setup();
+    const p = t.store.prepareConfirm({ purpose: 'register' });
+    const failed = expect(p).rejects.toThrow('error');
+    t.deliver({ type: 'error', code: 'invalid' });
+    await failed;
+    const first = t.store.prepareConfirm({ purpose: 'register' });
+    const superseded = expect(first).rejects.toThrow('superseded');
+    const second = t.store.prepareConfirm({ purpose: 'register' });
+    await superseded;
+    t.deliver(challenge('register'));
+    await expect(second).resolves.toMatchObject({ purpose: 'register' });
+  });
+
+  it('prepareConfirm rejects when the link is not ready', async () => {
+    const t = setup({ state: 'pc_offline' });
+    await expect(t.store.prepareConfirm({ purpose: 'register' })).rejects.toThrow('not_ready');
+    expect(t.of('confirm.prepare')).toHaveLength(0);
+  });
+
+  it('registerCredential sends credential.register as an operation without id, and a resend is the same message', () => {
+    vi.useFakeTimers();
+    const t = setup();
+    const op = t.store.registerCredential(credential)!;
+    expect(t.of('credential.register')).toEqual([{ type: 'credential.register', op, credential }]);
+    expect(t.state().ops[op]?.phase).toBe('sending');
+    vi.advanceTimersByTime(UNCERTAIN_MS);
+    t.set('pc_offline');
+    t.set('ready');
+    t.deliver(snapshot([]));
+    expect(t.of('credential.register').length).toBeGreaterThanOrEqual(1);
+    t.deliver({ type: 'operation.result', op, status: 'applied' });
+    expect(t.state().ops[op]?.phase).toBe('applied');
+  });
+
+  it('a credential.register survives a reload and is not mistaken for another op', () => {
+    const storage = new MemoryStorage();
+    const first = setup({ storage });
+    const op = first.store.registerCredential(credential)!;
+    const again = setup({ storage });
+    expect(again.state().ops[op]?.message).toMatchObject({ type: 'credential.register', op });
+    // two registrations are two ops: a new attempt takes a new op id
+    expect(first.store.registerCredential(credential)).not.toBe(op);
+  });
+
+  it('decide with an assertion sends it, and a resend after reconnection is the same message', () => {
+    vi.useFakeTimers();
+    const t = setup();
+    t.deliver(snapshot([waiting('a')]));
+    const op = t.store.decide('a', 'accept', { assertion })!;
+    expect(t.of('session.decide')[0]).toMatchObject({ op, assertion });
+    vi.advanceTimersByTime(UNCERTAIN_MS);
+    t.set('pc_offline');
+    t.set('ready');
+    const decides = t.of('session.decide');
+    expect(decides).toHaveLength(2);
+    expect(decides[1]).toEqual(decides[0]);
+    expect(decides[1]?.assertion).toEqual(assertion);
+  });
+
+  it('reply with an assertion sends it', () => {
+    const t = setup();
+    t.deliver(snapshot([waiting('a')]));
+    const op = t.store.reply('a', 'oui', { assertion })!;
+    expect(t.of('session.reply')[0]).toMatchObject({ op, text: 'oui', assertion });
+  });
+
+  it('decide and reply without an assertion carry no assertion field', () => {
+    const t = setup();
+    t.deliver(snapshot([waiting('a')]));
+    t.store.decide('a', 'accept');
+    expect(t.of('session.decide')[0]).not.toHaveProperty('assertion');
   });
 });

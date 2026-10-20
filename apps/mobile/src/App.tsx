@@ -3,10 +3,13 @@
 import { useEffect, useReducer, useRef, useState } from 'react';
 import { MeResponseSchema } from '@ledge/protocol';
 import type { LinkState, PhoneLink } from './link/link';
-import { useRoute } from './router';
+import { href, openFromWorker, useRoute } from './router';
 import { Agents } from './screens/Agents';
+import { Chat } from './screens/Chat';
 import { Compare } from './screens/Compare';
+import { ProtectStep } from './screens/Enroll';
 import { Connection } from './screens/Connection';
+import { NotifyStep, offersNotifications } from './screens/Notifications';
 import { Denied } from './screens/Denied';
 import { Inbox, clock } from './screens/Inbox';
 import { KeyChanged } from './screens/KeyChanged';
@@ -18,6 +21,7 @@ import { Terminal } from './screens/Terminal';
 import { Thread } from './screens/Thread';
 import { Unrecognized } from './screens/Unrecognized';
 import { Update } from './screens/Update';
+import { copy } from './copy';
 import { useMobile, type MobileStore } from './state/store';
 import type { UpdateWatch } from './sw/register';
 import type { BuildInfo } from './sw/types';
@@ -88,8 +92,12 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
   // The sign-in issue stays until the user moves on: « Utiliser un autre compte » leaves Denied for the login board.
   const [issue, setIssue] = useState(signin);
   const [keysLost, setKeysLost] = useState(lost);
+  // The PC did not confirm that it removed this phone when the user left.
+  const [forgetNote, setForgetNote] = useState(false);
   // « Voir ce qui attend » was tapped: the pairing's outcome is no longer the screen.
   const [doneSeen, setDoneSeen] = useState(false);
+  // The step after « Protéger les accords »: « Être prévenu quand un agent attend ».
+  const [notifyStep, setNotifyStep] = useState(false);
   // A pairing was started from this page (by itself or by a tap): the ref guards against a second start in the same
   // commit, the state draws the screen.
   const startedRef = useRef(false);
@@ -114,16 +122,47 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
     if (autoPair && !startedRef.current) begin(() => link.startPairing());
   }, [autoPair, link]);
   useEffect(() => {
-    if (state === 'ready') { startedRef.current = false; setStarted(false); setKeysLost(false); }
-    if (state === 'unpaired' || state === 'pairing') setDoneSeen(false);
+    if (state === 'ready') { startedRef.current = false; setStarted(false); setKeysLost(false); setForgetNote(false); }
+    if (state === 'unpaired' || state === 'pairing') { setDoneSeen(false); setNotifyStep(false); }
   }, [state]);
+  // A tap on a notification: the service worker tells the page where to go.
+  useEffect(() => {
+    const sw = globalThis.navigator?.serviceWorker;
+    if (!sw) return;
+    const onMessage = (e: MessageEvent) => openFromWorker(e.data);
+    sw.addEventListener('message', onMessage);
+    return () => sw.removeEventListener('message', onMessage);
+  }, []);
+
+  // `#/chat` without the chat announced goes to the inbox; before the PC's first snapshot nothing is known, so the address stays.
+  const chatOff = route.name === 'chat' && mobile.fresh && !mobile.device?.chat;
+  useEffect(() => { if (chatOff) globalThis.location.replace(href({ name: 'inbox' })); }, [chatOff]);
 
   const pinned = link.pinned();
   // The pinned PC only while pairing: the name the old PC gave is not the one being paired.
   const pairingName = pinned?.name ?? null;
   const pcName = pinned?.name ?? mobile.daemon?.name ?? null;
   const retry = () => link.retry();
-  const signOut = () => { void link.signOut(); };
+  // Leaving (signing out, relinking) first asks the PC to remove this phone. Without its confirmation (offline, no
+  // answer in time) the phone is erased all the same, and the note says the PC still has to be told. A PC that
+  // denied this phone has already removed it.
+  const leaving = useRef(false);
+  const leave = (then: () => void) => {
+    if (leaving.current) return;
+    if (state !== 'ready') {
+      if (state !== 'denied') setForgetNote(true);
+      then();
+      return;
+    }
+    leaving.current = true;
+    void store.forgetDevice().then((applied) => {
+      leaving.current = false;
+      if (!applied) setForgetNote(true);
+      then();
+    });
+  };
+  const signOut = () => leave(() => { void link.signOut(); });
+  const relink = () => leave(() => begin(() => { void link.relink(); }));
 
   const screen = (() => {
     switch (kind) {
@@ -131,9 +170,9 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
       case 'login': return <Login server={relay} error={loginError} />;
       case 'replaced': return <Replaced onHere={() => globalThis.location.reload()} />;
       case 'keyChanged':
-        return <KeyChanged pcName={pcName} known={pinned} received={link.receivedKey()} onRelink={() => begin(() => { void link.relink(); })} onSignOut={signOut} />;
+        return <KeyChanged pcName={pcName} known={pinned} received={link.receivedKey()} onRelink={relink} onSignOut={signOut} />;
       case 'unrecognized':
-        return <Unrecognized pcName={pcName} onRelink={() => begin(() => { void link.relink(); })} onSignOut={signOut} />;
+        return <Unrecognized pcName={pcName} onRelink={relink} onSignOut={signOut} />;
       case 'storage': return <StorageUnavailable onRetry={retry} onReload={() => globalThis.location.reload()} />;
       case 'compare':
         return (
@@ -143,16 +182,20 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
             reach={link.reach()} onRetry={retry}
             onSame={() => link.pairing()?.confirmOnPhone()} onCancel={() => link.pairing()?.cancel()}
             onRestart={() => begin(() => link.startPairing())} onDone={() => setDoneSeen(true)}
+            actions={notifyStep
+              ? <NotifyStep store={store} fetchImpl={fetchImpl} onDone={() => { setNotifyStep(false); setDoneSeen(true); }} />
+              : <ProtectStep store={store} onDone={() => { if (offersNotifications(mobile.device?.push)) setNotifyStep(true); else setDoneSeen(true); }} />}
           />
         );
     }
     switch (route.name) {
       case 'agents': return <Agents store={store} onReconnect={retry} />;
+      case 'chat': return mobile.device?.chat ? <Chat store={store} onReconnect={retry} /> : <Inbox store={store} onReconnect={retry} />;
       case 'thread': return <Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} />;
       case 'terminal': return <Terminal key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} />;
       // Keyed by the session only: a request replaced in place rewrites the address, and must not start the screen over.
       case 'request': return <RequestDetail key={route.sessionId} store={store} sessionId={route.sessionId} requestKey={route.key} onReconnect={retry} />;
-      case 'connection': return <Connection store={store} login={login} relay={relay} pinned={pinned} linkState={state} build={build} onSignOut={signOut} />;
+      case 'connection': return <Connection store={store} fetchImpl={fetchImpl} login={login} relay={relay} pinned={pinned} linkState={state} build={build} onSignOut={signOut} />;
       default: {
         const notice = state === 'pc_offline' ? <Offline pcName={pcName} since={clock(mobile.syncedAt)} onRetry={retry} /> : undefined;
         return <Inbox store={store} onReconnect={retry} notice={notice} />;
@@ -162,6 +205,7 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
 
   return (
     <div className="app flex flex-col" data-route={route.name}>
+      {forgetNote && state !== 'ready' && <p role="status" className="mx-4 my-3 text-[13px] text-muted">{copy.forget.pending}</p>}
       {screen}
       {updates && waiting && waiting.fingerprint !== later && (
         <Update next={waiting} current={build} onLater={() => setLater(waiting.fingerprint)} onApply={() => updates.accept()} />

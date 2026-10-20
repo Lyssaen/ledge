@@ -1,16 +1,19 @@
 // Mobile access: files, relay link, sign-in, pairing and channels put together, as one state and a set of commands
 // for the local fronts. Nothing secret (relay token, device code, keys, nonces, message texts) reaches the state or the log.
 import type WebSocket from 'ws';
-import { SealedFrameSchema, type MobileClientMessage, type MobileConfig, type MobileState, type RelayServerMessage, type SealedFrame } from '@ledge/protocol';
+import { PushSendResultSchema, SealedFrameSchema, type PushSend, type PushSendResult, type MobileClientMessage, type MobileConfig, type MobileState, type RelayServerMessage, type SealedFrame } from '@ledge/protocol';
 import {
-  clearRelaySession, loadPcIdentity, readDevices, readMobileConfig, readRelaySession, writeDevices, writeMobileConfig, writeRelaySession,
-  type ApprovedDevice, type RelaySession
+  clearRelaySession, loadPcIdentity, readDevices, readMobileConfig, readRelaySession, readRevocations, writeDevices, writeMobileConfig, writeRelaySession, writeRevocations,
+  type ApprovedDevice, type RelaySession, type Revocation
 } from './files.js';
+import { rpOf, type DeviceCredential } from './webauthn.js';
 import { createRelayLink, type LinkState, type RelayLink, type Schedule } from './link.js';
 import { signOut, startSignIn } from './signin.js';
 import { createPairing } from './pairing.js';
 import { createChannels } from './channels.js';
 import { log } from '../log.js';
+
+export interface PushSetting { endpoint: string; p256dh: string; auth: string; key: string }
 
 export interface MobileService {
   state(): MobileState;
@@ -20,12 +23,29 @@ export interface MobileService {
   handle(msg: MobileClientMessage): Promise<void>;
   /** Seals `text` to the device's confirmed channel; false if it has none. */
   send(deviceId: string, text: string): Promise<boolean>;
+  /** Removes the device from the PC (as the `mobile.device.revoke` command does); a device already gone is not an error. */
+  revoke(deviceId: string): Promise<void>;
+  /** The device's passkey, unless it was registered for another relay host than the current one. */
+  credential(deviceId: string): DeviceCredential | null;
+  /** Stores the passkey of an approved device (persisted with it). */
+  setCredential(deviceId: string, c: DeviceCredential): void;
+  /** The device's push subscription, with the relay key it was made with; null if none. */
+  pushOf(deviceId: string): PushSetting | null;
+  /** Stores (or with null removes) the push subscription of an approved device. */
+  setPush(deviceId: string, p: PushSetting | null): void;
+  /** The relay's VAPID public key: undefined until read, null when the relay has push off. Read at each `online`. */
+  relayPushKey(): string | null | undefined;
+  /** Asks the relay to forward an encrypted push (`POST /push/send`, Bearer PC). Never throws. */
+  sendPush(msg: PushSend): Promise<PushSendResult>;
   /** Texts opened from approved devices' sealed messages; returns the unsubscribe. */
   onMessage(fn: (deviceId: string, text: string) => void): () => void;
   stop(): Promise<void>;
 }
 
 const REVOKE_TIMEOUT_MS = 15_000;
+const PUSH_TIMEOUT_MS = 10_000;
+/** A revocation the relay never confirmed in this long is given up. */
+const REVOCATION_MAX_AGE_MS = 30 * 86_400_000;
 
 /**
  * Reads the files once, then keeps them in step with the commands. `fetchImpl` serves the /auth calls,
@@ -46,12 +66,14 @@ export async function createMobileService(opts: {
   let config: MobileConfig = readMobileConfig();
   let session: RelaySession | null = readRelaySession();
   let devices: ApprovedDevice[] = readDevices();
+  let revocations: Revocation[] = readRevocations();
   let link: RelayLink | null = null;
   let linkState: LinkState = { state: 'off' };
   let signin: MobileState['signin'] = null;
   let signinError: MobileState['signinError'] = null;
   let signinRun: { cancel(): void } | null = null;
   let stopped = false;
+  let pushKey: string | null | undefined;
 
   const changeListeners = new Set<() => void>();
   const messageListeners = new Set<(deviceId: string, text: string) => void>();
@@ -143,6 +165,7 @@ export async function createMobileService(opts: {
     // Pairings still to decide cannot be answered without a link; channels are reset by the next welcome.
     if (old) pairing.reset();
     linkState = { state: 'off' };
+    pushKey = undefined; // belongs to the relay of the closed link
   };
 
   const openLink = () => {
@@ -156,6 +179,7 @@ export async function createMobileService(opts: {
         if (self.link !== null && link !== self.link) return;
         linkState = s;
         changed();
+        if (s.state === 'online') { void retryRevocations(); void readPushKey(); }
       },
       onMessage(m) {
         if (link !== self.link) return;
@@ -212,9 +236,19 @@ export async function createMobileService(opts: {
     });
   };
 
-  /** Asks the relay to close the revoked device's sessions and sockets. Logged on failure, never retried. */
-  const revokeOnRelay = async (peer: string) => {
-    if (!session || linkState.state !== 'online') return;
+  const saveRevocations = (next: Revocation[]) => {
+    try { writeRevocations(next); }
+    catch (e) { log(`mobile: revocations.json not written (${(e as Error).message})`); }
+    revocations = next;
+  };
+
+  /** Peers with a call to the relay under way, so a retry never doubles one. */
+  const revoking = new Set<string>();
+
+  /** One call. The entry leaves the file on a 2xx or a 404 (the relay has no such peer); on 401, 429, 5xx or a network error it stays. */
+  const tryRevoke = async (peer: string) => {
+    if (!session || linkState.state !== 'online' || revoking.has(peer)) return;
+    revoking.add(peer);
     try {
       const res = await fetchImpl(new URL('/auth/devices/revoke', session.relayUrl).toString(), {
         method: 'POST',
@@ -223,11 +257,53 @@ export async function createMobileService(opts: {
         signal: AbortSignal.timeout(REVOKE_TIMEOUT_MS)
       });
       await res.body?.cancel();
-      if (!res.ok) log(`mobile: relay did not revoke peer ${peer} (status ${res.status})`);
-      else log(`mobile: relay revoked peer ${peer}`);
+      if (res.ok || res.status === 404) {
+        saveRevocations(revocations.filter((r) => r.peer !== peer));
+        log(`mobile: relay revoked peer ${peer}`);
+      } else log(`mobile: relay did not revoke peer ${peer} (status ${res.status}), kept for a retry`);
     } catch (e) {
-      log(`mobile: relay did not revoke peer ${peer} (${(e as Error).name})`);
+      log(`mobile: relay did not revoke peer ${peer} (${(e as Error).name}), kept for a retry`);
+    } finally {
+      revoking.delete(peer);
     }
+  };
+
+  /** `GET /push/key`: the key, or null when the relay has push off (404). Any other answer leaves what was known. */
+  const readPushKey = async () => {
+    const at = session;
+    if (!at) return;
+    try {
+      const res = await fetchImpl(new URL('/push/key', at.relayUrl).toString(), {
+        headers: { authorization: `Bearer ${at.token}` },
+        signal: AbortSignal.timeout(PUSH_TIMEOUT_MS)
+      });
+      let next: string | null | undefined;
+      if (res.status === 404) { next = null; await res.body?.cancel(); }
+      else if (res.ok) {
+        const body = (await res.json()) as { publicKey?: unknown };
+        next = typeof body.publicKey === 'string' && body.publicKey ? body.publicKey : undefined;
+      } else await res.body?.cancel();
+      if (next !== undefined && session === at && next !== pushKey) { pushKey = next; changed(); }
+    } catch (e) {
+      log(`mobile: relay push key not read (${(e as Error).name})`);
+    }
+  };
+
+  /** The whole list, each time the link comes online; an entry too old is dropped first. */
+  const retryRevocations = async () => {
+    const limit = now() - REVOCATION_MAX_AGE_MS;
+    const stale = revocations.filter((r) => !(Date.parse(r.at) >= limit));
+    if (stale.length > 0) {
+      for (const r of stale) log(`mobile: giving up the revocation of peer ${r.peer} (older than 30 days)`);
+      saveRevocations(revocations.filter((r) => !stale.includes(r)));
+    }
+    await Promise.all(revocations.map((r) => tryRevoke(r.peer)));
+  };
+
+  /** Writes the peer down first, so a relay that cannot be reached (or a daemon that stops) does not lose it. */
+  const revokeOnRelay = async (peer: string) => {
+    if (!revocations.some((r) => r.peer === peer)) saveRevocations([...revocations, { peer, at: new Date(now()).toISOString() }]);
+    await tryRevoke(peer);
   };
 
   const revoke = async (id: string) => {
@@ -264,6 +340,53 @@ export async function createMobileService(opts: {
         })),
         pairings: pairing.views()
       };
+    },
+
+    revoke,
+
+    credential(deviceId) {
+      const c = devices.find((d) => d.id === deviceId)?.credential;
+      return c && c.rpId === rpOf(config.relayUrl)?.rpId ? c : null;
+    },
+
+    setCredential(deviceId, c) {
+      if (!devices.some((d) => d.id === deviceId)) throw new Error('no such device');
+      saveDevices(devices.map((d) => (d.id === deviceId ? { ...d, credential: c } : d)));
+    },
+
+    pushOf(deviceId) {
+      return devices.find((d) => d.id === deviceId)?.push ?? null;
+    },
+
+    setPush(deviceId, p) {
+      if (!devices.some((d) => d.id === deviceId)) throw new Error('no such device');
+      saveDevices(devices.map((d) => {
+        if (d.id !== deviceId) return d;
+        const { push: _old, ...rest } = d;
+        return p ? { ...rest, push: p } : rest;
+      }));
+      changed();
+    },
+
+    relayPushKey: () => pushKey,
+
+    async sendPush(msg) {
+      const at = session;
+      if (!at || linkState.state !== 'online') return { result: 'failed' };
+      try {
+        const res = await fetchImpl(new URL('/push/send', at.relayUrl).toString(), {
+          method: 'POST',
+          headers: { authorization: `Bearer ${at.token}`, 'content-type': 'application/json' },
+          body: JSON.stringify(msg),
+          signal: AbortSignal.timeout(PUSH_TIMEOUT_MS)
+        });
+        if (!res.ok) { await res.body?.cancel(); return { result: 'failed', status: res.status }; }
+        const parsed = PushSendResultSchema.safeParse(await res.json());
+        return parsed.success ? parsed.data : { result: 'failed' };
+      } catch (e) {
+        log(`mobile: push not sent (${(e as Error).name})`);
+        return { result: 'failed' };
+      }
     },
 
     onChange(fn) {

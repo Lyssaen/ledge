@@ -10,6 +10,7 @@ export type RelayLogEvent =
   | { ev: 'sign_out'; account: string; peer: string }
   | { ev: 'device_revoked'; account: string; peer: string; count: number }
   | { ev: 'sign_in_refused'; reason: 'not_allowed' | 'denied' | 'expired' | 'bad_state' | 'github'; count: number }
+  | { ev: 'push'; account: string; host: string; result: 'sent' | 'gone' | 'failed' | 'refused'; status?: number }
   | { ev: 'frame_error'; account: string; peer: string; code: Extract<RelayServerMessage, { type: 'error' }>['code'] };
 
 export type RelayLog = (e: RelayLogEvent) => void;

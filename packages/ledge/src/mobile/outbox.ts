@@ -13,6 +13,8 @@ export interface Outbox {
   push(deviceId: string, msg: PhoneServerMessage, key?: string): void;
   /** Forgets everything queued for the device. */
   drop(deviceId: string): void;
+  /** Resolves once nothing is queued or being sent for the device (at once if there is nothing), or when the outbox closes. */
+  flush(deviceId: string): Promise<void>;
   close(): void;
 }
 
@@ -46,12 +48,21 @@ export function createOutbox(opts: {
   let running = false;
   let closed = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
+  /** The device whose text is on its way to the relay. */
+  let sending: string | null = null;
+  let waiters: Array<{ deviceId: string; done: () => void }> = [];
 
   const clear = (deviceId: string) => {
     queues.delete(deviceId);
     queuedBytes.delete(deviceId);
     const i = turn.indexOf(deviceId);
     if (i >= 0) turn.splice(i, 1);
+  };
+
+  const settle = () => {
+    const ready = waiters.filter(w => closed || (!queues.has(w.deviceId) && sending !== w.deviceId));
+    waiters = waiters.filter(w => !ready.includes(w));
+    for (const w of ready) w.done();
   };
 
   const prune = () => {
@@ -83,13 +94,16 @@ export function createOutbox(opts: {
         window.push({ at: now(), cost: item.cost });
         windowBytes += item.cost;
         let ok = false;
+        sending = deviceId;
         try { ok = await opts.send(deviceId, item.text); } catch { ok = false; }
+        sending = null;
         if (!ok && !closed) {
           clear(deviceId);
           try { opts.onGone(deviceId); } catch (err) {
             opts.log(`phone outbox: onGone failed (${err instanceof Error ? err.name : 'error'})`);
           }
         }
+        settle();
       }
     } finally {
       running = false;
@@ -137,9 +151,14 @@ export function createOutbox(opts: {
       }
       enqueue(deviceId, padded, key, msg.type === 'operation.result' || msg.type === 'error');
     },
-    drop: clear,
+    drop(deviceId) { clear(deviceId); settle(); },
+    flush: deviceId => new Promise<void>(done => {
+      if (closed || (!queues.has(deviceId) && sending !== deviceId)) return done();
+      waiters.push({ deviceId, done });
+    }),
     close() {
       closed = true;
+      settle();
       if (timer) clearTimeout(timer);
       timer = null;
       queues.clear();

@@ -18,7 +18,44 @@ export const copy = {
     emptyFilterHint: 'Les autres demandes restent dans « Tout ».',
     offlineNote: 'Vous pouvez consulter les demandes. Aucune décision ne sera envoyée hors connexion.'
   },
-  nav: { label: 'Navigation principale', inbox: 'À traiter', agents: 'Agents' },
+  nav: { label: 'Navigation principale', inbox: 'À traiter', agents: 'Agents', chat: 'Demander à Ledge' },
+  chat: {
+    title: 'Ledge',
+    subtitle: (agents: number, repos: number) => `Fil du téléphone · ${agents} ${agents > 1 ? 'agents' : 'agent'}, ${repos} ${repos > 1 ? 'repos' : 'repo'}`,
+    reset: 'Nouvelle conversation',
+    empty: 'Posez une question sur vos agents et vos repos. Ce fil est propre à ce téléphone.',
+    suggestions: {
+      waiting: 'Qui attend quelque chose de moi ?',
+      session: (name: string) => `Où en est ${name} sur le badge d'attente ?`,
+      repo: (repo: string) => `Qu'est-ce qui a changé dans ${repo} aujourd'hui ?`
+    },
+    stop: 'Arrêter',
+    stepsLabel: 'Étapes',
+    sources: 'Sources : ',
+    field: 'Question pour Ledge',
+    placeholder: 'Demander à Ledge…',
+    send: 'Envoyer la question',
+    busy: 'Ledge répond déjà à d\'autres questions. Réessayez dans un instant.',
+    timeout: 'Ledge n\'a pas répondu à temps.',
+    failed: 'Ledge n\'a pas pu répondre.',
+    cancelled: 'Question arrêtée.',
+    offline: 'Hors ligne : posez la question quand le PC sera joignable.',
+    cut: 'Réponse coupée : la suite est sur le PC.',
+    relayLabel: 'Consigne proposée', launchLabel: 'Session proposée',
+    relayHead: (name: string) => `Envoyer à ${name}`,
+    launchHead: (tool: string, project: string) => `Lancer ${tool} dans ${project}`,
+    ignore: 'Ignorer', relayGo: 'Envoyer',
+    queued: (name: string) => `En attente : ${name} est occupé.`,
+    sentTo: (name: string) => `Envoyé à ${name} · `, launchedTo: 'Lancée · ', seeThread: 'voir son fil',
+    notSent: 'Pas envoyé.', notLaunched: 'Pas lancée.',
+    launchSetup: 'Protégez d\'abord vos accords depuis Connexion.',
+    steps: {
+      sessions: (n: number) => `Lit les ${n} sessions…`,
+      pane: (name: string) => `Regarde le terminal de ${name}…`,
+      reply: (name: string) => `Lit la dernière réponse de ${name}…`,
+      look: (name: string) => `Regarde ${name}…`
+    }
+  },
   agents: {
     title: 'Agents',
     subtitle: (sessions: number, projects: number) => `${sessions} ${sessions > 1 ? 'sessions' : 'session'} · ${projects} ${projects > 1 ? 'projets' : 'projet'} sur ce PC`,
@@ -141,6 +178,14 @@ export const copy = {
     untypable: 'La réponse doit tenir sur une ligne, sans saut de ligne ni caractère de contrôle.',
     digit: 'Un chiffre seul serait lu comme le numéro d’une option. Choisissez l’option ci-dessus, ou écrivez la réponse en toutes lettres.'
   },
+  /** OMP's dialogs: an option to tap, or every question of an `ask` answered together. */
+  answers: {
+    send: 'Envoyer les réponses',
+    cancel: 'Annuler la demande',
+    missing: (n: number) => `${n} question${n > 1 ? 's' : ''} sans réponse`,
+    change: 'Choisir une autre réponse',
+    legend: 'Choisir une option'
+  },
   consequence: {
     forceTitle: 'Peut remplacer l’historique distant',
     forceBody: (dest?: string) => `Les commits présents sur ${dest ?? 'le dépôt distant'} peuvent être écrasés. Les autres personnes travaillant sur cette branche peuvent être affectées.`,
@@ -174,6 +219,10 @@ export const copy = {
     none: '—',
     signOut: 'Se déconnecter'
   },
+  /** The user left while the PC could not confirm that it removed this phone: shown on the screen they land on. */
+  forget: {
+    pending: 'Le PC n’a pas confirmé. Retirez ce téléphone dans Ledge sur le PC, section Accès mobile.'
+  },
   /** The GitHub login, as the boards write it. */
   account: (login: string) => `@${login}`,
   /** The PC before its first snapshot named it. */
@@ -204,6 +253,37 @@ export const copy = {
     github: 'Continuer avec GitHub',
     /** What the relay's `?signin=` said went wrong; the boards show none, these are the desktop's words. */
     errors: { denied: 'La connexion a été refusée sur GitHub.', failed: 'La connexion à GitHub a échoué. Réessayez.' }
+  },
+  /** Confirming a high-impact accept with the device's own check (Face ID, fingerprint, PIN). */
+  confirm: {
+    heading: 'Confirmer l’autorisation',
+    note: 'Une vérification sur votre appareil sera demandée. Elle confirme votre identité, pas la sûreté de la commande.',
+    go: 'Confirmer avec mon appareil', goApple: 'Autoriser avec Face ID',
+    preparing: 'Préparation de la vérification…',
+    asking: 'Vérification en cours sur cet appareil…',
+    cancelled: 'Vérification annulée. Rien n’a été envoyé.',
+    expired: 'La vérification a expiré. Recommencez.',
+    failed: 'La vérification de l’appareil n’a pas abouti. Rien n’a été envoyé. Réessayez.',
+    prepareFailed: 'La vérification n’a pas pu être préparée. Rien n’a été envoyé.',
+    retry: 'Réessayer'
+  },
+  /** Protecting the high-impact accepts with this device, at pairing and in Connection. */
+  enroll: {
+    title: 'Protéger les accords',
+    body: 'Face ID ou le code de ce téléphone sera demandé pour autoriser une commande à impact élevé.',
+    go: 'Protéger les accords', later: 'Plus tard',
+    done: 'Protégés par cet appareil', row: 'Accords à impact élevé',
+    unsupported: 'Cet appareil ne peut pas protéger les accords.'
+  },
+  notifications: {
+    title: 'Être prévenu quand un agent attend', body: 'Activez les notifications pour ouvrir une demande directement depuis votre écran verrouillé.',
+    enable: 'Activer les notifications', later: 'Plus tard', working: 'Activation…', waiting: 'Connexion au PC…',
+    row: 'Notifications', on: 'Activées', off: 'Désactivées',
+    denied: 'Notifications refusées. Vous pourrez les autoriser dans les réglages du téléphone.',
+    unsupported: 'Ce navigateur ne propose pas les notifications. Sur iPhone, ouvrez Ledge depuis son icône de l’écran d’accueil.',
+    failed: 'L’activation n’a pas abouti : le PC n’a pas reçu l’abonnement. Vérifiez la connexion, puis réessayez.',
+    noPush: 'Les notifications ne sont pas disponibles sur ce PC.',
+    stale: 'Le PC a changé de clés : réactivez les notifications pour que ce téléphone les reçoive à nouveau.'
   },
   compare: {
     /** The name this phone gives itself in its `pair_commit`, when its user agent names no known device. */

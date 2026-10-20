@@ -139,9 +139,13 @@ export function toPhoneThread(items: ThreadItem[]): { items: ThreadItem[]; cut: 
   return { items: kept.reverse(), cut: cut.reverse(), more: kept.length < items.length };
 }
 
-/** What each tool's adapter can type for a phone. OMP has no adapter: its dialogs take an option, never free text, from a reply. */
+/** What each tool's adapter can type for a phone. OMP has no adapter: its dialogs are answered with their own options and questions (`session.answer`), never typed. */
 export function capabilities(): CapabilitiesByTool {
   const caps = {} as CapabilitiesByTool;
-  for (const tool of ToolSchema.options as readonly Tool[]) caps[tool] = { freeTextAnswer: tool !== 'omp' && !!adapterFor(tool).freeText };
+  for (const tool of ToolSchema.options as readonly Tool[]) {
+    caps[tool] = tool === 'omp'
+      ? { freeTextAnswer: false, decide: false, questions: true }
+      : { freeTextAnswer: !!adapterFor(tool).freeText, decide: true, questions: false };
+  }
   return caps;
 }

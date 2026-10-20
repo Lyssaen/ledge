@@ -4,6 +4,7 @@ import { href, parseRoute, type Route } from '../src/router';
 const routes: Route[] = [
   { name: 'inbox' },
   { name: 'agents' },
+  { name: 'chat' },
   { name: 'thread', sessionId: 's1' },
   { name: 'terminal', sessionId: 's1' },
   { name: 'request', sessionId: 's1', key: 'k1' },
