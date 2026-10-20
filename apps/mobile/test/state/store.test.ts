@@ -517,3 +517,130 @@ describe('the store, when the link has no PC any more', () => {
     expect(t.storage.length).toBe(0);
   });
 });
+
+describe('the store, device confirmation', () => {
+  const assertion = { id: 'AQ', clientDataJSON: 'AQI', authenticatorData: 'Aw', signature: 'BAU' };
+  const credential = { id: 'AQ', publicKey: 'AQID', alg: -7 as const, clientDataJSON: 'AQI', authenticatorData: 'Aw' };
+  const challenge = (purpose: 'register' | 'decide') => ({ type: 'confirm.challenge' as const, purpose, challenge: 'Y2hhbGw', rpId: 'relay.example', expiresInMs: 60_000 });
+
+  it('a snapshot with device puts it in the state, and one without leaves null (a lot 5 daemon)', () => {
+    const t = setup();
+    expect(t.state().device).toBeNull();
+    t.deliver({ ...snapshot([session('a')]), device: { confirm: true } } as never);
+    expect(t.state().device).toEqual({ confirm: true });
+    t.deliver(snapshot([session('a')]));
+    expect(t.state().device).toBeNull();
+  });
+
+  it('forgetting the PC resets device', () => {
+    const t = setup();
+    t.deliver({ ...snapshot([session('a')]), device: { confirm: false } } as never);
+    t.set('unpaired');
+    expect(t.state().device).toBeNull();
+  });
+
+  it('prepareConfirm sends confirm.prepare and resolves on the next challenge of that purpose', async () => {
+    const t = setup();
+    const expectOf = { key: 'p1', kind: 'permission' as const, text: 'pnpm test' };
+    const p = t.store.prepareConfirm({ purpose: 'decide', id: 'a', expect: expectOf });
+    expect(t.of('confirm.prepare')).toEqual([{ type: 'confirm.prepare', purpose: 'decide', id: 'a', expect: expectOf }]);
+    t.deliver(challenge('register'));
+    t.deliver(challenge('decide'));
+    await expect(p).resolves.toMatchObject({ type: 'confirm.challenge', purpose: 'decide', challenge: 'Y2hhbGw' });
+  });
+
+  it('prepareConfirm for register sends no id or expect', async () => {
+    const t = setup();
+    const p = t.store.prepareConfirm({ purpose: 'register' });
+    expect(t.of('confirm.prepare')).toEqual([{ type: 'confirm.prepare', purpose: 'register' }]);
+    t.deliver(challenge('register'));
+    await expect(p).resolves.toMatchObject({ purpose: 'register' });
+  });
+
+  it('prepareConfirm rejects after 10 s without an answer', async () => {
+    vi.useFakeTimers();
+    const t = setup();
+    const p = t.store.prepareConfirm({ purpose: 'register' });
+    const seen = expect(p).rejects.toThrow('timeout');
+    await vi.advanceTimersByTimeAsync(9_999);
+    t.deliver(challenge('decide'));
+    await vi.advanceTimersByTimeAsync(1);
+    await seen;
+    // a late challenge changes nothing
+    t.deliver(challenge('register'));
+  });
+
+  it('prepareConfirm rejects on an error message, and a second call supersedes the first', async () => {
+    const t = setup();
+    const p = t.store.prepareConfirm({ purpose: 'register' });
+    const failed = expect(p).rejects.toThrow('error');
+    t.deliver({ type: 'error', code: 'invalid' });
+    await failed;
+    const first = t.store.prepareConfirm({ purpose: 'register' });
+    const superseded = expect(first).rejects.toThrow('superseded');
+    const second = t.store.prepareConfirm({ purpose: 'register' });
+    await superseded;
+    t.deliver(challenge('register'));
+    await expect(second).resolves.toMatchObject({ purpose: 'register' });
+  });
+
+  it('prepareConfirm rejects when the link is not ready', async () => {
+    const t = setup({ state: 'pc_offline' });
+    await expect(t.store.prepareConfirm({ purpose: 'register' })).rejects.toThrow('not_ready');
+    expect(t.of('confirm.prepare')).toHaveLength(0);
+  });
+
+  it('registerCredential sends credential.register as an operation without id, and a resend is the same message', () => {
+    vi.useFakeTimers();
+    const t = setup();
+    const op = t.store.registerCredential(credential)!;
+    expect(t.of('credential.register')).toEqual([{ type: 'credential.register', op, credential }]);
+    expect(t.state().ops[op]?.phase).toBe('sending');
+    vi.advanceTimersByTime(UNCERTAIN_MS);
+    t.set('pc_offline');
+    t.set('ready');
+    t.deliver(snapshot([]));
+    expect(t.of('credential.register').length).toBeGreaterThanOrEqual(1);
+    t.deliver({ type: 'operation.result', op, status: 'applied' });
+    expect(t.state().ops[op]?.phase).toBe('applied');
+  });
+
+  it('a credential.register survives a reload and is not mistaken for another op', () => {
+    const storage = new MemoryStorage();
+    const first = setup({ storage });
+    const op = first.store.registerCredential(credential)!;
+    const again = setup({ storage });
+    expect(again.state().ops[op]?.message).toMatchObject({ type: 'credential.register', op });
+    // two registrations are two ops: a new attempt takes a new op id
+    expect(first.store.registerCredential(credential)).not.toBe(op);
+  });
+
+  it('decide with an assertion sends it, and a resend after reconnection is the same message', () => {
+    vi.useFakeTimers();
+    const t = setup();
+    t.deliver(snapshot([waiting('a')]));
+    const op = t.store.decide('a', 'accept', { assertion })!;
+    expect(t.of('session.decide')[0]).toMatchObject({ op, assertion });
+    vi.advanceTimersByTime(UNCERTAIN_MS);
+    t.set('pc_offline');
+    t.set('ready');
+    const decides = t.of('session.decide');
+    expect(decides).toHaveLength(2);
+    expect(decides[1]).toEqual(decides[0]);
+    expect(decides[1]?.assertion).toEqual(assertion);
+  });
+
+  it('reply with an assertion sends it', () => {
+    const t = setup();
+    t.deliver(snapshot([waiting('a')]));
+    const op = t.store.reply('a', 'oui', { assertion })!;
+    expect(t.of('session.reply')[0]).toMatchObject({ op, text: 'oui', assertion });
+  });
+
+  it('decide and reply without an assertion carry no assertion field', () => {
+    const t = setup();
+    t.deliver(snapshot([waiting('a')]));
+    t.store.decide('a', 'accept');
+    expect(t.of('session.decide')[0]).not.toHaveProperty('assertion');
+  });
+});

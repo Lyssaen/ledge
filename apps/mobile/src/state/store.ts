@@ -2,7 +2,7 @@
 // of it. Every write is an operation named by a uuid, sent again with that same uuid after a lost connection.
 import { useSyncExternalStore } from 'react';
 import {
-  PhoneClientMessageSchema, type CapabilitiesByTool, type PhoneClientMessage, type PhonePending, type PhoneServerMessage,
+  PhoneClientMessageSchema, type Assertion, type CapabilitiesByTool, type Credential, type PhoneClientMessage, type PhonePending, type PhoneServerMessage,
   type PhoneSession, type ThreadItem
 } from '@ledge/protocol';
 import type { PhoneLink } from '../link/link';
@@ -27,6 +27,8 @@ export interface MobileState {
   previews: Map<string, string[]>;
   /** Null until the first snapshot of this run: they are not kept on the phone. */
   capabilities: CapabilitiesByTool | null;
+  /** What the PC offers for confirming on the device; null until a snapshot, and from a PC that says nothing (lot 5). */
+  device: { confirm: boolean } | null;
   daemon: { version: string; name: string } | null;
   /** True from a snapshot until the channel is lost: what is shown is the PC's state now, not the last known one. */
   fresh: boolean;
@@ -35,15 +37,30 @@ export interface MobileState {
   ops: Record<string, Op>;
 }
 
+/** The request a challenge is asked for, as `session.decide` names it. */
+export type PhoneExpect = Extract<PhoneClientMessage, { type: 'session.decide' }>['expect'];
+export type ConfirmChallenge = Extract<PhoneServerMessage, { type: 'confirm.challenge' }>;
+export type ConfirmRequest = { purpose: 'register' } | { purpose: 'decide'; id: string; expect: PhoneExpect };
+
+/** How long `prepareConfirm` waits for the PC's challenge. */
+export const PREPARE_MS = 10_000;
+
 export type Decision = Extract<PhoneClientMessage, { type: 'session.decide' }>['decision'];
 
 export interface MobileStore {
   getState(): MobileState;
   subscribe(fn: () => void): () => void;
   /** Answers the session's request. The op's id, or null when nothing was sent (no request, not ready, already answered). */
-  decide(id: string, decision: Decision, opts?: { note?: string }): string | null;
+  decide(id: string, decision: Decision, opts?: { note?: string; assertion?: Assertion }): string | null;
   /** An answer to the session's request when there is one, else an instruction. The op's id, or null when nothing was sent. */
-  reply(id: string, text: string): string | null;
+  reply(id: string, text: string, opts?: { assertion?: Assertion }): string | null;
+  /**
+   * Asks the PC for a challenge; resolves on the next `confirm.challenge` of that purpose. Rejects (Error message
+   * `error`, `timeout` after `PREPARE_MS`, `not_ready`, `superseded`, `lost`). One is pending at a time: a new call supersedes the old one.
+   */
+  prepareConfirm(req: ConfirmRequest): Promise<ConfirmChallenge>;
+  /** Registers the passkey with the PC. The op's id, or null when nothing was sent. */
+  registerCredential(c: Credential): string | null;
   interrupt(id: string): string | null;
   /** Marks the session read up to `at` (now by default); the latest mark is sent again after every ready. */
   read(id: string, at?: string): void;
@@ -71,6 +88,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     threads: new Map(),
     previews: new Map(Object.entries(last?.previews ?? {})),
     capabilities: null,
+    device: null,
     daemon: last?.daemon ?? null,
     fresh: false,
     syncedAt: last?.syncedAt ?? null,
@@ -89,6 +107,15 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
   /** A preview changed since the cache was last written. */
   let previewsDirty = false;
   let closed = false;
+  /** The `prepareConfirm` waiting for its challenge. */
+  let preparing: { purpose: ConfirmChallenge['purpose']; resolve: (c: ConfirmChallenge) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> } | null = null;
+  const settle = (outcome: ConfirmChallenge | Error) => {
+    const p = preparing;
+    if (!p) return;
+    preparing = null;
+    clearTimeout(p.timer);
+    if (outcome instanceof Error) p.reject(outcome); else p.resolve(outcome);
+  };
   const timers = new Map<string, ReturnType<typeof setTimeout>>();
   const listeners = new Set<() => void>();
 
@@ -152,6 +179,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
   function onLost() {
     // Requests sent on the lost channel get no answer.
     threadAsks = [];
+    settle(new Error('lost'));
     for (const id of [...timers.keys()]) stopTimer(id);
     const ops = Object.values(state.ops).filter(o => o.phase === 'sending');
     if (ops.length) setOps({ ...state.ops, ...Object.fromEntries(ops.map(o => [o.op, { ...o, phase: 'uncertain' as const }])) });
@@ -169,7 +197,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         reads = Object.fromEntries(Object.entries(reads).filter(([id]) => sessions.has(id)));
         saveReads(reads, storage);
         boot = m.daemon.boot ?? null;
-        set({ sessions, previews, threads, capabilities: m.capabilities, daemon: m.daemon, fresh: true, syncedAt: now });
+        set({ sessions, previews, threads, capabilities: m.capabilities, device: m.device ?? null, daemon: m.daemon, fresh: true, syncedAt: now });
         persist();
         // The instructions and interrupts left uncertain (those in flight on this link are `sending`) go again if this PC may not have applied them.
         if (ready()) resend(o => o.phase === 'uncertain' && expectKey(o.message) === undefined);
@@ -235,10 +263,14 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         const { reason: _old, ...rest } = o;
         patchOp(m.op, () => ({ ...rest, received: true, ...(boot ? { boot } : {}), phase: m.status as Op['phase'], ...(m.status !== 'applied' && m.reason ? { reason: m.reason } : {}) }));
         // The request changed under this answer: ask for the one there now, with its body.
-        if (m.status === 'rejected' && m.reason === 'stale' && ready()) send({ type: 'session.pending', id: o.message.id });
+        if (m.status === 'rejected' && m.reason === 'stale' && ready() && 'id' in o.message) send({ type: 'session.pending', id: o.message.id });
         return;
       }
+      case 'confirm.challenge':
+        if (preparing?.purpose === m.purpose) settle(m);
+        return;
       case 'error':
+        settle(new Error('error'));
         if (m.code === 'unknown_session' && m.request === 'session.thread') {
           const id = threadAsks.shift();
           if (id !== undefined) setThread(id, { items: [], cut: [], more: false, ...state.threads.get(id), status: 'gone' });
@@ -265,17 +297,18 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
   /** The link has no PC any more (forgotten, or pairing a new one): nothing of the old PC is kept or sent again. */
   function forget() {
     const held = state.sessions.size || state.threads.size || state.previews.size || state.daemon || state.capabilities
-      || state.syncedAt || Object.keys(state.ops).length || Object.keys(reads).length || lastThread !== null;
+      || state.device || state.syncedAt || Object.keys(state.ops).length || Object.keys(reads).length || lastThread !== null;
     if (!held) return;
     for (const id of [...timers.keys()]) stopTimer(id);
     reads = {};
     boot = null;
     lastThread = null;
     threadAsks = [];
+    settle(new Error('lost'));
     previewsDirty = false;
     clearLastState(storage);
     clearOps(storage);
-    set({ sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, daemon: null, fresh: false, syncedAt: null, ops: {} });
+    set({ sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, fresh: false, syncedAt: null, ops: {} });
   }
 
   let wasReady = ready();
@@ -297,15 +330,30 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     decide(id, decision, opts = {}) {
       const p = state.sessions.get(id)?.pending;
       if (!p?.key) return null;
-      return write(op => ({ type: 'session.decide', op, id, decision, ...(opts.note !== undefined ? { note: opts.note } : {}), expect: expectOf(p) }));
+      return write(op => ({ type: 'session.decide', op, id, decision, ...(opts.note !== undefined ? { note: opts.note } : {}), expect: expectOf(p), ...(opts.assertion ? { assertion: opts.assertion } : {}) }));
     },
 
-    reply(id, text) {
+    reply(id, text, opts = {}) {
       const s = state.sessions.get(id);
       if (!s) return null;
       // A request without a key cannot be named: the PC would refuse the reply either way.
       if (s.pending && !s.pending.key) return null;
-      return write(op => ({ type: 'session.reply', op, id, text, expect: s.pending ? expectOf(s.pending) : null }));
+      return write(op => ({ type: 'session.reply', op, id, text, expect: s.pending ? expectOf(s.pending) : null, ...(opts.assertion ? { assertion: opts.assertion } : {}) }));
+    },
+
+    prepareConfirm(req) {
+      return new Promise<ConfirmChallenge>((resolve, reject) => {
+        if (closed || !ready()) { reject(new Error('not_ready')); return; }
+        const m = PhoneClientMessageSchema.safeParse({ type: 'confirm.prepare', ...req });
+        if (!m.success) { reject(new Error('invalid')); return; }
+        settle(new Error('superseded'));
+        preparing = { purpose: req.purpose, resolve, reject, timer: setTimeout(() => settle(new Error('timeout')), PREPARE_MS) };
+        send(m.data);
+      });
+    },
+
+    registerCredential(c) {
+      return write(op => ({ type: 'credential.register', op, credential: c }));
     },
 
     interrupt(id) {
@@ -344,6 +392,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     close() {
       if (closed) return;
       closed = true;
+      settle(new Error('lost'));
       if (previewsDirty) persist();
       offState();
       offMessage();

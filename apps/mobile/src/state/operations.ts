@@ -11,8 +11,8 @@ import { localStore } from './storage';
 export type OpPhase = 'sending' | 'uncertain' | 'applied' | 'rejected' | 'failed';
 
 /** The messages that are operations. */
-// The lot 6a writes (credential.register, session.answer, device.forget) join this type with the phone's code for them.
-export type OpMessage = Extract<PhoneClientMessage, { op: string; id: string }> extends infer M ? Exclude<M, { type: 'session.answer' }> : never;
+// `credential.register` names no session, so it has no `id`. session.answer and device.forget join with the phone's code for them.
+export type OpMessage = Exclude<Extract<PhoneClientMessage, { op: string }>, { type: 'session.answer' | 'device.forget' }>;
 
 export interface Op {
   op: string;
@@ -46,7 +46,7 @@ export function pruneOps(ops: Record<string, Op>): Record<string, Op> {
 }
 
 /** The key of the request a message answers; undefined for an instruction (`expect: null`) or an interrupt. */
-export const expectKey = (m: OpMessage): string | undefined => m.type === 'session.interrupt' ? undefined : m.expect?.key;
+export const expectKey = (m: OpMessage): string | undefined => m.type === 'session.interrupt' || m.type === 'credential.register' ? undefined : m.expect?.key;
 
 /**
  * How long an instruction or an interrupt of unknown outcome may still be sent again (the same as the thread's
@@ -77,9 +77,11 @@ export function resendable(o: Op, boot: string | null, now: number = Date.now())
  */
 export function isNew(ops: Record<string, Op>, m: OpMessage, boot: string | null, now: number = Date.now()): boolean {
   if (ops[m.op]) return false;
+  // A registration names no session: only its own op id dedupes it (a new attempt is a new op).
+  if (m.type === 'credential.register') return true;
   const key = expectKey(m);
   return !Object.values(ops).some(o => {
-    if (o.message.id !== m.id) return false;
+    if (!('id' in o.message) || o.message.id !== m.id) return false;
     if (key !== undefined) return expectKey(o.message) === key && (isLive(o.phase) || o.phase === 'applied');
     return o.message.type === m.type && expectKey(o.message) === undefined && resendable(o, boot, now);
   });
