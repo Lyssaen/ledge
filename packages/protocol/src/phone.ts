@@ -49,13 +49,17 @@ export const OperationStatusSchema = z.enum(['received', 'applied', 'rejected', 
 export type OperationStatus = z.infer<typeof OperationStatusSchema>;
 
 /** Why an operation was refused: a refusal code of the local fronts, or one only a phone can meet. */
-export const OperationReasonSchema = z.enum([...RefusalCodeSchema.options, 'untypable', 'confirm_required', 'conflict']);
+export const OperationReasonSchema = z.enum([...RefusalCodeSchema.options, 'untypable', 'confirm_required', 'conflict', 'assertion_invalid', 'assertion_expired']);
 export type OperationReason = z.infer<typeof OperationReasonSchema>;
 
 /** What an adapter knows how to type for a phone, beyond accept, deny and an option number. A phone hides an answer its session's tool cannot give. */
 export const CapabilitiesSchema = z.object({
   /** A question can be answered in free text. */
-  freeTextAnswer: z.boolean()
+  freeTextAnswer: z.boolean(),
+  /** The session's accept/deny can be typed; absent = true. */
+  decide: z.boolean().optional(),
+  /** OMP's dialog questions can be answered from the phone; absent = false. */
+  questions: z.boolean().optional()
 });
 export type Capabilities = z.infer<typeof CapabilitiesSchema>;
 
@@ -85,6 +89,33 @@ export const PhoneSessionSchema = SessionSchema.pick({
 }).extend({ pending: PhonePendingSchema.optional(), unread: z.boolean() });
 export type PhoneSession = z.infer<typeof PhoneSessionSchema>;
 
+/** Base64url without padding: what WebAuthn fields look like once the phone encodes them. */
+const B64U = z.string().regex(/^[A-Za-z0-9_-]*$/);
+
+/** A device passkey as the phone registers it: its public key (SPKI) and the first attestation's client data. */
+export const CredentialSchema = z.object({
+  id: B64U.max(1_366),
+  publicKey: B64U.max(2_048),
+  alg: z.union([z.literal(-7), z.literal(-257)]),
+  clientDataJSON: B64U.max(4_096),
+  authenticatorData: B64U.max(4_096),
+  transports: z.array(z.string().max(20)).max(8).optional()
+});
+export type Credential = z.infer<typeof CredentialSchema>;
+
+/** A WebAuthn assertion over a challenge the daemon issued. */
+export const AssertionSchema = z.object({
+  id: B64U.max(1_366),
+  clientDataJSON: B64U.max(4_096),
+  authenticatorData: B64U.max(4_096),
+  signature: B64U.max(1_024)
+});
+export type Assertion = z.infer<typeof AssertionSchema>;
+
+/** What a challenge is for. */
+export const ConfirmPurposeSchema = z.enum(['register', 'decide']);
+export type ConfirmPurpose = z.infer<typeof ConfirmPurposeSchema>;
+
 const sessionId = z.string().min(1).max(100);
 /** The request the phone showed, named by its key. */
 const PhoneExpectSchema = PendingSchema.pick({ kind: true, text: true }).extend({ key: z.string().min(1).max(64) });
@@ -98,23 +129,38 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   /** The session whose terminal the phone shows; null when it shows none. */
   z.object({ type: z.literal('session.watch'), id: sessionId.nullable() }),
   z.object({ type: z.literal('session.read'), id: sessionId, at: z.string().datetime() }),
+  /** Asks for a challenge. One object for both purposes: the gateway refuses a `decide` without `id` and `expect`. */
+  z.object({ type: z.literal('confirm.prepare'), purpose: ConfirmPurposeSchema, id: sessionId.optional(), expect: PhoneExpectSchema.optional() }),
+  z.object({ type: z.literal('credential.register'), op: OperationIdSchema, credential: CredentialSchema }),
   z.object({
     type: z.literal('session.decide'), op: OperationIdSchema, id: sessionId, decision: DecisionSchema, note: z.string().trim().min(1).max(NOTE_MAX).optional(),
     /** The request the phone showed: refused unless it is still the pending one. */
-    expect: PhoneExpectSchema
+    expect: PhoneExpectSchema,
+    /** The device check over the challenge of `confirm.prepare`; required by the daemon for a high-risk accept. */
+    assertion: AssertionSchema.optional()
   }),
   z.object({
     type: z.literal('session.reply'), op: OperationIdSchema, id: sessionId, text: z.string().min(1).max(MESSAGE_MAX),
     /** The request the reply answers, or null when the phone showed none: refused if the session's request is no longer that one. */
-    expect: PhoneExpectSchema.nullable()
+    expect: PhoneExpectSchema.nullable(),
+    assertion: AssertionSchema.optional()
   }),
-  z.object({ type: z.literal('session.interrupt'), op: OperationIdSchema, id: sessionId })
+  /** OMP's `ask`: the answers to every question of the dialog `requestId`, in order; `cancel` declines it. Bounds as the local `session.answer`. */
+  z.object({
+    type: z.literal('session.answer'), op: OperationIdSchema, id: sessionId, requestId: z.string().min(1).max(200),
+    answers: z.array(z.object({ id: z.string().max(200), selected: z.array(z.string().max(2_000)).max(100), text: z.string().max(20_000).optional() })).max(50),
+    cancel: z.literal(true).optional(), expect: PhoneExpectSchema
+  }),
+  z.object({ type: z.literal('session.interrupt'), op: OperationIdSchema, id: sessionId }),
+  /** The phone drops its passkey from the daemon. */
+  z.object({ type: z.literal('device.forget'), op: OperationIdSchema })
 ]);
 export type PhoneClientMessage = z.infer<typeof PhoneClientMessageSchema>;
 
 /** What the daemon sends a phone. */
 export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('snapshot'), protocol: z.literal(PHONE_PROTOCOL), sessions: z.array(PhoneSessionSchema), capabilities: CapabilitiesByToolSchema, daemon: z.object({ version: z.string(), name: z.string().max(40) }) }),
+  z.object({ type: z.literal('snapshot'), protocol: z.literal(PHONE_PROTOCOL), sessions: z.array(PhoneSessionSchema), capabilities: CapabilitiesByToolSchema, daemon: z.object({ version: z.string(), name: z.string().max(40), boot: z.string().uuid().optional() }), device: z.object({ confirm: z.boolean() }).optional() }),
+  z.object({ type: z.literal('confirm.challenge'), purpose: ConfirmPurposeSchema, challenge: B64U.max(64), rpId: z.string().max(253), credentialId: B64U.max(1_366).optional(), expiresInMs: z.number().int().positive() }),
   z.object({ type: z.literal('session.updated'), session: PhoneSessionSchema }),
   z.object({ type: z.literal('session.removed'), id: z.string() }),
   /** `pending.cut` is set when even this body was shortened. */

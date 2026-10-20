@@ -11,7 +11,8 @@ import { localStore } from './storage';
 export type OpPhase = 'sending' | 'uncertain' | 'applied' | 'rejected' | 'failed';
 
 /** The messages that are operations. */
-export type OpMessage = Extract<PhoneClientMessage, { op: string }>;
+// The lot 6a writes (credential.register, session.answer, device.forget) join this type with the phone's code for them.
+export type OpMessage = Extract<PhoneClientMessage, { op: string; id: string }> extends infer M ? Exclude<M, { type: 'session.answer' }> : never;
 
 export interface Op {
   op: string;

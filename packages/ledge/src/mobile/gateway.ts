@@ -212,6 +212,10 @@ export function createPhoneGateway(deps: {
       return push(deviceId, { type: 'error', code: 'invalid', ...(request !== undefined ? { request } : {}) });
     }
     const msg = parsed.data;
+    // The lot 6a messages are parsed but not handled yet: refused like any unknown request until the gateway learns them.
+    if (msg.type === 'confirm.prepare' || msg.type === 'credential.register' || msg.type === 'session.answer' || msg.type === 'device.forget') {
+      return push(deviceId, { type: 'error', code: 'invalid', request: msg.type });
+    }
     if ('op' in msg) {
       void write(deviceId, msg).catch((e: unknown) => log(`phone ${msg.type} failed (${e instanceof Error ? e.name : 'error'})`));
       return;

@@ -119,3 +119,56 @@ describe('padPlain', () => {
     expect(size(padPlain('{"t":"ab"}')!)).toBe(1024);
   });
 });
+
+describe('phone device confirmation (lot 6a)', () => {
+  const credential = { id: 'AbC_-9', publicKey: 'MFkw', alg: -7, clientDataJSON: 'eyJ0', authenticatorData: 'SZYN', transports: ['internal'] };
+  const assertion = { id: 'AbC_-9', clientDataJSON: 'eyJ0', authenticatorData: 'SZYN', signature: 'MEUC' };
+  const caps = { freeTextAnswer: true };
+  const allCaps = { claude: caps, codex: caps, cursor: caps, omp: caps };
+  const snap = { type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: [], capabilities: allCaps, daemon: { version: '1.0.0', name: 'pc' } };
+
+  it('accepts the new client messages', () => {
+    for (const m of [
+      { type: 'confirm.prepare', purpose: 'register' },
+      { type: 'confirm.prepare', purpose: 'decide', id: 's1', expect: expectKey },
+      { type: 'credential.register', op: OP, credential },
+      { type: 'credential.register', op: OP, credential: { ...credential, alg: -257, transports: undefined } },
+      { type: 'session.decide', op: OP, id: 's1', decision: 'accept', expect: expectKey, assertion },
+      { type: 'session.reply', op: OP, id: 's1', text: '1', expect: expectKey, assertion },
+      { type: 'session.answer', op: OP, id: 's1', requestId: 'r1', answers: [{ id: 'q1', selected: ['a'], text: 'x' }], expect: expectKey },
+      { type: 'session.answer', op: OP, id: 's1', requestId: 'r1', answers: [], cancel: true, expect: expectKey },
+      { type: 'device.forget', op: OP }
+    ]) expect(() => PhoneClientMessageSchema.parse(m)).not.toThrow();
+  });
+  it('refuses a bad algorithm and non base64url fields', () => {
+    expect(() => PhoneClientMessageSchema.parse({ type: 'credential.register', op: OP, credential: { ...credential, alg: -8 } })).toThrow();
+    for (const bad of ['ab+c', 'ab=']) {
+      expect(() => PhoneClientMessageSchema.parse({ type: 'credential.register', op: OP, credential: { ...credential, clientDataJSON: bad } })).toThrow();
+      expect(() => PhoneClientMessageSchema.parse({ type: 'session.decide', op: OP, id: 's1', decision: 'accept', expect: expectKey, assertion: { ...assertion, signature: bad } })).toThrow();
+    }
+    expect(() => PhoneClientMessageSchema.parse({ type: 'confirm.prepare', purpose: 'launch' })).toThrow();
+  });
+  it('bounds session.answer like the local one', () => {
+    const base = { type: 'session.answer', op: OP, id: 's1', requestId: 'r1', expect: expectKey };
+    const a = { id: 'q', selected: [] };
+    expect(() => PhoneClientMessageSchema.parse({ ...base, answers: Array(50).fill(a) })).not.toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ ...base, answers: Array(51).fill(a) })).toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ ...base, answers: [], cancel: false })).toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ ...base, answers: [], expect: undefined })).toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ ...base, requestId: '', answers: [] })).toThrow();
+  });
+  it('accepts a confirm.challenge', () => {
+    expect(() => PhoneServerMessageSchema.parse({ type: 'confirm.challenge', purpose: 'decide', challenge: 'abc_-', rpId: 'relay.example', credentialId: 'AbC', expiresInMs: 60_000 })).not.toThrow();
+    expect(() => PhoneServerMessageSchema.parse({ type: 'confirm.challenge', purpose: 'register', challenge: 'abc', rpId: 'relay.example', expiresInMs: 0 })).toThrow();
+  });
+  it('still parses a lot 5 snapshot and takes the new fields', () => {
+    expect(() => PhoneServerMessageSchema.parse(snap)).not.toThrow();
+    expect(() => PhoneServerMessageSchema.parse({ ...snap, device: { confirm: true }, daemon: { version: '1', name: 'pc', boot: OP } })).not.toThrow();
+    expect(() => PhoneServerMessageSchema.parse({ ...snap, daemon: { version: '1', name: 'pc', boot: 'nope' } })).toThrow();
+    const c2 = { freeTextAnswer: true, decide: false, questions: true };
+    expect(() => PhoneServerMessageSchema.parse({ ...snap, capabilities: { claude: c2, codex: c2, cursor: c2, omp: c2 } })).not.toThrow();
+  });
+  it('extends the operation reasons', () => {
+    for (const r of ['assertion_invalid', 'assertion_expired']) expect(OperationReasonSchema.parse(r)).toBe(r);
+  });
+});
