@@ -34,11 +34,31 @@ async function ecdh(priv: CryptoKey, pub: CryptoKey): Promise<Uint8Array<ArrayBu
   return new Uint8Array(await subtle.deriveBits({ name: 'ECDH', public: pub }, priv, 256));
 }
 
-export async function startHandshake(self: Identity, role: Role, peerPublicKey: string): Promise<Handshake> {
+/** The ephemeral key pair: generated, or (test vectors only) imported from `ephemeralPkcs8`. */
+async function ephemeralKeys(pkcs8?: string): Promise<{ privateKey: CryptoKey; raw: Uint8Array<ArrayBuffer> }> {
+  if (pkcs8 === undefined) {
+    const eph = await subtle.generateKey(ECDH, false, ['deriveBits']);
+    return { privateKey: eph.privateKey, raw: new Uint8Array(await subtle.exportKey('raw', eph.publicKey)) };
+  }
+  const der = fromB64u(pkcs8);
+  const probe = await subtle.importKey('pkcs8', der, ECDH, true, ['deriveBits']);
+  const jwk = await subtle.exportKey('jwk', probe);
+  if (!jwk.x || !jwk.y) throw new SealError('bad_key', 'ephemeral key has no public coordinates');
+  const raw = concat(new Uint8Array([0x04]), fromB64u(jwk.x), fromB64u(jwk.y));
+  return { privateKey: await subtle.importKey('pkcs8', der, ECDH, false, ['deriveBits']), raw };
+}
+
+/** `opts.ephemeralPkcs8`: test vectors only. Without it nothing changes. */
+export async function startHandshake(
+  self: Identity,
+  role: Role,
+  peerPublicKey: string,
+  opts: { ephemeralPkcs8?: string } = {},
+): Promise<Handshake> {
   const peerStatic = await importPublicKey(peerPublicKey);
   const ss = await ecdh(self.privateKey, peerStatic);
-  const eph = await subtle.generateKey(ECDH, false, ['deriveBits']);
-  const ephRaw = new Uint8Array(await subtle.exportKey('raw', eph.publicKey));
+  const eph = await ephemeralKeys(opts.ephemeralPkcs8);
+  const ephRaw = eph.raw;
   let ephPrivate: CryptoKey | null = eph.privateKey;
 
   return {

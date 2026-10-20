@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="fr">
+  <head><meta charset="utf-8" /><title>crypto vectors</title></head>
+  <body>
+    <script type="module">
+      import { commit, fingerprint, importIdentity, importPublicKey, pairingCode, startHandshake } from '@ledge/seal';
+      import v from '../../../packages/seal/test/vectors.json';
+
+      const code = async (p) => p.then(() => null, (e) => e.code ?? String(e));
+
+      window.runVectors = async () => {
+        const pc = await importIdentity(v.pc.pkcs8);
+        const device = await importIdentity(v.device.pkcs8);
+        const hp = await startHandshake(pc, 'pc', device.publicKey, { ephemeralPkcs8: v.pcEphemeral.pkcs8 });
+        const hd = await startHandshake(device, 'device', pc.publicKey, { ephemeralPkcs8: v.deviceEphemeral.pkcs8 });
+        const cp = await hp.finish(hd.hello);
+        const cd = await hd.finish(hp.hello);
+        const ready = '{"t":"ready"}';
+        const pcToDevice = await cp.seal(ready);
+        const deviceToPc = await cd.seal(ready);
+        return {
+          pcPublicKey: pc.publicKey,
+          devicePublicKey: device.publicKey,
+          pcFingerprint: await fingerprint(pc.publicKey),
+          deviceFingerprint: await fingerprint(device.publicKey),
+          commit: await commit(device.publicKey, v.deviceNonce),
+          pairingCode: await pairingCode({ pcPublicKey: pc.publicKey, devicePublicKey: device.publicKey, deviceNonce: v.deviceNonce, pcNonce: v.pcNonce }),
+          sealed: { pcToDevice, deviceToPc },
+          opened: { atDevice: await cd.open(pcToDevice), atPc: await cp.open(deviceToPc) },
+          offCurveImport: await code(importPublicKey(v.offCurve)),
+          offCurveHandshake: await code(startHandshake(device, 'device', v.offCurve)),
+        };
+      };
+      window.vectorsReady = true;
+    </script>
+  </body>
+</html>
