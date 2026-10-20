@@ -96,6 +96,19 @@ describe('the pinned request and the reply', () => {
     expect(sent(d, 'session.reply')[1]).toEqual({ type: 'session.reply', id: 'kit', text: 'Port 9000' });
   });
 
+  it('a Claude question takes an answer of one\'s own: « Write your own answer » opens the field, the dialog\'s free-text row is no choice', async () => {
+    const kit = { ...listSessions()[4]!, tool: 'claude' as const, pending: { kind: 'question' as const, text: 'Quelle story ?', options: ['Hors story', 'Préciser la story', 'Type something.', 'Chat about this'], source: 'pane' as const } };
+    const { d, user } = await open('Kit', [...listSessions().slice(0, 4), kit]);
+    const q = card('Question from the agent');
+    expect(q.queryByRole('button', { name: /Type something/ })).toBeNull();
+    expect(q.getByRole('button', { name: /^4\s*Chat about this/ })).toBeVisible();
+    fireEvent.keyDown(document.body, { key: '3' });
+    await user.click(q.getByRole('button', { name: /^R\s*Write your own answer/ }));
+    expect(field()).toHaveFocus();
+    await user.keyboard('ST7-162{Enter}');
+    await waitFor(() => expect(sent(d, 'session.reply')).toEqual([{ type: 'session.reply', id: 'kit', text: 'ST7-162' }]));
+  });
+
   it('a refused reply gives its text back', async () => {
     const { d, user } = await open('Nova');
     await user.type(field(), 'Continue{Enter}');
@@ -252,6 +265,7 @@ describe('the reply, beyond the brief (carried items)', () => {
     await open('Kit', [...listSessions().slice(0, 4), kit]);
     expect(field()).toBeDisabled();
     expect(screen.getByText('Choose one of the proposed answers (1–9).')).toHaveClass('reply-hint');
+    expect(screen.queryByRole('button', { name: /^R\s*Write your own answer/ })).toBeNull();
   });
 
   it('a refusal the harness takes without a note: N still works, the field says why it is shut', async () => {

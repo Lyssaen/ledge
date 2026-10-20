@@ -492,6 +492,7 @@ export const en: Messages = {
       toTerminal: (k) => `Give the keyboard to the terminal · Ctrl ${k}`, toThread: (k) => `The keyboard goes to the terminal · back to the thread: Ctrl ${k}`
     },
     pending: {
+      writeOwn: 'Write your own answer', writeOwnHint: 'In the field below, then Enter',
       ask: { send: 'Send the answers', decline: 'Decline', other: (q: string) => `Another answer to “${q}”`, otherPlaceholder: 'Another answer…' },
       regions: { approval: 'Approval requested', plan: 'Plan to approve', question: 'Question from the agent' },
       command: (n) => `${n} wants to run a command`, edit: (n) => `${n} wants to change a file`, approval: (n) => `${n} wants your approval`,

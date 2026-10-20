@@ -15,7 +15,7 @@ import { SessionBot } from '../shell/SessionBot';
 import { isNative } from '../term/mode';
 import type { SessionMemory } from './memory';
 import { SessionModel } from './SessionModel';
-import { alwaysScope, PendingCard, sortOf, type PendingActions } from './PendingCard';
+import { alwaysScope, isFreeRow, PendingCard, sortOf, type PendingActions } from './PendingCard';
 
 export interface ReplyProps {
   /** The parent on a subagent's page. */
@@ -110,6 +110,7 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
     decide: d => { decisions.decide(session, d); },
     keepPlanning: () => { if (text && !noteless) submit(); else askRevision(tp.revise); },
     choose: i => { decisions.reply(session, String(i + 1)); },
+    ...(sort === 'question' && !shut ? { writeOwn: () => { input.current?.focus(); } } : {}),
     ...(pending.questions ? { answer: (answers: ReadonlyArray<{ id: string; selected: string[]; text?: string }>, cancel?: boolean) => { decisions.answer(session, answers, cancel); } } : {})
   } : null;
 
@@ -130,7 +131,8 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
       if (k === 'y') decisions.decide(session, 'accept'); else askRevision(tp.reviseKey);
       return true;
     }
-    if (sort === 'question' && /^[1-9]$/.test(k) && pending.options?.[Number(k) - 1] !== undefined) { decisions.reply(session, k); return true; }
+    const option = /^[1-9]$/.test(k) ? pending.options?.[Number(k) - 1] : undefined;
+    if (sort === 'question' && option !== undefined && !isFreeRow(option)) { decisions.reply(session, k); return true; }
     return false;
   };
   useEffect(() => { keys.current = onScreenKey; });
