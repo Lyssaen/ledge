@@ -14,7 +14,8 @@ describe('phone client messages', () => {
       { type: 'session.read', id: 's1', at: '2026-10-20T10:00:00.000Z' },
       { type: 'session.decide', op: OP, id: 's1', decision: 'accept', expect: expectKey },
       { type: 'session.decide', op: OP, id: 's1', decision: 'deny', note: '  no  ', expect: expectKey },
-      { type: 'session.reply', op: OP, id: 's1', text: 'hello' },
+      { type: 'session.reply', op: OP, id: 's1', text: 'hello', expect: null },
+      { type: 'session.reply', op: OP, id: 's1', text: '1', expect: expectKey },
       { type: 'session.interrupt', op: OP, id: 's1' }
     ]) expect(() => PhoneClientMessageSchema.parse(m)).not.toThrow();
     const d = PhoneClientMessageSchema.parse({ type: 'session.decide', op: OP, id: 's1', decision: 'deny', note: '  no  ', expect: expectKey });
@@ -25,10 +26,14 @@ describe('phone client messages', () => {
     expect(() => PhoneClientMessageSchema.parse({ type: 'session.decide', op: OP, id: 's1', decision: 'accept', expect: { kind: 'permission', text: 'x' } })).toThrow();
     expect(() => PhoneClientMessageSchema.parse({ type: 'session.decide', op: 'x', id: 's1', decision: 'accept', expect: expectKey })).toThrow();
   });
+  it('requires a reply to name the request it answers, or null', () => {
+    expect(() => PhoneClientMessageSchema.parse({ type: 'session.reply', op: OP, id: 's1', text: 'hi' })).toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ type: 'session.reply', op: OP, id: 's1', text: 'hi', expect: { kind: 'question', text: 'q' } })).toThrow();
+  });
   it('bounds a reply to 20 000 characters', () => {
-    expect(() => PhoneClientMessageSchema.parse({ type: 'session.reply', op: OP, id: 's1', text: 'x'.repeat(20_001) })).toThrow();
-    expect(() => PhoneClientMessageSchema.parse({ type: 'session.reply', op: OP, id: 's1', text: 'x'.repeat(20_000) })).not.toThrow();
-    expect(() => PhoneClientMessageSchema.parse({ type: 'session.reply', op: OP, id: 's1', text: '' })).toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ type: 'session.reply', op: OP, id: 's1', text: 'x'.repeat(20_001), expect: null })).toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ type: 'session.reply', op: OP, id: 's1', text: 'x'.repeat(20_000), expect: null })).not.toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ type: 'session.reply', op: OP, id: 's1', text: '', expect: null })).toThrow();
   });
   it('refuses every command outside the whitelist', () => {
     for (const m of [

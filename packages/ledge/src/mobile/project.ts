@@ -1,4 +1,4 @@
-import { pendingKey, PENDING_BODY_MAX, THREAD_BUDGET, THREAD_ITEMS_MAX, THREAD_TEXT_MAX, TOOL_TEXT_MAX, ToolSchema } from '@ledge/protocol';
+import { pendingKey, PENDING_BODY_MAX, THREAD_BUDGET, THREAD_ITEMS_MAX, THREAD_TEXT_MAX, TOOL_TEXT_MAX, TOPIC_MAX, ToolSchema } from '@ledge/protocol';
 import type { CapabilitiesByTool, FileChange, Pending, PhonePending, PhoneSession, Session, ThreadItem, Tool } from '@ledge/protocol';
 import { adapterFor } from '../adapters/index.js';
 import { riskOf } from './risk.js';
@@ -37,9 +37,12 @@ export function toPhoneSession(s: Session, readAt: string): PhoneSession {
   return {
     id: s.id, name: s.name, tool: s.tool, project: s.project, title: s.title, state: s.state,
     startedAt: s.startedAt, lastActivityAt: s.lastActivityAt,
-    ...pickSet(s, ['topic', 'repo', 'branch', 'worktree']),
+    // Topics are already cut to TOPIC_MAX where they are set; clipped again so no source can swell a snapshot.
+    ...(s.topic !== undefined ? { topic: clip(s.topic, TOPIC_MAX).text } : {}),
+    ...pickSet(s, ['repo', 'branch', 'worktree']),
     helpers: s.helpers.map(h => ({ id: h.id, kind: h.kind, task: h.task, state: h.state, ...pickSet(h, ['finishedAt']) })),
-    ...(s.lastReply ? { lastReply: { text: s.lastReply.text, at: s.lastReply.at, ...pickSet(s.lastReply, ['plan']) } } : {}),
+    // A preview only: the whole reply is in the thread.
+    ...(s.lastReply ? { lastReply: { text: clip(s.lastReply.text, TOOL_TEXT_MAX).text, at: s.lastReply.at, ...pickSet(s.lastReply, ['plan']) } } : {}),
     ...(s.pending && verdict ? { pending: toPhonePending(s.pending, pendingKey(s.pending), verdict.risk, verdict.reason) } : {}),
     unread: !!s.lastReply && s.lastReply.at > readAt
   };

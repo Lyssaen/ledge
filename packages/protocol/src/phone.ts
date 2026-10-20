@@ -70,6 +70,8 @@ export const PhoneSessionSchema = SessionSchema.pick({
 export type PhoneSession = z.infer<typeof PhoneSessionSchema>;
 
 const sessionId = z.string().min(1).max(100);
+/** The request the phone showed, named by its key. */
+const PhoneExpectSchema = PendingSchema.pick({ kind: true, text: true }).extend({ key: z.string().min(1).max(64) });
 
 /** What the daemon accepts from a phone: this union is the whitelist. */
 export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
@@ -81,9 +83,13 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('session.decide'), op: OperationIdSchema, id: sessionId, decision: DecisionSchema, note: z.string().trim().min(1).max(NOTE_MAX).optional(),
     /** The request the phone showed: refused unless it is still the pending one. */
-    expect: PendingSchema.pick({ kind: true, text: true }).extend({ key: z.string().min(1).max(64) })
+    expect: PhoneExpectSchema
   }),
-  z.object({ type: z.literal('session.reply'), op: OperationIdSchema, id: sessionId, text: z.string().min(1).max(MESSAGE_MAX) }),
+  z.object({
+    type: z.literal('session.reply'), op: OperationIdSchema, id: sessionId, text: z.string().min(1).max(MESSAGE_MAX),
+    /** The request the reply answers, or null when the phone showed none: refused if the session's request is no longer that one. */
+    expect: PhoneExpectSchema.nullable()
+  }),
   z.object({ type: z.literal('session.interrupt'), op: OperationIdSchema, id: sessionId })
 ]);
 export type PhoneClientMessage = z.infer<typeof PhoneClientMessageSchema>;

@@ -88,7 +88,10 @@ describe('fingerprint', () => {
     expect(fingerprint({ ...decide, decision: 'deny' } as PhoneOperation)).not.toBe(f);
     expect(fingerprint({ ...decide, note: 'n' } as PhoneOperation)).not.toBe(f);
     expect(fingerprint({ ...decide, id: 's2' } as PhoneOperation)).not.toBe(f);
-    const reply: PhoneOperation = { type: 'session.reply', op: uid(1), id: 's1', text: 'a' };
+    const reply: PhoneOperation = { type: 'session.reply', op: uid(1), id: 's1', text: 'a', expect: null };
     expect(fingerprint({ ...reply, text: 'b' })).not.toBe(fingerprint(reply));
+    // The request a reply answers counts; none seen is one value, whatever the phone wrote for it.
+    expect(fingerprint({ ...reply, expect: { kind: 'question', text: 'q', key: 'k1' } })).not.toBe(fingerprint(reply));
+    expect(fingerprint({ ...reply, expect: undefined } as unknown as PhoneOperation)).toBe(fingerprint(reply));
   });
 });

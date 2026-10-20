@@ -2,7 +2,7 @@
 // through the operation registry and then the local fronts' own `dispatch`. What the daemon broadcasts is projected for
 // the devices that follow it. Logs carry a type, a code or an error's name, never a message's content.
 import {
-  PHONE_PROTOCOL, PhoneClientMessageSchema, RefusalCodeSchema, UNTYPABLE, pendingKey,
+  PHONE_PROTOCOL, PhoneClientMessageSchema, RefusalCodeSchema, UNTYPABLE, isArchived, pendingKey,
   type ClientMessage, type OperationReason, type OperationStatus, type PhoneClientMessage, type PhoneServerMessage, type ServerMessage, type Session, type ThreadItem
 } from '@ledge/protocol';
 import type { MobileService } from './service.js';
@@ -62,9 +62,14 @@ export function createPhoneGateway(deps: {
   };
   const approved = (deviceId: string) => mobile.state().devices.some(d => d.id === deviceId);
 
+  /** A session the phone may see: an archived one is, for the phone, gone. */
+  const live = (id: string): Session | undefined => {
+    const s = deps.session(id);
+    return s && !isArchived(s) ? s : undefined;
+  };
   const projected = (deviceId: string, s: Session) => toPhoneSession(s, followers.get(deviceId)?.reads.get(s.id) ?? startedAt);
   const snapshot = (deviceId: string): PhoneServerMessage => ({
-    type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version }
+    type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version }
   });
 
   const outbox = createOutbox({
@@ -89,7 +94,7 @@ export function createPhoneGateway(deps: {
 
   /** The checks only a phone meets, in order; undefined lets the operation through. */
   const precheck = (msg: PhoneOperation): Outcome | undefined => {
-    const s = deps.session(msg.id);
+    const s = live(msg.id);
     if (!s) return { status: 'rejected', reason: 'unknown_session' };
     switch (msg.type) {
       case 'session.decide':
@@ -98,8 +103,13 @@ export function createPhoneGateway(deps: {
         if (msg.decision !== 'deny' && riskOf(s)?.risk !== 'low') return { status: 'rejected', reason: 'confirm_required' };
         // The note is typed into the terminal like a reply.
         return msg.note !== undefined && UNTYPABLE.test(msg.note) ? { status: 'rejected', reason: 'untypable' } : undefined;
-      case 'session.reply':
+      case 'session.reply': {
+        // The reply is meant for the request the phone showed (or for none): a newer one would read it as its answer.
+        if (msg.expect ? !s.pending || pendingKey(s.pending) !== msg.expect.key : !!s.pending) return { status: 'rejected', reason: 'stale' };
+        const options = s.pending?.kind === 'question' ? s.pending.options : undefined;
+        if (options?.length && /^[1-9]$/.test(msg.text) && Number(msg.text) > options.length) return { status: 'rejected', reason: 'invalid' };
         return UNTYPABLE.test(msg.text) ? { status: 'rejected', reason: 'untypable' } : undefined;
+      }
       case 'session.interrupt':
         // The local handler returns silently there: the phone would read a no-op as applied.
         return s.tmuxSession ? undefined : { status: 'rejected', reason: 'read_only' };
@@ -158,24 +168,26 @@ export function createPhoneGateway(deps: {
         follower(deviceId).subscribed = true;
         return push(deviceId, snapshot(deviceId), 'snapshot');
       case 'session.thread': {
-        if (!deps.session(msg.id)) return push(deviceId, { type: 'error', code: 'unknown_session', request: msg.type });
+        if (!live(msg.id)) return push(deviceId, { type: 'error', code: 'unknown_session', request: msg.type });
         return push(deviceId, { type: 'session.thread', id: msg.id, ...toPhoneThread(deps.thread(msg.id) ?? []) });
       }
       case 'session.watch': {
         if (msg.id === null) { follower(deviceId).watching = null; return; }
-        if (!deps.session(msg.id)) return push(deviceId, { type: 'error', code: 'unknown_session', request: msg.type });
+        if (!live(msg.id)) return push(deviceId, { type: 'error', code: 'unknown_session', request: msg.type });
         follower(deviceId).watching = msg.id;
         const lines = deps.preview(msg.id);
         if (lines) push(deviceId, { type: 'session.preview', id: msg.id, lines: [...lines] }, `session.preview:${msg.id}`);
         return;
       }
       case 'session.read': {
-        const s = deps.session(msg.id);
+        const s = live(msg.id);
         if (!s) return push(deviceId, { type: 'error', code: 'unknown_session', request: msg.type });
         // Normalised, so marks of mixed fractional precision compare as strings.
         const at = new Date(msg.at).toISOString();
-        const reads = follower(deviceId).reads;
-        if (at > (reads.get(msg.id) ?? '')) reads.set(msg.id, at);
+        const f = follower(deviceId);
+        if (at > (f.reads.get(msg.id) ?? '')) f.reads.set(msg.id, at);
+        // Only a device that follows the sessions hears of them.
+        if (!f.subscribed) return;
         return push(deviceId, { type: 'session.updated', session: projected(deviceId, s) }, `session.updated:${s.id}`);
       }
     }
@@ -208,6 +220,15 @@ export function createPhoneGateway(deps: {
     for (const deviceId of [...followers.keys()]) if (!ids.has(deviceId)) forget(deviceId);
   };
 
+  /** A session gone for the phone (removed or archived): its read mark and watch go with it. */
+  const removed = (id: string) => {
+    for (const [deviceId, f] of followers) {
+      f.reads.delete(id);
+      if (f.watching === id) f.watching = null;
+      if (f.subscribed) push(deviceId, { type: 'session.removed', id });
+    }
+  };
+
   const unsubscribeMessage = mobile.onMessage(receive);
   const unsubscribeChange = mobile.onChange(pruneRevoked);
 
@@ -217,17 +238,13 @@ export function createPhoneGateway(deps: {
       try {
         switch (m.type) {
           case 'session.updated':
+            if (isArchived(m.session)) return removed(m.session.id);
             for (const [deviceId, f] of followers) {
               if (f.subscribed) push(deviceId, { type: 'session.updated', session: projected(deviceId, m.session) }, `session.updated:${m.session.id}`);
             }
             return;
           case 'session.removed':
-            for (const [deviceId, f] of followers) {
-              f.reads.delete(m.id);
-              if (f.watching === m.id) f.watching = null;
-              if (f.subscribed) push(deviceId, { type: 'session.removed', id: m.id });
-            }
-            return;
+            return removed(m.id);
           case 'session.preview':
             for (const [deviceId, f] of followers) {
               if (f.watching === m.id) push(deviceId, { type: 'session.preview', id: m.id, lines: [...m.lines] }, `session.preview:${m.id}`);

@@ -1,12 +1,16 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { PAD_TIERS, PhoneServerMessageSchema, pendingKey, type ClientMessage, type MobileState, type PhoneServerMessage, type ServerMessage, type Session, type ThreadItem } from '@ledge/protocol';
+import { PAD_TIERS, PLAIN_MAX, TOPIC_MAX, PhoneServerMessageSchema, pendingKey, type ClientMessage, type MobileState, type Pending, type PhoneServerMessage, type ServerMessage, type Session, type ThreadItem } from '@ledge/protocol';
 import { createPhoneGateway } from '../src/mobile/gateway.js';
 
 const T0 = '2026-10-20T08:00:00.000Z';
 const T1 = '2026-10-20T09:00:00.000Z';
 const PUSH = { kind: 'permission', text: 'git push', tool: 'Bash', source: 'hook' } as const;
 const LS = { kind: 'permission', text: 'ls src', tool: 'Bash', source: 'hook' } as const;
+const PICK: Pending = { kind: 'question', text: 'Which one?', options: ['red', 'green', 'blue'], source: 'pane' };
+/** What the phone sends back as `expect` for request `p`. */
+const seen = (p: Omit<Pending, 'source'> & { source?: Pending['source'] }) => ({ kind: p.kind, text: p.text, key: pendingKey({ source: 'pane', ...p }) });
+const SEEN_LS = seen(LS);
 
 const mk = (id: string, extra: Partial<Session> = {}): Session => ({
   id, name: id, tool: 'claude', cwd: '/w/repo', project: 'repo', title: `t ${id}`, tmuxSession: `ledge-${id}`, state: 'working', helpers: [],
@@ -45,7 +49,8 @@ function setup(opts: { dispatch?: (msg: ClientMessage, reply: (m: ServerMessage)
   const sessions = new Map<string, Session>([
     ['a', mk('a', { state: 'waiting_permission', pending: { ...PUSH }, lastReply: { text: 'done', at: T1 } })],
     ['b', mk('b', { state: 'waiting_permission', pending: { ...LS } })],
-    ['c', mk('c', { tmuxSession: null })]
+    ['c', mk('c', { tmuxSession: null })],
+    ['q', mk('q', { state: 'waiting_input', pending: { ...PICK, options: [...PICK.options!] } })]
   ]);
   const previews = new Map<string, string[]>([['a', ['$ ls', 'src']]]);
   const threads = new Map<string, ThreadItem[]>([['a', [{ kind: 'message', id: 'm1', at: T0, turn: 0, text: 'hello' }]]]);
@@ -124,7 +129,7 @@ describe('phone gateway: reads and forward', () => {
     const [snap] = g.got('dev1');
     expect(PhoneServerMessageSchema.parse(snap)).toMatchObject({ type: 'snapshot', protocol: 1, daemon: { version: '1.2.3' } });
     if (snap?.type !== 'snapshot') throw new Error('no snapshot');
-    expect(snap.sessions.map(s => s.id)).toEqual(['a', 'b', 'c']);
+    expect(snap.sessions.map(s => s.id)).toEqual(['a', 'b', 'c', 'q']);
     expect(snap.sessions[0]).toMatchObject({ unread: true, pending: { risk: 'high', riskReason: 'pushes' } });
     g.gw.forward({ type: 'session.updated', session: mk('a', { title: 'renamed' }) });
     await flush();
@@ -204,6 +209,53 @@ describe('phone gateway: reads and forward', () => {
     g.send('dev1', { type: 'session.read', id: 'a', at: '2026-10-20T07:00:00.000Z' });
     await flush();
     expect(g.got('dev1').at(-1)).toMatchObject({ type: 'session.updated', session: { unread: false } });
+  });
+
+  it('session.read from a device that follows no session moves its mark and sends nothing', async () => {
+    const g = setup();
+    g.send('dev1', { type: 'session.read', id: 'a', at: '2026-10-20T09:00:00Z' });
+    await flush();
+    expect(g.fm.sent).toEqual([]);
+    g.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    const snap = g.got('dev1')[0];
+    expect(snap?.type === 'snapshot' && snap.sessions.find(s => s.id === 'a')?.unread).toBe(false);
+  });
+
+  it('an archived session never reaches the phone: off the snapshot, forwarded as removed, unknown to reads and writes', async () => {
+    const g = setup();
+    g.sessions.set('z', mk('z', { archivedAt: T1, lastReply: { text: 'old', at: T1 } }));
+    g.send('dev1', { type: 'snapshot.request' });
+    g.send('dev1', { type: 'session.watch', id: 'a' });
+    await flush();
+    const snap = g.got('dev1')[0];
+    expect(snap?.type === 'snapshot' && snap.sessions.map(s => s.id)).toEqual(['a', 'b', 'c', 'q']);
+    g.send('dev1', { type: 'session.read', id: 'a', at: T1 });
+    await flush();
+    // Session a is archived now: the phone hears it is gone, and forgets its watch and read mark.
+    const archived = { ...g.sessions.get('a')!, archivedAt: T1 };
+    g.sessions.set('a', archived);
+    g.gw.forward({ type: 'session.updated', session: archived });
+    g.gw.forward({ type: 'session.preview', id: 'a', lines: ['ghost'] });
+    await flush();
+    expect(g.got('dev1').at(-1)).toEqual({ type: 'session.removed', id: 'a' });
+    const before = g.got('dev1').length;
+    for (const id of ['a', 'z']) {
+      g.send('dev1', { type: 'session.thread', id });
+      g.send('dev1', { type: 'session.watch', id });
+      g.send('dev1', { type: 'session.read', id, at: T1 });
+    }
+    const write = { type: 'session.reply', op: randomUUID(), id: 'z', text: 'hi', expect: null };
+    g.send('dev1', write);
+    await flush();
+    const after = g.got('dev1').slice(before);
+    expect(after.filter(m => m.type === 'error').map(m => m.type === 'error' && [m.code, m.request])).toEqual([
+      ['unknown_session', 'session.thread'], ['unknown_session', 'session.watch'], ['unknown_session', 'session.read'],
+      ['unknown_session', 'session.thread'], ['unknown_session', 'session.watch'], ['unknown_session', 'session.read']
+    ]);
+    expect(g.results('dev1').at(-1)).toEqual({ type: 'operation.result', op: write.op, status: 'rejected', reason: 'unknown_session' });
+    expect(after.some(m => m.type === 'session.preview')).toBe(false);
+    expect(g.dispatched).toEqual([]);
   });
 
   it('watching an unknown session is refused and keeps the session watched before', async () => {
@@ -352,7 +404,7 @@ describe('phone gateway: writes', () => {
 
   it('the same op twice is dispatched once, the second answer is the stored one', async () => {
     const g = setup();
-    const m = { type: 'session.reply', op: randomUUID(), id: 'b', text: 'hello' };
+    const m = { type: 'session.reply', op: randomUUID(), id: 'b', text: 'hello', expect: SEEN_LS };
     g.send('dev1', m);
     await flush();
     g.send('dev1', m);
@@ -364,9 +416,9 @@ describe('phone gateway: writes', () => {
   it('the same op with another text is a conflict', async () => {
     const g = setup();
     const op = randomUUID();
-    g.send('dev1', { type: 'session.reply', op, id: 'b', text: 'hello' });
+    g.send('dev1', { type: 'session.reply', op, id: 'b', text: 'hello', expect: SEEN_LS });
     await flush();
-    g.send('dev1', { type: 'session.reply', op, id: 'b', text: 'goodbye' });
+    g.send('dev1', { type: 'session.reply', op, id: 'b', text: 'goodbye', expect: SEEN_LS });
     await flush();
     expect(g.dispatched).toHaveLength(1);
     expect(g.results('dev1').at(-1)).toEqual({ type: 'operation.result', op, status: 'rejected', reason: 'conflict' });
@@ -374,7 +426,7 @@ describe('phone gateway: writes', () => {
 
   it('a reply carrying an escape sequence is untypable, and never dispatched', async () => {
     const g = setup();
-    const m = { type: 'session.reply', op: randomUUID(), id: 'b', text: 'clear \x1b[2J' };
+    const m = { type: 'session.reply', op: randomUUID(), id: 'b', text: 'clear \x1b[2J', expect: SEEN_LS };
     g.send('dev1', m);
     await flush();
     expect(g.results('dev1').at(-1)).toEqual({ type: 'operation.result', op: m.op, status: 'rejected', reason: 'untypable' });
@@ -396,6 +448,47 @@ describe('phone gateway: writes', () => {
     expect(g.dispatched).toEqual([{ type: 'session.decide', id: 'a', decision: 'deny', note: 'not this one', expect: { kind: 'permission', text: 'git push', key: pendingKey(PUSH) } }]);
   });
 
+  it('a reply names the request it answers: an older one, or a request it never saw, is stale', async () => {
+    const g = setup();
+    const older = { type: 'session.reply', op: randomUUID(), id: 'q', text: '1', expect: seen({ kind: 'question', text: 'Before?' }) };
+    const blind = { type: 'session.reply', op: randomUUID(), id: 'q', text: '1', expect: null };
+    g.send('dev1', older);
+    g.send('dev1', blind);
+    await flush();
+    expect(g.results('dev1').filter(r => r.type === 'operation.result' && r.status !== 'received')).toEqual([
+      { type: 'operation.result', op: older.op, status: 'rejected', reason: 'stale' },
+      { type: 'operation.result', op: blind.op, status: 'rejected', reason: 'stale' }
+    ]);
+    // A request seen on a session that has none any more is stale too.
+    const gone = { type: 'session.reply', op: randomUUID(), id: 'c', text: 'go on', expect: SEEN_LS };
+    g.send('dev1', gone);
+    await flush();
+    expect(g.results('dev1').at(-1)).toEqual({ type: 'operation.result', op: gone.op, status: 'rejected', reason: 'stale' });
+    expect(g.dispatched).toEqual([]);
+  });
+
+  it('a reply with no request seen goes through while the session has none', async () => {
+    const g = setup();
+    const m = { type: 'session.reply', op: randomUUID(), id: 'c', text: 'go on', expect: null };
+    g.send('dev1', m);
+    await flush();
+    expect(g.dispatched).toEqual([{ type: 'session.reply', id: 'c', text: 'go on' }]);
+    expect(g.results('dev1').at(-1)).toEqual({ type: 'operation.result', op: m.op, status: 'applied' });
+  });
+
+  it('a digit past the options of the question is invalid; one within them is dispatched', async () => {
+    const g = setup();
+    const five = { type: 'session.reply', op: randomUUID(), id: 'q', text: '5', expect: seen(PICK) };
+    const two = { type: 'session.reply', op: randomUUID(), id: 'q', text: '2', expect: seen(PICK) };
+    g.send('dev1', five);
+    await flush();
+    expect(g.results('dev1').at(-1)).toEqual({ type: 'operation.result', op: five.op, status: 'rejected', reason: 'invalid' });
+    expect(g.dispatched).toEqual([]);
+    g.send('dev1', two);
+    await flush();
+    expect(g.dispatched).toEqual([{ type: 'session.reply', id: 'q', text: '2' }]);
+  });
+
   it('two operations running at once each get their own outcome', async () => {
     const gates = new Map<string, (m?: ServerMessage) => void>();
     const g = setup({
@@ -403,8 +496,8 @@ describe('phone gateway: writes', () => {
         gates.set(msg.type === 'session.reply' ? msg.text : '', m => { if (m) reply(m); res(); });
       })
     });
-    const one = { type: 'session.reply', op: randomUUID(), id: 'b', text: 'one' };
-    const two = { type: 'session.reply', op: randomUUID(), id: 'b', text: 'two' };
+    const one = { type: 'session.reply', op: randomUUID(), id: 'b', text: 'one', expect: SEEN_LS };
+    const two = { type: 'session.reply', op: randomUUID(), id: 'b', text: 'two', expect: SEEN_LS };
     g.send('dev1', one); g.send('dev1', two);
     await flush();
     expect(gates.size).toBe(2);
@@ -422,7 +515,7 @@ describe('phone gateway: writes', () => {
   it('a device revoked while its operation runs gets no result', async () => {
     let release!: () => void;
     const g = setup({ dispatch: () => new Promise<void>(res => { release = res; }) });
-    g.send('dev1', { type: 'session.reply', op: randomUUID(), id: 'b', text: 'hi' });
+    g.send('dev1', { type: 'session.reply', op: randomUUID(), id: 'b', text: 'hi', expect: SEEN_LS });
     await flush();
     expect(g.results('dev1').map(r => r.type === 'operation.result' && r.status)).toEqual(['received']);
     g.fm.setDevices(['dev2']);
@@ -452,7 +545,7 @@ describe('phone gateway: writes', () => {
     g.send('dev1', { type: 'snapshot.request' });
     g.send('dev2', { type: 'snapshot.request' });
     await flush();
-    g.send('dev1', { type: 'session.reply', op: randomUUID(), id: 'b', text: 'hi' });
+    g.send('dev1', { type: 'session.reply', op: randomUUID(), id: 'b', text: 'hi', expect: SEEN_LS });
     await flush();
     expect(g.results('dev1')).toHaveLength(2);
     expect(g.results('dev2')).toHaveLength(0);
@@ -471,5 +564,24 @@ describe('phone gateway: sizes', () => {
     await flush();
     expect(g.fm.sent.length).toBeGreaterThan(5);
     for (const [, text] of g.fm.sent) expect(PAD_TIERS).toContain(Buffer.byteLength(text, 'utf8'));
+  });
+
+  it('a snapshot of 200 sessions with long replies and topics still fits: previews are clipped', async () => {
+    const g = setup();
+    g.sessions.clear();
+    for (let i = 0; i < 200; i++) {
+      g.sessions.set(`s${i}`, mk(`s${i}`, { topic: 't'.repeat(24_000), lastReply: { text: 'r'.repeat(24_000), at: T1 } }));
+    }
+    g.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    const [snap] = g.got('dev1');
+    expect(snap?.type).toBe('snapshot');
+    expect(PhoneServerMessageSchema.parse(snap)).toBeTruthy();
+    expect(Buffer.byteLength(JSON.stringify(snap), 'utf8')).toBeLessThanOrEqual(PLAIN_MAX);
+    if (snap?.type === 'snapshot') {
+      expect(snap.sessions).toHaveLength(200);
+      expect(snap.sessions[0]!.lastReply!.text).toHaveLength(2_048);
+      expect(snap.sessions[0]!.topic).toHaveLength(TOPIC_MAX);
+    }
   });
 });
