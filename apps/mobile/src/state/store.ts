@@ -152,6 +152,8 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
   /** `chat.history` was asked since the last ready; the snapshot of a first connection asks it when the ready could not. */
   let historyAsked = false;
   /** The relay or launch of a turn that is under way, shared by a second tap. */
+  /** The questions asked since the last ready: only these may be newer than a history reply. */
+  const askedSinceReady = new Set<string>();
   const expirers = new Set<() => void>();
   const chatActions = new Map<string, Promise<ChatAction>>();
   /** The `prepareConfirm` waiting for its challenge. */
@@ -235,11 +237,13 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     if (visible !== null) send({ type: 'presence', visible });
     if (lastThread && state.threads.get(lastThread)?.status !== 'gone') askThread(lastThread);
     historyAsked = false;
+    askedSinceReady.clear();
     if (state.device?.chat) askHistory();
   }
 
   function onLost() {
     historyAsked = false;
+    askedSinceReady.clear();
     settleForget(false);
     // Requests sent on the lost channel get no answer.
     threadAsks = [];
@@ -336,7 +340,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         return;
       }
       case 'chat.history': case 'chat.step': case 'chat.delta': case 'chat.done': case 'chat.error':
-        setChat(reduceChat(chatState, m));
+        setChat(reduceChat(chatState, m, askedSinceReady));
         return;
       case 'confirm.challenge':
         if (preparing?.purpose === m.purpose) settle(m);
@@ -539,6 +543,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
       const m = PhoneClientMessageSchema.safeParse({ type: 'chat.ask', qid, text });
       if (!m.success || m.data.type !== 'chat.ask') { setChat({ ...chatState, error: { code: 'failed', qid, text } }); return qid; }
       if (closed || !ready()) { setChat({ ...chatState, error: { code: 'offline', text: m.data.text } }); return qid; }
+      askedSinceReady.add(qid);
       setChat(asked(chatState, { qid, question: m.data.text, askedAt: new Date().toISOString(), steps: [] }));
       send(m.data);
       return qid;

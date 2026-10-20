@@ -29,14 +29,15 @@ export function asked(s: ChatState, turn: PhoneChatTurn): ChatState {
   return { turns: [...s.turns, turn], live: { qid: turn.qid, steps: [], text: '' }, error: null };
 }
 
-export function reduceChat(s: ChatState, m: ChatServerMessage): ChatState {
+/** `fresh`: the qids asked since the last ready, which a history reply may have been built before seeing. */
+export function reduceChat(s: ChatState, m: ChatServerMessage, fresh: ReadonlySet<string> = new Set()): ChatState {
   switch (m.type) {
     case 'chat.history': {
       // The PC's thread is the truth, except for a question just asked that its reply was built before seeing: that
       // bubble stays after the history, with its live, until its own done or error.
-      const fresh = s.live ? s.turns.find(t => t.qid === s.live?.qid && !finished(t) && !m.turns.some(h => h.qid === t.qid)) : undefined;
+      const keep = s.live ? s.turns.find(t => t.qid === s.live?.qid && fresh.has(t.qid) && !finished(t) && !m.turns.some(h => h.qid === t.qid)) : undefined;
       const known = s.live && m.turns.some(t => t.qid === s.live?.qid && !finished(t));
-      return { ...s, turns: fresh ? [...m.turns, fresh] : m.turns, live: fresh || known ? s.live : null };
+      return { ...s, turns: keep ? [...m.turns, keep] : m.turns, live: keep || known ? s.live : null };
     }
     case 'chat.step': {
       const live = liveFor(s, m.qid);

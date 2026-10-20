@@ -220,4 +220,15 @@ describe('the phone chat in the store', () => {
     t.store.close();
     await expect(done).resolves.toEqual({ status: 'expired' });
   });
+
+  it('a question lost in a drop leaves no bubble after the reconnect history', () => {
+    const t = setup();
+    const qid = t.store.ask('Perdue');
+    t.set('pc_offline');
+    t.set('ready');
+    t.deliver(chat.history());
+    expect(t.store.chat().turns).toEqual([]);
+    expect(t.store.chat().live).toBeNull();
+    expect(qid).toBeTruthy();
+  });
 });
