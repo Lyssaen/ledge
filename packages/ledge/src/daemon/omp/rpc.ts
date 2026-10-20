@@ -45,6 +45,44 @@ export function lineReader(max: number, onLine: (line: string) => void, onBad: (
   };
 }
 
+/**
+ * Protocol 2's `rpc_chunk`: a frame past the physical limit travels as `count` chunks `{chunkId, index, count, byteLength, data}`
+ * (base64 of consecutive byte slices of the frame's UTF-8 JSON), in order. Reassembled strictly: indices one after the other,
+ * the total exactly `byteLength` and within `maxBytes`, base64 and UTF-8 valid; a set that breaks any of it is dropped whole and
+ * reported, never delivered half-read. Bounded: few sets at once.
+ */
+export class ChunkAssembler {
+  private sets = new Map<string, { count: number; byteLength: number; next: number; parts: Buffer[]; size: number }>();
+  constructor(private readonly maxBytes: number, private readonly maxSets = 8) {}
+
+  /** The whole frame's text once its last chunk is in; null while more are due; throws the reason a set is dropped. */
+  add(f: Frame): string | null {
+    const { chunkId, index, count, byteLength, data } = f as { chunkId?: unknown; index?: unknown; count?: unknown; byteLength?: unknown; data?: unknown };
+    if (typeof chunkId !== 'string' || !Number.isInteger(index) || !Number.isInteger(count) || !Number.isInteger(byteLength) || typeof data !== 'string') throw new Error('malformed rpc_chunk');
+    const i = index as number, n = count as number, total = byteLength as number;
+    let set = this.sets.get(chunkId);
+    if (!set) {
+      if (i !== 0) throw new Error('rpc_chunk set does not start at 0');
+      if (n < 1 || total < 0 || total > this.maxBytes) throw new Error(`rpc_chunk set over the limit (${total} bytes)`);
+      if (this.sets.size >= this.maxSets) throw new Error('too many rpc_chunk sets at once');
+      set = { count: n, byteLength: total, next: 0, parts: [], size: 0 };
+      this.sets.set(chunkId, set);
+    }
+    const drop = (why: string): never => { this.sets.delete(chunkId); throw new Error(why); };
+    if (n !== set.count || total !== set.byteLength) drop('rpc_chunk set changed shape');
+    if (i !== set.next) drop('rpc_chunk out of order');
+    if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(data)) drop('invalid rpc chunk data');
+    const part = Buffer.from(data, 'base64');
+    set.size += part.length;
+    if (set.size > set.byteLength) drop('rpc_chunk set longer than announced');
+    set.parts.push(part); set.next++;
+    if (set.next < set.count) return null;
+    this.sets.delete(chunkId);
+    if (set.size !== set.byteLength) throw new Error('rpc_chunk set shorter than announced');
+    try { return new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(set.parts)); } catch { throw new Error('rpc_chunk set is not UTF-8'); }
+  }
+}
+
 export interface RpcOptions {
   /** The binary and its leading arguments (`['omp']`); tests run a fake. */
   command: string[];
@@ -67,6 +105,9 @@ export class OmpRpc {
   private exited: RpcExit | null = null;
   private closing = false;
   private readyFrame: Ready | null = null;
+  private chunks = new ChunkAssembler(0);
+  /** The protocol in use: 1 until `negotiate_protocol` is accepted. */
+  protocol = 1;
   private readyWaiters: Array<{ ok: (r: Ready) => void; fail: (e: Error) => void }> = [];
 
   private constructor(private readonly child: ChildProcessWithoutNullStreams) {
@@ -88,6 +129,12 @@ export class OmpRpc {
       rpc.readyWaiters.push({ ok: r => { clearTimeout(timer); ok(r); }, fail: e => { clearTimeout(timer); fail(e); } });
       if (rpc.exited) fail(new RpcError(rpc.exitText(), 'closed'));
     }).catch(async e => { await rpc.close(); throw e; });
+    // Protocol 2 when announced: a frame past 1 MiB then arrives as chunks instead of being refused (the limit also holds for what we send).
+    if (ready.supportedProtocolVersions.includes(2)) {
+      rpc.chunks = new ChunkAssembler(ready.maxReassembledFrameBytes);
+      try { await rpc.request('negotiate_protocol', { protocolVersion: 2 }, 10_000); rpc.protocol = 2; }
+      catch { /* a refusal keeps protocol 1: no chunk will come */ }
+    }
     return Object.assign(rpc, { ready });
   }
 
@@ -145,6 +192,13 @@ export class OmpRpc {
     let f: Frame;
     try { const v = JSON.parse(line) as unknown; if (!v || typeof v !== 'object' || typeof (v as Frame).type !== 'string') throw new Error('not a frame'); f = v as Frame; }
     catch { for (const l of this.badListeners) l('not JSON'); return; }
+    if (f.type === 'rpc_chunk') {
+      if (this.protocol !== 2) { for (const l of this.badListeners) l('rpc_chunk before protocol 2'); return; }
+      let whole: string | null;
+      try { whole = this.chunks.add(f); } catch (e) { for (const l of this.badListeners) l((e as Error).message); return; }
+      if (whole !== null) this.onLine(whole);
+      return;
+    }
     if (f.type === 'ready' && !this.readyFrame) {
       this.readyFrame = f as unknown as Ready;
       const r: Ready = { ...({ maxFrameBytes: DEFAULT_MAX_FRAME, maxReassembledFrameBytes: 0, supportedProtocolVersions: [1] } as Partial<Ready>), ...(f as unknown as Ready) };

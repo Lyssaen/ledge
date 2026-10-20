@@ -514,6 +514,7 @@ export const fr = {
       toTerminal: (k: string) => `Donner le clavier au terminal · Ctrl ${k}`, toThread: (k: string) => `Le clavier va au terminal · revenir au fil : Ctrl ${k}`
     },
     pending: {
+      ask: { send: 'Envoyer les réponses', decline: 'Décliner', other: (q: string) => `Autre réponse à « ${q} »`, otherPlaceholder: 'Autre réponse…' },
       regions: { approval: 'Autorisation demandée', plan: 'Plan à approuver', question: 'Question de l’agent' } as Record<'approval' | 'plan' | 'question', string>,
       command: (n: string) => `${n} veut exécuter une commande`, edit: (n: string) => `${n} veut modifier un fichier`, approval: (n: string) => `${n} veut votre accord`,
       question: (n: string) => `${n} vous pose une question`, plan: (n: string, title: string) => `${n} propose un plan · ${title}`, planBadge: 'Plan à approuver',
@@ -539,8 +540,10 @@ export const fr = {
       offline: (m: string) => `${m} est hors ligne.`, offlineBody: ' Le fil est figé à la dernière activité connue ; vous pourrez répondre à la reconnexion.', seeMachine: 'Voir la machine',
       viaParent: (n: string, p: string) => `Les réponses à ${n} passent par ${p}, qui l’a lancé.`, openParent: (p: string) => `Ouvrir ${p}`,
       readOnly: 'Session démarrée sans Ledge : lecture seule.', optionsOnly: 'Choisissez une des réponses proposées (1–9).',
+      askCard: 'Répondez depuis la carte ci-dessus.',
       afterTurn: 'Entrée : après ce tour', queue: 'Envoyer après ce tour', steer: 'Réorienter maintenant', steerTitle: 'Dévie le tour en cours au lieu d’attendre sa fin',
       interrupt: 'Interrompre', interruptTitle: 'Arrête le travail en cours ; la session et sa conversation restent',
+      queueLabel: 'Consignes en attente', queued: (n: number) => `En attente (${n})`, queueSteer: 'réorienter', queueAfter: 'après ce tour', restore: 'Interrompre et récupérer', restoreTitle: 'Arrête le travail et remet les consignes en attente dans le champ',
       noNote: 'Cet agent ne prend pas de message avec un refus : refusez avec N.', tooLong: (max: number) => `Une note tient en ${max} caractères au plus.`
     },
     model: {

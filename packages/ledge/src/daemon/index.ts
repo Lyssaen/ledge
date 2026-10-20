@@ -1,5 +1,7 @@
 import { writeFile, rm } from 'node:fs/promises';
 import { backendOf } from '@ledge/protocol';
+import { join } from 'node:path';
+import { reapOwner } from './omp/owner.js';
 import { Store } from './store.js';
 import { History } from './history.js';
 import { startServer } from './server.js';
@@ -24,7 +26,10 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   }
   // An OMP process lives and dies with this daemon: after a restart its session is over, resumable from its journal.
   for (const s of store.all()) {
-    if (backendOf(s) !== 'omp-rpc' || s.state === 'exited') continue;
+    if (backendOf(s) !== 'omp-rpc') continue;
+    // A process the dead daemon left running must not go on writing the journal a resume will continue.
+    await reapOwner(join(paths().dir, 'omp', s.id)).catch(() => false);
+    if (s.state === 'exited') continue;
     const at = new Date().toISOString();
     store.apply(s.id, { name: 'StopFailure', at, source: 'daemon', text: 'Ledge restarted: the OMP process ended with it' });
     store.apply(s.id, { name: 'SessionEnd', at, source: 'daemon', exitCode: null });

@@ -11,6 +11,13 @@ export type Backend = z.infer<typeof BackendSchema>;
 export const SessionStateSchema = z.enum(['starting', 'working', 'waiting_input', 'waiting_permission', 'idle', 'exited', 'error']);
 export type SessionState = z.infer<typeof SessionStateSchema>;
 
+/** One question of OMP's `ask` tool: its choices (each may say more), whether several can be picked; a free answer is always possible. */
+export const AskQuestionSchema = z.object({
+  id: z.string(), question: z.string(), header: z.string().optional(), multi: z.boolean().optional(),
+  options: z.array(z.object({ label: z.string(), description: z.string().optional() }))
+});
+export type AskQuestion = z.infer<typeof AskQuestionSchema>;
+
 export const PendingSchema = z.object({
   kind: z.enum(['question', 'permission', 'plan', 'diff']),
   text: z.string(),
@@ -22,6 +29,8 @@ export const PendingSchema = z.object({
   optionDetails: z.array(z.string()).optional(),
   /** `rpc`: the harness's own protocol asked (OMP): answered on its request id, never by typing. */
   source: z.enum(['hook', 'pane', 'rpc']),
+  /** OMP: every question of one `ask` call, answered together with `session.answer`; `requestId` is the dialog it answers. */
+  questions: z.array(AskQuestionSchema).optional(), requestId: z.string().optional(),
   /** Set when the request comes from a helper (subagent): it is routed through its parent. */
   helperId: z.string().optional(),
   /** For a helper-routed request: the state the parent returns to once it is answered (main thread may stop meanwhile). */
@@ -79,6 +88,8 @@ export const SessionSchema =z.object({
   state: SessionStateSchema,
   pending: PendingSchema.optional(),
   helpers: z.array(HelperSchema).default([]),
+  /** OMP: the instructions waiting in its own queue (typed while it works), as it reports them; left out when none. */
+  queue: z.array(z.object({ text: z.string(), mode: z.enum(['steer', 'follow_up']) })).optional(),
   lastReply: ReplySchema.optional(),
   /** The last message this session sent to another agent: its tool_use_id, the address, the peer's Ledge session id, a one-line summary. */
   lastMessage: z.object({ id: z.string(), to: z.string(), peer: z.string().optional(), summary: z.string(), at: z.string().datetime() }).optional(),

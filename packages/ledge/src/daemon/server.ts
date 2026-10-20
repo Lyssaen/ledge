@@ -717,10 +717,21 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         if (refused) refuse(refused, msg.id);
         return;
       }
+      case 'session.answer': {
+        const s = store.get(msg.id); if (!s) return refuse('unknown session', msg.id);
+        if (backendOf(s) !== 'omp-rpc') return refuse('this session has no set of questions to answer', msg.id);
+        const refused = await omp.answerAsk(msg.id, msg.requestId, msg.answers, msg.cancel === true);
+        if (refused) refuse(refused, msg.id);
+        return;
+      }
       case 'session.interrupt': {
         const s = store.get(msg.id);
         if (s?.source === 'hook_only') return refuse(READ_ONLY, msg.id);
-        if (s && backendOf(s) === 'omp-rpc') return void await omp.interrupt(s.id).catch(e => refuse((e as Error).message, msg.id));
+        if (s && backendOf(s) === 'omp-rpc') {
+          if (!msg.restoreQueue) return void await omp.interrupt(s.id).catch(e => refuse((e as Error).message, msg.id));
+          // The queue comes back as a draft for the one who asked; never re-sent by the daemon.
+          return void await omp.interruptAndRestore(s.id).then(texts => send(ws, { type: 'session.queue.restored', id: s.id, texts }), e => refuse((e as Error).message, msg.id));
+        }
         if (!s?.tmuxSession) return;
         await tmux.sendKeys(s.tmuxSession, adapterFor(s.tool).interruptKeys());
         return;

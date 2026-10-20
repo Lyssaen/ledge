@@ -7,7 +7,8 @@ import { agentEnv, PARENT_AGENT_VARS } from '../../spawn.js';
 import { log } from '../../log.js';
 import type { Store } from '../store.js';
 import { OmpRpc, RpcError, type Frame, type RpcOptions } from './rpc.js';
-import { answerFor, newTracking, project, requestEvent, type Tracking } from './project.js';
+import { reapOwner, writeOwner } from './owner.js';
+import { answerFor, askAnswerFor, newTracking, project, requestEvent, type Tracking } from './project.js';
 
 /**
  * The daemon owns one `omp --mode rpc-ui` process per live OMP session and projects its stream onto the store
@@ -59,11 +60,17 @@ export function createOmpHost(deps: OmpHostDeps) {
   async function startProcess(id: string, o: OmpLaunch): Promise<{ rpc: OmpRpc; state: OmpState }> {
     const dir = join(deps.dir, id);
     await mkdir(dir, { recursive: true });
+    // A process left by a daemon that died is ended first: one writer per conversation.
+    if (await reapOwner(dir)) log(`omp ${id}: ended the process a previous daemon left`);
     const env = agentEnv({ ...(await deps.env()), LEDGE_SESSION: id }, {});
     for (const v of PARENT_AGENT_VARS) delete env[v];
     const rpc = await OmpRpc.start({ command, args: ompArgs({ dir, ...o }), cwd: o.cwd, env, ...(deps.spawn ? { spawn: deps.spawn } : {}) });
+    await writeOwner(dir, rpc.pid).catch(() => undefined);
     try {
-      // Protocol 1 only: a protocol-2 frame never reaches us because we never ask for it.
+      // One card for all the questions of an `ask` call; a refusal leaves OMP asking them one by one as `select`s, which work too.
+      await rpc.request('set_ask_dialog', { enabled: true }).catch(() => undefined);
+      // The subagents' lifecycle and events (not only their progress): what the thread and the sidebar show of a helper.
+      await rpc.request('set_subagent_subscription', { level: 'events' }).catch(() => undefined);
       const state = await rpc.request<OmpState>('get_state');
       return { rpc, state };
     } catch (e) { await rpc.close(); throw e; }
@@ -148,6 +155,13 @@ export function createOmpHost(deps: OmpHostDeps) {
       if (mode !== 'prompt') store.apply(id, { name: 'Notification', at: now(), source: 'daemon' });
     },
 
+    /** `abort_and_restore_queue`: stops the work and takes back what waited in OMP's queue (the draft returned, nothing sent again). */
+    async interruptAndRestore(id: string): Promise<string[]> {
+      const l = live.get(id); if (!l) throw new Error('the session is not running');
+      const r = await l.rpc.request<{ steering?: Array<{ text?: unknown }>; followUp?: Array<{ text?: unknown }> }>('abort_and_restore_queue');
+      return [...(r.steering ?? []), ...(r.followUp ?? [])].map(x => (typeof x.text === 'string' ? x.text : '')).filter(Boolean);
+    },
+
     /** `abort` stops the work, not the session: the state follows OMP's own `session_settled`. */
     async interrupt(id: string): Promise<void> {
       const l = live.get(id); if (!l) throw new Error('the session is not running');
@@ -199,6 +213,25 @@ export function createOmpHost(deps: OmpHostDeps) {
         store.upsert({ ...bare, ...(model ? { model } : {}), ...(state.thinkingLevel ? { effort: state.thinkingLevel } : {}) });
       }
       if (failure) throw new Error(`the model changed, but its effort did not: ${failure.message}`);
+    },
+
+    /**
+     * Answers the `ask` dialog `requestId` with every question's answer, or declines it (`cancel`). Refused when that dialog is not
+     * the one OMP waits on now (another front answered it, OMP withdrew it): nothing is written for a stale view.
+     */
+    async answerAsk(id: string, requestId: string, answers: ReadonlyArray<{ id: string; selected: string[]; text?: string }>, cancel = false): Promise<string | null> {
+      const l = live.get(id); if (!l) return 'the session is not running';
+      const open = l.tracking.requests[0];
+      if (!open || open.id !== requestId) return 'the request changed, look again';
+      const a = cancel ? { frame: { type: 'extension_ui_response', id: open.id, cancelled: true } } : askAnswerFor(open, answers);
+      if ('refused' in a) return a.refused;
+      l.tracking.requests.shift();
+      try { await l.rpc.write(a.frame); }
+      catch (e) { l.tracking.requests.unshift(open); return (e as Error).message; }
+      store.apply(id, { name: 'Decided', at: now(), source: 'daemon' });
+      const next = l.tracking.requests[0];
+      if (next) store.apply(id, requestEvent(next, now()));
+      return null;
     },
 
     /** Stops the process the way the owner asks: its input closes, OMP saves and leaves. The caller records the end. */

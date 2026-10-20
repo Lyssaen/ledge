@@ -5,6 +5,7 @@ import { Button } from '@ledge/ui/ui/Button';
 import { Kbd } from '@ledge/ui/ui/Kbd';
 import { useI18n } from '../i18n/lang';
 import { planTitle, stepsOf } from './exchanges';
+import { AskForm } from './AskForm';
 
 /** The mockup's three sorts of request: a permission or a diff is an « approval ». */
 export type Sort = 'approval' | 'plan' | 'question';
@@ -37,6 +38,8 @@ export interface PendingActions {
   /** « Continuer à planifier » : sends the draft back as the note, else asks for one (a plain deny where no note is taken). */
   keepPlanning(): void;
   choose(i: number): void;
+  /** OMP's `ask`: all the answers at once, or declining the dialog. */
+  answer?(answers: ReadonlyArray<{ id: string; selected: string[]; text?: string }>, cancel?: boolean): void;
 }
 
 /** The request pinned above the reply field (session.tsx `pendingCard`): who asks what, since when, and its answers;
@@ -72,7 +75,8 @@ export function PendingCard({ pending, asker, since, actions, relay, onReadPlan 
       {sort === 'approval' && (
         <div className="pending-command">{pending.tool && <span className="tool-tag">{pending.tool}</span>}<code>{pending.text}</code></div>
       )}
-      {sort === 'question' && <>
+      {sort === 'question' && pending.questions && actions?.answer && <AskForm key={pending.requestId} questions={pending.questions} busy={busy} onSend={actions.answer} />}
+      {sort === 'question' && !(pending.questions && actions?.answer) && <>
         <p className="pending-question">{pending.text}</p>
         {(pending.options?.length ?? 0) > 0 && (
           <ol className="pending-choices">

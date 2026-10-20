@@ -308,3 +308,46 @@ describe('OMP: queued, redirected, interrupted (spec 2026-10-20 §3.2)', () => {
     await waitFor(() => expect(sent(d, 'session.reply')).toEqual([{ type: 'session.reply', id: 'omp1', text: '3' }]));
   });
 });
+
+describe('OMP: the waiting queue', () => {
+  const queued = () => fakeSession('omp1', { name: 'Noor', tool: 'omp', backend: 'omp-rpc', tmuxSession: null, state: 'working', queue: [{ text: 'hurry', mode: 'steer' as const }, { text: 'then the tests', mode: 'follow_up' as const }] });
+  it('shows what waits as OMP reports it; « Interrupt and take back » asks for it and the texts return to the field, appended to what is typed', async () => {
+    const { d, user } = await open('Noor', [queued(), ...listSessions()]);
+    const q = within(screen.getByRole('status', { name: 'Waiting instructions' }));
+    expect(q.getByText('Waiting (2)')).toBeVisible(); expect(q.getByText('hurry')).toBeVisible(); expect(q.getByText('then the tests')).toBeVisible();
+    await user.click(field()); await user.type(field(), 'mine');
+    await user.click(q.getByRole('button', { name: 'Interrupt and take back' }));
+    await waitFor(() => expect(sent(d, 'session.interrupt')).toEqual([{ type: 'session.interrupt', id: 'omp1', restoreQueue: true }]));
+    d.push({ type: 'session.queue.restored', id: 'omp1', texts: ['hurry', 'then the tests'] });
+    await waitFor(() => expect(field()).toHaveValue('mine\n\nhurry\n\nthen the tests'));
+  });
+});
+
+describe('OMP: the ask card (one call, several questions)', () => {
+  const asking = (extra = {}) => fakeSession('omp1', { name: 'Noor', tool: 'omp', backend: 'omp-rpc', tmuxSession: null, state: 'waiting_input', pending: {
+    kind: 'question' as const, text: 'Favorite color? · Your name?', source: 'rpc' as const, tool: 'omp', requestId: 'ask1',
+    questions: [{ id: 'color', question: 'Favorite color?', header: 'Color', multi: true, options: [{ label: 'red' }, { label: 'blue', description: 'the sea' }] }, { id: 'name', question: 'Your name?', options: [{ label: 'skip' }] }] }, ...extra });
+  it('shows every question, sends nothing until each has an answer, then all together; the reply field says to use the card', async () => {
+    const { d, user } = await open('Noor', [asking(), ...listSessions()]);
+    const card = within(screen.getByRole('region', { name: 'Question from the agent' }));
+    expect(card.getByText('Favorite color?')).toBeVisible(); expect(card.getByText('the sea')).toBeVisible();
+    expect(field()).toBeDisabled(); expect(screen.getByText('Answer from the card above.')).toBeVisible();
+    const send = card.getByRole('button', { name: 'Send the answers' });
+    expect(send).toBeDisabled();
+    await user.click(card.getByRole('checkbox', { name: /red/ })); await user.click(card.getByRole('checkbox', { name: /blue/ }));
+    expect(send).toBeDisabled();
+    await user.type(card.getByRole('textbox', { name: 'Another answer to “Your name?”' }), ' Joe ');
+    expect(send).toBeEnabled();
+    await user.click(send);
+    await waitFor(() => expect(sent(d, 'session.answer')).toEqual([{ type: 'session.answer', id: 'omp1', requestId: 'ask1', answers: [{ id: 'color', selected: ['red', 'blue'] }, { id: 'name', selected: [], text: 'Joe' }] }]));
+    expect(sent(d, 'session.reply')).toEqual([]);
+  });
+  it('a single-choice question takes one choice at a time; declining sends the cancel', async () => {
+    const { d, user } = await open('Noor', [asking(), ...listSessions()]);
+    const card = within(screen.getByRole('region', { name: 'Question from the agent' }));
+    await user.click(card.getByRole('radio', { name: /skip/ }));
+    expect(card.getByRole('radio', { name: /skip/ })).toBeChecked();
+    await user.click(card.getByRole('button', { name: 'Decline' }));
+    await waitFor(() => expect(sent(d, 'session.answer')).toEqual([{ type: 'session.answer', id: 'omp1', requestId: 'ask1', answers: [], cancel: true }]));
+  });
+});

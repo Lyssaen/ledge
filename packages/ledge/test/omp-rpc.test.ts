@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { fileURLToPath } from 'node:url';
-import { OmpRpc, RpcError, lineReader } from '../src/daemon/omp/rpc.js';
+import { ChunkAssembler, OmpRpc, RpcError, lineReader } from '../src/daemon/omp/rpc.js';
 
 const FAKE = [process.execPath, fileURLToPath(new URL('./fake-omp.mjs', import.meta.url))];
 const start = (args: string[] = [], env: NodeJS.ProcessEnv = {}) => OmpRpc.start({ command: FAKE, args: ['--session-dir', '/tmp/ledge-fake-omp', ...args], cwd: '/tmp', env: { ...process.env, ...env } });
@@ -75,5 +75,52 @@ describe('OmpRpc', () => {
   it('close() ends stdin so the process leaves by itself with code 0', async () => {
     const rpc = await start();
     expect(await rpc.close()).toMatchObject({ code: 0 });
+  });
+});
+
+describe('protocol 2: rpc_chunk', () => {
+  it('negotiates 2 when announced, and a response past 1 MiB comes back whole, multi-byte text split across chunks included', async () => {
+    const rpc = await start();
+    expect(rpc.protocol).toBe(2);
+    const name = `é${'ü'.repeat(700_000)}€`; // 1.4 MB of two-byte characters, chunks of 100000 bytes cut through them
+    await rpc.request('set_session_name', { name });
+    const state = await rpc.request<{ sessionName: string }>('get_state');
+    expect(state.sessionName).toBe(name);
+    await rpc.close();
+  });
+  it('a frame under the limit stays one line; a process that cannot negotiate keeps protocol 1', async () => {
+    const rpc = await start([], { FAKE_OMP_LIMIT: '5' });
+    expect(await rpc.request<{ sessionName: string }>('get_state')).toMatchObject({ sessionName: '' });
+    await rpc.close();
+  });
+});
+
+describe('ChunkAssembler', () => {
+  const b64 = (s: string) => Buffer.from(s).toString('base64');
+  const chunk = (o: Record<string, unknown>) => ({ type: 'rpc_chunk', chunkId: 'c', index: 0, count: 2, byteLength: 6, data: b64('{"a":'), ...o });
+  it('joins the chunks of a frame in order', () => {
+    const a = new ChunkAssembler(100);
+    expect(a.add(chunk({ byteLength: 7, data: b64('{"a":') }))).toBeNull();
+    expect(a.add(chunk({ byteLength: 7, index: 1, data: b64('1}') }))).toBe('{"a":1}');
+  });
+  it('drops the whole set, and says why, for: a start past 0, a set over the limit, out of order, wrong base64, a total off from byteLength, bad UTF-8', () => {
+    expect(() => new ChunkAssembler(100).add(chunk({ index: 1 }))).toThrow(/start at 0/);
+    expect(() => new ChunkAssembler(5).add(chunk({}))).toThrow(/over the limit/);
+    const a = new ChunkAssembler(100); a.add(chunk({}));
+    expect(() => a.add(chunk({ index: 0 }))).toThrow(/out of order/);
+    const b = new ChunkAssembler(100); b.add(chunk({}));
+    expect(() => b.add(chunk({ index: 1, data: '!!!!' }))).toThrow(/invalid rpc chunk data/);
+    const c = new ChunkAssembler(100); c.add(chunk({ byteLength: 20 }));
+    expect(() => c.add(chunk({ byteLength: 20, index: 1, data: b64('x') }))).toThrow(/shorter/);
+    const d = new ChunkAssembler(100); d.add(chunk({ byteLength: 6 }));
+    expect(() => d.add(chunk({ byteLength: 6, index: 1, data: b64('toolong') }))).toThrow(/longer/);
+    const e = new ChunkAssembler(100); e.add(chunk({ byteLength: 6, count: 2, data: Buffer.from([0x7b, 0xff]).toString('base64') }));
+    expect(() => e.add(chunk({ byteLength: 6, count: 2, index: 1, data: b64('abcd') }))).toThrow(/UTF-8/);
+    expect(() => new ChunkAssembler(100).add({ type: 'rpc_chunk' })).toThrow(/malformed/);
+  });
+  it('is bounded: too many sets open at once are refused', () => {
+    const a = new ChunkAssembler(100, 2);
+    a.add(chunk({ chunkId: '1' })); a.add(chunk({ chunkId: '2' }));
+    expect(() => a.add(chunk({ chunkId: '3' }))).toThrow(/too many/);
   });
 });

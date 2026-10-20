@@ -80,6 +80,50 @@ describe('server: OMP sessions', () => {
     await until(() => store.get(id)!.lastReply?.text === 'done: second turn');
     await c.close();
   });
+  it('session.answer gives OMP\'s ask every answer at once; a stale request id is refused and nothing is written', async () => {
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.launch', tool: 'omp', cwd: dir, prompt: 'ask two things' });
+    const { id } = await c.next('session.launched');
+    await until(() => store.get(id)!.state === 'waiting_input');
+    c.send({ type: 'session.answer', id, requestId: 'older', answers: [] });
+    expect((await c.next('error')).message).toBe('the request changed, look again');
+    c.send({ type: 'session.answer', id, requestId: 'ask1', answers: [{ id: 'color', selected: ['blue'] }, { id: 'name', selected: ['skip'] }] });
+    await until(() => store.get(id)!.state === 'idle');
+    expect(store.get(id)!.lastReply?.text).toBe('done: ask two things');
+    c.send({ type: 'session.answer', id: 'nope', requestId: 'x', answers: [] });
+    expect((await c.next('error')).message).toBe('unknown session');
+    await c.close();
+  });
+  it('the queue is OMP\'s own: shown as it reports it, emptied as its turns start, and an interrupt that restores it hands the texts back to the asker, sending nothing again', async () => {
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.launch', tool: 'omp', cwd: dir, prompt: 'slow work' });
+    const { id } = await c.next('session.launched');
+    await until(() => store.get(id)!.state === 'working');
+    c.send({ type: 'session.reply', id, text: 'after this' });
+    c.send({ type: 'session.reply', id, text: 'hurry', steer: true });
+    await until(() => store.get(id)!.queue?.length === 2);
+    expect(store.get(id)!.queue).toEqual([{ text: 'hurry', mode: 'steer' }, { text: 'after this', mode: 'follow_up' }]);
+    c.send({ type: 'session.interrupt', id, restoreQueue: true });
+    expect(await c.next('session.queue.restored')).toEqual({ type: 'session.queue.restored', id, texts: ['hurry', 'after this'] });
+    await until(() => store.get(id)!.queue === undefined && store.get(id)!.state === 'idle');
+    expect(store.get(id)!.lastReply?.text).toBe('done: slow work'); // nothing the queue held ran
+    await c.close();
+  });
+  it('resuming ends the OMP a dead daemon left behind in the session directory before the new one starts', async () => {
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.launch', tool: 'omp', cwd: dir });
+    const { id } = await c.next('session.launched');
+    const pid = srv.omp.pidOf(id)!;
+    // The daemon "dies": its record of the process goes, the process (stdin still open) does not.
+    const owned = store.get(id)!;
+    store.apply(id, { name: 'SessionEnd', at: new Date().toISOString(), source: 'daemon', exitCode: null });
+    (srv.omp as unknown as { forget(id: string): void }).forget?.(id);
+    expect(owned.agentSessionFile).toBeTruthy();
+    c.send({ type: 'session.resume', id });
+    await until(() => store.get(id)!.state === 'idle' && srv.omp.pidOf(id) !== pid);
+    expect(() => process.kill(pid, 0)).toThrow(); // the first process is gone
+    await c.close();
+  });
   it('interrupt aborts the turn without ending the session; kill ends it, closing the process', async () => {
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'session.launch', tool: 'omp', cwd: dir, prompt: 'slow work' });

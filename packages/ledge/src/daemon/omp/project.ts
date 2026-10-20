@@ -1,4 +1,4 @@
-import type { SessionEvent } from '@ledge/protocol';
+import type { AskQuestion, SessionEvent } from '@ledge/protocol';
 import type { Frame } from './rpc.js';
 
 /**
@@ -7,9 +7,9 @@ import type { Frame } from './rpc.js';
  * is the only memory.
  */
 
-export type DialogMethod = 'select' | 'confirm' | 'input' | 'editor';
+export type DialogMethod = 'select' | 'confirm' | 'input' | 'editor' | 'ask';
 /** The one dialog OMP waits on, as the daemon must answer it. */
-export interface OpenRequest { id: string; method: DialogMethod; title: string; options?: string[] }
+export interface OpenRequest { id: string; method: DialogMethod; title: string; options?: string[]; /** `ask`: every question of one call, answered together. */ questions?: AskQuestion[] }
 export interface Tracking {
   /** The text of the latest assistant message of the turn, what `Stop` carries once the session settles. */
   reply?: string;
@@ -24,11 +24,13 @@ export interface Tracking {
   tag: string;
   /** The Stop of the turn need not repeat the text: every assistant message already went to the thread. */
   sent: boolean;
+  /** Subagents: the ones whose task is known, and each one's latest message (its report once it ends). */
+  helpers: Map<string, { known: boolean; reply?: string }>;
   calls: Map<string, { name: string; args?: Record<string, unknown> }>;
 }
-export const newTracking = (tag = 'p'): Tracking => ({ requests: [], working: false, echo: [], tag, sent: false, calls: new Map() });
+export const newTracking = (tag = 'p'): Tracking => ({ requests: [], working: false, echo: [], tag, sent: false, helpers: new Map(), calls: new Map() });
 
-const DIALOGS: ReadonlySet<string> = new Set<DialogMethod>(['select', 'confirm', 'input', 'editor']);
+const DIALOGS: ReadonlySet<string> = new Set<DialogMethod>(['select', 'confirm', 'input', 'editor', 'ask']);
 const CAP_INPUT = 4000;
 const CAP_OUTPUT = 20000;
 
@@ -49,18 +51,55 @@ function boundedArgs(args: unknown): Record<string, unknown> | undefined {
 
 const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
 
+/** One line saying what a subagent was given: its assignment without the headings, or its first line. */
+function taskOf(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+  const line = lines.find(l => !l.startsWith('#')) ?? lines[0]?.replace(/^#+\s*/, '');
+  return line ? cap(line, 160) : undefined;
+}
+
 /** The input a finished `edit` or `write` is recorded with so the thread can list the file: its path and the change as OMP reports it. */
 function changeOf(tool: string, args: Record<string, unknown> | undefined, details: unknown): Record<string, unknown> | undefined {
   const d = (details && typeof details === 'object' ? details : {}) as Record<string, unknown>;
   if (tool === 'write') { const path = str(d.resolvedPath) ?? str(args?.path); return path ? { path, ...(str(args?.content) !== undefined ? { content: args!.content } : {}) } : undefined; }
+  // The work plan: each call reports the whole list (`details.phases`), the only reliable copy of it.
+  if (tool === 'todo') return Array.isArray(d.phases) ? { phases: d.phases } : undefined;
   if (tool === 'edit') { const path = str(d.path); return path ? { path, ...(str(d.diff) ? { diff: cap(d.diff as string, CAP_OUTPUT) } : {}) } : undefined; }
   return undefined;
 }
 
 /** The events a frame stands for, in order; updates `t`. Frames Ledge has no use for yield none. */
-export function project(f: Frame, t: Tracking, at: string): SessionEvent[] {
-  const ev = (e: Omit<SessionEvent, 'at' | 'source'>): SessionEvent => ({ at, source: 'daemon', ...e });
+export function project(f: Frame, t: Tracking, at: string, helper?: string): SessionEvent[] {
+  // A subagent's events carry its id; the reducer routes those that say `hook` (what the harness itself reported) to the helper.
+  const ev = (e: Omit<SessionEvent, 'at' | 'source'>): SessionEvent => ({ at, source: helper ? 'hook' : 'daemon', ...(helper ? { helperId: helper } : {}), ...e });
+  const own = (): boolean => helper === undefined;
   switch (f.type) {
+    case 'subagent_lifecycle': {
+      const p = (f.payload ?? {}) as Record<string, unknown>; const id = str(p.id); if (!id || !own()) return [];
+      const status = str(p.status);
+      if (status === 'started') { t.helpers.set(id, t.helpers.get(id) ?? { known: false }); return [ev({ name: 'SubagentStart', helperId: id, tool: str(p.agent) ?? 'subagent', text: '' })]; }
+      if (!status) return [];
+      const report = t.helpers.get(id)?.reply; t.helpers.delete(id);
+      return [ev({ name: 'SubagentStop', helperId: id, tool: str(p.agent) ?? 'subagent', ...(status === 'completed' ? (report ? { text: report } : {}) : { text: `${status}${report ? `: ${report}` : ''}` }) })];
+    }
+    case 'subagent_progress': {
+      const p = (f.payload ?? {}) as Record<string, unknown>;
+      const prog = (p.progress ?? {}) as Record<string, unknown>; const id = str(prog.id);
+      const h = id ? t.helpers.get(id) : undefined;
+      if (!id || !h || h.known || !own()) return [];
+      const task = taskOf(str(p.assignment) ?? str(p.task)); h.known = true;
+      return task ? [ev({ name: 'SubagentStart', helperId: id, tool: str(p.agent) ?? 'subagent', text: task, task })] : [];
+    }
+    case 'subagent_event': {
+      const p = (f.payload ?? {}) as Record<string, unknown>; const id = str(p.id); const inner = p.event as Frame | undefined;
+      if (!id || !own() || !inner || typeof inner.type !== 'string') return [];
+      // Only what the thread shows of a helper: its messages and its actions. Its turns and dialogs are not the session's.
+      if (inner.type !== 'message_update' && inner.type !== 'message_end' && inner.type !== 'tool_execution_start' && inner.type !== 'tool_execution_end') return [];
+      const evs = project(inner, t, at, id);
+      const h = t.helpers.get(id); if (h && inner.type === 'message_end') { const m = inner.message as { role?: unknown; content?: unknown } | undefined; const text = m?.role === 'assistant' ? contentText(m.content).trim() : ''; if (text) h.reply = text; }
+      return evs;
+    }
     case 'agent_start': {
       if (t.working) return [];
       t.working = true;
@@ -80,7 +119,7 @@ export function project(f: Frame, t: Tracking, at: string): SessionEvent[] {
       const id = str(f.messageId);
       if (!id || !m || (m.type !== 'text_delta' && m.type !== 'text_end')) return [];
       const text = contentText(m.partial?.content);
-      return text.trim() ? [ev({ name: 'AgentMessage', messageId: `${t.tag}-${id}`, text, streaming: m.type === 'text_delta' })] : [];
+      return text.trim() ? [ev({ name: 'AgentMessage', messageId: `${t.tag}-${helper ? `${helper}-` : ''}${id}`, text, streaming: m.type === 'text_delta' })] : [];
     }
     case 'message_end': {
       const m = f.message as { role?: unknown; content?: unknown } | undefined;
@@ -88,8 +127,8 @@ export function project(f: Frame, t: Tracking, at: string): SessionEvent[] {
       const text = contentText(m.content).trim();
       const id = str(f.messageId);
       if (!text) return [];
-      t.reply = text; t.sent = !!id;
-      return id ? [ev({ name: 'AgentMessage', messageId: `${t.tag}-${id}`, text })] : [];
+      if (own()) { t.reply = text; t.sent = !!id; }
+      return id ? [ev({ name: 'AgentMessage', messageId: `${t.tag}-${helper ? `${helper}-` : ''}${id}`, text })] : [];
     }
     case 'tool_execution_start': {
       const tool = str(f.toolName); if (!tool) return [];
@@ -119,10 +158,17 @@ export function project(f: Frame, t: Tracking, at: string): SessionEvent[] {
       }
       if (!method || !id || !DIALOGS.has(method)) return []; // setWidget, notify, setStatus…: decoration
       const options = Array.isArray(f.options) ? f.options.filter((o): o is string => typeof o === 'string') : undefined;
-      const title = str(f.title) ?? str(f.message) ?? str(f.placeholder) ?? 'OMP';
-      const req: OpenRequest = { id, method: method as DialogMethod, title, ...(options?.length ? { options } : {}) };
+      const questions = method === 'ask' ? askQuestions(f.questions) : undefined;
+      if (method === 'ask' && !questions?.length) return []; // an `ask` we cannot read is left to OMP's own timeout, never answered blind
+      const title = questions ? questions.map(q => q.question).join(' · ') : str(f.title) ?? str(f.message) ?? str(f.placeholder) ?? 'OMP';
+      const req: OpenRequest = { id, method: method as DialogMethod, title, ...(options?.length ? { options } : {}), ...(questions ? { questions } : {}) };
       t.requests.push(req);
       return t.requests.length === 1 ? [requestEvent(req, at)] : [];
+    }
+    case 'queue_update': {
+      // OMP's queue as it stands: its own words, never an estimate of ours.
+      const take = (v: unknown, mode: 'steer' | 'follow_up') => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string').map(text => ({ text: cap(text, 500), mode })) : []);
+      return [ev({ name: 'QueueUpdate', queue: [...take(f.steering, 'steer'), ...take(f.followUp, 'follow_up')].slice(0, 20) })];
     }
     case 'session_settled': {
       t.working = false;
@@ -139,9 +185,25 @@ export function project(f: Frame, t: Tracking, at: string): SessionEvent[] {
   }
 }
 
+/** The questions of an `ask` request as Ledge shows them; none when its shape is not the one OMP 18.12.3 sends. */
+export function askQuestions(raw: unknown): AskQuestion[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: AskQuestion[] = [];
+  for (const q of raw) {
+    const o = (q && typeof q === 'object' ? q : {}) as Record<string, unknown>;
+    if (typeof o.id !== 'string' || typeof o.question !== 'string' || !Array.isArray(o.options)) return undefined;
+    const options = o.options.map(x => (x && typeof x === 'object' ? x : {}) as Record<string, unknown>).filter(x => typeof x.label === 'string')
+      .map(x => ({ label: x.label as string, ...(typeof x.description === 'string' ? { description: x.description } : {}) }));
+    out.push({ id: o.id, question: o.question, ...(typeof o.header === 'string' ? { header: o.header } : {}), ...(o.multi === true ? { multi: true } : {}), options });
+  }
+  return out;
+}
+
 export function requestEvent(r: OpenRequest, at: string): SessionEvent {
-  const options = r.method === 'confirm' ? ['Yes', 'No'] : r.options;
-  return { name: 'NativeRequest', at, source: 'daemon', kind: 'question', text: r.title, ...(options ? { options } : {}), tool: 'omp' };
+  // A lone single-choice question is also offered as options (a digit answers it); several questions only through session.answer.
+  const lone = r.questions?.length === 1 && !r.questions[0]!.multi ? r.questions[0]!.options.map(o => o.label) : undefined;
+  const options = r.method === 'confirm' ? ['Yes', 'No'] : lone?.length ? lone : r.options;
+  return { name: 'NativeRequest', at, source: 'daemon', kind: 'question', text: r.title, ...(options ? { options } : {}), requestId: r.id, ...(r.questions ? { questions: r.questions } : {}), tool: 'omp' };
 }
 
 /** After the first dialog closed: the next one, if OMP already asked it, takes the card. */
@@ -153,10 +215,39 @@ function next(t: Tracking, at: string): SessionEvent[] {
 /** The `extension_ui_response` for `text` against the open dialog, or the reason it does not fit. */
 export function answerFor(r: OpenRequest, text: string): { frame: Record<string, unknown> } | { refused: string } {
   const t = text.trim();
+  if (r.method === 'ask') {
+    // Only a lone single-choice question is answered by a digit or its label; the rest has its own card.
+    const q = r.questions?.length === 1 && !r.questions[0]!.multi ? r.questions[0]! : undefined;
+    if (!q) return { refused: 'answer this request from its card: it has several questions' };
+    const n = /^[1-9]\d*$/.test(t) ? Number(t) : 0;
+    const label = n >= 1 && n <= q.options.length ? q.options[n - 1]!.label : q.options.find(o => o.label === text)?.label;
+    return label === undefined ? { refused: 'this answer is not one of the options OMP offers' }
+      : { frame: { type: 'extension_ui_response', id: r.id, answers: [{ id: q.id, selectedOptions: [label] }] } };
+  }
   if (r.method === 'input' || r.method === 'editor') return t === '' ? { refused: 'empty reply' } : { frame: { type: 'extension_ui_response', id: r.id, value: text } };
   const options = r.method === 'confirm' ? ['Yes', 'No'] : r.options ?? [];
   const n = /^[1-9]\d*$/.test(t) ? Number(t) : 0;
   const choice = n >= 1 && n <= options.length ? options[n - 1]! : options.find(o => o === text) ;
   if (choice === undefined) return { refused: 'this answer is not one of the options OMP offers' };
   return { frame: r.method === 'confirm' ? { type: 'extension_ui_response', id: r.id, confirmed: choice === 'Yes' } : { type: 'extension_ui_response', id: r.id, value: choice } };
+}
+
+/** The `extension_ui_response` of an `ask` from the answers a front sends, or why they do not fit its questions: one answer per
+ *  question in order, choices among the question's own labels (one only unless it takes several), free text as `customInput`. */
+export function askAnswerFor(r: OpenRequest, answers: ReadonlyArray<{ id: string; selected: string[]; text?: string }>): { frame: Record<string, unknown> } | { refused: string } {
+  const qs = r.questions;
+  if (r.method !== 'ask' || !qs) return { refused: 'this request is not a set of questions' };
+  if (answers.length !== qs.length) return { refused: `OMP asks ${qs.length} question${qs.length > 1 ? 's' : ''}` };
+  const out: Array<{ id: string; selectedOptions: string[]; customInput?: string }> = [];
+  for (const [i, q] of qs.entries()) {
+    const a = answers[i]!;
+    if (a.id !== q.id) return { refused: `answer ${i + 1} is not for “${q.question}”` };
+    const labels = new Set(q.options.map(o => o.label));
+    if (a.selected.some(x => !labels.has(x)) || new Set(a.selected).size !== a.selected.length) return { refused: `“${a.selected.find(x => !labels.has(x)) ?? 'a repeated choice'}” is not a choice of “${q.question}”` };
+    if (!q.multi && a.selected.length > 1) return { refused: `“${q.question}” takes one choice` };
+    const text = a.text?.trim();
+    if (a.selected.length === 0 && !text) return { refused: `“${q.question}” has no answer` };
+    out.push({ id: q.id, selectedOptions: a.selected, ...(text ? { customInput: text } : {}) });
+  }
+  return { frame: { type: 'extension_ui_response', id: r.id, answers: out } };
 }

@@ -40,7 +40,7 @@ function pendingFor(ev: SessionEvent): Pending | undefined {
   }
   if (ev.name === 'NativeRequest') {
     // OMP's own dialog (spec 2026-10-20 §3.3): its exact text and options, nothing inferred about permission.
-    return { kind: 'question', text: ev.text ?? '', ...(ev.options?.length ? { options: ev.options } : {}), source: 'rpc', tool: 'omp' };
+    return { kind: 'question', text: ev.text ?? '', ...(ev.options?.length ? { options: ev.options } : {}), ...(ev.questions ? { questions: ev.questions } : {}), ...(ev.requestId ? { requestId: ev.requestId } : {}), source: 'rpc', tool: 'omp' };
   }
   if (ev.name === 'PanePrompt') {
     return { kind: ev.kind ?? 'permission', text: ev.text ?? '', ...(ev.body ? { body: ev.body } : {}), options: ev.options, ...details(ev), source: 'pane' };
@@ -297,6 +297,7 @@ function reduceEvent(s: Session, ev: SessionEvent): Session {
       const state = pending.kind === 'question' ? 'waiting_input' : 'waiting_permission';
       return { ...s, state, pending, lastActivityAt: at };
     }
+    case 'QueueUpdate': { const { queue: _q, ...rest } = s; return ev.queue?.length ? { ...rest, queue: ev.queue } : s.queue ? rest : s; }
     case 'AgentMessage': return s.lastActivityAt === at ? s : { ...s, lastActivityAt: at };
     case 'NativeRequest': {
       // A second dialog waits in the harness's queue (the host keeps it): the first request holds the card until it is answered.
@@ -311,6 +312,9 @@ function reduceEvent(s: Session, ev: SessionEvent): Session {
       // The harness's cross-session notices are not the user's words: no topic, and the last reply still waits for the user.
       const notice = ev.name === 'UserPromptSubmit' && !!ev.text && !!crossSessionNotices(ev.text);
       if (ev.name === 'UserPromptSubmit' && ev.text && !s.topic && !notice && !crossSession(ev.text)) s = withTopic(s, ev.text, 'prompt');
+      // OMP's dialog is closed by OMP's own word (a cancel) or by the answer: an action starting meanwhile (its `ask` call is
+      // announced after its dialog) is not the end of the request.
+      if (s.pending?.source === 'rpc' && ev.name === 'PreToolUse') return { ...s, lastHookAt: at, lastActivityAt: at };
       const incoming = pendingFor(ev);
       if (incoming) {
         // A Notification never overwrites an existing pending, a hook's or the pane's (question 2 of an AskUserQuestion,

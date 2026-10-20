@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Store } from '../src/daemon/store.js';
 import { createOmpHost, ompArgs, type OmpHost } from '../src/daemon/omp/host.js';
-import { answerFor, newTracking, project } from '../src/daemon/omp/project.js';
+import { answerFor, askAnswerFor, askQuestions, newTracking, project } from '../src/daemon/omp/project.js';
 import { ompChoices } from '../src/daemon/omp/catalog.js';
 import { until } from './helpers.js';
 import { filesOf } from '../src/daemon/files.js';
@@ -58,7 +58,7 @@ describe('OmpHost', () => {
     const s = await host.launch({ cwd: tmpdir() });
     await host.send(s.id, 'run a tool');
     await until(() => store.get(s.id)!.state === 'waiting_input');
-    expect(store.get(s.id)!.pending).toEqual({ kind: 'question', text: 'Allow tool: bash\nCommand: echo hi', options: ['Approve', 'Approve bash for this session', 'Deny'], source: 'rpc', tool: 'omp' });
+    expect(store.get(s.id)!.pending).toEqual({ kind: 'question', text: 'Allow tool: bash\nCommand: echo hi', options: ['Approve', 'Approve bash for this session', 'Deny'], requestId: 'q1', source: 'rpc', tool: 'omp' });
     expect(await host.answer(s.id, 'Maybe')).toMatch(/not one of the options/);
     expect(store.get(s.id)!.state).toBe('waiting_input');
     expect(await host.answer(s.id, '1')).toBeNull();
@@ -79,7 +79,7 @@ describe('OmpHost', () => {
     await until(() => store.get(s.id)!.state === 'working');
     await host.send(s.id, 'and then this', 'follow_up');
     await host.interrupt(s.id);
-    expect(cmds().filter(c => c.cmd).map(c => c.cmd!.type)).toEqual(['get_state', 'prompt', 'follow_up', 'abort']);
+    expect(cmds().filter(c => c.cmd).map(c => c.cmd!.type)).toEqual(['negotiate_protocol', 'set_ask_dialog', 'set_subagent_subscription', 'get_state', 'prompt', 'follow_up', 'abort']);
   });
   it('a follow_up waits for the turn to end, and its prompt enters the thread when its turn starts, once; the first prompt is not recorded twice', async () => {
     const s = await host.launch({ cwd: tmpdir() });
@@ -201,6 +201,90 @@ describe('files changed by OMP (spec §3.2: a change counts once its result says
     expect(h.items('s')[0]).toMatchObject({ kind: 'tool', tool: 'edit', status: 'success', files: [{ path: '/w/b.txt', change: 'edit', diff: '- two\n+ 2' }] });
     for (const e of events(frames('edit', { input: 'x' }, {}, true))) h.record('t', e);
     expect(h.items('t')[0]).toMatchObject({ status: 'failed', files: [] });
+  });
+});
+
+describe('ask: every question of one call, answered together', () => {
+  const raw = [{ id: 'color', question: 'Favorite color?', header: 'Color', multi: true, options: [{ label: 'red' }, { label: 'blue', description: 'the sea' }] }, { id: 'name', question: 'Your name?', options: [{ label: 'skip' }] }];
+  const req = { id: 'r', method: 'ask' as const, title: 't', questions: askQuestions(raw)! };
+  it('reads the questions as OMP sends them, and nothing from a shape it does not know', () => {
+    expect(req.questions).toEqual([{ id: 'color', question: 'Favorite color?', header: 'Color', multi: true, options: [{ label: 'red' }, { label: 'blue', description: 'the sea' }] }, { id: 'name', question: 'Your name?', options: [{ label: 'skip' }] }]);
+    expect(askQuestions('x')).toBeUndefined(); expect(askQuestions([{ id: 1 }])).toBeUndefined();
+  });
+  it('an unreadable ask is not shown (and so never answered blind); a readable one is a pending question with its questions and request id', () => {
+    const t = newTracking();
+    expect(project({ type: 'extension_ui_request', id: 'r', method: 'ask', questions: [{}] }, t, T)).toEqual([]);
+    const [e] = project({ type: 'extension_ui_request', id: 'r', method: 'ask', questions: raw } as never, newTracking(), T);
+    expect(e).toMatchObject({ name: 'NativeRequest', text: 'Favorite color? · Your name?', requestId: 'r', questions: req.questions });
+    expect(e).not.toHaveProperty('options'); // several questions: no one-tap answer
+    const lone = project({ type: 'extension_ui_request', id: 'r', method: 'ask', questions: [raw[1]] } as never, newTracking(), T)[0]!;
+    expect(lone.options).toEqual(['skip']);
+  });
+  it('askAnswerFor: one answer per question in order, choices among the labels, one only unless multi, free text kept as customInput', () => {
+    expect(askAnswerFor(req, [{ id: 'color', selected: ['red', 'blue'] }, { id: 'name', selected: [], text: ' Joe ' }])).toEqual({ frame: { type: 'extension_ui_response', id: 'r', answers: [{ id: 'color', selectedOptions: ['red', 'blue'] }, { id: 'name', selectedOptions: [], customInput: 'Joe' }] } });
+    expect(askAnswerFor(req, [{ id: 'color', selected: ['red'] }])).toMatchObject({ refused: 'OMP asks 2 questions' });
+    expect(askAnswerFor(req, [{ id: 'name', selected: ['skip'] }, { id: 'color', selected: ['red'] }])).toMatchObject({ refused: expect.stringContaining('not for') });
+    expect(askAnswerFor(req, [{ id: 'color', selected: ['green'] }, { id: 'name', selected: ['skip'] }])).toMatchObject({ refused: expect.stringContaining('not a choice') });
+    expect(askAnswerFor(req, [{ id: 'color', selected: [] }, { id: 'name', selected: ['skip'] }])).toMatchObject({ refused: expect.stringContaining('no answer') });
+    expect(askAnswerFor(req, [{ id: 'color', selected: ['red'] }, { id: 'name', selected: ['skip', 'skip'] }])).toMatchObject({ refused: expect.any(String) });
+    const single = { ...req, questions: [{ ...req.questions[0]!, multi: false }] };
+    expect(askAnswerFor(single, [{ id: 'color', selected: ['red', 'blue'] }])).toMatchObject({ refused: expect.stringContaining('takes one choice') });
+  });
+  it('answerFor: a digit answers a lone single-choice question; several questions are refused there', () => {
+    expect(answerFor({ ...req, questions: [req.questions[1]!] }, '1')).toEqual({ frame: { type: 'extension_ui_response', id: 'r', answers: [{ id: 'name', selectedOptions: ['skip'] }] } });
+    expect(answerFor(req, '1')).toMatchObject({ refused: expect.stringContaining('card') });
+  });
+  it('through the host: the card answers with the right request id, a stale id or a second answer writes nothing, cancel declines', async () => {
+    const s = await host.launch({ cwd: tmpdir() });
+    await host.send(s.id, 'ask two things');
+    await until(() => store.get(s.id)!.state === 'waiting_input');
+    expect(store.get(s.id)!.pending).toMatchObject({ requestId: 'ask1', questions: expect.any(Array), source: 'rpc' });
+    expect(await host.answerAsk(s.id, 'old', [])).toBe('the request changed, look again');
+    expect(await host.answerAsk(s.id, 'ask1', [{ id: 'color', selected: ['red'] }])).toMatch(/asks 2 questions/);
+    expect(store.get(s.id)!.state).toBe('waiting_input');
+    expect(await host.answerAsk(s.id, 'ask1', [{ id: 'color', selected: ['red', 'blue'] }, { id: 'name', selected: [], text: 'Joe' }])).toBeNull();
+    await until(() => store.get(s.id)!.state === 'idle');
+    expect(await host.answerAsk(s.id, 'ask1', [])).toBe('the request changed, look again');
+    await host.send(s.id, 'ask two more');
+    await until(() => store.get(s.id)!.state === 'waiting_input');
+    expect(await host.answerAsk(s.id, 'ask1', [], true)).toBeNull();
+    await until(() => store.get(s.id)!.state === 'idle');
+  });
+});
+
+describe('subagents (task)', () => {
+  it('a helper starts with its kind, learns its task from its assignment, owns its actions and message, and ends with its report; the parent\'s state is untouched', async () => {
+    const h = new History(); store.onEvent((id, e) => h.record(id, e));
+    const s = await host.launch({ cwd: tmpdir() });
+    await host.send(s.id, 'launch a subagent please');
+    await until(() => store.get(s.id)!.state === 'idle' && !!store.get(s.id)!.lastReply);
+    expect(store.get(s.id)!.helpers).toEqual([expect.objectContaining({ id: 'EchoSub', kind: 'sonic', task: 'Run the bash command: echo sub', state: 'exited' })]);
+    const items = h.items(s.id);
+    expect(items.find(i => i.kind === 'helper')).toMatchObject({ id: 'EchoSub', task: 'Run the bash command: echo sub', state: 'exited', agentType: 'sonic' });
+    expect(items.find(i => i.kind === 'tool' && i.tool === 'bash')).toMatchObject({ helperId: 'EchoSub', status: 'success' });
+    expect(items.find(i => i.kind === 'reply' && i.helperId === 'EchoSub')).toMatchObject({ text: 'The output is sub' });
+    expect(items.find(i => i.kind === 'reply' && i.helperId === 'EchoSub' && i.id.startsWith('report-'))).toMatchObject({ text: 'The output is sub' });
+    expect(items.filter(i => i.kind === 'reply' && !i.helperId)).toHaveLength(1); // the parent's own reply, once
+  });
+  it('a helper still running when the turn ends keeps working until its own end', async () => {
+    const s = await host.launch({ cwd: tmpdir() });
+    await host.send(s.id, 'launch a subagent please and be slow');
+    await until(() => store.get(s.id)!.helpers.length === 1);
+    expect(store.get(s.id)!.helpers[0]).toMatchObject({ id: 'EchoSub', state: 'working' });
+    await host.interrupt(s.id);
+    await until(() => store.get(s.id)!.helpers[0]!.state === 'exited');
+  });
+});
+
+describe('the work plan (todo)', () => {
+  it('a finished todo call carries the whole plan OMP reports, which the thread keeps as the action\'s input', () => {
+    const phases = [{ name: 'Tasks', tasks: [{ content: 'alpha', status: 'completed' }, { content: 'beta', status: 'pending' }] }];
+    const t = newTracking(); const h = new History();
+    for (const f of [{ type: 'tool_execution_start', toolCallId: 'c', toolName: 'todo', args: { op: 'init', items: ['alpha', 'beta'] } },
+      { type: 'tool_execution_end', toolCallId: 'c', toolName: 'todo', result: { content: [{ type: 'text', text: 'ok' }], details: { op: 'done', phases } }, isError: false }])
+      for (const e of project(f as { type: string }, t, T)) h.record('s', e);
+    const item = h.items('s')[0] as { input: string };
+    expect(JSON.parse(item.input)).toEqual({ phases });
   });
 });
 

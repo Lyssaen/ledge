@@ -160,7 +160,9 @@ export class History {
         const row = this.callFor(id, ev);
         // A harness that only says what changed once the action is done (OMP's edit): the files come from its result.
         const late = row && row.files.length === 0 && ev.toolInput ? filesOf(ev.tool, ev.toolInput) : [];
-        const base: ToolItem = row ? { ...row, ...(late.length ? { files: late } : {}) } : { kind: 'tool', id: ev.toolUseId ?? `tool-${ev.at}-${this.items(id).length}`, ...common, tool: ev.tool, label: ev.text ?? ev.tool, status: 'running', files: filesOf(ev.tool, ev.toolInput) };
+        // OMP's todo: the list it reports once done replaces the call's own arguments (which only say what changed).
+        const plan = row && ev.tool === 'todo' && ev.toolInput ? inputText(ev.toolInput) : undefined;
+        const base: ToolItem = row ? { ...row, ...(late.length ? { files: late } : {}), ...(plan ? { input: plan } : {}) } : { kind: 'tool', id: ev.toolUseId ?? `tool-${ev.at}-${this.items(id).length}`, ...common, tool: ev.tool, label: ev.text ?? ev.tool, status: 'running', files: filesOf(ev.tool, ev.toolInput) };
         const error = failed ? ev.error ?? (ev.interrupt ? 'interrupted' : 'failed') : undefined;
         return this.put(id, { ...base, status: failed ? 'failed' : 'success', ...(ev.output !== undefined ? { output: ev.output } : {}), ...(error ? { error } : {}), ...(ev.durationMs !== undefined ? { durationMs: ev.durationMs } : {}) });
       }

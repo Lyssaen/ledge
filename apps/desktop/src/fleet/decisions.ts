@@ -29,12 +29,14 @@ export interface Decisions {
   decide(s: Session, decision: Decision, note?: string, onRefused?: (text: string) => void): boolean;
   /** false sans envoi : hors ligne, lecture seule, texte vide, déjà en vol, demande autre qu'une question. `onRefused` rend le texte. */
   reply(s: Session, text: string, onRefused?: (text: string) => void, how?: { steer?: boolean }): boolean;
+  /** OMP's `ask`: every question's answer at once (or `cancel`), for the dialog the card shows. false without a send: offline, no such request, already in flight. */
+  answer(s: Session, answers: ReadonlyArray<{ id: string; selected: string[]; text?: string }>, cancel?: boolean): boolean;
 }
 
 /** What is in flight: the message, the request and the mark it started from, the last error seen then (only a later one
  *  can refuse it), the name a notice gives, and what a refused reply (or note) gives back. */
 interface Sent {
-  message: 'session.decide' | 'session.reply'; pending: string | null; mark: string; errorSeq: number; name: string;
+  message: 'session.decide' | 'session.reply' | 'session.answer'; pending: string | null; mark: string; errorSeq: number; name: string;
   text?: string; onRefused?: (text: string) => void; timer: ReturnType<typeof setTimeout>;
 }
 
@@ -79,7 +81,7 @@ export function useDecisions(o: { client: Pick<DaemonClient, 'send'>; sessions: 
     for (const [id, x] of [...live.current]) {
       const s = byId.get(id);
       if (!s) forget(id);
-      else if (!s.offline && (x.message === 'session.decide' ? requestKey(s) !== x.pending : markOf(s) !== x.mark)) {
+      else if (!s.offline && (x.message === 'session.reply' ? markOf(s) !== x.mark : requestKey(s) !== x.pending)) {
         forget(id); setLanded({ id });
         // A deny with a note lands before the daemon can say its note was not typed (NOTE_NOT_TYPED): it waits for that too.
         if (x.message === 'session.reply' || x.text !== undefined) { unsettle(id); settled.current.set(id, { ...x, timer: setTimeout(() => settled.current.delete(id), UNCONFIRMED_MS) }); }
@@ -150,6 +152,11 @@ export function useDecisions(o: { client: Pick<DaemonClient, 'send'>; sessions: 
       // The request the user saw goes with it: the daemon refuses the decision if another one is pending by then.
       const payload = { type: 'session.decide' as const, id: s.id, decision, ...(note ? { note } : {}), expect: { kind: p.kind, text: p.text, key: pendingKey(p) } };
       return send(s, 'session.decide', payload, note ? { text: note, onRefused } : {});
+    },
+    answer(s, answers, cancel) {
+      const p = s.pending;
+      if (s.offline || s.source === 'hook_only' || !p?.questions || !p.requestId || live.current.has(s.id)) return false;
+      return send(s, 'session.answer', { type: 'session.answer', id: s.id, requestId: p.requestId, answers: [...answers], ...(cancel ? { cancel: true } : {}) });
     },
     reply(s, text, onRefused, how) {
       if (s.offline || s.source === 'hook_only' || !text.trim() || live.current.has(s.id) || (s.pending && s.pending.kind !== 'question')) return false;

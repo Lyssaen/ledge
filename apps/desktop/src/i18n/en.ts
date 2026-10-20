@@ -492,6 +492,7 @@ export const en: Messages = {
       toTerminal: (k) => `Give the keyboard to the terminal · Ctrl ${k}`, toThread: (k) => `The keyboard goes to the terminal · back to the thread: Ctrl ${k}`
     },
     pending: {
+      ask: { send: 'Send the answers', decline: 'Decline', other: (q: string) => `Another answer to “${q}”`, otherPlaceholder: 'Another answer…' },
       regions: { approval: 'Approval requested', plan: 'Plan to approve', question: 'Question from the agent' },
       command: (n) => `${n} wants to run a command`, edit: (n) => `${n} wants to change a file`, approval: (n) => `${n} wants your approval`,
       question: (n) => `${n} asks you a question`, plan: (n, title) => `${n} proposes a plan · ${title}`, planBadge: 'Plan to approve',
@@ -516,8 +517,10 @@ export const en: Messages = {
       offline: (m) => `${m} is offline.`, offlineBody: ' The thread is frozen at the last known activity; you can reply once it reconnects.', seeMachine: 'See the machine',
       viaParent: (n, p) => `Replies to ${n} go through ${p}, who started it.`, openParent: (p) => `Open ${p}`,
       readOnly: 'Session started without Ledge: read only.', optionsOnly: 'Choose one of the proposed answers (1–9).',
+      askCard: 'Answer from the card above.',
       afterTurn: 'Enter: after this turn', queue: 'Send after this turn', steer: 'Redirect now', steerTitle: 'Redirects the turn running now instead of waiting for its end',
       interrupt: 'Interrupt', interruptTitle: 'Stops the work in progress; the session and its conversation stay',
+      queueLabel: 'Waiting instructions', queued: (n: number) => `Waiting (${n})`, queueSteer: 'redirect', queueAfter: 'after this turn', restore: 'Interrupt and take back', restoreTitle: 'Stops the work and puts the waiting instructions back in the field',
       noNote: 'This agent takes no message with a refusal: deny with N.', tooLong: (max) => `A note holds ${max} characters at most.`
     },
     model: {
