@@ -95,7 +95,6 @@ it('read-only drops input, pasted or typed, and hides the cursor', async () => {
   const input = vi.fn();
   s.onInput(input);
   s.setReadOnly(true);
-  expect(t.options.disableStdin).toBe(true);
   expect(t.options.theme).toMatchObject({ background: '#101112', cursor: '#101112' });
   t.data.forEach(fn => fn('x'));
   t.keys(key({ ctrlKey: true, code: 'KeyV', key: 'v' }));
@@ -105,10 +104,20 @@ it('read-only drops input, pasted or typed, and hides the cursor', async () => {
   s.setTheme({ background: '#202122' });
   expect(t.options.theme).toMatchObject({ background: '#202122', cursor: '#202122' });
   s.setReadOnly(false);
-  expect(t.options.disableStdin).toBe(false);
   expect(t.options.theme).toEqual({ background: '#202122' });
   t.data.forEach(fn => fn('x'));
   expect(input).toHaveBeenCalledWith('x');
+});
+
+it('read-only still answers the terminal\'s own queries: ConPTY waits for the cursor report before it draws anything', () => {
+  const { s, t } = surface();
+  const input = vi.fn();
+  s.onInput(input);
+  s.setReadOnly(true);
+  // xterm sends its replies through onData too: disableStdin would drop them with the keys.
+  expect(t.options.disableStdin).toBeFalsy();
+  for (const d of ['\x1b[12;1R', '\x1b[?1;2c', '\x1b[>0;276;0c', 'x', '\r', '\x1b[A', '\x1b[<0;3;4M']) t.data.forEach(fn => fn(d));
+  expect(input.mock.calls).toEqual([['\x1b[12;1R'], ['\x1b[?1;2c'], ['\x1b[>0;276;0c']]);
 });
 
 it('WebGL falls back to the DOM renderer when it throws or loses its context', () => {
