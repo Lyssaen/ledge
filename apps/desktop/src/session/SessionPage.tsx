@@ -22,6 +22,7 @@ import { SidePane, tabId, type PanePlan, type PaneTab } from './SidePane';
 import { Tags, Thread } from './Thread';
 import { marksOf } from './markers';
 import { TodoBar } from './TodoBar';
+import { useConversations } from './useConversations';
 import { latestTodos } from './todos';
 import { atEnd, displayIds, exchanges, helperOf, pendingPlan, unreadFrom, type PlanDoc, type Segment } from './exchanges';
 
@@ -143,6 +144,7 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   const openDoc = useCallback((path: string) => openTab({ kind: 'doc', path }), [openTab]);
   const openDiff = useCallback((path: string) => openTab({ kind: 'diff', path }), [openTab]);
   const openPlan = useCallback((key: string) => openTab({ kind: 'plan', key }), [openTab]);
+  const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', peer }), [openTab]);
   // Its neighbour takes over: the next one, else the one before. A focus in the pane (or already lost) follows: to the tab
   // now active, else the pane, else (the pane closed) the thread; a focus elsewhere stays where it is.
   const refocus = useRef(false);
@@ -157,6 +159,11 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   const active = tabs.find(x => tabId(x) === activeTab);
   const paneShown = active !== undefined && view === 'thread';
   const planOpen = active?.kind === 'plan' ? active.key : null;
+  const convOpen = active?.kind === 'conv' ? active.peer : null;
+  // The open Conversation tabs, active or not: each one's peer thread is asked and its bubbles merged here (SidePane mounts
+  // only the active tab).
+  const convKeys = useMemo(() => tabs.flatMap(x => (x.kind === 'conv' ? [x.peer] : [])), [tabs]);
+  const convs = useConversations(p.client, session, items, convKeys);
 
   /* Plans: a card per ExitPlanMode action in the thread, and the pinned request's own ('pending': Codex and Cursor have no
      such action). The pinned plan is read from the card whose action waits, else from the request. */
@@ -408,7 +415,8 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
               {items === undefined ? <p className="thread-note muted">{offline ? th.notLoaded : th.loading}</p>
                 : xs.length === 0 ? <p className="thread-note muted">{th.empty}</p>
                 : <Thread session={session} helper={helper} items={items} xs={shownXs} now={times} unread={unread.current ?? null} since={since} dispatch={p.dispatch}
-                    flash={flash} onChange={openDiff} onDocument={openDoc} planOpen={planOpen} onPlan={openPlan} waiting={waiting} />}
+                    flash={flash} onChange={openDiff} onDocument={openDoc} planOpen={planOpen} onPlan={openPlan}
+                    convOpen={convOpen} onConversation={helper ? undefined : openConversation} waiting={waiting} />}
             </div>
             {/* Before the thread is there, the files are not known: the thread's own note, never « Aucun fichier modifié ». */}
             {view === 'changes' && !loaded && <div className="changes-empty"><p className="muted">{offline ? th.notLoaded : th.loading}</p></div>}
@@ -423,7 +431,7 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
         </div>
         {paneShown && (
           <SidePane tabs={tabs} active={activeTab!} onActive={setActiveTab} onClose={closeTab} split={p.split} onSplit={onSplit}
-            onAllChanges={showChanges} onDocument={openDoc} session={session} files={files} client={p.client} plans={plans} />
+            onAllChanges={showChanges} onDocument={openDoc} session={session} files={files} client={p.client} plans={plans} convs={convs} />
         )}
       </div>
     </section>

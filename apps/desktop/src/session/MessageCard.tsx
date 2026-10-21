@@ -7,7 +7,8 @@ import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
 import { SessionBot } from '../shell/SessionBot';
 
-const STATUS_MARK: Record<SentItem['status'], string> = { delivered: '✓', read: '✓✓', sending: '…', failed: '✕' };
+/** A delivery's mark: on the card, its folded line, and the Conversation tab's bubbles. */
+export const STATUS_MARK: Record<SentItem['status'], string> = { delivered: '✓', read: '✓✓', sending: '…', failed: '✕' };
 
 /** Longer than this many characters or lines, a message's body is clamped until « Lire tout le message ». */
 const LONG_CHARS = 200;
@@ -33,14 +34,19 @@ export interface MessageCardProps {
   onFold(): void;
   /** « voir son fil »: the peer's session. */
   onOpenPeer(): void;
+  /** This conversation's tab is the pane's active one (the header's « Ouvert à côté »). */
+  following: boolean;
+  /** « suivre la conversation »: its tab beside the thread; absent: no way to it (a subagent's page). */
+  onFollow?(): void;
 }
 
 /** A message between this agent and another, as rail rows (the mockup's bubbles): the conversation's header when it opens
  *  one, then the bubble — received on the left, « De Iris · voir son fil »; sent on the right, « À Nova · lu » — its body
  *  clamped when long; folded, one line. The direction's node sits on the rail: an envelope out, a reply in. */
-export function MessageCard({ item, self, peer, header, folded, lit, time, onFold, onOpenPeer }: MessageCardProps): JSX.Element {
+export function MessageCard({ item, self, peer, header, folded, lit, time, onFold, onOpenPeer, following, onFollow }: MessageCardProps): JSX.Element {
   const { t } = useI18n();
   const tm = t.session.message;
+  const tc = t.session.conversation;
   const [more, setMore] = useState(false);
   const sent = item.kind === 'sent';
   const peerName = peer?.name ?? (sent ? item.to : item.from);
@@ -56,6 +62,12 @@ export function MessageCard({ item, self, peer, header, folded, lit, time, onFol
       <span className="n" />
       <div className={`message-head ${item.kind}`}>
         <Icon d={SHELL_ICONS.mail} size={12} /><span>{tm.conversation(peerName, header.count)}</span><span className="spacer" />
+        {/* The conversation beside the thread; pressed while its tab is the active one, as the plan card's button. */}
+        {onFollow && (
+          <button type="button" className="lnk message-fold conv-follow" aria-pressed={following} title={tc.followTitle(peerName)} onClick={onFollow}>
+            {following ? tc.openBeside : tc.followBeside}<Icon d={ICONS.chevronRight.d} size={12} />
+          </button>
+        )}
         <button type="button" className="lnk message-fold" aria-expanded={!folded} onClick={onFold}>{folded ? tm.unfold : tm.fold}<Icon d={SHELL_ICONS.chevronDown} size={12} /></button>
       </div>
       <span className="tm" />
@@ -84,6 +96,7 @@ export function MessageCard({ item, self, peer, header, folded, lit, time, onFol
           {sent ? tm.to : tm.from} {bot(sent ? to : from, 14)}<strong>{peerName}</strong>
           {sent && <> · <Status item={item} peer={peerName} /></>}
           {peer && (!sent || paired) && <> · <button type="button" className="lnk message-link" title={tm.seeIn(peerName)} onClick={onOpenPeer}>{tm.seeTheirs}</button></>}
+          {onFollow && <> · <button type="button" className="lnk message-link" title={tc.followTitle(peerName)} onClick={onFollow}>{tc.follow}</button></>}
         </span>
         {sent && item.summary && <p className="message-summary">{item.summary}</p>}
         <div className={cls('message-body', long && !more && 'clamped')}><ThreadMarkdown text={item.text} /></div>
