@@ -23,6 +23,18 @@ const NONE: readonly ThreadItem[] = [];
 /** A tab's bubbles and the two threads they were merged from. */
 type Merged = { a: readonly ThreadItem[]; b: readonly ThreadItem[] | undefined; bubbles: readonly Bubble[] };
 
+/** The merge again, its unchanged bubbles kept as they were (the rows are memoised on them), and the same list when nothing
+ *  in it changed (another item of A's thread, a tool run, leaves the tab alone). */
+function remerge(prev: readonly Bubble[] | undefined, next: Bubble[]): readonly Bubble[] {
+  if (!prev) return next;
+  const byKey = new Map(prev.map(x => [x.key, x]));
+  const kept = next.map(x => {
+    const p = byKey.get(x.key);
+    return p && p.from === x.from && p.at === x.at && p.summary === x.summary && p.text === x.text && p.status === x.status && p.inA === x.inA && p.inB === x.inB ? p : x;
+  });
+  return kept.length === prev.length && kept.every((x, i) => x === prev[i]) ? prev : kept;
+}
+
 /** A view per open Conversation tab (`keys`: their peerKeys), at the page's level: SidePane mounts only the active tab.
  *  B's thread is asked while its tab is open, active or not; each view's bubbles keep their identity while neither thread
  *  changes. `active`: the tab the reader sees (its peerKey, the pane shown), whose messages are all seen; null: none. */
@@ -49,7 +61,7 @@ export function useConversations(client: Pick<DaemonClient, 'send'>, self: Sessi
     const peer = peers[i]!;
     const b = peer ? threads.get(peer.id) : undefined;
     const last = cache.current.get(key);
-    const bubbles = last && last.a === a && last.b === b ? last.bubbles : conversation(a, b, key, selfId);
+    const bubbles = last && last.a === a && last.b === b ? last.bubbles : remerge(last?.bubbles, conversation(a, b, key, selfId));
     kept.set(key, { a, b, bubbles });
     const loading = peer !== null && peer.offline !== true && b === undefined;
     const base = seen.get(key);
