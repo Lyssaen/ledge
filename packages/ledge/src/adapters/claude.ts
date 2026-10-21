@@ -310,10 +310,34 @@ const NO_FREE_ROW = 'no free-text row in this dialog, answer in the terminal';
 // cleared this way back). A tmux key name, sent as a key, never as text.
 const CLEAR: KeyPlan = [{ keys: ['C-u'] }];
 
+/**
+ * Claude Code reads keys typed in a fast burst as a paste, and an Enter in the same burst is a newline in the draft: the
+ * text stays in the input, unsent (#76). tmux types the text in one burst: Enter goes after a pause. Seen on 2.1.306:
+ * text and Enter in one burst left « [Pasted text #2 +1 lines] », or the raw text over two lines, in the input.
+ */
+export const REPLY_ENTER_DELAY_MS = 300;
+/** The text, then Enter once the burst is over. */
+const send = (text: string): KeyPlan => [{ text }, { waitMs: REPLY_ENTER_DELAY_MS }, { keys: ['Enter'] }];
+
+/** The input box no longer holds `text`, raw or pasted: Enter sent it. A pane without the box tells nothing against it. */
+function sentFrom(text: string): (pane: string) => boolean {
+  const head = text.replace(/\s+/g, '').slice(0, 40);
+  return pane => {
+    const lines = pane.split('\n').map(l => l.replace(/\s+$/, ''));
+    const box = inputBox(lines);
+    if (!box) return true;
+    const draft = lines.slice(box.top + 1, box.bottom).join('').replace(/\s+/g, '').replace(/^❯/, '');
+    return !draft.includes('[Pastedtext#') && !(head && draft.startsWith(head));
+  };
+}
+/** Typed into the main input and sent; a draft still there after Enter is a text the terminal did not take. `denied`:
+ *  a refusal already went before it (a deny's note). */
+const submit = (text: string, denied?: true): KeyPlan => [...send(text), { until: sentFrom(text), ...(denied ? { denied } : {}) }];
+
 /** Option `n` (1-based) is a row that takes text: its digit selects it, the row cleared and the text typed once it is, then Enter. */
 function rowPlan(n: number, text: string): KeyPlan {
   const row = new RegExp(`^\\s*❯\\s*${n}\\.\\s`, 'm');
-  return [...digit(n), { until: p => row.test(p) }, ...CLEAR, { text }, { keys: ['Enter'] }];
+  return [...digit(n), { until: p => row.test(p) }, ...CLEAR, ...send(text)];
 }
 
 function freeTextPlan(text: string, pane: string | undefined): KeyPlan {
@@ -362,7 +386,7 @@ function notePlan(note: string, pane: string | undefined): KeyPlan {
   const d = pane ? parseDialog(pane) : null;
   const row = d?.kind === 'plan' ? d.options.findIndex(o => PLAN_NOTE_ROW.test(o)) : -1;
   if (row >= 0) return rowPlan(row + 1, text);
-  return [{ keys: ['Escape'] }, { until: atRest, denied: true }, ...CLEAR, { text }, { keys: ['Enter'] }];
+  return [{ keys: ['Escape'] }, { until: atRest, denied: true }, ...CLEAR, ...submit(text, true)];
 }
 
 export const claudeAdapter: Adapter = {
@@ -395,7 +419,7 @@ export const claudeAdapter: Adapter = {
     const n = optionNumber(flat, pending);
     if (n !== null) return digit(n);
     if (pending?.kind === 'question') return freeTextPlan(flat, pane);
-    return [{ text: flat }, { keys: ['Enter'] }];
+    return submit(flat);
   },
   interruptKeys: () => ['Escape']
 };
