@@ -26,8 +26,15 @@ export function crossSession(text: string): { from: string; name?: string; text:
  *  carry control bytes (test output in colour): tmux would type them as keys (Esc, Ctrl-U, Ctrl-C), so none is left. */
 const LEDGE_CLOSE = '</ledge-message>';
 const LEDGE_BLOCK = /^<ledge-message\b([^>]*)>([\s\S]*?)(?:<\/ledge-message>|$)/;
-const note = (from: string, to: Tool) =>
+export const messageNote = (from: string, to: Tool): string =>
   `(message de la session ${from}, pas de l'utilisateur ; pour répondre : ${to === 'codex' ? `ledge send ${from} "…"` : `SendMessage vers ${from}`})`;
+const NOTE_SENDER = /^\(message de la session (.+?), pas de l'utilisateur ; /;
+/** A message body without the note that opens it (either reply hint), with the sender that note names. */
+export function stripNote(text: string): { sender?: string; text: string } {
+  const body = text.trimStart(); const sender = NOTE_SENDER.exec(body)?.[1];
+  const lead = sender === undefined ? undefined : [messageNote(sender, 'codex'), messageNote(sender, 'claude')].find(n => body.startsWith(n));
+  return lead ? { sender, text: body.slice(lead.length).trim() } : { text };
+}
 /** ANSI sequences: CSI (`ESC [ … final`), a string ended by BEL or ST (OSC, DCS, APC, PM, SOS), any other `ESC … final`. */
 const ESCAPES = /\x1b(?:\[[0-?]*[ -/]*[@-~]|[\]PX^_][^\x07\x1b]*(?:\x07|\x1b\\)|[ -/]*[0-~])/g;
 const CONTROLS = /[\x00-\x1f\x7f-\x9f]/g;
@@ -37,7 +44,7 @@ const typable = (text: string, newline: string) => text.replace(ESCAPES, '').rep
 export const ledgeBody = (text: string): string => typable(text.replaceAll('<', '‹'), ' ⏎ ');
 export function formatLedgeMessage(m: { from: string; tool: Tool; text: string; to: Tool }): string {
   const from = typable(m.from, ' ').replace(/["<>]/g, '').trim();
-  return `<ledge-message from="${from}" tool="${m.tool}">${note(from, m.to)} ${ledgeBody(m.text)}${LEDGE_CLOSE}`;
+  return `<ledge-message from="${from}" tool="${m.tool}">${messageNote(from, m.to)} ${ledgeBody(m.text)}${LEDGE_CLOSE}`;
 }
 export function ledgeMessages(text: string): { from: string; tool?: string; text: string }[] | undefined {
   const m = LEDGE_BLOCK.exec(text.trimStart());
@@ -45,9 +52,7 @@ export function ledgeMessages(text: string): { from: string; tool?: string; text
   const attrs = new Map([...m[1]!.matchAll(ATTR)].map(a => [a[1]!, a[2]!] as const));
   const from = attrs.get('from'); const tool = attrs.get('tool');
   if (!from) return undefined;
-  // The body without the note that opens it (either reply hint).
-  const body = m[2]!.trimStart(); const lead = [note(from, 'codex'), note(from, 'claude')].find(n => body.startsWith(n));
-  return [{ from, ...(tool ? { tool } : {}), text: (lead ? body.slice(lead.length) : body).trim() }];
+  return [{ from, ...(tool ? { tool } : {}), text: stripNote(m[2]!).text.trim() }];
 }
 
 /** Claude Code's automated notices about messages between sessions (2.1.303), delivered as a prompt as if the user had

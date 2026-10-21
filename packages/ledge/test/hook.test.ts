@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -277,15 +277,19 @@ describe('runHook', () => {
   });
 });
 
+/** The sender of the SendMessage tests: a Claude Ledge launched (LEDGE_SESSION=a). */
+const otto = (extra: Partial<Session> = {}): Session => ({ id: 'a', name: 'Otto', tool: 'claude', cwd: '/w/ledge', project: 'ledge', title: 'Otto · ledge', tmuxSession: 'ledge-a', state: 'working', helpers: [], startedAt: at, lastActivityAt: at, source: 'launcher', ...extra });
+
 describe('runHook: Claude SendMessage to a Codex', () => {
   const pim = (extra: Partial<Session> = {}): Session => ({ id: 'b', name: 'Pim', tool: 'codex', cwd: '/w/api', project: 'api', title: 'Pim · api', tmuxSession: 'ledge-b', state: 'idle', helpers: [], startedAt: at, lastActivityAt: at, source: 'launcher', ...extra });
   const send = (to = 'Pim', message = 'Salut') => JSON.stringify({ session_id: 'uuid-a', hook_event_name: 'PreToolUse', tool_name: 'SendMessage', tool_use_id: 'tu1', tool_input: { to, message, summary: 'Un salut' } });
   const decision = (out: string | undefined) => (JSON.parse(out!) as { hookSpecificOutput: { hookEventName: string; permissionDecision: string; permissionDecisionReason: string } }).hookSpecificOutput;
   const tmux = { async setOption() {}, async capture() { return ''; }, async sendText() {}, async sendKeys() {} } as never;
+  const withSender = (...sessions: Session[]) => { const store = new Store(); store.upsert(otto()); for (const s of sessions) store.upsert(s); return store; };
   beforeEach(() => { process.env.LEDGE_SESSION = 'a'; });
 
   it('a free Codex gets the message through Ledge, and the real SendMessage is denied with the reason', async () => {
-    const store = new Store(); store.upsert(pim());
+    const store = withSender(pim());
     const srv = await startServer({ store, tmux, port: 0 });
     const spy = await connect({ port: srv.port }); await spy.next('snapshot');
     try {
@@ -298,7 +302,7 @@ describe('runHook: Claude SendMessage to a Codex', () => {
     const { WebSocketServer } = await import('ws');
     const wss = new WebSocketServer({ port: 0, host: '127.0.0.1' }); await new Promise(r => wss.once('listening', r));
     wss.on('connection', ws => {
-      ws.send(JSON.stringify({ type: 'snapshot', sessions: [pim()] }));
+      ws.send(JSON.stringify({ type: 'snapshot', sessions: [otto(), pim()] }));
       ws.on('message', d => { const m = JSON.parse(String(d)); got.push(m); if (m.type === 'session.message') ws.send(JSON.stringify({ type: 'message.ack', rid: m.rid, outcome: 'queued' })); });
     });
     try {
@@ -309,25 +313,15 @@ describe('runHook: Claude SendMessage to a Codex', () => {
     } finally { wss.close(); }
   });
   it('a refusal says why', async () => {
-    const store = new Store(); store.upsert(pim({ source: 'hook_only', tmuxSession: '' }));
+    const store = withSender(pim({ source: 'hook_only', tmuxSession: '' }));
     const srv = await startServer({ store, tmux, port: 0 });
     try {
       expect(decision(await runHook('PreToolUse', send(), { port: srv.port }))).toEqual({ hookEventName: 'PreToolUse', permissionDecision: 'deny',
         permissionDecisionReason: "Ledge n'a pas pu transmettre le message à Pim : Pim n'a pas été lancée par Ledge : impossible de lui écrire" });
     } finally { await srv.close(); }
   });
-  it('to a Claude target, the real SendMessage proceeds', async () => {
-    const store = new Store(); store.upsert(pim({ tool: 'claude' }));
-    const srv = await startServer({ store, tmux, port: 0 });
-    try { expect(await runHook('PreToolUse', send(), { port: srv.port })).toBeUndefined(); } finally { await srv.close(); }
-  });
-  it('a message too long for Ledge still reaches a Claude target natively', async () => {
-    const store = new Store(); store.upsert(pim({ tool: 'claude' }));
-    const srv = await startServer({ store, tmux, port: 0 });
-    try { expect(await runHook('PreToolUse', send('Pim', 'x'.repeat(20001)), { port: srv.port })).toBeUndefined(); } finally { await srv.close(); }
-  });
   it('a message too long for Ledge is refused to a Codex, with its length', async () => {
-    const store = new Store(); store.upsert(pim());
+    const store = withSender(pim());
     const srv = await startServer({ store, tmux, port: 0 });
     try {
       expect(decision(await runHook('PreToolUse', send('Pim', 'x'.repeat(20001)), { port: srv.port })).permissionDecisionReason)
@@ -339,18 +333,16 @@ describe('runHook: Claude SendMessage to a Codex', () => {
     expect(await runHook('PreToolUse', send(), { port: 1 })).toBeUndefined();
     expect(Date.now() - t0).toBeLessThan(2000);
   });
-  it('a Claude Ledge only knows from its hooks (no LEDGE_SESSION) is intercepted too', async () => {
+  it('a Claude Ledge only knows from its hooks (no LEDGE_SESSION) is left to Claude', async () => {
     delete process.env.LEDGE_SESSION;
-    const store = new Store(); store.upsert(pim());
+    const store = withSender(pim());
     const srv = await startServer({ store, tmux, port: 0 });
-    try {
-      expect(decision(await runHook('PreToolUse', send(), { port: srv.port })).permissionDecisionReason).toBe('Message transmis par Ledge à Pim (codex) : il le reçoit maintenant.');
-    } finally { await srv.close(); }
+    try { expect(await runHook('PreToolUse', send(), { port: srv.port })).toBeUndefined(); } finally { await srv.close(); }
   });
   it('a daemon that never acks leaves the real SendMessage to proceed, within 2 s', async () => {
     const { WebSocketServer } = await import('ws');
     const wss = new WebSocketServer({ port: 0, host: '127.0.0.1' }); await new Promise(r => wss.once('listening', r));
-    wss.on('connection', ws => { ws.send(JSON.stringify({ type: 'snapshot', sessions: [pim()] })); });
+    wss.on('connection', ws => { ws.send(JSON.stringify({ type: 'snapshot', sessions: [otto(), pim()] })); });
     const t0 = Date.now();
     try {
       expect(await runHook('PreToolUse', send(), { port: (wss.address() as { port: number }).port })).toBeUndefined();
@@ -358,9 +350,57 @@ describe('runHook: Claude SendMessage to a Codex', () => {
     } finally { wss.close(); }
   });
   it('a Codex SendMessage is never intercepted', async () => {
-    const store = new Store(); store.upsert(pim());
+    const store = withSender(pim());
     const srv = await startServer({ store, tmux, port: 0 });
     try { expect(await runHook('PreToolUse', send(), { port: srv.port, tool: 'codex' })).toBeUndefined(); } finally { await srv.close(); }
+  });
+});
+
+describe('runHook: Claude SendMessage to a Claude', () => {
+  const ID = '3c1d9e2a-0000-4000-8000-000000000001';
+  const pim = (extra: Partial<Session> = {}): Session => ({ id: 'b', name: 'Pim', tool: 'claude', cwd: '/w/api', project: 'api', title: 'Pim · api', tmuxSession: 'ledge-b', state: 'idle', helpers: [], startedAt: at, lastActivityAt: at, source: 'launcher', agentSessionId: ID, ...extra });
+  const send = (to = 'Pim', message = 'Salut') => JSON.stringify({ session_id: 'uuid-a', hook_event_name: 'PreToolUse', tool_name: 'SendMessage', tool_use_id: 'tu1', tool_input: { to, message, summary: 'Un salut', content: message } });
+  const decision = (out: string | undefined) => (JSON.parse(out!) as { hookSpecificOutput: Record<string, unknown> }).hookSpecificOutput;
+  const note = "(message de la session Otto, pas de l'utilisateur ; pour répondre : SendMessage vers Otto)";
+  let config: string; let saved: string | undefined;
+  const peer = () => { mkdirSync(join(config, 'sessions'), { recursive: true }); writeFileSync(join(config, 'sessions', `${process.pid}.json`), JSON.stringify({ pid: process.pid, sessionId: ID, name: 'api', messagingSocketPath: '/s/x.sock' })); };
+  const serve = async (sender = otto()) => { const store = new Store(); store.upsert(sender); store.upsert(pim()); return startServer({ store, tmux: {} as never, port: 0 }); };
+  beforeEach(() => { process.env.LEDGE_SESSION = 'a'; saved = process.env.CLAUDE_CONFIG_DIR; config = mkdtempSync(join(tmpdir(), 'ledge-claude-')); process.env.CLAUDE_CONFIG_DIR = config; });
+  afterEach(() => { if (saved === undefined) delete process.env.CLAUDE_CONFIG_DIR; else process.env.CLAUDE_CONFIG_DIR = saved; });
+
+  it('rewrites the address to the live peer and names the sender in the message', async () => {
+    peer();
+    const srv = await serve();
+    try {
+      expect(decision(await runHook('PreToolUse', send(), { port: srv.port }))).toEqual({ hookEventName: 'PreToolUse', permissionDecision: 'allow',
+        updatedInput: { to: 'uds:/s/x.sock', message: `${note} Salut`, summary: 'Un salut', content: `${note} Salut` } });
+      expect((decision(await runHook('PreToolUse', send('Pim [ab12]'), { port: srv.port })).updatedInput as Record<string, unknown>).to).toBe('uds:/s/x.sock');
+    } finally { await srv.close(); }
+  });
+  it('a target with no live peer is refused, never guessed', async () => {
+    const srv = await serve();
+    try {
+      expect(decision(await runHook('PreToolUse', send(), { port: srv.port }))).toEqual({ hookEventName: 'PreToolUse', permissionDecision: 'deny',
+        permissionDecisionReason: "Ledge n'a pas pu transmettre le message à Pim : Pim n'est pas joignable" });
+    } finally { await srv.close(); }
+  });
+  it('a message too long for Ledge still goes natively', async () => {
+    peer();
+    const srv = await serve();
+    try { expect(decision(await runHook('PreToolUse', send('Pim', 'x'.repeat(20001)), { port: srv.port })).permissionDecision).toBe('allow'); } finally { await srv.close(); }
+  });
+  it('a sender Ledge did not launch is left to Claude', async () => {
+    peer();
+    const srv = await serve(otto({ source: 'hook_only', tmuxSession: '' }));
+    try { expect(await runHook('PreToolUse', send(), { port: srv.port })).toBeUndefined(); } finally { await srv.close(); }
+  });
+  it('with the daemon down, the real SendMessage proceeds unchanged within the budget', async () => {
+    peer();
+    const srv = createServer(); await new Promise<void>(r => srv.listen(0, '127.0.0.1', r));
+    const port = (srv.address() as { port: number }).port; await new Promise(r => srv.close(r));
+    const t0 = Date.now();
+    expect(await runHook('PreToolUse', send(), { port })).toBeUndefined();
+    expect(Date.now() - t0).toBeLessThan(2000);
   });
 });
 
@@ -445,7 +485,7 @@ describe('session identity (SessionStart additionalContext)', () => {
     expect(text).toContain('Tu es Pim, projet ledge, branche feat/x');
     expect(text).toContain('worktree ledge-wt');
     expect(text).toContain('`ledge who`');
-    expect(text).toContain('Pour écrire à une autre session Ledge, Claude ou Codex, utilise son nom Ledge comme adresse SendMessage.');
+    expect(text).toContain('Pour écrire à une autre session Ledge, Claude ou Codex, utilise son nom Ledge (donné par `ledge who`) comme adresse SendMessage : Ledge le transmet. `ListAgents` montre les noms internes de Claude, pas les noms Ledge.');
     // Codex has no SendMessage: it is told `ledge send`.
     const codex = identityContext({ name: 'Nova', tool: 'codex', project: 'api', cwd: '/w/api' });
     expect(codex).toContain('Tu es Nova, projet api');

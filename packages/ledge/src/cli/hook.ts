@@ -4,7 +4,8 @@ import { log } from '../log.js';
 import { QUESTION_TOOLS } from '../daemon/state.js';
 import { codexPlan } from '../daemon/transcript.js';
 import { gitInfo } from '../daemon/git.js';
-import { bareName } from '../daemon/peers.js';
+import { readPeers, resolveTarget } from '../daemon/peers.js';
+import { messageNote } from '../daemon/crossSession.js';
 import { readFileSync, openSync, fstatSync, readSync, closeSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { CODEX_ENV_VAR, CODEX_HOOK_VAR } from '../spawn.js';
@@ -347,14 +348,14 @@ function mapCursorEvent(eventName: string, p: Payload, at: string, launched: boo
 type Identity = Pick<Session, 'name' | 'tool' | 'project' | 'cwd'> & Partial<Pick<Session, 'repo' | 'branch' | 'worktree'>>;
 
 /** What a session Ledge launched is told of itself when it starts, resumes or is cleared (#20): its Ledge name, project,
- *  branch and worktree, and how to find the other sessions. Claude Code is launched with `-n <name>`, so the Ledge name
- *  is also its SendMessage address. */
+ *  branch and worktree, and how to find the other sessions. A Claude addresses the others by Ledge name: its hook
+ *  rewrites that name to the target's live address (Claude's own peer names are not Ledge's). */
 export function identityContext(s: Identity): string {
   const where = [`projet ${s.repo ?? s.project}`, ...(s.branch ? [`branche ${s.branch}`] : []), ...(s.worktree ? [`worktree ${basename(s.cwd) || s.cwd}`] : [])].join(', ');
   return [
     `Tu es ${s.name}, ${where} : une session lancée par Ledge (${s.tool}). Les autres sessions Ledge te connaissent sous le nom ${s.name}.`,
     'Pour voir les autres sessions (nom, outil, état, projet, branche, sujet), lance `ledge who`.',
-    s.tool === 'claude' ? 'Pour écrire à une autre session Ledge, Claude ou Codex, utilise son nom Ledge comme adresse SendMessage.'
+    s.tool === 'claude' ? 'Pour écrire à une autre session Ledge, Claude ou Codex, utilise son nom Ledge (donné par `ledge who`) comme adresse SendMessage : Ledge le transmet. `ListAgents` montre les noms internes de Claude, pas les noms Ledge.'
       : 'Pour écrire à une autre session Ledge, lance `ledge send <nom> "<message>"` (seul, sans && ni |). Ledge exécute lui-même `ledge send` et `ledge who` : leur résultat t\'arrive comme « Command blocked by PreToolUse hook: … », c\'est la réponse, pas une erreur.'
   ].join('\n');
 }
@@ -377,25 +378,39 @@ async function identity(agent: Tool, cwd: string | undefined, known: Session | u
 /** A Claude `SendMessage` waits this long for the daemon's ack: the message is typed into a Codex, not just recorded. */
 const SEND_MESSAGE_MS = 1500;
 
+const deny = (reason: string) => JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } });
+
 /**
- * Hands a Claude `SendMessage` to the daemon and turns its ack into the hook's decision: delivered or queued, the real tool is denied
- * (the reason tells Claude it went through Ledge); `native` (a Claude target) or any failure leaves it to proceed.
+ * Routes a Ledge-launched Claude's `SendMessage`: to a Claude, the real tool proceeds with `to` rewritten to the target's
+ * live address and the message naming its sender; to a Codex, the daemon types it and its ack becomes the deny reason
+ * (delivered or queued: it went through Ledge). A dead or ambiguous target is refused; an unknown one, a sender Ledge
+ * did not launch, or any failure leaves the real tool to proceed unchanged.
  */
 async function relayMessage(client: Client, from: string, toolUseId: string | undefined, input: Payload, deadline: number): Promise<string | undefined> {
   if (!toolUseId) return undefined;
   const left = () => Math.max(0, deadline - Date.now());
   const to = input.to as string;
   const snapshot = await client.next('snapshot', left());
-  const tool = snapshot.sessions.find(s => s.name === bareName(to))?.tool;
+  const sender = snapshot.sessions.find(s => s.id === from);
+  if (sender?.source !== 'launcher') return undefined;
+  const r = resolveTarget(to, snapshot.sessions, readPeers());
+  if (r.outcome === 'unknown') return undefined;
+  if (r.outcome === 'refused') return deny(`Ledge n'a pas pu transmettre le message à ${to} : ${r.reason}`);
+  if (r.outcome === 'native') {
+    const named = (text: string) => `${messageNote(sender.name, 'claude')} ${text}`;
+    const updatedInput = { ...input, to: r.address, message: named(input.message as string), ...(typeof input.content === 'string' ? { content: named(input.content) } : {}) };
+    return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow', updatedInput } });
+  }
+  const tool = r.target.tool;
   // Too long for Ledge: a Codex can only be reached through it (refused below, with the length), anyone else natively.
   if (tool !== 'codex' && (input.message as string).length > MESSAGE_MAX) return undefined;
   const summary = str(input.summary);
   const ack = await sendMessageAndAwaitAck(client, { type: 'session.message', rid: toolUseId, from, to, text: input.message as string, ...(summary ? { summary } : {}), intercept: true }, left());
-  const target = tool ? `${to} (${tool})` : to;
+  const target = `${to} (${tool})`;
   const reason = ack.outcome === 'accepted' ? `Message transmis par Ledge à ${target} : il le reçoit maintenant.`
     : ack.outcome === 'queued' ? `Message transmis par Ledge à ${target} : il le recevra dès qu'il sera libre.`
     : ack.outcome === 'refused' ? `Ledge n'a pas pu transmettre le message à ${to} : ${ack.reason ?? 'raison inconnue'}` : undefined;
-  return reason ? JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } }) : undefined;
+  return reason ? deny(reason) : undefined;
 }
 
 /**
@@ -410,7 +425,7 @@ async function runLedgeCommand(client: Client, cmd: NonNullable<ReturnType<typeo
   else {
     line = (await sendOnClient(client, cmd.args, from, left())).line;
   }
-  return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: line } });
+  return deny(line);
 }
 
 /**
