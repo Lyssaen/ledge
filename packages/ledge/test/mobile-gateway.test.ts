@@ -1591,17 +1591,22 @@ describe('phone gateway: chat cards', () => {
 
 describe('phone gateway: close cards', () => {
   const rp = { rpId: 'relay.test', origin: 'https://relay.test' };
-  const QA = randomUUID(); const QB = randomUUID(); const QN = randomUUID();
+  const QA = randomUUID(); const QB = randomUUID(); const QN = randomUUID(); const QPC = randomUUID();
   type Close = { id: string; name: string; tool: 'claude'; closedAt?: string; how?: 'exit' | 'killed'; error?: string };
   const close = (id: string, extra: Partial<Close> = {}): Close => ({ id, name: `bot-${id}`, tool: 'claude', ...extra });
   const DONE = '2026-10-21T08:00:00.000Z';
 
-  /** The device's thread holds QA (a close card of `rows`) and QN (no card); dev2's QB is not the device's. */
+  /**
+   * The device's thread holds QA (a close card of `rows`) and QN (no card); dev2's QB is not the device's, nor is the PC's
+   * QPC, though its card is listed with the device's turns: only its owner tells it apart.
+   */
   function make(rows: Close[], result?: Awaited<ReturnType<NonNullable<Parameters<typeof createPhoneGateway>[0]['closeChat']>>> | Error) {
     const c = fakeChats();
     const turn = (qid: string, closes?: Close[]) => ({ qid, question: 'q', askedAt: T0, steps: [] as never[], ...(closes ? { closes } : {}) });
-    c.turns.set('dev1', [turn(QA, rows), turn(QN)] as never);
+    c.turns.set('dev1', [turn(QA, rows), turn(QN), turn(QPC, rows)] as never);
     c.turns.set('dev2', [turn(QB, rows)] as never);
+    const owner = c.chats.owner;
+    c.chats.owner = (qid: string) => (qid === QPC ? 'desktop' as never : owner(qid));
     const calls: Array<[string, string, number[] | undefined]> = [];
     const closeChat = async (thread: string, qid: string, r?: number[]) => {
       calls.push([thread, qid, r]);
@@ -1687,6 +1692,18 @@ describe('phone gateway: close cards', () => {
     g.send('dev1', { type: 'chat.close', op: randomUUID(), qid: QB });
     await flush();
     expect(last(g)).toMatchObject({ status: 'rejected', reason: 'unknown_session' });
+    expect(calls).toEqual([]);
+  });
+
+  it("chat.close on the PC's qid is unknown_session and closes nothing", async () => {
+    const { calls, g } = make([close('a')]);
+    const auth = await enroll(g);
+    // Even with a close assertion of the device's own turn: the PC's card is not the phone's to act on.
+    const ch = await prepare(g, QA);
+    g.send('dev1', { type: 'chat.close', op: randomUUID(), qid: QPC, assertion: auth.get(rp, ch.challenge, { counter: 1 }) });
+    g.send('dev1', { type: 'chat.close', op: randomUUID(), qid: QPC, rows: [0] });
+    await flush();
+    expect(g.results('dev1').filter(r => r.status === 'rejected').map(r => r.reason)).toEqual(['unknown_session', 'unknown_session']);
     expect(calls).toEqual([]);
   });
 
