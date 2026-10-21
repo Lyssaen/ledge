@@ -331,7 +331,8 @@ export function createPhoneGateway(deps: {
       const done = await deps.closeChat(`device:${deviceId}`, msg.qid, targets);
       return done.closed.length > 0 ? { status: 'applied' } : { status: 'failed' };
     } catch (e) {
-      if (e instanceof CloseRefused) return { status: 'failed' };
+      // A row still being closed (the phone reloaded mid-close and asked again) is that close's: under way, not failed.
+      if (e instanceof CloseRefused) return { status: e.underWay ? 'applied' : 'failed' };
       throw e;
     }
   };

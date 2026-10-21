@@ -1740,6 +1740,16 @@ describe('phone gateway: close cards', () => {
     }
   });
 
+  it('is applied when every row left is already being closed, as after a reload mid-close', async () => {
+    const { calls, g } = make([close('a'), close('b', { closedAt: DONE, how: 'exit' })], new CloseRefused('already closed', true));
+    const auth = await enroll(g);
+    const ch = await prepare(g, QA);
+    g.send('dev1', { type: 'chat.close', op: randomUUID(), qid: QA, assertion: auth.get(rp, ch.challenge, { counter: 1 }) });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'applied' });
+    expect(calls).toHaveLength(1);
+  });
+
   it('is applied when at least one row closed', async () => {
     const { g } = make([close('a'), close('b')], { closed: [{ row: 1, id: 'b', how: 'killed' }], failed: [{ row: 0, message: 'x' }] });
     const auth = await enroll(g);

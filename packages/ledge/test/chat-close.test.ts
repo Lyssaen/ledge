@@ -76,9 +76,21 @@ describe('closeFromChat', () => {
     const deps = { chat: f.chat, emit: () => {}, inFlight: new Set(['q#1']), close: async (id: string) => { asked.push(id); return { how: 'exit' as const }; } };
     expect(await closeFromChat(deps, 'q')).toEqual({ closed: [{ row: 2, id: 'c', how: 'exit' }], failed: [] });
     expect(asked).toEqual(['c']);
-    await expect(closeFromChat(deps, 'q')).rejects.toThrow(new CloseRefused('already closed'));
+    // Row 1 is still being closed: the refusal says so.
+    await expect(closeFromChat(deps, 'q')).rejects.toThrow(new CloseRefused('already closed', true));
     await expect(closeFromChat(deps, 'q', [0, 1])).rejects.toBeInstanceOf(CloseRefused);
     expect(asked).toEqual(['c']);
+  });
+
+  it('says whether a refusal is for rows still being closed, or only for rows closed', async () => {
+    const f = fake([row('a', { closedAt: '2026-10-21T08:00:00.000Z', how: 'exit' }), row('b')]);
+    const deps = { chat: f.chat, emit: () => {}, inFlight: new Set(['q#1']), close: async () => ({ how: 'exit' as const }) };
+    // Row 1's close is under way (a phone reloaded mid-close asks again): that is no failure.
+    await expect(closeFromChat(deps, 'q')).rejects.toMatchObject({ message: 'already closed', underWay: true });
+    await expect(closeFromChat(deps, 'q', [1])).rejects.toMatchObject({ underWay: true });
+    await expect(closeFromChat(deps, 'q', [0])).rejects.toMatchObject({ message: 'already closed', underWay: false });
+    await expect(closeFromChat(deps, 'q', [3])).rejects.toMatchObject({ message: 'unknown close', underWay: false });
+    expect(f.marks).toEqual([]);
   });
 
   it('refuses an unknown row', async () => {
@@ -95,7 +107,7 @@ describe('closeFromChat', () => {
     const deps = { chat: f.chat, emit: () => {}, inFlight: new Set<string>(), close: () => { n++; return wait.promise; } };
     const first = closeFromChat(deps, 'q', [0, 0]);
     const second = closeFromChat(deps, 'q', [0]);
-    await expect(second).rejects.toThrow(new CloseRefused('already closed'));
+    await expect(second).rejects.toThrow(new CloseRefused('already closed', true));
     wait.resolve({ how: 'exit' });
     expect(await first).toEqual({ closed: [{ row: 0, id: 'a', how: 'exit' }], failed: [] });
     expect(n).toBe(1);

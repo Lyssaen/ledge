@@ -15,8 +15,13 @@ export interface CloseDeps {
   onClosed?: (row: number, id: string, how: CloseHow) => void;
 }
 
-/** Thrown when no row can be closed at all: every one is already closed or closing, or the card has no such row. */
-export class CloseRefused extends Error {}
+/**
+ * Thrown when no row can be closed at all: every one is already closed or closing, or the card has no such row. `underWay`
+ * when a row is still being closed: that close answers for it, so the request has not failed.
+ */
+export class CloseRefused extends Error {
+  constructor(message: string, readonly underWay = false) { super(message); }
+}
 
 /**
  * A chat card's rows close in parallel (each close waits up to its delays on its own session); a closed row, or one in
@@ -28,7 +33,7 @@ export async function closeFromChat(deps: CloseDeps, qid: string, rows?: number[
   const known = [...new Set(rows ?? [...Array(MAX_PROPOSALS).keys()])].filter(r => chat.close(qid, r));
   if (known.length === 0) throw new CloseRefused('unknown close');
   const todo = known.filter(r => !chat.close(qid, r)!.closedAt && !inFlight.has(`${qid}#${r}`));
-  if (todo.length === 0) throw new CloseRefused('already closed');
+  if (todo.length === 0) throw new CloseRefused('already closed', known.some(r => !chat.close(qid, r)!.closedAt));
   for (const r of todo) inFlight.add(`${qid}#${r}`);
   const closed: Array<{ row: number; id: string; how: CloseHow }> = [];
   const failed: Array<{ row: number; message: string }> = [];
