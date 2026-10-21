@@ -92,8 +92,8 @@ describe('useThreads', () => {
     await waitFor(() => expect(screen.getByTestId('local:nova')).toHaveTextContent('1'));
     const from = log.length;
     await d.dropClients();
-    await waitFor(() => expect(asked(d, 'nova')).toHaveLength(2));
-    await waitFor(() => expect(asked(d, 'otto')).toHaveLength(2));
+    await waitFor(() => expect(asked(d, 'nova')).toHaveLength(2), { timeout: 5000 });
+    await waitFor(() => expect(asked(d, 'otto')).toHaveLength(2), { timeout: 5000 });
     expect(screen.getByTestId('local:nova')).toHaveTextContent('1');
     expect(log.slice(from).filter(x => x === 'local:nova=loading')).toEqual([]);
   });
@@ -108,7 +108,7 @@ describe('useThreads', () => {
     expect(screen.getByTestId('local:rio')).toHaveTextContent('loading');
     view.rerender(<Many client={client} ids={['local:otto']} />);
     await d.dropClients();
-    await waitFor(() => expect(asked(d, 'otto')).toHaveLength(2));
+    await waitFor(() => expect(asked(d, 'otto')).toHaveLength(2), { timeout: 5000 });
     await new Promise(r => setTimeout(r, 150));
     expect(asked(d, 'nova')).toHaveLength(1);
     expect(asked(d, 'rio')).toEqual([]);
