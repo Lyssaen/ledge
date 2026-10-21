@@ -250,5 +250,9 @@ export const codexAdapter: Adapter = {
     return [{ text: flat }, { waitMs: REPLY_ENTER_DELAY_MS }, { keys: ['Enter'] }];
   },
   // Esc interrupts the turn; Ctrl+C clears the draft and a second one quits Codex.
-  interruptKeys: () => ['Escape']
+  interruptKeys: () => ['Escape'],
+  // Codex 0.162, seen in tmux: Ctrl+U clears a typed draft, then `/exit` and `/quit` both quit it (a draft cleared that
+  // way does not stop either from quitting).
+  exitText: () => '/exit',
+  exitPlan: () => [{ keys: ['C-u'] }, { text: '/exit' }, { waitMs: REPLY_ENTER_DELAY_MS }, { keys: ['Enter'] }]
 };

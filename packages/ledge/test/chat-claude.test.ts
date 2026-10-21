@@ -20,6 +20,11 @@ describe('claudeArgs', () => {
     expect(PERSONA).toContain('8 sessions au plus');
     expect(PERSONA).toContain('ne mets un bloc que pour les dossiers sûrs');
   });
+  it('the persona allows a close block for explicit requests, keeps the conversation resumable, and still never acts itself', () => {
+    expect(PERSONA).toContain('```ledge-close');
+    expect(PERSONA).toContain('la conversation reste reprenable');
+    expect(PERSONA).toContain('Tu n\'agis jamais toi-même');
+  });
   it('the persona sends questions about issues, PR/MR and CI to the forge files, dated, and says when there is no access (#23)', () => {
     expect(PERSONA).toContain('forge.md');
     expect(PERSONA).toContain('forge-<projet>.md');

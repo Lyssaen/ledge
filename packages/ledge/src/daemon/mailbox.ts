@@ -13,6 +13,8 @@ export interface MailboxDeps {
   typing: Set<string>;
   /** A chat relay instruction is queued for the session: it goes first. */
   relayQueued: (id: string) => boolean;
+  /** Sessions Ledge is closing: never delivered to, even free; their messages fail once they exit. */
+  closing?: ReadonlySet<string>;
   sent: { record(senderId: string, item: { rid: string; at: string; to: string; peer?: string; text: string; summary?: string }): void; mark(senderId: string, rid: string, status: 'delivered' | 'failed'): void };
   now?: () => string;
 }
@@ -35,7 +37,7 @@ export function createMailbox(d: MailboxDeps): Mailbox {
   const now = d.now ?? (() => new Date().toISOString());
   const queue: Queued[] = []; const seen = new Map<string, MessageAck>();
 
-  const ready = (id: string) => free(d.store.get(id)) && !d.typing.has(id) && !d.relayQueued(id);
+  const ready = (id: string) => free(d.store.get(id)) && !d.typing.has(id) && !d.closing?.has(id) && !d.relayQueued(id);
 
   async function deliver(m: Queued): Promise<void> {
     const s = d.store.get(m.target);

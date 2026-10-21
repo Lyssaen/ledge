@@ -29,6 +29,17 @@ export const ChatRelaySchema = z.object({
 });
 export type ChatRelay = z.infer<typeof ChatRelaySchema>;
 
+/** How a session ended when the card closed it: its agent exited on its own, or was killed. */
+export type CloseHow = 'exit' | 'killed';
+/** A session the chat proposes to close: the session as the store named it, `closedAt` and `how` once the card closed it, `error` when the last attempt failed. */
+export const ChatCloseSchema = z.object({
+  id: z.string().min(1), name: z.string(), tool: ToolSchema,
+  closedAt: z.string().datetime().optional(), how: z.enum(['exit', 'killed']).optional(), error: z.string().optional()
+});
+export type ChatClose = z.infer<typeof ChatCloseSchema>;
+/** Every session an answer proposes to close, in order. */
+export const ChatClosesSchema = z.array(ChatCloseSchema).min(1).max(MAX_PROPOSALS);
+
 /** A project the chat proposes (lot 11, task 5): its repositories are paths the daemon found on its machine, each with the LLM's reason;
  *  `addTo` names an existing project to complete. Nothing is created until the editor's button. */
 export const ChatProjectProposalSchema = z.object({
@@ -42,7 +53,7 @@ export type ChatProjectProposal = z.infer<typeof ChatProjectProposalSchema>;
 export const ChatTurnSchema = z.object({
   machineId: z.string().optional(), machineName: z.string().optional(), choices: z.array(z.object({ id: z.string(), label: z.string() })).optional(),
   qid: z.string().min(1), question: z.string(), askedAt: z.string().datetime(),
-  steps: z.array(ChatStepSchema), answer: z.string().optional(), answeredAt: z.string().datetime().optional(), error: z.string().optional(), proposal: ChatProposalSchema.optional(), proposals: ChatProposalsSchema.optional(), relay: ChatRelaySchema.optional(),
+  steps: z.array(ChatStepSchema), answer: z.string().optional(), answeredAt: z.string().datetime().optional(), error: z.string().optional(), proposal: ChatProposalSchema.optional(), proposals: ChatProposalsSchema.optional(), relay: ChatRelaySchema.optional(), closes: ChatClosesSchema.optional(),
   projectProposal: ChatProjectProposalSchema.optional()
 });
 export type ChatTurn = z.infer<typeof ChatTurnSchema>;

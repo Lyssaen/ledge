@@ -61,6 +61,10 @@ export interface FakeDaemon {
   finishChat(): void;
   /** The `qid` of every launch typed, in order. */
   launched: string[];
+  /** True: the next answers carry a close card of two sessions (Nova, Lancée, both already in the phone's list) instead of the relay and launch cards. */
+  closeCard: boolean;
+  /** The `qid` of every close typed, in order. */
+  closed: string[];
   /** Replaces a session (or adds it) and tells the phone. */
   update(s: PhoneSession): Promise<void>;
   stop(): void;
@@ -71,7 +75,7 @@ function runDaemon(pc: FakePc): FakeDaemon {
   let seen = 0;
   let busy = false;
   const d: FakeDaemon = {
-    sessions: [waiting()], typed: [], answer: true, device: null, push: null, subscription: null, chat: false, hold: false, turns: [], launched: [],
+    sessions: [waiting()], typed: [], answer: true, device: null, push: null, subscription: null, chat: false, hold: false, turns: [], launched: [], closeCard: false, closed: [],
     finishChat() { d.turns = d.turns.map((t) => (t.answer === undefined ? finished(t) : t)); },
     async update(s) {
       d.sessions = [...d.sessions.filter((x) => x.id !== s.id), s];
@@ -85,7 +89,10 @@ function runDaemon(pc: FakePc): FakeDaemon {
     ...(d.device || d.push || d.chat ? { device: { confirm: d.device ? d.device.registered : true, ...(d.push ? { push: d.push } : {}), ...(d.chat ? { chat: true as const } : {}) } } : {})
   });
   /** The scripted answer: short on purpose, a card is never cut (TOOL_TEXT_MAX). */
-  const finished = (t: PhoneChatTurn): PhoneChatTurn => ({
+  const finished = (t: PhoneChatTurn): PhoneChatTurn => d.closeCard ? ({
+    ...t, answer: CHAT_ANSWER, answeredAt: T,
+    closes: [{ id: 'nova', name: 'Nova', tool: 'claude' }, { id: 'lancee', name: 'Lancée', tool: 'claude' }]
+  }) : ({
     ...t, answer: CHAT_ANSWER, answeredAt: T,
     relay: { id: 'nova', name: 'Nova', tool: 'claude', text: 'Relance les tests.' },
     proposals: [{ project: 'ledge', tool: 'claude', prompt: 'Corriger le badge' }]
@@ -104,6 +111,18 @@ function runDaemon(pc: FakePc): FakeDaemon {
       const done = finished({ ...turn, steps: [{ kind: 'sessions' }, { kind: 'pane', id: 's1', name: 'Otto' }] });
       replace(done);
       return pc.send({ type: 'chat.done', qid: m.qid, turn: done });
+    }
+    if (m.type === 'chat.close') {
+      const turn = d.turns.find((t) => t.qid === m.qid);
+      if (!turn?.closes) return pc.send({ type: 'operation.result', op: m.op, status: 'rejected', reason: 'unknown_session' });
+      const refused = d.device?.assertClose(m);
+      if (refused) return pc.send({ type: 'operation.result', op: m.op, status: 'rejected', reason: refused });
+      d.closed.push(m.qid);
+      await pc.send({ type: 'operation.result', op: m.op, status: 'applied' });
+      const rows = new Set(m.rows ?? turn.closes.map((_, i) => i));
+      const after: PhoneChatTurn = { ...turn, closes: turn.closes.map((c, i) => (rows.has(i) ? { ...c, how: 'exit' as const, closedAt: T } : c)) };
+      replace(after);
+      return pc.send({ type: 'chat.done', qid: m.qid, turn: after });
     }
     if (m.type === 'chat.relay' || m.type === 'chat.launch') {
       const turn = d.turns.find((t) => t.qid === m.qid);
@@ -130,13 +149,13 @@ function runDaemon(pc: FakePc): FakeDaemon {
   };
   const handle = async (m: PhoneClientMessage) => {
     if (m.type === 'snapshot.request') return pc.send(snapshot());
-    if (d.chat && (m.type === 'chat.history' || m.type === 'chat.ask' || m.type === 'chat.relay' || m.type === 'chat.launch')) return chatMessage(m);
+    if (d.chat && (m.type === 'chat.history' || m.type === 'chat.ask' || m.type === 'chat.relay' || m.type === 'chat.launch' || m.type === 'chat.close')) return chatMessage(m);
     if (m.type === 'session.pending') {
       const s = d.sessions.find((x) => x.id === m.id);
       return s && pc.send({ type: 'session.updated', session: s });
     }
     if (m.type === 'confirm.prepare') {
-      const r = d.device?.prepare(m, m.purpose === 'launch' ? d.turns.some((t) => t.qid === m.qid) : d.sessions.some((x) => x.id === m.id));
+      const r = d.device?.prepare(m, m.purpose === 'launch' || m.purpose === 'close' ? d.turns.some((t) => t.qid === m.qid) : d.sessions.some((x) => x.id === m.id));
       if (r === undefined) return;
       return pc.send(typeof r === 'string' ? { type: 'error', code: r, request: m.type } : r);
     }

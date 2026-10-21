@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { connect as tcp } from 'node:net';
-import type { ChatProposal, ChatRelay, Projects, ServerMessage, Session } from '@ledge/protocol';
+import type { ChatClose, ChatProposal, ChatRelay, Projects, ServerMessage, Session } from '@ledge/protocol';
 import { DEFAULT_ISLAND_PREFS, pendingKey } from '@ledge/protocol';
 import type { Chat } from '../src/chat/service.js';
 import { Store } from '../src/daemon/store.js';
@@ -1448,7 +1448,7 @@ describe('server', () => {
         proposal: qid => (qid === 'q1' ? proposal : undefined),
         markLaunched(qid, id, emit) { marks.push(['launched', qid, id]); proposal = { ...proposal!, launchedId: id }; emit({ type: 'chat.history', turns: [] }); },
         markFailed(qid, message, emit) { marks.push(['failed', qid, message]); proposal = { ...proposal!, error: message }; emit({ type: 'chat.history', turns: [] }); },
-        relay: () => undefined, markRelay() {}, queuedRelays: () => [], idle: async () => {}
+        relay: () => undefined, markRelay() {}, queuedRelays: () => [], close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}
       };
       return { chat, marks };
     }
@@ -1521,7 +1521,7 @@ describe('server', () => {
           proposal: (qid, row = 0) => (qid === 'q1' ? rows[row] : undefined),
           markLaunched(_qid, id, emit, row = 0) { marks.push(['launched', row, id]); rows[row] = { ...rows[row]!, launchedId: id }; emit({ type: 'chat.history', turns: [] }); },
           markFailed(_qid, message, emit, row = 0) { marks.push(['failed', row, message]); rows[row] = { ...rows[row]!, error: message }; emit({ type: 'chat.history', turns: [] }); },
-          relay: () => undefined, markRelay() {}, queuedRelays: () => [], idle: async () => {}
+          relay: () => undefined, markRelay() {}, queuedRelays: () => [], close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}
         };
         return { chat, marks };
       }
@@ -1575,7 +1575,7 @@ describe('server', () => {
         relay: qid => (qid === 'q1' ? r : undefined),
         markRelay(_qid, patch, emit) { const { id, name, tool, text } = r!; r = { id, name, tool, text, ...patch }; emit({ type: 'chat.history', turns: [] }); },
         queuedRelays: () => (r?.status === 'queued' ? [{ qid: 'q1', relay: r, askedAt: '2026-10-12T08:00:00.000Z' }] : []),
-        idle: async () => {}
+        close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}
       };
       return { chat, current: () => r };
     }
@@ -2326,5 +2326,355 @@ describe('server: models.list (#58)', () => {
     expect(await c.next('models.listing')).toEqual({ type: 'models.listing', requestId: 'r2', tool: 'codex', models: [], error: 'not installed' });
     expect(asked).toEqual(['claude', 'codex']);
     c.close(); await srv2.close();
+  });
+});
+
+describe('close a session', () => {
+  const CLOSE = { freeMs: 200, exitMs: 200 };
+  /** A fake terminal whose agent leaves when the exit command is submitted (`leaves`): its pane goes, the poller sees it gone. */
+  async function closing(panes: Record<string, string[]>, o: { leaves?: boolean; close?: { freeMs: number; exitMs: number }; history?: History; chat?: Chat; omp?: Parameters<typeof startServer>[0]['omp'] } = {}) {
+    tmux = fakeTmux(panes);
+    const keys = tmux.sendKeys.bind(tmux);
+    tmux.sendKeys = async (n, k) => {
+      // This pane's own last key: several sessions closing at once interleave in `sent`.
+      const prev = tmux.sent.filter(x => x[1] === n).at(-1);
+      await keys(n, k);
+      if (o.leaves === false || !k.includes('Enter') || prev?.[0] !== 'text' || prev[2] !== '/exit') return;
+      delete panes[n];
+      const s = store.all().find(x => x.tmuxSession === n);
+      if (s) store.apply(s.id, { name: 'PaneGone', at: new Date().toISOString(), source: 'pane' });
+    };
+    await srv.close();
+    srv = await startServer({ store, tmux, port: 0, close: o.close ?? CLOSE, ...(o.history ? { history: o.history } : {}), ...(o.chat ? { chat: o.chat } : {}), ...(o.omp ? { omp: o.omp } : {}) });
+  }
+  const texts = () => tmux.sent.filter(x => x[0] === 'text');
+  const logged = () => (existsSync(paths().log) ? readFileSync(paths().log, 'utf8') : '');
+
+  it('is not taken as closed by the exit a model change\'s respawn passes through, and the session ends exited', async () => {
+    await closing({ 'ledge-a': ['> '] }, { leaves: false, close: { freeMs: 700, exitMs: 200 } });
+    store.upsert(mk('a', { state: 'idle', cwd: tmpdir(), project: 'p', agentSessionId: 'u-1', model: 'opus' }));
+    let release!: () => void; const gate = new Promise<void>(r => { release = r; });
+    let killing = false; const end = tmux.killSession.bind(tmux);
+    tmux.killSession = async n => { killing = true; await gate; return end(n); };
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.model', id: 'a', model: 'sonnet', effort: null });
+    await until(() => killing, 3000);
+    // The model change holds the session (typing) while it ends the old agent; the close starts then and the agent reads exited.
+    let settled = false;
+    const closed = srv.closeSession('a').then(r => { settled = true; return r; });
+    store.apply('a', { name: 'PaneGone', at: new Date().toISOString(), source: 'daemon' });
+    await new Promise(r => setTimeout(r, 150));
+    expect(settled).toBe(false);
+    release();
+    await closed;
+    expect(store.get('a')!.state).toBe('exited');
+    c.close();
+  });
+
+  it('refuses a direct reply to a session being closed', async () => {
+    await closing({ 'ledge-a': ['Running…'] }, { close: { freeMs: 400, exitMs: 200 } });
+    store.upsert(mk('a', { state: 'working' }));
+    const closed = srv.closeSession('a');
+    await until(() => tmux.sent.length > 0, 3000);
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.reply', id: 'a', text: 'hello' });
+    expect(await c.next('error')).toMatchObject({ id: 'a', message: 'the session is being closed' });
+    expect(texts()).toEqual([]);
+    c.close();
+    await closed;
+  });
+
+  it('closes an idle session with its exit command', async () => {
+    await closing({ 'ledge-a': ['> '] });
+    store.upsert(mk('a', { state: 'idle' }));
+    expect(await srv.closeSession('a')).toEqual({ how: 'exit' });
+    expect(tmux.sent).toEqual([['keys', 'ledge-a', 'C-u'], ['text', 'ledge-a', '/exit'], ['keys', 'ledge-a', 'Enter']]);
+    expect(store.get('a')).toMatchObject({ state: 'exited' });
+    expect(store.get('a')!.archivedAt).toBeUndefined();
+  });
+
+  it('interrupts a working session before it types the exit command', async () => {
+    await closing({ 'ledge-a': ['Running…'] });
+    store.upsert(mk('a', { state: 'working' }));
+    const closed = srv.closeSession('a');
+    await until(() => tmux.sent.length > 0, 3000);
+    expect(tmux.sent).toEqual([['keys', 'ledge-a', 'Escape']]);
+    store.upsert({ ...store.get('a')!, state: 'idle' });
+    expect(await closed).toEqual({ how: 'exit' });
+    expect(tmux.sent).toEqual([['keys', 'ledge-a', 'Escape'], ['keys', 'ledge-a', 'C-u'], ['text', 'ledge-a', '/exit'], ['keys', 'ledge-a', 'Enter']]);
+  });
+
+  it('refuses a pending permission, records the refusal and never types into the dialog', async () => {
+    const history = new History({ dir: tmpDir() });
+    await closing({ 'ledge-a': [PROMPT] }, { history });
+    store.upsert(mk('a', { state: 'working' }));
+    store.apply('a', { name: 'PermissionRequest', at: new Date().toISOString(), source: 'hook', tool: 'Bash', text: 'npm test' });
+    expect(store.get('a')!.pending).toBeDefined();
+    const closed = srv.closeSession('a');
+    await until(() => tmux.sent.length > 0, 3000);
+    expect(tmux.sent[0]).toEqual(['keys', 'ledge-a', 'Escape']);
+    await until(() => history.items('a').some(i => i.kind === 'permission' && i.decision !== undefined), 3000);
+    expect(history.items('a').find(i => i.kind === 'permission')).toMatchObject({ decision: 'deny', byClose: true });
+    expect(texts()).toEqual([]);
+    store.upsert({ ...store.get('a')!, state: 'idle' });
+    expect(await closed).toEqual({ how: 'exit' });
+    expect(texts()).toEqual([['text', 'ledge-a', '/exit']]);
+  });
+
+  it('dismisses a pending question without marking an older permission refused', async () => {
+    const history = new History({ dir: tmpDir() });
+    await closing({ 'ledge-a': [QUESTION] }, { history });
+    store.upsert(mk('a', { state: 'working' }));
+    history.record('a', { name: 'PermissionRequest', at: new Date().toISOString(), source: 'hook', tool: 'Bash', text: 'ls' });
+    history.record('a', { name: 'PreToolUse', at: new Date().toISOString(), source: 'hook', tool: 'AskUserQuestion', text: 'Which?', toolUseId: 'toolu_q' });
+    store.upsert({ ...store.get('a')!, state: 'waiting_input', pending: { kind: 'question', text: 'Which?', source: 'hook' } });
+    const closed = srv.closeSession('a');
+    await until(() => store.get('a')!.pending === undefined, 3000);
+    expect(history.items('a').find(i => i.kind === 'permission')).not.toHaveProperty('decision');
+    // The question's own tool row says the close dismissed it.
+    await until(() => history.items('a').some(i => i.kind === 'tool' && i.byClose === true), 3000);
+    store.upsert({ ...store.get('a')!, state: 'idle' });
+    expect(await closed).toEqual({ how: 'exit' });
+  });
+
+  /** The names of the events the store applied to `id` from now on. */
+  const eventsOf = (id: string) => { const seen: string[] = []; store.onEvent((i, ev) => { if (i === id) seen.push(ev.name); }); return seen; };
+  const hookPermission = { kind: 'permission' as const, text: 'npm test', tool: 'Bash', source: 'hook' as const };
+
+  it('a helper\'s request is not refused for the thread: no Decided, and the close ends in a kill', async () => {
+    await closing({ 'ledge-a': [PROMPT] });
+    store.upsert(mk('a', { state: 'waiting_permission', pending: { ...hookPermission, helperId: 'h1' } }));
+    const events = eventsOf('a');
+    expect(await srv.closeSession('a')).toEqual({ how: 'killed' });
+    expect(tmux.sent).toEqual([['keys', 'ledge-a', 'Escape'], ['kill', 'ledge-a']]);
+    expect(events).not.toContain('Decided');
+  });
+
+  it('a request the terminal showed (no hook) gets no deny', async () => {
+    await closing({ 'ledge-a': [PROMPT] });
+    store.upsert(mk('a', { state: 'waiting_permission', pending: { ...hookPermission, source: 'pane' } }));
+    const events = eventsOf('a');
+    const closed = srv.closeSession('a');
+    await until(() => tmux.sent.length > 0, 3000);
+    await new Promise(r => setTimeout(r, 100));
+    expect(events).not.toContain('Decided');
+    store.upsert({ ...store.get('a')!, state: 'idle', pending: undefined });
+    expect(await closed).toEqual({ how: 'exit' });
+  });
+
+  it('a failed interrupt refuses nothing and ends in a kill', async () => {
+    await closing({ 'ledge-a': [PROMPT] });
+    const keys = tmux.sendKeys;
+    tmux.sendKeys = async (n, k) => { if (k.includes('Escape')) throw new Error('no server running'); return keys(n, k); };
+    store.upsert(mk('a', { state: 'waiting_permission', pending: hookPermission }));
+    const events = eventsOf('a');
+    expect(await srv.closeSession('a')).toEqual({ how: 'killed' });
+    expect(events).not.toContain('Decided');
+    expect(texts()).toEqual([]);
+    expect(logged()).toMatch(/close of a: the interrupt failed: no server running/);
+  });
+
+  it('a request replaced while the interrupt went is left alone', async () => {
+    await closing({ 'ledge-a': [PROMPT] });
+    const keys = tmux.sendKeys;
+    tmux.sendKeys = async (n, k) => {
+      await keys(n, k);
+      if (k.includes('Escape')) store.upsert({ ...store.get('a')!, pending: { ...hookPermission, text: 'rm -rf dist' } });
+    };
+    store.upsert(mk('a', { state: 'waiting_permission', pending: hookPermission }));
+    const events = eventsOf('a');
+    expect(await srv.closeSession('a')).toEqual({ how: 'killed' });
+    expect(events).not.toContain('Decided');
+    expect(store.get('a')).toMatchObject({ state: 'exited' });
+  });
+
+  it('an exit command that cannot be typed ends in a kill', async () => {
+    await closing({ 'ledge-a': ['> '] });
+    tmux.sendText = async () => { throw new Error('no server running'); };
+    store.upsert(mk('a', { state: 'idle' }));
+    expect(await srv.closeSession('a')).toEqual({ how: 'killed' });
+    expect(tmux.sent.at(-1)).toEqual(['kill', 'ledge-a']);
+    expect(logged()).toMatch(/close of a: killed \(its exit command could not be typed\)/);
+  });
+
+  it('a reply sent while the exit command is typed is refused, never typed into it', async () => {
+    await closing({ 'ledge-a': ['> '] });
+    store.upsert(mk('a', { state: 'idle' }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    const closed = srv.closeSession('a');
+    await until(() => texts().length > 0, 3000);
+    c.send({ type: 'session.reply', id: 'a', text: 'encore une chose' });
+    expect(await c.next('error', 3000)).toMatchObject({ id: 'a', request: 'session.reply', code: 'busy' });
+    expect(await closed).toEqual({ how: 'exit' });
+    expect(tmux.sent).toEqual([['keys', 'ledge-a', 'C-u'], ['text', 'ledge-a', '/exit'], ['keys', 'ledge-a', 'Enter']]);
+    c.close();
+  });
+
+  it('kills the session when the agent does not leave', async () => {
+    await closing({ 'ledge-a': ['> '] }, { leaves: false });
+    store.upsert(mk('a', { state: 'idle' }));
+    expect(await srv.closeSession('a')).toEqual({ how: 'killed' });
+    expect(texts()).toEqual([['text', 'ledge-a', '/exit']]);
+    expect(tmux.sent.at(-1)).toEqual(['kill', 'ledge-a']);
+    expect(store.get('a')).toMatchObject({ state: 'exited' });
+    expect(logged()).toMatch(/close of a: killed \(.+\)/);
+  });
+
+  it('kills without typing when the prompt is never freed', async () => {
+    await closing({ 'ledge-a': ['Running…'] });
+    store.upsert(mk('a', { state: 'working' }));
+    expect(await srv.closeSession('a')).toEqual({ how: 'killed' });
+    expect(texts()).toEqual([]);
+    expect(tmux.sent).toEqual([['keys', 'ledge-a', 'Escape'], ['kill', 'ledge-a']]);
+    expect(store.get('a')).toMatchObject({ state: 'exited' });
+  });
+
+  it('a session that exits by itself during the close is closed, not killed', async () => {
+    await closing({ 'ledge-a': ['Running…'] });
+    store.upsert(mk('a', { state: 'working' }));
+    const closed = srv.closeSession('a');
+    await until(() => tmux.sent.length > 0, 3000);
+    store.apply('a', { name: 'PaneGone', at: new Date().toISOString(), source: 'pane' });
+    expect(await closed).toEqual({ how: 'exit' });
+    expect(tmux.sent).toEqual([['keys', 'ledge-a', 'Escape']]);
+  });
+
+  it('closes an OMP session through omp.close', async () => {
+    const closed: string[] = [];
+    const omp = { close: async (id: string) => { closed.push(id); }, closeAll: async () => {}, catalog: async () => ({}) } as unknown as NonNullable<Parameters<typeof startServer>[0]['omp']>;
+    await closing({}, { omp });
+    store.upsert(mk('o', { tool: 'omp', backend: 'omp-rpc', tmuxSession: undefined, state: 'working' }));
+    expect(await srv.closeSession('o')).toEqual({ how: 'exit' });
+    expect(closed).toEqual(['o']);
+    expect(store.get('o')).toMatchObject({ state: 'exited' });
+    expect(tmux.sent).toEqual([]);
+  });
+
+  it('refuses a read-only, an exited and an already closing session', async () => {
+    await closing({ 'ledge-a': ['> '] });
+    store.upsert(mk('h', { source: 'hook_only', tmuxSession: undefined }));
+    store.upsert(mk('x', { state: 'exited' }));
+    store.upsert(mk('a', { state: 'idle' }));
+    await expect(srv.closeSession('zz')).rejects.toMatchObject({ code: 'unknown_session' });
+    await expect(srv.closeSession('h')).rejects.toMatchObject({ code: 'read_only' });
+    await expect(srv.closeSession('x')).rejects.toMatchObject({ code: 'busy', message: 'the session has already exited' });
+    const first = srv.closeSession('a');
+    await expect(srv.closeSession('a')).rejects.toMatchObject({ code: 'busy', message: 'a close is already in progress' });
+    expect(await first).toEqual({ how: 'exit' });
+    expect(texts()).toEqual([['text', 'ledge-a', '/exit']]);
+  });
+
+  describe('from a chat card', () => {
+    /** A chat whose `q1` card closes these rows; the marks are recorded per row and broadcast as a history, like the real one. */
+    function closeChat(initial: ChatClose[]) {
+      const rows = [...initial]; const marks: Array<[string, number, string]> = [];
+      const chat: Chat = {
+        async ask() {}, cancel() {}, async reset() {}, history: () => [], proposal: () => undefined, markLaunched() {}, markFailed() {},
+        relay: () => undefined, markRelay() {}, queuedRelays: () => [],
+        close: (qid, row) => (qid === 'q1' ? rows[row] : undefined),
+        markClosed(_qid, row, how, emit) { marks.push(['closed', row, how]); rows[row] = { ...rows[row]!, closedAt: new Date().toISOString(), how }; emit({ type: 'chat.history', turns: [] }); },
+        markCloseFailed(_qid, row, message, emit) { marks.push(['failed', row, message]); rows[row] = { ...rows[row]!, error: message }; emit({ type: 'chat.history', turns: [] }); },
+        idle: async () => {}
+      };
+      return { chat, marks };
+    }
+    const otto: ChatClose = { id: 'a', name: 'Otto', tool: 'claude' };
+    const pim: ChatClose = { id: 'b', name: 'Pim', tool: 'claude' };
+    const byRow = (a: { row: number }, b: { row: number }) => a.row - b.row;
+
+    it('closes every row for the requester, and every client gets the history', async () => {
+      const { chat, marks } = closeChat([otto, pim]);
+      await closing({ 'ledge-a': ['> '], 'ledge-b': ['> '] }, { chat });
+      store.upsert(mk('a', { state: 'idle' })); store.upsert(mk('b', { name: 'Pim', state: 'idle' }));
+      const c = await connect({ port: srv.port }); await c.next('snapshot'); await c.next('chat.history');
+      const other = await connect({ port: srv.port }); await other.next('snapshot'); await other.next('chat.history');
+      c.send({ type: 'session.close', qid: 'q1' });
+      const closed = [await c.next('session.closed', 3000), await c.next('session.closed', 3000)].sort(byRow);
+      expect(closed).toEqual([{ type: 'session.closed', qid: 'q1', row: 0, id: 'a', how: 'exit' }, { type: 'session.closed', qid: 'q1', row: 1, id: 'b', how: 'exit' }]);
+      await c.next('chat.history'); await other.next('chat.history');
+      await expect(other.next('session.closed', 100)).rejects.toThrow(/timeout/);
+      expect(marks.sort((x, y) => x[1] - y[1])).toEqual([['closed', 0, 'exit'], ['closed', 1, 'exit']]);
+      expect(store.get('a')).toMatchObject({ state: 'exited' }); expect(store.get('b')).toMatchObject({ state: 'exited' });
+      expect(texts()).toEqual(expect.arrayContaining([['text', 'ledge-a', '/exit'], ['text', 'ledge-b', '/exit']]));
+      // Closed, the card refuses a second click.
+      c.send({ type: 'session.close', qid: 'q1', rows: [1] });
+      expect(await c.next('error')).toEqual({ type: 'error', message: 'already closed', request: 'session.close' });
+      c.close(); other.close();
+    });
+
+    it('refuses an unknown card, and an unknown row, without typing anything', async () => {
+      await closing({ 'ledge-a': ['> '] }, { chat: closeChat([otto]).chat });
+      store.upsert(mk('a', { state: 'idle' }));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.close', qid: 'q9' });
+      expect(await c.next('error')).toEqual({ type: 'error', message: 'unknown close', request: 'session.close' });
+      c.send({ type: 'session.close', qid: 'q1', rows: [3] });
+      expect(await c.next('error')).toEqual({ type: 'error', message: 'unknown close', request: 'session.close' });
+      expect(tmux.sent).toEqual([]);
+      c.close();
+    });
+
+    it('two cards closing the same session share its close: both rows read closed, neither failed', async () => {
+      // q1 and q2 each name session `a` (a phone's card and Desktop's, say): their rows are not the same, their session is.
+      const cards: Record<string, ChatClose[]> = { q1: [otto], q2: [otto] }; const marks: Array<[string, string, number]> = [];
+      const chat: Chat = {
+        ...closeChat([]).chat,
+        close: (qid, row) => cards[qid]?.[row],
+        markClosed(qid, row, how, emit) { marks.push([how, qid, row]); cards[qid]![row] = { ...cards[qid]![row]!, closedAt: new Date().toISOString(), how }; emit({ type: 'chat.history', turns: [] }); },
+        markCloseFailed(qid, row, message, emit) { marks.push([message, qid, row]); cards[qid]![row] = { ...cards[qid]![row]!, error: message }; emit({ type: 'chat.history', turns: [] }); }
+      };
+      await closing({ 'ledge-a': ['> '] }, { chat });
+      store.upsert(mk('a', { state: 'idle' }));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.close', qid: 'q1' });
+      c.send({ type: 'session.close', qid: 'q2' });
+      const closed = [await c.next('session.closed', 3000), await c.next('session.closed', 3000)].sort((x, y) => (x as { qid: string }).qid.localeCompare((y as { qid: string }).qid));
+      expect(closed).toEqual([{ type: 'session.closed', qid: 'q1', row: 0, id: 'a', how: 'exit' }, { type: 'session.closed', qid: 'q2', row: 0, id: 'a', how: 'exit' }]);
+      expect(marks.sort()).toEqual([['exit', 'q1', 0], ['exit', 'q2', 0]]);
+      await expect(c.next('error', 100)).rejects.toThrow(/timeout/);
+      // One close typed one exit command.
+      expect(texts()).toEqual([['text', 'ledge-a', '/exit']]);
+      c.close();
+    });
+
+    it('a failed row reaches the requester as one error once every row has settled', async () => {
+      const { chat, marks } = closeChat([otto, { id: 'gone', name: 'Zed', tool: 'claude' }]);
+      await closing({ 'ledge-a': ['> '] }, { chat });
+      store.upsert(mk('a', { state: 'idle' }));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.close', qid: 'q1' });
+      const error = await c.next('error', 3000);
+      expect(error).toEqual({ type: 'error', message: 'unknown session', request: 'session.close' });
+      // The failure came first, but the error waited for the other row.
+      expect(marks.sort((x, y) => x[1] - y[1])).toEqual([['closed', 0, 'exit'], ['failed', 1, 'unknown session']]);
+      expect(await c.next('session.closed')).toEqual({ type: 'session.closed', qid: 'q1', row: 0, id: 'a', how: 'exit' });
+      await expect(c.next('error', 100)).rejects.toThrow(/timeout/);
+      c.close();
+    });
+  });
+
+  it('delivers nothing to a closing session', async () => {
+    let r: ChatRelay | undefined = { id: 'a', name: 'Otto', tool: 'claude', text: 'Lance les tests', status: 'queued' };
+    const chat: Chat = {
+      async ask() {}, cancel() {}, async reset() {}, history: () => [], proposal: () => undefined, markLaunched() {}, markFailed() {},
+      relay: qid => (qid === 'q1' ? r : undefined),
+      markRelay(_qid, patch, emit) { const { id, name, tool, text } = r!; r = { id, name, tool, text, ...patch }; emit({ type: 'chat.history', turns: [] }); },
+      queuedRelays: () => (r?.status === 'queued' ? [{ qid: 'q1', relay: r, askedAt: '2026-10-12T08:00:00.000Z' }] : []),
+      close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}
+    };
+    const history = new History({ dir: tmpDir() });
+    await closing({ 'ledge-a': ['Running…'] }, { history, chat });
+    store.upsert(mk('a', { state: 'working' })); store.upsert(mk('b', { name: 'Pim', state: 'idle' }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.message', rid: 'r1', from: 'b', to: 'Otto', text: 'Salut' });
+    expect(await c.next('message.ack', 3000)).toMatchObject({ outcome: 'queued' });
+    const closed = srv.closeSession('a');
+    await until(() => tmux.sent.length > 0, 3000);
+    store.upsert({ ...store.get('a')!, state: 'idle' });
+    expect(await closed).toEqual({ how: 'exit' });
+    expect(texts()).toEqual([['text', 'ledge-a', '/exit']]);
+    expect(r).toMatchObject({ error: 'Otto stopped before it got the instruction' });
+    await until(() => history.items('b').some(i => i.kind === 'sent' && i.status === 'failed'), 3000);
+    c.close();
   });
 });

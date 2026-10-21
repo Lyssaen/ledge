@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { AskQuestionSchema, PendingSchema, SessionSchema, ToolSchema, OmpApprovalSchema } from './session.js';
-import { ChatStepSchema, ChatTurnSchema, ChatProposalSchema, ChatProposalsSchema, ChatRelaySchema, MAX_PROPOSALS, ChatProjectProposalSchema } from './chat.js';
+import { ChatStepSchema, ChatTurnSchema, ChatProposalSchema, ChatProposalsSchema, ChatRelaySchema, ChatClosesSchema, MAX_PROPOSALS, ChatProjectProposalSchema } from './chat.js';
 import { ReposInspectSchema, ReposInfoSchema } from './repos.js';
 import { ModelsListSchema, ModelsListingSchema, ModelIdSchema, EffortSchema } from './models.js';
 import { ReposScanSchema, ReposFoundSchema } from './scan.js';
@@ -59,6 +59,8 @@ export const SessionEventSchema = z.object({
   transcriptPath: z.string().optional(),
   /** Decided: what was chosen when the daemon knows it. */
   decision: DecisionSchema.optional(),
+  /** Decided: the request was refused by Ledge closing the session (its interrupt keys), not by the user's answer. */
+  byClose: z.literal(true).optional(),
   /** The agent's own session id when the hook names it, so the daemon can resume that conversation. */
   agentSessionId: z.string().optional()
 });
@@ -103,6 +105,8 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session.thread.item'), id: z.string(), item: ThreadItemSchema }),
   /** Answer to the requester of a `session.launch`: the session exists (its `session.updated` is broadcast as usual). */
   z.object({ type: z.literal('session.launched'), id: z.string() }),
+  /** Answer to the requester of a `session.close`, once per row closed: the session `id` and how it ended. */
+  z.object({ type: z.literal('session.closed'), qid: z.string(), row: z.number().int().min(0), id: z.string(), how: z.enum(['exit', 'killed']) }),
   z.object({ type: z.literal('recents'), recents: z.array(RecentSchema) }),
   /** Answer to the requester of a `folder.list` or `folder.create`: `path` resolved (`~` expanded), `parent` null at the
    *  root, `entries` its subfolders by name (hidden ones left out). A failure keeps the asked path and says why in `error`,
@@ -113,7 +117,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   /** The chat (spec 2026-10-11 §5): what Ledge reads, its words as they come, the final text, or why it stopped; the day's turns after each snapshot. */
   z.object({ type: z.literal('chat.step'), qid: z.string(), step: ChatStepSchema }),
   z.object({ type: z.literal('chat.delta'), qid: z.string(), text: z.string() }),
-  z.object({ type: z.literal('chat.done'), qid: z.string(), text: z.string(), at: z.string().datetime(), proposal: ChatProposalSchema.optional(), proposals: ChatProposalsSchema.optional(), relay: ChatRelaySchema.optional(), projectProposal: ChatProjectProposalSchema.optional() }),
+  z.object({ type: z.literal('chat.done'), qid: z.string(), text: z.string(), at: z.string().datetime(), proposal: ChatProposalSchema.optional(), proposals: ChatProposalsSchema.optional(), relay: ChatRelaySchema.optional(), closes: ChatClosesSchema.optional(), projectProposal: ChatProjectProposalSchema.optional() }),
   z.object({ type: z.literal('chat.error'), qid: z.string(), message: z.string() }),
   z.object({ type: z.literal('chat.history'), turns: z.array(ChatTurnSchema) }),
   /** The daemon updating itself: npm is running, then the service restarts (the socket closes right after). */
@@ -140,6 +144,9 @@ export type MessageAck = Extract<ServerMessage, { type: 'message.ack' }>;
 export const MESSAGE_MAX = 20000;
 export const SUMMARY_MAX = 500;
 
+/** A card's rows to act on (#24), indexes into the turn's list, each once. */
+const launchRows = z.array(z.number().int().min(0).max(MAX_PROPOSALS - 1)).min(1).max(MAX_PROPOSALS).refine(r => new Set(r).size === r.length, 'a row twice');
+
 export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('chat.route'), qid: z.string().min(1).max(100), text: z.string().min(1).max(20000), tool: ToolSchema.optional(), context: RoutingContextSchema }),
   DocumentReadSchema,
@@ -152,7 +159,7 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
    *  but `rows`, `model` and `effort`. */
   z.object({ type: z.literal('session.launch'), tool: ToolSchema, cwd: z.string().min(1), name: z.string().optional(), prompt: z.string().optional(), continue: z.boolean().optional(), qid: z.string().min(1).optional(),
     /** With `qid`: the card's rows to launch (#24), indexes into the turn's `proposals`, each once; the first row without it. */
-    rows: z.array(z.number().int().min(0).max(MAX_PROPOSALS - 1)).min(1).max(MAX_PROPOSALS).refine(r => new Set(r).size === r.length, 'a row twice').optional(),
+    rows: launchRows.optional(),
     /** Folders in addition to `cwd` (Claude: `--add-dir`); resolved like `cwd`. */ dirs: z.array(z.string().min(1)).max(20).optional(),
     /** The agent's model and effort (#58), the agent's own default when left out; with `qid`, for every row launched. */
     model: ModelIdSchema.optional(), effort: EffortSchema.optional(),
@@ -173,6 +180,8 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session.relay'), qid: z.string().min(1) }),
   /** Takes the card's queued instruction back out of the queue. */
   z.object({ type: z.literal('session.relay.cancel'), qid: z.string().min(1) }),
+  /** The chat's close card: closes the turn's sessions, `rows` (indexes into its `closes`) or all of them. */
+  z.object({ type: z.literal('session.close'), qid: z.string().min(1), rows: launchRows.optional() }),
   /** `always` and `note` only where the harness offers them (`offers`); a note goes with `deny`, for the agent to read. */
   z.object({
     type: z.literal('session.decide'), id: z.string(), decision: DecisionSchema, note: z.string().trim().min(1).max(NOTE_MAX).optional(),

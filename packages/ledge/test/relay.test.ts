@@ -279,6 +279,23 @@ describe('createRelay (spec 2026-10-12 relay §4)', () => {
     relay.close();
   });
 
+  it('a closing session is never delivered to, even free; once out of the set, the next store change delivers', async () => {
+    store.upsert(mk('s1', { state: 'idle' }));
+    const c = fakeChat({ q1: otto('a') });
+    const closing = new Set(['s1']); const next: string[] = [];
+    const relay = createRelay({ threads: c.threads, store, replyTo, closing, next: id => next.push(id) });
+    await relay.request('q1');
+    expect(c.map.get('q1')!.status).toBe('queued');
+    store.upsert(mk('s1', { state: 'idle', lastActivityAt: '2026-10-12T08:00:01.000Z' })); await flush();
+    relay.settle('s1'); await flush();
+    expect(typed).toEqual([]);
+    closing.delete('s1');
+    store.upsert(mk('s1', { state: 'idle', lastActivityAt: '2026-10-12T08:00:02.000Z' })); await flush();
+    expect(typed).toEqual([['s1', 'a']]);
+    expect(next).toEqual([]);
+    relay.close();
+  });
+
   describe('across threads', () => {
     it('a device thread\'s instruction is reported to that device\'s emitter, not the desktop\'s', async () => {
       store.upsert(mk('s1', { state: 'idle' }));

@@ -207,6 +207,7 @@ const fr = {
     },
     // #24 : plusieurs sessions dans une réponse.
     group: { label: (n: number) => `${n} sessions proposées`, launchAll: (n: number) => `Tout lancer (${n})`, launchRow: 'Lancer', pick: (project: string) => `Lancer ${project}` },
+    closeGroup: { label: (n: number) => n === 1 ? 'Session à fermer' : `${n} sessions à fermer`, row: 'Fermer', all: (n: number) => `Fermer tout (${n})`, closing: 'Fermeture…', closed: 'Fermée', killed: 'Fermée de force', ended: 'Terminée', retry: 'Réessayer', failed: (m: string) => `Échec : ${m}` },
     relay: {
       label: 'Instruction à envoyer', session: 'Session', instruction: 'Instruction',
       send: 'Envoyer', sending: 'Envoi…', cancel: 'Annuler', retry: 'Réessayer', orRephrase: 'ou reformule ta demande',
@@ -237,7 +238,7 @@ const fr = {
     you: 'Vous', loading: 'Le fil arrive…',
     empty: 'Le fil se remplit au prochain événement de l’agent.',
     liveLabel: 'Outil en cours',
-    permission: 'Permission demandée', decided: { accept: 'Autorisée', deny: 'Refusée', always: 'Toujours autorisée', unknown: 'Répondue dans le terminal' }, undecided: 'En attente de votre décision',
+    permission: 'Permission demandée', decided: { accept: 'Autorisée', deny: 'Refusée', always: 'Toujours autorisée', unknown: 'Répondue dans le terminal', denyByClose: 'Refusée par la fermeture' }, questionByClose: 'Refusée par la fermeture', undecided: 'En attente de votre décision',
     cursorNote: 'Cette source ne transmet ni résultats ni messages intermédiaires.',
     helperOpen: 'Ouvrir la discussion', helperDone: 'Terminé', helperWorking: 'Au travail',
     backTo: 'Discussion principale', delegatedBy: 'Délégué par', instruction: 'Consigne', report: 'Rapport final', helperWaiting: 'attend son rapport…'
@@ -442,6 +443,7 @@ const en: Messages = {
     },
     // #24: several sessions in one answer.
     group: { label: (n: number) => `${n} proposed sessions`, launchAll: (n: number) => `Start all (${n})`, launchRow: 'Start', pick: (project: string) => `Start ${project}` },
+    closeGroup: { label: (n: number) => n === 1 ? 'Session to close' : `${n} sessions to close`, row: 'Close', all: (n: number) => `Close all (${n})`, closing: 'Closing…', closed: 'Closed', killed: 'Force closed', ended: 'Ended', retry: 'Retry', failed: (m: string) => `Failed: ${m}` },
     relay: {
       label: 'Instruction to send', session: 'Session', instruction: 'Instruction',
       send: 'Send', sending: 'Sending…', cancel: 'Cancel', retry: 'Retry', orRephrase: 'or rephrase your request',
@@ -472,7 +474,7 @@ const en: Messages = {
     you: 'You', loading: 'Loading the thread…',
     empty: 'The thread fills up with the agent’s next event.',
     liveLabel: 'Running tool',
-    permission: 'Permission requested', decided: { accept: 'Allowed', deny: 'Denied', always: 'Always allowed', unknown: 'Answered in the terminal' }, undecided: 'Waiting for your decision',
+    permission: 'Permission requested', decided: { accept: 'Allowed', deny: 'Denied', always: 'Always allowed', unknown: 'Answered in the terminal', denyByClose: 'Denied by the close' }, questionByClose: 'Dismissed by the close', undecided: 'Waiting for your decision',
     cursorNote: 'This source sends neither results nor intermediate messages.',
     helperOpen: 'Open the discussion', helperDone: 'Done', helperWorking: 'Working',
     backTo: 'Main discussion', delegatedBy: 'Delegated by', instruction: 'Instruction', report: 'Final report', helperWaiting: 'is waiting for its report…'

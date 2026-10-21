@@ -10,6 +10,7 @@ import { relativeTime } from './format';
 import { inline } from './inline';
 import { LaunchGroupCard } from './LaunchGroupCard';
 import { LaunchCard } from './LaunchCard';
+import { CloseGroupCard } from './CloseGroupCard';
 import { RelayCard } from './RelayCard';
 import { ProjectCard } from './ProjectCard';
 import { groupSessions } from '@ledge/fleet';
@@ -35,6 +36,8 @@ export interface ChatViewProps {
   renderModel?: (qid: string, tool: Tool, disabled: boolean) => ReactNode;
   /** The rows of `launchingQid`'s card in flight (#24): the grouped card says « Launching » on those. */
   launchingRows?: readonly number[] | null;
+  /** The close card's turn being closed (its qid), the rows in flight, and its action. Not `onClose`, which closes the panel. */
+  closingQid?: string | null; closingRows?: readonly number[] | null; onCloseSessions?: (qid: string, rows?: number[]) => void;
   /** The relay card's turn being sent (its qid) and its actions. */
   relayingQid?: string | null; onRelay?: (qid: string) => void; onRelayCancel?: (qid: string) => void;
   /** The project card's « Review the proposal » (lot 11): without it (the island) there is no card, the answer stands alone.
@@ -169,19 +172,23 @@ export function ChatView(p: ChatViewProps) {
                       return text && <Answer text={text} sessions={p.sessions.filter(s => !turn.machineId || s.machineId === turn.machineId)} onOpen={p.onOpenSession} onDocument={p.onDocument ? ref => p.onDocument!(ref, turn.qid) : undefined} />;
                     })()}
                     {!!turn.choices?.length && turn === turns.at(-1) && <><div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{turn.choices.map(c => <Button key={c.id} variant="outline" size="sm" disabled={busy || !!p.offline} onClick={() => submit(t.machines.choose(c.label))} style={{ height: 30, padding: '0 10px', fontSize: 12 }}>{c.label}</Button>)}</div><small style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>{t.machines.clarification}</small></>}
-                    {turn.machineName && (turn.proposal || turn.relay || (turn.projectProposal && p.onProject)) && <div style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{t.machines.destination} : <strong style={{ color: 'var(--sidebar-foreground)' }}>{turn.machineId === 'local' ? t.machines.local : turn.machineName}</strong>{p.turnAvailable?.(turn.qid) === false && ` · ${t.machines.offline}`}</div>}
-                    {turn.answeredAt !== undefined && turn.relay ? (
+                    {turn.machineName && (turn.proposal || turn.relay || turn.closes || (turn.projectProposal && p.onProject)) && <div style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{t.machines.destination} : <strong style={{ color: 'var(--sidebar-foreground)' }}>{turn.machineId === 'local' ? t.machines.local : turn.machineName}</strong>{p.turnAvailable?.(turn.qid) === false && ` · ${t.machines.offline}`}</div>}
+                    {turn.answeredAt !== undefined && turn.closes ? (
+                      <CloseGroupCard closes={turn.closes} sessions={p.sessions} busy={p.closingQid === turn.qid} busyRows={p.closingQid === turn.qid ? p.closingRows ?? [] : []}
+                        disabled={!!p.offline || p.turnAvailable?.(turn.qid) === false || (!!p.closingQid && p.closingQid !== turn.qid) || !!p.launchingQid || !!p.relayingQid}
+                        onClose={rows => p.onCloseSessions?.(turn.qid, rows)} onOpenSession={p.onOpenSession} />
+                    ) : turn.answeredAt !== undefined && turn.relay ? (
                       <RelayCard relay={turn.relay} session={p.sessions.find(s => s.id === turn.relay!.id)} busy={p.relayingQid === turn.qid}
-                        disabled={!!p.offline || p.turnAvailable?.(turn.qid) === false || (!!p.relayingQid && p.relayingQid !== turn.qid) || !!p.launchingQid} theme={p.theme ?? 'dark'} reducedMotion={p.reducedMotion}
+                        disabled={!!p.offline || p.turnAvailable?.(turn.qid) === false || (!!p.relayingQid && p.relayingQid !== turn.qid) || !!p.launchingQid || !!p.closingQid} theme={p.theme ?? 'dark'} reducedMotion={p.reducedMotion}
                         onSend={() => p.onRelay?.(turn.qid)} onCancel={() => p.onRelayCancel?.(turn.qid)} onOpenSession={p.onOpenSession} />
                     ) : turn.answeredAt !== undefined && (turn.proposals?.length ?? 0) > 1 ? (
                       <LaunchGroupCard proposals={turn.proposals!} sessions={p.sessions} busy={p.launchingQid === turn.qid} busyRows={p.launchingQid === turn.qid ? p.launchingRows ?? [] : []}
-                        disabled={!!p.offline || p.turnAvailable?.(turn.qid) === false || (!!p.launchingQid && p.launchingQid !== turn.qid) || !!p.relayingQid}
+                        disabled={!!p.offline || p.turnAvailable?.(turn.qid) === false || (!!p.launchingQid && p.launchingQid !== turn.qid) || !!p.relayingQid || !!p.closingQid}
                         model={turn.proposals!.some(x => x.launchedId === undefined) ? p.renderModel?.(turn.qid, turn.proposals![0]!.tool, p.launchingQid === turn.qid) : undefined}
                         onLaunch={rows => p.onLaunchProposal?.(turn.qid, rows)} onOpenSession={p.onOpenSession} onTerminal={id => p.onTerminal?.(id)} />
                     ) : turn.answeredAt !== undefined && turn.proposal && (
                       <LaunchCard proposal={turn.proposal} session={p.sessions.find(s => s.id === turn.proposal!.launchedId)} busy={p.launchingQid === turn.qid}
-                        disabled={!!p.offline || p.turnAvailable?.(turn.qid) === false || (!!p.launchingQid && p.launchingQid !== turn.qid) || !!p.relayingQid}
+                        disabled={!!p.offline || p.turnAvailable?.(turn.qid) === false || (!!p.launchingQid && p.launchingQid !== turn.qid) || !!p.relayingQid || !!p.closingQid}
                         model={turn.proposal.launchedId === undefined ? p.renderModel?.(turn.qid, turn.proposal.tool, p.launchingQid === turn.qid) : undefined}
                         onLaunch={() => p.onLaunchProposal?.(turn.qid)} onOpenSession={p.onOpenSession} onTerminal={id => p.onTerminal?.(id)} />
                     )}

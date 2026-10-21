@@ -421,5 +421,8 @@ export const claudeAdapter: Adapter = {
     if (pending?.kind === 'question') return freeTextPlan(flat, pane);
     return submit(flat);
   },
-  interruptKeys: () => ['Escape']
+  interruptKeys: () => ['Escape'],
+  // `/exit` quits Claude Code 2.1.x, also after a typed draft was cleared with Ctrl+U (seen in tmux).
+  exitText: () => '/exit',
+  exitPlan: () => [...CLEAR, ...send('/exit')]
 };

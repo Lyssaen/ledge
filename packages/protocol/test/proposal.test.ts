@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractProposal, parseProposalBlock, parseProjectBlock, parseRelayBlock, hideProposal } from '../src/proposal.js';
+import { extractProposal, parseProposalBlock, parseProjectBlock, parseRelayBlock, parseCloseBlock, hideProposal } from '../src/proposal.js';
 
 const block = (json: string) => '```ledge-session\n' + json + '\n```';
 
@@ -116,5 +116,35 @@ describe('project blocks (lot 11 task 5)', () => {
     expect(hideProposal('Je propose.\n```ledge-pro')).toBe('Je propose.');
     expect(hideProposal('Je propose.\n```ledge-project\n{"name": "Pa')).toBe('Je propose.');
     expect(hideProposal(project(valid))).toBe('Je propose **Paper** avec deux dépôts.');
+  });
+});
+
+describe('ledge-close blocks', () => {
+  const close = (session: string) => '```ledge-close\n' + JSON.stringify({ session }) + '\n```';
+  it('extractProposal reads several close blocks and removes them from the text', () => {
+    const r = extractProposal('Je ferme Arlo et Bram.\n' + close('a1') + '\n' + close('b2'));
+    expect(r.kind).toBe('close');
+    expect(r.text).toBe('Je ferme Arlo et Bram.');
+    expect(r.blocks.map(b => b.kind)).toEqual(['close', 'close']);
+  });
+  it('the last block decides the kind, and every block leaves the text', () => {
+    const session = '```ledge-session\n{"cwd":"/a"}\n```';
+    const relay = '```ledge-relay\n{"session":"s1","text":"go"}\n```';
+    const a = extractProposal('Voilà.\n' + session + '\n' + close('a1'));
+    expect(a.kind).toBe('close');
+    expect(a.text).toBe('Voilà.');
+    const b = extractProposal('Voilà.\n' + close('a1') + '\n' + relay);
+    expect(b.kind).toBe('relay');
+    expect(b.text).toBe('Voilà.');
+  });
+  it('parseCloseBlock trims the session and refuses an empty or missing one', () => {
+    expect(parseCloseBlock('{"session":"  a1 "}')).toEqual({ session: 'a1' });
+    expect(parseCloseBlock('{"session":""}')).toBeNull();
+    expect(parseCloseBlock('nope')).toBeNull();
+    expect(parseCloseBlock('{}')).toBeNull();
+  });
+  it('hideProposal holds back a close block and a close fence being typed', () => {
+    expect(hideProposal('Je ferme Arlo.\n```ledge-cl')).toBe('Je ferme Arlo.');
+    expect(hideProposal('Je ferme.\n```ledge-close\n{"session":"a')).toBe('Je ferme.');
   });
 });

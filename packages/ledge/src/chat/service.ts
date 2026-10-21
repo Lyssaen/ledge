@@ -3,7 +3,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { spawn as nodeSpawn } from 'node:child_process';
-import { extractProposal, isArchived, MAX_PROPOSALS, proposalRows, parseProjectBlock, parseProposalBlock, parseRelayBlock, type ChatProjectProposal, type ChatProposal, type ChatRelay, type ChatTurn, type Projects, type ServerMessage, type Session, type Tool } from '@ledge/protocol';
+import { extractProposal, isArchived, MAX_PROPOSALS, proposalRows, parseProjectBlock, parseCloseBlock, parseProposalBlock, parseRelayBlock, type ChatClose, type ChatProjectProposal, type ChatProposal, type ChatRelay, type CloseHow, type ChatTurn, type Projects, type ServerMessage, type Session, type Tool } from '@ledge/protocol';
 import { resolveFolder } from '../daemon/folders.js';
 import type { Store } from '../daemon/store.js';
 import type { Tmux } from '../tmux.js';
@@ -29,6 +29,12 @@ export interface Chat {
   markRelay(qid: string, patch: Pick<ChatRelay, 'status' | 'sentAt' | 'error'>, emit: (m: ChatMessage) => void): void;
   /** Today's queued relays, oldest turn first. */
   queuedRelays(emit?: (m: ChatMessage) => void): Array<{ qid: string; relay: ChatRelay; askedAt: string }>;
+  /** The turn's close card row (spec 2026-10-21 close §4), if the turn is still in the day's history. */
+  close(qid: string, row: number): ChatClose | undefined;
+  /** The row's session was closed (`how`); every client gets the new history. */
+  markClosed(qid: string, row: number, how: CloseHow, emit: (m: ChatMessage) => void): void;
+  /** The row's close failed (`error`); every client gets the new history. */
+  markCloseFailed(qid: string, row: number, message: string, emit: (m: ChatMessage) => void): void;
   /** Resolves once no question is running (at once when there is none). */
   idle(): Promise<void>;
 }
@@ -137,6 +143,19 @@ export function createChat(deps: ChatDeps): Chat {
     if (why) { log(`chat ${qid}: relay ignored: ${why} ${block.session}`); return undefined; }
     return { id: s!.id, name: s!.name, tool: s!.tool, text: block.text };
   }
+  /** The close blocks as rows: each session must be tracked, writable, still running now and not already a row; the others are dropped with a log line. */
+  function closesFrom(blocks: Array<{ raw: string }>, qid: string): ChatClose[] {
+    const rows: ChatClose[] = [];
+    for (const { raw } of blocks) {
+      const block = parseCloseBlock(raw);
+      if (!block) { log(`chat ${qid}: close ignored, invalid block: ${raw.slice(0, 200)}`); continue; }
+      const s = deps.store.get(block.session);
+      const why = !s ? 'unknown session' : s.source === 'hook_only' ? 'read-only session' : s.state === 'exited' ? 'session has exited' : rows.some(r => r.id === s.id) ? 'duplicate session' : null;
+      if (why) { log(`chat ${qid}: close ignored: ${why} ${block.session}`); continue; }
+      rows.push({ id: s!.id, name: s!.name, tool: s!.tool });
+    }
+    return rows;
+  }
   /** A project block as a card (lot 11, task 5): only the paths that are folders on this machine now stay (resolved, `~` included,
    *  once each), never one `tooWide` names (it would swallow every repository, as the Settings proposer knows); the others are dropped with
    *  a log line, and with none left there is no card. Nothing is created here. */
@@ -200,12 +219,16 @@ export function createChat(deps: ChatDeps): Chat {
     for (const b of sessionBlocks.slice(0, MAX_PROPOSALS)) { const p = await proposalFrom(b.raw, tool, turn.qid); if (p) proposals.push(p); }
     const proposal = proposals[0];
     const relay = kind === 'relay' ? relayFrom(raw!, turn.qid) : undefined;
+    const closeBlocks = kind === 'close' ? blocks.filter(b => b.kind === 'close') : [];
+    if (closeBlocks.length > MAX_PROPOSALS) log(`chat ${turn.qid}: ${closeBlocks.length - MAX_PROPOSALS} sessions beyond ${MAX_PROPOSALS} ignored`);
+    const closes = closesFrom(closeBlocks.slice(0, MAX_PROPOSALS), turn.qid);
     const projectProposal = kind === 'project' ? await projectFrom(raw!, turn.qid) : undefined;
     turn.answer = text; turn.answeredAt = now();
     if (proposal) { turn.proposal = proposal; turn.proposals = proposals; }
     if (relay) turn.relay = relay;
+    if (closes.length > 0) turn.closes = closes;
     if (projectProposal) turn.projectProposal = projectProposal;
-    emit({ type: 'chat.done', qid: turn.qid, text, at: turn.answeredAt, ...(proposal ? { proposal, proposals } : {}), ...(relay ? { relay } : {}), ...(projectProposal ? { projectProposal } : {}) });
+    emit({ type: 'chat.done', qid: turn.qid, text, at: turn.answeredAt, ...(proposal ? { proposal, proposals } : {}), ...(relay ? { relay } : {}), ...(closes.length > 0 ? { closes } : {}), ...(projectProposal ? { projectProposal } : {}) });
     return { ok: true };
   }
 
@@ -226,6 +249,18 @@ export function createChat(deps: ChatDeps): Chat {
     markRelay(qid, patch, emit) {
       const t = turnOf(qid); if (!t?.relay) return;
       const { id, name, tool, text } = t.relay; t.relay = { id, name, tool, text, ...patch };
+      emit({ type: 'chat.history', turns });
+    },
+    close: (qid, row) => { rollDay(); return turnOf(qid)?.closes?.[row]; },
+    markClosed(qid, row, how, emit) {
+      const t = turnOf(qid); const c = t?.closes?.[row]; if (!t || !c) return;
+      const next: ChatClose = { ...c, closedAt: now(), how }; delete next.error;
+      t.closes = t.closes!.map((r, i) => (i === row ? next : r));
+      emit({ type: 'chat.history', turns });
+    },
+    markCloseFailed(qid, row, message, emit) {
+      const t = turnOf(qid); const c = t?.closes?.[row]; if (!t || !c) return;
+      t.closes = t.closes!.map((r, i) => (i === row ? { ...c, error: message } : r));
       emit({ type: 'chat.history', turns });
     },
     // A roll caught here is silent otherwise: the overlays would keep showing yesterday's queued card.

@@ -49,6 +49,9 @@ export const copy = {
     sentTo: (name: string) => `Envoyé à ${name} · `, launchedTo: 'Lancée · ', seeThread: 'voir son fil',
     notSent: 'Pas envoyé.', notLaunched: 'Pas lancée.',
     launchSetup: 'Protégez d\'abord vos accords depuis Connexion.',
+    closeLabel: 'Sessions à fermer', closeRow: 'Fermer', closeAll: (n: number) => `Fermer tout (${n})`,
+    closing: 'Fermeture…', closed: 'Fermée', killed: 'Fermée de force', ended: 'Terminée',
+    closeFailed: 'Échec de la fermeture', closeSetup: 'Protégez d\'abord vos accords depuis Connexion.',
     steps: {
       sessions: (n: number) => `Lit les ${n} sessions…`,
       pane: (name: string) => `Regarde le terminal de ${name}…`,

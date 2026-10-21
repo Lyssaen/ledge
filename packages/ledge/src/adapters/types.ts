@@ -31,6 +31,10 @@ export interface Adapter {
   /** A question can be answered in free text (`replyPlan` with any text); without it, only an option number. */
   freeText?: boolean;
   interruptKeys(): string[];
+  /** The slash command that quits the agent CLI. */
+  exitText(): string;
+  /** Clear the input line, type `exitText()`, submit. No `until`: nothing is verified, the daemon falls back to a kill. */
+  exitPlan(): KeyPlan;
   /**
    * The pane lines worth showing in the terminal preview, with the tool's own chrome (input box, status
    * line) removed. Optional: without it the preview is the raw pane. Blank runs and the last-N cut are

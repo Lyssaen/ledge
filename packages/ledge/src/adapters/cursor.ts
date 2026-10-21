@@ -317,6 +317,9 @@ function notePlan(lines: string[], note: string): KeyPlan {
   return [{ text: 'n' }, { until: inSkipField }, ...typeIt];
 }
 
+/** Pause between the typed `/exit` and its Enter, so the Enter is not taken as part of a paste. */
+const EXIT_ENTER_DELAY_MS = 300;
+
 export const cursorAdapter: Adapter = {
   tool: 'cursor',
   detectPrompt,
@@ -352,5 +355,10 @@ export const cursorAdapter: Adapter = {
     return [{ text: flat }, { until: typed(flat) }, { keys: ['Enter'] }];
   },
   // Ctrl-C aborts a running turn; at rest it only clears the input line, it never quits.
-  interruptKeys: () => ['C-c']
+  interruptKeys: () => ['C-c'],
+  // Not run on the real CLI (its TUI asked for a login that could not be done here): `/exit` as the quit command is an assumption,
+  // not verified on the real CLI; the `killSession` fallback covers it if wrong. Ctrl-C at rest only clears the input line. No `until`
+  // (replyPlan's `typed` check): a pause lets the text land in the input before Enter.
+  exitText: () => '/exit',
+  exitPlan: () => [{ keys: ['C-c'] }, { text: '/exit' }, { waitMs: EXIT_ENTER_DELAY_MS }, { keys: ['Enter'] }]
 };

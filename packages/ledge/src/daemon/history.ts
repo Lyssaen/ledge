@@ -175,10 +175,15 @@ export class History {
         return this.put(id, { kind: 'permission', id: `perm-${ev.at}-${this.items(id).length}`, ...common, tool: ev.tool, text: ev.text });
       }
       case 'Decided': {
-        // Without a decision it answered a question (or the idle input line): no permission of the thread is its.
-        if (!ev.decision) return undefined;
+        // Without a decision it answered a question (or the idle input line): no permission of the thread is its. Only a
+        // close says so in the thread: it marks the question's own tool row (a question has no permission row) as dismissed.
+        if (!ev.decision) {
+          if (!ev.byClose) return undefined;
+          const q = [...this.items(id)].reverse().find((i): i is ToolItem => i.kind === 'tool' && QUESTION_TOOLS.has(i.tool) && i.status === 'running' && !i.helperId);
+          return q ? this.put(id, { ...q, status: 'unknown', byClose: true as const }) : undefined;
+        }
         const perm = [...this.items(id)].reverse().find(i => i.kind === 'permission' && i.decision === undefined);
-        return perm && perm.kind === 'permission' ? this.put(id, { ...perm, decision: ev.decision }) : undefined;
+        return perm && perm.kind === 'permission' ? this.put(id, { ...perm, decision: ev.decision, ...(ev.byClose ? { byClose: true as const } : {}) }) : undefined;
       }
       case 'AgentMessage': {
         if (!ev.messageId || !ev.text) return undefined;

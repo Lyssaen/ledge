@@ -59,6 +59,17 @@ describe('<Thread>', () => {
     expect(container.querySelector('[data-permission]')).toHaveAttribute('data-decision', 'deny');
     expect(container.querySelector('[data-permission]')).toHaveTextContent('Denied');
   });
+  it('says a request refused by a close came from the close, for a permission and for a question', () => {
+    const refused: ThreadItem[] = [
+      { kind: 'prompt', id: 'p', at: at(0), turn: 1, text: 'Go' },
+      { kind: 'permission', id: 'perm-c', at: at(1), turn: 1, tool: 'Bash', text: 'npm test', decision: 'deny', byClose: true },
+      { kind: 'tool', id: 'toolu_q', at: at(2), turn: 1, tool: 'AskUserQuestion', label: 'Créer bye.txt ?', status: 'unknown', byClose: true, files: [] }
+    ];
+    const { container } = render(<Thread session={fakeSession('a')} items={refused} t={t} theme="dark" paused />);
+    expect(container.querySelector('[data-permission]')).toHaveTextContent('Denied by the close');
+    expect(container.querySelector('[data-question-closed]')).toHaveTextContent('Dismissed by the close');
+    expect(container.querySelector('[data-question-closed]')).toHaveTextContent('Créer bye.txt ?');
+  });
   it('keeps the live tool line last in the turn, under what the agent said after the call started', () => {
     // The agent speaks while a tool still runs (or a permission is asked): the thread stays chronological, tool line last.
     const turn: ThreadItem[] = [

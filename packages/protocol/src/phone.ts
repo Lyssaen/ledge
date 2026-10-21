@@ -115,7 +115,7 @@ export const AssertionSchema = z.object({
 export type Assertion = z.infer<typeof AssertionSchema>;
 
 /** What a challenge is for. */
-export const ConfirmPurposeSchema = z.enum(['register', 'decide', 'launch']);
+export const ConfirmPurposeSchema = z.enum(['register', 'decide', 'launch', 'close']);
 export type ConfirmPurpose = z.infer<typeof ConfirmPurposeSchema>;
 
 /** The phone's chat: no folder, no path, no machine, no free error text; every object is strict, `pick` included. */
@@ -134,6 +134,13 @@ export const PhoneChatRelaySchema = z.object({
 }).strict();
 export type PhoneChatRelay = z.infer<typeof PhoneChatRelaySchema>;
 
+/** A session the card closes: no error text, `failed` says the last attempt did not work. */
+export const PhoneChatCloseSchema = z.object({
+  id: z.string().min(1), name: z.string(), tool: ToolSchema,
+  how: z.enum(['exit', 'killed']).optional(), closedAt: z.string().datetime().optional(), failed: z.literal(true).optional()
+}).strict();
+export type PhoneChatClose = z.infer<typeof PhoneChatCloseSchema>;
+
 /** Why a question ended without an answer. */
 export const ChatErrorCodeSchema = z.enum(['busy', 'timeout', 'cancelled', 'failed']);
 export type ChatErrorCode = z.infer<typeof ChatErrorCodeSchema>;
@@ -142,7 +149,7 @@ export const PhoneChatTurnSchema = z.object({
   qid: OperationIdSchema, question: z.string().max(MESSAGE_MAX), askedAt: z.string().datetime(),
   steps: z.array(PhoneChatStepSchema).max(50), answer: z.string().max(THREAD_TEXT_MAX).optional(), answeredAt: z.string().datetime().optional(),
   error: ChatErrorCodeSchema.optional(), proposals: z.array(PhoneChatProposalSchema).max(MAX_PROPOSALS).optional(),
-  relay: PhoneChatRelaySchema.optional(), cut: z.literal(true).optional()
+  relay: PhoneChatRelaySchema.optional(), closes: z.array(PhoneChatCloseSchema).min(1).max(MAX_PROPOSALS).optional(), cut: z.literal(true).optional()
 }).strict();
 export type PhoneChatTurn = z.infer<typeof PhoneChatTurnSchema>;
 
@@ -152,6 +159,9 @@ export const CHAT_HISTORY_BUDGET = 393_216;
 const sessionId = z.string().min(1).max(100);
 /** The request the phone showed, named by its key. */
 const PhoneExpectSchema = PendingSchema.pick({ kind: true, text: true }).extend({ key: z.string().min(1).max(64) });
+
+/** The rows of a card the phone acts on: indexes into the card, none twice. */
+const CardRowsSchema = z.array(z.number().int().min(0).max(MAX_PROPOSALS - 1)).min(1).max(MAX_PROPOSALS).refine(r => new Set(r).size === r.length, 'a row twice');
 
 /** What the daemon accepts from a phone: this union is the whitelist. */
 export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
@@ -196,7 +206,8 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('chat.reset') }),
   z.object({ type: z.literal('chat.history') }),
   z.object({ type: z.literal('chat.relay'), op: OperationIdSchema, qid: OperationIdSchema }),
-  z.object({ type: z.literal('chat.launch'), op: OperationIdSchema, qid: OperationIdSchema, rows: z.array(z.number().int().min(0).max(MAX_PROPOSALS - 1)).min(1).max(MAX_PROPOSALS).refine(r => new Set(r).size === r.length, 'a row twice').optional(), assertion: AssertionSchema.optional() }),
+  z.object({ type: z.literal('chat.launch'), op: OperationIdSchema, qid: OperationIdSchema, rows: CardRowsSchema.optional(), assertion: AssertionSchema.optional() }),
+  z.object({ type: z.literal('chat.close'), op: OperationIdSchema, qid: OperationIdSchema, rows: CardRowsSchema.optional(), assertion: AssertionSchema.optional() }),
   /** Whether the phone's app is in front: a device that is visible gets no push. */
   z.object({ type: z.literal('presence'), visible: z.boolean() })
 ]);
