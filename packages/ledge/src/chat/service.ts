@@ -251,7 +251,6 @@ export function createChat(deps: ChatDeps): Chat {
       const { id, name, tool, text } = t.relay; t.relay = { id, name, tool, text, ...patch };
       emit({ type: 'chat.history', turns });
     },
-    // A roll caught here is silent otherwise: the overlays would keep showing yesterday's queued card.
     close: (qid, row) => { rollDay(); return turnOf(qid)?.closes?.[row]; },
     markClosed(qid, row, how, emit) {
       const t = turnOf(qid); const c = t?.closes?.[row]; if (!t || !c) return;
@@ -264,6 +263,7 @@ export function createChat(deps: ChatDeps): Chat {
       t.closes = t.closes!.map((r, i) => (i === row ? { ...c, error: message } : r));
       emit({ type: 'chat.history', turns });
     },
+    // A roll caught here is silent otherwise: the overlays would keep showing yesterday's queued card.
     queuedRelays(emit) { if (rollDay()) emit?.({ type: 'chat.history', turns }); return turns.flatMap(t => (t.relay?.status === 'queued' ? [{ qid: t.qid, relay: t.relay, askedAt: t.askedAt }] : [])); },
     idle: () => (busy ? new Promise<void>(res => { idleWaiters.push(res); }) : Promise.resolve()),
     cancel(qid) { if (current?.qid === qid) { current.cancelled = true; current.handle?.kill(); } },
