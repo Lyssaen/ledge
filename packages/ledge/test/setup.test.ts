@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, symlinkSync, readlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, symlinkSync, readlinkSync, chmodSync, lstatSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { mergeClaudeHooks, mergeCodexHooks, mergeCursorHooks, runSetup, CLAUDE_EVENTS, CODEX_EVENTS, CURSOR_EVENTS, systemdUnit, installService, SERVICE, relinkBin } from '../src/cli/setup.js';
+import { mergeClaudeHooks, mergeCodexHooks, mergeCursorHooks, runSetup, CLAUDE_EVENTS, CODEX_EVENTS, CURSOR_EVENTS, systemdUnit, installService, SERVICE, writeBin } from '../src/cli/setup.js';
 
 describe('mergeClaudeHooks', () => {
   it('appends a ledge entry to every event, keeping foreign hooks', () => {
@@ -280,22 +281,46 @@ describe('systemd service', () => {
   });
 });
 
-describe('relinkBin', () => {
+describe('writeBin', () => {
   const dir = () => mkdtempSync(join(tmpdir(), 'ledge-bin-'));
-  it('points a link to an older Ledge CLI at the running one', async () => {
-    const d = dir(); const old = join(d, 'clone/packages/ledge/dist/cli/index.js'); const now = join(d, 'npm/node_modules/@paradow/ledge/dist/cli/index.js');
-    mkdirSync(join(old, '..'), { recursive: true }); mkdirSync(join(now, '..'), { recursive: true }); writeFileSync(old, ''); writeFileSync(now, '');
-    symlinkSync(old, join(d, 'ledge'));
-    expect(await relinkBin({ link: join(d, 'ledge'), target: now })).toMatch(/now points to/);
-    expect(readlinkSync(join(d, 'ledge'))).toBe(now);
+  /** A CLI that prints its arguments, under a `dist/cli/index.js` like the real one. */
+  const cli = (d: string, where: string) => {
+    const p = join(d, where, 'dist/cli/index.js'); mkdirSync(join(p, '..'), { recursive: true });
+    writeFileSync(p, '#!/usr/bin/env node\nconsole.log(JSON.stringify(process.argv.slice(2)));\n'); chmodSync(p, 0o755);
+    return p;
+  };
+  const NO_NODE = { PATH: '/usr/bin:/bin' };
+
+  it('runs the CLI with this node when the PATH has none (a launched session under nvm)', async () => {
+    const d = dir(); const now = cli(d, 'npm'); symlinkSync(now, join(d, 'ledge'));
+    expect(await writeBin({ link: join(d, 'ledge'), node: process.execPath, target: now })).toMatch(/runs .* with /);
+    expect(execFileSync(join(d, 'ledge'), ['hook', "it's"], { env: NO_NODE, encoding: 'utf8' })).toBe('["hook","it\'s"]\n');
   });
-  it('leaves an up-to-date link, a missing link and a foreign file alone', async () => {
-    const d = dir(); const now = join(d, 'cli/dist/cli/index.js'); mkdirSync(join(now, '..'), { recursive: true }); writeFileSync(now, '');
-    symlinkSync(now, join(d, 'ledge'));
-    expect(await relinkBin({ link: join(d, 'ledge'), target: now })).toBeNull();
-    expect(await relinkBin({ link: join(d, 'absent'), target: now })).toBeNull();
+  it('replaces a link to an older Ledge CLI', async () => {
+    const d = dir(); const old = cli(d, 'clone/packages/ledge'); const now = cli(d, 'npm');
+    symlinkSync(old, join(d, 'ledge'));
+    await writeBin({ link: join(d, 'ledge'), node: process.execPath, target: now });
+    expect(lstatSync(join(d, 'ledge')).isSymbolicLink()).toBe(false);
+    expect(readFileSync(join(d, 'ledge'), 'utf8')).toContain(now);
+  });
+  it('rewrites its own script for another CLI or node, and leaves an up-to-date one alone', async () => {
+    const d = dir(); const a = cli(d, 'a'); const b = cli(d, 'b'); const link = join(d, 'ledge');
+    symlinkSync(a, link);
+    await writeBin({ link, node: process.execPath, target: a });
+    expect(await writeBin({ link, node: process.execPath, target: a })).toBeNull();
+    expect(await writeBin({ link, node: process.execPath, target: b })).toMatch(/runs/);
+    expect(execFileSync(link, ['x'], { env: NO_NODE, encoding: 'utf8' })).toBe('["x"]\n');
+    expect(readFileSync(link, 'utf8')).not.toContain(a);
+  });
+  it('leaves a missing link, a foreign file and a foreign link alone', async () => {
+    const d = dir(); const now = cli(d, 'npm');
+    expect(await writeBin({ link: join(d, 'absent'), node: process.execPath, target: now })).toBeNull();
     expect(existsSync(join(d, 'absent'))).toBe(false);
     writeFileSync(join(d, 'mine'), '#!/bin/sh\n');
-    expect(await relinkBin({ link: join(d, 'mine'), target: now })).toBeNull();
+    expect(await writeBin({ link: join(d, 'mine'), node: process.execPath, target: now })).toBeNull();
+    expect(readFileSync(join(d, 'mine'), 'utf8')).toBe('#!/bin/sh\n');
+    symlinkSync('/usr/bin/true', join(d, 'other'));
+    expect(await writeBin({ link: join(d, 'other'), node: process.execPath, target: now })).toBeNull();
+    expect(readlinkSync(join(d, 'other'))).toBe('/usr/bin/true');
   });
 });

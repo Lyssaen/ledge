@@ -94,7 +94,7 @@ One binary, `ledge`, with seven commands. Source under `src/`:
 | `cli/launch.ts` | `ledge <claude\|codex\|cursor> [--name <bot>] [-- args]`: finds or spawns the daemon, picks an id and a name, creates the tmux session with `LEDGE_SESSION` and `LEDGE_NAME` in the agent's environment, registers, renames the tab, attaches, and reports the agent's exit code through `session.unregister`. |
 | `cli/hook.ts` | `ledge hook [codex\|cursor] <Event>`: maps a Claude Code, Codex or Cursor Agent hook payload (read on stdin) to a `SessionEvent` and sends it, with the agent and its folder for a session the daemon does not know yet. Subagent events carry `helperId`. An `AskUserQuestion` with several questions sends the first one's text and options; later questions and the review come from the pane. |
 | `cli/setup.ts` | `ledge setup`: creates `~/.ledge` and merges `ledge hook <Event>` entries into `~/.claude/settings.json` for the twelve Claude Code events, and `ledge hook codex <Event>` entries into `~/.codex/hooks.json` (or `$CODEX_HOME`) for the ten Codex events, and `ledge hook cursor <event>` entries into `~/.cursor/hooks.json` for eight Cursor Agent events, never overwriting what is there. |
-| `cli/uninstall.ts` | `ledge uninstall [--purge]`: removes only Ledge's hook entries, the systemd unit and the `~/.local/bin/ledge` link. `--purge` also deletes `~/.ledge`. |
+| `cli/uninstall.ts` | `ledge uninstall [--purge]`: removes only Ledge's hook entries, the systemd unit and `~/.local/bin/ledge` (the link, or the script `ledge setup` wrote in its place). `--purge` also deletes `~/.ledge`. |
 | `cli/status.ts` | `ledge status`: one line per session from a fresh snapshot. |
 | `cli/attach.ts` | `ledge attach <id>`: renames the tab after the session and puts this terminal on its pane. What the overlay runs in a new Windows Terminal tab for a session it started itself. |
 | `spawn.ts` | `spawnSession`: the tmux session that runs the agent (with `LEDGE_SESSION` and `LEDGE_NAME`) and the `starting` session record. Shared by the launcher and the daemon's `session.launch`. |
@@ -443,7 +443,7 @@ In WSL, one command undoes `ledge setup`:
 ledge uninstall           # add --purge to also delete ~/.ledge (session journal and log)
 ```
 
-It removes only Ledge's own entries from the Claude Code, Codex and Cursor Agent hooks, and keeps every other hook where it was. It stops the daemon, removes the `ledge-daemon.service` unit and deletes the `~/.local/bin/ledge` link. Sessions still running on Ledge's tmux server are reported, not killed. It leaves linger on, since other user services may need it. If a config file is not valid JSON, it is left untouched and the command ends with an error after doing the rest.
+It removes only Ledge's own entries from the Claude Code, Codex and Cursor Agent hooks, and keeps every other hook where it was. It stops the daemon, removes the `ledge-daemon.service` unit and deletes `~/.local/bin/ledge` (the link, or the script `ledge setup` wrote in its place). Sessions still running on Ledge's tmux server are reported, not killed. It leaves linger on, since other user services may need it. If a config file is not valid JSON, it is left untouched and the command ends with an error after doing the rest.
 
 On Windows: Settings > Apps > Installed apps > Ledge Desktop > Uninstall. It also removes launch at login. Then delete the clones if you no longer need them.
 
@@ -458,7 +458,7 @@ pnpm --filter @paradow/ledge build
 chmod +x packages/ledge/dist/cli/index.js
 mkdir -p ~/.local/bin
 ln -sf "$PWD/packages/ledge/dist/cli/index.js" ~/.local/bin/ledge   # ~/.local/bin must be on the PATH Claude Code uses for hooks
-ledge setup                         # a clone install: the update button leaves it alone
+ledge setup                         # a clone install: the update button leaves it alone; the link becomes a script that runs the CLI with this node (a session Ledge launches may have no node on its PATH: nvm)
 ```
 
 Then:

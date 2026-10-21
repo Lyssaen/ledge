@@ -2,7 +2,7 @@ import { readFile, writeFile, rename, rm, lstat, realpath } from 'node:fs/promis
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { paths } from '../paths.js';
-import { SERVICE, execRunner, stopDetachedDaemon, type Runner } from './setup.js';
+import { BIN_MARK, SERVICE, execRunner, stopDetachedDaemon, type Runner } from './setup.js';
 
 /** Every command `ledge setup` ever wired, whatever the event: `ledge hook <Event>`, `ledge hook codex|cursor <event>`. */
 const LEDGE_HOOK = /^ledge hook (?:(?:codex|cursor) )?[A-Za-z]+$/;
@@ -88,11 +88,12 @@ async function runningSessions(run: Runner, socket: string): Promise<number> {
   return r.code === 0 ? r.stdout.split('\n').filter(Boolean).length : 0;
 }
 
-/** Removes `link` only when it is a symlink to this very CLI: a `ledge` installed some other way is not ours to delete. */
+/** Removes `link` only when it is a symlink to this very CLI or the script `ledge setup` wrote: a `ledge` installed some other way is not ours to delete. */
 async function removeLink(link: string, script: string): Promise<boolean> {
   try {
-    if (!(await lstat(link)).isSymbolicLink()) return false;
-    if (await realpath(link) !== await realpath(script)) return false;
+    const st = await lstat(link);
+    // The script `ledge setup` writes in the link's place is Ledge's whatever CLI it runs.
+    if (st.isFile() ? !(await readFile(link, 'utf8')).startsWith(BIN_MARK) : !st.isSymbolicLink() || await realpath(link) !== await realpath(script)) return false;
   } catch { return false; }
   await rm(link, { force: true });
   return true;

@@ -30,7 +30,7 @@ pnpm --filter @paradow/ledge build
 chmod +x packages/ledge/dist/cli/index.js
 mkdir -p ~/.local/bin
 ln -sf "$PWD/packages/ledge/dist/cli/index.js" ~/.local/bin/ledge   # ~/.local/bin must be on the PATH Claude Code uses for hooks
-ledge setup
+ledge setup                         # the link becomes a script that runs the CLI with this node (a session Ledge launches may have no node on its PATH: nvm)
 ```
 
 The daemon is spawned from the built CLI (`dist/cli/index.js`), so rebuild after changes (`pnpm --filter @paradow/ledge build`).
@@ -43,7 +43,7 @@ ledge claude --name max # pick the bot's name
 ledge status            # list bots and what they wait for
 ledge attach <id>       # put this terminal on a running session (what the overlay opens a tab with)
 ledge daemon            # run the daemon in the foreground (normally run by the systemd service)
-ledge uninstall         # undo ledge setup: hooks, service and the ~/.local/bin link (--purge: ~/.ledge too)
+ledge uninstall         # undo ledge setup: hooks, service and ~/.local/bin/ledge (--purge: ~/.ledge too)
 ```
 
 `ledge setup` installs `ledge-daemon.service` as a systemd user unit, starts it and enables linger, so the daemon runs from WSL boot and restarts after a crash. Rerun it after a node upgrade or a repository move: the unit is rewritten and the service restarted. Useful commands:
