@@ -40,6 +40,11 @@ export function toPhoneTurn(t: ChatTurn): PhoneChatTurn {
     const r = t.relay;
     out.relay = { id: r.id, name: r.name, tool: r.tool, text: r.text, ...(r.status ? { status: r.status } : {}), ...(r.sentAt ? { sentAt: r.sentAt } : {}), ...(r.error !== undefined ? { failed: true as const } : {}) };
   }
+  if (t.closes) {
+    out.closes = t.closes.map(c => ({
+      id: c.id, name: c.name, tool: c.tool, ...(c.how ? { how: c.how } : {}), ...(c.closedAt ? { closedAt: c.closedAt } : {}), ...(c.error !== undefined ? { failed: true as const } : {})
+    }));
+  }
   return out;
 }
 

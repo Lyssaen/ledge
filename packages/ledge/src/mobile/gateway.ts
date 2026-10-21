@@ -166,7 +166,7 @@ export function createPhoneGateway(deps: {
   };
 
   /** The operations that act on a tracked session: the registry's own, the credential's, the device's and the chat's are handled before it. */
-  type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.launch' }>;
+  type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.launch' | 'chat.close' }>;
   /** Whether the operation needs the device's own check: an accept of a request that is not low, or a reply to an OMP (rpc) dialog, which is never low. */
   const needsAssertion = (msg: SessionOperation, s: Session): boolean => {
     if (msg.type === 'session.decide') return msg.decision !== 'deny' && riskOf(s)?.risk !== 'low';
@@ -328,6 +328,8 @@ export function createPhoneGateway(deps: {
     }
     if (msg.type === 'chat.relay') return chatRelay(deviceId, msg);
     if (msg.type === 'chat.launch') return chatLaunch(deviceId, msg);
+    // Task 2 handles the close card; until then nothing is closed from a phone.
+    if (msg.type === 'chat.close') return { status: 'rejected', reason: 'invalid' };
     const refused = precheck(deviceId, msg);
     if (refused) return refused;
     const out = local(msg);
