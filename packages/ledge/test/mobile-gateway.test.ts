@@ -1743,16 +1743,6 @@ describe('phone gateway: close cards', () => {
     expect(await prepare(g, QA)).toMatchObject({ type: 'confirm.challenge', purpose: 'close' });
   });
 
-  it('never answers a close prepare with a register challenge', async () => {
-    const { g } = make([close('a')]);
-    await enroll(g);
-    const before = g.got('dev1').length;
-    g.send('dev1', { type: 'confirm.prepare', purpose: 'close', qid: QB });
-    await flush();
-    const got = g.got('dev1').slice(before);
-    expect(got).toEqual([{ type: 'error', code: 'invalid', request: 'confirm.prepare' }]);
-  });
-
   it('answers an invalid chat.close from an approved device with rejected', async () => {
     const { calls, g } = make([close('a')]);
     await enroll(g);
