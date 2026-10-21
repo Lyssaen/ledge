@@ -1,4 +1,4 @@
-import { useState, type JSX, type MouseEvent, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, useState, type JSX, type MouseEvent, type ReactNode } from 'react';
 import type { Session } from '@ledge/protocol';
 import { ThreadMarkdown } from '@ledge/ui/documents/markdown';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
@@ -7,7 +7,7 @@ import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
 import { SessionBot } from '../shell/SessionBot';
 import type { Bubble } from './conversation';
-import { clock } from './exchanges';
+import { atEnd, clock } from './exchanges';
 import { isLong, STATUS_MARK } from './MessageCard';
 import type { ConversationView } from './useConversations';
 
@@ -22,12 +22,54 @@ export interface ConversationTabProps {
 }
 
 /** The « Conversation » tab: its head (the pair, the count, the peer's thread), then the messages of both agents, one bubble
- *  each, in the order they were sent. */
+ *  each, in the order they were sent; live, following the end while the reader is there. */
 export function ConversationTab({ self, view, buttons, onLight, onOpenPeer }: ConversationTabProps): JSX.Element {
   const { t } = useI18n();
   const tm = t.session.message;
   const tc = t.session.conversation;
   const { peer, name: peerName, bubbles } = view;
+  const scroller = useRef<HTMLDivElement>(null);
+  const follow = useRef(true);
+  const count = useRef(bubbles.length);
+  const [fresh, setFresh] = useState(0);
+  // Opened at the end (the latest message is what one comes for); a message that comes keeps the end in view while the
+  // reader is there, else it is counted on the « n nouveaux messages » pill. A status changing in place is not one.
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    const added = bubbles.length - count.current;
+    count.current = bubbles.length;
+    if (!el) return;
+    if (follow.current) el.scrollTop = el.scrollHeight;
+    else if (added > 0) setFresh(f => f + added);
+  }, [bubbles]);
+  // The pane or a bubble changed size without a scroll (the pane resized, « Lire tout le message », the narrow layout): a
+  // reader at the end stays there, as in the thread.
+  const resized = useRef<ResizeObserver | null>(null);
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => { if (follow.current) el.scrollTop = el.scrollHeight; });
+    resized.current = ro;
+    ro.observe(el);
+    return () => { ro.disconnect(); resized.current = null; };
+  }, []);
+  // After each render, what the body holds is watched too (observing twice is a no-op).
+  useLayoutEffect(() => {
+    const el = scroller.current; const ro = resized.current;
+    if (el && ro) for (const child of el.children) ro.observe(child);
+  });
+  const onScroll = () => {
+    const el = scroller.current;
+    if (!el) return;
+    follow.current = atEnd(el);
+    if (follow.current) setFresh(0);
+  };
+  const toLatest = () => {
+    const el = scroller.current;
+    if (!el) return;
+    if (typeof el.scrollTo === 'function') el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    else el.scrollTop = el.scrollHeight;
+  };
   const name = (from: Bubble['from']) => (from === 'a' ? self.name : peerName);
   const bot = (from: Bubble['from']) => (from === 'a' ? <SessionBot session={self} size={14} /> : peer ? <SessionBot session={peer} size={14} /> : null);
 
@@ -53,7 +95,7 @@ export function ConversationTab({ self, view, buttons, onLight, onOpenPeer }: Co
         </div>
       )}
       <div className="conv-wrap">
-        <div className="side-body conv-body">
+        <div className="side-body conv-body" ref={scroller} onScroll={onScroll}>
           {view.loading && <p className="conv-loading muted">{tc.loadingPeer(peerName)}</p>}
           {bubbles.length === 0 && !view.loading && (
             <div className="changes-empty conv-empty"><Icon d={SHELL_ICONS.mail} size={22} /><strong>{tc.empty(self.name, peerName)}</strong><p>{tc.emptyHint}</p></div>
@@ -66,6 +108,7 @@ export function ConversationTab({ self, view, buttons, onLight, onOpenPeer }: Co
             ))}
           </ol>
         </div>
+        {fresh > 0 && <button type="button" className="to-latest" onClick={toLatest}><Icon d={SHELL_ICONS.arrowDown} size={13} />{tc.fresh(fresh)}</button>}
       </div>
     </>
   );

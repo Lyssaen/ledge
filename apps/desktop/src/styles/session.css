@@ -509,8 +509,9 @@ button.tg:disabled{cursor:default}
 .conv-note svg{margin-top:1px}
 .conv-empty{gap:8px}
 .conv-empty strong{font-size:13px}
-/* The conversation header's pill, pressed while its tab is the active one. */
+/* The conversation header's pill, pressed while its tab is the active one; the tab's dot for unseen messages. */
 .conv-follow[aria-pressed=true]{background:var(--secondary);color:var(--foreground)}
+.conv-tab-dot{width:6px;height:6px;margin-left:2px;border-radius:50%;background:var(--sidebar-primary);flex:none}
 
 /* Claude Code's automated cross-session notices (NoticeLine): a quiet system line on the rail, not a card nor a prompt. */
 .notice-row{padding:6px 0}

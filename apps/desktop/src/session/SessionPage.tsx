@@ -168,7 +168,7 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   // The open Conversation tabs, active or not: each one's peer thread is asked and its bubbles merged here (SidePane mounts
   // only the active tab).
   const convKeys = useMemo(() => tabs.flatMap(x => (x.kind === 'conv' ? [x.peer] : [])), [tabs]);
-  const convs = useConversations(p.client, session, items, convKeys);
+  const convs = useConversations(p.client, session, items, convKeys, paneShown ? convOpen : null);
 
   /* Plans: a card per ExitPlanMode action in the thread, and the pinned request's own ('pending': Codex and Cursor have no
      such action). The pinned plan is read from the card whose action waits, else from the request. */

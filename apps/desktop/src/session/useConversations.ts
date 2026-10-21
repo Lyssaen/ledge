@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { qualify, splitId, useDaemon, type DaemonClient } from '@ledge/fleet';
 import type { Session, ThreadItem } from '@ledge/protocol';
 import { conversation, conversationName, conversationPeer, type Bubble } from './conversation';
@@ -15,6 +15,8 @@ export interface ConversationView {
   bubbles: readonly Bubble[];
   /** B's thread is being read for the first time (A's side shows meanwhile). */
   loading: boolean;
+  /** Messages added while the tab was not the active one (its dot); a status changing is not one. */
+  unseen: number;
 }
 
 const NONE: readonly ThreadItem[] = [];
@@ -23,8 +25,8 @@ type Merged = { a: readonly ThreadItem[]; b: readonly ThreadItem[] | undefined; 
 
 /** A view per open Conversation tab (`keys`: their peerKeys), at the page's level: SidePane mounts only the active tab.
  *  B's thread is asked while its tab is open, active or not; each view's bubbles keep their identity while neither thread
- *  changes. */
-export function useConversations(client: Pick<DaemonClient, 'send'>, self: Session, items: readonly ThreadItem[] | undefined, keys: readonly string[]): ReadonlyMap<string, ConversationView> {
+ *  changes. `active`: the tab the reader sees (its peerKey, the pane shown), whose messages are all seen; null: none. */
+export function useConversations(client: Pick<DaemonClient, 'send'>, self: Session, items: readonly ThreadItem[] | undefined, keys: readonly string[], active: string | null): ReadonlyMap<string, ConversationView> {
   const { byId } = useDaemon();
   const a = items ?? NONE;
   const own = splitId(self.id);
@@ -37,6 +39,10 @@ export function useConversations(client: Pick<DaemonClient, 'send'>, self: Sessi
   });
   const threads = useThreads(client, peers.filter((s): s is Session => s !== null));
   const cache = useRef(new Map<string, Merged>());
+  // How many messages each tab held when last seen. A count that drops (both agents ran /clear) takes it down too, so the
+  // messages that come after still count; while B's thread is first read, an inactive tab's is left as it was.
+  const [seen, setSeen] = useState<ReadonlyMap<string, number>>(() => new Map());
+  const nextSeen = new Map<string, number>();
   const kept = new Map<string, Merged>();
   const out = new Map<string, ConversationView>();
   keys.forEach((key, i) => {
@@ -45,8 +51,15 @@ export function useConversations(client: Pick<DaemonClient, 'send'>, self: Sessi
     const last = cache.current.get(key);
     const bubbles = last && last.a === a && last.b === b ? last.bubbles : conversation(a, b, key, selfId);
     kept.set(key, { a, b, bubbles });
-    out.set(key, { key, peer, name: peer?.name ?? conversationName(a, key), bubbles, loading: peer !== null && peer.offline !== true && b === undefined });
+    const loading = peer !== null && peer.offline !== true && b === undefined;
+    const base = seen.get(key);
+    const count = bubbles.length;
+    const baseline = key === active || base === undefined ? count : loading ? base : Math.min(base, count);
+    nextSeen.set(key, baseline);
+    out.set(key, { key, peer, name: peer?.name ?? conversationName(a, key), bubbles, loading, unseen: Math.max(0, count - baseline) });
   });
   cache.current = kept;
+  // Closed tabs' baselines go; the state changes only when one of them does.
+  if (nextSeen.size !== seen.size || [...nextSeen].some(([k, v]) => seen.get(k) !== v)) setSeen(nextSeen);
   return out;
 }
