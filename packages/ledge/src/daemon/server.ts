@@ -13,8 +13,9 @@ import { Refusal, STALE, bottomLines, dialogMismatch } from '../adapters/types.j
 import { verifyGone } from '../adapters/verify.js';
 import { DETECT_LINES } from './poller.js';
 import { answeredBy, pendingTool } from './state.js';
-import { claudeOpenCall, claudeToolAnswered } from './transcript.js';
+import { claudeOpenCall, claudeToolAnswered, labelTranscript, resumeLabel } from './transcript.js';
 import { pickName } from '../names.js';
+import { readPeers, type ClaudePeer } from './peers.js';
 import { spawnSession, type TmuxTool } from '../spawn.js';
 import { createOmpHost, type OmpHost } from './omp/host.js';
 import { ompChoices } from './omp/catalog.js';
@@ -141,6 +142,8 @@ export interface ServerHandle {
   omp: OmpHost;
   /** Closes a session cleanly (its exit command, a kill as a last resort); rejects with a Refusal. */
   closeSession(id: string): Promise<{ how: CloseHow }>;
+  /** Writes the resume labels that waited for their Claude process to end (the poller calls it every tick). */
+  labelExited(): void;
 }
 
 /**
@@ -161,7 +164,7 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; scan?: typeof scanRepos; models?: Models; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; close?: { freeMs?: number; exitMs?: number } }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; scan?: typeof scanRepos; models?: Models; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[] }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -262,13 +265,30 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const previews = new Map<string, string[]>();
   /** The title last pushed to each session's tmux tab, so tmux is told only when it changes. */
   const titles = new Map<string, string>();
+  /** The `exitedAt` of the exit last labelled for `claude --resume`, per session: one label per exit. */
+  const labelled = new Map<string, string>();
+  /** Exited sessions whose label waits for their Claude process to end, retried by the poller. */
+  const unlabelled = new Set<string>();
+  const livePeers = opts.peers ?? (() => readPeers());
+  /** Labels an exited launched Claude's transcript for `claude --resume`, once per exit, never while a live process holds it. */
+  const labelExit = (s: Session): void => {
+    unlabelled.delete(s.id);
+    if (s.tool !== 'claude' || s.source !== 'launcher' || s.state !== 'exited' || !s.transcriptPath || !s.topic || s.topic === s.name || labelled.get(s.id) === (s.exitedAt ?? '')) return;
+    const id = basename(s.transcriptPath, '.jsonl');
+    if (livePeers().some(p => p.sessionId === id)) { unlabelled.add(s.id); return; }
+    labelled.set(s.id, s.exitedAt ?? '');
+    const r = labelTranscript(s.transcriptPath, s.name, resumeLabel(s.name, s.topic));
+    if (r instanceof Error) log(`resume label of ${s.id} not written: ${r.message}`);
+  };
+  const labelExited = (): void => { for (const id of [...unlabelled]) { const s = store.get(id); if (s) labelExit(s); else unlabelled.delete(id); } };
   const unsubscribe = store.onChange(c => {
     if (c.type === 'recents') return broadcast({ type: 'recents', recents: c.recents });
     if (c.type === 'updated' && c.session.tmuxSession && titles.get(c.session.id) !== c.session.title) {
       titles.set(c.session.id, c.session.title);
       tmux.setOption(c.session.tmuxSession, '@ledge_title', c.session.title).catch(e => log(`tab title not set for ${c.session.id}: ${(e as Error).message}`));
     }
-    if (c.type === 'removed') { previews.delete(c.id); titles.delete(c.id); }
+    if (c.type === 'removed') { previews.delete(c.id); titles.delete(c.id); labelled.delete(c.id); unlabelled.delete(c.id); }
+    if (c.type === 'updated') labelExit(c.session);
     if (c.type === 'updated' && c.session.modelNext) void applyModelNext(c.session.id).catch(e => log(`model change of ${c.session.id} failed: ${(e as Error).message}`));
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
@@ -1058,6 +1078,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     preview,
     omp,
     closeSession: id => { const s = store.get(id); return s ? closeSession(s) : Promise.reject(unknownSession()); },
+    labelExited,
     close: () => new Promise(res => { unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
   };
 }

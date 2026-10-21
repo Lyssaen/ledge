@@ -6,7 +6,7 @@ import { log } from '../log.js';
 import { filesOf } from './files.js';
 import { agentMessages } from './transcript.js';
 import { QUESTION_TOOLS } from './state.js';
-import { crossSession, crossSessionNotices, ledgeBody, ledgeMessages, type CrossSessionNotice } from './crossSession.js';
+import { crossSession, crossSessionNotices, stripNote, ledgeBody, ledgeMessages, type CrossSessionNotice } from './crossSession.js';
 export { crossSession } from './crossSession.js';
 
 /** Native tracking (spec 2026-10-13 §3–4): one thread per session, reduced from the events the store applies. */
@@ -119,7 +119,7 @@ export class History {
         if (messages) { // another agent's messages: a turn of their own, a card each, no prompt
           this.turns.set(id, turn + 1);
           let last: ThreadItem | undefined;
-          messages.forEach((m, i) => { last = this.receive(id, { kind: 'received', id: `recv-${turn + 1}-${i}`, at: ev.at, turn: turn + 1, from: m.name ?? m.from, text: m.text }, m); });
+          messages.forEach((m, i) => { const { sender, text } = stripNote(m.text); last = this.receive(id, { kind: 'received', id: `recv-${turn + 1}-${i}`, at: ev.at, turn: turn + 1, from: sender ?? m.name ?? m.from, text }, { ...m, ...(sender ? { sender } : {}) }); });
           return last;
         }
         const ledge = ledgeMessages(ev.text);
@@ -256,7 +256,7 @@ export class History {
   /** A SendMessage's card, from its input: `to` the address used, `peer` the Ledge session that address is. */
   private sentOf(ev: SessionEvent, common: { at: string; turn: number; helperId?: string }, status: SentItem['status']): SentItem {
     const input = ev.toolInput ?? {}; const to = typeof input.to === 'string' ? input.to : ''; const peer = to ? this.peerOf(to) : undefined;
-    return { kind: 'sent', id: ev.toolUseId ?? `sent-${ev.at}`, ...common, to, ...(peer ? { peer } : {}), ...(typeof input.summary === 'string' && input.summary ? { summary: input.summary } : {}), text: typeof input.message === 'string' ? input.message : '', status };
+    return { kind: 'sent', id: ev.toolUseId ?? `sent-${ev.at}`, ...common, to, ...(peer ? { peer } : {}), ...(typeof input.summary === 'string' && input.summary ? { summary: input.summary } : {}), text: typeof input.message === 'string' ? stripNote(input.message).text : '', status };
   }
 
   /** A notice as a thread item: the session it is about named, and its Ledge session when it is one. */
@@ -274,8 +274,8 @@ export class History {
   /** Puts a received card, paired with the sender's sent one when the sender is a Ledge session: the last of its
    *  messages to this session not read yet, the one whose text starts like the body if any (the hook may have cut
    *  either), both read as Ledge types a body (a multi-line one arrives on one line). That sent one becomes read, in the sender's thread. */
-  private receive(id: string, recv: ReceivedItem, m: { from: string; name?: string }): ThreadItem {
-    const peer = this.peerOf(m.from) ?? (m.name ? this.peerOf(m.name) : undefined);
+  private receive(id: string, recv: ReceivedItem, m: { from: string; name?: string; sender?: string }): ThreadItem {
+    const peer = (m.sender ? this.peerOf(m.sender) : undefined) ?? this.peerOf(m.from) ?? (m.name ? this.peerOf(m.name) : undefined);
     if (!peer) return this.put(id, recv);
     const head = (t: string) => ledgeBody(t).trim().slice(0, 200);
     const open = this.items(peer).filter((i): i is SentItem => i.kind === 'sent' && i.peer === id && i.status !== 'read');

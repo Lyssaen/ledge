@@ -51,7 +51,7 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   catch (e) { log(`mobile access not available: ${(e as Error).message}`); mobileUnavailable = (e as Error).message.slice(0, 200); }
   const server = await startServer({ store, tmux, port: opts.port, daemon, updater, history, mobile, mobileUnavailable });
   ompLive = () => server.omp.liveCount();
-  const poller = startPoller({ store, tmux, broadcastPreview: server.preview });
+  const poller = startPoller({ store, tmux, broadcastPreview: server.preview, labelExited: server.labelExited });
   await writeFile(paths().pid, String(process.pid));
   log(`daemon started on ${server.port} with ${store.all().length} sessions`);
   let stopping: Promise<void> | null = null;

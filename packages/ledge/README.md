@@ -39,12 +39,14 @@ The daemon is spawned from the built CLI (`dist/cli/index.js`), so rebuild after
 
 ```sh
 ledge claude            # start Claude Code in a tracked tmux session (tab renamed to the bot)
-ledge claude --name max # pick the bot's name
+ledge claude --name max # pick the session's Ledge name
 ledge status            # list bots and what they wait for
 ledge attach <id>       # put this terminal on a running session (what the overlay opens a tab with)
 ledge daemon            # run the daemon in the foreground (normally run by the systemd service)
 ledge uninstall         # undo ledge setup: hooks, service and ~/.local/bin/ledge (--purge: ~/.ledge too)
 ```
+
+When a Claude it launched exits, Ledge appends a `custom-title` « name - topic » to its transcript, so `claude --resume` lists the conversation that way, unless the user named it (`claude -n`, `/rename`).
 
 `ledge setup` installs `ledge-daemon.service` as a systemd user unit, starts it and enables linger, so the daemon runs from WSL boot and restarts after a crash. Rerun it after a node upgrade or a repository move: the unit is rewritten and the service restarted. Useful commands:
 

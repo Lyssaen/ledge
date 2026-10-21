@@ -341,6 +341,70 @@ describe('server', () => {
     c.close();
   });
 
+  describe('resume label', () => {
+    const transcript = () => { const p = join(mkdtempSync(join(tmpdir(), 'ledge-tr-')), 'abc.jsonl'); writeFileSync(p, '{"type":"user"}\n'); return p; };
+    const lines = (p: string) => readFileSync(p, 'utf8').trimEnd().split('\n');
+
+    it('labels the transcript of an exited launched Claude once per exit', async () => {
+      const p = transcript();
+      store.upsert(mk('a', { name: 'Pim', topic: 'Sujet', transcriptPath: p }));
+      store.upsert(mk('a', { name: 'Pim', topic: 'Sujet', transcriptPath: p, state: 'exited', exitedAt: T0 }));
+      await until(() => lines(p).length === 2);
+      expect(JSON.parse(lines(p)[1]!)).toEqual({ type: 'custom-title', customTitle: 'Pim - Sujet', sessionId: 'abc', ledge: true });
+      store.upsert(mk('a', { name: 'Pim', topic: 'Sujet', transcriptPath: p, state: 'exited', exitedAt: T0, lastActivityAt: '2026-10-09T18:05:00.000Z' }));
+      await new Promise(r => setTimeout(r, 50));
+      expect(lines(p)).toHaveLength(2);
+    });
+
+    it('a session resumed and exited again is relabelled with its new topic', async () => {
+      const p = transcript();
+      store.upsert(mk('a', { name: 'Pim', topic: 'Sujet', transcriptPath: p, state: 'exited', exitedAt: T0 }));
+      await until(() => lines(p).length === 2);
+      store.upsert(mk('a', { name: 'Pim', topic: 'Autre', transcriptPath: p }));
+      store.upsert(mk('a', { name: 'Pim', topic: 'Autre', transcriptPath: p, state: 'exited', exitedAt: '2026-10-09T19:00:00.000Z' }));
+      await until(() => lines(p).length === 3);
+      expect(JSON.parse(lines(p)[2]!).customTitle).toBe('Pim - Autre');
+    });
+
+    it('waits for the Claude process to end: no label while a live peer holds the transcript, written on the next retry', async () => {
+      const p = transcript(); const q = transcript(); const st = new Store();
+      let peers = [{ pid: 1, sessionId: 'abc', name: 'Pim', address: 'uds:/x/1.sock' }];
+      const s2 = await startServer({ store: st, tmux: fakeTmux({}), port: 0, peers: () => peers });
+      try {
+        st.upsert(mk('a', { name: 'Pim', topic: 'Sujet', transcriptPath: p, state: 'exited', exitedAt: T0 }));
+        st.upsert(mk('b', { name: 'Nova', topic: 'Sujet', transcriptPath: q, state: 'exited', exitedAt: T0 }));
+        await new Promise(r => setTimeout(r, 50));
+        s2.labelExited();
+        expect(lines(p)).toHaveLength(1); expect(lines(q)).toHaveLength(1);
+        st.upsert(mk('b', { name: 'Nova', topic: 'Sujet', transcriptPath: q })); // respawned before the retry: not this exit's label
+        peers = [];
+        s2.labelExited();
+        expect(lines(p)).toHaveLength(2); expect(JSON.parse(lines(p)[1]!).customTitle).toBe('Pim - Sujet');
+        expect(lines(q)).toHaveLength(1);
+      } finally { await s2.close(); }
+    });
+
+    it('a label that cannot be written is logged', async () => {
+      const p = join(mkdtempSync(join(tmpdir(), 'ledge-tr-')), 'gone.jsonl');
+      store.upsert(mk('a', { name: 'Pim', topic: 'Sujet', transcriptPath: p, state: 'exited', exitedAt: T0 }));
+      await until(() => { try { return readFileSync(paths().log, 'utf8').includes('resume label of a not written'); } catch { return false; } });
+    });
+
+    it('writes no label while the topic is still the name (a session launched before the change)', async () => {
+      const p = transcript();
+      store.upsert(mk('a', { name: 'Pim', topic: 'Pim', transcriptPath: p, state: 'exited', exitedAt: T0 }));
+      await new Promise(r => setTimeout(r, 50));
+      expect(lines(p)).toHaveLength(1);
+    });
+    it('leaves Codex and hook-only sessions alone', async () => {
+      const p = transcript(); const q = transcript();
+      store.upsert(mk('c', { tool: 'codex', topic: 'Sujet', transcriptPath: p, state: 'exited', exitedAt: T0 }));
+      store.upsert(mk('h', { source: 'hook_only', topic: 'Sujet', transcriptPath: q, state: 'exited', exitedAt: T0 }));
+      await new Promise(r => setTimeout(r, 50));
+      expect(lines(p)).toHaveLength(1); expect(lines(q)).toHaveLength(1);
+    });
+  });
+
   it('register re-picks a name already held by another live session and broadcasts the stored one', async () => {
     store.upsert(mk('a', { name: 'Otto' }));
     store.upsert(mk('x', { name: 'Pim', state: 'exited' }));
@@ -1562,7 +1626,7 @@ describe('server', () => {
       const s = store.get(launched.id)!;
       expect(s).toMatchObject({ name: 'Juno', tool: 'claude', cwd: join(home(), 'api-gateway'), project: 'api-gateway', title: 'Juno · api-gateway', state: 'starting', source: 'launcher', tmuxSession: `ledge-${launched.id}` });
       expect(tmux.created).toHaveLength(1);
-      expect(tmux.created[0]).toMatchObject({ name: `ledge-${launched.id}`, cwd: join(home(), 'api-gateway'), command: ['claude', '-n', 'Juno', '--continue', 'run the tests'] });
+      expect(tmux.created[0]).toMatchObject({ name: `ledge-${launched.id}`, cwd: join(home(), 'api-gateway'), command: ['claude', '--continue', 'run the tests'] });
       // The daemon runs with systemd's bare PATH: the agent gets the login shell's instead, so `claude` resolves as in a terminal.
       expect(tmux.created[0]!.env).toMatchObject({ LEDGE_SESSION: launched.id, LEDGE_NAME: 'Juno', PATH: '/login/bin:/usr/bin', HTTPS_PROXY: 'http://proxy:8080' });
       expect((await other.next('session.updated')).session.id).toBe(launched.id);
@@ -1580,15 +1644,14 @@ describe('server', () => {
       expect(cmd[0]).toBe('claude'); expect(cmd[1]).toBe('--session-id');
       const uuid = cmd[2]!;
       expect(uuid).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
-      // Its Claude Code session takes the Ledge name (`-n`): SendMessage reaches it by that name.
-      expect(cmd.slice(3)).toEqual(['-n', store.get(launched.id)!.name, 'plan it']);
+      expect(cmd.slice(3)).toEqual(['plan it']);
       const s = store.get(launched.id)!;
       expect(s.agentSessionId).toBe(uuid);
       const dir = join(home(), 'my_app.v2').replace(/[^a-zA-Z0-9]/g, '-');
       expect(s.transcriptPath).toMatch(new RegExp(`/projects/${dir}/${uuid}\\.jsonl$`));
       c.send({ type: 'session.launch', tool: 'claude', cwd: join(home(), 'my_app.v2'), continue: true });
       const resumed = await c.next('session.launched');
-      expect(tmux.created[1]!.command).toEqual(['claude', '-n', store.get(resumed.id)!.name, '--continue']);
+      expect(tmux.created[1]!.command).toEqual(['claude', '--continue']);
       expect(store.get(resumed.id)!.transcriptPath).toBeUndefined();
       c.close();
     });

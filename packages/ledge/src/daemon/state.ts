@@ -2,6 +2,7 @@ import { cleanTopic, sessionTitle, type Session, type SessionEvent, type Pending
 
 import { crossSession, crossSessionNotices } from './crossSession.js';
 import { sameQuestion } from '../adapters/types.js';
+import { ledgeTitleRest } from '../names.js';
 
 export const HOOK_PRIORITY_MS = 2000;
 
@@ -245,7 +246,14 @@ function reduceEvent(s: Session, ev: SessionEvent): Session {
       return { ...s, state: 'exited', pending: undefined, exitCode: null, exitedAt: s.exitedAt ?? at, lastActivityAt: at };
     case 'PaneChanged':
       return s.lastActivityAt === at ? s : { ...s, lastActivityAt: at };
-    case 'PaneTitle': return s.topicSource === 'user' ? s : withTopic(s, ev.text ?? '', 'pane');
+    case 'PaneTitle': {
+      if (s.topicSource === 'user') return s;
+      const t = ev.text ?? '';
+      const rest = ledgeTitleRest(t, s.name);
+      // A bare Ledge name is no topic; one an earlier launch stored as such (`-n`) is dropped, so a prompt or a title sets one.
+      if (rest === '') return s.topicSource === 'pane' && s.topic !== undefined && ledgeTitleRest(s.topic, s.name) === '' ? withTopic(s, '', undefined) : s;
+      return withTopic(s, rest ?? t, 'pane');
+    }
     case 'Renamed': return withTopic(s, ev.text ?? '', ev.text?.trim() ? 'user' : undefined);
     case 'PaneIdle': {
       // The pane shows Claude waiting for a prompt. Ends what no hook ends (a denied request, an Esc) and drops a

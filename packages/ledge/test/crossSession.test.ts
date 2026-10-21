@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { crossSessionNotices, formatLedgeMessage, ledgeMessages } from '../src/daemon/crossSession.js';
+import { crossSessionNotices, formatLedgeMessage, ledgeMessages, messageNote, stripNote } from '../src/daemon/crossSession.js';
 
 const F = JSON.parse(readFileSync(join(import.meta.dirname, 'fixtures', 'cross-session', 'notices.json'), 'utf8')) as Record<string, string>;
 
@@ -81,5 +81,10 @@ describe('ledge messages (spec 2026-10-19 codex messaging §3.2)', () => {
   });
   it('is undefined for any other prompt', () => {
     expect(ledgeMessages('Lance les tests')).toBeUndefined();
+  });
+  it('strips the note that opens a message, naming its sender', () => {
+    expect(stripNote(`${messageNote('Pim', 'claude')} Salut`)).toEqual({ sender: 'Pim', text: 'Salut' });
+    expect(stripNote(`  ${messageNote('Otto', 'codex')}  ok `)).toEqual({ sender: 'Otto', text: 'ok' });
+    expect(stripNote('Salut')).toEqual({ text: 'Salut' });
   });
 });

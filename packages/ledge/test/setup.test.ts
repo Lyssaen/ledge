@@ -207,6 +207,16 @@ describe('systemd service', () => {
     expect(out.join('\n')).toContain('linger enabled');
   });
 
+  it('run through the ~/.local/bin/ledge link, setup writes a unit that runs the CLI, not the script put in the link\'s place', async () => {
+    const d = tmp(); const unitDir = join(d, 'systemd');
+    const cli = join(d, 'npm/dist/cli/index.js'); mkdirSync(join(cli, '..'), { recursive: true }); writeFileSync(cli, '');
+    const link = join(d, 'bin/ledge'); mkdirSync(join(d, 'bin')); symlinkSync(cli, link);
+    const f = fakeRun({ 'systemctl --user is-active': { code: 3 }, 'loginctl show-user': { code: 0, stdout: 'Linger=yes\n' } });
+    await runSetup({ settingsPath: join(d, 'settings.json'), codexDir: join(d, 'codex'), cursorDir: join(d, 'cursor'), cli: link, link, unitDir, run: f.run });
+    expect(readFileSync(link, 'utf8')).toContain(cli);
+    expect(readFileSync(join(unitDir, SERVICE), 'utf8')).toContain(` ${cli} daemon`);
+  });
+
   it('is idempotent: same unit, already active and lingering, touches nothing', async () => {
     const d = tmp(); const unitDir = join(d, 'systemd');
     const first = fakeRun({ 'systemctl --user is-active': { code: 3 }, 'loginctl show-user': { code: 0, stdout: 'Linger=no\n' } });
@@ -312,10 +322,13 @@ describe('writeBin', () => {
     expect(execFileSync(link, ['x'], { env: NO_NODE, encoding: 'utf8' })).toBe('["x"]\n');
     expect(readFileSync(link, 'utf8')).not.toContain(a);
   });
-  it('leaves a missing link, a foreign file and a foreign link alone', async () => {
+  it('writes the script where no link exists yet (an npm install), creating its folder', async () => {
+    const d = dir(); const now = cli(d, 'npm'); const link = join(d, 'local/bin/ledge');
+    expect(await writeBin({ link, node: process.execPath, target: now })).toMatch(/runs .* with /);
+    expect(execFileSync(link, ['hook'], { env: NO_NODE, encoding: 'utf8' })).toBe('["hook"]\n');
+  });
+  it('leaves a foreign file and a foreign link alone', async () => {
     const d = dir(); const now = cli(d, 'npm');
-    expect(await writeBin({ link: join(d, 'absent'), node: process.execPath, target: now })).toBeNull();
-    expect(existsSync(join(d, 'absent'))).toBe(false);
     writeFileSync(join(d, 'mine'), '#!/bin/sh\n');
     expect(await writeBin({ link: join(d, 'mine'), node: process.execPath, target: now })).toBeNull();
     expect(readFileSync(join(d, 'mine'), 'utf8')).toBe('#!/bin/sh\n');

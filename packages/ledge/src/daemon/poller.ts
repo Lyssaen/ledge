@@ -20,6 +20,8 @@ export function startPoller(opts: {
   intervalMs?: number; deadCheckMs?: number; retireMs?: number; now?: () => string;
   broadcastPreview?: (id: string, lines: string[]) => void;
   gitInfo?: typeof defaultGitInfo;
+  /** Retries the resume labels that waited for a Claude process to end. */
+  labelExited?: () => void;
 }) {
   const { store, tmux } = opts;
   const adapterFor = opts.adapterFor ?? defaultAdapterFor;
@@ -48,6 +50,7 @@ export function startPoller(opts: {
       const deadCheck = t - lastDeadCheck >= deadCheckMs;
       if (deadCheck) lastDeadCheck = t;
       for (const id of previews.keys()) if (!store.get(id)) previews.delete(id);
+      try { opts.labelExited?.(); } catch (e) { log(`resume labels failed: ${(e as Error).message}`); }
       for (const snapshot of store.all()) {
         // Earlier sessions yield while reading Git/the terminal. Hooks and removals may have
         // changed this one meanwhile: never clean up or republish the stale snapshot.

@@ -99,6 +99,11 @@ async function removeLink(link: string, script: string): Promise<boolean> {
   return true;
 }
 
+/** `ledge uninstall`'s arguments: none or `--purge`. Anything else (`--help`, a typo) is null: the command does nothing. */
+export function uninstallArgs(args: string[]): { purge: boolean } | null {
+  return args.every(a => a === '--purge') && args.length <= 1 ? { purge: args.length === 1 } : null;
+}
+
 export interface UninstallOptions {
   purge?: boolean;
   settingsPath?: string;
