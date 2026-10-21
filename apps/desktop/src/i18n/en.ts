@@ -831,6 +831,7 @@ export const en: Messages = {
     },
     // #24: several sessions in one answer.
     group: { label: (n: number) => `${n} proposed sessions`, launchAll: (n: number) => `Start all (${n})`, launchRow: 'Start', pick: (project: string) => `Start ${project}` },
+    closeGroup: { label: (n: number) => n === 1 ? 'Session to close' : `${n} sessions to close`, row: 'Close', all: (n: number) => `Close all (${n})`, closing: 'Closing…', closed: 'Closed', killed: 'Force closed', ended: 'Ended', retry: 'Retry', failed: (m: string) => `Failed: ${m}` },
     relay: {
       label: 'Instruction to send', session: 'Session', instruction: 'Instruction',
       send: 'Send', sending: 'Sending…', cancel: 'Cancel', retry: 'Retry', orRephrase: 'or rephrase your request',

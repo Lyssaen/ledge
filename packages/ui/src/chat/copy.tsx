@@ -19,6 +19,8 @@ export interface ChatCopy {
     };
     /** The card of an answer that proposes several sessions (#24): `pick` names a row's checkbox. */
     group: { label: (n: number) => string; launchAll: (n: number) => string; launchRow: string; pick: Say };
+    /** The card of an answer that proposes to close sessions: a row's end state is `closed`, `killed` (force closed) or `ended` (it had exited already). */
+    closeGroup: { label: (n: number) => string; row: string; all: (n: number) => string; closing: string; closed: string; killed: string; ended: string; retry: string; failed: Say };
     relay: {
       label: string; session: string; instruction: string;
       send: string; sending: string; cancel: string; retry: string; orRephrase: string;

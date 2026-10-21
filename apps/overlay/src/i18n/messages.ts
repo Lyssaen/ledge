@@ -207,6 +207,7 @@ const fr = {
     },
     // #24 : plusieurs sessions dans une réponse.
     group: { label: (n: number) => `${n} sessions proposées`, launchAll: (n: number) => `Tout lancer (${n})`, launchRow: 'Lancer', pick: (project: string) => `Lancer ${project}` },
+    closeGroup: { label: (n: number) => n === 1 ? 'Session à fermer' : `${n} sessions à fermer`, row: 'Fermer', all: (n: number) => `Fermer tout (${n})`, closing: 'Fermeture…', closed: 'Fermée', killed: 'Fermée de force', ended: 'Terminée', retry: 'Réessayer', failed: (m: string) => `Échec : ${m}` },
     relay: {
       label: 'Instruction à envoyer', session: 'Session', instruction: 'Instruction',
       send: 'Envoyer', sending: 'Envoi…', cancel: 'Annuler', retry: 'Réessayer', orRephrase: 'ou reformule ta demande',
@@ -442,6 +443,7 @@ const en: Messages = {
     },
     // #24: several sessions in one answer.
     group: { label: (n: number) => `${n} proposed sessions`, launchAll: (n: number) => `Start all (${n})`, launchRow: 'Start', pick: (project: string) => `Start ${project}` },
+    closeGroup: { label: (n: number) => n === 1 ? 'Session to close' : `${n} sessions to close`, row: 'Close', all: (n: number) => `Close all (${n})`, closing: 'Closing…', closed: 'Closed', killed: 'Force closed', ended: 'Ended', retry: 'Retry', failed: (m: string) => `Failed: ${m}` },
     relay: {
       label: 'Instruction to send', session: 'Session', instruction: 'Instruction',
       send: 'Send', sending: 'Sending…', cancel: 'Cancel', retry: 'Retry', orRephrase: 'or rephrase your request',
