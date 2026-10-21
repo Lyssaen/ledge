@@ -192,27 +192,31 @@ export const BIN_MARK = '#!/bin/sh\n# Written by `ledge setup`';
 const shQuote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
 
 /**
- * `~/.local/bin/ledge` from the README's clone install, as a script that runs the CLI with an absolute node: the hooks
- * call `ledge` with the agent's PATH, and a session the daemon launched gets a non-interactive login shell's, where nvm
- * (nvm.fish) has put no node for the CLI's `#!/usr/bin/env node`. Only a link to a Ledge CLI or this script is replaced.
+ * `~/.local/bin/ledge` as a script that runs the CLI with an absolute node: the hooks call `ledge` with the agent's PATH,
+ * and a session the daemon launched gets a non-interactive login shell's, where nvm (nvm.fish, or nvm.sh past
+ * .bashrc's interactive guard) has put neither node nor npm's `ledge`. Written where nothing is (an npm install) or in
+ * place of a link to a Ledge CLI (the README's clone install) or of this script; anything else is left alone.
  */
 export async function writeBin(opts: { link: string; node: string; target: string }): Promise<string | null> {
   const st = await lstat(opts.link).catch(() => null);
-  if (!st) return null;
-  const was = st.isSymbolicLink() ? await readlink(opts.link) : null;
+  const was = st?.isSymbolicLink() ? await readlink(opts.link) : null;
   if (was !== null && !was.endsWith('/dist/cli/index.js')) return null;
-  const current = was === null && st.isFile() ? await readFile(opts.link, 'utf8').catch(() => '') : '';
-  if (was === null && !current.startsWith(BIN_MARK)) return null;
+  const current = st && was === null && st.isFile() ? await readFile(opts.link, 'utf8').catch(() => '') : '';
+  if (st && was === null && !current.startsWith(BIN_MARK)) return null;
   const script = `${BIN_MARK}: the hooks run \`ledge\` wherever node is not on the PATH.\nexec ${shQuote(opts.node)} ${shQuote(opts.target)} "$@"\n`;
   if (current === script) return null;
+  await mkdir(dirname(opts.link), { recursive: true });
   const tmp = `${opts.link}.tmp`;
   await writeFile(tmp, script, { mode: 0o755 });
   await rename(tmp, opts.link);
   return `${opts.link} runs ${opts.target} with ${opts.node}${was !== null ? ` (was a link to ${was})` : ''}`;
 }
 
-/** `codexDir` and `cursorDir` are the agents' config folders: their hooks are wired only where the folder exists. */
-export async function runSetup(opts: { settingsPath?: string; codexDir?: string; cursorDir?: string; service?: boolean } = {}): Promise<string[]> {
+/**
+ * `codexDir` and `cursorDir` are the agents' config folders: their hooks are wired only where the folder exists. For
+ * tests: `cli` is the CLI as it was run (argv[1]), `link` the `ledge` script's place, `unitDir` and `run` the service's.
+ */
+export async function runSetup(opts: { settingsPath?: string; codexDir?: string; cursorDir?: string; service?: boolean; cli?: string; link?: string; unitDir?: string; run?: Runner } = {}): Promise<string[]> {
   const out: string[] = [];
   await ensureLedgeDir();
   out.push('~/.ledge ready (tmux.conf written if missing)');
@@ -228,14 +232,17 @@ export async function runSetup(opts: { settingsPath?: string; codexDir?: string;
   if (!(await isDir(cursorDir))) out.push(`Cursor Agent not found (${cursorDir} missing), Cursor Agent hooks skipped`);
   else if (await mergeJsonFile(join(cursorDir, 'hooks.json'), mergeCursorHooks, 'hooks.json')) out.push(`Cursor Agent hooks added in ${join(cursorDir, 'hooks.json')}`);
   else out.push('Cursor Agent hooks already present');
-  // Like the service below, this edits the machine outside the agents' config: tests that pass `service: false` skip it.
-  if ((opts.service ?? true) && !process.argv[1]?.endsWith('.ts')) {
-    const line = await writeBin({ link: join(homedir(), '.local', 'bin', 'ledge'), node: process.execPath, target: await realpath(process.argv[1]!) });
-    if (line) out.push(line);
-  }
+  // The script and the service edit the machine outside the agents' config: tests that pass `service: false` skip them.
   if (opts.service ?? true) {
-    if (process.argv[1]?.endsWith('.ts')) out.push('systemd service skipped: run setup from the built CLI (pnpm --filter @paradow/ledge build, then ledge setup)');
-    else out.push(...await installService());
+    const cli = opts.cli ?? process.argv[1] ?? '';
+    if (cli.endsWith('.ts')) out.push('systemd service skipped: run setup from the built CLI (pnpm --filter @paradow/ledge build, then ledge setup)');
+    else {
+      // Resolved once, before writeBin: run as `~/.local/bin/ledge`, `cli` is the link that writeBin turns into a script.
+      const script = await realpath(cli);
+      const line = await writeBin({ link: opts.link ?? join(homedir(), '.local', 'bin', 'ledge'), node: process.execPath, target: script });
+      if (line) out.push(line);
+      out.push(...await installService({ script, unitDir: opts.unitDir, run: opts.run }));
+    }
   }
   return out;
 }
