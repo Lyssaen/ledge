@@ -470,6 +470,42 @@ describe('common chat routing', () => {
       server.set('unreachable'); // row 1's error did not change since the send: still held
       expect(drops(got)).toHaveLength(1);
     });
+    it('a launch on the same machine supersedes the close: a drop names the launch', () => {
+      const { client, server, got } = routed();
+      server.emit({ type: 'chat.history', turns: [turn(closes())] });
+      client.send({ type: 'session.close', qid: 'q' });
+      client.send({ type: 'session.launch', tool: 'claude', cwd: '/w/a', machineId: 'server' });
+      server.emit({ type: 'chat.history', turns: [turn(closes([{ closedAt: at, how: 'exit' }, { closedAt: at, how: 'exit' }]))] }); // the old close's rows settling must not end the launch
+      server.set('unreachable');
+      expect(got.filter(m => m.type === 'error')).toEqual([{ type: 'error', message: 'dev-server is offline', request: 'session.launch' }]);
+    });
+    it('does not hold a close operation for a turn without closes', () => {
+      const { client, server, got } = routed();
+      server.emit({ type: 'chat.history', turns: [{ ...turn(closes()), closes: undefined }] });
+      client.send({ type: 'session.close', qid: 'q' });
+      expect(server.sent.at(-1)).toEqual({ type: 'session.close', qid: 'q' });
+      server.set('unreachable');
+      expect(got.filter(m => m.type === 'error')).toEqual([]);
+    });
+    it('sends the raw qid of a turn whose global qid differs', () => {
+      const { client, local, server, got } = setup();
+      client.send({ type: 'chat.ask', qid: 'q', text: 'Ferme-les' });
+      local.emit({ type: 'chat.routed', qid: 'q', result: { machineId: 'local', text: 'Ferme-les' } });
+      server.emit({ type: 'chat.history', turns: [turn(closes())] });
+      const remoteQid = lastHistory(got).find(t => t.machineId === 'server')!.qid;
+      expect(remoteQid).not.toBe('q');
+      client.send({ type: 'session.close', qid: remoteQid });
+      expect(server.sent.at(-1)).toEqual({ type: 'session.close', qid: 'q' });
+      expect(local.sent.some(m => m.type === 'session.close')).toBe(false);
+    });
+    it('without rows, waits for every row', () => {
+      const { client, server, got } = routed();
+      server.emit({ type: 'chat.history', turns: [turn(closes())] });
+      client.send({ type: 'session.close', qid: 'q' });
+      server.emit({ type: 'chat.history', turns: [turn(closes([{ closedAt: at, how: 'exit' }, {}]))] });
+      server.set('unreachable');
+      expect(drops(got)).toHaveLength(1);
+    });
     it('a row refused with a new error settles the operation', () => {
       const { client, server, got } = routed();
       server.emit({ type: 'chat.history', turns: [turn(closes([{}, { error: 'old failure' }]))] });

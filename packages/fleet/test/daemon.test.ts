@@ -197,6 +197,7 @@ describe('daemon client + store', () => {
     daemonStore.apply({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, closes });
     expect(daemonStore.getState().chat[0]!.closes).toEqual(closes);
   });
+
   it('chat.done keeps the relay', () => {
     daemonStore.reset();
     daemonStore.beginTurn({ qid: 'q1', question: 'dis à Otto', askedAt: T0, steps: [] });

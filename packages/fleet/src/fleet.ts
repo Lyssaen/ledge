@@ -195,7 +195,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     if (m.type === 'recents') { if (p.snapshot) p.snapshot = { ...p.snapshot, recents: m.recents }; if (machine === selected && available(p)) emit(m); refresh(); return; }
     if (m.type === 'session.preview') { p.previews.set(m.id, m.lines); if (available(p)) emit({ ...m, id: qualify(machine, m.id) }); return; }
     if (m.type === 'session.thread' || m.type === 'session.thread.item' || m.type === 'session.queue.restored') { if (available(p)) emit({ ...m, id: qualify(machine, m.id) }); return; }
-    if (m.type === 'session.launched') { operations.delete(machine); emit({ ...m, id: qualify(machine, m.id) }); return; }
+    if (m.type === 'session.launched') { if (!closeRows.has(machine)) operations.delete(machine); emit({ ...m, id: qualify(machine, m.id) }); return; }
     if (m.type === 'session.closed') { emit({ ...m, id: qualify(machine, m.id) }); return; }
     if (m.type === 'folder.listing') {
       if (m.requestId !== undefined && listings.has(m.requestId)) { if (listings.get(m.requestId)!.machine === machine) { listings.delete(m.requestId); emit(m); } return; }
@@ -224,7 +224,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       return;
     }
     if (m.type === 'chat.history') {
-      if (m.turns.some(t => t.qid === operations.get(machine) && t.relay && (t.relay.status || t.relay.error))) operations.delete(machine);
+      if (m.turns.some(t => t.qid === operations.get(machine) && t.relay && (t.relay.status || t.relay.error)) && !closeRows.has(machine)) endOperation(machine);
       const close = closeRows.get(machine), closing = close && m.turns.find(t => t.qid === close.qid);
       if (close && closing?.closes && close.rows.every(r => { const c = closing.closes![r]; return !c || c.closedAt || (c.error !== undefined && c.error !== close.errors[r]); })) endOperation(machine);
       for (const raw of m.turns) if (raw.askedAt >= resetAt && raw.askedAt.slice(0, 10) === historyDay) { const t = mappedTurn(p, raw); turns.set(t.qid, t); }
@@ -366,11 +366,11 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         else emit({ type: 'error', ...('id' in msg ? { id: msg.id } : {}), message: `${target?.config.label ?? machine} is offline`, request: msg.type });
         return;
       }
-      if (outgoing.type === 'session.launch' || outgoing.type === 'session.relay' || outgoing.type === 'session.relay.cancel') operations.set(machine, outgoing.qid ?? 'launch');
+      if (outgoing.type === 'session.launch' || outgoing.type === 'session.relay' || outgoing.type === 'session.relay.cancel') { closeRows.delete(machine); operations.set(machine, outgoing.qid ?? 'launch'); }
       if (outgoing.type === 'session.close') {
         const all = turns.get(msg.type === 'session.close' ? msg.qid : '')?.closes ?? [];
-        closeRows.set(machine, { qid: outgoing.qid, rows: outgoing.rows ?? all.map((_, i) => i), errors: all.map(c => c.error) });
-        operations.set(machine, outgoing.qid);
+        // Nothing to wait for on an unknown turn or one without closes: the daemon's error or history settles it, never a held operation.
+        if (all.length) { closeRows.set(machine, { qid: outgoing.qid, rows: outgoing.rows ?? all.map((_, i) => i), errors: all.map(c => c.error) }); operations.set(machine, outgoing.qid); }
       }
       target!.client.send(outgoing);
     },
