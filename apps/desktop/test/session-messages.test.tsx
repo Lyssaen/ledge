@@ -52,7 +52,7 @@ describe('messages between agents in the thread', () => {
     expect(card).not.toBeNull();
     expect(document.querySelector('.session-thread .prompt-block')).toBeNull();
     expect(card).toHaveTextContent('Message reçu');
-    expect(card).toHaveTextContent(/^Message reçuDe Nova · voir son fil/);
+    expect(card).toHaveTextContent(/^Message reçuDe Nova · voir son fil · suivre la conversation/);
     expect(within(card).getByText('Nova', { selector: 'strong' })).toBeVisible();
     expect(thread().queryByText('Vous')).toBeNull();
     expect(within(card).getByRole('button', { name: 'voir son fil' })).toHaveAttribute('title', 'Voir dans le fil de Nova');
@@ -62,7 +62,7 @@ describe('messages between agents in the thread', () => {
     await openOtto([prompt('p1', 0, 1, 'Préviens Nova'), sent('s1', 5, 1, { summary: 'Le schéma est prêt', text: 'Tout est dans docs/schema.md.', status: 'read', received: 'r1' })]);
     const card = (await thread().findByText('Le schéma est prêt')).closest<HTMLElement>('[data-message="s1"]')!;
     expect(card).toHaveTextContent('Message envoyé');
-    expect(card).toHaveTextContent(/^Message envoyéÀ Nova · ✓✓lu · voir son fil/);
+    expect(card).toHaveTextContent(/^Message envoyéÀ Nova · ✓✓lu · voir son fil · suivre la conversation/);
     expect(card.querySelector('.message-read')).toHaveAttribute('title', 'Lu par Nova');
     expect(within(card).getByText('Tout est dans docs/schema.md.')).toBeVisible();
     // The sent card is in its exchange, after its prompt.
@@ -129,6 +129,7 @@ describe('messages between agents in the thread', () => {
     const card = (await thread().findByText('Bonjour de loin.')).closest<HTMLElement>('[data-message="r1"]')!;
     expect(within(card).getByText('zed', { selector: 'strong' })).toBeVisible();
     expect(within(card).queryByRole('button', { name: 'voir son fil' })).toBeNull();
+    expect(within(card).getByRole('button', { name: 'suivre la conversation' })).toHaveAttribute('title', 'Suivre la conversation avec zed à côté du fil');
   });
 
   it('« voir son fil » opens Nova’s session', async () => {

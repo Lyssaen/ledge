@@ -87,3 +87,51 @@ test('the work plan bar stays on top while the thread scrolls', async ({ page })
   const top = (await page.locator('.session-thread').boundingBox())!.y;
   expect(Math.abs((await bar.boundingBox())!.y - top)).toBeLessThan(12);
 });
+
+/** Turn 2 with Nova: Otto writes (read, Nova's copy recv-1-0), Nova answers (Otto's copy recv-2-0), then asks something Otto
+ *  has not received yet. Nova's thread holds her side of it. */
+const withNova: ThreadItem[] = [
+  ...review,
+  { kind: 'sent', id: 's1', at: at(-2), turn: 2, to: 'nova', peer: 'nova', summary: 'The schema is ready', text: 'All of it is in docs/schema.md.', status: 'read', received: 'recv-1-0' },
+  { kind: 'received', id: 'recv-2-0', at: at(-1), turn: 2, from: 'nova', peer: 'nova', sent: 'toolu_n1', text: 'Thanks, looking at it.' }
+];
+const nova: ThreadItem[] = [
+  { kind: 'received', id: 'recv-1-0', at: at(-1.8), turn: 1, from: 'otto', peer: 'otto', sent: 's1', text: 'All of it is in docs/schema.md.' },
+  { kind: 'sent', id: 'toolu_n1', at: at(-1.5), turn: 1, to: 'otto', peer: 'otto', summary: 'Got it', text: 'Thanks, looking at it.', status: 'read', received: 'recv-2-0' },
+  { kind: 'sent', id: 'toolu_n2', at: at(-0.5), turn: 1, to: 'otto', peer: 'otto', summary: 'A question', text: 'Do you have the migration?', status: 'delivered' }
+];
+test('the Conversation tab: both sides interleaved, Otto on the right, live; narrow, « in the thread » closes it and lights the message', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  const daemon = await fakeDaemon(page, fleet, { projects: twoProjects, threads: { otto: withNova, nova }, documents });
+  await page.goto('/');
+  await open(page);
+  await page.locator('.session-thread [data-message="s1"]').getByRole('button', { name: 'follow the conversation' }).click();
+  const pane = page.getByRole('complementary', { name: 'Reading pane' });
+  const head = pane.locator('.conv-head');
+  // One tab: no tab bar (SidePane shows it from two); the head names the pair.
+  await expect(head).toContainText('3 messages');
+  await expect(head.locator('.conv-pair')).toContainText('Otto');
+  await expect(head.locator('.conv-pair')).toContainText('Nova');
+  const log = pane.getByRole('log', { name: 'Conversation between Otto and Nova' });
+  await expect(log).toBeVisible();
+  await expect(log.locator('[data-bubble]')).toHaveCount(3);
+  // A centred column; Otto (this page's agent) on the right, Nova on the left.
+  const column = (await pane.locator('.conv-log').boundingBox())!;
+  expect(column.width).toBeLessThanOrEqual(680);
+  const mine = (await pane.locator('.conv-row.mine .conv-bubble').boundingBox())!;
+  expect(Math.abs(mine.x + mine.width - (column.x + column.width))).toBeLessThanOrEqual(2);
+  const theirs = pane.locator('.conv-row.theirs .conv-bubble');
+  await expect(theirs).toHaveCount(2);
+  for (const box of await Promise.all((await theirs.all()).map(b => b.boundingBox()))) expect(Math.abs(box!.x - column.x)).toBeLessThanOrEqual(2);
+  // Live: Nova writes again.
+  daemon.item('nova', { kind: 'sent', id: 'toolu_n3', at: at(0), turn: 1, to: 'otto', peer: 'otto', text: 'And the tests?', status: 'delivered' });
+  await expect(head).toContainText('4 messages');
+  // Narrow (terminal open): the pane lies over the thread; « in the thread » closes the tab, then lights Otto's message.
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.keyboard.press('o');
+  await expect(page.getByRole('region', { name: 'Terminal' })).toBeVisible();
+  expect(await pane.evaluate(el => getComputedStyle(el).position)).toBe('absolute');
+  await pane.locator('[data-bubble="a:s1"]').getByRole('button', { name: 'in the thread' }).click();
+  await expect(pane).toHaveCount(0);
+  await expect(page.locator('.session-thread .message-card.lit[data-message="s1"]')).toBeVisible();
+});
