@@ -397,12 +397,15 @@ async function relayMessage(client: Client, from: string, toolUseId: string | un
   if (r.outcome === 'unknown') return undefined;
   if (r.outcome === 'refused') return deny(`Ledge n'a pas pu transmettre le message à ${to} : ${r.reason}`);
   if (r.outcome === 'native') {
-    const named = (text: string) => `${messageNote(sender.name, 'claude')} ${text}`;
+    // Already named when Ledge's hook runs twice (installed in user and project settings): never twice.
+    const note = messageNote(sender.name, 'claude');
+    const named = (text: string) => (text.startsWith(note) ? text : `${note} ${text}`);
     const updatedInput = { ...input, to: r.address, message: named(input.message as string), ...(typeof input.content === 'string' ? { content: named(input.content) } : {}) };
     return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow', updatedInput } });
   }
   const tool = r.target.tool;
-  // Too long for Ledge: a Codex can only be reached through it (refused below, with the length), anyone else natively.
+  // Too long for Ledge: a Codex can only be reached through it (refused below, with the length). An OMP or Cursor
+  // target falls through to the native tool, as does a name Ledge does not know: Claude's own error then answers.
   if (tool !== 'codex' && (input.message as string).length > MESSAGE_MAX) return undefined;
   const summary = str(input.summary);
   const ack = await sendMessageAndAwaitAck(client, { type: 'session.message', rid: toolUseId, from, to, text: input.message as string, ...(summary ? { summary } : {}), intercept: true }, left());

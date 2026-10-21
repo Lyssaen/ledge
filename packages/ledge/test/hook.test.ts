@@ -377,6 +377,14 @@ describe('runHook: Claude SendMessage to a Claude', () => {
       expect((decision(await runHook('PreToolUse', send('Pim [ab12]'), { port: srv.port })).updatedInput as Record<string, unknown>).to).toBe('uds:/s/x.sock');
     } finally { await srv.close(); }
   });
+  it('a message already naming its sender is not named twice (the hook installed twice)', async () => {
+    peer();
+    const srv = await serve();
+    try {
+      expect(decision(await runHook('PreToolUse', send('uds:/s/x.sock', `${note} Salut`), { port: srv.port })).updatedInput).toEqual(
+        { to: 'uds:/s/x.sock', message: `${note} Salut`, summary: 'Un salut', content: `${note} Salut` });
+    } finally { await srv.close(); }
+  });
   it('a target with no live peer is refused, never guessed', async () => {
     const srv = await serve();
     try {
