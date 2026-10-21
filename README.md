@@ -212,6 +212,8 @@ Ledge never sends an instruction to a pane, or starts anything, by itself: the u
 
 Ask it to pass something on — "tell Otto to run the overlay tests" — and, when exactly one tracked session matches and Ledge can type into it, the answer ends with a card: the session, its state, and the exact instruction. **Send** types it into the session the way a reply from the overlay does. If the session is busy, the card waits ("Otto is working; I'll send it as soon as it's done", **Cancel**) and the daemon sends it the next time the session is free, one instruction per free moment, oldest first, even with the overlay closed. Sessions started outside Ledge (hook only) are read-only and never get a card. A reset, a new day or a daemon restart drops the waiting instructions with the history; nothing is sent.
 
+Ask it to close sessions — "close Arlo and Bram" — and, for each session it can name without doubt (tracked, not hook only, not already ended), the answer ends with a close card: one row per session (eight at most) with **Close** and **Close all**. Ledge itself closes nothing: the click does. The daemon clears the prompt (it sends the interrupt keys and waits up to 10 s for a free prompt; a pending permission or question is only ever refused, never typed into, and the thread records "Refused by the close"), types the agent's exit command (`/exit`) and waits for the session to end. If the agent has not left after 15 s, the tmux session is killed and the row says so ("Closed by force"). Rows close in parallel and only once, even after a double click or from a second client. The session ends `exited`, not archived: it stays in the list and can be resumed (`session.resume`). There is no `ledge close` for agents: only Ledge's chat closes sessions.
+
 ## Protocol
 
 JSON messages over one WebSocket, validated with the zod schemas in `packages/protocol` on both ends.
@@ -226,14 +228,15 @@ Daemon to clients:
 | `session.preview { id, lines }` | The last 30 cleaned lines of the pane, sent only when they changed. |
 | `session.thread { id, items }` | A session's thread, answered to a `session.thread` request. |
 | `session.thread.item { id, item }` | One thread item created or updated, broadcast as it happens. |
+| `session.closed { qid, row, id, how }` | To the requester of a `session.close` only, once per row closed: `how` is `exit` (the agent left) or `killed` (it did not, the tmux session was killed). |
 | `session.launched { id }` | To the requester of a `session.launch` only: the session exists (its `session.updated` was broadcast just before). |
 | `recents { recents }` | The recent folders changed. |
 | `folder.listing { path, parent, entries, error? }` | To the requester of a `folder.list` or `folder.create` only: the folder (resolved, `~` expanded), its parent (`null` at the root) and its subfolders by name, hidden ones left out. A refusal says why in `error`, never in an `error` message. |
 | `chat.step { qid, step }` | What Ledge is reading: `sessions`, `pane`, `reply`, `git` or `repo` (`id` / `name` / `path` when they apply). |
 | `chat.delta { qid, text }` | The next slice of the answer, as the harness writes it. |
-| `chat.done { qid, text, at, proposal?, relay? }` | The finished answer; `proposal` the session card, `relay` the instruction card, if any. |
+| `chat.done { qid, text, at, proposal?, relay?, closes? }` | The finished answer; `proposal` the session card, `relay` the instruction card, `closes` the close card's rows (`id`, `name`, `tool`), if any. |
 | `chat.error { qid, message }` | The question could not be answered (busy, timeout, cancel, harness missing). |
-| `chat.history { turns }` | The day's turns (50 at most), after each snapshot and after each ask or reset. A turn still running has no `answer`. A turn's `proposal` carries `launchedId` once started and `error` if the start failed; its `relay` carries `status` (`queued` or `sent`), `sentAt` and `error`. |
+| `chat.history { turns }` | The day's turns (50 at most), after each snapshot and after each ask or reset. A turn still running has no `answer`. A turn's `proposal` carries `launchedId` once started and `error` if the start failed; its `relay` carries `status` (`queued` or `sent`), `sentAt` and `error`; each of its `closes` carries `closedAt` and `how` once closed, or `error`. |
 | `error { message, id? }` | A rejected command. With `id`, the overlay shows it on that session; without one, a refused launch or relay (`session.relay`, `session.relay.cancel`). |
 
 Clients to daemon:
@@ -251,6 +254,7 @@ Clients to daemon:
 | `session.dismiss { id }` | overlay | Remove a finished or read-only session from the list. |
 | `session.focus { id }` | overlay | Acknowledged only; the overlay focuses the terminal itself. |
 | `session.launch { tool, cwd, name?, prompt?, continue?, qid? }` | overlay | Start a session: `cwd` a WSL folder (`~` allowed, must exist), `name` a preferred bot name, `prompt` the first instruction, `continue` resumes the folder's last conversation. The daemon spawns the agent exactly like `ledge <tool>` would (minus the exit-code wrapper: the poller sees the pane end) and answers `session.launched`. With `qid`, it starts that chat turn's proposal (the other fields are ignored), refused once started. |
+| `session.close { qid, rows? }` | overlay | Close the chat card's sessions, once each: `rows` (0..7, unique) picks some, all otherwise. Refused when no row can go. |
 | `session.relay { qid }` | overlay | Sends the chat card's instruction now, or queues it until the session is free. Refusals: `unknown relay`, `already sent`, `already queued`. |
 | `session.relay.cancel { qid }` | overlay | Takes the card's instruction back out of the queue (`nothing queued` otherwise). |
 | `folder.list { path? }` | overlay | The launch form's folder browser: list a WSL folder's subfolders (home without `path`). |

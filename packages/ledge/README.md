@@ -89,6 +89,8 @@ The question goes on stdin, never in argv, and `LEDGE_CHAT=1` is set so Ledge's 
 - `~/.ledge/chat.json` holds the day's conversation (its date, session id and which tool it belongs to); a new day, a `chat.reset`, or a change of harness starts a new conversation, and a question after a failed resume starts a new one too.
 - One question at a time; a turn that takes more than 180 s is stopped and the chat says it timed out (no retry). `chat.reset` is refused while a question is running.
 
+- Close card: asked to close sessions, the harness ends its answer with one `ledge-close` block per session (8 at most; the daemon takes the id, name and tool from its own store). The card's **Close** sends `session.close { qid, rows? }`: the daemon sends the interrupt keys and waits up to 10 s for a free prompt (a pending permission or question is only refused, never typed into, and the thread records "Refusé(e) par la fermeture"), types the agent's exit command (`/exit`), then waits up to 15 s for the session to end. If the agent has not left, the tmux session is killed. The session ends `exited`, not archived, so `session.resume` brings it back. There is no `ledge close` for agents: only Ledge's chat closes sessions.
+
 Session names and tab titles: Ledge sets `set-titles` in `~/.ledge/tmux.conf`. A tmux server that is already running re-reads `tmux.conf` only after it restarts, so `set-titles` applies to new tmux servers. The tab string is `${name} · ${topic ?? project}`; `session.rename` from the overlay updates it.
 
 ## Tests
