@@ -99,7 +99,8 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   const [view, setView] = useState<View>('thread');
   const [file, setFile] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
-  const [flash, setFlash] = useState<string | null>(null);
+  // A new object each time: the same row lit again (« dans le fil » twice) comes into view again.
+  const [flash, setFlash] = useState<{ id: string } | null>(null);
   const files = useMemo(() => (items ? changedFiles(items, session.cwd, helper?.id) : []), [items, session.cwd, helper?.id]);
   // The file asked for (findFile), else the first.
   const current = useMemo(() => (file === null ? undefined : findFile(files, file, session.cwd)) ?? files[0], [files, file, session.cwd]);
@@ -118,7 +119,7 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
     // Aimed at an action, the reader no longer follows the end: the thread growing around it must not take the view away.
     follow.current = false;
     setListOpen(false);
-    setFlash(toolId);
+    setFlash({ id: toolId });
     setView('thread');
   }, []);
   const stepFile = (d: 1 | -1) => {
@@ -311,7 +312,7 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   useEffect(() => {
     if (flash === null || view !== 'thread') return;
     const frame = requestAnimationFrame(() => {
-      const row = [...(scroller.current?.querySelectorAll<HTMLElement>('[data-tool],[data-message]') ?? [])].find(e => (e.dataset.tool ?? e.dataset.message) === flash);
+      const row = [...(scroller.current?.querySelectorAll<HTMLElement>('[data-tool],[data-message]') ?? [])].find(e => (e.dataset.tool ?? e.dataset.message) === flash.id);
       row?.scrollIntoView?.({ block: 'center' });
     });
     const off = setTimeout(() => setFlash(null), FLASH_MS);
@@ -325,14 +326,14 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
     if (id === undefined || !items?.some(i => i.id === id)) return;
     aimed.current = undefined;
     follow.current = false;
-    setFlash(id);
+    setFlash({ id });
   }, [items]);
   // From the Conversation tab, « dans le fil » lights the message in place, as above; the narrow pane, lying over the thread,
   // closes its tab first.
   const lightMessage = (id: string, covered: boolean) => {
     if (covered && activeTab !== null) closeTab(activeTab);
     follow.current = false;
-    setFlash(id);
+    setFlash({ id });
   };
   const onScroll = () => {
     const el = scroller.current;
@@ -436,7 +437,7 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
               {items === undefined ? <p className="thread-note muted">{offline ? th.notLoaded : th.loading}</p>
                 : xs.length === 0 ? <p className="thread-note muted">{th.empty}</p>
                 : <Thread session={session} helper={helper} items={items} xs={shownXs} now={times} unread={unread.current ?? null} since={since} dispatch={p.dispatch}
-                    flash={flash} onChange={openDiff} onDocument={openDoc} planOpen={planOpen} onPlan={openPlan}
+                    flash={flash?.id ?? null} onChange={openDiff} onDocument={openDoc} planOpen={planOpen} onPlan={openPlan}
                     convOpen={convOpen} onConversation={helper ? undefined : openConversation} waiting={waiting} />}
             </div>
             {/* Before the thread is there, the files are not known: the thread's own note, never « Aucun fichier modifié ». */}

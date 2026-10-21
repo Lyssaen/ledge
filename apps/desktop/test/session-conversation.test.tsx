@@ -289,6 +289,21 @@ describe('the Conversation tab', () => {
       await waitFor(() => expect(document.querySelector('.session-thread .message-card.lit')).toBeNull(), { timeout: 4000 });
     });
 
+    it('« dans le fil » twice while the message is still lit: it comes into view again', async () => {
+      const scroll = vi.fn();
+      Element.prototype.scrollIntoView = scroll;
+      const { user } = await openConversation();
+      await user.click(within(bubble('a:s1')).getByRole('button', { name: 'dans le fil' }));
+      await waitFor(() => expect(lit('s1')).not.toBeNull());
+      await waitFor(() => expect(scroll.mock.contexts).toContain(card('s1')));
+      const before = scroll.mock.calls.length;
+      // The reader scrolls the thread away and asks again, well within the 1.8 s light.
+      await user.click(within(bubble('a:s1')).getByRole('button', { name: 'dans le fil' }));
+      await waitFor(() => expect(scroll.mock.calls.length).toBeGreaterThan(before));
+      expect(scroll.mock.contexts.at(-1)).toBe(card('s1'));
+      expect(lit('s1')).not.toBeNull();
+    });
+
     it('a click on the bubble does the same; on its links or over a selection it does not', async () => {
       Element.prototype.scrollIntoView = vi.fn();
       const long = `Merci, je regarde. ${'Je lis le schéma en entier. '.repeat(10)}`;
