@@ -467,13 +467,13 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       // Busy or asking: the interrupt keys free the prompt. On a request they refuse it, which the thread records, but only for
       // the request that was interrupted and is still there (a newer one, or one a hook already settled, is left alone), not a
       // helper's, and only a hook's: a request read off the screen has no permission row, so a deny would mark an older one. A
-      // question has no permission row: its Decided carries no decision. A failed key refuses nothing and ends in the kill.
+      // question has no permission row: its Decided carries no decision, only `byClose`, for its tool row. A failed key refuses nothing and ends in the kill.
       if (!free(cur) && pane) {
         const asked = pending && pendingKey(pending);
         const sent = await tmux.sendKeys(pane, adapter.interruptKeys()).then(() => true, e => { log(`close of ${id}: the interrupt failed: ${(e as Error).message}`); return false; });
         const still = store.get(id)?.pending;
         if (sent && pending && !pending.helperId && still && pendingKey(still) === asked) {
-          if (pending.kind === 'question') store.apply(id, { name: 'Decided', at: now(), source: 'daemon' });
+          if (pending.kind === 'question') store.apply(id, { name: 'Decided', at: now(), source: 'daemon', byClose: true });
           else if (pending.source === 'hook') store.apply(id, { name: 'Decided', at: now(), source: 'daemon', decision: 'deny', byClose: true });
         }
       }

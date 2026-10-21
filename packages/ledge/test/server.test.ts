@@ -2328,10 +2328,13 @@ describe('close a session', () => {
     await closing({ 'ledge-a': [QUESTION] }, { history });
     store.upsert(mk('a', { state: 'working' }));
     history.record('a', { name: 'PermissionRequest', at: new Date().toISOString(), source: 'hook', tool: 'Bash', text: 'ls' });
+    history.record('a', { name: 'PreToolUse', at: new Date().toISOString(), source: 'hook', tool: 'AskUserQuestion', text: 'Which?', toolUseId: 'toolu_q' });
     store.upsert({ ...store.get('a')!, state: 'waiting_input', pending: { kind: 'question', text: 'Which?', source: 'hook' } });
     const closed = srv.closeSession('a');
     await until(() => store.get('a')!.pending === undefined, 3000);
     expect(history.items('a').find(i => i.kind === 'permission')).not.toHaveProperty('decision');
+    // The question's own tool row says the close dismissed it.
+    await until(() => history.items('a').some(i => i.kind === 'tool' && i.byClose === true), 3000);
     store.upsert({ ...store.get('a')!, state: 'idle' });
     expect(await closed).toEqual({ how: 'exit' });
   });

@@ -104,6 +104,7 @@ function ActionRow({ tool, now, live, expanded, onExpand, flash, onChange }: Row
           <span className="vb">{!change && <Icon d={KIND_ICON[k]} size={13} />}<span className="action-verb">{th.verbs[verbOf(tool)]}</span></span>
           <button type="button" className="tg action-target" title={tool.label} onClick={detail ? onExpand : undefined} aria-expanded={detail ? expanded : undefined} disabled={!detail}>{target(tool) || tool.tool}</button>
           {failed && <Badge state="error" label={th.marks.failed} />}
+          {tool.byClose && <Badge state="error" label={th.questionByClose} />}
           {delta && <Delta plus={delta.plus} minus={delta.minus} />}
           {change && <button type="button" className="lnk action-link" data-short={th.seeChangeShort} onClick={() => onChange(f.path)}><Icon d={SHELL_ICONS.diff} size={12} /><span>{th.seeChange}</span></button>}
         </div>

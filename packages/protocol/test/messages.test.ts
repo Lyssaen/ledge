@@ -299,6 +299,8 @@ describe('native session tracking (spec 2026-10-13 §3, §5)', () => {
   it('validates each thread item kind and defaults the files of an action', () => {
     const tool = ThreadItemSchema.parse({ kind: 'tool', id: 'toolu_1', at, turn: 1, tool: 'Bash', label: 'Bash · pnpm test', status: 'running' });
     expect(tool).toMatchObject({ kind: 'tool', files: [] });
+    expect(ThreadItemSchema.parse({ kind: 'tool', id: 'toolu_q', at, turn: 1, tool: 'AskUserQuestion', label: 'Q ?', status: 'unknown', byClose: true })).toMatchObject({ byClose: true });
+    expect(ThreadItemSchema.safeParse({ kind: 'tool', id: 'toolu_q', at, turn: 1, tool: 'AskUserQuestion', label: 'Q ?', status: 'unknown', byClose: false }).success).toBe(false);
     expect(ThreadItemSchema.parse({ kind: 'prompt', id: 'p1', at, turn: 1, text: 'Fais le plan' }).kind).toBe('prompt');
     expect(ThreadItemSchema.parse({ kind: 'helper', id: 'h1', at, turn: 1, task: 'review task 1', agentType: 'Explore', state: 'working' }).kind).toBe('helper');
     expect(ThreadItemSchema.parse({ kind: 'permission', id: 'perm-1', at, turn: 1, tool: 'Bash', text: 'rm -rf dist', decision: 'deny' }).kind).toBe('permission');

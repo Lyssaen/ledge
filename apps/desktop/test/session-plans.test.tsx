@@ -133,6 +133,15 @@ it('a request refused by a close says so on its chip, in both languages', async 
   expect(chips.map(c => c.textContent)).toEqual(['Denied by the closenpm test', 'Deniedrm -rf dist']);
   expect(fr.session.thread.decided.denyByClose).toBe('Refusé par la fermeture');
 });
+it('a question dismissed by a close says so on its action row, in both languages', async () => {
+  const { d, user } = await boot({ sessions: listSessions(), list: true });
+  const asked: ThreadItem = { kind: 'tool', id: 'toolu_q', at: new Date().toISOString(), turn: 2, tool: 'AskUserQuestion', label: 'Créer bye.txt ?', status: 'unknown', byClose: true, files: [] };
+  d.thread('otto', [...ottoThread(), asked]);
+  await user.click(screen.getByRole('button', { name: /^Otto,/ }));
+  await screen.findByText('Corrige-les');
+  expect(document.querySelector('[data-tool="toolu_q"]')).toHaveTextContent('Dismissed by the close');
+  expect(fr.session.thread.questionByClose).toBe('Refusée par la fermeture');
+});
 it('a plan without its action (Codex) is read from the request; once answered, its tab keeps the plan, its fate untold', async () => {
   const cora = fakeSession('cora', { name: 'Cora', tool: 'codex', cwd: '/w/ledge', state: 'waiting_permission', pending: { kind: 'plan', text: '# Plan : version 0.6.0', body: md, source: 'pane' } });
   const { d, user } = await boot({ sessions: [...listSessions(), cora], list: true });

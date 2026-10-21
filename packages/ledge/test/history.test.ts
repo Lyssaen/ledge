@@ -63,6 +63,26 @@ describe('History', () => {
     expect(h.items('s')[1]).not.toHaveProperty('byClose');
   });
 
+  it('a Decided by a close, without decision, marks the open question row as dismissed by the close and settled', () => {
+    const h = new History();
+    h.record('s', ev('PermissionRequest', { tool: 'Bash', text: 'rm -rf dist' }));
+    h.record('s', ev('PreToolUse', { tool: 'AskUserQuestion', text: 'Créer bye.txt ?', toolUseId: 'toolu_q', options: ['Oui', 'Non'] }, 1));
+    h.record('s', ev('Decided', { source: 'daemon', byClose: true }, 2));
+    expect(h.items('s')[1]).toMatchObject({ kind: 'tool', tool: 'AskUserQuestion', status: 'unknown', byClose: true });
+    expect(h.items('s')[0]).not.toHaveProperty('decision');
+    expect(h.items('s')[0]).not.toHaveProperty('byClose');
+  });
+
+  it('a Decided by a close, without decision, changes nothing when no question is open', () => {
+    const h = new History();
+    h.record('s', ev('PreToolUse', { tool: 'Bash', text: 'ls', toolUseId: 'toolu_b' }));
+    h.record('s', ev('PreToolUse', { tool: 'AskUserQuestion', text: 'Q ?', toolUseId: 'toolu_q' }, 1));
+    h.record('s', ev('PostToolUse', { tool: 'AskUserQuestion', toolUseId: 'toolu_q' }, 2));
+    const before = JSON.stringify(h.items('s'));
+    expect(h.record('s', ev('Decided', { source: 'daemon', byClose: true }, 3))).toBeUndefined();
+    expect(JSON.stringify(h.items('s'))).toBe(before);
+  });
+
   it('a reply to a question (a Decided without decision) leaves the permissions alone', () => {
     const h = new History();
     h.record('s', ev('PermissionRequest', { tool: 'Bash', text: 'rm -rf dist' }));

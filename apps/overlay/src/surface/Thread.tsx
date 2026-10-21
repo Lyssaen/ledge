@@ -37,9 +37,15 @@ function Item({ item, session, t, theme, paused, frozen, reducedMotion, onDocume
       </div>);
     case 'permission': return (
       <div data-item="permission" data-permission data-decision={item.decision ?? 'pending'} style={{ padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
-        <span style={{ ...muted, display: 'block', fontSize: 10 }}>{t.thread.permission} · {item.decision ? t.thread.decided[item.decision] : t.thread.undecided}</span>
+        <span style={{ ...muted, display: 'block', fontSize: 10 }}>{t.thread.permission} · {item.byClose ? t.thread.decided.denyByClose : item.decision ? t.thread.decided[item.decision] : t.thread.undecided}</span>
         <pre className="ledge-scroll" style={{ ...pre, marginTop: 6 }}>{item.text}</pre>
       </div>);
+    // A question the close dismissed: the only tool row kept in the thread, as the close's own record.
+    case 'tool': return item.byClose ? (
+      <div data-item="tool" data-question-closed style={{ padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+        <span style={{ ...muted, display: 'block', fontSize: 10 }}>{t.thread.questionByClose}</span>
+        <p style={{ margin: '6px 0 0', fontSize: 12, overflowWrap: 'anywhere' }}>{item.label}</p>
+      </div>) : null;
     default: return null; // tool calls share the live line; helper rows live under the title
   }
 }
@@ -58,7 +64,7 @@ export function Thread(p: ThreadProps) {
   const current = all[all.length - 1]!;
   const rows: ReactNode[] = [];
   for (const turn of all) for (const it of turn.items) {
-    if (it.kind === 'tool' || (hideCurrentReply && it.kind === 'reply' && turn === current)) continue;
+    if ((it.kind === 'tool' && !it.byClose) || (hideCurrentReply && it.kind === 'reply' && turn === current)) continue;
     rows.push(<Item key={it.id} item={it} session={session} t={t} theme={p.theme} paused={p.paused} frozen={p.frozen} reducedMotion={p.reducedMotion} onDocument={p.onDocument} />);
   }
   // The current turn's calls are one live line, under everything said so far: the running tool, then its mark.
