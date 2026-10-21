@@ -94,9 +94,9 @@ export function ConversationTab({ self, view, buttons, onLight, onOpenPeer }: Co
       <div className="side-head conv-head">
         <span className="side-title conv-title">
           <span className="conv-pair">
-            <SessionBot session={self} size={18} /><strong>{self.name}</strong>
-            <Icon d={SHELL_ICONS.exchange} size={13} />
-            {peer && <SessionBot session={peer} size={18} />}<strong title={peerName}>{peerName}</strong>
+            <span className="conv-bot" aria-hidden="true"><SessionBot session={self} size={18} /></span><strong>{self.name}</strong>
+            <span className="conv-exchange" aria-hidden="true"><Icon d={SHELL_ICONS.exchange} size={13} /></span>
+            {peer && <span className="conv-bot" aria-hidden="true"><SessionBot session={peer} size={18} /></span>}<strong title={peerName}>{peerName}</strong>
           </span>
           {bubbles.length > 0 && <span className="conv-count">{tc.count(bubbles.length)}</span>}
         </span>
