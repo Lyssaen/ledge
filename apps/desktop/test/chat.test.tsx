@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import type { DaemonError } from '@ledge/fleet';
-import type { ChatProjectProposal, ChatProposal, ChatTurn, ClientMessage, Session } from '@ledge/protocol';
+import type { ChatClose, ChatProjectProposal, ChatProposal, ChatTurn, ClientMessage, Session } from '@ledge/protocol';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { boot, closeDaemons, declarations, DEFAULT_SESSIONS, LAUNCH_PROJECTS, recordToasts, type MockDaemon } from './helpers';
 import { loadChat } from '../src/chat/lazy';
@@ -47,7 +47,7 @@ async function ask(env: Awaited<ReturnType<typeof openChat>>, question: string, 
   await panel().findByText('Reads the sessions');
   d.push({ type: 'chat.delta', qid, text: answer.slice(0, 4) });
   const at = new Date().toISOString();
-  d.push({ type: 'chat.done', qid, text: answer, at, ...(extra.proposal ? { proposal: extra.proposal } : {}), ...(extra.projectProposal ? { projectProposal: extra.projectProposal } : {}) });
+  d.push({ type: 'chat.done', qid, text: answer, at, ...(extra.proposal ? { proposal: extra.proposal } : {}), ...(extra.closes ? { closes: extra.closes } : {}), ...(extra.projectProposal ? { projectProposal: extra.projectProposal } : {}) });
   await waitFor(() => expect(panel().queryByText('Reads the sessions')).toBeNull());
   return { qid, question, askedAt: at, steps: [{ kind: 'sessions' }], answer, answeredAt: at, ...extra };
 }
@@ -254,6 +254,25 @@ describe('the Ledge chat docked on the right', () => {
     expect(panel().queryByRole('button', { name: /Start the session|Retry/ })).toBeNull();
     expect(launches(d)).toHaveLength(1);
     expect(screen.getByRole('complementary', { name: 'Chat Ledge' })).toBeVisible();   // the chat stays open
+  });
+
+  it('closes the rows of a close card and frees it once the turn marks them', async () => {
+    const env = await openChat();
+    const { d, user } = env;
+    const closes: ChatClose[] = [{ id: 'local:otto', name: 'Otto', tool: 'claude' }, { id: 'local:nova', name: 'Nova', tool: 'claude' }];
+    const turn = await ask(env, 'Ferme Otto et Nova', 'Voici.', { closes });
+    const card = within(panel().getByRole('region', { name: '2 sessions to close' }));
+    await user.click(card.getByRole('button', { name: 'Close all (2)' }));
+    await waitFor(() => expect(d.received.filter(m => m.type === 'session.close')).toHaveLength(1));
+    expect(d.received.find(m => m.type === 'session.close')).toEqual({ type: 'session.close', qid: turn.qid, rows: [0, 1] });
+    expect(card.getAllByRole('button', { name: 'Closing…' })).toHaveLength(2);
+    const at = new Date().toISOString();
+    d.push({ type: 'chat.history', turns: [{ ...turn, closes: [{ ...closes[0]!, closedAt: at, how: 'exit' }, closes[1]!] }] });
+    await card.findByText('Closed');
+    expect(card.getAllByRole('button', { name: 'Closing…' })).toHaveLength(1);   // row 1 still waits
+    d.push({ type: 'chat.history', turns: [{ ...turn, closes: closes.map(c => ({ ...c, closedAt: at, how: 'exit' as const })) }] });
+    await waitFor(() => expect(card.queryByRole('button', { name: 'Closing…' })).toBeNull());
+    expect(card.queryByRole('button', { name: /Close all|Close$/ })).toBeNull();
   });
 
   it('a card offers the agent\'s models once its machine lists them, and launches with the one chosen (#58)', async () => {
@@ -578,6 +597,66 @@ describe('useChatCards', () => {
     rerender({ chat: both, lastLaunched: null, errors: [], ready: true });
     expect(result.current).toMatchObject({ launchingQid: null, launchingRows: null });
     expect(onLaunched).toHaveBeenCalledTimes(1);
+  });
+
+  describe('close cards', () => {
+    const a: ChatClose = { id: 'local:otto', name: 'Otto', tool: 'claude' }, b: ChatClose = { id: 'local:nova', name: 'Nova', tool: 'claude' };
+    const at = '2026-10-17T10:00:05.000Z';
+
+    it('sends one session.close with the open rows only, and frees the card once every sent row is closed or has a new error', () => {
+      const chat = [turnWith({ closes: [a, { ...b, error: 'old' }, { ...a, id: 'local:kit', closedAt: at, how: 'exit' }] })];
+      const { send, result, rerender } = setup({ chat, lastLaunched: null, errors: [], ready: true });
+      act(() => { result.current.close('q-1', [0, 1, 2]); result.current.close('q-1', [0]); result.current.launch('q-1'); });
+      expect(send).toHaveBeenCalledExactlyOnceWith({ type: 'session.close', qid: 'q-1', rows: [0, 1] });
+      expect(result.current).toMatchObject({ closingQid: 'q-1', closingRows: [0, 1] });
+      const half = [turnWith({ closes: [{ ...a, closedAt: at, how: 'exit' }, { ...b, error: 'old' }, chat[0]!.closes![2]!] })];
+      rerender({ chat: half, lastLaunched: null, errors: [], ready: true });
+      expect(result.current.closingQid).toBe('q-1');                   // an error equal to the old one is not an answer
+      const done = [turnWith({ closes: [{ ...a, closedAt: at, how: 'exit' }, { ...b, error: 'still on its dialog' }, chat[0]!.closes![2]!] })];
+      rerender({ chat: done, lastLaunched: null, errors: [], ready: true });
+      expect(result.current).toMatchObject({ closingQid: null, closingRows: null });
+    });
+
+    it('without rows closes every open row, sending no rows', () => {
+      const chat = [turnWith({ closes: [{ ...a, closedAt: at, how: 'exit' }, b] })];
+      const { send, result } = setup({ chat, lastLaunched: null, errors: [], ready: true });
+      act(() => result.current.close('q-1'));
+      expect(send).toHaveBeenCalledExactlyOnceWith({ type: 'session.close', qid: 'q-1' });
+      expect(result.current.closingRows).toEqual([1]);
+    });
+
+    it('a refusal of the close (an error without id) frees the card', () => {
+      const chat = [turnWith({ closes: [a, b] })];
+      const old: DaemonError = { message: 'older', seq: 1 };
+      const { result, rerender } = setup({ chat, lastLaunched: null, errors: [old], ready: true });
+      act(() => result.current.close('q-1'));
+      rerender({ chat, lastLaunched: null, errors: [old], ready: true });
+      expect(result.current.closingQid).toBe('q-1');
+      rerender({ chat, lastLaunched: null, errors: [old, { message: 'no such turn', seq: 2, request: 'session.close' }], ready: true });
+      expect(result.current.closingQid).toBeNull();
+    });
+
+    it('a card whose machine goes away is freed', () => {
+      const chat = [turnWith({ closes: [a, b] })];
+      const { result, rerender } = setup({ chat, lastLaunched: null, errors: [], ready: true });
+      act(() => result.current.close('q-1'));
+      expect(result.current.closingQid).toBe('q-1');
+      rerender({ chat, lastLaunched: null, errors: [], ready: false });
+      expect(result.current).toMatchObject({ closingQid: null, closingRows: null });
+    });
+
+    it('sends nothing for a machine that is not ready, or while a launch, a relay or a close is in flight', () => {
+      const chat = [turnWith({ closes: [a, b] }), turnWith({ qid: 'q-2', proposal: PROPOSAL }), turnWith({ qid: 'q-3', closes: [a] })];
+      const off = setup({ chat, lastLaunched: null, errors: [], ready: false });
+      act(() => off.result.current.close('q-1'));
+      expect(off.send).not.toHaveBeenCalled();
+      const { send, result } = setup({ chat, lastLaunched: null, errors: [], ready: true });
+      act(() => { result.current.launch('q-2'); result.current.close('q-1'); });
+      expect(send.mock.calls.map(c => c[0].type)).toEqual(['session.launch']);
+      const two = setup({ chat, lastLaunched: null, errors: [], ready: true });
+      act(() => { two.result.current.close('q-1'); two.result.current.close('q-3'); two.result.current.launch('q-2'); two.result.current.relay('q-1'); });
+      expect(two.send.mock.calls.map(c => c[0].type)).toEqual(['session.close']);
+    });
   });
 
   it('a relay sends once, waits for its turn to change, and blocks launches meanwhile', () => {

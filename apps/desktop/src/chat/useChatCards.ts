@@ -24,12 +24,18 @@ export interface ChatCards {
   launchingRows: readonly number[] | null;
   /** Launches the card's rows (#24; its first row without `rows`): the launched ones are left out, all in one message. */
   launch(qid: string, rows?: number[]): void; relay(qid: string): void; cancelRelay(qid: string): void;
+  /** The rows of `closingQid`'s close card in flight. */
+  closingQid: string | null; closingRows: readonly number[] | null;
+  /** Closes the card's open rows (`rows`, or all of them), in one message. */
+  close(qid: string, rows?: number[]): void;
   /** The model and effort chosen on the card (#58), sent with its launch; the agent's default until one is chosen. */
   pick(qid: string): ModelPick; setPick(qid: string, pick: ModelPick): void;
 }
 
 /** A launch in flight: its rows and each row as sent (its error tells a new failure from the old one), what was seen at the send, the rows announced. */
 interface Launching { qid: string; rows: number[]; from: ChatProposal[]; machineId: string | undefined; launchedSeq: number; errorSeq: number; announced: Set<number> }
+/** A close in flight: its rows and each row's error as sent (a new error tells a failure from the old one). */
+interface Closing { qid: string; rows: number[]; from: Array<string | undefined>; errorSeq: number }
 interface Relaying { qid: string; from: string; errorSeq: number }
 
 const relayState = (chat: readonly ChatTurn[], qid: string): string => {
@@ -41,25 +47,31 @@ const relayState = (chat: readonly ChatTurn[], qid: string): string => {
  *  A launch sends `session.launch { tool, cwd, prompt?, qid }`; the next `session.launched` is announced (`onLaunched`), and the card
  *  is freed once its turn says so (the history's `launchedId` or a new `error`), by a refusal of the launch (an error without id),
  *  or when its machine goes away. A relay sends `session.relay` / `session.relay.cancel { qid }` and is freed when its turn's relay
- *  changes, by an error without id, or when its machine goes away. A card of a machine that is not ready does nothing. */
+ *  changes, by an error without id, or when its machine goes away. A close sends `session.close { qid, rows? }` and is freed when every
+ *  sent row is marked (`closedAt`, or a new `error`), by a `session.close` refusal, or when its machine goes away. A card of a machine
+ *  that is not ready does nothing. */
 export function useChatCards(o: ChatCardsOptions): ChatCards {
   const latest = useRef(o);
   latest.current = o;
   // Synchronous mirrors of what is in flight: two clicks in the same frame see the first send before React renders again.
   const launching = useRef<Launching | null>(null);
   const relaying = useRef<Relaying | null>(null);
+  const closing = useRef<Closing | null>(null);
   const [launchingQid, setLaunchingQid] = useState<string | null>(null);
   const [launchingRows, setLaunchingRows] = useState<readonly number[] | null>(null);
+  const [closingQid, setClosingQid] = useState<string | null>(null);
+  const [closingRows, setClosingRows] = useState<readonly number[] | null>(null);
   const [relayingQid, setRelayingQid] = useState<string | null>(null);
   const [picks, setPicks] = useState<ReadonlyMap<string, ModelPick>>(new Map());
   const picksNow = useRef(picks);
   picksNow.current = picks;
   const freeLaunch = () => { launching.current = null; setLaunchingQid(null); setLaunchingRows(null); };
+  const freeClose = () => { closing.current = null; setClosingQid(null); setClosingRows(null); };
   const freeRelay = () => { relaying.current = null; setRelayingQid(null); };
 
   const launch = useCallback((qid: string, asked?: number[]) => {
     const { chat, send, turnReady, turnMachine, lastLaunched, errors } = latest.current;
-    if (launching.current || relaying.current || !turnReady(qid)) return;
+    if (launching.current || relaying.current || closing.current || !turnReady(qid)) return;
     const all = proposalRows(chat.find(x => x.qid === qid));
     const rows = (asked ?? [0]).filter(r => all[r] && !all[r]!.launchedId);
     const p = all[rows[0] ?? -1];
@@ -73,9 +85,20 @@ export function useChatCards(o: ChatCardsOptions): ChatCards {
   const pick = useCallback((qid: string) => picks.get(qid) ?? NO_PICK, [picks]);
   const setPick = useCallback((qid: string, next: ModelPick) => setPicks(m => new Map(m).set(qid, next)), []);
 
+  const close = useCallback((qid: string, asked?: number[]) => {
+    const { chat, send, turnReady, errors } = latest.current;
+    if (launching.current || relaying.current || closing.current || !turnReady(qid)) return;
+    const all = chat.find(x => x.qid === qid)?.closes ?? [];
+    const open = (asked ?? all.map((_, i) => i)).filter(r => all[r] && !all[r]!.closedAt);
+    if (open.length === 0) return;
+    closing.current = { qid, rows: open, from: open.map(r => all[r]!.error), errorSeq: errors.at(-1)?.seq ?? 0 };
+    setClosingQid(qid); setClosingRows(open);
+    send({ type: 'session.close', qid, ...(asked ? { rows: open } : {}) });
+  }, []);
+
   const relayCard = useCallback((type: 'session.relay' | 'session.relay.cancel', qid: string) => {
     const { chat, send, turnReady, errors } = latest.current;
-    if (launching.current || relaying.current || !turnReady(qid) || !chat.find(x => x.qid === qid)?.relay) return;
+    if (launching.current || relaying.current || closing.current || !turnReady(qid) || !chat.find(x => x.qid === qid)?.relay) return;
     relaying.current = { qid, from: relayState(chat, qid), errorSeq: errors.at(-1)?.seq ?? 0 };
     setRelayingQid(qid);
     send({ type, qid });
@@ -84,7 +107,7 @@ export function useChatCards(o: ChatCardsOptions): ChatCards {
   const cancelRelay = useCallback((qid: string) => relayCard('session.relay.cancel', qid), [relayCard]);
 
   const { chat, lastLaunched, errors, sessions } = o;
-  const ready = launchingQid ? o.turnReady(launchingQid) : relayingQid ? o.turnReady(relayingQid) : true;
+  const ready = launchingQid ? o.turnReady(launchingQid) : closingQid ? o.turnReady(closingQid) : relayingQid ? o.turnReady(relayingQid) : true;
   useEffect(() => {
     const l = launching.current;
     if (l) {
@@ -102,9 +125,17 @@ export function useChatCards(o: ChatCardsOptions): ChatCards {
       const refused = errors.some(e => e.seq > l.errorSeq && e.id === undefined && (e.request === 'session.launch' || l.rows.some(r => e.message === all[r]?.error)));
       if (all.length === 0 || settled || refused || !ready) freeLaunch();
     }
+    const c = closing.current;
+    if (c) {
+      // The daemon marks each row of the turn as it closes it (`closedAt`) or fails it (a new `error`); a refusal comes without id.
+      const rows = chat.find(x => x.qid === c.qid)?.closes ?? [];
+      const settled = c.rows.every((r, k) => !rows[r] || rows[r]!.closedAt || rows[r]!.error !== c.from[k]);
+      const refused = errors.some(e => e.seq > c.errorSeq && e.id === undefined && e.request === 'session.close');
+      if (rows.length === 0 || settled || refused || !ready) freeClose();
+    }
     const r = relaying.current;
     if (r && (relayState(chat, r.qid) !== r.from || errors.some(e => e.seq > r.errorSeq && e.id === undefined) || !ready)) freeRelay();
   }, [chat, lastLaunched, errors, sessions, ready]);
 
-  return { launchingQid, launchingRows, relayingQid, launch, relay, cancelRelay, pick, setPick };
+  return { launchingQid, launchingRows, closingQid, closingRows, close, relayingQid, launch, relay, cancelRelay, pick, setPick };
 }
