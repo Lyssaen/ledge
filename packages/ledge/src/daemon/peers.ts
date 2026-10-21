@@ -16,24 +16,35 @@ function parsePeer(path: string): ClaudePeer | undefined {
   } catch { return undefined; }
 }
 
-/** Every `<pid>.json` of Claude's sessions directory; unreadable or partial files are skipped, never throws. */
-export function readPeers(dir: string = defaultDir()): ClaudePeer[] {
+/** Whether a process exists (`EPERM`: it does, but is not ours). */
+export function pidAlive(pid: number): boolean {
+  try { process.kill(pid, 0); return true; } catch (e) { return (e as NodeJS.ErrnoException).code === 'EPERM'; }
+}
+
+/** Every `<pid>.json` of Claude's sessions directory whose process is alive; unreadable or partial files are skipped, never throws. */
+export function readPeers(dir: string = defaultDir(), alive: (pid: number) => boolean = pidAlive): ClaudePeer[] {
   let names: string[];
   try { names = readdirSync(dir); } catch { return []; }
-  return names.filter(n => n.endsWith('.json')).flatMap(n => parsePeer(join(dir, n)) ?? []);
+  return names.filter(n => n.endsWith('.json')).flatMap(n => parsePeer(join(dir, n)) ?? []).filter(p => alive(p.pid));
+}
+
+/** The address of a session's live peer, by its transcript (follows `/clear` and `--resume`) or agent session id. */
+export function addressOf(s: Pick<Session, 'agentSessionId' | 'transcriptPath'>, peers: readonly ClaudePeer[]): string | undefined {
+  const t = s.transcriptPath && basename(s.transcriptPath, '.jsonl');
+  return (peers.find(p => t && p.sessionId === t) ?? peers.find(p => s.agentSessionId && p.sessionId === s.agentSessionId))?.address;
 }
 
 /** A session name without the ` [ref]` Claude's peer list appends to it (`Pim [ab12]` → `Pim`). */
 export const bareName = (name: string): string => name.replace(/ \[[^\]]*\]$/, '');
 
 /** The Ledge session a peer name (`name` or `name [ref]`) or address (`uds:…/<pid>.sock`) belongs to. */
-export function peerFor(target: string, peers: readonly ClaudePeer[], sessions: readonly Session[], dir: string = defaultDir()): Session | undefined {
+export function peerFor(target: string, peers: readonly ClaudePeer[], sessions: readonly Session[], dir: string = defaultDir(), alive: (pid: number) => boolean = pidAlive): Session | undefined {
   const name = bareName(target);
   const found = peers.filter(p => p.name === name || p.address === name);
   if (!found.length && name.startsWith('uds:') && name.endsWith('.sock')) {
     const pid = basename(name, '.sock');
     const direct = /^\d+$/.test(pid) ? parsePeer(join(dir, `${pid}.json`)) : undefined;
-    if (direct) found.push(direct);
+    if (direct && alive(direct.pid)) found.push(direct);
   }
   for (const { sessionId: id } of found) {
     const s = sessions.find(s => s.agentSessionId === id || s.transcriptPath?.endsWith(`/${id}.jsonl`));

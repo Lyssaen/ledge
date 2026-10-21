@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Session } from '@ledge/protocol';
-import { readPeers, peerFor, ledgePeer, bareName } from '../src/daemon/peers.js';
+import { readPeers, peerFor, ledgePeer, bareName, addressOf, pidAlive } from '../src/daemon/peers.js';
 
 const ID = 'de4ebbac-117e-4827-9eba-e0db4bb23687';
 const sock = '/run/user/1000/cc-socks/304399.sock';
@@ -20,36 +20,53 @@ describe('peers: which Ledge session a Claude peer is', () => {
   });
 
   it('resolves a name, a name with its ref, and an address to the Ledge session', () => {
-    const peers = readPeers(dir);
+    const peers = readPeers(dir, () => true);
     const s = fake({ agentSessionId: ID });
     for (const t of ['harness-assistant-bf', 'harness-assistant-bf [7e2ea7]', `uds:${sock}`]) expect(peerFor(t, peers, [fake({ id: 'x', agentSessionId: 'nope' }), s])).toBe(s);
   });
   it('falls back to the transcript path', () => {
     const s = fake({ transcriptPath: `/x/${ID}.jsonl` });
-    expect(peerFor('harness-assistant-bf', readPeers(dir), [s])).toBe(s);
+    expect(peerFor('harness-assistant-bf', readPeers(dir, () => true), [s])).toBe(s);
   });
   it('an address without a name match reads <pid>.json directly', () => {
     const s = fake({ agentSessionId: ID });
-    expect(peerFor(`uds:/elsewhere/cc-socks/304399.sock`, [], [s], dir)).toBe(s);
+    expect(peerFor(`uds:/elsewhere/cc-socks/304399.sock`, [], [s], dir, () => true)).toBe(s);
+    expect(peerFor(`uds:/elsewhere/cc-socks/304399.sock`, [], [s], dir, () => false)).toBeUndefined();
   });
   it('an unknown name, a broken file, a missing directory: no peer, no throw', () => {
     writeFileSync(join(dir, '2.json'), '{nope');
     writeFileSync(join(dir, '3.json'), '{"pid":3}');
-    expect(readPeers(dir).map(p => p.pid).sort()).toEqual([1, 304399]);
-    expect(peerFor('ghost', readPeers(dir), [fake({ agentSessionId: ID })])).toBeUndefined();
+    expect(readPeers(dir, () => true).map(p => p.pid).sort()).toEqual([1, 304399]);
+    expect(peerFor('ghost', readPeers(dir, () => true), [fake({ agentSessionId: ID })])).toBeUndefined();
     expect(readPeers(join(dir, 'missing'))).toEqual([]);
   });
   it('two files with the same name: the live one wins whatever the directory order', () => {
     writeFileSync(join(dir, '100.json'), JSON.stringify({ ...file, pid: 100, sessionId: 'stale-id', messagingSocketPath: '/x/100.sock' }));
     const s = fake({ agentSessionId: ID });
-    const peers = readPeers(dir);
+    const peers = readPeers(dir, () => true);
     expect(peers.filter(p => p.name === 'harness-assistant-bf').length).toBe(2);
     expect(peerFor('harness-assistant-bf', peers, [s])).toBe(s);
     expect(peerFor('harness-assistant-bf', [...peers].reverse(), [s])).toBe(s);
   });
+  it('skips the file of a dead process', () => {
+    writeFileSync(join(dir, '42.json'), JSON.stringify({ ...file, pid: 42, messagingSocketPath: '/x/42.sock' }));
+    expect(readPeers(dir, pid => pid !== 42).map(p => p.pid).sort()).toEqual([1, 304399]);
+  });
+  it('the address of a session: its live peer, by session id, else by transcript', () => {
+    const peers = readPeers(dir, () => true);
+    expect(addressOf({ agentSessionId: ID }, peers)).toBe(`uds:${sock}`);
+    expect(addressOf({ transcriptPath: `/p/${ID}.jsonl` }, peers)).toBe(`uds:${sock}`);
+    expect(addressOf({ agentSessionId: 'old', transcriptPath: `/p/${ID}.jsonl` }, peers)).toBe(`uds:${sock}`);
+    expect(addressOf({ agentSessionId: ID }, readPeers(dir, pid => pid !== 304399))).toBeUndefined();
+    expect(addressOf({}, peers)).toBeUndefined();
+  });
+  it('pidAlive: this process is alive, a free pid is not', () => {
+    expect(pidAlive(process.pid)).toBe(true);
+    expect(pidAlive(2 ** 22 + 1)).toBe(false);
+  });
   it('strips a ref from an address, and a non-numeric pid address gives nothing', () => {
     const s = fake({ agentSessionId: ID });
-    expect(peerFor(`uds:${sock} [7e2ea7]`, readPeers(dir), [s])).toBe(s);
+    expect(peerFor(`uds:${sock} [7e2ea7]`, readPeers(dir, () => true), [s])).toBe(s);
     expect(peerFor('uds:/x/abc.sock', [], [s], dir)).toBeUndefined();
   });
 });
