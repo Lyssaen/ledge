@@ -327,6 +327,13 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
     follow.current = false;
     setFlash(id);
   }, [items]);
+  // From the Conversation tab, « dans le fil » lights the message in place, as above; the narrow pane, lying over the thread,
+  // closes its tab first.
+  const lightMessage = (id: string, covered: boolean) => {
+    if (covered && activeTab !== null) closeTab(activeTab);
+    follow.current = false;
+    setFlash(id);
+  };
   const onScroll = () => {
     const el = scroller.current;
     if (!el || view !== 'thread') return;
@@ -452,7 +459,8 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
         </div>
         {paneShown && (
           <SidePane tabs={tabs} active={activeTab!} onActive={setActiveTab} onClose={closeTab} split={p.split} onSplit={onSplit}
-            onAllChanges={showChanges} onDocument={openDoc} session={session} files={files} client={p.client} plans={plans} convs={convs} />
+            onAllChanges={showChanges} onDocument={openDoc} session={session} files={files} client={p.client} plans={plans} convs={convs}
+            onLight={lightMessage} onOpenPeer={(peer, item) => p.dispatch({ type: 'open', id: peer.id, ...(item !== undefined && { item }) })} />
         )}
       </div>
     </section>

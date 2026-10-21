@@ -1,4 +1,4 @@
-import { useCallback, useMemo, type JSX, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { useCallback, useMemo, useRef, type JSX, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import type { DaemonClient } from '@ledge/fleet';
 import type { Session } from '@ledge/protocol';
 import { MarkdownDocument, type DocumentHeading } from '@ledge/ui/documents/markdown';
@@ -63,6 +63,10 @@ export interface SidePaneProps {
   plans: ReadonlyMap<string, PanePlan>;
   /** The open Conversation tabs' views, by peerKey (useConversations, at the page's level). */
   convs: ReadonlyMap<string, ConversationView>;
+  /** « dans le fil »: the message lit in the page's thread; `covered`: the pane lies over the thread (the narrow layout). */
+  onLight(id: string, covered: boolean): void;
+  /** « voir son fil »: the peer's page, on `item` when given. */
+  onOpenPeer(peer: Session, item?: string): void;
 }
 
 /** The side pane (session.tsx `sidePane`, `paneDoc`, `dragSplit`): the handle, then the documents and changes opened beside
@@ -71,6 +75,7 @@ export function SidePane(p: SidePaneProps): JSX.Element | null {
   const { t } = useI18n();
   const tp = t.session.pane;
   const { tabs, active, split, onSplit, files, session } = p;
+  const aside = useRef<HTMLElement>(null);
   const tab = tabs.find(x => tabId(x) === active);
   if (!tab) return null;
   // A change is named by its file as it is now (a renamed one by its new name), below the cwd.
@@ -121,13 +126,15 @@ export function SidePane(p: SidePaneProps): JSX.Element | null {
       {buttons}
     </div>
   );
+  // In the narrow layout the pane is laid over the thread (session.css: @container session ≤ 860 px).
+  const covered = () => aside.current !== null && getComputedStyle(aside.current).position === 'absolute';
   const conv = tab.kind === 'conv' ? p.convs.get(tab.peer) : undefined;
   return (
     <>
       <div className="split-handle" role="separator" aria-orientation="vertical" aria-label={tp.resize} tabIndex={0}
         onPointerDown={drag} onDoubleClick={() => onSplit(DEFAULT_SPLIT)} onKeyDown={onHandleKey} />
       {/* Its width comes from the page's --split (session-split). Focusable: the focus lands here when a tab closes under it. */}
-      <aside className="side-pane" aria-label={tp.label} tabIndex={-1}>
+      <aside ref={aside} className="side-pane" aria-label={tp.label} tabIndex={-1}>
         {tabs.length > 1 && (
           <div className="pane-tabs" role="tablist" aria-label={tp.tabs}>
             {tabs.map(x => {
@@ -148,7 +155,8 @@ export function SidePane(p: SidePaneProps): JSX.Element | null {
         {tab.kind === 'doc' ? <DocTab key={active} path={tab.path} head={head} session={session} client={p.client} onDocument={p.onDocument} />
           : tab.kind === 'diff' ? <DiffTab key={active} path={tab.path} head={head} files={files} cwd={session.cwd} onAllChanges={p.onAllChanges} />
           : tab.kind === 'plan' ? <PlanTab key={active} entry={plan(tab.key)} path={pathOf(tab)} head={head} onDocument={p.onDocument} />
-          : conv && <ConversationTab key={active} self={session} view={conv} buttons={buttons} />}
+          : conv && <ConversationTab key={active} self={session} view={conv} buttons={buttons}
+              onLight={id => p.onLight(id, covered())} onOpenPeer={item => conv.peer && p.onOpenPeer(conv.peer, item)} />}
       </aside>
     </>
   );
