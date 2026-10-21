@@ -48,12 +48,12 @@ export function CloseCards({ store, qid, closes, canConfirm, sessions }: { store
   };
   const text: Record<State, string> = { closed: copy.chat.closed, killed: copy.chat.killed, ended: copy.chat.ended, closing: copy.chat.closing, failed: copy.chat.closeFailed, open: '' };
   return (
-    <section aria-label={copy.chat.closeLabel} className={CARD}>
+    <section aria-label={copy.chat.closeLabel} aria-live="polite" className={CARD}>
       <ul className="flex flex-col gap-2">
         {rows.map(({ row, i, state }) => (
           <li key={i} className="flex items-center justify-between gap-2">
             <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">{row.name} <span className="font-normal text-muted">· {copy.tools[row.tool]}</span></span>
-            {state !== 'open' && <span role="status" className={`text-[13px] ${state === 'failed' ? 'text-danger-fg' : state === 'closing' ? 'text-attention' : 'text-ok'}`}>{text[state]}</span>}
+            {state !== 'open' && <span className={`text-[13px] ${state === 'failed' ? 'text-danger-fg' : state === 'closing' ? 'text-attention' : 'text-ok'}`}>{text[state]}</span>}
             {(state === 'open' || state === 'failed') && <button type="button" className={GHOST} disabled={held || !canConfirm} onClick={() => go([i])}>{copy.chat.closeRow}</button>}
           </li>
         ))}

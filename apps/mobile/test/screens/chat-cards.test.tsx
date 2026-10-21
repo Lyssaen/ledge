@@ -158,6 +158,19 @@ describe('the close card', () => {
     expect(spy).toHaveBeenCalledWith(QID, [1, 2, 3]);
   });
 
+  it('a refused close marks the sent rows failed, and a retry clears the mark', async () => {
+    const t = open({ closes });
+    const spy = vi.spyOn(t.store, 'closeSessions').mockResolvedValueOnce({ status: 'rejected', reason: 'invalid' });
+    fireEvent.click(screen.getAllByRole('button', { name: copy.chat.closeRow })[0]!);
+    expect(await screen.findByText(copy.chat.closeFailed)).toBeInTheDocument();
+    expect(screen.getAllByText(copy.chat.closeFailed)).toHaveLength(1);
+    let release!: (r: { status: 'cancelled' }) => void;
+    spy.mockReturnValueOnce(new Promise(r => { release = r; }));
+    fireEvent.click(screen.getAllByRole('button', { name: copy.chat.closeRow })[0]!);
+    await waitFor(() => expect(screen.queryByText(copy.chat.closeFailed)).toBeNull());
+    release({ status: 'cancelled' });
+  });
+
   it('a row button closes that row alone', () => {
     const t = open({ closes });
     const spy = vi.spyOn(t.store, 'closeSessions').mockResolvedValue({ status: 'cancelled' });
