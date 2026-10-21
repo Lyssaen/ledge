@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { mergeClaudeHooks, mergeCodexHooks, mergeCursorHooks, SERVICE, type Runner } from '../src/cli/setup.js';
+import { mergeClaudeHooks, mergeCodexHooks, mergeCursorHooks, SERVICE, writeBin, type Runner } from '../src/cli/setup.js';
 import { removeClaudeHooks, removeCursorHooks, removeService, runUninstall } from '../src/cli/uninstall.js';
 
 type Call = [string, string[]];
@@ -112,6 +112,17 @@ describe('runUninstall', () => {
     expect(r.ok).toBe(true);
     expect(existsSync(process.env.LEDGE_HOME!)).toBe(false);
     expect(existsSync(link)).toBe(true);
+  });
+
+  it('removes the script ledge setup wrote in place of the link', async () => {
+    const d = tmp(); const files = setupFiles(d);
+    mkdirSync(process.env.LEDGE_HOME!);
+    const script = join(d, 'dist', 'cli', 'index.js'); mkdirSync(join(d, 'dist', 'cli'), { recursive: true }); writeFileSync(script, '');
+    const link = join(d, 'bin-ledge'); symlinkSync(script, link);
+    await writeBin({ link, node: process.execPath, target: script });
+    const r = await runUninstall({ ...files, service: false, run: fakeRun({ tmux: { code: 1 } }).run, script, link });
+    expect(r.ok).toBe(true);
+    expect(existsSync(link)).toBe(false);
   });
 
   it('leaves a malformed file untouched, carries on and fails at the end', async () => {

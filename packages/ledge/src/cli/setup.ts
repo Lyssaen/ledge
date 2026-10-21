@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir, rename, realpath, rm, stat, lstat, readlink, symlink, unlink } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, rename, realpath, rm, stat, lstat, readlink } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { homedir, userInfo } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -187,15 +187,28 @@ export async function isDir(path: string): Promise<boolean> {
   try { return (await stat(path)).isDirectory(); } catch { return false; }
 }
 
-/** `~/.local/bin/ledge` from the README's clone install: once npm installed Ledge, it must follow, or hooks run the clone. */
-export async function relinkBin(opts: { link: string; target: string }): Promise<string | null> {
+/** The first lines of the script `writeBin` writes: the one file it may rewrite. */
+export const BIN_MARK = '#!/bin/sh\n# Written by `ledge setup`';
+const shQuote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
+
+/**
+ * `~/.local/bin/ledge` from the README's clone install, as a script that runs the CLI with an absolute node: the hooks
+ * call `ledge` with the agent's PATH, and a session the daemon launched gets a non-interactive login shell's, where nvm
+ * (nvm.fish) has put no node for the CLI's `#!/usr/bin/env node`. Only a link to a Ledge CLI or this script is replaced.
+ */
+export async function writeBin(opts: { link: string; node: string; target: string }): Promise<string | null> {
   const st = await lstat(opts.link).catch(() => null);
-  if (!st?.isSymbolicLink()) return null;
-  const current = await readlink(opts.link);
-  if (current === opts.target || !current.endsWith('/dist/cli/index.js')) return null;
-  await unlink(opts.link);
-  await symlink(opts.target, opts.link);
-  return `${opts.link} now points to ${opts.target} (was ${current})`;
+  if (!st) return null;
+  const was = st.isSymbolicLink() ? await readlink(opts.link) : null;
+  if (was !== null && !was.endsWith('/dist/cli/index.js')) return null;
+  const current = was === null && st.isFile() ? await readFile(opts.link, 'utf8').catch(() => '') : '';
+  if (was === null && !current.startsWith(BIN_MARK)) return null;
+  const script = `${BIN_MARK}: the hooks run \`ledge\` wherever node is not on the PATH.\nexec ${shQuote(opts.node)} ${shQuote(opts.target)} "$@"\n`;
+  if (current === script) return null;
+  const tmp = `${opts.link}.tmp`;
+  await writeFile(tmp, script, { mode: 0o755 });
+  await rename(tmp, opts.link);
+  return `${opts.link} runs ${opts.target} with ${opts.node}${was !== null ? ` (was a link to ${was})` : ''}`;
 }
 
 /** `codexDir` and `cursorDir` are the agents' config folders: their hooks are wired only where the folder exists. */
@@ -217,7 +230,7 @@ export async function runSetup(opts: { settingsPath?: string; codexDir?: string;
   else out.push('Cursor Agent hooks already present');
   // Like the service below, this edits the machine outside the agents' config: tests that pass `service: false` skip it.
   if ((opts.service ?? true) && !process.argv[1]?.endsWith('.ts')) {
-    const line = await relinkBin({ link: join(homedir(), '.local', 'bin', 'ledge'), target: await realpath(process.argv[1]!) });
+    const line = await writeBin({ link: join(homedir(), '.local', 'bin', 'ledge'), node: process.execPath, target: await realpath(process.argv[1]!) });
     if (line) out.push(line);
   }
   if (opts.service ?? true) {
