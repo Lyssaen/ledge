@@ -1,6 +1,6 @@
 # Following a conversation between two agents — design
 
-2026-10-21. Mockup waiting for the user's approval: `docs/mockups/agent-conversation/` (built into `docs/mockups/ledge-agent-conversation.html` by `node docs/mockups/agent-conversation/build.mjs`; captures `docs/mockups/ledge-agent-conversation-{dark,light,one-sided,narrow,empty,entry,lit}.png`). It follows `2026-10-18-agent-messages-design.md` (v1): same cards, same copy, same neutral colours.
+2026-10-21. Mockup approved by the user: `docs/mockups/agent-conversation/` (built into `docs/mockups/ledge-agent-conversation.html` by `node docs/mockups/agent-conversation/build.mjs`; captures `docs/mockups/ledge-agent-conversation-{dark,light,one-sided,narrow,empty,entry,lit}.png`). It follows `2026-10-18-agent-messages-design.md` (v1): same cards, same copy, same neutral colours.
 
 The mockup mounts Desktop's real title bar, sidebar, top bar and session page (thread, reply) on a fixture fleet: Otto's page, the pane open on « Conversation · Nova ». Only two things are the mockup's: `MessageCard.tsx` (the app's, plus the two entry points; diff it against `apps/desktop/src/session/MessageCard.tsx`) and `ConversationPane.tsx` (the new tab inside SidePane's markup). The bar above the window switches the state (both threads, unknown peer, empty), the width, the theme and the language, and « Simuler la suite » plays the live part (Otto's message delivered, Otto receives Nova's, Nova reads Otto's, Nova replies, Otto receives it). URL: `?state=both|oneSided|empty&theme=dark|light&width=wide|narrow&lang=fr|en&step=0…5`.
 
@@ -109,7 +109,9 @@ French first, English alongside (`session.conversation` in fr.ts / en.ts; the mo
 
 Markup and CSS details within the mockup's look; test fixtures; how long B's thread stays asked (while the tab is mounted, or while it is open); English polish.
 
-## For the user to confirm
+## Confirmed by the user (2026-10-21)
 
-- « suivre la conversation » on every card makes a third link in the card's line (« À Nova · ✓✓ lu · voir son fil · suivre la conversation »). The alternative is the header's pill plus single-message cards only.
-- Sides are relative to the page (this agent on the right, as « sent » in its thread), so on Nova's page Nova is on the right. Fixed sides per agent would break that rule.
+- « suivre la conversation » on every card, sent or received (the third link in the card's line is accepted).
+- Sides are relative to the page: this agent on the right, as « sent » in its thread; on Nova's page Nova is on the right.
+- One Conversation tab per peer: an agent talking with several agents can have several Conversation tabs open at once.
+- The builder adds what the mockup missed: the ⇄ between the two names in the one-sided head, and the « Lecture du fil de Nova… » line while B's thread loads.
