@@ -37,6 +37,9 @@ export function addressOf(s: Pick<Session, 'agentSessionId' | 'transcriptPath'>,
 /** A session name without the ` [ref]` Claude's peer list appends to it (`Pim [ab12]` → `Pim`). */
 export const bareName = (name: string): string => name.replace(/ \[[^\]]*\]$/, '');
 
+/** The Ledge session a Claude session id belongs to (by agent session id or transcript basename). */
+const sessionOf = (id: string, sessions: readonly Session[]): Session | undefined => sessions.find(s => s.agentSessionId === id || s.transcriptPath?.endsWith(`/${id}.jsonl`));
+
 /** The Ledge session a peer name (`name` or `name [ref]`) or address (`uds:…/<pid>.sock`) belongs to. */
 export function peerFor(target: string, peers: readonly ClaudePeer[], sessions: readonly Session[], dir: string = defaultDir(), alive: (pid: number) => boolean = pidAlive): Session | undefined {
   const name = bareName(target);
@@ -46,8 +49,8 @@ export function peerFor(target: string, peers: readonly ClaudePeer[], sessions: 
     const direct = /^\d+$/.test(pid) ? parsePeer(join(dir, `${pid}.json`)) : undefined;
     if (direct && alive(direct.pid)) found.push(direct);
   }
-  for (const { sessionId: id } of found) {
-    const s = sessions.find(s => s.agentSessionId === id || s.transcriptPath?.endsWith(`/${id}.jsonl`));
+  for (const { sessionId } of found) {
+    const s = sessionOf(sessionId, sessions);
     if (s) return s;
   }
   return undefined;
@@ -57,4 +60,32 @@ export function peerFor(target: string, peers: readonly ClaudePeer[], sessions: 
 export function ledgePeer(target: string, peers: readonly ClaudePeer[], sessions: readonly Session[]): Session | undefined {
   const name = bareName(target);
   return peerFor(target, peers, sessions) ?? sessions.find(s => s.name === name && s.state !== 'exited');
+}
+
+export type Resolution =
+  | { outcome: 'native'; target: Session; address: string }
+  | { outcome: 'ledge'; target: Session }
+  | { outcome: 'refused'; reason: string }
+  | { outcome: 'unknown' };
+
+/** What to do with a SendMessage `to`: by `uds:` address, Ledge name, then Claude name; `peers` are the live ones. */
+export function resolveTarget(to: string, sessions: readonly Session[], peers: readonly ClaudePeer[]): Resolution {
+  const name = bareName(to);
+  let t: Session | undefined;
+  if (name.startsWith('uds:')) {
+    const p = peers.find(p => p.address === name);
+    t = p && sessionOf(p.sessionId, sessions);
+  } else {
+    t = sessions.find(s => s.name === name && s.state !== 'exited' && !s.archivedAt);
+    if (!t) {
+      const named = peers.filter(p => p.name === name);
+      if (named.length > 1) return { outcome: 'refused', reason: `plusieurs sessions s'appellent ${name}` };
+      t = named[0] && sessionOf(named[0].sessionId, sessions);
+    }
+  }
+  if (!t) return { outcome: 'unknown' };
+  if (t.source === 'hook_only') return { outcome: 'refused', reason: `${t.name} n'a pas été lancée par Ledge : impossible de lui écrire` };
+  if (t.tool !== 'claude') return { outcome: 'ledge', target: t };
+  const address = addressOf(t, peers);
+  return address ? { outcome: 'native', target: t, address } : { outcome: 'refused', reason: `${t.name} n'est pas joignable` };
 }

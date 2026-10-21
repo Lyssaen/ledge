@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Session } from '@ledge/protocol';
-import { readPeers, peerFor, ledgePeer, bareName, addressOf, pidAlive } from '../src/daemon/peers.js';
+import { readPeers, peerFor, ledgePeer, bareName, addressOf, pidAlive, resolveTarget } from '../src/daemon/peers.js';
 
 const ID = 'de4ebbac-117e-4827-9eba-e0db4bb23687';
 const sock = '/run/user/1000/cc-socks/304399.sock';
@@ -89,5 +89,39 @@ describe('bareName', () => {
     expect(bareName('Pim')).toBe('Pim');
     expect(bareName('a [b] c')).toBe('a [b] c');
     expect(bareName('uds:/x/1.sock [7e2ea7]')).toBe('uds:/x/1.sock');
+  });
+});
+
+describe('resolveTarget', () => {
+  const pim = fake({ id: 'p', name: 'Pim', tool: 'claude', source: 'launcher', state: 'idle', agentSessionId: ID });
+  const nova = fake({ id: 'n', name: 'Nova', tool: 'codex', source: 'launcher', state: 'idle' });
+  const bix = fake({ id: 'b', name: 'Bix', tool: 'claude', source: 'hook_only', state: 'idle', agentSessionId: 'bix-id' });
+  const peer = { pid: 1, sessionId: ID, name: 'ledge-88', address: `uds:${sock}` };
+  const native = { outcome: 'native', target: pim, address: `uds:${sock}` };
+
+  it('a Ledge name, with its ref, an address and a Claude name all reach the native address', () => {
+    for (const t of ['Pim', 'Pim [ab12]', `uds:${sock}`, 'ledge-88']) expect(resolveTarget(t, [pim, nova], [peer])).toEqual(native);
+  });
+  it('a Ledge name wins over a Claude peer of the same name belonging to another session', () => {
+    const other = fake({ id: 'o', name: 'Zed', tool: 'claude', source: 'launcher', state: 'idle', agentSessionId: 'z' });
+    const zpeer = { pid: 2, sessionId: 'z', name: 'Pim', address: 'uds:/x/2.sock' };
+    expect(resolveTarget('Pim', [pim, other], [peer, zpeer])).toEqual(native);
+  });
+  it('two Claude peers of one name are refused', () => {
+    expect(resolveTarget('ledge-88', [pim], [peer, { ...peer, pid: 2 }])).toEqual({ outcome: 'refused', reason: "plusieurs sessions s'appellent ledge-88" });
+  });
+  it('a non-Claude session is delivered by the mailbox', () => {
+    expect(resolveTarget('Nova', [pim, nova], [peer])).toEqual({ outcome: 'ledge', target: nova });
+  });
+  it('a hook_only Claude is refused', () => {
+    expect(resolveTarget('Bix', [bix], [])).toEqual({ outcome: 'refused', reason: "Bix n'a pas été lancée par Ledge : impossible de lui écrire" });
+  });
+  it('a launched Claude without a live peer is refused', () => {
+    expect(resolveTarget('Pim', [pim], [])).toEqual({ outcome: 'refused', reason: "Pim n'est pas joignable" });
+  });
+  it('an exited or archived session, an unknown name: not ours', () => {
+    expect(resolveTarget('Pim', [{ ...pim, state: 'exited' }], [])).toEqual({ outcome: 'unknown' });
+    expect(resolveTarget('Pim', [{ ...pim, archivedAt: '2026-01-01T00:00:00Z' } as Session], [])).toEqual({ outcome: 'unknown' });
+    expect(resolveTarget('ghost', [pim], [peer])).toEqual({ outcome: 'unknown' });
   });
 });
