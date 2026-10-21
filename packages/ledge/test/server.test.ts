@@ -366,6 +366,24 @@ describe('server', () => {
       expect(JSON.parse(lines(p)[2]!).customTitle).toBe('Pim - Autre');
     });
 
+    it('waits for the Claude process to end: no label while a live peer holds the transcript, written on the next retry', async () => {
+      const p = transcript(); const q = transcript(); const st = new Store();
+      let peers = [{ pid: 1, sessionId: 'abc', name: 'Pim', address: 'uds:/x/1.sock' }];
+      const s2 = await startServer({ store: st, tmux: fakeTmux({}), port: 0, peers: () => peers });
+      try {
+        st.upsert(mk('a', { name: 'Pim', topic: 'Sujet', transcriptPath: p, state: 'exited', exitedAt: T0 }));
+        st.upsert(mk('b', { name: 'Nova', topic: 'Sujet', transcriptPath: q, state: 'exited', exitedAt: T0 }));
+        await new Promise(r => setTimeout(r, 50));
+        s2.labelExited();
+        expect(lines(p)).toHaveLength(1); expect(lines(q)).toHaveLength(1);
+        st.upsert(mk('b', { name: 'Nova', topic: 'Sujet', transcriptPath: q })); // respawned before the retry: not this exit's label
+        peers = [];
+        s2.labelExited();
+        expect(lines(p)).toHaveLength(2); expect(JSON.parse(lines(p)[1]!).customTitle).toBe('Pim - Sujet');
+        expect(lines(q)).toHaveLength(1);
+      } finally { await s2.close(); }
+    });
+
     it('a label that cannot be written is logged', async () => {
       const p = join(mkdtempSync(join(tmpdir(), 'ledge-tr-')), 'gone.jsonl');
       store.upsert(mk('a', { name: 'Pim', topic: 'Sujet', transcriptPath: p, state: 'exited', exitedAt: T0 }));
