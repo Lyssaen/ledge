@@ -264,6 +264,35 @@ git add packages/ledge packages/protocol apps/desktop
 git commit -m "feat(daemon): close a session cleanly: free its prompt, type its exit command, kill as a last resort"
 ```
 
+### Task 4b: Thread: a question dismissed by the close
+
+Added after the Task 4 review (ruling R2). History never makes a permission row for a question: a question is a `tool` row (`PreToolUse`, `running`). A `Decided` with `deny` would therefore mark an older permission row by mistake. Task 4 sends a `Decided` with no decision for a pending question. This task records in the thread that the close dismissed that question, as spec §3 step 3 asks.
+
+**Files:**
+- Modify: `packages/ledge/src/server.ts` (closeSession: for a pending question, send `{ name: 'Decided', byClose: true }`, with no decision)
+- Modify: `packages/ledge/src/daemon/history.ts` (`Decided` case)
+- Modify: `packages/protocol/src/thread.ts` (tool item: `byClose: z.literal(true).optional()`)
+- Modify: `apps/desktop/src/session/ActionGroup.tsx`, `apps/desktop/src/i18n/{fr,en}.ts`
+- Modify: `apps/overlay/src/surface/Thread.tsx` (both cases: a permission with `byClose`, and a question tool row with `byClose`)
+- Test: the history test, packages/protocol, ActionGroup/Thread tests, the overlay Thread test
+
+**Interfaces:**
+- Consumes: Task 4 `closeSession`; `QUESTION_TOOLS` from `daemon/state.ts`.
+- Produces: `ToolItem.byClose?: true`.
+
+- [ ] **Step 1: Failing tests.**
+  - History: a `Decided` with `byClose` and no `decision` marks the last open question tool row. That row has `QUESTION_TOOLS.has(tool)`, `status === 'running'` and no `helperId`. It gets `byClose: true` and is settled. No permission row changes.
+  - A `Decided` with `byClose` and no open question row changes nothing.
+  - The protocol schema accepts `byClose` on a tool item.
+  - Desktop: a question tool row with `byClose` shows « Refusée par la fermeture » (en "Dismissed by the close").
+  - Overlay: a permission with `byClose` shows the close label, not the plain "denied".
+  - Overlay: a question tool row with `byClose` shows the close label too.
+- [ ] **Step 2: Run them and see them fail.**
+- [ ] **Step 3: Implement.**
+  - Copy: fr `questionByClose: 'Refusée par la fermeture'`, en `'Dismissed by the close'`. The overlay reuses its existing copy file and follows its own pattern.
+- [ ] **Step 4: Run the tests and tsc. They pass.**
+- [ ] **Step 5: Commit** `feat(thread): a question dismissed by closing the session says so`.
+
 ### Task 5: Daemon: `closeFromChat` and `session.close`
 
 **Files:**
