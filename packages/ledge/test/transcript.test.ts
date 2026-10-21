@@ -170,6 +170,16 @@ describe('labelTranscript', () => {
     const mine = file(title('Pim - X'));
     expect(labelTranscript(mine, 'Otto', 'Otto - Y')).toBe(false);
   });
+  it('finds a title older than the tail window: the user\'s is kept, none at all is labelled', () => {
+    const filler = Array.from({ length: Math.ceil(TAIL_BYTES / 1000) + 10 }, (_, i) => claude(`u${i}`, '2026-10-13T10:00:01.000Z', [{ type: 'text', text: 'x'.repeat(1000) }]));
+    const mine = file(title('mon titre'), ...filler);
+    const before = readFileSync(mine, 'utf8');
+    expect(before.length).toBeGreaterThan(TAIL_BYTES);
+    expect(labelTranscript(mine, 'Pim', 'Pim - Sujet')).toBe(false);
+    expect(readFileSync(mine, 'utf8')).toBe(before);
+    const none = file(...filler);
+    expect(labelTranscript(none, 'Pim', 'Pim - Sujet')).toBe(true);
+  });
   it('starts on its own line when the file does not end with a newline, and skips a missing file', () => {
     const p = join(dir, `${uuid}.jsonl`);
     writeFileSync(p, '{"type":"user"}');

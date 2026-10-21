@@ -1,4 +1,4 @@
-import { appendFileSync, closeSync, fstatSync, openSync, readSync } from 'node:fs';
+import { appendFileSync, closeSync, fstatSync, openSync, readFileSync, readSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { ledgeTitleRest } from '../names.js';
@@ -131,19 +131,27 @@ export function resumeLabel(name: string, topic: string): string {
   return label.length > LABEL_MAX ? `${label.slice(0, LABEL_MAX - 1)}…` : label;
 }
 
+type Title = { customTitle: string; ledge?: unknown };
+/** The last `custom-title` entry of `lines`; only the lines that name one are parsed (a whole transcript can be read). */
+function lastTitle(lines: readonly string[]): Title | undefined {
+  let last: Title | undefined;
+  for (const line of lines) {
+    if (!line.includes('"custom-title"')) continue;
+    try { const e = JSON.parse(line) as { type?: string; customTitle?: unknown; ledge?: unknown }; if (e.type === 'custom-title' && typeof e.customTitle === 'string') last = { customTitle: e.customTitle, ledge: e.ledge }; } catch { /* not an entry */ }
+  }
+  return last;
+}
+
 /** Whether a conversation title is Ledge's to replace: marked by Ledge, `name` or « name - … », or a bare Ledge-shaped
  *  name (the `-n` title of a launch before the change, or of a conversation continued under another Ledge name). */
-const ledgeOwned = (t: { customTitle: string; ledge?: unknown }, name: string): boolean =>
+const ledgeOwned = (t: Title, name: string): boolean =>
   t.ledge === true || t.customTitle.startsWith(`${name} - `) || ledgeTitleRest(t.customTitle, name) === '';
 
 /** Appends Ledge's marked `custom-title` of `label` to an exited Claude's transcript, unless it already ends so or the
  *  user named the session (a last title that is not Ledge's). Whether it wrote; never throws. */
 export function labelTranscript(path: string, name: string, label: string): boolean {
   try {
-    let last: { customTitle: string; ledge?: unknown } | undefined;
-    for (const line of tailLines(path)) {
-      try { const e = JSON.parse(line) as { type?: string; customTitle?: unknown; ledge?: unknown }; if (e.type === 'custom-title' && typeof e.customTitle === 'string') last = { customTitle: e.customTitle, ledge: e.ledge }; } catch { /* not an entry */ }
-    }
+    const last = lastTitle(tailLines(path)) ?? (statSync(path).size > TAIL_BYTES ? lastTitle(readFileSync(path, 'utf8').split('\n')) : undefined);
     if (last && (last.customTitle === label || !ledgeOwned(last, name))) return false;
     const fd = openSync(path, 'r');
     let lead = '';
