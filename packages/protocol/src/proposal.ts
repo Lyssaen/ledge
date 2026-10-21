@@ -17,10 +17,14 @@ export const ProjectBlockSchema = z.object({
 });
 export type ProjectBlock = z.infer<typeof ProjectBlockSchema>;
 
-export type BlockKind = 'session' | 'relay' | 'project';
-const FENCES = ['```ledge-session', '```ledge-relay', '```ledge-project'];
+/** What the chat harness writes in its ```ledge-close block: the session to close, as the store names it; the daemon checks it. */
+export const CloseBlockSchema = z.object({ session: z.string().trim().min(1) });
+export type CloseBlock = z.infer<typeof CloseBlockSchema>;
+
+export type BlockKind = 'session' | 'relay' | 'project' | 'close';
+const FENCES = ['```ledge-session', '```ledge-relay', '```ledge-project', '```ledge-close'];
 /** A block from its fence to the closing fence, or to the end of the text when it is not closed (yet). */
-const BLOCK = /```ledge-(session|relay|project)[ \t]*\n?([\s\S]*?)(?:```|$)/g;
+const BLOCK = /```ledge-(session|relay|project|close)[ \t]*\n?([\s\S]*?)(?:```|$)/g;
 
 /** The answer without its card blocks; every block in order (#24: several sessions in one answer), and the language and content of
  *  the last one (null when there is none), which decides the turn's card. */
@@ -36,7 +40,7 @@ export function parseProposalBlock(raw: string): ProposalBlock | null {
   try { const r = ProposalBlockSchema.safeParse(JSON.parse(raw)); return r.success ? r.data : null; } catch { return null; }
 }
 
-/** A streamed answer as it may be shown: no block, and no fence still being typed at the end (`` ` `` … ```` ```ledge-se ````, ```` ```ledge-re ````, ```` ```ledge-pro ````). */
+/** A streamed answer as it may be shown: no block, and no fence still being typed at the end (`` ` `` … ```` ```ledge-se ````, ```` ```ledge-re ````, ```` ```ledge-pro ````, ```` ```ledge-cl ````). */
 export function hideProposal(text: string): string {
   const shown = text.replace(BLOCK, '');
   const lineStart = shown.lastIndexOf('\n') + 1;
@@ -48,6 +52,11 @@ export function hideProposal(text: string): string {
 /** The block's JSON as a relay, or null when it lacks a session or a non-blank text. */
 export function parseRelayBlock(raw: string): RelayBlock | null {
   try { const r = RelayBlockSchema.safeParse(JSON.parse(raw)); return r.success ? r.data : null; } catch { return null; }
+}
+
+/** The block's JSON as a close, or null when it lacks a non-blank session. */
+export function parseCloseBlock(raw: string): CloseBlock | null {
+  try { const r = CloseBlockSchema.safeParse(JSON.parse(raw)); return r.success ? r.data : null; } catch { return null; }
 }
 
 /** The block's JSON as a project proposal, or null when it breaks the schema (a name, 1 to 50 repositories with a reason, the bounds). */

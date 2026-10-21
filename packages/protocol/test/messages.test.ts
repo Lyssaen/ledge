@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseClientMessage, parseServerMessage, ServerMessageSchema, SessionSchema, SessionEventSchema, PROTOCOL_PORT, NAMES, pickName, ThreadItemSchema, offers, NOTE_NOT_TYPED, isArchived } from '../src/index.js';
+import { parseClientMessage, parseServerMessage, ServerMessageSchema, SessionSchema, SessionEventSchema, PROTOCOL_PORT, NAMES, pickName, ThreadItemSchema, offers, NOTE_NOT_TYPED, isArchived, ChatTurnSchema } from '../src/index.js';
 
 const T0 = '2026-10-09T18:02:00.000Z';
 
@@ -439,5 +439,23 @@ describe('protocol: model and effort (#58)', () => {
     expect(parseClientMessage({ type: 'session.model', id: 's1', model: null, effort: null })).toMatchObject({ model: null, effort: null });
     expect(() => parseClientMessage({ type: 'session.model', id: 's1', model: '--yolo', effort: null })).toThrow();
     expect(() => parseClientMessage({ type: 'session.model', id: 's1', model: 'opus' })).toThrow();
+  });
+  it('session.close takes the card qid and optional rows, session.closed answers each row', () => {
+    expect(parseClientMessage({ type: 'session.close', qid: 'q1' })).toEqual({ type: 'session.close', qid: 'q1' });
+    expect(parseClientMessage({ type: 'session.close', qid: 'q1', rows: [0, 7] })).toMatchObject({ rows: [0, 7] });
+    for (const rows of [[], [8], [1, 1], [0, 1, 2, 3, 4, 5, 6, 7, 0]]) expect(() => parseClientMessage({ type: 'session.close', qid: 'q1', rows })).toThrow();
+    const closed = { type: 'session.closed', qid: 'q1', row: 0, id: 's1', how: 'killed' };
+    expect(parseServerMessage(closed)).toEqual(closed);
+    expect(() => parseServerMessage({ ...closed, how: 'quit' })).toThrow();
+  });
+  it('chat.done and a turn carry the close rows, one to eight', () => {
+    const row = { id: 's1', name: 'Arlo', tool: 'claude' };
+    expect(parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, closes: [row] })).toMatchObject({ closes: [row] });
+    expect(() => parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, closes: [] })).toThrow();
+    expect(() => parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, closes: Array(9).fill(row) })).toThrow();
+    const turn = { qid: 'q1', question: '?', askedAt: T0, steps: [] };
+    expect(ChatTurnSchema.parse({ ...turn, closes: [row] }).closes).toEqual([row]);
+    expect(() => ChatTurnSchema.parse({ ...turn, closes: [] })).toThrow();
+    expect(() => ChatTurnSchema.parse({ ...turn, closes: Array(9).fill(row) })).toThrow();
   });
 });
