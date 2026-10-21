@@ -36,7 +36,12 @@ async function main(argv: string[]): Promise<number> {
     case 'daemon': { const { startDaemon } = await import('../daemon/index.js'); await startDaemon(); await new Promise(() => {}); return 0; }
     case '--version': case 'version': { const { LEDGE_VERSION } = await import('../version.js'); console.log(LEDGE_VERSION); return 0; }
     case 'setup': { const { runSetup } = await import('./setup.js'); for (const l of await runSetup()) console.log(l); return 0; }
-    case 'uninstall': { const { runUninstall } = await import('./uninstall.js'); const r = await runUninstall({ purge: rest.includes('--purge') }); for (const l of r.lines) console.log(l); return r.ok ? 0 : 1; }
+    case 'uninstall': {
+      const { runUninstall, uninstallArgs } = await import('./uninstall.js');
+      const args = uninstallArgs(rest);
+      if (!args) { console.log(USAGE); return rest.every(a => a === '--help' || a === '-h') ? 0 : 1; }
+      const r = await runUninstall(args); for (const l of r.lines) console.log(l); return r.ok ? 0 : 1;
+    }
     case 'status': { const { printStatus } = await import('./status.js'); console.log(await printStatus()); return 0; }
     case 'who': { const { printWho } = await import('./who.js'); console.log(await printWho()); return 0; }
     case 'send': { const { sendMessage } = await import('./send.js'); const r = await sendMessage(rest); console.log(r.line); return r.code; }

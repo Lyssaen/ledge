@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, symlin
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mergeClaudeHooks, mergeCodexHooks, mergeCursorHooks, SERVICE, writeBin, type Runner } from '../src/cli/setup.js';
-import { removeClaudeHooks, removeCursorHooks, removeService, runUninstall } from '../src/cli/uninstall.js';
+import { removeClaudeHooks, removeCursorHooks, removeService, runUninstall, uninstallArgs } from '../src/cli/uninstall.js';
 
 type Call = [string, string[]];
 const fakeRun = (answers: Record<string, { code: number; stdout?: string; stderr?: string }> = {}) => {
@@ -73,6 +73,16 @@ describe('removeService', () => {
     const out = await removeService({ unitDir: join(d, 'systemd'), run: f.run, pidFile: join(d, 'none.pid') });
     expect(f.calls).toEqual([]);
     expect(out.join('\n')).toContain('not installed');
+  });
+});
+
+describe('uninstallArgs', () => {
+  it('takes no argument or --purge', () => {
+    expect(uninstallArgs([])).toEqual({ purge: false });
+    expect(uninstallArgs(['--purge'])).toEqual({ purge: true });
+  });
+  it('refuses anything else, --help included: a typo must not uninstall', () => {
+    for (const a of [['--help'], ['-h'], ['--prune'], ['--purge', 'x']]) expect(uninstallArgs(a)).toBeNull();
   });
 });
 
