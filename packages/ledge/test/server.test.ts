@@ -922,6 +922,17 @@ describe('server', () => {
     c.close();
   });
 
+  it('a reply still in the input box after Enter is one the terminal did not take (#76): an error, never working', async () => {
+    const box = (draft: string) => ['● done', '─'.repeat(80), `❯ ${draft}`, '─'.repeat(80), '  ⏵⏵ auto mode on'].join('\n');
+    tmux = fakeTmux({ 'ledge-a': [box('[Pasted text #2 +1 lines]')] }); await srv.close(); srv = await startServer({ store, tmux, port: 0, untilMs: 300 });
+    store.upsert(mk('a', { state: 'idle' }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.reply', id: 'a', text: 'run the tests' });
+    expect(await c.next('error', 3000)).toMatchObject({ id: 'a', message: 'the terminal did not take it', code: 'not_taken' });
+    expect(store.get('a')?.state).toBe('error');
+    c.close();
+  });
+
   it.each(['permission', 'diff', 'plan'] as const)('refuses a reply to a %s prompt, nothing injected', async kind => {
     const before = mk('a', { state: 'waiting_permission', pending: { kind, text: 'x', source: 'hook' } });
     store.upsert(before);
