@@ -270,7 +270,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       const s = c.session;
       if (s.tool === 'claude' && s.source === 'launcher' && s.state === 'exited' && s.transcriptPath && s.topic && s.topic !== s.name && labelled.get(s.id) !== (s.exitedAt ?? '')) {
         labelled.set(s.id, s.exitedAt ?? '');
-        try { labelTranscript(s.transcriptPath, s.name, resumeLabel(s.name, s.topic)); } catch (e) { log(`resume label of ${s.id} not written: ${(e as Error).message}`); }
+        const r = labelTranscript(s.transcriptPath, s.name, resumeLabel(s.name, s.topic));
+        if (r instanceof Error) log(`resume label of ${s.id} not written: ${r.message}`);
       }
     }
     if (c.type === 'updated' && c.session.modelNext) void applyModelNext(c.session.id).catch(e => log(`model change of ${c.session.id} failed: ${(e as Error).message}`));

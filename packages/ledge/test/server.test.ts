@@ -356,6 +356,22 @@ describe('server', () => {
       expect(lines(p)).toHaveLength(2);
     });
 
+    it('a session resumed and exited again is relabelled with its new topic', async () => {
+      const p = transcript();
+      store.upsert(mk('a', { name: 'Pim', topic: 'Sujet', transcriptPath: p, state: 'exited', exitedAt: T0 }));
+      await until(() => lines(p).length === 2);
+      store.upsert(mk('a', { name: 'Pim', topic: 'Autre', transcriptPath: p }));
+      store.upsert(mk('a', { name: 'Pim', topic: 'Autre', transcriptPath: p, state: 'exited', exitedAt: '2026-10-09T19:00:00.000Z' }));
+      await until(() => lines(p).length === 3);
+      expect(JSON.parse(lines(p)[2]!).customTitle).toBe('Pim - Autre');
+    });
+
+    it('a label that cannot be written is logged', async () => {
+      const p = join(mkdtempSync(join(tmpdir(), 'ledge-tr-')), 'gone.jsonl');
+      store.upsert(mk('a', { name: 'Pim', topic: 'Sujet', transcriptPath: p, state: 'exited', exitedAt: T0 }));
+      await until(() => { try { return readFileSync(paths().log, 'utf8').includes('resume label of a not written'); } catch { return false; } });
+    });
+
     it('writes no label while the topic is still the name (a session launched before the change)', async () => {
       const p = transcript();
       store.upsert(mk('a', { name: 'Pim', topic: 'Pim', transcriptPath: p, state: 'exited', exitedAt: T0 }));

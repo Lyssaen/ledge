@@ -148,8 +148,8 @@ const ledgeOwned = (t: Title, name: string): boolean =>
   t.ledge === true || t.customTitle.startsWith(`${name} - `) || ledgeTitleRest(t.customTitle, name) === '';
 
 /** Appends Ledge's marked `custom-title` of `label` to an exited Claude's transcript, unless it already ends so or the
- *  user named the session (a last title that is not Ledge's). Whether it wrote; never throws. */
-export function labelTranscript(path: string, name: string, label: string): boolean {
+ *  user named the session (a last title that is not Ledge's). Whether it wrote, or the error that stopped it; never throws. */
+export function labelTranscript(path: string, name: string, label: string): boolean | Error {
   try {
     const last = lastTitle(tailLines(path)) ?? (statSync(path).size > TAIL_BYTES ? lastTitle(readFileSync(path, 'utf8').split('\n')) : undefined);
     if (last && (last.customTitle === label || !ledgeOwned(last, name))) return false;
@@ -161,5 +161,5 @@ export function labelTranscript(path: string, name: string, label: string): bool
     } finally { closeSync(fd); }
     appendFileSync(path, `${lead}${JSON.stringify({ type: 'custom-title', customTitle: label, sessionId: basename(path, '.jsonl'), ledge: true })}\n`);
     return true;
-  } catch { return false; }
+  } catch (e) { return e instanceof Error ? e : new Error(String(e)); }
 }

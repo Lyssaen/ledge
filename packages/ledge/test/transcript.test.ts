@@ -180,11 +180,11 @@ describe('labelTranscript', () => {
     const none = file(...filler);
     expect(labelTranscript(none, 'Pim', 'Pim - Sujet')).toBe(true);
   });
-  it('starts on its own line when the file does not end with a newline, and skips a missing file', () => {
+  it('starts on its own line when the file does not end with a newline; a missing file is an error, returned', () => {
     const p = join(dir, `${uuid}.jsonl`);
     writeFileSync(p, '{"type":"user"}');
     expect(labelTranscript(p, 'Pim', 'Pim - Sujet')).toBe(true);
     expect(readFileSync(p, 'utf8').split('\n')).toEqual(['{"type":"user"}', JSON.stringify({ type: 'custom-title', customTitle: 'Pim - Sujet', sessionId: uuid, ledge: true }), '']);
-    expect(labelTranscript(join(dir, 'missing.jsonl'), 'Pim', 'Pim - Sujet')).toBe(false);
+    expect(labelTranscript(join(dir, 'missing.jsonl'), 'Pim', 'Pim - Sujet')).toBeInstanceOf(Error);
   });
 });
