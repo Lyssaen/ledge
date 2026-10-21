@@ -6,6 +6,7 @@ import { createPhoneGateway } from '../src/mobile/gateway.js';
 import { createChallengeStore } from '../src/mobile/challenges.js';
 import { challengeOf, rpOf, type DeviceCredential } from '../src/mobile/webauthn.js';
 import { launchFromChat } from '../src/chat/launch.js';
+import { CloseRefused } from '../src/chat/close.js';
 import { toPhoneTurn } from '../src/mobile/chat.js';
 import { tooWide } from '../src/chat/service.js';
 import { softAuthenticator } from './mobile-soft-authenticator.js';
@@ -64,7 +65,7 @@ const flush = async () => { for (let i = 0; i < 5; i++) await new Promise(r => s
 const stops: Array<() => void> = [];
 afterEach(() => { for (const s of stops.splice(0)) s(); });
 
-function setup(opts: { boot?: string; dispatch?: (msg: ClientMessage, reply: (m: ServerMessage) => void) => Promise<void>; relayUrl?: string; chats?: Parameters<typeof createPhoneGateway>[0]['chats']; relay?: Parameters<typeof createPhoneGateway>[0]['relay']; launchChat?: Parameters<typeof createPhoneGateway>[0]['launchChat']; onChatEnd?: Parameters<typeof createPhoneGateway>[0]['onChatEnd']; devices?: string[] } = {}) {
+function setup(opts: { boot?: string; dispatch?: (msg: ClientMessage, reply: (m: ServerMessage) => void) => Promise<void>; relayUrl?: string; chats?: Parameters<typeof createPhoneGateway>[0]['chats']; relay?: Parameters<typeof createPhoneGateway>[0]['relay']; launchChat?: Parameters<typeof createPhoneGateway>[0]['launchChat']; closeChat?: Parameters<typeof createPhoneGateway>[0]['closeChat']; onChatEnd?: Parameters<typeof createPhoneGateway>[0]['onChatEnd']; devices?: string[] } = {}) {
   const fm = fakeMobile(opts.devices ?? ['dev1', 'dev2'], opts.relayUrl);
   const clock = { t: 1_000_000 };
   const challenges = createChallengeStore({ now: () => clock.t });
@@ -86,6 +87,7 @@ function setup(opts: { boot?: string; dispatch?: (msg: ClientMessage, reply: (m:
     ...(opts.chats ? { chats: opts.chats } : {}),
     ...(opts.relay ? { relay: opts.relay } : {}),
     ...(opts.launchChat ? { launchChat: opts.launchChat } : {}),
+    ...(opts.closeChat ? { closeChat: opts.closeChat } : {}),
     ...(opts.onChatEnd ? { onChatEnd: opts.onChatEnd } : {}),
     sessions: () => [...sessions.values()],
     session: id => sessions.get(id),
@@ -1584,5 +1586,170 @@ describe('phone gateway: chat cards', () => {
     expect(last(g)).toMatchObject({ status: 'failed' });
     expect(k.launches).toEqual([]);
     expect(g.creds.get('dev1')?.counter).toBe(0);
+  });
+});
+
+describe('phone gateway: close cards', () => {
+  const rp = { rpId: 'relay.test', origin: 'https://relay.test' };
+  const QA = randomUUID(); const QB = randomUUID(); const QN = randomUUID();
+  type Close = { id: string; name: string; tool: 'claude'; closedAt?: string; how?: 'exit' | 'killed'; error?: string };
+  const close = (id: string, extra: Partial<Close> = {}): Close => ({ id, name: `bot-${id}`, tool: 'claude', ...extra });
+  const DONE = '2026-10-21T08:00:00.000Z';
+
+  /** The device's thread holds QA (a close card of `rows`) and QN (no card); dev2's QB is not the device's. */
+  function make(rows: Close[], result?: Awaited<ReturnType<NonNullable<Parameters<typeof createPhoneGateway>[0]['closeChat']>>> | Error) {
+    const c = fakeChats();
+    const turn = (qid: string, closes?: Close[]) => ({ qid, question: 'q', askedAt: T0, steps: [] as never[], ...(closes ? { closes } : {}) });
+    c.turns.set('dev1', [turn(QA, rows), turn(QN)] as never);
+    c.turns.set('dev2', [turn(QB, rows)] as never);
+    const calls: Array<[string, string, number[] | undefined]> = [];
+    const closeChat = async (thread: string, qid: string, r?: number[]) => {
+      calls.push([thread, qid, r]);
+      if (result instanceof Error) throw result;
+      return result ?? { closed: (r ?? []).map(row => ({ row, id: rows[row]!.id, how: 'exit' as const })), failed: [] };
+    };
+    const g = setup({ chats: c.chats, closeChat: closeChat as never, relayUrl: 'https://relay.test' });
+    return { c, calls, g };
+  }
+  type G = ReturnType<typeof setup>;
+  const enroll = async (g: G) => {
+    const auth = softAuthenticator();
+    g.send('dev1', { type: 'confirm.prepare', purpose: 'register' });
+    await flush();
+    const reg = g.got('dev1').find(m => m.type === 'confirm.challenge');
+    if (reg?.type !== 'confirm.challenge') throw new Error('no challenge');
+    g.send('dev1', { type: 'credential.register', op: randomUUID(), credential: auth.create(rp, reg.challenge) });
+    await flush();
+    return auth;
+  };
+  const prepare = async (g: G, qid: string, purpose: 'close' | 'launch' = 'close') => {
+    const before = g.got('dev1').length;
+    g.send('dev1', { type: 'confirm.prepare', purpose, qid });
+    await flush();
+    const m = g.got('dev1').slice(before).find(x => x.type === 'confirm.challenge');
+    if (m?.type !== 'confirm.challenge') throw new Error('no challenge');
+    return m;
+  };
+  const last = (g: G) => g.results('dev1').at(-1);
+
+  it("closes the rows of the device's own close card after its passkey check", async () => {
+    const { calls, g } = make([close('a'), close('b')]);
+    const auth = await enroll(g);
+    const ch = await prepare(g, QA);
+    expect(ch).toMatchObject({ purpose: 'close', rpId: 'relay.test' });
+    const m = { type: 'chat.close', op: randomUUID(), qid: QA, assertion: auth.get(rp, ch.challenge, { counter: 1 }) };
+    g.send('dev1', m);
+    await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: m.op, status: 'applied' });
+    expect(calls).toEqual([['device:dev1', QA, [0, 1]]]);
+    // The challenge is spent: the replayed assertion under a new op is refused.
+    g.send('dev1', { ...m, op: randomUUID() });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'rejected', reason: 'assertion_invalid' });
+    expect(calls).toHaveLength(1);
+  });
+
+  it('passes the named rows only', async () => {
+    const { calls, g } = make([close('a'), close('b')]);
+    const auth = await enroll(g);
+    const ch = await prepare(g, QA);
+    g.send('dev1', { type: 'chat.close', op: randomUUID(), qid: QA, rows: [1], assertion: auth.get(rp, ch.challenge, { counter: 1 }) });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'applied' });
+    expect(calls).toEqual([['device:dev1', QA, [1]]]);
+  });
+
+  it('refuses a close without a passkey, then without an assertion', async () => {
+    const { calls, g } = make([close('a')]);
+    g.send('dev1', { type: 'chat.close', op: randomUUID(), qid: QA });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'rejected', reason: 'confirm_required' });
+    await enroll(g);
+    g.send('dev1', { type: 'chat.close', op: randomUUID(), qid: QA });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'rejected', reason: 'confirm_required' });
+    expect(calls).toEqual([]);
+  });
+
+  it('refuses a launch assertion for a close of the same turn', async () => {
+    const { calls, g } = make([close('a')]);
+    const auth = await enroll(g);
+    const ch = await prepare(g, QA, 'launch');
+    g.send('dev1', { type: 'chat.close', op: randomUUID(), qid: QA, assertion: auth.get(rp, ch.challenge, { counter: 1 }) });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'rejected', reason: 'assertion_invalid' });
+    expect(calls).toEqual([]);
+  });
+
+  it("refuses a close of another device's turn", async () => {
+    const { calls, g } = make([close('a')]);
+    await enroll(g);
+    g.send('dev1', { type: 'chat.close', op: randomUUID(), qid: QB });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'rejected', reason: 'unknown_session' });
+    expect(calls).toEqual([]);
+  });
+
+  it('refuses an unknown row, and a turn with no close card', async () => {
+    const { calls, g } = make([close('a')]);
+    await enroll(g);
+    g.send('dev1', { type: 'chat.close', op: randomUUID(), qid: QA, rows: [3] });
+    g.send('dev1', { type: 'chat.close', op: randomUUID(), qid: QN });
+    await flush();
+    expect(g.results('dev1').filter(r => r.status === 'rejected').map(r => r.reason)).toEqual(['invalid', 'invalid']);
+    expect(calls).toEqual([]);
+  });
+
+  it('answers failed when every row is already closed, before it spends the assertion', async () => {
+    const { calls, g } = make([close('a', { closedAt: DONE, how: 'exit' })]);
+    const auth = await enroll(g);
+    const ch = await prepare(g, QA);
+    g.send('dev1', { type: 'chat.close', op: randomUUID(), qid: QA, assertion: auth.get(rp, ch.challenge, { counter: 1 }) });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'failed' });
+    expect(calls).toEqual([]);
+    expect(g.creds.get('dev1')?.counter).toBe(0);
+  });
+
+  it('answers failed when no row closed, and when the close is refused', async () => {
+    for (const result of [{ closed: [], failed: [{ row: 0, message: 'busy' }] }, new CloseRefused('already closed')]) {
+      const { calls, g } = make([close('a')], result);
+      const auth = await enroll(g);
+      const ch = await prepare(g, QA);
+      g.send('dev1', { type: 'chat.close', op: randomUUID(), qid: QA, assertion: auth.get(rp, ch.challenge, { counter: 1 }) });
+      await flush();
+      expect(last(g)).toMatchObject({ status: 'failed' });
+      expect(calls).toHaveLength(1);
+    }
+  });
+
+  it('is applied when at least one row closed', async () => {
+    const { g } = make([close('a'), close('b')], { closed: [{ row: 1, id: 'b', how: 'killed' }], failed: [{ row: 0, message: 'x' }] });
+    const auth = await enroll(g);
+    const ch = await prepare(g, QA);
+    g.send('dev1', { type: 'chat.close', op: randomUUID(), qid: QA, assertion: auth.get(rp, ch.challenge, { counter: 1 }) });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'applied' });
+  });
+
+  it("prepares a close challenge only for the device's own turn", async () => {
+    const { g } = make([close('a')]);
+    await enroll(g);
+    const before = g.got('dev1').length;
+    g.send('dev1', { type: 'confirm.prepare', purpose: 'close' });
+    g.send('dev1', { type: 'confirm.prepare', purpose: 'close', qid: QB });
+    await flush();
+    expect(g.got('dev1').slice(before)).toEqual(Array(2).fill({ type: 'error', code: 'invalid', request: 'confirm.prepare' }));
+    expect(await prepare(g, QA)).toMatchObject({ type: 'confirm.challenge', purpose: 'close' });
+  });
+
+  it('answers an invalid chat.close from an approved device with rejected', async () => {
+    const { calls, g } = make([close('a')]);
+    await enroll(g);
+    const op = randomUUID();
+    g.send('dev1', { type: 'chat.close', op, qid: QA, rows: [1, 1] });
+    await flush();
+    expect(g.got('dev1').at(-1)).toMatchObject({ type: 'operation.result', op, status: 'rejected', reason: 'invalid' });
+    expect(calls).toEqual([]);
   });
 });

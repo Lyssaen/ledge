@@ -4,12 +4,13 @@
 import { hostname } from 'node:os';
 import {
   OperationIdSchema, PHONE_PROTOCOL, TOOL_TEXT_MAX, proposalRows, PhoneClientMessageSchema, pushEndpointAllowed, RefusalCodeSchema, UNTYPABLE, backendOf, isArchived, pendingKey,
-  type ChatErrorCode, type ChatTurn, type ClientMessage, type OperationReason, type OperationStatus, type PhoneClientMessage, type PhoneServerMessage, type ServerMessage, type Session, type ThreadItem
+  type ChatErrorCode, type ChatTurn, type CloseHow, type ClientMessage, type OperationReason, type OperationStatus, type PhoneClientMessage, type PhoneServerMessage, type ServerMessage, type Session, type ThreadItem
 } from '@ledge/protocol';
 import type { MobileService } from './service.js';
 import type { ChatThreads, ChatThreadId } from '../chat/threads.js';
 import { phoneEmitter, toPhoneHistory } from './chat.js';
 import type { ChatMessage } from '../chat/service.js';
+import { CloseRefused } from '../chat/close.js';
 import { createOutbox } from './outbox.js';
 import { fingerprint, OperationRegistry, type PhoneOperation } from './operations.js';
 import { capabilities, clip, toPhoneFullRequest, toPhoneItem, toPhoneSession, toPhoneThread } from './project.js';
@@ -73,6 +74,8 @@ export function createPhoneGateway(deps: {
   relay?: { request(qid: string): Promise<void> };
   /** Starts the sessions of a turn's card, on that thread (its own emitter and refusals). */
   launchChat?: (thread: ChatThreadId, qid: string, rows?: number[]) => Promise<{ launched: string[]; failed: number }>;
+  /** Closes the sessions of a turn's close card, on that thread (its own emitter and marks). */
+  closeChat?: (thread: ChatThreadId, qid: string, rows?: number[]) => Promise<{ closed: Array<{ row: number; id: string; how: CloseHow }>; failed: Array<{ row: number; message: string }> }>;
   /** A device's question ended (answered, or with a code). */
   onChatEnd?: (deviceId: string, end: { qid: string; code?: ChatErrorCode }) => void;
   chatThrottleMs?: number;
@@ -179,7 +182,7 @@ export function createPhoneGateway(deps: {
     `${id}:${key}${s?.pending?.source === 'rpc' && s.pending.requestId ? `:${s.pending.requestId}` : ''}`;
 
   /** The device check: the challenge is spent first, whatever the verdict, then the signature is verified and the counter kept. */
-  const checkAssertion = (deviceId: string, assertion: NonNullable<Extract<PhoneOperation, { type: 'session.decide' }>['assertion']> | undefined, purpose: 'decide' | 'launch', subject: string | undefined): Outcome | undefined => {
+  const checkAssertion = (deviceId: string, assertion: NonNullable<Extract<PhoneOperation, { type: 'session.decide' }>['assertion']> | undefined, purpose: 'decide' | 'launch' | 'close', subject: string | undefined): Outcome | undefined => {
     const cred = deps.credential(deviceId);
     const rp = deps.rp();
     if (!cred || !rp || !assertion || subject === undefined) return { status: 'rejected', reason: 'confirm_required' };
@@ -312,6 +315,27 @@ export function createPhoneGateway(deps: {
     return done.launched.length > 0 ? { status: 'applied' } : { status: 'failed' };
   };
 
+  const chatClose = async (deviceId: string, msg: Extract<PhoneOperation, { type: 'chat.close' }>): Promise<Outcome> => {
+    const turn = ownTurn(deviceId, msg.qid);
+    if (!turn || !deps.closeChat) return { status: 'rejected', reason: 'unknown_session' };
+    const closes = turn.closes;
+    const targets = msg.rows ?? (closes ? [...closes.keys()] : []);
+    if (!closes || targets.length === 0) return { status: 'rejected', reason: 'invalid' };
+    for (const r of targets) if (!closes[r]) return { status: 'rejected', reason: 'invalid' };
+    if (deps.credential(deviceId) === null) return { status: 'rejected', reason: 'confirm_required' };
+    // Nothing left to close: answered before the assertion is spent.
+    if (targets.every(r => closes[r]!.closedAt)) return { status: 'failed' };
+    const refused = checkAssertion(deviceId, msg.assertion, 'close', msg.qid);
+    if (refused) return refused;
+    try {
+      const done = await deps.closeChat(`device:${deviceId}`, msg.qid, targets);
+      return done.closed.length > 0 ? { status: 'applied' } : { status: 'failed' };
+    } catch (e) {
+      if (e instanceof CloseRefused) return { status: 'failed' };
+      throw e;
+    }
+  };
+
   const run = async (deviceId: string, msg: PhoneOperation): Promise<Outcome> => {
     if (msg.type === 'credential.register') return register(deviceId, msg);
     // Applied here; the device is revoked by `write`, once the answer has left.
@@ -328,8 +352,7 @@ export function createPhoneGateway(deps: {
     }
     if (msg.type === 'chat.relay') return chatRelay(deviceId, msg);
     if (msg.type === 'chat.launch') return chatLaunch(deviceId, msg);
-    // Task 2 handles the close card; until then nothing is closed from a phone.
-    if (msg.type === 'chat.close') return { status: 'rejected', reason: 'invalid' };
+    if (msg.type === 'chat.close') return chatClose(deviceId, msg);
     const refused = precheck(deviceId, msg);
     if (refused) return refused;
     const out = local(msg);
@@ -441,6 +464,13 @@ export function createPhoneGateway(deps: {
           const challenge = deps.challenges.issue({ deviceId, purpose: 'launch', subject: msg.qid });
           return push(deviceId, { type: 'confirm.challenge', purpose: 'launch', challenge, rpId: rp.rpId, credentialId: cred.id, expiresInMs: CHALLENGE_TTL_MS });
         }
+        if (msg.purpose === 'close') {
+          if (msg.qid === undefined || !ownTurn(deviceId, msg.qid)) return invalid();
+          const cred = deps.credential(deviceId);
+          if (!cred || cred.rpId !== rp.rpId) return invalid();
+          const challenge = deps.challenges.issue({ deviceId, purpose: 'close', subject: msg.qid });
+          return push(deviceId, { type: 'confirm.challenge', purpose: 'close', challenge, rpId: rp.rpId, credentialId: cred.id, expiresInMs: CHALLENGE_TTL_MS });
+        }
         const challenge = deps.challenges.issue({ deviceId, purpose: 'register', subject: '' });
         return push(deviceId, { type: 'confirm.challenge', purpose: 'register', challenge, rpId: rp.rpId, expiresInMs: CHALLENGE_TTL_MS });
       }
@@ -469,7 +499,7 @@ export function createPhoneGateway(deps: {
       log(`phone message refused: ${request ?? '?'}`);
       // A subscription to an endpoint off the list, or a launch the schema refuses (a row twice), is an operation the phone waits an answer for.
       const op = OperationIdSchema.safeParse((raw as { op?: unknown } | null | undefined)?.op);
-      if ((request === 'push.subscribe' || request === 'chat.launch') && op.success && approved(deviceId)) return push(deviceId, { type: 'operation.result', op: op.data, status: 'rejected', reason: 'invalid' });
+      if ((request === 'push.subscribe' || request === 'chat.launch' || request === 'chat.close') && op.success && approved(deviceId)) return push(deviceId, { type: 'operation.result', op: op.data, status: 'rejected', reason: 'invalid' });
       return push(deviceId, { type: 'error', code: 'invalid', ...(request !== undefined ? { request } : {}) });
     }
     const msg = parsed.data;

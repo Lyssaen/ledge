@@ -1015,6 +1015,15 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         refuse: p => { const wide = tooWide(resolve(p.cwd), userHome); return wide ? `the folder is ${wide}` : null; }
       }, qid, rows);
     },
+    closeChat: (thread, qid, rows) => {
+      const card = cardOf(cardThreads, qid);
+      if (!card || card.thread !== thread) return Promise.reject(new CloseRefused('unknown close'));
+      // The phone learns of each row from chat.history, so nothing is sent on a close.
+      return closeFromChat({
+        chat: card.chat, emit: card.emit, inFlight: chatCloses,
+        close: id => { const s = store.get(id); if (!s) throw unknownSession(); return closeSession(s); }
+      }, qid, rows);
+    },
     onChatEnd: (deviceId, end) => notifyChatEnd?.(deviceId, end.code),
     version: opts.daemon?.version ?? 'unknown',
     boot: randomUUID(),
