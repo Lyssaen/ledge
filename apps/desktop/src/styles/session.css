@@ -478,6 +478,40 @@ button.tg:disabled{cursor:default}
 .message-line:hover{background:var(--accent)}
 .message-line-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
+/* The « Conversation » tab: the exchange between this agent and one other, beside the thread. Neutral like the cards: the
+   bubbles are the thread's .message-card, the state colours stay for what the agents need from the user. */
+/* The head: the pair (bots and names), the count, the peer's thread; then « Agrandir » / « Fermer » as every tab. */
+.conv-head .conv-title{align-items:center;gap:10px}
+.conv-pair{display:inline-flex;align-items:center;gap:6px;min-width:0;color:var(--muted-foreground)}
+.conv-title .conv-pair strong{max-width:14em;font-size:13px;font-weight:500;color:var(--foreground);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.conv-count{font-size:11px;color:var(--muted-foreground);white-space:nowrap}
+.conv-head .conv-peer{margin-right:4px;font-size:11px}
+/* The messages: a column centred in the pane, one bubble each, the page's agent on the right (as « sent » in the thread). */
+.conv-wrap{position:relative;flex:1;min-height:0;display:flex;flex-direction:column}
+.conv-body{padding:16px 20px 28px}
+.conv-loading{margin:0 auto 12px;max-width:680px;font-size:12px;text-align:center}
+.conv-log{list-style:none;margin:0 auto;padding:0;width:100%;max-width:680px;display:flex;flex-direction:column;gap:4px}
+.conv-row{display:flex;padding:1px 0}
+.conv-row.first{padding-top:12px}
+.conv-row:first-child{padding-top:0}
+.conv-row.mine{justify-content:flex-end}
+.conv-bubble,.conv-bubble.sent{max-width:86%}
+.conv-bubble.can-light{cursor:pointer}
+.conv-bubble.received.can-light:hover{border-color:var(--input)}
+.conv-bubble.sent.can-light:hover{border-color:var(--border)}
+.conv-who{gap:5px}
+.conv-meta{gap:4px;font-weight:400}
+.conv-row.mine .conv-meta{justify-content:flex-end}
+.conv-meta time{font-family:'Geist Mono',monospace;font-variant-numeric:tabular-nums}
+/* One side only (the peer unknown here): a strip under the head, kept in view, in the frozen thread's quiet tone. */
+.conv-note{flex-shrink:0;display:flex;gap:10px;align-items:flex-start;padding:10px 16px;border-bottom:1px dashed var(--input);font-size:12px;line-height:18px;color:var(--muted-foreground);background:var(--well)}
+.conv-note strong{color:var(--foreground);font-weight:500}
+.conv-note svg{margin-top:1px}
+.conv-empty{gap:8px}
+.conv-empty strong{font-size:13px}
+/* The conversation header's pill, pressed while its tab is the active one. */
+.conv-follow[aria-pressed=true]{background:var(--secondary);color:var(--foreground)}
+
 /* Claude Code's automated cross-session notices (NoticeLine): a quiet system line on the rail, not a card nor a prompt. */
 .notice-row{padding:6px 0}
 .notice-line{min-width:0;padding:2px 0 2px 10px;border-left:2px solid var(--border);font-size:12px;line-height:20px;color:var(--muted-foreground)}

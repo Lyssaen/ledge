@@ -10,13 +10,15 @@ import { useI18n } from '../i18n/lang';
 import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
 import { findFile, nameOf, relativeTo, type ChangedFile } from './changedFiles';
+import { ConversationTab } from './ConversationTab';
 import { Delta, FileDiffs } from './DiffView';
 import { clampSplit } from './prefs';
 import type { PlanDoc } from './exchanges';
+import type { ConversationView } from './useConversations';
 import { useDocument } from './useDocument';
 
-export type PaneTab = { kind: 'doc'; path: string } | { kind: 'diff'; path: string } | { kind: 'plan'; key: string };
-export const tabId = (t: PaneTab): string => `${t.kind}:${t.kind === 'plan' ? t.key : t.path}`;
+export type PaneTab = { kind: 'doc'; path: string } | { kind: 'diff'; path: string } | { kind: 'plan'; key: string } | { kind: 'conv'; peer: string };
+export const tabId = (t: PaneTab): string => `${t.kind}:${t.kind === 'plan' ? t.key : t.kind === 'conv' ? t.peer : t.path}`;
 
 /** A plan the pane can show, by its key (a card's action id, or 'pending' for the request's own). */
 export interface PanePlan {
@@ -59,6 +61,8 @@ export interface SidePaneProps {
   onDocument(path: string): void;
   session: Session; files: readonly ChangedFile[]; client: DaemonClient;
   plans: ReadonlyMap<string, PanePlan>;
+  /** The open Conversation tabs' views, by peerKey (useConversations, at the page's level). */
+  convs: ReadonlyMap<string, ConversationView>;
 }
 
 /** The side pane (session.tsx `sidePane`, `paneDoc`, `dragSplit`): the handle, then the documents and changes opened beside
@@ -72,11 +76,13 @@ export function SidePane(p: SidePaneProps): JSX.Element | null {
   // A change is named by its file as it is now (a renamed one by its new name), below the cwd.
   const plan = (key: string) => p.plans.get(key);
   const pathOf = (x: PaneTab) => {
+    if (x.kind === 'conv') return '';
     if (x.kind !== 'plan') return x.kind === 'doc' ? x.path : shownOf(files, x.path, session.cwd);
     const by = plan(x.key)?.by;
     return by === undefined ? '' : t.session.plan.by(by);
   };
   const labelOf = (x: PaneTab) => (x.kind === 'doc' ? nameOf(x.path) : x.kind === 'diff' ? tp.diffLabel(nameOf(pathOf(x)))
+    : x.kind === 'conv' ? t.session.conversation.tab(p.convs.get(x.peer)?.name ?? x.peer)
     : t.session.plan.tab(plan(x.key)?.plan.title || t.session.plan.fallback));
 
   // Dragged: the pane takes what is right of the pointer (the pointer captured, so leaving the handle does not let go); the
@@ -99,17 +105,23 @@ export function SidePane(p: SidePaneProps): JSX.Element | null {
     else if (e.key === 'ArrowRight') { e.preventDefault(); onSplit(split - SPLIT_STEP); }
   };
   const grown = split >= 0.6;
-  const head = (title: string, path: string) => (
-    <div className="side-head">
-      <span className="side-title"><strong>{title}</strong>{path && <code title={path}>{path}</code>}</span>
+  const buttons = (
+    <>
       <Button variant="ghost" size="sm" className="side-grow" onClick={() => onSplit(grown ? DEFAULT_SPLIT : GROWN)} title={grown ? tp.shrinkTitle : tp.growTitle}>
         <Icon d={SHELL_ICONS.split} size={13} />{grown ? tp.shrink : tp.grow}
       </Button>
       <Button variant="ghost" size="sm" className="side-close" onClick={() => p.onClose(active)} aria-label={tp.closeTitle} title={tp.closeShort}>
         <Icon d={ICONS.close.d} size={14} /><span>{tp.close}</span>
       </Button>
+    </>
+  );
+  const head = (title: string, path: string) => (
+    <div className="side-head">
+      <span className="side-title"><strong>{title}</strong>{path && <code title={path}>{path}</code>}</span>
+      {buttons}
     </div>
   );
+  const conv = tab.kind === 'conv' ? p.convs.get(tab.peer) : undefined;
   return (
     <>
       <div className="split-handle" role="separator" aria-orientation="vertical" aria-label={tp.resize} tabIndex={0}
@@ -124,7 +136,7 @@ export function SidePane(p: SidePaneProps): JSX.Element | null {
               return (
                 <div key={id} className={cls('pane-tab', id === active && 'current')}>
                   <button type="button" role="tab" aria-selected={id === active} onClick={() => p.onActive(id)} title={pathOf(x) || undefined}>
-                    <Icon d={x.kind === 'diff' ? SHELL_ICONS.diff : x.kind === 'plan' ? SHELL_ICONS.plan : SHELL_ICONS.file} size={12} /><span>{label}</span>
+                    <Icon d={x.kind === 'diff' ? SHELL_ICONS.diff : x.kind === 'plan' ? SHELL_ICONS.plan : x.kind === 'conv' ? SHELL_ICONS.mail : SHELL_ICONS.file} size={12} /><span>{label}</span>
                   </button>
                   <button type="button" className="tab-close" aria-label={tp.closeTab(label)} onClick={() => p.onClose(id)}><Icon d={ICONS.close.d} size={11} /></button>
                 </div>
@@ -135,7 +147,8 @@ export function SidePane(p: SidePaneProps): JSX.Element | null {
         {/* Keyed by the tab: another one starts at its top, its own document read. */}
         {tab.kind === 'doc' ? <DocTab key={active} path={tab.path} head={head} session={session} client={p.client} onDocument={p.onDocument} />
           : tab.kind === 'diff' ? <DiffTab key={active} path={tab.path} head={head} files={files} cwd={session.cwd} onAllChanges={p.onAllChanges} />
-          : <PlanTab key={active} entry={plan(tab.key)} path={pathOf(tab)} head={head} onDocument={p.onDocument} />}
+          : tab.kind === 'plan' ? <PlanTab key={active} entry={plan(tab.key)} path={pathOf(tab)} head={head} onDocument={p.onDocument} />
+          : conv && <ConversationTab key={active} self={session} view={conv} buttons={buttons} />}
       </aside>
     </>
   );
