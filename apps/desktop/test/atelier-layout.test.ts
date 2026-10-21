@@ -14,7 +14,8 @@ const helper = (id: string, state: Helper['state'] = 'working'): Helper => ({ id
 
 it('a table grows one step per agent, from two, up to six', () => {
   expect([1, 2, 3, 6].map(tableLength)).toEqual([210, 210, 280, 490]);
-  expect([1, 6, 9].map(roomWidth)).toEqual([470, 750, 750]);
+  expect([1, 6, 9].map(n => roomWidth(n))).toEqual([470, 750, 750]);
+  expect([6, 9, 12].map(n => roomWidth(n, 10))).toEqual([750, 960, 1030]);
 });
 it('seats main agents in a zigzag; a lone agent sits in the middle, on top', () => {
   expect(layoutTable([main('a')], true).seats.map(s => [s.x, s.side])).toEqual([[105, 't']]);
@@ -37,6 +38,14 @@ it('beyond six main agents, and with helpers hidden', () => {
   const hidden = layoutTable(seven, false);
   expect(hidden).toMatchObject({ ends: [], extraCount: 1 });
   expect(hidden.notes.size).toBe(0);
+});
+it('the seat count chosen in the settings moves where +N starts', () => {
+  const ten = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'].map(id => main(id));
+  expect(layoutTable(ten, true, 4)).toMatchObject({ length: tableLength(4), extraCount: 6 });
+  const eight = layoutTable(ten, true, 8);
+  expect(eight.seats.map(s => s.session.name)).toEqual(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']);
+  expect(eight.extra.mains.map(s => s.name)).toEqual(['i', 'j']);
+  expect(eight).toMatchObject({ length: tableLength(8), width: roomWidth(10, 8), extraCount: 2 });
 });
 it('lays a post-it right of its sheet, else left, else overlapping', () => {
   expect(noteX(70, [70, 210], 490)).toBe(114);
@@ -65,6 +74,7 @@ it('the scene of each filter, and the J / K order', () => {
   expect(names(sceneOf(order, null, () => null, 'all'))).toEqual([[], ['otto', 'nova', 'kit'], null]);
   const crowd = mainOrder(['a', 'b', 'c', 'd', 'e', 'f', 'g'].map(id => main(id)), projects);
   expect(walkOrder(sceneOf(crowd, projects, idOf, 'all')).map(s => s.name)).toEqual(['a', 'b', 'c', 'd', 'e', 'f']);
+  expect(walkOrder(sceneOf(crowd, projects, idOf, 'all'), 4).map(s => s.name)).toEqual(['a', 'b', 'c', 'd']);
 });
 it('mosaic rows and zoom arithmetic', () => {
   expect([1, 2, 3].map(k => widestRow([230, 750, 470, 420], k))).toEqual([1918, 1004, 762]);

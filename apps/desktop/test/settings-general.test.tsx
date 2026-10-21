@@ -295,6 +295,17 @@ describe('Settings › Appearance › Profile photo (#50)', () => {
 });
 
 describe('Settings › Appearance', () => {
+  it('the agents around a table: six by default, eight kept and said once; an unknown stored value falls back to six', async () => {
+    localStorage.setItem('desktop.atelier.seats', '7');
+    const { user } = await openSettings('Appearance');
+    const group = screen.getByRole('radiogroup', { name: 'Agents around a table' });
+    expect(within(group).getByRole('radio', { name: '6' })).toBeChecked();
+    await user.click(within(group).getByRole('radio', { name: '8' }));
+    expect(localStorage.getItem('desktop.atelier.seats')).toBe('8');
+    expect(within(group).getByRole('radio', { name: '8' })).toBeChecked();
+    expect(saved()).toEqual(['Setting saved · 8 agents around a table']);
+  });
+
   it('an invalid hex (#12) changes nothing and says so; a valid one is saved once; Coral goes back to the default', async () => {
     const { user } = await openSettings('Appearance');
     const hex = screen.getByRole('textbox', { name: 'Hex code' });

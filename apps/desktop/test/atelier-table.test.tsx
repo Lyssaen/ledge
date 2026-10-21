@@ -28,7 +28,7 @@ type Overrides = Partial<Omit<ProjectTableProps, 'mains' | 'dispatch'>>;
 function tableElement(mains: readonly Session[], overrides: Overrides = {}, dispatch: ProjectTableProps['dispatch'] = vi.fn()) {
   return (
     <LangProvider lang="en">
-      <ProjectTable project={ledge} mains={mains} order={mains} helpers paused={false} isolated={false} focusedId={null} seated={null} dispatch={dispatch} filing={noFiling} actions={noActions} menuId={null} onMenu={() => {}} {...overrides} />
+      <ProjectTable project={ledge} mains={mains} order={mains} helpers seats={6} paused={false} isolated={false} focusedId={null} seated={null} dispatch={dispatch} filing={noFiling} actions={noActions} menuId={null} onMenu={() => {}} {...overrides} />
     </LangProvider>
   );
 }
@@ -73,6 +73,11 @@ it('beyond six agents and four helpers: +N filters the atelier on the project, n
   await userEvent.click(screen.getByRole('button', { name: /\+2 at this table/ }));       // g and a5
   expect(dispatch).toHaveBeenCalledWith({ type: 'home', project: 'ledge' });
   expect(document.querySelector('.plant-spot.spot-br')).toBeNull();
+});
+it('with eight seats chosen, eight agents sit and only the ninth goes into +N', () => {
+  renderTable(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'].map(id => main(id)), { seats: 8 });
+  expect(document.querySelectorAll('.agent-seat:not(.helper-seat)')).toHaveLength(8);
+  expect(screen.getByRole('button', { name: /\+1 at this table/ })).toBeVisible();
 });
 it('the label: colour, a long name cut with its full name in title, the main branch', () => {
   const long = 'Payment Service Platform Migration Europe';
