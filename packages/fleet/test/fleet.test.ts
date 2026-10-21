@@ -458,7 +458,7 @@ describe('common chat routing', () => {
       client.send({ type: 'session.close', qid: 'q' });
       expect(server.sent.at(-1)).toEqual({ type: 'session.close', qid: 'q' });
       server.emit({ type: 'session.closed', qid: 'q', row: 0, id: 'a1', how: 'exit' });
-      expect(got.filter(m => m.type === 'session.closed')).toEqual([{ type: 'session.closed', qid: 'q', row: 0, id: 'server:a1', how: 'exit' }]);
+      expect(got.filter(m => m.type === 'session.closed')).toEqual([{ type: 'session.closed', qid: lastHistory(got)[0]!.qid, row: 0, id: 'server:a1', how: 'exit' }]);
       server.set('unreachable');
       expect(drops(got)).toHaveLength(1);
     });

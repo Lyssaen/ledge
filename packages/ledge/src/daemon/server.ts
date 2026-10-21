@@ -435,12 +435,13 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const CLOSE_EXIT_MS = opts.close?.exitMs ?? 15_000;
   /**
    * Waits up to `ms` for `ok`, polled every UNTIL_POLL_MS. `gone` as soon as the session has exited or left the store: the
-   * close is then over, and nothing more is typed.
+   * close is then over, and nothing more is typed. An exit seen while another path holds the session (`typing`: a model
+   * change's respawn ends the agent, then brings it back) is not final, and is waited out.
    */
   async function closeWait(id: string, ms: number, ok: (s: Session) => boolean): Promise<'ok' | 'gone' | 'timeout'> {
     for (const end = Date.now() + ms; ;) {
       const cur = store.get(id);
-      if (!cur || cur.state === 'exited') return 'gone';
+      if (!cur || (cur.state === 'exited' && !typing.has(id))) return 'gone';
       if (ok(cur)) return 'ok';
       if (Date.now() >= end) return 'timeout';
       await new Promise(r => setTimeout(r, UNTIL_POLL_MS));
@@ -479,7 +480,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         }
       }
       let why: string;
-      const freed = await closeWait(id, CLOSE_FREE_MS, x => free(x) && !typing.has(id) && !inFlight.has(id));
+      // Re-checked synchronously before the locks are taken: nothing may have started typing since the wait saw it free.
+      const idle = (x: Session) => free(x) && !typing.has(id) && !inFlight.has(id);
+      const until = Date.now() + CLOSE_FREE_MS;
+      let freed = await closeWait(id, CLOSE_FREE_MS, idle);
+      while (freed === 'ok' && !idle(store.get(id)!)) freed = await closeWait(id, Math.max(0, until - Date.now()), idle);
       if (freed === 'gone') return { how: 'exit' };
       if (freed === 'timeout') why = `its prompt was not free after ${CLOSE_FREE_MS} ms`;
       else {
@@ -505,6 +510,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   async function replyTo(id: string, text: string, how: { steer?: boolean } = {}): Promise<Refusal | null> {
     const s = store.get(id); if (!s) return unknownSession();
     if (s.source === 'hook_only') return readOnly();
+    if (closing.has(id)) return new Refusal('the session is being closed', 'busy');
     if (backendOf(s) === 'omp-rpc') return replyOmp(s, text, how.steer === true);
     // A select dialog ignores typed text and Enter would pick option 1: those take decide only.
     if (s.pending && s.pending.kind !== 'question') return new Refusal(`a ${s.pending.kind} prompt takes accept or deny, not a reply`, 'not_offered');

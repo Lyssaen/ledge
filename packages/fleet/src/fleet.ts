@@ -196,7 +196,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     if (m.type === 'session.preview') { p.previews.set(m.id, m.lines); if (available(p)) emit({ ...m, id: qualify(machine, m.id) }); return; }
     if (m.type === 'session.thread' || m.type === 'session.thread.item' || m.type === 'session.queue.restored') { if (available(p)) emit({ ...m, id: qualify(machine, m.id) }); return; }
     if (m.type === 'session.launched') { if (!closeRows.has(machine)) operations.delete(machine); emit({ ...m, id: qualify(machine, m.id) }); return; }
-    if (m.type === 'session.closed') { emit({ ...m, id: qualify(machine, m.id) }); return; }
+    if (m.type === 'session.closed') { emit({ ...m, qid: globalQid(machine, m.qid), id: qualify(machine, m.id) }); return; }
     if (m.type === 'folder.listing') {
       if (m.requestId !== undefined && listings.has(m.requestId)) { if (listings.get(m.requestId)!.machine === machine) { listings.delete(m.requestId); emit(m); } return; }
       // A daemon before 0.9.1 answers folder.create without its requestId: the listing of the new folder, or of the parent with the refusal.

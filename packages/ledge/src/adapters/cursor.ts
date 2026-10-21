@@ -356,8 +356,8 @@ export const cursorAdapter: Adapter = {
   },
   // Ctrl-C aborts a running turn; at rest it only clears the input line, it never quits.
   interruptKeys: () => ['C-c'],
-  // Not run on the real CLI (its TUI asked for a login that could not be done here): `/exit` is Cursor Agent's documented
-  // quit command, the `killSession` fallback covers it if not. Ctrl-C at rest only clears the input line. No `until`
+  // Not run on the real CLI (its TUI asked for a login that could not be done here): `/exit` as the quit command is an assumption,
+  // not verified on the real CLI; the `killSession` fallback covers it if wrong. Ctrl-C at rest only clears the input line. No `until`
   // (replyPlan's `typed` check): a pause lets the text land in the input before Enter.
   exitText: () => '/exit',
   exitPlan: () => [{ keys: ['C-c'] }, { text: '/exit' }, { waitMs: EXIT_ENTER_DELAY_MS }, { keys: ['Enter'] }]

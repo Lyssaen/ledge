@@ -2269,7 +2269,7 @@ describe('server: models.list (#58)', () => {
 describe('close a session', () => {
   const CLOSE = { freeMs: 200, exitMs: 200 };
   /** A fake terminal whose agent leaves when the exit command is submitted (`leaves`): its pane goes, the poller sees it gone. */
-  async function closing(panes: Record<string, string[]>, o: { leaves?: boolean; history?: History; chat?: Chat; omp?: Parameters<typeof startServer>[0]['omp'] } = {}) {
+  async function closing(panes: Record<string, string[]>, o: { leaves?: boolean; close?: { freeMs: number; exitMs: number }; history?: History; chat?: Chat; omp?: Parameters<typeof startServer>[0]['omp'] } = {}) {
     tmux = fakeTmux(panes);
     const keys = tmux.sendKeys.bind(tmux);
     tmux.sendKeys = async (n, k) => {
@@ -2282,10 +2282,44 @@ describe('close a session', () => {
       if (s) store.apply(s.id, { name: 'PaneGone', at: new Date().toISOString(), source: 'pane' });
     };
     await srv.close();
-    srv = await startServer({ store, tmux, port: 0, close: CLOSE, ...(o.history ? { history: o.history } : {}), ...(o.chat ? { chat: o.chat } : {}), ...(o.omp ? { omp: o.omp } : {}) });
+    srv = await startServer({ store, tmux, port: 0, close: o.close ?? CLOSE, ...(o.history ? { history: o.history } : {}), ...(o.chat ? { chat: o.chat } : {}), ...(o.omp ? { omp: o.omp } : {}) });
   }
   const texts = () => tmux.sent.filter(x => x[0] === 'text');
   const logged = () => (existsSync(paths().log) ? readFileSync(paths().log, 'utf8') : '');
+
+  it('is not taken as closed by the exit a model change\'s respawn passes through, and the session ends exited', async () => {
+    await closing({ 'ledge-a': ['> '] }, { leaves: false, close: { freeMs: 700, exitMs: 200 } });
+    store.upsert(mk('a', { state: 'idle', cwd: tmpdir(), project: 'p', agentSessionId: 'u-1', model: 'opus' }));
+    let release!: () => void; const gate = new Promise<void>(r => { release = r; });
+    let killing = false; const end = tmux.killSession.bind(tmux);
+    tmux.killSession = async n => { killing = true; await gate; return end(n); };
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.model', id: 'a', model: 'sonnet', effort: null });
+    await until(() => killing, 3000);
+    // The model change holds the session (typing) while it ends the old agent; the close starts then and the agent reads exited.
+    let settled = false;
+    const closed = srv.closeSession('a').then(r => { settled = true; return r; });
+    store.apply('a', { name: 'PaneGone', at: new Date().toISOString(), source: 'daemon' });
+    await new Promise(r => setTimeout(r, 150));
+    expect(settled).toBe(false);
+    release();
+    await closed;
+    expect(store.get('a')!.state).toBe('exited');
+    c.close();
+  });
+
+  it('refuses a direct reply to a session being closed', async () => {
+    await closing({ 'ledge-a': ['Running…'] }, { close: { freeMs: 400, exitMs: 200 } });
+    store.upsert(mk('a', { state: 'working' }));
+    const closed = srv.closeSession('a');
+    await until(() => tmux.sent.length > 0, 3000);
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.reply', id: 'a', text: 'hello' });
+    expect(await c.next('error')).toMatchObject({ id: 'a', message: 'the session is being closed' });
+    expect(texts()).toEqual([]);
+    c.close();
+    await closed;
+  });
 
   it('closes an idle session with its exit command', async () => {
     await closing({ 'ledge-a': ['> '] });

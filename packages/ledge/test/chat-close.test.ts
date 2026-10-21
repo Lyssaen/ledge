@@ -24,6 +24,20 @@ function deferred<T>() {
 const flush = () => new Promise(r => setTimeout(r, 0));
 
 describe('closeFromChat', () => {
+  it('a throwing emitter or listener neither rejects a row nor frees another row\'s key early', async () => {
+    const rows = [row('a'), row('b')];
+    const f = fake(rows);
+    const chat: CloseDeps['chat'] = { ...f.chat, markClosed: (q, r, how, emit) => { f.chat.markClosed(q, r, how, emit); emit({ type: 'chat.history', turns: [] }); } };
+    const inFlight = new Set<string>(); const waits: Record<string, ReturnType<typeof deferred<{ how: CloseHow }>>> = { a: deferred(), b: deferred() };
+    const out = closeFromChat({ chat, emit: () => { throw new Error('socket gone'); }, inFlight, close: id => waits[id]!.promise, onClosed: () => { throw new Error('listener'); } }, 'q');
+    await flush();
+    waits.a!.resolve({ how: 'exit' });
+    await flush();
+    expect(inFlight.has('q#1')).toBe(true);
+    waits.b!.resolve({ how: 'exit' });
+    expect(await out).toEqual({ closed: [{ row: 0, id: 'a', how: 'exit' }, { row: 1, id: 'b', how: 'exit' }], failed: [] });
+    expect(inFlight.size).toBe(0);
+  });
   it('closes the rows in parallel and marks each', async () => {
     const f = fake([row('a'), row('b')]);
     const started: string[] = []; const waits: Record<string, ReturnType<typeof deferred<{ how: CloseHow }>>> = { a: deferred(), b: deferred() };

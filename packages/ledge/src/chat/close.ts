@@ -2,6 +2,7 @@
 import { MAX_PROPOSALS, type CloseHow } from '@ledge/protocol';
 import type { Chat, ChatMessage } from './service.js';
 import type { ChatThreadId } from './threads.js';
+import { log } from '../log.js';
 
 export interface CloseDeps {
   chat: Pick<Chat, 'close' | 'markClosed' | 'markCloseFailed'>;
@@ -23,6 +24,7 @@ export class CloseRefused extends Error {}
  */
 export async function closeFromChat(deps: CloseDeps, qid: string, rows?: number[]): Promise<{ closed: Array<{ row: number; id: string; how: CloseHow }>; failed: Array<{ row: number; message: string }> }> {
   const { chat, inFlight } = deps;
+  const safe = (m: ChatMessage) => { try { deps.emit(m); } catch (e) { log(`close: emit failed: ${(e as Error).message}`); } };
   const known = [...new Set(rows ?? [...Array(MAX_PROPOSALS).keys()])].filter(r => chat.close(qid, r));
   if (known.length === 0) throw new CloseRefused('unknown close');
   const todo = known.filter(r => !chat.close(qid, r)!.closedAt && !inFlight.has(`${qid}#${r}`));
@@ -35,11 +37,12 @@ export async function closeFromChat(deps: CloseDeps, qid: string, rows?: number[
       const { id } = chat.close(qid, r)!;
       let how: CloseHow;
       try { ({ how } = await deps.close(id)); }
-      catch (e) { failed.push({ row: r, message: (e as Error).message }); chat.markCloseFailed(qid, r, (e as Error).message, deps.emit); return; }
+      catch (e) { failed.push({ row: r, message: (e as Error).message }); chat.markCloseFailed(qid, r, (e as Error).message, safe); return; }
       finally { inFlight.delete(`${qid}#${r}`); }
       closed.push({ row: r, id, how });
-      chat.markClosed(qid, r, how, deps.emit);
-      deps.onClosed?.(r, id, how);
+      // A throwing emitter or listener must neither reject the row nor free the other rows' keys early (as relay.ts emitTo).
+      try { chat.markClosed(qid, r, how, safe); } catch (e) { log(`close of ${id}: marking row ${r} failed: ${(e as Error).message}`); }
+      try { deps.onClosed?.(r, id, how); } catch (e) { log(`close of ${id}: onClosed failed: ${(e as Error).message}`); }
     }));
   } finally { for (const r of todo) inFlight.delete(`${qid}#${r}`); }
   const byRow = (a: { row: number }, b: { row: number }) => a.row - b.row;
@@ -54,5 +57,5 @@ export function cardOf<C>(threads: { all(): Array<[ChatThreadId, C]>; owner(qid:
   const thread = threads.owner(qid);
   const chat = thread && threads.all().find(([id]) => id === thread)?.[1];
   if (!thread || !chat) return undefined;
-  return { thread, chat, emit: m => threads.emitterOf(thread)?.(m) };
+  return { thread, chat, emit: m => { try { threads.emitterOf(thread)?.(m); } catch (e) { log(`close: emit to ${thread} failed: ${(e as Error).message}`); } } };
 }
