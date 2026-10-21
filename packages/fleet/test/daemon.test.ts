@@ -190,6 +190,13 @@ describe('daemon client + store', () => {
     expect(daemonStore.getState().chat[0]).toMatchObject({ proposal: a, proposals: [a, b] });
   });
 
+  it('chat.done keeps the closes', () => {
+    daemonStore.reset();
+    daemonStore.beginTurn({ qid: 'q1', question: 'ferme Otto', askedAt: T0, steps: [] });
+    const closes = [{ id: 's1', name: 'Otto', tool: 'claude' as const }];
+    daemonStore.apply({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, closes });
+    expect(daemonStore.getState().chat[0]!.closes).toEqual(closes);
+  });
   it('chat.done keeps the relay', () => {
     daemonStore.reset();
     daemonStore.beginTurn({ qid: 'q1', question: 'dis à Otto', askedAt: T0, steps: [] });
