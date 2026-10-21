@@ -665,6 +665,21 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const chatLaunches = new Set<string>();
   /** The close card rows being closed: a second click, or another overlay, is passed over until the first one has answered. */
   const chatCloses = new Set<string>();
+  /**
+   * The cards' closes under way, by session. Two cards can name one session (a phone's and Desktop's): the second waits for
+   * the first one's close and reads its outcome, closed rather than failed for a close another card is making.
+   */
+  const cardSessionCloses = new Map<string, Promise<{ how: CloseHow }>>();
+  function closeForCard(id: string): Promise<{ how: CloseHow }> {
+    const running = cardSessionCloses.get(id);
+    if (running) return running;
+    const s = store.get(id); if (!s) throw unknownSession();
+    const p = closeSession(s);
+    cardSessionCloses.set(id, p);
+    const done = () => { if (cardSessionCloses.get(id) === p) cardSessionCloses.delete(id); };
+    p.then(done, done);
+    return p;
+  }
   /** Spawns the agent as `ledge <tool>` would and records it; throws the reason (bad folder, tmux). */
   async function launch(req: { tool: Tool; cwd: string; name?: string; prompt?: string; continue?: boolean; dirs?: string[]; model?: string; effort?: string; approval?: OmpApproval }): Promise<Session> {
     if (req.tool === 'omp') return launchOmp(req);
@@ -952,7 +967,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         try {
           const done = await closeFromChat({
             chat: card.chat, emit: card.emit, inFlight: chatCloses,
-            close: id => { const s = store.get(id); if (!s) throw unknownSession(); return closeSession(s); },
+            close: closeForCard,
             onClosed: (row, id, how) => reply({ type: 'session.closed', qid: msg.qid, row, id, how })
           }, msg.qid, msg.rows);
           if (done.failed.length > 0) throw new Error(done.failed[0]!.message);
@@ -1021,7 +1036,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       // The phone learns of each row from chat.history, so nothing is sent on a close.
       return closeFromChat({
         chat: card.chat, emit: card.emit, inFlight: chatCloses,
-        close: id => { const s = store.get(id); if (!s) throw unknownSession(); return closeSession(s); }
+        close: closeForCard
       }, qid, rows);
     },
     onChatEnd: (deviceId, end) => notifyChatEnd?.(deviceId, end.code),
