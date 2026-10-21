@@ -341,6 +341,30 @@ describe('server', () => {
     c.close();
   });
 
+  describe('resume label', () => {
+    const transcript = () => { const p = join(mkdtempSync(join(tmpdir(), 'ledge-tr-')), 'abc.jsonl'); writeFileSync(p, '{"type":"user"}\n'); return p; };
+    const lines = (p: string) => readFileSync(p, 'utf8').trimEnd().split('\n');
+
+    it('labels the transcript of an exited launched Claude once per exit', async () => {
+      const p = transcript();
+      store.upsert(mk('a', { name: 'Pim', topic: 'Sujet', transcriptPath: p }));
+      store.upsert(mk('a', { name: 'Pim', topic: 'Sujet', transcriptPath: p, state: 'exited', exitedAt: T0 }));
+      await until(() => lines(p).length === 2);
+      expect(JSON.parse(lines(p)[1]!)).toEqual({ type: 'custom-title', customTitle: 'Pim - Sujet', sessionId: 'abc' });
+      store.upsert(mk('a', { name: 'Pim', topic: 'Sujet', transcriptPath: p, state: 'exited', exitedAt: T0, lastActivityAt: '2026-10-09T18:05:00.000Z' }));
+      await new Promise(r => setTimeout(r, 50));
+      expect(lines(p)).toHaveLength(2);
+    });
+
+    it('leaves Codex and hook-only sessions alone', async () => {
+      const p = transcript(); const q = transcript();
+      store.upsert(mk('c', { tool: 'codex', topic: 'Sujet', transcriptPath: p, state: 'exited', exitedAt: T0 }));
+      store.upsert(mk('h', { source: 'hook_only', topic: 'Sujet', transcriptPath: q, state: 'exited', exitedAt: T0 }));
+      await new Promise(r => setTimeout(r, 50));
+      expect(lines(p)).toHaveLength(1); expect(lines(q)).toHaveLength(1);
+    });
+  });
+
   it('register re-picks a name already held by another live session and broadcasts the stored one', async () => {
     store.upsert(mk('a', { name: 'Otto' }));
     store.upsert(mk('x', { name: 'Pim', state: 'exited' }));

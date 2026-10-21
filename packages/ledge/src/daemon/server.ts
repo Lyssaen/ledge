@@ -13,7 +13,7 @@ import { Refusal, STALE, bottomLines, dialogMismatch } from '../adapters/types.j
 import { verifyGone } from '../adapters/verify.js';
 import { DETECT_LINES } from './poller.js';
 import { answeredBy, pendingTool } from './state.js';
-import { claudeOpenCall, claudeToolAnswered } from './transcript.js';
+import { claudeOpenCall, claudeToolAnswered, labelTranscript, resumeLabel } from './transcript.js';
 import { pickName } from '../names.js';
 import { spawnSession, type TmuxTool } from '../spawn.js';
 import { createOmpHost, type OmpHost } from './omp/host.js';
@@ -257,13 +257,22 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const previews = new Map<string, string[]>();
   /** The title last pushed to each session's tmux tab, so tmux is told only when it changes. */
   const titles = new Map<string, string>();
+  /** The `exitedAt` of the exit last labelled for `claude --resume`, per session: one label per exit. */
+  const labelled = new Map<string, string>();
   const unsubscribe = store.onChange(c => {
     if (c.type === 'recents') return broadcast({ type: 'recents', recents: c.recents });
     if (c.type === 'updated' && c.session.tmuxSession && titles.get(c.session.id) !== c.session.title) {
       titles.set(c.session.id, c.session.title);
       tmux.setOption(c.session.tmuxSession, '@ledge_title', c.session.title).catch(e => log(`tab title not set for ${c.session.id}: ${(e as Error).message}`));
     }
-    if (c.type === 'removed') { previews.delete(c.id); titles.delete(c.id); }
+    if (c.type === 'removed') { previews.delete(c.id); titles.delete(c.id); labelled.delete(c.id); }
+    if (c.type === 'updated') {
+      const s = c.session;
+      if (s.tool === 'claude' && s.source === 'launcher' && s.state === 'exited' && s.transcriptPath && s.topic && labelled.get(s.id) !== (s.exitedAt ?? '')) {
+        labelled.set(s.id, s.exitedAt ?? '');
+        try { labelTranscript(s.transcriptPath, s.name, resumeLabel(s.name, s.topic)); } catch (e) { log(`resume label of ${s.id} not written: ${(e as Error).message}`); }
+      }
+    }
     if (c.type === 'updated' && c.session.modelNext) void applyModelNext(c.session.id).catch(e => log(`model change of ${c.session.id} failed: ${(e as Error).message}`));
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });

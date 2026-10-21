@@ -1,6 +1,6 @@
-import { closeSync, fstatSync, openSync, readSync } from 'node:fs';
+import { appendFileSync, closeSync, fstatSync, openSync, readSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 
 /** Native tracking (spec 2026-10-13 §2, §4): the agent's own messages, read from the tail of what the harness writes. */
 export type AgentText = { id: string; at: string; text: string };
@@ -121,4 +121,31 @@ export function claudeOpenCall(path: string, tool: string): string | undefined {
 /** Whether the call `id` has its result in the transcript: the agent took the answer (#35). */
 export function claudeToolAnswered(path: string, id: string): boolean {
   return claudeCalls(path).some(c => c.id === id && c.answered);
+}
+
+const LABEL_MAX = 80;
+/** What `claude --resume` shows for a Ledge session: « name - topic » on one line, cut to LABEL_MAX characters. */
+export function resumeLabel(name: string, topic: string): string {
+  const label = `${name} - ${topic}`.replace(/\s+/g, ' ').trim();
+  return label.length > LABEL_MAX ? `${label.slice(0, LABEL_MAX - 1)}…` : label;
+}
+
+/** Appends a `custom-title` of `label` to an exited Claude's transcript, unless it already ends so or the user named the
+ *  session (a last title that is neither `name` nor « name - … »). Whether it wrote; never throws. */
+export function labelTranscript(path: string, name: string, label: string): boolean {
+  try {
+    let last: string | undefined;
+    for (const line of tailLines(path)) {
+      try { const e = JSON.parse(line) as { type?: string; customTitle?: unknown }; if (e.type === 'custom-title' && typeof e.customTitle === 'string') last = e.customTitle; } catch { /* not an entry */ }
+    }
+    if (last === label || (last !== undefined && last !== name && !last.startsWith(`${name} - `))) return false;
+    const fd = openSync(path, 'r');
+    let lead = '';
+    try {
+      const size = fstatSync(fd).size;
+      if (size > 0) { const b = Buffer.alloc(1); readSync(fd, b, 0, 1, size - 1); if (b[0] !== 10) lead = '\n'; }
+    } finally { closeSync(fd); }
+    appendFileSync(path, `${lead}${JSON.stringify({ type: 'custom-title', customTitle: label, sessionId: basename(path, '.jsonl') })}\n`);
+    return true;
+  } catch { return false; }
 }
