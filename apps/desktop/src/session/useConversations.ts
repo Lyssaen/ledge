@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { qualify, splitId, useDaemon, type DaemonClient } from '@ledge/fleet';
 import type { Session, ThreadItem } from '@ledge/protocol';
 import { conversation, conversationName, conversationPeer, type Bubble } from './conversation';
@@ -44,16 +44,16 @@ export function useConversations(client: Pick<DaemonClient, 'send'>, self: Sessi
   const own = splitId(self.id);
   const machine = own?.machine ?? 'local';
   const selfId = own?.id ?? self.id;
-  // B is resolved on A's own machine, as the thread's peers are (Thread.tsx usePeers).
-  const peers = keys.map(key => {
-    const raw = conversationPeer(a, key);
-    return raw === null ? null : byId.get(qualify(machine, raw)) ?? null;
-  });
+  // What A's thread says of each peer (its raw id, else null: one side only; its raw name), read again only when A's thread
+  // or the tabs change. B is resolved on A's own machine, as the thread's peers are (Thread.tsx usePeers).
+  const named = useMemo(() => keys.map(key => ({ raw: conversationPeer(a, key), name: conversationName(a, key) })), [a, keys]);
+  const peers = named.map(({ raw }) => (raw === null ? null : byId.get(qualify(machine, raw)) ?? null));
   const threads = useThreads(client, peers.filter((s): s is Session => s !== null));
   const cache = useRef(new Map<string, Merged>());
   // How many messages each tab held when last seen. A count that drops (both agents ran /clear) takes it down too, so the
-  // messages that come after still count; while B's thread is first read, an inactive tab's is left as it was.
-  const [seen, setSeen] = useState<ReadonlyMap<string, number>>(() => new Map());
+  // messages that come after still count; while B's thread is first read, an inactive tab's is left as it was. Written
+  // once the render is committed: the unseen counts below come from the same render.
+  const seen = useRef<ReadonlyMap<string, number>>(new Map());
   const nextSeen = new Map<string, number>();
   const kept = new Map<string, Merged>();
   const out = new Map<string, ConversationView>();
@@ -64,14 +64,14 @@ export function useConversations(client: Pick<DaemonClient, 'send'>, self: Sessi
     const bubbles = last && last.a === a && last.b === b ? last.bubbles : remerge(last?.bubbles, conversation(a, b, key, selfId));
     kept.set(key, { a, b, bubbles });
     const loading = peer !== null && peer.offline !== true && b === undefined;
-    const base = seen.get(key);
+    const base = seen.current.get(key);
     const count = bubbles.length;
     const baseline = key === active || base === undefined ? count : loading ? base : Math.min(base, count);
     nextSeen.set(key, baseline);
-    out.set(key, { key, peer, name: peer?.name ?? conversationName(a, key), bubbles, loading, unseen: Math.max(0, count - baseline) });
+    out.set(key, { key, peer, name: peer?.name ?? named[i]!.name, bubbles, loading, unseen: Math.max(0, count - baseline) });
   });
   cache.current = kept;
-  // Closed tabs' baselines go; the state changes only when one of them does.
-  if (nextSeen.size !== seen.size || [...nextSeen].some(([k, v]) => seen.get(k) !== v)) setSeen(nextSeen);
+  // Closed tabs' baselines go with them.
+  useEffect(() => { seen.current = nextSeen; });
   return out;
 }
