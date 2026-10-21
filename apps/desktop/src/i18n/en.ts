@@ -546,6 +546,25 @@ export const en: Messages = {
       readAll: 'Read the whole message', showLess: 'Show less', seeIn: (n) => `See it in ${n}'s thread`,
       to: 'To', from: 'From', seeTheirs: 'see their thread', seen: 'read'
     },
+    /** The « Conversation » tab: the exchange between this agent and one other, merged from both threads, in the side pane. */
+    conversation: {
+      follow: 'follow the conversation',
+      followTitle: (b) => `Follow the conversation with ${b} beside the thread`,
+      followBeside: 'Follow beside', openBeside: 'Open beside',
+      tab: (b) => `Conversation · ${b}`,
+      tabNew: (b, n) => `Conversation · ${b}, ${pluralEn(n, '1 new message', `${n} new messages`)}`,
+      log: (a, b) => `Conversation between ${a} and ${b}`,
+      count: (n) => pluralEn(n, '1 message', `${n} messages`),
+      kicker: (from, to) => `Message from ${from} to ${to}`,
+      readBy: (who) => `Read by ${who}`, deliveredTo: (who) => `Delivered to ${who}, not read yet`,
+      inThread: 'in the thread', inThreadTitle: (a) => `Show it in ${a}'s thread`,
+      fresh: (n) => pluralEn(n, '1 new message', `${n} new messages`),
+      oneSidedLead: 'Seen from one side',
+      oneSided: (b, a) => `${b} is not a session Ledge follows on this machine. The conversation is read from ${a}'s thread only: ${b}'s messages show once ${a} receives them, and Ledge cannot tell whether ${a}'s were read.`,
+      empty: (a, b) => `No messages between ${a} and ${b} yet.`,
+      emptyHint: 'They will show here, live, as soon as one writes to the other.',
+      loadingPeer: (b) => `Reading ${b}'s thread…`
+    },
     /** Claude Code's automated cross-session notices (NoticeLine): system events, never the user's words. */
     notice: {
       kicker: 'Automated notice', other: 'Automated notice between sessions', anotherSession: 'another session',
