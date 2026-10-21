@@ -105,6 +105,19 @@ test('the phone chat: a question, its steps and answer, the instruction sent, th
     dropping = false;
   });
 
+  await test.step('a close card of two sessions: « Fermer tout » goes through the device, then both rows read closed', async () => {
+    h.daemon.closeCard = true;
+    await page.getByLabel(copy.chat.field).fill('Ferme Nova et Lancée');
+    await page.getByRole('button', { name: copy.chat.send }).click();
+    const card = page.getByRole('region', { name: copy.chat.closeLabel });
+    await expect(card.getByRole('listitem')).toHaveCount(2);
+    await card.getByRole('button', { name: copy.chat.closeAll(2) }).click();
+    await expect(card.getByText(copy.chat.closed)).toHaveCount(2);
+    const [close] = sent().filter((m): m is Extract<PhoneClientMessage, { type: 'chat.close' }> => m.type === 'chat.close');
+    expect(close).toMatchObject({ rows: [0, 1], assertion: { id: expect.any(String) } });
+    expect(h.daemon.closed).toEqual([close!.qid]);
+  });
+
   await test.step('no error in the browser console', async () => {
     expect(problems).toEqual([]);
   });

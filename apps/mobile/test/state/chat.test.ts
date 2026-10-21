@@ -157,6 +157,49 @@ describe('the phone chat in the store', () => {
     await expect(done).resolves.toEqual({ status: 'rejected', reason: 'assertion_invalid' });
   });
 
+  it('close prepares a close challenge for the turn, signs it and sends chat.close with the rows', async () => {
+    const t = setup();
+    const qid = '0b0e6f4c-27e6-4c1a-9a53-0d8a7d2a3c11';
+    vi.mocked(getAssertion).mockResolvedValue(ASSERTION);
+    const done = t.store.closeSessions(qid, [0, 1]);
+    expect(t.of('confirm.prepare')).toEqual([{ type: 'confirm.prepare', purpose: 'close', qid }]);
+    t.deliver({ ...CHALLENGE, purpose: 'close' });
+    await flush();
+    const [sent] = t.of('chat.close');
+    expect(sent).toMatchObject({ type: 'chat.close', qid, rows: [0, 1], assertion: ASSERTION });
+    expect(t.of('chat.launch')).toEqual([]);
+    t.deliver({ type: 'operation.result', op: sent!.op, status: 'applied' });
+    await expect(done).resolves.toEqual({ status: 'applied' });
+  });
+
+  it('close without a passkey sends nothing and shows the setup hint', async () => {
+    const t = setup({ confirm: false, chat: true });
+    await expect(t.store.closeSessions('0b0e6f4c-27e6-4c1a-9a53-0d8a7d2a3c11')).resolves.toEqual({ status: 'rejected', reason: 'confirm_required' });
+    expect(getAssertion).not.toHaveBeenCalled();
+    expect(t.of('confirm.prepare')).toEqual([]);
+    expect(t.of('chat.close')).toEqual([]);
+  });
+
+  it('chat.close is not replayed after a reload', async () => {
+    const t = setup();
+    const qid = '0b0e6f4c-27e6-4c1a-9a53-0d8a7d2a3c11';
+    vi.mocked(getAssertion).mockResolvedValue(ASSERTION);
+    void t.store.closeSessions(qid);
+    t.deliver({ ...CHALLENGE, purpose: 'close' });
+    await flush();
+    expect(t.of('chat.close')).toHaveLength(1);
+    expect(Object.values(t.store.getState().ops).map(o => o.message.type)).toEqual(['chat.close']);
+    expect(JSON.parse(t.storage.getItem(OPS_KEY) ?? '{}')).toEqual({});
+    // The page reloads: a new store on the same storage, a link that comes up ready.
+    const g = fakeLink('ready');
+    const again = createStore(g.link, t.storage);
+    stores.push(again);
+    g.deliver(snapshot([], 'Atelier', undefined, { confirm: true, chat: true }));
+    await flush();
+    expect(Object.keys(again.getState().ops)).toEqual([]);
+    expect(g.of('chat.close')).toEqual([]);
+  });
+
   it('two rows of one card launched back to back are two launches, not one shared result', async () => {
     const t = setup();
     const qid = '0b0e6f4c-27e6-4c1a-9a53-0d8a7d2a3c11';
