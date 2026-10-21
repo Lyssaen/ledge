@@ -43,12 +43,16 @@ export function ConversationTab({ self, view, buttons, onLight, onOpenPeer }: Co
     else if (added > 0) setFresh(f => f + added);
   }, [bubbles]);
   // The pane or a bubble changed size without a scroll (the pane resized, « Lire tout le message », the narrow layout): a
-  // reader at the end stays there, as in the thread.
+  // reader at the end stays there, as in the thread. The size it last saw is kept for onScroll.
   const resized = useRef<ResizeObserver | null>(null);
+  const laid = useRef<{ height: number; client: number } | null>(null);
   useLayoutEffect(() => {
     const el = scroller.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => { if (follow.current) el.scrollTop = el.scrollHeight; });
+    const ro = new ResizeObserver(() => {
+      laid.current = { height: el.scrollHeight, client: el.clientHeight };
+      if (follow.current) el.scrollTop = el.scrollHeight;
+    });
     resized.current = ro;
     ro.observe(el);
     return () => { ro.disconnect(); resized.current = null; };
@@ -58,9 +62,13 @@ export function ConversationTab({ self, view, buttons, onLight, onOpenPeer }: Co
     const el = scroller.current; const ro = resized.current;
     if (el && ro) for (const child of el.children) ro.observe(child);
   });
+  // A scroll the browser reports on a size the observer has not seen yet comes from the layout (the narrow layout wrapping
+  // the bubbles taller moves or resets the position before the observer runs), not from the reader: following is left
+  // alone, and the observer then keeps the end.
   const onScroll = () => {
     const el = scroller.current;
-    if (!el) return;
+    const size = laid.current;
+    if (!el || (size !== null && (size.height !== el.scrollHeight || size.client !== el.clientHeight))) return;
     follow.current = atEnd(el);
     if (follow.current) setFresh(0);
   };
