@@ -1,0 +1,57 @@
+/* ---- The « Conversation » tab: what the builder adds to session.css, after the message cards. Neutral like them: the
+   bubbles are the thread's cards (.message-card), the state colours stay for what the agents need from the user. ---- */
+
+/* The head: the pair (bots and names), the count, the peer's thread; then « Agrandir » / « Fermer » as every tab. */
+.conv-head .conv-title{align-items:center;gap:10px}
+.conv-pair{display:inline-flex;align-items:center;gap:6px;min-width:0;color:var(--muted-foreground)}
+.conv-title .conv-pair strong{max-width:14em;font-size:13px;font-weight:500;color:var(--foreground);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.conv-count{font-size:11px;color:var(--muted-foreground);white-space:nowrap}
+.conv-head .conv-peer{margin-right:4px;font-size:11px}
+
+/* The messages: a column centred in the pane, one bubble each, the page's agent on the right (as « sent » in the thread). */
+.conv-wrap{position:relative;flex:1;min-height:0;display:flex;flex-direction:column}
+.conv-body{padding:16px 20px 28px}
+.conv-log{list-style:none;margin:0 auto;padding:0;width:100%;max-width:680px;display:flex;flex-direction:column;gap:4px}
+.conv-row{display:flex;padding:1px 0}
+.conv-row.first{padding-top:12px}
+.conv-row:first-child{padding-top:0}
+.conv-row.mine{justify-content:flex-end}
+.conv-bubble,.conv-bubble.sent{max-width:86%}
+.conv-bubble.can-light{cursor:pointer}
+.conv-bubble.received.can-light:hover{border-color:var(--input)}
+.conv-bubble.sent.can-light:hover{border-color:var(--border)}
+.conv-who{gap:5px}
+.conv-meta{gap:4px;font-weight:400}
+.conv-row.mine .conv-meta{justify-content:flex-end}
+.conv-meta time{font-family:'Geist Mono',monospace;font-variant-numeric:tabular-nums}
+
+/* One side only (the peer unknown here): a strip under the head, kept in view (the reader comes in at the end), in the
+   frozen thread's quiet tone. */
+.conv-note{flex-shrink:0;display:flex;gap:10px;align-items:flex-start;padding:10px 16px;border-bottom:1px dashed var(--input);font-size:12px;line-height:18px;color:var(--muted-foreground);background:var(--well)}
+.conv-note strong{color:var(--foreground);font-weight:500}
+.conv-note svg{margin-top:1px}
+.conv-empty{gap:8px}
+.conv-empty strong{font-size:13px}
+
+/* Entry points in the thread: the header's pill pressed while its tab is the active one; the tab's dot for unseen messages. */
+.conv-follow[aria-pressed=true]{background:var(--secondary);color:var(--foreground)}
+.conv-tab-dot{width:6px;height:6px;margin-left:2px;border-radius:50%;background:var(--sidebar-primary);flex:none}
+
+/* The document tab beside it (only here to show the tab bar). */
+.conv-doc{padding:20px 24px;font-size:13px;line-height:21px;max-width:680px}
+
+/* ---- The mockup's own chrome (not for the app) ---- */
+.mock-root{flex:1;min-height:0;display:flex;flex-direction:column;background:var(--well)}
+.mock-bar{display:flex;align-items:center;flex-wrap:wrap;gap:8px 14px;padding:8px 14px;border-bottom:1px solid var(--border);background:var(--sidebar);font-size:12px}
+.mock-bar .ledge-btn{height:28px!important;font-size:12px!important;padding:0 10px!important;gap:6px!important}
+.mock-title{padding-left:12px;border-left:1px solid var(--border);color:var(--muted-foreground);white-space:nowrap}
+.mock-field{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted-foreground)}
+.mock-field .view-switch button{height:22px;padding:0 8px;font-size:11px}
+.mock-step{min-width:0;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--muted-foreground)}
+@media(max-width:1500px){.mock-title{display:none}}
+.mock-stage{flex:1;min-height:0;display:flex;justify-content:center}
+.mock-window{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--background)}
+.mock-window .application{height:auto;flex:1;min-height:0}
+.mock-stage.narrow{padding:18px}
+.mock-stage.narrow .mock-window{flex:0 0 960px;border:1px solid var(--border);border-radius:10px;overflow:hidden;box-shadow:0 20px 50px rgb(0 0 0/.3)}
+.mock-notice{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:50;display:flex;align-items:center;gap:10px;padding:8px 14px;border:1px solid var(--input);border-radius:999px;background:var(--popover);font-size:12px;box-shadow:0 8px 24px rgb(0 0 0/.3);cursor:pointer}
