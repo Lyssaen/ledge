@@ -245,7 +245,11 @@ function reduceEvent(s: Session, ev: SessionEvent): Session {
       return { ...s, state: 'exited', pending: undefined, exitCode: null, exitedAt: s.exitedAt ?? at, lastActivityAt: at };
     case 'PaneChanged':
       return s.lastActivityAt === at ? s : { ...s, lastActivityAt: at };
-    case 'PaneTitle': return s.topicSource === 'user' ? s : withTopic(s, ev.text ?? '', 'pane');
+    case 'PaneTitle': {
+      const t = ev.text ?? '';
+      if (s.topicSource === 'user' || t === s.name) return s;
+      return withTopic(s, t.startsWith(`${s.name} - `) ? t.slice(s.name.length + 3) : t, 'pane');
+    }
     case 'Renamed': return withTopic(s, ev.text ?? '', ev.text?.trim() ? 'user' : undefined);
     case 'PaneIdle': {
       // The pane shows Claude waiting for a prompt. Ends what no hook ends (a denied request, an Esc) and drops a

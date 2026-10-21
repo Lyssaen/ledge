@@ -679,6 +679,13 @@ describe('topics', () => {
     s = reduce(s, { name: 'PaneTitle', at, source: 'pane', text: 'other-title' });
     expect(s.topic).toBe('Mon sujet'); expect(s.topicSource).toBe('user'); expect(s.title).toBe('Otto · Mon sujet');
   });
+  it('a pane title that is the session name is no topic; « <name> - <topic> » gives the topic', () => {
+    let s = reduce(mk('a'), { name: 'UserPromptSubmit', at, source: 'hook', text: 'premier prompt' });
+    expect(reduce(s, { name: 'PaneTitle', at, source: 'pane', text: 'Otto' })).toBe(s);
+    s = reduce(s, { name: 'PaneTitle', at, source: 'pane', text: 'Otto - Refonte des noms' });
+    expect(s.topic).toBe('Refonte des noms'); expect(s.topicSource).toBe('pane');
+    expect(reduce(s, { name: 'PaneTitle', at, source: 'pane', text: 'Ottoman - x' }).topic).toBe('Ottoman - x');
+  });
   it('an empty rename hands back to the automatic sources', () => {
     let s = reduce(mk('a'), { name: 'Renamed', at, source: 'daemon', text: 'Mon sujet' });
     s = reduce(s, { name: 'Renamed', at, source: 'daemon', text: '  ' });
