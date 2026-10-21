@@ -27,21 +27,25 @@ export function ConversationTab({ self, view, buttons, onLight, onOpenPeer }: Co
   const { t } = useI18n();
   const tm = t.session.message;
   const tc = t.session.conversation;
-  const { peer, name: peerName, bubbles } = view;
+  const { peer, name: peerName, bubbles, withPeer } = view;
   const scroller = useRef<HTMLDivElement>(null);
   const follow = useRef(true);
   const count = useRef(bubbles.length);
+  const merged = useRef(withPeer);
   const [fresh, setFresh] = useState(0);
   // Opened at the end (the latest message is what one comes for); a message that comes keeps the end in view while the
-  // reader is there, else it is counted on the « n nouveaux messages » pill. A status changing in place is not one.
+  // reader is there, else it is counted on the « n nouveaux messages » pill. A status changing in place is not one, nor
+  // B's thread coming at last: its messages are the past, sorted in among those already shown.
   useLayoutEffect(() => {
     const el = scroller.current;
     const added = bubbles.length - count.current;
+    const arrived = withPeer && !merged.current;
     count.current = bubbles.length;
+    merged.current = withPeer;
     if (!el) return;
     if (follow.current) el.scrollTop = el.scrollHeight;
-    else if (added > 0) setFresh(f => f + added);
-  }, [bubbles]);
+    else if (added > 0 && !arrived) setFresh(f => f + added);
+  }, [bubbles, withPeer]);
   // The pane or a bubble changed size without a scroll (the pane resized, « Lire tout le message », the narrow layout): a
   // reader at the end stays there, as in the thread. The size it last saw is kept for onScroll.
   const resized = useRef<ResizeObserver | null>(null);

@@ -451,6 +451,38 @@ describe('the Conversation tab', () => {
       expect(pane().queryByRole('button', { name: /nouveaux? messages?$/ })).toBeNull();
     });
 
+    it('Nova\u2019s thread read at last is the past: neither the pill nor the dot count its messages as new', async () => {
+      // Active and scrolled up: the backlog sorts in among Otto's side, no « nouveau message ».
+      const toKit = sent('sk', 32, 1, { to: 'kit', peer: 'kit', received: 'recv-k-0', summary: 'Pour Kit', text: 'Kit, regarde ça.' });
+      const { d, user } = await openConversation([...otto(), toKit, docReply(35)], null);
+      await waitFor(() => expect(bubbles()).toEqual(['a:s1', 'a:recv-2-0']));
+      const el = paneEl().querySelector<HTMLElement>('.conv-body')!;
+      Object.defineProperty(el, 'scrollHeight', { configurable: true, get: () => 2000 });
+      Object.defineProperty(el, 'clientHeight', { configurable: true, value: 500 });
+      Object.defineProperty(el, 'scrollTop', { configurable: true, get: () => 200, set: () => {} });
+      fireEvent.scroll(el);
+      d.push({ type: 'session.thread', id: 'nova', items: nova() });
+      await waitFor(() => expect(bubbles()).toEqual(['a:s1', 'a:recv-2-0', 'b:toolu_n2']));
+      await pause(100);
+      expect(pane().queryByRole('button', { name: /nouveaux? messages?$/ })).toBeNull();
+      // A message Nova writes after that is new.
+      d.threadItem('nova', sent('toolu_n3', 50, 1, { to: 'otto', peer: 'otto', text: 'Et les tests ?' }));
+      expect(await pane().findByRole('button', { name: '1 nouveau message' })).toBeVisible();
+      // Inactive: Kit's thread comes while a document is shown; no dot until Kit writes.
+      await follow(user, 'sk');
+      await waitFor(() => expect(pane().getByRole('tab', { name: 'Conversation · Kit' })).toHaveAttribute('aria-selected', 'true'));
+      await user.click(thread().getByRole('link', { name: 'docs/guide.md' }));
+      await pane().findByText('Bonjour.');
+      d.push({ type: 'session.thread', id: 'kit', items: [received('recv-k-0', 33, 1, { from: 'otto', peer: 'otto', sent: 'sk', text: 'Kit, regarde ça.' }), sent('toolu_k1', 34, 1, { to: 'otto', peer: 'otto', text: 'Vu.' })] });
+      await waitFor(() => expect(asked(d, 'kit')).toHaveLength(1));
+      await pause(150);
+      expect(pane().getByRole('tab', { name: 'Conversation · Kit' })).toBeInTheDocument();
+      expect(pane().getByRole('tab', { name: 'Conversation · Kit' }).querySelector('.conv-tab-dot')).toBeNull();
+      d.threadItem('kit', sent('toolu_k2', 60, 1, { to: 'otto', peer: 'otto', text: 'Et ensuite ?' }));
+      const tab = await pane().findByRole('tab', { name: 'Conversation · Kit, 1 nouveau message' });
+      expect(tab.querySelector('.conv-tab-dot')).not.toBeNull();
+    });
+
     it('a reconnect asks Nova\u2019s thread again; the conversation stays as it was meanwhile', async () => {
       const { d, user } = await openConversation([...otto(), docReply(35)]);
       await waitFor(() => expect(bubbles()).toEqual(['a:s1', 'a:recv-2-0', 'b:toolu_n2']));
