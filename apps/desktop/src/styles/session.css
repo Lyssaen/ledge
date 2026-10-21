@@ -437,6 +437,7 @@ button.tg:disabled{cursor:default}
 /* The head: the pair (bots and names), the count, the peer's thread; then « Agrandir » / « Fermer » as every tab. */
 .conv-head .conv-title{align-items:center;gap:10px}
 .conv-pair{display:inline-flex;align-items:center;gap:6px;min-width:0;color:var(--muted-foreground)}
+.conv-bot,.conv-exchange{display:inline-flex;flex:none}
 .conv-title .conv-pair strong{max-width:14em;font-size:13px;font-weight:500;color:var(--foreground);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .conv-count{font-size:11px;color:var(--muted-foreground);white-space:nowrap}
 .conv-head .conv-peer{margin-right:4px;font-size:11px}

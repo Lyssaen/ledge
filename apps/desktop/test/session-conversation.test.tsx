@@ -43,6 +43,8 @@ const thread = () => within(screen.getByRole('tabpanel', { name: 'Fil de la sess
 const paneEl = () => screen.getByRole('complementary', { name: 'Volet de lecture' });
 const pane = () => within(paneEl());
 const head = () => paneEl().querySelector<HTMLElement>('.conv-head')!;
+/** The head's pair in order: each name, and the class of what stands between (a bot, ⇄). */
+const pairOf = () => [...head().querySelector('.conv-pair')!.children].map(c => (c.tagName === 'STRONG' ? c.textContent : c.className));
 const logOf = (b = 'Nova') => pane().getByRole('log', { name: `Conversation entre Otto et ${b}` });
 const bubble = (key: string) => paneEl().querySelector<HTMLElement>(`[data-bubble="${key}"]`)!;
 const bubbles = () => [...paneEl().querySelectorAll('[data-bubble]')].map(e => e.getAttribute('data-bubble'));
@@ -139,9 +141,8 @@ describe('the Conversation tab', () => {
       await waitFor(() => expect(head()).toHaveTextContent('3 messages'));
       expect(head()).toHaveTextContent('Otto');
       expect(head()).toHaveTextContent('Nova');
-      expect(head().querySelector('.conv-pair path[d="M4 8h14"]')).not.toBeNull();
-      // Both bots: the pair is known.
-      expect(head().querySelectorAll('.conv-pair [data-tool]')).toHaveLength(2);
+      // Otto's bot and name, ⇄, Nova's bot and name: both bots, the pair is known.
+      expect(pairOf()).toEqual(['conv-bot', 'Otto', 'conv-exchange', 'conv-bot', 'Nova']);
       expect(p.getByRole('log', { name: 'Conversation entre Otto et Nova' })).toBeInTheDocument();
       // Otto's page stays.
       expect(document.querySelector('.session-page')).toHaveAttribute('data-session', 'local:otto');
@@ -237,9 +238,8 @@ describe('the Conversation tab', () => {
       expect(note).toHaveTextContent('Vue d’un seul côté · harness-assistant-bf n’est pas une session que Ledge suit sur cette machine. La conversation est lue dans le fil d’Otto seulement :');
       expect(note).toHaveTextContent('et Ledge ne sait pas si ceux d’Otto ont été lus.');
       expect(head()).toHaveTextContent('harness-assistant-bf');
-      expect(head().querySelector('.conv-pair path[d="M4 8h14"]')).not.toBeNull();
-      // Otto's bot only.
-      expect(head().querySelectorAll('.conv-pair [data-tool]')).toHaveLength(1);
+      // ⇄ between the names; Otto's bot only.
+      expect(pairOf()).toEqual(['conv-bot', 'Otto', 'conv-exchange', 'harness-assistant-bf']);
       expect(within(head()).queryByRole('button', { name: 'voir son fil' })).toBeNull();
       expect(bubbles()).toEqual(['a:rh', 'a:sh']);
       expect(bubble('a:sh').querySelector('.message-read')).toHaveTextContent('Remis, pas encore lu');
