@@ -189,6 +189,12 @@ describe('the close card', () => {
     release({ status: 'applied' });
   });
 
+  it("names each row by its session's current name, the card's while the session is gone", () => {
+    open({ closes: [{ id: 'a', name: 'Ancien', tool: 'claude' }, { id: 'gone', name: 'Rex', tool: 'claude' }] });
+    const rows = within(screen.getByRole('region', { name: copy.chat.closeLabel })).getAllByRole('listitem');
+    expect(rows.map(r => r.textContent)).toEqual([`Bix · Claude Code${copy.chat.closeRow}`, `Rex · Claude Code${copy.chat.ended}`]);
+  });
+
   it('a row button closes that row alone', () => {
     const t = open({ closes });
     const spy = vi.spyOn(t.store, 'closeSessions').mockResolvedValue({ status: 'cancelled' });

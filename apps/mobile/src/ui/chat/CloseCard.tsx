@@ -22,7 +22,7 @@ function stateOf(row: PhoneChatClose, index: number, gone: boolean, liveRows: Re
  * own check confirms it (the store asks for it). A row whose session is gone from the phone's list, or exited there,
  * reads « Terminée » with no button.
  */
-export function CloseCards({ store, qid, closes, canConfirm, sessions }: { store: MobileStore; qid: string; closes: PhoneChatClose[]; canConfirm: boolean; sessions: { id: string; exited?: boolean }[] }) {
+export function CloseCards({ store, qid, closes, canConfirm, sessions }: { store: MobileStore; qid: string; closes: PhoneChatClose[]; canConfirm: boolean; sessions: { id: string; name: string; exited?: boolean }[] }) {
   const { ops } = useMobile(store);
   const [failed, setFailed] = useState<ReadonlySet<number>>(new Set());
   const [tapped, setTapped] = useState(false);
@@ -39,7 +39,8 @@ export function CloseCards({ store, qid, closes, canConfirm, sessions }: { store
   const held = tapped || live.length > 0;
   const rows = closes.map((row, i) => {
     const s = sessions.find(x => x.id === row.id);
-    return { row, i, state: stateOf(row, i, !s || !!s.exited, liveRows, failed.has(i)) };
+    // Named as the session is now, as the PC's card does: a rename since the card was made shows on both.
+    return { row, i, name: s?.name ?? row.name, state: stateOf(row, i, !s || !!s.exited, liveRows, failed.has(i)) };
   });
   const open = rows.filter(r => r.state === 'open' || r.state === 'failed');
   const go = (indexes: number[]) => {
@@ -52,9 +53,9 @@ export function CloseCards({ store, qid, closes, canConfirm, sessions }: { store
   return (
     <section aria-label={copy.chat.closeLabel} aria-live="polite" className={CARD}>
       <ul className="flex flex-col gap-2">
-        {rows.map(({ row, i, state }) => (
+        {rows.map(({ row, i, name, state }) => (
           <li key={i} className="flex items-center justify-between gap-2">
-            <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">{row.name} <span className="font-normal text-muted">· {copy.tools[row.tool]}</span></span>
+            <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">{name} <span className="font-normal text-muted">· {copy.tools[row.tool]}</span></span>
             {state !== 'open' && <span className={`text-[13px] ${state === 'failed' ? 'text-danger-fg' : state === 'closing' ? 'text-attention' : 'text-ok'}`}>{text[state]}</span>}
             {(state === 'open' || state === 'failed') && <button type="button" className={GHOST} disabled={held || !canConfirm} onClick={() => go([i])}>{copy.chat.closeRow}</button>}
           </li>
