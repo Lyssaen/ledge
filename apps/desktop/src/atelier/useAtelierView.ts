@@ -30,7 +30,7 @@ const OWN_TOUCH = '.assign-menu,textarea';
 const TAP_SLOP = 8;
 /** Space on these keeps its own activation. */
 const OWN_SPACE = 'button,a,input,textarea,select,[role=button],[role=checkbox],[role=menuitem],[role=tab],[contenteditable=true]';
-/** The mosaic's tiles: what the floor keeps in sight. */
+/** What the floor keeps in sight: Ledge in its corner and the mosaic's tiles. */
 const TILES = '.ledge-corner,.project-room,.empty-project,.unassigned-zone';
 const NO_PAD = { left: 0, right: 0, top: 0, bottom: 0 };
 
