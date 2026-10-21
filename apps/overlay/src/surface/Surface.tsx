@@ -486,7 +486,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const relayFrom = useRef('');
   const relayCard = (type: 'session.relay' | 'session.relay.cancel', qid: string) => {
     if (client.fleet && !client.fleet.turnMachine(qid)?.ready) return;
-    if (relaying || launching || chatLaunching || status === 'unreachable' || !chat.find(x => x.qid === qid)?.relay) return;
+    if (relaying || launching || chatLaunching || chatClosing || status === 'unreachable' || !chat.find(x => x.qid === qid)?.relay) return;
     relayFrom.current = relayState(qid); setRelaying(qid);
     send({ type, qid });
   };
@@ -495,7 +495,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   useEffect(() => { if (relaying && lastError && !lastError.id) setRelaying(null); }, [lastError?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (status === 'unreachable' && relaying) setRelaying(null); }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
   const launch = (req: LaunchRequest) => {
-    if (launching || chatLaunching || relaying || status === 'unreachable') return;
+    if (launching || chatLaunching || chatClosing || relaying || status === 'unreachable') return;
     setLaunchFailure(null); setLaunching({ openTab: req.openTab });
     send({ type: 'session.launch', tool: req.tool, cwd: req.cwd, name: req.name, prompt: req.prompt, continue: req.continue });
   };
@@ -520,7 +520,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
     const all = proposalRows(chat.find(x => x.qid === qid));
     const rows = (asked ?? [0]).filter(r => all[r] && !all[r]!.launchedId);
     const p = all[rows[0] ?? -1];
-    if (!p || launching || chatLaunching || relaying || status === 'unreachable') return;
+    if (!p || launching || chatLaunching || chatClosing || relaying || status === 'unreachable') return;
     launchedFrom.current = rows.map(r => ({ row: r, error: all[r]!.error })); setChatLaunching(qid);
     send({ type: 'session.launch', tool: p.tool, cwd: p.cwd, ...(p.prompt ? { prompt: p.prompt } : {}), qid, ...(asked ? { rows } : {}) });
   };
@@ -543,6 +543,28 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   useEffect(() => { if (chatLaunching && lastError && !lastError.id && launchedFrom.current.some(({ row }) => lastError.message === launchingRowsNow[row]?.error)) setChatLaunching(null); }, [lastError?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (status === 'unreachable' && chatLaunching) setChatLaunching(null); }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (chatLaunching && client.fleet && !client.fleet.turnMachine(chatLaunching)?.ready) setChatLaunching(null); }, [machines, chatLaunching, client]);
+  // A chat card's close: the turn's qid while the daemon closes the open rows. Its marks (closedAt, error) come back with chat.history, a refusal as an
+  // id-less `session.close` error; `session.closed` opens no tab. Freed like a launch: every sent row marked (closed, or failed anew), a refusal, or no daemon.
+  const [chatClosing, setChatClosing] = useState<string | null>(null);
+  const closedFrom = useRef<Array<{ row: number; error: string | undefined }>>([]);
+  const closeSessions = (qid: string, asked?: number[]) => {
+    if (client.fleet && !client.fleet.turnMachine(qid)?.ready) return;
+    if (launching || chatLaunching || chatClosing || relaying || status === 'unreachable') return;
+    const all = chat.find(x => x.qid === qid)?.closes ?? [];
+    // Always explicit rows: the open ones, those the card has not closed and whose session has not ended on its own.
+    const rows = (asked ?? all.map((_, i) => i)).filter(r => all[r] && !all[r]!.closedAt && byId.get(all[r]!.id)?.state !== 'exited');
+    if (rows.length === 0) return;
+    closedFrom.current = rows.map(r => ({ row: r, error: all[r]!.error })); setChatClosing(qid);
+    send({ type: 'session.close', qid, rows });
+  };
+  const closingRowsNow = chatClosing ? chat.find(x => x.qid === chatClosing)?.closes ?? [] : [];
+  const closeSettled = closedFrom.current.every(({ row, error }) => !closingRowsNow[row] || closingRowsNow[row]!.closedAt || closingRowsNow[row]!.error !== error);
+  useEffect(() => {
+    if (chatClosing && (closingRowsNow.length === 0 || closeSettled)) setChatClosing(null);
+  }, [chatClosing, closeSettled, closingRowsNow.length === 0]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (chatClosing && lastError && !lastError.id && lastError.request === 'session.close') setChatClosing(null); }, [lastError?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (status === 'unreachable' && chatClosing) setChatClosing(null); }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (chatClosing && client.fleet && !client.fleet.turnMachine(chatClosing)?.ready) setChatClosing(null); }, [machines, chatClosing, client]);
   const sayCandidates: SayCandidate[] = [];
   if (ledgeUnread) sayCandidates.push({ id: LEDGE_ID, kind: 'ledge', seed: ledgeSaySeed });
   for (const s of sessions) {
@@ -765,6 +787,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
               turnAvailable={qid => !client.fleet || !!client.fleet.turnMachine(qid)?.ready}
               onAsk={ask} onCancel={qid => send({ type: 'chat.cancel', qid })} onReset={() => send({ type: 'chat.reset' })} onClose={() => { setMenuOpen(false); dispatch({ type: 'close' }); }} onOpenSession={id => openInLedge({ kind: 'session', id })}
               launchingQid={chatLaunching} launchingRows={chatLaunching ? launchedFrom.current.map(x => x.row) : null} onLaunchProposal={launchProposal} onTerminal={id => openInLedge({ kind: 'terminal', id })}
+              closingQid={chatClosing} closingRows={chatClosing ? closedFrom.current.map(x => x.row) : null} onCloseSessions={closeSessions}
               relayingQid={relaying} onRelay={qid => relayCard('session.relay', qid)} onRelayCancel={qid => relayCard('session.relay.cancel', qid)}
               theme={theme} frozen={unreachable} reducedMotion={reducedMotion} onDocument={ref => openInLedge({ kind: 'document', path: ref.path })} />
           </div>
