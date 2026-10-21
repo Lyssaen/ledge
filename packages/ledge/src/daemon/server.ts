@@ -464,20 +464,30 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return { how: 'exit' };
       }
       const adapter = adapterFor(cur.tool); const { tmuxSession: pane, pending } = cur;
-      // Busy or asking: the interrupt keys free the prompt. On a request they refuse it, which the thread records; a question
-      // has no permission row, and a Decided without decision leaves the thread's permissions alone. A failed key ends in the kill.
+      // Busy or asking: the interrupt keys free the prompt. On a request they refuse it, which the thread records, but only for
+      // the request that was interrupted and is still there (a newer one, or one a hook already settled, is left alone), not a
+      // helper's, and only a hook's: a request read off the screen has no permission row, so a deny would mark an older one. A
+      // question has no permission row: its Decided carries no decision. A failed key refuses nothing and ends in the kill.
       if (!free(cur) && pane) {
-        await tmux.sendKeys(pane, adapter.interruptKeys()).catch(e => log(`close of ${id}: the interrupt failed: ${(e as Error).message}`));
-        if (pending && !pending.helperId) store.apply(id, { name: 'Decided', at: now(), source: 'daemon', ...(pending.kind === 'question' ? {} : { decision: 'deny' as const, byClose: true as const }) });
+        const asked = pending && pendingKey(pending);
+        const sent = await tmux.sendKeys(pane, adapter.interruptKeys()).then(() => true, e => { log(`close of ${id}: the interrupt failed: ${(e as Error).message}`); return false; });
+        const still = store.get(id)?.pending;
+        if (sent && pending && !pending.helperId && still && pendingKey(still) === asked) {
+          if (pending.kind === 'question') store.apply(id, { name: 'Decided', at: now(), source: 'daemon' });
+          else if (pending.source === 'hook') store.apply(id, { name: 'Decided', at: now(), source: 'daemon', decision: 'deny', byClose: true });
+        }
       }
       let why: string;
-      const freed = await closeWait(id, CLOSE_FREE_MS, x => free(x) && !typing.has(id));
+      const freed = await closeWait(id, CLOSE_FREE_MS, x => free(x) && !typing.has(id) && !inFlight.has(id));
       if (freed === 'gone') return { how: 'exit' };
       if (freed === 'timeout') why = `its prompt was not free after ${CLOSE_FREE_MS} ms`;
       else {
         let typed = true;
+        // Held as a reply and a relay hold it: nothing else is typed into the line while the exit command is.
+        typing.add(id); inFlight.add(id);
         try { await runPlan(store.get(id)!, adapter.exitPlan()); }
         catch (e) { typed = false; log(`close of ${id}: the exit command failed: ${(e as Error).message}`); }
+        finally { typing.delete(id); inFlight.delete(id); }
         why = typed ? `still running ${CLOSE_EXIT_MS} ms after its exit command` : 'its exit command could not be typed';
         if (typed && await closeWait(id, CLOSE_EXIT_MS, () => false) === 'gone') return { how: 'exit' };
       }

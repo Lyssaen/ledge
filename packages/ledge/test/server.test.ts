@@ -2336,6 +2336,79 @@ describe('close a session', () => {
     expect(await closed).toEqual({ how: 'exit' });
   });
 
+  /** The names of the events the store applied to `id` from now on. */
+  const eventsOf = (id: string) => { const seen: string[] = []; store.onEvent((i, ev) => { if (i === id) seen.push(ev.name); }); return seen; };
+  const hookPermission = { kind: 'permission' as const, text: 'npm test', tool: 'Bash', source: 'hook' as const };
+
+  it('a helper\'s request is not refused for the thread: no Decided, and the close ends in a kill', async () => {
+    await closing({ 'ledge-a': [PROMPT] });
+    store.upsert(mk('a', { state: 'waiting_permission', pending: { ...hookPermission, helperId: 'h1' } }));
+    const events = eventsOf('a');
+    expect(await srv.closeSession('a')).toEqual({ how: 'killed' });
+    expect(tmux.sent).toEqual([['keys', 'ledge-a', 'Escape'], ['kill', 'ledge-a']]);
+    expect(events).not.toContain('Decided');
+  });
+
+  it('a request the terminal showed (no hook) gets no deny', async () => {
+    await closing({ 'ledge-a': [PROMPT] });
+    store.upsert(mk('a', { state: 'waiting_permission', pending: { ...hookPermission, source: 'pane' } }));
+    const events = eventsOf('a');
+    const closed = srv.closeSession('a');
+    await until(() => tmux.sent.length > 0, 3000);
+    await new Promise(r => setTimeout(r, 100));
+    expect(events).not.toContain('Decided');
+    store.upsert({ ...store.get('a')!, state: 'idle', pending: undefined });
+    expect(await closed).toEqual({ how: 'exit' });
+  });
+
+  it('a failed interrupt refuses nothing and ends in a kill', async () => {
+    await closing({ 'ledge-a': [PROMPT] });
+    const keys = tmux.sendKeys;
+    tmux.sendKeys = async (n, k) => { if (k.includes('Escape')) throw new Error('no server running'); return keys(n, k); };
+    store.upsert(mk('a', { state: 'waiting_permission', pending: hookPermission }));
+    const events = eventsOf('a');
+    expect(await srv.closeSession('a')).toEqual({ how: 'killed' });
+    expect(events).not.toContain('Decided');
+    expect(texts()).toEqual([]);
+    expect(logged()).toMatch(/close of a: the interrupt failed: no server running/);
+  });
+
+  it('a request replaced while the interrupt went is left alone', async () => {
+    await closing({ 'ledge-a': [PROMPT] });
+    const keys = tmux.sendKeys;
+    tmux.sendKeys = async (n, k) => {
+      await keys(n, k);
+      if (k.includes('Escape')) store.upsert({ ...store.get('a')!, pending: { ...hookPermission, text: 'rm -rf dist' } });
+    };
+    store.upsert(mk('a', { state: 'waiting_permission', pending: hookPermission }));
+    const events = eventsOf('a');
+    expect(await srv.closeSession('a')).toEqual({ how: 'killed' });
+    expect(events).not.toContain('Decided');
+    expect(store.get('a')).toMatchObject({ state: 'exited' });
+  });
+
+  it('an exit command that cannot be typed ends in a kill', async () => {
+    await closing({ 'ledge-a': ['> '] });
+    tmux.sendText = async () => { throw new Error('no server running'); };
+    store.upsert(mk('a', { state: 'idle' }));
+    expect(await srv.closeSession('a')).toEqual({ how: 'killed' });
+    expect(tmux.sent.at(-1)).toEqual(['kill', 'ledge-a']);
+    expect(logged()).toMatch(/close of a: killed \(its exit command could not be typed\)/);
+  });
+
+  it('a reply sent while the exit command is typed is refused, never typed into it', async () => {
+    await closing({ 'ledge-a': ['> '] });
+    store.upsert(mk('a', { state: 'idle' }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    const closed = srv.closeSession('a');
+    await until(() => texts().length > 0, 3000);
+    c.send({ type: 'session.reply', id: 'a', text: 'encore une chose' });
+    expect(await c.next('error', 3000)).toMatchObject({ id: 'a', request: 'session.reply', code: 'busy' });
+    expect(await closed).toEqual({ how: 'exit' });
+    expect(tmux.sent).toEqual([['keys', 'ledge-a', 'C-u'], ['text', 'ledge-a', '/exit'], ['keys', 'ledge-a', 'Enter']]);
+    c.close();
+  });
+
   it('kills the session when the agent does not leave', async () => {
     await closing({ 'ledge-a': ['> '] }, { leaves: false });
     store.upsert(mk('a', { state: 'idle' }));
