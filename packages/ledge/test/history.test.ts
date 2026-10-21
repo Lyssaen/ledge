@@ -347,6 +347,16 @@ describe('messages between agents', () => {
     expect(h.items('bc8e')[1]).toMatchObject({ kind: 'tool', turn: 1 });
   });
 
+  it('strips the sender note and names the sender by its Ledge name', () => {
+    const note = "(message de la session Otto, pas de l'utilisateur ; pour répondre : SendMessage vers Otto)";
+    const h = new History({ peerOf: t => ({ Otto: 'fce8', 'uds:/s/1.sock': 'bc8e' })[t] }); // Otto sends to the receiver's address
+    h.record('fce8', ev('PostToolUse', { tool: 'SendMessage', toolUseId: 'toolu_1', toolInput: { to: 'uds:/s/1.sock', message: `${note} Salut` } }));
+    expect(h.items('fce8')[0]).toMatchObject({ kind: 'sent', text: 'Salut' });
+    h.record('bc8e', ev('UserPromptSubmit', { text: `<cross-session-message from="uds:/s/1.sock" from-name="ledge-88">${note} Salut</cross-session-message>` }, 1));
+    expect(h.items('bc8e')[0]).toMatchObject({ kind: 'received', from: 'Otto', text: 'Salut', peer: 'fce8', sent: 'toolu_1' });
+    expect(h.items('fce8')[0]).toMatchObject({ kind: 'sent', status: 'read', received: 'recv-1-0' });
+  });
+
   it('two queued messages make two received cards in one turn', () => {
     const h = new History({ peerOf });
     h.record('fce8', ev('PreToolUse', { tool: 'SendMessage', toolUseId: 'toolu_1', toolInput: { to: 'a-bf', message: 'Un' } }));

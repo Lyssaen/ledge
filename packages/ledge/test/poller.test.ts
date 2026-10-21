@@ -43,6 +43,11 @@ describe('poller', () => {
       expect(store.get('later')).toBe(latest);
     } finally { unblock(); p.stop(); }
   });
+  it('retries the resume labels on every tick', async () => {
+    let n = 0;
+    const p = startPoller({ store, tmux: fakeTmux(panes), intervalMs: 1_000_000, now, labelExited: () => { n++; } });
+    try { await p.tick(); await p.tick(); expect(n).toBe(2); } finally { p.stop(); }
+  });
   it('removes finished helpers after five minutes, retaining active helpers and the parent', async () => {
     store.upsert(mk('a', { tmuxSession: null }));
     store.apply('a', { name: 'SubagentStart', helperId: 'done', at: now(), source: 'hook' });

@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { Session } from '@ledge/protocol';
 import { formatWho, printWho } from '../src/cli/who.js';
-import { agentNameArgs } from '../src/spawn.js';
+import { spawnSession } from '../src/spawn.js';
+import type { Tmux } from '../src/tmux.js';
 
 const at = '2026-10-19T10:00:00.000Z';
 const s = (id: string, extra: Partial<Session> = {}): Session => ({ id, name: id, tool: 'claude', cwd: `/w/${id}`, project: id, title: id, tmuxSession: `ledge-${id}`, state: 'idle', helpers: [], startedAt: at, lastActivityAt: at, source: 'launcher', ...extra });
@@ -30,11 +31,20 @@ describe('ledge who', () => {
   });
 });
 
-describe('agentNameArgs', () => {
-  it('names Claude Code after the Ledge session unless its arguments already name it', () => {
-    expect(agentNameArgs('claude', 'Pim', ['--continue'])).toEqual(['-n', 'Pim']);
-    expect(agentNameArgs('claude', 'Pim', ['--name', 'mine'])).toEqual([]);
-    expect(agentNameArgs('claude', 'Pim', ['-n=mine'])).toEqual([]);
-    expect(agentNameArgs('codex', 'Pim', [])).toEqual([]);
+describe('spawnSession', () => {
+  const launch = async (args: string[]) => {
+    const newSession = vi.fn(async (_o: { command: string[] }) => {});
+    await spawnSession({ tool: 'claude', args, cwd: '/w/ledge', tmux: { newSession } as unknown as Tmux, id: 'a1', taken: { names: [], ids: [] }, env: {} });
+    return newSession.mock.calls[0]![0].command;
+  };
+  it('launches Claude Code without -n, so it titles its own conversation', async () => {
+    const cmd = await launch(['--continue']);
+    expect(cmd.slice(0, 1)).toEqual(['claude']);
+    expect(cmd.filter(a => a === '-n' || a === '--name')).toEqual([]);
+  });
+  it('passes the user\'s own -n exactly once', async () => {
+    const cmd = await launch(['-n', 'mine']);
+    expect(cmd.slice(-2)).toEqual(['-n', 'mine']);
+    expect(cmd.filter(a => a === '-n')).toHaveLength(1);
   });
 });

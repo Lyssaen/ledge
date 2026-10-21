@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { agentMessages, claudeOpenCall, claudePlan, claudeToolAnswered, claudeTranscriptPath, codexPlan, tailLines, TAIL_BYTES } from '../src/daemon/transcript.js';
+import { agentMessages, claudeOpenCall, claudePlan, claudeToolAnswered, claudeTranscriptPath, codexPlan, labelTranscript, resumeLabel, tailLines, TAIL_BYTES } from '../src/daemon/transcript.js';
 
 let dir: string;
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'ledge-')); });
@@ -120,5 +120,71 @@ describe('Claude Code transcript: the call a request waits on (#35)', () => {
     expect(claudeOpenCall(p, 'AskUserQuestion')).toBeUndefined();
     expect(claudeOpenCall(join(dir, 'none.jsonl'), 'AskUserQuestion')).toBeUndefined();
     expect(claudeToolAnswered(join(dir, 'none.jsonl'), 'toolu_1')).toBe(false);
+  });
+});
+
+describe('resumeLabel', () => {
+  it('joins name and topic on one line, cut to 80 characters', () => {
+    expect(resumeLabel('Pim', 'Refonte\n des noms')).toBe('Pim - Refonte des noms');
+    const long = resumeLabel('Pim', 'x'.repeat(200));
+    expect(long).toHaveLength(80);
+    expect(long.endsWith('…')).toBe(true);
+  });
+});
+
+describe('labelTranscript', () => {
+  const uuid = '6f1c0e52-3b0a-4a57-9a43-1d2f5a9c7e10';
+  const title = (customTitle: string) => JSON.stringify({ type: 'custom-title', customTitle, sessionId: uuid });
+  const file = (...lines: string[]) => { const p = join(dir, `${uuid}.jsonl`); writeFileSync(p, lines.map(l => `${l}\n`).join('')); return p; };
+  const lastLine = (p: string) => JSON.parse(readFileSync(p, 'utf8').trimEnd().split('\n').at(-1)!);
+
+  it('appends the label once', () => {
+    const p = file(claude('u1', '2026-10-13T10:00:01.000Z', [{ type: 'text', text: 'Salut' }]));
+    expect(labelTranscript(p, 'Pim', 'Pim - Sujet')).toBe(true);
+    expect(lastLine(p)).toEqual({ type: 'custom-title', customTitle: 'Pim - Sujet', sessionId: uuid, ledge: true });
+    expect(readFileSync(p, 'utf8')).toContain('"ledge":true');
+    const written = readFileSync(p, 'utf8');
+    expect(labelTranscript(p, 'Pim', 'Pim - Sujet')).toBe(false);
+    expect(readFileSync(p, 'utf8')).toBe(written);
+  });
+
+  it('replaces a title Ledge or a pre-change launch wrote, never the user\'s own', () => {
+    for (const old of ['Pim', 'Pim - Ancien']) {
+      const p = file(title(old));
+      expect(labelTranscript(p, 'Pim', 'Pim - Sujet')).toBe(true);
+      expect(lastLine(p).customTitle).toBe('Pim - Sujet');
+    }
+    const mine = file(title('mon titre'));
+    const before = readFileSync(mine, 'utf8');
+    expect(labelTranscript(mine, 'Pim', 'Pim - Sujet')).toBe(false);
+    expect(readFileSync(mine, 'utf8')).toBe(before);
+  });
+
+  it('a conversation continued under another Ledge name: Ledge\'s marked title and a bare Ledge name are replaced', () => {
+    const marked = file(JSON.stringify({ type: 'custom-title', customTitle: 'Pim - X', sessionId: uuid, ledge: true }));
+    expect(labelTranscript(marked, 'Otto', 'Otto - Y')).toBe(true);
+    expect(lastLine(marked).customTitle).toBe('Otto - Y');
+    const bare = file(title('Pim'));
+    expect(labelTranscript(bare, 'Otto', 'Otto - Y')).toBe(true);
+    expect(lastLine(bare).customTitle).toBe('Otto - Y');
+    const mine = file(title('Pim - X'));
+    expect(labelTranscript(mine, 'Otto', 'Otto - Y')).toBe(false);
+  });
+  it('finds a title older than the tail window: the user\'s is kept, none at all is labelled', () => {
+    const filler = Array.from({ length: Math.ceil(TAIL_BYTES / 1000) + 10 }, (_, i) => claude(`u${i}`, '2026-10-13T10:00:01.000Z', [{ type: 'text', text: 'x'.repeat(1000) }]));
+    const mine = file(title('mon titre'), ...filler);
+    const before = readFileSync(mine, 'utf8');
+    expect(before.length).toBeGreaterThan(TAIL_BYTES);
+    expect(labelTranscript(mine, 'Pim', 'Pim - Sujet')).toBe(false);
+    expect(readFileSync(mine, 'utf8')).toBe(before);
+    const none = file(...filler);
+    expect(labelTranscript(none, 'Pim', 'Pim - Sujet')).toBe(true);
+  });
+  it('starts on its own line when the file does not end with a newline; a missing file is an error, returned', () => {
+    const p = join(dir, `${uuid}.jsonl`);
+    writeFileSync(p, '{"type":"user"}');
+    expect(labelTranscript(p, 'Pim', 'Pim - Sujet')).toBe(true);
+    expect(readFileSync(p, 'utf8').split('\n')).toEqual(['{"type":"user"}', JSON.stringify({ type: 'custom-title', customTitle: 'Pim - Sujet', sessionId: uuid, ledge: true }), '']);
+    expect(labelTranscript(join(dir, 'missing.jsonl'), 'Pim', 'Pim - Sujet')).toBeInstanceOf(Error);
   });
 });
