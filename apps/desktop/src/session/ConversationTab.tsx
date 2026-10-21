@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type JSX, type MouseEvent, type ReactNode } from 'react';
+import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState, type JSX, type MouseEvent, type ReactNode } from 'react';
 import type { Session } from '@ledge/protocol';
 import { ThreadMarkdown } from '@ledge/ui/documents/markdown';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
@@ -78,8 +78,12 @@ export function ConversationTab({ self, view, buttons, onLight, onOpenPeer }: Co
     if (typeof el.scrollTo === 'function') el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
     else el.scrollTop = el.scrollHeight;
   };
+  // The rows are memoised: they get the page's callbacks through stable wrappers (the latest ones, read when clicked).
+  const handlers = useRef({ onLight, onOpenPeer });
+  handlers.current = { onLight, onOpenPeer };
+  const light = useCallback((id: string) => handlers.current.onLight(id), []);
+  const openPeer = useCallback((item?: string) => handlers.current.onOpenPeer(item), []);
   const name = (from: Bubble['from']) => (from === 'a' ? self.name : peerName);
-  const bot = (from: Bubble['from']) => (from === 'a' ? <SessionBot session={self} size={14} /> : peer ? <SessionBot session={peer} size={14} /> : null);
 
   return (
     <>
@@ -111,8 +115,8 @@ export function ConversationTab({ self, view, buttons, onLight, onOpenPeer }: Co
           {/* Mounted even when empty, so the first message that comes is announced. */}
           <ol className="conv-log" role="log" aria-label={tc.log(self.name, peerName)}>
             {bubbles.map((b, i) => (
-              <BubbleRow key={b.key} b={b} first={bubbles[i - 1]?.from !== b.from} name={name(b.from)} to={name(b.from === 'a' ? 'b' : 'a')} bot={bot(b.from)}
-                peerKnown={peer !== null} peerName={peerName} selfName={self.name} onLight={onLight} onOpenPeer={onOpenPeer} />
+              <BubbleRow key={b.key} b={b} first={bubbles[i - 1]?.from !== b.from} name={name(b.from)} to={name(b.from === 'a' ? 'b' : 'a')}
+                who={b.from === 'a' ? self : peer} peerKnown={peer !== null} peerName={peerName} selfName={self.name} onLight={light} onOpenPeer={openPeer} />
             ))}
           </ol>
         </div>
@@ -123,9 +127,11 @@ export function ConversationTab({ self, view, buttons, onLight, onOpenPeer }: Co
 }
 
 /** One message: who wrote it (on the first of a run), its summary and body (clamped when long, as the thread's card), then
- *  its time, its delivery and where to find it. A's on the right, filled, as « sent » in the thread; B's on the left. */
-function BubbleRow({ b, first, name, to, bot, peerKnown, peerName, selfName, onLight, onOpenPeer }: {
-  b: Bubble; first: boolean; name: string; to: string; bot: ReactNode; peerKnown: boolean; peerName: string; selfName: string;
+ *  its time, its delivery and where to find it. A's on the right, filled, as « sent » in the thread; B's on the left.
+ *  Memoised, its Markdown parsed again only when its text changes: the page's clock and the store's changes elsewhere
+ *  leave it alone. `who`: the author's session, for its bot (none for a peer Ledge does not know). */
+const BubbleRow = memo(function BubbleRow({ b, first, name, to, who, peerKnown, peerName, selfName, onLight, onOpenPeer }: {
+  b: Bubble; first: boolean; name: string; to: string; who: Session | null; peerKnown: boolean; peerName: string; selfName: string;
   onLight(id: string): void; onOpenPeer(item?: string): void;
 }): JSX.Element {
   const { t } = useI18n();
@@ -133,6 +139,7 @@ function BubbleRow({ b, first, name, to, bot, peerKnown, peerName, selfName, onL
   const tc = t.session.conversation;
   const [more, setMore] = useState(false);
   const long = isLong(b.text);
+  const body = useMemo(() => <ThreadMarkdown text={b.text} />, [b.text]);
   const mine = b.from === 'a';
   const status = b.status === 'read' ? tc.readBy(to) : b.status === 'delivered' ? tc.deliveredTo(to) : tm[b.status];
   const inA = b.inA;
@@ -145,9 +152,9 @@ function BubbleRow({ b, first, name, to, bot, peerKnown, peerName, selfName, onL
     <li className={cls('conv-row', mine ? 'mine' : 'theirs', first && 'first')}>
       <div className={cls('message-card conv-bubble', mine ? 'sent' : 'received', inA !== undefined && 'can-light')} role="article" data-bubble={b.key} onClick={click}>
         <span className="visually-hidden">{tc.kicker(name, to)}</span>
-        {first && <span className="who conv-who" aria-hidden="true">{bot}<strong>{name}</strong></span>}
+        {first && <span className="who conv-who" aria-hidden="true">{who && <SessionBot session={who} size={14} />}<strong>{name}</strong></span>}
         {b.summary && <p className="message-summary">{b.summary}</p>}
-        <div className={cls('message-body', long && !more && 'clamped')}><ThreadMarkdown text={b.text} /></div>
+        <div className={cls('message-body', long && !more && 'clamped')}>{body}</div>
         {long && <button type="button" className="lnk message-link" aria-expanded={more} onClick={() => setMore(m => !m)}>{more ? tm.showLess : tm.readAll}<Icon d={ICONS.chevronRight.d} size={12} /></button>}
         <span className="who conv-meta">
           <time dateTime={b.at}>{clock(b.at)}</time>
@@ -162,4 +169,4 @@ function BubbleRow({ b, first, name, to, bot, peerKnown, peerName, selfName, onL
       </div>
     </li>
   );
-}
+});
