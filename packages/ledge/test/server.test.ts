@@ -1384,7 +1384,7 @@ describe('server', () => {
         proposal: qid => (qid === 'q1' ? proposal : undefined),
         markLaunched(qid, id, emit) { marks.push(['launched', qid, id]); proposal = { ...proposal!, launchedId: id }; emit({ type: 'chat.history', turns: [] }); },
         markFailed(qid, message, emit) { marks.push(['failed', qid, message]); proposal = { ...proposal!, error: message }; emit({ type: 'chat.history', turns: [] }); },
-        relay: () => undefined, markRelay() {}, queuedRelays: () => [], idle: async () => {}
+        relay: () => undefined, markRelay() {}, queuedRelays: () => [], close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}
       };
       return { chat, marks };
     }
@@ -1457,7 +1457,7 @@ describe('server', () => {
           proposal: (qid, row = 0) => (qid === 'q1' ? rows[row] : undefined),
           markLaunched(_qid, id, emit, row = 0) { marks.push(['launched', row, id]); rows[row] = { ...rows[row]!, launchedId: id }; emit({ type: 'chat.history', turns: [] }); },
           markFailed(_qid, message, emit, row = 0) { marks.push(['failed', row, message]); rows[row] = { ...rows[row]!, error: message }; emit({ type: 'chat.history', turns: [] }); },
-          relay: () => undefined, markRelay() {}, queuedRelays: () => [], idle: async () => {}
+          relay: () => undefined, markRelay() {}, queuedRelays: () => [], close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}
         };
         return { chat, marks };
       }
@@ -1511,7 +1511,7 @@ describe('server', () => {
         relay: qid => (qid === 'q1' ? r : undefined),
         markRelay(_qid, patch, emit) { const { id, name, tool, text } = r!; r = { id, name, tool, text, ...patch }; emit({ type: 'chat.history', turns: [] }); },
         queuedRelays: () => (r?.status === 'queued' ? [{ qid: 'q1', relay: r, askedAt: '2026-10-12T08:00:00.000Z' }] : []),
-        idle: async () => {}
+        close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}
       };
       return { chat, current: () => r };
     }

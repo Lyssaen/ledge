@@ -9,6 +9,11 @@ const AT = '2026-10-20T08:00:00.000Z';
 const turn = (extra: Partial<ChatTurn> = {}): ChatTurn => ({ qid: randomUUID(), question: 'what?', askedAt: AT, steps: [], ...extra });
 
 describe('toPhoneTurn', () => {
+  it('does not carry the close card to the phone yet', () => {
+    const p = toPhoneTurn(turn({ answer: 'ok', closes: [{ id: 's', name: 'Otto', tool: 'claude' }] }));
+    expect(PhoneChatTurnSchema.safeParse(p).success).toBe(true);
+    expect(p).not.toHaveProperty('closes');
+  });
   it('carries no path, folder, machine or project proposal', () => {
     const t = turn({
       steps: [{ kind: 'git', path: '/home/gch/secret', id: 'a', name: 'n' }, { kind: 'repo', path: '/etc/x' }],

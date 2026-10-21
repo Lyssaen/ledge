@@ -407,6 +407,67 @@ describe('chat service', () => {
       expect(chat.history()[0]!.projectProposal).toEqual({ name: 'Paper', repos: [{ path: dir, why: 'x' }] });
     });
   });
+  describe('close card (spec 2026-10-21 close §4)', () => {
+    const closeFence = (...ids: string[]) => 'Je ferme ces sessions.\n\n' + ids.map(id => '```ledge-close\n{"session": "' + id + '"}\n```').join('\n');
+    const session = (id: string, extra: Partial<Session> = {}): Session => ({ id, name: id.toUpperCase(), tool: 'claude', cwd: '/w/ledge', project: 'ledge', title: `${id} · ledge`,
+      tmuxSession: `ledge-${id}`, state: 'working', helpers: [], startedAt: '2026-10-11T08:00:00.000Z', lastActivityAt: '2026-10-11T08:00:00.000Z', source: 'launcher', ...extra });
+    const askWith = async (answer: string, sessions: Session[]) => {
+      const s = setup({ env: async () => ({ ...process.env, FAKE_ANSWER: answer }), now: () => '2026-10-11T09:00:00.000Z' });
+      for (const x of sessions) s.store.upsert(x);
+      const out: ServerMessage[] = [];
+      logged.length = 0;
+      await s.chat.ask('q1', 'ferme Arlo et Bram', m => out.push(m));
+      return { ...s, out, done: out.find(m => m.type === 'chat.done') as Extract<ServerMessage, { type: 'chat.done' }> };
+    };
+
+    it('keeps a close row per known session, in order, with the store\'s name and tool', async () => {
+      const { chat, done } = await askWith(closeFence('a1', 'b2'), [session('a1', { name: 'Arlo' }), session('b2', { name: 'Bram', tool: 'codex' })]);
+      const closes = [{ id: 'a1', name: 'Arlo', tool: 'claude' }, { id: 'b2', name: 'Bram', tool: 'codex' }];
+      expect(chat.history()[0]!.closes).toEqual(closes);
+      expect(done.closes).toEqual(closes);
+      expect(done.text).toBe('Je ferme ces sessions.');
+      expect(chat.history()[0]!.answer).not.toContain('```');
+    });
+    it('drops unknown, read-only, exited and repeated sessions', async () => {
+      const { chat, done } = await askWith(closeFence('zz', 'h1', 'x1', 'a1', 'a1'), [session('a1', { name: 'Arlo' }), session('h1', { source: 'hook_only', tmuxSession: null }), session('x1', { state: 'exited' })]);
+      expect(chat.history()[0]!.closes).toEqual([{ id: 'a1', name: 'Arlo', tool: 'claude' }]);
+      expect(done.closes).toHaveLength(1);
+      expect(logged.filter(l => l.includes('close ignored'))).toEqual([
+        'chat q1: close ignored: unknown session zz', 'chat q1: close ignored: read-only session h1', 'chat q1: close ignored: session has exited x1', 'chat q1: close ignored: duplicate session a1'
+      ]);
+    });
+    it('ignores close rows beyond 8', async () => {
+      const ids = Array.from({ length: 10 }, (_, i) => `s${i}`);
+      const { chat } = await askWith(closeFence(...ids), ids.map(id => session(id)));
+      expect(chat.history()[0]!.closes!.map(c => c.id)).toEqual(ids.slice(0, 8));
+      expect(logged.some(l => l.includes('2 sessions beyond 8 ignored'))).toBe(true);
+    });
+    it('gives no card when no close row is valid', async () => {
+      const { chat, done } = await askWith(closeFence('zz'), []);
+      expect(chat.history()[0]).not.toHaveProperty('closes');
+      expect(done).not.toHaveProperty('closes');
+    });
+    it('gives no close card when the last block is not a close', async () => {
+      const answer = closeFence('a1') + '\n```ledge-relay\n{"session": "a1", "text": "go"}\n```';
+      const { chat, done } = await askWith(answer, [session('a1', { name: 'Arlo' })]);
+      expect(chat.history()[0]).not.toHaveProperty('closes');
+      expect(done).not.toHaveProperty('closes');
+      expect(chat.relay('q1')).toEqual({ id: 'a1', name: 'Arlo', tool: 'claude', text: 'go' });
+    });
+    it('marks a close row closed or failed for every client', async () => {
+      const { chat } = await askWith(closeFence('a1', 'b2'), [session('a1', { name: 'Arlo' }), session('b2', { name: 'Bram', tool: 'codex' })]);
+      const out: ServerMessage[] = [];
+      chat.markCloseFailed('q1', 1, 'busy', m => out.push(m));
+      expect(chat.close('q1', 1)).toEqual({ id: 'b2', name: 'Bram', tool: 'codex', error: 'busy' });
+      chat.markClosed('q1', 1, 'killed', m => out.push(m));
+      expect(chat.close('q1', 1)).toEqual({ id: 'b2', name: 'Bram', tool: 'codex', closedAt: '2026-10-11T09:00:00.000Z', how: 'killed' });
+      expect(chat.close('q1', 0)).toEqual({ id: 'a1', name: 'Arlo', tool: 'claude' });
+      expect(out.map(m => m.type)).toEqual(['chat.history', 'chat.history']);
+      expect(chat.close('q1', 5)).toBeUndefined();
+      chat.markClosed('q1', 5, 'exit', m => out.push(m));
+      expect(out).toHaveLength(2);
+    });
+  });
   describe('relay (spec 2026-10-12 relay §4)', () => {
     const relayFence = (json: string) => 'Je transmets à Otto.\n\n```ledge-relay\n' + json + '\n```';
     const session = (id: string, extra: Partial<Session> = {}): Session => ({ id, name: 'Otto', tool: 'codex', cwd: '/w/ledge', project: 'ledge', title: 'Otto · ledge',
