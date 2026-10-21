@@ -178,7 +178,7 @@ export class History {
         // Without a decision it answered a question (or the idle input line): no permission of the thread is its.
         if (!ev.decision) return undefined;
         const perm = [...this.items(id)].reverse().find(i => i.kind === 'permission' && i.decision === undefined);
-        return perm && perm.kind === 'permission' ? this.put(id, { ...perm, decision: ev.decision }) : undefined;
+        return perm && perm.kind === 'permission' ? this.put(id, { ...perm, decision: ev.decision, ...(ev.byClose ? { byClose: true as const } : {}) }) : undefined;
       }
       case 'AgentMessage': {
         if (!ev.messageId || !ev.text) return undefined;

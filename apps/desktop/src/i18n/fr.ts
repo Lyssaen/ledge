@@ -627,7 +627,7 @@ export const fr = {
       marks: { running: 'En cours', success: 'Réussi', failed: 'Échec', unknown: 'Interrompu' } as Record<ToolStatus, string>,
       verbs: { create: 'Création', delete: 'Suppression', read: 'Lecture', search: 'Recherche', command: 'Commande', edit: 'Modification' } as Record<Verb, string>,
       // `unknown` : seul un historique écrit avant le lot 6b le porte (un Decided sans décision ne marque plus de permission).
-      decided: { accept: 'Accordé', always: 'Toujours autorisé', deny: 'Refusé', unknown: 'Répondu dans le terminal' } as Record<'accept' | 'always' | 'deny' | 'unknown', string>,
+      decided: { accept: 'Accordé', always: 'Toujours autorisé', deny: 'Refusé', unknown: 'Répondu dans le terminal', denyByClose: 'Refusé par la fermeture' } as Record<'accept' | 'always' | 'deny' | 'unknown' | 'denyByClose', string>,
       seeChange: 'Voir la modification', seeChangeShort: 'Voir',
       read: 'Lire',
       unread: 'Nouveau depuis votre dernière visite', latest: 'Aller au dernier message',

@@ -2,6 +2,7 @@ import { afterEach, expect, it } from 'vitest';
 import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import type { ThreadItem, ToolItem } from '@ledge/protocol';
 import { fakeSession, T0 } from '@ledge/fleet/test/mockDaemon';
+import { fr } from '../src/i18n/fr';
 import { boot, closeDaemons, declarations, listSessions, ottoThread, unfoldPast } from './helpers';
 
 afterEach(async () => { cleanup(); localStorage.clear(); await closeDaemons(); });
@@ -121,6 +122,16 @@ it('a decided plan is a chip, its node in the colour of its fate', async () => {
   expect(always.closest('.r')!.querySelector('.n')).toHaveClass('success');
   // Answered in the terminal, its fate is not known: no success colour.
   expect(document.querySelector('.decision-chip.plan.unknown')!.closest('.r')!.querySelector('.n')).not.toHaveClass('success');
+});
+it('a request refused by a close says so on its chip, in both languages', async () => {
+  const { d, user } = await boot({ sessions: listSessions(), list: true });
+  const refused: ThreadItem = { kind: 'permission', id: 'perm-close', at: new Date().toISOString(), turn: 2, tool: 'Bash', text: 'npm test', decision: 'deny', byClose: true };
+  d.thread('otto', [...ottoThread(), refused, { ...refused, id: 'perm-deny', text: 'rm -rf dist', byClose: undefined }]);
+  await user.click(screen.getByRole('button', { name: /^Otto,/ }));
+  await screen.findByText('Corrige-les');
+  const chips = [...document.querySelectorAll('.decision-chip.deny')];
+  expect(chips.map(c => c.textContent)).toEqual(['Denied by the closenpm test', 'Deniedrm -rf dist']);
+  expect(fr.session.thread.decided.denyByClose).toBe('Refusé par la fermeture');
 });
 it('a plan without its action (Codex) is read from the request; once answered, its tab keeps the plan, its fate untold', async () => {
   const cora = fakeSession('cora', { name: 'Cora', tool: 'codex', cwd: '/w/ledge', state: 'waiting_permission', pending: { kind: 'plan', text: '# Plan : version 0.6.0', body: md, source: 'pane' } });

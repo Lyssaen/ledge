@@ -59,6 +59,8 @@ export const SessionEventSchema = z.object({
   transcriptPath: z.string().optional(),
   /** Decided: what was chosen when the daemon knows it. */
   decision: DecisionSchema.optional(),
+  /** Decided: the request was refused by Ledge closing the session (its interrupt keys), not by the user's answer. */
+  byClose: z.literal(true).optional(),
   /** The agent's own session id when the hook names it, so the daemon can resume that conversation. */
   agentSessionId: z.string().optional()
 });

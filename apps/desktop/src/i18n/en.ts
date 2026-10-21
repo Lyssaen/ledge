@@ -600,7 +600,7 @@ export const en: Messages = {
       running: 'running · ', interrupted: 'interrupted', liveAction: 'Action running',
       marks: { running: 'Running', success: 'Succeeded', failed: 'Failed', unknown: 'Interrupted' },
       verbs: { create: 'Create', delete: 'Delete', read: 'Read', search: 'Search', command: 'Command', edit: 'Edit' },
-      decided: { accept: 'Allowed', always: 'Always allowed', deny: 'Denied', unknown: 'Answered in the terminal' },
+      decided: { accept: 'Allowed', always: 'Always allowed', deny: 'Denied', unknown: 'Answered in the terminal', denyByClose: 'Denied by the close' },
       seeChange: 'View the change', seeChangeShort: 'View',
       read: 'Read',
       unread: 'New since your last visit', latest: 'Go to the latest message',

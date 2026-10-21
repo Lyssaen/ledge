@@ -20,6 +20,8 @@ export interface RelayDeps {
   typing?: Set<string>;
   /** A refused delivery left the session free with no card queued for it: whatever else waits for it (the mailbox) goes now. */
   next?: (id: string) => void;
+  /** Sessions Ledge is closing: never delivered to, even free; their cards fail once they exit. */
+  closing?: ReadonlySet<string>;
 }
 
 /** Free to take a typed instruction: its turn (or in error, where session.reply types too), nothing pending. */
@@ -34,6 +36,8 @@ export function createRelay(d: RelayDeps): Relay {
   const now = d.now ?? (() => new Date().toISOString());
   // A session stays idle while its instruction is being typed: these keep a second one, or the same one twice, from following it.
   const typing = d.typing ?? new Set<string>(); const sending = new Set<string>();
+  /** Free, nothing being typed into it, and not being closed. */
+  const open = (id: string) => free(d.store.get(id)) && !typing.has(id) && !d.closing?.has(id);
 
   /** A thread's emitter, looked up at the moment it is needed: a dropped device thread has none, and nothing here may throw for it. */
   const emitTo = (thread: ChatThreadId) => (m: ChatMessage): void => {
@@ -62,7 +66,7 @@ export function createRelay(d: RelayDeps): Relay {
   /** Delivers the session's oldest queued card when it is free and nothing is being typed into it. */
   function kick(id: string): void {
     const q = queued().find(x => x.relay.id === id);
-    if (!q || typing.has(id) || !free(d.store.get(id))) return;
+    if (!q || !open(id)) return;
     void deliverAndKick(q.thread, q.qid, q.relay).catch(e => log(`relay ${q.qid} failed: ${(e as Error).message}`));
   }
   /** After a refused delivery the session is still free: the next queued card must not wait for an unrelated store change. */
@@ -70,7 +74,7 @@ export function createRelay(d: RelayDeps): Relay {
     const refused = await deliver(thread, qid, r);
     if (refused) {
       if (queued().some(q => q.relay.id === r.id)) kick(r.id);
-      else if (free(d.store.get(r.id)) && !typing.has(r.id)) d.next?.(r.id);
+      else if (open(r.id)) d.next?.(r.id);
     }
     return refused;
   }
@@ -83,7 +87,7 @@ export function createRelay(d: RelayDeps): Relay {
       if (q.length === 0) return;
       const s = c.type === 'updated' ? c.session : undefined;
       if (!s || s.state === 'exited') { for (const x of q) if (!sending.has(x.qid)) { mark(x.thread, x.qid, { error: stopped(x.relay.name) }); } return; }
-      if (free(s) && !typing.has(id)) kick(id);
+      if (open(id)) kick(id);
     } catch (e) { log(`relay change handler failed: ${(e as Error).message}`); }
   });
 
@@ -96,7 +100,7 @@ export function createRelay(d: RelayDeps): Relay {
       if (r.status === 'queued') throw new Error('already queued');
       const s = d.store.get(r.id);
       if (!s || s.state === 'exited') { const m = stopped(r.name); mark(thread, qid, { error: m }); throw new Error(m); }
-      if (free(s) && !typing.has(r.id)) {
+      if (open(r.id)) {
         if (queued().some(q => q.relay.id === r.id)) { markQueued(thread, qid); kick(r.id); return; }
         const refused = await deliverAndKick(thread, qid, r); if (refused) throw new Error(refused); return;
       }
@@ -111,7 +115,7 @@ export function createRelay(d: RelayDeps): Relay {
     settle(id) {
       try {
         if (queued().some(q => q.relay.id === id)) kick(id);
-        else if (free(d.store.get(id)) && !typing.has(id)) d.next?.(id);
+        else if (open(id)) d.next?.(id);
       } catch (e) { log(`relay settle failed: ${(e as Error).message}`); }
     },
     close: unsubscribe

@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type ChatErrorCode, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, backendOf } from '@ledge/protocol';
+import { DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type ChatErrorCode, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, backendOf } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
 import type { Tmux } from '../tmux.js';
@@ -138,6 +138,8 @@ export interface ServerHandle {
   preview(id: string, lines: string[]): void;
   /** The OMP processes this daemon owns. */
   omp: OmpHost;
+  /** Closes a session cleanly (its exit command, a kill as a last resort); rejects with a Refusal. */
+  closeSession(id: string): Promise<{ how: CloseHow }>;
 }
 
 /**
@@ -158,7 +160,7 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; scan?: typeof scanRepos; models?: Models; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; scan?: typeof scanRepos; models?: Models; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; close?: { freeMs?: number; exitMs?: number } }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -240,6 +242,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const unsubscribeMobile = mobile?.onChange(() => broadcast({ type: 'mobile', state: mobile.state() }));
   // One lock for both: a session is never typed into by the relay and the mailbox at once.
   const typing = new Set<string>();
+  /** Sessions being closed: neither the relay nor the mailbox delivers to them, even free; their queues fail once they exit. */
+  const closing = new Set<string>();
   // An injected chat (tests) is the only thread there is; otherwise the relay works across the PC's and every device's.
   const relayThreads: Pick<typeof threads, 'all' | 'owner' | 'emitterOf' | 'queuedRelays'> = opts.chat ? {
     all: () => [['desktop', chat]], owner: qid => (chat.relay(qid) ? 'desktop' : undefined), emitterOf: () => broadcast,
@@ -248,11 +252,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** `replyTo` for the mailbox and the relay, which keep the refusal's text. */
   const replyText = async (id: string, text: string) => (await replyTo(id, text))?.message ?? null;
   const mailbox = createMailbox({
-    store, replyTo: replyText, typing, now,
+    store, replyTo: replyText, typing, closing, now,
     relayQueued: id => relayThreads.queuedRelays().some(q => q.relay.id === id),
     sent: { record: (id, m) => { history?.recordSent(id, m); }, mark: (id, rid, status) => history?.markSent(id, rid, status) }
   });
-  const relay = createRelay({ threads: relayThreads, store, replyTo: replyText, now, typing, next: id => mailbox.kick(id) });
+  const relay = createRelay({ threads: relayThreads, store, replyTo: replyText, now, typing, closing, next: id => mailbox.kick(id) });
   /** The last preview per session, replayed after every snapshot so a late client does not wait for the agent to write. */
   const previews = new Map<string, string[]>();
   /** The title last pushed to each session's tmux tab, so tmux is told only when it changes. */
@@ -425,6 +429,67 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     store.apply(s.id, { name: 'PaneGone', at: now(), source: 'daemon' });
   }
 
+  /** How long a close waits for a free prompt, then for the agent to leave after its exit command (spec 2026-10-21 §3). */
+  const CLOSE_FREE_MS = opts.close?.freeMs ?? 10_000;
+  const CLOSE_EXIT_MS = opts.close?.exitMs ?? 15_000;
+  /**
+   * Waits up to `ms` for `ok`, polled every UNTIL_POLL_MS. `gone` as soon as the session has exited or left the store: the
+   * close is then over, and nothing more is typed.
+   */
+  async function closeWait(id: string, ms: number, ok: (s: Session) => boolean): Promise<'ok' | 'gone' | 'timeout'> {
+    for (const end = Date.now() + ms; ;) {
+      const cur = store.get(id);
+      if (!cur || cur.state === 'exited') return 'gone';
+      if (ok(cur)) return 'ok';
+      if (Date.now() >= end) return 'timeout';
+      await new Promise(r => setTimeout(r, UNTIL_POLL_MS));
+    }
+  }
+
+  /**
+   * Ends a live session as its user would: frees its prompt (a pending request is refused, never answered), types the agent's
+   * exit command, and waits for it to leave; kills its tmux session as a last resort. Never archives: the session stays resumable.
+   */
+  async function closeSession(s: Session): Promise<{ how: CloseHow }> {
+    const id = s.id; const cur = store.get(id);
+    if (!cur) throw unknownSession();
+    if (cur.source === 'hook_only') throw readOnly();
+    if (cur.state === 'exited') throw new Refusal('the session has already exited', 'busy');
+    if (closing.has(id)) throw new Refusal('a close is already in progress', 'busy');
+    closing.add(id);
+    try {
+      if (backendOf(cur) === 'omp-rpc') {
+        await omp.close(id).catch(e => log(`close of omp ${id} failed: ${(e as Error).message}`));
+        store.apply(id, { name: 'PaneGone', at: now(), source: 'daemon' });
+        return { how: 'exit' };
+      }
+      const adapter = adapterFor(cur.tool); const { tmuxSession: pane, pending } = cur;
+      // Busy or asking: the interrupt keys free the prompt. On a request they refuse it, which the thread records; a question
+      // has no permission row, and a Decided without decision leaves the thread's permissions alone. A failed key ends in the kill.
+      if (!free(cur) && pane) {
+        await tmux.sendKeys(pane, adapter.interruptKeys()).catch(e => log(`close of ${id}: the interrupt failed: ${(e as Error).message}`));
+        if (pending && !pending.helperId) store.apply(id, { name: 'Decided', at: now(), source: 'daemon', ...(pending.kind === 'question' ? {} : { decision: 'deny' as const, byClose: true as const }) });
+      }
+      let why: string;
+      const freed = await closeWait(id, CLOSE_FREE_MS, x => free(x) && !typing.has(id));
+      if (freed === 'gone') return { how: 'exit' };
+      if (freed === 'timeout') why = `its prompt was not free after ${CLOSE_FREE_MS} ms`;
+      else {
+        let typed = true;
+        try { await runPlan(store.get(id)!, adapter.exitPlan()); }
+        catch (e) { typed = false; log(`close of ${id}: the exit command failed: ${(e as Error).message}`); }
+        why = typed ? `still running ${CLOSE_EXIT_MS} ms after its exit command` : 'its exit command could not be typed';
+        if (typed && await closeWait(id, CLOSE_EXIT_MS, () => false) === 'gone') return { how: 'exit' };
+      }
+      const last = store.get(id);
+      if (!last || last.state === 'exited') return { how: 'exit' };
+      if (last.tmuxSession) await tmux.killSession(last.tmuxSession).catch(e => log(`kill of ${last.tmuxSession} failed: ${(e as Error).message}`));
+      store.apply(id, { name: 'PaneGone', at: now(), source: 'daemon' });
+      log(`close of ${id}: killed (${why})`);
+      return { how: 'killed' };
+    } finally { closing.delete(id); }
+  }
+
   /** session.reply's checks and typing (shared with the chat's relay): null once typed, the refusal otherwise; rejects when the injection fails. */
   async function replyTo(id: string, text: string, how: { steer?: boolean } = {}): Promise<Refusal | null> {
     const s = store.get(id); if (!s) return unknownSession();
@@ -539,7 +604,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** A model change waiting for the session's free moment (`modelNext`): the agent stopped and resumed on that model. */
   async function applyModelNext(id: string): Promise<void> {
     const s = store.get(id);
-    if (!s?.modelNext || !free(s) || typing.has(id) || relayThreads.queuedRelays().some(q => q.relay.id === id)) return;
+    if (!s?.modelNext || !free(s) || typing.has(id) || closing.has(id) || relayThreads.queuedRelays().some(q => q.relay.id === id)) return;
     // OMP changes its model in place (set_model on the same process): nothing is stopped, the conversation is never left.
     if (backendOf(s) === 'omp-rpc') return applyOmpModel(s);
     const key = resumeKey(s);
@@ -957,6 +1022,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast,
     preview,
     omp,
+    closeSession: id => { const s = store.get(id); return s ? closeSession(s) : Promise.reject(unknownSession()); },
     close: () => new Promise(res => { unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
   };
 }

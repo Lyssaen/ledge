@@ -133,6 +133,18 @@ describe('createMailbox', () => {
     expect(typed).toEqual([]);
   });
 
+  it('a closing target is never delivered to, even free; once out of the set, the next store change delivers', async () => {
+    box.close();
+    const closing = new Set(['s2']);
+    box = createMailbox({ store, typing, sent, now: () => T0, relayQueued: id => relayQueued(id), closing,
+      replyTo: (id, text) => { typed.push([id, text]); return answer(id, text); } });
+    expect(box.submit(msg())).toMatchObject({ outcome: 'queued' });
+    box.kick('s2'); setState('s2', 'idle'); await flush();
+    expect(typed).toEqual([]);
+    closing.delete('s2'); setState('s2', 'idle'); await flush();
+    expect(typed).toHaveLength(1);
+  });
+
   it('intercept: a Claude target or an unknown name is native', () => {
     expect(box.submit(msg({ rid: 'a', to: 'Otto', intercept: true }))).toMatchObject({ outcome: 'native' });
     expect(box.submit(msg({ rid: 'b', to: 'Nobody', intercept: true }))).toMatchObject({ outcome: 'native' });

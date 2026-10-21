@@ -2265,3 +2265,153 @@ describe('server: models.list (#58)', () => {
     c.close(); await srv2.close();
   });
 });
+
+describe('close a session', () => {
+  const CLOSE = { freeMs: 200, exitMs: 200 };
+  /** A fake terminal whose agent leaves when the exit command is submitted (`leaves`): its pane goes, the poller sees it gone. */
+  async function closing(panes: Record<string, string[]>, o: { leaves?: boolean; history?: History; chat?: Chat; omp?: Parameters<typeof startServer>[0]['omp'] } = {}) {
+    tmux = fakeTmux(panes);
+    const keys = tmux.sendKeys.bind(tmux);
+    tmux.sendKeys = async (n, k) => {
+      const prev = tmux.sent.at(-1);
+      await keys(n, k);
+      if (o.leaves === false || !k.includes('Enter') || prev?.[0] !== 'text' || prev[2] !== '/exit') return;
+      delete panes[n];
+      const s = store.all().find(x => x.tmuxSession === n);
+      if (s) store.apply(s.id, { name: 'PaneGone', at: new Date().toISOString(), source: 'pane' });
+    };
+    await srv.close();
+    srv = await startServer({ store, tmux, port: 0, close: CLOSE, ...(o.history ? { history: o.history } : {}), ...(o.chat ? { chat: o.chat } : {}), ...(o.omp ? { omp: o.omp } : {}) });
+  }
+  const texts = () => tmux.sent.filter(x => x[0] === 'text');
+  const logged = () => (existsSync(paths().log) ? readFileSync(paths().log, 'utf8') : '');
+
+  it('closes an idle session with its exit command', async () => {
+    await closing({ 'ledge-a': ['> '] });
+    store.upsert(mk('a', { state: 'idle' }));
+    expect(await srv.closeSession('a')).toEqual({ how: 'exit' });
+    expect(tmux.sent).toEqual([['keys', 'ledge-a', 'C-u'], ['text', 'ledge-a', '/exit'], ['keys', 'ledge-a', 'Enter']]);
+    expect(store.get('a')).toMatchObject({ state: 'exited' });
+    expect(store.get('a')!.archivedAt).toBeUndefined();
+  });
+
+  it('interrupts a working session before it types the exit command', async () => {
+    await closing({ 'ledge-a': ['Running…'] });
+    store.upsert(mk('a', { state: 'working' }));
+    const closed = srv.closeSession('a');
+    await until(() => tmux.sent.length > 0, 3000);
+    expect(tmux.sent).toEqual([['keys', 'ledge-a', 'Escape']]);
+    store.upsert({ ...store.get('a')!, state: 'idle' });
+    expect(await closed).toEqual({ how: 'exit' });
+    expect(tmux.sent).toEqual([['keys', 'ledge-a', 'Escape'], ['keys', 'ledge-a', 'C-u'], ['text', 'ledge-a', '/exit'], ['keys', 'ledge-a', 'Enter']]);
+  });
+
+  it('refuses a pending permission, records the refusal and never types into the dialog', async () => {
+    const history = new History({ dir: tmpDir() });
+    await closing({ 'ledge-a': [PROMPT] }, { history });
+    store.upsert(mk('a', { state: 'working' }));
+    store.apply('a', { name: 'PermissionRequest', at: new Date().toISOString(), source: 'hook', tool: 'Bash', text: 'npm test' });
+    expect(store.get('a')!.pending).toBeDefined();
+    const closed = srv.closeSession('a');
+    await until(() => tmux.sent.length > 0, 3000);
+    expect(tmux.sent[0]).toEqual(['keys', 'ledge-a', 'Escape']);
+    await until(() => history.items('a').some(i => i.kind === 'permission' && i.decision !== undefined), 3000);
+    expect(history.items('a').find(i => i.kind === 'permission')).toMatchObject({ decision: 'deny', byClose: true });
+    expect(texts()).toEqual([]);
+    store.upsert({ ...store.get('a')!, state: 'idle' });
+    expect(await closed).toEqual({ how: 'exit' });
+    expect(texts()).toEqual([['text', 'ledge-a', '/exit']]);
+  });
+
+  it('dismisses a pending question without marking an older permission refused', async () => {
+    const history = new History({ dir: tmpDir() });
+    await closing({ 'ledge-a': [QUESTION] }, { history });
+    store.upsert(mk('a', { state: 'working' }));
+    history.record('a', { name: 'PermissionRequest', at: new Date().toISOString(), source: 'hook', tool: 'Bash', text: 'ls' });
+    store.upsert({ ...store.get('a')!, state: 'waiting_input', pending: { kind: 'question', text: 'Which?', source: 'hook' } });
+    const closed = srv.closeSession('a');
+    await until(() => store.get('a')!.pending === undefined, 3000);
+    expect(history.items('a').find(i => i.kind === 'permission')).not.toHaveProperty('decision');
+    store.upsert({ ...store.get('a')!, state: 'idle' });
+    expect(await closed).toEqual({ how: 'exit' });
+  });
+
+  it('kills the session when the agent does not leave', async () => {
+    await closing({ 'ledge-a': ['> '] }, { leaves: false });
+    store.upsert(mk('a', { state: 'idle' }));
+    expect(await srv.closeSession('a')).toEqual({ how: 'killed' });
+    expect(texts()).toEqual([['text', 'ledge-a', '/exit']]);
+    expect(tmux.sent.at(-1)).toEqual(['kill', 'ledge-a']);
+    expect(store.get('a')).toMatchObject({ state: 'exited' });
+    expect(logged()).toMatch(/close of a: killed \(.+\)/);
+  });
+
+  it('kills without typing when the prompt is never freed', async () => {
+    await closing({ 'ledge-a': ['Running…'] });
+    store.upsert(mk('a', { state: 'working' }));
+    expect(await srv.closeSession('a')).toEqual({ how: 'killed' });
+    expect(texts()).toEqual([]);
+    expect(tmux.sent).toEqual([['keys', 'ledge-a', 'Escape'], ['kill', 'ledge-a']]);
+    expect(store.get('a')).toMatchObject({ state: 'exited' });
+  });
+
+  it('a session that exits by itself during the close is closed, not killed', async () => {
+    await closing({ 'ledge-a': ['Running…'] });
+    store.upsert(mk('a', { state: 'working' }));
+    const closed = srv.closeSession('a');
+    await until(() => tmux.sent.length > 0, 3000);
+    store.apply('a', { name: 'PaneGone', at: new Date().toISOString(), source: 'pane' });
+    expect(await closed).toEqual({ how: 'exit' });
+    expect(tmux.sent).toEqual([['keys', 'ledge-a', 'Escape']]);
+  });
+
+  it('closes an OMP session through omp.close', async () => {
+    const closed: string[] = [];
+    const omp = { close: async (id: string) => { closed.push(id); }, closeAll: async () => {}, catalog: async () => ({}) } as unknown as NonNullable<Parameters<typeof startServer>[0]['omp']>;
+    await closing({}, { omp });
+    store.upsert(mk('o', { tool: 'omp', backend: 'omp-rpc', tmuxSession: undefined, state: 'working' }));
+    expect(await srv.closeSession('o')).toEqual({ how: 'exit' });
+    expect(closed).toEqual(['o']);
+    expect(store.get('o')).toMatchObject({ state: 'exited' });
+    expect(tmux.sent).toEqual([]);
+  });
+
+  it('refuses a read-only, an exited and an already closing session', async () => {
+    await closing({ 'ledge-a': ['> '] });
+    store.upsert(mk('h', { source: 'hook_only', tmuxSession: undefined }));
+    store.upsert(mk('x', { state: 'exited' }));
+    store.upsert(mk('a', { state: 'idle' }));
+    await expect(srv.closeSession('zz')).rejects.toMatchObject({ code: 'unknown_session' });
+    await expect(srv.closeSession('h')).rejects.toMatchObject({ code: 'read_only' });
+    await expect(srv.closeSession('x')).rejects.toMatchObject({ code: 'busy', message: 'the session has already exited' });
+    const first = srv.closeSession('a');
+    await expect(srv.closeSession('a')).rejects.toMatchObject({ code: 'busy', message: 'a close is already in progress' });
+    expect(await first).toEqual({ how: 'exit' });
+    expect(texts()).toEqual([['text', 'ledge-a', '/exit']]);
+  });
+
+  it('delivers nothing to a closing session', async () => {
+    let r: ChatRelay | undefined = { id: 'a', name: 'Otto', tool: 'claude', text: 'Lance les tests', status: 'queued' };
+    const chat: Chat = {
+      async ask() {}, cancel() {}, async reset() {}, history: () => [], proposal: () => undefined, markLaunched() {}, markFailed() {},
+      relay: qid => (qid === 'q1' ? r : undefined),
+      markRelay(_qid, patch, emit) { const { id, name, tool, text } = r!; r = { id, name, tool, text, ...patch }; emit({ type: 'chat.history', turns: [] }); },
+      queuedRelays: () => (r?.status === 'queued' ? [{ qid: 'q1', relay: r, askedAt: '2026-10-12T08:00:00.000Z' }] : []),
+      close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}
+    };
+    const history = new History({ dir: tmpDir() });
+    await closing({ 'ledge-a': ['Running…'] }, { history, chat });
+    store.upsert(mk('a', { state: 'working' })); store.upsert(mk('b', { name: 'Pim', state: 'idle' }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.message', rid: 'r1', from: 'b', to: 'Otto', text: 'Salut' });
+    expect(await c.next('message.ack', 3000)).toMatchObject({ outcome: 'queued' });
+    const closed = srv.closeSession('a');
+    await until(() => tmux.sent.length > 0, 3000);
+    store.upsert({ ...store.get('a')!, state: 'idle' });
+    expect(await closed).toEqual({ how: 'exit' });
+    expect(texts()).toEqual([['text', 'ledge-a', '/exit']]);
+    expect(r).toMatchObject({ error: 'Otto stopped before it got the instruction' });
+    await until(() => history.items('b').some(i => i.kind === 'sent' && i.status === 'failed'), 3000);
+    c.close();
+  });
+});

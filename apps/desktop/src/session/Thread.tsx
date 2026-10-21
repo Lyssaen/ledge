@@ -319,7 +319,7 @@ const Turn = memo(function Turn({ session, helper, items, x, at, last, folded, o
     return (
       <li className="r decision-row">
         <span className={cls('n node', tone.node)} aria-hidden="true"><Icon d={tone.icon} size={12} /></span>
-        <div className={`decision-chip ${d}`}><Badge state={tone.badge} label={th.decided[d]} /><code>{item.text}</code></div>
+        <div className={`decision-chip ${d}`}><Badge state={tone.badge} label={item.byClose ? th.decided.denyByClose : th.decided[d]} /><code>{item.text}</code></div>
         <span className="tm">{clock(item.at)}</span>
       </li>
     );
