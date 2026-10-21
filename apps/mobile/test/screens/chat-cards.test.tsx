@@ -171,6 +171,24 @@ describe('the close card', () => {
     release({ status: 'cancelled' });
   });
 
+  it('a cancelled or expired check says so, and the next tap clears it', async () => {
+    const t = open({ closes });
+    const spy = vi.spyOn(t.store, 'closeSessions').mockResolvedValueOnce({ status: 'cancelled' });
+    fireEvent.click(screen.getAllByRole('button', { name: copy.chat.closeRow })[0]!);
+    expect(await screen.findByText(copy.confirm.cancelled)).not.toHaveClass('text-danger-fg');
+    // Nothing was sent: no row reads failed, and the rows can be tapped again.
+    expect(screen.queryByText(copy.chat.closeFailed)).toBeNull();
+    spy.mockResolvedValueOnce({ status: 'expired' });
+    fireEvent.click(screen.getAllByRole('button', { name: copy.chat.closeRow })[1]!);
+    expect(await screen.findByText(copy.confirm.expired)).toBeInTheDocument();
+    expect(screen.queryByText(copy.confirm.cancelled)).toBeNull();
+    let release!: (r: { status: 'applied' }) => void;
+    spy.mockReturnValueOnce(new Promise(r => { release = r; }));
+    fireEvent.click(screen.getAllByRole('button', { name: copy.chat.closeRow })[0]!);
+    await waitFor(() => expect(screen.queryByText(copy.confirm.expired)).toBeNull());
+    release({ status: 'applied' });
+  });
+
   it('a row button closes that row alone', () => {
     const t = open({ closes });
     const spy = vi.spyOn(t.store, 'closeSessions').mockResolvedValue({ status: 'cancelled' });

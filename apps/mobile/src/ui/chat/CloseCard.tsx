@@ -26,6 +26,8 @@ export function CloseCards({ store, qid, closes, canConfirm, sessions }: { store
   const { ops } = useMobile(store);
   const [failed, setFailed] = useState<ReadonlySet<number>>(new Set());
   const [tapped, setTapped] = useState(false);
+  // A cancelled or expired check sent nothing: the card says so until the next tap.
+  const [note, setNote] = useState<'cancelled' | 'expired' | null>(null);
   const live = Object.values(ops).filter(o => isLive(o.phase)).map(o => o.message).filter(m => m.type === 'chat.relay' || m.type === 'chat.launch' || m.type === 'chat.close').filter(m => m.qid === qid);
   // A close under way names its rows, or none for all of them.
   const liveRows: ReadonlySet<number> | 'all' | null = (() => {
@@ -41,10 +43,10 @@ export function CloseCards({ store, qid, closes, canConfirm, sessions }: { store
   });
   const open = rows.filter(r => r.state === 'open' || r.state === 'failed');
   const go = (indexes: number[]) => {
-    setTapped(true);
+    setTapped(true); setNote(null);
     setFailed(f => new Set([...f].filter(i => !indexes.includes(i))));
     // Cancelled or expired leaves the rows as they were: the next tap asks again.
-    void store.closeSessions(qid, indexes).then(r => { if (r.status === 'failed' || r.status === 'rejected') setFailed(f => new Set([...f, ...indexes])); }, () => setFailed(f => new Set([...f, ...indexes]))).finally(() => setTapped(false));
+    void store.closeSessions(qid, indexes).then(r => { if (r.status === 'cancelled' || r.status === 'expired') setNote(r.status); else if (r.status === 'failed' || r.status === 'rejected') setFailed(f => new Set([...f, ...indexes])); }, () => setFailed(f => new Set([...f, ...indexes]))).finally(() => setTapped(false));
   };
   const text: Record<State, string> = { closed: copy.chat.closed, killed: copy.chat.killed, ended: copy.chat.ended, closing: copy.chat.closing, failed: copy.chat.closeFailed, open: '' };
   return (
@@ -58,6 +60,7 @@ export function CloseCards({ store, qid, closes, canConfirm, sessions }: { store
           </li>
         ))}
       </ul>
+      {note && <p className="text-[13px] text-muted">{copy.confirm[note]}</p>}
       {open.length > 0 && !canConfirm && (
         <p className="text-[13px] text-attention">{copy.chat.closeSetup} <a href={href({ name: 'connection' })} className="text-info underline underline-offset-2">{copy.connection.title}</a></p>
       )}
