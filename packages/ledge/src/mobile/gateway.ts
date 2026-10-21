@@ -471,6 +471,8 @@ export function createPhoneGateway(deps: {
           const challenge = deps.challenges.issue({ deviceId, purpose: 'close', subject: msg.qid });
           return push(deviceId, { type: 'confirm.challenge', purpose: 'close', challenge, rpId: rp.rpId, credentialId: cred.id, expiresInMs: CHALLENGE_TTL_MS });
         }
+        // Nothing else falls into a register challenge.
+        if (msg.purpose !== 'register') return invalid();
         const challenge = deps.challenges.issue({ deviceId, purpose: 'register', subject: '' });
         return push(deviceId, { type: 'confirm.challenge', purpose: 'register', challenge, rpId: rp.rpId, expiresInMs: CHALLENGE_TTL_MS });
       }
