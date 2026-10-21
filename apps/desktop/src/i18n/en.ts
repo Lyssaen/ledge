@@ -120,7 +120,9 @@ export const en: Messages = {
       scale: 'Interface scale', scaleHint: 'Size of Ledge Desktop’s text and controls. Auto follows Windows’ scaling.',
       percent: (n) => `${Math.round(n * 100)}%`, auto: 'Auto', autoAt: (pct) => `Auto (${pct})`, scaleSaved: (label) => `Interface scale ${label}`, scaleFailed: 'The scale could not be applied.',
       reduced: 'Reduced motion', reducedHint: 'The mascots stand still; states stay readable without animation. The Windows setting wins.',
-      reducedOff: 'Animations'
+      reducedOff: 'Animations',
+      seats: 'Agents around a table', seatsHint: 'Beyond that, the project’s other agents go into « +N ».',
+      seatsSaved: (n) => `${n} agents around a table`
     },
     notifications: {
       dnd: 'Do not disturb', dndHint: 'Holds the bubbles, the Windows notifications and the sounds. Requests stay visible in the notch and in the sessions.',

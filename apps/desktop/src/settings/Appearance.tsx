@@ -4,6 +4,7 @@ import { Bot } from '@ledge/ui/bots/Bot';
 import { ResidentMascot } from '@ledge/ui/bots/ResidentMascot';
 import { UI_SCALES, type UiScale } from '@ledge/ui/scale';
 import { Button } from '@ledge/ui/ui/Button';
+import { SEAT_CHOICES, useSeats } from '../atelier/seats';
 import { useI18n } from '../i18n/lang';
 import { useMotionPreferences } from '../motionPreferences';
 import { prepareAvatar, setAvatar, useAvatar, type AvatarRefusal } from '../shell/avatar';
@@ -19,13 +20,15 @@ type ScaleChoice = 'auto' | '1' | '1.25' | '1.5' | '2';
 const toChoice = (s: UiScale): ScaleChoice => String(s) as ScaleChoice;
 const toScale = (c: ScaleChoice): UiScale => (c === 'auto' ? 'auto' : (Number(c) as UiScale));
 
-/** Settings › Appearance (settings.tsx, `appearance`): the theme's two cards, Ledge's color, the interface scale, reduced motion.
+/** Settings › Appearance (settings.tsx, `appearance`): the theme's two cards, Ledge's color, the interface scale, reduced motion,
+ *  how many agents sit around an atelier table.
  *  Each accepted change says « Setting saved » once. */
 export function Appearance({ ctx }: { ctx: SettingsContext }): JSX.Element {
   const { t } = useI18n();
   const a = t.settings.appearance;
   const theme = useTheme();
   const motion = useMotionPreferences();
+  const [seats, setSeats] = useSeats();
   const { saved } = ctx;
 
   // The scale: kept and applied by saveUiScale, which answers the factor the WebView took; « Auto » shows the one it resolved to.
@@ -72,6 +75,11 @@ export function Appearance({ ctx }: { ctx: SettingsContext }): JSX.Element {
           options={UI_SCALES.map(s => ({ value: toChoice(s), label: s === 'auto' ? (autoFactor === null ? a.auto : a.autoAt(a.percent(autoFactor))) : a.percent(s), wide: s === 'auto' }))} />}
       </Row>
       <SwitchRow label={a.reduced} hint={a.reducedHint} checked={motion.app} onChange={on => { motion.setReduced(on); saved(on ? a.reduced : a.reducedOff); }} />
+      <Row label={a.seats} hint={a.seatsHint} stack>
+        {describedBy => <Segmented label={a.seats} value={String(seats)} describedBy={describedBy}
+          onChange={v => { const n = SEAT_CHOICES.find(c => String(c) === v)!; setSeats(n); saved(a.seatsSaved(n)); }}
+          options={SEAT_CHOICES.map(n => ({ value: String(n), label: String(n) }))} />}
+      </Row>
     </Card>
     </>
   );

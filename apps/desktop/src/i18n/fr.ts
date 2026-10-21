@@ -136,7 +136,9 @@ export const fr = {
       scale: 'Échelle de l’interface', scaleHint: 'Taille du texte et des contrôles de Ledge Desktop. Auto suit la mise à l’échelle de Windows.',
       percent: (n: number) => `${Math.round(n * 100)} %`, auto: 'Auto', autoAt: (pct: string) => `Auto (${pct})`, scaleSaved: (label: string) => `Échelle de l’interface ${label}`, scaleFailed: 'L’échelle n’a pas pu être appliquée.',
       reduced: 'Mouvements réduits', reducedHint: 'Les mascottes s’immobilisent ; les états restent lisibles sans animation. La préférence de Windows reste prioritaire.',
-      reducedOff: 'Animations'
+      reducedOff: 'Animations',
+      seats: 'Agents autour d’une table', seatsHint: 'Au-delà, les autres agents du projet se rangent dans « +N ».',
+      seatsSaved: (n: number) => `${n} agents autour d’une table`
     },
     notifications: {
       dnd: 'Ne pas déranger', dndHint: 'Suspend les bulles, les notifications Windows et les sons. Les demandes restent visibles dans l’encoche et dans les sessions.',

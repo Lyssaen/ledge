@@ -22,6 +22,8 @@ export interface ProjectTableProps {
   /** The whole mainOrder: « Alt n » on the first nine. */
   order: readonly Session[];
   helpers: boolean;
+  /** How many main agents sit before « +N » (Settings › Appearance). */
+  seats: number;
   paused: boolean;
   /** The filter is on this project: the menu offers « Voir tous les projets ». */
   isolated: boolean;
@@ -74,11 +76,11 @@ function TableTop({ sheets, length }: { sheets: Sheet[]; length: number }): JSX.
 
 /** One project's table in the atelier (observatory.tsx, `project-room` in atelier mode): the rug with its label and
  *  « +N », the plants, the chairs, the table with its sheets and post-its, the seats and the sub-agents at the ends. */
-export function ProjectTable({ project, mains, order, helpers, paused, isolated, focusedId, seated, dispatch, filing, actions, menuId, onMenu }: ProjectTableProps): JSX.Element {
+export function ProjectTable({ project, mains, order, helpers, seats: maxSeats, paused, isolated, focusedId, seated, dispatch, filing, actions, menuId, onMenu }: ProjectTableProps): JSX.Element {
   const { t } = useI18n();
   const { id, name } = project;
   const color = PROJECT_COLORS[project.color];
-  const layout = layoutTable(mains, helpers);
+  const layout = layoutTable(mains, helpers, maxSeats);
   const { length, width, seats, ends, notes, extra, extraCount } = layout;
   const at = (dx: number) => `calc(50% - ${length / 2}px + ${dx}px)`;
   const branch = tableBranch(mains);

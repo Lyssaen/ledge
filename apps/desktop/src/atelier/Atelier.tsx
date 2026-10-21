@@ -13,6 +13,7 @@ import { roomWidth, sceneOf, walkOrder } from './layout';
 import { LedgeDesk } from './LedgeDesk';
 import { MessageLayer, useMessageClock } from './MessageLayer';
 import { ProjectTable } from './ProjectTable';
+import { useSeats } from './seats';
 import { Unassigned } from './Unassigned';
 import { useAtelierView } from './useAtelierView';
 import { folderOf, type Filing } from './filing';
@@ -58,7 +59,8 @@ export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf,
   const { place } = nav;
   const filter = place.kind === 'settings' ? place.back.project : place.project;
   const scene = useMemo(() => sceneOf(order, projects, projectIdOf, filter), [order, projects, projectIdOf, filter]);
-  const walk = useMemo(() => walkOrder(scene), [scene]);
+  const [seats] = useSeats();
+  const walk = useMemo(() => walkOrder(scene, seats), [scene, seats]);
   const clock = useMessageClock(sessions);
 
   const [focusedId, setFocusedId] = useState<string | null>(null);
@@ -77,8 +79,8 @@ export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf,
 
   // The mosaic's tiles, in render order: Ledge's desk, the tables, then the empty project or « Sans projet ».
   const tiles = useMemo(() => [
-    LEDGE_TILE, ...scene.tables.map(t => roomWidth(t.mains.length)), ...(scene.empty || scene.unassigned.length > 0 ? [ZONE_TILE] : [])
-  ], [scene]);
+    LEDGE_TILE, ...scene.tables.map(t => roomWidth(t.mains.length, seats)), ...(scene.empty || scene.unassigned.length > 0 ? [ZONE_TILE] : [])
+  ], [scene, seats]);
   const view = useAtelierView(tiles, [nav.helpers, nav.fullscreen, nav.chat, filter, sessions.length]);
   useScreenKeys(e => {
     if (view.keys(e)) return true;
@@ -132,7 +134,7 @@ export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf,
           <LedgeDesk count={activeCount(sessions)} chat={nav.chat} paused={nav.paused} onClick={() => dispatch({ type: 'chat' })} />
           <div className={`project-grid ${scene.tables.length === 1 ? 'focused' : ''}`}>
             {scene.tables.map(({ project, mains }) => (
-              <ProjectTable key={project.id} project={project} mains={mains} order={order} helpers={nav.helpers} paused={nav.paused}
+              <ProjectTable key={project.id} project={project} mains={mains} order={order} helpers={nav.helpers} seats={seats} paused={nav.paused}
                 isolated={filter === project.id} focusedId={focusedId} seated={filing.seated} dispatch={dispatch} filing={filing}
                 actions={actions} menuId={menu.menu?.id ?? null} onMenu={menuAt} />
             ))}

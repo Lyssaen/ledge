@@ -2,7 +2,7 @@ import type { Helper, Project, Projects, Session } from '@ledge/protocol';
 import type { BotState } from '@ledge/ui/bots/poseFor';
 import type { ProjectFilter } from '../nav/state';
 
-/** The mockup's constants (observatory.tsx). */
+/** The mockup's constants (observatory.tsx). MAX_SEATS is the default seat count; Settings › Appearance chooses another (seats.ts). */
 export const STEP = 70, MAX_SEATS = 6, END_SEATS = 2, RUG_SIDE = 130;
 export type Side = 't' | 'b';
 export type End = 'left' | 'right';
@@ -20,10 +20,10 @@ export interface TableLayout {
 }
 
 export const tableLength = (n: number): number => (Math.max(n, 2) + 1) * STEP;
-export const roomWidth = (mains: number): number => tableLength(Math.min(mains, MAX_SEATS)) + 2 * RUG_SIDE;
+export const roomWidth = (mains: number, maxSeats = MAX_SEATS): number => tableLength(Math.min(mains, maxSeats)) + 2 * RUG_SIDE;
 
-export function layoutTable(mains: readonly Session[], showHelpers: boolean): TableLayout {
-  const seated = mains.slice(0, MAX_SEATS);
+export function layoutTable(mains: readonly Session[], showHelpers: boolean, maxSeats = MAX_SEATS): TableLayout {
+  const seated = mains.slice(0, maxSeats);
   const length = tableLength(seated.length);
   const xOf = (i: number) => (seated.length === 1 ? length / 2 : STEP * (i + 1));
   const seats: Seat[] = seated.map((session, i) => ({ session, x: xOf(i), side: seated.length === 1 || i % 2 === 0 ? 't' : 'b' }));
@@ -43,11 +43,11 @@ export function layoutTable(mains: readonly Session[], showHelpers: boolean): Ta
         else extraHelpers.push({ helper, parent });
       }
     }
-    for (const parent of mains.slice(MAX_SEATS)) for (const helper of parent.helpers ?? []) extraHelpers.push({ helper, parent });
+    for (const parent of mains.slice(maxSeats)) for (const helper of parent.helpers ?? []) extraHelpers.push({ helper, parent });
   }
   const ends: EndSeat[] = (['left', 'right'] as const).flatMap(end => bins[end].map((b, slot) => ({ ...b, end, slot, count: bins[end].length })));
-  const extraMains = mains.slice(MAX_SEATS);
-  return { length, width: roomWidth(mains.length), seats, ends, notes, extra: { mains: extraMains, helpers: extraHelpers }, extraCount: extraMains.length + extraHelpers.length };
+  const extraMains = mains.slice(maxSeats);
+  return { length, width: roomWidth(mains.length, maxSeats), seats, ends, notes, extra: { mains: extraMains, helpers: extraHelpers }, extraCount: extraMains.length + extraHelpers.length };
 }
 
 const SHEET_W = 84, NOTE_W = 52;
@@ -93,6 +93,6 @@ export function sceneOf(order: readonly Session[], projects: Projects | null, pr
   return { tables, unassigned, empty };
 }
 
-export function walkOrder(scene: AtelierScene): Session[] {
-  return [...scene.tables.flatMap(t => t.mains.slice(0, MAX_SEATS)), ...scene.unassigned];
+export function walkOrder(scene: AtelierScene, maxSeats = MAX_SEATS): Session[] {
+  return [...scene.tables.flatMap(t => t.mains.slice(0, maxSeats)), ...scene.unassigned];
 }
