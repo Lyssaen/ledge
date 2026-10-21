@@ -268,7 +268,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     if (c.type === 'removed') { previews.delete(c.id); titles.delete(c.id); labelled.delete(c.id); }
     if (c.type === 'updated') {
       const s = c.session;
-      if (s.tool === 'claude' && s.source === 'launcher' && s.state === 'exited' && s.transcriptPath && s.topic && labelled.get(s.id) !== (s.exitedAt ?? '')) {
+      if (s.tool === 'claude' && s.source === 'launcher' && s.state === 'exited' && s.transcriptPath && s.topic && s.topic !== s.name && labelled.get(s.id) !== (s.exitedAt ?? '')) {
         labelled.set(s.id, s.exitedAt ?? '');
         try { labelTranscript(s.transcriptPath, s.name, resumeLabel(s.name, s.topic)); } catch (e) { log(`resume label of ${s.id} not written: ${(e as Error).message}`); }
       }

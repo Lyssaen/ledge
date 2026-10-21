@@ -246,9 +246,12 @@ function reduceEvent(s: Session, ev: SessionEvent): Session {
     case 'PaneChanged':
       return s.lastActivityAt === at ? s : { ...s, lastActivityAt: at };
     case 'PaneTitle': {
+      if (s.topicSource === 'user') return s;
       const t = ev.text ?? '';
-      if (s.topicSource === 'user' || t === s.name) return s;
-      return withTopic(s, t.startsWith(`${s.name} - `) ? t.slice(s.name.length + 3) : t, 'pane');
+      const rest = t.startsWith(`${s.name} - `) ? t.slice(s.name.length + 3).trim() : undefined;
+      // The bare name is no topic; one an earlier launch stored as such (`-n`) is dropped, so a prompt or a title sets one.
+      if (t === s.name || rest === '') return s.topicSource === 'pane' && s.topic === s.name ? withTopic(s, '', undefined) : s;
+      return withTopic(s, rest ?? t, 'pane');
     }
     case 'Renamed': return withTopic(s, ev.text ?? '', ev.text?.trim() ? 'user' : undefined);
     case 'PaneIdle': {

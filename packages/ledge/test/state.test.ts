@@ -686,6 +686,17 @@ describe('topics', () => {
     expect(s.topic).toBe('Refonte des noms'); expect(s.topicSource).toBe('pane');
     expect(reduce(s, { name: 'PaneTitle', at, source: 'pane', text: 'Ottoman - x' }).topic).toBe('Ottoman - x');
   });
+  it('a topic an earlier launch stored as the name is cleared by that title, so a prompt sets one', () => {
+    let s = reduce({ ...mk('a'), topic: 'Otto', topicSource: 'pane', title: 'Otto · Otto' }, { name: 'PaneTitle', at, source: 'pane', text: 'Otto' });
+    expect(s.topic).toBeUndefined(); expect(s.topicSource).toBeUndefined(); expect(s.title).toBe('Otto · harness-assistant');
+    s = reduce(s, { name: 'UserPromptSubmit', at, source: 'hook', text: 'premier prompt' });
+    expect(s.topic).toBe('premier prompt');
+  });
+  it('« <name> - » with an empty rest is the bare name', () => {
+    const s = reduce(mk('a'), { name: 'UserPromptSubmit', at, source: 'hook', text: 'premier prompt' });
+    expect(reduce(s, { name: 'PaneTitle', at, source: 'pane', text: 'Otto - ' })).toBe(s);
+    expect(reduce(s, { name: 'PaneTitle', at, source: 'pane', text: 'Otto -  ' })).toBe(s);
+  });
   it('an empty rename hands back to the automatic sources', () => {
     let s = reduce(mk('a'), { name: 'Renamed', at, source: 'daemon', text: 'Mon sujet' });
     s = reduce(s, { name: 'Renamed', at, source: 'daemon', text: '  ' });

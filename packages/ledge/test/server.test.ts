@@ -356,6 +356,12 @@ describe('server', () => {
       expect(lines(p)).toHaveLength(2);
     });
 
+    it('writes no label while the topic is still the name (a session launched before the change)', async () => {
+      const p = transcript();
+      store.upsert(mk('a', { name: 'Pim', topic: 'Pim', transcriptPath: p, state: 'exited', exitedAt: T0 }));
+      await new Promise(r => setTimeout(r, 50));
+      expect(lines(p)).toHaveLength(1);
+    });
     it('leaves Codex and hook-only sessions alone', async () => {
       const p = transcript(); const q = transcript();
       store.upsert(mk('c', { tool: 'codex', topic: 'Sujet', transcriptPath: p, state: 'exited', exitedAt: T0 }));
