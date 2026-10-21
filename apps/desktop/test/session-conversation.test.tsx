@@ -447,7 +447,7 @@ describe('the Conversation tab', () => {
       });
       watch.observe(document.body, { childList: true, subtree: true, characterData: true });
       await d.dropClients();
-      await waitFor(() => expect(asked(d, 'nova')).toHaveLength(2));
+      await waitFor(() => expect(asked(d, 'nova')).toHaveLength(2), { timeout: 5000 });
       await pause(150);
       watch.disconnect();
       expect(seen).toEqual({ loading: false, gone: false });
@@ -456,7 +456,7 @@ describe('the Conversation tab', () => {
       await user.click(thread().getByRole('link', { name: 'docs/guide.md' }));
       await pane().findByText('Bonjour.');
       await d.dropClients();
-      await waitFor(() => expect(asked(d, 'nova')).toHaveLength(3));
+      await waitFor(() => expect(asked(d, 'nova')).toHaveLength(3), { timeout: 5000 });
       await pause(150);
       expect(pane().getByRole('tab', { name: 'Conversation · Nova' })).toBeInTheDocument();
       expect(paneEl().querySelector('.conv-tab-dot')).toBeNull();

@@ -140,10 +140,15 @@ export function SidePane(p: SidePaneProps): JSX.Element | null {
             {tabs.map(x => {
               const id = tabId(x);
               const label = labelOf(x);
+              // A conversation's tab not shown: a dot, and its name says how many messages came since it was.
+              const view = x.kind === 'conv' && id !== active ? p.convs.get(x.peer) : undefined;
+              const unseen = view?.unseen ?? 0;
               return (
                 <div key={id} className={cls('pane-tab', id === active && 'current')}>
-                  <button type="button" role="tab" aria-selected={id === active} onClick={() => p.onActive(id)} title={pathOf(x) || undefined}>
+                  <button type="button" role="tab" aria-selected={id === active} onClick={() => p.onActive(id)} title={pathOf(x) || undefined}
+                    aria-label={view && unseen > 0 ? t.session.conversation.tabNew(view.name, unseen) : undefined}>
                     <Icon d={x.kind === 'diff' ? SHELL_ICONS.diff : x.kind === 'plan' ? SHELL_ICONS.plan : x.kind === 'conv' ? SHELL_ICONS.mail : SHELL_ICONS.file} size={12} /><span>{label}</span>
+                    {unseen > 0 && <i className="conv-tab-dot" aria-hidden="true" />}
                   </button>
                   <button type="button" className="tab-close" aria-label={tp.closeTab(label)} onClick={() => p.onClose(id)}><Icon d={ICONS.close.d} size={11} /></button>
                 </div>
