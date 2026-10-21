@@ -15,6 +15,8 @@ export interface ConversationView {
   bubbles: readonly Bubble[];
   /** B's thread is being read for the first time (A's side shows meanwhile). */
   loading: boolean;
+  /** B's thread is merged in. When it comes, its messages are the conversation's past, never « nouveaux ». */
+  withPeer: boolean;
   /** Messages added while the tab was not the active one (its dot); a status changing is not one. */
   unseen: number;
 }
@@ -53,8 +55,8 @@ export function useConversations(client: Pick<DaemonClient, 'send'>, self: Sessi
   // How many messages each tab held when last seen. A count that drops (both agents ran /clear) takes it down too, so the
   // messages that come after still count; while B's thread is first read, an inactive tab's is left as it was. Written
   // once the render is committed: the unseen counts below come from the same render.
-  const seen = useRef<ReadonlyMap<string, number>>(new Map());
-  const nextSeen = new Map<string, number>();
+  const seen = useRef<ReadonlyMap<string, { count: number; withPeer: boolean }>>(new Map());
+  const nextSeen = new Map<string, { count: number; withPeer: boolean }>();
   const kept = new Map<string, Merged>();
   const out = new Map<string, ConversationView>();
   keys.forEach((key, i) => {
@@ -64,11 +66,14 @@ export function useConversations(client: Pick<DaemonClient, 'send'>, self: Sessi
     const bubbles = last && last.a === a && last.b === b ? last.bubbles : remerge(last?.bubbles, conversation(a, b, key, selfId));
     kept.set(key, { a, b, bubbles });
     const loading = peer !== null && peer.offline !== true && b === undefined;
+    const withPeer = b !== undefined;
     const base = seen.current.get(key);
     const count = bubbles.length;
-    const baseline = key === active || base === undefined ? count : loading ? base : Math.min(base, count);
-    nextSeen.set(key, baseline);
-    out.set(key, { key, peer, name: peer?.name ?? named[i]!.name, bubbles, loading, unseen: Math.max(0, count - baseline) });
+    // B's thread just came (read at last, or its peer found later): what it adds is the past, counted as seen.
+    const baseline = key === active || base === undefined || (withPeer && !base.withPeer) ? count
+      : loading ? base.count : Math.min(base.count, count);
+    nextSeen.set(key, { count: baseline, withPeer });
+    out.set(key, { key, peer, name: peer?.name ?? named[i]!.name, bubbles, loading, withPeer, unseen: Math.max(0, count - baseline) });
   });
   cache.current = kept;
   // Closed tabs' baselines go with them.
