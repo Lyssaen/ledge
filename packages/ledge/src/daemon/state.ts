@@ -294,9 +294,12 @@ function reduceEvent(s: Session, ev: SessionEvent): Session {
       // answered in the terminal) gives way to what the pane asks. No hook reports the next one: only the end of all.
       const moved = s.pending?.source === 'hook' && s.pending.kind === 'question' && incoming.kind === 'question'
         && !sameQuestion(incoming.text, s.pending.text);
-      if (s.pending?.source === 'hook' && !moved) return s;
+      // A Notification's request names no tool and no option: the pane's says more (question 2 of an AskUserQuestion
+      // whose question 1 was answered from Ledge: its Decided emptied the card before the Notification came).
+      const bare = s.pending?.source === 'hook' && s.pending.kind === 'permission' && !s.pending.tool;
+      if (s.pending?.source === 'hook' && !moved && !bare) return s;
       if (!moved && hooksReportPrompts(s) && lastHookAt && Date.parse(at) - Date.parse(lastHookAt) < HOOK_PRIORITY_MS) return s;
-      let pending = moved ? { ...incoming, ...(s.pending!.helperId ? { helperId: s.pending!.helperId } : {}) } : mergePending(s.pending, incoming);
+      let pending = moved ? { ...incoming, ...(s.pending!.helperId ? { helperId: s.pending!.helperId } : {}) } : bare ? incoming : mergePending(s.pending, incoming);
       // Codex asks "Implement this plan?" under the plan it just proposed: its last reply is what to review.
       if (pending.kind === 'plan' && !pending.body && s.tool === 'codex' && s.lastReply) pending = { ...pending, body: s.lastReply.text };
       if (s.pending && samePending(s.pending, pending)) return s;

@@ -151,6 +151,13 @@ describe('reduce: pending rules', () => {
     const review = reduce(next, ev('PanePrompt', { source: 'pane', kind: 'question', text: 'Ready to submit your answers?', options: ['Submit answers', 'Cancel'], at: later(9500) }));
     expect(review.pending).toMatchObject({ text: 'Ready to submit your answers?', options: ['Submit answers', 'Cancel'], source: 'pane' });
   });
+  it('question 1 answered from Ledge: the Notification that follows gives way to the next question the pane shows', () => {
+    const asked = reduce(session('working'), ev('PreToolUse', { tool: 'AskUserQuestion', text: 'Quelle est la clé de la story ?', options: ['Hors story', 'Autre clé'] }));
+    const decided = reduce(asked, ev('Decided', { source: 'daemon', at: later(8000) }));
+    const notified = reduce(decided, ev('Notification', { kind: 'permission', text: 'Claude needs your permission', at: later(9000) }));
+    const next = reduce(notified, ev('PanePrompt', { source: 'pane', kind: 'question', text: 'Quel est l objectif ?', options: ['Correction', 'Analyse', 'Type something.', 'Chat about this'], at: later(9000 + HOOK_PRIORITY_MS + 1) }));
+    expect(next).toMatchObject({ state: 'waiting_input', pending: { kind: 'question', text: 'Quel est l objectif ?', source: 'pane' } });
+  });
   it('a pane prompt within HOOK_PRIORITY_MS of the last hook event is ignored', () => {
     const s = reduce(session('working'), ev('UserPromptSubmit', { at: later(5000) }));
     const next = reduce(s, ev('PanePrompt', { source: 'pane', kind: 'permission', text: 'Do you want to proceed?', at: later(5000 + HOOK_PRIORITY_MS - 1) }));
