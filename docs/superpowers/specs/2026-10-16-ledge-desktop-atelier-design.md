@@ -50,9 +50,11 @@ posées devant eux. On voit d'un coup d'œil qui travaille sur quoi, où, et qui
   emplacement tirés de l'identifiant du projet (stables d'un chargement à l'autre), toujours sur le tapis.
 - **Rejeté** : objets décoratifs sur les tables, mur et « coin des idées », thèmes de décor, robot aspirateur, cactus.
 
-### 2.2 Le bureau de Ledge
+### 2.2 Ledge dans son coin
 
-Ledge a son petit bureau dans l'atelier (mascotte, bulle « Je veille sur N agents »). Un clic ouvre le chat.
+Ledge se tient dans le coin haut gauche du sol, posé sur le rebord de son propre logo : pas de bureau. À sa droite, sa
+bulle (« Je veille sur N agents », « Je vous écoute. » quand le chat est ouvert), puis « Ledge · Votre assistant ». Un
+clic ouvre ou ferme le chat ; un anneau l'entoure tant que le chat est ouvert. Il zoome et se déplace avec le sol.
 
 ### 2.3 Sans projet
 
@@ -62,7 +64,8 @@ s'allume), ou par « Ranger dans… » (dont « Nouveau projet… »). Ledge mé
 
 ### 2.4 Disposition et navigation
 
-- **Mosaïque ajustée** : le bureau de Ledge, les tables et « Sans projet » sont les tuiles d'une même mosaïque. L'app
+- **Mosaïque ajustée** : les tables et « Sans projet » sont les tuiles d'une même mosaïque, sous la bande où Ledge a son
+  coin (§ 2.2). L'app
   essaie 1, 2, 3… rangées et garde celle qui permet le plus grand zoom sans défilement ; les rangées sont centrées et
   réparties dans la hauteur. Marge de sol autour du contenu ; bande réservée en bas pour la légende et le zoom.
 - **Le quadrillage du sol** remplit toute la zone et **ne zoome ni ne bouge** ; seul le contenu le fait.

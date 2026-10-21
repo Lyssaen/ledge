@@ -126,14 +126,14 @@
 .office-shell .table-scene{overflow:visible}
 .note-t{top:12px;transform:rotate(5deg)}.note-b{bottom:12px;transform:rotate(-5deg)}
 
-/* office.css, lines 146-151. */
+/* office.css, lines 137-142. */
 /* The project's label is woven into the rug, bottom-left; it shares the rug's skew. */
 .office-shell .rug-labels .room-heading{position:absolute;left:14px;bottom:12px;margin:0;width:auto;max-width:calc(100% - 28px);padding:5px 6px 5px 10px;gap:6px;background:color-mix(in srgb,var(--sidebar) 88%,transparent);border:1px solid var(--input);box-shadow:0 2px 0 var(--border);border-radius:var(--radius-md);z-index:4}
 .office-shell .rug-labels .room-heading .spacer{width:2px}
 .office-shell .rug-labels .room-heading strong,.office-shell .rug-labels .project-conversations{font-size:12px;font-weight:500}
 .office-shell .table-scene{height:490px}
 
-/* office.css, lines 155-171. */
+/* office.css, lines 146-162. */
 /* Wider, flatter rugs: the label sits in the free bottom-left corner, and a long name is cut. */
 .office-shell .office-rug,.office-shell .rug-labels{top:-6px!important;bottom:6px!important}
 /* The label and « +N » lie on the rug but in their own layer: the rug's skew makes it a stacking context under the table,
@@ -156,7 +156,7 @@
 /* Full screen: no width cap, the zoom computed in App fills the screen. */
 .immersive .office-shell .project-grid{max-width:none}
 
-/* office.css, lines 279-287: the post-it count and « +N à cette table ». */
+/* office.css, lines 268-276: the post-it count and « +N à cette table ». */
 /* Several sub-agents on one parent: the sticky note counts the others. */
 .note-more{position:absolute;right:-6px;bottom:-6px;min-width:16px;height:14px;padding:0 3px;border-radius:999px;background:var(--card);border:1px solid var(--input);font:600 8px/12px 'Geist Mono',monospace;font-style:normal;text-align:center;color:var(--foreground)}
 /* Overflow, on the rug's bottom-right corner (mirror of the project label): who else sits at this table. */
@@ -262,30 +262,21 @@
 /* Not in the mockup: the app's own reduced-motion setting stills the seat pop too. */
 .office-reduced .just-seated,.office-reduced .just-seated:after{animation:none}
 
-/* office.css, lines 125-145: Ledge's desk. */
-/* Ledge's own little desk, at the head of the room: a click opens the chat. */
-.ledge-corner{display:flex;justify-content:center;padding:26px 0 4px}
-.ledge-desk{position:relative;display:flex;flex-direction:column;align-items:center;width:200px;padding:4px 0 8px!important;border-radius:var(--radius-xl)}
-.ledge-desk:hover .mini-desk,.ledge-desk.active .mini-desk{box-shadow:0 6px 0 var(--secondary),0 7px 0 var(--input),0 0 0 2px color-mix(in srgb,var(--sidebar-primary) 45%,transparent),5px 14px 12px color-mix(in srgb,var(--foreground) 8%,transparent)}
+/* office.css, lines 125-136: Ledge in the floor's top-left corner. */
+/* Ledge in the top-left corner of the floor, sitting on its own ledge (the logo's): no desk, a click opens the chat. */
+.ledge-corner{position:absolute;top:14px;left:18px;z-index:5}
+.ledge-desk{display:grid;grid-template-columns:auto auto;grid-template-rows:auto auto auto 1fr;column-gap:2px;align-items:start;justify-items:start;padding:2px 12px 2px 2px!important;border-radius:var(--radius-xl);text-align:left;transition:background .15s,box-shadow .15s}
+.ledge-desk:hover{background:color-mix(in srgb,var(--sidebar-accent) 70%,transparent)}
+.ledge-desk.active{box-shadow:0 0 0 2px color-mix(in srgb,var(--sidebar-primary) 45%,transparent)}
 .ledge-desk:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
-.ledge-bubble{position:absolute;left:calc(50% + 52px);top:2px;display:flex;align-items:center;gap:6px;white-space:nowrap;padding:5px 9px;font-size:11px;border:1px solid var(--input);border-radius:10px 10px 10px 2px;background:var(--popover);color:var(--popover-foreground);box-shadow:0 3px 0 var(--border);z-index:2}
+.ledge-seat{grid-column:1;grid-row:1/5;display:block}
+.ledge-bubble{grid-column:2;grid-row:1;margin:6px 0 6px;display:flex;align-items:center;gap:6px;white-space:nowrap;padding:5px 9px;font-size:11px;border:1px solid var(--input);border-radius:10px 10px 10px 2px;background:var(--popover);color:var(--popover-foreground);box-shadow:0 3px 0 var(--border)}
 .ledge-bubble kbd{font-size:9px!important;height:16px!important}
-.ledge-seat{position:relative;z-index:1;margin-bottom:-30px}
-.mini-desk{position:relative;z-index:2;display:block;width:150px;height:46px;border-radius:12px;transform:skewY(-4deg);background:linear-gradient(150deg,color-mix(in srgb,var(--office-wood) 90%,var(--foreground)),var(--office-wood));border:1px solid color-mix(in srgb,var(--warning) 18%,var(--input));box-shadow:0 6px 0 var(--secondary),0 7px 0 var(--input),5px 14px 12px color-mix(in srgb,var(--foreground) 8%,transparent);transition:box-shadow .15s}
-.mini-desk:before,.mini-desk:after{content:'';position:absolute;bottom:-20px;height:15px;width:6px;background:var(--muted-foreground);opacity:.35;border-radius:0 0 2px 2px}
-.mini-desk:before{left:16px}.mini-desk:after{right:16px}
-.mini-sheet{position:absolute;top:9px;left:22px;width:30px;height:22px;border-radius:2px;background:color-mix(in srgb,var(--card) 86%,var(--foreground));border:1px solid var(--input);transform:rotate(-6deg);box-shadow:1px 2px 0 color-mix(in srgb,var(--foreground) 12%,transparent)}
-:root[data-theme=light] .mini-sheet{background:var(--card)}
-.mini-sheet.two{left:46px;top:13px;transform:rotate(5deg);background:color-mix(in srgb,var(--warning) 26%,var(--card))}
-.mini-mug{position:absolute;top:12px;right:28px;width:11px;height:13px;border-radius:2px 2px 4px 4px;background:var(--card);border:1px solid var(--input)}
-.mini-lamp{position:absolute;top:-14px;right:10px;width:16px;height:9px;border-radius:9px 9px 2px 2px;background:color-mix(in srgb,var(--warning) 35%,var(--muted));border:1px solid var(--muted-foreground);transform:rotate(14deg)}
-.ledge-desk.active .mini-lamp{background:var(--warning);box-shadow:0 6px 14px color-mix(in srgb,var(--warning) 55%,transparent)}
-.ledge-desk>strong{margin-top:22px;font-size:12px;font-weight:500}
-.ledge-desk>small{font-size:10px;color:var(--muted-foreground)}
-.office-shell .ledge-corner+.project-grid{padding-top:8px}
+.ledge-desk>strong{grid-column:2;grid-row:2;padding-left:2px;font-size:12px;font-weight:500}
+.ledge-desk>small{grid-column:2;grid-row:3;padding-left:2px;font-size:10px;color:var(--muted-foreground)}
 @media(max-width:700px){.ledge-bubble{display:none}}
 
-/* office.css, lines 152-154: a filtered project without agents. */
+/* office.css, lines 143-145: a filtered project without agents. */
 .empty-project{display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;margin:40px auto;max-width:420px;padding:28px;border:1.5px dashed var(--input);border-radius:var(--radius-xl)}
 .empty-project h2{margin:0;font-size:15px;font-weight:500}
 .empty-project p{margin:0 0 8px;font-size:12px;color:var(--muted-foreground)}
@@ -301,7 +292,7 @@
 @media(max-width:1250px){.workspace-legend{flex-wrap:wrap}.workspace-legend .spacer{display:none}}
 @media(max-width:540px){.workspace-legend{gap:10px}}
 
-/* office.css, lines 197-201: the legend pinned to the page's bottom-left corner. */
+/* office.css, lines 186-190: the legend pinned to the page's bottom-left corner. */
 .overview-scroll.atelier .workspace-legend{padding:12px 26px 14px}
 /* The legend is pinned to the page's bottom-left corner, out of the zoomed and panned content
    (its containing block is .workspace, so the scroller neither scrolls nor clips it). */
@@ -319,12 +310,10 @@
 
 /* Third part (task 5): the fitted mosaic, zoom and pan. */
 
-/* office.css, lines 175-196 and 202-204 (197-201, the pinned legend, are above; 183 `.workspace{position:relative}` is in shell.css). */
-.immersive .office-shell .ledge-corner{padding-top:14px}
-/* Atelier: Ledge's desk, the tables and "Sans projet" are tiles of one mosaic that fills the space (zoom set in App). */
-.overview-scroll.atelier .office-shell{display:flex;flex-wrap:wrap;align-content:space-evenly;justify-content:center;gap:0 12px;padding:44px 56px}
+/* office.css, lines 165-185 and 191-193 (186-190, the pinned legend, are above; 183 `.workspace{position:relative}` is in shell.css). */
+/* Atelier: the tables and "Sans projet" are tiles of one mosaic that fills the space (zoom set in App); Ledge keeps the top-left corner, above it. */
+.overview-scroll.atelier .office-shell{display:flex;flex-wrap:wrap;align-content:space-evenly;justify-content:center;gap:0 12px;padding:104px 56px 44px}
 .overview-scroll.atelier .office-shell .project-grid{display:contents}
-.overview-scroll.atelier .office-shell .ledge-corner{flex:0 0 230px;align-self:center;padding:0}
 .overview-scroll.atelier .office-shell .unassigned-zone{flex:1 1 420px;margin:26px 0 30px}
 .overview-scroll.atelier .office-shell .unassigned-list{grid-template-columns:1fr}
 /* Navigating the atelier like a canvas: zoom controls, drag to pan. */
@@ -352,7 +341,7 @@
 .overview-scroll.atelier .assign-menu,.overview-scroll.atelier textarea{touch-action:pan-y}
 /* Room for the pinned legend and zoom bar, outside the zoom (the floor grid still covers it). */
 .overview-scroll.atelier{padding-bottom:76px!important}
-/* office.css, lines 219-221, with the app's `.application` in place of the mockup's `.prototype`. */
+/* office.css, lines 208-210, with the app's `.application` in place of the mockup's `.prototype`. */
 .zoom-controls{z-index:12}.overview-scroll.atelier .workspace-legend{z-index:11}
 /* With the chat docked the workspace narrows: the zoom bar drops its hint and the legend its footnote so they never meet. */
 .application:has(.ledge-chat-panel) .zoom-hint,.application:has(.ledge-chat-panel) .workspace-legend>span:last-child{display:none}

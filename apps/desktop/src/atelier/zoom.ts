@@ -1,5 +1,5 @@
 export const ZOOM_MIN = 0.3, ZOOM_MAX = 2.5, FIT_MAX = 1.8, FIT_MIN = 0.4, FIT_STEP = 0.02, FRAME_MAX = 2.2;
-export const FLOOR_MARGIN = 56, TILE_GAP = 12, LEDGE_TILE = 230, ZONE_TILE = 420;
+export const FLOOR_MARGIN = 56, TILE_GAP = 12, ZONE_TILE = 420;
 /** How much of the tiles (screen pixels) a pan always leaves in sight. */
 export const FLOOR_KEEP = 120;
 

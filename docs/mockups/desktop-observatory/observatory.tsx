@@ -129,10 +129,10 @@ function App(){
  React.useLayoutEffect(()=>{
   const scroll=document.querySelector<HTMLElement>('.overview-scroll');const shell=scroll?.querySelector<HTMLElement>('.office-shell');
   if(mode!=='atelier'||selected||!scroll||!shell){setFit(1);return}
-  // The atelier tiles everything (Ledge's desk, the tables, "Sans projet") in one wrapping row set. Tables are wide and low:
+  // The atelier tiles the tables and "Sans projet" in one wrapping row set (Ledge sits in the corner, outside it). Tables are wide and low:
   // try every number of rows, force it through the shell's width, and keep the arrangement that zooms the most.
   const fits=()=>scroll.scrollHeight<=scroll.clientHeight+1&&scroll.scrollWidth<=scroll.clientWidth+1;
-  const tiles=()=>[...shell.querySelectorAll<HTMLElement>('.ledge-corner,.project-room,.empty-project,.unassigned-zone')].map(t=>t.classList.contains('project-room')?parseFloat(t.style.getPropertyValue('--room'))||560:t.classList.contains('ledge-corner')?230:420);
+  const tiles=()=>[...shell.querySelectorAll<HTMLElement>('.project-room,.empty-project,.unassigned-zone')].map(t=>t.classList.contains('project-room')?parseFloat(t.style.getPropertyValue('--room'))||560:420);
   const compute=()=>{for(const k of ['width','paddingInline','minHeight','maxWidth'] as const)shell.style[k]='';shell.style.zoom='1';const widths=tiles();const total=widths.reduce((a,b)=>a+b+12,0);let best={z:0.4,w:''};
    for(let k=1;k<=Math.max(1,widths.length);k++){let row=0,widest=0;const target=total/k;for(const w of widths){if(row>0&&row+w>target*1.12){widest=Math.max(widest,row);row=0}row+=w+12}widest=Math.max(widest,row);const gw=`${Math.ceil(widest+2*FLOOR_MARGIN)}px`;
     shell.style.maxWidth=gw;shell.style.marginInline='auto';let z=Math.min(1.8,(scroll.clientWidth-8)/(widest+2*FLOOR_MARGIN+16));for(;z>0.4;z-=0.02){shell.style.zoom=String(z);if(fits())break}if(z>best.z)best={z,w:gw}}
@@ -310,8 +310,7 @@ function App(){
       {mode==='compact'?<SessionList agents={agents} projects={projects} machines={machines} inScope={inScope} helpers={helpers} focusedId={focusedId} setFocusedId={setFocusedId} open={open} decide={quickDecide} launch={launch} isolate={pid=>setProject(pid)} assign={assign} newProjectFrom={a=>newProject({prefill:{repos:[{machine:a.machine,path:a.repos,branch:null}],agents:[{id:a.id,name:a.name,tool:a.tool,checked:true}]}})} dragProps={a=>dragProps(a as Agent)} dropProps={dropProps} dragging={dragging} dropOver={dropOver} bot={(a,size)=>bot(a as Agent,size)} status={a=>status(a as Agent)} onOrder={setListOrder} emptyProject={emptyProject}/>:<div className={`office-shell ${paused?'office-paused':''}`}>
       {mode==='atelier'&&<div className="ledge-corner"><button className={`ledge-desk ${chatOpen?'active':''}`} onClick={()=>chatOpen?setChatOpen(false):openChat()} aria-label="Parler à Ledge" aria-pressed={chatOpen}>
        <span className="ledge-bubble">{chatOpen?'Je vous écoute.':`Je veille sur ${agents.filter(a=>!a.offline&&a.state!=='done').length} agents.`}<Kbd>/</Kbd></span>
-       <span className="ledge-seat"><ResidentMascot size={92} theme={theme} paused={paused}/></span>
-       <span className="mini-desk" aria-hidden="true"><i className="mini-sheet"/><i className="mini-sheet two"/><i className="mini-mug"/><i className="mini-lamp"/></span>
+       <span className="ledge-seat"><ResidentMascot size={80} theme={theme} paused={paused}/></span>
        <strong>Ledge</strong><small>Votre assistant</small>
       </button></div>}
       <div className={`project-grid ${visibleProjects.length===1?'focused':''}`}>{visibleProjects.map((p,projectIndex)=>{

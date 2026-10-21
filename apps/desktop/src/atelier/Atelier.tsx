@@ -17,7 +17,7 @@ import { useSeats } from './seats';
 import { Unassigned } from './Unassigned';
 import { useAtelierView } from './useAtelierView';
 import { folderOf, type Filing } from './filing';
-import { LEDGE_TILE, ZONE_TILE } from './zoom';
+import { ZONE_TILE } from './zoom';
 import { ProjectSwatch } from '../projects/ProjectSwatch';
 
 export interface AtelierProps {
@@ -77,9 +77,9 @@ export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf,
     menu.open(s.id, pointer ? { x: e.clientX, y: e.clientY } : { x: r.left, y: r.bottom + 4 }, el.matches('button') ? el : el.querySelector<HTMLElement>('button[data-agent]'));
   };
 
-  // The mosaic's tiles, in render order: Ledge's desk, the tables, then the empty project or « Sans projet ».
+  // The mosaic's tiles, in render order: the tables, then the empty project or « Sans projet » (Ledge sits in the corner, outside it).
   const tiles = useMemo(() => [
-    LEDGE_TILE, ...scene.tables.map(t => roomWidth(t.mains.length, seats)), ...(scene.empty || scene.unassigned.length > 0 ? [ZONE_TILE] : [])
+    ...scene.tables.map(t => roomWidth(t.mains.length, seats)), ...(scene.empty || scene.unassigned.length > 0 ? [ZONE_TILE] : [])
   ], [scene, seats]);
   const view = useAtelierView(tiles, [nav.helpers, nav.fullscreen, nav.chat, filter, sessions.length]);
   useScreenKeys(e => {
