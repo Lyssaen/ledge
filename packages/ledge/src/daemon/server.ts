@@ -35,6 +35,7 @@ import { readDocument } from './documents.js';
 import { createModels, type Models } from './models.js';
 import { createRelay, free } from './relay.js';
 import { launchFromChat, LaunchRefused } from '../chat/launch.js';
+import { cardOf, closeFromChat, CloseRefused } from '../chat/close.js';
 import { createMailbox } from './mailbox.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
 import { createRouter } from '../chat/routing.js';
@@ -244,19 +245,19 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const typing = new Set<string>();
   /** Sessions being closed: neither the relay nor the mailbox delivers to them, even free; their queues fail once they exit. */
   const closing = new Set<string>();
-  // An injected chat (tests) is the only thread there is; otherwise the relay works across the PC's and every device's.
-  const relayThreads: Pick<typeof threads, 'all' | 'owner' | 'emitterOf' | 'queuedRelays'> = opts.chat ? {
-    all: () => [['desktop', chat]], owner: qid => (chat.relay(qid) ? 'desktop' : undefined), emitterOf: () => broadcast,
+  // An injected chat (tests) is the only thread there is; otherwise the relay and the close cards work across the PC's and every device's.
+  const cardThreads: Pick<typeof threads, 'all' | 'owner' | 'emitterOf' | 'queuedRelays'> = opts.chat ? {
+    all: () => [['desktop', chat]], owner: qid => (chat.relay(qid) || chat.close(qid, 0) ? 'desktop' : undefined), emitterOf: () => broadcast,
     queuedRelays: () => chat.queuedRelays(broadcast).map(q => ({ thread: 'desktop' as const, ...q }))
   } : threads;
   /** `replyTo` for the mailbox and the relay, which keep the refusal's text. */
   const replyText = async (id: string, text: string) => (await replyTo(id, text))?.message ?? null;
   const mailbox = createMailbox({
     store, replyTo: replyText, typing, closing, now,
-    relayQueued: id => relayThreads.queuedRelays().some(q => q.relay.id === id),
+    relayQueued: id => cardThreads.queuedRelays().some(q => q.relay.id === id),
     sent: { record: (id, m) => { history?.recordSent(id, m); }, mark: (id, rid, status) => history?.markSent(id, rid, status) }
   });
-  const relay = createRelay({ threads: relayThreads, store, replyTo: replyText, now, typing, closing, next: id => mailbox.kick(id) });
+  const relay = createRelay({ threads: cardThreads, store, replyTo: replyText, now, typing, closing, next: id => mailbox.kick(id) });
   /** The last preview per session, replayed after every snapshot so a late client does not wait for the agent to write. */
   const previews = new Map<string, string[]>();
   /** The title last pushed to each session's tmux tab, so tmux is told only when it changes. */
@@ -614,7 +615,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** A model change waiting for the session's free moment (`modelNext`): the agent stopped and resumed on that model. */
   async function applyModelNext(id: string): Promise<void> {
     const s = store.get(id);
-    if (!s?.modelNext || !free(s) || typing.has(id) || closing.has(id) || relayThreads.queuedRelays().some(q => q.relay.id === id)) return;
+    if (!s?.modelNext || !free(s) || typing.has(id) || closing.has(id) || cardThreads.queuedRelays().some(q => q.relay.id === id)) return;
     // OMP changes its model in place (set_model on the same process): nothing is stopped, the conversation is never left.
     if (backendOf(s) === 'omp-rpc') return applyOmpModel(s);
     const key = resumeKey(s);
@@ -636,6 +637,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
 
   /** The chat cards being launched: a second click, or another overlay, is refused until the first one has answered. */
   const chatLaunches = new Set<string>();
+  /** The close card rows being closed: a second click, or another overlay, is passed over until the first one has answered. */
+  const chatCloses = new Set<string>();
   /** Spawns the agent as `ledge <tool>` would and records it; throws the reason (bad folder, tmux). */
   async function launch(req: { tool: Tool; cwd: string; name?: string; prompt?: string; continue?: boolean; dirs?: string[]; model?: string; effort?: string; approval?: OmpApproval }): Promise<Session> {
     if (req.tool === 'omp') return launchOmp(req);
@@ -914,6 +917,22 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       // A chat card's instruction: a refusal reaches the requester as an `error`, the card's state everyone through chat.history.
       case 'session.relay': return relay.request(msg.qid);
       case 'session.relay.cancel': return relay.cancel(msg.qid);
+      // A chat's close card (spec 2026-10-21 close §4), on the thread that holds the turn: each row closed answers the
+      // requester, the card's state reaches the thread's clients through chat.history. A failed row is the requester's one
+      // `error`, once every row has settled.
+      case 'session.close': {
+        const card = cardOf(cardThreads, msg.qid);
+        if (!card) return refuse('unknown close');
+        try {
+          const done = await closeFromChat({
+            chat: card.chat, emit: card.emit, inFlight: chatCloses,
+            close: id => { const s = store.get(id); if (!s) throw unknownSession(); return closeSession(s); },
+            onClosed: (row, id, how) => reply({ type: 'session.closed', qid: msg.qid, row, id, how })
+          }, msg.qid, msg.rows);
+          if (done.failed.length > 0) throw new Error(done.failed[0]!.message);
+        } catch (e) { if (e instanceof CloseRefused) return refuse(e.message); throw e; }
+        return;
+      }
       // Broadcast: every overlay shows the same progress, and the one that asked may be the one that reconnects.
       // A busy refusal goes to the asker only: it must not fail the flow the other overlays follow.
       case 'update.daemon':

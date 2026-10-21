@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { connect as tcp } from 'node:net';
-import type { ChatProposal, ChatRelay, Projects, ServerMessage, Session } from '@ledge/protocol';
+import type { ChatClose, ChatProposal, ChatRelay, Projects, ServerMessage, Session } from '@ledge/protocol';
 import { DEFAULT_ISLAND_PREFS, pendingKey } from '@ledge/protocol';
 import type { Chat } from '../src/chat/service.js';
 import { Store } from '../src/daemon/store.js';
@@ -2273,7 +2273,8 @@ describe('close a session', () => {
     tmux = fakeTmux(panes);
     const keys = tmux.sendKeys.bind(tmux);
     tmux.sendKeys = async (n, k) => {
-      const prev = tmux.sent.at(-1);
+      // This pane's own last key: several sessions closing at once interleave in `sent`.
+      const prev = tmux.sent.filter(x => x[1] === n).at(-1);
       await keys(n, k);
       if (o.leaves === false || !k.includes('Enter') || prev?.[0] !== 'text' || prev[2] !== '/exit') return;
       delete panes[n];
@@ -2464,6 +2465,72 @@ describe('close a session', () => {
     await expect(srv.closeSession('a')).rejects.toMatchObject({ code: 'busy', message: 'a close is already in progress' });
     expect(await first).toEqual({ how: 'exit' });
     expect(texts()).toEqual([['text', 'ledge-a', '/exit']]);
+  });
+
+  describe('from a chat card', () => {
+    /** A chat whose `q1` card closes these rows; the marks are recorded per row and broadcast as a history, like the real one. */
+    function closeChat(initial: ChatClose[]) {
+      const rows = [...initial]; const marks: Array<[string, number, string]> = [];
+      const chat: Chat = {
+        async ask() {}, cancel() {}, async reset() {}, history: () => [], proposal: () => undefined, markLaunched() {}, markFailed() {},
+        relay: () => undefined, markRelay() {}, queuedRelays: () => [],
+        close: (qid, row) => (qid === 'q1' ? rows[row] : undefined),
+        markClosed(_qid, row, how, emit) { marks.push(['closed', row, how]); rows[row] = { ...rows[row]!, closedAt: new Date().toISOString(), how }; emit({ type: 'chat.history', turns: [] }); },
+        markCloseFailed(_qid, row, message, emit) { marks.push(['failed', row, message]); rows[row] = { ...rows[row]!, error: message }; emit({ type: 'chat.history', turns: [] }); },
+        idle: async () => {}
+      };
+      return { chat, marks };
+    }
+    const otto: ChatClose = { id: 'a', name: 'Otto', tool: 'claude' };
+    const pim: ChatClose = { id: 'b', name: 'Pim', tool: 'claude' };
+    const byRow = (a: { row: number }, b: { row: number }) => a.row - b.row;
+
+    it('closes every row for the requester, and every client gets the history', async () => {
+      const { chat, marks } = closeChat([otto, pim]);
+      await closing({ 'ledge-a': ['> '], 'ledge-b': ['> '] }, { chat });
+      store.upsert(mk('a', { state: 'idle' })); store.upsert(mk('b', { name: 'Pim', state: 'idle' }));
+      const c = await connect({ port: srv.port }); await c.next('snapshot'); await c.next('chat.history');
+      const other = await connect({ port: srv.port }); await other.next('snapshot'); await other.next('chat.history');
+      c.send({ type: 'session.close', qid: 'q1' });
+      const closed = [await c.next('session.closed', 3000), await c.next('session.closed', 3000)].sort(byRow);
+      expect(closed).toEqual([{ type: 'session.closed', qid: 'q1', row: 0, id: 'a', how: 'exit' }, { type: 'session.closed', qid: 'q1', row: 1, id: 'b', how: 'exit' }]);
+      await c.next('chat.history'); await other.next('chat.history');
+      await expect(other.next('session.closed', 100)).rejects.toThrow(/timeout/);
+      expect(marks.sort((x, y) => x[1] - y[1])).toEqual([['closed', 0, 'exit'], ['closed', 1, 'exit']]);
+      expect(store.get('a')).toMatchObject({ state: 'exited' }); expect(store.get('b')).toMatchObject({ state: 'exited' });
+      expect(texts()).toEqual(expect.arrayContaining([['text', 'ledge-a', '/exit'], ['text', 'ledge-b', '/exit']]));
+      // Closed, the card refuses a second click.
+      c.send({ type: 'session.close', qid: 'q1', rows: [1] });
+      expect(await c.next('error')).toEqual({ type: 'error', message: 'already closed', request: 'session.close' });
+      c.close(); other.close();
+    });
+
+    it('refuses an unknown card, and an unknown row, without typing anything', async () => {
+      await closing({ 'ledge-a': ['> '] }, { chat: closeChat([otto]).chat });
+      store.upsert(mk('a', { state: 'idle' }));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.close', qid: 'q9' });
+      expect(await c.next('error')).toEqual({ type: 'error', message: 'unknown close', request: 'session.close' });
+      c.send({ type: 'session.close', qid: 'q1', rows: [3] });
+      expect(await c.next('error')).toEqual({ type: 'error', message: 'unknown close', request: 'session.close' });
+      expect(tmux.sent).toEqual([]);
+      c.close();
+    });
+
+    it('a failed row reaches the requester as one error once every row has settled', async () => {
+      const { chat, marks } = closeChat([otto, { id: 'gone', name: 'Zed', tool: 'claude' }]);
+      await closing({ 'ledge-a': ['> '] }, { chat });
+      store.upsert(mk('a', { state: 'idle' }));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.close', qid: 'q1' });
+      const error = await c.next('error', 3000);
+      expect(error).toEqual({ type: 'error', message: 'unknown session', request: 'session.close' });
+      // The failure came first, but the error waited for the other row.
+      expect(marks.sort((x, y) => x[1] - y[1])).toEqual([['closed', 0, 'exit'], ['failed', 1, 'unknown session']]);
+      expect(await c.next('session.closed')).toEqual({ type: 'session.closed', qid: 'q1', row: 0, id: 'a', how: 'exit' });
+      await expect(c.next('error', 100)).rejects.toThrow(/timeout/);
+      c.close();
+    });
   });
 
   it('delivers nothing to a closing session', async () => {
