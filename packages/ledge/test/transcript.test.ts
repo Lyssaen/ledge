@@ -141,7 +141,8 @@ describe('labelTranscript', () => {
   it('appends the label once', () => {
     const p = file(claude('u1', '2026-10-13T10:00:01.000Z', [{ type: 'text', text: 'Salut' }]));
     expect(labelTranscript(p, 'Pim', 'Pim - Sujet')).toBe(true);
-    expect(lastLine(p)).toEqual({ type: 'custom-title', customTitle: 'Pim - Sujet', sessionId: uuid });
+    expect(lastLine(p)).toEqual({ type: 'custom-title', customTitle: 'Pim - Sujet', sessionId: uuid, ledge: true });
+    expect(readFileSync(p, 'utf8')).toContain('"ledge":true');
     const written = readFileSync(p, 'utf8');
     expect(labelTranscript(p, 'Pim', 'Pim - Sujet')).toBe(false);
     expect(readFileSync(p, 'utf8')).toBe(written);
@@ -159,11 +160,21 @@ describe('labelTranscript', () => {
     expect(readFileSync(mine, 'utf8')).toBe(before);
   });
 
+  it('a conversation continued under another Ledge name: Ledge\'s marked title and a bare Ledge name are replaced', () => {
+    const marked = file(JSON.stringify({ type: 'custom-title', customTitle: 'Pim - X', sessionId: uuid, ledge: true }));
+    expect(labelTranscript(marked, 'Otto', 'Otto - Y')).toBe(true);
+    expect(lastLine(marked).customTitle).toBe('Otto - Y');
+    const bare = file(title('Pim'));
+    expect(labelTranscript(bare, 'Otto', 'Otto - Y')).toBe(true);
+    expect(lastLine(bare).customTitle).toBe('Otto - Y');
+    const mine = file(title('Pim - X'));
+    expect(labelTranscript(mine, 'Otto', 'Otto - Y')).toBe(false);
+  });
   it('starts on its own line when the file does not end with a newline, and skips a missing file', () => {
     const p = join(dir, `${uuid}.jsonl`);
     writeFileSync(p, '{"type":"user"}');
     expect(labelTranscript(p, 'Pim', 'Pim - Sujet')).toBe(true);
-    expect(readFileSync(p, 'utf8').split('\n')).toEqual(['{"type":"user"}', title('Pim - Sujet'), '']);
+    expect(readFileSync(p, 'utf8').split('\n')).toEqual(['{"type":"user"}', JSON.stringify({ type: 'custom-title', customTitle: 'Pim - Sujet', sessionId: uuid, ledge: true }), '']);
     expect(labelTranscript(join(dir, 'missing.jsonl'), 'Pim', 'Pim - Sujet')).toBe(false);
   });
 });

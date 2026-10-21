@@ -697,6 +697,13 @@ describe('topics', () => {
     expect(reduce(s, { name: 'PaneTitle', at, source: 'pane', text: 'Otto - ' })).toBe(s);
     expect(reduce(s, { name: 'PaneTitle', at, source: 'pane', text: 'Otto -  ' })).toBe(s);
   });
+  it('a conversation continued under another Ledge name: its old name is no topic', () => {
+    const s = reduce(mk('a'), { name: 'UserPromptSubmit', at, source: 'hook', text: 'premier prompt' });
+    expect(reduce(s, { name: 'PaneTitle', at, source: 'pane', text: 'Pim - Refonte' }).topic).toBe('Refonte');
+    expect(reduce(s, { name: 'PaneTitle', at, source: 'pane', text: 'Pim' })).toBe(s);
+    expect(reduce(s, { name: 'PaneTitle', at, source: 'pane', text: 'Max - x' }).topic).toBe('x');
+    expect(reduce(s, { name: 'PaneTitle', at, source: 'pane', text: 'mon projet - x' }).topic).toBe('mon projet - x');
+  });
   it('an empty rename hands back to the automatic sources', () => {
     let s = reduce(mk('a'), { name: 'Renamed', at, source: 'daemon', text: 'Mon sujet' });
     s = reduce(s, { name: 'Renamed', at, source: 'daemon', text: '  ' });

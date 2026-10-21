@@ -1,6 +1,7 @@
 import { appendFileSync, closeSync, fstatSync, openSync, readSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
+import { ledgeTitleRest } from '../names.js';
 
 /** Native tracking (spec 2026-10-13 §2, §4): the agent's own messages, read from the tail of what the harness writes. */
 export type AgentText = { id: string; at: string; text: string };
@@ -130,22 +131,27 @@ export function resumeLabel(name: string, topic: string): string {
   return label.length > LABEL_MAX ? `${label.slice(0, LABEL_MAX - 1)}…` : label;
 }
 
-/** Appends a `custom-title` of `label` to an exited Claude's transcript, unless it already ends so or the user named the
- *  session (a last title that is neither `name` nor « name - … »). Whether it wrote; never throws. */
+/** Whether a conversation title is Ledge's to replace: marked by Ledge, `name` or « name - … », or a bare Ledge-shaped
+ *  name (the `-n` title of a launch before the change, or of a conversation continued under another Ledge name). */
+const ledgeOwned = (t: { customTitle: string; ledge?: unknown }, name: string): boolean =>
+  t.ledge === true || t.customTitle.startsWith(`${name} - `) || ledgeTitleRest(t.customTitle, name) === '';
+
+/** Appends Ledge's marked `custom-title` of `label` to an exited Claude's transcript, unless it already ends so or the
+ *  user named the session (a last title that is not Ledge's). Whether it wrote; never throws. */
 export function labelTranscript(path: string, name: string, label: string): boolean {
   try {
-    let last: string | undefined;
+    let last: { customTitle: string; ledge?: unknown } | undefined;
     for (const line of tailLines(path)) {
-      try { const e = JSON.parse(line) as { type?: string; customTitle?: unknown }; if (e.type === 'custom-title' && typeof e.customTitle === 'string') last = e.customTitle; } catch { /* not an entry */ }
+      try { const e = JSON.parse(line) as { type?: string; customTitle?: unknown; ledge?: unknown }; if (e.type === 'custom-title' && typeof e.customTitle === 'string') last = { customTitle: e.customTitle, ledge: e.ledge }; } catch { /* not an entry */ }
     }
-    if (last === label || (last !== undefined && last !== name && !last.startsWith(`${name} - `))) return false;
+    if (last && (last.customTitle === label || !ledgeOwned(last, name))) return false;
     const fd = openSync(path, 'r');
     let lead = '';
     try {
       const size = fstatSync(fd).size;
       if (size > 0) { const b = Buffer.alloc(1); readSync(fd, b, 0, 1, size - 1); if (b[0] !== 10) lead = '\n'; }
     } finally { closeSync(fd); }
-    appendFileSync(path, `${lead}${JSON.stringify({ type: 'custom-title', customTitle: label, sessionId: basename(path, '.jsonl') })}\n`);
+    appendFileSync(path, `${lead}${JSON.stringify({ type: 'custom-title', customTitle: label, sessionId: basename(path, '.jsonl'), ledge: true })}\n`);
     return true;
   } catch { return false; }
 }

@@ -350,7 +350,7 @@ describe('server', () => {
       store.upsert(mk('a', { name: 'Pim', topic: 'Sujet', transcriptPath: p }));
       store.upsert(mk('a', { name: 'Pim', topic: 'Sujet', transcriptPath: p, state: 'exited', exitedAt: T0 }));
       await until(() => lines(p).length === 2);
-      expect(JSON.parse(lines(p)[1]!)).toEqual({ type: 'custom-title', customTitle: 'Pim - Sujet', sessionId: 'abc' });
+      expect(JSON.parse(lines(p)[1]!)).toEqual({ type: 'custom-title', customTitle: 'Pim - Sujet', sessionId: 'abc', ledge: true });
       store.upsert(mk('a', { name: 'Pim', topic: 'Sujet', transcriptPath: p, state: 'exited', exitedAt: T0, lastActivityAt: '2026-10-09T18:05:00.000Z' }));
       await new Promise(r => setTimeout(r, 50));
       expect(lines(p)).toHaveLength(2);

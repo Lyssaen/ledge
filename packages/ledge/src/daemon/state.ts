@@ -2,6 +2,7 @@ import { cleanTopic, sessionTitle, type Session, type SessionEvent, type Pending
 
 import { crossSession, crossSessionNotices } from './crossSession.js';
 import { sameQuestion } from '../adapters/types.js';
+import { ledgeTitleRest } from '../names.js';
 
 export const HOOK_PRIORITY_MS = 2000;
 
@@ -248,9 +249,9 @@ function reduceEvent(s: Session, ev: SessionEvent): Session {
     case 'PaneTitle': {
       if (s.topicSource === 'user') return s;
       const t = ev.text ?? '';
-      const rest = t.startsWith(`${s.name} - `) ? t.slice(s.name.length + 3).trim() : undefined;
-      // The bare name is no topic; one an earlier launch stored as such (`-n`) is dropped, so a prompt or a title sets one.
-      if (t === s.name || rest === '') return s.topicSource === 'pane' && s.topic === s.name ? withTopic(s, '', undefined) : s;
+      const rest = ledgeTitleRest(t, s.name);
+      // A bare Ledge name is no topic; one an earlier launch stored as such (`-n`) is dropped, so a prompt or a title sets one.
+      if (rest === '') return s.topicSource === 'pane' && s.topic !== undefined && ledgeTitleRest(s.topic, s.name) === '' ? withTopic(s, '', undefined) : s;
       return withTopic(s, rest ?? t, 'pane');
     }
     case 'Renamed': return withTopic(s, ev.text ?? '', ev.text?.trim() ? 'user' : undefined);
