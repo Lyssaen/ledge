@@ -42,7 +42,7 @@ export interface MobileState {
 /** The request a challenge is asked for, as `session.decide` names it. */
 export type PhoneExpect = Extract<PhoneClientMessage, { type: 'session.decide' }>['expect'];
 export type ConfirmChallenge = Extract<PhoneServerMessage, { type: 'confirm.challenge' }>;
-export type ConfirmRequest = { purpose: 'register' } | { purpose: 'decide'; id: string; expect: PhoneExpect } | { purpose: 'launch'; qid: string };
+export type ConfirmRequest = { purpose: 'register' } | { purpose: 'decide'; id: string; expect: PhoneExpect } | { purpose: 'launch'; qid: string } | { purpose: 'close'; qid: string };
 
 /** How long `prepareConfirm` waits for the PC's challenge. */
 export const PREPARE_MS = 10_000;
@@ -109,6 +109,8 @@ export interface MobileStore {
   relay(qid: string): Promise<ChatAction>;
   /** Launches the turn's proposals (`rows`, or all of them), after the device's confirmation. */
   launch(qid: string, rows?: number[]): Promise<ChatAction>;
+  /** Closes the turn's sessions (`rows`, or all of them), after the device's confirmation. (Not `close`: that stops the store.) */
+  closeSessions(qid: string, rows?: number[]): Promise<ChatAction>;
   /** Stops listening to the link and every timer. */
   close(): void;
 }
@@ -584,6 +586,26 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         // Good for a minute: after that the PC would only refuse it.
         if (Date.now() - at >= challenge.expiresInMs) return { status: 'expired' };
         const op = write(o => ({ type: 'chat.launch', op: o, qid, ...(rows ? { rows } : {}), assertion: signed }));
+        // The link dropped after the passkey: the PC never got it, so the card stays as it was and can be tapped again.
+        return op === null ? { status: 'expired' } : finalOf(op);
+      });
+    },
+
+    closeSessions(qid, rows) {
+      return chatAction(`close:${qid}:${rows?.join(',') ?? '*'}`, async () => {
+        // A phone without a passkey cannot confirm: the PC would refuse, and no prompt is worth showing.
+        if (!state.device?.confirm) return { status: 'rejected', reason: 'confirm_required' };
+        let challenge: ConfirmChallenge;
+        try { challenge = await store.prepareConfirm({ purpose: 'close', qid }); }
+        catch (e) { return { status: e instanceof Error && e.message === 'timeout' ? 'expired' : 'failed' }; }
+        if (!challenge.credentialId) return { status: 'rejected', reason: 'confirm_required' };
+        const at = Date.now();
+        const signed = await getAssertion({ challenge: challenge.challenge, rpId: challenge.rpId, credentialId: challenge.credentialId }).catch(() => 'failed' as const);
+        if (signed === 'cancelled') return { status: 'cancelled' };
+        if (signed === 'failed') return { status: 'failed' };
+        // Good for a minute: after that the PC would only refuse it.
+        if (Date.now() - at >= challenge.expiresInMs) return { status: 'expired' };
+        const op = write(o => ({ type: 'chat.close', op: o, qid, ...(rows ? { rows } : {}), assertion: signed }));
         // The link dropped after the passkey: the PC never got it, so the card stays as it was and can be tapped again.
         return op === null ? { status: 'expired' } : finalOf(op);
       });

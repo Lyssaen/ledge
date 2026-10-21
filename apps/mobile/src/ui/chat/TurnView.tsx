@@ -2,6 +2,7 @@ import type { ChatErrorCode, PhoneChatStep, PhoneChatTurn } from '@ledge/protoco
 import { copy } from '../../copy';
 import type { MobileStore } from '../../state/store';
 import { Answer, Sources } from './Answer';
+import { CloseCards } from './CloseCard';
 import { LaunchCards } from './LaunchCard';
 import { RelayCard } from './RelayCard';
 
@@ -49,7 +50,7 @@ const ERROR: Record<ChatErrorCode, string> = { busy: copy.chat.busy, timeout: co
  * One question and what came of it. `live` is the question being answered: its steps and the text so far
  * (the answer's Markdown comes later, the text is shown as it is).
  */
-export function TurnView({ store, turn, live, sessions, list, canConfirm, onStop }: { store: MobileStore; turn: PhoneChatTurn; live: { steps: PhoneChatStep[]; text: string } | null; sessions: number; list: { id: string; name: string; repo?: string }[]; canConfirm: boolean; onStop: () => void }) {
+export function TurnView({ store, turn, live, sessions, list, canConfirm, onStop }: { store: MobileStore; turn: PhoneChatTurn; live: { steps: PhoneChatStep[]; text: string } | null; sessions: number; list: { id: string; name: string; repo?: string; exited?: boolean }[]; canConfirm: boolean; onStop: () => void }) {
   const steps = live?.steps ?? turn.steps;
   const text = live ? live.text : turn.answer;
   // A name two sessions share says nothing about which one is meant: it is not linked.
@@ -67,8 +68,9 @@ export function TurnView({ store, turn, live, sessions, list, canConfirm, onStop
       {!live && turn.answer && <Sources names={sourcesOf(steps)} ids={names} />}
       {!live && turn.cut && <span className="px-1 text-xs text-muted">{copy.chat.cut}</span>}
       {!live && turn.error && <p role="status" className="px-1 text-[13px] text-danger-fg">{ERROR[turn.error]}</p>}
-      {!live && relay && <RelayCard store={store} qid={turn.qid} relay={relay} repo={list.find(x => x.id === relay.id)?.repo} known={list.some(x => x.id === relay.id)} />}
-      {!live && turn.proposals && turn.proposals.length > 0 && <LaunchCards store={store} qid={turn.qid} proposals={turn.proposals} canConfirm={canConfirm} sessionIds={new Set(list.map(x => x.id))} />}
+      {!live && turn.closes && <CloseCards store={store} qid={turn.qid} closes={turn.closes} canConfirm={canConfirm} sessions={list} />}
+      {!live && !turn.closes && relay && <RelayCard store={store} qid={turn.qid} relay={relay} repo={list.find(x => x.id === relay.id)?.repo} known={list.some(x => x.id === relay.id)} />}
+      {!live && !turn.closes && turn.proposals && turn.proposals.length > 0 && <LaunchCards store={store} qid={turn.qid} proposals={turn.proposals} canConfirm={canConfirm} sessionIds={new Set(list.map(x => x.id))} />}
       {live && (
         <button type="button" onClick={onStop} className="inline-flex h-9 items-center gap-2 self-start rounded-control border border-white/15 px-3.5 text-[13px] font-medium">
           <svg className={ICON} viewBox="0 0 24 24" aria-hidden="true"><rect width="12" height="12" x="6" y="6" rx="1" /></svg>

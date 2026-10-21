@@ -2614,6 +2614,29 @@ describe('close a session', () => {
       c.close();
     });
 
+    it('two cards closing the same session share its close: both rows read closed, neither failed', async () => {
+      // q1 and q2 each name session `a` (a phone's card and Desktop's, say): their rows are not the same, their session is.
+      const cards: Record<string, ChatClose[]> = { q1: [otto], q2: [otto] }; const marks: Array<[string, string, number]> = [];
+      const chat: Chat = {
+        ...closeChat([]).chat,
+        close: (qid, row) => cards[qid]?.[row],
+        markClosed(qid, row, how, emit) { marks.push([how, qid, row]); cards[qid]![row] = { ...cards[qid]![row]!, closedAt: new Date().toISOString(), how }; emit({ type: 'chat.history', turns: [] }); },
+        markCloseFailed(qid, row, message, emit) { marks.push([message, qid, row]); cards[qid]![row] = { ...cards[qid]![row]!, error: message }; emit({ type: 'chat.history', turns: [] }); }
+      };
+      await closing({ 'ledge-a': ['> '] }, { chat });
+      store.upsert(mk('a', { state: 'idle' }));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.close', qid: 'q1' });
+      c.send({ type: 'session.close', qid: 'q2' });
+      const closed = [await c.next('session.closed', 3000), await c.next('session.closed', 3000)].sort((x, y) => (x as { qid: string }).qid.localeCompare((y as { qid: string }).qid));
+      expect(closed).toEqual([{ type: 'session.closed', qid: 'q1', row: 0, id: 'a', how: 'exit' }, { type: 'session.closed', qid: 'q2', row: 0, id: 'a', how: 'exit' }]);
+      expect(marks.sort()).toEqual([['exit', 'q1', 0], ['exit', 'q2', 0]]);
+      await expect(c.next('error', 100)).rejects.toThrow(/timeout/);
+      // One close typed one exit command.
+      expect(texts()).toEqual([['text', 'ledge-a', '/exit']]);
+      c.close();
+    });
+
     it('a failed row reaches the requester as one error once every row has settled', async () => {
       const { chat, marks } = closeChat([otto, { id: 'gone', name: 'Zed', tool: 'claude' }]);
       await closing({ 'ledge-a': ['> '] }, { chat });

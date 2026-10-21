@@ -1,11 +1,14 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PhoneChatTurn } from '@ledge/protocol';
 import { copy } from '../../src/copy';
+import { getAssertion } from '../../src/link/webauthn';
 import { Chat } from '../../src/screens/Chat';
 import { session } from '../model/fixtures';
 import { chat, snapshot } from '../state/helpers';
 import { setup } from './setup';
+
+vi.mock('../../src/link/webauthn', () => ({ platformAvailable: vi.fn(), createCredential: vi.fn(), getAssertion: vi.fn() }));
 
 const QID = '0b1e8f7a-4c1d-4a55-9d0e-2f3a4b5c6d7e';
 const UA = Object.getOwnPropertyDescriptor(globalThis.navigator, 'userAgent') ?? Object.getOwnPropertyDescriptor(Object.getPrototypeOf(globalThis.navigator), 'userAgent');
@@ -112,6 +115,115 @@ describe('the instruction card', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Ignorer' }));
     expect(screen.queryByRole('region', { name: 'Consigne proposée' })).toBeNull();
     expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+const closes = [
+  { id: 'a', name: 'Bix', tool: 'claude' as const },
+  { id: 'b', name: 'Nova', tool: 'codex' as const }
+];
+
+describe('the close card', () => {
+  it('shows one close row per session with its live state', () => {
+    const t = setup();
+    t.deliver(snapshot([session('a', { name: 'Bix' }), session('b', { name: 'Nova' }), session('c', { name: 'Kai' }), session('d', { name: 'Zed' }), session('e', { name: 'Ina', state: 'exited' })], 'Atelier', undefined, { confirm: true, chat: true }));
+    t.deliver(chat.history(chat.turn(QID, {
+      answer: 'Fini.', answeredAt: '2026-10-20T10:00:05.000Z',
+      closes: [
+        { id: 'a', name: 'Bix', tool: 'claude', how: 'exit', closedAt: '2026-10-20T10:00:06.000Z' },
+        { id: 'b', name: 'Nova', tool: 'codex', how: 'killed', closedAt: '2026-10-20T10:00:06.000Z' },
+        { id: 'c', name: 'Kai', tool: 'claude', failed: true },
+        { id: 'd', name: 'Zed', tool: 'claude' },
+        { id: 'e', name: 'Ina', tool: 'claude' },
+        { id: 'gone', name: 'Rex', tool: 'claude' }
+      ]
+    })));
+    render(<Chat store={t.store} />);
+    const card = screen.getByRole('region', { name: copy.chat.closeLabel });
+    const rows = within(card).getAllByRole('listitem');
+    expect(rows.map(r => r.textContent)).toEqual([
+      `Bix · Claude Code${copy.chat.closed}`, `Nova · Codex${copy.chat.killed}`, `Kai · Claude Code${copy.chat.closeFailed}${copy.chat.closeRow}`,
+      `Zed · Claude Code${copy.chat.closeRow}`, `Ina · Claude Code${copy.chat.ended}`, `Rex · Claude Code${copy.chat.ended}`
+    ]);
+    expect(within(card).getAllByRole('button', { name: copy.chat.closeRow })).toHaveLength(2);
+    // Two rows are open (the failed one retries): the group button counts them, the ended ones are left out.
+    expect(within(card).getByRole('button', { name: copy.chat.closeAll(2) })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: copy.chat.launchLabel })).toBeNull();
+  });
+
+  it('Fermer tout sends only the open rows', async () => {
+    const t = open({ closes: [{ ...closes[0]!, closedAt: '2026-10-20T10:00:06.000Z', how: 'exit' }, closes[1]!, { id: 'a', name: 'Bix', tool: 'claude' }, { id: 'b', name: 'Nova', tool: 'codex' }] });
+    const spy = vi.spyOn(t.store, 'closeSessions').mockResolvedValue({ status: 'applied' });
+    fireEvent.click(screen.getByRole('button', { name: copy.chat.closeAll(3) }));
+    expect(spy).toHaveBeenCalledWith(QID, [1, 2, 3]);
+  });
+
+  it('a refused close marks the sent rows failed, and a retry clears the mark', async () => {
+    const t = open({ closes });
+    const spy = vi.spyOn(t.store, 'closeSessions').mockResolvedValueOnce({ status: 'rejected', reason: 'invalid' });
+    fireEvent.click(screen.getAllByRole('button', { name: copy.chat.closeRow })[0]!);
+    expect(await screen.findByText(copy.chat.closeFailed)).toBeInTheDocument();
+    expect(screen.getAllByText(copy.chat.closeFailed)).toHaveLength(1);
+    let release!: (r: { status: 'cancelled' }) => void;
+    spy.mockReturnValueOnce(new Promise(r => { release = r; }));
+    fireEvent.click(screen.getAllByRole('button', { name: copy.chat.closeRow })[0]!);
+    await waitFor(() => expect(screen.queryByText(copy.chat.closeFailed)).toBeNull());
+    release({ status: 'cancelled' });
+  });
+
+  it('a cancelled or expired check says so, and the next tap clears it', async () => {
+    const t = open({ closes });
+    const spy = vi.spyOn(t.store, 'closeSessions').mockResolvedValueOnce({ status: 'cancelled' });
+    fireEvent.click(screen.getAllByRole('button', { name: copy.chat.closeRow })[0]!);
+    expect(await screen.findByText(copy.confirm.cancelled)).not.toHaveClass('text-danger-fg');
+    // Nothing was sent: no row reads failed, and the rows can be tapped again.
+    expect(screen.queryByText(copy.chat.closeFailed)).toBeNull();
+    spy.mockResolvedValueOnce({ status: 'expired' });
+    fireEvent.click(screen.getAllByRole('button', { name: copy.chat.closeRow })[1]!);
+    expect(await screen.findByText(copy.confirm.expired)).toBeInTheDocument();
+    expect(screen.queryByText(copy.confirm.cancelled)).toBeNull();
+    let release!: (r: { status: 'applied' }) => void;
+    spy.mockReturnValueOnce(new Promise(r => { release = r; }));
+    fireEvent.click(screen.getAllByRole('button', { name: copy.chat.closeRow })[0]!);
+    await waitFor(() => expect(screen.queryByText(copy.confirm.expired)).toBeNull());
+    release({ status: 'applied' });
+  });
+
+  it("names each row by its session's current name, the card's while the session is gone", () => {
+    open({ closes: [{ id: 'a', name: 'Ancien', tool: 'claude' }, { id: 'gone', name: 'Rex', tool: 'claude' }] });
+    const rows = within(screen.getByRole('region', { name: copy.chat.closeLabel })).getAllByRole('listitem');
+    expect(rows.map(r => r.textContent)).toEqual([`Bix · Claude Code${copy.chat.closeRow}`, `Rex · Claude Code${copy.chat.ended}`]);
+  });
+
+  it('a row button closes that row alone', () => {
+    const t = open({ closes });
+    const spy = vi.spyOn(t.store, 'closeSessions').mockResolvedValue({ status: 'cancelled' });
+    fireEvent.click(screen.getAllByRole('button', { name: copy.chat.closeRow })[1]!);
+    expect(spy).toHaveBeenCalledWith(QID, [1]);
+  });
+
+  it('holds the close card while a close or a launch of the turn is live', async () => {
+    const t = open({ closes });
+    vi.mocked(getAssertion).mockResolvedValue({ id: 'a', clientDataJSON: 'b', authenticatorData: 'c', signature: 'd' });
+    // A close of row 0 is under way: its row reads « Fermeture… », and every button is held.
+    void t.store.closeSessions(QID, [0]);
+    t.deliver({ type: 'confirm.challenge', purpose: 'close', challenge: 'Y2g', rpId: 'pc.local', credentialId: 'Y3I', expiresInMs: 60_000 });
+    expect(await screen.findByText(copy.chat.closing)).toBeInTheDocument();
+    for (const b of within(screen.getByRole('region', { name: copy.chat.closeLabel })).getAllByRole('button')) expect(b).toBeDisabled();
+    // Once final, it lets go: « Fermeture… » only ever comes from the live operation.
+    const [sent] = t.of('chat.close');
+    t.deliver({ type: 'operation.result', op: sent!.op, status: 'failed' });
+    await waitFor(() => expect(screen.queryByText(copy.chat.closing)).toBeNull());
+    expect(screen.getAllByRole('button', { name: copy.chat.closeRow })[0]).toBeEnabled();
+    // A relay of the same turn holds it as well.
+    void t.store.relay(QID);
+    await waitFor(() => expect(screen.getAllByRole('button', { name: copy.chat.closeRow })[0]).toBeDisabled());
+  });
+
+  it('without a passkey, points to Connexion and disables the buttons', () => {
+    open({ closes }, false);
+    expect(screen.getByRole('link', { name: 'Connexion' })).toHaveAttribute('href', '#/connection');
+    for (const b of within(screen.getByRole('region', { name: copy.chat.closeLabel })).getAllByRole('button')) expect(b).toBeDisabled();
   });
 });
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { PhoneClientMessageSchema, PhoneServerMessageSchema, PhoneSessionSchema, UNTYPABLE, PHONE_PROTOCOL, OperationReasonSchema, SessionSchema, PAD_TIERS, PLAIN_MAX, padPlain, PushPayloadSchema } from '../src/index.js';
+import { PhoneClientMessageSchema, PhoneServerMessageSchema, PhoneSessionSchema, UNTYPABLE, PHONE_PROTOCOL, OperationReasonSchema, SessionSchema, PAD_TIERS, PLAIN_MAX, padPlain, PushPayloadSchema, PhoneChatTurnSchema, ConfirmPurposeSchema } from '../src/index.js';
 
 const OP = '123e4567-e89b-42d3-a456-426614174000';
 const expectKey = { kind: 'permission', text: 'Run ls', key: 'k1' };
@@ -232,6 +232,19 @@ describe('phone chat', () => {
     expect(() => PhoneClientMessageSchema.parse({ type: 'chat.ask', qid: QID, text: '   ' })).toThrow();
     expect(() => PhoneClientMessageSchema.parse({ type: 'chat.launch', op: OP, qid: QID, rows: [8] })).toThrow();
     expect(() => PhoneClientMessageSchema.parse({ type: 'chat.launch', op: OP, qid: QID, rows: [0, 0] })).toThrow();
+  });
+  it('carries the close card, strictly', () => {
+    const row = { id: 's1', name: 'Arlo', tool: 'claude', how: 'killed', closedAt: '2026-10-20T10:00:00.000Z' };
+    expect(() => PhoneChatTurnSchema.parse({ ...turn, closes: [row] })).not.toThrow();
+    expect(() => PhoneChatTurnSchema.parse({ ...turn, closes: [{ ...row, error: 'busy' }] })).toThrow();
+    expect(() => PhoneChatTurnSchema.parse({ ...turn, closes: [] })).toThrow();
+    expect(ConfirmPurposeSchema.parse('close')).toBe('close');
+  });
+  it('checks the chat.close client message', () => {
+    const assertion = { id: 'a', clientDataJSON: 'b', authenticatorData: 'c', signature: 'd' };
+    for (const m of [{ type: 'chat.close', op: OP, qid: QID }, { type: 'chat.close', op: OP, qid: QID, rows: [0, 2], assertion }]) expect(() => PhoneClientMessageSchema.parse(m)).not.toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ type: 'chat.close', op: OP, qid: QID, rows: [0, 0] })).toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ type: 'chat.close', op: OP, qid: QID, rows: [8] })).toThrow();
   });
   it('keeps a snapshot without chat valid and accepts chat: true', () => {
     expect(() => PhoneServerMessageSchema.parse({ ...snap, device: { confirm: true } })).not.toThrow();

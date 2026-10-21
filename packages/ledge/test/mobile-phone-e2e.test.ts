@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { PhoneServerMessageSchema, pendingKey, type PhoneServerMessage, type Session } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
@@ -12,6 +13,8 @@ import { createMobileService, type MobileService } from '../src/mobile/service.j
 import { writeMobileConfig, writeRelaySession } from '../src/mobile/files.js';
 import { startTestRelay, TEST_ACCOUNT } from './mobile-relay-harness.js';
 import { fakeDevice, type FakeDevice } from './mobile-fake-device.js';
+import { softAuthenticator } from './mobile-soft-authenticator.js';
+import { rpOf } from '../src/mobile/webauthn.js';
 
 const T0 = '2026-10-20T08:00:00.000Z';
 const PEER = 'd_bbbbbbbbbbbbbbbb';
@@ -49,17 +52,20 @@ afterEach(async () => {
 });
 
 /** A signed-in mobile service on the real relay, the daemon over it, and a phone paired, approved and linked. */
-async function linked() {
+async function linked(extra: { panes?: Record<string, string[]>; server?: Partial<Parameters<typeof startServer>[0]>; tmux?: (t: ReturnType<typeof fakeTmux>) => void; localhost?: boolean } = {}) {
   const relay = await startTestRelay();
   cleanups.push(() => relay.relay.close());
-  writeMobileConfig({ enabled: true, relayUrl: relay.url });
-  writeRelaySession({ token: relay.pcToken, accountId: TEST_ACCOUNT, login: 'octocat', relayUrl: relay.url });
+  // A passkey needs a secure relay URL, and `localhost` is the one http host the daemon accepts.
+  const pcUrl = extra.localhost ? relay.url.replace('127.0.0.1', 'localhost') : relay.url;
+  writeMobileConfig({ enabled: true, relayUrl: pcUrl });
+  writeRelaySession({ token: relay.pcToken, accountId: TEST_ACCOUNT, login: 'octocat', relayUrl: pcUrl });
   const mobile: MobileService = await createMobileService();
   cleanups.push(() => mobile.stop());
   await until(() => mobile.state().link.state === 'online', 'link online');
   const store = new Store();
-  const tmux = fakeTmux({ 'ledge-a': [DIALOG, DIALOG, 'Running…'] });
-  const srv = await startServer({ store, tmux, port: 0, mobile, daemon: { version: '0.2.2', install: 'npm', systemd: true } });
+  const tmux = fakeTmux(extra.panes ?? { 'ledge-a': [DIALOG, DIALOG, 'Running…'] });
+  extra.tmux?.(tmux);
+  const srv = await startServer({ store, tmux, port: 0, mobile, ...extra.server, daemon: { version: '0.2.2', install: 'npm', systemd: true } });
   cleanups.push(() => srv.close());
 
   const phone: FakeDevice = await fakeDevice({ relayUrl: relay.url, token: relay.deviceToken(PEER), peer: PEER, label: 'Pixel 8' });
@@ -70,7 +76,7 @@ async function linked() {
   expect(await result).toBe('ok');
   await phone.hello();
   await until(() => mobile.state().devices[0]?.online === true, 'device linked');
-  return { store, tmux, phone };
+  return { store, tmux, phone, relayUrl: pcUrl };
 }
 
 const parsed = (phone: FakeDevice): PhoneServerMessage[] => phone.received.map(t => PhoneServerMessageSchema.parse(JSON.parse(t)));
@@ -105,5 +111,60 @@ describe('phone protocol end to end', () => {
     await until(() => results(phone).length >= 3, 'the replay answered');
     expect(results(phone).at(-1)?.status).toBe('applied');
     expect(tmux.sent).toHaveLength(1);
+  }, 20_000);
+
+  it('a signed chat.close closes the sessions of the phone\'s close card, and the phone reads it in chat.history', async () => {
+    const panes: Record<string, string[]> = { 'ledge-a': ['> '] };
+    const { store, tmux, phone, relayUrl } = await linked({
+      panes, localhost: true,
+      tmux: t => {
+        // A pane leaves once `/exit` is entered, like a session that quits.
+        const keys = t.sendKeys.bind(t);
+        t.sendKeys = async (n, k) => {
+          const prev = t.sent.filter(x => x[1] === n).at(-1);
+          await keys(n, k);
+          if (!k.includes('Enter') || prev?.[0] !== 'text' || prev[2] !== '/exit') return;
+          delete panes[n];
+          const s = store.all().find(x => x.tmuxSession === n);
+          if (s) store.apply(s.id, { name: 'PaneGone', at: new Date().toISOString(), source: 'pane' });
+        };
+      },
+      server: {
+        close: { freeMs: 200, exitMs: 200 },
+        agentEnv: async () => ({ ...process.env, FAKE_ANSWER: 'Je la ferme.\n```ledge-close\n{"session": "a"}\n```' }),
+        claudeBin: [process.execPath, fileURLToPath(new URL('./fake-claude.mjs', import.meta.url))]
+      }
+    });
+    store.upsert({
+      id: 'a', name: 'Otto', tool: 'claude', cwd: tmpdir(), project: 'repo', title: 'Otto · repo', tmuxSession: 'ledge-a', state: 'idle',
+      helpers: [], startedAt: T0, lastActivityAt: T0, source: 'launcher'
+    });
+    const rp = rpOf(relayUrl)!;
+    const auth = softAuthenticator();
+    const ask = (m: object) => phone.send(JSON.stringify(m));
+    const challenge = async (purpose: 'register' | 'close', qid?: string) => {
+      const before = parsed(phone).length;
+      await ask({ type: 'confirm.prepare', purpose, ...(qid ? { qid } : {}) });
+      await until(() => parsed(phone).slice(before).some(m => m.type === 'confirm.challenge'), `the ${purpose} challenge`);
+      const m = parsed(phone).slice(before).find(x => x.type === 'confirm.challenge');
+      if (m?.type !== 'confirm.challenge') throw new Error('no challenge');
+      return m.challenge;
+    };
+    await ask({ type: 'credential.register', op: randomUUID(), credential: auth.create(rp, await challenge('register')) });
+    await until(() => results(phone).some(r => r.status === 'applied'), 'the credential registered');
+
+    const qid = randomUUID();
+    await ask({ type: 'chat.ask', qid, text: 'ferme Otto' });
+    const closes = () => parsed(phone).flatMap(m => (m.type === 'chat.history' ? m.turns : m.type === 'chat.done' ? [m.turn] : [])).filter(t => t.qid === qid).at(-1)?.closes;
+    await until(() => closes() !== undefined, 'the close card');
+    expect(closes()).toEqual([{ id: 'a', name: 'Otto', tool: 'claude' }]);
+
+    const op = randomUUID();
+    await ask({ type: 'chat.close', op, qid, assertion: auth.get(rp, await challenge('close', qid), { counter: 1 }) });
+    await until(() => results(phone).some(r => r.op === op && r.status === 'applied'), 'the close applied');
+    await until(() => closes()?.[0]?.closedAt !== undefined, 'the closed row in chat.history');
+    expect(closes()?.[0]).toMatchObject({ id: 'a', how: 'exit' });
+    expect(store.get('a')?.state).toBe('exited');
+    expect(tmux.sent.filter(x => x[0] === 'text')).toEqual([['text', 'ledge-a', '/exit']]);
   }, 20_000);
 });

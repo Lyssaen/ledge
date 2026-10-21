@@ -35,9 +35,9 @@ export const UNCERTAIN_MS = 10_000;
 
 /**
  * Operations that stay in this page's memory. Push changes: replayed after a reload they could undo a later choice, and
- * they carry the endpoint (a secret). A chat relay or launch: after a reload nothing leaves without a new gesture.
+ * they carry the endpoint (a secret). A chat relay, launch or close: after a reload nothing leaves without a new gesture.
  */
-const isVolatile = (m: { type: string }) => m.type === 'push.subscribe' || m.type === 'push.unsubscribe' || m.type === 'chat.relay' || m.type === 'chat.launch';
+const isVolatile = (m: { type: string }) => m.type === 'push.subscribe' || m.type === 'push.unsubscribe' || m.type === 'chat.relay' || m.type === 'chat.launch' || m.type === 'chat.close';
 
 export const isLive = (p: OpPhase) => p === 'sending' || p === 'uncertain';
 
