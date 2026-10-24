@@ -19,6 +19,8 @@ Personal project. Windows host + WSL2 only.
 - [Components](#components)
 - [Session lifecycle](#session-lifecycle)
 - [Asking Ledge](#asking-ledge)
+- [Messages between sessions](#messages-between-sessions)
+- [Projects, archive and models](#projects-archive-and-models)
 - [Protocol](#protocol)
 - [Session model](#session-model)
 - [Files and settings](#files-and-settings)
@@ -86,7 +88,7 @@ Zod schemas shared by everything else: the session model, the hook-derived `Sess
 
 ### `packages/ledge` (WSL, Node 22, TypeScript)
 
-One binary, `ledge`, with seven commands. Source under `src/`:
+One binary, `ledge`, with eleven commands. Source under `src/`:
 
 | Path | Role |
 | --- | --- |
@@ -96,13 +98,16 @@ One binary, `ledge`, with seven commands. Source under `src/`:
 | `cli/setup.ts` | `ledge setup`: creates `~/.ledge` and merges `ledge hook <Event>` entries into `~/.claude/settings.json` for the twelve Claude Code events, and `ledge hook codex <Event>` entries into `~/.codex/hooks.json` (or `$CODEX_HOME`) for the ten Codex events, and `ledge hook cursor <event>` entries into `~/.cursor/hooks.json` for eight Cursor Agent events, never overwriting what is there. |
 | `cli/uninstall.ts` | `ledge uninstall [--purge]`: removes only Ledge's hook entries, the systemd unit and `~/.local/bin/ledge` (the link, or the script `ledge setup` wrote in its place). `--purge` also deletes `~/.ledge`. |
 | `cli/status.ts` | `ledge status`: one line per session from a fresh snapshot. |
-| `cli/attach.ts` | `ledge attach <id>`: renames the tab after the session and puts this terminal on its pane. What the overlay runs in a new Windows Terminal tab for a session it started itself. |
+| `cli/attach.ts` | `ledge attach [--read-only] <id>`: renames the tab after the session and puts this terminal on its pane (`--read-only`: watch without typing). What the overlay runs in a new Windows Terminal tab for a session it started itself. |
+| `cli/who.ts` | `ledge who`: the live sessions, one line each (name, tool, state, project, branch, topic). What an agent runs to find the others. |
+| `cli/send.ts` | `ledge send <name> "<message>" [--summary <text>]`: writes to another Ledge session through the daemon's mailbox. See [Messages between sessions](#messages-between-sessions). |
+| `cli/bridge.ts` | `ledge bridge`: exchanges Ledge messages over SSH stdin/stdout, for a local daemon that reaches this machine (see [docs/multi-machine.md](docs/multi-machine.md)). |
 | `spawn.ts` | `spawnSession`: the tmux session that runs the agent (with `LEDGE_SESSION` and `LEDGE_NAME`) and the `starting` session record. Shared by the launcher and the daemon's `session.launch`. |
 | `daemon/index.ts` | `ledge daemon`: loads the journal, prunes sessions whose tmux session is gone, starts the server and the poller, writes `daemon.pid`, saves on SIGTERM/SIGINT. |
 | `daemon/store.ts` | In-memory session map with change listeners; applies events through the reducer and saves the journal 200 ms after the last change (atomic write). Also the twelve most recent folders, for the overlay's launch form, and `patch` for repo/branch fields that skip the reducer. |
 | `daemon/state.ts` | The pure reducer `reduce(session, event)`: the whole state machine, including helper (subagent) routing, the hook-over-pane priority, the session topic (`PaneTitle`, `Renamed`, first `UserPromptSubmit`) and `lastReply` from a `Stop`. |
 | `daemon/git.ts` | One `git rev-parse` per session: repository name and path, checked-out branch, and whether `cwd` is a linked worktree. |
-| `daemon/poller.ts` | Every 1 s captures each live pane (200 lines), hashes it to detect activity, broadcasts a 30-line preview when it changed, runs the adapter's prompt detection on the last 60 lines, reads Claude Code's conversation title (`PaneTitle`), refreshes git fields on the life check (every 5 s), and drops exited sessions after 10 min. |
+| `daemon/poller.ts` | Every 1 s captures each live pane (200 lines), hashes it to detect activity, broadcasts a 30-line preview when it changed, runs the adapter's prompt detection on the last 60 lines, reads Claude Code's conversation title (`PaneTitle`), refreshes git fields on the life check (every 5 s), and archives exited sessions 10 min after they end (see [Projects, archive and models](#projects-archive-and-models)). |
 | `daemon/server.ts` | The WebSocket server on `127.0.0.1:47831`: snapshot on connect (then `chat.history`), broadcast of every store change and preview, and the command handlers. A decision is injected with the adapter's key plan, then verified. `session.launch` checks the folder, spawns the agent with the login shell's environment (see `shell-path.ts`) and answers `session.launched`. With a chat card's `qid`, it launches the proposal once and marks the turn. `session.rename` sets the topic. Chat commands go to `chat/`. |
 | `daemon/folders.ts` | `resolveFolder` (`~` expanded, absolute, existing) and the folder browser's `listFolder` and `createFolder`, which answer with a `folder.listing`. |
 | `chat/` | Ask Ledge: `service.ts` keeps one conversation a day per harness (50 turns, 180 s cap), writes `~/.ledge/chat/context/`, and runs `claude.ts` (`claude -p --restricted`), `codex.ts` (`codex exec --sandbox read-only`) or `cursor.ts` (`cursor-agent -p --mode ask`). `LEDGE_CHAT=1` so Ledge's own hooks ignore the run; no API key is inherited. |
@@ -175,7 +180,7 @@ sequenceDiagram
   H->>D: session.event {Stop} → idle
   U->>T: exit claude
   L->>D: session.unregister {exitCode}
-  D->>D: exited (dropped after 10 min)
+  D->>D: exited (archived after 10 min)
 ```
 
 Points worth knowing:
@@ -213,6 +218,24 @@ Ledge never sends an instruction to a pane, or starts anything, by itself: the u
 Ask it to pass something on — "tell Otto to run the overlay tests" — and, when exactly one tracked session matches and Ledge can type into it, the answer ends with a card: the session, its state, and the exact instruction. **Send** types it into the session the way a reply from the overlay does. If the session is busy, the card waits ("Otto is working; I'll send it as soon as it's done", **Cancel**) and the daemon sends it the next time the session is free, one instruction per free moment, oldest first, even with the overlay closed. Sessions started outside Ledge (hook only) are read-only and never get a card. A reset, a new day or a daemon restart drops the waiting instructions with the history; nothing is sent.
 
 Ask it to close sessions — "close Arlo and Bram" — and, for each session it can name without doubt (tracked, not hook only, not already ended), the answer ends with a close card: one row per session (eight at most) with **Close** and **Close all**. Ledge itself closes nothing: the click does. The daemon clears the prompt (it sends the interrupt keys and waits up to 10 s for a free prompt) and, once it is free, types the agent's exit command (`/exit`) and waits for the session to end. A pending request is only ever interrupted, never answered or typed into: when it came from a hook for the main thread, the thread records a permission as "Denied by the close" and a question as "Dismissed by the close"; a request read off the screen, or a helper's, is interrupted with nothing recorded (a helper's request keeps the prompt busy, so that close ends in the kill below). The tmux session is killed as a last resort, in either of two cases: the prompt is still not free after 10 s (nothing is typed), or the agent is still running 15 s after the exit command. The row then says "Force closed". Rows close in parallel and only once, even after a double click or from a second client. Two cards that name the same session (one on the phone, one on the PC) share its close: the second waits for the first, and both rows end the same way ("Closed", "Force closed", or both failed if that close fails). The session ends `exited`, not archived: it stays in the list and can be resumed (`session.resume`). The phone's chat shows the same card ("Sessions à fermer", with **Fermer** per row and **Fermer tout (n)**), and a close from the phone needs your passkey, as a launch does: the phone asks for an assertion made for the close (one made for a launch or a decision is refused). Without a passkey, the card says "Protégez d'abord vos accords depuis Connexion." and nothing is closed. The row reads "Fermeture…", then "Fermée", "Fermée de force" or "Terminée" (already ended), or "Échec de la fermeture". A cancelled or expired passkey check says so on the card, and nothing is sent. A close from the phone is not replayed after a page reload: tapped again while the first close is still under way, it is accepted at once rather than failing, and the row settles when that close ends. There is no `ledge close` for agents: only Ledge's chat closes sessions.
+
+## Messages between sessions
+
+Sessions Ledge launched can write to each other. Code: `cli/send.ts`, `cli/who.ts`, `cli/hook.ts`, `daemon/mailbox.ts`, `daemon/crossSession.ts`, `daemon/peers.ts`.
+
+- **Identity.** On `SessionStart` (start, resume, `/clear`) the hook tells the agent its Ledge name, project, branch and worktree, and how to reach the others.
+- **Directory.** `ledge who` lists the live sessions: name, tool, state, project, branch, topic.
+- **Claude Code** writes with its own `SendMessage`, addressed by Ledge name. The `PreToolUse` hook intercepts it: to another Claude, it rewrites the name to the target's live address (`uds:` from `~/.claude/sessions/*.json`) and names the sender; to a Codex, the daemon types the message. An unknown name is left to Claude's own tool.
+- **Codex** runs `ledge send <name> "<message>"`. Its sandbox cannot reach the daemon, so the hook runs the command itself, only when it is one plain command (no `&&`, `|`, `$()`, redirection or glob), and hands the result back as the hook's deny reason.
+- **Delivery.** The daemon acknowledges at once (`accepted`, `queued` or `refused`) and types the message at the target's next free moment, one per free moment, oldest first. A queued chat relay goes first; the typing lock is shared with it. A `rid` drops duplicates. Messages to a session that exits or is being closed fail. `hook_only` sessions cannot receive. 20 000 characters at most.
+- **Framing.** The text arrives as `<ledge-message from="…" tool="…">`, opening with a note that it comes from another session, not the user, and how to answer. `<` becomes `‹` and control bytes are removed, so a body can neither close the frame nor send keys through tmux.
+- **Display.** Sent and received messages are thread items (`sent`, `received`); Claude Code's cross-session notices (idle, delivery) show as `notice`. Ledge Desktop's atelier draws each message for 5 s, from the sender's seat to the receiver's.
+
+## Projects, archive and models
+
+- **Projects.** A project has a name, one of 8 colours, a description and repositories (machine + path). Folder rules file any other folder into a project. A session belongs to the deepest matching repository or rule. Stored in `~/.ledge/projects.json`, replaced whole by `projects.set`. Ledge Desktop draws one table per project in its atelier; dragging a session onto a table writes a rule. `repos.scan` walks home (depth 4, 5000 folders, 4 s) so Ledge can propose projects; the chat can propose one too.
+- **Archive.** An exited session is archived 10 min after it ends, not removed. `session.archive`, `session.restore`, `session.resume` (same id and name, same conversation: `--resume`, `resume <id>`, or the OMP journal file) and `session.delete` act on it. 200 archives at most; past that, the oldest goes with its thread.
+- **Models.** `models.list` gives each agent's models on this machine (Claude's aliases, `codex debug models`, `cursor-agent models`, OMP's catalog), cached 10 min. `session.launch` takes `model` and `effort`. `session.model` changes a live session: it is applied at the next free moment by restarting the agent on the same conversation (OMP changes in place).
 
 ## Protocol
 
@@ -264,6 +287,8 @@ Clients to daemon:
 | `chat.reset` | overlay | Clear the day's turns and start a new harness session on the next question. Refused while a question is running. |
 | `session.thread { id }` | overlay | Ask for a session's thread; it is not in the snapshot. |
 | `snapshot.request` | any | Ask for a fresh snapshot. |
+
+Not listed above, see `packages/protocol/src`: `models.list` / `models.listing`, `repos.scan` / `repos.found`, `repos.inspect` / `repos.info`, `document.read` / `document.content`, `chat.route` / `chat.routed` (multi-machine chat), `session.answer` (OMP dialogs), `session.archive` / `restore` / `resume` / `delete` / `model`, `session.message` / `message.ack`, `session.queue.restored`, `projects.set` / `projects`, `machines.set` / `machines`, `island.set` / `island`, `update.daemon` / `update.progress` / `update.failed`, and the phone link (`mobile.*`, `packages/protocol/src/phone.ts`).
 
 The handshake is checked before any message is read; anything else gets HTTP 401:
 
