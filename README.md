@@ -2,17 +2,24 @@
 
 # Ledge
 
-A living island on the top edge of your Windows screen, centred like a dynamic island, that follows every agentic session running in WSL2 (Claude Code, Codex, Cursor Agent, OMP), shows which ones are waiting for you, and lets you answer or approve without hunting for the right terminal tab. From the list you can also ask Ledge about the running sessions: it reads, it never types into a pane.
+The workshop of one person who runs coding agents (Claude Code, Codex, Cursor Agent, OMP) across projects and machines. Ledge answers two questions: where all the work handed to agents stands, and how to steer it from wherever you are.
 
-Personal project. Windows host + WSL2 only.
+- **Organise.** Ledge Desktop's atelier gives each project a table and seats its sessions around it, subagents at the ends. Messages between agents travel across the room.
+- **Launch and steer.** Start a session from an instruction, pick the project, machine, model and effort; change the model later, archive a session and resume it on the same conversation, read its thread, diffs and terminal.
+- **Decide.** Requests that wait for you reach you where you are: the island on the top edge of the screen, Desktop's "Your turn", or the phone, end-to-end encrypted. Answers are typed into the right pane and checked.
+- **Ask.** Ledge knows every session, its repository, its issues, PRs and CI. Ask it a question; when an action fits, it proposes a card (launch, relay an instruction, close, file into a project) and nothing happens until you click.
+- **Let agents talk.** Sessions find each other with `ledge who` and write with `ledge send` or Claude Code's `SendMessage`, delivered at the receiver's next free moment.
 
-**[Take the tour](docs/tour.md)**: every screen of the overlay, captured from the real app.
+You hold the organisation: Ledge proposes, you decide. Personal project. Windows host + WSL2, with remote Linux machines over SSH.
+
+<img src="docs/screens/desktop-atelier-dark.png" alt="Ledge Desktop's atelier: two project tables, eight agents seated, Otto writing to Nova, two requests waiting in « À toi »" width="900">
 
 <p>
-  <img src="docs/screens/list-dark.png" alt="The list of sessions" width="300">
-  <img src="docs/screens/session-permission-dark.png" alt="A permission request answered from Ledge" width="300">
-  <img src="docs/screens/bubble-dark.png" alt="The bubble" width="300">
+  <img src="docs/screens/desktop-session-dark.png" alt="A session: its thread and the command waiting for your approval" width="440">
+  <img src="docs/screens/desktop-chat-dark.png" alt="Ask Ledge: who needs me, and a card to start a session" width="440">
 </p>
+
+**[Take the tour](docs/tour.md)**: Ledge Desktop and the island, captured from the real app.
 
 - [How it works](#how-it-works)
 - [Architecture](#architecture)
@@ -497,7 +504,7 @@ pnpm -r typecheck
 pnpm test                           # pnpm -r test, then the release scripts' tests; protocol, ledge (unit + tmux + end-to-end, needs tmux, no AI), overlay (vitest + jsdom)
 pnpm --filter overlay dev           # the UI alone on http://localhost:1420, against a daemon running in WSL (needs its token: VITE_LEDGE_TOKEN=$(cat ~/.ledge/token) pnpm --filter overlay dev)
 pnpm --filter overlay test:e2e      # Playwright, chromium
-LEDGE_SCREENSHOTS=1 pnpm --filter overlay exec playwright test e2e/screenshots.spec.ts   # refresh docs/screens (see docs/tour.md)
+LEDGE_SCREENSHOTS=1 pnpm --filter desktop exec playwright test e2e/screenshots.spec.ts   # refresh Ledge Desktop's captures in docs/screens (see docs/tour.md)
 pnpm --filter desktop tauri dev     # Windows only: Ledge Desktop with the notch
 ```
 
