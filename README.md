@@ -2,9 +2,15 @@
 
 # Ledge
 
-A living island on the top edge of your Windows screen, centred like a dynamic island, that follows every agentic session running in WSL2 (Claude Code, Codex, Cursor Agent, OMP), shows which ones are waiting for you, and lets you answer or approve without hunting for the right terminal tab. From the list you can also ask Ledge about the running sessions: it reads, it never types into a pane.
+The workshop of one person who runs coding agents (Claude Code, Codex, Cursor Agent, OMP) across projects and machines. Ledge answers two questions: where all the work handed to agents stands, and how to steer it from wherever you are.
 
-Personal project. Windows host + WSL2 only.
+- **Organise.** Ledge Desktop's atelier gives each project a table and seats its sessions around it, subagents at the ends. Messages between agents travel across the room.
+- **Launch and steer.** Start a session from an instruction, pick the project, machine, model and effort; change the model later, archive a session and resume it on the same conversation, read its thread, diffs and terminal.
+- **Decide.** Requests that wait for you reach you where you are: the island on the top edge of the screen, Desktop's "Your turn", or the phone, end-to-end encrypted. Answers are typed into the right pane and checked.
+- **Ask.** Ledge knows every session, its repository, its issues, PRs and CI. Ask it a question; when an action fits, it proposes a card (launch, relay an instruction, close, file into a project) and nothing happens until you click.
+- **Let agents talk.** Sessions find each other with `ledge who` and write with `ledge send` or Claude Code's `SendMessage`, delivered at the receiver's next free moment.
+
+You hold the organisation: Ledge proposes, you decide. Personal project. Windows host + WSL2, with remote Linux machines over SSH.
 
 **[Take the tour](docs/tour.md)**: every screen of the overlay, captured from the real app.
 
