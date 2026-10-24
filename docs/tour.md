@@ -2,7 +2,33 @@
 
 Ledge is an island at the top of your Windows screen: a dark pill cut into the centre of the top edge, the way a dynamic island is. Every agent you start from WSL2 with `ledge claude`, or from the island itself, gets a mascot in it. When an agent needs you, its mascot lights up, the island stretches into a bubble, and you answer from there. The terminal tab is one click away when you want the whole conversation.
 
-All captures below are the real overlay, in French (its default language, English is one toggle away), running against simulated sessions. Dark theme "Signal" unless noted; the light theme is "Galet".
+All captures below are the real app, in French (its default language, English is one toggle away), running against simulated sessions. Dark theme "Signal" unless noted; the light theme is "Galet".
+
+## Ledge Desktop
+
+Ledge Desktop is the main window. Its atelier gives each project a table: the agents sit around it, their topics lie on it as sheets, their subagents stand at the ends. The sidebar holds Ask Ledge, « À toi » (every request waiting, oldest first, answered in place) and the project tree by branch. When an agent writes to another, a bubble opens over the sender and a dotted line runs to the receiver's seat.
+
+<p>
+  <img src="screens/desktop-atelier-dark.png" alt="The atelier: Ledge and Website tables, eight agents, Otto writing to Nova" width="720">
+  <img src="screens/desktop-atelier-light.png" alt="The same atelier in light theme" width="720">
+</p>
+
+A session opens on its thread: each exchange folds into one line, the current one shows its actions, and a request waiting for you is pinned above the reply field, with « Toujours autoriser dans ce projet » beside Autoriser and Refuser.
+
+<p>
+  <img src="screens/desktop-session-dark.png" alt="Otto's thread, npm test waiting for approval" width="720">
+  <img src="screens/desktop-session-light.png" alt="The same session in light theme" width="720">
+</p>
+
+`N` opens « Nouvelle session »: the instruction first, then the agent and its model, the project, the machine and the repositories. The footer says which table the new agent joins.
+
+<img src="screens/desktop-launch-dark.png" alt="New session: instruction, Claude Code, default model, project Ledge, machine Local, repository ledge" width="720">
+
+`/` asks Ledge. The chat docks on the right while the atelier stays in view; hovering a bot named in the answer lights its seat, and a proposal comes as a card you launch with one click.
+
+<img src="screens/desktop-chat-dark.png" alt="Ask Ledge: Otto and Luna are waiting, a card proposes a session to fix the tests" width="720">
+
+The sections below are the island, the notch at the top of the screen.
 
 ## The island
 
@@ -133,10 +159,12 @@ Settings › À propos shows the version of the app and of the daemon, the lates
 
 ## Refreshing these captures
 
-They come from `apps/overlay/e2e/screenshots.spec.ts`, which drives the real app against the fake daemon used by the end-to-end tests:
+Ledge Desktop's captures (`desktop-*.png`) come from `apps/desktop/e2e/screenshots.spec.ts`, which drives the real app against the fake daemon used by the end-to-end tests:
 
 ```sh
-LEDGE_SCREENSHOTS=1 pnpm --filter overlay exec playwright test e2e/screenshots.spec.ts
+LEDGE_SCREENSHOTS=1 pnpm --filter desktop exec playwright test e2e/screenshots.spec.ts
 ```
+
+The island's captures came from `apps/overlay/e2e/screenshots.spec.ts`, removed with the sober island; they predate it and are not refreshed.
 
 Set `LEDGE_CHROMIUM=/path/to/chrome` when the Playwright build pinned by the project is not installed. The web fonts are fetched for real, so it needs network access.

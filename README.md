@@ -12,13 +12,14 @@ The workshop of one person who runs coding agents (Claude Code, Codex, Cursor Ag
 
 You hold the organisation: Ledge proposes, you decide. Personal project. Windows host + WSL2, with remote Linux machines over SSH.
 
-**[Take the tour](docs/tour.md)**: every screen of the overlay, captured from the real app.
+<img src="docs/screens/desktop-atelier-dark.png" alt="Ledge Desktop's atelier: two project tables, eight agents seated, Otto writing to Nova, two requests waiting in « À toi »" width="900">
 
 <p>
-  <img src="docs/screens/list-dark.png" alt="The list of sessions" width="300">
-  <img src="docs/screens/session-permission-dark.png" alt="A permission request answered from Ledge" width="300">
-  <img src="docs/screens/bubble-dark.png" alt="The bubble" width="300">
+  <img src="docs/screens/desktop-session-dark.png" alt="A session: its thread and the command waiting for your approval" width="440">
+  <img src="docs/screens/desktop-chat-dark.png" alt="Ask Ledge: who needs me, and a card to start a session" width="440">
 </p>
+
+**[Take the tour](docs/tour.md)**: Ledge Desktop and the island, captured from the real app.
 
 - [How it works](#how-it-works)
 - [Architecture](#architecture)
@@ -503,7 +504,7 @@ pnpm -r typecheck
 pnpm test                           # pnpm -r test, then the release scripts' tests; protocol, ledge (unit + tmux + end-to-end, needs tmux, no AI), overlay (vitest + jsdom)
 pnpm --filter overlay dev           # the UI alone on http://localhost:1420, against a daemon running in WSL (needs its token: VITE_LEDGE_TOKEN=$(cat ~/.ledge/token) pnpm --filter overlay dev)
 pnpm --filter overlay test:e2e      # Playwright, chromium
-LEDGE_SCREENSHOTS=1 pnpm --filter overlay exec playwright test e2e/screenshots.spec.ts   # refresh docs/screens (see docs/tour.md)
+LEDGE_SCREENSHOTS=1 pnpm --filter desktop exec playwright test e2e/screenshots.spec.ts   # refresh Ledge Desktop's captures in docs/screens (see docs/tour.md)
 pnpm --filter desktop tauri dev     # Windows only: Ledge Desktop with the notch
 ```
 
