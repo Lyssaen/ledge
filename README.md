@@ -6,7 +6,7 @@ The workshop of one person who runs coding agents (Claude Code, Codex, Cursor Ag
 
 - **Organise.** Ledge Desktop's atelier gives each project a table and seats its sessions around it, subagents at the ends. Messages between agents travel across the room.
 - **Launch and steer.** Start a session from an instruction, pick the project, machine, model and effort; change the model later, archive a session and resume it on the same conversation, read its thread, diffs and terminal.
-- **Decide.** Requests that wait for you reach you where you are: the island on the top edge of the screen, Desktop's "Your turn", or the phone, end-to-end encrypted. Answers are typed into the right pane and checked.
+- **Decide.** Requests that wait for you reach you where you are: the island on the top edge of the screen, Desktop's "Your turn", the phone, end-to-end encrypted, or any terminal with `ledge tui`. Answers are typed into the right pane and checked.
 - **Ask.** Ledge knows every session, its repository, its issues, PRs and CI. Ask it a question; when an action fits, it proposes a card (launch, relay an instruction, close, file into a project) and nothing happens until you click.
 - **Let agents talk.** Sessions find each other with `ledge who` and write with `ledge send` or Claude Code's `SendMessage`, delivered at the receiver's next free moment.
 
@@ -27,6 +27,7 @@ You hold the organisation: Ledge proposes, you decide. Personal project. Windows
 - [Session lifecycle](#session-lifecycle)
 - [Asking Ledge](#asking-ledge)
 - [Messages between sessions](#messages-between-sessions)
+- [Ledge in a terminal](#ledge-in-a-terminal)
 - [Projects, archive and models](#projects-archive-and-models)
 - [Protocol](#protocol)
 - [Session model](#session-model)
@@ -95,7 +96,7 @@ Zod schemas shared by everything else: the session model, the hook-derived `Sess
 
 ### `packages/ledge` (WSL, Node 22, TypeScript)
 
-One binary, `ledge`, with thirteen commands. Source under `src/`:
+One binary, `ledge`, with fourteen commands. Source under `src/`:
 
 | Path | Role |
 | --- | --- |
@@ -109,6 +110,7 @@ One binary, `ledge`, with thirteen commands. Source under `src/`:
 | `cli/who.ts` | `ledge who`: the live sessions, one line each (name, tool, state, project, branch, topic). What an agent runs to find the others. |
 | `cli/send.ts` | `ledge send <name> "<message>" [--summary <text>]`: writes to another Ledge session through the daemon's mailbox; `ledge read <id>`: prints a long message whole. See [Messages between sessions](#messages-between-sessions). |
 | `cli/task.ts` | `ledge task give\|list\|show\|take\|done\|refuse\|pass …`: work given to another session, taken and closed. See [Tasks between sessions](#tasks-between-sessions). |
+| `tui/` | `ledge tui [--notify bell\|osc9\|off]`: Ledge in a terminal (Ink, React). See [Ledge in a terminal](#ledge-in-a-terminal). |
 | `cli/bridge.ts` | `ledge bridge`: exchanges Ledge messages over SSH stdin/stdout, for a local daemon that reaches this machine (see [docs/multi-machine.md](docs/multi-machine.md)). |
 | `spawn.ts` | `spawnSession`: the tmux session that runs the agent (with `LEDGE_SESSION` and `LEDGE_NAME`) and the `starting` session record. Shared by the launcher and the daemon's `session.launch`. |
 | `daemon/index.ts` | `ledge daemon`: loads the journal, prunes sessions whose tmux session is gone, starts the server and the poller, writes `daemon.pid`, saves on SIGTERM/SIGINT. |
@@ -252,6 +254,18 @@ A message says something; a task is work that must not get lost. Code: `cli/task
 - **Read.** `list` shows the open tasks you hold or gave (`--all` adds the closed ones). `show <id>` prints one with its detail, result and history.
 - **Agents.** The identity context tells every session to use a task rather than a message for work. Codex's hook runs a lone `ledge task …` itself. A `<ledge-task>` line shows in the thread as a `notice`, never as the user's words.
 
+## Ledge in a terminal
+
+`ledge tui` follows and answers the sessions from any terminal where the daemon runs: a WSL tab, a Linux or macOS machine, a server over SSH, a tmux pane. It is a client of the same daemon as the island, Desktop and the phone, and reaches the remote machines the daemon lists the same way Desktop does (`@ledge/fleet` over `ws`, the daemon token from `~/.ledge`). Nothing changes in the daemon. Source under `packages/ledge/src/tui/`.
+
+- **Overview** (`1`): « À toi » first (the requests waiting for you, oldest first), the projects by branch, the selected session's card with its request and the keys that answer it, the last lines of its terminal and the latest messages between sessions. `j`/`k` move, `tab` jumps to the next session waiting, `y`/`n`/`A` and `1`…`9` answer, `a` attaches.
+- **Session** (`2`, or `↵`): the thread, past turns folded on one line (`space` unfolds), diffs under `d`, the terminal under `t`, a reply or a refusal with a note under `r`, the model under `m`, `i` interrupts.
+- **Ask Ledge** (`3`, or `/`): the question, what Ledge reads, the answer as it comes, and its cards (launch, relay, close); `tab` focuses a card, `↵` acts on it, nothing happens otherwise.
+- **New session** (`4`, or `+`): instruction, agent, model and effort, project, machine, repositories or a folder, the drawn name; `ctrl+s` launches.
+- **Settings** (`5`, or `,`): the language, French or English. The default follows the locale (`LC_ALL`, `LC_MESSAGES`, `LANG`); the choice is kept in `~/.ledge/tui.json`.
+
+`a` hands the terminal to `ledge attach` (through `ssh -t` for a remote machine) and comes back to the TUI when tmux detaches; it works from inside tmux too. A new request rings the terminal's bell, or sends an OSC 9 notification with `--notify osc9` (wrapped for tmux), or nothing with `--notify off`; the title says how many sessions wait. `LEDGE_TUI_ASCII=1` draws with ASCII only. The decisions go through the same code as Desktop's (`@ledge/fleet/decisions`): one in flight per session, refused by the daemon if the request changed meanwhile. Design: `docs/superpowers/plans/2026-10-25-ledge-tui.md`.
+
 ## Projects, archive and models
 
 - **Projects.** A project has a name, one of 8 colours, a description and repositories (machine + path). Folder rules file any other folder into a project. A session belongs to the deepest matching repository or rule. Stored in `~/.ledge/projects.json`, replaced whole by `projects.set`. Ledge Desktop draws one table per project in its atelier; dragging a session onto a table writes a rule. `repos.scan` walks home (depth 4, 5000 folders, 4 s) so Ledge can propose projects; the chat can propose one too.
@@ -376,6 +390,7 @@ WSL side, under `~/.ledge` (or `$LEDGE_HOME`):
 | `chat.json` | The day's Ledge conversation: its date, harness session id and which tool it belongs to. A new day, a reset, or a change of harness starts a new one. |
 | `chat/context/` | Files the chat reads, rewritten before each question and deleted when it ends (`sessions.md`, `pane-*`, `reply-*`, `git-*`). |
 | `exit-<id>` | Transient: the agent's exit code, written by the launcher's wrapper and consumed by `ledge claude`. |
+| `tui.json` | `ledge tui`'s settings: `lang` (`fr` or `en`). Keys it does not know are kept. |
 
 `~/.config/systemd/user/ledge-daemon.service` runs the daemon with the real node binary (resolved through the fnm symlink) and the built CLI; rerun `ledge setup` after changing the node version or moving the repository, it rewrites the unit and restarts the service.
 

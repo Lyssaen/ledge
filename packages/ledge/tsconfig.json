@@ -1,1 +1,7 @@
-{ "extends": "../../tsconfig.base.json", "include": ["src", "test"] }
+{
+  "extends": "../../tsconfig.base.json",
+  // Bundler resolution and the DOM lib: `ledge tui` bundles @ledge/fleet and parts of @ledge/ui, whose sources import
+  // without extensions and name browser globals (WebSocket, localStorage) that the fleet guards at runtime.
+  "compilerOptions": { "module": "ESNext", "moduleResolution": "Bundler", "jsx": "react-jsx", "lib": ["ES2023", "DOM", "DOM.Iterable"] },
+  "include": ["src", "test"]
+}

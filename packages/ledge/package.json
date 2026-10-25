@@ -18,14 +18,20 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "ink": "7.1.1",
+    "react": "^19.3.0",
     "ws": "^8.18.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@ledge/fleet": "workspace:*",
     "@ledge/protocol": "workspace:*",
     "@ledge/seal": "workspace:*",
+    "@ledge/ui": "workspace:*",
     "@types/node": "^22.7.0",
+    "@types/react": "^19.3.0",
     "@types/ws": "^8.5.12",
+    "ink-testing-library": "4.0.0",
     "tsup": "^8.3.0"
   }
 }

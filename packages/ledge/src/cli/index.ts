@@ -10,6 +10,7 @@ ledge who                                                    list the live sessi
 ledge send <nom> "<message>" [--summary <texte>]             write to another Ledge session
 ledge read <id>                                              print a long message whole (the id is in its pointer)
 ledge task <give|list|show|take|done|refuse|pass> …         give another session work, take it, close it (ledge task: details)
+ledge tui [--notify bell|osc9|off]                           follow and answer the sessions in this terminal
 ledge bridge                                                 exchange Ledge messages over SSH stdio
 ledge --version                                              print the installed version`;
 
@@ -49,6 +50,7 @@ async function main(argv: string[]): Promise<number> {
     case 'send': { const { sendMessage } = await import('./send.js'); const r = await sendMessage(rest); console.log(r.line); return r.code; }
     case 'read': { const { readMessage } = await import('./send.js'); const r = await readMessage(rest); console.log(r.line); return r.code; }
     case 'task': { const { runTask } = await import('./task.js'); const r = await runTask(rest); console.log(r.line); return r.code; }
+    case 'tui': { const { runTui } = await import('../tui/index.js'); return runTui(rest); }
     case 'bridge': { const { bridge } = await import('./bridge.js'); await bridge(); return 0; }
     case 'claude': case 'codex': case 'cursor': { const { launch } = await import('./launch.js'); return launch(cmd, rest); }
     case 'attach': { const { attach } = await import('./attach.js'); return attach(rest.find(a => !a.startsWith('--')) ?? '', { readOnly: rest.includes('--read-only') }); }

@@ -131,6 +131,37 @@ A session started with plain `claude`, without the launcher, is still visible th
   <img src="screens/help-dark.png" alt="Help: every keyboard shortcut" width="408">
 </p>
 
+## In a terminal
+
+`ledge tui` is the same Ledge in a terminal: a WSL tab, a server over SSH, a tmux pane. « À toi » comes first, then the projects by branch; the selected session's card has its request and the keys that answer it, with the last lines of its terminal under it (a 100-column terminal, the sessions simulated). `y` allows, `n` denies, digits pick a question's option, `↵` opens the thread, `a` puts the terminal on the session's pane and comes back when tmux detaches. `/` asks Ledge, `+` starts a session, `,` opens the settings (French or English).
+
+```text
+ ◖ ledge  4 sessions · 1 machine · 2 t’attendent                                            Local ●
+╭─ À TOI · 2 ──────────────────────────────╮╭─ OTTO · CÂBLER LA LISTE DES SESSIONS ────────────────╮
+│ ◆ Otto   ledge    npm test        5 min  ││ ◆ Votre accord  Claude Code · opus · high · Local ·… │
+│ ? Luna   website  Quel port pour… 4 min  ││   ↳ Explore · Lire le code                           │
+╰──────────────────────────────────────────╯│                                                      │
+╭─ PROJETS ────────────────────────────────╮│ Veut exécuter : npm test  Bash                       │
+│ ■ Ledge 3 sessions                       ││                                                      │
+│   ⎇ release/LEDGE-42-v0.5.0              ││  Autoriser y    Refuser n    Toujours A              │
+│ ▌  ◆ Otto   Câbler la… Votre accord +1   ││  Refuser en expliquant r                             │
+│   ⎇ fix/LEDGE-42-ssh-reconnect           │╰──────────────────────────────────────────────────────╯
+│    ● Nova   Reconnexi… Au travail        │╭─ TERMINAL · LEDGE-OTTO ──────────────────────────────╮
+│   ⎇ docs/protocol                        ││   ✓ Read src/App.tsx                                 │
+│    ○ Bix    Documente… Disponible        ││   ✓ Edit src/App.tsx  +12 −3                         │
+│ ■ Website 1 session                      ││   ✗ npm test  2 échecs                               │
+│   ⎇ feat/WEB-18-homepage                 ││                                                      │
+│    ? Luna   Nouvelle … Une question      ││   Je relance les tests après correction.             │
+│                                          ││                                                      │
+│                                          │╰──────────────────────────────────────────────────────╯
+│                                          │╭─ ÉCHANGES ───────────────────────────────────────────╮
+│                                          ││ 16:42 Otto → Nova  Les tests passent, tu peux rebas… │
+│                                          ││                                                      │
+│                                          ││                                                      │
+╰──────────────────────────────────────────╯╰──────────────────────────────────────────────────────╯
+  j k  naviguer   ↵  ouvrir   tab  suivante en attente   y n  répondre   a  attacher (tmux)
+```
+
 ## Settings
 
 Four tabs, the last one opened remembered. Display: language, the default harness (new sessions and the Ledge chat), the screen the island sits on, "Position de l'île" (Centre, À gauche or À droite: the island's axis moves to a quarter of the screen width, to keep window titles and browser tabs clear), "Mode discret sous une fenêtre" (a switch, on by default: the strip under a maximised window), the size of the island and of the windows (auto or 100 to 200 percent), the theme (`Ctrl+Alt+T`) and reduced motion. Notifications: do-not-disturb and when a bot finishes (bubble and sound, bubble, sound, or island only). Sounds: everything below. About: versions and updates (see Updating).

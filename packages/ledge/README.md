@@ -42,6 +42,7 @@ ledge claude            # start Claude Code in a tracked tmux session (tab renam
 ledge claude --name max # pick the session's Ledge name
 ledge status            # list bots and what they wait for
 ledge attach <id>       # put this terminal on a running session (what the overlay opens a tab with)
+ledge tui               # follow and answer every session from this terminal (--notify bell|osc9|off)
 ledge daemon            # run the daemon in the foreground (normally run by the systemd service)
 ledge uninstall         # undo ledge setup: hooks, service and ~/.local/bin/ledge (--purge: ~/.ledge too)
 ```
@@ -65,6 +66,7 @@ systemctl --user disable --now ledge-daemon.service   # back to on-demand start 
 ~/.ledge/daemon.log     dropped hooks, failed injections, poll errors
 ~/.ledge/chat.json      the day's chat conversation (date, session id)
 ~/.ledge/chat/context/  files the chat reads (sessions.md, pane-*, reply-*, git-*)
+~/.ledge/tui.json       ledge tui's settings (its language)
 ~/.ledge/daemon.pid     PID of the running daemon, removed when it stops cleanly
 ~/.config/systemd/user/ledge-daemon.service   user unit written by `ledge setup`
 ~/.ledge/exit-<id>      transient: the agent's exit code, written by the launcher's wrapper when the agent ends and read and deleted by `ledge claude`
