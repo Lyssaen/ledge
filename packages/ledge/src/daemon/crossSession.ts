@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { Tool } from '@ledge/protocol';
 
 /** Claude Code delivers another session's SendMessage as a prompt: one `<cross-session-message from="<address>"
@@ -27,7 +28,7 @@ export function crossSession(text: string): { from: string; name?: string; text:
 const LEDGE_CLOSE = '</ledge-message>';
 const LEDGE_BLOCK = /^<ledge-message\b([^>]*)>([\s\S]*?)(?:<\/ledge-message>|$)/;
 export const messageNote = (from: string, to: Tool): string =>
-  `(message de la session ${from}, pas de l'utilisateur ; pour répondre : ${to === 'codex' ? `ledge send ${from} "…"` : `SendMessage vers ${from}`})`;
+  `(message de la session ${from}, pas de l'utilisateur ; pour répondre : ${to === 'claude' ? `SendMessage vers ${from}` : `ledge send ${from} "…"`})`;
 const NOTE_SENDER = /^\(message de la session (.+?), pas de l'utilisateur ; /;
 /** A message body without the note that opens it (either reply hint), with the sender that note names. */
 export function stripNote(text: string): { sender?: string; text: string } {
@@ -42,17 +43,53 @@ const CONTROLS = /[\x00-\x1f\x7f-\x9f]/g;
 const typable = (text: string, newline: string) => text.replace(ESCAPES, '').replace(/\r\n|\r|\n/g, newline).replace(CONTROLS, ' ');
 /** A body as the receiver's prompt carries it: on one line, escaped. The history pairs a received body with its sent card on this form. */
 export const ledgeBody = (text: string): string => typable(text.replaceAll('<', '‹'), ' ⏎ ');
-export function formatLedgeMessage(m: { from: string; tool: Tool; text: string; to: Tool }): string {
-  const from = typable(m.from, ' ').replace(/["<>]/g, '').trim();
-  return `<ledge-message from="${from}" tool="${m.tool}">${messageNote(from, m.to)} ${ledgeBody(m.text)}${LEDGE_CLOSE}`;
+/** Past this many characters or lines, a body is typed as its start and a pointer: `ledge read <id>` prints it whole. */
+export const INLINE_MAX = 800;
+export const INLINE_LINES = 8;
+/** What a pointer shows of the body: the summary, else the first line, cut to this. */
+const POINTER_HEAD = 200;
+const lineCount = (text: string) => text.split(/\r\n|\r|\n/).length;
+/** A message's short id, from its rid: the mailbox and the history each compute it, so a pointer pairs with its sent card
+ *  without asking the mailbox. `length` grows only when two rids meet on the shorter one in the mailbox. */
+export const mailId = (rid: string, length = 6): string => `m${createHash('sha1').update(rid).digest('hex').slice(0, length)}`;
+/** A body short enough to be typed whole. */
+export const inline = (text: string): boolean => text.length <= INLINE_MAX && lineCount(text) <= INLINE_LINES;
+/** A value safe inside a tag's attribute. */
+const attr = (s: string) => typable(s, ' ').replace(/["<>]/g, '').trim();
+export function formatLedgeMessage(m: { from: string; tool: Tool; text: string; to: Tool; id?: string; summary?: string }): string {
+  const from = attr(m.from);
+  const open = `<ledge-message from="${from}" tool="${m.tool}"${m.id ? ` id="${attr(m.id)}"` : ''}>${messageNote(from, m.to)} `;
+  if (!m.id || inline(m.text)) return `${open}${ledgeBody(m.text)}${LEDGE_CLOSE}`;
+  const first = m.summary?.trim() || m.text.trim().split(/\r\n|\r|\n/)[0]!.trim();
+  const head = ledgeBody(first.length > POINTER_HEAD ? `${first.slice(0, POINTER_HEAD)}…` : first);
+  return `${open}${head} … [message de ${m.text.length} caractères, ${lineCount(m.text)} lignes : lis-le en entier avec ledge read ${attr(m.id)}]${LEDGE_CLOSE}`;
 }
-export function ledgeMessages(text: string): { from: string; tool?: string; text: string }[] | undefined {
+export function ledgeMessages(text: string): { from: string; tool?: string; id?: string; text: string }[] | undefined {
   const m = LEDGE_BLOCK.exec(text.trimStart());
   if (!m) return undefined;
   const attrs = new Map([...m[1]!.matchAll(ATTR)].map(a => [a[1]!, a[2]!] as const));
-  const from = attrs.get('from'); const tool = attrs.get('tool');
+  const from = attrs.get('from'); const tool = attrs.get('tool'); const id = attrs.get('id');
   if (!from) return undefined;
-  return [{ from, ...(tool ? { tool } : {}), text: stripNote(m[2]!).text.trim() }];
+  return [{ from, ...(tool ? { tool } : {}), ...(id ? { id } : {}), text: stripNote(m[2]!).text.trim() }];
+}
+
+/** What Ledge types into a sender's prompt when it gives up on one of its messages: one line, never the user's words. */
+const NOTICE_BLOCK = /^<ledge-notice\b([^>]*)>([\s\S]*?)(?:<\/ledge-notice>|$)/;
+const NOTICE_QUOTE = 80;
+const NOTICE_REASON = ' ») : ';
+export function formatLedgeNotice(n: { to: string; text: string; reason: string }): string {
+  const to = attr(n.to); const flat = typable(n.text, ' ').trim();
+  const quote = ledgeBody(flat.length > NOTICE_QUOTE ? `${flat.slice(0, NOTICE_QUOTE)}…` : flat);
+  return `<ledge-notice to="${to}">Ledge n'a pas pu remettre ton message à ${to} (« ${quote}${NOTICE_REASON}${ledgeBody(n.reason)}</ledge-notice>`;
+}
+/** A prompt that is a Ledge notice: the target it names, the reason that ends it, and its text. */
+export function ledgeNotice(text: string): { to: string; reason?: string; text: string } | undefined {
+  const m = NOTICE_BLOCK.exec(text.trimStart());
+  if (!m) return undefined;
+  const to = new Map([...m[1]!.matchAll(ATTR)].map(a => [a[1]!, a[2]!] as const)).get('to');
+  if (!to) return undefined;
+  const body = m[2]!.trim(); const at = body.lastIndexOf(NOTICE_REASON);
+  return { to, ...(at >= 0 ? { reason: body.slice(at + NOTICE_REASON.length) } : {}), text: body };
 }
 
 /** Claude Code's automated notices about messages between sessions (2.1.303), delivered as a prompt as if the user had

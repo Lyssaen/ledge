@@ -1,6 +1,6 @@
 import { cleanTopic, sessionTitle, type Session, type SessionEvent, type Pending, type Helper, type SessionState, type TopicSource } from '@ledge/protocol';
 
-import { crossSession, crossSessionNotices } from './crossSession.js';
+import { crossSession, crossSessionNotices, ledgeNotice } from './crossSession.js';
 import { sameQuestion } from '../adapters/types.js';
 import { ledgeTitleRest } from '../names.js';
 
@@ -327,7 +327,7 @@ function reduceEvent(s: Session, ev: SessionEvent): Session {
     case 'PermissionRequest':
     case 'Notification': {
       // The harness's cross-session notices are not the user's words: no topic, and the last reply still waits for the user.
-      const notice = ev.name === 'UserPromptSubmit' && !!ev.text && !!crossSessionNotices(ev.text);
+      const notice = ev.name === 'UserPromptSubmit' && !!ev.text && (!!crossSessionNotices(ev.text) || !!ledgeNotice(ev.text));
       if (ev.name === 'UserPromptSubmit' && ev.text && !s.topic && !notice && !crossSession(ev.text)) s = withTopic(s, ev.text, 'prompt');
       // OMP's dialog is closed by OMP's own word (a cancel) or by the answer: an action starting meanwhile (its `ask` call is
       // announced after its dialog) is not the end of the request.

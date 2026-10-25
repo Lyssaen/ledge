@@ -21,6 +21,7 @@ import { paths } from '../src/paths.js';
 import { writeMachines } from '../src/daemon/machines.js';
 import { writeProjects } from '../src/daemon/projects.js';
 import { createMobileService } from '../src/mobile/service.js';
+import { mailId } from '../src/daemon/crossSession.js';
 
 const T0 = '2026-10-09T18:00:00.000Z';
 const fx = (n: string) => readFileSync(new URL(`./fixtures/panes/${n}.txt`, import.meta.url), 'utf8');
@@ -720,6 +721,19 @@ describe('server', () => {
 
   describe('session.message', () => {
     const line = 'Salut';
+    it('message.read gives a long body whole to its receiver, and refuses anyone else', async () => {
+      store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'working' }));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      const long = 'ligne\n'.repeat(30);
+      c.send({ type: 'session.message', rid: 'r-long', from: 'a', to: 'Pim', text: long });
+      expect(await c.next('message.ack', 3000)).toMatchObject({ outcome: 'queued' });
+      const id = mailId('r-long');
+      c.send({ type: 'message.read', id, by: 'b' });
+      expect(await c.next('message.body', 3000)).toMatchObject({ id, from: 'Otto', to: 'Pim', text: long });
+      c.send({ type: 'message.read', id, by: 'z' });
+      expect(await c.next('message.body', 3000)).toMatchObject({ id, reason: expect.stringContaining("ne t'est pas adressé") });
+      c.close();
+    });
     it('to a free Codex is acked accepted and typed', async () => {
       tmux = fakeTmux({ 'ledge-b': [fx('codex-idle-after-turn')] }); await srv.close();
       srv = await startServer({ store, tmux, port: 0 });
@@ -728,7 +742,7 @@ describe('server', () => {
       c.send({ type: 'session.message', rid: 'r1', from: 'a', to: 'Pim', text: line });
       expect(await c.next('message.ack', 3000)).toEqual({ type: 'message.ack', rid: 'r1', outcome: 'accepted' });
       await until(() => tmux.sent.some(x => x[0] === 'keys' && x[2] === 'Enter'), 3000);
-      expect(tmux.sent[0]).toEqual(['text', 'ledge-b', expect.stringMatching(new RegExp(`^<ledge-message from="Otto" tool="claude">\\(message de la session Otto, .*\\) ${line}</ledge-message>$`))]);
+      expect(tmux.sent[0]).toEqual(['text', 'ledge-b', expect.stringMatching(new RegExp(`^<ledge-message from="Otto" tool="claude" id="m[0-9a-f]{6}">\\(message de la session Otto, .*\\) ${line}</ledge-message>$`))]);
       expect(tmux.sent.at(-1)).toEqual(['keys', 'ledge-b', 'Enter']);
       c.close();
     });
@@ -2672,9 +2686,12 @@ describe('close a session', () => {
     await until(() => tmux.sent.length > 0, 3000);
     store.upsert({ ...store.get('a')!, state: 'idle' });
     expect(await closed).toEqual({ how: 'exit' });
-    expect(texts()).toEqual([['text', 'ledge-a', '/exit']]);
+    expect(texts().filter(t => t[1] === 'ledge-a')).toEqual([['text', 'ledge-a', '/exit']]);
     expect(r).toMatchObject({ error: 'Otto stopped before it got the instruction' });
     await until(() => history.items('b').some(i => i.kind === 'sent' && i.status === 'failed'), 3000);
+    // The sender, free, is told its message never reached Otto.
+    await until(() => texts().some(t => t[1] === 'ledge-b'), 3000);
+    expect(texts().filter(t => t[1] === 'ledge-b')).toEqual([['text', 'ledge-b', expect.stringMatching(/^<ledge-notice to="Otto">Ledge n'a pas pu remettre ton message à Otto \(« Salut »\) : /)]]);
     c.close();
   });
 });

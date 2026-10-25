@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import type { ClientMessage, Session } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
 import { createMailbox, type Mailbox, type MailboxDeps } from '../src/daemon/mailbox.js';
-import { formatLedgeMessage } from '../src/daemon/crossSession.js';
+import { formatLedgeMessage, formatLedgeNotice, mailId } from '../src/daemon/crossSession.js';
 
 const T0 = '2026-10-19T08:00:00.000Z';
 const mk = (id: string, extra: Partial<Session> = {}): Session => ({ id, name: 'Otto', tool: 'claude', cwd: '/w/ledge', project: 'ledge', title: 'Otto · ledge',
@@ -32,7 +32,7 @@ describe('createMailbox', () => {
   it('a free Codex gets the message now, formatted, and the card is delivered', async () => {
     expect(box.submit(msg())).toMatchObject({ outcome: 'accepted' });
     await flush();
-    expect(typed).toEqual([['s2', formatLedgeMessage({ from: 'Otto', tool: 'claude', text: 'Salut', to: 'codex' })]]);
+    expect(typed).toEqual([['s2', formatLedgeMessage({ from: 'Otto', tool: 'claude', text: 'Salut', to: 'codex', id: mailId('r1') })]]);
     expect(sentCalls).toEqual([['record', 's1', { rid: 'r1', at: T0, to: 'Pim', peer: 's2', text: 'Salut' }], ['mark', 's1', 'r1', 'delivered']]);
   });
 
@@ -95,9 +95,11 @@ describe('createMailbox', () => {
     store.upsert(pim({ state: 'working' }));
     box.submit(msg({ rid: 'r1', text: 'un' })); box.submit(msg({ rid: 'r2', text: 'deux' }));
     setState('s2', 'idle'); await flush(); await flush();
-    expect(typed).toHaveLength(2);
+    expect(typed.filter(([id]) => id === 's2')).toHaveLength(2);
     expect(sentCalls).toContainEqual(['mark', 's1', 'r1', 'failed']);
     expect(sentCalls).toContainEqual(['mark', 's1', 'r2', 'delivered']);
+    // The sender, free, is told which message failed and why.
+    expect(typed).toContainEqual(['s1', formatLedgeNotice({ to: 'Pim', text: 'un', reason: 'refused' })]);
   });
 
   it('a passing refusal (a decision being typed, a prompt meanwhile) keeps the message first in line for the next free moment', async () => {
@@ -130,7 +132,62 @@ describe('createMailbox', () => {
     box.submit(msg());
     setState('s2', 'exited'); await flush();
     expect(sentCalls).toContainEqual(['mark', 's1', 'r1', 'failed']);
+    expect(typed).toEqual([['s1', formatLedgeNotice({ to: 'Pim', text: 'Salut', reason: "la session s'est terminée avant de le recevoir" })]]);
+  });
+
+  it('a sender busy when its message fails gets the notice at its own free moment, and a notice that fails is not told again', async () => {
+    setState('s1', 'working'); store.upsert(pim({ state: 'working' }));
+    box.submit(msg());
+    setState('s2', 'exited'); await flush();
     expect(typed).toEqual([]);
+    answer = async () => 'refused';
+    setState('s1', 'idle'); await flush(); await flush();
+    expect(typed).toHaveLength(1);
+    expect(typed[0]![1]).toMatch(/^<ledge-notice to="Pim">/);
+    setState('s1', 'working'); setState('s1', 'idle'); await flush();
+    expect(typed).toHaveLength(1);
+    expect(sentCalls.filter(c => c[0] === 'mark')).toEqual([['mark', 's1', 'r1', 'failed']]);
+  });
+
+  it('a sender Ledge cannot type into (hook only, or gone) gets no notice', async () => {
+    store.upsert(mk('s1', { state: 'idle', source: 'hook_only' }));
+    store.upsert(pim({ state: 'working' }));
+    box.submit(msg());
+    setState('s2', 'exited'); await flush();
+    expect(typed).toEqual([]);
+  });
+
+  it('a long body is typed as a pointer, and `read` gives it whole to its receiver or its sender only', async () => {
+    const long = Array.from({ length: 20 }, (_, i) => `ligne ${i} <b>`).join('\n');
+    box.submit(msg({ text: long, summary: 'Le plan' })); await flush();
+    const id = mailId('r1');
+    expect(typed[0]![1]).toBe(`<ledge-message from="Otto" tool="claude" id="${id}">(message de la session Otto, pas de l'utilisateur ; pour répondre : ledge send Otto "…") Le plan … [message de ${long.length} caractères, 20 lignes : lis-le en entier avec ledge read ${id}]</ledge-message>`);
+    expect(box.read({ type: 'message.read', id, by: 's2' })).toEqual({ type: 'message.body', id, from: 'Otto', to: 'Pim', at: T0, text: long });
+    expect(box.read({ type: 'message.read', id, by: 's1' })).toMatchObject({ text: long });
+    expect(box.read({ type: 'message.read', id, by: 's9' })).toEqual({ type: 'message.body', id, reason: `le message ${id} ne t'est pas adressé` });
+    expect(box.read({ type: 'message.read', id: 'm000000', by: 's2' })).toMatchObject({ reason: expect.stringContaining('aucun message m000000') });
+  });
+
+  it('with a journal, a waiting message outlives the daemon; one whose target is gone fails and is told', async () => {
+    let saved: Parameters<NonNullable<MailboxDeps['journal']>['save']>[0] | undefined;
+    const journal = { load: () => saved, save: (s: typeof saved) => { saved = s; } };
+    const long = 'x'.repeat(2000);
+    const deps = (extra: Partial<MailboxDeps> = {}): MailboxDeps => ({ store, typing, sent, now: () => T0, relayQueued: () => false,
+      replyTo: async (id, text) => { typed.push([id, text]); return null; }, journal, ...extra });
+    box.close(); box = createMailbox(deps());
+    store.upsert(pim({ state: 'working' })); store.upsert(mk('s3', { name: 'Nova', tool: 'codex', state: 'working' }));
+    box.submit(msg({ rid: 'r1', text: long })); box.submit(msg({ rid: 'r2', to: 'Nova' }));
+    expect(saved!.queue.map(m => m.rid)).toEqual(['r1', 'r2']);
+    // The daemon restarts: Nova is gone meanwhile, Pim still works.
+    box.close(); store.remove('s3'); sentCalls = [];
+    box = createMailbox(deps()); await flush();
+    expect(sentCalls).toEqual([['mark', 's1', 'r2', 'failed']]);
+    expect(typed).toEqual([['s1', formatLedgeNotice({ to: 'Nova', text: 'Salut', reason: "la session n'existe plus" })]]);
+    expect(saved!.queue.map(m => m.rid)).toEqual(['r1']);
+    setState('s2', 'idle'); await flush();
+    expect(typed.at(-1)![1]).toContain(`ledge read ${mailId('r1')}`);
+    expect(box.read({ type: 'message.read', id: mailId('r1'), by: 's2' })).toMatchObject({ text: long });
+    expect(saved!.queue).toEqual([]);
   });
 
   it('a closing target is never delivered to, even free; once out of the set, the next store change delivers', async () => {

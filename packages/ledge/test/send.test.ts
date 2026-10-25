@@ -90,6 +90,11 @@ describe('parseLedgeCommand', () => {
     expect(parseLedgeCommand('ledge send Otto "a;b|c&d" --summary x#y')).toEqual({ cmd: 'send', args: ['Otto', 'a;b|c&d', '--summary', 'x#y'] });
     expect(parseLedgeCommand('ledge send Otto ""')).toEqual({ cmd: 'send', args: ['Otto', ''] });
   });
+  it('reads a lone `ledge read <id>`, and nothing chained to it', () => {
+    expect(parseLedgeCommand('ledge read m3fa21c')).toEqual({ cmd: 'read', args: ['m3fa21c'] });
+    expect(parseLedgeCommand('ledge read m3fa21c | head')).toBeUndefined();
+    expect(parseLedgeCommand('ledge read m3fa21c; ls')).toBeUndefined();
+  });
   it('keeps a newline inside quotes literal, but an unquoted newline or carriage return is a command separator', () => {
     expect(parseLedgeCommand('ledge send Otto "a\nb"')).toEqual({ cmd: 'send', args: ['Otto', 'a\nb'] });
     expect(parseLedgeCommand('ledge send Otto "hi"\nls')).toBeUndefined();
