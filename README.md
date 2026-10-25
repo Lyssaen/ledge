@@ -95,7 +95,7 @@ Zod schemas shared by everything else: the session model, the hook-derived `Sess
 
 ### `packages/ledge` (WSL, Node 22, TypeScript)
 
-One binary, `ledge`, with eleven commands. Source under `src/`:
+One binary, `ledge`, with twelve commands. Source under `src/`:
 
 | Path | Role |
 | --- | --- |
@@ -107,7 +107,7 @@ One binary, `ledge`, with eleven commands. Source under `src/`:
 | `cli/status.ts` | `ledge status`: one line per session from a fresh snapshot. |
 | `cli/attach.ts` | `ledge attach [--read-only] <id>`: renames the tab after the session and puts this terminal on its pane (`--read-only`: watch without typing). What the overlay runs in a new Windows Terminal tab for a session it started itself. |
 | `cli/who.ts` | `ledge who`: the live sessions, one line each (name, tool, state, project, branch, topic). What an agent runs to find the others. |
-| `cli/send.ts` | `ledge send <name> "<message>" [--summary <text>]`: writes to another Ledge session through the daemon's mailbox. See [Messages between sessions](#messages-between-sessions). |
+| `cli/send.ts` | `ledge send <name> "<message>" [--summary <text>]`: writes to another Ledge session through the daemon's mailbox; `ledge read <id>`: prints a long message whole. See [Messages between sessions](#messages-between-sessions). |
 | `cli/bridge.ts` | `ledge bridge`: exchanges Ledge messages over SSH stdin/stdout, for a local daemon that reaches this machine (see [docs/multi-machine.md](docs/multi-machine.md)). |
 | `spawn.ts` | `spawnSession`: the tmux session that runs the agent (with `LEDGE_SESSION` and `LEDGE_NAME`) and the `starting` session record. Shared by the launcher and the daemon's `session.launch`. |
 | `daemon/index.ts` | `ledge daemon`: loads the journal, prunes sessions whose tmux session is gone, starts the server and the poller, writes `daemon.pid`, saves on SIGTERM/SIGINT. |
@@ -233,9 +233,11 @@ Sessions Ledge launched can write to each other. Code: `cli/send.ts`, `cli/who.t
 - **Identity.** On `SessionStart` (start, resume, `/clear`) the hook tells the agent its Ledge name, project, branch and worktree, and how to reach the others.
 - **Directory.** `ledge who` lists the live sessions: name, tool, state, project, branch, topic.
 - **Claude Code** writes with its own `SendMessage`, addressed by Ledge name. The `PreToolUse` hook intercepts it: to another Claude, it rewrites the name to the target's live address (`uds:` from `~/.claude/sessions/*.json`) and names the sender; to a Codex, the daemon types the message. An unknown name is left to Claude's own tool.
-- **Codex** runs `ledge send <name> "<message>"`. Its sandbox cannot reach the daemon, so the hook runs the command itself, only when it is one plain command (no `&&`, `|`, `$()`, redirection or glob), and hands the result back as the hook's deny reason.
-- **Delivery.** The daemon acknowledges at once (`accepted`, `queued` or `refused`) and types the message at the target's next free moment, one per free moment, oldest first. A queued chat relay goes first; the typing lock is shared with it. A `rid` drops duplicates. Messages to a session that exits or is being closed fail. `hook_only` sessions cannot receive. 20 000 characters at most.
-- **Framing.** The text arrives as `<ledge-message from="…" tool="…">`, opening with a note that it comes from another session, not the user, and how to answer. `<` becomes `‹` and control bytes are removed, so a body can neither close the frame nor send keys through tmux.
+- **Codex** runs `ledge send <name> "<message>"` and `ledge read <id>`. Its sandbox cannot reach the daemon, so the hook runs the command itself, only when it is one plain command (no `&&`, `|`, `$()`, redirection or glob), and hands the result back as the hook's deny reason.
+- **Delivery.** The daemon acknowledges at once (`accepted`, `queued` or `refused`) and types the message at the target's next free moment, one per free moment, oldest first. A queued chat relay goes first; the typing lock is shared with it. A `rid` drops duplicates. `hook_only` sessions cannot receive. 20 000 characters at most (a Claude's longer message to a Codex, a Cursor or an OMP is refused with its length).
+- **Durability.** The queue and the long bodies are journaled in `~/.ledge/mail.json`: a message waiting for a busy session survives a daemon restart (an update included). Long bodies stay readable for 7 days (200 at most).
+- **Failures.** A message to a session that exits, is closed or is removed before its free moment fails. Its sender, when Ledge can type into it, then gets one line at its own next free moment: `<ledge-notice to="…">Ledge n'a pas pu remettre ton message à … (« … ») : raison</ledge-notice>`. A notice that fails is not told again. The thread shows it as a refused delivery `notice`.
+- **Framing.** The text arrives as `<ledge-message from="…" tool="…" id="m…">`, opening with a note that it comes from another session, not the user, and how to answer (`SendMessage` for a Claude, `ledge send` for any other). `<` becomes `‹` and control bytes are removed, so a body can neither close the frame nor send keys through tmux. A body over 800 characters or 8 lines is typed as its summary (else its first line) and a pointer, `[message de N caractères, L lignes : lis-le en entier avec ledge read m…]`. `ledge read` prints it as written, newlines and `<` kept, to its receiver or its sender only.
 - **Display.** Sent and received messages are thread items (`sent`, `received`); Claude Code's cross-session notices (idle, delivery) show as `notice`. Ledge Desktop's atelier draws each message for 5 s, from the sender's seat to the receiver's.
 
 ## Projects, archive and models

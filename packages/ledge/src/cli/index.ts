@@ -8,6 +8,7 @@ ledge uninstall [--purge]                                    remove hooks, servi
 ledge status                                                 list sessions
 ledge who                                                    list the live sessions (name, tool, state, project, branch, topic)
 ledge send <nom> "<message>" [--summary <texte>]             write to another Ledge session
+ledge read <id>                                              print a long message whole (the id is in its pointer)
 ledge bridge                                                 exchange Ledge messages over SSH stdio
 ledge --version                                              print the installed version`;
 
@@ -45,6 +46,7 @@ async function main(argv: string[]): Promise<number> {
     case 'status': { const { printStatus } = await import('./status.js'); console.log(await printStatus()); return 0; }
     case 'who': { const { printWho } = await import('./who.js'); console.log(await printWho()); return 0; }
     case 'send': { const { sendMessage } = await import('./send.js'); const r = await sendMessage(rest); console.log(r.line); return r.code; }
+    case 'read': { const { readMessage } = await import('./send.js'); const r = await readMessage(rest); console.log(r.line); return r.code; }
     case 'bridge': { const { bridge } = await import('./bridge.js'); await bridge(); return 0; }
     case 'claude': case 'codex': case 'cursor': { const { launch } = await import('./launch.js'); return launch(cmd, rest); }
     case 'attach': { const { attach } = await import('./attach.js'); return attach(rest.find(a => !a.startsWith('--')) ?? '', { readOnly: rest.includes('--read-only') }); }

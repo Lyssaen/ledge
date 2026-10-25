@@ -6,7 +6,7 @@ import { log } from '../log.js';
 import { filesOf } from './files.js';
 import { agentMessages } from './transcript.js';
 import { QUESTION_TOOLS } from './state.js';
-import { crossSession, crossSessionNotices, stripNote, ledgeBody, ledgeMessages, type CrossSessionNotice } from './crossSession.js';
+import { crossSession, crossSessionNotices, stripNote, ledgeBody, ledgeMessages, ledgeNotice, mailId, type CrossSessionNotice } from './crossSession.js';
 export { crossSession } from './crossSession.js';
 
 /** Native tracking (spec 2026-10-13 §3–4): one thread per session, reduced from the events the store applies. */
@@ -135,6 +135,13 @@ export class History {
           let last: ThreadItem | undefined;
           notices.forEach((n, i) => { last = this.put(id, this.noticeOf(n, { id: `notice-${turn + 1}-${i}`, at: ev.at, turn: turn + 1 })); });
           return last;
+        }
+        const failed = ledgeNotice(ev.text);
+        if (failed) { // Ledge telling this session one of its messages was not delivered: a system event, no prompt
+          this.turns.set(id, turn + 1);
+          const peer = this.peerOf(failed.to);
+          return this.put(id, { kind: 'notice', id: `notice-${turn + 1}-0`, at: ev.at, turn: turn + 1, notice: 'delivery', status: 'refused', count: 1, recipients: [failed.to],
+            name: failed.to, ...(peer ? { peer } : {}), ...(failed.reason ? { reason: failed.reason } : {}), text: failed.text });
         }
         this.turns.set(id, turn + 1);
         return this.put(id, { kind: 'prompt', id: `prompt-${turn + 1}`, at: ev.at, turn: turn + 1, text: ev.text });
@@ -273,15 +280,17 @@ export class History {
 
   /** Puts a received card, paired with the sender's sent one when the sender is a Ledge session: the last of its
    *  messages to this session not read yet, the one whose text starts like the body if any (the hook may have cut
-   *  either), both read as Ledge types a body (a multi-line one arrives on one line). That sent one becomes read, in the sender's thread. */
-  private receive(id: string, recv: ReceivedItem, m: { from: string; name?: string; sender?: string }): ThreadItem {
+   *  either), both read as Ledge types a body (a multi-line one arrives on one line). A message the mailbox typed names
+   *  its id: the sent card of that id is the one, and its text replaces a pointer's. That sent one becomes read, in the sender's thread. */
+  private receive(id: string, recv: ReceivedItem, m: { from: string; name?: string; sender?: string; id?: string }): ThreadItem {
     const peer = (m.sender ? this.peerOf(m.sender) : undefined) ?? this.peerOf(m.from) ?? (m.name ? this.peerOf(m.name) : undefined);
     if (!peer) return this.put(id, recv);
     const head = (t: string) => ledgeBody(t).trim().slice(0, 200);
     const open = this.items(peer).filter((i): i is SentItem => i.kind === 'sent' && i.peer === id && i.status !== 'read');
-    const sent = [...open].reverse().find(i => head(i.text) === head(recv.text)) ?? open.at(-1);
+    const byId = m.id ? open.find(i => mailId(i.id) === m.id) : undefined;
+    const sent = byId ?? [...open].reverse().find(i => head(i.text) === head(recv.text)) ?? open.at(-1);
     if (sent) this.put(peer, { ...sent, status: 'read', received: recv.id });
-    return this.put(id, { ...recv, peer, ...(sent ? { sent: sent.id } : {}) });
+    return this.put(id, { ...recv, ...(byId ? { text: byId.text } : {}), peer, ...(sent ? { sent: sent.id } : {}) });
   }
 
   /** The turn (or the helper) is over: an action still running will not get its result from this side. It shows as

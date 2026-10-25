@@ -53,12 +53,44 @@ export async function sendMessage(args: string[], opts: { port?: number; env?: N
   finally { await client.close(); }
 }
 
+const READ_USAGE = 'ledge read <id>   print a long message whole (its id is in the pointer you received)';
+const MAIL_ID = /^m[0-9a-f]{6,40}$/;
+
+/** `ledge read <id>` over an already-connected client, as its reader `by`: the body as written, newlines kept. */
+export async function readOnClient(client: Client, args: string[], by: string, ms: number): Promise<{ line: string; code: number }> {
+  const [id] = args;
+  if (args.length !== 1 || !id || !MAIL_ID.test(id)) return { line: READ_USAGE, code: 1 };
+  try {
+    client.send({ type: 'message.read', id, by });
+    const body = await client.next('message.body', ms);
+    if (body.text === undefined) return { line: `introuvable : ${body.reason ?? 'raison inconnue'}`, code: 1 };
+    return { line: `De ${body.from} à ${body.to}, ${body.at} :\n${body.text}`, code: 0 };
+  } catch (e) {
+    return { line: `pas de réponse de Ledge : ${(e as Error).message}`, code: 1 };
+  }
+}
+
+/** `ledge read <id>`: a long message whole, for its receiver or its sender. */
+export async function readMessage(args: string[], opts: { port?: number; env?: NodeJS.ProcessEnv; timeoutMs?: number } = {}): Promise<{ line: string; code: number }> {
+  if (args.length !== 1 || !MAIL_ID.test(args[0]!)) return { line: READ_USAGE, code: 1 };
+  const env = opts.env ?? process.env;
+  const by = env[CODEX_HOOK_VAR] || env.LEDGE_SESSION;
+  if (!by) return { line: 'ledge read ne marche que dans une session lancée par Ledge', code: 1 };
+  const deadline = Date.now() + (opts.timeoutMs ?? SEND_MS);
+  const left = () => Math.max(0, deadline - Date.now());
+  let client;
+  try { client = await connect({ port: opts.port, timeoutMs: left() }); }
+  catch { return { line: 'daemon not running (start a session with `ledge claude`, or run `ledge daemon`)', code: 1 }; }
+  try { return await readOnClient(client, args, by, left()); }
+  finally { await client.close(); }
+}
+
 /**
- * Reads a shell command as exactly one `ledge who` or `ledge send …`, nothing else: Codex's hook runs it itself, outside
+ * Reads a shell command as exactly one `ledge who`, `ledge send …` or `ledge read …`, nothing else: Codex's hook runs it itself, outside
  * the sandbox, so anything a shell would do beyond a plain word list (chaining, pipes, redirections, substitution,
  * comments, an unquoted backslash, newline or glob/tilde character) makes it `undefined`, as does an unclosed quote.
  */
-export function parseLedgeCommand(command: string): { cmd: 'who' } | { cmd: 'send'; args: string[] } | undefined {
+export function parseLedgeCommand(command: string): { cmd: 'who' } | { cmd: 'send' | 'read'; args: string[] } | undefined {
   command = command.replace(/[\r\n\s]+$/, ''); // a trailing newline ends the one command, it chains nothing
   const words: string[] = [];
   let word = ''; let inWord = false; let quote: '"' | "'" | undefined;
@@ -83,5 +115,6 @@ export function parseLedgeCommand(command: string): { cmd: 'who' } | { cmd: 'sen
   if (words[0] !== 'ledge') return undefined;
   if (words[1] === 'who' && words.length === 2) return { cmd: 'who' };
   if (words[1] === 'send') return { cmd: 'send', args: words.slice(2) };
+  if (words[1] === 'read') return { cmd: 'read', args: words.slice(2) };
   return undefined;
 }

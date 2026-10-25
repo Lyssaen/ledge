@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { crossSessionNotices, formatLedgeMessage, ledgeMessages, messageNote, stripNote } from '../src/daemon/crossSession.js';
+import { crossSessionNotices, formatLedgeMessage, formatLedgeNotice, INLINE_LINES, INLINE_MAX, ledgeMessages, ledgeNotice, mailId, messageNote, stripNote } from '../src/daemon/crossSession.js';
 
 const F = JSON.parse(readFileSync(join(import.meta.dirname, 'fixtures', 'cross-session', 'notices.json'), 'utf8')) as Record<string, string>;
 
@@ -42,6 +42,36 @@ describe('cross-session notices', () => {
     expect(crossSessionNotices(F.userQuotingOne!)).toBeUndefined();
     expect(crossSessionNotices('<cross-session-message from="uds:x">\nSalut</cross-session-message>')).toBeUndefined();
     expect(crossSessionNotices('Lance les tests')).toBeUndefined();
+  });
+});
+
+describe('long messages and notices (spec 2026-10-25 mailbox durability §3.1)', () => {
+  it('types a short body whole with its id, a long one as its start and a pointer', () => {
+    const id = mailId('rid-1');
+    expect(id).toMatch(/^m[0-9a-f]{6}$/);
+    expect(mailId('rid-1', 8)).toMatch(new RegExp(`^${id}[0-9a-f]{2}$`));
+    const short = formatLedgeMessage({ from: 'Otto', tool: 'claude', text: 'ok', to: 'codex', id });
+    expect(short).toBe(`<ledge-message from="Otto" tool="claude" id="${id}">${messageNote('Otto', 'codex')} ok</ledge-message>`);
+    expect(ledgeMessages(short)).toEqual([{ from: 'Otto', tool: 'claude', id, text: 'ok' }]);
+    const long = `Le plan <v2>\n${'x'.repeat(INLINE_MAX)}`;
+    const pointer = formatLedgeMessage({ from: 'Otto', tool: 'claude', text: long, to: 'codex', id });
+    expect(pointer).toContain(`) Le plan ‹v2> … [message de ${long.length} caractères, 2 lignes : lis-le en entier avec ledge read ${id}]</ledge-message>`);
+    // The summary, when given, is what the pointer shows; too many lines make a pointer too.
+    const lines = Array.from({ length: INLINE_LINES + 1 }, (_, i) => `l${i}`).join('\n');
+    expect(formatLedgeMessage({ from: 'Otto', tool: 'claude', text: lines, to: 'codex', id, summary: 'Résumé' })).toContain(') Résumé … [message de');
+    // Without an id there is nothing to read back: the body is typed whole.
+    expect(formatLedgeMessage({ from: 'Otto', tool: 'claude', text: lines, to: 'codex' })).toContain('l0 ⏎ l1');
+  });
+  it('a Cursor, with no SendMessage, is told to answer with ledge send', () => {
+    expect(messageNote('Otto', 'cursor')).toBe(messageNote('Otto', 'codex'));
+    expect(stripNote(`${messageNote('Otto', 'cursor')} salut`)).toEqual({ sender: 'Otto', text: 'salut' });
+  });
+  it('frames a notice of a failed message on one line, and reads it back', () => {
+    const n = formatLedgeNotice({ to: 'Pim', text: `Tests <verts>\n${'y'.repeat(100)}`, reason: "la session n'existe plus" });
+    expect(n).toMatch(/^<ledge-notice to="Pim">Ledge n'a pas pu remettre ton message à Pim \(« Tests ‹verts> y+… »\) : la session n'existe plus<\/ledge-notice>$/);
+    expect(ledgeNotice(n)).toMatchObject({ to: 'Pim', reason: "la session n'existe plus" });
+    expect(ledgeNotice('<ledge-message from="Pim">x</ledge-message>')).toBeUndefined();
+    expect(ledgeNotice('Salut')).toBeUndefined();
   });
 });
 
