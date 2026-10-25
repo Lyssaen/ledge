@@ -95,7 +95,7 @@ Zod schemas shared by everything else: the session model, the hook-derived `Sess
 
 ### `packages/ledge` (WSL, Node 22, TypeScript)
 
-One binary, `ledge`, with twelve commands. Source under `src/`:
+One binary, `ledge`, with thirteen commands. Source under `src/`:
 
 | Path | Role |
 | --- | --- |
@@ -108,6 +108,7 @@ One binary, `ledge`, with twelve commands. Source under `src/`:
 | `cli/attach.ts` | `ledge attach [--read-only] <id>`: renames the tab after the session and puts this terminal on its pane (`--read-only`: watch without typing). What the overlay runs in a new Windows Terminal tab for a session it started itself. |
 | `cli/who.ts` | `ledge who`: the live sessions, one line each (name, tool, state, project, branch, topic). What an agent runs to find the others. |
 | `cli/send.ts` | `ledge send <name> "<message>" [--summary <text>]`: writes to another Ledge session through the daemon's mailbox; `ledge read <id>`: prints a long message whole. See [Messages between sessions](#messages-between-sessions). |
+| `cli/task.ts` | `ledge task give\|list\|show\|take\|done\|refuse\|pass …`: work given to another session, taken and closed. See [Tasks between sessions](#tasks-between-sessions). |
 | `cli/bridge.ts` | `ledge bridge`: exchanges Ledge messages over SSH stdin/stdout, for a local daemon that reaches this machine (see [docs/multi-machine.md](docs/multi-machine.md)). |
 | `spawn.ts` | `spawnSession`: the tmux session that runs the agent (with `LEDGE_SESSION` and `LEDGE_NAME`) and the `starting` session record. Shared by the launcher and the daemon's `session.launch`. |
 | `daemon/index.ts` | `ledge daemon`: loads the journal, prunes sessions whose tmux session is gone, starts the server and the poller, writes `daemon.pid`, saves on SIGTERM/SIGINT. |
@@ -239,6 +240,17 @@ Sessions Ledge launched can write to each other. Code: `cli/send.ts`, `cli/who.t
 - **Failures.** A message to a session that exits, is closed or is removed before its free moment fails. Its sender, when Ledge can type into it, then gets one line at its own next free moment: `<ledge-notice to="…">Ledge n'a pas pu remettre ton message à … (« … ») : raison</ledge-notice>`. A notice that fails is not told again. The thread shows it as a refused delivery `notice`.
 - **Framing.** The text arrives as `<ledge-message from="…" tool="…" id="m…">`, opening with a note that it comes from another session, not the user, and how to answer (`SendMessage` for a Claude, `ledge send` for any other). `<` becomes `‹` and control bytes are removed, so a body can neither close the frame nor send keys through tmux. A body over 800 characters or 8 lines is typed as its summary (else its first line) and a pointer, `[message de N caractères, L lignes : lis-le en entier avec ledge read m…]`. `ledge read` prints it as written, newlines and `<` kept, to its receiver or its sender only.
 - **Display.** Sent and received messages are thread items (`sent`, `received`); Claude Code's cross-session notices (idle, delivery) show as `notice`. Ledge Desktop's atelier draws each message for 5 s, from the sender's seat to the receiver's.
+
+## Tasks between sessions
+
+A message says something; a task is work that must not get lost. Code: `cli/task.ts`, `daemon/tasks.ts`.
+
+- **Give.** `ledge task give <name> "<title>" ["<detail>"]` gives a live session a task (`t` + 6 hex). The owner gets one line at its next free moment, `<ledge-task id="…" from="…">`, naming the giver, the title and the commands that read and close it.
+- **Take, close.** The owner runs `take <id>`, then `done <id> ["<result>"]` or `refuse <id> "<reason>"`. The giver is then told, with the start of the result or the reason. The giver can `refuse` its own task to cancel it, and the owner is then told to stop. A closed task takes no more changes.
+- **Pass.** `pass <id> <name> ["<note>"]` hands the task to another session. The giver stays the same, and the new owner is told.
+- **Never lost.** Tasks are journaled in `~/.ledge/tasks.json`. An owner that ends or is removed with an open task drops it, and the giver is told. A closed task is kept 7 days, 300 at most.
+- **Read.** `list` shows the open tasks you hold or gave (`--all` adds the closed ones). `show <id>` prints one with its detail, result and history.
+- **Agents.** The identity context tells every session to use a task rather than a message for work. Codex's hook runs a lone `ledge task …` itself. A `<ledge-task>` line shows in the thread as a `notice`, never as the user's words.
 
 ## Projects, archive and models
 

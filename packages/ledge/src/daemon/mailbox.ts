@@ -1,15 +1,14 @@
-import { readFileSync } from 'node:fs';
-import { writeFile, rename } from 'node:fs/promises';
 import { backendOf, isArchived, type ClientMessage, type MessageAck, type ServerMessage, type Session, type Tool } from '@ledge/protocol';
 import type { Store } from './store.js';
 import { formatLedgeMessage, formatLedgeNotice, inline, mailId } from './crossSession.js';
 import { free } from './relay.js';
 import { bareName } from './peers.js';
 import { log } from '../log.js';
+import { jsonJournal, type Journal } from './journal.js';
 
 /** What the mailbox journals: the messages still to type, and the bodies `ledge read` can still give. */
 export interface MailState { queue: Queued[]; bodies: Body[] }
-export interface MailJournal { load(): MailState | undefined; save(state: MailState): void }
+export type MailJournal = Journal<MailState>;
 
 export interface MailboxDeps {
   store: Pick<Store, 'get' | 'all' | 'onChange'>;
@@ -29,6 +28,8 @@ export interface MailboxDeps {
 export interface Mailbox {
   submit(m: Extract<ClientMessage, { type: 'session.message' }>): MessageAck;
   read(m: Extract<ClientMessage, { type: 'message.read' }>): Extract<ServerMessage, { type: 'message.body' }>;
+  /** Ledge's own line for a session (a task's pointer), typed at its next free moment; false when it cannot be typed into. Never told back on failure. */
+  notify(target: string, text: string, rid: string): boolean;
   kick(id: string): void;
   close(): void;
 }
@@ -79,10 +80,12 @@ export function createMailbox(d: MailboxDeps): Mailbox {
     d.sent.mark(m.from, m.rid, 'failed');
     const sender = d.store.get(m.from);
     if (!reachable(sender)) return;
-    const rid = `${m.rid}:notice`;
-    queue.push({ kind: 'notice', id: mailId(rid), rid, from: '', sender: { name: 'Ledge', tool: sender.tool }, target: sender.id, to: sender.name,
-      text: formatLedgeNotice({ to: m.to, text: m.text, reason }) });
-    queueMicrotask(() => kick(sender.id));
+    notice(sender, formatLedgeNotice({ to: m.to, text: m.text, reason }), `${m.rid}:notice`);
+  }
+
+  function notice(s: Session, text: string, rid: string): void {
+    queue.push({ kind: 'notice', id: mailId(rid), rid, from: '', sender: { name: 'Ledge', tool: s.tool }, target: s.id, to: s.name, text });
+    queueMicrotask(() => kick(s.id));
   }
 
   async function deliver(m: Queued): Promise<void> {
@@ -186,6 +189,12 @@ export function createMailbox(d: MailboxDeps): Mailbox {
       if (by !== b.from && by !== b.target) return { type: 'message.body', id, reason: `le message ${id} ne t'est pas adressé` };
       return { type: 'message.body', id, from: b.fromName, to: b.to, at: b.at, text: b.text };
     },
+    notify(target, text, rid) {
+      const s = d.store.get(target);
+      if (!reachable(s)) return false;
+      notice(s, text, rid); save();
+      return true;
+    },
     kick,
     close: unsubscribe
   };
@@ -193,26 +202,8 @@ export function createMailbox(d: MailboxDeps): Mailbox {
 
 /** The mailbox's journal in a file: read once at startup, rewritten whole through a temporary file after each change, one write at a time. */
 export function fileJournal(path: string): MailJournal & { flush(): Promise<void> } {
-  let pending: MailState | undefined; let writing: Promise<void> = Promise.resolve();
-  const drain = async (): Promise<void> => {
-    while (pending) {
-      const state = pending; pending = undefined;
-      const tmp = `${path}.tmp`;
-      try { await writeFile(tmp, JSON.stringify(state)); await rename(tmp, path); }
-      catch (e) { log(`mailbox journal not written: ${(e as Error).message}`); }
-    }
-  };
-  return {
-    load() {
-      try {
-        const raw = JSON.parse(readFileSync(path, 'utf8')) as Partial<MailState>;
-        return { queue: Array.isArray(raw.queue) ? raw.queue : [], bodies: Array.isArray(raw.bodies) ? raw.bodies : [] };
-      } catch { return undefined; }
-    },
-    save(state) {
-      const idle = !pending; pending = state;
-      if (idle) writing = writing.then(drain);
-    },
-    flush: () => writing
-  };
+  return jsonJournal<MailState>(path, 'mailbox', raw => {
+    const r = raw as Partial<MailState> | null;
+    return r ? { queue: Array.isArray(r.queue) ? r.queue : [], bodies: Array.isArray(r.bodies) ? r.bodies : [] } : undefined;
+  });
 }

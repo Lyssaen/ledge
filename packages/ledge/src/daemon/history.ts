@@ -6,7 +6,7 @@ import { log } from '../log.js';
 import { filesOf } from './files.js';
 import { agentMessages } from './transcript.js';
 import { QUESTION_TOOLS } from './state.js';
-import { crossSession, crossSessionNotices, stripNote, ledgeBody, ledgeMessages, ledgeNotice, mailId, type CrossSessionNotice } from './crossSession.js';
+import { crossSession, crossSessionNotices, stripNote, ledgeBody, ledgeMessages, ledgeNotice, ledgeTask, mailId, type CrossSessionNotice } from './crossSession.js';
 export { crossSession } from './crossSession.js';
 
 /** Native tracking (spec 2026-10-13 §3–4): one thread per session, reduced from the events the store applies. */
@@ -142,6 +142,13 @@ export class History {
           const peer = this.peerOf(failed.to);
           return this.put(id, { kind: 'notice', id: `notice-${turn + 1}-0`, at: ev.at, turn: turn + 1, notice: 'delivery', status: 'refused', count: 1, recipients: [failed.to],
             name: failed.to, ...(peer ? { peer } : {}), ...(failed.reason ? { reason: failed.reason } : {}), text: failed.text });
+        }
+        const task = ledgeTask(ev.text);
+        if (task) { // Ledge's pointer about a task: a system event, no prompt
+          this.turns.set(id, turn + 1);
+          const peer = task.from ? this.peerOf(task.from) : undefined;
+          return this.put(id, { kind: 'notice', id: `notice-${turn + 1}-0`, at: ev.at, turn: turn + 1, notice: 'other',
+            ...(task.from ? { name: task.from } : {}), ...(peer ? { peer } : {}), text: task.text });
         }
         this.turns.set(id, turn + 1);
         return this.put(id, { kind: 'prompt', id: `prompt-${turn + 1}`, at: ev.at, turn: turn + 1, text: ev.text });

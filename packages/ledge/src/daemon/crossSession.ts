@@ -82,6 +82,19 @@ export function formatLedgeNotice(n: { to: string; text: string; reason: string 
   const quote = ledgeBody(flat.length > NOTICE_QUOTE ? `${flat.slice(0, NOTICE_QUOTE)}…` : flat);
   return `<ledge-notice to="${to}">Ledge n'a pas pu remettre ton message à ${to} (« ${quote}${NOTICE_REASON}${ledgeBody(n.reason)}</ledge-notice>`;
 }
+/** What Ledge types about a task (spec 2026-10-25 session tasks §3.3): one line naming the task and the session the
+ *  change comes from, never the user's words. `text` is Ledge's own wording around the title and result, escaped here. */
+const TASK_BLOCK = /^<ledge-task\b([^>]*)>([\s\S]*?)(?:<\/ledge-task>|$)/;
+export function formatLedgeTask(t: { id: string; from: string; text: string }): string {
+  return `<ledge-task id="${attr(t.id)}" from="${attr(t.from)}">${ledgeBody(t.text)}</ledge-task>`;
+}
+export function ledgeTask(text: string): { id: string; from?: string; text: string } | undefined {
+  const m = TASK_BLOCK.exec(text.trimStart());
+  if (!m) return undefined;
+  const attrs = new Map([...m[1]!.matchAll(ATTR)].map(a => [a[1]!, a[2]!] as const));
+  const id = attrs.get('id'); const from = attrs.get('from');
+  return id ? { id, ...(from ? { from } : {}), text: m[2]!.trim() } : undefined;
+}
 /** A prompt that is a Ledge notice: the target it names, the reason that ends it, and its text. */
 export function ledgeNotice(text: string): { to: string; reason?: string; text: string } | undefined {
   const m = NOTICE_BLOCK.exec(text.trimStart());

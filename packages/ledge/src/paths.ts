@@ -20,7 +20,7 @@ export function ledgeDir(): string {
 
 export function paths() {
   const dir = ledgeDir();
-  return { dir, tmuxConf: join(dir, 'tmux.conf'), journal: join(dir, 'sessions.json'), log: join(dir, 'daemon.log'), pid: join(dir, 'daemon.pid'), history: join(dir, 'history'), mail: join(dir, 'mail.json'), machines: join(dir, 'machines.json'), projects: join(dir, 'projects.json'), island: join(dir, 'island.json'), token: join(dir, 'token'), mobile: join(dir, 'mobile.json'), mobileSession: join(dir, 'mobile-session.json'), mobileKey: join(dir, 'mobile-key'), devices: join(dir, 'devices.json'), revocations: join(dir, 'revocations.json') };
+  return { dir, tmuxConf: join(dir, 'tmux.conf'), journal: join(dir, 'sessions.json'), log: join(dir, 'daemon.log'), pid: join(dir, 'daemon.pid'), history: join(dir, 'history'), mail: join(dir, 'mail.json'), tasks: join(dir, 'tasks.json'), machines: join(dir, 'machines.json'), projects: join(dir, 'projects.json'), island: join(dir, 'island.json'), token: join(dir, 'token'), mobile: join(dir, 'mobile.json'), mobileSession: join(dir, 'mobile-session.json'), mobileKey: join(dir, 'mobile-key'), devices: join(dir, 'devices.json'), revocations: join(dir, 'revocations.json') };
 }
 
 export async function ensureLedgeDir(): Promise<void> {

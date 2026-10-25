@@ -499,9 +499,11 @@ describe('session identity (SessionStart additionalContext)', () => {
     expect(codex).toContain('Tu es Nova, projet api');
     expect(codex).not.toMatch(/branche [^,]/);
     expect(codex).not.toContain('SendMessage');
-    expect(codex).toContain('Pour écrire à une autre session Ledge, lance `ledge send <nom> "<message>"` (seul, sans && ni |). Ledge exécute lui-même `ledge send`, `ledge read` et `ledge who` : leur résultat t\'arrive comme « Command blocked by PreToolUse hook: … », c\'est la réponse, pas une erreur.');
+    expect(codex).toContain('Pour écrire à une autre session Ledge, lance `ledge send <nom> "<message>"` (seul, sans && ni |). Ledge exécute lui-même `ledge send`, `ledge read`, `ledge task` et `ledge who` : leur résultat t\'arrive comme « Command blocked by PreToolUse hook: … », c\'est la réponse, pas une erreur.');
     // Both are told how to read a long message whole.
     for (const t of [text, codex]) expect(t).toContain('lance `ledge read <id>` pour le lire en entier');
+    // And how to give work that must not get lost.
+    for (const t of [text, codex]) expect(t).toContain('`ledge task give <nom> "<titre>" "<détail>"`');
   });
 
   it('a launched session is told its current Ledge name (a rename wins over LEDGE_NAME), with the daemon\'s branch', async () => {

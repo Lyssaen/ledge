@@ -149,6 +149,18 @@ describe('createMailbox', () => {
     expect(sentCalls.filter(c => c[0] === 'mark')).toEqual([['mark', 's1', 'r1', 'failed']]);
   });
 
+  it('notify types Ledge\'s own line at the target\'s free moment, and refuses a session it cannot type into', async () => {
+    store.upsert(pim({ state: 'working' }));
+    expect(box.notify('s2', '<ledge-task id="t1" from="Otto">x</ledge-task>', 't1:1')).toBe(true);
+    await flush(); expect(typed).toEqual([]);
+    setState('s2', 'idle'); await flush();
+    expect(typed).toEqual([['s2', '<ledge-task id="t1" from="Otto">x</ledge-task>']]);
+    expect(sentCalls).toEqual([]);
+    store.upsert(mk('s3', { name: 'Nova', source: 'hook_only' }));
+    expect(box.notify('s3', 'x', 'r')).toBe(false);
+    expect(box.notify('nobody', 'x', 'r')).toBe(false);
+  });
+
   it('a sender Ledge cannot type into (hook only, or gone) gets no notice', async () => {
     store.upsert(mk('s1', { state: 'idle', source: 'hook_only' }));
     store.upsert(pim({ state: 'working' }));

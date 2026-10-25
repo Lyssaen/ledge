@@ -10,6 +10,7 @@ import { readFileSync, openSync, fstatSync, readSync, closeSync } from 'node:fs'
 import { basename, join } from 'node:path';
 import { CODEX_ENV_VAR, CODEX_HOOK_VAR } from '../spawn.js';
 import { parseLedgeCommand, readOnClient, sendOnClient } from './send.js';
+import { taskOnClient } from './task.js';
 import { formatWho } from './who.js';
 
 type Payload = Record<string, unknown>;
@@ -356,8 +357,9 @@ export function identityContext(s: Identity): string {
     `Tu es ${s.name}, ${where} : une session lancée par Ledge (${s.tool}). Les autres sessions Ledge te connaissent sous le nom ${s.name}.`,
     'Pour voir les autres sessions (nom, outil, état, projet, branche, sujet), lance `ledge who`.',
     s.tool === 'claude' ? 'Pour écrire à une autre session Ledge, Claude ou Codex, utilise son nom Ledge (donné par `ledge who`) comme adresse SendMessage : Ledge le transmet. `ListAgents` montre les noms internes de Claude, pas les noms Ledge.'
-      : 'Pour écrire à une autre session Ledge, lance `ledge send <nom> "<message>"` (seul, sans && ni |). Ledge exécute lui-même `ledge send`, `ledge read` et `ledge who` : leur résultat t\'arrive comme « Command blocked by PreToolUse hook: … », c\'est la réponse, pas une erreur.',
-    'Un long message d\'une autre session t\'arrive en aperçu avec son id : lance `ledge read <id>` pour le lire en entier. Une `<ledge-notice>` te dit qu\'un de tes messages n\'a pas pu être remis.'
+      : 'Pour écrire à une autre session Ledge, lance `ledge send <nom> "<message>"` (seul, sans && ni |). Ledge exécute lui-même `ledge send`, `ledge read`, `ledge task` et `ledge who` : leur résultat t\'arrive comme « Command blocked by PreToolUse hook: … », c\'est la réponse, pas une erreur.',
+    'Un long message d\'une autre session t\'arrive en aperçu avec son id : lance `ledge read <id>` pour le lire en entier. Une `<ledge-notice>` te dit qu\'un de tes messages n\'a pas pu être remis.',
+    'Un message sert à prévenir ; pour confier un travail qui ne doit pas se perdre, lance plutôt `ledge task give <nom> "<titre>" "<détail>"` (`ledge task` pour le reste). Une `<ledge-task>` t\'en confie une, ou te dit comment une des tiennes a fini : quand on t\'en confie une, prends-la (`ledge task take <id>`) et termine-la toujours (`ledge task done <id> "<résultat>"`, ou `refuse`).'
   ].join('\n');
 }
 
@@ -426,6 +428,7 @@ async function runLedgeCommand(client: Client, cmd: NonNullable<ReturnType<typeo
   let line: string;
   if (cmd.cmd === 'who') line = formatWho((await client.next('snapshot', left())).sessions, from);
   else if (cmd.cmd === 'read') line = (await readOnClient(client, cmd.args, from, left())).line;
+  else if (cmd.cmd === 'task') line = (await taskOnClient(client, cmd.args, from, left())).line;
   else line = (await sendOnClient(client, cmd.args, from, left())).line;
   return deny(line);
 }

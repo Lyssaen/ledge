@@ -721,6 +721,20 @@ describe('server', () => {
 
   describe('session.message', () => {
     const line = 'Salut';
+    it('task.cmd gives a task and the owner gets its pointer typed', async () => {
+      tmux = fakeTmux({ 'ledge-b': [fx('codex-idle-after-turn')] }); await srv.close();
+      srv = await startServer({ store, tmux, port: 0 });
+      store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'idle' }));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'task.cmd', rid: 't-r1', by: 'a', op: 'give', to: 'Pim', title: 'Lance les tests' });
+      const r = await c.next('task.result', 3000);
+      expect(r.task).toMatchObject({ owner: 'b', state: 'open', title: 'Lance les tests' });
+      await until(() => tmux.sent.some(x => x[0] === 'keys' && x[2] === 'Enter'), 3000);
+      expect(tmux.sent[0]).toEqual(['text', 'ledge-b', expect.stringContaining(`<ledge-task id="${r.task!.id}" from="Otto">Tâche de Otto : « Lance les tests »`)]);
+      c.send({ type: 'task.cmd', rid: 't-r2', by: 'b', op: 'list' });
+      expect((await c.next('task.result', 3000)).tasks!.map(t => t.id)).toEqual([r.task!.id]);
+      c.close();
+    });
     it('message.read gives a long body whole to its receiver, and refuses anyone else', async () => {
       store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'working' }));
       const c = await connect({ port: srv.port }); await c.next('snapshot');

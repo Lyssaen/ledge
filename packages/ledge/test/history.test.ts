@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { SessionEvent } from '@ledge/protocol';
 import { History, MAX_ITEMS, SYNC_MS, handBack, crossSession } from '../src/daemon/history.js';
-import { formatLedgeMessage, formatLedgeNotice, mailId } from '../src/daemon/crossSession.js';
+import { formatLedgeMessage, formatLedgeNotice, formatLedgeTask, mailId } from '../src/daemon/crossSession.js';
 import { paths } from '../src/paths.js';
 
 const T0 = '2026-10-13T10:00:00.000Z';
@@ -498,6 +498,12 @@ describe('messages through the Ledge mailbox', () => {
     h.record('fce8', ev('UserPromptSubmit', { text: formatLedgeMessage({ from: 'Pim', tool: 'codex', text: long, to: 'claude', id: mailId('rid-1') }) }, 1));
     expect(h.items('fce8')[0]).toMatchObject({ kind: 'received', sent: 'rid-1', text: long });
     expect(h.items('c0de').map(i => i.kind === 'sent' && `${i.id}:${i.status}`)).toEqual(['rid-1:read', 'rid-2:sending']);
+  });
+
+  it('a task pointer is a notice naming the session it comes from, never a prompt', () => {
+    const h = new History({ peerOf });
+    h.record('fce8', ev('UserPromptSubmit', { text: formatLedgeTask({ id: 't1a2b3c', from: 'Pim', text: 'Tâche de Pim : « Lance les tests ».' }) }, 1));
+    expect(h.items('fce8')).toEqual([expect.objectContaining({ kind: 'notice', notice: 'other', name: 'Pim', peer: 'c0de', text: 'Tâche de Pim : « Lance les tests ».' })]);
   });
 
   it('a Ledge notice is a refused delivery notice, never a prompt', () => {

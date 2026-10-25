@@ -95,6 +95,10 @@ describe('parseLedgeCommand', () => {
     expect(parseLedgeCommand('ledge read m3fa21c | head')).toBeUndefined();
     expect(parseLedgeCommand('ledge read m3fa21c; ls')).toBeUndefined();
   });
+  it('reads a lone `ledge task …`, its quoted words kept whole', () => {
+    expect(parseLedgeCommand('ledge task give Pim "Lance les tests" "pnpm test, puis dis-moi"')).toEqual({ cmd: 'task', args: ['give', 'Pim', 'Lance les tests', 'pnpm test, puis dis-moi'] });
+    expect(parseLedgeCommand('ledge task done t1a2b3c "verts" && rm -rf x')).toBeUndefined();
+  });
   it('keeps a newline inside quotes literal, but an unquoted newline or carriage return is a command separator', () => {
     expect(parseLedgeCommand('ledge send Otto "a\nb"')).toEqual({ cmd: 'send', args: ['Otto', 'a\nb'] });
     expect(parseLedgeCommand('ledge send Otto "hi"\nls')).toBeUndefined();
