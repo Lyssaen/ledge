@@ -38,6 +38,7 @@ import { createRelay, free } from './relay.js';
 import { launchFromChat, LaunchRefused } from '../chat/launch.js';
 import { cardOf, closeFromChat, CloseRefused } from '../chat/close.js';
 import { createMailbox, type MailJournal } from './mailbox.js';
+import { createTasks, type TasksJournal } from './tasks.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
 import { createRouter } from '../chat/routing.js';
 import { serveSsh } from '../transport/ssh.js';
@@ -164,7 +165,7 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; scan?: typeof scanRepos; models?: Models; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; scan?: typeof scanRepos; models?: Models; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; tasks?: TasksJournal }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -261,6 +262,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     sent: { record: (id, m) => { history?.recordSent(id, m); }, mark: (id, rid, status) => history?.markSent(id, rid, status) }
   });
   const relay = createRelay({ threads: cardThreads, store, replyTo: replyText, now, typing, closing, next: id => mailbox.kick(id) });
+  const tasks = createTasks({ store, mailbox, now, ...(opts.tasks ? { journal: opts.tasks } : {}) });
   /** The last preview per session, replayed after every snapshot so a late client does not wait for the agent to write. */
   const previews = new Map<string, string[]>();
   /** The title last pushed to each session's tmux tab, so tmux is told only when it changes. */
@@ -956,6 +958,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       // An agent's message to another session: acked at once, typed when the target is free.
       case 'session.message': return reply(mailbox.submit(msg));
       case 'message.read': return reply(mailbox.read(msg));
+      case 'task.cmd': return reply(tasks.run(msg));
       // A chat card's instruction: a refusal reaches the requester as an `error`, the card's state everyone through chat.history.
       case 'session.relay': return relay.request(msg.qid);
       case 'session.relay.cancel': return relay.cancel(msg.qid);
@@ -1104,6 +1107,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     omp,
     closeSession: id => { const s = store.get(id); return s ? closeSession(s) : Promise.reject(unknownSession()); },
     labelExited,
-    close: () => new Promise(res => { unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
+    close: () => new Promise(res => { unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); tasks.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
   };
 }
