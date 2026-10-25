@@ -39,6 +39,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   height: 100vh;
   height: 100dvh;
   margin: 0 auto;
-  padding: env(safe-area-inset-top) 18px env(safe-area-inset-bottom);
+  padding: env(safe-area-inset-top) max(18px, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(18px, env(safe-area-inset-left));
   box-sizing: border-box;
+}
+
+/* A phone on its side (landscape, short): the whole width; its notch is then on a side, cleared by the padding above. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .app { max-width: none; }
 }
