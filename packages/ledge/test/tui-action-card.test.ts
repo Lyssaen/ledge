@@ -44,6 +44,15 @@ describe('the action card as the TUI plans it', () => {
     expect(cardPlan([decide({ detail: lines(60) })], room(10)).cutLines).toBe(1);
     expect(cardPlan([decide({ detail: lines(60) })]).shown).toEqual(['proposed']);
   });
+  it('the plan stops at a request that changed; another action\'s « changed » is a refusal, not a stale request (codes.md)', () => {
+    const stale = cardPlan([archive('Otto', { state: 'done' }), decide({ state: 'refused', code: 'changed' }), archive('Ari')]);
+    expect(stale.shown).toEqual(['done', 'stale', 'held']);
+    expect(stale.all).toEqual({ kind: 'skip', rows: [2], k: 2 });
+    const save = cardPlan([archive('Otto', { state: 'done' }), row('team.save', { vars: { team: 'api' }, state: 'refused', code: 'changed' }), archive('Ari')]);
+    expect(save.shown).toEqual(['done', 'refused', 'held']);
+    expect(save.rows[1]).toMatchObject({ state: 'refused', code: 'changed' });
+    expect(save.all).toEqual({ kind: 'skip', rows: [2], k: 2 });
+  });
   it('is closed once every row is applied or its request denied', () => {
     expect(cardClosed([archive('Otto', { state: 'done' }), decide({ state: 'denied' })])).toBe(true);
     expect(cardClosed([archive('Otto', { state: 'done' }), archive('Bix', { state: 'failed' })])).toBe(false);
@@ -80,6 +89,10 @@ describe('the conversation and the cards of a turn with an action card', () => {
     expect(begun).not.toContain('rien n’a été envoyé');
     const both = text(turn({ ignoredAt: AT, actions: [archive('Otto', { state: 'done' }), archive('Bix', { state: 'done' }), decide({ state: 'denied', doneAt: AT }), archive('Ari')] }));
     expect(both).toContain(`  · plan de 4 actions : 2 appliquées, 1 refus envoyé, le reste ignoré à ${clock(AT)} · revoir : ctrl+r`);
+    // A step failed went too, as the Desktop's line says (actionCopy).
+    const failed = text(turn({ ignoredAt: AT, actions: [archive('Otto', { state: 'done' }), archive('Bix', { state: 'failed', code: 'failed' }), archive('Ari')] }));
+    expect(failed).toContain(`  · plan de 3 actions : 1 appliquée, 1 échouée, le reste ignoré à ${clock(AT)} · revoir : ctrl+r`);
+    expect(text(turn({ ignoredAt: AT, actions: [archive('Otto', { state: 'failed', code: 'failed' })] }))).toContain(`  · carte ignorée à ${clock(AT)}, l’action est partie, mais n’a pas abouti · revoir : ctrl+r`);
   });
   it('once applied, the box goes and a line stays: the plan, or the row', () => {
     expect(text(turn({ actions: [archive('Otto', { state: 'done', doneAt: AT }), archive('Bix', { state: 'done', doneAt: AT })] }))).toContain(`  ✓ Plan appliqué à ${clock(AT)}`);

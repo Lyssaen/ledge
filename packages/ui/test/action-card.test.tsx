@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { ActionCard, actionRowOf, type ActionCardProps, type ActionRowView } from '../src/chat/ActionCard';
 import { ACTIONS, ACTION_ERROR_CODES, type ChatAction } from '@ledge/protocol';
+import { actionCopy as shipped } from '../src/chat/actionCopy';
 import { actionWords } from '../src/chat/actionWords';
 import { ChatCopyProvider } from '../src/chat/copy';
 import { actionCopy, copy } from './chat-copy-fixture';
@@ -228,6 +229,18 @@ describe('the action card (#94): a plan', () => {
     expect(p.onReview).toHaveBeenCalledOnce();
   });
 
+  it('ignored once begun: what went is counted, the rest ignored, never « nothing was sent »', () => {
+    card(plan([{ state: 'done', doneAt: AT }, { state: 'failed', code: 'failed' }]), { ignoredAt: AT });
+    expect(document.body).toHaveTextContent(`Plan of 3 actions: 1 applied, 1 failed, the rest ignored at ${at}`);
+    expect(document.body).not.toHaveTextContent('nothing was sent');
+    const decide: ActionRowView = { ...permission, state: 'denied', doneAt: AT };
+    card([{ ...model, state: 'done' }, { ...archive, state: 'done' }, decide, dissolve], { ignoredAt: AT });
+    expect(document.body).toHaveTextContent(`Plan of 4 actions: 2 applied, 1 denial sent, the rest ignored at ${at}`);
+    expect(shipped.fr.ignored(4, '10:42', { done: 2, denied: 1, failed: 1 })).toBe('Plan de 4 actions : 2 appliquées, 1 refus envoyé, 1 échouée, le reste ignoré à 10:42');
+    expect(shipped.fr.ignored(1, '10:42', { done: 0, denied: 0, failed: 1 })).toBe('Carte ignorée à 10:42 · l’action est partie, mais n’a pas abouti');
+    expect(shipped.fr.ignored(3, '10:42')).toBe('Plan de 3 actions ignoré à 10:42 · rien n’a été envoyé');
+  });
+
   it('narrow (the island): the buttons go under the text', () => {
     card(plan(), { narrow: true });
     expect(rowsOf()[0]!.querySelector('[data-action-side]')!.getAttribute('data-under')).toBe('true');
@@ -267,6 +280,12 @@ describe('the action card (#94): one row', () => {
   it('ignored: « Card ignored »', () => {
     card([model], { ignoredAt: AT });
     expect(document.body).toHaveTextContent(`Card ignored at ${at} · nothing was sent`);
+  });
+
+  it('ignored after it failed: it was sent, the line does not say nothing was', () => {
+    card([{ ...model, state: 'failed', code: 'failed' }], { ignoredAt: AT });
+    expect(document.body).toHaveTextContent(`Card ignored at ${at} · the action was sent but did not go through`);
+    expect(document.body).not.toHaveTextContent('nothing was sent');
   });
 
   it('an action the front does not know (a newer daemon): its summary, « Apply »', () => {
@@ -342,6 +361,25 @@ describe('the action card (#94): a row from the protocol', () => {
     expect(actionRowOf(deny).decision).toBe('deny');
     card([actionRowOf(deny)]);
     expect(within(rowsOf()[0]!).getAllByRole('button').map(b => b.textContent)).toEqual(['Ignore', 'Deny']);
+  });
+
+  it('changed on another action than session.decide: a refusal, « things have changed », no Open; the plan stops there (codes.md)', () => {
+    const save: ChatAction = { action: 'team.save', args: { team: 't1' }, summary: 'Enregistrer **ledge-roles**', vars: { team: 'ledge-roles' }, risk: 'reversible', team: 't1', state: 'refused', code: 'changed', error: 'the target has changed since the card' };
+    expect(actionRowOf(save)).toMatchObject({ state: 'refused', code: 'changed' });
+    card([{ ...model, state: 'done', doneAt: AT }, actionRowOf(save), dissolve]);
+    expect(nodes()[1]).toBe('Step 2, refused');
+    expect(within(rowsOf()[1]!).getByRole('alert')).toHaveTextContent('Refused: things have changed since my answer: ask me again. Nothing was sent.');
+    expect(screen.queryByRole('button', { name: /^Open/ })).toBeNull();
+    expect(rowsOf()[2]).toHaveTextContent('Not applied: the plan stopped at step 2.');
+    expect(screen.getByRole('button', { name: 'Continue without step 2 (1)…' })).toBeTruthy();
+  });
+
+  it('a request changed inside a plan: Open Nova on its row, the plan stopped there too', () => {
+    const decide: ChatAction = { action: 'session.decide', args: { session: 'local:nova', decision: 'accept' }, summary: 'Accepter la demande de **Nova**', vars: { session: 'Nova', decision: 'accept', kind: 'permission' }, risk: 'destructive', session: 'local:nova', detail: 'npm test', state: 'refused', code: 'changed' };
+    card([{ ...model, state: 'done', doneAt: AT }, actionRowOf(decide), dissolve]);
+    expect(within(rowsOf()[1]!).getByRole('button', { name: 'Open Nova' })).toBeTruthy();
+    expect(rowsOf()[2]).toHaveTextContent('Not applied: the plan stopped at step 2.');
+    expect(screen.getByRole('button', { name: 'Continue without step 2 (1)…' })).toBeTruthy();
   });
 
   it('a code it knows is kept; one it does not (a newer daemon) reads as failed', () => {

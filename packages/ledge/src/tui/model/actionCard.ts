@@ -37,11 +37,12 @@ export function cardPlan(actions: readonly ChatAction[], room?: Room): CardPlan 
     left -= need;
     return s;
   });
-  const stopAt = states.findIndex(s => s === 'failed' || s === 'refused');
+  // A request that changed was refused too: the daemon stopped there.
+  const stopAt = states.findIndex(s => s === 'failed' || s === 'refused' || s === 'stale');
   const shown: Shown[] = states.map((s, i) => (s === 'proposed' && stopAt >= 0 && i > stopAt ? 'held' : s));
   const open = shown.flatMap((s, i) => (['done', 'running', 'denied', 'stale', 'cut'].includes(s) ? [] : [i]));
   // A refused step's target is gone: it would only be refused again, so « a » goes on without it.
-  const skip = stopAt >= 0 && states[stopAt] === 'refused';
+  const skip = stopAt >= 0 && states[stopAt] !== 'failed';
   const all: All = { kind: stopAt < 0 ? 'all' : skip ? 'skip' : 'resume', rows: skip ? open.filter(i => i !== stopAt) : open, k: stopAt + 1 };
   return { rows, shown, open, stopAt, all, cutLines };
 }

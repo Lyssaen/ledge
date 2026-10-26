@@ -42,6 +42,19 @@ describe('the chat draws a turn\'s generic card (#94)', () => {
     expect(onIgnoreCards).toHaveBeenLastCalledWith('q1', true);
   });
 
+  it('a mixed turn ignored: chat.ignore sets the whole turn aside, so its launch card no longer launches', () => {
+    const proposal = { cwd: '/w/ledge', project: 'ledge', tool: 'claude' as const, prompt: 'Fix' };
+    const { rerender } = render(ui({ onAct: noop, onLaunchProposal: noop, turns: [turn({ proposal })] }));
+    expect((screen.getByRole('button', { name: 'Launch' }) as HTMLButtonElement).disabled).toBe(false);
+    rerender(ui({ onAct: noop, onLaunchProposal: noop, turns: [turn({ proposal, ignoredAt: T0 })] }));
+    expect((screen.getByRole('button', { name: 'Launch' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('a turn of actions alone names the machine they run on, as the other cards do', () => {
+    render(ui({ onAct: noop, turns: [turn({ machineId: 'dev-server', machineName: 'dev-server' })] }));
+    expect(document.body).toHaveTextContent('Destination : dev-server');
+  });
+
   it('the rows in flight run; the card waits', () => {
     render(ui({ onAct: noop, actingQid: 'q1', actingRows: [0, 1] }));
     expect([...document.querySelectorAll('[data-action-row]')].map(r => r.getAttribute('data-action-row'))).toEqual(['running', 'running']);
@@ -58,7 +71,7 @@ describe('the chat draws a turn\'s generic card (#94)', () => {
 
   it('Open: the row\'s session, by its qualified id', () => {
     const onOpenSession = vi.fn();
-    render(ui({ onAct: noop, onOpenSession, turns: [turn({ actions: [{ ...archive, state: 'refused', code: 'changed' }] })] }));
+    render(ui({ onAct: noop, onOpenSession, turns: [turn({ actions: [{ ...archive, state: 'refused', code: 'cut' }] })] }));
     fireEvent.click(within(screen.getByRole('region', { name: 'Proposed action' })).getByRole('button', { name: 'Open Otto' }));
     expect(onOpenSession).toHaveBeenCalledWith('local:otto');
   });
