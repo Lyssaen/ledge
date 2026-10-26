@@ -374,14 +374,14 @@ export function createPhoneGateway(deps: {
     const targets = msg.rows ?? (actions ? [...actions.keys()] : []);
     if (!actions || targets.length === 0) return { status: 'rejected', reason: 'invalid' };
     for (const r of targets) if (!actions[r]) return { status: 'rejected', reason: 'invalid' };
-    // « Refuser » answers a session's request only.
-    if (msg.deny && targets.some(r => actions[r]!.action !== 'session.decide')) return { status: 'rejected', reason: 'invalid' };
-    // A request the phone could only show cut is refused from there, never accepted: the rest is read on the PC.
-    if (!msg.deny && targets.some(r => phoneCut(actions[r]!) && actions[r]!.args.decision !== 'deny')) return { status: 'rejected', reason: 'not_offered' };
-    // Nothing left to apply: answered before the assertion is spent.
+    // Nothing left to apply: answered before the assertion is spent. The checks below read the rows still open, as act.ts does.
     const settled = (r: number) => actions[r]!.state === 'done' || actions[r]!.state === 'denied';
     if (targets.every(settled)) return { status: 'failed' };
     const todo = targets.filter(r => !settled(r));
+    // « Refuser » answers a session's request only.
+    if (msg.deny && todo.some(r => actions[r]!.action !== 'session.decide')) return { status: 'rejected', reason: 'invalid' };
+    // A request the phone could only show cut is refused from there, never accepted: the rest is read on the PC.
+    if (!msg.deny && todo.some(r => phoneCut(actions[r]!) && actions[r]!.args.decision !== 'deny')) return { status: 'rejected', reason: 'not_offered' };
     // A deny is never confirmed nor checked on the device, as the phone's own deny of a request is not.
     if (!msg.deny && !msg.confirmed && todo.some(r => actions[r]!.risk === 'destructive')) return { status: 'rejected', reason: 'confirm_required' };
     if (!msg.deny && todo.some(r => actionById(actions[r]!.action)?.phone)) {

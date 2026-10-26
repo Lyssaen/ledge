@@ -1878,6 +1878,12 @@ describe('phone gateway: generic cards (spec 2026-10-26 action registry §9)', (
     await flush();
     expect(last(g)).toEqual({ type: 'operation.result', op: m.op, status: 'applied' });
     expect(calls).toEqual([['device:dev1', QA, [0], undefined, true]]);
+    // As on the PC, only the rows still open count: a row already done does not stop « Refuser ».
+    const mixed = make([{ ...dissolve, state: 'done' }, { ...accept, detail: 'Bash: rm' }]);
+    mixed.g.send('dev1', { type: 'chat.act', op: randomUUID(), qid: QA, deny: true });
+    await flush();
+    expect(last(mixed.g)).toMatchObject({ status: 'applied' });
+    expect(mixed.calls).toEqual([['device:dev1', QA, [1], undefined, true]]);
     const other = make([dissolve]);
     other.g.send('dev1', { type: 'chat.act', op: randomUUID(), qid: QA, deny: true });
     await flush();
