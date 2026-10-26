@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useInput, useWindowSize } from 'ink';
 import { daemonStore } from '@ledge/fleet';
-import { proposalRows, type ChatTurn } from '@ledge/protocol';
+import { LEDGE_GIVER, proposalRows, type ChatTurn } from '@ledge/protocol';
 import { useEditing, useScreenKeys, useTui } from '../context.js';
 import { chatLines, openCards, type Card } from '../model/chat.js';
 import { TOOL_NAME } from '../model/labels.js';
@@ -52,8 +52,17 @@ export function Ask() {
     if (busy) return;
     const turn = d.chat.find(x => x.qid === card.qid);
     if (!turn) return;
+    if (card.kind === 'task') {
+      // A task to `@role` waits for the team proposed with it.
+      const row = card.rows.find(r => { const c = turn.tasks![r]!; return !c.to.startsWith('@') || c.team || turn.team?.teamId; });
+      if (row === undefined) { toast({ text: t.ask.waitTeam, tone: 'info' }); return; }
+      setBusy({ qid: card.qid, turn, errorSeq: d.errors.at(-1)?.seq ?? 0, at: Date.now() });
+      client.send({ type: 'task.cmd', rid: randomUUID(), by: LEDGE_GIVER, op: 'give', qid: card.qid, row });
+      return;
+    }
     setBusy({ qid: card.qid, turn, errorSeq: d.errors.at(-1)?.seq ?? 0, at: Date.now() });
-    if (card.kind === 'launch') {
+    if (card.kind === 'team') client.send({ type: 'team.launch', rid: randomUUID(), qid: card.qid });
+    else if (card.kind === 'launch') {
       const first = proposalRows(turn)[card.rows[0]!]!;
       client.send({ type: 'session.launch', tool: first.tool, cwd: first.cwd, ...(first.prompt ? { prompt: first.prompt } : {}), qid: card.qid, rows: card.rows });
     } else if (card.kind === 'relay') client.send({ type: turn.relay?.status === 'queued' ? 'session.relay.cancel' : 'session.relay', qid: card.qid });
@@ -74,6 +83,12 @@ export function Ask() {
     }
     if (focus < 0) return false;
     if (key.return) { act(cards[focus]!); return true; }
+    // s saves a proposed ad hoc team as a template (« Enregistrer »).
+    if (input === 's' && cards[focus]!.kind === 'team') {
+      const team = d.chat.find(x => x.qid === cards[focus]!.qid)?.team;
+      if (team && !team.template && !team.savedPath) client.send({ type: 'team.save', rid: randomUUID(), qid: cards[focus]!.qid, name: team.name, seats: team.seats.map(x => ({ role: x.role, tool: x.tool, ...(x.model ? { model: x.model } : {}), ...(x.effort ? { effort: x.effort } : {}) })) });
+      return true;
+    }
     if (key.escape) { setFocus(-1); return true; }
     return false;
   });
@@ -82,8 +97,8 @@ export function Ask() {
   const width = Math.max(20, columns - 6);
   const lines = useMemo(() => chatLines(d.chat, d.chatLive, { t, g, width }), [d.chat, d.chatLive, t, g, width]);
   return (
-    <Frame crumb={`${t.tabs.ask}`} keys={[['↵', t.keys.send], ['tab', t.keys.nextCard], ['ctrl+n', t.keys.newChat], ['ctrl+c', t.keys.stopAnswer], ['esc', t.keys.back]]}>
-      <TitledBox title={t.ask.title(sessions, Math.max(1, machines.length))} flexGrow={1}>
+    <Frame crumb={`${t.tabs.ask}`} keys={[['↵', t.keys.send], ['tab', t.keys.nextCard], ['s', t.keys.save], ['ctrl+n', t.keys.newChat], ['ctrl+c', t.keys.stopAnswer], ['esc', t.keys.back]]}>
+      <TitledBox title={t.ask.operator(sessions, Math.max(1, machines.length))} flexGrow={1}>
         {lines.length === 0 ? <Text color={C.faint}>{t.ask.empty}</Text>
           : <Lines lines={lines} />}
       </TitledBox>
@@ -100,6 +115,34 @@ export function Ask() {
 function CardBox({ card, turn, focused, busy }: { card: Card; turn: ChatTurn; focused: boolean; busy: boolean }) {
   const { t, g } = useTui();
   const color = focused ? C.coral : C.line;
+  if (card.kind === 'team') {
+    const team = turn.team!;
+    const auto = team.seats.filter(x => x.autonomy === 'auto').map(x => `@${x.role}`);
+    return (
+      <TitledBox title={t.ask.teamCard(team.name)} color={color} titleColor={C.coral}>
+        <Text wrap="truncate"><Text color={C.dim}>{t.ask.folder.padEnd(13)}</Text><Text color={C.faint}>{team.cwd}</Text></Text>
+        <Text wrap="truncate"><Text color={C.dim}>{t.ask.table.padEnd(13)}</Text>{g.team} {t.ask.newTable(team.projectName ?? team.project)}</Text>
+        {team.seats.map(x => (
+          <Text key={x.role} wrap="truncate"><Text color={C.dim}>{''.padEnd(13)}</Text><Text color={C.violet}>@{x.role}</Text> {x.label} <Text color={C.faint}>{[TOOL_NAME[x.tool], x.model, x.effort].filter(Boolean).join(' · ')}</Text> <Text color={x.autonomy === 'auto' ? C.yellow : C.faint}>{t.ask.autonomy[x.autonomy ?? 'ask']}</Text></Text>
+        ))}
+        {auto.length ? <Text color={C.yellow} wrap="truncate">{t.ask.autoWarning(auto.join(', '))}</Text> : null}
+        {team.error ? <Text color={C.red} wrap="truncate">{team.error}</Text> : null}
+        <Box columnGap={2}><Button label={busy ? `${g.live} ${t.ask.launchTeam}` : t.ask.launchTeam} k="↵" primary={focused} />{!team.template ? (team.savedPath ? <Text color={C.faint}>{t.ask.saved}</Text> : <Button label={t.ask.save} k="s" />) : null}<Text color={C.faint}>{t.ask.nothingWithoutYou}</Text></Box>
+      </TitledBox>
+    );
+  }
+  if (card.kind === 'task') {
+    const tasks = turn.tasks!;
+    const waits = !!turn.team && !turn.team.teamId;
+    return (
+      <TitledBox title={t.ask.taskCard} color={color} titleColor={C.violet}>
+        {card.rows.map(r => { const c = tasks[r]!; return (
+          <Text key={r} wrap="truncate"><Text color={C.fg}>{c.title}</Text> <Text color={C.faint}>{c.toName ?? c.to}</Text>{c.error ? <Text color={C.red}>  {c.error}</Text> : null}</Text>
+        ); })}
+        <Box columnGap={2}><Button label={busy ? `${g.live} ${t.ask.give}` : t.ask.give} k="↵" primary={focused && !waits} />{waits ? <Text color={C.faint}>{t.ask.waitTeam}</Text> : null}</Box>
+      </TitledBox>
+    );
+  }
   if (card.kind === 'launch') {
     const rows = proposalRows(turn);
     return (

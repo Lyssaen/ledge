@@ -6,7 +6,7 @@ import { fr } from '../src/tui/i18n/fr.js';
 import { en } from '../src/tui/i18n/en.js';
 import { MESSAGES } from '../src/tui/i18n/lang.js';
 import { glyphsFor } from '../src/tui/glyphs.js';
-import { exchanges, keepSelection, nextWaiting, overview, step } from '../src/tui/model/overview.js';
+import { closedLedgeTasks, exchanges, keepSelection, nextWaiting, overview, step } from '../src/tui/model/overview.js';
 import { answerFor, choices } from '../src/tui/model/pending.js';
 import { diffCount, threadLines, wrap } from '../src/tui/model/thread.js';
 import { chatLines, openCards } from '../src/tui/model/chat.js';
@@ -198,4 +198,32 @@ describe('tui settings', () => {
   });
 
   it('every language has its messages', () => { expect(Object.keys(MESSAGES)).toEqual(['fr', 'en']); });
+});
+
+describe('tui overview with teams (roles spec §3.9)', () => {
+  const team = { id: 'team-a1b2', name: 'ledge-roles', project: 'ledge', machine: 'local', cwd: '/w/ledge', state: 'active' as const, seats: [{ role: 'build', sessionId: 'nova' }], createdAt: '2026-10-09T16:00:00.000Z', updatedAt: '2026-10-09T16:00:00.000Z' };
+  const task = (id: string, extra: object) => ({ id, title: `Tâche ${id}`, giver: 'ledge', giverName: 'Ledge', owner: 'nova', ownerName: 'Nova', team: 'team-a1b2', state: 'open' as const, at: '2026-10-09T16:05:00.000Z', updatedAt: '2026-10-09T16:05:00.000Z', log: [], ...extra });
+  it('a project lists its common table’s branches, then its teams with their seats; Ledge’s progress per team', () => {
+    const sessions = mockupSessions().map(s => (s.id === 'nova' ? { ...s, team: 'team-a1b2', role: 'build' } : s));
+    const v = overview(sessions, PROJECTS, [team, { ...team, id: 'team-c3d4', name: 'mobile', state: 'resting', seats: [] }, { ...team, id: 'team-e5f6', state: 'dissolved' }], [task('t000001', { state: 'done' }), task('t000002', {})]);
+    const ledge = v.tree[0]!;
+    expect(ledge.branches.flatMap(b => b.sessions.map(s => s.name))).toEqual(['Otto', 'Bix']);
+    expect(ledge.teams.map(x => [x.team.name, x.team.state, x.sessions.map(s => s.name), `${x.done}/${x.given}`])).toEqual([['ledge-roles', 'active', ['Nova'], '1/2'], ['mobile', 'resting', [], '0/0']]);
+    expect(v.order).toEqual(['otto', 'bix', 'nova', 'luna']);
+  });
+  it('Ledge is a sender in the exchanges; the closed tasks Ledge gave are items of « À toi » until seen', () => {
+    const tasks = [task('t000001', { state: 'done', at: '2026-10-09T17:00:00.000Z' }), task('t000002', { state: 'done', seen: true }), task('t000003', { giver: 'otto', giverName: 'Otto', state: 'done' })];
+    expect(exchanges([], 3, tasks)[0]).toEqual({ at: '2026-10-09T17:00:00.000Z', from: 'Ledge', to: 'Nova', summary: 'Tâche t000001' });
+    expect(closedLedgeTasks(tasks).map(x => x.id)).toEqual(['t000001']);
+  });
+  it('the team and task cards: open until acted on, then their outcome stays in the conversation', () => {
+    const turn: ChatTurn = { qid: 'q1', question: 'Monte une équipe', askedAt: '2026-10-09T16:00:00.000Z', steps: [], answer: 'Voici.', answeredAt: '2026-10-09T16:00:05.000Z',
+      team: { cwd: '/w/ledge', project: 'ledge', name: 'ledge-roles', seats: [{ role: 'build', label: 'Build', tool: 'claude' }] }, tasks: [{ to: '@build', title: 'Implémenter' }] };
+    expect(openCards([turn])).toEqual([{ kind: 'team', qid: 'q1' }, { kind: 'task', qid: 'q1', rows: [0] }]);
+    const done: ChatTurn = { ...turn, team: { ...turn.team!, teamId: 'team-a1b2', launchedAt: '2026-10-09T16:01:00.000Z' }, tasks: [{ ...turn.tasks![0]!, taskId: 't91b0d4', ownerName: 'Mila', state: 'taken' }] };
+    expect(openCards([done])).toEqual([]);
+    const lines = text(chatLines([done], null, { t: fr, g: glyphsFor({}), width: 80 }));
+    expect(lines.some(l => l.includes('▣ ledge-roles · ✓ Équipe lancée à'))).toBe(true);
+    expect(lines).toContain('  Implémenter · ✓ Confiée à Mila · t91b0d4 · prise');
+  });
 });

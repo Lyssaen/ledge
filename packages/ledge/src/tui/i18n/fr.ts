@@ -23,14 +23,19 @@ export const fr = {
     settings: 'réglages', help: 'aide', quit: 'quitter', back: 'retour', write: 'écrire', diffs: 'diffs', terminal: 'terminal', model: 'modèle',
     interrupt: 'interrompre', next: 'suivante en attente', unfold: 'déplier', send: 'envoyer / lancer', nextCard: 'carte suivante',
     newChat: 'nouvelle conversation', stopAnswer: 'arrêter la réponse', nextField: 'champ suivant', choose: 'choisir', tick: 'cocher',
-    start: 'lancer', cancel: 'annuler', change: 'changer', scroll: 'défiler', space: 'espace', redraw: 'autre nom'
+    start: 'lancer', cancel: 'annuler', change: 'changer', scroll: 'défiler', space: 'espace', redraw: 'autre nom',
+    save: 'enregistrer l’équipe', tasks: 'tâches de l’équipe', join: 'rejoindre une équipe', resume: 'reprendre l’équipe', teamMode: 'session ou équipe'
   },
   overview: {
     yours: (n: number) => `À toi · ${n}`, projects: 'Projets', exchanges: 'Échanges', terminal: (name: string) => `Terminal · ${name}`,
     nobodyWaits: 'Personne ne t’attend.', noSession: 'Aucune session. + pour en lancer une.', noPreview: 'Pas d’aperçu.', noExchange: 'Aucun échange.',
     sessions: (n: number) => `${n} ${plural(n, 'session', 'sessions')}`, outside: 'Hors projet', offline: 'hors ligne', readOnly: 'lecture seule',
     wantsToRun: 'Veut exécuter :', asks: 'Demande :', plan: 'Propose un plan :', diff: 'Veut modifier :',
-    allow: 'Autoriser', deny: 'Refuser', always: 'Toujours', denyWithNote: 'Refuser en expliquant'
+    allow: 'Autoriser', deny: 'Refuser', always: 'Toujours', denyWithNote: 'Refuser en expliquant',
+    common: 'table commune', teamLine: (done: number, given: number) => `équipe · ${done}/${given}`, resting: 'au repos · R pour reprendre',
+    tasks: (team: string) => `Tâches · ${team}`, noTask: 'Aucune tâche.', ledge: 'Ledge',
+    ledgeTask: (owner: string, title: string, state: 'done' | 'refused' | 'dropped') => `${owner} a ${state === 'done' ? 'fini' : state === 'refused' ? 'refusé' : 'abandonné'} « ${title} » · tâche de Ledge`,
+    joinWhich: (name: string) => `${name} rejoint quelle équipe ? (↑↓ ↵, esc)`, noTeamHere: 'Aucune équipe dans ce projet.', notInTeam: 'Cette session n’est dans aucune équipe.'
   },
   session: {
     you: 'Vous', unfold: 'déplier', fold: 'replier', actions: (n: number) => `${n} ${plural(n, 'action', 'actions')}`,
@@ -50,7 +55,15 @@ export const fr = {
     relay: 'Envoyer', cancelRelay: 'Retirer de la file', close: 'Fermer', ignore: 'Ignorer', nothingWithoutYou: 'Ledge ne lance rien sans toi.',
     folder: 'Dossier', agent: 'Agent', instruction: 'Instruction', launched: 'lancée', queued: 'en file', sentAt: 'envoyée', closed: 'fermée',
     offline: 'Le daemon local est hors ligne : la question attendra.',
-    steps: { sessions: 'les sessions', pane: (n: string) => `le terminal de ${n}`, reply: (n: string) => `la réponse de ${n}`, git: (n: string) => `l’état git de ${n}`, repo: (p: string) => p }
+    steps: { sessions: 'les sessions', pane: (n: string) => `le terminal de ${n}`, reply: (n: string) => `la réponse de ${n}`, git: (n: string) => `l’état git de ${n}`, repo: (p: string) => p },
+    operator: (s: number, m: number) => `Ledge · Opérateur · voit ${s} ${plural(s, 'session', 'sessions')}, ${m} ${plural(m, 'machine', 'machines')}`,
+    teamCard: (name: string) => `Équipe · ${name}`, taskCard: 'Tâches à confier', launchTeam: 'Lancer l’équipe', save: 'Enregistrer', saved: 'enregistrée',
+    seats: 'Sièges', table: 'Table', newTable: (project: string) => `nouvelle table dans la pièce ${project}`,
+    autonomy: { ask: 'demande', edits: 'modifie sans demander', auto: 'autonome' } as Record<'ask' | 'edits' | 'auto', string>,
+    autoWarning: (roles: string) => `${roles} travaillera sans demander.`, teamLaunched: (at: string) => `✓ Équipe lancée à ${at}`,
+    give: 'Confier', waitTeam: 'active une fois l’équipe lancée',
+    given: (owner: string, id: string, state: string) => `✓ Confiée à ${owner} · ${id} · ${state}`,
+    taskState: { open: 'à prendre', taken: 'prise', done: 'finie', refused: 'refusée', dropped: 'abandonnée' } as Record<'open' | 'taken' | 'done' | 'refused' | 'dropped', string>
   },
   launch: {
     title: 'Nouvelle session', preview: 'Aperçu', instruction: 'Instruction', agent: 'Agent', model: 'Modèle', effort: 'Effort', project: 'Projet', machine: 'Machine',
@@ -58,7 +71,11 @@ export const fr = {
     folderHint: 'chemin sur la machine (~ accepté)', joins: (name: string, table: string) => `${name} rejoindra ${table}`,
     launch: 'Lancer', cancel: 'Annuler', thenAttach: 'puis a pour s’attacher à son terminal',
     missing: { prompt: 'Écrivez une instruction.', machine: 'Aucune machine en ligne.', repos: 'Choisissez un dépôt ou un dossier.' } as Record<'prompt' | 'machine' | 'repos', string>,
-    launching: 'Lancement…', launched: (name: string) => `✓ ${name} est lancée`
+    launching: 'Lancement…', launched: (name: string) => `✓ ${name} est lancée`,
+    teamTitle: 'Nouvelle équipe', mode: 'Mode', session: 'session', team: 'équipe', template: 'Modèle', custom: 'sièges choisis un par un', seats: 'Sièges',
+    teamName: 'Nom', noRole: 'aucun rôle : écris ~/.ledge/roles/<id>.md', loadingRoles: 'lecture des rôles…',
+    teamPreview: (team: string, project: string) => `L’équipe ${team} s’installera à une nouvelle table de la pièce ${project}.`,
+    teamLaunched: (name: string) => `✓ Équipe ${name} lancée`, teamFailed: (why: string) => `Équipe non lancée : ${why}`, noSeat: 'Choisissez au moins un siège.'
   },
   settings: { title: 'Réglages', language: 'Langue', saved: 'Réglage enregistré.', saveFailed: (m: string) => `Réglage appliqué, mais non enregistré : ${m}` },
   help: {
@@ -74,7 +91,8 @@ export const fr = {
     noNote: (n: string) => `${n} ne prend pas de note ici.`,
     noTerminalOmp: (n: string) => `${n} est piloté par Ledge via le protocole d’OMP : pas de terminal à attacher.`,
     noTerminal: (n: string) => `Pas de terminal pour ${n}.`, attachFailed: (code: number) => `tmux s’est arrêté avec le code ${code}.`,
-    modelSwitch: 'Ce daemon ne change pas le modèle d’une session en cours.'
+    modelSwitch: 'Ce daemon ne change pas le modèle d’une session en cours.',
+    joined: (n: string, team: string) => `${n} rejoint ${team}.`, resumed: (team: string) => `Reprise de l’équipe ${team} demandée.`, saved: (path: string) => `Équipe enregistrée : ${path}`
   },
   decisions: {
     failed: (name: string, message: string) => `Décision non transmise à ${name} : ${message}`,

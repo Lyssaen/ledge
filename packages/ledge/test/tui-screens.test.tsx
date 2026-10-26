@@ -69,7 +69,7 @@ describe('ledge tui: ask Ledge', () => {
     const tui = await startTui();
     try {
       await tui.press('/');
-      await until(() => tui.frame().includes('LEDGE · VOIT 4 SESSIONS'));
+      await until(() => tui.frame().includes('LEDGE · OPÉRATEUR · VOIT 4 SESSIONS'));
       await tui.press('Qui a besoin de moi ?');
       await tui.press('\r');
       await until(() => sent(tui.daemon.received, 'chat.ask').length === 1);
@@ -143,6 +143,52 @@ describe('ledge tui: settings', () => {
       await tui.press(',');
       await tui.press('\u001b[C');
       await until(() => tui.frame().includes('Setting applied, but not saved: read-only file system'));
+    } finally { await tui.cleanup(); }
+  });
+});
+
+describe('ledge tui: teams (roles spec §3.9)', () => {
+  it('the overview draws ▭ the common table and ▣ a team with its seats’ roles; J joins, R resumes', async () => {
+    const sessions = mockupSessions().map(s => (s.id === 'nova' ? { ...s, team: 'team-a1b2', role: 'build' } : s));
+    const tui = await startTui({ sessions });
+    try {
+      tui.daemon.push({ type: 'teams', teams: [
+        { id: 'team-a1b2', name: 'ledge-roles', project: 'ledge', machine: 'local', cwd: '/w/ledge', state: 'active', seats: [{ role: 'build', sessionId: 'nova' }, { role: 'qa', sessionId: null }], createdAt: T(0), updatedAt: T(0) },
+        { id: 'team-c3d4', name: 'mobile', project: 'ledge', machine: 'local', cwd: '/w/ledge', state: 'resting', seats: [], createdAt: T(1), updatedAt: T(1) }
+      ] });
+      await until(() => tui.frame().includes('▣ ledge-roles'));
+      expect(tui.frame()).toContain('▭ table commune');
+      expect(tui.frame()).toContain('@build');
+      expect(tui.frame()).toContain('au repos · R pour reprendre');
+      await tui.press('R');
+      await until(() => sent(tui.daemon.received, 'team.resume').length === 1);
+      expect(sent(tui.daemon.received, 'team.resume')[0]).toEqual({ type: 'team.resume', team: 'team-c3d4' });
+      // Otto (selected first) joins ledge-roles in its first free role.
+      await tui.press('J');
+      await until(() => tui.frame().includes('OTTO REJOINT QUELLE ÉQUIPE'));
+      await tui.press('\r');
+      await until(() => sent(tui.daemon.received, 'team.join').length === 1);
+      expect(sent(tui.daemon.received, 'team.join')[0]).toEqual({ type: 'team.join', team: 'team-a1b2', session: 'otto', role: 'qa' });
+    } finally { await tui.cleanup(); }
+  });
+
+  it('ctrl+t turns the new session form into a team: the template, its preview, ctrl+s launches it', async () => {
+    const tui = await startTui();
+    tui.daemon.onMessage(m => {
+      if (m.type === 'roles.list') tui.daemon.push({ type: 'roles.listing', requestId: m.requestId, roles: [{ id: 'lead', label: 'Chef', prompt: '', source: 'home', path: '/h/lead.md' }, { id: 'review', label: 'Relecteur', prompt: '', autonomy: 'auto', source: 'home', path: '/h/review.md' }], templates: [{ id: 'workshop', name: 'workshop', seats: [{ role: 'lead' }, { role: 'review', tool: 'codex' }], source: 'home', path: '/h/w.yaml' }], problems: [] });
+      if (m.type === 'team.launch') tui.daemon.push({ type: 'team.launched', rid: m.rid, team: { id: 'team-e5f6', name: 'workshop', project: 'ledge', machine: 'local', cwd: '/w/ledge', state: 'active', seats: [], createdAt: T(0), updatedAt: T(0) } });
+    });
+    try {
+      await tui.press('+');
+      await until(() => tui.frame().includes('NOUVELLE SESSION'));
+      await tui.press('\u0014'); // ctrl+t
+      await until(() => tui.frame().includes('NOUVELLE ÉQUIPE'));
+      await until(() => tui.frame().includes('L’équipe workshop s’installera à une nouvelle table de la pièce Ledge.'));
+      expect(tui.frame()).toContain('@review travaillera sans demander.');
+      await tui.press('\u0013'); // ctrl+s
+      await until(() => sent(tui.daemon.received, 'team.launch').length === 1);
+      expect(sent(tui.daemon.received, 'team.launch')[0]).toMatchObject({ cwd: '/w/ledge', template: 'workshop', name: 'workshop' });
+      await until(() => tui.frame().includes('✓ Équipe workshop lancée'));
     } finally { await tui.cleanup(); }
   });
 });

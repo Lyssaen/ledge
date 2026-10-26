@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApp, useInput, useStdout } from 'ink';
-import { isPending, useDaemon, useMachines, useProjects, type DaemonClient, type Fleet } from '@ledge/fleet';
+import { isPending, useDaemon, useMachines, useProjects, useTasks, useTeams, type DaemonClient, type Fleet } from '@ledge/fleet';
 import type { Session } from '@ledge/protocol';
 import { useActions, type Toast } from './actions.js';
 import { attachCommand, runAttached } from './attach.js';
@@ -44,6 +44,8 @@ function Shell({ client, lang, setLang: setLangState, saveLang, notify, glyphs, 
   const d = useDaemon();
   const machines = useMachines(client);
   const projects = useProjects(client);
+  const teams = useTeams(client);
+  const tasks = useTasks(client);
   const fleet = client.fleet as Fleet;
   const t = MESSAGES[lang];
   const [screen, setScreen] = useState<Screen>('overview');
@@ -64,7 +66,7 @@ function Shell({ client, lang, setLang: setLangState, saveLang, notify, glyphs, 
   const setEditing = useCallback((on: boolean) => setEditingState(on), []);
 
   // The selection follows its session; the first one waiting for the user is chosen at start.
-  const view = useMemo(() => overview(d.sessions, projects), [d.sessions, projects]);
+  const view = useMemo(() => overview(d.sessions, projects, teams ?? [], tasks), [d.sessions, projects, teams, tasks]);
   const order = useRef<string[]>([]);
   useEffect(() => {
     setSelectedId(cur => cur === null && view.yours[0] ? view.yours[0].id : keepSelection(view.order, cur, order.current));
