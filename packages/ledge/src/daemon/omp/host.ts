@@ -44,12 +44,12 @@ export interface OmpHostDeps {
   attachments?: AttachmentStore;
 }
 
-/** How often a message still being written reaches the thread: a card updated this often reads as live without a frame per token. */
 /** One JSONL frame, newline included (OMP's MAX_RPC_FRAME_BYTES): what Ledge sends must fit, there is no chunking in this direction. */
 export const OMP_FRAME_MAX = 1_048_576;
 /** Room for the request id and the command name around the message and the images. */
 const FRAME_SLACK = 128;
 
+/** How often a message still being written reaches the thread: a card updated this often reads as live without a frame per token. */
 export const STREAM_MS = 120;
 interface Live { rpc: OmpRpc; tracking: Tracking; closing: boolean; generation: number; held: Map<string, SessionEvent>; flush: NodeJS.Timeout | null }
 

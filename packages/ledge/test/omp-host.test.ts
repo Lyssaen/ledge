@@ -372,18 +372,29 @@ describe('OmpHost images', () => {
     await host.send(s2.id, 'a', 'follow_up', [ref]);
     expect(await host.interruptAndRestore(s2.id)).toEqual({ entries: [{ text: 'a', attachments: [] }], imagesDropped: true });
   });
-});
-
-describe('projection of queued echoes', () => {
-  const start = (text: string) => ({ type: 'message_start', message: { role: 'user', attribution: 'user', content: text ? [{ type: 'text', text }] : [{ type: 'image', data: 'x', mimeType: 'image/png' }] } });
-  it('an empty user message with no queued entry is nothing; with a matching one it is a prompt carrying its attachments', () => {
-    const t = newTracking();
-    expect(project(start(''), t, T)).toEqual([]);
-    t.queued.push({ text: '', attachments: ['a'.repeat(64)] });
-    expect(project(start(''), t, T)).toMatchObject([{ name: 'UserPromptSubmit', attachments: ['a'.repeat(64)] }]);
-    expect(t.queued).toEqual([]);
+  it('a follow_up whose images overflow into brackets still shows and restores the person\'s own words', async () => {
+    const s = await host.launch({ cwd: tmpdir() });
+    const refs: AttachmentRef[] = []; for (let i = 0; i < 5; i++) refs.push(await put(400_000 - 100 - i));
+    await host.send(s.id, 'slow one');
+    await until(() => store.get(s.id)!.state === 'working');
+    await host.send(s.id, 'many', 'follow_up', refs);
+    expect(cmds().find(c => c.cmd?.type === 'follow_up')!.cmd!.message).toContain('[Image attached:');
+    expect(await host.interruptAndRestore(s.id)).toEqual({ entries: [{ text: 'many', attachments: refs.map(r => r.id) }], imagesDropped: false });
+  });
+  it('and its echo shows the original text with every attachment', async () => {
+    const s = await host.launch({ cwd: tmpdir() });
+    const refs: AttachmentRef[] = []; for (let i = 0; i < 5; i++) refs.push(await put(400_000 - 100 - i));
+    const events: Array<{ text?: string; attachments?: string[] }> = [];
+    store.onEvent((_id, e) => { if (e.name === 'UserPromptSubmit') events.push(e as never); });
+    await host.send(s.id, 'slow one');
+    await until(() => store.get(s.id)!.state === 'working');
+    await host.send(s.id, 'again', 'follow_up', refs);
+    await host.interrupt(s.id);
+    await until(() => events.some(e => e.attachments?.length === 5));
+    expect(events.find(e => e.attachments)!.text).toBe('again');
   });
 });
+
 
 describe('projection of queued echoes', () => {
   const start = (text: string) => ({ type: 'message_start', message: { role: 'user', attribution: 'user', content: text ? [{ type: 'text', text }] : [{ type: 'image', data: 'x', mimeType: 'image/png' }] } });
