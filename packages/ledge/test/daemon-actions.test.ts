@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { ACTION_ERROR_CODES, actionById, ChatActionSchema, NOTE_MAX, pendingKey, TASK_TEXT_MAX, TASK_TITLE_MAX, type ActionId, type ChatAction, type Pending, type Role, type Session, type Task, type Team } from '@ledge/protocol';
+import { denied } from '../src/chat/act.js';
 import { actionMessage, cardRefusal, GENERIC_ACTIONS, resolveAction, type ResolveCtx } from '../src/daemon/actions.js';
 
 const T0 = '2026-10-26T08:00:00.000Z';
@@ -113,6 +114,15 @@ describe('resolveAction', () => {
     // A request shown whole is accepted as before.
     expect(cardRefusal(ok('session.decide', { session: 'Nova', decision: 'accept' }))).toBeNull();
     expect(ACTION_ERROR_CODES).toContain('cut');
+  });
+  it('« Refuser » a row gives the row the resolver gives for deny: same args, same risk', () => {
+    const c = ctx({ sessions: [mk('nova', 'Nova', { pending: permission, state: 'waiting_permission' })] });
+    for (const args of [{ session: 'Nova', decision: 'accept' }, { session: 'Nova', decision: 'deny', note: 'Pas sur main' }]) {
+      const d = denied(ok('session.decide', args, c));
+      const again = ok('session.decide', { session: 'Nova', decision: 'deny', ...('note' in args ? { note: args.note } : {}) }, c);
+      expect(JSON.stringify(d.args)).toBe(JSON.stringify(again.args));
+      expect(d.risk).toBe(again.risk);
+    }
   });
   it('a request too long for the card is cut and marked, never shown as whole', () => {
     const big = ctx({ sessions: [mk('p', 'P', { pending: { kind: 'plan', text: 'Le plan', body: 'x'.repeat(5000), source: 'hook' } })] });

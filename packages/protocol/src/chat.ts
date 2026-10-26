@@ -99,9 +99,10 @@ export type ActionErrorCode = (typeof ACTION_ERROR_CODES)[number];
  *  are resolved (ids, never names), what the daemon applies; `summary` the daemon's one line in French; `vars` its words, for
  *  a front's own language; `detail` what to read in full before confirming (a pending request, verbatim), `detailCut` when it
  *  had to be shortened (the front says so, and sends to the session); `session` / `team` the target, for a link. No `state`:
- *  proposed; `refused`: nothing was sent (its target changed or went since the card), `failed`: sent, and it went wrong;
+ *  proposed; `done`: applied; `denied`: « Refuser », the session's request answered with deny instead (session.decide only);
+ *  `doneAt` set on both. `refused`: nothing was sent (its target changed or went since the card), `failed`: sent, and it went wrong;
  *  `code` says why, `error` too in the daemon's words. */
-export const ChatActionStateSchema = z.enum(['running', 'done', 'failed', 'refused']);
+export const ChatActionStateSchema = z.enum(['running', 'done', 'denied', 'failed', 'refused']);
 export const ChatActionSchema = z.object({
   action: z.string().min(1).max(40), args: z.record(z.unknown()), summary: z.string().min(1).max(300), vars: ActionVarsSchema.optional(),
   detail: z.string().max(DETAIL_MAX).optional(), detailCut: z.literal(true).optional(),

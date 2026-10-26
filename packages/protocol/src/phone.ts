@@ -263,7 +263,9 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('chat.task'), op: OperationIdSchema, qid: OperationIdSchema, row: z.number().int().min(0).max(MAX_PROPOSALS - 1) }),
   /** Rows of the turn's generic card (action registry spec §5): `confirmed` as the local `chat.act`; a row whose action asks
    *  for a device check (`phone`) needs one assertion, purpose `act`, over the turn. */
-  z.object({ type: z.literal('chat.act'), op: OperationIdSchema, qid: OperationIdSchema, rows: CardRowsSchema.optional(), confirmed: z.literal(true).optional(), assertion: AssertionSchema.optional() }),
+  z.object({ type: z.literal('chat.act'), op: OperationIdSchema, qid: OperationIdSchema, rows: CardRowsSchema.optional(), confirmed: z.literal(true).optional(), assertion: AssertionSchema.optional(),
+    /** « Refuser », as the local `chat.act`: no passkey, no confirmation. */
+    deny: z.literal(true).optional() }),
   /** « Ignorer » the turn's cards, or `undo` (« Revoir »), as the local `chat.ignore`. */
   z.object({ type: z.literal('chat.ignore'), op: OperationIdSchema, qid: OperationIdSchema, undo: z.literal(true).optional() }),
   /** « Reprendre » a resting team. */

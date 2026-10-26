@@ -204,7 +204,10 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session.relay.cancel'), qid: z.string().min(1) }),
   /** The chat's generic card (action registry spec §5.1): applies its rows in order (all of them without `rows`), stopping at
    *  the first failure. `confirmed` says the front asked again; refused without it when a row is destructive. */
-  z.object({ type: z.literal('chat.act'), rid: z.string().min(1).max(100), qid: z.string().min(1), rows: launchRows.optional(), confirmed: z.literal(true).optional() }),
+  z.object({ type: z.literal('chat.act'), rid: z.string().min(1).max(100), qid: z.string().min(1), rows: launchRows.optional(), confirmed: z.literal(true).optional(),
+    /** « Refuser »: each row (session.decide only) answers its session's request with deny, whatever its own decision; never
+     *  confirmed, and allowed on a request shown cut. The rows become `denied`. */
+    deny: z.literal(true).optional() }),
   /** « Ignorer » the turn's cards, for every device and for Ledge (who is told at the next question); `undo` opens them
    *  again (« Revoir »). Refused while one of them is under way. Every client gets the turn's `ignoredAt` through chat.history. */
   z.object({ type: z.literal('chat.ignore'), qid: z.string().min(1), undo: z.literal(true).optional() }),

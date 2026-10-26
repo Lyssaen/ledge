@@ -16,6 +16,15 @@ export interface ActDeps {
   now?: () => string;
 }
 
+/** Applied, or its request denied: passed over by the next click. */
+const settled = (a: ChatAction) => a.state === 'done' || a.state === 'denied';
+/** The row as « Refuser » applies it: its request answered with deny (a note only if its own answer was already deny). Its args
+ *  in the order `resolveAction` gives them, since the row resolved again is compared by its JSON. */
+export function denied(row: ChatAction): ChatAction {
+  const { session, decision, note, expect } = row.args;
+  return { ...row, args: { session, decision: 'deny', ...(decision === 'deny' && note !== undefined ? { note } : {}), expect }, risk: 'reversible' };
+}
+
 /** Thrown when nothing is applied: no such row, nothing left to apply, or a destructive row without the confirmation. */
 export class ActRefused extends Error {
   constructor(message: string, readonly code?: 'confirm_required') { super(message); }
@@ -25,23 +34,25 @@ export class ActRefused extends Error {
  * A plan's rows apply one after the other, in the card's order, and stop at the first failure (spec §9.2): the next rows stay as
  * they were, to be tried again. A done row, or one in flight, is passed over. Each row is resolved again first: a row whose target
  * changed since the card (a request answered meanwhile, say) is `refused`, nothing sent; one the daemon's handler turned down is
- * `failed`. One confirmation covers every destructive row.
+ * `failed`. One confirmation covers every destructive row. `deny` (« Refuser ») answers each row's request with deny instead
+ * (session.decide only): never confirmed, allowed on a request shown cut, the row then `denied`.
  */
-export async function actFromChat(deps: ActDeps, qid: string, rows?: number[], confirmed?: true): Promise<{ done: number[]; failed: Array<{ row: number; message: string; refused?: true }> }> {
+export async function actFromChat(deps: ActDeps, qid: string, rows?: number[], confirmed?: true, deny?: true): Promise<{ done: number[]; failed: Array<{ row: number; message: string; refused?: true }> }> {
   const { chat, inFlight } = deps;
   const now = deps.now ?? (() => new Date().toISOString());
   const safe = (m: ChatMessage) => { try { deps.emit(m); } catch (e) { log(`act: emit failed: ${(e as Error).message}`); } };
   const known = [...new Set(rows ?? [...Array(MAX_PROPOSALS).keys()])].filter(r => chat.action(qid, r)).sort((a, b) => a - b);
   if (known.length === 0) throw new ActRefused('unknown action');
-  const todo = known.filter(r => chat.action(qid, r)!.state !== 'done' && !inFlight.has(`${qid}#${r}`));
+  const todo = known.filter(r => !settled(chat.action(qid, r)!) && !inFlight.has(`${qid}#${r}`));
   if (todo.length === 0) throw new ActRefused('already done');
-  if (!confirmed && todo.some(r => chat.action(qid, r)!.risk === 'destructive')) throw new ActRefused('confirm before applying a destructive action', 'confirm_required');
+  if (deny && todo.some(r => chat.action(qid, r)!.action !== 'session.decide')) throw new ActRefused('only a request is refused');
+  if (!deny && !confirmed && todo.some(r => chat.action(qid, r)!.risk === 'destructive')) throw new ActRefused('confirm before applying a destructive action', 'confirm_required');
   for (const r of todo) inFlight.add(`${qid}#${r}`);
   const done: number[] = [];
   const failed: Array<{ row: number; message: string; refused?: true }> = [];
   try {
     for (const r of todo) {
-      const row = chat.action(qid, r)!;
+      const row = deny ? denied(chat.action(qid, r)!) : chat.action(qid, r)!;
       chat.markAction(qid, r, { state: 'running' }, safe);
       let refused: ActionErrorCode | null = 'changed';
       try {
@@ -61,7 +72,7 @@ export async function actFromChat(deps: ActDeps, qid: string, rows?: number[], c
         break;
       } finally { inFlight.delete(`${qid}#${r}`); }
       done.push(r);
-      try { chat.markAction(qid, r, { state: 'done', doneAt: now() }, safe); } catch (e) { log(`act ${qid}: marking row ${r} failed: ${(e as Error).message}`); }
+      try { chat.markAction(qid, r, { state: deny ? 'denied' : 'done', doneAt: now() }, safe); } catch (e) { log(`act ${qid}: marking row ${r} failed: ${(e as Error).message}`); }
     }
   } finally { for (const r of todo) inFlight.delete(`${qid}#${r}`); }
   return { done, failed };
