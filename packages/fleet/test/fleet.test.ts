@@ -342,6 +342,30 @@ describe('multi-machine connections', () => {
     expect(got.filter(m => m.type === 'models.listing').at(-1)).toMatchObject({ requestId: 'm2' });
     expect(got.filter(m => m.type === 'error')).toEqual([]);
   });
+  it('routes roles.list to the project\'s machine (local by default), relays only that machine\'s listing, answers offline and outdated (#99)', () => {
+    const { client, local, server, got } = setup();
+    const listings = () => got.filter(m => m.type === 'roles.listing');
+    client.send({ type: 'roles.list', cwd: '/srv/app', requestId: 'r1', machineId: 'server' });
+    client.send({ type: 'roles.list', cwd: '/home/me/app', requestId: 'r2' });
+    expect(server.sent).toEqual([{ type: 'roles.list', cwd: '/srv/app', requestId: 'r1' }]);
+    expect(local.sent).toEqual([{ type: 'roles.list', cwd: '/home/me/app', requestId: 'r2' }]);
+    const listing: ServerMessage = { type: 'roles.listing', requestId: 'r1', roles: [], templates: [], problems: [{ path: '/srv/app/.ledge/roles/x.md', reason: 'invalid' }] };
+    local.emit(listing); // not the machine asked
+    expect(listings()).toEqual([]);
+    server.emit(listing); server.emit(listing);
+    expect(listings()).toEqual([listing]);
+    // An older daemon refuses roles.list: answered outdated, the other machine's request still pending.
+    client.send({ type: 'roles.list', cwd: '/srv/app', requestId: 'r3', machineId: 'server' });
+    server.emit({ type: 'error', message: 'invalid message', request: 'roles.list' });
+    expect(listings().at(-1)).toEqual({ type: 'roles.listing', requestId: 'r3', roles: [], templates: [], problems: [], error: 'outdated' });
+    client.send({ type: 'roles.list', cwd: '/srv/app', requestId: 'r4', machineId: 'server' });
+    server.set('unreachable');
+    client.send({ type: 'roles.list', cwd: '/srv/app', requestId: 'r5', machineId: 'server' });
+    expect(listings().slice(-2).map(m => m.type === 'roles.listing' && [m.requestId, m.error])).toEqual([['r4', 'offline'], ['r5', 'offline']]);
+    local.emit({ type: 'roles.listing', requestId: 'r2', roles: [], templates: [], problems: [] });
+    expect(listings().at(-1)).toMatchObject({ requestId: 'r2' });
+    expect(got.filter(m => m.type === 'error')).toEqual([]);
+  });
   it('answers a repos.scan for an offline machine, and one pending on a machine that drops, with error offline', () => {
     const { client, server, got } = setup();
     client.send({ type: 'repos.scan', requestId: 's1', machineId: 'server' });
