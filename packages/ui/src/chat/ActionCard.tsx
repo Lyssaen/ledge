@@ -63,7 +63,8 @@ export function ActionCard(p: ActionCardProps) {
   const many = p.rows.length > 1;
 
   const states = p.rows.map(r => r.state ?? 'proposed');
-  const stopAt = states.findIndex(s => s === 'failed' || s === 'refused');
+  // A request that changed was refused too: the daemon stopped there.
+  const stopAt = states.findIndex(s => s === 'failed' || s === 'refused' || s === 'stale');
   const shown: Shown[] = states.map((s, i) => (s === 'proposed' && stopAt >= 0 && i > stopAt ? 'held' : s));
   const open = shown.flatMap((s, i) => (['done', 'running', 'denied', 'stale', 'cut'].includes(s) ? [] : [i]));
   const risky = (rows: readonly number[]) => rows.some(i => p.rows[i]!.risk === 'destructive');
@@ -74,9 +75,11 @@ export function ActionCard(p: ActionCardProps) {
     if (still.length !== confirming.length) setConfirming(still.length && risky(still) ? still : null);
   }
 
+  // What went before the card was set aside: a plan begun, or a row that failed, did send something.
+  const sent = { done: states.filter(s => s === 'done').length, denied: states.filter(s => s === 'denied').length, failed: states.filter(s => s === 'failed').length };
   if (p.ignoredAt !== undefined) return (
     <div ref={box as RefObject<HTMLDivElement>} data-action-ignored style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, ...muted }}>
-      <Icon size={11} {...ICONS.close} />{c.ignored(p.rows.length, clock(p.ignoredAt))}
+      <Icon size={11} {...ICONS.close} />{c.ignored(p.rows.length, clock(p.ignoredAt), sent)}
       <Button variant="ghost" size="sm" disabled={p.disabled} onClick={() => { folding.current = true; p.onReview(); }} style={{ height: 22, padding: '0 6px', fontSize: 12 }}>{c.review}</Button>
     </div>
   );
@@ -200,8 +203,9 @@ export function ActionCard(p: ActionCardProps) {
     if (running >= 0) return <div data-action-foot style={foot}><Button variant="primary" size="sm" disabled style={big}>{spinner}{c.progress(running + 1, p.rows.length)}</Button><span style={{ flex: 1, minWidth: 160, fontSize: 12, ...muted }}>{c.inOrder}</span></div>;
     if (!open.length) return null;
     // From the failed step again, or past a refused one: its target is gone, it would only be refused again.
-    const rows = stopAt >= 0 && states[stopAt] === 'refused' ? open.filter(i => i !== stopAt) : open;
-    const label = stopAt < 0 ? c.all(rows.length) : states[stopAt] === 'refused' ? c.skip(stopAt + 1, rows.length) : c.resume(stopAt + 1, rows.length);
+    const skip = stopAt >= 0 && states[stopAt] !== 'failed';
+    const rows = skip ? open.filter(i => i !== stopAt) : open;
+    const label = stopAt < 0 ? c.all(rows.length) : skip ? c.skip(stopAt + 1, rows.length) : c.resume(stopAt + 1, rows.length);
     const later = rows.filter(i => p.rows[i]!.risk === 'destructive').length;
     return (
       <div data-action-foot style={foot}>

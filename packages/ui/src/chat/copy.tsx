@@ -64,7 +64,8 @@ export interface ActionCopy {
     label: string; many: (n: number, all: boolean) => string; one: Say; oneWhy: string; manyWhy: (destructive: number) => string;
     cancel: string; go: (n: number) => string; alreadyDone: string;
   };
-  ignored: (n: number, at: string) => string;
+  /** `sent`: the rows applied, denied or failed before the card was set aside; none, and nothing was sent. */
+  ignored: (n: number, at: string, sent?: { done: number; denied: number; failed: number }) => string;
   /** The rows' lines and why one was refused, from their `vars` (actionWords.ts). */
   words: ActionWords;
 }

@@ -58,7 +58,7 @@ describe('the chat draws a turn\'s generic card (#94)', () => {
 
   it('Open: the row\'s session, by its qualified id', () => {
     const onOpenSession = vi.fn();
-    render(ui({ onAct: noop, onOpenSession, turns: [turn({ actions: [{ ...archive, state: 'refused', code: 'changed' }] })] }));
+    render(ui({ onAct: noop, onOpenSession, turns: [turn({ actions: [{ ...archive, state: 'refused', code: 'cut' }] })] }));
     fireEvent.click(within(screen.getByRole('region', { name: 'Proposed action' })).getByRole('button', { name: 'Open Otto' }));
     expect(onOpenSession).toHaveBeenCalledWith('local:otto');
   });
