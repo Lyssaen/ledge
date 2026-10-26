@@ -8,7 +8,7 @@ import { MESSAGES } from '../src/tui/i18n/lang.js';
 import { glyphsFor } from '../src/tui/glyphs.js';
 import { closedLedgeTasks, exchanges, keepSelection, nextWaiting, overview, step } from '../src/tui/model/overview.js';
 import { answerFor, choices } from '../src/tui/model/pending.js';
-import { diffCount, threadLines, threadView, wrap } from '../src/tui/model/thread.js';
+import { anchorLine, diffCount, threadLines, threadView, wrap } from '../src/tui/model/thread.js';
 import { cells } from '../src/tui/model/cells.js';
 import { chatLines, openCards } from '../src/tui/model/chat.js';
 import { ago, took } from '../src/tui/model/time.js';
@@ -173,6 +173,15 @@ describe('tui thread', () => {
     expect(cells(text([v.lines[0]!])[0]!)).toBe(60);
     expect(v.keys[0]).toBe('p1');
     expect(v.keys[v.keys.length - 1]).toBe('s1');
+  });
+
+  it('a line kept at the top whose item folds away falls back on its turn, at the turn’s line', () => {
+    const open = threadView(items, { ...o, unfolded: true }), folded = threadView(items, o);
+    const tool = open.keys.findIndex(k => k !== 'p1' && !folded.keys.includes(k) && open.turns.get(k) === 'p1');
+    expect(tool).toBeGreaterThan(-1);
+    expect(anchorLine(open, { key: open.keys[tool]!, offset: 1 })).toBe(tool + 1);
+    expect(anchorLine(folded, { key: open.keys[tool]!, offset: 1 })).toBe(folded.keys.indexOf('p1'));
+    expect(anchorLine(folded, { key: 'nowhere', offset: 0 })).toBe(-1);
   });
 
   it('says how long it took: « 8,4 s », « 12 s », « 1 min 04 »', () => {

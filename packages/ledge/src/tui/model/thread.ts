@@ -96,21 +96,33 @@ export function foldedLine(turn: Turn, o: Pick<Opts, 't' | 'g'>): Line {
   return [{ text: `${o.g.folded} ${clock(turn.prompt?.at ?? turn.items[0]?.at ?? new Date(0).toISOString())}  `, color: C.faint }, { text: parts.join(' · '), color: C.faint }];
 }
 
-/** The session's main thread as lines, each with the item it shows (what a scroll stays on): past turns folded unless
- *  unfolded, the last one in full. Each element wraps at the real width, up to its ceiling unless unfolded. */
-export function threadView(items: ThreadItem[], o: Omit<Opts, 'cap'> & { unfolded: boolean }): { lines: Line[]; keys: string[] } {
+export type ThreadView = { lines: Line[]; keys: string[]; turns: Map<string, string> };
+
+/** The session's main thread as lines, each with the item it shows (what a scroll stays on), and each item's turn (its first
+ *  item's key: the folded turn's line). Past turns folded unless unfolded, the last one in full. Each element wraps at the
+ *  real width, up to its ceiling unless unfolded. */
+export function threadView(items: ThreadItem[], o: Omit<Opts, 'cap'> & { unfolded: boolean }): ThreadView {
   const all = turns(items);
-  const lines: Line[] = [], keys: string[] = [];
+  const lines: Line[] = [], keys: string[] = [], turnOf = new Map<string, string>();
   const opts: Opts = { ...o, cap: n => (o.unfolded ? Infinity : n) };
   const push = (key: string, l: Line[]) => { for (const x of l) { lines.push(x); keys.push(key); } };
   all.forEach((turn, i) => {
     const last = i === all.length - 1;
     const first = turn.prompt?.id ?? turn.items[0]?.id ?? String(i);
+    for (const it of turn.items) turnOf.set(it.id, first);
     if (!last && !o.unfolded) { push(first, [cut(foldedLine(turn, o), o.width)]); return; }
     if (lines.length) push(first, [[{ text: '' }]]);
     for (const it of turn.items) push(it.id, itemLines(it, opts));
   });
-  return { lines, keys };
+  return { lines, keys, turns: turnOf };
+}
+
+/** The line at the top of a scrolled view: its item's, `offset` lines in; the item folded away, its turn's line. -1: gone. */
+export function anchorLine(v: Pick<ThreadView, 'keys' | 'turns'>, anchor: { key: string; offset: number }): number {
+  const at = v.keys.indexOf(anchor.key);
+  if (at >= 0) return at + anchor.offset;
+  const turn = v.turns.get(anchor.key);
+  return turn === undefined ? -1 : v.keys.indexOf(turn);
 }
 
 export const threadLines = (items: ThreadItem[], o: Omit<Opts, 'cap'> & { unfolded: boolean }): Line[] => threadView(items, o).lines;

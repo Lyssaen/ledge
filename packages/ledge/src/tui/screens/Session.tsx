@@ -6,7 +6,7 @@ import { botState } from '@ledge/ui/bots/poseFor';
 import { useEditing, useScreenKeys, useTui } from '../context.js';
 import { machineLabel, modelLabel, paneName, TOOL_NAME } from '../model/labels.js';
 import { pad, row, type Line } from '../model/cells.js';
-import { threadView } from '../model/thread.js';
+import { anchorLine, threadView } from '../model/thread.js';
 import { ago, oneLine } from '../model/time.js';
 import { C, STATE_COLOR } from '../theme.js';
 import { Frame } from '../ui/Frame.js';
@@ -50,12 +50,14 @@ function SessionView({ s }: { s: Session }) {
 
   const width = Math.max(20, columns - 6);
   // The clock is not in here: a running action's spinner and time tick on their own (ui/Lines.tsx).
-  const { lines, keys: lineKeys } = useMemo(() => items ? threadView(items, { t, g, width, diffs, unfolded }) : { lines: [] as Line[], keys: [] as string[] }, [items, t, g, width, diffs, unfolded]);
+  const thread = useMemo(() => items ? threadView(items, { t, g, width, diffs, unfolded }) : { lines: [] as Line[], keys: [] as string[], turns: new Map<string, string>() }, [items, t, g, width, diffs, unfolded]);
+  const { lines, keys: lineKeys } = thread;
   const p = s.pending;
   const [view, setView] = useState(10);
   const maxUp = Math.max(0, lines.length - view);
-  const at = anchor ? lineKeys.indexOf(anchor.key) : -1;
-  const up = at < 0 ? 0 : Math.min(maxUp, Math.max(0, lines.length - view - (at + anchor!.offset)));
+  // The anchored item folded away (space), its turn's line stays at the top.
+  const at = anchor ? anchorLine(thread, anchor) : -1;
+  const up = at < 0 ? 0 : Math.min(maxUp, Math.max(0, lines.length - view - at));
   const scroll = (to: number) => {
     const u = Math.min(maxUp, Math.max(0, to));
     if (u === 0) { setAnchor(null); return; }
