@@ -19,6 +19,8 @@ import { Settings } from './screens/Settings.js';
 import { Help } from './screens/Help.js';
 import { MIN } from './ui/Frame.js';
 import { setTone, tone as toneNow, toneFor, type ThemeChoice, type Tone } from './theme.js';
+import { Teams } from './screens/Teams.js';
+import type { CatalogMemo } from './model/catalog.js';
 
 /** How long a toast stays. */
 export const TOAST_MS = 5000;
@@ -74,6 +76,7 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
   const kept = useRef<Kept>({ drafts: new Map(), sent: new Map(), asked: [] }).current;
   // When ctrl+c was last pressed with a draft waiting.
   const armed = useRef(0);
+  const catalog = useRef<CatalogMemo>({});
 
   useEffect(() => {
     if (!lastToast) return;
@@ -129,12 +132,18 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
       if (code !== 0) toast({ text: t.toast.attachFailed(code), tone: 'error' });
     });
   }, [fleet, suspendTerminal, run, t, toast, write]);
+  const runInTerminal = useCallback((argv: string[]) => {
+    void suspendTerminal(async () => {
+      const code = await (run ?? runAttached)(argv);
+      if (code !== 0) toast({ text: t.toast.exited(argv[0]!, code), tone: 'error' });
+    });
+  }, [suspendTerminal, run, t, toast]);
 
   const size = useWindowSize();
   const small = size.columns < MIN.columns || size.rows < MIN.rows;
   const tui: Tui = {
     client, fleet, d, machines, projects, t, lang, setLang, theme, setTheme, tone, background, g: glyphs, screen, go, selected, select: setSelectedId,
-    toast, lastToast, actions, editing, setEditing, small, attach, keys, kept,
+    toast, lastToast, actions, editing, setEditing, small, attach, runInTerminal, env, catalog, keys, kept,
     readImage: readImage ?? (() => readClipboardImage(env)), openFile: openFile ?? (file => openImage(file, env))
   };
 
@@ -162,9 +171,9 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
     if (input === ',') { go('settings'); return; }
     if (input === '/') { go('ask'); return; }
     if (input === '+') { go('launch'); return; }
-    if (/^[1-5]$/.test(input)) { go(SCREENS[Number(input) - 1]!); return; }
+    if (/^[1-6]$/.test(input)) { go(SCREENS[Number(input) - 1]!); return; }
   });
 
-  const Body = { overview: Overview, session: SessionScreen, ask: Ask, launch: Launch, settings: Settings, help: Help }[screen];
+  const Body = { overview: Overview, session: SessionScreen, ask: Ask, launch: Launch, settings: Settings, teams: Teams, help: Help }[screen];
   return <TuiContext.Provider value={tui}><Body /></TuiContext.Provider>;
 }

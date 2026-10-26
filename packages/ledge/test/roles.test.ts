@@ -43,6 +43,26 @@ describe('roles', () => {
     expect(repoRoot(join(repo, 'packages', 'a'))).toBe(repo);
   });
 
+  it("a repository role names the home role of the same id it shadows; a role alone shadows nothing", () => {
+    write(join(home, 'roles', 'review.md'), 'home');
+    write(join(home, 'roles', 'lead.md'), 'lead');
+    write(join(repo, '.ledge', 'roles', 'review.md'), 'repo');
+    write(join(repo, '.ledge', 'roles', 'build.md'), 'build');
+    const roles = new Map(listRoles(repo).roles.map(r => [r.id, r]));
+    expect(roles.get('review')).toMatchObject({ source: 'repo', shadows: join(home, 'roles', 'review.md') });
+    expect(roles.get('lead')).not.toHaveProperty('shadows');
+    expect(roles.get('build')).not.toHaveProperty('shadows');
+    expect(listRoles().roles.find(r => r.id === 'review')).not.toHaveProperty('shadows');
+  });
+
+  it('a home role a repository one shadows is not read: invalid, it is named in shadows and not in problems', () => {
+    write(join(home, 'roles', 'review.md'), '---\ntool: vim\n---\n');
+    write(join(repo, '.ledge', 'roles', 'review.md'), '---\nlabel: Relecteur du dépôt\n---\nrepo');
+    const { roles, problems } = listRoles(repo);
+    expect(roles).toEqual([expect.objectContaining({ id: 'review', label: 'Relecteur du dépôt', source: 'repo', shadows: join(home, 'roles', 'review.md') })]);
+    expect(problems).toEqual([]);
+  });
+
   it('maps autonomy to each agent’s own switch, nothing for ask', () => {
     expect(autonomyArgs('claude', 'ask')).toEqual([]);
     expect(autonomyArgs('claude', undefined)).toEqual([]);

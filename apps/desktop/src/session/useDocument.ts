@@ -14,9 +14,10 @@ let sequence = 0;
 /** `document.read` correlated by requestId (the overlay's useDocumentReader, reduced to one document): the reply to the
  *  request in flight counts, any other is ignored; no reply within DOCUMENT_TIMEOUT_MS is a 'timeout'. The machine offline
  *  is an 'offline' error, nothing sent; the daemon not connected (or dropping the request) too, until it connects again:
- *  then the document is read. Another path asks again, and shows loading until its own reply. */
-export function useDocument(client: DaemonClient, sessionId: string, path: string, online: boolean): DocState {
-  const key = `${sessionId}\n${path}\n${online}`;
+ *  then the document is read. Another path asks again, and shows loading until its own reply. Without a session (the
+ *  catalog's files, #97), the path is absolute and read as it is. */
+export function useDocument(client: DaemonClient, sessionId: string | undefined, path: string, online: boolean): DocState {
+  const key = `${sessionId ?? ''}\n${path}\n${online}`;
   // The state of the request for `key`: a render for another key shows loading until its effect has asked.
   const [state, setState] = useState<{ key: string; doc: DocState }>({ key: '', doc: LOADING });
   useEffect(() => {
@@ -31,7 +32,7 @@ export function useDocument(client: DaemonClient, sessionId: string, path: strin
       requestId = id;
       setState({ key, doc: LOADING });
       timer = setTimeout(() => { if (requestId === id) settle({ status: 'error', code: 'timeout' }); }, DOCUMENT_TIMEOUT_MS);
-      client.send({ type: 'document.read', requestId: id, path, sessionId });
+      client.send({ type: 'document.read', requestId: id, path, ...(sessionId ? { sessionId } : {}) });
     };
     const offMessage = client.onMessage(m => {
       if ((m.type !== 'document.content' && m.type !== 'document.error') || requestId === null || m.requestId !== requestId) return;

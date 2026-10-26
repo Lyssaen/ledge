@@ -1,8 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { ChatAction, ChatTurn, ClientMessage } from '@ledge/protocol';
 import { daemonStore } from '@ledge/fleet';
 import { until } from './helpers.js';
-import { mockupSessions, startTui } from './tui-fixture.js';
+import { mockupSessions, PROJECTS, startTui } from './tui-fixture.js';
 
 const sent = <T extends ClientMessage['type']>(received: ClientMessage[], type: T) => received.filter((m): m is Extract<ClientMessage, { type: T }> => m.type === type);
 const T = (s: number) => new Date(Date.parse('2026-10-09T18:00:00.000Z') + s * 1000).toISOString();
@@ -1252,6 +1252,338 @@ describe('ledge tui: teams (roles spec §3.9)', () => {
       await until(() => sent(tui.daemon.received, 'team.launch').length === 1);
       expect(sent(tui.daemon.received, 'team.launch')[0]).toMatchObject({ cwd: '/w/ledge', template: 'workshop', name: 'workshop' });
       await until(() => tui.frame().includes('✓ Équipe workshop lancée'));
+    } finally { await tui.cleanup(); }
+  });
+});
+
+describe('ledge tui: « Équipes » (6), the roles and templates catalog (#97)', () => {
+  const listing = (requestId?: string) => ({
+    type: 'roles.listing' as const, requestId,
+    roles: [
+      { id: 'build', label: 'Builder', prompt: '## Rôle\nTu implémentes une étape à la fois.', tool: 'claude' as const, model: 'opus', effort: 'high', autonomy: 'edits' as const, source: 'repo' as const, path: '/w/ledge/.ledge/roles/build.md' },
+      { id: 'review', label: 'Relecteur', prompt: 'Tu relis sans modifier le code.', tool: 'codex' as const, source: 'repo' as const, path: '/w/ledge/.ledge/roles/review.md', shadows: '/h/.ledge/roles/review.md' },
+      { id: 'lead', label: 'Lead', prompt: 'Tu découpes le travail.', source: 'home' as const, path: '/h/.ledge/roles/lead.md' }
+    ],
+    templates: [{ id: 'workshop', name: 'workshop', seats: [{ role: 'lead' }, { role: 'build' }, { role: 'review', model: 'gpt-5.5-mini' }], source: 'repo' as const, path: '/w/ledge/.ledge/teams/workshop.yaml' }],
+    problems: [{ path: '/w/ledge/.ledge/roles/Design.md', reason: 'nom de fichier invalide' }]
+  });
+  const answer = (tui: Awaited<ReturnType<typeof startTui>>) => tui.daemon.onMessage(m => {
+    // A repository's files are its own: a folder's roles are read in it.
+    if (m.type === 'roles.list') tui.daemon.push(m.cwd ? { ...listing(m.requestId), roles: listing().roles.map(r => (r.source === 'repo' ? { ...r, path: r.path.replace('/w/ledge', m.cwd!) } : r)) } : { ...listing(m.requestId), roles: listing().roles.filter(r => r.source === 'home'), templates: [], problems: [] });
+  });
+
+  it('6 lists the selected session’s repository roles then the home’s; j k move, the detail follows; ← → shows the templates', async () => {
+    const tui = await startTui();
+    answer(tui);
+    try {
+      await tui.press('6');
+      await until(() => tui.frame().includes('dépôt · .ledge/roles'));
+      expect(sent(tui.daemon.received, 'roles.list')[0]).toMatchObject({ cwd: '/w/ledge' });
+      expect(tui.frame()).toContain('perso · ~/.ledge/roles');
+      expect(tui.frame()).toContain('@BUILD · BUILDER');
+      expect(tui.frame()).toContain('Tu implémentes une étape à la fois.');
+      await tui.press('j');
+      await until(() => tui.frame().includes('@REVIEW · RELECTEUR'));
+      expect(tui.frame()).toContain('remplace /h/.ledge/roles/review.md');
+      expect(tui.frame()).toContain('▣ workshop');
+      await tui.press('\u001b[C'); // →
+      await until(() => tui.frame().includes('dépôt · .ledge/teams'));
+      expect(tui.frame()).toContain('gpt-5.5-mini');
+    } finally { await tui.cleanup(); }
+  });
+
+  it('! shows the ignored files; c changes the folder and reads the roles again', async () => {
+    const tui = await startTui();
+    answer(tui);
+    try {
+      await tui.press('6');
+      await until(() => tui.frame().includes('1 fichier ignoré'));
+      await tui.press('!');
+      await until(() => tui.frame().includes('nom de fichier invalide'));
+      expect(tui.frame()).toContain('/w/ledge/.ledge/roles/Design.md');
+      await tui.press('!');
+      const before = sent(tui.daemon.received, 'roles.list').length;
+      await tui.press('c');
+      await until(() => sent(tui.daemon.received, 'roles.list').length === before + 1);
+      expect(sent(tui.daemon.received, 'roles.list').at(-1)!.cwd).not.toBe('/w/ledge');
+    } finally { await tui.cleanup(); }
+  });
+
+  it('↵ opens « Nouvelle session » with the role, and launches it with the role', async () => {
+    const tui = await startTui();
+    answer(tui);
+    try {
+      await tui.press('6');
+      await until(() => tui.frame().includes('@BUILD · BUILDER'));
+      await tui.press('j');
+      await until(() => tui.frame().includes('@REVIEW · RELECTEUR'));
+      await tui.press('\r');
+      await until(() => tui.frame().includes('NOUVELLE SESSION'));
+      expect(tui.frame()).toContain('@review');
+      await tui.press('Relis la PR');
+      await tui.press('\u0013'); // ctrl+s
+      await until(() => sent(tui.daemon.received, 'session.launch').length === 1);
+      expect(sent(tui.daemon.received, 'session.launch')[0]).toMatchObject({ tool: 'codex', cwd: '/w/ledge', role: 'review', prompt: 'Relis la PR' });
+    } finally { await tui.cleanup(); }
+  });
+
+  it('the role’s model and effort fill the form, as the daemon applies them; another agent takes its own, the role’s come back with it', async () => {
+    const tui = await startTui();
+    answer(tui);
+    tui.daemon.onMessage(m => {
+      if (m.type === 'models.list') tui.daemon.push({ type: 'models.listing', requestId: m.requestId, tool: m.tool, models: m.tool === 'claude' ? [{ id: 'sonnet', label: 'Sonnet' }, { id: 'opus', label: 'Opus', efforts: ['low', 'high'] }] : [{ id: 'gpt-5.5', label: 'GPT-5.5' }] });
+    });
+    try {
+      await tui.press('6');
+      await until(() => tui.frame().includes('@BUILD · BUILDER'));
+      await tui.press('\r');
+      await until(() => tui.frame().includes('NOUVELLE SESSION'));
+      await until(() => tui.frame().includes('◂ Opus ▸'));
+      expect(tui.frame()).toContain('◂ high ▸');
+      expect(tui.frame()).toContain('Local · Claude Code · opus · high');
+      await tui.press('Implémente');
+      await tui.press('\t'); // to Agent
+      await tui.press('\u001b[C'); // → Codex
+      await until(() => tui.frame().includes('GPT-5.5'));
+      expect(tui.frame()).not.toContain('◂ Opus ▸');
+      await tui.press('\u001b[D'); // ← back to Claude Code
+      await until(() => tui.frame().includes('◂ Opus ▸'));
+      expect(tui.frame()).toContain('◂ high ▸');
+      await tui.press('\u0013'); // ctrl+s
+      await until(() => sent(tui.daemon.received, 'session.launch').length === 1);
+      expect(sent(tui.daemon.received, 'session.launch')[0]).toMatchObject({ tool: 'claude', role: 'build', model: 'opus', effort: 'high', prompt: 'Implémente' });
+    } finally { await tui.cleanup(); }
+  });
+
+  it('the role read in a folder is dropped when the launch goes elsewhere, and comes back with the folder', async () => {
+    const tui = await startTui();
+    // /w/website has no role of its own: only the home's.
+    tui.daemon.onMessage(m => {
+      if (m.type === 'roles.list') tui.daemon.push(m.cwd === '/w/ledge' ? listing(m.requestId) : { ...listing(m.requestId), roles: listing().roles.filter(r => r.source === 'home'), templates: [], problems: [] });
+    });
+    try {
+      await tui.press('6');
+      await until(() => tui.frame().includes('@BUILD · BUILDER'));
+      await tui.press('j');
+      await until(() => tui.frame().includes('@REVIEW · RELECTEUR'));
+      await tui.press('\r');
+      await until(() => tui.frame().includes('NOUVELLE SESSION'));
+      expect(tui.frame()).toContain('@review Relecteur');
+      await tui.press('Relis la PR');
+      for (let i = 0; i < 4; i++) await tui.press('\t'); // to Projet
+      await tui.press('\u001b[C'); // → Website
+      await until(() => tui.frame().includes('n’est lu que dans /w/ledge'));
+      expect(tui.frame()).not.toContain('@review Relecteur');
+      await tui.press('\u001b[D'); // ← back to Ledge
+      await until(() => tui.frame().includes('@review Relecteur'));
+      await tui.press('\u001b[C');
+      await until(() => tui.frame().includes('n’est lu que dans /w/ledge'));
+      await tui.press('\u0013'); // ctrl+s
+      await until(() => sent(tui.daemon.received, 'session.launch').length === 1);
+      const launched = sent(tui.daemon.received, 'session.launch')[0]!;
+      expect(launched).toMatchObject({ cwd: '/w/website', prompt: 'Relis la PR' });
+      expect(launched.role).toBeUndefined();
+    } finally { await tui.cleanup(); }
+  });
+
+  it('a role read under « Perso seulement » is asked again in the folder launched: shadowed there by the repository’s, that one is shown and launched, with its defaults', async () => {
+    const tui = await startTui();
+    const home = { id: 'review', label: 'Relecteur perso', prompt: 'Tu relis.', autonomy: 'ask' as const, source: 'home' as const, path: '/h/.ledge/roles/review.md' };
+    const lead = { id: 'lead', label: 'Lead', prompt: 'Tu découpes.', source: 'home' as const, path: '/h/.ledge/roles/lead.md' };
+    const repo = { id: 'review', label: 'Relecteur auto', prompt: 'Tu modifies.', tool: 'codex' as const, autonomy: 'auto' as const, source: 'repo' as const, path: '/w/ledge/.ledge/roles/review.md', shadows: home.path };
+    tui.daemon.onMessage(m => {
+      if (m.type === 'roles.list') tui.daemon.push({ type: 'roles.listing', requestId: m.requestId, roles: m.cwd === '/w/ledge' ? [repo, lead] : [home, lead], templates: [], problems: [] });
+    });
+    try {
+      await tui.press('6');
+      await until(() => tui.frame().includes('@REVIEW · RELECTEUR AUTO'));
+      for (const _ of [0, 1]) await tui.press('c'); // /w/website, then « Perso seulement »
+      await until(() => tui.frame().includes('PERSO SEULEMENT') && tui.frame().includes('@REVIEW · RELECTEUR PERSO'));
+      await tui.press('\r');
+      await until(() => tui.frame().includes('NOUVELLE SESSION'));
+      await until(() => tui.frame().includes('@review Relecteur auto · celui de /w/ledge'));
+      expect(sent(tui.daemon.received, 'roles.list').at(-1)).toMatchObject({ cwd: '/w/ledge' });
+      expect(tui.frame()).not.toContain('Relecteur perso');
+      // Its agent, as the daemon will launch it.
+      expect(tui.frame()).toMatch(/◉ Codex/);
+      await tui.press('Relis');
+      await tui.press('\u0013'); // ctrl+s
+      await until(() => sent(tui.daemon.received, 'session.launch').length === 1);
+      expect(sent(tui.daemon.received, 'session.launch')[0]).toMatchObject({ cwd: '/w/ledge', role: 'review', tool: 'codex' });
+    } finally { await tui.cleanup(); }
+  });
+
+  it('a role read under « Perso seulement » that the folder does not shadow is launched with it, once the folder said so', async () => {
+    const tui = await startTui();
+    answer(tui);
+    try {
+      await tui.press('6');
+      await until(() => tui.frame().includes('@BUILD · BUILDER'));
+      for (const _ of [0, 1]) await tui.press('c');
+      await until(() => tui.frame().includes('PERSO SEULEMENT') && tui.frame().includes('@LEAD · LEAD'));
+      await tui.press('\r');
+      await until(() => tui.frame().includes('NOUVELLE SESSION'));
+      await until(() => tui.frame().includes('@lead Lead'));
+      await tui.press('Découpe');
+      await tui.press('\u0013'); // ctrl+s
+      await until(() => sent(tui.daemon.received, 'session.launch').length === 1);
+      expect(sent(tui.daemon.received, 'session.launch')[0]).toMatchObject({ cwd: '/w/ledge', role: 'lead' });
+    } finally { await tui.cleanup(); }
+  });
+
+  it('↵ on a template opens the team mode with it', async () => {
+    const tui = await startTui();
+    answer(tui);
+    try {
+      await tui.press('6');
+      await until(() => tui.frame().includes('@BUILD · BUILDER'));
+      await tui.press('\u001b[C'); // →
+      await until(() => tui.frame().includes('▣ WORKSHOP'));
+      await tui.press('\r');
+      await until(() => tui.frame().includes('NOUVELLE ÉQUIPE'));
+      await until(() => tui.frame().includes('L’équipe workshop s’installera'));
+      await tui.press('\u0013'); // ctrl+s
+      await until(() => sent(tui.daemon.received, 'team.launch').length === 1);
+      expect(sent(tui.daemon.received, 'team.launch')[0]).toMatchObject({ cwd: '/w/ledge', template: 'workshop' });
+    } finally { await tui.cleanup(); }
+  });
+
+  it('c steps through every folder to « Perso seulement » and back to the first, the order kept', async () => {
+    const projects = { ...PROJECTS, projects: [...PROJECTS.projects, { id: 'docs', name: 'Docs', color: 'violet', repos: [{ machine: 'local', path: '/w/docs' }] }] as typeof PROJECTS.projects };
+    const tui = await startTui({ projects });
+    answer(tui);
+    try {
+      await tui.press('6');
+      await until(() => tui.frame().includes('@BUILD · BUILDER'));
+      const cwds: Array<string | undefined> = [];
+      for (let i = 0; i < 4; i++) {
+        const before = sent(tui.daemon.received, 'roles.list').length;
+        await tui.press('c');
+        await until(() => sent(tui.daemon.received, 'roles.list').length === before + 1);
+        cwds.push(sent(tui.daemon.received, 'roles.list').at(-1)!.cwd);
+        if (i === 2) await until(() => tui.frame().includes('PERSO SEULEMENT'));
+      }
+      expect(cwds).toEqual(['/w/website', '/w/docs', undefined, '/w/ledge']);
+    } finally { await tui.cleanup(); }
+  });
+
+  it('esc closes the ignored files and stays on « Équipes »', async () => {
+    const tui = await startTui();
+    answer(tui);
+    try {
+      await tui.press('6');
+      await until(() => tui.frame().includes('1 fichier ignoré'));
+      await tui.press('!');
+      await until(() => tui.frame().includes('nom de fichier invalide'));
+      await tui.press('\u001b');
+      await until(() => !tui.frame().includes('nom de fichier invalide'));
+      expect(tui.frame()).toContain('@BUILD · BUILDER');
+    } finally { await tui.cleanup(); }
+  });
+
+  for (const [env, editor] of [[{ VISUAL: 'code -w', EDITOR: 'nano' }, ['code', '-w']], [{ EDITOR: 'nano' }, ['nano']], [{}, ['vi']]] as const) {
+    it(`o opens the role’s file, then the template’s, in ${editor.join(' ')} (${Object.keys(env).join(', ') || 'neither VISUAL nor EDITOR'})`, async () => {
+      const runs: string[][] = [];
+      const tui = await startTui({ env, run: async argv => { runs.push(argv); return 0; } });
+      answer(tui);
+      try {
+        await tui.press('6');
+        await until(() => tui.frame().includes('@BUILD · BUILDER'));
+        await tui.press('o');
+        await until(() => runs.length === 1);
+        await tui.press('\u001b[C'); // →
+        await until(() => tui.frame().includes('▣ WORKSHOP'));
+        await tui.press('o');
+        await until(() => runs.length === 2);
+        expect(runs).toEqual([[...editor, '/w/ledge/.ledge/roles/build.md'], [...editor, '/w/ledge/.ledge/teams/workshop.yaml']]);
+      } finally { await tui.cleanup(); }
+    });
+  }
+
+  it('a daemon that does not answer roles.list in 4 s is said; r asks the same folder again', async () => {
+    const tui = await startTui();
+    // The screen's 4 s is jumped, not waited: its timeouts are faked, still running with real time for the polling and the socket.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+    try {
+      await tui.press('6');
+      await until(() => sent(tui.daemon.received, 'roles.list').length === 1);
+      expect(tui.frame()).not.toContain('r  relire');
+      await vi.advanceTimersByTimeAsync(3_000);
+      expect(tui.frame()).not.toContain('Le daemon n’a pas répondu.');
+      await vi.advanceTimersByTimeAsync(1_000);
+      await until(() => tui.frame().includes('Le daemon n’a pas répondu.'));
+      expect(tui.frame()).toContain('r  relire');
+      answer(tui);
+      await tui.press('r');
+      await until(() => sent(tui.daemon.received, 'roles.list').length === 2);
+      expect(sent(tui.daemon.received, 'roles.list')[1]).toMatchObject({ cwd: '/w/ledge' });
+      await until(() => tui.frame().includes('@BUILD · BUILDER'));
+      expect(tui.frame()).not.toContain('Le daemon n’a pas répondu.');
+    } finally { vi.useRealTimers(); await tui.cleanup(); }
+  });
+
+  it('a project on another machine is read there (#99): c reaches it, the title names the machine, roles.list carries it, o is not offered', async () => {
+    const projects = { ...PROJECTS, projects: [...PROJECTS.projects, { id: 'srv', name: 'App', color: 'violet', repos: [{ machine: 'server', path: '/srv/applications/catalog' }] }] as typeof PROJECTS.projects };
+    const runs: string[][] = [];
+    const tui = await startTui({ projects, run: async argv => { runs.push(argv); return 0; } });
+    // The remote machine is the same mock reached through /ssh/srv: its snapshot names the alias, as a daemon behind ssh does.
+    Object.assign(tui.daemon.extras, { sshAlias: 'srv' });
+    tui.daemon.machines([{ id: 'local', label: 'Local' }, { id: 'server', label: 'serveur', ssh: 'srv' }]);
+    answer(tui);
+    const asked: Array<Record<string, unknown>> = [];
+    const send = tui.client.send.bind(tui.client);
+    tui.client.send = m => { if (m.type === 'roles.list') asked.push(m); send(m); };
+    try {
+      await tui.resize(160, 30);
+      await until(() => tui.frame().includes('serveur ●'));
+      await tui.press('6');
+      await until(() => tui.frame().includes('@BUILD · BUILDER'));
+      // Two machines: the local folder names its machine too, the first ask goes without machineId (local, as before).
+      expect(tui.frame()).toContain('LEDGE /W/LEDGE · ● LOCAL');
+      expect(asked[0]).toMatchObject({ cwd: '/w/ledge' });
+      expect(asked[0]!.machineId).toBeUndefined();
+      for (let i = 0; i < 4 && asked.at(-1)!.cwd !== '/srv/applications/catalog'; i++) {
+        const before = asked.length;
+        await tui.press('c');
+        await until(() => asked.length === before + 1);
+      }
+      expect(asked.at(-1)).toMatchObject({ cwd: '/srv/applications/catalog', machineId: 'server' });
+      await until(() => tui.frame().includes('APP /SRV/APPLICATIONS/CATALOG · ● SERVEUR') && tui.frame().includes('@BUILD · BUILDER'));
+      // Narrower, the folder is cut before the machine, which stays.
+      await tui.resize(100, 30);
+      await until(() => tui.frame().includes('… · ● SERVEUR'));
+      expect(tui.frame()).not.toContain('APP /SRV/APPLICATIONS/CATALOG');
+      expect(tui.frame()).toContain('sur serveur');
+      expect(tui.frame()).not.toContain('o  ouvrir le fichier');
+      await tui.press('o');
+      await new Promise(r => setTimeout(r, 100));
+      expect(runs).toEqual([]);
+      // Teams are the local daemon's: a template read there is shown, not launched.
+      await tui.press('\u001b[C'); // →
+      await until(() => tui.frame().includes('▣ WORKSHOP'));
+      expect(tui.frame()).not.toContain('lancer cette équipe');
+      await tui.press('\u001b[D'); // ←
+      await until(() => tui.frame().includes('@BUILD · BUILDER'));
+      await tui.press('\r');
+      await until(() => tui.frame().includes('NOUVELLE SESSION'));
+      expect(tui.frame()).toMatch(/· serveur · Claude Code/);
+    } finally { await tui.cleanup(); }
+  });
+
+  it('a machine offline is said with r to read again, a daemon too old is said (#99)', async () => {
+    const tui = await startTui();
+    let error: 'offline' | 'outdated' = 'offline';
+    tui.daemon.onMessage(m => { if (m.type === 'roles.list') tui.daemon.push({ type: 'roles.listing', requestId: m.requestId, roles: [], templates: [], problems: [], error }); });
+    try {
+      await tui.resize(160, 30);
+      await tui.press('6');
+      await until(() => tui.frame().includes('Local est hors ligne.'));
+      expect(tui.frame()).toContain('r  relire');
+      expect(tui.frame()).not.toContain('Aucun rôle ici');
+      error = 'outdated';
+      await tui.press('r');
+      await until(() => tui.frame().includes('Le daemon de Local est trop ancien pour le catalogue.'));
+      expect(tui.frame()).not.toContain('r  relire');
     } finally { await tui.cleanup(); }
   });
 });

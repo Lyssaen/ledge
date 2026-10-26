@@ -312,7 +312,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
             manage={{ open: sessionMenu.menu?.id === session?.id && sessionMenu.menu !== null, onOpen: (at, opener) => session && sessionMenu.open(session.id, at, opener) }} />
           {place.kind === 'settings' ? <SettingsPlace section={place.section} ctx={settings} />
             : place.kind === 'home' ? <HomePlace label={t.side.ledgeHome} client={fleetClient} view={fleetView} teams={teams} decisions={decisions} waits={waits} tab={place.tab} task={place.task} dispatch={dispatch}
-                paused={nav.paused} focus={nav.chatFocus} projects={projects} onLaunched={chatLaunched} onTerminal={showTerminal} notify={notify} onProposal={openProposal} />
+                paused={nav.paused} focus={nav.chatFocus} projects={projects} onLaunched={chatLaunched} onTerminal={showTerminal} notify={notify} onProposal={openProposal}
+                open={place.back?.kind === 'session' ? sessions.find(x => x.id === (place.back as { id: string }).id) : undefined} atelierProject={place.project} />
             : session && place.kind === 'session' ? <SessionPlace client={fleetClient} session={session} nav={nav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify} actions={actions} teams={teams}
                 prefs={sessionPrefs} setPrefs={setSessionPrefs} onRevealCurrent={() => setRevealCurrent(n => n + 1)} />
             : detached ? <AtelierAway onShow={detach} onAttach={attach} />
@@ -332,7 +333,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         const room = projects.projects.find(x => x.id === (nav.modal as { project?: string }).project)!;
         return (
           <Modal title={t.teamLaunch.title(room.name)} wide onClose={close}>
-            <TeamLaunch client={fleetClient} teams={teams} project={room} onCancel={close}
+            <TeamLaunch client={fleetClient} teams={teams} project={room} onCancel={close} initial={nav.modal as { cwd?: string; template?: string; seat?: string }}
               onLaunched={team => { close(); dispatch({ type: 'home', project: room.id }); notify(t.teamLaunch.launched(team.name, room.name)); }} />
           </Modal>
         );
@@ -340,7 +341,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       {nav.modal?.kind === 'launch' && !nav.modal.team && (
         <Modal title={t.modalTitles.launch} wide onClose={close}>
           <LaunchPlace client={fleetClient} projects={projects?.projects ?? NO_PROJECTS} machines={machines} sessions={sessions} projectIdOf={projectIdOf}
-            wanted={{ ...(nav.modal.project !== undefined && { project: nav.modal.project }), ...(filter && { filter }) }}
+            wanted={{ ...(nav.modal.project !== undefined && { project: nav.modal.project }), ...(filter && { filter }), ...(nav.modal.cwd && { cwd: nav.modal.cwd }), ...(nav.modal.machine && { machine: nav.modal.machine }), ...(nav.modal.role && { role: nav.modal.role }) }}
             onEditProject={id => dispatch({ type: 'modal', modal: { kind: 'project', edit: id } })} onNewProject={() => dispatch({ type: 'modal', modal: { kind: 'project' } })}
             launch={launcher.state} onLaunch={(msg, preview) => { launched.current = preview; launcher.launch(msg); }} onCancel={close} paused={nav.paused} />
         </Modal>

@@ -7,11 +7,12 @@ export const RoleIdSchema = z.string().regex(/^[a-z0-9][a-z0-9_-]{0,39}$/);
 export const ROLE_LABEL_MAX = 40;
 export const ROLE_PROMPT_MAX = 8000;
 
-/** A role (`.ledge/roles/<id>.md`): a label, a prompt, and the launch defaults it asks for. The repository's wins over the home's. */
+/** A role (`.ledge/roles/<id>.md`): a label, a prompt, and the launch defaults it asks for. The repository's wins over the home's:
+ *  `shadows` is then the path of the home role of the same id it hides (absent otherwise, and from older daemons). */
 export const RoleSchema = z.object({
   id: RoleIdSchema, label: z.string().min(1).max(ROLE_LABEL_MAX), prompt: z.string().max(ROLE_PROMPT_MAX),
   tool: ToolSchema.optional(), model: ModelIdSchema.optional(), effort: EffortSchema.optional(), autonomy: AutonomySchema.optional(),
-  source: z.enum(['repo', 'home']), path: z.string()
+  source: z.enum(['repo', 'home']), path: z.string(), shadows: z.string().optional()
 });
 export type Role = z.infer<typeof RoleSchema>;
 
@@ -51,7 +52,9 @@ export type Team = z.infer<typeof TeamSchema>;
 
 /** The client's requests about roles and teams. `machineId` is the fleet's routing, removed before the daemon. */
 export const RolesListSchema = z.object({ type: z.literal('roles.list'), cwd: z.string().min(1).optional(), requestId: z.string().max(100).optional(), machineId: z.string().optional() });
-export const RolesListingSchema = z.object({ type: z.literal('roles.listing'), requestId: z.string().optional(), roles: z.array(RoleSchema), templates: z.array(TeamTemplateSchema).default([]), problems: z.array(DefinitionProblemSchema) });
+export const RolesListingSchema = z.object({ type: z.literal('roles.listing'), requestId: z.string().optional(), roles: z.array(RoleSchema), templates: z.array(TeamTemplateSchema).default([]), problems: z.array(DefinitionProblemSchema),
+  /** Set by the fleet when the project's machine could not answer (#99): 'offline', or 'outdated' for a daemon without roles.list. */
+  error: z.string().optional() });
 
 /** `team.launch`: a template by id, or ad hoc seats (the chat card's); with `qid`, the chat's team card of that turn. */
 export const TeamLaunchSchema = z.object({
