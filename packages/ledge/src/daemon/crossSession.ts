@@ -82,6 +82,11 @@ export function formatLedgeNotice(n: { to: string; text: string; reason: string 
   const quote = ledgeBody(flat.length > NOTICE_QUOTE ? `${flat.slice(0, NOTICE_QUOTE)}…` : flat);
   return `<ledge-notice to="${to}">Ledge n'a pas pu remettre ton message à ${to} (« ${quote}${NOTICE_REASON}${ledgeBody(n.reason)}</ledge-notice>`;
 }
+/** What Ledge types to a session that joins a team at its next free moment (spec 2026-10-25 roles §3.3): its role and
+ *  its teammates, the lines its next start would give it. */
+export function formatTeamNotice(n: { team: string; text: string }): string {
+  return `<ledge-notice team="${attr(n.team)}">${ledgeBody(n.text)}</ledge-notice>`;
+}
 /** What Ledge types about a task (spec 2026-10-25 session tasks §3.3): one line naming the task and the session the
  *  change comes from, never the user's words. `text` is Ledge's own wording around the title and result, escaped here. */
 const TASK_BLOCK = /^<ledge-task\b([^>]*)>([\s\S]*?)(?:<\/ledge-task>|$)/;

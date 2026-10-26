@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
+import { LEDGE_GIVER, projectOf, type Autonomy, type Role, type Seat, type Team } from '@ledge/protocol';
 import { DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type ChatErrorCode, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, backendOf } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
@@ -39,6 +40,11 @@ import { launchFromChat, LaunchRefused } from '../chat/launch.js';
 import { cardOf, closeFromChat, CloseRefused } from '../chat/close.js';
 import { createMailbox, type MailJournal } from './mailbox.js';
 import { createTasks, type TasksJournal } from './tasks.js';
+import { createTeamsLive, type TeamsJournal } from './teamsLive.js';
+import { autonomyArgs, findRole, ompApprovalFor } from './roles.js';
+import { listDefinitions, resolveSeats, saveTemplate } from './teams.js';
+import { resolveRoleAddress, seatContext, teammates } from './seat.js';
+import { formatTeamNotice } from './crossSession.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
 import { createRouter } from '../chat/routing.js';
 import { serveSsh } from '../transport/ssh.js';
@@ -74,13 +80,13 @@ export const MODEL_ARGS: Record<TmuxTool, (model: string) => string[]> = { claud
 export const EFFORT_ARGS: Partial<Record<TmuxTool, (effort: string) => string[]>> = { claude: e => ['--effort', e], codex: e => ['-c', `model_reasoning_effort="${e}"`] };
 
 /** The agent's arguments for a `session.launch`: the resume flag, the model and effort, then the first instruction as the positional prompt. */
-export function launchArgs(msg: { tool: TmuxTool; prompt?: string; continue?: boolean; dirs?: string[]; model?: string; effort?: string }): string[] {
+export function launchArgs(msg: { tool: TmuxTool; prompt?: string; continue?: boolean; dirs?: string[]; model?: string; effort?: string; autonomy?: Autonomy }): string[] {
   const prompt = msg.prompt?.trim();
   const more = msg.dirs?.length ? MULTI_DIR_ARGS[msg.tool]?.(msg.dirs) : undefined;
   const model = msg.model ? MODEL_ARGS[msg.tool](msg.model) : [];
   const effort = msg.effort ? EFFORT_ARGS[msg.tool]?.(msg.effort) ?? [] : [];
   // The `--` only follows --add-dir: the option is variadic and would swallow the prompt.
-  return [...(msg.continue ? CONTINUE_ARGS[msg.tool] : []), ...model, ...effort, ...(more ?? []), ...(prompt ? [...(more ? ['--'] : []), prompt] : [])];
+  return [...(msg.continue ? CONTINUE_ARGS[msg.tool] : []), ...model, ...effort, ...autonomyArgs(msg.tool, msg.autonomy), ...(more ?? []), ...(prompt ? [...(more ? ['--'] : []), prompt] : [])];
 }
 
 export { resolveFolder };
@@ -165,14 +171,14 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; scan?: typeof scanRepos; models?: Models; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; tasks?: TasksJournal }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; scan?: typeof scanRepos; models?: Models; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; tasks?: TasksJournal; teams?: TeamsJournal }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
   // Under systemd the daemon has the bare system environment (no PATH to the agents, no proxy): a launched agent gets
   // the login shell's on top of it, as a terminal would.
   const agentEnv = opts.agentEnv ?? (async () => ({ ...process.env, ...(await loginShellEnv()) }));
-  const threads = createChatThreads({ store, tmux, home: paths().dir, userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now, projects: () => projects, forge: createForge({ env: agentEnv }) });
+  const threads = createChatThreads({ store, tmux, home: paths().dir, userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now, projects: () => projects, forge: createForge({ env: agentEnv }), teams: () => teams.all(), tasks: () => tasks.all() });
   const chat: Chat = opts.chat ?? threads.desktop;
   const router = createRouter({ env: agentEnv });
   const omp = opts.omp ?? createOmpHost({ store, env: agentEnv, dir: join(paths().dir, 'omp'), now });
@@ -262,7 +268,14 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     sent: { record: (id, m) => { history?.recordSent(id, m); }, mark: (id, rid, status) => history?.markSent(id, rid, status) }
   });
   const relay = createRelay({ threads: cardThreads, store, replyTo: replyText, now, typing, closing, next: id => mailbox.kick(id) });
-  const tasks = createTasks({ store, mailbox, now, ...(opts.tasks ? { journal: opts.tasks } : {}) });
+  /** The live teams (spec 2026-10-25 roles §3.3): every change reaches the local fronts. */
+  const teams = createTeamsLive({ store, now, ...(opts.teams ? { journal: opts.teams } : {}) });
+  const unsubscribeTeams = teams.onChange(team => broadcast({ type: 'team.updated', team }));
+  const tasks = createTasks({ store, mailbox, now, teams, ...(opts.tasks ? { journal: opts.tasks } : {}), onLedgeTask: task => {
+    broadcast({ type: 'task.updated', task });
+    // The card that gave it follows it, on whichever thread holds it.
+    for (const [thread, c] of cardThreads.all()) c.followTask?.(task, cardThreads.emitterOf(thread) ?? broadcast);
+  } });
   /** The last preview per session, replayed after every snapshot so a late client does not wait for the agent to write. */
   const previews = new Map<string, string[]>();
   /** The title last pushed to each session's tmux tab, so tmux is told only when it changes. */
@@ -295,9 +308,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const sendSnapshot = (reply: Reply) => {
-    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true, ...(mobile || unavailable ? { mobile: true } : {}) } } : {}) });
+    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true, teams: true, ...(mobile || unavailable ? { mobile: true } : {}) } } : {}) });
     reply(machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
     reply(projectsMsg()); // then the shared projects (build spec §5)
+    reply({ type: 'teams', teams: teams.all() }); // then the live teams (roles spec §3.3)
     reply(islandMsg()); // then the island's settings
     if (mobile) reply({ type: 'mobile', state: mobile.state() }); // then mobile access
     else if (unavailable) reply({ type: 'mobile', state: unavailable });
@@ -585,7 +599,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     try {
       const cwd = await resolveFolder(s.cwd, opts.home);
       const env = await agentEnv();
-      const spawned = await spawnSession({ tool: s.tool, id: s.id, name: s.name, args: [...RESUME_ARGS[s.tool](key), ...(model ? MODEL_ARGS[s.tool](model) : []), ...(effort ? EFFORT_ARGS[s.tool]?.(effort) ?? [] : [])], cwd, tmux, now, env, taken: { names: store.all().filter(o => o.id !== s.id && o.state !== 'exited').map(o => o.name), ids: [] } });
+      const spawned = await spawnSession({ tool: s.tool, id: s.id, name: s.name, args: [...RESUME_ARGS[s.tool](key), ...(model ? MODEL_ARGS[s.tool](model) : []), ...(effort ? EFFORT_ARGS[s.tool]?.(effort) ?? [] : []), ...autonomyArgs(s.tool, s.autonomy)], cwd, tmux, now, env,
+        ...(s.role ? { role: { id: s.role, label: s.roleLabel ?? s.role } } : {}), ...(s.team && teams.get(s.team)?.state !== 'dissolved' ? { team: s.team } : {}), ...(s.autonomy ? { autonomy: s.autonomy } : {}), taken: { names: store.all().filter(o => o.id !== s.id && o.state !== 'exited').map(o => o.name), ids: [] } });
       // Deleted or archived while it spawned: that request wins, the agent just started is stopped and not recorded.
       const cur = store.get(s.id);
       if (!cur || cur.archivedAt !== undefined) {
@@ -611,9 +626,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     store.upsert({ ...rest, state: 'starting', source: 'launcher' });
     try {
       const cwd = await resolveFolder(s.cwd, opts.home);
-      const spawned = await omp.launch({ id: s.id, name: s.name, cwd, resumeFile: file, ...(model ? { model } : {}), ...(effort ? { effort } : {}), ...(s.approval ? { approval: s.approval } : {}) });
-      const { topic, topicSource, repo, repoPath, branch, worktree, repoId, project } = s;
-      store.upsert({ ...spawned, ...(topic ? { topic } : {}), ...(topicSource ? { topicSource } : {}), ...(repo ? { repo } : {}), ...(repoPath ? { repoPath } : {}), ...(branch ? { branch } : {}), ...(worktree !== undefined ? { worktree } : {}), ...(repoId ? { repoId } : {}), project });
+      const spawned = await omp.launch({ id: s.id, name: s.name, cwd, resumeFile: file, ...(model ? { model } : {}), ...(effort ? { effort } : {}), ...(s.approval ? { approval: s.approval } : {}), ...ompSeat(s) });
+      const { topic, topicSource, repo, repoPath, branch, worktree, repoId, project, role, roleLabel, team, autonomy } = s;
+      store.upsert({ ...spawned, ...(role ? { role } : {}), ...(roleLabel ? { roleLabel } : {}), ...(team ? { team } : {}), ...(autonomy ? { autonomy } : {}), ...(topic ? { topic } : {}), ...(topicSource ? { topicSource } : {}), ...(repo ? { repo } : {}), ...(repoPath ? { repoPath } : {}), ...(branch ? { branch } : {}), ...(worktree !== undefined ? { worktree } : {}), ...(repoId ? { repoId } : {}), project });
       log(`resumed ${spawned.name} (omp) in ${spawned.cwd} as ${spawned.id}`);
       return null;
     } catch (e) {
@@ -682,38 +697,141 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     p.then(done, done);
     return p;
   }
-  /** Spawns the agent as `ledge <tool>` would and records it; throws the reason (bad folder, tmux). */
-  async function launch(req: { tool: Tool; cwd: string; name?: string; prompt?: string; continue?: boolean; dirs?: string[]; model?: string; effort?: string; approval?: OmpApproval }): Promise<Session> {
-    if (req.tool === 'omp') return launchOmp(req);
-    if (req.approval) throw new Error(`launch: ${req.tool} takes no approval mode`);
-    return launchTmux({ ...req, tool: req.tool });
+  type LaunchReq = { tool: Tool; cwd: string; name?: string; prompt?: string; continue?: boolean; dirs?: string[]; model?: string; effort?: string; approval?: OmpApproval; role?: string; team?: string };
+  /**
+   * Spawns the agent as `ledge <tool>` would and records it; throws the reason (bad folder, tmux, unknown role or team).
+   * A role (roles spec §3.4) fills the model and effort left out, when it is the role's own agent, and adds its autonomy;
+   * a team seats the session at once.
+   */
+  async function launch(req: LaunchReq): Promise<Session> {
+    const cwd = await resolveFolder(req.cwd, opts.home);
+    const role = req.role ? findRole(req.role, cwd) : undefined;
+    if (req.role && !role) throw new Error(`rôle inconnu : ${req.role} (aucun fichier .ledge/roles/${req.role}.md)`);
+    const team = req.team ? teams.get(req.team) : undefined;
+    if (req.team && (!team || team.state === 'dissolved')) throw new Error(`aucune équipe ${req.team} en cours`);
+    if (team && !role) throw new Error('une session rejoint une équipe avec un rôle');
+    const own = role && (role.tool === undefined || role.tool === req.tool);
+    const filled: LaunchReq = { ...req, cwd, ...(!req.model && own && role.model ? { model: role.model } : {}), ...(!req.effort && own && role.effort ? { effort: role.effort } : {}) };
+    if (filled.approval && filled.tool !== 'omp') throw new Error(`launch: ${filled.tool} takes no approval mode`);
+    const session = filled.tool === 'omp' ? await launchOmp(filled, role, team) : await launchTmux({ ...filled, tool: filled.tool }, role, team);
+    if (role && team) teams.seat(team.id, role.id, session, role.label);
+    return store.get(session.id) ?? session;
+  }
+  /** What an OMP seat gets through its own channel (`--append-system-prompt`): its role and team, its env. */
+  function ompSeat(s: Pick<Session, 'id' | 'role' | 'roleLabel' | 'team' | 'cwd'>): { appendSystemPrompt?: string; seatEnv?: Record<string, string> } {
+    if (!s.role) return {};
+    const team = s.team ? teams.get(s.team) : undefined;
+    const live = team && team.state !== 'dissolved' ? team : undefined;
+    const text = seatContext({ role: findRole(s.role, s.cwd), roleId: s.role, roleLabel: s.roleLabel, ...(live ? { team: { name: live.name, members: teammates(live, store.all()).filter(m => m.name !== store.get(s.id)?.name) } } : {}) });
+    return { appendSystemPrompt: text, seatEnv: { LEDGE_ROLE: s.role, ...(live ? { LEDGE_TEAM: live.id } : {}) } };
   }
   /** `omp --mode rpc-ui` owned by the daemon: no pane. `continue` has no meaning here (a folder's latest journal is never picked). */
-  async function launchOmp(req: { cwd: string; name?: string; prompt?: string; continue?: boolean; dirs?: string[]; model?: string; effort?: string; approval?: OmpApproval }): Promise<Session> {
+  async function launchOmp(req: LaunchReq, role?: Role, team?: Team): Promise<Session> {
     if (req.continue) throw new Error('launch: OMP resumes an exact conversation, not the latest of a folder');
-    const cwd = await resolveFolder(req.cwd, opts.home);
+    const cwd = req.cwd;
     const dirs = req.dirs?.length ? await Promise.all(req.dirs.map(d => resolveFolder(d, opts.home))) : undefined;
-    const session = await omp.launch({ cwd, ...(req.name ? { name: req.name } : {}), ...(dirs ? { dirs } : {}), ...(req.model ? { model: req.model } : {}), ...(req.effort ? { effort: req.effort } : {}), ...(req.approval ? { approval: req.approval } : {}) });
+    const approval = req.approval ?? ompApprovalFor(role?.autonomy);
+    const seat = role ? ompSeat({ id: '', cwd, role: role.id, roleLabel: role.label, ...(team ? { team: team.id } : {}) }) : {};
+    const launched = await omp.launch({ cwd, ...(req.name ? { name: req.name } : {}), ...(dirs ? { dirs } : {}), ...(req.model ? { model: req.model } : {}), ...(req.effort ? { effort: req.effort } : {}), ...(approval ? { approval } : {}), ...seat });
+    const session: Session = { ...launched, ...(role ? { role: role.id, roleLabel: role.label, ...(role.autonomy && role.autonomy !== 'ask' ? { autonomy: role.autonomy } : {}) } : {}) };
+    if (role) store.upsert(session);
     store.touchRecent(session.cwd, session.project, session.startedAt);
-    log(`launched ${session.name} (omp) in ${session.cwd} as ${session.id}`);
+    log(`launched ${session.name} (omp) in ${session.cwd} as ${session.id}${role ? ` as @${role.id}` : ''}`);
     const prompt = req.prompt?.trim();
     // The session exists and is usable: a first instruction that fails is its error state, not a failed launch.
     if (prompt) await omp.send(session.id, prompt).catch(e => log(`first prompt of ${session.id} failed: ${(e as Error).message}`));
     return store.get(session.id) ?? session;
   }
-  async function launchTmux(req: { tool: TmuxTool; cwd: string; name?: string; prompt?: string; continue?: boolean; dirs?: string[]; model?: string; effort?: string }): Promise<Session> {
+  async function launchTmux(req: LaunchReq & { tool: TmuxTool }, role?: Role, team?: Team): Promise<Session> {
     if (req.dirs?.length && !MULTI_DIR_ARGS[req.tool]) throw new Error(`launch: ${req.tool} takes one folder`);
     if (req.effort && !EFFORT_ARGS[req.tool]) throw new Error(`launch: ${req.tool} takes its effort in the model id`);
-    const cwd = await resolveFolder(req.cwd, opts.home);
+    const cwd = req.cwd;
     const dirs = req.dirs?.length ? await Promise.all(req.dirs.map(d => resolveFolder(d, opts.home))) : undefined;
     const live = store.all();
     const env = await agentEnv();
-    const spawned = await spawnSession({ tool: req.tool, args: launchArgs({ ...req, dirs }), name: req.name, cwd, tmux, now, env, taken: { names: live.filter(s => s.state !== 'exited').map(s => s.name), ids: live.map(s => s.id) } });
+    const autonomy = role?.autonomy;
+    const spawned = await spawnSession({ tool: req.tool, args: launchArgs({ ...req, dirs, autonomy }), name: req.name, cwd, tmux, now, env,
+      ...(role ? { role: { id: role.id, label: role.label } } : {}), ...(team ? { team: team.id } : {}), ...(autonomy ? { autonomy } : {}),
+      taken: { names: live.filter(s => s.state !== 'exited').map(s => s.name), ids: live.map(s => s.id) } });
     const session: Session = { ...spawned, ...(req.model ? { model: req.model } : {}), ...(req.effort ? { effort: req.effort } : {}) };
     store.upsert(session);
     store.touchRecent(session.cwd, session.project, session.startedAt);
-    log(`launched ${session.name} (${session.tool}) in ${session.cwd} as ${session.id}`);
+    log(`launched ${session.name} (${session.tool}) in ${session.cwd} as ${session.id}${role ? ` as @${role.id}` : ''}`);
     return session;
+  }
+
+  /** `team.launch` (roles spec §3.4): resolves the folder, its project and every role (one unknown refuses the whole
+   *  launch), creates the live team and spawns its seats in order. A seat that fails stops there: the others stay. */
+  async function launchTeam(req: { cwd: string; template?: string; seats?: Seat[]; name?: string; defaults?: { tool: Tool; model?: string; effort?: string } }): Promise<{ team: Team } | { reason: string; team?: Team }> {
+    const cwd = await resolveFolder(req.cwd, opts.home);
+    const defs = listDefinitions(cwd);
+    const template = req.template ? defs.templates.find(t => t.id === req.template) : undefined;
+    if (req.template && !template) return { reason: `aucun modèle d'équipe ${req.template} (.ledge/teams/${req.template}.yaml)` };
+    const seats = template?.seats ?? req.seats;
+    if (!seats?.length) return { reason: 'une équipe a au moins un siège' };
+    const resolved = resolveSeats(seats, defs.roles, req.defaults);
+    if ('unknown' in resolved) return { reason: `rôle inconnu : ${resolved.unknown.join(', ')} (écris .ledge/roles/<id>.md)` };
+    const name = req.name ?? template?.name ?? (basename(cwd) || cwd);
+    const team = teams.create({ name, ...(template ? { template: template.id } : {}), project: projectOf({ cwd }, projects), cwd, roles: seats.map(s => s.role) });
+    log(`team ${team.id} (${name}) launching ${resolved.length} seats in ${cwd}`);
+    for (const seat of resolved) {
+      try { await launch({ tool: seat.tool, cwd, role: seat.role.id, team: team.id, ...(seat.name ? { name: seat.name } : {}), ...(seat.model ? { model: seat.model } : {}), ...(seat.effort ? { effort: seat.effort } : {}) }); }
+      catch (e) {
+        log(`team ${team.id}: seat @${seat.role.id} failed: ${(e as Error).message}`);
+        return { reason: `@${seat.role.id} : ${(e as Error).message}`, team: teams.get(team.id)! };
+      }
+    }
+    return { team: teams.get(team.id)! };
+  }
+
+  /** The chat's team card (roles spec §3.8): launched once, from the card's own fields; its outcome stays on the card. */
+  const teamCardsInFlight = new Set<string>();
+  async function launchTeamFromCard(rid: string, qid: string, reply: Reply): Promise<void> {
+    const card = cardOf(cardThreads, qid);
+    const p = card?.chat.team(qid);
+    if (!card || !p) return reply({ type: 'team.failed', rid, reason: 'carte d\'équipe inconnue' });
+    if (p.teamId) return reply({ type: 'team.failed', rid, reason: 'équipe déjà lancée', ...(teams.get(p.teamId) ? { team: teams.get(p.teamId)! } : {}) });
+    if (teamCardsInFlight.has(qid)) return reply({ type: 'team.failed', rid, reason: 'lancement déjà en cours' });
+    teamCardsInFlight.add(qid);
+    try {
+      const r = await launchTeam({ cwd: p.cwd, ...(p.template ? { template: p.template } : { seats: p.seats.map(s => ({ role: s.role, tool: s.tool, ...(s.model ? { model: s.model } : {}), ...(s.effort ? { effort: s.effort } : {}), ...(s.name ? { name: s.name } : {}) })) }), name: p.name });
+      if ('reason' in r) {
+        card.chat.markTeam(qid, { error: r.reason, ...(r.team ? { teamId: r.team.id, launchedAt: now() } : {}) }, card.emit);
+        return reply({ type: 'team.failed', rid, reason: r.reason, ...(r.team ? { team: r.team } : {}) });
+      }
+      card.chat.markTeam(qid, { teamId: r.team.id, launchedAt: now() }, card.emit);
+      reply({ type: 'team.launched', rid, team: r.team });
+    } finally { teamCardsInFlight.delete(qid); }
+  }
+
+  /** The chat's task card row: given by Ledge, `@role` resolved in the card's team, or in the team its turn launched. */
+  function giveFromCard(msg: Extract<ClientMessage, { type: 'task.cmd' }>, reply: Reply): void {
+    const qid = msg.qid!; const row = msg.row ?? 0;
+    const card = cardOf(cardThreads, qid);
+    const c = card?.chat.task(qid, row);
+    if (!card || !c) return reply({ type: 'task.result', rid: msg.rid, reason: 'carte de tâche inconnue' });
+    if (c.taskId) return reply({ type: 'task.result', rid: msg.rid, reason: `déjà confiée (${c.taskId})` });
+    const team = c.team ?? card.chat.team(qid)?.teamId;
+    if (c.to.startsWith('@') && !team) return reply({ type: 'task.result', rid: msg.rid, reason: 'active une fois l\'équipe lancée' });
+    const r = tasks.run({ type: 'task.cmd', rid: msg.rid, by: LEDGE_GIVER, op: 'give', to: c.to, title: c.title, ...(c.text ? { text: c.text } : {}), ...(team ? { team } : {}) });
+    if (r.task) card.chat.markTask(qid, row, { taskId: r.task.id, ownerName: r.task.ownerName, state: r.task.state, givenAt: now() }, card.emit);
+    else card.chat.markTask(qid, row, { error: r.reason ?? 'refusée' }, card.emit);
+    reply(r);
+  }
+
+  /** `team.resume`: each seat's archived or ended session continues its own conversation, so the team comes back as it was. */
+  async function resumeTeam(t: Team): Promise<string | null> {
+    if (t.state === 'dissolved') return `l'équipe ${t.name} est dissoute`;
+    const failures: string[] = [];
+    for (const seat of t.seats) {
+      const s = seat.sessionId ? store.get(seat.sessionId) : undefined;
+      if (!s || s.state !== 'exited') continue;
+      const key = resumeKey(s);
+      if (!key) { failures.push(`@${seat.role} : aucune conversation à reprendre`); continue; }
+      const refused = await respawn(s, key, s.model, s.effort);
+      if (refused) failures.push(`@${seat.role} : ${refused}`);
+    }
+    return failures.length ? failures.join(' ; ') : null;
   }
   /** The scan in flight (lot 11): a `repos.scan` arriving while one walks gets that walk's result, under its own requestId. */
   let scanning: ReturnType<typeof scanRepos> | null = null;
@@ -956,9 +1074,66 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return;
       }
       // An agent's message to another session: acked at once, typed when the target is free.
-      case 'session.message': return reply(mailbox.submit(msg));
+      case 'session.message': {
+        // `@role` names a seat of the sender's team (roles spec §3.6).
+        const r = resolveRoleAddress(msg.to, msg.from, store.all(), teams.all());
+        if ('reason' in r) return reply({ type: 'message.ack', rid: msg.rid, outcome: 'refused', reason: r.reason });
+        return reply(mailbox.submit({ ...msg, to: r.to }));
+      }
       case 'message.read': return reply(mailbox.read(msg));
-      case 'task.cmd': return reply(tasks.run(msg));
+      case 'task.cmd': {
+        // The chat's task card (roles spec §3.8) gives through its turn, which then follows its task.
+        if (msg.qid !== undefined && msg.op === 'give') return giveFromCard(msg, reply);
+        return reply(tasks.run(msg));
+      }
+      case 'roles.list': {
+        const cwd = msg.cwd ? await resolveFolder(msg.cwd, opts.home).catch(() => undefined) : undefined;
+        return reply({ type: 'roles.listing', ...(msg.requestId ? { requestId: msg.requestId } : {}), ...listDefinitions(cwd) });
+      }
+      case 'team.launch': {
+        if (msg.qid !== undefined) return launchTeamFromCard(msg.rid, msg.qid, reply);
+        if (!msg.cwd) return reply({ type: 'team.failed', rid: msg.rid, reason: 'il faut un dossier' });
+        const r = await launchTeam({ cwd: msg.cwd, ...(msg.template ? { template: msg.template } : {}), ...(msg.seats ? { seats: msg.seats } : {}), ...(msg.name ? { name: msg.name } : {}) });
+        return reply('reason' in r ? { type: 'team.failed', rid: msg.rid, reason: r.reason, ...(r.team ? { team: r.team } : {}) } : { type: 'team.launched', rid: msg.rid, team: r.team });
+      }
+      case 'team.join': {
+        const s = store.get(msg.session); if (!s) return refuse(unknownSession());
+        const role = findRole(msg.role, s.cwd);
+        if (!role) return refuse(`rôle inconnu : ${msg.role} (aucun fichier .ledge/roles/${msg.role}.md)`);
+        const r = teams.join(msg.team, msg.session, role.id, role.label);
+        if (typeof r === 'string') return refuse(r);
+        // Its role and its teammates reach it at its next free moment, as its next start would tell it.
+        const text = seatContext({ role, team: { name: r.name, members: teammates(r, store.all()).filter(m => m.name !== s.name) } });
+        mailbox.notify(s.id, formatTeamNotice({ team: r.id, text }), `${r.id}:join:${s.id}:${now()}`);
+        log(`${s.name} joined team ${r.id} as @${role.id}`);
+        return;
+      }
+      case 'team.leave': {
+        const r = teams.leave(msg.team, msg.session);
+        if (typeof r === 'string') return refuse(r);
+        return;
+      }
+      case 'team.resume': {
+        const t = teams.get(msg.team); if (!t) return refuse(`aucune équipe ${msg.team}`);
+        const refused = await resumeTeam(t);
+        if (refused) refuse(refused);
+        return;
+      }
+      case 'team.dissolve': {
+        const r = teams.dissolve(msg.team);
+        if (typeof r === 'string') return refuse(r);
+        return;
+      }
+      case 'team.save': {
+        try {
+          const path = saveTemplate(msg.name, msg.seats);
+          const card = msg.qid ? cardOf(cardThreads, msg.qid) : undefined;
+          if (card && card.chat.team(msg.qid!)) card.chat.markTeam(msg.qid!, { savedPath: path }, card.emit);
+          log(`team template saved: ${path}`);
+          return reply({ type: 'team.saved', rid: msg.rid, path });
+        }
+        catch (e) { return reply({ type: 'team.saved', rid: msg.rid, reason: (e as Error).message }); }
+      }
       // A chat card's instruction: a refusal reaches the requester as an `error`, the card's state everyone through chat.history.
       case 'session.relay': return relay.request(msg.qid);
       case 'session.relay.cancel': return relay.cancel(msg.qid);
@@ -1107,6 +1282,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     omp,
     closeSession: id => { const s = store.get(id); return s ? closeSession(s) : Promise.reject(unknownSession()); },
     labelExited,
-    close: () => new Promise(res => { unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); tasks.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
+    close: () => new Promise(res => { unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); tasks.close(); unsubscribeTeams(); teams.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
   };
 }

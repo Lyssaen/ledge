@@ -21,10 +21,24 @@ export type ProjectBlock = z.infer<typeof ProjectBlockSchema>;
 export const CloseBlockSchema = z.object({ session: z.string().trim().min(1) });
 export type CloseBlock = z.infer<typeof CloseBlockSchema>;
 
-export type BlockKind = 'session' | 'relay' | 'project' | 'close';
-const FENCES = ['```ledge-session', '```ledge-relay', '```ledge-project', '```ledge-close'];
+/** What the chat harness writes in its ```ledge-team block (roles spec §3.8): a folder and a template, or a name and ad hoc
+ *  seats; the daemon checks the folder and the roles. */
+export const TeamBlockSchema = z.object({
+  cwd: z.string().trim().min(1), template: z.string().trim().min(1).max(64).optional(), name: z.string().trim().min(1).max(60).optional(),
+  seats: z.array(z.object({ role: z.string().trim().min(1).max(40), tool: z.enum(['claude', 'codex', 'cursor', 'omp']).optional(), model: z.string().max(200).optional(), effort: z.string().max(20).optional(), name: z.string().max(40).optional() })).min(1).max(8).optional()
+}).refine(b => !!b.template || !!b.seats?.length, 'a template or seats');
+export type TeamBlock = z.infer<typeof TeamBlockSchema>;
+
+/** What the chat harness writes in its ```ledge-task block (roles spec §3.8): a session id or `@role`, a title, a detail. */
+export const TaskBlockSchema = z.object({
+  to: z.string().trim().min(1).max(80), team: z.string().trim().max(40).optional(), title: z.string().trim().min(1).max(200), text: z.string().max(20000).optional()
+});
+export type TaskBlock = z.infer<typeof TaskBlockSchema>;
+
+export type BlockKind = 'session' | 'relay' | 'project' | 'close' | 'team' | 'task';
+const FENCES = ['```ledge-session', '```ledge-relay', '```ledge-project', '```ledge-close', '```ledge-team', '```ledge-task'];
 /** A block from its fence to the closing fence, or to the end of the text when it is not closed (yet). */
-const BLOCK = /```ledge-(session|relay|project|close)[ \t]*\n?([\s\S]*?)(?:```|$)/g;
+const BLOCK = /```ledge-(session|relay|project|close|team|task)[ \t]*\n?([\s\S]*?)(?:```|$)/g;
 
 /** The answer without its card blocks; every block in order (#24: several sessions in one answer), and the language and content of
  *  the last one (null when there is none), which decides the turn's card. */
@@ -57,6 +71,16 @@ export function parseRelayBlock(raw: string): RelayBlock | null {
 /** The block's JSON as a close, or null when it lacks a non-blank session. */
 export function parseCloseBlock(raw: string): CloseBlock | null {
   try { const r = CloseBlockSchema.safeParse(JSON.parse(raw)); return r.success ? r.data : null; } catch { return null; }
+}
+
+/** The block's JSON as a team, or null when it has no folder, or neither a template nor seats. */
+export function parseTeamBlock(raw: string): TeamBlock | null {
+  try { const r = TeamBlockSchema.safeParse(JSON.parse(raw)); return r.success ? r.data : null; } catch { return null; }
+}
+
+/** The block's JSON as a task, or null when it lacks a target or a title. */
+export function parseTaskBlock(raw: string): TaskBlock | null {
+  try { const r = TaskBlockSchema.safeParse(JSON.parse(raw)); return r.success ? r.data : null; } catch { return null; }
 }
 
 /** The block's JSON as a project proposal, or null when it breaks the schema (a name, 1 to 50 repositories with a reason, the bounds). */

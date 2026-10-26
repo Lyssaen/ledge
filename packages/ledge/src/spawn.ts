@@ -1,6 +1,6 @@
 import { basename, join } from 'node:path';
 import { randomBytes, randomUUID } from 'node:crypto';
-import type { Session, Tool } from '@ledge/protocol';
+import type { Autonomy, Session, Tool } from '@ledge/protocol';
 import { pickName } from '@ledge/protocol';
 import { paths } from './paths.js';
 import type { Tmux } from './tmux.js';
@@ -53,7 +53,8 @@ const PARENT_AGENT = new Set<string>(PARENT_AGENT_VARS);
  */
 export function agentEnv(base: NodeJS.ProcessEnv, extra: Record<string, string>): Record<string, string> {
   const env: Record<string, string> = {};
-  for (const [k, v] of Object.entries(base)) if (v !== undefined && k !== 'TMUX' && !k.startsWith('TMUX_') && !PARENT_AGENT.has(k)) env[k] = v;
+  // A seat's role and team are its own: an agent it starts gets them only when Ledge gives them (`extra`).
+  for (const [k, v] of Object.entries(base)) if (v !== undefined && k !== 'TMUX' && !k.startsWith('TMUX_') && !PARENT_AGENT.has(k) && k !== 'LEDGE_ROLE' && k !== 'LEDGE_TEAM') env[k] = v;
   return { ...env, ...extra };
 }
 
@@ -68,13 +69,17 @@ export interface SpawnOptions {
   name?: string; cwd: string; tmux: Tmux;
   /** Reuses this Ledge id (a resumed session keeps its own) instead of drawing a free one. */
   id?: string;
+  /** Its role (id and label) and the live team it sits in: in the agent's environment as LEDGE_ROLE and LEDGE_TEAM, and on the record. */
+  role?: { id: string; label: string }; team?: string;
+  /** The role's autonomy, as its arguments were built (`autonomyArgs`): kept on the record for a resume. */
+  autonomy?: Autonomy;
   /** Names and ids already in use, so the new session gets free ones. */
   taken: { names: Iterable<string>; ids: Iterable<string> };
   now?: () => string; env?: NodeJS.ProcessEnv;
 }
 
 /**
- * Creates the tmux session that runs the agent (with `LEDGE_SESSION` and `LEDGE_NAME` in its environment) and returns
+ * Creates the tmux session that runs the agent (with `LEDGE_SESSION`, `LEDGE_NAME`, and its role and team when it has them, in its environment) and returns
  * the session record in state `starting`. Shared by the terminal launcher (`ledge claude`) and the daemon's
  * `session.launch`; neither registration nor attachment happens here.
  */
@@ -92,7 +97,8 @@ export async function spawnSession(opts: SpawnOptions): Promise<Session> {
   // With recordExit, sh runs the agent with its argv untouched ("$@") and writes its exit code to
   // the file passed as $0, so the session can die naturally and the code is still readable.
   const command = opts.recordExit ? ['sh', '-c', '"$@"; echo $? > "$0"', exitFile(id), ...agent] : agent;
-  await opts.tmux.newSession({ name: tmuxSession, cwd: opts.cwd, env: agentEnv(env, { LEDGE_SESSION: id, LEDGE_NAME: name, ...(opts.tool === 'codex' ? { [CODEX_ENV_VAR]: id } : {}) }), unset: PARENT_AGENT_VARS, command });
+  await opts.tmux.newSession({ name: tmuxSession, cwd: opts.cwd, env: agentEnv(env, { LEDGE_SESSION: id, LEDGE_NAME: name, ...(opts.role ? { LEDGE_ROLE: opts.role.id } : {}), ...(opts.team ? { LEDGE_TEAM: opts.team } : {}), ...(opts.tool === 'codex' ? { [CODEX_ENV_VAR]: id } : {}) }), unset: PARENT_AGENT_VARS, command });
   const at = now();
-  return { id, name, tool: opts.tool, cwd: opts.cwd, project, title: `${name} · ${project}`, tmuxSession, state: 'starting', helpers: [], startedAt: at, lastActivityAt: at, source: 'launcher', ...(agentSessionId ? { agentSessionId } : {}), ...(transcriptPath ? { transcriptPath } : {}) };
+  return { id, name, tool: opts.tool, cwd: opts.cwd, project, title: `${name} · ${project}`, tmuxSession, state: 'starting', helpers: [], startedAt: at, lastActivityAt: at, source: 'launcher', ...(agentSessionId ? { agentSessionId } : {}), ...(transcriptPath ? { transcriptPath } : {}),
+    ...(opts.role ? { role: opts.role.id, roleLabel: opts.role.label } : {}), ...(opts.team ? { team: opts.team } : {}), ...(opts.autonomy && opts.autonomy !== 'ask' ? { autonomy: opts.autonomy } : {}) };
 }

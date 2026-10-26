@@ -137,3 +137,67 @@ describe('ledge task (CLI)', () => {
     ].join('\n'));
   });
 });
+
+describe('tasks Ledge gives (roles spec §3.7)', () => {
+  let updates: Task[];
+  let teams: import('../src/daemon/teamsLive.js').TeamsLive;
+  beforeEach(async () => {
+    const { createTeamsLive } = await import('../src/daemon/teamsLive.js');
+    updates = [];
+    teams = createTeamsLive({ store, now: () => T0 });
+    tasks = createTasks({ store, mailbox: { notify }, teams, onLedgeTask: t => updates.push(t), now: () => T0 });
+  });
+
+  it('give by ledge: the owner gets the usual pointer from Ledge; every change reaches the fronts, never a terminal', () => {
+    const t = cmd('ledge', 'give', { to: 'Pim', title: 'Implémenter les rôles' }).task!;
+    expect(t).toMatchObject({ giver: 'ledge', giverName: 'Ledge', owner: 'pim', state: 'open' });
+    expect(told).toEqual([['pim', expect.stringContaining('from="Ledge"')]]);
+    expect(updates.map(u => u.state)).toEqual(['open']);
+    told = [];
+    cmd('pim', 'take', { task: t.id });
+    cmd('pim', 'done', { task: t.id, text: 'rôles lus au démarrage' });
+    expect(updates.map(u => u.state)).toEqual(['open', 'taken', 'done']);
+    // Nothing is typed anywhere for Ledge: the outcome is an item of « À toi ».
+    expect(told).toEqual([]);
+    expect(cmd('ledge', 'seen', { task: t.id }).task).toMatchObject({ seen: true });
+    expect(updates.at(-1)!.seen).toBe(true);
+    expect(cmd('pim', 'seen', { task: t.id }).reason).toBe('seul Ledge range ses propres tâches');
+  });
+
+  it('a pass between seats keeps Ledge as the giver; an owner that ends drops it to Ledge', () => {
+    const t = cmd('ledge', 'give', { to: 'pim', title: 'Relire' }).task!;
+    const passed = cmd('pim', 'pass', { task: t.id, to: 'Nova' }).task!;
+    expect(passed).toMatchObject({ giver: 'ledge', owner: 'nova' });
+    told = [];
+    store.upsert({ ...store.get('nova')!, state: 'exited' });
+    expect(updates.at(-1)).toMatchObject({ id: t.id, state: 'dropped' });
+    expect(told).toEqual([]);
+  });
+
+  it('@role names a seat of a team: the giver’s own for a session, the named one for Ledge; list by team', () => {
+    const team = teams.create({ name: 'ledge-roles', project: 'ledge', cwd: '/w/ledge', roles: ['lead', 'qa'] });
+    teams.seat(team.id, 'lead', store.get('otto')!, 'Chef'); teams.seat(team.id, 'qa', store.get('pim')!, 'QA');
+    const t = cmd('otto', 'give', { to: '@qa', title: 'Teste' }).task!;
+    expect(t).toMatchObject({ owner: 'pim', team: team.id, giver: 'otto' });
+    expect(cmd('nova', 'give', { to: '@qa', title: 'x' }).reason).toBe("@qa n'existe que dans une équipe");
+    expect(cmd('ledge', 'give', { to: '@qa', title: 'x' }).reason).toBe("@qa n'existe que dans une équipe");
+    const l = cmd('ledge', 'give', { to: '@lead', team: team.id, title: 'Mène' }).task!;
+    expect(l).toMatchObject({ owner: 'otto', giver: 'ledge', team: team.id });
+    expect(cmd('ledge', 'give', { to: '@ops', team: team.id, title: 'x' }).reason).toContain("personne ne tient @ops dans l'équipe ledge-roles");
+    expect(cmd('ledge', 'list', { team: team.id }).tasks!.map(x => x.id)).toEqual([t.id, l.id]);
+    expect(cmd('ledge', 'list').tasks!.map(x => x.id)).toEqual([l.id]);
+    expect(cmd('ledge', 'list', { team: 'team-0000' }).reason).toBe('aucune équipe team-0000');
+    // Ledge reads any task, the ones the seats gave each other too.
+    expect(cmd('ledge', 'show', { task: t.id }).task!.id).toBe(t.id);
+  });
+});
+
+describe('ledge task from a session never gives as Ledge', () => {
+  it('taskOnClient refuses `by: ledge` before sending anything', async () => {
+    const { taskOnClient } = await import('../src/cli/task.js');
+    const sent: unknown[] = [];
+    const client = { send: (m: unknown) => sent.push(m), next: async () => { throw new Error('no'); }, close: async () => {} };
+    expect(await taskOnClient(client as never, ['give', 'Pim', 'x'], 'ledge', 100)).toEqual({ line: 'refusé : seul Ledge confie une tâche en son nom', code: 1 });
+    expect(sent).toEqual([]);
+  });
+});

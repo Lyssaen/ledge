@@ -1,15 +1,15 @@
 import { randomUUID } from 'node:crypto';
-import { TASK_TEXT_MAX, TASK_TITLE_MAX, type ClientMessage, type Task } from '@ledge/protocol';
+import { LEDGE_GIVER, TASK_TEXT_MAX, TASK_TITLE_MAX, type ClientMessage, type Task } from '@ledge/protocol';
 import { connect, type Client } from '../client.js';
 import { CODEX_HOOK_VAR } from '../spawn.js';
 
-export const TASK_USAGE = `ledge task give <nom> "<titre>" ["<détail>"]   confier un travail à une session
+export const TASK_USAGE = `ledge task give <nom|@rôle> "<titre>" ["<détail>"]   confier un travail à une session (@rôle : dans ton équipe)
 ledge task list [--all]                         tes tâches (tenues ou confiées), ouvertes ; --all : closes aussi
 ledge task show <id>                            une tâche, son détail et son historique
 ledge task take <id>                            la prendre
 ledge task done <id> ["<résultat>"]             la terminer (la session qui l'a confiée est prévenue)
 ledge task refuse <id> "<raison>"               la refuser, ou l'annuler si tu l'as confiée
-ledge task pass <id> <nom> ["<note>"]           la passer à une autre session`;
+ledge task pass <id> <nom|@rôle> ["<note>"]     la passer à une autre session`;
 /** One deadline for connect and answer: Codex kills a hook after 5 s, and the hook calls this in-process. */
 const TASK_MS = 4000;
 const ID = /^t[0-9a-f]{6}$/;
@@ -52,6 +52,8 @@ export function formatTask(t: Task): string {
 export async function taskOnClient(client: Client, args: string[], by: string, ms: number): Promise<{ line: string; code: number }> {
   const op = taskArgs(args);
   if (!op) return { line: TASK_USAGE, code: 1 };
+  // Only a front gives in Ledge's name (roles spec §3.7): never a session, whatever its environment says.
+  if (by === LEDGE_GIVER) return { line: 'refusé : seul Ledge confie une tâche en son nom', code: 1 };
   try {
     client.send({ type: 'task.cmd', rid: randomUUID(), by, ...op });
     const r = await client.next('task.result', ms);
