@@ -42,12 +42,15 @@ export function chatView(turns: readonly ChatTurn[], live: { qid: string; text: 
 
 export const chatLines = (turns: readonly ChatTurn[], live: { qid: string; text: string } | null, o: { t: Messages; g: Glyphs; width: number }): Line[] => chatView(turns, live, o).lines;
 
-/** What was asked, oldest first, each once (at its last time): the questions of the conversation, after those asked since
- *  the TUI started in conversations cleared since. */
-export function askHistory(turns: readonly ChatTurn[], sent: readonly string[]): string[] {
-  const all = [...sent, ...turns.map(x => x.question)];
+/** What was asked, oldest first by its time, each once (at its last time): the questions of the conversation, and those
+ *  asked since the TUI started, in conversations cleared since or never answered. */
+export function askHistory(turns: readonly ChatTurn[], sent: readonly Asked[]): string[] {
+  const all = [...sent, ...turns].sort((a, b) => a.askedAt.localeCompare(b.askedAt)).map(x => x.question);
   return all.filter((q, i) => all.lastIndexOf(q) === i);
 }
+
+/** A question asked from the TUI, at its time. */
+export type Asked = Pick<ChatTurn, 'question' | 'askedAt'>;
 
 /** A card the answer carries, to act on with ↵. */
 export type Card =

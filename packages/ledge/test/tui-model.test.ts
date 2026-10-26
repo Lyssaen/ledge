@@ -229,8 +229,16 @@ describe('tui chat', () => {
   });
 
   it('the history of the field: the questions of the conversation, after the ones cleared since, each once', () => {
-    expect(askHistory([turn({ question: 'B' }), turn({ qid: 'q2', question: 'C' })], ['A', 'B'])).toEqual(['A', 'B', 'C']);
+    const at = (s: number) => `2026-10-09T18:00:0${s}.000Z`;
+    expect(askHistory([turn({ question: 'B', askedAt: at(2) }), turn({ qid: 'q2', question: 'C', askedAt: at(3) })],
+      [{ question: 'A', askedAt: at(1) }, { question: 'B', askedAt: at(2) }])).toEqual(['A', 'B', 'C']);
     expect(askHistory([turn({ question: 'A' })], [])).toEqual(['A']);
+  });
+
+  it('the history of the field: a question that never got its turn (not sent) comes at its time, not first', () => {
+    const at = (s: number) => `2026-10-09T18:00:0${s}.000Z`;
+    expect(askHistory([turn({ question: 'B', askedAt: at(2) })], [{ question: 'B', askedAt: at(2) }, { question: 'D', askedAt: at(4) }]))
+      .toEqual(['B', 'D']);
   });
 
   it('keeps the cards still to act on, newest turn first', () => {

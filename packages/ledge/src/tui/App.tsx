@@ -57,7 +57,7 @@ function Shell({ client, lang, setLang: setLangState, saveLang, notify, glyphs, 
   const [lastToast, setToast] = useState<Toast | null>(null);
   const [editing, setEditingState] = useState(false);
   const keys = useRef<KeyHandler | null>(null);
-  const kept = useRef<Kept>({ drafts: new Map(), sent: new Map() }).current;
+  const kept = useRef<Kept>({ drafts: new Map(), sent: new Map(), asked: [] }).current;
   // When ctrl+c was last pressed with a draft waiting.
   const armed = useRef(0);
 

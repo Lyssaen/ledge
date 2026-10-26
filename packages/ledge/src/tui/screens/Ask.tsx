@@ -57,9 +57,10 @@ export function Ask() {
     if (!text.trim()) return;
     if (!local?.ready) { toast({ text: t.ask.offline, tone: 'info' }); return; }
     const qid = `q-${randomUUID()}`;
-    daemonStore.beginTurn({ qid, question: text.trim(), askedAt: new Date().toISOString(), steps: [] });
-    client.send({ type: 'chat.ask', qid, text: text.trim() });
-    kept.sent.set('ask', [...(kept.sent.get('ask') ?? []), text.trim()]);
+    const asked = { question: text.trim(), askedAt: new Date().toISOString() };
+    daemonStore.beginTurn({ qid, ...asked, steps: [] });
+    client.send({ type: 'chat.ask', qid, text: asked.question });
+    kept.asked.push(asked);
     // An entry of the history asked again leaves the draft as it was.
     if (!fromHistory) setDraft('');
   };
@@ -148,7 +149,7 @@ export function Ask() {
   const stop = asking ? [['ctrl+c', t.keys.stopAnswer] as const] : [];
   const card = cards[focus];
   // What was asked: the conversation's questions, not only this run's.
-  const history = askHistory(d.chat, kept.sent.get('ask') ?? []);
+  const history = askHistory(d.chat, kept.asked);
   const keys: Array<readonly [string, string]> = confirm ? [['n esc', t.keys.keep], ['y', t.keys.wipe]]
     : focus === -1 && browsing ? [['↵', t.keys.resend], ['↑ ↓', t.keys.history], ['esc', t.keys.backToDraft]]
     : focus === -1 ? [['↵', t.keys.sendOnly], ['alt+↵', t.keys.newLine], ['esc', t.keys.back], ['PgUp PgDn', t.keys.scroll], ['↑ ↓', t.keys.history], ['tab', cards.length ? t.keys.nextCard : t.keys.conversation], ['ctrl+n', t.keys.newChat], ...stop]

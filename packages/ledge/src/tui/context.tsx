@@ -3,6 +3,7 @@ import type { Key } from 'ink';
 import type { DaemonClient, DaemonState, Fleet, MachineState } from '@ledge/fleet';
 import type { Projects, Session } from '@ledge/protocol';
 import type { Actions, Toast } from './actions.js';
+import type { Asked } from './model/chat.js';
 import type { Glyphs } from './glyphs.js';
 import type { Lang, Messages } from './i18n/lang.js';
 
@@ -11,7 +12,7 @@ export const SCREENS: readonly Screen[] = ['overview', 'session', 'ask', 'launch
 
 /** What the fields keep while the TUI runs, a screen left or not: each one's draft and what it sent, by field (`ask`, or a
  *  session's id). */
-export interface Kept { drafts: Map<string, string>; sent: Map<string, string[]> }
+export interface Kept { drafts: Map<string, string>; sent: Map<string, string[]>; asked: Asked[] }
 
 /** A screen's keys: true when it took the key (the global keys then leave it alone). */
 export type KeyHandler = (input: string, key: Key) => boolean;
