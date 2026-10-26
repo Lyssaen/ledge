@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from 'react';
 import {
   PhoneClientMessageSchema, type Assertion, type CapabilitiesByTool, type Credential, type PhoneClientMessage, type PhonePending, type PhoneServerMessage,
-  type PhoneSession, type PushSubscription, type ThreadItem
+  type PhoneSession, type PhoneTask, type PhoneTeam, type PushSubscription, type ThreadItem
 } from '@ledge/protocol';
 import type { PhoneLink } from '../link/link';
 import { getAssertion } from '../link/webauthn';
@@ -37,6 +37,10 @@ export interface MobileState {
   /** When the PC last said something about its sessions. */
   syncedAt: string | null;
   ops: Record<string, Op>;
+  /** The PC's live teams with the progress of Ledge's tasks; null from a PC that sends none (ledge home spec §2.4). */
+  teams: PhoneTeam[] | null;
+  /** The tasks Ledge gave, by id: the open ones and those closed lately, not put away. Never cached. */
+  tasks: Map<string, PhoneTask>;
 }
 
 /** The request a challenge is asked for, as `session.decide` names it. */
@@ -111,6 +115,14 @@ export interface MobileStore {
   launch(qid: string, rows?: number[]): Promise<ChatAction>;
   /** Closes the turn's sessions (`rows`, or all of them), after the device's confirmation. (Not `close`: that stops the store.) */
   closeSessions(qid: string, rows?: number[]): Promise<ChatAction>;
+  /** Launches the turn's team (roles spec §3.8), after the device's confirmation like a launch card. */
+  launchTeam(qid: string): Promise<ChatAction>;
+  /** Gives the turn's task `row` to its seat, in Ledge's name. */
+  giveTask(qid: string, row: number): Promise<ChatAction>;
+  /** Wakes a resting team. */
+  resumeTeam(team: string): Promise<ChatAction>;
+  /** Puts away a closed task Ledge gave: it leaves « À toi » and « À traiter ». */
+  seeTask(task: string): Promise<ChatAction>;
   /** Stops listening to the link and every timer. */
   close(): void;
 }
@@ -133,7 +145,9 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     daemon: last?.daemon ?? null,
     fresh: false,
     syncedAt: last?.syncedAt ?? null,
-    ops: loadOps(storage)
+    ops: loadOps(storage),
+    teams: null,
+    tasks: new Map()
   };
   let reads = loadReads(storage);
   /** The PC's boot id of this run, from its snapshot; null until one, and when the PC sends none. Never cached. */
@@ -274,6 +288,15 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         if (m.device?.chat && !historyAsked && ready()) askHistory();
         return;
       }
+      case 'teams':
+        set({ teams: m.teams });
+        return;
+      case 'tasks':
+        set({ tasks: new Map(m.tasks.map(x => [x.id, x])) });
+        return;
+      case 'task.updated':
+        set({ tasks: new Map(state.tasks).set(m.task.id, m.task) });
+        return;
       case 'session.updated': {
         const sessions = new Map(state.sessions).set(m.session.id, keepBody(state.sessions.get(m.session.id)?.pending, m.session));
         set({ sessions, syncedAt: now });
@@ -407,7 +430,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
   /** The link has no PC any more (forgotten, or pairing a new one): nothing of the old PC is kept or sent again. */
   function forget() {
     const held = chatState.turns.length || chatState.live || chatState.error || state.sessions.size || state.threads.size || state.previews.size || state.daemon || state.capabilities
-      || state.device || state.syncedAt || Object.keys(state.ops).length || Object.keys(reads).length || lastThread !== null;
+      || state.device || state.syncedAt || state.teams || state.tasks.size || Object.keys(state.ops).length || Object.keys(reads).length || lastThread !== null;
     if (!held) return;
     for (const id of [...timers.keys()]) stopTimer(id);
     reads = {};
@@ -420,7 +443,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     previewsDirty = false;
     clearLastState(storage);
     clearOps(storage);
-    set({ sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, fresh: false, syncedAt: null, ops: {} });
+    set({ sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, fresh: false, syncedAt: null, ops: {}, teams: null, tasks: new Map() });
   }
 
   let wasReady = ready();
@@ -608,6 +631,45 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         const op = write(o => ({ type: 'chat.close', op: o, qid, ...(rows ? { rows } : {}), assertion: signed }));
         // The link dropped after the passkey: the PC never got it, so the card stays as it was and can be tapped again.
         return op === null ? { status: 'expired' } : finalOf(op);
+      });
+    },
+
+    launchTeam(qid) {
+      return chatAction(`team:${qid}`, async () => {
+        // Like a launch card: a phone without a passkey cannot confirm, the PC would refuse.
+        if (!state.device?.confirm) return { status: 'rejected', reason: 'confirm_required' };
+        let challenge: ConfirmChallenge;
+        try { challenge = await store.prepareConfirm({ purpose: 'launch', qid }); }
+        catch (e) { return { status: e instanceof Error && e.message === 'timeout' ? 'expired' : 'failed' }; }
+        if (!challenge.credentialId) return { status: 'rejected', reason: 'confirm_required' };
+        const at = Date.now();
+        const signed = await getAssertion({ challenge: challenge.challenge, rpId: challenge.rpId, credentialId: challenge.credentialId }).catch(() => 'failed' as const);
+        if (signed === 'cancelled') return { status: 'cancelled' };
+        if (signed === 'failed') return { status: 'failed' };
+        if (Date.now() - at >= challenge.expiresInMs) return { status: 'expired' };
+        const op = write(o => ({ type: 'chat.team', op: o, qid, assertion: signed }));
+        return op === null ? { status: 'expired' } : finalOf(op);
+      });
+    },
+
+    giveTask(qid, row) {
+      return chatAction(`task:${qid}:${row}`, async () => {
+        const op = write(o => ({ type: 'chat.task', op: o, qid, row }));
+        return op === null ? { status: 'failed' } : finalOf(op);
+      });
+    },
+
+    resumeTeam(team) {
+      return chatAction(`resume:${team}`, async () => {
+        const op = write(o => ({ type: 'team.resume', op: o, team }));
+        return op === null ? { status: 'failed' } : finalOf(op);
+      });
+    },
+
+    seeTask(task) {
+      return chatAction(`seen:${task}`, async () => {
+        const op = write(o => ({ type: 'task.seen', op: o, task }));
+        return op === null ? { status: 'failed' } : finalOf(op);
       });
     },
 

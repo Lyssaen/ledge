@@ -7,7 +7,16 @@ export const copy = {
     title: 'À traiter',
     subtitle: (n: number) => n === 0 ? 'Tout est calme' : n === 1 ? '1 demande. Choisissez par où commencer.' : `${n} demandes. Choisissez par où commencer.`,
     filtersLabel: 'Filtrer les demandes',
-    filters: { all: 'Tout', permission: 'Autorisations', question: 'Questions' },
+    filters: { all: 'Tout', permission: 'Autorisations', question: 'Questions', tasks: 'Tâches' },
+    /** With the closed tasks of Ledge (ledge home spec §2.4). */
+    subtitleTasks: (requests: number, tasks: number) => {
+      const r = requests === 0 ? '' : requests === 1 ? '1 demande' : `${requests} demandes`;
+      const t = tasks === 1 ? '1 tâche finie' : `${tasks} tâches finies`;
+      return `${r ? `${r} et ` : ''}${t}. Choisissez par où commencer.`;
+    },
+    taskDone: 'Tâche finie', taskClosed: 'Tâche close',
+    finishedTitle: (title: string) => `A fini « ${title} »`, refusedTitle: (title: string) => `A refusé « ${title} »`, droppedTitle: (title: string) => `A abandonné « ${title} »`,
+    ledgeTask: 'Tâche de Ledge', seeResult: 'Voir le résultat', putAway: 'Ranger',
     oldestFirst: 'LES PLUS ANCIENNES D’ABORD',
     examine: 'Examiner',
     lastKnown: 'Dernier état connu',
@@ -18,16 +27,39 @@ export const copy = {
     emptyFilterHint: 'Les autres demandes restent dans « Tout ».',
     offlineNote: 'Vous pouvez consulter les demandes. Aucune décision ne sera envoyée hors connexion.'
   },
-  nav: { label: 'Navigation principale', inbox: 'À traiter', agents: 'Agents', chat: 'Demander à Ledge' },
+  nav: { label: 'Navigation principale', inbox: 'À traiter', agents: 'Agents', chat: 'Ledge' },
   chat: {
     title: 'Ledge',
     subtitle: (agents: number, repos: number) => `Fil du téléphone · ${agents} ${agents > 1 ? 'agents' : 'agent'}, ${repos} ${repos > 1 ? 'repos' : 'repo'}`,
+    /** With teams (ledge home spec §2.4): Ledge is the operator. */
+    operator: (agents: number, teams: number) => `Opérateur · ${agents} ${agents > 1 ? 'agents' : 'agent'}, ${teams} ${teams > 1 ? 'équipes' : 'équipe'}`,
+    point: {
+      title: 'Le point', label: 'Le point', ago: (s: string) => `il y a ${s}`,
+      yours: 'À TOI', yoursLabel: 'À toi', teams: 'ÉQUIPES', teamsLabel: 'Équipes', given: 'CONFIÉES PAR LEDGE', givenLabel: 'Confiées par Ledge',
+      yes: 'Oui', no: 'Non', see: 'Voir', finished: 'a fini sa tâche', refused: 'a refusé sa tâche', dropped: 'a abandonné sa tâche',
+      seats: (n: number) => `${n} ${n > 1 ? 'postes' : 'poste'}`, resting: 'au repos', resume: 'Reprendre',
+      progress: (done: number, given: number) => `${done}/${given}`,
+      state: { open: 'ouverte', taken: 'prise', done: 'finie', refused: 'refusée', dropped: 'abandonnée' },
+      calm: 'Rien ne t’attend. Demande à Ledge ce que tu veux savoir ou faire.'
+    },
+    team: {
+      label: 'Équipe proposée', team: 'Équipe', seats: 'Postes', newTable: (project: string) => `nouvelle table dans la pièce ${project}`,
+      launch: 'Lancer l’équipe', launched: (at: string) => `Équipe lancée à ${at}`, byKey: 'confirmé avec la clé de l’appareil',
+      notLaunched: 'Pas lancée.', autonomy: { ask: 'ask', edits: 'edits', auto: 'auto' },
+      autoWarning: (who: string) => `${who} travaillera sans demander.`, openAgents: 'Voir la table'
+    },
+    task: {
+      label: 'Tâche à confier', give: 'Confier', waitTeam: 'active une fois l’équipe lancée',
+      given: (name: string, id: string, state: string) => `Confiée à ${name} · ${id} · ${state}`, notGiven: 'Pas confiée.'
+    },
     reset: 'Nouvelle conversation',
     empty: 'Posez une question sur vos agents et vos repos. Ce fil est propre à ce téléphone.',
     suggestions: {
       waiting: 'Qui attend quelque chose de moi ?',
       session: (name: string) => `Où en est ${name} sur le badge d'attente ?`,
-      repo: (repo: string) => `Qu'est-ce qui a changé dans ${repo} aujourd'hui ?`
+      repo: (repo: string) => `Qu'est-ce qui a changé dans ${repo} aujourd'hui ?`,
+      team: 'Monte une équipe…',
+      teamWhere: (name: string) => `Où en est ${name} ?`
     },
     stop: 'Arrêter',
     stepsLabel: 'Étapes',
@@ -67,7 +99,12 @@ export const copy = {
     working: 'Travaille sur les dernières modifications.',
     state: { working: 'Au travail', idle: 'Disponible', exited: 'Terminée', error: 'Erreur' },
     empty: 'Aucune session sur ce PC', emptyHint: 'Les agents lancés depuis Ledge apparaissent ici.',
-    open: (name: string, task: string) => `${name} · ${task}`
+    open: (name: string, task: string) => `${name} · ${task}`,
+    /** The tables of a project (atelier rooms spec, as the phone draws them). */
+    teamsWorking: (n: number) => n === 0 ? '' : ` · ${n} ${n > 1 ? 'équipes' : 'équipe'} au travail`,
+    tables: (label: string, n: number) => `${label} · ${n} ${n > 1 ? 'tables' : 'table'}`,
+    team: 'équipe · opérateur Ledge', common: 'table commune', resting: 'au repos', resume: 'Reprendre',
+    teamLabel: (name: string) => `Équipe ${name}`
   },
   link: {
     online: 'connecté', offline: 'déconnecté',

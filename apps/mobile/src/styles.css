@@ -19,6 +19,9 @@
   --color-danger-bg: #301b1d;
   --color-danger-btn: #8f3037;
   --color-line: #ffffff14;
+  /* A team's flag, and a seat's role pill (roles spec). */
+  --color-team: #b9a2ef;
+  --color-role: #f0a08f;
   --radius-card: 16px;
   --radius-control: 12px;
   --font-sans: 'Geist Variable', system-ui, sans-serif;
