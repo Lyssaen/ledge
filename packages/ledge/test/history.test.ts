@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { SessionEvent, Task, TaskTransmission } from '@ledge/protocol';
+import type { AttachmentRef, SessionEvent, Task, TaskTransmission } from '@ledge/protocol';
 import { History, MAX_ITEMS, SYNC_MS, handBack, crossSession } from '../src/daemon/history.js';
 import { formatLedgeMessage, formatLedgeNotice, formatLedgeTask, formatTeamNotice, mailId } from '../src/daemon/crossSession.js';
 import { paths } from '../src/paths.js';
@@ -569,6 +569,31 @@ describe('the outgoing card of a task (issue #92)', () => {
     h.recordTask('fce8', { task: { ...task, title: 'Relire tout' }, tr: tr() });
     expect(h.items('fce8')).toHaveLength(1);
     expect(h.items('fce8')[0]).toMatchObject({ summary: 'Relire tout' });
+  });
+});
+
+describe('History images on prompts', () => {
+  const id = 'c'.repeat(64);
+  const ref: AttachmentRef = { id, mime: 'image/webp', width: 10, height: 10, bytes: 100, preview: false };
+  const known = (x: string) => (x === id ? ref : null);
+  it('turns the attachment ids of a prompt into image refs, dropping unknown ones', () => {
+    const h = new History({ refOf: known });
+    const it = h.record('s', ev('UserPromptSubmit', { text: 'Regarde', attachments: [id, 'd'.repeat(64)] }));
+    expect(it).toMatchObject({ kind: 'prompt', text: 'Regarde', images: [ref] });
+  });
+  it('adds no images key without attachments, or when none is known', () => {
+    const h = new History({ refOf: known });
+    expect(h.record('s', ev('UserPromptSubmit', { text: 'Seul' }))).not.toHaveProperty('images');
+    expect(h.record('s', ev('UserPromptSubmit', { text: 'Inconnue', attachments: ['d'.repeat(64)] }))).not.toHaveProperty('images');
+  });
+  it('keeps an image-only prompt', () => {
+    const h = new History({ refOf: known });
+    expect(h.record('s', ev('UserPromptSubmit', { attachments: [id] }))).toMatchObject({ kind: 'prompt', text: '', images: [ref] });
+  });
+  it('protects the images a tmux agent prompt refers to from the sweep', async () => {
+    const h = new History({ dir: join(dir, 'h'), refOf: known });
+    h.record('s', ev('UserPromptSubmit', { text: 'Regarde', attachments: [id] }));
+    expect(await h.attachmentIds()).toEqual(new Set([id]));
   });
 });
 
