@@ -928,6 +928,94 @@ describe('ledge tui: teams (roles spec §3.9)', () => {
   });
 });
 
+describe('ledge tui: « Équipes » (6), the roles and templates catalog (#97)', () => {
+  const listing = (requestId?: string) => ({
+    type: 'roles.listing' as const, requestId,
+    roles: [
+      { id: 'build', label: 'Builder', prompt: '## Rôle\nTu implémentes une étape à la fois.', tool: 'claude' as const, model: 'opus', autonomy: 'edits' as const, source: 'repo' as const, path: '/w/ledge/.ledge/roles/build.md' },
+      { id: 'review', label: 'Relecteur', prompt: 'Tu relis sans modifier le code.', tool: 'codex' as const, source: 'repo' as const, path: '/w/ledge/.ledge/roles/review.md', shadows: '/h/.ledge/roles/review.md' },
+      { id: 'lead', label: 'Lead', prompt: 'Tu découpes le travail.', source: 'home' as const, path: '/h/.ledge/roles/lead.md' }
+    ],
+    templates: [{ id: 'workshop', name: 'workshop', seats: [{ role: 'lead' }, { role: 'build' }, { role: 'review', model: 'gpt-5.5-mini' }], source: 'repo' as const, path: '/w/ledge/.ledge/teams/workshop.yaml' }],
+    problems: [{ path: '/w/ledge/.ledge/roles/Design.md', reason: 'nom de fichier invalide' }]
+  });
+  const answer = (tui: Awaited<ReturnType<typeof startTui>>) => tui.daemon.onMessage(m => {
+    if (m.type === 'roles.list') tui.daemon.push(m.cwd ? listing(m.requestId) : { ...listing(m.requestId), roles: listing().roles.filter(r => r.source === 'home'), templates: [], problems: [] });
+  });
+
+  it('6 lists the selected session’s repository roles then the home’s; j k move, the detail follows; ← → shows the templates', async () => {
+    const tui = await startTui();
+    answer(tui);
+    try {
+      await tui.press('6');
+      await until(() => tui.frame().includes('dépôt · .ledge/roles'));
+      expect(sent(tui.daemon.received, 'roles.list')[0]).toMatchObject({ cwd: '/w/ledge' });
+      expect(tui.frame()).toContain('perso · ~/.ledge/roles');
+      expect(tui.frame()).toContain('@BUILD · BUILDER');
+      expect(tui.frame()).toContain('Tu implémentes une étape à la fois.');
+      await tui.press('j');
+      await until(() => tui.frame().includes('@REVIEW · RELECTEUR'));
+      expect(tui.frame()).toContain('remplace /h/.ledge/roles/review.md');
+      expect(tui.frame()).toContain('▣ workshop');
+      await tui.press('\u001b[C'); // →
+      await until(() => tui.frame().includes('dépôt · .ledge/teams'));
+      expect(tui.frame()).toContain('gpt-5.5-mini');
+    } finally { await tui.cleanup(); }
+  });
+
+  it('! shows the ignored files; c changes the folder and reads the roles again', async () => {
+    const tui = await startTui();
+    answer(tui);
+    try {
+      await tui.press('6');
+      await until(() => tui.frame().includes('1 fichier ignoré'));
+      await tui.press('!');
+      await until(() => tui.frame().includes('nom de fichier invalide'));
+      expect(tui.frame()).toContain('/w/ledge/.ledge/roles/Design.md');
+      await tui.press('!');
+      const before = sent(tui.daemon.received, 'roles.list').length;
+      await tui.press('c');
+      await until(() => sent(tui.daemon.received, 'roles.list').length === before + 1);
+      expect(sent(tui.daemon.received, 'roles.list').at(-1)!.cwd).not.toBe('/w/ledge');
+    } finally { await tui.cleanup(); }
+  });
+
+  it('↵ opens « Nouvelle session » with the role, and launches it with the role', async () => {
+    const tui = await startTui();
+    answer(tui);
+    try {
+      await tui.press('6');
+      await until(() => tui.frame().includes('@BUILD · BUILDER'));
+      await tui.press('j');
+      await until(() => tui.frame().includes('@REVIEW · RELECTEUR'));
+      await tui.press('\r');
+      await until(() => tui.frame().includes('NOUVELLE SESSION'));
+      expect(tui.frame()).toContain('@review');
+      await tui.press('Relis la PR');
+      await tui.press('\u0013'); // ctrl+s
+      await until(() => sent(tui.daemon.received, 'session.launch').length === 1);
+      expect(sent(tui.daemon.received, 'session.launch')[0]).toMatchObject({ tool: 'codex', cwd: '/w/ledge', role: 'review', prompt: 'Relis la PR' });
+    } finally { await tui.cleanup(); }
+  });
+
+  it('↵ on a template opens the team mode with it', async () => {
+    const tui = await startTui();
+    answer(tui);
+    try {
+      await tui.press('6');
+      await until(() => tui.frame().includes('@BUILD · BUILDER'));
+      await tui.press('\u001b[C'); // →
+      await until(() => tui.frame().includes('▣ WORKSHOP'));
+      await tui.press('\r');
+      await until(() => tui.frame().includes('NOUVELLE ÉQUIPE'));
+      await until(() => tui.frame().includes('L’équipe workshop s’installera'));
+      await tui.press('\u0013'); // ctrl+s
+      await until(() => sent(tui.daemon.received, 'team.launch').length === 1);
+      expect(sent(tui.daemon.received, 'team.launch')[0]).toMatchObject({ cwd: '/w/ledge', template: 'workshop' });
+    } finally { await tui.cleanup(); }
+  });
+});
+
 describe('ledge tui: a session near its context limit (context handover spec §3.2)', () => {
   it('« À toi » lists it, the card shows its context, H hands it over', async () => {
     const sessions = mockupSessions().map(s => (s.id === 'nova' ? { ...s, role: 'build', context: { used: 230_000, window: 272_000, at: T(0) } } : s));

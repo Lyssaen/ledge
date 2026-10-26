@@ -6,7 +6,7 @@ export const en: Messages = {
   lang: { fr: 'Français', en: 'English' },
   state: { approval: 'Needs you', question: 'A question', starting: 'Starting', idle: 'Available', working: 'Working', done: 'Finished', error: 'Error', readonly: 'Read-only' },
   time: { now: 'just now', decimal: '.', s: n => `${n}s`, min: n => `${n} min`, h: n => `${n} h`, d: n => `${n} d` },
-  tabs: { overview: 'Overview', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings' },
+  tabs: { overview: 'Overview', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings', teams: 'Teams' },
   bar: {
     sessions: n => `${n} ${plural(n, 'session', 'sessions')}`,
     machines: n => `${n} ${plural(n, 'machine', 'machines')}`,
@@ -24,7 +24,8 @@ export const en: Messages = {
     save: 'save the team', tasks: 'team tasks', join: 'join a team', resume: 'resume the team', teamMode: 'session or team', handover: 'hand over',
     sendOnly: 'send', newLine: 'new line', keepAndLeave: 'keep and leave', lineHistory: 'line · history', history: 'history',
     word: 'word', clear: 'clear', resend: 'send again', backToDraft: 'back to the draft', keep: 'keep', wipe: 'clear',
-    line: 'line', page: 'page', end: 'end', question: 'question', conversation: 'conversation', cycle: 'cards · conversation'
+    line: 'line', page: 'page', end: 'end', question: 'question', conversation: 'conversation', cycle: 'cards · conversation',
+    rolesTemplates: 'roles / templates', folder: 'folder', launchRole: 'launch with this role', launchTeam: 'launch this team', openFile: 'open the file', ignored: 'ignored'
   },
   overview: {
     yours: n => `Yours · ${n}`, projects: 'Projects', exchanges: 'Messages', terminal: name => `Terminal · ${name}`,
@@ -96,8 +97,20 @@ export const en: Messages = {
     teamPreview: (team, project) => `Team ${team} will sit at a new table in the ${project} room.`,
     teamLaunched: name => `✓ Team ${name} launched`, teamFailed: why => `Team not launched: ${why}`, noSeat: 'Choose at least one seat.'
   },
+  catalog: {
+    roles: 'roles', templates: 'templates', homeOnly: 'Personal only',
+    repoRoles: 'repository · .ledge/roles', homeRoles: 'personal · ~/.ledge/roles', repoTeams: 'repository · .ledge/teams', homeTeams: 'personal · ~/.ledge/teams',
+    repo: 'repository', home: 'personal', tool: 'agent', model: 'model', effort: 'effort', autonomy: 'autonomy', file: 'file', usedIn: 'in', heldBy: 'held by',
+    teams: 'teams', replaces: path => `replaces ${path}`, toolDefault: 'the agent’s default', noTemplate: 'no template', nobody: 'nobody', noTeam: 'none',
+    active: 'active', resting: 'resting', instruction: (n, max) => `Instruction · ${n}/${max}`, noInstruction: 'No instruction.',
+    seats: n => `${n} ${plural(n, 'seat', 'seats')}`,
+    autonomyShort: { ask: 'asks', edits: 'edits', auto: 'auto' },
+    ignored: n => `⚠ ${n} ${plural(n, 'file', 'files')} ignored`, see: 'see', problems: 'Ignored files', noProblem: 'No ignored file.',
+    loading: 'reading the roles…', noRole: 'No role here: write .ledge/roles/<id>.md', noTemplateHere: 'No template here: write .ledge/teams/<id>.yaml',
+    role: 'Role'
+  },
   settings: { title: 'Settings', language: 'Language', theme: 'Theme', themes: { auto: 'Auto', dark: 'Dark', light: 'Light' }, themeAuto: tone => `Auto (${tone} background)`, context: 'Max context', contextHint: 'past it: hand over', contextUnknown: 'update the daemon', contextSaved: pct => `Max context: ${pct} %`, saved: 'Setting saved.', saveFailed: m => `Setting applied, but not saved: ${m}` },
-  help: { title: 'Help', global: 'Everywhere', overview: 'Overview', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings', screens: 'switch screen', field: 'Typing', wordBefore: 'delete the word before',
+  help: { title: 'Help', global: 'Everywhere', overview: 'Overview', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings', screens: 'switch screen', teams: 'Teams', field: 'Typing', wordBefore: 'delete the word before',
     more: (above, below) => [above ? `↑ ${above} above` : '', below ? `↓ ${below} below` : ''].filter(Boolean).join(' · ') },
   toast: {
     handover: n => `${n} is writing its brief: a fresh session will take its place`, handoverRefused: why => `Relief refused: ${why}`,
@@ -112,7 +125,8 @@ export const en: Messages = {
     noTerminal: n => `No terminal for ${n}.`, attachFailed: code => `tmux stopped with code ${code}.`,
     modelSwitch: 'This daemon cannot change a running session’s model.',
     joined: (n, team) => `${n} joins ${team}.`, resumed: team => `Asked to resume team ${team}.`, saved: path => `Team saved: ${path}`,
-    draftKept: 'Draft kept: r to pick it up.', draftQuit: 'Draft in progress: ctrl+c again to quit anyway (it will be lost).'
+    draftKept: 'Draft kept: r to pick it up.', draftQuit: 'Draft in progress: ctrl+c again to quit anyway (it will be lost).',
+    exited: (cmd, code) => `${cmd} exited with code ${code}.`
   },
   decisions: {
     failed: (name, message) => `Could not send the decision to ${name}: ${message}`,
