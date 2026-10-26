@@ -138,7 +138,7 @@
  .st-keys-tip{left:calc(100% + 6px);bottom:8px} /* the rail's foot is a column: the tooltip opens beside it */
  .st-ask{margin:10px 8px 0;padding:0;justify-content:center;border:0;background:none}.st-ask input,.st-ask kbd{display:none}
  .st-views{flex-direction:column;margin:10px 8px 6px}.st .st-views button{font-size:0;gap:0}.st-views small{display:none}
- .st-attn,.st-label,.st-help,.st-agent,.st-branch,.st-more,.st-archives{display:none}
+ .st-attn,.st-label,.st-help,.st-agent,.st-branch,.st-common,.st-team,.st-more,.st-archives{display:none}
  .st .st-views button{justify-content:center;padding:0}.st-views .st-fill{display:none}
  .st-project{justify-content:center;padding:0;min-height:36px}.st-project>.st-chev,.st-project>.st-gap,.st-project .st-main,.st-project .st-acts{display:none}
  .st-project .side-swatch{width:16px;height:16px;border-radius:5px}
@@ -155,11 +155,20 @@
 .st-ledge input{height:26px;padding:0 6px;border:1px solid var(--input)!important;border-radius:var(--radius-sm);background:var(--sidebar)!important}
 .st-ledge.on{background:color-mix(in srgb,var(--sidebar-primary) 8%,var(--well))}
 @media(max-width:850px){.st-ask.st-ledge{padding:0}.st-ledge .st-ledge-names{display:none}.st-ledge .st-ledge-entry{justify-content:center}}
-/* Teams in the tree (atelier rooms spec §3.4): « table commune », then ⚑ team rows holding their seats. */
-.st-row.st-team .team-flag{color:var(--sidebar-primary);font-size:12px;width:14px;text-align:center;flex:none}
-.st-row.st-team .st-main span,.st-row.st-common .st-main span{color:var(--muted-foreground);font-size:11px;margin-left:6px}
-.st-row.st-common .st-main span{margin-left:0}
-.st-row.st-team.resting{opacity:.7}
-.st .role-pill{margin-left:6px;font-size:10px;line-height:14px;vertical-align:1px}
+/* Teams in the tree (atelier rooms spec §3.4): « table commune », then a team per row, on one line as a project's: the flag in
+   its project's colour (--team), the name, « équipe » small, and the bar of the tasks Ledge gave. Resting: flag and name dimmed. */
+.st-common .st-main span{font-size:11px}
+.st-team{--team:var(--sidebar-primary)}
+.st-flag{display:grid;flex:none;color:var(--team)}
+.st-team .st-main{flex-direction:row;align-items:baseline;gap:6px}
+.st-team .st-main strong{flex:none;max-width:60%}
+.st-team .st-main span{font-size:11px}
+.st-team.resting .st-flag,.st-team.resting .st-main strong{opacity:.55}
+.st-progress{display:flex;align-items:center;gap:6px;flex:none;font:10px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.st-progress i{width:28px;height:4px;border-radius:999px;background:var(--secondary);overflow:hidden}
+.st-progress b{display:block;height:100%;background:var(--team)}
+/* A seat's @role, on the name's baseline: it overrides atelier.css's .role-pill (margin-bottom; overflow:hidden, which puts an
+   inline-block's baseline at its bottom edge and lifts it) and .st-main span (12 px, grey). The name's <strong> clips it. */
+.st .role-pill{margin:0 0 0 6px;font-size:10px;line-height:14px;vertical-align:baseline;overflow:visible;color:color-mix(in srgb,var(--sidebar-primary) 70%,var(--foreground))}
 .st-card.st-task .st-task-mark{display:grid;place-items:center;width:18px;height:18px;font-size:12px;color:var(--success,#16a34a)}
 .st-card.st-near .st-task-mark{color:var(--warning,#e5b85c)}
