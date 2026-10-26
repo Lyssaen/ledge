@@ -443,8 +443,7 @@ export const fr = {
     history: { none: 'Aucune conversation aujourd’hui.', open: 'Voir dans la conversation' }
   },
   handover: {
-    near: (name: string, pct: number) => `${name} approche de sa limite de contexte · ${pct} %`,
-    failedItem: (name: string, why: string) => `La relève de ${name} a échoué : ${why}`,
+    nearShort: (name: string, pct: number) => `${name} · contexte ${pct} %`, nearHint: 'limite proche', failedShort: (name: string) => `Relève de ${name} échouée`, retry: 'Réessayer',
     pass: 'Passer le relais', passTitle: 'Une nouvelle session prend sa place : il écrit son bilan, ses tâches lui sont passées', later: 'Plus tard',
     gauge: (pct: number) => `contexte ${pct} %`,
     state: { briefing: 'relève : bilan demandé', launching: 'relève : lancement…', done: 'relevée', failed: 'relève échouée' } as Record<'briefing' | 'launching' | 'done' | 'failed', string>,

@@ -163,7 +163,7 @@ describe('a session near its context limit on the phone (context handover spec �
     t.deliver({ type: 'teams', teams: [] });
     const { unmount } = render(<Chat store={t.store} />);
     const yours = within(screen.getByRole('group', { name: 'À toi' }));
-    expect(yours.getByText('approche de sa limite de contexte · 85 %')).toBeInTheDocument();
+    expect(yours.getByText('· contexte 85 %')).toBeInTheDocument();
     expect(yours.getByRole('link', { name: 'Voir' })).toHaveAttribute('href', '#/thread/otto');
     unmount();
     render(<Agents store={t.store} />);

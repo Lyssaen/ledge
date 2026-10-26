@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useTasks, useTeams, type DaemonClient } from '@ledge/fleet';
 import { contextNear, contextShare, LEDGE_GIVER, taskClosed, type Role, type Session, type Task, type Team, type TeamTemplate } from '@ledge/protocol';
 
@@ -17,6 +17,9 @@ export interface TeamsApi {
   seen(task: string): void;
   /** Hands a session over to a fresh one at its seat (context handover spec §3.3): null once asked, else why not. */
   handover(session: string): Promise<string | null>;
+  /** The sessions put away with « Plus tard », at the share they had (context handover spec §3.2): shared by « À toi » and « Le point ». */
+  later: ReadonlyMap<string, number>;
+  putLater(session: Session): void;
   /** The roles and templates a folder can use, from the local daemon (`roles.list`); empty when it does not answer in time. */
   roles(cwd: string): Promise<{ roles: Role[]; templates: TeamTemplate[] }>;
 }
@@ -41,14 +44,16 @@ export function useTeamsApi(client: DaemonClient): TeamsApi {
     const timer = setTimeout(() => done(null), 4000);
     client.send({ type: 'session.handover', rid, id });
   }), [client]);
+  const [later, setLater] = useState<ReadonlyMap<string, number>>(new Map());
+  const putLater = useCallback((s: Session) => setLater(m => new Map(m).set(s.id, contextShare(s.context) ?? 1)), []);
   return useMemo(() => ({
-    teams, tasks, teamOf, roles, handover,
+    teams, tasks, teamOf, roles, handover, later, putLater,
     join: (team, session, role) => client.send({ type: 'team.join', team, session, role }),
     leave: (team, session) => client.send({ type: 'team.leave', team, session }),
     resume: team => client.send({ type: 'team.resume', team }),
     dissolve: team => client.send({ type: 'team.dissolve', team }),
     seen: task => client.send({ type: 'task.cmd', rid: `seen-${++seq}`, by: LEDGE_GIVER, op: 'seen', task })
-  }), [client, teams, tasks, teamOf, roles, handover]);
+  }), [client, teams, tasks, teamOf, roles, handover, later, putLater]);
 }
 
 /** A team's tasks Ledge gave: how many are done of how many given (« 1/2 »). */

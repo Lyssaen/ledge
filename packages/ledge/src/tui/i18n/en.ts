@@ -31,7 +31,7 @@ export const en: Messages = {
     allow: 'Allow', deny: 'Deny', always: 'Always', denyWithNote: 'Deny with a note',
     common: 'common table', teamLine: (done, given) => `team · ${done}/${given}`, resting: 'resting · R to resume',
     tasks: team => `Tasks · ${team}`, noTask: 'No task.', ledge: 'Ledge',
-    near: (name, pct) => `${name} is nearing its context limit · ${pct} % · H hand over`,
+    near: (name, pct) => `${name} · ctx ${pct} % · H hand over`,
     reliefFailed: (name, why) => `The relief of ${name} failed: ${why}`,
     context: pct => `ctx ${pct} %`,
     relief: { briefing: 'relief: brief asked', launching: 'relief: launching…', done: 'relieved', failed: 'relief failed' },

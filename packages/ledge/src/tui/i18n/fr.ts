@@ -34,7 +34,7 @@ export const fr = {
     allow: 'Autoriser', deny: 'Refuser', always: 'Toujours', denyWithNote: 'Refuser en expliquant',
     common: 'table commune', teamLine: (done: number, given: number) => `équipe · ${done}/${given}`, resting: 'au repos · R pour reprendre',
     tasks: (team: string) => `Tâches · ${team}`, noTask: 'Aucune tâche.', ledge: 'Ledge',
-    near: (name: string, pct: number) => `${name} approche de sa limite de contexte · ${pct} % · H passer le relais`,
+    near: (name: string, pct: number) => `${name} · ctx ${pct} % · H relève`,
     reliefFailed: (name: string, why: string) => `La relève de ${name} a échoué : ${why}`,
     context: (pct: number) => `ctx ${pct} %`,
     relief: { briefing: 'relève : bilan demandé', launching: 'relève : lancement…', done: 'relevée', failed: 'relève échouée' } as Record<'briefing' | 'launching' | 'done' | 'failed', string>,

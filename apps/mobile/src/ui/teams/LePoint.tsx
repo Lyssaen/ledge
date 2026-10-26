@@ -84,7 +84,7 @@ export function LePoint({ store, sessions, teams, tasks, syncedAt, fresh }: { st
             <div key={`near:${s.id}`} className="flex items-center gap-2">
               <Dot tone="attention" />
               <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 text-[13px]" title={P.nearHint}>
-                <span className="font-medium">{s.name}</span>{s.role && <RolePill role={s.role} />}<span>{P.near(Math.round((s.context!.used / s.context!.window) * 100))}</span>
+                <span className="font-medium">{s.name}</span>{s.role && <RolePill role={s.role} />}<span className="text-attention">· {P.near(Math.round((s.context!.used / s.context!.window) * 100))}</span>
               </span>
               <a href={href({ name: 'thread', sessionId: s.id })} className={SMALL}>{P.see}</a>
             </div>

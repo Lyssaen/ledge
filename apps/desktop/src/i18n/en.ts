@@ -423,8 +423,7 @@ export const en: Messages = {
     history: { none: 'No conversation today.', open: 'See in the conversation' }
   },
   handover: {
-    near: (name: string, pct: number) => `${name} is nearing its context limit · ${pct} %`,
-    failedItem: (name: string, why: string) => `The relief of ${name} failed: ${why}`,
+    nearShort: (name: string, pct: number) => `${name} · context ${pct} %`, nearHint: 'near its limit', failedShort: (name: string) => `Relief of ${name} failed`, retry: 'Retry',
     pass: 'Hand over', passTitle: 'A fresh session takes its place: it writes its brief, its tasks are passed on', later: 'Later',
     gauge: (pct: number) => `context ${pct} %`,
     state: { briefing: 'relief: brief asked', launching: 'relief: launching…', done: 'relieved', failed: 'relief failed' } as Record<'briefing' | 'launching' | 'done' | 'failed', string>,

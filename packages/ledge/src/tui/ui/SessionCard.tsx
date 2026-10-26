@@ -33,10 +33,15 @@ export function SessionCard({ s, note }: { s: Session; note?: boolean }) {
         {/* Its context, before what is cut first on a narrow terminal (context handover spec §3.2). */}
         {s.context ? <Text color={contextNear(s.context) ? C.yellow : C.dim}> · {t.overview.context(Math.round((s.context.used / s.context.window) * 100))}</Text> : null}
         <Text color={C.dim}> · {machineLabel(s)}{s.branch ? ` · ${g.branch} ${s.branch}` : ''}</Text>
-        {s.handover ? <Text color={s.handover.state === 'failed' ? C.red : C.dim}> · {s.handover.state === 'done' && s.handover.toName ? t.overview.relievedBy(s.handover.toName) : t.overview.relief[s.handover.state]}</Text> : null}
-        {s.relieves ? <Text color={C.dim}> · {t.overview.relieves(s.relieves.name)}</Text> : null}
         {s.offline ? <Text color={C.yellow}>  {t.overview.offline}</Text> : s.source === 'hook_only' ? <Text color={C.faint}>  {t.overview.readOnly}</Text> : null}
       </Text>
+      {/* Its relief on a line of its own (context handover spec §3.3): the first line is cut on a narrow terminal. */}
+      {s.handover || s.relieves ? (
+        <Text wrap="truncate">
+          {s.handover ? <Text color={s.handover.state === 'failed' ? C.red : C.yellow}>  ⇄ {s.handover.state === 'done' && s.handover.toName ? t.overview.relievedBy(s.handover.toName) : t.overview.relief[s.handover.state]}{s.handover.reason ? ` : ${s.handover.reason}` : ''}</Text> : null}
+          {s.relieves ? <Text color={C.dim}>  ⇄ {t.overview.relieves(s.relieves.name)}</Text> : null}
+        </Text>
+      ) : null}
       {helpers.length > 0 ? <Text color={C.violet} wrap="truncate">  {helpers.map(h => `${g.helper} ${h.kind} · ${oneLine(h.task)}`).join('   ')}</Text> : null}
       {p ? (
         <Box flexDirection="column" marginTop={1}>

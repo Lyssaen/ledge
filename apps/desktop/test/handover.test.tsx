@@ -17,8 +17,8 @@ describe('a session near its context limit (context handover spec §3.2)', () =>
       fakeSession('pim', { name: 'Pim', cwd: '/w/ledge', state: 'working', context: ctx(60_000) })
     ] });
     const yours = within(side.getByRole('region', { name: 'Your turn' }));
-    expect(yours.getByText('Otto @build is nearing its context limit · 85 %')).toBeVisible();
-    expect(yours.queryByText(/Pim is nearing/)).toBeNull();
+    expect(yours.getByText('Otto @build · context 85 %')).toBeVisible();
+    expect(yours.queryByText(/Pim · context/)).toBeNull();
     d.onMessage(m => { if (m.type === 'session.handover') d.push({ type: 'session.handover.result', rid: m.rid, ok: true }); });
     await user.click(yours.getByRole('button', { name: 'Hand over' }));
     await waitFor(() => expect(d.received).toContainEqual({ type: 'session.handover', rid: expect.any(String), id: 'otto' }));
@@ -28,7 +28,18 @@ describe('a session near its context limit (context handover spec §3.2)', () =>
     // Under way: the page says so, « Your turn » lets it be.
     d.push({ type: 'session.updated', session: fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'idle', role: 'build', context: ctx(170_000), handover: { state: 'briefing', at: AT } }) });
     expect(await screen.findByText('relief: brief asked')).toBeVisible();
-    await waitFor(() => expect(side.queryByText(/nearing its context limit/)).toBeNull());
+    await waitFor(() => expect(side.queryByText(/Otto @build · context/)).toBeNull());
+  });
+
+  it('« The point » lists it as « Your turn » does; « Later » in « Your turn » puts it away from both', async () => {
+    const { side, user } = await boot({ home: true, projects: PROJECTS, sessions: [fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'idle', role: 'build', context: ctx(170_000) })] });
+    const point = within(await screen.findByRole('region', { name: 'The point' }));
+    const row = (await point.findByText('Otto · context 85 %')).closest('.lp-row') as HTMLElement;
+    expect(within(row).getByRole('button', { name: 'Hand over' })).toBeVisible();
+    expect(side.getByText('Otto @build · context 85 %')).toBeVisible();
+    await user.click(within(side.getByText('Otto @build · context 85 %').closest('.st-card') as HTMLElement).getByRole('button', { name: 'Later' }));
+    await waitFor(() => expect(side.queryByText(/Otto @build · context/)).toBeNull());
+    expect(point.queryByText(/Otto · context/)).toBeNull();
   });
 
   it('« Later » puts it away until it grows by 5 points; a failed relief is listed with its reason', () => {

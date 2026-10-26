@@ -199,7 +199,7 @@ describe('ledge tui: a session near its context limit (context handover spec §3
     const tui = await startTui({ sessions });
     tui.daemon.onMessage(m => { if (m.type === 'session.handover') tui.daemon.push({ type: 'session.handover.result', rid: m.rid, ok: true }); });
     try {
-      await until(() => tui.frame().includes('◔ Nova @build approche de sa limite'));
+      await until(() => tui.frame().includes('◔ Nova @build · ctx 85 %'));
       await tui.press('j');
       await until(() => tui.frame().includes('ctx 85 %'));
       await tui.press('H');

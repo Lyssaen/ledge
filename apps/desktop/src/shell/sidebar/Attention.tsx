@@ -102,10 +102,10 @@ export function Attention(p: {
           <div key={`near:${s.id}`} className="st-card st-task st-near" data-near={s.id}>
             <span className="st-bot st-task-mark" aria-hidden="true">{failed ? '!' : '◔'}</span>
             <div className="st-card-body">
-              <div className="st-l1"><span className="st-req">{failed ? t.handover.failedItem(s.name, s.handover?.reason ?? '?') : t.handover.near(`${s.name}${s.role ? ` @${s.role}` : ''}`, pct)}</span></div>
+              <div className="st-l1"><span className="st-req" title={failed ? s.handover?.reason : undefined}>{failed ? t.handover.failedShort(s.name) : t.handover.nearShort(`${s.name}${s.role ? ` @${s.role}` : ''}`, pct)}</span></div>
               <div className="st-l2">
-                <span className="st-where">{s.context ? t.handover.gauge(pct) : ''}</span>
-                <button type="button" className="st-qa pri" title={t.handover.passTitle} onClick={() => p.onHandover?.(s.id)}>{t.handover.pass}</button>
+                <span className="st-where" title={failed ? s.handover?.reason : t.handover.nearHint}>{failed ? (s.handover?.reason ?? '') : ''}</span>
+                <button type="button" className="st-qa pri" title={t.handover.passTitle} onClick={() => p.onHandover?.(s.id)}>{failed ? t.handover.retry : t.handover.pass}</button>
                 <button type="button" className="st-qa" onClick={() => p.onLater?.(s.id)}>{t.handover.later}</button>
               </div>
             </div>

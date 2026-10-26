@@ -41,7 +41,7 @@ export const copy = {
       progress: (done: number, given: number) => `${done}/${given}`,
       state: { open: 'ouverte', taken: 'prise', done: 'finie', refused: 'refusée', dropped: 'abandonnée' },
       calm: 'Rien ne t’attend. Demande à Ledge ce que tu veux savoir ou faire.',
-      near: (pct: number) => `approche de sa limite de contexte · ${pct} %`, nearHint: 'La relève se lance depuis le PC.'
+      near: (pct: number) => `contexte ${pct} %`, nearHint: 'La relève se lance depuis le PC.'
     },
     team: {
       label: 'Équipe proposée', team: 'Équipe', seats: 'Postes', newTable: (project: string) => `nouvelle table dans la pièce ${project}`,

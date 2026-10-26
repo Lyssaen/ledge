@@ -227,6 +227,7 @@ button.lp-row:hover, .lp-row.sel { background: var(--sidebar-accent); }
 .lp-row small { color: var(--muted-foreground); white-space: nowrap; }
 .lp-mark.lp-done { color: var(--success, #16a34a); }
 .lp-mark.lp-refused, .lp-mark.lp-dropped { color: var(--warning, #d97706); }
+.lp-mark.lp-near-mark { color: var(--warning, #d97706); }
 .lp-progress { width: 56px; height: 5px; flex: none; border-radius: 999px; background: var(--secondary); overflow: hidden; }
 .lp-progress i { display: block; height: 100%; background: var(--sidebar-primary); }
 .lp-resting { opacity: .7; }

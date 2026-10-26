@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent } from 'react';
 import { daemonStore, useDaemon, type DaemonClient } from '@ledge/fleet';
-import { LEDGE_GIVER, taskClosed, type ChatTurn, type Projects, type Session, type Task, type Team } from '@ledge/protocol';
+import { contextShare, LEDGE_GIVER, taskClosed, type ChatTurn, type Projects, type Session, type Task, type Team } from '@ledge/protocol';
 import { ChatView } from '@ledge/ui/chat/ChatView';
 import { ChatCopyProvider } from '@ledge/ui/chat/copy';
 import { ResidentMascot } from '@ledge/ui/bots/ResidentMascot';
@@ -17,7 +17,7 @@ import { attentionOf, quickDecide } from '../shell/sidebar/model';
 import { useDefaultTool } from '../settings/tool';
 import { HOME_TABS, type HomeTab, type NavAction } from '../nav/state';
 import { teamProject } from '../atelier/layout';
-import { closedLedgeTasks, ledgeProgress, type TeamsApi } from '../teams/useTeamsApi';
+import { closedLedgeTasks, ledgeProgress, nearLimit, type TeamsApi } from '../teams/useTeamsApi';
 import type { Wait } from '../list/time';
 import { useAgentHighlight } from './useAgentHighlight';
 import { useChatCards } from './useChatCards';
@@ -52,6 +52,8 @@ export function LePoint({ view, teams, decisions, waits, projects, dispatch, onA
   const p = t.home.point;
   const attn = useMemo(() => attentionOf(view.sessions, waits), [view.sessions, waits]);
   const closed = closedLedgeTasks(teams.tasks);
+  // Near their context limit (context handover spec §3.2), as « À toi » lists them.
+  const near = useMemo(() => nearLimit(view.sessions, teams.later), [view.sessions, teams.later]);
   const given = teams.tasks.filter(x => x.giver === LEDGE_GIVER && (!taskClosed(x) || isToday(x.updatedAt)));
   const live = teams.teams ?? [];
   const state = (x: Task) => t.chat.task.state[x.state];
@@ -64,8 +66,8 @@ export function LePoint({ view, teams, decisions, waits, projects, dispatch, onA
       </div>
       <div className="lp-cols">
         <div className="lp-col" aria-label={p.yours}>
-          <h3>{p.yours} {attn.length + closed.length > 0 && <b className="st-badge">{attn.length + closed.length}</b>}</h3>
-          {attn.length + closed.length === 0 && <p className="lp-none">{p.nothingYours}</p>}
+          <h3>{p.yours} {attn.length + closed.length + near.length > 0 && <b className="st-badge">{attn.length + closed.length + near.length}</b>}</h3>
+          {attn.length + closed.length + near.length === 0 && <p className="lp-none">{p.nothingYours}</p>}
           {attn.map(item => (
             <div key={item.session.id} className="lp-row">
               <SessionBot session={item.session} size={16} paused />
@@ -84,6 +86,17 @@ export function LePoint({ view, teams, decisions, waits, projects, dispatch, onA
               <button type="button" className="st-qa" onClick={() => teams.seen(x.id)}>{p.dismiss}</button>
             </div>
           ))}
+          {near.map(s => {
+            const failed = s.handover?.state === 'failed';
+            const pct = Math.round((contextShare(s.context) ?? 0) * 100);
+            return (
+              <div key={`near:${s.id}`} className="lp-row lp-near" data-near={s.id}>
+                <span className={cls('lp-mark', failed ? 'lp-refused' : 'lp-near-mark')} aria-hidden>{failed ? '!' : '◔'}</span>
+                <span className="lp-text" title={failed ? s.handover?.reason : t.handover.nearHint}>{failed ? t.handover.failedShort(s.name) : t.handover.nearShort(s.name, pct)}</span>
+                <button type="button" className="st-qa pri" title={t.handover.passTitle} onClick={() => { void teams.handover(s.id); }}>{failed ? t.handover.retry : t.handover.pass}</button>
+              </div>
+            );
+          })}
         </div>
         <div className="lp-col" aria-label={p.teams}>
           <h3>{p.teams}</h3>

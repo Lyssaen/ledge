@@ -22,7 +22,6 @@ import { attentionOf, treeModel } from './model';
 import { loadSidebarPrefs, saveSidebarPrefs } from './prefs';
 import { Tree } from './Tree';
 import { closedLedgeTasks, nearLimit, type TeamsApi } from '../../teams/useTeamsApi';
-import { contextShare } from '@ledge/protocol';
 
 /** The explorer shell: Session, Ask Ledge, Atelier, Your turn, the project tree, Archives, then the foot. */
 export function Sidebar(p: {
@@ -54,9 +53,8 @@ export function Sidebar(p: {
   const current = base.kind === 'session' ? base.id : null;
   const groups = useMemo(() => treeModel(p.sessions, p.projects, p.projectIdOf, p.teams?.teams ?? []), [p.sessions, p.projects, p.projectIdOf, p.teams?.teams]);
   const attn = useMemo(() => attentionOf(p.sessions, p.waits), [p.sessions, p.waits]);
-  // « Plus tard » on a session near its limit: the share it was put away at (context handover spec §3.2).
-  const [later, setLater] = useState<ReadonlyMap<string, number>>(new Map());
-  const near = useMemo(() => nearLimit(p.sessions, later), [p.sessions, later]);
+  // Sessions near their context limit, less those put away with « Plus tard » (context handover spec §3.2).
+  const near = useMemo(() => nearLimit(p.sessions, p.teams?.later), [p.sessions, p.teams?.later]);
   const root = useRef<HTMLElement>(null);
   const keys = useRef({ attn, current, dispatch: p.dispatch, quiet: false });
   keys.current = { attn, current, dispatch: p.dispatch, quiet: p.nav.modal !== null || p.nav.chat || p.actions.pending !== null };
@@ -106,7 +104,7 @@ export function Sidebar(p: {
           <span className="st-mascot"><ResidentMascot size={22} theme={theme} paused={p.nav.paused} reducedMotion={reduced} /></span>
           <span className="st-ledge-names">
             <span className="st-ledge-brand">Ledge<span className="brand-dot">.</span></span>
-            <small className="st-ledge-line">{t.side.ledgeLine(attn.length + (p.ledge?.closedTasks ?? 0), p.ledge?.activeTeams ?? 0)}</small>
+            <small className="st-ledge-line">{t.side.ledgeLine(attn.length + (p.ledge?.closedTasks ?? 0) + near.length, p.ledge?.activeTeams ?? 0)}</small>
           </span>
           <Kbd>/</Kbd>
         </button>
@@ -124,7 +122,7 @@ export function Sidebar(p: {
           onDecide={(s, ok) => { p.decisions.decide(s, ok ? 'accept' : 'deny'); }}
           ledgeTasks={p.teams ? closedLedgeTasks(p.teams.tasks) : []} onSeeTask={id => p.dispatch({ type: 'ledge', tab: 'tasks', task: id })} onDismissTask={id => p.teams?.seen(id)}
           near={near} onHandover={id => { void p.teams?.handover(id); }}
-          onLater={id => { const s = p.sessions.find(x => x.id === id); setLater(m => new Map(m).set(id, contextShare(s?.context) ?? 1)); }}
+          onLater={id => { const s = p.sessions.find(x => x.id === id); if (s) p.teams?.putLater(s); }}
           onMenu={(id, e) => {
             const host = e.currentTarget instanceof HTMLElement ? e.currentTarget : undefined;
             p.menu.open(id, { x: e.clientX, y: e.clientY }, host);
