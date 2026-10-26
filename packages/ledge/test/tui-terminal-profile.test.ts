@@ -66,13 +66,17 @@ describe('ledge tui in a Ledge tab of Windows Terminal', () => {
       expect(readFileSync(launcher, 'utf8')).toBe(launcherScript('/opt/node/bin/node', '/w/ledge/dist/cli/index.js'));
     });
 
-    it('waits for Windows Terminal to read a new fragment, and stays in this tab when it does not in time', async () => {
+    it('says so and waits for Windows Terminal to read a new fragment, and stays in this tab when it does not in time', async () => {
+      let waits = 0;
       setTimeout(loaded, 100);
-      expect(await openInLedgeTab(tab())).toBe(true);
+      expect(await openInLedgeTab(tab({ onWait: () => { waits++; } }))).toBe(true);
+      expect(waits).toBe(1);
+      expect(await openInLedgeTab(tab({ onWait: () => { waits++; } }))).toBe(true);
+      expect(waits).toBe(1);
       lad = mkdtempSync(join(tmpdir(), 'ledge-wt-'));
       expect(await openInLedgeTab(tab())).toBe(false);
       expect(existsSync(join(fragmentDir(), 'ledge.json'))).toBe(true);
-      expect(opened).toHaveLength(1);
+      expect(opened).toHaveLength(2);
     });
 
     it('stays in this tab when the launcher path cannot reach Windows, and writes nothing', async () => {
