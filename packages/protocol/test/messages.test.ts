@@ -455,8 +455,9 @@ describe('protocol: model and effort (#58)', () => {
     expect(parseClientMessage({ type: 'chat.act', rid: 'r1', qid: 'q1', rows: [2, 0], confirmed: true })).toMatchObject({ rows: [2, 0], confirmed: true });
     expect(() => parseClientMessage({ type: 'chat.act', rid: 'r1', qid: 'q1', confirmed: false })).toThrow();
     expect(() => parseClientMessage({ type: 'chat.act', rid: 'r1', qid: 'q1', rows: [1, 1] })).toThrow();
-    const acted = { type: 'chat.acted', rid: 'r1', qid: 'q1', done: [0], failed: [{ row: 1, message: 'unknown session' }] };
+    const acted = { type: 'chat.acted', rid: 'r1', qid: 'q1', done: [0], failed: [{ row: 1, message: 'unknown session', refused: true }, { row: 2, message: 'busy' }] };
     expect(parseServerMessage(acted)).toEqual(acted);
+    expect(() => parseServerMessage({ ...acted, failed: [{ row: 1, message: 'x', refused: false }] })).toThrow();
   });
   it('chat.done and a turn carry the generic rows, one to eight, each a registry action', () => {
     const row = { action: 'team.dissolve', args: { team: 'team-3fa2' }, summary: 'Dissoudre **api**', risk: 'destructive', team: 'team-3fa2' };
@@ -467,6 +468,8 @@ describe('protocol: model and effort (#58)', () => {
     expect(() => parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, actions: [{ ...row, risk: 'harmless' }] })).toThrow();
     const turn = { qid: 'q1', question: '?', askedAt: T0, steps: [] };
     expect(ChatTurnSchema.parse({ ...turn, actions: [{ ...row, state: 'done', doneAt: T0 }] }).actions?.[0]?.state).toBe('done');
+    // Refused: nothing was sent (a target changed, a request answered meanwhile); failed: sent, and it went wrong.
+    expect(ChatTurnSchema.parse({ ...turn, actions: [{ ...row, state: 'refused', error: 'unknown team' }] }).actions?.[0]?.state).toBe('refused');
   });
   it('chat.done and a turn carry the close rows, one to eight', () => {
     const row = { id: 's1', name: 'Arlo', tool: 'claude' };

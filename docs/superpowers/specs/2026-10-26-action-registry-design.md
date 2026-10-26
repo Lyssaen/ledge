@@ -166,7 +166,7 @@ export const ChatActionSchema = z.object({
   risk: ActionRiskSchema,
   session: z.string().optional(),             // the target session's id: link, and « offline » when its machine is
   team: z.string().optional(),                // the target team's id: link to its table
-  state: z.enum(['running', 'done', 'failed']).optional(),  // absent: proposed
+  state: z.enum(['running', 'done', 'failed', 'refused']).optional(),  // absent: proposed; refused: nothing sent
   doneAt: z.string().datetime().optional(), error: z.string().optional()
 });
 ChatTurn.actions?: ChatAction[]   // 1..8, and chat.done carries it like `closes`
@@ -174,7 +174,7 @@ ChatTurn.actions?: ChatAction[]   // 1..8, and chat.done carries it like `closes
 // Client → daemon: apply rows of the turn's generic card, in order; all rows when `rows` is left out.
 { type: 'chat.act', rid, qid, rows?: number[], confirmed?: true }
 // Daemon → requester: what was applied; every client also gets the new rows through chat.history.
-{ type: 'chat.acted', rid, qid, done: number[], failed: Array<{ row: number; message: string }> }
+{ type: 'chat.acted', rid, qid, done: number[], failed: Array<{ row: number; message: string; refused?: true }> }
 // Phone: the same, with its device check (ConfirmPurpose gains 'act', subject the qid).
 { type: 'chat.act', op, qid, rows?, confirmed?, assertion? }
 ```
@@ -183,8 +183,10 @@ As built:
 
 - A refused apply (nothing applied) answers an error: « unknown action » (no such row), « already done » (nothing left),
   « confirm before applying a destructive action » with the code `confirm_required`.
-- A row whose re-resolve changed its args fails with « the request has changed since the card » (`session.decide`) or
-  « the target has changed since the card » (the others); a refused re-resolve fails with its reason.
+- `refused` vs `failed` (asked by Ida's mockup): a row is `refused` when nothing was sent, its re-resolve refused (with
+  its reason) or changed its args (« the request has changed since the card » for `session.decide`, « the target has
+  changed since the card » for the others); it is `failed` when the daemon's handler turned it down or erred. Both stop
+  the plan, keep `error`, and may be tried again; `chat.acted` marks a refused row `refused: true`.
 - `ChatProposal` gains `model?` and `effort?` (a `session.launch` block may carry them); the launch card applies
   `msg.model ?? p.model` on the PC and `p.model`/`p.effort` from a phone. The phone's `PhoneChatProposal` does not carry
   them.

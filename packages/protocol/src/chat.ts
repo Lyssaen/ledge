@@ -81,11 +81,13 @@ export const ChatTasksSchema = z.array(ChatTaskProposalSchema).min(1).max(MAX_PR
 
 /** A row of the chat's generic card (action registry spec §5.1): an action the daemon resolved, ready to apply. `args` are
  *  resolved (ids, never names), what the daemon applies; `summary` the daemon's one line in French; `detail` what to read in
- *  full before confirming (a pending request, verbatim); `session` / `team` the target, for a link. No `state`: proposed. */
+ *  full before confirming (a pending request, verbatim); `session` / `team` the target, for a link. No `state`: proposed;
+ *  `refused`: nothing was sent (its target changed or went since the card), `failed`: sent, and it went wrong; `error` says why. */
+export const ChatActionStateSchema = z.enum(['running', 'done', 'failed', 'refused']);
 export const ChatActionSchema = z.object({
   action: ActionIdSchema, args: z.record(z.unknown()), summary: z.string().min(1).max(300), detail: z.string().max(4000).optional(),
   risk: ActionRiskSchema, session: z.string().optional(), team: z.string().optional(),
-  state: z.enum(['running', 'done', 'failed']).optional(), doneAt: z.string().datetime().optional(), error: z.string().optional()
+  state: ChatActionStateSchema.optional(), doneAt: z.string().datetime().optional(), error: z.string().optional()
 });
 export type ChatAction = z.infer<typeof ChatActionSchema>;
 /** Every generic row an answer proposes, in the order Ledge wrote them: one plan (spec §9.2). */

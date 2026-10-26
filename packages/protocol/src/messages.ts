@@ -123,7 +123,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('chat.delta'), qid: z.string(), text: z.string() }),
   z.object({ type: z.literal('chat.done'), qid: z.string(), text: z.string(), at: z.string().datetime(), proposal: ChatProposalSchema.optional(), proposals: ChatProposalsSchema.optional(), relay: ChatRelaySchema.optional(), closes: ChatClosesSchema.optional(), projectProposal: ChatProjectProposalSchema.optional(), team: ChatTeamProposalSchema.optional(), tasks: ChatTasksSchema.optional(), actions: ChatActionsSchema.optional() }),
   /** What a `chat.act` applied: the rows done, and the one that failed with why (the rows after it stay proposed). */
-  z.object({ type: z.literal('chat.acted'), rid: z.string(), qid: z.string(), done: z.array(z.number().int().min(0)), failed: z.array(z.object({ row: z.number().int().min(0), message: z.string() })) }),
+  z.object({ type: z.literal('chat.acted'), rid: z.string(), qid: z.string(), done: z.array(z.number().int().min(0)), failed: z.array(z.object({ row: z.number().int().min(0), message: z.string(), /** nothing was sent */ refused: z.literal(true).optional() })) }),
   z.object({ type: z.literal('chat.error'), qid: z.string(), message: z.string() }),
   z.object({ type: z.literal('chat.history'), turns: z.array(ChatTurnSchema) }),
   /** The daemon updating itself: npm is running, then the service restarts (the socket closes right after). */

@@ -243,6 +243,7 @@ describe('phone chat', () => {
   it('carries the generic rows without their args, strictly', () => {
     const row = { action: 'team.dissolve', summary: 'Dissoudre **api**', risk: 'destructive', team: 'team-3fa2' };
     expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [row] })).not.toThrow();
+    expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [{ ...row, state: 'refused' }] })).not.toThrow();
     expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [{ ...row, args: { team: 'team-3fa2' } }] })).toThrow();
     expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [{ ...row, error: 'boom' }] })).toThrow();
     expect(ConfirmPurposeSchema.parse('act')).toBe('act');

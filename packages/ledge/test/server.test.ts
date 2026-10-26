@@ -2699,8 +2699,8 @@ describe('close a session', () => {
         store.upsert(mk('a', { state: 'idle' })); store.upsert(mk('b', { state: 'idle' }));
         const c = await connect({ port: srv.port }); await c.next('snapshot');
         c.send({ type: 'chat.act', rid: 'r1', qid: 'q1' });
-        expect(await c.next('chat.acted', 3000)).toEqual({ type: 'chat.acted', rid: 'r1', qid: 'q1', done: [0], failed: [{ row: 1, message: 'unknown session zz' }] });
-        expect(marks).toEqual(['0:running', '0:done', '1:running', '1:failed']);
+        expect(await c.next('chat.acted', 3000)).toEqual({ type: 'chat.acted', rid: 'r1', qid: 'q1', done: [0], failed: [{ row: 1, message: 'unknown session zz', refused: true }] });
+        expect(marks).toEqual(['0:running', '0:done', '1:running', '1:refused']);
         expect(store.get('a')?.archivedAt).toBeDefined(); expect(store.get('b')?.archivedAt).toBeUndefined();
         expect(rows[2]).not.toHaveProperty('state');
         c.close();

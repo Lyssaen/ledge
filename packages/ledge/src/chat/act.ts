@@ -24,9 +24,10 @@ export class ActRefused extends Error {
 /**
  * A plan's rows apply one after the other, in the card's order, and stop at the first failure (spec §9.2): the next rows stay as
  * they were, to be tried again. A done row, or one in flight, is passed over. Each row is resolved again first: a row whose target
- * changed since the card (a request answered meanwhile, say) fails without being applied. One confirmation covers every destructive row.
+ * changed since the card (a request answered meanwhile, say) is `refused`, nothing sent; one the daemon's handler turned down is
+ * `failed`. One confirmation covers every destructive row.
  */
-export async function actFromChat(deps: ActDeps, qid: string, rows?: number[], confirmed?: true): Promise<{ done: number[]; failed: Array<{ row: number; message: string }> }> {
+export async function actFromChat(deps: ActDeps, qid: string, rows?: number[], confirmed?: true): Promise<{ done: number[]; failed: Array<{ row: number; message: string; refused?: true }> }> {
   const { chat, inFlight } = deps;
   const now = deps.now ?? (() => new Date().toISOString());
   const safe = (m: ChatMessage) => { try { deps.emit(m); } catch (e) { log(`act: emit failed: ${(e as Error).message}`); } };
@@ -37,19 +38,22 @@ export async function actFromChat(deps: ActDeps, qid: string, rows?: number[], c
   if (!confirmed && todo.some(r => chat.action(qid, r)!.risk === 'destructive')) throw new ActRefused('confirm before applying a destructive action', 'confirm_required');
   for (const r of todo) inFlight.add(`${qid}#${r}`);
   const done: number[] = [];
-  const failed: Array<{ row: number; message: string }> = [];
+  const failed: Array<{ row: number; message: string; refused?: true }> = [];
   try {
     for (const r of todo) {
       const row = chat.action(qid, r)!;
       chat.markAction(qid, r, { state: 'running' }, safe);
+      let refused = true;
       try {
         const current = deps.resolve(row);
         if ('refused' in current) throw new Error(current.refused);
         if (JSON.stringify(current.args) !== JSON.stringify(row.args)) throw new Error(row.action === 'session.decide' ? 'the request has changed since the card' : 'the target has changed since the card');
+        refused = false;
         await deps.apply(row);
       } catch (e) {
-        failed.push({ row: r, message: (e as Error).message });
-        chat.markAction(qid, r, { state: 'failed', error: (e as Error).message }, safe);
+        const message = (e as Error).message;
+        failed.push({ row: r, message, ...(refused ? { refused: true as const } : {}) });
+        chat.markAction(qid, r, { state: refused ? 'refused' : 'failed', error: message }, safe);
         break;
       } finally { inFlight.delete(`${qid}#${r}`); }
       done.push(r);

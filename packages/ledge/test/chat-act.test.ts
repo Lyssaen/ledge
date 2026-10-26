@@ -10,7 +10,7 @@ function card(rows: ChatAction[]) {
     action: (_qid: string, r: number) => rows[r],
     markAction(_qid: string, r: number, patch: Partial<ChatAction>, emit: (m: ChatMessage) => void) {
       const next: ChatAction = { ...rows[r]!, ...patch };
-      if (patch.state !== 'failed') delete next.error;
+      if (patch.state !== 'failed' && patch.state !== 'refused') delete next.error;
       rows[r] = next; marks.push(`${r}:${patch.state}`); emit({ type: 'chat.history', turns: [] });
     }
   };
@@ -73,13 +73,16 @@ describe('actFromChat (spec 2026-10-26 action registry §9.2)', () => {
     expect(applied).toEqual([]); expect(c.marks).toEqual([]);
     expect(await actFromChat(d, 'q1', undefined, true)).toEqual({ done: [0, 1], failed: [] });
   });
-  it('re-resolves each row first: a refused one, or one whose target changed, fails without being applied', async () => {
+  it('re-resolves each row first: a refused one, or one whose target changed, is refused without being sent, and stops the plan', async () => {
     const c = card([row('session.decide', { session: 'a', decision: 'accept', expect: { key: 'k1' } }, { risk: 'destructive' }), row('session.archive', { session: 'b' })]);
     const { d, applied } = deps(c, { resolve: r => (r.action === 'session.decide' ? { ...r, args: { ...r.args, expect: { key: 'k2' } } } : r) });
-    expect(await actFromChat(d, 'q1', undefined, true)).toEqual({ done: [], failed: [{ row: 0, message: 'the request has changed since the card' }] });
+    expect(await actFromChat(d, 'q1', undefined, true)).toEqual({ done: [], failed: [{ row: 0, message: 'the request has changed since the card', refused: true }] });
+    expect(c.rows[0]).toMatchObject({ state: 'refused', error: 'the request has changed since the card' });
+    expect(c.rows[1]).not.toHaveProperty('state');
     expect(applied).toEqual([]);
     const gone = card([row('session.archive', { session: 'a' })]);
     const g = deps(gone, { resolve: () => ({ refused: 'unknown session a' }) });
-    expect(await actFromChat(g.d, 'q1')).toEqual({ done: [], failed: [{ row: 0, message: 'unknown session a' }] });
+    expect(await actFromChat(g.d, 'q1')).toEqual({ done: [], failed: [{ row: 0, message: 'unknown session a', refused: true }] });
+    expect(gone.rows[0]).toMatchObject({ state: 'refused', error: 'unknown session a' });
   });
 });

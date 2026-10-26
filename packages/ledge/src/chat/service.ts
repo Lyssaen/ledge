@@ -396,7 +396,7 @@ export function createChat(deps: ChatDeps): Chat {
     markAction(qid, row, patch, emit) {
       const t = turnOf(qid); const a = t?.actions?.[row]; if (!t || !a) return;
       const next: ChatAction = { ...a, ...patch };
-      if (patch.state !== 'failed') delete next.error;
+      if (patch.state !== 'failed' && patch.state !== 'refused') delete next.error;
       if (patch.state !== 'done') delete next.doneAt;
       t.actions = t.actions!.map((r, i) => (i === row ? next : r));
       emit({ type: 'chat.history', turns });

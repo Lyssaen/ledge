@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { ContextPrefsSchema, HandoverStateSchema } from './handover.js';
 import { AutonomySchema, PendingSchema, SessionSchema, ToolSchema, type Tool } from './session.js';
-import { ChatStepSchema, MAX_PROPOSALS } from './chat.js';
+import { ChatActionStateSchema, ChatStepSchema, MAX_PROPOSALS } from './chat.js';
 import { ActionIdSchema, ActionRiskSchema } from './actions.js';
 import { DecisionSchema, NOTE_MAX } from './decisions.js';
 import { ThreadItemSchema } from './thread.js';
@@ -166,7 +166,7 @@ export type PhoneChatTask = z.infer<typeof PhoneChatTaskSchema>;
 export const PhoneChatActionSchema = z.object({
   action: ActionIdSchema, summary: z.string().max(300), detail: z.string().max(TOOL_TEXT_MAX).optional(), risk: ActionRiskSchema,
   session: z.string().max(100).optional(), team: z.string().max(40).optional(),
-  state: z.enum(['running', 'done', 'failed']).optional(), doneAt: z.string().datetime().optional()
+  state: ChatActionStateSchema.optional(), doneAt: z.string().datetime().optional()
 }).strict();
 export type PhoneChatAction = z.infer<typeof PhoneChatActionSchema>;
 
