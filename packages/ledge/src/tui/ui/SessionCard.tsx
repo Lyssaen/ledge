@@ -12,8 +12,8 @@ import { C, STATE_COLOR } from '../theme.js';
 export function Button({ label, k, primary, off }: { label: string; k: string; primary?: boolean; off?: boolean }) {
   return (
     <Text>
-      <Text color={off ? C.faint : primary ? C.fg : C.fg} backgroundColor={off ? undefined : primary ? '#3a201b' : '#2c2926'}> {label} </Text>
-      <Text color={C.dim} backgroundColor={off ? undefined : primary ? '#3a201b' : '#2c2926'}>{k} </Text>
+      <Text color={off ? C.faint : primary ? C.fg : C.fg} backgroundColor={off ? undefined : primary ? C.primary : C.key}> {label} </Text>
+      <Text color={C.dim} backgroundColor={off ? undefined : primary ? C.primary : C.key}>{k} </Text>
     </Text>
   );
 }

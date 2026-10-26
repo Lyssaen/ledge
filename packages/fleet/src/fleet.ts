@@ -121,11 +121,16 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     // A relief and the one it relieves are on the same machine (context handover spec §3.3).
     ...(s.handover?.to ? { handover: { ...s.handover, to: qualify(p.config.id, s.handover.to) } } : {}),
     ...(s.relieves ? { relieves: { ...s.relieves, id: qualify(p.config.id, s.relieves.id) } } : {}) });
+  /** What the overlay shows of a peer: its live sessions, its frozen ones, or none. */
+  const shows = (p: Peer): 'live' | 'stale' | 'none' => (available(p) ? 'live' : stale(p) ? 'stale' : 'none');
   const stateSessions = (p: Peer): Session[] => (stale(p) ? p.snapshot!.sessions.map(s => ({ ...s, offline: true })) : p.snapshot?.sessions ?? []).filter(s => !isArchived(s));
   /** The fleet's own inventory and status follow every change. Only `publish` tells the overlay the whole picture again:
    *  a (re)connection, a host joining or leaving, another host selected. A session's own update is relayed as itself
    *  (see `receive`): to the overlay a snapshot is a reconnection, which empties the threads and rebuilds the open view. */
   function refresh() {
+    // Mid-`apply` a closing client may speak (« connecting », at once) while `configs` and the peers disagree: the final
+    // `publish` tells it all.
+    if (configuring) return;
     state = configs.map(c => { const p = peers.get(c.id)!; return { ...c, status: p.status, ready: available(p), recents: p.snapshot?.recents ?? [], sessions: stateSessions(p), launcher: p.snapshot?.launcher ?? null, version: p.snapshot?.daemon?.version, daemon: p.snapshot?.daemon, error: p.error }; });
     const next = status(); if (next !== lastStatus) { lastStatus = next; statuses.forEach(fn => fn(next)); }
     listeners.forEach(fn => fn());
@@ -308,6 +313,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     const client = makeClient({ url: machineUrl(c, configs[0]!), token: opts.token });
     const p: Peer = { config: c, client, status: 'connecting', fresh: false, snapshot: null, previews: new Map(), off: [] }; peers.set(c.id, p);
     p.off.push(client.onMessage(m => receive(p, m)), client.onStatus(s => {
+      const shown = shows(p);
       p.status = s;
       if (s !== 'open') {
         p.fresh = false;
@@ -319,7 +325,9 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         if (routing?.coordinator === c.id) { const qid = routing.qid; routing = null; fail(qid, `${c.label} is offline`); }
         for (const [qid, b] of bindings) { const t = turns.get(qid); if (b.machine === c.id && t && !t.answeredAt && !t.error) fail(qid, `${c.label} is offline`); }
       }
-      publish();
+      // A fallen peer retrying (connecting, unreachable, again) changes nothing the overlay shows: a snapshot would drop the
+      // threads on screen and ask them again, the whole thread blinking at each retry.
+      if (shows(p) === shown) refresh(); else publish();
     }));
     if (connected) client.connect();
   }

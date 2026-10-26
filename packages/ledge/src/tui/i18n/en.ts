@@ -5,7 +5,7 @@ const plural = (n: number, one: string, many: string) => (n > 1 ? many : one);
 export const en: Messages = {
   lang: { fr: 'Français', en: 'English' },
   state: { approval: 'Needs you', question: 'A question', starting: 'Starting', idle: 'Available', working: 'Working', done: 'Finished', error: 'Error', readonly: 'Read-only' },
-  time: { now: 'just now', s: n => `${n}s`, min: n => `${n} min`, h: n => `${n} h`, d: n => `${n} d` },
+  time: { now: 'just now', decimal: '.', s: n => `${n}s`, min: n => `${n} min`, h: n => `${n} h`, d: n => `${n} d` },
   tabs: { overview: 'Overview', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings' },
   bar: {
     sessions: n => `${n} ${plural(n, 'session', 'sessions')}`,
@@ -21,7 +21,10 @@ export const en: Messages = {
     interrupt: 'interrupt', next: 'next waiting', unfold: 'unfold', send: 'send / launch', nextCard: 'next card',
     newChat: 'new conversation', stopAnswer: 'stop the answer', nextField: 'next field', choose: 'choose', tick: 'tick',
     start: 'launch', cancel: 'cancel', change: 'change', scroll: 'scroll', space: 'space', redraw: 'another name',
-    save: 'save the team', tasks: 'team tasks', join: 'join a team', resume: 'resume the team', teamMode: 'session or team', handover: 'hand over'
+    save: 'save the team', tasks: 'team tasks', join: 'join a team', resume: 'resume the team', teamMode: 'session or team', handover: 'hand over',
+    sendOnly: 'send', newLine: 'new line', keepAndLeave: 'keep and leave', lineHistory: 'line · history', history: 'history',
+    word: 'word', clear: 'clear', resend: 'send again', backToDraft: 'back to the draft', keep: 'keep', wipe: 'clear',
+    line: 'line', page: 'page', end: 'end', question: 'question', conversation: 'conversation', cycle: 'cards · conversation'
   },
   overview: {
     yours: n => `Yours · ${n}`, projects: 'Projects', exchanges: 'Messages', terminal: name => `Terminal · ${name}`,
@@ -43,10 +46,14 @@ export const en: Messages = {
     you: 'You', unfold: 'unfold', fold: 'fold', actions: n => `${n} ${plural(n, 'action', 'actions')}`,
     files: n => `${n} ${plural(n, 'file changed', 'files changed')}`,
     since: (label, t) => `${label} · for ${t}`,
-    wantsTo: name => `${name} wants to run:`, sentTo: 'sent to', receivedFrom: 'from',
+    wants: name => `${name} wants to run`, colon: ':', sentTo: 'sent to', receivedFrom: 'from',
+    decision: { accept: 'allowed', deny: 'denied', always: 'always allowed', unknown: 'answered in the terminal' },
+    above: n => `↑ ${n} above`, scrolled: (above, below) => `${above ? `↑ ${above} above · ` : ''}↓ ${below} · G end`,
     sent: { sending: 'sending…', delivered: 'delivered', read: 'read', failed: 'failed' },
     helperWorking: n => `working · ${n} ${plural(n, 'action', 'actions')}`, helperDone: 'done',
     replyTo: name => `Reply to ${name}…`, noteFor: name => `Tell ${name} why…`,
+    replyTitle: name => `Reply to ${name}`, noteTitle: name => `Deny and tell ${name} why`, writeDraft: 'Write · draft',
+    draftLines: n => `${n} ${plural(n, 'line', 'lines')} · r to pick it up`,
     loading: 'Loading the thread…', empty: 'Nothing in this thread yet.', noSession: 'Pick a session in the overview.',
     model: m => `model: ${m}`, defaultModel: 'default', notice: 'Ledge'
   },
@@ -65,7 +72,17 @@ export const en: Messages = {
     autoWarning: roles => `${roles} will work without asking.`, teamLaunched: at => `✓ Team launched at ${at}`,
     give: 'Give', waitTeam: 'active once the team is launched',
     given: (owner, id, state) => `✓ Given to ${owner} · ${id} · ${state}`,
-    taskState: { open: 'to take', taken: 'taken', done: 'done', refused: 'refused', dropped: 'dropped' }
+    taskState: { open: 'to take', taken: 'taken', done: 'done', refused: 'refused', dropped: 'dropped' },
+    placeholder: 'A question for Ledge…',
+    resetTitle: 'New conversation?',
+    resetBody: (n, since) => `Today's conversation (${n} ${plural(n, 'question', 'questions')}, since ${since}) will be cleared.`,
+    draftStays: 'Your draft stays.', keep: 'Keep', wipe: 'Clear and start over',
+    above: n => `↑ ${n} ${plural(n, 'line', 'lines')} above · PgUp`, answering: '↓ Ledge is answering · G to follow'
+  },
+  field: {
+    above: n => `↑ ${n} ${plural(n, 'line', 'lines')}`, below: n => `↓ ${n}`,
+    pasted: n => `${n} lines pasted`, line: (k, n) => `line ${k}/${n} · alt+↵ new line`,
+    history: (k, n) => `history ${k}/${n} · ↓ your draft`
   },
   launch: {
     title: 'New session', preview: 'Preview', instruction: 'Instruction', agent: 'Agent', model: 'Model', effort: 'Effort', project: 'Project', machine: 'Machine',
@@ -79,8 +96,9 @@ export const en: Messages = {
     teamPreview: (team, project) => `Team ${team} will sit at a new table in the ${project} room.`,
     teamLaunched: name => `✓ Team ${name} launched`, teamFailed: why => `Team not launched: ${why}`, noSeat: 'Choose at least one seat.'
   },
-  settings: { title: 'Settings', language: 'Language', context: 'Max context', contextHint: 'past it: hand over', contextUnknown: 'update the daemon', contextSaved: pct => `Max context: ${pct} %`, saved: 'Setting saved.', saveFailed: m => `Setting applied, but not saved: ${m}` },
-  help: { title: 'Help', global: 'Everywhere', overview: 'Overview', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings', screens: 'switch screen' },
+  settings: { title: 'Settings', language: 'Language', theme: 'Theme', themes: { auto: 'Auto', dark: 'Dark', light: 'Light' }, themeAuto: tone => `Auto (${tone} background)`, context: 'Max context', contextHint: 'past it: hand over', contextUnknown: 'update the daemon', contextSaved: pct => `Max context: ${pct} %`, saved: 'Setting saved.', saveFailed: m => `Setting applied, but not saved: ${m}` },
+  help: { title: 'Help', global: 'Everywhere', overview: 'Overview', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings', screens: 'switch screen', field: 'Typing', wordBefore: 'delete the word before',
+    more: (above, below) => [above ? `↑ ${above} above` : '', below ? `↓ ${below} below` : ''].filter(Boolean).join(' · ') },
   toast: {
     handover: n => `${n} is writing its brief: a fresh session will take its place`, handoverRefused: why => `Relief refused: ${why}`,
     accept: n => `✓ ${n}: allowed`, deny: n => `✓ ${n}: denied`, always: n => `✓ ${n}: always allowed`,
@@ -88,11 +106,13 @@ export const en: Messages = {
     interrupted: n => `${n}: interrupt asked`, model: (n, m) => `${n}: model ${m}`,
     notNow: n => `Nothing to answer for ${n}.`, offline: n => `${n} is offline.`, readOnly: n => `${n} is read-only: answer in its terminal.`,
     busy: n => `A send for ${n} is already in flight.`, noAlways: n => `${n} does not offer “always” here.`,
+    noteTooLong: max => `Note too long: ${max} characters at most. It stays in the field.`,
     noNote: n => `${n} takes no note here.`,
     noTerminalOmp: n => `${n} is driven by Ledge over OMP's protocol: there is no terminal to attach to.`,
     noTerminal: n => `No terminal for ${n}.`, attachFailed: code => `tmux stopped with code ${code}.`,
     modelSwitch: 'This daemon cannot change a running session’s model.',
-    joined: (n, team) => `${n} joins ${team}.`, resumed: team => `Asked to resume team ${team}.`, saved: path => `Team saved: ${path}`
+    joined: (n, team) => `${n} joins ${team}.`, resumed: team => `Asked to resume team ${team}.`, saved: path => `Team saved: ${path}`,
+    draftKept: 'Draft kept: r to pick it up.', draftQuit: 'Draft in progress: ctrl+c again to quit anyway (it will be lost).'
   },
   decisions: {
     failed: (name, message) => `Could not send the decision to ${name}: ${message}`,
@@ -105,6 +125,10 @@ export const en: Messages = {
     approval: (n, text) => `${n} needs your approval: ${text}`,
     question: (n, text) => `${n} has a question: ${text}`,
     title: n => (n > 0 ? `ledge · ${n} waiting` : 'ledge')
+  },
+  small: {
+    tooSmall: (w, h) => `Window too small: ${w}×${h}`, atLeast: (w, h) => `needs at least ${w}×${h}`,
+    waits: (name, question) => (question ? `${name} has a question` : `${name} waits for your approval`), kept: 'draft kept'
   },
   cli: { notTty: 'ledge tui: needs a terminal (stdin and stdout must be a TTY)', movedToTab: 'ledge tui opens in the Ledge tab.', loadingProfile: 'Windows Terminal is loading the Ledge profile…' }
 };

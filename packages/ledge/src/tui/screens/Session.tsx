@@ -1,20 +1,24 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Box, Text, useWindowSize } from 'ink';
 import { isPending, splitId } from '@ledge/fleet';
-import { offers, type Session } from '@ledge/protocol';
+import { offers, type Pending, type Session } from '@ledge/protocol';
 import { botState } from '@ledge/ui/bots/poseFor';
 import { useEditing, useScreenKeys, useTui } from '../context.js';
 import { machineLabel, modelLabel, paneName, TOOL_NAME } from '../model/labels.js';
-import { threadLines, type Line } from '../model/thread.js';
+import { cells, pad, row, type Line } from '../model/cells.js';
+import { anchorLine, threadView } from '../model/thread.js';
 import { ago, oneLine } from '../model/time.js';
 import { C, STATE_COLOR } from '../theme.js';
 import { Frame } from '../ui/Frame.js';
 import { ModelPicker } from '../ui/ModelPicker.js';
 import { Button } from '../ui/SessionCard.js';
 import { choices } from '../model/pending.js';
-import { Lines } from '../ui/Lines.js';
+import { LineText, Lines } from '../ui/Lines.js';
+import { useNow } from '../ui/now.js';
 import { Tail } from '../ui/Tail.js';
-import { TextInput } from '../ui/TextInput.js';
+import { Field, fieldRows } from '../ui/Field.js';
+import { layout } from '../model/field.js';
+import type { Messages } from '../i18n/lang.js';
 import { TitledBox } from '../ui/TitledBox.js';
 
 type Mode = 'read' | 'reply' | 'note' | 'model';
@@ -27,15 +31,19 @@ export function SessionScreen() {
 }
 
 function SessionView({ s }: { s: Session }) {
-  const { client, d, t, g, now, actions, attach, toast, machines } = useTui();
-  const { columns } = useWindowSize();
+  const { client, d, t, g, actions, attach, toast, machines, kept, lastToast, tone } = useTui();
+  const { columns, rows } = useWindowSize();
   const [mode, setMode] = useState<Mode>('read');
-  const [draft, setDraft] = useState('');
+  // The draft outlives the field, the screen and ctrl+c: it is kept by the TUI, by session.
+  const [draft, setDraftState] = useState(() => kept.drafts.get(s.id) ?? '');
+  const setDraft = (x: string) => { setDraftState(x); if (x) kept.drafts.set(s.id, x); else kept.drafts.delete(s.id); };
+  const [browsing, setBrowsing] = useState(false);
   const [diffs, setDiffs] = useState(false);
   const [unfolded, setUnfolded] = useState(false);
   const [terminal, setTerminal] = useState(false);
-  // Lines scrolled up from the bottom; 0 follows the thread.
-  const [up, setUp] = useState(0);
+  // The line at the top of the box once scrolled, as an item and a line in it, so that a resize, a fold or new lines below
+  // keep it in place; null follows the bottom of the thread.
+  const [anchor, setAnchor] = useState<{ key: string; offset: number } | null>(null);
   useEditing(mode === 'reply' || mode === 'note');
 
   // The thread is asked once per opening (and again after a reconnect drops it); its items then arrive one by one.
@@ -43,34 +51,54 @@ function SessionView({ s }: { s: Session }) {
   useEffect(() => { if (!items && !s.offline) client.send({ type: 'session.thread', id: s.id }); }, [items === undefined, s.id, d.snapshotSeq]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const width = Math.max(20, columns - 6);
-  const lines: Line[] = useMemo(() => items ? threadLines(items, { t, g, now, width, diffs, unfolded }) : [], [items, t, g, now, width, diffs, unfolded]);
+  // The clock is not in here: a running action's spinner and time tick on their own (ui/Lines.tsx).
+  const thread = useMemo(() => items ? threadView(items, { t, g, width, diffs, unfolded }) : { lines: [] as Line[], keys: [] as string[], turns: new Map<string, string>() }, [items, t, g, width, diffs, unfolded, tone]);
+  const { lines, keys: lineKeys } = thread;
   const p = s.pending;
   const [view, setView] = useState(10);
   const maxUp = Math.max(0, lines.length - view);
+  // The anchored item folded away (space), its turn's line stays at the top.
+  const at = anchor ? anchorLine(thread, anchor) : -1;
+  const up = at < 0 ? 0 : Math.min(maxUp, Math.max(0, lines.length - view - at));
+  const scroll = (to: number) => {
+    const u = Math.min(maxUp, Math.max(0, to));
+    if (u === 0) { setAnchor(null); return; }
+    const top = lines.length - view - u, key = lineKeys[top]!;
+    setAnchor({ key, offset: top - lineKeys.indexOf(key) });
+  };
 
   const machine = splitId(s.id)?.machine ?? 'local';
   const canSwitch = machines.find(m => m.id === machine)?.daemon?.modelSwitch === true;
 
-  const send = (text: string) => {
-    if (!text.trim()) { setMode('read'); return; }
-    const back = (x: string) => { setDraft(x); };
-    if (mode === 'note') actions.denyWithNote(s, text.trim(), back);
-    else if (!actions.reply(s, text, back)) return;
-    setDraft(''); setMode('read');
+  /** false when refused at once: the field keeps the text. */
+  const send = (text: string, { fromHistory }: { fromHistory: boolean }): boolean => {
+    if (!text.trim()) { setMode('read'); return true; }
+    // Refused later, the text comes back as the draft; sent from the history, it does not replace a draft kept.
+    const back = (x: string) => { if (!fromHistory || !kept.drafts.get(s.id)) setDraft(x); };
+    if (!(mode === 'note' ? actions.denyWithNote(s, text.trim(), back) : actions.reply(s, text, back))) return false;
+    kept.sent.set(s.id, [...(kept.sent.get(s.id) ?? []), text]);
+    // An entry of the history sent again leaves the draft as it was.
+    if (!fromHistory) setDraft('');
+    setMode('read');
+    return true;
   };
+  // Out of the field, the draft stays (and says so).
+  const leave = () => { setMode('read'); setBrowsing(false); if (draft.trim()) toast({ text: t.toast.draftKept, tone: 'quiet' }); };
 
   useScreenKeys((input, key) => {
     if (mode === 'model') return true;
     if (mode !== 'read') {
       // ctrl+c leaves the field (keeping the draft) instead of quitting.
-      if (key.ctrl && input === 'c') { setMode('read'); return true; }
+      if (key.ctrl && input === 'c') { leave(); return true; }
+      // Too small, the field is not drawn (the app sends esc here only then): esc leaves it.
+      if (key.escape) { leave(); return true; }
       return false;
     }
-    if (key.pageUp) { setUp(u => Math.min(maxUp, u + view - 1)); return true; }
-    if (key.pageDown) { setUp(u => Math.max(0, u - view + 1)); return true; }
-    if (input === 'k' || key.upArrow) { setUp(u => Math.min(maxUp, u + 1)); return true; }
-    if (input === 'j' || key.downArrow) { setUp(u => Math.max(0, u - 1)); return true; }
-    if (input === 'G' || key.end) { setUp(0); return true; }
+    if (key.pageUp) { scroll(up + view - 1); return true; }
+    if (key.pageDown) { scroll(up - view + 1); return true; }
+    if (input === 'k' || key.upArrow) { scroll(up + 1); return true; }
+    if (input === 'j' || key.downArrow) { scroll(up - 1); return true; }
+    if (input === 'G' || key.end) { setAnchor(null); return true; }
     if (input === ' ') { setUnfolded(u => !u); return true; }
     if (input === 'd') { setDiffs(x => !x); return true; }
     if (input === 't') { setTerminal(x => !x); return true; }
@@ -95,14 +123,29 @@ function SessionView({ s }: { s: Session }) {
     return false;
   });
 
-  const state = botState(s);
   const title = `${s.name} · ${oneLine(s.topic ?? s.title)} · ${TOOL_NAME[s.tool]} · ${modelLabel(s, t.session.defaultModel)}`;
+  const showsThread = mode !== 'model' && !terminal && !!items && lines.length > 0;
+  const above = lines.length - view - up;
+  const foot = up > 0 ? t.session.scrolled(above, up) : lines.length > view ? t.session.above(lines.length - view) : undefined;
   const keys: Array<readonly [string, string]> = mode === 'model' ? [['↑ ↓', t.keys.choose], ['← →', t.launch.effort], ['↵', t.keys.choose], ['esc', t.keys.cancel]]
-    : mode !== 'read' ? [['↵', t.keys.send], ['esc', t.keys.back]]
+    : mode !== 'read' && browsing ? [['↵', t.keys.resend], ['↑ ↓', t.keys.history], ['esc', t.keys.backToDraft]]
+    : mode !== 'read' ? [['↵', t.keys.sendOnly], ['alt+↵', t.keys.newLine], ['esc', t.keys.keepAndLeave], ['↑ ↓', t.keys.lineHistory], ['ctrl ← →', t.keys.word], ['ctrl+u', t.keys.clear]]
     : [['esc', t.keys.back], ...(p ? [['y n A', t.keys.answer] as const] : []), ['r', t.keys.write], ['j k', t.keys.scroll], [t.keys.space, t.keys.unfold], ['d', t.keys.diffs], ['t', t.keys.terminal], ['a', t.keys.attach], ['m', t.keys.model], ['i', t.keys.interrupt]];
+  // The rows, in this order: the request (its keys left out while writing), the field, the thread with what is left, drawn
+  // only with room for a line. The request is cut only when even that does not fit.
+  const editing = mode === 'reply' || mode === 'note';
+  const body = rows - 2 - (lastToast ? 1 : 0);
+  const inner = Math.max(20, columns - 4);
+  // The field as high as its text, up to its most (its prefix and the cursor's cell kept, as it lays itself out).
+  const below = editing ? Math.min(fieldRows(columns, rows), layout(draft, Math.max(10, columns - 4) - 2).length) + 2 : 3;
+  let request = p ? ask(s, p, t, inner, 4, !editing) : null;
+  const over = request ? askRows(request, inner) + below - body : 0;
+  if (p && request && over > 0) request = ask(s, p, t, inner, Math.max(1, 4 - over), !editing);
+  const room = body - below - (request ? askRows(request, inner) : 0);
+  const drawsThread = mode === 'model' || room >= 3;
   return (
-    <Frame crumb={`${s.repo ?? s.project}${s.branch ? ` › ${g.branch} ${s.branch}` : ''} › ${s.name} · ${machineLabel(s)}`} keys={keys}>
-      <TitledBox title={terminal ? t.overview.terminal(paneName(s)) : title} flexGrow={1}>
+    <Frame crumb={`${s.repo ?? s.project}${s.branch ? ` › ${g.branch} ${s.branch}` : ''} › ${s.name} · ${machineLabel(s)}`} crumbShort={s.name} keys={keys} kept={draft !== ''}>
+      {drawsThread ? <TitledBox title={terminal ? t.overview.terminal(paneName(s)) : title} flexGrow={1} minHeight={3} foot={showsThread ? foot : undefined}>
         {mode === 'model'
           ? <ModelPicker machine={machine} tool={s.tool} current={{ model: s.model ?? null, effort: s.effort ?? null }} onCancel={() => setMode('read')}
             onPick={pick => { client.send({ type: 'session.model', id: s.id, model: pick.model, effort: pick.effort }); toast({ text: t.toast.model(s.name, pick.model ?? t.session.defaultModel), tone: 'ok' }); setMode('read'); }} />
@@ -110,31 +153,62 @@ function SessionView({ s }: { s: Session }) {
           : !items ? <Text color={C.faint}>{t.session.loading}</Text>
           : lines.length === 0 ? <Text color={C.faint}>{t.session.empty}</Text>
           : <Lines lines={lines} up={up} onHeight={setView} />}
-      </TitledBox>
-      {p ? (
-        <TitledBox title={t.session.since(t.state[state], ago(s.lastActivityAt, now, t.time))} color={isPending(s) ? C.red : C.line} titleColor={STATE_COLOR[state]}>
-          <Text wrap="truncate"><Text color={C.fg}>{p.kind === 'question' ? oneLine(p.text) : `${t.session.wantsTo(s.name)} `}</Text>{p.kind !== 'question' ? <Text color={C.fg} bold>{oneLine(p.text)}</Text> : null}{p.tool ? <Text color={C.faint}>   {p.tool}</Text> : null}</Text>
-          <Box marginTop={1} columnGap={2} flexWrap="wrap">
-            {p.kind === 'question'
-              ? choices(p).slice(0, 9).map((c, i) => <Button key={c.n} label={`${c.n} · ${c.label}`} k={String(c.n)} primary={i === 0} />)
-              : <>
-                <Button label={t.overview.allow} k="y" primary />
-                <Button label={t.overview.deny} k="n" />
-                {offers(s.tool, p.kind, 'always') ? <Button label={t.overview.always} k="A" /> : null}
-                {offers(s.tool, p.kind, 'note') ? <Button label={t.overview.denyWithNote} k="r" /> : null}
-              </>}
-          </Box>
-        </TitledBox>
-      ) : null}
-      <TitledBox title={mode === 'note' ? t.overview.denyWithNote : t.keys.write} color={mode === 'read' ? C.line : C.coral}>
-        {/* The field is its own Text: inside another, the outer one's truncation would cut the end being typed. */}
-        <Box><Text color={C.coral}>{g.cursor} </Text>
-          <Box flexGrow={1} overflow="hidden">
-            <TextInput value={draft} onChange={setDraft} onSubmit={send} onEscape={() => setMode('read')} active={mode === 'reply' || mode === 'note'}
-              placeholder={mode === 'note' ? t.session.noteFor(s.name) : t.session.replyTo(s.name)} />
-          </Box>
-        </Box>
-      </TitledBox>
+      </TitledBox> : null}
+      {p && request ? <PendingBox s={s} a={request} /> : null}
+      {mode === 'reply' || mode === 'note'
+        ? <Field title={mode === 'note' ? t.session.noteTitle(s.name) : t.session.replyTitle(s.name)} value={draft} onChange={setDraft} onSubmit={send} onEscape={leave}
+          onBrowse={setBrowsing} history={kept.sent.get(s.id) ?? []} active placeholder={mode === 'note' ? t.session.noteFor(s.name) : t.session.replyTo(s.name)} />
+        // Read: the draft kept, its first line dimmed; or what r does.
+        : <TitledBox title={draft ? t.session.writeDraft : t.keys.write} foot={draft ? t.session.draftLines(draft.split('\n').length) : undefined} flexShrink={0}>
+          <Text wrap="truncate"><Text color={C.coral}>{g.cursor} </Text>{draft ? <Text color={C.dim}>{draft.split('\n')[0]}</Text> : <Text color={C.faint}>{t.session.replyTo(s.name)}</Text>}</Text>
+        </TitledBox>}
     </Frame>
+  );
+}
+
+export type Ask = { lines: Line[]; buttons: Array<{ label: string; k: string; primary?: boolean }> };
+
+/** The request folded at `width` under an indent, at most `max` lines, and the keys that answer it (none while a field is
+ *  open: the field has the keyboard). */
+function ask(s: Session, p: Pending, t: Messages, width: number, max: number, buttons: boolean): Ask {
+  const more = { text: ' …', color: C.faint };
+  const lines: Line[] = p.kind === 'question'
+    ? row([], [{ text: oneLine(p.text), color: C.fg }], null, width, { max, more })
+    : [[{ text: `${t.session.wants(s.name)}${p.tool ? ' ' : ''}`, color: C.fg }, ...(p.tool ? [{ text: `(${p.tool})`, color: C.faint }] : []), { text: t.session.colon, color: C.fg }],
+      ...row([pad(2)], [{ text: oneLine(p.text), color: C.fg, bold: true }], null, width, { max, more })];
+  const all = !buttons ? [] : p.kind === 'question'
+    ? choices(p).slice(0, 9).map((c, i) => ({ label: `${c.n} · ${c.label}`, k: String(c.n), primary: i === 0 }))
+    : [{ label: t.overview.allow, k: 'y', primary: true }, { label: t.overview.deny, k: 'n' },
+      ...(offers(s.tool, p.kind, 'always') ? [{ label: t.overview.always, k: 'A' }] : []),
+      ...(offers(s.tool, p.kind, 'note') ? [{ label: t.overview.denyWithNote, k: 'r' }] : [])];
+  return { lines, buttons: all };
+}
+
+/** The rows the request's box takes: its borders, its lines, then a blank row and its keys, wrapped as Ink wraps them. */
+export function askRows(a: Ask, width: number): number {
+  let rows = 0, used = Infinity;
+  for (const b of a.buttons) {
+    const w = cells(b.label) + cells(b.k) + 3;
+    // A key wider than the box wraps on as many rows.
+    if (used + 2 + w > width) { rows += Math.max(1, Math.ceil(w / width)); used = Math.min(w, width); } else used += 2 + w;
+  }
+  return 2 + a.lines.length + (rows ? 1 + rows : 0);
+}
+
+/** What the session waits for: the request and how to answer. */
+function PendingBox({ s, a }: { s: Session; a: Ask }) {
+  const { t } = useTui();
+  // The only part of the screen with the clock: « depuis 2 min ».
+  const now = useNow();
+  const state = botState(s);
+  return (
+    <TitledBox title={t.session.since(t.state[state], ago(s.lastActivityAt, now, t.time))} color={isPending(s) ? C.red : C.line} titleColor={STATE_COLOR[state]} flexShrink={0}>
+      {a.lines.map((l, i) => <LineText key={i} line={l} />)}
+      {a.buttons.length ? (
+        <Box marginTop={1} columnGap={2} flexWrap="wrap">
+          {a.buttons.map(b => <Button key={b.k} label={b.label} k={b.k} primary={b.primary} />)}
+        </Box>
+      ) : null}
+    </TitledBox>
   );
 }

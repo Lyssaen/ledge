@@ -28,7 +28,7 @@ export function Launch() {
 }
 
 function SessionLaunch({ onTeam }: { onTeam(): void }) {
-  const { client, d, machines, projects, t, g, toast, go, select } = useTui();
+  const { client, d, machines, projects, t, g, toast, go, select, small } = useTui();
   const list = projects?.projects ?? [];
   const [form, setForm] = useState<LaunchForm>(() => launchDefaults(list, machines, {}, 'claude'));
   const [field, setField] = useState<Field>('prompt');
@@ -78,6 +78,8 @@ function SessionLaunch({ onTeam }: { onTeam(): void }) {
   };
 
   useInput((input, key) => {
+    // Too small, the form is not drawn: only esc goes.
+    if (small && !key.escape) return;
     if (key.escape) { go('overview'); return; }
     if (key.ctrl && input === 's') { launch(); return; }
     if (key.ctrl && input === 't') { onTeam(); return; }
@@ -125,7 +127,7 @@ function SessionLaunch({ onTeam }: { onTeam(): void }) {
         {row('machine', t.launch.machine, <Text wrap="truncate">{machines.map(m => <Text key={m.id} color={m.id === form.machine ? C.fg : C.dim} bold={m.id === form.machine}><Text color={m.ready ? C.green : C.faint}>{g.machine}</Text> {m.label}{'    '}</Text>)}</Text>)}
         {row('repos', t.launch.repos, repoOptions.length === 0 ? <Text color={C.faint}>{t.launch.none}</Text> : (
           <Text wrap="truncate">{repoOptions.map((r, i) => (
-            <Text key={r} backgroundColor={field === 'repos' && i === repoAt ? '#3a3532' : undefined} color={form.repos.includes(r) ? C.fg : C.dim}>
+            <Text key={r} backgroundColor={field === 'repos' && i === repoAt ? C.line : undefined} color={form.repos.includes(r) ? C.fg : C.dim}>
               <Text color={form.repos.includes(r) ? C.green : C.faint}>{form.repos.includes(r) ? g.boxOn : g.boxOff}</Text> {r.split('/').filter(Boolean).at(-1) ?? r} <Text color={C.faint}>{r}</Text>{'   '}
             </Text>
           ))}</Text>
@@ -148,13 +150,14 @@ function SessionLaunch({ onTeam }: { onTeam(): void }) {
 
 const TEAM_FIELDS = ['project', 'folder', 'template', 'seats', 'name'] as const;
 type TeamField = typeof TEAM_FIELDS[number];
-const AUTONOMY_COLOR = { ask: C.faint, edits: C.dim, auto: C.yellow } as const;
+/** Read at each render: the palette changes with the theme. */
+const autonomyColor = (a: 'ask' | 'edits' | 'auto'): string => ({ ask: C.faint, edits: C.dim, auto: C.yellow })[a];
 
 /** The team mode (roles spec §3.9): a project and one of its folders, a template or seats chosen one by one (each with its
  *  agent), the team's name, and the preview « L'équipe workshop s'installera à une nouvelle table de la pièce Ledge » with the
  *  autonomy warning. ctrl+s sends `team.launch`; its answer says how it went. */
 function TeamLaunch({ onSession }: { onSession(): void }) {
-  const { client, machines, projects, t, g, toast, go } = useTui();
+  const { client, machines, projects, t, g, toast, go, small } = useTui();
   const list = projects?.projects ?? [];
   const [projectId, setProjectId] = useState<string | null>(list[0]?.id ?? null);
   const project = list.find(p => p.id === projectId);
@@ -211,6 +214,8 @@ function TeamLaunch({ onSession }: { onSession(): void }) {
   const tools: Tool[] = ['claude', 'codex', 'cursor', 'omp'];
   const templates: Array<string | null> = [...(defs?.templates ?? []).map(x => x.id), null];
   useInput((input, key) => {
+    // Too small, the form is not drawn: only esc goes.
+    if (small && !key.escape) return;
     if (key.escape) { go('overview'); return; }
     if (key.ctrl && input === 's') { launch(); return; }
     if (key.ctrl && input === 't') { onSession(); return; }
@@ -247,15 +252,15 @@ function TeamLaunch({ onSession }: { onSession(): void }) {
           ? <Text wrap="truncate">{chosen.map(x => <Text key={x.id}><Text color={C.violet}>@{x.id}</Text> <Text color={C.dim}>{TOOL_NAME[x.tool]}</Text>{'   '}</Text>)}</Text>
           : seats.length === 0 ? <Text color={C.faint}>{t.launch.noRole}</Text>
           : <>{seats.map((x, i) => (
-            <Text key={x.role.id} wrap="truncate" backgroundColor={field === 'seats' && i === seatAt ? '#3a3532' : undefined}>
-              <Text color={x.on ? C.green : C.faint}>{x.on ? g.boxOn : g.boxOff}</Text> <Text color={C.violet}>@{x.role.id}</Text> {x.role.label} <Text color={C.dim}>{g.prev} {TOOL_NAME[x.tool]} {g.next}</Text> <Text color={AUTONOMY_COLOR[x.role.autonomy ?? 'ask']}>{t.ask.autonomy[x.role.autonomy ?? 'ask']}</Text>
+            <Text key={x.role.id} wrap="truncate" backgroundColor={field === 'seats' && i === seatAt ? C.line : undefined}>
+              <Text color={x.on ? C.green : C.faint}>{x.on ? g.boxOn : g.boxOff}</Text> <Text color={C.violet}>@{x.role.id}</Text> {x.role.label} <Text color={C.dim}>{g.prev} {TOOL_NAME[x.tool]} {g.next}</Text> <Text color={autonomyColor(x.role.autonomy ?? 'ask')}>{t.ask.autonomy[x.role.autonomy ?? 'ask']}</Text>
             </Text>
           ))}</>)}
         {row('name', t.launch.teamName, <TextInput value={name} onChange={setName} active={field === 'name'} placeholder={teamName} />)}
       </TitledBox>
       <TitledBox title={t.launch.preview} color={C.coral} titleColor={C.coral}>
         <Text wrap="truncate"><Text color={C.coral}>{g.team}</Text> <Text color={C.fg} bold>{t.launch.teamPreview(teamName, project?.name ?? cwd ?? '-')}</Text></Text>
-        <Text wrap="truncate">{chosen.map(x => <Text key={x.id}><Text color={C.violet}>@{x.id}</Text> <Text color={C.dim}>{TOOL_NAME[x.tool]}</Text> <Text color={AUTONOMY_COLOR[x.autonomy]}>{t.ask.autonomy[x.autonomy]}</Text>{'   '}</Text>)}</Text>
+        <Text wrap="truncate">{chosen.map(x => <Text key={x.id}><Text color={C.violet}>@{x.id}</Text> <Text color={C.dim}>{TOOL_NAME[x.tool]}</Text> <Text color={autonomyColor(x.autonomy)}>{t.ask.autonomy[x.autonomy]}</Text>{'   '}</Text>)}</Text>
         {auto.length ? <Text color={C.yellow} wrap="truncate">{t.ask.autoWarning(auto.join(', '))}</Text> : null}
         <Box marginTop={1} columnGap={2}>
           <Button label={launching ? t.launch.launching : t.ask.launchTeam} k="ctrl+s" primary />

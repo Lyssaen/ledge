@@ -68,6 +68,19 @@ describe('ledge tui: overview', () => {
     } finally { await tui.cleanup(); }
   });
 
+  it('back from an attach, the title is written again: the attached program may have set its own', async () => {
+    const runs: string[][] = [];
+    const tui = await startTui({ run: async argv => { runs.push(argv); return 0; } });
+    const titles = () => tui.written().split('\u001b]0;').length - 1;
+    try {
+      await until(() => titles() > 0);
+      const before = titles();
+      await tui.press('a');
+      await until(() => runs.length === 1);
+      await until(() => titles() === before + 1);
+    } finally { await tui.cleanup(); }
+  });
+
   it('an OMP session has nothing to attach to', async () => {
     const runs: string[][] = [];
     const tui = await startTui({ sessions: [mockupSessions()[0]!, { ...mockupSessions()[1]!, id: 'omp1', name: 'Milo', tool: 'omp', backend: 'omp-rpc', tmuxSession: null }], run: async argv => { runs.push(argv); return 0; } });

@@ -1,17 +1,19 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { DaemonClient, DaemonError } from '@ledge/fleet';
 import { useDecisions } from '@ledge/fleet/decisions';
-import type { Session } from '@ledge/protocol';
+import { NOTE_MAX, type Session } from '@ledge/protocol';
 import type { Messages } from './i18n/lang.js';
 import { answerFor } from './model/pending.js';
 
-export type Toast = { text: string; tone: 'ok' | 'info' | 'error' };
+/** A line under the screen; `quiet` dimmed; it stays `ms` (5 s by default). */
+export type Toast = { text: string; tone: 'ok' | 'info' | 'error' | 'quiet'; ms?: number };
 
 export interface Actions {
   /** A key on the session's request (y, n, A, 1…9): sent, or the reason it was not in a toast. False when the key means nothing here. */
   key(s: Session, key: string): boolean;
-  /** Deny with a note the agent reads. */
-  denyWithNote(s: Session, note: string, onRefused: (text: string) => void): void;
+  /** Deny with a note the agent reads. false without a send, the reason in a toast: the caller keeps the note. `onRefused`
+   *  gives it back when the daemon refuses it later. */
+  denyWithNote(s: Session, note: string, onRefused: (text: string) => void): boolean;
   reply(s: Session, text: string, onRefused: (text: string) => void): boolean;
   interrupt(s: Session): void;
   busy(id: string): boolean;
@@ -45,8 +47,11 @@ export function useActions(o: { client: DaemonClient; sessions: readonly Session
       return true;
     },
     denyWithNote(s, note, onRefused) {
-      if (decisions.decide(s, 'deny', note, onRefused)) onLand.current.set(s.id, t.toast.deny(s.name));
-      else { onRefused(note); toast({ text: t.toast.noNote(s.name), tone: 'info' }); }
+      if (note.length > NOTE_MAX) { toast({ text: t.toast.noteTooLong(NOTE_MAX), tone: 'info' }); return false; }
+      const sent = decisions.decide(s, 'deny', note, onRefused);
+      if (sent) onLand.current.set(s.id, t.toast.deny(s.name));
+      else toast({ text: t.toast.noNote(s.name), tone: 'info' });
+      return sent;
     },
     reply(s, text, onRefused) {
       const sent = decisions.reply(s, text, onRefused);

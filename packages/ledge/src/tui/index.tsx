@@ -7,6 +7,7 @@ import { MESSAGES } from './i18n/lang.js';
 import { NOTIFY_MODES, type NotifyMode } from './notify.js';
 import { defaultLang, loadSettings, saveSettings } from './settings.js';
 import { movesToLedgeTab, openTuiInLedgeTab } from './terminalProfile.js';
+import { backgroundAtStart } from './background.js';
 
 export const TUI_USAGE = 'ledge tui [--notify bell|osc9|off] [--here]';
 
@@ -36,13 +37,19 @@ export async function runTui(args: readonly string[]): Promise<number> {
     console.log(MESSAGES[lang].cli.movedToTab);
     return 0;
   }
+  const theme = settings.theme ?? 'auto';
+  // Asked before Ink takes the keyboard, in auto only: a few milliseconds where the terminal answers, a second at most where
+  // it does not.
+  const background = await backgroundAtStart(theme, process.env, { stdin: process.stdin, stdout: process.stdout });
   const client = createTuiFleet();
   const detach = attachClient(client);
   client.connect();
   const app = render(
-    <App client={client} lang={lang} saveLang={next => saveSettings({ ...loadSettings(), lang: next })} notify={parsed.notify} glyphs={glyphsFor(process.env)} env={process.env} />,
-    // Incremental: a key rewrites the lines it changed, not the whole screen erased then drawn again (the flicker).
-    { alternateScreen: true, exitOnCtrlC: false, maxFps: 30, incrementalRendering: true }
+    <App client={client} lang={lang} saveLang={next => saveSettings({ ...loadSettings(), lang: next })}
+      theme={theme} background={background} saveTheme={next => saveSettings({ ...loadSettings(), theme: next })} notify={parsed.notify} glyphs={glyphsFor(process.env)} env={process.env} />,
+    // Incremental: a key rewrites the lines it changed, not the whole screen erased then drawn again (the flicker). Where the
+    // terminal speaks the kitty keyboard protocol, shift+↵ is told from ↵ (a new line in a field).
+    { alternateScreen: true, exitOnCtrlC: false, maxFps: 30, incrementalRendering: true, kittyKeyboard: { mode: 'auto', flags: ['disambiguateEscapeCodes'] } }
   );
   // A kill leaves the terminal as Ink found it: unmounting restores the screen, the cursor and the keyboard mode.
   const stop = () => app.unmount();

@@ -16,3 +16,12 @@ export const clock = (iso: string): string => { const d = new Date(iso); return 
 
 /** One line: newlines folded to spaces, markdown's emphasis and code marks dropped. */
 export const oneLine = (s: string): string => s.replace(/\*\*|__|`/g, '').replace(/\s*\n\s*/g, ' ').trim();
+
+/** How long something took: « 8,4 s » under ten seconds, « 12 s » under a minute, then « 1 min 04 », « 2 h 05 ». */
+export function took(ms: number, decimal: string): string {
+  if (ms < 9_950) return `${(Math.max(0, ms) / 1000).toFixed(1).replace('.', decimal)} s`;
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s} s`;
+  const m = Math.floor(s / 60);
+  return m < 60 ? `${m} min ${String(s % 60).padStart(2, '0')}` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`;
+}
