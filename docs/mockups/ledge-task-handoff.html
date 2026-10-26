@@ -866,27 +866,28 @@ const NOTES = {
     <li><b>Téléphone</b> : la ligne d’équipe de « Le point » ouvre un écran de l’équipe (mêmes groupes, puces de siège défilantes) ; une tâche s’ouvre en feuille, « Ouvrir le fil de Lu » en tête.</li>
     <li><b>TUI</b> : la boîte <kbd>T</kbd> garde sa place, met les tâches à prendre d’abord, ajoute porteur et âge, et compte le reste ; <kbd>t</kbd> (libre aujourd’hui) ouvre l’écran « Tâches de l’équipe » : liste groupée à gauche, la tâche à droite, <kbd>↵</kbd> fil du porteur, <kbd>p</kbd> fil du donneur, <kbd>c</kbd> les closes, <kbd>esc</kbd> retour.</li>
     <li>Textes en : « To take · Taken · Closed today · Who holds what · waiting for 48 min · taken 25 min ago · passed by Nova · Nothing to take, nothing in progress in ledge-roles ».</li></ul></div>
-    <div class="note"><h3>Données</h3><h4>Ce qui manque au daemon (pour Nova)</h4><ol>
-    <li><b>Les changements des tâches entre sièges</b> n’arrivent pas aux fronts : <code>task.updated</code> ne part que pour celles de Ledge (<code>onLedgeTask</code>). La flotte liste une équipe à la connexion, puis plus rien. C’est la question 1 de #92, déjà chez Nova : sans elle, la vue se fige.</li>
+    <div class="note"><h3>Données</h3><h4>Ce qui manque au daemon (pour @dev-back)</h4><ol>
+    <li><b>Les changements des tâches entre sièges</b> n’arrivent pas aux fronts : <code>task.updated</code> ne part que pour celles de Ledge (<code>onLedgeTask</code>). La flotte liste une équipe à la connexion, puis plus rien. C’est la question 1 de #92, déjà chez @dev-back : sans elle, la vue se fige.</li>
     <li><b>Un genre par entrée du journal</b> (<code>kind: given · taken · passed · done · refused · cancelled · dropped</code>). Aujourd’hui seul le texte (« passée à Lu », « prise », « annulée : … ») dit ce qui s’est passé ; « passée par », « prise il y a » et « annulée » s’en déduiraient sans lire du français.</li>
     <li><b>Le téléphone</b> ne reçoit que les tâches de Ledge (<code>phoneTasks</code>, filtre <code>giver === ledge</code>) et sans <code>giverName</code> ni journal. Il faut les tâches des équipes vivantes (ouvertes + closes du jour, borné), avec <code>giverName</code>, les passages et le journal court de la feuille.</li>
     <li>Le <b>rôle du porteur</b> se déduit des sièges de l’équipe (Desktop, TUI) ; le téléphone a déjà <code>ownerRole</code>. Rien à ajouter, sauf si une tâche doit garder le rôle d’origine quand le siège change de main.</li></ol></div>`
 };
-const OPEN_EQ = `<div class="note"><h3>À trancher</h3><ol>
-  <li>Le filtre d’équipe en <b>puces</b> au lieu du select : d’accord ? Au-delà de 5 équipes, les puces se replient en « + 3 ».</li>
-  <li>« Attend depuis » en ambre après <b>30 min</b> : le bon seuil ? Faut-il aussi le signaler dans « À toi » ?</li>
-  <li>Les closes : seulement <b>celles du jour</b> (comme la boîte de la TUI), ou les 24 dernières heures (comme le téléphone) ?</li>
-  <li>Une action « Relancer Lu » sur une tâche qui attend (un message au porteur) : utile, ou le fil du porteur suffit ?</li>
-  <li>TUI : <kbd>t</kbd> pour l’écran et <kbd>T</kbd> pour la boîte, ou <kbd>T</kbd> qui cycle boîte → écran → caché ?</li></ol></div>`;
+const DECIDED = `<div class="note"><h3>Tranché par l’utilisateur</h3><h4>Transmission (#92)</h4><ul>
+  <li>Couleur : le violet <code>--task</code>, un jeton propre.</li>
+  <li>Le drapeau violet « pas encore prise » sur la fiche de la table : gardé.</li>
+  <li>Messages et tâches restent deux objets distincts, sans fusion.</li>
+  <li>« Convertir un message en tâche » : hors de #92.</li></ul>
+  <h4 style="margin-top:12px">Tâches d’équipe : la maquette telle que dessinée</h4><ul>
+  <li>Filtre d’équipe : des <b>puces</b> au lieu du select ; au-delà de 5 équipes, elles se replient en « + 3 ».</li>
+  <li>« Attend depuis » passe en <b>ambre après 30 min</b>, dans la liste seulement : rien de plus dans « À toi ».</li>
+  <li>Closes : <b>celles du jour</b> (« Closes aujourd’hui »), partout, téléphone compris.</li>
+  <li>Pas d’action « Relancer » : le panneau d’une tâche mène au <b>fil du porteur</b>, et ça suffit.</li>
+  <li>TUI : deux touches, <kbd>T</kbd> la boîte sous la carte de session, <kbd>t</kbd> l’écran « Tâches de l’équipe ».</li></ul></div>`;
 const OPEN = `<div class="note"><h3>À trancher</h3><ol>
   <li><b>Données</b> : un événement <code>task.updated</code> pour <b>toutes</b> les tâches (proposé : l’Atelier, le fil et la TUI le lisent tels quels), ou une relecture périodique du journal ?</li>
   <li>La transmission entre-t-elle dans <code>history</code> (comme <code>recordSent</code>) pour que les cartes survivent au redémarrage, ou le fil les déduit-il du journal de la tâche ?</li>
 </ol></div>
-<div class="note"><h3>Tranché par l’utilisateur</h3><ul>
-  <li>Couleur : le violet <code>--task</code>, un jeton propre.</li>
-  <li>Le drapeau violet « pas encore prise » sur la fiche de la table : gardé.</li>
-  <li>Messages et tâches restent deux objets distincts, sans fusion.</li>
-  <li>« Convertir un message en tâche » : hors de #92.</li></ul></div>`;
+` + DECIDED;
 
 // ---- Chrome ----
 const CASE_KEYS = { atelier: Object.keys(CASES), fil: Object.keys(THREADS) };
@@ -908,7 +909,7 @@ function render() {
   document.documentElement.dataset.theme = st.theme;
   document.getElementById('bar').innerHTML = bar();
   document.getElementById('view').innerHTML = st.vue === 'fil' ? fil() : st.vue === 'tui' ? tui() : st.vue === 'equipe' ? equipe() : atelier();
-  document.getElementById('notes').innerHTML = NOTES[st.vue] + (st.vue === 'equipe' ? OPEN_EQ : OPEN);
+  document.getElementById('notes').innerHTML = NOTES[st.vue] + (st.vue === 'equipe' ? DECIDED : OPEN);
   fitFloor();
   clearInterval(loop);
   if (st.vue === 'atelier' && st.anim === 'play') loop = setInterval(replay, 6000);
