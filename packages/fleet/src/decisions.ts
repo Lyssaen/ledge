@@ -27,8 +27,8 @@ export interface Decisions {
   /** false sans envoi : hors ligne, lecture seule, sans demande, question, déjà en vol, `always` ou note que offers() refuse, note sans deny.
    *  `onRefused` rend la note quand le daemon refuse. */
   decide(s: Session, decision: Decision, note?: string, onRefused?: (text: string) => void): boolean;
-  /** false sans envoi : hors ligne, lecture seule, texte vide, déjà en vol, demande autre qu'une question. `onRefused` rend le texte. */
-  reply(s: Session, text: string, onRefused?: (text: string) => void, how?: { steer?: boolean }): boolean;
+  /** false sans envoi : hors ligne, lecture seule, texte vide sans image, déjà en vol, demande autre qu'une question. `onRefused` rend le texte. */
+  reply(s: Session, text: string, onRefused?: (text: string) => void, how?: { steer?: boolean; attachments?: string[] }): boolean;
   /** OMP's `ask`: every question's answer at once (or `cancel`), for the dialog the card shows. false without a send: offline, no such request, already in flight. */
   answer(s: Session, answers: ReadonlyArray<{ id: string; selected: string[]; text?: string }>, cancel?: boolean): boolean;
 }
@@ -164,8 +164,9 @@ export function useDecisions(o: { client: Pick<DaemonClient, 'send'>; sessions: 
       return send(s, 'session.answer', { type: 'session.answer', id: s.id, requestId: p.requestId, answers: [...answers], ...(cancel ? { cancel: true } : {}) });
     },
     reply(s, text, onRefused, how) {
-      if (s.offline || s.source === 'hook_only' || !text.trim() || live.current.has(s.id) || (s.pending && s.pending.kind !== 'question')) return false;
-      return send(s, 'session.reply', { type: 'session.reply', id: s.id, text, ...(how?.steer ? { steer: true } : {}) }, { text, onRefused });
+      const attachments = how?.attachments?.length ? how.attachments : undefined;
+      if (s.offline || s.source === 'hook_only' || (!text.trim() && !attachments) || live.current.has(s.id) || (s.pending && s.pending.kind !== 'question')) return false;
+      return send(s, 'session.reply', { type: 'session.reply', id: s.id, text, ...(attachments ? { attachments } : {}), ...(how?.steer ? { steer: true } : {}) }, { text, onRefused });
     }
   };
 }
