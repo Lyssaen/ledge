@@ -361,3 +361,50 @@ describe('claude adapter: the dialog on screen must be the request (lot 6a revie
     expect(claudeAdapter.keysFor('accept', perm)).toEqual([{ text: '1' }]);
   });
 });
+
+describe('claude adapter: a question with a preview (Claude Code 2.1.310 captures)', () => {
+  const preview = fx('claude2-question-preview');
+  const verrou = { kind: 'question' as const, text: 'Quel verrou utiliser ?', options: ['Mutex', 'RWLock', 'Aucun'], source: 'hook' as const };
+  type Until = { until: (p: string) => boolean };
+  it('reads the options left of the preview box, « Chat about this » and the notes left out', () => {
+    expect(claudeAdapter.detectPrompt(preview)).toEqual({ kind: 'question', text: 'Quel verrou utiliser ?', options: ['Mutex', 'RWLock', 'Aucun'] });
+    expect(claudeAdapter.detectPrompt(fx('claude2-question-preview-notes'))).toEqual({ kind: 'question', text: 'Quel verrou utiliser ?', options: ['Mutex', 'RWLock', 'Aucun'] });
+    expect(claudeAdapter.promptStillVisible(tail(preview))).toBe(true);
+    expect(claudeAdapter.atRest!(preview)).toBe(false);
+    expect(claudeAdapter.promptGone!(preview, verrou)).toBe(false);
+    expect(claudeAdapter.promptGone!(fx('claude2-question-preview-chat-left'), verrou)).toBe(true);
+  });
+  it('a digit only moves the cursor: Enter once the cursor is on that option', () => {
+    const plan = claudeAdapter.replyPlan('2', verrou, preview);
+    expect(plan).toEqual([{ text: '2' }, { until: expect.any(Function) }, { keys: ['Enter'] }]);
+    expect((plan[1] as Until).until(tail(fx('claude2-question-preview-second'), 30))).toBe(true);
+    expect((plan[1] as Until).until(tail(preview, 30))).toBe(false);
+    expect(claudeAdapter.keysFor('accept', verrou, preview)).toEqual([{ text: '1' }, { until: expect.any(Function) }, { keys: ['Enter'] }]);
+    expect((claudeAdapter.keysFor('accept', verrou, preview)[1] as Until).until(tail(preview, 30))).toBe(true);
+  });
+  it('a digit past its options is refused, nothing typed', () => {
+    expect(() => claudeAdapter.replyPlan('4', verrou, preview)).toThrow(/no option 4 in this dialog, answer in the terminal/);
+  });
+  it('free text goes through « Chat about this »: the question declined, the text queued as the next prompt', () => {
+    const plan = claudeAdapter.replyPlan('avec timeout\nsi possible', verrou, preview);
+    expect(plan).toEqual([
+      { text: '3' }, { until: expect.any(Function) }, { keys: ['Down'] }, { until: expect.any(Function) }, { keys: ['Enter'] },
+      { until: expect.any(Function) }, { keys: ['C-u'] }, { text: 'avec timeout si possible' }, { waitMs: REPLY_ENTER_DELAY_MS }, { keys: ['Enter'] },
+      { until: expect.any(Function) }
+    ]);
+    const [, onLast, , onChat, , back] = plan as Until[];
+    expect(onLast!.until(tail(preview, 30))).toBe(false);
+    // On « Chat about this » the last option keeps its ❯: only the row itself tells the cursor is there.
+    expect(onChat!.until(tail(fx('claude2-question-preview-chat-focused'), 30))).toBe(true);
+    expect(onChat!.until(tail(preview, 30))).toBe(false);
+    expect(back!.until(tail(fx('claude2-question-preview-chat-left'), 30))).toBe(true);
+    expect(back!.until(tail(fx('claude2-question-preview-chat-focused'), 30))).toBe(false);
+  });
+  it('without a preview (same version) the digit still selects at once and free text takes the « Type something. » row', () => {
+    const plain = fx('claude2-question-310');
+    expect(claudeAdapter.detectPrompt(plain)).toMatchObject({ kind: 'question', options: ['Mutex', 'RWLock', 'Aucun', 'Type something.', 'Chat about this'] });
+    expect(claudeAdapter.replyPlan('2', verrou, plain)).toEqual([{ text: '2' }]);
+    expect(claudeAdapter.keysFor('accept', verrou, plain)).toEqual([{ text: '1' }]);
+    expect(claudeAdapter.replyPlan('Vert', verrou, plain)[0]).toEqual({ text: '4' });
+  });
+});
