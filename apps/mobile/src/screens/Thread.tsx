@@ -12,6 +12,8 @@ import { LinkStatus, linkView } from '../ui/Header';
 import { MobileBot } from '../ui/MobileBot';
 import { Notice } from '../ui/Notice';
 import { ReplyView } from '../ui/ReplyView';
+import { PhoneThumbs } from '../ui/PhoneThumbs';
+import { useAttachments } from '../ui/useAttachments';
 import { Reply, replyFailure, replyProblem } from './Reply';
 
 const ICON = 'size-5 fill-none stroke-current [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:1.6]';
@@ -23,11 +25,15 @@ function AgentReply({ text }: { text: string }) {
 
 const Cut = ({ align }: { align: 'start' | 'end' }) => <div className={`text-[10px] text-muted ${align === 'end' ? 'text-right' : ''}`}>{copy.thread.cut}</div>;
 
-function Bubble({ item }: { item: ThreadItem }) {
+function Bubble({ item, store }: { item: ThreadItem; store: MobileStore }) {
   switch (item.kind) {
-    case 'me': return (
+    case 'me': {
+      // The PC's prompt carries refs; this phone's own instruction knows the ones it stored.
+      const refs = item.images ?? (item.attachments ?? []).flatMap(id => store.knownImage(id) ?? []);
+      return (
       <div className="flex flex-col items-end gap-1">
-        <div className="max-w-[94%] rounded-2xl rounded-br-[4px] bg-[#292d30] p-3.5 text-[13px] [overflow-wrap:anywhere] whitespace-pre-wrap">{item.text}</div>
+        {item.text && <div className="max-w-[94%] rounded-2xl rounded-br-[4px] bg-[#292d30] p-3.5 text-[13px] [overflow-wrap:anywhere] whitespace-pre-wrap">{item.text}</div>}
+        <PhoneThumbs store={store} refs={refs} align="end" />
         {item.cut && <Cut align="end" />}
         {item.delivery && (
           <div role={item.delivery === 'sending' ? 'status' : undefined} className={`text-[10px] ${item.delivery === 'uncertain' ? 'text-attention' : item.delivery === 'sending' ? 'text-muted' : 'text-ok'}`}>
@@ -35,7 +41,8 @@ function Bubble({ item }: { item: ThreadItem }) {
           </div>
         )}
       </div>
-    );
+      );
+    }
     case 'agent': return (
       <div className="flex flex-col items-start gap-1">
         <article aria-label={copy.thread.agentLabel} className="max-w-[94%] rounded-2xl rounded-bl-[4px] border border-line bg-surface p-3.5 text-[13px] [overflow-wrap:anywhere]">
@@ -77,6 +84,8 @@ export function Thread({ store, sessionId, storage, onReconnect }: { store: Mobi
   const { fresh, ops } = state;
   const [draft, setDraft] = useState(() => loadDraft(sessionId, storage));
   const [refused, setRefused] = useState(false);
+  // Chips are not persisted: only the draft text is.
+  const images = useAttachments(store);
   const changeDraft = (t: string) => { setDraft(t); saveDraft(sessionId, t, storage); setRefused(false); };
 
   // The thread is asked once on open; the store asks it again after every reconnection.
@@ -133,10 +142,16 @@ export function Thread({ store, sessionId, storage, onReconnect }: { store: Mobi
   const failed = last && (last.phase === 'rejected' || last.phase === 'failed' || last.phase === 'uncertain')
     && (last.phase === 'uncertain' || draft.trim() === last.message.text) ? replyFailure(last) : null;
   const error = refused && !failed ? { title: copy.thread.composer.failTitle, body: copy.thread.composer.lost } : failed;
+  // A dialog waits: images would not be taken with an answer.
+  const dialog = !!session.pending || session.state === 'waiting_input' || session.state === 'waiting_permission';
   const send = () => {
     const text = draft.trim();
-    if (!text || !composer.enabled || replyProblem(draft)) return;
-    setRefused(!store.reply(sessionId, text));
+    if ((!text && images.items.length === 0) || !composer.enabled || replyProblem(draft) || !images.ready || (images.items.length > 0 && dialog)) return;
+    const ids = images.ids();
+    const taken = images.clear();
+    const sent = store.reply(sessionId, text, ids.length ? { attachments: ids } : {});
+    if (!sent && taken.length) images.putBack(taken);
+    setRefused(!sent);
   };
   const ready = thread?.status === 'ready';
 
@@ -160,9 +175,9 @@ export function Thread({ store, sessionId, storage, onReconnect }: { store: Mobi
         {thread?.more && <p className="text-center text-[11px] text-muted">{copy.thread.more}</p>}
         {!ready && items.length === 0 && <p className="text-center text-[11px] text-muted" role="status">{fresh ? copy.thread.loading : copy.thread.unavailable}</p>}
         {ready && items.length === 0 && <p className="text-center text-[11px] text-muted">{copy.thread.empty}</p>}
-        {items.map(it => <Bubble key={it.key} item={it} />)}
+        {items.map(it => <Bubble key={it.key} item={it} store={store} />)}
       </main>
-      <Reply name={session.name} composer={composer} draft={draft} onDraft={changeDraft} onSend={send} fresh={fresh} taken={takenNow} checking={last?.phase === 'uncertain' && fresh} error={error} onReconnect={onReconnect} />
+      <Reply name={session.name} composer={composer} draft={draft} onDraft={changeDraft} onSend={send} fresh={fresh} taken={takenNow} checking={last?.phase === 'uncertain' && fresh} error={error} onReconnect={onReconnect} images={images} dialog={dialog} />
     </>
   );
 }

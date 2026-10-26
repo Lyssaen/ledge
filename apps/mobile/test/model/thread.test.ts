@@ -78,3 +78,29 @@ describe('composerState', () => {
     expect(c(s({ state: 'exited' })).enabled).toBe(false);
   });
 });
+
+describe('threadItems with images', () => {
+  const IMG = { id: 'f'.repeat(64), mime: 'image/webp' as const, width: 800, height: 600, bytes: 1000, preview: true };
+  const withImages = (attachments?: string[]): Op => instruction({ message: { type: 'session.reply', op: OP, id: 'a', text: '', expect: null, ...(attachments ? { attachments } : {}) }, phase: 'applied' });
+
+  it('an applied op with an image claims the prompt carrying that image, not a prompt without one', () => {
+    const plain: ThreadItem = { kind: 'prompt', ...base('t1', 6), text: '' };
+    const pic: ThreadItem = { kind: 'prompt', ...base('t2', 7), text: '', images: [IMG] };
+    const items = threadItems([plain, pic], s(), ops(withImages([IMG.id])), Date.parse(T(30)));
+    expect(items.map(i => [i.key, i.kind === 'me' ? i.delivery : null])).toEqual([['t1', undefined], ['t2', 'taken']]);
+    expect(items[1]).toMatchObject({ images: [IMG] });
+  });
+
+  it('an op without an image does not claim a prompt that has one', () => {
+    const pic: ThreadItem = { kind: 'prompt', ...base('t2', 7), text: '', images: [IMG] };
+    const items = threadItems([pic], s(), ops(withImages()), Date.parse(T(30)));
+    expect(items).toHaveLength(2);
+    expect(items[0]).toMatchObject({ key: 't2' });
+    expect(items[0]).not.toHaveProperty('delivery');
+  });
+
+  it('an unmatched own op carries its attachment ids', () => {
+    const items = threadItems([], s(), ops({ ...withImages([IMG.id]), phase: 'sending' }));
+    expect(items[0]).toMatchObject({ kind: 'me', delivery: 'sending', attachments: [IMG.id] });
+  });
+});

@@ -9,6 +9,7 @@ import { LinkStatus, linkView } from '../ui/Header';
 import { TabBar } from '../ui/TabBar';
 import { requestsOf } from '../model/requests';
 import { closedTasks } from '../model/teams';
+import { useAttachments } from '../ui/useAttachments';
 import { LePoint } from '../ui/teams/LePoint';
 import type { PhoneTeam } from '@ledge/protocol';
 
@@ -35,6 +36,7 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
   const sessions = [...state.sessions.values()];
   const repos = new Set(sessions.map(s => s.repo).filter(Boolean));
   const [text, setText] = useState('');
+  const images = useAttachments(store);
   // A refusal for load: the screen says so (the store has already forgotten it) and the question is back in the field.
   const [refused, setRefused] = useState<string | null>(null);
   const end = useRef<HTMLDivElement>(null);
@@ -55,9 +57,11 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
 
   const send = () => {
     const q = text.trim();
-    if (!q || running || offline) return;
+    if ((!q && images.items.length === 0) || running || offline || !images.ready) return;
     setRefused(null);
-    store.ask(q);
+    const ids = images.ids();
+    images.clear();
+    store.ask(q, ids);
     setText('');
   };
   const note = refused ?? (offline ? copy.chat.offline : null);
@@ -104,7 +108,7 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
         <div ref={end} />
       </main>
       {note && <p role="status" className="flex-none pb-2 text-[13px] text-attention">{note}</p>}
-      <Composer value={text} onChange={setText} onSend={send} canSend={text.trim() !== '' && !running && !offline} />
+      <Composer value={text} onChange={setText} onSend={send} canSend={(text.trim() !== '' || images.items.length > 0) && images.ready && !running && !offline} images={images} attachDisabled={running || offline} />
       <TabBar count={requestsOf(sessions).length + closedTasks(state.tasks.values()).length} active="chat" chat />
     </>
   );

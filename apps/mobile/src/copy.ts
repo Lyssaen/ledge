@@ -28,6 +28,12 @@ export const copy = {
     offlineNote: 'Vous pouvez consulter les demandes. Aucune décision ne sera envoyée hors connexion.'
   },
   nav: { label: 'Navigation principale', inbox: 'À traiter', agents: 'Agents', chat: 'Ledge' },
+  images: {
+    attach: 'Joindre une image', remove: 'Retirer l\'image', tooLarge: 'Image trop lourde, même réduite', notImage: 'Ce fichier n\'est pas une image', max: '5 images au plus par message',
+    dialog: 'Répondez d\'abord à la question, l\'image partira après', failed: 'Image non envoyée',
+    noPreview: 'Image trop lourde pour le téléphone · ouvrir sur le PC', unavailable: 'Image indisponible',
+    view: 'Image', share: 'Partager', save: 'Enregistrer', close: 'Fermer', prev: 'Image précédente', next: 'Image suivante'
+  },
   chat: {
     title: 'Ledge',
     subtitle: (agents: number, repos: number) => `Fil du téléphone · ${agents} ${agents > 1 ? 'agents' : 'agent'}, ${repos} ${repos > 1 ? 'repos' : 'repo'}`,
