@@ -14,10 +14,14 @@ function Live({ seg }: { seg: Seg & { live: NonNullable<Seg['live']> } }) {
   return <Text color={seg.color} bold={seg.bold}>{'spin' in l ? spin(now) : took(Math.max(0, now - l.since), t.time.decimal).padStart(l.pad)}</Text>;
 }
 
+/** A link's text, clickable where the terminal knows OSC 8 (the others show it as it is). */
+const linked = (text: string, url: string) => `\x1b]8;;${url.replace(/[\x00-\x1f\x7f]/g, '')}\x07${text}\x1b]8;;\x07`;
+
 /** One line, its pieces in their colours, cut at the box's edge. */
 export const LineText = memo(function LineText({ line }: { line: Line }) {
   return <Text wrap="truncate">{line.map((x, k) => x.live ? <Live key={k} seg={x as Seg & { live: NonNullable<Seg['live']> }} />
-    : <Text key={k} color={x.color} bold={x.bold} inverse={x.inverse}>{x.text || (k === 0 ? ' ' : '')}</Text>)}{line.length === 0 ? ' ' : null}</Text>;
+    : <Text key={k} color={x.color} backgroundColor={x.bg} bold={x.bold} italic={x.italic} underline={x.underline} strikethrough={x.strike} inverse={x.inverse}>
+      {x.link && x.text ? linked(x.text, x.link) : x.text || (k === 0 ? ' ' : '')}</Text>)}{line.length === 0 ? ' ' : null}</Text>;
 });
 
 /** Lines in a box that grows: the ones that fit, `up` lines above the bottom; the box's height goes back through `onHeight`

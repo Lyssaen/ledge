@@ -4,7 +4,8 @@ import { Box, Text, useInput, useWindowSize } from 'ink';
 import { daemonStore } from '@ledge/fleet';
 import { LEDGE_GIVER, proposalRows, type ChatTurn } from '@ledge/protocol';
 import { useEditing, useScreenKeys, useTui } from '../context.js';
-import { chatLines, openCards, type Card } from '../model/chat.js';
+import { askHistory, chatView, openCards, type Card } from '../model/chat.js';
+import { anchorLine } from '../model/thread.js';
 import { TOOL_NAME } from '../model/labels.js';
 import { listed } from '../model/overview.js';
 import { clock, oneLine } from '../model/time.js';
@@ -18,6 +19,8 @@ import { TitledBox } from '../ui/TitledBox.js';
 
 /** A card's send is done when its turn changes, an error comes without a session id, or after this long. */
 const CARD_MS = 20_000;
+/** The focus on the conversation, read with the thread's keys; -1 is the question field, 0… a card. */
+const CONVO = -2;
 
 export function Ask() {
   const { client, d, machines, t, g, toast, go, kept } = useTui();
@@ -28,8 +31,12 @@ export function Ask() {
   const [browsing, setBrowsing] = useState(false);
   // ctrl+n asks first: « Garder » by default.
   const [confirm, setConfirm] = useState(false);
-  // -1: the question field; otherwise the index of the focused card.
+  // -1: the question field; CONVO: the conversation; otherwise the index of the focused card.
   const [focus, setFocus] = useState(-1);
+  // The line at the top of the conversation once scrolled, as a turn and a line in it, so that an answer written below, a
+  // resize or a new card keep it in place; null follows the bottom.
+  const [anchor, setAnchor] = useState<{ key: string; offset: number } | null>(null);
+  const [view, setView] = useState(10);
   const [busy, setBusy] = useState<{ qid: string; turn: ChatTurn | undefined; errorSeq: number; at: number } | null>(null);
   useEditing(focus === -1 && !confirm);
 
@@ -77,14 +84,33 @@ export function Ask() {
     else client.send({ type: 'session.close', qid: card.qid, rows: card.rows });
   };
 
+  const sessions = listed(d.sessions).length;
+  const width = Math.max(20, columns - 6);
+  // The streamed answer comes a few words at a time: drawn at most each 100 ms.
+  const live = useThrottled(d.chatLive, 100);
+  const chat = useMemo(() => chatView(d.chat, live, { t, g, width }), [d.chat, live, t, g, width]);
+  const { lines } = chat;
+  const maxUp = Math.max(0, lines.length - view);
+  const at = anchor ? anchorLine(chat, anchor) : -1;
+  const up = at < 0 ? 0 : Math.min(maxUp, Math.max(0, lines.length - view - at));
+  const scroll = (to: number) => {
+    const u = Math.min(maxUp, Math.max(0, to));
+    if (u === 0) { setAnchor(null); return; }
+    const top = lines.length - view - u, key = chat.keys[top]!;
+    setAnchor({ key, offset: top - chat.keys.indexOf(key) });
+  };
+
   // ctrl+c stops the answer being written; ctrl+n starts a new conversation (once confirmed, when there is one); tab goes
-  // from the field to the cards and back.
-  const latest = useRef({ asking, cards, focus, confirm, turns: d.chat.length });
-  latest.current = { asking, cards, focus, confirm, turns: d.chat.length };
+  // round, from the field to the cards, the conversation and back; PgUp PgDn scroll the conversation, from the field too.
+  const latest = useRef({ asking, cards, focus, confirm, turns: d.chat.length, scroll, up, view });
+  latest.current = { asking, cards, focus, confirm, turns: d.chat.length, scroll, up, view };
   useInput((input, key) => {
-    if (latest.current.confirm) return;
-    if (key.ctrl && input === 'n') { if (latest.current.turns === 0) client.send({ type: 'chat.reset' }); else setConfirm(true); return; }
-    if (key.tab) { const n = latest.current.cards.length; setFocus(f => (n === 0 ? -1 : f + 1 >= n ? -1 : f + 1)); }
+    const l = latest.current;
+    if (l.confirm) return;
+    if (key.ctrl && input === 'n') { if (l.turns === 0) client.send({ type: 'chat.reset' }); else setConfirm(true); return; }
+    if (key.pageUp) { l.scroll(l.up + l.view - 1); return; }
+    if (key.pageDown) { l.scroll(l.up - l.view + 1); return; }
+    if (key.tab) { const n = l.cards.length; setFocus(f => (f === CONVO ? -1 : f + 1 < n ? f + 1 : CONVO)); }
   });
   useScreenKeys((input, key) => {
     if (key.ctrl && input === 'c') {
@@ -96,6 +122,13 @@ export function Ask() {
       if (input === 'y') { client.send({ type: 'chat.reset' }); setConfirm(false); }
       else if (input === 'n' || key.escape) setConfirm(false);
       return true;
+    }
+    if (focus === CONVO) {
+      if (input === 'k' || key.upArrow) { scroll(up + 1); return true; }
+      if (input === 'j' || key.downArrow) { scroll(up - 1); return true; }
+      if (input === 'G' || key.end) { setAnchor(null); return true; }
+      if (key.escape) { setFocus(-1); return true; }
+      return false;
     }
     if (focus < 0) return false;
     if (key.return) { act(cards[focus]!); return true; }
@@ -109,20 +142,26 @@ export function Ask() {
     return false;
   });
 
-  const sessions = listed(d.sessions).length;
-  const width = Math.max(20, columns - 6);
-  // The streamed answer comes a few words at a time: drawn at most each 100 ms.
-  const live = useThrottled(d.chatLive, 100);
-  const lines = useMemo(() => chatLines(d.chat, live, { t, g, width }), [d.chat, live, t, g, width]);
+  // The keys follow the focus: s only on a team's card, ctrl+c only while Ledge answers.
+  const stop = asking ? [['ctrl+c', t.keys.stopAnswer] as const] : [];
+  const card = cards[focus];
+  // What was asked: the conversation's questions, not only this run's.
+  const history = askHistory(d.chat, kept.sent.get('ask') ?? []);
   const keys: Array<readonly [string, string]> = confirm ? [['n esc', t.keys.keep], ['y', t.keys.wipe]]
     : focus === -1 && browsing ? [['↵', t.keys.resend], ['↑ ↓', t.keys.history], ['esc', t.keys.backToDraft]]
-    : focus === -1 ? [['↵', t.keys.sendOnly], ['alt+↵', t.keys.newLine], ['esc', t.keys.back], ['↑ ↓', t.keys.history], ['tab', t.keys.nextCard], ['ctrl+n', t.keys.newChat], ['ctrl+c', t.keys.stopAnswer]]
-    : [['↵', t.keys.send], ['tab', t.keys.nextCard], ['s', t.keys.save], ['ctrl+n', t.keys.newChat], ['ctrl+c', t.keys.stopAnswer], ['esc', t.keys.back]];
+    : focus === -1 ? [['↵', t.keys.sendOnly], ['alt+↵', t.keys.newLine], ['esc', t.keys.back], ['PgUp PgDn', t.keys.scroll], ['↑ ↓', t.keys.history], ['tab', cards.length ? t.keys.nextCard : t.keys.conversation], ['ctrl+n', t.keys.newChat], ...stop]
+    : focus === CONVO ? [['j k', t.keys.line], ['PgUp PgDn', t.keys.page], ['G', t.keys.end], ...stop, ['tab', t.keys.question], ['esc', t.keys.question]]
+    : [['↵', t.keys.send], ['tab', focus + 1 < cards.length ? t.keys.nextCard : t.keys.conversation], ...(card?.kind === 'team' ? [['s', t.keys.save] as const] : []), ['ctrl+n', t.keys.newChat], ...stop, ['esc', t.keys.back]];
+  // Scrolled: how much is above and below, or that the answer goes on below; at the bottom, what is above.
+  const foot = up > 0 ? (asking && live?.qid === asking.qid ? t.ask.answering : t.session.scrolled(lines.length - view - up, up))
+    : lines.length > view ? (focus === CONVO ? t.session.above(lines.length - view) : t.ask.above(lines.length - view)) : undefined;
+  const reading = focus === CONVO;
   return (
     <Frame crumb={`${t.tabs.ask}`} keys={keys} kept={draft !== ''}>
-      <TitledBox title={t.ask.operator(sessions, Math.max(1, machines.length))} flexGrow={1}>
+      <TitledBox title={t.ask.operator(sessions, Math.max(1, machines.length))} flexGrow={1} color={reading ? C.coral : C.line} titleColor={reading ? C.coral : C.dim}
+        foot={foot} footColor={reading || up > 0 ? C.coral : C.faint}>
         {lines.length === 0 ? <Text color={C.faint}>{t.ask.empty}</Text>
-          : <Lines lines={lines} />}
+          : <Lines lines={lines} up={up} onHeight={setView} />}
       </TitledBox>
       {cards.slice(0, 2).map((c, i) => <CardBox key={`${c.kind}:${c.qid}`} card={c} turn={d.chat.find(x => x.qid === c.qid)!} focused={i === focus} busy={busy?.qid === c.qid} />)}
       {confirm
@@ -131,7 +170,7 @@ export function Ask() {
           <Box marginTop={1} columnGap={2}><Button label={t.ask.keep} k="n · esc" primary /><Button label={t.ask.wipe} k="y" /></Box>
         </TitledBox>
         : <Field title={t.ask.question} value={draft} onChange={setDraft} onSubmit={ask} onEscape={() => { if (!draft) go('overview'); }} onBrowse={setBrowsing}
-          history={kept.sent.get('ask') ?? []} active={focus === -1} placeholder={t.ask.placeholder} />}
+          history={history} active={focus === -1} placeholder={t.ask.placeholder} />}
     </Frame>
   );
 }

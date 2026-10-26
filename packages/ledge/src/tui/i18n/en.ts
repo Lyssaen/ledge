@@ -23,7 +23,8 @@ export const en: Messages = {
     start: 'launch', cancel: 'cancel', change: 'change', scroll: 'scroll', space: 'space', redraw: 'another name',
     save: 'save the team', tasks: 'team tasks', join: 'join a team', resume: 'resume the team', teamMode: 'session or team', handover: 'hand over',
     sendOnly: 'send', newLine: 'new line', keepAndLeave: 'keep and leave', lineHistory: 'line · history', history: 'history',
-    word: 'word', clear: 'clear', resend: 'send again', backToDraft: 'back to the draft', keep: 'keep', wipe: 'clear'
+    word: 'word', clear: 'clear', resend: 'send again', backToDraft: 'back to the draft', keep: 'keep', wipe: 'clear',
+    line: 'line', page: 'page', end: 'end', question: 'question', conversation: 'conversation', cycle: 'cards · conversation'
   },
   overview: {
     yours: n => `Yours · ${n}`, projects: 'Projects', exchanges: 'Messages', terminal: name => `Terminal · ${name}`,
@@ -47,7 +48,7 @@ export const en: Messages = {
     since: (label, t) => `${label} · for ${t}`,
     wants: name => `${name} wants to run`, colon: ':', sentTo: 'sent to', receivedFrom: 'from',
     decision: { accept: 'allowed', deny: 'denied', always: 'always allowed', unknown: 'answered in the terminal' },
-    above: n => `↑ ${n} above`, scrolled: (above, below) => `↑ ${above} above · ↓ ${below} · G end`,
+    above: n => `↑ ${n} above`, scrolled: (above, below) => `${above ? `↑ ${above} above · ` : ''}↓ ${below} · G end`,
     sent: { sending: 'sending…', delivered: 'delivered', read: 'read', failed: 'failed' },
     helperWorking: n => `working · ${n} ${plural(n, 'action', 'actions')}`, helperDone: 'done',
     replyTo: name => `Reply to ${name}…`, noteFor: name => `Tell ${name} why…`,
@@ -75,7 +76,8 @@ export const en: Messages = {
     placeholder: 'A question for Ledge…',
     resetTitle: 'New conversation?',
     resetBody: (n, since) => `Today's conversation (${n} ${plural(n, 'question', 'questions')}, since ${since}) will be cleared.`,
-    draftStays: 'Your draft stays.', keep: 'Keep', wipe: 'Clear and start over'
+    draftStays: 'Your draft stays.', keep: 'Keep', wipe: 'Clear and start over',
+    above: n => `↑ ${n} ${plural(n, 'line', 'lines')} above · PgUp`, answering: '↓ Ledge is answering · G to follow'
   },
   field: {
     above: n => `↑ ${n} ${plural(n, 'line', 'lines')}`, below: n => `↓ ${n}`,
@@ -95,7 +97,8 @@ export const en: Messages = {
     teamLaunched: name => `✓ Team ${name} launched`, teamFailed: why => `Team not launched: ${why}`, noSeat: 'Choose at least one seat.'
   },
   settings: { title: 'Settings', language: 'Language', context: 'Max context', contextHint: 'past it: hand over', contextUnknown: 'update the daemon', contextSaved: pct => `Max context: ${pct} %`, saved: 'Setting saved.', saveFailed: m => `Setting applied, but not saved: ${m}` },
-  help: { title: 'Help', global: 'Everywhere', overview: 'Overview', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings', screens: 'switch screen', field: 'Typing', wordBefore: 'delete the word before' },
+  help: { title: 'Help', global: 'Everywhere', overview: 'Overview', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings', screens: 'switch screen', field: 'Typing', wordBefore: 'delete the word before',
+    more: (above, below) => [above ? `↑ ${above} above` : '', below ? `↓ ${below} below` : ''].filter(Boolean).join(' · ') },
   toast: {
     handover: n => `${n} is writing its brief: a fresh session will take its place`, handoverRefused: why => `Relief refused: ${why}`,
     accept: n => `✓ ${n}: allowed`, deny: n => `✓ ${n}: denied`, always: n => `✓ ${n}: always allowed`,

@@ -26,7 +26,8 @@ export const fr = {
     start: 'lancer', cancel: 'annuler', change: 'changer', scroll: 'défiler', space: 'espace', redraw: 'autre nom',
     save: 'enregistrer l’équipe', tasks: 'tâches de l’équipe', join: 'rejoindre une équipe', resume: 'reprendre l’équipe', teamMode: 'session ou équipe', handover: 'passer le relais',
     sendOnly: 'envoyer', newLine: 'nouvelle ligne', keepAndLeave: 'garder et sortir', lineHistory: 'ligne · historique', history: 'historique',
-    word: 'mot', clear: 'effacer', resend: 'renvoyer', backToDraft: 'revenir au brouillon', keep: 'garder', wipe: 'effacer'
+    word: 'mot', clear: 'effacer', resend: 'renvoyer', backToDraft: 'revenir au brouillon', keep: 'garder', wipe: 'effacer',
+    line: 'ligne', page: 'page', end: 'fin', question: 'question', conversation: 'conversation', cycle: 'cartes · conversation'
   },
   overview: {
     yours: (n: number) => `À toi · ${n}`, projects: 'Projets', exchanges: 'Échanges', terminal: (name: string) => `Terminal · ${name}`,
@@ -50,7 +51,7 @@ export const fr = {
     since: (label: string, t: string) => `${label} · depuis ${t}`,
     wants: (name: string) => `${name} veut exécuter`, colon: ' :', sentTo: 'envoyé à', receivedFrom: 'reçu de',
     decision: { accept: 'autorisé', deny: 'refusé', always: 'toujours autorisé', unknown: 'répondu au terminal' } as Record<'accept' | 'deny' | 'always' | 'unknown', string>,
-    above: (n: number) => `↑ ${n} plus haut`, scrolled: (above: number, below: number) => `↑ ${above} plus haut · ↓ ${below} · G fin`,
+    above: (n: number) => `↑ ${n} plus haut`, scrolled: (above: number, below: number) => `${above ? `↑ ${above} plus haut · ` : ''}↓ ${below} · G fin`,
     sent: { sending: 'envoi…', delivered: 'remis', read: 'lu', failed: 'échec' } as Record<'sending' | 'delivered' | 'read' | 'failed', string>,
     helperWorking: (n: number) => `au travail · ${n} ${plural(n, 'action', 'actions')}`, helperDone: 'terminé',
     replyTo: (name: string) => `Répondre à ${name}…`, noteFor: (name: string) => `Expliquer le refus à ${name}…`,
@@ -78,7 +79,8 @@ export const fr = {
     placeholder: 'Une question pour Ledge…',
     resetTitle: 'Nouvelle conversation ?',
     resetBody: (n: number, since: string) => `La conversation du jour (${n} ${plural(n, 'question', 'questions')}, depuis ${since}) sera effacée.`,
-    draftStays: 'Ton brouillon reste.', keep: 'Garder', wipe: 'Effacer et repartir'
+    draftStays: 'Ton brouillon reste.', keep: 'Garder', wipe: 'Effacer et repartir',
+    above: (n: number) => `↑ ${n} ${plural(n, 'ligne', 'lignes')} plus haut · PgUp`, answering: '↓ Ledge répond · G pour suivre'
   },
   launch: {
     title: 'Nouvelle session', preview: 'Aperçu', instruction: 'Instruction', agent: 'Agent', model: 'Modèle', effort: 'Effort', project: 'Projet', machine: 'Machine',
@@ -95,7 +97,8 @@ export const fr = {
   settings: { title: 'Réglages', language: 'Langue', context: 'Contexte max', contextHint: 'au-delà : passer le relais', contextUnknown: 'mettez à jour le daemon', contextSaved: (pct: number) => `Contexte max : ${pct} %`, saved: 'Réglage enregistré.', saveFailed: (m: string) => `Réglage appliqué, mais non enregistré : ${m}` },
   help: {
     title: 'Aide', global: 'Partout', overview: 'Vue d’ensemble', session: 'Session', ask: 'Demander à Ledge', launch: 'Nouvelle session', settings: 'Réglages',
-    screens: 'changer d’écran', field: 'Saisie', wordBefore: 'effacer le mot précédent'
+    screens: 'changer d’écran', field: 'Saisie', wordBefore: 'effacer le mot avant',
+    more: (above: number, below: number) => [above ? `↑ ${above} plus haut` : '', below ? `↓ ${below} plus bas` : ''].filter(Boolean).join(' · ')
   },
   field: {
     above: (n: number) => `↑ ${n} ${plural(n, 'ligne', 'lignes')}`, below: (n: number) => `↓ ${n}`,

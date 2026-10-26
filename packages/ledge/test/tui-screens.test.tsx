@@ -524,6 +524,107 @@ describe('ledge tui: the field (#95 lot B)', () => {
   });
 });
 
+describe('ledge tui: ask Ledge scrolls, in Markdown (#95 lot C)', () => {
+  const OP = 'LEDGE · OPÉRATEUR';
+  // Of today: the fleet keeps only the day's conversation.
+  const at = (i: number) => new Date(Date.now() - (60 - i) * 1000).toISOString();
+  const turns = (n: number) => Array.from({ length: n }, (_, i) => ({
+    qid: `h${i}`, question: `Question ${i} ?`, askedAt: at(i), steps: [], answeredAt: at(i),
+    answer: `## Réponse ${i}\n- **un** point\n- \`deux\`\n\nFin ${i}.`
+  }));
+
+  it('PgUp PgDn scroll the conversation from the field, which keeps the keys; the border says what is above and below', async () => {
+    const tui = await startTui();
+    try {
+      await tui.resize(80, 24);
+      await tui.press('/');
+      tui.daemon.push({ type: 'chat.history', turns: turns(6) });
+      await until(() => tui.frame().includes('Fin 5.'));
+      expect(tui.frame()).not.toContain('## Réponse');
+      expect(tui.frame()).toContain('Réponse 5');
+      expect(bottom(tui.frame(), OP)).toMatch(/↑ \d+ lignes plus haut · PgUp/);
+      expect(tui.frame()).toContain('PgUp PgDn');
+      await tui.press('\u001b[5~');
+      await until(() => /↑ \d+ plus haut · ↓ \d+ · G fin/.test(bottom(tui.frame(), OP)));
+      expect(tui.frame()).not.toContain('Fin 5.');
+      await tui.press('Et');
+      await until(() => tui.frame().includes('❯ Et'));
+      await tui.press('\u001b[6~');
+      await until(() => tui.frame().includes('Fin 5.'));
+    } finally { await tui.cleanup(); }
+  });
+
+  it('tab goes to the conversation: j k G and its keys; an answer written meanwhile does not move the view; esc gives the question back', async () => {
+    const tui = await startTui();
+    try {
+      await tui.resize(80, 24);
+      await tui.press('/');
+      tui.daemon.push({ type: 'chat.history', turns: turns(6) });
+      await until(() => tui.frame().includes('Fin 5.'));
+      await tui.press('Qui ?');
+      await tui.press('\r');
+      await until(() => sent(tui.daemon.received, 'chat.ask').length === 1);
+      const { qid } = sent(tui.daemon.received, 'chat.ask')[0]!;
+      tui.daemon.push({ type: 'chat.delta', qid, text: 'Otto attend.' });
+      await until(() => tui.frame().includes('Otto attend.'));
+      await tui.press('\t');
+      await until(() => tui.frame().includes(' G  fin'));
+      expect(tui.frame()).toContain('arrêter la réponse');
+      for (let i = 0; i < 12; i++) await tui.press('k');
+      await until(() => bottom(tui.frame(), OP).includes('↓ Ledge répond · G pour suivre'));
+      const before = boxRows(tui.frame(), OP);
+      tui.daemon.push({ type: 'chat.delta', qid, text: '\n\n- une ligne de plus' });
+      await new Promise(r => setTimeout(r, 250));
+      expect(boxRows(tui.frame(), OP)).toEqual(before);
+      await tui.press('G');
+      await until(() => tui.frame().includes('une ligne de plus'));
+      await tui.press('\u001b');
+      await until(() => tui.frame().includes('alt+↵'));
+      await tui.press('x');
+      await until(() => tui.frame().includes('❯ x'));
+    } finally { await tui.cleanup(); }
+  });
+
+  it('↑ in the field goes back through the conversation’s questions, not only this run’s', async () => {
+    const tui = await startTui();
+    try {
+      await tui.press('/');
+      tui.daemon.push({ type: 'chat.history', turns: turns(2) });
+      await until(() => tui.frame().includes('Fin 1.'));
+      await tui.press(UP);
+      await until(() => boxRows(tui.frame(), 'QUESTION').some(l => l.includes('Question 1 ?')));
+      await tui.press(UP);
+      await until(() => boxRows(tui.frame(), 'QUESTION').some(l => l.includes('Question 0 ?')));
+    } finally { await tui.cleanup(); }
+  });
+
+  it('a link is clickable: its text goes out inside OSC 8', async () => {
+    const tui = await startTui();
+    try {
+      await tui.press('/');
+      tui.daemon.push({ type: 'chat.history', turns: [{ ...turns(1)[0]!, answer: 'la [PR #212](https://github.com/x/pull/212)' }] });
+      await until(() => tui.frame().includes('#212'));
+      expect(tui.frame().replace(/\u001b\]8;;[^\u0007]*\u0007/g, '')).toContain('la PR #212 ↗');
+      expect(tui.written()).toContain('\u001b]8;;https://github.com/x/pull/212\u0007PR');
+    } finally { await tui.cleanup(); }
+  });
+
+  it('the help fits 80×24 from its top: the bar, the « Saisie » group, j k for the rest', async () => {
+    const tui = await startTui();
+    try {
+      await tui.resize(80, 24);
+      await tui.press('?');
+      await until(() => tui.frame().includes('Saisie'));
+      const lines = tui.frame().split('\n');
+      expect(lines[0]).toContain('ledge');
+      expect(lines[2]).toContain('Partout');
+      expect(bottom(tui.frame(), 'AIDE')).toMatch(/↓ \d+ plus bas/);
+      await tui.press('j');
+      await until(() => /↑ 1 plus haut/.test(bottom(tui.frame(), 'AIDE')));
+    } finally { await tui.cleanup(); }
+  });
+});
+
 describe('ledge tui: new session', () => {
   it('launches what the form says on ctrl+s and selects the new session', async () => {
     const tui = await startTui();

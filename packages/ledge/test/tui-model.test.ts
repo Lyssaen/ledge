@@ -9,8 +9,10 @@ import { glyphsFor } from '../src/tui/glyphs.js';
 import { closedLedgeTasks, exchanges, keepSelection, nextWaiting, overview, step } from '../src/tui/model/overview.js';
 import { answerFor, choices } from '../src/tui/model/pending.js';
 import { anchorLine, diffCount, threadLines, threadView, wrap } from '../src/tui/model/thread.js';
-import { cells } from '../src/tui/model/cells.js';
-import { chatLines, openCards } from '../src/tui/model/chat.js';
+import { cells, type Line } from '../src/tui/model/cells.js';
+import { markdownLines } from '../src/tui/model/markdown.js';
+import { helpLines } from '../src/tui/screens/Help.js';
+import { askHistory, chatLines, chatView, openCards } from '../src/tui/model/chat.js';
 import { ago, took } from '../src/tui/model/time.js';
 import { asked, notification } from '../src/tui/notify.js';
 import { defaultLang, loadSettings, saveSettings, settingsPath } from '../src/tui/settings.js';
@@ -207,10 +209,27 @@ describe('tui thread', () => {
 
 describe('tui chat', () => {
   const turn = (extra: Partial<ChatTurn>): ChatTurn => ({ qid: 'q1', question: 'Qui a besoin de moi ?', askedAt: '2026-10-09T18:00:00.000Z', steps: [], ...extra });
-  it('shows what Ledge read, then the streamed text while it writes', () => {
+  it('shows when and what Ledge read on one line, then the streamed text while it writes, its caret last', () => {
     const lines = text(chatLines([turn({ steps: [{ kind: 'sessions' }, { kind: 'pane', name: 'Otto' }] })], { qid: 'q1', text: 'Otto attend.' }, { t: fr, g: glyphsFor({}), width: 80 }));
-    expect(lines).toContain('  lu : les sessions · le terminal de Otto');
-    expect(lines).toContain('  Otto attend.');
+    expect(lines.some(l => /^  vous · \d\d:\d\d · lu : les sessions · le terminal de Otto$/.test(l))).toBe(true);
+    expect(lines.slice(-2)).toEqual(['  Otto attend.', '  ▍']);
+  });
+
+  it('the answer in Markdown; each line keeps its turn, so a scroll stays on it', () => {
+    const v = chatView([turn({ answer: '## Qui t’attend\n- **Otto** veut lancer `rm -rf coverage`', answeredAt: '2026-10-09T18:00:05.000Z' }), turn({ qid: 'q2', question: 'Et Luna ?' })],
+      null, { t: fr, g: glyphsFor({}), width: 80 });
+    const shown = text(v.lines);
+    expect(shown).toContain('  Qui t’attend');
+    expect(shown).toContain('  • Otto veut lancer rm -rf coverage');
+    expect(shown).not.toContain('  ▍');
+    expect(v.keys.length).toBe(v.lines.length);
+    expect(v.keys[shown.indexOf('❯ Et Luna ?')]).toBe('q2');
+    expect(anchorLine(v, { key: 'q2', offset: 0 })).toBe(shown.indexOf('❯ Et Luna ?') - 1);
+  });
+
+  it('the history of the field: the questions of the conversation, after the ones cleared since, each once', () => {
+    expect(askHistory([turn({ question: 'B' }), turn({ qid: 'q2', question: 'C' })], ['A', 'B'])).toEqual(['A', 'B', 'C']);
+    expect(askHistory([turn({ question: 'A' })], [])).toEqual(['A']);
   });
 
   it('keeps the cards still to act on, newest turn first', () => {
@@ -298,5 +317,72 @@ describe('tui overview with teams (roles spec §3.9)', () => {
     const lines = text(chatLines([done], null, { t: fr, g: glyphsFor({}), width: 80 }));
     expect(lines.some(l => l.includes('▣ ledge-roles · ✓ Équipe lancée à'))).toBe(true);
     expect(lines).toContain('  Implémenter · ✓ Confiée à Mila · t91b0d4 · prise');
+  });
+});
+
+describe('tui markdown (#95 lot C)', () => {
+  const g = glyphsFor({}), ascii = glyphsFor({ LEDGE_TUI_ASCII: '1' });
+  const md = (src: string, width = 40, gl = g) => markdownLines(src, { width, g: gl, color: '#fff' });
+  const seg = (lines: Line[], s: string) => lines.flat().find(x => x.text.includes(s));
+
+  it('titles without their hashes, bold, # and ## in coral; bold, italics and code as the terminal draws them', () => {
+    const lines = md('# Un\n### Trois\n\n**gras** *italique* `code` ~~barré~~');
+    expect(text(lines)).toEqual(['Un', 'Trois', '', 'gras italique code barré']);
+    expect(seg(lines, 'Un')).toMatchObject({ bold: true, color: '#f07a62' });
+    expect(seg(lines, 'Trois')).toMatchObject({ bold: true, color: '#e6e0dc' });
+    expect(seg(lines, 'gras')).toMatchObject({ bold: true });
+    expect(seg(lines, 'italique')).toMatchObject({ italic: true });
+    expect(seg(lines, 'code')!.bg).toBeDefined();
+    expect(seg(lines, 'barré')).toMatchObject({ strike: true });
+  });
+
+  it('lists with their marks and a hanging indent, nested, numbered and ticked', () => {
+    expect(text(md('- un deux trois quatre cinq six sept huit\n  - dedans\n- [ ] à faire\n- [x] fait\n\n1. premier\n2. second', 24))).toEqual([
+      '• un deux trois quatre', '  cinq six sept huit', '  ◦ dedans', '☐ à faire', '✓ fait', '', '1. premier', '2. second'
+    ]);
+    expect(text(md('- un\n  - deux', 40, ascii))).toEqual(['- un', '  o deux']);
+  });
+
+  it('a code block between corners, its language on top, a long line wrapped with ↪; one still open while it streams already a block', () => {
+    expect(text(md('```bash\npnpm --filter @ledge/fleet test -- reconnect\n```', 30))).toEqual(['╭ bash', '│ pnpm --filter @ledge/fleet', '│ ↪ test -- reconnect', '╰']);
+    expect(text(md('Voici :\n\n```ts\nconst a = 1;', 30))).toEqual(['Voici :', '', '╭ ts', '│ const a = 1;', '╰']);
+    expect(text(md('```\nx\n```', 30, ascii))).toEqual(['+ code', '| x', '+']);
+  });
+
+  it('a link: underlined and clickable with ↗; without OSC 8, its address follows it', () => {
+    const lines = md('la [PR #212](https://github.com/x/pull/212) ici', 80);
+    expect(text(lines)).toEqual(['la PR #212 ↗ ici']);
+    expect(seg(lines, 'PR')).toMatchObject({ underline: true, link: 'https://github.com/x/pull/212' });
+    expect(text(md('la [PR](https://x.io/p) et https://x.io', 80, ascii))).toEqual(['la PR (https://x.io/p) et https://x.io']);
+    expect(text(md('[PR](https://x.io/p)', 80, glyphsFor({ LEDGE_TUI_LINKS: '0' })))).toEqual(['PR (https://x.io/p)']);
+  });
+
+  it('a quote behind its bar in dim italics; a rule; a table as it was written, cut, not wrapped; an image by its text', () => {
+    const lines = md('> Je peux lui relayer les remarques.\n\n---\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n![le logo](x.png)', 24);
+    expect(text(lines)).toEqual(['▎ Je peux lui relayer', '▎ les remarques.', '', '─'.repeat(24), '', '| a | b |', '|---|---|', '| 1 | 2 |', '', 'le logo']);
+    expect(seg(lines, 'relayer')).toMatchObject({ italic: true });
+    expect(text(md('| une colonne bien trop longue |\n|---|', 12))[0]).toBe('| une colon…');
+  });
+
+  it('wraps at the real width: an emoji or 日 counts two cells', () => {
+    for (const l of text(md('Tests verts ✅ 🎉 sur **fix/tui-wrap** : 日本語 compris, emoji 🎯 aussi.', 16))) expect(cells(l)).toBeLessThanOrEqual(16);
+  });
+
+  it('the thread draws its prompts, messages and replies in Markdown', () => {
+    const items: ThreadItem[] = [{ kind: 'reply', id: 'r', at: '2026-10-09T18:00:00.000Z', text: '## Fait\n- **wrap** compte les cellules' } as ThreadItem];
+    const lines = threadLines(items, { t: fr, g, width: 60, diffs: false, unfolded: false });
+    expect(text(lines)).toEqual(['  Fait', '  • wrap compte les cellules']);
+  });
+});
+
+describe('tui help (#95 lot C)', () => {
+  const group = (title: string, n: number) => [title, Array.from({ length: n }, (_, i) => [`k${i}`, `label ${i}`] as const)] as const;
+  it('the groups side by side, in order, each column as short as it can', () => {
+    const lines = text(helpLines([group('A', 3), group('B', 2), group('C', 3)], 76));
+    expect(lines[0]).toMatch(/^A +C$/);
+    expect(lines.length).toBe(8);
+    expect(lines[4]!.trim()).toBe('');
+    expect(lines[5]).toMatch(/^B/);
+    expect(text(helpLines([group('A', 3), group('B', 2)], 30))).toHaveLength(8);
   });
 });

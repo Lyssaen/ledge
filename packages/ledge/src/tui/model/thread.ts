@@ -5,6 +5,7 @@ import type { Glyphs } from '../glyphs.js';
 import type { Messages } from '../i18n/lang.js';
 import { C } from '../theme.js';
 import { cut, pad, row, wrapSegs, type Line, type Seg } from './cells.js';
+import { markdownLines } from './markdown.js';
 import { clock, oneLine, took } from './time.js';
 
 export type { Seg, Line } from './cells.js';
@@ -65,7 +66,7 @@ interface Opts { t: Messages; g: Glyphs; now?: number; width: number; diffs: boo
 
 function itemLines(it: ThreadItem, o: Opts): Line[] {
   const { t, g, width } = o;
-  const body = (text: string, color: string) => wrap(text, width - 2).map(l => [{ text: `  ${l}`, color }]);
+  const body = (text: string, color: string) => markdownLines(text, { width: width - 2, g, color }).map(l => [pad(2), ...l]);
   const message = (head: Line, text: string, meta: Line | null) => row([pad(2), { text: `${g.message} `, color: C.violet }, ...head, pad(2)], [{ text: `« ${oneLine(text)} »`, color: C.dim }], meta, width, { indent: 4, max: o.cap(CAP.message), more: MORE });
   switch (it.kind) {
     case 'prompt': return [[{ text: t.session.you, color: C.coral, bold: true }, { text: `  ${clock(it.at)}`, color: C.faint }], ...body(it.text, C.fg)];

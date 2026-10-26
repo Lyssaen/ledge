@@ -3,8 +3,11 @@ import stringWidth from 'string-width';
 /** What a piece of a line shows that the clock changes: the spinner's frame, or the time since `since` padded to `pad` cells.
  *  Its `text` is only the value when the line was made; `ui/Lines.tsx` draws it again on each tick, alone. */
 export type Live = { spin: true } | { since: number; pad: number };
-/** A piece of a line, with its colour. */
-export type Seg = { text: string; color?: string; bold?: boolean; inverse?: boolean; live?: Live };
+/** A piece of a line, with its colour and attributes; `bg` a background, `link` the address it opens (OSC 8). */
+export type Seg = {
+  text: string; color?: string; bg?: string; bold?: boolean; italic?: boolean; underline?: boolean; strike?: boolean; inverse?: boolean;
+  link?: string; live?: Live;
+};
 export type Line = Seg[];
 
 const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
