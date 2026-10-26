@@ -354,7 +354,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       }
       if (msg.type === 'chat.cancel' && routing?.qid === msg.qid) { peers.get(routing.coordinator)?.client.send(msg); routing = null; fail(msg.qid, 'cancelled'); return; }
       let machine = selected; let outgoing: ClientMessage = msg;
-      if ('id' in msg) { const origin = splitId(msg.id); if (!origin) { emit({ type: 'error', id: msg.id, message: 'Unknown machine', request: msg.type }); return; } machine = origin.machine; outgoing = { ...msg, id: origin.id }; }
+      if ('id' in msg && msg.id !== undefined) { const origin = splitId(msg.id); if (!origin) { emit({ type: 'error', id: msg.id, message: 'Unknown machine', request: msg.type }); return; } machine = origin.machine; outgoing = { ...msg, id: origin.id }; }
       if ('qid' in msg && msg.qid) { const b = bindings.get(msg.qid); if (!b) { emit({ type: 'error', message: 'Unknown conversation destination', request: msg.type }); return; } machine = b.machine; outgoing = { ...outgoing, qid: b.raw } as ClientMessage; }
       if (msg.type === 'document.read') {
         if (configs.length > 1 && !msg.machineId && !msg.sessionId) { emit({ type: 'document.error', requestId: msg.requestId, path: msg.path, code: 'read_failed' }); return; }
