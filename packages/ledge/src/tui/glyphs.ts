@@ -4,14 +4,16 @@ const UNICODE = {
   branch: '⎇', helper: '↳', message: '✉', arrow: '→', ok: '✓', fail: '✗', live: '◌', folded: '▸', unfolded: '▾', project: '■', machine: '●',
   logo: '◖', cursor: '❯', radioOn: '◉', radioOff: '○', boxOn: '✓', boxOff: '☐', prev: '◂', next: '▸', ellipsis: '…', bar: '│',
   /** A team's table and the common table (roles spec §3.9). */
-  team: '▣', common: '▭'
+  team: '▣', common: '▭',
+  /** A task handed between seats in « Échanges » (#92). */
+  task: '▤'
 };
 export type Glyphs = typeof UNICODE;
 const ASCII: Glyphs = {
   approval: '!', question: '?', working: '*', idle: 'o', starting: '.', done: '-', error: 'x', readonly: 'o',
   branch: 'git:', helper: '>', message: '@', arrow: '->', ok: 'v', fail: 'x', live: '~', folded: '+', unfolded: '-', project: '#', machine: '*',
   logo: '(', cursor: '>', radioOn: '(*)', radioOff: '( )', boxOn: '[x]', boxOff: '[ ]', prev: '<', next: '>', ellipsis: '...', bar: '|',
-  team: '[T]', common: '[ ]'
+  team: '[T]', common: '[ ]', task: '[=]'
 };
 
 export function glyphsFor(env: NodeJS.ProcessEnv): Glyphs {

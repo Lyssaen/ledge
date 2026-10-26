@@ -196,7 +196,7 @@ export function Overview() {
               {(() => {
                 const list = exchanges(d.sessions, 3, tasks, t.overview.ledge);
                 return list.length === 0 ? <Text color={C.faint}>{t.overview.noExchange}</Text> : list.map((x, i) => (
-                  <Text key={i} wrap="truncate"><Text color={C.faint}>{clock(x.at)}</Text> <Text color={C.fg}>{x.from}</Text> <Text color={C.violet}>{g.arrow}</Text> <Text color={C.fg}>{x.to}</Text>  <Text color={C.dim}>{oneLine(x.summary)}</Text></Text>
+                  <Text key={i} wrap="truncate"><Text color={C.faint}>{clock(x.at)}</Text> <Text color={C.fg}>{x.from}</Text> <Text color={x.kind === 'task' ? C.green : C.violet}>{g.arrow}</Text> <Text color={C.fg}>{x.to}</Text>  {x.kind === 'task' ? <Text color={C.green}>{g.task} </Text> : null}<Text color={C.dim}>{oneLine(x.summary)}</Text></Text>
                 ));
               })()}
             </TitledBox>

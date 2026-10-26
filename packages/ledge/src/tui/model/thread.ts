@@ -79,7 +79,8 @@ function itemLines(it: ThreadItem, o: Opts): Line[] {
     case 'helper': return [[{ text: `  ${g.helper} `, color: C.violet }, { text: it.agentType ?? '', color: C.dim }, { text: ` ${oneLine(it.task)}`, color: C.violet }, { text: `  ${it.state === 'working' ? t.state.working : t.session.helperDone}`, color: C.faint }]];
     case 'sent': return [[{ text: `  ${g.message} `, color: C.violet }, { text: `${t.session.sentTo} `, color: C.dim }, { text: it.to, color: C.fg, bold: true }, { text: `  « ${oneLine(it.summary ?? it.text)} »`, color: C.dim }, { text: `  ${t.session.sent[it.status]}`, color: it.status === 'failed' ? C.red : C.green }]];
     case 'received': return [[{ text: `  ${g.message} `, color: C.violet }, { text: `${t.session.receivedFrom} `, color: C.dim }, { text: it.from, color: C.fg, bold: true }, { text: `  « ${oneLine(it.text)} »`, color: C.dim }]];
-    case 'notice': return [[{ text: `  · ${oneLine(it.summary ?? it.text)}`, color: C.faint }]];
+    // A task the session handed over (#92): its plain line says to whom; the summary alone is the title.
+    case 'notice': return [[{ text: `  · ${oneLine(it.outgoing ? it.text : it.summary ?? it.text)}`, color: C.faint }]];
   }
 }
 
