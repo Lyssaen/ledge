@@ -184,19 +184,23 @@ ChatTurn.actions?: ChatAction[]   // 1..8, and chat.done carries it like `closes
 - The fleet copies `actions` from `chat.done` (as `closes`); the phone's strict turn schema gets
   `PhoneChatActionSchema` = `ChatActionSchema` without `args` (the phone sends rows, never args).
 
-### 5.2 What a front draws
+### 5.2 What a front must convey (the look is Ida's)
 
-The front needs no knowledge per action: `summary`, `detail`, `risk`, `state` are enough. Per row: the summary
-(Markdown inline), the risk as a badge (`destructive` in the danger colour), a button, and its state (« fait »,
-« échec : … »). Under the rows, « Tout appliquer » when there are two or more. A front may hold copy per `action` id
-for a nicer verb, with `summary` as the fallback: an older front still draws a newer action.
+This section fixes the data and the behaviour, not the look: no screen (Desktop, overlay, TUI, phone) changes before
+Ida's mockup of the cards, made from this contract, is validated; Bix codes it then.
 
-### 5.3 Confirmation
+- The front needs no knowledge per action: `summary`, `detail`, `risk` and `state` are enough to draw a row. It may
+  hold copy per `action` id, with `summary` as the fallback, so an older front still draws a newer action.
+- Each row can be applied on its own; a card with two rows or more can also be applied as a whole, in order.
+- The risk must be visible before the click, and a row's state (proposed, running, done, failed with its reason) after.
+
+### 5.3 Confirmation (behaviour, enforced by the daemon)
 
 - `read` / `reversible`: the click applies.
-- `destructive`, or « Tout appliquer » over a plan holding one: a dialog lists **every** row to apply, the destructive
-  ones marked, with `detail` in full; « Confirmer » sends `confirmed: true`. Desktop/overlay: a modal; TUI: a
-  `y/N` prompt naming the rows; mobile: the sheet then the device check.
+- `destructive`, or applying the whole card when it holds one: the front asks again, showing **every** row about to
+  be applied, the destructive ones told apart, with `detail` in full; only then does it send `confirmed: true`. The
+  daemon refuses a destructive apply without it, and a phone also needs its device check. How each front asks
+  (dialog, prompt, sheet) is the mockup's.
 
 ## 6. Coverage
 
@@ -304,5 +308,5 @@ turn, weaker than a system prompt against a pane that says « ignore your instru
 
 ## 10. Out of scope
 
-The cards themselves (Bix, from §5), `ledge team` / `ledge close` (#93, on top of §2.1), machine routing changes, a
+The cards themselves (Ida's mockup from §5, then Bix), `ledge team` / `ledge close` (#93, on top of §2.1), machine routing changes, a
 read-only « ask Ledge to show » action set beyond what the files give.
