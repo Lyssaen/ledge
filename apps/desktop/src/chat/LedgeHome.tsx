@@ -6,6 +6,7 @@ import { ChatCopyProvider } from '@ledge/ui/chat/copy';
 import { useActionCards } from '@ledge/ui/chat/useActionCards';
 import { ResidentMascot } from '@ledge/ui/bots/ResidentMascot';
 import { Button } from '@ledge/ui/ui/Button';
+import { Tabs, tabIds } from '@ledge/ui/ui/Tabs';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import type { FleetView } from '../fleet/useFleet';
 import type { Decisions } from '../fleet/decisions';
@@ -19,6 +20,7 @@ import { useDefaultTool } from '../settings/tool';
 import { HOME_TABS, type HomeTab, type NavAction } from '../nav/state';
 import { teamProject } from '../atelier/layout';
 import { closedLedgeTasks, ledgeProgress, nearLimit, type TeamsApi } from '../teams/useTeamsApi';
+import { CatalogView, ScopePicker, stateKey, useCatalog, useScope, type CatalogPick, type TeamsView } from '../teams/Catalog';
 import type { Wait } from '../list/time';
 import { useAgentHighlight } from './useAgentHighlight';
 import { useChatCards } from './useChatCards';
@@ -33,6 +35,8 @@ export interface LedgeHomeProps {
   task?: string;
   paused: boolean; focus: number;
   projects: Projects | null;
+  /** The folder of the session open in the atelier, and the atelier's project filter: where « Équipes »' catalog reads first (#97). */
+  openCwd?: string; atelierProject?: string;
   onLaunched(id: string): void; onTerminal(id: string): void; notify(text: string): void; onProposal(pid: string): void;
 }
 
@@ -119,8 +123,9 @@ export function LePoint({ view, teams, decisions, waits, projects, dispatch, onA
   );
 }
 
-/** A live team in one line: its name, project and seats, the progress of Ledge's tasks, and « Table » or « Reprendre ». */
-function TeamLine({ team, teams, projects, dispatch }: { team: Team; teams: TeamsApi; projects: Projects | null; dispatch: (a: NavAction) => void }): JSX.Element {
+/** A live team in one line: its name, project and seats, the progress of Ledge's tasks, and « Table » or « Reprendre »; with
+ *  `onTemplate`, the template it was born of, a link to the catalog. */
+function TeamLine({ team, teams, projects, dispatch, onTemplate }: { team: Team; teams: TeamsApi; projects: Projects | null; dispatch: (a: NavAction) => void; onTemplate?(id: string): void }): JSX.Element {
   const { t } = useI18n();
   const p = t.home.point;
   const { done, given } = ledgeProgress(teams.tasks, team.id);
@@ -129,7 +134,8 @@ function TeamLine({ team, teams, projects, dispatch }: { team: Team; teams: Team
   return (
     <div className={cls('lp-row lp-team', team.state === 'resting' && 'lp-resting')} data-team={team.id}>
       <span className="team-flag" aria-hidden>⚑</span>
-      <span className="lp-text"><strong>{team.name}</strong> <small>{[name, p.seats(team.seats.filter(s => s.sessionId).length), team.state === 'resting' ? p.resting : null].filter(Boolean).join(' · ')}</small></span>
+      <span className="lp-text"><strong>{team.name}</strong> <small>{[name, p.seats(team.seats.filter(s => s.sessionId).length), team.state === 'resting' ? p.resting : null].filter(Boolean).join(' · ')}</small>
+        {onTemplate && team.template && <small> · {t.home.catalog.fromTemplate} <button type="button" className="cat-goto" onClick={() => onTemplate(team.template!)}>{team.template}</button></small>}</span>
       <span className="lp-progress" title={p.progress(done, given)} aria-label={p.progress(done, given)}><i style={{ width: `${given ? Math.round((done / given) * 100) : 0}%` }} /></span>
       <small className="lp-count">{done}/{given}</small>
       {team.state === 'resting'
@@ -139,31 +145,70 @@ function TeamLine({ team, teams, projects, dispatch }: { team: Team; teams: Team
   );
 }
 
-/** « Équipes »: the same live teams as « Le point », each with its seats and their sessions. */
-function TeamsTab({ teams, sessions, projects, dispatch }: { teams: TeamsApi; sessions: readonly Session[]; projects: Projects | null; dispatch: (a: NavAction) => void }): JSX.Element {
+/**
+ * « Équipes » (#97): the live teams, as « Le point » shows them, and the catalog of a folder, its templates and its roles, read
+ * from the local daemon at the view's opening and for each folder chosen. A live team's template and each `@role` lead there.
+ */
+function TeamsTab({ client, teams, sessions, projects, dispatch, notify, openCwd, atelierProject }: {
+  client: DaemonClient; teams: TeamsApi; sessions: readonly Session[]; projects: Projects | null; dispatch: (a: NavAction) => void; notify(text: string): void;
+  openCwd?: string; atelierProject?: string;
+}): JSX.Element {
   const { t } = useI18n();
+  const c = t.home.catalog;
   const live = teams.teams ?? [];
   const byId = new Map(sessions.map(s => [s.id, s]));
+  const [view, setView] = useState<TeamsView>('live');
+  const [pick, setPick] = useState<CatalogPick>({});
+  const [query, setQuery] = useState('');
+  const [tick, setTick] = useState(0);
+  const scope = useScope(projects, openCwd, atelierProject);
+  const listing = useCatalog(teams, scope.cwd, tick);
+  const show = (next: TeamsView, nextPick: CatalogPick = { ...pick, problems: false }) => {
+    setPick(nextPick);
+    if (next !== view && next !== 'live') setTick(n => n + 1);
+    setView(next);
+  };
+  // From a live team: its folder's catalog, on its template or one of its roles.
+  const goto = (team: Team, next: 'roles' | 'templates', id: string) => {
+    scope.choose(team.cwd, false);
+    setQuery('');
+    show(next, next === 'roles' ? { role: id } : { template: id });
+  };
+  const known = listing && !listing.silent ? listing : null;
+  const counts = { live: live.length, templates: known?.templates.length, roles: known?.roles.length };
+  const ids = tabIds('home-teams', view);
   return (
-    <div className="home-list" role="tabpanel" aria-label={t.home.tabs.teams(live.length)}>
-      {live.length === 0 && <p className="lp-none">{t.home.teams.none}</p>}
-      {live.map(team => (
-        <section key={team.id} className="home-team">
-          <TeamLine team={team} teams={teams} projects={projects} dispatch={dispatch} />
-          <ul>
-            {team.seats.map(seat => {
-              const s = seat.sessionId ? byId.get(seat.sessionId) : undefined;
-              return (
-                <li key={seat.role}>
-                  <span className="role-pill">@{seat.role}</span>
-                  {s ? <button type="button" className="st-name" onClick={() => dispatch({ type: 'open', id: s.id })}>{s.name}</button> : <span className="lp-none">—</span>}
-                  {s && <small>{t.stateLabel[s.state === 'waiting_permission' ? 'approval' : s.state === 'waiting_input' ? 'question' : s.state === 'exited' ? 'done' : s.state === 'idle' ? 'idle' : s.state === 'error' ? 'error' : 'working']}</small>}
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      ))}
+    <div className="home-list home-teams" role="tabpanel" aria-label={t.home.tabs.teams(live.length)}>
+      <div className="cat-toolbar">
+        <Tabs id="home-teams" fit label={c.views} value={view} onChange={v => show(v)} tabs={(['live', 'templates', 'roles'] as const).map(v => ({ value: v, label: c[v](counts[v]) }))} />
+        {view !== 'live' && <ScopePicker scope={scope} onChoose={cwd => { scope.choose(cwd, true); setPick({}); }} />}
+        {view === 'roles' && <input type="search" className="cat-search" aria-label={c.filterLabel} placeholder={c.filter} value={query} onChange={e => setQuery(e.target.value)} />}
+      </div>
+      <div className="cat-panel" role="tabpanel" id={ids.panelId} aria-labelledby={ids.tabId}>
+      {view === 'live' ? <>
+        {live.length === 0 && <p className="lp-none">{t.home.teams.none}</p>}
+        {live.map(team => (
+          <section key={team.id} className="home-team">
+            <TeamLine team={team} teams={teams} projects={projects} dispatch={dispatch} onTemplate={id => goto(team, 'templates', id)} />
+            <ul>
+              {team.seats.map(seat => {
+                const s = seat.sessionId ? byId.get(seat.sessionId) : undefined;
+                return (
+                  <li key={seat.role}>
+                    <button type="button" className="role-pill" title={c.seeRole(seat.role)} onClick={() => goto(team, 'roles', seat.role)}>@{seat.role}</button>
+                    {s ? <button type="button" className="st-name" onClick={() => dispatch({ type: 'open', id: s.id })}>{s.name}</button> : <span className="lp-none">—</span>}
+                    {s && <small>{t.stateLabel[stateKey(s)]}</small>}
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ))}
+      </> : (
+        <CatalogView ctx={{ client, teams, sessions, projects, dispatch, notify }} view={view} cwd={scope.cwd} listing={listing} pick={pick} query={view === 'roles' ? query : ''}
+          onPick={(next, to) => { if (!to) return setPick(next); setQuery(''); show(to, next); }} onRetry={() => setTick(n => n + 1)} />
+      )}
+      </div>
     </div>
   );
 }
@@ -360,7 +405,7 @@ export function LedgeHome(p: LedgeHomeProps): JSX.Element {
                 theme={theme} frozen={offline !== null} reducedMotion={p.paused || reduced} />
             </ChatCopyProvider>
           )}
-          {tab === 'teams' && <TeamsTab teams={teams} sessions={view.sessions} projects={p.projects} dispatch={dispatch} />}
+          {tab === 'teams' && <TeamsTab client={client} teams={teams} sessions={view.sessions} projects={p.projects} dispatch={dispatch} notify={p.notify} openCwd={p.openCwd} atelierProject={p.atelierProject} />}
           {tab === 'tasks' && <TasksTab teams={teams} shown={shownTask} onShow={setShownTask} />}
           {tab === 'history' && <HistoryTab chat={chat} onOpen={qid => {
             dispatch({ type: 'ledge', tab: 'conversation' });

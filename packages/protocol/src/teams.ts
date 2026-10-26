@@ -7,11 +7,12 @@ export const RoleIdSchema = z.string().regex(/^[a-z0-9][a-z0-9_-]{0,39}$/);
 export const ROLE_LABEL_MAX = 40;
 export const ROLE_PROMPT_MAX = 8000;
 
-/** A role (`.ledge/roles/<id>.md`): a label, a prompt, and the launch defaults it asks for. The repository's wins over the home's. */
+/** A role (`.ledge/roles/<id>.md`): a label, a prompt, and the launch defaults it asks for. The repository's wins over the home's:
+ *  `shadows` is then the path of the home role of the same id it hides (absent otherwise, and from older daemons). */
 export const RoleSchema = z.object({
   id: RoleIdSchema, label: z.string().min(1).max(ROLE_LABEL_MAX), prompt: z.string().max(ROLE_PROMPT_MAX),
   tool: ToolSchema.optional(), model: ModelIdSchema.optional(), effort: EffortSchema.optional(), autonomy: AutonomySchema.optional(),
-  source: z.enum(['repo', 'home']), path: z.string()
+  source: z.enum(['repo', 'home']), path: z.string(), shadows: z.string().optional()
 });
 export type Role = z.infer<typeof RoleSchema>;
 
