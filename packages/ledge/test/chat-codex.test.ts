@@ -16,8 +16,8 @@ describe('codexArgs', () => {
     expect(a.at(-1)).toBe('-');
     expect(a).not.toContain('--add-dir');
     expect(a).not.toContain('resume');
-    expect(codexArgs(opts({ resume: true }))[1]).toBe('resume');
-    expect(codexArgs(opts({ resume: true }))[2]).toBe(opts().sessionId);
+    const r = codexArgs(opts({ resume: true }));
+    expect(r[r.indexOf('resume') + 1]).toBe(opts().sessionId);
   });
 });
 
@@ -41,5 +41,20 @@ describe('runCodex', () => {
     expect(events[0]).toMatchObject({ type: 'init' });
     expect(events.filter((e: any) => e.type === 'tool')).toHaveLength(1);
     expect(events.at(-1)).toMatchObject({ type: 'result', isError: false, text: expect.stringContaining('Où en sont les autres ?') });
+  });
+});
+
+describe('codexArgs images and resume order', () => {
+  it('puts --sandbox and -C before `resume` (it rejects them after the id) and pins the whole resume argv', () => {
+    expect(codexArgs(opts({ resume: true, cwd: '/ctx' }))).toEqual(['exec', '--sandbox', 'read-only', '-C', '/ctx', 'resume', opts().sessionId,
+      '--json', '--skip-git-repo-check', '--ignore-user-config', '-c', 'sandbox_permissions=["disk-full-read-access"]', '-']);
+  });
+  it('passes -i per image before the final -, on a first run and on resume', () => {
+    const images = [{ path: '/a/1.png', mime: 'image/png' }, { path: '/a/2.jpg', mime: 'image/jpeg' }];
+    for (const resume of [false, true]) {
+      const a = codexArgs(opts({ resume, images }));
+      expect(a.slice(-5)).toEqual(['-i', '/a/1.png', '-i', '/a/2.jpg', '-']);
+    }
+    expect(codexArgs(opts())).not.toContain('-i');
   });
 });

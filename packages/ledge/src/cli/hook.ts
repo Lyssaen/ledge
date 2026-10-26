@@ -16,6 +16,8 @@ import { parseLedgeCommand, readOnClient, sendOnClient } from './send.js';
 import { taskOnClient } from './task.js';
 import { handoverOnClient } from './handover.js';
 import { formatWho } from './who.js';
+import { takeImages } from '../attachmentText.js';
+import { paths } from '../paths.js';
 
 type Payload = Record<string, unknown>;
 const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
@@ -25,7 +27,12 @@ const PROMPT_MAX = 500;
 /** Claude Code hands a backgrounded helper's report back, another session's message, or its harness's notice about one
  *  (`[Cross-session idle notice]`…), as a prompt: that text is the report, message or notice, capped like a tool input. */
 const fromAgent = (t: string) => t.startsWith('<agent-message from="') || t.startsWith('<cross-session-message ') || t.startsWith('[Cross-session ');
-const promptText = (p: Payload) => { const t = str(p.prompt)?.trim(); return t ? { text: t.slice(0, fromAgent(t) ? INPUT_MAX : PROMPT_MAX) } : {}; };
+/** The prompt's text, cut; the brackets Ledge typed for images in its store leave it as `attachments` ids. */
+const promptText = (p: Payload) => {
+  const raw = str(p.prompt)?.trim(); if (!raw) return {};
+  const taken = takeImages(raw, paths().attachments); const ids = taken.ids; const t = ids.length ? taken.text : raw; // untouched without brackets
+  return { ...(t ? { text: t.slice(0, fromAgent(t) ? INPUT_MAX : PROMPT_MAX) } : {}), ...(ids.length ? { attachments: ids } : {}) };
+};
 
 function describeTool(tool: string | undefined, input: unknown): string {
   const i = (input && typeof input === 'object' ? input : {}) as Payload;

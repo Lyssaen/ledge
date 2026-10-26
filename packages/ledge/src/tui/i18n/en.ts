@@ -1,3 +1,4 @@
+import { formatBytes } from '@ledge/ui/images/encode';
 import type { Messages } from './lang.js';
 
 const plural = (n: number, one: string, many: string) => (n > 1 ? many : one);
@@ -16,6 +17,7 @@ export const en: Messages = {
     tokenMissing: 'no token: start a session with `ledge claude` or run `ledge daemon`'
   },
   keys: {
+    image: 'image', openImage: 'open image',
     navigate: 'move', open: 'open', answer: 'answer', attach: 'attach (tmux)', ask: 'ask Ledge', launch: 'new session',
     settings: 'settings', help: 'help', quit: 'quit', back: 'back', write: 'write', diffs: 'diffs', terminal: 'terminal', model: 'model',
     interrupt: 'interrupt', next: 'next waiting', unfold: 'unfold', send: 'send / launch', nextCard: 'next card',
@@ -81,6 +83,12 @@ export const en: Messages = {
   },
   settings: { title: 'Settings', language: 'Language', context: 'Max context', contextHint: 'past it: hand over', contextUnknown: 'update the daemon', contextSaved: pct => `Max context: ${pct} %`, saved: 'Setting saved.', saveFailed: m => `Setting applied, but not saved: ${m}` },
   help: { title: 'Help', global: 'Everywhere', overview: 'Overview', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings', screens: 'switch screen' },
+  images: {
+    capture: 'capture', size: (n: number) => formatBytes(n, 'en'), open: (key: string) => `${key} open in viewer`,
+    tooLarge: 'Image too large, even reduced', notImage: 'This file is not an image', failed: 'Image not sent',
+    max: '5 images per message at most', dialog: 'Answer the question first, the image will go after', none: 'No image in the clipboard',
+    openFailed: (why: string) => `Image not opened: ${why}`
+  },
   toast: {
     handover: n => `${n} is writing its brief: a fresh session will take its place`, handoverRefused: why => `Relief refused: ${why}`,
     accept: n => `✓ ${n}: allowed`, deny: n => `✓ ${n}: denied`, always: n => `✓ ${n}: always allowed`,

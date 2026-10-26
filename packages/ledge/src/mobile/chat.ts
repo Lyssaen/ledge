@@ -27,6 +27,7 @@ export function toPhoneTurn(t: ChatTurn): PhoneChatTurn {
     if (t.answer.length > THREAD_TEXT_MAX) out.cut = true;
   }
   if (t.answeredAt !== undefined) out.answeredAt = t.answeredAt;
+  if (t.attachments?.length) out.attachments = t.attachments;
   if (t.error !== undefined) out.error = errorCode(t.error);
   // All or nothing: the phone's row i is the PC's row i, so a card with one row too long is not projected at all.
   const rows = proposalRows(t);

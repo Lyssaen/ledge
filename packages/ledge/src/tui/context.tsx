@@ -3,6 +3,7 @@ import type { Key } from 'ink';
 import type { DaemonClient, DaemonState, Fleet, MachineState } from '@ledge/fleet';
 import type { Projects, Session } from '@ledge/protocol';
 import type { Actions, Toast } from './actions.js';
+import type { ClipboardImage } from './clipboard.js';
 import type { Glyphs } from './glyphs.js';
 import type { Lang, Messages } from './i18n/lang.js';
 
@@ -22,6 +23,9 @@ export interface Tui {
   /** A field has the keyboard: the global keys are off. */
   setEditing(on: boolean): void;
   attach(s: Session): void;
+  /** The clipboard picture (null when there is none) and the system viewer: injected so tests stub them. */
+  readImage(): Promise<ClipboardImage | null>;
+  openFile(file: string): Promise<void>;
   /** Registers the screen's key handler (see `useScreenKeys`). */
   keys: { current: KeyHandler | null };
 }

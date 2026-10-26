@@ -22,6 +22,7 @@ import { openInLedge, subscribeOpenInLedge } from '../desktop/openInLedge';
 import { SettingsView } from './SettingsView';
 import { HelpView } from './HelpView';
 import { HelperView } from './HelperView';
+import { TurnThumbs } from './TurnThumbs';
 import { LaunchView, LAUNCH_FOOTER_H, type LaunchRequest } from './LaunchView';
 import { ChatView, CHAT_HEADER_H, CHAT_COMPOSER_H } from './ChatView';
 import { loadOpenTab } from './openTabPreference';
@@ -781,7 +782,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
               onAsk={ask} onOpenChat={() => dispatch({ type: 'chat' })} onTyping={on => dispatch({ type: 'typing', on })} askDisabled={chatOffline !== null} />
           </div>
           <div aria-hidden={st.mode !== 'chat' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'chat' ? 'auto' : 'none', transform: `translateX(${st.mode === 'chat' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
-            <ChatView contentRef={chatRef} turns={chat} live={chatLive} sessions={sessions} visible={st.mode === 'chat'} enterDelay={enter} offline={chatOffline}
+            <ChatView contentRef={chatRef} turnImages={turn => <TurnThumbs client={client} turn={turn} />} turns={chat} live={chatLive} sessions={sessions} visible={st.mode === 'chat'} enterDelay={enter} offline={chatOffline}
               showBack={false}
               headerExtra={<IslandMenu open={menuOpen && st.mode === 'chat'} dnd={dnd} onToggle={() => setMenuOpen(o => !o)} onClose={() => setMenuOpen(false)} onSettings={() => { setMenuOpen(false); openInLedge({ kind: 'settings' }); }} onDnd={onToggleDnd} onQuit={() => { setMenuOpen(false); void quitApp(); }} />}
               turnAvailable={qid => !client.fleet || !!client.fleet.turnMachine(qid)?.ready}
@@ -809,7 +810,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
             <HelpView shortcut={shortcut} contentRef={helpRef} visible={st.mode === 'help'} enterDelay={enter} onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} />
           </div>
           <div aria-hidden={st.mode !== 'session' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'session' ? 'auto' : 'none', transform: `translateX(${st.mode === 'session' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
-            {shown && <SessionView helpers={shows.helpers} contentRef={sessionContentRef} replyRef={sessionReplyRef} session={shown} preview={shownPreview} visible={st.mode === 'session'} enterDelay={enter} reading={st.reading} draft={drafts[shown.id] ?? ''} thread={threads.get(shown.id)} onOpenHelper={id => dispatch({ type: 'openHelper', id })}
+            {shown && <SessionView client={client} helpers={shows.helpers} contentRef={sessionContentRef} replyRef={sessionReplyRef} session={shown} preview={shownPreview} visible={st.mode === 'session'} enterDelay={enter} reading={st.reading} draft={drafts[shown.id] ?? ''} thread={threads.get(shown.id)} onOpenHelper={id => dispatch({ type: 'openHelper', id })}
               blocked={blockedFor(shown)} deciding={asks.inFlight.has(shown.id)} failure={asks.failures[shown.id]} frozen={unreachable} reducedMotion={reducedMotion}
               onDraft={t => { setDrafts(x => ({ ...x, [shown.id]: t })); dispatch({ type: 'typing', on: t.length > 0 }); }}
               onBack={() => dispatch({ type: 'back' })} onClose={() => dispatch({ type: 'close' })} onDecide={d => decide(shown.id, d)} onReply={t => reply(shown.id, t)}

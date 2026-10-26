@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { Page, WebSocketRoute } from '@playwright/test';
 import type { ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, FoundRepo, IslandPrefs, Machines, ModelChoice, Projects, Recent, Session, ThreadItem, Tool } from '@ledge/protocol';
 
@@ -45,6 +46,7 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
   let up = true;
   let launches = 0;
   const turns = new Map<string, ChatTurn>();
+  const images = new Map<string, { mime: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; data: string; preview: boolean }>();
   await page.routeWebSocket(/127\.0\.0\.1:47831\/?$/, ws => {
     if (!up) { ws.close(); return; }
     socket = ws;
@@ -65,6 +67,20 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
         ws.send(JSON.stringify(text === undefined
           ? { type: 'document.error', requestId: msg.requestId, path: msg.path, code: 'not_found' }
           : { type: 'document.content', requestId: msg.requestId, path: msg.path, text, bytes: new TextEncoder().encode(text).length, modifiedAt: T0 }));
+      }
+      // Attachments: a put is stored under its sha256 and answered with its ref; a get serves the stored bytes (the preview when asked and present), `attachment.error` `not_found` for an unknown id.
+      if (msg.type === 'attachment.put') {
+        const id = createHash('sha256').update(msg.image.data).digest('hex');
+        const preview = msg.image.preview !== undefined;
+        images.set(id, { mime: msg.image.mime, data: msg.image.data, preview });
+        if (preview) images.set(`${id}:preview`, { mime: msg.image.preview!.mime, data: msg.image.preview!.data, preview: false });
+        ws.send(JSON.stringify({ type: 'attachment.stored', requestId: msg.requestId, ref: { id, mime: msg.image.mime, width: 1440, height: 900, bytes: Math.floor(msg.image.data.length * 3 / 4), preview } }));
+      }
+      if (msg.type === 'attachment.get') {
+        const hit = (msg.preview ? images.get(`${msg.attachment}:preview`) : undefined) ?? images.get(msg.attachment);
+        ws.send(JSON.stringify(hit
+          ? { type: 'attachment.data', requestId: msg.requestId, attachment: msg.attachment, mime: hit.mime, data: hit.data }
+          : { type: 'attachment.error', requestId: msg.requestId, reason: 'not_found' }));
       }
       if (msg.type === 'machines.set') { machines = msg.machines; ws.send(JSON.stringify({ type: 'machines', machines })); }
       // #58: the agent's models from `extras.models`; without an entry, an empty list.
@@ -134,6 +150,8 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
   return {
     received,
     push,
+    /** The ref of an image the page put, as the daemon would give it back in a thread item. */
+    stored(id: string) { const i = images.get(id); if (!i) throw new Error(`no stored image ${id}`); return { id, mime: i.mime, width: 1440, height: 900, bytes: Math.floor(i.data.length * 3 / 4), preview: i.preview }; },
     upsert(s: Session) { sessions.set(s.id, s); push({ type: 'session.updated', session: s }); },
     remove(id: string) { sessions.delete(id); push({ type: 'session.removed', id }); },
     /** Answers a `session.launch` as the daemon does: the session is broadcast first, then `session.launched` with its raw id. */

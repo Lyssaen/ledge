@@ -11,7 +11,8 @@ import { runJsonl } from './run.js';
 export function ompChatArgs(o: RunOptions & { sessionDir?: string }): string[] {
   return ['-p', '--mode', 'json', '--tools', 'read,grep,glob', '--no-extensions', '--no-skills', '--no-rules', '--no-lsp', '--approval-mode', 'always-ask',
     '--append-system-prompt', o.persona ?? PERSONA, ...o.addDirs.flatMap(d => ['--add-dir', d]),
-    ...(o.sessionDir ? ['--session-dir', o.sessionDir, ...(o.resume ? ['--continue'] : [])] : ['--no-session'])];
+    ...(o.sessionDir ? ['--session-dir', o.sessionDir, ...(o.resume ? ['--continue'] : [])] : ['--no-session']),
+    ...(o.images ?? []).map(i => `@${i.path}`)];
 }
 
 type Json = Record<string, unknown>;

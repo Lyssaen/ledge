@@ -4,6 +4,7 @@ import { Box, Text, useInput, useWindowSize } from 'ink';
 import { daemonStore } from '@ledge/fleet';
 import { LEDGE_GIVER, proposalRows, type ChatTurn } from '@ledge/protocol';
 import { useEditing, useScreenKeys, useTui } from '../context.js';
+import { ChipsLine, type Chip, useChips, useOpenImage, usePaste } from '../images.js';
 import { chatLines, openCards, type Card } from '../model/chat.js';
 import { TOOL_NAME } from '../model/labels.js';
 import { listed } from '../model/overview.js';
@@ -24,8 +25,21 @@ export function Ask() {
   const [draft, setDraft] = useState('');
   // -1: the question field; otherwise the index of the focused card.
   const [focus, setFocus] = useState(-1);
+  // Images travel inline with the question: no store on a machine before Ledge routes it.
+  const chips = useChips(null);
+  const paste = usePaste(chips);
+  const openImage = useOpenImage();
   const [busy, setBusy] = useState<{ qid: string; turn: ChatTurn | undefined; errorSeq: number; at: number } | null>(null);
   useEditing(focus === -1);
+  // What the last question carried: given back if the daemon refuses it, as a session reply does.
+  const sentAsk = useRef<{ qid: string; taken: Chip[]; text: string } | null>(null);
+  useEffect(() => {
+    const s = sentAsk.current;
+    const turn = s && d.chat.find(x => x.qid === s.qid);
+    if (!s || !turn) return;
+    if (turn.error) { sentAsk.current = null; chips.putBack(s.taken); setDraft(x => x || s.text); }
+    else if (turn.answeredAt) sentAsk.current = null;
+  }, [d.chat]);
 
   const cards = useMemo(() => openCards(d.chat), [d.chat]);
   useEffect(() => { if (focus >= cards.length) setFocus(cards.length ? cards.length - 1 : -1); }, [cards.length, focus]);
@@ -41,11 +55,13 @@ export function Ask() {
   const local = machines.find(m => m.id === 'local');
   const asking = d.chat.find(x => !x.answeredAt && !x.error);
   const ask = (text: string) => {
-    if (!text.trim()) return;
+    const images = chips.uploads();
+    if (!text.trim() && images.length === 0) return;
     if (!local?.ready) { toast({ text: t.ask.offline, tone: 'info' }); return; }
     const qid = `q-${randomUUID()}`;
     daemonStore.beginTurn({ qid, question: text.trim(), askedAt: new Date().toISOString(), steps: [] });
-    client.send({ type: 'chat.ask', qid, text: text.trim() });
+    client.send({ type: 'chat.ask', qid, text: text.trim(), ...(images.length ? { images } : {}) });
+    sentAsk.current = { qid, taken: chips.clear(), text: text.trim() };
     setDraft('');
   };
   const act = (card: Card) => {
@@ -72,8 +88,13 @@ export function Ask() {
   // ctrl+c stops the answer being written; ctrl+n starts a new conversation; tab goes from the field to the cards and back.
   const latest = useRef({ asking, cards, focus });
   latest.current = { asking, cards, focus };
+  // The images of the conversation, oldest first: Alt+O opens the newest.
+  const turnImages = useMemo(() => d.chat.flatMap(x => (x.attachments ?? []).map(ref => ({ ref, route: { machine: x.machineId } }))), [d.chat]);
   useInput((input, key) => {
     if (key.ctrl && input === 'n') { client.send({ type: 'chat.reset' }); return; }
+    if (key.meta && input === 'v' && latest.current.focus === -1) { paste(); return; }
+    if ((key.backspace || key.delete) && latest.current.focus === -1 && draft === '') { chips.removeLast(); return; }
+    if (key.meta && input === 'o' && turnImages.length) { openImage(turnImages); return; }
     if (key.tab) { const n = latest.current.cards.length; setFocus(f => (n === 0 ? -1 : f + 1 >= n ? -1 : f + 1)); }
   });
   useScreenKeys((input, key) => {
@@ -97,13 +118,14 @@ export function Ask() {
   const width = Math.max(20, columns - 6);
   const lines = useMemo(() => chatLines(d.chat, d.chatLive, { t, g, width }), [d.chat, d.chatLive, t, g, width]);
   return (
-    <Frame crumb={`${t.tabs.ask}`} keys={[['↵', t.keys.send], ['tab', t.keys.nextCard], ['s', t.keys.save], ['ctrl+n', t.keys.newChat], ['ctrl+c', t.keys.stopAnswer], ['esc', t.keys.back]]}>
+    <Frame crumb={`${t.tabs.ask}`} keys={[['↵', t.keys.send], ['alt+v', t.keys.image], ...(turnImages.length ? [['alt+o', t.keys.openImage] as const] : []), ['tab', t.keys.nextCard], ['s', t.keys.save], ['ctrl+n', t.keys.newChat], ['ctrl+c', t.keys.stopAnswer], ['esc', t.keys.back]]}>
       <TitledBox title={t.ask.operator(sessions, Math.max(1, machines.length))} flexGrow={1}>
         {lines.length === 0 ? <Text color={C.faint}>{t.ask.empty}</Text>
           : <Lines lines={lines} />}
       </TitledBox>
       {cards.slice(0, 2).map((c, i) => <CardBox key={`${c.kind}:${c.qid}`} card={c} turn={d.chat.find(x => x.qid === c.qid)!} focused={i === focus} busy={busy?.qid === c.qid} />)}
       <TitledBox title={t.ask.question} flexShrink={0} color={focus === -1 ? C.coral : C.line}>
+        <ChipsLine chips={chips.items} />
         <Box><Text color={C.coral}>{g.cursor} </Text>
           <Box flexGrow={1} overflow="hidden">
             <TextInput value={draft} onChange={setDraft} onSubmit={ask} onEscape={() => { if (!draft) go('overview'); }} active={focus === -1} />

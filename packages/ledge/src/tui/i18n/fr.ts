@@ -1,3 +1,4 @@
+import { formatBytes } from '@ledge/ui/images/encode';
 import type { BotState } from '@ledge/ui/bots/poseFor';
 
 const plural = (n: number, one: string, many: string) => (n > 1 ? many : one);
@@ -19,6 +20,7 @@ export const fr = {
     tokenMissing: 'pas de jeton : lancez une session avec `ledge claude` ou `ledge daemon`'
   },
   keys: {
+    image: 'image', openImage: "ouvrir l'image",
     navigate: 'naviguer', open: 'ouvrir', answer: 'répondre', attach: 'attacher (tmux)', ask: 'demander à Ledge', launch: 'nouvelle session',
     settings: 'réglages', help: 'aide', quit: 'quitter', back: 'retour', write: 'écrire', diffs: 'diffs', terminal: 'terminal', model: 'modèle',
     interrupt: 'interrompre', next: 'suivante en attente', unfold: 'déplier', send: 'envoyer / lancer', nextCard: 'carte suivante',
@@ -86,6 +88,12 @@ export const fr = {
   help: {
     title: 'Aide', global: 'Partout', overview: 'Vue d’ensemble', session: 'Session', ask: 'Demander à Ledge', launch: 'Nouvelle session', settings: 'Réglages',
     screens: 'changer d’écran'
+  },
+  images: {
+    capture: 'capture', size: (n: number) => formatBytes(n, 'fr'), open: (key: string) => `${key} ouvrir dans la visionneuse`,
+    tooLarge: 'Image trop lourde, même réduite', notImage: "Ce fichier n'est pas une image", failed: 'Image non envoyée',
+    max: '5 images au plus par message', dialog: "Répondez d'abord à la question, l'image partira après", none: "Pas d'image dans le presse-papiers",
+    openFailed: (why: string) => `Image non ouverte : ${why}`
   },
   toast: {
     handover: (n: string) => `${n} écrit son bilan : une nouvelle session prendra sa place`, handoverRefused: (why: string) => `Relève refusée : ${why}`,

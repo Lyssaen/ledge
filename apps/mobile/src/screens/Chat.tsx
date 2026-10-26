@@ -9,6 +9,7 @@ import { LinkStatus, linkView } from '../ui/Header';
 import { TabBar } from '../ui/TabBar';
 import { requestsOf } from '../model/requests';
 import { closedTasks } from '../model/teams';
+import { useAttachments } from '../ui/useAttachments';
 import { LePoint } from '../ui/teams/LePoint';
 import type { PhoneTeam } from '@ledge/protocol';
 
@@ -35,6 +36,7 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
   const sessions = [...state.sessions.values()];
   const repos = new Set(sessions.map(s => s.repo).filter(Boolean));
   const [text, setText] = useState('');
+  const images = useAttachments(store);
   // A refusal for load: the screen says so (the store has already forgotten it) and the question is back in the field.
   const [refused, setRefused] = useState<string | null>(null);
   const end = useRef<HTMLDivElement>(null);
@@ -43,21 +45,27 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
   // A PC that knows teams: Ledge is the operator, and the thread opens on « Le point » (ledge home spec §2.4).
   const teams = state.teams;
 
+  const takenAtSend = useRef<ReturnType<typeof images.clear>>([]);
   useEffect(() => {
     const e = chat.error;
     if (e?.text === undefined) return;
     // Not a newer draft's loss: the question only comes back into an empty field.
     setText(prev => prev || e.text!);
+    if (takenAtSend.current.length) { images.putBack(takenAtSend.current); takenAtSend.current = []; }
     setRefused(e.code === 'busy' ? copy.chat.busy : e.code === 'offline' ? copy.chat.offline : copy.chat.failed);
     store.clearChatError();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chat.error, store]);
   useEffect(() => { end.current?.scrollIntoView?.({ block: 'end' }); }, [chat.turns.length, chat.live?.text, chat.live?.steps.length]);
 
   const send = () => {
     const q = text.trim();
-    if (!q || running || offline) return;
+    if ((!q && images.items.length === 0) || running || offline || !images.ready) return;
     setRefused(null);
-    store.ask(q);
+    const ids = images.ids();
+    const taken = images.clear();
+    takenAtSend.current = taken;
+    store.ask(q, ids);
     setText('');
   };
   const note = refused ?? (offline ? copy.chat.offline : null);
@@ -104,7 +112,7 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
         <div ref={end} />
       </main>
       {note && <p role="status" className="flex-none pb-2 text-[13px] text-attention">{note}</p>}
-      <Composer value={text} onChange={setText} onSend={send} canSend={text.trim() !== '' && !running && !offline} />
+      <Composer value={text} onChange={setText} onSend={send} canSend={(text.trim() !== '' || images.items.length > 0) && images.ready && !running && !offline} images={images} attachDisabled={running || offline} />
       <TabBar count={requestsOf(sessions).length + closedTasks(state.tasks.values()).length} active="chat" chat />
     </>
   );

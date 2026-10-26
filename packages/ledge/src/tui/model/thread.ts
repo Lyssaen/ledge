@@ -1,4 +1,4 @@
-import type { ThreadItem, ToolItem } from '@ledge/protocol';
+import type { AttachmentRef, ThreadItem, ToolItem } from '@ledge/protocol';
 import { turns, type Turn } from '@ledge/ui/thread/turns';
 import { target, SPINNER } from '@ledge/ui/thread/tools';
 import type { Glyphs } from '../glyphs.js';
@@ -9,6 +9,11 @@ import { clock, oneLine } from './time.js';
 /** A piece of a line, with its colour. */
 export type Seg = { text: string; color?: string; bold?: boolean };
 export type Line = Seg[];
+
+/** One line for an attached image, to open with `key` (« o », « alt+o »): `  ▣ capture 1440×900 · 212 Ko · o ouvrir dans la visionneuse`. */
+export function imageLine(ref: AttachmentRef, t: Messages, key: string): Line {
+  return [{ text: `  ▣ ${t.images.capture} ${ref.width}×${ref.height} · ${t.images.size(ref.bytes)} · ${t.images.open(key)}`, color: C.faint }];
+}
 
 /** The most diff lines shown under one file. */
 export const DIFF_MAX = 30;
@@ -68,7 +73,7 @@ function itemLines(it: ThreadItem, o: Opts): Line[] {
   const { t, g, width } = o;
   const body = (text: string, color: string) => wrap(text, width - 2).map(l => [{ text: `  ${l}`, color }]);
   switch (it.kind) {
-    case 'prompt': return [[{ text: t.session.you, color: C.coral, bold: true }, { text: `  ${clock(it.at)}`, color: C.faint }], ...body(it.text, C.fg)];
+    case 'prompt': return [[{ text: t.session.you, color: C.coral, bold: true }, { text: `  ${clock(it.at)}`, color: C.faint }], ...body(it.text, C.fg), ...(it.images ?? []).map(r => imageLine(r, t, 'o'))];
     case 'message': return body(it.text, C.dim);
     case 'reply': return body(it.text, C.fg);
     case 'tool': return toolLines(it, o);
@@ -103,4 +108,10 @@ export function threadLines(items: ThreadItem[], o: Opts & { unfolded: boolean }
     for (const it of turn.items) out.push(...itemLines(it, o));
   });
   return out;
+}
+
+/** The images of the turns shown in full (the last one, or all unfolded), oldest first. */
+export function threadImages(items: ThreadItem[], unfolded: boolean): AttachmentRef[] {
+  const all = turns(items);
+  return (unfolded ? all : all.slice(-1)).flatMap(turn => turn.items.flatMap(it => (it.kind === 'prompt' ? it.images ?? [] : [])));
 }

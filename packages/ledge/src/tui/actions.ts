@@ -12,7 +12,8 @@ export interface Actions {
   key(s: Session, key: string): boolean;
   /** Deny with a note the agent reads. */
   denyWithNote(s: Session, note: string, onRefused: (text: string) => void): void;
-  reply(s: Session, text: string, onRefused: (text: string) => void): boolean;
+  /** `how.attachments`: the stored ids of the images that go with the reply. */
+  reply(s: Session, text: string, onRefused: (text: string) => void, how?: { attachments?: string[] }): boolean;
   interrupt(s: Session): void;
   busy(id: string): boolean;
 }
@@ -48,8 +49,8 @@ export function useActions(o: { client: DaemonClient; sessions: readonly Session
       if (decisions.decide(s, 'deny', note, onRefused)) onLand.current.set(s.id, t.toast.deny(s.name));
       else { onRefused(note); toast({ text: t.toast.noNote(s.name), tone: 'info' }); }
     },
-    reply(s, text, onRefused) {
-      const sent = decisions.reply(s, text, onRefused);
+    reply(s, text, onRefused, how) {
+      const sent = decisions.reply(s, text, onRefused, how);
       if (sent) onLand.current.set(s.id, t.toast.reply(s.name));
       else toast({ text: s.offline ? t.toast.offline(s.name) : s.source === 'hook_only' ? t.toast.readOnly(s.name) : t.toast.busy(s.name), tone: 'info' });
       return sent;

@@ -28,6 +28,12 @@ export const copy = {
     offlineNote: 'Vous pouvez consulter les demandes. Aucune décision ne sera envoyée hors connexion.'
   },
   nav: { label: 'Navigation principale', inbox: 'À traiter', agents: 'Agents', chat: 'Ledge' },
+  images: {
+    attach: 'Joindre une image', remove: 'Retirer l\'image', tooLarge: 'Image trop lourde, même réduite', notImage: 'Ce fichier n\'est pas une image', max: '5 images au plus par message',
+    dialog: 'Répondez d\'abord à la question, l\'image partira après', failed: 'Image non envoyée',
+    noPreview: 'Image trop lourde pour le téléphone · ouvrir sur le PC', unavailable: 'Image indisponible',
+    view: 'Image', share: 'Partager', save: 'Enregistrer', close: 'Fermer', prev: 'Image précédente', next: 'Image suivante'
+  },
   chat: {
     title: 'Ledge',
     subtitle: (agents: number, repos: number) => `Fil du téléphone · ${agents} ${agents > 1 ? 'agents' : 'agent'}, ${repos} ${repos > 1 ? 'repos' : 'repo'}`,
@@ -194,6 +200,7 @@ export const copy = {
       untypable: 'Le message doit tenir sur une ligne, sans saut de ligne ni caractère de contrôle.',
       failTitle: 'Message non envoyé', uncertainTitle: 'Réception non confirmée',
       lost: 'Le PC est injoignable. Votre brouillon est conservé.',
+      imageGone: 'Une image n’est plus disponible : retirez-la et recollez-la. Votre brouillon est conservé.',
       busy: 'L’agent n’est plus disponible pour une consigne. Votre brouillon est conservé.',
       invalid: (max: number) => `Le message n’a pas été accepté par le PC (${max} caractères au plus). Votre brouillon est conservé.`,
       readOnly: 'Cette session a été démarrée hors de Ledge : écrivez dans le terminal.',

@@ -104,7 +104,7 @@ describe('server: OMP sessions', () => {
     await until(() => store.get(id)!.queue?.length === 2);
     expect(store.get(id)!.queue).toEqual([{ text: 'hurry', mode: 'steer' }, { text: 'after this', mode: 'follow_up' }]);
     c.send({ type: 'session.interrupt', id, restoreQueue: true });
-    expect(await c.next('session.queue.restored')).toEqual({ type: 'session.queue.restored', id, texts: ['hurry', 'after this'] });
+    expect(await c.next('session.queue.restored')).toEqual({ type: 'session.queue.restored', id, texts: ['hurry', 'after this'], entries: [{ text: 'hurry', attachments: [] }, { text: 'after this', attachments: [] }] });
     await until(() => store.get(id)!.queue === undefined && store.get(id)!.state === 'idle');
     expect(store.get(id)!.lastReply?.text).toBe('done: slow work'); // nothing the queue held ran
     await c.close();

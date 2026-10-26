@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
+import type { DaemonClient } from '@ledge/fleet';
 import type { Session, ThreadItem } from '@ledge/protocol';
+import { Thumbs } from '@ledge/ui/images';
 import type { Messages } from '../i18n/messages';
 import { Bot } from '../bots/Bot';
 import { botState, poseFor } from '../bots/poseFor';
@@ -15,18 +17,22 @@ export interface ThreadProps {
   hideCurrentReply?: boolean;
   /** Opens a Markdown document an agent's message links to; without it such links stay text. */
   onDocument?: (ref: DocumentReference) => void;
+  /** Fetches a prompt's images; without it they are not shown. Display only: the island adds no image of its own. */
+  client?: DaemonClient;
 }
 
+const clock = (at: string) => { const d = new Date(at); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
 const mono = { fontFamily: 'var(--font-mono, ui-monospace, monospace)' } as const;
 const pre = { ...mono, margin: 0, padding: '8px 10px', fontSize: 11, lineHeight: '17px', whiteSpace: 'pre-wrap' as const, overflowWrap: 'anywhere' as const, background: 'var(--well)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', maxHeight: 220, overflow: 'auto' };
 const muted = { fontSize: 11, lineHeight: '16px', color: 'var(--muted-foreground)' } as const;
 
-function Item({ item, session, t, theme, paused, frozen, reducedMotion, onDocument }: { item: ThreadItem } & Omit<ThreadProps, 'items' | 'hideCurrentReply' | 'now'>) {
+function Item({ item, session, t, theme, paused, frozen, reducedMotion, onDocument, client }: { item: ThreadItem } & Omit<ThreadProps, 'items' | 'hideCurrentReply' | 'now'>) {
   switch (item.kind) {
     case 'prompt': return (
       <div data-item="prompt" data-prompt style={{ margin: '0 0 0 18px', padding: '10px 12px', background: 'var(--well)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)' }}>
         <span style={{ ...muted, display: 'block', fontSize: 10, marginBottom: 4 }}>{t.thread.you}</span>
         <p style={{ margin: 0, fontSize: 13, lineHeight: '20px', overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}>{item.text}</p>
+        {client && item.images?.length ? <div style={{ marginTop: 8 }}><Thumbs client={client} refs={item.images} route={{ id: session.id }} max={{ w: 260, h: 160 }} who={t.thread.you} at={clock(item.at)} lang={t.time.locale.startsWith('fr') ? 'fr' : 'en'} copy={t.thread.image} /></div> : null}
       </div>);
     // The bot takes the same props as the header bot in SessionView.tsx (botState/poseFor signatures live in ../bots/poseFor).
     case 'message':
@@ -65,7 +71,7 @@ export function Thread(p: ThreadProps) {
   const rows: ReactNode[] = [];
   for (const turn of all) for (const it of turn.items) {
     if ((it.kind === 'tool' && !it.byClose) || (hideCurrentReply && it.kind === 'reply' && turn === current)) continue;
-    rows.push(<Item key={it.id} item={it} session={session} t={t} theme={p.theme} paused={p.paused} frozen={p.frozen} reducedMotion={p.reducedMotion} onDocument={p.onDocument} />);
+    rows.push(<Item key={it.id} item={it} session={session} t={t} theme={p.theme} paused={p.paused} frozen={p.frozen} reducedMotion={p.reducedMotion} onDocument={p.onDocument} client={p.client} />);
   }
   // The current turn's calls are one live line, under everything said so far: the running tool, then its mark.
   if (current.items.some(it => it.kind === 'tool')) rows.push(<LiveToolLine key="live-tools" items={current.items} t={t} now={p.now} paused={p.paused} reducedMotion={p.reducedMotion} />);

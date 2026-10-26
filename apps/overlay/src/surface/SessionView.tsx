@@ -1,4 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react';
+import type { DaemonClient } from '@ledge/fleet';
 import type { Helper, Pending, Session, ThreadItem } from '@ledge/protocol';
 import { Bot } from '../bots/Bot';
 import { botState, liveHelpers, poseFor, type BotState } from '../bots/poseFor';
@@ -125,6 +126,8 @@ function HelpersTree({ parent, helpers, direction, t, theme, paused, frozen, red
 }
 
 export interface SessionViewProps {
+  /** Fetches the thread's images; without it they are not shown. */
+  client?: DaemonClient;
   session: Session; preview: string[]; visible: boolean; reading: boolean; draft: string;
   /** When the layer's fade-in starts, in ms (see `enterDelay` in motion). */
   enterDelay?: number;
@@ -235,7 +238,7 @@ export function SessionView(p: SessionViewProps) {
           {readOnly && p.helpers !== false && rows.length > 0 && <HelpersTree parent={s} helpers={rows} direction="down" t={t} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} onOpen={p.onOpenHelper} />}
           {p.thread !== undefined
             // The current answer is the card below when there is one, or the plan the request shows; otherwise (a request waits) it reads in the thread.
-            ? <Thread session={s} items={p.thread} t={t} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} now={p.now} onDocument={p.onDocument} hideCurrentReply={!!(reply && doc) || (!!pending?.body && pending.body === s.lastReply?.text)} />
+            ? <Thread client={p.client} session={s} items={p.thread} t={t} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} now={p.now} onDocument={p.onDocument} hideCurrentReply={!!(reply && doc) || (!!pending?.body && pending.body === s.lastReply?.text)} />
             : <p style={{ fontSize: 11, color: 'var(--muted-foreground)', margin: '12px 0 0' }}>{t.thread.loading}</p>}
           {reply && doc && <>
             <span data-reply-meta style={{ marginTop: 6, fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>

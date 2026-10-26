@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'rea
 import { daemonStore, useDaemon, useTeams, type DaemonClient } from '@ledge/fleet';
 import { ChatView } from '@ledge/ui/chat/ChatView';
 import { ChatCopyProvider } from '@ledge/ui/chat/copy';
+import { useAttachments } from '../images/useAttachments';
+import { TurnThumbs } from '../images/Thumbs';
 import type { Projects } from '@ledge/protocol';
 import type { FleetView } from '../fleet/useFleet';
 import { chatCopy, useI18n } from '../i18n/lang';
@@ -64,11 +66,15 @@ export function ChatPanel({ client, view, paused, focus, onClose, onOpenSession,
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => { inputRef.current?.focus({ preventScroll: true }); }, [focus]);
 
-  const ask = (text: string) => {
+  // Images pasted or dropped on the field travel inline with the field's question only (not a suggestion's or « Résumer »).
+  const images = useAttachments(client, { inline: true });
+  const ask = (text: string, withImages = false) => {
     if (offline) return;
     const qid = `q-${crypto.randomUUID()}`;
     daemonStore.beginTurn({ qid, question: text, askedAt: new Date().toISOString(), steps: [] });
-    send({ type: 'chat.ask', qid, text, tool });
+    const uploads = withImages ? images.uploads() : [];
+    send({ type: 'chat.ask', qid, text, ...(uploads.length ? { images: uploads } : {}), tool });
+    if (withImages) images.clear();
   };
   // Opening a name opens the agent's page, which closes the chat (the mockup's `open`); the light goes out first.
   const open = (id: string) => { setHovered(null); onOpenSession(id); };
@@ -83,7 +89,7 @@ export function ChatPanel({ client, view, paused, focus, onClose, onOpenSession,
     }}>
       <div className="chat-drawer-content">
         <ChatCopyProvider value={copy}>
-          <ChatView docked visible turns={chat} live={chatLive} sessions={view.sessions} offline={offline}
+          <ChatView docked visible turnImages={turn => <TurnThumbs client={client} turn={turn} />} turns={chat} live={chatLive} sessions={view.sessions} offline={offline}
             onAsk={ask} onCancel={qid => send({ type: 'chat.cancel', qid })} onReset={() => send({ type: 'chat.reset' })} onBack={onClose} onClose={onClose}
             onOpenSession={open} onTerminal={terminal} turnAvailable={turnReady}
             launchingQid={cards.launchingQid} launchingRows={cards.launchingRows} onLaunchProposal={cards.launch}
@@ -93,7 +99,7 @@ export function ChatPanel({ client, view, paused, focus, onClose, onOpenSession,
             onProject={project.review} projectNamed={project.projectNamed}
             onLaunchTeam={teamCards.launchTeam} onSaveTeam={teamCards.saveTeam} onOpenTeam={openTeam} onGiveTask={teamCards.giveTask}
             teamBusy={teamCards.teamBusy} taskBusy={teamCards.taskBusy} clock={iso => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            onAgentHover={setHovered} inputRef={inputRef}
+            onAgentHover={setHovered} inputRef={inputRef} attach={{ items: images.items, onFiles: images.add, onRemove: images.remove, ready: images.ready, error: images.error }}
             theme={theme} frozen={offline !== null} reducedMotion={paused || reduced} />
         </ChatCopyProvider>
       </div>

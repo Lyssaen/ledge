@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { PhoneClientMessageSchema, PhoneServerMessageSchema, PhoneSessionSchema, UNTYPABLE, PHONE_PROTOCOL, OperationReasonSchema, SessionSchema, PAD_TIERS, PLAIN_MAX, padPlain, PushPayloadSchema, PhoneChatTurnSchema, ConfirmPurposeSchema } from '../src/index.js';
+import { PhoneClientMessageSchema, PhoneServerMessageSchema, PhoneSessionSchema, UNTYPABLE, PHONE_PROTOCOL, OperationReasonSchema, SessionSchema, PAD_TIERS, PLAIN_MAX, padPlain, PushPayloadSchema, PhoneChatTurnSchema, ConfirmPurposeSchema, b64Max, ATTACHMENT_MAX, PREVIEW_MAX } from '../src/index.js';
 
 const OP = '123e4567-e89b-42d3-a456-426614174000';
 const expectKey = { kind: 'permission', text: 'Run ls', key: 'k1' };
@@ -33,7 +33,9 @@ describe('phone client messages', () => {
   it('bounds a reply to 20 000 characters', () => {
     expect(() => PhoneClientMessageSchema.parse({ type: 'session.reply', op: OP, id: 's1', text: 'x'.repeat(20_001), expect: null })).toThrow();
     expect(() => PhoneClientMessageSchema.parse({ type: 'session.reply', op: OP, id: 's1', text: 'x'.repeat(20_000), expect: null })).not.toThrow();
-    expect(() => PhoneClientMessageSchema.parse({ type: 'session.reply', op: OP, id: 's1', text: '', expect: null })).toThrow();
+    // An image may stand alone: empty text is the gateway's to judge.
+    expect(() => PhoneClientMessageSchema.parse({ type: 'session.reply', op: OP, id: 's1', text: '', attachments: ['d'.repeat(64)], expect: null })).not.toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ type: 'session.reply', op: OP, id: 's1', text: 'x', attachments: Array(6).fill('d'.repeat(64)), expect: null })).toThrow();
   });
   it('refuses every command outside the whitelist', () => {
     for (const m of [
@@ -229,7 +231,8 @@ describe('phone chat', () => {
     ]) expect(() => PhoneClientMessageSchema.parse(m)).not.toThrow();
     expect(PhoneClientMessageSchema.parse({ type: 'chat.ask', qid: QID, text: '  hi ' })).toMatchObject({ text: 'hi' });
     expect(() => PhoneClientMessageSchema.parse({ type: 'chat.ask', qid: 'nope', text: 'hi' })).toThrow();
-    expect(() => PhoneClientMessageSchema.parse({ type: 'chat.ask', qid: QID, text: '   ' })).toThrow();
+    // Blank text is the gateway's to judge: an image may stand alone.
+    expect(PhoneClientMessageSchema.parse({ type: 'chat.ask', qid: QID, text: '   ' })).toMatchObject({ text: '' });
     expect(() => PhoneClientMessageSchema.parse({ type: 'chat.launch', op: OP, qid: QID, rows: [8] })).toThrow();
     expect(() => PhoneClientMessageSchema.parse({ type: 'chat.launch', op: OP, qid: QID, rows: [0, 0] })).toThrow();
   });
@@ -252,5 +255,39 @@ describe('phone chat', () => {
   });
   it('accepts a chat push payload', () => {
     expect(PushPayloadSchema.safeParse({ v: 1, kind: 'chat', title: 'Ledge a répondu', body: 'Touchez pour lire la réponse.', url: '/#/chat', badge: 0, tag: 'chat' }).success).toBe(true);
+  });
+});
+
+describe('phone attachments', () => {
+  const QID = '223e4567-e89b-42d3-a456-426614174001';
+  const b64 = (bytes: number) => 'A'.repeat(b64Max(bytes));
+  const put = (data: string, preview?: string) => ({ type: 'attachment.put', requestId: 'r1', image: { mime: 'image/webp', data, ...(preview ? { preview: { mime: 'image/webp', data: preview } } : {}) } });
+
+  it('caps a put at 400 000 bytes and takes no session id', () => {
+    expect(() => PhoneClientMessageSchema.parse(put(b64(ATTACHMENT_MAX)))).not.toThrow();
+    expect(() => PhoneClientMessageSchema.parse(put(b64(ATTACHMENT_MAX) + 'A'))).toThrow();
+    expect(PhoneClientMessageSchema.parse({ ...put('AAAA'), id: 's1' })).not.toHaveProperty('id');
+  });
+
+  it('takes a get by id, and refuses a path', () => {
+    const get = { type: 'attachment.get', requestId: 'r1', attachment: 'e'.repeat(64), preview: true };
+    expect(PhoneClientMessageSchema.parse(get)).toEqual(get);
+    expect(() => PhoneClientMessageSchema.parse({ ...get, attachment: '../x' })).toThrow();
+  });
+
+  it('seals the largest put under PLAIN_MAX', () => {
+    const json = JSON.stringify(put(b64(ATTACHMENT_MAX), b64(PREVIEW_MAX)));
+    expect(padPlain(json)).not.toBeNull();
+  });
+
+  it('takes attachments on a chat question and a turn, and sends the three answers', () => {
+    const id = 'f'.repeat(64);
+    expect(PhoneClientMessageSchema.parse({ type: 'chat.ask', qid: QID, text: '  ', attachments: [id] })).toMatchObject({ text: '', attachments: [id] });
+    const ref = { id, mime: 'image/png', width: 5, height: 5, bytes: 30, preview: false };
+    expect(() => PhoneChatTurnSchema.parse({ qid: QID, question: 'q', askedAt: '2026-10-20T10:00:00.000Z', steps: [], attachments: [ref] })).not.toThrow();
+    expect(() => PhoneChatTurnSchema.parse({ qid: QID, question: 'q', askedAt: '2026-10-20T10:00:00.000Z', steps: [], attachments: Array(6).fill(ref) })).toThrow();
+    expect(PhoneServerMessageSchema.parse({ type: 'attachment.stored', requestId: 'r1', ref }).type).toBe('attachment.stored');
+    expect(PhoneServerMessageSchema.parse({ type: 'attachment.data', requestId: 'r1', attachment: id, mime: 'image/png', data: 'AAAA' }).type).toBe('attachment.data');
+    expect(PhoneServerMessageSchema.parse({ type: 'attachment.error', requestId: 'r1', reason: 'too_large' }).type).toBe('attachment.error');
   });
 });

@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cursorArgs, parseCursorLine, runCursor } from '../src/chat/cursor.js';
 
@@ -42,5 +45,18 @@ describe('runCursor', () => {
     expect(events[0]).toMatchObject({ type: 'init' });
     expect(events.filter((e: any) => e.type === 'delta').map((e: any) => e.text).join('')).toContain('Deux');
     expect(events.at(-1)).toMatchObject({ type: 'result', isError: false, text: expect.stringContaining('Où en sont les autres ?') });
+  });
+});
+
+describe('runCursor images', () => {
+  it('copies each image into cwd as image-N.<ext> and ends stdin with the brackets', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'ledge-cur-')); const src = join(cwd, '..', `src-${Date.now()}.png`);
+    writeFileSync(src, 'x'); writeFileSync(`${src}.jpg`, 'y');
+    const log = join(cwd, '..', `log-${Date.now()}.jsonl`);
+    const h = runCursor(opts({ cwd, images: [{ path: src, mime: 'image/png' }, { path: `${src}.jpg`, mime: 'image/jpeg' }], env: { ...process.env, FAKE_AGENT: 'cursor', FAKE_LOG: log } }), () => {});
+    await h.done;
+    expect(readFileSync(join(cwd, 'image-1.png'), 'utf8')).toBe('x');
+    expect(readFileSync(join(cwd, 'image-2.jpg'), 'utf8')).toBe('y');
+    expect((JSON.parse(readFileSync(log, 'utf8')) as { stdin: string }).stdin.endsWith(`Où en sont les autres ? [Image attached: ${cwd}/image-1.png] [Image attached: ${cwd}/image-2.jpg]`)).toBe(true);
   });
 });

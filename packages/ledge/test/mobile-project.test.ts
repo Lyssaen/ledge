@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { CapabilitiesByToolSchema, PhoneSessionSchema, PhoneSessionSchema as S, pendingKey, THREAD_BUDGET, THREAD_ITEMS_MAX, type Session, type ThreadItem } from '@ledge/protocol';
 import { adapterFor } from '../src/adapters/index.js';
+import { toPhoneTurn } from '../src/mobile/chat.js';
 import { capabilities, toPhoneFullRequest, toPhoneItem, toPhoneSession, toPhoneThread } from '../src/mobile/project.js';
 
 const T = '2026-10-20T10:00:00.000Z';
@@ -107,5 +108,21 @@ describe('capabilities', () => {
   it('lets every other tool accept and deny, and ask no OMP question', () => {
     const c = capabilities();
     for (const tool of ['claude', 'codex', 'cursor'] as const) expect(c[tool]).toMatchObject({ decide: true, questions: false });
+  });
+});
+
+describe('images on the phone projection', () => {
+  const ref = { id: 'a'.repeat(64), mime: 'image/png' as const, width: 10, height: 10, bytes: 100, preview: true };
+  it('a prompt item keeps its images', () => {
+    const item: ThreadItem = { kind: 'prompt', id: 'p1', at: T, turn: 1, text: 'look', images: [ref] };
+    expect(toPhoneItem(item).item).toEqual({ kind: 'prompt', id: 'p1', at: T, turn: 1, text: 'look', images: [ref] });
+  });
+  it('a prompt item without images stays as it was', () => {
+    expect(toPhoneItem({ kind: 'prompt', id: 'p1', at: T, turn: 1, text: 'look' }).item).not.toHaveProperty('images');
+  });
+  it('a chat turn keeps its attachments', () => {
+    const t = toPhoneTurn({ qid: '8b4f6d3e-0000-4000-8000-000000000000', question: 'q', askedAt: T, steps: [], attachments: [ref] } as never);
+    expect(t.attachments).toEqual([ref]);
+    expect(toPhoneTurn({ qid: 'x', question: 'q', askedAt: T, steps: [] } as never)).not.toHaveProperty('attachments');
   });
 });

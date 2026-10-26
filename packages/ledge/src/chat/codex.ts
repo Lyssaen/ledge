@@ -4,8 +4,10 @@ import { runJsonl } from './run.js';
 
 /** `codex exec` headless, read-only; the prompt is stdin (`-`), never made writable via `--add-dir`. */
 export function codexArgs(o: RunOptions): string[] {
-  const flags = ['--sandbox', 'read-only', '--json', '--skip-git-repo-check', '--ignore-user-config', '-C', o.cwd, '-c', 'sandbox_permissions=["disk-full-read-access"]', '-'];
-  return o.resume ? ['exec', 'resume', o.sessionId, ...flags] : ['exec', ...flags];
+  // `exec resume` rejects --sandbox and -C after the id (they belong to `exec`), but takes the rest, including -i.
+  const exec = ['--sandbox', 'read-only', '-C', o.cwd];
+  const flags = ['--json', '--skip-git-repo-check', '--ignore-user-config', '-c', 'sandbox_permissions=["disk-full-read-access"]', ...(o.images ?? []).flatMap(i => ['-i', i.path]), '-'];
+  return o.resume ? ['exec', ...exec, 'resume', o.sessionId, ...flags] : ['exec', ...exec, ...flags];
 }
 
 type Json = Record<string, unknown>;
