@@ -42,7 +42,7 @@ export function Settings() {
             {r.id === 'lang'
               ? <Text>{LANGS.map(l => <Text key={l} color={l === lang ? C.fg : C.dim} bold={l === lang}>{l === lang ? `${g.radioOn} ` : `${g.radioOff} `}{t.lang[l]}{'     '}</Text>)}</Text>
               : r.id === 'theme'
-              ? <Text>{THEMES.map(x => <Text key={x} color={x === theme ? C.fg : C.dim} bold={x === theme}>{x === theme ? `${g.radioOn} ` : `${g.radioOff} `}{x === 'auto' ? t.settings.themeAuto(background) : t.settings.themes[x]}{'     '}</Text>)}</Text>
+              ? <Text>{THEMES.map(x => <Text key={x} color={x === theme ? C.fg : C.dim} bold={x === theme}>{x === theme ? `${g.radioOn} ` : `${g.radioOff} `}{x === 'auto' && background ? t.settings.themeAuto(background) : t.settings.themes[x]}{'     '}</Text>)}</Text>
               : <Text><Text color={C.fg} bold>◂ {Math.round(near * 100)} % ▸</Text><Text color={C.faint}>   {known ? t.settings.contextHint : t.settings.contextUnknown}</Text></Text>}
           </Box>
         ))}

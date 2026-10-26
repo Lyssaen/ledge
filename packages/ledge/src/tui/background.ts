@@ -1,4 +1,4 @@
-import type { Tone } from './theme.js';
+import type { ThemeChoice, Tone } from './theme.js';
 
 /** `COLORFGBG` (rxvt, Konsole, iTerm2…), `fg;bg` or `fg;default;bg`: its last field is the background's colour number,
  *  0 to 6 and 8 dark, the others light, as Vim reads it. Not set, or `default`: unknown. */
@@ -24,10 +24,11 @@ export interface TerminalIo {
 }
 
 /** Asks the terminal its background (OSC 11), then its attributes (DA1), which every terminal answers, in order: DA1 come
- *  back alone, the terminal knows no OSC 11, no need to wait. Nothing back within `ms` (a terminal that answers nothing, a
- *  slow link), unknown. The terminal is given back as found, raw mode and all. tmux answers OSC 11 itself (3.3 and later),
- *  from the outer terminal's colour; an older one answers DA1 only. */
-export function askBackground(io: TerminalIo, ms = 150): Promise<Tone | null> {
+ *  back alone, the terminal knows no OSC 11, no need to wait. The answers are read up to DA1, however late (a slow link, a
+ *  terminal over ssh): stopped short, what came after would be Ink's, echoed once then typed into an open field. Nothing
+ *  back within `ms` (a terminal that answers nothing), unknown. The terminal is given back as found, raw mode and all. tmux
+ *  answers OSC 11 itself (3.3 and later), from the outer terminal's colour; an older one answers DA1 only. */
+export function askBackground(io: TerminalIo, ms = 1000): Promise<Tone | null> {
   const { stdin, stdout } = io;
   if (!stdin.isTTY || !stdout.isTTY || !stdin.setRawMode) return Promise.resolve(null);
   return new Promise(resolve => {
@@ -58,4 +59,10 @@ export function askBackground(io: TerminalIo, ms = 150): Promise<Tone | null> {
 /** The terminal's background: `COLORFGBG`, else OSC 11, else dark (the palette Ledge's TUI was drawn for). */
 export async function detectTone(env: NodeJS.ProcessEnv, io: TerminalIo, ms?: number): Promise<Tone> {
   return toneOfColorFgBg(env.COLORFGBG) ?? (await askBackground(io, ms)) ?? 'dark';
+}
+
+/** The background as the TUI starts: asked only when the theme follows it (auto). Forced dark or light, the terminal is
+ *  not asked; `COLORFGBG` costs nothing, else unknown. */
+export async function backgroundAtStart(theme: ThemeChoice, env: NodeJS.ProcessEnv, io: TerminalIo): Promise<Tone | undefined> {
+  return theme === 'auto' ? detectTone(env, io) : toneOfColorFgBg(env.COLORFGBG) ?? undefined;
 }

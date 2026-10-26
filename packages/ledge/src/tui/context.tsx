@@ -21,8 +21,9 @@ export type KeyHandler = (input: string, key: Key) => boolean;
 export interface Tui {
   client: DaemonClient; fleet: Fleet; d: DaemonState; machines: MachineState[]; projects: Projects | null;
   t: Messages; lang: Lang; setLang(lang: Lang): void; g: Glyphs;
-  /** The theme chosen, the tone drawn (what the palette `C` holds now), the terminal's background as found at start. */
-  theme: ThemeChoice; setTheme(theme: ThemeChoice): void; tone: Tone; background: Tone;
+  /** The theme chosen, the tone drawn (what the palette `C` holds now), the terminal's background as found at start
+   *  (undefined: not asked, the theme was forced). */
+  theme: ThemeChoice; setTheme(theme: ThemeChoice): void; tone: Tone; background: Tone | undefined;
   screen: Screen; go(screen: Screen): void;
   /** The session the overview and the session screen show. */
   selected: Session | null; select(id: string | null): void;

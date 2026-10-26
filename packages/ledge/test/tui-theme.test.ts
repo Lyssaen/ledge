@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { EventEmitter } from 'node:events';
-import { askBackground, detectTone, toneOfColorFgBg, toneOfOsc11 } from '../src/tui/background.js';
+import { askBackground, backgroundAtStart, detectTone, toneOfColorFgBg, toneOfOsc11 } from '../src/tui/background.js';
 import { C, PALETTES, STATE_COLOR, setTone, toneFor } from '../src/tui/theme.js';
 
 /** A terminal on a fake TTY: what the TUI writes, and what the terminal answers to it. */
-function terminal(answer: (query: string) => string | null, o: { tty?: boolean } = {}) {
+function terminal(answer: (query: string) => string | null, o: { tty?: boolean; after?: number } = {}) {
   const stdin = Object.assign(new EventEmitter(), {
     isTTY: o.tty ?? true, isRaw: false, paused: true,
     setRawMode(on: boolean) { this.isRaw = on; return this; },
@@ -12,7 +12,7 @@ function terminal(answer: (query: string) => string | null, o: { tty?: boolean }
     pause() { this.paused = true; return this; }
   });
   const written: string[] = [];
-  const stdout = { isTTY: o.tty ?? true, write(s: string) { written.push(s); const a = answer(s); if (a !== null) setTimeout(() => stdin.emit('data', Buffer.from(a)), 5); return true; } };
+  const stdout = { isTTY: o.tty ?? true, write(s: string) { written.push(s); const a = answer(s); if (a !== null) setTimeout(() => stdin.emit('data', Buffer.from(a)), o.after ?? 5); return true; } };
   return { stdin, stdout, written };
 }
 
@@ -63,6 +63,13 @@ describe('ledge tui: the terminal\'s background (#95 lot D)', () => {
     expect(term.stdin.listenerCount('data')).toBe(0);
   });
 
+  it('an answer past 150 ms is still read, up to DA1: none of it left for Ink to echo or type', async () => {
+    const term = terminal(q => (q === OSC ? `\u001b]11;rgb:ffff/ffff/ffff\u0007${DA1}` : null), { after: 400 });
+    expect(await askBackground(term)).toBe('light');
+    expect(term.stdin.listenerCount('data')).toBe(0);
+    expect(term.stdin.isRaw).toBe(false);
+  });
+
   it('not a terminal: nothing is asked', async () => {
     const term = terminal(() => null, { tty: false });
     expect(await askBackground(term, 60)).toBeNull();
@@ -75,6 +82,19 @@ describe('ledge tui: the terminal\'s background (#95 lot D)', () => {
     expect(light.written).toEqual([]);
     expect(await detectTone({}, light)).toBe('light');
     expect(await detectTone({}, terminal(q => (q === OSC ? DA1 : null)))).toBe('dark');
+  });
+
+  it('a theme forced dark or light: the terminal is not asked; auto asks it', async () => {
+    const light = () => terminal(q => (q === OSC ? `\u001b]11;rgb:ffff/ffff/ffff\u0007${DA1}` : null));
+    for (const theme of ['dark', 'light'] as const) {
+      const term = light();
+      expect(await backgroundAtStart(theme, {}, term)).toBeUndefined();
+      expect(await backgroundAtStart(theme, { COLORFGBG: '0;15' }, term)).toBe('light');
+      expect(term.written).toEqual([]);
+    }
+    const term = light();
+    expect(await backgroundAtStart('auto', {}, term)).toBe('light');
+    expect(term.written).toEqual([OSC]);
   });
 });
 

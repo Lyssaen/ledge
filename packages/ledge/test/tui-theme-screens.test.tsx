@@ -24,6 +24,16 @@ describe('ledge tui: the theme (#95 lot D)', () => {
     } finally { await tui.cleanup(); }
   });
 
+  it('a theme forced at start: the background was not asked, Auto reads alone', async () => {
+    const tui = await startTui({ theme: 'dark' });
+    try {
+      await tui.press(',');
+      await until(() => tui.frame().includes('RÉGLAGES'));
+      expect(tui.frame()).toContain('Auto ');
+      expect(tui.frame()).not.toContain('Auto (fond');
+    } finally { await tui.cleanup(); }
+  });
+
   it('the settings: Thème cycles auto, sombre, clair, at once, and saves each', async () => {
     const tui = await startTui({ background: 'light' });
     try {
