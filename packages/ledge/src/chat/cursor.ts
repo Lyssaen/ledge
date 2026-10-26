@@ -1,5 +1,6 @@
 import { spawn as nodeSpawn } from 'node:child_process';
-import { PERSONA, parseLine, type ClaudeEvent, type RunHandle, type RunOptions } from './claude.js';
+import { parseLine, type ClaudeEvent, type RunHandle, type RunOptions } from './claude.js';
+import { buildPersona } from './persona.js';
 import { runJsonl } from './run.js';
 
 /** `cursor-agent -p --mode ask`: read-only print mode, repos as extra workspace roots, no --force. */
@@ -33,5 +34,5 @@ export function parseCursorLine(line: string): ClaudeEvent[] {
 
 export function runCursor(o: RunOptions, onEvent: (e: ClaudeEvent) => void, spawnImpl: typeof nodeSpawn = nodeSpawn): RunHandle {
   const [file = 'cursor-agent', ...pre] = o.bin ?? ['cursor-agent'];
-  return runJsonl(file, [...pre, ...cursorArgs(o)], { cwd: o.cwd, env: o.env, question: `${o.persona ?? PERSONA}\n\n${o.question}` }, parseCursorLine, onEvent, spawnImpl);
+  return runJsonl(file, [...pre, ...cursorArgs(o)], { cwd: o.cwd, env: o.env, question: `${o.persona ?? buildPersona('cursor')}\n\n${o.question}` }, parseCursorLine, onEvent, spawnImpl);
 }

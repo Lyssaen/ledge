@@ -1,5 +1,6 @@
 import { spawn as nodeSpawn } from 'node:child_process';
-import { PERSONA, type ClaudeEvent, type RunHandle, type RunOptions } from './claude.js';
+import type { ClaudeEvent, RunHandle, RunOptions } from './claude.js';
+import { buildPersona } from './persona.js';
 import { runJsonl } from './run.js';
 
 /** `codex exec` headless, read-only; the prompt is stdin (`-`), never made writable via `--add-dir`. */
@@ -36,5 +37,5 @@ export function parseCodexLine(line: string): ClaudeEvent[] {
 
 export function runCodex(o: RunOptions, onEvent: (e: ClaudeEvent) => void, spawnImpl: typeof nodeSpawn = nodeSpawn): RunHandle {
   const [file = 'codex', ...pre] = o.bin ?? ['codex'];
-  return runJsonl(file, [...pre, ...codexArgs(o)], { cwd: o.cwd, env: o.env, question: `${o.persona ?? PERSONA}\n\n${o.question}` }, parseCodexLine, onEvent, spawnImpl);
+  return runJsonl(file, [...pre, ...codexArgs(o)], { cwd: o.cwd, env: o.env, question: `${o.persona ?? buildPersona('codex')}\n\n${o.question}` }, parseCodexLine, onEvent, spawnImpl);
 }
