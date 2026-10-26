@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { actionById, type ActionId, type ServerMessage } from '@ledge/protocol';
 import { connect, type Client } from '../client.js';
 import { CODEX_HOOK_VAR } from '../spawn.js';
+import { SESSION_KEY_VAR } from '../auth.js';
 
 // The CLI's side of the action registry (#93): argv parsed against `ACTIONS[id].args`, then `action.run`; the daemon resolves
 // and applies it as it does a chat card's row, so no rule is written here.
@@ -19,15 +20,20 @@ export function actionArgs(id: ActionId, args: Record<string, unknown>): Record<
   return parsed.success ? args : undefined;
 }
 
+/** A session running the command: its id and the key Ledge gave it (`SESSION_KEY_VAR`), for the daemon to check. */
+export interface Caller { by: string; key?: string }
 /** The session that runs the command (its id from the environment, as `ledge task`), or `undefined` for the user's own terminal. */
-export function callerOf(env: NodeJS.ProcessEnv): string | undefined {
-  return env[CODEX_HOOK_VAR] || env.LEDGE_SESSION || undefined;
+export function callerOf(env: NodeJS.ProcessEnv): Caller | undefined {
+  const by = env[CODEX_HOOK_VAR] || env.LEDGE_SESSION;
+  const key = env[SESSION_KEY_VAR];
+  return by ? { by, ...(key ? { key } : {}) } : undefined;
 }
 
 /** One `action.run` over a connected client, answered by its `action.result`. */
-export async function runOnClient(client: Client, action: ActionId, args: Record<string, unknown>, opts: { by?: string; confirmed?: boolean; ms?: number } = {}): Promise<ActionResult> {
+export async function runOnClient(client: Client, action: ActionId, args: Record<string, unknown>, opts: { by?: Caller; confirmed?: boolean; ms?: number } = {}): Promise<ActionResult> {
   const rid = randomUUID();
-  client.send({ type: 'action.run', rid, action, args, ...(opts.by ? { by: opts.by } : {}), ...(opts.confirmed ? { confirmed: true as const } : {}) });
+  const by = opts.by;
+  client.send({ type: 'action.run', rid, action, args, ...(by ? { by: by.by, ...(by.key ? { key: by.key } : {}) } : {}), ...(opts.confirmed ? { confirmed: true as const } : {}) });
   const deadline = Date.now() + (opts.ms ?? RUN_MS);
   for (;;) {
     const { type: _t, rid: got, ...r } = await client.next('action.result', Math.max(0, deadline - Date.now()));

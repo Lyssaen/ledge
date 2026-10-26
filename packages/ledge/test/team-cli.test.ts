@@ -7,6 +7,7 @@ import { Store } from '../src/daemon/store.js';
 import { startServer } from '../src/daemon/server.js';
 import type { Tmux } from '../src/tmux.js';
 import { teamArgs, runTeam } from '../src/cli/team.js';
+import { sessionKey } from '../src/auth.js';
 import { closeArgs, resultLine, runClose } from '../src/cli/action.js';
 
 // `ledge team` and `ledge close` (#93): argv against the registry's args, then `action.run` to the daemon.
@@ -82,7 +83,7 @@ describe('ledge team and ledge close against a daemon', () => {
     const [lead, build] = team.seats.map((s: { sessionId: string }) => s.sessionId) as [string, string];
 
     expect(await runTeam(['dissolve', 'api'], user())).toEqual({ line: 'Dissoudre l\'équipe api : irréversible ; relance avec --yes pour confirmer', code: 1 });
-    expect(await runTeam(['dissolve', 'api', '--yes'], { ...user(), env: { LEDGE_SESSION: lead } })).toMatchObject({ code: 1, line: expect.stringMatching(/^refusé : une session agent/) });
+    expect(await runTeam(['dissolve', 'api', '--yes'], { ...user(), env: { LEDGE_SESSION: lead, LEDGE_SESSION_KEY: sessionKey(lead) } })).toMatchObject({ code: 1, line: expect.stringMatching(/^refusé : une session agent/) });
     const done = await runTeam(['dissolve', 'api', '--yes', '--close-sessions'], user());
     expect(done.code).toBe(0);
     expect(done.line.split('\n')[0]).toBe('fait : Dissoudre l\'équipe api');
@@ -95,12 +96,12 @@ describe('ledge team and ledge close against a daemon', () => {
     await runTeam(['up', '--seat', 'leader', '--seat', 'build', '--name', 'api'], user());
     const team = JSON.parse((await runTeam(['list', '--json'], user())).line).teams[0];
     const [lead, build] = team.seats.map((s: { sessionId: string }) => s.sessionId) as [string, string];
-    expect(await runClose([store.get(lead)!.name], { port: srv.port, env: { LEDGE_SESSION: build } })).toMatchObject({ code: 1, line: expect.stringMatching(/^refusé : une session agent/) });
-    const r = await runClose([store.get(build)!.name, '--json'], { port: srv.port, env: { LEDGE_SESSION: lead } });
+    expect(await runClose([store.get(lead)!.name], { port: srv.port, env: { LEDGE_SESSION: build, LEDGE_SESSION_KEY: sessionKey(build) } })).toMatchObject({ code: 1, line: expect.stringMatching(/^refusé : une session agent/) });
+    const r = await runClose([store.get(build)!.name, '--json'], { port: srv.port, env: { LEDGE_SESSION: lead, LEDGE_SESSION_KEY: sessionKey(lead) } });
     expect(r.code).toBe(0);
     expect(JSON.parse(r.line)).toMatchObject({ ok: true, action: 'session.close', row: { args: { session: build } } });
     expect(store.get(build)!.state).toBe('exited');
-    expect(await runClose([lead], { port: srv.port, env: { LEDGE_SESSION: lead } })).toMatchObject({ code: 0 });
+    expect(await runClose([lead], { port: srv.port, env: { LEDGE_SESSION: lead, LEDGE_SESSION_KEY: sessionKey(lead) } })).toMatchObject({ code: 0 });
   });
 
   it('a verb with no daemon says how to start one', async () => {

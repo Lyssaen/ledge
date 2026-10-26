@@ -29,7 +29,7 @@ import { tooWide, type Chat } from '../chat/service.js';
 import { createChatThreads } from '../chat/threads.js';
 import { createForge } from '../chat/forge.js';
 import { paths } from '../paths.js';
-import { ensureDaemonToken, hostAllowed, requestAuthorized, selectDaemonProtocol } from '../auth.js';
+import { ensureDaemonToken, hostAllowed, requestAuthorized, selectDaemonProtocol, sessionKey, tokenEquals } from '../auth.js';
 import { readMachines, writeMachines } from './machines.js';
 import { readProjects, writeProjects } from './projects.js';
 import { readContextPrefs, readIsland, writeContextPrefs, writeIsland } from './island.js';
@@ -767,6 +767,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     const answer = (x: { row?: ChatAction; reason?: string; code?: string; path?: string }) => reply({ type: 'action.result', rid: msg.rid, action: msg.action, ...x });
     const parsed = actionById(msg.action)!.args.safeParse(msg.args);
     if (!parsed.success) return answer({ reason: `invalid args: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'} ${i.message}`).join('; ')}`, code: 'refused' });
+    // A session is who its key says (#93): a `by` from another environment, or none, is refused before anything is resolved.
+    const want = msg.by === undefined ? undefined : sessionKey(msg.by, token);
+    if (msg.by !== undefined && (!msg.key || !want || !tokenEquals(msg.key, want)))
+      return answer({ reason: `la clé de la session ${msg.by} ne correspond pas : lance la commande depuis cette session, telle que Ledge l'a lancée`, code: 'identity' });
     const ctx = { sessions: store.all(), teams: teams.all(), tasks: tasks.all(), findRole, templateExists: (name: string) => templateExists(name) };
     const r: Resolved = resolveRun(msg.action, parsed.data, ctx);
     if ('refused' in r) return answer({ reason: r.refused, code: 'refused' });

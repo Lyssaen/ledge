@@ -210,7 +210,7 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('chat.ignore'), qid: z.string().min(1), undo: z.literal(true).optional() }),
   /** A registry action run outside the chat (#93, the CLI): the daemon resolves `args` as it does a generic card's row, then
    *  applies it through its own handler. `by` the session that asks, left out for the user; `confirmed` for a destructive one. */
-  z.object({ type: z.literal('action.run'), rid: z.string().min(1).max(100), by: z.string().min(1).optional(), action: ActionIdSchema, args: z.record(z.unknown()), confirmed: z.literal(true).optional() }),
+  z.object({ type: z.literal('action.run'), rid: z.string().min(1).max(100), by: z.string().min(1).optional(), /** `by`'s key (LEDGE_SESSION_KEY) */ key: z.string().max(128).optional(), action: ActionIdSchema, args: z.record(z.unknown()), confirmed: z.literal(true).optional() }),
   /** The chat's close card: closes the turn's sessions, `rows` (indexes into its `closes`) or all of them. */
   z.object({ type: z.literal('session.close'), qid: z.string().min(1), rows: launchRows.optional() }),
   /** `always` and `note` only where the harness offers them (`offers`); a note goes with `deny`, for the agent to read. */
