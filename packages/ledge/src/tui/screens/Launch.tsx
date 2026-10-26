@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { launchDefaults, launchMessage, missingOf, MULTI_REPO_TOOLS, previewOf, reposOn, toggleRepo, withMachine, withPick, withProject, withTool, type LaunchForm } from '@ledge/fleet/launch';
 import { useModels } from '@ledge/fleet/models';
 import { randomUUID } from 'node:crypto';
 import { pickName, projectOf, type ProjectColor, type Role, type TeamTemplate, type Tool } from '@ledge/protocol';
 import { useEditing, useTui } from '../context.js';
+import type { LaunchPrefill } from '../model/catalog.js';
 import { TOOL_NAME } from '../model/labels.js';
 import { C, projectColor } from '../theme.js';
 import { Frame } from '../ui/Frame.js';
@@ -34,16 +35,24 @@ function ProjectChoice({ project, on }: { project: { name: string; color?: Proje
   );
 }
 
-/** « Nouvelle session » (4): a session, or with ctrl+t a team (roles spec §3.9). */
+/** « Nouvelle session » (4): a session, or with ctrl+t a team (roles spec §3.9). « Équipes » (6) opens it with a role, or
+ *  in team mode with a template, and its folder. */
 export function Launch() {
-  const [team, setTeam] = useState(false);
-  return team ? <TeamLaunch onSession={() => setTeam(false)} /> : <SessionLaunch onTeam={() => setTeam(true)} />;
+  const { catalog } = useTui();
+  const [prefill] = useState(() => { const p = catalog.current.launch; catalog.current.launch = undefined; return p; });
+  const [team, setTeam] = useState(prefill?.template !== undefined);
+  return team ? <TeamLaunch onSession={() => setTeam(false)} prefill={prefill?.template !== undefined ? prefill : undefined} />
+    : <SessionLaunch onTeam={() => setTeam(true)} prefill={prefill?.template === undefined ? prefill : undefined} />;
 }
 
-function SessionLaunch({ onTeam }: { onTeam(): void }) {
+function SessionLaunch({ onTeam, prefill }: { onTeam(): void; prefill?: LaunchPrefill }) {
   const { client, d, machines, projects, t, g, toast, go, select, small } = useTui();
   const list = projects?.projects ?? [];
-  const [form, setForm] = useState<LaunchForm>(() => launchDefaults(list, machines, {}, 'claude'));
+  const role = prefill?.role;
+  const [form, setForm] = useState<LaunchForm>(() => {
+    const f = launchDefaults(list, machines, prefill?.project ? { project: prefill.project } : {}, role?.tool ?? 'claude');
+    return prefill?.cwd ? { ...f, repos: [prefill.cwd] } : f;
+  });
   const [field, setField] = useState<Field>('prompt');
   const [folder, setFolder] = useState('');
   const [repoAt, setRepoAt] = useState(0);
@@ -87,7 +96,7 @@ function SessionLaunch({ onTeam }: { onTeam(): void }) {
     if (launching) return;
     if (missing) { toast({ text: t.launch.missing[missing], tone: 'info' }); setField(missing === 'prompt' ? 'prompt' : missing === 'machine' ? 'machine' : 'repos'); return; }
     setLaunching({ seq: d.lastLaunched?.seq ?? 0, errorSeq: d.errors.at(-1)?.seq ?? 0, at: Date.now(), name: shownName });
-    client.send(launchMessage(withFolder, shownName));
+    client.send({ ...launchMessage(withFolder, shownName), ...(role ? { role: role.id } : {}) });
   };
 
   useInput((input, key) => {
@@ -131,6 +140,7 @@ function SessionLaunch({ onTeam }: { onTeam(): void }) {
     <Frame crumb={t.launch.title} keys={[['tab', t.keys.nextField], ['← →', t.keys.choose], [t.keys.space, t.keys.tick], ['ctrl+s', t.keys.start], ['ctrl+t', t.keys.teamMode], ['ctrl+r', t.keys.redraw], ['esc', t.keys.cancel]]}>
       <TitledBox title={t.launch.title} flexGrow={1}>
         <Box><Text color={C.faint}> </Text><Box width={14} flexShrink={0}><Text color={C.dim}>{t.launch.mode}</Text></Box><Text><Text color={C.coral}>{g.radioOn} {t.launch.session}</Text>   <Text color={C.dim}>{g.radioOff} {t.launch.team}</Text>  <Text color={C.faint}>ctrl+t</Text></Text></Box>
+        {role ? <Box><Text color={C.faint}> </Text><Box width={14} flexShrink={0}><Text color={C.dim}>{t.catalog.role}</Text></Box><Text wrap="truncate"><Text color={C.violet}>@{role.id}</Text> <Text color={C.fg}>{role.label}</Text></Text></Box> : null}
         {row('prompt', t.launch.instruction, <TextInput value={form.prompt} onChange={v => setForm(f => ({ ...f, prompt: v }))} active={field === 'prompt'} />)}
         <Text> </Text>
         {row('tool', t.launch.agent, <Text wrap="truncate">{tools.map(x => <Text key={x} color={x === form.tool ? C.coral : C.dim}>{x === form.tool ? g.radioOn : g.radioOff} {TOOL_NAME[x]}   </Text>)}</Text>)}
@@ -169,16 +179,19 @@ const autonomyColor = (a: 'ask' | 'edits' | 'auto'): string => ({ ask: C.faint, 
 /** The team mode (roles spec §3.9): a project and one of its folders, a template or seats chosen one by one (each with its
  *  agent), the team's name, and the preview « L'équipe workshop s'installera à une nouvelle table de la pièce Ledge » with the
  *  autonomy warning. ctrl+s sends `team.launch`; its answer says how it went. */
-function TeamLaunch({ onSession }: { onSession(): void }) {
+function TeamLaunch({ onSession, prefill }: { onSession(): void; prefill?: LaunchPrefill }) {
   const { client, machines, projects, t, g, toast, go, small } = useTui();
   const list = projects?.projects ?? [];
-  const [projectId, setProjectId] = useState<string | null>(list[0]?.id ?? null);
+  const [projectId, setProjectId] = useState<string | null>(prefill ? prefill.project : list[0]?.id ?? null);
   const project = list.find(p => p.id === projectId);
   const folders = useMemo(() => {
     const own = (project?.repos ?? []).filter(r => r.machine === 'local').map(r => r.path);
-    return own.length ? own : (machines.find(m => m.id === 'local')?.recents ?? []).slice(0, 6).map(r => r.cwd);
-  }, [project, machines]);
-  const [folderAt, setFolderAt] = useState(0);
+    const base = own.length ? own : (machines.find(m => m.id === 'local')?.recents ?? []).slice(0, 6).map(r => r.cwd);
+    return prefill?.cwd && projectId === prefill.project && !base.includes(prefill.cwd) ? [prefill.cwd, ...base] : base;
+  }, [project, machines]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [folderAt, setFolderAt] = useState(() => Math.max(0, prefill?.cwd ? folders.indexOf(prefill.cwd) : 0));
+  // The template « Équipes » chose, taken from the first listing only.
+  const wanted = useRef(prefill?.template);
   const cwd = folders[folderAt] ?? folders[0] ?? null;
   const [field, setField] = useState<TeamField>('template');
   const [defs, setDefs] = useState<{ roles: Role[]; templates: TeamTemplate[] } | null>(null);
@@ -197,8 +210,10 @@ function TeamLaunch({ onSession }: { onSession(): void }) {
       off();
       setDefs({ roles: m.roles, templates: m.templates });
       setSeats(m.roles.map(role => ({ role, tool: role.tool ?? 'claude', on: false })));
-      setTemplate(m.templates[0]?.id ?? null);
-      setName(n => n || m.templates[0]?.name || project?.name || '');
+      const first = m.templates.find(x => x.id === wanted.current) ?? m.templates[0];
+      wanted.current = undefined;
+      setTemplate(first?.id ?? null);
+      setName(n => n || first?.name || project?.name || '');
     });
     client.send({ type: 'roles.list', cwd, requestId });
     return off;

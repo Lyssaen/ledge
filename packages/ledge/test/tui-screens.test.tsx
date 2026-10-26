@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { ChatAction, ChatTurn, ClientMessage } from '@ledge/protocol';
 import { daemonStore } from '@ledge/fleet';
 import { until } from './helpers.js';
-import { mockupSessions, startTui } from './tui-fixture.js';
+import { mockupSessions, PROJECTS, startTui } from './tui-fixture.js';
 
 const sent = <T extends ClientMessage['type']>(received: ClientMessage[], type: T) => received.filter((m): m is Extract<ClientMessage, { type: T }> => m.type === type);
 const T = (s: number) => new Date(Date.parse('2026-10-09T18:00:00.000Z') + s * 1000).toISOString();
@@ -1143,6 +1143,163 @@ describe('ledge tui: teams (roles spec §3.9)', () => {
       await until(() => sent(tui.daemon.received, 'team.launch').length === 1);
       expect(sent(tui.daemon.received, 'team.launch')[0]).toMatchObject({ cwd: '/w/ledge', template: 'workshop', name: 'workshop' });
       await until(() => tui.frame().includes('✓ Équipe workshop lancée'));
+    } finally { await tui.cleanup(); }
+  });
+});
+
+describe('ledge tui: « Équipes » (6), the roles and templates catalog (#97)', () => {
+  const listing = (requestId?: string) => ({
+    type: 'roles.listing' as const, requestId,
+    roles: [
+      { id: 'build', label: 'Builder', prompt: '## Rôle\nTu implémentes une étape à la fois.', tool: 'claude' as const, model: 'opus', autonomy: 'edits' as const, source: 'repo' as const, path: '/w/ledge/.ledge/roles/build.md' },
+      { id: 'review', label: 'Relecteur', prompt: 'Tu relis sans modifier le code.', tool: 'codex' as const, source: 'repo' as const, path: '/w/ledge/.ledge/roles/review.md', shadows: '/h/.ledge/roles/review.md' },
+      { id: 'lead', label: 'Lead', prompt: 'Tu découpes le travail.', source: 'home' as const, path: '/h/.ledge/roles/lead.md' }
+    ],
+    templates: [{ id: 'workshop', name: 'workshop', seats: [{ role: 'lead' }, { role: 'build' }, { role: 'review', model: 'gpt-5.5-mini' }], source: 'repo' as const, path: '/w/ledge/.ledge/teams/workshop.yaml' }],
+    problems: [{ path: '/w/ledge/.ledge/roles/Design.md', reason: 'nom de fichier invalide' }]
+  });
+  const answer = (tui: Awaited<ReturnType<typeof startTui>>) => tui.daemon.onMessage(m => {
+    if (m.type === 'roles.list') tui.daemon.push(m.cwd ? listing(m.requestId) : { ...listing(m.requestId), roles: listing().roles.filter(r => r.source === 'home'), templates: [], problems: [] });
+  });
+
+  it('6 lists the selected session’s repository roles then the home’s; j k move, the detail follows; ← → shows the templates', async () => {
+    const tui = await startTui();
+    answer(tui);
+    try {
+      await tui.press('6');
+      await until(() => tui.frame().includes('dépôt · .ledge/roles'));
+      expect(sent(tui.daemon.received, 'roles.list')[0]).toMatchObject({ cwd: '/w/ledge' });
+      expect(tui.frame()).toContain('perso · ~/.ledge/roles');
+      expect(tui.frame()).toContain('@BUILD · BUILDER');
+      expect(tui.frame()).toContain('Tu implémentes une étape à la fois.');
+      await tui.press('j');
+      await until(() => tui.frame().includes('@REVIEW · RELECTEUR'));
+      expect(tui.frame()).toContain('remplace /h/.ledge/roles/review.md');
+      expect(tui.frame()).toContain('▣ workshop');
+      await tui.press('\u001b[C'); // →
+      await until(() => tui.frame().includes('dépôt · .ledge/teams'));
+      expect(tui.frame()).toContain('gpt-5.5-mini');
+    } finally { await tui.cleanup(); }
+  });
+
+  it('! shows the ignored files; c changes the folder and reads the roles again', async () => {
+    const tui = await startTui();
+    answer(tui);
+    try {
+      await tui.press('6');
+      await until(() => tui.frame().includes('1 fichier ignoré'));
+      await tui.press('!');
+      await until(() => tui.frame().includes('nom de fichier invalide'));
+      expect(tui.frame()).toContain('/w/ledge/.ledge/roles/Design.md');
+      await tui.press('!');
+      const before = sent(tui.daemon.received, 'roles.list').length;
+      await tui.press('c');
+      await until(() => sent(tui.daemon.received, 'roles.list').length === before + 1);
+      expect(sent(tui.daemon.received, 'roles.list').at(-1)!.cwd).not.toBe('/w/ledge');
+    } finally { await tui.cleanup(); }
+  });
+
+  it('↵ opens « Nouvelle session » with the role, and launches it with the role', async () => {
+    const tui = await startTui();
+    answer(tui);
+    try {
+      await tui.press('6');
+      await until(() => tui.frame().includes('@BUILD · BUILDER'));
+      await tui.press('j');
+      await until(() => tui.frame().includes('@REVIEW · RELECTEUR'));
+      await tui.press('\r');
+      await until(() => tui.frame().includes('NOUVELLE SESSION'));
+      expect(tui.frame()).toContain('@review');
+      await tui.press('Relis la PR');
+      await tui.press('\u0013'); // ctrl+s
+      await until(() => sent(tui.daemon.received, 'session.launch').length === 1);
+      expect(sent(tui.daemon.received, 'session.launch')[0]).toMatchObject({ tool: 'codex', cwd: '/w/ledge', role: 'review', prompt: 'Relis la PR' });
+    } finally { await tui.cleanup(); }
+  });
+
+  it('↵ on a template opens the team mode with it', async () => {
+    const tui = await startTui();
+    answer(tui);
+    try {
+      await tui.press('6');
+      await until(() => tui.frame().includes('@BUILD · BUILDER'));
+      await tui.press('\u001b[C'); // →
+      await until(() => tui.frame().includes('▣ WORKSHOP'));
+      await tui.press('\r');
+      await until(() => tui.frame().includes('NOUVELLE ÉQUIPE'));
+      await until(() => tui.frame().includes('L’équipe workshop s’installera'));
+      await tui.press('\u0013'); // ctrl+s
+      await until(() => sent(tui.daemon.received, 'team.launch').length === 1);
+      expect(sent(tui.daemon.received, 'team.launch')[0]).toMatchObject({ cwd: '/w/ledge', template: 'workshop' });
+    } finally { await tui.cleanup(); }
+  });
+
+  it('c steps through every folder to « Perso seulement » and back to the first, the order kept', async () => {
+    const projects = { ...PROJECTS, projects: [...PROJECTS.projects, { id: 'docs', name: 'Docs', color: 'violet', repos: [{ machine: 'local', path: '/w/docs' }] }] as typeof PROJECTS.projects };
+    const tui = await startTui({ projects });
+    answer(tui);
+    try {
+      await tui.press('6');
+      await until(() => tui.frame().includes('@BUILD · BUILDER'));
+      const cwds: Array<string | undefined> = [];
+      for (let i = 0; i < 4; i++) {
+        const before = sent(tui.daemon.received, 'roles.list').length;
+        await tui.press('c');
+        await until(() => sent(tui.daemon.received, 'roles.list').length === before + 1);
+        cwds.push(sent(tui.daemon.received, 'roles.list').at(-1)!.cwd);
+        if (i === 2) await until(() => tui.frame().includes('PERSO SEULEMENT'));
+      }
+      expect(cwds).toEqual(['/w/website', '/w/docs', undefined, '/w/ledge']);
+    } finally { await tui.cleanup(); }
+  });
+
+  it('esc closes the ignored files and stays on « Équipes »', async () => {
+    const tui = await startTui();
+    answer(tui);
+    try {
+      await tui.press('6');
+      await until(() => tui.frame().includes('1 fichier ignoré'));
+      await tui.press('!');
+      await until(() => tui.frame().includes('nom de fichier invalide'));
+      await tui.press('\u001b');
+      await until(() => !tui.frame().includes('nom de fichier invalide'));
+      expect(tui.frame()).toContain('@BUILD · BUILDER');
+    } finally { await tui.cleanup(); }
+  });
+
+  for (const [env, editor] of [[{ VISUAL: 'code -w', EDITOR: 'nano' }, ['code', '-w']], [{ EDITOR: 'nano' }, ['nano']], [{}, ['vi']]] as const) {
+    it(`o opens the role’s file, then the template’s, in ${editor.join(' ')} (${Object.keys(env).join(', ') || 'neither VISUAL nor EDITOR'})`, async () => {
+      const runs: string[][] = [];
+      const tui = await startTui({ env, run: async argv => { runs.push(argv); return 0; } });
+      answer(tui);
+      try {
+        await tui.press('6');
+        await until(() => tui.frame().includes('@BUILD · BUILDER'));
+        await tui.press('o');
+        await until(() => runs.length === 1);
+        await tui.press('\u001b[C'); // →
+        await until(() => tui.frame().includes('▣ WORKSHOP'));
+        await tui.press('o');
+        await until(() => runs.length === 2);
+        expect(runs).toEqual([[...editor, '/w/ledge/.ledge/roles/build.md'], [...editor, '/w/ledge/.ledge/teams/workshop.yaml']]);
+      } finally { await tui.cleanup(); }
+    });
+  }
+
+  it('a daemon that does not answer roles.list in 4 s is said; r asks the same folder again', async () => {
+    const tui = await startTui();
+    try {
+      await tui.press('6');
+      await until(() => sent(tui.daemon.received, 'roles.list').length === 1);
+      expect(tui.frame()).not.toContain('r  relire');
+      await until(() => tui.frame().includes('Le daemon n’a pas répondu.'), 10_000);
+      expect(tui.frame()).toContain('r  relire');
+      answer(tui);
+      await tui.press('r');
+      await until(() => sent(tui.daemon.received, 'roles.list').length === 2);
+      expect(sent(tui.daemon.received, 'roles.list')[1]).toMatchObject({ cwd: '/w/ledge' });
+      await until(() => tui.frame().includes('@BUILD · BUILDER'));
+      expect(tui.frame()).not.toContain('Le daemon n’a pas répondu.');
     } finally { await tui.cleanup(); }
   });
 });

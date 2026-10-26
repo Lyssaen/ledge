@@ -10,7 +10,7 @@ export const fr = {
   time: {
     now: 'à l’instant', decimal: ',', s: (n: number) => `${n} s`, min: (n: number) => `${n} min`, h: (n: number) => `${n} h`, d: (n: number) => `${n} j`
   },
-  tabs: { overview: 'Vue d’ensemble', session: 'Session', ask: 'Demander à Ledge', launch: 'Nouvelle session', settings: 'Réglages' },
+  tabs: { overview: 'Vue d’ensemble', session: 'Session', ask: 'Demander à Ledge', launch: 'Nouvelle session', settings: 'Réglages', teams: 'Équipes' },
   bar: {
     sessions: (n: number) => `${n} ${plural(n, 'session', 'sessions')}`,
     machines: (n: number) => `${n} ${plural(n, 'machine', 'machines')}`,
@@ -30,7 +30,8 @@ export const fr = {
     word: 'mot', clear: 'effacer', resend: 'renvoyer', backToDraft: 'revenir au brouillon', keep: 'garder', wipe: 'effacer',
     line: 'ligne', page: 'page', end: 'fin', question: 'question', conversation: 'conversation', cycle: 'cartes · conversation',
     applyRow: 'appliquer la ligne', apply: 'appliquer', applyAll: 'tout appliquer', deny: 'refuser', ignore: 'ignorer', review: 'revoir',
-    openSession: (name: string) => `ouvrir ${name}`
+    openSession: (name: string) => `ouvrir ${name}`,
+    rolesTemplates: 'rôles / modèles', folder: 'dossier', launchRole: 'lancer avec ce rôle', launchTeam: 'lancer cette équipe', openFile: 'ouvrir le fichier', ignored: 'ignorés', reread: 'relire'
   },
   overview: {
     yours: (n: number) => `À toi · ${n}`, projects: 'Projets', exchanges: 'Échanges', terminal: (name: string) => `Terminal · ${name}`,
@@ -110,10 +111,22 @@ export const fr = {
     teamPreview: (team: string, project: string) => `L’équipe ${team} s’installera à une nouvelle table de la pièce ${project}.`,
     teamLaunched: (name: string) => `✓ Équipe ${name} lancée`, teamFailed: (why: string) => `Équipe non lancée : ${why}`, noSeat: 'Choisissez au moins un siège.'
   },
+  catalog: {
+    roles: 'rôles', templates: 'modèles', homeOnly: 'Perso seulement',
+    repoRoles: 'dépôt · .ledge/roles', homeRoles: 'perso · ~/.ledge/roles', repoTeams: 'dépôt · .ledge/teams', homeTeams: 'perso · ~/.ledge/teams',
+    repo: 'dépôt', home: 'perso', tool: 'outil', model: 'modèle', effort: 'effort', autonomy: 'autonomie', file: 'fichier', usedIn: 'dans', heldBy: 'tenu par',
+    teams: 'équipes', replaces: (path: string) => `remplace ${path}`, toolDefault: 'défaut de l’outil', noTemplate: 'aucun modèle', nobody: 'personne', noTeam: 'aucune',
+    active: 'active', resting: 'au repos', instruction: (n: number, max: number) => `Consigne · ${n}/${max}`, noInstruction: 'Pas de consigne.',
+    seats: (n: number) => `${n} ${plural(n, 'poste', 'postes')}`,
+    autonomyShort: { ask: 'demande', edits: 'éditions', auto: 'auto' } as Record<'ask' | 'edits' | 'auto', string>,
+    ignored: (n: number) => `⚠ ${n} ${plural(n, 'fichier ignoré', 'fichiers ignorés')}`, see: 'voir', problems: 'Fichiers ignorés', noProblem: 'Aucun fichier ignoré.',
+    loading: 'lecture des rôles…', noAnswer: 'Le daemon n’a pas répondu.', noRole: 'Aucun rôle ici : écris .ledge/roles/<id>.md', noTemplateHere: 'Aucun modèle ici : écris .ledge/teams/<id>.yaml',
+    role: 'Rôle'
+  },
   settings: { title: 'Réglages', language: 'Langue', theme: 'Thème', themes: { auto: 'Auto', dark: 'Sombre', light: 'Clair' }, themeAuto: (tone: 'dark' | 'light') => `Auto (fond ${tone === 'light' ? 'clair' : 'sombre'})`, context: 'Contexte max', contextHint: 'au-delà : passer le relais', contextUnknown: 'mettez à jour le daemon', contextSaved: (pct: number) => `Contexte max : ${pct} %`, saved: 'Réglage enregistré.', saveFailed: (m: string) => `Réglage appliqué, mais non enregistré : ${m}` },
   help: {
     title: 'Aide', global: 'Partout', overview: 'Vue d’ensemble', session: 'Session', ask: 'Demander à Ledge', launch: 'Nouvelle session', settings: 'Réglages',
-    screens: 'changer d’écran', field: 'Saisie', wordBefore: 'effacer le mot avant',
+    screens: 'changer d’écran', teams: 'Équipes', field: 'Saisie', wordBefore: 'effacer le mot avant',
     more: (above: number, below: number) => [above ? `↑ ${above} plus haut` : '', below ? `↓ ${below} plus bas` : ''].filter(Boolean).join(' · ')
   },
   field: {
@@ -134,7 +147,8 @@ export const fr = {
     noTerminal: (n: string) => `Pas de terminal pour ${n}.`, attachFailed: (code: number) => `tmux s’est arrêté avec le code ${code}.`,
     modelSwitch: 'Ce daemon ne change pas le modèle d’une session en cours.',
     joined: (n: string, team: string) => `${n} rejoint ${team}.`, resumed: (team: string) => `Reprise de l’équipe ${team} demandée.`, saved: (path: string) => `Équipe enregistrée : ${path}`,
-    draftKept: 'Brouillon gardé : r pour reprendre.', draftQuit: 'Brouillon en cours : ctrl+c encore pour quitter quand même (il sera perdu).'
+    draftKept: 'Brouillon gardé : r pour reprendre.', draftQuit: 'Brouillon en cours : ctrl+c encore pour quitter quand même (il sera perdu).',
+    exited: (cmd: string, code: number) => `${cmd} s’est arrêté avec le code ${code}.`
   },
   decisions: {
     failed: (name: string, message: string) => `Décision non transmise à ${name} : ${message}`,

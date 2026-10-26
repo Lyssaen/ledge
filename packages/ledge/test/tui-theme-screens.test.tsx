@@ -93,3 +93,50 @@ describe('ledge tui: the theme (#95 lot D)', () => {
     } finally { await tui.cleanup(); }
   });
 });
+
+describe('ledge tui: « Équipes » (6) in both palettes (#97)', () => {
+  const RIGHT = '\u001b[C', DOWN = '\u001b[B';
+  const fgOf = (hex: string) => `38;2;${hex.slice(1).match(/../g)!.map(x => parseInt(x, 16)).join(';')}m`;
+  const bgOf = (hex: string) => `48;2;${hex.slice(1).match(/../g)!.map(x => parseInt(x, 16)).join(';')}m`;
+  const roles = (requestId?: string) => ({
+    type: 'roles.listing' as const, requestId, templates: [], problems: [],
+    roles: [{ id: 'build', label: 'Builder', prompt: '## Rôle\nLance `pnpm test`.', autonomy: 'edits' as const, source: 'repo' as const, path: '/w/ledge/.ledge/roles/build.md' }]
+  });
+  const open = async (tui: Awaited<ReturnType<typeof startTui>>) => {
+    tui.daemon.onMessage(m => { if (m.type === 'roles.list') tui.daemon.push(roles(m.requestId)); });
+    await tui.press('6');
+    await until(() => tui.frame().includes('Lance'));
+  };
+
+  for (const tone of ['dark', 'light'] as const) {
+    it(`${tone}: the selected row, the heading, inline code and the autonomy in the ${tone} palette, none of the other`, async () => {
+      const tui = await startTui({ theme: tone });
+      const other = PALETTES[tone === 'dark' ? 'light' : 'dark'];
+      try {
+        await open(tui);
+        const f = tui.frame(), p = PALETTES[tone];
+        expect(f).toContain(bgOf(p.sel));
+        expect(f).toContain(fgOf(p.coral));
+        expect(f).toContain(bgOf(p.code));
+        expect(f).toContain(fgOf(p.blue));
+        for (const k of ['fg', 'coral', 'blue'] as const) expect(f).not.toContain(fgOf(other[k]));
+      } finally { await tui.cleanup(); }
+    });
+  }
+
+  it('the theme changed in the settings: the instruction is drawn again in the new palette', async () => {
+    const tui = await startTui({ background: 'light' });
+    try {
+      await open(tui);
+      expect(tui.frame()).toContain(bgOf(PALETTES.light.code));
+      await tui.press(',');
+      await until(() => tui.frame().includes('RÉGLAGES'));
+      await tui.press(DOWN); await tui.press(RIGHT);
+      await until(() => tui.frame().includes(bgOf(PALETTES.dark.bar)));
+      await tui.press('6');
+      await until(() => tui.frame().includes('Lance'));
+      expect(tui.frame()).toContain(bgOf(PALETTES.dark.code));
+      expect(tui.frame()).not.toContain(bgOf(PALETTES.light.code));
+    } finally { await tui.cleanup(); }
+  });
+});

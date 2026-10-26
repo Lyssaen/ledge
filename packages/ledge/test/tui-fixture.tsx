@@ -32,7 +32,7 @@ export const PROJECTS: Projects = {
 };
 
 /** A TUI on a mock daemon: its frame, its keyboard, the daemon, and a cleanup. */
-export async function startTui(o: { sessions?: Session[]; projects?: Projects; lang?: Lang; run?: (argv: string[]) => Promise<number>; save?: (l: Lang) => void; theme?: ThemeChoice; background?: Tone } = {}) {
+export async function startTui(o: { sessions?: Session[]; projects?: Projects; lang?: Lang; run?: (argv: string[]) => Promise<number>; save?: (l: Lang) => void; theme?: ThemeChoice; background?: Tone; env?: NodeJS.ProcessEnv } = {}) {
   daemonStore.reset();
   const daemon = await createMockDaemon();
   for (const s of o.sessions ?? mockupSessions()) daemon.sessions.set(s.id, s);
@@ -43,7 +43,7 @@ export async function startTui(o: { sessions?: Session[]; projects?: Projects; l
   const detach = attachClient(client);
   client.connect();
   const saved: Lang[] = [], themes: ThemeChoice[] = [];
-  const ui = render(<App client={client} lang={o.lang ?? 'fr'} saveLang={l => { (o.save ?? (x => saved.push(x)))(l); }} theme={o.theme} background={o.background} saveTheme={x => { themes.push(x); }} notify="off" glyphs={glyphsFor({})} env={{}} run={o.run} />);
+  const ui = render(<App client={client} lang={o.lang ?? 'fr'} saveLang={l => { (o.save ?? (x => saved.push(x)))(l); }} theme={o.theme} background={o.background} saveTheme={x => { themes.push(x); }} notify="off" glyphs={glyphsFor({})} env={o.env ?? {}} run={o.run} />);
   await until(() => daemonStore.getState().sessions.length > 0);
   await until(() => (ui.lastFrame() ?? '').includes('Otto') || (o.sessions !== undefined && o.sessions.length === 0));
   const press = async (keys: string) => { ui.stdin.write(keys); await new Promise(r => setTimeout(r, 30)); };
