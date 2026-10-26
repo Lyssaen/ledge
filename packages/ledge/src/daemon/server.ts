@@ -1311,6 +1311,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     thread: id => history?.items(id),
     preview: id => previews.get(id),
     dispatch,
+    attachments,
     relay,
     launchChat: (thread, qid, rows) => {
       const c = thread === 'desktop' ? threads.desktop : threads.device(thread.slice('device:'.length));
