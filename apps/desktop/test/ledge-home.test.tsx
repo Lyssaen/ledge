@@ -52,14 +52,16 @@ describe('Ledge’s home view (ledge home spec)', () => {
     const { d, user } = await openHome();
     d.push({ type: 'teams', teams: [team] });
     d.push({ type: 'task.updated', task: task('t000001', { state: 'done', result: 'fait' }) });
-    const row = await screen.findByText(/Otto finished “Tâche t000001”/);
+    const row = await point().findByText(/Otto finished “Tâche t000001”/);
+    // The sidebar's « Yours » has it too.
+    expect(within(screen.getByRole('complementary', { name: 'Sidebar' })).getByText(/Otto finished “Tâche t000001”/)).toBeVisible();
     await user.click(within(row.closest('.lp-row') as HTMLElement).getByRole('button', { name: 'See' }));
     expect(home().getByRole('tab', { name: /Tasks/ })).toHaveAttribute('aria-selected', 'true');
     const detail = await screen.findByRole('region', { name: 'Tâche t000001' });
     expect(within(detail).getByText('fait')).toBeVisible();
     expect(within(detail).getByText(/confiée à Otto/)).toBeVisible();
     await user.click(home().getByRole('tab', { name: 'Conversation' }));
-    await user.click(within((await screen.findByText(/Otto finished/)).closest('.lp-row') as HTMLElement).getByRole('button', { name: 'Dismiss' }));
+    await user.click(within((await point().findByText(/Otto finished/)).closest('.lp-row') as HTMLElement).getByRole('button', { name: 'Dismiss' }));
     await waitFor(() => expect(d.received).toContainEqual({ type: 'task.cmd', rid: expect.any(String), by: 'ledge', op: 'seen', task: 't000001' }));
   });
 

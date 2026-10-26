@@ -1,5 +1,5 @@
 import { useState, type JSX, type MouseEvent } from 'react';
-import type { Project, Session } from '@ledge/protocol';
+import type { Project, Session, Task } from '@ledge/protocol';
 import { Kbd } from '@ledge/ui/ui/Kbd';
 import { useI18n } from '../../i18n/lang';
 import { spanOf } from '../../list/time';
@@ -27,17 +27,22 @@ export function Attention(p: {
   onDecide(s: Session, ok: boolean): void;
   onMenu(id: string, e: MouseEvent): void;
   paused: boolean;
+  /** The closed tasks Ledge gave, not put away (roles spec §3.7): « ✓ Otto a fini … · tâche de Ledge », with « Voir ». */
+  ledgeTasks?: readonly Task[];
+  onSeeTask?(id: string): void;
+  onDismissTask?(id: string): void;
 }): JSX.Element | null {
   const { t } = useI18n();
   const [all, setAll] = useState(false);
-  if (p.items.length === 0) return null;
+  const tasks = p.ledgeTasks ?? [];
+  if (p.items.length === 0 && tasks.length === 0) return null;
   const shown = all ? p.items : p.items.slice(0, CAP);
   const units = t.list.when.units;
   return (
     <section className="st-attn" aria-label={t.side.yours}>
       <div className="st-label">
         <span>{t.side.yours}</span>
-        <b className="st-badge">{p.items.length}</b>
+        <b className="st-badge">{p.items.length + tasks.length}</b>
         <span className="st-fill" />
         <Kbd>Alt ↓</Kbd>
       </div>
@@ -72,6 +77,20 @@ export function Attention(p: {
           </div>
         );
       })}
+      {tasks.map(x => (
+        <div key={x.id} className="st-card st-task" data-task={x.id}>
+          <span className="st-bot st-task-mark" aria-hidden="true">{x.state === 'done' ? '✓' : '!'}</span>
+          <div className="st-card-body">
+            <div className="st-l1"><span className="st-req">{t.home.point.closed(x.ownerName, x.title, x.state as 'done' | 'refused' | 'dropped')}</span></div>
+            <div className="st-l2">
+              <span className="st-where">{t.home.point.ofLedge}</span>
+              <span className="st-fill" />
+              <button type="button" className="st-qa" onClick={() => p.onSeeTask?.(x.id)}>{t.side.see}</button>
+              <button type="button" className="st-qa" onClick={() => p.onDismissTask?.(x.id)}>{t.home.point.dismiss}</button>
+            </div>
+          </div>
+        </div>
+      ))}
       {p.items.length > CAP && (
         <button type="button" className="st-showall" onClick={() => setAll(v => !v)}>
           {all ? t.side.yoursLess : t.side.yoursMore(p.items.length - CAP)}

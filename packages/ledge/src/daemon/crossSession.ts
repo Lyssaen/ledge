@@ -87,6 +87,14 @@ export function formatLedgeNotice(n: { to: string; text: string; reason: string 
 export function formatTeamNotice(n: { team: string; text: string }): string {
   return `<ledge-notice team="${attr(n.team)}">${ledgeBody(n.text)}</ledge-notice>`;
 }
+const TEAM_NOTICE = /^<ledge-notice\b([^>]*\bteam="[^"]*"[^>]*)>([\s\S]*?)(?:<\/ledge-notice>|$)/;
+/** A prompt that is Ledge telling a session it joined a team: the team and the lines it carries. */
+export function ledgeTeamNotice(text: string): { team: string; text: string } | undefined {
+  const m = TEAM_NOTICE.exec(text.trimStart());
+  if (!m) return undefined;
+  const team = new Map([...m[1]!.matchAll(ATTR)].map(a => [a[1]!, a[2]!] as const)).get('team');
+  return team ? { team, text: m[2]!.trim() } : undefined;
+}
 /** What Ledge types about a task (spec 2026-10-25 session tasks §3.3): one line naming the task and the session the
  *  change comes from, never the user's words. `text` is Ledge's own wording around the title and result, escaped here. */
 const TASK_BLOCK = /^<ledge-task\b([^>]*)>([\s\S]*?)(?:<\/ledge-task>|$)/;

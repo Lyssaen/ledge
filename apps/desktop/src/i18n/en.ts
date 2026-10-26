@@ -372,6 +372,7 @@ export const en: Messages = {
     seat: (name, task, machine) => `${name}, ${task}, ${machine}`,
     helperSeat: (kind, parent, task) => `${kind}, subagent of ${parent}: ${task}`,
     offline: 'Offline',
+    ledgeTaskLabel: (owner: string, title: string) => `Ledge gives “${title}” to ${owner}. See the task`,
     messageTo: (n) => `to ${n}`,
     messageLabel: (sender, n, summary) => `${sender} writes to ${n}: ${summary}. Open the conversation`,
     desk: 'Talk to Ledge',
@@ -421,7 +422,16 @@ export const en: Messages = {
     teams: { none: 'No team at work. Ask Ledge to set one up.', dissolved: 'dissolved' },
     history: { none: 'No conversation today.', open: 'See in the conversation' }
   },
+  teamLaunch: {
+    title: (project: string) => `New team · ${project}`, folder: 'Folder', noFolder: 'No folder of this project on this machine', loading: 'Reading the roles and templates…',
+    template: 'Template', custom: 'Seats chosen one by one', seats: 'Seats', noRole: 'No role: write ~/.ledge/roles/<id>.md', agentOf: (role: string) => `Agent of @${role}`,
+    name: 'Team name', preview: (team: string, project: string) => `Team ${team} will sit at a new table in the ${project} room.`,
+    unknown: (roles: string) => `Unknown roles in this folder: ${roles}`, launch: 'Launch the team', launching: 'Launching…',
+    failed: (why: string) => `The team was not launched: ${why}`, noAnswer: 'Ledge did not answer.', launched: (team: string, project: string) => `Team ${team} settles in the ${project} room.`
+  },
   teams: {
+    tables: (n: number) => `${n} ${n === 1 ? 'table' : 'tables'}`,
+    treeLine: (done: number, given: number) => `team · ${done}/${given}`, treeResting: 'resting',
     common: 'common table',
     room: (name: string) => `${name} room`,
     plaqueCounts: (tables: number, sessions: number) => `${tables} ${tables === 1 ? 'table' : 'tables'} · ${sessions} ${sessions === 1 ? 'session' : 'sessions'}`,
@@ -698,7 +708,12 @@ export const en: Messages = {
       to: 'To', from: 'From', seeTheirs: 'see their thread', seen: 'read'
     },
     /** Claude Code's automated cross-session notices (NoticeLine): system events, never the user's words. */
+    seat: {
+      task: (id: string, title: string, giver: string, state: string) => `${id} · ${title} · given by ${giver} · ${state}`,
+      seeTasks: 'See the tasks', pinned: 'Current task', autonomy: { ask: 'asks', edits: 'edits without asking', auto: 'autonomous' }
+    },
     notice: {
+      task: 'TASK', taskFrom: (name: string) => `Task from ${name}`, team: 'TEAM', teamJoined: 'Team joined',
       kicker: 'Automated notice', other: 'Automated notice between sessions', anotherSession: 'another session',
       idle: (n, time) => `${n} finished${time ? ` · ${time}` : ''}`,
       exited: (n, time) => `Session ${n} closed${time ? ` · ${time}` : ''}`,

@@ -28,6 +28,8 @@ import { useProjectReview } from './projectReview';
 export interface LedgeHomeProps {
   client: DaemonClient; view: FleetView; teams: TeamsApi; decisions: Decisions; waits: ReadonlyMap<string, Wait>;
   tab: HomeTab; dispatch: (a: NavAction) => void;
+  /** The task « Tâches » opens on (the sidebar's « Voir »). */
+  task?: string;
   paused: boolean; focus: number;
   projects: Projects | null;
   onLaunched(id: string): void; onTerminal(id: string): void; notify(text: string): void; onProposal(pid: string): void;
@@ -249,7 +251,8 @@ export function LedgeHome(p: LedgeHomeProps): JSX.Element {
   const [hovered, setHovered] = useState<string | null>(null);
   useAgentHighlight(hovered);
   const [draft, setDraft] = useState('');
-  const [shownTask, setShownTask] = useState<string | null>(null);
+  const [shownTask, setShownTask] = useState<string | null>(p.task ?? null);
+  useEffect(() => { if (p.task) setShownTask(p.task); }, [p.task]);
   const [mentionIndex, setMentionIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
   useEffect(() => { if (tab === 'conversation') inputRef.current?.focus({ preventScroll: true }); }, [p.focus, tab]);

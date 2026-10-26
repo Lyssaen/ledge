@@ -92,4 +92,22 @@ describe('the atelier’s rooms (atelier rooms spec)', () => {
     await env.user.click(within(confirm).getByRole('button', { name: 'Dissolve the team' }));
     await waitFor(() => expect(env.d.received).toContainEqual({ type: 'team.dissolve', team: 'team-c3d4' }));
   });
+
+  it('« New team here… » opens the team form on the room’s folder: a template or chosen seats, the preview, the launch', async () => {
+    const { d, user } = await withTeam();
+    d.onMessage(m => {
+      if (m.type === 'roles.list') d.push({ type: 'roles.listing', requestId: m.requestId, roles: [role('lead'), { ...role('review'), autonomy: 'auto' }], templates: [{ id: 'workshop', name: 'workshop', seats: [{ role: 'lead' }, { role: 'review', tool: 'codex' }], source: 'home', path: '/h/w.yaml' }], problems: [] });
+      if (m.type === 'team.launch') d.push({ type: 'team.launched', rid: m.rid, team: team({ id: 'team-e5f6', name: 'workshop' }) });
+    });
+    const room = screen.getByRole('region', { name: 'Ledge room' });
+    await user.click(within(room).getByRole('button', { name: 'Actions of the Ledge room' }));
+    await user.click(screen.getByRole('menuitem', { name: /New team here/ }));
+    const form = await screen.findByRole('dialog', { name: 'New team · Ledge' });
+    const preview = await within(form).findByRole('status');
+    expect(preview).toHaveTextContent('Team workshop will sit at a new table in the Ledge room.');
+    expect(within(form).getByRole('note')).toHaveTextContent('@review will work without asking');
+    await user.click(within(form).getByRole('button', { name: 'Launch the team' }));
+    await waitFor(() => expect(d.received).toContainEqual({ type: 'team.launch', rid: expect.any(String), cwd: '/w/ledge', name: 'workshop', template: 'workshop' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'New team · Ledge' })).toBeNull());
+  });
 });

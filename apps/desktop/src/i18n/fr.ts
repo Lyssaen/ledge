@@ -392,6 +392,7 @@ export const fr = {
     seat: (name: string, task: string, machine: string) => `${name}, ${task}, ${machine}`,
     helperSeat: (kind: string, parent: string, task: string) => `${kind}, sous-agent de ${parent} : ${task}`,
     offline: 'Hors ligne',
+    ledgeTaskLabel: (owner: string, title: string) => `Ledge confie « ${title} » à ${owner}. Voir la tâche`,
     messageTo: (n: string) => `à ${n}`,
     messageLabel: (sender: string, n: string, summary: string) => `${sender} écrit à ${n} : ${summary}. Ouvrir l’échange`,
     desk: 'Parler à Ledge',
@@ -441,7 +442,16 @@ export const fr = {
     teams: { none: 'Aucune équipe en cours. Demande à Ledge d’en monter une.', dissolved: 'dissoute' },
     history: { none: 'Aucune conversation aujourd’hui.', open: 'Voir dans la conversation' }
   },
+  teamLaunch: {
+    title: (project: string) => `Nouvelle équipe · ${project}`, folder: 'Dossier', noFolder: 'Aucun dossier de ce projet sur cette machine', loading: 'Lecture des rôles et des modèles…',
+    template: 'Modèle', custom: 'Sièges choisis un par un', seats: 'Sièges', noRole: 'Aucun rôle : écris ~/.ledge/roles/<id>.md', agentOf: (role: string) => `Agent de @${role}`,
+    name: 'Nom de l’équipe', preview: (team: string, project: string) => `L’équipe ${team} s’installera à une nouvelle table de la pièce ${project}.`,
+    unknown: (roles: string) => `Rôles inconnus dans ce dossier : ${roles}`, launch: 'Lancer l’équipe', launching: 'Lancement…',
+    failed: (why: string) => `L’équipe n’a pas été lancée : ${why}`, noAnswer: 'Ledge n’a pas répondu.', launched: (team: string, project: string) => `L’équipe ${team} s’installe dans la pièce ${project}.`
+  },
   teams: {
+    tables: (n: number) => plural(n, `${n} table`, `${n} tables`),
+    treeLine: (done: number, given: number) => `équipe · ${done}/${given}`, treeResting: 'au repos',
     common: 'table commune',
     room: (name: string) => `Pièce ${name}`,
     plaqueCounts: (tables: number, sessions: number) => `${plural(tables, `${tables} table`, `${tables} tables`)} · ${plural(sessions, `${sessions} session`, `${sessions} sessions`)}`,
@@ -733,7 +743,12 @@ export const fr = {
       to: 'À', from: 'De', seeTheirs: 'voir son fil', seen: 'lu'
     },
     /** Claude Code's automated cross-session notices (NoticeLine): system events, never the user's words. */
+    seat: {
+      task: (id: string, title: string, giver: string, state: string) => `${id} · ${title} · donnée par ${giver} · ${state}`,
+      seeTasks: 'Voir les tâches', pinned: 'Tâche en cours', autonomy: { ask: 'demande', edits: 'modifie sans demander', auto: 'autonome' }
+    },
     notice: {
+      task: 'TÂCHE', taskFrom: (name: string) => `Tâche de ${name}`, team: 'ÉQUIPE', teamJoined: 'Équipe rejointe',
       kicker: 'Avis automatique', other: 'Avis automatique entre sessions', anotherSession: 'une autre session',
       idle: (n: string, time?: string) => `${n} a terminé${time ? ` · ${time}` : ''}`,
       exited: (n: string, time?: string) => `Session ${n} fermée${time ? ` · ${time}` : ''}`,

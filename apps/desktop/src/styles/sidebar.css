@@ -154,3 +154,10 @@
 .st-ledge input{height:26px;padding:0 6px;border:1px solid var(--input)!important;border-radius:var(--radius-sm);background:var(--sidebar)!important}
 .st-ledge.on{background:color-mix(in srgb,var(--sidebar-primary) 8%,var(--well))}
 @media(max-width:850px){.st-ask.st-ledge{padding:0}.st-ledge .st-ledge-names{display:none}.st-ledge .st-ledge-entry{justify-content:center}}
+/* Teams in the tree (atelier rooms spec §3.4): « table commune », then ⚑ team rows holding their seats. */
+.st-row.st-team .team-flag{color:var(--sidebar-primary);font-size:12px;width:14px;text-align:center;flex:none}
+.st-row.st-team .st-main span,.st-row.st-common .st-main span{color:var(--muted-foreground);font-size:11px;margin-left:6px}
+.st-row.st-common .st-main span{margin-left:0}
+.st-row.st-team.resting{opacity:.7}
+.st .role-pill{margin-left:6px;font-size:10px;line-height:14px;vertical-align:1px}
+.st-card.st-task .st-task-mark{display:grid;place-items:center;width:18px;height:18px;font-size:12px;color:var(--success,#16a34a)}

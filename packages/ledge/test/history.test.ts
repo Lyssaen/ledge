@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { SessionEvent } from '@ledge/protocol';
 import { History, MAX_ITEMS, SYNC_MS, handBack, crossSession } from '../src/daemon/history.js';
-import { formatLedgeMessage, formatLedgeNotice, formatLedgeTask, mailId } from '../src/daemon/crossSession.js';
+import { formatLedgeMessage, formatLedgeNotice, formatLedgeTask, formatTeamNotice, mailId } from '../src/daemon/crossSession.js';
 import { paths } from '../src/paths.js';
 
 const T0 = '2026-10-13T10:00:00.000Z';
@@ -503,7 +503,13 @@ describe('messages through the Ledge mailbox', () => {
   it('a task pointer is a notice naming the session it comes from, never a prompt', () => {
     const h = new History({ peerOf });
     h.record('fce8', ev('UserPromptSubmit', { text: formatLedgeTask({ id: 't1a2b3c', from: 'Pim', text: 'Tâche de Pim : « Lance les tests ».' }) }, 1));
-    expect(h.items('fce8')).toEqual([expect.objectContaining({ kind: 'notice', notice: 'other', name: 'Pim', peer: 'c0de', text: 'Tâche de Pim : « Lance les tests ».' })]);
+    expect(h.items('fce8')).toEqual([expect.objectContaining({ kind: 'notice', notice: 'other', task: 't1a2b3c', name: 'Pim', peer: 'c0de', summary: 'Tâche de Pim : « Lance les tests ».', text: 'Tâche de Pim : « Lance les tests ».' })]);
+  });
+
+  it('a team notice (a session that joined a team) is a notice naming the team, never a prompt', () => {
+    const h = new History({ peerOf });
+    h.record('fce8', ev('UserPromptSubmit', { text: formatTeamNotice({ team: 'team-a1b2', text: 'Ton rôle : Build (build).\nTon équipe : Pim (lead).' }) }, 1));
+    expect(h.items('fce8')).toEqual([expect.objectContaining({ kind: 'notice', notice: 'other', team: 'team-a1b2', summary: 'Ton rôle : Build (build).\nTon équipe : Pim (lead).' })]);
   });
 
   it('a Ledge notice is a refused delivery notice, never a prompt', () => {
