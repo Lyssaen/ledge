@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { launchDefaults, launchMessage, missingOf, MULTI_REPO_TOOLS, previewOf, reposOn, toggleRepo, withMachine, withPick, withProject, withTool, type LaunchForm } from '@ledge/fleet/launch';
+import { launchDefaults, launchMessage, missingOf, MULTI_REPO_TOOLS, NO_PICK, previewOf, reposOn, toggleRepo, withMachine, withPick, withProject, withTool, type LaunchForm, type ModelPick } from '@ledge/fleet/launch';
 import { useModels } from '@ledge/fleet/models';
 import { randomUUID } from 'node:crypto';
 import { pickName, projectOf, type ProjectColor, type Role, type TeamTemplate, type Tool } from '@ledge/protocol';
@@ -48,8 +48,14 @@ export function Launch() {
 function SessionLaunch({ onTeam, prefill }: { onTeam(): void; prefill?: LaunchPrefill }) {
   const { client, d, machines, projects, t, g, toast, go, select, small } = useTui();
   const list = projects?.projects ?? [];
+  // The daemon fills the model and effort left out with the role's when it is the role's agent: the form shows them (#97).
+  const rolePick = (tool: Tool): ModelPick => {
+    const r = prefill?.role;
+    return r && (r.tool === undefined || r.tool === tool) ? { model: r.model ?? null, effort: r.effort ?? null } : NO_PICK;
+  };
   const [form, setForm] = useState<LaunchForm>(() => {
-    const base = launchDefaults(list, machines, prefill?.project ? { project: prefill.project } : {}, prefill?.role?.tool ?? 'claude');
+    const tool = prefill?.role?.tool ?? 'claude';
+    const base = withPick(launchDefaults(list, machines, prefill?.project ? { project: prefill.project } : {}, tool), rolePick(tool));
     // A folder « Équipes » read on another machine (#99) is launched there.
     const f = prefill && prefill.machine !== 'local' ? withMachine(base, list, prefill.machine) : base;
     return prefill?.cwd ? { ...f, repos: [prefill.cwd] } : f;
@@ -122,7 +128,7 @@ function SessionLaunch({ onTeam, prefill }: { onTeam(): void; prefill?: LaunchPr
       return;
     }
     if (!by) return;
-    if (field === 'tool') setForm(f => withTool(f, cycle(tools, f.tool, by)));
+    if (field === 'tool') setForm(f => { const next = cycle(tools, f.tool, by); return withTool(f, next, rolePick(next)); });
     else if (field === 'model') setForm(f => withPick(f, { model: cycle(modelIds, f.model, by), effort: null }));
     else if (field === 'effort') setForm(f => withPick(f, { model: f.model, effort: cycle(efforts, f.effort, by) }));
     else if (field === 'project') { const ids = [...list.map(p => p.id), null]; setForm(f => { const next = cycle(ids, f.project, by); return next === null ? { ...f, project: null, repos: [] } : withProject(f, list, next); }); setRepoAt(0); }

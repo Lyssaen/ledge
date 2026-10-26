@@ -1151,7 +1151,7 @@ describe('ledge tui: « Équipes » (6), the roles and templates catalog (#97)',
   const listing = (requestId?: string) => ({
     type: 'roles.listing' as const, requestId,
     roles: [
-      { id: 'build', label: 'Builder', prompt: '## Rôle\nTu implémentes une étape à la fois.', tool: 'claude' as const, model: 'opus', autonomy: 'edits' as const, source: 'repo' as const, path: '/w/ledge/.ledge/roles/build.md' },
+      { id: 'build', label: 'Builder', prompt: '## Rôle\nTu implémentes une étape à la fois.', tool: 'claude' as const, model: 'opus', effort: 'high', autonomy: 'edits' as const, source: 'repo' as const, path: '/w/ledge/.ledge/roles/build.md' },
       { id: 'review', label: 'Relecteur', prompt: 'Tu relis sans modifier le code.', tool: 'codex' as const, source: 'repo' as const, path: '/w/ledge/.ledge/roles/review.md', shadows: '/h/.ledge/roles/review.md' },
       { id: 'lead', label: 'Lead', prompt: 'Tu découpes le travail.', source: 'home' as const, path: '/h/.ledge/roles/lead.md' }
     ],
@@ -1214,6 +1214,34 @@ describe('ledge tui: « Équipes » (6), the roles and templates catalog (#97)',
       await tui.press('\u0013'); // ctrl+s
       await until(() => sent(tui.daemon.received, 'session.launch').length === 1);
       expect(sent(tui.daemon.received, 'session.launch')[0]).toMatchObject({ tool: 'codex', cwd: '/w/ledge', role: 'review', prompt: 'Relis la PR' });
+    } finally { await tui.cleanup(); }
+  });
+
+  it('the role’s model and effort fill the form, as the daemon applies them; another agent takes its own, the role’s come back with it', async () => {
+    const tui = await startTui();
+    answer(tui);
+    tui.daemon.onMessage(m => {
+      if (m.type === 'models.list') tui.daemon.push({ type: 'models.listing', requestId: m.requestId, tool: m.tool, models: m.tool === 'claude' ? [{ id: 'sonnet', label: 'Sonnet' }, { id: 'opus', label: 'Opus', efforts: ['low', 'high'] }] : [{ id: 'gpt-5.5', label: 'GPT-5.5' }] });
+    });
+    try {
+      await tui.press('6');
+      await until(() => tui.frame().includes('@BUILD · BUILDER'));
+      await tui.press('\r');
+      await until(() => tui.frame().includes('NOUVELLE SESSION'));
+      await until(() => tui.frame().includes('◂ Opus ▸'));
+      expect(tui.frame()).toContain('◂ high ▸');
+      expect(tui.frame()).toContain('Local · Claude Code · opus · high');
+      await tui.press('Implémente');
+      await tui.press('\t'); // to Agent
+      await tui.press('\u001b[C'); // → Codex
+      await until(() => tui.frame().includes('GPT-5.5'));
+      expect(tui.frame()).not.toContain('◂ Opus ▸');
+      await tui.press('\u001b[D'); // ← back to Claude Code
+      await until(() => tui.frame().includes('◂ Opus ▸'));
+      expect(tui.frame()).toContain('◂ high ▸');
+      await tui.press('\u0013'); // ctrl+s
+      await until(() => sent(tui.daemon.received, 'session.launch').length === 1);
+      expect(sent(tui.daemon.received, 'session.launch')[0]).toMatchObject({ tool: 'claude', role: 'build', model: 'opus', effort: 'high', prompt: 'Implémente' });
     } finally { await tui.cleanup(); }
   });
 
