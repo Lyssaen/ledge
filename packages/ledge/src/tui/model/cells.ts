@@ -56,6 +56,8 @@ export function wrapSegs(line: Line, width: number, first = width): Line[] {
     let k = end; while (k > i && a[k - 1]!.g === ' ') k--;
     out.push(join(line, a.slice(i, k)));
     i = end; while (i < a.length && a[i]!.g === ' ') i++;
+    // The line ended at its spaces, then its newline: that newline is this line's end, not an empty line.
+    if (a[i]?.g === '\n') { i++; if (i >= a.length) out.push([]); }
   }
   return out;
 }

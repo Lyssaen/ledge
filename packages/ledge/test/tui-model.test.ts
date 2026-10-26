@@ -197,6 +197,10 @@ describe('tui thread', () => {
 
   it('wraps at spaces and counts a diff', () => {
     expect(wrap('un deux trois quatre', 10)).toEqual(['un deux', 'trois', 'quatre']);
+    // A line full at its spaces, then its newline: no empty line in between.
+    expect(wrap('aaaaa bbbb \nccc', 10)).toEqual(['aaaaa bbbb', 'ccc']);
+    expect(wrap('aaaaa bbbb   \n\nccc', 10)).toEqual(['aaaaa bbbb', '', 'ccc']);
+    expect(wrap('aaaaa bbbb \n', 10)).toEqual(['aaaaa bbbb', '']);
     expect(diffCount('--- a\n+++ b\n+x\n-y\n-z')).toEqual({ add: 1, del: 2 });
   });
 });
