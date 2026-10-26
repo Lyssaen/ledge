@@ -49,7 +49,12 @@ export const chatLines = (turns: readonly ChatTurn[], live: { qid: string; text:
 function actionTrace(turn: ChatTurn, t: Messages, g: Glyphs, width: number): Line[] {
   const a = t.ask.action, c = a.copy;
   const cards = !!(turn.actions || turn.proposal || turn.relay || turn.closes || turn.team || turn.tasks || turn.projectProposal);
-  if (turn.ignoredAt) return cards ? [[{ text: '' }], [{ text: `  ${a.ignored(turn.actions?.length ?? 1, clock(turn.ignoredAt))}`, color: C.faint }]] : [];
+  if (turn.ignoredAt) {
+    // What went before the rest was set aside is counted: a plan begun did send something.
+    const shown = turn.actions ? cardPlan(turn.actions).shown : [];
+    const sent = { done: shown.filter(s => s === 'done').length, denied: shown.filter(s => s === 'denied').length };
+    return cards ? [[{ text: '' }], [{ text: `  ${a.ignored(turn.actions?.length ?? 1, clock(turn.ignoredAt), sent)}`, color: C.faint }]] : [];
+  }
   if (!turn.actions || !cardClosed(turn.actions)) return [];
   // Apart from the answer, as the mockup leaves it.
   const p = cardPlan(turn.actions), out: Line[] = [[{ text: '' }]];
