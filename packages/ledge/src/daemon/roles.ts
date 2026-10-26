@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { AutonomySchema, RoleSchema, ROLE_LABEL_MAX, ROLE_PROMPT_MAX, type Autonomy, type DefinitionProblem, type OmpApproval, type Role, type Tool } from '@ledge/protocol';
+import { autonomyArgs, AutonomySchema, ompApprovalFor, RoleSchema, ROLE_LABEL_MAX, ROLE_PROMPT_MAX, type Autonomy, type DefinitionProblem, type Role } from '@ledge/protocol';
 import { ledgeDir } from '../paths.js';
 import { log } from '../log.js';
 
@@ -103,23 +103,7 @@ export function findRole(id: string, cwd?: string): Role | undefined {
   return listRoles(cwd).roles.find(r => r.id === id);
 }
 
-/**
- * Each agent's own permission switch for an autonomy (spec §3.1), added at launch and kept by a resume. Ledge never
- * answers a prompt in the agent's place: what the agent still asks lands in « À toi ».
- */
-export function autonomyArgs(tool: Tool, autonomy: Autonomy | undefined): string[] {
-  if (!autonomy || autonomy === 'ask') return [];
-  switch (tool) {
-    case 'claude': return ['--permission-mode', autonomy === 'edits' ? 'acceptEdits' : 'auto'];
-    case 'codex': return autonomy === 'edits' ? ['--ask-for-approval', 'on-request'] : ['--ask-for-approval', 'never', '--sandbox', 'workspace-write'];
-    case 'cursor': return autonomy === 'auto' ? ['--force'] : [];
-    case 'omp': return [];
-  }
-}
-
-/** OMP's approval mode for an autonomy: it has no switch of its own beyond these. */
-export function ompApprovalFor(autonomy: Autonomy | undefined): OmpApproval | undefined {
-  return autonomy === 'auto' ? 'yolo' : autonomy ? 'always-ask' : undefined;
-}
+/** Each agent's own permission switch for an autonomy, shared with the fronts that explain it. */
+export { autonomyArgs, ompApprovalFor };
 
 export const isAutonomy = (v: unknown): v is Autonomy => AutonomySchema.safeParse(v).success;

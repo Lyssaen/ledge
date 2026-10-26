@@ -422,6 +422,37 @@ export const en: Messages = {
       none: 'No task.', result: 'Result', reason: 'Reason', log: 'History', from: (giver: string, owner: string) => `from ${giver} to ${owner}`, close: 'Close'
     },
     teams: { none: 'No team at work. Ask Ledge to set one up.', dissolved: 'dissolved' },
+    catalog: {
+      views: 'Team views', live: (n?: number) => `Live · ${n ?? 0}`, templates: (n?: number) => (n === undefined ? 'Templates' : `Templates · ${n}`), roles: (n?: number) => (n === undefined ? 'Roles' : `Roles · ${n}`),
+      folder: 'Folder', folderTitle: 'The folder whose catalog is read', personal: 'Personal only',
+      scopeProject: (name: string) => `project ${name} · repository + ~/.ledge`, scopeFolder: 'folder · repository + ~/.ledge', scopePersonal: 'no folder: ~/.ledge only',
+      repoWins: 'The repository wins over ~/.ledge for the same id.',
+      filter: 'Filter the roles…', filterLabel: 'Filter the roles', rolesList: 'Roles', templatesList: 'Templates',
+      repoRoles: 'Repository · .ledge/roles', homeRoles: 'Personal · ~/.ledge/roles', repoTeams: 'Repository · .ledge/teams', homeTeams: 'Personal · ~/.ledge/teams',
+      ignored: 'Skipped', ignoredRow: (n: number) => `${n} ${n === 1 ? 'file' : 'files'} not read`, ignoredHint: 'Ledge skips them without blocking the rest',
+      ignoredTitle: 'Skipped files', ignoredBody: 'Read by the daemon but not understood: neither a role nor a template.',
+      loading: 'Reading the roles and templates…', noRole: 'No role in this folder.', noRoleHint: 'A role is written in .ledge/roles/<id>.md (the repository) or ~/.ledge/roles/<id>.md (personal).',
+      noTemplate: 'No template in this folder.', noTemplateHint: 'A template is written in .ledge/teams/<id>.yaml; « Save » on a chat team card writes one.', noMatch: 'No role matches.',
+      inTemplates: (n: number) => `in ${n} ${n === 1 ? 'template' : 'templates'}`, heldBy: (names: string) => `held by ${names}`, seats: (n: number) => `${n} ${n === 1 ? 'seat' : 'seats'}`,
+      toolDefaults: 'the tool’s defaults', source: { repo: 'repository', home: 'personal' } as Record<'repo' | 'home', string>,
+      role: 'Role', template: 'Team template', fromTemplate: 'template', seeRole: (id: string) => `See role @${id}`,
+      launchSession: 'Start a session', mountTeam: 'Set up a team…', launchTeam: 'Launch this team…',
+      needProject: 'This folder belongs to no project: a team sits in a project’s room.',
+      tool: 'Tool', model: 'Model', effort: 'Effort', autonomy: 'Autonomy', file: 'File', anyTool: 'any', toolDefault: 'the tool’s default',
+      autonomyShort: { ask: 'asks', edits: 'edits', auto: 'auto' } as Record<'ask' | 'edits' | 'auto', string>,
+      autonomyAsk: 'nothing added: the agent asks before acting', autonomyAuto: 'works without asking', autonomyNone: 'nothing added', toolFlag: (tool: string, flag: string) => `${tool}: ${flag}`, ompApproval: (mode: string) => `approval mode ${mode}`,
+      copy: 'Copy', open: 'Open', reader: (name: string) => `File ${name}`, copied: (path: string) => `Path copied: ${path}`,
+      shadows: 'Replaces', shadowsWhy: '(same id, the repository wins)',
+      prompt: 'Instructions given to the seat at every start', promptEmpty: 'No instructions.',
+      usedIn: 'Used in', noUse: 'No template.', seeTemplate: 'See the template',
+      heldNow: 'Held right now', noHolder: 'No seat holds this role.', openSession: 'Open the session',
+      roleReadOnly: 'Read only: a role is changed in its file.',
+      posts: 'Seats', colRole: 'Role', colLabel: 'Label', colRun: 'Tool · model · effort', colAutonomy: 'Autonomy',
+      overWord: 'blue', overNote: 'what the template changes of the role’s defaults.', unknownRole: 'Role unknown in this folder',
+      autoWarn: (roles: readonly string[]) => `${new Intl.ListFormat('en', { type: 'conjunction' }).format(roles)} ${roles.length === 1 ? 'works' : 'work'} without asking (autonomy auto, set by the role’s file).`,
+      born: 'Teams born of it', noneBorn: 'none', active: 'active', resting: 'resting',
+      templateReadOnly: 'Read only: a template is changed in its file; « Save » on a chat team card writes one.'
+    },
     history: { none: 'No conversation today.', open: 'See in the conversation' }
   },
   handover: {
@@ -759,6 +790,7 @@ export const en: Messages = {
     }
   },
   launch: {
+    role: 'Role', roleHint: 'its instructions and defaults apply to the session', roleRemove: 'Remove',
     prompt: 'Instruction', placeholder: 'What should the agent do? Describe the expected result.',
     suggestions: 'Suggestions', ideas: ['Review the latest pull request', 'Fix the failing tests', 'Update the documentation'],
     agent: 'Agent', agentHint: 'The engine of this session', change: 'Change', chooseFor: 'Choose for this session', byDefaultTag: 'Default', thisSession: 'This session', defaultMark: 'Default',

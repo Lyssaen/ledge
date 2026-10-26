@@ -442,6 +442,37 @@ export const fr = {
       none: 'Aucune tâche.', result: 'Résultat', reason: 'Raison', log: 'Historique', from: (giver: string, owner: string) => `de ${giver} à ${owner}`, close: 'Fermer'
     },
     teams: { none: 'Aucune équipe en cours. Demande à Ledge d’en monter une.', dissolved: 'dissoute' },
+    catalog: {
+      views: 'Vues des équipes', live: (n?: number) => `En cours · ${n ?? 0}`, templates: (n?: number) => (n === undefined ? 'Modèles' : `Modèles · ${n}`), roles: (n?: number) => (n === undefined ? 'Rôles' : `Rôles · ${n}`),
+      folder: 'Dossier', folderTitle: 'Le dossier dont le catalogue est lu', personal: 'Perso seulement',
+      scopeProject: (name: string) => `projet ${name} · dépôt + ~/.ledge`, scopeFolder: 'dossier · dépôt + ~/.ledge', scopePersonal: 'sans dossier : ~/.ledge seulement',
+      repoWins: 'Le dépôt l’emporte sur ~/.ledge pour un même id.',
+      filter: 'Filtrer les rôles…', filterLabel: 'Filtrer les rôles', rolesList: 'Rôles', templatesList: 'Modèles',
+      repoRoles: 'Dépôt · .ledge/roles', homeRoles: 'Perso · ~/.ledge/roles', repoTeams: 'Dépôt · .ledge/teams', homeTeams: 'Perso · ~/.ledge/teams',
+      ignored: 'Ignorés', ignoredRow: (n: number) => plural(n, `${n} fichier non lu`, `${n} fichiers non lus`), ignoredHint: 'Ledge les saute sans bloquer le reste',
+      ignoredTitle: 'Fichiers ignorés', ignoredBody: 'Lus par le daemon mais pas compris : ni rôle ni modèle.',
+      loading: 'Lecture des rôles et des modèles…', noRole: 'Aucun rôle dans ce dossier.', noRoleHint: 'Un rôle s’écrit dans .ledge/roles/<id>.md (le dépôt) ou ~/.ledge/roles/<id>.md (perso).',
+      noTemplate: 'Aucun modèle dans ce dossier.', noTemplateHint: 'Un modèle s’écrit dans .ledge/teams/<id>.yaml ; « Enregistrer » sur une carte d’équipe du chat en crée un.', noMatch: 'Aucun rôle ne correspond.',
+      inTemplates: (n: number) => `dans ${n} ${plural(n, 'modèle', 'modèles')}`, heldBy: (names: string) => `tenu par ${names}`, seats: (n: number) => `${n} ${plural(n, 'poste', 'postes')}`,
+      toolDefaults: 'défauts de l’outil', source: { repo: 'dépôt', home: 'perso' } as Record<'repo' | 'home', string>,
+      role: 'Rôle', template: 'Modèle d’équipe', fromTemplate: 'modèle', seeRole: (id: string) => `Voir le rôle @${id}`,
+      launchSession: 'Lancer une session', mountTeam: 'Monter une équipe…', launchTeam: 'Lancer cette équipe…',
+      needProject: 'Ce dossier n’est d’aucun projet : une équipe s’installe dans la pièce d’un projet.',
+      tool: 'Outil', model: 'Modèle', effort: 'Effort', autonomy: 'Autonomie', file: 'Fichier', anyTool: 'au choix', toolDefault: 'défaut de l’outil',
+      autonomyShort: { ask: 'demande', edits: 'éditions', auto: 'auto' } as Record<'ask' | 'edits' | 'auto', string>,
+      autonomyAsk: 'rien d’ajouté : l’agent demande avant d’agir', autonomyAuto: 'travaille sans demander', autonomyNone: 'rien d’ajouté', toolFlag: (tool: string, flag: string) => `${tool} : ${flag}`, ompApproval: (mode: string) => `mode d’approbation ${mode}`,
+      copy: 'Copier', open: 'Ouvrir', reader: (name: string) => `Fichier ${name}`, copied: (path: string) => `Chemin copié : ${path}`,
+      shadows: 'Remplace', shadowsWhy: '(même id, le dépôt l’emporte)',
+      prompt: 'Consigne donnée au siège à chaque démarrage', promptEmpty: 'Aucune consigne.',
+      usedIn: 'Utilisé dans', noUse: 'Aucun modèle.', seeTemplate: 'Voir le modèle',
+      heldNow: 'Tenu en ce moment', noHolder: 'Aucun siège ne tient ce rôle.', openSession: 'Ouvrir la session',
+      roleReadOnly: 'Lecture seule : un rôle se modifie dans son fichier.',
+      posts: 'Postes', colRole: 'Rôle', colLabel: 'Libellé', colRun: 'Outil · modèle · effort', colAutonomy: 'Autonomie',
+      overWord: 'bleu', overNote: 'ce que le modèle change aux défauts du rôle.', unknownRole: 'Rôle inconnu dans ce dossier',
+      autoWarn: (roles: readonly string[]) => `${andList(roles)} ${plural(roles.length, 'travaille', 'travaillent')} sans demander (autonomie auto, fixée par le fichier du rôle).`,
+      born: 'Équipes nées', noneBorn: 'aucune', active: 'active', resting: 'au repos',
+      templateReadOnly: 'Lecture seule : un modèle se modifie dans son fichier ; « Enregistrer » sur une carte d’équipe du chat en crée un.'
+    },
     history: { none: 'Aucune conversation aujourd’hui.', open: 'Voir dans la conversation' }
   },
   handover: {
@@ -795,6 +826,7 @@ export const fr = {
     }
   },
   launch: {
+    role: 'Rôle', roleHint: 'sa consigne et ses défauts s’appliquent à la session', roleRemove: 'Retirer',
     prompt: 'Consigne', placeholder: 'Que doit faire l’agent ? Décrivez le résultat attendu.',
     suggestions: 'Suggestions', ideas: ['Relire la dernière pull request', 'Corriger les tests qui échouent', 'Mettre à jour la documentation'] as readonly string[],
     agent: 'Agent', agentHint: 'Le moteur de cette session', change: 'Changer', chooseFor: 'Choisir pour cette session', byDefaultTag: 'Par défaut', thisSession: 'Cette session', defaultMark: 'Défaut',

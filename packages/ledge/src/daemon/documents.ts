@@ -1,10 +1,13 @@
 import { constants } from 'node:fs';
 import { open, realpath } from 'node:fs/promises';
-import { isAbsolute, dirname, extname, resolve } from 'node:path';
+import { basename, isAbsolute, dirname, extname, resolve } from 'node:path';
 import type { DocumentRead, DocumentContent, DocumentError, DocumentErrorCode } from '@ledge/protocol';
 import { DOCUMENT_MAX_BYTES } from '@ledge/protocol';
 
 const markdown = (path: string) => /^\.(?:md|markdown)$/i.test(extname(path));
+/** A team template (`.ledge/teams/<id>.yaml`, the repository's or the home's): the catalog shows it as it is written (#97). */
+const template = (path: string) => /^\.ya?ml$/i.test(extname(path)) && basename(dirname(path)) === 'teams' && basename(dirname(dirname(path))) === '.ledge';
+const readable = (path: string) => markdown(path) || template(path);
 const failure = (request: DocumentRead, code: DocumentErrorCode): DocumentError => ({
   type: 'document.error', requestId: request.requestId, path: request.path, code
 });
@@ -14,7 +17,7 @@ const errorCode = (e: unknown): DocumentErrorCode => {
     : code === 'EISDIR' || code === 'ENXIO' ? 'not_file' : 'read_failed';
 };
 
-/** Read one WSL Markdown file for the requesting socket. Never spawns a process or writes to the file. */
+/** Read one WSL Markdown file (or a team template) for the requesting socket. Never spawns a process or writes to the file. */
 export async function readDocument(request: DocumentRead, context: { cwd?: string; workdir?: string; home: string }): Promise<DocumentContent | DocumentError> {
   const source = request.path;
   if (/^(?:file:|[a-zA-Z]:[\\/]|\\\\)/.test(source) || source.includes('\0')) return failure(request, 'unsupported_path');
@@ -25,7 +28,7 @@ export async function readDocument(request: DocumentRead, context: { cwd?: strin
   const bases = request.basePath ? [dirname(request.basePath)] : [...new Set([context.workdir, context.cwd].filter((d): d is string => !!d))];
   if (!isAbsolute(expanded) && !bases.length) return failure(request, 'ambiguous_path');
   const paths = isAbsolute(expanded) ? [resolve(expanded)] : bases.map(base => resolve(base, expanded));
-  if (!markdown(paths[0]!)) return failure(request, 'unsupported_type');
+  if (!readable(paths[0]!)) return failure(request, 'unsupported_type');
   let read: DocumentContent | DocumentError = failure(request, 'not_found');
   for (const path of paths) {
     read = await readAt(request, path);
@@ -37,6 +40,8 @@ export async function readDocument(request: DocumentRead, context: { cwd?: strin
 async function readAt(request: DocumentRead, path: string): Promise<DocumentContent | DocumentError> {
   let file;
   try {
+    // A template is read only where the daemon reads templates: a link out of `.ledge/teams` (or to another file) is refused.
+    if (!markdown(path) && !template(await realpath(path))) return failure(request, 'unsupported_type');
     // O_NONBLOCK also makes a path replaced by a FIFO between resolution and open safe to reject.
     file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
     const stat = await file.stat();

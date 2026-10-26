@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type JSX, type KeyboardEvent, type ReactNode } from 'react';
 import type { DaemonClient, MachineState } from '@ledge/fleet';
-import type { OmpApproval, Project, Session } from '@ledge/protocol';
+import type { OmpApproval, Project, Role, Session } from '@ledge/protocol';
 import { Bot } from '@ledge/ui/bots/Bot';
 import { Button } from '@ledge/ui/ui/Button';
 import { Kbd } from '@ledge/ui/ui/Kbd';
@@ -30,10 +30,12 @@ function emphasized(text: (a: string, b: string) => string, a: string, b: string
 
 /** Starting a session (the mockup's LaunchComposer, ledge-harness-integration #launch): the instruction first, then the agent, preselected as
  *  the default (Settings › General) and changed for this session only behind « Change », then the project, the machine and the repositories
- *  there; the preview shows who joins which table. Nothing is sent while a field is missing: it is named instead. */
+ *  there; the preview shows who joins which table. Nothing is sent while a field is missing: it is named instead. From the
+ *  catalog (#97), `wanted` brings a role, whose defaults fill the agent, its model and effort, and the folder it was read in. */
 export function LaunchComposer(p: {
   client: DaemonClient; projects: readonly Project[]; machines: readonly MachineState[]; sessions: readonly Session[];
-  projectIdOf(s: Session): string | null; wanted: { project?: string; filter?: string }; onEditProject(id: string): void; onNewProject(): void;
+  projectIdOf(s: Session): string | null; wanted: { project?: string; filter?: string; cwd?: string; role?: Pick<Role, 'id' | 'label' | 'tool' | 'model' | 'effort'> };
+  onEditProject(id: string): void; onNewProject(): void;
   /** The launch in flight or its outcome (useLaunch): « Launching… » sends nothing more; a refusal or a silence is said here. */
   launch: LaunchState; onLaunch(msg: LaunchMessage, preview: { name: string; project: string; projectId: string }): void; onCancel(): void;
   /** The app's « Freeze animations »: the form's bots hold still. */
@@ -44,7 +46,13 @@ export function LaunchComposer(p: {
   const { reduced } = useMotionPreferences();
   const { projects, machines } = p;
   const [defaultTool, setDefaultTool] = useDefaultTool();
-  const [form, setForm] = useState<LaunchForm>(() => { const f = launchDefaults(projects, machines, p.wanted, defaultTool); return withPick(f, loadPick(f.project, f.tool)); });
+  const [form, setForm] = useState<LaunchForm>(() => {
+    const { role, cwd } = p.wanted;
+    let f = launchDefaults(projects, machines, p.wanted, role?.tool ?? defaultTool);
+    f = withPick(f, role?.model ? { model: role.model, effort: role.effort ?? null } : loadPick(f.project, f.tool));
+    return cwd && reposOn(projects.find(x => x.id === f.project), f.machine).some(r => r.path === cwd) ? { ...f, repos: [cwd] } : f;
+  });
+  const [role, setRole] = useState(p.wanted.role);
   const [tried, setTried] = useState(false);
   const [choosing, setChoosing] = useState(false);
   const [feedback, setFeedback] = useState('');
@@ -104,7 +112,7 @@ export function LaunchComposer(p: {
     if (missing || launching || !project || unavailable) return;
     if (!outdated) savePick(project.id, form.tool, { model: form.model, effort: form.effort });
     const sent = { ...(outdated ? withPick(form, NO_PICK) : form), approval: approvable ? form.approval : 'always-ask' as const };
-    p.onLaunch(launchMessage(sent, name), { name, project: project.name, projectId: project.id });
+    p.onLaunch({ ...launchMessage(sent, name), ...(role ? { role: role.id } : {}) }, { name, project: project.name, projectId: project.id });
   };
   // Only Ctrl / ⌘ ↵ and « Launch » send: a plain Enter on a tile or a chip would submit the form implicitly (the textarea keeps its newline).
   const onKeyDown = (e: KeyboardEvent) => {
@@ -138,6 +146,13 @@ export function LaunchComposer(p: {
           <textarea ref={field} value={form.prompt} onChange={e => { const prompt = e.target.value; setForm(f => ({ ...f, prompt })); }} rows={4}
             placeholder={t.launch.placeholder} aria-invalid={invalid('prompt')} />
         </label>
+        {role && (
+          <div className="composer-role" role="note">
+            <span className="composer-label">{t.launch.role}</span>
+            <span className="role-pill">@{role.id}</span><strong>{role.label}</strong><small>{t.launch.roleHint}</small>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setRole(undefined)}>{t.launch.roleRemove}</Button>
+          </div>
+        )}
         {!form.prompt && (
           <div className="composer-suggestions" role="group" aria-label={t.launch.suggestions}>
             {t.launch.ideas.map(s => <button type="button" key={s} onClick={() => { setForm(f => ({ ...f, prompt: s })); field.current?.focus(); }}>{s}</button>)}

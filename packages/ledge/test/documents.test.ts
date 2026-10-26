@@ -38,6 +38,24 @@ describe('readDocument', () => {
     expect(await readDocument(req(join(root, 'folder.md')), { home: root })).toMatchObject({ type: 'document.error', code: 'not_file' });
     expect(await readDocument(req(join(root, 'note.txt')), { home: root })).toMatchObject({ type: 'document.error', code: 'unsupported_type' });
   });
+  it('reads a team template of a .ledge/teams folder, and no other YAML', async () => {
+    const root = await dir(); await mkdir(join(root, '.ledge', 'teams'), { recursive: true });
+    await writeFile(join(root, '.ledge', 'teams', 'workshop.yaml'), 'name: workshop\n'); await writeFile(join(root, 'config.yaml'), 'x: 1\n');
+    expect(await readDocument(req(join(root, '.ledge', 'teams', 'workshop.yaml')), { home: root })).toMatchObject({ type: 'document.content', text: 'name: workshop\n' });
+    expect(await readDocument(req(join(root, 'config.yaml')), { home: root })).toMatchObject({ type: 'document.error', code: 'unsupported_type' });
+    // Out of .ledge/teams by `..`, below it, or through a link to a file elsewhere: refused.
+    const teams = join(root, '.ledge', 'teams');
+    expect(await readDocument(req(`${teams}/../../config.yaml`), { home: root })).toMatchObject({ type: 'document.error', code: 'unsupported_type' });
+    await mkdir(join(teams, 'sub')); await writeFile(join(teams, 'sub', 'deep.yaml'), 'x: 1\n');
+    expect(await readDocument(req(join(teams, 'sub', 'deep.yaml')), { home: root })).toMatchObject({ type: 'document.error', code: 'unsupported_type' });
+    await writeFile(join(root, 'secret'), 'token\n');
+    await symlink(join(root, 'config.yaml'), join(teams, 'linked.yaml')); await symlink(join(root, 'secret'), join(teams, 'secret.yaml'));
+    expect(await readDocument(req(join(teams, 'linked.yaml')), { home: root })).toMatchObject({ type: 'document.error', code: 'unsupported_type' });
+    expect(await readDocument(req(join(teams, 'secret.yaml')), { home: root })).toMatchObject({ type: 'document.error', code: 'unsupported_type' });
+    // A link to another template stays a template.
+    await symlink(join(teams, 'workshop.yaml'), join(teams, 'alias.yml'));
+    expect(await readDocument(req(join(teams, 'alias.yml')), { home: root })).toMatchObject({ type: 'document.content', text: 'name: workshop\n' });
+  });
   it('accepts 1 MiB exactly and rejects one byte more or malformed UTF-8', async () => {
     const root = await dir(); const file = join(root, 'limit.md');
     await writeFile(file, Buffer.alloc(1_048_576, 97));
