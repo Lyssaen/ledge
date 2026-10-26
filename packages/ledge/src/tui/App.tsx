@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useApp, useInput, useStdout } from 'ink';
+import { useApp, useInput, useStdout, useWindowSize } from 'ink';
 import { isPending, useDaemon, useMachines, useProjects, useTasks, useTeams, type DaemonClient, type Fleet } from '@ledge/fleet';
 import type { Session } from '@ledge/protocol';
 import { useActions, type Toast } from './actions.js';
@@ -15,6 +15,7 @@ import { Ask } from './screens/Ask.js';
 import { Launch } from './screens/Launch.js';
 import { Settings } from './screens/Settings.js';
 import { Help } from './screens/Help.js';
+import { MIN } from './ui/Frame.js';
 
 /** How long a toast stays. */
 export const TOAST_MS = 5000;
@@ -115,6 +116,7 @@ function Shell({ client, lang, setLang: setLangState, saveLang, notify, glyphs, 
     toast, lastToast, actions, editing, setEditing, attach, keys, kept
   };
 
+  const size = useWindowSize();
   useInput((input, key) => {
     if (key.ctrl && input === 'c') {
       if (keys.current?.(input, key)) return;
@@ -127,6 +129,8 @@ function Shell({ client, lang, setLang: setLangState, saveLang, notify, glyphs, 
       exit(); return;
     }
     if (editing) return;
+    // Too small, the screen is not drawn: y, n, a… would act on a request out of view. esc and q still go.
+    if ((size.columns < MIN.columns || size.rows < MIN.rows) && !key.escape && input !== 'q') return;
     if (keys.current?.(input, key)) return;
     if (input === 'q') { exit(); return; }
     if (key.escape) { go(screen === 'help' || screen === 'settings' ? back : 'overview'); return; }

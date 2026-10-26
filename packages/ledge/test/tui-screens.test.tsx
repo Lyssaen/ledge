@@ -139,6 +139,24 @@ describe('ledge tui: the session thread (#95 lot A)', () => {
     } finally { await tui.cleanup(); }
   });
 
+  it('below 60×16 the screen keys do nothing: the request is not in view; esc and q still work', async () => {
+    const runs: string[][] = [];
+    const tui = await startTui({ run: async argv => { runs.push(argv); return 0; } });
+    try {
+      await tui.press('\r');
+      await until(() => tui.frame().includes('Otto veut exécuter'));
+      await tui.resize(52, 14);
+      await until(() => tui.frame().includes('Fenêtre trop petite'));
+      for (const k of ['y', 'n', 'A', '1', 'i', 'a']) await tui.press(k);
+      await new Promise(r => setTimeout(r, 100));
+      expect(tui.daemon.received.filter(m => m.type === 'session.decide' || m.type === 'session.interrupt')).toEqual([]);
+      expect(runs).toEqual([]);
+      await tui.press('\u001b');
+      await tui.resize(100, 30);
+      await until(() => tui.frame().includes('PROJETS'));
+    } finally { await tui.cleanup(); }
+  });
+
   it('the request folds under an indent, four lines at most; the key bar drops keys from the end and keeps « ? aide »; the crumb shortens', async () => {
     const long = `rm -rf coverage node_modules/.vite && ${'pnpm --filter @ledge/ledge test -- --run --coverage --reporter=verbose && '.repeat(4)}echo fin`;
     const otto = mockupSessions()[0]!;
