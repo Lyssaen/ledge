@@ -1,6 +1,6 @@
 // Applies the rows of a chat's generic card (spec 2026-10-26 action registry §9.2), for the PC's overlays and for a phone alike.
 import { MAX_PROPOSALS, type ActionErrorCode, type ChatAction } from '@ledge/protocol';
-import type { Resolved } from '../daemon/actions.js';
+import { cardRefusal, type Resolved } from '../daemon/actions.js';
 import type { Chat, ChatMessage } from './service.js';
 import { log } from '../log.js';
 
@@ -49,6 +49,9 @@ export async function actFromChat(deps: ActDeps, qid: string, rows?: number[], c
         if ('refused' in current) { refused = current.code ?? 'changed'; throw new Error(current.refused); }
         // The same args at another risk (a template saved meanwhile under that name) is another action: confirmed for neither.
         if (JSON.stringify(current.args) !== JSON.stringify(row.args) || current.risk !== row.risk) throw new Error(row.action === 'session.decide' ? 'the request has changed since the card' : 'the target has changed since the card');
+        // Checked on the row as it stands now: a request that grew past the card since is cut too.
+        const never = cardRefusal(current);
+        if (never) { refused = never.code; throw new Error(never.refused); }
         refused = null;
         await deps.apply(row);
       } catch (e) {

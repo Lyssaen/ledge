@@ -95,6 +95,18 @@ describe('actFromChat (spec 2026-10-26 action registry §9.2)', () => {
     await actFromChat(x.d, 'q1');
     expect(f.rows[0]).toMatchObject({ state: 'failed', error: 'tmux died', code: 'failed' });
   });
+  it('accepting a cut request from the card is refused before it is sent; denying it is sent', async () => {
+    const accept = row('session.decide', { session: 'a', decision: 'accept' }, { detail: 'x…', detailCut: true });
+    const c = card([accept]);
+    const { d, applied } = deps(c);
+    expect((await actFromChat(d, 'q1', undefined, true)).failed).toEqual([{ row: 0, message: 'a\'s request is cut on the card: accept it in the session', refused: true }]);
+    expect(c.rows[0]).toMatchObject({ state: 'refused', code: 'cut' });
+    expect(applied).toEqual([]);
+    const deny = card([row('session.decide', { session: 'a', decision: 'deny' }, { detail: 'x…', detailCut: true })]);
+    const x = deps(deny);
+    expect(await actFromChat(x.d, 'q1')).toEqual({ done: [0], failed: [] });
+    expect(x.applied).toEqual(['a']);
+  });
   it('the same args at another risk (a template saved meanwhile) is refused: it was confirmed at the old one', async () => {
     const c = card([row('team.save', { team: 't', name: 'api', seats: [] })]);
     const { d, applied } = deps(c, { resolve: (r: ChatAction) => ({ ...r, risk: 'destructive' as const }) });
