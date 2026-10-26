@@ -56,7 +56,7 @@ describe('the action card (#94): a plan', () => {
   it('confirmation in the card: the rows lose their buttons, details unfold, focus on Cancel, esc cancels, the foot applies all', () => {
     const p = card(plan());
     fireEvent.click(screen.getByRole('button', { name: 'Apply all (3)…' }));
-    const confirm = screen.getByRole('group', { name: 'Confirmation' });
+    const confirm = screen.getByRole('group', { name: /^Confirmation/ });
     expect(confirm).toHaveTextContent('Apply these 3 actions, in order?');
     expect(confirm).toHaveTextContent('1 irreversible: read the detail above.');
     expect(document.activeElement).toBe(within(confirm).getByRole('button', { name: 'Cancel' }));
@@ -64,43 +64,70 @@ describe('the action card (#94): a plan', () => {
     for (const r of rowsOf()) expect(within(r).queryByRole('button')).toBeNull();
     expect(rowsOf()[2]!.querySelector('[data-action-detail]')!.hasAttribute('data-clamped')).toBe(false);
     fireEvent.keyDown(confirm, { key: 'Escape' });
-    expect(screen.queryByRole('group', { name: 'Confirmation' })).toBeNull();
+    expect(screen.queryByRole('group', { name: /^Confirmation/ })).toBeNull();
     expect(p.onApply).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Apply all (3)…' }));
     fireEvent.click(screen.getByRole('button', { name: 'Apply the 3' }));
     expect(p.onApply).toHaveBeenCalledWith([0, 1, 2]);
-    expect(screen.queryByRole('group', { name: 'Confirmation' })).toBeNull();
+    expect(screen.queryByRole('group', { name: /^Confirmation/ })).toBeNull();
   });
 
   it('esc or Cancel: the focus goes back to the button that asked, not to the page', () => {
     card(plan());
-    fireEvent.click(screen.getByRole('button', { name: 'Apply all (3)…' }));
-    fireEvent.keyDown(screen.getByRole('group', { name: 'Confirmation' }), { key: 'Escape' });
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Apply all (3)…' }));
     fireEvent.click(within(rowsOf()[2]!).getByRole('button', { name: 'Dissolve…' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    fireEvent.keyDown(screen.getByRole('group', { name: /^Confirmation/ }), { key: 'Escape' });
     expect(document.activeElement).toBe(within(rowsOf()[2]!).getByRole('button', { name: 'Dissolve…' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Apply all (3)…' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Apply all (3)…' }));
   });
 
-  it('the card changes elsewhere (another device): the confirmation closes, Ignore then Review does not reopen it', () => {
+  it('the asking row applied elsewhere: the confirmation closes, the focus goes to the foot', () => {
+    const p = card(plan());
+    fireEvent.click(within(rowsOf()[2]!).getByRole('button', { name: 'Dissolve…' }));
+    p.rerender(<ChatCopyProvider value={{ ...copy, chat: { ...copy.chat, action: actionCopy } }}><ActionCard rows={plan([{}, {}, { state: 'done', doneAt: AT }])} {...p} /></ChatCopyProvider>);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Apply all (2)' }));
+  });
+
+  it('the card changes elsewhere: the confirmation keeps only the rows still open, and sends only them', () => {
+    const p = card(plan());
+    fireEvent.click(screen.getByRole('button', { name: 'Apply all (3)…' }));
+    p.rerender(<ChatCopyProvider value={{ ...copy, chat: { ...copy.chat, action: actionCopy } }}><ActionCard rows={plan([{ state: 'done', doneAt: AT }])} {...p} /></ChatCopyProvider>);
+    const confirm = screen.getByRole('group', { name: /^Confirmation/ });
+    expect(confirm).toHaveTextContent('Apply the 2 actions, in order?');
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Apply the 2' }));
+    expect(p.onApply).toHaveBeenCalledWith([1, 2]);
+  });
+
+  it('the card changes elsewhere: no row asked is open any more, or it is ignored, the confirmation closes; Review does not reopen it', () => {
     const p = card(plan());
     const again = (rows: ActionRowView[], extra: Partial<ActionCardProps> = {}) =>
       p.rerender(<ChatCopyProvider value={{ ...copy, chat: { ...copy.chat, action: actionCopy } }}><ActionCard rows={rows} {...p} {...extra} /></ChatCopyProvider>);
     fireEvent.click(within(rowsOf()[2]!).getByRole('button', { name: 'Dissolve…' }));
     again(plan([{}, {}, { state: 'done', doneAt: AT }]));
-    expect(screen.queryByRole('group', { name: 'Confirmation' })).toBeNull();
+    expect(screen.queryByRole('group', { name: /^Confirmation/ })).toBeNull();
+    expect(document.body).not.toHaveTextContent('already done');
     again(plan());
     fireEvent.click(screen.getByRole('button', { name: 'Apply all (3)…' }));
     again(plan(), { ignoredAt: AT });
     again(plan());
-    expect(screen.queryByRole('group', { name: 'Confirmation' })).toBeNull();
+    expect(screen.queryByRole('group', { name: /^Confirmation/ })).toBeNull();
     expect(screen.getByRole('button', { name: 'Apply all (3)…' })).toBeTruthy();
+  });
+
+  it('the confirmation is named by its question and described by its why; a row\'s state reads at 12 px', () => {
+    card(plan([{ state: 'done', doneAt: AT }]));
+    fireEvent.click(within(rowsOf()[2]!).getByRole('button', { name: 'Dissolve…' }));
+    const confirm = screen.getByRole('group', { name: 'Confirmation Dissolve the team ledge-roles?' });
+    expect(document.getElementById(confirm.getAttribute('aria-describedby')!)).toHaveTextContent('Ledge cannot undo it once sent.');
+    fireEvent.keyDown(confirm, { key: 'Escape' });
+    expect(rowsOf()[0]!.querySelector<HTMLElement>('[data-action-side] span')!.style.fontSize).toBe('12px');
   });
 
   it('an irreversible row asks too, alone; the rows already done read « already done », dimmed', () => {
     const p = card(plan([{ state: 'done', doneAt: AT }]));
     fireEvent.click(screen.getByRole('button', { name: 'Dissolve…' }));
-    const confirm = screen.getByRole('group', { name: 'Confirmation' });
+    const confirm = screen.getByRole('group', { name: /^Confirmation/ });
     expect(confirm).toHaveTextContent('Dissolve the team ledge-roles?');
     expect(rowsOf()[0]).toHaveTextContent('already done');
     expect(rowsOf()[0]!.hasAttribute('data-dim')).toBe(true);
@@ -138,7 +165,7 @@ describe('the action card (#94): a plan', () => {
     expect(within(rowsOf()[1]!).queryByRole('button')).toBeNull();
     expect(rowsOf()[1]).toHaveTextContent('Refused');
     fireEvent.click(screen.getByRole('button', { name: 'Continue without step 2 (1)…' }));
-    fireEvent.click(within(screen.getByRole('group', { name: 'Confirmation' })).getByRole('button', { name: 'Dissolve' }));
+    fireEvent.click(within(screen.getByRole('group', { name: /^Confirmation/ })).getByRole('button', { name: 'Dissolve' }));
     expect(p.onApply).toHaveBeenLastCalledWith([2]);
   });
 
@@ -209,9 +236,9 @@ describe('the action card (#94): a permission', () => {
     const p = card([permission]);
     fireEvent.click(screen.getByRole('button', { name: 'Deny' }));
     expect(p.onDeny).toHaveBeenCalledWith(0);
-    expect(screen.queryByRole('group', { name: 'Confirmation' })).toBeNull();
+    expect(screen.queryByRole('group', { name: /^Confirmation/ })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Accept…' }));
-    const confirm = screen.getByRole('group', { name: 'Confirmation' });
+    const confirm = screen.getByRole('group', { name: /^Confirmation/ });
     expect(confirm).toHaveTextContent('Accept Nova\'s request?');
     expect(confirm).toHaveTextContent('Ledge cannot undo it once sent.');
     fireEvent.click(within(confirm).getByRole('button', { name: 'Accept' }));

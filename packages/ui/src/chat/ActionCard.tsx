@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { ACTION_ERROR_CODES, type ActionErrorCode, type ChatAction } from '@ledge/protocol';
 import { Button } from '../ui/Button';
 import { Icon, ICONS } from '../ui/icons';
@@ -62,19 +62,33 @@ export function ActionCard(p: ActionCardProps) {
   const [confirming, setConfirming] = useState<number[] | null>(null);
   const cancel = useRef<HTMLButtonElement>(null);
   const box = useRef<HTMLElement>(null);
-  // The button that asked: its node goes while the card confirms, so it is found again by its key.
+  const id = useId();
+  // The button that asked: its node goes while the card confirms, so it is found again by its key; gone, the first
+  // button of its row, or of the foot.
   const asker = useRef<string | null>(null);
   useEffect(() => {
     if (confirming) { cancel.current?.focus(); return; }
-    if (asker.current !== null) box.current?.querySelector<HTMLElement>(`[data-action-ask="${asker.current}"]`)?.focus();
-    asker.current = null;
+    const key = asker.current; asker.current = null;
+    if (key === null || !box.current) return;
+    const first = (el?: Element | null) => el?.querySelector<HTMLElement>('button:not(:disabled)');
+    const back = box.current.querySelector<HTMLElement>(`[data-action-ask="${key}"]`)
+      ?? (key === 'all' ? null : first(box.current.querySelectorAll('[data-action-row]')[Number(key)]))
+      ?? first(box.current.querySelector('[data-action-foot]'));
+    back?.focus();
   }, [confirming]);
-  // The card changed elsewhere (a row applied on another device, ignored then reviewed): what was confirmed no longer holds.
-  const seen = `${p.ignoredAt ?? ''}|${p.rows.map(r => r.state ?? 'proposed').join()}`;
-  const [was, setWas] = useState(seen);
-  if (was !== seen) { setWas(seen); if (confirming) setConfirming(null); }
   const clock = (iso?: string) => (iso ? new Date(iso).toLocaleTimeString(t.time.locale, { hour: '2-digit', minute: '2-digit' }) : '');
   const many = p.rows.length > 1;
+
+  const states = p.rows.map(r => r.state ?? 'proposed');
+  const stopAt = states.findIndex(s => s === 'failed' || s === 'refused');
+  const shown: Shown[] = states.map((s, i) => (s === 'proposed' && stopAt >= 0 && i > stopAt ? 'held' : s));
+  const open = shown.flatMap((s, i) => (['done', 'running', 'denied', 'stale'].includes(s) ? [] : [i]));
+  // The card changed elsewhere (a row applied on another device, the card ignored): only the rows asked that are still
+  // open stay to confirm, none left and it closes.
+  if (confirming) {
+    const still = p.ignoredAt === undefined ? confirming.filter(i => open.includes(i)) : [];
+    if (still.length !== confirming.length) setConfirming(still.length ? still : null);
+  }
 
   if (p.ignoredAt !== undefined) return (
     <div data-action-ignored style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, ...muted }}>
@@ -83,10 +97,6 @@ export function ActionCard(p: ActionCardProps) {
     </div>
   );
 
-  const states = p.rows.map(r => r.state ?? 'proposed');
-  const stopAt = states.findIndex(s => s === 'failed' || s === 'refused');
-  const shown: Shown[] = states.map((s, i) => (s === 'proposed' && stopAt >= 0 && i > stopAt ? 'held' : s));
-  const open = shown.flatMap((s, i) => (['done', 'running', 'denied', 'stale'].includes(s) ? [] : [i]));
   const risky = (rows: readonly number[]) => rows.some(i => p.rows[i]!.risk === 'destructive');
   const ask = (rows: number[], key: string) => { if (risky(rows)) { asker.current = key; setConfirming(rows); } else p.onApply(rows); };
   const go = (rows: number[]) => { setConfirming(null); p.onApply(rows); };
@@ -116,7 +126,7 @@ export function ActionCard(p: ActionCardProps) {
   };
 
   const side = (s: Shown, i: number, r: ActionRowView): ReactNode => {
-    if (confirming) return s === 'done' ? <span style={{ color: 'var(--success)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon size={11} {...ICONS.check} />{c.confirm.alreadyDone}</span> : null;
+    if (confirming) return s === 'done' ? <span style={{ color: 'var(--success)', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12 }}><Icon size={11} {...ICONS.check} />{c.confirm.alreadyDone}</span> : null;
     const destructive = r.risk === 'destructive';
     switch (s) {
       case 'proposed': case 'held': return <>
@@ -125,11 +135,11 @@ export function ActionCard(p: ActionCardProps) {
         <Button size="sm" disabled={p.disabled} data-action-ask={i} onClick={() => ask([i], String(i))} style={{ ...small, ...(destructive ? danger : {}) }}>{verb(r)}{dots([i])}</Button>
       </>;
       case 'running': return <Button size="sm" disabled style={small}>{spinner}{c.running}</Button>;
-      case 'done': return <span style={{ color: 'var(--success)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon size={11} {...ICONS.check} />{c.done(clock(r.doneAt))}</span>;
+      case 'done': return <span style={{ color: 'var(--success)', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12 }}><Icon size={11} {...ICONS.check} />{c.done(clock(r.doneAt))}</span>;
       case 'failed': return <>{!many && ignore}<Button size="sm" disabled={p.disabled} data-action-ask={i} onClick={() => ask([i], String(i))} style={small}>{c.retry}</Button></>;
-      case 'refused': return <span style={muted}>{c.refusedState}</span>;
+      case 'refused': return <span style={{ ...muted, fontSize: 12 }}>{c.refusedState}</span>;
       // Grey, not green: the no reached the session, nothing was applied.
-      case 'denied': return <span style={{ ...muted, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon size={11} {...ICONS.check} />{c.denied(clock(r.doneAt))}</span>;
+      case 'denied': return <span style={{ ...muted, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12 }}><Icon size={11} {...ICONS.check} />{c.denied(clock(r.doneAt))}</span>;
       case 'stale': return <Button size="sm" disabled={p.disabled} onClick={() => p.onOpen(i)} style={small}><Icon size={11} {...ICONS.external} />{c.open(r.target ?? '')}</Button>;
     }
   };
@@ -174,10 +184,10 @@ export function ActionCard(p: ActionCardProps) {
     if (confirming) {
       const one = confirming.length === 1 ? p.rows[confirming[0]!]! : null;
       return (
-        <div data-action-foot role="group" aria-label={c.confirm.label} onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); setConfirming(null); } }}
+        <div id={`${id}-c`} data-action-foot role="group" aria-label={c.confirm.label} aria-labelledby={`${id}-c ${id}-q`} aria-describedby={`${id}-w`} onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); setConfirming(null); } }}
           style={{ ...foot, flexDirection: 'column', alignItems: 'stretch', gap: 8, background: 'color-mix(in srgb, var(--destructive) 5%, transparent)' }}>
-          <strong style={{ fontSize: 13 }}>{one ? c.confirm.one(plain(one.summary)) : c.confirm.many(confirming.length, confirming.length === p.rows.length)}</strong>
-          <span style={{ fontSize: 12, ...muted }}>{one ? c.confirm.oneWhy : c.confirm.manyWhy(confirming.filter(i => p.rows[i]!.risk === 'destructive').length)}</span>
+          <strong id={`${id}-q`} style={{ fontSize: 13 }}>{one ? c.confirm.one(plain(one.summary)) : c.confirm.many(confirming.length, confirming.length === p.rows.length)}</strong>
+          <span id={`${id}-w`} style={{ fontSize: 12, ...muted }}>{one ? c.confirm.oneWhy : c.confirm.manyWhy(confirming.filter(i => p.rows[i]!.risk === 'destructive').length)}</span>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <Button ref={cancel} size="sm" onClick={() => setConfirming(null)} style={small}>{c.confirm.cancel}</Button>
             <Button size="sm" disabled={p.disabled} onClick={() => go(confirming)} style={{ ...big, ...dangerFill }}>{one ? verb(one) : c.confirm.go(confirming.length)}</Button>

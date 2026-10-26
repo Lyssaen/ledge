@@ -32,7 +32,7 @@ describe('the action card in the Desktop\'s words (#94)', () => {
     expect(document.body).toHaveTextContent('· je te redemanderai');
     expect(document.body).toHaveTextContent('dans l’ordre, s’arrête au premier échec · 1 irréversible, je te redemanderai');
     fireEvent.click(screen.getByRole('button', { name: 'Tout appliquer (3)…' }));
-    const confirm = screen.getByRole('group', { name: 'Confirmation' });
+    const confirm = screen.getByRole('group', { name: /^Confirmation/ });
     expect(confirm).toHaveTextContent('Appliquer ces 3 actions, dans l’ordre ?');
     expect(confirm).toHaveTextContent('Une est irréversible : relis son détail ci-dessus. Si une étape échoue, les suivantes ne sont pas appliquées.');
     expect(within(confirm).getByRole('button', { name: 'Appliquer les 3' })).toBeTruthy();
