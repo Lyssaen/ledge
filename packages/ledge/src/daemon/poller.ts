@@ -8,7 +8,7 @@ import { gitInfo as defaultGitInfo } from './git.js';
 import { claudePlan } from './transcript.js';
 
 export { PREVIEW_LINES } from '../adapters/index.js';
-/** Prompt detection reads more than the preview: a dialog with a long diff or many options is taller than 30 lines. */
+/** Prompt detection reads the pane's last lines: a dialog with a long diff or many options is taller than 30 lines. */
 export const DETECT_LINES = 60;
 /** How long the pane must stay at rest before the session is called idle: a turn starting has time to show itself. */
 export const REST_MS = 2000;

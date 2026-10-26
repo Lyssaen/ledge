@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Session } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
-import { startPoller } from '../src/daemon/poller.js';
+import { PREVIEW_LINES, startPoller } from '../src/daemon/poller.js';
 import type { Tmux } from '../src/tmux.js';
 
 const T0 = Date.parse('2026-10-09T18:00:00.000Z');
@@ -144,17 +144,17 @@ describe('poller', () => {
     expect(store.get('a')!.pending?.source).toBe('pane');
     p.stop();
   });
-  it('detects a dialog taller than the preview, and the preview stays the last 30 lines', async () => {
+  it('detects a dialog taller than 30 lines, and the preview stays the last PREVIEW_LINES', async () => {
     const body = Array.from({ length: 30 }, (_, i) => `  ${i + 1} line ${i + 1}`).join('\n');
     panes['ledge-a'] = 'seed'; store.upsert(mk('a'));
     const p = startPoller({ store, tmux: fakeTmux(panes), intervalMs: 100000, now, broadcastPreview: (id, l) => previews.push(l) });
     clock += 1000; await p.tick();
-    panes['ledge-a'] = Array.from({ length: 20 }, (_, i) => `scroll ${i}`).join('\n') + '\n' + '─'.repeat(40) + '\n Create file\n a.txt\n' + '╌'.repeat(40) + '\n' + body + '\n' + '╌'.repeat(40) +
+    panes['ledge-a'] = Array.from({ length: 120 }, (_, i) => `scroll ${i}`).join('\n') + '\n' + '─'.repeat(40) + '\n Create file\n a.txt\n' + '╌'.repeat(40) + '\n' + body + '\n' + '╌'.repeat(40) +
       '\n Do you want to create a.txt?\n ❯ 1. Yes\n   2. No\n\n Esc to cancel · Tab to amend';
     clock += 5000; await p.tick();
     expect(store.get('a')!.state).toBe('waiting_permission');
     expect(store.get('a')!.pending?.text).toBe('Create file a.txt');
-    expect(previews.at(-1)!.length).toBe(30);
+    expect(previews.at(-1)!.length).toBe(PREVIEW_LINES);
     expect(previews.at(-1)!.at(-1)).toBe(' Esc to cancel · Tab to amend');
     p.stop();
   });

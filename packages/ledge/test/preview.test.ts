@@ -48,12 +48,12 @@ describe('terminal preview', () => {
     const pane = ['● Here is a rule:', rule, '  some text', rule, '● and more', 'line', 'line', 'line', 'line'].join('\n');
     expect(buildPreview(pane, claudeAdapter)).toEqual(pane.split('\n'));
   });
-  it('without an adapter hook (Codex, Cursor): raw lines, blank runs collapsed, trimmed, last 30', () => {
+  it('without an adapter hook (Codex, Cursor): raw lines, blank runs collapsed, trimmed, last 100', () => {
     expect(buildPreview('\n\n a\n\n\n\nb  \n\n')).toEqual([' a', '', 'b']);
-    expect(buildPreview(Array.from({ length: 50 }, (_, i) => `l${i}`).join('\n'))).toEqual(Array.from({ length: 30 }, (_, i) => `l${i + 20}`));
+    expect(buildPreview(Array.from({ length: 150 }, (_, i) => `l${i}`).join('\n'))).toEqual(Array.from({ length: 100 }, (_, i) => `l${i + 50}`));
     expect(buildPreview('', {})).toEqual([]);
     // The cut never starts on a blank line.
-    expect(buildPreview(['x', '', ...Array.from({ length: 29 }, (_, i) => `l${i}`)].join('\n'))).toEqual(Array.from({ length: 29 }, (_, i) => `l${i}`));
+    expect(buildPreview(['x', '', ...Array.from({ length: 99 }, (_, i) => `l${i}`)].join('\n'))).toEqual(Array.from({ length: 99 }, (_, i) => `l${i}`));
     expect(tidyLines(['', ' ', 'x', '  ', '', 'y', ''])).toEqual(['x', '', 'y']);
   });
 });

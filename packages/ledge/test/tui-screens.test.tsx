@@ -46,6 +46,18 @@ describe('ledge tui: session', () => {
     } finally { await tui.cleanup(); }
   });
 
+  it('a reply longer than the field shows its end, where the cursor is', async () => {
+    const tui = await startTui();
+    try {
+      await tui.press('j'); await tui.press('j');
+      await until(() => tui.frame().includes('BIX · DOCUMENTER'));
+      await tui.press('\r');
+      await tui.press('r');
+      await tui.press(`${'d'.repeat(150)}FIN`);
+      await until(() => tui.frame().includes('dFIN'));
+    } finally { await tui.cleanup(); }
+  });
+
   it('m changes the model of a running session', async () => {
     const tui = await startTui();
     try {
@@ -84,6 +96,15 @@ describe('ledge tui: ask Ledge', () => {
       await tui.press('\r');
       await until(() => sent(tui.daemon.received, 'session.launch').length === 1);
       expect(sent(tui.daemon.received, 'session.launch')[0]).toMatchObject({ type: 'session.launch', tool: 'claude', cwd: '/w/ledge', rows: [0] });
+    } finally { await tui.cleanup(); }
+  });
+
+  it('a question longer than the field shows its end, where the cursor is', async () => {
+    const tui = await startTui();
+    try {
+      await tui.press('/');
+      await tui.press(`${'q'.repeat(150)}FIN`);
+      await until(() => tui.frame().includes('qFIN'));
     } finally { await tui.cleanup(); }
   });
 });
