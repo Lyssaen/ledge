@@ -3,6 +3,7 @@ import { daemonStore, useDaemon, useTeams, type DaemonClient } from '@ledge/flee
 import { ChatView } from '@ledge/ui/chat/ChatView';
 import { ChatCopyProvider } from '@ledge/ui/chat/copy';
 import { useAttachments } from '../images/useAttachments';
+import { TurnThumbs } from '../images/Thumbs';
 import type { Projects } from '@ledge/protocol';
 import type { FleetView } from '../fleet/useFleet';
 import { chatCopy, useI18n } from '../i18n/lang';
@@ -88,7 +89,7 @@ export function ChatPanel({ client, view, paused, focus, onClose, onOpenSession,
     }}>
       <div className="chat-drawer-content">
         <ChatCopyProvider value={copy}>
-          <ChatView docked visible turns={chat} live={chatLive} sessions={view.sessions} offline={offline}
+          <ChatView docked visible turnImages={turn => <TurnThumbs client={client} turn={turn} />} turns={chat} live={chatLive} sessions={view.sessions} offline={offline}
             onAsk={ask} onCancel={qid => send({ type: 'chat.cancel', qid })} onReset={() => send({ type: 'chat.reset' })} onBack={onClose} onClose={onClose}
             onOpenSession={open} onTerminal={terminal} turnAvailable={turnReady}
             launchingQid={cards.launchingQid} launchingRows={cards.launchingRows} onLaunchProposal={cards.launch}

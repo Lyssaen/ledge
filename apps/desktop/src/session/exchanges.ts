@@ -1,4 +1,4 @@
-import type { FileChange, Helper, HelperItem, NoticeItem, Pending, ReceivedItem, SentItem, Session, ThreadItem, ToolItem } from '@ledge/protocol';
+import type { AttachmentRef, FileChange, Helper, HelperItem, NoticeItem, Pending, ReceivedItem, SentItem, Session, ThreadItem, ToolItem } from '@ledge/protocol';
 import { helperThread, turns } from '@ledge/ui/thread/turns';
 import { elapsedMs, liveTool } from '@ledge/ui/thread/tools';
 import { findDocumentReferences } from '@ledge/ui/documents/references';
@@ -33,7 +33,7 @@ export type Segment =
 export interface Exchange {
   key: string;
   at: string;
-  prompt: { id: string; text: string; from: 'you' | 'parent' } | null;
+  prompt: { id: string; text: string; from: 'you' | 'parent'; images?: AttachmentRef[] } | null;
   /** The turn's received messages, in order: they open it like a prompt, so they are no segment. */
   received: ReceivedItem[];
   /** The harness's cross-session notices that open it (an idle or delivery notice): system events, no segment. */
@@ -134,7 +134,7 @@ function exchangesOf(items: readonly ThreadItem[], helperId?: string): Exchange[
     const rest = t.items.filter(i => i.kind !== 'prompt');
     return {
       key: t.prompt?.id ?? `turn-${t.n}`, at: t.prompt?.at ?? t.items[0]!.at,
-      prompt: t.prompt ? { id: t.prompt.id, text: t.prompt.text, from: 'you' as const } : null,
+      prompt: t.prompt ? { id: t.prompt.id, text: t.prompt.text, from: 'you' as const, ...(t.prompt.images?.length ? { images: t.prompt.images } : {}) } : null,
       received: t.items.filter((i): i is ReceivedItem => i.kind === 'received'),
       notices: t.items.filter((i): i is NoticeItem => i.kind === 'notice'), segments: segmentsOf(rest)
     };

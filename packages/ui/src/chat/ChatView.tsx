@@ -60,6 +60,8 @@ export interface ChatViewProps {
   inputRef?: Ref<HTMLInputElement | HTMLTextAreaElement>;
   /** Images under the field (pasted on it or dropped on the composer): Send also works with no text, once every chip is `ready`.
    *  A front that holds none leaves it out. `error`: what the last add or upload said, under the chips. */
+  /** What a turn's question carried (its images), drawn above its bubble; a front without images leaves it out. */
+  turnImages?: (turn: ChatTurn) => ReactNode;
   attach?: { items: ChipItem[]; onFiles(files: File[]): void; onRemove(key: string): void; ready: boolean; error?: string | null };
   /** Ledge's home view (ledge home spec §2.2): `pinned` stays at the top of the thread while the conversation scrolls under it
    *  (« Le point »), `above` sits over the field (the suggestions), `footnote` under it; `multiline` makes the field a text
@@ -188,6 +190,7 @@ export function ChatView(p: ChatViewProps) {
           )}
           {turns.map(turn => (
             <div key={turn.qid} data-turn style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {p.turnImages?.(turn)}
               <div style={{ display: 'flex', justifyContent: 'flex-end' }}><span style={{ maxWidth: '85%', padding: '8px 12px', borderRadius: '12px 12px 4px 12px', background: 'var(--secondary)', fontSize: 13, lineHeight: '19px', overflowWrap: 'anywhere' }}>{turn.question}</span></div>
               {turn.error === 'cancelled' ? <span data-chat-stopped style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{t.chat.stopped}</span>
                 : turn.error !== undefined && <span data-chat-error role="alert" style={{ fontSize: 12, lineHeight: '16px', color: 'var(--destructive)' }}>{t.chat.error(turn.error)}</span>}

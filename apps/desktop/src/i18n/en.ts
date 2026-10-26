@@ -939,7 +939,8 @@ export const en: Messages = {
   },
   images: {
     remove: 'Remove image', tooLarge: 'Image too large, even reduced', notImage: 'This file is not an image', max: '5 images per message at most',
-    dialog: 'Answer the question first, the image will go after', lost: "This message's images were lost", failed: 'Image not sent'
+    dialog: 'Answer the question first, the image will go after', lost: "This message's images were lost", failed: 'Image not sent',
+    capture: 'Capture', unavailable: 'Image unavailable', close: 'Close', prev: 'Previous image', next: 'Next image', copy: 'Copy', copied: 'Copied', save: 'Save…'
   },
   machines: { clarification: 'You can also answer in the chat.', destination: 'Destination', choose: (name: string) => `On ${name}.`, local: 'This machine', offline: 'Offline' },
   whatsNew: {

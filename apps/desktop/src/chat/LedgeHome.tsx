@@ -4,6 +4,7 @@ import { contextShare, LEDGE_GIVER, taskClosed, type ChatTurn, type Projects, ty
 import { ChatView } from '@ledge/ui/chat/ChatView';
 import { ChatCopyProvider } from '@ledge/ui/chat/copy';
 import { useAttachments } from '../images/useAttachments';
+import { TurnThumbs } from '../images/Thumbs';
 import { ResidentMascot } from '@ledge/ui/bots/ResidentMascot';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
@@ -345,7 +346,7 @@ export function LedgeHome(p: LedgeHomeProps): JSX.Element {
         <div className="home-body">
           {tab === 'conversation' && (
             <ChatCopyProvider value={copy}>
-              <ChatView docked visible hideHeader multiline turns={chat} live={chatLive} sessions={view.sessions} offline={offline}
+              <ChatView docked visible hideHeader multiline turnImages={turn => <TurnThumbs client={client} turn={turn} />} turns={chat} live={chatLive} sessions={view.sessions} offline={offline}
                 pinned={<LePoint view={view} teams={teams} decisions={p.decisions} waits={p.waits} projects={p.projects} dispatch={dispatch} onAsk={ask} onShowTask={showTask} busy={busy || !!offline} />}
                 above={above} footnote={<small className="home-readonly">{t.home.readOnly}</small>}
                 draft={draft} onDraft={setDraft} onFieldKey={onFieldKey}
