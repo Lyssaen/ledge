@@ -56,8 +56,8 @@ export interface ActionCardProps {
   ignoredAt?: string;
   /** The island's width: a row's buttons go under its text. */
   narrow?: boolean; disabled?: boolean;
-  /** The rows to apply, in order; an irreversible one is confirmed in the card first. */
-  onApply: (rows: number[]) => void; onDeny: (row: number) => void; onIgnore: () => void; onReview: () => void; onOpen: (row: number) => void;
+  /** The rows to apply, in order; an irreversible one is confirmed in the card first, and `confirmed` says so (chat.act's). */
+  onApply: (rows: number[], o: { confirmed: boolean }) => void; onDeny: (row: number) => void; onIgnore: () => void; onReview: () => void; onOpen: (row: number) => void;
 }
 
 type Shown = ActionRowState | 'held';
@@ -115,8 +115,8 @@ export function ActionCard(p: ActionCardProps) {
     </div>
   );
 
-  const ask = (rows: number[], key: string) => { if (risky(rows)) { asker.current = key; setConfirming(rows); } else p.onApply(rows); };
-  const go = (rows: number[]) => { setConfirming(null); p.onApply(rows); };
+  const ask = (rows: number[], key: string) => { if (risky(rows)) { asker.current = key; setConfirming(rows); } else p.onApply(rows, { confirmed: false }); };
+  const go = (rows: number[]) => { setConfirming(null); p.onApply(rows, { confirmed: true }); };
   const line = (r: ActionRowView) => (r.vars && r.action !== undefined ? c.words.line[r.action]?.(r.vars) : undefined) ?? r.summary;
   const why = (r: ActionRowView) => c.words.why(r.code ?? (r.state === 'failed' ? 'failed' : undefined), r.action, r.vars ?? {});
   const verb = (r: ActionRowView) => (r.decision === 'deny' ? c.deny : (r.action !== undefined ? c.verbs[r.action] : undefined) ?? c.apply);

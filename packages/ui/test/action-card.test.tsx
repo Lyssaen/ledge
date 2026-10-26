@@ -49,7 +49,7 @@ describe('the action card (#94): a plan', () => {
   it('a reversible row applies at once; Ignore says so', () => {
     const p = card(plan());
     fireEvent.click(screen.getByRole('button', { name: 'Change' }));
-    expect(p.onApply).toHaveBeenCalledWith([0]);
+    expect(p.onApply).toHaveBeenCalledWith([0], { confirmed: false });
     fireEvent.click(screen.getByRole('button', { name: 'Ignore' }));
     expect(p.onIgnore).toHaveBeenCalledOnce();
   });
@@ -69,7 +69,7 @@ describe('the action card (#94): a plan', () => {
     expect(p.onApply).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Apply all (3)…' }));
     fireEvent.click(screen.getByRole('button', { name: 'Apply the 3' }));
-    expect(p.onApply).toHaveBeenCalledWith([0, 1, 2]);
+    expect(p.onApply).toHaveBeenCalledWith([0, 1, 2], { confirmed: true });
     expect(screen.queryByRole('group', { name: /^Confirmation/ })).toBeNull();
   });
 
@@ -104,7 +104,7 @@ describe('the action card (#94): a plan', () => {
     const confirm = screen.getByRole('group', { name: /^Confirmation/ });
     expect(confirm).toHaveTextContent('Apply the 2 actions, in order?');
     fireEvent.click(within(confirm).getByRole('button', { name: 'Apply the 2' }));
-    expect(p.onApply).toHaveBeenCalledWith([1, 2]);
+    expect(p.onApply).toHaveBeenCalledWith([1, 2], { confirmed: true });
   });
 
   it('the irreversible row applied elsewhere: what is left needs no confirmation, it closes', () => {
@@ -156,7 +156,7 @@ describe('the action card (#94): a plan', () => {
     expect(rowsOf()[0]).toHaveTextContent('already done');
     expect(rowsOf()[0]!.hasAttribute('data-dim')).toBe(true);
     fireEvent.click(within(confirm).getByRole('button', { name: 'Dissolve' }));
-    expect(p.onApply).toHaveBeenCalledWith([2]);
+    expect(p.onApply).toHaveBeenCalledWith([2], { confirmed: true });
   });
 
   it('running: the step turns, its button waits, the foot counts the steps', () => {
@@ -176,10 +176,10 @@ describe('the action card (#94): a plan', () => {
     expect(rowsOf()[2]).toHaveTextContent('Not applied: the plan stopped at step 2.');
     expect(document.body).toHaveTextContent('steps done are not replayed');
     fireEvent.click(within(rowsOf()[1]!).getByRole('button', { name: 'Retry' }));
-    expect(p.onApply).toHaveBeenLastCalledWith([1]);
+    expect(p.onApply).toHaveBeenLastCalledWith([1], { confirmed: false });
     fireEvent.click(screen.getByRole('button', { name: 'Resume at step 2 (2)…' }));
     fireEvent.click(screen.getByRole('button', { name: 'Apply the 2' }));
-    expect(p.onApply).toHaveBeenLastCalledWith([1, 2]);
+    expect(p.onApply).toHaveBeenLastCalledWith([1, 2], { confirmed: true });
     expect(screen.getAllByRole('button', { name: 'Ignore' })).toHaveLength(1);
   });
 
@@ -193,7 +193,7 @@ describe('the action card (#94): a plan', () => {
     expect(rowsOf()[1]).toHaveTextContent('Refused');
     fireEvent.click(screen.getByRole('button', { name: 'Continue without step 2 (1)…' }));
     fireEvent.click(within(screen.getByRole('group', { name: /^Confirmation/ })).getByRole('button', { name: 'Dissolve' }));
-    expect(p.onApply).toHaveBeenLastCalledWith([2]);
+    expect(p.onApply).toHaveBeenLastCalledWith([2], { confirmed: true });
   });
 
   it('applied: every step ✓ and the plan\'s time, no button left', () => {
@@ -226,7 +226,7 @@ describe('the action card (#94): one row', () => {
     expect(within(rowsOf()[0]!).getByRole('button', { name: 'Ignore' })).toBeTruthy();
     expect(document.querySelector('[data-action-foot]')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Change' }));
-    expect(p.onApply).toHaveBeenCalledWith([0]);
+    expect(p.onApply).toHaveBeenCalledWith([0], { confirmed: false });
   });
 
   it('failed: Ignore and Retry; done: its time', () => {
@@ -279,7 +279,7 @@ describe('the action card (#94): a permission', () => {
     expect(confirm).toHaveTextContent('Accept Nova\'s request?');
     expect(confirm).toHaveTextContent('Ledge cannot undo it once sent.');
     fireEvent.click(within(confirm).getByRole('button', { name: 'Accept' }));
-    expect(p.onApply).toHaveBeenCalledWith([0]);
+    expect(p.onApply).toHaveBeenCalledWith([0], { confirmed: true });
   });
 
   it('denial sent: grey, the deny line, no risk, the request faded', () => {
@@ -431,6 +431,6 @@ describe('the action card (#94): a request from the protocol, and one cut', () =
   it('a plan with a cut row: Apply all leaves it out', () => {
     const p = card([actionRowOf({ ...decide, detailCut: true }), model]);
     fireEvent.click(screen.getByRole('button', { name: 'Apply all (1)' }));
-    expect(p.onApply).toHaveBeenCalledWith([1]);
+    expect(p.onApply).toHaveBeenCalledWith([1], { confirmed: false });
   });
 });
