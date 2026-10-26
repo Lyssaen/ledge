@@ -37,6 +37,20 @@ describe('teams and tasks from the local daemon', () => {
     expect(api.fleet!.teams()![0]!.state).toBe('resting');
   });
 
+  it('qualifies the ids of a task’s transmissions (#92)', () => {
+    const { api, local } = setup();
+    const at = '2026-10-26T08:00:00.000Z';
+    local.emit({ type: 'task.updated', task: task('t000003', { giver: 'max', owner: 'nova', log: [
+      { at, by: 'Max', what: 'confiée à Nova', op: 'give', from: 'max', to: 'nova', fromName: 'Max', toName: 'Nova' },
+      { at, by: 'Nova', what: 'prise', op: 'take' },
+      { at, by: 'Nova', what: 'terminée', op: 'done', from: 'nova', to: 'ledge', fromName: 'Nova', toName: 'Ledge' }
+    ] }) });
+    const [give, take, done] = api.fleet!.tasks()[0]!.log;
+    expect(give).toMatchObject({ from: 'local:max', to: 'local:nova', fromName: 'Max', toName: 'Nova' });
+    expect(take).toEqual({ at, by: 'Nova', what: 'prise', op: 'take' });
+    expect(done).toMatchObject({ from: 'local:nova', to: 'ledge' });
+  });
+
   it('team and task commands go to the local daemon, sessions unqualified, Ledge kept', () => {
     const { api, local } = setup();
     api.send({ type: 'team.join', team: 'team-a1b2', session: 'local:ab12', role: 'qa' });

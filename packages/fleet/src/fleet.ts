@@ -82,7 +82,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   const taskLists = new Set<string>(); let listSeq = 0;
   const local = (id: string) => (id === LEDGE_GIVER ? id : qualify('local', id));
   const teamOut = (t: Team): Team => ({ ...t, seats: t.seats.map(s => ({ ...s, sessionId: s.sessionId === null ? null : qualify('local', s.sessionId) })) });
-  const taskOut = (t: Task): Task => ({ ...t, giver: local(t.giver), owner: local(t.owner) });
+  const taskOut = (t: Task): Task => ({ ...t, giver: local(t.giver), owner: local(t.owner),
+    log: t.log.map(e => ({ ...e, ...(e.from ? { from: local(e.from) } : {}), ...(e.to ? { to: local(e.to) } : {}) })) });
   const putTasks = (list: Task[]) => { for (const t of list) tasks.set(t.id, taskOut(t)); taskList = [...tasks.values()].sort((a, b) => a.at.localeCompare(b.at)); listeners.forEach(fn => fn()); };
   /** Ledge's own tasks, and each live team's, asked again at each local snapshot (an `all` list: the ones closed this week too). */
   const askTasks = (p: Peer) => {
