@@ -10,17 +10,19 @@ import { ompChoices } from '../src/daemon/omp/catalog.js';
 import { until } from './helpers.js';
 import { filesOf } from '../src/daemon/files.js';
 import { History } from '../src/daemon/history.js';
+import { AttachmentStore } from '../src/daemon/attachments.js';
+import type { AttachmentRef } from '@ledge/protocol';
 
 const FAKE = [process.execPath, fileURLToPath(new URL('./fake-omp.mjs', import.meta.url))];
 const T = '2026-10-20T12:00:00.000Z';
-let store: Store; let host: OmpHost; let dir: string; let log: string;
-const cmds = () => (existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n').map(l => JSON.parse(l) as { argv?: string[]; cmd?: { type: string; message?: string } }) : []);
+let store: Store; let host: OmpHost; let atts: AttachmentStore; let dir: string; let log: string;
+const cmds = () => (existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n').map(l => JSON.parse(l) as { argv?: string[]; cmd?: { type: string; message?: string; images?: Array<{ type: string; data: string; mimeType: string }> } }) : []);
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'ledge-omp-')); log = join(dir, 'fake.log'); process.env.FAKE_OMP_LOG = log;
-  store = new Store();
-  host = createOmpHost({ store, env: async () => ({ ...process.env }), dir: join(dir, 'omp'), command: FAKE });
+  store = new Store(); atts = new AttachmentStore(join(dir, 'att'));
+  host = createOmpHost({ store, env: async () => ({ ...process.env }), dir: join(dir, 'omp'), command: FAKE, attachments: atts });
 });
-afterEach(async () => { await host.closeAll(); delete process.env.FAKE_OMP_LOG; delete process.env.FAKE_OMP_DIE; });
+afterEach(async () => { await host.closeAll(); delete process.env.FAKE_OMP_LOG; delete process.env.FAKE_OMP_DIE; delete process.env.FAKE_OMP_DROP_IMAGES; });
 
 describe('ompArgs', () => {
   it('asks before writes and executions, names the session folder and the conversation file, never --no-ui or --yolo', () => {
@@ -312,5 +314,84 @@ describe('ompChoices', () => {
       { id: 'anthropic/claude-opus-5-5', label: 'Claude Opus 5.5', description: 'anthropic', efforts: ['low', 'max'], isDefault: true },
       { id: 'openai-codex/gpt-6.1-sol', label: 'GPT-6.1-Sol', description: 'openai-codex' }
     ]);
+  });
+});
+
+const u32 = (n: number) => { const b = Buffer.alloc(4); b.writeUInt32BE(n); return b; };
+const png = (pad: number) => Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), u32(13), Buffer.from('IHDR'), u32(10), u32(10), Buffer.from([8, 6, 0, 0, 0]), Buffer.alloc(pad, pad % 250 + 1)]);
+const put = async (pad: number): Promise<AttachmentRef> => atts.put(png(pad), undefined, 2_000_000);
+
+describe('OmpHost images', () => {
+  beforeEach(async () => { await atts.load(); });
+  it('a prompt carries its images as base64 image content, and the thread item records them', async () => {
+    const s = await host.launch({ cwd: tmpdir() });
+    const ref = await put(100); const events: Array<{ text?: string; attachments?: string[] }> = [];
+    store.onEvent((_id, e) => { if (e.name === 'UserPromptSubmit') events.push(e as never); });
+    await host.send(s.id, 'look', 'prompt', [ref]);
+    const cmd = cmds().find(c => c.cmd?.type === 'prompt')!.cmd!;
+    expect(cmd.message).toBe('look');
+    expect(cmd.images).toEqual([{ type: 'image', data: png(100).toString('base64'), mimeType: 'image/png' }]);
+    await until(() => store.get(s.id)!.state === 'idle' && !!store.get(s.id)!.lastReply);
+    expect(events).toHaveLength(1); // OMP's echo of the prompt is not a second one
+    expect(events[0]).toMatchObject({ text: 'look', attachments: [ref.id] });
+  });
+  it('five images of 400 000 bytes cannot all fit one 1 MiB frame: the command stays within it and the overflow goes as brackets at the end of the message', async () => {
+    const s = await host.launch({ cwd: tmpdir() });
+    const refs = []; for (let i = 0; i < 5; i++) refs.push(await put(400_000 - 100 - i));
+    await host.send(s.id, 'five', 'prompt', refs);
+    const cmd = cmds().find(c => c.cmd?.type === 'prompt')!.cmd!;
+    expect(Buffer.byteLength(JSON.stringify({ id: 'l99', ...cmd })) + 1).toBeLessThanOrEqual(1_048_576);
+    const native = cmd.images!.length; expect(native).toBeGreaterThan(0); expect(native).toBeLessThan(5);
+    const brackets = refs.slice(native).map(r => `[Image attached: ${atts.path(r.id)}]`);
+    expect(cmd.message).toBe(['five', ...brackets].join(' '));
+  });
+  it('an image-only follow_up is echoed with its image once its turn starts', async () => {
+    const s = await host.launch({ cwd: tmpdir() });
+    const ref = await put(50); const events: Array<{ text?: string; attachments?: string[] }> = [];
+    store.onEvent((_id, e) => { if (e.name === 'UserPromptSubmit') events.push(e as never); });
+    await host.send(s.id, 'slow one');
+    await until(() => store.get(s.id)!.state === 'working');
+    await host.send(s.id, '', 'follow_up', [ref]);
+    expect(cmds().find(c => c.cmd?.type === 'follow_up')!.cmd!.images).toHaveLength(1);
+    await host.interrupt(s.id); // the fake's slow turn ends on abort and then runs the queue
+    await until(() => events.some(e => e.attachments?.[0] === ref.id));
+    expect(events.find(e => e.attachments)).toMatchObject({ attachments: [ref.id] });
+    expect(events.find(e => e.attachments)!.text).toBeUndefined();
+  });
+  it('interruptAndRestore returns each queued instruction with its images; imagesDropped when OMP could not hand them back', async () => {
+    const s = await host.launch({ cwd: tmpdir() });
+    const ref = await put(60);
+    await host.send(s.id, 'slow one');
+    await until(() => store.get(s.id)!.state === 'working');
+    await host.send(s.id, 'a', 'follow_up', [ref]); await host.send(s.id, 'b', 'follow_up');
+    expect(await host.interruptAndRestore(s.id)).toEqual({ entries: [{ text: 'a', attachments: [ref.id] }, { text: 'b', attachments: [] }], imagesDropped: false });
+    process.env.FAKE_OMP_DROP_IMAGES = '1';
+    const s2 = await host.launch({ cwd: tmpdir() });
+    await host.send(s2.id, 'slow one');
+    await until(() => store.get(s2.id)!.state === 'working');
+    await host.send(s2.id, 'a', 'follow_up', [ref]);
+    expect(await host.interruptAndRestore(s2.id)).toEqual({ entries: [{ text: 'a', attachments: [] }], imagesDropped: true });
+  });
+});
+
+describe('projection of queued echoes', () => {
+  const start = (text: string) => ({ type: 'message_start', message: { role: 'user', attribution: 'user', content: text ? [{ type: 'text', text }] : [{ type: 'image', data: 'x', mimeType: 'image/png' }] } });
+  it('an empty user message with no queued entry is nothing; with a matching one it is a prompt carrying its attachments', () => {
+    const t = newTracking();
+    expect(project(start(''), t, T)).toEqual([]);
+    t.queued.push({ text: '', attachments: ['a'.repeat(64)] });
+    expect(project(start(''), t, T)).toMatchObject([{ name: 'UserPromptSubmit', attachments: ['a'.repeat(64)] }]);
+    expect(t.queued).toEqual([]);
+  });
+});
+
+describe('projection of queued echoes', () => {
+  const start = (text: string) => ({ type: 'message_start', message: { role: 'user', attribution: 'user', content: text ? [{ type: 'text', text }] : [{ type: 'image', data: 'x', mimeType: 'image/png' }] } });
+  it('an empty user message with no queued entry is nothing; with a matching one it is a prompt carrying its attachments', () => {
+    const t = newTracking();
+    expect(project(start(''), t, T)).toEqual([]);
+    t.queued.push({ text: '', attachments: ['a'.repeat(64)] });
+    expect(project(start(''), t, T)).toMatchObject([{ name: 'UserPromptSubmit', attachments: ['a'.repeat(64)] }]);
+    expect(t.queued).toEqual([]);
   });
 });

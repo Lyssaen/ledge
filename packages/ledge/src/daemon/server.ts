@@ -187,7 +187,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const threads = createChatThreads({ store, tmux, home: paths().dir, userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now, projects: () => projects, forge: createForge({ env: agentEnv }), teams: () => teams.all(), tasks: () => tasks.all() });
   const chat: Chat = opts.chat ?? threads.desktop;
   const router = createRouter({ env: agentEnv });
-  const omp = opts.omp ?? createOmpHost({ store, env: agentEnv, dir: join(paths().dir, 'omp'), now });
+  const attachments = opts.attachments ?? new AttachmentStore(paths().attachments);
+  const omp = opts.omp ?? createOmpHost({ store, env: agentEnv, dir: join(paths().dir, 'omp'), now, attachments });
   const models = opts.models ?? createModels({ env: agentEnv, omp: async () => ompChoices(await omp.catalog(opts.home ?? homedir())) });
   const token = await ensureDaemonToken();
   const httpServer = createServer(unauthorized);
@@ -247,7 +248,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const broadcast = (msg: ServerMessage) => { for (const c of localClients) send(c, msg); gateway?.forward(msg); };
   threads.setEmitter('desktop', broadcast);
   const history = opts.history;
-  const attachments = opts.attachments ?? new AttachmentStore(paths().attachments);
   await attachments.load().catch(e => log(`attachments not loaded: ${(e as Error).message}`));
   // Unsent images go after a day; the ones a session history or a live chat turn refers to stay.
   const sweepAttachments = async () => {
@@ -1094,7 +1094,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         if (s && backendOf(s) === 'omp-rpc') {
           if (!msg.restoreQueue) return void await omp.interrupt(s.id).catch(e => refuse((e as Error).message, msg.id));
           // The queue comes back as a draft for the one who asked; never re-sent by the daemon.
-          return void await omp.interruptAndRestore(s.id).then(texts => reply({ type: 'session.queue.restored', id: s.id, texts }), e => refuse((e as Error).message, msg.id));
+          return void await omp.interruptAndRestore(s.id).then(({ entries, imagesDropped }) => reply({ type: 'session.queue.restored', id: s.id, texts: entries.map(e => e.text), entries, ...(imagesDropped ? { imagesDropped } : {}) }), e => refuse((e as Error).message, msg.id));
         }
         if (!s?.tmuxSession) return;
         await tmux.sendKeys(s.tmuxSession, adapterFor(s.tool).interruptKeys());

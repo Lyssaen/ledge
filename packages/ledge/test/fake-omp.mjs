@@ -26,10 +26,10 @@ let sessionFile = resume;
 if (!sessionFile && dir) { mkdirSync(dir, { recursive: true }); sessionFile = join(dir, '2026-10-20T00-00-00-000Z_fake-session.jsonl'); if (!existsSync(sessionFile)) writeFileSync(sessionFile, ''); }
 const model = { id: arg('--model')?.split('/').pop() ?? 'claude-opus-5-5', provider: arg('--model')?.split('/')[0] ?? 'anthropic', name: 'Fake', reasoning: true, thinking: { mode: 'anthropic-adaptive', efforts: ['low', 'medium', 'high'] } };
 let thinking = arg('--thinking') ?? 'high';
-const queueUpdate = () => out({ type: 'queue_update', steering: queued.steering, followUp: queued.followUp, liveSteered: 0 });
+const queueUpdate = () => out({ type: 'queue_update', steering: queued.steering.map(q => q.text), followUp: queued.followUp.map(q => q.text), liveSteered: 0 });
 let settled = true; let queued = { steering: [], followUp: [] };
 let sessionName = '';
-const state = () => ({ sessionName, model, thinkingLevel: thinking, isStreaming: !settled, isCompacting: false, sessionFile, sessionId: 'fake-session', isSettled: settled, queuedMessageCount: queued.steering.length + queued.followUp.length, queuedMessages: { ...queued, liveSteered: 0 }, hasPendingAsyncWork: false, todoPhases: [], messageCount: 0 });
+const state = () => ({ sessionName, model, thinkingLevel: thinking, isStreaming: !settled, isCompacting: false, sessionFile, sessionId: 'fake-session', isSettled: settled, queuedMessageCount: queued.steering.length + queued.followUp.length, queuedMessages: { steering: queued.steering.map(q => q.text), followUp: queued.followUp.map(q => q.text), liveSteered: 0 }, hasPendingAsyncWork: false, todoPhases: [], messageCount: 0 });
 
 out({ type: 'ready', protocolVersion: 1, supportedProtocolVersions: [1, 2], maxFrameBytes: 1048576, maxReassembledFrameBytes: 67108864 });
 out({ type: 'extension_ui_request', id: 'w1', method: 'setWidget', widgetKey: 'autoresearch' });
@@ -38,12 +38,12 @@ let msgs = 1; let waiting = null; // the open dialog: resolves with the response
 const ask = frame => new Promise(res => { waiting = res; out({ type: 'extension_ui_request', ...frame }); });
 const text = t => ({ role: 'assistant', content: [{ type: 'text', text: t }], provider: model.provider, model: model.id });
 
-async function turn(id, message) {
+async function turn(id, message, images = []) {
   settled = false;
   if (id) out({ id, type: 'response', command: 'prompt', success: true });
   out({ type: 'agent_start' }); out({ type: 'turn_start' });
-  out({ type: 'message_start', message: { role: 'user', content: [{ type: 'text', text: message }], attribution: 'user' }, messageId: 'msg-1' });
-  out({ type: 'message_end', message: { role: 'user', content: [{ type: 'text', text: message }], attribution: 'user' }, messageId: 'msg-1' });
+  out({ type: 'message_start', message: { role: 'user', content: [...(message ? [{ type: 'text', text: message }] : []), ...images], attribution: 'user' }, messageId: 'msg-1' });
+  out({ type: 'message_end', message: { role: 'user', content: [...(message ? [{ type: 'text', text: message }] : []), ...images], attribution: 'user' }, messageId: 'msg-1' });
   if (message.includes('run a tool') || message.includes('with a tool')) {
     out({ type: 'tool_execution_start', toolCallId: 't1', toolName: 'bash', args: { command: 'echo hi' }, intent: 'Running echo' });
     const r = await ask({ id: 'q1', method: 'select', title: 'Allow tool: bash\nCommand: echo hi', options: ['Approve', 'Approve bash for this session', 'Deny'] });
@@ -87,7 +87,7 @@ async function turn(id, message) {
   const next = queued.steering.shift() ?? queued.followUp.shift();
   if (next !== undefined) queueUpdate();
   if (id) out({ type: 'prompt_result', id, agentInvoked: true, status: 'completed', sessionSettled: next === undefined });
-  if (next !== undefined) return turn(null, next);
+  if (next !== undefined) return turn(null, next.text, next.images);
   settled = true;
   out({ type: 'session_settled' });
 }
@@ -114,9 +114,9 @@ function handle(c) {
       { id: 'gpt-6.1-sol', provider: 'openai-codex', name: 'GPT-6.1-Sol', reasoning: false },
       { id: '-p', provider: 'evil', name: 'Evil' }
     ] } });
-    case 'prompt': return void turn(c.id, c.message);
-    case 'follow_up': case 'steer': (c.type === 'steer' ? queued.steering : queued.followUp).push(c.message); queueUpdate(); return out({ id: c.id, type: 'response', command: c.type, success: true });
-    case 'abort_and_restore_queue': { const data = { steering: queued.steering.map(text => ({ text })), followUp: queued.followUp.map(text => ({ text })) }; queued = { steering: [], followUp: [] }; queueUpdate(); settled = true; out({ id: c.id, type: 'response', command: c.type, success: true, data }); if (waiting) { const w = waiting; waiting = null; w({ cancelled: true }); } return; }
+    case 'prompt': return void turn(c.id, c.message, c.images);
+    case 'follow_up': case 'steer': (c.type === 'steer' ? queued.steering : queued.followUp).push({ text: c.message, images: c.images ?? [] }); queueUpdate(); return out({ id: c.id, type: 'response', command: c.type, success: true });
+    case 'abort_and_restore_queue': { const drop = process.env.FAKE_OMP_DROP_IMAGES === '1'; const entry = q => ({ text: q.text, ...(drop || q.images.length === 0 ? {} : { images: q.images }) }); const data = { steering: queued.steering.map(entry), followUp: queued.followUp.map(entry), ...(drop ? { imagesDropped: true } : {}) }; queued = { steering: [], followUp: [] }; queueUpdate(); settled = true; out({ id: c.id, type: 'response', command: c.type, success: true, data }); if (waiting) { const w = waiting; waiting = null; w({ cancelled: true }); } return; }
     case 'abort': settled = true; out({ id: c.id, type: 'response', command: 'abort', success: true }); if (waiting) { const w = waiting; waiting = null; w({ cancelled: true }); } return;
     case 'set_model':
       if (c.modelId === 'nope') return out({ id: c.id, type: 'response', command: 'set_model', success: false, error: `Model not found: ${c.provider}/${c.modelId}` });
