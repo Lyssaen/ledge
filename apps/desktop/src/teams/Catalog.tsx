@@ -180,8 +180,9 @@ export function CatalogView({ ctx, view, cwd, machine = LOCAL, listing, pick, on
   const problems = listing.problems;
   const group = <T extends { source: 'repo' | 'home' }>(title: string, list: readonly T[], row: (x: T) => ReactNode) =>
     list.length > 0 && <><h4>{title}</h4>{list.map(row)}</>;
+  // The folder's machine first (#99): another machine's ~/.ledge is not this one's, then the folder for a repository's role.
   const held = (id: string, source: 'repo' | 'home') => ctx.sessions.filter(s => s.role === id && s.state !== 'exited' && !s.archivedAt
-    && (source === 'home' || !cwd || ((s.machineId ?? LOCAL) === machine && under(s.cwd, cwd))));
+    && (s.machineId ?? LOCAL) === machine && (source === 'home' || !cwd || under(s.cwd, cwd)));
   const usedIn = (id: string) => listing.templates.filter(x => x.seats.some(s => s.role === id));
   return (
     <div className={cls('cat-split', opened && 'reading')}>
@@ -370,7 +371,7 @@ function TemplateDetail({ ctx, cwd, template, roles, onPick }: {
   const auto = template.seats.filter(s => roleOf(s.role)?.autonomy === 'auto').map(s => `@${s.role}`);
   const project = projectOfFolder(ctx.projects, cwd, ctx.machine);
   const noTeam = ctx.remote ? c.remoteTeam(ctx.remote) : project ? undefined : c.needProject;
-  const born = (ctx.teams.teams ?? []).filter((x: Team) => x.template === template.id && (template.source === 'home' || !cwd || (x.machine === ctx.machine && under(x.cwd, cwd))));
+  const born = (ctx.teams.teams ?? []).filter((x: Team) => x.template === template.id && x.machine === ctx.machine && (template.source === 'home' || !cwd || under(x.cwd, cwd)));
   return (
     <section className="cat-detail-body" aria-label={template.name}>
       <div className="cat-head">
