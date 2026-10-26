@@ -32,6 +32,18 @@ describe('the action card as the TUI plans it', () => {
     expect(p.shown).toEqual(['stale', 'cut']);
     expect(p.open).toEqual([]);
   });
+  it('a request the screen cannot show whole is cut there, as one the daemon cut; one that fits, a denial or a row settled is not', () => {
+    const lines = (n: number) => Array.from({ length: n }, (_, i) => `l${i}`).join('\n');
+    const room = (n: number) => ({ lines: n, height: (text: string) => text.split('\n').length });
+    expect(cardPlan([decide({ detail: lines(60) })], room(18)).shown).toEqual(['cut']);
+    expect(cardPlan([decide({ detail: lines(11) })], room(18)).shown).toEqual(['proposed']);
+    expect(cardPlan([decide({ detail: lines(60), vars: { session: 'Nova', decision: 'deny', kind: 'permission' } }), decide({ detail: lines(60), state: 'done' })], room(18)).shown).toEqual(['proposed', 'done']);
+    // Two requests share the room: the second, that would fit alone, does not after the first.
+    expect(cardPlan([decide({ detail: lines(8) }), decide({ detail: lines(8) })], room(24)).shown).toEqual(['proposed', 'cut']);
+    // A short screen quotes fewer lines of a request cut.
+    expect(cardPlan([decide({ detail: lines(60) })], room(10)).cutLines).toBe(1);
+    expect(cardPlan([decide({ detail: lines(60) })]).shown).toEqual(['proposed']);
+  });
   it('is closed once every row is applied or its request denied', () => {
     expect(cardClosed([archive('Otto', { state: 'done' }), decide({ state: 'denied' })])).toBe(true);
     expect(cardClosed([archive('Otto', { state: 'done' }), archive('Bix', { state: 'failed' })])).toBe(false);

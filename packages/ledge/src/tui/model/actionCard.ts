@@ -9,22 +9,41 @@ import type { ActionCopy } from '@ledge/ui/chat/copy';
 export type Shown = ActionRowState | 'held';
 /** What « a » applies: every open row, from the failed step again (`resume`), or past a refused one (`skip`), `k` that step. */
 export type All = { kind: 'all' | 'resume' | 'skip'; rows: number[]; k: number };
-export interface CardPlan { rows: ActionRowView[]; shown: Shown[]; open: number[]; stopAt: number; all: All }
+/** `cutLines`: the lines a request shown cut quotes, fewer on a short screen. */
+export interface CardPlan { rows: ActionRowView[]; shown: Shown[]; open: number[]; stopAt: number; all: All; cutLines: number }
 
 /** Applied, or its request denied: nothing is left to do on the row. */
 export const settled = (s: Shown) => s === 'done' || s === 'denied';
 
-/** The card's rows, their states, those a click may still apply, and what « a » applies, as the Desktop's card reads them. */
-export function cardPlan(actions: readonly ChatAction[]): CardPlan {
+/** The first lines of a request shown cut: the rest is read in the session (o). */
+export const CUT_LINES = 6;
+/** The lines the card has on screen, and a request's height there at a row's indent. */
+export interface Room { lines: number; height(text: string, indent: number): number }
+/** The card's lines besides its requests: its borders, its keys and what a confirmation adds. */
+const CHROME = 5;
+
+/** The card's rows, their states, those a click may still apply, and what « a » applies, as the Desktop's card reads them. In
+ *  `room`, an acceptance whose request the screen cannot show whole is cut as the daemon cuts one: not accepted from the card. */
+export function cardPlan(actions: readonly ChatAction[], room?: Room): CardPlan {
   const rows = actions.map(actionRowOf);
-  const states = rows.map(r => r.state ?? 'proposed');
+  let left = room ? room.lines - CHROME - 2 * rows.length : Infinity;
+  // Its mark and its note (two lines) follow the quote.
+  const cutLines = Math.max(1, Math.min(CUT_LINES, left - 3));
+  const states = rows.map((r): ActionRowState => {
+    const s = r.state ?? 'proposed';
+    if (!room || !r.request) return s;
+    const need = room.height(r.request.text, rows.length > 1 ? 6 : 2);
+    if (s === 'proposed' && r.decision !== 'deny' && need > left) { left -= cutLines + 3; return 'cut'; }
+    left -= need;
+    return s;
+  });
   const stopAt = states.findIndex(s => s === 'failed' || s === 'refused');
   const shown: Shown[] = states.map((s, i) => (s === 'proposed' && stopAt >= 0 && i > stopAt ? 'held' : s));
   const open = shown.flatMap((s, i) => (['done', 'running', 'denied', 'stale', 'cut'].includes(s) ? [] : [i]));
   // A refused step's target is gone: it would only be refused again, so « a » goes on without it.
   const skip = stopAt >= 0 && states[stopAt] === 'refused';
   const all: All = { kind: stopAt < 0 ? 'all' : skip ? 'skip' : 'resume', rows: skip ? open.filter(i => i !== stopAt) : open, k: stopAt + 1 };
-  return { rows, shown, open, stopAt, all };
+  return { rows, shown, open, stopAt, all, cutLines };
 }
 
 /** Every row applied or denied: the box goes, a line stays in the conversation. */

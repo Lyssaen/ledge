@@ -10,9 +10,6 @@ import { C } from '../theme.js';
 import { Button } from './SessionCard.js';
 import { TitledBox } from './TitledBox.js';
 
-/** The first lines of a request shown cut: the rest is read in the session (o). */
-const CUT_LINES = 6;
-
 /** A row whose request « n » denies from the card: an acceptance not applied yet, shown whole or cut. */
 export const deniable = (r: ActionRowView, s: Shown) => r.action === 'session.decide' && r.decision === 'accept' && (s === 'proposed' || s === 'held' || s === 'cut');
 /** What ↵ applies on the row: nothing on a row settled, running, refused, stale or cut. */
@@ -71,7 +68,7 @@ export function ActionBox({ turn, focused, busy, sel, confirming, plan }: Action
     if (r.request) {
       under.push(<Text key="k" color={C.faint}>{c.words.kind[r.request.kind] ?? r.request.kind}</Text>);
       if (s === 'cut') {
-        r.request.text.split('\n').slice(0, CUT_LINES).forEach((l, k) => under.push(...quote(l, C.fg, indent, `q${k}-`)));
+        r.request.text.split('\n').slice(0, p.cutLines).forEach((l, k) => under.push(...quote(l, C.fg, indent, `q${k}-`)));
         under.push(...quote(a.cutMark, C.yellow, indent, 'cut'));
         under.push(...para(c.words.cut.note(r.target ?? ''), C.dim, indent, 'n'));
       } else r.request.text.split('\n').forEach((l, k) => under.push(...quote(l, s === 'stale' || s === 'denied' ? C.faint : C.fg, indent, `q${k}-`)));
