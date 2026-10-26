@@ -1,6 +1,6 @@
 import { appendFile, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { NoticeItem, ReceivedItem, SentItem, SessionEvent, Task, TaskTransmission, ThreadItem, ToolItem } from '@ledge/protocol';
+import type { AttachmentRef, NoticeItem, ReceivedItem, SentItem, SessionEvent, Task, TaskTransmission, ThreadItem, ToolItem } from '@ledge/protocol';
 import { paths } from '../paths.js';
 import { log } from '../log.js';
 import { filesOf } from './files.js';
@@ -50,8 +50,10 @@ export class History {
   private readonly dir: string;
   /** The Ledge session a SendMessage address or a sender's name is, when it is one (peers.ts). */
   private readonly peerOf: (target: string) => string | undefined;
-  constructor(opts: { dir?: string; peerOf?: (target: string) => string | undefined } = {}) {
-    this.dir = opts.dir ?? paths().history; this.peerOf = opts.peerOf ?? (() => undefined);
+  /** The stored image an attachment id is, when the store still holds it. */
+  private readonly refOf: (id: string) => AttachmentRef | null;
+  constructor(opts: { dir?: string; peerOf?: (target: string) => string | undefined; refOf?: (id: string) => AttachmentRef | null } = {}) {
+    this.dir = opts.dir ?? paths().history; this.peerOf = opts.peerOf ?? (() => undefined); this.refOf = opts.refOf ?? (() => null);
   }
 
   items(id: string): ThreadItem[] { return this.threads.get(id) ?? []; }
@@ -90,6 +92,25 @@ export class History {
     }
   }
 
+  /** The ids of the images the journaled prompts refer to, read from every `<dir>/*.jsonl` once the pending writes landed. */
+  async attachmentIds(): Promise<Set<string>> {
+    await this.writes;
+    const ids = new Set<string>();
+    let names: string[];
+    try { names = await readdir(this.dir); } catch { return ids; }
+    for (const name of names) {
+      if (!name.endsWith('.jsonl')) continue;
+      let text: string;
+      try { text = await readFile(join(this.dir, name), 'utf8'); }
+      catch (e) { log(`history not read for ${name}: ${(e as Error).message}`); continue; }
+      for (const line of text.split('\n')) {
+        if (!line.includes('"images"')) continue;
+        try { for (const img of (JSON.parse(line) as { images?: Array<{ id?: unknown }> }).images ?? []) if (typeof img?.id === 'string') ids.add(img.id); } catch { /* a partial or corrupt line */ }
+      }
+    }
+    return ids;
+  }
+
   /** The ids of the threads held, loaded or recorded. */
   ids(): string[] { return [...this.threads.keys()]; }
 
@@ -108,56 +129,58 @@ export class History {
     }
     switch (ev.name) {
       case 'UserPromptSubmit': {
-        if (!ev.text) return undefined;
-        const back = handBack(ev.text);
+        const images = (ev.attachments ?? []).flatMap(a => this.refOf(a) ?? []);
+        if (!ev.text && images.length === 0) return undefined;
+        const text = ev.text ?? '';
+        const back = handBack(text);
         if (back) { // not a turn: the helper's report
           const helper = this.items(id).find(i => i.id === back.helperId);
           if (helper?.kind === 'helper' && helper.state !== 'exited') this.put(id, { ...helper, state: 'exited' });
           if (helper?.kind === 'helper') this.settle(id, i => i.helperId === back.helperId);
           return back.report ? this.put(id, { kind: 'reply', id: `report-${back.helperId}`, at: ev.at, turn: helper?.turn ?? turn, helperId: back.helperId, text: back.report }) : undefined;
         }
-        const messages = crossSession(ev.text);
+        const messages = crossSession(text);
         if (messages) { // another agent's messages: a turn of their own, a card each, no prompt
           this.turns.set(id, turn + 1);
           let last: ThreadItem | undefined;
           messages.forEach((m, i) => { const { sender, text } = stripNote(m.text); last = this.receive(id, { kind: 'received', id: `recv-${turn + 1}-${i}`, at: ev.at, turn: turn + 1, from: sender ?? m.name ?? m.from, text }, { ...m, ...(sender ? { sender } : {}) }); });
           return last;
         }
-        const ledge = ledgeMessages(ev.text);
+        const ledge = ledgeMessages(text);
         if (ledge) { // a Ledge session's message: the same, the sender known by its name alone
           this.turns.set(id, turn + 1);
           let last: ThreadItem | undefined;
           ledge.forEach((m, i) => { last = this.receive(id, { kind: 'received', id: `recv-${turn + 1}-${i}`, at: ev.at, turn: turn + 1, from: m.from, text: m.text }, m); });
           return last;
         }
-        const notices = crossSessionNotices(ev.text);
+        const notices = crossSessionNotices(text);
         if (notices) { // the harness's notices: the agent's turn on them, a system event each, no prompt
           this.turns.set(id, turn + 1);
           let last: ThreadItem | undefined;
           notices.forEach((n, i) => { last = this.put(id, this.noticeOf(n, { id: `notice-${turn + 1}-${i}`, at: ev.at, turn: turn + 1 })); });
           return last;
         }
-        const failed = ledgeNotice(ev.text);
+        const failed = ledgeNotice(text);
         if (failed) { // Ledge telling this session one of its messages was not delivered: a system event, no prompt
           this.turns.set(id, turn + 1);
           const peer = this.peerOf(failed.to);
           return this.put(id, { kind: 'notice', id: `notice-${turn + 1}-0`, at: ev.at, turn: turn + 1, notice: 'delivery', status: 'refused', count: 1, recipients: [failed.to],
             name: failed.to, ...(peer ? { peer } : {}), ...(failed.reason ? { reason: failed.reason } : {}), text: failed.text });
         }
-        const task = ledgeTask(ev.text);
+        const task = ledgeTask(text);
         if (task) { // Ledge's pointer about a task: a system event, no prompt
           this.turns.set(id, turn + 1);
           const peer = task.from ? this.peerOf(task.from) : undefined;
           return this.put(id, { kind: 'notice', id: `notice-${turn + 1}-0`, at: ev.at, turn: turn + 1, notice: 'other', task: task.id,
             ...(task.from ? { name: task.from } : {}), ...(peer ? { peer } : {}), summary: task.text.replaceAll(' ⏎ ', '\n'), text: task.text });
         }
-        const joined = ledgeTeamNotice(ev.text);
+        const joined = ledgeTeamNotice(text);
         if (joined) { // Ledge seating this session in a team: a system event, no prompt
           this.turns.set(id, turn + 1);
           return this.put(id, { kind: 'notice', id: `notice-${turn + 1}-0`, at: ev.at, turn: turn + 1, notice: 'other', team: joined.team, summary: joined.text.replaceAll(' ⏎ ', '\n'), text: joined.text });
         }
         this.turns.set(id, turn + 1);
-        return this.put(id, { kind: 'prompt', id: `prompt-${turn + 1}`, at: ev.at, turn: turn + 1, text: ev.text });
+        return this.put(id, { kind: 'prompt', id: `prompt-${turn + 1}`, at: ev.at, turn: turn + 1, text: text, ...(images.length ? { images } : {}) });
       }
       case 'PreToolUse': {
         if (!ev.tool) return undefined;

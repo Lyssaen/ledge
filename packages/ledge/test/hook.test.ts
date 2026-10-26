@@ -10,6 +10,7 @@ import type { Session } from '@ledge/protocol';
 import { startServer } from '../src/daemon/server.js';
 import { Store } from '../src/daemon/store.js';
 import { connect } from '../src/client.js';
+import { paths } from '../src/paths.js';
 
 const at = '2026-10-09T18:00:00.000Z';
 let home: string;
@@ -737,6 +738,18 @@ describe('prompts and the chat marker', () => {
     expect(back.length).toBeGreaterThan(3000);
     expect(mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt: back }, at)?.event.text).toBe(back);
     expect(mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt: back + 'x'.repeat(INPUT_MAX) }, at)?.event.text).toHaveLength(INPUT_MAX);
+  });
+  it('takes the store brackets out of the prompt into attachments, keeping other brackets', () => {
+    const dir = paths().attachments;
+    const a = 'a'.repeat(64); const b = 'b'.repeat(64);
+    const brackets = `[Image attached: ${dir}/${a}.webp] [Image attached: ${dir}/${b}.png]`;
+    const prompt = 'x'.repeat(700) + ' ' + brackets;
+    const m = mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt }, at);
+    expect(m?.event.text).toBe('x'.repeat(500)); expect(m?.event.attachments).toEqual([a, b]);
+    const other = mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt: 'Regarde [Image attached: /tmp/x.png]' }, at);
+    expect(other?.event.text).toBe('Regarde [Image attached: /tmp/x.png]'); expect(other?.event.attachments).toBeUndefined();
+    const cursor = mapCursorHook('beforeSubmitPrompt', { session_id: 's', prompt: `Regarde ${brackets}` }, at, {});
+    expect(cursor?.event.text).toBe('Regarde'); expect(cursor?.event.attachments).toEqual([a, b]);
   });
   it('keeps a cross-session message whole (up to INPUT_MAX)', () => {
     const prompt = '<cross-session-message from="uds:/run/user/1000/cc-socks/1.sock" from-name="a-2d" from-mode="prompting">\n' + 'x'.repeat(3000);

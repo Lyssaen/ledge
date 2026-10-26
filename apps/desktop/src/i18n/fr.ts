@@ -984,6 +984,11 @@ export const fr = {
       repos: (n: number) => `${n} dépôt${n > 1 ? 's' : ''}`, review: 'Vérifier la proposition'
     },
   },
+  images: {
+    remove: "Retirer l'image", tooLarge: 'Image trop lourde, même réduite', notImage: "Ce fichier n'est pas une image", max: '5 images au plus par message',
+    dialog: "Répondez d'abord à la question, l'image partira après", lost: 'Les images de ce message ont été perdues', failed: 'Image non envoyée',
+    capture: 'Capture', unavailable: 'Image indisponible', close: 'Fermer', prev: 'Image précédente', next: 'Image suivante', copy: 'Copier', copied: 'Copié', save: 'Enregistrer…'
+  },
   machines: { clarification: 'Vous pouvez aussi répondre dans le chat.', destination: 'Destination', choose: (name: string) => `Sur ${name}.`, local: 'Cette machine', offline: 'Hors ligne' },
   whatsNew: {
     title: (v: string) => `Nouveautés de Ledge ${v}`, updated: (v: string) => `Ledge a été mis à jour en ${v}`,

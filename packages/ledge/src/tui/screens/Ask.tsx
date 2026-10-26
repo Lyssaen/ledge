@@ -4,6 +4,7 @@ import { Box, Text, useInput, useWindowSize } from 'ink';
 import { daemonStore } from '@ledge/fleet';
 import { LEDGE_GIVER, proposalRows, type ChatTurn } from '@ledge/protocol';
 import { useEditing, useScreenKeys, useTui } from '../context.js';
+import { ChipsLine, type Chip, useChips, useOpenImage, usePaste } from '../images.js';
 import { askHistory, chatView, openCards, type Card } from '../model/chat.js';
 import { cardPlan, moveRow, selectedRow, type Room } from '../model/actionCard.js';
 import { wrapSegs } from '../model/cells.js';
@@ -40,6 +41,10 @@ export function Ask() {
   // resize or a new card keep it in place; null follows the bottom.
   const [anchor, setAnchor] = useState<{ key: string; offset: number } | null>(null);
   const [view, setView] = useState(10);
+  // Images travel inline with the question: no store on a machine before Ledge routes it.
+  const chips = useChips(null);
+  const paste = usePaste(chips);
+  const openImage = useOpenImage();
   // A generic card's send (`rid`) is under way until the daemon answers it (chat.acted), whatever its rows did meanwhile.
   const [busy, setBusy] = useState<{ qid: string; turn: ChatTurn | undefined; errorSeq: number; at: number; rid?: string } | null>(null);
   // The action cards (#94): the row chosen in each, the rows a red box asks to confirm, the card ctrl+r opened again.
@@ -47,6 +52,15 @@ export function Ask() {
   const [confirming, setConfirming] = useState<{ qid: string; rows: number[] } | null>(null);
   const [review, setReview] = useState<string | null>(null);
   useEditing(focus === -1 && !confirm);
+  // What the last question carried: given back if the daemon refuses it, as a session reply does.
+  const sentAsk = useRef<{ qid: string; taken: Chip[]; text: string } | null>(null);
+  useEffect(() => {
+    const s = sentAsk.current;
+    const turn = s && d.chat.find(x => x.qid === s.qid);
+    if (!s || !turn) return;
+    if (turn.error) { sentAsk.current = null; chips.putBack(s.taken); setDraft(kept.drafts.get('ask') || s.text); }
+    else if (turn.answeredAt) sentAsk.current = null;
+  }, [d.chat]);
 
   // Two cards at most are drawn: tab, the focus and the keys only reach those.
   const cards = useMemo(() => openCards(d.chat).slice(0, 2), [d.chat]);
@@ -90,13 +104,15 @@ export function Ask() {
   const asking = d.chat.find(x => !x.answeredAt && !x.error);
   /** false when refused (Ledge offline): the field keeps the text. */
   const ask = (text: string, { fromHistory }: { fromHistory: boolean }): boolean => {
-    if (!text.trim()) return true;
+    const images = fromHistory ? [] : chips.uploads();
+    if (!text.trim() && images.length === 0) return true;
     if (!local?.ready) { toast({ text: t.ask.offline, tone: 'info' }); return false; }
     const qid = `q-${randomUUID()}`;
     const asked = { question: text.trim(), askedAt: new Date().toISOString() };
     daemonStore.beginTurn({ qid, ...asked, steps: [] });
-    client.send({ type: 'chat.ask', qid, text: asked.question });
+    client.send({ type: 'chat.ask', qid, text: asked.question, ...(images.length ? { images } : {}) });
     kept.asked.push(asked);
+    if (images.length) sentAsk.current = { qid, taken: chips.clear(), text: asked.question };
     // An entry of the history asked again leaves the draft as it was.
     if (!fromHistory) setDraft('');
     return true;
@@ -180,11 +196,14 @@ export function Ask() {
     const top = lines.length - view - u, key = chat.keys[top]!;
     setAnchor({ key, offset: top - chat.keys.indexOf(key) });
   };
+  // The images of the conversation, oldest first: alt+o opens the newest.
+  const turnImages = useMemo(() => d.chat.flatMap(x => (x.attachments ?? []).map(ref => ({ ref, route: { machine: x.machineId } }))), [d.chat]);
 
   // ctrl+c stops the answer being written; ctrl+n starts a new conversation (once confirmed, when there is one); tab goes
-  // round, from the field to the cards, the conversation and back; PgUp PgDn scroll the conversation, from the field too.
-  const latest = useRef({ asking, cards, focus, confirm, turns: d.chat.length, scroll, up, view, ignored });
-  latest.current = { asking, cards, focus, confirm, turns: d.chat.length, scroll, up, view, ignored };
+  // round, from the field to the cards, the conversation and back; PgUp PgDn scroll the conversation, from the field too;
+  // alt+v pastes an image in the field, alt+o opens the conversation's newest.
+  const latest = useRef({ asking, cards, focus, confirm, turns: d.chat.length, scroll, up, view, ignored, draft, turnImages });
+  latest.current = { asking, cards, focus, confirm, turns: d.chat.length, scroll, up, view, ignored, draft, turnImages };
   useInput((input, key) => {
     // Too small, nothing is drawn: esc is the app's.
     if (small) return;
@@ -193,6 +212,9 @@ export function Ask() {
     if (key.ctrl && input === 'n') { if (l.turns === 0) client.send({ type: 'chat.reset' }); else setConfirm(true); return; }
     // ctrl+r opens the latest card set aside again, wherever the focus is; again, the one before.
     if (key.ctrl && input === 'r') { if (l.ignored) { client.send({ type: 'chat.ignore', qid: l.ignored.qid, undo: true }); setReview(l.ignored.qid); } return; }
+    if (key.meta && input === 'v' && l.focus === -1) { paste(); return; }
+    if ((key.backspace || key.delete) && l.focus === -1 && l.draft === '') { chips.removeLast(); return; }
+    if (key.meta && input === 'o' && l.turnImages.length) { openImage(l.turnImages); return; }
     if (key.pageUp) { l.scroll(l.up + l.view - 1); return; }
     if (key.pageDown) { l.scroll(l.up - l.view + 1); return; }
     if (key.tab) { const n = l.cards.length; setFocus(f => (f === CONVO ? -1 : f + 1 < n ? f + 1 : CONVO)); }
@@ -251,7 +273,7 @@ export function Ask() {
   const keys: Array<readonly [string, string]> = confirm ? [['n esc', t.keys.keep], ['y', t.keys.wipe]]
     : focus === -1 && browsing ? [['↵', t.keys.resend], ['↑ ↓', t.keys.history], ['esc', t.keys.backToDraft]]
     // ctrl+r near the front while a card is set aside: the bar drops what does not fit, from its end.
-    : focus === -1 ? [['↵', t.keys.sendOnly], ...review$, ['alt+↵', t.keys.newLine], ['esc', t.keys.back], ['PgUp PgDn', t.keys.scroll], ['↑ ↓', t.keys.history], ['tab', cards.length ? t.keys.nextCard : t.keys.conversation], ['ctrl+n', t.keys.newChat], ...stop]
+    : focus === -1 ? [['↵', t.keys.sendOnly], ...review$, ['alt+↵', t.keys.newLine], ['esc', t.keys.back], ['PgUp PgDn', t.keys.scroll], ['↑ ↓', t.keys.history], ['tab', cards.length ? t.keys.nextCard : t.keys.conversation], ['alt+v', t.keys.image], ...(turnImages.length ? [['alt+o', t.keys.openImage] as const] : []), ['ctrl+n', t.keys.newChat], ...stop]
     : focus === CONVO ? [['j k', t.keys.line], ['PgUp PgDn', t.keys.page], ['G', t.keys.end], ...stop, ['tab', t.keys.question], ['esc', t.keys.question]]
     : card?.kind === 'action' ? [...actionKeys(card.qid), ...stop, ...review$]
     : [['↵', t.keys.send], ['tab', focus + 1 < cards.length ? t.keys.nextCard : t.keys.conversation], ...(card?.kind === 'team' ? [['s', t.keys.save] as const] : []), ['ctrl+n', t.keys.newChat], ...stop, ['esc', t.keys.back]];
@@ -278,8 +300,8 @@ export function Ask() {
           <Text color={C.fg}>{t.ask.resetBody(d.chat.length, d.chat[0] ? clock(d.chat[0].askedAt) : '')}{draft.trim() ? ` ${t.ask.draftStays}` : ''}</Text>
           <Box marginTop={1} columnGap={2}><Button label={t.ask.keep} k="n · esc" primary /><Button label={t.ask.wipe} k="y" /></Box>
         </TitledBox>
-        : <Field title={t.ask.question} value={draft} onChange={setDraft} onSubmit={ask} onEscape={() => { if (!draft) go('overview'); }} onBrowse={setBrowsing}
-          history={history} active={focus === -1} placeholder={t.ask.placeholder} />}
+        : <><ChipsLine chips={chips.items} /><Field title={t.ask.question} value={draft} onChange={setDraft} onSubmit={ask} onEscape={() => { if (!draft) go('overview'); }} onBrowse={setBrowsing}
+          history={history} active={focus === -1} placeholder={t.ask.placeholder} /></>}
     </Frame>
   );
 }

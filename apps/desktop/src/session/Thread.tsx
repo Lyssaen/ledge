@@ -1,5 +1,5 @@
 import { Fragment, memo, useCallback, useMemo, useRef, useState, useSyncExternalStore, type JSX, type ReactNode } from 'react';
-import { daemonStore, qualify, splitId } from '@ledge/fleet';
+import { daemonStore, qualify, splitId, type DaemonClient } from '@ledge/fleet';
 import type { Helper, HelperItem, NoticeItem, Pending, ReceivedItem, SentItem, Session, ThreadItem, ToolItem } from '@ledge/protocol';
 import type { BotState } from '@ledge/ui/bots/poseFor';
 import { ThreadMarkdown } from '@ledge/ui/documents/markdown';
@@ -9,6 +9,7 @@ import { helperThread } from '@ledge/ui/thread/turns';
 import { Badge } from '@ledge/ui/ui/Badge';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
+import { Thumbs } from '../images/Thumbs';
 import type { NavAction } from '../nav/state';
 import { helperState } from '../atelier/layout';
 import { cls } from '../shell/cls';
@@ -46,6 +47,8 @@ const TASK: Record<TaskNotice['status'], { node: string; icon: readonly string[]
 export interface Waiting { kind: Pending['kind']; asker: string }
 
 export interface ThreadProps {
+  /** Fetches the prompts' images. */
+  client: DaemonClient;
   session: Session; helper: Helper | null; items: readonly ThreadItem[]; xs: readonly Exchange[];
   /** The clock; offline, the instant the thread froze (its times stand still). */
   now: number;
@@ -219,6 +222,7 @@ const grouped = (segments: readonly Segment[]): Group[] => {
 };
 
 interface TurnProps {
+  client: DaemonClient;
   session: Session; helper: Helper | null; items: readonly ThreadItem[]; x: Exchange;
   /** Its time mark, and whether it is the last exchange (the waiting, frozen or ended row goes in it). */
   at: string; last: boolean;
@@ -246,7 +250,7 @@ interface TurnProps {
 /** One exchange on the rail: its prompt (or the task it was told of), then what the agent said, decided and did, a row each,
  *  and its end. A past one folds to one row. Rendered again only when what it shows changes: the clock's tick reaches the
  *  exchange whose action runs, not the ones before it. */
-const Turn = memo(function Turn({ session, helper, items, x, at, last, folded, onUnfold, now, unread, since, dispatch, flash, onChange, onDocument, planOpen, onPlan, peers, convs, folded2, onFold, marks, waiting, wait }: TurnProps): JSX.Element {
+const Turn = memo(function Turn({ client, session, helper, items, x, at, last, folded, onUnfold, now, unread, since, dispatch, flash, onChange, onDocument, planOpen, onPlan, peers, convs, folded2, onFold, marks, waiting, wait }: TurnProps): JSX.Element {
   const { t } = useI18n();
   const th = t.session.thread;
   const offline = session.offline === true;
@@ -379,6 +383,7 @@ const Turn = memo(function Turn({ session, helper, items, x, at, last, folded, o
                 {marks.get(x.prompt.id) && <Tags tags={marks.get(x.prompt.id)!.tags} />}
               </span>
               <p className="prompt-text">{promptText}</p>
+              {x.prompt.images && <Thumbs className="prompt-images" client={client} refs={x.prompt.images} route={{ id: session.id }} max={{ w: 420, h: 260 }} who={th.you} at={clock(x.at)} />}
             </div>
             <span className="tm">{at}</span>
           </li>
@@ -493,7 +498,7 @@ function useKeys(id: string): [ReadonlySet<string>, (key: string) => void] {
  *  The past exchanges fold to a row, except the ones that hold what is new, what runs or waits, or what the reader came back
  *  to. Memoised: the store's changes elsewhere (another session's preview, the chat, an error) leave it alone, its props
  *  being the session, its items and their exchanges, the clock and the page's stable callbacks. */
-export const Thread = memo(function Thread({ session, helper, items, xs, now, unread, since, dispatch, flash, onChange, onDocument, planOpen, onPlan, waiting = null }: ThreadProps): JSX.Element {
+export const Thread = memo(function Thread({ client, session, helper, items, xs, now, unread, since, dispatch, flash, onChange, onDocument, planOpen, onPlan, waiting = null }: ThreadProps): JSX.Element {
   const { t, lang } = useI18n();
   const offline = session.offline === true;
   const wait = useWait(session, helper, items, xs, waiting, t.session.subagent);
@@ -511,7 +516,7 @@ export const Thread = memo(function Thread({ session, helper, items, xs, now, un
         const lit = flash !== null && holds(x, flash);
         const open = last || (fresh >= 0 && i >= fresh) || lit || (planOpen !== null && holdsPlan(x, planOpen)) || pending(x, !offline);
         return (
-          <Turn key={x.key} session={session} helper={helper} items={items} x={x} at={timeMark(x.at, now, lang)} last={last}
+          <Turn key={x.key} client={client} session={session} helper={helper} items={items} x={x} at={timeMark(x.at, now, lang)} last={last}
             folded={open ? null : !unfolded.has(x.key)} onUnfold={onUnfold}
             now={ticks(x) || (last && wait !== null) ? now : 0} unread={unread} since={since} dispatch={dispatch}
             flash={lit ? flash : null} onChange={onChange} onDocument={onDocument}

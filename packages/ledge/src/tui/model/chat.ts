@@ -5,6 +5,7 @@ import { C } from '../theme.js';
 import { pad, row, wrapSegs, type Line } from './cells.js';
 import { markdownLines } from './markdown.js';
 import { cardClosed, cardPlan, lineOf } from './actionCard.js';
+import { imageLine } from './thread.js';
 import { clock } from './time.js';
 
 /** What a step says Ledge read: « les sessions », « le terminal d'Otto »… */
@@ -24,6 +25,7 @@ export function chatView(turns: readonly ChatTurn[], live: { qid: string; text: 
     const out: Line[] = [];
     if (lines.length) out.push([{ text: '' }]);
     wrapSegs([{ text: turn.question, color: C.fg, bold: true }], width - 2).forEach((l, k) => out.push([k ? pad(2) : { text: `${g.cursor} `, color: C.coral }, ...l]));
+    for (const a of turn.attachments ?? []) out.push(imageLine(a, t, 'alt+o'));
     const steps = [...new Set(turn.steps.map(s => stepLabel(s, t.ask.steps)))];
     out.push(...row([pad(2)], [{ text: [`${t.ask.you} · ${clock(turn.askedAt)}`, ...(steps.length ? [`${t.ask.read} : ${steps.join(' · ')}`] : [])].join(' · '), color: C.faint }], null, width));
     const streaming = !turn.answer && live?.qid === turn.qid ? live.text : undefined;

@@ -1,4 +1,4 @@
-import type { PhoneSession, ThreadItem as PcItem } from '@ledge/protocol';
+import type { AttachmentRef, PhoneSession, ThreadItem as PcItem } from '@ledge/protocol';
 import { copy } from '../copy';
 import type { LinkState } from '../link/link';
 import type { Op } from '../state/operations';
@@ -11,12 +11,17 @@ export type Delivery = 'sending' | 'taken' | 'uncertain';
 
 /** `cut`: the PC shortened that item. */
 export type ThreadItem =
-  | { key: string; kind: 'me'; text: string; at: string; delivery?: Delivery; fresh?: boolean; cut?: true }
+  | { key: string; kind: 'me'; text: string; at: string; delivery?: Delivery; fresh?: boolean; cut?: true;
+    /** The images a prompt from the PC carried. */ images?: AttachmentRef[];
+    /** The ids of the images of this phone's own instruction not yet shown by the PC. */ attachments?: string[] }
   | { key: string; kind: 'agent'; text: string; at: string; cut?: true }
   | { key: string; kind: 'event'; label: string; at: string }
   | { key: string; kind: 'awaiting'; item: InboxItem };
 
 type Instruction = Op & { message: Extract<Op['message'], { type: 'session.reply' }> };
+
+/** Two lists of attachment ids, in the same order. */
+const sameIds = (a: string[], b: string[]) => a.length === b.length && a.every((x, n) => x === b[n]);
 
 /** The instructions this phone sent to the session (replies that answer no request), oldest first. */
 export const messagesOf = (sessionId: string, ops: Record<string, Op>): Instruction[] =>
@@ -58,11 +63,12 @@ export function threadItems(items: PcItem[], session: PhoneSession, ops: Record<
   const shown = new Set<string>();
   for (const o of mine) {
     if (o.phase !== 'applied') continue;
-    const hit = items.find(i => i.kind === 'prompt' && i.text === o.message.text && !claimed.has(i.id));
+    const ids = o.message.attachments ?? [];
+    const hit = items.find(i => i.kind === 'prompt' && i.text === o.message.text && !claimed.has(i.id) && sameIds(i.images?.map(x => x.id) ?? [], ids));
     if (hit) { claimed.add(hit.id); shown.add(o.op); }
   }
   for (const i of items) {
-    if (i.kind === 'prompt') out.push({ key: i.id, kind: 'me', text: i.text, at: i.at, ...(claimed.has(i.id) ? { delivery: 'taken' as const } : {}), ...mark(i.id) });
+    if (i.kind === 'prompt') out.push({ key: i.id, kind: 'me', text: i.text, at: i.at, ...(i.images?.length ? { images: i.images } : {}), ...(claimed.has(i.id) ? { delivery: 'taken' as const } : {}), ...mark(i.id) });
     else if (i.kind === 'reply') out.push({ key: i.id, kind: 'agent', text: i.text, at: i.at, ...mark(i.id) });
     else if (i.kind === 'permission') {
       const label = eventLabel(i, session.id, ops);
@@ -71,7 +77,7 @@ export function threadItems(items: PcItem[], session: PhoneSession, ops: Record<
   }
   const oldest = items[0]?.at;
   for (const o of mine) {
-    const base = { key: o.op, kind: 'me' as const, text: o.message.text, at: o.at };
+    const base = { key: o.op, kind: 'me' as const, text: o.message.text, at: o.at, ...(o.message.attachments?.length ? { attachments: o.message.attachments } : {}) };
     if (o.phase === 'sending') out.push({ ...base, delivery: 'sending' });
     else if (o.phase === 'uncertain') out.push({ ...base, delivery: 'uncertain' });
     else if (o.phase === 'applied' && !shown.has(o.op) && !(oldest && Date.parse(oldest) - Date.parse(o.at) > FALLEN_OFF))

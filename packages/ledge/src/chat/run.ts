@@ -4,7 +4,7 @@ import type { ClaudeEvent, RunHandle } from './claude.js';
 /** Spawns a CLI, feeds `question` on stdin, and turns each stdout line into chat events. */
 export function runJsonl(
   file: string, args: string[],
-  o: { cwd: string; env: NodeJS.ProcessEnv; question: string },
+  o: { cwd: string; env: NodeJS.ProcessEnv; question: string; /** What goes on stdin when it is not `question` (Claude's image input). */ stdin?: string },
   parse: (line: string) => ClaudeEvent[],
   onEvent: (e: ClaudeEvent) => void,
   spawnImpl: typeof nodeSpawn = nodeSpawn
@@ -21,6 +21,6 @@ export function runJsonl(
     child.on('close', code => { if (buf.trim()) feed(buf); res({ code, stderr }); });
   });
   child.stdin!.on('error', () => { /* the child exited before reading: close reports it */ });
-  child.stdin!.end(o.question);
+  child.stdin!.end(o.stdin ?? o.question);
   return { done, kill: () => { child.kill('SIGTERM'); } };
 }

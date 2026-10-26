@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { reapOwner } from './omp/owner.js';
 import { Store } from './store.js';
 import { History } from './history.js';
+import { AttachmentStore } from './attachments.js';
 import { startServer } from './server.js';
 import { startPoller } from './poller.js';
 import { realTmux, type Tmux } from '../tmux.js';
@@ -41,7 +42,10 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   const daemon = await daemonInfo();
   let ompLive = () => 0;
   const updater = createDaemonUpdater(realUpdaterDeps({ info: daemon, save: () => store.save(), ownedLive: () => ompLive() }));
-  const history = new History({ peerOf: t => ledgePeer(t, readPeers(), store.all())?.id });
+  // One store for the thread's image refs and the server's attachment requests.
+  const attachments = new AttachmentStore(paths().attachments);
+  await attachments.load().catch(e => log(`attachments not loaded: ${(e as Error).message}`));
+  const history = new History({ peerOf: t => ledgePeer(t, readPeers(), store.all())?.id, refOf: id => attachments.ref(id) });
   try { await history.load(); } catch (e) { log(`history not loaded: ${(e as Error).message}`); }
   // Threads of sessions the store no longer holds (deleted, or past the archive cap) go now; only when the journal was
   // read whole: a session it lost is not a deleted one, and its thread must stay.
@@ -55,7 +59,7 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   const mail = fileJournal(paths().mail);
   const taskJournal = tasksJournal(paths().tasks);
   const teamJournal = teamsJournal(paths().teams);
-  const server = await startServer({ store, tmux, port: opts.port, daemon, updater, history, mobile, mobileUnavailable, mail, tasks: taskJournal, teams: teamJournal });
+  const server = await startServer({ store, tmux, port: opts.port, daemon, updater, history, mobile, mobileUnavailable, mail, tasks: taskJournal, teams: teamJournal, attachments });
   ompLive = () => server.omp.liveCount();
   const poller = startPoller({ store, tmux, broadcastPreview: server.preview, labelExited: server.labelExited });
   await writeFile(paths().pid, String(process.pid));

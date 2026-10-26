@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { claudeArgs, parseLine, runClaude, PERSONA } from '../src/chat/claude.js';
+import { claudeArgs, claudeInput, parseLine, runClaude, PERSONA } from '../src/chat/claude.js';
 import { buildPersona } from '../src/chat/persona.js';
 
 const FAKE = fileURLToPath(new URL('./fake-claude.mjs', import.meta.url));
@@ -59,5 +62,20 @@ describe('runClaude', () => {
     expect(r.code).toBe(1); expect(r.stderr).toContain('No conversation found');
     const h = runClaude(opts({ env: { ...process.env, FAKE_CLAUDE_MODE: 'slow' } }), () => {}); setTimeout(() => h.kill(), 200);
     expect((await h.done).code).not.toBe(0);
+  });
+});
+
+describe('images', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ledge-img-'));
+  const png = join(dir, 'a.png'); writeFileSync(png, Buffer.from([1, 2, 3]));
+  it('without images the argv is unchanged; with images stdin becomes one stream-json user message', () => {
+    expect(claudeArgs(opts())).not.toContain('--input-format');
+    const a = claudeArgs(opts({ images: [{ path: png, mime: 'image/png' }] }));
+    expect(a[a.indexOf('--input-format') + 1]).toBe('stream-json');
+    const line = claudeInput('Que vois-tu ?', [{ path: png, mime: 'image/png' }]);
+    expect(line.endsWith('\n')).toBe(true);
+    expect(JSON.parse(line)).toEqual({ type: 'user', message: { role: 'user', content: [
+      { type: 'text', text: 'Que vois-tu ?' },
+      { type: 'image', source: { type: 'base64', media_type: 'image/png', data: Buffer.from([1, 2, 3]).toString('base64') } }] } });
   });
 });

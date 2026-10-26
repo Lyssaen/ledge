@@ -75,7 +75,10 @@ export function toPhoneItem(item: ThreadItem): { item: ThreadItem; cut: boolean 
   const base = { id: item.id, at: item.at, turn: item.turn, ...pickSet(item, ['helperId']) };
   let out: ThreadItem;
   switch (item.kind) {
-    case 'prompt': case 'message': case 'reply':
+    case 'prompt':
+      out = { kind: 'prompt', ...base, text: text(item.text), ...(item.images?.length ? { images: item.images } : {}) };
+      break;
+    case 'message': case 'reply':
       out = { kind: item.kind, ...base, text: text(item.text) };
       break;
     case 'tool': {

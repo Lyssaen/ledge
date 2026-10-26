@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseClientMessage, parseServerMessage, ServerMessageSchema, SessionSchema, SessionEventSchema, PROTOCOL_PORT, NAMES, pickName, ThreadItemSchema, offers, NOTE_NOT_TYPED, isArchived, ChatTurnSchema } from '../src/index.js';
+import { parseClientMessage, parseServerMessage, ServerMessageSchema, SessionSchema, SessionEventSchema, PROTOCOL_PORT, NAMES, pickName, ThreadItemSchema, offers, NOTE_NOT_TYPED, isArchived, ChatTurnSchema, RefusalCodeSchema } from '../src/index.js';
 
 const T0 = '2026-10-09T18:02:00.000Z';
 
@@ -103,10 +103,36 @@ describe('protocol', () => {
     expect(ServerMessageSchema.parse({ type: 'session.updated', session }).type).toBe('session.updated');
   });
 
+  it('carries images and attachment ids on replies and questions', () => {
+    const id = 'b'.repeat(64);
+    expect(parseClientMessage({ type: 'session.reply', id: 's', text: '', attachments: [id] })).toEqual({ type: 'session.reply', id: 's', text: '', attachments: [id] });
+    expect(() => parseClientMessage({ type: 'session.reply', id: 's', text: 'x', attachments: Array(6).fill(id) })).toThrow();
+    expect(() => parseClientMessage({ type: 'session.reply', id: 's', text: 'x', attachments: ['nope'] })).toThrow();
+    const image = { mime: 'image/png', data: 'iVBORw0KGgo=' };
+    expect(parseClientMessage({ type: 'chat.ask', qid: 'q1', text: 'look', images: [image] })).toEqual({ type: 'chat.ask', qid: 'q1', text: 'look', images: [image] });
+    expect(() => parseClientMessage({ type: 'chat.ask', qid: 'q1', text: 'look', images: Array(6).fill(image) })).toThrow();
+    expect(parseServerMessage({ type: 'session.queue.restored', id: 's', texts: ['a'], entries: [{ text: 'a', attachments: [id] }, { text: 'b' }], imagesDropped: true }).type).toBe('session.queue.restored');
+    expect(parseServerMessage({ type: 'session.queue.restored', id: 's', texts: ['a'] }).type).toBe('session.queue.restored');
+    expect(SessionEventSchema.parse({ name: 'UserPromptSubmit', at: T0, source: 'daemon', attachments: [id] }).attachments).toEqual([id]);
+    expect(() => SessionEventSchema.parse({ name: 'UserPromptSubmit', at: T0, source: 'daemon', attachments: Array(6).fill(id) })).toThrow();
+  });
+
+  it('carries image refs on a prompt and a chat turn', () => {
+    const ref = { id: 'c'.repeat(64), mime: 'image/jpeg', width: 10, height: 10, bytes: 99, preview: true };
+    expect(ThreadItemSchema.parse({ kind: 'prompt', id: 'p', at: T0, turn: 1, text: 'hi', images: [ref] })).toMatchObject({ images: [ref] });
+    expect(ChatTurnSchema.parse({ qid: 'q', question: 'q', askedAt: T0, steps: [], attachments: [ref] }).attachments).toEqual([ref]);
+  });
+
+  it('knows the attachment refusals', () => {
+    expect(RefusalCodeSchema.parse('attachment_missing')).toBe('attachment_missing');
+    expect(RefusalCodeSchema.parse('attachments_not_accepted')).toBe('attachments_not_accepted');
+  });
+
   it('carries the chat messages', () => {
     expect(parseClientMessage({ type: 'chat.ask', qid: 'q1', text: 'Où en sont les autres ?' })).toEqual({ type: 'chat.ask', qid: 'q1', text: 'Où en sont les autres ?' });
     expect(parseClientMessage({ type: 'chat.ask', qid: 'q1', text: 'x', tool: 'codex' })).toEqual({ type: 'chat.ask', qid: 'q1', text: 'x', tool: 'codex' });
-    expect(() => parseClientMessage({ type: 'chat.ask', qid: 'q1', text: '' })).toThrow();
+    // Empty text is the daemon's to refuse (an image may carry the question), not the schema's.
+    expect(parseClientMessage({ type: 'chat.ask', qid: 'q1', text: '' }).type).toBe('chat.ask');
     expect(() => parseClientMessage({ type: 'chat.ask', qid: 'q1', text: 'x', tool: 'gemini' })).toThrow();
     expect(parseClientMessage({ type: 'chat.reset' }).type).toBe('chat.reset');
     expect(parseServerMessage({ type: 'chat.step', qid: 'q1', step: { kind: 'pane', id: 'a', name: 'Nova' } }).type).toBe('chat.step');

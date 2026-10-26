@@ -3,8 +3,8 @@
 // the devices that follow it. Logs carry a type, a code or an error's name, never a message's content.
 import { hostname } from 'node:os';
 import {
-  OperationIdSchema, PHONE_PROTOCOL, actionById, TOOL_TEXT_MAX, proposalRows, PhoneClientMessageSchema, pushEndpointAllowed, RefusalCodeSchema, UNTYPABLE, backendOf, isArchived, pendingKey,
-  LEDGE_GIVER, type ChatErrorCode, type ChatTurn, type CloseHow, type ClientMessage, type PhoneTask, type Task, type Team, type OperationReason, type OperationStatus, type PhoneClientMessage, type PhoneServerMessage, type ServerMessage, type Session, type ThreadItem
+  ATTACHMENT_MAX, OperationIdSchema, PHONE_PROTOCOL, actionById, TOOL_TEXT_MAX, proposalRows, PhoneClientMessageSchema, pushEndpointAllowed, RefusalCodeSchema, UNTYPABLE, backendOf, isArchived, pendingKey,
+  LEDGE_GIVER, type AttachmentRef, type ChatErrorCode, type ChatTurn, type CloseHow, type ClientMessage, type PhoneTask, type Task, type Team, type OperationReason, type OperationStatus, type PhoneClientMessage, type PhoneServerMessage, type ServerMessage, type Session, type ThreadItem
 } from '@ledge/protocol';
 import type { MobileService } from './service.js';
 import type { ChatThreads, ChatThreadId } from '../chat/threads.js';
@@ -12,6 +12,7 @@ import { phoneCut, phoneEmitter, toPhoneHistory } from './chat.js';
 import type { ChatMessage } from '../chat/service.js';
 import { CloseRefused } from '../chat/close.js';
 import { ActRefused } from '../chat/act.js';
+import { AttachmentError, type AttachmentStore } from '../daemon/attachments.js';
 import { createOutbox } from './outbox.js';
 import { fingerprint, OperationRegistry, type PhoneOperation } from './operations.js';
 import { capabilities, clip, phoneTasks, toPhoneFullRequest, toPhoneItem, toPhoneSession, toPhoneTask, toPhoneTeam, toPhoneThread } from './project.js';
@@ -63,6 +64,8 @@ export function createPhoneGateway(deps: {
   thread: (id: string) => ThreadItem[] | undefined;
   preview: (id: string) => string[] | undefined;
   dispatch: (msg: ClientMessage, reply: (m: ServerMessage) => void) => Promise<void>;
+  /** The images a device sends or asks for, by id. */
+  attachments: Pick<AttachmentStore, 'put' | 'read' | 'ref'>;
   version: string;
   /** Fresh for each daemon start: the phone tells a restarted PC (empty registry) from the same one. */
   boot: string;
@@ -245,6 +248,8 @@ export function createPhoneGateway(deps: {
         // The note is typed into the terminal like a reply.
         return msg.note !== undefined && UNTYPABLE.test(msg.note) ? { status: 'rejected', reason: 'untypable' } : undefined;
       case 'session.reply': {
+        // Images alone are a reply; nothing at all is not.
+        if (msg.text === '' && !msg.attachments?.length) return { status: 'rejected', reason: 'invalid' };
         // The reply is meant for the request the phone showed (or for none): a newer one would read it as its answer.
         if (msg.expect ? !s.pending || pendingKey(s.pending) !== msg.expect.key : !!s.pending) return { status: 'rejected', reason: 'stale' };
         const options = s.pending?.kind === 'question' ? s.pending.options : undefined;
@@ -268,7 +273,7 @@ export function createPhoneGateway(deps: {
     switch (msg.type) {
       case 'session.decide':
         return { type: 'session.decide', id: msg.id, decision: msg.decision, ...(msg.note !== undefined ? { note: msg.note } : {}), expect: { kind: msg.expect.kind, text: msg.expect.text, key: msg.expect.key } };
-      case 'session.reply': return { type: 'session.reply', id: msg.id, text: msg.text };
+      case 'session.reply': return { type: 'session.reply', id: msg.id, text: msg.text, ...(msg.attachments?.length ? { attachments: msg.attachments } : {}) };
       case 'session.answer': return { type: 'session.answer', id: msg.id, requestId: msg.requestId, answers: msg.answers, ...(msg.cancel ? { cancel: true } : {}) };
       case 'session.interrupt': return { type: 'session.interrupt', id: msg.id };
     }
@@ -514,7 +519,15 @@ export function createPhoneGateway(deps: {
         case 'chat.ask': {
           const thread = chats.device(deviceId);
           const emit = emitterOf(deviceId);
-          return await thread.ask(msg.qid, msg.text, emit, await chats.deviceTool());
+          // The images were put first; an id the store does not know fails the question rather than sending it without.
+          const refs: AttachmentRef[] = [];
+          for (const id of msg.attachments ?? []) {
+            const ref = deps.attachments.ref(id);
+            if (!ref) return push(deviceId, { type: 'chat.error', qid: msg.qid, code: 'failed' });
+            refs.push(ref);
+          }
+          if (msg.text === '' && refs.length === 0) return push(deviceId, { type: 'chat.error', qid: msg.qid, code: 'failed' });
+          return await thread.ask(msg.qid, msg.text, emit, await chats.deviceTool(), refs);
         }
         case 'chat.cancel':
           // Only the device's own turn: another thread's qid is nothing here.
@@ -530,8 +543,35 @@ export function createPhoneGateway(deps: {
     }
   };
 
+  /** A phone's image upload or download; the answer is the request's, matched by `requestId`. */
+  const attachment = async (deviceId: string, msg: Extract<PhoneClientMessage, { type: 'attachment.put' | 'attachment.get' }>) => {
+    if (!approved(deviceId)) return;
+    const fail = (reason: AttachmentError['reason']) => push(deviceId, { type: 'attachment.error', requestId: msg.requestId, reason });
+    try {
+      if (msg.type === 'attachment.get') {
+        const found = await deps.attachments.read(msg.attachment, msg.preview === true);
+        if (!found) return fail('not_found');
+        return push(deviceId, { type: 'attachment.data', requestId: msg.requestId, attachment: msg.attachment, mime: found.mime, data: found.data.toString('base64') });
+      }
+      const decode = (data: string): Buffer => {
+        if (!/^[A-Za-z0-9+/]*={0,2}$/.test(data) || data.length % 4 === 1) throw new AttachmentError('unreadable');
+        return Buffer.from(data, 'base64');
+      };
+      const { image } = msg;
+      const ref = await deps.attachments.put(decode(image.data), image.preview ? decode(image.preview.data) : undefined, ATTACHMENT_MAX);
+      push(deviceId, { type: 'attachment.stored', requestId: msg.requestId, ref });
+    } catch (e) {
+      if (e instanceof AttachmentError) return fail(e.reason);
+      log(`phone ${msg.type} failed (${e instanceof Error ? e.name : 'error'})`);
+      fail('unreadable');
+    }
+  };
+
   const read = (deviceId: string, msg: Exclude<PhoneClientMessage, PhoneOperation>) => {
     switch (msg.type) {
+      case 'attachment.put': case 'attachment.get':
+        void attachment(deviceId, msg);
+        return;
       case 'chat.ask': case 'chat.cancel': case 'chat.reset': case 'chat.history':
         if (!deps.chats) return push(deviceId, { type: 'error', code: 'invalid', request: msg.type });
         void chatRead(deviceId, msg);

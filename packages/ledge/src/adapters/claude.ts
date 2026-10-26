@@ -30,9 +30,26 @@ import { NO_ALWAYS, NO_NOTE, Refusal, assertDialogIs, bottomLines, flatten, show
 //   Ready to submit your answers?
 //   ❯ 1. Submit answers
 //     2. Cancel
+//
+// A question whose options carry a preview (2.1.310) draws it in a box right of the options, notes under it, and
+// « Chat about this » without a number under a full-width rule. Its digits only move the cursor:
+//
+//    ☐ Verrou
+//   Quel verrou utiliser ?
+//   ❯ 1. Mutex                        ┌──────────────────────────┐
+//     2. RWLock                       │ let guard = mutex.lock(); │
+//     3. Aucun                        └──────────────────────────┘
+//                                     Notes: press n to add notes
+//   ────────────────────────
+//     Chat about this
+//   Enter to select · ↑/↓ to navigate · n to add notes · Esc to cancel
 const OPTION = /^\s*(?:❯\s*)?(\d+)\.\s+(\S.*?)\s*$/;
 const FOOTER = /^\s*(?:(?:Enter to select\b.*)?Esc to cancel\b|ctrl\+g to edit\b)/;
 const PLAN_FOOTER = /^\s*ctrl\+g to edit\b/;
+const PREVIEW_FOOTER = /\bn to add notes\b/;
+const CHAT_LINE = /^\s*(?:❯\s*)?Chat about this$/;
+/** Where the preview box starts on a line: two spaces at least, then its left edge. */
+const PREVIEW_EDGE = /\s{2,}[┌│└]/;
 const GUTTER = /^│\s*/;
 const REVIEW_QUESTION = /^\s*Ready to submit your answers\?$/;
 const RULE = /^─{10,}$/;
@@ -82,20 +99,39 @@ function dialogEnd(lines: string[]): number {
   return footer >= 0 ? footer : reviewEnd(lines);
 }
 
-/** Options 1..n between `from` (option 1) and the footer; any other non-blank line is a description (joined) or a rule. */
-function optionsBetween(lines: string[], from: number, footer: number): { options: string[]; details: string[] } {
+/** The column the preview box starts at, left of it the options; or -1. */
+function previewColumn(lines: string[], from: number, footer: number): number {
+  let col = -1;
+  for (let i = from; i < footer; i++) {
+    const m = PREVIEW_EDGE.exec(lines[i]!);
+    const at = m ? m.index + m[0].length - 1 : -1;
+    if (m && m.index > 0 && (col < 0 || at < col)) col = at;
+  }
+  return col;
+}
+
+/**
+ * Options 1..n between `from` (option 1) and the footer; any other non-blank line is a description (joined) or a rule.
+ * Past a full-width rule only numbered rows count: the preview's « Chat about this » has no number. `cut`: the column the
+ * preview box starts at, nothing right of it is the options'.
+ */
+function optionsBetween(lines: string[], from: number, footer: number, cut = -1): { options: string[]; details: string[] } {
   const options: string[] = [];
   const details: string[] = [];
+  let ruled = false;
   for (let i = from; i < footer; i++) {
-    const m = lines[i]!.match(OPTION);
+    const line = cut < 0 ? lines[i]! : lines[i]!.slice(0, cut).replace(/\s+$/, '');
+    if (RULE.test(line.trim())) { ruled = true; continue; }
+    const m = line.match(OPTION);
     if (m && Number(m[1]) === options.length + 1) { options.push(m[2]!.replace(/\s+✔$/, '')); details.push(''); }
-    else if (options.length && !isBlank(lines[i]!) && !isRule(lines[i]!)) details[options.length - 1] = `${details[options.length - 1]} ${lines[i]!.trim()}`.trim();
+    else if (options.length && !ruled && !isBlank(line) && !isRule(line)) details[options.length - 1] = `${details[options.length - 1]} ${line.trim()}`.trim();
   }
   // A description that only repeats its label says nothing.
   return { options, details: details.map((d, i) => (d === options[i] ? '' : d)) };
 }
 
-type Dialog = { kind: 'permission' | 'question' | 'plan'; title: string[]; question: string; options: string[]; details: string[] };
+/** `preview`: a question with a preview box, whose digits only move the cursor. */
+type Dialog = { kind: 'permission' | 'question' | 'plan'; title: string[]; question: string; options: string[]; details: string[]; preview: boolean };
 
 function parseDialog(pane: string): Dialog | null {
   const lines = pane.split('\n').map(l => l.replace(/\s+$/, ''));
@@ -108,7 +144,8 @@ function parseDialog(pane: string): Dialog | null {
     if (m && m[1] === '1') { first = i; break; }
   }
   if (first < 0) return null;
-  const { options, details } = optionsBetween(lines, first, footer);
+  const preview = PREVIEW_FOOTER.test(lines[footer] ?? '');
+  const { options, details } = optionsBetween(lines, first, footer, preview ? previewColumn(lines, first, footer) : -1);
 
   // The question is the block of text right above option 1 (wrapped lines joined). 2.1.304 draws some behind a `│ `
   // gutter, which is not part of it.
@@ -128,7 +165,8 @@ function parseDialog(pane: string): Dialog | null {
     title: lines.slice(top + 1, q + 1),
     question: questionLines.join(' '),
     options,
-    details
+    details,
+    preview
   };
 }
 
@@ -208,7 +246,9 @@ function promptStillVisible(lastLines: string): boolean {
   const lines = lastLines.split('\n').map(l => l.replace(/\s+$/, ''));
   if (lines.some(l => TRUST_FOOTER.test(l)) && lines.some(l => TRUST_OPTION.test(l))) return true;
   const footer = dialogEnd(lines);
-  return footer > 0 && lines.slice(0, footer).some(l => OPTION.test(l));
+  // Under a preview's options come the box's bottom, the notes, a rule and « Chat about this »: the row stands for them.
+  const above = lines.slice(0, footer);
+  return footer > 0 && (above.some(l => OPTION.test(l)) || (PREVIEW_FOOTER.test(lines[footer]!) && above.some(l => CHAT_LINE.test(l))));
 }
 
 const squash = (t: string) => t.replace(/\s+/g, ' ').trim();
@@ -293,6 +333,19 @@ function atRest(pane: string): boolean {
 // In 2.x a digit selects its option at once: no Enter (an Enter would land on whatever comes next).
 const digit = (n: number): KeyPlan => [{ text: String(n) }];
 
+/** The cursor ❯ is on option `n` (1-based). */
+const focused = (n: number) => { const row = new RegExp(`^\\s*❯\\s*${n}\\.\\s`, 'm'); return (p: string) => row.test(p); };
+
+/**
+ * Option `n` of the dialog on screen. A question with a preview only moves the cursor on a digit: Enter selects, once the
+ * cursor is on the option (Claude Code 2.1.310, seen in tmux).
+ */
+function pick(n: number, d: Dialog | null): KeyPlan {
+  if (!d?.preview) return digit(n);
+  if (n > d.options.length) throw new Refusal(`no option ${n} in this dialog, answer in the terminal`, 'not_offered');
+  return [...digit(n), { until: focused(n) }, { keys: ['Enter'] }];
+}
+
 // Any digit is a selection: hook options omit the dialog's own "Type something." / "Chat about this".
 function optionNumber(text: string, pending: Pending | undefined): number | null {
   return pending?.kind === 'question' && /^[1-9]$/.test(text) ? Number(text) : null;
@@ -303,6 +356,9 @@ function optionNumber(text: string, pending: Pending | undefined): number | null
 //
 //   ❯ 3. Type something.        →        ❯ 3. Vert pomme
 const FREE_ROW = /^Type something\.?$/;
+// A question with a preview has no such row: « Chat about this », under the last option, declines it and gives the input
+// box back while Claude answers. Typed then, the text is queued and goes after that turn (2.1.310, seen in tmux).
+const CHAT_FOCUSED = /^\s*❯\s*Chat about this\s*$/m;
 const NO_FREE_ROW = 'no free-text row in this dialog, answer in the terminal';
 
 // Ctrl+U empties the field the cursor is in before a text goes in: a row's text, or the input's draft typed in the
@@ -336,12 +392,23 @@ const submit = (text: string, denied?: true): KeyPlan => [...send(text), { until
 
 /** Option `n` (1-based) is a row that takes text: its digit selects it, the row cleared and the text typed once it is, then Enter. */
 function rowPlan(n: number, text: string): KeyPlan {
-  const row = new RegExp(`^\\s*❯\\s*${n}\\.\\s`, 'm');
-  return [...digit(n), { until: p => row.test(p) }, ...CLEAR, ...send(text)];
+  return [...digit(n), { until: focused(n) }, ...CLEAR, ...send(text)];
+}
+
+/** No dialog left, the input box back. */
+function inputBack(pane: string): boolean {
+  const lines = pane.split('\n').map(l => l.replace(/\s+$/, ''));
+  return dialogEnd(lines) < 0 && !!inputBox(lines);
+}
+
+/** Free text on a question with a preview: the cursor to « Chat about this » (Down from the last option), Enter, the text. */
+function chatPlan(last: number, text: string): KeyPlan {
+  return [...digit(last), { until: focused(last) }, { keys: ['Down'] }, { until: p => CHAT_FOCUSED.test(p) }, { keys: ['Enter'] }, { until: inputBack }, ...CLEAR, ...submit(text)];
 }
 
 function freeTextPlan(text: string, pane: string | undefined): KeyPlan {
   const d = pane ? parseDialog(pane) : null;
+  if (d?.kind === 'question' && d.preview && d.options.length) return chatPlan(d.options.length, text);
   const i = d?.kind === 'question' ? d.options.findIndex(o => FREE_ROW.test(o)) : -1;
   if (i < 0) throw new Refusal(NO_FREE_ROW, 'free_text');
   return rowPlan(i + 1, text);
@@ -411,13 +478,13 @@ export const claudeAdapter: Adapter = {
       const i = d.options.findIndex(o => PLAN_ACCEPT.test(o));
       return digit(i < 0 ? 1 : i + 1);
     }
-    return digit(1);
+    return pick(1, d);
   },
   freeText: true,
   replyPlan(text, pending, pane) {
     const flat = flatten(text);
     const n = optionNumber(flat, pending);
-    if (n !== null) return digit(n);
+    if (n !== null) return pick(n, pane ? parseDialog(pane) : null);
     if (pending?.kind === 'question') return freeTextPlan(flat, pane);
     return submit(flat);
   },
