@@ -38,6 +38,9 @@ import { createModels, type Models } from './models.js';
 import { createRelay, free } from './relay.js';
 import { launchFromChat, LaunchRefused } from '../chat/launch.js';
 import { cardOf, closeFromChat, CloseRefused } from '../chat/close.js';
+import { actFromChat, ActRefused } from '../chat/act.js';
+import type { ChatMessage } from '../chat/service.js';
+import { actionMessage, resolveAction } from './actions.js';
 import { createMailbox, type MailJournal } from './mailbox.js';
 import { createTasks, type TasksJournal } from './tasks.js';
 import { createTeamsLive, type TeamsJournal } from './teamsLive.js';
@@ -263,7 +266,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const closing = new Set<string>();
   // An injected chat (tests) is the only thread there is; otherwise the relay and the close cards work across the PC's and every device's.
   const cardThreads: Pick<typeof threads, 'all' | 'owner' | 'emitterOf' | 'queuedRelays'> = opts.chat ? {
-    all: () => [['desktop', chat]], owner: qid => (chat.relay(qid) || chat.close(qid, 0) ? 'desktop' : undefined), emitterOf: () => broadcast,
+    all: () => [['desktop', chat]], owner: qid => (chat.relay(qid) || chat.close(qid, 0) || chat.action(qid, 0) ? 'desktop' : undefined), emitterOf: () => broadcast,
     queuedRelays: () => chat.queuedRelays(broadcast).map(q => ({ thread: 'desktop' as const, ...q }))
   } : threads;
   /** `replyTo` for the mailbox and the relay, which keep the refusal's text. */
@@ -726,6 +729,26 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     p.then(done, done);
     return p;
   }
+  /** The generic card rows being applied: a second click, or another overlay, is passed over until the first one has answered. */
+  const chatActs = new Set<string>();
+  /**
+   * A generic card's rows (spec 2026-10-26 action registry §2.1), applied through the daemon's own handlers so their rules stay in
+   * one place: a row fails on the handler's `error`, or on the reason its `team.saved` or `task.result` carries.
+   */
+  function actOnCard(card: { chat: Pick<Chat, 'action' | 'markAction'>; emit: (m: ChatMessage) => void }, qid: string, rid: string, rows?: number[], confirmed?: true) {
+    return actFromChat({
+      chat: card.chat, emit: card.emit, inFlight: chatActs, now,
+      resolve: row => resolveAction(row.action, row.args, { sessions: store.all(), teams: teams.all(), tasks: tasks.all(), findRole }),
+      apply: async row => {
+        let failure: string | null = null;
+        await handle(actionMessage(row, rid), m => {
+          if (m.type === 'error') failure ??= m.message;
+          else if ((m.type === 'team.saved' || m.type === 'task.result') && m.reason) failure ??= m.reason;
+        });
+        if (failure !== null) throw new Error(failure);
+      }
+    }, qid, rows, confirmed);
+  }
   type LaunchReq = { tool: Tool; cwd: string; name?: string; prompt?: string; continue?: boolean; dirs?: string[]; model?: string; effort?: string; approval?: OmpApproval; role?: string; team?: string };
   /**
    * Spawns the agent as `ledge <tool>` would and records it; throws the reason (bad folder, tmux, unknown role or team).
@@ -946,7 +969,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
             chat, emit: broadcast, inFlight: chatLaunches,
             launch: async p => {
               try {
-                const session = await launch({ tool: p.tool, cwd: p.cwd, prompt: p.prompt, model: msg.model, effort: msg.effort });
+                const session = await launch({ tool: p.tool, cwd: p.cwd, prompt: p.prompt, model: msg.model ?? p.model, effort: msg.effort ?? p.effort });
                 reply({ type: 'session.launched', id: session.id });
                 return session.id;
               } catch (e) { failure = e; throw e; }
@@ -1200,6 +1223,14 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         } catch (e) { if (e instanceof CloseRefused) return refuse(e.message); throw e; }
         return;
       }
+      // A chat's generic card (spec 2026-10-26 action registry §9.2), on the thread that holds the turn: the rows apply in order and
+      // stop at the first failure; the requester gets chat.acted, the thread's clients the rows' state through chat.history.
+      case 'chat.act': {
+        const card = cardOf(cardThreads, msg.qid);
+        if (!card) return refuse('unknown action');
+        try { return reply({ type: 'chat.acted', rid: msg.rid, qid: msg.qid, ...(await actOnCard(card, msg.qid, msg.rid, msg.rows, msg.confirmed)) }); }
+        catch (e) { if (e instanceof ActRefused) return reply({ type: 'error', message: e.message, request: msg.type, ...(e.code ? { code: e.code } : {}) }); throw e; }
+      }
       // Broadcast: every overlay shows the same progress, and the one that asked may be the one that reconnects.
       // A busy refusal goes to the asker only: it must not fail the flow the other overlays follow.
       case 'update.daemon':
@@ -1252,7 +1283,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       const userHome = resolve(opts.home ?? homedir());
       return launchFromChat({
         chat: c, emit: threads.emitterOf(thread) ?? (() => {}), inFlight: chatLaunches,
-        launch: async p => (await launch({ tool: p.tool, cwd: p.cwd, prompt: p.prompt })).id,
+        launch: async p => (await launch({ tool: p.tool, cwd: p.cwd, prompt: p.prompt, model: p.model, effort: p.effort })).id,
         refuse: p => { const wide = tooWide(resolve(p.cwd), userHome); return wide ? `the folder is ${wide}` : null; }
       }, qid, rows);
     },
@@ -1264,6 +1295,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         chat: card.chat, emit: card.emit, inFlight: chatCloses,
         close: closeForCard
       }, qid, rows);
+    },
+    actChat: (thread, qid, rid, rows, confirmed) => {
+      const card = cardOf(cardThreads, qid);
+      if (!card || card.thread !== thread) return Promise.reject(new ActRefused('unknown action'));
+      return actOnCard(card, qid, rid, rows, confirmed);
     },
     onChatEnd: (deviceId, end) => notifyChatEnd?.(deviceId, end.code),
     version: opts.daemon?.version ?? 'unknown',

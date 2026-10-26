@@ -57,6 +57,11 @@ export function toPhoneTurn(t: ChatTurn): PhoneChatTurn {
       id: c.id, name: c.name, tool: c.tool, ...(c.how ? { how: c.how } : {}), ...(c.closedAt ? { closedAt: c.closedAt } : {}), ...(c.error !== undefined ? { failed: true as const } : {})
     }));
   }
+  // The generic card (spec 2026-10-26 action registry §5): its summaries and the request quoted, never its args nor an error's text.
+  if (t.actions && !t.actions.some(a => (a.detail?.length ?? 0) > TOOL_TEXT_MAX)) {
+    out.actions = t.actions.map(a => ({ action: a.action, summary: a.summary, ...(a.detail !== undefined ? { detail: a.detail } : {}), risk: a.risk,
+      ...(a.session ? { session: a.session } : {}), ...(a.team ? { team: a.team } : {}), ...(a.state ? { state: a.state } : {}), ...(a.doneAt ? { doneAt: a.doneAt } : {}) }));
+  }
   return out;
 }
 

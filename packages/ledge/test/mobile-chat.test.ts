@@ -24,6 +24,20 @@ describe('toPhoneTurn', () => {
     expect(PhoneChatTurnSchema.safeParse(p).success).toBe(true);
     for (const r of p.closes!) expect(r).not.toHaveProperty('error');
   });
+  it('projects the generic card without its args or its error text; a detail too long leaves the card out', () => {
+    const DONE = '2026-10-20T08:01:00.000Z';
+    const p = toPhoneTurn(turn({ answer: 'ok', actions: [
+      { action: 'session.archive', args: { session: 'a' }, summary: 'Archiver **Otto**', risk: 'reversible', session: 'a', state: 'done', doneAt: DONE },
+      { action: 'session.decide', args: { session: 'b', decision: 'accept', expect: { kind: 'permission', text: 'Bash: rm', key: 'k' } }, summary: 'Accepter', detail: 'Bash: rm', risk: 'destructive', session: 'b', state: 'failed', error: 'stale' }
+    ] }));
+    expect(p.actions).toEqual([
+      { action: 'session.archive', summary: 'Archiver **Otto**', risk: 'reversible', session: 'a', state: 'done', doneAt: DONE },
+      { action: 'session.decide', summary: 'Accepter', detail: 'Bash: rm', risk: 'destructive', session: 'b', state: 'failed' }
+    ]);
+    expect(PhoneChatTurnSchema.safeParse(p).success).toBe(true);
+    const long = toPhoneTurn(turn({ actions: [{ action: 'session.decide', args: {}, summary: 'Accepter', detail: 'x'.repeat(3000), risk: 'destructive' }] }));
+    expect(long).not.toHaveProperty('actions');
+  });
   it('carries no path, folder, machine or project proposal', () => {
     const t = turn({
       steps: [{ kind: 'git', path: '/home/gch/secret', id: 'a', name: 'n' }, { kind: 'repo', path: '/etc/x' }],

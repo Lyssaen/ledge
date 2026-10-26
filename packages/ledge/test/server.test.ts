@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { connect as tcp } from 'node:net';
-import type { ChatClose, ChatProposal, ChatRelay, Projects, ServerMessage, Session } from '@ledge/protocol';
+import type { ChatAction, ChatClose, ChatProposal, ChatRelay, Projects, ServerMessage, Session } from '@ledge/protocol';
 import { DEFAULT_ISLAND_PREFS, pendingKey } from '@ledge/protocol';
 import type { Chat } from '../src/chat/service.js';
 import { Store } from '../src/daemon/store.js';
@@ -2678,6 +2678,55 @@ describe('close a session', () => {
       expect(await c.next('session.closed')).toEqual({ type: 'session.closed', qid: 'q1', row: 0, id: 'a', how: 'exit' });
       await expect(c.next('error', 100)).rejects.toThrow(/timeout/);
       c.close();
+    });
+
+    describe('a generic card (chat.act, spec 2026-10-26 action registry §9.2)', () => {
+      /** A chat whose `q1` card holds these generic rows, marked as the real one marks them. */
+      function actChat(initial: ChatAction[]) {
+        const rows = [...initial]; const marks: string[] = [];
+        const chat: Chat = {
+          ...closeChat([]).chat,
+          action: (qid, row) => (qid === 'q1' ? rows[row] : undefined),
+          markAction(_qid, row, patch, emit) { marks.push(`${row}:${patch.state}`); rows[row] = { ...rows[row]!, ...patch }; emit({ type: 'chat.history', turns: [] }); }
+        };
+        return { chat, rows, marks };
+      }
+      const archiveOf = (id: string): ChatAction => ({ action: 'session.archive', args: { session: id }, summary: `Archiver ${id}`, risk: 'reversible', session: id });
+
+      it('applies the rows through the daemon\'s handlers in order and stops at the first failure', async () => {
+        const { chat, rows, marks } = actChat([archiveOf('a'), archiveOf('zz'), archiveOf('b')]);
+        await closing({}, { chat });
+        store.upsert(mk('a', { state: 'idle' })); store.upsert(mk('b', { state: 'idle' }));
+        const c = await connect({ port: srv.port }); await c.next('snapshot');
+        c.send({ type: 'chat.act', rid: 'r1', qid: 'q1' });
+        expect(await c.next('chat.acted', 3000)).toEqual({ type: 'chat.acted', rid: 'r1', qid: 'q1', done: [0], failed: [{ row: 1, message: 'unknown session zz' }] });
+        expect(marks).toEqual(['0:running', '0:done', '1:running', '1:failed']);
+        expect(store.get('a')?.archivedAt).toBeDefined(); expect(store.get('b')?.archivedAt).toBeUndefined();
+        expect(rows[2]).not.toHaveProperty('state');
+        c.close();
+      });
+      it('a row whose handler answers nothing is done', async () => {
+        const { chat, rows } = actChat([{ action: 'session.restore', args: { session: 'a' }, summary: 'x', risk: 'reversible' }]);
+        await closing({}, { chat });
+        store.upsert(mk('a', { state: 'idle', archivedAt: '2026-10-26T08:00:00.000Z' }));
+        const c = await connect({ port: srv.port }); await c.next('snapshot');
+        c.send({ type: 'chat.act', rid: 'r1', qid: 'q1' });
+        expect(await c.next('chat.acted', 3000)).toMatchObject({ done: [0], failed: [] });
+        expect(store.get('a')?.archivedAt).toBeUndefined();
+        expect(rows[0]).toMatchObject({ state: 'done' });
+        c.close();
+      });
+      it('refuses an unknown card, and a destructive row without the confirmation', async () => {
+        const { chat, marks } = actChat([{ action: 'team.dissolve', args: { team: 't1' }, summary: 'x', risk: 'destructive', team: 't1' }]);
+        await closing({}, { chat });
+        const c = await connect({ port: srv.port }); await c.next('snapshot');
+        c.send({ type: 'chat.act', rid: 'r1', qid: 'q9' });
+        expect(await c.next('error')).toEqual({ type: 'error', message: 'unknown action', request: 'chat.act' });
+        c.send({ type: 'chat.act', rid: 'r2', qid: 'q1' });
+        expect(await c.next('error')).toMatchObject({ code: 'confirm_required', request: 'chat.act' });
+        expect(marks).toEqual([]);
+        c.close();
+      });
     });
   });
 
