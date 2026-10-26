@@ -571,3 +571,17 @@ describe('the outgoing card of a task (issue #92)', () => {
     expect(h.items('fce8')[0]).toMatchObject({ summary: 'Relire tout' });
   });
 });
+
+describe('History.attachmentIds', () => {
+  it('finds the images a previous run journaled on a prompt', async () => {
+    const id = 'a'.repeat(64); const other = 'b'.repeat(64);
+    const ref = (x: string) => ({ id: x, mime: 'image/png', width: 10, height: 10, bytes: 5, preview: false });
+    mkdirSync(paths().history, { recursive: true });
+    writeFileSync(join(paths().history, 's.jsonl'), [
+      { kind: 'prompt', id: 'prompt-1', at: T0, turn: 1, text: 'Regarde', images: [ref(id)] }, { kind: 'prompt', id: 'prompt-2', at: T0, turn: 2, text: 'Sans image' }, 'not json'
+    ].map(l => (typeof l === 'string' ? l : JSON.stringify(l))).join('\n') + '\n');
+    writeFileSync(join(paths().history, 't.jsonl'), JSON.stringify({ kind: 'prompt', id: 'prompt-1', at: T0, turn: 1, text: 'Autre', images: [ref(other)] }) + '\n');
+    const h = new History();
+    expect(await h.attachmentIds()).toEqual(new Set([id, other]));
+  });
+});

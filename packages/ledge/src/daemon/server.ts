@@ -5,9 +5,10 @@ import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
 import { contextNear, givenByLedge, LEDGE_GIVER, transmissions, projectOf, type Autonomy, type Role, type Seat, type Team } from '@ledge/protocol';
-import { DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type ChatErrorCode, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, backendOf } from '@ledge/protocol';
+import { ATTACHMENT_LOCAL_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, backendOf } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
+import { AttachmentError, AttachmentStore } from './attachments.js';
 import type { Tmux } from '../tmux.js';
 import { adapterFor, type KeyPlan } from '../adapters/index.js';
 import { Refusal, STALE, bottomLines, dialogMismatch } from '../adapters/types.js';
@@ -173,7 +174,7 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; tasks?: TasksJournal; teams?: TeamsJournal; handoverBriefMs?: number }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; tasks?: TasksJournal; teams?: TeamsJournal; handoverBriefMs?: number; attachments?: AttachmentStore }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -243,6 +244,18 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const broadcast = (msg: ServerMessage) => { for (const c of localClients) send(c, msg); gateway?.forward(msg); };
   threads.setEmitter('desktop', broadcast);
   const history = opts.history;
+  const attachments = opts.attachments ?? new AttachmentStore(paths().attachments);
+  await attachments.load().catch(e => log(`attachments not loaded: ${(e as Error).message}`));
+  // Unsent images go after a day; the ones a session history or a live chat turn refers to stay.
+  const sweepAttachments = async () => {
+    try {
+      const referenced = new Set([...(await history?.attachmentIds() ?? []), ...threads.attachmentIds(), ...chat.attachmentIds()]);
+      const removed = await attachments.sweep(referenced);
+      if (removed.length > 0) log(`attachments swept: ${removed.length}`);
+    } catch (e) { log(`attachments sweep failed: ${(e as Error).message}`); }
+  };
+  void sweepAttachments();
+  const sweepTimer = setInterval(() => { void sweepAttachments(); }, 24 * 3_600_000); sweepTimer.unref();
   const unsubscribeHistory = history ? [
     history.onItem((id, item) => {
       broadcast({ type: 'session.thread.item', id, item });
@@ -879,6 +892,15 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
    * Applies one message from a local front or the phone gateway, answering the sender through `reply` only. Settles once
    * the action is applied or refused: a decision, a reply or an interrupt has been typed (or refused) by then.
    */
+  /** Stores an upload (a local client may send up to ATTACHMENT_LOCAL_MAX); invalid base64 is `unreadable`. */
+  async function storeUpload(u: ImageUpload): Promise<AttachmentRef> {
+    const decode = (data: string) => {
+      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(data) || data.length % 4 === 1) throw new AttachmentError('unreadable');
+      return Buffer.from(data, 'base64');
+    };
+    return attachments.put(decode(u.data), u.preview ? decode(u.preview.data) : undefined, ATTACHMENT_LOCAL_MAX);
+  }
+
   async function handle(msg: ClientMessage, reply: Reply): Promise<void> {
     /** A refusal names the request it answers, so a front can tell a refused reply from a refused decision; a coded one says why. */
     const refuse = (r: Refusal | string, id?: string) => reply({ type: 'error', ...(id !== undefined ? { id } : {}), message: typeof r === 'string' ? r : r.message, request: msg.type, ...(typeof r === 'string' ? {} : { code: r.code }) });
@@ -1209,7 +1231,22 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'update.daemon':
         if (!opts.updater) return reply({ type: 'update.failed', version: msg.version, reason: 'no-systemd' });
         return opts.updater.update(msg.version, broadcast, reply);
-      case 'chat.ask': return chat.ask(msg.qid, msg.text, broadcast, msg.tool);
+      case 'chat.ask': {
+        const uploads = msg.images ?? [];
+        if (msg.text.trim() === '' && uploads.length === 0) return refuse(new Refusal('empty question', 'invalid'));
+        const refs: AttachmentRef[] = [];
+        try { for (const u of uploads) refs.push(await storeUpload(u)); }
+        catch (e) { if (e instanceof AttachmentError) return refuse(new Refusal(`image refused: ${e.reason}`, 'invalid')); throw e; }
+        return chat.ask(msg.qid, msg.text, broadcast, msg.tool, refs);
+      }
+      case 'attachment.put':
+        try { return reply({ type: 'attachment.stored', requestId: msg.requestId, ref: await storeUpload(msg.image) }); }
+        catch (e) { if (e instanceof AttachmentError) return reply({ type: 'attachment.error', requestId: msg.requestId, reason: e.reason }); throw e; }
+      case 'attachment.get': {
+        const found = await attachments.read(msg.attachment, msg.preview === true);
+        if (!found) return reply({ type: 'attachment.error', requestId: msg.requestId, reason: 'not_found' });
+        return reply({ type: 'attachment.data', requestId: msg.requestId, attachment: msg.attachment, mime: found.mime, data: found.data.toString('base64') });
+      }
       case 'chat.route':
         try { reply({ type: 'chat.routed', qid: msg.qid, result: await router.route(msg) }); }
         catch (e) { reply({ type: 'chat.error', qid: msg.qid, message: (e as Error).message }); }
@@ -1335,6 +1372,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     omp,
     closeSession: id => { const s = store.get(id); return s ? closeSession(s) : Promise.reject(unknownSession()); },
     labelExited,
-    close: () => new Promise(res => { unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); tasks.close(); handovers.close(); unsubscribeTeams(); teams.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
+    close: () => new Promise(res => { clearInterval(sweepTimer); unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); tasks.close(); handovers.close(); unsubscribeTeams(); teams.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
   };
 }

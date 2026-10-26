@@ -90,6 +90,25 @@ export class History {
     }
   }
 
+  /** The ids of the images the journaled prompts refer to, read from every `<dir>/*.jsonl` once the pending writes landed. */
+  async attachmentIds(): Promise<Set<string>> {
+    await this.writes;
+    const ids = new Set<string>();
+    let names: string[];
+    try { names = await readdir(this.dir); } catch { return ids; }
+    for (const name of names) {
+      if (!name.endsWith('.jsonl')) continue;
+      let text: string;
+      try { text = await readFile(join(this.dir, name), 'utf8'); }
+      catch (e) { log(`history not read for ${name}: ${(e as Error).message}`); continue; }
+      for (const line of text.split('\n')) {
+        if (!line.includes('"images"')) continue;
+        try { for (const img of (JSON.parse(line) as { images?: Array<{ id?: unknown }> }).images ?? []) if (typeof img?.id === 'string') ids.add(img.id); } catch { /* a partial or corrupt line */ }
+      }
+    }
+    return ids;
+  }
+
   /** The ids of the threads held, loaded or recorded. */
   ids(): string[] { return [...this.threads.keys()]; }
 

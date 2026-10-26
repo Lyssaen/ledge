@@ -1505,7 +1505,7 @@ describe('server', () => {
     function stubChat(initial: ChatProposal | undefined) {
       let proposal = initial; const marks: string[][] = [];
       const chat: Chat = {
-        async ask() {}, cancel() {}, async reset() {}, history: () => [],
+        async ask() {}, attachmentIds: () => [], cancel() {}, async reset() {}, history: () => [],
         proposal: qid => (qid === 'q1' ? proposal : undefined),
         markLaunched(qid, id, emit) { marks.push(['launched', qid, id]); proposal = { ...proposal!, launchedId: id }; emit({ type: 'chat.history', turns: [] }); },
         markFailed(qid, message, emit) { marks.push(['failed', qid, message]); proposal = { ...proposal!, error: message }; emit({ type: 'chat.history', turns: [] }); },
@@ -1578,7 +1578,7 @@ describe('server', () => {
       function rowsChat(initial: ChatProposal[]) {
         const rows = [...initial]; const marks: Array<[string, number, string]> = [];
         const chat: Chat = {
-          async ask() {}, cancel() {}, async reset() {}, history: () => [],
+          async ask() {}, attachmentIds: () => [], cancel() {}, async reset() {}, history: () => [],
           proposal: (qid, row = 0) => (qid === 'q1' ? rows[row] : undefined),
           markLaunched(_qid, id, emit, row = 0) { marks.push(['launched', row, id]); rows[row] = { ...rows[row]!, launchedId: id }; emit({ type: 'chat.history', turns: [] }); },
           markFailed(_qid, message, emit, row = 0) { marks.push(['failed', row, message]); rows[row] = { ...rows[row]!, error: message }; emit({ type: 'chat.history', turns: [] }); },
@@ -1632,7 +1632,7 @@ describe('server', () => {
     function relayChat(relay: ChatRelay) {
       let r: ChatRelay | undefined = relay;
       const chat: Chat = {
-        async ask() {}, cancel() {}, async reset() {}, history: () => [], proposal: () => undefined, markLaunched() {}, markFailed() {},
+        async ask() {}, attachmentIds: () => [], cancel() {}, async reset() {}, history: () => [], proposal: () => undefined, markLaunched() {}, markFailed() {},
         relay: qid => (qid === 'q1' ? r : undefined),
         markRelay(_qid, patch, emit) { const { id, name, tool, text } = r!; r = { id, name, tool, text, ...patch }; emit({ type: 'chat.history', turns: [] }); },
         queuedRelays: () => (r?.status === 'queued' ? [{ qid: 'q1', relay: r, askedAt: '2026-10-12T08:00:00.000Z' }] : []),
@@ -2630,7 +2630,7 @@ describe('close a session', () => {
     function closeChat(initial: ChatClose[]) {
       const rows = [...initial]; const marks: Array<[string, number, string]> = [];
       const chat: Chat = {
-        async ask() {}, cancel() {}, async reset() {}, history: () => [], proposal: () => undefined, markLaunched() {}, markFailed() {},
+        async ask() {}, attachmentIds: () => [], cancel() {}, async reset() {}, history: () => [], proposal: () => undefined, markLaunched() {}, markFailed() {},
         relay: () => undefined, markRelay() {}, queuedRelays: () => [],
         close: (qid, row) => (qid === 'q1' ? rows[row] : undefined),
         markClosed(_qid, row, how, emit) { marks.push(['closed', row, how]); rows[row] = { ...rows[row]!, closedAt: new Date().toISOString(), how }; emit({ type: 'chat.history', turns: [] }); },
@@ -2717,7 +2717,7 @@ describe('close a session', () => {
   it('delivers nothing to a closing session', async () => {
     let r: ChatRelay | undefined = { id: 'a', name: 'Otto', tool: 'claude', text: 'Lance les tests', status: 'queued' };
     const chat: Chat = {
-      async ask() {}, cancel() {}, async reset() {}, history: () => [], proposal: () => undefined, markLaunched() {}, markFailed() {},
+      async ask() {}, attachmentIds: () => [], cancel() {}, async reset() {}, history: () => [], proposal: () => undefined, markLaunched() {}, markFailed() {},
       relay: qid => (qid === 'q1' ? r : undefined),
       markRelay(_qid, patch, emit) { const { id, name, tool, text } = r!; r = { id, name, tool, text, ...patch }; emit({ type: 'chat.history', turns: [] }); },
       queuedRelays: () => (r?.status === 'queued' ? [{ qid: 'q1', relay: r, askedAt: '2026-10-12T08:00:00.000Z' }] : []),

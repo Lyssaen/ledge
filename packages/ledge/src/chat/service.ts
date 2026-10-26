@@ -3,7 +3,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { spawn as nodeSpawn } from 'node:child_process';
-import { extractProposal, isArchived, MAX_PROPOSALS, proposalRows, parseProjectBlock, parseCloseBlock, parseProposalBlock, parseRelayBlock, parseTaskBlock, parseTeamBlock, projectOf, type ChatClose, type ChatProjectProposal, type ChatProposal, type ChatRelay, type ChatTaskProposal, type ChatTeamProposal, type CloseHow, type ChatTurn, type Projects, type ServerMessage, type Session, type Task, type Team, type Tool } from '@ledge/protocol';
+import { extractProposal, isArchived, MAX_PROPOSALS, proposalRows, parseProjectBlock, parseCloseBlock, parseProposalBlock, parseRelayBlock, parseTaskBlock, parseTeamBlock, projectOf, type ChatClose, type ChatProjectProposal, type ChatProposal, type ChatRelay, type ChatTaskProposal, type ChatTeamProposal, type CloseHow, type ChatTurn, type AttachmentRef, type Projects, type ServerMessage, type Session, type Task, type Team, type Tool } from '@ledge/protocol';
 import { listDefinitions, resolveSeats } from '../daemon/teams.js';
 import { resolveFolder } from '../daemon/folders.js';
 import type { Store } from '../daemon/store.js';
@@ -19,7 +19,10 @@ import { log } from '../log.js';
 
 export type ChatMessage = Extract<ServerMessage, { type: 'chat.history' | 'chat.step' | 'chat.delta' | 'chat.done' | 'chat.error' }>;
 export interface Chat {
-  ask(qid: string, text: string, emit: (m: ChatMessage) => void, tool?: Tool): Promise<void>; cancel(qid: string): void; reset(emit: (m: ChatMessage) => void): Promise<void>; history(): ChatTurn[];
+  ask(qid: string, text: string, emit: (m: ChatMessage) => void, tool?: Tool, images?: AttachmentRef[]): Promise<void>;
+  /** The ids of the images the day's turns hold. */
+  attachmentIds(): string[];
+  cancel(qid: string): void; reset(emit: (m: ChatMessage) => void): Promise<void>; history(): ChatTurn[];
   /** The turn's session proposal (spec 2026-10-12 §4) at that row of its card (#24, the first by default), if the turn is still in the day's history. */
   proposal(qid: string, row?: number): ChatProposal | undefined;
   /** The card row's launch went through (`launchedId`) or failed (`error`); every client gets the new history. */
@@ -298,6 +301,7 @@ export function createChat(deps: ChatDeps): Chat {
 
   return {
     history: () => turns,
+    attachmentIds: () => turns.flatMap(t => t.attachments?.map(a => a.id) ?? []),
     proposal: (qid, row = 0) => proposalRows(turnOf(qid))[row],
     markLaunched(qid, id, emit, row = 0) {
       const t = turnOf(qid); const p = proposalRows(t)[row]; if (!t || !p) return;
@@ -363,13 +367,13 @@ export function createChat(deps: ChatDeps): Chat {
       // Without a day file a restarted daemon also starts fresh.
       await rm(dayFile, { force: true }).catch(e => log(`chat reset: day file not removed: ${(e as Error).message}`));
     },
-    async ask(qid, text, emit, tool = 'claude') {
+    async ask(qid, text, emit, tool = 'claude', images = []) {
       if (busy) return emit({ type: 'chat.error', qid, message: ONE_AT_A_TIME });
       if (deps.slots && !deps.slots.take()) return emit({ type: 'chat.error', qid, message: TOO_MANY });
       busy = true;
       try {
         const mine: Running = current = { qid, handle: null, cancelled: false };
-        const turn: ChatTurn = { qid, question: text, askedAt: now(), steps: [] };
+        const turn: ChatTurn = { qid, question: text, askedAt: now(), steps: [], ...(images.length > 0 ? { attachments: images } : {}) };
         try {
           rollDay();
           turns = [...turns, turn].slice(-HISTORY_MAX);
