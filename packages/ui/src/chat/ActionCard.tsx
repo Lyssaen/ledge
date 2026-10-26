@@ -61,7 +61,18 @@ export function ActionCard(p: ActionCardProps) {
   const t = useChatCopy(); const c = t.chat.action!;
   const [confirming, setConfirming] = useState<number[] | null>(null);
   const cancel = useRef<HTMLButtonElement>(null);
-  useEffect(() => { if (confirming) cancel.current?.focus(); }, [confirming]);
+  const box = useRef<HTMLElement>(null);
+  // The button that asked: its node goes while the card confirms, so it is found again by its key.
+  const asker = useRef<string | null>(null);
+  useEffect(() => {
+    if (confirming) { cancel.current?.focus(); return; }
+    if (asker.current !== null) box.current?.querySelector<HTMLElement>(`[data-action-ask="${asker.current}"]`)?.focus();
+    asker.current = null;
+  }, [confirming]);
+  // The card changed elsewhere (a row applied on another device, ignored then reviewed): what was confirmed no longer holds.
+  const seen = `${p.ignoredAt ?? ''}|${p.rows.map(r => r.state ?? 'proposed').join()}`;
+  const [was, setWas] = useState(seen);
+  if (was !== seen) { setWas(seen); if (confirming) setConfirming(null); }
   const clock = (iso?: string) => (iso ? new Date(iso).toLocaleTimeString(t.time.locale, { hour: '2-digit', minute: '2-digit' }) : '');
   const many = p.rows.length > 1;
 
@@ -77,7 +88,7 @@ export function ActionCard(p: ActionCardProps) {
   const shown: Shown[] = states.map((s, i) => (s === 'proposed' && stopAt >= 0 && i > stopAt ? 'held' : s));
   const open = shown.flatMap((s, i) => (['done', 'running', 'denied', 'stale'].includes(s) ? [] : [i]));
   const risky = (rows: readonly number[]) => rows.some(i => p.rows[i]!.risk === 'destructive');
-  const ask = (rows: number[]) => { if (risky(rows)) setConfirming(rows); else p.onApply(rows); };
+  const ask = (rows: number[], key: string) => { if (risky(rows)) { asker.current = key; setConfirming(rows); } else p.onApply(rows); };
   const go = (rows: number[]) => { setConfirming(null); p.onApply(rows); };
   const verb = (r: ActionRowView) => (r.action !== undefined ? c.verbs[r.action] : undefined) ?? c.apply;
   const dots = (rows: readonly number[]) => (risky(rows) ? '…' : '');
@@ -111,11 +122,11 @@ export function ActionCard(p: ActionCardProps) {
       case 'proposed': case 'held': return <>
         {!many && s === 'proposed' && ignore}
         {r.deny && <Button size="sm" disabled={p.disabled} onClick={() => p.onDeny(i)} style={small}>{c.deny}</Button>}
-        <Button size="sm" disabled={p.disabled} onClick={() => ask([i])} style={{ ...small, ...(destructive ? danger : {}) }}>{verb(r)}{dots([i])}</Button>
+        <Button size="sm" disabled={p.disabled} data-action-ask={i} onClick={() => ask([i], String(i))} style={{ ...small, ...(destructive ? danger : {}) }}>{verb(r)}{dots([i])}</Button>
       </>;
       case 'running': return <Button size="sm" disabled style={small}>{spinner}{c.running}</Button>;
       case 'done': return <span style={{ color: 'var(--success)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon size={11} {...ICONS.check} />{c.done(clock(r.doneAt))}</span>;
-      case 'failed': return <>{!many && ignore}<Button size="sm" disabled={p.disabled} onClick={() => ask([i])} style={small}>{c.retry}</Button></>;
+      case 'failed': return <>{!many && ignore}<Button size="sm" disabled={p.disabled} data-action-ask={i} onClick={() => ask([i], String(i))} style={small}>{c.retry}</Button></>;
       case 'refused': return <span style={muted}>{c.refusedState}</span>;
       // Grey, not green: the no reached the session, nothing was applied.
       case 'denied': return <span style={{ ...muted, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon size={11} {...ICONS.check} />{c.denied(clock(r.doneAt))}</span>;
@@ -188,7 +199,7 @@ export function ActionCard(p: ActionCardProps) {
     const later = rows.filter(i => p.rows[i]!.risk === 'destructive').length;
     return (
       <div data-action-foot style={foot}>
-        <Button variant="primary" size="sm" disabled={p.disabled || !rows.length} onClick={() => ask(rows)} style={big}><Icon size={10} {...ICONS.play} />{label}{dots(rows)}</Button>
+        <Button variant="primary" size="sm" disabled={p.disabled || !rows.length} data-action-ask="all" onClick={() => ask(rows, 'all')} style={big}><Icon size={10} {...ICONS.play} />{label}{dots(rows)}</Button>
         <span style={{ flex: 1, minWidth: 160, fontSize: 12, ...muted }}>{stopAt >= 0 ? c.notReplayed : later ? `${c.inOrder} · ${c.destructiveLater(later)}` : c.inOrder}</span>
         {ignore}
       </div>
@@ -196,7 +207,7 @@ export function ActionCard(p: ActionCardProps) {
   };
 
   return (
-    <section data-action-card data-confirming={confirming ? true : undefined} aria-label={c.label(p.rows.length)}
+    <section ref={box} data-action-card data-confirming={confirming ? true : undefined} aria-label={c.label(p.rows.length)}
       style={{ border: `1px solid ${confirming ? 'color-mix(in srgb, var(--destructive) 55%, var(--sidebar-border))' : 'var(--sidebar-border)'}`, borderRadius: 'var(--radius-md)', background: 'var(--well)', overflow: 'hidden', fontSize: 12.5, lineHeight: '18px' }}>
       {p.rows.map(row)}
       {footer()}

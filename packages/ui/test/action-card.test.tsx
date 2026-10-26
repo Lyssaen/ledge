@@ -72,6 +72,31 @@ describe('the action card (#94): a plan', () => {
     expect(screen.queryByRole('group', { name: 'Confirmation' })).toBeNull();
   });
 
+  it('esc or Cancel: the focus goes back to the button that asked, not to the page', () => {
+    card(plan());
+    fireEvent.click(screen.getByRole('button', { name: 'Apply all (3)…' }));
+    fireEvent.keyDown(screen.getByRole('group', { name: 'Confirmation' }), { key: 'Escape' });
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Apply all (3)…' }));
+    fireEvent.click(within(rowsOf()[2]!).getByRole('button', { name: 'Dissolve…' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(document.activeElement).toBe(within(rowsOf()[2]!).getByRole('button', { name: 'Dissolve…' }));
+  });
+
+  it('the card changes elsewhere (another device): the confirmation closes, Ignore then Review does not reopen it', () => {
+    const p = card(plan());
+    const again = (rows: ActionRowView[], extra: Partial<ActionCardProps> = {}) =>
+      p.rerender(<ChatCopyProvider value={{ ...copy, chat: { ...copy.chat, action: actionCopy } }}><ActionCard rows={rows} {...p} {...extra} /></ChatCopyProvider>);
+    fireEvent.click(within(rowsOf()[2]!).getByRole('button', { name: 'Dissolve…' }));
+    again(plan([{}, {}, { state: 'done', doneAt: AT }]));
+    expect(screen.queryByRole('group', { name: 'Confirmation' })).toBeNull();
+    again(plan());
+    fireEvent.click(screen.getByRole('button', { name: 'Apply all (3)…' }));
+    again(plan(), { ignoredAt: AT });
+    again(plan());
+    expect(screen.queryByRole('group', { name: 'Confirmation' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Apply all (3)…' })).toBeTruthy();
+  });
+
   it('an irreversible row asks too, alone; the rows already done read « already done », dimmed', () => {
     const p = card(plan([{ state: 'done', doneAt: AT }]));
     fireEvent.click(screen.getByRole('button', { name: 'Dissolve…' }));
