@@ -5,6 +5,7 @@ import { ChatView } from '@ledge/ui/chat/ChatView';
 import { ChatCopyProvider } from '@ledge/ui/chat/copy';
 import { ResidentMascot } from '@ledge/ui/bots/ResidentMascot';
 import { Button } from '@ledge/ui/ui/Button';
+import { Tabs, tabIds } from '@ledge/ui/ui/Tabs';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import type { FleetView } from '../fleet/useFleet';
 import type { Decisions } from '../fleet/decisions';
@@ -172,18 +173,17 @@ function TeamsTab({ client, teams, sessions, projects, dispatch, notify, openCwd
     setQuery('');
     show(next, next === 'roles' ? { role: id } : { template: id });
   };
-  const counts = { live: live.length, templates: listing?.templates.length, roles: listing?.roles.length };
+  const known = listing && !listing.silent ? listing : null;
+  const counts = { live: live.length, templates: known?.templates.length, roles: known?.roles.length };
+  const ids = tabIds('home-teams', view);
   return (
     <div className="home-list home-teams" role="tabpanel" aria-label={t.home.tabs.teams(live.length)}>
       <div className="cat-toolbar">
-        <span className="cat-seg" role="group" aria-label={c.views}>
-          {(['live', 'templates', 'roles'] as const).map(v => (
-            <button key={v} type="button" aria-pressed={view === v} onClick={() => show(v)}>{c[v](counts[v])}</button>
-          ))}
-        </span>
+        <Tabs id="home-teams" label={c.views} value={view} onChange={v => show(v)} tabs={(['live', 'templates', 'roles'] as const).map(v => ({ value: v, label: c[v](counts[v]) }))} />
         {view !== 'live' && <ScopePicker scope={scope} onChoose={cwd => { scope.choose(cwd, true); setPick({}); }} />}
         {view === 'roles' && <input type="search" className="cat-search" aria-label={c.filterLabel} placeholder={c.filter} value={query} onChange={e => setQuery(e.target.value)} />}
       </div>
+      <div className="cat-panel" role="tabpanel" id={ids.panelId} aria-labelledby={ids.tabId}>
       {view === 'live' ? <>
         {live.length === 0 && <p className="lp-none">{t.home.teams.none}</p>}
         {live.map(team => (
@@ -205,8 +205,9 @@ function TeamsTab({ client, teams, sessions, projects, dispatch, notify, openCwd
         ))}
       </> : (
         <CatalogView ctx={{ client, teams, sessions, projects, dispatch, notify }} view={view} cwd={scope.cwd} listing={listing} pick={pick} query={view === 'roles' ? query : ''}
-          onPick={(next, to) => { if (!to) return setPick(next); setQuery(''); show(to, next); }} />
+          onPick={(next, to) => { if (!to) return setPick(next); setQuery(''); show(to, next); }} onRetry={() => setTick(n => n + 1)} />
       )}
+      </div>
     </div>
   );
 }

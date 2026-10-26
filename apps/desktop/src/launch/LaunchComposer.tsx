@@ -49,7 +49,9 @@ export function LaunchComposer(p: {
   const [form, setForm] = useState<LaunchForm>(() => {
     const { role, cwd } = p.wanted;
     let f = launchDefaults(projects, machines, p.wanted, role?.tool ?? defaultTool);
-    f = withPick(f, role?.model ? { model: role.model, effort: role.effort ?? null } : loadPick(f.project, f.tool));
+    // The role's model, with its effort or none; a role naming only an effort keeps the model remembered for the agent.
+    const memo = loadPick(f.project, f.tool);
+    f = withPick(f, role?.model ? { model: role.model, effort: role.effort ?? null } : role?.effort ? { model: memo.model, effort: role.effort } : memo);
     return cwd && reposOn(projects.find(x => x.id === f.project), f.machine).some(r => r.path === cwd) ? { ...f, repos: [cwd] } : f;
   });
   const [role, setRole] = useState(p.wanted.role);

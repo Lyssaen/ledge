@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type JSX, type ReactNode } from 'react';
 import type { DaemonClient } from '@ledge/fleet';
 import { autonomyArgs, ompApprovalFor, ROLE_PROMPT_MAX, type Autonomy, type DefinitionProblem, type Project, type Projects, type Role, type Seat, type Session, type Team, type TeamTemplate, type Tool } from '@ledge/protocol';
 import { toolName } from '@ledge/ui/chat/format';
@@ -6,6 +6,7 @@ import { MarkdownDocument, ThreadMarkdown } from '@ledge/ui/documents/markdown';
 import { Button } from '@ledge/ui/ui/Button';
 import { useI18n } from '../i18n/lang';
 import { cls } from '../shell/cls';
+import { Menu, MenuItem } from '../shell/Menu';
 import { readJson, writeJson } from '../state/storage';
 import type { Modal, NavAction } from '../nav/state';
 import type { RolesListing, TeamsApi } from './useTeamsApi';
@@ -87,38 +88,29 @@ export function useCatalog(teams: TeamsApi, cwd: string | null, tick: number): R
   return listing;
 }
 
-/** « Dossier ledge ~/w/ledge ▾ »: the folder read, and the others offered, « Perso seulement » last. */
+/** « Dossier ledge ~/w/ledge ▾ »: the folder read, and the others offered, « Perso seulement » last; the app's menu (arrows,
+ *  Home / End, Échap, the focus back on the button). */
 export function ScopePicker({ scope, onChoose }: { scope: ReturnType<typeof useScope>; onChoose(cwd: string | null): void }): JSX.Element {
   const { t } = useI18n();
   const c = t.home.catalog;
   const [open, setOpen] = useState(false);
-  const box = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const away = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener('mousedown', away);
-    return () => document.removeEventListener('mousedown', away);
-  }, [open]);
   const current = scope.options.find(s => s.cwd === scope.cwd);
   const all: Scope[] = [...scope.options, { cwd: null, name: c.personal }];
   return (
-    <div className="cat-scope" ref={box} onKeyDown={e => { if (e.key === 'Escape' && open) { e.stopPropagation(); setOpen(false); } }}>
-      <button type="button" className="cat-scope-btn" aria-haspopup="listbox" aria-expanded={open} title={c.folderTitle} onClick={() => setOpen(o => !o)}>
-        {c.folder} <strong>{scope.cwd === null ? c.personal : current?.name ?? folderName(scope.cwd)}</strong> <small>{scope.cwd ?? '~/.ledge'}</small> ▾
-      </button>
-      {open && (
-        <div className="cat-scope-pop" role="listbox" aria-label={c.folderTitle}>
-          {all.map(s => (
-            <button key={s.cwd ?? ''} type="button" role="option" aria-selected={s.cwd === scope.cwd} className={cls(s.cwd === scope.cwd && 'on')}
-              onClick={() => { setOpen(false); onChoose(s.cwd); }}>
-              <strong>{s.name}</strong>
-              <small>{s.cwd ?? '~/.ledge'} · {s.cwd === null ? c.scopePersonal : s.project ? c.scopeProject(s.project) : c.scopeFolder}</small>
-            </button>
-          ))}
-          <p>{c.repoWins}</p>
-        </div>
-      )}
-    </div>
+    <Menu open={open} onOpenChange={setOpen} label={c.folderTitle} className="cat-scope" menuClassName="cat-scope-pop"
+      trigger={tr => (
+        <button type="button" className="cat-scope-btn" title={c.folderTitle} {...tr}>
+          {c.folder} <strong>{scope.cwd === null ? c.personal : current?.name ?? folderName(scope.cwd)}</strong> <small>{scope.cwd ?? '~/.ledge'}</small> ▾
+        </button>
+      )}>
+      {all.map(s => (
+        <MenuItem key={s.cwd ?? ''} className={cls(s.cwd === scope.cwd && 'on')} aria-current={s.cwd === scope.cwd || undefined} onSelect={() => onChoose(s.cwd)}>
+          <strong>{s.name}</strong>
+          <small>{s.cwd ?? '~/.ledge'} · {s.cwd === null ? c.scopePersonal : s.project ? c.scopeProject(s.project) : c.scopeFolder}</small>
+        </MenuItem>
+      ))}
+      <p>{c.repoWins}</p>
+    </Menu>
   );
 }
 
@@ -135,8 +127,10 @@ export interface CatalogCtx {
 type DetailCtx = CatalogCtx & { openFile(path: string): void };
 
 /** The catalog of a folder: the list grouped by source (repository, then home), the files skipped, the detail on the right. */
-export function CatalogView({ ctx, view, cwd, listing, pick, onPick, query }: {
+export function CatalogView({ ctx, view, cwd, listing, pick, onPick, query, onRetry }: {
   ctx: CatalogCtx; view: 'templates' | 'roles'; cwd: string | null; listing: RolesListing | null; pick: CatalogPick; onPick(next: CatalogPick, view?: TeamsView): void; query: string;
+  /** Reads the folder again (a daemon that did not answer). */
+  onRetry(): void;
 }): JSX.Element {
   const { t } = useI18n();
   const c = t.home.catalog;
@@ -144,11 +138,17 @@ export function CatalogView({ ctx, view, cwd, listing, pick, onPick, query }: {
   const [opened, setOpened] = useState<string | null>(null);
   useEffect(() => setOpened(null), [view, cwd, pick.role, pick.template, pick.problems]);
   if (!listing) return <p className="lp-none cat-loading">{c.loading}</p>;
+  // No answer is not an empty folder: said apart, with « Réessayer ».
+  if (listing.silent) return <div className="cat-empty" role="alert"><p>{c.silent}</p><Button variant="outline" size="sm" onClick={onRetry}>{c.retry}</Button></div>;
   const dctx: DetailCtx = { ...ctx, openFile: setOpened };
   const q = query.trim().toLowerCase();
   const roles = listing.roles.filter(r => !q || `${r.id} ${r.label}`.toLowerCase().includes(q));
-  const role = pick.problems ? undefined : roles.find(r => r.id === pick.role) ?? roles[0];
-  const template = pick.problems ? undefined : listing.templates.find(x => x.id === pick.template) ?? listing.templates[0];
+  // A role or a template asked for (a link) that this folder does not have is said so, never shown as another; one only
+  // hidden by the filter gives way to the first one shown.
+  const unknownRole = !!pick.role && !listing.roles.some(r => r.id === pick.role);
+  const unknownTemplate = !!pick.template && !listing.templates.some(x => x.id === pick.template);
+  const role = pick.problems || unknownRole ? undefined : roles.find(r => r.id === pick.role) ?? roles[0];
+  const template = pick.problems || unknownTemplate ? undefined : listing.templates.find(x => x.id === pick.template) ?? listing.templates[0];
   const problems = listing.problems;
   const group = <T extends { source: 'repo' | 'home' }>(title: string, list: readonly T[], row: (x: T) => ReactNode) =>
     list.length > 0 && <><h4>{title}</h4>{list.map(row)}</>;
@@ -176,6 +176,8 @@ export function CatalogView({ ctx, view, cwd, listing, pick, onPick, query }: {
       </div>
       <div className="cat-detail">
         {pick.problems ? <ProblemsDetail problems={problems} />
+          : view === 'roles' && unknownRole ? <EmptyDetail text={c.unknownRoleIn(pick.role!)} hint={c.noRoleHint} />
+          : view === 'templates' && unknownTemplate ? <EmptyDetail text={c.unknownTemplateIn(pick.template!)} hint={c.noTemplateHint} />
           : view === 'roles' ? (role ? <RoleDetail ctx={dctx} cwd={cwd} role={role} used={usedIn(role.id)} held={held(role.id, role.source)} onPick={onPick} />
             : <EmptyDetail text={c.noRole} hint={c.noRoleHint} />)
           : template ? <TemplateDetail ctx={dctx} cwd={cwd} template={template} roles={listing.roles} onPick={onPick} />
@@ -269,6 +271,7 @@ function RoleDetail({ ctx, cwd, role, used, held, onPick }: {
             onClick={() => project && ctx.dispatch(launchModal({ project: project.id, team: true, ...(cwd ? { cwd } : {}), seat: role.id }))}>{c.mountTeam}</Button>
         </div>
       </div>
+      {!project && <p className="cat-ro">{c.needProject}</p>}
       <dl className="cat-facts">
         <dt>{c.tool}</dt><dd>{role.tool ? toolName(role.tool) : <span className="lp-none">{c.anyTool}</span>}</dd>
         <dt>{c.model}</dt><dd>{role.model ?? <span className="lp-none">{c.toolDefault}</span>}</dd>
@@ -348,6 +351,7 @@ function TemplateDetail({ ctx, cwd, template, roles, onPick }: {
             onClick={() => project && ctx.dispatch(launchModal({ project: project.id, team: true, ...(cwd ? { cwd } : {}), template: template.id }))}>{c.launchTeam}</Button>
         </div>
       </div>
+      {!project && <p className="cat-ro">{c.needProject}</p>}
       <div className="cat-section">
         <h3>{c.posts}</h3>
         <table className="cat-seats">

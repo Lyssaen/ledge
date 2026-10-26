@@ -468,6 +468,8 @@ export const fr = {
       heldNow: 'Tenu en ce moment', noHolder: 'Aucun siège ne tient ce rôle.', openSession: 'Ouvrir la session',
       roleReadOnly: 'Lecture seule : un rôle se modifie dans son fichier.',
       posts: 'Postes', colRole: 'Rôle', colLabel: 'Libellé', colRun: 'Outil · modèle · effort', colAutonomy: 'Autonomie',
+      unknownRoleIn: (id: string) => `@${id} : rôle inconnu dans ce dossier.`, unknownTemplateIn: (id: string) => `${id} : modèle inconnu dans ce dossier.`,
+      silent: 'Le daemon n’a pas répondu : le catalogue de ce dossier n’a pas pu être lu.', retry: 'Réessayer',
       overWord: 'bleu', overNote: 'ce que le modèle change aux défauts du rôle.', unknownRole: 'Rôle inconnu dans ce dossier',
       autoWarn: (roles: readonly string[]) => `${andList(roles)} ${plural(roles.length, 'travaille', 'travaillent')} sans demander (autonomie auto, fixée par le fichier du rôle).`,
       born: 'Équipes nées', noneBorn: 'aucune', active: 'active', resting: 'au repos',

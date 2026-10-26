@@ -448,6 +448,8 @@ export const en: Messages = {
       heldNow: 'Held right now', noHolder: 'No seat holds this role.', openSession: 'Open the session',
       roleReadOnly: 'Read only: a role is changed in its file.',
       posts: 'Seats', colRole: 'Role', colLabel: 'Label', colRun: 'Tool · model · effort', colAutonomy: 'Autonomy',
+      unknownRoleIn: (id: string) => `@${id}: role unknown in this folder.`, unknownTemplateIn: (id: string) => `${id}: template unknown in this folder.`,
+      silent: 'The daemon did not answer: this folder’s catalog could not be read.', retry: 'Retry',
       overWord: 'blue', overNote: 'what the template changes of the role’s defaults.', unknownRole: 'Role unknown in this folder',
       autoWarn: (roles: readonly string[]) => `${new Intl.ListFormat('en', { type: 'conjunction' }).format(roles)} ${roles.length === 1 ? 'works' : 'work'} without asking (autonomy auto, set by the role’s file).`,
       born: 'Teams born of it', noneBorn: 'none', active: 'active', resting: 'resting',

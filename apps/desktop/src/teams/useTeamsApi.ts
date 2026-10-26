@@ -3,8 +3,10 @@ import { useContextNear, useTasks, useTeams, type DaemonClient } from '@ledge/fl
 import { CONTEXT_NEAR, contextNear, contextShare, LEDGE_GIVER, taskClosed, type DefinitionProblem, type Role, type Session, type Task, type Team, type TeamTemplate } from '@ledge/protocol';
 
 /** What `roles.list` answers for a folder: its roles and templates, and the files skipped with why (`problems`). */
-export interface RolesListing { roles: Role[]; templates: TeamTemplate[]; problems: DefinitionProblem[] }
-const NO_LISTING: RolesListing = { roles: [], templates: [], problems: [] };
+export interface RolesListing { roles: Role[]; templates: TeamTemplate[]; problems: DefinitionProblem[];
+  /** The daemon did not answer in time: nothing is known of the folder (not an empty one). */
+  silent?: true }
+const SILENT: RolesListing = { roles: [], templates: [], problems: [], silent: true };
 
 /** What the fronts do with the local daemon's teams and Ledge's tasks (roles spec §3.3, §3.7): every command goes to the
  *  daemon, whose broadcast (`team.updated`, `task.updated`) changes what is shown. */
@@ -27,11 +29,13 @@ export interface TeamsApi {
   near: number;
   putLater(session: Session): void;
   /** The roles and templates a folder can use, and the files skipped, from the local daemon (`roles.list`); without a folder,
-   *  `~/.ledge`'s alone. Empty when it does not answer in time. */
+   *  `~/.ledge`'s alone. Empty and `silent` when it does not answer in time. */
   roles(cwd?: string): Promise<RolesListing>;
 }
 
 let seq = 0;
+/** How long `roles.list` is waited for. */
+export const ROLES_TIMEOUT_MS = 4000;
 export function useTeamsApi(client: DaemonClient): TeamsApi {
   const all = useTeams(client);
   const tasks = useTasks(client);
@@ -41,7 +45,7 @@ export function useTeamsApi(client: DaemonClient): TeamsApi {
     const requestId = `roles-${Date.now()}-${++seq}`;
     const done = (r: RolesListing) => { clearTimeout(timer); off(); resolve(r); };
     const off = client.onMessage(m => { if (m.type === 'roles.listing' && m.requestId === requestId) done({ roles: m.roles, templates: m.templates, problems: m.problems }); });
-    const timer = setTimeout(() => done(NO_LISTING), 4000);
+    const timer = setTimeout(() => done(SILENT), ROLES_TIMEOUT_MS);
     client.send({ type: 'roles.list', ...(cwd ? { cwd } : {}), requestId });
   }), [client]);
   const handover = useCallback((id: string) => new Promise<string | null>(resolve => {

@@ -264,15 +264,16 @@ button.role-pill:hover { background: color-mix(in srgb, var(--sidebar-primary) 2
 .role-pill.bad { color: var(--warning); background: color-mix(in srgb, var(--warning) 14%, transparent); }
 .cat-goto { border: 0; padding: 0; background: none; color: var(--info); font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .cat-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; flex: none; padding-bottom: 8px; border-bottom: 1px solid var(--sidebar-border); }
-.cat-seg { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--sidebar-border); border-radius: var(--radius-md); background: var(--well); }
-.cat-seg button { height: 24px; padding: 0 10px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--muted-foreground); font-size: 12px; cursor: pointer; }
-.cat-seg button[aria-pressed="true"] { background: var(--sidebar-accent); color: var(--sidebar-foreground); font-weight: 500; }
-.cat-scope { position: relative; }
+/* The views use the app's Tabs (packages/ui), at their content's width; the panel holds the view chosen. */
+.cat-toolbar > [role="tablist"] { flex: none; }
+.cat-toolbar > [role="tablist"] button { padding: 0 12px !important; }
+.cat-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 4px; }
+.cat-scope { position: relative; display: inline-block; }
 .cat-scope-btn { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid var(--input); border-radius: var(--radius-md); background: var(--sidebar); color: inherit; font-size: 12px; cursor: pointer; max-width: 360px; }
 .cat-scope-btn small, .cat-scope-pop small { font: 10.5px 'Geist Mono', monospace; color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cat-scope-pop { position: absolute; top: calc(100% + 4px); left: 0; z-index: 5; width: 340px; padding: 4px; border: 1px solid var(--input); border-radius: var(--radius-md); background: var(--sidebar); box-shadow: 0 20px 40px -12px rgb(0 0 0 / .35); }
 .cat-scope-pop button { width: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 6px 8px; border: 0; border-radius: var(--radius-sm); background: none; color: inherit; text-align: left; font-size: 12.5px; cursor: pointer; }
-.cat-scope-pop button:hover, .cat-scope-pop button.on { background: var(--sidebar-accent); }
+.cat-scope-pop button:hover, .cat-scope-pop button.on, .cat-scope-pop button:focus-visible { background: var(--sidebar-accent); outline: none; }
 .cat-scope-pop p { margin: 6px 8px 2px; font-size: 11px; color: var(--muted-foreground); }
 .cat-search { height: 28px; flex: 1 1 140px; max-width: 220px; padding: 0 10px; border: 1px solid var(--input); border-radius: var(--radius-md); background: var(--well); color: inherit; font-size: 12px; }
 .cat-split { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(220px, 320px) minmax(0, 1fr); margin: 0 -16px -12px; }
