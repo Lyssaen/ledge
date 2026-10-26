@@ -125,7 +125,7 @@ export const en: Messages = {
     ignored: n => `⚠ ${n} ${plural(n, 'file', 'files')} ignored`, see: 'see', problems: 'Ignored files', noProblem: 'No ignored file.',
     loading: 'reading the roles…', noAnswer: 'The daemon did not answer.',
     offline: m => `${m} is offline.`, outdated: m => `${m}’s daemon is too old for the catalog.`, onMachine: m => `on ${m}`,
-    roleChecking: id => `@${id}: reading the role in this folder…`, roleShadowed: (id, cwd) => `@${id} from ~/.ledge is replaced in ${cwd}: launched without a role`,
+    roleChecking: id => `@${id}: reading the role in this folder…`, roleReadIn: cwd => `the one in ${cwd}`,
     roleElsewhere: (id, cwd) => `@${id} is only read in ${cwd}: launched without a role`, noRole: 'No role here: write .ledge/roles/<id>.md', noTemplateHere: 'No template here: write .ledge/teams/<id>.yaml',
     role: 'Role'
   },

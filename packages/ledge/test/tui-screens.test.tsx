@@ -1248,7 +1248,10 @@ describe('ledge tui: « Équipes » (6), the roles and templates catalog (#97)',
 
   it('the role read in a folder is dropped when the launch goes elsewhere, and comes back with the folder', async () => {
     const tui = await startTui();
-    answer(tui);
+    // /w/website has no role of its own: only the home's.
+    tui.daemon.onMessage(m => {
+      if (m.type === 'roles.list') tui.daemon.push(m.cwd === '/w/ledge' ? listing(m.requestId) : { ...listing(m.requestId), roles: listing().roles.filter(r => r.source === 'home'), templates: [], problems: [] });
+    });
     try {
       await tui.press('6');
       await until(() => tui.frame().includes('@BUILD · BUILDER'));
@@ -1274,11 +1277,11 @@ describe('ledge tui: « Équipes » (6), the roles and templates catalog (#97)',
     } finally { await tui.cleanup(); }
   });
 
-  it('a role read under « Perso seulement » is asked again in the folder launched: shadowed there by the repository’s, it is launched without', async () => {
+  it('a role read under « Perso seulement » is asked again in the folder launched: shadowed there by the repository’s, that one is shown and launched, with its defaults', async () => {
     const tui = await startTui();
     const home = { id: 'review', label: 'Relecteur perso', prompt: 'Tu relis.', autonomy: 'ask' as const, source: 'home' as const, path: '/h/.ledge/roles/review.md' };
     const lead = { id: 'lead', label: 'Lead', prompt: 'Tu découpes.', source: 'home' as const, path: '/h/.ledge/roles/lead.md' };
-    const repo = { id: 'review', label: 'Relecteur auto', prompt: 'Tu modifies.', autonomy: 'auto' as const, source: 'repo' as const, path: '/w/ledge/.ledge/roles/review.md', shadows: home.path };
+    const repo = { id: 'review', label: 'Relecteur auto', prompt: 'Tu modifies.', tool: 'codex' as const, autonomy: 'auto' as const, source: 'repo' as const, path: '/w/ledge/.ledge/roles/review.md', shadows: home.path };
     tui.daemon.onMessage(m => {
       if (m.type === 'roles.list') tui.daemon.push({ type: 'roles.listing', requestId: m.requestId, roles: m.cwd === '/w/ledge' ? [repo, lead] : [home, lead], templates: [], problems: [] });
     });
@@ -1289,13 +1292,15 @@ describe('ledge tui: « Équipes » (6), the roles and templates catalog (#97)',
       await until(() => tui.frame().includes('PERSO SEULEMENT') && tui.frame().includes('@REVIEW · RELECTEUR PERSO'));
       await tui.press('\r');
       await until(() => tui.frame().includes('NOUVELLE SESSION'));
-      await until(() => tui.frame().includes('@review de ~/.ledge est remplacé dans /w/ledge : lancé sans rôle'));
+      await until(() => tui.frame().includes('@review Relecteur auto · celui de /w/ledge'));
       expect(sent(tui.daemon.received, 'roles.list').at(-1)).toMatchObject({ cwd: '/w/ledge' });
       expect(tui.frame()).not.toContain('Relecteur perso');
+      // Its agent, as the daemon will launch it.
+      expect(tui.frame()).toMatch(/◉ Codex/);
       await tui.press('Relis');
       await tui.press('\u0013'); // ctrl+s
       await until(() => sent(tui.daemon.received, 'session.launch').length === 1);
-      expect(sent(tui.daemon.received, 'session.launch')[0]!.role).toBeUndefined();
+      expect(sent(tui.daemon.received, 'session.launch')[0]).toMatchObject({ cwd: '/w/ledge', role: 'review', tool: 'codex' });
     } finally { await tui.cleanup(); }
   });
 
