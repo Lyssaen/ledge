@@ -546,6 +546,39 @@ describe('ledge tui: the field (#95 lot B)', () => {
     } finally { await tui.cleanup(); }
   });
 
+  // The other branches of the same answer: one test a row, the session changed (upsert) between the note and Enter.
+  it.each([
+    ['read only', { source: 'hook_only' as const }, 'Otto est en lecture seule : répondez dans son terminal.'],
+    ['the request gone', { state: 'idle' as const, pending: undefined }, 'Rien à répondre pour Otto.'],
+    ['a tool that takes no note', { tool: 'omp' as const }, 'Otto ne prend pas de note ici.']
+  ])('a note refused at once: %s', async (_, change, why) => {
+    const tui = await startTui();
+    try {
+      await tui.press('\r');
+      await until(() => tui.frame().includes('Otto veut exécuter'));
+      await tui.press('r'); await tui.press('non');
+      tui.daemon.upsert({ ...mockupSessions()[0]!, ...change });
+      await until(() => daemonStore.getState().sessions.find(x => x.id === 'local:otto')?.[Object.keys(change)[0] as 'tool'] === Object.values(change)[0]);
+      await tui.press('\r');
+      await until(() => tui.frame().includes(why));
+      expect(sent(tui.daemon.received, 'session.decide')).toEqual([]);
+    } finally { await tui.cleanup(); }
+  });
+
+  it('a note refused at once: a send under way', async () => {
+    const tui = await startTui();
+    try {
+      await tui.press('\r');
+      await until(() => tui.frame().includes('Otto veut exécuter'));
+      await tui.press('r'); await tui.press('non'); await tui.press('\r');
+      await until(() => sent(tui.daemon.received, 'session.decide').length === 1);
+      // Not landed yet: a second note waits behind it.
+      await tui.press('r'); await tui.press('encore'); await tui.press('\r');
+      await until(() => tui.frame().includes('Un envoi pour Otto est déjà en cours.'));
+      expect(sent(tui.daemon.received, 'session.decide')).toHaveLength(1);
+    } finally { await tui.cleanup(); }
+  });
+
   it('Ask offline: an entry of the history, retouched, stays in the field; esc brings the draft back', async () => {
     const tui = await startTui();
     try {
