@@ -96,4 +96,21 @@ describe('keepStale', () => {
     expect(got.filter(m => m.type === 'snapshot').length).toBe(before);
     expect(api.fleet!.machines().find(m => m.id === 'server')?.status).toBe('unreachable');
   });
+  it('one update removing two unreachable machines applies: a closed client saying « connecting » at once breaks nothing', () => {
+    const second = { id: 'build', label: 'build', url: 'ws://127.0.0.1:47833', ssh: 'build' };
+    const local = peer(), a = peer(), b = peer();
+    // A real client tells its status as it closes, before close() returns.
+    for (const x of [a, b]) x.client.close = () => x.set('connecting');
+    const api = createFleetClient([LOCAL_MACHINE, remote, second], o => o.url === LOCAL_MACHINE.url ? local.client : o.url === remote.url ? a.client : b.client, { keepStale: true });
+    const got: ServerMessage[] = []; api.onMessage(m => got.push(m)); api.connect();
+    local.set('open'); local.emit(snap(['l1']));
+    a.set('unreachable'); b.set('unreachable');
+    expect(() => api.fleet!.configure([LOCAL_MACHINE])).not.toThrow();
+    expect(api.fleet!.machines().map(m => m.id)).toEqual(['local']);
+    // The overlay hears the fleet again afterwards.
+    const before = got.filter(m => m.type === 'snapshot').length;
+    local.emit(snap(['l1', 'l2']));
+    expect(got.filter(m => m.type === 'snapshot').length).toBeGreaterThan(before);
+    expect(lastSnapshot(got)!.sessions.map(x => x.id)).toEqual(['local:l1', 'local:l2']);
+  });
 });

@@ -128,6 +128,9 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
    *  a (re)connection, a host joining or leaving, another host selected. A session's own update is relayed as itself
    *  (see `receive`): to the overlay a snapshot is a reconnection, which empties the threads and rebuilds the open view. */
   function refresh() {
+    // Mid-`apply` a closing client may speak (« connecting », at once) while `configs` and the peers disagree: the final
+    // `publish` tells it all.
+    if (configuring) return;
     state = configs.map(c => { const p = peers.get(c.id)!; return { ...c, status: p.status, ready: available(p), recents: p.snapshot?.recents ?? [], sessions: stateSessions(p), launcher: p.snapshot?.launcher ?? null, version: p.snapshot?.daemon?.version, daemon: p.snapshot?.daemon, error: p.error }; });
     const next = status(); if (next !== lastStatus) { lastStatus = next; statuses.forEach(fn => fn(next)); }
     listeners.forEach(fn => fn());
