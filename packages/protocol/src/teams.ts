@@ -52,7 +52,9 @@ export type Team = z.infer<typeof TeamSchema>;
 
 /** The client's requests about roles and teams. `machineId` is the fleet's routing, removed before the daemon. */
 export const RolesListSchema = z.object({ type: z.literal('roles.list'), cwd: z.string().min(1).optional(), requestId: z.string().max(100).optional(), machineId: z.string().optional() });
-export const RolesListingSchema = z.object({ type: z.literal('roles.listing'), requestId: z.string().optional(), roles: z.array(RoleSchema), templates: z.array(TeamTemplateSchema).default([]), problems: z.array(DefinitionProblemSchema) });
+export const RolesListingSchema = z.object({ type: z.literal('roles.listing'), requestId: z.string().optional(), roles: z.array(RoleSchema), templates: z.array(TeamTemplateSchema).default([]), problems: z.array(DefinitionProblemSchema),
+  /** Set by the fleet when the project's machine could not answer (#99): 'offline', or 'outdated' for a daemon without roles.list. */
+  error: z.string().optional() });
 
 /** `team.launch`: a template by id, or ad hoc seats (the chat card's); with `qid`, the chat's team card of that turn. */
 export const TeamLaunchSchema = z.object({

@@ -41,6 +41,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   const scans = new Map<string, string>();
   /** `models.list` requestId -> the machine asked and the agent, so only its `models.listing` answers it (and a drop or a refusal answers « offline » or « outdated »). */
   const modelLists = new Map<string, { machine: string; tool: Tool }>();
+  /** `roles.list` requestId -> the project's machine, so only its `roles.listing` answers it (and a drop or a refusal answers « offline » or « outdated ») (#99). */
+  const roleLists = new Map<string, string>();
   const operations = new Map<string, string>();
   /** A machine's close in flight: its raw qid, the rows asked for and each row's `error` at the send (a refusal is a new one, not the old). */
   const closeRows = new Map<string, { qid: string; rows: number[]; errors: Array<string | undefined> }>();
@@ -62,6 +64,10 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   /** Each pending models.list of `machine` is answered empty with `error` (#58): 'offline' when it dropped, 'outdated' when its daemon does not know models.list. */
   const answerFailedModels = (machine: string, error: 'offline' | 'outdated') => {
     for (const [requestId, l] of modelLists) if (l.machine === machine) { modelLists.delete(requestId); emit({ type: 'models.listing', requestId, tool: l.tool, models: [], error }); }
+  };
+  /** Each pending roles.list of `machine` is answered empty with `error` (#99): 'offline' when it dropped, 'outdated' when its daemon does not know roles.list. */
+  const answerFailedRoles = (machine: string, error: 'offline' | 'outdated') => {
+    for (const [requestId, owner] of roleLists) if (owner === machine) { roleLists.delete(requestId); emit({ type: 'roles.listing', requestId, roles: [], templates: [], problems: [], error }); }
   };
   let source: 'daemon' | 'local' = 'local';
   /** The local daemon's projects (build spec §5); the last ones stay while it is down. */
@@ -250,6 +256,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     if (m.type === 'repos.info') { if (inspections.get(m.requestId) === machine) { inspections.delete(m.requestId); unfound.delete(m.requestId); emit(m); } return; }
     if (m.type === 'repos.found') { if (scans.get(m.requestId) === machine) { scans.delete(m.requestId); emit(m); } return; }
     if (m.type === 'models.listing') { if (modelLists.get(m.requestId)?.machine === machine) { modelLists.delete(m.requestId); emit(m); } return; }
+    if (m.type === 'roles.listing' && m.requestId !== undefined && roleLists.has(m.requestId)) { if (roleLists.get(m.requestId) === machine) { roleLists.delete(m.requestId); emit(m); } return; }
     if (m.type === 'chat.routed') {
       if (routing?.qid !== m.qid || routing.coordinator !== machine) return;
       const req = routing; routing = null;
@@ -295,6 +302,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       // Likewise for repos.scan (lot 11): the new daemon answers every scan with repos.found, so a refusal means an older daemon.
       if (m.request === 'repos.scan') { answerFailedScans(machine, 'outdated'); return; }
       if (m.request === 'models.list') { answerFailedModels(machine, 'outdated'); return; }
+      if (m.request === 'roles.list' && [...roleLists.values()].includes(machine)) { answerFailedRoles(machine, 'outdated'); return; }
       if ((m.request === 'folder.list' || m.request === 'folder.create') && [...listings.values()].some(l => l.machine === machine)) { answerUnfoundListings(machine, m.message || 'not found'); return; }
       // Only the in-flight operation's own refusal ends it: another refused command leaves it waiting for its answer or the machine's drop.
       if (m.request !== undefined && OPERATIONS.has(m.request)) endOperation(machine);
@@ -315,7 +323,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         // A launch in flight names its request, as the daemon's refusal does, so the form that sent it hears it.
         const op = operations.get(c.id), closing = closeRows.has(c.id);
         if (endOperation(c.id)) emit({ type: 'error', message: `${c.label} is offline`, ...(op === 'launch' ? { request: 'session.launch' } : closing ? { request: 'session.close' } : {}) });
-        answerUnfoundInspections(c.id); answerUnfoundListings(c.id, 'offline'); answerFailedScans(c.id, 'offline'); answerFailedModels(c.id, 'offline');
+        answerUnfoundInspections(c.id); answerUnfoundListings(c.id, 'offline'); answerFailedScans(c.id, 'offline'); answerFailedModels(c.id, 'offline'); answerFailedRoles(c.id, 'offline');
         for (const [requestId, owner] of documents) if (owner === c.id) { documents.delete(requestId); emit({ type: 'document.error', requestId, path: '', code: 'read_failed' }); }
         if (routing?.coordinator === c.id) { const qid = routing.qid; routing = null; fail(qid, `${c.label} is offline`); }
         for (const [qid, b] of bindings) { const t = turns.get(qid); if (b.machine === c.id && t && !t.answeredAt && !t.error) fail(qid, `${c.label} is offline`); }
@@ -402,6 +410,12 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         }
       }
       if (msg.type === 'update.daemon') machine = 'local';
+      // A catalog is read on the project's machine (#99), local when none is named.
+      if (msg.type === 'roles.list' && msg.requestId !== undefined) {
+        machine = msg.machineId ?? 'local';
+        if (!available(peers.get(machine))) { emit({ type: 'roles.listing', requestId: msg.requestId, roles: [], templates: [], problems: [], error: 'offline' }); return; }
+        roleLists.set(msg.requestId, machine);
+      }
       // Roles, teams and Ledge's tasks are the local daemon's: its sessions are named there without their machine.
       if (msg.type === 'roles.list' || msg.type === 'team.launch') {
         if (!('qid' in msg && msg.qid)) machine = msg.machineId ?? 'local';
