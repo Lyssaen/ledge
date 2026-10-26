@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { act, render, renderHook, screen, fireEvent, within } from '@testing-library/react';
-import type { ChatAction, ChatTurn, ClientMessage } from '@ledge/protocol';
+import type { ChatAction, ChatTurn, ClientMessage, ServerMessage } from '@ledge/protocol';
 import { ChatView, type ChatViewProps } from '../src/chat/ChatView';
 import { ChatCopyProvider } from '../src/chat/copy';
 import { useActionCards, type ActionCardsOptions } from '../src/chat/useActionCards';
@@ -111,6 +111,43 @@ describe('useActionCards: chat.act and chat.ignore (#94)', () => {
     expect(result.current.actingRows).toEqual([0]);
     act(() => result.current.deny('q1', 0));
     expect(send).toHaveBeenCalledOnce();
+  });
+
+  it('a plan under way: held while a row sent runs or is still to come; freed once none is', () => {
+    const { send, result, rerender, props } = setup();
+    act(() => result.current.act('q1', [0, 1], true));
+    const at = (states: Array<ChatAction['state']>) => rerender({ ...props, chat: [turn({ actions: [archive, dissolve].map((a, i) => ({ ...a, ...(states[i] ? { state: states[i] } : {}) })) })] });
+    at(['running']);
+    expect(result.current.actingQid).toBe('q1');
+    act(() => result.current.act('q1', [1], true));
+    expect(send).toHaveBeenCalledOnce();
+    at(['done']);
+    expect(result.current.actingQid).toBe('q1');
+    at(['done', 'running']);
+    expect(result.current.actingQid).toBe('q1');
+    at(['done', 'done']);
+    expect(result.current.actingQid).toBeNull();
+  });
+
+  it('a plan stopped: a row sent failed or refused frees it, the rest still proposed', () => {
+    for (const stop of ['failed', 'refused'] as const) {
+      const { result, rerender, props } = setup();
+      act(() => result.current.act('q1', [0, 1], true));
+      rerender({ ...props, chat: [turn({ actions: [{ ...archive, state: stop }, dissolve] })] });
+      expect(result.current.actingQid, stop).toBeNull();
+    }
+  });
+
+  it('its chat.acted frees it, whatever the history says; another rid\'s does not', () => {
+    let listener: ((m: ServerMessage) => void) | null = null;
+    const onMessage = (fn: (m: ServerMessage) => void) => { listener = fn; return () => { listener = null; }; };
+    const { send, result } = setup({ onMessage });
+    act(() => result.current.act('q1', [0], false));
+    const rid = (send.mock.calls[0]![0] as { rid: string }).rid;
+    act(() => listener!({ type: 'chat.acted', rid: 'other', qid: 'q1', done: [], failed: [] }));
+    expect(result.current.actingQid).toBe('q1');
+    act(() => listener!({ type: 'chat.acted', rid, qid: 'q1', done: [0], failed: [] }));
+    expect(result.current.actingQid).toBeNull();
   });
 
   it('a machine not ready: nothing is sent', () => {

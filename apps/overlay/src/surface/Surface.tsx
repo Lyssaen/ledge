@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { FocusEvent } from 'react';
 import { DEFAULT_ISLAND_PREFS, proposalRows, type IslandPrefs, type Session, type Tool } from '@ledge/protocol';
 import { loadDefaultTool, saveDefaultTool } from '../defaultTool';
@@ -652,7 +652,8 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const bubblePaused = st.hovering || st.focusWithin || st.hidden || st.ack !== null;
   const send = (m: Parameters<DaemonClient['send']>[0]) => client.send(m);
   const turnReady = (qid: string) => !client.fleet || !!client.fleet.turnMachine(qid)?.ready;
-  const actionCards = useActionCards({ send, chat, errors, turnReady });
+  const onMessage = useCallback((fn: Parameters<DaemonClient['onMessage']>[0]) => client.onMessage(fn), [client]);
+  const actionCards = useActionCards({ send, chat, errors, turnReady, onMessage });
   // The thread is not in the snapshot: ask for it when a session opens (or after a reconnection emptied the threads).
   const threadWanted = st.mode === 'session' || st.mode === 'helper' ? st.selectedId : null;
   // A boolean, not the Map: the store rebuilds `threads` on every update, which would re-send the request while the reply is pending.
