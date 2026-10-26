@@ -97,11 +97,10 @@ export function ScopePicker({ scope, onChoose }: { scope: ReturnType<typeof useS
   const current = scope.options.find(s => s.cwd === scope.cwd);
   const all: Scope[] = [...scope.options, { cwd: null, name: c.personal }];
   const note = useId();
-  // The rule the choice follows describes the button: the menu holds its items only.
+  // The rule the choice follows, at the popup's foot (the mockup's), outside the menu's items; it describes the button.
   return (
-    <>
-    <span id={note} className="sr-only">{c.repoWins}</span>
     <Menu open={open} onOpenChange={setOpen} label={c.folderTitle} className="cat-scope" menuClassName="cat-scope-pop"
+      footer={<p id={note} className="cat-scope-note">{c.repoWins}</p>}
       trigger={tr => (
         <button type="button" className="cat-scope-btn" title={c.folderTitle} aria-describedby={note} {...tr}>
           {c.folder} <strong>{scope.cwd === null ? c.personal : current?.name ?? folderName(scope.cwd)}</strong> <small>{scope.cwd ?? '~/.ledge'}</small> ▾
@@ -114,7 +113,6 @@ export function ScopePicker({ scope, onChoose }: { scope: ReturnType<typeof useS
         </MenuItem>
       ))}
     </Menu>
-    </>
   );
 }
 

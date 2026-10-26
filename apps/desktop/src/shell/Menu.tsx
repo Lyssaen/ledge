@@ -17,6 +17,8 @@ export interface MenuProps {
   trigger(t: MenuTrigger): ReactNode;
   /** MenuItems. */
   children: ReactNode;
+  /** Shown under the items, in the same popup but outside role="menu" (a note on the choice, not a choice). */
+  footer?: ReactNode;
 }
 
 /** Closes the menu and gives the focus back to its button. */
@@ -24,10 +26,12 @@ const CloseMenu = createContext<() => void>(() => {});
 
 /** One menu for every « … » and « Ranger dans… »: a mousedown outside or the focus leaving closes it, Escape closes it and goes no further
  *  (captured on the window, so the global keys never see it), the arrows, Home and End move between its items. */
-export function Menu({ open, onOpenChange, label, className, menuClassName, flip, at, trigger, children }: MenuProps): JSX.Element {
+export function Menu({ open, onOpenChange, label, className, menuClassName, flip, at, trigger, children, footer }: MenuProps): JSX.Element {
   const wrap = useRef<HTMLSpanElement>(null);
   const button = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
+  /** The popup with a footer: the menu and its footer, placed together. */
+  const popup = useRef<HTMLDivElement>(null);
   const [up, setUp] = useState(false);
   const close = () => { onOpenChange(false); button.current?.focus(); };
   const closeRef = useRef(close);
@@ -39,7 +43,7 @@ export function Menu({ open, onOpenChange, label, className, menuClassName, flip
   const atX = at?.x, atY = at?.y;
   useLayoutEffect(() => {
     if (!open || atX === undefined || atY === undefined) { setPlaced(null); return; }
-    const r = menu.current?.getBoundingClientRect();
+    const r = (popup.current ?? menu.current)?.getBoundingClientRect();
     const w = r?.width ?? 0, h = r?.height ?? 0;
     setPlaced({ left: Math.max(0, Math.min(atX, window.innerWidth - w)), top: Math.max(0, Math.min(atY, window.innerHeight - h)) });
   }, [open, atX, atY]);
@@ -77,13 +81,19 @@ export function Menu({ open, onOpenChange, label, className, menuClassName, flip
     items[to]!.focus();
   };
 
+  const place = at ? { position: 'fixed' as const, left: placed?.left ?? at.x, top: placed?.top ?? at.y, right: 'auto', bottom: 'auto', margin: 0 } : undefined;
   return (
     // The focus leaving for a control outside (Tab, or a key like F that moves it) closes the menu, and stays where it went.
     <span className={className} ref={wrap} onBlur={e => { if (open && e.relatedTarget instanceof Node && !e.currentTarget.contains(e.relatedTarget)) changeRef.current(false); }}>
       {trigger({ ref: button, 'aria-haspopup': 'menu', 'aria-expanded': open, onClick: () => onOpenChange(!open) })}
       {open && (
         <CloseMenu.Provider value={() => closeRef.current()}>
-          <div ref={menu} className={`${menuClassName}${up ? ' up' : ''}`} style={at ? { position: 'fixed', left: placed?.left ?? at.x, top: placed?.top ?? at.y, right: 'auto', bottom: 'auto', margin: 0 } : undefined} role="menu" aria-label={label} onKeyDown={onKeyDown}>{children}</div>
+          {footer === undefined
+            ? <div ref={menu} className={`${menuClassName}${up ? ' up' : ''}`} style={place} role="menu" aria-label={label} onKeyDown={onKeyDown}>{children}</div>
+            : <div ref={popup} className={`${menuClassName}${up ? ' up' : ''}`} style={place}>
+                <div ref={menu} role="menu" aria-label={label} onKeyDown={onKeyDown}>{children}</div>
+                {footer}
+              </div>}
         </CloseMenu.Provider>
       )}
     </span>
