@@ -135,7 +135,14 @@ describe('createTasks', () => {
     expect(p).toMatchObject({ owner: 'nova', ownerName: 'Nova', giver: 'otto', state: 'open' });
     expect(told.map(([to]) => to).sort()).toEqual(['nova', 'pim']);
     expect(cmd(LEDGE_GIVER, 'pass', { task: t.id, to: 'nova' }).reason).toBe('elle est déjà à Nova');
-    expect(cmd('otto', 'pass', { task: t.id, to: 'pim' }).reason).toContain('seule la session qui la tient');
+  });
+  it('pass by its giver: the lead moves a task it gave without cancelling it, the one who held it is told to stop', () => {
+    const t = give();
+    told = [];
+    const p = cmd('otto', 'pass', { task: t.id, to: 'Nova', text: 'Pim est pris' }).task!;
+    expect(p).toMatchObject({ owner: 'nova', giver: 'otto', state: 'open' });
+    expect(told.map(([to]) => to).sort()).toEqual(['nova', 'pim']);
+    expect(cmd('pim', 'pass', { task: t.id, to: 'Otto' }).reason).toContain('ou celle qui l\'a confiée (Otto)');
   });
 });
 

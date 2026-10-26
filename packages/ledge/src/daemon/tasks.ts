@@ -186,7 +186,8 @@ export function createTasks(d: TasksDeps): Tasks {
         return ok(cancelled);
       }
       case 'pass': {
-        if (!owner && !ledge) return refuse(`seule la session qui la tient (${t.ownerName}) peut la passer`);
+        // Its giver too (a lead moving work between seats), without the cancel-and-give-again that loses its history.
+        if (!owner && !giver && !ledge) return refuse(`seule la session qui la tient (${t.ownerName}) ou celle qui l'a confiée (${t.giverName}) peut la passer`);
         if (!cmd.to) return refuse('il faut le nom de la session à qui la passer');
         const next = target(cmd.to, teamOf(me.id));
         if (typeof next === 'string') return refuse(next);
@@ -199,7 +200,7 @@ export function createTasks(d: TasksDeps): Tasks {
         const passed = put({ ...rest, ...(nextTeam ? { team: nextTeam } : {}), owner: next.id, ownerName: next.name, state: 'open' }, me.name, `passée à ${next.name}${note ? ` : ${note}` : ''}`,
           { ...sides('pass', ownerOf(t), next), ...(note ? { note } : {}) });
         tellOwner(passed, me.name, `Tâche passée par ${me.name}${note ? ` (${quote(note)})` : ''}, confiée par ${t.giverName} :`);
-        // Passed by Ledge over its owner's head: the one who held it stops.
+        // Passed over its owner's head (by Ledge or its giver): the one who held it stops.
         if (!owner) d.mailbox.notify(t.owner, formatLedgeTask({ id: t.id, from: me.name, text: `Tâche « ${t.title} » passée à ${next.name} par ${me.name}. Arrête d'y travailler.` }), `${t.id}:${passed.log.length}:from`);
         return ok(passed);
       }

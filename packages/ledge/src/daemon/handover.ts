@@ -14,6 +14,7 @@ const PROMPT_BRIEF_MAX = 6000;
 
 export interface HandoverDeps {
   store: Pick<Store, 'get' | 'all' | 'upsert' | 'patch' | 'onChange'>;
+  /** The request for a brief goes before anything waiting: past the brief's deadline Ledge writes an empty one. */
   mailbox: Pick<Mailbox, 'notify'>;
   tasks: { run(cmd: TaskCmd): { reason?: string }; all(): Task[] };
   teams: { get(id: string): Team | undefined };
@@ -35,6 +36,23 @@ export interface Handovers {
   /** The brief a session may read again: its predecessor's, else the one it wrote. */
   show(by: string): { text: string } | { reason: string };
   close(): void;
+}
+
+/** The live session a relieved one handed its seat to, down the chain of reliefs; none once the chain has ended. */
+export function reliefOf(get: (id: string) => Session | undefined, s: Session): Session | undefined {
+  let cur: Session | undefined = s;
+  for (let hops = 0; cur && hops < 50; hops++) {
+    if (cur.state !== 'exited' && !isArchived(cur)) return cur === s ? undefined : cur;
+    const to: string | undefined = cur.handover?.state === 'done' ? cur.handover.to : undefined;
+    cur = to ? get(to) : undefined;
+  }
+  return undefined;
+}
+
+/** Names of relieved sessions whose seat still lives: no other launch takes them, so a message to one still reaches its seat. */
+export function heldNames(all: Session[]): string[] {
+  const byId = new Map(all.map(s => [s.id, s] as const));
+  return all.filter(s => s.handover?.state === 'done' && reliefOf(id => byId.get(id), s)).map(s => s.name);
 }
 
 const quote = (s: string, max: number) => (s.length > max ? `${s.slice(0, max)}…` : s);
@@ -132,7 +150,7 @@ export function createHandovers(d: HandoverDeps): Handovers {
       if (s.tool === 'omp' || !s.tmuxSession) return `${s.name} n'a pas de terminal où demander son bilan`;
       if (waiting.has(id) || s.handover?.state === 'briefing' || s.handover?.state === 'launching') return `la relève de ${s.name} est déjà en cours`;
       const share = s.context ? ` (${Math.round((s.context.used / s.context.window) * 100)} %)` : '';
-      const asked = d.mailbox.notify(id, `<ledge-handover>Ton contexte est presque plein${share} : une nouvelle session va prendre ta place. Écris ton bilan de relève en une seule commande : ledge handover "<bilan>" — ce qui est fait, ce qui est en cours, la suite, les pièges, les fichiers clés. Ne commence rien d'autre ensuite.</ledge-handover>`, `handover:${id}:${now()}`);
+      const asked = d.mailbox.notify(id, `<ledge-handover>Ton contexte est presque plein${share} : une nouvelle session va prendre ta place. Écris ton bilan de relève en une seule commande : ledge handover "<bilan>" — ce qui est fait, ce qui est en cours, la suite, les pièges, les fichiers clés. Ne commence rien d'autre ensuite.</ledge-handover>`, `handover:${id}:${now()}`, { first: true });
       if (!asked) return `impossible d'écrire à ${s.name}`;
       const auto = o.auto === true;
       waiting.set(id, { timer: setTimeout(() => finish(id, undefined), briefMs), auto });
