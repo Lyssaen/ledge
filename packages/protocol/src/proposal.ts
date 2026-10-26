@@ -35,10 +35,11 @@ export const TaskBlockSchema = z.object({
 });
 export type TaskBlock = z.infer<typeof TaskBlockSchema>;
 
-export type BlockKind = 'session' | 'relay' | 'project' | 'close' | 'team' | 'task';
-const FENCES = ['```ledge-session', '```ledge-relay', '```ledge-project', '```ledge-close', '```ledge-team', '```ledge-task'];
+/** The fences the chat may write: `action` (action registry spec §3), and the six that came before it, still read. */
+export type BlockKind = 'session' | 'relay' | 'project' | 'close' | 'team' | 'task' | 'action';
+const FENCES = ['```ledge-session', '```ledge-relay', '```ledge-project', '```ledge-close', '```ledge-team', '```ledge-task', '```ledge-action'];
 /** A block from its fence to the closing fence, or to the end of the text when it is not closed (yet). */
-const BLOCK = /```ledge-(session|relay|project|close|team|task)[ \t]*\n?([\s\S]*?)(?:```|$)/g;
+const BLOCK = /```ledge-(session|relay|project|close|team|task|action)[ \t]*\n?([\s\S]*?)(?:```|$)/g;
 
 /** The answer without its card blocks; every block in order (#24: several sessions in one answer), and the language and content of
  *  the last one (null when there is none), which decides the turn's card. */

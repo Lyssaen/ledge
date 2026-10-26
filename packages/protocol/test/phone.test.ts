@@ -240,6 +240,19 @@ describe('phone chat', () => {
     expect(() => PhoneChatTurnSchema.parse({ ...turn, closes: [] })).toThrow();
     expect(ConfirmPurposeSchema.parse('close')).toBe('close');
   });
+  it('carries the generic rows without their args, strictly', () => {
+    const row = { action: 'team.dissolve', summary: 'Dissoudre **api**', risk: 'destructive', team: 'team-3fa2' };
+    expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [row] })).not.toThrow();
+    expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [{ ...row, args: { team: 'team-3fa2' } }] })).toThrow();
+    expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [{ ...row, error: 'boom' }] })).toThrow();
+    expect(ConfirmPurposeSchema.parse('act')).toBe('act');
+  });
+  it('checks the chat.act client message', () => {
+    const assertion = { id: 'a', clientDataJSON: 'b', authenticatorData: 'c', signature: 'd' };
+    for (const m of [{ type: 'chat.act', op: OP, qid: QID }, { type: 'chat.act', op: OP, qid: QID, rows: [1, 0], confirmed: true, assertion }]) expect(() => PhoneClientMessageSchema.parse(m)).not.toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ type: 'chat.act', op: OP, qid: QID, rows: [0, 0] })).toThrow();
+    expect(PhoneClientMessageSchema.parse({ type: 'chat.act', op: OP, qid: QID, args: { team: 'x' } })).not.toHaveProperty('args');
+  });
   it('checks the chat.close client message', () => {
     const assertion = { id: 'a', clientDataJSON: 'b', authenticatorData: 'c', signature: 'd' };
     for (const m of [{ type: 'chat.close', op: OP, qid: QID }, { type: 'chat.close', op: OP, qid: QID, rows: [0, 2], assertion }]) expect(() => PhoneClientMessageSchema.parse(m)).not.toThrow();

@@ -1,6 +1,6 @@
 # Ledge's actions: one registry for what the chat may propose
 
-Date: 2026-10-26. Status: design, awaiting the product decisions of §9. Issue #94; base of #93 (`ledge team`, `ledge close`).
+Date: 2026-10-26. Status: design; the product points of §9 decided on 2026-10-26. Issue #94; base of #93 (`ledge team`, `ledge close`).
 
 ## 1. Intent
 
@@ -269,7 +269,7 @@ later lot (« passe le relais à Nova »), not phase 1.
 - `chat-act.test.ts`: in-order apply, stop at first failure, `confirm_required`, re-resolve, double click.
 - `daemon-tasks.test.ts`: `cancel`, `pass` by Ledge.
 
-## 9. To decide (my recommendations)
+## 9. Decided on 2026-10-26 (the user kept the three recommendations as they are)
 
 ### 9.1 Answering a pending permission from the chat — **yes, narrowly**
 

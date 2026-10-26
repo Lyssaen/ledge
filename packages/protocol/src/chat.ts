@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { AutonomySchema, ToolSchema } from './session.js';
+import { ActionIdSchema, ActionRiskSchema } from './actions.js';
 
 /** What Ledge consulted while answering: a context file (a session's pane, reply or git summary, the sessions list) or a repository file. */
 export const ChatStepSchema = z.object({
@@ -75,13 +76,25 @@ export const ChatTaskProposalSchema = z.object({
 export type ChatTaskProposal = z.infer<typeof ChatTaskProposalSchema>;
 export const ChatTasksSchema = z.array(ChatTaskProposalSchema).min(1).max(MAX_PROPOSALS);
 
+/** A row of the chat's generic card (action registry spec §5.1): an action the daemon resolved, ready to apply. `args` are
+ *  resolved (ids, never names), what the daemon applies; `summary` the daemon's one line in French; `detail` what to read in
+ *  full before confirming (a pending request, verbatim); `session` / `team` the target, for a link. No `state`: proposed. */
+export const ChatActionSchema = z.object({
+  action: ActionIdSchema, args: z.record(z.unknown()), summary: z.string().min(1).max(300), detail: z.string().max(4000).optional(),
+  risk: ActionRiskSchema, session: z.string().optional(), team: z.string().optional(),
+  state: z.enum(['running', 'done', 'failed']).optional(), doneAt: z.string().datetime().optional(), error: z.string().optional()
+});
+export type ChatAction = z.infer<typeof ChatActionSchema>;
+/** Every generic row an answer proposes, in the order Ledge wrote them: one plan (spec §9.2). */
+export const ChatActionsSchema = z.array(ChatActionSchema).min(1).max(MAX_PROPOSALS);
+
 /** One question to Ledge and its answer; `error` set when it could not answer, both absent while it is still reading. */
 export const ChatTurnSchema = z.object({
   machineId: z.string().optional(), machineName: z.string().optional(), choices: z.array(z.object({ id: z.string(), label: z.string() })).optional(),
   qid: z.string().min(1), question: z.string(), askedAt: z.string().datetime(),
   steps: z.array(ChatStepSchema), answer: z.string().optional(), answeredAt: z.string().datetime().optional(), error: z.string().optional(), proposal: ChatProposalSchema.optional(), proposals: ChatProposalsSchema.optional(), relay: ChatRelaySchema.optional(), closes: ChatClosesSchema.optional(),
   projectProposal: ChatProjectProposalSchema.optional(),
-  team: ChatTeamProposalSchema.optional(), tasks: ChatTasksSchema.optional()
+  team: ChatTeamProposalSchema.optional(), tasks: ChatTasksSchema.optional(), actions: ChatActionsSchema.optional()
 });
 export type ChatTurn = z.infer<typeof ChatTurnSchema>;
 
