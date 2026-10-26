@@ -1,10 +1,16 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Store } from '../src/daemon/store.js';
 import { createOmpHost, ompArgs, type OmpHost } from '../src/daemon/omp/host.js';
+// Records each session's tracking so a test can read what the host left in it.
+const trackings = vi.hoisted(() => [] as Array<{ echo: string[] }>);
+vi.mock('../src/daemon/omp/project.js', async importOriginal => {
+  const real = await importOriginal<typeof import('../src/daemon/omp/project.js')>();
+  return { ...real, newTracking: (tag?: string) => { const t = real.newTracking(tag); trackings.push(t); return t; } };
+});
 import { answerFor, askAnswerFor, askQuestions, newTracking, project } from '../src/daemon/omp/project.js';
 import { ompChoices } from '../src/daemon/omp/catalog.js';
 import { until } from './helpers.js';
@@ -344,6 +350,12 @@ describe('OmpHost images', () => {
     const native = cmd.images!.length; expect(native).toBeGreaterThan(0); expect(native).toBeLessThan(5);
     const brackets = refs.slice(native).map(r => `[Image attached: ${atts.path(r.id)}]`);
     expect(cmd.message).toBe(['five', ...brackets].join(' '));
+  });
+  it('an image-only prompt leaves nothing in the echo list', async () => {
+    const s = await host.launch({ cwd: tmpdir() });
+    const ref = await put(70);
+    await host.send(s.id, '', 'prompt', [ref]);
+    expect(trackings.at(-1)!.echo).toEqual([]);
   });
   it('an image-only follow_up is echoed with its image once its turn starts', async () => {
     const s = await host.launch({ cwd: tmpdir() });

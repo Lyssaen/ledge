@@ -184,11 +184,11 @@ export function createOmpHost(deps: OmpHostDeps) {
       const { message, native } = await fitImages(text, images);
       const attachments = images.map(r => r.id);
       const entry = { text: message.trim(), attachments, ...(message !== text ? { shown: text.trim() } : {}) };
-      if (mode === 'prompt') { l.tracking.echo.push(message.trim()); store.apply(id, { name: 'UserPromptSubmit', at: now(), source: 'daemon', text, ...(attachments.length > 0 ? { attachments } : {}) }); l.tracking.working = true; }
+      if (mode === 'prompt') { if (message.trim() !== '') l.tracking.echo.push(message.trim()); store.apply(id, { name: 'UserPromptSubmit', at: now(), source: 'daemon', text, ...(attachments.length > 0 ? { attachments } : {}) }); l.tracking.working = true; }
       else l.tracking.queued.push(entry);
       try { await l.rpc.request(mode, { message, ...(native.length > 0 ? { images: native } : {}) }); }
       catch (e) {
-        if (mode === 'prompt') { l.tracking.working = false; l.tracking.echo.pop(); store.apply(id, { name: 'StopFailure', at: now(), source: 'daemon', text: (e as Error).message }); }
+        if (mode === 'prompt') { l.tracking.working = false; if (message.trim() !== '') l.tracking.echo.pop(); store.apply(id, { name: 'StopFailure', at: now(), source: 'daemon', text: (e as Error).message }); }
         else { const i = l.tracking.queued.lastIndexOf(entry); if (i !== -1) l.tracking.queued.splice(i, 1); }
         throw e;
       }
