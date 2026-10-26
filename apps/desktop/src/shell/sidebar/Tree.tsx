@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, type ReactNode } from 'react';
-import type { Helper, Projects, Session, Task } from '@ledge/protocol';
+import { PROJECT_COLORS, type Helper, type Projects, type Session, type Task } from '@ledge/protocol';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import type { Filing } from '../../atelier/filing';
 import { useI18n } from '../../i18n/lang';
 import { spanOf } from '../../list/time';
 import { taskOf } from '../../nav/agents';
 import { ProjectSwatch } from '../../projects/ProjectSwatch';
+import { ledgeProgress } from '../../teams/useTeamsApi';
 import { cls } from '../cls';
 import { SHELL_ICONS } from '../icons';
 import { AutoMark, HelperBot, SessionBot } from '../SessionBot';
@@ -304,16 +305,19 @@ export function Tree(p: {
       const tkey = `${pkey}:team:${team.id}`;
       const topen = !closed.has(tkey);
       const ttoggle = () => flip(closed, setClosed, tkey);
-      const mine = (p.tasks ?? []).filter(x => x.team === team.id && x.giver === 'ledge');
-      const line = team.state === 'resting' ? t.teams.treeResting : t.teams.treeLine(mine.filter(x => x.state === 'done').length, mine.length);
+      const { done, given } = ledgeProgress(p.tasks ?? [], team.id);
+      const progress = t.home.point.progress(done, given);
       nav.current.set(tkey, { toggle: ttoggle, open: topen, parent: pkey });
+      // One line, as a project's: the flag in the project's colour, the name, « team » or « resting », and Ledge's tasks once it gave some.
       rows.push(
-        <div key={tkey} role="treeitem" aria-level={2} aria-expanded={topen} className={cls('st-row st-team', team.state === 'resting' && 'resting')} style={{ '--d': 1 } as CSSProperties}>
+        <div key={tkey} role="treeitem" aria-level={2} aria-expanded={topen} className={cls('st-row st-team', team.state === 'resting' && 'resting')}
+          style={{ '--d': 1, ...(project ? { '--team': PROJECT_COLORS[project.color] } : {}) } as CSSProperties}>
           <Chevron open={topen} label={topen ? t.side.fold(team.name) : t.side.unfold(team.name)} onClick={ttoggle} />
-          <span className="team-flag" aria-hidden="true">⚑</span>
+          <span className="st-flag"><Icon d={SHELL_ICONS.flag} size={13} /></span>
           <button type="button" className="st-main" data-tree-key={tkey} tabIndex={tabOf(tkey)} onClick={() => p.onHome(g.id ?? 'none')}>
-            <strong>{team.name}</strong><span>{line}</span>
+            <strong>{team.name}</strong><span>{team.state === 'resting' ? t.teams.treeResting : t.teams.tree}</span>
           </button>
+          {given > 0 && <span className="st-progress" role="progressbar" aria-valuemin={0} aria-valuemax={given} aria-valuenow={done} title={progress} aria-label={progress}><i><b style={{ width: `${Math.round((done / given) * 100)}%` }} /></i>{done}/{given}</span>}
         </div>
       );
       if (topen) rows.push(...sessionRows(seats, 2, tkey, tkey));
