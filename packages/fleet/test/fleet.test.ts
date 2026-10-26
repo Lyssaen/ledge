@@ -767,6 +767,22 @@ describe('attachments', () => {
     expect(server.sent).toEqual([]);
     expect(got.filter(m => m.type === 'attachment.error')).toEqual([{ type: 'attachment.error', requestId: 'r1', reason: 'offline' }, { type: 'attachment.error', requestId: 'g1', reason: 'offline' }]);
   });
+  it('answers « offline » for a pending ask when its machine drops, and forgets it', () => {
+    const { client, server, got } = setup();
+    client.send({ type: 'attachment.put', requestId: 'r1', id: 'server:s1', image });
+    server.set('unreachable');
+    expect(got.filter(m => m.type === 'attachment.error')).toEqual([{ type: 'attachment.error', requestId: 'r1', reason: 'offline' }]);
+    server.emit({ type: 'attachment.stored', requestId: 'r1', ref });
+    expect(got.filter(m => m.type === 'attachment.stored')).toEqual([]);
+  });
+  it('answers « offline » for an unqualified or unknown route instead of a generic error', () => {
+    const { client, local, server, got } = setup();
+    client.send({ type: 'attachment.put', requestId: 'r1', id: 's1', image });
+    client.send({ type: 'attachment.get', requestId: 'g1', attachment: ref.id, machine: 'nowhere' });
+    expect(got.filter(m => m.type === 'attachment.error')).toEqual([{ type: 'attachment.error', requestId: 'r1', reason: 'offline' }, { type: 'attachment.error', requestId: 'g1', reason: 'offline' }]);
+    expect(got.some(m => m.type === 'error')).toBe(false);
+    expect(local.sent).toEqual([]); expect(server.sent).toEqual([]);
+  });
   it('keeps chat images out of chat.route and hands them to the routed machine', () => {
     const { client, local, server } = setup();
     client.send({ type: 'chat.ask', qid: 'q', text: 'Lance sur le serveur', images: [image] });
