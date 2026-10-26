@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { HandoverStateSchema } from './handover.js';
 import { AutonomySchema, PendingSchema, SessionSchema, ToolSchema, type Tool } from './session.js';
 import { ChatStepSchema, MAX_PROPOSALS } from './chat.js';
 import { DecisionSchema, NOTE_MAX } from './decisions.js';
@@ -89,8 +90,10 @@ export const PhoneSessionSchema = SessionSchema.pick({
   id: true, name: true, tool: true, project: true, title: true, topic: true, repo: true, branch: true, worktree: true,
   state: true, helpers: true, lastReply: true, startedAt: true, lastActivityAt: true,
   /** Its role and its live team (ledge home spec §2.4): the agents screen groups a project's sessions by table. */
-  role: true, roleLabel: true, team: true
-}).extend({ pending: PhonePendingSchema.optional(), unread: z.boolean() });
+  role: true, roleLabel: true, team: true,
+  /** Its context and its relief (context handover spec §3.2): the phone shows the gauge; the relief is started from the PC. */
+  context: true, relieves: true
+}).extend({ pending: PhonePendingSchema.optional(), unread: z.boolean(), handover: z.object({ state: HandoverStateSchema, toName: z.string().max(80).optional() }).strict().optional() });
 export type PhoneSession = z.infer<typeof PhoneSessionSchema>;
 
 /** Base64url without padding: what WebAuthn fields look like once the phone encodes them. */

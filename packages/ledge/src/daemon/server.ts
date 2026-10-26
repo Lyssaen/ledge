@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { LEDGE_GIVER, projectOf, type Autonomy, type Role, type Seat, type Team } from '@ledge/protocol';
+import { contextNear, LEDGE_GIVER, projectOf, type Autonomy, type Role, type Seat, type Team } from '@ledge/protocol';
 import { DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type ChatErrorCode, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, backendOf } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
@@ -41,6 +41,8 @@ import { cardOf, closeFromChat, CloseRefused } from '../chat/close.js';
 import { createMailbox, type MailJournal } from './mailbox.js';
 import { createTasks, type TasksJournal } from './tasks.js';
 import { createTeamsLive, type TeamsJournal } from './teamsLive.js';
+import { createHandovers } from './handover.js';
+import { readContext } from './context.js';
 import { autonomyArgs, findRole, ompApprovalFor } from './roles.js';
 import { listDefinitions, resolveSeats, saveTemplate } from './teams.js';
 import { resolveRoleAddress, seatContext, teammates } from './seat.js';
@@ -171,7 +173,7 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; scan?: typeof scanRepos; models?: Models; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; tasks?: TasksJournal; teams?: TeamsJournal }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; scan?: typeof scanRepos; models?: Models; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; tasks?: TasksJournal; teams?: TeamsJournal; handoverBriefMs?: number }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -276,6 +278,24 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     // The card that gave it follows it, on whichever thread holds it.
     for (const [thread, c] of cardThreads.all()) c.followTask?.(task, cardThreads.emitterOf(thread) ?? broadcast);
   } });
+  // The relief of a session whose context is nearly full (context handover spec §3.3). `launch` and `closeSession` are hoisted.
+  const handovers = createHandovers({ store, mailbox, tasks, teams, launch: req => launch(req), close: s => closeSession(s),
+    dir: join(paths().dir, 'handovers'), now, ...(opts.handoverBriefMs !== undefined ? { briefMs: opts.handoverBriefMs } : {}) });
+  /** Each session's state last seen: a turn's end (→ idle) is when its context is read again. */
+  const lastState = new Map<string, Session['state']>();
+  /** Reads a session's context after a turn (§3.1); a seat working without asking is relieved by Ledge past the threshold (§3.2). */
+  const measure = async (id: string): Promise<void> => {
+    const s = store.get(id); if (!s) return;
+    const context = await readContext(s, now());
+    const cur = store.get(id);
+    if (!context || !cur) return;
+    if (cur.context?.used !== context.used || cur.context.window !== context.window) store.upsert({ ...cur, context });
+    const h = cur.handover?.state;
+    if (contextNear(context) && cur.autonomy === 'auto' && cur.team && h !== 'briefing' && h !== 'launching' && h !== 'done' && h !== 'failed') {
+      const refused = handovers.start(id, { auto: true });
+      if (refused) log(`automatic relief of ${cur.name} not started: ${refused}`);
+    }
+  };
   /** The last preview per session, replayed after every snapshot so a late client does not wait for the agent to write. */
   const previews = new Map<string, string[]>();
   /** The title last pushed to each session's tmux tab, so tmux is told only when it changes. */
@@ -302,7 +322,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       titles.set(c.session.id, c.session.title);
       tmux.setOption(c.session.tmuxSession, '@ledge_title', c.session.title).catch(e => log(`tab title not set for ${c.session.id}: ${(e as Error).message}`));
     }
-    if (c.type === 'removed') { previews.delete(c.id); titles.delete(c.id); labelled.delete(c.id); unlabelled.delete(c.id); }
+    if (c.type === 'removed') { previews.delete(c.id); titles.delete(c.id); labelled.delete(c.id); unlabelled.delete(c.id); lastState.delete(c.id); }
+    if (c.type === 'updated') {
+      const was = lastState.get(c.session.id); lastState.set(c.session.id, c.session.state);
+      if (c.session.state === 'idle' && was !== undefined && was !== 'idle' && c.session.transcriptPath) void measure(c.session.id).catch(e => log(`context of ${c.session.id} not read: ${(e as Error).message}`));
+    }
     if (c.type === 'updated') labelExit(c.session);
     if (c.type === 'updated' && c.session.modelNext) void applyModelNext(c.session.id).catch(e => log(`model change of ${c.session.id} failed: ${(e as Error).message}`));
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
@@ -1081,6 +1105,18 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return reply(mailbox.submit({ ...msg, to: r.to }));
       }
       case 'message.read': return reply(mailbox.read(msg));
+      case 'session.handover': {
+        const reason = handovers.start(msg.id);
+        return reply({ type: 'session.handover.result', rid: msg.rid, ok: reason === null, ...(reason ? { reason } : {}) });
+      }
+      case 'handover.brief': {
+        const reason = handovers.brief(msg.by, msg.text);
+        return reply({ type: 'handover.result', rid: msg.rid, ...(reason ? { reason } : {}) });
+      }
+      case 'handover.show': {
+        const r = handovers.show(msg.by);
+        return reply({ type: 'handover.result', rid: msg.rid, ...('text' in r ? { text: r.text } : { reason: r.reason }) });
+      }
       case 'task.cmd': {
         // The chat's task card (roles spec §3.8) gives through its turn, which then follows its task.
         if (msg.qid !== undefined && msg.op === 'give') return giveFromCard(msg, reply);
@@ -1284,6 +1320,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     omp,
     closeSession: id => { const s = store.get(id); return s ? closeSession(s) : Promise.reject(unknownSession()); },
     labelExited,
-    close: () => new Promise(res => { unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); tasks.close(); unsubscribeTeams(); teams.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
+    close: () => new Promise(res => { unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); tasks.close(); handovers.close(); unsubscribeTeams(); teams.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
   };
 }

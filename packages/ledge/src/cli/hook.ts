@@ -1,4 +1,5 @@
-import { type Session, type SessionEvent, type Team, type Tool } from '@ledge/protocol';
+import { randomUUID } from 'node:crypto';
+import { taskClosed, type Session, type SessionEvent, type Task, type Team, type Tool } from '@ledge/protocol';
 import { findRole } from '../daemon/roles.js';
 import { resolveRoleAddress, seatContext, teammates } from '../daemon/seat.js';
 import { connect, sendMessageAndAwaitAck, type Client } from '../client.js';
@@ -13,6 +14,7 @@ import { basename, join } from 'node:path';
 import { CODEX_ENV_VAR, CODEX_HOOK_VAR } from '../spawn.js';
 import { parseLedgeCommand, readOnClient, sendOnClient } from './send.js';
 import { taskOnClient } from './task.js';
+import { handoverOnClient } from './handover.js';
 import { formatWho } from './who.js';
 
 type Payload = Record<string, unknown>;
@@ -351,7 +353,27 @@ function mapCursorEvent(eventName: string, p: Payload, at: string, launched: boo
 type Identity = Pick<Session, 'name' | 'tool' | 'project' | 'cwd'> & Partial<Pick<Session, 'repo' | 'branch' | 'worktree'>> & {
   /** Its role and team, as `seatContext` words them (roles spec §3.5): rebuilt at every start from the live team. */
   seat?: string;
+  /** The tasks it holds, open (context handover spec §2): kept by Ledge, not in its conversation. */
+  tasks?: Task[];
+  /** The session it relieves (§3.3): its brief is one command away. */
+  relieves?: Session['relieves'];
 };
+
+/** How many of its open tasks a session is told of when it starts. */
+const TASKS_TOLD = 10;
+const TASK_STATE: Record<Task['state'], string> = { open: 'ouverte', taken: 'prise', done: 'terminée', refused: 'refusée', dropped: 'abandonnée' };
+
+/** The open tasks block (§2): after a compaction the agent knows what it was doing, and where to read it again. */
+export function tasksContext(tasks: readonly Task[]): string | undefined {
+  if (!tasks.length) return undefined;
+  const shown = tasks.slice(0, TASKS_TOLD);
+  return [
+    'Tes tâches en cours (elles sont gardées par Ledge, pas dans ta conversation) :',
+    ...shown.map(t => `- ${t.id} · ${TASK_STATE[t.state]} · « ${t.title} » · confiée par ${t.giverName}`),
+    ...(tasks.length > shown.length ? [`- et ${tasks.length - shown.length} autre(s) : ledge task list`] : []),
+    'Relis-en une avec `ledge task show <id>` avant de reprendre.'
+  ].join('\n');
+}
 
 /** What a session Ledge launched is told of itself when it starts, resumes or is cleared (#20): its Ledge name, project,
  *  branch and worktree, and how to find the other sessions. A Claude addresses the others by Ledge name: its hook
@@ -365,7 +387,9 @@ export function identityContext(s: Identity): string {
       : 'Pour écrire à une autre session Ledge, lance `ledge send <nom> "<message>"` (seul, sans && ni |). Ledge exécute lui-même `ledge send`, `ledge read`, `ledge task` et `ledge who` : leur résultat t\'arrive comme « Command blocked by PreToolUse hook: … », c\'est la réponse, pas une erreur.',
     'Un long message d\'une autre session t\'arrive en aperçu avec son id : lance `ledge read <id>` pour le lire en entier. Une `<ledge-notice>` te dit qu\'un de tes messages n\'a pas pu être remis.',
     'Un message sert à prévenir ; pour confier un travail qui ne doit pas se perdre, lance plutôt `ledge task give <nom> "<titre>" "<détail>"` (`ledge task` pour le reste). Une `<ledge-task>` t\'en confie une, ou te dit comment une des tiennes a fini : quand on t\'en confie une, prends-la (`ledge task take <id>`) et termine-la toujours (`ledge task done <id> "<résultat>"`, ou `refuse`).',
-    ...(s.seat ? [s.seat] : [])
+    ...(s.seat ? [s.seat] : []),
+    ...(s.relieves ? [`Tu as pris la relève de ${s.relieves.name}, dont le contexte était plein : relis son bilan avec \`ledge handover show\`.`] : []),
+    ...(s.tasks ? [tasksContext(s.tasks) ?? ''].filter(Boolean) : [])
   ].join('\n');
 }
 
@@ -455,6 +479,7 @@ async function runLedgeCommand(client: Client, cmd: NonNullable<ReturnType<typeo
   if (cmd.cmd === 'who') line = formatWho((await client.next('snapshot', left())).sessions, from);
   else if (cmd.cmd === 'read') line = (await readOnClient(client, cmd.args, from, left())).line;
   else if (cmd.cmd === 'task') line = (await taskOnClient(client, cmd.args, from, left())).line;
+  else if (cmd.cmd === 'handover') line = (await handoverOnClient(client, cmd.args, from, left())).line;
   else line = (await sendOnClient(client, cmd.args, from, left())).line;
   return deny(line);
 }
@@ -472,6 +497,7 @@ export async function runHook(eventName: string, stdin: string, opts: { port?: n
   let mapped: MappedHook | null = null;
   let identify = false; let known: Session | undefined; let live = { sessions: [] as Session[], teams: [] as Team[] }; let deadline = Date.now() + (opts.timeoutMs ?? 100);
   let relayed: string | undefined;
+  let held: Task[] = [];
   try {
     const payload = JSON.parse(stdin || '{}');
     mapped = agent === 'cursor' ? mapCursorHook(eventName, payload, new Date().toISOString()) : mapHook(agent, eventName, payload, new Date().toISOString());
@@ -493,6 +519,10 @@ export async function runHook(eventName: string, stdin: string, opts: { port?: n
       // A seat's team follows the snapshot (`teams`): its line names the teammates as they are now.
       const teamList = known?.team ? (await client.next('teams', Math.max(0, deadline - Date.now())).catch(() => undefined))?.teams : undefined;
       live = { sessions: snapshot?.sessions ?? [], teams: teamList ?? [] };
+      // Its own open tasks (§2), within the same deadline: none known is no block.
+      client.send({ type: 'task.cmd', rid: randomUUID(), by: mapped.id, op: 'list' });
+      const listed = await client.next('task.result', Math.max(0, deadline - Date.now())).catch(() => undefined);
+      held = (listed?.tasks ?? []).filter(t => t.owner === mapped!.id && !taskClosed(t));
     }
     if (intercept) relayed = await relayMessage(client, mapped.id, str((payload as Payload).tool_use_id), input, deadline);
     if (command) relayed = await runLedgeCommand(client, command, mapped.id, deadline);
@@ -503,6 +533,7 @@ export async function runHook(eventName: string, stdin: string, opts: { port?: n
   }
   if (relayed) return relayed;
   if (!identify || !mapped) return undefined;
-  const who = await identity(agent, mapped.cwd, known, deadline, live);
+  const found = await identity(agent, mapped.cwd, known, deadline, live);
+  const who = found ? { ...found, ...(held.length ? { tasks: held } : {}), ...(known?.relieves ? { relieves: known.relieves } : {}) } : undefined;
   return who ? JSON.stringify({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: identityContext(who) } }) : undefined;
 }

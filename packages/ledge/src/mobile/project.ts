@@ -52,7 +52,9 @@ export function toPhoneSession(s: Session, readAt: string): PhoneSession {
     startedAt: s.startedAt, lastActivityAt: s.lastActivityAt,
     // Topics are already cut to TOPIC_MAX where they are set; clipped again so no source can swell a snapshot.
     ...(s.topic !== undefined ? { topic: clip(s.topic, TOPIC_MAX).text } : {}),
-    ...pickSet(s, ['repo', 'branch', 'worktree', 'role', 'roleLabel', 'team']),
+    ...pickSet(s, ['repo', 'branch', 'worktree', 'role', 'roleLabel', 'team', 'context', 'relieves']),
+    // Its relief's state only (context handover spec §3.2): the phone shows it, the PC starts it.
+    ...(s.handover ? { handover: { state: s.handover.state, ...(s.handover.toName ? { toName: s.handover.toName.slice(0, 80) } : {}) } } : {}),
     helpers: s.helpers.map(h => ({ id: h.id, kind: h.kind, task: h.task, state: h.state, ...pickSet(h, ['finishedAt']) })),
     // A preview only: the whole reply is in the thread.
     ...(s.lastReply ? { lastReply: { text: clip(s.lastReply.text, TOOL_TEXT_MAX).text, at: s.lastReply.at, ...pickSet(s.lastReply, ['plan']) } } : {}),

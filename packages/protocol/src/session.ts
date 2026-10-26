@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ContextSchema, HandoverSchema, RelievesSchema } from './handover.js';
 
 export const ToolSchema = z.enum(['claude', 'codex', 'cursor', 'omp']);
 /** OMP's `--approval-mode` as Ledge offers it: ask before writes and executions, approve file writes by themselves, or approve everything (auto). */
@@ -114,6 +115,12 @@ export const SessionSchema =z.object({
   team: z.string().optional(),
   /** Its role's autonomy, as launched (kept by a resume); left out, `ask`. */
   autonomy: AutonomySchema.optional(),
+  /** Its context as its agent last reported it, after a turn (context handover spec §3.1); left out, not measured. */
+  context: ContextSchema.optional(),
+  /** Its relief by a fresh session (§3.3): asked, launched, done or failed. */
+  handover: HandoverSchema.optional(),
+  /** The session it relieves, when it is a relief. */
+  relieves: RelievesSchema.optional(),
   /** A model change asked while the agent worked (`session.model`), applied at its next free moment; a field left out is the agent's default. */
   modelNext: z.object({ model: z.string().optional(), effort: z.string().optional() }).optional(),
   /** The agent's own session id when Ledge chose it at launch (Claude Code `--session-id`). */

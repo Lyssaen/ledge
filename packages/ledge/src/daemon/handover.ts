@@ -1,0 +1,159 @@
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { BRIEF_MAX, isArchived, taskClosed, type ClientMessage, type Handover, type Session, type Task, type Team, type Tool } from '@ledge/protocol';
+import type { Store } from './store.js';
+import type { Mailbox } from './mailbox.js';
+import { log } from '../log.js';
+
+type TaskCmd = Extract<ClientMessage, { type: 'task.cmd' }>;
+
+/** How long a session has to write its brief before Ledge writes one itself. */
+export const BRIEF_MS = 10 * 60_000;
+/** How much of the brief the relief's first instruction quotes; the whole one is `ledge handover show`. */
+const PROMPT_BRIEF_MAX = 6000;
+
+export interface HandoverDeps {
+  store: Pick<Store, 'get' | 'all' | 'upsert' | 'patch' | 'onChange'>;
+  mailbox: Pick<Mailbox, 'notify'>;
+  tasks: { run(cmd: TaskCmd): { reason?: string }; all(): Task[] };
+  teams: { get(id: string): Team | undefined };
+  /** Launches the relief as `session.launch` would (its role seats it at its team's table). */
+  launch(req: { tool: Tool; cwd: string; prompt: string; model?: string; effort?: string; role?: string; team?: string }): Promise<Session>;
+  /** Stops the relieved session's agent. */
+  close(s: Session): Promise<unknown>;
+  /** Where briefs are kept, one `<session id>.md` each. */
+  dir: string;
+  now?: () => string;
+  briefMs?: number;
+}
+
+export interface Handovers {
+  /** Starts a session's relief: null once asked, else why not. */
+  start(id: string, o?: { auto?: boolean }): string | null;
+  /** The brief written by the session being relieved: null once taken, else why not. */
+  brief(by: string, text: string): string | null;
+  /** The brief a session may read again: its predecessor's, else the one it wrote. */
+  show(by: string): { text: string } | { reason: string };
+  close(): void;
+}
+
+const quote = (s: string, max: number) => (s.length > max ? `${s.slice(0, max)}…` : s);
+
+/**
+ * The relief of a session whose context is nearly full (context handover spec §3.3): its brief asked at its next free
+ * moment, a fresh session at the same seat given that brief, its open tasks passed to it, and the old one closed.
+ */
+export function createHandovers(d: HandoverDeps): Handovers {
+  const now = d.now ?? (() => new Date().toISOString());
+  const briefMs = d.briefMs ?? BRIEF_MS;
+  /** The reliefs waiting for their brief, by session: the fallback timer, and whether Ledge started it. */
+  const waiting = new Map<string, { timer: ReturnType<typeof setTimeout>; auto: boolean }>();
+  const file = (id: string) => join(d.dir, `${id}.md`);
+
+  const mark = (id: string, h: Omit<Handover, 'at'>) => {
+    const cur = d.store.get(id);
+    if (cur) d.store.upsert({ ...cur, handover: { ...h, at: now() } });
+  };
+  const openTasks = (id: string) => d.tasks.all().filter(t => t.owner === id && !taskClosed(t));
+
+  /** What Ledge writes when the session wrote nothing: its last reply and the tasks it held. */
+  const fallback = (s: Session): string => {
+    const held = openTasks(s.id);
+    return [
+      `Bilan écrit par Ledge : ${s.name} n'a pas écrit le sien.`,
+      ...(s.lastReply?.text ? ['', 'Sa dernière réponse :', s.lastReply.text] : []),
+      ...(held.length ? ['', 'Ses tâches en cours :', ...held.map(t => `- ${t.id} « ${t.title} » (confiée par ${t.giverName})`)] : [])
+    ].join('\n');
+  };
+
+  async function relieve(id: string, brief: string, auto: boolean): Promise<void> {
+    const s = d.store.get(id);
+    if (!s) return;
+    try { mkdirSync(d.dir, { recursive: true }); writeFileSync(file(id), `${brief.trim()}\n`); }
+    catch (e) { log(`brief of ${id} not kept: ${(e as Error).message}`); }
+    mark(id, { state: 'launching', ...(auto ? { auto: true } : {}) });
+    const team = s.team ? d.teams.get(s.team) : undefined;
+    const live = team && team.state !== 'dissolved' ? team : undefined;
+    const seat = s.role ? ` (@${s.role}${live ? `, équipe ${live.name}` : ''})` : '';
+    const prompt = [
+      `Tu prends la relève de ${s.name}${seat}, dont le contexte était plein. Voici son bilan :`,
+      '',
+      quote(brief.trim(), PROMPT_BRIEF_MAX),
+      '',
+      'Ses tâches en cours te sont passées par Ledge : elles t\'arrivent une à une. Relis le bilan complet avec `ledge handover show`.'
+    ].join('\n');
+    let relief: Session;
+    try {
+      relief = await d.launch({ tool: s.tool, cwd: s.cwd, prompt, ...(s.model ? { model: s.model } : {}), ...(s.effort ? { effort: s.effort } : {}),
+        ...(s.role ? { role: s.role } : {}), ...(s.role && live ? { team: live.id } : {}) });
+    } catch (e) {
+      const reason = (e as Error).message;
+      log(`relief of ${s.name} (${id}) not launched: ${reason}`);
+      mark(id, { state: 'failed', reason, ...(auto ? { auto: true } : {}) });
+      return;
+    }
+    const at = now();
+    const fresh = d.store.get(relief.id) ?? relief;
+    d.store.upsert({ ...fresh, relieves: { id, name: s.name, at } });
+    // Its open tasks follow it; their giver stays (a task Ledge gave still comes back to Ledge).
+    for (const t of openTasks(id)) {
+      const r = d.tasks.run({ type: 'task.cmd', rid: `handover-${t.id}`, by: id, op: 'pass', task: t.id, to: relief.id, text: `relève de ${s.name}` });
+      if (r.reason) log(`task ${t.id} not passed to ${relief.name}: ${r.reason}`);
+    }
+    // Its seat is the relief's now (the launch took it): the old record leaves the table.
+    if (s.team) d.store.patch(id, { team: undefined });
+    const cur = d.store.get(id);
+    if (cur && cur.state !== 'exited') await d.close(cur).catch(e => log(`relieved ${id} not closed: ${(e as Error).message}`));
+    mark(id, { state: 'done', to: relief.id, toName: relief.name, ...(auto ? { auto: true } : {}) });
+    log(`${s.name} (${id}) relieved by ${relief.name} (${relief.id})`);
+  }
+
+  const finish = (id: string, brief: string | undefined) => {
+    const w = waiting.get(id);
+    if (!w) return;
+    clearTimeout(w.timer); waiting.delete(id);
+    const s = d.store.get(id);
+    if (!s) return;
+    void relieve(id, brief ?? fallback(s), w.auto).catch(e => { log(`relief of ${id} failed: ${(e as Error).message}`); mark(id, { state: 'failed', reason: (e as Error).message }); });
+  };
+
+  // A session that ends before writing its brief: Ledge writes it (its tasks were dropped by its end, their givers told).
+  const unsubscribe = d.store.onChange(c => {
+    if (c.type === 'removed') { const w = waiting.get(c.id); if (w) { clearTimeout(w.timer); waiting.delete(c.id); } return; }
+    if (c.type === 'updated' && c.session.state === 'exited' && waiting.has(c.session.id)) finish(c.session.id, undefined);
+  });
+
+  return {
+    start(id, o = {}) {
+      const s = d.store.get(id);
+      if (!s) return 'session inconnue';
+      if (s.source !== 'launcher') return `${s.name} n'a pas été lancée par Ledge`;
+      if (s.state === 'exited' || isArchived(s)) return `${s.name} est terminée`;
+      if (s.tool === 'omp' || !s.tmuxSession) return `${s.name} n'a pas de terminal où demander son bilan`;
+      if (waiting.has(id) || s.handover?.state === 'briefing' || s.handover?.state === 'launching') return `la relève de ${s.name} est déjà en cours`;
+      const share = s.context ? ` (${Math.round((s.context.used / s.context.window) * 100)} %)` : '';
+      const asked = d.mailbox.notify(id, `<ledge-handover>Ton contexte est presque plein${share} : une nouvelle session va prendre ta place. Écris ton bilan de relève en une seule commande : ledge handover "<bilan>" — ce qui est fait, ce qui est en cours, la suite, les pièges, les fichiers clés. Ne commence rien d'autre ensuite.</ledge-handover>`, `handover:${id}:${now()}`);
+      if (!asked) return `impossible d'écrire à ${s.name}`;
+      const auto = o.auto === true;
+      waiting.set(id, { timer: setTimeout(() => finish(id, undefined), briefMs), auto });
+      mark(id, { state: 'briefing', ...(auto ? { auto: true } : {}) });
+      log(`relief of ${s.name} (${id}) asked${auto ? ' by Ledge' : ''}`);
+      return null;
+    },
+    brief(by, text) {
+      if (!waiting.has(by)) return 'aucune relève ne t\'attend : Ledge ne t\'a pas demandé de bilan';
+      const t = text.trim();
+      if (!t) return 'le bilan est vide';
+      finish(by, t.slice(0, BRIEF_MAX));
+      return null;
+    },
+    show(by) {
+      const s = d.store.get(by);
+      if (!s) return { reason: 'session inconnue' };
+      const id = s.relieves?.id ?? by;
+      try { return { text: readFileSync(file(id), 'utf8') }; }
+      catch { return { reason: s.relieves ? `le bilan de ${s.relieves.name} est introuvable` : 'aucun bilan : tu ne prends la relève de personne' }; }
+    },
+    close() { unsubscribe(); for (const w of waiting.values()) clearTimeout(w.timer); waiting.clear(); }
+  };
+}
