@@ -201,7 +201,7 @@ function RoleRow({ role, on, used, held, onClick }: { role: Role; on: boolean; u
   return (
     <button type="button" className={cls('cat-row', on && 'on')} aria-current={on || undefined} data-role={role.id} onClick={onClick}>
       <span className="t"><span className="role-pill">@{role.id}</span><span className="n">{role.label}</span></span>
-      <span className={cls('r', `auto-${autonomy}`)}>{c.autonomyShort[autonomy]}</span>
+      <span className={cls('cat-badge', `auto-${autonomy}`)}>{c.autonomyShort[autonomy]}</span>
       <span className="s">{[runOf(role) || c.toolDefaults, used > 0 ? c.inTemplates(used) : null, held.length > 0 ? c.heldBy(held.map(s => s.name).join(', ')) : null].filter(Boolean).join(' · ')}</span>
     </button>
   );
@@ -212,7 +212,7 @@ function TemplateRow({ template, on, onClick }: { template: TeamTemplate; on: bo
   return (
     <button type="button" className={cls('cat-row', on && 'on')} aria-current={on || undefined} data-template={template.id} onClick={onClick}>
       <span className="t"><span className="team-flag" aria-hidden>⚑</span> <span className="n">{template.name}</span></span>
-      <span className="r">{t.home.catalog.seats(template.seats.length)}</span>
+      <span className="cat-badge">{t.home.catalog.seats(template.seats.length)}</span>
       <span className="s">{template.seats.map(s => <span key={s.role} className="role-pill">@{s.role}</span>)}</span>
     </button>
   );

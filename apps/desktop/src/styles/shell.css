@@ -282,11 +282,11 @@ button.role-pill:hover { background: color-mix(in srgb, var(--sidebar-primary) 2
 .cat-row.on { border-color: var(--sidebar-foreground); box-shadow: inset 0 0 0 1px var(--sidebar-foreground); }
 .cat-row .t { display: flex; align-items: center; gap: 6px; min-width: 0; font-weight: 600; }
 .cat-row .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cat-row .r { align-self: center; font-size: 11px; color: var(--muted-foreground); }
+.cat-row .cat-badge { align-self: center; justify-self: end; white-space: nowrap; font-size: 11px; color: var(--muted-foreground); }
 .cat-row .s { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 11.5px; color: var(--muted-foreground); }
 .cat-row.bad .t { color: var(--warning); }
 .auto-ask { color: var(--muted-foreground); } .auto-edits { color: var(--info); } .auto-auto { color: var(--warning); }
-.cat-row .r.auto-edits { color: var(--info); } .cat-row .r.auto-auto { color: var(--warning); }
+.cat-row .cat-badge.auto-edits { color: var(--info); } .cat-row .cat-badge.auto-auto { color: var(--warning); }
 .cat-detail { overflow-y: auto; padding: 14px 18px 20px; }
 .cat-detail-body { display: flex; flex-direction: column; gap: 16px; }
 .cat-loading, .cat-empty { padding: 8px 0; }
