@@ -29,7 +29,7 @@ describe('a seat in the sidebar and on its page (atelier rooms spec §3.4, §3.5
     // No « 0/0 » while Ledge has given the team nothing; its first task shows « 0/1 ».
     expect(teamRow).not.toHaveTextContent(/\d\/\d/);
     d.push({ type: 'task.updated', task: { id: 't5c7e2a', title: 'Relire le candidat', giver: 'ledge', giverName: 'Ledge', owner: 'otto', ownerName: 'Otto', team: 'team-a1b2', state: 'taken', at: T0, updatedAt: T0, log: [] } });
-    expect(await within(teamRow).findByLabelText('0/1 Ledge task')).toHaveTextContent('0/1');
+    expect(await within(teamRow).findByRole('progressbar', { name: '0/1 Ledge task' })).toHaveTextContent('0/1');
   });
 
   it('the page: the team in the breadcrumb, the role pill, the meta line, and the current task pinned above the reply', async () => {

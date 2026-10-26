@@ -317,7 +317,7 @@ export function Tree(p: {
           <button type="button" className="st-main" data-tree-key={tkey} tabIndex={tabOf(tkey)} onClick={() => p.onHome(g.id ?? 'none')}>
             <strong>{team.name}</strong><span>{team.state === 'resting' ? t.teams.treeResting : t.teams.tree}</span>
           </button>
-          {given > 0 && <span className="st-progress" title={progress} aria-label={progress}><i><b style={{ width: `${Math.round((done / given) * 100)}%` }} /></i>{done}/{given}</span>}
+          {given > 0 && <span className="st-progress" role="progressbar" aria-valuemin={0} aria-valuemax={given} aria-valuenow={done} title={progress} aria-label={progress}><i><b style={{ width: `${Math.round((done / given) * 100)}%` }} /></i>{done}/{given}</span>}
         </div>
       );
       if (topen) rows.push(...sessionRows(seats, 2, tkey, tkey));
