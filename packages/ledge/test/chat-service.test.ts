@@ -639,6 +639,33 @@ describe('ledge-action blocks (spec 2026-10-26 action registry §3)', () => {
       chat.markAction('q1', 0, { state: 'running' }, () => {});
       expect(chat.ignore('q1', false, () => {})).toBe('the card is under way');
     });
+    it('a card set aside during a question is told at the one after: only what was said is forgotten', async () => {
+      let answer: string | undefined = act('session.archive', { session: 'a1' });
+      const { chat } = await askWith(answer, [session('a1', { state: 'exited' })], { env: async () => ({ ...process.env, ...(answer ? { FAKE_ANSWER: answer } : {}) }) });
+      await chat.ask('q2', 'Et b ?', () => {});
+      chat.ignore('q1', false, () => {});
+      answer = undefined;
+      const running = chat.ask('q3', 'Alors ?', () => {});
+      chat.ignore('q2', false, () => {});
+      await running;
+      const out: ServerMessage[] = [];
+      await chat.ask('q4', 'Ensuite ?', m => out.push(m));
+      const told = (out.find(m => m.type === 'chat.done') as Extract<ServerMessage, { type: 'chat.done' }>).text;
+      expect(told).toContain('en réponse à « Et b ? »');
+      expect(told).not.toContain('en réponse à « x »');
+    });
+    it('a card partly applied before it was set aside: Ledge hears that the rest was not', async () => {
+      let answer: string | undefined = act('session.archive', { session: 'a1' }) + act('session.archive', { session: 'b2' });
+      const { chat } = await askWith(answer, [session('a1', { state: 'exited' }), session('b2', { state: 'exited' })], { env: async () => ({ ...process.env, ...(answer ? { FAKE_ANSWER: answer } : {}) }) });
+      chat.markAction('q1', 0, { state: 'done', doneAt: '2026-10-11T09:00:00.000Z' }, () => {});
+      chat.ignore('q1', false, () => {});
+      answer = undefined;
+      const out: ServerMessage[] = [];
+      await chat.ask('q2', 'Ensuite ?', m => out.push(m));
+      const told = (out.find(m => m.type === 'chat.done') as Extract<ServerMessage, { type: 'chat.done' }>).text;
+      expect(told).toContain('le reste n\'en a pas été appliqué');
+      expect(told).not.toContain('rien n\'en a été appliqué');
+    });
     it('tells Ledge at the next question, once, unless the card was opened again', async () => {
       let answer: string | undefined = act('session.archive', { session: 'a1' });
       const { chat } = await askWith(answer, [session('a1', { state: 'exited' })], { env: async () => ({ ...process.env, ...(answer ? { FAKE_ANSWER: answer } : {}) }) });

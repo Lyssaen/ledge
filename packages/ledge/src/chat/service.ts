@@ -121,13 +121,17 @@ export function createChat(deps: ChatDeps): Chat {
   /** Set by a reset: the next question starts a new Claude session (`--session-id`) instead of resuming the day's. */
   let freshNext = false;
   /** The running question, from its first line (so a Stop while the context is built counts); `handle` once Claude Code has spawned. */
-  type Running = { qid: string; handle: RunHandle | null; cancelled: boolean; told: string };
+  type Running = { qid: string; handle: RunHandle | null; cancelled: boolean; told: { text: string; qids: string[] } };
   let current: Running | null = null;
   let idleWaiters: Array<() => void> = [];
   const CANCELLED = { ok: false as const, message: 'cancelled', resumed: false };
   /** The turns set aside since Ledge last heard: it is told before the next question, so it does not propose them again. */
-  const setAside = new Map<string, string>();
-  const tell = () => [...setAside.values()].map(q => `[Ledge] L'utilisateur a ignoré ta proposition en réponse à « ${q} » : rien n'en a été appliqué. Ne la propose plus, sauf s'il la redemande.`).join('\n');
+  const setAside = new Map<string, { question: string; partly: boolean }>();
+  const tell = () => ({ qids: [...setAside.keys()], text: [...setAside.values()].map(a => `[Ledge] L'utilisateur a ignoré ta proposition en réponse à « ${a.question} » : `
+    + `${a.partly ? 'une partie était déjà faite, le reste n\'en a pas été appliqué' : 'rien n\'en a été appliqué'}. Ne la propose plus, sauf s'il la redemande.`).join('\n') });
+  /** Something of the turn's cards was already applied, or is under way: Ledge is not told that nothing was. */
+  const partly = (t: ChatTurn) => !!(proposalRows(t).some(p => p.launchedId) || t.relay?.status === 'sent' || t.relay?.sentAt || t.closes?.some(c => c.closedAt)
+    || t.team?.teamId || t.tasks?.some(c => c.taskId) || t.actions?.some(a => a.state === 'done'));
 
   /** A new day starts an empty history; the day file decides the Claude session separately. */
   function rollDay(): boolean { const day = today(); if (turnsDay === day) return false; turns = []; turnsDay = day; setAside.clear(); return true; }
@@ -288,7 +292,7 @@ export function createChat(deps: ChatDeps): Chat {
     const env: NodeJS.ProcessEnv = { ...(await deps.env()), LEDGE_CHAT: '1' }; delete env.LEDGE_SESSION; delete env.LEDGE_NAME; delete env.ANTHROPIC_API_KEY;
     if (mine.cancelled) return CANCELLED;
     let answer = ''; let resultError: string | null = null;
-    const handle = runTool(tool, { question: mine.told ? `${mine.told}\n\n${turn.question}` : turn.question, cwd: ctx.dir, addDirs: ctx.repoPaths, sessionId, resume, env, bin: deps.bins?.[tool] ?? deps.bin, ...(tool === 'omp' ? { sessionDir: join(deps.home, 'chat', 'omp', sessionId) } : {}) }, e => {
+    const handle = runTool(tool, { question: mine.told.text ? `${mine.told.text}\n\n${turn.question}` : turn.question, cwd: ctx.dir, addDirs: ctx.repoPaths, sessionId, resume, env, bin: deps.bins?.[tool] ?? deps.bin, ...(tool === 'omp' ? { sessionDir: join(deps.home, 'chat', 'omp', sessionId) } : {}) }, e => {
       if (e.type === 'tool') { const step = e.path ? stepFor(e.path, ctx) : null; if (step && !turn.steps.some(s => sameStep(s, step))) { turn.steps.push(step); emit({ type: 'chat.step', qid: turn.qid, step }); } }
       else if (e.type === 'delta') { answer += e.text; emit({ type: 'chat.delta', qid: turn.qid, text: e.text }); }
       else if (e.type === 'result') { if (e.text) answer = e.text; if (e.isError) resultError = e.text || `${label} reported an error`; }
@@ -421,7 +425,7 @@ export function createChat(deps: ChatDeps): Chat {
         if (t.ignoredAt) return null;
         // A queued instruction or a row being applied is under way: it is stopped first (« Annuler »), then set aside.
         if (t.relay?.status === 'queued' || t.actions?.some(a => a.state === 'running')) return 'the card is under way';
-        t.ignoredAt = now(); setAside.set(qid, t.question.slice(0, 200));
+        t.ignoredAt = now(); setAside.set(qid, { question: t.question.slice(0, 200), partly: partly(t) });
       }
       emit({ type: 'chat.history', turns });
       return null;
@@ -453,7 +457,8 @@ export function createChat(deps: ChatDeps): Chat {
           // A day session whose transcript is gone (or a CLI that forgot it): once more, from a fresh conversation.
           if (!r.ok && r.resumed && !mine.cancelled) { log(`chat ${qid}: resume failed (${r.message}), starting a new day session`); turn.steps.length = 0; r = await attempt(turn, emit, true, mine, tool); }
           if (!r.ok) { turn.error = r.message; emit({ type: 'chat.error', qid, message: r.message }); }
-          else if (mine.told) setAside.clear();
+          // Only what was said: a card set aside while this question ran is told at the next one.
+          else for (const q of mine.told.qids) setAside.delete(q);
         } catch (e) {
           // The context folder or the day file could not be written: the overlay still needs its unlock.
           log(`chat ${qid} failed: ${(e as Error).message}`);
