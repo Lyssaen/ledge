@@ -9,11 +9,12 @@ import { choices } from '../model/pending.js';
 import { oneLine } from '../model/time.js';
 import { C, STATE_COLOR } from '../theme.js';
 
-export function Button({ label, k, primary, off }: { label: string; k: string; primary?: boolean; off?: boolean }) {
+export function Button({ label, k, primary, danger, off }: { label: string; k: string; primary?: boolean; danger?: boolean; off?: boolean }) {
+  const bg = off ? undefined : danger ? C.danger : primary ? C.primary : C.key;
   return (
     <Text>
-      <Text color={off ? C.faint : primary ? C.fg : C.fg} backgroundColor={off ? undefined : primary ? C.primary : C.key}> {label} </Text>
-      <Text color={C.dim} backgroundColor={off ? undefined : primary ? C.primary : C.key}>{k} </Text>
+      <Text color={off ? C.faint : C.fg} backgroundColor={bg}> {label} </Text>
+      <Text color={C.dim} backgroundColor={bg}>{k} </Text>
     </Text>
   );
 }

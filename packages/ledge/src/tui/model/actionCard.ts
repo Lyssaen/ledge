@@ -35,6 +35,9 @@ export function firstRow(p: CardPlan): number {
   const act = p.shown.findIndex(s => s === 'proposed' || s === 'held' || s === 'failed');
   return act >= 0 ? act : Math.max(0, p.shown.findIndex(s => !settled(s)));
 }
+/** The row chosen with ↑ ↓, while it is still there and not settled; else the row the selection starts on. */
+export const selectedRow = (p: CardPlan, chosen: number | undefined): number =>
+  (chosen !== undefined && p.shown[chosen] !== undefined && !settled(p.shown[chosen]!) ? chosen : firstRow(p));
 /** ↑ ↓ : the next row not settled that way, or the same at an end. */
 export function moveRow(p: CardPlan, from: number, by: 1 | -1): number {
   for (let i = from + by; i >= 0 && i < p.shown.length; i += by) if (!settled(p.shown[i]!)) return i;

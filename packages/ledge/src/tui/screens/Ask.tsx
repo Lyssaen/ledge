@@ -5,6 +5,7 @@ import { daemonStore } from '@ledge/fleet';
 import { LEDGE_GIVER, proposalRows, type ChatTurn } from '@ledge/protocol';
 import { useEditing, useScreenKeys, useTui } from '../context.js';
 import { askHistory, chatView, openCards, type Card } from '../model/chat.js';
+import { cardPlan, moveRow, selectedRow } from '../model/actionCard.js';
 import { anchorLine } from '../model/thread.js';
 import { TOOL_NAME } from '../model/labels.js';
 import { listed } from '../model/overview.js';
@@ -16,6 +17,7 @@ import { Lines } from '../ui/Lines.js';
 import { useThrottled } from '../ui/throttle.js';
 import { Field } from '../ui/Field.js';
 import { TitledBox } from '../ui/TitledBox.js';
+import { ActionBox, appliable, deniable } from '../ui/ActionBox.js';
 
 /** A card's send is done when its turn changes, an error comes without a session id, or after this long. */
 const CARD_MS = 20_000;
@@ -23,7 +25,7 @@ const CARD_MS = 20_000;
 const CONVO = -2;
 
 export function Ask() {
-  const { client, d, machines, t, g, toast, go, kept, small, tone } = useTui();
+  const { client, d, machines, t, g, toast, go, kept, small, tone, select } = useTui();
   const { columns } = useWindowSize();
   // Kept by the TUI: ctrl+c and another screen leave it as it is.
   const [draft, setDraftState] = useState(() => kept.drafts.get('ask') ?? '');
@@ -38,10 +40,24 @@ export function Ask() {
   const [anchor, setAnchor] = useState<{ key: string; offset: number } | null>(null);
   const [view, setView] = useState(10);
   const [busy, setBusy] = useState<{ qid: string; turn: ChatTurn | undefined; errorSeq: number; at: number } | null>(null);
+  // The action cards (#94): the row chosen in each, the rows a red box asks to confirm, the card ctrl+r opened again.
+  const [rowOf, setRowOf] = useState<Record<string, number>>({});
+  const [confirming, setConfirming] = useState<{ qid: string; rows: number[] } | null>(null);
+  const [review, setReview] = useState<string | null>(null);
   useEditing(focus === -1 && !confirm);
 
   const cards = useMemo(() => openCards(d.chat), [d.chat]);
   useEffect(() => { if (focus >= cards.length) setFocus(cards.length ? cards.length - 1 : -1); }, [cards.length, focus]);
+  // Opened again with ctrl+r: its card has the focus once it is back.
+  useEffect(() => {
+    if (!review) return;
+    const i = cards.findIndex(c => c.qid === review);
+    if (i >= 0) { setFocus(i); setReview(null); }
+  }, [cards, review]);
+  // A confirmation of a card that went (applied or ignored elsewhere) goes with it.
+  useEffect(() => { if (confirming && !cards.some(c => c.kind === 'action' && c.qid === confirming.qid)) setConfirming(null); }, [confirming, cards]);
+  /** The latest card set aside, the one ctrl+r opens again. */
+  const ignored = [...d.chat].filter(x => x.ignoredAt).sort((a, b) => b.ignoredAt!.localeCompare(a.ignoredAt!))[0];
   // A card in flight is free again once its turn moved, a refusal came, or nothing happened for a while.
   useEffect(() => {
     if (!busy) return;
@@ -67,7 +83,7 @@ export function Ask() {
     return true;
   };
   const act = (card: Card) => {
-    if (busy) return;
+    if (busy || card.kind === 'action') return;
     const turn = d.chat.find(x => x.qid === card.qid);
     if (!turn) return;
     if (card.kind === 'task') {
@@ -85,6 +101,48 @@ export function Ask() {
       client.send({ type: 'session.launch', tool: first.tool, cwd: first.cwd, ...(first.prompt ? { prompt: first.prompt } : {}), qid: card.qid, rows: card.rows });
     } else if (card.kind === 'relay') client.send({ type: turn.relay?.status === 'queued' ? 'session.relay.cancel' : 'session.relay', qid: card.qid });
     else client.send({ type: 'session.close', qid: card.qid, rows: card.rows });
+  };
+
+  /** A generic card's rows through chat.act: applied, confirmed, or their requests denied (« Refuser »). */
+  const send = (qid: string, rows: number[], o: { confirmed?: true; deny?: true } = {}) => {
+    const turn = d.chat.find(x => x.qid === qid);
+    setBusy({ qid, turn, errorSeq: d.errors.at(-1)?.seq ?? 0, at: Date.now() });
+    client.send({ type: 'chat.act', rid: randomUUID(), qid, rows, ...o });
+  };
+  /** The keys of a focused generic card (docs/mockups/ledge-action-card.html, view TUI): ↑ ↓ the row, ↵ applies it, a all
+   *  of them, n denies a request, o opens the session, esc sets the card aside; an irreversible one is asked in the box, and
+   *  only y confirms it. */
+  const actionKey = (qid: string, input: string, key: { upArrow: boolean; downArrow: boolean; return: boolean; escape: boolean }): boolean => {
+    const turn = d.chat.find(x => x.qid === qid);
+    if (!turn?.actions) return false;
+    const p = cardPlan(turn.actions);
+    const sel = selectedRow(p, rowOf[qid]);
+    const ask = (rows: number[]) => { if (rows.some(i => p.rows[i]!.risk === 'destructive')) setConfirming({ qid, rows }); else send(qid, rows); };
+    if (confirming?.qid === qid) {
+      if (input === 'y') { const rows = confirming.rows; setConfirming(null); send(qid, rows, { confirmed: true }); }
+      else if (key.escape) setConfirming(null);
+      // ↵ never confirms: a double press dissolves nothing.
+      return true;
+    }
+    const r = p.rows[sel]!, s = p.shown[sel]!;
+    if (input === 'o') {
+      const id = turn.actions[sel]?.session;
+      if ((s === 'stale' || s === 'cut') && id) { select(id); go('session'); }
+      return true;
+    }
+    // A send under way: nothing else goes until the daemon has answered.
+    if (busy?.qid === qid) return true;
+    if (key.upArrow || input === 'k') { setRowOf(m => ({ ...m, [qid]: moveRow(p, sel, -1) })); return true; }
+    if (key.downArrow || input === 'j') { setRowOf(m => ({ ...m, [qid]: moveRow(p, sel, 1) })); return true; }
+    if (key.return) { if (appliable(s)) ask([sel]); return true; }
+    if (input === 'a' && p.rows.length > 1) { if (p.all.rows.length) ask(p.all.rows); return true; }
+    if (input === 'n') { if (deniable(r, s)) send(qid, [sel], { deny: true }); return true; }
+    if (key.escape) {
+      // Nothing left to do from the card (a request changed): esc goes back, as on a settled card.
+      if (p.open.length || p.shown.some(x => x === 'cut')) client.send({ type: 'chat.ignore', qid }); else setFocus(-1);
+      return true;
+    }
+    return false;
   };
 
   const sessions = listed(d.sessions).length;
@@ -105,14 +163,16 @@ export function Ask() {
 
   // ctrl+c stops the answer being written; ctrl+n starts a new conversation (once confirmed, when there is one); tab goes
   // round, from the field to the cards, the conversation and back; PgUp PgDn scroll the conversation, from the field too.
-  const latest = useRef({ asking, cards, focus, confirm, turns: d.chat.length, scroll, up, view });
-  latest.current = { asking, cards, focus, confirm, turns: d.chat.length, scroll, up, view };
+  const latest = useRef({ asking, cards, focus, confirm, turns: d.chat.length, scroll, up, view, ignored });
+  latest.current = { asking, cards, focus, confirm, turns: d.chat.length, scroll, up, view, ignored };
   useInput((input, key) => {
     // Too small, nothing is drawn: esc is the app's.
     if (small) return;
     const l = latest.current;
     if (l.confirm) return;
     if (key.ctrl && input === 'n') { if (l.turns === 0) client.send({ type: 'chat.reset' }); else setConfirm(true); return; }
+    // ctrl+r opens the latest card set aside again, wherever the focus is; again, the one before.
+    if (key.ctrl && input === 'r') { if (l.ignored) { client.send({ type: 'chat.ignore', qid: l.ignored.qid, undo: true }); setReview(l.ignored.qid); } return; }
     if (key.pageUp) { l.scroll(l.up + l.view - 1); return; }
     if (key.pageDown) { l.scroll(l.up - l.view + 1); return; }
     if (key.tab) { const n = l.cards.length; setFocus(f => (f === CONVO ? -1 : f + 1 < n ? f + 1 : CONVO)); }
@@ -136,6 +196,7 @@ export function Ask() {
       return false;
     }
     if (focus < 0) return false;
+    if (cards[focus]!.kind === 'action') return actionKey(cards[focus]!.qid, input, key);
     if (key.return) { act(cards[focus]!); return true; }
     // s saves a proposed ad hoc team as a template (« Enregistrer »).
     if (input === 's' && cards[focus]!.kind === 'team') {
@@ -150,12 +211,28 @@ export function Ask() {
   // The keys follow the focus: s only on a team's card, ctrl+c only while Ledge answers.
   const stop = asking ? [['ctrl+c', t.keys.stopAnswer] as const] : [];
   const card = cards[focus];
+  const review$ = ignored ? [['ctrl+r', t.keys.review] as const] : [];
+  /** A focused generic card's keys, as its state allows. */
+  const actionKeys = (qid: string): Array<readonly [string, string]> => {
+    const turn = d.chat.find(x => x.qid === qid);
+    if (!turn?.actions) return [];
+    if (confirming?.qid === qid) return [['y', t.keys.apply], ['esc', t.keys.cancel]];
+    const p = cardPlan(turn.actions);
+    const sel = selectedRow(p, rowOf[qid]);
+    const r = p.rows[sel]!, s = p.shown[sel]!, many = p.rows.length > 1;
+    const next = ['tab', focus + 1 < cards.length ? t.keys.nextCard : t.keys.conversation] as const;
+    if (s === 'cut') return [['n', t.keys.deny], ['o', t.keys.openSession(r.target ?? '')], ['esc', t.keys.ignore], next, ['ctrl+n', t.keys.newChat]];
+    if (!p.open.length) return [next, ['ctrl+n', t.keys.newChat], ['esc', t.keys.back]];
+    return [['↵', many ? t.keys.applyRow : t.keys.apply], ...(many ? [['a', t.keys.applyAll] as const, ['↑ ↓', t.keys.line] as const] : []),
+      ...(deniable(r, s) ? [['n', t.keys.deny] as const] : []), ['esc', t.keys.ignore], next, ['ctrl+n', t.keys.newChat]];
+  };
   // What was asked: the conversation's questions, not only this run's.
   const history = askHistory(d.chat, kept.asked);
   const keys: Array<readonly [string, string]> = confirm ? [['n esc', t.keys.keep], ['y', t.keys.wipe]]
     : focus === -1 && browsing ? [['↵', t.keys.resend], ['↑ ↓', t.keys.history], ['esc', t.keys.backToDraft]]
-    : focus === -1 ? [['↵', t.keys.sendOnly], ['alt+↵', t.keys.newLine], ['esc', t.keys.back], ['PgUp PgDn', t.keys.scroll], ['↑ ↓', t.keys.history], ['tab', cards.length ? t.keys.nextCard : t.keys.conversation], ['ctrl+n', t.keys.newChat], ...stop]
+    : focus === -1 ? [['↵', t.keys.sendOnly], ['alt+↵', t.keys.newLine], ['esc', t.keys.back], ['PgUp PgDn', t.keys.scroll], ['↑ ↓', t.keys.history], ['tab', cards.length ? t.keys.nextCard : t.keys.conversation], ['ctrl+n', t.keys.newChat], ...stop, ...review$]
     : focus === CONVO ? [['j k', t.keys.line], ['PgUp PgDn', t.keys.page], ['G', t.keys.end], ...stop, ['tab', t.keys.question], ['esc', t.keys.question]]
+    : card?.kind === 'action' ? [...actionKeys(card.qid), ...stop, ...review$]
     : [['↵', t.keys.send], ['tab', focus + 1 < cards.length ? t.keys.nextCard : t.keys.conversation], ...(card?.kind === 'team' ? [['s', t.keys.save] as const] : []), ['ctrl+n', t.keys.newChat], ...stop, ['esc', t.keys.back]];
   // Scrolled: how much is above and below, or that the answer goes on below; at the bottom, what is above.
   const foot = up > 0 ? (asking && live?.qid === asking.qid ? t.ask.answering : t.session.scrolled(lines.length - view - up, up))
@@ -168,7 +245,13 @@ export function Ask() {
         {lines.length === 0 ? <Text color={C.faint}>{t.ask.empty}</Text>
           : <Lines lines={lines} up={up} onHeight={setView} />}
       </TitledBox>
-      {cards.slice(0, 2).map((c, i) => <CardBox key={`${c.kind}:${c.qid}`} card={c} turn={d.chat.find(x => x.qid === c.qid)!} focused={i === focus} busy={busy?.qid === c.qid} />)}
+      {cards.slice(0, 2).map((c, i) => {
+        const turn = d.chat.find(x => x.qid === c.qid)!;
+        if (c.kind !== 'action') return <CardBox key={`${c.kind}:${c.qid}`} card={c} turn={turn} focused={i === focus} busy={busy?.qid === c.qid} />;
+        const p = cardPlan(turn.actions ?? []);
+        const sel = selectedRow(p, rowOf[c.qid]);
+        return <ActionBox key={`action:${c.qid}`} turn={turn} plan={p} focused={i === focus} busy={busy?.qid === c.qid} sel={sel} confirming={confirming?.qid === c.qid ? confirming.rows : null} />;
+      })}
       {confirm
         ? <TitledBox title={t.ask.resetTitle} color={C.red} titleColor={C.red} flexShrink={0}>
           <Text color={C.fg}>{t.ask.resetBody(d.chat.length, d.chat[0] ? clock(d.chat[0].askedAt) : '')}{draft.trim() ? ` ${t.ask.draftStays}` : ''}</Text>
@@ -180,7 +263,7 @@ export function Ask() {
   );
 }
 
-function CardBox({ card, turn, focused, busy }: { card: Card; turn: ChatTurn; focused: boolean; busy: boolean }) {
+function CardBox({ card, turn, focused, busy }: { card: Exclude<Card, { kind: 'action' }>; turn: ChatTurn; focused: boolean; busy: boolean }) {
   const { t, g } = useTui();
   const color = focused ? C.coral : C.line;
   if (card.kind === 'team') {

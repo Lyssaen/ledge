@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { ClientMessage } from '@ledge/protocol';
+import type { ChatAction, ChatTurn, ClientMessage } from '@ledge/protocol';
 import { daemonStore } from '@ledge/fleet';
 import { until } from './helpers.js';
 import { mockupSessions, startTui } from './tui-fixture.js';
@@ -243,6 +243,138 @@ describe('ledge tui: ask Ledge', () => {
       await tui.press('/');
       await tui.press(`${'q'.repeat(150)}FIN`);
       await until(() => tui.frame().includes('qFIN'));
+    } finally { await tui.cleanup(); }
+  });
+});
+
+describe('ledge tui: the action card (#94, docs/mockups/ledge-action-card.html, view TUI)', () => {
+  // Today's: the fleet keeps the day's conversation only.
+  const NOW = (s: number) => new Date(Date.now() - 60_000 + s * 1000).toISOString();
+  const AT = NOW(30);
+  const row = (action: string, extra: Partial<ChatAction> = {}): ChatAction => ({ action, args: {}, summary: action, risk: 'reversible', ...extra });
+  const plan = (states: Array<Partial<ChatAction>> = [{}, {}, {}]): ChatAction[] => [
+    row('session.model', { vars: { session: 'Nova', model: 'Opus 5.5', effort: 'élevé' }, session: 'nova', ...states[0] }),
+    row('session.archive', { vars: { session: 'Otto' }, session: 'otto', ...states[1] }),
+    row('team.dissolve', { risk: 'destructive', vars: { team: 'ledge-roles' }, detail: 'Ses 6 sessions retournent à la table commune.', ...states[2] })
+  ];
+  const decide = (extra: Partial<ChatAction> = {}) => row('session.decide', { risk: 'destructive', session: 'nova', detail: 'rm -rf packages/ledge/dist', vars: { session: 'Nova', decision: 'accept', kind: 'permission' }, ...extra });
+  const turn = (actions: ChatAction[], extra: Partial<ChatTurn> = {}): ChatTurn => ({ qid: 'q1', question: 'Range tout', askedAt: NOW(1), answeredAt: NOW(2), answer: 'Voici le plan.', steps: [], actions, ...extra });
+  /** The Ask screen with this turn in the conversation, the card focused (tab). */
+  async function ask(t: ChatTurn) {
+    const tui = await startTui();
+    await tui.press('/');
+    await until(() => tui.frame().includes('LEDGE · OPÉRATEUR'));
+    tui.daemon.push({ type: 'chat.history', turns: [t] });
+    await until(() => tui.frame().includes('Voici le plan.'));
+    await tui.press('\t');
+    return tui;
+  }
+
+  it('a plan: numbered rows, their risk in words; ↵ applies the line, ↓ moves, a asks to confirm in the card, y confirms, ↵ never does', async () => {
+    const tui = await ask(turn(plan()));
+    try {
+      await until(() => tui.frame().includes('PLAN · 3 ACTIONS'));
+      expect(tui.frame()).toContain('1 ○ Passer Nova sur Opus 5.5, effort élevé');
+      expect(tui.frame()).toContain('3 ○ Dissoudre l’équipe ledge-roles');
+      expect(tui.frame()).toContain('irréversible');
+      expect(tui.frame()).toContain('Ses 6 sessions retournent à la table commune.');
+      await tui.press('\r');
+      await until(() => sent(tui.daemon.received, 'chat.act').length === 1);
+      expect(sent(tui.daemon.received, 'chat.act')[0]).toMatchObject({ qid: 'q1', rows: [0] });
+      expect(sent(tui.daemon.received, 'chat.act')[0]).not.toHaveProperty('confirmed');
+      // The daemon answers with the day's history: the card is free again.
+      tui.daemon.push({ type: 'chat.history', turns: [turn(plan())] });
+      await new Promise(r => setTimeout(r, 50));
+      await tui.press('a');
+      await until(() => tui.frame().includes('CONFIRMER · 3 ACTIONS, 1 IRRÉVERSIBLE'));
+      expect(tui.frame()).toContain('╔');
+      await tui.press('\r');
+      expect(sent(tui.daemon.received, 'chat.act')).toHaveLength(1);
+      await tui.press('y');
+      await until(() => sent(tui.daemon.received, 'chat.act').length === 2);
+      expect(sent(tui.daemon.received, 'chat.act')[1]).toMatchObject({ qid: 'q1', rows: [0, 1, 2], confirmed: true });
+    } finally { await tui.cleanup(); }
+  });
+
+  it('esc cancels a confirmation without sending; ↓ then ↵ on an irreversible row asks for it alone', async () => {
+    const tui = await ask(turn(plan()));
+    try {
+      await until(() => tui.frame().includes('PLAN · 3 ACTIONS'));
+      await tui.press(DOWN); await tui.press(DOWN);
+      await tui.press('\r');
+      await until(() => tui.frame().includes('CONFIRMER · DISSOUDRE L’ÉQUIPE LEDGE-ROLES'));
+      await tui.press('\u001b');
+      await until(() => tui.frame().includes('PLAN · 3 ACTIONS'));
+      expect(sent(tui.daemon.received, 'chat.act')).toEqual([]);
+      expect(sent(tui.daemon.received, 'chat.ignore')).toEqual([]);
+    } finally { await tui.cleanup(); }
+  });
+
+  it('a failed step says why and offers to retry; the rows after it are not applied', async () => {
+    const tui = await ask(turn(plan([{ state: 'done', doneAt: AT }, { state: 'failed', code: 'failed' }, {}])));
+    try {
+      await until(() => tui.frame().includes('Échec : l’action est partie, mais n’a pas abouti.'));
+      expect(tui.frame()).toContain('pas appliquée');
+      expect(tui.frame()).toContain('Réessayer');
+      await tui.press('\r');
+      await until(() => sent(tui.daemon.received, 'chat.act').length === 1);
+      expect(sent(tui.daemon.received, 'chat.act')[0]).toMatchObject({ rows: [1] });
+    } finally { await tui.cleanup(); }
+  });
+
+  it('a permission: its request quoted; n denies at once, ↵ asks to confirm the acceptance', async () => {
+    const tui = await ask(turn([decide()]));
+    try {
+      await until(() => tui.frame().includes('PERMISSION · NOVA'));
+      expect(tui.frame()).toContain('rm -rf packages/ledge/dist');
+      await tui.press('n');
+      await until(() => sent(tui.daemon.received, 'chat.act').length === 1);
+      expect(sent(tui.daemon.received, 'chat.act')[0]).toMatchObject({ qid: 'q1', rows: [0], deny: true });
+      tui.daemon.push({ type: 'chat.history', turns: [turn([decide()])] });
+      await new Promise(r => setTimeout(r, 50));
+      await tui.press('\r');
+      await until(() => tui.frame().includes('CONFIRMER · ACCEPTER LA DEMANDE DE PERMISSION DE NOVA'));
+      await tui.press('y');
+      await until(() => sent(tui.daemon.received, 'chat.act').length === 2);
+      expect(sent(tui.daemon.received, 'chat.act')[1]).toMatchObject({ rows: [0], confirmed: true });
+    } finally { await tui.cleanup(); }
+  });
+
+  it('a request shown cut: marked, never accepted from the card; o opens the session, n still denies', async () => {
+    const tui = await ask(turn([decide({ detail: 'ligne\n'.repeat(20) + 'fin…', detailCut: true })]));
+    try {
+      await until(() => tui.frame().includes('… (tronqué, voir la session : o)'));
+      expect(tui.frame()).toContain('coupée');
+      await tui.press('\r');
+      await new Promise(r => setTimeout(r, 100));
+      expect(sent(tui.daemon.received, 'chat.act')).toEqual([]);
+      await tui.press('n');
+      await until(() => sent(tui.daemon.received, 'chat.act').length === 1);
+      expect(sent(tui.daemon.received, 'chat.act')[0]).toMatchObject({ rows: [0], deny: true });
+      await tui.press('o');
+      await until(() => tui.frame().includes('NOVA · RECONNEXION SSH DU FLEET'));
+    } finally { await tui.cleanup(); }
+  });
+
+  it('esc ignores the card everywhere; a faded line stays; ctrl+r opens it again, focused', async () => {
+    const tui = await ask(turn(plan()));
+    try {
+      await until(() => tui.frame().includes('PLAN · 3 ACTIONS'));
+      await tui.press('\u001b');
+      await until(() => sent(tui.daemon.received, 'chat.ignore').length === 1);
+      expect(sent(tui.daemon.received, 'chat.ignore')[0]).toEqual({ type: 'chat.ignore', qid: 'q1' });
+      tui.daemon.push({ type: 'chat.history', turns: [turn(plan(), { ignoredAt: AT })] });
+      await until(() => !tui.frame().includes('PLAN · 3 ACTIONS'));
+      expect(tui.frame()).toContain('Plan de 3 actions ignoré à');
+      expect(tui.frame()).toContain('revoir : ctrl+r');
+      await tui.press('\u0012');
+      await until(() => sent(tui.daemon.received, 'chat.ignore').length === 2);
+      expect(sent(tui.daemon.received, 'chat.ignore')[1]).toEqual({ type: 'chat.ignore', qid: 'q1', undo: true });
+      tui.daemon.push({ type: 'chat.history', turns: [turn(plan())] });
+      await until(() => tui.frame().includes('PLAN · 3 ACTIONS'));
+      // Focused: ↵ applies its line straight away.
+      await tui.press('\r');
+      await until(() => sent(tui.daemon.received, 'chat.act').length === 1);
     } finally { await tui.cleanup(); }
   });
 });
