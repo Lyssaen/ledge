@@ -434,6 +434,33 @@ describe('common chat routing', () => {
     client.send({ type: 'session.launch', cwd: '/w/a', tool: 'claude', qid: 'q', rows: [0, 1] });
     expect(server.sent.at(-1)).toMatchObject({ type: 'session.launch', qid: 'q', rows: [0, 1] });
   });
+  describe('generic card', () => {
+    const at = new Date().toISOString();
+    const rows = (over: Record<string, unknown> = {}) => [{ action: 'session.interrupt', args: { session: 'a1' }, summary: 'Interrompre **bot1**', vars: { session: 'bot1' }, risk: 'reversible' as const, session: 'a1', ...over }];
+    function routed() {
+      const s = setup();
+      s.client.send({ type: 'chat.ask', qid: 'q', text: 'Interromps bot1 sur le serveur' });
+      s.local.emit({ type: 'chat.routed', qid: 'q', result: { machineId: 'server', text: 'Interromps bot1' } });
+      return s;
+    }
+    it('keeps the rows of a remote chat.done, their session qualified, and in the history', () => {
+      const { server, got } = routed();
+      server.emit({ type: 'chat.done', qid: 'q', text: 'Une.', at, actions: rows() });
+      expect(lastHistory(got)[0]!.actions).toEqual([{ ...rows()[0], session: 'server:a1' }]);
+      server.emit({ type: 'chat.history', turns: [{ qid: 'q', question: 'Interromps', askedAt: at, steps: [], answer: 'Une.', answeredAt: at, actions: rows({ state: 'done', doneAt: at }) }] });
+      expect(lastHistory(got)[0]!.actions![0]).toMatchObject({ session: 'server:a1', state: 'done' });
+    });
+    it('routes chat.act and chat.ignore to the turn\'s machine, and relays chat.acted under the overlay\'s qid', () => {
+      const { client, server, got } = routed();
+      server.emit({ type: 'chat.done', qid: 'q', text: 'Une.', at, actions: rows() });
+      client.send({ type: 'chat.act', rid: 'r1', qid: 'q' });
+      expect(server.sent.at(-1)).toEqual({ type: 'chat.act', rid: 'r1', qid: 'q' });
+      client.send({ type: 'chat.ignore', qid: 'q' });
+      expect(server.sent.at(-1)).toEqual({ type: 'chat.ignore', qid: 'q' });
+      server.emit({ type: 'chat.acted', rid: 'r1', qid: 'q', done: [0], failed: [] });
+      expect(got.at(-1)).toEqual({ type: 'chat.acted', rid: 'r1', qid: 'q', done: [0], failed: [] });
+    });
+  });
   describe('close card', () => {
     const at = new Date().toISOString();
     const closes = (over: Array<Record<string, unknown>> = [{}, {}]) => over.map((o, i) => ({ id: `a${i + 1}`, name: `bot${i + 1}`, tool: 'claude' as const, ...o }));

@@ -19,6 +19,16 @@ describe('codexArgs', () => {
     expect(codexArgs(opts({ resume: true }))[1]).toBe('resume');
     expect(codexArgs(opts({ resume: true }))[2]).toBe(opts().sessionId);
   });
+  it('gives the persona as developer instructions, a TOML string, on a resume too (spec 2026-10-26 action registry §4)', () => {
+    const persona = 'Tu es "Ledge".\nUn `bloc` \\ fin.';
+    for (const resume of [false, true]) {
+      const a = codexArgs(opts({ persona, resume }));
+      const v = a.find(x => x.startsWith('developer_instructions='));
+      expect(a[a.indexOf(v!) - 1]).toBe('-c');
+      expect(JSON.parse(v!.slice('developer_instructions='.length))).toBe(persona);
+    }
+    expect(codexArgs(opts()).find(x => x.startsWith('developer_instructions='))).toContain('## Ce que tu peux proposer');
+  });
 });
 
 describe('parseCodexLine', () => {
@@ -34,12 +44,12 @@ describe('parseCodexLine', () => {
 });
 
 describe('runCodex', () => {
-  it('feeds the question on stdin and streams Codex events', async () => {
+  it('feeds the question alone on stdin and streams Codex events', async () => {
     const events: unknown[] = [];
     const r = await runCodex(opts({ env: { ...process.env, FAKE_AGENT: 'codex' } }), e => events.push(e)).done;
     expect(r.code).toBe(0);
     expect(events[0]).toMatchObject({ type: 'init' });
     expect(events.filter((e: any) => e.type === 'tool')).toHaveLength(1);
-    expect(events.at(-1)).toMatchObject({ type: 'result', isError: false, text: expect.stringContaining('Où en sont les autres ?') });
+    expect(events.at(-1)).toMatchObject({ type: 'result', isError: false, text: 'Deux compagnons travaillent. Question : Où en sont les autres ?' });
   });
 });

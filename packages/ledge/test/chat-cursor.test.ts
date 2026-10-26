@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { fileURLToPath } from 'node:url';
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { cursorArgs, parseCursorLine, runCursor } from '../src/chat/cursor.js';
 
 const FAKE = fileURLToPath(new URL('./fake-claude.mjs', import.meta.url));
@@ -35,12 +38,14 @@ describe('parseCursorLine', () => {
 });
 
 describe('runCursor', () => {
-  it('feeds the question on stdin and streams Cursor events', async () => {
+  it('feeds the question alone on stdin, the persona in the context folder\'s AGENTS.md, and streams Cursor events', async () => {
     const events: unknown[] = [];
-    const r = await runCursor(opts({ env: { ...process.env, FAKE_AGENT: 'cursor' } }), e => events.push(e)).done;
+    const cwd = mkdtempSync(join(tmpdir(), 'ledge-cursor-'));
+    const r = await runCursor(opts({ cwd, persona: 'Tu es Ledge.', env: { ...process.env, FAKE_AGENT: 'cursor' } }), e => events.push(e)).done;
+    expect(readFileSync(join(cwd, 'AGENTS.md'), 'utf8')).toBe('Tu es Ledge.\n');
     expect(r.code).toBe(0);
     expect(events[0]).toMatchObject({ type: 'init' });
     expect(events.filter((e: any) => e.type === 'delta').map((e: any) => e.text).join('')).toContain('Deux');
-    expect(events.at(-1)).toMatchObject({ type: 'result', isError: false, text: expect.stringContaining('Où en sont les autres ?') });
+    expect(events.at(-1)).toMatchObject({ type: 'result', isError: false, text: 'Deux compagnons travaillent. Question : Où en sont les autres ?' });
   });
 });

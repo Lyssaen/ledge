@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Session, Task } from '@ledge/protocol';
+import { LEDGE_GIVER, type Session, type Task } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
 import { createTasks, tasksJournal, type Tasks, type TasksDeps } from '../src/daemon/tasks.js';
 import { ledgeTask } from '../src/daemon/crossSession.js';
@@ -111,6 +111,31 @@ describe('createTasks', () => {
     expect(cmd('otto', 'show', { task: a.id }).task).toMatchObject({ state: 'open' });
     expect(cmd('otto', 'show', { task: b.id }).task).toMatchObject({ state: 'dropped' });
     expect(told).toEqual([['otto', expect.stringContaining('abandonnée : Nova')]]);
+  });
+
+  it('cancel: by its giver or by Ledge, closed with its reason; the owner is told to stop, and a seat giver learns it', () => {
+    const t = give();
+    told = [];
+    expect(cmd('nova', 'cancel', { task: t.id }).reason).toContain('seul celui qui l\'a confiée (Otto)');
+    const c = cmd(LEDGE_GIVER, 'cancel', { task: t.id, text: 'Plus utile' }).task!;
+    expect(c).toMatchObject({ state: 'refused', result: 'Plus utile' });
+    expect(c.log.at(-1)).toMatchObject({ by: 'Ledge', what: 'annulée : Plus utile' });
+    expect(told.map(([to]) => to)).toEqual(['pim', 'otto']);
+    expect(told[0]![1]).toContain('annulée par Ledge');
+    expect(cmd(LEDGE_GIVER, 'cancel', { task: t.id }).reason).toContain('déjà close');
+  });
+  it('cancel by the giver needs no reason', () => {
+    const t = give();
+    expect(cmd('otto', 'cancel', { task: t.id }).task).toMatchObject({ state: 'refused' });
+  });
+  it('pass by Ledge: a task it did not give changes owner, and the one who held it is told to stop', () => {
+    const t = give();
+    told = [];
+    const p = cmd(LEDGE_GIVER, 'pass', { task: t.id, to: 'nova' }).task!;
+    expect(p).toMatchObject({ owner: 'nova', ownerName: 'Nova', giver: 'otto', state: 'open' });
+    expect(told.map(([to]) => to).sort()).toEqual(['nova', 'pim']);
+    expect(cmd(LEDGE_GIVER, 'pass', { task: t.id, to: 'nova' }).reason).toBe('elle est déjà à Nova');
+    expect(cmd('otto', 'pass', { task: t.id, to: 'pim' }).reason).toContain('seule la session qui la tient');
   });
 });
 

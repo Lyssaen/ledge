@@ -166,12 +166,22 @@ export function createTasks(d: TasksDeps): Tasks {
         if (giver && !owner) d.mailbox.notify(t.owner, formatLedgeTask({ id: t.id, from: me.name, text: `Tâche « ${t.title} » annulée par ${me.name} : ${quote(reason)}. Arrête d'y travailler.` }), `${t.id}:${refused.log.length}`);
         return ok(refused);
       }
+      case 'cancel': {
+        // Its giver, or Ledge for any task (the user is the operator, action registry spec §6.3): closed as a giver's refusal is.
+        if (!giver && !ledge) return refuse(`seul celui qui l'a confiée (${t.giverName}) peut l'annuler`);
+        const reason = cmd.text?.trim();
+        const cancelled = put({ ...t, state: 'refused', ...(reason ? { result: reason } : {}) }, me.name, `annulée${reason ? ` : ${reason}` : ''}`);
+        d.mailbox.notify(t.owner, formatLedgeTask({ id: t.id, from: me.name, text: `Tâche « ${t.title} » annulée par ${me.name}${reason ? ` : ${quote(reason)}` : ''}. Arrête d'y travailler.` }), `${t.id}:${cancelled.log.length}`);
+        // A task a seat gave another, cancelled by Ledge: its giver learns it too.
+        if (!giver) tellGiver(cancelled, me.name, `annulée par ${me.name}${reason ? ` : ${quote(reason)}` : ''}`);
+        return ok(cancelled);
+      }
       case 'pass': {
-        if (!owner) return refuse(`seule la session qui la tient (${t.ownerName}) peut la passer`);
+        if (!owner && !ledge) return refuse(`seule la session qui la tient (${t.ownerName}) peut la passer`);
         if (!cmd.to) return refuse('il faut le nom de la session à qui la passer');
         const next = target(cmd.to, teamOf(me.id));
         if (typeof next === 'string') return refuse(next);
-        if (next.id === me.id) return refuse('elle est déjà à toi');
+        if (next.id === t.owner) return refuse(owner ? 'elle est déjà à toi' : `elle est déjà à ${t.ownerName}`);
         if (!reachable(next)) return refuse(`${next.name} n'a pas été lancée par Ledge : impossible de lui passer une tâche`);
         const note = cmd.text?.trim();
         // The giver stays: a task Ledge gave still comes back to Ledge, however the team passed it inside (§3.7).
@@ -179,6 +189,8 @@ export function createTasks(d: TasksDeps): Tasks {
         const { team: _team, ...rest } = t;
         const passed = put({ ...rest, ...(nextTeam ? { team: nextTeam } : {}), owner: next.id, ownerName: next.name, state: 'open' }, me.name, `passée à ${next.name}${note ? ` : ${note}` : ''}`);
         tellOwner(passed, me.name, `Tâche passée par ${me.name}${note ? ` (${quote(note)})` : ''}, confiée par ${t.giverName} :`);
+        // Passed by Ledge over its owner's head: the one who held it stops.
+        if (!owner) d.mailbox.notify(t.owner, formatLedgeTask({ id: t.id, from: me.name, text: `Tâche « ${t.title} » passée à ${next.name} par ${me.name}. Arrête d'y travailler.` }), `${t.id}:${passed.log.length}:from`);
         return ok(passed);
       }
     }

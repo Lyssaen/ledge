@@ -1,49 +1,25 @@
 import { describe, it, expect } from 'vitest';
 import { fileURLToPath } from 'node:url';
 import { claudeArgs, parseLine, runClaude, PERSONA } from '../src/chat/claude.js';
+import { buildPersona } from '../src/chat/persona.js';
 
 const FAKE = fileURLToPath(new URL('./fake-claude.mjs', import.meta.url));
 const opts = (extra = {}) => ({ question: 'Où en sont les autres ?', cwd: process.cwd(), addDirs: ['/w/ledge'], sessionId: '11111111-1111-4111-8111-111111111111', resume: false, env: { ...process.env }, bin: [process.execPath, FAKE], ...extra });
 
 describe('claudeArgs', () => {
-  it('the persona allows a proposal block only, and names folders.md', () => {
-    expect(PERSONA).toContain('```ledge-session');
-    expect(PERSONA).toContain('folders.md');
+  // The text is generated from the registry (chat-persona.test.ts checks its structure): here, only the rules Ledge's safety rests on.
+  it('the persona is the generated one: never acts nor sends anything itself, proposes on an explicit request only, invents no path', () => {
+    expect(PERSONA).toBe(buildPersona('claude'));
     expect(PERSONA).toContain('Tu n\'agis jamais toi-même');
-    expect(PERSONA).not.toContain('Tu ne proposes jamais d\'agir');
-    // Codex reads only through shell commands (its sandbox is read-only): the persona must not forbid them.
-    expect(PERSONA).toContain('seulement des commandes de lecture');
-    expect(PERSONA).not.toContain('pas de commande,');
-  });
-  it('the persona asks for one block per session, up to 8, the sure folders only and a question for the others (#24)', () => {
-    expect(PERSONA).toContain('un bloc ```ledge-session par session');
-    expect(PERSONA).toContain('8 sessions au plus');
-    expect(PERSONA).toContain('ne mets un bloc que pour les dossiers sûrs');
-  });
-  it('the persona allows a close block for explicit requests, keeps the conversation resumable, and still never acts itself', () => {
-    expect(PERSONA).toContain('```ledge-close');
-    expect(PERSONA).toContain('la conversation reste reprenable');
-    expect(PERSONA).toContain('Tu n\'agis jamais toi-même');
+    expect(PERSONA).toContain('tu n\'envoies jamais rien toi-même à une session');
+    expect(PERSONA).toContain('que si l\'utilisateur la demande explicitement');
+    expect(PERSONA).toContain('n\'invente jamais un chemin');
+    expect(PERSONA).toContain('folders.md'); expect(PERSONA).toContain('projects.md');
   });
   it('the persona sends questions about issues, PR/MR and CI to the forge files, dated, and says when there is no access (#23)', () => {
     expect(PERSONA).toContain('forge.md');
     expect(PERSONA).toContain('forge-<projet>.md');
     expect(PERSONA).toContain('dis que Ledge n\'a pas accès');
-  });
-  it('the persona allows a relay block for one sure, writable session, and never sends anything itself', () => {
-    expect(PERSONA).toContain('```ledge-relay');
-    expect(PERSONA).toContain('{"session": "<id>", "text": "<l\'instruction, formulée pour l\'agent>"}');
-    expect(PERSONA).toContain('tu n\'envoies jamais rien toi-même à une session');
-    expect(PERSONA).toContain('pas en lecture seule');
-    expect(PERSONA).not.toContain('jamais d\'instruction envoyée à une session');
-  });
-  it('the persona reads projects.md and proposes a project only on an explicit request, with paths it read, addTo to complete one, and an answer that stands alone', () => {
-    expect(PERSONA).toContain('```ledge-project');
-    expect(PERSONA).toContain('projects.md');
-    expect(PERSONA).toContain('{"name": "<nom>", "description": "<une phrase>", "repos": [{"path": "<chemin absolu>", "why": "<pourquoi ce dépôt>"}], "addTo": "<nom exact d\'un projet de projects.md>"}');
-    expect(PERSONA).toContain('que si l\'utilisateur demande explicitement de créer un projet ou d\'en compléter un');
-    expect(PERSONA).toContain('n\'invente jamais de chemin');
-    expect(PERSONA).toContain('se suffit à elle-même');
   });
   it('runs headless, restricted, read-only, streaming, with the day session', () => {
     const a = claudeArgs(opts());

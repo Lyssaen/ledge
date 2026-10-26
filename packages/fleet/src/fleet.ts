@@ -160,7 +160,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       steps: raw.steps.map(s => ({ ...s, ...(s.id ? { id: qualify(p.config.id, s.id) } : {}) })),
       ...(raw.proposal ? { proposal: launchedOn(p, raw.proposal) } : {}), ...(raw.proposals ? { proposals: raw.proposals.map(x => launchedOn(p, x)) } : {}),
       ...(raw.relay ? { relay: { ...raw.relay, id: qualify(p.config.id, raw.relay.id) } } : {}),
-      ...(raw.closes ? { closes: raw.closes.map(c => ({ ...c, id: qualify(p.config.id, c.id) })) } : {}) };
+      ...(raw.closes ? { closes: raw.closes.map(c => ({ ...c, id: qualify(p.config.id, c.id) })) } : {}),
+      ...(raw.actions ? { actions: raw.actions.map(a => ({ ...a, ...(a.session ? { session: qualify(p.config.id, a.session) } : {}) })) } : {}) };
   }
   /** Applies a confirmed list to the peers: no storage write, nothing for the overlay until `publish`. */
   function apply(next: MachineConfig[]) {
@@ -242,6 +243,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     if (m.type === 'session.thread' || m.type === 'session.thread.item' || m.type === 'session.queue.restored') { if (available(p)) emit({ ...m, id: qualify(machine, m.id) }); return; }
     if (m.type === 'session.launched') { if (!closeRows.has(machine)) operations.delete(machine); emit({ ...m, id: qualify(machine, m.id) }); return; }
     if (m.type === 'session.closed') { emit({ ...m, qid: globalQid(machine, m.qid), id: qualify(machine, m.id) }); return; }
+    if (m.type === 'chat.acted') { emit({ ...m, qid: globalQid(machine, m.qid) }); return; }
     if (m.type === 'folder.listing') {
       if (m.requestId !== undefined && listings.has(m.requestId)) { if (listings.get(m.requestId)!.machine === machine) { listings.delete(m.requestId); emit(m); } return; }
       // A daemon before 0.9.1 answers folder.create without its requestId: the listing of the new folder, or of the parent with the refusal.
@@ -279,7 +281,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       if (routing?.qid === m.qid && routing.coordinator === machine && m.type === 'chat.error') { routing = null; fail(m.qid, m.message); return; }
       const qid = globalQid(machine, m.qid), old = turns.get(qid); if (!old) return;
       if (m.type === 'chat.done') {
-        const raw = { ...old, qid: m.qid, answer: m.text, answeredAt: m.at, proposal: m.proposal, proposals: m.proposals, relay: m.relay, closes: m.closes, projectProposal: m.projectProposal, team: m.team, tasks: m.tasks };
+        const raw = { ...old, qid: m.qid, answer: m.text, answeredAt: m.at, proposal: m.proposal, proposals: m.proposals, relay: m.relay, closes: m.closes, projectProposal: m.projectProposal, team: m.team, tasks: m.tasks, actions: m.actions };
         const t = mappedTurn(p, { ...raw, steps: [] }); turns.set(qid, { ...t, steps: old.steps }); history();
       } else if (m.type === 'chat.error') fail(qid, m.message);
       else if (m.type === 'chat.step') { const step = { ...m.step, ...(m.step.id ? { id: qualify(machine, m.step.id) } : {}) }; turns.set(qid, { ...old, steps: [...old.steps, step] }); emit({ ...m, qid, step }); }

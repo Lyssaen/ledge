@@ -65,7 +65,7 @@ const flush = async () => { for (let i = 0; i < 5; i++) await new Promise(r => s
 const stops: Array<() => void> = [];
 afterEach(() => { for (const s of stops.splice(0)) s(); });
 
-function setup(opts: { boot?: string; dispatch?: (msg: ClientMessage, reply: (m: ServerMessage) => void) => Promise<void>; relayUrl?: string; chats?: Parameters<typeof createPhoneGateway>[0]['chats']; relay?: Parameters<typeof createPhoneGateway>[0]['relay']; launchChat?: Parameters<typeof createPhoneGateway>[0]['launchChat']; closeChat?: Parameters<typeof createPhoneGateway>[0]['closeChat']; teams?: () => Team[]; tasks?: () => Task[]; onChatEnd?: Parameters<typeof createPhoneGateway>[0]['onChatEnd']; devices?: string[] } = {}) {
+function setup(opts: { boot?: string; dispatch?: (msg: ClientMessage, reply: (m: ServerMessage) => void) => Promise<void>; relayUrl?: string; chats?: Parameters<typeof createPhoneGateway>[0]['chats']; relay?: Parameters<typeof createPhoneGateway>[0]['relay']; launchChat?: Parameters<typeof createPhoneGateway>[0]['launchChat']; closeChat?: Parameters<typeof createPhoneGateway>[0]['closeChat']; actChat?: Parameters<typeof createPhoneGateway>[0]['actChat']; teams?: () => Team[]; tasks?: () => Task[]; onChatEnd?: Parameters<typeof createPhoneGateway>[0]['onChatEnd']; devices?: string[] } = {}) {
   const fm = fakeMobile(opts.devices ?? ['dev1', 'dev2'], opts.relayUrl);
   const clock = { t: 1_000_000 };
   const challenges = createChallengeStore({ now: () => clock.t });
@@ -88,6 +88,7 @@ function setup(opts: { boot?: string; dispatch?: (msg: ClientMessage, reply: (m:
     ...(opts.relay ? { relay: opts.relay } : {}),
     ...(opts.launchChat ? { launchChat: opts.launchChat } : {}),
     ...(opts.closeChat ? { closeChat: opts.closeChat } : {}),
+    ...(opts.actChat ? { actChat: opts.actChat } : {}),
     ...(opts.onChatEnd ? { onChatEnd: opts.onChatEnd } : {}),
     ...(opts.teams ? { teams: opts.teams, projectName: (id: string | null) => (id === 'repo' ? 'Repo' : null) } : {}),
     ...(opts.tasks ? { tasks: opts.tasks } : {}),
@@ -1235,7 +1236,13 @@ function fakeChats() {
     },
     cancel(qid: string) { cancelled.push({ id, qid }); },
     async reset(emit: (m: ServerMessage) => void) { resets.push(id); turns.set(id, []); emit({ type: 'chat.history', turns: [] } as never); },
-    history: () => turns.get(id) ?? []
+    history: () => turns.get(id) ?? [],
+    ignore(qid: string, undo: boolean) {
+      const t = (turns.get(id) ?? []).find(x => x.qid === qid) as { ignoredAt?: string; actions?: unknown } | undefined;
+      if (!t?.actions) return 'no card to ignore';
+      if (undo) delete t.ignoredAt; else t.ignoredAt = T0;
+      return null;
+    }
   });
   const chats = {
     device(id: string) { touched.push(id); gone.delete(id); if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) throw new Error('invalid device id'); if (dropping.has(id)) throw new Error('device thread is being dropped'); return chatOf(id) as never; },
@@ -1779,6 +1786,149 @@ describe('phone gateway: close cards', () => {
     g.send('dev1', { type: 'chat.close', op, qid: QA, rows: [1, 1] });
     await flush();
     expect(g.got('dev1').at(-1)).toMatchObject({ type: 'operation.result', op, status: 'rejected', reason: 'invalid' });
+    expect(calls).toEqual([]);
+  });
+});
+
+describe('phone gateway: generic cards (spec 2026-10-26 action registry §9)', () => {
+  const rp = { rpId: 'relay.test', origin: 'https://relay.test' };
+  const QA = randomUUID(); const QPC = randomUUID();
+  type Row = { action: string; args: Record<string, unknown>; summary: string; risk: 'reversible' | 'destructive'; state?: 'done'; detail?: string; detailCut?: true };
+  const archive: Row = { action: 'session.archive', args: { session: 'a' }, summary: 'Archiver **A**', risk: 'reversible' };
+  const resume: Row = { action: 'session.resume', args: { session: 'b' }, summary: 'Reprendre **B**', risk: 'reversible' };
+  const dissolve: Row = { action: 'team.dissolve', args: { team: 't' }, summary: 'Dissoudre **T**', risk: 'destructive' };
+
+  function make(rows: Row[], result?: { done: number[]; failed: Array<{ row: number; message: string }> } | Error) {
+    const c = fakeChats(); turnsOf = c.turns;
+    const turn = (qid: string) => ({ qid, question: 'q', askedAt: T0, steps: [] as never[], actions: rows });
+    c.turns.set('dev1', [turn(QA), turn(QPC)] as never);
+    const owner = c.chats.owner;
+    c.chats.owner = (qid: string) => (qid === QPC ? 'desktop' as never : owner(qid));
+    const calls: Array<[string, string, number[] | undefined, true | undefined]> = [];
+    const actChat = async (thread: string, qid: string, _rid: string, r?: number[], confirmed?: true) => {
+      calls.push([thread, qid, r, confirmed]);
+      if (result instanceof Error) throw result;
+      return result ?? { done: r ?? [], failed: [] };
+    };
+    const g = setup({ chats: c.chats, actChat: actChat as never, relayUrl: 'https://relay.test' });
+    return { calls, g };
+  }
+  type G = ReturnType<typeof setup>;
+  const enroll = async (g: G) => {
+    const auth = softAuthenticator();
+    g.send('dev1', { type: 'confirm.prepare', purpose: 'register' });
+    await flush();
+    const reg = g.got('dev1').find(m => m.type === 'confirm.challenge');
+    if (reg?.type !== 'confirm.challenge') throw new Error('no challenge');
+    g.send('dev1', { type: 'credential.register', op: randomUUID(), credential: auth.create(rp, reg.challenge) });
+    await flush();
+    return auth;
+  };
+  const prepare = async (g: G, qid: string) => {
+    const before = g.got('dev1').length;
+    g.send('dev1', { type: 'confirm.prepare', purpose: 'act', qid });
+    await flush();
+    const m = g.got('dev1').slice(before).find(x => x.type === 'confirm.challenge');
+    if (m?.type !== 'confirm.challenge') throw new Error('no challenge');
+    return m;
+  };
+  const last = (g: G) => g.results('dev1').at(-1);
+  let turnsOf: ReturnType<typeof fakeChats>['turns'];
+
+  it('« Ignorer » sets the device\'s turn aside, « Revoir » opens it again; an ignored card applies no more', async () => {
+    const { calls, g } = make([archive]);
+    const ignore = { type: 'chat.ignore', op: randomUUID(), qid: QA };
+    g.send('dev1', ignore);
+    await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: ignore.op, status: 'applied' });
+    expect((turnsOf.get('dev1')![0] as { ignoredAt?: string }).ignoredAt).toBe(T0);
+    g.send('dev1', { type: 'chat.act', op: randomUUID(), qid: QA });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'rejected', reason: 'stale' });
+    expect(calls).toEqual([]);
+    g.send('dev1', { type: 'chat.ignore', op: randomUUID(), qid: QA, undo: true });
+    g.send('dev1', { type: 'chat.act', op: randomUUID(), qid: QA });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'applied' });
+    // The PC's card is not the phone's to set aside.
+    g.send('dev1', { type: 'chat.ignore', op: randomUUID(), qid: QPC });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'rejected', reason: 'unknown_session' });
+  });
+  it('a row whose request the phone only saw cut is refused there, never accepted', async () => {
+    const accept: Row = { action: 'session.decide', args: { session: 'a', decision: 'accept' }, summary: 'Accepter', risk: 'reversible', detail: 'x'.repeat(3000) };
+    const deny: Row = { ...accept, args: { session: 'a', decision: 'deny' }, summary: 'Refuser', detail: 'x…', detailCut: true };
+    const one = make([accept]);
+    one.g.send('dev1', { type: 'chat.act', op: randomUUID(), qid: QA });
+    await flush();
+    expect(last(one.g)).toMatchObject({ status: 'rejected', reason: 'not_offered' });
+    expect(one.calls).toEqual([]);
+    const two = make([deny]);
+    two.g.send('dev1', { type: 'chat.act', op: randomUUID(), qid: QA });
+    await flush();
+    // A deny goes on to its usual check (the passkey, here).
+    expect(last(two.g)).toMatchObject({ status: 'rejected', reason: 'confirm_required' });
+  });
+
+  it('applies rows with no device check without a passkey', async () => {
+    const { calls, g } = make([archive]);
+    const m = { type: 'chat.act', op: randomUUID(), qid: QA };
+    g.send('dev1', m);
+    await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: m.op, status: 'applied' });
+    expect(calls).toEqual([['device:dev1', QA, [0], undefined]]);
+  });
+  it('asks the passkey for a row the registry checks, bound to the turn and spent once', async () => {
+    const { calls, g } = make([archive, resume]);
+    g.send('dev1', { type: 'chat.act', op: randomUUID(), qid: QA });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'rejected', reason: 'confirm_required' });
+    const auth = await enroll(g);
+    const ch = await prepare(g, QA);
+    expect(ch).toMatchObject({ purpose: 'act' });
+    const m = { type: 'chat.act', op: randomUUID(), qid: QA, assertion: auth.get(rp, ch.challenge, { counter: 1 }) };
+    g.send('dev1', m);
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'applied' });
+    g.send('dev1', { ...m, op: randomUUID() });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'rejected', reason: 'assertion_invalid' });
+    expect(calls).toHaveLength(1);
+  });
+  it('a destructive row needs the confirmation and the passkey', async () => {
+    const { calls, g } = make([dissolve]);
+    const auth = await enroll(g);
+    const ch = await prepare(g, QA);
+    g.send('dev1', { type: 'chat.act', op: randomUUID(), qid: QA, assertion: auth.get(rp, ch.challenge, { counter: 1 }) });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'rejected', reason: 'confirm_required' });
+    const ch2 = await prepare(g, QA);
+    g.send('dev1', { type: 'chat.act', op: randomUUID(), qid: QA, confirmed: true, assertion: auth.get(rp, ch2.challenge, { counter: 2 }) });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'applied' });
+    expect(calls).toEqual([['device:dev1', QA, [0], true]]);
+  });
+  it('passes the done rows over, and answers failed when none is left or one failed', async () => {
+    const one = make([{ ...archive, state: 'done' }, archive]);
+    one.g.send('dev1', { type: 'chat.act', op: randomUUID(), qid: QA });
+    await flush();
+    expect(one.calls).toEqual([['device:dev1', QA, [1], undefined]]);
+    const none = make([{ ...archive, state: 'done' }]);
+    none.g.send('dev1', { type: 'chat.act', op: randomUUID(), qid: QA });
+    await flush();
+    expect(last(none.g)).toMatchObject({ status: 'failed' });
+    expect(none.calls).toEqual([]);
+    const failing = make([archive], { done: [], failed: [{ row: 0, message: 'busy' }] });
+    failing.g.send('dev1', { type: 'chat.act', op: randomUUID(), qid: QA });
+    await flush();
+    expect(last(failing.g)).toMatchObject({ status: 'failed' });
+  });
+  it("refuses an unknown row, and the PC's card", async () => {
+    const { calls, g } = make([archive]);
+    g.send('dev1', { type: 'chat.act', op: randomUUID(), qid: QA, rows: [3] });
+    g.send('dev1', { type: 'chat.act', op: randomUUID(), qid: QPC });
+    await flush();
+    expect(g.results('dev1').filter(r => r.status === 'rejected').map(r => r.reason)).toEqual(['invalid', 'unknown_session']);
     expect(calls).toEqual([]);
   });
 });

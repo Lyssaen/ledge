@@ -1,5 +1,8 @@
 import { spawn as nodeSpawn } from 'node:child_process';
-import { PERSONA, parseLine, type ClaudeEvent, type RunHandle, type RunOptions } from './claude.js';
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { parseLine, type ClaudeEvent, type RunHandle, type RunOptions } from './claude.js';
+import { buildPersona } from './persona.js';
 import { runJsonl } from './run.js';
 
 /** `cursor-agent -p --mode ask`: read-only print mode, repos as extra workspace roots, no --force. */
@@ -31,7 +34,9 @@ export function parseCursorLine(line: string): ClaudeEvent[] {
   return [];
 }
 
+/** The persona is a system instruction (spec 2026-10-26 action registry §4): the AGENTS.md of the workspace, the context folder written anew each turn. */
 export function runCursor(o: RunOptions, onEvent: (e: ClaudeEvent) => void, spawnImpl: typeof nodeSpawn = nodeSpawn): RunHandle {
   const [file = 'cursor-agent', ...pre] = o.bin ?? ['cursor-agent'];
-  return runJsonl(file, [...pre, ...cursorArgs(o)], { cwd: o.cwd, env: o.env, question: `${o.persona ?? PERSONA}\n\n${o.question}` }, parseCursorLine, onEvent, spawnImpl);
+  writeFileSync(join(o.cwd, 'AGENTS.md'), `${o.persona ?? buildPersona('cursor')}\n`);
+  return runJsonl(file, [...pre, ...cursorArgs(o)], { cwd: o.cwd, env: o.env, question: o.question }, parseCursorLine, onEvent, spawnImpl);
 }
