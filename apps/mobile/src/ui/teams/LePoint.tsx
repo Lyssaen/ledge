@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { PhoneSession, PhoneTask, PhoneTeam } from '@ledge/protocol';
+import { CONTEXT_NEAR, type PhoneSession, type PhoneTask, type PhoneTeam } from '@ledge/protocol';
 import { copy } from '../../copy';
 import { closedTasks, openTasks } from '../../model/teams';
 import { ageLabel, headline, requestsOf } from '../../model/requests';
@@ -32,9 +32,11 @@ export function LePoint({ store, sessions, teams, tasks, syncedAt, fresh }: { st
   const byId = new Map(sessions.map(s => [s.id, s]));
   const requests = requestsOf(sessions);
   const closed = closedTasks(tasks.values());
+  // Near their context limit (context handover spec §3.2): opened here, handed over from the PC.
+  const near = sessions.filter(s => s.state !== 'exited' && !s.handover && s.context && s.context.used / s.context.window >= CONTEXT_NEAR);
   const open = openTasks(tasks.values()).slice(0, 5);
   const P = copy.chat.point;
-  const yours = requests.length + closed.length;
+  const yours = requests.length + closed.length + near.length;
   const decide = (sessionId: string, key: string, decision: 'accept' | 'deny') => {
     const item = requests.find(r => r.sessionId === sessionId && r.key === key);
     if (!item) return;
@@ -76,6 +78,15 @@ export function LePoint({ store, sessions, teams, tasks, syncedAt, fresh }: { st
                 <span className="font-medium">{t.ownerName}</span>{t.ownerRole && <RolePill role={t.ownerRole} />}<span>{closedLine(t)}</span>
               </span>
               <button type="button" className={SMALL} onClick={() => see(t)}>{P.see}</button>
+            </div>
+          ))}
+          {near.map(s => (
+            <div key={`near:${s.id}`} className="flex items-center gap-2">
+              <Dot tone="attention" />
+              <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 text-[13px]" title={P.nearHint}>
+                <span className="font-medium">{s.name}</span>{s.role && <RolePill role={s.role} />}<span>{P.near(Math.round((s.context!.used / s.context!.window) * 100))}</span>
+              </span>
+              <a href={href({ name: 'thread', sessionId: s.id })} className={SMALL}>{P.see}</a>
             </div>
           ))}
         </div>

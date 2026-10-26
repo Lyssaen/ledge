@@ -6,7 +6,7 @@ import { isPending, useTasks, useTeams } from '@ledge/fleet';
 import { LEDGE_GIVER, taskClosed, type Session, type Team } from '@ledge/protocol';
 import { botState } from '@ledge/ui/bots/poseFor';
 import { useScreenKeys, useTui } from '../context.js';
-import { closedLedgeTasks, exchanges, helperCount, nextWaiting, overview, step } from '../model/overview.js';
+import { closedLedgeTasks, exchanges, helperCount, nearContext, nextWaiting, overview, step } from '../model/overview.js';
 import { fit, machineLabel, paneName } from '../model/labels.js';
 import { ago, clock, oneLine } from '../model/time.js';
 import { C, projectColor, STATE_COLOR } from '../theme.js';
@@ -43,6 +43,8 @@ export function Overview() {
   const view = useMemo(() => overview(d.sessions, projects, teams ?? [], tasks), [d.sessions, projects, teams, tasks]);
   const sel = selected?.id ?? null;
   const closed = closedLedgeTasks(tasks);
+  // Sessions near their context limit (context handover spec §3.2): H hands the selected one (else the first) over.
+  const near = useMemo(() => nearContext(d.sessions), [d.sessions]);
   // The selected seat's team: its tasks box (t hides it), and the teams of its project for J and R.
   const [tasksShown, setTasksShown] = useState(true);
   const [joining, setJoining] = useState<{ index: number } | null>(null);
@@ -75,6 +77,15 @@ export function Overview() {
       return true;
     }
     if (input === 'T') { setTasksShown(v => !v); return true; }
+    if (input === 'H') {
+      const s = (selected && selected.source === 'launcher' && selected.state !== 'exited' && selected.tool !== 'omp' && (!selected.handover || selected.handover.state === 'failed') ? selected : undefined) ?? near.find(x => x.handover?.state !== 'failed') ?? near[0];
+      if (!s) return true;
+      const rid = randomUUID();
+      const off = tui.client.onMessage(m => { if (m.type === 'session.handover.result' && m.rid === rid) { off(); tui.toast(m.ok ? { text: t.toast.handover(s.name), tone: 'ok' } : { text: t.toast.handoverRefused(m.reason ?? '?'), tone: 'info' }); } });
+      setTimeout(off, 5000);
+      tui.client.send({ type: 'session.handover', rid, id: s.id });
+      return true;
+    }
     // x puts away the oldest closed task Ledge gave (« À toi »).
     if (input === 'x' && closed[0]) { tui.client.send({ type: 'task.cmd', rid: randomUUID(), by: LEDGE_GIVER, op: 'seen', task: closed[0].id }); return true; }
     if (input === 'j' || key.downArrow) { select(step(view.order, sel, 1)); return true; }
@@ -102,7 +113,7 @@ export function Overview() {
       ...n.teams.flatMap(x => [{ kind: 'team' as const, key: x.key, team: x.team, done: x.done, given: x.given }, ...x.sessions.map(s => ({ kind: 'session' as const, key: s.id, s, indent: 2 }))])
     ];
   });
-  const yoursCount = view.yours.length + closed.length;
+  const yoursCount = view.yours.length + closed.length + near.length;
   const yoursHeight = Math.max(1, Math.min(yoursCount, 6));
   // The status bar, the key bar, the toast, the boxes' borders and titles.
   const joinHeight = joining && selected ? Math.max(1, choices.length) + 2 : 0;
@@ -126,6 +137,8 @@ export function Overview() {
         );
       }), ...closed.slice(0, Math.max(0, yoursHeight - view.yours.length)).map(x => (
         <Text key={x.id} wrap="truncate"><Text color={x.state === 'done' ? C.green : C.yellow}>{x.state === 'done' ? g.ok : g.fail} </Text><Text color={C.fg}>{t.overview.ledgeTask(x.ownerName, x.title, x.state as 'done' | 'refused' | 'dropped')}</Text></Text>
+      )), ...near.slice(0, Math.max(0, yoursHeight - view.yours.length - closed.length)).map(s => (
+        <Text key={`near:${s.id}`} wrap="truncate" backgroundColor={s.id === sel ? C.sel : undefined}><Text color={C.yellow}>{s.handover?.state === 'failed' ? g.fail : '◔'} </Text><Text color={C.fg}>{s.handover?.state === 'failed' ? t.overview.reliefFailed(s.name, s.handover.reason ?? '?') : t.overview.near(`${s.name}${s.role ? ` @${s.role}` : ''}`, Math.round(((s.context?.used ?? 0) / (s.context?.window ?? 1)) * 100))}</Text></Text>
       ))]}
     </TitledBox>
   );
@@ -147,6 +160,7 @@ export function Overview() {
     ['j k', t.keys.navigate], ['↵', t.keys.open], ...(view.yours.length ? [['tab', t.keys.next] as const, ['y n', t.keys.answer] as const] : []),
     ['a', t.keys.attach], ...(seatTeam ? [['T', t.keys.tasks] as const] : []), ...(choices.length ? [['J', t.keys.join] as const] : []),
     ...(view.tree.some(n => n.teams.some(x => x.team.state === 'resting')) ? [['R', t.keys.resume] as const] : []),
+    ...(near.length ? [['H', t.keys.handover] as const] : []),
     ['/', t.keys.ask], ['+', t.keys.launch], [',', t.keys.settings], ['?', t.keys.help], ['q', t.keys.quit]
   ];
   const teamTasks = seatTeam ? tasks.filter(x => x.team === seatTeam.id && (!taskClosed(x) || x.updatedAt.slice(0, 10) === new Date().toISOString().slice(0, 10))).slice(-4) : [];

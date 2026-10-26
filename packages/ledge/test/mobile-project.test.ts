@@ -11,6 +11,13 @@ const session = (extra: Partial<Session> = {}): Session => ({
 const msg = (n: number, text = 'hi'): ThreadItem => ({ kind: 'message', id: `m${n}`, at: T, turn: 0, text });
 
 describe('toPhoneSession', () => {
+  it('carries the context, the one it relieves, and its relief\'s state only (context handover spec §3.2)', () => {
+    const p = toPhoneSession(session({ context: { used: 170_000, window: 200_000, at: T }, relieves: { id: 'x', name: 'Pim', at: T }, handover: { state: 'done', at: T, to: 'y', toName: 'Nova', auto: true } }), T);
+    expect(p).toMatchObject({ context: { used: 170_000, window: 200_000 }, relieves: { name: 'Pim' }, handover: { state: 'done', toName: 'Nova' } });
+    expect(p.handover).toEqual({ state: 'done', toName: 'Nova' });
+    expect(PhoneSessionSchema.safeParse(p).success).toBe(true);
+  });
+
   it('keeps only whitelisted keys', () => {
     const s = { ...session({ topic: 'x', pending: { kind: 'permission', text: 'ok?', tool: 'Bash', source: 'hook' } }), secret: 'x' } as Session;
     const p = toPhoneSession(s, T);

@@ -31,18 +31,23 @@ export function Attention(p: {
   ledgeTasks?: readonly Task[];
   onSeeTask?(id: string): void;
   onDismissTask?(id: string): void;
+  /** The sessions near their context limit, or whose relief failed (context handover spec §3.2): « Passer le relais », « Plus tard ». */
+  near?: readonly Session[];
+  onHandover?(id: string): void;
+  onLater?(id: string): void;
 }): JSX.Element | null {
   const { t } = useI18n();
   const [all, setAll] = useState(false);
   const tasks = p.ledgeTasks ?? [];
-  if (p.items.length === 0 && tasks.length === 0) return null;
+  const near = p.near ?? [];
+  if (p.items.length === 0 && tasks.length === 0 && near.length === 0) return null;
   const shown = all ? p.items : p.items.slice(0, CAP);
   const units = t.list.when.units;
   return (
     <section className="st-attn" aria-label={t.side.yours}>
       <div className="st-label">
         <span>{t.side.yours}</span>
-        <b className="st-badge">{p.items.length + tasks.length}</b>
+        <b className="st-badge">{p.items.length + tasks.length + near.length}</b>
         <span className="st-fill" />
         <Kbd>Alt ↓</Kbd>
       </div>
@@ -90,6 +95,23 @@ export function Attention(p: {
           </div>
         </div>
       ))}
+      {near.map(s => {
+        const failed = s.handover?.state === 'failed';
+        const pct = s.context ? Math.round((s.context.used / s.context.window) * 100) : 0;
+        return (
+          <div key={`near:${s.id}`} className="st-card st-task st-near" data-near={s.id}>
+            <span className="st-bot st-task-mark" aria-hidden="true">{failed ? '!' : '◔'}</span>
+            <div className="st-card-body">
+              <div className="st-l1"><span className="st-req">{failed ? t.handover.failedItem(s.name, s.handover?.reason ?? '?') : t.handover.near(`${s.name}${s.role ? ` @${s.role}` : ''}`, pct)}</span></div>
+              <div className="st-l2">
+                <span className="st-where">{s.context ? t.handover.gauge(pct) : ''}</span>
+                <button type="button" className="st-qa pri" title={t.handover.passTitle} onClick={() => p.onHandover?.(s.id)}>{t.handover.pass}</button>
+                <button type="button" className="st-qa" onClick={() => p.onLater?.(s.id)}>{t.handover.later}</button>
+              </div>
+            </div>
+          </div>
+        );
+      })}
       {p.items.length > CAP && (
         <button type="button" className="st-showall" onClick={() => setAll(v => !v)}>
           {all ? t.side.yoursLess : t.side.yoursMore(p.items.length - CAP)}

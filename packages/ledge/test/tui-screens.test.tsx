@@ -192,3 +192,20 @@ describe('ledge tui: teams (roles spec §3.9)', () => {
     } finally { await tui.cleanup(); }
   });
 });
+
+describe('ledge tui: a session near its context limit (context handover spec §3.2)', () => {
+  it('« À toi » lists it, the card shows its context, H hands it over', async () => {
+    const sessions = mockupSessions().map(s => (s.id === 'nova' ? { ...s, role: 'build', context: { used: 230_000, window: 272_000, at: T(0) } } : s));
+    const tui = await startTui({ sessions });
+    tui.daemon.onMessage(m => { if (m.type === 'session.handover') tui.daemon.push({ type: 'session.handover.result', rid: m.rid, ok: true }); });
+    try {
+      await until(() => tui.frame().includes('◔ Nova @build approche de sa limite'));
+      await tui.press('j');
+      await until(() => tui.frame().includes('ctx 85 %'));
+      await tui.press('H');
+      await until(() => sent(tui.daemon.received, 'session.handover').length === 1);
+      expect(sent(tui.daemon.received, 'session.handover')[0]).toMatchObject({ id: 'nova' });
+      await until(() => tui.frame().includes('Nova écrit son bilan'));
+    } finally { await tui.cleanup(); }
+  });
+});

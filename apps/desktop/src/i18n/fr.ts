@@ -442,6 +442,15 @@ export const fr = {
     teams: { none: 'Aucune équipe en cours. Demande à Ledge d’en monter une.', dissolved: 'dissoute' },
     history: { none: 'Aucune conversation aujourd’hui.', open: 'Voir dans la conversation' }
   },
+  handover: {
+    near: (name: string, pct: number) => `${name} approche de sa limite de contexte · ${pct} %`,
+    failedItem: (name: string, why: string) => `La relève de ${name} a échoué : ${why}`,
+    pass: 'Passer le relais', passTitle: 'Une nouvelle session prend sa place : il écrit son bilan, ses tâches lui sont passées', later: 'Plus tard',
+    gauge: (pct: number) => `contexte ${pct} %`,
+    state: { briefing: 'relève : bilan demandé', launching: 'relève : lancement…', done: 'relevée', failed: 'relève échouée' } as Record<'briefing' | 'launching' | 'done' | 'failed', string>,
+    relievedBy: (name: string) => `relevée par ${name}`, relieves: (name: string) => `relève de ${name}`,
+    refused: (why: string) => `Relève refusée : ${why}`, auto: 'par Ledge'
+  },
   teamLaunch: {
     title: (project: string) => `Nouvelle équipe · ${project}`, folder: 'Dossier', noFolder: 'Aucun dossier de ce projet sur cette machine', loading: 'Lecture des rôles et des modèles…',
     template: 'Modèle', custom: 'Sièges choisis un par un', seats: 'Sièges', noRole: 'Aucun rôle : écris ~/.ledge/roles/<id>.md', agentOf: (role: string) => `Agent de @${role}`,

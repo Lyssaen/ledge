@@ -59,7 +59,7 @@ Two parts, in this order: (A) the open tasks in what a session is told when it s
   - Desktop: an item in « À toi » (« Otto @build approche de sa limite de contexte · 84 % ») with « Passer le relais »
     and « Plus tard » (put away until it grows by another 5 points); the session page's meta line shows the gauge
     (`contexte 84 %`), with « Passer le relais » in the session's actions.
-  - TUI: the session's line in « À toi » with `H` to hand over; the session screen shows `contexte 84 %`.
+  - TUI: the session's line in « À toi » with `H` to hand over; the session card shows `ctx 84 %` (short: a narrow terminal cuts the line).
   - Phone: the agent's row shows `contexte 84 %`; the relief is started from the PC (it launches a session, which the
     phone only does with its device check on a chat card).
   - Ledge's chat context (`sessions.md`) gives each session's context, so the operator can mention it.

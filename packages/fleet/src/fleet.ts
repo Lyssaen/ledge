@@ -115,7 +115,10 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   const status = (): DaemonStatus => [...peers.values()].some(available) ? 'open' : [...peers.values()].some(p => p.status === 'connecting') ? 'connecting' : 'unreachable';
   /** keepStale: a fallen peer, the local one included, keeps its last snapshot, flagged offline (spec §6). */
   const stale = (p: Peer | undefined): boolean => !!opts.keepStale && !!p && !available(p) && !!p.snapshot;
-  const session = (p: Peer, s: Session): Session => ({ ...s, id: qualify(p.config.id, s.id), machineId: p.config.id, machineName: p.config.label, ...(stale(p) ? { offline: true } : {}) });
+  const session = (p: Peer, s: Session): Session => ({ ...s, id: qualify(p.config.id, s.id), machineId: p.config.id, machineName: p.config.label, ...(stale(p) ? { offline: true } : {}),
+    // A relief and the one it relieves are on the same machine (context handover spec §3.3).
+    ...(s.handover?.to ? { handover: { ...s.handover, to: qualify(p.config.id, s.handover.to) } } : {}),
+    ...(s.relieves ? { relieves: { ...s.relieves, id: qualify(p.config.id, s.relieves.id) } } : {}) });
   const stateSessions = (p: Peer): Session[] => (stale(p) ? p.snapshot!.sessions.map(s => ({ ...s, offline: true })) : p.snapshot?.sessions ?? []).filter(s => !isArchived(s));
   /** The fleet's own inventory and status follow every change. Only `publish` tells the overlay the whole picture again:
    *  a (re)connection, a host joining or leaving, another host selected. A session's own update is relayed as itself
@@ -289,6 +292,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       emit({ ...m, ...(m.id ? { id: qualify(machine, m.id) } : {}), message: configs.length > 1 ? `${p.config.label}: ${m.message}` : m.message });
       return;
     }
+    // A relief's answer comes from the machine the session runs on (context handover spec §3.3).
+    if (m.type === 'session.handover.result') { emit(m); return; }
     if (machine === 'local') emit(m);
   }
   function add(c: MachineConfig) {

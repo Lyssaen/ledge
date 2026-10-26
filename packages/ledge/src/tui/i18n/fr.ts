@@ -24,7 +24,7 @@ export const fr = {
     interrupt: 'interrompre', next: 'suivante en attente', unfold: 'déplier', send: 'envoyer / lancer', nextCard: 'carte suivante',
     newChat: 'nouvelle conversation', stopAnswer: 'arrêter la réponse', nextField: 'champ suivant', choose: 'choisir', tick: 'cocher',
     start: 'lancer', cancel: 'annuler', change: 'changer', scroll: 'défiler', space: 'espace', redraw: 'autre nom',
-    save: 'enregistrer l’équipe', tasks: 'tâches de l’équipe', join: 'rejoindre une équipe', resume: 'reprendre l’équipe', teamMode: 'session ou équipe'
+    save: 'enregistrer l’équipe', tasks: 'tâches de l’équipe', join: 'rejoindre une équipe', resume: 'reprendre l’équipe', teamMode: 'session ou équipe', handover: 'passer le relais'
   },
   overview: {
     yours: (n: number) => `À toi · ${n}`, projects: 'Projets', exchanges: 'Échanges', terminal: (name: string) => `Terminal · ${name}`,
@@ -34,6 +34,11 @@ export const fr = {
     allow: 'Autoriser', deny: 'Refuser', always: 'Toujours', denyWithNote: 'Refuser en expliquant',
     common: 'table commune', teamLine: (done: number, given: number) => `équipe · ${done}/${given}`, resting: 'au repos · R pour reprendre',
     tasks: (team: string) => `Tâches · ${team}`, noTask: 'Aucune tâche.', ledge: 'Ledge',
+    near: (name: string, pct: number) => `${name} approche de sa limite de contexte · ${pct} % · H passer le relais`,
+    reliefFailed: (name: string, why: string) => `La relève de ${name} a échoué : ${why}`,
+    context: (pct: number) => `ctx ${pct} %`,
+    relief: { briefing: 'relève : bilan demandé', launching: 'relève : lancement…', done: 'relevée', failed: 'relève échouée' } as Record<'briefing' | 'launching' | 'done' | 'failed', string>,
+    relievedBy: (name: string) => `relevée par ${name}`, relieves: (name: string) => `relève de ${name}`,
     ledgeTask: (owner: string, title: string, state: 'done' | 'refused' | 'dropped') => `${owner} a ${state === 'done' ? 'fini' : state === 'refused' ? 'refusé' : 'abandonné'} « ${title} » · tâche de Ledge`,
     joinWhich: (name: string) => `${name} rejoint quelle équipe ? (↑↓ ↵, esc)`, noTeamHere: 'Aucune équipe dans ce projet.', notInTeam: 'Cette session n’est dans aucune équipe.'
   },
@@ -83,6 +88,7 @@ export const fr = {
     screens: 'changer d’écran'
   },
   toast: {
+    handover: (n: string) => `${n} écrit son bilan : une nouvelle session prendra sa place`, handoverRefused: (why: string) => `Relève refusée : ${why}`,
     accept: (n: string) => `✓ ${n} : autorisé`, deny: (n: string) => `✓ ${n} : refusé`, always: (n: string) => `✓ ${n} : toujours autorisé`,
     option: (n: string, k: number) => `✓ ${n} : option ${k} envoyée`, reply: (n: string) => `✓ Réponse envoyée à ${n}`,
     interrupted: (n: string) => `${n} : interruption demandée`, model: (n: string, m: string) => `${n} : modèle ${m}`,

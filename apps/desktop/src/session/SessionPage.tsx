@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent } from 'react';
 import type { DaemonClient } from '@ledge/fleet';
-import { isArchived, type Helper, type Session, type ThreadItem, taskClosed } from '@ledge/protocol';
+import { contextNear, contextShare, isArchived, type Helper, type Session, type ThreadItem, taskClosed } from '@ledge/protocol';
 import { Icon } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import type { Decisions } from '../fleet/decisions';
@@ -383,6 +383,10 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   const since = whenOf(session, undefined, now, t.list.when).text;
   const waitedFor = whenOf(session, p.waits.get(session.id)?.since, now, t.list.when).text;
   const place = p.nav.place;
+  const share = contextShare(session.context);
+  const near = contextNear(session.context);
+  const canHand = helper === null && !!p.teams && session.source === 'launcher' && session.state !== 'exited' && !session.archivedAt && session.tool !== 'omp' && !!session.tmuxSession
+    && share !== undefined && (!session.handover || session.handover.state === 'failed');
   const kids = helper === null ? session.helpers ?? [] : [];
   return (
     <section className="conversation session-page" data-session={session.id} data-helper={helper?.id}>
@@ -395,7 +399,13 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
             </button>
           ))}
         </div>
-        <span className="pane-meta mono" title={t.session.meta}>{[machine, repoOf(session), ...(team ? [`⚑ ${team.name}`] : []), ...(session.role ? [toolName(session.tool), session.model, session.autonomy ? t.session.seat.autonomy[session.autonomy] : null] : [])].filter(Boolean).join(' · ')}</span>
+        <span className="pane-meta mono" title={t.session.meta}>{[machine, repoOf(session), ...(team ? [`⚑ ${team.name}`] : []), ...(session.role ? [toolName(session.tool), session.model, session.autonomy ? t.session.seat.autonomy[session.autonomy] : null] : []), ...(share !== undefined ? [t.handover.gauge(Math.round(share * 100))] : [])].filter(Boolean).join(' · ')}</span>
+        {/* Its relief (context handover spec §3.3): under way, done (the relief opens), or the one it relieves. */}
+        {session.handover && (session.handover.state === 'done' && session.handover.to
+          ? <button type="button" className="kids-pill" onClick={() => p.dispatch({ type: 'open', id: session.handover!.to! })}>{t.handover.relievedBy(session.handover.toName ?? '')}</button>
+          : <span className={cls('pane-relief', session.handover.state === 'failed' && 'failed')} role="status">{t.handover.state[session.handover.state]}{session.handover.auto ? ` · ${t.handover.auto}` : ''}{session.handover.reason ? ` : ${session.handover.reason}` : ''}</span>)}
+        {session.relieves && <button type="button" className="kids-pill" onClick={() => p.dispatch({ type: 'open', id: session.relieves!.id })}>{t.handover.relieves(session.relieves.name)}</button>}
+        {canHand && <button type="button" className={cls('kids-pill', near && 'near')} title={t.handover.passTitle} onClick={() => { void p.teams?.handover(session.id); }}>{t.handover.pass}</button>}
         {(tags || kids.length > 0) && <span className="spacer" />}
         {tags && <Tags tags={tags} />}
         {kids.length > 0 && <><button type="button" className="kids-pill" title={t.session.kidsPillTitle} onClick={p.onShowKids}><Icon d={SHELL_ICONS.subagents} size={13} />{t.session.kidsPill(kids.length)}</button></>}

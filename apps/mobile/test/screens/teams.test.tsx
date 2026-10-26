@@ -152,3 +152,23 @@ describe('« À traiter » and « Agents » with teams', () => {
     expect(groups.map(g => [g.label, g.tables.map(t => (t.kind === 'team' ? t.team.id : 'common'))])).toEqual([['ledge', ['team-a1b2', 'common', 'team-c3d4']], ['Site', ['team-e5f6']]]);
   });
 });
+
+describe('a session near its context limit on the phone (context handover spec §3.2)', () => {
+  it('« Le point » lists it with « Voir »; « Agents » shows its gauge and its relief', () => {
+    const t = setup();
+    t.deliver(snapshot([
+      session('otto', { name: 'Otto', repo: 'ledge', role: 'build', context: { used: 170_000, window: 200_000, at: NOW } }),
+      session('nova', { name: 'Nova', repo: 'ledge', context: { used: 50_000, window: 200_000, at: NOW }, relieves: { id: 'old', name: 'Pim', at: NOW } })
+    ], 'PC-Desan', undefined, ON));
+    t.deliver({ type: 'teams', teams: [] });
+    const { unmount } = render(<Chat store={t.store} />);
+    const yours = within(screen.getByRole('group', { name: 'À toi' }));
+    expect(yours.getByText('approche de sa limite de contexte · 85 %')).toBeInTheDocument();
+    expect(yours.getByRole('link', { name: 'Voir' })).toHaveAttribute('href', '#/thread/otto');
+    unmount();
+    render(<Agents store={t.store} />);
+    expect(screen.getByText('contexte 85 %')).toHaveClass('text-attention');
+    expect(screen.getByText('contexte 25 %')).toBeInTheDocument();
+    expect(screen.getByText(/relève de Pim/)).toBeInTheDocument();
+  });
+});

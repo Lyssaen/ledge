@@ -40,7 +40,8 @@ export const copy = {
       seats: (n: number) => `${n} ${n > 1 ? 'postes' : 'poste'}`, resting: 'au repos', resume: 'Reprendre',
       progress: (done: number, given: number) => `${done}/${given}`,
       state: { open: 'ouverte', taken: 'prise', done: 'finie', refused: 'refusée', dropped: 'abandonnée' },
-      calm: 'Rien ne t’attend. Demande à Ledge ce que tu veux savoir ou faire.'
+      calm: 'Rien ne t’attend. Demande à Ledge ce que tu veux savoir ou faire.',
+      near: (pct: number) => `approche de sa limite de contexte · ${pct} %`, nearHint: 'La relève se lance depuis le PC.'
     },
     team: {
       label: 'Équipe proposée', team: 'Équipe', seats: 'Postes', newTable: (project: string) => `nouvelle table dans la pièce ${project}`,
@@ -104,7 +105,11 @@ export const copy = {
     teamsWorking: (n: number) => n === 0 ? '' : ` · ${n} ${n > 1 ? 'équipes' : 'équipe'} au travail`,
     tables: (label: string, n: number) => `${label} · ${n} ${n > 1 ? 'tables' : 'table'}`,
     team: 'équipe · opérateur Ledge', common: 'table commune', resting: 'au repos', resume: 'Reprendre',
-    teamLabel: (name: string) => `Équipe ${name}`
+    teamLabel: (name: string) => `Équipe ${name}`,
+    /** A session's context and relief (context handover spec §3.2): shown here, started from the PC. */
+    context: (pct: number) => `contexte ${pct} %`,
+    relief: { briefing: 'relève : bilan demandé', launching: 'relève : lancement…', done: 'relevée', failed: 'relève échouée' } as Record<'briefing' | 'launching' | 'done' | 'failed', string>,
+    relievedBy: (name: string) => `relevée par ${name}`, relieves: (name: string) => `relève de ${name}`
   },
   link: {
     online: 'connecté', offline: 'déconnecté',

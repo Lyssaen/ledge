@@ -25,6 +25,15 @@ function Row({ row, session, offline }: { row: AgentRow; session: PhoneSession |
           <span className="inline-flex flex-wrap items-center gap-1.5">{row.botName}{row.role && <RolePill role={row.role} />}</span>{row.branch && <> · <code className={`font-mono text-[.9em] ${row.worktree ? 'underline decoration-dotted underline-offset-2' : ''}`}>{row.branch}</code></>}
         </div>
         {row.last && <p className="mt-[5px] line-clamp-2 text-xs [overflow-wrap:anywhere] text-muted">{row.last}</p>}
+        {session && (session.context || session.handover || session.relieves) && (
+          <p className="mt-[5px] text-[11px] text-muted">
+            {[session.context ? copy.agents.context(Math.round((session.context.used / session.context.window) * 100)) : null,
+              session.handover ? (session.handover.state === 'done' && session.handover.toName ? copy.agents.relievedBy(session.handover.toName) : copy.agents.relief[session.handover.state]) : null,
+              session.relieves ? copy.agents.relieves(session.relieves.name) : null].filter(Boolean).map((x, i) => (
+              <span key={i} className={i === 0 && session.context && session.context.used / session.context.window >= 0.8 ? 'text-attention' : undefined}>{i > 0 ? ' · ' : ''}{x}</span>
+            ))}
+          </p>
+        )}
         <div className="mt-2"><StatusBadge {...row.status} /></div>
       </div>
       <svg className="mt-1 size-5 flex-none self-center fill-none stroke-muted [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:1.6]" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>

@@ -21,7 +21,7 @@ export const en: Messages = {
     interrupt: 'interrupt', next: 'next waiting', unfold: 'unfold', send: 'send / launch', nextCard: 'next card',
     newChat: 'new conversation', stopAnswer: 'stop the answer', nextField: 'next field', choose: 'choose', tick: 'tick',
     start: 'launch', cancel: 'cancel', change: 'change', scroll: 'scroll', space: 'space', redraw: 'another name',
-    save: 'save the team', tasks: 'team tasks', join: 'join a team', resume: 'resume the team', teamMode: 'session or team'
+    save: 'save the team', tasks: 'team tasks', join: 'join a team', resume: 'resume the team', teamMode: 'session or team', handover: 'hand over'
   },
   overview: {
     yours: n => `Yours · ${n}`, projects: 'Projects', exchanges: 'Messages', terminal: name => `Terminal · ${name}`,
@@ -31,6 +31,11 @@ export const en: Messages = {
     allow: 'Allow', deny: 'Deny', always: 'Always', denyWithNote: 'Deny with a note',
     common: 'common table', teamLine: (done, given) => `team · ${done}/${given}`, resting: 'resting · R to resume',
     tasks: team => `Tasks · ${team}`, noTask: 'No task.', ledge: 'Ledge',
+    near: (name, pct) => `${name} is nearing its context limit · ${pct} % · H hand over`,
+    reliefFailed: (name, why) => `The relief of ${name} failed: ${why}`,
+    context: pct => `ctx ${pct} %`,
+    relief: { briefing: 'relief: brief asked', launching: 'relief: launching…', done: 'relieved', failed: 'relief failed' },
+    relievedBy: name => `relieved by ${name}`, relieves: name => `relieves ${name}`,
     ledgeTask: (owner, title, state) => `${owner} ${state === 'done' ? 'finished' : state === 'refused' ? 'refused' : 'dropped'} “${title}” · Ledge’s task`,
     joinWhich: name => `${name} joins which team? (↑↓ ↵, esc)`, noTeamHere: 'No team in this project.', notInTeam: 'This session is in no team.'
   },
@@ -77,6 +82,7 @@ export const en: Messages = {
   settings: { title: 'Settings', language: 'Language', saved: 'Setting saved.', saveFailed: m => `Setting applied, but not saved: ${m}` },
   help: { title: 'Help', global: 'Everywhere', overview: 'Overview', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings', screens: 'switch screen' },
   toast: {
+    handover: n => `${n} is writing its brief: a fresh session will take its place`, handoverRefused: why => `Relief refused: ${why}`,
     accept: n => `✓ ${n}: allowed`, deny: n => `✓ ${n}: denied`, always: n => `✓ ${n}: always allowed`,
     option: (n, k) => `✓ ${n}: option ${k} sent`, reply: n => `✓ Reply sent to ${n}`,
     interrupted: n => `${n}: interrupt asked`, model: (n, m) => `${n}: model ${m}`,

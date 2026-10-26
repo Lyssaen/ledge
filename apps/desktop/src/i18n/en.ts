@@ -422,6 +422,15 @@ export const en: Messages = {
     teams: { none: 'No team at work. Ask Ledge to set one up.', dissolved: 'dissolved' },
     history: { none: 'No conversation today.', open: 'See in the conversation' }
   },
+  handover: {
+    near: (name: string, pct: number) => `${name} is nearing its context limit · ${pct} %`,
+    failedItem: (name: string, why: string) => `The relief of ${name} failed: ${why}`,
+    pass: 'Hand over', passTitle: 'A fresh session takes its place: it writes its brief, its tasks are passed on', later: 'Later',
+    gauge: (pct: number) => `context ${pct} %`,
+    state: { briefing: 'relief: brief asked', launching: 'relief: launching…', done: 'relieved', failed: 'relief failed' } as Record<'briefing' | 'launching' | 'done' | 'failed', string>,
+    relievedBy: (name: string) => `relieved by ${name}`, relieves: (name: string) => `relieves ${name}`,
+    refused: (why: string) => `Relief refused: ${why}`, auto: 'by Ledge'
+  },
   teamLaunch: {
     title: (project: string) => `New team · ${project}`, folder: 'Folder', noFolder: 'No folder of this project on this machine', loading: 'Reading the roles and templates…',
     template: 'Template', custom: 'Seats chosen one by one', seats: 'Seats', noRole: 'No role: write ~/.ledge/roles/<id>.md', agentOf: (role: string) => `Agent of @${role}`,

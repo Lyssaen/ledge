@@ -1,6 +1,6 @@
 import { Box, Text } from 'ink';
 import { liveHelpers } from '@ledge/fleet';
-import { offers, type Session } from '@ledge/protocol';
+import { contextNear, offers, type Session } from '@ledge/protocol';
 import { botState } from '@ledge/ui/bots/poseFor';
 import { useTui } from '../context.js';
 import { machineLabel, modelLabel, TOOL_NAME } from '../model/labels.js';
@@ -29,7 +29,12 @@ export function SessionCard({ s, note }: { s: Session; note?: boolean }) {
     <Box flexDirection="column">
       <Text wrap="truncate">
         <Text color={STATE_COLOR[state]}>{g[state]} {t.state[state]}</Text>
-        <Text color={C.dim}>  {TOOL_NAME[s.tool]} · {modelLabel(s, t.session.defaultModel)} · {machineLabel(s)}{s.branch ? ` · ${g.branch} ${s.branch}` : ''}</Text>
+        <Text color={C.dim}>  {TOOL_NAME[s.tool]} · {modelLabel(s, t.session.defaultModel)}</Text>
+        {/* Its context, before what is cut first on a narrow terminal (context handover spec §3.2). */}
+        {s.context ? <Text color={contextNear(s.context) ? C.yellow : C.dim}> · {t.overview.context(Math.round((s.context.used / s.context.window) * 100))}</Text> : null}
+        <Text color={C.dim}> · {machineLabel(s)}{s.branch ? ` · ${g.branch} ${s.branch}` : ''}</Text>
+        {s.handover ? <Text color={s.handover.state === 'failed' ? C.red : C.dim}> · {s.handover.state === 'done' && s.handover.toName ? t.overview.relievedBy(s.handover.toName) : t.overview.relief[s.handover.state]}</Text> : null}
+        {s.relieves ? <Text color={C.dim}> · {t.overview.relieves(s.relieves.name)}</Text> : null}
         {s.offline ? <Text color={C.yellow}>  {t.overview.offline}</Text> : s.source === 'hook_only' ? <Text color={C.faint}>  {t.overview.readOnly}</Text> : null}
       </Text>
       {helpers.length > 0 ? <Text color={C.violet} wrap="truncate">  {helpers.map(h => `${g.helper} ${h.kind} · ${oneLine(h.task)}`).join('   ')}</Text> : null}

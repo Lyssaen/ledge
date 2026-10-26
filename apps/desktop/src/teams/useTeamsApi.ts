@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react';
 import { useTasks, useTeams, type DaemonClient } from '@ledge/fleet';
-import { LEDGE_GIVER, taskClosed, type Role, type Session, type Task, type Team, type TeamTemplate } from '@ledge/protocol';
+import { contextNear, contextShare, LEDGE_GIVER, taskClosed, type Role, type Session, type Task, type Team, type TeamTemplate } from '@ledge/protocol';
 
 /** What the fronts do with the local daemon's teams and Ledge's tasks (roles spec §3.3, §3.7): every command goes to the
  *  daemon, whose broadcast (`team.updated`, `task.updated`) changes what is shown. */
@@ -15,6 +15,8 @@ export interface TeamsApi {
   dissolve(team: string): void;
   /** Puts a closed task Ledge gave away from « À toi ». */
   seen(task: string): void;
+  /** Hands a session over to a fresh one at its seat (context handover spec §3.3): null once asked, else why not. */
+  handover(session: string): Promise<string | null>;
   /** The roles and templates a folder can use, from the local daemon (`roles.list`); empty when it does not answer in time. */
   roles(cwd: string): Promise<{ roles: Role[]; templates: TeamTemplate[] }>;
 }
@@ -32,20 +34,44 @@ export function useTeamsApi(client: DaemonClient): TeamsApi {
     const timer = setTimeout(() => done({ roles: [], templates: [] }), 4000);
     client.send({ type: 'roles.list', cwd, requestId });
   }), [client]);
+  const handover = useCallback((id: string) => new Promise<string | null>(resolve => {
+    const rid = `handover-${Date.now()}-${++seq}`;
+    const done = (r: string | null) => { clearTimeout(timer); off(); resolve(r); };
+    const off = client.onMessage(m => { if (m.type === 'session.handover.result' && m.rid === rid) done(m.ok ? null : m.reason ?? '?'); });
+    const timer = setTimeout(() => done(null), 4000);
+    client.send({ type: 'session.handover', rid, id });
+  }), [client]);
   return useMemo(() => ({
-    teams, tasks, teamOf, roles,
+    teams, tasks, teamOf, roles, handover,
     join: (team, session, role) => client.send({ type: 'team.join', team, session, role }),
     leave: (team, session) => client.send({ type: 'team.leave', team, session }),
     resume: team => client.send({ type: 'team.resume', team }),
     dissolve: team => client.send({ type: 'team.dissolve', team }),
     seen: task => client.send({ type: 'task.cmd', rid: `seen-${++seq}`, by: LEDGE_GIVER, op: 'seen', task })
-  }), [client, teams, tasks, teamOf, roles]);
+  }), [client, teams, tasks, teamOf, roles, handover]);
 }
 
 /** A team's tasks Ledge gave: how many are done of how many given (« 1/2 »). */
 export function ledgeProgress(tasks: readonly Task[], team: string): { done: number; given: number } {
   const mine = tasks.filter(t => t.team === team && t.giver === LEDGE_GIVER);
   return { done: mine.filter(t => t.state === 'done').length, given: mine.length };
+}
+
+/**
+ * The sessions « À toi » lists for their context (context handover spec §3.2): live ones past the threshold with no relief
+ * under way, and those whose relief failed. « Plus tard » (`later`: the share it was put away at) hides one until it
+ * grows by another 5 points.
+ */
+export function nearLimit(sessions: readonly Session[], later: ReadonlyMap<string, number> = new Map()): Session[] {
+  return sessions.filter(s => {
+    if (s.state === 'exited' || s.archivedAt) return false;
+    if (s.handover?.state === 'failed') return later.get(s.id) === undefined;
+    if (s.handover) return false;
+    const share = contextShare(s.context);
+    if (share === undefined || !contextNear(s.context)) return false;
+    const put = later.get(s.id);
+    return put === undefined || share >= put + 0.05;
+  });
 }
 
 /** A closed task Ledge gave and the user has not put away: an item of « À toi » (roles spec §3.7). */

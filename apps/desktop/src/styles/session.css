@@ -53,6 +53,10 @@
 .kids-pill{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px;border:1px solid var(--border);border-radius:999px;font-size:11px;color:var(--muted-foreground)}
 .kids-pill:hover{color:var(--foreground);border-color:var(--input)}
 .kids-pill:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+/* A session's relief (context handover spec §3.3): « Passer le relais » lit near the limit, the relief's state. */
+.kids-pill.near{color:var(--warning,#e5b85c);border-color:color-mix(in srgb,var(--warning,#e5b85c) 45%,transparent)}
+.pane-relief{font-size:11px;color:var(--muted-foreground);white-space:nowrap}
+.pane-relief.failed{color:var(--destructive)}
 @media(max-width:1000px){.conversation-workspace.with-terminal{grid-template-columns:minmax(0,1fr)}.term-handle{display:none}}
 @media(max-width:850px){.conversation-workspace{grid-template-columns:1fr;overflow:auto;display:flex;flex-direction:column}.conversation{min-height:520px;flex-shrink:0}.terminal-pane{min-height:310px;flex-shrink:0;border-top:1px solid var(--border)}.messages{max-height:480px}}
 @media(max-width:540px){.messages{padding:18px}}
