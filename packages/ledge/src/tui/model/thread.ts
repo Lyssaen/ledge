@@ -64,9 +64,19 @@ const MORE: Seg = { text: ' …', color: C.faint };
 /** `now` only for the line's first value: a running action's spinner and time then tick in `ui/Lines.tsx`. */
 interface Opts { t: Messages; g: Glyphs; now?: number; width: number; diffs: boolean; ascii?: boolean; cap(n: number): number }
 
+/** Each text's lines, by item: the thread is drawn again at each change, and the store keeps the items that did not change.
+ *  Past 500 texts the parser's own cache goes round and would parse them all again. */
+const bodies = new WeakMap<ThreadItem, { width: number; g: Glyphs; lines: Line[] }>();
+
 function itemLines(it: ThreadItem, o: Opts): Line[] {
   const { t, g, width } = o;
-  const body = (text: string, color: string) => markdownLines(text, { width: width - 2, g, color }).map(l => [pad(2), ...l]);
+  const body = (text: string, color: string) => {
+    const was = bodies.get(it);
+    if (was && was.width === width && was.g === g) return was.lines;
+    const lines = markdownLines(text, { width: width - 2, g, color }).map(l => [pad(2), ...l]);
+    bodies.set(it, { width, g, lines });
+    return lines;
+  };
   const message = (head: Line, text: string, meta: Line | null) => row([pad(2), { text: `${g.message} `, color: C.violet }, ...head, pad(2)], [{ text: `« ${oneLine(text)} »`, color: C.dim }], meta, width, { indent: 4, max: o.cap(CAP.message), more: MORE });
   switch (it.kind) {
     case 'prompt': return [[{ text: t.session.you, color: C.coral, bold: true }, { text: `  ${clock(it.at)}`, color: C.faint }], ...body(it.text, C.fg)];
