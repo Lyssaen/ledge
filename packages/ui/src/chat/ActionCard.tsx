@@ -1,21 +1,36 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { ACTION_ERROR_CODES, type ActionErrorCode, type ChatAction } from '@ledge/protocol';
 import { Button } from '../ui/Button';
 import { Icon, ICONS } from '../ui/icons';
 import { useChatCopy } from './copy';
 import { inline } from './inline';
 
-export type ActionRisk = 'read' | 'reversible' | 'destructive';
+export type ActionRisk = ChatAction['risk'];
 /** A row as the card draws it. No state: proposed. `refused`: nothing was sent; `failed`: sent, it went wrong; `denied`: a
  *  permission's « Deny » reached the session; `stale`: the request changed since the card, nothing was sent. */
 export type ActionRowState = 'proposed' | 'running' | 'done' | 'failed' | 'refused' | 'denied' | 'stale';
 
-/** One action of the card, in the front's words, apart from the protocol (wired later): the daemon's `summary` (names in
- *  **bold**), the button's `verb` (« Apply » without one), `detail` to read in full before confirming, a permission's
- *  `request` quoted verbatim and `deny` its other button, `target` the session named by its lines. */
+/** One action of the card, as the protocol's `ChatAction` gives it (`actionRowOf`): its registry id `action`, whose verb the
+ *  front's copy holds (« Apply » for an id it does not know), the daemon's `summary` (names in **bold**, the fallback),
+ *  `detail` to read in full before confirming, `target` the session named by its lines, `code` why it was refused or failed.
+ *  A permission adds its `request` quoted verbatim and `deny` its other button. */
 export interface ActionRowView {
-  summary: string; risk: ActionRisk; verb?: string; state?: ActionRowState; detail?: string;
+  action?: string; summary: string; risk: ActionRisk; state?: ActionRowState; detail?: string;
   request?: { kind: string; text: string }; deny?: { summary: string }; target?: string;
-  error?: string; doneAt?: string;
+  error?: string; code?: ActionErrorCode; doneAt?: string;
+}
+
+const CODES: ReadonlySet<string> = new Set(ACTION_ERROR_CODES);
+/** A row of the protocol, as the card draws it: a code the front does not know yet (a newer daemon) reads as `failed`. */
+export function actionRowOf(a: ChatAction): ActionRowView {
+  const row: ActionRowView = { action: a.action, summary: a.summary, risk: a.risk };
+  if (a.detail !== undefined) row.detail = a.detail;
+  if (a.session !== undefined) row.target = a.session;
+  if (a.state !== undefined) row.state = a.state;
+  if (a.doneAt !== undefined) row.doneAt = a.doneAt;
+  if (a.error !== undefined) row.error = a.error;
+  if (a.code !== undefined) row.code = CODES.has(a.code) ? a.code as ActionErrorCode : 'failed';
+  return row;
 }
 
 export interface ActionCardProps {
@@ -64,7 +79,7 @@ export function ActionCard(p: ActionCardProps) {
   const risky = (rows: readonly number[]) => rows.some(i => p.rows[i]!.risk === 'destructive');
   const ask = (rows: number[]) => { if (risky(rows)) setConfirming(rows); else p.onApply(rows); };
   const go = (rows: number[]) => { setConfirming(null); p.onApply(rows); };
-  const verb = (r: ActionRowView) => r.verb ?? c.apply;
+  const verb = (r: ActionRowView) => (r.action !== undefined ? c.verbs[r.action] : undefined) ?? c.apply;
   const dots = (rows: readonly number[]) => (risky(rows) ? '…' : '');
   const ignore = <Button variant="ghost" size="sm" disabled={p.disabled} onClick={p.onIgnore} style={{ ...small, ...muted }}>{c.ignore}</Button>;
 

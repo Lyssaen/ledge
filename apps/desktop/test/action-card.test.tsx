@@ -2,21 +2,21 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { ActionCard, type ActionRowView } from '@ledge/ui/chat/ActionCard';
 import { ChatCopyProvider } from '@ledge/ui/chat/copy';
+import { ACTIONS } from '@ledge/protocol';
 import { fr } from '../src/i18n/fr';
 import { en } from '../src/i18n/en';
 import { chatCopy } from '../src/i18n/lang';
 
 const AT = '2026-10-26T09:42:00.000Z';
 const at = new Date(AT).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-const verbs = fr.chat.action.verbs;
-// The mockup's plan (docs/mockups/ledge-action-card.html), its verbs taken from the Desktop's own copy.
+// The mockup's plan (docs/mockups/ledge-action-card.html), by action id: the verbs are the Desktop's own copy.
 const plan: ActionRowView[] = [
-  { summary: 'Passer **Nova** sur Opus 5.5, effort élevé', risk: 'reversible', verb: verbs['session.model'] },
-  { summary: 'Archiver **Otto**', risk: 'reversible', verb: verbs['session.archive'] },
-  { summary: 'Dissoudre l’équipe **ledge-roles**', risk: 'destructive', verb: verbs['team.dissolve'], detail: 'Ses 6 sessions retournent à la table commune.' }
+  { summary: 'Passer **Nova** sur Opus 5.5, effort élevé', risk: 'reversible', action: 'session.model' },
+  { summary: 'Archiver **Otto**', risk: 'reversible', action: 'session.archive' },
+  { summary: 'Dissoudre l’équipe **ledge-roles**', risk: 'destructive', action: 'team.dissolve', detail: 'Ses 6 sessions retournent à la table commune.' }
 ];
 const permission: ActionRowView = {
-  summary: 'Accepter la demande de **Nova**', risk: 'destructive', verb: verbs['session.decide'], target: 'Nova',
+  summary: 'Accepter la demande de **Nova**', risk: 'destructive', action: 'session.decide', target: 'Nova',
   request: { kind: 'Bash', text: 'rm -rf packages/ledge/dist' }, deny: { summary: 'Refuser la demande de **Nova**' }
 };
 const show = (rows: ActionRowView[], o: { ignoredAt?: string } = {}) => render(
@@ -68,7 +68,9 @@ describe('the action card in the Desktop\'s words (#94)', () => {
     expect(screen.getByRole('button', { name: 'Revoir' })).toBeTruthy();
   });
 
-  it('English has a verb for each action French has', () => {
-    expect(Object.keys(en.chat.action.verbs).sort()).toEqual(Object.keys(fr.chat.action.verbs).sort());
+  it('a verb for each action of the generic card, in French and English', () => {
+    const generic = ACTIONS.filter(a => a.card === 'generic').map(a => a.id).sort();
+    expect(Object.keys(fr.chat.action.verbs).sort()).toEqual(generic);
+    expect(Object.keys(en.chat.action.verbs).sort()).toEqual(generic);
   });
 });

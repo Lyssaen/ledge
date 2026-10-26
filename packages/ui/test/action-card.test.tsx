@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
-import { ActionCard, type ActionCardProps, type ActionRowView } from '../src/chat/ActionCard';
+import { ActionCard, actionRowOf, type ActionCardProps, type ActionRowView } from '../src/chat/ActionCard';
+import type { ChatAction } from '@ledge/protocol';
 import { ChatCopyProvider } from '../src/chat/copy';
 import { actionCopy, copy } from './chat-copy-fixture';
 
@@ -8,11 +9,11 @@ const AT = '2026-10-26T09:42:00.000Z';
 const at = new Date(AT).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 
 // The mockup's cases (docs/mockups/ledge-action-card.html): a plan of three, one reversible row, a permission.
-const model: ActionRowView = { summary: 'Switch **Nova** to Opus 5.5', risk: 'reversible', verb: 'Change' };
-const archive: ActionRowView = { summary: 'Archive **Otto**', risk: 'reversible', verb: 'Archive' };
-const dissolve: ActionRowView = { summary: 'Dissolve the team **ledge-roles**', risk: 'destructive', verb: 'Dissolve', detail: 'Its 6 sessions go back to the common table.' };
+const model: ActionRowView = { summary: 'Switch **Nova** to Opus 5.5', risk: 'reversible', action: 'session.model' };
+const archive: ActionRowView = { summary: 'Archive **Otto**', risk: 'reversible', action: 'session.archive' };
+const dissolve: ActionRowView = { summary: 'Dissolve the team **ledge-roles**', risk: 'destructive', action: 'team.dissolve', detail: 'Its 6 sessions go back to the common table.' };
 const permission: ActionRowView = {
-  summary: 'Accept **Nova**\'s request', risk: 'destructive', verb: 'Accept', target: 'Nova',
+  summary: 'Accept **Nova**\'s request', risk: 'destructive', action: 'session.decide', target: 'Nova',
   request: { kind: 'Bash · rebuild the daemon', text: 'rm -rf packages/ledge/dist' }, deny: { summary: 'Deny **Nova**\'s request' }
 };
 const plan = (states: Array<Partial<ActionRowView>> = []) => [model, archive, dissolve].map((r, i) => ({ ...r, ...states[i] }));
@@ -163,8 +164,9 @@ describe('the action card (#94): one row', () => {
     expect(document.body).toHaveTextContent(`Card ignored at ${at} · nothing was sent`);
   });
 
-  it('a verb the front does not know: « Apply »', () => {
-    card([{ summary: 'Something new', risk: 'reversible' }]);
+  it('an action the front does not know (a newer daemon): its summary, « Apply »', () => {
+    card([{ action: 'session.fork', summary: 'Fork **Nova**', risk: 'reversible' }]);
+    expect(document.body).toHaveTextContent('Fork Nova');
     expect(screen.getByRole('button', { name: 'Apply' })).toBeTruthy();
   });
 });
@@ -210,5 +212,19 @@ describe('the action card (#94): a permission', () => {
     expect(r).toHaveTextContent('Nova\'s request changed since my answer: nothing was sent.');
     fireEvent.click(screen.getByRole('button', { name: 'Open Nova' }));
     expect(p.onOpen).toHaveBeenCalledWith(0);
+  });
+});
+
+describe('the action card (#94): a row from the protocol', () => {
+  const row: ChatAction = { action: 'team.dissolve', args: { team: 't1' }, summary: 'Dissoudre l’équipe **ledge-roles**', vars: { team: 'ledge-roles' }, risk: 'destructive', team: 't1', detail: 'Ses 6 sessions…' };
+
+  it('its id, summary, risk, detail and state as they come; the session it names, for a link', () => {
+    expect(actionRowOf(row)).toEqual({ action: 'team.dissolve', summary: row.summary, risk: 'destructive', detail: 'Ses 6 sessions…' });
+    expect(actionRowOf({ ...row, action: 'session.archive', session: 'otto', state: 'done', doneAt: AT })).toMatchObject({ target: 'otto', state: 'done', doneAt: AT });
+  });
+
+  it('a code it knows is kept; one it does not (a newer daemon) reads as failed', () => {
+    expect(actionRowOf({ ...row, state: 'refused', code: 'dissolved', error: 'déjà dissoute' })).toMatchObject({ state: 'refused', code: 'dissolved', error: 'déjà dissoute' });
+    expect(actionRowOf({ ...row, state: 'failed', code: 'quota_exceeded' }).code).toBe('failed');
   });
 });
