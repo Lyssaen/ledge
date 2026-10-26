@@ -24,6 +24,7 @@
     "./chat/ChatView": "./src/chat/ChatView.tsx",
     "./chat/LaunchCard": "./src/chat/LaunchCard.tsx",
     "./chat/RelayCard": "./src/chat/RelayCard.tsx",
+    "./chat/ActionCard": "./src/chat/ActionCard.tsx",
     "./chat/inline": "./src/chat/inline.tsx",
     "./chat/copy": "./src/chat/copy.tsx",
     "./chat/format": "./src/chat/format.ts",
