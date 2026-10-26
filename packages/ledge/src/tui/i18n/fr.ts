@@ -94,9 +94,10 @@ export const fr = {
       cutMark: '… (tronqué, voir la session : o)',
       stale: (name: string) => `La demande de ${name} a changé depuis ma réponse : rien n’a été envoyé.`,
       hint: { one: 'Ledge ne fait rien sans toi.', choose: '↑↓ choisir', cut: '↵ n’accepte pas : lis-la d’abord', stale: 'redemande à Ledge pour la nouvelle demande', confirm: '↵ ne confirme pas : tape y', inOrder: 'Dans l’ordre ; si une étape échoue, les suivantes ne sont pas appliquées.' },
-      /** `sent`: the rows applied and the denials sent before the rest was set aside. */
-      ignored: (n: number, at: string, sent: { done: number; denied: number } = { done: 0, denied: 0 }) => sent.done + sent.denied
-        ? `· plan de ${n} actions : ${[...(sent.done ? [`${sent.done} ${plural(sent.done, 'appliquée', 'appliquées')}`] : []), ...(sent.denied ? [`${sent.denied} ${plural(sent.denied, 'refus envoyé', 'refus envoyés')}`] : [])].join(', ')}, le reste ignoré à ${at} · revoir : ctrl+r`
+      /** `sent`: the rows applied, the denials sent and the rows failed (they went too) before the rest was set aside. */
+      ignored: (n: number, at: string, sent: { done: number; denied: number; failed: number } = { done: 0, denied: 0, failed: 0 }) => sent.done + sent.denied + sent.failed
+        ? n > 1 ? `· plan de ${n} actions : ${[...(sent.done ? [`${sent.done} ${plural(sent.done, 'appliquée', 'appliquées')}`] : []), ...(sent.denied ? [`${sent.denied} ${plural(sent.denied, 'refus envoyé', 'refus envoyés')}`] : []), ...(sent.failed ? [`${sent.failed} ${plural(sent.failed, 'échouée', 'échouées')}`] : [])].join(', ')}, le reste ignoré à ${at} · revoir : ctrl+r`
+          : `· carte ignorée à ${at}, l’action est partie, mais n’a pas abouti · revoir : ctrl+r`
         : `· ${n > 1 ? `plan de ${n} actions ignoré` : 'carte ignorée'} à ${at}, rien n’a été envoyé · revoir : ctrl+r`,
       denied: (name: string, at: string) => `Refus envoyé à ${name}${at ? ` · ${at}` : ''} : la commande n’a pas été lancée`,
       done: (line: string, at: string) => `${line}${at ? ` · ${at}` : ''}`

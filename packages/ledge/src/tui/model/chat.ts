@@ -50,9 +50,9 @@ function actionTrace(turn: ChatTurn, t: Messages, g: Glyphs, width: number): Lin
   const a = t.ask.action, c = a.copy;
   const cards = !!(turn.actions || turn.proposal || turn.relay || turn.closes || turn.team || turn.tasks || turn.projectProposal);
   if (turn.ignoredAt) {
-    // What went before the rest was set aside is counted: a plan begun did send something.
+    // What went before the rest was set aside is counted, a step failed too (it went): a plan begun did send something.
     const shown = turn.actions ? cardPlan(turn.actions).shown : [];
-    const sent = { done: shown.filter(s => s === 'done').length, denied: shown.filter(s => s === 'denied').length };
+    const sent = { done: shown.filter(s => s === 'done').length, denied: shown.filter(s => s === 'denied').length, failed: shown.filter(s => s === 'failed').length };
     return cards ? [[{ text: '' }], [{ text: `  ${a.ignored(turn.actions?.length ?? 1, clock(turn.ignoredAt), sent)}`, color: C.faint }]] : [];
   }
   if (!turn.actions || !cardClosed(turn.actions)) return [];

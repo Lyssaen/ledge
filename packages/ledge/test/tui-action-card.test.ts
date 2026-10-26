@@ -32,6 +32,18 @@ describe('the action card as the TUI plans it', () => {
     expect(p.shown).toEqual(['stale', 'cut']);
     expect(p.open).toEqual([]);
   });
+  it('a request the screen cannot show whole is cut there, as one the daemon cut; one that fits, a denial or a row settled is not', () => {
+    const lines = (n: number) => Array.from({ length: n }, (_, i) => `l${i}`).join('\n');
+    const room = (n: number) => ({ lines: n, height: (text: string) => text.split('\n').length });
+    expect(cardPlan([decide({ detail: lines(60) })], room(18)).shown).toEqual(['cut']);
+    expect(cardPlan([decide({ detail: lines(11) })], room(18)).shown).toEqual(['proposed']);
+    expect(cardPlan([decide({ detail: lines(60), vars: { session: 'Nova', decision: 'deny', kind: 'permission' } }), decide({ detail: lines(60), state: 'done' })], room(18)).shown).toEqual(['proposed', 'done']);
+    // Two requests share the room: the second, that would fit alone, does not after the first.
+    expect(cardPlan([decide({ detail: lines(8) }), decide({ detail: lines(8) })], room(24)).shown).toEqual(['proposed', 'cut']);
+    // A short screen quotes fewer lines of a request cut.
+    expect(cardPlan([decide({ detail: lines(60) })], room(10)).cutLines).toBe(1);
+    expect(cardPlan([decide({ detail: lines(60) })]).shown).toEqual(['proposed']);
+  });
   it('the plan stops at a request that changed; another action\'s « changed » is a refusal, not a stale request (codes.md)', () => {
     const stale = cardPlan([archive('Otto', { state: 'done' }), decide({ state: 'refused', code: 'changed' }), archive('Ari')]);
     expect(stale.shown).toEqual(['done', 'stale', 'held']);
@@ -77,6 +89,10 @@ describe('the conversation and the cards of a turn with an action card', () => {
     expect(begun).not.toContain('rien n’a été envoyé');
     const both = text(turn({ ignoredAt: AT, actions: [archive('Otto', { state: 'done' }), archive('Bix', { state: 'done' }), decide({ state: 'denied', doneAt: AT }), archive('Ari')] }));
     expect(both).toContain(`  · plan de 4 actions : 2 appliquées, 1 refus envoyé, le reste ignoré à ${clock(AT)} · revoir : ctrl+r`);
+    // A step failed went too, as the Desktop's line says (actionCopy).
+    const failed = text(turn({ ignoredAt: AT, actions: [archive('Otto', { state: 'done' }), archive('Bix', { state: 'failed', code: 'failed' }), archive('Ari')] }));
+    expect(failed).toContain(`  · plan de 3 actions : 1 appliquée, 1 échouée, le reste ignoré à ${clock(AT)} · revoir : ctrl+r`);
+    expect(text(turn({ ignoredAt: AT, actions: [archive('Otto', { state: 'failed', code: 'failed' })] }))).toContain(`  · carte ignorée à ${clock(AT)}, l’action est partie, mais n’a pas abouti · revoir : ctrl+r`);
   });
   it('once applied, the box goes and a line stays: the plan, or the row', () => {
     expect(text(turn({ actions: [archive('Otto', { state: 'done', doneAt: AT }), archive('Bix', { state: 'done', doneAt: AT })] }))).toContain(`  ✓ Plan appliqué à ${clock(AT)}`);

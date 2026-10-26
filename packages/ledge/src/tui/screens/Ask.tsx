@@ -5,7 +5,8 @@ import { daemonStore } from '@ledge/fleet';
 import { LEDGE_GIVER, proposalRows, type ChatTurn } from '@ledge/protocol';
 import { useEditing, useScreenKeys, useTui } from '../context.js';
 import { askHistory, chatView, openCards, type Card } from '../model/chat.js';
-import { cardPlan, moveRow, selectedRow } from '../model/actionCard.js';
+import { cardPlan, moveRow, selectedRow, type Room } from '../model/actionCard.js';
+import { wrapSegs } from '../model/cells.js';
 import { anchorLine } from '../model/thread.js';
 import { TOOL_NAME } from '../model/labels.js';
 import { listed } from '../model/overview.js';
@@ -26,7 +27,7 @@ const CONVO = -2;
 
 export function Ask() {
   const { client, d, machines, t, g, toast, go, kept, small, tone, select } = useTui();
-  const { columns } = useWindowSize();
+  const { columns, rows: height } = useWindowSize();
   // Kept by the TUI: ctrl+c and another screen leave it as it is.
   const [draft, setDraftState] = useState(() => kept.drafts.get('ask') ?? '');
   const setDraft = (x: string) => { setDraftState(x); if (x) kept.drafts.set('ask', x); else kept.drafts.delete('ask'); };
@@ -39,14 +40,23 @@ export function Ask() {
   // resize or a new card keep it in place; null follows the bottom.
   const [anchor, setAnchor] = useState<{ key: string; offset: number } | null>(null);
   const [view, setView] = useState(10);
-  const [busy, setBusy] = useState<{ qid: string; turn: ChatTurn | undefined; errorSeq: number; at: number } | null>(null);
+  // A generic card's send (`rid`) is under way until the daemon answers it (chat.acted), whatever its rows did meanwhile.
+  const [busy, setBusy] = useState<{ qid: string; turn: ChatTurn | undefined; errorSeq: number; at: number; rid?: string } | null>(null);
   // The action cards (#94): the row chosen in each, the rows a red box asks to confirm, the card ctrl+r opened again.
   const [rowOf, setRowOf] = useState<Record<string, number>>({});
   const [confirming, setConfirming] = useState<{ qid: string; rows: number[] } | null>(null);
   const [review, setReview] = useState<string | null>(null);
   useEditing(focus === -1 && !confirm);
 
-  const cards = useMemo(() => openCards(d.chat), [d.chat]);
+  // Two cards at most are drawn: tab, the focus and the keys only reach those.
+  const cards = useMemo(() => openCards(d.chat).slice(0, 2), [d.chat]);
+  // What a card has on screen (#94): all but the frame's two lines, the field's three and the conversation's last one, shared by
+  // the cards drawn. A request taller than that is cut: never accepted unread.
+  const room: Room = {
+    lines: Math.floor((height - 6) / Math.max(1, cards.length)),
+    height: (text, indent) => text.split('\n').reduce((n, l) => n + Math.max(1, wrapSegs([{ text: l, color: C.fg }], Math.max(10, columns - 8 - indent)).length), 0)
+  };
+  const planOf = (turn: ChatTurn) => cardPlan(turn.actions ?? [], room);
   useEffect(() => { if (focus >= cards.length) setFocus(cards.length ? cards.length - 1 : -1); }, [cards.length, focus]);
   // Opened again with ctrl+r: its card has the focus once it is back.
   useEffect(() => {
@@ -56,13 +66,22 @@ export function Ask() {
   }, [cards, review]);
   // A confirmation of a card that went (applied or ignored elsewhere) goes with it.
   useEffect(() => { if (confirming && !cards.some(c => c.kind === 'action' && c.qid === confirming.qid)) setConfirming(null); }, [confirming, cards]);
+  // So does one whose rows the screen no longer shows whole (made smaller, a request cut).
+  useEffect(() => {
+    const turn = confirming && d.chat.find(x => x.qid === confirming.qid);
+    if (turn && !confirming.rows.every(i => appliable(planOf(turn).shown[i]!))) setConfirming(null);
+  }); // eslint-disable-line react-hooks/exhaustive-deps
   /** The latest card set aside, the one ctrl+r opens again. */
   const ignored = [...d.chat].filter(x => x.ignoredAt).sort((a, b) => b.ignoredAt!.localeCompare(a.ignoredAt!))[0];
   // A card in flight is free again once its turn moved, a refusal came, or nothing happened for a while.
   useEffect(() => {
+    if (!busy?.rid) return;
+    return client.onMessage(m => { if (m.type === 'chat.acted' && m.rid === busy.rid) setBusy(null); });
+  }, [busy?.rid]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
     if (!busy) return;
     const turn = d.chat.find(x => x.qid === busy.qid);
-    if (turn !== busy.turn || (d.errors.at(-1)?.seq ?? 0) > busy.errorSeq) { setBusy(null); return; }
+    if ((turn !== busy.turn && !busy.rid) || (d.errors.at(-1)?.seq ?? 0) > busy.errorSeq) { setBusy(null); return; }
     const timer = setTimeout(() => setBusy(null), Math.max(0, busy.at + CARD_MS - Date.now()));
     return () => clearTimeout(timer);
   }, [busy, d.chat, d.errors]);
@@ -106,8 +125,9 @@ export function Ask() {
   /** A generic card's rows through chat.act: applied, confirmed, or their requests denied (« Refuser »). */
   const send = (qid: string, rows: number[], o: { confirmed?: true; deny?: true } = {}) => {
     const turn = d.chat.find(x => x.qid === qid);
-    setBusy({ qid, turn, errorSeq: d.errors.at(-1)?.seq ?? 0, at: Date.now() });
-    client.send({ type: 'chat.act', rid: randomUUID(), qid, rows, ...o });
+    const rid = randomUUID();
+    setBusy({ qid, turn, errorSeq: d.errors.at(-1)?.seq ?? 0, at: Date.now(), rid });
+    client.send({ type: 'chat.act', rid, qid, rows, ...o });
   };
   /** The keys of a focused generic card (docs/mockups/ledge-action-card.html, view TUI): ↑ ↓ the row, ↵ applies it, a all
    *  of them, n denies a request, o opens the session, esc sets the card aside; an irreversible one is asked in the box, and
@@ -115,11 +135,11 @@ export function Ask() {
   const actionKey = (qid: string, input: string, key: { upArrow: boolean; downArrow: boolean; return: boolean; escape: boolean }): boolean => {
     const turn = d.chat.find(x => x.qid === qid);
     if (!turn?.actions) return false;
-    const p = cardPlan(turn.actions);
+    const p = planOf(turn);
     const sel = selectedRow(p, rowOf[qid]);
     const ask = (rows: number[]) => { if (rows.some(i => p.rows[i]!.risk === 'destructive')) setConfirming({ qid, rows }); else send(qid, rows); };
     if (confirming?.qid === qid) {
-      if (input === 'y') { const rows = confirming.rows; setConfirming(null); send(qid, rows, { confirmed: true }); }
+      if (input === 'y') { const rows = confirming.rows; setConfirming(null); if (rows.every(i => appliable(p.shown[i]!))) send(qid, rows, { confirmed: true }); }
       else if (key.escape) setConfirming(null);
       // ↵ never confirms: a double press dissolves nothing.
       return true;
@@ -130,8 +150,8 @@ export function Ask() {
       if ((s === 'stale' || s === 'cut') && id) { select(id); go('session'); }
       return true;
     }
-    // A send under way: nothing else goes until the daemon has answered.
-    if (busy?.qid === qid) return true;
+    // A send under way, or a row still running: nothing else goes until the daemon has answered.
+    if (busy?.qid === qid || p.shown.includes('running')) return true;
     if (key.upArrow || input === 'k') { setRowOf(m => ({ ...m, [qid]: moveRow(p, sel, -1) })); return true; }
     if (key.downArrow || input === 'j') { setRowOf(m => ({ ...m, [qid]: moveRow(p, sel, 1) })); return true; }
     if (key.return) { if (appliable(s)) ask([sel]); return true; }
@@ -217,7 +237,7 @@ export function Ask() {
     const turn = d.chat.find(x => x.qid === qid);
     if (!turn?.actions) return [];
     if (confirming?.qid === qid) return [['y', t.keys.apply], ['esc', t.keys.cancel]];
-    const p = cardPlan(turn.actions);
+    const p = planOf(turn);
     const sel = selectedRow(p, rowOf[qid]);
     const r = p.rows[sel]!, s = p.shown[sel]!, many = p.rows.length > 1;
     const next = ['tab', focus + 1 < cards.length ? t.keys.nextCard : t.keys.conversation] as const;
@@ -246,10 +266,10 @@ export function Ask() {
         {lines.length === 0 ? <Text color={C.faint}>{t.ask.empty}</Text>
           : <Lines lines={lines} up={up} onHeight={setView} />}
       </TitledBox>
-      {cards.slice(0, 2).map((c, i) => {
+      {cards.map((c, i) => {
         const turn = d.chat.find(x => x.qid === c.qid)!;
         if (c.kind !== 'action') return <CardBox key={`${c.kind}:${c.qid}`} card={c} turn={turn} focused={i === focus} busy={busy?.qid === c.qid} />;
-        const p = cardPlan(turn.actions ?? []);
+        const p = planOf(turn);
         const sel = selectedRow(p, rowOf[c.qid]);
         return <ActionBox key={`action:${c.qid}`} turn={turn} plan={p} focused={i === focus} busy={busy?.qid === c.qid} sel={sel} confirming={confirming?.qid === c.qid ? confirming.rows : null} />;
       })}
