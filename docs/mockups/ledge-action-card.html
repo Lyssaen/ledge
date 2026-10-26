@@ -109,6 +109,7 @@ svg.i{width:12px;height:12px;flex:none;fill:none;stroke:currentColor;stroke-widt
 .clamp{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .verbatim{margin:6px 0 0;padding:7px 9px;border:1px solid var(--sidebar-border);border-left:2px solid var(--muted-foreground);border-radius:4px;background:var(--sidebar);font:11.5px/17px 'Geist Mono',monospace;white-space:pre-wrap;overflow-wrap:anywhere;max-height:120px;overflow:auto;color:var(--sidebar-foreground)}
 .verbatim .k{display:block;font:500 10.5px/15px 'Geist',sans-serif;color:var(--muted-foreground);margin-bottom:2px}
+.verbatim.faded{opacity:.6}
 .verbatim.old{text-decoration:line-through;text-decoration-color:color-mix(in srgb,var(--muted-foreground) 60%,transparent);opacity:.6}
 .alert{margin-top:5px;color:var(--danger-text);overflow-wrap:anywhere}
 .quiet{margin-top:5px;color:var(--muted-foreground)}
@@ -242,6 +243,7 @@ const CASES = {
         detail: 'Ses 6 sessions retournent à la table commune, ouvertes ou archivées comme elles sont. L’équipe ne pourra plus être reprise.' }
     ],
     // Row states per step of the story: p proposed, run, done, fail, refused, held (not applied: the plan stopped before it).
+    // A permission adds denied (« Refuser » was sent: the session got the no) and stale.
     states: { ignored: ['p', 'p', 'p'], proposed: ['p', 'p', 'p'], confirm: ['p', 'p', 'p'], running: ['done', 'run', 'p'], failed: ['done', 'fail', 'held'], refused: ['done', 'refused', 'held'], done: ['done', 'done', 'done'] },
     why: { fail: 'Otto est sur la machine Atlas, hors ligne depuis 10:12.', refused: 'Otto a été fermé entre-temps : il n’y a plus rien à archiver.' }
   },
@@ -250,11 +252,11 @@ const CASES = {
     q: 'Accepte la demande de Nova.',
     a: '**Nova** attend ta réponse depuis 4 min, dans ledge sur feat/task-handoff. Voici sa demande telle quelle :',
     rows: [
-      { action: 'session.decide', risk: 'destructive', sum: 'Accepter la demande de **Nova**', btn: 'Accepter', deny: 'Refuser', tui: 'Accepter la demande de Nova',
+      { action: 'session.decide', risk: 'destructive', sum: 'Accepter la demande de **Nova**', btn: 'Accepter', deny: 'Refuser', tui: 'Accepter la demande de Nova', denied: 'Refuser la demande de **Nova**',
         request: { kind: 'Bash · reconstruire le daemon', text: 'rm -rf packages/ledge/dist && pnpm --filter @ledge/ledge build' },
         newRequest: { kind: 'Bash', text: 'git push --force origin feat/task-handoff' } }
     ],
-    states: { proposed: ['p'], confirm: ['p'], running: ['run'], failed: ['fail'], refused: ['refused'], done: ['done'], stale: ['stale'], ignored: ['p'] },
+    states: { proposed: ['p'], confirm: ['p'], running: ['run'], failed: ['fail'], refused: ['refused'], done: ['done'], denied: ['denied'], stale: ['stale'], ignored: ['p'] },
     why: { fail: 'Nova s’est arrêtée avant de recevoir la réponse.', refused: 'la machine Atlas est hors ligne.' }
   },
   one: {
@@ -266,7 +268,7 @@ const CASES = {
     why: { fail: 'Otto est sur la machine Atlas, hors ligne depuis 10:12.', refused: 'Otto a été fermé entre-temps.' }
   }
 };
-const ETATS = [['proposed', 'Proposée'], ['confirm', 'Confirmation'], ['running', 'En cours'], ['failed', 'Échouée, suite arrêtée'], ['refused', 'Refusée'], ['done', 'Appliquée'], ['stale', 'La demande a changé'], ['ignored', 'Ignorée']];
+const ETATS = [['proposed', 'Proposée'], ['confirm', 'Confirmation'], ['running', 'En cours'], ['failed', 'Échouée, suite arrêtée'], ['refused', 'Refusée'], ['done', 'Appliquée'], ['denied', 'Refus envoyé'], ['stale', 'La demande a changé'], ['ignored', 'Ignorée']];
 const AT = '10:42';
 
 function model() {
@@ -275,7 +277,7 @@ function model() {
   const states = c.states[st.etat];
   const many = c.rows.length > 1;
   const stopAt = states.findIndex(s => s === 'fail' || s === 'refused');
-  const open = c.rows.map((r, i) => i).filter(i => !['done', 'run'].includes(states[i]) && states[i] !== 'stale');
+  const open = c.rows.map((r, i) => i).filter(i => !['done', 'run', 'denied', 'stale'].includes(states[i]));
   const destructive = open.filter(i => c.rows[i].risk === 'destructive');
   // The plan's button: all of it, from the failed step again, or past a refused one (its target is gone: retrying it
   // would only be refused again).
@@ -296,9 +298,9 @@ function nodeOf(s, i) {
   return `<span class="node${s === 'held' ? ' held' : ''}" aria-label="Étape ${i + 1}">${i + 1}</span>`;
 }
 function riskChip(risk) { return `<span class="risk ${risk}" title="${RISK_TIP[risk]}">${ic(risk, 11)}${RISK[risk]}</span>`; }
-function request(r, old) {
+function request(r, old, faded) {
   const q = old ? r.request : r.request;
-  return `<pre class="verbatim${old ? ' old' : ''}"><span class="k">${esc(q.kind)}</span>${esc(q.text)}</pre>`;
+  return `<pre class="verbatim${old ? ' old' : ''}${faded ? ' faded' : ''}"><span class="k">${esc(q.kind)}</span>${esc(q.text)}</pre>`;
 }
 function rowHTML(m, i, narrow) {
   const { c, states, many, stopAt } = m, r = c.rows[i], s = states[i];
@@ -311,17 +313,21 @@ function rowHTML(m, i, narrow) {
   else if (s === 'done') side = `<span class="st ok">${ic('check', 11)} Appliquée · ${AT}</span>`;
   else if (s === 'fail') side = `${many ? '' : IGNORE}<button class="btn" type="button">Réessayer</button>`;
   else if (s === 'refused') side = `<span class="st">Refusée</span>`;
+  // Neutral, not green: the no reached the session, nothing was applied.
+  else if (s === 'denied') side = `<span class="st">${ic('check', 11)} Refus envoyé · ${AT}</span>`;
   else if (s === 'stale') side = `<button class="btn" type="button">${ic('ext', 11)}Ouvrir Nova</button>`;
-  let body = `<div class="sum">${md(r.sum)}</div>`;
-  body += `<div class="meta">${riskChip(r.risk)}${r.risk === 'destructive' && s === 'p' && !asking ? '<span>· je te redemanderai</span>' : ''}</div>`;
+  // Once the no is sent, the row says what was done, without the risk of the yes it did not run.
+  let body = `<div class="sum">${md(s === 'denied' ? r.denied : r.sum)}</div>`;
+  if (s !== 'denied') body += `<div class="meta">${riskChip(r.risk)}${r.risk === 'destructive' && s === 'p' && !asking ? '<span>· je te redemanderai</span>' : ''}</div>`;
   if (r.detail) body += `<div class="detail${asking || s === 'done' ? '' : ' clamp'}">${esc(r.detail)}</div>`;
-  if (r.request) body += s === 'stale' ? request(r, true) : request(r);
+  if (r.request) body += s === 'stale' ? request(r, true) : request(r, false, s === 'denied');
   if (s === 'fail') body += `<div class="alert" role="alert">Échec : ${esc(c.why.fail)}</div>`;
   if (s === 'refused') body += `<div class="alert" role="alert">Refusée : ${esc(c.why.refused)} Rien n’a été envoyé.</div>`;
   if (s === 'held') body += `<div class="quiet">Pas appliquée : le plan s’est arrêté à l’étape ${stopAt + 1}.</div>`;
   if (s === 'stale') body += `<div class="warnline">La demande de Nova a changé depuis ma réponse : rien n’a été envoyé. Ouvre Nova pour voir la nouvelle, ou redemande-moi.</div>`;
+  if (s === 'denied') body += `<div class="quiet">Nova a reçu ton refus : la commande n’a pas été lancée.</div>`;
   const dim = asking && s === 'done';
-  return `<div class="arow ${r.risk}${['done', 'stale', 'refused'].includes(s) ? ' settled' : ''}${dim ? ' dim' : ''}${i === c.rows.length - 1 ? ' last' : ''}">${many ? nodeOf(s, i) : ''}<div class="body">${body}</div>${narrow && side ? `<div class="side" style="grid-column:${many ? 2 : 1};justify-self:start">${side}</div>` : `<div class="side">${side}</div>`}</div>`;
+  return `<div class="arow ${r.risk}${['done', 'stale', 'refused', 'denied'].includes(s) ? ' settled' : ''}${dim ? ' dim' : ''}${i === c.rows.length - 1 ? ' last' : ''}">${many ? nodeOf(s, i) : ''}<div class="body">${body}</div>${narrow && side ? `<div class="side" style="grid-column:${many ? 2 : 1};justify-self:start">${side}</div>` : `<div class="side">${side}</div>`}</div>`;
 }
 function footHTML(m) {
   const { c, states, many, open, destructive, stopAt } = m;
@@ -373,14 +379,16 @@ function phone() {
     else if (s === 'done') act = `<span class="st ok">✓ Appliquée · ${AT}</span>`;
     else if (s === 'fail') act = `${many ? '' : '<button class="pbtn ghost" type="button">Ignorer</button>'}<button class="pbtn" type="button">Réessayer</button>`;
     else if (s === 'refused') act = `<span class="st">Refusée</span>`;
+    else if (s === 'denied') act = `<span class="st">✓ Refus envoyé · ${AT}</span>`;
     else if (s === 'stale') act = `<a class="pbtn" style="text-decoration:none">Ouvrir Nova</a>`;
-    let body = `<div class="sum">${md(r.sum)}</div><div class="meta">${riskChip(r.risk)}</div>`;
+    let body = s === 'denied' ? `<div class="sum">${md(r.denied)}</div>` : `<div class="sum">${md(r.sum)}</div><div class="meta">${riskChip(r.risk)}</div>`;
     if (r.detail) body += `<div class="detail${s === 'done' ? '' : ' clamp'}">${esc(r.detail)}</div>`;
-    if (r.request) body += request(r, s === 'stale');
+    if (r.request) body += request(r, s === 'stale', s === 'denied');
     if (s === 'fail') body += `<div class="alert">Échec : ${esc(c.why.fail)}</div>`;
     if (s === 'refused') body += `<div class="alert">Refusée : ${esc(c.why.refused)} Rien n’a été envoyé.</div>`;
     if (s === 'held') body += `<div class="quiet">Pas appliquée : le plan s’est arrêté à l’étape ${stopAt + 1}.</div>`;
     if (s === 'stale') body += `<div class="warnline">La demande a changé depuis : rien n’a été envoyé.</div>`;
+    if (s === 'denied') body += `<div class="quiet">Nova a reçu ton refus : la commande n’a pas été lancée.</div>`;
     return `<div class="prow ${r.risk}${i === c.rows.length - 1 ? ' last' : ''}">${many ? nodeOf(s, i) : ''}<div>${body}</div><div class="act">${act}</div></div>`;
   }).join('');
   let foot = '';
@@ -438,13 +446,14 @@ function tui() {
   conv.push([['']]);
   for (const l of wrapText(plain(c.a), W - 8)) conv.push([['  '], [l, 'c-fg']]);
   if (st.etat === 'ignored') { conv.push([['']]); conv.push([[`  · ${many ? `plan de ${c.rows.length} actions ignoré` : 'carte ignorée'} à ${AT}, rien n’a été envoyé`, 'c-faint']]); }
+  if (st.etat === 'denied') { conv.push([['']]); conv.push([['  ✓ ', 'c-dim'], [`Refus envoyé à Nova · ${AT} : la commande n’a pas été lancée`, 'c-fg']]); conv.push([[`    ${c.rows[0].request.text}`, 'c-faint']]); }
   if (states.every(s => s === 'done')) { conv.push([['']]); conv.push([[`  ✓ ${many ? `Plan appliqué à ${AT} : Nova sur Opus 5.5 · Otto archivé · ledge-roles dissoute` : `${plain(c.rows[0].sum)} · ${AT}`}`, 'c-green']]); }
   L.push(boxTop('Ledge · Opérateur · voit 9 sessions, 1 machine', 'c-line', 'c-dim'));
   for (const s of conv) L.push(inBox(s, 'c-line'));
   for (let i = conv.length; i < 9; i++) L.push(inBox([['']], 'c-line'));
   L.push(bottom('c-line'));
   // The card, while something is left to do.
-  const settled = states.every(s => s === 'done') || st.etat === 'ignored';
+  const settled = states.every(s => s === 'done') || ['ignored', 'denied'].includes(st.etat);
   if (!settled) {
     const asking = m.asking;
     const border = asking ? 'c-red dbl' : 'c-coral';
@@ -505,7 +514,7 @@ const NOTES = {
     <li>Même coque que les cartes de fermeture et de tâche (<code>--well</code>, bordure <code>--sidebar-border</code>, 12,5 px) : la carte générique est leur cousine, pas un nouveau style.</li>
     <li><b>Le rail d’ordre</b> : à partir de 2 lignes, chaque ligne a un nœud numéroté relié aux autres, parce que l’ordre compte (on s’arrête au premier échec). Le nœud porte l’état : numéro (proposée), anneau qui tourne (en cours), ✓ (appliquée), ✕ (échouée ou refusée), pointillés (pas appliquée, le plan s’est arrêté avant). Une seule ligne : pas de rail.</li>
     <li>Une ligne = le <code>summary</code> du daemon (noms en gras), puis le risque, <b>icône et mot</b>, lisible sans la couleur. Bouton à droite, <b>un verbe par action</b> (« Changer », « Archiver », « Dissoudre… »), « Appliquer » en repli seulement, pour une action inconnue du front.</li>
-    <li><b>Permission</b> : « Refuser » à côté de « Accepter… », sans repasser par Ledge. Refuser n’a pas de « … » ni de confirmation : ne rien laisser faire ne se défait pas mal. Une fois envoyé : « ✓ Refus envoyé · 10:42 ».</li>
+    <li><b>Permission</b> : « Refuser » à côté de « Accepter… », sans repasser par Ledge. Refuser n’a pas de « … » ni de confirmation : ne rien laisser faire ne se défait pas mal. Une fois envoyé : « ✓ Refus envoyé · 10:42 », en gris et pas en vert, puisque rien n’a été appliqué. La ligne devient « Refuser la demande de <b>Nova</b> », sans le risque de l’acceptation qui n’a pas eu lieu ; une ligne dit « Nova a reçu ton refus : la commande n’a pas été lancée. », et la demande reste citée, estompée, pour qu’on voie ce qui a été refusé.</li>
     <li><b>« Ignorer »</b>, partout, en bouton discret à gauche des autres (le pied pour un plan, la ligne pour une seule action), comme « Ignorer » de la carte de relais du téléphone : la carte se replie en une ligne « Carte ignorée à 10:42 · rien n’a été envoyé · Revoir ». Ignorer vaut <b>sur tous les appareils</b> : Ledge le sait, la carte se replie partout (Desktop, île, téléphone, TUI) et Ledge ne la repropose pas.</li>
     <li>Irréversible : fond teinté, nœud et mot en rouge, « … » sur le bouton (une confirmation suit), le <code>detail</code> sur 2 lignes, en entier dans la confirmation.</li>
     <li>Pied : « Tout appliquer (n) » ; après un échec, « Reprendre à l’étape k (n) » ; après un refus, « Continuer sans l’étape k (n) », puisque la rejouer serait refusé encore. Une fois tout fait, la carte garde sa trace : « ✓ Plan appliqué à 10:42 ».</li>
@@ -513,7 +522,7 @@ const NOTES = {
   phone: `<div class="note"><h3>Téléphone</h3><h4>La même carte, une feuille pour confirmer</h4><ul>
     <li>Les jetons du téléphone (sombre seulement), les boutons de 44 px, le bouton de ligne <b>sous</b> le texte : la largeur ne permet pas de les mettre côte à côte.</li>
     <li>Confirmer ouvre une feuille par le bas qui reprend chaque ligne à appliquer avec son détail entier, puis la vérification de l’appareil (<code>ConfirmPurpose</code> <code>act</code>, sujet le qid ; <code>decide</code> pour une permission). Le texte est celui de la confirmation actuelle (« Elle confirme votre identité, pas la sûreté de la commande »).</li>
-    <li>« Ignorer » en bouton fantôme à gauche, comme la carte de relais ; pour une permission, trois boutons sur une ligne : Ignorer, Refuser, Accepter…. Ignorée ici, la carte l’est aussi sur le Desktop et dans la TUI.</li>
+    <li>« Ignorer » en bouton fantôme à gauche, comme la carte de relais ; pour une permission, trois boutons sur une ligne : Ignorer, Refuser, Accepter…. Refuser n’ouvre pas de feuille (pas de vérification) : la ligne passe à « ✓ Refus envoyé · 10:42 ». Ignorée ici, la carte l’est aussi sur le Desktop et dans la TUI.</li>
     <li>Une ligne réversible sans vérification (<code>phone: null</code>) s’applique au toucher, sans feuille.</li>
     <li>Vérification annulée ou expirée : la carte reste proposée et dit « Vérification annulée. Rien n’a été envoyé. » (texte existant).</li></ul></div>`,
   tui: `<div class="note"><h3>TUI</h3><h4>Une boîte de plus, des lignes qu’on choisit</h4><ul>
@@ -521,7 +530,7 @@ const NOTES = {
     <li><kbd>↑</kbd><kbd>↓</kbd> choisit la ligne (▸), <kbd>↵</kbd> l’applique, <kbd>a</kbd> applique tout. Le détail d’une ligne irréversible est toujours affiché, en estompé.</li>
     <li>Confirmer : la boîte passe au rouge, en trait double, liste tout, et ne se valide qu’avec <kbd>y</kbd>. <kbd>↵</kbd> ne confirme pas, pour qu’un double appui ne dissolve rien.</li>
     <li>La demande d’une permission est citée en entier, repliée sur la largeur, jamais tronquée.</li>
-    <li>Permission : <kbd>n</kbd> refuse, comme sur la carte de session. <kbd>esc</kbd> ignore la carte (comme la carte de lancement de Demander) ; la boîte disparaît et une ligne estompée reste dans la conversation. Ignorée ici, elle l’est partout : Ledge ne la repropose pas.</li>
+    <li>Permission : <kbd>n</kbd> refuse, comme sur la carte de session ; la boîte disparaît et une ligne reste dans la conversation, « ✓ Refus envoyé à Nova · 10:42 », suivie de la commande en estompé. <kbd>esc</kbd> ignore la carte (comme la carte de lancement de Demander) ; la boîte disparaît et une ligne estompée reste dans la conversation. Ignorée ici, elle l’est partout : Ledge ne la repropose pas.</li>
     <li>Une fois tout fait, la boîte disparaît et une ligne verte reste dans la conversation, comme pour l’équipe et les tâches.</li></ul></div>`,
   risks: `<div class="note"><h3>Risque et états</h3><table>
     <tr><td>${riskChip('read')}</td><td>rien ne change : appliquée au clic, sans « … » (aucune action de la phase 1 ; prévu pour la suite)</td></tr>
@@ -529,6 +538,7 @@ const NOTES = {
     <tr><td>${riskChip('destructive')}</td><td>Ledge ne peut pas le défaire : confirmation, et la vérification de l’appareil sur le téléphone</td></tr>
     <tr><td>Échouée</td><td>envoyée, le daemon a répondu une erreur ; « Réessayer » ; la suite reste proposée</td></tr>
     <tr><td>Refusée</td><td>rien n’a été envoyé : la cible a changé à la nouvelle résolution (fermée, hors ligne, en lecture seule)</td></tr>
+    <tr><td>Refus envoyé</td><td>une permission refusée par « Refuser » : le refus est parvenu à la session, qui ne lance pas la commande. Ce n’est ni « Refusée » (rien n’a été envoyé) ni « Échouée » (l’envoi a raté)</td></tr>
     <tr><td>Ignorée</td><td>rien n’a été appliqué ; Ledge le sait : la carte est repliée sur tous les appareils et n’est plus reproposée ; « Revoir » la rouvre</td></tr>
     <tr><td>La demande a changé</td><td>une permission : la demande n’est plus celle que Ledge a citée (stale) ; l’ancienne est barrée, « Ouvrir Nova »</td></tr></table></div>`
 };
