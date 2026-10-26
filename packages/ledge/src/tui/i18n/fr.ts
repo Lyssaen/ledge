@@ -1,4 +1,5 @@
 import type { BotState } from '@ledge/ui/bots/poseFor';
+import { actionCopy } from '@ledge/ui/chat/actionCopy';
 
 const plural = (n: number, one: string, many: string) => (n > 1 ? many : one);
 
@@ -27,7 +28,9 @@ export const fr = {
     save: 'enregistrer l’équipe', tasks: 'tâches de l’équipe', join: 'rejoindre une équipe', resume: 'reprendre l’équipe', teamMode: 'session ou équipe', handover: 'passer le relais',
     sendOnly: 'envoyer', newLine: 'nouvelle ligne', keepAndLeave: 'garder et sortir', lineHistory: 'ligne · historique', history: 'historique',
     word: 'mot', clear: 'effacer', resend: 'renvoyer', backToDraft: 'revenir au brouillon', keep: 'garder', wipe: 'effacer',
-    line: 'ligne', page: 'page', end: 'fin', question: 'question', conversation: 'conversation', cycle: 'cartes · conversation'
+    line: 'ligne', page: 'page', end: 'fin', question: 'question', conversation: 'conversation', cycle: 'cartes · conversation',
+    applyRow: 'appliquer la ligne', apply: 'appliquer', applyAll: 'tout appliquer', deny: 'refuser', ignore: 'ignorer', review: 'revoir',
+    openSession: (name: string) => `ouvrir ${name}`
   },
   overview: {
     yours: (n: number) => `À toi · ${n}`, projects: 'Projets', exchanges: 'Échanges', terminal: (name: string) => `Terminal · ${name}`,
@@ -80,7 +83,19 @@ export const fr = {
     resetTitle: 'Nouvelle conversation ?',
     resetBody: (n: number, since: string) => `La conversation du jour (${n} ${plural(n, 'question', 'questions')}, depuis ${since}) sera effacée.`,
     draftStays: 'Ton brouillon reste.', keep: 'Garder', wipe: 'Effacer et repartir',
-    above: (n: number) => `↑ ${n} ${plural(n, 'ligne', 'lignes')} plus haut · PgUp`, answering: '↓ Ledge répond · G pour suivre'
+    above: (n: number) => `↑ ${n} ${plural(n, 'ligne', 'lignes')} plus haut · PgUp`, answering: '↓ Ledge répond · G pour suivre',
+    /** The generic card (#94): the words every PC front shares (`copy`), and the terminal's own. */
+    action: {
+      copy: actionCopy.fr,
+      plan: (n: number) => `Plan · ${n} actions`, request: (kind: string, name: string) => `${kind} · ${name}`,
+      confirmOne: (line: string) => `Confirmer · ${line}`, confirmMany: (n: number, d: number) => `Confirmer · ${n} actions, ${d} ${plural(d, 'irréversible', 'irréversibles')}`,
+      state: { done: (at: string) => `appliquée${at ? ` ${at}` : ''}`, running: 'en cours', held: 'pas appliquée', refused: 'refusée', cut: 'coupée', denied: (at: string) => `refus envoyé${at ? ` ${at}` : ''}`, stale: 'a changé' },
+      cutMark: '… (tronqué, voir la session : o)',
+      hint: { one: 'Ledge ne fait rien sans toi.', choose: '↑↓ choisir', cut: '↵ n’accepte pas : lis-la d’abord', stale: 'redemande à Ledge pour la nouvelle demande', confirm: '↵ ne confirme pas : tape y', inOrder: 'Dans l’ordre ; si une étape échoue, les suivantes ne sont pas appliquées.' },
+      ignored: (n: number, at: string) => `· ${actionCopy.fr.ignored(n, at)} · revoir : ctrl+r`,
+      denied: (name: string, at: string) => `Refus envoyé à ${name}${at ? ` · ${at}` : ''} : la commande n’a pas été lancée`,
+      done: (line: string, at: string) => `${line}${at ? ` · ${at}` : ''}`
+    }
   },
   launch: {
     title: 'Nouvelle session', preview: 'Aperçu', instruction: 'Instruction', agent: 'Agent', model: 'Modèle', effort: 'Effort', project: 'Projet', machine: 'Machine',

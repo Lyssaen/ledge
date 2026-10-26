@@ -26,6 +26,8 @@ const text = (lines: { text: string }[][]) => lines.map(l => l.map(s => s.text).
 describe('tui copy', () => {
   /** Every key of the French copy has an English one of the same kind, never empty. */
   function same(a: unknown, b: unknown, path: string): void {
+    // The action card's words every PC front shares (packages/ui actionCopy): checked there, not the TUI's own.
+    if (path === 'en.ask.action.copy') { expect(b).toBeTypeOf('object'); return; }
     expect(typeof b, path).toBe(typeof a);
     if (typeof a === 'string') expect((b as string).length, path).toBeGreaterThan(0);
     else if (typeof a === 'function') expect(String((b as (...x: unknown[]) => string)('x', 1)).length, path).toBeGreaterThan(0);

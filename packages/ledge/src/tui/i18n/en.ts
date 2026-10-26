@@ -1,3 +1,4 @@
+import { actionCopy } from '@ledge/ui/chat/actionCopy';
 import type { Messages } from './lang.js';
 
 const plural = (n: number, one: string, many: string) => (n > 1 ? many : one);
@@ -24,7 +25,9 @@ export const en: Messages = {
     save: 'save the team', tasks: 'team tasks', join: 'join a team', resume: 'resume the team', teamMode: 'session or team', handover: 'hand over',
     sendOnly: 'send', newLine: 'new line', keepAndLeave: 'keep and leave', lineHistory: 'line · history', history: 'history',
     word: 'word', clear: 'clear', resend: 'send again', backToDraft: 'back to the draft', keep: 'keep', wipe: 'clear',
-    line: 'line', page: 'page', end: 'end', question: 'question', conversation: 'conversation', cycle: 'cards · conversation'
+    line: 'line', page: 'page', end: 'end', question: 'question', conversation: 'conversation', cycle: 'cards · conversation',
+    applyRow: 'apply the line', apply: 'apply', applyAll: 'apply all', deny: 'deny', ignore: 'ignore', review: 'review',
+    openSession: name => `open ${name}`
   },
   overview: {
     yours: n => `Yours · ${n}`, projects: 'Projects', exchanges: 'Messages', terminal: name => `Terminal · ${name}`,
@@ -77,7 +80,18 @@ export const en: Messages = {
     resetTitle: 'New conversation?',
     resetBody: (n, since) => `Today's conversation (${n} ${plural(n, 'question', 'questions')}, since ${since}) will be cleared.`,
     draftStays: 'Your draft stays.', keep: 'Keep', wipe: 'Clear and start over',
-    above: n => `↑ ${n} ${plural(n, 'line', 'lines')} above · PgUp`, answering: '↓ Ledge is answering · G to follow'
+    above: n => `↑ ${n} ${plural(n, 'line', 'lines')} above · PgUp`, answering: '↓ Ledge is answering · G to follow',
+    action: {
+      copy: actionCopy.en,
+      plan: n => `Plan · ${n} actions`, request: (kind, name) => `${kind} · ${name}`,
+      confirmOne: line => `Confirm · ${line}`, confirmMany: (n, d) => `Confirm · ${n} actions, ${d} irreversible`,
+      state: { done: at => `applied${at ? ` ${at}` : ''}`, running: 'running', held: 'not applied', refused: 'refused', cut: 'cut', denied: at => `denial sent${at ? ` ${at}` : ''}`, stale: 'changed' },
+      cutMark: '… (truncated, see the session: o)',
+      hint: { one: 'Ledge does nothing without you.', choose: '↑↓ choose', cut: '↵ does not accept: read it first', stale: 'ask Ledge again for the new request', confirm: '↵ does not confirm: type y', inOrder: 'In order; if a step fails, the next ones are not applied.' },
+      ignored: (n, at) => `· ${actionCopy.en.ignored(n, at)} · review: ctrl+r`,
+      denied: (name, at) => `Denial sent to ${name}${at ? ` · ${at}` : ''}: the command did not run`,
+      done: (line, at) => `${line}${at ? ` · ${at}` : ''}`
+    }
   },
   field: {
     above: n => `↑ ${n} ${plural(n, 'line', 'lines')}`, below: n => `↓ ${n}`,
