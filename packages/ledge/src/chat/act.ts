@@ -43,10 +43,14 @@ export async function actFromChat(deps: ActDeps, qid: string, rows?: number[], c
   const safe = (m: ChatMessage) => { try { deps.emit(m); } catch (e) { log(`act: emit failed: ${(e as Error).message}`); } };
   const known = [...new Set(rows ?? [...Array(MAX_PROPOSALS).keys()])].filter(r => chat.action(qid, r)).sort((a, b) => a - b);
   if (known.length === 0) throw new ActRefused('unknown action');
-  const todo = known.filter(r => !settled(chat.action(qid, r)!) && !inFlight.has(`${qid}#${r}`));
-  if (todo.length === 0) throw new ActRefused('already done');
-  if (deny && todo.some(r => chat.action(qid, r)!.action !== 'session.decide')) throw new ActRefused('only a request is refused');
-  if (!deny && !confirmed && todo.some(r => chat.action(qid, r)!.risk === 'destructive')) throw new ActRefused('confirm before applying a destructive action', 'confirm_required');
+  const pending = known.filter(r => !settled(chat.action(qid, r)!) && !inFlight.has(`${qid}#${r}`));
+  if (pending.length === 0) throw new ActRefused('already done');
+  if (deny && pending.some(r => chat.action(qid, r)!.action !== 'session.decide')) throw new ActRefused('only a request is refused');
+  // The plan stops at a row the card may never apply: rows after it are not tried, nor confirmed for; the row itself is refused
+  // in the loop, so a confirmation is never asked for an acceptance the daemon then turns down.
+  const cut = deny ? -1 : pending.findIndex(r => cardRefusal(chat.action(qid, r)!));
+  const todo = cut < 0 ? pending : pending.slice(0, cut + 1);
+  if (!deny && !confirmed && todo.some(r => chat.action(qid, r)!.risk === 'destructive' && !cardRefusal(chat.action(qid, r)!))) throw new ActRefused('confirm before applying a destructive action', 'confirm_required');
   for (const r of todo) inFlight.add(`${qid}#${r}`);
   const done: number[] = [];
   const failed: Array<{ row: number; message: string; refused?: true }> = [];
@@ -60,8 +64,8 @@ export async function actFromChat(deps: ActDeps, qid: string, rows?: number[], c
         if ('refused' in current) { refused = current.code ?? 'changed'; throw new Error(current.refused); }
         // The same args at another risk (a template saved meanwhile under that name) is another action: confirmed for neither.
         if (JSON.stringify(current.args) !== JSON.stringify(row.args) || current.risk !== row.risk) throw new Error(row.action === 'session.decide' ? 'the request has changed since the card' : 'the target has changed since the card');
-        // Checked on the row as it stands now: a request that grew past the card since is cut too.
-        const never = cardRefusal(current);
+        // On the row the user saw, and as it stands now: a request that grew past the card since is cut too.
+        const never = cardRefusal(row) ?? cardRefusal(current);
         if (never) { refused = never.code; throw new Error(never.refused); }
         refused = null;
         await deps.apply(row);
