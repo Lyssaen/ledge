@@ -598,7 +598,8 @@ const OPEN = `<div class="note"><h3>Tranché par l’utilisateur</h3><ol>
   <li><b>« ✓ Refus envoyé »</b> tel que dessiné : en gris, pas en vert, et la ligne devient « Refuser la demande de <b>Nova</b> ».</li></ol>
   <p style="margin:8px 0 0">La maquette est validée en entier par l’utilisateur, sauf l’état ci-dessous.</p></div>
   <div class="note"><h3>À valider</h3><ol>
-  <li><b>« Demande coupée »</b> : une demande coupée ne s’accepte pas depuis la carte, ni sur le PC ni au téléphone ; elle se refuse d’ici. Les textes des codes de refus : <code>ledge-action-card-codes.md</code>.</li></ol></div>`;
+  <li><b>« Demande coupée »</b> : une demande coupée ne s’accepte pas depuis la carte, ni sur le PC ni au téléphone ; elle se refuse d’ici (d’accord avec le leader, à valider par l’utilisateur). Les textes des codes de refus : <code>ledge-action-card-codes.md</code>.</li>
+  <li><b>Suite possible</b> : charger le texte complet à la demande, comme le corps d’une demande au téléphone, au lieu de l’envoyer dans la carte. La carte pourrait alors citer toute la demande et proposer « Accepter… ». Ce n’est pas fait ici : c’est plus de travail pour un cas rare.</li></ol></div>`;
 
 // ---- Chrome ----
 function label() { return ETATS.find(([k]) => k === st.etat)[1].toLowerCase(); }
