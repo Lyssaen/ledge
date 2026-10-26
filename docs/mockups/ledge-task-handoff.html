@@ -1,0 +1,549 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transmission d'une tâche</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Tokens: packages/ui/src/styles/tokens.css (subset), plus --task, the one new colour (#92). */
+:root,:root[data-theme=light]{
+  --background:oklch(1 0 0);--foreground:oklch(.145 0 0);--card:oklch(1 0 0);--popover:oklch(1 0 0);
+  --secondary:oklch(.967 .001 286.375);--muted:oklch(.97 0 0);--muted-foreground:oklch(.556 0 0);--accent:oklch(.97 0 0);
+  --border:oklch(.922 0 0);--input:oklch(.922 0 0);--ring:oklch(.708 0 0);
+  --sidebar:oklch(.985 0 0);--sidebar-accent:oklch(.97 0 0);--sidebar-primary:oklch(.577 .245 27.325);
+  --success:#059669;--warning:#b45309;--info:#2563eb;--danger-text:oklch(.505 .213 27.518);--well:oklch(.97 0 0);
+  --radius-sm:6px;--radius-md:8px;--radius-lg:10px;--radius-xl:14px;
+  --bot-shell-line:#ffffff99;--bot-visor:#22292b;
+  --task:#6d4fc4;--task-soft:color-mix(in srgb,var(--task) 9%,var(--card));
+  --page:#f4f2ef;--chrome:#fbfaf8;
+  /* The TUI, on a light terminal: the palette proposed with #95. */
+  --t-bg:#faf8f6;--t-fg:#2b2522;--t-dim:#6f6560;--t-faint:#a39a95;--t-line:#d9d2cd;--t-violet:#6d4fc4;--t-green:#2f8a55;--t-red:#c4483a;--t-coral:#c9563f;--t-blue:#2f6db5;--t-sel:#efeae6;
+}
+:root[data-theme=dark]{
+  --background:oklch(.145 0 0);--foreground:oklch(.985 0 0);--card:oklch(.205 0 0);--popover:oklch(.205 0 0);
+  --secondary:oklch(.274 .006 286.033);--muted:oklch(.269 0 0);--muted-foreground:oklch(.708 0 0);--accent:oklch(.269 0 0);
+  --border:#ffffff1a;--input:#ffffff26;--ring:oklch(.556 0 0);
+  --sidebar:oklch(.205 0 0);--sidebar-accent:oklch(.269 0 0);--sidebar-primary:oklch(.637 .237 25.331);
+  --success:#34d399;--warning:#fbbf24;--info:#60a5fa;--danger-text:oklch(.704 .191 22.216);--well:oklch(.145 0 0);
+  --bot-shell-line:#859397;--bot-visor:#172124;
+  --task:#b9a2f0;--task-soft:color-mix(in srgb,var(--task) 11%,var(--card));
+  --page:#0b0b0c;--chrome:#141414;
+  /* The TUI's own palette (packages/ledge/src/tui/theme.ts). */
+  --t-bg:#1a1817;--t-fg:#e6e0dc;--t-dim:#8f8681;--t-faint:#5f5854;--t-line:#3a3532;--t-violet:#b9a2f0;--t-green:#86cf9d;--t-red:#f0806e;--t-coral:#f07a62;--t-blue:#7fb2ec;--t-sel:#2b2725;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--page);color:var(--foreground);font:14px/1.45 'Geist','Segoe UI',system-ui,sans-serif}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+svg.i{width:12px;height:12px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+/* ---- The mockup's chrome ---- */
+.bar{position:sticky;top:0;z-index:30;display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;padding:10px 20px;background:var(--chrome);border-bottom:1px solid var(--border);font-size:12px}
+.bar .brand{font-weight:600;font-size:14px}
+.bar .brand small{font-weight:400;color:var(--muted-foreground);margin-left:6px;font-size:12px}
+.field{display:flex;align-items:center;gap:6px;color:var(--muted-foreground)}
+.seg{display:inline-flex;padding:2px;border:1px solid var(--border);border-radius:8px;background:var(--background)}
+.seg button{height:24px;padding:0 9px;border-radius:6px;color:var(--muted-foreground);white-space:nowrap}
+.seg button[aria-pressed=true]{background:var(--secondary);color:var(--foreground)}
+.seg button:focus-visible{outline:2px solid var(--ring)}
+.replay{height:28px;padding:0 10px;border:1px solid var(--input);border-radius:8px;display:inline-flex;align-items:center;gap:6px}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:24px;padding:22px 20px 40px;align-items:start}
+@media(max-width:1180px){.layout{grid-template-columns:1fr}}
+.cap{display:flex;gap:10px;align-items:baseline;margin:0 0 8px;font-size:11px;color:var(--muted-foreground)}
+.cap b{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--foreground)}
+.cap b.next{color:var(--task)}
+.notes{display:flex;flex-direction:column;gap:14px}
+.note{border:1px solid var(--border);border-radius:12px;background:var(--card);padding:14px 16px;font-size:12.5px;line-height:1.55}
+.note h3{margin:0 0 2px;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--task)}
+.note h4{margin:0 0 8px;font-size:14px;font-weight:600}
+.note ul,.note ol{margin:0;padding-left:18px}
+.note li+li{margin-top:5px}
+.note code,.note kbd{font:11px 'Geist Mono',monospace;padding:0 4px;border:1px solid var(--border);border-radius:4px;background:var(--secondary)}
+.note table{width:100%;border-collapse:collapse;font-size:12px}
+.note td{padding:4px 0;border-top:1px solid var(--border);vertical-align:top}
+.note td:first-child{color:var(--muted-foreground);padding-right:10px;white-space:nowrap}
+
+/* ---- The atelier (atelier.css / office.css, simplified: one team room, one table) ---- */
+.floor{position:relative;width:1000px;height:660px;border:1px solid var(--border);border-radius:14px;overflow:hidden;
+  --office-wood:color-mix(in srgb,var(--secondary) 88%,var(--warning));--office-floor:color-mix(in srgb,var(--sidebar) 97%,var(--warning));
+  background:repeating-linear-gradient(90deg,transparent 0,transparent 89px,var(--border) 90px,transparent 91px),repeating-linear-gradient(0deg,transparent 0,transparent 89px,var(--border) 90px,transparent 91px),var(--office-floor)}
+.fit{transform-origin:0 0}
+.room{position:absolute;left:130px;top:146px;width:760px;height:440px;border:1px solid color-mix(in srgb,var(--info) 18%,var(--input));border-top:4px solid var(--info);border-radius:30px 18px 30px 18px;background:color-mix(in srgb,var(--info) 5%,var(--sidebar));box-shadow:0 4px 0 var(--border)}
+.plaque{position:absolute;left:50%;top:-16px;transform:translateX(-50%);display:flex;gap:8px;align-items:center;padding:4px 10px;background:var(--sidebar);border:1px solid var(--input);border-radius:8px;box-shadow:0 2px 0 var(--border);font-size:12px;white-space:nowrap}
+.plaque b{font-weight:600}.plaque span{color:var(--muted-foreground);font-size:11px}
+.plaque i{width:7px;height:7px;border-radius:2px;background:var(--info)}
+.worktable{position:absolute;left:130px;top:170px;width:500px;height:112px;border-radius:18px;transform:skewY(-4deg);background:linear-gradient(150deg,color-mix(in srgb,var(--office-wood) 90%,var(--foreground)),var(--office-wood));border:1px solid color-mix(in srgb,var(--warning) 18%,var(--input));box-shadow:0 7px 0 var(--secondary),0 8px 0 var(--input)}
+.sheet{--sheet:color-mix(in srgb,var(--card) 86%,var(--foreground));position:absolute;width:86px;min-height:40px;padding:6px 8px 8px;border-radius:2px;background:var(--sheet);border:1px solid var(--input);box-shadow:2px 3px 0 color-mix(in srgb,var(--foreground) 12%,transparent)}
+:root[data-theme=light] .sheet{--sheet:var(--card)}
+.sheet p{margin:0;font-size:9px;line-height:12px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.sheet .flag{position:absolute;top:-5px;right:7px;width:14px;height:13px;border-radius:1px}
+.sheet.with-task .flag{background:var(--task)}
+.sheet.with-task{outline:1.5px solid color-mix(in srgb,var(--task) 70%,transparent);outline-offset:1px}
+.sheet.fresh{animation:sheet-in .45s cubic-bezier(.3,1.4,.5,1) both;animation-delay:var(--land)}
+.sheet.leaving{animation:sheet-out .4s ease-in both;animation-delay:var(--land)}
+@keyframes sheet-in{from{opacity:0;transform:translateY(-10px) rotate(-6deg) scale(.8)}}
+@keyframes sheet-out{to{opacity:.25;transform:translateY(4px) scale(.94)}}
+.seat{position:absolute;width:120px;margin-left:-60px;display:flex;flex-direction:column;align-items:center;gap:1px;padding:4px 2px;border-radius:8px;z-index:3}
+.seat strong{font-size:13px;font-weight:500;line-height:18px}
+.seat.gone{opacity:.35}
+.role{display:inline-block;font:10px/14px 'Geist Mono',monospace;padding:0 6px;border-radius:999px;background:color-mix(in srgb,var(--info) 16%,transparent);color:color-mix(in srgb,var(--info) 70%,var(--foreground))}
+.state{font-size:10px;line-height:15px;padding:0 6px;border-radius:4px;margin-top:2px}
+.state.work{color:var(--info);background:color-mix(in srgb,var(--info) 13%,transparent)}
+.state.idle{color:var(--success);background:color-mix(in srgb,var(--success) 13%,transparent)}
+.state.done{color:var(--muted-foreground);background:color-mix(in srgb,var(--muted-foreground) 13%,transparent)}
+.ledge-desk{position:absolute;left:22px;top:84px;display:flex;gap:8px;align-items:flex-start}
+.ledge-desk .who{display:flex;flex-direction:column;font-size:12px;font-weight:500}
+.ledge-desk small{font-size:10px;font-weight:400;color:var(--muted-foreground)}
+.legend{position:absolute;left:16px;bottom:12px;display:flex;gap:14px;align-items:center;padding:7px 12px;border:1px solid var(--border);border-radius:10px;background:var(--popover);font-size:11px;color:var(--muted-foreground);z-index:8}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend svg.w{width:30px;height:8px;overflow:visible}
+.legend svg.w path{fill:none;stroke-width:1.5;stroke-linecap:round}
+
+/* ---- One layer for every transmission (#92): a wire, a token travelling on it, the sender's bubble. ---- */
+.tx-layer{position:absolute;inset:0;pointer-events:none;z-index:6}
+.tx-wire{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.tx-wire path{fill:none;stroke-width:1.5;stroke-linecap:round;animation:wire-draw .5s ease-out both,wire-flow 1s linear infinite,wire-out .4s ease-in 4.7s forwards}
+.tx-message .tx-wire path{stroke:var(--foreground);stroke-opacity:.5;stroke-dasharray:2 5}
+/* A task: dashes, not dots (told apart without the colour), in the task's violet. */
+.tx-task .tx-wire path{stroke:var(--task);stroke-opacity:.85;stroke-dasharray:7 5;stroke-width:1.75}
+.tx-token{position:absolute;left:0;top:0;offset-rotate:0deg;filter:drop-shadow(0 2px 0 var(--border));animation:token-fly 1.3s cubic-bezier(.45,0,.3,1) both,token-out .4s ease-in 1.5s forwards}
+.tx-message .tx-token{width:26px;height:19px;margin:-9.5px 0 0 -13px}
+.tx-task .tx-token{width:24px;height:29px;margin:-14.5px 0 0 -12px;animation-duration:1.45s,.4s;animation-delay:0s,1.65s}
+.tx-token svg{display:block;width:100%;height:100%;overflow:visible}
+.tx-message .tx-token svg{animation:envelope-sway .65s ease-in-out 2}
+/* The task's sheet glides flat and turns once to show its face as it lands. */
+.tx-task .tx-token svg{animation:sheet-glide 1.45s cubic-bezier(.45,0,.3,1) both}
+.env-body{fill:var(--popover);stroke:var(--foreground);stroke-width:1.4;stroke-linejoin:round}
+.env-flap{fill:none;stroke:var(--foreground);stroke-width:1.4;stroke-linejoin:round;stroke-linecap:round}
+.tk-paper{fill:var(--popover);stroke:var(--task);stroke-width:1.5;stroke-linejoin:round}
+.tk-fold{fill:color-mix(in srgb,var(--task) 25%,var(--popover));stroke:var(--task);stroke-width:1.5;stroke-linejoin:round}
+.tk-line{stroke:color-mix(in srgb,var(--foreground) 45%,transparent);stroke-width:1.4;stroke-linecap:round}
+.tk-flag{fill:var(--task)}
+.tk-stamp{fill:var(--popover);stroke-width:1.6}
+.tk-stamp.done{stroke:var(--success)}.tk-stamp.refused,.tk-stamp.cancelled{stroke:var(--danger-text)}.tk-stamp.dropped{stroke:var(--muted-foreground)}
+.tk-mark{fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.tk-mark.done{stroke:var(--success)}.tk-mark.refused,.tk-mark.cancelled{stroke:var(--danger-text)}.tk-mark.dropped{stroke:var(--muted-foreground)}
+.tx-bubble{position:absolute;transform:translate(-50%,-100%);display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:max-content;max-width:250px;padding:6px 10px 7px;border:1px solid var(--input);border-radius:10px 10px 10px 2px;background:var(--popover);box-shadow:0 3px 0 var(--border);text-align:left;pointer-events:auto;animation:bubble-in .25s cubic-bezier(.3,1.4,.5,1) both,bubble-out .35s ease-in 4.65s forwards}
+.tx-bubble:hover,.tx-bubble:focus-visible{border-color:var(--ring);outline:none}
+.tx-task .tx-bubble{border-left:3px solid var(--task);padding-left:9px;border-radius:4px 10px 10px 2px}
+.tx-head{display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--muted-foreground);white-space:nowrap}
+.tx-task .tx-head{color:var(--task);font-weight:500}
+.tx-head .out{display:inline-flex;align-items:center;gap:3px;padding:0 5px;border-radius:4px;font-weight:500}
+.out.done{color:var(--success);background:color-mix(in srgb,var(--success) 14%,transparent)}
+.out.refused,.out.cancelled{color:var(--danger-text);background:color-mix(in srgb,var(--danger-text) 14%,transparent)}
+.out.dropped{color:var(--muted-foreground);background:color-mix(in srgb,var(--muted-foreground) 14%,transparent)}
+.tx-text{font-size:11px;line-height:15px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.tx-task .tx-text{font-weight:500}
+.tx-sub{font-size:10.5px;line-height:14px;color:var(--muted-foreground);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.tx-sub q{font-style:italic}
+.seat.lit{outline:2px solid var(--ring);outline-offset:3px}
+.seat.arrived:after{content:'';position:absolute;inset:-6px;border-radius:10px;border:2px solid var(--foreground);opacity:0;animation:seat-ring 1.4s ease-out forwards;animation-delay:var(--land);pointer-events:none}
+.seat.arrived.by-task:after{border-color:var(--task)}
+@keyframes wire-draw{from{opacity:0}}
+@keyframes wire-flow{to{stroke-dashoffset:-14}}
+@keyframes wire-out{to{opacity:0}}
+@keyframes token-fly{from{offset-distance:0%;opacity:0;scale:.6}12%{opacity:1;scale:1}to{offset-distance:100%;opacity:1;scale:1}}
+@keyframes token-out{to{opacity:0;scale:.85}}
+@keyframes envelope-sway{25%{transform:translateY(-1.5px) rotate(-4deg)}75%{transform:translateY(1.5px) rotate(4deg)}}
+@keyframes sheet-glide{0%{transform:rotate(-8deg)}80%{transform:rotate(4deg)}100%{transform:rotate(0)}}
+@keyframes bubble-in{from{opacity:0;transform:translate(-50%,-90%) scale(.92)}}
+@keyframes bubble-out{to{opacity:0}}
+@keyframes seat-ring{0%{opacity:.7;transform:scale(.96)}100%{opacity:0;transform:scale(1.12)}}
+/* Frozen or reduced, as for a message today: no token, no ring, the wire and the bubble hold still; the sheet is simply there. */
+.still .tx-wire path,.still .tx-bubble,.still .sheet{animation:none!important}
+.still .tx-token,.still .seat.arrived:after{display:none}
+/* Mockup only: the token stopped half-way, for the captures. */
+.freeze .tx-wire path,.freeze .tx-bubble,.freeze .tx-token,.freeze .tx-token svg{animation:none!important}
+.freeze .tx-token{offset-distance:58%}
+.freeze .sheet.fresh{display:none}
+.freeze .sheet.leaving{animation:none}
+.freeze .seat.arrived:after{display:none}
+
+/* ---- The session thread (session.css + the PR #74 message cards) ---- */
+.window{width:960px;border:1px solid var(--border);border-radius:12px;background:var(--background);overflow:hidden;display:flex;flex-direction:column}
+.pane-head{display:flex;align-items:center;gap:10px;height:46px;padding:0 16px;border-bottom:1px solid var(--border);background:var(--sidebar);font-size:13px}
+.pane-head .meta{color:var(--muted-foreground);font-size:11px}
+.tabs{display:flex;gap:2px;margin-left:auto}
+.tabs span{display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 10px;border-radius:6px;font-size:12px;color:var(--muted-foreground)}
+.tabs span.on{background:var(--secondary);color:var(--foreground)}
+.tabs span.task-tab.on{box-shadow:inset 0 -2px 0 var(--task)}
+.split{display:flex;min-height:560px}
+.thread{flex:1;min-width:0;padding:16px 18px 24px}
+.thread ol{list-style:none;margin:0 auto;padding:0;max-width:760px;position:relative}
+.thread ol:before{content:'';position:absolute;left:19.5px;top:6px;bottom:6px;width:1px;background:var(--border)}
+.r{display:grid;grid-template-columns:40px minmax(0,1fr) 56px;column-gap:14px;align-items:start;padding:4px 0;position:relative}
+.r>.n{justify-self:center;z-index:1}
+.r>.tm{font:11px/20px 'Geist Mono',monospace;color:var(--muted-foreground);text-align:right;font-variant-numeric:tabular-nums}
+.node{width:24px;height:24px;margin-top:-2px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:var(--sidebar);border:1px solid var(--border);color:var(--muted-foreground)}
+.node.task{color:var(--task);border-color:color-mix(in srgb,var(--task) 40%,var(--border));background:color-mix(in srgb,var(--task) 12%,var(--sidebar))}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--muted-foreground);margin-top:7px}
+.you{font-size:13px;line-height:20px}
+.you b{font-weight:600;margin-right:6px}
+.say{font-size:13.5px;line-height:21px}
+.tool{font:12px/20px 'Geist Mono',monospace;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tool .ok{color:var(--success)}.tool b{font-weight:500;color:var(--foreground);margin-right:6px}
+.message-card{justify-self:start;max-width:86%;min-width:0;display:flex;flex-direction:column;gap:4px;padding:9px 13px;border:1px solid var(--border);border-radius:14px 14px 14px 4px;background:var(--card)}
+.message-card.sent{justify-self:end;max-width:78%;background:var(--secondary);border-color:transparent;border-radius:14px 14px 4px 14px}
+.route{display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap;font-size:11px;color:var(--muted-foreground)}
+.route strong{color:var(--foreground);font-weight:500}
+.lnk{color:var(--muted-foreground);text-decoration:underline;text-decoration-color:var(--input);text-underline-offset:3px;font-size:11px}
+.lnk:hover{color:var(--foreground)}
+.message-body{font-size:13.5px;line-height:21px}
+/* The task card: the message card's frame and place (right when sent, left when received), with a ticket's edge and its own head. */
+.task-card{justify-self:start;width:min(86%,560px);display:flex;flex-direction:column;border:1px solid color-mix(in srgb,var(--task) 30%,var(--border));border-left:3px solid var(--task);border-radius:6px 14px 14px 4px;background:var(--task-soft);text-align:left;cursor:pointer;transition:border-color .15s,box-shadow .15s;position:relative}
+.task-card.sent{justify-self:end;border-radius:6px 14px 4px 14px}
+.task-card:hover,.task-card:focus-visible{border-color:var(--task);outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--task) 20%,transparent)}
+.task-card.lit{box-shadow:0 0 0 3px color-mix(in srgb,var(--task) 32%,transparent)}
+.task-card .kicker{display:flex;align-items:center;gap:6px;padding:8px 13px 0;font-size:11px;color:var(--task);font-weight:500}
+.task-card .kicker .id{font:10.5px 'Geist Mono',monospace;color:var(--muted-foreground);font-weight:400}
+.task-card .kicker .sp{flex:1}
+.pill{display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 7px;border-radius:999px;font-size:10.5px;font-weight:500;white-space:nowrap}
+.pill.open{color:var(--task);background:color-mix(in srgb,var(--task) 15%,transparent)}
+.pill.taken{color:var(--info);background:color-mix(in srgb,var(--info) 14%,transparent)}
+.pill.done{color:var(--success);background:color-mix(in srgb,var(--success) 14%,transparent)}
+.pill.refused,.pill.cancelled{color:var(--danger-text);background:color-mix(in srgb,var(--danger-text) 14%,transparent)}
+.pill.dropped{color:var(--muted-foreground);background:color-mix(in srgb,var(--muted-foreground) 14%,transparent)}
+.task-card .title{padding:3px 13px 0;font-size:14px;font-weight:600;line-height:20px}
+.task-card .detail{padding:2px 13px 0;font-size:13px;line-height:19px;color:color-mix(in srgb,var(--foreground) 82%,transparent);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.task-card .quote{margin:7px 13px 0;padding:5px 10px;border-left:2px solid var(--input);font-size:12.5px;line-height:18px;color:var(--muted-foreground)}
+.task-card .quote b{display:block;font-size:10.5px;font-weight:500;color:var(--muted-foreground);text-transform:uppercase;letter-spacing:.05em}
+.task-card .quote.result{border-left-color:var(--success)}
+.task-card .quote.reason{border-left-color:var(--danger-text)}
+.task-card .quote span{color:var(--foreground)}
+.task-card .foot{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px;padding:6px 13px 8px;border-top:1px dashed color-mix(in srgb,var(--task) 28%,var(--border));font-size:11px;color:var(--muted-foreground)}
+.task-card .foot .sp{flex:1}
+.task-card .foot .open-task{display:inline-flex;align-items:center;gap:3px;color:var(--task);font-weight:500}
+.trail{display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap}
+.trail i{font-style:normal;color:var(--input)}
+.trail .now{color:var(--foreground)}
+.task-line{display:flex;align-items:center;gap:8px;width:100%;min-width:0;padding:5px 10px;border:1px solid color-mix(in srgb,var(--task) 30%,var(--border));border-left:3px solid var(--task);border-radius:6px 8px 8px 6px;background:var(--task-soft);font-size:12px;text-align:left}
+.task-line .route{flex:none}
+.task-line .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+.botmini{display:inline-block;vertical-align:-2px}
+/* The task beside the thread (as the « Conversation » tab of PR #74). */
+.task-pane{width:350px;flex:none;border-left:1px solid var(--border);background:var(--sidebar);padding:16px 18px;display:flex;flex-direction:column;gap:12px}
+.task-pane .tp-head{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--task);font-weight:500}
+.task-pane .tp-head .id{font:11px 'Geist Mono',monospace;color:var(--muted-foreground);font-weight:400}
+.task-pane h2{margin:0;font-size:16px;line-height:22px}
+.task-pane .people{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:12px}
+.task-pane .people span{color:var(--muted-foreground)}
+.task-pane p{margin:0;font-size:13px;line-height:19px}
+.task-pane .log{list-style:none;margin:0;padding:0;font-size:12px;border-left:1px solid var(--input);margin-left:5px}
+.task-pane .log li{position:relative;padding:0 0 9px 14px;line-height:17px}
+.task-pane .log li:before{content:'';position:absolute;left:-4px;top:5px;width:7px;height:7px;border-radius:50%;background:var(--sidebar);border:1.5px solid var(--task)}
+.task-pane .log li.done:before{border-color:var(--success);background:var(--success)}
+.task-pane .log time{font:11px 'Geist Mono',monospace;color:var(--muted-foreground);margin-right:6px}
+.task-pane .log em{display:block;color:var(--muted-foreground);font-style:normal}
+.task-pane .actions{display:flex;gap:8px;flex-wrap:wrap}
+.task-pane .actions span{height:28px;padding:0 10px;border:1px solid var(--input);border-radius:8px;display:inline-flex;align-items:center;font-size:12px}
+.h-label{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted-foreground)}
+
+/* ---- The TUI ---- */
+.term{display:inline-block;background:var(--t-bg);color:var(--t-fg);border-radius:8px;padding:10px 12px;font:13px/18px 'Geist Mono',ui-monospace,monospace;border:1px solid var(--border);box-shadow:0 10px 30px rgb(0 0 0/.18)}
+.term .ln{white-space:pre;height:18px}
+.term .g{display:inline-block;width:1ch;text-align:center}
+.c-fg{color:var(--t-fg)}.c-dim{color:var(--t-dim)}.c-faint{color:var(--t-faint)}.c-line{color:var(--t-line)}.c-violet{color:var(--t-violet)}.c-green{color:var(--t-green)}.c-red{color:var(--t-red)}.c-coral{color:var(--t-coral)}.c-blue{color:var(--t-blue)}
+.c-b{font-weight:600}
+.tui-pair{display:flex;flex-direction:column;gap:22px}
+</style>
+</head>
+<body>
+<header class="bar" id="bar"></header>
+<main class="layout"><section id="view"></section><aside class="notes" id="notes"></aside></main>
+<script>
+// ---- State in the URL: #vue=atelier&cas=give&anim=play&theme=dark ----
+const DEF = { vue: 'atelier', cas: 'give', anim: 'play', theme: 'dark', fil: 'pim', plie: '0', largeur: '120' };
+const st = Object.assign({}, DEF, Object.fromEntries(new URLSearchParams(location.hash.slice(1))));
+const save = () => { history.replaceState(null, '', '#' + new URLSearchParams(Object.fromEntries(Object.entries(st).filter(([k, v]) => DEF[k] !== v || k === 'vue'))).toString()); };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+const ICON = {
+  mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>',
+  task: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4M12 16h4M8 11h.01M8 16h.01"/>',
+  arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+  chev: '<path d="m9 6 6 6-6 6"/>',
+  pass: '<path d="M4 12h12M12 6l6 6-6 6"/><path d="M20 5v14"/>',
+  back: '<path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/>',
+  replay: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>',
+  close: '<path d="M18 6 6 18M6 6l12 12"/>'
+};
+const ic = (k, s = 12) => `<svg class="i" viewBox="0 0 24 24" style="width:${s}px;height:${s}px">${ICON[k]}</svg>`;
+
+// A mascot, simplified: the shell in the session's colour, the visor, two eyes in the state's colour.
+const BOT = { Pim: '#e0866d', Nova: '#8f86e8', Bix: '#7f9aa5', Lu: '#d9a066', Max: '#c97f9b', Ida: '#76b59a', Ledge: '#e0866d' };
+const bot = (name, size = 40, eye = '#90c7f2') => `<svg class="botmini" width="${size}" height="${size * .9}" viewBox="0 0 40 36"><line x1="20" y1="2" x2="20" y2="7" stroke="${BOT[name]}" stroke-width="2"/><circle cx="20" cy="2.5" r="2" fill="${BOT[name]}"/><rect x="4" y="7" width="32" height="26" rx="8" fill="${BOT[name]}"/><rect x="4.5" y="7.5" width="31" height="10" rx="7" fill="var(--bot-shell-line)" opacity=".25"/><rect x="9" y="13" width="22" height="12" rx="5" fill="var(--bot-visor)"/><rect x="13" y="16" width="4" height="6" rx="1.5" fill="${eye}"/><rect x="23" y="16" width="4" height="6" rx="1.5" fill="${eye}"/></svg>`;
+
+// ---- The story: Pim gives Nova a task; Nova passes it to Lu for review; Lu closes it, back to Pim. ----
+const TASK = {
+  id: 't5c2e19', title: 'Émettre task.updated pour toutes les tâches',
+  text: "Aujourd'hui seul Ledge apprend les changements de ses propres tâches. Émets l'événement pour toutes, avec le journal, et couvre pass, done, refuse et la reprise par des tests.",
+  note: 'Relis surtout la reprise du journal au redémarrage',
+  result: 'Fait sur feat/task-handoff : task.updated pour toutes les tâches, 6 tests. La reprise du journal n’émet plus deux fois.',
+  reason: 'Le daemon n’est pas à moi : je relis, je n’écris pas. Repasse-la à Nova.'
+};
+
+// ---- The atelier: one team room, seats around one table ----
+const SEATS = {
+  Pim: { x: 230, y: 52, role: 'lead', state: ['idle', 'Disponible'], sheet: 'Découper #92' },
+  Nova: { x: 380, y: 52, role: 'dev-back', state: ['work', 'Au travail'], sheet: 'Journal des tâches' },
+  Bix: { x: 530, y: 52, role: 'dev-front', state: ['work', 'Au travail'], sheet: 'Carte de tâche du fil' },
+  Ida: { x: 230, y: 312, role: 'ux-ui', state: ['work', 'Au travail'], sheet: 'Maquette #92' },
+  Max: { x: 380, y: 312, role: 'rev-front', state: ['idle', 'Disponible'], sheet: 'Relire #95' },
+  Lu: { x: 530, y: 312, role: 'rev-back', state: ['idle', 'Disponible'], sheet: 'Relire PR #97' }
+};
+const ROOM = { x: 130, y: 146 };
+const LEDGE_AT = { x: 42, y: 90 };
+// The seat's anchor, in floor coordinates: its top centre (the app's `top + 6`).
+const anchor = n => n === 'Ledge' ? LEDGE_AT : { x: ROOM.x + SEATS[n].x, y: ROOM.y + SEATS[n].y + 6 };
+// The app's arc, plus one change (#92): between two rows it rises by half the rows' gap, so it clears the seats in between.
+const arc = (a, b) => `M ${a.x} ${a.y} Q ${(a.x + b.x) / 2} ${Math.min(a.y, b.y) - 70 - Math.abs(a.x - b.x) * .12 - (a === LEDGE_AT || b === LEDGE_AT ? 0 : Math.abs(a.y - b.y) * .5)} ${b.x} ${b.y}`;
+
+const CASES = {
+  message: { label: 'Message (aujourd’hui)', kind: 'message', from: 'Bix', to: 'Max', head: 'à Max', text: 'La carte de tâche est prête à relire, deux états à vérifier.' },
+  ledge: { label: 'Ledge confie', kind: 'task', from: 'Ledge', to: 'Pim', verb: 'Tâche confiée à Pim', text: '#92 : transmission d’une tâche (Atelier, fil, TUI)', landSheet: 'Pim' },
+  give: { label: 'Confiée', kind: 'task', from: 'Pim', to: 'Nova', verb: 'Tâche confiée à Nova', text: TASK.title, landSheet: 'Nova' },
+  pass: { label: 'Passée (avec la note)', kind: 'task', from: 'Nova', to: 'Lu', verb: 'Tâche passée à Lu', text: TASK.title, sub: `de Pim · <q>${TASK.note}</q>`, landSheet: 'Lu', leaveSheet: 'Nova' },
+  done: { label: 'Rendue : terminée', kind: 'task', from: 'Lu', to: 'Pim', verb: 'Rendue à Pim', out: ['done', '✓ terminée'], text: TASK.title, sub: TASK.result, leaveSheet: 'Lu' },
+  refused: { label: 'Rendue : refusée', kind: 'task', from: 'Lu', to: 'Pim', verb: 'Rendue à Pim', out: ['refused', '✕ refusée'], text: TASK.title, sub: TASK.reason, leaveSheet: 'Lu' },
+  dropped: { label: 'Abandonnée', kind: 'task', from: 'Lu', to: 'Pim', gone: 'Lu', verb: 'Revient à Pim', out: ['dropped', '— abandonnée'], text: TASK.title, sub: 'Lu s’est terminée sans la finir.', leaveSheet: 'Lu' },
+  cancelled: { label: 'Annulée par Pim', kind: 'task', from: 'Pim', to: 'Lu', verb: 'Tâche annulée pour Lu', out: ['cancelled', '✕ annulée'], text: TASK.title, sub: 'Nova s’en charge finalement.', leaveSheet: 'Lu' }
+};
+
+const token = c => c.kind === 'message'
+  ? '<svg viewBox="0 0 26 19"><rect class="env-body" x="1" y="1" width="24" height="17" rx="2.5"/><path class="env-flap" d="M1.8 2.4 13 10.6 24.2 2.4"/></svg>'
+  : `<svg viewBox="0 0 24 29"><path class="tk-paper" d="M2 2h14l6 6v19H2z"/><path class="tk-fold" d="M16 2v6h6"/><path class="tk-line" d="M6 13h11M6 17.5h11M6 22h7"/>${c.out ? '' : '<rect class="tk-flag" x="3.5" y="-3" width="7" height="7" rx="1"/>'}${c.out ? `<circle class="tk-stamp ${c.out[0]}" cx="18" cy="24" r="6.5"/><path class="tk-mark ${c.out[0]}" d="${c.out[0] === 'done' ? 'M15 24.2l2.1 2.1 4-4.4' : c.out[0] === 'dropped' ? 'M15 24h6' : 'M15.6 21.6l4.8 4.8M20.4 21.6l-4.8 4.8'}"/>` : ''}</svg>`;
+
+function atelier() {
+  const c = CASES[st.cas] ?? CASES.give;
+  const a = anchor(c.from), b = anchor(c.to), path = arc(a, b);
+  const land = c.kind === 'task' ? '1.45s' : '1.3s';
+  const mode = st.anim === 'still' ? 'still' : st.anim === 'freeze' ? 'freeze' : '';
+  const seats = Object.entries(SEATS).map(([n, s]) => `<div class="seat${n === c.to ? ` arrived${c.kind === 'task' ? ' by-task' : ''}` : ''}${n === c.gone ? ' gone' : ''}" style="left:${s.x}px;top:${s.y}px;--land:${land}">
+      ${bot(n, 42, s.state[0] === 'work' ? '#90c7f2' : '#a9dfc7')}<strong>${n}</strong><span class="role">@${s.role}</span><span class="state ${n === c.gone ? 'done' : s.state[0]}">${n === c.gone ? 'Terminée' : s.state[1]}</span></div>`).join('');
+  // The table's sheets: one per seat; the task's lands on its new owner's, flagged violet while nobody has taken it.
+  const sheets = Object.entries(SEATS).map(([n, s]) => {
+    const top = s.y < 200, x = s.x - 130 - 43 + (top ? -6 : 6), y = top ? 6 : 62;
+    const fresh = c.landSheet === n, leaving = c.leaveSheet === n;
+    return `<div class="sheet${fresh ? ' fresh with-task' : ''}${leaving ? ' leaving' : ''}" style="left:${x}px;top:${y}px;--land:${land}">${fresh ? '<i class="flag"></i>' : ''}<p>${esc(fresh ? c.text : s.sheet)}</p></div>`;
+  }).join('');
+  const aria = c.kind === 'message' ? `Bix a écrit à Max : ${c.text}` : `${c.from} → ${c.to} : ${c.verb}, « ${c.text} »`;
+  return `<p class="cap"><b class="next">Visé</b> Atelier · ${esc(c.label)} · ${st.anim === 'play' ? 'animé, rejoué toutes les 6 s' : st.anim === 'freeze' ? 'arrêt sur image (le jeton à mi-chemin)' : 'figé ou animations réduites'}</p>
+  <div class="floor-wrap"><div class="floor ${mode}" id="floor">
+    <div class="ledge-desk">${bot('Ledge', 40)}<div class="who">Ledge<small>Votre assistant</small></div></div>
+    <div class="room"><div class="plaque"><i></i><b>ledge-roles</b><span>équipe dev · 6 sessions</span></div>
+      <div class="worktable">${sheets}</div>${seats}</div>
+    <div class="tx-layer tx-${c.kind}">
+      <svg class="tx-wire" aria-hidden="true"><path d="${path}"/></svg>
+      <span class="tx-token" aria-hidden="true" style="offset-path:path('${path}')">${token(c)}</span>
+      <button type="button" class="tx-bubble" style="left:${Math.max(a.x, 135)}px;top:${a.y - 12}px" aria-label="${esc(aria)}">
+        <span class="tx-head">${ic(c.kind === 'message' ? 'mail' : c.out ? 'back' : st.cas === 'pass' ? 'pass' : 'task', 11)}${c.kind === 'message' ? esc(c.head) : esc(c.verb)}${c.out ? ` <span class="out ${c.out[0]}">${esc(c.out[1])}</span>` : ''}</span>
+        <span class="tx-text">${esc(c.text)}</span>${c.sub ? `<span class="tx-sub">${c.sub.includes('<q>') ? c.sub : esc(c.sub)}</span>` : ''}
+      </button>
+    </div>
+    <div class="legend"><span><svg class="w"><path d="M1 4h28" stroke="var(--foreground)" stroke-opacity=".5" stroke-dasharray="2 5"/></svg>${ic('mail', 11)} message</span><span><svg class="w"><path d="M1 4h28" stroke="var(--task)" stroke-dasharray="7 5" stroke-width="1.75"/></svg><span style="color:var(--task)">${ic('task', 11)}</span> tâche</span><span>pointillés courts / tirets : lisibles sans la couleur</span></div>
+  </div></div>`;
+}
+
+// ---- The session thread ----
+const mini = n => bot(n, 15);
+const route = (a, b) => `<span class="route">${mini(a)}<strong>${a}</strong>${ic('arrow', 11)}${mini(b)}<strong>${b}</strong></span>`;
+const STATE = { open: 'ouverte', taken: 'prise', done: 'terminée', refused: 'refusée', dropped: 'abandonnée', cancelled: 'annulée' };
+// The trail under every card: where the task is now, whichever card you read it on.
+const TRAIL = [['confiée', '10:21'], ['prise', '10:23'], ['passée à Lu', '10:52'], ['prise', '10:53'], ['terminée', '11:05']];
+const trail = upto => `<span class="trail">${TRAIL.slice(0, upto).map(([w, t], i) => `<span class="${i === upto - 1 ? 'now' : ''}">${w} <span class="mono">${t}</span></span>`).join('<i>›</i>')}</span>`;
+
+function card({ side, head, state, extra = '', upto, lit }) {
+  return `<button type="button" class="task-card ${side}${lit ? ' lit' : ''}" aria-label="${esc(head)} : ${esc(TASK.title)}, ${STATE[state]}. Ouvrir la tâche">
+    <span class="kicker">${ic('task', 12)}${head}<span class="id">${TASK.id}</span><span class="sp"></span><span class="pill ${state}">${STATE[state]}</span></span>
+    <span class="title">${esc(TASK.title)}</span>
+    ${extra}
+    <span class="foot">${trail(upto)}<span class="sp"></span><span class="open-task">Ouvrir la tâche ${ic('chev', 12)}</span></span>
+  </button>`;
+}
+const line = (a, b, state) => `<button type="button" class="task-line">${ic('task', 12)}${route(a, b)}<span class="t">${esc(TASK.title)}</span><span class="pill ${state}">${STATE[state]}</span></button>`;
+const row = (node, body, tm = '') => `<li class="r">${node}<div style="display:grid;min-width:0">${body}</div><span class="tm">${tm}</span></li>`;
+const nTask = `<span class="n node task">${ic('task', 12)}</span>`;
+const nDot = '<span class="n"><span class="dot" style="display:block"></span></span>';
+const nMail = `<span class="n node">${ic('mail', 12)}</span>`;
+
+const THREADS = {
+  pim: { who: 'Pim', role: 'lead', label: 'Chez Pim, qui l’a confiée', rows: f => [
+    row(nDot, `<div class="you"><b>Vous</b>Découpe #92 et confie le daemon à Nova.</div>`, '10:19'),
+    row(nDot, `<div class="tool"><span class="ok">✓</span> <b>Bash</b>gh issue view 92</div><div class="tool"><span class="ok">✓</span> <b>Bash</b>ledge task give Nova "Émettre task.updated pour toutes les tâches" "…"</div>`, '10:21'),
+    row(nTask, f ? line('Pim', 'Nova', 'done') : card({ side: 'sent', head: 'Confiée à Nova', state: 'done', upto: 5, extra: `<span class="detail">${esc(TASK.text)}</span>` }), '10:21'),
+    row(nMail, `<div class="message-card"><span class="route">de ${mini('Nova')}<strong>Nova</strong></span><div class="message-body">Prise. Je la passerai à Lu pour la relecture du journal.</div></div>`, '10:24'),
+    row(nTask, f ? line('Lu', 'Pim', 'done') : card({ side: '', head: `Rendue par Lu`, state: 'done', upto: 5, lit: true, extra: `<span class="quote result"><b>Résultat</b><span>${esc(TASK.result)}</span></span>` }), '11:05')
+  ] },
+  nova: { who: 'Nova', role: 'dev-back', label: 'Chez Nova, qui l’a passée', rows: f => [
+    row(nTask, f ? line('Pim', 'Nova', 'done') : card({ side: '', head: 'De Pim', state: 'done', upto: 5, extra: `<span class="detail">${esc(TASK.text)}</span>` }), '10:21'),
+    row(nDot, `<div class="tool"><span class="ok">✓</span> <b>Bash</b>ledge task take ${TASK.id}</div><div class="say">Je prends. Le journal émet aujourd'hui deux fois à la reprise, je commence par là.</div>`, '10:23'),
+    row(nDot, `<div class="tool"><span class="ok">✓</span> <b>Edit</b>packages/ledge/src/daemon/tasks.ts <span style="color:var(--success)">+48</span> <span style="color:var(--danger-text)">-9</span></div><div class="tool"><span class="ok">✓</span> <b>Bash</b>pnpm --filter @ledge/ledge test -- tasks</div>`, '10:49'),
+    row(nTask, f ? line('Nova', 'Lu', 'done') : card({ side: 'sent', head: 'Passée à Lu', state: 'done', upto: 5, extra: `<span class="quote"><b>Ta note</b><span>${esc(TASK.note)}</span></span>` }), '10:52')
+  ] },
+  lu: { who: 'Lu', role: 'rev-back', label: 'Chez Lu, qui l’a rendue', rows: f => [
+    row(nTask, f ? line('Nova', 'Lu', 'done') : card({ side: '', head: 'Passée par Nova · confiée par Pim', state: 'done', upto: 5, extra: `<span class="quote"><b>Note de Nova</b><span>${esc(TASK.note)}</span></span>` }), '10:52'),
+    row(nDot, `<div class="tool"><span class="ok">✓</span> <b>Bash</b>ledge task take ${TASK.id}</div><div class="tool"><span class="ok">✓</span> <b>Read</b>packages/ledge/src/daemon/tasks.ts</div><div class="say">La reprise est saine : un seul événement par changement. Je ferme.</div>`, '11:03'),
+    row(nTask, f ? line('Lu', 'Pim', 'done') : card({ side: 'sent', head: 'Rendue à Pim', state: 'done', upto: 5, extra: `<span class="quote result"><b>Ton résultat</b><span>${esc(TASK.result)}</span></span>` }), '11:05')
+  ] },
+  open: { who: 'Pim', role: 'lead', label: 'Chez Pim, la tâche ouverte à côté', open: true }
+};
+
+function taskPane() {
+  return `<aside class="task-pane" aria-label="Tâche ${TASK.id}">
+    <div class="tp-head">${ic('task', 13)}Tâche <span class="id">${TASK.id}</span><span style="flex:1"></span><span class="pill done">terminée</span></div>
+    <h2>${esc(TASK.title)}</h2>
+    <div class="people"><span>Confiée par</span><b>${mini('Pim')} Pim</b><span>Tenue par</span><b>${mini('Lu')} Lu <span class="role" style="margin-left:4px">@rev-back</span></b><span>Équipe</span><b>ledge-roles</b></div>
+    <p>${esc(TASK.text)}</p>
+    <div class="h-label">Résultat</div><p>${esc(TASK.result)}</p>
+    <div class="h-label">Journal</div>
+    <ol class="log">
+      <li><time>10:21</time>Pim · confiée à Nova</li><li><time>10:23</time>Nova · prise</li>
+      <li><time>10:52</time>Nova · passée à Lu<em>« ${esc(TASK.note)} »</em></li><li><time>10:53</time>Lu · prise</li>
+      <li class="done"><time>11:05</time>Lu · terminée</li>
+    </ol>
+    <div class="actions"><span>Fil de Nova</span><span>Fil de Lu</span><span>Copier l’id</span></div>
+  </aside>`;
+}
+
+function fil() {
+  const v = THREADS[st.fil] ?? THREADS.pim, f = st.plie === '1';
+  const rows = (v.open ? THREADS.pim : v).rows(f).join('');
+  return `<p class="cap"><b class="next">Visé</b> Fil de session · ${esc(v.label)}${f ? ' · cartes repliées' : ''}</p>
+  <div class="window">
+    <div class="pane-head">${bot(v.who, 22)}<b>${v.who}</b><span class="role">@${v.role}</span><span class="meta">ledge-roles · feat/task-handoff</span>
+      <div class="tabs"><span class="${v.open ? '' : 'on'}">Fil</span><span>Terminal</span>${v.open ? `<span class="task-tab on">${ic('task', 12)}Tâche ${TASK.id}</span>` : ''}</div></div>
+    <div class="split"><div class="thread"><ol>${rows}</ol></div>${v.open ? taskPane() : ''}</div>
+  </div>`;
+}
+
+// ---- The TUI: « Échanges » in the overview's right column (120 columns: 70 wide) ----
+const T = (cls, s) => ({ cls, s });
+const pad = (s, n) => s.length >= n ? s.slice(0, n) : s + ' '.repeat(n - s.length);
+function renderBox(W, title, lines, color = 'line') {
+  const inner = W - 4;
+  const top = [T(`c-${color}`, '╭─ '), T('c-dim', title.toUpperCase()), T(`c-${color}`, ' ' + '─'.repeat(Math.max(0, W - 5 - title.length)) + '╮')];
+  const body = lines.map(segs => {
+    let used = 0; const out = [];
+    for (const g of segs) { if (used >= inner) break; let s = g.s; if (used + s.length > inner) s = s.slice(0, inner - used - 1) + '…'; out.push(T(g.cls, s)); used += s.length; }
+    return [T(`c-${color}`, '│ '), ...out, T('', ' '.repeat(Math.max(0, inner - used))), T(`c-${color}`, ' │')];
+  });
+  const bottom = [T(`c-${color}`, '╰' + '─'.repeat(W - 2) + '╯')];
+  return [top, ...body, bottom];
+}
+const term = rows => `<div class="term">${rows.map(r => `<div class="ln">${r.map(g => g.glyph ? `<span class="g ${g.cls}">${esc(g.s)}</span>` : `<span class="${g.cls}">${esc(g.s)}</span>`).join('')}</div>`).join('')}</div>`;
+const G = (cls, s) => ({ cls, s, glyph: true });
+
+function tui() {
+  const W = st.largeur === '160' ? 96 : 70;
+  const now = renderBox(W, 'Échanges', [
+    [T('c-faint', '11:02 '), T('c-fg', 'Bix'), T('c-violet', ' → '), T('c-fg', 'Max'), T('', '  '), T('c-dim', 'La carte de tâche est prête à relire, deux états à vérifier.')],
+    [T('c-faint', '10:50 '), T('c-fg', 'Lu'), T('c-violet', ' → '), T('c-fg', 'Nova'), T('', '  '), T('c-dim', 'Je regarde ta PR dès que la tâche arrive.')],
+    [T('c-faint', '10:20 '), T('c-fg', 'Ledge'), T('c-violet', ' → '), T('c-fg', 'Pim'), T('', '  '), T('c-dim', '#92 : transmission d’une tâche (Atelier, fil, TUI)')]
+  ]);
+  // Proposed: messages and every task change, newest first; a task line names its verb; the routes align.
+  const ex = [
+    ['11:05', 'task', 'Lu', 'Pim', [T('c-green', '✓ terminée  '), T('c-fg', TASK.title)]],
+    ['11:02', 'msg', 'Bix', 'Max', [T('c-dim', 'La carte de tâche est prête à relire, deux états à vérifier.')]],
+    ['10:52', 'task', 'Nova', 'Lu', [T('c-violet', 'passée  '), T('c-fg', TASK.title), T('c-dim', ' · « ' + TASK.note + ' »')]],
+    ['10:21', 'task', 'Pim', 'Nova', [T('c-violet', 'confiée  '), T('c-fg', TASK.title)]],
+    ['10:20', 'task', 'Ledge', 'Pim', [T('c-violet', 'confiée  '), T('c-fg', '#92 : transmission d’une tâche (Atelier, fil, TUI)')]]
+  ];
+  const rw = Math.max(...ex.map(e => e[2].length + e[3].length + 3));
+  const next = renderBox(W, 'Échanges', ex.map(([at, k, a, b, rest]) => [T('c-faint', at + ' '), { ...G(k === 'task' ? 'c-violet' : 'c-dim', k === 'task' ? '▤' : '✉') }, T('', ' '), T('c-fg', a), T(k === 'task' ? 'c-violet' : 'c-faint', ' → '), T('c-fg', pad(b, rw - a.length - 3)), T('', '  '), ...rest]));
+  // The team's tasks box (key T) gains the same verbs.
+  return `<div class="tui-pair">
+    <div><p class="cap"><b>Actuel</b> TUI · Échanges · ${W} colonnes (vue d’ensemble en ${st.largeur === '160' ? '160' : '120'} colonnes) : seules les tâches de Ledge y passent, comme des messages</p>${term(now)}</div>
+    <div><p class="cap"><b class="next">Visé</b> TUI · Échanges · ${W} colonnes : chaque transmission d’une tâche, avec son verbe</p>${term(next)}</div>
+  </div>`;
+}
+
+// ---- Notes ----
+const NOTES = {
+  atelier: `<div class="note"><h3>Atelier</h3><h4>Une tâche voyage comme un message, sous une autre forme</h4><ul>
+    <li>Même mécanique pour tout : fil en arc, jeton qui voyage, bulle au-dessus de l’émetteur pendant 5 s, anneau sur le receveur à l’arrivée.</li>
+    <li>Message : enveloppe, <b>pointillés courts</b>, couleur du texte. Tâche : <b>fiche</b> à coin plié, <b>tirets</b>, violet <code>--task</code>. La forme et le trait suffisent sans la couleur.</li>
+    <li>La fiche se pose sur la table, devant son nouveau porteur : un petit drapeau violet tant qu’elle n’est pas prise (<code>ledge task take</code>).</li>
+    <li>Passée : la bulle cite la note et garde le donneur (« de Pim »). La fiche quitte la place de Nova pour celle de Lu.</li>
+    <li>Rendue : la fiche revient au donneur avec un tampon ✓ terminée, ✕ refusée ou — abandonnée. Annulée : du donneur vers le porteur.</li>
+    <li>Figé ou réduit : ni jeton ni anneau ; le fil et la bulle restent immobiles, la fiche est simplement posée. C’est la règle actuelle des messages.</li>
+    <li>La bulle est un bouton : elle ouvre la tâche ; au survol, les deux places s’allument.</li></ul></div>
+    <div class="note"><h3>Composant</h3><h4>Un seul « Transmission » au lieu de Bubble et LedgeWire</h4><table>
+    <tr><td>from, to</td><td>une place (id de session) ou <code>ledge</code> (le coin de Ledge)</td></tr>
+    <tr><td>kind</td><td><code>message</code> · <code>task</code></td></tr>
+    <tr><td>verb</td><td>sent · given · passed · returned · cancelled</td></tr>
+    <tr><td>outcome</td><td>done · refused · dropped (returned seulement)</td></tr>
+    <tr><td>text, sub</td><td>résumé ou titre ; note (pass), résultat ou raison (retour)</td></tr>
+    <tr><td>arc</td><td>la courbe d’aujourd’hui ; entre deux rangs, elle monte de la moitié de l’écart pour passer au-dessus des places</td></tr>
+    <tr><td>still</td><td>paused ‖ reduced, comme aujourd’hui</td></tr>
+    <tr><td>onOpen</td><td>le fil à l’élément (message), la tâche (task)</td></tr></table>
+    <p style="margin:8px 0 0">La mesure des places (rAF, zoom divisé), l’horloge 5 s et l’anneau sont partagés ; seuls le jeton, le trait et la bulle changent selon <code>kind</code>.</p></div>`,
+  fil: `<div class="note"><h3>Fil de session</h3><h4>Une carte de tâche à chaque transmission, chez les deux</h4><ul>
+    <li>La carte reprend la place des cartes de message de la PR #74 : à droite pour qui transmet, à gauche pour qui reçoit. Elle s’en distingue par son <b>bord de ticket</b> violet, son en-tête « Confiée à… / De… / Passée à… / Rendue par… », l’id et un état.</li>
+    <li>L’état est <b>celui d’aujourd’hui</b>, pas celui du moment : la carte « Confiée à Nova » de Pim montre « terminée » et le chemin complet en pied (confiée › prise › passée à Lu › prise › terminée).</li>
+    <li>Contenu selon le verbe : le détail (2 lignes) quand on confie, la note quand on passe, le résultat ou la raison quand on rend.</li>
+    <li>Toute la carte est cliquable : elle ouvre la tâche <b>à côté du fil</b>, comme l’onglet « Conversation » (titre, donneur et porteur, détail, résultat, journal, liens vers les fils de Nova et de Lu).</li>
+    <li>Repliée (le réglage des messages) : une ligne, route, titre, état.</li>
+    <li>Le pointeur <code>&lt;ledge-task&gt;</code> tapé dans le terminal reste ; c’est la carte qui le montre dans le fil, pas le texte brut.</li></ul></div>`,
+  tui: `<div class="note"><h3>TUI</h3><h4>« Échanges » montre toutes les transmissions</h4><ul>
+    <li>Aujourd’hui <code>exchanges()</code> ne mêle que les tâches de Ledge, et comme des messages (même flèche, pas de verbe).</li>
+    <li>Visé : chaque changement d’une tâche entre sessions devient une ligne : glyphe <code>▤</code> violet (ASCII <code>=</code>), route alignée, puis le verbe (<span style="color:var(--task)">confiée</span>, <span style="color:var(--task)">passée</span>, <span style="color:var(--success)">✓ terminée</span>, <span style="color:var(--danger-text)">✕ refusée</span>, abandonnée) et le titre. Le message garde <code>✉</code> et une flèche estompée.</li>
+    <li>La note d’un passage suit le titre, estompée, et se coupe la première.</li>
+    <li>La boîte passe de 3 à 5 lignes quand la hauteur le permet (32 rangées et plus).</li>
+    <li>Sous 100 colonnes la colonne de droite n’existe pas : rien ne change.</li></ul></div>`
+};
+const OPEN = `<div class="note"><h3>À trancher</h3><ol>
+  <li><b>Données</b> : un événement <code>task.updated</code> pour <b>toutes</b> les tâches (proposé : l’Atelier, le fil et la TUI le lisent tels quels), ou une relecture périodique du journal ?</li>
+  <li>La transmission entre-t-elle dans <code>history</code> (comme <code>recordSent</code>) pour que les cartes survivent au redémarrage, ou le fil les déduit-il du journal de la tâche ?</li>
+  <li>Couleur : violet <code>--task</code>, nouveau jeton, ou la couleur du projet ? Le violet évite les couleurs d’état (bleu, rouge, ambre, vert).</li>
+  <li>Le drapeau violet « pas encore prise » sur la fiche de la table : utile, ou une marque de trop ?</li>
+  <li>« Convertir un message en tâche » : hors de cette maquette ; une issue à part ?</li></ol></div>`;
+
+// ---- Chrome ----
+const CASE_KEYS = { atelier: Object.keys(CASES), fil: Object.keys(THREADS) };
+function seg(key, opts) { return `<span class="seg">${opts.map(([v, l]) => `<button type="button" data-k="${key}" data-v="${v}" aria-pressed="${st[key] === v}">${l}</button>`).join('')}</span>`; }
+function bar() {
+  let h = `<span class="brand">Ledge.<small>#92 · transmission d’une tâche</small></span>
+    <span class="field">Vue ${seg('vue', [['atelier', 'Atelier'], ['fil', 'Fil de session'], ['tui', 'TUI']])}</span>`;
+  if (st.vue === 'atelier') h += `<span class="field">Cas ${seg('cas', Object.entries(CASES).map(([k, c]) => [k, c.label]))}</span>
+    <span class="field">Animation ${seg('anim', [['play', 'Animée'], ['freeze', 'Arrêt sur image'], ['still', 'Figée / réduite']])}</span><button class="replay" type="button" id="replay">${ic('replay', 12)}Rejouer</button>`;
+  if (st.vue === 'fil') h += `<span class="field">Fil ${seg('fil', Object.entries(THREADS).map(([k, v]) => [k, k === 'open' ? 'Tâche ouverte' : `Chez ${v.who}`]))}</span>
+    <span class="field">Cartes ${seg('plie', [['0', 'Dépliées'], ['1', 'Repliées']])}</span>`;
+  if (st.vue === 'tui') h += `<span class="field">Terminal ${seg('largeur', [['120', '120 colonnes'], ['160', '160 colonnes']])}</span>`;
+  h += `<span class="field">Thème ${seg('theme', [['dark', 'Sombre'], ['light', 'Clair']])}</span>`;
+  return h;
+}
+let loop;
+function render() {
+  document.documentElement.dataset.theme = st.theme;
+  document.getElementById('bar').innerHTML = bar();
+  document.getElementById('view').innerHTML = st.vue === 'fil' ? fil() : st.vue === 'tui' ? tui() : atelier();
+  document.getElementById('notes').innerHTML = NOTES[st.vue] + OPEN;
+  fitFloor();
+  clearInterval(loop);
+  if (st.vue === 'atelier' && st.anim === 'play') loop = setInterval(replay, 6000);
+  save();
+}
+function replay() { const f = document.getElementById('floor'); if (!f) return; const n = f.cloneNode(true); f.replaceWith(n); fitFloor(); }
+function fitFloor() {
+  const w = document.querySelector('.floor-wrap'); if (!w) return;
+  const f = w.firstElementChild, k = Math.min(1, w.clientWidth / 1000);
+  f.style.transform = k < 1 ? `scale(${k})` : ''; f.classList.add('fit'); w.style.height = 660 * k + 'px';
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-k]');
+  if (b) { st[b.dataset.k] = b.dataset.v; render(); return; }
+  if (e.target.closest('#replay')) replay();
+});
+document.addEventListener('mouseover', e => { const b = e.target.closest('.tx-bubble'); if (b) lightSeats(true); });
+document.addEventListener('mouseout', e => { const b = e.target.closest('.tx-bubble'); if (b) lightSeats(false); });
+function lightSeats(on) {
+  const c = CASES[st.cas]; for (const s of document.querySelectorAll('.seat')) if ([c.from, c.to].includes(s.querySelector('strong').textContent)) s.classList.toggle('lit', on);
+}
+addEventListener('resize', fitFloor);
+addEventListener('hashchange', () => { Object.assign(st, DEF, Object.fromEntries(new URLSearchParams(location.hash.slice(1)))); render(); });
+render();
+</script>
+</body>
+</html>
