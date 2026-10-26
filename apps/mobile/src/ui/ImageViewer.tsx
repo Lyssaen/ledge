@@ -67,9 +67,11 @@ export function ImageViewer({ store, refs, index, onIndex, onClose }: { store: M
   };
 
   const share = () => { if (file) void navigator.share({ files: [file] }).catch(() => undefined); };
+  // The gesture container captures the pointer: the buttons must not start a gesture of its own.
+  const stop = (e: React.PointerEvent) => e.stopPropagation();
   const button = 'inline-flex min-h-11 items-center rounded-full bg-white/15 px-4 text-[13px] font-medium text-white';
   const nav = (to: number, label: string, side: string, d: string) => to >= 0 && to < refs.length && (
-    <button type="button" aria-label={label} title={label} onClick={() => onIndex(to)} className={`absolute top-1/2 ${side} grid size-11 -translate-y-1/2 place-items-center rounded-full bg-white/15 text-white`}>
+    <button type="button" aria-label={label} title={label} onPointerDown={stop} onClick={() => onIndex(to)} className={`absolute top-1/2 ${side} grid size-11 -translate-y-1/2 place-items-center rounded-full bg-white/15 text-white`}>
       <svg className="size-5 fill-none stroke-current [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:1.6]" viewBox="0 0 24 24" aria-hidden="true"><path d={d} /></svg>
     </button>
   );
@@ -78,9 +80,9 @@ export function ImageViewer({ store, refs, index, onIndex, onClose }: { store: M
     <div role="dialog" aria-modal="true" aria-label={C.view} className="fixed inset-0 z-50 flex flex-col bg-black/90 text-white" style={{ opacity: drag ? Math.max(0.4, 1 - Math.abs(drag) / 400) : 1 }}>
       <div className="flex items-center gap-2 px-3 py-2.5">
         <span className="min-w-0 flex-1 text-xs text-white/70">{shown.width}×{shown.height}{refs.length > 1 ? ` · ${index + 1}/${refs.length}` : ''}</span>
-        {file && <button type="button" onClick={share} className={button}>{C.share}</button>}
-        {url && <a href={url} download={name} className={button}>{C.save}</a>}
-        <button type="button" aria-label={C.close} title={C.close} onClick={onClose} className="grid size-11 place-items-center rounded-full bg-white/15">
+        {file && <button type="button" onPointerDown={stop} onClick={share} className={button}>{C.share}</button>}
+        {url && <a href={url} download={name} onPointerDown={stop} className={button}>{C.save}</a>}
+        <button type="button" aria-label={C.close} title={C.close} onPointerDown={stop} onClick={onClose} className="grid size-11 place-items-center rounded-full bg-white/15">
           <svg className="size-5 fill-none stroke-current [stroke-linecap:round] [stroke-width:1.8]" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
         </button>
       </div>

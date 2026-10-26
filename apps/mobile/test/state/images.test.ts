@@ -93,3 +93,49 @@ describe('imageUrl', () => {
     expect(t.of('attachment.get')).toHaveLength(3);
   });
 });
+
+describe('the put queue under failure', () => {
+  it('after a timeout the next put goes, and a late answer for the first does not settle it', async () => {
+    vi.useFakeTimers();
+    const t = setup();
+    const first = t.store.putImage(upload).catch((e: Error) => e.message);
+    let secondDone: AttachmentRef | undefined;
+    void t.store.putImage(upload).then(r => { secondDone = r; });
+    await vi.advanceTimersByTimeAsync(30_000);
+    await expect(first).resolves.toBe('timeout');
+    expect(t.of('attachment.put')).toHaveLength(2);
+    t.deliver({ type: 'attachment.stored', requestId: t.of('attachment.put')[0]!.requestId, ref: ref('a') });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(secondDone).toBeUndefined();
+    t.deliver({ type: 'attachment.stored', requestId: t.of('attachment.put')[1]!.requestId, ref: ref('b') });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(secondDone).toEqual(ref('b'));
+  });
+
+  it('a lost link fails what is in flight and what waits with offline', async () => {
+    const t = setup();
+    const a = t.store.putImage(upload).catch((e: Error) => e.message);
+    const b = t.store.putImage(upload).catch((e: Error) => e.message);
+    await tick();
+    t.set('pc_offline');
+    await expect(a).resolves.toBe('offline');
+    await expect(b).resolves.toBe('offline');
+  });
+});
+
+describe('object URLs', () => {
+  it('are revoked when the store closes', async () => {
+    const create = vi.fn(() => 'blob:one'); const revoke = vi.fn();
+    Object.assign(URL, { createObjectURL: create, revokeObjectURL: revoke });
+    try {
+      const t = setup();
+      const p = t.store.imageUrl(ID('a'), true);
+      await tick();
+      const g = t.of('attachment.get')[0]!;
+      t.deliver({ type: 'attachment.data', requestId: g.requestId, attachment: g.attachment, mime: 'image/webp', data: 'AAAA' });
+      await p;
+      t.store.close();
+      expect(revoke).toHaveBeenCalledWith('blob:one');
+    } finally { delete (URL as Partial<typeof URL>).createObjectURL; delete (URL as Partial<typeof URL>).revokeObjectURL; }
+  });
+});

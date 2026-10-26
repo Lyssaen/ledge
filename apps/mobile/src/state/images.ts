@@ -74,6 +74,7 @@ function objectUrl(mime: ImageMime, data: string): string {
 export function createImages(send: (m: PhoneClientMessage) => boolean): Images {
   const known = new Map<string, AttachmentRef>();
   const urls = new Map<string, Promise<string>>();
+  const made = new Set<string>();
   const puts = createQueue<AttachmentRef>(send, 'put');
   const gets = createQueue<{ mime: ImageMime; data: string }>(send, 'get');
   return {
@@ -92,7 +93,7 @@ export function createImages(send: (m: PhoneClientMessage) => boolean): Images {
       const p = new Promise<string>((resolve, reject) => gets.add({
         build: requestId => ({ type: 'attachment.get', requestId, attachment: id, ...(preview ? { preview: true } : {}) }),
         pick: m => m.type === 'attachment.data' ? { mime: m.mime, data: m.data } : undefined,
-        resolve: d => resolve(objectUrl(d.mime, d.data)),
+        resolve: d => { const u = objectUrl(d.mime, d.data); made.add(u); resolve(u); },
         reject
       }));
       urls.set(key, p);
@@ -102,6 +103,10 @@ export function createImages(send: (m: PhoneClientMessage) => boolean): Images {
     knownImage: id => known.get(id),
     handle: m => (m.type === 'attachment.stored' || m.type === 'attachment.data' || m.type === 'attachment.error') && (puts.handle(m) || gets.handle(m)),
     lost() { puts.fail('offline'); gets.fail('offline'); },
-    close() { puts.fail('offline'); gets.fail('offline'); }
+    close() {
+      puts.fail('offline'); gets.fail('offline');
+      for (const u of made) if (u.startsWith('blob:')) try { URL.revokeObjectURL(u); } catch { /* already gone */ }
+      made.clear(); urls.clear();
+    }
   };
 }

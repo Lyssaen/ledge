@@ -97,6 +97,23 @@ describe('attaching to a reply', () => {
   });
 });
 
+describe('a reply the PC refuses', () => {
+  it('brings the chip back, and a retry sends the same attachment id', async () => {
+    const t = opened();
+    fireEvent.change(fileInput(), { target: { files: [png()] } });
+    await stored(t, 1);
+    await waitFor(() => expect(send()).toBeEnabled());
+    fireEvent.click(send());
+    expect(chips()).toHaveLength(0);
+    act(() => t.deliver({ type: 'operation.result', op: t.of('session.reply')[0]!.op, status: 'rejected', reason: 'busy' }));
+    await waitFor(() => expect(chips()).toHaveLength(1));
+    expect(chips()[0]).toHaveAttribute('data-chip', 'ready');
+    await waitFor(() => expect(send()).toBeEnabled());
+    fireEvent.click(send());
+    expect(t.of('session.reply')[1]).toMatchObject({ text: '', attachments: [ID] });
+  });
+});
+
 describe('an image in the thread', () => {
   const prompt = (images: AttachmentRef[]) => ({ kind: 'prompt', id: 'p1', at: '2026-10-14T10:00:00.000Z', turn: 1, text: '', images });
 

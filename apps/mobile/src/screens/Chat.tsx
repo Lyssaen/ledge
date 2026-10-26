@@ -45,13 +45,16 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
   // A PC that knows teams: Ledge is the operator, and the thread opens on « Le point » (ledge home spec §2.4).
   const teams = state.teams;
 
+  const takenAtSend = useRef<ReturnType<typeof images.clear>>([]);
   useEffect(() => {
     const e = chat.error;
     if (e?.text === undefined) return;
     // Not a newer draft's loss: the question only comes back into an empty field.
     setText(prev => prev || e.text!);
+    if (takenAtSend.current.length) { images.putBack(takenAtSend.current); takenAtSend.current = []; }
     setRefused(e.code === 'busy' ? copy.chat.busy : e.code === 'offline' ? copy.chat.offline : copy.chat.failed);
     store.clearChatError();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chat.error, store]);
   useEffect(() => { end.current?.scrollIntoView?.({ block: 'end' }); }, [chat.turns.length, chat.live?.text, chat.live?.steps.length]);
 
@@ -60,7 +63,8 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
     if ((!q && images.items.length === 0) || running || offline || !images.ready) return;
     setRefused(null);
     const ids = images.ids();
-    images.clear();
+    const taken = images.clear();
+    takenAtSend.current = taken;
     store.ask(q, ids);
     setText('');
   };

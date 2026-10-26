@@ -183,6 +183,21 @@ describe('images in the chat', () => {
     } finally { setCodecForTests(null); }
   });
 
+  it('a refused question (busy) brings the chip back', async () => {
+    setCodecForTests({ async decode() { return { width: 800, height: 600, async draw() { return { async encode(mime: 'image/webp' | 'image/jpeg') { return new Blob([new Uint8Array(1000)], { type: mime }); } }; } }; } });
+    try {
+      const t = chatSetup();
+      fireEvent.change(document.querySelector<HTMLInputElement>('input[type=file]')!, { target: { files: [new File([new Uint8Array(10)], 'a.png', { type: 'image/png' })] } });
+      await waitFor(() => expect(t.of('attachment.put')).toHaveLength(1));
+      act(() => t.deliver({ type: 'attachment.stored', requestId: t.of('attachment.put')[0]!.requestId, ref: REF }));
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Envoyer la question' })).toBeEnabled());
+      send();
+      expect(document.querySelectorAll('[data-chip]')).toHaveLength(0);
+      act(() => t.deliver(chat.error(t.of('chat.ask')[0]!.qid, 'busy')));
+      await waitFor(() => expect(document.querySelectorAll('[data-chip]')).toHaveLength(1));
+    } finally { setCodecForTests(null); }
+  });
+
   it('a turn the PC lists with images shows them', async () => {
     const t = chatSetup();
     act(() => t.deliver(chat.history(chat.turn('q1', { question: 'Regarde', answer: 'Vu.', attachments: [REF] }))));

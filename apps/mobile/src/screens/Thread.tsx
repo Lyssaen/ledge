@@ -86,6 +86,15 @@ export function Thread({ store, sessionId, storage, onReconnect }: { store: Mobi
   const [refused, setRefused] = useState(false);
   // Chips are not persisted: only the draft text is.
   const images = useAttachments(store);
+  // What a send took out of the field, by op id: it comes back if the PC does not take the reply.
+  const takenAtSend = useRef(new Map<string, ReturnType<typeof images.clear>>());
+  useEffect(() => {
+    for (const [op, taken] of takenAtSend.current) {
+      const phase = ops[op]?.phase;
+      if (phase === 'applied') takenAtSend.current.delete(op);
+      else if (phase === 'rejected' || phase === 'failed' || phase === 'uncertain') { takenAtSend.current.delete(op); images.putBack(taken); }
+    }
+  });
   const changeDraft = (t: string) => { setDraft(t); saveDraft(sessionId, t, storage); setRefused(false); };
 
   // The thread is asked once on open; the store asks it again after every reconnection.
@@ -151,6 +160,7 @@ export function Thread({ store, sessionId, storage, onReconnect }: { store: Mobi
     const taken = images.clear();
     const sent = store.reply(sessionId, text, ids.length ? { attachments: ids } : {});
     if (!sent && taken.length) images.putBack(taken);
+    else if (sent && taken.length) takenAtSend.current.set(sent, taken);
     setRefused(!sent);
   };
   const ready = thread?.status === 'ready';
