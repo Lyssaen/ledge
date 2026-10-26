@@ -9,6 +9,7 @@ import { startServer } from '../src/daemon/server.js';
 import { connect, type Client } from '../src/client.js';
 import type { Tmux } from '../src/tmux.js';
 import { runGuard } from '../src/daemon/actions.js';
+import { until } from './helpers.js';
 
 // `action.run` (#93): a registry action outside the chat, resolved and applied as a generic card's row.
 function fakeTmux(): Tmux {
@@ -59,7 +60,7 @@ describe('action.run', () => {
     const t = await team();
     const lead = t.seats[0]!.sessionId!;
     expect(await run('team.dissolve', { team: 'api' })).toMatchObject({ code: 'confirm_required', row: { args: { team: t.id }, risk: 'destructive' } });
-    expect(await run('team.dissolve', { team: 'api' }, { by: lead, confirmed: true })).toMatchObject({ code: 'agent', reason: expect.stringContaining('utilisateur') });
+    expect(await run('team.dissolve', { team: 'api' }, { by: lead, confirmed: true })).toMatchObject({ code: 'agent', reason: expect.stringContaining('@leader') });
     const done = await run('team.dissolve', { team: t.id }, { confirmed: true });
     expect(done.reason).toBeUndefined();
     expect(await run('team.resume', { team: t.id })).toMatchObject({ code: 'refused', reason: 'team api is dissolved' });
@@ -78,24 +79,70 @@ describe('action.run', () => {
     expect(existsSync(r.path!)).toBe(true);
   });
 
-  it('session.close closes a session cleanly; a session never closes itself', async () => {
-    const t = await team();
+  it('session.close: the @leader closes a session of its team; a session closes itself, answered before its close', async () => {
+    role('leader');
+    c.send({ type: 'team.launch', rid: 'launch', cwd: work, name: 'api', seats: [{ role: 'leader' }, { role: 'build' }] });
+    const t = (await c.next('team.launched', 5000)).team;
     const [lead, build] = t.seats.map(s => s.sessionId!);
-    expect(await run('session.close', { session: lead! }, { by: lead! })).toMatchObject({ code: 'refused', reason: expect.stringContaining('itself') });
     const r = await run('session.close', { session: store.get(build!)!.name }, { by: lead! });
     expect(r).toMatchObject({ row: { action: 'session.close', args: { session: build }, risk: 'reversible' } });
     expect(r.reason).toBeUndefined();
     expect(store.get(build!)!.state).toBe('exited');
+    const self = await run('session.close', { session: lead! }, { by: lead! });
+    expect(self.reason).toBeUndefined();
+    await until(() => store.get(lead!)!.state === 'exited');
+  });
+
+  it('refuses an agent what the rule does not give it, with the reason', async () => {
+    const t = await team();
+    const [lead, build] = t.seats.map(s => s.sessionId!);
+    expect(await run('session.close', { session: build! }, { by: lead! })).toMatchObject({ code: 'agent', reason: expect.stringContaining('utilisateur') });
+    expect(store.get(build!)!.state).not.toBe('exited');
   });
 });
 
-describe('runGuard (#93 (a), until the user decides: the strictest)', () => {
-  const ctx = { sessions: [], teams: [], tasks: [], findRole: () => undefined };
-  const dissolve = { action: 'team.dissolve' as const, args: { team: 'team-3fa2' }, summary: 'Dissoudre', risk: 'destructive' as const, team: 'team-3fa2' };
-  const close = { action: 'session.close' as const, args: { session: 's2' }, summary: 'Fermer', risk: 'reversible' as const, session: 's2' };
-  it('lets the user run anything; a session closes, joins, leaves, but never runs a destructive action', () => {
-    expect(runGuard(dissolve, undefined, ctx)).toBeNull();
-    expect(runGuard(close, 's1', ctx)).toBeNull();
-    expect(runGuard(dissolve, 's1', ctx)).toMatch(/utilisateur/);
+describe('runGuard (#93 (a), decided by the user on 2026-10-26: option 4)', () => {
+  const T0 = '2026-10-26T10:00:00.000Z';
+  const team = (id: string, seats: Array<[string, string]>, state: 'active' | 'dissolved' = 'active') =>
+    ({ id, name: id, project: null, machine: 'local', cwd: '/w', state, seats: seats.map(([role, sessionId]) => ({ role, sessionId })), createdAt: T0, updatedAt: T0 });
+  // `lead` leads team-a1 (ann, bob); `cid` sits in team-b2 (dan); `eve` is in no team.
+  const ctx = { sessions: [], tasks: [], findRole: () => undefined, teams: [
+    team('team-a1', [['leader', 'lead'], ['dev-back', 'ann'], ['dev-front', 'bob']]),
+    team('team-b2', [['leader', 'dan'], ['dev-back', 'cid']]),
+    team('team-c3', [['leader', 'lead'], ['dev-back', 'gus']], 'dissolved')
+  ] };
+  const dissolve = (t: string) => ({ action: 'team.dissolve' as const, args: { team: t }, summary: 'Dissoudre', risk: 'destructive' as const, team: t });
+  const leave = (t: string, s: string) => ({ action: 'team.leave' as const, args: { team: t, session: s }, summary: 'Retirer', risk: 'reversible' as const, team: t, session: s });
+  const close = (s: string) => ({ action: 'session.close' as const, args: { session: s }, summary: 'Fermer', risk: 'reversible' as const, session: s });
+  const cancel = { action: 'task.cancel' as const, args: { task: 't123456' }, summary: 'Annuler', risk: 'destructive' as const };
+  const cancelIn = (t: string) => ({ ...cancel, team: t });
+  const resume = { action: 'team.resume' as const, args: { team: 'team-a1' }, summary: 'Reprendre', risk: 'reversible' as const, team: 'team-a1' };
+
+  it('lets the user run anything', () => {
+    for (const row of [dissolve('team-a1'), leave('team-b2', 'cid'), close('eve'), cancel, resume]) expect(runGuard(row, undefined, ctx)).toBeNull();
+  });
+  it('lets a team\'s @leader dissolve it, take a member out of it and close one of its sessions', () => {
+    expect(runGuard(dissolve('team-a1'), 'lead', ctx)).toBeNull();
+    expect(runGuard(leave('team-a1', 'ann'), 'lead', ctx)).toBeNull();
+    expect(runGuard(close('bob'), 'lead', ctx)).toBeNull();
+    expect(runGuard(cancelIn('team-a1'), 'lead', ctx)).toBeNull();
+  });
+  it('never on another team, nor on a team it led that is dissolved', () => {
+    expect(runGuard(dissolve('team-b2'), 'lead', ctx)).toMatch(/@leader/);
+    expect(runGuard(leave('team-b2', 'cid'), 'lead', ctx)).toMatch(/@leader/);
+    expect(runGuard(close('cid'), 'lead', ctx)).toMatch(/@leader/);
+    expect(runGuard(close('gus'), 'lead', ctx)).toMatch(/@leader/);
+    expect(runGuard(cancelIn('team-b2'), 'lead', ctx)).toMatch(/@leader/);
+    expect(runGuard(cancelIn('team-c3'), 'lead', ctx)).toMatch(/@leader/);
+  });
+  it('lets any session close itself and leave its team, and nothing else', () => {
+    expect(runGuard(close('eve'), 'eve', ctx)).toBeNull();
+    expect(runGuard(leave('team-a1', 'ann'), 'ann', ctx)).toBeNull();
+    expect(runGuard(close('bob'), 'ann', ctx)).toMatch(/utilisateur/);
+    expect(runGuard(leave('team-a1', 'bob'), 'ann', ctx)).toMatch(/utilisateur/);
+    expect(runGuard(dissolve('team-a1'), 'ann', ctx)).toMatch(/utilisateur/);
+    expect(runGuard(cancel, 'lead', ctx)).toMatch(/utilisateur/);
+    expect(runGuard(cancelIn('team-a1'), 'ann', ctx)).toMatch(/utilisateur/);
+    expect(runGuard(resume, 'lead', ctx)).toMatch(/utilisateur/);
   });
 });

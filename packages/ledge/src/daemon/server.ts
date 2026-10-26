@@ -768,11 +768,18 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     const parsed = actionById(msg.action)!.args.safeParse(msg.args);
     if (!parsed.success) return answer({ reason: `invalid args: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'} ${i.message}`).join('; ')}`, code: 'refused' });
     const ctx = { sessions: store.all(), teams: teams.all(), tasks: tasks.all(), findRole, templateExists: (name: string) => templateExists(name) };
-    const r: Resolved = resolveRun(msg.action, parsed.data, ctx, msg.by);
+    const r: Resolved = resolveRun(msg.action, parsed.data, ctx);
     if ('refused' in r) return answer({ reason: r.refused, code: 'refused' });
     const guard = runGuard(r, msg.by, ctx);
     if (guard) return answer({ row: r, reason: guard, code: 'agent' });
     if (r.risk === 'destructive' && !msg.confirmed) return answer({ row: r, reason: 'destructive: confirm it', code: 'confirm_required' });
+    // A session closing itself is answered first: its command would wait on its own close, and the close on its prompt.
+    const self = msg.by;
+    if (r.action === 'session.close' && self !== undefined && r.session === self) {
+      answer({ row: r });
+      closeForCard(self).catch(e => log(`self close of ${self} failed: ${(e as Error).message}`));
+      return;
+    }
     if (r.action === 'session.close') {
       const failure = await closeForCard(String(r.args.session)).then(() => undefined, e => (e as Error).message);
       return answer({ row: r, ...(failure !== undefined ? { reason: failure, code: 'failed' } : {}) });

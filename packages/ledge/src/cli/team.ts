@@ -13,7 +13,8 @@ ledge team leave <équipe> <session>                         faire sortir une se
 ledge team resume <équipe>                                  reprendre une équipe au repos
 ledge team dissolve <équipe> [--close-sessions] --yes       dissoudre une équipe (irréversible) ; ses sessions restent, ou se ferment
 ledge team save <équipe> <nom>                              enregistrer une équipe en cours comme modèle
---json : une ligne JSON, pour un agent ou un script. Une session agent ne lance pas d'action irréversible.`;
+--json : une ligne JSON, pour un agent ou un script. Une session agent peut se fermer et quitter son équipe ;
+l'@leader d'une équipe peut aussi la dissoudre, en retirer un membre ou en fermer une session. Le reste revient à l'utilisateur.`;
 /** A team's seats start one after the other: the launch may take a while. */
 const UP_MS = 60_000;
 

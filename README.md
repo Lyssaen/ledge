@@ -263,8 +263,8 @@ What the Desktop does to a team, an agent or a script does with `ledge team` (co
 - **List.** `ledge team list [--cwd <folder>]`: the templates, the roles and the live teams, each seat with the session that holds it.
 - **Change.** `join <team> <session> <@role>` seats a running session, `leave <team> <session>` frees its seat (the session goes on), `resume <team>` brings a resting team back, `save <team> <name>` writes the live team as `~/.ledge/teams/<name>.yaml`. A team is its id or its name, a session its id or its bot name.
 - **Dissolve.** `dissolve <team> --yes [--close-sessions]` cannot be undone: without `--yes` Ledge only says what it would do. `--close-sessions` then closes each live seat cleanly.
-- **Close.** `ledge close <session>…` closes sessions as their user would (their conversation stays resumable), one after the other. A session never closes itself.
-- **Agents.** `--json` prints one JSON line (`ok`, the resolved row, `reason`, `code`). Run from a session (`LEDGE_SESSION`), a command that cannot be undone is refused: the agent asks the user. This is a guard against an agent's mistake, not a security boundary.
+- **Close.** `ledge close <session>…` closes sessions as their user would (their conversation stays resumable), one after the other.
+- **Agents.** `--json` prints one JSON line (`ok`, the resolved row, `reason`, `code`). Run from a session (`LEDGE_SESSION`), a command is allowed only when it closes that session or takes it out of its team, or when the session holds the `@leader` seat of the team it touches (dissolve it, take a member out, close one of its sessions, cancel one of its tasks through `action.run`). Anything else is refused, and the agent asks the user. The rule is `runGuard` in `daemon/actions.ts`; it guards against an agent's mistake, it is not a security boundary.
 
 ## Ledge in a terminal
 

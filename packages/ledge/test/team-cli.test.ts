@@ -90,15 +90,17 @@ describe('ledge team and ledge close against a daemon', () => {
     expect(store.get(build)!.state).toBe('exited');
   });
 
-  it('ledge close by a session closes another one, never itself, and says so in JSON', async () => {
-    await runTeam(['up', '--seat', 'lead', '--seat', 'build', '--name', 'api'], user());
-    const [lead, build] = store.all().map(s => s.id) as [string, string];
-    const env = { LEDGE_SESSION: lead };
-    expect(await runClose([store.get(lead)!.name], { port: srv.port, env })).toMatchObject({ code: 1, line: expect.stringContaining('cannot close itself') });
-    const r = await runClose([store.get(build)!.name, '--json'], { port: srv.port, env });
+  it('ledge close: a session closes itself, its @leader one of its team, in JSON; anything else is refused', async () => {
+    writeFileSync(join(process.env.LEDGE_HOME!, 'roles', 'leader.md'), '---\nlabel: leader\n---\nTu mènes.\n');
+    await runTeam(['up', '--seat', 'leader', '--seat', 'build', '--name', 'api'], user());
+    const team = JSON.parse((await runTeam(['list', '--json'], user())).line).teams[0];
+    const [lead, build] = team.seats.map((s: { sessionId: string }) => s.sessionId) as [string, string];
+    expect(await runClose([store.get(lead)!.name], { port: srv.port, env: { LEDGE_SESSION: build } })).toMatchObject({ code: 1, line: expect.stringMatching(/^refusé : une session agent/) });
+    const r = await runClose([store.get(build)!.name, '--json'], { port: srv.port, env: { LEDGE_SESSION: lead } });
     expect(r.code).toBe(0);
     expect(JSON.parse(r.line)).toMatchObject({ ok: true, action: 'session.close', row: { args: { session: build } } });
     expect(store.get(build)!.state).toBe('exited');
+    expect(await runClose([lead], { port: srv.port, env: { LEDGE_SESSION: lead } })).toMatchObject({ code: 0 });
   });
 
   it('a verb with no daemon says how to start one', async () => {

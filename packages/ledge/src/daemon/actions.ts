@@ -155,26 +155,32 @@ export const GENERIC_ACTIONS = Object.keys(IMPLS) as ActionId[];
 /** The actions `action.run` takes (#93, the CLI): the generic ones, and the clean close, which the chat keeps on its close card. */
 export const RUN_ACTIONS: readonly ActionId[] = [...GENERIC_ACTIONS, 'session.close'];
 
-/**
- * An action's parsed args against the live state, for `action.run` by `by` (a session; left out for the user). A session never
- * closes itself: its command would wait on its own close, and the close on its prompt.
- */
-export function resolveRun(id: ActionId, args: unknown, ctx: ResolveCtx, by?: string): Resolved {
+/** An action's parsed args against the live state, for `action.run` (#93): who may run it is `runGuard`'s call. */
+export function resolveRun(id: ActionId, args: unknown, ctx: ResolveCtx): Resolved {
   if (!RUN_ACTIONS.includes(id)) return no('unknown', `${id} is not run from the CLI`);
   if (id !== 'session.close') return resolveAction(id, args, ctx);
-  return withSession(ctx, (args as Args).session, s => writable(s) ?? (s.id === by ? no('running', `${s.name} cannot close itself`) : null),
-    s => row('session.close', { session: s.id }, `Fermer ${b(s.name)}`, { session: s.name }, { session: s.id }));
+  return withSession(ctx, (args as Args).session, writable, s => row('session.close', { session: s.id }, `Fermer ${b(s.name)}`, { session: s.name }, { session: s.id }));
 }
 
+/** The role that leads a team: the `@leader` seat (#93 (a)). */
+export const LEADER_ROLE = 'leader';
+const AGENT_REFUSED = 'une session agent ne peut que se fermer elle-même et quitter son équipe ; l\'@leader d\'une équipe peut aussi la dissoudre, '
+  + 'en retirer un membre, en fermer une session ou en annuler une tâche. Le reste, demande-le à l\'utilisateur (il le lance lui-même, avec --yes si c\'est irréversible)';
+
 /**
- * Who may run what outside the chat (#93, point (a), the user's call): the row as resolved (action, ids, risk), the session that
- * asks (`by`, left out for the user) and the live state, so that any rule (the team's lead only, a session Ledge launched) is
- * written here and nowhere else. Until the user decides, the strictest: a session never runs a destructive action, the user
- * does; everything else (a close, a join) is allowed. Null when allowed, else the reason.
+ * Who may run what outside the chat (#93, point (a), decided by the user on 2026-10-26, option 4), from the row as resolved
+ * (action, ids, risk), the session that asks (`by`, left out for the user) and the live state; the rule lives here alone.
+ * The user runs anything. A session closes itself and leaves its team; the `@leader` of a team not dissolved dissolves it,
+ * takes a member out of it, closes one of its sessions and cancels one of its tasks; nothing else. Null when allowed, else the reason.
  */
-export function runGuard(row: ChatAction, by: string | undefined, _ctx: ResolveCtx): string | null {
-  return by !== undefined && row.risk === 'destructive'
-    ? 'une session agent ne lance pas d\'action destructive : demande-le à l\'utilisateur (il la lance lui-même avec --yes)' : null;
+export function runGuard(row: ChatAction, by: string | undefined, ctx: ResolveCtx): string | null {
+  if (by === undefined) return null;
+  if ((row.action === 'session.close' || row.action === 'team.leave') && row.session === by) return null;
+  const leads = (t: Team) => t.state !== 'dissolved' && t.seats.some(x => x.sessionId === by && x.role === LEADER_ROLE);
+  const led = ctx.teams.filter(leads);
+  if ((row.action === 'team.dissolve' || row.action === 'team.leave' || row.action === 'task.cancel') && led.some(t => t.id === row.team)) return null;
+  if (row.action === 'session.close' && led.some(t => t.seats.some(x => x.sessionId === row.session))) return null;
+  return AGENT_REFUSED;
 }
 
 /** A generic action's parsed args against the live state: a row ready to apply, or why not. */
