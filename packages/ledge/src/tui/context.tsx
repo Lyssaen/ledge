@@ -9,6 +9,10 @@ import type { Lang, Messages } from './i18n/lang.js';
 export type Screen = 'overview' | 'session' | 'ask' | 'launch' | 'settings' | 'help';
 export const SCREENS: readonly Screen[] = ['overview', 'session', 'ask', 'launch', 'settings'];
 
+/** What the fields keep while the TUI runs, a screen left or not: each one's draft and what it sent, by field (`ask`, or a
+ *  session's id). */
+export interface Kept { drafts: Map<string, string>; sent: Map<string, string[]> }
+
 /** A screen's keys: true when it took the key (the global keys then leave it alone). */
 export type KeyHandler = (input: string, key: Key) => boolean;
 
@@ -22,6 +26,7 @@ export interface Tui {
   /** A field has the keyboard: the global keys are off. */
   editing: boolean; setEditing(on: boolean): void;
   attach(s: Session): void;
+  kept: Kept;
   /** Registers the screen's key handler (see `useScreenKeys`). */
   keys: { current: KeyHandler | null };
 }

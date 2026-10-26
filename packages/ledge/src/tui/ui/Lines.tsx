@@ -17,7 +17,7 @@ function Live({ seg }: { seg: Seg & { live: NonNullable<Seg['live']> } }) {
 /** One line, its pieces in their colours, cut at the box's edge. */
 export const LineText = memo(function LineText({ line }: { line: Line }) {
   return <Text wrap="truncate">{line.map((x, k) => x.live ? <Live key={k} seg={x as Seg & { live: NonNullable<Seg['live']> }} />
-    : <Text key={k} color={x.color} bold={x.bold}>{x.text || (k === 0 ? ' ' : '')}</Text>)}{line.length === 0 ? ' ' : null}</Text>;
+    : <Text key={k} color={x.color} bold={x.bold} inverse={x.inverse}>{x.text || (k === 0 ? ' ' : '')}</Text>)}{line.length === 0 ? ' ' : null}</Text>;
 });
 
 /** Lines in a box that grows: the ones that fit, `up` lines above the bottom; the box's height goes back through `onHeight`

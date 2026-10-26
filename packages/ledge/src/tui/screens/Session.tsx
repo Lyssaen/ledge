@@ -16,7 +16,7 @@ import { choices } from '../model/pending.js';
 import { LineText, Lines } from '../ui/Lines.js';
 import { useNow } from '../ui/now.js';
 import { Tail } from '../ui/Tail.js';
-import { TextInput } from '../ui/TextInput.js';
+import { Field } from '../ui/Field.js';
 import { TitledBox } from '../ui/TitledBox.js';
 
 type Mode = 'read' | 'reply' | 'note' | 'model';
@@ -29,10 +29,13 @@ export function SessionScreen() {
 }
 
 function SessionView({ s }: { s: Session }) {
-  const { client, d, t, g, actions, attach, toast, machines } = useTui();
+  const { client, d, t, g, actions, attach, toast, machines, kept } = useTui();
   const { columns } = useWindowSize();
   const [mode, setMode] = useState<Mode>('read');
-  const [draft, setDraft] = useState('');
+  // The draft outlives the field, the screen and ctrl+c: it is kept by the TUI, by session.
+  const [draft, setDraftState] = useState(() => kept.drafts.get(s.id) ?? '');
+  const setDraft = (x: string) => { setDraftState(x); if (x) kept.drafts.set(s.id, x); else kept.drafts.delete(s.id); };
+  const [browsing, setBrowsing] = useState(false);
   const [diffs, setDiffs] = useState(false);
   const [unfolded, setUnfolded] = useState(false);
   const [terminal, setTerminal] = useState(false);
@@ -68,14 +71,17 @@ function SessionView({ s }: { s: Session }) {
     const back = (x: string) => { setDraft(x); };
     if (mode === 'note') actions.denyWithNote(s, text.trim(), back);
     else if (!actions.reply(s, text, back)) return;
+    kept.sent.set(s.id, [...(kept.sent.get(s.id) ?? []), text]);
     setDraft(''); setMode('read');
   };
+  // Out of the field, the draft stays (and says so).
+  const leave = () => { setMode('read'); setBrowsing(false); if (draft.trim()) toast({ text: t.toast.draftKept, tone: 'quiet' }); };
 
   useScreenKeys((input, key) => {
     if (mode === 'model') return true;
     if (mode !== 'read') {
       // ctrl+c leaves the field (keeping the draft) instead of quitting.
-      if (key.ctrl && input === 'c') { setMode('read'); return true; }
+      if (key.ctrl && input === 'c') { leave(); return true; }
       return false;
     }
     if (key.pageUp) { scroll(up + view - 1); return true; }
@@ -112,7 +118,8 @@ function SessionView({ s }: { s: Session }) {
   const above = lines.length - view - up;
   const foot = up > 0 ? t.session.scrolled(above, up) : lines.length > view ? t.session.above(lines.length - view) : undefined;
   const keys: Array<readonly [string, string]> = mode === 'model' ? [['↑ ↓', t.keys.choose], ['← →', t.launch.effort], ['↵', t.keys.choose], ['esc', t.keys.cancel]]
-    : mode !== 'read' ? [['↵', t.keys.send], ['esc', t.keys.back]]
+    : mode !== 'read' && browsing ? [['↵', t.keys.resend], ['↑ ↓', t.keys.history], ['esc', t.keys.backToDraft]]
+    : mode !== 'read' ? [['↵', t.keys.sendOnly], ['alt+↵', t.keys.newLine], ['esc', t.keys.keepAndLeave], ['↑ ↓', t.keys.lineHistory], ['ctrl ← →', t.keys.word], ['ctrl+u', t.keys.clear]]
     : [['esc', t.keys.back], ...(p ? [['y n A', t.keys.answer] as const] : []), ['r', t.keys.write], ['j k', t.keys.scroll], [t.keys.space, t.keys.unfold], ['d', t.keys.diffs], ['t', t.keys.terminal], ['a', t.keys.attach], ['m', t.keys.model], ['i', t.keys.interrupt]];
   return (
     <Frame crumb={`${s.repo ?? s.project}${s.branch ? ` › ${g.branch} ${s.branch}` : ''} › ${s.name} · ${machineLabel(s)}`} crumbShort={s.name} keys={keys} kept={draft !== ''}>
@@ -126,15 +133,13 @@ function SessionView({ s }: { s: Session }) {
           : <Lines lines={lines} up={up} onHeight={setView} />}
       </TitledBox>
       {p ? <PendingBox s={s} p={p} width={Math.max(20, columns - 4)} /> : null}
-      <TitledBox title={mode === 'note' ? t.overview.denyWithNote : t.keys.write} color={mode === 'read' ? C.line : C.coral}>
-        {/* The field is its own Text: inside another, the outer one's truncation would cut the end being typed. */}
-        <Box><Text color={C.coral}>{g.cursor} </Text>
-          <Box flexGrow={1} overflow="hidden">
-            <TextInput value={draft} onChange={setDraft} onSubmit={send} onEscape={() => setMode('read')} active={mode === 'reply' || mode === 'note'}
-              placeholder={mode === 'note' ? t.session.noteFor(s.name) : t.session.replyTo(s.name)} />
-          </Box>
-        </Box>
-      </TitledBox>
+      {mode === 'reply' || mode === 'note'
+        ? <Field title={mode === 'note' ? t.session.noteTitle(s.name) : t.session.replyTitle(s.name)} value={draft} onChange={setDraft} onSubmit={send} onEscape={leave}
+          onBrowse={setBrowsing} history={kept.sent.get(s.id) ?? []} active placeholder={mode === 'note' ? t.session.noteFor(s.name) : t.session.replyTo(s.name)} />
+        // Read: the draft kept, its first line dimmed; or what r does.
+        : <TitledBox title={draft ? t.session.writeDraft : t.keys.write} foot={draft ? t.session.draftLines(draft.split('\n').length) : undefined} flexShrink={0}>
+          <Text wrap="truncate"><Text color={C.coral}>{g.cursor} </Text>{draft ? <Text color={C.dim}>{draft.split('\n')[0]}</Text> : <Text color={C.faint}>{t.session.replyTo(s.name)}</Text>}</Text>
+        </TitledBox>}
     </Frame>
   );
 }

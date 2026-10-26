@@ -4,7 +4,7 @@ import { isPending, useDaemon, useMachines, useProjects, useTasks, useTeams, typ
 import type { Session } from '@ledge/protocol';
 import { useActions, type Toast } from './actions.js';
 import { attachCommand, runAttached } from './attach.js';
-import { SCREENS, TuiContext, type KeyHandler, type Screen, type Tui } from './context.js';
+import { SCREENS, TuiContext, type Kept, type KeyHandler, type Screen, type Tui } from './context.js';
 import type { Glyphs } from './glyphs.js';
 import { I18nProvider, MESSAGES, type Lang } from './i18n/lang.js';
 import { keepSelection, listed, overview } from './model/overview.js';
@@ -18,6 +18,8 @@ import { Help } from './screens/Help.js';
 
 /** How long a toast stays. */
 export const TOAST_MS = 5000;
+/** ctrl+c with a draft quits only when pressed again within this. */
+export const QUIT_MS = 2000;
 
 export interface AppProps {
   client: DaemonClient;
@@ -54,10 +56,13 @@ function Shell({ client, lang, setLang: setLangState, saveLang, notify, glyphs, 
   const [lastToast, setToast] = useState<Toast | null>(null);
   const [editing, setEditingState] = useState(false);
   const keys = useRef<KeyHandler | null>(null);
+  const kept = useRef<Kept>({ drafts: new Map(), sent: new Map() }).current;
+  // When ctrl+c was last pressed with a draft waiting.
+  const armed = useRef(0);
 
   useEffect(() => {
     if (!lastToast) return;
-    const timer = setTimeout(() => setToast(null), TOAST_MS);
+    const timer = setTimeout(() => setToast(null), lastToast.ms ?? TOAST_MS);
     return () => clearTimeout(timer);
   }, [lastToast]);
   const toast = useCallback((x: Toast) => setToast(x), []);
@@ -105,12 +110,18 @@ function Shell({ client, lang, setLang: setLangState, saveLang, notify, glyphs, 
 
   const tui: Tui = {
     client, fleet, d, machines, projects, t, lang, setLang, g: glyphs, screen, go, selected, select: setSelectedId,
-    toast, lastToast, actions, editing, setEditing, attach, keys
+    toast, lastToast, actions, editing, setEditing, attach, keys, kept
   };
 
   useInput((input, key) => {
     if (key.ctrl && input === 'c') {
       if (keys.current?.(input, key)) return;
+      // A draft is not lost by reflex: the first ctrl+c says so, a second one within 2 s quits.
+      if ([...kept.drafts.values()].some(x => x.trim()) && Date.now() - armed.current > QUIT_MS) {
+        armed.current = Date.now();
+        toast({ text: t.toast.draftQuit, tone: 'info', ms: QUIT_MS });
+        return;
+      }
       exit(); return;
     }
     if (editing) return;

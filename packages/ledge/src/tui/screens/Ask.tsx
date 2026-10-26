@@ -7,26 +7,31 @@ import { useEditing, useScreenKeys, useTui } from '../context.js';
 import { chatLines, openCards, type Card } from '../model/chat.js';
 import { TOOL_NAME } from '../model/labels.js';
 import { listed } from '../model/overview.js';
-import { oneLine } from '../model/time.js';
+import { clock, oneLine } from '../model/time.js';
 import { C } from '../theme.js';
 import { Frame } from '../ui/Frame.js';
 import { Button } from '../ui/SessionCard.js';
 import { Lines } from '../ui/Lines.js';
 import { useThrottled } from '../ui/throttle.js';
-import { TextInput } from '../ui/TextInput.js';
+import { Field } from '../ui/Field.js';
 import { TitledBox } from '../ui/TitledBox.js';
 
 /** A card's send is done when its turn changes, an error comes without a session id, or after this long. */
 const CARD_MS = 20_000;
 
 export function Ask() {
-  const { client, d, machines, t, g, toast, go } = useTui();
+  const { client, d, machines, t, g, toast, go, kept } = useTui();
   const { columns } = useWindowSize();
-  const [draft, setDraft] = useState('');
+  // Kept by the TUI: ctrl+c and another screen leave it as it is.
+  const [draft, setDraftState] = useState(() => kept.drafts.get('ask') ?? '');
+  const setDraft = (x: string) => { setDraftState(x); if (x) kept.drafts.set('ask', x); else kept.drafts.delete('ask'); };
+  const [browsing, setBrowsing] = useState(false);
+  // ctrl+n asks first: « Garder » by default.
+  const [confirm, setConfirm] = useState(false);
   // -1: the question field; otherwise the index of the focused card.
   const [focus, setFocus] = useState(-1);
   const [busy, setBusy] = useState<{ qid: string; turn: ChatTurn | undefined; errorSeq: number; at: number } | null>(null);
-  useEditing(focus === -1);
+  useEditing(focus === -1 && !confirm);
 
   const cards = useMemo(() => openCards(d.chat), [d.chat]);
   useEffect(() => { if (focus >= cards.length) setFocus(cards.length ? cards.length - 1 : -1); }, [cards.length, focus]);
@@ -47,6 +52,7 @@ export function Ask() {
     const qid = `q-${randomUUID()}`;
     daemonStore.beginTurn({ qid, question: text.trim(), askedAt: new Date().toISOString(), steps: [] });
     client.send({ type: 'chat.ask', qid, text: text.trim() });
+    kept.sent.set('ask', [...(kept.sent.get('ask') ?? []), text.trim()]);
     setDraft('');
   };
   const act = (card: Card) => {
@@ -70,17 +76,25 @@ export function Ask() {
     else client.send({ type: 'session.close', qid: card.qid, rows: card.rows });
   };
 
-  // ctrl+c stops the answer being written; ctrl+n starts a new conversation; tab goes from the field to the cards and back.
-  const latest = useRef({ asking, cards, focus });
-  latest.current = { asking, cards, focus };
+  // ctrl+c stops the answer being written; ctrl+n starts a new conversation (once confirmed, when there is one); tab goes
+  // from the field to the cards and back.
+  const latest = useRef({ asking, cards, focus, confirm, turns: d.chat.length });
+  latest.current = { asking, cards, focus, confirm, turns: d.chat.length };
   useInput((input, key) => {
-    if (key.ctrl && input === 'n') { client.send({ type: 'chat.reset' }); return; }
+    if (latest.current.confirm) return;
+    if (key.ctrl && input === 'n') { if (latest.current.turns === 0) client.send({ type: 'chat.reset' }); else setConfirm(true); return; }
     if (key.tab) { const n = latest.current.cards.length; setFocus(f => (n === 0 ? -1 : f + 1 >= n ? -1 : f + 1)); }
   });
   useScreenKeys((input, key) => {
     if (key.ctrl && input === 'c') {
       if (latest.current.asking) { client.send({ type: 'chat.cancel', qid: latest.current.asking.qid }); return true; }
       return false;
+    }
+    // The confirmation has the keys: y clears, n or esc keeps; nothing else goes through.
+    if (confirm) {
+      if (input === 'y') { client.send({ type: 'chat.reset' }); setConfirm(false); }
+      else if (input === 'n' || key.escape) setConfirm(false);
+      return true;
     }
     if (focus < 0) return false;
     if (key.return) { act(cards[focus]!); return true; }
@@ -99,20 +113,24 @@ export function Ask() {
   // The streamed answer comes a few words at a time: drawn at most each 100 ms.
   const live = useThrottled(d.chatLive, 100);
   const lines = useMemo(() => chatLines(d.chat, live, { t, g, width }), [d.chat, live, t, g, width]);
+  const keys: Array<readonly [string, string]> = confirm ? [['n esc', t.keys.keep], ['y', t.keys.wipe]]
+    : focus === -1 && browsing ? [['↵', t.keys.resend], ['↑ ↓', t.keys.history], ['esc', t.keys.backToDraft]]
+    : focus === -1 ? [['↵', t.keys.sendOnly], ['alt+↵', t.keys.newLine], ['esc', t.keys.back], ['↑ ↓', t.keys.history], ['tab', t.keys.nextCard], ['ctrl+n', t.keys.newChat], ['ctrl+c', t.keys.stopAnswer]]
+    : [['↵', t.keys.send], ['tab', t.keys.nextCard], ['s', t.keys.save], ['ctrl+n', t.keys.newChat], ['ctrl+c', t.keys.stopAnswer], ['esc', t.keys.back]];
   return (
-    <Frame crumb={`${t.tabs.ask}`} keys={[['↵', t.keys.send], ['tab', t.keys.nextCard], ['s', t.keys.save], ['ctrl+n', t.keys.newChat], ['ctrl+c', t.keys.stopAnswer], ['esc', t.keys.back]]}>
+    <Frame crumb={`${t.tabs.ask}`} keys={keys} kept={draft !== ''}>
       <TitledBox title={t.ask.operator(sessions, Math.max(1, machines.length))} flexGrow={1}>
         {lines.length === 0 ? <Text color={C.faint}>{t.ask.empty}</Text>
           : <Lines lines={lines} />}
       </TitledBox>
       {cards.slice(0, 2).map((c, i) => <CardBox key={`${c.kind}:${c.qid}`} card={c} turn={d.chat.find(x => x.qid === c.qid)!} focused={i === focus} busy={busy?.qid === c.qid} />)}
-      <TitledBox title={t.ask.question} flexShrink={0} color={focus === -1 ? C.coral : C.line}>
-        <Box><Text color={C.coral}>{g.cursor} </Text>
-          <Box flexGrow={1} overflow="hidden">
-            <TextInput value={draft} onChange={setDraft} onSubmit={ask} onEscape={() => { if (!draft) go('overview'); }} active={focus === -1} />
-          </Box>
-        </Box>
-      </TitledBox>
+      {confirm
+        ? <TitledBox title={t.ask.resetTitle} color={C.red} titleColor={C.red} flexShrink={0}>
+          <Text color={C.fg}>{t.ask.resetBody(d.chat.length, d.chat[0] ? clock(d.chat[0].askedAt) : '')}{draft.trim() ? ` ${t.ask.draftStays}` : ''}</Text>
+          <Box marginTop={1} columnGap={2}><Button label={t.ask.keep} k="n · esc" primary /><Button label={t.ask.wipe} k="y" /></Box>
+        </TitledBox>
+        : <Field title={t.ask.question} value={draft} onChange={setDraft} onSubmit={ask} onEscape={() => { if (!draft) go('overview'); }} onBrowse={setBrowsing}
+          history={kept.sent.get('ask') ?? []} active={focus === -1} placeholder={t.ask.placeholder} />}
     </Frame>
   );
 }

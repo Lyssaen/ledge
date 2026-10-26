@@ -191,6 +191,203 @@ describe('ledge tui: ask Ledge', () => {
   });
 });
 
+const ALT_ENTER = '\u001b\r';
+const CTRL = { left: '\u001b[1;5D', right: '\u001b[1;5C', a: '\u0001', e: '\u0005', w: '\u0017', u: '\u0015', j: '\n', n: '\u000e', c: '\u0003' };
+const UP = '\u001b[A', DOWN = '\u001b[B', LEFT = '\u001b[D', DEL = '\u001b[3~';
+const paste = (text: string) => `\u001b[200~${text}\u001b[201~`;
+/** The rows of the box whose title is `title`, between its borders. */
+const boxRows = (frame: string, title: string) => {
+  const lines = frame.split('\n'), i = lines.findIndex(l => l.includes(title));
+  const out: string[] = [];
+  for (const l of lines.slice(i + 1)) { if (!l.startsWith('│')) break; out.push(l.replace(/^│ ?/, '').replace(/ ?│$/, '').trimEnd()); }
+  return out;
+};
+const bottom = (frame: string, title: string) => { const lines = frame.split('\n'); return lines.slice(lines.findIndex(l => l.includes(title))).find(l => l.startsWith('╰')) ?? ''; };
+
+describe('ledge tui: the field (#95 lot B)', () => {
+  /** Bix's session open, its field open. */
+  async function replying() {
+    const tui = await startTui();
+    await tui.press('j'); await tui.press('j');
+    await until(() => tui.frame().includes('BIX · DOCUMENTER'));
+    await tui.press('\r');
+    await tui.press('r');
+    await until(() => tui.frame().includes('RÉPONDRE À BIX'));
+    return tui;
+  }
+
+  it('says whom one writes to; alt+↵ and ctrl+j add a line, ↵ sends the lines as they are', async () => {
+    const tui = await replying();
+    try {
+      await tui.press('Oui, replie aussi les notices.'); await tui.press(ALT_ENTER);
+      await tui.press('- garde DIFF_MAX'); await tui.press(CTRL.j);
+      await tui.press('- ajoute un test');
+      await until(() => tui.frame().includes('- ajoute un test'));
+      expect(boxRows(tui.frame(), 'RÉPONDRE À BIX')).toEqual(['❯ Oui, replie aussi les notices.', '  - garde DIFF_MAX', '  - ajoute un test']);
+      expect(bottom(tui.frame(), 'RÉPONDRE À BIX')).toContain('ligne 3/3 · alt+↵ nouvelle ligne');
+      expect(tui.frame().split('\n').at(-1)).toMatch(/alt\+↵ +nouvelle ligne/);
+      await tui.press('\r');
+      await until(() => sent(tui.daemon.received, 'session.reply').length === 1);
+      expect(sent(tui.daemon.received, 'session.reply')[0]!.text).toBe('Oui, replie aussi les notices.\n- garde DIFF_MAX\n- ajoute un test');
+      tui.daemon.upsert({ ...mockupSessions()[2]!, state: 'working', lastActivityAt: T(5) });
+      await until(() => tui.frame().includes('✓ Réponse envoyée à Bix'));
+      // Where the terminal tells keys apart (kitty protocol): shift+↵ and ctrl+j.
+      await tui.press('r'); await tui.press('un'); await tui.press('\u001b[13;2u'); await tui.press('deux'); await tui.press('\u001b[106;5u'); await tui.press('trois');
+      await tui.press('\r');
+      await until(() => sent(tui.daemon.received, 'session.reply').length === 2);
+      expect(sent(tui.daemon.received, 'session.reply')[1]!.text).toBe('un\ndeux\ntrois');
+    } finally { await tui.cleanup(); }
+  });
+
+  it('moves the cursor by character, word, line start and end, row; deletes forward, the word before, everything', async () => {
+    const tui = await replying();
+    try {
+      await tui.press('garde DIFF_MAX à 30'); await tui.press(ALT_ENTER); await tui.press('ajoute un test');
+      await tui.press(CTRL.left); await tui.press('vrai ');                  // ajoute un vrai test
+      await tui.press(CTRL.a); await tui.press('+ ');                         // + ajoute un vrai test
+      await tui.press(UP); await tui.press(CTRL.e); await tui.press(' lignes'); // garde DIFF_MAX à 30 lignes
+      await tui.press(CTRL.w); await tui.press('lignes max');
+      await tui.press(CTRL.a); await tui.press(DEL); await tui.press('G');   // Garde …
+      await tui.press(DOWN); await tui.press(CTRL.e); await tui.press(LEFT); await tui.press(LEFT); await tui.press(LEFT); await tui.press(LEFT); await tui.press('!');
+      await until(() => tui.frame().includes('+ ajoute un vrai !test'));
+      await tui.press('\r');
+      await until(() => sent(tui.daemon.received, 'session.reply').length === 1);
+      expect(sent(tui.daemon.received, 'session.reply')[0]!.text).toBe('Garde DIFF_MAX à 30 lignes max\n+ ajoute un vrai !test');
+      await tui.press('r'); await tui.press('à effacer'); await tui.press(CTRL.u);
+      await until(() => !tui.frame().includes('à effacer'));
+    } finally { await tui.cleanup(); }
+  });
+
+  it('a paste keeps its lines without sending; a long one shows in full and the field scrolls, 6 rows (8 in 120×32)', async () => {
+    const lines = Array.from({ length: 14 }, (_, i) => `ligne ${i + 1} du log`);
+    const tui = await replying();
+    try {
+      await tui.resize(80, 24);
+      await tui.press(paste(lines.join('\r\n')));
+      await until(() => tui.frame().includes('ligne 14 du log'));
+      expect(sent(tui.daemon.received, 'session.reply')).toEqual([]);
+      expect(tui.frame()).not.toContain('⏎');
+      expect(boxRows(tui.frame(), 'RÉPONDRE À BIX')).toEqual(lines.slice(-6).map((l, i) => `${i === 0 ? '  ' : '  '}${l}`));
+      expect(bottom(tui.frame(), 'RÉPONDRE À BIX')).toContain('↑ 8 lignes · 14 lignes collées');
+      await tui.resize(120, 32);
+      await until(() => boxRows(tui.frame(), 'RÉPONDRE À BIX').length === 8);
+      await tui.press('\r');
+      await until(() => sent(tui.daemon.received, 'session.reply').length === 1);
+      expect(sent(tui.daemon.received, 'session.reply')[0]!.text).toBe(lines.join('\n'));
+    } finally { await tui.cleanup(); }
+  });
+
+  it('↑ goes back through what was asked, ↓ comes down to the draft as it was; esc goes back to it', async () => {
+    const tui = await startTui();
+    try {
+      await tui.press('/');
+      for (const [i, q] of ['Qui travaille sur la TUI ?', 'Et les tests ?'].entries()) {
+        await tui.press(q); await tui.press('\r');
+        await until(() => sent(tui.daemon.received, 'chat.ask').length === i + 1);
+        tui.daemon.push({ type: 'chat.done', qid: sent(tui.daemon.received, 'chat.ask')[i]!.qid, text: 'Oui.', at: T(i) });
+        await until(() => !tui.frame().includes('Ledge lit…'));
+      }
+      await tui.press('Et Luna');
+      await tui.press(UP);
+      await until(() => boxRows(tui.frame(), 'QUESTION')[0] === '❯ Et les tests ?');
+      expect(bottom(tui.frame(), 'QUESTION')).toContain('historique 2/2 · ↓ ton brouillon');
+      expect(tui.frame().split('\n').at(-1)).toMatch(/↵ +renvoyer.*esc +revenir au brouillon/);
+      await tui.press(UP);
+      await until(() => boxRows(tui.frame(), 'QUESTION')[0] === '❯ Qui travaille sur la TUI ?');
+      await tui.press(DOWN); await tui.press(DOWN);
+      await until(() => boxRows(tui.frame(), 'QUESTION')[0] === '❯ Et Luna');
+      expect(bottom(tui.frame(), 'QUESTION')).not.toContain('historique');
+      await tui.press(UP); await tui.press(UP); await tui.press(ESC);
+      await until(() => boxRows(tui.frame(), 'QUESTION')[0] === '❯ Et Luna');
+    } finally { await tui.cleanup(); }
+  });
+
+  it('a session keeps its replies: ↑ in an empty field brings the last one back', async () => {
+    const tui = await replying();
+    try {
+      await tui.press('Ajoute un exemple'); await tui.press('\r');
+      await until(() => sent(tui.daemon.received, 'session.reply').length === 1);
+      await tui.press('r'); await tui.press(UP);
+      await until(() => boxRows(tui.frame(), 'RÉPONDRE À BIX')[0] === '❯ Ajoute un exemple');
+    } finally { await tui.cleanup(); }
+  });
+
+  it('the draft outlives esc, ctrl+c and another screen; read, it shows dimmed in « Écrire »', async () => {
+    const tui = await replying();
+    try {
+      await tui.press('Pas ce test'); await tui.press(ALT_ENTER); await tui.press('ni celui-là');
+      await tui.press(ESC);
+      await until(() => tui.frame().includes('ÉCRIRE · BROUILLON'));
+      expect(tui.frame()).toContain('Brouillon gardé : r pour reprendre.');
+      expect(boxRows(tui.frame(), 'ÉCRIRE · BROUILLON')).toEqual(['❯ Pas ce test']);
+      expect(bottom(tui.frame(), 'ÉCRIRE · BROUILLON')).toContain('2 lignes · r pour reprendre');
+      await tui.press(ESC);
+      await until(() => !tui.frame().includes('ÉCRIRE · BROUILLON'));
+      await tui.press('\r');
+      await until(() => tui.frame().includes('ÉCRIRE · BROUILLON'));
+      await tui.press('r');
+      await until(() => boxRows(tui.frame(), 'RÉPONDRE À BIX').join('\n') === '❯ Pas ce test\n  ni celui-là');
+      await tui.press(CTRL.c);
+      await until(() => tui.frame().includes('ÉCRIRE · BROUILLON'));
+    } finally { await tui.cleanup(); }
+  });
+
+  it('r on a permission: « Refuser en expliquant à Otto »', async () => {
+    const tui = await startTui();
+    try {
+      await tui.press('\r');
+      await until(() => tui.frame().includes('Otto veut exécuter'));
+      await tui.press('r');
+      await until(() => tui.frame().includes('REFUSER EN EXPLIQUANT À OTTO'));
+    } finally { await tui.cleanup(); }
+  });
+
+  it('ctrl+n asks first: n or esc keeps the conversation, y clears it; the draft stays', async () => {
+    const tui = await startTui();
+    try {
+      await tui.press('/');
+      await tui.press('Qui a besoin de moi ?'); await tui.press('\r');
+      await until(() => sent(tui.daemon.received, 'chat.ask').length === 1);
+      tui.daemon.push({ type: 'chat.done', qid: sent(tui.daemon.received, 'chat.ask')[0]!.qid, text: 'Otto.', at: T(1) });
+      await until(() => !tui.frame().includes('Ledge lit…'));
+      await tui.press('Et Luna');
+      await tui.press(CTRL.n);
+      await until(() => tui.frame().includes('NOUVELLE CONVERSATION ?'));
+      expect(tui.frame()).toMatch(/La conversation du jour \(1 question, depuis \d\d:\d\d\) sera effacée\. Ton brouillon reste\./);
+      expect(tui.frame()).toMatch(/Garder.*n · esc/);
+      await tui.press('n');
+      await until(() => !tui.frame().includes('NOUVELLE CONVERSATION ?'));
+      await tui.press(CTRL.n); await tui.press(ESC);
+      await until(() => !tui.frame().includes('NOUVELLE CONVERSATION ?'));
+      expect(sent(tui.daemon.received, 'chat.reset')).toEqual([]);
+      expect(boxRows(tui.frame(), 'QUESTION')[0]).toBe('❯ Et Luna');
+      await tui.press(CTRL.n); await tui.press('y');
+      await until(() => sent(tui.daemon.received, 'chat.reset').length === 1);
+      await until(() => boxRows(tui.frame(), 'QUESTION')[0] === '❯ Et Luna');
+    } finally { await tui.cleanup(); }
+  });
+
+  it('ctrl+c with a draft does not quit: it says so, and a second one within 2 s does', async () => {
+    const tui = await startTui();
+    try {
+      await tui.press('/');
+      await tui.press('Et Luna, elle');
+      await tui.press(CTRL.c);
+      await until(() => tui.frame().includes('Brouillon en cours : ctrl+c encore pour quitter quand même (il sera perdu).'));
+      await tui.press(' attend');
+      await until(() => tui.frame().includes('Et Luna, elle attend'));
+      // Past 2 s the line goes, and ctrl+c asks again.
+      await until(() => !tui.frame().includes('Brouillon en cours'), 3000);
+      await tui.press(CTRL.c);
+      await until(() => tui.frame().includes('Brouillon en cours'));
+      await tui.press(CTRL.c);
+      // Gone: what is typed goes nowhere.
+      await tui.press(' quoi');
+      expect(tui.frame()).not.toContain('attend quoi');
+    } finally { await tui.cleanup(); }
+  });
+});
+
 describe('ledge tui: new session', () => {
   it('launches what the form says on ctrl+s and selects the new session', async () => {
     const tui = await startTui();

@@ -4,7 +4,7 @@ import stringWidth from 'string-width';
  *  Its `text` is only the value when the line was made; `ui/Lines.tsx` draws it again on each tick, alone. */
 export type Live = { spin: true } | { since: number; pad: number };
 /** A piece of a line, with its colour. */
-export type Seg = { text: string; color?: string; bold?: boolean; live?: Live };
+export type Seg = { text: string; color?: string; bold?: boolean; inverse?: boolean; live?: Live };
 export type Line = Seg[];
 
 const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' });

@@ -50,7 +50,7 @@ export function Frame({ crumb, crumbShort, keys, kept, children }: {
         {shown ? <Text wrap="truncate" color={C.dim}>{shown}</Text> : null}
       </Box>
       <Box flexGrow={1} flexDirection="column" overflow="hidden">{children}</Box>
-      {lastToast ? <Box paddingX={1} height={1}><Text wrap="truncate" color={lastToast.tone === 'error' ? C.red : lastToast.tone === 'ok' ? C.green : C.yellow}>{lastToast.text}</Text></Box> : null}
+      {lastToast ? <Box paddingX={1} height={1}><Text wrap="truncate" color={lastToast.tone === 'error' ? C.red : lastToast.tone === 'ok' ? C.green : lastToast.tone === 'quiet' ? C.dim : C.yellow}>{lastToast.text}</Text></Box> : null}
       <KeyBar keys={fitKeys(keys, columns, editing ? null : ['?', t.keys.help])} />
     </Box>
   );

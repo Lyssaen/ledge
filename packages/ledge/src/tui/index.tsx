@@ -33,8 +33,9 @@ export async function runTui(args: readonly string[]): Promise<number> {
   client.connect();
   const app = render(
     <App client={client} lang={lang} saveLang={next => saveSettings({ ...loadSettings(), lang: next })} notify={parsed.notify} glyphs={glyphsFor(process.env)} env={process.env} />,
-    // Incremental: a key rewrites the lines it changed, not the whole screen erased then drawn again (the flicker).
-    { alternateScreen: true, exitOnCtrlC: false, maxFps: 30, incrementalRendering: true }
+    // Incremental: a key rewrites the lines it changed, not the whole screen erased then drawn again (the flicker). Where the
+    // terminal speaks the kitty keyboard protocol, shift+↵ is told from ↵ (a new line in a field).
+    { alternateScreen: true, exitOnCtrlC: false, maxFps: 30, incrementalRendering: true, kittyKeyboard: { mode: 'auto', flags: ['disambiguateEscapeCodes'] } }
   );
   // A kill leaves the terminal as Ink found it: unmounting restores the screen, the cursor and the keyboard mode.
   const stop = () => app.unmount();
