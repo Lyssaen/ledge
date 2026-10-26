@@ -48,6 +48,14 @@ describe('the chat draws a turn\'s generic card (#94)', () => {
     expect(screen.queryByRole('button', { name: 'Ignore' })).toBeNull();
   });
 
+  it('Deny goes to onDenyAction, with its row', () => {
+    const onDenyAction = vi.fn();
+    const decide: ChatAction = { action: 'session.decide', args: { session: 'otto', decision: 'accept' }, summary: 'Accepter', vars: { session: 'Otto', decision: 'accept', kind: 'permission' }, risk: 'destructive', session: 'local:otto', detail: 'npm test' };
+    render(ui({ onAct: noop, onDenyAction, turns: [turn({ actions: [decide] })] }));
+    fireEvent.click(screen.getByRole('button', { name: 'Deny' }));
+    expect(onDenyAction).toHaveBeenCalledWith('q1', 0);
+  });
+
   it('Open: the row\'s session, by its qualified id', () => {
     const onOpenSession = vi.fn();
     render(ui({ onAct: noop, onOpenSession, turns: [turn({ actions: [{ ...archive, state: 'refused', code: 'changed' }] })] }));
@@ -94,6 +102,15 @@ describe('useActionCards: chat.act and chat.ignore (#94)', () => {
     act(() => c.result.current.act('q1', [0], false));
     c.rerender({ ...c.props, turnReady: () => false });
     expect(c.result.current.actingQid).toBeNull();
+  });
+
+  it('Deny: chat.act with deny, its row alone, never confirmed; held as an apply', () => {
+    const { send, result } = setup();
+    act(() => result.current.deny('q1', 0));
+    expect(send).toHaveBeenCalledWith({ type: 'chat.act', rid: expect.any(String), qid: 'q1', rows: [0], deny: true });
+    expect(result.current.actingRows).toEqual([0]);
+    act(() => result.current.deny('q1', 0));
+    expect(send).toHaveBeenCalledOnce();
   });
 
   it('a machine not ready: nothing is sent', () => {

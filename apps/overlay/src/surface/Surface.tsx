@@ -791,7 +791,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
               onAsk={ask} onCancel={qid => send({ type: 'chat.cancel', qid })} onReset={() => send({ type: 'chat.reset' })} onClose={() => { setMenuOpen(false); dispatch({ type: 'close' }); }} onOpenSession={id => openInLedge({ kind: 'session', id })}
               launchingQid={chatLaunching} launchingRows={chatLaunching ? launchedFrom.current.map(x => x.row) : null} onLaunchProposal={launchProposal} onTerminal={id => openInLedge({ kind: 'terminal', id })}
               closingQid={chatClosing} closingRows={chatClosing ? closedFrom.current.map(x => x.row) : null} onCloseSessions={closeSessions}
-              onAct={actionCards.act} actingQid={actionCards.actingQid} actingRows={actionCards.actingRows} onIgnoreCards={actionCards.ignore}
+              onAct={actionCards.act} actingQid={actionCards.actingQid} actingRows={actionCards.actingRows} onIgnoreCards={actionCards.ignore} onDenyAction={actionCards.deny}
               relayingQid={relaying} onRelay={qid => relayCard('session.relay', qid)} onRelayCancel={qid => relayCard('session.relay.cancel', qid)}
               theme={theme} frozen={unreachable} reducedMotion={reducedMotion} onDocument={ref => openInLedge({ kind: 'document', path: ref.path })} />
           </div>

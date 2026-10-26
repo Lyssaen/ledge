@@ -90,7 +90,7 @@ export function ChatPanel({ client, view, paused, focus, onClose, onOpenSession,
             onOpenSession={open} onTerminal={terminal} turnAvailable={turnReady}
             launchingQid={cards.launchingQid} launchingRows={cards.launchingRows} onLaunchProposal={cards.launch}
             closingQid={cards.closingQid} closingRows={cards.closingRows} onCloseSessions={cards.close}
-            onAct={actionCards.act} actingQid={actionCards.actingQid} actingRows={actionCards.actingRows} onIgnoreCards={actionCards.ignore}
+            onAct={actionCards.act} actingQid={actionCards.actingQid} actingRows={actionCards.actingRows} onIgnoreCards={actionCards.ignore} onDenyAction={actionCards.deny}
             renderModel={(qid, agent, busy) => <CardModelPick client={client} machine={turnMachine(qid)} tool={agent} pick={cards.pick(qid)} disabled={busy} onPick={next => cards.setPick(qid, next)} />}
             relayingQid={cards.relayingQid} onRelay={cards.relay} onRelayCancel={cards.cancelRelay}
             onProject={project.review} projectNamed={project.projectNamed}

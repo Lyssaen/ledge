@@ -350,7 +350,7 @@ export function LedgeHome(p: LedgeHomeProps): JSX.Element {
                 onOpenSession={open} onTerminal={id => { setHovered(null); p.onTerminal(id); }} turnAvailable={turnReady}
                 launchingQid={cards.launchingQid} launchingRows={cards.launchingRows} onLaunchProposal={cards.launch}
                 closingQid={cards.closingQid} closingRows={cards.closingRows} onCloseSessions={cards.close}
-                onAct={actionCards.act} actingQid={actionCards.actingQid} actingRows={actionCards.actingRows} onIgnoreCards={actionCards.ignore}
+                onAct={actionCards.act} actingQid={actionCards.actingQid} actingRows={actionCards.actingRows} onIgnoreCards={actionCards.ignore} onDenyAction={actionCards.deny}
                 renderModel={(qid, agent, b) => <CardModelPick client={client} machine={turnMachine(qid)} tool={agent} pick={cards.pick(qid)} disabled={b} onPick={next => cards.setPick(qid, next)} />}
                 relayingQid={cards.relayingQid} onRelay={cards.relay} onRelayCancel={cards.cancelRelay}
                 onProject={project.review} projectNamed={project.projectNamed}

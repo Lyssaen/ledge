@@ -14,6 +14,8 @@ export interface ActionCards {
   actingQid: string | null; actingRows: readonly number[] | null;
   /** Applies the card's rows in order (`chat.act`), `confirmed` once the card asked again. */
   act(qid: string, rows: number[], confirmed: boolean): void;
+  /** « Deny » a session.decide row: its session's request answered with deny (chat.act's `deny`), never confirmed. */
+  deny(qid: string, row: number): void;
   /** « Ignore » the turn's cards on every device, or `undo` (« Review »). */
   ignore(qid: string, undo: boolean): void;
 }
@@ -26,7 +28,7 @@ const cardState = (chat: readonly ChatTurn[], qid: string): string => {
 };
 
 /** The chat's generic card (#94) for the Desktop and the island, one at a time, nothing optimistic: `chat.act { rid, qid, rows,
- *  confirmed? }` is freed once the turn's rows change (chat.history), by a refusal of it, or when its machine goes away.
+ *  confirmed? | deny? }` is freed once the turn's rows change (chat.history), by a refusal of it, or when its machine goes away.
  *  `chat.ignore` waits for nothing: every device gets the turn's `ignoredAt` through chat.history. */
 export function useActionCards(o: ActionCardsOptions): ActionCards {
   const latest = useRef(o);
@@ -37,13 +39,15 @@ export function useActionCards(o: ActionCardsOptions): ActionCards {
   const [actingRows, setActingRows] = useState<readonly number[] | null>(null);
   const free = () => { acting.current = null; setActingQid(null); setActingRows(null); };
 
-  const act = useCallback((qid: string, rows: number[], confirmed: boolean) => {
+  const actOn = useCallback((qid: string, rows: number[], how: { confirmed: true } | { deny: true } | Record<string, never>) => {
     const { chat, send, turnReady, errors } = latest.current;
     if (acting.current || !turnReady(qid) || rows.length === 0) return;
     acting.current = { qid, rows, from: cardState(chat, qid), errorSeq: errors.at(-1)?.seq ?? 0 };
     setActingQid(qid); setActingRows(rows);
-    send({ type: 'chat.act', rid: `act-${crypto.randomUUID()}`, qid, rows, ...(confirmed ? { confirmed: true as const } : {}) });
+    send({ type: 'chat.act', rid: `act-${crypto.randomUUID()}`, qid, rows, ...how });
   }, []);
+  const act = useCallback((qid: string, rows: number[], confirmed: boolean) => actOn(qid, rows, confirmed ? { confirmed: true } : {}), [actOn]);
+  const deny = useCallback((qid: string, row: number) => actOn(qid, [row], { deny: true }), [actOn]);
   const ignore = useCallback((qid: string, undo: boolean) => {
     const { send, turnReady } = latest.current;
     if (!turnReady(qid)) return;
@@ -57,5 +61,5 @@ export function useActionCards(o: ActionCardsOptions): ActionCards {
     if (a && (cardState(chat, a.qid) !== a.from || errors.some(e => e.seq > a.errorSeq && e.request === 'chat.act') || !ready)) free();
   }, [chat, errors, ready]);
 
-  return { actingQid, actingRows, act, ignore };
+  return { actingQid, actingRows, act, deny, ignore };
 }
