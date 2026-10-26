@@ -455,6 +455,12 @@ describe('protocol: model and effort (#58)', () => {
     expect(parseClientMessage({ type: 'chat.act', rid: 'r1', qid: 'q1', rows: [2, 0], confirmed: true })).toMatchObject({ rows: [2, 0], confirmed: true });
     expect(() => parseClientMessage({ type: 'chat.act', rid: 'r1', qid: 'q1', confirmed: false })).toThrow();
     expect(() => parseClientMessage({ type: 'chat.act', rid: 'r1', qid: 'q1', rows: [1, 1] })).toThrow();
+    // « Refuser »: the rows' requests answered with deny, never confirmed; only a literal true.
+    expect(parseClientMessage({ type: 'chat.act', rid: 'r1', qid: 'q1', rows: [0], deny: true })).toEqual({ type: 'chat.act', rid: 'r1', qid: 'q1', rows: [0], deny: true });
+    expect(() => parseClientMessage({ type: 'chat.act', rid: 'r1', qid: 'q1', deny: false })).toThrow();
+    const turn = { qid: 'q1', question: '?', askedAt: T0, steps: [] };
+    const denied = { action: 'session.decide', args: { session: 's1', decision: 'accept' }, summary: 'Accepter', risk: 'destructive', state: 'denied', doneAt: T0 };
+    expect(ChatTurnSchema.parse({ ...turn, actions: [denied] }).actions?.[0]).toMatchObject({ state: 'denied', doneAt: T0 });
     const acted = { type: 'chat.acted', rid: 'r1', qid: 'q1', done: [0], failed: [{ row: 1, message: 'unknown session', refused: true }, { row: 2, message: 'busy' }] };
     expect(parseServerMessage(acted)).toEqual(acted);
     expect(() => parseServerMessage({ ...acted, failed: [{ row: 1, message: 'x', refused: false }] })).toThrow();

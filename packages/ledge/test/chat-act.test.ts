@@ -95,6 +95,63 @@ describe('actFromChat (spec 2026-10-26 action registry §9.2)', () => {
     await actFromChat(x.d, 'q1');
     expect(f.rows[0]).toMatchObject({ state: 'failed', error: 'tmux died', code: 'failed' });
   });
+  it('accepting a cut request from the card is refused before it is sent; denying it is sent', async () => {
+    const accept = row('session.decide', { session: 'a', decision: 'accept' }, { detail: 'x…', detailCut: true });
+    const c = card([accept]);
+    const { d, applied } = deps(c);
+    expect((await actFromChat(d, 'q1', undefined, true)).failed).toEqual([{ row: 0, message: 'a\'s request is cut on the card: accept it in the session', refused: true }]);
+    expect(c.rows[0]).toMatchObject({ state: 'refused', code: 'cut' });
+    expect(applied).toEqual([]);
+    const deny = card([row('session.decide', { session: 'a', decision: 'deny' }, { detail: 'x…', detailCut: true })]);
+    const x = deps(deny);
+    expect(await actFromChat(x.d, 'q1')).toEqual({ done: [0], failed: [] });
+    expect(x.applied).toEqual(['a']);
+  });
+  it('a cut request is refused at once, before any confirmation is asked; the rows before it still apply', async () => {
+    const cutAccept = row('session.decide', { session: 'a', decision: 'accept' }, { risk: 'destructive', detail: 'x…', detailCut: true });
+    const c = card([cutAccept]);
+    const { d, applied } = deps(c);
+    expect(await actFromChat(d, 'q1')).toEqual({ done: [], failed: [{ row: 0, message: 'a\'s request is cut on the card: accept it in the session', refused: true }] });
+    expect(c.rows[0]).toMatchObject({ state: 'refused', code: 'cut' });
+    expect(applied).toEqual([]);
+    const two = card([row('session.archive', { session: 'b' }), { ...cutAccept }]);
+    const t = deps(two);
+    expect(await actFromChat(t.d, 'q1')).toMatchObject({ done: [0], failed: [{ row: 1, refused: true }] });
+    expect(t.applied).toEqual(['b']);
+  });
+  it('the row the user saw counts too: cut on the card, it is refused even if the request is whole now', async () => {
+    const c = card([row('session.decide', { session: 'a', decision: 'accept' }, { detail: 'x…', detailCut: true })]);
+    const { d, applied } = deps(c, { resolve: (r: ChatAction) => { const { detailCut: _c, ...whole } = r; return { ...whole, detail: 'x' }; } });
+    expect((await actFromChat(d, 'q1', undefined, true)).failed).toEqual([{ row: 0, message: 'a\'s request is cut on the card: accept it in the session', refused: true }]);
+    expect(applied).toEqual([]);
+  });
+  describe('« Refuser » (deny)', () => {
+    const accept = (extra: Partial<ChatAction> = {}) => row('session.decide', { session: 'a', decision: 'accept', expect: { kind: 'plan', text: 'P', key: 'k' } }, { risk: 'destructive', ...extra });
+    it('answers the request with deny, unconfirmed, and marks the row denied with its time', async () => {
+      const c = card([accept()]);
+      const sent: ChatAction[] = [];
+      const { d } = deps(c, { apply: async (r: ChatAction) => { sent.push(r); } });
+      expect(await actFromChat(d, 'q1', undefined, undefined, true)).toEqual({ done: [0], failed: [] });
+      expect(sent.map(r => r.args)).toEqual([{ session: 'a', decision: 'deny', expect: { kind: 'plan', text: 'P', key: 'k' } }]);
+      expect(c.rows[0]).toMatchObject({ state: 'denied', doneAt: '2026-10-26T10:00:00.000Z' });
+      expect(c.rows[0]!.args.decision).toBe('accept');
+      // Denied is settled, as done is.
+      await expect(actFromChat(d, 'q1', undefined, undefined, true)).rejects.toThrow('already done');
+      await expect(actFromChat(d, 'q1', undefined, true)).rejects.toThrow('already done');
+    });
+    it('is allowed on a request shown cut', async () => {
+      const c = card([accept({ detail: 'x…', detailCut: true })]);
+      const { d, applied } = deps(c);
+      expect(await actFromChat(d, 'q1', undefined, undefined, true)).toEqual({ done: [0], failed: [] });
+      expect(applied).toEqual(['a']);
+    });
+    it('refuses a row that is not a request, and sends nothing', async () => {
+      const c = card([accept(), row('team.dissolve', { team: 't' }, { risk: 'destructive' })]);
+      const { d, applied } = deps(c);
+      await expect(actFromChat(d, 'q1', undefined, undefined, true)).rejects.toThrow('only a request is refused');
+      expect(applied).toEqual([]);
+    });
+  });
   it('the same args at another risk (a template saved meanwhile) is refused: it was confirmed at the old one', async () => {
     const c = card([row('team.save', { team: 't', name: 'api', seats: [] })]);
     const { d, applied } = deps(c, { resolve: (r: ChatAction) => ({ ...r, risk: 'destructive' as const }) });

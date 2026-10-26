@@ -29,7 +29,7 @@ export interface AppProps {
   /** Saves the language; throws when it cannot (the choice still applies for this run). */
   saveLang(lang: Lang): void;
   /** The theme chosen (auto by default), the terminal's background as found at start (not asked when the theme is forced;
-   *  auto then draws dark), and how to save the theme (throws as `saveLang`). */
+   *  auto then keeps the tone drawn), and how to save the theme (throws as `saveLang`). */
   theme?: ThemeChoice; background?: Tone; saveTheme?(theme: ThemeChoice): void;
   notify: NotifyMode;
   glyphs: Glyphs;
@@ -42,7 +42,8 @@ export function App(props: AppProps) {
   const [lang, setLangState] = useState<Lang>(props.lang);
   const [theme, setThemeState] = useState<ThemeChoice>(props.theme ?? 'auto');
   // The palette is switched before anything below draws with it.
-  const tone = toneFor(theme, props.background ?? 'dark');
+  // The background unknown (a theme forced at start), Auto keeps the tone drawn rather than turning dark.
+  const tone = toneFor(theme, props.background ?? toneNow());
   if (tone !== toneNow()) setTone(tone);
   return <I18nProvider lang={lang}><Shell {...props} lang={lang} setLang={setLangState} theme={theme} setThemeState={setThemeState} tone={tone} /></I18nProvider>;
 }

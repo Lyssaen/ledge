@@ -86,12 +86,12 @@ export const ChatTasksSchema = z.array(ChatTaskProposalSchema).min(1).max(MAX_PR
  *  (its title), `owner` (who holds it), task.cancel `reason`, task.pass `session` (who gets it), `note`. */
 export const ActionVarsSchema = z.record(z.string().max(40), z.string().max(300));
 export const DETAIL_MAX = 4000;
-/** Why a row was refused or failed, for a front's own words (`error` stays the daemon's text, for the log): a string on the
+/** Why a row was refused or failed (`cut`: a request the card shows cut, accepted only in the session), for a front's own words (`error` stays the daemon's text, for the log): a string on the
  *  wire, so a code a front does not know yet reads as `failed`. */
 export const ACTION_ERROR_CODES = [
   'unknown', 'ambiguous', 'read_only', 'exited', 'running', 'archived', 'not_archived', 'no_terminal', 'same_model', 'no_request',
   'in_session', 'no_note', 'member', 'not_member', 'unknown_role', 'not_resting', 'dissolved', 'no_seat', 'closed', 'holder',
-  'changed', 'failed'
+  'changed', 'cut', 'failed'
 ] as const;
 export type ActionErrorCode = (typeof ACTION_ERROR_CODES)[number];
 /** A row of the chat's generic card (action registry spec §5.1): an action the daemon resolved, ready to apply. `action` is a
@@ -99,9 +99,10 @@ export type ActionErrorCode = (typeof ACTION_ERROR_CODES)[number];
  *  are resolved (ids, never names), what the daemon applies; `summary` the daemon's one line in French; `vars` its words, for
  *  a front's own language; `detail` what to read in full before confirming (a pending request, verbatim), `detailCut` when it
  *  had to be shortened (the front says so, and sends to the session); `session` / `team` the target, for a link. No `state`:
- *  proposed; `refused`: nothing was sent (its target changed or went since the card), `failed`: sent, and it went wrong;
+ *  proposed; `done`: applied; `denied`: « Refuser », the session's request answered with deny instead (session.decide only);
+ *  `doneAt` set on both. `refused`: nothing was sent (its target changed or went since the card), `failed`: sent, and it went wrong;
  *  `code` says why, `error` too in the daemon's words. */
-export const ChatActionStateSchema = z.enum(['running', 'done', 'failed', 'refused']);
+export const ChatActionStateSchema = z.enum(['running', 'done', 'denied', 'failed', 'refused']);
 export const ChatActionSchema = z.object({
   action: z.string().min(1).max(40), args: z.record(z.unknown()), summary: z.string().min(1).max(300), vars: ActionVarsSchema.optional(),
   detail: z.string().max(DETAIL_MAX).optional(), detailCut: z.literal(true).optional(),

@@ -409,7 +409,7 @@ export function createChat(deps: ChatDeps): Chat {
       const t = turnOf(qid); const a = t?.actions?.[row]; if (!t || !a) return;
       const next: ChatAction = { ...a, ...patch };
       if (patch.state !== 'failed' && patch.state !== 'refused') { delete next.error; delete next.code; }
-      if (patch.state !== 'done') delete next.doneAt;
+      if (patch.state !== 'done' && patch.state !== 'denied') delete next.doneAt;
       t.actions = t.actions!.map((r, i) => (i === row ? next : r));
       emit({ type: 'chat.history', turns });
     },
