@@ -550,7 +550,9 @@ const OPEN = `<div class="note"><h3>Tranché par l’utilisateur</h3><ol>
   <li><b>Un verbe par action</b> (« Changer », « Archiver », « Dissoudre »…), « Appliquer » en repli seulement.</li>
   <li>Après un échec ou un refus, la suite d’un plan se relance <b>d’un bouton</b> : « Reprendre à l’étape k », « Continuer sans l’étape k ».</li>
   <li><b>« Ignorer »</b> sur la carte générique, partout.</li>
-  <li>Ignorer vaut <b>sur tous les appareils</b> : Ledge le sait et ne repropose pas la carte.</li></ol></div>`;
+  <li>Ignorer vaut <b>sur tous les appareils</b> : Ledge le sait et ne repropose pas la carte.</li>
+  <li><b>« ✓ Refus envoyé »</b> tel que dessiné : en gris, pas en vert, et la ligne devient « Refuser la demande de <b>Nova</b> ».</li></ol>
+  <p style="margin:8px 0 0">La maquette est validée en entier par l’utilisateur.</p></div>`;
 
 // ---- Chrome ----
 function label() { return ETATS.find(([k]) => k === st.etat)[1].toLowerCase(); }
