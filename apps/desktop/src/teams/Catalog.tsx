@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState, type JSX, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type JSX, type ReactNode } from 'react';
 import type { DaemonClient } from '@ledge/fleet';
 import { autonomyArgs, ompApprovalFor, ROLE_PROMPT_MAX, type Autonomy, type DefinitionProblem, type Project, type Projects, type Role, type Seat, type Session, type Team, type TeamTemplate, type Tool } from '@ledge/protocol';
 import { toolName } from '@ledge/ui/chat/format';
@@ -96,13 +96,12 @@ export function ScopePicker({ scope, onChoose }: { scope: ReturnType<typeof useS
   const [open, setOpen] = useState(false);
   const current = scope.options.find(s => s.cwd === scope.cwd);
   const all: Scope[] = [...scope.options, { cwd: null, name: c.personal }];
-  const note = useId();
-  // The rule the choice follows, at the popup's foot (the mockup's), outside the menu's items; it describes the button.
+  // The rule the choice follows, at the popup's foot (the mockup's), outside the menu's items; Menu makes it describe the menu.
   return (
     <Menu open={open} onOpenChange={setOpen} label={c.folderTitle} className="cat-scope" menuClassName="cat-scope-pop"
-      footer={<p id={note} className="cat-scope-note">{c.repoWins}</p>}
+      footer={<p className="cat-scope-note">{c.repoWins}</p>}
       trigger={tr => (
-        <button type="button" className="cat-scope-btn" title={c.folderTitle} aria-describedby={note} {...tr}>
+        <button type="button" className="cat-scope-btn" title={c.folderTitle} {...tr}>
           {c.folder} <strong>{scope.cwd === null ? c.personal : current?.name ?? folderName(scope.cwd)}</strong> <small>{scope.cwd ?? '~/.ledge'}</small> ▾
         </button>
       )}>

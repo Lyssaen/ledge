@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ComponentPropsWithoutRef, type JSX, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from 'react';
+import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ComponentPropsWithoutRef, type JSX, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from 'react';
 
 export interface MenuTrigger { ref: RefObject<HTMLButtonElement | null>; 'aria-haspopup': 'menu'; 'aria-expanded': boolean; onClick(): void }
 export interface MenuProps {
@@ -17,7 +17,7 @@ export interface MenuProps {
   trigger(t: MenuTrigger): ReactNode;
   /** MenuItems. */
   children: ReactNode;
-  /** Shown under the items, in the same popup but outside role="menu" (a note on the choice, not a choice). */
+  /** Shown under the items, in the same popup but outside role="menu" (a note on the choice, not a choice); it describes the menu. */
   footer?: ReactNode;
 }
 
@@ -32,6 +32,7 @@ export function Menu({ open, onOpenChange, label, className, menuClassName, flip
   const menu = useRef<HTMLDivElement>(null);
   /** The popup with a footer: the menu and its footer, placed together. */
   const popup = useRef<HTMLDivElement>(null);
+  const footerId = useId();
   const [up, setUp] = useState(false);
   const close = () => { onOpenChange(false); button.current?.focus(); };
   const closeRef = useRef(close);
@@ -91,8 +92,8 @@ export function Menu({ open, onOpenChange, label, className, menuClassName, flip
           {footer === undefined
             ? <div ref={menu} className={`${menuClassName}${up ? ' up' : ''}`} style={place} role="menu" aria-label={label} onKeyDown={onKeyDown}>{children}</div>
             : <div ref={popup} className={`${menuClassName}${up ? ' up' : ''}`} style={place}>
-                <div ref={menu} role="menu" aria-label={label} onKeyDown={onKeyDown}>{children}</div>
-                {footer}
+                <div ref={menu} role="menu" aria-label={label} aria-describedby={footerId} onKeyDown={onKeyDown}>{children}</div>
+                <div id={footerId}>{footer}</div>
               </div>}
         </CloseMenu.Provider>
       )}
