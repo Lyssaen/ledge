@@ -40,7 +40,7 @@ export function Frame({ crumb, crumbShort, keys, kept, children }: {
   const shown = cells(crumb) <= room ? crumb : crumbShort && cells(crumbShort) <= room ? crumbShort : '';
   return (
     <Box flexDirection="column" height={rows} width={columns}>
-      <Box paddingX={1} justifyContent="space-between" height={1} backgroundColor="#1f1d1b">
+      <Box paddingX={1} justifyContent="space-between" height={1} backgroundColor={C.bar}>
         <Text wrap="truncate">
           <Text color={C.coral}>{g.logo} ledge</Text>
           <Text color={C.dim}>  {t.bar.sessions(live.length)} · {t.bar.machines(Math.max(1, machines.length))}</Text>

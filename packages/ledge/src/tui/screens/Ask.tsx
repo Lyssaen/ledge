@@ -23,7 +23,7 @@ const CARD_MS = 20_000;
 const CONVO = -2;
 
 export function Ask() {
-  const { client, d, machines, t, g, toast, go, kept, small } = useTui();
+  const { client, d, machines, t, g, toast, go, kept, small, tone } = useTui();
   const { columns } = useWindowSize();
   // Kept by the TUI: ctrl+c and another screen leave it as it is.
   const [draft, setDraftState] = useState(() => kept.drafts.get('ask') ?? '');
@@ -89,7 +89,7 @@ export function Ask() {
   const width = Math.max(20, columns - 6);
   // The streamed answer comes a few words at a time: drawn at most each 100 ms.
   const live = useThrottled(d.chatLive, 100);
-  const chat = useMemo(() => chatView(d.chat, live, { t, g, width }), [d.chat, live, t, g, width]);
+  const chat = useMemo(() => chatView(d.chat, live, { t, g, width }), [d.chat, live, t, g, width, tone]);
   const { lines } = chat;
   const maxUp = Math.max(0, lines.length - view);
   const at = anchor ? anchorLine(chat, anchor) : -1;

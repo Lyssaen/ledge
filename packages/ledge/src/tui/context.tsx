@@ -6,6 +6,7 @@ import type { Actions, Toast } from './actions.js';
 import type { Asked } from './model/chat.js';
 import type { Glyphs } from './glyphs.js';
 import type { Lang, Messages } from './i18n/lang.js';
+import type { ThemeChoice, Tone } from './theme.js';
 
 export type Screen = 'overview' | 'session' | 'ask' | 'launch' | 'settings' | 'help';
 export const SCREENS: readonly Screen[] = ['overview', 'session', 'ask', 'launch', 'settings'];
@@ -20,6 +21,8 @@ export type KeyHandler = (input: string, key: Key) => boolean;
 export interface Tui {
   client: DaemonClient; fleet: Fleet; d: DaemonState; machines: MachineState[]; projects: Projects | null;
   t: Messages; lang: Lang; setLang(lang: Lang): void; g: Glyphs;
+  /** The theme chosen, the tone drawn (what the palette `C` holds now), the terminal's background as found at start. */
+  theme: ThemeChoice; setTheme(theme: ThemeChoice): void; tone: Tone; background: Tone;
   screen: Screen; go(screen: Screen): void;
   /** The session the overview and the session screen show. */
   selected: Session | null; select(id: string | null): void;

@@ -24,7 +24,7 @@ function inline(nodes: readonly Node[], s: Style, ctx: Ctx): Seg[] {
       case 'emphasis': out.push(...inline(n.children!, { ...s, italic: true }, ctx)); break;
       case 'delete': out.push(...inline(n.children!, { ...s, strike: true }, ctx)); break;
       case 'highlight': out.push(...inline(n.children!, { ...s, color: C.yellow }, ctx)); break;
-      case 'inlineCode': out.push({ ...s, text: n.value!, color: C.fg, bg: C.sel, italic: false }); break;
+      case 'inlineCode': out.push({ ...s, text: n.value!, color: C.fg, bg: C.code, italic: false }); break;
       case 'link': {
         const text = inline(n.children!, { ...s, color: C.blue, underline: true, ...(ctx.g.links ? { link: n.url! } : {}) }, ctx);
         out.push(...text);

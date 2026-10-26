@@ -6,6 +6,7 @@ import { App } from '../src/tui/App.js';
 import { createTuiFleet } from '../src/tui/fleet.js';
 import { glyphsFor } from '../src/tui/glyphs.js';
 import type { Lang } from '../src/tui/i18n/lang.js';
+import { setTone, type ThemeChoice, type Tone } from '../src/tui/theme.js';
 import { until } from './helpers.js';
 
 const ago = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
@@ -31,7 +32,7 @@ export const PROJECTS: Projects = {
 };
 
 /** A TUI on a mock daemon: its frame, its keyboard, the daemon, and a cleanup. */
-export async function startTui(o: { sessions?: Session[]; projects?: Projects; lang?: Lang; run?: (argv: string[]) => Promise<number>; save?: (l: Lang) => void } = {}) {
+export async function startTui(o: { sessions?: Session[]; projects?: Projects; lang?: Lang; run?: (argv: string[]) => Promise<number>; save?: (l: Lang) => void; theme?: ThemeChoice; background?: Tone } = {}) {
   daemonStore.reset();
   const daemon = await createMockDaemon();
   for (const s of o.sessions ?? mockupSessions()) daemon.sessions.set(s.id, s);
@@ -41,13 +42,13 @@ export async function startTui(o: { sessions?: Session[]; projects?: Projects; l
   const client: DaemonClient = createTuiFleet({ port: daemon.port, minBackoffMs: 50, maxBackoffMs: 100, token: null });
   const detach = attachClient(client);
   client.connect();
-  const saved: Lang[] = [];
-  const ui = render(<App client={client} lang={o.lang ?? 'fr'} saveLang={l => { (o.save ?? (x => saved.push(x)))(l); }} notify="off" glyphs={glyphsFor({})} env={{}} run={o.run} />);
+  const saved: Lang[] = [], themes: ThemeChoice[] = [];
+  const ui = render(<App client={client} lang={o.lang ?? 'fr'} saveLang={l => { (o.save ?? (x => saved.push(x)))(l); }} theme={o.theme} background={o.background} saveTheme={x => { themes.push(x); }} notify="off" glyphs={glyphsFor({})} env={{}} run={o.run} />);
   await until(() => daemonStore.getState().sessions.length > 0);
   await until(() => (ui.lastFrame() ?? '').includes('Otto') || (o.sessions !== undefined && o.sessions.length === 0));
   const press = async (keys: string) => { ui.stdin.write(keys); await new Promise(r => setTimeout(r, 30)); };
   return {
-    stdin: ui.stdin as { write(data: string): void }, daemon, client, saved, press,
+    stdin: ui.stdin as { write(data: string): void }, daemon, client, saved, themes, press,
     frame: () => ui.lastFrame() ?? '',
     /** All that went to the terminal, the frames and the sequences written beside them (a title, a bell). */
     written: () => ui.stdout.frames.join(''),
@@ -58,6 +59,6 @@ export async function startTui(o: { sessions?: Session[]; projects?: Projects; l
       ui.stdout.emit('resize');
       await new Promise(r => setTimeout(r, 50));
     },
-    async cleanup() { ui.unmount(); detach(); client.close(); await daemon.close(); daemonStore.reset(); }
+    async cleanup() { ui.unmount(); detach(); client.close(); await daemon.close(); daemonStore.reset(); setTone('dark'); }
   };
 }

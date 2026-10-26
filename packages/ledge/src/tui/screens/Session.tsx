@@ -31,7 +31,7 @@ export function SessionScreen() {
 }
 
 function SessionView({ s }: { s: Session }) {
-  const { client, d, t, g, actions, attach, toast, machines, kept, lastToast } = useTui();
+  const { client, d, t, g, actions, attach, toast, machines, kept, lastToast, tone } = useTui();
   const { columns, rows } = useWindowSize();
   const [mode, setMode] = useState<Mode>('read');
   // The draft outlives the field, the screen and ctrl+c: it is kept by the TUI, by session.
@@ -52,7 +52,7 @@ function SessionView({ s }: { s: Session }) {
 
   const width = Math.max(20, columns - 6);
   // The clock is not in here: a running action's spinner and time tick on their own (ui/Lines.tsx).
-  const thread = useMemo(() => items ? threadView(items, { t, g, width, diffs, unfolded }) : { lines: [] as Line[], keys: [] as string[], turns: new Map<string, string>() }, [items, t, g, width, diffs, unfolded]);
+  const thread = useMemo(() => items ? threadView(items, { t, g, width, diffs, unfolded }) : { lines: [] as Line[], keys: [] as string[], turns: new Map<string, string>() }, [items, t, g, width, diffs, unfolded, tone]);
   const { lines, keys: lineKeys } = thread;
   const p = s.pending;
   const [view, setView] = useState(10);

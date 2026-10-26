@@ -16,6 +16,7 @@ import { Launch } from './screens/Launch.js';
 import { Settings } from './screens/Settings.js';
 import { Help } from './screens/Help.js';
 import { MIN } from './ui/Frame.js';
+import { setTone, tone as toneNow, toneFor, type ThemeChoice, type Tone } from './theme.js';
 
 /** How long a toast stays. */
 export const TOAST_MS = 5000;
@@ -27,6 +28,9 @@ export interface AppProps {
   lang: Lang;
   /** Saves the language; throws when it cannot (the choice still applies for this run). */
   saveLang(lang: Lang): void;
+  /** The theme chosen (auto by default), the terminal's background as found at start (dark when unknown), and how to save
+   *  the theme (throws as `saveLang`). */
+  theme?: ThemeChoice; background?: Tone; saveTheme?(theme: ThemeChoice): void;
   notify: NotifyMode;
   glyphs: Glyphs;
   env: NodeJS.ProcessEnv;
@@ -36,10 +40,14 @@ export interface AppProps {
 
 export function App(props: AppProps) {
   const [lang, setLangState] = useState<Lang>(props.lang);
-  return <I18nProvider lang={lang}><Shell {...props} lang={lang} setLang={setLangState} /></I18nProvider>;
+  const [theme, setThemeState] = useState<ThemeChoice>(props.theme ?? 'auto');
+  // The palette is switched before anything below draws with it.
+  const tone = toneFor(theme, props.background ?? 'dark');
+  if (tone !== toneNow()) setTone(tone);
+  return <I18nProvider lang={lang}><Shell {...props} lang={lang} setLang={setLangState} theme={theme} setThemeState={setThemeState} tone={tone} /></I18nProvider>;
 }
 
-function Shell({ client, lang, setLang: setLangState, saveLang, notify, glyphs, env, run }: AppProps & { setLang(l: Lang): void }) {
+function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeState, tone, background = 'dark', saveTheme, notify, glyphs, env, run }: AppProps & { setLang(l: Lang): void; theme: ThemeChoice; setThemeState(x: ThemeChoice): void; tone: Tone }) {
   const { exit, suspendTerminal } = useApp();
   // Escape sequences that print nothing (bell, OSC 9, title) go straight to the terminal, not through Ink's frame.
   const { stdout } = useStdout();
@@ -99,6 +107,11 @@ function Shell({ client, lang, setLang: setLangState, saveLang, notify, glyphs, 
     try { saveLang(next); toast({ text: MESSAGES[next].settings.saved, tone: 'ok' }); }
     catch (e) { toast({ text: MESSAGES[next].settings.saveFailed((e as Error).message), tone: 'error' }); }
   }, [saveLang, setLangState, toast]);
+  const setTheme = useCallback((next: ThemeChoice) => {
+    setThemeState(next);
+    try { saveTheme?.(next); toast({ text: t.settings.saved, tone: 'ok' }); }
+    catch (e) { toast({ text: t.settings.saveFailed((e as Error).message), tone: 'error' }); }
+  }, [saveTheme, setThemeState, toast, t]);
 
   const attach = useCallback((s: Session) => {
     const cmd = attachCommand(fleet, s);
@@ -114,7 +127,7 @@ function Shell({ client, lang, setLang: setLangState, saveLang, notify, glyphs, 
   const size = useWindowSize();
   const small = size.columns < MIN.columns || size.rows < MIN.rows;
   const tui: Tui = {
-    client, fleet, d, machines, projects, t, lang, setLang, g: glyphs, screen, go, selected, select: setSelectedId,
+    client, fleet, d, machines, projects, t, lang, setLang, theme, setTheme, tone, background, g: glyphs, screen, go, selected, select: setSelectedId,
     toast, lastToast, actions, editing, setEditing, small, attach, keys, kept
   };
 

@@ -19,7 +19,7 @@ export function KeyBar({ keys }: { keys: readonly Key[] }) {
   return (
     <Box paddingX={1} columnGap={2} height={1} overflow="hidden">
       {keys.map(([k, label]) => (
-        <Box key={k} flexShrink={0}><Text wrap="truncate"><Text color={C.fg} backgroundColor="#2c2926"> {k} </Text><Text color={C.dim}> {label}</Text></Text></Box>
+        <Box key={k} flexShrink={0}><Text wrap="truncate"><Text color={C.fg} backgroundColor={C.key}> {k} </Text><Text color={C.dim}> {label}</Text></Text></Box>
       ))}
     </Box>
   );

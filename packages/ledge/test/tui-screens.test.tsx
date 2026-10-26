@@ -903,7 +903,8 @@ describe('ledge tui: « Contexte max » (context handover spec §3.2)', () => {
       await tui.press(',');
       await until(() => tui.frame().includes('Contexte max'));
       await until(() => tui.frame().includes('◂ 80 % ▸'));
-      await tui.press('j');
+      // Langue, Thème, then Contexte max.
+      await tui.press('j'); await tui.press('j');
       await tui.press('\u001b[C');
       await until(() => sent(tui.daemon.received, 'context.set').length === 1);
       expect(sent(tui.daemon.received, 'context.set')[0]).toEqual({ type: 'context.set', prefs: { near: 0.85 } });

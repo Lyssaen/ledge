@@ -5,7 +5,7 @@ import { ledgeDir } from '../paths.js';
 import type { Lang } from './i18n/lang.js';
 
 /** `ledge tui`'s own settings, in `~/.ledge/tui.json`. Keys it does not know are kept (a newer `ledge` may have written them). */
-const SettingsSchema = z.object({ lang: z.enum(['fr', 'en']).optional() }).passthrough();
+const SettingsSchema = z.object({ lang: z.enum(['fr', 'en']).optional(), theme: z.enum(['auto', 'dark', 'light']).optional() }).passthrough();
 export type Settings = z.infer<typeof SettingsSchema>;
 
 export const settingsPath = (): string => join(ledgeDir(), 'tui.json');

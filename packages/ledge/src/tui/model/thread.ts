@@ -3,7 +3,7 @@ import { turns, type Turn } from '@ledge/ui/thread/turns';
 import { rawTarget, SPINNER } from '@ledge/ui/thread/tools';
 import type { Glyphs } from '../glyphs.js';
 import type { Messages } from '../i18n/lang.js';
-import { C } from '../theme.js';
+import { C, tone, type Tone } from '../theme.js';
 import { cut, pad, row, wrapSegs, type Line, type Seg } from './cells.js';
 import { markdownLines } from './markdown.js';
 import { clock, oneLine, took } from './time.js';
@@ -47,8 +47,8 @@ function toolLines(it: ToolItem, o: Opts): Line[] {
     const since = Date.parse(it.at);
     meta.push(...(meta.length ? [pad(2)] : []), { text: took(Math.max(0, now - since), t.time.decimal).padStart(LIVE_PAD), color: C.blue, live: { since, pad: LIVE_PAD } });
   }
-  const out = row([pad(2), status, { text: ` ${it.tool.padEnd(6)} `, color: C.dim }], [{ text: rawTarget(it), color: C.fg }], meta, width, { max: o.cap(CAP.tool), more: MORE });
-  if (it.status === 'failed' && it.error) out.push(...row([pad(6)], [{ text: oneLine(it.error), color: C.red }], null, width, { max: o.cap(CAP.error), more: MORE }));
+  const out = row([pad(2), status, { text: ` ${it.tool.padEnd(6)} `, color: C.dim }], [{ text: rawTarget(it), color: C.fg }], meta, width, { max: o.cap(CAP.tool), more: more() });
+  if (it.status === 'failed' && it.error) out.push(...row([pad(6)], [{ text: oneLine(it.error), color: C.red }], null, width, { max: o.cap(CAP.error), more: more() }));
   if (o.diffs) for (const f of it.files) {
     const lines = (f.diff ?? '').split('\n').filter(l => l && !l.startsWith('+++') && !l.startsWith('---'));
     // Each diff line wrapped; what goes on below it marked « ↪ ».
@@ -59,25 +59,26 @@ function toolLines(it: ToolItem, o: Opts): Line[] {
   return out;
 }
 
-const MORE: Seg = { text: ' …', color: C.faint };
+/** Read at each call: the palette changes with the theme. */
+const more = (): Seg => ({ text: ' …', color: C.faint });
 
 /** `now` only for the line's first value: a running action's spinner and time then tick in `ui/Lines.tsx`. */
 interface Opts { t: Messages; g: Glyphs; now?: number; width: number; diffs: boolean; ascii?: boolean; cap(n: number): number }
 
 /** Each text's lines, by item: the thread is drawn again at each change, and the store keeps the items that did not change.
  *  Past 500 texts the parser's own cache goes round and would parse them all again. */
-const bodies = new WeakMap<ThreadItem, { width: number; g: Glyphs; lines: Line[] }>();
+const bodies = new WeakMap<ThreadItem, { width: number; g: Glyphs; tone: Tone; lines: Line[] }>();
 
 function itemLines(it: ThreadItem, o: Opts): Line[] {
   const { t, g, width } = o;
   const body = (text: string, color: string) => {
     const was = bodies.get(it);
-    if (was && was.width === width && was.g === g) return was.lines;
+    if (was && was.width === width && was.g === g && was.tone === tone()) return was.lines;
     const lines = markdownLines(text, { width: width - 2, g, color }).map(l => [pad(2), ...l]);
-    bodies.set(it, { width, g, lines });
+    bodies.set(it, { width, g, tone: tone(), lines });
     return lines;
   };
-  const message = (head: Line, text: string, meta: Line | null) => row([pad(2), { text: `${g.message} `, color: C.violet }, ...head, pad(2)], [{ text: `« ${oneLine(text)} »`, color: C.dim }], meta, width, { indent: 4, max: o.cap(CAP.message), more: MORE });
+  const message = (head: Line, text: string, meta: Line | null) => row([pad(2), { text: `${g.message} `, color: C.violet }, ...head, pad(2)], [{ text: `« ${oneLine(text)} »`, color: C.dim }], meta, width, { indent: 4, max: o.cap(CAP.message), more: more() });
   switch (it.kind) {
     case 'prompt': return [[{ text: t.session.you, color: C.coral, bold: true }, { text: `  ${clock(it.at)}`, color: C.faint }], ...body(it.text, C.fg)];
     case 'message': return body(it.text, C.dim);
@@ -85,17 +86,17 @@ function itemLines(it: ThreadItem, o: Opts): Line[] {
     case 'tool': return toolLines(it, o);
     case 'permission':
       return row([pad(2), { text: g.approval, color: C.red }, { text: ` ${it.tool.padEnd(6)} `, color: C.dim }], [{ text: oneLine(it.text), color: C.fg }],
-        it.decision ? [{ text: `${g.arrow} ${t.session.decision[it.decision]}`, color: C.faint }] : null, width, { max: o.cap(CAP.permission), more: MORE });
+        it.decision ? [{ text: `${g.arrow} ${t.session.decision[it.decision]}`, color: C.faint }] : null, width, { max: o.cap(CAP.permission), more: more() });
     case 'helper':
       return row([{ text: `  ${g.helper} `, color: C.violet }], [{ text: it.agentType ? `${it.agentType} ` : '', color: C.dim }, { text: oneLine(it.task), color: C.violet }],
-        [{ text: it.state === 'working' ? t.state.working : t.session.helperDone, color: C.faint }], width, { indent: 4, max: o.cap(CAP.helper), more: MORE });
+        [{ text: it.state === 'working' ? t.state.working : t.session.helperDone, color: C.faint }], width, { indent: 4, max: o.cap(CAP.helper), more: more() });
     case 'sent': {
       const status = it.status === 'read' ? `${g.ok}${g.ok} ` : it.status === 'delivered' ? `${g.ok} ` : '';
       return message([{ text: `${t.session.sentTo} `, color: C.dim }, { text: it.to, color: C.fg, bold: true }], it.summary ?? it.text,
         [{ text: `${status}${t.session.sent[it.status]}`, color: it.status === 'failed' ? C.red : it.status === 'sending' ? C.faint : C.green }]);
     }
     case 'received': return message([{ text: `${t.session.receivedFrom} `, color: C.dim }, { text: it.from, color: C.fg, bold: true }], it.text, null);
-    case 'notice': return row([{ text: '  · ', color: C.faint }], [{ text: oneLine(it.summary ?? it.text), color: C.faint }], null, width, { max: o.cap(CAP.notice), more: MORE });
+    case 'notice': return row([{ text: '  · ', color: C.faint }], [{ text: oneLine(it.summary ?? it.text), color: C.faint }], null, width, { max: o.cap(CAP.notice), more: more() });
   }
 }
 
