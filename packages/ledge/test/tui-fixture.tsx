@@ -1,11 +1,14 @@
+import { createHash } from 'node:crypto';
 import { render } from 'ink-testing-library';
 import { attachClient, daemonStore, type DaemonClient } from '@ledge/fleet';
 import { createMockDaemon, fakeSession } from '@ledge/fleet/test/mockDaemon';
-import type { Projects, Session } from '@ledge/protocol';
+import type { AttachmentErrorReason, ImageMime, Projects, Session } from '@ledge/protocol';
 import { App } from '../src/tui/App.js';
+import type { ClipboardImage } from '../src/tui/clipboard.js';
 import { createTuiFleet } from '../src/tui/fleet.js';
 import { glyphsFor } from '../src/tui/glyphs.js';
 import type { Lang } from '../src/tui/i18n/lang.js';
+import { setTone, type ThemeChoice, type Tone } from '../src/tui/theme.js';
 import { until } from './helpers.js';
 
 const ago = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
@@ -31,24 +34,49 @@ export const PROJECTS: Projects = {
 };
 
 /** A TUI on a mock daemon: its frame, its keyboard, the daemon, and a cleanup. */
-export async function startTui(o: { sessions?: Session[]; projects?: Projects; lang?: Lang; run?: (argv: string[]) => Promise<number>; save?: (l: Lang) => void } = {}) {
+export async function startTui(o: { sessions?: Session[]; projects?: Projects; lang?: Lang; run?: (argv: string[]) => Promise<number>; save?: (l: Lang) => void; theme?: ThemeChoice; background?: Tone;
+  /** The clipboard reader and the viewer launcher the TUI is given (none by default: no image, nothing opened). `refusePut`: the daemon's reason for refusing every `attachment.put`. */
+  readImage?: () => Promise<ClipboardImage | null>; openFile?: (file: string) => Promise<void>; refusePut?: AttachmentErrorReason } = {}) {
   daemonStore.reset();
   const daemon = await createMockDaemon();
   for (const s of o.sessions ?? mockupSessions()) daemon.sessions.set(s.id, s);
   if (o.projects ?? PROJECTS) daemon.projects(o.projects ?? PROJECTS);
   daemon.extras.daemon = { version: '0.16.0', install: 'npm', systemd: false, models: true, modelSwitch: true, archive: true };
   daemon.extras.launcher = ['node', '/opt/ledge/cli.js'];
+  // The daemon's attachment store: a put keeps the bytes under their sha256, a get gives them back.
+  const attachments = new Map<string, { mime: ImageMime; data: string }>();
+  daemon.onMessage(m => {
+    if (m.type === 'attachment.put') {
+      if (o.refusePut) { daemon.push({ type: 'attachment.error', requestId: m.requestId, reason: o.refusePut }); return; }
+      const bytes = Buffer.from(m.image.data, 'base64');
+      const id = createHash('sha256').update(bytes).digest('hex');
+      attachments.set(id, { mime: m.image.mime, data: m.image.data });
+      daemon.push({ type: 'attachment.stored', requestId: m.requestId, ref: { id, mime: m.image.mime, width: 1, height: 1, bytes: bytes.length, preview: !!m.image.preview } });
+    } else if (m.type === 'attachment.get') {
+      const a = attachments.get(m.attachment);
+      daemon.push(a ? { type: 'attachment.data', requestId: m.requestId, attachment: m.attachment, ...a } : { type: 'attachment.error', requestId: m.requestId, reason: 'not_found' });
+    }
+  });
   const client: DaemonClient = createTuiFleet({ port: daemon.port, minBackoffMs: 50, maxBackoffMs: 100, token: null });
   const detach = attachClient(client);
   client.connect();
-  const saved: Lang[] = [];
-  const ui = render(<App client={client} lang={o.lang ?? 'fr'} saveLang={l => { (o.save ?? (x => saved.push(x)))(l); }} notify="off" glyphs={glyphsFor({})} env={{}} run={o.run} />);
+  const saved: Lang[] = [], themes: ThemeChoice[] = [];
+  const ui = render(<App client={client} lang={o.lang ?? 'fr'} saveLang={l => { (o.save ?? (x => saved.push(x)))(l); }} theme={o.theme} background={o.background} saveTheme={x => { themes.push(x); }} notify="off" glyphs={glyphsFor({})} env={{}} run={o.run} readImage={o.readImage ?? (async () => null)} openFile={o.openFile ?? (async () => {})} />);
   await until(() => daemonStore.getState().sessions.length > 0);
   await until(() => (ui.lastFrame() ?? '').includes('Otto') || (o.sessions !== undefined && o.sessions.length === 0));
   const press = async (keys: string) => { ui.stdin.write(keys); await new Promise(r => setTimeout(r, 30)); };
   return {
-    stdin: ui.stdin as { write(data: string): void }, daemon, client, saved, press,
+    stdin: ui.stdin as { write(data: string): void }, daemon, client, attachments, saved, themes, press,
     frame: () => ui.lastFrame() ?? '',
-    async cleanup() { ui.unmount(); detach(); client.close(); await daemon.close(); daemonStore.reset(); }
+    /** All that went to the terminal, the frames and the sequences written beside them (a title, a bell). */
+    written: () => ui.stdout.frames.join(''),
+    /** The terminal resized to `columns` × `rows`, as a real one says it (a `resize` on stdout). */
+    async resize(columns: number, rows: number) {
+      Object.defineProperty(ui.stdout, 'columns', { configurable: true, get: () => columns });
+      Object.defineProperty(ui.stdout, 'rows', { configurable: true, get: () => rows });
+      ui.stdout.emit('resize');
+      await new Promise(r => setTimeout(r, 50));
+    },
+    async cleanup() { ui.unmount(); detach(); client.close(); await daemon.close(); daemonStore.reset(); setTone('dark'); }
   };
 }

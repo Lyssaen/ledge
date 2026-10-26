@@ -2,10 +2,11 @@ import { useContext, useEffect, useMemo } from 'react';
 import Markdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { MarkdownLinks } from './links';
+import { remarkHighlight } from './mdast';
 import { parseDocumentReference, type DocumentReference } from './references';
 import './markdown.css';
 
-export { MarkdownLinks };
+export { MarkdownLinks, remarkHighlight };
 
 export interface DocumentHeading { id: string; depth: number; text: string }
 export function splitMarkdownFrontmatter(text: string): { title?: string; body: string } {
@@ -34,28 +35,6 @@ export function documentHeadings(root: Node): DocumentHeading[] {
     n.children?.forEach(visit);
   };
   visit(root); return headings;
-}
-
-/** `==text==` becomes a highlight (<mark>), as most Markdown editors read it; GFM has no such mark. Inline code and code
- *  blocks are left alone, and the mark does not span other inline marks. */
-const HIGHLIGHT = /==(?=\S)([^=\n]*?\S)==/g;
-export function remarkHighlight() {
-  const visit = (n: Node) => {
-    if (!n.children) return;
-    n.children = n.children.flatMap(c => {
-      if (c.type !== 'text' || !c.value?.includes('==')) { visit(c); return [c]; }
-      const out: Node[] = []; let last = 0;
-      for (const m of c.value.matchAll(HIGHLIGHT)) {
-        if (m.index > last) out.push({ type: 'text', value: c.value.slice(last, m.index) });
-        out.push({ type: 'highlight', data: { hName: 'mark' }, children: [{ type: 'text', value: m[1]! }] } as Node);
-        last = m.index + m[0].length;
-      }
-      if (last === 0) return [c];
-      if (last < c.value.length) out.push({ type: 'text', value: c.value.slice(last) });
-      return out;
-    });
-  };
-  return (tree: Node) => visit(tree);
 }
 
 /** Links open where Ledge can: a Markdown document in the reader, a web address in the browser, an anchor in place.

@@ -8,7 +8,8 @@ import { botState } from '@ledge/ui/bots/poseFor';
 import { useScreenKeys, useTui } from '../context.js';
 import { closedLedgeTasks, exchanges, helperCount, nearContext, nextWaiting, overview, step } from '../model/overview.js';
 import { fit, machineLabel, paneName } from '../model/labels.js';
-import { ago, clock, oneLine } from '../model/time.js';
+import { clock, oneLine } from '../model/time.js';
+import { Ago } from '../ui/Ago.js';
 import { C, projectColor, STATE_COLOR } from '../theme.js';
 import { Frame } from '../ui/Frame.js';
 import { SessionCard } from '../ui/SessionCard.js';
@@ -33,7 +34,7 @@ export function windowed<T extends { key: string }>(rows: readonly T[], selected
 
 export function Overview() {
   const tui = useTui();
-  const { d, projects, t, g, now, selected, select, actions, go, attach } = tui;
+  const { d, projects, t, g, selected, select, actions, go, attach } = tui;
   const { columns, rows: height } = useWindowSize();
   const wide = columns >= WIDE;
   // The left column: wide enough for a topic, never more than half the terminal.
@@ -133,7 +134,7 @@ export function Overview() {
           <Text key={s.id} wrap="truncate" backgroundColor={s.id === sel ? C.sel : undefined}>
             <Text color={STATE_COLOR[st]}>{g[st]} </Text><Text color={C.fg} bold>{fit(s.name, nameW)}</Text>
             <Text color={C.dim}>{fit(s.repo ?? s.project, 9)}</Text><Text color={STATE_COLOR[st]}>{fit(oneLine(s.pending?.text ?? ''), askW)}</Text>
-            <Text color={C.faint}> {ago(s.lastActivityAt, now, t.time)}</Text>
+            <Text color={C.faint}> <Ago iso={s.lastActivityAt} /></Text>
           </Text>
         );
       }), ...closed.slice(0, Math.max(0, yoursHeight - view.yours.length)).map(x => (
@@ -196,7 +197,7 @@ export function Overview() {
               {(() => {
                 const list = exchanges(d.sessions, 3, tasks, t.overview.ledge);
                 return list.length === 0 ? <Text color={C.faint}>{t.overview.noExchange}</Text> : list.map((x, i) => (
-                  <Text key={i} wrap="truncate"><Text color={C.faint}>{clock(x.at)}</Text> <Text color={C.fg}>{x.from}</Text> <Text color={C.violet}>{g.arrow}</Text> <Text color={C.fg}>{x.to}</Text>  <Text color={C.dim}>{oneLine(x.summary)}</Text></Text>
+                  <Text key={i} wrap="truncate"><Text color={C.faint}>{clock(x.at)}</Text> <Text color={C.fg}>{x.from}</Text> <Text color={x.kind === 'task' ? C.green : C.violet}>{g.arrow}</Text> <Text color={C.fg}>{x.to}</Text>  {x.kind === 'task' ? <Text color={C.green}>{g.task} </Text> : null}<Text color={C.dim}>{oneLine(x.summary)}</Text></Text>
                 ));
               })()}
             </TitledBox>

@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import type { ThreadItem } from '@ledge/protocol';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { DaemonClient } from '@ledge/fleet';
+import type { AttachmentRef, ClientMessage, ServerMessage, ThreadItem } from '@ledge/protocol';
 import { Thread } from '../src/surface/Thread';
 import { messagesFor } from '../src/i18n/lang';
 import { fakeSession } from './mockDaemon';
@@ -108,5 +109,42 @@ describe('<Thread>', () => {
     expect(md.querySelector('pre')).toHaveTextContent('x == y');
     expect(md.querySelector('b')).toBeNull();
     expect(container.querySelector('[data-message]')).toHaveTextContent(fakeSession('a').name);
+  });
+});
+
+describe('<Thread> images', () => {
+  const ref = (c: string): AttachmentRef => ({ id: c.repeat(64), mime: 'image/png', width: 1440, height: 900, bytes: 212_000, preview: true });
+  const local = new Date(2026, 9, 26, 14, 2).toISOString();
+  beforeEach(() => { let n = 0; URL.createObjectURL = vi.fn(() => `blob:test/${++n}`); });
+  /** A client whose daemon answers every attachment.get with a pixel. */
+  function fakeClient() {
+    const sent: ClientMessage[] = [];
+    const listeners = new Set<(m: ServerMessage) => void>();
+    const client = {
+      send: (m: ClientMessage) => { sent.push(m); if (m.type === 'attachment.get') queueMicrotask(() => listeners.forEach(l => l({ type: 'attachment.data', requestId: m.requestId, attachment: m.attachment, mime: 'image/png', data: 'iVBORw0KGgo=' }))); },
+      onMessage: (l: (m: ServerMessage) => void) => { listeners.add(l); return () => { listeners.delete(l); }; }
+    } as unknown as DaemonClient;
+    return { client, sent };
+  }
+  const withImages: ThreadItem[] = [{ kind: 'prompt', id: 'p1', at: local, turn: 1, text: 'Look at this', images: [ref('a'), ref('b')] }];
+
+  it('shows a prompt’s images as thumbnails and opens the lightbox, with no actions', async () => {
+    const { client, sent } = fakeClient();
+    const { container } = render(<Thread session={fakeSession('a')} items={withImages} t={t} theme="dark" paused client={client} />);
+    await waitFor(() => expect([...container.querySelectorAll('[data-thumb]')].map(e => e.getAttribute('data-thumb'))).toEqual(['ready', 'ready']));
+    expect(sent.filter(m => m.type === 'attachment.get')).toMatchObject([{ attachment: 'a'.repeat(64), id: 'a', preview: true }, { attachment: 'b'.repeat(64), id: 'a', preview: true }]);
+    fireEvent.click(container.querySelector('[data-thumb="ready"]')!);
+    const dialog = await screen.findByRole('dialog', { name: 'Capture · You, 14:02' });
+    expect(dialog).toHaveTextContent('1440×900 · 212 KB');
+    expect(screen.queryByRole('button', { name: 'Copy' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Save…' })).toBeNull();
+    fireEvent.keyDown(document, { key: 'ArrowRight' });
+    expect(dialog).toHaveTextContent('2/2');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+  it('shows no thumbnails without a client', () => {
+    const { container } = render(<Thread session={fakeSession('a')} items={withImages} t={t} theme="dark" paused />);
+    expect(container.querySelector('[data-thumb]')).toBeNull();
   });
 });

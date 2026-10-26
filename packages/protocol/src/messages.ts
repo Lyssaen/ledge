@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { AskQuestionSchema, PendingSchema, SessionSchema, ToolSchema, OmpApprovalSchema } from './session.js';
-import { ChatStepSchema, ChatTurnSchema, ChatProposalSchema, ChatProposalsSchema, ChatRelaySchema, ChatClosesSchema, MAX_PROPOSALS, ChatProjectProposalSchema, ChatTeamProposalSchema, ChatTasksSchema } from './chat.js';
+import { ChatStepSchema, ChatTurnSchema, ChatProposalSchema, ChatProposalsSchema, ChatRelaySchema, ChatClosesSchema, MAX_PROPOSALS, ChatProjectProposalSchema, ChatTeamProposalSchema, ChatTasksSchema, ChatActionsSchema, ChatActionSchema } from './chat.js';
+import { ActionIdSchema } from './actions.js';
+import { ATTACHMENTS_MAX, AttachmentDataSchema, AttachmentErrorSchema, AttachmentGetSchema, AttachmentIdSchema, AttachmentPutSchema, AttachmentStoredSchema, ImageUploadSchema } from './attachments.js';
 import { ReposInspectSchema, ReposInfoSchema } from './repos.js';
 import { ModelsListSchema, ModelsListingSchema, ModelIdSchema, EffortSchema } from './models.js';
 import { ReposScanSchema, ReposFoundSchema } from './scan.js';
@@ -20,7 +22,7 @@ import { RoleIdSchema, RolesListSchema, RolesListingSchema, TeamDissolveSchema, 
 export const PROTOCOL_PORT = 47831;
 
 /** Why the daemon refused a front's command. Travels as the `code` of an `error`, which stays a free string so that an older front ignores a new one. */
-export const RefusalCodeSchema = z.enum(['stale', 'read_only', 'no_prompt', 'not_taken', 'busy', 'unknown_session', 'nothing_to_decide', 'not_offered', 'free_text', 'note_not_typed', 'unavailable', 'invalid']);
+export const RefusalCodeSchema = z.enum(['stale', 'read_only', 'no_prompt', 'not_taken', 'busy', 'unknown_session', 'nothing_to_decide', 'not_offered', 'free_text', 'note_not_typed', 'unavailable', 'invalid', 'attachment_missing', 'attachments_not_accepted']);
 export type RefusalCode = z.infer<typeof RefusalCodeSchema>;
 
 export const SessionEventSchema = z.object({
@@ -41,6 +43,8 @@ export const SessionEventSchema = z.object({
   task: z.string().optional(),
   /** PostToolUseFailure: the user interrupted the turn (Esc); Claude then waits for input with no Stop. */
   interrupt: z.boolean().optional(),
+  /** UserPromptSubmit: the images the prompt carried, by attachment id. */
+  attachments: z.array(AttachmentIdSchema).max(ATTACHMENTS_MAX).optional(),
   /** QueueUpdate: OMP's queue as it stands. */
   queue: z.array(z.object({ text: z.string(), mode: z.enum(['steer', 'follow_up']) })).optional(),
   /** AgentMessage: the harness's own message, its text so far (`streaming`) or whole. `messageId` is unique for the session's life. */
@@ -92,6 +96,9 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('chat.routed'), qid: z.string(), result: RouteResultSchema }),
   DocumentContentSchema,
   DocumentErrorSchema,
+  AttachmentStoredSchema,
+  AttachmentDataSchema,
+  AttachmentErrorSchema,
   ReposInfoSchema,
   ReposFoundSchema,
   ModelsListingSchema,
@@ -101,7 +108,9 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('snapshot'), sessions: z.array(SessionSchema), recents: z.array(RecentSchema).optional(), launcher: z.array(z.string()).optional(), daemon: DaemonInfoSchema.optional(), sshAlias: SshAliasSchema.optional() }),
   z.object({ type: z.literal('session.updated'), session: SessionSchema }),
   /** OMP: the instructions taken back from its queue by an interrupt that restores it; the asker puts them back in its draft. */
-  z.object({ type: z.literal('session.queue.restored'), id: z.string(), texts: z.array(z.string()) }),
+  z.object({ type: z.literal('session.queue.restored'), id: z.string(), texts: z.array(z.string()),
+    /** The same instructions with the images they carried; `imagesDropped`: some images could not be put back. */
+    entries: z.array(z.object({ text: z.string(), attachments: z.array(AttachmentIdSchema).optional() })).optional(), imagesDropped: z.boolean().optional() }),
   z.object({ type: z.literal('session.removed'), id: z.string() }),
   z.object({ type: z.literal('session.preview'), id: z.string(), lines: z.array(z.string()) }),
   /** A session's thread, on request (spec 2026-10-13 §5); then each created or updated item, broadcast. */
@@ -121,7 +130,13 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   /** The chat (spec 2026-10-11 §5): what Ledge reads, its words as they come, the final text, or why it stopped; the day's turns after each snapshot. */
   z.object({ type: z.literal('chat.step'), qid: z.string(), step: ChatStepSchema }),
   z.object({ type: z.literal('chat.delta'), qid: z.string(), text: z.string() }),
-  z.object({ type: z.literal('chat.done'), qid: z.string(), text: z.string(), at: z.string().datetime(), proposal: ChatProposalSchema.optional(), proposals: ChatProposalsSchema.optional(), relay: ChatRelaySchema.optional(), closes: ChatClosesSchema.optional(), projectProposal: ChatProjectProposalSchema.optional(), team: ChatTeamProposalSchema.optional(), tasks: ChatTasksSchema.optional() }),
+  z.object({ type: z.literal('chat.done'), qid: z.string(), text: z.string(), at: z.string().datetime(), proposal: ChatProposalSchema.optional(), proposals: ChatProposalsSchema.optional(), relay: ChatRelaySchema.optional(), closes: ChatClosesSchema.optional(), projectProposal: ChatProjectProposalSchema.optional(), team: ChatTeamProposalSchema.optional(), tasks: ChatTasksSchema.optional(), actions: ChatActionsSchema.optional() }),
+  /** What a `chat.act` applied: the rows done, and the one that failed with why (the rows after it stay proposed). */
+  z.object({ type: z.literal('chat.acted'), rid: z.string(), qid: z.string(), done: z.array(z.number().int().min(0)), failed: z.array(z.object({ row: z.number().int().min(0), message: z.string(), /** nothing was sent */ refused: z.literal(true).optional() })) }),
+  /** What an `action.run` came to: `row` the action as the daemon resolved it (its summary, its risk); `reason` why it was not
+   *  done, with `code` (`refused`: not possible now; `agent`: a session may not run it; `confirm_required`: destructive, ask
+   *  again; `failed`: the handler turned it down; a free string, as an `error`'s); `path` the template a `team.save` wrote. */
+  z.object({ type: z.literal('action.result'), rid: z.string(), action: z.string().min(1).max(40), row: ChatActionSchema.optional(), reason: z.string().optional(), code: z.string().optional(), path: z.string().optional() }),
   z.object({ type: z.literal('chat.error'), qid: z.string(), message: z.string() }),
   z.object({ type: z.literal('chat.history'), turns: z.array(ChatTurnSchema) }),
   /** The daemon updating itself: npm is running, then the service restarts (the socket closes right after). */
@@ -163,6 +178,8 @@ const launchRows = z.array(z.number().int().min(0).max(MAX_PROPOSALS - 1)).min(1
 export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('chat.route'), qid: z.string().min(1).max(100), text: z.string().min(1).max(20000), tool: ToolSchema.optional(), context: RoutingContextSchema }),
   DocumentReadSchema,
+  AttachmentPutSchema,
+  AttachmentGetSchema,
   ReposInspectSchema,
   ReposScanSchema,
   ModelsListSchema,
@@ -190,11 +207,23 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   /** `steer`: OMP only, redirect the turn running now instead of queueing the text after it. */
   /** OMP's `ask`: the answers to every question of the dialog `requestId`, in order (`selected` labels, and/or free `text`); `cancel` declines it. */
   z.object({ type: z.literal('session.answer'), id: z.string(), requestId: z.string().min(1).max(200), answers: z.array(z.object({ id: z.string(), selected: z.array(z.string().max(2000)).max(100), text: z.string().max(20000).optional() })).max(50), cancel: z.boolean().optional() }),
-  z.object({ type: z.literal('session.reply'), id: z.string(), text: z.string().min(1), steer: z.boolean().optional() }),
+  z.object({ type: z.literal('session.reply'), id: z.string(), text: z.string(), attachments: z.array(AttachmentIdSchema).max(ATTACHMENTS_MAX).optional(), steer: z.boolean().optional() }),
   /** The chat card's instruction (spec 2026-10-12 relay §4): sent now if the session is free, else queued until it is. */
   z.object({ type: z.literal('session.relay'), qid: z.string().min(1) }),
   /** Takes the card's queued instruction back out of the queue. */
   z.object({ type: z.literal('session.relay.cancel'), qid: z.string().min(1) }),
+  /** The chat's generic card (action registry spec §5.1): applies its rows in order (all of them without `rows`), stopping at
+   *  the first failure. `confirmed` says the front asked again; refused without it when a row is destructive. */
+  z.object({ type: z.literal('chat.act'), rid: z.string().min(1).max(100), qid: z.string().min(1), rows: launchRows.optional(), confirmed: z.literal(true).optional(),
+    /** « Refuser »: each row (session.decide only) answers its session's request with deny, whatever its own decision; never
+     *  confirmed, and allowed on a request shown cut. The rows become `denied`. */
+    deny: z.literal(true).optional() }),
+  /** « Ignorer » the turn's cards, for every device and for Ledge (who is told at the next question); `undo` opens them
+   *  again (« Revoir »). Refused while one of them is under way. Every client gets the turn's `ignoredAt` through chat.history. */
+  z.object({ type: z.literal('chat.ignore'), qid: z.string().min(1), undo: z.literal(true).optional() }),
+  /** A registry action run outside the chat (#93, the CLI): the daemon resolves `args` as it does a generic card's row, then
+   *  applies it through its own handler. `by` the session that asks, left out for the user; `confirmed` for a destructive one. */
+  z.object({ type: z.literal('action.run'), rid: z.string().min(1).max(100), by: z.string().min(1).optional(), /** `by`'s key (LEDGE_SESSION_KEY) */ key: z.string().max(128).optional(), action: ActionIdSchema, args: z.record(z.unknown()), confirmed: z.literal(true).optional() }),
   /** The chat's close card: closes the turn's sessions, `rows` (indexes into its `closes`) or all of them. */
   z.object({ type: z.literal('session.close'), qid: z.string().min(1), rows: launchRows.optional() }),
   /** `always` and `note` only where the harness offers them (`offers`); a note goes with `deny`, for the agent to read. */
@@ -229,7 +258,7 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session.event'), id: z.string(), event: SessionEventSchema, agent: ToolSchema.optional(), cwd: z.string().optional() }),
   z.object({ type: z.literal('session.unregister'), id: z.string(), exitCode: z.number().int().nullable() }),
   z.object({ type: z.literal('snapshot.request') }),
-  z.object({ type: z.literal('chat.ask'), qid: z.string().min(1), text: z.string().min(1), tool: ToolSchema.optional() }),
+  z.object({ type: z.literal('chat.ask'), qid: z.string().min(1), text: z.string(), images: z.array(ImageUploadSchema).max(ATTACHMENTS_MAX).optional(), tool: ToolSchema.optional() }),
   z.object({ type: z.literal('chat.cancel'), qid: z.string().min(1) }),
   /** Starts a new conversation with Ledge: the day's turns are cleared and the next question opens a new harness session. */
   z.object({ type: z.literal('chat.reset') }),

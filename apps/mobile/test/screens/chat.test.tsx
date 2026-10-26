@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { setCodecForTests } from '@ledge/ui/images';
 import { describe, expect, it } from 'vitest';
 import { copy } from '../../src/copy';
 import { Agents } from '../../src/screens/Agents';
@@ -157,5 +158,49 @@ describe('the chat screen', () => {
     expect(t.of('chat.ask')).toHaveLength(0);
     fireEvent.keyDown(field, { key: 'Enter' });
     expect(t.of('chat.ask')).toHaveLength(1);
+  });
+});
+
+describe('images in the chat', () => {
+  const ID = 'd'.repeat(64);
+  const REF = { id: ID, mime: 'image/webp' as const, width: 800, height: 600, bytes: 31_000, preview: true };
+
+  it('＋ then send asks with the image id and the turn shows its thumbnail', async () => {
+    setCodecForTests({ async decode() { return { width: 800, height: 600, async draw() { return { async encode(mime: 'image/webp' | 'image/jpeg') { return new Blob([new Uint8Array(1000)], { type: mime }); } }; } }; } });
+    try {
+      const t = chatSetup();
+      expect(screen.getByRole('button', { name: 'Joindre une image' })).toBeEnabled();
+      const input = document.querySelector<HTMLInputElement>('input[type=file][accept="image/*"][multiple]')!;
+      fireEvent.change(input, { target: { files: [new File([new Uint8Array(10)], 'a.png', { type: 'image/png' })] } });
+      await waitFor(() => expect(t.of('attachment.put')).toHaveLength(1));
+      act(() => t.deliver({ type: 'attachment.stored', requestId: t.of('attachment.put')[0]!.requestId, ref: REF }));
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Envoyer la question' })).toBeEnabled());
+      send();
+      expect(t.of('chat.ask')).toMatchObject([{ text: '', attachments: [ID] }]);
+      await waitFor(() => expect(t.of('attachment.get')).toHaveLength(1));
+      act(() => t.deliver({ type: 'attachment.data', requestId: t.of('attachment.get')[0]!.requestId, attachment: ID, mime: 'image/webp', data: 'AAAA' }));
+      await waitFor(() => expect(document.querySelector('[data-thumb=ready]')).not.toBeNull());
+    } finally { setCodecForTests(null); }
+  });
+
+  it('a refused question (busy) brings the chip back', async () => {
+    setCodecForTests({ async decode() { return { width: 800, height: 600, async draw() { return { async encode(mime: 'image/webp' | 'image/jpeg') { return new Blob([new Uint8Array(1000)], { type: mime }); } }; } }; } });
+    try {
+      const t = chatSetup();
+      fireEvent.change(document.querySelector<HTMLInputElement>('input[type=file]')!, { target: { files: [new File([new Uint8Array(10)], 'a.png', { type: 'image/png' })] } });
+      await waitFor(() => expect(t.of('attachment.put')).toHaveLength(1));
+      act(() => t.deliver({ type: 'attachment.stored', requestId: t.of('attachment.put')[0]!.requestId, ref: REF }));
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Envoyer la question' })).toBeEnabled());
+      send();
+      expect(document.querySelectorAll('[data-chip]')).toHaveLength(0);
+      act(() => t.deliver(chat.error(t.of('chat.ask')[0]!.qid, 'busy')));
+      await waitFor(() => expect(document.querySelectorAll('[data-chip]')).toHaveLength(1));
+    } finally { setCodecForTests(null); }
+  });
+
+  it('a turn the PC lists with images shows them', async () => {
+    const t = chatSetup();
+    act(() => t.deliver(chat.history(chat.turn('q1', { question: 'Regarde', answer: 'Vu.', attachments: [REF] }))));
+    await waitFor(() => expect(t.of('attachment.get')).toHaveLength(1));
   });
 });

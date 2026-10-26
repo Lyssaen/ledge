@@ -1,5 +1,8 @@
 import { z } from 'zod';
 import { AutonomySchema, ToolSchema } from './session.js';
+import { EffortSchema, ModelIdSchema } from './models.js';
+import { ActionRiskSchema } from './actions.js';
+import { AttachmentRefSchema } from './attachments.js';
 
 /** What Ledge consulted while answering: a context file (a session's pane, reply or git summary, the sessions list) or a repository file. */
 export const ChatStepSchema = z.object({
@@ -12,6 +15,8 @@ export type ChatStep = z.infer<typeof ChatStepSchema>;
  *  `launchedId` once the card started it, `error` when the last launch failed. */
 export const ChatProposalSchema = z.object({
   cwd: z.string().min(1), project: z.string(), prompt: z.string().optional(), tool: ToolSchema,
+  /** What Ledge proposed on the card's picker (spec 2026-10-26 action registry §4), the agent's own default when left out. */
+  model: ModelIdSchema.optional(), effort: EffortSchema.optional(),
   launchedId: z.string().optional(), error: z.string().optional()
 });
 export type ChatProposal = z.infer<typeof ChatProposalSchema>;
@@ -75,13 +80,49 @@ export const ChatTaskProposalSchema = z.object({
 export type ChatTaskProposal = z.infer<typeof ChatTaskProposalSchema>;
 export const ChatTasksSchema = z.array(ChatTaskProposalSchema).min(1).max(MAX_PROPOSALS);
 
-/** One question to Ledge and its answer; `error` set when it could not answer, both absent while it is still reading. */
+/** A row's display words (action registry spec §5.1), by action, each at most 300 characters: what a front fills its own
+ *  copy with, `summary` its fallback. session.* `session` (its name); session.model `model`, `effort`; session.decide
+ *  `decision` (accept | deny), `kind` (permission | diff | plan), `note`; team.* `team` (its name), team.join `session`,
+ *  `role`, team.leave `session`, team.save `name`, `replaces` ('1': a template of that name is replaced); task.* `task`
+ *  (its title), `owner` (who holds it), task.cancel `reason`, task.pass `session` (who gets it), `note`. */
+export const ActionVarsSchema = z.record(z.string().max(40), z.string().max(300));
+export const DETAIL_MAX = 4000;
+/** Why a row was refused or failed (`cut`: a request the card shows cut, accepted only in the session), for a front's own words (`error` stays the daemon's text, for the log): a string on the
+ *  wire, so a code a front does not know yet reads as `failed`. */
+export const ACTION_ERROR_CODES = [
+  'unknown', 'ambiguous', 'read_only', 'exited', 'running', 'archived', 'not_archived', 'no_terminal', 'same_model', 'no_request',
+  'in_session', 'no_note', 'member', 'not_member', 'unknown_role', 'not_resting', 'dissolved', 'no_seat', 'closed', 'holder',
+  'changed', 'cut', 'failed'
+] as const;
+export type ActionErrorCode = (typeof ACTION_ERROR_CODES)[number];
+/** A row of the chat's generic card (action registry spec §5.1): an action the daemon resolved, ready to apply. `action` is a
+ *  registry id, a plain string here so a front older than the daemon still draws a newer one from its `summary` (§5.2); `args`
+ *  are resolved (ids, never names), what the daemon applies; `summary` the daemon's one line in French; `vars` its words, for
+ *  a front's own language; `detail` what to read in full before confirming (a pending request, verbatim), `detailCut` when it
+ *  had to be shortened (the front says so, and sends to the session); `session` / `team` the target, for a link. No `state`:
+ *  proposed; `done`: applied; `denied`: « Refuser », the session's request answered with deny instead (session.decide only);
+ *  `doneAt` set on both. `refused`: nothing was sent (its target changed or went since the card), `failed`: sent, and it went wrong;
+ *  `code` says why, `error` too in the daemon's words. */
+export const ChatActionStateSchema = z.enum(['running', 'done', 'denied', 'failed', 'refused']);
+export const ChatActionSchema = z.object({
+  action: z.string().min(1).max(40), args: z.record(z.unknown()), summary: z.string().min(1).max(300), vars: ActionVarsSchema.optional(),
+  detail: z.string().max(DETAIL_MAX).optional(), detailCut: z.literal(true).optional(),
+  risk: ActionRiskSchema, session: z.string().optional(), team: z.string().optional(),
+  state: ChatActionStateSchema.optional(), doneAt: z.string().datetime().optional(), error: z.string().optional(), code: z.string().max(40).optional()
+});
+export type ChatAction = z.infer<typeof ChatActionSchema>;
+/** Every generic row an answer proposes, in the order Ledge wrote them: one plan (spec §9.2). */
+export const ChatActionsSchema = z.array(ChatActionSchema).min(1).max(MAX_PROPOSALS);
+
+/** One question to Ledge and its answer; `error` set when it could not answer, both absent while it is still reading.
+ *  `ignoredAt`: the user set the turn's cards aside (on any device): nothing of them applies until `chat.ignore` with `undo`. */
 export const ChatTurnSchema = z.object({
   machineId: z.string().optional(), machineName: z.string().optional(), choices: z.array(z.object({ id: z.string(), label: z.string() })).optional(),
   qid: z.string().min(1), question: z.string(), askedAt: z.string().datetime(),
   steps: z.array(ChatStepSchema), answer: z.string().optional(), answeredAt: z.string().datetime().optional(), error: z.string().optional(), proposal: ChatProposalSchema.optional(), proposals: ChatProposalsSchema.optional(), relay: ChatRelaySchema.optional(), closes: ChatClosesSchema.optional(),
   projectProposal: ChatProjectProposalSchema.optional(),
-  team: ChatTeamProposalSchema.optional(), tasks: ChatTasksSchema.optional()
+  team: ChatTeamProposalSchema.optional(), tasks: ChatTasksSchema.optional(), actions: ChatActionsSchema.optional(),
+  ignoredAt: z.string().datetime().optional(), attachments: z.array(AttachmentRefSchema).optional()
 });
 export type ChatTurn = z.infer<typeof ChatTurnSchema>;
 

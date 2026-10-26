@@ -6,19 +6,23 @@ import { glyphsFor } from './glyphs.js';
 import { MESSAGES } from './i18n/lang.js';
 import { NOTIFY_MODES, type NotifyMode } from './notify.js';
 import { defaultLang, loadSettings, saveSettings } from './settings.js';
+import { movesToLedgeTab, openTuiInLedgeTab } from './terminalProfile.js';
+import { backgroundAtStart } from './background.js';
 
-export const TUI_USAGE = 'ledge tui [--notify bell|osc9|off]';
+export const TUI_USAGE = 'ledge tui [--notify bell|osc9|off] [--here]';
 
-/** `--notify <mode>` or `--notify=<mode>`; null when an argument is not understood. */
-export function tuiArgs(args: readonly string[]): { notify: NotifyMode } | null {
+/** `--notify <mode>` or `--notify=<mode>`, and `--here` (stay in this tab); null when an argument is not understood. */
+export function tuiArgs(args: readonly string[]): { notify: NotifyMode; here: boolean } | null {
   let notify: NotifyMode = 'bell';
+  let here = false;
   for (let i = 0; i < args.length; i++) {
     const a = args[i]!;
+    if (a === '--here') { here = true; continue; }
     const value = a.startsWith('--notify=') ? a.slice('--notify='.length) : a === '--notify' ? args[++i] : undefined;
     if (value === undefined || !NOTIFY_MODES.includes(value as NotifyMode)) return null;
     notify = value as NotifyMode;
   }
-  return { notify };
+  return { notify, here };
 }
 
 /** `ledge tui`: Ledge in the terminal, on the alternate screen, until `q`. */
@@ -28,13 +32,24 @@ export async function runTui(args: readonly string[]): Promise<number> {
   const settings = loadSettings();
   const lang = settings.lang ?? defaultLang(process.env);
   if (!process.stdin.isTTY || !process.stdout.isTTY) { console.error(MESSAGES[lang].cli.notTty); return 2; }
+  // In Windows Terminal, the TUI moves to a tab of the Ledge profile, the one whose icon is the mascot.
+  if (movesToLedgeTab(process.env, parsed.here, process.argv[1] ?? '') && await openTuiInLedgeTab(process.env, () => console.log(MESSAGES[lang].cli.loadingProfile))) {
+    console.log(MESSAGES[lang].cli.movedToTab);
+    return 0;
+  }
+  const theme = settings.theme ?? 'auto';
+  // Asked before Ink takes the keyboard, in auto only: a few milliseconds where the terminal answers, a second at most where
+  // it does not.
+  const background = await backgroundAtStart(theme, process.env, { stdin: process.stdin, stdout: process.stdout });
   const client = createTuiFleet();
   const detach = attachClient(client);
   client.connect();
   const app = render(
-    <App client={client} lang={lang} saveLang={next => saveSettings({ ...loadSettings(), lang: next })} notify={parsed.notify} glyphs={glyphsFor(process.env)} env={process.env} />,
-    // Incremental: a key rewrites the lines it changed, not the whole screen erased then drawn again (the flicker).
-    { alternateScreen: true, exitOnCtrlC: false, maxFps: 30, incrementalRendering: true }
+    <App client={client} lang={lang} saveLang={next => saveSettings({ ...loadSettings(), lang: next })}
+      theme={theme} background={background} saveTheme={next => saveSettings({ ...loadSettings(), theme: next })} notify={parsed.notify} glyphs={glyphsFor(process.env)} env={process.env} />,
+    // Incremental: a key rewrites the lines it changed, not the whole screen erased then drawn again (the flicker). Where the
+    // terminal speaks the kitty keyboard protocol, shift+↵ is told from ↵ (a new line in a field).
+    { alternateScreen: true, exitOnCtrlC: false, maxFps: 30, incrementalRendering: true, kittyKeyboard: { mode: 'auto', flags: ['disambiguateEscapeCodes'] } }
   );
   // A kill leaves the terminal as Ink found it: unmounting restores the screen, the cursor and the keyboard mode.
   const stop = () => app.unmount();

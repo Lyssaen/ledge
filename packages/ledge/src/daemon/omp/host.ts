@@ -1,11 +1,14 @@
 import { randomBytes } from 'node:crypto';
 import { basename, join } from 'node:path';
 import { mkdir } from 'node:fs/promises';
-import type { OmpApproval, Session, SessionEvent } from '@ledge/protocol';
+import type { AttachmentRef, OmpApproval, Session, SessionEvent } from '@ledge/protocol';
 import { pickName } from '@ledge/protocol';
 import { agentEnv, PARENT_AGENT_VARS } from '../../spawn.js';
+import { sessionKey, SESSION_KEY_VAR } from '../../auth.js';
 import { log } from '../../log.js';
 import type { Store } from '../store.js';
+import type { AttachmentStore } from '../attachments.js';
+import { withImages } from '../../attachmentText.js';
 import { OmpRpc, RpcError, type Frame, type RpcOptions } from './rpc.js';
 import { reapOwner, writeOwner } from './owner.js';
 import { answerFor, askAnswerFor, newTracking, project, requestEvent, type Tracking } from './project.js';
@@ -38,7 +41,14 @@ export interface OmpHostDeps {
   command?: string[];
   spawn?: RpcOptions['spawn'];
   now?: () => string;
+  /** Where pasted images are read from (a session reply that carries some). */
+  attachments?: AttachmentStore;
 }
+
+/** One JSONL frame, newline included (OMP's MAX_RPC_FRAME_BYTES): what Ledge sends must fit, there is no chunking in this direction. */
+export const OMP_FRAME_MAX = 1_048_576;
+/** Room for the request id and the command name around the message and the images. */
+const FRAME_SLACK = 128;
 
 /** How often a message still being written reaches the thread: a card updated this often reads as live without a frame per token. */
 export const STREAM_MS = 120;
@@ -66,7 +76,8 @@ export function createOmpHost(deps: OmpHostDeps) {
     await mkdir(dir, { recursive: true });
     // A process left by a daemon that died is ended first: one writer per conversation.
     if (await reapOwner(dir)) log(`omp ${id}: ended the process a previous daemon left`);
-    const env = agentEnv({ ...(await deps.env()), LEDGE_SESSION: id }, o.seatEnv ?? {});
+    const key = sessionKey(id);
+    const env = agentEnv({ ...(await deps.env()), LEDGE_SESSION: id, ...(key ? { [SESSION_KEY_VAR]: key } : {}) }, o.seatEnv ?? {});
     for (const v of PARENT_AGENT_VARS) delete env[v];
     const rpc = await OmpRpc.start({ command, args: ompArgs({ dir, ...o }), cwd: o.cwd, env, ...(deps.spawn ? { spawn: deps.spawn } : {}) });
     await writeOwner(dir, rpc.pid).catch(() => undefined);
@@ -118,6 +129,25 @@ export function createOmpHost(deps: OmpHostDeps) {
     return l;
   }
 
+  /** The message and the images that go in one frame: images are taken in order while the serialized command stays within OMP's limit; the others become brackets. */
+  async function fitImages(text: string, refs: AttachmentRef[]): Promise<{ message: string; native: Array<{ type: 'image'; data: string; mimeType: string }> }> {
+    if (refs.length === 0) return { message: text, native: [] };
+    const store = deps.attachments; if (!store) throw new Error('images are not available');
+    const loaded: Array<{ path: string; item: { type: 'image'; data: string; mimeType: string } | null }> = [];
+    for (const r of refs) {
+      const path = store.path(r.id); const file = await store.read(r.id);
+      if (!path || !file) throw new Error('attachment missing');
+      loaded.push({ path, item: { type: 'image', data: file.data.toString('base64'), mimeType: r.mime } });
+    }
+    // The message is sized as if every image were a bracket (the worst case), so moving one to a bracket never overflows.
+    let used = Buffer.byteLength(JSON.stringify({ message: withImages(text, loaded.map(x => x.path)), images: [] })) + FRAME_SLACK + 1;
+    for (const x of loaded) {
+      const cost = Buffer.byteLength(JSON.stringify(x.item)) + 1;
+      if (used + cost <= OMP_FRAME_MAX) used += cost; else x.item = null;
+    }
+    return { message: withImages(text, loaded.filter(x => !x.item).map(x => x.path)), native: loaded.flatMap(x => (x.item ? [x.item] : [])) };
+  }
+
   return {
     /**
      * Starts OMP, waits for its handshake and its state, and records the session `idle`: usable. The record is not in the
@@ -147,24 +177,40 @@ export function createOmpHost(deps: OmpHostDeps) {
       return session;
     },
 
-    /** An instruction at rest starts a turn; while OMP works, it waits for the turn's end (`follow_up`), or redirects it (`steer`). */
-    async send(id: string, text: string, mode: 'prompt' | 'follow_up' | 'steer' = 'prompt'): Promise<void> {
+    /**
+     * An instruction at rest starts a turn; while OMP works, it waits for the turn's end (`follow_up`), or redirects it (`steer`).
+     * Images go natively (base64 content) while the frame fits OMP's limit; the rest are `[Image attached: <path>]` brackets in the message.
+     */
+    async send(id: string, text: string, mode: 'prompt' | 'follow_up' | 'steer' = 'prompt', images: AttachmentRef[] = []): Promise<void> {
       const l = live.get(id); if (!l) throw new Error('the session is not running');
-      if (mode === 'prompt') { l.tracking.echo.push(text.trim()); store.apply(id, { name: 'UserPromptSubmit', at: now(), source: 'daemon', text }); l.tracking.working = true; }
-      try { await l.rpc.request(mode, { message: text }); }
+      const { message, native } = await fitImages(text, images);
+      const attachments = images.map(r => r.id);
+      const entry = { text: message.trim(), attachments, ...(message !== text ? { shown: text.trim() } : {}) };
+      if (mode === 'prompt') { if (message.trim() !== '') l.tracking.echo.push(message.trim()); store.apply(id, { name: 'UserPromptSubmit', at: now(), source: 'daemon', text, ...(attachments.length > 0 ? { attachments } : {}) }); l.tracking.working = true; }
+      else l.tracking.queued.push(entry);
+      try { await l.rpc.request(mode, { message, ...(native.length > 0 ? { images: native } : {}) }); }
       catch (e) {
-        if (mode === 'prompt') { l.tracking.working = false; l.tracking.echo.pop(); store.apply(id, { name: 'StopFailure', at: now(), source: 'daemon', text: (e as Error).message }); }
+        if (mode === 'prompt') { l.tracking.working = false; if (message.trim() !== '') l.tracking.echo.pop(); store.apply(id, { name: 'StopFailure', at: now(), source: 'daemon', text: (e as Error).message }); }
+        else { const i = l.tracking.queued.lastIndexOf(entry); if (i !== -1) l.tracking.queued.splice(i, 1); }
         throw e;
       }
       // Accepted into OMP's queue: the thread shows it when its turn starts; the session moves now, so a front sees the instruction land.
       if (mode !== 'prompt') store.apply(id, { name: 'Notification', at: now(), source: 'daemon' });
     },
 
-    /** `abort_and_restore_queue`: stops the work and takes back what waited in OMP's queue (the draft returned, nothing sent again). */
-    async interruptAndRestore(id: string): Promise<string[]> {
+    /** `abort_and_restore_queue`: stops the work and takes back what waited in OMP's queue (the draft returned, nothing sent again), each with its images. */
+    async interruptAndRestore(id: string): Promise<{ entries: Array<{ text: string; attachments: string[] }>; imagesDropped: boolean }> {
       const l = live.get(id); if (!l) throw new Error('the session is not running');
-      const r = await l.rpc.request<{ steering?: Array<{ text?: unknown }>; followUp?: Array<{ text?: unknown }> }>('abort_and_restore_queue');
-      return [...(r.steering ?? []), ...(r.followUp ?? [])].map(x => (typeof x.text === 'string' ? x.text : '')).filter(Boolean);
+      const r = await l.rpc.request<{ steering?: Array<{ text?: unknown }>; followUp?: Array<{ text?: unknown }>; imagesDropped?: unknown }>('abort_and_restore_queue');
+      const imagesDropped = r.imagesDropped === true;
+      const entries = [...(r.steering ?? []), ...(r.followUp ?? [])].map(x => (typeof x.text === 'string' ? x.text : '')).map(text => {
+        // Paired by text, in order: OMP's own entries carry the words, the host remembers which images went with them.
+        const i = l.tracking.queued.findIndex(q => q.text === text.trim());
+        const q = i === -1 ? undefined : l.tracking.queued.splice(i, 1)[0];
+        return { text: q?.shown ?? text, attachments: imagesDropped ? [] : q?.attachments ?? [] };
+      }).filter(e => e.text !== '' || e.attachments.length > 0);
+      l.tracking.queued = [];
+      return { entries, imagesDropped };
     },
 
     /** `abort` stops the work, not the session: the state follows OMP's own `session_settled`. */

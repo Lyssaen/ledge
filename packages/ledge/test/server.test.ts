@@ -4,9 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { connect as tcp } from 'node:net';
-import type { ChatClose, ChatProposal, ChatRelay, Projects, ServerMessage, Session } from '@ledge/protocol';
+import type { ChatAction, ChatClose, ChatProposal, ChatRelay, Projects, ServerMessage, Session } from '@ledge/protocol';
 import { DEFAULT_ISLAND_PREFS, pendingKey } from '@ledge/protocol';
 import type { Chat } from '../src/chat/service.js';
+import { sessionKey } from '../src/auth.js';
+import { resolveAction } from '../src/daemon/actions.js';
 import { Store } from '../src/daemon/store.js';
 import WebSocket from 'ws';
 import { startServer, ALLOWED_ORIGINS, launchArgs, resolveFolder } from '../src/daemon/server.js';
@@ -733,6 +735,39 @@ describe('server', () => {
       expect(tmux.sent[0]).toEqual(['text', 'ledge-b', expect.stringContaining(`<ledge-task id="${r.task!.id}" from="Otto">Tâche de Otto : « Lance les tests »`)]);
       c.send({ type: 'task.cmd', rid: 't-r2', by: 'b', op: 'list' });
       expect((await c.next('task.result', 3000)).tasks!.map(t => t.id)).toEqual([r.task!.id]);
+      c.close();
+    });
+    it('a task given between two seats reaches the fronts with its transmission, and Ledge lists it (#92)', async () => {
+      store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'idle' }));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'task.cmd', rid: 't-r1', by: 'a', op: 'give', to: 'Pim', title: 'Lance les tests' });
+      const { task } = await c.next('task.updated', 3000);
+      await c.next('task.result', 3000);
+      expect(task).toMatchObject({ giver: 'a', owner: 'b' });
+      expect(task.log.at(-1)).toMatchObject({ op: 'give', from: 'a', to: 'b', fromName: 'Otto', toName: 'Pim' });
+      c.send({ type: 'task.cmd', rid: 't-r2', by: 'ledge', op: 'list' });
+      expect((await c.next('task.result', 3000)).tasks!.map(t => t.id)).toEqual([task.id]);
+      c.close();
+    });
+    it('the sender’s thread gets the card of the task it handed over; Ledge’s give and seen add none (#92)', async () => {
+      await srv.close();
+      const history = new History({ dir: tmpDir() }); srv = await startServer({ store, tmux, port: 0, history });
+      store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'idle' }));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'task.cmd', rid: 'g1', by: 'a', op: 'give', to: 'Pim', title: 'Lance les tests' });
+      const given = (await c.next('task.result', 3000)).task!;
+      expect(history.items('a')).toEqual([expect.objectContaining({ kind: 'notice', id: `task-${given.id}-0`, taskOp: 'give', outgoing: true, name: 'Pim', peer: 'b' })]);
+      c.send({ type: 'task.cmd', rid: 'g2', by: 'ledge', op: 'give', to: 'Pim', title: 'Relis' });
+      const mine = (await c.next('task.result', 3000)).task!;
+      c.send({ type: 'task.cmd', rid: 'd', by: 'b', op: 'done', task: mine.id, text: 'ok' });
+      await c.next('task.result', 3000);
+      const outgoing = history.items('b').filter(i => i.kind === 'notice' && i.outgoing);
+      expect(outgoing).toEqual([expect.objectContaining({ id: `task-${mine.id}-1`, taskOp: 'done', name: 'Ledge', summary: 'Relis\nok' })]);
+      expect(outgoing[0]).not.toHaveProperty('peer');
+      const before = [history.items('a').length, history.items('b').length];
+      c.send({ type: 'task.cmd', rid: 's', by: 'ledge', op: 'seen', task: mine.id });
+      expect((await c.next('task.result', 3000)).task).toMatchObject({ seen: true });
+      expect([history.items('a').length, history.items('b').length]).toEqual(before);
       c.close();
     });
     it('message.read gives a long body whole to its receiver, and refuses anyone else', async () => {
@@ -1472,11 +1507,11 @@ describe('server', () => {
     function stubChat(initial: ChatProposal | undefined) {
       let proposal = initial; const marks: string[][] = [];
       const chat: Chat = {
-        async ask() {}, cancel() {}, async reset() {}, history: () => [],
+        async ask() {}, attachmentIds: () => [], cancel() {}, async reset() {}, history: () => [],
         proposal: qid => (qid === 'q1' ? proposal : undefined),
         markLaunched(qid, id, emit) { marks.push(['launched', qid, id]); proposal = { ...proposal!, launchedId: id }; emit({ type: 'chat.history', turns: [] }); },
         markFailed(qid, message, emit) { marks.push(['failed', qid, message]); proposal = { ...proposal!, error: message }; emit({ type: 'chat.history', turns: [] }); },
-        relay: () => undefined, markRelay() {}, queuedRelays: () => [], close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}, team: () => undefined, markTeam() {}, task: () => undefined, markTask() {}, followTask() {}
+        relay: () => undefined, markRelay() {}, queuedRelays: () => [], close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}, team: () => undefined, markTeam() {}, task: () => undefined, markTask() {}, followTask() {}, action: () => undefined, markAction() {}, ignore: () => null, ignored: () => false
       };
       return { chat, marks };
     }
@@ -1545,11 +1580,11 @@ describe('server', () => {
       function rowsChat(initial: ChatProposal[]) {
         const rows = [...initial]; const marks: Array<[string, number, string]> = [];
         const chat: Chat = {
-          async ask() {}, cancel() {}, async reset() {}, history: () => [],
+          async ask() {}, attachmentIds: () => [], cancel() {}, async reset() {}, history: () => [],
           proposal: (qid, row = 0) => (qid === 'q1' ? rows[row] : undefined),
           markLaunched(_qid, id, emit, row = 0) { marks.push(['launched', row, id]); rows[row] = { ...rows[row]!, launchedId: id }; emit({ type: 'chat.history', turns: [] }); },
           markFailed(_qid, message, emit, row = 0) { marks.push(['failed', row, message]); rows[row] = { ...rows[row]!, error: message }; emit({ type: 'chat.history', turns: [] }); },
-          relay: () => undefined, markRelay() {}, queuedRelays: () => [], close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}, team: () => undefined, markTeam() {}, task: () => undefined, markTask() {}, followTask() {}
+          relay: () => undefined, markRelay() {}, queuedRelays: () => [], close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}, team: () => undefined, markTeam() {}, task: () => undefined, markTask() {}, followTask() {}, action: () => undefined, markAction() {}, ignore: () => null, ignored: () => false
         };
         return { chat, marks };
       }
@@ -1599,11 +1634,11 @@ describe('server', () => {
     function relayChat(relay: ChatRelay) {
       let r: ChatRelay | undefined = relay;
       const chat: Chat = {
-        async ask() {}, cancel() {}, async reset() {}, history: () => [], proposal: () => undefined, markLaunched() {}, markFailed() {},
+        async ask() {}, attachmentIds: () => [], cancel() {}, async reset() {}, history: () => [], proposal: () => undefined, markLaunched() {}, markFailed() {},
         relay: qid => (qid === 'q1' ? r : undefined),
         markRelay(_qid, patch, emit) { const { id, name, tool, text } = r!; r = { id, name, tool, text, ...patch }; emit({ type: 'chat.history', turns: [] }); },
         queuedRelays: () => (r?.status === 'queued' ? [{ qid: 'q1', relay: r, askedAt: '2026-10-12T08:00:00.000Z' }] : []),
-        close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}, team: () => undefined, markTeam() {}, task: () => undefined, markTask() {}, followTask() {}
+        close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}, team: () => undefined, markTeam() {}, task: () => undefined, markTask() {}, followTask() {}, action: () => undefined, markAction() {}, ignore: () => null, ignored: () => false
       };
       return { chat, current: () => r };
     }
@@ -1696,8 +1731,11 @@ describe('server', () => {
       expect(store.get(second.id)!.name).toBe('Otto-2');
       expect(tmux.created.map(x => x.command[0])).toEqual(['codex', 'cursor-agent']);
       // Codex hooks run in a shared daemon: the session id reaches them through a per-thread config override.
-      expect(tmux.created[0]!.command).toEqual(['codex', '-c', `shell_environment_policy.set.LEDGE_CODEX_HOOK_SESSION="${first.id}"`]);
-      expect(tmux.created[0]!.env).toMatchObject({ LEDGE_SESSION: first.id, LEDGE_CODEX_SESSION: first.id });
+      // Its key goes the same way (#93): the daemon checks the `by` of its commands against it.
+      const key = sessionKey(first.id)!;
+      expect(tmux.created[0]!.command).toEqual(['codex', '-c', `shell_environment_policy.set.LEDGE_CODEX_HOOK_SESSION="${first.id}"`, '-c', `shell_environment_policy.set.LEDGE_SESSION_KEY="${key}"`]);
+      expect(tmux.created[0]!.env).toMatchObject({ LEDGE_SESSION: first.id, LEDGE_SESSION_KEY: key, LEDGE_CODEX_SESSION: first.id });
+      expect(tmux.created[1]!.env.LEDGE_SESSION_KEY).toBe(sessionKey(second.id));
       expect(tmux.created[1]!.env.LEDGE_CODEX_SESSION).toBeUndefined();
       c.close();
     });
@@ -2597,12 +2635,12 @@ describe('close a session', () => {
     function closeChat(initial: ChatClose[]) {
       const rows = [...initial]; const marks: Array<[string, number, string]> = [];
       const chat: Chat = {
-        async ask() {}, cancel() {}, async reset() {}, history: () => [], proposal: () => undefined, markLaunched() {}, markFailed() {},
+        async ask() {}, attachmentIds: () => [], cancel() {}, async reset() {}, history: () => [], proposal: () => undefined, markLaunched() {}, markFailed() {},
         relay: () => undefined, markRelay() {}, queuedRelays: () => [],
         close: (qid, row) => (qid === 'q1' ? rows[row] : undefined),
         markClosed(_qid, row, how, emit) { marks.push(['closed', row, how]); rows[row] = { ...rows[row]!, closedAt: new Date().toISOString(), how }; emit({ type: 'chat.history', turns: [] }); },
         markCloseFailed(_qid, row, message, emit) { marks.push(['failed', row, message]); rows[row] = { ...rows[row]!, error: message }; emit({ type: 'chat.history', turns: [] }); },
-        idle: async () => {}, team: () => undefined, markTeam() {}, task: () => undefined, markTask() {}, followTask() {}
+        idle: async () => {}, team: () => undefined, markTeam() {}, task: () => undefined, markTask() {}, followTask() {}, action: () => undefined, markAction() {}, ignore: () => null, ignored: () => false
       };
       return { chat, marks };
     }
@@ -2679,16 +2717,122 @@ describe('close a session', () => {
       await expect(c.next('error', 100)).rejects.toThrow(/timeout/);
       c.close();
     });
+
+    describe('a generic card (chat.act, spec 2026-10-26 action registry §9.2)', () => {
+      /** A chat whose `q1` card holds these generic rows, marked as the real one marks them. */
+      function actChat(initial: ChatAction[]) {
+        const rows = [...initial]; const marks: string[] = [];
+        const chat: Chat = {
+          ...closeChat([]).chat,
+          action: (qid, row) => (qid === 'q1' ? rows[row] : undefined),
+          markAction(_qid, row, patch, emit) { marks.push(`${row}:${patch.state}`); rows[row] = { ...rows[row]!, ...patch }; emit({ type: 'chat.history', turns: [] }); }
+        };
+        return { chat, rows, marks };
+      }
+      const archiveOf = (id: string): ChatAction => ({ action: 'session.archive', args: { session: id }, summary: `Archiver ${id}`, risk: 'reversible', session: id });
+
+      it('applies the rows through the daemon\'s handlers in order and stops at the first failure', async () => {
+        const { chat, rows, marks } = actChat([archiveOf('a'), archiveOf('zz'), archiveOf('b')]);
+        await closing({}, { chat });
+        store.upsert(mk('a', { state: 'exited' })); store.upsert(mk('b', { state: 'exited' }));
+        const c = await connect({ port: srv.port }); await c.next('snapshot');
+        c.send({ type: 'chat.act', rid: 'r1', qid: 'q1' });
+        expect(await c.next('chat.acted', 3000)).toEqual({ type: 'chat.acted', rid: 'r1', qid: 'q1', done: [0], failed: [{ row: 1, message: 'unknown session zz', refused: true }] });
+        expect(marks).toEqual(['0:running', '0:done', '1:running', '1:refused']);
+        expect(store.get('a')?.archivedAt).toBeDefined(); expect(store.get('b')?.archivedAt).toBeUndefined();
+        expect(rows[2]).not.toHaveProperty('state');
+        c.close();
+      });
+      it('a row whose handler answers nothing is done', async () => {
+        const { chat, rows } = actChat([{ action: 'session.restore', args: { session: 'a' }, summary: 'x', risk: 'reversible' }]);
+        await closing({}, { chat });
+        store.upsert(mk('a', { state: 'idle', archivedAt: '2026-10-26T08:00:00.000Z' }));
+        const c = await connect({ port: srv.port }); await c.next('snapshot');
+        c.send({ type: 'chat.act', rid: 'r1', qid: 'q1' });
+        expect(await c.next('chat.acted', 3000)).toMatchObject({ done: [0], failed: [] });
+        expect(store.get('a')?.archivedAt).toBeUndefined();
+        expect(rows[0]).toMatchObject({ state: 'done' });
+        c.close();
+      });
+      it('« Refuser » a request row: answered with deny, unconfirmed, the row denied', async () => {
+        const pending = { kind: 'permission' as const, text: 'mkdir zz-ledge-probe', tool: 'Bash', source: 'hook' as const };
+        const session = mk('a', { state: 'waiting_permission', pending });
+        const accept = resolveAction('session.decide', { session: 'a', decision: 'accept' }, { sessions: [session], teams: [], tasks: [], findRole: () => undefined });
+        if ('refused' in accept) throw new Error(accept.refused);
+        const { chat, marks } = actChat([accept]);
+        const rest = fx('claude2-rest-after-deny');
+        await closing({ 'ledge-a': [fx('claude2-permission-bash'), rest, rest] }, { chat });
+        store.upsert(session);
+        const c = await connect({ port: srv.port }); await c.next('snapshot');
+        c.send({ type: 'chat.act', rid: 'r1', qid: 'q1', deny: true });
+        expect(await c.next('chat.acted', 3000)).toEqual({ type: 'chat.acted', rid: 'r1', qid: 'q1', done: [0], failed: [] });
+        expect(marks).toEqual(['0:running', '0:denied']);
+        expect(tmux.sent[0]).toEqual(['keys', 'ledge-a', 'Escape']);
+        c.close();
+      });
+      it('refuses an unknown card, and a destructive row without the confirmation', async () => {
+        const { chat, marks } = actChat([{ action: 'team.dissolve', args: { team: 't1' }, summary: 'x', risk: 'destructive', team: 't1' }]);
+        await closing({}, { chat });
+        const c = await connect({ port: srv.port }); await c.next('snapshot');
+        c.send({ type: 'chat.act', rid: 'r1', qid: 'q9' });
+        expect(await c.next('error')).toEqual({ type: 'error', message: 'unknown action', request: 'chat.act' });
+        c.send({ type: 'chat.act', rid: 'r2', qid: 'q1' });
+        expect(await c.next('error')).toMatchObject({ code: 'confirm_required', request: 'chat.act' });
+        expect(marks).toEqual([]);
+        c.close();
+      });
+      it('a card set aside (« Ignorer ») applies no more; chat.ignore reaches the chat and its refusal the requester', async () => {
+        const { chat, marks } = actChat([archiveOf('a')]);
+        let ignored = false; const calls: Array<[string, boolean]> = [];
+        chat.ignored = qid => qid === 'q1' && ignored;
+        chat.ignore = (qid, undo, emit) => { calls.push([qid, undo]); if (qid !== 'q1') return 'unknown card'; ignored = !undo; emit({ type: 'chat.history', turns: [] }); return null; };
+        await closing({}, { chat });
+        store.upsert(mk('a', { state: 'exited' }));
+        const c = await connect({ port: srv.port }); await c.next('snapshot');
+        c.send({ type: 'chat.ignore', qid: 'q1' });
+        await c.next('chat.history', 3000);
+        c.send({ type: 'chat.act', rid: 'r1', qid: 'q1' });
+        expect(await c.next('error')).toEqual({ type: 'error', message: 'ignored card: open it again first', request: 'chat.act', code: 'ignored' });
+        c.send({ type: 'session.close', qid: 'q1' });
+        expect(await c.next('error')).toMatchObject({ message: 'ignored card: open it again first', request: 'session.close' });
+        c.send({ type: 'chat.ignore', qid: 'q9' });
+        expect(await c.next('error')).toMatchObject({ message: 'unknown card', request: 'chat.ignore' });
+        c.send({ type: 'chat.ignore', qid: 'q1', undo: true });
+        await c.next('chat.history', 3000);
+        c.send({ type: 'chat.act', rid: 'r2', qid: 'q1' });
+        expect(await c.next('chat.acted', 3000)).toMatchObject({ done: [0] });
+        expect(calls).toEqual([['q1', false], ['q9', false], ['q1', true]]);
+        expect(marks).toEqual(['0:running', '0:done']);
+        c.close();
+      });
+      it('Ledge cancels or passes a task from its card only: a client naming itself ledge is refused', async () => {
+        const { chat, rows } = actChat([]);
+        await closing({}, { chat });
+        store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'idle' }));
+        const c = await connect({ port: srv.port }); await c.next('snapshot');
+        c.send({ type: 'task.cmd', rid: 't1', by: 'a', op: 'give', to: 'Pim', title: 'Lance les tests' });
+        const id = (await c.next('task.result', 3000)).task!.id;
+        c.send({ type: 'task.cmd', rid: 't2', by: 'ledge', op: 'cancel', task: id });
+        expect((await c.next('task.result', 3000)).reason).toBe('seul le chat de Ledge annule ou passe une tâche au nom de Ledge');
+        c.send({ type: 'task.cmd', rid: 't3', by: 'ledge', op: 'pass', task: id, to: 'a' });
+        expect((await c.next('task.result', 3000)).reason).toBe('seul le chat de Ledge annule ou passe une tâche au nom de Ledge');
+        // The card's own row goes through: Ledge cancels it.
+        rows.push({ action: 'task.cancel', args: { task: id }, summary: 'x', risk: 'destructive', session: 'b' });
+        c.send({ type: 'chat.act', rid: 'r1', qid: 'q1', confirmed: true });
+        expect(await c.next('chat.acted', 3000)).toMatchObject({ done: [0], failed: [] });
+        c.close();
+      });
+    });
   });
 
   it('delivers nothing to a closing session', async () => {
     let r: ChatRelay | undefined = { id: 'a', name: 'Otto', tool: 'claude', text: 'Lance les tests', status: 'queued' };
     const chat: Chat = {
-      async ask() {}, cancel() {}, async reset() {}, history: () => [], proposal: () => undefined, markLaunched() {}, markFailed() {},
+      async ask() {}, attachmentIds: () => [], cancel() {}, async reset() {}, history: () => [], proposal: () => undefined, markLaunched() {}, markFailed() {},
       relay: qid => (qid === 'q1' ? r : undefined),
       markRelay(_qid, patch, emit) { const { id, name, tool, text } = r!; r = { id, name, tool, text, ...patch }; emit({ type: 'chat.history', turns: [] }); },
       queuedRelays: () => (r?.status === 'queued' ? [{ qid: 'q1', relay: r, askedAt: '2026-10-12T08:00:00.000Z' }] : []),
-      close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}, team: () => undefined, markTeam() {}, task: () => undefined, markTask() {}, followTask() {}
+      close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}, team: () => undefined, markTeam() {}, task: () => undefined, markTask() {}, followTask() {}, action: () => undefined, markAction() {}, ignore: () => null, ignored: () => false
     };
     const history = new History({ dir: tmpDir() });
     await closing({ 'ledge-a': ['Running…'] }, { history, chat });

@@ -26,3 +26,26 @@ test('open Otto from the tree, show Bix from +N finished and archive him, reread
   // The toast region is always a status (« Bix is archived. »). The banner is the one that names the archived session.
   await expect(page.getByRole('status').filter({ hasText: /Archived session/ })).toContainText(/Archived session/);
 });
+
+// #98: a team is one row; in the rail (< 850 px) team and common-table rows hide, as branches and seats do, and the project keeps its swatch.
+test('teams in the tree: one row each, hidden in the rail', async ({ page }) => {
+  const seat = (id: string, name: string, role: string) => session(id, { name, title: `${name} · ledge`, cwd: '/w/ledge', project: 'ledge', team: 'team-a1b2', role });
+  const daemon = await fakeDaemon(page, [seat('nova', 'Nova', 'review'), seat('pim', 'Pim', 'lead'), otto], { projects: twoProjects });
+  const T = new Date().toISOString();
+  await page.goto('/'); await openAtelier(page);
+  daemon.push({ type: 'teams', teams: [{ id: 'team-a1b2', name: 'ledge-dev', project: 'ledge', machine: 'local', cwd: '/w/ledge', state: 'active', seats: [{ role: 'lead', sessionId: 'pim' }, { role: 'review', sessionId: 'nova' }], createdAt: T, updatedAt: T }] });
+  const tree = page.getByRole('tree');
+  const team = tree.locator('.st-team');
+  await expect(team).toHaveCount(1);
+  const name = await team.locator('strong').boundingBox(), tag = await team.locator('.st-main span').boundingBox();
+  expect(Math.abs((name!.y + name!.height) - (tag!.y + tag!.height))).toBeLessThan(4);
+  if (process.env.LEDGE_RAIL_SHOTS) await page.screenshot({ path: `${process.env.LEDGE_RAIL_SHOTS}/wide.png` });
+  await page.setViewportSize({ width: 800, height: 800 });
+  await expect(team).toBeHidden();
+  await expect(tree.locator('.st-common')).toBeHidden();
+  await expect(tree.locator('.st-project').first()).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  const rail = await page.locator('aside.sidebar').boundingBox();
+  expect(rail!.width).toBeLessThan(90);
+  if (process.env.LEDGE_RAIL_SHOTS) await page.screenshot({ path: `${process.env.LEDGE_RAIL_SHOTS}/rail.png` });
+});

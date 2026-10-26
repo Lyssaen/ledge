@@ -3,6 +3,9 @@ import { daemonStore, useDaemon, type DaemonClient } from '@ledge/fleet';
 import { contextShare, LEDGE_GIVER, taskClosed, type ChatTurn, type Projects, type Session, type Task, type Team } from '@ledge/protocol';
 import { ChatView } from '@ledge/ui/chat/ChatView';
 import { ChatCopyProvider } from '@ledge/ui/chat/copy';
+import { useActionCards } from '@ledge/ui/chat/useActionCards';
+import { useAttachments } from '../images/useAttachments';
+import { TurnThumbs } from '../images/Thumbs';
 import { ResidentMascot } from '@ledge/ui/bots/ResidentMascot';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
@@ -259,6 +262,7 @@ export function LedgeHome(p: LedgeHomeProps): JSX.Element {
   const turnReady = useCallback((qid: string) => !!view.fleet.turnMachine(qid)?.ready, [view.fleet]);
   const turnMachine = useCallback((qid: string) => view.fleet.turnMachine(qid)?.id, [view.fleet]);
   const cards = useChatCards({ send, chat, lastLaunched: view.lastLaunched, errors: view.errors, sessions: view.sessions, turnReady, turnMachine, onLaunched: p.onLaunched });
+  const actionCards = useActionCards({ send, chat, errors: view.errors, turnReady, onMessage });
   const teamCards = useTeamCards({ send, onMessage, chat });
   const project = useProjectReview({ chat, projects: p.projects, machines: view.machines, notify: p.notify, onProposal: p.onProposal });
   const [hovered, setHovered] = useState<string | null>(null);
@@ -272,11 +276,15 @@ export function LedgeHome(p: LedgeHomeProps): JSX.Element {
   const busy = chat.some(x => x.answeredAt === undefined && x.error === undefined);
   const live = teams.teams ?? [];
 
-  const ask = (text: string) => {
+  // Images pasted or dropped on the field travel inline with the field's question only (not a suggestion's or « Résumer »).
+  const images = useAttachments(client, { inline: true });
+  const ask = (text: string, withImages = false) => {
     if (offline) return;
     const qid = `q-${crypto.randomUUID()}`;
     daemonStore.beginTurn({ qid, question: text, askedAt: new Date().toISOString(), steps: [] });
-    send({ type: 'chat.ask', qid, text, tool });
+    const uploads = withImages ? images.uploads() : [];
+    send({ type: 'chat.ask', qid, text, ...(uploads.length ? { images: uploads } : {}), tool });
+    if (withImages) images.clear();
     if (tab !== 'conversation') dispatch({ type: 'ledge', tab: 'conversation' });
   };
   const open = (id: string) => { setHovered(null); dispatch({ type: 'open', id }); };
@@ -340,14 +348,16 @@ export function LedgeHome(p: LedgeHomeProps): JSX.Element {
         <div className="home-body">
           {tab === 'conversation' && (
             <ChatCopyProvider value={copy}>
-              <ChatView docked visible hideHeader multiline turns={chat} live={chatLive} sessions={view.sessions} offline={offline}
+              <ChatView docked visible hideHeader multiline turnImages={turn => <TurnThumbs client={client} turn={turn} />} turns={chat} live={chatLive} sessions={view.sessions} offline={offline}
                 pinned={<LePoint view={view} teams={teams} decisions={p.decisions} waits={p.waits} projects={p.projects} dispatch={dispatch} onAsk={ask} onShowTask={showTask} busy={busy || !!offline} />}
                 above={above} footnote={<small className="home-readonly">{t.home.readOnly}</small>}
                 draft={draft} onDraft={setDraft} onFieldKey={onFieldKey}
+                attach={{ items: images.items, onFiles: images.add, onRemove: images.remove, ready: images.ready, error: images.error }}
                 onAsk={ask} onCancel={qid => send({ type: 'chat.cancel', qid })} onReset={() => send({ type: 'chat.reset' })} onClose={() => dispatch({ type: 'escape' })}
                 onOpenSession={open} onTerminal={id => { setHovered(null); p.onTerminal(id); }} turnAvailable={turnReady}
                 launchingQid={cards.launchingQid} launchingRows={cards.launchingRows} onLaunchProposal={cards.launch}
                 closingQid={cards.closingQid} closingRows={cards.closingRows} onCloseSessions={cards.close}
+                onAct={actionCards.act} actingQid={actionCards.actingQid} actingRows={actionCards.actingRows} onIgnoreCards={actionCards.ignore} onDenyAction={actionCards.deny}
                 renderModel={(qid, agent, b) => <CardModelPick client={client} machine={turnMachine(qid)} tool={agent} pick={cards.pick(qid)} disabled={b} onPick={next => cards.setPick(qid, next)} />}
                 relayingQid={cards.relayingQid} onRelay={cards.relay} onRelayCancel={cards.cancelRelay}
                 onProject={project.review} projectNamed={project.projectNamed}

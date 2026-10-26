@@ -190,6 +190,14 @@ describe('daemon client + store', () => {
     expect(daemonStore.getState().chat[0]).toMatchObject({ proposal: a, proposals: [a, b] });
   });
 
+  it('chat.done keeps the generic rows (#94)', () => {
+    daemonStore.reset();
+    daemonStore.beginTurn({ qid: 'q1', question: 'archive Otto', askedAt: T0, steps: [] });
+    const actions = [{ action: 'session.archive' as const, args: { session: 'a' }, summary: 'Archiver **Otto**', risk: 'reversible' as const, session: 'a' }];
+    daemonStore.apply({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, actions });
+    expect(daemonStore.getState().chat[0]).toMatchObject({ actions });
+  });
+
   it('chat.done keeps the closes', () => {
     daemonStore.reset();
     daemonStore.beginTurn({ qid: 'q1', question: 'ferme Otto', askedAt: T0, steps: [] });

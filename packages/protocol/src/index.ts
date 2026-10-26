@@ -1,3 +1,4 @@
+export * from './attachments.js';
 export * from './chat.js';
 export * from './decisions.js';
 export * from './documents.js';
@@ -23,3 +24,4 @@ export * from './phone.js';
 export * from './push.js';
 export * from './teams.js';
 export * from './handover.js';
+export * from './actions.js';

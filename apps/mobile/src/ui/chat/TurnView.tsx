@@ -1,6 +1,7 @@
 import type { ChatErrorCode, PhoneChatStep, PhoneChatTurn } from '@ledge/protocol';
 import { copy } from '../../copy';
 import type { MobileStore } from '../../state/store';
+import { PhoneThumbs } from '../PhoneThumbs';
 import { Answer, Sources } from './Answer';
 import { CloseCards } from './CloseCard';
 import { LaunchCards } from './LaunchCard';
@@ -63,7 +64,8 @@ export function TurnView({ store, turn, live, sessions, list, canConfirm, onStop
   const relay = turn.relay;
   return (
     <div className="flex flex-col gap-3">
-      <div className="max-w-[80%] self-end whitespace-pre-wrap break-words rounded-[18px_18px_4px_18px] bg-raised px-3.5 py-2.5">{turn.question}</div>
+      {turn.question && <div className="max-w-[80%] self-end whitespace-pre-wrap break-words rounded-[18px_18px_4px_18px] bg-raised px-3.5 py-2.5">{turn.question}</div>}
+      {turn.attachments && <div className="self-end max-w-full"><PhoneThumbs store={store} refs={turn.attachments} align="end" /></div>}
       <Steps steps={steps} sessions={sessions} running={!!live && !live.text} />
       {live && text && <p aria-live="polite" className="px-1 whitespace-pre-wrap break-words">{text}</p>}
       {!live && text && <Answer text={text} names={names} />}

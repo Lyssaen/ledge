@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import type { DaemonError } from '@ledge/fleet';
-import type { ChatClose, ChatProjectProposal, ChatProposal, ChatTurn, ClientMessage, Session } from '@ledge/protocol';
+import type { ChatAction, ChatClose, ChatProjectProposal, ChatProposal, ChatTurn, ClientMessage, Session } from '@ledge/protocol';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { boot, closeDaemons, declarations, DEFAULT_SESSIONS, LAUNCH_PROJECTS, recordToasts, type MockDaemon } from './helpers';
 import { loadChat } from '../src/chat/lazy';
@@ -47,7 +47,7 @@ async function ask(env: Awaited<ReturnType<typeof openChat>>, question: string, 
   await panel().findByText('Reads the sessions');
   d.push({ type: 'chat.delta', qid, text: answer.slice(0, 4) });
   const at = new Date().toISOString();
-  d.push({ type: 'chat.done', qid, text: answer, at, ...(extra.proposal ? { proposal: extra.proposal } : {}), ...(extra.closes ? { closes: extra.closes } : {}), ...(extra.projectProposal ? { projectProposal: extra.projectProposal } : {}) });
+  d.push({ type: 'chat.done', qid, text: answer, at, ...(extra.proposal ? { proposal: extra.proposal } : {}), ...(extra.closes ? { closes: extra.closes } : {}), ...(extra.projectProposal ? { projectProposal: extra.projectProposal } : {}), ...(extra.actions ? { actions: extra.actions } : {}) });
   await waitFor(() => expect(panel().queryByText('Reads the sessions')).toBeNull());
   return { qid, question, askedAt: at, steps: [{ kind: 'sessions' }], answer, answeredAt: at, ...extra };
 }
@@ -270,6 +270,41 @@ describe('the Ledge chat docked on the right', () => {
     d.push({ type: 'chat.history', turns: [{ ...turn, closes: closes.map(c => ({ ...c, closedAt: at, how: 'exit' as const })) }] });
     await waitFor(() => expect(card.queryByRole('button', { name: 'Closing…' })).toBeNull());
     expect(card.queryByRole('button', { name: /Close all|Close$/ })).toBeNull();
+  });
+
+  it('a generic card (#94): its rows in the Desktop\'s words, applied through chat.act, confirmed, then set aside and reviewed', async () => {
+    const env = await openChat();
+    const { d, user } = env;
+    const actions: ChatAction[] = [
+      { action: 'session.archive', args: { session: 'otto' }, summary: 'Archiver **Otto**', vars: { session: 'Otto' }, risk: 'reversible', session: 'otto' },
+      { action: 'team.dissolve', args: { team: 't1' }, summary: 'Dissoudre l’équipe **qa**', vars: { team: 'qa' }, risk: 'destructive', team: 't1' }
+    ];
+    const turn = await ask(env, 'Range', 'Voici.', { actions });
+    const card = within(panel().getByRole('region', { name: 'Plan of 2 actions' }));
+    expect(card.getByText('Otto')).toBeTruthy();
+    await user.click(card.getByRole('button', { name: 'Apply all (2)…' }));
+    await user.click(card.getByRole('button', { name: 'Apply the 2' }));
+    await waitFor(() => expect(d.received.filter(m => m.type === 'chat.act')).toHaveLength(1));
+    expect(d.received.find(m => m.type === 'chat.act')).toEqual({ type: 'chat.act', rid: expect.any(String), qid: turn.qid, rows: [0, 1], confirmed: true });
+    const at = new Date().toISOString();
+    d.push({ type: 'chat.history', turns: [{ ...turn, actions: actions.map(a => ({ ...a, state: 'done' as const, doneAt: at })) }] });
+    await card.findByText(/^Plan applied/);
+    d.push({ type: 'chat.history', turns: [{ ...turn }] });
+    await user.click(await card.findByRole('button', { name: 'Ignore' }));
+    await waitFor(() => expect(d.received.filter(m => m.type === 'chat.ignore')).toEqual([{ type: 'chat.ignore', qid: turn.qid }]));
+  });
+
+  it('a generic card\'s Deny (#94): chat.act with deny for its row, then « Refus envoyé »', async () => {
+    const env = await openChat();
+    const { d, user } = env;
+    const decide: ChatAction = { action: 'session.decide', args: { session: 'otto', decision: 'accept' }, summary: 'Accepter la demande de permission de **Otto**', vars: { session: 'Otto', decision: 'accept', kind: 'permission' }, risk: 'destructive', session: 'otto', detail: 'npm test' };
+    const turn = await ask(env, 'Otto attend', 'Voici.', { actions: [decide] });
+    const card = within(panel().getByRole('region', { name: 'Proposed action' }));
+    await user.click(card.getByRole('button', { name: 'Deny' }));
+    await waitFor(() => expect(d.received.filter(m => m.type === 'chat.act')).toEqual([{ type: 'chat.act', rid: expect.any(String), qid: turn.qid, rows: [0], deny: true }]));
+    d.push({ type: 'chat.history', turns: [{ ...turn, actions: [{ ...decide, state: 'denied', doneAt: new Date().toISOString() }] }] });
+    await card.findByText(/^Denial sent/);
+    expect(card.getByText(/^Deny/, { selector: 'div' })).toBeTruthy();
   });
 
   it('a card offers the agent\'s models once its machine lists them, and launches with the one chosen (#58)', async () => {

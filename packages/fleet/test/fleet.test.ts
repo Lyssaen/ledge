@@ -434,6 +434,33 @@ describe('common chat routing', () => {
     client.send({ type: 'session.launch', cwd: '/w/a', tool: 'claude', qid: 'q', rows: [0, 1] });
     expect(server.sent.at(-1)).toMatchObject({ type: 'session.launch', qid: 'q', rows: [0, 1] });
   });
+  describe('generic card', () => {
+    const at = new Date().toISOString();
+    const rows = (over: Record<string, unknown> = {}) => [{ action: 'session.interrupt', args: { session: 'a1' }, summary: 'Interrompre **bot1**', vars: { session: 'bot1' }, risk: 'reversible' as const, session: 'a1', ...over }];
+    function routed() {
+      const s = setup();
+      s.client.send({ type: 'chat.ask', qid: 'q', text: 'Interromps bot1 sur le serveur' });
+      s.local.emit({ type: 'chat.routed', qid: 'q', result: { machineId: 'server', text: 'Interromps bot1' } });
+      return s;
+    }
+    it('keeps the rows of a remote chat.done, their session qualified, and in the history', () => {
+      const { server, got } = routed();
+      server.emit({ type: 'chat.done', qid: 'q', text: 'Une.', at, actions: rows() });
+      expect(lastHistory(got)[0]!.actions).toEqual([{ ...rows()[0], session: 'server:a1' }]);
+      server.emit({ type: 'chat.history', turns: [{ qid: 'q', question: 'Interromps', askedAt: at, steps: [], answer: 'Une.', answeredAt: at, actions: rows({ state: 'done', doneAt: at }) }] });
+      expect(lastHistory(got)[0]!.actions![0]).toMatchObject({ session: 'server:a1', state: 'done' });
+    });
+    it('routes chat.act and chat.ignore to the turn\'s machine, and relays chat.acted under the overlay\'s qid', () => {
+      const { client, server, got } = routed();
+      server.emit({ type: 'chat.done', qid: 'q', text: 'Une.', at, actions: rows() });
+      client.send({ type: 'chat.act', rid: 'r1', qid: 'q' });
+      expect(server.sent.at(-1)).toEqual({ type: 'chat.act', rid: 'r1', qid: 'q' });
+      client.send({ type: 'chat.ignore', qid: 'q' });
+      expect(server.sent.at(-1)).toEqual({ type: 'chat.ignore', qid: 'q' });
+      server.emit({ type: 'chat.acted', rid: 'r1', qid: 'q', done: [0], failed: [] });
+      expect(got.at(-1)).toEqual({ type: 'chat.acted', rid: 'r1', qid: 'q', done: [0], failed: [] });
+    });
+  });
   describe('close card', () => {
     const at = new Date().toISOString();
     const closes = (over: Array<Record<string, unknown>> = [{}, {}]) => over.map((o, i) => ({ id: `a${i + 1}`, name: `bot${i + 1}`, tool: 'claude' as const, ...o }));
@@ -724,5 +751,81 @@ describe('archived sessions', () => {
     expect(canManage({ daemon: { version: '1', install: 'npm', systemd: true, archive: true } })).toBe(true);
     expect(canManage({ daemon: { version: '1', install: 'npm', systemd: true } })).toBe(false);
     expect(canManage({})).toBe(false);
+  });
+});
+
+describe('attachments', () => {
+  const image = { mime: 'image/png' as const, data: 'AAAA' };
+  const ref = { id: 'a'.repeat(64), mime: 'image/png' as const, width: 1, height: 1, bytes: 4, preview: true };
+  it('routes a put by its session id and only emits the answer of the machine asked', () => {
+    const { client, local, server, got } = setup();
+    client.send({ type: 'attachment.put', requestId: 'r1', id: 'server:s1', image });
+    expect(server.sent).toEqual([{ type: 'attachment.put', requestId: 'r1', id: 's1', image }]);
+    expect(local.sent).toEqual([]);
+    local.emit({ type: 'attachment.stored', requestId: 'r1', ref });
+    expect(got.filter(m => m.type === 'attachment.stored')).toEqual([]);
+    server.emit({ type: 'attachment.stored', requestId: 'r1', ref });
+    expect(got.filter(m => m.type === 'attachment.stored')).toEqual([{ type: 'attachment.stored', requestId: 'r1', ref }]);
+    // answered once: the same answer again is dropped
+    server.emit({ type: 'attachment.stored', requestId: 'r1', ref });
+    expect(got.filter(m => m.type === 'attachment.stored')).toHaveLength(1);
+  });
+  it('routes a get by machine, without the machine field', () => {
+    const { client, local, server, got } = setup();
+    client.send({ type: 'attachment.get', requestId: 'g1', attachment: ref.id, machine: 'server' });
+    expect(server.sent).toEqual([{ type: 'attachment.get', requestId: 'g1', attachment: ref.id }]);
+    server.emit({ type: 'attachment.data', requestId: 'g1', attachment: ref.id, mime: 'image/png', data: 'AAAA' });
+    expect(got.filter(m => m.type === 'attachment.data')).toHaveLength(1);
+    expect(local.sent).toEqual([]);
+  });
+  it('sends a put or get without a route to the local machine, not the selected one', () => {
+    const { client, local, server } = setup();
+    client.fleet!.select('server');
+    client.send({ type: 'attachment.put', requestId: 'r1', image });
+    client.send({ type: 'attachment.get', requestId: 'g1', attachment: ref.id });
+    expect(local.sent.map(m => m.type)).toEqual(['attachment.put', 'attachment.get']);
+    expect(server.sent).toEqual([]);
+  });
+  it('answers « offline » and sends nothing when the target machine is not connected', () => {
+    const { client, server, got } = setup();
+    server.set('unreachable');
+    client.send({ type: 'attachment.put', requestId: 'r1', id: 'server:s1', image });
+    client.send({ type: 'attachment.get', requestId: 'g1', attachment: ref.id, machine: 'server' });
+    expect(server.sent).toEqual([]);
+    expect(got.filter(m => m.type === 'attachment.error')).toEqual([{ type: 'attachment.error', requestId: 'r1', reason: 'offline' }, { type: 'attachment.error', requestId: 'g1', reason: 'offline' }]);
+  });
+  it('answers « offline » for a pending ask when its machine drops, and forgets it', () => {
+    const { client, server, got } = setup();
+    client.send({ type: 'attachment.put', requestId: 'r1', id: 'server:s1', image });
+    server.set('unreachable');
+    expect(got.filter(m => m.type === 'attachment.error')).toEqual([{ type: 'attachment.error', requestId: 'r1', reason: 'offline' }]);
+    server.emit({ type: 'attachment.stored', requestId: 'r1', ref });
+    expect(got.filter(m => m.type === 'attachment.stored')).toEqual([]);
+  });
+  it('answers « offline » for an unqualified or unknown route instead of a generic error', () => {
+    const { client, local, server, got } = setup();
+    client.send({ type: 'attachment.put', requestId: 'r1', id: 's1', image });
+    client.send({ type: 'attachment.get', requestId: 'g1', attachment: ref.id, machine: 'nowhere' });
+    expect(got.filter(m => m.type === 'attachment.error')).toEqual([{ type: 'attachment.error', requestId: 'r1', reason: 'offline' }, { type: 'attachment.error', requestId: 'g1', reason: 'offline' }]);
+    expect(got.some(m => m.type === 'error')).toBe(false);
+    expect(local.sent).toEqual([]); expect(server.sent).toEqual([]);
+  });
+  it('keeps chat images out of chat.route and hands them to the routed machine', () => {
+    const { client, local, server } = setup();
+    client.send({ type: 'chat.ask', qid: 'q', text: 'Lance sur le serveur', images: [image] });
+    expect(local.sent[0]).toMatchObject({ type: 'chat.route' });
+    expect(local.sent[0]).not.toHaveProperty('images');
+    local.emit({ type: 'chat.routed', qid: 'q', result: { machineId: 'server', text: 'Lance' } });
+    expect(server.sent).toEqual([{ type: 'chat.ask', qid: 'q', text: 'Lance', tool: undefined, images: [image] }]);
+  });
+  it('ends the turn when the routed machine refuses its images, and takes the next question', () => {
+    const { client, local, server, got } = setup();
+    client.send({ type: 'chat.ask', qid: 'q', text: 'Lance sur le serveur', images: [image] });
+    local.emit({ type: 'chat.routed', qid: 'q', result: { machineId: 'server', text: 'Lance' } });
+    server.emit({ type: 'chat.error', qid: 'q', message: 'image refused: too_large' });
+    expect(lastHistory(got)[0]).toMatchObject({ qid: 'q', error: 'image refused: too_large' });
+    client.send({ type: 'chat.ask', qid: 'q2', text: 'Autre' });
+    expect(got.some(m => m.type === 'chat.error' && m.message === 'one question at a time')).toBe(false);
+    expect(local.sent.at(-1)).toMatchObject({ type: 'chat.route', qid: 'q2' });
   });
 });

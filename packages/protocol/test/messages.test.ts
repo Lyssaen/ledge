@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseClientMessage, parseServerMessage, ServerMessageSchema, SessionSchema, SessionEventSchema, PROTOCOL_PORT, NAMES, pickName, ThreadItemSchema, offers, NOTE_NOT_TYPED, isArchived, ChatTurnSchema } from '../src/index.js';
+import { parseClientMessage, parseServerMessage, ServerMessageSchema, SessionSchema, SessionEventSchema, PROTOCOL_PORT, NAMES, pickName, ThreadItemSchema, offers, NOTE_NOT_TYPED, isArchived, ChatTurnSchema, RefusalCodeSchema } from '../src/index.js';
 
 const T0 = '2026-10-09T18:02:00.000Z';
 
@@ -103,10 +103,36 @@ describe('protocol', () => {
     expect(ServerMessageSchema.parse({ type: 'session.updated', session }).type).toBe('session.updated');
   });
 
+  it('carries images and attachment ids on replies and questions', () => {
+    const id = 'b'.repeat(64);
+    expect(parseClientMessage({ type: 'session.reply', id: 's', text: '', attachments: [id] })).toEqual({ type: 'session.reply', id: 's', text: '', attachments: [id] });
+    expect(() => parseClientMessage({ type: 'session.reply', id: 's', text: 'x', attachments: Array(6).fill(id) })).toThrow();
+    expect(() => parseClientMessage({ type: 'session.reply', id: 's', text: 'x', attachments: ['nope'] })).toThrow();
+    const image = { mime: 'image/png', data: 'iVBORw0KGgo=' };
+    expect(parseClientMessage({ type: 'chat.ask', qid: 'q1', text: 'look', images: [image] })).toEqual({ type: 'chat.ask', qid: 'q1', text: 'look', images: [image] });
+    expect(() => parseClientMessage({ type: 'chat.ask', qid: 'q1', text: 'look', images: Array(6).fill(image) })).toThrow();
+    expect(parseServerMessage({ type: 'session.queue.restored', id: 's', texts: ['a'], entries: [{ text: 'a', attachments: [id] }, { text: 'b' }], imagesDropped: true }).type).toBe('session.queue.restored');
+    expect(parseServerMessage({ type: 'session.queue.restored', id: 's', texts: ['a'] }).type).toBe('session.queue.restored');
+    expect(SessionEventSchema.parse({ name: 'UserPromptSubmit', at: T0, source: 'daemon', attachments: [id] }).attachments).toEqual([id]);
+    expect(() => SessionEventSchema.parse({ name: 'UserPromptSubmit', at: T0, source: 'daemon', attachments: Array(6).fill(id) })).toThrow();
+  });
+
+  it('carries image refs on a prompt and a chat turn', () => {
+    const ref = { id: 'c'.repeat(64), mime: 'image/jpeg', width: 10, height: 10, bytes: 99, preview: true };
+    expect(ThreadItemSchema.parse({ kind: 'prompt', id: 'p', at: T0, turn: 1, text: 'hi', images: [ref] })).toMatchObject({ images: [ref] });
+    expect(ChatTurnSchema.parse({ qid: 'q', question: 'q', askedAt: T0, steps: [], attachments: [ref] }).attachments).toEqual([ref]);
+  });
+
+  it('knows the attachment refusals', () => {
+    expect(RefusalCodeSchema.parse('attachment_missing')).toBe('attachment_missing');
+    expect(RefusalCodeSchema.parse('attachments_not_accepted')).toBe('attachments_not_accepted');
+  });
+
   it('carries the chat messages', () => {
     expect(parseClientMessage({ type: 'chat.ask', qid: 'q1', text: 'Où en sont les autres ?' })).toEqual({ type: 'chat.ask', qid: 'q1', text: 'Où en sont les autres ?' });
     expect(parseClientMessage({ type: 'chat.ask', qid: 'q1', text: 'x', tool: 'codex' })).toEqual({ type: 'chat.ask', qid: 'q1', text: 'x', tool: 'codex' });
-    expect(() => parseClientMessage({ type: 'chat.ask', qid: 'q1', text: '' })).toThrow();
+    // Empty text is the daemon's to refuse (an image may carry the question), not the schema's.
+    expect(parseClientMessage({ type: 'chat.ask', qid: 'q1', text: '' }).type).toBe('chat.ask');
     expect(() => parseClientMessage({ type: 'chat.ask', qid: 'q1', text: 'x', tool: 'gemini' })).toThrow();
     expect(parseClientMessage({ type: 'chat.reset' }).type).toBe('chat.reset');
     expect(parseServerMessage({ type: 'chat.step', qid: 'q1', step: { kind: 'pane', id: 'a', name: 'Nova' } }).type).toBe('chat.step');
@@ -449,6 +475,66 @@ describe('protocol: model and effort (#58)', () => {
     const closed = { type: 'session.closed', qid: 'q1', row: 0, id: 's1', how: 'killed' };
     expect(parseServerMessage(closed)).toEqual(closed);
     expect(() => parseServerMessage({ ...closed, how: 'quit' })).toThrow();
+  });
+  it('chat.act takes the card qid, optional rows and a literal confirmed; chat.acted answers it', () => {
+    expect(parseClientMessage({ type: 'chat.act', rid: 'r1', qid: 'q1' })).toEqual({ type: 'chat.act', rid: 'r1', qid: 'q1' });
+    expect(parseClientMessage({ type: 'chat.act', rid: 'r1', qid: 'q1', rows: [2, 0], confirmed: true })).toMatchObject({ rows: [2, 0], confirmed: true });
+    expect(() => parseClientMessage({ type: 'chat.act', rid: 'r1', qid: 'q1', confirmed: false })).toThrow();
+    expect(() => parseClientMessage({ type: 'chat.act', rid: 'r1', qid: 'q1', rows: [1, 1] })).toThrow();
+    // « Refuser »: the rows' requests answered with deny, never confirmed; only a literal true.
+    expect(parseClientMessage({ type: 'chat.act', rid: 'r1', qid: 'q1', rows: [0], deny: true })).toEqual({ type: 'chat.act', rid: 'r1', qid: 'q1', rows: [0], deny: true });
+    expect(() => parseClientMessage({ type: 'chat.act', rid: 'r1', qid: 'q1', deny: false })).toThrow();
+    const turn = { qid: 'q1', question: '?', askedAt: T0, steps: [] };
+    const denied = { action: 'session.decide', args: { session: 's1', decision: 'accept' }, summary: 'Accepter', risk: 'destructive', state: 'denied', doneAt: T0 };
+    expect(ChatTurnSchema.parse({ ...turn, actions: [denied] }).actions?.[0]).toMatchObject({ state: 'denied', doneAt: T0 });
+    const acted = { type: 'chat.acted', rid: 'r1', qid: 'q1', done: [0], failed: [{ row: 1, message: 'unknown session', refused: true }, { row: 2, message: 'busy' }] };
+    expect(parseServerMessage(acted)).toEqual(acted);
+    expect(() => parseServerMessage({ ...acted, failed: [{ row: 1, message: 'x', refused: false }] })).toThrow();
+  });
+  it('action.run names a registry action and its args, by a session or the user; action.result answers it with the row or why not', () => {
+    const run = { type: 'action.run', rid: 'r1', by: 's1', action: 'team.dissolve', args: { team: 'api' }, confirmed: true };
+    expect(parseClientMessage(run)).toEqual(run);
+    expect(parseClientMessage({ type: 'action.run', rid: 'r1', action: 'team.resume', args: { team: 'api' } })).not.toHaveProperty('by');
+    expect(() => parseClientMessage({ ...run, action: 'session.kill' })).toThrow();
+    expect(() => parseClientMessage({ ...run, confirmed: false })).toThrow();
+    const row = { action: 'team.dissolve', args: { team: 'team-3fa2' }, summary: 'Dissoudre **api**', risk: 'destructive', team: 'team-3fa2' };
+    const done = { type: 'action.result', rid: 'r1', action: 'team.dissolve', row };
+    expect(parseServerMessage(done)).toEqual(done);
+    const refused = { type: 'action.result', rid: 'r1', action: 'team.dissolve', row, reason: 'confirm', code: 'confirm_required' };
+    expect(parseServerMessage(refused)).toEqual(refused);
+    expect(parseServerMessage({ type: 'action.result', rid: 'r1', action: 'team.save', path: '/h/.ledge/teams/api.yaml' })).toMatchObject({ path: '/h/.ledge/teams/api.yaml' });
+    expect(parseServerMessage({ type: 'action.result', rid: 'r1', action: 'team.save', reason: 'x', code: 'something-newer' })).toMatchObject({ code: 'something-newer' });
+  });
+  it('chat.done and a turn carry the generic rows, one to eight, each a registry action', () => {
+    const row = { action: 'team.dissolve', args: { team: 'team-3fa2' }, summary: 'Dissoudre **api**', risk: 'destructive', team: 'team-3fa2' };
+    expect(parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, actions: [row] })).toMatchObject({ actions: [row] });
+    expect(() => parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, actions: [] })).toThrow();
+    expect(() => parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, actions: Array(9).fill(row) })).toThrow();
+    // An action this front does not know yet still parses: it is drawn from its summary (spec §5.2).
+    expect(parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, actions: [{ ...row, action: 'session.later' }] })).toMatchObject({ actions: [{ action: 'session.later' }] });
+    expect(() => parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, actions: [{ ...row, action: '' }] })).toThrow();
+    expect(() => parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, actions: [{ ...row, summary: 'x'.repeat(301) }] })).toThrow();
+    expect(() => parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, actions: [{ ...row, risk: 'harmless' }] })).toThrow();
+    const turn = { qid: 'q1', question: '?', askedAt: T0, steps: [] };
+    expect(ChatTurnSchema.parse({ ...turn, actions: [{ ...row, state: 'done', doneAt: T0 }] }).actions?.[0]?.state).toBe('done');
+    // Refused: nothing was sent (a target changed, a request answered meanwhile); failed: sent, and it went wrong.
+    expect(ChatTurnSchema.parse({ ...turn, actions: [{ ...row, state: 'refused', error: 'unknown team' }] }).actions?.[0]?.state).toBe('refused');
+  });
+  it('a generic row carries its words for each front (vars), a cut detail and an error code', () => {
+    const row = { action: 'session.decide', args: { session: 's1', decision: 'deny' }, summary: 'Refuser la demande de plan de **Nova**', risk: 'reversible',
+      vars: { session: 'Nova', decision: 'deny', kind: 'plan', note: 'Pas sur main' }, detail: 'Le plan…', detailCut: true, state: 'refused', error: 'Nova has exited', code: 'exited' };
+    const turn = { qid: 'q1', question: '?', askedAt: T0, steps: [] };
+    expect(ChatTurnSchema.parse({ ...turn, actions: [row] }).actions?.[0]).toMatchObject({ vars: row.vars, detailCut: true, code: 'exited' });
+    expect(() => ChatTurnSchema.parse({ ...turn, actions: [{ ...row, vars: { note: 'x'.repeat(301) } }] })).toThrow();
+    expect(() => ChatTurnSchema.parse({ ...turn, actions: [{ ...row, detailCut: false }] })).toThrow();
+  });
+  it('a turn may be ignored, and chat.ignore ignores it or opens it again', () => {
+    const turn = { qid: 'q1', question: '?', askedAt: T0, steps: [], ignoredAt: T0 };
+    expect(ChatTurnSchema.parse(turn).ignoredAt).toBe(T0);
+    expect(parseClientMessage({ type: 'chat.ignore', qid: 'q1' })).toEqual({ type: 'chat.ignore', qid: 'q1' });
+    expect(parseClientMessage({ type: 'chat.ignore', qid: 'q1', undo: true })).toEqual({ type: 'chat.ignore', qid: 'q1', undo: true });
+    expect(() => parseClientMessage({ type: 'chat.ignore', qid: '' })).toThrow();
+    expect(() => parseClientMessage({ type: 'chat.ignore', qid: 'q1', undo: false })).toThrow();
   });
   it('chat.done and a turn carry the close rows, one to eight', () => {
     const row = { id: 's1', name: 'Arlo', tool: 'claude' };

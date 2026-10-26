@@ -1,3 +1,4 @@
+import { actionCopy } from '@ledge/ui/chat/actionCopy';
 import type { Messages } from './messages';
 
 /** English counts only 1 as singular. */
@@ -374,7 +375,11 @@ export const en: Messages = {
     seat: (name, task, machine) => `${name}, ${task}, ${machine}`,
     helperSeat: (kind, parent, task) => `${kind}, subagent of ${parent}: ${task}`,
     offline: 'Offline',
-    ledgeTaskLabel: (owner: string, title: string) => `Ledge gives “${title}” to ${owner}. See the task`,
+    taskTo: { give: n => `Task → ${n}`, pass: n => `Passed → ${n}`, done: n => `Done → ${n}`, refuse: n => `Refused → ${n}`, cancel: n => `Cancelled → ${n}` },
+    taskLabel: (op, from, to, title) => `${{
+      give: `${from} gives “${title}” to ${to}`, pass: `${from} passes “${title}” to ${to}`, done: `${from} hands “${title}” back to ${to}, done`,
+      refuse: `${from} refuses “${title}”, back to ${to}`, cancel: `${from} cancels “${title}” for ${to}`
+    }[op]}. See the task`,
     messageTo: (n) => `to ${n}`,
     messageLabel: (sender, n, summary) => `${sender} writes to ${n}: ${summary}. Open the conversation`,
     desk: 'Talk to Ledge',
@@ -441,7 +446,7 @@ export const en: Messages = {
   },
   teams: {
     tables: (n: number) => `${n} ${n === 1 ? 'table' : 'tables'}`,
-    treeLine: (done: number, given: number) => `team · ${done}/${given}`, treeResting: 'resting',
+    tree: 'team', treeResting: 'resting',
     common: 'common table',
     room: (name: string) => `${name} room`,
     plaqueCounts: (tables: number, sessions: number) => `${tables} ${tables === 1 ? 'table' : 'tables'} · ${sessions} ${sessions === 1 ? 'session' : 'sessions'}`,
@@ -742,7 +747,12 @@ export const en: Messages = {
       seeTasks: 'See the tasks', pinned: 'Current task', autonomy: { ask: 'asks', edits: 'edits without asking', auto: 'autonomous' }
     },
     notice: {
-      task: 'TASK', taskFrom: (name: string) => `Task from ${name}`, team: 'TEAM', teamJoined: 'Team joined',
+      task: 'TASK', taskFrom: (name: string) => `Task from ${name}`, seeTask: 'See the task',
+      taskOut: {
+        give: n => `Task given to ${n}`, pass: n => `Task passed to ${n}`, done: n => `Task handed back to ${n} (done)`,
+        refuse: n => `Task refused, handed back to ${n}`, cancel: n => `Task cancelled for ${n}`
+      },
+      team: 'TEAM', teamJoined: 'Team joined',
       kicker: 'Automated notice', other: 'Automated notice between sessions', anotherSession: 'another session',
       idle: (n, time) => `${n} finished${time ? ` · ${time}` : ''}`,
       exited: (n, time) => `Session ${n} closed${time ? ` · ${time}` : ''}`,
@@ -942,10 +952,17 @@ export const en: Messages = {
       given: (owner: string, id: string, state: string) => `Given to ${owner} · ${id} · ${state}`,
       state: { open: 'to take', taken: 'taken', done: 'done', refused: 'refused', dropped: 'dropped' }, failed: (why: string) => `Refused: ${why}`
     },
+    // #94: the generic card, a row per action, a plan past one (docs/mockups/ledge-action-card.html).
+    action: actionCopy.en,
     project: {
       label: 'Project proposal', title: (name: string) => `Project proposal · ${name}`, complete: (name: string) => `Complete ${name}`,
       repos: (n: number) => `${n} ${n === 1 ? 'repository' : 'repositories'}`, review: 'Review the proposal'
     },
+  },
+  images: {
+    remove: 'Remove image', tooLarge: 'Image too large, even reduced', notImage: 'This file is not an image', max: '5 images per message at most',
+    dialog: 'Answer the question first, the image will go after', lost: "This message's images were lost", failed: 'Image not sent',
+    capture: 'Capture', unavailable: 'Image unavailable', close: 'Close', prev: 'Previous image', next: 'Next image', copy: 'Copy', copied: 'Copied', save: 'Save…'
   },
   machines: { clarification: 'You can also answer in the chat.', destination: 'Destination', choose: (name: string) => `On ${name}.`, local: 'This machine', offline: 'Offline' },
   whatsNew: {

@@ -3,25 +3,41 @@ import type { Key } from 'ink';
 import type { DaemonClient, DaemonState, Fleet, MachineState } from '@ledge/fleet';
 import type { Projects, Session } from '@ledge/protocol';
 import type { Actions, Toast } from './actions.js';
+import type { Asked } from './model/chat.js';
+import type { ClipboardImage } from './clipboard.js';
 import type { Glyphs } from './glyphs.js';
 import type { Lang, Messages } from './i18n/lang.js';
+import type { ThemeChoice, Tone } from './theme.js';
 
 export type Screen = 'overview' | 'session' | 'ask' | 'launch' | 'settings' | 'help';
 export const SCREENS: readonly Screen[] = ['overview', 'session', 'ask', 'launch', 'settings'];
+
+/** What the fields keep while the TUI runs, a screen left or not: each one's draft and what it sent, by field (`ask`, or a
+ *  session's id). */
+export interface Kept { drafts: Map<string, string>; sent: Map<string, string[]>; asked: Asked[] }
 
 /** A screen's keys: true when it took the key (the global keys then leave it alone). */
 export type KeyHandler = (input: string, key: Key) => boolean;
 
 export interface Tui {
   client: DaemonClient; fleet: Fleet; d: DaemonState; machines: MachineState[]; projects: Projects | null;
-  t: Messages; lang: Lang; setLang(lang: Lang): void; g: Glyphs; now: number;
+  t: Messages; lang: Lang; setLang(lang: Lang): void; g: Glyphs;
+  /** The theme chosen, the tone drawn (what the palette `C` holds now), the terminal's background as found at start
+   *  (undefined: not asked, the theme was forced). */
+  theme: ThemeChoice; setTheme(theme: ThemeChoice): void; tone: Tone; background: Tone | undefined;
   screen: Screen; go(screen: Screen): void;
   /** The session the overview and the session screen show. */
   selected: Session | null; select(id: string | null): void;
   toast(t: Toast): void; lastToast: Toast | null; actions: Actions;
   /** A field has the keyboard: the global keys are off. */
-  setEditing(on: boolean): void;
+  editing: boolean; setEditing(on: boolean): void;
+  /** Below `MIN`: the screen is not drawn, its keys are off but esc. */
+  small: boolean;
   attach(s: Session): void;
+  kept: Kept;
+  /** The clipboard picture (null when there is none) and the system viewer: injected so tests stub them. */
+  readImage(): Promise<ClipboardImage | null>;
+  openFile(file: string): Promise<void>;
   /** Registers the screen's key handler (see `useScreenKeys`). */
   keys: { current: KeyHandler | null };
 }

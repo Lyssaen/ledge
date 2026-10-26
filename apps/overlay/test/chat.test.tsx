@@ -91,7 +91,7 @@ describe('<ChatView>', () => {
     expect(within(content as HTMLElement).getByText('To start with')).toBeInTheDocument();
     const chip = within(content as HTMLElement).getByRole('button', { name: 'How are the others doing?' });
     fireEvent.click(chip);
-    expect(onAsk).toHaveBeenCalledWith('How are the others doing?');
+    expect(onAsk).toHaveBeenCalledWith('How are the others doing?', false);
   });
   it('hides the suggestions once a question was asked', () => {
     const turn: ChatTurn = { qid: 'q1', question: 'Hi', askedAt: T0, steps: [], answeredAt: T0, answer: 'Hello.' };
@@ -245,5 +245,22 @@ describe('the relay card', () => {
     render(<ChatView {...base} sessions={[otto]} turns={[{ qid: 'q1', question: 'x', askedAt: T0, steps: [] }]} live={{ qid: 'q1', text: 'I will pass it on.\n```ledge-relay\n{"session": "a", "te' }} />);
     expect(screen.getByText('I will pass it on.')).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent('ledge-relay');
+  });
+});
+
+describe('<ChatView> images', () => {
+  it('draws a turn’s images above its question, through turnImages', () => {
+    const turn: ChatTurn = { qid: 'q1', question: 'What is this?', askedAt: T0, steps: [], answeredAt: T0, answer: 'A cat.' };
+    render(<ChatView {...base} turns={[turn]} live={null} turnImages={t => <div data-turn-images={t.qid} />} />);
+    const el = document.querySelector('[data-turn] [data-turn-images]')!;
+    expect(el).toHaveAttribute('data-turn-images', 'q1');
+    expect(el.compareDocumentPosition(screen.getByText('What is this?')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+  it('has no image paste: an image file pasted into the field is left alone', () => {
+    render(<ChatView {...base} turns={[]} live={null} />);
+    const field = screen.getByRole('textbox', { name: 'Ask Ledge' });
+    const file = new File([new Uint8Array(8)], 's.png', { type: 'image/png' });
+    expect(fireEvent.paste(field, { clipboardData: { files: [file], items: [], types: ['Files'], getData: () => '' } })).toBe(true);
+    expect(document.querySelector('[data-chip]')).toBeNull();
   });
 });

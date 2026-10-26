@@ -3,8 +3,10 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { spawn as nodeSpawn } from 'node:child_process';
-import { extractProposal, isArchived, MAX_PROPOSALS, proposalRows, parseProjectBlock, parseCloseBlock, parseProposalBlock, parseRelayBlock, parseTaskBlock, parseTeamBlock, projectOf, type ChatClose, type ChatProjectProposal, type ChatProposal, type ChatRelay, type ChatTaskProposal, type ChatTeamProposal, type CloseHow, type ChatTurn, type Projects, type ServerMessage, type Session, type Task, type Team, type Tool } from '@ledge/protocol';
-import { listDefinitions, resolveSeats } from '../daemon/teams.js';
+import { extractProposal, isArchived, LEGACY_FENCE_ACTION, MAX_PROPOSALS, proposalRows, parseActionBlock, parseProjectBlock, parseCloseBlock, parseRelayBlock, parseTaskBlock, parseTeamBlock, projectOf, type BlockKind, type ChatAction, type ChatClose, type ChatProjectProposal, type ChatProposal, type ChatRelay, type ChatTaskProposal, type ChatTeamProposal, type CloseHow, type ChatTurn, type AttachmentRef, type Projects, type ServerMessage, type Session, type Task, type Team, type Tool } from '@ledge/protocol';
+import { listDefinitions, resolveSeats, templateExists } from '../daemon/teams.js';
+import { resolveAction } from '../daemon/actions.js';
+import { findRole } from '../daemon/roles.js';
 import { resolveFolder } from '../daemon/folders.js';
 import type { Store } from '../daemon/store.js';
 import type { Tmux } from '../tmux.js';
@@ -19,7 +21,10 @@ import { log } from '../log.js';
 
 export type ChatMessage = Extract<ServerMessage, { type: 'chat.history' | 'chat.step' | 'chat.delta' | 'chat.done' | 'chat.error' }>;
 export interface Chat {
-  ask(qid: string, text: string, emit: (m: ChatMessage) => void, tool?: Tool): Promise<void>; cancel(qid: string): void; reset(emit: (m: ChatMessage) => void): Promise<void>; history(): ChatTurn[];
+  ask(qid: string, text: string, emit: (m: ChatMessage) => void, tool?: Tool, images?: AttachmentRef[]): Promise<void>;
+  /** The ids of the images the day's turns hold. */
+  attachmentIds(): string[];
+  cancel(qid: string): void; reset(emit: (m: ChatMessage) => void): Promise<void>; history(): ChatTurn[];
   /** The turn's session proposal (spec 2026-10-12 §4) at that row of its card (#24, the first by default), if the turn is still in the day's history. */
   proposal(qid: string, row?: number): ChatProposal | undefined;
   /** The card row's launch went through (`launchedId`) or failed (`error`); every client gets the new history. */
@@ -46,6 +51,15 @@ export interface Chat {
   markTask(qid: string, row: number, patch: Partial<Pick<ChatTaskProposal, 'taskId' | 'ownerName' | 'state' | 'givenAt' | 'error'>>, emit: (m: ChatMessage) => void): void;
   /** A task Ledge gave changed: the card that gave it follows it (« prise », then « finie »). */
   followTask(task: Task, emit: (m: ChatMessage) => void): void;
+  /** The turn's generic card row (spec 2026-10-26 action registry §5). */
+  action(qid: string, row: number): ChatAction | undefined;
+  /** The row is running, done (`doneAt`) or failed (`error`); every client gets the new history. */
+  markAction(qid: string, row: number, patch: Partial<Pick<ChatAction, 'state' | 'doneAt' | 'error' | 'code'>>, emit: (m: ChatMessage) => void): void;
+  /** « Ignorer » the turn's cards (`undo`: « Revoir », open again): why not, or null once every client has the turn's
+   *  `ignoredAt`. Ledge hears of a card set aside at the next question, unless it was opened again meanwhile. */
+  ignore(qid: string, undo: boolean, emit: (m: ChatMessage) => void): string | null;
+  /** The turn's cards were set aside: none of them applies. */
+  ignored(qid: string): boolean;
   /** Resolves once no question is running (at once when there is none). */
   idle(): Promise<void>;
 }
@@ -64,6 +78,8 @@ export interface ChatDeps {
   forge?: Forge;
   /** A pool shared by several chats: a question takes a place while it runs. */
   slots?: { take(): boolean; give(): void };
+  /** Resolves an attached image's id to its file (the daemon's attachment store). */
+  attachments?: { path(id: string): string | null };
   now?: () => string; today?: () => string; uuid?: () => string; bin?: string[]; bins?: Partial<Record<Tool, string[]>>; spawn?: typeof nodeSpawn; timeoutMs?: number;
 }
 
@@ -94,6 +110,8 @@ export function tooWide(path: string, userHome: string): string | null {
   if (/^\/[^/]+$/.test(path)) return 'a top-level folder';
   return null;
 }
+/** The earlier fence each earlier card's action is read as, so a ledge-action block for it reaches the same validator. */
+const FENCE_OF = new Map(Object.entries(LEGACY_FENCE_ACTION).map(([kind, id]) => [id as string, kind as BlockKind]));
 const sameStep = (a: ChatTurn['steps'][number], b: ChatTurn['steps'][number]) => a.kind === b.kind && a.id === b.id && a.path === b.path;
 
 /** One conversation with Ledge per day, run by the chosen harness (spec 2026-10-11 §5). */
@@ -108,13 +126,20 @@ export function createChat(deps: ChatDeps): Chat {
   /** Set by a reset: the next question starts a new Claude session (`--session-id`) instead of resuming the day's. */
   let freshNext = false;
   /** The running question, from its first line (so a Stop while the context is built counts); `handle` once Claude Code has spawned. */
-  type Running = { qid: string; handle: RunHandle | null; cancelled: boolean };
+  type Running = { qid: string; handle: RunHandle | null; cancelled: boolean; told: { text: string; qids: string[] } };
   let current: Running | null = null;
   let idleWaiters: Array<() => void> = [];
   const CANCELLED = { ok: false as const, message: 'cancelled', resumed: false };
+  /** The turns set aside since Ledge last heard: it is told before the next question, so it does not propose them again. */
+  const setAside = new Map<string, { question: string; partly: boolean }>();
+  const tell = () => ({ qids: [...setAside.keys()], text: [...setAside.values()].map(a => `[Ledge] L'utilisateur a ignoré ta proposition en réponse à « ${a.question} » : `
+    + `${a.partly ? 'une partie était déjà faite, le reste n\'en a pas été appliqué' : 'rien n\'en a été appliqué'}. Ne la propose plus, sauf s'il la redemande.`).join('\n') });
+  /** Something of the turn's cards was already applied, or is under way: Ledge is not told that nothing was. */
+  const partly = (t: ChatTurn) => !!(proposalRows(t).some(p => p.launchedId) || t.relay?.status === 'sent' || t.relay?.sentAt || t.closes?.some(c => c.closedAt)
+    || t.team?.teamId || t.tasks?.some(c => c.taskId) || t.actions?.some(a => a.state === 'done'));
 
   /** A new day starts an empty history; the day file decides the Claude session separately. */
-  function rollDay(): boolean { const day = today(); if (turnsDay === day) return false; turns = []; turnsDay = day; return true; }
+  function rollDay(): boolean { const day = today(); if (turnsDay === day) return false; turns = []; turnsDay = day; setAside.clear(); return true; }
 
   /** Today's session for this harness: resumed from the day file when it names today and the same tool, else a fresh id. */
   async function daySession(fresh: boolean, tool: Tool): Promise<{ sessionId: string; resume: boolean }> {
@@ -136,14 +161,15 @@ export function createChat(deps: ChatDeps): Chat {
 
   /** A block as a card: its folder must exist now; a bad block or a missing folder gives no card and a log line. */
   async function proposalFrom(raw: string, tool: Tool, qid: string): Promise<ChatProposal | undefined> {
-    const block = parseProposalBlock(raw);
-    if (!block) { log(`chat ${qid}: proposal ignored, invalid block: ${raw.slice(0, 200)}`); return undefined; }
+    const parsed = parseActionBlock('session', raw);
+    if ('error' in parsed) { log(`chat ${qid}: proposal ignored, invalid block: ${raw.slice(0, 200)}`); return undefined; }
+    const block = parsed.args as { cwd: string; prompt?: string; model?: string; effort?: ChatProposal['effort'] };
     try {
       const cwd = await resolveFolder(block.cwd, deps.userHome);
       const prompt = block.prompt?.trim();
       // launchArgs passes the prompt as a bare argv entry: a leading `-` would be read as a flag by the agent CLI.
       if (prompt?.startsWith('-')) { log(`chat ${qid}: proposal ignored: prompt starts with "-"`); return undefined; }
-      return { cwd, project: basename(cwd), tool, ...(prompt ? { prompt } : {}) };
+      return { cwd, project: basename(cwd), tool, ...(prompt ? { prompt } : {}), ...(block.model ? { model: block.model } : {}), ...(block.effort ? { effort: block.effort } : {}) };
     } catch (e) { log(`chat ${qid}: proposal ignored: ${(e as Error).message}`); return undefined; }
   }
   /** A relay block as a card: its session must be tracked, writable and still running now; otherwise no card and a log line. */
@@ -231,6 +257,24 @@ export function createChat(deps: ChatDeps): Chat {
     }
     return rows;
   }
+  /** The generic blocks as rows (spec §9.2, one plan): each resolved against the state now, at most `max` per action and 8 in all; a refused,
+   *  repeated or capped one is dropped with a log line. */
+  function actionsFrom(blocks: Array<{ id: string; args: unknown; max: number }>, qid: string, closing: ReadonlySet<string>): ChatAction[] {
+    const ctx = { sessions: deps.store.all(), teams: deps.teams?.() ?? [], tasks: deps.tasks?.() ?? [], findRole, templateExists: (name: string) => templateExists(name), closing };
+    const rows: ChatAction[] = []; const per = new Map<string, number>(); const over = new Map<string, number>(); let beyond = 0;
+    for (const b of blocks) {
+      if ((per.get(b.id) ?? 0) >= b.max) { over.set(b.id, (over.get(b.id) ?? 0) + 1); continue; }
+      if (rows.length >= MAX_PROPOSALS) { beyond++; continue; }
+      const r = resolveAction(b.id, b.args, ctx);
+      if ('refused' in r) { log(`chat ${qid}: action ignored: ${r.refused}`); continue; }
+      if (rows.some(x => x.action === r.action && JSON.stringify(x.args) === JSON.stringify(r.args))) { log(`chat ${qid}: action ignored: duplicate ${r.action}`); continue; }
+      per.set(b.id, (per.get(b.id) ?? 0) + 1); rows.push(r);
+    }
+    for (const [id, n] of over) log(`chat ${qid}: ${n} ${id} beyond ${actionMax(blocks, id)} ignored`);
+    if (beyond > 0) log(`chat ${qid}: ${beyond} actions beyond ${MAX_PROPOSALS} ignored`);
+    return rows;
+  }
+  const actionMax = (blocks: Array<{ id: string; max: number }>, id: string) => blocks.find(b => b.id === id)!.max;
   const turnOf = (qid: string) => turns.find(t => t.qid === qid);
   /** Sets a row and keeps `proposal` the first row, for the clients from before #24. */
   function setRow(t: ChatTurn, row: number, next: ChatProposal) {
@@ -249,11 +293,12 @@ export function createChat(deps: ChatDeps): Chat {
     if (mine.cancelled) return CANCELLED;
     const { sessionId, resume } = await daySession(fresh, tool);
     const label = TOOL_LABEL[tool];
+    const images = (turn.attachments ?? []).flatMap(a => { const path = deps.attachments?.path(a.id); return path ? [{ path, mime: a.mime }] : []; });
     // The chat runs on the CLI's own login: an API key the daemon inherited is never billed (spec §5.2).
     const env: NodeJS.ProcessEnv = { ...(await deps.env()), LEDGE_CHAT: '1' }; delete env.LEDGE_SESSION; delete env.LEDGE_NAME; delete env.ANTHROPIC_API_KEY;
     if (mine.cancelled) return CANCELLED;
     let answer = ''; let resultError: string | null = null;
-    const handle = runTool(tool, { question: turn.question, cwd: ctx.dir, addDirs: ctx.repoPaths, sessionId, resume, env, bin: deps.bins?.[tool] ?? deps.bin, ...(tool === 'omp' ? { sessionDir: join(deps.home, 'chat', 'omp', sessionId) } : {}) }, e => {
+    const handle = runTool(tool, { question: mine.told.text ? `${mine.told.text}\n\n${turn.question}` : turn.question, cwd: ctx.dir, addDirs: ctx.repoPaths, sessionId, resume, env, bin: deps.bins?.[tool] ?? deps.bin, ...(images.length > 0 ? { images } : {}), ...(tool === 'omp' ? { sessionDir: join(deps.home, 'chat', 'omp', sessionId) } : {}) }, e => {
       if (e.type === 'tool') { const step = e.path ? stepFor(e.path, ctx) : null; if (step && !turn.steps.some(s => sameStep(s, step))) { turn.steps.push(step); emit({ type: 'chat.step', qid: turn.qid, step }); } }
       else if (e.type === 'delta') { answer += e.text; emit({ type: 'chat.delta', qid: turn.qid, text: e.text }); }
       else if (e.type === 'result') { if (e.text) answer = e.text; if (e.isError) resultError = e.text || `${label} reported an error`; }
@@ -267,7 +312,17 @@ export function createChat(deps: ChatDeps): Chat {
     if (r.code !== 0) return { ok: false, message: r.code === null ? `${label} could not start: ${r.stderr.trim() || 'not found in PATH'}` : r.stderr.trim() || `${label} exited with code ${r.code}`, resumed: resume };
     if (resultError) return { ok: false, message: resultError, resumed: false };
     // The proposal block never reaches the reader: the card stands for it (spec 2026-10-12 §3-4).
-    const { text, kind, raw, blocks } = extractProposal(answer);
+    const { text, blocks: found } = extractProposal(answer);
+    // A ledge-action block for an earlier card is read as that card's fence; the generic ones never decide which earlier card the turn gets.
+    const blocks: Array<{ kind: BlockKind; raw: string }> = []; const generic: Array<{ id: string; args: unknown; max: number }> = [];
+    for (const b of found) {
+      if (b.kind !== 'action') { blocks.push(b); continue; }
+      const r = parseActionBlock('action', b.raw);
+      if ('error' in r) { log(`chat ${turn.qid}: action ignored: ${r.error}`); continue; }
+      if (r.action.card === 'generic') generic.push({ id: r.action.id, args: r.args, max: r.action.max });
+      else blocks.push({ kind: FENCE_OF.get(r.action.id)!, raw: JSON.stringify(r.args) });
+    }
+    const kind = blocks.at(-1)?.kind ?? null; const raw = blocks.at(-1)?.raw ?? null;
     // Every session block is a row of the card (#24); the last block's kind still decides which card the turn gets.
     const sessionBlocks = kind === 'session' ? blocks.filter(b => b.kind === 'session') : [];
     if (sessionBlocks.length > MAX_PROPOSALS) log(`chat ${turn.qid}: ${sessionBlocks.length - MAX_PROPOSALS} sessions beyond ${MAX_PROPOSALS} ignored`);
@@ -285,6 +340,7 @@ export function createChat(deps: ChatDeps): Chat {
     const taskBlocks = blocks.filter(b => b.kind === 'task');
     if (taskBlocks.length > MAX_PROPOSALS) log(`chat ${turn.qid}: ${taskBlocks.length - MAX_PROPOSALS} tasks beyond ${MAX_PROPOSALS} ignored`);
     const tasks = tasksFrom(taskBlocks.slice(0, MAX_PROPOSALS), turn.qid, team);
+    const actions = actionsFrom(generic, turn.qid, new Set(closes.map(c => c.id)));
     turn.answer = text; turn.answeredAt = now();
     if (proposal) { turn.proposal = proposal; turn.proposals = proposals; }
     if (relay) turn.relay = relay;
@@ -292,12 +348,14 @@ export function createChat(deps: ChatDeps): Chat {
     if (projectProposal) turn.projectProposal = projectProposal;
     if (team) turn.team = team;
     if (tasks.length > 0) turn.tasks = tasks;
-    emit({ type: 'chat.done', qid: turn.qid, text, at: turn.answeredAt, ...(proposal ? { proposal, proposals } : {}), ...(relay ? { relay } : {}), ...(closes.length > 0 ? { closes } : {}), ...(projectProposal ? { projectProposal } : {}), ...(team ? { team } : {}), ...(tasks.length > 0 ? { tasks } : {}) });
+    if (actions.length > 0) turn.actions = actions;
+    emit({ type: 'chat.done', qid: turn.qid, text, at: turn.answeredAt, ...(proposal ? { proposal, proposals } : {}), ...(relay ? { relay } : {}), ...(closes.length > 0 ? { closes } : {}), ...(projectProposal ? { projectProposal } : {}), ...(team ? { team } : {}), ...(tasks.length > 0 ? { tasks } : {}), ...(actions.length > 0 ? { actions } : {}) });
     return { ok: true };
   }
 
   return {
     history: () => turns,
+    attachmentIds: () => turns.flatMap(t => t.attachments?.map(a => a.id) ?? []),
     proposal: (qid, row = 0) => proposalRows(turnOf(qid))[row],
     markLaunched(qid, id, emit, row = 0) {
       const t = turnOf(qid); const p = proposalRows(t)[row]; if (!t || !p) return;
@@ -353,23 +411,50 @@ export function createChat(deps: ChatDeps): Chat {
       }
       if (changed) emit({ type: 'chat.history', turns });
     },
+    action: (qid, row) => { rollDay(); return turnOf(qid)?.actions?.[row]; },
+    markAction(qid, row, patch, emit) {
+      const t = turnOf(qid); const a = t?.actions?.[row]; if (!t || !a) return;
+      const next: ChatAction = { ...a, ...patch };
+      if (patch.state !== 'failed' && patch.state !== 'refused') { delete next.error; delete next.code; }
+      if (patch.state !== 'done' && patch.state !== 'denied') delete next.doneAt;
+      t.actions = t.actions!.map((r, i) => (i === row ? next : r));
+      emit({ type: 'chat.history', turns });
+    },
+    ignore(qid, undo, emit) {
+      rollDay();
+      const t = turnOf(qid);
+      if (!t) return 'unknown card';
+      if (!t.proposal && !t.relay && !t.closes && !t.projectProposal && !t.team && !t.tasks && !t.actions) return 'no card to ignore';
+      if (undo) {
+        if (!t.ignoredAt) return null;
+        delete t.ignoredAt; setAside.delete(qid);
+      } else {
+        if (t.ignoredAt) return null;
+        // A queued instruction or a row being applied is under way: it is stopped first (« Annuler »), then set aside.
+        if (t.relay?.status === 'queued' || t.actions?.some(a => a.state === 'running')) return 'the card is under way';
+        t.ignoredAt = now(); setAside.set(qid, { question: t.question.slice(0, 200), partly: partly(t) });
+      }
+      emit({ type: 'chat.history', turns });
+      return null;
+    },
+    ignored: qid => turnOf(qid)?.ignoredAt !== undefined,
     idle: () => (busy ? new Promise<void>(res => { idleWaiters.push(res); }) : Promise.resolve()),
     cancel(qid) { if (current?.qid === qid) { current.cancelled = true; current.handle?.kill(); } },
     async reset(emit) {
       // The overlay only offers it between questions; a reset racing a question is dropped rather than orphaning its turn.
       if (busy) { log('chat reset ignored: a question is running'); return; }
-      freshNext = true; turns = []; turnsDay = today();
+      freshNext = true; turns = []; turnsDay = today(); setAside.clear();
       emit({ type: 'chat.history', turns });
       // Without a day file a restarted daemon also starts fresh.
       await rm(dayFile, { force: true }).catch(e => log(`chat reset: day file not removed: ${(e as Error).message}`));
     },
-    async ask(qid, text, emit, tool = 'claude') {
+    async ask(qid, text, emit, tool = 'claude', images = []) {
       if (busy) return emit({ type: 'chat.error', qid, message: ONE_AT_A_TIME });
       if (deps.slots && !deps.slots.take()) return emit({ type: 'chat.error', qid, message: TOO_MANY });
       busy = true;
       try {
-        const mine: Running = current = { qid, handle: null, cancelled: false };
-        const turn: ChatTurn = { qid, question: text, askedAt: now(), steps: [] };
+        const mine: Running = current = { qid, handle: null, cancelled: false, told: tell() };
+        const turn: ChatTurn = { qid, question: text, askedAt: now(), steps: [], ...(images.length > 0 ? { attachments: images } : {}) };
         try {
           rollDay();
           turns = [...turns, turn].slice(-HISTORY_MAX);
@@ -379,6 +464,8 @@ export function createChat(deps: ChatDeps): Chat {
           // A day session whose transcript is gone (or a CLI that forgot it): once more, from a fresh conversation.
           if (!r.ok && r.resumed && !mine.cancelled) { log(`chat ${qid}: resume failed (${r.message}), starting a new day session`); turn.steps.length = 0; r = await attempt(turn, emit, true, mine, tool); }
           if (!r.ok) { turn.error = r.message; emit({ type: 'chat.error', qid, message: r.message }); }
+          // Only what was said: a card set aside while this question ran is told at the next one.
+          else for (const q of mine.told.qids) setAside.delete(q);
         } catch (e) {
           // The context folder or the day file could not be written: the overlay still needs its unlock.
           log(`chat ${qid} failed: ${(e as Error).message}`);

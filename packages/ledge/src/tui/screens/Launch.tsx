@@ -3,7 +3,7 @@ import { Box, Text, useInput } from 'ink';
 import { launchDefaults, launchMessage, missingOf, MULTI_REPO_TOOLS, previewOf, reposOn, toggleRepo, withMachine, withPick, withProject, withTool, type LaunchForm } from '@ledge/fleet/launch';
 import { useModels } from '@ledge/fleet/models';
 import { randomUUID } from 'node:crypto';
-import { pickName, projectOf, type Role, type TeamTemplate, type Tool } from '@ledge/protocol';
+import { pickName, projectOf, type ProjectColor, type Role, type TeamTemplate, type Tool } from '@ledge/protocol';
 import { useEditing, useTui } from '../context.js';
 import { TOOL_NAME } from '../model/labels.js';
 import { C, projectColor } from '../theme.js';
@@ -21,6 +21,19 @@ const LAUNCH_MS = 20_000;
 /** `list[i ± 1]`, wrapping. */
 const cycle = <T,>(list: readonly T[], cur: T, by: number): T => list[((Math.max(0, list.indexOf(cur)) + by) % list.length + list.length) % list.length]!;
 
+/** A project among the choices, as the overview and the Desktop draw it: its ■ in its colour, then its name, dim, or chosen
+ *  ‹ ■ name › in the text's colour and bold. None (null) has no ■. */
+function ProjectChoice({ project, on }: { project: { name: string; color?: ProjectColor } | null; on: boolean }) {
+  const { t, g } = useTui();
+  return (
+    <Text>
+      {on ? <Text color={C.fg} bold>{`${g.prev} `}</Text> : null}
+      {project ? <><Text color={projectColor(project.color)}>{g.project}</Text><Text color={on ? C.fg : C.dim} bold={on}> {project.name}</Text></> : <Text color={on ? C.fg : C.dim} bold={on}>{t.launch.none}</Text>}
+      {on ? <Text color={C.fg} bold>{` ${g.next}`}</Text> : null}{'   '}
+    </Text>
+  );
+}
+
 /** « Nouvelle session » (4): a session, or with ctrl+t a team (roles spec §3.9). */
 export function Launch() {
   const [team, setTeam] = useState(false);
@@ -28,7 +41,7 @@ export function Launch() {
 }
 
 function SessionLaunch({ onTeam }: { onTeam(): void }) {
-  const { client, d, machines, projects, t, g, toast, go, select } = useTui();
+  const { client, d, machines, projects, t, g, toast, go, select, small } = useTui();
   const list = projects?.projects ?? [];
   const [form, setForm] = useState<LaunchForm>(() => launchDefaults(list, machines, {}, 'claude'));
   const [field, setField] = useState<Field>('prompt');
@@ -78,6 +91,8 @@ function SessionLaunch({ onTeam }: { onTeam(): void }) {
   };
 
   useInput((input, key) => {
+    // Too small, the form is not drawn: only esc goes.
+    if (small && !key.escape) return;
     if (key.escape) { go('overview'); return; }
     if (key.ctrl && input === 's') { launch(); return; }
     if (key.ctrl && input === 't') { onTeam(); return; }
@@ -107,9 +122,9 @@ function SessionLaunch({ onTeam }: { onTeam(): void }) {
       <Box flexGrow={1} overflow="hidden">{value}</Box>
     </Box>
   );
-  const choice = <T extends string | null,>(items: readonly T[], cur: T, label: (x: T) => string, color?: (x: T) => string | undefined) => (
+  const choice = <T extends string | null,>(items: readonly T[], cur: T, label: (x: T) => string) => (
     <Text wrap="truncate">{items.map((x, i) => (
-      <Text key={i}>{x === cur ? <Text color={C.fg} bold>{`${g.prev} ${label(x)} ${g.next}`}</Text> : <Text color={color?.(x) ?? C.dim}>{label(x)}</Text>}{'   '}</Text>
+      <Text key={i}>{x === cur ? <Text color={C.fg} bold>{`${g.prev} ${label(x)} ${g.next}`}</Text> : <Text color={C.dim}>{label(x)}</Text>}{'   '}</Text>
     ))}</Text>
   );
   return (
@@ -121,11 +136,11 @@ function SessionLaunch({ onTeam }: { onTeam(): void }) {
         {row('tool', t.launch.agent, <Text wrap="truncate">{tools.map(x => <Text key={x} color={x === form.tool ? C.coral : C.dim}>{x === form.tool ? g.radioOn : g.radioOff} {TOOL_NAME[x]}   </Text>)}</Text>)}
         {row('model', t.launch.model, models.status === 'loading' ? <Text color={C.faint}>{t.launch.loading}</Text> : choice(modelIds, form.model, x => x === null ? t.launch.defaultModel : (models.models.find(m => m.id === x)?.label ?? x)))}
         {row('effort', t.launch.effort, efforts.length > 1 ? choice(efforts, form.effort, x => x ?? t.launch.defaultModel) : <Text color={C.faint}>{t.launch.defaultModel}</Text>)}
-        {row('project', t.launch.project, choice([...list.map(p => p.id), null], form.project, x => x === null ? t.launch.none : list.find(p => p.id === x)!.name, x => projectColor(list.find(p => p.id === x)?.color)))}
+        {row('project', t.launch.project, <Text wrap="truncate">{[...list, null].map(p => <ProjectChoice key={p?.id ?? '-'} project={p} on={(p?.id ?? null) === form.project} />)}</Text>)}
         {row('machine', t.launch.machine, <Text wrap="truncate">{machines.map(m => <Text key={m.id} color={m.id === form.machine ? C.fg : C.dim} bold={m.id === form.machine}><Text color={m.ready ? C.green : C.faint}>{g.machine}</Text> {m.label}{'    '}</Text>)}</Text>)}
         {row('repos', t.launch.repos, repoOptions.length === 0 ? <Text color={C.faint}>{t.launch.none}</Text> : (
           <Text wrap="truncate">{repoOptions.map((r, i) => (
-            <Text key={r} backgroundColor={field === 'repos' && i === repoAt ? '#3a3532' : undefined} color={form.repos.includes(r) ? C.fg : C.dim}>
+            <Text key={r} backgroundColor={field === 'repos' && i === repoAt ? C.line : undefined} color={form.repos.includes(r) ? C.fg : C.dim}>
               <Text color={form.repos.includes(r) ? C.green : C.faint}>{form.repos.includes(r) ? g.boxOn : g.boxOff}</Text> {r.split('/').filter(Boolean).at(-1) ?? r} <Text color={C.faint}>{r}</Text>{'   '}
             </Text>
           ))}</Text>
@@ -148,13 +163,14 @@ function SessionLaunch({ onTeam }: { onTeam(): void }) {
 
 const TEAM_FIELDS = ['project', 'folder', 'template', 'seats', 'name'] as const;
 type TeamField = typeof TEAM_FIELDS[number];
-const AUTONOMY_COLOR = { ask: C.faint, edits: C.dim, auto: C.yellow } as const;
+/** Read at each render: the palette changes with the theme. */
+const autonomyColor = (a: 'ask' | 'edits' | 'auto'): string => ({ ask: C.faint, edits: C.dim, auto: C.yellow })[a];
 
 /** The team mode (roles spec §3.9): a project and one of its folders, a template or seats chosen one by one (each with its
  *  agent), the team's name, and the preview « L'équipe workshop s'installera à une nouvelle table de la pièce Ledge » with the
  *  autonomy warning. ctrl+s sends `team.launch`; its answer says how it went. */
 function TeamLaunch({ onSession }: { onSession(): void }) {
-  const { client, machines, projects, t, g, toast, go } = useTui();
+  const { client, machines, projects, t, g, toast, go, small } = useTui();
   const list = projects?.projects ?? [];
   const [projectId, setProjectId] = useState<string | null>(list[0]?.id ?? null);
   const project = list.find(p => p.id === projectId);
@@ -211,6 +227,8 @@ function TeamLaunch({ onSession }: { onSession(): void }) {
   const tools: Tool[] = ['claude', 'codex', 'cursor', 'omp'];
   const templates: Array<string | null> = [...(defs?.templates ?? []).map(x => x.id), null];
   useInput((input, key) => {
+    // Too small, the form is not drawn: only esc goes.
+    if (small && !key.escape) return;
     if (key.escape) { go('overview'); return; }
     if (key.ctrl && input === 's') { launch(); return; }
     if (key.ctrl && input === 't') { onSession(); return; }
@@ -240,22 +258,22 @@ function TeamLaunch({ onSession }: { onSession(): void }) {
     <Frame crumb={t.launch.teamTitle} keys={[['tab', t.keys.nextField], ['← →', t.keys.choose], [t.keys.space, t.keys.tick], ['ctrl+s', t.keys.start], ['ctrl+t', t.keys.teamMode], ['esc', t.keys.cancel]]}>
       <TitledBox title={t.launch.teamTitle} flexGrow={1}>
         <Box><Text color={C.faint}> </Text><Box width={14} flexShrink={0}><Text color={C.dim}>{t.launch.mode}</Text></Box><Text><Text color={C.dim}>{g.radioOff} {t.launch.session}</Text>   <Text color={C.coral}>{g.radioOn} {t.launch.team}</Text>  <Text color={C.faint}>ctrl+t</Text></Text></Box>
-        {row('project', t.launch.project, <Text wrap="truncate">{list.length === 0 ? <Text color={C.faint}>{t.launch.none}</Text> : list.map(p => <Text key={p.id} color={p.id === projectId ? C.fg : projectColor(p.color)} bold={p.id === projectId}>{p.id === projectId ? `${g.prev} ${p.name} ${g.next}` : p.name}{'   '}</Text>)}</Text>)}
+        {row('project', t.launch.project, <Text wrap="truncate">{list.length === 0 ? <Text color={C.faint}>{t.launch.none}</Text> : list.map(p => <ProjectChoice key={p.id} project={p} on={p.id === projectId} />)}</Text>)}
         {row('folder', t.launch.folder, <Text wrap="truncate">{cwd ? <><Text color={C.fg}>{cwd}</Text>{folders.length > 1 ? <Text color={C.faint}>  ({folderAt + 1}/{folders.length})</Text> : null}</> : <Text color={C.faint}>{t.launch.none}</Text>}</Text>)}
         {row('template', t.launch.template, defs === null ? <Text color={C.faint}>{t.launch.loadingRoles}</Text> : <Text wrap="truncate">{templates.map(x => <Text key={x ?? '-'} color={x === template ? C.fg : C.dim} bold={x === template}>{x === template ? `${g.prev} ${x ?? t.launch.custom} ${g.next}` : x ?? t.launch.custom}{'   '}</Text>)}</Text>)}
         {row('seats', t.launch.seats, tpl
           ? <Text wrap="truncate">{chosen.map(x => <Text key={x.id}><Text color={C.violet}>@{x.id}</Text> <Text color={C.dim}>{TOOL_NAME[x.tool]}</Text>{'   '}</Text>)}</Text>
           : seats.length === 0 ? <Text color={C.faint}>{t.launch.noRole}</Text>
           : <>{seats.map((x, i) => (
-            <Text key={x.role.id} wrap="truncate" backgroundColor={field === 'seats' && i === seatAt ? '#3a3532' : undefined}>
-              <Text color={x.on ? C.green : C.faint}>{x.on ? g.boxOn : g.boxOff}</Text> <Text color={C.violet}>@{x.role.id}</Text> {x.role.label} <Text color={C.dim}>{g.prev} {TOOL_NAME[x.tool]} {g.next}</Text> <Text color={AUTONOMY_COLOR[x.role.autonomy ?? 'ask']}>{t.ask.autonomy[x.role.autonomy ?? 'ask']}</Text>
+            <Text key={x.role.id} wrap="truncate" backgroundColor={field === 'seats' && i === seatAt ? C.line : undefined}>
+              <Text color={x.on ? C.green : C.faint}>{x.on ? g.boxOn : g.boxOff}</Text> <Text color={C.violet}>@{x.role.id}</Text> {x.role.label} <Text color={C.dim}>{g.prev} {TOOL_NAME[x.tool]} {g.next}</Text> <Text color={autonomyColor(x.role.autonomy ?? 'ask')}>{t.ask.autonomy[x.role.autonomy ?? 'ask']}</Text>
             </Text>
           ))}</>)}
         {row('name', t.launch.teamName, <TextInput value={name} onChange={setName} active={field === 'name'} placeholder={teamName} />)}
       </TitledBox>
       <TitledBox title={t.launch.preview} color={C.coral} titleColor={C.coral}>
         <Text wrap="truncate"><Text color={C.coral}>{g.team}</Text> <Text color={C.fg} bold>{t.launch.teamPreview(teamName, project?.name ?? cwd ?? '-')}</Text></Text>
-        <Text wrap="truncate">{chosen.map(x => <Text key={x.id}><Text color={C.violet}>@{x.id}</Text> <Text color={C.dim}>{TOOL_NAME[x.tool]}</Text> <Text color={AUTONOMY_COLOR[x.autonomy]}>{t.ask.autonomy[x.autonomy]}</Text>{'   '}</Text>)}</Text>
+        <Text wrap="truncate">{chosen.map(x => <Text key={x.id}><Text color={C.violet}>@{x.id}</Text> <Text color={C.dim}>{TOOL_NAME[x.tool]}</Text> <Text color={autonomyColor(x.autonomy)}>{t.ask.autonomy[x.autonomy]}</Text>{'   '}</Text>)}</Text>
         {auto.length ? <Text color={C.yellow} wrap="truncate">{t.ask.autoWarning(auto.join(', '))}</Text> : null}
         <Box marginTop={1} columnGap={2}>
           <Button label={launching ? t.launch.launching : t.ask.launchTeam} k="ctrl+s" primary />

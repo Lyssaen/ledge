@@ -3,6 +3,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import type { Autonomy, Session, Tool } from '@ledge/protocol';
 import { pickName } from '@ledge/protocol';
 import { paths } from './paths.js';
+import { sessionKey, SESSION_KEY_VAR } from './auth.js';
 import type { Tmux } from './tmux.js';
 import { claudeTranscriptPath } from './daemon/transcript.js';
 
@@ -19,9 +20,12 @@ export const AGENT_BIN: Record<Tool, string> = { claude: 'claude', codex: 'codex
 export const CODEX_ENV_VAR = 'LEDGE_CODEX_SESSION';
 export const CODEX_HOOK_VAR = 'LEDGE_CODEX_HOOK_SESSION';
 
-/** Extra agent arguments naming the session for its hooks (see `CODEX_HOOK_VAR`). */
+/** Extra agent arguments naming the session for its hooks (see `CODEX_HOOK_VAR`), and its key with them: a shared Codex daemon's
+ *  environment holds another session's. */
 export function agentIdArgs(tool: Tool, id: string): string[] {
-  return tool === 'codex' ? ['-c', `shell_environment_policy.set.${CODEX_HOOK_VAR}="${id}"`] : [];
+  if (tool !== 'codex') return [];
+  const key = sessionKey(id);
+  return ['-c', `shell_environment_policy.set.${CODEX_HOOK_VAR}="${id}"`, ...(key ? ['-c', `shell_environment_policy.set.${SESSION_KEY_VAR}="${key}"`] : [])];
 }
 
 /** Claude Code arguments that pick the conversation themselves: Ledge then names none. */
@@ -97,7 +101,8 @@ export async function spawnSession(opts: SpawnOptions): Promise<Session> {
   // With recordExit, sh runs the agent with its argv untouched ("$@") and writes its exit code to
   // the file passed as $0, so the session can die naturally and the code is still readable.
   const command = opts.recordExit ? ['sh', '-c', '"$@"; echo $? > "$0"', exitFile(id), ...agent] : agent;
-  await opts.tmux.newSession({ name: tmuxSession, cwd: opts.cwd, env: agentEnv(env, { LEDGE_SESSION: id, LEDGE_NAME: name, ...(opts.role ? { LEDGE_ROLE: opts.role.id } : {}), ...(opts.team ? { LEDGE_TEAM: opts.team } : {}), ...(opts.tool === 'codex' ? { [CODEX_ENV_VAR]: id } : {}) }), unset: PARENT_AGENT_VARS, command });
+  const key = sessionKey(id);
+  await opts.tmux.newSession({ name: tmuxSession, cwd: opts.cwd, env: agentEnv(env, { LEDGE_SESSION: id, ...(key ? { [SESSION_KEY_VAR]: key } : {}), LEDGE_NAME: name, ...(opts.role ? { LEDGE_ROLE: opts.role.id } : {}), ...(opts.team ? { LEDGE_TEAM: opts.team } : {}), ...(opts.tool === 'codex' ? { [CODEX_ENV_VAR]: id } : {}) }), unset: PARENT_AGENT_VARS, command });
   const at = now();
   return { id, name, tool: opts.tool, cwd: opts.cwd, project, title: `${name} · ${project}`, tmuxSession, state: 'starting', helpers: [], startedAt: at, lastActivityAt: at, source: 'launcher', ...(agentSessionId ? { agentSessionId } : {}), ...(transcriptPath ? { transcriptPath } : {}),
     ...(opts.role ? { role: opts.role.id, roleLabel: opts.role.label } : {}), ...(opts.team ? { team: opts.team } : {}), ...(opts.autonomy && opts.autonomy !== 'ask' ? { autonomy: opts.autonomy } : {}) };

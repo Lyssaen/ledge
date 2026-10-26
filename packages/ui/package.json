@@ -19,10 +19,13 @@
     "./ui/*": "./src/ui/*.tsx",
     "./documents/markdown": "./src/documents/markdown.tsx",
     "./documents/references": "./src/documents/references.ts",
+    "./documents/mdast": "./src/documents/mdast.ts",
     "./documents/markdown.css": "./src/documents/markdown.css",
+    "./images": "./src/images/index.ts",
     "./chat/ChatView": "./src/chat/ChatView.tsx",
     "./chat/LaunchCard": "./src/chat/LaunchCard.tsx",
     "./chat/RelayCard": "./src/chat/RelayCard.tsx",
+    "./chat/ActionCard": "./src/chat/ActionCard.tsx",
     "./chat/inline": "./src/chat/inline.tsx",
     "./chat/copy": "./src/chat/copy.tsx",
     "./chat/format": "./src/chat/format.ts",
@@ -33,9 +36,9 @@
   },
   "scripts": { "dev:mascots": "vite --open /mascots-logos.html", "test": "vitest run", "typecheck": "tsc --noEmit" },
   "peerDependencies": { "react": "^19.0.0", "react-dom": "^19.0.0" },
-  "dependencies": { "@ledge/fleet": "workspace:*", "@ledge/protocol": "workspace:*", "react-markdown": "10.1.0", "remark-gfm": "4.0.1" },
+  "dependencies": { "@ledge/fleet": "workspace:*", "@ledge/protocol": "workspace:*", "react-markdown": "10.1.0", "remark-gfm": "4.0.1", "remark-parse": "11.0.0", "unified": "11.0.5" },
   "devDependencies": {
-    "@testing-library/jest-dom": "^6.6.0", "@testing-library/react": "^16.1.0", "@types/node": "^22.7.0",
+    "@testing-library/jest-dom": "^6.6.0", "@testing-library/react": "^16.1.0", "@types/mdast": "4.0.4", "@types/node": "^22.7.0",
     "@types/react": "^19.0.0", "@types/react-dom": "^19.0.0", "@vitejs/plugin-react": "^4.3.0",
     "jsdom": "^25.0.0", "react": "^19.0.0", "react-dom": "^19.0.0", "typescript": "^5.6.0", "vite": "^6.0.0", "vitest": "^4.1.12"
   }

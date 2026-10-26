@@ -1,7 +1,8 @@
+import { actionCopy } from '@ledge/ui/chat/actionCopy';
 import type { BotState } from '@ledge/ui/bots/poseFor';
 import type { SectionId } from '../nav/state';
 import type { Bucket, GroupBy } from '../list/model';
-import type { DaemonInfo, OmpApproval, ProjectColor, ToolStatus, UpdateFailure } from '@ledge/protocol';
+import type { DaemonInfo, OmpApproval, ProjectColor, ToolStatus, TransmissionOp, UpdateFailure } from '@ledge/protocol';
 import type { PlanDoc, ToolKind, Verb } from '../session/exchanges';
 import type { Change } from '../session/changedFiles';
 import type { TodoStatus } from '../session/todos';
@@ -394,7 +395,11 @@ export const fr = {
     seat: (name: string, task: string, machine: string) => `${name}, ${task}, ${machine}`,
     helperSeat: (kind: string, parent: string, task: string) => `${kind}, sous-agent de ${parent} : ${task}`,
     offline: 'Hors ligne',
-    ledgeTaskLabel: (owner: string, title: string) => `Ledge confie « ${title} » à ${owner}. Voir la tâche`,
+    taskTo: { give: (n: string) => `Tâche → ${n}`, pass: (n: string) => `Passée → ${n}`, done: (n: string) => `Terminée → ${n}`, refuse: (n: string) => `Refusée → ${n}`, cancel: (n: string) => `Annulée → ${n}` } satisfies Record<TransmissionOp, (n: string) => string>,
+    taskLabel: (op: TransmissionOp, from: string, to: string, title: string) => `${{
+      give: `${from} confie « ${title} » à ${to}`, pass: `${from} passe « ${title} » à ${to}`, done: `${from} rend « ${title} » à ${to}, terminée`,
+      refuse: `${from} refuse « ${title} », rendue à ${to}`, cancel: `${from} annule « ${title} » pour ${to}`
+    }[op]}. Voir la tâche`,
     messageTo: (n: string) => `à ${n}`,
     messageLabel: (sender: string, n: string, summary: string) => `${sender} écrit à ${n} : ${summary}. Ouvrir l’échange`,
     desk: 'Parler à Ledge',
@@ -461,7 +466,7 @@ export const fr = {
   },
   teams: {
     tables: (n: number) => plural(n, `${n} table`, `${n} tables`),
-    treeLine: (done: number, given: number) => `équipe · ${done}/${given}`, treeResting: 'au repos',
+    tree: 'équipe', treeResting: 'au repos',
     common: 'table commune',
     room: (name: string) => `Pièce ${name}`,
     plaqueCounts: (tables: number, sessions: number) => `${plural(tables, `${tables} table`, `${tables} tables`)} · ${plural(sessions, `${sessions} session`, `${sessions} sessions`)}`,
@@ -777,7 +782,13 @@ export const fr = {
       seeTasks: 'Voir les tâches', pinned: 'Tâche en cours', autonomy: { ask: 'demande', edits: 'modifie sans demander', auto: 'autonome' }
     },
     notice: {
-      task: 'TÂCHE', taskFrom: (name: string) => `Tâche de ${name}`, team: 'ÉQUIPE', teamJoined: 'Équipe rejointe',
+      task: 'TÂCHE', taskFrom: (name: string) => `Tâche de ${name}`, seeTask: 'Voir la tâche',
+      /** The sender's card of a task it handed over (issue #92), by what it did. */
+      taskOut: {
+        give: (n: string) => `Tâche confiée à ${n}`, pass: (n: string) => `Tâche passée à ${n}`, done: (n: string) => `Tâche rendue à ${n} (terminée)`,
+        refuse: (n: string) => `Tâche refusée, rendue à ${n}`, cancel: (n: string) => `Tâche annulée pour ${n}`
+      },
+      team: 'ÉQUIPE', teamJoined: 'Équipe rejointe',
       kicker: 'Avis automatique', other: 'Avis automatique entre sessions', anotherSession: 'une autre session',
       idle: (n: string, time?: string) => `${n} a terminé${time ? ` · ${time}` : ''}`,
       exited: (n: string, time?: string) => `Session ${n} fermée${time ? ` · ${time}` : ''}`,
@@ -985,10 +996,17 @@ export const fr = {
       given: (owner: string, id: string, state: string) => `Confiée à ${owner} · ${id} · ${state}`,
       state: { open: 'à prendre', taken: 'prise', done: 'finie', refused: 'refusée', dropped: 'abandonnée' }, failed: (why: string) => `Refusée : ${why}`
     },
+    // #94 : la carte générique, une ligne par action, un plan au-delà d’une (docs/mockups/ledge-action-card.html).
+    action: actionCopy.fr,
     project: {
       label: 'Proposition de projet', title: (name: string) => `Proposition de projet · ${name}`, complete: (name: string) => `Compléter ${name}`,
       repos: (n: number) => `${n} dépôt${n > 1 ? 's' : ''}`, review: 'Vérifier la proposition'
     },
+  },
+  images: {
+    remove: "Retirer l'image", tooLarge: 'Image trop lourde, même réduite', notImage: "Ce fichier n'est pas une image", max: '5 images au plus par message',
+    dialog: "Répondez d'abord à la question, l'image partira après", lost: 'Les images de ce message ont été perdues', failed: 'Image non envoyée',
+    capture: 'Capture', unavailable: 'Image indisponible', close: 'Fermer', prev: 'Image précédente', next: 'Image suivante', copy: 'Copier', copied: 'Copié', save: 'Enregistrer…'
   },
   machines: { clarification: 'Vous pouvez aussi répondre dans le chat.', destination: 'Destination', choose: (name: string) => `Sur ${name}.`, local: 'Cette machine', offline: 'Hors ligne' },
   whatsNew: {

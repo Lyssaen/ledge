@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'rea
 import { daemonStore, useDaemon, useTeams, type DaemonClient } from '@ledge/fleet';
 import { ChatView } from '@ledge/ui/chat/ChatView';
 import { ChatCopyProvider } from '@ledge/ui/chat/copy';
+import { useActionCards } from '@ledge/ui/chat/useActionCards';
+import { useAttachments } from '../images/useAttachments';
+import { TurnThumbs } from '../images/Thumbs';
 import type { Projects } from '@ledge/protocol';
 import type { FleetView } from '../fleet/useFleet';
 import { chatCopy, useI18n } from '../i18n/lang';
@@ -54,6 +57,7 @@ export function ChatPanel({ client, view, paused, focus, onClose, onOpenSession,
   const cards = useChatCards({ send, chat, lastLaunched: view.lastLaunched, errors: view.errors, sessions: view.sessions, turnReady, turnMachine, onLaunched });
   const project = useProjectReview({ chat, projects, machines: view.machines, notify, onProposal });
   const onMessage = useCallback((fn: Parameters<DaemonClient['onMessage']>[0]) => client.onMessage(fn), [client]);
+  const actionCards = useActionCards({ send, chat, errors: view.errors, turnReady, onMessage });
   const teamCards = useTeamCards({ send, onMessage, chat });
   const teams = useTeams(client);
   const openTeam = (id: string) => { const team = teams?.find(x => x.id === id); onOpenTeam?.(team ? teamProject(team, projects) : null); };
@@ -64,11 +68,15 @@ export function ChatPanel({ client, view, paused, focus, onClose, onOpenSession,
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => { inputRef.current?.focus({ preventScroll: true }); }, [focus]);
 
-  const ask = (text: string) => {
+  // Images pasted or dropped on the field travel inline with the field's question only (not a suggestion's or « Résumer »).
+  const images = useAttachments(client, { inline: true });
+  const ask = (text: string, withImages = false) => {
     if (offline) return;
     const qid = `q-${crypto.randomUUID()}`;
     daemonStore.beginTurn({ qid, question: text, askedAt: new Date().toISOString(), steps: [] });
-    send({ type: 'chat.ask', qid, text, tool });
+    const uploads = withImages ? images.uploads() : [];
+    send({ type: 'chat.ask', qid, text, ...(uploads.length ? { images: uploads } : {}), tool });
+    if (withImages) images.clear();
   };
   // Opening a name opens the agent's page, which closes the chat (the mockup's `open`); the light goes out first.
   const open = (id: string) => { setHovered(null); onOpenSession(id); };
@@ -83,17 +91,18 @@ export function ChatPanel({ client, view, paused, focus, onClose, onOpenSession,
     }}>
       <div className="chat-drawer-content">
         <ChatCopyProvider value={copy}>
-          <ChatView docked visible turns={chat} live={chatLive} sessions={view.sessions} offline={offline}
+          <ChatView docked visible turnImages={turn => <TurnThumbs client={client} turn={turn} />} turns={chat} live={chatLive} sessions={view.sessions} offline={offline}
             onAsk={ask} onCancel={qid => send({ type: 'chat.cancel', qid })} onReset={() => send({ type: 'chat.reset' })} onBack={onClose} onClose={onClose}
             onOpenSession={open} onTerminal={terminal} turnAvailable={turnReady}
             launchingQid={cards.launchingQid} launchingRows={cards.launchingRows} onLaunchProposal={cards.launch}
             closingQid={cards.closingQid} closingRows={cards.closingRows} onCloseSessions={cards.close}
+            onAct={actionCards.act} actingQid={actionCards.actingQid} actingRows={actionCards.actingRows} onIgnoreCards={actionCards.ignore} onDenyAction={actionCards.deny}
             renderModel={(qid, agent, busy) => <CardModelPick client={client} machine={turnMachine(qid)} tool={agent} pick={cards.pick(qid)} disabled={busy} onPick={next => cards.setPick(qid, next)} />}
             relayingQid={cards.relayingQid} onRelay={cards.relay} onRelayCancel={cards.cancelRelay}
             onProject={project.review} projectNamed={project.projectNamed}
             onLaunchTeam={teamCards.launchTeam} onSaveTeam={teamCards.saveTeam} onOpenTeam={openTeam} onGiveTask={teamCards.giveTask}
             teamBusy={teamCards.teamBusy} taskBusy={teamCards.taskBusy} clock={iso => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            onAgentHover={setHovered} inputRef={inputRef}
+            onAgentHover={setHovered} inputRef={inputRef} attach={{ items: images.items, onFiles: images.add, onRemove: images.remove, ready: images.ready, error: images.error }}
             theme={theme} frozen={offline !== null} reducedMotion={paused || reduced} />
         </ChatCopyProvider>
       </div>

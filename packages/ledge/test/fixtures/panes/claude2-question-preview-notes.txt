@@ -1,0 +1,50 @@
+ ▐▛███▛█   Claude Code v2.1.310
+▝▜██████▀  Haiku 5.5 · Claude Team
+ ▝▝   ▝▝   /home/dev/demo
+
+  Get to finished work sooner with Opus 5.5. Switch anytime with /model.
+
+❯ Call the AskUserQuestion tool exactly once, with one question "Quel verrou utiliser ?" header "Verrou", and three options each with a "preview" field
+  containing a short multi-line code snippet: "Mutex", "RWLock", "Aucun". Do nothing else.
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ☐ Verrou
+
+Quel verrou utiliser ?
+
+  1. Mutex                        ┌──────────────────────────────────────────┐
+❯ 2. RWLock                       │ let r = rwlock.read().unwrap();          │
+  3. Aucun                        │ let w = rwlock.write().unwrap();         │
+                                  └──────────────────────────────────────────┘
+
+                                  Notes: avec timeout
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Chat about this
+
+Enter to select · ↑/↓ to navigate · n to add notes · ctrl+g to edit in Vim · Esc to cancel
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,6 +1,6 @@
-import { ChatTurnSchema, ContextPrefsSchema, isArchived, IslandPrefsSchema, LEDGE_GIVER, ProjectsSchema, type Task, type Team, type IslandPrefs, type MobileState, type ChatTurn, type ChatProposal, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session, type Tool } from '@ledge/protocol';
+import { ChatTurnSchema, ContextPrefsSchema, isArchived, IslandPrefsSchema, LEDGE_GIVER, ProjectsSchema, type Task, type Team, type IslandPrefs, type MobileState, type ChatTurn, type ChatProposal, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session, type Tool, type ImageUpload } from '@ledge/protocol';
 import { createDaemonClient, type DaemonClient, type DaemonStatus } from './client';
-import { loadMachines, machineUrl, parseMachines, probeMachine, qualify, shellCommand, splitId, terminalCommand, type MachineConfig, type MobileError, type MachineState } from './machines';
+import { LOCAL_MACHINE, loadMachines, machineUrl, parseMachines, probeMachine, qualify, shellCommand, splitId, terminalCommand, type MachineConfig, type MobileError, type MachineState } from './machines';
 import type { TokenSource } from './token';
 
 type Snapshot = Extract<ServerMessage, { type: 'snapshot' }>;
@@ -9,7 +9,7 @@ const toWire = (list: MachineConfig[]): Machine[] => list.map(({ id, label, ssh 
 type Binding = { machine: string; raw: string };
 /** The commands tracked as a machine's operation in flight (`operations`, set in `send`): their answer, their refusal or the machine's drop ends it. */
 const OPERATIONS: ReadonlySet<string> = new Set(['session.launch', 'session.relay', 'session.relay.cancel', 'session.close']);
-type PendingRoute = { qid: string; text: string; tool?: Tool; coordinator: string };
+type PendingRoute = { qid: string; text: string; tool?: Tool; images?: ImageUpload[]; coordinator: string };
 
 export interface FleetOptions {
   /** Storage key prefix: `ledge` (island) or `desktop` (spec §7). */
@@ -39,6 +39,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   const listings = new Map<string, { machine: string; path: string; created?: string }>();
   /** `repos.scan` requestId -> the machine asked, so only its `repos.found` answers it (and a drop or a refusal answers « offline » or « outdated »). */
   const scans = new Map<string, string>();
+  /** `attachment.put` / `attachment.get` requestId -> the machine asked, so only its answer is emitted (a drop answers « offline »). */
+  const attachmentAsks = new Map<string, string>();
   /** `models.list` requestId -> the machine asked and the agent, so only its `models.listing` answers it (and a drop or a refusal answers « offline » or « outdated »). */
   const modelLists = new Map<string, { machine: string; tool: Tool }>();
   const operations = new Map<string, string>();
@@ -82,7 +84,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   const taskLists = new Set<string>(); let listSeq = 0;
   const local = (id: string) => (id === LEDGE_GIVER ? id : qualify('local', id));
   const teamOut = (t: Team): Team => ({ ...t, seats: t.seats.map(s => ({ ...s, sessionId: s.sessionId === null ? null : qualify('local', s.sessionId) })) });
-  const taskOut = (t: Task): Task => ({ ...t, giver: local(t.giver), owner: local(t.owner) });
+  const taskOut = (t: Task): Task => ({ ...t, giver: local(t.giver), owner: local(t.owner),
+    log: t.log.map(e => ({ ...e, ...(e.from ? { from: local(e.from) } : {}), ...(e.to ? { to: local(e.to) } : {}) })) });
   const putTasks = (list: Task[]) => { for (const t of list) tasks.set(t.id, taskOut(t)); taskList = [...tasks.values()].sort((a, b) => a.at.localeCompare(b.at)); listeners.forEach(fn => fn()); };
   /** Ledge's own tasks, and each live team's, asked again at each local snapshot (an `all` list: the ones closed this week too). */
   const askTasks = (p: Peer) => {
@@ -121,11 +124,16 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     // A relief and the one it relieves are on the same machine (context handover spec §3.3).
     ...(s.handover?.to ? { handover: { ...s.handover, to: qualify(p.config.id, s.handover.to) } } : {}),
     ...(s.relieves ? { relieves: { ...s.relieves, id: qualify(p.config.id, s.relieves.id) } } : {}) });
+  /** What the overlay shows of a peer: its live sessions, its frozen ones, or none. */
+  const shows = (p: Peer): 'live' | 'stale' | 'none' => (available(p) ? 'live' : stale(p) ? 'stale' : 'none');
   const stateSessions = (p: Peer): Session[] => (stale(p) ? p.snapshot!.sessions.map(s => ({ ...s, offline: true })) : p.snapshot?.sessions ?? []).filter(s => !isArchived(s));
   /** The fleet's own inventory and status follow every change. Only `publish` tells the overlay the whole picture again:
    *  a (re)connection, a host joining or leaving, another host selected. A session's own update is relayed as itself
    *  (see `receive`): to the overlay a snapshot is a reconnection, which empties the threads and rebuilds the open view. */
   function refresh() {
+    // Mid-`apply` a closing client may speak (« connecting », at once) while `configs` and the peers disagree: the final
+    // `publish` tells it all.
+    if (configuring) return;
     state = configs.map(c => { const p = peers.get(c.id)!; return { ...c, status: p.status, ready: available(p), recents: p.snapshot?.recents ?? [], sessions: stateSessions(p), launcher: p.snapshot?.launcher ?? null, version: p.snapshot?.daemon?.version, daemon: p.snapshot?.daemon, error: p.error }; });
     const next = status(); if (next !== lastStatus) { lastStatus = next; statuses.forEach(fn => fn(next)); }
     listeners.forEach(fn => fn());
@@ -155,7 +163,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       steps: raw.steps.map(s => ({ ...s, ...(s.id ? { id: qualify(p.config.id, s.id) } : {}) })),
       ...(raw.proposal ? { proposal: launchedOn(p, raw.proposal) } : {}), ...(raw.proposals ? { proposals: raw.proposals.map(x => launchedOn(p, x)) } : {}),
       ...(raw.relay ? { relay: { ...raw.relay, id: qualify(p.config.id, raw.relay.id) } } : {}),
-      ...(raw.closes ? { closes: raw.closes.map(c => ({ ...c, id: qualify(p.config.id, c.id) })) } : {}) };
+      ...(raw.closes ? { closes: raw.closes.map(c => ({ ...c, id: qualify(p.config.id, c.id) })) } : {}),
+      ...(raw.actions ? { actions: raw.actions.map(a => ({ ...a, ...(a.session ? { session: qualify(p.config.id, a.session) } : {}) })) } : {}) };
   }
   /** Applies a confirmed list to the peers: no storage write, nothing for the overlay until `publish`. */
   function apply(next: MachineConfig[]) {
@@ -237,6 +246,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     if (m.type === 'session.thread' || m.type === 'session.thread.item' || m.type === 'session.queue.restored') { if (available(p)) emit({ ...m, id: qualify(machine, m.id) }); return; }
     if (m.type === 'session.launched') { if (!closeRows.has(machine)) operations.delete(machine); emit({ ...m, id: qualify(machine, m.id) }); return; }
     if (m.type === 'session.closed') { emit({ ...m, qid: globalQid(machine, m.qid), id: qualify(machine, m.id) }); return; }
+    if (m.type === 'chat.acted') { emit({ ...m, qid: globalQid(machine, m.qid) }); return; }
     if (m.type === 'folder.listing') {
       if (m.requestId !== undefined && listings.has(m.requestId)) { if (listings.get(m.requestId)!.machine === machine) { listings.delete(m.requestId); emit(m); } return; }
       // A daemon before 0.9.1 answers folder.create without its requestId: the listing of the new folder, or of the parent with the refusal.
@@ -247,6 +257,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     }
     if (m.type === 'document.content' || m.type === 'document.error') { if (documents.get(m.requestId) === machine) { documents.delete(m.requestId); emit(m); } return; }
     if (m.type === 'repos.info') { if (inspections.get(m.requestId) === machine) { inspections.delete(m.requestId); unfound.delete(m.requestId); emit(m); } return; }
+    if (m.type === 'attachment.stored' || m.type === 'attachment.data' || m.type === 'attachment.error') { if (attachmentAsks.get(m.requestId) === machine) { attachmentAsks.delete(m.requestId); emit(m); } return; }
     if (m.type === 'repos.found') { if (scans.get(m.requestId) === machine) { scans.delete(m.requestId); emit(m); } return; }
     if (m.type === 'models.listing') { if (modelLists.get(m.requestId)?.machine === machine) { modelLists.delete(m.requestId); emit(m); } return; }
     if (m.type === 'chat.routed') {
@@ -259,7 +270,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         const target = peers.get(m.result.machineId);
         bindings.set(req.qid, { machine: m.result.machineId, raw: req.qid });
         if (!available(target)) { fail(req.qid, `${target?.config.label ?? m.result.machineId} is offline`); return; }
-        target!.client.send({ type: 'chat.ask', qid: req.qid, text: m.result.text, tool: req.tool });
+        target!.client.send({ type: 'chat.ask', qid: req.qid, text: m.result.text, tool: req.tool, ...(req.images ? { images: req.images } : {}) });
       }
       return;
     }
@@ -274,7 +285,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       if (routing?.qid === m.qid && routing.coordinator === machine && m.type === 'chat.error') { routing = null; fail(m.qid, m.message); return; }
       const qid = globalQid(machine, m.qid), old = turns.get(qid); if (!old) return;
       if (m.type === 'chat.done') {
-        const raw = { ...old, qid: m.qid, answer: m.text, answeredAt: m.at, proposal: m.proposal, proposals: m.proposals, relay: m.relay, closes: m.closes, projectProposal: m.projectProposal, team: m.team, tasks: m.tasks };
+        const raw = { ...old, qid: m.qid, answer: m.text, answeredAt: m.at, proposal: m.proposal, proposals: m.proposals, relay: m.relay, closes: m.closes, projectProposal: m.projectProposal, team: m.team, tasks: m.tasks, actions: m.actions };
         const t = mappedTurn(p, { ...raw, steps: [] }); turns.set(qid, { ...t, steps: old.steps }); history();
       } else if (m.type === 'chat.error') fail(qid, m.message);
       else if (m.type === 'chat.step') { const step = { ...m.step, ...(m.step.id ? { id: qualify(machine, m.step.id) } : {}) }; turns.set(qid, { ...old, steps: [...old.steps, step] }); emit({ ...m, qid, step }); }
@@ -308,18 +319,22 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     const client = makeClient({ url: machineUrl(c, configs[0]!), token: opts.token });
     const p: Peer = { config: c, client, status: 'connecting', fresh: false, snapshot: null, previews: new Map(), off: [] }; peers.set(c.id, p);
     p.off.push(client.onMessage(m => receive(p, m)), client.onStatus(s => {
+      const shown = shows(p);
       p.status = s;
       if (s !== 'open') {
         p.fresh = false;
         // A launch in flight names its request, as the daemon's refusal does, so the form that sent it hears it.
         const op = operations.get(c.id), closing = closeRows.has(c.id);
         if (endOperation(c.id)) emit({ type: 'error', message: `${c.label} is offline`, ...(op === 'launch' ? { request: 'session.launch' } : closing ? { request: 'session.close' } : {}) });
+        for (const [requestId, owner] of attachmentAsks) if (owner === c.id) { attachmentAsks.delete(requestId); emit({ type: 'attachment.error', requestId, reason: 'offline' }); }
         answerUnfoundInspections(c.id); answerUnfoundListings(c.id, 'offline'); answerFailedScans(c.id, 'offline'); answerFailedModels(c.id, 'offline');
         for (const [requestId, owner] of documents) if (owner === c.id) { documents.delete(requestId); emit({ type: 'document.error', requestId, path: '', code: 'read_failed' }); }
         if (routing?.coordinator === c.id) { const qid = routing.qid; routing = null; fail(qid, `${c.label} is offline`); }
         for (const [qid, b] of bindings) { const t = turns.get(qid); if (b.machine === c.id && t && !t.answeredAt && !t.error) fail(qid, `${c.label} is offline`); }
       }
-      publish();
+      // A fallen peer retrying (connecting, unreachable, again) changes nothing the overlay shows: a snapshot would drop the
+      // threads on screen and ask them again, the whole thread blinking at each retry.
+      if (shows(p) === shown) refresh(); else publish();
     }));
     if (connected) client.connect();
   }
@@ -348,13 +363,20 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         }
         const coordinator = [...peers.values()].find(p => available(p) && p.snapshot?.daemon?.routing);
         if (!coordinator) return fail(msg.qid, 'Update a connected daemon to enable multi-machine chat');
-        routing = { qid: msg.qid, text: msg.text, tool: msg.tool, coordinator: coordinator.config.id };
+        routing = { qid: msg.qid, text: msg.text, tool: msg.tool, ...(msg.images ? { images: msg.images } : {}), coordinator: coordinator.config.id };
         coordinator.client.send({ type: 'chat.route', qid: msg.qid, text: msg.text, tool: msg.tool, context }); return;
       }
       if (msg.type === 'chat.cancel' && routing?.qid === msg.qid) { peers.get(routing.coordinator)?.client.send(msg); routing = null; fail(msg.qid, 'cancelled'); return; }
       let machine = selected; let outgoing: ClientMessage = msg;
-      if ('id' in msg) { const origin = splitId(msg.id); if (!origin) { emit({ type: 'error', id: msg.id, message: 'Unknown machine', request: msg.type }); return; } machine = origin.machine; outgoing = { ...msg, id: origin.id }; }
+      if ('id' in msg && msg.id !== undefined) { const origin = splitId(msg.id); if (!origin) { if (msg.type === 'attachment.put' || msg.type === 'attachment.get') emit({ type: 'attachment.error', requestId: msg.requestId, reason: 'offline' }); else emit({ type: 'error', id: msg.id, message: 'Unknown machine', request: msg.type }); return; } machine = origin.machine; outgoing = { ...msg, id: origin.id }; }
       if ('qid' in msg && msg.qid) { const b = bindings.get(msg.qid); if (!b) { emit({ type: 'error', message: 'Unknown conversation destination', request: msg.type }); return; } machine = b.machine; outgoing = { ...outgoing, qid: b.raw } as ClientMessage; }
+      if (msg.type === 'attachment.put' || msg.type === 'attachment.get') {
+        // A session's id routes (qualified above); a chat turn's image names its `machine`; neither is the local machine, never the selected one.
+        if (msg.id === undefined) machine = (msg.type === 'attachment.get' && msg.machine) || LOCAL_MACHINE.id;
+        if (outgoing.type === 'attachment.get') { const { machine: _m, ...rest } = outgoing; outgoing = rest; }
+        if (!available(peers.get(machine))) { emit({ type: 'attachment.error', requestId: msg.requestId, reason: 'offline' }); return; }
+        attachmentAsks.set(msg.requestId, machine);
+      }
       if (msg.type === 'document.read') {
         if (configs.length > 1 && !msg.machineId && !msg.sessionId) { emit({ type: 'document.error', requestId: msg.requestId, path: msg.path, code: 'read_failed' }); return; }
         if (msg.machineId) machine = msg.machineId;

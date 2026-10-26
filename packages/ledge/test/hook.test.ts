@@ -10,6 +10,7 @@ import type { Session } from '@ledge/protocol';
 import { startServer } from '../src/daemon/server.js';
 import { Store } from '../src/daemon/store.js';
 import { connect } from '../src/client.js';
+import { paths } from '../src/paths.js';
 
 const at = '2026-10-09T18:00:00.000Z';
 let home: string;
@@ -504,6 +505,7 @@ describe('session identity (SessionStart additionalContext)', () => {
     for (const t of [text, codex]) expect(t).toContain('lance `ledge read <id>` pour le lire en entier');
     // And how to give work that must not get lost.
     for (const t of [text, codex]) expect(t).toContain('`ledge task give <nom> "<titre>" "<détail>"`');
+    for (const t of [text, codex]) expect(t).toContain('`ledge task give ledge "<question>" "<options, ta recommandation>"`');
   });
 
   it('a launched session is told its current Ledge name (a rename wins over LEDGE_NAME), with the daemon\'s branch', async () => {
@@ -529,7 +531,7 @@ describe('session identity (SessionStart additionalContext)', () => {
     try {
       const mine = await give('9d8e', 'Pim', 'Tests de roles.ts');
       const done = await give('9d8e', 'Pim', 'Déjà fini');
-      c.send({ type: 'task.cmd', rid: 'd', by: '7f3a', op: 'done', task: done.id }); await c.next('task.result');
+      c.send({ type: 'task.cmd', rid: 'd', by: '7f3a', op: 'done', task: done.id, text: 'fait' }); await c.next('task.result');
       await give('7f3a', 'Bix', 'Relire le hook');
       const out = context(await runHook('SessionStart', JSON.stringify({ session_id: 'u-1', cwd: '/w/ledge-wt', source: 'compact' }), { port: srv.port }));
       expect(out.additionalContext).toContain('Tes tâches en cours (elles sont gardées par Ledge, pas dans ta conversation) :');
@@ -706,21 +708,24 @@ describe('SessionEnd against a live daemon', () => {
   });
 });
 
+// Each test starts the CLI through tsx, which transpiles it first: about 1.4 s unloaded, past 5 s on a busy machine (measured
+// against main, the CLI's own start is the same). The built hook, what an agent runs, starts in about 0.2 s.
+const CLI_MS = 20_000;
 describe('ledge hook (CLI)', () => {
   it('always exits 0, even with invalid stdin and no daemon', () => {
     const r = spawnSync('pnpm', ['exec', 'tsx', 'src/cli/index.ts', 'hook', 'Stop'], { input: '{{{', env: { ...process.env, LEDGE_HOME: home }, encoding: 'utf8' });
     expect(r.status).toBe(0);
-  });
+  }, CLI_MS);
   it('takes the agent before the event (ledge hook codex Stop) and exits 0 too', () => {
     const r = spawnSync('pnpm', ['exec', 'tsx', 'src/cli/index.ts', 'hook', 'codex', 'Whatever'], { input: '{"session_id":"s"}', env: { ...process.env, LEDGE_HOME: home }, encoding: 'utf8' });
     expect(r.status).toBe(0);
     expect(readFileSync(join(home, 'daemon.log'), 'utf8')).toContain('hook codex Whatever ignored');
-  });
+  }, CLI_MS);
   it('a Cursor hook always exits 0 and answers {} on stdout, which lets the agent go on', () => {
     const r = spawnSync('pnpm', ['exec', 'tsx', 'src/cli/index.ts', 'hook', 'cursor', 'preToolUse'], { input: '{{{', env: { ...process.env, LEDGE_HOME: home }, encoding: 'utf8' });
     expect(r.status).toBe(0);
     expect(r.stdout.trim()).toBe('{}');
-  });
+  }, CLI_MS);
 });
 
 describe('prompts and the chat marker', () => {
@@ -734,6 +739,18 @@ describe('prompts and the chat marker', () => {
     expect(back.length).toBeGreaterThan(3000);
     expect(mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt: back }, at)?.event.text).toBe(back);
     expect(mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt: back + 'x'.repeat(INPUT_MAX) }, at)?.event.text).toHaveLength(INPUT_MAX);
+  });
+  it('takes the store brackets out of the prompt into attachments, keeping other brackets', () => {
+    const dir = paths().attachments;
+    const a = 'a'.repeat(64); const b = 'b'.repeat(64);
+    const brackets = `[Image attached: ${dir}/${a}.webp] [Image attached: ${dir}/${b}.png]`;
+    const prompt = 'x'.repeat(700) + ' ' + brackets;
+    const m = mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt }, at);
+    expect(m?.event.text).toBe('x'.repeat(500)); expect(m?.event.attachments).toEqual([a, b]);
+    const other = mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt: 'Regarde [Image attached: /tmp/x.png]' }, at);
+    expect(other?.event.text).toBe('Regarde [Image attached: /tmp/x.png]'); expect(other?.event.attachments).toBeUndefined();
+    const cursor = mapCursorHook('beforeSubmitPrompt', { session_id: 's', prompt: `Regarde ${brackets}` }, at, {});
+    expect(cursor?.event.text).toBe('Regarde'); expect(cursor?.event.attachments).toEqual([a, b]);
   });
   it('keeps a cross-session message whole (up to INPUT_MAX)', () => {
     const prompt = '<cross-session-message from="uds:/run/user/1000/cc-socks/1.sock" from-name="a-2d" from-mode="prompting">\n' + 'x'.repeat(3000);

@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { TRANSMISSION_OPS } from './tasks.js';
+import { AttachmentRefSchema } from './attachments.js';
 
 /** Native session tracking (spec 2026-10-13 §3): what a session's thread is made of. */
 export const ToolStatusSchema = z.enum(['running', 'success', 'failed', 'unknown']);
@@ -12,7 +14,7 @@ export type FileChange = z.infer<typeof FileChangeSchema>;
 /** `turn` counts the prompts so far (0 before the first); `helperId` marks an item of a subagent's own thread. */
 const base = { id: z.string().min(1), at: z.string().datetime(), turn: z.number().int().nonnegative(), helperId: z.string().optional() };
 export const ThreadItemSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('prompt'), ...base, text: z.string() }),
+  z.object({ kind: z.literal('prompt'), ...base, text: z.string(), images: z.array(AttachmentRefSchema).optional() }),
   z.object({ kind: z.literal('message'), ...base, text: z.string() }),
   /** `id` is the harness's tool_use_id when it gives one, so the result updates the same row; `byClose`: a question
    *  dismissed by Ledge closing the session. */
@@ -34,6 +36,8 @@ export const ThreadItemSchema = z.discriminatedUnion('kind', [
     /** An `other` notice from Ledge: `task`, the task a `<ledge-task>` is about; `team`, the team a `<ledge-notice team>` seated the
      *  session in (roles spec §3.3). An older front, which knows neither, shows it as any other notice. */
     task: z.string().optional(), team: z.string().optional(),
+    /** A task this session handed over (`outgoing`), and how (issue #92). */
+    taskOp: z.enum(TRANSMISSION_OPS).optional(), outgoing: z.literal(true).optional(),
     name: z.string().optional(), peer: z.string().optional(), time: z.string().optional(), summary: z.string().optional(),
     status: z.enum(['held', 'denied', 'expired', 'delivered', 'refused', 'dropped', 'unknown']).optional(),
     count: z.number().int().positive().optional(), recipients: z.array(z.string()).optional(), reason: z.string().optional(), text: z.string()

@@ -2,7 +2,7 @@
 // no machine, no free error text), and the live answer is coalesced so a slow link never builds a backlog.
 import {
   CHAT_HISTORY_BUDGET, THREAD_TEXT_MAX, TOOL_TEXT_MAX, MESSAGE_MAX, proposalRows,
-  type ChatErrorCode, type ChatTurn, type PhoneChatProposal, type PhoneChatStep, type PhoneChatTurn, type PhoneServerMessage
+  type ChatAction, type ChatErrorCode, type ChatTurn, type PhoneChatProposal, type PhoneChatStep, type PhoneChatTurn, type PhoneServerMessage
 } from '@ledge/protocol';
 import { ONE_AT_A_TIME, TOO_MANY, type Chat, type ChatMessage } from '../chat/service.js';
 
@@ -27,6 +27,7 @@ export function toPhoneTurn(t: ChatTurn): PhoneChatTurn {
     if (t.answer.length > THREAD_TEXT_MAX) out.cut = true;
   }
   if (t.answeredAt !== undefined) out.answeredAt = t.answeredAt;
+  if (t.attachments?.length) out.attachments = t.attachments;
   if (t.error !== undefined) out.error = errorCode(t.error);
   // All or nothing: the phone's row i is the PC's row i, so a card with one row too long is not projected at all.
   const rows = proposalRows(t);
@@ -57,8 +58,20 @@ export function toPhoneTurn(t: ChatTurn): PhoneChatTurn {
       id: c.id, name: c.name, tool: c.tool, ...(c.how ? { how: c.how } : {}), ...(c.closedAt ? { closedAt: c.closedAt } : {}), ...(c.error !== undefined ? { failed: true as const } : {})
     }));
   }
+  // The generic card (spec 2026-10-26 action registry §5): its summaries, its words and the request quoted, never its args nor an
+  // error's text. A request too long for the phone comes cut and marked, the row with it: the phone only refuses it, or sends to the PC.
+  if (t.actions) {
+    out.actions = t.actions.map(a => ({ action: a.action, summary: a.summary, ...(a.vars ? { vars: a.vars } : {}),
+      ...(a.detail !== undefined ? (a.detail.length > TOOL_TEXT_MAX ? { detail: `${a.detail.slice(0, TOOL_TEXT_MAX - 1)}…`, detailCut: true as const } : { detail: a.detail, ...(a.detailCut ? { detailCut: true as const } : {}) }) : {}),
+      risk: a.risk, ...(a.session ? { session: a.session } : {}), ...(a.team ? { team: a.team } : {}), ...(a.state ? { state: a.state } : {}), ...(a.doneAt ? { doneAt: a.doneAt } : {}),
+      ...(a.code ? { code: a.code.slice(0, 40) } : {}) }));
+  }
+  if (t.ignoredAt) out.ignoredAt = t.ignoredAt;
   return out;
 }
+
+/** A generic row whose request the phone sees only in part: cut by the daemon, or too long for the phone. */
+export const phoneCut = (a: ChatAction): boolean => !!a.detailCut || (a.detail?.length ?? 0) > TOOL_TEXT_MAX;
 
 const bytes = (v: unknown) => Buffer.byteLength(JSON.stringify(v), 'utf8');
 

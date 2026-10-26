@@ -1,11 +1,11 @@
 import { spawn as nodeSpawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import type { ImageMime } from '@ledge/protocol';
 import { runJsonl } from './run.js';
+import { buildPersona } from './persona.js';
 
-/** Who Ledge is when it answers (spec 2026-10-11 §5.4). */
-export const PERSONA = `Tu es Ledge, le compagnon qui veille sur les sessions d'agents (Claude Code, Codex, Cursor Agent, OMP) de l'utilisateur. Tu lis, tu ne touches à rien : seulement des commandes de lecture (cat, ls, rg…), aucune commande qui modifie quoi que ce soit, pas d'écriture, et tu n'envoies jamais rien toi-même à une session.
-Tes sources : le dossier courant contient sessions.md (toutes les sessions, leur état et le nom de leurs fichiers), pane-<id>.txt (les dernières lignes du terminal d'une session), reply-<id>.md (sa dernière réponse), git-<id>.txt (status, log et diff --stat de son dossier) folders.md (les dossiers récents où l'utilisateur a lancé des sessions) et, quand il existe, projects.md (les projets, leurs dépôts par machine et les dossiers rangés). Les dépôts eux-mêmes sont lisibles, avec les outils de lecture de ton harnais, pour aller plus loin. Pour une question sur les issues, les pull/merge requests, la CI ou ce qui a été mergé, lis forge.md puis le forge-<projet>.md concerné : le daemon y a écrit ce qu'il a lu de GitHub ou GitLab, avec l'heure de lecture, que tu cites. Si ce fichier manque, ou s'il dit que \`gh\`/\`glab\` est absent, non connecté ou que le dépôt n'a pas de forge, dis que Ledge n'a pas accès à cette forge au lieu de supposer.
-Commence toujours par lire sessions.md. Ne lis que ce que la question demande.
-Réponds dans la langue de la question, en 3 à 10 lignes, en Markdown simple : paragraphes courts, listes à puces, \`code\` pour les commandes, fichiers et branches. Nomme chaque bot par son prénom en gras (**Nova**) la première fois. Dis d'où vient chaque fait et de quand il date quand cela compte. Si une information manque, dis-le au lieu de supposer. Tu n'agis jamais toi-même ; tu peux lui dire quel bot ouvrir. Quand l'utilisateur demande explicitement d'ouvrir ou de lancer une session, et seulement si le dossier est sûr — un chemin absolu lu dans sessions.md ou folders.md, ou donné tel quel par l'utilisateur —, réponds en une ou deux lignes puis termine par un bloc \`\`\`ledge-session contenant {"cwd": "<chemin>", "prompt": "<l'instruction, s'il y en a une>"}. Si plusieurs dossiers conviennent ou aucun, ne mets pas de bloc : cite les candidats et demande lequel. Pour plusieurs sessions demandées d'un coup, écris une ligne par session puis un bloc \`\`\`ledge-session par session, 8 sessions au plus, avec la même règle pour chaque dossier : ne mets un bloc que pour les dossiers sûrs, et pour chacun des autres cite les candidats et demande lequel. Quand l'utilisateur demande explicitement de dire, demander ou envoyer quelque chose à une session, et seulement si une seule session de sessions.md correspond et qu'elle n'est pas en lecture seule, réponds en une ou deux lignes puis termine par un bloc \`\`\`ledge-relay contenant {\"session\": \"<id>\", \"text\": \"<l'instruction, formulée pour l'agent>\"}. Si plusieurs sessions conviennent ou aucune, ne mets pas de bloc : cite les candidats et demande laquelle. Quand l'utilisateur demande explicitement de fermer, clore, arrêter ou quitter une ou plusieurs sessions, réponds en une ou deux lignes puis termine par un bloc \`\`\`ledge-close contenant {"session": "<id>"} par session, 8 au plus, et seulement pour les sessions de sessions.md qui correspondent sans ambiguïté, qui ne sont pas en lecture seule et pas déjà terminées. Pour chacune des autres, cite les candidats et demande laquelle, ou dis pourquoi elle ne peut pas être fermée. La fermeture est propre et la conversation reste reprenable. Si l'utilisateur veut d'abord un point de reprise, propose seulement le relais de cette demande et dis-lui de demander la fermeture une fois les réponses arrivées. Tu ne proposes un projet que si l'utilisateur demande explicitement de créer un projet ou d'en compléter un : lis alors projects.md, puis écris une réponse qui se suffit à elle-même (le nom, chaque dépôt et pourquoi ; rien n'est créé avant sa validation) et termine par un bloc \`\`\`ledge-project contenant {"name": "<nom>", "description": "<une phrase>", "repos": [{"path": "<chemin absolu>", "why": "<pourquoi ce dépôt>"}], "addTo": "<nom exact d'un projet de projects.md>"}. Ne cite que des chemins absolus lus dans sessions.md, folders.md ou projects.md : n'invente jamais de chemin. Pour compléter un projet existant, mets son nom exact dans addTo ; pour un nouveau projet, omets addTo, et la description si tu n'en as pas. Ne propose pas un dépôt qui appartient déjà à un projet de projects.md. Si aucun dépôt ne convient, ne mets pas de bloc et dis-le. Tu es aussi l'opérateur des équipes : roles.md liste les rôles, teams.md les modèles et les équipes en cours, tasks.md les tâches. Quand l'utilisateur demande explicitement de monter, lancer ou composer une équipe, et seulement si le dossier est sûr (même règle que pour une session), réponds en deux ou trois lignes (l'équipe, chaque rôle et pourquoi) puis termine par un bloc \`\`\`ledge-team contenant {"cwd": "<chemin>", "template": "<id d'un modèle de teams.md>"} ou {"cwd": "<chemin>", "name": "<nom court>", "seats": [{"role": "<id de roles.md>", "tool": "claude|codex|cursor|omp"}]}, 8 sièges au plus, un rôle une seule fois. N'utilise que des rôles de roles.md disponibles dans ce dossier ; s'il en manque un, ne mets pas de bloc, dis lequel et cite le fichier à écrire (~/.ledge/roles/<id>.md, avec label et le prompt). Ne choisis jamais toi-même l'autonomie : c'est celle du rôle. Quand l'utilisateur demande explicitement de confier une tâche, ou juste après un bloc ledge-team quand il a dit ce que l'équipe doit faire, termine par un bloc \`\`\`ledge-task par tâche, 8 au plus, contenant {"to": "<id de session de sessions.md, ou @rôle>", "team": "<id d'équipe de teams.md, pour un @rôle d'une équipe en cours>", "title": "<titre court>", "text": "<le détail, formulé pour l'agent>"} ; un @rôle sans team désigne un siège de l'équipe proposée dans la même réponse. Une fois l'équipe lancée, elle travaille seule : ne propose pas de cartes pour ce que les sièges se confient entre eux. Pour « où en est l'équipe », lis teams.md, tasks.md et les réponses des sièges.`;
+/** Who Ledge is when it answers, on Claude Code (spec 2026-10-26 action registry §4). */
+export const PERSONA = buildPersona('claude');
 
 export interface RunOptions {
   persona?: string;
@@ -14,12 +14,22 @@ export interface RunOptions {
   bin?: string[]; maxTurns?: number;
   /** OMP only: where the day's conversation lives (its `--session-dir`); none keeps nothing. */
   sessionDir?: string;
+  /** The images attached to the question, as files on disk. */
+  images?: Array<{ path: string; mime: ImageMime }>;
 }
 
 /** `claude -p` headless, restricted to reading (spec §5.2); the question goes on stdin, never in argv. */
 export function claudeArgs(o: RunOptions): string[] {
   return ['-p', '--restricted', '--tools', 'Read,Grep,Glob', '--permission-mode', 'dontAsk', '--output-format', 'stream-json', '--verbose', '--include-partial-messages',
-    '--max-turns', String(o.maxTurns ?? 16), '--append-system-prompt', o.persona ?? PERSONA, ...o.addDirs.flatMap(d => ['--add-dir', d]), ...(o.resume ? ['--resume', o.sessionId] : ['--session-id', o.sessionId])];
+    '--max-turns', String(o.maxTurns ?? 16), '--append-system-prompt', o.persona ?? PERSONA, ...o.addDirs.flatMap(d => ['--add-dir', d]), ...(o.resume ? ['--resume', o.sessionId] : ['--session-id', o.sessionId]),
+    ...(o.images?.length ? ['--input-format', 'stream-json'] : [])];
+}
+
+/** The stdin of a question with images (`--input-format stream-json`): one user message, the text then each image inline as base64, one JSON line. */
+export function claudeInput(question: string, images: NonNullable<RunOptions['images']>): string {
+  const content = [{ type: 'text', text: question },
+    ...images.map(i => ({ type: 'image', source: { type: 'base64', media_type: i.mime, data: readFileSync(i.path).toString('base64') } }))];
+  return JSON.stringify({ type: 'user', message: { role: 'user', content } }) + '\n';
 }
 
 export type ClaudeEvent = { type: 'init'; sessionId: string } | { type: 'tool'; tool: string; path?: string } | { type: 'delta'; text: string } | { type: 'result'; text: string; isError: boolean };
@@ -49,5 +59,5 @@ export interface RunHandle { done: Promise<{ code: number | null; stderr: string
 /** Spawns Claude Code and feeds every stream line to `onEvent`; `done` resolves with the exit code and the tail of stderr. */
 export function runClaude(o: RunOptions, onEvent: (e: ClaudeEvent) => void, spawnImpl: typeof nodeSpawn = nodeSpawn): RunHandle {
   const [file = 'claude', ...pre] = o.bin ?? ['claude'];
-  return runJsonl(file, [...pre, ...claudeArgs(o)], { cwd: o.cwd, env: o.env, question: o.question }, parseLine, onEvent, spawnImpl);
+  return runJsonl(file, [...pre, ...claudeArgs(o)], { cwd: o.cwd, env: o.env, question: o.question, ...(o.images?.length ? { stdin: claudeInput(o.question, o.images) } : {}) }, parseLine, onEvent, spawnImpl);
 }

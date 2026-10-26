@@ -75,7 +75,10 @@ export function toPhoneItem(item: ThreadItem): { item: ThreadItem; cut: boolean 
   const base = { id: item.id, at: item.at, turn: item.turn, ...pickSet(item, ['helperId']) };
   let out: ThreadItem;
   switch (item.kind) {
-    case 'prompt': case 'message': case 'reply':
+    case 'prompt':
+      out = { kind: 'prompt', ...base, text: text(item.text), ...(item.images?.length ? { images: item.images } : {}) };
+      break;
+    case 'message': case 'reply':
       out = { kind: item.kind, ...base, text: text(item.text) };
       break;
     case 'tool': {
@@ -112,7 +115,7 @@ export function toPhoneItem(item: ThreadItem): { item: ThreadItem; cut: boolean 
       const summary = optText(item.summary), reason = optText(item.reason);
       out = {
         kind: 'notice', ...base, notice: item.notice, text: text(item.text),
-        ...pickSet(item, ['name', 'peer', 'time', 'status', 'count']),
+        ...pickSet(item, ['name', 'peer', 'time', 'status', 'count', 'task', 'team', 'taskOp', 'outgoing']),
         ...(item.recipients ? { recipients: [...item.recipients] } : {}),
         ...(summary.v !== undefined ? { summary: summary.v } : {}),
         ...(reason.v !== undefined ? { reason: reason.v } : {})

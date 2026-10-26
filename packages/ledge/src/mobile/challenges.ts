@@ -6,7 +6,7 @@ import { randomBytes } from 'node:crypto';
 export const CHALLENGE_TTL_MS = 60_000;
 const MAX_OUTSTANDING = 1_000;
 
-export interface ChallengeBinding { deviceId: string; purpose: 'register' | 'decide' | 'launch' | 'close'; subject: string }
+export interface ChallengeBinding { deviceId: string; purpose: 'register' | 'decide' | 'launch' | 'close' | 'act'; subject: string }
 export type ChallengeVerdict = 'ok' | 'expired' | 'mismatch' | 'unknown';
 interface Pending { binding: ChallengeBinding; issuedAt: number; slot: string }
 

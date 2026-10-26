@@ -1,7 +1,9 @@
 #!/usr/bin/env node
-import { readFileSync } from 'node:fs';
+import { appendFileSync, readFileSync } from 'node:fs';
 import { stdin, stdout, stderr, env, argv, exit } from 'node:process';
 let q = ''; stdin.setEncoding('utf8'); for await (const c of stdin) q += c;
+// FAKE_LOG: each run appends its argv and stdin as one JSON line, for the tests that check what a CLI is given.
+if (env.FAKE_LOG) appendFileSync(env.FAKE_LOG, JSON.stringify({ argv: argv.slice(2), stdin: q }) + '\n');
 const say = o => stdout.write(JSON.stringify(o) + '\n');
 const resumeAt = argv.indexOf('resume');
 const sid = argv.includes('--session-id') ? argv[argv.indexOf('--session-id') + 1]
