@@ -139,6 +139,16 @@ describe('ledge tui: the session thread (#95 lot A)', () => {
     } finally { await tui.cleanup(); }
   });
 
+  it('below 60×16, a question waiting says so, not « attend ton accord »', async () => {
+    const [otto, ...rest] = mockupSessions();
+    const tui = await startTui({ sessions: [{ ...otto!, state: 'waiting_input', pending: { kind: 'question', text: 'Quel port ?', source: 'hook' } }, ...rest] });
+    try {
+      await tui.resize(52, 14);
+      await until(() => tui.frame().includes('Fenêtre trop petite'));
+      expect(tui.frame()).toContain('Otto a une question');
+    } finally { await tui.cleanup(); }
+  });
+
   it('below 60×16 the screen keys do nothing: the request is not in view; esc and q still work', async () => {
     const runs: string[][] = [];
     const tui = await startTui({ run: async argv => { runs.push(argv); return 0; } });

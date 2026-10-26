@@ -23,7 +23,7 @@ export function Frame({ crumb, crumbShort, keys, kept, children }: {
   const status = d.status === 'open' ? null : d.status === 'connecting' ? t.bar.connecting : t.bar.unreachable;
 
   if (columns < MIN.columns || rows < MIN.rows) {
-    const why = [...(pending[0] ? [t.small.waits(pending[0].name)] : []), ...(kept ? [t.small.kept] : [])].join(' · ');
+    const why = [...(pending[0] ? [t.small.waits(pending[0].name, pending[0].pending?.kind === 'question')] : []), ...(kept ? [t.small.kept] : [])].join(' · ');
     return (
       <Box flexDirection="column" height={rows} width={columns} alignItems="center" justifyContent="center">
         <Text color={C.coral} bold>{g.logo} ledge</Text>

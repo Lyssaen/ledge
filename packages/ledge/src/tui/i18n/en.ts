@@ -124,7 +124,7 @@ export const en: Messages = {
   },
   small: {
     tooSmall: (w, h) => `Window too small: ${w}×${h}`, atLeast: (w, h) => `needs at least ${w}×${h}`,
-    waits: name => `${name} waits for your approval`, kept: 'draft kept'
+    waits: (name, question) => (question ? `${name} has a question` : `${name} waits for your approval`), kept: 'draft kept'
   },
   cli: { notTty: 'ledge tui: needs a terminal (stdin and stdout must be a TTY)' }
 };

@@ -130,7 +130,7 @@ export const fr = {
   },
   small: {
     tooSmall: (w: number, h: number) => `Fenêtre trop petite : ${w}×${h}`, atLeast: (w: number, h: number) => `il faut au moins ${w}×${h}`,
-    waits: (name: string) => `${name} attend ton accord`, kept: 'brouillon gardé'
+    waits: (name: string, question: boolean) => (question ? `${name} a une question` : `${name} attend ton accord`), kept: 'brouillon gardé'
   },
   cli: { notTty: 'ledge tui: needs a terminal (stdin and stdout must be a TTY)' }
 };
