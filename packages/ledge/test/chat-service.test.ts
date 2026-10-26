@@ -532,6 +532,31 @@ describe('chat service', () => {
       expect(again.chat.queuedRelays()).toEqual([]);
     });
   });
+  describe('images', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ledge-svc-img-')); const png = join(dir, 'a.png'); writeFileSync(png, Buffer.from([1, 2, 3]));
+    const ref = { id: 'a'.repeat(64), mime: 'image/png' as const, width: 1, height: 1, bytes: 3, preview: false };
+    /** Asks with one image through `agent` and returns what the fake CLI recorded. */
+    async function asked(agent: string, tool: 'claude' | 'omp' | 'codex' | 'cursor') {
+      const log = join(dir, `${agent}.jsonl`);
+      const { chat } = setup({ attachments: { path: id => (id === ref.id ? png : null) }, env: async () => ({ ...process.env, FAKE_AGENT: agent, FAKE_LOG: log }) });
+      await chat.ask('q1', 'Que vois-tu ?', () => {}, tool, [ref]);
+      return JSON.parse(readFileSync(log, 'utf8').trim().split('\n').at(-1)!) as { argv: string[]; stdin: string };
+    }
+    it('Claude gets a stream-json user message on stdin', async () => {
+      const r = await asked('claude', 'claude');
+      expect(r.argv[r.argv.indexOf('--input-format') + 1]).toBe('stream-json');
+      expect(JSON.parse(r.stdin).message.content[1]).toMatchObject({ type: 'image', source: { media_type: 'image/png', data: 'AQID' } });
+    });
+    it('OMP gets @file, Codex -i file', async () => {
+      expect((await asked('omp', 'omp')).argv.at(-1)).toBe(`@${png}`);
+      const c = (await asked('codex', 'codex')).argv;
+      expect(c.slice(-3)).toEqual(['-i', png, '-']);
+    });
+    it('Cursor gets the image copied next to its context and named in the text', async () => {
+      const r = await asked('cursor', 'cursor');
+      expect(r.stdin).toMatch(/Que vois-tu \? \[Image attached: .*\/image-1\.png\]$/);
+    });
+  });
 });
 
 describe('chat service slots and idle', () => {

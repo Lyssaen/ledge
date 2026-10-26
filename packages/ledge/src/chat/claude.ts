@@ -1,4 +1,6 @@
 import { spawn as nodeSpawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import type { ImageMime } from '@ledge/protocol';
 import { runJsonl } from './run.js';
 
 /** Who Ledge is when it answers (spec 2026-10-11 §5.4). */
@@ -14,12 +16,22 @@ export interface RunOptions {
   bin?: string[]; maxTurns?: number;
   /** OMP only: where the day's conversation lives (its `--session-dir`); none keeps nothing. */
   sessionDir?: string;
+  /** The images attached to the question, as files on disk. */
+  images?: Array<{ path: string; mime: ImageMime }>;
 }
 
 /** `claude -p` headless, restricted to reading (spec §5.2); the question goes on stdin, never in argv. */
 export function claudeArgs(o: RunOptions): string[] {
   return ['-p', '--restricted', '--tools', 'Read,Grep,Glob', '--permission-mode', 'dontAsk', '--output-format', 'stream-json', '--verbose', '--include-partial-messages',
-    '--max-turns', String(o.maxTurns ?? 16), '--append-system-prompt', o.persona ?? PERSONA, ...o.addDirs.flatMap(d => ['--add-dir', d]), ...(o.resume ? ['--resume', o.sessionId] : ['--session-id', o.sessionId])];
+    '--max-turns', String(o.maxTurns ?? 16), '--append-system-prompt', o.persona ?? PERSONA, ...o.addDirs.flatMap(d => ['--add-dir', d]), ...(o.resume ? ['--resume', o.sessionId] : ['--session-id', o.sessionId]),
+    ...(o.images?.length ? ['--input-format', 'stream-json'] : [])];
+}
+
+/** The stdin of a question with images (`--input-format stream-json`): one user message, the text then each image inline as base64, one JSON line. */
+export function claudeInput(question: string, images: NonNullable<RunOptions['images']>): string {
+  const content = [{ type: 'text', text: question },
+    ...images.map(i => ({ type: 'image', source: { type: 'base64', media_type: i.mime, data: readFileSync(i.path).toString('base64') } }))];
+  return JSON.stringify({ type: 'user', message: { role: 'user', content } }) + '\n';
 }
 
 export type ClaudeEvent = { type: 'init'; sessionId: string } | { type: 'tool'; tool: string; path?: string } | { type: 'delta'; text: string } | { type: 'result'; text: string; isError: boolean };
@@ -49,5 +61,5 @@ export interface RunHandle { done: Promise<{ code: number | null; stderr: string
 /** Spawns Claude Code and feeds every stream line to `onEvent`; `done` resolves with the exit code and the tail of stderr. */
 export function runClaude(o: RunOptions, onEvent: (e: ClaudeEvent) => void, spawnImpl: typeof nodeSpawn = nodeSpawn): RunHandle {
   const [file = 'claude', ...pre] = o.bin ?? ['claude'];
-  return runJsonl(file, [...pre, ...claudeArgs(o)], { cwd: o.cwd, env: o.env, question: o.question }, parseLine, onEvent, spawnImpl);
+  return runJsonl(file, [...pre, ...claudeArgs(o)], { cwd: o.cwd, env: o.env, question: o.question, ...(o.images?.length ? { stdin: claudeInput(o.question, o.images) } : {}) }, parseLine, onEvent, spawnImpl);
 }
