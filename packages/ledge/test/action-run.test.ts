@@ -90,9 +90,12 @@ describe('action.run', () => {
 });
 
 describe('runGuard (#93 (a), until the user decides: the strictest)', () => {
-  it('lets the user run anything, a session nothing destructive', () => {
-    expect(runGuard('destructive', undefined)).toBeNull();
-    expect(runGuard('reversible', 's1')).toBeNull();
-    expect(runGuard('destructive', 's1')).toMatch(/utilisateur/);
+  const ctx = { sessions: [], teams: [], tasks: [], findRole: () => undefined };
+  const dissolve = { action: 'team.dissolve' as const, args: { team: 'team-3fa2' }, summary: 'Dissoudre', risk: 'destructive' as const, team: 'team-3fa2' };
+  const close = { action: 'session.close' as const, args: { session: 's2' }, summary: 'Fermer', risk: 'reversible' as const, session: 's2' };
+  it('lets the user run anything; a session closes, joins, leaves, but never runs a destructive action', () => {
+    expect(runGuard(dissolve, undefined, ctx)).toBeNull();
+    expect(runGuard(close, 's1', ctx)).toBeNull();
+    expect(runGuard(dissolve, 's1', ctx)).toMatch(/utilisateur/);
   });
 });

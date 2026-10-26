@@ -1,6 +1,6 @@
 // The daemon's side of the action registry (spec 2026-10-26 action registry §2.1): whether an action is possible now, and
 // the message the daemon already handles that applies it. The chat's generic card and, in #93, the CLI share it.
-import { backendOf, isArchived, isTeamLive, LEDGE_GIVER, offers, pendingKey, riskOf, taskClosed, actionById, DETAIL_MAX, type ActionErrorCode, type ActionId, type ActionRisk, type ChatAction, type ClientMessage, type Role, type Session, type Task, type Team } from '@ledge/protocol';
+import { backendOf, isArchived, isTeamLive, LEDGE_GIVER, offers, pendingKey, riskOf, taskClosed, actionById, DETAIL_MAX, type ActionErrorCode, type ActionId, type ChatAction, type ClientMessage, type Role, type Session, type Task, type Team } from '@ledge/protocol';
 
 export interface ResolveCtx {
   sessions: readonly Session[]; teams: readonly Team[]; tasks: readonly Task[];
@@ -167,11 +167,13 @@ export function resolveRun(id: ActionId, args: unknown, ctx: ResolveCtx, by?: st
 }
 
 /**
- * Who may run what outside the chat (#93, point (a), the user's call): until the user decides, the strictest — a session never
- * runs a destructive action, the user does. One function, so the decision lands in one place. Null when allowed.
+ * Who may run what outside the chat (#93, point (a), the user's call): the row as resolved (action, ids, risk), the session that
+ * asks (`by`, left out for the user) and the live state, so that any rule (the team's lead only, a session Ledge launched) is
+ * written here and nowhere else. Until the user decides, the strictest: a session never runs a destructive action, the user
+ * does; everything else (a close, a join) is allowed. Null when allowed, else the reason.
  */
-export function runGuard(risk: ActionRisk, by: string | undefined): string | null {
-  return by !== undefined && risk === 'destructive'
+export function runGuard(row: ChatAction, by: string | undefined, _ctx: ResolveCtx): string | null {
+  return by !== undefined && row.risk === 'destructive'
     ? 'une session agent ne lance pas d\'action destructive : demande-le à l\'utilisateur (il la lance lui-même avec --yes)' : null;
 }
 

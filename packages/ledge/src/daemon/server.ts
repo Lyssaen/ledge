@@ -767,9 +767,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     const answer = (x: { row?: ChatAction; reason?: string; code?: string; path?: string }) => reply({ type: 'action.result', rid: msg.rid, action: msg.action, ...x });
     const parsed = actionById(msg.action)!.args.safeParse(msg.args);
     if (!parsed.success) return answer({ reason: `invalid args: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'} ${i.message}`).join('; ')}`, code: 'refused' });
-    const r: Resolved = resolveRun(msg.action, parsed.data, { sessions: store.all(), teams: teams.all(), tasks: tasks.all(), findRole, templateExists: name => templateExists(name) }, msg.by);
+    const ctx = { sessions: store.all(), teams: teams.all(), tasks: tasks.all(), findRole, templateExists: (name: string) => templateExists(name) };
+    const r: Resolved = resolveRun(msg.action, parsed.data, ctx, msg.by);
     if ('refused' in r) return answer({ reason: r.refused, code: 'refused' });
-    const guard = runGuard(r.risk, msg.by);
+    const guard = runGuard(r, msg.by, ctx);
     if (guard) return answer({ row: r, reason: guard, code: 'agent' });
     if (r.risk === 'destructive' && !msg.confirmed) return answer({ row: r, reason: 'destructive: confirm it', code: 'confirm_required' });
     if (r.action === 'session.close') {
