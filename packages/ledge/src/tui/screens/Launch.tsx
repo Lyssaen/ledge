@@ -48,9 +48,8 @@ export function Launch() {
 function SessionLaunch({ onTeam, prefill }: { onTeam(): void; prefill?: LaunchPrefill }) {
   const { client, d, machines, projects, t, g, toast, go, select, small } = useTui();
   const list = projects?.projects ?? [];
-  const role = prefill?.role;
   const [form, setForm] = useState<LaunchForm>(() => {
-    const base = launchDefaults(list, machines, prefill?.project ? { project: prefill.project } : {}, role?.tool ?? 'claude');
+    const base = launchDefaults(list, machines, prefill?.project ? { project: prefill.project } : {}, prefill?.role?.tool ?? 'claude');
     // A folder « Équipes » read on another machine (#99) is launched there.
     const f = prefill && prefill.machine !== 'local' ? withMachine(base, list, prefill.machine) : base;
     return prefill?.cwd ? { ...f, repos: [prefill.cwd] } : f;
@@ -76,6 +75,10 @@ function SessionLaunch({ onTeam, prefill }: { onTeam(): void; prefill?: LaunchPr
     return own.length ? own : (machine?.recents ?? []).slice(0, 6).map(r => r.cwd);
   }, [project, form.machine, machine?.recents]);
   const withFolder: LaunchForm = folder.trim() ? { ...form, repos: MULTI_REPO_TOOLS.has(form.tool) ? [folder.trim(), ...form.repos.filter(r => r !== folder.trim())] : [folder.trim()] } : form;
+  // The daemon reads the role in the folder launched: the one « Équipes » read holds only there, on its machine; one read
+  // under « Perso seulement » is the local home's, read in any local folder.
+  const roleHere = !!prefill?.role && withFolder.machine === prefill.machine && (prefill.cwd === null || withFolder.repos[0] === prefill.cwd);
+  const role = roleHere ? prefill!.role : undefined;
   const projectIdOf = (s: Parameters<typeof projectOf>[0]) => (projects ? projectOf(s, projects) : null);
   const drawn = useMemo(() => previewOf(withFolder, d.sessions, projectIdOf), [form.machine, form.project, d.sessions.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const [name, setName] = useState<string | null>(null);
@@ -142,7 +145,9 @@ function SessionLaunch({ onTeam, prefill }: { onTeam(): void; prefill?: LaunchPr
     <Frame crumb={t.launch.title} keys={[['tab', t.keys.nextField], ['← →', t.keys.choose], [t.keys.space, t.keys.tick], ['ctrl+s', t.keys.start], ['ctrl+t', t.keys.teamMode], ['ctrl+r', t.keys.redraw], ['esc', t.keys.cancel]]}>
       <TitledBox title={t.launch.title} flexGrow={1}>
         <Box><Text color={C.faint}> </Text><Box width={14} flexShrink={0}><Text color={C.dim}>{t.launch.mode}</Text></Box><Text><Text color={C.coral}>{g.radioOn} {t.launch.session}</Text>   <Text color={C.dim}>{g.radioOff} {t.launch.team}</Text>  <Text color={C.faint}>ctrl+t</Text></Text></Box>
-        {role ? <Box><Text color={C.faint}> </Text><Box width={14} flexShrink={0}><Text color={C.dim}>{t.catalog.role}</Text></Box><Text wrap="truncate"><Text color={C.violet}>@{role.id}</Text> <Text color={C.fg}>{role.label}</Text></Text></Box> : null}
+        {prefill?.role ? <Box><Text color={C.faint}> </Text><Box width={14} flexShrink={0}><Text color={C.dim}>{t.catalog.role}</Text></Box>
+          {role ? <Text wrap="truncate"><Text color={C.violet}>@{role.id}</Text> <Text color={C.fg}>{role.label}</Text></Text>
+            : <Text wrap="truncate" color={C.faint}>{t.catalog.roleElsewhere(prefill.role.id, prefill.cwd ?? '~/.ledge')}</Text>}</Box> : null}
         {row('prompt', t.launch.instruction, <TextInput value={form.prompt} onChange={v => setForm(f => ({ ...f, prompt: v }))} active={field === 'prompt'} />)}
         <Text> </Text>
         {row('tool', t.launch.agent, <Text wrap="truncate">{tools.map(x => <Text key={x} color={x === form.tool ? C.coral : C.dim}>{x === form.tool ? g.radioOn : g.radioOff} {TOOL_NAME[x]}   </Text>)}</Text>)}

@@ -1217,6 +1217,34 @@ describe('ledge tui: « Équipes » (6), the roles and templates catalog (#97)',
     } finally { await tui.cleanup(); }
   });
 
+  it('the role read in a folder is dropped when the launch goes elsewhere, and comes back with the folder', async () => {
+    const tui = await startTui();
+    answer(tui);
+    try {
+      await tui.press('6');
+      await until(() => tui.frame().includes('@BUILD · BUILDER'));
+      await tui.press('j');
+      await until(() => tui.frame().includes('@REVIEW · RELECTEUR'));
+      await tui.press('\r');
+      await until(() => tui.frame().includes('NOUVELLE SESSION'));
+      expect(tui.frame()).toContain('@review Relecteur');
+      await tui.press('Relis la PR');
+      for (let i = 0; i < 4; i++) await tui.press('\t'); // to Projet
+      await tui.press('\u001b[C'); // → Website
+      await until(() => tui.frame().includes('n’est lu que dans /w/ledge'));
+      expect(tui.frame()).not.toContain('@review Relecteur');
+      await tui.press('\u001b[D'); // ← back to Ledge
+      await until(() => tui.frame().includes('@review Relecteur'));
+      await tui.press('\u001b[C');
+      await until(() => tui.frame().includes('n’est lu que dans /w/ledge'));
+      await tui.press('\u0013'); // ctrl+s
+      await until(() => sent(tui.daemon.received, 'session.launch').length === 1);
+      const launched = sent(tui.daemon.received, 'session.launch')[0]!;
+      expect(launched).toMatchObject({ cwd: '/w/website', prompt: 'Relis la PR' });
+      expect(launched.role).toBeUndefined();
+    } finally { await tui.cleanup(); }
+  });
+
   it('↵ on a template opens the team mode with it', async () => {
     const tui = await startTui();
     answer(tui);

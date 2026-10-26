@@ -121,7 +121,8 @@ export const fr = {
     autonomyShort: { ask: 'demande', edits: 'éditions', auto: 'auto' } as Record<'ask' | 'edits' | 'auto', string>,
     ignored: (n: number) => `⚠ ${n} ${plural(n, 'fichier ignoré', 'fichiers ignorés')}`, see: 'voir', problems: 'Fichiers ignorés', noProblem: 'Aucun fichier ignoré.',
     loading: 'lecture des rôles…', noAnswer: 'Le daemon n’a pas répondu.',
-    offline: (m: string) => `${m} est hors ligne.`, outdated: (m: string) => `Le daemon de ${m} est trop ancien pour le catalogue.`, onMachine: (m: string) => `sur ${m}`, noRole: 'Aucun rôle ici : écris .ledge/roles/<id>.md', noTemplateHere: 'Aucun modèle ici : écris .ledge/teams/<id>.yaml',
+    offline: (m: string) => `${m} est hors ligne.`, outdated: (m: string) => `Le daemon de ${m} est trop ancien pour le catalogue.`, onMachine: (m: string) => `sur ${m}`,
+    roleElsewhere: (id: string, cwd: string) => `@${id} n’est lu que dans ${cwd} : lancé sans rôle`, noRole: 'Aucun rôle ici : écris .ledge/roles/<id>.md', noTemplateHere: 'Aucun modèle ici : écris .ledge/teams/<id>.yaml',
     role: 'Rôle'
   },
   settings: { title: 'Réglages', language: 'Langue', theme: 'Thème', themes: { auto: 'Auto', dark: 'Sombre', light: 'Clair' }, themeAuto: (tone: 'dark' | 'light') => `Auto (fond ${tone === 'light' ? 'clair' : 'sombre'})`, context: 'Contexte max', contextHint: 'au-delà : passer le relais', contextUnknown: 'mettez à jour le daemon', contextSaved: (pct: number) => `Contexte max : ${pct} %`, saved: 'Réglage enregistré.', saveFailed: (m: string) => `Réglage appliqué, mais non enregistré : ${m}` },
