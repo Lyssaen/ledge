@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { basename, join } from 'node:path';
 import { mkdir } from 'node:fs/promises';
-import type { OmpApproval, Session, SessionEvent } from '@ledge/protocol';
+import type { AttachmentRef, OmpApproval, Session, SessionEvent } from '@ledge/protocol';
 import { pickName } from '@ledge/protocol';
 import { agentEnv, PARENT_AGENT_VARS } from '../../spawn.js';
 import { log } from '../../log.js';
@@ -148,7 +148,7 @@ export function createOmpHost(deps: OmpHostDeps) {
     },
 
     /** An instruction at rest starts a turn; while OMP works, it waits for the turn's end (`follow_up`), or redirects it (`steer`). */
-    async send(id: string, text: string, mode: 'prompt' | 'follow_up' | 'steer' = 'prompt'): Promise<void> {
+    async send(id: string, text: string, mode: 'prompt' | 'follow_up' | 'steer' = 'prompt', _images?: AttachmentRef[]): Promise<void> {
       const l = live.get(id); if (!l) throw new Error('the session is not running');
       if (mode === 'prompt') { l.tracking.echo.push(text.trim()); store.apply(id, { name: 'UserPromptSubmit', at: now(), source: 'daemon', text }); l.tracking.working = true; }
       try { await l.rpc.request(mode, { message: text }); }

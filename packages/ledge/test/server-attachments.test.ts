@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,6 +10,9 @@ import { AttachmentStore } from '../src/daemon/attachments.js';
 import { History } from '../src/daemon/history.js';
 import { connect } from '../src/client.js';
 import type { Tmux } from '../src/tmux.js';
+import type { OmpHost } from '../src/daemon/omp/host.js';
+import type { Session } from '@ledge/protocol';
+import { withImages } from '../src/attachmentText.js';
 
 const u32 = (n: number) => Buffer.from([n >>> 24, (n >> 16) & 255, (n >> 8) & 255, n & 255]);
 const png = (w: number, h: number, pad = 0) => Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), u32(13), Buffer.from('IHDR'), u32(w), u32(h), Buffer.from([8, 6, 0, 0, 0]), Buffer.alloc(pad, 7)]);
@@ -107,5 +110,106 @@ describe('the sweep', () => {
     await srv.sweepAttachments();
     expect([unsent, inHistory, inChat].map(b => existsSync(files(b)))).toEqual([false, true, true]);
     await c.close();
+  });
+});
+
+describe('session replies with images', () => {
+  const T0 = '2026-10-26T10:00:00.000Z';
+  const mk = (id: string, extra: Partial<Session> = {}): Session => ({
+    id, name: 'Otto', tool: 'claude', cwd: '/w/p', project: 'p', title: 'Otto · p', tmuxSession: `ledge-${id}`, state: 'idle',
+    helpers: [], startedAt: T0, lastActivityAt: T0, source: 'launcher', ...extra
+  });
+  let sent: string[][]; let clock: number; let store: Store; let atts: AttachmentStore; let omp: { calls: unknown[][]; answered: string[] };
+  let id: string;
+  const typedText = () => sent.filter(x => x[0] === 'text').map(x => x[2]);
+
+  beforeEach(async () => {
+    await srv.close();
+    sent = []; clock = Date.parse(T0); omp = { calls: [], answered: [] };
+    const root = mkdtempSync(join(tmpdir(), 'ledge-reply-'));
+    atts = new AttachmentStore(join(root, 'attachments'));
+    const fake = {
+      ...tmux, sent,
+      async sendText(n: string, t: string) { sent.push(['text', n, t]); }, async sendKeys(n: string, k: string[]) { sent.push(['keys', n, ...k]); },
+      async capture() { return ''; }, async hasSession() { return true; }, async setOption() {}
+    } as unknown as Tmux;
+    const ompHost = { isLive: () => true, async closeAll() {}, async send(...a: unknown[]) { omp.calls.push(a); }, async answer(i: string) { omp.answered.push(i); return null; } } as unknown as OmpHost;
+    store = new Store();
+    srv = await startServer({ store, tmux: fake, port: 0, attachments: atts, omp: ompHost, now: () => new Date(clock).toISOString(), verify: { attempts: 2, intervalMs: 10 }, untilMs: 300, agentEnv: async () => ({ ...process.env }) });
+    id = (await atts.put(png(10, 10, 1), undefined, 400_000)).id;
+  });
+
+  it('types the text followed by the image brackets into an idle Claude session', async () => {
+    store.upsert(mk('a'));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.reply', id: 'a', text: 'regarde', attachments: [id] });
+    await vi.waitFor(() => expect(typedText()).toContain(withImages('regarde', [atts.path(id)!])), { timeout: 3000 });
+    await c.close();
+  });
+
+  it('refuses an unknown image, a dialog open, and an empty reply, typing nothing', async () => {
+    store.upsert(mk('a')); store.upsert(mk('q', { state: 'waiting_input', pending: { kind: 'question', text: 'Which?', options: ['a'], source: 'hook' } }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.reply', id: 'a', text: 'x', attachments: ['f'.repeat(64)] });
+    expect(await c.next('error')).toMatchObject({ request: 'session.reply', code: 'attachment_missing' });
+    c.send({ type: 'session.reply', id: 'q', text: 'x', attachments: [id] });
+    expect(await c.next('error')).toMatchObject({ request: 'session.reply', code: 'attachments_not_accepted' });
+    c.send({ type: 'session.reply', id: 'a', text: '', attachments: [] });
+    expect(await c.next('error')).toMatchObject({ message: 'empty reply', code: 'invalid' });
+    expect(sent).toEqual([]);
+    await c.close();
+  });
+
+  it('refuses images to an OMP session with a dialog open, without answering it', async () => {
+    store.upsert(mk('o', { tool: 'omp', backend: 'omp-rpc', tmuxSession: null, state: 'waiting_input', pending: { kind: 'question', text: 'Which?', options: ['a'], source: 'hook' } }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.reply', id: 'o', text: 'x', attachments: [id] });
+    expect(await c.next('error')).toMatchObject({ code: 'attachments_not_accepted' });
+    expect(omp.answered).toEqual([]);
+    await c.close();
+  });
+
+  it('hands an OMP session its images as refs', async () => {
+    store.upsert(mk('o', { tool: 'omp', backend: 'omp-rpc', tmuxSession: null }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.reply', id: 'o', text: 'regarde', attachments: [id] });
+    await vi.waitFor(() => expect(omp.calls).toHaveLength(1));
+    expect(omp.calls[0]).toMatchObject(['o', 'regarde', 'prompt', [{ id }]]);
+    await c.close();
+  });
+
+  describe('the echoed prompt', () => {
+    const prompt = (c: Awaited<ReturnType<typeof connect>>, text: string) => c.send({ type: 'session.event', id: 'a', event: { name: 'UserPromptSubmit', at: new Date(clock).toISOString(), source: 'hook', text } });
+    const recorded = () => store.get('a')!;
+    const seen: Array<{ attachments?: string[] }> = [];
+    beforeEach(() => {
+      seen.length = 0;
+      const apply = store.apply.bind(store);
+      store.apply = ((i: string, e: { name: string; source?: string; attachments?: string[] }) => { if (e.name === 'UserPromptSubmit' && e.source === 'hook') seen.push(e); return apply(i, e as never); }) as typeof store.apply;
+    });
+
+    it('tags the first prompt echoed within 30 s, once', async () => {
+      store.upsert(mk('a'));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.reply', id: 'a', text: 'regarde', attachments: [id] });
+      await vi.waitFor(() => expect(typedText()).toHaveLength(1), { timeout: 3000 });
+      clock += 29_000;
+      prompt(c, 'regarde [Image attached: x]'); await vi.waitFor(() => expect(seen).toHaveLength(1));
+      prompt(c, 'again'); await vi.waitFor(() => expect(seen).toHaveLength(2));
+      expect(seen.map(e => e.attachments)).toEqual([[id], undefined]);
+      expect(recorded()).toBeTruthy();
+      await c.close();
+    });
+
+    it('does not tag one after 30 s, nor one that already carries its attachments', async () => {
+      store.upsert(mk('a'));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.reply', id: 'a', text: 'regarde', attachments: [id] });
+      await vi.waitFor(() => expect(typedText()).toHaveLength(1), { timeout: 3000 });
+      clock += 31_000;
+      prompt(c, 'late'); await vi.waitFor(() => expect(seen).toHaveLength(1));
+      expect(seen[0]!.attachments).toBeUndefined();
+      await c.close();
+    });
   });
 });

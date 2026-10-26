@@ -9,6 +9,7 @@ import { ATTACHMENT_LOCAL_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT,
 import type { Store } from './store.js';
 import type { History } from './history.js';
 import { AttachmentError, AttachmentStore } from './attachments.js';
+import { withImages } from '../attachmentText.js';
 import type { Tmux } from '../tmux.js';
 import { adapterFor, type KeyPlan } from '../adapters/index.js';
 import { Refusal, STALE, bottomLines, dialogMismatch } from '../adapters/types.js';
@@ -590,12 +591,25 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     } finally { closing.delete(id); }
   }
 
+  /** The images typed with a reply by session: the next prompt event without `attachments` is theirs (the hook could not tell). */
+  const typed = new Map<string, { ids: string[]; at: number }>();
+  const TYPED_MS = 30_000;
+
   /** session.reply's checks and typing (shared with the chat's relay): null once typed, the refusal otherwise; rejects when the injection fails. */
-  async function replyTo(id: string, text: string, how: { steer?: boolean } = {}): Promise<Refusal | null> {
+  async function replyTo(id: string, text: string, how: { steer?: boolean; attachments?: string[] } = {}): Promise<Refusal | null> {
     const s = store.get(id); if (!s) return unknownSession();
     if (s.source === 'hook_only') return readOnly();
     if (closing.has(id)) return new Refusal('the session is being closed', 'busy');
-    if (backendOf(s) === 'omp-rpc') return replyOmp(s, text, how.steer === true);
+    const ids = how.attachments ?? [];
+    const refs: AttachmentRef[] = [];
+    for (const a of ids) {
+      const ref = attachments.ref(a);
+      if (!ref) return new Refusal('attachment missing', 'attachment_missing');
+      refs.push(ref);
+    }
+    if (refs.length > 0 && s.pending) return new Refusal('reply with images while a dialog is open', 'attachments_not_accepted');
+    if (backendOf(s) === 'omp-rpc') return replyOmp(s, text, how.steer === true, refs);
+    if (refs.length > 0) text = withImages(text, ids.map(a => attachments.path(a)!));
     // A select dialog ignores typed text and Enter would pick option 1: those take decide only.
     if (s.pending && s.pending.kind !== 'question') return new Refusal(`a ${s.pending.kind} prompt takes accept or deny, not a reply`, 'not_offered');
     if (text.trim() === '') return new Refusal('empty reply', 'invalid');
@@ -604,7 +618,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     const pending = s.pending; const adapter = adapterFor(s.tool);
     if (pending?.kind === 'question' && !/^[1-9]$/.test(text.trim()) && !adapter.freeText) return new Refusal(FREE_TEXT, 'free_text');
     // With no pending (idle, your turn) the text goes to the input line: no prompt to check for.
-    await injectAndVerify(id, pane => adapter.replyPlan(text, pending, pane || undefined), !!pending);
+    // Noted before typing: the agent's hook can land before the injection is verified.
+    if (ids.length > 0) typed.set(id, { ids, at: Date.parse(now()) });
+    try { await injectAndVerify(id, pane => adapter.replyPlan(text, pending, pane || undefined), !!pending); }
+    catch (e) { typed.delete(id); throw e; }
     return null;
   }
 
@@ -612,13 +629,13 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
    * A reply to an OMP session: the answer to the dialog it waits on, else an instruction: a new turn at rest, queued behind
    * the running one otherwise (OMP's `follow_up`: « après ce tour »). Null once sent, the refusal otherwise.
    */
-  async function replyOmp(s: Session, text: string, steer: boolean): Promise<Refusal | null> {
-    if (text.trim() === '') return new Refusal('empty reply', 'invalid');
+  async function replyOmp(s: Session, text: string, steer: boolean, refs: AttachmentRef[]): Promise<Refusal | null> {
+    if (text.trim() === '' && refs.length === 0) return new Refusal('empty reply', 'invalid');
     if (s.state === 'exited') return new Refusal('the session has ended', 'unavailable');
     if (s.pending) { const refused = await omp.answer(s.id, text); return refused === null ? null : new Refusal(refused, 'not_offered'); }
     if (!omp.isLive(s.id)) return new Refusal('the session is not running', 'unavailable');
     // At rest an instruction starts a turn; while OMP works it waits for the turn's end, unless the user asked to redirect it now.
-    await omp.send(s.id, text, s.state === 'working' ? (steer ? 'steer' : 'follow_up') : 'prompt');
+    await omp.send(s.id, text, s.state === 'working' ? (steer ? 'steer' : 'follow_up') : 'prompt', refs);
     return null;
   }
 
@@ -991,7 +1008,12 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return reply(listing);
       }
       case 'session.event': {
-        const ev = msg.event;
+        let ev = msg.event;
+        if (ev.name === 'UserPromptSubmit') {
+          // A reply typed with images comes back as a plain prompt: the first one within the window carries them.
+          const t = typed.get(msg.id); typed.delete(msg.id);
+          if (!ev.attachments && t && Date.parse(now()) - t.at <= TYPED_MS) { ev = { ...ev, attachments: t.ids }; msg.event = ev; }
+        }
         // Late hooks of a session deleted moments ago (its SessionEnd, a last Stop) bring back neither it nor its thread.
         if (recentlyDeleted(msg.id)) return;
         // The agent's text precedes the action it announces: sync the parent's transcript before the row lands.
@@ -1055,7 +1077,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return;
       }
       case 'session.reply': {
-        const refused = await replyTo(msg.id, msg.text, { steer: msg.steer });
+        const refused = await replyTo(msg.id, msg.text, { steer: msg.steer, attachments: msg.attachments });
         if (refused) refuse(refused, msg.id);
         return;
       }
