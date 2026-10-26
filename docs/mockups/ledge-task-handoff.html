@@ -881,9 +881,12 @@ const OPEN_EQ = `<div class="note"><h3>À trancher</h3><ol>
 const OPEN = `<div class="note"><h3>À trancher</h3><ol>
   <li><b>Données</b> : un événement <code>task.updated</code> pour <b>toutes</b> les tâches (proposé : l’Atelier, le fil et la TUI le lisent tels quels), ou une relecture périodique du journal ?</li>
   <li>La transmission entre-t-elle dans <code>history</code> (comme <code>recordSent</code>) pour que les cartes survivent au redémarrage, ou le fil les déduit-il du journal de la tâche ?</li>
-  <li>Couleur : violet <code>--task</code>, nouveau jeton, ou la couleur du projet ? Le violet évite les couleurs d’état (bleu, rouge, ambre, vert).</li>
-  <li>Le drapeau violet « pas encore prise » sur la fiche de la table : utile, ou une marque de trop ?</li>
-  <li>« Convertir un message en tâche » : hors de cette maquette ; une issue à part ?</li></ol></div>`;
+</ol></div>
+<div class="note"><h3>Tranché par l’utilisateur</h3><ul>
+  <li>Couleur : le violet <code>--task</code>, un jeton propre.</li>
+  <li>Le drapeau violet « pas encore prise » sur la fiche de la table : gardé.</li>
+  <li>Messages et tâches restent deux objets distincts, sans fusion.</li>
+  <li>« Convertir un message en tâche » : hors de #92.</li></ul></div>`;
 
 // ---- Chrome ----
 const CASE_KEYS = { atelier: Object.keys(CASES), fil: Object.keys(THREADS) };
