@@ -609,8 +609,10 @@ describe('ledge-action blocks (spec 2026-10-26 action registry §3)', () => {
     expect(chat.action('q1', 0)).toMatchObject({ state: 'done', doneAt: '2026-10-11T09:00:00.000Z' });
     expect(chat.action('q1', 0)).not.toHaveProperty('error');
     expect(chat.action('q1', 0)).not.toHaveProperty('code');
+    chat.markAction('q1', 0, { state: 'denied', doneAt: '2026-10-11T09:01:00.000Z' }, m => out.push(m));
+    expect(chat.action('q1', 0)).toMatchObject({ state: 'denied', doneAt: '2026-10-11T09:01:00.000Z' });
     chat.markAction('q1', 4, { state: 'done' }, m => out.push(m));
-    expect(out.map(m => m.type)).toEqual(['chat.history', 'chat.history']);
+    expect(out.map(m => m.type)).toEqual(['chat.history', 'chat.history', 'chat.history']);
   });
   it('a long note, a long title: the history with those rows still parses for every client', async () => {
     const pending = { kind: 'permission' as const, text: 'Bash: rm x', source: 'hook' as const };

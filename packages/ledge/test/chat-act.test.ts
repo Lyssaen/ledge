@@ -107,6 +107,33 @@ describe('actFromChat (spec 2026-10-26 action registry §9.2)', () => {
     expect(await actFromChat(x.d, 'q1')).toEqual({ done: [0], failed: [] });
     expect(x.applied).toEqual(['a']);
   });
+  describe('« Refuser » (deny)', () => {
+    const accept = (extra: Partial<ChatAction> = {}) => row('session.decide', { session: 'a', decision: 'accept', expect: { kind: 'plan', text: 'P', key: 'k' } }, { risk: 'destructive', ...extra });
+    it('answers the request with deny, unconfirmed, and marks the row denied with its time', async () => {
+      const c = card([accept()]);
+      const sent: ChatAction[] = [];
+      const { d } = deps(c, { apply: async (r: ChatAction) => { sent.push(r); } });
+      expect(await actFromChat(d, 'q1', undefined, undefined, true)).toEqual({ done: [0], failed: [] });
+      expect(sent.map(r => r.args)).toEqual([{ session: 'a', decision: 'deny', expect: { kind: 'plan', text: 'P', key: 'k' } }]);
+      expect(c.rows[0]).toMatchObject({ state: 'denied', doneAt: '2026-10-26T10:00:00.000Z' });
+      expect(c.rows[0]!.args.decision).toBe('accept');
+      // Denied is settled, as done is.
+      await expect(actFromChat(d, 'q1', undefined, undefined, true)).rejects.toThrow('already done');
+      await expect(actFromChat(d, 'q1', undefined, true)).rejects.toThrow('already done');
+    });
+    it('is allowed on a request shown cut', async () => {
+      const c = card([accept({ detail: 'x…', detailCut: true })]);
+      const { d, applied } = deps(c);
+      expect(await actFromChat(d, 'q1', undefined, undefined, true)).toEqual({ done: [0], failed: [] });
+      expect(applied).toEqual(['a']);
+    });
+    it('refuses a row that is not a request, and sends nothing', async () => {
+      const c = card([accept(), row('team.dissolve', { team: 't' }, { risk: 'destructive' })]);
+      const { d, applied } = deps(c);
+      await expect(actFromChat(d, 'q1', undefined, undefined, true)).rejects.toThrow('only a request is refused');
+      expect(applied).toEqual([]);
+    });
+  });
   it('the same args at another risk (a template saved meanwhile) is refused: it was confirmed at the old one', async () => {
     const c = card([row('team.save', { team: 't', name: 'api', seats: [] })]);
     const { d, applied } = deps(c, { resolve: (r: ChatAction) => ({ ...r, risk: 'destructive' as const }) });

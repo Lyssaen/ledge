@@ -8,6 +8,7 @@ import type { ChatAction, ChatClose, ChatProposal, ChatRelay, Projects, ServerMe
 import { DEFAULT_ISLAND_PREFS, pendingKey } from '@ledge/protocol';
 import type { Chat } from '../src/chat/service.js';
 import { sessionKey } from '../src/auth.js';
+import { resolveAction } from '../src/daemon/actions.js';
 import { Store } from '../src/daemon/store.js';
 import WebSocket from 'ws';
 import { startServer, ALLOWED_ORIGINS, launchArgs, resolveFolder } from '../src/daemon/server.js';
@@ -2718,6 +2719,22 @@ describe('close a session', () => {
         expect(await c.next('chat.acted', 3000)).toMatchObject({ done: [0], failed: [] });
         expect(store.get('a')?.archivedAt).toBeUndefined();
         expect(rows[0]).toMatchObject({ state: 'done' });
+        c.close();
+      });
+      it('« Refuser » a request row: answered with deny, unconfirmed, the row denied', async () => {
+        const pending = { kind: 'permission' as const, text: 'mkdir zz-ledge-probe', tool: 'Bash', source: 'hook' as const };
+        const session = mk('a', { state: 'waiting_permission', pending });
+        const accept = resolveAction('session.decide', { session: 'a', decision: 'accept' }, { sessions: [session], teams: [], tasks: [], findRole: () => undefined });
+        if ('refused' in accept) throw new Error(accept.refused);
+        const { chat, marks } = actChat([accept]);
+        const rest = fx('claude2-rest-after-deny');
+        await closing({ 'ledge-a': [fx('claude2-permission-bash'), rest, rest] }, { chat });
+        store.upsert(session);
+        const c = await connect({ port: srv.port }); await c.next('snapshot');
+        c.send({ type: 'chat.act', rid: 'r1', qid: 'q1', deny: true });
+        expect(await c.next('chat.acted', 3000)).toEqual({ type: 'chat.acted', rid: 'r1', qid: 'q1', done: [0], failed: [] });
+        expect(marks).toEqual(['0:running', '0:denied']);
+        expect(tmux.sent[0]).toEqual(['keys', 'ledge-a', 'Escape']);
         c.close();
       });
       it('refuses an unknown card, and a destructive row without the confirmation', async () => {

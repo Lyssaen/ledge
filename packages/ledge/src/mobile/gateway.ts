@@ -78,7 +78,7 @@ export function createPhoneGateway(deps: {
   /** Closes the sessions of a turn's close card, on that thread (its own emitter and marks). */
   closeChat?: (thread: ChatThreadId, qid: string, rows?: number[]) => Promise<{ closed: Array<{ row: number; id: string; how: CloseHow }>; failed: Array<{ row: number; message: string }> }>;
   /** Applies the rows of a turn's generic card, on that thread (its own emitter and marks); `rid` names the request. */
-  actChat?: (thread: ChatThreadId, qid: string, rid: string, rows?: number[], confirmed?: true) => Promise<{ done: number[]; failed: Array<{ row: number; message: string }> }>;
+  actChat?: (thread: ChatThreadId, qid: string, rid: string, rows?: number[], confirmed?: true, deny?: true) => Promise<{ done: number[]; failed: Array<{ row: number; message: string }> }>;
   /** A device's question ended (answered, or with a code). */
   onChatEnd?: (deviceId: string, end: { qid: string; code?: ChatErrorCode }) => void;
   chatThrottleMs?: number;
@@ -374,19 +374,23 @@ export function createPhoneGateway(deps: {
     const targets = msg.rows ?? (actions ? [...actions.keys()] : []);
     if (!actions || targets.length === 0) return { status: 'rejected', reason: 'invalid' };
     for (const r of targets) if (!actions[r]) return { status: 'rejected', reason: 'invalid' };
+    // « Refuser » answers a session's request only.
+    if (msg.deny && targets.some(r => actions[r]!.action !== 'session.decide')) return { status: 'rejected', reason: 'invalid' };
     // A request the phone could only show cut is refused from there, never accepted: the rest is read on the PC.
-    if (targets.some(r => phoneCut(actions[r]!) && actions[r]!.args.decision !== 'deny')) return { status: 'rejected', reason: 'not_offered' };
+    if (!msg.deny && targets.some(r => phoneCut(actions[r]!) && actions[r]!.args.decision !== 'deny')) return { status: 'rejected', reason: 'not_offered' };
     // Nothing left to apply: answered before the assertion is spent.
-    if (targets.every(r => actions[r]!.state === 'done')) return { status: 'failed' };
-    const todo = targets.filter(r => actions[r]!.state !== 'done');
-    if (!msg.confirmed && todo.some(r => actions[r]!.risk === 'destructive')) return { status: 'rejected', reason: 'confirm_required' };
-    if (todo.some(r => actionById(actions[r]!.action)?.phone)) {
+    const settled = (r: number) => actions[r]!.state === 'done' || actions[r]!.state === 'denied';
+    if (targets.every(settled)) return { status: 'failed' };
+    const todo = targets.filter(r => !settled(r));
+    // A deny is never confirmed nor checked on the device, as the phone's own deny of a request is not.
+    if (!msg.deny && !msg.confirmed && todo.some(r => actions[r]!.risk === 'destructive')) return { status: 'rejected', reason: 'confirm_required' };
+    if (!msg.deny && todo.some(r => actionById(actions[r]!.action)?.phone)) {
       if (deps.credential(deviceId) === null) return { status: 'rejected', reason: 'confirm_required' };
       const refused = checkAssertion(deviceId, msg.assertion, 'act', msg.qid);
       if (refused) return refused;
     }
     try {
-      const done = await deps.actChat(`device:${deviceId}`, msg.qid, `phone:${msg.op}`, todo, msg.confirmed);
+      const done = await deps.actChat(`device:${deviceId}`, msg.qid, `phone:${msg.op}`, todo, msg.confirmed, msg.deny);
       return done.failed.length === 0 && done.done.length > 0 ? { status: 'applied' } : { status: 'failed' };
     } catch (e) {
       if (e instanceof ActRefused) return e.code ? { status: 'rejected', reason: e.code } : { status: 'failed' };
