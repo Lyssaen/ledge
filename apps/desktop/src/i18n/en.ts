@@ -375,7 +375,11 @@ export const en: Messages = {
     seat: (name, task, machine) => `${name}, ${task}, ${machine}`,
     helperSeat: (kind, parent, task) => `${kind}, subagent of ${parent}: ${task}`,
     offline: 'Offline',
-    ledgeTaskLabel: (owner: string, title: string) => `Ledge gives “${title}” to ${owner}. See the task`,
+    taskTo: { give: n => `Task → ${n}`, pass: n => `Passed → ${n}`, done: n => `Done → ${n}`, refuse: n => `Refused → ${n}`, cancel: n => `Cancelled → ${n}` },
+    taskLabel: (op, from, to, title) => `${{
+      give: `${from} gives “${title}” to ${to}`, pass: `${from} passes “${title}” to ${to}`, done: `${from} hands “${title}” back to ${to}, done`,
+      refuse: `${from} refuses “${title}”, back to ${to}`, cancel: `${from} cancels “${title}” for ${to}`
+    }[op]}. See the task`,
     messageTo: (n) => `to ${n}`,
     messageLabel: (sender, n, summary) => `${sender} writes to ${n}: ${summary}. Open the conversation`,
     desk: 'Talk to Ledge',
@@ -724,7 +728,12 @@ export const en: Messages = {
       seeTasks: 'See the tasks', pinned: 'Current task', autonomy: { ask: 'asks', edits: 'edits without asking', auto: 'autonomous' }
     },
     notice: {
-      task: 'TASK', taskFrom: (name: string) => `Task from ${name}`, team: 'TEAM', teamJoined: 'Team joined',
+      task: 'TASK', taskFrom: (name: string) => `Task from ${name}`, seeTask: 'See the task',
+      taskOut: {
+        give: n => `Task given to ${n}`, pass: n => `Task passed to ${n}`, done: n => `Task handed back to ${n} (done)`,
+        refuse: n => `Task refused, handed back to ${n}`, cancel: n => `Task cancelled for ${n}`
+      },
+      team: 'TEAM', teamJoined: 'Team joined',
       kicker: 'Automated notice', other: 'Automated notice between sessions', anotherSession: 'another session',
       idle: (n, time) => `${n} finished${time ? ` · ${time}` : ''}`,
       exited: (n, time) => `Session ${n} closed${time ? ` · ${time}` : ''}`,

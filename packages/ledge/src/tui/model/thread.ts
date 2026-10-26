@@ -96,7 +96,8 @@ function itemLines(it: ThreadItem, o: Opts): Line[] {
         [{ text: `${status}${t.session.sent[it.status]}`, color: it.status === 'failed' ? C.red : it.status === 'sending' ? C.faint : C.green }]);
     }
     case 'received': return message([{ text: `${t.session.receivedFrom} `, color: C.dim }, { text: it.from, color: C.fg, bold: true }], it.text, null);
-    case 'notice': return row([{ text: '  · ', color: C.faint }], [{ text: oneLine(it.summary ?? it.text), color: C.faint }], null, width, { max: o.cap(CAP.notice), more: more() });
+    // A task the session handed over (#92): its plain line says to whom; the summary alone is the title.
+    case 'notice': return row([{ text: '  · ', color: C.faint }], [{ text: oneLine(it.outgoing ? it.text : it.summary ?? it.text), color: C.faint }], null, width, { max: o.cap(CAP.notice), more: more() });
   }
 }
 

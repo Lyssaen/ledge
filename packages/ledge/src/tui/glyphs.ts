@@ -10,7 +10,9 @@ const UNICODE = {
   /** An action card's row (#94): proposed is `idle`, applied `ok`, failed or refused `fail`. */
   running: '◐', held: '·', stale: '!',
   /** Links are clickable (OSC 8); without, their address follows them. */
-  links: true as boolean
+  links: true as boolean,
+  /** A task handed between seats in « Échanges » (#92). */
+  task: '▤'
 };
 export type Glyphs = typeof UNICODE;
 const ASCII: Glyphs = {
@@ -20,6 +22,7 @@ const ASCII: Glyphs = {
   team: '[T]', common: '[ ]',
   bullet: '-', subBullet: 'o', quote: '|', rule: '-', codeTop: '+', codeEnd: '+', link: '', caret: '_',
   running: '~', held: '.', stale: '!',
+  task: '[=]',
   links: false
 };
 

@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Session } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
+import { History } from '../src/daemon/history.js';
 import { startServer } from '../src/daemon/server.js';
 import { claudeUsage, codexUsage, readContext } from '../src/daemon/context.js';
 import { handoverArgs } from '../src/cli/handover.js';
@@ -61,9 +62,10 @@ function fakeTmux(): Tmux & { created: NewSession[]; typed: Array<{ pane: string
 
 let srv: Awaited<ReturnType<typeof startServer>> | undefined; let store: Store; let tmux: ReturnType<typeof fakeTmux>; let work: string; let c: Client;
 const role = (id: string, front: string) => { mkdirSync(join(process.env.LEDGE_HOME!, 'roles'), { recursive: true }); writeFileSync(join(process.env.LEDGE_HOME!, 'roles', `${id}.md`), `---\n${front}\n---\nTu es ${id}.\n`); };
+let history: History;
 async function start(briefMs = 60_000) {
-  tmux = fakeTmux();
-  srv = await startServer({ store, tmux, port: 0, verify: { attempts: 2, intervalMs: 10 }, close: { freeMs: 200, exitMs: 200 }, handoverBriefMs: briefMs });
+  tmux = fakeTmux(); history = new History({ dir: mkdtempSync(join(tmpdir(), 'ledge-history-')) });
+  srv = await startServer({ store, tmux, port: 0, history, verify: { attempts: 2, intervalMs: 10 }, close: { freeMs: 200, exitMs: 200 }, handoverBriefMs: briefMs });
   c = await connect({ port: srv.port }); await c.next('snapshot');
 }
 const set = (id: string, patch: Partial<Session>) => store.upsert({ ...store.get(id)!, ...patch });
@@ -124,6 +126,24 @@ describe('the relief of a session (context handover spec §3.3)', () => {
     // The relief reads the brief again.
     c.send({ type: 'handover.show', rid: 'v', by: relief.id });
     expect((await c.next('handover.result')).text).toContain('Piège : LEDGE_HOME.');
+  }, 20_000);
+
+  it('a relief’s passes leave the relieved session one card per task, toward the relief (#92)', async () => {
+    await start();
+    const { team, id } = await seated(170_000);
+    for (const title of ['Un', 'Deux']) {
+      c.send({ type: 'task.cmd', rid: title, by: 'ledge', op: 'give', team: team.id, to: '@build', title });
+      await c.next('task.result');
+    }
+    c.send({ type: 'session.handover', rid: 'h1', id });
+    expect(await c.next('session.handover.result')).toMatchObject({ ok: true });
+    c.send({ type: 'handover.brief', rid: 'b', by: id, text: 'Fait : tout.' });
+    await c.next('handover.result');
+    await until(() => store.get(id)?.handover?.state === 'done', 5000);
+    const relief = store.get(store.get(id)!.handover!.to!)!;
+    await until(() => history.items(id).filter(i => i.kind === 'notice' && i.outgoing).length === 2, 5000);
+    expect(history.items(id).filter(i => i.kind === 'notice' && i.outgoing)).toEqual(['Un', 'Deux'].map(title =>
+      expect.objectContaining({ taskOp: 'pass', name: relief.name, peer: relief.id, summary: expect.stringMatching(new RegExp(`^${title}\\n`)) })));
   }, 20_000);
 
   it('a session that writes no brief in time gets one from Ledge: its last reply and its tasks', async () => {

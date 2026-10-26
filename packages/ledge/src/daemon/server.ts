@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { actionById, contextNear, LEDGE_GIVER, projectOf, type ChatAction, type Autonomy, type Role, type Seat, type Team } from '@ledge/protocol';
+import { actionById, contextNear, givenByLedge, LEDGE_GIVER, transmissions, projectOf, type ChatAction, type Autonomy, type Role, type Seat, type Team } from '@ledge/protocol';
 import { DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type ChatErrorCode, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, backendOf } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
@@ -280,10 +280,14 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** The live teams (spec 2026-10-25 roles §3.3): every change reaches the local fronts. */
   const teams = createTeamsLive({ store, now, ...(opts.teams ? { journal: opts.teams } : {}) });
   const unsubscribeTeams = teams.onChange(team => broadcast({ type: 'team.updated', team }));
-  const tasks = createTasks({ store, mailbox, now, teams, ...(opts.tasks ? { journal: opts.tasks } : {}), onLedgeTask: task => {
+  const tasks = createTasks({ store, mailbox, now, teams, ...(opts.tasks ? { journal: opts.tasks } : {}), onTask: (task, entry) => {
     broadcast({ type: 'task.updated', task });
-    // The card that gave it follows it, on whichever thread holds it.
-    for (const [thread, c] of cardThreads.all()) c.followTask?.(task, cardThreads.emitterOf(thread) ?? broadcast);
+    // The card that gave it follows it, on whichever thread holds it: only Ledge gives from a card.
+    if (givenByLedge(task)) for (const [thread, c] of cardThreads.all()) c.followTask?.(task, cardThreads.emitterOf(thread) ?? broadcast);
+    // A session that handed it over sees it in its thread, as a message it sent (issue #92); Ledge has no thread.
+    const index = entry ? task.log.lastIndexOf(entry) : -1;
+    const tr = transmissions(task).find(x => x.index === index);
+    if (tr && tr.from !== LEDGE_GIVER) history?.recordTask(tr.from, { task, tr, ...(tr.to !== LEDGE_GIVER ? { peer: tr.to } : {}) });
   } });
   // The relief of a session whose context is nearly full (context handover spec §3.3). `launch` and `closeSession` are hoisted.
   const handovers = createHandovers({ store, mailbox, tasks, teams, launch: req => launch(req), close: s => closeSession(s),

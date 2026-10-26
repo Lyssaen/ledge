@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
-import type { ChatTurn, ThreadItem } from '@ledge/protocol';
+import type { ChatTurn, Task, ThreadItem } from '@ledge/protocol';
 import { fr } from '../src/tui/i18n/fr.js';
 import { en } from '../src/tui/i18n/en.js';
 import { MESSAGES } from '../src/tui/i18n/lang.js';
@@ -68,6 +68,21 @@ describe('tui overview model', () => {
       fakeSession('n', { name: 'Nova', lastMessage: { id: 'm2', to: 'otto', summary: 'Relance', at: '2026-10-09T18:01:00.000Z' } })
     ], 5);
     expect(list.map(x => `${x.from}→${x.to}:${x.summary}`)).toEqual(['Otto→Nova:Rebase', 'Nova→otto:Relance']);
+  });
+
+  it('mixes the task hand-overs between any two seats with the messages, newest first; an old journal shows none (#92)', () => {
+    const T = (m: number) => `2026-10-09T18:0${m}:00.000Z`;
+    const relire: Task = { id: 't1', title: 'Relire', giver: 'o', giverName: 'Otto', owner: 'b', ownerName: 'Bix', state: 'open', at: T(0), updatedAt: T(3), log: [
+      { at: T(0), by: 'Otto', what: 'confiée à Nova', op: 'give', from: 'o', to: 'n', fromName: 'Otto', toName: 'Nova' },
+      { at: T(1), by: 'Nova', what: 'prise', op: 'take' },
+      { at: T(3), by: 'Nova', what: 'passée à Bix', op: 'pass', from: 'local:n', to: 'b', fromName: 'Nova', toName: 'Bix', note: 'la fin' }
+    ] };
+    const old: Task = { ...relire, id: 't2', title: 'Ancienne', log: [{ at: T(4), by: 'Otto', what: 'confiée à Nova' }] };
+    const list = exchanges([
+      fakeSession('o', { name: 'Otto', lastMessage: { id: 'm1', to: 'nova', peer: 'n', summary: 'Rebase', at: T(2) } }),
+      fakeSession('n', { name: 'Nova' })
+    ], 5, [relire, old]);
+    expect(list.map(x => `${x.kind}:${x.from}→${x.to}:${x.summary}`)).toEqual(['task:Nova→Bix:Relire', 'message:Otto→Nova:Rebase', 'task:Otto→Nova:Relire']);
   });
 
   it('says how long ago, short', () => {
@@ -193,6 +208,14 @@ describe('tui thread', () => {
     expect([took(8_400, ','), took(12_300, ','), took(64_000, ','), took(8_400, '.'), took(7_380_000, ',')]).toEqual(['8,4 s', '12 s', '1 min 04', '8.4 s', '2 h 03']);
   });
 
+  it('prints the card of a task the session handed over, by its plain line (#92)', () => {
+    const card: ThreadItem = { kind: 'notice', id: 'task-t1-0', at: at(6), turn: 2, notice: 'other', task: 't1', taskOp: 'give', outgoing: true, name: 'Nova', summary: 'Relire', text: 'Tâche « Relire » confiée à Nova' };
+    const incoming: ThreadItem = { kind: 'notice', id: 'n2', at: at(7), turn: 2, notice: 'other', task: 't2', name: 'Otto', summary: 'Tâche de Otto', text: '<ledge-task …>' };
+    const lines = text(threadLines([...items, card, incoming], o));
+    expect(lines).toContain('  · Tâche « Relire » confiée à Nova');
+    expect(lines).toContain('  · Tâche de Otto');
+  });
+
   it('unfolds every turn and shows the diffs on demand', () => {
     const lines = text(threadLines(items, { ...o, unfolded: true, diffs: true }));
     expect(lines.find(l => l.includes('SessionList.tsx'))).toContain('+2 −1');
@@ -315,8 +338,9 @@ describe('tui overview with teams (roles spec §3.9)', () => {
     expect(v.order).toEqual(['otto', 'bix', 'nova', 'luna']);
   });
   it('Ledge is a sender in the exchanges; the closed tasks Ledge gave are items of « À toi » until seen', () => {
-    const tasks = [task('t000001', { state: 'done', at: '2026-10-09T17:00:00.000Z' }), task('t000002', { state: 'done', seen: true }), task('t000003', { giver: 'otto', giverName: 'Otto', state: 'done' })];
-    expect(exchanges([], 3, tasks)[0]).toEqual({ at: '2026-10-09T17:00:00.000Z', from: 'Ledge', to: 'Nova', summary: 'Tâche t000001' });
+    const given = { at: '2026-10-09T17:00:00.000Z', by: 'Ledge', what: 'confiée à Nova', op: 'give' as const, from: 'ledge', to: 'nova', fromName: 'Ledge', toName: 'Nova' };
+    const tasks = [task('t000001', { state: 'done', at: '2026-10-09T17:00:00.000Z', log: [given] }), task('t000002', { state: 'done', seen: true }), task('t000003', { giver: 'otto', giverName: 'Otto', state: 'done' })];
+    expect(exchanges([], 3, tasks, 'Ledge (moi)')[0]).toEqual({ at: '2026-10-09T17:00:00.000Z', from: 'Ledge (moi)', to: 'Nova', summary: 'Tâche t000001', kind: 'task' });
     expect(closedLedgeTasks(tasks).map(x => x.id)).toEqual(['t000001']);
   });
   it('the team and task cards: open until acted on, then their outcome stays in the conversation', () => {

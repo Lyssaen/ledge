@@ -1,13 +1,14 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type JSX, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type JSX, type ReactNode, type RefObject } from 'react';
 import { qualify, splitId } from '@ledge/fleet';
-import { LEDGE_GIVER, type Session, type Task } from '@ledge/protocol';
+import { LEDGE_GIVER, transmissions, type Session, type Task, type TaskTransmission } from '@ledge/protocol';
 import { Icon } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import type { NavAction } from '../nav/state';
 import { SHELL_ICONS } from '../shell/icons';
 
 /** Messages between agents in the atelier (exchange.tsx, AtelierExchanges): the sender's bubble for 5 s and a dotted line to the
- *  receiver's seat with an envelope travelling along it (#27: no tag on the seats afterwards, the session's thread says it better). */
+ *  receiver's seat with an envelope travelling along it (#27: no tag on the seats afterwards, the session's thread says it better).
+ *  A task handed between agents (#92) travels the same way, as a ticket on a line in the task colour. */
 export const BUBBLE_MS = 5000;
 const TRAVEL_MS = 1300;
 const RING_MS = 1600;
@@ -79,15 +80,21 @@ const seatOf = (shell: Element | null | undefined, id: string | undefined): HTML
 
 type Point = { x: number; y: number };
 type Geo = { a: Point; b: Point | null; path: string };
+/** A wire's end: a seat by its agent's id, or Ledge's corner (`ledge` in a task's log). */
+type End = string | 'desk';
+const endOf = (id: string): End => (id === LEDGE_GIVER ? 'desk' : id);
+const placeOf = (shell: Element | null | undefined, end: End | undefined): HTMLElement | null =>
+  end === 'desk' ? shell?.querySelector<HTMLElement>('.ledge-desk') ?? null : seatOf(shell, end);
 
-function Bubble({ sender, message, peerId, receiver, still, layer, dispatch }: {
-  sender: Session; message: Sent; peerId: string | undefined; receiver: string; still: boolean;
-  layer: RefObject<HTMLDivElement | null>; dispatch: (a: NavAction) => void;
+/** One exchange in the atelier: a bubble over `from`, a dotted line to `to` with an envelope (a message) or a ticket (a task)
+ *  travelling along it, `to` ringing when it lands. Without `from` on screen, nothing; without `to`, the bubble alone. */
+function Wire({ from, to, kind, label, head, text, onOpen, still, layer }: {
+  from: End; to: End | undefined; kind: 'message' | 'task'; label: string; head: ReactNode; text: string; onOpen(): void; still: boolean;
+  layer: RefObject<HTMLDivElement | null>;
 }): JSX.Element | null {
-  const { t } = useI18n();
   const [geo, setGeo] = useState<Geo | null>(null);
 
-  // Follows the two seats while the bubble shows (zoom, pan and the tables' layout move them); the shell's CSS zoom is divided out.
+  // Follows the two ends while the bubble shows (zoom, pan and the tables' layout move them); the shell's CSS zoom is divided out.
   useLayoutEffect(() => {
     let raf = 0;
     const measure = () => {
@@ -96,7 +103,7 @@ function Bubble({ sender, message, peerId, receiver, still, layer, dispatch }: {
       const box = shell.getBoundingClientRect();
       const z = box.width / (shell.offsetWidth || 1) || 1;
       const pt = (el: HTMLElement): Point => { const r = el.getBoundingClientRect(); return { x: (r.left + r.width / 2 - box.left) / z, y: (r.top + 6 - box.top) / z }; };
-      const sa = seatOf(shell, sender.id), sb = seatOf(shell, peerId);
+      const sa = placeOf(shell, from), sb = placeOf(shell, to);
       if (!sa) setGeo(null);
       else {
         const a = pt(sa), b = sb ? pt(sb) : null;
@@ -107,130 +114,110 @@ function Bubble({ sender, message, peerId, receiver, still, layer, dispatch }: {
     };
     measure();
     return () => cancelAnimationFrame(raf);
-  }, [layer, sender.id, peerId]);
+  }, [layer, from, to]);
 
-  // The two seats light up while the bubble is hovered or focused.
+  // The two ends light up while the bubble is hovered or focused.
   const light = (on: boolean) => {
     const shell = layer.current?.parentElement;
-    for (const id of [sender.id, peerId]) seatOf(shell, id)?.classList.toggle('exchange-lit', on);
+    for (const end of [from, to]) placeOf(shell, end)?.classList.toggle('exchange-lit', on);
   };
-  // The receiver's seat rings when the envelope lands (not with the animations frozen or reduced).
+  // The receiving end rings when the envelope or the ticket lands (not with the animations frozen or reduced).
   useEffect(() => {
     if (still) return;
     const shell = layer.current?.parentElement;
     let ring: ReturnType<typeof setTimeout> | undefined;
-    let seat: HTMLElement | null = null;
+    let place: HTMLElement | null = null;
     const land = setTimeout(() => {
-      seat = seatOf(shell, peerId);
-      seat?.classList.add('exchange-arrived');
-      ring = setTimeout(() => seat?.classList.remove('exchange-arrived'), RING_MS);
+      place = placeOf(shell, to);
+      place?.classList.add('exchange-arrived');
+      ring = setTimeout(() => place?.classList.remove('exchange-arrived'), RING_MS);
     }, TRAVEL_MS);
     return () => {
-      clearTimeout(land); clearTimeout(ring); seat?.classList.remove('exchange-arrived');
-      for (const id of [sender.id, peerId]) seatOf(shell, id)?.classList.remove('exchange-lit');
+      clearTimeout(land); clearTimeout(ring); place?.classList.remove('exchange-arrived');
+      for (const end of [from, to]) placeOf(shell, end)?.classList.remove('exchange-lit');
     };
-  }, [still, layer, sender.id, peerId]);
+  }, [still, layer, from, to]);
 
   if (!geo) return null;
+  const task = kind === 'task';
+  const fly = { offsetPath: `path('${geo.path}')` } as CSSProperties;
   return <>
     {geo.b && (
-      <svg className="exchange-wire" aria-hidden="true">
+      <svg className={`exchange-wire${task ? ' task-wire' : ''}`} aria-hidden="true">
         <path d={geo.path} />
       </svg>
     )}
-    {geo.b && !still && (
-      <span className="exchange-envelope" aria-hidden="true" style={{ offsetPath: `path('${geo.path}')` } as CSSProperties}>
-        <svg viewBox="0 0 26 19"><rect className="exchange-envelope-body" x="1" y="1" width="24" height="17" rx="2.5" /><path className="exchange-envelope-flap" d="M1.8 2.4 13 10.6 24.2 2.4" /></svg>
-      </span>
+    {geo.b && !still && (task
+      ? <span className="exchange-ticket" aria-hidden="true" style={fly}>
+          <svg viewBox="0 0 24 20"><path className="exchange-ticket-body" d="M1.5 1.5h15l6 6v11h-21z" /><path className="exchange-ticket-fold" d="M16.5 1.5v6h6" /><path className="exchange-ticket-lines" d="M5 10h8M5 14h12" /></svg>
+        </span>
+      : <span className="exchange-envelope" aria-hidden="true" style={fly}>
+          <svg viewBox="0 0 26 19"><rect className="exchange-envelope-body" x="1" y="1" width="24" height="17" rx="2.5" /><path className="exchange-envelope-flap" d="M1.8 2.4 13 10.6 24.2 2.4" /></svg>
+        </span>
     )}
-    <button type="button" className="exchange-bubble" style={{ left: geo.a.x, top: geo.a.y - 12 }}
+    <button type="button" className={`exchange-bubble${task ? ' task-bubble' : ''}`} style={{ left: geo.a.x, top: geo.a.y - 12 }}
       onMouseEnter={() => light(true)} onMouseLeave={() => light(false)} onFocus={() => light(true)} onBlur={() => light(false)}
-      onClick={() => dispatch({ type: 'open', id: sender.id, item: message.id })}
-      aria-label={t.atelier.messageLabel(sender.name, receiver, message.summary)}>
-      <span className="exchange-bubble-to"><Icon d={SHELL_ICONS.mail} size={11} />{t.atelier.messageTo(receiver)}</span>
-      <span className="exchange-bubble-text">{message.summary}</span>
+      onClick={onOpen} aria-label={label}>
+      <span className="exchange-bubble-to">{head}</span>
+      <span className="exchange-bubble-text">{text}</span>
     </button>
   </>;
 }
 
-/** A task Ledge just gave (atelier rooms spec §3.3): the dotted line from Ledge's corner to its owner's seat, with its title,
- *  as for a message between sessions. */
-function LedgeWire({ task, still, layer, dispatch }: { task: Task; still: boolean; layer: RefObject<HTMLDivElement | null>; dispatch: (a: NavAction) => void }): JSX.Element | null {
-  const { t } = useI18n();
-  const [geo, setGeo] = useState<Geo | null>(null);
-  useLayoutEffect(() => {
-    let raf = 0;
-    const measure = () => {
-      const shell = layer.current?.parentElement;
-      if (!shell) return;
-      const box = shell.getBoundingClientRect();
-      const z = box.width / (shell.offsetWidth || 1) || 1;
-      const pt = (el: HTMLElement): Point => { const r = el.getBoundingClientRect(); return { x: (r.left + r.width / 2 - box.left) / z, y: (r.top + 6 - box.top) / z }; };
-      const desk = shell.querySelector<HTMLElement>('.ledge-desk'), seat = seatOf(shell, task.owner);
-      if (!desk || !seat) setGeo(null);
-      else {
-        const a = pt(desk), b = pt(seat);
-        const path = `M ${a.x} ${a.y} Q ${(a.x + b.x) / 2} ${Math.min(a.y, b.y) - 70 - Math.abs(a.x - b.x) * 0.12} ${b.x} ${b.y}`;
-        setGeo(g => (g && g.path === path ? g : { a, b, path }));
-      }
-      raf = requestAnimationFrame(measure);
-    };
-    measure();
-    return () => cancelAnimationFrame(raf);
-  }, [layer, task.owner]);
-  if (!geo) return null;
-  return <>
-    <svg className="exchange-wire ledge-wire" aria-hidden="true"><path d={geo.path} /></svg>
-    {!still && (
-      <span className="exchange-envelope" aria-hidden="true" style={{ offsetPath: `path('${geo.path}')` } as CSSProperties}>
-        <svg viewBox="0 0 26 19"><rect className="exchange-envelope-body" x="1" y="1" width="24" height="17" rx="2.5" /><path className="exchange-envelope-flap" d="M1.8 2.4 13 10.6 24.2 2.4" /></svg>
-      </span>
-    )}
-    <button type="button" className="exchange-bubble ledge-bubble" style={{ left: geo.a.x, top: geo.a.y - 12 }}
-      onClick={() => dispatch({ type: 'ledge', tab: 'tasks', task: task.id })} aria-label={t.atelier.ledgeTaskLabel(task.ownerName, task.title)}>
-      <span className="exchange-bubble-to"><Icon d={SHELL_ICONS.mail} size={11} />{t.atelier.messageTo(task.ownerName)}</span>
-      <span className="exchange-bubble-text">{task.title}</span>
-    </button>
-  </>;
-}
-
-/** The tasks Ledge gave in the last 5 s (their first sight counts when their date is ahead of the clock), and a render at the moment the last one ends. */
-function useRecentLedgeTasks(tasks: readonly Task[]): Task[] {
+type Recent = { task: Task; tr: TaskTransmission };
+/** Every transmission of a task in the last 5 s (its first sight counts when its date is ahead of the clock), and a render at
+ *  the moment the next one ends. A give then a pass within 5 s are two. */
+function useRecentTransmissions(tasks: readonly Task[]): Recent[] {
   const seen = useRef(new Map<string, number>());
   const [, setTick] = useState(0);
   const now = Date.now();
-  const recent = tasks.filter(x => {
-    if (x.giver !== LEDGE_GIVER || x.log.length > 1) return false;
-    if (!seen.current.has(x.id)) seen.current.set(x.id, now);
-    const at = Math.min(Date.parse(x.at), seen.current.get(x.id)!);
-    return now - at < BUBBLE_MS;
-  });
-  const ids = recent.map(x => x.id).join(',');
-  useEffect(() => { if (!ids) return; const t = setTimeout(() => setTick(k => k + 1), BUBBLE_MS); return () => clearTimeout(t); }, [ids]);
+  let next = Infinity;
+  const recent: Recent[] = [];
+  for (const task of tasks) for (const tr of transmissions(task)) {
+    const k = `${task.id}#${tr.index}`;
+    if (!seen.current.has(k)) seen.current.set(k, now);
+    const end = Math.min(Date.parse(tr.at), seen.current.get(k)!) + BUBBLE_MS;
+    if (end <= now) continue;
+    recent.push({ task, tr });
+    next = Math.min(next, end);
+  }
+  const due = next === Infinity ? 0 : next;
+  useEffect(() => { if (!due) return; const t = setTimeout(() => setTick(k => k + 1), Math.max(0, due - Date.now())); return () => clearTimeout(t); }, [due]);
   return recent;
 }
 
 export interface MessageLayerProps {
   sessions: readonly Session[]; clock: MessageClock; paused: boolean; reduced: boolean; dispatch: (a: NavAction) => void;
-  /** The tasks Ledge gave: one just given draws its line from Ledge's corner to its owner's seat. */
+  /** The tasks the daemon knows: each hand-over under 5 s old draws its line, a ticket travelling along it. */
   tasks?: readonly Task[];
 }
 
-/** A layer over the atelier, the shell's first child: one bubble per session whose last message is less than 5 s old. */
+/** A layer over the atelier, the shell's first child: one bubble per session whose last message is less than 5 s old, and one per
+ *  task hand-over as recent (#92). */
 export function MessageLayer({ sessions, clock, paused, reduced, dispatch, tasks = [] }: MessageLayerProps): JSX.Element {
+  const { t } = useI18n();
   const layer = useRef<HTMLDivElement>(null);
-  const given = useRecentLedgeTasks(tasks);
+  const handed = useRecentTransmissions(tasks);
   const byId = useMemo(() => new Map(sessions.map(s => [s.id, s])), [sessions]);
+  const nameOf = (id: string, then: string) => byId.get(id)?.name ?? then;
   const shown = sessions.filter(s => isRecent(s, clock, BUBBLE_MS));
+  const still = paused || reduced;
   return (
     <div ref={layer} className="exchange-layer" aria-live="polite">
       {shown.map(s => {
         const m = s.lastMessage!;
         const peerId = peerIdOf(s);
         const receiver = (peerId !== undefined ? byId.get(peerId)?.name : undefined) ?? m.to;
-        return <Bubble key={`${s.id}\n${m.id}`} sender={s} message={m} peerId={peerId} receiver={receiver} still={paused || reduced} layer={layer} dispatch={dispatch} />;
+        return <Wire key={`${s.id}\n${m.id}`} from={s.id} to={peerId} kind="message" still={still} layer={layer}
+          label={t.atelier.messageLabel(s.name, receiver, m.summary)} head={<><Icon d={SHELL_ICONS.mail} size={11} />{t.atelier.messageTo(receiver)}</>}
+          text={m.summary} onOpen={() => dispatch({ type: 'open', id: s.id, item: m.id })} />;
       })}
-      {given.map(x => <LedgeWire key={x.id} task={x} still={paused || reduced} layer={layer} dispatch={dispatch} />)}
+      {handed.map(({ task, tr }) => {
+        const from = nameOf(tr.from, tr.fromName), to = nameOf(tr.to, tr.toName);
+        return <Wire key={`${task.id}#${tr.index}`} from={endOf(tr.from)} to={endOf(tr.to)} kind="task" still={still} layer={layer}
+          label={t.atelier.taskLabel(tr.op, from, to, task.title)} head={<><Icon d={SHELL_ICONS.plan} size={11} />{t.atelier.taskTo[tr.op](to)}</>}
+          text={tr.op === 'pass' && tr.note ? tr.note : task.title} onOpen={() => dispatch({ type: 'ledge', tab: 'tasks', task: task.id })} />;
+      })}
     </div>
   );
 }
