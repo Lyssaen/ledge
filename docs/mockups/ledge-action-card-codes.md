@@ -53,4 +53,4 @@ garde le texte du daemon : il va dans le journal, jamais à l'écran.
 ## Hors de la liste
 
 - `ignored` (réponse de `chat.act` sur une carte ignorée) et `confirm_required` (action irréversible sans confirmation) ne s'affichent jamais. La carte ignorée est repliée, et le front confirme avant d'envoyer. Si l'un d'eux arrive quand même, on rouvre la carte pour `ignored`, et on ouvre la confirmation pour `confirm_required`, sans texte d'erreur.
-- Une demande coupée (`detailCut`) n'est pas un refus : c'est l'état « Demande coupée » de la maquette.
+- Une demande coupée (`detailCut`) n'est pas un refus : c'est l'état « Demande coupée » de la maquette. Le code `cut` (`session.decide` accept sur une ligne coupée, refusé par le daemon sur tous les appareils) ne s'affiche donc jamais en « Refusée » : la carte ne propose pas d'accepter une demande coupée. S'il arrive quand même (front ancien, course), la ligne passe à l'état « Demande coupée », avec « Ouvrir Nova » sur le PC et « À accepter sur le PC » au téléphone, sans texte d'erreur.
