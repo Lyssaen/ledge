@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { existsSync, mkdtempSync, readdirSync, statSync } from 'node:fs';
-import { utimes } from 'node:fs/promises';
+import { utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -74,5 +74,22 @@ describe('AttachmentStore', () => {
     expect(await old.sweep(new Set())).toEqual([ref.id]);
     expect(readdirSync(dir)).toEqual([]);
     expect(old.ref(ref.id)).toBeNull();
+  });
+
+  it('survives concurrent puts of the same bytes', async () => {
+    const img = png(10, 10, 5); const pv = png(5, 5);
+    const refs = await Promise.all([store.put(img, pv, 1000), store.put(img, pv, 1000), store.put(img, pv, 1000)]);
+    expect(refs[1]).toEqual(refs[0]); expect(refs[2]).toEqual(refs[0]);
+    expect(readdirSync(dir).filter(f => f.endsWith('.tmp'))).toEqual([]);
+  });
+
+  it('sweeps stray files no index entry owns, once old', async () => {
+    const ref = await store.put(png(10, 10), undefined, 1000);
+    const orphan = `${'b'.repeat(64)}.png`; const tmp = `${'c'.repeat(64)}.png.x.tmp`; const keep = `${'d'.repeat(64)}.png`;
+    for (const f of [orphan, tmp, keep]) await writeFile(join(dir, f), 'x');
+    const old = new Date(Date.now() - 30 * H);
+    for (const f of [orphan, tmp]) await utimes(join(dir, f), old, old);
+    expect(await store.sweep(new Set([ref.id, 'd'.repeat(64)]))).toEqual([]);
+    expect(readdirSync(dir).sort()).toEqual([keep, `${ref.id}.json`, `${ref.id}.png`].sort());
   });
 });

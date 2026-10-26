@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readdir, readFile, rename, stat, unlink, utimes, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { ATTACHMENT_ID, AttachmentRefSchema, PREVIEW_MAX, type AttachmentRef, type ImageMime } from '@ledge/protocol';
@@ -90,16 +90,37 @@ export class AttachmentStore {
       this.index.delete(id);
       swept.push(id);
     }
+    await this.sweepStray(referenced);
     return swept;
+  }
+
+  /** Removes files no index entry owns (a crash between the image and its meta, a failed write's temp file) once they are over 24 h old. */
+  private async sweepStray(referenced: ReadonlySet<string>): Promise<void> {
+    let names: string[];
+    try { names = await readdir(this.dir); } catch { return; }
+    for (const name of names) {
+      const id = name.slice(0, 64);
+      const owned = ATTACHMENT_ID.test(id) && name[64] === '.';
+      if (!owned && !name.endsWith('.tmp')) continue;
+      if (owned && (this.index.has(id) || referenced.has(id))) continue;
+      try {
+        if (this.now() - (await stat(join(this.dir, name))).mtimeMs > MAX_AGE_MS) await unlink(join(this.dir, name));
+      } catch { /* gone already */ }
+    }
   }
 
   /** Atomic write (temp + rename); rewriting identical content refreshes the mtime, which the sweep reads. */
   private async write(name: string, data: Buffer): Promise<void> {
     const file = join(this.dir, name);
-    const tmp = `${file}.${process.pid}.tmp`;
-    await writeFile(tmp, data);
-    await rename(tmp, file);
-    const t = new Date(this.now());
-    await utimes(file, t, t);
+    const tmp = `${file}.${randomUUID()}.tmp`;
+    try {
+      await writeFile(tmp, data);
+      const t = new Date(this.now());
+      await utimes(tmp, t, t);
+      await rename(tmp, file);
+    } catch (e) {
+      await unlink(tmp).catch(() => {});
+      throw e;
+    }
   }
 }
