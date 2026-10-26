@@ -125,6 +125,7 @@ export const fr = {
     ignored: (n: number) => `⚠ ${n} ${plural(n, 'fichier ignoré', 'fichiers ignorés')}`, see: 'voir', problems: 'Fichiers ignorés', noProblem: 'Aucun fichier ignoré.',
     loading: 'lecture des rôles…', noAnswer: 'Le daemon n’a pas répondu.',
     offline: (m: string) => `${m} est hors ligne.`, outdated: (m: string) => `Le daemon de ${m} est trop ancien pour le catalogue.`, onMachine: (m: string) => `sur ${m}`,
+    roleChecking: (id: string) => `@${id} : lecture du rôle dans ce dossier…`, roleShadowed: (id: string, cwd: string) => `@${id} de ~/.ledge est remplacé dans ${cwd} : lancé sans rôle`,
     roleElsewhere: (id: string, cwd: string) => `@${id} n’est lu que dans ${cwd} : lancé sans rôle`, noRole: 'Aucun rôle ici : écris .ledge/roles/<id>.md', noTemplateHere: 'Aucun modèle ici : écris .ledge/teams/<id>.yaml',
     role: 'Rôle'
   },
