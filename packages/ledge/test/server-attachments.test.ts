@@ -77,12 +77,12 @@ describe('attachments', () => {
     await c.close();
   });
 
-  it('refuses a question with neither text nor images, and an image that is not one', async () => {
+  it('answers a question with neither text nor images, and an image that is not one, with a chat.error for its qid', async () => {
     const c = await connect({ port: srv.port }); await c.next('snapshot'); await c.next('chat.history');
     c.send({ type: 'chat.ask', qid: 'q1', text: '' });
-    expect(await c.next('error')).toMatchObject({ request: 'chat.ask', code: 'invalid' });
+    expect(await c.next('chat.error')).toMatchObject({ qid: 'q1', message: 'empty question' });
     c.send({ type: 'chat.ask', qid: 'q2', text: 'x', images: [upload(Buffer.from('not an image at all'))] });
-    expect(await c.next('error')).toMatchObject({ request: 'chat.ask', code: 'invalid', message: 'image refused: not_image' });
+    expect(await c.next('chat.error')).toMatchObject({ qid: 'q2', message: 'image refused: not_image' });
     c.send({ type: 'snapshot.request' });
     expect((await c.next('chat.history')).turns).toEqual([]);
     await c.close();

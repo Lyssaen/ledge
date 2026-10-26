@@ -1257,10 +1257,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return opts.updater.update(msg.version, broadcast, reply);
       case 'chat.ask': {
         const uploads = msg.images ?? [];
-        if (msg.text.trim() === '' && uploads.length === 0) return refuse(new Refusal('empty question', 'invalid'));
+        // A refusal ends the asker's turn (a chat.error for its qid), as chat.route does: a generic error would leave it waiting.
+        if (msg.text.trim() === '' && uploads.length === 0) return reply({ type: 'chat.error', qid: msg.qid, message: 'empty question' });
         const refs: AttachmentRef[] = [];
         try { for (const u of uploads) refs.push(await storeUpload(u)); }
-        catch (e) { if (e instanceof AttachmentError) return refuse(new Refusal(`image refused: ${e.reason}`, 'invalid')); throw e; }
+        catch (e) { if (e instanceof AttachmentError) return reply({ type: 'chat.error', qid: msg.qid, message: `image refused: ${e.reason}` }); throw e; }
         return chat.ask(msg.qid, msg.text, broadcast, msg.tool, refs);
       }
       case 'attachment.put':

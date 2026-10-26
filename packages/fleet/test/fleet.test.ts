@@ -791,4 +791,14 @@ describe('attachments', () => {
     local.emit({ type: 'chat.routed', qid: 'q', result: { machineId: 'server', text: 'Lance' } });
     expect(server.sent).toEqual([{ type: 'chat.ask', qid: 'q', text: 'Lance', tool: undefined, images: [image] }]);
   });
+  it('ends the turn when the routed machine refuses its images, and takes the next question', () => {
+    const { client, local, server, got } = setup();
+    client.send({ type: 'chat.ask', qid: 'q', text: 'Lance sur le serveur', images: [image] });
+    local.emit({ type: 'chat.routed', qid: 'q', result: { machineId: 'server', text: 'Lance' } });
+    server.emit({ type: 'chat.error', qid: 'q', message: 'image refused: too_large' });
+    expect(lastHistory(got)[0]).toMatchObject({ qid: 'q', error: 'image refused: too_large' });
+    client.send({ type: 'chat.ask', qid: 'q2', text: 'Autre' });
+    expect(got.some(m => m.type === 'chat.error' && m.message === 'one question at a time')).toBe(false);
+    expect(local.sent.at(-1)).toMatchObject({ type: 'chat.route', qid: 'q2' });
+  });
 });
