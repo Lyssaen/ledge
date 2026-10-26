@@ -79,14 +79,16 @@ export function parseRole(id: string, text: string, source: 'repo' | 'home', pat
   return r.data;
 }
 
-/** The roles a session in `cwd` can take (spec 2026-10-25 roles §3.1): the repository's, then the home's of another id.
- *  A file that does not parse is skipped, logged, and told in `problems`. */
+/** The roles a session in `cwd` can take (spec 2026-10-25 roles §3.1): the repository's, then the home's of another id; a
+ *  repository role names in `shadows` the home file of its id it hides. A file that does not parse is skipped, logged, and
+ *  told in `problems`. */
 export function listRoles(cwd?: string): { roles: Role[]; problems: DefinitionProblem[] } {
   const roles = new Map<string, Role>(); const problems: DefinitionProblem[] = [];
   for (const { dir, source } of definitionDirs('roles', cwd)) {
     for (const path of definitionFiles(dir, ['.md'])) {
       const id = path.slice(dir.length + 1, -'.md'.length);
-      if (roles.has(id)) continue;
+      const won = roles.get(id);
+      if (won) { if (source === 'home') roles.set(id, { ...won, shadows: path }); continue; }
       let r: Role | string;
       try { r = parseRole(id, readSmall(path), source, path); } catch (e) { r = (e as Error).message; }
       if (typeof r === 'string') { log(`role ${path} skipped: ${r}`); problems.push({ path, reason: r }); continue; }

@@ -43,6 +43,18 @@ describe('roles', () => {
     expect(repoRoot(join(repo, 'packages', 'a'))).toBe(repo);
   });
 
+  it("a repository role names the home role of the same id it shadows; a role alone shadows nothing", () => {
+    write(join(home, 'roles', 'review.md'), 'home');
+    write(join(home, 'roles', 'lead.md'), 'lead');
+    write(join(repo, '.ledge', 'roles', 'review.md'), 'repo');
+    write(join(repo, '.ledge', 'roles', 'build.md'), 'build');
+    const roles = new Map(listRoles(repo).roles.map(r => [r.id, r]));
+    expect(roles.get('review')).toMatchObject({ source: 'repo', shadows: join(home, 'roles', 'review.md') });
+    expect(roles.get('lead')).not.toHaveProperty('shadows');
+    expect(roles.get('build')).not.toHaveProperty('shadows');
+    expect(listRoles().roles.find(r => r.id === 'review')).not.toHaveProperty('shadows');
+  });
+
   it('maps autonomy to each agent’s own switch, nothing for ask', () => {
     expect(autonomyArgs('claude', 'ask')).toEqual([]);
     expect(autonomyArgs('claude', undefined)).toEqual([]);
