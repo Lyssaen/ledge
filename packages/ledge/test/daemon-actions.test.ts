@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { actionById, ChatActionSchema, NOTE_MAX, pendingKey, TASK_TEXT_MAX, TASK_TITLE_MAX, type ActionId, type ChatAction, type Pending, type Role, type Session, type Task, type Team } from '@ledge/protocol';
-import { actionMessage, GENERIC_ACTIONS, resolveAction, type ResolveCtx } from '../src/daemon/actions.js';
+import { ACTION_ERROR_CODES, actionById, ChatActionSchema, NOTE_MAX, pendingKey, TASK_TEXT_MAX, TASK_TITLE_MAX, type ActionId, type ChatAction, type Pending, type Role, type Session, type Task, type Team } from '@ledge/protocol';
+import { denied } from '../src/chat/act.js';
+import { actionMessage, cardRefusal, GENERIC_ACTIONS, resolveAction, type ResolveCtx } from '../src/daemon/actions.js';
 
 const T0 = '2026-10-26T08:00:00.000Z';
 const mk = (id: string, name: string, extra: Partial<Session> = {}): Session => ({ id, name, tool: 'claude', cwd: '/w/api', project: 'api', title: `${name} · api`,
@@ -103,6 +104,24 @@ describe('resolveAction', () => {
     for (const r of [ok('task.cancel', { task: 't91b0d4', reason: 'r'.repeat(500) }, long), ok('task.pass', { task: 't91b0d4', to: 'far', note: 'n'.repeat(TASK_TEXT_MAX) }, long)]) {
       expect(r.summary.length).toBeLessThanOrEqual(300);
       expect(() => ChatActionSchema.parse(r)).not.toThrow();
+    }
+  });
+  it('a cut request is never accepted from a card, on any device: refused before anything is sent; denied, it goes', () => {
+    const big = ctx({ sessions: [mk('p', 'P', { pending: { kind: 'plan', text: 'Le plan', body: 'x'.repeat(5000), source: 'hook' } })] });
+    expect(cardRefusal(ok('session.decide', { session: 'P', decision: 'accept' }, big))).toEqual({ refused: 'P\'s request is cut on the card: accept it in the session', code: 'cut' });
+    expect(cardRefusal(ok('session.decide', { session: 'P', decision: 'deny' }, big))).toBeNull();
+    expect(cardRefusal(ok('session.decide', { session: 'P', decision: 'deny', note: 'Trop long' }, big))).toBeNull();
+    // A request shown whole is accepted as before.
+    expect(cardRefusal(ok('session.decide', { session: 'Nova', decision: 'accept' }))).toBeNull();
+    expect(ACTION_ERROR_CODES).toContain('cut');
+  });
+  it('« Refuser » a row gives the row the resolver gives for deny: same args, same risk', () => {
+    const c = ctx({ sessions: [mk('nova', 'Nova', { pending: permission, state: 'waiting_permission' })] });
+    for (const args of [{ session: 'Nova', decision: 'accept' }, { session: 'Nova', decision: 'deny', note: 'Pas sur main' }]) {
+      const d = denied(ok('session.decide', args, c));
+      const again = ok('session.decide', { session: 'Nova', decision: 'deny', ...('note' in args ? { note: args.note } : {}) }, c);
+      expect(JSON.stringify(d.args)).toBe(JSON.stringify(again.args));
+      expect(d.risk).toBe(again.risk);
     }
   });
   it('a request too long for the card is cut and marked, never shown as whole', () => {

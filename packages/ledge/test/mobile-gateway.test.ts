@@ -1805,8 +1805,8 @@ describe('phone gateway: generic cards (spec 2026-10-26 action registry §9)', (
     const owner = c.chats.owner;
     c.chats.owner = (qid: string) => (qid === QPC ? 'desktop' as never : owner(qid));
     const calls: Array<[string, string, number[] | undefined, true | undefined]> = [];
-    const actChat = async (thread: string, qid: string, _rid: string, r?: number[], confirmed?: true) => {
-      calls.push([thread, qid, r, confirmed]);
+    const actChat = async (thread: string, qid: string, _rid: string, r?: number[], confirmed?: true, deny?: true) => {
+      calls.push([thread, qid, r, confirmed, ...(deny ? [deny] : [])] as never);
       if (result instanceof Error) throw result;
       return result ?? { done: r ?? [], failed: [] };
     };
@@ -1868,6 +1868,27 @@ describe('phone gateway: generic cards (spec 2026-10-26 action registry §9)', (
     await flush();
     // A deny goes on to its usual check (the passkey, here).
     expect(last(two.g)).toMatchObject({ status: 'rejected', reason: 'confirm_required' });
+  });
+
+  it('« Refuser » a request: no passkey, no confirmation, and allowed on a request shown cut; only on a request', async () => {
+    const accept: Row = { action: 'session.decide', args: { session: 'a', decision: 'accept' }, summary: 'Accepter', risk: 'destructive', detail: 'x'.repeat(3000) };
+    const { calls, g } = make([accept]);
+    const m = { type: 'chat.act', op: randomUUID(), qid: QA, deny: true };
+    g.send('dev1', m);
+    await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: m.op, status: 'applied' });
+    expect(calls).toEqual([['device:dev1', QA, [0], undefined, true]]);
+    // As on the PC, only the rows still open count: a row already done does not stop « Refuser ».
+    const mixed = make([{ ...dissolve, state: 'done' }, { ...accept, detail: 'Bash: rm' }]);
+    mixed.g.send('dev1', { type: 'chat.act', op: randomUUID(), qid: QA, deny: true });
+    await flush();
+    expect(last(mixed.g)).toMatchObject({ status: 'applied' });
+    expect(mixed.calls).toEqual([['device:dev1', QA, [1], undefined, true]]);
+    const other = make([dissolve]);
+    other.g.send('dev1', { type: 'chat.act', op: randomUUID(), qid: QA, deny: true });
+    await flush();
+    expect(last(other.g)).toMatchObject({ status: 'rejected', reason: 'invalid' });
+    expect(other.calls).toEqual([]);
   });
 
   it('applies rows with no device check without a passkey', async () => {

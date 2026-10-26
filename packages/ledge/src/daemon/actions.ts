@@ -149,6 +149,15 @@ const IMPLS: Partial<Record<ActionId, Impl>> = {
   }
 };
 
+/**
+ * What a card may never do, whatever the device (the user's decision on the cards' mockup, #94): accept a request it shows
+ * cut, whose end the user has not read. Refusing it, or setting the card aside, stays possible.
+ */
+export function cardRefusal(row: Pick<ChatAction, 'action' | 'args' | 'vars' | 'detailCut'>): Refusal | null {
+  if (row.action !== 'session.decide' || !row.detailCut || row.args.decision !== 'accept') return null;
+  return no('cut', `${row.vars?.session ?? String(row.args.session)}'s request is cut on the card: accept it in the session`);
+}
+
 /** The generic actions the daemon can resolve (the six earlier cards resolve in chat/service.ts). */
 export const GENERIC_ACTIONS = Object.keys(IMPLS) as ActionId[];
 

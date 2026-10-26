@@ -735,12 +735,12 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
    * A generic card's rows (spec 2026-10-26 action registry §2.1), applied through the daemon's own handlers so their rules stay in
    * one place: a row fails on the handler's `error`, or on the reason its `team.saved` or `task.result` carries.
    */
-  function actOnCard(card: { chat: Pick<Chat, 'action' | 'markAction'>; emit: (m: ChatMessage) => void }, qid: string, rid: string, rows?: number[], confirmed?: true) {
+  function actOnCard(card: { chat: Pick<Chat, 'action' | 'markAction'>; emit: (m: ChatMessage) => void }, qid: string, rid: string, rows?: number[], confirmed?: true, deny?: true) {
     return actFromChat({
       chat: card.chat, emit: card.emit, inFlight: chatActs, now,
       resolve: row => resolveAction(row.action, row.args, { sessions: store.all(), teams: teams.all(), tasks: tasks.all(), findRole, templateExists: name => templateExists(name) }),
       apply: async row => { const r = await applyRow(row, rid); if (r.failure !== undefined) throw new Error(r.failure); }
-    }, qid, rows, confirmed);
+    }, qid, rows, confirmed, deny);
   }
   /** The turn's cards were set aside (« Ignorer », on any thread's device): nothing of them applies until opened again. */
   const setAside = (qid: string) => cardThreads.all().some(([, c]) => c.ignored(qid));
@@ -1279,7 +1279,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         const card = cardOf(cardThreads, msg.qid);
         if (!card) return refuse('unknown action');
         if (setAside(msg.qid)) return reply({ type: 'error', message: SET_ASIDE, request: msg.type, code: 'ignored' });
-        try { return reply({ type: 'chat.acted', rid: msg.rid, qid: msg.qid, ...(await actOnCard(card, msg.qid, msg.rid, msg.rows, msg.confirmed)) }); }
+        try { return reply({ type: 'chat.acted', rid: msg.rid, qid: msg.qid, ...(await actOnCard(card, msg.qid, msg.rid, msg.rows, msg.confirmed, msg.deny)) }); }
         catch (e) { if (e instanceof ActRefused) return reply({ type: 'error', message: e.message, request: msg.type, ...(e.code ? { code: e.code } : {}) }); throw e; }
       }
       // Broadcast: every overlay shows the same progress, and the one that asked may be the one that reconnects.
@@ -1349,10 +1349,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         close: closeForCard
       }, qid, rows);
     },
-    actChat: (thread, qid, rid, rows, confirmed) => {
+    actChat: (thread, qid, rid, rows, confirmed, deny) => {
       const card = cardOf(cardThreads, qid);
       if (!card || card.thread !== thread) return Promise.reject(new ActRefused('unknown action'));
-      return actOnCard(card, qid, rid, rows, confirmed);
+      return actOnCard(card, qid, rid, rows, confirmed, deny);
     },
     onChatEnd: (deviceId, end) => notifyChatEnd?.(deviceId, end.code),
     version: opts.daemon?.version ?? 'unknown',

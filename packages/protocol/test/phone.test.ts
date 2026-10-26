@@ -261,6 +261,9 @@ describe('phone chat', () => {
     const assertion = { id: 'a', clientDataJSON: 'b', authenticatorData: 'c', signature: 'd' };
     for (const m of [{ type: 'chat.act', op: OP, qid: QID }, { type: 'chat.act', op: OP, qid: QID, rows: [1, 0], confirmed: true, assertion }]) expect(() => PhoneClientMessageSchema.parse(m)).not.toThrow();
     expect(() => PhoneClientMessageSchema.parse({ type: 'chat.act', op: OP, qid: QID, rows: [0, 0] })).toThrow();
+    expect(PhoneClientMessageSchema.parse({ type: 'chat.act', op: OP, qid: QID, rows: [0], deny: true })).toMatchObject({ deny: true });
+    expect(() => PhoneClientMessageSchema.parse({ type: 'chat.act', op: OP, qid: QID, deny: false })).toThrow();
+    expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [{ action: 'session.decide', summary: 'Accepter', risk: 'destructive', state: 'denied', doneAt: '2026-10-20T10:00:00.000Z' }] })).not.toThrow();
     expect(PhoneClientMessageSchema.parse({ type: 'chat.act', op: OP, qid: QID, args: { team: 'x' } })).not.toHaveProperty('args');
   });
   it('checks the chat.close client message', () => {
