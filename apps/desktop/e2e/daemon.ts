@@ -196,3 +196,12 @@ export const eight = [
   session('echo', { name: 'Echo', project: 'ledge', cwd: '/w/ledge', state: 'working', branch: 'test/LEDGE-42-notifications' }),
   session('rio', { name: 'Rio', project: 'website', cwd: '/w/website', state: 'working', branch: 'feat/WEB-18-accessibility' })
 ];
+
+/** The app opens on Ledge's home view (ledge home spec §2.1); a test about the atelier goes there from the sidebar. */
+export async function openAtelier(page: Page): Promise<void> {
+  await page.locator('section.ledge-home').waitFor();
+  // The sidebar's « Atelier »; in a narrow window, where the sidebar is hidden, the home view's own way back.
+  const entry = page.locator('aside.sidebar').getByRole('button', { name: /^Atelier/ });
+  if (await entry.isVisible()) await entry.click();
+  else await page.getByRole('button', { name: /^(Back to the atelier|Retour à l’atelier)$/ }).click();
+}

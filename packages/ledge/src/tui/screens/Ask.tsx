@@ -103,7 +103,7 @@ export function Ask() {
           : <Lines lines={lines} />}
       </TitledBox>
       {cards.slice(0, 2).map((c, i) => <CardBox key={`${c.kind}:${c.qid}`} card={c} turn={d.chat.find(x => x.qid === c.qid)!} focused={i === focus} busy={busy?.qid === c.qid} />)}
-      <TitledBox title={t.ask.question} color={focus === -1 ? C.coral : C.line}>
+      <TitledBox title={t.ask.question} flexShrink={0} color={focus === -1 ? C.coral : C.line}>
         <Text wrap="truncate"><Text color={C.coral}>{g.cursor} </Text>
           <TextInput value={draft} onChange={setDraft} onSubmit={ask} onEscape={() => { if (!draft) go('overview'); }} active={focus === -1} />
         </Text>
@@ -119,7 +119,7 @@ function CardBox({ card, turn, focused, busy }: { card: Card; turn: ChatTurn; fo
     const team = turn.team!;
     const auto = team.seats.filter(x => x.autonomy === 'auto').map(x => `@${x.role}`);
     return (
-      <TitledBox title={t.ask.teamCard(team.name)} color={color} titleColor={C.coral}>
+      <TitledBox title={t.ask.teamCard(team.name)} flexShrink={0} color={color} titleColor={C.coral}>
         <Text wrap="truncate"><Text color={C.dim}>{t.ask.folder.padEnd(13)}</Text><Text color={C.faint}>{team.cwd}</Text></Text>
         <Text wrap="truncate"><Text color={C.dim}>{t.ask.table.padEnd(13)}</Text>{g.team} {t.ask.newTable(team.projectName ?? team.project)}</Text>
         {team.seats.map(x => (
@@ -135,7 +135,7 @@ function CardBox({ card, turn, focused, busy }: { card: Card; turn: ChatTurn; fo
     const tasks = turn.tasks!;
     const waits = !!turn.team && !turn.team.teamId;
     return (
-      <TitledBox title={t.ask.taskCard} color={color} titleColor={C.violet}>
+      <TitledBox title={t.ask.taskCard} flexShrink={0} color={color} titleColor={C.violet}>
         {card.rows.map(r => { const c = tasks[r]!; return (
           <Text key={r} wrap="truncate"><Text color={C.fg}>{c.title}</Text> <Text color={C.faint}>{c.toName ?? c.to}</Text>{c.error ? <Text color={C.red}>  {c.error}</Text> : null}</Text>
         ); })}
@@ -146,7 +146,7 @@ function CardBox({ card, turn, focused, busy }: { card: Card; turn: ChatTurn; fo
   if (card.kind === 'launch') {
     const rows = proposalRows(turn);
     return (
-      <TitledBox title={t.ask.launchCard} color={color} titleColor={C.coral}>
+      <TitledBox title={t.ask.launchCard} flexShrink={0} color={color} titleColor={C.coral}>
         {card.rows.map(r => { const p = rows[r]!; return (
           <Box key={r} flexDirection="column">
             <Text wrap="truncate"><Text color={C.dim}>{t.ask.folder.padEnd(13)}</Text><Text color={C.fg}>{p.project}</Text> <Text color={C.faint}>{p.cwd}</Text></Text>
@@ -162,7 +162,7 @@ function CardBox({ card, turn, focused, busy }: { card: Card; turn: ChatTurn; fo
   if (card.kind === 'relay') {
     const r = turn.relay!;
     return (
-      <TitledBox title={t.ask.relayCard(r.name)} color={color} titleColor={C.violet}>
+      <TitledBox title={t.ask.relayCard(r.name)} flexShrink={0} color={color} titleColor={C.violet}>
         <Text wrap="truncate" color={C.fg}>{oneLine(r.text)}</Text>
         {r.error ? <Text color={C.red} wrap="truncate">{r.error}</Text> : null}
         <Box columnGap={2}><Button label={r.status === 'queued' ? t.ask.cancelRelay : t.ask.relay} k="↵" primary={focused} />{r.status === 'queued' ? <Text color={C.faint}>{t.ask.queued}</Text> : null}</Box>
@@ -171,7 +171,7 @@ function CardBox({ card, turn, focused, busy }: { card: Card; turn: ChatTurn; fo
   }
   const closes = turn.closes ?? [];
   return (
-    <TitledBox title={t.ask.closeCard} color={color} titleColor={C.red}>
+    <TitledBox title={t.ask.closeCard} flexShrink={0} color={color} titleColor={C.red}>
       {card.rows.map(r => <Text key={r} wrap="truncate"><Text color={C.fg}>{closes[r]!.name}</Text> <Text color={C.faint}>{TOOL_NAME[closes[r]!.tool]}</Text>{closes[r]!.error ? <Text color={C.red}>  {closes[r]!.error}</Text> : null}</Text>)}
       <Box columnGap={2}><Button label={t.ask.close} k="↵" primary={focused} /></Box>
     </TitledBox>

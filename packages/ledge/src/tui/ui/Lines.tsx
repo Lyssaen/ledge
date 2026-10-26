@@ -13,7 +13,8 @@ export function Lines({ lines, up = 0, onHeight }: { lines: readonly Line[]; up?
   const shown = lines.slice(Math.max(0, lines.length - h - back), lines.length - back);
   return (
     <Box ref={ref} flexDirection="column" flexGrow={1} overflow="hidden">
-      {shown.map((l, i) => <Text key={i} wrap="truncate">{l.map((x, k) => <Text key={k} color={x.color} bold={x.bold}>{x.text || (k === 0 ? ' ' : '')}</Text>)}</Text>)}
+      {/* A row never shrinks: one too many is clipped at the bottom, never drawn over the one above. */}
+      {shown.map((l, i) => <Box key={i} flexShrink={0}><Text wrap="truncate">{l.map((x, k) => <Text key={k} color={x.color} bold={x.bold}>{x.text || (k === 0 ? ' ' : '')}</Text>)}</Text></Box>)}
     </Box>
   );
 }

@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from './fixtures';
-import { eight, fakeDaemon, session, twoProjects } from './daemon';
+import { eight, fakeDaemon, session, twoProjects, openAtelier } from './daemon';
 
 const kit = session('kit', { name: 'Kit', cwd: '/tmp/scratch', project: 'scratch' });
 const helper = (id: string) => ({ id, kind: 'Explore', task: `Task ${id}`, state: 'working' as const });
@@ -17,7 +17,7 @@ const center = (b: { x: number; y: number; width: number; height: number }) => (
 
 test('at fit nothing scrolls; Ctrl + wheel zooms under the pointer; + - 0', async ({ page }) => {
   await fakeDaemon(page, [...eight, kit], { projects: twoProjects });
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   const ledge = page.getByRole('region', { name: 'Ledge table' });
   await expect(ledge).toBeVisible();
   expect(await noScroll(page)).toBe(true);
@@ -50,7 +50,7 @@ test('at fit nothing scrolls; Ctrl + wheel zooms under the pointer; + - 0', asyn
 
 test('two fingers pinch the floor, not the window: the zoom follows them, the page stays at scale 1', async ({ page }) => {
   await fakeDaemon(page, [...eight, kit], { projects: twoProjects });
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   const ledge = page.getByRole('region', { name: 'Ledge table' });
   await expect(ledge).toBeVisible();
   const fit = await pct(page);
@@ -78,7 +78,7 @@ test('two fingers pinch the floor, not the window: the zoom follows them, the pa
 
 test('double-click frames a table, the floor fits again; legend and zoom bar stay put; dragging the floor pans', async ({ page }) => {
   await fakeDaemon(page, [...eight, kit], { projects: twoProjects });
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   const legend = page.locator('.workspace-legend');
   await expect(legend).toBeVisible();
   const before = await legend.boundingBox();
@@ -92,7 +92,8 @@ test('double-click frames a table, the floor fits again; legend and zoom bar sta
   const t = (await table.boundingBox())!, v = (await scroller(page).boundingBox())!;
   expect(Math.abs(t.x + t.width / 2 - (v.x + v.width / 2))).toBeLessThan(v.width * 0.1);
   expect(Math.abs(t.y + t.height / 2 - (v.y + v.height / 2))).toBeLessThan(v.height * 0.1);
-  expect(t.width).toBeGreaterThan(v.width * 0.5);
+  // The table is framed inside its room, whose walls take some of the width.
+  expect(t.width).toBeGreaterThan(v.width * 0.45);
   expect(await legend.boundingBox()).toEqual(before);
   expect(await bar.boundingBox()).toEqual(barBefore);
   // Panning: drag the empty floor, the scroll moves.
@@ -111,7 +112,7 @@ test('double-click frames a table, the floor fits again; legend and zoom bar sta
 
 test('dezoomed, dragging the floor carries the whole group to any edge, and part of it always stays in sight (#42)', async ({ page }) => {
   await fakeDaemon(page, [...eight, kit], { projects: twoProjects });
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   await expect(page.getByRole('region', { name: 'Ledge table' })).toBeVisible();
   for (let i = 0; i < 3; i++) await page.keyboard.press('-');
   await expect(page.getByRole('button', { name: /Fit/ })).toHaveAttribute('aria-pressed', 'false');
@@ -159,7 +160,7 @@ test('dezoomed, dragging the floor carries the whole group to any edge, and part
 
 test('a resize and full screen refit without scrollbars', async ({ page }) => {
   await fakeDaemon(page, [...eight, kit], { projects: twoProjects });
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   await expect(page.getByRole('region', { name: 'Ledge table' })).toBeVisible();
   await page.setViewportSize({ width: 1000, height: 700 });
   await expect.poll(() => noScroll(page)).toBe(true);
@@ -172,7 +173,7 @@ test('a resize and full screen refit without scrollbars', async ({ page }) => {
 
 test('drag Kit from Sans projet onto a table: the daemon gets the rule, Kit sits there', async ({ page }) => {
   const daemon = await fakeDaemon(page, [...eight, kit], { projects: twoProjects });
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   await page.locator('.unassigned-card', { hasText: 'Kit' }).dragTo(page.getByRole('region', { name: 'Ledge table' }));
   await expect(page.getByRole('region', { name: 'Ledge table' }).getByRole('button', { name: /^Kit,/ })).toBeVisible();
   expect(daemon.received).toContainEqual(expect.objectContaining({ type: 'projects.set', projects: expect.objectContaining({ rules: [{ machine: 'local', path: '/tmp/scratch', project: 'ledge' }] }) }));
@@ -181,7 +182,7 @@ test('drag Kit from Sans projet onto a table: the daemon gets the rule, Kit sits
 
 test('a crowded table: six seats, four at the ends, +N filters the atelier on the project', async ({ page }) => {
   await fakeDaemon(page, crowd, { projects: twoProjects });
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   const table = page.getByRole('region', { name: 'Ledge table' });
   await expect(table.locator('.agent-seat:not(.helper-seat)')).toHaveCount(6);
   await expect(table.locator('.helper-seat')).toHaveCount(4);
@@ -195,7 +196,7 @@ test('a crowded table: six seats, four at the ends, +N filters the atelier on th
 test('a long project name on the rug is cut with an ellipsis and stays inside the rug', async ({ page }) => {
   const long = { projects: [{ ...twoProjects.projects[0]!, name: 'Payment Service Platform Migration Europe' }, twoProjects.projects[1]!], rules: [] };
   await fakeDaemon(page, eight, { projects: long });
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   const table = page.getByRole('region', { name: 'Payment Service Platform Migration Europe table' });
   const name = table.getByRole('button', { name: /^Conversations of project/ });
   await expect(name).toHaveAttribute('title', 'Payment Service Platform Migration Europe');
@@ -206,7 +207,7 @@ test('a long project name on the rug is cut with an ellipsis and stays inside th
 
 test('a message between agents: the bubble over Otto, an upright envelope flying to Nova\'s seat, which rings; no tag on the seats; reduced motion, no envelope (#27)', async ({ page }) => {
   const daemon = await fakeDaemon(page, eight, { projects: twoProjects });
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   await expect(page.getByRole('region', { name: 'Ledge table' })).toBeVisible();
   const otto = eight.find(s => s.id === 'otto')!;
   daemon.upsert({ ...otto, lastMessage: { id: 'sent-1', to: 'Nova', peer: 'nova', summary: 'The tests pass', at: new Date().toISOString() } });

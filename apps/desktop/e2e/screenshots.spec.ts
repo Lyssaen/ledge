@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
-import { fakeDaemon, twoProjects, type ChatReply } from './daemon';
+import { fakeDaemon, twoProjects, type ChatReply, openAtelier } from './daemon';
 import { fleet, ottoThread } from './thread';
 
 // Captures Ledge Desktop for docs/screens (README, tour), in French, against the simulated daemon.
@@ -23,7 +23,7 @@ const busy = fleet.map(s => ({
 async function boot(page: Page, theme: 'dark' | 'light', chat?: ChatReply) {
   await page.addInitScript(t => { try { localStorage.setItem('desktop.lang', 'fr'); localStorage.setItem('desktop.theme', t); } catch { /* ignore */ } }, theme);
   const daemon = await fakeDaemon(page, busy, { projects: twoProjects, threads: { otto: ottoThread }, ...(chat ? { chat } : {}) });
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   await expect(page.locator('.agent-seat').first()).toBeVisible();
   await page.evaluate(() => document.fonts.ready);
   return daemon;
@@ -62,8 +62,8 @@ test('chat, dark', async ({ page }) => {
     proposal: { cwd: '/w/ledge', project: 'ledge', tool: 'claude', prompt: 'Corrige les tests de l\'overlay qui échouent' }
   };
   await boot(page, 'dark', chat);
-  await page.keyboard.press('/');
-  const field = page.locator('aside.sidebar').getByRole('textbox').first();
+  await page.keyboard.press('Control+/');
+  const field = page.getByRole('complementary').getByRole('textbox').first();
   await expect(field).toBeFocused();
   await field.fill('Qui a besoin de moi ?');
   await field.press('Enter');

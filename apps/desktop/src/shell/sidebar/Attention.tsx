@@ -84,7 +84,6 @@ export function Attention(p: {
             <div className="st-l1"><span className="st-req">{t.home.point.closed(x.ownerName, x.title, x.state as 'done' | 'refused' | 'dropped')}</span></div>
             <div className="st-l2">
               <span className="st-where">{t.home.point.ofLedge}</span>
-              <span className="st-fill" />
               <button type="button" className="st-qa" onClick={() => p.onSeeTask?.(x.id)}>{t.side.see}</button>
               <button type="button" className="st-qa" onClick={() => p.onDismissTask?.(x.id)}>{t.home.point.dismiss}</button>
             </div>

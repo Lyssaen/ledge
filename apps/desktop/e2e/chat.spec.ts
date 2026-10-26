@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import type { ClientMessage } from '@ledge/protocol';
 import { test, expect } from './fixtures';
-import { eight, fakeDaemon, twoProjects, type ChatReply } from './daemon';
+import { eight, fakeDaemon, twoProjects, type ChatReply, openAtelier } from './daemon';
 
 /** Three agents: two at the Ledge table, one at Website, so a new one has a free seat. */
 const fleet = eight.filter(s => ['otto', 'nova', 'luna'].includes(s.id));
@@ -16,13 +16,13 @@ const pageNoSideScroll = (page: Page) => page.evaluate(() => document.documentEl
 const scrollNoSideScroll = (page: Page) => scroll(page).evaluate(e => e.scrollWidth <= e.clientWidth + 1);
 
 async function boot(page: Page) {
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   await expect(ledgeTable(page)).toBeVisible();
 }
-/** `/` focuses Ask Ledge in the sidebar; Enter with text opens the chat and sends the question. */
+/** Ctrl+/ opens the chat docked over the atelier (`/` alone goes to Ledge's home view); Enter with text sends the question. */
 async function ask(page: Page, question: string) {
-  await page.keyboard.press('/');
-  const askField = page.locator('aside.sidebar').getByRole('textbox', { name: 'Ask Ledge' });
+  await page.keyboard.press('Control+/');
+  const askField = field(page);
   await expect(askField).toBeFocused();
   await askField.fill(question);
   await askField.press('Enter');

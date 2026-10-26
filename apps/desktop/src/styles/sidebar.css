@@ -30,6 +30,7 @@
 .st .st-name{font-weight:500;color:var(--sidebar-foreground)}
 .st .st-name:hover{text-decoration:underline}
 .st-where{flex:1;min-width:0;display:flex;align-items:center;gap:2px;font:11px 'Geist Mono',monospace;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-task .st-where{display:block}
 .st-where .side-swatch{width:7px;height:7px;margin:0 3px 0 0}
 .st-l2{display:flex;align-items:center;gap:5px}
 .st-req{flex:1;min-width:0;font-size:12px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

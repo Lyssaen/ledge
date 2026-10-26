@@ -147,8 +147,8 @@ describe('« À traiter » and « Agents » with teams', () => {
     expect(t.of('team.resume')).toMatchObject([{ team: 'team-c3d4' }]);
   });
 
-  it('a team none of whose sessions the phone knows gets a group of its project', () => {
-    const groups = tablesOf([session('pim', { repo: 'ledge' })], [team({ seats: [] })]);
-    expect(groups.map(g => [g.label, g.tables.map(t => t.kind)])).toEqual([['ledge', ['common']], ['Ledge', ['team']]]);
+  it('a team none of whose sessions the phone knows sits in its project\'s group (any case), else in a group of its own', () => {
+    const groups = tablesOf([session('pim', { repo: 'ledge' })], [team({ seats: [] }), team({ id: 'team-c3d4', state: 'resting', seats: [] }), team({ id: 'team-e5f6', project: 'Site', seats: [] })]);
+    expect(groups.map(g => [g.label, g.tables.map(t => (t.kind === 'team' ? t.team.id : 'common'))])).toEqual([['ledge', ['team-a1b2', 'common', 'team-c3d4']], ['Site', ['team-e5f6']]]);
   });
 });

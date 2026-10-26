@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import type { ClientMessage, Projects } from '@ledge/protocol';
 import { test, expect } from './fixtures';
-import { eight, fakeDaemon, fakeRemote, session, twoProjects } from './daemon';
+import { eight, fakeDaemon, fakeRemote, session, twoProjects, openAtelier } from './daemon';
 import { fleet, ottoThread } from './thread';
 
 const nav = (page: Page) => page.getByRole('navigation', { name: 'Settings sections' });
@@ -40,7 +40,7 @@ async function openSettings(page: Page) {
 
 test('Ctrl , then Appearance › Light: the page takes the light theme, « Setting saved » says it once, Escape goes back to the atelier', async ({ page }) => {
   await fakeDaemon(page, eight, { projects: twoProjects });
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   await openSettings(page);
   await expect(tab(page, 'General')).toHaveAttribute('aria-current', 'page');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
@@ -71,7 +71,7 @@ test('Machines › Add a machine: an SSH server shows once the daemon broadcasts
   const daemon = await fakeDaemon(page, eight, { projects: twoProjects });
   const remote = await fakeRemote(page, 'gpu-box', []);
   remote.close();   // the server never answers: it is saved offline
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   await openSettings(page);
   await tab(page, 'Machines').click();
   await expect(heading(page)).toHaveText('Machines');
@@ -113,7 +113,7 @@ test('Projects › a remembered folder re-pointed to Website: its filed agent le
   const kit = session('kit', { name: 'Kit', cwd: '/tmp/scratch', project: 'scratch' });
   const projects: Projects = { ...twoProjects, rules: [{ machine: 'local', path: '/tmp/scratch', project: 'ledge' }] };
   const daemon = await fakeDaemon(page, [...eight, kit], { projects });
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   await expect(page.getByRole('region', { name: 'Ledge table' }).getByRole('button', { name: /^Kit,/ })).toBeVisible();
   await openSettings(page);
   await tab(page, 'Projects').click();
@@ -146,7 +146,7 @@ test('a 900 px window: the settings fit without a side scroll, their section bar
   await fakeDaemon(page, eight, { projects, machines: [{ id: 'local', label: 'Local' }, { id: 'devbox', label: 'A build server in the basement with a rather long name for the narrow layout', ssh: 'devbox' }] });
   const remote = await fakeRemote(page, 'devbox', []);
   remote.close();
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   await openSettings(page);
   const bar = nav(page);
   const content = page.locator('.settings-content');
@@ -183,7 +183,7 @@ test('a 900 px window: the settings fit without a side scroll, their section bar
 
 test('Appearance › Profile photo: a real picture is cropped to its centre square at 128 px, then shows beside « You » in the thread (#50)', async ({ page }) => {
   await fakeDaemon(page, fleet, { projects: twoProjects, threads: { otto: ottoThread } });
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   await openSettings(page);
   await tab(page, 'Appearance').click();
   const profile = page.getByRole('region', { name: 'Profile' });

@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { fakeDaemon, session, twoProjects } from './daemon';
+import { fakeDaemon, session, twoProjects, openAtelier } from './daemon';
 
 /** Same capability the manage spec uses: archive, restore, resume and delete are allowed. */
 const CAN = { version: '0.7.0', install: 'npm' as const, systemd: true, archive: true };
@@ -10,7 +10,7 @@ const bix = session('bix', { name: 'Bix', cwd: '/w/ledge', state: 'exited', topi
 
 test('open Otto from the tree, show Bix from +N finished and archive him, reread him in Archives', async ({ page }) => {
   const daemon = await fakeDaemon(page, [otto, bix], { projects: twoProjects, daemon: CAN });
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   await expect(page.getByRole('tree', { name: /Projects, branches and sessions/ })).toBeVisible();
   await page.getByRole('tree').getByRole('button', { name: /^Otto/ }).click();
   await expect(page.getByRole('banner').getByText('Otto')).toBeVisible();

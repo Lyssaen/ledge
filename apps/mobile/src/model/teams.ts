@@ -44,12 +44,20 @@ export function tablesOf(sessions: PhoneSession[], teams: PhoneTeam[] | null): A
     const tables: Table[] = [...ofState('active'), ...(common.length ? [{ kind: 'common' as const, rows: common }] : []), ...ofState('resting')];
     return { label: g.label, key: g.rows[0]!.sessionId, tables };
   });
-  // Teams with no known session: by their project, active first.
-  const alone = (teams ?? []).filter(t => !placed.has(t.id)).sort((a, b) => (a.state === b.state ? 0 : a.state === 'active' ? -1 : 1));
+  // Teams with no known session: in the group of their project (its name, whatever its case), else a group of their own;
+  // an active one before the common table, a resting one at the end.
+  const alone = (teams ?? []).filter(t => !placed.has(t.id));
   const extra = new Map<string, Table[]>();
   for (const t of alone) {
     const label = t.project ?? t.name;
-    extra.set(label, [...(extra.get(label) ?? []), { kind: 'team', team: t, rows: [] }]);
+    const table: Table = { kind: 'team', team: t, rows: [] };
+    const home = groups.find(g => g.label.toLowerCase() === label.toLowerCase());
+    if (home) {
+      if (t.state === 'resting') home.tables.push(table);
+      else home.tables.splice(home.tables.filter(x => x.kind === 'team' && x.team.state === 'active').length, 0, table);
+      continue;
+    }
+    extra.set(label, [...(extra.get(label) ?? []), table].sort((a, b) => (a.kind === 'team' && b.kind === 'team' && a.team.state !== b.team.state ? (a.team.state === 'active' ? -1 : 1) : 0)));
   }
   return [...groups, ...[...extra].map(([label, tables]) => ({ label, key: `team:${label}`, tables }))];
 }

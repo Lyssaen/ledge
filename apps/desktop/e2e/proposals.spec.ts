@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import type { ClientMessage, FoundRepo } from '@ledge/protocol';
 import { test, expect, openNewProject } from './fixtures';
-import { eight, fakeDaemon, twoProjects, type ChatReply } from './daemon';
+import { eight, fakeDaemon, twoProjects, type ChatReply, openAtelier } from './daemon';
 
 type ProjectsSet = Extract<ClientMessage, { type: 'projects.set' }>;
 const sets = (received: ClientMessage[]) => received.filter((m): m is ProjectsSet => m.type === 'projects.set');
@@ -23,7 +23,7 @@ const paperDisk = disk.filter(r => r.path !== '/w/ledge-cli');
 const projects = { ...twoProjects, projects: twoProjects.projects.map(p => p.id === 'ledge' ? { ...p, repos: [{ machine: 'local', path: '/w/ledge' }] } : p) };
 
 async function boot(page: Page) {
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   await expect(page.getByRole('region', { name: 'Ledge table' })).toBeVisible();
 }
 async function openProjectsSettings(page: Page) {
@@ -95,8 +95,8 @@ test('The chat proposes a project: Review the proposal opens the editor prefille
   };
   const daemon = await fakeDaemon(page, eight, { projects, chat });
   await boot(page);
-  await page.keyboard.press('/');
-  const ask = page.locator('aside.sidebar').getByRole('textbox', { name: 'Ask Ledge' });
+  await page.keyboard.press('Control+/');
+  const ask = page.getByRole('complementary', { name: 'Chat Ledge' }).getByPlaceholder('Ask Ledge…');
   await expect(ask).toBeFocused();
   await ask.fill('Group my paper repositories');
   await ask.press('Enter');
