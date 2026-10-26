@@ -527,3 +527,5 @@ button.tg:disabled{cursor:default}
 .notice-line.notice-task .notice-kicker,.notice-line.notice-team .notice-kicker{color:var(--sidebar-primary)}
 .crumb-team{white-space:nowrap}
 .crumb-session .role-pill{margin-left:2px}
+.session-reply .reply-chips{flex:1 0 100%;padding:2px 2px 0}
+.session-reply .reply-images-error{color:var(--danger-text)}

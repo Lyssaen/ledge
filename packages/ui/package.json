@@ -20,6 +20,7 @@
     "./documents/markdown": "./src/documents/markdown.tsx",
     "./documents/references": "./src/documents/references.ts",
     "./documents/markdown.css": "./src/documents/markdown.css",
+    "./images": "./src/images/index.ts",
     "./chat/ChatView": "./src/chat/ChatView.tsx",
     "./chat/LaunchCard": "./src/chat/LaunchCard.tsx",
     "./chat/RelayCard": "./src/chat/RelayCard.tsx",

@@ -8,6 +8,8 @@ type Steps = { sessions: string; pane: Say; reply: Say; git: Say; repo: Say };
 export interface ChatCopy {
   chat: {
     title: string; subtitle: (sessions: number, repos: number) => string;
+    /** The ✕ of an image chip under the field; a front without images leaves it out. */
+    removeImage?: string;
     ask: string; askPlaceholder: string; open: string; send: string; stop: string; reset: string; back: string; close: string;
     emptyTitle: string; emptyHint: (sessions: number) => string; starters: string; chips: string[]; thinking: string;
     step: Steps; source: Steps;

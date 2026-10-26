@@ -4,7 +4,7 @@ export const frTime: ChatCopy['time'] = { seconds: n => `${n} s`, minutes: n => 
 const fn = (s: string) => () => s;
 export const copy: ChatCopy = {
   chat: {
-    title: 'Ledge', subtitle: (n, r) => `${n} sessions · ${r} repos`, ask: 'Ask', askPlaceholder: 'Ask…', open: 'Open', send: 'Send', stop: 'Stop', reset: 'Reset', back: 'Back', close: 'Close',
+    removeImage: 'Remove image', title: 'Ledge', subtitle: (n, r) => `${n} sessions · ${r} repos`, ask: 'Ask', askPlaceholder: 'Ask…', open: 'Open', send: 'Send', stop: 'Stop', reset: 'Reset', back: 'Back', close: 'Close',
     emptyTitle: 'Test empty title', emptyHint: n => `${n} visible`, starters: 'Starters', chips: ['First chip'], thinking: 'Thinking',
     step: { sessions: 'sessions', pane: fn('pane'), reply: fn('reply'), git: fn('git'), repo: fn('repo') },
     source: { sessions: 'sessions', pane: fn('pane'), reply: fn('reply'), git: fn('git'), repo: fn('repo') },

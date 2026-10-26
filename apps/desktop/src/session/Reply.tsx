@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState, type JSX, type KeyboardEvent, type MutableRefObject } from 'react';
+import { useEffect, useRef, useState, type ClipboardEvent, type JSX, type KeyboardEvent, type MutableRefObject } from 'react';
 import type { DaemonClient } from '@ledge/fleet';
 import { NOTE_MAX, offers, type Helper, type Session } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { Kbd } from '@ledge/ui/ui/Kbd';
 import type { Decisions } from '../fleet/decisions';
+import { AttachmentChips } from '@ledge/ui/images';
+import { useAttachments } from '../images/useAttachments';
 import { useI18n } from '../i18n/lang';
 import { machineOf } from '../nav/agents';
 import type { ScreenKeyHandler } from '../nav/screenKeys';
@@ -54,6 +56,9 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
   const [draft, setDraftState] = useState(() => memory.get(key).draft);
   const setDraft = (v: string) => { setDraftState(v); memory.set(key, { draft: v }); };
   const input = useRef<HTMLTextAreaElement>(null);
+  // Images pasted or dropped on the field: stored on the daemon as they come, sent by id with the reply.
+  const images = useAttachments(client, { put: { id: session.id } });
+  const withImages = images.items.length > 0;
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => { if (focusOnArrival) input.current?.focus(); }, []); // once, on arrival
@@ -61,6 +66,10 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
   // What an interrupt that takes back OMP's queue returns: the instructions that were waiting, back in the draft (never re-sent).
   useEffect(() => client?.onMessage(m => {
     if (m.type !== 'session.queue.restored' || m.id !== session.id || !mounted.current) return;
+    // The images come back as chips, to be sent again with the text.
+    const entries = m.entries ?? m.texts.map(text => ({ text, attachments: undefined }));
+    const ids = entries.flatMap(e => e.attachments ?? []);
+    if (ids.length || m.imagesDropped) images.restore(ids, m.imagesDropped);
     const back = m.texts.join('\n\n'); if (!back) return;
     const cur = memory.get(key).draft;
     setDraft(cur ? `${cur}\n\n${back}` : back);
@@ -101,14 +110,25 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
     memory.set(key, { draft: back });
     if (mounted.current) setDraftState(back);
   };
+  /** The images go with a reply, never with a decision's note, and not while a dialog waits (the daemon would refuse them). */
+  const imagesOk = images.ready && !(withImages && pending);
+  /** Sends the text and the ready images; a refusal gives both back (the chips too). */
+  const sendReply = (steerNow: boolean) => {
+    const attachments = images.ids();
+    const taken = images.items.length ? images.clear() : [];
+    const back = (t: string) => { restore(t); if (taken.length) images.putBack(taken); };
+    if (decisions.reply(session, text, back, { ...(steerNow ? { steer: true } : {}), attachments })) { setDraft(''); return true; }
+    if (taken.length) images.putBack(taken);
+    return false;
+  };
   const steer = () => {
-    if (!text || !canAct || shut || !working) return;
-    if (decisions.reply(session, text, restore, { steer: true })) setDraft('');
+    if ((!text && !withImages) || !canAct || shut || !working || !imagesOk) return;
+    sendReply(true);
   };
   const submit = () => {
-    if (!text || !canAct || shut || tooLong) return;
-    const sent = isNote ? decisions.decide(session, 'deny', text, restore) : decisions.reply(session, text, restore);
-    if (sent) setDraft('');
+    if ((!text && !withImages) || !canAct || shut || tooLong || !imagesOk) return;
+    if (isNote) { if (decisions.decide(session, 'deny', text, restore)) setDraft(''); }
+    else sendReply(false);
   };
   // A plan goes back with what to revise; where the harness takes no note, a plain deny (the field is shut).
   const askRevision = (message: string) => {
@@ -151,10 +171,16 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
   useEffect(() => { keys.current = onScreenKey; });
   useEffect(() => () => { keys.current = null; }, [keys]);
 
+  /** Pasted image files become chips; a text paste is left alone. */
+  const onPaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = [...e.clipboardData.files].filter(f => f.type.startsWith('image/'));
+    if (!client || files.length === 0) return;
+    e.preventDefault(); images.add(files);
+  };
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.nativeEvent.isComposing) return;
     // While OMP works, Ctrl / ⌘ Enter redirects the turn now; Enter alone queues the text for the turn's end.
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && working && text) { e.preventDefault(); steer(); }
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && working && (text || withImages)) { e.preventDefault(); steer(); }
     else if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
     // Escape stops OMP at work when nothing is typed; otherwise it leaves the field and keeps the draft (navigation never sees it).
     else if (e.key === 'Escape') {
@@ -167,6 +193,7 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
   const placeholder = working ? tr.placeholder.queued(name) : sort === 'plan' ? tr.placeholder.plan : sort === 'approval' ? tr.placeholder.approval : sort === 'question' ? tr.placeholder.question(name)
     : session.state === 'exited' || session.state === 'idle' ? tr.placeholder.done(name) : tr.placeholder.idle(name);
   const hint = stopping ? tr.stopping
+    : withImages && pending ? t.images.dialog
     : working && text ? <><Kbd>↵</Kbd> {tr.whenQueued} · <Kbd>Ctrl ↵</Kbd> {tr.whenNow}</>
     : stoppable && client && !askCard ? <><Kbd>{tr.escKey}</Kbd> {tr.stopKey}</>
     : askCard ? tr.askCard : optionsOnly ? tr.optionsOnly : noteless ? tr.noNote : tooLong ? tr.tooLong(NOTE_MAX)
@@ -203,16 +230,20 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
             ))}</ul>
           </div>
         )}
-        <form className={cls(pending && 'with-pending', (session.queue?.length ?? 0) > 0 && native && 'under-queue')} onSubmit={e => { e.preventDefault(); submit(); }}>
+        <form className={cls(pending && 'with-pending', (session.queue?.length ?? 0) > 0 && native && 'under-queue')} onSubmit={e => { e.preventDefault(); submit(); }}
+          onDragOver={client ? e => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); } : undefined}
+          onDrop={client ? e => { if (e.dataTransfer.files.length === 0) return; e.preventDefault(); images.add([...e.dataTransfer.files]); } : undefined}>
+          {withImages && <div className="reply-chips"><AttachmentChips items={images.items} onRemove={images.remove} size={{ w: 72, h: 54 }} removeLabel={t.images.remove} lang={t.time.locale.startsWith('fr') ? 'fr' : 'en'} /></div>}
           <textarea ref={input} rows={1} aria-label={tr.label} placeholder={placeholder} value={draft} disabled={shut}
-            maxLength={isNote ? NOTE_MAX : undefined} onChange={e => setDraft(e.target.value)} onKeyDown={onKeyDown} />
+            maxLength={isNote ? NOTE_MAX : undefined} onChange={e => setDraft(e.target.value)} onKeyDown={onKeyDown} onPaste={onPaste} />
+          {images.error && <span className="reply-hint reply-images-error" role="alert">{images.error}</span>}
           {client && <SessionModel client={client} session={session} notify={notify} />}
           <span className="reply-hint">{hint}</span>
           {stoppable && client && !text && !askCard
             ? <Button variant="primary" size="icon" type="button" className="reply-stop" onClick={stop} disabled={stopping} aria-label={stopping ? tr.stopping : tr.stop(session.name)} title={tr.stopTitle}
                 style={{ width: 32, height: 32 }}>{stopping ? <span className="reply-stop-spin" aria-hidden="true" /> : <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor" /></svg>}</Button>
             : <Button variant="primary" size="icon" type="submit" aria-label={sort === 'approval' ? tr.denyWith : working ? tr.queue : tr.send}
-                disabled={!text || shut || tooLong || busy} style={{ width: 32, height: 32 }}><Icon d={ICONS.send.d} /></Button>}
+                disabled={(!text && !withImages) || shut || tooLong || busy || !imagesOk} style={{ width: 32, height: 32 }}><Icon d={ICONS.send.d} /></Button>}
         </form>
         </>
       )}

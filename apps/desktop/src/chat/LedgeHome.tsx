@@ -3,6 +3,7 @@ import { daemonStore, useDaemon, type DaemonClient } from '@ledge/fleet';
 import { contextShare, LEDGE_GIVER, taskClosed, type ChatTurn, type Projects, type Session, type Task, type Team } from '@ledge/protocol';
 import { ChatView } from '@ledge/ui/chat/ChatView';
 import { ChatCopyProvider } from '@ledge/ui/chat/copy';
+import { useAttachments } from '../images/useAttachments';
 import { ResidentMascot } from '@ledge/ui/bots/ResidentMascot';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
@@ -272,11 +273,15 @@ export function LedgeHome(p: LedgeHomeProps): JSX.Element {
   const busy = chat.some(x => x.answeredAt === undefined && x.error === undefined);
   const live = teams.teams ?? [];
 
+  // Images pasted or dropped on the field travel inline with the question.
+  const images = useAttachments(client, { inline: true });
   const ask = (text: string) => {
     if (offline) return;
     const qid = `q-${crypto.randomUUID()}`;
     daemonStore.beginTurn({ qid, question: text, askedAt: new Date().toISOString(), steps: [] });
-    send({ type: 'chat.ask', qid, text, tool });
+    const uploads = images.uploads();
+    send({ type: 'chat.ask', qid, text, ...(uploads.length ? { images: uploads } : {}), tool });
+    images.clear();
     if (tab !== 'conversation') dispatch({ type: 'ledge', tab: 'conversation' });
   };
   const open = (id: string) => { setHovered(null); dispatch({ type: 'open', id }); };
@@ -344,6 +349,7 @@ export function LedgeHome(p: LedgeHomeProps): JSX.Element {
                 pinned={<LePoint view={view} teams={teams} decisions={p.decisions} waits={p.waits} projects={p.projects} dispatch={dispatch} onAsk={ask} onShowTask={showTask} busy={busy || !!offline} />}
                 above={above} footnote={<small className="home-readonly">{t.home.readOnly}</small>}
                 draft={draft} onDraft={setDraft} onFieldKey={onFieldKey}
+                attach={{ items: images.items, onFiles: images.add, onRemove: images.remove, ready: images.ready, error: images.error }}
                 onAsk={ask} onCancel={qid => send({ type: 'chat.cancel', qid })} onReset={() => send({ type: 'chat.reset' })} onClose={() => dispatch({ type: 'escape' })}
                 onOpenSession={open} onTerminal={id => { setHovered(null); p.onTerminal(id); }} turnAvailable={turnReady}
                 launchingQid={cards.launchingQid} launchingRows={cards.launchingRows} onLaunchProposal={cards.launch}
