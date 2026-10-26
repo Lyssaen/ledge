@@ -166,9 +166,9 @@ describe('tui notifications', () => {
   });
 
   it('reads --notify', () => {
-    expect(tuiArgs([])).toEqual({ notify: 'bell' });
-    expect(tuiArgs(['--notify', 'osc9'])).toEqual({ notify: 'osc9' });
-    expect(tuiArgs(['--notify=off'])).toEqual({ notify: 'off' });
+    expect(tuiArgs([])).toEqual({ notify: 'bell', here: false });
+    expect(tuiArgs(['--notify', 'osc9', '--here'])).toEqual({ notify: 'osc9', here: true });
+    expect(tuiArgs(['--notify=off'])).toEqual({ notify: 'off', here: false });
     expect(tuiArgs(['--notify=loud'])).toBeNull();
     expect(tuiArgs(['--other'])).toBeNull();
   });
