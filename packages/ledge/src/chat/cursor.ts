@@ -1,6 +1,7 @@
 import { spawn as nodeSpawn } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { copyFileSync, writeFileSync } from 'node:fs';
+import { extname, join } from 'node:path';
+import { withImages } from '../attachmentText.js';
 import { parseLine, type ClaudeEvent, type RunHandle, type RunOptions } from './claude.js';
 import { buildPersona } from './persona.js';
 import { runJsonl } from './run.js';
@@ -38,5 +39,7 @@ export function parseCursorLine(line: string): ClaudeEvent[] {
 export function runCursor(o: RunOptions, onEvent: (e: ClaudeEvent) => void, spawnImpl: typeof nodeSpawn = nodeSpawn): RunHandle {
   const [file = 'cursor-agent', ...pre] = o.bin ?? ['cursor-agent'];
   writeFileSync(join(o.cwd, 'AGENTS.md'), `${o.persona ?? buildPersona('cursor')}\n`);
-  return runJsonl(file, [...pre, ...cursorArgs(o)], { cwd: o.cwd, env: o.env, question: o.question }, parseCursorLine, onEvent, spawnImpl);
+  // Cursor has no image input: the images are copied into its working directory (the context folder, removed after the turn) and named in the text.
+  const copies = (o.images ?? []).map((img, n) => { const to = join(o.cwd, `image-${n + 1}${extname(img.path)}`); copyFileSync(img.path, to); return to; });
+  return runJsonl(file, [...pre, ...cursorArgs(o)], { cwd: o.cwd, env: o.env, question: withImages(o.question, copies) }, parseCursorLine, onEvent, spawnImpl);
 }

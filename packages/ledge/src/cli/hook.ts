@@ -16,6 +16,8 @@ import { parseLedgeCommand, readOnClient, sendOnClient } from './send.js';
 import { taskOnClient } from './task.js';
 import { handoverOnClient } from './handover.js';
 import { formatWho } from './who.js';
+import { takeImages } from '../attachmentText.js';
+import { paths } from '../paths.js';
 
 type Payload = Record<string, unknown>;
 const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
@@ -25,7 +27,12 @@ const PROMPT_MAX = 500;
 /** Claude Code hands a backgrounded helper's report back, another session's message, or its harness's notice about one
  *  (`[Cross-session idle notice]`…), as a prompt: that text is the report, message or notice, capped like a tool input. */
 const fromAgent = (t: string) => t.startsWith('<agent-message from="') || t.startsWith('<cross-session-message ') || t.startsWith('[Cross-session ');
-const promptText = (p: Payload) => { const t = str(p.prompt)?.trim(); return t ? { text: t.slice(0, fromAgent(t) ? INPUT_MAX : PROMPT_MAX) } : {}; };
+/** The prompt's text, cut; the brackets Ledge typed for images in its store leave it as `attachments` ids. */
+const promptText = (p: Payload) => {
+  const raw = str(p.prompt)?.trim(); if (!raw) return {};
+  const taken = takeImages(raw, paths().attachments); const ids = taken.ids; const t = ids.length ? taken.text : raw; // untouched without brackets
+  return { ...(t ? { text: t.slice(0, fromAgent(t) ? INPUT_MAX : PROMPT_MAX) } : {}), ...(ids.length ? { attachments: ids } : {}) };
+};
 
 function describeTool(tool: string | undefined, input: unknown): string {
   const i = (input && typeof input === 'object' ? input : {}) as Payload;
@@ -386,7 +393,7 @@ export function identityContext(s: Identity): string {
     s.tool === 'claude' ? 'Pour écrire à une autre session Ledge, Claude ou Codex, utilise son nom Ledge (donné par `ledge who`) comme adresse SendMessage : Ledge le transmet. `ListAgents` montre les noms internes de Claude, pas les noms Ledge.'
       : 'Pour écrire à une autre session Ledge, lance `ledge send <nom> "<message>"` (seul, sans && ni |). Ledge exécute lui-même `ledge send`, `ledge read`, `ledge task` et `ledge who` : leur résultat t\'arrive comme « Command blocked by PreToolUse hook: … », c\'est la réponse, pas une erreur.',
     'Un long message d\'une autre session t\'arrive en aperçu avec son id : lance `ledge read <id>` pour le lire en entier. Une `<ledge-notice>` te dit qu\'un de tes messages n\'a pas pu être remis.',
-    'Un message sert à prévenir ; pour confier un travail qui ne doit pas se perdre, lance plutôt `ledge task give <nom> "<titre>" "<détail>"` (`ledge task` pour le reste). Une `<ledge-task>` t\'en confie une, ou te dit comment une des tiennes a fini : quand on t\'en confie une, prends-la (`ledge task take <id>`) et termine-la toujours (`ledge task done <id> "<résultat>"`, ou `refuse`).',
+    'Un message sert à prévenir ; pour confier un travail qui ne doit pas se perdre, lance plutôt `ledge task give <nom> "<titre>" "<détail>"` (`ledge task` pour le reste). Une `<ledge-task>` t\'en confie une, ou te dit comment une des tiennes a fini : quand on t\'en confie une, prends-la (`ledge task take <id>`) et termine-la toujours (`ledge task done <id> "<résultat>"`, ou `refuse`). Une décision qui revient à l\'utilisateur se pose avec `ledge task give ledge "<question>" "<options, ta recommandation>"` : sa réponse te réveille, inutile d\'attendre la fin pour la poser.',
     ...(s.seat ? [s.seat] : []),
     ...(s.relieves ? [`Tu as pris la relève de ${s.relieves.name}, dont le contexte était plein : relis son bilan avec \`ledge handover show\`.`] : []),
     ...(s.tasks ? [tasksContext(s.tasks) ?? ''].filter(Boolean) : [])

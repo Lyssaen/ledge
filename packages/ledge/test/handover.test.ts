@@ -7,6 +7,7 @@ import { Store } from '../src/daemon/store.js';
 import { History } from '../src/daemon/history.js';
 import { startServer } from '../src/daemon/server.js';
 import { claudeUsage, codexUsage, readContext } from '../src/daemon/context.js';
+import { briefGaps, heldNames, reliefOf } from '../src/daemon/handover.js';
 import { handoverArgs } from '../src/cli/handover.js';
 import { parseLedgeCommand } from '../src/cli/send.js';
 import { connect, type Client } from '../src/client.js';
@@ -80,6 +81,7 @@ async function seated(used: number) {
   await until(() => store.get(id)?.context?.used === used);
   return { team, id };
 }
+const BRIEF = 'Fait : roles.ts. En cours : le hook. Suite : les tests. Décisions : LEDGE_HOME isolé, car partagé entre tests. Piège : LEDGE_HOME.';
 const pointers = (pane: string, tag: string) => tmux.typed.filter(t => t.pane === pane && t.text.includes(tag));
 
 beforeEach(() => {
@@ -89,6 +91,33 @@ beforeEach(() => {
   role('build', 'label: Build\nmodel: opus\nautonomy: edits');
 });
 afterEach(async () => { await c?.close(); await srv?.close(); srv = undefined; });
+
+describe('briefGaps', () => {
+  it('names the sections a brief lacks, in any case, with or without accents, as headings or inline', () => {
+    expect(briefGaps('## Fait\nx\n## En cours\ny\n## Suite\nz\n## Décisions\nw')).toEqual([]);
+    expect(briefGaps('FAIT : x. EN COURS : y. SUITE : z. DECISIONS : w.')).toEqual([]);
+    expect(briefGaps('- **Fait** : x')).toEqual(['En cours', 'Suite', 'Décisions']);
+    expect(briefGaps('Tout est fait, la suite plus tard.')).toEqual(['Fait', 'En cours', 'Suite', 'Décisions']);
+  });
+});
+
+describe('a relieved name', () => {
+  const T = '2026-10-26T19:00:00.000Z';
+  const s = (id: string, name: string, extra: Partial<Session> = {}): Session => ({ id, name, tool: 'claude', cwd: '/w', project: 'w', title: name, tmuxSession: `ledge-${id}`,
+    state: 'idle', helpers: [], startedAt: T, lastActivityAt: T, source: 'launcher', ...extra });
+  const relieved = (id: string, name: string, to: string) => s(id, name, { state: 'exited', handover: { state: 'done', to, toName: '', at: T } });
+  it('leads to the live end of its chain, none when the chain has ended', () => {
+    const all = [relieved('a', 'Pim', 'b'), relieved('b', 'Ida', 'c'), s('c', 'Max')];
+    const get = (id: string) => all.find(x => x.id === id);
+    expect(reliefOf(get, all[0]!)?.id).toBe('c');
+    expect(reliefOf(get, s('d', 'Lu', { state: 'exited' }))).toBeUndefined();
+    expect(reliefOf(get, relieved('e', 'Lu', 'gone'))).toBeUndefined();
+  });
+  it('is held while its relief lives, so no other seat gets it', () => {
+    const all = [relieved('a', 'Pim', 'b'), s('b', 'Ida'), relieved('c', 'Lu', 'd'), s('d', 'Bix', { state: 'exited' })];
+    expect(heldNames(all)).toEqual(['Pim']);
+  });
+});
 
 describe('the relief of a session (context handover spec §3.3)', () => {
   it('measured after its turn; asked, its brief written, a relief at its seat with the brief, its tasks passed, the old one closed', async () => {
@@ -108,14 +137,14 @@ describe('the relief of a session (context handover spec §3.3)', () => {
     c.send({ type: 'session.handover', rid: 'h2', id });
     expect(await c.next('session.handover.result')).toMatchObject({ ok: false, reason: expect.stringContaining('déjà en cours') });
     // The brief.
-    c.send({ type: 'handover.brief', rid: 'b', by: id, text: 'Fait : roles.ts. En cours : le hook. Piège : LEDGE_HOME.' });
+    c.send({ type: 'handover.brief', rid: 'b', by: id, text: BRIEF });
     expect((await c.next('handover.result')).reason).toBeUndefined();
     await until(() => store.get(id)?.handover?.state === 'done', 5000);
     const relief = store.get(store.get(id)!.handover!.to!)!;
     expect(relief).toMatchObject({ role: 'build', team: team.id, relieves: { id, name: store.get(id)!.name } });
     const spawned = tmux.created.at(-1)!;
     expect(spawned.env).toMatchObject({ LEDGE_ROLE: 'build', LEDGE_TEAM: team.id });
-    expect(spawned.command.join(' ')).toContain('Fait : roles.ts. En cours : le hook. Piège : LEDGE_HOME.');
+    expect(spawned.command.join(' ')).toContain(BRIEF);
     expect(spawned.command).toEqual(expect.arrayContaining(['--model', 'opus', '--permission-mode', 'acceptEdits']));
     // The seat is the relief's; its task too, still given by Ledge.
     c.send({ type: 'task.cmd', rid: 's', by: 'ledge', op: 'show', task: task.id });
@@ -128,6 +157,33 @@ describe('the relief of a session (context handover spec §3.3)', () => {
     expect((await c.next('handover.result')).text).toContain('Piège : LEDGE_HOME.');
   }, 20_000);
 
+  it('the request for a brief jumps whatever waits for a busy session', async () => {
+    await start();
+    const { team, id } = await seated(170_000);
+    const pane = store.get(id)!.tmuxSession!;
+    set(id, { state: 'working' });
+    c.send({ type: 'task.cmd', rid: 'g', by: 'ledge', op: 'give', team: team.id, to: '@build', title: 'Implémenter les rôles' });
+    await c.next('task.result');
+    c.send({ type: 'session.handover', rid: 'h1', id });
+    expect(await c.next('session.handover.result')).toMatchObject({ ok: true });
+    const before = tmux.typed.filter(t => t.pane === pane).length;
+    set(id, { state: 'idle' });
+    await until(() => tmux.typed.filter(t => t.pane === pane).length > before);
+    expect(tmux.typed.filter(t => t.pane === pane)[before]!.text).toContain('<ledge-handover>');
+  }, 20_000);
+
+  it('a relieved name is not given to another seat while its relief lives', async () => {
+    await start();
+    const { id } = await seated(170_000);
+    const old = store.get(id)!.name;
+    c.send({ type: 'session.handover', rid: 'h1', id }); await c.next('session.handover.result');
+    c.send({ type: 'handover.brief', rid: 'b', by: id, text: BRIEF }); await c.next('handover.result');
+    await until(() => store.get(id)?.handover?.state === 'done' && store.get(id)?.state === 'exited', 5000);
+    c.send({ type: 'session.launch', tool: 'claude', cwd: work });
+    const { id: other } = await c.next('session.launched', 5000);
+    expect(store.get(other)!.name).not.toBe(old);
+  }, 20_000);
+
   it('a relief’s passes leave the relieved session one card per task, toward the relief (#92)', async () => {
     await start();
     const { team, id } = await seated(170_000);
@@ -137,7 +193,7 @@ describe('the relief of a session (context handover spec §3.3)', () => {
     }
     c.send({ type: 'session.handover', rid: 'h1', id });
     expect(await c.next('session.handover.result')).toMatchObject({ ok: true });
-    c.send({ type: 'handover.brief', rid: 'b', by: id, text: 'Fait : tout.' });
+    c.send({ type: 'handover.brief', rid: 'b', by: id, text: BRIEF });
     await c.next('handover.result');
     await until(() => store.get(id)?.handover?.state === 'done', 5000);
     const relief = store.get(store.get(id)!.handover!.to!)!;
@@ -146,15 +202,31 @@ describe('the relief of a session (context handover spec §3.3)', () => {
       expect.objectContaining({ taskOp: 'pass', name: relief.name, peer: relief.id, summary: expect.stringMatching(new RegExp(`^${title}\\n`)) })));
   }, 20_000);
 
+  it('a brief missing a section is refused, naming what is missing; the relief still waits for it', async () => {
+    await start();
+    const { id } = await seated(170_000);
+    c.send({ type: 'session.handover', rid: 'h', id }); await c.next('session.handover.result');
+    c.send({ type: 'handover.brief', rid: 'b1', by: id, text: 'Fait : roles.ts.' });
+    expect((await c.next('handover.result')).reason).toBe('bilan incomplet, il manque : En cours, Suite, Décisions. Réécris-le en entier.');
+    expect(store.get(id)!.handover?.state).toBe('briefing');
+    c.send({ type: 'handover.brief', rid: 'b2', by: id, text: BRIEF });
+    expect((await c.next('handover.result')).reason).toBeUndefined();
+  }, 20_000);
+
   it('a session that writes no brief in time gets one from Ledge: its last reply and its tasks', async () => {
     await start(150);
     const { id } = await seated(100_000);
-    set(id, { lastReply: { text: 'Étape 1 finie, tests verts.', at: AT } });
+    set(id, { lastReply: { text: 'Étape 1 finie, tests verts.', at: AT }, branch: 'feat/roles', cwd: work });
+    c.send({ type: 'task.cmd', rid: 'g', by: 'ledge', op: 'give', to: store.get(id)!.name, title: 'Écrire les rôles' }); await c.next('task.result');
     c.send({ type: 'session.handover', rid: 'h', id });
     await c.next('session.handover.result');
     await until(() => store.get(id)?.handover?.state === 'done', 5000);
     expect(tmux.created.at(-1)!.command.join(' ')).toContain('Bilan écrit par Ledge');
-    expect(tmux.created.at(-1)!.command.join(' ')).toContain('Étape 1 finie, tests verts.');
+    const said = tmux.created.at(-1)!.command.join(' ');
+    expect(said).toContain('Étape 1 finie, tests verts.');
+    expect(said).toContain(`Branche : feat/roles (${work})`);
+    expect(said).toContain('« Écrire les rôles » (confiée par Ledge)');
+    expect(said).toContain('Il n\'a noté ni décisions ni pièges');
   }, 20_000);
 
   it('a launch refused leaves the session as it was, with its tasks', async () => {
@@ -164,7 +236,7 @@ describe('the relief of a session (context handover spec §3.3)', () => {
     const task = (await c.next('task.result')).task!;
     c.send({ type: 'session.handover', rid: 'h', id }); await c.next('session.handover.result');
     rmSync(join(process.env.LEDGE_HOME!, 'roles', 'build.md'));
-    c.send({ type: 'handover.brief', rid: 'b', by: id, text: 'bilan' }); await c.next('handover.result');
+    c.send({ type: 'handover.brief', rid: 'b', by: id, text: BRIEF }); await c.next('handover.result');
     await until(() => store.get(id)?.handover?.state === 'failed', 5000);
     expect(store.get(id)!.handover!.reason).toContain('rôle inconnu');
     expect(store.get(id)!.state).not.toBe('exited');

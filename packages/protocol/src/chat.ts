@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { AutonomySchema, ToolSchema } from './session.js';
 import { EffortSchema, ModelIdSchema } from './models.js';
 import { ActionRiskSchema } from './actions.js';
+import { AttachmentRefSchema } from './attachments.js';
 
 /** What Ledge consulted while answering: a context file (a session's pane, reply or git summary, the sessions list) or a repository file. */
 export const ChatStepSchema = z.object({
@@ -121,7 +122,7 @@ export const ChatTurnSchema = z.object({
   steps: z.array(ChatStepSchema), answer: z.string().optional(), answeredAt: z.string().datetime().optional(), error: z.string().optional(), proposal: ChatProposalSchema.optional(), proposals: ChatProposalsSchema.optional(), relay: ChatRelaySchema.optional(), closes: ChatClosesSchema.optional(),
   projectProposal: ChatProjectProposalSchema.optional(),
   team: ChatTeamProposalSchema.optional(), tasks: ChatTasksSchema.optional(), actions: ChatActionsSchema.optional(),
-  ignoredAt: z.string().datetime().optional()
+  ignoredAt: z.string().datetime().optional(), attachments: z.array(AttachmentRefSchema).optional()
 });
 export type ChatTurn = z.infer<typeof ChatTurnSchema>;
 

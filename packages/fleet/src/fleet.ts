@@ -1,6 +1,6 @@
-import { ChatTurnSchema, ContextPrefsSchema, isArchived, IslandPrefsSchema, LEDGE_GIVER, ProjectsSchema, type Task, type Team, type IslandPrefs, type MobileState, type ChatTurn, type ChatProposal, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session, type Tool } from '@ledge/protocol';
+import { ChatTurnSchema, ContextPrefsSchema, isArchived, IslandPrefsSchema, LEDGE_GIVER, ProjectsSchema, type Task, type Team, type IslandPrefs, type MobileState, type ChatTurn, type ChatProposal, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session, type Tool, type ImageUpload } from '@ledge/protocol';
 import { createDaemonClient, type DaemonClient, type DaemonStatus } from './client';
-import { loadMachines, machineUrl, parseMachines, probeMachine, qualify, shellCommand, splitId, terminalCommand, type MachineConfig, type MobileError, type MachineState } from './machines';
+import { LOCAL_MACHINE, loadMachines, machineUrl, parseMachines, probeMachine, qualify, shellCommand, splitId, terminalCommand, type MachineConfig, type MobileError, type MachineState } from './machines';
 import type { TokenSource } from './token';
 
 type Snapshot = Extract<ServerMessage, { type: 'snapshot' }>;
@@ -9,7 +9,7 @@ const toWire = (list: MachineConfig[]): Machine[] => list.map(({ id, label, ssh 
 type Binding = { machine: string; raw: string };
 /** The commands tracked as a machine's operation in flight (`operations`, set in `send`): their answer, their refusal or the machine's drop ends it. */
 const OPERATIONS: ReadonlySet<string> = new Set(['session.launch', 'session.relay', 'session.relay.cancel', 'session.close']);
-type PendingRoute = { qid: string; text: string; tool?: Tool; coordinator: string };
+type PendingRoute = { qid: string; text: string; tool?: Tool; images?: ImageUpload[]; coordinator: string };
 
 export interface FleetOptions {
   /** Storage key prefix: `ledge` (island) or `desktop` (spec §7). */
@@ -39,6 +39,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   const listings = new Map<string, { machine: string; path: string; created?: string }>();
   /** `repos.scan` requestId -> the machine asked, so only its `repos.found` answers it (and a drop or a refusal answers « offline » or « outdated »). */
   const scans = new Map<string, string>();
+  /** `attachment.put` / `attachment.get` requestId -> the machine asked, so only its answer is emitted (a drop answers « offline »). */
+  const attachmentAsks = new Map<string, string>();
   /** `models.list` requestId -> the machine asked and the agent, so only its `models.listing` answers it (and a drop or a refusal answers « offline » or « outdated »). */
   const modelLists = new Map<string, { machine: string; tool: Tool }>();
   /** `roles.list` requestId -> the project's machine, so only its `roles.listing` answers it (and a drop or a refusal answers « offline » or « outdated ») (#99). */
@@ -261,6 +263,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     }
     if (m.type === 'document.content' || m.type === 'document.error') { if (documents.get(m.requestId) === machine) { documents.delete(m.requestId); emit(m); } return; }
     if (m.type === 'repos.info') { if (inspections.get(m.requestId) === machine) { inspections.delete(m.requestId); unfound.delete(m.requestId); emit(m); } return; }
+    if (m.type === 'attachment.stored' || m.type === 'attachment.data' || m.type === 'attachment.error') { if (attachmentAsks.get(m.requestId) === machine) { attachmentAsks.delete(m.requestId); emit(m); } return; }
     if (m.type === 'repos.found') { if (scans.get(m.requestId) === machine) { scans.delete(m.requestId); emit(m); } return; }
     if (m.type === 'models.listing') { if (modelLists.get(m.requestId)?.machine === machine) { modelLists.delete(m.requestId); emit(m); } return; }
     if (m.type === 'roles.listing' && m.requestId !== undefined && roleLists.has(m.requestId)) { if (roleLists.get(m.requestId) === machine) { roleLists.delete(m.requestId); emit(m); } return; }
@@ -274,7 +277,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         const target = peers.get(m.result.machineId);
         bindings.set(req.qid, { machine: m.result.machineId, raw: req.qid });
         if (!available(target)) { fail(req.qid, `${target?.config.label ?? m.result.machineId} is offline`); return; }
-        target!.client.send({ type: 'chat.ask', qid: req.qid, text: m.result.text, tool: req.tool });
+        target!.client.send({ type: 'chat.ask', qid: req.qid, text: m.result.text, tool: req.tool, ...(req.images ? { images: req.images } : {}) });
       }
       return;
     }
@@ -331,6 +334,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         // A launch in flight names its request, as the daemon's refusal does, so the form that sent it hears it.
         const op = operations.get(c.id), closing = closeRows.has(c.id);
         if (endOperation(c.id)) emit({ type: 'error', message: `${c.label} is offline`, ...(op === 'launch' ? { request: 'session.launch' } : closing ? { request: 'session.close' } : {}) });
+        for (const [requestId, owner] of attachmentAsks) if (owner === c.id) { attachmentAsks.delete(requestId); emit({ type: 'attachment.error', requestId, reason: 'offline' }); }
         answerUnfoundInspections(c.id); answerUnfoundListings(c.id, 'offline'); answerFailedScans(c.id, 'offline'); answerFailedModels(c.id, 'offline'); answerFailedRoles(c.id, 'offline');
         for (const [requestId, owner] of documents) if (owner === c.id) { documents.delete(requestId); emit({ type: 'document.error', requestId, path: '', code: 'read_failed' }); }
         if (routing?.coordinator === c.id) { const qid = routing.qid; routing = null; fail(qid, `${c.label} is offline`); }
@@ -367,13 +371,20 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         }
         const coordinator = [...peers.values()].find(p => available(p) && p.snapshot?.daemon?.routing);
         if (!coordinator) return fail(msg.qid, 'Update a connected daemon to enable multi-machine chat');
-        routing = { qid: msg.qid, text: msg.text, tool: msg.tool, coordinator: coordinator.config.id };
+        routing = { qid: msg.qid, text: msg.text, tool: msg.tool, ...(msg.images ? { images: msg.images } : {}), coordinator: coordinator.config.id };
         coordinator.client.send({ type: 'chat.route', qid: msg.qid, text: msg.text, tool: msg.tool, context }); return;
       }
       if (msg.type === 'chat.cancel' && routing?.qid === msg.qid) { peers.get(routing.coordinator)?.client.send(msg); routing = null; fail(msg.qid, 'cancelled'); return; }
       let machine = selected; let outgoing: ClientMessage = msg;
-      if ('id' in msg) { const origin = splitId(msg.id); if (!origin) { emit({ type: 'error', id: msg.id, message: 'Unknown machine', request: msg.type }); return; } machine = origin.machine; outgoing = { ...msg, id: origin.id }; }
+      if ('id' in msg && msg.id !== undefined) { const origin = splitId(msg.id); if (!origin) { if (msg.type === 'attachment.put' || msg.type === 'attachment.get') emit({ type: 'attachment.error', requestId: msg.requestId, reason: 'offline' }); else emit({ type: 'error', id: msg.id, message: 'Unknown machine', request: msg.type }); return; } machine = origin.machine; outgoing = { ...msg, id: origin.id }; }
       if ('qid' in msg && msg.qid) { const b = bindings.get(msg.qid); if (!b) { emit({ type: 'error', message: 'Unknown conversation destination', request: msg.type }); return; } machine = b.machine; outgoing = { ...outgoing, qid: b.raw } as ClientMessage; }
+      if (msg.type === 'attachment.put' || msg.type === 'attachment.get') {
+        // A session's id routes (qualified above); a chat turn's image names its `machine`; neither is the local machine, never the selected one.
+        if (msg.id === undefined) machine = (msg.type === 'attachment.get' && msg.machine) || LOCAL_MACHINE.id;
+        if (outgoing.type === 'attachment.get') { const { machine: _m, ...rest } = outgoing; outgoing = rest; }
+        if (!available(peers.get(machine))) { emit({ type: 'attachment.error', requestId: msg.requestId, reason: 'offline' }); return; }
+        attachmentAsks.set(msg.requestId, machine);
+      }
       if (msg.type === 'document.read') {
         if (configs.length > 1 && !msg.machineId && !msg.sessionId) { emit({ type: 'document.error', requestId: msg.requestId, path: msg.path, code: 'read_failed' }); return; }
         if (msg.machineId) machine = msg.machineId;

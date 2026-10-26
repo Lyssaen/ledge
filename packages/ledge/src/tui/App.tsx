@@ -4,6 +4,8 @@ import { isPending, useDaemon, useMachines, useProjects, useTasks, useTeams, typ
 import type { Session } from '@ledge/protocol';
 import { useActions, type Toast } from './actions.js';
 import { attachCommand, runAttached } from './attach.js';
+import { readClipboardImage, type ClipboardImage } from './clipboard.js';
+import { openImage } from './openImage.js';
 import { SCREENS, TuiContext, type Kept, type KeyHandler, type Screen, type Tui } from './context.js';
 import type { Glyphs } from './glyphs.js';
 import { I18nProvider, MESSAGES, type Lang } from './i18n/lang.js';
@@ -38,6 +40,9 @@ export interface AppProps {
   env: NodeJS.ProcessEnv;
   /** Test hook: runs an attach command (the real one hands the terminal over to it). */
   run?: (argv: string[]) => Promise<number>;
+  /** Test hooks: the clipboard reader (Alt+V) and the image viewer launcher (o, Alt+O). */
+  readImage?: () => Promise<ClipboardImage | null>;
+  openFile?: (file: string) => Promise<void>;
 }
 
 export function App(props: AppProps) {
@@ -50,7 +55,7 @@ export function App(props: AppProps) {
   return <I18nProvider lang={lang}><Shell {...props} lang={lang} setLang={setLangState} theme={theme} setThemeState={setThemeState} tone={tone} /></I18nProvider>;
 }
 
-function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeState, tone, background, saveTheme, notify, glyphs, env, run }: AppProps & { setLang(l: Lang): void; theme: ThemeChoice; setThemeState(x: ThemeChoice): void; tone: Tone }) {
+function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeState, tone, background, saveTheme, notify, glyphs, env, run, readImage, openFile }: AppProps & { setLang(l: Lang): void; theme: ThemeChoice; setThemeState(x: ThemeChoice): void; tone: Tone }) {
   const { exit, suspendTerminal } = useApp();
   // Escape sequences that print nothing (bell, OSC 9, title) go straight to the terminal, not through Ink's frame.
   const { stdout } = useStdout();
@@ -138,7 +143,8 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
   const small = size.columns < MIN.columns || size.rows < MIN.rows;
   const tui: Tui = {
     client, fleet, d, machines, projects, t, lang, setLang, theme, setTheme, tone, background, g: glyphs, screen, go, selected, select: setSelectedId,
-    toast, lastToast, actions, editing, setEditing, small, attach, runInTerminal, env, catalog, keys, kept
+    toast, lastToast, actions, editing, setEditing, small, attach, runInTerminal, env, catalog, keys, kept,
+    readImage: readImage ?? (() => readClipboardImage(env)), openFile: openFile ?? (file => openImage(file, env))
   };
 
   useInput((input, key) => {

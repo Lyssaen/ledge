@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ATTACHMENTS_MAX, ATTACHMENT_MAX, AttachmentDataSchema, AttachmentErrorSchema, AttachmentGetSchema, AttachmentIdSchema, AttachmentPutSchema, AttachmentRefSchema, AttachmentStoredSchema, ImageUploadSchema, b64Max } from './attachments.js';
 import { ContextPrefsSchema, HandoverStateSchema } from './handover.js';
 import { AutonomySchema, PendingSchema, SessionSchema, ToolSchema, type Tool } from './session.js';
 import { ActionVarsSchema, ChatActionStateSchema, ChatStepSchema, MAX_PROPOSALS } from './chat.js';
@@ -198,7 +199,8 @@ export const PhoneChatTurnSchema = z.object({
   error: ChatErrorCodeSchema.optional(), proposals: z.array(PhoneChatProposalSchema).max(MAX_PROPOSALS).optional(),
   relay: PhoneChatRelaySchema.optional(), closes: z.array(PhoneChatCloseSchema).min(1).max(MAX_PROPOSALS).optional(), cut: z.literal(true).optional(),
   team: PhoneChatTeamSchema.optional(), tasks: z.array(PhoneChatTaskSchema).min(1).max(MAX_PROPOSALS).optional(),
-  actions: z.array(PhoneChatActionSchema).min(1).max(MAX_PROPOSALS).optional(), ignoredAt: z.string().datetime().optional()
+  actions: z.array(PhoneChatActionSchema).min(1).max(MAX_PROPOSALS).optional(), ignoredAt: z.string().datetime().optional(),
+  attachments: z.array(AttachmentRefSchema).max(ATTACHMENTS_MAX).optional()
 }).strict();
 export type PhoneChatTurn = z.infer<typeof PhoneChatTurnSchema>;
 
@@ -232,7 +234,7 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
     assertion: AssertionSchema.optional()
   }),
   z.object({
-    type: z.literal('session.reply'), op: OperationIdSchema, id: sessionId, text: z.string().min(1).max(MESSAGE_MAX),
+    type: z.literal('session.reply'), op: OperationIdSchema, id: sessionId, text: z.string().max(MESSAGE_MAX), attachments: z.array(AttachmentIdSchema).max(ATTACHMENTS_MAX).optional(),
     /** The request the reply answers, or null when the phone showed none: refused if the session's request is no longer that one. */
     expect: PhoneExpectSchema.nullable(),
     assertion: AssertionSchema.optional()
@@ -250,10 +252,13 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('push.subscribe'), op: OperationIdSchema, subscription: PushSubscriptionSchema, key: B64U.length(87) }),
   z.object({ type: z.literal('push.unsubscribe'), op: OperationIdSchema }),
   /** The phone's own chat with Ledge. */
-  z.object({ type: z.literal('chat.ask'), qid: OperationIdSchema, text: z.string().trim().min(1).max(MESSAGE_MAX) }),
+  z.object({ type: z.literal('chat.ask'), qid: OperationIdSchema, text: z.string().trim().max(MESSAGE_MAX), attachments: z.array(AttachmentIdSchema).max(ATTACHMENTS_MAX).optional() }),
   z.object({ type: z.literal('chat.cancel'), qid: OperationIdSchema }),
   z.object({ type: z.literal('chat.reset') }),
   z.object({ type: z.literal('chat.history') }),
+  /** An image to store, sent alone before the message that names it; no `id`, and at most `ATTACHMENT_MAX` bytes. */
+  AttachmentPutSchema.pick({ type: true, requestId: true }).extend({ image: ImageUploadSchema.extend({ data: z.string().min(1).max(b64Max(ATTACHMENT_MAX)) }) }),
+  AttachmentGetSchema.pick({ type: true, requestId: true, attachment: true, preview: true }),
   z.object({ type: z.literal('chat.relay'), op: OperationIdSchema, qid: OperationIdSchema }),
   z.object({ type: z.literal('chat.launch'), op: OperationIdSchema, qid: OperationIdSchema, rows: CardRowsSchema.optional(), assertion: AssertionSchema.optional() }),
   z.object({ type: z.literal('chat.close'), op: OperationIdSchema, qid: OperationIdSchema, rows: CardRowsSchema.optional(), assertion: AssertionSchema.optional() }),
@@ -301,6 +306,9 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
   /** The tasks Ledge gave, open or closed lately, after each snapshot; then each change. */
   z.object({ type: z.literal('tasks'), tasks: z.array(PhoneTaskSchema).max(200) }),
   z.object({ type: z.literal('task.updated'), task: PhoneTaskSchema }),
+  AttachmentStoredSchema,
+  AttachmentDataSchema,
+  AttachmentErrorSchema,
   /** Never carries free text. */
   z.object({ type: z.literal('error'), code: z.enum(['invalid', 'unknown_session', 'too_large']), request: z.string().max(40).optional() })
 ]);

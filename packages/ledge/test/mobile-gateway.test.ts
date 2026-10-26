@@ -1,7 +1,11 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { PAD_TIERS, PLAIN_MAX, SNAPSHOT_BODY_MAX, TOPIC_MAX, PhoneServerMessageSchema, pendingKey, type ClientMessage, type MobileState, type Pending, type PhoneServerMessage, type ServerMessage, type Session, type Task, type Team, type ThreadItem } from '@ledge/protocol';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { ATTACHMENT_MAX, PREVIEW_MAX, padPlain, PAD_TIERS, PLAIN_MAX, SNAPSHOT_BODY_MAX, TOPIC_MAX, PhoneServerMessageSchema, pendingKey, type ClientMessage, type MobileState, type Pending, type PhoneServerMessage, type ServerMessage, type Session, type Task, type Team, type ThreadItem } from '@ledge/protocol';
 import { hostname } from 'node:os';
+import { AttachmentStore } from '../src/daemon/attachments.js';
 import { createPhoneGateway } from '../src/mobile/gateway.js';
 import { createChallengeStore } from '../src/mobile/challenges.js';
 import { challengeOf, rpOf, type DeviceCredential } from '../src/mobile/webauthn.js';
@@ -65,7 +69,7 @@ const flush = async () => { for (let i = 0; i < 5; i++) await new Promise(r => s
 const stops: Array<() => void> = [];
 afterEach(() => { for (const s of stops.splice(0)) s(); });
 
-function setup(opts: { boot?: string; dispatch?: (msg: ClientMessage, reply: (m: ServerMessage) => void) => Promise<void>; relayUrl?: string; chats?: Parameters<typeof createPhoneGateway>[0]['chats']; relay?: Parameters<typeof createPhoneGateway>[0]['relay']; launchChat?: Parameters<typeof createPhoneGateway>[0]['launchChat']; closeChat?: Parameters<typeof createPhoneGateway>[0]['closeChat']; actChat?: Parameters<typeof createPhoneGateway>[0]['actChat']; teams?: () => Team[]; tasks?: () => Task[]; onChatEnd?: Parameters<typeof createPhoneGateway>[0]['onChatEnd']; devices?: string[] } = {}) {
+function setup(opts: { boot?: string; dispatch?: (msg: ClientMessage, reply: (m: ServerMessage) => void) => Promise<void>; relayUrl?: string; chats?: Parameters<typeof createPhoneGateway>[0]['chats']; relay?: Parameters<typeof createPhoneGateway>[0]['relay']; launchChat?: Parameters<typeof createPhoneGateway>[0]['launchChat']; closeChat?: Parameters<typeof createPhoneGateway>[0]['closeChat']; actChat?: Parameters<typeof createPhoneGateway>[0]['actChat']; teams?: () => Team[]; tasks?: () => Task[]; onChatEnd?: Parameters<typeof createPhoneGateway>[0]['onChatEnd']; devices?: string[]; attachments?: AttachmentStore } = {}) {
   const fm = fakeMobile(opts.devices ?? ['dev1', 'dev2'], opts.relayUrl);
   const clock = { t: 1_000_000 };
   const challenges = createChallengeStore({ now: () => clock.t });
@@ -82,8 +86,10 @@ function setup(opts: { boot?: string; dispatch?: (msg: ClientMessage, reply: (m:
   const dispatched: ClientMessage[] = [];
   const logs: string[] = [];
   const dispatch = opts.dispatch ?? (async (msg: ClientMessage) => { dispatched.push(msg); });
+  const attachments = opts.attachments ?? new AttachmentStore(join(mkdtempSync(join(tmpdir(), 'ledge-gw-att-')), 'attachments'));
   const gw = createPhoneGateway({
     mobile: fm.mobile,
+    attachments,
     ...(opts.chats ? { chats: opts.chats } : {}),
     ...(opts.relay ? { relay: opts.relay } : {}),
     ...(opts.launchChat ? { launchChat: opts.launchChat } : {}),
@@ -111,7 +117,7 @@ function setup(opts: { boot?: string; dispatch?: (msg: ClientMessage, reply: (m:
   const got = (deviceId: string): PhoneServerMessage[] => fm.sent.filter(([d]) => d === deviceId).map(([, t]) => JSON.parse(t) as PhoneServerMessage);
   const results = (deviceId: string) => got(deviceId).filter(m => m.type === 'operation.result');
   const send = (deviceId: string, m: unknown) => fm.receive(deviceId, typeof m === 'string' ? m : JSON.stringify(m));
-  return { fm, gw, sessions, dispatched, logs, got, results, send, clock, creds, stored };
+  return { fm, gw, sessions, dispatched, logs, got, results, send, clock, creds, stored, attachments };
 }
 
 const decide = (id: string, decision: 'accept' | 'deny' | 'always', pending: Session['pending'] & object, extra: { key?: string; op?: string } = {}) => ({
@@ -1219,6 +1225,7 @@ function fakeChats() {
   const drops: string[] = [];
   const emitters = new Map<string, unknown>();
   const asked: Array<{ id: string; qid: string; tool: unknown }> = [];
+  const images: unknown[] = [];
   const cancelled: Array<{ id: string; qid: string }> = [];
   const resets: string[] = [];
   const turns = new Map<string, Array<{ qid: string; question: string; askedAt: string; steps: never[]; answer?: string }>>();
@@ -1227,8 +1234,9 @@ function fakeChats() {
   const touched: string[] = [];
   const gone = new Set<string>();
   const chatOf = (id: string) => ({
-    async ask(qid: string, text: string, emit: (m: ServerMessage) => void, tool?: unknown) {
+    async ask(qid: string, text: string, emit: (m: ServerMessage) => void, tool?: unknown, refs?: unknown) {
       asked.push({ id, qid, tool });
+      images.push(refs);
       const t = { qid, question: text, askedAt: T0, steps: [] as never[], answer: `answer of ${id}` };
       turns.set(id, [...(turns.get(id) ?? []), t]);
       emit({ type: 'chat.delta', qid, text: 'ans' } as never);
@@ -1252,7 +1260,7 @@ function fakeChats() {
     async drop(id: string) { drops.push(id); gone.add(id); turns.delete(id); },
     setEmitter(thread: string, e: unknown) { emitters.set(thread, e); }
   };
-  return { chats, drops, emitters, asked, cancelled, resets, turns, dropping, touched };
+  return { chats, images, drops, emitters, asked, cancelled, resets, turns, dropping, touched };
 }
 
 describe('phone gateway: chat', () => {
@@ -2059,5 +2067,113 @@ describe('phone gateway: teams and Ledge\'s tasks (ledge home spec §2.4)', () =
     await flush();
     const after = g.got('dev1').slice(before).map(m => m.type);
     expect(after).toEqual(['teams', 'task.updated', 'teams']);
+  });
+});
+
+const u32 = (n: number) => Buffer.from([n >>> 24, (n >> 16) & 255, (n >> 8) & 255, n & 255]);
+const png = (w: number, h: number, size = 0) => Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), u32(13), Buffer.from('IHDR'), u32(w), u32(h), Buffer.from([8, 6, 0, 0, 0]), Buffer.alloc(Math.max(0, size - 29), 7)]);
+const ATTACH_FULL = ATTACHMENT_MAX;
+/** Waits for the store's file writes: `flush` only spins the event loop. */
+const until = async (cond: () => boolean) => { for (let i = 0; i < 200 && !cond(); i++) await new Promise(r => setTimeout(r, 5)); };
+const put = (requestId: string, image: Buffer, preview?: Buffer) => ({
+  type: 'attachment.put', requestId,
+  image: { mime: 'image/png', data: image.toString('base64'), ...(preview ? { preview: { mime: 'image/png', data: preview.toString('base64') } } : {}) }
+});
+
+describe('phone gateway: images', () => {
+  it('refuses a 400 001-byte put with too_large', async () => {
+    const g = setup();
+    g.send('dev1', put('r1', png(100, 100, ATTACHMENT_MAX + 1)));
+    await flush();
+    expect(g.got('dev1')).toEqual([{ type: 'attachment.error', requestId: 'r1', reason: 'too_large' }]);
+  });
+
+  it('stores a 400 000-byte image with a 40 000-byte preview, and the answer fits the transport', async () => {
+    const g = setup();
+    g.send('dev1', put('r1', png(1600, 1200, ATTACH_FULL), png(480, 360, PREVIEW_MAX)));
+    await until(() => g.got('dev1').length > 0);
+    const [m] = g.got('dev1');
+    expect(m).toMatchObject({ type: 'attachment.stored', requestId: 'r1', ref: { mime: 'image/png', width: 1600, height: 1200, bytes: ATTACHMENT_MAX, preview: true } });
+    expect(PhoneServerMessageSchema.safeParse(m).success).toBe(true);
+    // Sent as a stored answer, not the outbox's too_large error: the frame passed `padPlain`.
+    expect(padPlain(g.fm.sent[0]![1].trimEnd())).not.toBeNull();
+  });
+
+  it('the largest attachment.data frame (a 400 000-byte image) passes the transport frame cap', async () => {
+    const g = setup();
+    g.send('dev1', put('r1', png(1600, 1200, ATTACHMENT_MAX)));
+    await until(() => g.got('dev1').length > 0);
+    const id = (g.got('dev1')[0] as { ref: { id: string } }).ref.id;
+    g.send('dev1', { type: 'attachment.get', requestId: 'r2', attachment: id });
+    await until(() => g.got('dev1').length > 1);
+    const frame = g.fm.sent[1]![1].trimEnd();
+    expect(JSON.parse(frame)).toMatchObject({ type: 'attachment.data', requestId: 'r2' });
+    expect(padPlain(frame)).not.toBeNull();
+    expect(Buffer.byteLength(frame)).toBeLessThan(PLAIN_MAX);
+  });
+
+  it('answers a get with the bytes, the preview on request, and not_found for an unknown id', async () => {
+    const g = setup();
+    g.send('dev1', put('r1', png(10, 10, 100), png(5, 5, 60)));
+    await until(() => g.got('dev1').length > 0);
+    const ref = (g.got('dev1')[0] as { ref: { id: string } }).ref;
+    g.send('dev1', { type: 'attachment.get', requestId: 'r2', attachment: ref.id });
+    g.send('dev1', { type: 'attachment.get', requestId: 'r3', attachment: ref.id, preview: true });
+    g.send('dev1', { type: 'attachment.get', requestId: 'r4', attachment: 'a'.repeat(64) });
+    await until(() => g.got('dev1').length >= 4);
+    const byId = (r: string) => (g.got('dev1') as Array<Record<string, unknown>>).find(m => m.requestId === r);
+    const full = byId('r2'), small = byId('r3'), missing = byId('r4');
+    expect(full).toMatchObject({ type: 'attachment.data', requestId: 'r2', attachment: ref.id, mime: 'image/png' });
+    expect(Buffer.from(full!.data as string, 'base64')).toHaveLength(100);
+    expect(Buffer.from(small!.data as string, 'base64')).toHaveLength(60);
+    expect(missing).toEqual({ type: 'attachment.error', requestId: 'r4', reason: 'not_found' });
+  });
+
+  it('a device that is not approved gets nothing', async () => {
+    const g = setup({ devices: ['dev1'] });
+    g.send('stranger', put('r1', png(10, 10, 100)));
+    await flush();
+    expect(g.got('stranger')).toEqual([]);
+  });
+
+  it('dispatches a reply with images and no text', async () => {
+    const g = setup();
+    g.send('dev1', put('r1', png(10, 10, 100)));
+    await until(() => g.got('dev1').length > 0);
+    const id = (g.got('dev1')[0] as { ref: { id: string } }).ref.id;
+    g.send('dev1', { type: 'session.reply', op: randomUUID(), id: 'c', text: '', attachments: [id], expect: null });
+    await flush();
+    expect(g.dispatched).toEqual([{ type: 'session.reply', id: 'c', text: '', attachments: [id] }]);
+  });
+
+  it('refuses an empty reply with no images as invalid, dispatching nothing', async () => {
+    const g = setup();
+    const m = { type: 'session.reply', op: randomUUID(), id: 'c', text: '', expect: null };
+    g.send('dev1', m);
+    await flush();
+    expect(g.results('dev1').at(-1)).toEqual({ type: 'operation.result', op: m.op, status: 'rejected', reason: 'invalid' });
+    expect(g.dispatched).toEqual([]);
+  });
+
+  it('reports a daemon refusal of the images as that reason', async () => {
+    const g = setup({ dispatch: async (msg, reply) => { reply({ type: 'error', message: 'no', request: msg.type, code: 'attachments_not_accepted' }); } });
+    const m = { type: 'session.reply', op: randomUUID(), id: 'c', text: 'hi', attachments: ['a'.repeat(64)], expect: null };
+    g.send('dev1', m);
+    await flush();
+    expect(g.results('dev1').at(-1)).toEqual({ type: 'operation.result', op: m.op, status: 'rejected', reason: 'attachments_not_accepted' });
+  });
+
+  it('resolves a chat question\'s image ids to refs; a missing id fails the question', async () => {
+    const c = fakeChats();
+    const g = setup({ chats: c.chats });
+    g.send('dev1', put('r1', png(10, 10, 100)));
+    await until(() => g.got('dev1').length > 0);
+    const ref = (g.got('dev1')[0] as { ref: unknown }).ref as { id: string };
+    const q1 = randomUUID(), q2 = randomUUID();
+    g.send('dev1', { type: 'chat.ask', qid: q1, text: '', attachments: [ref.id] });
+    g.send('dev1', { type: 'chat.ask', qid: q2, text: 'x', attachments: ['b'.repeat(64)] });
+    await flush();
+    expect(c.images).toEqual([[ref]]);
+    expect(g.got('dev1')).toContainEqual({ type: 'chat.error', qid: q2, code: 'failed' });
   });
 });

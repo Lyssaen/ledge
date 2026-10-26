@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { fileURLToPath } from 'node:url';
 import { codexArgs, parseCodexLine, runCodex } from '../src/chat/codex.js';
+import { buildPersona } from '../src/chat/persona.js';
 
 const FAKE = fileURLToPath(new URL('./fake-claude.mjs', import.meta.url));
 const opts = (extra = {}) => ({ question: 'Où en sont les autres ?', cwd: process.cwd(), addDirs: ['/w/ledge'], sessionId: '11111111-1111-4111-8111-111111111111', resume: false, env: { ...process.env }, bin: [process.execPath, FAKE], ...extra });
@@ -16,8 +17,8 @@ describe('codexArgs', () => {
     expect(a.at(-1)).toBe('-');
     expect(a).not.toContain('--add-dir');
     expect(a).not.toContain('resume');
-    expect(codexArgs(opts({ resume: true }))[1]).toBe('resume');
-    expect(codexArgs(opts({ resume: true }))[2]).toBe(opts().sessionId);
+    const r = codexArgs(opts({ resume: true }));
+    expect(r[r.indexOf('resume') + 1]).toBe(opts().sessionId);
   });
   it('gives the persona as developer instructions, a TOML string, on a resume too (spec 2026-10-26 action registry §4)', () => {
     const persona = 'Tu es "Ledge".\nUn `bloc` \\ fin.';
@@ -51,5 +52,21 @@ describe('runCodex', () => {
     expect(events[0]).toMatchObject({ type: 'init' });
     expect(events.filter((e: any) => e.type === 'tool')).toHaveLength(1);
     expect(events.at(-1)).toMatchObject({ type: 'result', isError: false, text: 'Deux compagnons travaillent. Question : Où en sont les autres ?' });
+  });
+});
+
+describe('codexArgs images and resume order', () => {
+  it('puts --sandbox and -C before `resume` (it rejects them after the id) and pins the whole resume argv', () => {
+    expect(codexArgs(opts({ resume: true, cwd: '/ctx' }))).toEqual(['exec', '--sandbox', 'read-only', '-C', '/ctx', 'resume', opts().sessionId,
+      '--json', '--skip-git-repo-check', '--ignore-user-config', '-c', 'sandbox_permissions=["disk-full-read-access"]',
+      '-c', `developer_instructions=${JSON.stringify(buildPersona('codex'))}`, '-']);
+  });
+  it('passes -i per image before the final -, on a first run and on resume', () => {
+    const images = [{ path: '/a/1.png', mime: 'image/png' }, { path: '/a/2.jpg', mime: 'image/jpeg' }];
+    for (const resume of [false, true]) {
+      const a = codexArgs(opts({ resume, images }));
+      expect(a.slice(-5)).toEqual(['-i', '/a/1.png', '-i', '/a/2.jpg', '-']);
+    }
+    expect(codexArgs(opts())).not.toContain('-i');
   });
 });

@@ -8,9 +8,11 @@ import { runJsonl } from './run.js';
  * instruction (`developer_instructions`, spec 2026-10-26 action registry §4), a TOML string: a JSON string is one.
  */
 export function codexArgs(o: RunOptions): string[] {
-  const flags = ['--sandbox', 'read-only', '--json', '--skip-git-repo-check', '--ignore-user-config', '-C', o.cwd, '-c', 'sandbox_permissions=["disk-full-read-access"]',
-    '-c', `developer_instructions=${JSON.stringify(o.persona ?? buildPersona('codex'))}`, '-'];
-  return o.resume ? ['exec', 'resume', o.sessionId, ...flags] : ['exec', ...flags];
+  // `exec resume` rejects --sandbox and -C after the id (they belong to `exec`), but takes the rest, including -i.
+  const exec = ['--sandbox', 'read-only', '-C', o.cwd];
+  const flags = ['--json', '--skip-git-repo-check', '--ignore-user-config', '-c', 'sandbox_permissions=["disk-full-read-access"]',
+    '-c', `developer_instructions=${JSON.stringify(o.persona ?? buildPersona('codex'))}`, ...(o.images ?? []).flatMap(i => ['-i', i.path]), '-'];
+  return o.resume ? ['exec', ...exec, 'resume', o.sessionId, ...flags] : ['exec', ...exec, ...flags];
 }
 
 type Json = Record<string, unknown>;

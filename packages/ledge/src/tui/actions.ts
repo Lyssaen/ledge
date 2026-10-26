@@ -14,7 +14,8 @@ export interface Actions {
   /** Deny with a note the agent reads. false without a send, the reason in a toast: the caller keeps the note. `onRefused`
    *  gives it back when the daemon refuses it later. */
   denyWithNote(s: Session, note: string, onRefused: (text: string) => void): boolean;
-  reply(s: Session, text: string, onRefused: (text: string) => void): boolean;
+  /** `how.attachments`: the stored ids of the images that go with the reply. */
+  reply(s: Session, text: string, onRefused: (text: string) => void, how?: { attachments?: string[] }): boolean;
   interrupt(s: Session): void;
   busy(id: string): boolean;
 }
@@ -59,8 +60,8 @@ export function useActions(o: { client: DaemonClient; sessions: readonly Session
         else toast({ text: refused(s, true), tone: 'info' });
         return sent;
       },
-      reply(s, text, onRefused) {
-        const sent = decisions.reply(s, text, onRefused);
+      reply(s, text, onRefused, how) {
+        const sent = decisions.reply(s, text, onRefused, how);
         if (sent) onLand.current.set(s.id, t.toast.reply(s.name));
         else toast({ text: refused(s, false), tone: 'info' });
         return sent;

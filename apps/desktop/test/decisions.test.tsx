@@ -149,6 +149,18 @@ describe('useDecisions', () => {
     expect(props.client.send).toHaveBeenCalledWith({ type: 'session.decide', id: 'local:otto', decision: 'deny', note: 'Use pnpm', expect: { kind: 'permission', text: 'npm test', key: pendingKey(otto.pending!) } });
     expect(props.client.send).toHaveBeenCalledTimes(1);
   });
+  it('a reply of images alone carries their attachment ids; none omits the field', () => {
+    const bix = fakeSession('local:bix', { name: 'Bix', state: 'idle' });
+    const id = 'b'.repeat(64);
+    const { result, props } = setup();
+    act(() => { expect(result.current.reply(bix, '', undefined, { attachments: [id] })).toBe(true); });
+    expect(props.client.send).toHaveBeenCalledWith({ type: 'session.reply', id: 'local:bix', text: '', attachments: [id] });
+    const other = setup();
+    act(() => { expect(other.result.current.reply(bix, 'Go on', undefined, { attachments: [] })).toBe(true); });
+    expect(other.props.client.send).toHaveBeenCalledWith({ type: 'session.reply', id: 'local:bix', text: 'Go on' });
+    const empty = setup();
+    act(() => { expect(empty.result.current.reply(bix, ' ', undefined, { attachments: [] })).toBe(false); });
+  });
   it('a reply lands when the session moves; refused, its text comes back', () => {
     const bix = fakeSession('local:bix', { name: 'Bix', state: 'idle' });
     const onRefused = vi.fn();

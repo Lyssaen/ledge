@@ -45,3 +45,11 @@ describe('runOmp', () => {
     expect(events).toContainEqual({ type: 'result', text: 'Deux sessions : Nova travaille.', isError: false });
   });
 });
+
+describe('ompChatArgs images', () => {
+  it('names each image as an @file argument', () => {
+    expect(ompChatArgs(opts()).some(x => x.startsWith('@'))).toBe(false);
+    const a = ompChatArgs(opts({ images: [{ path: '/a/1.png', mime: 'image/png' }, { path: '/a/2.jpg', mime: 'image/jpeg' }] }));
+    expect(a.slice(-2)).toEqual(['@/a/1.png', '@/a/2.jpg']);
+  });
+});

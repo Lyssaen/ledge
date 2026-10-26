@@ -109,6 +109,11 @@ describe('ledge messages (spec 2026-10-19 codex messaging §3.2)', () => {
     expect(line).not.toMatch(/[\x00-\x1f\x7f-\x9f]/);
     expect(ledgeMessages(line)![0]!.from).toBe('Pim');
   });
+  it('reads every message of a batch the mailbox typed on one line', () => {
+    const a = formatLedgeMessage({ from: 'Otto', tool: 'claude', text: 'un', to: 'codex' });
+    const b = formatLedgeMessage({ from: 'Pim', tool: 'codex', text: 'deux', to: 'codex', id: 'm123456' });
+    expect(ledgeMessages(`${a} ${b}`)).toEqual([{ from: 'Otto', tool: 'claude', text: 'un' }, { from: 'Pim', tool: 'codex', id: 'm123456', text: 'deux' }]);
+  });
   it('is undefined for any other prompt', () => {
     expect(ledgeMessages('Lance les tests')).toBeUndefined();
   });

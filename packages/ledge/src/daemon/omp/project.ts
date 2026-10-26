@@ -19,6 +19,9 @@ export interface Tracking {
   working: boolean;
   /** Instructions the host already recorded when it sent them (a prompt at rest): their echo in the stream is not a second prompt. */
   echo: string[];
+  /** Follow-ups and steers the host queued, with the images they carry: OMP's echo of one, when its turn starts, shows them in the thread.
+   *  `text` is what OMP was given (it echoes it back); `shown` the person's own words when overflow images were appended as brackets. */
+  queued: Array<{ text: string; attachments: string[]; shown?: string }>;
   /** Tool calls in flight, by id: the result frame does not repeat the arguments (a write's path). */
   /** This process's own tag in the ids of its messages: OMP numbers them from 1 in each process, and a resumed session has several. */
   tag: string;
@@ -28,7 +31,7 @@ export interface Tracking {
   helpers: Map<string, { known: boolean; reply?: string }>;
   calls: Map<string, { name: string; args?: Record<string, unknown> }>;
 }
-export const newTracking = (tag = 'p'): Tracking => ({ requests: [], working: false, echo: [], tag, sent: false, helpers: new Map(), calls: new Map() });
+export const newTracking = (tag = 'p'): Tracking => ({ requests: [], working: false, echo: [], queued: [], tag, sent: false, helpers: new Map(), calls: new Map() });
 
 const DIALOGS: ReadonlySet<string> = new Set<DialogMethod>(['select', 'confirm', 'input', 'editor', 'ask']);
 const CAP_INPUT = 4000;
@@ -109,7 +112,11 @@ export function project(f: Frame, t: Tracking, at: string, helper?: string): Ses
       // The user's instruction as OMP takes it: a queued follow-up or a steer enters the thread when its turn starts, not when it was typed.
       const m = f.message as { role?: unknown; attribution?: unknown; content?: unknown } | undefined;
       if (m?.role !== 'user' || m.attribution !== 'user') return [];
-      const text = contentText(m.content).trim(); if (!text) return [];
+      const text = contentText(m.content).trim();
+      // A queued instruction is found by its text, an image-only one included (its text is empty).
+      const q = t.queued.findIndex(x => x.text === text);
+      if (q !== -1) { const [e] = t.queued.splice(q, 1); return [ev({ name: 'UserPromptSubmit', ...((e!.shown ?? text) ? { text: e!.shown ?? text } : {}), ...(e!.attachments.length > 0 ? { attachments: e!.attachments } : {}) })]; }
+      if (!text) return [];
       const i = t.echo.indexOf(text);
       if (i !== -1) { t.echo.splice(i, 1); return []; }
       return [ev({ name: 'UserPromptSubmit', text })];

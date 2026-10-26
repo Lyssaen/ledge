@@ -5,6 +5,7 @@ import type { Projects, Session } from '@ledge/protocol';
 import type { Actions, Toast } from './actions.js';
 import type { Asked } from './model/chat.js';
 import type { CatalogMemo } from './model/catalog.js';
+import type { ClipboardImage } from './clipboard.js';
 import type { Glyphs } from './glyphs.js';
 import type { Lang, Messages } from './i18n/lang.js';
 import type { ThemeChoice, Tone } from './theme.js';
@@ -40,6 +41,9 @@ export interface Tui {
   env: NodeJS.ProcessEnv;
   /** « Équipes »' last folder, and the launch it prefills. */
   catalog: { current: CatalogMemo };
+  /** The clipboard picture (null when there is none) and the system viewer: injected so tests stub them. */
+  readImage(): Promise<ClipboardImage | null>;
+  openFile(file: string): Promise<void>;
   /** Registers the screen's key handler (see `useScreenKeys`). */
   keys: { current: KeyHandler | null };
 }

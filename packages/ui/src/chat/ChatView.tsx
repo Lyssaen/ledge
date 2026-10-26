@@ -5,6 +5,7 @@ import { Button } from '../ui/Button';
 import { Icon, ICONS } from '../ui/icons';
 import { transition } from '../motion';
 import { MarkdownLinks } from '../documents/links';
+import { AttachmentChips, type ChipItem } from '../images';
 import { useChatCopy, type ChatCopy } from './copy';
 import { relativeTime } from './format';
 import { inline } from './inline';
@@ -26,7 +27,8 @@ export interface ChatViewProps {
   turns: ChatTurn[]; live: { qid: string; text: string } | null; sessions: Session[]; visible: boolean; enterDelay?: number;
   /** Null when questions may be sent; otherwise why not (offline). */
   offline: string | null;
-  onAsk: (text: string) => void; onCancel: (qid: string) => void; onReset: () => void; onBack?: () => void; onClose: () => void; onOpenSession: (id: string) => void;
+  /** `withImages`: the question comes from the field, so the chips under it go with it (then the text may be empty); suggestions and choices send text alone. */
+  onAsk: (text: string, withImages?: boolean) => void; onCancel: (qid: string) => void; onReset: () => void; onBack?: () => void; onClose: () => void; onOpenSession: (id: string) => void;
   /** The sober island has no session list to return to. */
   showBack?: boolean;
   /** Extra controls in the header, before close. The sober island puts its menu here. */
@@ -62,6 +64,11 @@ export interface ChatViewProps {
   /** Hover or keyboard focus of a `ledge://session/<id>` link in an answer; null when it ends. */
   onAgentHover?: (id: string | null) => void;
   inputRef?: Ref<HTMLInputElement | HTMLTextAreaElement>;
+  /** Images under the field (pasted on it or dropped on the composer): Send also works with no text, once every chip is `ready`.
+   *  A front that holds none leaves it out. `error`: what the last add or upload said, under the chips. */
+  /** What a turn's question carried (its images), drawn above its bubble; a front without images leaves it out. */
+  turnImages?: (turn: ChatTurn) => ReactNode;
+  attach?: { items: ChipItem[]; onFiles(files: File[]): void; onRemove(key: string): void; ready: boolean; error?: string | null };
   /** Ledge's home view (ledge home spec §2.2): `pinned` stays at the top of the thread while the conversation scrolls under it
    *  (« Le point »), `above` sits over the field (the suggestions), `footnote` under it; `multiline` makes the field a text
    *  area (Enter sends, Shift + Enter breaks the line); `subtitle` replaces the header's second line; `hideHeader` leaves the
@@ -132,7 +139,18 @@ export function ChatView(p: ChatViewProps) {
   // The resident pulses while Ledge reads.
   const [pulse, setPulse] = useState(0);
   useEffect(() => { if (!busy || !visible || p.reducedMotion) return; const id = setInterval(() => setPulse(k => k + 1), 1400); return () => clearInterval(id); }, [busy, visible, p.reducedMotion]);
-  const submit = (q: string) => { const v = q.trim(); if (!v || busy || p.offline) return; p.onAsk(v); setText(''); };
+  const withImages = (p.attach?.items.length ?? 0) > 0;
+  const submit = (q: string, fromField = false) => {
+    const v = q.trim(), images = fromField && withImages;
+    if ((!v && !images) || busy || p.offline || (images && !p.attach!.ready)) return;
+    p.onAsk(v, images); setText('');
+  };
+  /** Pasted image files go to the images (the paste is then not a text one); a text paste is left alone. */
+  const onPaste = (e: React.ClipboardEvent) => {
+    const files = [...e.clipboardData.files].filter(f => f.type.startsWith('image/'));
+    if (!p.attach || files.length === 0) return;
+    e.preventDefault(); p.attach.onFiles(files);
+  };
   const repos = groupSessions(p.sessions).length;
   const mascot = (size: number, pulsing = false) => <ResidentMascot size={size} theme={p.theme ?? 'dark'} paused={!visible} frozen={p.frozen} reducedMotion={p.reducedMotion} gestureKey={pulsing && busy ? pulse : undefined} gestureKind="pulse" />;
   return (
@@ -178,6 +196,7 @@ export function ChatView(p: ChatViewProps) {
           )}
           {turns.map(turn => (
             <div key={turn.qid} data-turn style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {p.turnImages?.(turn)}
               <div style={{ display: 'flex', justifyContent: 'flex-end' }}><span style={{ maxWidth: '85%', padding: '8px 12px', borderRadius: '12px 12px 4px 12px', background: 'var(--secondary)', fontSize: 13, lineHeight: '19px', overflowWrap: 'anywhere' }}>{turn.question}</span></div>
               {turn.error === 'cancelled' ? <span data-chat-stopped style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{t.chat.stopped}</span>
                 : turn.error !== undefined && <span data-chat-error role="alert" style={{ fontSize: 12, lineHeight: '16px', color: 'var(--destructive)' }}>{t.chat.error(turn.error)}</span>}
@@ -251,23 +270,27 @@ export function ChatView(p: ChatViewProps) {
           ))}
         </div>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 12px', borderTop: '1px solid var(--sidebar-border)' }}>
+      <div data-chat-composer style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 12px', borderTop: '1px solid var(--sidebar-border)' }}
+        onDragOver={p.attach ? e => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); } : undefined}
+        onDrop={p.attach ? e => { if (e.dataTransfer.files.length === 0) return; e.preventDefault(); p.attach!.onFiles([...e.dataTransfer.files]); } : undefined}>
         {p.above}
+        {p.attach && <AttachmentChips items={p.attach.items} onRemove={p.attach.onRemove} size={{ w: 64, h: 48 }} removeLabel={t.chat.removeImage ?? ''} lang={t.time.locale.startsWith('fr') ? 'fr' : 'en'} />}
+        {p.attach?.error && <span role="alert" style={{ fontSize: 12, lineHeight: '16px', color: 'var(--danger-text)' }}>{p.attach.error}</span>}
         {p.offline && <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{p.offline}</span>}
         <div style={{ display: 'flex', alignItems: p.multiline ? 'flex-end' : 'center', gap: 8 }}>
           {p.multiline ? (
             <textarea ref={setField} data-chat-input className="ledge-field" aria-label={t.chat.ask} placeholder={t.chat.askPlaceholder} value={text} disabled={busy || !!p.offline} rows={Math.min(6, Math.max(2, text.split('\n').length))}
-              onChange={e => setText(e.target.value)} onKeyDown={e => {
+              onChange={e => setText(e.target.value)} onPaste={onPaste} onKeyDown={e => {
                 if (p.onFieldKey?.(e)) return;
-                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(text); } else if (e.key === 'Escape') { e.stopPropagation(); e.currentTarget.blur(); }
+                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(text, true); } else if (e.key === 'Escape') { e.stopPropagation(); e.currentTarget.blur(); }
               }}
               style={{ flex: 1, minWidth: 0, boxSizing: 'border-box', padding: '8px 10px', background: 'var(--well)', color: 'inherit', border: '1px solid var(--input)', borderRadius: 'var(--radius-md)', fontSize: 13, lineHeight: '19px', resize: 'none', fontFamily: 'inherit' }} />
           ) : (
           <input ref={setField} data-chat-input type="text" className="ledge-field" aria-label={t.chat.ask} placeholder={t.chat.askPlaceholder} value={text} disabled={busy || !!p.offline}
-            onChange={e => setText(e.target.value)} onKeyDown={e => { if (p.onFieldKey?.(e)) return; if (e.key === 'Enter') { e.preventDefault(); submit(text); } else if (e.key === 'Escape') { e.stopPropagation(); (e.target as HTMLInputElement).blur(); } }}
+            onChange={e => setText(e.target.value)} onPaste={onPaste} onKeyDown={e => { if (p.onFieldKey?.(e)) return; if (e.key === 'Enter') { e.preventDefault(); submit(text, true); } else if (e.key === 'Escape') { e.stopPropagation(); (e.target as HTMLInputElement).blur(); } }}
             style={{ flex: 1, minWidth: 0, height: 34, boxSizing: 'border-box', padding: '0 10px', background: 'var(--well)', color: 'inherit', border: '1px solid var(--input)', borderRadius: 'var(--radius-md)', fontSize: 13 }} />
           )}
-          <Button variant="primary" size="icon" aria-label={t.chat.send} title={t.chat.send} disabled={busy || !!p.offline || !text.trim()} onClick={() => submit(text)} style={{ width: 34, height: 34 }}><Icon {...ICONS.send} /></Button>
+          <Button variant="primary" size="icon" aria-label={t.chat.send} title={t.chat.send} disabled={busy || !!p.offline || (!text.trim() && !withImages) || (!!p.attach && !p.attach.ready)} onClick={() => submit(text, true)} style={{ width: 34, height: 34 }}><Icon {...ICONS.send} /></Button>
         </div>
         {p.footnote}
       </div>

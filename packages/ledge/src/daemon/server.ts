@@ -5,9 +5,11 @@ import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
 import { actionById, contextNear, givenByLedge, LEDGE_GIVER, transmissions, projectOf, type ChatAction, type Autonomy, type Role, type Seat, type Team } from '@ledge/protocol';
-import { DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type ChatErrorCode, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, backendOf } from '@ledge/protocol';
+import { ATTACHMENT_LOCAL_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, backendOf } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
+import { AttachmentError, AttachmentStore } from './attachments.js';
+import { withImages } from '../attachmentText.js';
 import type { Tmux } from '../tmux.js';
 import { adapterFor, type KeyPlan } from '../adapters/index.js';
 import { Refusal, STALE, bottomLines, dialogMismatch } from '../adapters/types.js';
@@ -44,7 +46,7 @@ import { actionMessage, resolveAction, resolveRun, runGuard, type Resolved } fro
 import { createMailbox, type MailJournal } from './mailbox.js';
 import { createTasks, type TasksJournal } from './tasks.js';
 import { createTeamsLive, type TeamsJournal } from './teamsLive.js';
-import { createHandovers } from './handover.js';
+import { createHandovers, heldNames } from './handover.js';
 import { readContext } from './context.js';
 import { autonomyArgs, findRole, ompApprovalFor } from './roles.js';
 import { listDefinitions, resolveSeats, saveTemplate, templateExists } from './teams.js';
@@ -154,6 +156,8 @@ export interface ServerHandle {
   omp: OmpHost;
   /** Closes a session cleanly (its exit command, a kill as a last resort); rejects with a Refusal. */
   closeSession(id: string): Promise<{ how: CloseHow }>;
+  /** Runs the unsent-images sweep now (it also runs at start and every 24 h). */
+  sweepAttachments(): Promise<void>;
   /** Writes the resume labels that waited for their Claude process to end (the poller calls it every tick). */
   labelExited(): void;
 }
@@ -176,17 +180,18 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; tasks?: TasksJournal; teams?: TeamsJournal; handoverBriefMs?: number }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; tasks?: TasksJournal; teams?: TeamsJournal; handoverBriefMs?: number; attachments?: AttachmentStore }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
   // Under systemd the daemon has the bare system environment (no PATH to the agents, no proxy): a launched agent gets
   // the login shell's on top of it, as a terminal would.
   const agentEnv = opts.agentEnv ?? (async () => ({ ...process.env, ...(await loginShellEnv()) }));
-  const threads = createChatThreads({ store, tmux, home: paths().dir, userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now, projects: () => projects, forge: createForge({ env: agentEnv }), teams: () => teams.all(), tasks: () => tasks.all() });
+  const attachments = opts.attachments ?? new AttachmentStore(paths().attachments);
+  const threads = createChatThreads({ attachments, store, tmux, home: paths().dir, userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now, projects: () => projects, forge: createForge({ env: agentEnv }), teams: () => teams.all(), tasks: () => tasks.all() });
   const chat: Chat = opts.chat ?? threads.desktop;
   const router = createRouter({ env: agentEnv });
-  const omp = opts.omp ?? createOmpHost({ store, env: agentEnv, dir: join(paths().dir, 'omp'), now });
+  const omp = opts.omp ?? createOmpHost({ store, env: agentEnv, dir: join(paths().dir, 'omp'), now, attachments });
   const models = opts.models ?? createModels({ env: agentEnv, omp: async () => ompChoices(await omp.catalog(opts.home ?? homedir())) });
   const token = await ensureDaemonToken();
   const httpServer = createServer(unauthorized);
@@ -246,6 +251,17 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const broadcast = (msg: ServerMessage) => { for (const c of localClients) send(c, msg); gateway?.forward(msg); };
   threads.setEmitter('desktop', broadcast);
   const history = opts.history;
+  await attachments.load().catch(e => log(`attachments not loaded: ${(e as Error).message}`));
+  // Unsent images go after a day; the ones a session history or a live chat turn refers to stay.
+  const sweepAttachments = async () => {
+    try {
+      const referenced = new Set([...(await history?.attachmentIds() ?? []), ...threads.attachmentIds(), ...chat.attachmentIds()]);
+      const removed = await attachments.sweep(referenced);
+      if (removed.length > 0) log(`attachments swept: ${removed.length}`);
+    } catch (e) { log(`attachments sweep failed: ${(e as Error).message}`); }
+  };
+  void sweepAttachments();
+  const sweepTimer = setInterval(() => { void sweepAttachments(); }, 24 * 3_600_000); sweepTimer.unref();
   const unsubscribeHistory = history ? [
     history.onItem((id, item) => {
       broadcast({ type: 'session.thread.item', id, item });
@@ -578,12 +594,25 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     } finally { closing.delete(id); }
   }
 
+  /** The images typed with a reply by session: the next prompt event without `attachments` is theirs (the hook could not tell). */
+  const typed = new Map<string, { ids: string[]; at: number }>();
+  const TYPED_MS = 30_000;
+
   /** session.reply's checks and typing (shared with the chat's relay): null once typed, the refusal otherwise; rejects when the injection fails. */
-  async function replyTo(id: string, text: string, how: { steer?: boolean } = {}): Promise<Refusal | null> {
+  async function replyTo(id: string, text: string, how: { steer?: boolean; attachments?: string[] } = {}): Promise<Refusal | null> {
     const s = store.get(id); if (!s) return unknownSession();
     if (s.source === 'hook_only') return readOnly();
     if (closing.has(id)) return new Refusal('the session is being closed', 'busy');
-    if (backendOf(s) === 'omp-rpc') return replyOmp(s, text, how.steer === true);
+    const ids = how.attachments ?? [];
+    const refs: AttachmentRef[] = [];
+    for (const a of ids) {
+      const ref = attachments.ref(a);
+      if (!ref) return new Refusal('attachment missing', 'attachment_missing');
+      refs.push(ref);
+    }
+    if (refs.length > 0 && s.pending) return new Refusal('reply with images while a dialog is open', 'attachments_not_accepted');
+    if (backendOf(s) === 'omp-rpc') return replyOmp(s, text, how.steer === true, refs);
+    if (refs.length > 0) text = withImages(text, ids.map(a => attachments.path(a)!));
     // A select dialog ignores typed text and Enter would pick option 1: those take decide only.
     if (s.pending && s.pending.kind !== 'question') return new Refusal(`a ${s.pending.kind} prompt takes accept or deny, not a reply`, 'not_offered');
     if (text.trim() === '') return new Refusal('empty reply', 'invalid');
@@ -592,7 +621,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     const pending = s.pending; const adapter = adapterFor(s.tool);
     if (pending?.kind === 'question' && !/^[1-9]$/.test(text.trim()) && !adapter.freeText) return new Refusal(FREE_TEXT, 'free_text');
     // With no pending (idle, your turn) the text goes to the input line: no prompt to check for.
-    await injectAndVerify(id, pane => adapter.replyPlan(text, pending, pane || undefined), !!pending);
+    // Noted before typing: the agent's hook can land before the injection is verified.
+    if (ids.length > 0) typed.set(id, { ids, at: Date.parse(now()) });
+    try { await injectAndVerify(id, pane => adapter.replyPlan(text, pending, pane || undefined), !!pending); }
+    catch (e) { typed.delete(id); throw e; }
     return null;
   }
 
@@ -600,13 +632,13 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
    * A reply to an OMP session: the answer to the dialog it waits on, else an instruction: a new turn at rest, queued behind
    * the running one otherwise (OMP's `follow_up`: « après ce tour »). Null once sent, the refusal otherwise.
    */
-  async function replyOmp(s: Session, text: string, steer: boolean): Promise<Refusal | null> {
-    if (text.trim() === '') return new Refusal('empty reply', 'invalid');
+  async function replyOmp(s: Session, text: string, steer: boolean, refs: AttachmentRef[]): Promise<Refusal | null> {
+    if (text.trim() === '' && refs.length === 0) return new Refusal('empty reply', 'invalid');
     if (s.state === 'exited') return new Refusal('the session has ended', 'unavailable');
     if (s.pending) { const refused = await omp.answer(s.id, text); return refused === null ? null : new Refusal(refused, 'not_offered'); }
     if (!omp.isLive(s.id)) return new Refusal('the session is not running', 'unavailable');
     // At rest an instruction starts a turn; while OMP works it waits for the turn's end, unless the user asked to redirect it now.
-    await omp.send(s.id, text, s.state === 'working' ? (steer ? 'steer' : 'follow_up') : 'prompt');
+    await omp.send(s.id, text, s.state === 'working' ? (steer ? 'steer' : 'follow_up') : 'prompt', refs);
     return null;
   }
 
@@ -853,7 +885,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     const autonomy = role?.autonomy;
     const spawned = await spawnSession({ tool: req.tool, args: launchArgs({ ...req, dirs, autonomy }), name: req.name, cwd, tmux, now, env,
       ...(role ? { role: { id: role.id, label: role.label } } : {}), ...(team ? { team: team.id } : {}), ...(autonomy ? { autonomy } : {}),
-      taken: { names: live.filter(s => s.state !== 'exited').map(s => s.name), ids: live.map(s => s.id) } });
+      taken: { names: [...live.filter(s => s.state !== 'exited').map(s => s.name), ...heldNames(live)], ids: live.map(s => s.id) } });
     const session: Session = { ...spawned, ...(req.model ? { model: req.model } : {}), ...(req.effort ? { effort: req.effort } : {}) };
     store.upsert(session);
     store.touchRecent(session.cwd, session.project, session.startedAt);
@@ -947,6 +979,15 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
    * Applies one message from a local front or the phone gateway, answering the sender through `reply` only. Settles once
    * the action is applied or refused: a decision, a reply or an interrupt has been typed (or refused) by then.
    */
+  /** Stores an upload (a local client may send up to ATTACHMENT_LOCAL_MAX); invalid base64 is `unreadable`. */
+  async function storeUpload(u: ImageUpload): Promise<AttachmentRef> {
+    const decode = (data: string) => {
+      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(data) || data.length % 4 === 1) throw new AttachmentError('unreadable');
+      return Buffer.from(data, 'base64');
+    };
+    return attachments.put(decode(u.data), u.preview ? decode(u.preview.data) : undefined, ATTACHMENT_LOCAL_MAX);
+  }
+
   async function handle(msg: ClientMessage, reply: Reply): Promise<void> {
     /** A refusal names the request it answers, so a front can tell a refused reply from a refused decision; a coded one says why. */
     const refuse = (r: Refusal | string, id?: string) => reply({ type: 'error', ...(id !== undefined ? { id } : {}), message: typeof r === 'string' ? r : r.message, request: msg.type, ...(typeof r === 'string' ? {} : { code: r.code }) });
@@ -1036,7 +1077,12 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return reply(listing);
       }
       case 'session.event': {
-        const ev = msg.event;
+        let ev = msg.event;
+        if (ev.name === 'UserPromptSubmit') {
+          // A reply typed with images comes back as a plain prompt: the first one within the window carries them.
+          const t = typed.get(msg.id); typed.delete(msg.id);
+          if (!ev.attachments && t && Date.parse(now()) - t.at <= TYPED_MS) { ev = { ...ev, attachments: t.ids }; msg.event = ev; }
+        }
         // Late hooks of a session deleted moments ago (its SessionEnd, a last Stop) bring back neither it nor its thread.
         if (recentlyDeleted(msg.id)) return;
         // The agent's text precedes the action it announces: sync the parent's transcript before the row lands.
@@ -1100,7 +1146,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return;
       }
       case 'session.reply': {
-        const refused = await replyTo(msg.id, msg.text, { steer: msg.steer });
+        const refused = await replyTo(msg.id, msg.text, { steer: msg.steer, attachments: msg.attachments });
         if (refused) refuse(refused, msg.id);
         return;
       }
@@ -1117,7 +1163,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         if (s && backendOf(s) === 'omp-rpc') {
           if (!msg.restoreQueue) return void await omp.interrupt(s.id).catch(e => refuse((e as Error).message, msg.id));
           // The queue comes back as a draft for the one who asked; never re-sent by the daemon.
-          return void await omp.interruptAndRestore(s.id).then(texts => reply({ type: 'session.queue.restored', id: s.id, texts }), e => refuse((e as Error).message, msg.id));
+          return void await omp.interruptAndRestore(s.id).then(({ entries, imagesDropped }) => reply({ type: 'session.queue.restored', id: s.id, texts: entries.map(e => e.text), entries, ...(imagesDropped ? { imagesDropped } : {}) }), e => refuse((e as Error).message, msg.id));
         }
         if (!s?.tmuxSession) return;
         await tmux.sendKeys(s.tmuxSession, adapterFor(s.tool).interruptKeys());
@@ -1291,7 +1337,23 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'update.daemon':
         if (!opts.updater) return reply({ type: 'update.failed', version: msg.version, reason: 'no-systemd' });
         return opts.updater.update(msg.version, broadcast, reply);
-      case 'chat.ask': return chat.ask(msg.qid, msg.text, broadcast, msg.tool);
+      case 'chat.ask': {
+        const uploads = msg.images ?? [];
+        // A refusal ends the asker's turn (a chat.error for its qid), as chat.route does: a generic error would leave it waiting.
+        if (msg.text.trim() === '' && uploads.length === 0) return reply({ type: 'chat.error', qid: msg.qid, message: 'empty question' });
+        const refs: AttachmentRef[] = [];
+        try { for (const u of uploads) refs.push(await storeUpload(u)); }
+        catch (e) { if (e instanceof AttachmentError) return reply({ type: 'chat.error', qid: msg.qid, message: `image refused: ${e.reason}` }); throw e; }
+        return chat.ask(msg.qid, msg.text, broadcast, msg.tool, refs);
+      }
+      case 'attachment.put':
+        try { return reply({ type: 'attachment.stored', requestId: msg.requestId, ref: await storeUpload(msg.image) }); }
+        catch (e) { if (e instanceof AttachmentError) return reply({ type: 'attachment.error', requestId: msg.requestId, reason: e.reason }); throw e; }
+      case 'attachment.get': {
+        const found = await attachments.read(msg.attachment, msg.preview === true);
+        if (!found) return reply({ type: 'attachment.error', requestId: msg.requestId, reason: 'not_found' });
+        return reply({ type: 'attachment.data', requestId: msg.requestId, attachment: msg.attachment, mime: found.mime, data: found.data.toString('base64') });
+      }
       case 'chat.route':
         try { reply({ type: 'chat.routed', qid: msg.qid, result: await router.route(msg) }); }
         catch (e) { reply({ type: 'chat.error', qid: msg.qid, message: (e as Error).message }); }
@@ -1334,6 +1396,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     thread: id => history?.items(id),
     preview: id => previews.get(id),
     dispatch,
+    attachments,
     relay,
     launchChat: (thread, qid, rows) => {
       const c = thread === 'desktop' ? threads.desktop : threads.device(thread.slice('device:'.length));
@@ -1422,8 +1485,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast,
     preview,
     omp,
+    sweepAttachments,
     closeSession: id => { const s = store.get(id); return s ? closeSession(s) : Promise.reject(unknownSession()); },
     labelExited,
-    close: () => new Promise(res => { unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); tasks.close(); handovers.close(); unsubscribeTeams(); teams.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
+    close: () => new Promise(res => { clearInterval(sweepTimer); unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); tasks.close(); handovers.close(); unsubscribeTeams(); teams.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
   };
 }

@@ -244,7 +244,8 @@ const fr = {
     permission: 'Permission demandée', decided: { accept: 'Autorisée', deny: 'Refusée', always: 'Toujours autorisée', unknown: 'Répondue dans le terminal', denyByClose: 'Refusée par la fermeture' }, questionByClose: 'Refusée par la fermeture', undecided: 'En attente de votre décision',
     cursorNote: 'Cette source ne transmet ni résultats ni messages intermédiaires.',
     helperOpen: 'Ouvrir la discussion', helperDone: 'Terminé', helperWorking: 'Au travail',
-    backTo: 'Discussion principale', delegatedBy: 'Délégué par', instruction: 'Consigne', report: 'Rapport final', helperWaiting: 'attend son rapport…'
+    backTo: 'Discussion principale', delegatedBy: 'Délégué par', instruction: 'Consigne', report: 'Rapport final', helperWaiting: 'attend son rapport…',
+    image: { capture: 'Capture', unavailable: 'Image indisponible', close: 'Fermer', prev: 'Image précédente', next: 'Image suivante' }
   },
   shortcut: 'Ctrl Alt L'
 };
@@ -482,7 +483,8 @@ const en: Messages = {
     permission: 'Permission requested', decided: { accept: 'Allowed', deny: 'Denied', always: 'Always allowed', unknown: 'Answered in the terminal', denyByClose: 'Denied by the close' }, questionByClose: 'Dismissed by the close', undecided: 'Waiting for your decision',
     cursorNote: 'This source sends neither results nor intermediate messages.',
     helperOpen: 'Open the discussion', helperDone: 'Done', helperWorking: 'Working',
-    backTo: 'Main discussion', delegatedBy: 'Delegated by', instruction: 'Instruction', report: 'Final report', helperWaiting: 'is waiting for its report…'
+    backTo: 'Main discussion', delegatedBy: 'Delegated by', instruction: 'Instruction', report: 'Final report', helperWaiting: 'is waiting for its report…',
+    image: { capture: 'Capture', unavailable: 'Image unavailable', close: 'Close', prev: 'Previous image', next: 'Next image' }
   },
   shortcut: 'Ctrl Alt L'
 };

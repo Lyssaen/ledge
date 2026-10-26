@@ -70,6 +70,8 @@ export function createChatThreads(deps: Omit<ChatDeps, 'slots'> & { max?: number
     queuedRelays(): Array<{ thread: ChatThreadId; qid: string; relay: ChatRelay; askedAt: string }> {
       return all().flatMap(([thread, c]) => c.queuedRelays(emitters.get(thread)).map(q => ({ thread, ...q })));
     },
+    /** The ids of the images every thread's turns hold. */
+    attachmentIds(): Set<string> { return new Set(all().flatMap(([, c]) => c.attachmentIds())); },
     owner(qid: string): ChatThreadId | undefined {
       for (const [id, c] of all()) if (c.history().some(t => t.qid === qid)) return id;
       return undefined;

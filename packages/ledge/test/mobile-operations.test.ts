@@ -27,6 +27,16 @@ describe('OperationRegistry', () => {
     expect(r.begin('dev2', uid(1), 'fp')).toEqual({ kind: 'conflict' });
   });
 
+  it('fingerprints the attachments of a message, in order', () => {
+    const m = (attachments?: string[]) => ({ type: 'session.reply', op: uid(1), id: 's', text: 'x', ...(attachments ? { attachments } : {}) }) as unknown as PhoneOperation;
+    const a = 'a'.repeat(64), b = 'b'.repeat(64);
+    const r = new OperationRegistry();
+    r.begin('dev1', uid(1), fingerprint(m([a])));
+    expect(r.begin('dev1', uid(1), fingerprint(m([a])))).toMatchObject({ kind: 'replay' });
+    expect(r.begin('dev1', uid(1), fingerprint(m([b])))).toEqual({ kind: 'conflict' });
+    expect(fingerprint(m())).toBe(fingerprint(m([])));
+  });
+
   it('forgets a record after 24 h and 1 ms', () => {
     let now = 1_000;
     const r = new OperationRegistry({ now: () => now });

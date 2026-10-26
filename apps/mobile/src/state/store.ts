@@ -2,11 +2,12 @@
 // of it. Every write is an operation named by a uuid, sent again with that same uuid after a lost connection.
 import { useSyncExternalStore } from 'react';
 import {
-  PhoneClientMessageSchema, type Assertion, type CapabilitiesByTool, type Credential, type PhoneClientMessage, type PhonePending, type PhoneServerMessage,
+  PhoneClientMessageSchema, type Assertion, type AttachmentRef, type CapabilitiesByTool, type Credential, type ImageUpload, type PhoneClientMessage, type PhonePending, type PhoneServerMessage,
   type PhoneSession, type PhoneTask, type PhoneTeam, type PushSubscription, type ThreadItem
 } from '@ledge/protocol';
 import type { PhoneLink } from '../link/link';
 import { getAssertion } from '../link/webauthn';
+import { createImages } from './images';
 import { asked, emptyChat, reduceChat, type ChatAction, type ChatState } from './chat';
 import { clearOps, expectKey, isLive, isNew, loadOps, newOperationId, pruneOps, resendable, saveOps, UNCERTAIN_MS, type Op, type OpMessage } from './operations';
 import { clearLastState, loadLastState, loadReads, saveLastState, saveReads } from './persist';
@@ -66,7 +67,13 @@ export interface MobileStore {
   /** Answers the session's request. The op's id, or null when nothing was sent (no request, not ready, already answered). */
   decide(id: string, decision: Decision, opts?: { note?: string; assertion?: Assertion; expect?: ConfirmedExpect }): string | null;
   /** An answer to the session's request when there is one, else an instruction. The op's id, or null when nothing was sent. */
-  reply(id: string, text: string, opts?: { assertion?: Assertion; expect?: ConfirmedExpect }): string | null;
+  reply(id: string, text: string, opts?: { assertion?: Assertion; expect?: ConfirmedExpect; attachments?: string[] }): string | null;
+  /** Stores an image on the PC, one at a time (the next goes once the previous is answered). Rejects with the server's `reason`, `timeout` or `offline`. */
+  putImage(image: ImageUpload): Promise<AttachmentRef>;
+  /** An object URL for a stored image (its preview when `preview`); one request in flight across all calls, cached per (id, preview), a failure not cached. */
+  imageUrl(id: string, preview: boolean): Promise<string>;
+  /** The ref of an image this device stored. */
+  knownImage(id: string): AttachmentRef | undefined;
   /**
    * Asks the PC for a challenge; resolves on the next `confirm.challenge` of that purpose. Rejects (Error message
    * `error`, `timeout` after `PREPARE_MS`, `not_ready`, `superseded`, `lost`). One is pending at a time: a new call supersedes the old one.
@@ -103,7 +110,7 @@ export interface MobileStore {
    * Asks Ledge a question: the turn shows at once. Returns its qid. Offline, nothing is sent and `chat().error` is
    * `offline` with the text; if the PC is busy the turn goes again and `error` is `busy` with the text.
    */
-  ask(text: string): string;
+  ask(text: string, attachments?: string[]): string;
   /** Stops the question being answered. */
   cancelAsk(): void;
   /** Starts the thread over. */
@@ -197,6 +204,8 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
   const ready = () => link.state() === 'ready';
   const send = (m: PhoneClientMessage) => { void link.send(m).catch(() => undefined); };
 
+  const images = createImages(m => { if (closed || !ready()) return false; send(m); return true; });
+
   const notify = () => { for (const fn of [...listeners]) fn(); };
   const setChat = (c: ChatState) => { chatState = c; notify(); };
   const askHistory = () => { historyAsked = true; send({ type: 'chat.history' }); };
@@ -264,6 +273,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     // Requests sent on the lost channel get no answer.
     threadAsks = [];
     settle(new Error('lost'));
+    images.lost();
     for (const id of [...timers.keys()]) stopTimer(id);
     const ops = Object.values(state.ops).filter(o => o.phase === 'sending');
     if (ops.length) setOps({ ...state.ops, ...Object.fromEntries(ops.map(o => [o.op, { ...o, phase: 'uncertain' as const }])) });
@@ -288,6 +298,9 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         if (m.device?.chat && !historyAsked && ready()) askHistory();
         return;
       }
+      case 'attachment.stored': case 'attachment.data': case 'attachment.error':
+        images.handle(m);
+        return;
       case 'teams':
         set({ teams: m.teams });
         return;
@@ -473,10 +486,12 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     reply(id, text, opts = {}) {
       const s = state.sessions.get(id);
       if (!s) return null;
+      // The PC refuses an empty instruction: only images make one without text.
+      if (!text && !opts.attachments?.length) return null;
       // A request without a key cannot be named: the PC would refuse the reply either way.
       if (!opts.expect && s.pending && !s.pending.key) return null;
       const expect = opts.expect ?? (s.pending ? expectOf(s.pending) : null);
-      return write(op => ({ type: 'session.reply', op, id, text, expect, ...(opts.assertion ? { assertion: opts.assertion } : {}) }));
+      return write(op => ({ type: 'session.reply', op, id, text, ...(opts.attachments?.length ? { attachments: opts.attachments } : {}), expect, ...(opts.assertion ? { assertion: opts.assertion } : {}) }));
     },
 
     answer(id, requestId, answers, opts) {
@@ -563,13 +578,18 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
 
     chat: () => chatState,
 
-    ask(text) {
+    putImage: image => images.putImage(image),
+    imageUrl: (id, preview) => images.imageUrl(id, preview),
+    knownImage: id => images.knownImage(id),
+
+    ask(text, attachments = []) {
       const qid = newOperationId();
-      const m = PhoneClientMessageSchema.safeParse({ type: 'chat.ask', qid, text });
+      const m = PhoneClientMessageSchema.safeParse({ type: 'chat.ask', qid, text, ...(attachments.length ? { attachments } : {}) });
       if (!m.success || m.data.type !== 'chat.ask') { setChat({ ...chatState, error: { code: 'failed', qid, text } }); return qid; }
       if (closed || !ready()) { setChat({ ...chatState, error: { code: 'offline', text: m.data.text } }); return qid; }
       askedSinceReady.add(qid);
-      setChat(asked(chatState, { qid, question: m.data.text, askedAt: new Date().toISOString(), steps: [] }));
+      const refs = attachments.flatMap(id => images.knownImage(id) ?? []);
+      setChat(asked(chatState, { qid, question: m.data.text, askedAt: new Date().toISOString(), steps: [], ...(refs.length ? { attachments: refs } : {}) }));
       send(m.data);
       return qid;
     },
@@ -679,6 +699,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
       for (const expire of [...expirers]) expire();
       settleForget(false);
       settle(new Error('lost'));
+      images.close();
       if (previewsDirty) persist();
       offState();
       offMessage();

@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Box, Text, useWindowSize } from 'ink';
-import { isPending, splitId } from '@ledge/fleet';
+import { Box, Text, useInput, useWindowSize } from 'ink';
+import { isPending, putImage, splitId } from '@ledge/fleet';
 import { offers, type Pending, type Session } from '@ledge/protocol';
 import { botState } from '@ledge/ui/bots/poseFor';
 import { useEditing, useScreenKeys, useTui } from '../context.js';
+import { ChipsLine, useChips, useOpenImage, usePaste } from '../images.js';
 import { machineLabel, modelLabel, paneName, TOOL_NAME } from '../model/labels.js';
 import { cells, pad, row, type Line } from '../model/cells.js';
-import { anchorLine, threadView } from '../model/thread.js';
+import { anchorLine, threadImages, threadView } from '../model/thread.js';
 import { ago, oneLine } from '../model/time.js';
 import { C, STATE_COLOR } from '../theme.js';
 import { Frame } from '../ui/Frame.js';
@@ -67,16 +68,27 @@ function SessionView({ s }: { s: Session }) {
     setAnchor({ key, offset: top - lineKeys.indexOf(key) });
   };
 
+  const images = useMemo(() => (items ? threadImages(items, unfolded) : []).map(ref => ({ ref, route: { id: s.id } })), [items, unfolded, s.id]);
+  const chips = useChips(image => putImage(client, image, { id: s.id }));
+  const paste = usePaste(chips);
+  const openImage = useOpenImage();
+
   const machine = splitId(s.id)?.machine ?? 'local';
   const canSwitch = machines.find(m => m.id === machine)?.daemon?.modelSwitch === true;
 
   /** false when refused at once: the field keeps the text. */
   const send = (text: string, { fromHistory }: { fromHistory: boolean }): boolean => {
-    if (!text.trim()) { setMode('read'); return true; }
+    const withImages = mode === 'reply' && !fromHistory && chips.items.length > 0;
+    if (!text.trim() && !withImages) { setMode('read'); return true; }
+    // An image still uploading or refused holds the send; a dialog question takes words only, the image waits.
+    if (withImages && !chips.ready) return false;
+    if (withImages && p?.kind === 'question') { toast({ text: t.images.dialog, tone: 'info' }); return false; }
     // Refused later, the text comes back as the draft, unless a draft was typed since: it stays, the text is one ↑ away.
-    const back = (x: string) => { if (!kept.drafts.get(s.id)) setDraft(x); };
-    if (!(mode === 'note' ? actions.denyWithNote(s, text.trim(), back) : actions.reply(s, text, back))) return false;
-    kept.sent.set(s.id, [...(kept.sent.get(s.id) ?? []), text]);
+    const taken = withImages ? chips.clear() : [];
+    const back = (x: string) => { if (!kept.drafts.get(s.id)) setDraft(x); if (taken.length) chips.putBack(taken); };
+    const how = taken.length ? { attachments: taken.flatMap(c => (c.id ? [c.id] : [])) } : undefined;
+    if (!(mode === 'note' ? actions.denyWithNote(s, text.trim(), back) : actions.reply(s, text, back, how))) { if (taken.length) chips.putBack(taken); return false; }
+    if (text.trim()) kept.sent.set(s.id, [...(kept.sent.get(s.id) ?? []), text]);
     // An entry of the history sent again leaves the draft as it was.
     if (!fromHistory) setDraft('');
     setMode('read');
@@ -84,6 +96,12 @@ function SessionView({ s }: { s: Session }) {
   };
   // Out of the field, the draft stays (and says so).
   const leave = () => { setMode('read'); setBrowsing(false); if (draft.trim()) toast({ text: t.toast.draftKept, tone: 'quiet' }); };
+
+  // Alt+V pastes the clipboard picture; backspace on an empty field takes the last chip back. (The field ignores these keys.)
+  useInput((input, key) => {
+    if (key.meta && input === 'v') paste();
+    else if ((key.backspace || key.delete) && draft === '') chips.removeLast();
+  }, { isActive: mode === 'reply' });
 
   useScreenKeys((input, key) => {
     if (mode === 'model') return true;
@@ -102,6 +120,7 @@ function SessionView({ s }: { s: Session }) {
     if (input === ' ') { setUnfolded(u => !u); return true; }
     if (input === 'd') { setDiffs(x => !x); return true; }
     if (input === 't') { setTerminal(x => !x); return true; }
+    if (input === 'o' && images.length) { openImage(images); return true; }
     if (input === 'a') { attach(s); return true; }
     if (input === 'i') { actions.interrupt(s); return true; }
     if (input === 'm') {
@@ -129,15 +148,16 @@ function SessionView({ s }: { s: Session }) {
   const foot = up > 0 ? t.session.scrolled(above, up) : lines.length > view ? t.session.above(lines.length - view) : undefined;
   const keys: Array<readonly [string, string]> = mode === 'model' ? [['↑ ↓', t.keys.choose], ['← →', t.launch.effort], ['↵', t.keys.choose], ['esc', t.keys.cancel]]
     : mode !== 'read' && browsing ? [['↵', t.keys.resend], ['↑ ↓', t.keys.history], ['esc', t.keys.backToDraft]]
-    : mode !== 'read' ? [['↵', t.keys.sendOnly], ['alt+↵', t.keys.newLine], ['esc', t.keys.keepAndLeave], ['↑ ↓', t.keys.lineHistory], ['ctrl ← →', t.keys.word], ['ctrl+u', t.keys.clear]]
-    : [['esc', t.keys.back], ...(p ? [['y n A', t.keys.answer] as const] : []), ['r', t.keys.write], ['j k', t.keys.scroll], [t.keys.space, t.keys.unfold], ['d', t.keys.diffs], ['t', t.keys.terminal], ['a', t.keys.attach], ['m', t.keys.model], ['i', t.keys.interrupt]];
+    : mode !== 'read' ? [['↵', t.keys.sendOnly], ...(mode === 'reply' ? [['alt+v', t.keys.image] as const] : []), ['alt+↵', t.keys.newLine], ['esc', t.keys.keepAndLeave], ['↑ ↓', t.keys.lineHistory], ['ctrl ← →', t.keys.word], ['ctrl+u', t.keys.clear]]
+    : [['esc', t.keys.back], ...(p ? [['y n A', t.keys.answer] as const] : []), ['r', t.keys.write], ['j k', t.keys.scroll], [t.keys.space, t.keys.unfold], ['d', t.keys.diffs], ['t', t.keys.terminal], ['a', t.keys.attach], ['m', t.keys.model], ['i', t.keys.interrupt], ...(images.length ? [['o', t.keys.openImage] as const] : [])];
   // The rows, in this order: the request (its keys left out while writing), the field, the thread with what is left, drawn
   // only with room for a line. The request is cut only when even that does not fit.
   const editing = mode === 'reply' || mode === 'note';
   const body = rows - 2 - (lastToast ? 1 : 0);
   const inner = Math.max(20, columns - 4);
-  // The field as high as its text, up to its most (its prefix and the cursor's cell kept, as it lays itself out).
-  const below = editing ? Math.min(fieldRows(columns, rows), layout(draft, Math.max(10, columns - 4) - 2).length) + 2 : 3;
+  // The field as high as its text, up to its most (its prefix and the cursor's cell kept, as it lays itself out); the images
+  // pasted take a line above it.
+  const below = (editing ? Math.min(fieldRows(columns, rows), layout(draft, Math.max(10, columns - 4) - 2).length) + 2 : 3) + (chips.items.length ? 1 : 0);
   let request = p ? ask(s, p, t, inner, 4, !editing) : null;
   const over = request ? askRows(request, inner) + below - body : 0;
   if (p && request && over > 0) request = ask(s, p, t, inner, Math.max(1, 4 - over), !editing);
@@ -155,6 +175,7 @@ function SessionView({ s }: { s: Session }) {
           : <Lines lines={lines} up={up} onHeight={setView} />}
       </TitledBox> : null}
       {p && request ? <PendingBox s={s} a={request} /> : null}
+      <ChipsLine chips={chips.items} />
       {mode === 'reply' || mode === 'note'
         ? <Field title={mode === 'note' ? t.session.noteTitle(s.name) : t.session.replyTitle(s.name)} value={draft} onChange={setDraft} onSubmit={send} onEscape={leave}
           onBrowse={setBrowsing} history={kept.sent.get(s.id) ?? []} active placeholder={mode === 'note' ? t.session.noteFor(s.name) : t.session.replyTo(s.name)} />

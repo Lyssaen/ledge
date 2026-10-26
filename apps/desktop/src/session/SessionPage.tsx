@@ -421,7 +421,7 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
               )}
               {items === undefined ? <p className="thread-note muted">{offline ? th.notLoaded : th.loading}</p>
                 : xs.length === 0 ? <p className="thread-note muted">{th.empty}</p>
-                : <Thread session={session} helper={helper} items={items} xs={shownXs} now={times} unread={unread.current ?? null} since={since} dispatch={p.dispatch}
+                : <Thread client={p.client} session={session} helper={helper} items={items} xs={shownXs} now={times} unread={unread.current ?? null} since={since} dispatch={p.dispatch}
                     flash={flash} onChange={openDiff} onDocument={openDoc} planOpen={planOpen} onPlan={openPlan} waiting={waiting} />}
             </div>
             {/* Before the thread is there, the files are not known: the thread's own note, never « Aucun fichier modifié ». */}
