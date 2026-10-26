@@ -136,7 +136,8 @@ describe('relay link', () => {
     for (let i = 0; i < 8; i++) {
       await until(() => t.count('offline') === i + 1, `offline #${i + 1}`);
       const s = t.last();
-      expect(s).toMatchObject({ state: 'offline', error: expect.stringContaining('ECONNREFUSED') });
+      // A closed port is refused, or accepted then reset where localhost is proxied (WSL's mirrored networking).
+      expect(s).toMatchObject({ state: 'offline', error: expect.stringMatching(/ECONNREFUSED|ECONNRESET/) });
       delays.push(delayOf(s, t.clock.now()));
       t.clock.advance(delays[i]!);
     }
