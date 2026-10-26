@@ -144,3 +144,13 @@
  .st-tally{position:absolute;top:2px;right:6px}.st-tally span:not(.t-need){display:none}
  .st-foot{flex-direction:column;height:auto;padding:8px 0;gap:8px}.st .st-mach{font-size:0}.st-mach small{display:none}.st-foot .st-fill{display:none}
 }
+
+/* Ledge's entry (ledge home spec §2.1): the resident, « Ledge. », the live line and /, the question field under it; lit while the home view shows. */
+.st-ask.st-ledge{height:auto;flex-direction:column;align-items:stretch;gap:4px;padding:6px 8px 6px;cursor:default}
+.st-ledge .st-ledge-entry{display:flex;align-items:center;gap:8px;width:100%;padding:2px 0;border:0;background:none;color:var(--sidebar-foreground);text-align:left;cursor:pointer}
+.st-ledge .st-ledge-names{display:flex;flex-direction:column;flex:1;min-width:0;line-height:14px}
+.st-ledge .st-ledge-brand{font-size:13px;font-weight:650}
+.st-ledge .st-ledge-line{font-size:11px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-ledge input{height:26px;padding:0 6px;border:1px solid var(--input)!important;border-radius:var(--radius-sm);background:var(--sidebar)!important}
+.st-ledge.on{background:color-mix(in srgb,var(--sidebar-primary) 8%,var(--well))}
+@media(max-width:850px){.st-ask.st-ledge{padding:0}.st-ledge .st-ledge-names{display:none}.st-ledge .st-ledge-entry{justify-content:center}}

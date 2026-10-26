@@ -26,3 +26,23 @@ export function ChatPlace(props: ChatPanelProps & { label: string }): JSX.Elemen
     </ChunkBoundary>
   );
 }
+
+type HomeModule = typeof import('./LedgeHome');
+let home: HomeModule | undefined;
+/** Fetches Ledge's home view chunk (it shares the chat's ChatView and cards). */
+export function loadHome(): Promise<HomeModule> {
+  return home ? Promise.resolve(home) : import('./LedgeHome').then(m => (home = m));
+}
+const Home = lazy(() => (home
+  ? { then: (ok: (m: { default: HomeModule['LedgeHome'] }) => void) => ok({ default: home!.LedgeHome }) } as PromiseLike<{ default: HomeModule['LedgeHome'] }> as Promise<{ default: HomeModule['LedgeHome'] }>
+  : loadHome().then(m => ({ default: m.LedgeHome }))));
+
+/** Ledge's home view, behind the same sober wait as the docked chat. */
+export function HomePlace(props: import('./LedgeHome').LedgeHomeProps & { label: string }): JSX.Element {
+  const { label, ...rest } = props;
+  return (
+    <ChunkBoundary around={note => <section className="ledge-home" aria-label={label}>{note}</section>}>
+      <Suspense fallback={<section className="ledge-home" aria-label={label} aria-busy="true" />}><Home {...rest} /></Suspense>
+    </ChunkBoundary>
+  );
+}

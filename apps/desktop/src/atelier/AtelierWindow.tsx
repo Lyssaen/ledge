@@ -23,6 +23,7 @@ import { useSessionMenu } from '../manage/useSessionMenu';
 import { SessionMenuHost } from '../manage/SessionMenu';
 import { ConfirmDialog } from '../manage/ConfirmDialog';
 import { Atelier } from './Atelier';
+import { useTeamsApi } from '../teams/useTeamsApi';
 import { useFiling } from './filing';
 import { closeAtelierWindow, terminalToMain, toMain, watchAtelierWindow } from './detach';
 
@@ -63,7 +64,8 @@ function AtelierAlone({ client }: { client?: DaemonClient }) {
   const fleetView = useFleet(client);
   const { sessions, machines, fleet, client: fleetClient, errors } = fleetView;
   const projects = useProjects(fleetClient);
-  const [nav, local] = useReducer(navReducer, undefined, () => initialNav(loadOverview()));
+  const teams = useTeamsApi(fleetClient);
+  const [nav, local] = useReducer(navReducer, undefined, () => initialNav(loadOverview(), 'atelier'));
   const dispatch = useCallback((a: NavAction) => { if (STAYS.has(a.type)) local(a); else toMain(a); }, []);
   useEffect(watchAtelierWindow, []);
   // Its own full screen, on its own window: the main window's is left as it is.
@@ -84,6 +86,7 @@ function AtelierAlone({ client }: { client?: DaemonClient }) {
       <div className={`application atelier-alone ${nav.fullscreen ? 'immersive' : ''} ${filing.dragging ? 'is-dragging' : ''}`} inert={blocked}>
         <section className="workspace">
           <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu}
+            teams={teams} archived={fleetView.archived} notify={notify}
             tools={nav.fullscreen && <>
               <span className="zoom-sep" />
               <Button variant="ghost" size="icon" aria-label={t.top.fullscreenExit} title={t.top.fullscreenExit} onClick={() => dispatch({ type: 'fullscreen', on: false })}>

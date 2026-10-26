@@ -36,13 +36,10 @@ export function useKeys(dispatch: (a: NavAction) => void, ctx: { state: NavState
         e.preventDefault(); dispatch({ type: 'escape' }); return;
       }
       if (state.modal?.kind === 'search') return;
-      // / focuses Ask Ledge when that field is actually on screen. The narrow sidebar (under 850px), a window under 540px,
-      // and full screen hide it, so / opens the chat (already open: its field takes the focus again). In a field, / is typed.
-      if (!state.modal && e.key === '/' && !mod && !e.altKey && !typing(document.activeElement)) {
-        const ask = document.querySelector<HTMLInputElement>('[data-ask-input]');
-        if (ask && ask.getClientRects().length > 0 && !state.fullscreen) { e.preventDefault(); ask.focus(); return; }
-        e.preventDefault(); dispatch({ type: 'chat', open: true }); return;
-      }
+      // / goes to Ledge's home view, its composer focused (ledge home spec §2.1); in a field, / is typed. Ctrl / asks Ledge
+      // beside what is shown, in the docked panel (already open: its field takes the focus again).
+      if (!state.modal && e.key === '/' && mod && !e.altKey) { e.preventDefault(); dispatch({ type: 'chat', open: true }); return; }
+      if (!state.modal && e.key === '/' && !mod && !e.altKey && !typing(document.activeElement)) { e.preventDefault(); dispatch({ type: 'ledge' }); return; }
       if (state.modal || state.chat || typing(document.activeElement)) return;
 
       const { place } = state;

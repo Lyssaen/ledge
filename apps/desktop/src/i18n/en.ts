@@ -10,6 +10,7 @@ export const en: Messages = {
     label: 'Sidebar', newSession: 'New session', searchLabel: 'Search a session',
     views: 'Views', atelier: 'Atelier', chat: 'Chat Ledge', projects: 'Projects', newProject: 'New project', unassigned: 'No project',
     machines: 'Machines', manageMachines: 'Manage machines', agents: (n) => pluralEn(n, `${n} agent`, `${n} agents`), offline: 'offline', daemonUpdating: 'daemon updating', settings: 'Settings', shortcuts: 'Keyboard shortcuts',
+    ledgeHome: 'Home: Ledge, the operator', ledgeLine: (yours: number, teams: number) => `${yours} yours · ${teams} active ${teams === 1 ? 'team' : 'teams'}`,
     ask: 'Ask Ledge', askPlaceholder: 'Ask Ledge…',
     openChat: 'Open the conversation with Ledge',
     active: (n) => `${n} active`,
@@ -395,6 +396,50 @@ export const en: Messages = {
     outdated: (name) => `${name} could not be moved: update the local Ledge daemon, it does not know projects yet.`,
     invalid: (name) => `${name} could not be moved: Ledge cannot remember this folder.`,
     unconfirmed: (name) => `${name} was not moved: Ledge did not confirm. Try again.`
+  },
+  home: {
+    operator: (sessions: number, teams: number, machines: number) => `Operator · sees ${sessions} ${sessions === 1 ? 'session' : 'sessions'}, ${teams} ${teams === 1 ? 'team' : 'teams'}, ${machines} ${machines === 1 ? 'machine' : 'machines'} · read only`,
+    tabsLabel: 'Ledge views',
+    tabs: { conversation: 'Conversation', teams: (n: number) => `Teams · ${n}`, tasks: (n: number) => `Tasks · ${n}`, history: 'History' },
+    toAtelier: 'Back to the atelier',
+    point: {
+      title: 'The point', yours: 'Yours', teams: 'Teams', given: 'Given by Ledge',
+      summarize: 'Summarise the day', summarizeQuestion: 'Summarise the day: what moved, what waits for my decision, what is stuck.',
+      nothingYours: 'Nothing waits for you.', noTeam: 'No team at work.', noTask: 'Ledge gave no task today.',
+      seats: (n: number) => `${n} ${n === 1 ? 'seat' : 'seats'}`, progress: (done: number, given: number) => `${done}/${given} Ledge ${given === 1 ? 'task' : 'tasks'}`,
+      table: 'Table', resume: 'Resume', resting: 'resting', allow: 'Yes', deny: 'No', see: 'See', dismiss: 'Dismiss',
+      closed: (owner: string, title: string, state: 'done' | 'refused' | 'dropped') => state === 'done' ? `${owner} finished “${title}”` : state === 'refused' ? `${owner} refused “${title}”` : `${owner} dropped “${title}”`,
+      ofLedge: 'Ledge’s task', owner: (owner: string, state: string) => `${owner} · ${state}`
+    },
+    suggestions: (team?: string) => ['Set up a team…', 'Give a task to…', team ? `Where is ${team} at?` : 'Where are the teams at?', 'Who needs me?'],
+    readOnly: 'read only · nothing without your click',
+    mentions: 'Mention', mentionSession: (name: string) => `session ${name}`, mentionTeam: (name: string) => `team ${name}`,
+    tasks: {
+      filters: 'Filters', all: 'All', open: 'Open', closed: 'Closed', giver: 'Giver', anyGiver: 'Anyone', ledge: 'Ledge', seats: 'The seats', team: 'Team', anyTeam: 'All',
+      none: 'No task.', result: 'Result', reason: 'Reason', log: 'History', from: (giver: string, owner: string) => `from ${giver} to ${owner}`, close: 'Close'
+    },
+    teams: { none: 'No team at work. Ask Ledge to set one up.', dissolved: 'dissolved' },
+    history: { none: 'No conversation today.', open: 'See in the conversation' }
+  },
+  teams: {
+    common: 'common table',
+    room: (name: string) => `${name} room`,
+    plaqueCounts: (tables: number, sessions: number) => `${tables} ${tables === 1 ? 'table' : 'tables'} · ${sessions} ${sessions === 1 ? 'session' : 'sessions'}`,
+    waiting: (n: number) => `${n} waiting`, working: (n: number) => `${n} working`,
+    roomMenu: (name: string) => `Actions of the ${name} room`, roomMenuTitle: 'Room actions',
+    newSessionHere: 'New session here', newTeamHere: 'New team here…', entrance: 'ENTRANCE',
+    teamTable: (name: string) => `Team ${name}`,
+    teamLine: (done: number, given: number) => `team · operator Ledge · ${done}/${given} ${given === 1 ? 'task' : 'tasks'}`,
+    restingLine: 'team resting', resume: 'Resume',
+    teamMenu: (name: string) => `Actions of team ${name}`, teamMenuTitle: 'Team actions',
+    openTasks: 'See the tasks', dissolve: 'Dissolve the team',
+    dissolveTitle: (name: string) => `Dissolve team ${name}?`,
+    dissolveBody: 'Its table leaves the room; its sessions stay, at the common table or in the archives, and its tasks stay with their sessions.',
+    dropJoin: 'Drop to join', dropLeave: 'Drop to go back to the common table',
+    sheet: (id: string, title: string, giver: string) => `${id} · ${title} · ${giver}`,
+    chooseRole: (name: string, team: string) => `${name}'s role in ${team}`, otherRole: 'another role…', loadingRoles: 'Reading the roles…', noRole: 'No other role',
+    joined: (name: string, team: string, role: string) => `${name} joins ${team} as @${role}.`,
+    left: (name: string) => `${name} goes back to the common table.`
   },
   zoom: {
     bar: 'Atelier zoom', out: 'Zoom out', outTitle: 'Zoom out (−)', in: 'Zoom in', inTitle: 'Zoom in (+)',
@@ -839,6 +884,19 @@ export const en: Messages = {
       send: 'Send', sending: 'Sending…', cancel: 'Cancel', retry: 'Retry', orRephrase: 'or rephrase your request',
       queued: "is working; I'll send it as soon as it's done", sentTo: 'Sent to', failed: (why: string) => `Could not send: ${why}`,
       pill: { yours: 'your turn', working: 'working', waiting: 'waiting for you', stopped: 'stopped' }
+    },
+    team: {
+      label: 'Proposed team', folder: 'Folder', table: (project: string) => `Table`, newTable: (project: string) => `new table in the ${project} room`, seats: 'Seats',
+      autonomy: { ask: 'asks before acting', edits: 'edits without asking', auto: 'autonomous' },
+      autoWarning: (roles: string) => `${roles} will work without asking: edits and commands without your approval.`,
+      launch: 'Launch the team', launching: 'Launching…', retry: 'Retry', save: 'Save', saved: (path: string) => `Saved: ${path}`,
+      launched: (at: string) => `Team launched at ${at}`, openTable: 'Open the table', failed: (why: string) => `Failed: ${why}`, template: (id: string) => `template ${id}`
+    },
+    task: {
+      label: (n: number) => n === 1 ? 'Task to give' : `${n} tasks to give`, to: 'to', give: 'Give', giving: 'Sending…', retry: 'Retry',
+      waitTeam: 'active once the team is launched',
+      given: (owner: string, id: string, state: string) => `Given to ${owner} · ${id} · ${state}`,
+      state: { open: 'to take', taken: 'taken', done: 'done', refused: 'refused', dropped: 'dropped' }, failed: (why: string) => `Refused: ${why}`
     },
     project: {
       label: 'Project proposal', title: (name: string) => `Project proposal · ${name}`, complete: (name: string) => `Complete ${name}`,

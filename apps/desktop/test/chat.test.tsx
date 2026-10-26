@@ -29,7 +29,7 @@ const filterButton = () => within(screen.getByRole('banner')).queryByRole('butto
 /** The app on one local machine and LAUNCH_PROJECTS (Otto at the Ledge table, Nova at Payment's, Kit without a project), the chat opened from the sidebar mascot. */
 async function openChat(opts: { list?: boolean; sessions?: Session[] } = {}) {
   const env = await boot({ machines: LOCAL, projects: LAUNCH_PROJECTS, ...opts });
-  await env.user.click(within(screen.getByRole('complementary', { name: /sidebar/i })).getByRole('button', { name: 'Open the conversation with Ledge' }));
+  await env.user.keyboard('{Control>}/{/Control}');
   await screen.findByRole('complementary', { name: 'Chat Ledge' });
   await waitFor(() => expect(field()).toHaveFocus());
   return env;
@@ -62,7 +62,7 @@ describe('the Ledge chat docked on the right', () => {
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('complementary', { name: 'Chat Ledge' })).toBeNull();
     // The sidebar's mascot opens it again, with the focus in the field.
-    await user.click(within(screen.getByRole('complementary', { name: /sidebar/i })).getByRole('button', { name: 'Open the conversation with Ledge' }));
+    await user.keyboard('{Control>}/{/Control}');
     await waitFor(() => expect(field()).toHaveFocus());
     // Escape from outside the field closes it first too.
     field().blur();
@@ -70,16 +70,13 @@ describe('the Ledge chat docked on the right', () => {
     expect(screen.queryByRole('complementary', { name: 'Chat Ledge' })).toBeNull();
   });
 
-  it('/ focuses Ask Ledge; the title bar’s chat button brings the focus back to the field of a chat already open', async () => {
+  it('Ctrl / brings the focus back to the docked field; in the field / is typed; the title bar’s chat button refocuses it', async () => {
     const { user } = await openChat();
     act(() => field().blur());
     expect(document.activeElement).toBe(document.body);
-    await user.keyboard('/');
-    const ask = within(screen.getByRole('complementary', { name: /sidebar/i })).getByRole('textbox', { name: 'Ask Ledge' });
-    expect(ask).toHaveFocus();
-    expect(field()).not.toHaveFocus();
+    await user.keyboard('{Control>}/{/Control}');
+    await waitFor(() => expect(field()).toHaveFocus());
     expect(field()).toHaveValue('');
-    act(() => field().focus());
     await user.keyboard('/');                                            // in the field, / is typed
     expect(field()).toHaveValue('/');
     act(() => field().blur());

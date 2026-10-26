@@ -36,6 +36,8 @@ export function Sidebar(p: {
   onAsk(text: string): void;
   onTerminal(s: Session): void;
   revealArchives: number; revealCurrent: number;
+  /** Ledge's entry's live line (ledge home spec §2.1): the closed tasks Ledge gave not put away, and the active teams. */
+  ledge?: { closedTasks: number; activeTeams: number };
 }): JSX.Element {
   const { t } = useI18n();
   const theme = useTheme();
@@ -86,22 +88,23 @@ export function Sidebar(p: {
   const active = activeCount(p.sessions);
   const submitAsk = () => {
     const q = ask.trim();
-    p.dispatch({ type: 'chat', open: true });
+    p.dispatch({ type: 'ledge', tab: 'conversation' });
     if (q) { p.onAsk(q); setAsk(''); }
   };
+  const homeOn = place.kind === 'home';
   return (
     <aside ref={root} className={cls('sidebar st', prefs.dense && 'st-dense')} aria-label={t.side.label}>
-      <div className={cls('st-ask', p.nav.chat && 'on')} onClick={e => {
-        const hit = e.target;
-        if (hit instanceof Element && hit.closest('button, input')) return;
-        e.currentTarget.querySelector<HTMLInputElement>('[data-ask-input]')?.focus();
-      }}>
-        <button type="button" tabIndex={-1} className="st-mascot" aria-label={t.side.openChat} title={t.side.openChat} onClick={e => { e.preventDefault(); p.dispatch({ type: 'chat', open: true }); }}>
-          <ResidentMascot size={20} theme={theme} paused={p.nav.paused} reducedMotion={reduced} />
+      <div className={cls('st-ask', 'st-ledge', (homeOn || p.nav.chat) && 'on')}>
+        <button type="button" className="st-ledge-entry" aria-current={homeOn ? 'page' : undefined} aria-label={t.side.ledgeHome} title={t.side.ledgeHome} onClick={() => p.dispatch({ type: 'ledge' })}>
+          <span className="st-mascot"><ResidentMascot size={22} theme={theme} paused={p.nav.paused} reducedMotion={reduced} /></span>
+          <span className="st-ledge-names">
+            <span className="st-ledge-brand">Ledge<span className="brand-dot">.</span></span>
+            <small className="st-ledge-line">{t.side.ledgeLine(attn.length + (p.ledge?.closedTasks ?? 0), p.ledge?.activeTeams ?? 0)}</small>
+          </span>
+          <Kbd>/</Kbd>
         </button>
         <input data-ask-input="" type="text" aria-label={t.side.ask} placeholder={t.side.askPlaceholder} value={ask} onChange={e => setAsk(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submitAsk(); } else if (e.key === 'Escape') { e.stopPropagation(); e.currentTarget.blur(); } }} />
-        <Kbd>/</Kbd>
       </div>
       <nav className="st-views" aria-label={t.side.views}>
         <button type="button" className={atelierOn ? 'on' : undefined} aria-current={atelierOn ? 'page' : undefined} onClick={() => p.dispatch({ type: 'home' })}>

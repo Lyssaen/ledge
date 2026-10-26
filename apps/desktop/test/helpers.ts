@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { expect } from 'vitest';
-import { render, screen, waitFor, within, type RenderResult } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within, type RenderResult } from '@testing-library/react';
 import userEvent, { type UserEvent } from '@testing-library/user-event';
 import WebSocket from 'ws';
 import { createElement, type ComponentType } from 'react';
@@ -14,6 +14,7 @@ import { activeCount } from '../src/nav/agents';
 import { loadWorkspace } from '../src/session/lazy';
 import { loadComposer } from '../src/launch/lazy';
 import { loadEditor } from '../src/projects/lazy';
+import { loadHome } from '../src/chat/lazy';
 import { loadSettings } from '../src/settings/lazy';
 
 /** jsdom loads no stylesheet: the declarations of the top-level rules naming `selector` in one of the app's sheets (@media and @container blocks removed). */
@@ -120,12 +121,13 @@ export async function closeDaemons(): Promise<void> {
  *  `list` is ignored: the atelier is the only overview (a stored `view: 'list'` is read as the atelier).
  *  Ready once the Atelier counter shows the active sessions, the last project's row is in the sidebar and, with sessions,
  *  the first one is shown on its atelier seat. */
-export async function boot({ sessions = DEFAULT_SESSIONS, projects = PROJECTS, list = false, machines = [{ id: 'local', label: 'Local' }, { id: 'dev', label: 'Dev SSH', ssh: 'dev' }], repoInfo, daemon }: { sessions?: Session[]; projects?: Projects; list?: boolean; machines?: Machines; repoInfo?: ReadonlyMap<string, RepoInfo>; daemon?: DaemonInfo } = {}): Promise<{ d: MockDaemon; side: ReturnType<typeof within>; view: RenderResult; client: DaemonClient; user: UserEvent }> {
+export async function boot({ sessions = DEFAULT_SESSIONS, projects = PROJECTS, list = false, machines = [{ id: 'local', label: 'Local' }, { id: 'dev', label: 'Dev SSH', ssh: 'dev' }], repoInfo, daemon, home = false }: { sessions?: Session[]; projects?: Projects; list?: boolean; machines?: Machines; repoInfo?: ReadonlyMap<string, RepoInfo>; daemon?: DaemonInfo; /** Stay on Ledge's home view, where the app opens; otherwise the test starts on the atelier. */ home?: boolean } = {}): Promise<{ d: MockDaemon; side: ReturnType<typeof within>; view: RenderResult; client: DaemonClient; user: UserEvent }> {
   // The session page's, the New session form's, the project editor's and the Settings page's own chunks are there before a test opens them: they come in the same render, as once preloaded in the app.
   await loadWorkspace();
   await loadComposer();
   await loadEditor();
   await loadSettings();
+  await loadHome();
   const d = await createMockDaemon(); daemons.push(d);
   d.machines(machines);
   d.projects(projects);
@@ -139,7 +141,10 @@ export async function boot({ sessions = DEFAULT_SESSIONS, projects = PROJECTS, l
   await waitFor(() => expect(side.getByRole('button', { name: /Atelier/ })).toHaveTextContent(String(activeCount(sessions))));
   const last = projects.projects[projects.projects.length - 1];
   if (last) await side.findByRole('button', { name: new RegExp(`^${last.name}`) });
-  if (sessions.length > 0) await screen.findByRole('button', { name: new RegExp(`^${sessions[0]!.name},`) });
+  // The app opens on Ledge's home view (ledge home spec §2.1); most tests are about the atelier, reached from the sidebar.
+  await screen.findByRole('region', { name: /^(Home|Accueil) ?: Ledge, (the operator|l’opérateur)$/ });
+  if (!home) fireEvent.click(side.getByRole('button', { name: /Atelier/ }));
+  if (sessions.length > 0 && !home) await screen.findByRole('button', { name: new RegExp(`^${sessions[0]!.name},`) });
   return { d, side, view, client, user: userEvent.setup() };
 }
 

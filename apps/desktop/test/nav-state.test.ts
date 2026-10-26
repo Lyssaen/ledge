@@ -12,9 +12,27 @@ const sess = (id: string, extra: Partial<Session> = {}) => fakeSession(id, { mac
 describe('nav state', () => {
   beforeEach(() => localStorage.clear());
 
-  it('starts on the atelier, even when a list view was stored', () => {
-    expect(s0).toEqual({ place: { kind: 'overview', view: 'atelier', project: 'all' }, modal: null, chat: false, chatFocus: 0, fullscreen: false, helpers: true, paused: false });
-    expect(initialNav({ ...o, view: 'list' as 'atelier' }).place).toEqual({ kind: 'overview', view: 'atelier', project: 'all' });
+  it('starts on Ledge’s home view (ledge home spec §2.1), the atelier behind it, even when a list view was stored', () => {
+    expect(s0).toEqual({ place: { kind: 'home', tab: 'conversation', view: 'atelier', project: 'all' }, modal: null, chat: false, chatFocus: 0, fullscreen: false, helpers: true, paused: false });
+    expect(initialNav({ ...o, view: 'list' as 'atelier' }).place).toEqual({ kind: 'home', tab: 'conversation', view: 'atelier', project: 'all' });
+    // Escape from the home view at start goes to the atelier.
+    expect(navReducer(s0, { type: 'escape' }).place).toEqual({ kind: 'overview', view: 'atelier', project: 'all' });
+  });
+  it('the home view is reached from anywhere, keeps the place it came from for Escape, and closes the docked chat', () => {
+    const page = navReducer(navReducer(s0, { type: 'home', project: 'ledge' }), { type: 'open', id: 'a' });
+    const chatOpen = navReducer(page, { type: 'chat', open: true });
+    const home = navReducer(chatOpen, { type: 'ledge' });
+    expect(home.place).toEqual({ kind: 'home', tab: 'conversation', view: 'atelier', project: 'ledge', back: { kind: 'session', id: 'a', view: 'atelier', project: 'ledge' } });
+    expect(home.chat).toBe(false);
+    expect(home.chatFocus).toBe(chatOpen.chatFocus + 1);
+    // Another tab keeps the way back.
+    const tasks = navReducer(home, { type: 'ledge', tab: 'tasks' });
+    expect(tasks.place).toMatchObject({ kind: 'home', tab: 'tasks', back: { kind: 'session', id: 'a' } });
+    expect(navReducer(tasks, { type: 'ledge' }).place).toMatchObject({ tab: 'tasks' });
+    expect(navReducer(tasks, { type: 'escape' }).place).toEqual({ kind: 'session', id: 'a', view: 'atelier', project: 'ledge' });
+    // From Settings: back to what Settings was over.
+    const fromSettings = navReducer(navReducer(page, { type: 'settings' }), { type: 'ledge' });
+    expect(fromSettings.place).toMatchObject({ kind: 'home', back: { kind: 'session', id: 'a' } });
   });
   it('asking for the chat when it is already open asks its field for the focus again; closing it does not', () => {
     const opened = navReducer(s0, { type: 'chat', open: true });

@@ -399,3 +399,34 @@
 .office-reduced .exchange-bubble,.office-paused .exchange-bubble,.office-reduced .exchange-wire path,.office-paused .exchange-wire path{animation:none}
 .office-reduced .exchange-envelope,.office-paused .exchange-envelope,.office-reduced .agent-seat.exchange-arrived:after,.office-paused .agent-seat.exchange-arrived:after{display:none}
 @media(prefers-reduced-motion:reduce){.exchange-wire path,.exchange-bubble{animation:none}.exchange-envelope,.agent-seat.exchange-arrived:after{display:none}}
+
+/* The atelier's rooms (atelier rooms spec §2, variant C): low walls with a line in the project's colour on the back one, the
+   plaque centred on it, an opening in the front wall; inside, the tables side by side. No decoration but the tables' plants. */
+.office-shell .atelier-room{padding:var(--room-back) var(--room-side) var(--room-side);margin:10px 0 26px!important}
+.atelier-room .room-walls{position:absolute;inset:44px 24px 22px;pointer-events:none;z-index:0}
+.room-walls i{position:absolute;background:color-mix(in srgb,var(--foreground) 5%,var(--sidebar));box-shadow:0 2px 0 var(--border)}
+.room-walls .wall-back{left:0;right:0;top:0;height:26px;border:1px solid var(--input);border-top:4px solid var(--project);border-radius:8px 8px 0 0}
+.room-walls .wall-left,.room-walls .wall-right{top:0;bottom:0;width:11px;border:1px solid var(--input);border-top:0}
+.room-walls .wall-left{left:0}
+.room-walls .wall-right{right:0}
+.room-walls .wall-front{left:0;right:0;bottom:0;height:12px;background:linear-gradient(90deg,var(--wall,color-mix(in srgb,var(--foreground) 5%,var(--sidebar))) 0 41%,transparent 41% 59%,var(--wall,color-mix(in srgb,var(--foreground) 5%,var(--sidebar))) 59%);box-shadow:none;border-bottom:1px solid var(--input)}
+.room-plaque{position:absolute;top:30px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:8px;max-width:calc(100% - 80px);padding:5px 6px 5px 10px;background:var(--sidebar);border:1px solid var(--input);border-radius:var(--radius-md);box-shadow:0 2px 0 var(--border);font-size:12px;white-space:nowrap;z-index:5}
+.room-plaque .plaque-name{font-weight:600;overflow:hidden;text-overflow:ellipsis}
+.room-plaque .plaque-counts,.room-plaque .plaque-waiting,.room-plaque .plaque-working{color:var(--muted-foreground);font-size:11px;display:inline-flex;align-items:center;gap:4px}
+.room-entrance{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);font:600 9px/1 'Geist Mono',monospace;letter-spacing:.2em;color:var(--muted-foreground);opacity:.8;pointer-events:none}
+.room-tables{position:relative;display:flex;flex-wrap:wrap;justify-content:center;gap:0 var(--table-gap);z-index:1}
+.office-shell .atelier-table{position:relative;flex:0 0 var(--room);min-width:min(var(--room),100%);margin:0 0 8px}
+.atelier-table:has(.room-menu),.atelier-room:has(.room-plaque .room-menu){z-index:6}
+.is-dragging .atelier-table.drop-over .room-heading,.atelier-table.drop-over .room-heading{border-color:var(--sidebar-primary)}
+.atelier-table.table-resting{opacity:.6}
+.atelier-table.table-resting:hover,.atelier-table.table-resting:focus-within{opacity:.85}
+.room-heading .heading-common,.room-heading .heading-team-line{color:var(--muted-foreground);font-size:11px;white-space:nowrap}
+.room-heading .team-flag{color:var(--project);font-size:13px;line-height:1}
+.room-heading .team-name{font-weight:600}
+.room-heading.team-heading .heading-names{display:flex;align-items:baseline;gap:6px;min-width:0}
+.room-heading .team-resume{font-size:11px;padding:2px 8px;border:1px solid var(--input);border-radius:var(--radius-md);background:var(--secondary);color:var(--foreground);cursor:pointer}
+.room-heading .team-resume:hover{border-color:var(--sidebar-primary)}
+.office-shell .agent-seat .seat-role,.role-pill{display:inline-block;font:10px/14px 'Geist Mono',monospace;padding:0 6px;border-radius:999px;background:color-mix(in srgb,var(--project,var(--sidebar-primary)) 16%,transparent);color:color-mix(in srgb,var(--project,var(--sidebar-primary)) 70%,var(--foreground));margin-bottom:2px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.role-menu .role-label{margin-left:8px;color:var(--muted-foreground);font-size:11px}
+.role-chooser{position:fixed;width:0;height:0}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}

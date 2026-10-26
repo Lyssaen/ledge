@@ -26,7 +26,7 @@ import { TitleBar } from './shell/TitleBar';
 import { TopBar } from './shell/TopBar';
 import { Footer } from './shell/Footer';
 import { LaunchPlace } from './launch/lazy';
-import { ChatPlace } from './chat/lazy';
+import { ChatPlace, HomePlace } from './chat/lazy';
 import { SettingsPlace } from './settings/lazy';
 import type { SettingsContext } from './settings/SettingsPage';
 import { daemonTarget, useDaemonUpdates } from './update/daemon';
@@ -35,6 +35,7 @@ import { takeWhatsNew } from './update/notes';
 import { openWhatsNew, useWhatsNew } from './update/whatsNewView';
 import { WhatsNew } from './update/WhatsNew';
 import { useLaunch } from './launch/useLaunch';
+import { closedLedgeTasks, useTeamsApi } from './teams/useTeamsApi';
 import { Atelier } from './atelier/Atelier';
 import { AtelierAway } from './atelier/Away';
 import { atelierOpen, attachAtelier, canDetach, detachAtelier, onAtelier, showMainWindow } from './atelier/detach';
@@ -110,6 +111,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const { sessions, machines, status, localDown, fleet, client: fleetClient, errors } = fleetView;
   const termStore = useTermStore(fleetClient);
   const projects = useProjects(fleetClient);
+  const teams = useTeamsApi(fleetClient);
   const island = useIsland(fleetClient);
   const mobile = useMobile(fleetClient);
   const mobileError = useMobileError(fleetClient);
@@ -196,7 +198,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // The sidebar's Ask Ledge, the same send as the chat panel: nothing goes out while the local daemon is offline (the chat still opens).
   const [tool] = useDefaultTool();
   const askLedge = (text: string) => {
-    if (!fleetView.machines.find(m => m.id === 'local')?.ready) { dispatch({ type: 'chat', open: true }); return; }
+    if (!fleetView.machines.find(m => m.id === 'local')?.ready) { dispatch({ type: 'ledge', tab: 'conversation' }); return; }
     const qid = `q-${crypto.randomUUID()}`;
     daemonStore.beginTurn({ qid, question: text, askedAt: new Date().toISOString(), steps: [] });
     fleetClient.send({ type: 'chat.ask', qid, text, tool });
@@ -300,23 +302,27 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       <div className={`application ${nav.fullscreen ? 'immersive' : ''} ${filing.dragging ? 'is-dragging' : ''}`} data-readonly={localDown ? 'true' : undefined} inert={blocked}>
         <Sidebar nav={nav} dispatch={dispatch} sessions={sessions} archived={fleetView.archived} machines={machines} updating={daemonUpdates.updating} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing}
           actions={actions} decisions={decisions} waits={waits} menu={{ open: (id, at, opener) => sessionMenu.open(id, at, opener ?? null) }}
-          onAsk={askLedge} onTerminal={sessionMenu.terminal} revealArchives={revealArchives} revealCurrent={revealCurrent} />
+          onAsk={askLedge} onTerminal={sessionMenu.terminal} revealArchives={revealArchives} revealCurrent={revealCurrent}
+          ledge={{ closedTasks: closedLedgeTasks(teams.tasks).length, activeTeams: (teams.teams ?? []).filter(x => x.state === 'active').length }} />
         <section className="workspace">
           {tokenMissing && <DaemonOutdated />}
           <TopBar nav={nav} dispatch={dispatch} session={session} helper={helper} projects={projects} projectIdOf={projectIdOf} terminal={sessionPrefs.terminal} onTerminal={toggleTerminal}
             onRevealArchives={() => setRevealArchives(n => n + 1)} onDetach={canDetach() && !detached ? detach : undefined}
             manage={{ open: sessionMenu.menu?.id === session?.id && sessionMenu.menu !== null, onOpen: (at, opener) => session && sessionMenu.open(session.id, at, opener) }} />
           {place.kind === 'settings' ? <SettingsPlace section={place.section} ctx={settings} />
+            : place.kind === 'home' ? <HomePlace label={t.side.ledgeHome} client={fleetClient} view={fleetView} teams={teams} decisions={decisions} waits={waits} tab={place.tab} dispatch={dispatch}
+                paused={nav.paused} focus={nav.chatFocus} projects={projects} onLaunched={chatLaunched} onTerminal={showTerminal} notify={notify} onProposal={openProposal} />
             : session && place.kind === 'session' ? <SessionPlace client={fleetClient} session={session} nav={nav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify} actions={actions}
                 prefs={sessionPrefs} setPrefs={setSessionPrefs} onRevealCurrent={() => setRevealCurrent(n => n + 1)} />
             : detached ? <AtelierAway onShow={detach} onAttach={attach} />
-            : <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu} />}
-          {onOverview && <Footer dispatch={dispatch} localDown={localDown} island={island} />}
+            : <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu}
+                teams={teams} archived={fleetView.archived} notify={notify} />}
+          {(onOverview || place.kind === 'home') && <Footer dispatch={dispatch} localDown={localDown} island={island} />}
         </section>
         {nav.chat && (
           <ChatPlace label={t.side.chat} client={fleetClient} view={fleetView} paused={nav.paused} focus={nav.chatFocus} onClose={() => dispatch({ type: 'chat', open: false })}
             onOpenSession={id => dispatch({ type: 'open', id })} onTerminal={showTerminal} onLaunched={chatLaunched}
-            projects={projects} notify={notify} onProposal={openProposal} />
+            projects={projects} notify={notify} onProposal={openProposal} onOpenTeam={room => dispatch({ type: 'home', ...(room ? { project: room } : {}) })} />
         )}
       </div>
       {nav.modal?.kind === 'search' && <SearchPalette sessions={sessions} projectName={projectName} order={order} onOpen={id => dispatch({ type: 'open', id })} onClose={close} />}
