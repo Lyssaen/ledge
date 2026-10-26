@@ -76,7 +76,9 @@ function SessionView({ s }: { s: Session }) {
     if (mode === 'note') actions.denyWithNote(s, text.trim(), back);
     else if (!actions.reply(s, text, back)) return;
     kept.sent.set(s.id, [...(kept.sent.get(s.id) ?? []), text]);
-    setDraft(''); setMode('read');
+    // An entry of the history sent again leaves the draft as it was.
+    if (text === draft) setDraft('');
+    setMode('read');
   };
   // Out of the field, the draft stays (and says so).
   const leave = () => { setMode('read'); setBrowsing(false); if (draft.trim()) toast({ text: t.toast.draftKept, tone: 'quiet' }); };

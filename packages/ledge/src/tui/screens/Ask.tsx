@@ -53,7 +53,8 @@ export function Ask() {
     daemonStore.beginTurn({ qid, question: text.trim(), askedAt: new Date().toISOString(), steps: [] });
     client.send({ type: 'chat.ask', qid, text: text.trim() });
     kept.sent.set('ask', [...(kept.sent.get('ask') ?? []), text.trim()]);
-    setDraft('');
+    // An entry of the history asked again leaves the draft as it was.
+    if (text === draft) setDraft('');
   };
   const act = (card: Card) => {
     if (busy) return;
