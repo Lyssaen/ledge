@@ -4,7 +4,8 @@ import { join } from 'node:path';
 import { useRef, useState } from 'react';
 import { Text } from 'ink';
 import { AttachmentFailure, getImage } from '@ledge/fleet';
-import { ATTACHMENTS_MAX, type AttachmentRef, type ImageMime, type ImageUpload } from '@ledge/protocol';
+import { ATTACHMENTS_MAX, ATTACHMENT_LOCAL_MAX, type AttachmentRef, type ImageMime, type ImageUpload } from '@ledge/protocol';
+import { MAX_FRAME } from '../transport/frames.js';
 import { useTui } from './context.js';
 import type { ClipboardImage } from './clipboard.js';
 import { C } from './theme.js';
@@ -29,6 +30,9 @@ export interface Chips {
 
 let counter = 0;
 
+/** What one inline `chat.ask` may carry in base64 (the daemon's frame, less room for the text and the envelope). */
+const INLINE_BUDGET = MAX_FRAME - 64 * 1024;
+
 /** The chips under a field. With `put`, each image is stored as soon as it is added; without, it stays in the chip. */
 export function useChips(put: ((image: ImageUpload) => Promise<AttachmentRef>) | null): Chips {
   const { t, toast } = useTui();
@@ -44,9 +48,14 @@ export function useChips(put: ((image: ImageUpload) => Promise<AttachmentRef>) |
 
   return {
     items,
-    add({ image, width, height }) {
+    add({ image, width, height, bytes }) {
       if (held.current.length >= ATTACHMENTS_MAX) { toast({ text: t.images.max, tone: 'info' }); return; }
       const key = counter++;
+      // Over the local cap, or past the frame the question travels in: a red chip, never sent (a frame over the daemon's limit closes the socket).
+      const inline = held.current.reduce((n, c) => n + (c.image?.data.length ?? 0), 0);
+      if (bytes > ATTACHMENT_LOCAL_MAX || (!put && inline + image.data.length > INLINE_BUDGET)) {
+        commit([...held.current, { key, width, height, state: 'refused', reason: t.images.tooLarge }]); return;
+      }
       if (!put) { commit([...held.current, { key, width, height, state: 'ready', image }]); return; }
       commit([...held.current, { key, width, height, state: 'uploading' }]);
       put(image).then(ref => patch(key, { state: 'ready', id: ref.id }), e => patch(key, { state: 'refused', reason: reasonOf(e) }));

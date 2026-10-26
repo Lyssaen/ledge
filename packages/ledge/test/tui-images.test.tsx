@@ -65,6 +65,18 @@ describe('ledge tui: images in a session reply', () => {
     } finally { await tui.cleanup(); }
   });
 
+  it('an image over the local cap is a red chip and is never sent', async () => {
+    const tui = await startTui({ readImage: async () => ({ ...pasted(), bytes: 2_000_001 }) });
+    tui.daemon.thread('bix', []);
+    try {
+      await openBix(tui);
+      await tui.press('r');
+      await tui.press(ALT_V);
+      await until(() => tui.frame().includes('Image trop lourde, même réduite'));
+      expect(sent(tui.daemon.received, 'attachment.put')).toHaveLength(0);
+    } finally { await tui.cleanup(); }
+  });
+
   it('no clipboard image says so', async () => {
     const tui = await startTui();
     tui.daemon.thread('bix', []);
@@ -169,6 +181,17 @@ describe('ledge tui: images in Ask', () => {
       await new Promise(r => setTimeout(r, 400));
       expect(reads).toBe(1);
       expect(tui.frame().split('▣ capture').length).toBe(2);
+    } finally { await tui.cleanup(); }
+  });
+
+  it('refuses the chip that would push the question past the frame budget', async () => {
+    const tui = await startTui({ readImage: async () => pasted('A'.repeat(1_500_000)) });
+    try {
+      await tui.press('/');
+      await until(() => tui.frame().includes('OPÉRATEUR'));
+      for (let n = 1; n <= 3; n++) { await tui.press(ALT_V); await until(() => tui.frame().split('▣ capture').length - 1 === n); }
+      expect(tui.frame()).toContain('Image trop lourde, même réduite');
+      expect(tui.frame().split('Image trop lourde').length - 1).toBe(1);
     } finally { await tui.cleanup(); }
   });
 
