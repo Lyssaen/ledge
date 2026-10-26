@@ -8,14 +8,16 @@ import { inline } from './inline';
 
 export type ActionRisk = ChatAction['risk'];
 /** A row as the card draws it. No state: proposed. `refused`: nothing was sent; `failed`: sent, it went wrong; `denied`: a
- *  permission's « Deny » reached the session; `stale`: the request changed since the card, nothing was sent. */
-export type ActionRowState = 'proposed' | 'running' | 'done' | 'failed' | 'refused' | 'denied' | 'stale';
+ *  permission's « Deny » reached the session; `stale`: the request changed since the card, nothing was sent; `cut`: the
+ *  request was too long to be quoted whole (`detailCut`), it is not accepted from the card. */
+export type ActionRowState = 'proposed' | 'running' | 'done' | 'failed' | 'refused' | 'denied' | 'stale' | 'cut';
 
 /** One action of the card, as the protocol's `ChatAction` gives it (`actionRowOf`): its registry id `action`, whose verb the
  *  front's copy holds (« Apply » for an id it does not know), the daemon's `summary` (names in **bold**, the fallback),
  *  `detail` to read in full before confirming, `target` the session or team by its name, `code` why it was refused or failed,
  *  `decision` a session.decide's (deny: its verb is « Deny »), `vars` its words, for the front's own line and why (the
- *  daemon's `summary` and `error` are French: the summary is the fallback, the error is for the log, never on screen). A permission adds its `request` quoted verbatim and `deny` its
+ *  daemon's `summary` and `error` are French: the summary is the fallback, the error is for the log, never on screen).
+ *  A permission adds its `request` quoted verbatim (`kind` its kind, in the front's words when it knows it) and `deny` its
  *  other button. */
 export interface ActionRowView {
   action?: string; summary: string; risk: ActionRisk; state?: ActionRowState; detail?: string;
@@ -29,7 +31,9 @@ const CODES: ReadonlySet<string> = new Set(ACTION_ERROR_CODES);
 export function actionRowOf(a: ChatAction): ActionRowView {
   const row: ActionRowView = { action: a.action, summary: a.summary, risk: a.risk };
   if (a.vars !== undefined) row.vars = a.vars;
-  if (a.detail !== undefined) row.detail = a.detail;
+  // A session.decide's detail is the request itself, quoted under its kind.
+  if (a.detail !== undefined && a.action === 'session.decide' && a.vars?.kind) row.request = { kind: a.vars.kind, text: a.detail };
+  else if (a.detail !== undefined) row.detail = a.detail;
   // task.cancel names its owner: the session it holds.
   const target = a.vars?.session ?? a.vars?.owner ?? a.vars?.team;
   if (target !== undefined) row.target = target;
@@ -39,6 +43,10 @@ export function actionRowOf(a: ChatAction): ActionRowView {
   if (a.error !== undefined) row.error = a.error;
   if (a.code !== undefined) row.code = CODES.has(a.code) ? a.code as ActionErrorCode : 'failed';
   if (a.code === 'changed') row.state = 'stale';
+  // Not accepted from the card, since it was not read whole (codes.md): the daemon's `cut` is that state too, never a refusal.
+  if ((a.detailCut && !a.state && row.decision !== 'deny') || a.code === 'cut') { row.state = 'cut'; delete row.code; delete row.error; }
+  // Never shown (codes.md): the card was set aside, or a destructive row was sent unconfirmed; it is proposed again.
+  if (a.code === 'ignored' || a.code === 'confirm_required') { delete row.state; delete row.code; delete row.error; }
   return row;
 }
 
@@ -91,7 +99,7 @@ export function ActionCard(p: ActionCardProps) {
   const states = p.rows.map(r => r.state ?? 'proposed');
   const stopAt = states.findIndex(s => s === 'failed' || s === 'refused');
   const shown: Shown[] = states.map((s, i) => (s === 'proposed' && stopAt >= 0 && i > stopAt ? 'held' : s));
-  const open = shown.flatMap((s, i) => (['done', 'running', 'denied', 'stale'].includes(s) ? [] : [i]));
+  const open = shown.flatMap((s, i) => (['done', 'running', 'denied', 'stale', 'cut'].includes(s) ? [] : [i]));
   const risky = (rows: readonly number[]) => rows.some(i => p.rows[i]!.risk === 'destructive');
   // The card changed elsewhere (a row applied on another device, the card ignored): only the rows asked that are still
   // open stay to confirm; none left, or none irreversible, and it closes.
@@ -152,6 +160,12 @@ export function ActionCard(p: ActionCardProps) {
       // Grey, not green: the no reached the session, nothing was applied.
       case 'denied': return <span style={{ ...muted, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12 }}><Icon size={11} {...ICONS.check} />{c.denied(clock(r.doneAt))}</span>;
       case 'stale': return <Button size="sm" disabled={p.disabled} onClick={() => p.onOpen(i)} style={small}><Icon size={11} {...ICONS.external} />{c.open(r.target ?? '')}</Button>;
+      // Denied from here, accepted in the session (codes.md).
+      case 'cut': return <>
+        {!many && ignore}
+        {r.deny && <Button size="sm" disabled={p.disabled} onClick={() => p.onDeny(i)} style={small}>{c.deny}</Button>}
+        <Button size="sm" disabled={p.disabled} onClick={() => p.onOpen(i)} style={small}><Icon size={11} {...ICONS.external} />{c.open(r.target ?? '')}</Button>
+      </>;
     }
   };
 
@@ -176,14 +190,17 @@ export function ActionCard(p: ActionCardProps) {
           )}
           {r.detail && <div data-action-detail data-clamped={(!confirming && s !== 'done') || undefined} style={{ marginTop: 5, overflowWrap: 'anywhere', ...muted, ...(!confirming && s !== 'done' ? { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } : {}) }}>{r.detail}</div>}
           {r.request && (
-            <pre data-action-request={s === 'stale' ? 'old' : s === 'denied' ? 'faded' : 'live'} style={{ margin: '6px 0 0', padding: '7px 9px', border: '1px solid var(--sidebar-border)', borderLeft: '2px solid var(--muted-foreground)', borderRadius: 4, background: 'var(--sidebar)', font: "11.5px/17px 'Geist Mono', ui-monospace, monospace", whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 120, overflow: 'auto', color: 'var(--sidebar-foreground)', ...(s === 'stale' ? { textDecoration: 'line-through', opacity: 0.6 } : s === 'denied' ? { opacity: 0.6 } : {}) }}>
-              <span style={{ display: 'block', font: "500 10.5px/15px 'Geist', system-ui, sans-serif", marginBottom: 2, ...muted }}>{r.request.kind}</span>{r.request.text}
+            <pre data-action-request={s === 'stale' ? 'old' : s === 'denied' ? 'faded' : s === 'cut' ? 'cut' : 'live'} style={{ margin: '6px 0 0', padding: '7px 9px', border: '1px solid var(--sidebar-border)', borderLeft: '2px solid var(--muted-foreground)', borderRadius: 4, background: 'var(--sidebar)', font: "11.5px/17px 'Geist Mono', ui-monospace, monospace", whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 120, overflow: 'auto', color: 'var(--sidebar-foreground)', ...(s === 'stale' ? { textDecoration: 'line-through', opacity: 0.6 } : s === 'denied' ? { opacity: 0.6 } : {}) }}>
+              <span style={{ display: 'block', font: "500 10.5px/15px 'Geist', system-ui, sans-serif", marginBottom: 2, ...muted }}>{c.words.kind[r.request.kind] ?? r.request.kind}</span>{r.request.text}
+              {/* Always in view at the foot of the quote, even scrolled. */}
+              {s === 'cut' && <span data-action-cut style={{ position: 'sticky', bottom: -7, display: 'block', margin: '4px -9px -7px', padding: '4px 9px', borderTop: '1px dashed var(--sidebar-border)', background: 'var(--sidebar)', font: "500 11px/16px 'Geist', system-ui, sans-serif", ...muted }}>{c.words.cut.mark}</span>}
             </pre>
           )}
           {s === 'failed' && <div role="alert" style={{ marginTop: 5, color: 'var(--danger-text)', overflowWrap: 'anywhere' }}>{inline(c.failed(why(r)))}</div>}
           {s === 'refused' && <div role="alert" style={{ marginTop: 5, color: 'var(--danger-text)', overflowWrap: 'anywhere' }}>{inline(c.refused(why(r)))}</div>}
           {s === 'held' && <div style={{ marginTop: 5, ...muted }}>{c.held(stopAt + 1)}</div>}
           {s === 'stale' && <div style={{ marginTop: 5, color: 'var(--warning)' }}>{c.stale(r.target ?? '')}</div>}
+          {s === 'cut' && <div style={{ marginTop: 5, ...muted }}>{c.words.cut.note(r.target ?? '')}</div>}
           {s === 'denied' && <div style={{ marginTop: 5, ...muted }}>{c.deniedNote(r.target ?? '')}</div>}
         </div>
         {what && <div data-action-side data-under={p.narrow || undefined} style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', ...(p.narrow ? { gridColumn: many ? 2 : 1, justifySelf: 'start' } : { justifySelf: 'end' }), ...fade }}>{what}</div>}

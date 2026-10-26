@@ -382,3 +382,55 @@ describe('the action card (#94): its words from the row\'s vars, in the front\'s
     for (const code of ACTION_ERROR_CODES) for (const l of ['fr', 'en'] as const) expect(actionWords[l].why(code, undefined, {}), `${l} ${code}`).toBeTruthy();
   });
 });
+
+describe('the action card (#94): a request from the protocol, and one cut', () => {
+  const decide: ChatAction = { action: 'session.decide', args: { session: 'local:nova', decision: 'accept' }, summary: 'Accepter la demande de permission de **Nova**', vars: { session: 'Nova', decision: 'accept', kind: 'permission' }, risk: 'destructive', session: 'local:nova', detail: 'npm test' };
+
+  it('session.decide: the request quoted, under the words of its kind, not as a detail', () => {
+    const r = actionRowOf(decide);
+    expect(r.request).toEqual({ kind: 'permission', text: 'npm test' });
+    expect(r.detail).toBeUndefined();
+    card([r]);
+    const quote = rowsOf()[0]!.querySelector('[data-action-request]')!;
+    expect(quote).toHaveTextContent('Permission');
+    expect(quote).toHaveTextContent('npm test');
+    expect(rowsOf()[0]!.querySelector('[data-action-detail]')).toBeNull();
+  });
+
+  it('cut (detailCut): the quote ends « truncated », no Accept, Open Nova instead; Ignore stays', () => {
+    const r = actionRowOf({ ...decide, detail: 'x'.repeat(50) + '…', detailCut: true });
+    expect(r.state).toBe('cut');
+    const p = card([r]);
+    expect(rowsOf()[0]!.getAttribute('data-action-row')).toBe('cut');
+    expect(rowsOf()[0]!.querySelector('[data-action-request]')).toHaveTextContent('… (truncated, see the session)');
+    expect(rowsOf()[0]).toHaveTextContent('Too long to be quoted in full: read it in Nova to accept it. You can deny it from here.');
+    expect(within(rowsOf()[0]!).getAllByRole('button').map(b => b.textContent)).toEqual(['Ignore', 'Open Nova']);
+    fireEvent.click(screen.getByRole('button', { name: 'Open Nova' }));
+    expect(p.onOpen).toHaveBeenCalledWith(0);
+    expect(p.onApply).not.toHaveBeenCalled();
+  });
+
+  it('cut with a deny row (the daemon\'s contract): Deny stays', () => {
+    card([{ ...actionRowOf({ ...decide, detailCut: true }), deny: { summary: 'Deny **Nova**’s request' } }]);
+    expect(within(rowsOf()[0]!).getAllByRole('button').map(b => b.textContent)).toEqual(['Ignore', 'Deny', 'Open Nova']);
+  });
+
+  it('the daemon\'s cut code reads as the cut state, not a refusal; a denial cut is not cut', () => {
+    expect(actionRowOf({ ...decide, state: 'refused', code: 'cut', error: 'cut' })).toMatchObject({ state: 'cut' });
+    expect(actionRowOf({ ...decide, vars: { ...decide.vars, decision: 'deny' }, detailCut: true }).state).toBeUndefined();
+  });
+
+  it('ignored and confirm_required are never shown: the row is proposed again', () => {
+    for (const code of ['ignored', 'confirm_required']) {
+      const r = actionRowOf({ ...decide, state: 'refused', code, error: code });
+      expect(r.state, code).toBeUndefined();
+      expect(r.code, code).toBeUndefined();
+    }
+  });
+
+  it('a plan with a cut row: Apply all leaves it out', () => {
+    const p = card([actionRowOf({ ...decide, detailCut: true }), model]);
+    fireEvent.click(screen.getByRole('button', { name: 'Apply all (1)' }));
+    expect(p.onApply).toHaveBeenCalledWith([1]);
+  });
+});
