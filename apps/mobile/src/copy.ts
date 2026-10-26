@@ -200,6 +200,7 @@ export const copy = {
       untypable: 'Le message doit tenir sur une ligne, sans saut de ligne ni caractère de contrôle.',
       failTitle: 'Message non envoyé', uncertainTitle: 'Réception non confirmée',
       lost: 'Le PC est injoignable. Votre brouillon est conservé.',
+      imageGone: 'Une image n’est plus disponible : retirez-la et recollez-la. Votre brouillon est conservé.',
       busy: 'L’agent n’est plus disponible pour une consigne. Votre brouillon est conservé.',
       invalid: (max: number) => `Le message n’a pas été accepté par le PC (${max} caractères au plus). Votre brouillon est conservé.`,
       readOnly: 'Cette session a été démarrée hors de Ledge : écrivez dans le terminal.',

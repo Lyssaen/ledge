@@ -25,7 +25,7 @@ export function replyProblem(draft: string): 'long' | 'untypable' | null {
 export function replyFailure(o: Op): { title: string; body: string } {
   if (o.phase === 'uncertain' || o.reason === 'not_taken') return { title: C.uncertainTitle, body: C.uncertain };
   const body = o.reason === 'busy' ? C.busy : o.reason === 'invalid' ? C.invalid(MESSAGE_MAX) : o.reason === 'untypable' ? C.untypable
-    : o.reason === 'read_only' ? C.readOnly : C.lost;
+    : o.reason === 'read_only' ? C.readOnly : o.reason === 'attachment_missing' ? C.imageGone : o.reason === 'attachments_not_accepted' ? copy.images.dialog : C.lost;
   return { title: C.failTitle, body };
 }
 
