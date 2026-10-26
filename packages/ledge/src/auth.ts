@@ -1,4 +1,4 @@
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { chmod, link, mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import type { IncomingHttpHeaders } from 'node:http';
@@ -127,6 +127,16 @@ export async function ensureDaemonToken(): Promise<string> {
 }
 
 /** The token file, or undefined when the daemon has never started in this LEDGE_HOME. */
+/** Where a session Ledge launched finds its key (#93): the CLI sends it with `by`, so the daemon knows the session is who it says. */
+export const SESSION_KEY_VAR = 'LEDGE_SESSION_KEY';
+/**
+ * A session's key: the daemon token's HMAC of its id, so the daemon checks it without keeping one per session, and it outlives a
+ * restart. Every agent runs as the same unix user and could read the token: it stops a mistaken `by`, it is not a barrier.
+ */
+export function sessionKey(id: string, token: string | undefined = readDaemonToken()): string | undefined {
+  return token ? createHmac('sha256', token).update(`ledge-session:${id}`).digest('hex') : undefined;
+}
+
 export function readDaemonToken(): string | undefined {
   try {
     const raw = readFileSync(paths().token, 'utf8').trim();

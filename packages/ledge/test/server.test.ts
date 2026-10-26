@@ -7,6 +7,7 @@ import { connect as tcp } from 'node:net';
 import type { ChatAction, ChatClose, ChatProposal, ChatRelay, Projects, ServerMessage, Session } from '@ledge/protocol';
 import { DEFAULT_ISLAND_PREFS, pendingKey } from '@ledge/protocol';
 import type { Chat } from '../src/chat/service.js';
+import { sessionKey } from '../src/auth.js';
 import { Store } from '../src/daemon/store.js';
 import WebSocket from 'ws';
 import { startServer, ALLOWED_ORIGINS, launchArgs, resolveFolder } from '../src/daemon/server.js';
@@ -1696,8 +1697,11 @@ describe('server', () => {
       expect(store.get(second.id)!.name).toBe('Otto-2');
       expect(tmux.created.map(x => x.command[0])).toEqual(['codex', 'cursor-agent']);
       // Codex hooks run in a shared daemon: the session id reaches them through a per-thread config override.
-      expect(tmux.created[0]!.command).toEqual(['codex', '-c', `shell_environment_policy.set.LEDGE_CODEX_HOOK_SESSION="${first.id}"`]);
-      expect(tmux.created[0]!.env).toMatchObject({ LEDGE_SESSION: first.id, LEDGE_CODEX_SESSION: first.id });
+      // Its key goes the same way (#93): the daemon checks the `by` of its commands against it.
+      const key = sessionKey(first.id)!;
+      expect(tmux.created[0]!.command).toEqual(['codex', '-c', `shell_environment_policy.set.LEDGE_CODEX_HOOK_SESSION="${first.id}"`, '-c', `shell_environment_policy.set.LEDGE_SESSION_KEY="${key}"`]);
+      expect(tmux.created[0]!.env).toMatchObject({ LEDGE_SESSION: first.id, LEDGE_SESSION_KEY: key, LEDGE_CODEX_SESSION: first.id });
+      expect(tmux.created[1]!.env.LEDGE_SESSION_KEY).toBe(sessionKey(second.id));
       expect(tmux.created[1]!.env.LEDGE_CODEX_SESSION).toBeUndefined();
       c.close();
     });

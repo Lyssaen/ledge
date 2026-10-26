@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { RoleIdSchema, SeatsSchema, ToolSchema, type ActionId, type Seat, type Session, type Team } from '@ledge/protocol';
 import { connect } from '../client.js';
 import { listDefinitions } from '../daemon/teams.js';
-import { actionArgs, callerOf, DAEMON_DOWN, resultLine, runOnClient } from './action.js';
+import { actionArgs, callerOf, DAEMON_DOWN, resultLine, runOnClient, type Caller } from './action.js';
 
 export const TEAM_USAGE = `ledge team up <modèle> [--cwd <dossier>] [--name <nom>]   lancer une équipe d'après .ledge/teams/<modèle>.yaml
 ledge team up --seat <rôle>[:<outil>]… [--cwd <dossier>] [--name <nom>]   lancer une équipe de sièges ad hoc
@@ -140,7 +140,7 @@ export async function runTeam(args: string[], opts: { port?: number; cwd?: strin
  * A verb that is a registry action. `dissolve --close-sessions` is two of them in a row: the team dissolved, then each of its
  * seats' live sessions closed cleanly (the seats are read before, a dissolved team is no longer listed).
  */
-async function runVerb(cmd: Extract<TeamCmd, { op: 'run' }>, port: number | undefined, by: string | undefined): Promise<{ line: string; code: number }> {
+async function runVerb(cmd: Extract<TeamCmd, { op: 'run' }>, port: number | undefined, by: Caller | undefined): Promise<{ line: string; code: number }> {
   let client;
   try { client = await connect({ port, timeoutMs: 1500 }); }
   catch { return { line: DAEMON_DOWN, code: 1 }; }

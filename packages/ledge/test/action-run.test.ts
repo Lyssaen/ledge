@@ -10,6 +10,7 @@ import { connect, type Client } from '../src/client.js';
 import type { Tmux } from '../src/tmux.js';
 import { runGuard } from '../src/daemon/actions.js';
 import { until } from './helpers.js';
+import { sessionKey } from '../src/auth.js';
 
 // `action.run` (#93): a registry action outside the chat, resolved and applied as a generic card's row.
 function fakeTmux(): Tmux {
@@ -24,9 +25,12 @@ function fakeTmux(): Tmux {
 let srv: Awaited<ReturnType<typeof startServer>>; let store: Store; let work: string; let c: Client;
 const role = (id: string) => { mkdirSync(join(process.env.LEDGE_HOME!, 'roles'), { recursive: true }); writeFileSync(join(process.env.LEDGE_HOME!, 'roles', `${id}.md`), `---\nlabel: ${id}\n---\nTu es ${id}.\n`); };
 let n = 0;
-async function run(action: string, args: Record<string, unknown>, extra: { by?: string; confirmed?: true } = {}) {
+/** Run as the user, or as session `by` with the key its environment holds (`key` to send another). */
+async function run(action: string, args: Record<string, unknown>, extra: { by?: string; key?: string | null; confirmed?: true } = {}) {
   const rid = `r${++n}`;
-  c.send({ type: 'action.run', rid, action, args, ...extra } as never);
+  const { key, ...rest } = extra;
+  const k = key === undefined ? (extra.by ? sessionKey(extra.by) : undefined) : key ?? undefined;
+  c.send({ type: 'action.run', rid, action, args, ...rest, ...(k ? { key: k } : {}) } as never);
   const r = await c.next('action.result', 5000);
   expect(r.rid).toBe(rid);
   return r;
@@ -91,6 +95,15 @@ describe('action.run', () => {
     const self = await run('session.close', { session: lead! }, { by: lead! });
     expect(self.reason).toBeUndefined();
     await until(() => store.get(lead!)!.state === 'exited');
+  });
+
+  it('a session is who its key says: a by with a wrong key, or none, is refused before anything', async () => {
+    const t = await team();
+    const [lead, build] = t.seats.map(s => s.sessionId!);
+    expect(await run('team.leave', { team: t.id, session: build! }, { by: build!, key: sessionKey(lead!) })).toMatchObject({ code: 'identity', reason: expect.stringContaining(build!) });
+    expect(await run('team.leave', { team: t.id, session: build! }, { by: build!, key: null })).toMatchObject({ code: 'identity' });
+    expect(t.seats.length).toBe(2);
+    expect(await run('team.leave', { team: t.id, session: build! }, { by: build! })).not.toHaveProperty('reason');
   });
 
   it('refuses an agent what the rule does not give it, with the reason', async () => {
