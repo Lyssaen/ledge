@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -7,6 +7,7 @@ import { Store } from '../src/daemon/store.js';
 import { createTasks, tasksJournal, type Tasks, type TasksDeps } from '../src/daemon/tasks.js';
 import { ledgeTask } from '../src/daemon/crossSession.js';
 import { taskArgs, formatTask } from '../src/cli/task.js';
+import { decideArgs } from '../src/cli/decide.js';
 
 const T0 = '2026-10-25T08:00:00.000Z';
 const mk = (id: string, name: string, extra: Partial<Session> = {}): Session => ({ id, name, tool: 'claude', cwd: '/w/ledge', project: 'ledge', title: `${name} · ledge`,
@@ -82,7 +83,7 @@ describe('createTasks', () => {
 
   it('list: what I hold and what I gave, open; --all adds the closed; show is for those two only', () => {
     const a = give('A'); const b = give('B');
-    cmd('pim', 'done', { task: b.id });
+    cmd('pim', 'done', { task: b.id, text: 'fait' });
     expect(cmd('pim', 'list').tasks!.map(t => t.id)).toEqual([a.id]);
     expect(cmd('otto', 'list', { all: true }).tasks!.map(t => t.id)).toEqual([a.id, b.id]);
     expect(cmd('nova', 'list').tasks).toEqual([]);
@@ -92,7 +93,7 @@ describe('createTasks', () => {
   });
 
   it('an owner that ends drops its open tasks, and the giver is told', () => {
-    const a = give('A'); const b = give('B'); cmd('pim', 'done', { task: b.id }); told = [];
+    const a = give('A'); const b = give('B'); cmd('pim', 'done', { task: b.id, text: 'fait' }); told = [];
     store.upsert({ ...store.get('pim')!, state: 'exited' });
     expect(cmd('otto', 'show', { task: a.id }).task).toMatchObject({ state: 'dropped' });
     expect(cmd('otto', 'show', { task: b.id }).task).toMatchObject({ state: 'done' });
@@ -123,6 +124,68 @@ describe('createTasks', () => {
   });
 });
 
+describe('closing and parking (borrowed from OpenRig)', () => {
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('done needs a result: the giver must learn what came of it', () => {
+    const t = give();
+    expect(cmd('pim', 'done', { task: t.id }).reason).toBe('il faut un résultat : ledge task done <id> "<ce qui est fait, où, tests>"');
+    expect(cmd('pim', 'done', { task: t.id, text: '  ' }).reason).toContain('il faut un résultat');
+    expect(cmd('pim', 'done', { task: t.id, text: 'fix/x 1a2b3c, tests verts' }).task).toMatchObject({ state: 'done' });
+  });
+
+  it('a decision for the user: a session gives it to Ledge, nobody is typed to, and the answer wakes the asker', () => {
+    const t = cmd('pim', 'give', { to: 'ledge', title: 'Merge ou rebase ?', text: 'A : merge. B : rebase. Je recommande A.' }).task!;
+    expect(t).toMatchObject({ owner: 'ledge', ownerName: 'Ledge', giver: 'pim', state: 'open' });
+    expect(told).toEqual([]);
+    expect(cmd('pim', 'give', { to: 'Ledge', title: 'x' }).task!.owner).toBe('ledge');
+    expect(cmd('ledge', 'give', { to: 'ledge', title: 'x' }).reason).toBe('tu ne peux pas te confier une tâche');
+    expect(cmd('nova', 'done', { task: t.id, text: 'A' }).reason).toContain('seule la session qui la tient (Ledge)');
+    const done = cmd('ledge', 'done', { task: t.id, text: 'A, merge' }).task!;
+    expect(done).toMatchObject({ state: 'done', result: 'A, merge' });
+    expect(told).toEqual([['pim', expect.stringContaining('« Merge ou rebase ? » terminée par Ledge : A, merge')]]);
+  });
+
+  it('a decision outlives a daemon restart, and drops when the session asking it ends', () => {
+    const mem = { data: undefined as Task[] | undefined, load() { return this.data; }, save(v: Task[]) { this.data = v; } };
+    tasks.close(); tasks = createTasks({ store, mailbox: { notify }, now: () => T0, journal: mem });
+    const t = cmd('pim', 'give', { to: 'ledge', title: 'Merge ou rebase ?' }).task!;
+    tasks.close(); tasks = createTasks({ store, mailbox: { notify }, now: () => T0, journal: mem });
+    expect(cmd('ledge', 'show', { task: t.id }).task).toMatchObject({ state: 'open' });
+    store.upsert({ ...store.get('pim')!, state: 'exited' });
+    expect(cmd('ledge', 'show', { task: t.id }).task).toMatchObject({ state: 'dropped' });
+  });
+
+  it('a session idle with tasks it holds is reminded once per set of tasks; one at work, or holding nothing, is not', () => {
+    vi.useFakeTimers();
+    tasks.close();
+    tasks = createTasks({ store, mailbox: { notify }, now: () => T0, parkedMs: 60_000 });
+    const t = give(); told = [];
+    vi.advanceTimersByTime(59_000); expect(told).toEqual([]);
+    vi.advanceTimersByTime(2_000);
+    expect(told).toEqual([['pim', expect.stringContaining(`tu tiens encore ${t.id} « Lance les tests » (à prendre)`)]]);
+    vi.advanceTimersByTime(120_000); expect(told).toHaveLength(1);
+    // Back at work then idle again with the same tasks: not told twice (a lead waiting on its team is not woken each stretch).
+    store.upsert({ ...store.get('pim')!, state: 'working' }); vi.advanceTimersByTime(120_000); expect(told).toHaveLength(1);
+    store.upsert({ ...store.get('pim')!, state: 'idle' }); vi.advanceTimersByTime(61_000); expect(told).toHaveLength(1);
+    // A new task makes a new set: told again once it sits.
+    const u = give('Relis la PR'); vi.advanceTimersByTime(61_000);
+    expect(told.at(-1)).toEqual(['pim', expect.stringContaining(`${u.id} « Relis la PR »`)]);
+    cmd('pim', 'done', { task: t.id, text: 'fait' }); cmd('pim', 'done', { task: u.id, text: 'fait' }); told = [];
+    store.upsert({ ...store.get('pim')!, state: 'working' }); store.upsert({ ...store.get('pim')!, state: 'idle' });
+    vi.advanceTimersByTime(120_000); expect(told).toEqual([]);
+  });
+});
+
+describe('ledge decide (CLI)', () => {
+  it('lists the decisions waiting, or answers one', () => {
+    expect(decideArgs([])).toEqual({ op: 'list' });
+    expect(decideArgs(['t1a2b3c', 'A, merge'])).toEqual({ op: 'done', task: 't1a2b3c', text: 'A, merge' });
+    expect(decideArgs(['t1a2b3c'])).toBeUndefined();
+    expect(decideArgs(['nope', 'A'])).toBeUndefined();
+  });
+});
+
 describe('ledge task (CLI)', () => {
   it('reads each op, or nothing when the arguments do not fit', () => {
     expect(taskArgs(['give', 'Pim', 'Lance les tests'])).toEqual({ op: 'give', to: 'Pim', title: 'Lance les tests' });
@@ -133,6 +196,7 @@ describe('ledge task (CLI)', () => {
     expect(taskArgs(['take', 't1a2b3c'])).toEqual({ op: 'take', task: 't1a2b3c' });
     expect(taskArgs(['take', 'nope'])).toBeUndefined();
     expect(taskArgs(['done', 't1a2b3c', 'ok'])).toEqual({ op: 'done', task: 't1a2b3c', text: 'ok' });
+    expect(taskArgs(['done', 't1a2b3c'])).toBeUndefined();
     expect(taskArgs(['refuse', 't1a2b3c'])).toBeUndefined();
     expect(taskArgs(['pass', 't1a2b3c', 'Nova', 'note'])).toEqual({ op: 'pass', task: 't1a2b3c', to: 'Nova', text: 'note' });
     expect(taskArgs([])).toBeUndefined();
@@ -247,7 +311,7 @@ describe('task transmissions (issue #92)', () => {
 
   it('tells onTask of seen without an entry', () => {
     const t = cmd('ledge', 'give', { to: 'Pim', title: 'x' }).task!;
-    cmd('pim', 'done', { task: t.id });
+    cmd('pim', 'done', { task: t.id, text: 'fait' });
     cmd('ledge', 'seen', { task: t.id });
     expect(updates.at(-1)![0].seen).toBe(true);
     expect(updates.at(-1)![1]).toBeUndefined();

@@ -55,6 +55,13 @@ export function heldNames(all: Session[]): string[] {
   return all.filter(s => s.handover?.state === 'done' && reliefOf(id => byId.get(id), s)).map(s => s.name);
 }
 
+/** The sections a brief must carry (OpenRig's recap contract, cut to what a relief needs): each as a heading or « Name : ». */
+const SECTIONS: [string, RegExp][] = [
+  ['Fait', /fait|done/], ['En cours', /en cours|in progress/], ['Suite', /suite|next/], ['Décisions', /d[ée]cisions?/]
+].map(([name, re]) => [name as string, new RegExp(`(?:^|[\\s#*(-])(?:${(re as RegExp).source})\\s*\\**\\s*(?::|$)`, 'im')]);
+/** The sections a brief lacks, in order; none when it is whole. */
+export const briefGaps = (text: string): string[] => SECTIONS.filter(([, re]) => !re.test(text)).map(([name]) => name);
+
 const quote = (s: string, max: number) => (s.length > max ? `${s.slice(0, max)}…` : s);
 
 /**
@@ -74,13 +81,16 @@ export function createHandovers(d: HandoverDeps): Handovers {
   };
   const openTasks = (id: string) => d.tasks.all().filter(t => t.owner === id && !taskClosed(t));
 
-  /** What Ledge writes when the session wrote nothing: its last reply and the tasks it held. */
+  /** What Ledge writes when the session wrote nothing: where it worked, its last reply, the tasks it held and those it gave still open. */
   const fallback = (s: Session): string => {
     const held = openTasks(s.id);
+    const given = d.tasks.all().filter(t => t.giver === s.id && !taskClosed(t));
     return [
-      `Bilan écrit par Ledge : ${s.name} n'a pas écrit le sien.`,
+      `Bilan écrit par Ledge : ${s.name} n'a pas écrit le sien. Il n'a noté ni décisions ni pièges : vérifie avant de défaire quoi que ce soit.`,
+      ...(s.branch ? ['', `Branche : ${s.branch} (${s.workdir ?? s.cwd})`] : []),
       ...(s.lastReply?.text ? ['', 'Sa dernière réponse :', s.lastReply.text] : []),
-      ...(held.length ? ['', 'Ses tâches en cours :', ...held.map(t => `- ${t.id} « ${t.title} » (confiée par ${t.giverName})`)] : [])
+      ...(held.length ? ['', 'Ses tâches en cours :', ...held.map(t => `- ${t.id} « ${t.title} » (confiée par ${t.giverName})`)] : []),
+      ...(given.length ? ['', 'Les tâches qu\'il a confiées, encore ouvertes :', ...given.map(t => `- ${t.id} « ${t.title} » à ${t.ownerName}`)] : [])
     ].join('\n');
   };
 
@@ -150,7 +160,7 @@ export function createHandovers(d: HandoverDeps): Handovers {
       if (s.tool === 'omp' || !s.tmuxSession) return `${s.name} n'a pas de terminal où demander son bilan`;
       if (waiting.has(id) || s.handover?.state === 'briefing' || s.handover?.state === 'launching') return `la relève de ${s.name} est déjà en cours`;
       const share = s.context ? ` (${Math.round((s.context.used / s.context.window) * 100)} %)` : '';
-      const asked = d.mailbox.notify(id, `<ledge-handover>Ton contexte est presque plein${share} : une nouvelle session va prendre ta place. Écris ton bilan de relève en une seule commande : ledge handover "<bilan>" — ce qui est fait, ce qui est en cours, la suite, les pièges, les fichiers clés. Ne commence rien d'autre ensuite.</ledge-handover>`, `handover:${id}:${now()}`, { first: true });
+      const asked = d.mailbox.notify(id, `<ledge-handover>Ton contexte est presque plein${share} : une nouvelle session va prendre ta place. Écris ton bilan de relève en une seule commande : ledge handover "<bilan>", avec ces sections : Fait : … En cours : … Suite : … Décisions : … (chacune avec sa raison), puis les pièges et les fichiers clés. Un bilan sans l'une d'elles est refusé. Ne commence rien d'autre ensuite.</ledge-handover>`, `handover:${id}:${now()}`, { first: true });
       if (!asked) return `impossible d'écrire à ${s.name}`;
       const auto = o.auto === true;
       waiting.set(id, { timer: setTimeout(() => finish(id, undefined), briefMs), auto });
@@ -162,6 +172,9 @@ export function createHandovers(d: HandoverDeps): Handovers {
       if (!waiting.has(by)) return 'aucune relève ne t\'attend : Ledge ne t\'a pas demandé de bilan';
       const t = text.trim();
       if (!t) return 'le bilan est vide';
+      // The relief starts from this alone: a brief without its sections is refused while there is still time to write it.
+      const gaps = briefGaps(t);
+      if (gaps.length) return `bilan incomplet, il manque : ${gaps.join(', ')}. Réécris-le en entier.`;
       finish(by, t.slice(0, BRIEF_MAX));
       return null;
     },
