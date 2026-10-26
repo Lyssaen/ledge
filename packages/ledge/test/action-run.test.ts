@@ -100,8 +100,9 @@ describe('action.run', () => {
   it('a session is who its key says: a by with a wrong key, or none, is refused before anything', async () => {
     const t = await team();
     const [lead, build] = t.seats.map(s => s.sessionId!);
-    expect(await run('team.leave', { team: t.id, session: build! }, { by: build!, key: sessionKey(lead!) })).toMatchObject({ code: 'identity', reason: expect.stringContaining(build!) });
-    expect(await run('team.leave', { team: t.id, session: build! }, { by: build!, key: null })).toMatchObject({ code: 'identity' });
+    expect(await run('team.leave', { team: t.id, session: build! }, { by: build!, key: sessionKey(lead!) })).toMatchObject({ code: 'identity', reason: expect.stringContaining('ne correspond pas') });
+    // No key at all: a session launched before Ledge gave keys, told to be resumed rather than suspected.
+    expect(await run('team.leave', { team: t.id, session: build! }, { by: build!, key: null })).toMatchObject({ code: 'identity', reason: expect.stringContaining('pas de clé') });
     expect(t.seats.length).toBe(2);
     expect(await run('team.leave', { team: t.id, session: build! }, { by: build! })).not.toHaveProperty('reason');
   });

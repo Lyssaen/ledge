@@ -769,8 +769,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     if (!parsed.success) return answer({ reason: `invalid args: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'} ${i.message}`).join('; ')}`, code: 'refused' });
     // A session is who its key says (#93): a `by` from another environment, or none, is refused before anything is resolved.
     const want = msg.by === undefined ? undefined : sessionKey(msg.by, token);
-    if (msg.by !== undefined && (!msg.key || !want || !tokenEquals(msg.key, want)))
-      return answer({ reason: `la clé de la session ${msg.by} ne correspond pas : lance la commande depuis cette session, telle que Ledge l'a lancée`, code: 'identity' });
+    // Without a key, the session was most likely launched before Ledge gave one: it is relaunched, not suspected.
+    if (msg.by !== undefined && !msg.key)
+      return answer({ reason: `la session ${msg.by} n'a pas de clé (lancée avant cette version de Ledge, ou hors de Ledge) : reprends-la depuis Ledge, ou demande à l'utilisateur`, code: 'identity' });
+    if (msg.by !== undefined && (!want || !tokenEquals(msg.key!, want)))
+      return answer({ reason: `la clé ne correspond pas à la session ${msg.by} : lance la commande depuis cette session, telle que Ledge l'a lancée`, code: 'identity' });
     const ctx = { sessions: store.all(), teams: teams.all(), tasks: tasks.all(), findRole, templateExists: (name: string) => templateExists(name) };
     const r: Resolved = resolveRun(msg.action, parsed.data, ctx);
     if ('refused' in r) return answer({ reason: r.refused, code: 'refused' });

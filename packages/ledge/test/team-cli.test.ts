@@ -7,6 +7,7 @@ import { Store } from '../src/daemon/store.js';
 import { startServer } from '../src/daemon/server.js';
 import type { Tmux } from '../src/tmux.js';
 import { teamArgs, runTeam } from '../src/cli/team.js';
+import { until } from './helpers.js';
 import { sessionKey } from '../src/auth.js';
 import { closeArgs, resultLine, runClose } from '../src/cli/action.js';
 
@@ -86,9 +87,33 @@ describe('ledge team and ledge close against a daemon', () => {
     expect(await runTeam(['dissolve', 'api', '--yes'], { ...user(), env: { LEDGE_SESSION: lead, LEDGE_SESSION_KEY: sessionKey(lead) } })).toMatchObject({ code: 1, line: expect.stringMatching(/^refusé : une session agent/) });
     const done = await runTeam(['dissolve', 'api', '--yes', '--close-sessions'], user());
     expect(done.code).toBe(0);
-    expect(done.line.split('\n')[0]).toBe('fait : Dissoudre l\'équipe api');
+    expect(done.line.split('\n')).toContain('fait : Dissoudre l\'équipe api');
     expect(store.get(lead)!.state).toBe('exited');
     expect(store.get(build)!.state).toBe('exited');
+  });
+
+  it('dissolve --close-sessions by its @leader: the other seats closed first, the team dissolved, the leader itself last', async () => {
+    writeFileSync(join(process.env.LEDGE_HOME!, 'roles', 'leader.md'), '---\nlabel: leader\n---\nTu mènes.\n');
+    await runTeam(['up', '--seat', 'leader', '--seat', 'build', '--seat', 'lead', '--name', 'api'], user());
+    const team = JSON.parse((await runTeam(['list', '--json'], user())).line).teams[0];
+    const [leader, build, lead] = team.seats.map((s: { sessionId: string }) => s.sessionId) as [string, string, string];
+    const done = await runTeam(['dissolve', 'api', '--yes', '--close-sessions'], { ...user(), env: { LEDGE_SESSION: leader, LEDGE_SESSION_KEY: sessionKey(leader) } });
+    expect(done.code).toBe(0);
+    const lines = done.line.split('\n');
+    expect(lines.indexOf('fait : Dissoudre l\'équipe api')).toBe(2);
+    expect(lines.at(-1)).toContain(store.get(leader)!.name);
+    expect(store.get(build)!.state).toBe('exited');
+    expect(store.get(lead)!.state).toBe('exited');
+    await until(() => store.get(leader)!.state === 'exited');
+    expect(JSON.parse((await runTeam(['list', '--json'], user())).line).teams).toEqual([]);
+  });
+  it('dissolve --close-sessions refused to an agent closes nothing', async () => {
+    await runTeam(['up', '--seat', 'lead', '--seat', 'build', '--name', 'api'], user());
+    const team = JSON.parse((await runTeam(['list', '--json'], user())).line).teams[0];
+    const [lead, build] = team.seats.map((s: { sessionId: string }) => s.sessionId) as [string, string];
+    expect(await runTeam(['dissolve', 'api', '--yes', '--close-sessions'], { ...user(), env: { LEDGE_SESSION: lead, LEDGE_SESSION_KEY: sessionKey(lead) } })).toMatchObject({ code: 1 });
+    expect(store.get(build)!.state).not.toBe('exited');
+    expect(store.get(lead)!.state).not.toBe('exited');
   });
 
   it('ledge close: a session closes itself, its @leader one of its team, in JSON; anything else is refused', async () => {
