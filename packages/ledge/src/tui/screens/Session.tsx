@@ -70,14 +70,14 @@ function SessionView({ s }: { s: Session }) {
   const machine = splitId(s.id)?.machine ?? 'local';
   const canSwitch = machines.find(m => m.id === machine)?.daemon?.modelSwitch === true;
 
-  const send = (text: string) => {
+  const send = (text: string, { fromHistory }: { fromHistory: boolean }) => {
     if (!text.trim()) { setMode('read'); return; }
     const back = (x: string) => { setDraft(x); };
     if (mode === 'note') actions.denyWithNote(s, text.trim(), back);
     else if (!actions.reply(s, text, back)) return;
     kept.sent.set(s.id, [...(kept.sent.get(s.id) ?? []), text]);
     // An entry of the history sent again leaves the draft as it was.
-    if (text === draft) setDraft('');
+    if (!fromHistory) setDraft('');
     setMode('read');
   };
   // Out of the field, the draft stays (and says so).

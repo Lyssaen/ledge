@@ -483,6 +483,52 @@ describe('ledge tui: the field (#95 lot B)', () => {
     } finally { await tui.cleanup(); }
   });
 
+  it('a fix and ↵ read together (« okk », then ⌫↵): the reply sent is no draft any more', async () => {
+    const tui = await replying();
+    try {
+      await tui.press('okk'); await tui.press('\u007f\r');
+      await until(() => sent(tui.daemon.received, 'session.reply').length === 1);
+      expect(sent(tui.daemon.received, 'session.reply')[0]!.text).toBe('ok');
+      tui.daemon.upsert({ ...mockupSessions()[2]!, state: 'working', lastActivityAt: T(5) });
+      await until(() => tui.frame().includes('✓ Réponse envoyée à Bix'));
+      expect(tui.frame()).not.toContain('ÉCRIRE · BROUILLON');
+    } finally { await tui.cleanup(); }
+  });
+
+  it('Ask: a fix and ↵ read together: the question asked leaves the field', async () => {
+    const tui = await startTui();
+    try {
+      await tui.press('/');
+      await tui.press('Qui a besoin de moi ??'); await tui.press('\u007f\r');
+      await until(() => sent(tui.daemon.received, 'chat.ask').length === 1);
+      expect(sent(tui.daemon.received, 'chat.ask')[0]!.text).toBe('Qui a besoin de moi ?');
+      tui.daemon.push({ type: 'chat.done', qid: sent(tui.daemon.received, 'chat.ask')[0]!.qid, text: 'Otto.', at: T(1) });
+      await until(() => !tui.frame().includes('Ledge lit…'));
+      await tui.press('X');
+      await until(() => boxRows(tui.frame(), 'QUESTION')[0]?.startsWith('❯ X') === true);
+    } finally { await tui.cleanup(); }
+  });
+
+  it('Ask: an entry of the history asked again, the field is back to the draft', async () => {
+    const tui = await startTui();
+    try {
+      await tui.press('/');
+      await tui.press('Qui a besoin de moi ?'); await tui.press('\r');
+      await until(() => sent(tui.daemon.received, 'chat.ask').length === 1);
+      tui.daemon.push({ type: 'chat.done', qid: sent(tui.daemon.received, 'chat.ask')[0]!.qid, text: 'Otto.', at: T(1) });
+      await until(() => !tui.frame().includes('Ledge lit…'));
+      await tui.press('Et Luna'); await tui.press(UP);
+      await until(() => boxRows(tui.frame(), 'QUESTION')[0] === '❯ Qui a besoin de moi ?');
+      await tui.press('\r');
+      await until(() => sent(tui.daemon.received, 'chat.ask').length === 2);
+      expect(sent(tui.daemon.received, 'chat.ask')[1]!.text).toBe('Qui a besoin de moi ?');
+      tui.daemon.push({ type: 'chat.done', qid: sent(tui.daemon.received, 'chat.ask')[1]!.qid, text: 'Otto.', at: T(2) });
+      await until(() => !tui.frame().includes('Ledge lit…'));
+      await tui.press('X');
+      await until(() => boxRows(tui.frame(), 'QUESTION')[0] === '❯ Et LunaX');
+    } finally { await tui.cleanup(); }
+  });
+
   it('keys read together all count (ssh, a busy machine): ab, ←, cd, ⌫ in one write is « acb »', async () => {
     const tui = await startTui();
     try {

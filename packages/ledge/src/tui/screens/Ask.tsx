@@ -53,7 +53,7 @@ export function Ask() {
 
   const local = machines.find(m => m.id === 'local');
   const asking = d.chat.find(x => !x.answeredAt && !x.error);
-  const ask = (text: string) => {
+  const ask = (text: string, { fromHistory }: { fromHistory: boolean }) => {
     if (!text.trim()) return;
     if (!local?.ready) { toast({ text: t.ask.offline, tone: 'info' }); return; }
     const qid = `q-${randomUUID()}`;
@@ -61,7 +61,7 @@ export function Ask() {
     client.send({ type: 'chat.ask', qid, text: text.trim() });
     kept.sent.set('ask', [...(kept.sent.get('ask') ?? []), text.trim()]);
     // An entry of the history asked again leaves the draft as it was.
-    if (text === draft) setDraft('');
+    if (!fromHistory) setDraft('');
   };
   const act = (card: Card) => {
     if (busy) return;
