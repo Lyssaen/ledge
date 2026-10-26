@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { RoleIdSchema, SeatsSchema, ToolSchema, type ActionId, type Seat, type Session, type Team } from '@ledge/protocol';
 import { connect } from '../client.js';
 import { listDefinitions } from '../daemon/teams.js';
-import { actionArgs, callerOf, DAEMON_DOWN, resultLine, runOnClient, type Caller } from './action.js';
+import { actionArgs, callerOf, DAEMON_DOWN, resultLine, runOnClient, type ActionResult, type Caller } from './action.js';
 
 export const TEAM_USAGE = `ledge team up <modèle> [--cwd <dossier>] [--name <nom>]   lancer une équipe d'après .ledge/teams/<modèle>.yaml
 ledge team up --seat <rôle>[:<outil>]… [--cwd <dossier>] [--name <nom>]   lancer une équipe de sièges ad hoc
@@ -137,30 +137,32 @@ export async function runTeam(args: string[], opts: { port?: number; cwd?: strin
 }
 
 /**
- * A verb that is a registry action. `dissolve --close-sessions` is two of them in a row: the team dissolved, then each of its
- * seats' live sessions closed cleanly (the seats are read before, a dissolved team is no longer listed).
+ * A verb that is a registry action. `dissolve --close-sessions` is several in a row, so that each is still allowed when it runs:
+ * the dissolve asked first without applying it (refused, nothing is closed), then the other seats' live sessions closed cleanly,
+ * the team dissolved, and the caller's own session last (its `@leader` rights end with the team, not its right to close itself).
  */
 async function runVerb(cmd: Extract<TeamCmd, { op: 'run' }>, port: number | undefined, by: Caller | undefined): Promise<{ line: string; code: number }> {
   let client;
   try { client = await connect({ port, timeoutMs: 1500 }); }
   catch { return { line: DAEMON_DOWN, code: 1 }; }
   try {
+    if (!cmd.closeSessions || !cmd.yes) return resultLine(await runOnClient(client, cmd.action, cmd.args, { by, confirmed: cmd.yes }), cmd.json);
     const snapshot = await client.next('snapshot', 1500);
-    const teams = cmd.closeSessions ? (await client.next('teams', 1500).catch(() => ({ teams: [] as Team[] }))).teams : [];
-    const r = await runOnClient(client, cmd.action, cmd.args, { by, confirmed: cmd.yes });
-    const first = resultLine(r, cmd.json);
-    if (first.code || !cmd.closeSessions) return first;
-    const team = teams.find(t => t.id === r.row?.team);
+    const teams = (await client.next('teams', 1500).catch(() => ({ teams: [] as Team[] }))).teams;
+    // Unconfirmed, a dissolve the caller may run answers `confirm_required` with its row; anything else is the answer.
+    const asked = await runOnClient(client, cmd.action, cmd.args, { by });
+    if (asked.code !== 'confirm_required') return resultLine(asked, cmd.json);
+    const team = teams.find(t => t.id === asked.row?.team);
     const live = (team?.seats ?? []).flatMap(seat => {
       const s = snapshot.sessions.find(x => x.id === seat.sessionId);
       return s && s.state !== 'exited' && s.source !== 'hook_only' ? [s] : [];
     });
-    const lines = [first.line];
-    for (const s of live) {
-      const closed = resultLine(await runOnClient(client, 'session.close', { session: s.id }, { by }), cmd.json);
-      lines.push(closed.line);
-      if (closed.code) return { line: lines.join('\n'), code: 1 };
-    }
+    const self = live.find(s => s.id === by?.by);
+    const lines: string[] = [];
+    const step = async (r: ActionResult): Promise<boolean> => { const l = resultLine(r, cmd.json); lines.push(l.line); return l.code === 0; };
+    for (const s of live) if (s !== self && !(await step(await runOnClient(client, 'session.close', { session: s.id }, { by })))) return { line: lines.join('\n'), code: 1 };
+    if (!(await step(await runOnClient(client, cmd.action, cmd.args, { by, confirmed: true })))) return { line: lines.join('\n'), code: 1 };
+    if (self && !(await step(await runOnClient(client, 'session.close', { session: self.id }, { by })))) return { line: lines.join('\n'), code: 1 };
     return { line: lines.join('\n'), code: 0 };
   } catch (e) {
     return { line: `pas de réponse de Ledge : ${(e as Error).message}`, code: 1 };

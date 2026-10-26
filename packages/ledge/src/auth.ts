@@ -126,7 +126,6 @@ export async function ensureDaemonToken(): Promise<string> {
   return stored;
 }
 
-/** The token file, or undefined when the daemon has never started in this LEDGE_HOME. */
 /** Where a session Ledge launched finds its key (#93): the CLI sends it with `by`, so the daemon knows the session is who it says. */
 export const SESSION_KEY_VAR = 'LEDGE_SESSION_KEY';
 /**
@@ -137,6 +136,7 @@ export function sessionKey(id: string, token: string | undefined = readDaemonTok
   return token ? createHmac('sha256', token).update(`ledge-session:${id}`).digest('hex') : undefined;
 }
 
+/** The token file, or undefined when the daemon has never started in this LEDGE_HOME. */
 export function readDaemonToken(): string | undefined {
   try {
     const raw = readFileSync(paths().token, 'utf8').trim();
