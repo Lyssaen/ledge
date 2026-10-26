@@ -59,8 +59,8 @@ describe('the conversation and the cards of a turn with an action card', () => {
   it('an ignored turn has no card at all, and says so in the conversation, with the key that opens it again', () => {
     const ignored = turn({ ignoredAt: AT, actions: [archive('Otto'), archive('Bix')], proposals: [{ cwd: '/w/a', project: 'a', tool: 'claude' }] });
     expect(openCards([ignored])).toEqual([]);
-    expect(text(ignored)).toContain(`  · Plan de 2 actions ignoré à ${clock(AT)} · rien n’a été envoyé · revoir : ctrl+r`);
-    expect(text(turn({ ignoredAt: AT, actions: [archive('Otto')] }))).toContain(`  · Carte ignorée à ${clock(AT)} · rien n’a été envoyé · revoir : ctrl+r`);
+    expect(text(ignored)).toContain(`  · plan de 2 actions ignoré à ${clock(AT)}, rien n’a été envoyé · revoir : ctrl+r`);
+    expect(text(turn({ ignoredAt: AT, actions: [archive('Otto')] }))).toContain(`  · carte ignorée à ${clock(AT)}, rien n’a été envoyé · revoir : ctrl+r`);
   });
   it('once applied, the box goes and a line stays: the plan, or the row', () => {
     expect(text(turn({ actions: [archive('Otto', { state: 'done', doneAt: AT }), archive('Bix', { state: 'done', doneAt: AT })] }))).toContain(`  ✓ Plan appliqué à ${clock(AT)}`);

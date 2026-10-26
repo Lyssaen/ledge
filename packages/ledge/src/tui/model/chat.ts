@@ -49,9 +49,10 @@ export const chatLines = (turns: readonly ChatTurn[], live: { qid: string; text:
 function actionTrace(turn: ChatTurn, t: Messages, g: Glyphs, width: number): Line[] {
   const a = t.ask.action, c = a.copy;
   const cards = !!(turn.actions || turn.proposal || turn.relay || turn.closes || turn.team || turn.tasks || turn.projectProposal);
-  if (turn.ignoredAt) return cards ? [[{ text: `  ${a.ignored(turn.actions?.length ?? 1, clock(turn.ignoredAt))}`, color: C.faint }]] : [];
+  if (turn.ignoredAt) return cards ? [[{ text: '' }], [{ text: `  ${a.ignored(turn.actions?.length ?? 1, clock(turn.ignoredAt))}`, color: C.faint }]] : [];
   if (!turn.actions || !cardClosed(turn.actions)) return [];
-  const p = cardPlan(turn.actions), out: Line[] = [];
+  // Apart from the answer, as the mockup leaves it.
+  const p = cardPlan(turn.actions), out: Line[] = [[{ text: '' }]];
   const done = p.rows.flatMap((r, i) => (p.shown[i] === 'done' ? [r] : []));
   const last = done.map(r => r.doneAt).filter((x): x is string => !!x).sort().at(-1);
   if (done.length > 1) out.push([{ text: `  ${g.ok} ${c.planDone(last ? clock(last) : '')}`, color: C.green }]);

@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text, useWindowSize } from 'ink';
 import type { ChatTurn } from '@ledge/protocol';
 import type { ActionRowView } from '@ledge/ui/chat/actionRow';
 import { useTui } from '../context.js';
 import { cardPlan, lineOf, verbOf, whyOf, type CardPlan, type Shown } from '../model/actionCard.js';
 import { clock } from '../model/time.js';
+import { wrapSegs, type Line } from '../model/cells.js';
 import { C } from '../theme.js';
 import { Button } from './SessionCard.js';
 import { TitledBox } from './TitledBox.js';
@@ -27,6 +28,7 @@ export interface ActionBoxProps { turn: ChatTurn; plan?: CardPlan; focused: bool
  */
 export function ActionBox({ turn, focused, busy, sel, confirming, plan }: ActionBoxProps) {
   const { t, g } = useTui();
+  const { columns } = useWindowSize();
   const a = t.ask.action, c = a.copy;
   const p = plan ?? cardPlan(turn.actions ?? []);
   const many = p.rows.length > 1;
@@ -44,17 +46,19 @@ export function ActionBox({ turn, focused, busy, sel, confirming, plan }: Action
   } as Record<Shown, [string, string]>)[s];
   const tail = (r: ActionRowView, s: Shown): ReactNode[] => {
     const state = s === 'done' ? [a.state.done(at(r.doneAt)), C.green] : s === 'running' ? [a.state.running, C.blue] : s === 'held' ? [a.state.held, C.faint]
-      : s === 'refused' ? [a.state.refused, C.dim] : s === 'cut' ? [a.state.cut, C.yellow] : s === 'denied' ? [a.state.denied(at(r.doneAt)), C.dim]
-      : s === 'stale' ? [a.state.stale, C.yellow] : null;
+      : s === 'refused' ? [a.state.refused, C.dim] : s === 'cut' ? [a.state.cut, C.yellow] : s === 'denied' ? [a.state.denied(at(r.doneAt)), C.dim] : null;
     const out: ReactNode[] = [];
     if (state) out.push(<Text key="s" color={state[1]}>{state[0]}  </Text>);
     // A denial sent has no risk: the acceptance it stood for did not happen.
     if (s !== 'denied') out.push(<Text key="r" color={r.risk === 'destructive' ? C.red : C.faint} bold={r.risk === 'destructive'}>{c.risk[r.risk].toLowerCase()}</Text>);
     return out;
   };
-  const quote = (text: string, color: string, key: string) => (
-    <Box key={key} flexDirection="row"><Text color={C.line}>│ </Text><Box flexGrow={1}><Text color={color} wrap="wrap">{text}</Text></Box></Box>
-  );
+  // Wrapped here, at the box's width less the row's indent, as the conversation is: a line never starts with a space.
+  const inner = (indent: number) => Math.max(10, columns - 6 - indent);
+  const drawn = (lines: Line[], key: string) => lines.map((l, k) => <Text key={`${key}${k}`} wrap="truncate">{l.map((x, j) => <Text key={j} color={x.color}>{x.text}</Text>)}</Text>);
+  const para = (text: string, color: string, indent: number, key: string) => drawn(wrapSegs([{ text, color }], inner(indent)), key);
+  const quote = (text: string, color: string, indent: number, key: string) =>
+    drawn(wrapSegs([{ text, color }], inner(indent + 2)).map(l => [{ text: '│ ', color: C.line }, ...l]), key);
 
   const rows = p.rows.map((r, i) => {
     const s = p.shown[i]!;
@@ -62,21 +66,23 @@ export function ActionBox({ turn, focused, busy, sel, confirming, plan }: Action
     const selected = focused && !confirming && many && i === sel;
     const [mark, markColor] = glyph(s);
     const line = s === 'denied' ? lineOf({ ...r, vars: { ...r.vars, decision: 'deny' } }, c) : lineOf(r, c);
+    const indent = many ? 6 : 2;
     const under: ReactNode[] = [];
     if (r.request) {
       under.push(<Text key="k" color={C.faint}>{c.words.kind[r.request.kind] ?? r.request.kind}</Text>);
       if (s === 'cut') {
-        r.request.text.split('\n').slice(0, CUT_LINES).forEach((l, k) => under.push(quote(l, C.fg, `q${k}`)));
-        under.push(quote(a.cutMark, C.yellow, 'cut'));
-        under.push(<Text key="n" color={C.dim} wrap="wrap">{c.words.cut.note(r.target ?? '')}</Text>);
-      } else r.request.text.split('\n').forEach((l, k) => under.push(quote(l, s === 'stale' || s === 'denied' ? C.faint : C.fg, `q${k}`)));
+        r.request.text.split('\n').slice(0, CUT_LINES).forEach((l, k) => under.push(...quote(l, C.fg, indent, `q${k}-`)));
+        under.push(...quote(a.cutMark, C.yellow, indent, 'cut'));
+        under.push(...para(c.words.cut.note(r.target ?? ''), C.dim, indent, 'n'));
+      } else r.request.text.split('\n').forEach((l, k) => under.push(...quote(l, s === 'stale' || s === 'denied' ? C.faint : C.fg, indent, `q${k}-`)));
     }
     // An irreversible row's detail always shows; another's on the row chosen, and all of them in a confirmation.
-    if (r.detail && (confirming || selected || r.risk === 'destructive')) under.push(<Text key="d" color={C.faint} wrap="wrap">{r.detail}</Text>);
-    if (s === 'failed') under.push(<Text key="f" color={C.red} wrap="wrap">{c.failed(whyOf(r, c))}</Text>);
-    if (s === 'refused') under.push(<Text key="f" color={C.red} wrap="wrap">{c.refused(whyOf(r, c))}</Text>);
-    if (s === 'stale') under.push(<Text key="f" color={C.yellow} wrap="wrap">{c.stale(r.target ?? '')}</Text>);
-    if (s === 'denied') under.push(<Text key="f" color={C.dim} wrap="wrap">{c.deniedNote(r.target ?? '')}</Text>);
+    if (r.detail && (confirming || selected || r.risk === 'destructive')) under.push(...para(r.detail, C.faint, indent, 'd'));
+    if (s === 'failed') under.push(...para(c.failed(whyOf(r, c)), C.red, indent, 'f'));
+    if (s === 'refused') under.push(...para(c.refused(whyOf(r, c)), C.red, indent, 'f'));
+    // Short: the line of keys below says to ask again.
+    if (s === 'stale') under.push(...para(a.stale(r.target ?? ''), C.yellow, indent, 'f'));
+    if (s === 'denied') under.push(...para(c.deniedNote(r.target ?? ''), C.dim, indent, 'f'));
     return (
       <Box key={i} flexDirection="column">
         <Box flexDirection="row" justifyContent="space-between" backgroundColor={selected ? C.sel : undefined}>
@@ -88,7 +94,7 @@ export function ActionBox({ turn, focused, busy, sel, confirming, plan }: Action
           </Text>
           <Box flexShrink={0} marginLeft={1}><Text>{tail(r, s)}</Text></Box>
         </Box>
-        {under.length ? <Box flexDirection="column" paddingLeft={many ? 6 : 2}>{under}</Box> : null}
+        {under.length ? <Box flexDirection="column" paddingLeft={indent}>{under}</Box> : null}
       </Box>
     );
   });
@@ -98,7 +104,7 @@ export function ActionBox({ turn, focused, busy, sel, confirming, plan }: Action
       const one = confirming.length === 1 ? p.rows[confirming[0]!]! : null;
       return (
         <Box flexDirection="column" marginTop={1}>
-          {many ? <Text color={C.dim} wrap="wrap">{a.hint.inOrder}</Text> : null}
+          {many ? <Box paddingLeft={2} flexDirection="column">{para(a.hint.inOrder, C.dim, 2, 'o')}</Box> : null}
           <Box columnGap={2}><Button label={one ? verbOf(one, c) : c.confirm.go(confirming.length)} k="y" danger /><Button label={c.confirm.cancel} k="esc" /><Text color={C.faint}>{a.hint.confirm}</Text></Box>
         </Box>
       );

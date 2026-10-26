@@ -365,8 +365,10 @@ describe('ledge tui: the action card (#94, docs/mockups/ledge-action-card.html, 
       expect(sent(tui.daemon.received, 'chat.ignore')[0]).toEqual({ type: 'chat.ignore', qid: 'q1' });
       tui.daemon.push({ type: 'chat.history', turns: [turn(plan(), { ignoredAt: AT })] });
       await until(() => !tui.frame().includes('PLAN · 3 ACTIONS'));
-      expect(tui.frame()).toContain('Plan de 3 actions ignoré à');
+      expect(tui.frame()).toContain('plan de 3 actions ignoré à');
       expect(tui.frame()).toContain('revoir : ctrl+r');
+      // The bar says it too: the focus is back on the question.
+      await until(() => /ctrl\+r\s+revoir/.test(tui.frame()));
       await tui.press('\u0012');
       await until(() => sent(tui.daemon.received, 'chat.ignore').length === 2);
       expect(sent(tui.daemon.received, 'chat.ignore')[1]).toEqual({ type: 'chat.ignore', qid: 'q1', undo: true });
