@@ -10,8 +10,11 @@ export interface ClipboardImage { image: ImageUpload; width: number; height: num
 
 type Run = (file: string, args: string[], o: { cwd?: string; maxBuffer: number; encoding: 'buffer' }) => Promise<{ stdout: Buffer }>;
 
+/** A hung reader (clipboard locked) is killed after this long. */
+const CLIPBOARD_TIMEOUT_MS = 10_000;
+
 const runFile: Run = (file, args, o) => new Promise((resolve, reject) => {
-  execFile(file, args, o, (err, stdout) => (err ? reject(err) : resolve({ stdout })));
+  execFile(file, args, { ...o, timeout: CLIPBOARD_TIMEOUT_MS }, (err, stdout) => (err ? reject(err) : resolve({ stdout })));
 });
 
 const POWERSHELL = '/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe';
@@ -30,21 +33,27 @@ const SCRIPT = [
   'function Encode($long, $qualities, $max) {',
   '$k = [Math]::Min(1.0, $long / [Math]::Max($src.Width, $src.Height));',
   '$w = [Math]::Max(1, [int][Math]::Round($src.Width * $k)); $h = [Math]::Max(1, [int][Math]::Round($src.Height * $k));',
-  '$bmp = New-Object System.Drawing.Bitmap($w, $h);',
-  '$g = [System.Drawing.Graphics]::FromImage($bmp); $g.Clear([System.Drawing.Color]::White);',
-  '$g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic; $g.DrawImage($src, 0, 0, $w, $h); $g.Dispose();',
+  '$bmp = New-Object System.Drawing.Bitmap($w, $h); $ms = $null;',
+  'try {',
+  '$g = [System.Drawing.Graphics]::FromImage($bmp);',
+  'try { $g.Clear([System.Drawing.Color]::White); $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic; $g.DrawImage($src, 0, 0, $w, $h) } finally { $g.Dispose() }',
   'foreach ($q in $qualities) {',
+  'if ($null -ne $ms) { $ms.Dispose(); $ms = $null }',
   '$p = New-Object System.Drawing.Imaging.EncoderParameters(1);',
+  'try {',
   '$p.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter([System.Drawing.Imaging.Encoder]::Quality, [long]$q);',
-  '$ms = New-Object System.IO.MemoryStream; $bmp.Save($ms, $codec, $p);',
+  '$ms = New-Object System.IO.MemoryStream; $bmp.Save($ms, $codec, $p)',
+  '} finally { $p.Dispose() }',
   'if ($ms.Length -le $max) { break }',
   '}',
-  '$bmp.Dispose();',
   'return @{ w = $w; h = $h; b = [Convert]::ToBase64String($ms.ToArray()) }',
+  '} finally { if ($null -ne $ms) { $ms.Dispose() }; $bmp.Dispose() }',
   '}',
+  'try {',
   '$main = Encode 1600 @(85, 70, 55, 40) 400000;',
   '$prev = Encode 480 @(70) 40000;',
-  '[Console]::Out.Write((ConvertTo-Json -Compress @{ w = $main.w; h = $main.h; main = $main.b; prev = $prev.b }))'
+  '[Console]::Out.Write((ConvertTo-Json -Compress @{ w = $main.w; h = $main.h; main = $main.b; prev = $prev.b }))',
+  '} finally { $src.Dispose() }'
 ].join(' ');
 
 async function fromWindows(run: Run): Promise<ClipboardImage | null> {

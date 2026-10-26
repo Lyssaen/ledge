@@ -78,7 +78,12 @@ const EXT: Record<ImageMime, string> = { 'image/png': 'png', 'image/jpeg': 'jpg'
 /** Reads the clipboard picture and adds it, or says there is none. */
 export function usePaste(chips: Chips): () => void {
   const { readImage, toast, t } = useTui();
-  return () => { void readImage().then(got => { if (got) chips.add(got); else toast({ text: t.images.none, tone: 'info' }); }, () => toast({ text: t.images.none, tone: 'info' })); };
+  const reading = useRef(false);
+  return () => {
+    if (reading.current) return;
+    reading.current = true;
+    void readImage().then(got => { if (got) chips.add(got); else toast({ text: t.images.none, tone: 'info' }); }, () => toast({ text: t.images.none, tone: 'info' })).finally(() => { reading.current = false; });
+  };
 }
 
 /** An image to open and where to fetch it: the session it belongs to, or the machine of a chat turn. */
@@ -88,16 +93,20 @@ export interface Openable { ref: AttachmentRef; route: { id?: string; machine?: 
 export function useOpenImage(): (items: readonly Openable[]) => void {
   const { client, openFile, toast, t } = useTui();
   const presses = useRef(0);
+  const last = useRef<string>('');
   return items => {
+    // A new list (a turn arrived, a thread unfolded or folded) starts again at the newest.
+    const signature = items.map(x => x.ref.id).join(',');
+    if (signature !== last.current) { last.current = signature; presses.current = 0; }
     const item = items[items.length - 1 - (presses.current++ % items.length)];
     if (!item) return;
     const { ref, route } = item;
     void (async () => {
       const { mime, data } = await getImage(client, ref.id, route);
       const dir = join(tmpdir(), 'ledge-images');
-      await mkdir(dir, { recursive: true });
+      await mkdir(dir, { recursive: true, mode: 0o700 });
       const file = join(dir, `${ref.id}.${EXT[mime]}`);
-      await writeFile(file, Buffer.from(data, 'base64'));
+      await writeFile(file, Buffer.from(data, 'base64'), { mode: 0o600 });
       await openFile(file);
     })().catch((e: unknown) => toast({ text: t.images.openFailed(e instanceof AttachmentFailure ? e.reason : (e as Error).message), tone: 'error' }));
   };

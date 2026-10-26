@@ -135,4 +135,56 @@ describe('ledge tui: images in Ask', () => {
       expect(opened[0]!.toString()).toBe('jpeg bytes');
     } finally { await tui.cleanup(); }
   });
+  it('Alt+O starts again at the newest image when a new turn arrives', async () => {
+    const opened: string[] = [];
+    const tui = await startTui({ openFile: async file => { opened.push(readFileSync(file).toString()); } });
+    const [a, b] = ['a'.repeat(64), 'b'.repeat(64)];
+    tui.attachments.set(a, { mime: 'image/jpeg', data: Buffer.from('first').toString('base64') });
+    tui.attachments.set(b, { mime: 'image/jpeg', data: Buffer.from('second').toString('base64') });
+    const turn = (qid: string, id: string) => ({ qid, question: 'Regarde', askedAt: new Date().toISOString(), answeredAt: new Date().toISOString(), answer: 'Vu.', steps: [], attachments: [{ id, mime: 'image/jpeg' as const, width: 800, height: 600, bytes: 90_000, preview: false }] });
+    try {
+      await tui.press('/');
+      await until(() => tui.frame().includes('OPÉRATEUR'));
+      tui.daemon.push({ type: 'chat.history', turns: [turn('q1', a)] });
+      await until(() => tui.frame().includes('▣ capture 800×600'));
+      await tui.press(ALT_O);
+      await until(() => opened.length === 1);
+      tui.daemon.push({ type: 'chat.history', turns: [turn('q1', a), turn('q2', b)] });
+      await until(() => tui.frame().split('▣ capture 800×600').length === 3);
+      await tui.press(ALT_O);
+      await until(() => opened.length === 2);
+      expect(opened).toEqual(['first', 'second']);
+    } finally { await tui.cleanup(); }
+  });
+
+  it('a second Alt+V while the clipboard is being read is ignored', async () => {
+    let reads = 0;
+    const tui = await startTui({ readImage: async () => { reads++; await new Promise(r => setTimeout(r, 300)); return pasted(); } });
+    try {
+      await tui.press('/');
+      await until(() => tui.frame().includes('OPÉRATEUR'));
+      await tui.press(ALT_V);
+      await tui.press(ALT_V);
+      await until(() => tui.frame().includes('▣ capture 1440×900 ✕'));
+      await new Promise(r => setTimeout(r, 400));
+      expect(reads).toBe(1);
+      expect(tui.frame().split('▣ capture').length).toBe(2);
+    } finally { await tui.cleanup(); }
+  });
+
+  it('the chips of a refused question come back', async () => {
+    const tui = await startTui({ readImage: async () => pasted() });
+    try {
+      await tui.press('/');
+      await until(() => tui.frame().includes('OPÉRATEUR'));
+      await tui.press(ALT_V);
+      await until(() => tui.frame().includes('▣ capture 1440×900 ✕'));
+      await tui.press('Et ça ?');
+      await tui.press('\r');
+      await until(() => sent(tui.daemon.received, 'chat.ask').length === 1);
+      await until(() => !tui.frame().includes('▣ capture 1440×900'));
+      tui.daemon.push({ type: 'chat.error', qid: sent(tui.daemon.received, 'chat.ask')[0]!.qid, message: 'refused' });
+      await until(() => tui.frame().includes('▣ capture 1440×900 ✕'));
+    } finally { await tui.cleanup(); }
+  });
 });

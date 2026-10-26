@@ -4,7 +4,7 @@ import { Box, Text, useInput, useWindowSize } from 'ink';
 import { daemonStore } from '@ledge/fleet';
 import { LEDGE_GIVER, proposalRows, type ChatTurn } from '@ledge/protocol';
 import { useEditing, useScreenKeys, useTui } from '../context.js';
-import { ChipsLine, useChips, useOpenImage, usePaste } from '../images.js';
+import { ChipsLine, type Chip, useChips, useOpenImage, usePaste } from '../images.js';
 import { chatLines, openCards, type Card } from '../model/chat.js';
 import { TOOL_NAME } from '../model/labels.js';
 import { listed } from '../model/overview.js';
@@ -31,6 +31,15 @@ export function Ask() {
   const openImage = useOpenImage();
   const [busy, setBusy] = useState<{ qid: string; turn: ChatTurn | undefined; errorSeq: number; at: number } | null>(null);
   useEditing(focus === -1);
+  // What the last question carried: given back if the daemon refuses it, as a session reply does.
+  const sentAsk = useRef<{ qid: string; taken: Chip[]; text: string } | null>(null);
+  useEffect(() => {
+    const s = sentAsk.current;
+    const turn = s && d.chat.find(x => x.qid === s.qid);
+    if (!s || !turn) return;
+    if (turn.error) { sentAsk.current = null; chips.putBack(s.taken); setDraft(x => x || s.text); }
+    else if (turn.answeredAt) sentAsk.current = null;
+  }, [d.chat]);
 
   const cards = useMemo(() => openCards(d.chat), [d.chat]);
   useEffect(() => { if (focus >= cards.length) setFocus(cards.length ? cards.length - 1 : -1); }, [cards.length, focus]);
@@ -52,7 +61,7 @@ export function Ask() {
     const qid = `q-${randomUUID()}`;
     daemonStore.beginTurn({ qid, question: text.trim(), askedAt: new Date().toISOString(), steps: [] });
     client.send({ type: 'chat.ask', qid, text: text.trim(), ...(images.length ? { images } : {}) });
-    chips.clear();
+    sentAsk.current = { qid, taken: chips.clear(), text: text.trim() };
     setDraft('');
   };
   const act = (card: Card) => {
