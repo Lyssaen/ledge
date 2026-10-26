@@ -735,6 +735,18 @@ describe('server', () => {
       expect((await c.next('task.result', 3000)).tasks!.map(t => t.id)).toEqual([r.task!.id]);
       c.close();
     });
+    it('a task given between two seats reaches the fronts with its transmission, and Ledge lists it (#92)', async () => {
+      store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'idle' }));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'task.cmd', rid: 't-r1', by: 'a', op: 'give', to: 'Pim', title: 'Lance les tests' });
+      const { task } = await c.next('task.updated', 3000);
+      await c.next('task.result', 3000);
+      expect(task).toMatchObject({ giver: 'a', owner: 'b' });
+      expect(task.log.at(-1)).toMatchObject({ op: 'give', from: 'a', to: 'b', fromName: 'Otto', toName: 'Pim' });
+      c.send({ type: 'task.cmd', rid: 't-r2', by: 'ledge', op: 'list' });
+      expect((await c.next('task.result', 3000)).tasks!.map(t => t.id)).toEqual([task.id]);
+      c.close();
+    });
     it('message.read gives a long body whole to its receiver, and refuses anyone else', async () => {
       store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'working' }));
       const c = await connect({ port: srv.port }); await c.next('snapshot');
