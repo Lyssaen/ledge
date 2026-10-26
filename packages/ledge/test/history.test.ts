@@ -535,6 +535,16 @@ describe('the outgoing card of a task (issue #92)', () => {
     expect(h.items('fce8').at(-1)!.turn).toBe(turn + 1);
   });
 
+  it("keeps syncing the agent's words written before its outgoing card, in the same turn", () => {
+    const p = join(dir, 'o.jsonl');
+    const line = (uuid: string, ts: string, text: string) => JSON.stringify({ uuid, timestamp: ts, type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text }] } });
+    writeFileSync(p, line('u1', later(1), 'Je confie la relecture à Pim.') + '\n');
+    const h = new History();
+    h.record('fce8', ev('UserPromptSubmit', { text: 'go' }));
+    h.recordTask('fce8', { task, tr: tr(), peer: 'c0de' });
+    expect(h.sync('fce8', p, { force: true }).map(i => i.id)).toEqual(['msg-u1']);
+  });
+
   it.each([
     [tr({ index: 2, op: 'pass', toName: 'Nova', to: 'nova', note: 'relis la fin' }), {}, 'Tâche « Relire » passée à Nova', 'Relire\nrelis la fin'],
     [tr({ index: 3, op: 'done', from: 'c0de', to: 'fce8', fromName: 'Pim', toName: 'Otto' }), { result: 'fait' }, 'Tâche « Relire » rendue à Otto (terminée)', 'Relire\nfait'],

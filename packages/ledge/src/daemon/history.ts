@@ -247,7 +247,7 @@ export class History {
     if (!opts.force && now - (this.synced.get(key) ?? 0) < SYNC_MS) return [];
     this.synced.set(key, now);
     const items = this.items(id);
-    const since = opts.helperId ? items.find(i => i.id === opts.helperId)?.at : [...items].reverse().find(i => i.kind === 'prompt' || i.kind === 'received' || i.kind === 'notice')?.at;
+    const since = opts.helperId ? items.find(i => i.id === opts.helperId)?.at : [...items].reverse().find(i => i.kind === 'prompt' || i.kind === 'received' || (i.kind === 'notice' && !i.outgoing))?.at; // an outgoing task card is mid-turn: not an anchor
     if (!since) return []; // a daemon that joined mid-turn: the old tail would flood the thread
     const have = new Set(items.map(i => i.id));
     const turn = this.turns.get(id) ?? 0;

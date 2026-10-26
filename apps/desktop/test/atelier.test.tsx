@@ -318,7 +318,11 @@ describe('the atelier', () => {
       expect(ticket).toHaveAttribute('aria-hidden', 'true');
       expect(ticket.style.offsetPath).toBe(`path('${wires()[0]!.querySelector('path')!.getAttribute('d')}')`);
       expect(document.querySelector('.exchange-envelope')).toBeNull();
-      expect(declarations('atelier.css', '.task-wire path')).toContain('stroke:var(--sidebar-primary)');
+      // Its own hue: --sidebar-primary is the « your approval » red, which a ticket landing on a seat must not mimic.
+      expect(declarations('atelier.css', '.task-wire path')).toContain('stroke:var(--task)');
+      expect(declarations('atelier.css', '.exchange-ticket-body')).toContain('stroke:var(--task)');
+      expect(declarations('atelier.css', '.task-bubble .exchange-bubble-to')).toContain('color:var(--task)');
+      expect(readFileSync(resolve(__dirname, '../../../packages/ui/src/styles/tokens.css'), 'utf8').match(/--task:/g)).toHaveLength(2);
     });
     it('draws two wires for a give then a pass within 5 s, the pass with its note', async () => {
       const { d } = await boot({ sessions: [...DEFAULT_SESSIONS, rio] });
