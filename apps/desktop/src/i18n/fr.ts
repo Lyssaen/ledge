@@ -25,6 +25,7 @@ export const fr = {
     label: 'Barre latérale', newSession: 'Nouvelle session', searchLabel: 'Rechercher une session',
     views: 'Vues', atelier: 'Atelier', chat: 'Chat Ledge', projects: 'Projets', newProject: 'Nouveau projet', unassigned: 'Sans projet',
     machines: 'Machines', manageMachines: 'Gérer les machines', agents: (n: number) => plural(n, `${n} agent`, `${n} agents`), offline: 'hors ligne', daemonUpdating: 'mise à jour du daemon', settings: 'Réglages', shortcuts: 'Raccourcis clavier',
+    ledgeHome: 'Accueil : Ledge, l’opérateur', ledgeLine: (yours: number, teams: number) => `${yours} à toi · ${plural(teams, `${teams} équipe active`, `${teams} équipes actives`)}`,
     ask: 'Demander à Ledge', askPlaceholder: 'Demander à Ledge…',
     openChat: 'Ouvrir la conversation avec Ledge',
     active: (n: number) => plural(n, `${n} actif`, `${n} actifs`),
@@ -77,7 +78,7 @@ export const fr = {
     nav: 'Sections des réglages', back: 'Retour à l’atelier',
     saved: (what: string) => `Réglage enregistré · ${what}`,
     hints: {
-      general: 'Langue, démarrage, agent par défaut et mises à jour.',
+      general: 'Langue, démarrage, agent par défaut, contexte max et mises à jour.',
       appearance: 'Thème, couleur de Ledge, échelle et mouvements.',
       island: 'L’encoche en haut de l’écran : où elle se pose et ce qu’elle signale.',
       notifications: 'Qui vous prévient, et quand vous laisser tranquille.',
@@ -98,7 +99,9 @@ export const fr = {
       autostart: 'Lancer au démarrage de Windows', autostartHint: 'Ledge Desktop s’ouvre avec votre session Windows.',
       autostartMissing: 'Pas proposé ici : seule l’application installée peut se lancer avec Windows.',
       autostartFailed: 'Windows n’a pas pris ce réglage.', autostartOff: 'Pas de lancement au démarrage',
-      tool: 'Agent par défaut', toolHint: 'Pour le chat de Ledge et ses cartes.', toolSaved: (name: string) => `Agent par défaut : ${name}`
+      tool: 'Agent par défaut', toolHint: 'Pour le chat de Ledge et ses cartes.', toolSaved: (name: string) => `Agent par défaut : ${name}`,
+      context: 'Contexte max', contextHint: 'Au-delà, une session est proche de sa limite : « À toi » propose de passer le relais, et Ledge relève de lui-même un poste qui travaille sans demander.',
+      contextSaved: (pct: number) => `Contexte max : ${pct} %`, contextUnknown: 'Mettez à jour le daemon Ledge local pour régler ce seuil.'
     },
     updates: {
       title: 'Mises à jour',
@@ -391,6 +394,7 @@ export const fr = {
     seat: (name: string, task: string, machine: string) => `${name}, ${task}, ${machine}`,
     helperSeat: (kind: string, parent: string, task: string) => `${kind}, sous-agent de ${parent} : ${task}`,
     offline: 'Hors ligne',
+    ledgeTaskLabel: (owner: string, title: string) => `Ledge confie « ${title} » à ${owner}. Voir la tâche`,
     messageTo: (n: string) => `à ${n}`,
     messageLabel: (sender: string, n: string, summary: string) => `${sender} écrit à ${n} : ${summary}. Ouvrir l’échange`,
     desk: 'Parler à Ledge',
@@ -415,6 +419,67 @@ export const fr = {
     outdated: (name: string) => `Impossible de ranger ${name} : mettez à jour le daemon Ledge local, il ne connaît pas encore les projets.`,
     invalid: (name: string) => `Impossible de ranger ${name} : Ledge ne peut pas mémoriser ce dossier.`,
     unconfirmed: (name: string) => `${name} n'a pas été rangé : Ledge n'a pas confirmé. Réessayez.`
+  },
+  home: {
+    operator: (sessions: number, teams: number, machines: number) => `Opérateur · voit ${plural(sessions, `${sessions} session`, `${sessions} sessions`)}, ${plural(teams, `${teams} équipe`, `${teams} équipes`)}, ${plural(machines, `${machines} machine`, `${machines} machines`)} · lecture seule`,
+    tabsLabel: 'Vues de Ledge',
+    tabs: { conversation: 'Conversation', teams: (n: number) => `Équipes · ${n}`, tasks: (n: number) => `Tâches · ${n}`, history: 'Historique' },
+    toAtelier: 'Retour à l’atelier',
+    point: {
+      title: 'Le point', yours: 'À toi', teams: 'Équipes', given: 'Confiées par Ledge',
+      summarize: 'Résumer la journée', summarizeQuestion: 'Résume la journée : ce qui a avancé, ce qui attend ma décision, ce qui bloque.',
+      nothingYours: 'Rien ne t’attend.', noTeam: 'Aucune équipe en cours.', noTask: 'Ledge n’a confié aucune tâche aujourd’hui.',
+      seats: (n: number) => plural(n, `${n} siège`, `${n} sièges`), progress: (done: number, given: number) => `${done}/${given} ${plural(given, 'tâche', 'tâches')} de Ledge`,
+      table: 'Table', resume: 'Reprendre', resting: 'au repos', allow: 'Oui', deny: 'Non', see: 'Voir', dismiss: 'Ranger',
+      closed: (owner: string, title: string, state: 'done' | 'refused' | 'dropped') => state === 'done' ? `${owner} a fini « ${title} »` : state === 'refused' ? `${owner} a refusé « ${title} »` : `${owner} a abandonné « ${title} »`,
+      ofLedge: 'tâche de Ledge', owner: (owner: string, state: string) => `${owner} · ${state}`
+    },
+    suggestions: (team?: string) => ['Monte une équipe…', 'Confie une tâche à…', team ? `Où en est ${team} ?` : 'Où en sont les équipes ?', 'Qui a besoin de moi ?'],
+    readOnly: 'lecture seule · rien sans ton clic',
+    mentions: 'Mentionner', mentionSession: (name: string) => `session ${name}`, mentionTeam: (name: string) => `équipe ${name}`,
+    tasks: {
+      filters: 'Filtres', all: 'Toutes', open: 'Ouvertes', closed: 'Closes', giver: 'Donneur', anyGiver: 'Tous', ledge: 'Ledge', seats: 'Les sièges', team: 'Équipe', anyTeam: 'Toutes',
+      none: 'Aucune tâche.', result: 'Résultat', reason: 'Raison', log: 'Historique', from: (giver: string, owner: string) => `de ${giver} à ${owner}`, close: 'Fermer'
+    },
+    teams: { none: 'Aucune équipe en cours. Demande à Ledge d’en monter une.', dissolved: 'dissoute' },
+    history: { none: 'Aucune conversation aujourd’hui.', open: 'Voir dans la conversation' }
+  },
+  handover: {
+    nearShort: (name: string, pct: number) => `${name} · contexte ${pct} %`, nearHint: 'limite proche', failedShort: (name: string) => `Relève de ${name} échouée`, retry: 'Réessayer',
+    pass: 'Passer le relais', passTitle: 'Une nouvelle session prend sa place : il écrit son bilan, ses tâches lui sont passées', later: 'Plus tard',
+    gauge: (pct: number) => `contexte ${pct} %`,
+    state: { briefing: 'relève : bilan demandé', launching: 'relève : lancement…', done: 'relevée', failed: 'relève échouée' } as Record<'briefing' | 'launching' | 'done' | 'failed', string>,
+    relievedBy: (name: string) => `relevée par ${name}`, relieves: (name: string) => `relève de ${name}`,
+    refused: (why: string) => `Relève refusée : ${why}`, auto: 'par Ledge'
+  },
+  teamLaunch: {
+    title: (project: string) => `Nouvelle équipe · ${project}`, folder: 'Dossier', noFolder: 'Aucun dossier de ce projet sur cette machine', loading: 'Lecture des rôles et des modèles…',
+    template: 'Modèle', custom: 'Sièges choisis un par un', seats: 'Sièges', noRole: 'Aucun rôle : écris ~/.ledge/roles/<id>.md', agentOf: (role: string) => `Agent de @${role}`,
+    name: 'Nom de l’équipe', preview: (team: string, project: string) => `L’équipe ${team} s’installera à une nouvelle table de la pièce ${project}.`,
+    unknown: (roles: string) => `Rôles inconnus dans ce dossier : ${roles}`, launch: 'Lancer l’équipe', launching: 'Lancement…',
+    failed: (why: string) => `L’équipe n’a pas été lancée : ${why}`, noAnswer: 'Ledge n’a pas répondu.', launched: (team: string, project: string) => `L’équipe ${team} s’installe dans la pièce ${project}.`
+  },
+  teams: {
+    tables: (n: number) => plural(n, `${n} table`, `${n} tables`),
+    treeLine: (done: number, given: number) => `équipe · ${done}/${given}`, treeResting: 'au repos',
+    common: 'table commune',
+    room: (name: string) => `Pièce ${name}`,
+    plaqueCounts: (tables: number, sessions: number) => `${plural(tables, `${tables} table`, `${tables} tables`)} · ${plural(sessions, `${sessions} session`, `${sessions} sessions`)}`,
+    waiting: (n: number) => plural(n, `${n} attend`, `${n} attendent`), working: (n: number) => plural(n, `${n} au travail`, `${n} au travail`),
+    roomMenu: (name: string) => `Actions de la pièce ${name}`, roomMenuTitle: 'Actions de la pièce',
+    newSessionHere: 'Nouvelle session ici', newTeamHere: 'Nouvelle équipe ici…', entrance: 'ENTRÉE',
+    teamTable: (name: string) => `Équipe ${name}`,
+    teamLine: (done: number, given: number) => `équipe · opérateur Ledge · ${done}/${given} ${plural(given, 'tâche', 'tâches')}`,
+    restingLine: 'équipe au repos', resume: 'Reprendre',
+    teamMenu: (name: string) => `Actions de l'équipe ${name}`, teamMenuTitle: "Actions de l'équipe",
+    openTasks: 'Voir les tâches', dissolve: "Dissoudre l'équipe",
+    dissolveTitle: (name: string) => `Dissoudre l'équipe ${name} ?`,
+    dissolveBody: 'Sa table disparaît de la pièce ; ses sessions restent, à la table commune ou dans les archives, et ses tâches restent à leurs sessions.',
+    dropJoin: 'Lâcher pour rejoindre', dropLeave: 'Lâcher pour revenir à la table commune',
+    sheet: (id: string, title: string, giver: string) => `${id} · ${title} · ${giver}`,
+    chooseRole: (name: string, team: string) => `Rôle de ${name} dans ${team}`, otherRole: 'autre rôle…', loadingRoles: 'Lecture des rôles…', noRole: 'Aucun autre rôle',
+    joined: (name: string, team: string, role: string) => `${name} rejoint ${team} comme @${role}.`,
+    left: (name: string) => `${name} revient à la table commune.`
   },
   zoom: {
     bar: "Zoom de l'atelier", out: 'Dézoomer', outTitle: 'Dézoomer (−)', in: 'Zoomer', inTitle: 'Zoomer (+)',
@@ -688,7 +753,12 @@ export const fr = {
       to: 'À', from: 'De', seeTheirs: 'voir son fil', seen: 'lu'
     },
     /** Claude Code's automated cross-session notices (NoticeLine): system events, never the user's words. */
+    seat: {
+      task: (id: string, title: string, giver: string, state: string) => `${id} · ${title} · donnée par ${giver} · ${state}`,
+      seeTasks: 'Voir les tâches', pinned: 'Tâche en cours', autonomy: { ask: 'demande', edits: 'modifie sans demander', auto: 'autonome' }
+    },
     notice: {
+      task: 'TÂCHE', taskFrom: (name: string) => `Tâche de ${name}`, team: 'ÉQUIPE', teamJoined: 'Équipe rejointe',
       kicker: 'Avis automatique', other: 'Avis automatique entre sessions', anotherSession: 'une autre session',
       idle: (n: string, time?: string) => `${n} a terminé${time ? ` · ${time}` : ''}`,
       exited: (n: string, time?: string) => `Session ${n} fermée${time ? ` · ${time}` : ''}`,
@@ -882,6 +952,19 @@ export const fr = {
       send: 'Envoyer', sending: 'Envoi…', cancel: 'Annuler', retry: 'Réessayer', orRephrase: 'ou reformule ta demande',
       queued: 'travaille, j’enverrai dès qu’il aura fini', sentTo: 'Envoyé à', failed: (why: string) => `Échec de l’envoi : ${why}`,
       pill: { yours: 'à toi', working: 'travaille', waiting: 'attend ta réponse', stopped: 'arrêtée' }
+    },
+    team: {
+      label: 'Équipe proposée', folder: 'Dossier', table: (project: string) => `Table`, newTable: (project: string) => `nouvelle table dans la pièce ${project}`, seats: 'Sièges',
+      autonomy: { ask: 'demande avant d’agir', edits: 'modifie sans demander', auto: 'autonome' },
+      autoWarning: (roles: string) => `${roles} travaillera sans demander : modifications et commandes sans ton accord.`,
+      launch: 'Lancer l’équipe', launching: 'Lancement…', retry: 'Réessayer', save: 'Enregistrer', saved: (path: string) => `Enregistrée : ${path}`,
+      launched: (at: string) => `Équipe lancée à ${at}`, openTable: 'Ouvrir la table', failed: (why: string) => `Échec : ${why}`, template: (id: string) => `modèle ${id}`
+    },
+    task: {
+      label: (n: number) => n === 1 ? 'Tâche à confier' : `${n} tâches à confier`, to: 'à', give: 'Confier', giving: 'Envoi…', retry: 'Réessayer',
+      waitTeam: 'active une fois l’équipe lancée',
+      given: (owner: string, id: string, state: string) => `Confiée à ${owner} · ${id} · ${state}`,
+      state: { open: 'à prendre', taken: 'prise', done: 'finie', refused: 'refusée', dropped: 'abandonnée' }, failed: (why: string) => `Refusée : ${why}`
     },
     project: {
       label: 'Proposition de projet', title: (name: string) => `Proposition de projet · ${name}`, complete: (name: string) => `Compléter ${name}`,

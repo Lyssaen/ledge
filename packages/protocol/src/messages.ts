@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { AskQuestionSchema, PendingSchema, SessionSchema, ToolSchema, OmpApprovalSchema } from './session.js';
-import { ChatStepSchema, ChatTurnSchema, ChatProposalSchema, ChatProposalsSchema, ChatRelaySchema, ChatClosesSchema, MAX_PROPOSALS, ChatProjectProposalSchema } from './chat.js';
+import { ChatStepSchema, ChatTurnSchema, ChatProposalSchema, ChatProposalsSchema, ChatRelaySchema, ChatClosesSchema, MAX_PROPOSALS, ChatProjectProposalSchema, ChatTeamProposalSchema, ChatTasksSchema } from './chat.js';
 import { ReposInspectSchema, ReposInfoSchema } from './repos.js';
 import { ModelsListSchema, ModelsListingSchema, ModelIdSchema, EffortSchema } from './models.js';
 import { ReposScanSchema, ReposFoundSchema } from './scan.js';
@@ -13,7 +13,9 @@ import { ProjectsSchema } from './projects.js';
 import { ThreadItemSchema } from './thread.js';
 import { DecisionSchema, NOTE_MAX } from './decisions.js';
 import { MobileStateSchema, RelayUrlSchema } from './mobile.js';
-import { TaskCmdSchema, TaskResultSchema } from './tasks.js';
+import { TaskCmdSchema, TaskResultSchema, TaskUpdatedSchema } from './tasks.js';
+import { ContextPrefsMessageSchema, ContextSetSchema, HandoverBriefSchema, HandoverResultSchema, HandoverShowSchema, SessionHandoverResultSchema, SessionHandoverSchema } from './handover.js';
+import { RoleIdSchema, RolesListSchema, RolesListingSchema, TeamDissolveSchema, TeamFailedSchema, TeamIdSchema, TeamJoinSchema, TeamLaunchSchema, TeamLaunchedSchema, TeamLeaveSchema, TeamResumeSchema, TeamSaveSchema, TeamSavedSchema, TeamsMessageSchema, TeamUpdatedSchema } from './teams.js';
 
 export const PROTOCOL_PORT = 47831;
 
@@ -80,7 +82,8 @@ export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(
   /** Drives OMP over its RPC: launching `omp` sessions is possible when the binary is there (`models.list` says so). */ omp: z.boolean().optional(),
   /** Takes `session.model`: a live session's model and effort changed (#58, lot 2). */ modelSwitch: z.boolean().optional(),
   /** Takes `approval` on an OMP `session.launch` (auto mode). */ ompApproval: z.boolean().optional(),
-  /** Its home folder, so a client shows the folders under it as `~` (absent from older daemons). */ home: z.string().optional(), mobile: z.boolean().optional() });
+  /** Its home folder, so a client shows the folders under it as `~` (absent from older daemons). */ home: z.string().optional(), mobile: z.boolean().optional(),
+  /** Knows roles, teams and tasks given by Ledge (spec 2026-10-25 roles). */ teams: z.boolean().optional() });
 export type DaemonInfo = z.infer<typeof DaemonInfoSchema>;
 export const UpdateFailureSchema = z.enum(['git-install', 'no-systemd', 'sessions-at-risk', 'npm-failed', 'busy']);
 export type UpdateFailure = z.infer<typeof UpdateFailureSchema>;
@@ -118,7 +121,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   /** The chat (spec 2026-10-11 §5): what Ledge reads, its words as they come, the final text, or why it stopped; the day's turns after each snapshot. */
   z.object({ type: z.literal('chat.step'), qid: z.string(), step: ChatStepSchema }),
   z.object({ type: z.literal('chat.delta'), qid: z.string(), text: z.string() }),
-  z.object({ type: z.literal('chat.done'), qid: z.string(), text: z.string(), at: z.string().datetime(), proposal: ChatProposalSchema.optional(), proposals: ChatProposalsSchema.optional(), relay: ChatRelaySchema.optional(), closes: ChatClosesSchema.optional(), projectProposal: ChatProjectProposalSchema.optional() }),
+  z.object({ type: z.literal('chat.done'), qid: z.string(), text: z.string(), at: z.string().datetime(), proposal: ChatProposalSchema.optional(), proposals: ChatProposalsSchema.optional(), relay: ChatRelaySchema.optional(), closes: ChatClosesSchema.optional(), projectProposal: ChatProjectProposalSchema.optional(), team: ChatTeamProposalSchema.optional(), tasks: ChatTasksSchema.optional() }),
   z.object({ type: z.literal('chat.error'), qid: z.string(), message: z.string() }),
   z.object({ type: z.literal('chat.history'), turns: z.array(ChatTurnSchema) }),
   /** The daemon updating itself: npm is running, then the service restarts (the socket closes right after). */
@@ -138,6 +141,12 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   /** The answer to a `message.read`: the body with its sender, target and time, or the refusal's `reason`. */
   z.object({ type: z.literal('message.body'), id: z.string(), from: z.string().optional(), to: z.string().optional(), at: z.string().optional(), text: z.string().optional(), reason: z.string().optional() }),
   TaskResultSchema,
+  SessionHandoverResultSchema,
+  ContextPrefsMessageSchema,
+  HandoverResultSchema,
+  TaskUpdatedSchema,
+  RolesListingSchema,
+  TeamsMessageSchema, TeamUpdatedSchema, TeamLaunchedSchema, TeamFailedSchema, TeamSavedSchema,
   z.object({ type: z.literal('error'), message: z.string(), id: z.string().optional(), /** Le type du message client refusé. */ request: z.string().optional(),
     /** Ce que le front doit reconnaître au-delà du texte (NOTE_NOT_TYPED) ; une chaîne libre, qu'un front plus ancien ignore. */ code: z.string().optional() })
 ]);
@@ -168,6 +177,8 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
     /** The agent's model and effort (#58), the agent's own default when left out; with `qid`, for every row launched. */
     model: ModelIdSchema.optional(), effort: EffortSchema.optional(),
     /** OMP only: its approval mode, `always-ask` when left out. */ approval: OmpApprovalSchema.optional(),
+    /** A role (spec 2026-10-25 roles §3.4): its prompt reaches the agent at every start, its defaults fill what is left out. */ role: RoleIdSchema.optional(),
+    /** A live team the new session joins at once, in `role`. */ team: TeamIdSchema.optional(),
     /** Routing by the fleet, removed before the message reaches the daemon. */ machineId: z.string().optional() }),
   /** The launch form's folder browser: list a folder's subfolders (home when no `path`), or make `name` inside `parent`
    *  and list it. Both are answered with a `folder.listing`. */
@@ -245,7 +256,13 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session.message'), rid: z.string().min(1), from: z.string().min(1), to: z.string().min(1), text: z.string().min(1).max(MESSAGE_MAX), summary: z.string().max(SUMMARY_MAX).optional(), intercept: z.boolean().optional() }),
   /** `ledge read <id>`: a message's whole body, for its receiver or its sender (`by`, a session id). */
   z.object({ type: z.literal('message.read'), id: z.string().min(1).max(40), by: z.string().min(1) }),
-  TaskCmdSchema
+  TaskCmdSchema,
+  SessionHandoverSchema,
+  ContextSetSchema,
+  HandoverBriefSchema,
+  HandoverShowSchema,
+  RolesListSchema,
+  TeamLaunchSchema, TeamJoinSchema, TeamLeaveSchema, TeamResumeSchema, TeamDissolveSchema, TeamSaveSchema
 ]);
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 /** The commands of the mobile access service. */

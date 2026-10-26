@@ -3,7 +3,8 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { spawn as nodeSpawn } from 'node:child_process';
-import { extractProposal, isArchived, MAX_PROPOSALS, proposalRows, parseProjectBlock, parseCloseBlock, parseProposalBlock, parseRelayBlock, type ChatClose, type ChatProjectProposal, type ChatProposal, type ChatRelay, type CloseHow, type ChatTurn, type Projects, type ServerMessage, type Session, type Tool } from '@ledge/protocol';
+import { extractProposal, isArchived, MAX_PROPOSALS, proposalRows, parseProjectBlock, parseCloseBlock, parseProposalBlock, parseRelayBlock, parseTaskBlock, parseTeamBlock, projectOf, type ChatClose, type ChatProjectProposal, type ChatProposal, type ChatRelay, type ChatTaskProposal, type ChatTeamProposal, type CloseHow, type ChatTurn, type Projects, type ServerMessage, type Session, type Task, type Team, type Tool } from '@ledge/protocol';
+import { listDefinitions, resolveSeats } from '../daemon/teams.js';
 import { resolveFolder } from '../daemon/folders.js';
 import type { Store } from '../daemon/store.js';
 import type { Tmux } from '../tmux.js';
@@ -35,6 +36,16 @@ export interface Chat {
   markClosed(qid: string, row: number, how: CloseHow, emit: (m: ChatMessage) => void): void;
   /** The row's close failed (`error`); every client gets the new history. */
   markCloseFailed(qid: string, row: number, message: string, emit: (m: ChatMessage) => void): void;
+  /** The turn's team card (roles spec §3.8), if the turn is still in the day's history. */
+  team(qid: string): ChatTeamProposal | undefined;
+  /** The team card's outcome: launched (`teamId`, `launchedAt`), failed (`error`), saved (`savedPath`); every client gets the new history. */
+  markTeam(qid: string, patch: Partial<Pick<ChatTeamProposal, 'teamId' | 'launchedAt' | 'error' | 'savedPath'>>, emit: (m: ChatMessage) => void): void;
+  /** The turn's task card row. */
+  task(qid: string, row: number): ChatTaskProposal | undefined;
+  /** The row's task was given (its id and state) or the give failed (`error`). */
+  markTask(qid: string, row: number, patch: Partial<Pick<ChatTaskProposal, 'taskId' | 'ownerName' | 'state' | 'givenAt' | 'error'>>, emit: (m: ChatMessage) => void): void;
+  /** A task Ledge gave changed: the card that gave it follows it (« prise », then « finie »). */
+  followTask(task: Task, emit: (m: ChatMessage) => void): void;
   /** Resolves once no question is running (at once when there is none). */
   idle(): Promise<void>;
 }
@@ -46,6 +57,9 @@ export interface ChatDeps {
   env: () => Promise<NodeJS.ProcessEnv>;
   /** The projects and folder rules as the daemon holds them now (read at each question); a daemon with none omits it. */
   projects?: () => Projects;
+  /** The live teams and the tasks (roles spec §3.8): the context's teams.md and tasks.md. */
+  teams?: () => Team[];
+  tasks?: () => Task[];
   /** Reads the projects' GitHub/GitLab (#23) into the context, for a question that asks about issues, PR/MR or CI. */
   forge?: Forge;
   /** A pool shared by several chats: a question takes a place while it runs. */
@@ -175,6 +189,48 @@ export function createChat(deps: ChatDeps): Chat {
     const description = block.description?.trim();
     return { name: block.name, ...(description ? { description } : {}), repos, ...(block.addTo ? { addTo: block.addTo } : {}) };
   }
+  /** A team block as a card: its folder must exist and every role be known there; the seats are resolved as `team.launch`
+   *  would launch them, so the card shows each one's agent, model, effort and autonomy. Otherwise no card and a log line. */
+  async function teamFrom(raw: string, tool: Tool, qid: string): Promise<ChatTeamProposal | undefined> {
+    const block = parseTeamBlock(raw);
+    if (!block) { log(`chat ${qid}: team ignored, invalid block: ${raw.slice(0, 200)}`); return undefined; }
+    let cwd: string;
+    try { cwd = await resolveFolder(block.cwd, deps.userHome); } catch (e) { log(`chat ${qid}: team ignored: ${(e as Error).message}`); return undefined; }
+    const wide = tooWide(cwd, resolve(deps.userHome ?? homedir()));
+    if (wide) { log(`chat ${qid}: team ignored: the folder is ${wide}`); return undefined; }
+    const defs = listDefinitions(cwd);
+    const template = block.template ? defs.templates.find(t => t.id === block.template) : undefined;
+    if (block.template && !template) { log(`chat ${qid}: team ignored: unknown template ${block.template}`); return undefined; }
+    const seats = template?.seats ?? block.seats!;
+    const resolved = resolveSeats(seats as Parameters<typeof resolveSeats>[0], defs.roles, { tool });
+    if ('unknown' in resolved) { log(`chat ${qid}: team ignored: unknown roles ${resolved.unknown.join(', ')}`); return undefined; }
+    const projects = deps.projects?.();
+    const project = projects ? projectOf({ cwd }, projects) : null;
+    const projectName = project ? projects!.projects.find(p => p.id === project)?.name : undefined;
+    return { cwd, project: project ?? basename(cwd), ...(projectName ? { projectName } : {}), name: block.name ?? template?.name ?? basename(cwd), ...(template ? { template: template.id } : {}),
+      seats: resolved.map(r => ({ role: r.role.id, label: r.role.label, tool: r.tool, ...(r.model ? { model: r.model } : {}), ...(r.effort ? { effort: r.effort } : {}), ...(r.role.autonomy ? { autonomy: r.role.autonomy } : {}), ...(r.name ? { name: r.name } : {}) })) };
+  }
+  /** The task blocks as rows: a session id must be a live session Ledge launched; `@role` is kept as written (resolved at the click). */
+  function tasksFrom(blocks: Array<{ raw: string }>, qid: string, team: ChatTeamProposal | undefined): ChatTaskProposal[] {
+    const rows: ChatTaskProposal[] = [];
+    for (const { raw } of blocks) {
+      const block = parseTaskBlock(raw);
+      if (!block) { log(`chat ${qid}: task ignored, invalid block: ${raw.slice(0, 200)}`); continue; }
+      if (block.to.startsWith('@')) {
+        // `@role` names a seat of the team proposed with it, or of a live team the block names.
+        const live = block.team ? deps.teams?.().find(t => t.id === block.team && t.state !== 'dissolved') : undefined;
+        if (!team && !live) { log(`chat ${qid}: task ignored: ${block.to} without a team`); continue; }
+        if (team && !block.team && !team.seats.some(x => `@${x.role}` === block.to)) { log(`chat ${qid}: task ignored: ${block.to} is not a seat of ${team.name}`); continue; }
+        rows.push({ to: block.to, ...(live ? { team: live.id } : {}), title: block.title, ...(block.text?.trim() ? { text: block.text.trim() } : {}) });
+        continue;
+      }
+      const s = deps.store.get(block.to) ?? deps.store.all().find(x => x.name === block.to && x.state !== 'exited');
+      const why = !s ? 'unknown session' : s.source === 'hook_only' ? 'read-only session' : s.state === 'exited' ? 'session has exited' : null;
+      if (why) { log(`chat ${qid}: task ignored: ${why} ${block.to}`); continue; }
+      rows.push({ to: s!.id, toName: s!.name, ...(s!.team ? { team: s!.team } : {}), title: block.title, ...(block.text?.trim() ? { text: block.text.trim() } : {}) });
+    }
+    return rows;
+  }
   const turnOf = (qid: string) => turns.find(t => t.qid === qid);
   /** Sets a row and keeps `proposal` the first row, for the clients from before #24. */
   function setRow(t: ChatTurn, row: number, next: ChatProposal) {
@@ -187,7 +243,7 @@ export function createChat(deps: ChatDeps): Chat {
   }
 
   async function run(turn: ChatTurn, emit: (m: ChatMessage) => void, fresh: boolean, mine: Running, tool: Tool): Promise<{ ok: true } | { ok: false; message: string; resumed: boolean }> {
-    const ctx = await writeContext(contextDir, { sessions: deps.store.all().filter(s => !isArchived(s)), recents: deps.store.recents(), projects: deps.projects?.(), now: now(), capture, git: cwd => gitSummary(cwd) });
+    const ctx = await writeContext(contextDir, { sessions: deps.store.all().filter(s => !isArchived(s)), recents: deps.store.recents(), projects: deps.projects?.(), teams: deps.teams?.(), tasks: deps.tasks?.(), now: now(), capture, git: cwd => gitSummary(cwd) });
     // Only a question about the forge runs gh/glab: the others never wait on the network.
     if (deps.forge && asksForge(turn.question)) await deps.forge.write(ctx, deps.projects?.() ?? { projects: [], rules: [] }).catch(e => log(`chat ${turn.qid}: forge files not written (${e instanceof Error ? e.message : String(e)})`));
     if (mine.cancelled) return CANCELLED;
@@ -223,12 +279,20 @@ export function createChat(deps: ChatDeps): Chat {
     if (closeBlocks.length > MAX_PROPOSALS) log(`chat ${turn.qid}: ${closeBlocks.length - MAX_PROPOSALS} sessions beyond ${MAX_PROPOSALS} ignored`);
     const closes = closesFrom(closeBlocks.slice(0, MAX_PROPOSALS), turn.qid);
     const projectProposal = kind === 'project' ? await projectFrom(raw!, turn.qid) : undefined;
+    // A team card and its first tasks may come in one answer (§3.8): both are read whatever the last block is.
+    const teamBlock = blocks.filter(b => b.kind === 'team').at(-1);
+    const team = teamBlock ? await teamFrom(teamBlock.raw, tool, turn.qid) : undefined;
+    const taskBlocks = blocks.filter(b => b.kind === 'task');
+    if (taskBlocks.length > MAX_PROPOSALS) log(`chat ${turn.qid}: ${taskBlocks.length - MAX_PROPOSALS} tasks beyond ${MAX_PROPOSALS} ignored`);
+    const tasks = tasksFrom(taskBlocks.slice(0, MAX_PROPOSALS), turn.qid, team);
     turn.answer = text; turn.answeredAt = now();
     if (proposal) { turn.proposal = proposal; turn.proposals = proposals; }
     if (relay) turn.relay = relay;
     if (closes.length > 0) turn.closes = closes;
     if (projectProposal) turn.projectProposal = projectProposal;
-    emit({ type: 'chat.done', qid: turn.qid, text, at: turn.answeredAt, ...(proposal ? { proposal, proposals } : {}), ...(relay ? { relay } : {}), ...(closes.length > 0 ? { closes } : {}), ...(projectProposal ? { projectProposal } : {}) });
+    if (team) turn.team = team;
+    if (tasks.length > 0) turn.tasks = tasks;
+    emit({ type: 'chat.done', qid: turn.qid, text, at: turn.answeredAt, ...(proposal ? { proposal, proposals } : {}), ...(relay ? { relay } : {}), ...(closes.length > 0 ? { closes } : {}), ...(projectProposal ? { projectProposal } : {}), ...(team ? { team } : {}), ...(tasks.length > 0 ? { tasks } : {}) });
     return { ok: true };
   }
 
@@ -265,6 +329,30 @@ export function createChat(deps: ChatDeps): Chat {
     },
     // A roll caught here is silent otherwise: the overlays would keep showing yesterday's queued card.
     queuedRelays(emit) { if (rollDay()) emit?.({ type: 'chat.history', turns }); return turns.flatMap(t => (t.relay?.status === 'queued' ? [{ qid: t.qid, relay: t.relay, askedAt: t.askedAt }] : [])); },
+    team: qid => { rollDay(); return turnOf(qid)?.team; },
+    markTeam(qid, patch, emit) {
+      const t = turnOf(qid); if (!t?.team) return;
+      const next: ChatTeamProposal = { ...t.team, ...patch };
+      if (patch.teamId) delete next.error;
+      t.team = next;
+      emit({ type: 'chat.history', turns });
+    },
+    task: (qid, row) => { rollDay(); return turnOf(qid)?.tasks?.[row]; },
+    markTask(qid, row, patch, emit) {
+      const t = turnOf(qid); const c = t?.tasks?.[row]; if (!t || !c) return;
+      const next: ChatTaskProposal = { ...c, ...patch };
+      if (patch.taskId) delete next.error;
+      t.tasks = t.tasks!.map((r, i) => (i === row ? next : r));
+      emit({ type: 'chat.history', turns });
+    },
+    followTask(task, emit) {
+      let changed = false;
+      for (const t of turns) {
+        if (!t.tasks?.some(c => c.taskId === task.id)) continue;
+        t.tasks = t.tasks.map(c => (c.taskId === task.id && (c.state !== task.state || c.ownerName !== task.ownerName) ? (changed = true, { ...c, state: task.state, ownerName: task.ownerName }) : c));
+      }
+      if (changed) emit({ type: 'chat.history', turns });
+    },
     idle: () => (busy ? new Promise<void>(res => { idleWaiters.push(res); }) : Promise.resolve()),
     cancel(qid) { if (current?.qid === qid) { current.cancelled = true; current.handle?.kill(); } },
     async reset(emit) {

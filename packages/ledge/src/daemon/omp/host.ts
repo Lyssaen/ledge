@@ -26,6 +26,8 @@ export interface OmpLaunch {
   id?: string;
   /** The exact journal of the conversation to continue. */
   resumeFile?: string;
+  /** A seat's role and team as its context (roles spec §3.5), and LEDGE_ROLE / LEDGE_TEAM. */
+  appendSystemPrompt?: string; seatEnv?: Record<string, string>;
 }
 export interface OmpHostDeps {
   store: Store;
@@ -45,8 +47,9 @@ interface Live { rpc: OmpRpc; tracking: Tracking; closing: boolean; generation: 
 /** `--model` takes `provider/id`; the id alone is ambiguous across providers, so the picker's ids carry both. */
 export const ompModelArgs = (model?: string, effort?: string): string[] => [...(model ? ['--model', model] : []), ...(effort ? ['--thinking', effort] : [])];
 
-export function ompArgs(o: { dir: string; cwd: string; dirs?: string[]; model?: string; effort?: string; approval?: OmpApproval; resumeFile?: string }): string[] {
-  return ['--mode', 'rpc-ui', '--session-dir', o.dir, '--cwd', o.cwd, '--approval-mode', o.approval ?? APPROVAL_MODE, ...ompModelArgs(o.model, o.effort), ...(o.dirs ?? []).flatMap(d => ['--add-dir', d]), ...(o.resumeFile ? ['--resume', o.resumeFile] : [])];
+export function ompArgs(o: { dir: string; cwd: string; dirs?: string[]; model?: string; effort?: string; approval?: OmpApproval; resumeFile?: string; appendSystemPrompt?: string }): string[] {
+  return ['--mode', 'rpc-ui', '--session-dir', o.dir, '--cwd', o.cwd, '--approval-mode', o.approval ?? APPROVAL_MODE, ...ompModelArgs(o.model, o.effort), ...(o.dirs ?? []).flatMap(d => ['--add-dir', d]), ...(o.resumeFile ? ['--resume', o.resumeFile] : []),
+    ...(o.appendSystemPrompt ? ['--append-system-prompt', o.appendSystemPrompt] : [])];
 }
 
 interface OmpState { sessionFile?: string; sessionId?: string; model?: { id?: string; provider?: string }; thinkingLevel?: string }
@@ -63,7 +66,7 @@ export function createOmpHost(deps: OmpHostDeps) {
     await mkdir(dir, { recursive: true });
     // A process left by a daemon that died is ended first: one writer per conversation.
     if (await reapOwner(dir)) log(`omp ${id}: ended the process a previous daemon left`);
-    const env = agentEnv({ ...(await deps.env()), LEDGE_SESSION: id }, {});
+    const env = agentEnv({ ...(await deps.env()), LEDGE_SESSION: id }, o.seatEnv ?? {});
     for (const v of PARENT_AGENT_VARS) delete env[v];
     const rpc = await OmpRpc.start({ command, args: ompArgs({ dir, ...o }), cwd: o.cwd, env, ...(deps.spawn ? { spawn: deps.spawn } : {}) });
     await writeOwner(dir, rpc.pid).catch(() => undefined);

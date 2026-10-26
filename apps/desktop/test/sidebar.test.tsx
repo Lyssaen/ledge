@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { cleanup, screen, within } from '@testing-library/react';
+import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import { activeCount } from '../src/nav/agents';
 import { boot, closeDaemons, listSessions, TWO_PROJECTS } from './helpers';
 import { MESSAGES } from '../src/i18n/messages';
@@ -23,21 +23,26 @@ describe('the sidebar shell', () => {
     expect(side.queryByRole('button', { name: /Search/ })).toBeNull();
   });
 
-  it('clicking the / hint focuses Ask Ledge and does not open the chat', async () => {
-    const { side, user } = await boot({ projects: TWO_PROJECTS, sessions: listSessions() });
-    await user.click(side.getByText('/', { selector: '.st-ask kbd' }));
-    expect(side.getByRole('textbox', { name: 'Ask Ledge' })).toHaveFocus();
+  it('Ledge’s entry (ledge home spec §2.1): its live line, and a click goes to the home view, lit, with its composer focused', async () => {
+    const { side, user, d } = await boot({ projects: TWO_PROJECTS, sessions: listSessions() });
+    const entry = side.getByRole('button', { name: 'Home: Ledge, the operator' });
+    expect(entry).toHaveTextContent(/\d+ yours · 0 active teams/);
+    await user.click(entry);
+    const home = await screen.findByRole('region', { name: 'Home: Ledge, the operator' });
+    await waitFor(() => expect(within(home).getByRole('textbox', { name: 'Ask Ledge' })).toHaveFocus());
+    expect(entry).toHaveAttribute('aria-current', 'page');
     expect(screen.queryByRole('complementary', { name: 'Chat Ledge' })).toBeNull();
+    // A team at work shows in the line.
+    d.push({ type: 'teams', teams: [{ id: 'team-a1b2', name: 'ledge-roles', project: null, machine: 'local', cwd: '/w/ledge', state: 'active', seats: [], createdAt: '2026-10-26T08:00:00.000Z', updatedAt: '2026-10-26T08:00:00.000Z' }] });
+    await waitFor(() => expect(entry).toHaveTextContent('· 1 active team'));
   });
 
-  it('/ focuses Ask Ledge; Enter with text opens the chat and sends chat.ask', async () => {
+  it('the question field under the entry: Enter with text goes home and sends chat.ask', async () => {
     // One machine: with two, the fleet sends chat.route instead of chat.ask (chat.test boots the same way).
-    const { d, user } = await boot({ projects: TWO_PROJECTS, sessions: listSessions(), machines: [{ id: 'local', label: 'Local' }] });
-    await user.keyboard('/');
-    expect(screen.getByRole('textbox', { name: 'Ask Ledge' })).toHaveFocus();
+    const { d, user, side } = await boot({ projects: TWO_PROJECTS, sessions: listSessions(), machines: [{ id: 'local', label: 'Local' }] });
+    await user.type(side.getByRole('textbox', { name: 'Ask Ledge' }), 'hello{Enter}');
+    expect(await screen.findByRole('region', { name: 'Home: Ledge, the operator' })).toBeVisible();
     expect(screen.queryByRole('complementary', { name: 'Chat Ledge' })).toBeNull();
-    await user.keyboard('hello{Enter}');
-    expect(await screen.findByRole('complementary', { name: 'Chat Ledge' })).toBeVisible();
     expect(d.received).toContainEqual({ type: 'chat.ask', qid: expect.stringMatching(/^q-/), text: 'hello', tool: 'claude' });
   });
 

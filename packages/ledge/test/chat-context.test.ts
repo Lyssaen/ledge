@@ -125,3 +125,33 @@ describe('writeContext', () => {
     expect(md).not.toContain('pane-a.txt'); expect(md).not.toContain('pane-c.txt'); expect(md).not.toContain('reply-c.md'); expect(md).not.toContain('git-');
   });
 });
+
+describe('writeContext: roles, teams and tasks (roles spec §3.8)', () => {
+  it('writes roles.md, teams.md and tasks.md, and each session’s role and team in sessions.md', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ctx-'));
+    const now = new Date().toISOString();
+    const team = { id: 'team-a1b2', name: 'ledge-roles', project: 'ledge', machine: 'local', cwd: '/w/ledge', state: 'active' as const, seats: [{ role: 'build', sessionId: 'a' }, { role: 'qa', sessionId: null }], createdAt: T0, updatedAt: T0 };
+    const task = (id: string, extra: object) => ({ id, title: `Tâche ${id}`, giver: 'ledge', giverName: 'Ledge', owner: 'a', ownerName: 'Otto', team: team.id, state: 'open' as const, at: T0, updatedAt: now, log: [], ...extra });
+    await writeContext(dir, {
+      sessions: [mk('a', { role: 'build', roleLabel: 'Build', team: team.id, autonomy: 'edits' })], now: T0, capture: async () => null, git: async () => null,
+      teams: [team], tasks: [task('t000001', { state: 'done', result: 'fait' }), task('t000002', {}), task('t000003', { state: 'done', updatedAt: '2020-01-01T00:00:00.000Z' })],
+      definitions: () => ({ roles: [{ id: 'build', label: 'Build', prompt: 'Tu construis.', autonomy: 'edits', source: 'home', path: '/h/build.md' }], templates: [{ id: 'workshop', name: 'workshop', seats: [{ role: 'build' }], source: 'home', path: '/h/w.yaml' }] })
+    });
+    const sessions = readFileSync(join(dir, 'sessions.md'), 'utf8');
+    expect(sessions).toContain('- role: Build (@build), autonomy edits');
+    expect(sessions).toContain('- team: ledge-roles (team-a1b2)');
+    const roles = readFileSync(join(dir, 'roles.md'), 'utf8');
+    expect(roles).toContain('## @build — Build');
+    expect(roles).toContain('autonomy edits');
+    const teams = readFileSync(join(dir, 'teams.md'), 'utf8');
+    expect(teams).toContain('- workshop (« workshop », home): @build');
+    expect(teams).toContain('### ledge-roles (team-a1b2) — active');
+    expect(teams).toContain("- Ledge's tasks: 2/3 done");
+    expect(teams).toContain('- @build: Otto (a)');
+    expect(teams).toContain('- @qa: free');
+    const tasks = readFileSync(join(dir, 'tasks.md'), 'utf8');
+    expect(tasks).toContain('t000001 « Tâche t000001 » — giver Ledge, owner Otto, team team-a1b2, done: fait');
+    expect(tasks).toContain('t000002');
+    expect(tasks).not.toContain('t000003');
+  });
+});

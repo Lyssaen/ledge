@@ -1,5 +1,5 @@
 import { useState, type JSX, type MouseEvent } from 'react';
-import type { Project, Session } from '@ledge/protocol';
+import type { Project, Session, Task } from '@ledge/protocol';
 import { Kbd } from '@ledge/ui/ui/Kbd';
 import { useI18n } from '../../i18n/lang';
 import { spanOf } from '../../list/time';
@@ -27,17 +27,27 @@ export function Attention(p: {
   onDecide(s: Session, ok: boolean): void;
   onMenu(id: string, e: MouseEvent): void;
   paused: boolean;
+  /** The closed tasks Ledge gave, not put away (roles spec §3.7): « ✓ Otto a fini … · tâche de Ledge », with « Voir ». */
+  ledgeTasks?: readonly Task[];
+  onSeeTask?(id: string): void;
+  onDismissTask?(id: string): void;
+  /** The sessions near their context limit, or whose relief failed (context handover spec §3.2): « Passer le relais », « Plus tard ». */
+  near?: readonly Session[];
+  onHandover?(id: string): void;
+  onLater?(id: string): void;
 }): JSX.Element | null {
   const { t } = useI18n();
   const [all, setAll] = useState(false);
-  if (p.items.length === 0) return null;
+  const tasks = p.ledgeTasks ?? [];
+  const near = p.near ?? [];
+  if (p.items.length === 0 && tasks.length === 0 && near.length === 0) return null;
   const shown = all ? p.items : p.items.slice(0, CAP);
   const units = t.list.when.units;
   return (
     <section className="st-attn" aria-label={t.side.yours}>
       <div className="st-label">
         <span>{t.side.yours}</span>
-        <b className="st-badge">{p.items.length}</b>
+        <b className="st-badge">{p.items.length + tasks.length + near.length}</b>
         <span className="st-fill" />
         <Kbd>Alt ↓</Kbd>
       </div>
@@ -67,6 +77,36 @@ export function Attention(p: {
                 </> : <button type="button" className="st-qa" onClick={() => p.onOpen(item.session.id, item.helper?.id)}>{t.side.see}</button>)}
                 {item.kind === 'question' && <button type="button" className="st-qa" onClick={() => p.onOpen(item.session.id, item.helper?.id, 'reply')}>{t.side.reply}</button>}
                 {item.kind === 'error' && <button type="button" className="st-qa" onClick={() => p.onOpen(item.session.id, item.helper?.id)}>{t.side.see}</button>}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+      {tasks.map(x => (
+        <div key={x.id} className="st-card st-task" data-task={x.id}>
+          <span className="st-bot st-task-mark" aria-hidden="true">{x.state === 'done' ? '✓' : '!'}</span>
+          <div className="st-card-body">
+            <div className="st-l1"><span className="st-req">{t.home.point.closed(x.ownerName, x.title, x.state as 'done' | 'refused' | 'dropped')}</span></div>
+            <div className="st-l2">
+              <span className="st-where">{t.home.point.ofLedge}</span>
+              <button type="button" className="st-qa" onClick={() => p.onSeeTask?.(x.id)}>{t.side.see}</button>
+              <button type="button" className="st-qa" onClick={() => p.onDismissTask?.(x.id)}>{t.home.point.dismiss}</button>
+            </div>
+          </div>
+        </div>
+      ))}
+      {near.map(s => {
+        const failed = s.handover?.state === 'failed';
+        const pct = s.context ? Math.round((s.context.used / s.context.window) * 100) : 0;
+        return (
+          <div key={`near:${s.id}`} className="st-card st-task st-near" data-near={s.id}>
+            <span className="st-bot st-task-mark" aria-hidden="true">{failed ? '!' : '◔'}</span>
+            <div className="st-card-body">
+              <div className="st-l1"><span className="st-req" title={failed ? s.handover?.reason : undefined}>{failed ? t.handover.failedShort(s.name) : t.handover.nearShort(`${s.name}${s.role ? ` @${s.role}` : ''}`, pct)}</span></div>
+              <div className="st-l2">
+                <span className="st-where" title={failed ? s.handover?.reason : t.handover.nearHint}>{failed ? (s.handover?.reason ?? '') : ''}</span>
+                <button type="button" className="st-qa pri" title={t.handover.passTitle} onClick={() => p.onHandover?.(s.id)}>{failed ? t.handover.retry : t.handover.pass}</button>
+                <button type="button" className="st-qa" onClick={() => p.onLater?.(s.id)}>{t.handover.later}</button>
               </div>
             </div>
           </div>

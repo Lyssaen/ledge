@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ToolSchema } from './session.js';
+import { AutonomySchema, ToolSchema } from './session.js';
 
 /** What Ledge consulted while answering: a context file (a session's pane, reply or git summary, the sessions list) or a repository file. */
 export const ChatStepSchema = z.object({
@@ -49,12 +49,39 @@ export const ChatProjectProposalSchema = z.object({
 });
 export type ChatProjectProposal = z.infer<typeof ChatProjectProposalSchema>;
 
+/** A team the chat proposes to start (roles spec §3.8): the folder as the daemon resolved it, the project it falls in, and
+ *  every seat with what it will be launched with, so the card shows the autonomy of each before the click. `teamId` and
+ *  `launchedAt` once launched, `error` when the last launch failed, `savedPath` once written as a template. */
+export const ChatTeamSeatSchema = z.object({
+  role: z.string().min(1), label: z.string(), tool: ToolSchema, model: z.string().optional(), effort: z.string().optional(),
+  autonomy: AutonomySchema.optional(), name: z.string().optional()
+});
+export type ChatTeamSeat = z.infer<typeof ChatTeamSeatSchema>;
+export const ChatTeamProposalSchema = z.object({
+  cwd: z.string().min(1), project: z.string(), projectName: z.string().optional(), name: z.string().min(1), template: z.string().optional(),
+  seats: z.array(ChatTeamSeatSchema).min(1).max(8),
+  teamId: z.string().optional(), launchedAt: z.string().datetime().optional(), error: z.string().optional(), savedPath: z.string().optional()
+});
+export type ChatTeamProposal = z.infer<typeof ChatTeamProposalSchema>;
+
+/** A task the chat proposes to give (roles spec §3.8): to a session (its id and name) or to `@role` of a team, which may be
+ *  the team proposed in the same answer (resolved once it is launched). Once given it follows its task: `taskId`, `owner`,
+ *  `state` as the daemon tells it. */
+export const ChatTaskProposalSchema = z.object({
+  to: z.string().min(1), toName: z.string().optional(), team: z.string().optional(), title: z.string().min(1).max(200), text: z.string().max(20000).optional(),
+  taskId: z.string().optional(), ownerName: z.string().optional(), state: z.enum(['open', 'taken', 'done', 'refused', 'dropped']).optional(),
+  givenAt: z.string().datetime().optional(), error: z.string().optional()
+});
+export type ChatTaskProposal = z.infer<typeof ChatTaskProposalSchema>;
+export const ChatTasksSchema = z.array(ChatTaskProposalSchema).min(1).max(MAX_PROPOSALS);
+
 /** One question to Ledge and its answer; `error` set when it could not answer, both absent while it is still reading. */
 export const ChatTurnSchema = z.object({
   machineId: z.string().optional(), machineName: z.string().optional(), choices: z.array(z.object({ id: z.string(), label: z.string() })).optional(),
   qid: z.string().min(1), question: z.string(), askedAt: z.string().datetime(),
   steps: z.array(ChatStepSchema), answer: z.string().optional(), answeredAt: z.string().datetime().optional(), error: z.string().optional(), proposal: ChatProposalSchema.optional(), proposals: ChatProposalsSchema.optional(), relay: ChatRelaySchema.optional(), closes: ChatClosesSchema.optional(),
-  projectProposal: ChatProjectProposalSchema.optional()
+  projectProposal: ChatProjectProposalSchema.optional(),
+  team: ChatTeamProposalSchema.optional(), tasks: ChatTasksSchema.optional()
 });
 export type ChatTurn = z.infer<typeof ChatTurnSchema>;
 

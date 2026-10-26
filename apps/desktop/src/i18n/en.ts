@@ -10,6 +10,7 @@ export const en: Messages = {
     label: 'Sidebar', newSession: 'New session', searchLabel: 'Search a session',
     views: 'Views', atelier: 'Atelier', chat: 'Chat Ledge', projects: 'Projects', newProject: 'New project', unassigned: 'No project',
     machines: 'Machines', manageMachines: 'Manage machines', agents: (n) => pluralEn(n, `${n} agent`, `${n} agents`), offline: 'offline', daemonUpdating: 'daemon updating', settings: 'Settings', shortcuts: 'Keyboard shortcuts',
+    ledgeHome: 'Home: Ledge, the operator', ledgeLine: (yours: number, teams: number) => `${yours} yours · ${teams} active ${teams === 1 ? 'team' : 'teams'}`,
     ask: 'Ask Ledge', askPlaceholder: 'Ask Ledge…',
     openChat: 'Open the conversation with Ledge',
     active: (n) => `${n} active`,
@@ -62,7 +63,7 @@ export const en: Messages = {
     nav: 'Settings sections', back: 'Back to the atelier',
     saved: (what) => `Setting saved · ${what}`,
     hints: {
-      general: 'Language, start-up, default agent and updates.',
+      general: 'Language, start-up, default agent, max context and updates.',
       appearance: 'Theme, Ledge’s color, scale and motion.',
       island: 'The notch at the top of the screen: where it sits and what it signals.',
       notifications: 'Who lets you know, and when to leave you alone.',
@@ -82,7 +83,9 @@ export const en: Messages = {
       autostart: 'Start with Windows', autostartHint: 'Ledge Desktop opens with your Windows session.',
       autostartMissing: 'Not offered here: only the installed app can start with Windows.',
       autostartFailed: 'Windows did not take this setting.', autostartOff: 'No start with Windows',
-      tool: 'Default agent', toolHint: 'For Ledge’s chat and its cards.', toolSaved: (name) => `Default agent: ${name}`
+      tool: 'Default agent', toolHint: 'For Ledge’s chat and its cards.', toolSaved: (name) => `Default agent: ${name}`,
+      context: 'Max context', contextHint: 'Past it, a session is near its limit: « Your turn » offers to hand it over, and Ledge relieves on its own a seat that works without asking.',
+      contextSaved: (pct) => `Max context: ${pct} %`, contextUnknown: 'Update the local Ledge daemon to set this threshold.'
     },
     updates: {
       title: 'Updates',
@@ -371,6 +374,7 @@ export const en: Messages = {
     seat: (name, task, machine) => `${name}, ${task}, ${machine}`,
     helperSeat: (kind, parent, task) => `${kind}, subagent of ${parent}: ${task}`,
     offline: 'Offline',
+    ledgeTaskLabel: (owner: string, title: string) => `Ledge gives “${title}” to ${owner}. See the task`,
     messageTo: (n) => `to ${n}`,
     messageLabel: (sender, n, summary) => `${sender} writes to ${n}: ${summary}. Open the conversation`,
     desk: 'Talk to Ledge',
@@ -395,6 +399,67 @@ export const en: Messages = {
     outdated: (name) => `${name} could not be moved: update the local Ledge daemon, it does not know projects yet.`,
     invalid: (name) => `${name} could not be moved: Ledge cannot remember this folder.`,
     unconfirmed: (name) => `${name} was not moved: Ledge did not confirm. Try again.`
+  },
+  home: {
+    operator: (sessions: number, teams: number, machines: number) => `Operator · sees ${sessions} ${sessions === 1 ? 'session' : 'sessions'}, ${teams} ${teams === 1 ? 'team' : 'teams'}, ${machines} ${machines === 1 ? 'machine' : 'machines'} · read only`,
+    tabsLabel: 'Ledge views',
+    tabs: { conversation: 'Conversation', teams: (n: number) => `Teams · ${n}`, tasks: (n: number) => `Tasks · ${n}`, history: 'History' },
+    toAtelier: 'Back to the atelier',
+    point: {
+      title: 'The point', yours: 'Yours', teams: 'Teams', given: 'Given by Ledge',
+      summarize: 'Summarise the day', summarizeQuestion: 'Summarise the day: what moved, what waits for my decision, what is stuck.',
+      nothingYours: 'Nothing waits for you.', noTeam: 'No team at work.', noTask: 'Ledge gave no task today.',
+      seats: (n: number) => `${n} ${n === 1 ? 'seat' : 'seats'}`, progress: (done: number, given: number) => `${done}/${given} Ledge ${given === 1 ? 'task' : 'tasks'}`,
+      table: 'Table', resume: 'Resume', resting: 'resting', allow: 'Yes', deny: 'No', see: 'See', dismiss: 'Dismiss',
+      closed: (owner: string, title: string, state: 'done' | 'refused' | 'dropped') => state === 'done' ? `${owner} finished “${title}”` : state === 'refused' ? `${owner} refused “${title}”` : `${owner} dropped “${title}”`,
+      ofLedge: 'Ledge’s task', owner: (owner: string, state: string) => `${owner} · ${state}`
+    },
+    suggestions: (team?: string) => ['Set up a team…', 'Give a task to…', team ? `Where is ${team} at?` : 'Where are the teams at?', 'Who needs me?'],
+    readOnly: 'read only · nothing without your click',
+    mentions: 'Mention', mentionSession: (name: string) => `session ${name}`, mentionTeam: (name: string) => `team ${name}`,
+    tasks: {
+      filters: 'Filters', all: 'All', open: 'Open', closed: 'Closed', giver: 'Giver', anyGiver: 'Anyone', ledge: 'Ledge', seats: 'The seats', team: 'Team', anyTeam: 'All',
+      none: 'No task.', result: 'Result', reason: 'Reason', log: 'History', from: (giver: string, owner: string) => `from ${giver} to ${owner}`, close: 'Close'
+    },
+    teams: { none: 'No team at work. Ask Ledge to set one up.', dissolved: 'dissolved' },
+    history: { none: 'No conversation today.', open: 'See in the conversation' }
+  },
+  handover: {
+    nearShort: (name: string, pct: number) => `${name} · context ${pct} %`, nearHint: 'near its limit', failedShort: (name: string) => `Relief of ${name} failed`, retry: 'Retry',
+    pass: 'Hand over', passTitle: 'A fresh session takes its place: it writes its brief, its tasks are passed on', later: 'Later',
+    gauge: (pct: number) => `context ${pct} %`,
+    state: { briefing: 'relief: brief asked', launching: 'relief: launching…', done: 'relieved', failed: 'relief failed' } as Record<'briefing' | 'launching' | 'done' | 'failed', string>,
+    relievedBy: (name: string) => `relieved by ${name}`, relieves: (name: string) => `relieves ${name}`,
+    refused: (why: string) => `Relief refused: ${why}`, auto: 'by Ledge'
+  },
+  teamLaunch: {
+    title: (project: string) => `New team · ${project}`, folder: 'Folder', noFolder: 'No folder of this project on this machine', loading: 'Reading the roles and templates…',
+    template: 'Template', custom: 'Seats chosen one by one', seats: 'Seats', noRole: 'No role: write ~/.ledge/roles/<id>.md', agentOf: (role: string) => `Agent of @${role}`,
+    name: 'Team name', preview: (team: string, project: string) => `Team ${team} will sit at a new table in the ${project} room.`,
+    unknown: (roles: string) => `Unknown roles in this folder: ${roles}`, launch: 'Launch the team', launching: 'Launching…',
+    failed: (why: string) => `The team was not launched: ${why}`, noAnswer: 'Ledge did not answer.', launched: (team: string, project: string) => `Team ${team} settles in the ${project} room.`
+  },
+  teams: {
+    tables: (n: number) => `${n} ${n === 1 ? 'table' : 'tables'}`,
+    treeLine: (done: number, given: number) => `team · ${done}/${given}`, treeResting: 'resting',
+    common: 'common table',
+    room: (name: string) => `${name} room`,
+    plaqueCounts: (tables: number, sessions: number) => `${tables} ${tables === 1 ? 'table' : 'tables'} · ${sessions} ${sessions === 1 ? 'session' : 'sessions'}`,
+    waiting: (n: number) => `${n} waiting`, working: (n: number) => `${n} working`,
+    roomMenu: (name: string) => `Actions of the ${name} room`, roomMenuTitle: 'Room actions',
+    newSessionHere: 'New session here', newTeamHere: 'New team here…', entrance: 'ENTRANCE',
+    teamTable: (name: string) => `Team ${name}`,
+    teamLine: (done: number, given: number) => `team · operator Ledge · ${done}/${given} ${given === 1 ? 'task' : 'tasks'}`,
+    restingLine: 'team resting', resume: 'Resume',
+    teamMenu: (name: string) => `Actions of team ${name}`, teamMenuTitle: 'Team actions',
+    openTasks: 'See the tasks', dissolve: 'Dissolve the team',
+    dissolveTitle: (name: string) => `Dissolve team ${name}?`,
+    dissolveBody: 'Its table leaves the room; its sessions stay, at the common table or in the archives, and its tasks stay with their sessions.',
+    dropJoin: 'Drop to join', dropLeave: 'Drop to go back to the common table',
+    sheet: (id: string, title: string, giver: string) => `${id} · ${title} · ${giver}`,
+    chooseRole: (name: string, team: string) => `${name}'s role in ${team}`, otherRole: 'another role…', loadingRoles: 'Reading the roles…', noRole: 'No other role',
+    joined: (name: string, team: string, role: string) => `${name} joins ${team} as @${role}.`,
+    left: (name: string) => `${name} goes back to the common table.`
   },
   zoom: {
     bar: 'Atelier zoom', out: 'Zoom out', outTitle: 'Zoom out (−)', in: 'Zoom in', inTitle: 'Zoom in (+)',
@@ -653,7 +718,12 @@ export const en: Messages = {
       to: 'To', from: 'From', seeTheirs: 'see their thread', seen: 'read'
     },
     /** Claude Code's automated cross-session notices (NoticeLine): system events, never the user's words. */
+    seat: {
+      task: (id: string, title: string, giver: string, state: string) => `${id} · ${title} · given by ${giver} · ${state}`,
+      seeTasks: 'See the tasks', pinned: 'Current task', autonomy: { ask: 'asks', edits: 'edits without asking', auto: 'autonomous' }
+    },
     notice: {
+      task: 'TASK', taskFrom: (name: string) => `Task from ${name}`, team: 'TEAM', teamJoined: 'Team joined',
       kicker: 'Automated notice', other: 'Automated notice between sessions', anotherSession: 'another session',
       idle: (n, time) => `${n} finished${time ? ` · ${time}` : ''}`,
       exited: (n, time) => `Session ${n} closed${time ? ` · ${time}` : ''}`,
@@ -839,6 +909,19 @@ export const en: Messages = {
       send: 'Send', sending: 'Sending…', cancel: 'Cancel', retry: 'Retry', orRephrase: 'or rephrase your request',
       queued: "is working; I'll send it as soon as it's done", sentTo: 'Sent to', failed: (why: string) => `Could not send: ${why}`,
       pill: { yours: 'your turn', working: 'working', waiting: 'waiting for you', stopped: 'stopped' }
+    },
+    team: {
+      label: 'Proposed team', folder: 'Folder', table: (project: string) => `Table`, newTable: (project: string) => `new table in the ${project} room`, seats: 'Seats',
+      autonomy: { ask: 'asks before acting', edits: 'edits without asking', auto: 'autonomous' },
+      autoWarning: (roles: string) => `${roles} will work without asking: edits and commands without your approval.`,
+      launch: 'Launch the team', launching: 'Launching…', retry: 'Retry', save: 'Save', saved: (path: string) => `Saved: ${path}`,
+      launched: (at: string) => `Team launched at ${at}`, openTable: 'Open the table', failed: (why: string) => `Failed: ${why}`, template: (id: string) => `template ${id}`
+    },
+    task: {
+      label: (n: number) => n === 1 ? 'Task to give' : `${n} tasks to give`, to: 'to', give: 'Give', giving: 'Sending…', retry: 'Retry',
+      waitTeam: 'active once the team is launched',
+      given: (owner: string, id: string, state: string) => `Given to ${owner} · ${id} · ${state}`,
+      state: { open: 'to take', taken: 'taken', done: 'done', refused: 'refused', dropped: 'dropped' }, failed: (why: string) => `Refused: ${why}`
     },
     project: {
       label: 'Project proposal', title: (name: string) => `Project proposal · ${name}`, complete: (name: string) => `Complete ${name}`,

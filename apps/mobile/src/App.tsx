@@ -134,6 +134,17 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
     return () => sw.removeEventListener('message', onMessage);
   }, []);
 
+  // Opened at its root, the app lands on « Ledge » once the PC says it offers the chat (ledge home spec §2.4); an
+  // address that names a screen (a shared link, a notification) stays where it is, and so does a later tap on « À traiter ».
+  const landing = useRef(['', '#', '#/'].includes(globalThis.location.hash));
+  const toLedge = landing.current && kind === 'route' && route.name === 'inbox' && !!mobile.device?.chat;
+  useEffect(() => {
+    if (!toLedge) return;
+    landing.current = false;
+    globalThis.location.replace(href({ name: 'chat' }));
+  }, [toLedge]);
+  useEffect(() => { if (route.name !== 'inbox') landing.current = false; }, [route.name]);
+
   // `#/chat` without the chat announced goes to the inbox; before the PC's first snapshot nothing is known, so the address stays.
   const chatOff = route.name === 'chat' && mobile.fresh && !mobile.device?.chat;
   useEffect(() => { if (chatOff) globalThis.location.replace(href({ name: 'inbox' })); }, [chatOff]);

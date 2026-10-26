@@ -1,7 +1,7 @@
 import type { Locator, Page } from '@playwright/test';
 import type { ClientMessage, Projects } from '@ledge/protocol';
 import { test, expect, openNewProject } from './fixtures';
-import { eight, fakeDaemon, session, twoProjects, type Folder } from './daemon';
+import { eight, fakeDaemon, session, twoProjects, type Folder, openAtelier } from './daemon';
 
 type ProjectsSet = Extract<ClientMessage, { type: 'projects.set' }>;
 const sets = (received: ClientMessage[]) => received.filter((m): m is ProjectsSet => m.type === 'projects.set');
@@ -16,7 +16,7 @@ const folders: Record<string, Folder> = {
 };
 test('« New folder » in the folder browser: the folder is made on Local, listed ready to add, and the project is created with it (#32)', async ({ page }) => {
   const daemon = await fakeDaemon(page, eight, { projects: twoProjects, folders: structuredClone(folders) });
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   await expect(page.getByRole('region', { name: 'Ledge table' })).toBeVisible();
   await openNewProject(page);
   const editor = page.getByRole('dialog', { name: 'New project' });
@@ -49,7 +49,7 @@ const kit = session('kit', { name: 'Kit', cwd: '/tmp/scratch', project: 'scratch
 
 test('+ Projects, a name, Workspace › paper-fonts on main from the folder browser, Create: the project is in the sidebar with its colour', async ({ page }) => {
   const daemon = await fakeDaemon(page, eight, { projects: twoProjects, folders });
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   await expect(page.getByRole('region', { name: 'Ledge table' })).toBeVisible();
   await openNewProject(page);
   const editor = page.getByRole('dialog', { name: 'New project' });
@@ -86,7 +86,7 @@ test('+ Projects, a name, Workspace › paper-fonts on main from the folder brow
 
 test('Move to… › New project… on an agent with no project: the project is created with its folder, the agent leaves « No project » for the new table', async ({ page }) => {
   const daemon = await fakeDaemon(page, [...eight, kit], { projects: twoProjects, folders });
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   const card = page.locator('.unassigned-card', { hasText: 'Kit' });
   await expect(card).toBeVisible();
   await card.getByRole('button', { name: 'Move to…' }).click();
@@ -115,7 +115,7 @@ test('Move to… › New project… on an agent with no project: the project is 
 
 test('Edit project › Delete the project › Move to… Website: its agents join the Website table and the filter goes back to All', async ({ page }) => {
   const daemon = await fakeDaemon(page, eight, { projects: twoProjects });
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   // The filter on Ledge: only its table is shown.
   await sidebarProjects(page).getByRole('button', { name: /^Ledge/ }).click();
   const ledge = page.getByRole('region', { name: 'Ledge table' });
@@ -165,7 +165,7 @@ test('a 900 px window: the editor and the folder browser fit without a side scro
     projects: twoProjects,
     folders: { '/home/me': { parent: '/home', entries: many, repos: many.filter((_, i) => i % 2 === 0).map(name => ({ name, branch: 'feature/a-very-long-branch-name-for-the-layout' })) } }
   });
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   await expect(page.getByRole('region', { name: 'Ledge table' })).toBeVisible();
   await openNewProject(page);
   const editor = page.getByRole('dialog', { name: 'New project' });

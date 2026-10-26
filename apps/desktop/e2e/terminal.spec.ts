@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from './fixtures';
-import { fakeDaemon, twoProjects } from './daemon';
+import { fakeDaemon, twoProjects, openAtelier } from './daemon';
 import { fleet, ottoThread } from './thread';
 
 const open = async (page: Page, name: string) => { await page.getByRole('tree').getByRole('button', { name: new RegExp(`^${name}`) }).click(); };
@@ -11,7 +11,7 @@ const termWidth = (page: Page) => page.locator('.conversation-workspace').evalua
 
 test('O shows the terminal, the keyboard goes to it and back, keys reach the shell', async ({ page }) => {
   await fakeDaemon(page, fleet, { launcher: ['ledge'], projects: twoProjects });
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   await open(page, 'Nova');
   await expect(page.locator('.session-page')).toBeVisible();
   await page.keyboard.press('o');
@@ -53,7 +53,7 @@ test('O shows the terminal, the keyboard goes to it and back, keys reach the she
 
 test('with Changes hiding the thread, Ctrl+² from the terminal lands on the session panel', async ({ page }) => {
   await fakeDaemon(page, fleet, { launcher: ['ledge'], projects: twoProjects, threads: { otto: ottoThread } });
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   await open(page, 'Otto');
   await expect(page.locator('.session-page')).toBeVisible();
   await page.getByRole('tab', { name: /^Changes/ }).click();

@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { launchDefaults, launchMessage, missingOf, MULTI_REPO_TOOLS, previewOf, reposOn, toggleRepo, withMachine, withPick, withProject, withTool, type LaunchForm } from '@ledge/fleet/launch';
 import { useModels } from '@ledge/fleet/models';
-import { pickName, projectOf, type Tool } from '@ledge/protocol';
+import { randomUUID } from 'node:crypto';
+import { pickName, projectOf, type Role, type TeamTemplate, type Tool } from '@ledge/protocol';
 import { useEditing, useTui } from '../context.js';
 import { TOOL_NAME } from '../model/labels.js';
 import { C, projectColor } from '../theme.js';
@@ -20,7 +21,13 @@ const LAUNCH_MS = 20_000;
 /** `list[i ± 1]`, wrapping. */
 const cycle = <T,>(list: readonly T[], cur: T, by: number): T => list[((Math.max(0, list.indexOf(cur)) + by) % list.length + list.length) % list.length]!;
 
+/** « Nouvelle session » (4): a session, or with ctrl+t a team (roles spec §3.9). */
 export function Launch() {
+  const [team, setTeam] = useState(false);
+  return team ? <TeamLaunch onSession={() => setTeam(false)} /> : <SessionLaunch onTeam={() => setTeam(true)} />;
+}
+
+function SessionLaunch({ onTeam }: { onTeam(): void }) {
   const { client, d, machines, projects, t, g, toast, go, select } = useTui();
   const list = projects?.projects ?? [];
   const [form, setForm] = useState<LaunchForm>(() => launchDefaults(list, machines, {}, 'claude'));
@@ -73,6 +80,7 @@ export function Launch() {
   useInput((input, key) => {
     if (key.escape) { go('overview'); return; }
     if (key.ctrl && input === 's') { launch(); return; }
+    if (key.ctrl && input === 't') { onTeam(); return; }
     if (key.ctrl && input === 'r') { setName(pickName([...d.sessions.map(s => s.name), shownName])); return; }
     if (key.tab || key.downArrow || (key.return && field !== 'name')) { setField(f => cycle(FIELDS, f, key.shift ? -1 : 1)); return; }
     if (key.upArrow) { setField(f => cycle(FIELDS, f, -1)); return; }
@@ -105,8 +113,9 @@ export function Launch() {
     ))}</Text>
   );
   return (
-    <Frame crumb={t.launch.title} keys={[['tab', t.keys.nextField], ['← →', t.keys.choose], [t.keys.space, t.keys.tick], ['ctrl+s', t.keys.start], ['ctrl+r', t.keys.redraw], ['esc', t.keys.cancel]]}>
+    <Frame crumb={t.launch.title} keys={[['tab', t.keys.nextField], ['← →', t.keys.choose], [t.keys.space, t.keys.tick], ['ctrl+s', t.keys.start], ['ctrl+t', t.keys.teamMode], ['ctrl+r', t.keys.redraw], ['esc', t.keys.cancel]]}>
       <TitledBox title={t.launch.title} flexGrow={1}>
+        <Box><Text color={C.faint}> </Text><Box width={14} flexShrink={0}><Text color={C.dim}>{t.launch.mode}</Text></Box><Text><Text color={C.coral}>{g.radioOn} {t.launch.session}</Text>   <Text color={C.dim}>{g.radioOff} {t.launch.team}</Text>  <Text color={C.faint}>ctrl+t</Text></Text></Box>
         {row('prompt', t.launch.instruction, <TextInput value={form.prompt} onChange={v => setForm(f => ({ ...f, prompt: v }))} active={field === 'prompt'} />)}
         <Text> </Text>
         {row('tool', t.launch.agent, <Text wrap="truncate">{tools.map(x => <Text key={x} color={x === form.tool ? C.coral : C.dim}>{x === form.tool ? g.radioOn : g.radioOff} {TOOL_NAME[x]}   </Text>)}</Text>)}
@@ -131,6 +140,126 @@ export function Launch() {
           <Button label={launching ? t.launch.launching : t.launch.launch} k="ctrl+s" primary />
           <Button label={t.launch.cancel} k="esc" />
           {missing ? <Text color={C.yellow}>{t.launch.missing[missing]}</Text> : <Text color={C.faint}>{t.launch.thenAttach}</Text>}
+        </Box>
+      </TitledBox>
+    </Frame>
+  );
+}
+
+const TEAM_FIELDS = ['project', 'folder', 'template', 'seats', 'name'] as const;
+type TeamField = typeof TEAM_FIELDS[number];
+const AUTONOMY_COLOR = { ask: C.faint, edits: C.dim, auto: C.yellow } as const;
+
+/** The team mode (roles spec §3.9): a project and one of its folders, a template or seats chosen one by one (each with its
+ *  agent), the team's name, and the preview « L'équipe workshop s'installera à une nouvelle table de la pièce Ledge » with the
+ *  autonomy warning. ctrl+s sends `team.launch`; its answer says how it went. */
+function TeamLaunch({ onSession }: { onSession(): void }) {
+  const { client, machines, projects, t, g, toast, go } = useTui();
+  const list = projects?.projects ?? [];
+  const [projectId, setProjectId] = useState<string | null>(list[0]?.id ?? null);
+  const project = list.find(p => p.id === projectId);
+  const folders = useMemo(() => {
+    const own = (project?.repos ?? []).filter(r => r.machine === 'local').map(r => r.path);
+    return own.length ? own : (machines.find(m => m.id === 'local')?.recents ?? []).slice(0, 6).map(r => r.cwd);
+  }, [project, machines]);
+  const [folderAt, setFolderAt] = useState(0);
+  const cwd = folders[folderAt] ?? folders[0] ?? null;
+  const [field, setField] = useState<TeamField>('template');
+  const [defs, setDefs] = useState<{ roles: Role[]; templates: TeamTemplate[] } | null>(null);
+  const [template, setTemplate] = useState<string | null>(null);
+  const [seats, setSeats] = useState<Array<{ role: Role; tool: Tool; on: boolean }>>([]);
+  const [seatAt, setSeatAt] = useState(0);
+  const [name, setName] = useState('');
+  const [launching, setLaunching] = useState(false);
+  useEditing(true);
+  useEffect(() => {
+    if (!cwd) { setDefs({ roles: [], templates: [] }); return; }
+    setDefs(null);
+    const requestId = `tui-roles-${randomUUID()}`;
+    const off = client.onMessage(m => {
+      if (m.type !== 'roles.listing' || m.requestId !== requestId) return;
+      off();
+      setDefs({ roles: m.roles, templates: m.templates });
+      setSeats(m.roles.map(role => ({ role, tool: role.tool ?? 'claude', on: false })));
+      setTemplate(m.templates[0]?.id ?? null);
+      setName(n => n || m.templates[0]?.name || project?.name || '');
+    });
+    client.send({ type: 'roles.list', cwd, requestId });
+    return off;
+  }, [cwd]); // eslint-disable-line react-hooks/exhaustive-deps
+  const tpl = defs?.templates.find(x => x.id === template);
+  const chosen = tpl
+    ? tpl.seats.map(x => { const role = defs!.roles.find(r => r.id === x.role); return { id: x.role, tool: x.tool ?? role?.tool ?? 'claude' as Tool, autonomy: role?.autonomy ?? 'ask' }; })
+    : seats.filter(x => x.on).map(x => ({ id: x.role.id, tool: x.tool, autonomy: x.role.autonomy ?? 'ask' }));
+  const auto = chosen.filter(x => x.autonomy === 'auto').map(x => `@${x.id}`);
+  const teamName = name.trim() || tpl?.name || project?.name || 'team';
+
+  const launch = () => {
+    if (launching || !cwd) return;
+    if (!chosen.length) { toast({ text: t.launch.noSeat, tone: 'info' }); return; }
+    const rid = randomUUID();
+    setLaunching(true);
+    const off = client.onMessage(m => {
+      if ((m.type !== 'team.launched' && m.type !== 'team.failed') || m.rid !== rid) return;
+      off(); setLaunching(false);
+      if (m.type === 'team.launched') { toast({ text: t.launch.teamLaunched(m.team.name), tone: 'ok' }); go('overview'); }
+      else toast({ text: t.launch.teamFailed(m.reason), tone: 'error' });
+    });
+    client.send({ type: 'team.launch', rid, cwd, name: teamName, ...(tpl ? { template: tpl.id } : { seats: chosen.map(x => ({ role: x.id, tool: x.tool })) }) });
+  };
+
+  const tools: Tool[] = ['claude', 'codex', 'cursor', 'omp'];
+  const templates: Array<string | null> = [...(defs?.templates ?? []).map(x => x.id), null];
+  useInput((input, key) => {
+    if (key.escape) { go('overview'); return; }
+    if (key.ctrl && input === 's') { launch(); return; }
+    if (key.ctrl && input === 't') { onSession(); return; }
+    if (key.tab || key.downArrow || key.return) { setField(f => cycle(TEAM_FIELDS, f, key.shift ? -1 : 1)); return; }
+    if (key.upArrow) { setField(f => cycle(TEAM_FIELDS, f, -1)); return; }
+    if (field === 'name') return;
+    const by = key.rightArrow || input === 'l' ? 1 : key.leftArrow || input === 'h' ? -1 : 0;
+    if (field === 'project' && by) { const ids = list.map(p => p.id); if (ids.length) { setProjectId(cur => cycle(ids, cur ?? ids[0]!, by)); setFolderAt(0); } }
+    else if (field === 'folder' && by && folders.length) setFolderAt(i => (i + by + folders.length) % folders.length);
+    else if (field === 'template' && by) { const next = cycle(templates, template, by); setTemplate(next); const x = defs?.templates.find(y => y.id === next); if (x) setName(x.name); }
+    else if (field === 'seats' && !tpl) {
+      if (input === 'j') setSeatAt(i => (seats.length ? (i + 1) % seats.length : 0));
+      else if (input === 'k') setSeatAt(i => (seats.length ? (i + seats.length - 1) % seats.length : 0));
+      else if (input === ' ') setSeats(xs => xs.map((x, i) => (i === seatAt ? { ...x, on: !x.on } : x)));
+      else if (by) setSeats(xs => xs.map((x, i) => (i === seatAt ? { ...x, tool: cycle(tools, x.tool, by) } : x)));
+    }
+  });
+
+  const row = (f: TeamField, label: string, value: ReactNode) => (
+    <Box key={f} backgroundColor={field === f ? C.sel : undefined}>
+      <Text color={field === f ? C.coral : C.faint}>{field === f ? '▌' : ' '}</Text>
+      <Box width={14} flexShrink={0}><Text color={C.dim}>{label}</Text></Box>
+      <Box flexGrow={1} overflow="hidden" flexDirection="column">{value}</Box>
+    </Box>
+  );
+  return (
+    <Frame crumb={t.launch.teamTitle} keys={[['tab', t.keys.nextField], ['← →', t.keys.choose], [t.keys.space, t.keys.tick], ['ctrl+s', t.keys.start], ['ctrl+t', t.keys.teamMode], ['esc', t.keys.cancel]]}>
+      <TitledBox title={t.launch.teamTitle} flexGrow={1}>
+        <Box><Text color={C.faint}> </Text><Box width={14} flexShrink={0}><Text color={C.dim}>{t.launch.mode}</Text></Box><Text><Text color={C.dim}>{g.radioOff} {t.launch.session}</Text>   <Text color={C.coral}>{g.radioOn} {t.launch.team}</Text>  <Text color={C.faint}>ctrl+t</Text></Text></Box>
+        {row('project', t.launch.project, <Text wrap="truncate">{list.length === 0 ? <Text color={C.faint}>{t.launch.none}</Text> : list.map(p => <Text key={p.id} color={p.id === projectId ? C.fg : projectColor(p.color)} bold={p.id === projectId}>{p.id === projectId ? `${g.prev} ${p.name} ${g.next}` : p.name}{'   '}</Text>)}</Text>)}
+        {row('folder', t.launch.folder, <Text wrap="truncate">{cwd ? <><Text color={C.fg}>{cwd}</Text>{folders.length > 1 ? <Text color={C.faint}>  ({folderAt + 1}/{folders.length})</Text> : null}</> : <Text color={C.faint}>{t.launch.none}</Text>}</Text>)}
+        {row('template', t.launch.template, defs === null ? <Text color={C.faint}>{t.launch.loadingRoles}</Text> : <Text wrap="truncate">{templates.map(x => <Text key={x ?? '-'} color={x === template ? C.fg : C.dim} bold={x === template}>{x === template ? `${g.prev} ${x ?? t.launch.custom} ${g.next}` : x ?? t.launch.custom}{'   '}</Text>)}</Text>)}
+        {row('seats', t.launch.seats, tpl
+          ? <Text wrap="truncate">{chosen.map(x => <Text key={x.id}><Text color={C.violet}>@{x.id}</Text> <Text color={C.dim}>{TOOL_NAME[x.tool]}</Text>{'   '}</Text>)}</Text>
+          : seats.length === 0 ? <Text color={C.faint}>{t.launch.noRole}</Text>
+          : <>{seats.map((x, i) => (
+            <Text key={x.role.id} wrap="truncate" backgroundColor={field === 'seats' && i === seatAt ? '#3a3532' : undefined}>
+              <Text color={x.on ? C.green : C.faint}>{x.on ? g.boxOn : g.boxOff}</Text> <Text color={C.violet}>@{x.role.id}</Text> {x.role.label} <Text color={C.dim}>{g.prev} {TOOL_NAME[x.tool]} {g.next}</Text> <Text color={AUTONOMY_COLOR[x.role.autonomy ?? 'ask']}>{t.ask.autonomy[x.role.autonomy ?? 'ask']}</Text>
+            </Text>
+          ))}</>)}
+        {row('name', t.launch.teamName, <TextInput value={name} onChange={setName} active={field === 'name'} placeholder={teamName} />)}
+      </TitledBox>
+      <TitledBox title={t.launch.preview} color={C.coral} titleColor={C.coral}>
+        <Text wrap="truncate"><Text color={C.coral}>{g.team}</Text> <Text color={C.fg} bold>{t.launch.teamPreview(teamName, project?.name ?? cwd ?? '-')}</Text></Text>
+        <Text wrap="truncate">{chosen.map(x => <Text key={x.id}><Text color={C.violet}>@{x.id}</Text> <Text color={C.dim}>{TOOL_NAME[x.tool]}</Text> <Text color={AUTONOMY_COLOR[x.autonomy]}>{t.ask.autonomy[x.autonomy]}</Text>{'   '}</Text>)}</Text>
+        {auto.length ? <Text color={C.yellow} wrap="truncate">{t.ask.autoWarning(auto.join(', '))}</Text> : null}
+        <Box marginTop={1} columnGap={2}>
+          <Button label={launching ? t.launch.launching : t.ask.launchTeam} k="ctrl+s" primary />
+          <Button label={t.launch.cancel} k="esc" />
         </Box>
       </TitledBox>
     </Frame>

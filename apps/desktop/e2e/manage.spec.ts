@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { fakeDaemon, session, twoProjects } from './daemon';
+import { fakeDaemon, session, twoProjects, openAtelier } from './daemon';
 
 const rex = session('rex', { name: 'Rex', project: 'ledge', cwd: '/w/ledge', state: 'exited', topic: 'Old task' });
 const live = session('nova', { name: 'Nova', project: 'ledge', cwd: '/w/ledge', state: 'working' });
@@ -7,7 +7,7 @@ const CAN = { version: '0.7.0', install: 'npm' as const, systemd: true, archive:
 
 test('archive a finished agent from its seat, undo with Ctrl Z, then archive and reopen it read-only', async ({ page }) => {
   const daemon = await fakeDaemon(page, [live, rex], { projects: twoProjects, daemon: CAN });
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   const seat = page.getByRole('button', { name: /^Rex,/ });
   await expect(seat).toBeVisible();
 

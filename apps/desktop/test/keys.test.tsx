@@ -54,30 +54,30 @@ describe('global shortcuts', () => {
     field.remove();
   });
 
-  it('/ opens the chat when Ask Ledge is hidden', async () => {
+  it('/ goes to Ledge’s home view with its composer focused; Escape comes back; Ctrl / docks the chat beside the page', async () => {
     const { user } = await boot({ projects: TWO_PROJECTS });
-    const ask = screen.getByRole('textbox', { name: 'Ask Ledge' });
-    vi.spyOn(ask, 'getClientRects').mockReturnValue([] as unknown as DOMRectList);
     await user.keyboard('/');
+    const home = await screen.findByRole('region', { name: 'Home: Ledge, the operator' });
+    await waitFor(() => expect(within(home).getByRole('textbox', { name: 'Ask Ledge' })).toHaveFocus());
+    expect(screen.queryByRole('complementary', { name: 'Chat Ledge' })).toBeNull();
+    (document.activeElement as HTMLElement).blur();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('region', { name: 'Home: Ledge, the operator' })).toBeNull();
+    await user.keyboard('{Control>}/{/Control}');
     expect(screen.getByRole('complementary', { name: 'Chat Ledge' })).toBeVisible();
-    expect(ask).not.toHaveFocus();
   });
 
-  it('/ opens the chat in full screen', async () => {
+  it('/ goes home in full screen too', async () => {
     const { user } = await boot({ projects: TWO_PROJECTS });
     await user.click(screen.getByRole('button', { name: 'Full screen' }));
     await user.keyboard('/');
-    expect(screen.getByRole('complementary', { name: 'Chat Ledge' })).toBeVisible();
-    expect(document.querySelector('[data-ask-input]')).not.toHaveFocus();
+    expect(await screen.findByRole('region', { name: 'Home: Ledge, the operator' })).toBeVisible();
   });
 
-  it('N opens New session, ? the shortcuts, / focuses Ask Ledge', async () => {
+  it('N opens New session, ? the shortcuts', async () => {
     const { user } = await boot({ projects: TWO_PROJECTS });
     await user.keyboard('n'); expect(screen.getByRole('dialog', { name: 'New session' })).toBeVisible(); await user.keyboard('{Escape}');
     await user.keyboard('?'); expect(screen.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeVisible(); await user.keyboard('{Escape}');
-    await user.keyboard('/');
-    expect(screen.getByRole('textbox', { name: 'Ask Ledge' })).toHaveFocus();
-    expect(screen.queryByRole('complementary', { name: 'Chat Ledge' })).toBeNull();
   });
 
   it('Alt 1…9 open the main agents in order; Alt → / ← walk them, wrapping', async () => {

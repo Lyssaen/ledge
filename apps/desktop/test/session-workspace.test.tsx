@@ -80,7 +80,9 @@ describe('the session place, the subagent page, the terminal', () => {
     expect(screen.getByRole('region', { name: 'Terminal' })).toBeVisible();
     view.unmount();
     render(<App client={client} />);
-    await user.click(await screen.findByRole('button', { name: /^Otto,/ }));     // only the prefs survive, never the place
+    // Only the prefs survive, never the place: the app opens on Ledge's home view, the atelier one click away.
+    await user.click(await within(screen.getByRole('complementary', { name: 'Sidebar' })).findByRole('button', { name: /Atelier/ }));
+    await user.click(await screen.findByRole('button', { name: /^Otto,/ }));
     expect(await screen.findByRole('region', { name: 'Terminal' })).toBeVisible();
   });
 

@@ -8,6 +8,15 @@ import { TurnView } from '../ui/chat/TurnView';
 import { LinkStatus, linkView } from '../ui/Header';
 import { TabBar } from '../ui/TabBar';
 import { requestsOf } from '../model/requests';
+import { closedTasks } from '../model/teams';
+import { LePoint } from '../ui/teams/LePoint';
+import type { PhoneTeam } from '@ledge/protocol';
+
+/** With teams, the operator's: « Monte une équipe… » and where the first active team is at. */
+function teamSuggestions(teams: PhoneTeam[]): string[] {
+  const first = teams.find(t => t.state === 'active');
+  return [copy.chat.suggestions.team, ...(first ? [copy.chat.suggestions.teamWhere(first.name)] : [])];
+}
 
 /** The suggestions: the first needs nothing, the others a real session and a real repo of the snapshot. */
 function suggestionsOf(sessions: { name: string; repo?: string }[]): string[] {
@@ -31,6 +40,8 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
   const end = useRef<HTMLDivElement>(null);
   const running = chat.live !== null;
   const offline = !state.fresh;
+  // A PC that knows teams: Ledge is the operator, and the thread opens on « Le point » (ledge home spec §2.4).
+  const teams = state.teams;
 
   useEffect(() => {
     const e = chat.error;
@@ -58,7 +69,7 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
         <div className="min-w-0 flex-1">
           <LinkStatus link={linkView(state)} />
           <h1 className="text-xl leading-[26px] font-bold tracking-[-0.4px]">{copy.chat.title}<span className="text-danger-fg">.</span></h1>
-          <p className="text-xs text-muted">{copy.chat.subtitle(sessions.length, repos.size)}</p>
+          <p className="text-xs text-muted">{teams ? copy.chat.operator(sessions.length, teams.length) : copy.chat.subtitle(sessions.length, repos.size)}</p>
         </div>
         <button
           type="button" disabled={running} onClick={() => { setRefused(null); store.resetChat(); }}
@@ -69,7 +80,17 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
         </button>
       </header>
       <main className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain py-4">
-        {chat.turns.length === 0 && (
+        {chat.turns.length === 0 && teams && (
+          <div className="flex flex-1 flex-col justify-end gap-3">
+            <LePoint store={store} sessions={sessions} teams={teams} tasks={state.tasks} syncedAt={state.syncedAt} fresh={state.fresh} {...(state.device?.contextNear !== undefined ? { threshold: state.device.contextNear } : {})} />
+            <div className="flex flex-wrap gap-2">
+              {teamSuggestions(teams).map(s => (
+                <button key={s} type="button" onClick={() => setText(s)} className="inline-flex min-h-11 items-center rounded-full border border-line bg-surface px-3.5 text-[13px] font-medium">{s}</button>
+              ))}
+            </div>
+          </div>
+        )}
+        {chat.turns.length === 0 && !teams && (
           <div className="flex flex-1 flex-col justify-end gap-2.5">
             <p className="mb-1.5 text-muted">{copy.chat.empty}</p>
             {suggestionsOf(sessions).map(s => (
@@ -84,7 +105,7 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
       </main>
       {note && <p role="status" className="flex-none pb-2 text-[13px] text-attention">{note}</p>}
       <Composer value={text} onChange={setText} onSend={send} canSend={text.trim() !== '' && !running && !offline} />
-      <TabBar count={requestsOf(sessions).length} active="chat" chat />
+      <TabBar count={requestsOf(sessions).length + closedTasks(state.tasks.values()).length} active="chat" chat />
     </>
   );
 }

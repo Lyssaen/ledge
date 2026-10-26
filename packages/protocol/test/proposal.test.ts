@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractProposal, parseProposalBlock, parseProjectBlock, parseRelayBlock, parseCloseBlock, hideProposal } from '../src/proposal.js';
+import { extractProposal, parseProposalBlock, parseProjectBlock, parseRelayBlock, parseCloseBlock, hideProposal, parseTeamBlock, parseTaskBlock } from '../src/proposal.js';
 
 const block = (json: string) => '```ledge-session\n' + json + '\n```';
 
@@ -146,5 +146,26 @@ describe('ledge-close blocks', () => {
   it('hideProposal holds back a close block and a close fence being typed', () => {
     expect(hideProposal('Je ferme Arlo.\n```ledge-cl')).toBe('Je ferme Arlo.');
     expect(hideProposal('Je ferme.\n```ledge-close\n{"session":"a')).toBe('Je ferme.');
+  });
+});
+
+describe('team and task blocks (roles spec §3.8)', () => {
+  it('a team names a folder and a template, or a name and seats', () => {
+    expect(parseTeamBlock('{"cwd": "/w/ledge", "template": "workshop"}')).toEqual({ cwd: '/w/ledge', template: 'workshop' });
+    expect(parseTeamBlock('{"cwd": "/w", "name": "r", "seats": [{"role": "build", "tool": "claude"}]}')).toEqual({ cwd: '/w', name: 'r', seats: [{ role: 'build', tool: 'claude' }] });
+    expect(parseTeamBlock('{"cwd": "/w"}')).toBeNull();
+    expect(parseTeamBlock('{"cwd": "/w", "seats": [{"role": "b", "tool": "vim"}]}')).toBeNull();
+    expect(parseTeamBlock('nope')).toBeNull();
+  });
+  it('a task names a target and a title', () => {
+    expect(parseTaskBlock('{"to": "@build", "title": "Implémenter", "text": "roles.ts"}')).toEqual({ to: '@build', title: 'Implémenter', text: 'roles.ts' });
+    expect(parseTaskBlock('{"to": "a1b2"}')).toBeNull();
+  });
+  it('a team and its tasks come out of one answer, in order; a fence being typed is hidden', () => {
+    const answer = 'Une équipe.\n```ledge-team\n{"cwd": "/w", "template": "w"}\n```\n```ledge-task\n{"to": "@build", "title": "a"}\n```\n```ledge-task\n{"to": "@qa", "title": "b"}\n```';
+    const r = extractProposal(answer);
+    expect(r.text).toBe('Une équipe.');
+    expect(r.blocks.map(b => b.kind)).toEqual(['team', 'task', 'task']);
+    expect(hideProposal('Une équipe.\n```ledge-te')).toBe('Une équipe.');
   });
 });

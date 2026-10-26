@@ -1,10 +1,15 @@
 import { z } from 'zod';
+import { ContextSchema, HandoverSchema, RelievesSchema } from './handover.js';
 
 export const ToolSchema = z.enum(['claude', 'codex', 'cursor', 'omp']);
 /** OMP's `--approval-mode` as Ledge offers it: ask before writes and executions, approve file writes by themselves, or approve everything (auto). */
 export const OmpApprovalSchema = z.enum(['always-ask', 'write', 'yolo']);
 export type OmpApproval = z.infer<typeof OmpApprovalSchema>;
 export type Tool = z.infer<typeof ToolSchema>;
+/** How far a seat may go without asking (spec 2026-10-25 roles §3.1): each agent's own permission switch at launch,
+ *  never Ledge answering in its place. `ask` adds nothing. */
+export const AutonomySchema = z.enum(['ask', 'edits', 'auto']);
+export type Autonomy = z.infer<typeof AutonomySchema>;
 
 /** How Ledge drives a session's agent: through a tmux pane (Claude Code, Codex, Cursor Agent), or through the agent's own
  *  JSONL protocol with the daemon owning the process (OMP, spec 2026-10-20 §4). A session without it is a tmux one. */
@@ -104,6 +109,18 @@ export const SessionSchema =z.object({
   effort: z.string().optional(),
   /** OMP: the approval mode it was launched with, kept by a resume; left out, `always-ask`. */
   approval: OmpApprovalSchema.optional(),
+  /** The role it was launched with or took in a team (spec 2026-10-25 roles §3.3): its id, its label as it was then. */
+  role: z.string().optional(), roleLabel: z.string().optional(),
+  /** The live team it sits in (`team-…`); left out, the project's common table. */
+  team: z.string().optional(),
+  /** Its role's autonomy, as launched (kept by a resume); left out, `ask`. */
+  autonomy: AutonomySchema.optional(),
+  /** Its context as its agent last reported it, after a turn (context handover spec §3.1); left out, not measured. */
+  context: ContextSchema.optional(),
+  /** Its relief by a fresh session (§3.3): asked, launched, done or failed. */
+  handover: HandoverSchema.optional(),
+  /** The session it relieves, when it is a relief. */
+  relieves: RelievesSchema.optional(),
   /** A model change asked while the agent worked (`session.model`), applied at its next free moment; a field left out is the agent's default. */
   modelNext: z.object({ model: z.string().optional(), effort: z.string().optional() }).optional(),
   /** The agent's own session id when Ledge chose it at launch (Claude Code `--session-id`). */

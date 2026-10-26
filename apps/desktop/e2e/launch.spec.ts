@@ -1,7 +1,7 @@
 import type { Locator, Page } from '@playwright/test';
 import type { ClientMessage, Projects } from '@ledge/protocol';
 import { test, expect } from './fixtures';
-import { eight, fakeDaemon, fakeRemote, session } from './daemon';
+import { eight, fakeDaemon, fakeRemote, session, openAtelier } from './daemon';
 
 /** Ledge with two repositories on this machine, Website with one. */
 const projects: Projects = {
@@ -30,7 +30,7 @@ async function pick(form: Locator, name: string) {
 const chip = (form: Locator, name: string) => form.locator('label.chip').filter({ hasText: new RegExp(`^${name}`) });
 
 async function open(page: Page) {
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   await expect(page.getByRole('region', { name: 'Ledge table' })).toBeVisible();
   await page.keyboard.press('n');
   await expect(dialog(page)).toBeVisible();

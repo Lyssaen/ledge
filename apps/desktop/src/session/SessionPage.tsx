@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent } from 'react';
 import type { DaemonClient } from '@ledge/fleet';
-import { isArchived, type Helper, type Session, type ThreadItem } from '@ledge/protocol';
+import { contextShare, isArchived, type Helper, type Session, type ThreadItem, taskClosed } from '@ledge/protocol';
 import { Icon } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import type { Decisions } from '../fleet/decisions';
@@ -22,10 +22,14 @@ import { SidePane, tabId, type PanePlan, type PaneTab } from './SidePane';
 import { Tags, Thread } from './Thread';
 import { marksOf } from './markers';
 import { TodoBar } from './TodoBar';
+import type { TeamsApi } from '../teams/useTeamsApi';
+import { toolName } from '@ledge/ui/chat/format';
 import { latestTodos } from './todos';
 import { atEnd, displayIds, exchanges, helperOf, pendingPlan, unreadFrom, type PlanDoc, type Segment } from './exchanges';
 
 export interface SessionPageProps {
+  /** The live teams and Ledge's tasks (atelier rooms spec §3.5): the meta line's team, the task pinned above the reply. */
+  teams?: TeamsApi;
   /** The parent on a subagent's page. */
   session: Session;
   helper: Helper | null;
@@ -373,9 +377,13 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   };
 
   const machine = machineOf(session);
+  const team = p.teams?.teamOf(session);
+  // The seat's current task (§3.5): the one it holds, taken first, the latest.
+  const held = helper === null ? (p.teams?.tasks ?? []).filter(x => x.owner === session.id && !taskClosed(x)).sort((a, b) => Number(b.state === 'taken') - Number(a.state === 'taken') || b.updatedAt.localeCompare(a.updatedAt))[0] : undefined;
   const since = whenOf(session, undefined, now, t.list.when).text;
   const waitedFor = whenOf(session, p.waits.get(session.id)?.since, now, t.list.when).text;
   const place = p.nav.place;
+  const share = contextShare(session.context);
   const kids = helper === null ? session.helpers ?? [] : [];
   return (
     <section className="conversation session-page" data-session={session.id} data-helper={helper?.id}>
@@ -388,7 +396,12 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
             </button>
           ))}
         </div>
-        <span className="pane-meta mono" title={t.session.meta}>{machine} · {repoOf(session)}</span>
+        <span className="pane-meta mono" title={t.session.meta}>{[machine, repoOf(session), ...(team ? [`⚑ ${team.name}`] : []), ...(session.role ? [toolName(session.tool), session.model, session.autonomy ? t.session.seat.autonomy[session.autonomy] : null] : []), ...(share !== undefined ? [t.handover.gauge(Math.round(share * 100))] : [])].filter(Boolean).join(' · ')}</span>
+        {/* Its relief (context handover spec §3.3): under way, done (the relief opens), or the one it relieves. */}
+        {session.handover && (session.handover.state === 'done' && session.handover.to
+          ? <button type="button" className="kids-pill" onClick={() => p.dispatch({ type: 'open', id: session.handover!.to! })}>{t.handover.relievedBy(session.handover.toName ?? '')}</button>
+          : <span className={cls('pane-relief', session.handover.state === 'failed' && 'failed')} role="status">{t.handover.state[session.handover.state]}{session.handover.auto ? ` · ${t.handover.auto}` : ''}{session.handover.reason ? ` : ${session.handover.reason}` : ''}</span>)}
+        {session.relieves && <button type="button" className="kids-pill" onClick={() => p.dispatch({ type: 'open', id: session.relieves!.id })}>{t.handover.relieves(session.relieves.name)}</button>}
         {(tags || kids.length > 0) && <span className="spacer" />}
         {tags && <Tags tags={tags} />}
         {kids.length > 0 && <><button type="button" className="kids-pill" title={t.session.kidsPillTitle} onClick={p.onShowKids}><Icon d={SHELL_ICONS.subagents} size={13} />{t.session.kidsPill(kids.length)}</button></>}
@@ -419,6 +432,13 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
             )}
             {view === 'thread' && !atBottom && <button type="button" className="to-latest" onClick={toLatest}><Icon d={SHELL_ICONS.arrowDown} size={13} />{th.latest}</button>}
           </div>
+          {!archived && held && (
+            <div className="pinned-task" role="note" aria-label={t.session.seat.pinned} data-task={held.id}>
+              <span className="kicker mono">{t.session.notice.task}</span>
+              <span className="pinned-text">{t.session.seat.task(held.id, held.title, held.giverName, t.chat.task.state[held.state])}</span>
+              <button type="button" className="message-link" onClick={() => p.dispatch({ type: 'ledge', tab: 'tasks', task: held.id })}>{t.session.seat.seeTasks}</button>
+            </div>
+          )}
           {!archived && <Reply session={session} helper={helper} asker={asker} since={waitedFor} decisions={p.decisions} memory={memory} memoKey={key}
             notify={p.notify} dispatch={p.dispatch} focusOnArrival={place.kind === 'session' && place.focus === 'reply'} keys={replyKeys} onReadPlan={readPlan} client={p.client} />}
         </div>

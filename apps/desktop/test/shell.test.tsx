@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { App } from '../src/App';
 import { boot, closeDaemons, declarations, openProjectEditor, TWO_PROJECTS } from './helpers';
@@ -74,6 +74,9 @@ describe('the Atelier shell', () => {
     view.unmount();
     localStorage.setItem('desktop.overview', JSON.stringify({ view: 'list', helpers: true, paused: false }));
     render(<App client={client} />);
+    // The app opens on Ledge's home view; the atelier is one click away, never a list.
+    expect(await screen.findByRole('region', { name: 'Home: Ledge, the operator' })).toBeVisible();
+    fireEvent.click(within(screen.getByRole('complementary', { name: 'Sidebar' })).getByRole('button', { name: /Atelier/ }));
     expect(await screen.findByRole('region', { name: 'Ledge table' })).toBeVisible();
     expect(screen.queryByRole('tab', { name: 'List' })).toBeNull();
   });
@@ -134,7 +137,7 @@ describe('the Atelier shell', () => {
 
   it('Ask Ledge opens a side panel that closes', async () => {
     const { side, user } = await boot({ projects: TWO_PROJECTS });
-    await user.click(side.getByRole('button', { name: 'Open the conversation with Ledge' }));
+    await user.keyboard('{Control>}/{/Control}');
     const chat = screen.getByRole('complementary', { name: 'Chat Ledge' });
     await user.click(within(chat).getByRole('button', { name: 'Close' }));
     expect(screen.queryByRole('complementary', { name: 'Chat Ledge' })).toBeNull();

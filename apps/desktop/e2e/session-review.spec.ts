@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import type { ThreadItem } from '@ledge/protocol';
 import { test, expect } from './fixtures';
-import { fakeDaemon, twoProjects } from './daemon';
+import { fakeDaemon, twoProjects, openAtelier } from './daemon';
 import { at, fleet, ottoThread, tool } from './thread';
 
 // A 400-character line (words, as code reads): the diff scrolls sideways, never the page.
@@ -27,7 +27,7 @@ const open = async (page: Page) => { await page.getByRole('tree').getByRole('but
 test('Changes: J / K walk the files; a 400-character line scrolls in the diff only', async ({ page }) => {
   expect(wide).toHaveLength(400);
   await fakeDaemon(page, fleet, { projects: twoProjects, threads: { otto: review }, documents });
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   await open(page);
   await page.getByRole('tab', { name: /^Changes/ }).click();
   await expect(page.locator('.file-title code')).toHaveText('src/App.tsx');
@@ -41,7 +41,7 @@ test('Changes: J / K walk the files; a 400-character line scrolls in the diff on
 test('the pane beside the thread: dragging the handle resizes it, the thread keeps 440 px, the width survives a reload', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   await fakeDaemon(page, fleet, { projects: twoProjects, threads: { otto: review }, documents });
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   await open(page);
   await page.getByRole('link', { name: 'docs/guide.md' }).click();
   await expect(page.getByRole('complementary', { name: 'Reading pane' }).getByText('Bonjour.')).toBeVisible();
@@ -61,7 +61,7 @@ test('the pane beside the thread: dragging the handle resizes it, the thread kee
 test('a narrow conversation (terminal open): the pane covers the thread above the reply, with Close', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await fakeDaemon(page, fleet, { projects: twoProjects, threads: { otto: review }, documents });
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   await open(page);
   await expect(page.locator('.session-page')).toBeVisible();
   await page.keyboard.press('o');
@@ -78,7 +78,7 @@ test('a narrow conversation (terminal open): the pane covers the thread above th
 });
 test('the work plan bar stays on top while the thread scrolls', async ({ page }) => {
   await fakeDaemon(page, fleet, { projects: twoProjects, threads: { otto: review }, documents });
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   await open(page);
   const bar = page.locator('.todo-bar');
   await expect(bar).toBeVisible();

@@ -4,7 +4,7 @@
 import { hostname } from 'node:os';
 import {
   OperationIdSchema, PHONE_PROTOCOL, TOOL_TEXT_MAX, proposalRows, PhoneClientMessageSchema, pushEndpointAllowed, RefusalCodeSchema, UNTYPABLE, backendOf, isArchived, pendingKey,
-  type ChatErrorCode, type ChatTurn, type CloseHow, type ClientMessage, type OperationReason, type OperationStatus, type PhoneClientMessage, type PhoneServerMessage, type ServerMessage, type Session, type ThreadItem
+  LEDGE_GIVER, type ChatErrorCode, type ChatTurn, type CloseHow, type ClientMessage, type PhoneTask, type Task, type Team, type OperationReason, type OperationStatus, type PhoneClientMessage, type PhoneServerMessage, type ServerMessage, type Session, type ThreadItem
 } from '@ledge/protocol';
 import type { MobileService } from './service.js';
 import type { ChatThreads, ChatThreadId } from '../chat/threads.js';
@@ -13,7 +13,7 @@ import type { ChatMessage } from '../chat/service.js';
 import { CloseRefused } from '../chat/close.js';
 import { createOutbox } from './outbox.js';
 import { fingerprint, OperationRegistry, type PhoneOperation } from './operations.js';
-import { capabilities, clip, toPhoneFullRequest, toPhoneItem, toPhoneSession, toPhoneThread } from './project.js';
+import { capabilities, clip, phoneTasks, toPhoneFullRequest, toPhoneItem, toPhoneSession, toPhoneTask, toPhoneTeam, toPhoneThread } from './project.js';
 import { riskOf } from './risk.js';
 import { CHALLENGE_TTL_MS, type ChallengeStore } from './challenges.js';
 import { challengeOf, verifyAssertion, verifyRegistration, type DeviceCredential, type Rp } from './webauthn.js';
@@ -79,6 +79,13 @@ export function createPhoneGateway(deps: {
   /** A device's question ended (answered, or with a code). */
   onChatEnd?: (deviceId: string, end: { qid: string; code?: ChatErrorCode }) => void;
   chatThrottleMs?: number;
+  /** The live teams and the tasks (ledge home spec §2.4): the phone's « Le point », « À traiter » and agents by table. */
+  teams?: () => Team[];
+  tasks?: () => Task[];
+  /** A project's name, by id. */
+  projectName?: (id: string | null) => string | null;
+  /** The context threshold the user chose (context handover spec §3.2). */
+  contextNear?: () => number;
 }): PhoneGateway {
   const { mobile, log } = deps;
   /** The read mark of a session no device marked: what was replied before the gateway started counts as read. */
@@ -144,8 +151,17 @@ export function createPhoneGateway(deps: {
     if (f) f.pushStatus = push;
     return {
     type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, boot: deps.boot, name: clip(hostname(), 40).text },
-    device: { confirm: deps.credential(deviceId) !== null, push, ...(deps.chats ? { chat: true as const } : {}) }
+    device: { confirm: deps.credential(deviceId) !== null, push, ...(deps.chats ? { chat: true as const } : {}), ...(deps.contextNear ? { contextNear: deps.contextNear() } : {}) }
     };
+  };
+
+  const phoneTeams = () => (deps.teams?.() ?? []).flatMap(t => { const x = toPhoneTeam(t, deps.tasks?.() ?? [], deps.projectName ?? (() => null)); return x ? [x] : []; });
+  const phoneTask = (x: Task): PhoneTask => toPhoneTask(x, deps.session(x.owner), x.team ? deps.teams?.().find(t => t.id === x.team)?.name : undefined);
+  /** After a snapshot: the teams and Ledge's tasks, for a daemon that has them. */
+  const teamsAndTasks = (deviceId: string) => {
+    if (!deps.teams || !deps.tasks) return;
+    push(deviceId, { type: 'teams', teams: phoneTeams() }, 'teams');
+    push(deviceId, { type: 'tasks', tasks: phoneTasks(deps.tasks(), Date.now()).map(phoneTask) }, 'tasks');
   };
 
   const outbox = createOutbox({
@@ -155,7 +171,7 @@ export function createPhoneGateway(deps: {
       followers.delete(deviceId);
     },
     onOverflow: deviceId => {
-      if (followers.get(deviceId)?.subscribed) outbox.push(deviceId, snapshot(deviceId), 'snapshot');
+      if (followers.get(deviceId)?.subscribed) { outbox.push(deviceId, snapshot(deviceId), 'snapshot'); teamsAndTasks(deviceId); }
     },
     log,
     ...deps.outbox
@@ -169,7 +185,7 @@ export function createPhoneGateway(deps: {
   };
 
   /** The operations that act on a tracked session: the registry's own, the credential's, the device's and the chat's are handled before it. */
-  type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.launch' | 'chat.close' }>;
+  type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.launch' | 'chat.close' | 'chat.team' | 'chat.task' | 'team.resume' | 'task.seen' }>;
   /** Whether the operation needs the device's own check: an accept of a request that is not low, or a reply to an OMP (rpc) dialog, which is never low. */
   const needsAssertion = (msg: SessionOperation, s: Session): boolean => {
     if (msg.type === 'session.decide') return msg.decision !== 'deny' && riskOf(s)?.risk !== 'low';
@@ -337,7 +353,48 @@ export function createPhoneGateway(deps: {
     }
   };
 
+  /** Dispatches a local message and reads its answer: `ok` says which answers mean applied, the rest (and an `error`) are refusals. */
+  const ask = async (out: ClientMessage, ok: (m: ServerMessage) => boolean | undefined): Promise<Outcome> => {
+    let outcome: Outcome | undefined;
+    await deps.dispatch(out, m => {
+      if (outcome) return;
+      if (m.type === 'error') { outcome = outcomeOf(m.code); return; }
+      const verdict = ok(m);
+      if (verdict !== undefined) outcome = verdict ? { status: 'applied' } : { status: 'failed' };
+    });
+    return outcome ?? { status: 'applied' };
+  };
+
+  /** The turn's team card (roles spec §3.8): like a launch card, the device's check over the turn first. */
+  const chatTeam = async (deviceId: string, msg: Extract<PhoneOperation, { type: 'chat.team' }>): Promise<Outcome> => {
+    const turn = ownTurn(deviceId, msg.qid);
+    if (!turn?.team || !deps.teams) return { status: 'rejected', reason: 'unknown_session' };
+    if (turn.team.teamId) return { status: 'failed' };
+    if (deps.credential(deviceId) === null) return { status: 'rejected', reason: 'confirm_required' };
+    const refused = launchAssertionOutcome(deviceId, msg.qid, msg.assertion);
+    if (refused) return refused;
+    const rid = msg.op;
+    return ask({ type: 'team.launch', rid, qid: msg.qid }, m => (m.type === 'team.launched' && m.rid === rid ? true : m.type === 'team.failed' && m.rid === rid ? false : undefined));
+  };
+  const chatTask = async (deviceId: string, msg: Extract<PhoneOperation, { type: 'chat.task' }>): Promise<Outcome> => {
+    const turn = ownTurn(deviceId, msg.qid);
+    const card = turn?.tasks?.[msg.row];
+    if (!card || !deps.tasks) return { status: 'rejected', reason: 'unknown_session' };
+    if ((card.text?.length ?? 0) > TOOL_TEXT_MAX) return { status: 'rejected', reason: 'invalid' };
+    if (card.taskId) return { status: 'failed' };
+    const rid = msg.op;
+    return ask({ type: 'task.cmd', rid, by: LEDGE_GIVER, op: 'give', qid: msg.qid, row: msg.row }, m => (m.type === 'task.result' && m.rid === rid ? m.task !== undefined : undefined));
+  };
+
   const run = async (deviceId: string, msg: PhoneOperation): Promise<Outcome> => {
+    if (msg.type === 'chat.team') return chatTeam(deviceId, msg);
+    if (msg.type === 'chat.task') return chatTask(deviceId, msg);
+    if (msg.type === 'team.resume') return deps.teams ? ask({ type: 'team.resume', team: msg.team }, () => undefined) : { status: 'rejected', reason: 'unavailable' };
+    if (msg.type === 'task.seen') {
+      if (!deps.tasks) return { status: 'rejected', reason: 'unavailable' };
+      const rid = msg.op;
+      return ask({ type: 'task.cmd', rid, by: LEDGE_GIVER, op: 'seen', task: msg.task }, m => (m.type === 'task.result' && m.rid === rid ? m.task !== undefined : undefined));
+    }
     if (msg.type === 'credential.register') return register(deviceId, msg);
     // Applied here; the device is revoked by `write`, once the answer has left.
     if (msg.type === 'device.forget') return { status: 'applied' };
@@ -427,7 +484,8 @@ export function createPhoneGateway(deps: {
         return;
       case 'snapshot.request':
         follower(deviceId).subscribed = true;
-        return push(deviceId, snapshot(deviceId), 'snapshot');
+        push(deviceId, snapshot(deviceId), 'snapshot');
+        return teamsAndTasks(deviceId);
       case 'session.thread': {
         if (!live(msg.id)) return push(deviceId, { type: 'error', code: 'unknown_session', request: msg.type });
         return push(deviceId, { type: 'session.thread', id: msg.id, ...toPhoneThread(deps.thread(msg.id) ?? []) });
@@ -506,7 +564,7 @@ export function createPhoneGateway(deps: {
       log(`phone message refused: ${request ?? '?'}`);
       // A subscription to an endpoint off the list, or a launch the schema refuses (a row twice), is an operation the phone waits an answer for.
       const op = OperationIdSchema.safeParse((raw as { op?: unknown } | null | undefined)?.op);
-      if ((request === 'push.subscribe' || request === 'chat.launch' || request === 'chat.close') && op.success && approved(deviceId)) return push(deviceId, { type: 'operation.result', op: op.data, status: 'rejected', reason: 'invalid' });
+      if ((request === 'push.subscribe' || request === 'chat.launch' || request === 'chat.close' || request === 'chat.team' || request === 'chat.task' || request === 'team.resume' || request === 'task.seen') && op.success && approved(deviceId)) return push(deviceId, { type: 'operation.result', op: op.data, status: 'rejected', reason: 'invalid' });
       return push(deviceId, { type: 'error', code: 'invalid', ...(request !== undefined ? { request } : {}) });
     }
     const msg = parsed.data;
@@ -561,6 +619,23 @@ export function createPhoneGateway(deps: {
             return;
           case 'session.removed':
             return removed(m.id);
+          case 'context.prefs':
+            // The threshold rides on the snapshot's device: a change sends each following device a fresh one.
+            for (const [deviceId, f] of followers) if (f.subscribed) push(deviceId, snapshot(deviceId), 'snapshot');
+            return;
+          case 'team.updated': {
+            const teams = phoneTeams();
+            for (const [deviceId, f] of followers) if (f.subscribed) push(deviceId, { type: 'teams', teams }, 'teams');
+            return;
+          }
+          case 'task.updated': {
+            if (m.task.giver !== LEDGE_GIVER) return;
+            const task = phoneTask(m.task);
+            for (const [deviceId, f] of followers) if (f.subscribed) push(deviceId, { type: 'task.updated', task });
+            // Ledge's progress on its team moves with it.
+            if (m.task.team) { const teams = phoneTeams(); for (const [deviceId, f] of followers) if (f.subscribed) push(deviceId, { type: 'teams', teams }, 'teams'); }
+            return;
+          }
           case 'session.preview':
             for (const [deviceId, f] of followers) {
               if (f.watching === m.id) push(deviceId, { type: 'session.preview', id: m.id, lines: [...m.lines] }, `session.preview:${m.id}`);

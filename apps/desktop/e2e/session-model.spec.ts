@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { fakeDaemon, session, twoProjects } from './daemon';
+import { fakeDaemon, session, twoProjects, openAtelier } from './daemon';
 
 const CAN = { version: '0.13.0', install: 'npm' as const, systemd: true, archive: true, models: true, modelSwitch: true };
 const efforts = ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
@@ -12,7 +12,7 @@ const codex = [
 test('a live session changes model (#58 lot 2): the chip in the reply bar, the list above it, Schedule while the agent works', async ({ page }) => {
   const iris = session('iris', { name: 'Iris', tool: 'codex', project: 'ledge', cwd: '/w/ledge', state: 'working', model: 'gpt-6.1-sol', effort: 'medium' });
   const daemon = await fakeDaemon(page, [iris], { projects: twoProjects, daemon: CAN, models: { codex } });
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   await page.getByRole('button', { name: /^Iris,/ }).click();
   const chip = page.getByRole('button', { name: /^Model and effort : / });
   await expect(chip).toHaveAccessibleName('Model and effort : GPT-6.1-Sol · Medium');

@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import { DEFAULT_ISLAND_PREFS, type ClientMessage, type IslandPrefs } from '@ledge/protocol';
 import { test, expect } from './fixtures';
-import { eight, fakeDaemon, twoProjects } from './daemon';
+import { eight, fakeDaemon, twoProjects, openAtelier } from './daemon';
 
 const nav = (page: Page) => page.getByRole('navigation', { name: 'Settings sections' });
 const tab = (page: Page, name: string) => nav(page).getByRole('button', { name: new RegExp(`^${name}( |$)`) });
@@ -28,7 +28,7 @@ async function openIsland(page: Page) {
 
 test('Settings › Notch: every control sends island.set with the whole settings, « Setting saved » once the daemon broadcasts, the preview follows', async ({ page }) => {
   const daemon = await fakeDaemon(page, eight, { projects: twoProjects });
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   await openIsland(page);
   await expect(tab(page, 'Notch')).toHaveAttribute('aria-current', 'page');
   await expect(page.getByRole('note')).toContainText('The notch has no settings of its own any more.');
@@ -91,7 +91,7 @@ test('Settings › Notch: every control sends island.set with the whole settings
 
 test('« Show the notch » off: everything else is disabled, the preview is empty, the footer says « Notch hidden » and opens the section again', async ({ page }) => {
   const daemon = await fakeDaemon(page, eight, { projects: twoProjects });
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   await openIsland(page);
   await sw(page, 'Show the notch').click();
   await expect(page.locator('.toast', { hasText: 'Setting saved · Notch hidden' })).toBeVisible();
@@ -117,13 +117,13 @@ test('« Show the notch » off: everything else is disabled, the preview is empt
   await expect(heading(page)).toHaveText('Notch');
   await expect(sw(page, 'Show the notch')).toHaveAttribute('aria-checked', 'false');
   // Kept by the daemon: a reload still says it.
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   await expect(footerState(page)).toHaveText('Notch hidden');
 });
 
 test('the shortcut recorder: Edit, a key without Ctrl, Alt or ⊞ is refused, Escape cancels in place, Ctrl Alt K is sent and shown in Keyboard shortcuts', async ({ page }) => {
   const daemon = await fakeDaemon(page, eight, { projects: twoProjects });
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   await openIsland(page);
   await expect(recorder(page)).toHaveText('Ctrl Alt LEdit');
   await recorder(page).click();
@@ -152,7 +152,7 @@ test('the shortcut recorder: Edit, a key without Ctrl, Alt or ⊞ is refused, Es
 
 test('a daemon too old for the notch: no footer state, the section says so and a change is refused under its row', async ({ page }) => {
   const daemon = await fakeDaemon(page, eight, { projects: twoProjects, island: 'unknown' });
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   await expect(page.locator('aside.sidebar').getByText(/\d+ active/).first()).toBeVisible();
   await expect(footerState(page)).toHaveCount(0);
   await page.keyboard.press('Control+Comma');
@@ -166,7 +166,7 @@ test('a daemon too old for the notch: no footer state, the section says so and a
 test('a 520 × 700 window: Settings › Notch fits without a side scroll, the two screens stacked', async ({ page }) => {
   await page.setViewportSize({ width: 520, height: 700 });
   await fakeDaemon(page, eight, { projects: twoProjects });
-  await page.goto('/');
+  await page.goto('/'); await openAtelier(page);
   // The footer keeps the notch's state at this width; it opens the section.
   await expect(footerState(page)).toHaveText('Notch active');
   await expect(footerState(page)).toBeInViewport();

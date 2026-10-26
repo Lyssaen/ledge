@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type JSX, type MouseEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type DragEvent, type JSX, type MouseEvent, type ReactNode } from 'react';
 import type { Project, Projects, Session } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
@@ -9,7 +9,11 @@ import type { SessionMenuState } from '../manage/useSessionMenu';
 import type { SessionActions } from '../manage/useSessionActions';
 import { useScreenKeys } from '../nav/screenKeys';
 import type { NavAction, NavState } from '../nav/state';
-import { roomWidth, sceneOf, walkOrder } from './layout';
+import { roomTileWidth, sceneOf, walkOrder, type AtelierTable } from './layout';
+import { ProjectRoom } from './ProjectRoom';
+import { RoleChooser, type RoleChoice } from './RoleChooser';
+import type { TeamsApi } from '../teams/useTeamsApi';
+import { Modal } from '../shell/Modal';
 import { LedgeDesk } from './LedgeDesk';
 import { MessageLayer, useMessageClock } from './MessageLayer';
 import { ProjectTable } from './ProjectTable';
@@ -32,6 +36,12 @@ export interface AtelierProps {
   menu: SessionMenuState;
   /** More buttons at the end of the zoom bar (the detached Atelier's way out of full screen). */
   tools?: ReactNode;
+  /** The live teams and Ledge's tasks (atelier rooms spec): a table per team, drag a seat to join or leave. */
+  teams?: TeamsApi;
+  /** The archived sessions: a resting team's seats are drawn from them. */
+  archived?: readonly Session[];
+  /** Says what happened (a join, a leave) in the shell's toast. */
+  notify?: (text: string) => void;
 }
 
 /** The filtered project has no agent yet: say where its table will appear, and offer to start a session there. */
@@ -53,12 +63,41 @@ function EmptyProject({ project, dispatch }: { project: Project; dispatch: (a: N
 /** The atelier (observatory.tsx, atelier mode): Ledge's desk, a table per project with agents, the filtered project's
  *  empty state, « Sans projet », then the legend; the zoom bar beside it. The mosaic is fitted to the space, zoomed and panned
  *  (useAtelierView). J / K (or ↓ / ↑) walk the agents shown, Entrée opens the chosen one; + / − / 0 zoom, Space pans. */
-export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf, filing, actions, menu, tools }: AtelierProps): JSX.Element {
+export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf, filing, actions, menu, tools, teams, archived = [], notify }: AtelierProps): JSX.Element {
   const { t } = useI18n();
   const { reduced } = useMotionPreferences();
   const { place } = nav;
   const filter = place.kind === 'settings' ? place.back.project : place.project;
-  const scene = useMemo(() => sceneOf(order, projects, projectIdOf, filter), [order, projects, projectIdOf, filter]);
+  const lookup = useMemo(() => { const byId = new Map([...archived, ...sessions].map(s => [s.id, s])); return (id: string) => byId.get(id); }, [archived, sessions]);
+  const scene = useMemo(() => sceneOf(order, projects, projectIdOf, filter, teams?.teams ?? [], lookup), [order, projects, projectIdOf, filter, teams?.teams, lookup]);
+  // A seat carried to another table (§3.3): a team table asks the role, the room's common table leaves the team, another room files it there.
+  const carried = useRef<Session | null>(null);
+  const [overTable, setOverTable] = useState<string | null>(null);
+  const [choosing, setChoosing] = useState<RoleChoice | null>(null);
+  const [dissolving, setDissolving] = useState<{ id: string; name: string } | null>(null);
+  const seatDrag = teams ? (s: Session) => (s.offline || s.source === 'hook_only' ? undefined : {
+    draggable: true as const,
+    onDragStart(e: DragEvent) { e.dataTransfer.setData('text/plain', s.id); e.dataTransfer.effectAllowed = 'move'; carried.current = s; },
+    onDragEnd() { carried.current = null; setOverTable(null); }
+  }) : undefined;
+  const tableDrop = (table: AtelierTable, projectId: string) => (teams ? {
+    over: overTable === table.key,
+    onDragOver(e: DragEvent) { if (!carried.current) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setOverTable(table.key); },
+    onDragLeave(e: DragEvent) { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOverTable(o => (o === table.key ? null : o)); },
+    onDrop(e: DragEvent) {
+      const s = carried.current; carried.current = null; setOverTable(null);
+      if (!s) return;
+      e.preventDefault(); e.stopPropagation();
+      if (table.kind === 'team' && table.team) {
+        if (s.team === table.team.id) return;
+        setChoosing({ session: s, team: table.team, at: { x: e.clientX, y: e.clientY } });
+        return;
+      }
+      // Another room: filed in that project (the folder rule), and out of its team.
+      if (projectIdOf(s) !== projectId) filing.file(s, projectId);
+      if (s.team) { teams.leave(s.team, s.id); notify?.(t.teams.left(s.name)); }
+    }
+  } : undefined);
   const [seats] = useSeats();
   const walk = useMemo(() => walkOrder(scene, seats), [scene, seats]);
   const clock = useMessageClock(sessions);
@@ -79,7 +118,7 @@ export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf,
 
   // The mosaic's tiles, in render order: the tables, then the empty project or « Sans projet » (Ledge sits in the corner, outside it).
   const tiles = useMemo(() => [
-    ...scene.tables.map(t => roomWidth(t.mains.length, seats)), ...(scene.empty || scene.unassigned.length > 0 ? [ZONE_TILE] : [])
+    ...scene.rooms.map(r => roomTileWidth(r.tables, seats)), ...(scene.empty || scene.unassigned.length > 0 ? [ZONE_TILE] : [])
   ], [scene, seats]);
   const view = useAtelierView(tiles, [nav.helpers, nav.fullscreen, nav.chat, filter, sessions.length]);
   useScreenKeys(e => {
@@ -130,13 +169,20 @@ export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf,
     <div className="overview-scroll atelier" id="view-panel-atelier" role="region" aria-label={t.side.atelier} ref={view.scrollRef}>
       <div ref={view.floorRef} className="atelier-floor">
         <div ref={view.shellRef} className={`office-shell ${nav.paused ? 'office-paused' : ''} ${reduced ? 'office-reduced' : ''}`}>
-          <MessageLayer sessions={sessions} clock={clock} paused={nav.paused} reduced={reduced} dispatch={dispatch} />
+          <MessageLayer sessions={sessions} clock={clock} paused={nav.paused} reduced={reduced} dispatch={dispatch} tasks={teams?.tasks} />
           <LedgeDesk count={activeCount(sessions)} chat={nav.chat} paused={nav.paused} onClick={() => dispatch({ type: 'chat' })} />
-          <div className={`project-grid ${scene.tables.length === 1 ? 'focused' : ''}`}>
-            {scene.tables.map(({ project, mains }) => (
-              <ProjectTable key={project.id} project={project} mains={mains} order={order} helpers={nav.helpers} seats={seats} paused={nav.paused}
-                isolated={filter === project.id} focusedId={focusedId} seated={filing.seated} dispatch={dispatch} filing={filing}
-                actions={actions} menuId={menu.menu?.id ?? null} onMenu={menuAt} />
+          <div className={`project-grid ${scene.rooms.length === 1 ? 'focused' : ''}`}>
+            {scene.rooms.map(({ project, tables }) => (
+              <ProjectRoom key={project.id} project={project} tables={tables} width={roomTileWidth(tables, seats)} dispatch={dispatch}>
+                {tables.map(table => (
+                  <ProjectTable key={table.key} table={table} roomHasTeams={tables.some(x => x.kind === 'team')} project={project} mains={table.mains} order={order} helpers={nav.helpers} seats={seats} paused={nav.paused}
+                    isolated={filter === project.id} focusedId={focusedId} seated={filing.seated} dispatch={dispatch} filing={filing}
+                    actions={actions} menuId={menu.menu?.id ?? null} onMenu={menuAt}
+                    teamTasks={table.team ? teams?.tasks.filter(x => x.team === table.team!.id) : undefined}
+                    teamActions={teams && { resume: teams.resume, dissolve: (id, name) => setDissolving({ id, name }), tasks: () => dispatch({ type: 'ledge', tab: 'tasks' }) }}
+                    seatDrag={seatDrag} tableDrop={tableDrop(table, project.id)} />
+                ))}
+              </ProjectRoom>
             ))}
           </div>
           {scene.empty && <EmptyProject project={scene.empty} dispatch={dispatch} />}
@@ -144,6 +190,21 @@ export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf,
             filing={filing} projects={projects?.projects ?? []} onMenu={menuAt} />
         </div>
       </div>
+      {choosing && teams && (
+        <RoleChooser choice={choosing} teams={teams} onClose={() => setChoosing(null)}
+          onChoose={role => { teams.join(choosing.team.id, choosing.session.id, role); notify?.(t.teams.joined(choosing.session.name, choosing.team.name, role)); setChoosing(null); }} />
+      )}
+      {dissolving && teams && (
+        <Modal title={t.teams.dissolveTitle(dissolving.name)} role="alertdialog" className="confirm-modal" onClose={() => setDissolving(null)}>
+          <div className="confirm-content">
+            <p>{t.teams.dissolveBody}</p>
+            <div className="confirm-actions">
+              <Button autoFocus onClick={() => setDissolving(null)}>{t.manage.confirm.cancel}</Button>
+              <Button variant="primary" className="danger-btn" onClick={() => { teams.dissolve(dissolving.id); setDissolving(null); }}>{t.teams.dissolve}</Button>
+            </div>
+          </div>
+        </Modal>
+      )}
       <div className="workspace-legend">
         <span><i className="live-dot" />{t.atelier.legend.working}</span>
         <span><i className="approval-dot" />{t.atelier.legend.approval}</span>

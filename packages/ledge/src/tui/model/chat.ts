@@ -25,12 +25,17 @@ export function chatLines(turns: readonly ChatTurn[], live: { qid: string; text:
     if (turn.error) out.push([{ text: `  ${turn.error}`, color: C.red }]);
     else if (text) { out.push([{ text: '' }]); for (const l of wrap(text, width - 2)) out.push([{ text: '  ' }, { text: l, color: C.fg }]); }
     else out.push([{ text: `  ${t.ask.reading}`, color: C.faint }]);
+    // The team and task cards keep their outcome in the conversation once acted on (roles spec §3.8).
+    if (turn.team?.teamId && turn.team.launchedAt) out.push([{ text: `  ${g.team} ${turn.team.name} · ${t.ask.teamLaunched(clock(turn.team.launchedAt))}`, color: C.green }]);
+    for (const c of turn.tasks ?? []) if (c.taskId) out.push([{ text: `  ${c.title} · ${t.ask.given(c.ownerName ?? c.toName ?? c.to, c.taskId, t.ask.taskState[c.state ?? 'open'])}`, color: C.green }]);
   }
   return out;
 }
 
 /** A card the answer carries, to act on with ↵. */
 export type Card =
+  | { kind: 'team'; qid: string }
+  | { kind: 'task'; qid: string; rows: number[] }
   | { kind: 'launch'; qid: string; rows: number[] }
   | { kind: 'relay'; qid: string }
   | { kind: 'close'; qid: string; rows: number[] };
@@ -41,6 +46,9 @@ export function openCards(turns: readonly ChatTurn[]): Card[] {
   const out: Card[] = [];
   for (const turn of [...turns].reverse()) {
     if (!turn.answeredAt) continue;
+    if (turn.team && !turn.team.teamId) out.push({ kind: 'team', qid: turn.qid });
+    const tasks = (turn.tasks ?? []).map((c, i) => (c.taskId ? -1 : i)).filter(i => i >= 0);
+    if (tasks.length) out.push({ kind: 'task', qid: turn.qid, rows: tasks });
     const launch = proposalRows(turn).map((p, i) => (p.launchedId ? -1 : i)).filter(i => i >= 0);
     if (launch.length) out.push({ kind: 'launch', qid: turn.qid, rows: launch });
     if (turn.relay && turn.relay.status !== 'sent') out.push({ kind: 'relay', qid: turn.qid });

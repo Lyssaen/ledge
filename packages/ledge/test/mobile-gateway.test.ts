@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { PAD_TIERS, PLAIN_MAX, SNAPSHOT_BODY_MAX, TOPIC_MAX, PhoneServerMessageSchema, pendingKey, type ClientMessage, type MobileState, type Pending, type PhoneServerMessage, type ServerMessage, type Session, type ThreadItem } from '@ledge/protocol';
+import { PAD_TIERS, PLAIN_MAX, SNAPSHOT_BODY_MAX, TOPIC_MAX, PhoneServerMessageSchema, pendingKey, type ClientMessage, type MobileState, type Pending, type PhoneServerMessage, type ServerMessage, type Session, type Task, type Team, type ThreadItem } from '@ledge/protocol';
 import { hostname } from 'node:os';
 import { createPhoneGateway } from '../src/mobile/gateway.js';
 import { createChallengeStore } from '../src/mobile/challenges.js';
@@ -65,7 +65,7 @@ const flush = async () => { for (let i = 0; i < 5; i++) await new Promise(r => s
 const stops: Array<() => void> = [];
 afterEach(() => { for (const s of stops.splice(0)) s(); });
 
-function setup(opts: { boot?: string; dispatch?: (msg: ClientMessage, reply: (m: ServerMessage) => void) => Promise<void>; relayUrl?: string; chats?: Parameters<typeof createPhoneGateway>[0]['chats']; relay?: Parameters<typeof createPhoneGateway>[0]['relay']; launchChat?: Parameters<typeof createPhoneGateway>[0]['launchChat']; closeChat?: Parameters<typeof createPhoneGateway>[0]['closeChat']; onChatEnd?: Parameters<typeof createPhoneGateway>[0]['onChatEnd']; devices?: string[] } = {}) {
+function setup(opts: { boot?: string; dispatch?: (msg: ClientMessage, reply: (m: ServerMessage) => void) => Promise<void>; relayUrl?: string; chats?: Parameters<typeof createPhoneGateway>[0]['chats']; relay?: Parameters<typeof createPhoneGateway>[0]['relay']; launchChat?: Parameters<typeof createPhoneGateway>[0]['launchChat']; closeChat?: Parameters<typeof createPhoneGateway>[0]['closeChat']; teams?: () => Team[]; tasks?: () => Task[]; onChatEnd?: Parameters<typeof createPhoneGateway>[0]['onChatEnd']; devices?: string[] } = {}) {
   const fm = fakeMobile(opts.devices ?? ['dev1', 'dev2'], opts.relayUrl);
   const clock = { t: 1_000_000 };
   const challenges = createChallengeStore({ now: () => clock.t });
@@ -89,6 +89,8 @@ function setup(opts: { boot?: string; dispatch?: (msg: ClientMessage, reply: (m:
     ...(opts.launchChat ? { launchChat: opts.launchChat } : {}),
     ...(opts.closeChat ? { closeChat: opts.closeChat } : {}),
     ...(opts.onChatEnd ? { onChatEnd: opts.onChatEnd } : {}),
+    ...(opts.teams ? { teams: opts.teams, projectName: (id: string | null) => (id === 'repo' ? 'Repo' : null) } : {}),
+    ...(opts.tasks ? { tasks: opts.tasks } : {}),
     sessions: () => [...sessions.values()],
     session: id => sessions.get(id),
     thread: id => threads.get(id),
@@ -1778,5 +1780,99 @@ describe('phone gateway: close cards', () => {
     await flush();
     expect(g.got('dev1').at(-1)).toMatchObject({ type: 'operation.result', op, status: 'rejected', reason: 'invalid' });
     expect(calls).toEqual([]);
+  });
+});
+
+describe('phone gateway: teams and Ledge\'s tasks (ledge home spec §2.4)', () => {
+  const rp = { rpId: 'relay.test', origin: 'https://relay.test' };
+  const team = (extra: Partial<Team> = {}): Team => ({ id: 'team-a1b2', name: 'repo-roles', project: 'repo', machine: 'local', cwd: '/w/repo', state: 'active', seats: [{ role: 'build', sessionId: 'a' }, { role: 'qa', sessionId: null }], createdAt: T0, updatedAt: T0, ...extra });
+  const task = (id: string, extra: Partial<Task> = {}): Task => ({ id, title: `Tâche ${id}`, giver: 'ledge', giverName: 'Ledge', owner: 'a', ownerName: 'a', team: 'team-a1b2', state: 'taken', at: T0, updatedAt: new Date().toISOString(), log: [], ...extra });
+
+  it('after a snapshot, the teams (not the dissolved) with Ledge\'s progress, and Ledge\'s tasks only', async () => {
+    const tasks = [task('t000001', { state: 'done', result: 'fait' }), task('t000002'), task('t000003', { giver: 'b', giverName: 'b' })];
+    const g = setup({ teams: () => [team(), team({ id: 'team-dead', state: 'dissolved' })], tasks: () => tasks });
+    g.sessions.set('a', { ...g.sessions.get('a')!, role: 'build', team: 'team-a1b2' });
+    g.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    const got = g.got('dev1');
+    for (const m of got) expect(PhoneServerMessageSchema.safeParse(m).success).toBe(true);
+    expect(got.find(m => m.type === 'teams')).toEqual({ type: 'teams', teams: [{ id: 'team-a1b2', name: 'repo-roles', project: 'Repo', state: 'active', seats: [{ role: 'build', sessionId: 'a' }, { role: 'qa', sessionId: null }], done: 1, given: 2 }] });
+    const listed = got.find(m => m.type === 'tasks');
+    expect(listed?.type === 'tasks' && listed.tasks.map(x => [x.id, x.ownerRole, x.teamName, x.result])).toEqual([['t000001', 'build', 'repo-roles', 'fait'], ['t000002', 'build', 'repo-roles', undefined]]);
+    const snap = got.find(m => m.type === 'snapshot');
+    expect(snap?.type === 'snapshot' && snap.sessions.find(x => x.id === 'a')).toMatchObject({ role: 'build', team: 'team-a1b2' });
+  });
+
+  it('a daemon without teams sends neither', async () => {
+    const g = setup();
+    g.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    expect(g.got('dev1').some(m => m.type === 'teams' || m.type === 'tasks')).toBe(false);
+  });
+
+  it('team.resume and task.seen are dispatched; their answers make the outcome', async () => {
+    const g = setup({ teams: () => [team()], tasks: () => [], dispatch: async (msg, reply) => {
+      if (msg.type === 'task.cmd') reply(msg.task === 't000001' ? { type: 'task.result', rid: msg.rid, task: task('t000001', { seen: true }) } as ServerMessage : { type: 'task.result', rid: msg.rid, reason: 'unknown' } as ServerMessage);
+    } });
+    g.send('dev1', { type: 'team.resume', op: randomUUID(), team: 'team-a1b2' });
+    g.send('dev1', { type: 'task.seen', op: randomUUID(), task: 't000001' });
+    g.send('dev1', { type: 'task.seen', op: randomUUID(), task: 't0000ff' });
+    await flush();
+    expect(g.dispatched).toEqual([{ type: 'team.resume', team: 'team-a1b2' }, expect.objectContaining({ type: 'task.cmd', by: 'ledge', op: 'seen', task: 't000001' }), expect.objectContaining({ type: 'task.cmd', task: 't0000ff' })]);
+    expect(g.results('dev1').filter(r => r.status !== 'received').map(r => r.status)).toEqual(['applied', 'applied', 'failed']);
+  });
+
+  it('chat.team needs the device\'s check over its own turn; then team.launch with the qid, its outcome from team.launched', async () => {
+    const c = fakeChats();
+    const QA = randomUUID();
+    const card = { cwd: '/w/repo', project: 'repo', projectName: 'Repo', name: 'repo-roles', seats: [{ role: 'build', label: 'Build', tool: 'claude', autonomy: 'edits' }] };
+    c.turns.set('dev1', [{ qid: QA, question: 'q', askedAt: T0, steps: [], team: card, tasks: [{ to: '@build', title: 'Implémenter' }] } as never]);
+    const g = setup({ chats: c.chats, relayUrl: 'https://relay.test', teams: () => [], tasks: () => [], dispatch: async (msg, reply) => {
+      if (msg.type === 'team.launch') reply({ type: 'team.launched', rid: msg.rid, team: team() });
+      if (msg.type === 'task.cmd') reply({ type: 'task.result', rid: msg.rid, task: task('t91b0d4') } as ServerMessage);
+    } });
+    g.send('dev1', { type: 'chat.team', op: randomUUID(), qid: QA });
+    await flush();
+    expect(g.results('dev1').at(-1)).toMatchObject({ status: 'rejected', reason: 'confirm_required' });
+    const auth = softAuthenticator();
+    g.send('dev1', { type: 'confirm.prepare', purpose: 'register' });
+    await flush();
+    const reg = g.got('dev1').find(m => m.type === 'confirm.challenge');
+    if (reg?.type !== 'confirm.challenge') throw new Error('no challenge');
+    g.send('dev1', { type: 'credential.register', op: randomUUID(), credential: auth.create(rp, reg.challenge) });
+    await flush();
+    const before = g.got('dev1').length;
+    g.send('dev1', { type: 'confirm.prepare', purpose: 'launch', qid: QA });
+    await flush();
+    const ch = g.got('dev1').slice(before).find(m => m.type === 'confirm.challenge');
+    if (ch?.type !== 'confirm.challenge') throw new Error('no challenge');
+    const op = randomUUID();
+    g.send('dev1', { type: 'chat.team', op, qid: QA, assertion: auth.get(rp, ch.challenge, { counter: 1 }) });
+    await flush();
+    expect(g.results('dev1').at(-1)).toEqual({ type: 'operation.result', op, status: 'applied' });
+    expect(g.dispatched).toContainEqual({ type: 'team.launch', rid: op, qid: QA });
+    // The task card: given by Ledge, no device check needed (it only gives work to a seat already launched).
+    g.send('dev1', { type: 'chat.task', op: randomUUID(), qid: QA, row: 0 });
+    g.send('dev1', { type: 'chat.task', op: randomUUID(), qid: QA, row: 3 });
+    await flush();
+    expect(g.dispatched).toContainEqual(expect.objectContaining({ type: 'task.cmd', by: 'ledge', op: 'give', qid: QA, row: 0 }));
+    expect(g.results('dev1').filter(r => r.status !== 'received').slice(-2).map(r => r.status === 'rejected' ? r.reason : r.status).sort()).toEqual(['applied', 'unknown_session']);
+  });
+
+  it('team.updated and task.updated reach the following devices; another giver\'s task does not', async () => {
+    let forward: ((m: ServerMessage) => void) | undefined;
+    const tasks: Task[] = [];
+    const g = setup({ teams: () => [team()], tasks: () => tasks });
+    g.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    forward = (m: ServerMessage) => g.gw.forward(m);
+    const before = g.got('dev1').length;
+    forward({ type: 'team.updated', team: team({ state: 'resting' }) });
+    forward({ type: 'task.updated', task: task('t000004', { giver: 'b', giverName: 'b', team: undefined }) });
+    tasks.push(task('t000005'));
+    forward({ type: 'task.updated', task: task('t000005') });
+    await flush();
+    const after = g.got('dev1').slice(before).map(m => m.type);
+    expect(after).toEqual(['teams', 'task.updated', 'teams']);
   });
 });

@@ -1110,23 +1110,23 @@ describe('server', () => {
     it('a client that connects later gets the last preview right after the snapshot', async () => {
       store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim' }));
       srv.preview('a', ['old']); srv.preview('a', ['● latest']);
-      const r = await recorder(); await r.until(6);
-      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'projects', 'island', 'session.preview', 'chat.history']);
-      expect(r.got[4]).toEqual({ type: 'session.preview', id: 'a', lines: ['● latest'] });
+      const r = await recorder(); await r.until(8);
+      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'projects', 'teams', 'island', 'session.preview', 'chat.history', 'context.prefs']);
+      expect(r.got[5]).toEqual({ type: 'session.preview', id: 'a', lines: ['● latest'] });
       r.ws.terminate();
     });
     it('a snapshot.request gets the previews again after the snapshot', async () => {
       store.upsert(mk('a')); srv.preview('a', ['● hi']);
       const r = await recorder(); await r.until(3);
-      r.ws.send(JSON.stringify({ type: 'snapshot.request' })); await r.until(12);
-      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'projects', 'island', 'session.preview', 'chat.history', 'snapshot', 'machines', 'projects', 'island', 'session.preview', 'chat.history']);
+      r.ws.send(JSON.stringify({ type: 'snapshot.request' })); await r.until(16);
+      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'projects', 'teams', 'island', 'session.preview', 'chat.history', 'context.prefs', 'snapshot', 'machines', 'projects', 'teams', 'island', 'session.preview', 'chat.history', 'context.prefs']);
       r.ws.terminate();
     });
     it('a removed session drops its preview; a preview for an unknown session is ignored', async () => {
       store.upsert(mk('a')); srv.preview('a', ['● hi']); srv.preview('ghost', ['boo']);
       store.remove('a');
       const r = await recorder(); await r.until(1); await new Promise(res => setTimeout(res, 50));
-      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'projects', 'island', 'chat.history']);
+      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'projects', 'teams', 'island', 'chat.history', 'context.prefs']);
       store.upsert(mk('a'));
       r.ws.send(JSON.stringify({ type: 'snapshot.request' })); await r.until(8); await new Promise(res => setTimeout(res, 50));
       expect(r.got.filter(m => m.type === 'session.preview')).toEqual([]);
@@ -1476,7 +1476,7 @@ describe('server', () => {
         proposal: qid => (qid === 'q1' ? proposal : undefined),
         markLaunched(qid, id, emit) { marks.push(['launched', qid, id]); proposal = { ...proposal!, launchedId: id }; emit({ type: 'chat.history', turns: [] }); },
         markFailed(qid, message, emit) { marks.push(['failed', qid, message]); proposal = { ...proposal!, error: message }; emit({ type: 'chat.history', turns: [] }); },
-        relay: () => undefined, markRelay() {}, queuedRelays: () => [], close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}
+        relay: () => undefined, markRelay() {}, queuedRelays: () => [], close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}, team: () => undefined, markTeam() {}, task: () => undefined, markTask() {}, followTask() {}
       };
       return { chat, marks };
     }
@@ -1549,7 +1549,7 @@ describe('server', () => {
           proposal: (qid, row = 0) => (qid === 'q1' ? rows[row] : undefined),
           markLaunched(_qid, id, emit, row = 0) { marks.push(['launched', row, id]); rows[row] = { ...rows[row]!, launchedId: id }; emit({ type: 'chat.history', turns: [] }); },
           markFailed(_qid, message, emit, row = 0) { marks.push(['failed', row, message]); rows[row] = { ...rows[row]!, error: message }; emit({ type: 'chat.history', turns: [] }); },
-          relay: () => undefined, markRelay() {}, queuedRelays: () => [], close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}
+          relay: () => undefined, markRelay() {}, queuedRelays: () => [], close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}, team: () => undefined, markTeam() {}, task: () => undefined, markTask() {}, followTask() {}
         };
         return { chat, marks };
       }
@@ -1603,7 +1603,7 @@ describe('server', () => {
         relay: qid => (qid === 'q1' ? r : undefined),
         markRelay(_qid, patch, emit) { const { id, name, tool, text } = r!; r = { id, name, tool, text, ...patch }; emit({ type: 'chat.history', turns: [] }); },
         queuedRelays: () => (r?.status === 'queued' ? [{ qid: 'q1', relay: r, askedAt: '2026-10-12T08:00:00.000Z' }] : []),
-        close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}
+        close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}, team: () => undefined, markTeam() {}, task: () => undefined, markTask() {}, followTask() {}
       };
       return { chat, current: () => r };
     }
@@ -1941,7 +1941,7 @@ describe('update.daemon', () => {
       updater: { running: () => false, update: async (v, send) => { seen.push(v); send({ type: 'update.progress', version: v, step: 'installing' }); } } });
     const c = await connect({ port: srv.port });
     const snap = await c.next('snapshot');
-    expect(snap.daemon).toEqual({ version: '0.2.2', install: 'npm', systemd: true, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true });
+    expect(snap.daemon).toEqual({ version: '0.2.2', install: 'npm', systemd: true, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true, teams: true });
     c.send({ type: 'update.daemon', version: '0.3.0' });
     expect(await c.next('update.progress')).toMatchObject({ step: 'installing' });
     expect(seen).toEqual(['0.3.0']);
@@ -2205,7 +2205,7 @@ describe('island settings', () => {
     const s = await startServer({ store: new Store(), tmux: fakeTmux({}), port: 0 });
     const ws = await open(s.port); const got = collect(ws);
     await until(() => got.some(m => m.type === 'island'));
-    expect(got.map(m => m.type).slice(0, 4)).toEqual(['snapshot', 'machines', 'projects', 'island']);
+    expect(got.map(m => m.type).slice(0, 5)).toEqual(['snapshot', 'machines', 'projects', 'teams', 'island']);
     expect(got.find(m => m.type === 'island')).toEqual({ type: 'island', prefs: null });
     ws.close(); await s.close();
   });
@@ -2246,7 +2246,7 @@ describe('mobile access', () => {
     const m = await withMobile();
     const ws = await open(m.s.port); const got = collect(ws);
     await until(() => got.some(x => x.type === 'mobile'));
-    expect(got.map(x => x.type).slice(0, 5)).toEqual(['snapshot', 'machines', 'projects', 'island', 'mobile']);
+    expect(got.map(x => x.type).slice(0, 6)).toEqual(['snapshot', 'machines', 'projects', 'teams', 'island', 'mobile']);
     expect(got.find(x => x.type === 'mobile')).toMatchObject({ type: 'mobile', state: { enabled: false, account: null, link: { state: 'off' }, devices: [], pairings: [] } });
     const snap = got.find(x => x.type === 'snapshot');
     expect(snap?.type === 'snapshot' && snap.daemon?.mobile).toBe(true);
@@ -2602,7 +2602,7 @@ describe('close a session', () => {
         close: (qid, row) => (qid === 'q1' ? rows[row] : undefined),
         markClosed(_qid, row, how, emit) { marks.push(['closed', row, how]); rows[row] = { ...rows[row]!, closedAt: new Date().toISOString(), how }; emit({ type: 'chat.history', turns: [] }); },
         markCloseFailed(_qid, row, message, emit) { marks.push(['failed', row, message]); rows[row] = { ...rows[row]!, error: message }; emit({ type: 'chat.history', turns: [] }); },
-        idle: async () => {}
+        idle: async () => {}, team: () => undefined, markTeam() {}, task: () => undefined, markTask() {}, followTask() {}
       };
       return { chat, marks };
     }
@@ -2688,7 +2688,7 @@ describe('close a session', () => {
       relay: qid => (qid === 'q1' ? r : undefined),
       markRelay(_qid, patch, emit) { const { id, name, tool, text } = r!; r = { id, name, tool, text, ...patch }; emit({ type: 'chat.history', turns: [] }); },
       queuedRelays: () => (r?.status === 'queued' ? [{ qid: 'q1', relay: r, askedAt: '2026-10-12T08:00:00.000Z' }] : []),
-      close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}
+      close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}, team: () => undefined, markTeam() {}, task: () => undefined, markTask() {}, followTask() {}
     };
     const history = new History({ dir: tmpDir() });
     await closing({ 'ledge-a': ['Running…'] }, { history, chat });

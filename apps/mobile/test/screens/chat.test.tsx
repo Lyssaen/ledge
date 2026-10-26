@@ -32,12 +32,13 @@ describe('the tab bar', () => {
     expect(within(nav()).getAllByRole('link')).toHaveLength(2);
   });
 
-  it('has three tabs with device.chat, the chat one linking #/chat', () => {
+  it('has three tabs with device.chat, « Ledge » first linking #/chat', () => {
     const t = setup();
     t.deliver(snapshot([session('a')], 'Atelier', undefined, ON));
     const { unmount } = render(<Inbox store={t.store} />);
     expect(within(nav()).getAllByRole('link')).toHaveLength(3);
-    expect(within(nav()).getByRole('link', { name: 'Demander à Ledge' })).toHaveAttribute('href', '#/chat');
+    expect(within(nav()).getAllByRole('link')[0]).toHaveAccessibleName('Ledge');
+    expect(within(nav()).getByRole('link', { name: 'Ledge' })).toHaveAttribute('href', '#/chat');
     unmount();
     render(<Agents store={t.store} />);
     expect(within(nav()).getAllByRole('link')).toHaveLength(3);

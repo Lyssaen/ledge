@@ -13,6 +13,8 @@ import { LaunchCard } from './LaunchCard';
 import { CloseGroupCard } from './CloseGroupCard';
 import { RelayCard } from './RelayCard';
 import { ProjectCard } from './ProjectCard';
+import { TeamCard } from './TeamCard';
+import { TaskCard } from './TaskCard';
 import { groupSessions } from '@ledge/fleet';
 import type { DocumentReference } from '../documents/references';
 
@@ -43,11 +45,25 @@ export interface ChatViewProps {
   /** The project card's « Review the proposal » (lot 11): without it (the island) there is no card, the answer stands alone.
    *  `projectNamed`: the current name of the project an `addTo` designates, or undefined when none exists (then a new project). */
   onProject?: (qid: string) => void; projectNamed?: (name: string) => string | undefined;
+  /** The team and task cards (roles spec §3.8): drawn when the front gives their actions and their copy. `teamBusy` is the
+   *  turn whose team is being launched, `taskBusy` the task row being given. */
+  onLaunchTeam?: (qid: string) => void; onSaveTeam?: (qid: string) => void; onOpenTeam?: (teamId: string) => void;
+  onGiveTask?: (qid: string, row: number) => void; teamBusy?: string | null; taskBusy?: { qid: string; row: number } | null;
+  /** A launch time as the front words it. */
+  clock?: (iso: string) => string;
   /** Desktop: in the flow of its parent column (no absolute positioning, no fade), no Back button; Close stays in the header. */
   docked?: boolean;
   /** Hover or keyboard focus of a `ledge://session/<id>` link in an answer; null when it ends. */
   onAgentHover?: (id: string | null) => void;
-  inputRef?: Ref<HTMLInputElement>;
+  inputRef?: Ref<HTMLInputElement | HTMLTextAreaElement>;
+  /** Ledge's home view (ledge home spec §2.2): `pinned` stays at the top of the thread while the conversation scrolls under it
+   *  (« Le point »), `above` sits over the field (the suggestions), `footnote` under it; `multiline` makes the field a text
+   *  area (Enter sends, Shift + Enter breaks the line); `subtitle` replaces the header's second line; `hideHeader` leaves the
+   *  header to the front; `onFieldKey` sees the field's keys first (a mention list), true when it took the key. */
+  pinned?: ReactNode; above?: ReactNode; footnote?: ReactNode; multiline?: boolean; subtitle?: string; hideHeader?: boolean;
+  onFieldKey?: (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => boolean;
+  /** The field's text, when the front holds it (the suggestions and mentions write into it). */
+  draft?: string; onDraft?: (text: string) => void;
   theme?: 'dark' | 'light'; frozen?: boolean; reducedMotion?: boolean; now?: number; contentRef?: Ref<HTMLDivElement>;
 }
 
@@ -81,13 +97,15 @@ export function ChatView(p: ChatViewProps) {
   const { turns, live, visible, enterDelay = 120 } = p;
   const running = turns.find(x => x.answeredAt === undefined && x.error === undefined) ?? null;
   const busy = !!running;
-  const [text, setText] = useState('');
-  const field = useRef<HTMLInputElement | null>(null);
+  const [own, setOwn] = useState('');
+  const text = p.draft ?? own;
+  const setText = (v: string) => { if (p.onDraft) p.onDraft(v); else setOwn(v); };
+  const field = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
   const thread = useRef<HTMLDivElement>(null);
   const root = useRef<HTMLDivElement>(null);
-  const setField = (el: HTMLInputElement | null) => {
+  const setField = (el: HTMLInputElement | HTMLTextAreaElement | null) => {
     field.current = el;
-    const r = p.inputRef; if (typeof r === 'function') r(el); else if (r) (r as { current: HTMLInputElement | null }).current = el;
+    const r = p.inputRef; if (typeof r === 'function') r(el); else if (r) (r as { current: HTMLInputElement | HTMLTextAreaElement | null }).current = el;
   };
   const SESSION_LINK = 'a[href^="ledge://session/"]';
   const agentOf = (target: EventTarget | null) => {
@@ -115,23 +133,24 @@ export function ChatView(p: ChatViewProps) {
     <div ref={root} data-layer="chat" data-delay={p.docked ? undefined : enterDelay} inert={p.docked ? undefined : !visible} style={p.docked
       ? { height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }
       : { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', opacity: visible ? 1 : 0, pointerEvents: visible ? 'auto' : 'none', transition: transition([['opacity', visible ? 'fadeIn' : 'fadeOut', visible ? enterDelay : 0]]) }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: CHAT_HEADER_H, flexShrink: 0, boxSizing: 'border-box', padding: '0 8px', borderBottom: '1px solid var(--sidebar-border)' }}>
+      {!p.hideHeader && <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: CHAT_HEADER_H, flexShrink: 0, boxSizing: 'border-box', padding: '0 8px', borderBottom: '1px solid var(--sidebar-border)' }}>
         {!p.docked && p.showBack !== false && <Button variant="ghost" size="icon" aria-label={t.chat.back} title={t.chat.back} data-initial-focus onClick={p.onBack}><Icon {...ICONS.chevronLeft} /></Button>}
         {mascot(28, true)}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flexGrow: 1, minWidth: 0 }}>
           <span data-brand style={{ fontSize: 14, lineHeight: '18px', fontWeight: 650 }}>{t.chat.title}<span style={{ color: 'var(--sidebar-primary)' }}>.</span></span>
-          <span style={{ fontSize: 11, lineHeight: '14px', color: 'var(--muted-foreground)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.chat.subtitle(p.sessions.length, repos)}</span>
+          <span style={{ fontSize: 11, lineHeight: '14px', color: 'var(--muted-foreground)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.subtitle ?? t.chat.subtitle(p.sessions.length, repos)}</span>
         </div>
         {/* A new conversation forgets the day's turns and Claude session; offered between questions, once there is something to forget. */}
         <Button variant="ghost" size="icon" aria-label={t.chat.reset} title={t.chat.reset} disabled={busy || !!p.offline || turns.length === 0} onClick={p.onReset}><Icon {...ICONS.plus} /></Button>
         {p.headerExtra}
         <Button variant="ghost" size="icon" aria-label={t.chat.close} title={t.chat.close} onClick={p.onClose}><Icon {...ICONS.close} /></Button>
-      </div>
+      </div>}
       <div ref={thread} data-scroll className="ledge-scroll"
         onMouseOver={hover ? e => hover(agentOf(e.target)) : undefined}
         onMouseLeave={hover ? () => hover(null) : undefined}
         onFocus={hover ? e => { const id = agentOf(e.target); if (id) hover(id); } : undefined}
         onBlur={hover ? e => { if (!agentOf(e.relatedTarget)) hover(null); } : undefined} style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
+        {p.pinned && <div data-chat-pinned style={{ position: 'sticky', top: 0, zIndex: 2, background: 'var(--sidebar)', borderBottom: '1px solid var(--sidebar-border)' }}>{p.pinned}</div>}
         <div ref={p.contentRef} data-chat-content style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '14px 16px 10px' }}>
           {turns.length === 0 && (
             <div data-chat-empty style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 6, padding: '26px 4px 6px', color: 'var(--muted-foreground)', fontSize: 12.5, lineHeight: '18px' }}>
@@ -192,6 +211,14 @@ export function ChatView(p: ChatViewProps) {
                         model={turn.proposal.launchedId === undefined ? p.renderModel?.(turn.qid, turn.proposal.tool, p.launchingQid === turn.qid) : undefined}
                         onLaunch={() => p.onLaunchProposal?.(turn.qid)} onOpenSession={p.onOpenSession} onTerminal={id => p.onTerminal?.(id)} />
                     )}
+                    {turn.answeredAt !== undefined && turn.team && p.onLaunchTeam && t.chat.team && (
+                      <TeamCard team={turn.team} busy={p.teamBusy === turn.qid} disabled={!!p.offline || p.turnAvailable?.(turn.qid) === false || (!!p.teamBusy && p.teamBusy !== turn.qid)}
+                        onLaunch={() => p.onLaunchTeam!(turn.qid)} onSave={p.onSaveTeam && (() => p.onSaveTeam!(turn.qid))} onOpenTable={p.onOpenTeam} at={p.clock} />
+                    )}
+                    {turn.answeredAt !== undefined && turn.tasks && p.onGiveTask && t.chat.task && (
+                      <TaskCard tasks={turn.tasks} busyRow={p.taskBusy?.qid === turn.qid ? p.taskBusy.row : null} waitingTeam={!!turn.team && !turn.team.teamId}
+                        disabled={!!p.offline || p.turnAvailable?.(turn.qid) === false || (!!p.taskBusy && p.taskBusy.qid !== turn.qid)} onGive={row => p.onGiveTask!(turn.qid, row)} />
+                    )}
                     {turn.answeredAt !== undefined && turn.projectProposal && p.onProject && (
                       <ProjectCard proposal={turn.projectProposal} target={turn.projectProposal.addTo === undefined ? undefined : p.projectNamed?.(turn.projectProposal.addTo)} onReview={() => p.onProject!(turn.qid)} />
                     )}
@@ -211,13 +238,24 @@ export function ChatView(p: ChatViewProps) {
         </div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 12px', borderTop: '1px solid var(--sidebar-border)' }}>
+        {p.above}
         {p.offline && <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{p.offline}</span>}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: p.multiline ? 'flex-end' : 'center', gap: 8 }}>
+          {p.multiline ? (
+            <textarea ref={setField} data-chat-input className="ledge-field" aria-label={t.chat.ask} placeholder={t.chat.askPlaceholder} value={text} disabled={busy || !!p.offline} rows={Math.min(6, Math.max(2, text.split('\n').length))}
+              onChange={e => setText(e.target.value)} onKeyDown={e => {
+                if (p.onFieldKey?.(e)) return;
+                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(text); } else if (e.key === 'Escape') { e.stopPropagation(); e.currentTarget.blur(); }
+              }}
+              style={{ flex: 1, minWidth: 0, boxSizing: 'border-box', padding: '8px 10px', background: 'var(--well)', color: 'inherit', border: '1px solid var(--input)', borderRadius: 'var(--radius-md)', fontSize: 13, lineHeight: '19px', resize: 'none', fontFamily: 'inherit' }} />
+          ) : (
           <input ref={setField} data-chat-input type="text" className="ledge-field" aria-label={t.chat.ask} placeholder={t.chat.askPlaceholder} value={text} disabled={busy || !!p.offline}
-            onChange={e => setText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submit(text); } else if (e.key === 'Escape') { e.stopPropagation(); (e.target as HTMLInputElement).blur(); } }}
+            onChange={e => setText(e.target.value)} onKeyDown={e => { if (p.onFieldKey?.(e)) return; if (e.key === 'Enter') { e.preventDefault(); submit(text); } else if (e.key === 'Escape') { e.stopPropagation(); (e.target as HTMLInputElement).blur(); } }}
             style={{ flex: 1, minWidth: 0, height: 34, boxSizing: 'border-box', padding: '0 10px', background: 'var(--well)', color: 'inherit', border: '1px solid var(--input)', borderRadius: 'var(--radius-md)', fontSize: 13 }} />
+          )}
           <Button variant="primary" size="icon" aria-label={t.chat.send} title={t.chat.send} disabled={busy || !!p.offline || !text.trim()} onClick={() => submit(text)} style={{ width: 34, height: 34 }}><Icon {...ICONS.send} /></Button>
         </div>
+        {p.footnote}
       </div>
     </div>
   );

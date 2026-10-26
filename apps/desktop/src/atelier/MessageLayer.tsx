@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type JSX, type RefObject } from 'react';
 import { qualify, splitId } from '@ledge/fleet';
-import type { Session } from '@ledge/protocol';
+import { LEDGE_GIVER, type Session, type Task } from '@ledge/protocol';
 import { Icon } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import type { NavAction } from '../nav/state';
@@ -153,13 +153,73 @@ function Bubble({ sender, message, peerId, receiver, still, layer, dispatch }: {
   </>;
 }
 
+/** A task Ledge just gave (atelier rooms spec §3.3): the dotted line from Ledge's corner to its owner's seat, with its title,
+ *  as for a message between sessions. */
+function LedgeWire({ task, still, layer, dispatch }: { task: Task; still: boolean; layer: RefObject<HTMLDivElement | null>; dispatch: (a: NavAction) => void }): JSX.Element | null {
+  const { t } = useI18n();
+  const [geo, setGeo] = useState<Geo | null>(null);
+  useLayoutEffect(() => {
+    let raf = 0;
+    const measure = () => {
+      const shell = layer.current?.parentElement;
+      if (!shell) return;
+      const box = shell.getBoundingClientRect();
+      const z = box.width / (shell.offsetWidth || 1) || 1;
+      const pt = (el: HTMLElement): Point => { const r = el.getBoundingClientRect(); return { x: (r.left + r.width / 2 - box.left) / z, y: (r.top + 6 - box.top) / z }; };
+      const desk = shell.querySelector<HTMLElement>('.ledge-desk'), seat = seatOf(shell, task.owner);
+      if (!desk || !seat) setGeo(null);
+      else {
+        const a = pt(desk), b = pt(seat);
+        const path = `M ${a.x} ${a.y} Q ${(a.x + b.x) / 2} ${Math.min(a.y, b.y) - 70 - Math.abs(a.x - b.x) * 0.12} ${b.x} ${b.y}`;
+        setGeo(g => (g && g.path === path ? g : { a, b, path }));
+      }
+      raf = requestAnimationFrame(measure);
+    };
+    measure();
+    return () => cancelAnimationFrame(raf);
+  }, [layer, task.owner]);
+  if (!geo) return null;
+  return <>
+    <svg className="exchange-wire ledge-wire" aria-hidden="true"><path d={geo.path} /></svg>
+    {!still && (
+      <span className="exchange-envelope" aria-hidden="true" style={{ offsetPath: `path('${geo.path}')` } as CSSProperties}>
+        <svg viewBox="0 0 26 19"><rect className="exchange-envelope-body" x="1" y="1" width="24" height="17" rx="2.5" /><path className="exchange-envelope-flap" d="M1.8 2.4 13 10.6 24.2 2.4" /></svg>
+      </span>
+    )}
+    <button type="button" className="exchange-bubble ledge-bubble" style={{ left: geo.a.x, top: geo.a.y - 12 }}
+      onClick={() => dispatch({ type: 'ledge', tab: 'tasks', task: task.id })} aria-label={t.atelier.ledgeTaskLabel(task.ownerName, task.title)}>
+      <span className="exchange-bubble-to"><Icon d={SHELL_ICONS.mail} size={11} />{t.atelier.messageTo(task.ownerName)}</span>
+      <span className="exchange-bubble-text">{task.title}</span>
+    </button>
+  </>;
+}
+
+/** The tasks Ledge gave in the last 5 s (their first sight counts when their date is ahead of the clock), and a render at the moment the last one ends. */
+function useRecentLedgeTasks(tasks: readonly Task[]): Task[] {
+  const seen = useRef(new Map<string, number>());
+  const [, setTick] = useState(0);
+  const now = Date.now();
+  const recent = tasks.filter(x => {
+    if (x.giver !== LEDGE_GIVER || x.log.length > 1) return false;
+    if (!seen.current.has(x.id)) seen.current.set(x.id, now);
+    const at = Math.min(Date.parse(x.at), seen.current.get(x.id)!);
+    return now - at < BUBBLE_MS;
+  });
+  const ids = recent.map(x => x.id).join(',');
+  useEffect(() => { if (!ids) return; const t = setTimeout(() => setTick(k => k + 1), BUBBLE_MS); return () => clearTimeout(t); }, [ids]);
+  return recent;
+}
+
 export interface MessageLayerProps {
   sessions: readonly Session[]; clock: MessageClock; paused: boolean; reduced: boolean; dispatch: (a: NavAction) => void;
+  /** The tasks Ledge gave: one just given draws its line from Ledge's corner to its owner's seat. */
+  tasks?: readonly Task[];
 }
 
 /** A layer over the atelier, the shell's first child: one bubble per session whose last message is less than 5 s old. */
-export function MessageLayer({ sessions, clock, paused, reduced, dispatch }: MessageLayerProps): JSX.Element {
+export function MessageLayer({ sessions, clock, paused, reduced, dispatch, tasks = [] }: MessageLayerProps): JSX.Element {
   const layer = useRef<HTMLDivElement>(null);
+  const given = useRecentLedgeTasks(tasks);
   const byId = useMemo(() => new Map(sessions.map(s => [s.id, s])), [sessions]);
   const shown = sessions.filter(s => isRecent(s, clock, BUBBLE_MS));
   return (
@@ -170,6 +230,7 @@ export function MessageLayer({ sessions, clock, paused, reduced, dispatch }: Mes
         const receiver = (peerId !== undefined ? byId.get(peerId)?.name : undefined) ?? m.to;
         return <Bubble key={`${s.id}\n${m.id}`} sender={s} message={m} peerId={peerId} receiver={receiver} still={paused || reduced} layer={layer} dispatch={dispatch} />;
       })}
+      {given.map(x => <LedgeWire key={x.id} task={x} still={paused || reduced} layer={layer} dispatch={dispatch} />)}
     </div>
   );
 }

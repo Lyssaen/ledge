@@ -174,13 +174,15 @@ beforeEach(() => localStorage.clear());
 afterEach(async () => { cleanup(); await closeDaemons(); });
 
 describe('putting an agent away', () => {
-  it('only the cards of No project are draggable, with their grip', async () => {
+  it('the cards of No project are draggable, with their grip; so are the seats, to another table (atelier rooms spec §3.3)', async () => {
     await boot();
     const card = document.querySelector('.unassigned-card')!;
     expect(card).toHaveAttribute('draggable', 'true');
     expect(card).toHaveAttribute('title', 'Drag onto a table to move it there');
     expect(card.querySelector('.drag-grip')).not.toBeNull();
-    expect(document.querySelectorAll('[draggable="true"]')).toHaveLength(1);
+    const seats = [...document.querySelectorAll('.agent-seat[draggable="true"]')];
+    expect(seats.length).toBeGreaterThan(0);
+    expect(document.querySelectorAll('[draggable="true"]')).toHaveLength(1 + seats.length);
   });
 
   it('dropping Kit on a table writes the rule; Kit sits there once the daemon broadcasts, once only', async () => {

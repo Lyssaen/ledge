@@ -40,6 +40,18 @@ export function toPhoneTurn(t: ChatTurn): PhoneChatTurn {
     const r = t.relay;
     out.relay = { id: r.id, name: r.name, tool: r.tool, text: r.text, ...(r.status ? { status: r.status } : {}), ...(r.sentAt ? { sentAt: r.sentAt } : {}), ...(r.error !== undefined ? { failed: true as const } : {}) };
   }
+  // The team and task cards (roles spec §3.8), without their folder; a detail too long for the phone leaves its row out of nothing:
+  // the card is all or nothing, as for the session card.
+  if (t.team) {
+    const tm = t.team;
+    out.team = { project: (tm.projectName ?? tm.project).slice(0, 80), name: tm.name.slice(0, 60), ...(tm.template ? { template: tm.template } : {}),
+      seats: tm.seats.map(x => ({ role: x.role, label: x.label.slice(0, 40), tool: x.tool, ...(x.model ? { model: x.model } : {}), ...(x.effort ? { effort: x.effort } : {}), ...(x.autonomy ? { autonomy: x.autonomy } : {}) })),
+      ...(tm.teamId ? { teamId: tm.teamId } : {}), ...(tm.launchedAt ? { launchedAt: tm.launchedAt } : {}), ...(tm.error !== undefined ? { failed: true as const } : {}) };
+  }
+  if (t.tasks && !t.tasks.some(c => (c.text?.length ?? 0) > TOOL_TEXT_MAX)) {
+    out.tasks = t.tasks.map(c => ({ to: c.to, ...(c.toName ? { toName: c.toName } : {}), title: c.title, ...(c.text ? { text: c.text } : {}),
+      ...(c.taskId ? { taskId: c.taskId } : {}), ...(c.ownerName ? { ownerName: c.ownerName } : {}), ...(c.state ? { state: c.state } : {}), ...(c.error !== undefined ? { failed: true as const } : {}) }));
+  }
   if (t.closes) {
     out.closes = t.closes.map(c => ({
       id: c.id, name: c.name, tool: c.tool, ...(c.how ? { how: c.how } : {}), ...(c.closedAt ? { closedAt: c.closedAt } : {}), ...(c.error !== undefined ? { failed: true as const } : {})

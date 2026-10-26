@@ -35,13 +35,15 @@ export function NoticeLine({ item, peer, onOpenPeer }: NoticeLineProps): JSX.Ele
       title = `${tn.messages(count, to)} ${tn.status[item.status ?? 'unknown'](count > 1)}`;
       break;
     }
-    default: title = tn.other;
+    default: title = item.task ? tn.taskFrom(name) : item.team ? tn.teamJoined : tn.other;
   }
+  // A task Ledge or a teammate gave (roles spec §3.5), or a team joined: « TÂCHE » / « ÉQUIPE » instead of « Avis automatique ».
+  const kicker = item.task ? tn.task : item.team ? tn.team : tn.kicker;
   const warn = item.notice === 'unavailable' || item.notice === 'expired' || (item.notice === 'delivery' && WARN.has(item.status ?? ''));
   return (
-    <div className={cls('notice-line', warn && 'warn')} data-notice={item.id} role="note" title={item.text}>
+    <div className={cls('notice-line', warn && 'warn', item.task && 'notice-task', item.team && 'notice-team')} data-notice={item.id} role="note" title={item.text}>
       <div className="notice-head">
-        <span className="notice-kicker"><Icon d={SHELL_ICONS.mail} size={12} />{tn.kicker}</span>
+        <span className="notice-kicker"><Icon d={SHELL_ICONS.mail} size={12} />{kicker}</span>
         <span className="notice-title">{title}</span>
         {peer && item.notice !== 'delivery' && <><span className="spacer" /><button type="button" className="message-link" onClick={onOpenPeer}>{tn.open(peer.name)}<Icon d={ICONS.chevronRight.d} size={12} /></button></>}
       </div>

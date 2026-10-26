@@ -4,10 +4,16 @@ import { href } from '../router';
 const ICON = 'size-5 fill-none stroke-current [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:1.6]';
 const tab = (on: boolean) => `flex min-h-12 items-center justify-center gap-2 rounded-control text-[13px] ${on ? 'bg-white/[0.03] text-fg' : 'text-muted'}`;
 
-/** « À traiter » and « Agents »; `count` is the number of requests waiting. */
+/** « Ledge » first when the PC offers the chat (ledge home spec §2.4), then « À traiter » and « Agents »; `count` is what waits there. */
 export function TabBar({ count, active = 'inbox', chat = false }: { count: number; active?: 'inbox' | 'agents' | 'chat'; chat?: boolean }) {
   return (
     <nav aria-label={copy.nav.label} className={`grid flex-none ${chat ? 'grid-cols-3' : 'grid-cols-2'} border-t border-line bg-bg pt-2 pb-3`}>
+      {chat && (
+        <a href={href({ name: 'chat' })} aria-current={active === 'chat' ? 'page' : undefined} className={`${tab(active === 'chat')} px-1 text-center leading-tight`}>
+          <svg className={ICON} viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
+          {copy.nav.chat}
+        </a>
+      )}
       <a href={href({ name: 'inbox' })} aria-current={active === 'inbox' ? 'page' : undefined} className={tab(active === 'inbox')}>
         <svg className={ICON} viewBox="0 0 24 24" aria-hidden="true"><path d="M22 12h-6l-2 3h-4l-2-3H2" /><path d="M5.5 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.7 4H7.3a2 2 0 0 0-1.8 1.1Z" /></svg>
         {copy.nav.inbox}
@@ -17,12 +23,6 @@ export function TabBar({ count, active = 'inbox', chat = false }: { count: numbe
         <svg className={ICON} viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v13H9l-5 4z" /></svg>
         {copy.nav.agents}
       </a>
-      {chat && (
-        <a href={href({ name: 'chat' })} aria-current={active === 'chat' ? 'page' : undefined} className={`${tab(active === 'chat')} px-1 text-center leading-tight`}>
-          <svg className={ICON} viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
-          {copy.nav.chat}
-        </a>
-      )}
     </nav>
   );
 }

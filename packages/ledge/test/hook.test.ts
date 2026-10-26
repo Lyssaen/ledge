@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { createServer } from 'node:net';
 import { spawnSync } from 'node:child_process';
 import { formatWho } from '../src/cli/who.js';
-import { mapClaudeHook, mapHook, mapCursorHook, runHook, codexLedgeId, underCodexDaemon, identityContext, REPLY_MAX, INPUT_MAX, toolOutput, trimInput } from '../src/cli/hook.js';
+import { mapClaudeHook, mapHook, mapCursorHook, runHook, codexLedgeId, underCodexDaemon, identityContext, tasksContext, REPLY_MAX, INPUT_MAX, toolOutput, trimInput } from '../src/cli/hook.js';
 import type { Session } from '@ledge/protocol';
 import { startServer } from '../src/daemon/server.js';
 import { Store } from '../src/daemon/store.js';
@@ -516,6 +516,33 @@ describe('session identity (SessionStart additionalContext)', () => {
       expect(out.hookEventName).toBe('SessionStart');
       expect(out.additionalContext).toContain('Tu es Pim, projet ledge, branche main');
     } finally { await srv.close(); delete process.env.LEDGE_NAME; }
+  });
+
+  it('after a compaction it is told the open tasks it holds (not those it gave, nor closed ones), and the relief it is (context handover §2)', async () => {
+    const store = new Store();
+    store.upsert(pim({ relieves: { id: '1b2c', name: 'Otto', at } }));
+    store.upsert(pim({ id: '9d8e', name: 'Bix', tmuxSession: 'ledge-9d8e' }));
+    const srv = await startServer({ store, tmux: {} as never, port: 0 });
+    const c = await connect({ port: srv.port });
+    const give = async (by: string, to: string, title: string) => { c.send({ type: 'task.cmd', rid: title, by, op: 'give', to, title }); return (await c.next('task.result')).task!; };
+    process.env.LEDGE_SESSION = '7f3a'; process.env.LEDGE_NAME = 'Pim';
+    try {
+      const mine = await give('9d8e', 'Pim', 'Tests de roles.ts');
+      const done = await give('9d8e', 'Pim', 'Déjà fini');
+      c.send({ type: 'task.cmd', rid: 'd', by: '7f3a', op: 'done', task: done.id }); await c.next('task.result');
+      await give('7f3a', 'Bix', 'Relire le hook');
+      const out = context(await runHook('SessionStart', JSON.stringify({ session_id: 'u-1', cwd: '/w/ledge-wt', source: 'compact' }), { port: srv.port }));
+      expect(out.additionalContext).toContain('Tes tâches en cours (elles sont gardées par Ledge, pas dans ta conversation) :');
+      expect(out.additionalContext).toContain(`- ${mine.id} · ouverte · « Tests de roles.ts » · confiée par Bix`);
+      expect(out.additionalContext).not.toContain('Déjà fini');
+      expect(out.additionalContext).not.toContain('Relire le hook');
+      expect(out.additionalContext).toContain('Tu as pris la relève de Otto, dont le contexte était plein : relis son bilan avec `ledge handover show`.');
+    } finally { await c.close(); await srv.close(); delete process.env.LEDGE_NAME; }
+  });
+
+  it('a session without open tasks gets no tasks block', () => {
+    expect(tasksContext([])).toBeUndefined();
+    expect(identityContext({ name: 'Pim', tool: 'claude', project: 'ledge', cwd: '/w' })).not.toContain('Tes tâches en cours');
   });
 
   it('without a daemon, the name comes from LEDGE_NAME and the project from the folder', async () => {

@@ -21,6 +21,7 @@ import { Attention } from './Attention';
 import { attentionOf, treeModel } from './model';
 import { loadSidebarPrefs, saveSidebarPrefs } from './prefs';
 import { Tree } from './Tree';
+import { closedLedgeTasks, nearLimit, type TeamsApi } from '../../teams/useTeamsApi';
 
 /** The explorer shell: Session, Ask Ledge, Atelier, Your turn, the project tree, Archives, then the foot. */
 export function Sidebar(p: {
@@ -36,6 +37,10 @@ export function Sidebar(p: {
   onAsk(text: string): void;
   onTerminal(s: Session): void;
   revealArchives: number; revealCurrent: number;
+  /** Ledge's entry's live line (ledge home spec §2.1): the closed tasks Ledge gave not put away, and the active teams. */
+  ledge?: { closedTasks: number; activeTeams: number };
+  /** The live teams and Ledge's tasks: the tree's team rows (atelier rooms spec §3.4), « À toi »'s closed Ledge tasks (§3.7). */
+  teams?: TeamsApi;
 }): JSX.Element {
   const { t } = useI18n();
   const theme = useTheme();
@@ -46,8 +51,10 @@ export function Sidebar(p: {
   const { place } = p.nav;
   const base = place.kind === 'settings' ? place.back : place;
   const current = base.kind === 'session' ? base.id : null;
-  const groups = useMemo(() => treeModel(p.sessions, p.projects, p.projectIdOf), [p.sessions, p.projects, p.projectIdOf]);
+  const groups = useMemo(() => treeModel(p.sessions, p.projects, p.projectIdOf, p.teams?.teams ?? []), [p.sessions, p.projects, p.projectIdOf, p.teams?.teams]);
   const attn = useMemo(() => attentionOf(p.sessions, p.waits), [p.sessions, p.waits]);
+  // Sessions near their context limit, less those put away with « Plus tard » (context handover spec §3.2).
+  const near = useMemo(() => nearLimit(p.sessions, p.teams?.later, p.teams?.near), [p.sessions, p.teams?.later, p.teams?.near]);
   const root = useRef<HTMLElement>(null);
   const keys = useRef({ attn, current, dispatch: p.dispatch, quiet: false });
   keys.current = { attn, current, dispatch: p.dispatch, quiet: p.nav.modal !== null || p.nav.chat || p.actions.pending !== null };
@@ -86,22 +93,23 @@ export function Sidebar(p: {
   const active = activeCount(p.sessions);
   const submitAsk = () => {
     const q = ask.trim();
-    p.dispatch({ type: 'chat', open: true });
+    p.dispatch({ type: 'ledge', tab: 'conversation' });
     if (q) { p.onAsk(q); setAsk(''); }
   };
+  const homeOn = place.kind === 'home';
   return (
     <aside ref={root} className={cls('sidebar st', prefs.dense && 'st-dense')} aria-label={t.side.label}>
-      <div className={cls('st-ask', p.nav.chat && 'on')} onClick={e => {
-        const hit = e.target;
-        if (hit instanceof Element && hit.closest('button, input')) return;
-        e.currentTarget.querySelector<HTMLInputElement>('[data-ask-input]')?.focus();
-      }}>
-        <button type="button" tabIndex={-1} className="st-mascot" aria-label={t.side.openChat} title={t.side.openChat} onClick={e => { e.preventDefault(); p.dispatch({ type: 'chat', open: true }); }}>
-          <ResidentMascot size={20} theme={theme} paused={p.nav.paused} reducedMotion={reduced} />
+      <div className={cls('st-ask', 'st-ledge', (homeOn || p.nav.chat) && 'on')}>
+        <button type="button" className="st-ledge-entry" aria-current={homeOn ? 'page' : undefined} aria-label={t.side.ledgeHome} title={t.side.ledgeHome} onClick={() => p.dispatch({ type: 'ledge' })}>
+          <span className="st-mascot"><ResidentMascot size={22} theme={theme} paused={p.nav.paused} reducedMotion={reduced} /></span>
+          <span className="st-ledge-names">
+            <span className="st-ledge-brand">Ledge<span className="brand-dot">.</span></span>
+            <small className="st-ledge-line">{t.side.ledgeLine(attn.length + (p.ledge?.closedTasks ?? 0) + near.length, p.ledge?.activeTeams ?? 0)}</small>
+          </span>
+          <Kbd>/</Kbd>
         </button>
         <input data-ask-input="" type="text" aria-label={t.side.ask} placeholder={t.side.askPlaceholder} value={ask} onChange={e => setAsk(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submitAsk(); } else if (e.key === 'Escape') { e.stopPropagation(); e.currentTarget.blur(); } }} />
-        <Kbd>/</Kbd>
       </div>
       <nav className="st-views" aria-label={t.side.views}>
         <button type="button" className={atelierOn ? 'on' : undefined} aria-current={atelierOn ? 'page' : undefined} onClick={() => p.dispatch({ type: 'home' })}>
@@ -112,6 +120,9 @@ export function Sidebar(p: {
         <Attention items={attn} current={current} projectOf={projectOf} paused={p.nav.paused}
           onOpen={(id, helper, focus) => p.dispatch({ type: 'open', id, ...(helper !== undefined ? { helper } : {}), ...(focus !== undefined ? { focus } : {}) })}
           onDecide={(s, ok) => { p.decisions.decide(s, ok ? 'accept' : 'deny'); }}
+          ledgeTasks={p.teams ? closedLedgeTasks(p.teams.tasks) : []} onSeeTask={id => p.dispatch({ type: 'ledge', tab: 'tasks', task: id })} onDismissTask={id => p.teams?.seen(id)}
+          near={near} onHandover={id => { void p.teams?.handover(id); }}
+          onLater={id => { const s = p.sessions.find(x => x.id === id); if (s) p.teams?.putLater(s); }}
           onMenu={(id, e) => {
             const host = e.currentTarget instanceof HTMLElement ? e.currentTarget : undefined;
             p.menu.open(id, { x: e.clientX, y: e.clientY }, host);
@@ -128,7 +139,7 @@ export function Sidebar(p: {
             }}
             onArchive={ids => p.actions.request('archive', ids)} onDelete={ids => p.actions.request('delete', ids)} onTerminal={p.onTerminal}
             onToggleHide={() => setPrefs(v => ({ ...v, hideDone: !v.hideDone }))} onToggleDense={() => setPrefs(v => ({ ...v, dense: !v.dense }))}
-            onNewProject={() => p.dispatch({ type: 'modal', modal: { kind: 'project' } })} />
+            onNewProject={() => p.dispatch({ type: 'modal', modal: { kind: 'project' } })} tasks={p.teams?.tasks} />
           {p.filing.dragging && <p className="st-help">{t.side.dropHelp(p.filing.dragging.name)}</p>}
         </section>
         <Archives archived={p.archived} current={current} projectName={projectName} reveal={p.revealArchives}
