@@ -723,7 +723,12 @@ export const en: Messages = {
       seeTasks: 'See the tasks', pinned: 'Current task', autonomy: { ask: 'asks', edits: 'edits without asking', auto: 'autonomous' }
     },
     notice: {
-      task: 'TASK', taskFrom: (name: string) => `Task from ${name}`, team: 'TEAM', teamJoined: 'Team joined',
+      task: 'TASK', taskFrom: (name: string) => `Task from ${name}`, seeTask: 'See the task',
+      taskOut: {
+        give: n => `Task given to ${n}`, pass: n => `Task passed to ${n}`, done: n => `Task handed back to ${n} (done)`,
+        refuse: n => `Task refused, handed back to ${n}`, cancel: n => `Task cancelled for ${n}`
+      },
+      team: 'TEAM', teamJoined: 'Team joined',
       kicker: 'Automated notice', other: 'Automated notice between sessions', anotherSession: 'another session',
       idle: (n, time) => `${n} finished${time ? ` · ${time}` : ''}`,
       exited: (n, time) => `Session ${n} closed${time ? ` · ${time}` : ''}`,

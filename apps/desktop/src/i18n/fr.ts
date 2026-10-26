@@ -758,7 +758,13 @@ export const fr = {
       seeTasks: 'Voir les tâches', pinned: 'Tâche en cours', autonomy: { ask: 'demande', edits: 'modifie sans demander', auto: 'autonome' }
     },
     notice: {
-      task: 'TÂCHE', taskFrom: (name: string) => `Tâche de ${name}`, team: 'ÉQUIPE', teamJoined: 'Équipe rejointe',
+      task: 'TÂCHE', taskFrom: (name: string) => `Tâche de ${name}`, seeTask: 'Voir la tâche',
+      /** The sender's card of a task it handed over (issue #92), by what it did. */
+      taskOut: {
+        give: (n: string) => `Tâche confiée à ${n}`, pass: (n: string) => `Tâche passée à ${n}`, done: (n: string) => `Tâche rendue à ${n} (terminée)`,
+        refuse: (n: string) => `Tâche refusée, rendue à ${n}`, cancel: (n: string) => `Tâche annulée pour ${n}`
+      },
+      team: 'ÉQUIPE', teamJoined: 'Équipe rejointe',
       kicker: 'Avis automatique', other: 'Avis automatique entre sessions', anotherSession: 'une autre session',
       idle: (n: string, time?: string) => `${n} a terminé${time ? ` · ${time}` : ''}`,
       exited: (n: string, time?: string) => `Session ${n} fermée${time ? ` · ${time}` : ''}`,
