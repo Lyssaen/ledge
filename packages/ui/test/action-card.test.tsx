@@ -116,6 +116,22 @@ describe('the action card (#94): a plan', () => {
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Apply all (2)' }));
   });
 
+  it('Ignore clicked here: once ignored, the focus goes to Review', () => {
+    const p = card(plan());
+    const ignore = screen.getByRole('button', { name: 'Ignore' });
+    ignore.focus(); fireEvent.click(ignore);
+    p.rerender(<ChatCopyProvider value={{ ...copy, chat: { ...copy.chat, action: actionCopy } }}><ActionCard rows={plan()} ignoredAt={AT} {...p} /></ChatCopyProvider>);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Review' }));
+  });
+
+  it('Review clicked here: once open again, the focus goes to the card\'s first button', () => {
+    const p = card(plan(), { ignoredAt: AT });
+    const review = screen.getByRole('button', { name: 'Review' });
+    review.focus(); fireEvent.click(review);
+    p.rerender(<ChatCopyProvider value={{ ...copy, chat: { ...copy.chat, action: actionCopy } }}><ActionCard rows={plan()} {...p} /></ChatCopyProvider>);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Change' }));
+  });
+
   it('ignored elsewhere while confirming: the focus goes to Review', () => {
     const p = card(plan());
     fireEvent.click(screen.getByRole('button', { name: 'Apply all (3)…' }));

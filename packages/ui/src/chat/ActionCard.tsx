@@ -93,6 +93,14 @@ export function ActionCard(p: ActionCardProps) {
       ?? first(box.current.querySelector('[data-action-foot]')) ?? first(box.current);
     back?.focus();
   }, [confirming]);
+  // Ignore or Review pressed here: the card folds or opens again, the button goes; the focus follows to its first button.
+  const folding = useRef(false);
+  const ignored = p.ignoredAt !== undefined;
+  useEffect(() => {
+    if (!folding.current) return;
+    folding.current = false;
+    box.current?.querySelector<HTMLElement>('button:not(:disabled)')?.focus();
+  }, [ignored]);
   const clock = (iso?: string) => (iso ? new Date(iso).toLocaleTimeString(t.time.locale, { hour: '2-digit', minute: '2-digit' }) : '');
   const many = p.rows.length > 1;
 
@@ -111,7 +119,7 @@ export function ActionCard(p: ActionCardProps) {
   if (p.ignoredAt !== undefined) return (
     <div ref={box as RefObject<HTMLDivElement>} data-action-ignored style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, ...muted }}>
       <Icon size={11} {...ICONS.close} />{c.ignored(p.rows.length, clock(p.ignoredAt))}
-      <Button variant="ghost" size="sm" disabled={p.disabled} onClick={p.onReview} style={{ height: 22, padding: '0 6px', fontSize: 12 }}>{c.review}</Button>
+      <Button variant="ghost" size="sm" disabled={p.disabled} onClick={() => { folding.current = true; p.onReview(); }} style={{ height: 22, padding: '0 6px', fontSize: 12 }}>{c.review}</Button>
     </div>
   );
 
@@ -121,7 +129,7 @@ export function ActionCard(p: ActionCardProps) {
   const why = (r: ActionRowView) => c.words.why(r.code ?? (r.state === 'failed' ? 'failed' : undefined), r.action, r.vars ?? {});
   const verb = (r: ActionRowView) => (r.decision === 'deny' ? c.deny : (r.action !== undefined ? c.verbs[r.action] : undefined) ?? c.apply);
   const dots = (rows: readonly number[]) => (risky(rows) ? '…' : '');
-  const ignore = <Button variant="ghost" size="sm" disabled={p.disabled} onClick={p.onIgnore} style={{ ...small, ...muted }}>{c.ignore}</Button>;
+  const ignore = <Button variant="ghost" size="sm" disabled={p.disabled} onClick={() => { folding.current = true; p.onIgnore(); }} style={{ ...small, ...muted }}>{c.ignore}</Button>;
 
   const node = (s: Shown, i: number, r: ActionRowView) => {
     const k = i + 1;
