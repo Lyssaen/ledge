@@ -806,6 +806,8 @@ export const en: Messages = {
   },
   launch: {
     role: 'Role', roleHint: 'its instructions and defaults apply to the session', roleRemove: 'Remove',
+    roleReading: 'read again in this folder…', roleGone: (id: string, cwd: string) => `@${id} does not exist in ${cwd}: the role was removed.`,
+    roleUnread: (id: string, cwd: string) => `Ledge could not read @${id} again in ${cwd}: the role was removed.`,
     prompt: 'Instruction', placeholder: 'What should the agent do? Describe the expected result.',
     suggestions: 'Suggestions', ideas: ['Review the latest pull request', 'Fix the failing tests', 'Update the documentation'],
     agent: 'Agent', agentHint: 'The engine of this session', change: 'Change', chooseFor: 'Choose for this session', byDefaultTag: 'Default', thisSession: 'This session', defaultMark: 'Default',

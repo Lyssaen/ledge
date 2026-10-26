@@ -17,6 +17,7 @@ import type { LaunchState } from './useLaunch';
 import { cls } from '../shell/cls';
 import { ProjectSwatch } from '../projects/ProjectSwatch';
 import { useDefaultTool } from '../settings/tool';
+import { listRoles } from '../teams/useTeamsApi';
 
 const TOOLS: readonly Tool[] = ['claude', 'codex', 'cursor', 'omp'];
 const APPROVALS: readonly OmpApproval[] = ['always-ask', 'write', 'yolo'];
@@ -57,6 +58,11 @@ export function LaunchComposer(p: {
     return cwd && reposOn(projects.find(x => x.id === f.project), f.machine).some(r => r.path === cwd) ? { ...f, repos: [cwd] } : f;
   });
   const [role, setRole] = useState(p.wanted.role);
+  // Where the role was read (#106): the daemon reads it again in the first folder, on its machine, the repository's winning over the
+  // home's. Elsewhere, the form reads it there too before anything is sent, and shows that one, or lets it go.
+  const [roleAt, setRoleAt] = useState(`${p.wanted.machine ?? 'local'}:${p.wanted.cwd ?? ''}`);
+  const at = `${form.machine ?? ''}:${form.repos[0] ?? ''}`;
+  const rereading = !!role && !!form.repos[0] && roleAt !== at;
   const [tried, setTried] = useState(false);
   const [choosing, setChoosing] = useState(false);
   const [feedback, setFeedback] = useState('');
@@ -106,6 +112,27 @@ export function LaunchComposer(p: {
     });
   }, [infos]);
 
+  useEffect(() => {
+    if (!rereading || !role) return;
+    let live = true;
+    const cwd = form.repos[0]!;
+    void listRoles(p.client, cwd, form.machine ?? undefined).then(l => {
+      if (!live) return;
+      const found = l.roles.find(r => r.id === role.id);
+      setRoleAt(at);
+      if (!found) { setRole(undefined); setFeedback(l.silent || l.error ? t.launch.roleUnread(role.id, cwd) : t.launch.roleGone(role.id, cwd)); return; }
+      setRole(found);
+      // Its defaults, as the role read first filled them: its agent, its model and effort.
+      if (found.tool === role.tool && found.model === role.model && found.effort === role.effort) return;
+      setForm(f => {
+        const g = found.tool && found.tool !== f.tool ? withTool(f, found.tool, loadPick(f.project, found.tool)) : f;
+        const memo = loadPick(g.project, g.tool);
+        return withPick(g, found.model ? { model: found.model, effort: found.effort ?? null } : found.effort ? { model: memo.model, effort: found.effort } : memo);
+      });
+    });
+    return () => { live = false; };
+  }, [rereading, at, role?.id]);
+
   const missing = missingOf(form, machines);
   const { name, seat } = previewOf(form, p.sessions, p.projectIdOf);
   // Without any project, the repositories are missing because the project is: the alert names the « No project yet » block.
@@ -113,7 +140,7 @@ export function LaunchComposer(p: {
   const launching = p.launch.status === 'launching';
   const submit = () => {
     setTried(true);
-    if (missing || launching || !project || unavailable) return;
+    if (missing || launching || !project || unavailable || rereading) return;
     if (!outdated) savePick(project.id, form.tool, { model: form.model, effort: form.effort });
     const sent = { ...(outdated ? withPick(form, NO_PICK) : form), approval: approvable ? form.approval : 'always-ask' as const };
     p.onLaunch({ ...launchMessage(sent, name), ...(role ? { role: role.id } : {}) }, { name, project: project.name, projectId: project.id });
@@ -153,7 +180,7 @@ export function LaunchComposer(p: {
         {role && (
           <div className="composer-role" role="note">
             <span className="composer-label">{t.launch.role}</span>
-            <span className="role-pill">@{role.id}</span><strong>{role.label}</strong><small>{t.launch.roleHint}</small>
+            <span className="role-pill">@{role.id}</span><strong>{role.label}</strong><small>{rereading ? t.launch.roleReading : t.launch.roleHint}</small>
             <Button type="button" variant="ghost" size="sm" onClick={() => setRole(undefined)}>{t.launch.roleRemove}</Button>
           </div>
         )}

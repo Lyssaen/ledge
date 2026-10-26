@@ -843,6 +843,8 @@ export const fr = {
   },
   launch: {
     role: 'Rôle', roleHint: 'sa consigne et ses défauts s’appliquent à la session', roleRemove: 'Retirer',
+    roleReading: 'relu dans ce dossier…', roleGone: (id: string, cwd: string) => `@${id} n’existe pas dans ${cwd} : le rôle a été retiré.`,
+    roleUnread: (id: string, cwd: string) => `Ledge n’a pas pu relire @${id} dans ${cwd} : le rôle a été retiré.`,
     prompt: 'Consigne', placeholder: 'Que doit faire l’agent ? Décrivez le résultat attendu.',
     suggestions: 'Suggestions', ideas: ['Relire la dernière pull request', 'Corriger les tests qui échouent', 'Mettre à jour la documentation'] as readonly string[],
     agent: 'Agent', agentHint: 'Le moteur de cette session', change: 'Changer', chooseFor: 'Choisir pour cette session', byDefaultTag: 'Par défaut', thisSession: 'Cette session', defaultMark: 'Défaut',

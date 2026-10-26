@@ -38,18 +38,20 @@ export interface TeamsApi {
 let seq = 0;
 /** How long `roles.list` is waited for. */
 export const ROLES_TIMEOUT_MS = 4000;
+/** `roles.list` asked of a folder's machine (the local daemon by default): its answer, or `silent` past ROLES_TIMEOUT_MS. */
+export const listRoles = (client: DaemonClient, cwd?: string, machine?: string) => new Promise<RolesListing>(resolve => {
+  const requestId = `roles-${Date.now()}-${++seq}`;
+  const done = (r: RolesListing) => { clearTimeout(timer); off(); resolve(r); };
+  const off = client.onMessage(m => { if (m.type === 'roles.listing' && m.requestId === requestId) done({ roles: m.roles, templates: m.templates, problems: m.problems, ...(m.error ? { error: m.error } : {}) }); });
+  const timer = setTimeout(() => done(SILENT), ROLES_TIMEOUT_MS);
+  client.send({ type: 'roles.list', ...(cwd ? { cwd } : {}), ...(machine && machine !== 'local' ? { machineId: machine } : {}), requestId });
+});
 export function useTeamsApi(client: DaemonClient): TeamsApi {
   const all = useTeams(client);
   const tasks = useTasks(client);
   const teams = useMemo(() => all?.filter(t => t.state !== 'dissolved') ?? null, [all]);
   const teamOf = useCallback((s: Pick<Session, 'team'>) => (s.team ? teams?.find(t => t.id === s.team) : undefined), [teams]);
-  const roles = useCallback((cwd?: string, machine?: string) => new Promise<RolesListing>(resolve => {
-    const requestId = `roles-${Date.now()}-${++seq}`;
-    const done = (r: RolesListing) => { clearTimeout(timer); off(); resolve(r); };
-    const off = client.onMessage(m => { if (m.type === 'roles.listing' && m.requestId === requestId) done({ roles: m.roles, templates: m.templates, problems: m.problems, ...(m.error ? { error: m.error } : {}) }); });
-    const timer = setTimeout(() => done(SILENT), ROLES_TIMEOUT_MS);
-    client.send({ type: 'roles.list', ...(cwd ? { cwd } : {}), ...(machine && machine !== 'local' ? { machineId: machine } : {}), requestId });
-  }), [client]);
+  const roles = useCallback((cwd?: string, machine?: string) => listRoles(client, cwd, machine), [client]);
   const handover = useCallback((id: string) => new Promise<string | null>(resolve => {
     const rid = `handover-${Date.now()}-${++seq}`;
     const done = (r: string | null) => { clearTimeout(timer); off(); resolve(r); };
