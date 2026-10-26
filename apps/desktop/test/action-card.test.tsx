@@ -62,6 +62,16 @@ describe('the action card in the Desktop\'s words (#94)', () => {
     expect(document.body).toHaveTextContent('Nova a reçu ton refus : la commande n’a pas été lancée.');
   });
 
+  it('without the daemon\'s time: « Appliquée », « Plan appliqué », « Refus envoyé », nothing after', () => {
+    const { unmount } = show(plan.map(x => ({ ...x, state: 'done' as const })));
+    expect(document.querySelector('[data-action-foot]')).toHaveTextContent(/^Plan appliqué$/);
+    expect(document.body).not.toHaveTextContent('Appliquée ·');
+    unmount();
+    show([{ ...permission, state: 'denied' }]);
+    expect(document.body).toHaveTextContent('Refus envoyé');
+    expect(document.body).not.toHaveTextContent('Refus envoyé ·');
+  });
+
   it('ignored, folded into a line', () => {
     show(plan, { ignoredAt: AT });
     expect(document.body).toHaveTextContent(`Plan de 3 actions ignoré à ${at} · rien n’a été envoyé`);

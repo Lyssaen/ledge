@@ -980,14 +980,14 @@ export const fr = {
         'task.cancel': 'Abandonner', 'task.pass': 'Passer le relais'
       } as Record<string, string>,
       apply: 'Appliquer', deny: 'Refuser', ignore: 'Ignorer', review: 'Revoir', retry: 'Réessayer', running: 'En cours…',
-      done: (at: string) => `Appliquée · ${at}`, refusedState: 'Refusée', denied: (at: string) => `Refus envoyé · ${at}`, open: (name: string) => `Ouvrir ${name}`,
+      done: (at: string) => `Appliquée${at ? ` · ${at}` : ''}`, refusedState: 'Refusée', denied: (at: string) => `Refus envoyé${at ? ` · ${at}` : ''}`, open: (name: string) => `Ouvrir ${name}`,
       failed: (why: string) => `Échec : ${why}`, refused: (why: string) => `Refusée : ${why} Rien n’a été envoyé.`,
       held: (k: number) => `Pas appliquée : le plan s’est arrêté à l’étape ${k}.`,
       stale: (name: string) => `La demande de ${name} a changé depuis ma réponse : rien n’a été envoyé. Ouvre ${name} pour voir la nouvelle, ou redemande-moi.`,
       deniedNote: (name: string) => `${name} a reçu ton refus : la commande n’a pas été lancée.`,
       all: (n: number) => `Tout appliquer (${n})`, resume: (k: number, n: number) => `Reprendre à l’étape ${k} (${n})`, skip: (k: number, n: number) => `Continuer sans l’étape ${k} (${n})`,
       inOrder: 'dans l’ordre, s’arrête au premier échec', destructiveLater: (n: number) => `${n} ${n > 1 ? 'irréversibles' : 'irréversible'}, je te redemanderai`,
-      notReplayed: 'les étapes faites ne sont pas rejouées', progress: (k: number, n: number) => `Étape ${k} sur ${n}…`, planDone: (at: string) => `Plan appliqué à ${at}`,
+      notReplayed: 'les étapes faites ne sont pas rejouées', progress: (k: number, n: number) => `Étape ${k} sur ${n}…`, planDone: (at: string) => `Plan appliqué${at ? ` à ${at}` : ''}`,
       confirm: {
         label: 'Confirmation', many: (n: number, all: boolean) => `Appliquer ${all ? 'ces' : 'les'} ${n} actions, dans l’ordre ?`, one: (summary: string) => `${summary} ?`,
         oneWhy: 'Ledge ne pourra pas la défaire une fois envoyée.',

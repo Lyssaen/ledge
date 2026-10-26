@@ -41,7 +41,7 @@ export interface ChatCopy {
       given: (owner: string, id: string, state: string) => string; state: Record<'open' | 'taken' | 'done' | 'refused' | 'dropped', string>; failed: Say;
     };
     /** The generic card (#94): a row per action, a plan past one. `verbs` the button of each action, by its id, `apply`
-     *  when the front knows none; `at` a time already put in words (10:42). Left out by a front that does not show it yet. */
+     *  when the front knows none; `at` a time already put in words (10:42), empty when the daemon gave none. Left out by a front that does not show it yet. */
     action?: ActionCopy;
   };
   machines: { destination: string; local: string; offline: string; choose: Say; clarification: string };

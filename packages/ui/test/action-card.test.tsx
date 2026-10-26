@@ -234,6 +234,16 @@ describe('the action card (#94): one row', () => {
     expect(screen.queryAllByRole('button')).toEqual([]);
   });
 
+  it('done or denied without its time: no empty « · », no « at »', () => {
+    card([{ ...model, state: 'done' }]);
+    expect(rowsOf()[0]).toHaveTextContent(/Applied$/);
+    card([{ ...permission, state: 'denied' }]);
+    expect(rowsOf()[1]).toHaveTextContent('Denial sent');
+    expect(rowsOf()[1]).not.toHaveTextContent('Denial sent ·');
+    card(plan([{ state: 'done' }, { state: 'done' }, { state: 'done' }]));
+    expect(document.querySelectorAll('[data-action-foot]')[0]).toHaveTextContent(/^Plan applied$/);
+  });
+
   it('ignored: « Card ignored »', () => {
     card([model], { ignoredAt: AT });
     expect(document.body).toHaveTextContent(`Card ignored at ${at} · nothing was sent`);

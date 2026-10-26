@@ -937,14 +937,14 @@ export const en: Messages = {
         'task.cancel': 'Drop', 'task.pass': 'Hand over'
       } as Record<string, string>,
       apply: 'Apply', deny: 'Deny', ignore: 'Ignore', review: 'Review', retry: 'Retry', running: 'Running…',
-      done: (at: string) => `Applied · ${at}`, refusedState: 'Refused', denied: (at: string) => `Denial sent · ${at}`, open: (name: string) => `Open ${name}`,
+      done: (at: string) => `Applied${at ? ` · ${at}` : ''}`, refusedState: 'Refused', denied: (at: string) => `Denial sent${at ? ` · ${at}` : ''}`, open: (name: string) => `Open ${name}`,
       failed: (why: string) => `Failed: ${why}`, refused: (why: string) => `Refused: ${why} Nothing was sent.`,
       held: (k: number) => `Not applied: the plan stopped at step ${k}.`,
       stale: (name: string) => `${name}’s request changed since my answer: nothing was sent. Open ${name} to see the new one, or ask me again.`,
       deniedNote: (name: string) => `${name} got your denial: the command did not run.`,
       all: (n: number) => `Apply all (${n})`, resume: (k: number, n: number) => `Resume at step ${k} (${n})`, skip: (k: number, n: number) => `Continue without step ${k} (${n})`,
       inOrder: 'in order, stops at the first failure', destructiveLater: (n: number) => `${n} irreversible, I’ll ask you again`,
-      notReplayed: 'steps already done are not replayed', progress: (k: number, n: number) => `Step ${k} of ${n}…`, planDone: (at: string) => `Plan applied at ${at}`,
+      notReplayed: 'steps already done are not replayed', progress: (k: number, n: number) => `Step ${k} of ${n}…`, planDone: (at: string) => `Plan applied${at ? ` at ${at}` : ''}`,
       confirm: {
         label: 'Confirmation', many: (n: number, all: boolean) => `Apply ${all ? 'these' : 'the'} ${n} actions, in order?`, one: (summary: string) => `${summary}?`,
         oneWhy: 'Ledge cannot undo it once sent.',

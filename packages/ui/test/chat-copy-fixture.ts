@@ -29,12 +29,12 @@ export const actionCopy: NonNullable<ChatCopy['chat']['action']> = {
   askAgain: 'I will ask again',
   verbs: { 'session.model': 'Change', 'session.archive': 'Archive', 'team.dissolve': 'Dissolve', 'session.decide': 'Accept' },
   apply: 'Apply', deny: 'Deny', ignore: 'Ignore', review: 'Review', retry: 'Retry', running: 'Running…',
-  done: at => `Applied · ${at}`, refusedState: 'Refused', denied: at => `Denial sent · ${at}`, open: n => `Open ${n}`,
+  done: at => `Applied${at ? ` · ${at}` : ''}`, refusedState: 'Refused', denied: at => `Denial sent${at ? ` · ${at}` : ''}`, open: n => `Open ${n}`,
   failed: w => `Failed: ${w}`, refused: w => `Refused: ${w} Nothing was sent.`, held: k => `Not applied: the plan stopped at step ${k}.`,
   stale: n => `${n}'s request changed since my answer: nothing was sent.`, deniedNote: n => `${n} got your denial: the command did not run.`,
   all: n => `Apply all (${n})`, resume: (k, n) => `Resume at step ${k} (${n})`, skip: (k, n) => `Continue without step ${k} (${n})`,
   inOrder: 'in order, stops at the first failure', destructiveLater: n => `${n} irreversible, I will ask again`, notReplayed: 'steps done are not replayed',
-  progress: (k, n) => `Step ${k} of ${n}…`, planDone: at => `Plan applied at ${at}`,
+  progress: (k, n) => `Step ${k} of ${n}…`, planDone: at => `Plan applied${at ? ` at ${at}` : ''}`,
   confirm: {
     label: 'Confirmation', many: (n, all) => `Apply ${all ? 'these' : 'the'} ${n} actions, in order?`, one: s => `${s}?`, oneWhy: 'Ledge cannot undo it once sent.',
     manyWhy: d => `${d} irreversible: read the detail above. If a step fails, the next ones are not applied.`, cancel: 'Cancel', go: n => `Apply the ${n}`, alreadyDone: 'already done'
