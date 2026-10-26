@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { SessionEvent } from '@ledge/protocol';
+import type { SessionEvent, Task, TaskTransmission } from '@ledge/protocol';
 import { History, MAX_ITEMS, SYNC_MS, handBack, crossSession } from '../src/daemon/history.js';
 import { formatLedgeMessage, formatLedgeNotice, formatLedgeTask, formatTeamNotice, mailId } from '../src/daemon/crossSession.js';
 import { paths } from '../src/paths.js';
@@ -516,5 +516,48 @@ describe('messages through the Ledge mailbox', () => {
     const h = new History({ peerOf });
     h.record('fce8', ev('UserPromptSubmit', { text: formatLedgeNotice({ to: 'Pim', text: 'Salut', reason: "la session n'existe plus" }) }, 1));
     expect(h.items('fce8')).toEqual([expect.objectContaining({ kind: 'notice', notice: 'delivery', status: 'refused', count: 1, recipients: ['Pim'], name: 'Pim', peer: 'c0de', reason: "la session n'existe plus" })]);
+  });
+});
+
+describe('the outgoing card of a task (issue #92)', () => {
+  const task: Task = { id: 't1', title: 'Relire', giver: 'fce8', giverName: 'Otto', owner: 'c0de', ownerName: 'Pim', state: 'open', at: later(5), updatedAt: later(5), log: [] };
+  const tr = (over: Partial<TaskTransmission> = {}): TaskTransmission => ({ index: 0, at: later(5), op: 'give', from: 'fce8', to: 'c0de', fromName: 'Otto', toName: 'Pim', ...over });
+
+  it("puts the outgoing card of a task in the sender's thread, without a new turn", () => {
+    const h = new History();
+    h.record('fce8', ev('UserPromptSubmit', { text: 'go' }));
+    const turn = h.items('fce8').at(-1)!.turn;
+    h.recordTask('fce8', { task, tr: tr(), peer: 'c0de' });
+    expect(h.items('fce8').at(-1)).toEqual({ kind: 'notice', id: 'task-t1-0', at: later(5), turn, notice: 'other', task: 't1', taskOp: 'give', outgoing: true,
+      name: 'Pim', peer: 'c0de', summary: 'Relire', text: 'Tâche « Relire » confiée à Pim' });
+    h.record('fce8', ev('Stop', {}, 6));
+    h.record('fce8', ev('UserPromptSubmit', { text: 'encore' }, 7));
+    expect(h.items('fce8').at(-1)!.turn).toBe(turn + 1);
+  });
+
+  it.each([
+    [tr({ index: 2, op: 'pass', toName: 'Nova', to: 'nova', note: 'relis la fin' }), {}, 'Tâche « Relire » passée à Nova', 'Relire\nrelis la fin'],
+    [tr({ index: 3, op: 'done', from: 'c0de', to: 'fce8', fromName: 'Pim', toName: 'Otto' }), { result: 'fait' }, 'Tâche « Relire » rendue à Otto (terminée)', 'Relire\nfait'],
+    [tr({ index: 3, op: 'refuse', from: 'c0de', to: 'fce8', fromName: 'Pim', toName: 'Otto' }), { result: 'pas le temps' }, 'Tâche « Relire » refusée, rendue à Otto', 'Relire\npas le temps'],
+    [tr({ index: 1, op: 'cancel' }), { result: 'plus utile' }, 'Tâche « Relire » annulée pour Pim', 'Relire\nplus utile'],
+    [tr({ index: 1, op: 'done', from: 'c0de', to: 'ledge', fromName: 'Pim', toName: 'Ledge' }), {}, 'Tâche « Relire » rendue à Ledge (terminée)', 'Relire']
+  ] as const)('words the %#th op of a task', (t, over, text, summary) => {
+    const h = new History();
+    h.recordTask(t.from, { task: { ...task, ...over }, tr: t });
+    expect(h.items(t.from)[0]).toMatchObject({ id: `task-t1-${t.index}`, taskOp: t.op, outgoing: true, name: t.toName, text, summary });
+  });
+
+  it('quotes a long result to 200 characters', () => {
+    const h = new History();
+    h.recordTask('c0de', { task: { ...task, result: 'x'.repeat(300) }, tr: tr({ op: 'done', from: 'c0de', to: 'fce8', toName: 'Otto' }) });
+    expect(h.items('c0de')[0]).toHaveProperty('summary', `Relire\n${'x'.repeat(200)}…`);
+  });
+
+  it('replaces, never duplicates, the card of the same transmission', () => {
+    const h = new History();
+    h.recordTask('fce8', { task, tr: tr() });
+    h.recordTask('fce8', { task: { ...task, title: 'Relire tout' }, tr: tr() });
+    expect(h.items('fce8')).toHaveLength(1);
+    expect(h.items('fce8')[0]).toMatchObject({ summary: 'Relire tout' });
   });
 });

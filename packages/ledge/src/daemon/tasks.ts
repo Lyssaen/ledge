@@ -27,9 +27,9 @@ export interface Tasks { run(cmd: TaskCmd): TaskResult; all(): Task[]; close(): 
 /** Closed tasks kept for `list --all` and `show`: a week, 300 at most. */
 const CLOSED_TTL_MS = 7 * 24 * 3600 * 1000;
 const CLOSED_MAX = 300;
-/** How much of a result or a reason the giver's pointer quotes. */
+/** How much of a result or a reason the giver's pointer (and the sender's card) quotes. */
 const QUOTE = 200;
-const quote = (s: string) => { const flat = s.trim().replace(/\s+/g, ' '); return flat.length > QUOTE ? `${flat.slice(0, QUOTE)}…` : flat; };
+export const quote = (s: string) => { const flat = s.trim().replace(/\s+/g, ' '); return flat.length > QUOTE ? `${flat.slice(0, QUOTE)}…` : flat; };
 
 /** A session Ledge launched and can type into, live. */
 const reachable = (s: Session | undefined): boolean =>
