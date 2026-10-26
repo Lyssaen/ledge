@@ -363,8 +363,8 @@ export function createPhoneGateway(deps: {
   };
 
   /**
-   * A generic card (spec 2026-10-26 action registry §9.1-9.2): a destructive row needs the phone's confirmation, and any row the
-   * registry gives a device check (`phone`) one assertion for the turn; the rows then apply in order, stopping at the first failure.
+   * A generic card (spec 2026-10-26 action registry §9.1-9.2): a destructive row needs the phone's confirmation, and it or any row
+   * the registry gives a device check (`phone`) one assertion for the turn; the rows then apply in order, stopping at the first failure.
    */
   const chatAct = async (deviceId: string, msg: Extract<PhoneOperation, { type: 'chat.act' }>): Promise<Outcome> => {
     const turn = ownTurn(deviceId, msg.qid);
@@ -384,7 +384,8 @@ export function createPhoneGateway(deps: {
     if (!msg.deny && todo.some(r => phoneCut(actions[r]!) && actions[r]!.args.decision !== 'deny')) return { status: 'rejected', reason: 'not_offered' };
     // A deny is never confirmed nor checked on the device, as the phone's own deny of a request is not.
     if (!msg.deny && !msg.confirmed && todo.some(r => actions[r]!.risk === 'destructive')) return { status: 'rejected', reason: 'confirm_required' };
-    if (!msg.deny && todo.some(r => actionById(actions[r]!.action)?.phone)) {
+    // A row destructive by its args (`team.save` over an existing template) is checked as one the registry marks (§5.3).
+    if (!msg.deny && todo.some(r => actions[r]!.risk === 'destructive' || actionById(actions[r]!.action)?.phone)) {
       if (deps.credential(deviceId) === null) return { status: 'rejected', reason: 'confirm_required' };
       const refused = checkAssertion(deviceId, msg.assertion, 'act', msg.qid);
       if (refused) return refused;

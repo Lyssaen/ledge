@@ -32,6 +32,15 @@ describe('the action card as the TUI plans it', () => {
     expect(p.shown).toEqual(['stale', 'cut']);
     expect(p.open).toEqual([]);
   });
+  it('the plan stops at a request that changed; another action\'s « changed » is a refusal, not a stale request (codes.md)', () => {
+    const stale = cardPlan([archive('Otto', { state: 'done' }), decide({ state: 'refused', code: 'changed' }), archive('Ari')]);
+    expect(stale.shown).toEqual(['done', 'stale', 'held']);
+    expect(stale.all).toEqual({ kind: 'skip', rows: [2], k: 2 });
+    const save = cardPlan([archive('Otto', { state: 'done' }), row('team.save', { vars: { team: 'api' }, state: 'refused', code: 'changed' }), archive('Ari')]);
+    expect(save.shown).toEqual(['done', 'refused', 'held']);
+    expect(save.rows[1]).toMatchObject({ state: 'refused', code: 'changed' });
+    expect(save.all).toEqual({ kind: 'skip', rows: [2], k: 2 });
+  });
   it('is closed once every row is applied or its request denied', () => {
     expect(cardClosed([archive('Otto', { state: 'done' }), decide({ state: 'denied' })])).toBe(true);
     expect(cardClosed([archive('Otto', { state: 'done' }), archive('Bix', { state: 'failed' })])).toBe(false);
