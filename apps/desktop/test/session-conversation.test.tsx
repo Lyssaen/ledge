@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent, { type UserEvent } from '@testing-library/user-event';
 import WebSocket from 'ws';
 import type { ThreadItem } from '@ledge/protocol';
@@ -11,9 +11,16 @@ import { loadWorkspace } from '../src/session/lazy';
 import { listSessions, PROJECTS, type MockDaemon } from './helpers';
 
 const daemons: MockDaemon[] = [];
+// jsdom lays nothing out: a test sets the body's sizes, then says it was resized, as a browser's ResizeObserver would.
+const observers: Array<() => void> = [];
+const resized = () => act(() => { for (const o of observers) o(); });
+beforeEach(() => {
+  observers.length = 0;
+  vi.stubGlobal('ResizeObserver', class { constructor(cb: ResizeObserverCallback) { observers.push(() => cb([], this as unknown as ResizeObserver)); } observe() {} unobserve() {} disconnect() {} });
+});
 afterEach(async () => {
   delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
-  vi.restoreAllMocks();
+  vi.restoreAllMocks(); vi.unstubAllGlobals();
   cleanup(); localStorage.clear();
   for (const d of daemons.splice(0)) await d.close();
 });
@@ -432,7 +439,8 @@ describe('the Conversation tab', () => {
       Object.defineProperty(el, 'clientHeight', { configurable: true, value: 500 });
       Object.defineProperty(el, 'scrollTop', { configurable: true, get: () => g.top, set: (v: number) => { g.top = v; } });
       el.scrollTo = ((o: ScrollToOptions) => { calls.push(o); g.top = o.top ?? g.top; fireEvent.scroll(el); }) as typeof el.scrollTo;
-      fireEvent.scroll(el);
+      resized();
+      g.top = 200; fireEvent.scroll(el);
       const novaSays = (id: string, s: number) => d.threadItem('nova', sent(id, s, 1, { to: 'otto', peer: 'otto', text: `Encore ${id}` }));
       novaSays('toolu_n3', 50);
       expect(await pane().findByRole('button', { name: '1 nouveau message' })).toBeVisible();
@@ -460,6 +468,7 @@ describe('the Conversation tab', () => {
       Object.defineProperty(el, 'scrollHeight', { configurable: true, get: () => 2000 });
       Object.defineProperty(el, 'clientHeight', { configurable: true, value: 500 });
       Object.defineProperty(el, 'scrollTop', { configurable: true, get: () => 200, set: () => {} });
+      resized();
       fireEvent.scroll(el);
       d.push({ type: 'session.thread', id: 'nova', items: nova() });
       await waitFor(() => expect(bubbles()).toEqual(['a:s1', 'a:recv-2-0', 'b:toolu_n2']));
@@ -481,6 +490,28 @@ describe('the Conversation tab', () => {
       d.threadItem('kit', sent('toolu_k2', 60, 1, { to: 'otto', peer: 'otto', text: 'Et ensuite ?' }));
       const tab = await pane().findByRole('tab', { name: 'Conversation · Kit, 1 nouveau message' });
       expect(tab.querySelector('.conv-tab-dot')).not.toBeNull();
+    });
+
+    it('\u00ab Lecture du fil de Nova\u2026 \u00bb going away without a resize the observer sees: scrolling up still stops following', async () => {
+      // The loading line going shortens the body, but neither the body nor the log changes size: an observer would not fire.
+      const { d } = await openConversation(otto(), null);
+      await pane().findByText('Lecture du fil de Nova\u2026');
+      const el = paneEl().querySelector<HTMLElement>('.conv-body')!;
+      const g = { top: 0, height: 2030 };
+      Object.defineProperty(el, 'scrollHeight', { configurable: true, get: () => g.height });
+      Object.defineProperty(el, 'clientHeight', { configurable: true, value: 500 });
+      Object.defineProperty(el, 'scrollTop', { configurable: true, get: () => g.top, set: (v: number) => { g.top = v; } });
+      resized();
+      expect(g.top).toBe(2030);
+      // Nova's thread holds nothing Otto's side does not: no bubble comes, the loading line goes, the body is 30 px shorter.
+      g.height = 2000;
+      d.push({ type: 'session.thread', id: 'nova', items: nova().slice(0, 2) });
+      await waitFor(() => expect(pane().queryByText('Lecture du fil de Nova\u2026')).toBeNull());
+      expect(bubbles()).toEqual(['a:s1', 'a:recv-2-0']);
+      g.top = 200; fireEvent.scroll(el);
+      d.threadItem('nova', sent('toolu_n3', 50, 1, { to: 'otto', peer: 'otto', text: 'Et les tests ?' }));
+      expect(await pane().findByRole('button', { name: '1 nouveau message' })).toBeVisible();
+      expect(g.top).toBe(200);
     });
 
     it('a reconnect asks Nova\u2019s thread again; the conversation stays as it was meanwhile', async () => {
