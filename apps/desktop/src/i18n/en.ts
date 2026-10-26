@@ -63,7 +63,7 @@ export const en: Messages = {
     nav: 'Settings sections', back: 'Back to the atelier',
     saved: (what) => `Setting saved · ${what}`,
     hints: {
-      general: 'Language, start-up, default agent and updates.',
+      general: 'Language, start-up, default agent, max context and updates.',
       appearance: 'Theme, Ledge’s color, scale and motion.',
       island: 'The notch at the top of the screen: where it sits and what it signals.',
       notifications: 'Who lets you know, and when to leave you alone.',
@@ -83,7 +83,9 @@ export const en: Messages = {
       autostart: 'Start with Windows', autostartHint: 'Ledge Desktop opens with your Windows session.',
       autostartMissing: 'Not offered here: only the installed app can start with Windows.',
       autostartFailed: 'Windows did not take this setting.', autostartOff: 'No start with Windows',
-      tool: 'Default agent', toolHint: 'For Ledge’s chat and its cards.', toolSaved: (name) => `Default agent: ${name}`
+      tool: 'Default agent', toolHint: 'For Ledge’s chat and its cards.', toolSaved: (name) => `Default agent: ${name}`,
+      context: 'Max context', contextHint: 'Past it, a session is near its limit: « Your turn » offers to hand it over, and Ledge relieves on its own a seat that works without asking.',
+      contextSaved: (pct) => `Max context: ${pct} %`, contextUnknown: 'Update the local Ledge daemon to set this threshold.'
     },
     updates: {
       title: 'Updates',

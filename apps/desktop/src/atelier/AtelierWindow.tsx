@@ -95,7 +95,7 @@ function AtelierAlone({ client }: { client?: DaemonClient }) {
             </>} />
         </section>
       </div>
-      <SessionMenuHost state={sessionMenu} actions={actions} filing={filing} projects={projects?.projects ?? []} currentOf={projectIdOf} onOpen={s => dispatch({ type: 'open', id: s.id })} />
+      <SessionMenuHost state={sessionMenu} actions={actions} filing={filing} projects={projects?.projects ?? []} currentOf={projectIdOf} onOpen={s => dispatch({ type: 'open', id: s.id })} onHandover={s => { void teams.handover(s.id); }} />
       {actions.pending && <ConfirmDialog c={actions.pending} onConfirm={actions.confirm} onCancel={actions.cancel} />}
       <Toast notice={notice} action={noticeAction} onAction={undo} />
     </ScreenKeysContext.Provider>

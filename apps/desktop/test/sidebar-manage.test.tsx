@@ -47,7 +47,7 @@ describe('archive and delete from the sidebar tree', () => {
     fireEvent.contextMenu(tree.getByRole('button', { name: /^Otto/ }));
     const fromPointer = await screen.findByRole('menu', { name: 'Manage Otto' });
     const labels = menuLabels(fromPointer);
-    expect(labels).toEqual(['Open session', 'Terminal', 'Rename…', 'Move to…', 'End session', 'End and archive…', 'Delete…']);
+    expect(labels).toEqual(['Open session', 'Terminal', 'Rename…', 'Move to…', 'Hand over', 'End session', 'End and archive…', 'Delete…']);
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('menu')).toBeNull();
 

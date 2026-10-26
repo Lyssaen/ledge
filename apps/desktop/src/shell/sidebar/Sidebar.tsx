@@ -54,7 +54,7 @@ export function Sidebar(p: {
   const groups = useMemo(() => treeModel(p.sessions, p.projects, p.projectIdOf, p.teams?.teams ?? []), [p.sessions, p.projects, p.projectIdOf, p.teams?.teams]);
   const attn = useMemo(() => attentionOf(p.sessions, p.waits), [p.sessions, p.waits]);
   // Sessions near their context limit, less those put away with « Plus tard » (context handover spec §3.2).
-  const near = useMemo(() => nearLimit(p.sessions, p.teams?.later), [p.sessions, p.teams?.later]);
+  const near = useMemo(() => nearLimit(p.sessions, p.teams?.later, p.teams?.near), [p.sessions, p.teams?.later, p.teams?.near]);
   const root = useRef<HTMLElement>(null);
   const keys = useRef({ attn, current, dispatch: p.dispatch, quiet: false });
   keys.current = { attn, current, dispatch: p.dispatch, quiet: p.nav.modal !== null || p.nav.chat || p.actions.pending !== null };

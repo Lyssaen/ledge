@@ -172,3 +172,13 @@ describe('a session near its context limit on the phone (context handover spec �
     expect(screen.getByText(/relève de Pim/)).toBeInTheDocument();
   });
 });
+
+describe('« Contexte max » on the phone (context handover spec §3.2)', () => {
+  it('follows the PC\'s threshold: 75 % is near at 70 %', () => {
+    const t = setup();
+    t.deliver(snapshot([session('otto', { name: 'Otto', repo: 'ledge', context: { used: 150_000, window: 200_000, at: NOW } })], 'PC-Desan', undefined, { ...ON, contextNear: 0.7 } as never));
+    t.deliver({ type: 'teams', teams: [] });
+    render(<Chat store={t.store} />);
+    expect(within(screen.getByRole('group', { name: 'À toi' })).getByText('· contexte 75 %')).toBeInTheDocument();
+  });
+});

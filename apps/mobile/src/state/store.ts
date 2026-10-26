@@ -30,7 +30,7 @@ export interface MobileState {
   /** Null until the first snapshot of this run: they are not kept on the phone. */
   capabilities: CapabilitiesByTool | null;
   /** What the PC offers for confirming on the device; null until a snapshot, and from a PC that says nothing (lot 5). */
-  device: { confirm: boolean; push?: 'on' | 'off' | 'stale' | 'unavailable'; chat?: true } | null;
+  device: { confirm: boolean; push?: 'on' | 'off' | 'stale' | 'unavailable'; chat?: true; contextNear?: number } | null;
   daemon: { version: string; name: string } | null;
   /** True from a snapshot until the channel is lost: what is shown is the PC's state now, not the last known one. */
   fresh: boolean;

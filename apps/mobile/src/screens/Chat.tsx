@@ -82,7 +82,7 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
       <main className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain py-4">
         {chat.turns.length === 0 && teams && (
           <div className="flex flex-1 flex-col justify-end gap-3">
-            <LePoint store={store} sessions={sessions} teams={teams} tasks={state.tasks} syncedAt={state.syncedAt} fresh={state.fresh} />
+            <LePoint store={store} sessions={sessions} teams={teams} tasks={state.tasks} syncedAt={state.syncedAt} fresh={state.fresh} {...(state.device?.contextNear !== undefined ? { threshold: state.device.contextNear } : {})} />
             <div className="flex flex-wrap gap-2">
               {teamSuggestions(teams).map(s => (
                 <button key={s} type="button" onClick={() => setText(s)} className="inline-flex min-h-11 items-center rounded-full border border-line bg-surface px-3.5 text-[13px] font-medium">{s}</button>

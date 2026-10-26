@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Session } from '@ledge/protocol';
@@ -150,6 +150,20 @@ describe('the relief of a session (context handover spec §3.3)', () => {
     expect(store.get(id)!.state).not.toBe('exited');
     c.send({ type: 'task.cmd', rid: 's', by: 'ledge', op: 'show', task: task.id });
     expect((await c.next('task.result')).task).toMatchObject({ owner: id });
+  }, 20_000);
+
+  it('« Contexte max »: told after the snapshot, set and kept in context.json, broadcast; an `auto` seat follows it', async () => {
+    role('build', 'label: Build\nautonomy: auto');
+    await start();
+    const other = await connect({ port: srv!.port });
+    expect((await other.next('context.prefs')).prefs).toEqual({ near: 0.8 });
+    c.send({ type: 'context.set', prefs: { near: 0.7 } });
+    expect((await other.next('context.prefs')).prefs).toEqual({ near: 0.7 });
+    expect(JSON.parse(readFileSync(join(process.env.LEDGE_HOME!, 'context.json'), 'utf8'))).toEqual({ near: 0.7 });
+    // 75 % is past 70 %: Ledge relieves the seat.
+    const { id } = await seated(150_000);
+    await until(() => store.get(id)?.handover?.state === 'briefing');
+    await other.close();
   }, 20_000);
 
   it('a seat that works without asking is relieved by Ledge past 80 %; below, or a brief nobody asked for, nothing', async () => {

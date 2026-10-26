@@ -209,3 +209,19 @@ describe('ledge tui: a session near its context limit (context handover spec §3
     } finally { await tui.cleanup(); }
   });
 });
+
+describe('ledge tui: « Contexte max » (context handover spec §3.2)', () => {
+  it('the settings show the daemon\'s threshold; → raises it by 5 % and sends it', async () => {
+    const tui = await startTui();
+    try {
+      tui.daemon.push({ type: 'context.prefs', prefs: { near: 0.8 } });
+      await tui.press(',');
+      await until(() => tui.frame().includes('Contexte max'));
+      await until(() => tui.frame().includes('◂ 80 % ▸'));
+      await tui.press('j');
+      await tui.press('\u001b[C');
+      await until(() => sent(tui.daemon.received, 'context.set').length === 1);
+      expect(sent(tui.daemon.received, 'context.set')[0]).toEqual({ type: 'context.set', prefs: { near: 0.85 } });
+    } finally { await tui.cleanup(); }
+  });
+});

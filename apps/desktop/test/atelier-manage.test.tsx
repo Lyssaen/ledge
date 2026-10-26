@@ -44,7 +44,7 @@ describe('the session menu in the atelier', () => {
     fireEvent.contextMenu(seat('Otto'));
     const menu = await screen.findByRole('menu', { name: 'Manage Otto' });
     expect(within(menu).getAllByRole('menuitem').map(i => i.getAttribute('aria-label'))).toEqual([
-      'Open session', 'Terminal', 'Rename…', 'Move to…', 'End session', 'End and archive…', 'Delete…'
+      'Open session', 'Terminal', 'Rename…', 'Move to…', 'Hand over', 'End session', 'End and archive…', 'Delete…'
     ]);
     expect(within(menu).getByText('1 subagent leaves with Otto.')).toBeVisible();
     await user.click(within(menu).getByRole('menuitem', { name: /^End and archive/ }));

@@ -13,6 +13,11 @@ import { notesBeforeInstall, openWhatsNew } from '../update/whatsNewView';
 import { Card, Row, Segmented, SwitchRow } from './controls';
 import type { SettingsContext } from './SettingsPage';
 import { TOOLS, useDefaultTool } from './tool';
+import { useContextNear } from '@ledge/fleet';
+import { CONTEXT_NEAR_MAX, CONTEXT_NEAR_MIN } from '@ledge/protocol';
+
+/** « Contexte max »: 50 % to 95 %, by 5. */
+const NEARS = Array.from({ length: Math.round((CONTEXT_NEAR_MAX - CONTEXT_NEAR_MIN) * 20) + 1 }, (_, i) => Math.round((CONTEXT_NEAR_MIN + i * 0.05) * 100));
 
 /** Settings › General (settings.tsx, `general`): the language, start with Windows, the chat's default agent, then the updates. */
 export function General({ ctx }: { ctx: SettingsContext }): JSX.Element {
@@ -21,6 +26,13 @@ export function General({ ctx }: { ctx: SettingsContext }): JSX.Element {
   const theme = useTheme();
   const { reduced } = useMotionPreferences();
   const [tool, setTool] = useDefaultTool();
+  // The context threshold the local daemon keeps (context handover spec §3.2): set there, applied by every front.
+  const near = useContextNear(ctx.client);
+  const known = ctx.fleet.contextNear() !== undefined;
+  const chooseNear = (pct: number) => {
+    try { ctx.fleet.setContextNear(pct / 100); ctx.saved(g.contextSaved(pct)); }
+    catch (e) { ctx.notify((e as Error).message); }
+  };
 
   // The language: its strings load first; until they do the choice waits, and if they do not, the language stays and the row says so.
   const [switching, setSwitching] = useState(false);
@@ -65,6 +77,13 @@ export function General({ ctx }: { ctx: SettingsContext }): JSX.Element {
               value: id,
               label: <><span aria-hidden="true" style={{ display: 'inline-flex' }}><Bot tool={id} state={tool === id ? 'working' : 'idle'} pose={1} size={20} theme={theme} seed={'set-' + id} paused={ctx.paused} reducedMotion={reduced} /></span>{t.launch.tools[id][0]}</>
             }))} />
+        </Row>
+        <Row label={g.context} hint={known ? g.contextHint : g.contextUnknown}>
+          {describedBy => (
+            <select className="set-input" aria-label={g.context} aria-describedby={describedBy} disabled={!known} value={Math.round(near * 100)} onChange={e => chooseNear(Number(e.target.value))}>
+              {NEARS.map(p => <option key={p} value={p}>{p} %</option>)}
+            </select>
+          )}
         </Row>
       </Card>
       <UpdatesCard saved={ctx.saved} />

@@ -32,7 +32,7 @@ import { paths } from '../paths.js';
 import { ensureDaemonToken, hostAllowed, requestAuthorized, selectDaemonProtocol } from '../auth.js';
 import { readMachines, writeMachines } from './machines.js';
 import { readProjects, writeProjects } from './projects.js';
-import { readIsland, writeIsland } from './island.js';
+import { readContextPrefs, readIsland, writeContextPrefs, writeIsland } from './island.js';
 import { readDocument } from './documents.js';
 import { createModels, type Models } from './models.js';
 import { createRelay, free } from './relay.js';
@@ -173,7 +173,7 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; scan?: typeof scanRepos; models?: Models; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; tasks?: TasksJournal; teams?: TeamsJournal; handoverBriefMs?: number }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; tasks?: TasksJournal; teams?: TeamsJournal; handoverBriefMs?: number }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -222,6 +222,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** The island's settings, set from Desktop (atelier spec §7); never sent to a remote peer. */
   let island = readIsland(islandFile);
   const islandMsg = (): ServerMessage => ({ type: 'island', prefs: island });
+  // The context threshold (context handover spec §3.2): past it a session is near its limit, and an `auto` seat is relieved.
+  const contextFile = opts.contextFile ?? join(paths().dir, 'context.json');
+  let contextPrefs = readContextPrefs(contextFile);
+  const contextMsg = (): ServerMessage => ({ type: 'context.prefs', prefs: contextPrefs });
   const mobile = opts.mobile;
   /** The mobile service failed to start: fronts see « unavailable » (and its reason), not a daemon too old to know mobile access. */
   const unavailable: MobileState | undefined = !mobile && opts.mobileUnavailable !== undefined
@@ -291,7 +295,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     if (!context || !cur) return;
     if (cur.context?.used !== context.used || cur.context.window !== context.window) store.upsert({ ...cur, context });
     const h = cur.handover?.state;
-    if (contextNear(context) && cur.autonomy === 'auto' && cur.team && h !== 'briefing' && h !== 'launching' && h !== 'done' && h !== 'failed') {
+    if (contextNear(context, contextPrefs.near) && cur.autonomy === 'auto' && cur.team && h !== 'briefing' && h !== 'launching' && h !== 'done' && h !== 'failed') {
       const refused = handovers.start(id, { auto: true });
       if (refused) log(`automatic relief of ${cur.name} not started: ${refused}`);
     }
@@ -341,6 +345,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     else if (unavailable) reply({ type: 'mobile', state: unavailable });
     for (const [id, lines] of previews) if (store.get(id)) reply({ type: 'session.preview', id, lines });
     reply({ type: 'chat.history', turns: chat.history() });
+    reply(contextMsg()); // last: the context threshold (context handover spec §3.2)
   };
   const preview = (id: string, lines: string[]) => {
     if (!store.get(id)) return;
@@ -899,6 +904,12 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         projects = msg.projects; // already validated by parseClientMessage
         return broadcast(projectsMsg());
       }
+      case 'context.set': {
+        writeContextPrefs(msg.prefs, contextFile); // first: a failing write leaves memory unchanged and reaches the sender
+        contextPrefs = msg.prefs;
+        // Sessions already past the new threshold: an `auto` seat is relieved at its next turn's end.
+        return broadcast(contextMsg());
+      }
       case 'island.set': {
         writeIsland(msg.prefs, islandFile); // first: a failing write leaves memory unchanged and reaches the sender
         island = msg.prefs; // already validated by parseClientMessage
@@ -1263,7 +1274,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     challenges: createChallengeStore(),
     credential: id => mobile.credential(id),
     setCredential: (id, c) => mobile.setCredential(id, c),
-    teams: () => teams.all(), tasks: () => tasks.all(),
+    teams: () => teams.all(), tasks: () => tasks.all(), contextNear: () => contextPrefs.near,
     projectName: id => (id ? projects.projects.find(p => p.id === id)?.name ?? null : null)
   });
   /** A hidden phone is told, through the relay, of what deserves it. */

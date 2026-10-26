@@ -100,7 +100,7 @@ export function exchanges(sessions: readonly Session[], max: number, tasks: read
 
 /** The closed tasks Ledge gave that the user has not put away: items of « À toi » (roles spec §3.7). */
 /** The sessions « À toi » lists for their context (context handover spec §3.2): live ones past 80 % with no relief under way, and failed reliefs. */
-export const nearContext = (sessions: readonly Session[]): Session[] =>
-  sessions.filter(s => s.state !== 'exited' && !s.archivedAt && (s.handover ? s.handover.state === 'failed' : contextNear(s.context)));
+export const nearContext = (sessions: readonly Session[], near?: number): Session[] =>
+  sessions.filter(s => s.state !== 'exited' && !s.archivedAt && (s.handover ? s.handover.state === 'failed' : contextNear(s.context, near)));
 
 export const closedLedgeTasks = (tasks: readonly Task[]): Task[] => tasks.filter(x => x.giver === LEDGE_GIVER && taskClosed(x) && !x.seen);

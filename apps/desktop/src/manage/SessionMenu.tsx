@@ -14,6 +14,9 @@ import type { SessionMenuState } from './useSessionMenu';
 
 /** A session still runs when its machine answers and it has not exited. */
 export const isLiveSession = (s: Session): boolean => !s.offline && s.state !== 'exited';
+/** A session Ledge can relieve (context handover spec §3.3): one it launched, live, in a pane, not already handing over. */
+export const canHandOver = (s: Session): boolean => isStoppable(s) && s.source === 'launcher' && s.tool !== 'omp' && !!s.tmuxSession && !s.archivedAt
+  && (!s.handover || s.handover.state === 'failed');
 /** Ledge can stop a session only when it launched it and it still runs: one launched outside Ledge (hook_only) is read only. */
 export const isStoppable = (s: Session): boolean => isLiveSession(s) && s.source !== 'hook_only';
 
@@ -29,13 +32,15 @@ export interface SessionMenuProps {
   onOpen(s: Session): void;
   onTerminal(s: Session): void;
   onRename(s: Session): void;
+  /** « Passer le relais » (context handover spec §3.3): offered for a session Ledge can ask for its brief. */
+  onHandover?(s: Session): void;
   /** The menu closed (a choice, Escape, a click outside): the caller gives the focus back where it came from. */
   onClose(): void;
 }
 
 /** The menu of one session (manage.tsx's `SessionMenu`), opened from a seat or a card of the atelier: open, terminal, rename, file, end or resume,
  *  archive, delete. A machine whose daemon cannot archive keeps Archiver, Supprimer and Reprendre disabled, with the reason. */
-export function SessionMenu({ session: s, at, actions, filing, projects, current, onOpen, onTerminal, onRename, onClose }: SessionMenuProps): JSX.Element {
+export function SessionMenu({ session: s, at, actions, filing, projects, current, onOpen, onTerminal, onRename, onHandover, onClose }: SessionMenuProps): JSX.Element {
   const { t } = useI18n();
   const m = t.manage.menu;
   const [filingOpen, setFilingOpen] = useState(false);
@@ -63,6 +68,8 @@ export function SessionMenu({ session: s, at, actions, filing, projects, current
           {projects.filter(p => p.id !== current).map(p => <MenuItem key={p.id} onSelect={() => filing.file(s, p.id)}><span>{p.name}</span></MenuItem>)}
         </div>
       )}
+      {onHandover && canHandOver(s) && item(s.handover?.state === 'failed' ? t.handover.retry : t.handover.pass, SHELL_ICONS.resume, () => onHandover(s),
+        { ...(s.context ? { hint: t.handover.gauge(Math.round((s.context.used / s.context.window) * 100)) } : {}) })}
       <hr />
       {exited
         ? item(m.resume, SHELL_ICONS.resume, () => actions.resume(s.id), { disabled: outdated })
@@ -96,14 +103,14 @@ export function RenameDialog({ session: s, onRename, onClose }: { session: Sessi
 }
 
 /** The menu and the rename dialog of a `useSessionMenu`, once for the page that owns it. */
-export function SessionMenuHost({ state, actions, filing, projects, currentOf, onOpen }: {
-  state: SessionMenuState; actions: SessionActions; filing: Filing; projects: readonly Project[]; currentOf(s: Session): string | null; onOpen(s: Session): void;
+export function SessionMenuHost({ state, actions, filing, projects, currentOf, onOpen, onHandover }: {
+  state: SessionMenuState; actions: SessionActions; filing: Filing; projects: readonly Project[]; currentOf(s: Session): string | null; onOpen(s: Session): void; onHandover?(s: Session): void;
 }): JSX.Element {
   const { menu, session, renaming } = state;
   return (<>
     {menu && session && (
       <SessionMenu session={session} at={menu.at} actions={actions} filing={filing} projects={projects} current={currentOf(session)}
-        onOpen={onOpen} onTerminal={state.terminal} onRename={state.rename} onClose={state.close} />
+        onOpen={onOpen} onTerminal={state.terminal} onRename={state.rename} {...(onHandover ? { onHandover } : {})} onClose={state.close} />
     )}
     {renaming && <RenameDialog session={renaming} onRename={state.sendRename} onClose={state.closeRename} />}
   </>);

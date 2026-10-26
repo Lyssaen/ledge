@@ -24,11 +24,32 @@ describe('a session near its context limit (context handover spec §3.2)', () =>
     await waitFor(() => expect(d.received).toContainEqual({ type: 'session.handover', rid: expect.any(String), id: 'otto' }));
     await user.click(screen.getByRole('button', { name: /^Otto,/ }));
     expect(document.querySelector('.pane-meta')).toHaveTextContent('context 85 %');
-    expect(within(screen.getByRole('banner').parentElement!).getAllByRole('button', { name: 'Hand over' }).length).toBeGreaterThan(0);
+    // « Hand over » is in the session's « … » menu, with its gauge; not in the page's heading.
+    expect(document.querySelector('.pane-heading')!.textContent).not.toContain('Hand over');
+    await user.click(within(screen.getByRole('banner')).getByRole('button', { name: 'Manage Otto' }));
+    const item = await screen.findByRole('menuitem', { name: 'Hand over' });
+    expect(item).toHaveTextContent('context 85 %');
+    await user.click(item);
+    await waitFor(() => expect(d.received.filter(m => m.type === 'session.handover')).toHaveLength(2));
     // Under way: the page says so, « Your turn » lets it be.
     d.push({ type: 'session.updated', session: fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'idle', role: 'build', context: ctx(170_000), handover: { state: 'briefing', at: AT } }) });
     expect(await screen.findByText('relief: brief asked')).toBeVisible();
     await waitFor(() => expect(side.queryByText(/Otto @build · context/)).toBeNull());
+  });
+
+  it('« Max context » in Settings › General: the daemon\'s threshold, set there; the lists follow it', async () => {
+    const { d, side, user } = await boot({ projects: PROJECTS, sessions: [fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'idle', context: ctx(150_000) })] });
+    d.push({ type: 'context.prefs', prefs: { near: 0.8 } });
+    expect(side.queryByText(/Otto · context/)).toBeNull();
+    await user.keyboard('{Control>},{/Control}');
+    await screen.findByRole('heading', { level: 1, name: 'General' });
+    const select = screen.getByRole('combobox', { name: 'Max context' });
+    expect(select).toHaveValue('80');
+    await user.selectOptions(select, '70');
+    await waitFor(() => expect(d.received).toContainEqual({ type: 'context.set', prefs: { near: 0.7 } }));
+    d.push({ type: 'context.prefs', prefs: { near: 0.7 } });
+    // 75 % is past 70 %: « Your turn » lists it.
+    expect(await side.findByText('Otto · context 75 %')).toBeVisible();
   });
 
   it('« The point » lists it as « Your turn » does; « Later » in « Your turn » puts it away from both', async () => {

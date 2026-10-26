@@ -79,7 +79,7 @@ export const en: Messages = {
     teamPreview: (team, project) => `Team ${team} will sit at a new table in the ${project} room.`,
     teamLaunched: name => `✓ Team ${name} launched`, teamFailed: why => `Team not launched: ${why}`, noSeat: 'Choose at least one seat.'
   },
-  settings: { title: 'Settings', language: 'Language', saved: 'Setting saved.', saveFailed: m => `Setting applied, but not saved: ${m}` },
+  settings: { title: 'Settings', language: 'Language', context: 'Max context', contextHint: 'past it: hand over', contextUnknown: 'update the daemon', contextSaved: pct => `Max context: ${pct} %`, saved: 'Setting saved.', saveFailed: m => `Setting applied, but not saved: ${m}` },
   help: { title: 'Help', global: 'Everywhere', overview: 'Overview', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings', screens: 'switch screen' },
   toast: {
     handover: n => `${n} is writing its brief: a fresh session will take its place`, handoverRefused: why => `Relief refused: ${why}`,

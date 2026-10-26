@@ -350,7 +350,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           proposal={nav.modal.proposal} projects={projects} sessions={sessions} machines={machines} client={fleetClient} fleet={fleet} projectIdOf={projectIdOf} paused={nav.paused}
           notify={notify} onClose={close} onSaved={projectSaved} onDeleted={projectDeleted} />
       )}
-      <SessionMenuHost state={sessionMenu} actions={actions} filing={filing} projects={projects?.projects ?? NO_PROJECTS} currentOf={projectIdOf} onOpen={s => dispatch({ type: 'open', id: s.id })} />
+      <SessionMenuHost state={sessionMenu} actions={actions} filing={filing} projects={projects?.projects ?? NO_PROJECTS} currentOf={projectIdOf} onOpen={s => dispatch({ type: 'open', id: s.id })} onHandover={s => { void teams.handover(s.id); }} />
       <WhatsNew />
       {actions.pending && <ConfirmDialog c={actions.pending} onConfirm={actions.confirm} onCancel={actions.cancel} />}
       <PairingDialog shown={pairing} mobile={mobile} fleet={fleet} notify={notify} />

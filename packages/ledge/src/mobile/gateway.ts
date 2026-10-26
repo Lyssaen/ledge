@@ -84,6 +84,8 @@ export function createPhoneGateway(deps: {
   tasks?: () => Task[];
   /** A project's name, by id. */
   projectName?: (id: string | null) => string | null;
+  /** The context threshold the user chose (context handover spec §3.2). */
+  contextNear?: () => number;
 }): PhoneGateway {
   const { mobile, log } = deps;
   /** The read mark of a session no device marked: what was replied before the gateway started counts as read. */
@@ -149,7 +151,7 @@ export function createPhoneGateway(deps: {
     if (f) f.pushStatus = push;
     return {
     type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, boot: deps.boot, name: clip(hostname(), 40).text },
-    device: { confirm: deps.credential(deviceId) !== null, push, ...(deps.chats ? { chat: true as const } : {}) }
+    device: { confirm: deps.credential(deviceId) !== null, push, ...(deps.chats ? { chat: true as const } : {}), ...(deps.contextNear ? { contextNear: deps.contextNear() } : {}) }
     };
   };
 
@@ -617,6 +619,10 @@ export function createPhoneGateway(deps: {
             return;
           case 'session.removed':
             return removed(m.id);
+          case 'context.prefs':
+            // The threshold rides on the snapshot's device: a change sends each following device a fresh one.
+            for (const [deviceId, f] of followers) if (f.subscribed) push(deviceId, snapshot(deviceId), 'snapshot');
+            return;
           case 'team.updated': {
             const teams = phoneTeams();
             for (const [deviceId, f] of followers) if (f.subscribed) push(deviceId, { type: 'teams', teams }, 'teams');

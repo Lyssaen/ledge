@@ -53,15 +53,19 @@ Two parts, in this order: (A) the open tasks in what a session is told when it s
 
 ### 3.2 When it is nearly full
 
-- **Threshold: 80 %** (`CONTEXT_NEAR`). Claude Code compacts on its own near the end of its window; at 80 % there is
-  room left to write a brief.
+- **Threshold: « Contexte max »**, a setting (Settings › General on Desktop, Réglages in the TUI), 50 % to 95 % by
+  steps of 5 %, **80 % by default**. The local daemon keeps it (`~/.ledge/context.json`, `context.set`), tells it after
+  every snapshot and on each change (`context.prefs`), and the phone gets it on its snapshot (`device.contextNear`).
+  Claude Code compacts on its own near the end of its window; at 80 % there is room left to write a brief.
 - A session past the threshold is « near its limit »:
-  - Desktop: an item in « À toi » (« Otto @build approche de sa limite de contexte · 84 % ») with « Passer le relais »
-    and « Plus tard » (put away until it grows by another 5 points); the session page's meta line shows the gauge
-    (`contexte 84 %`), with « Passer le relais » in the session's actions.
-  - TUI: the session's line in « À toi » with `H` to hand over; the session card shows `ctx 84 %` (short: a narrow terminal cuts the line).
-  - Phone: the agent's row shows `contexte 84 %`; the relief is started from the PC (it launches a session, which the
-    phone only does with its device check on a chat card).
+  - Desktop: an item in « À toi » and in « Le point » (« Otto @build · contexte 86 % ») with « Passer le relais » and
+    « Plus tard » (put away until it grows by another 5 points; the sidebar only, for room). « Passer le relais » is also
+    in the session's « ⋯ » menu (the top bar's and the seat's), with the gauge as its hint; the session page's meta line
+    shows the gauge (`contexte 86 %`) and the relief's state.
+  - TUI: the session's line in « À toi » (`ctx 86 % · H relève`), `H` to hand over; the session card shows `ctx 86 %`, and
+    the relief's state on a line of its own.
+  - Phone: « Le point » lists it (opened, not handed over: the relief launches a session, which the phone only does with
+    its device check on a chat card); « Agents » shows the gauge and the relief.
   - Ledge's chat context (`sessions.md`) gives each session's context, so the operator can mention it.
 - **Automatic relief** only for a seat of a team whose role works without asking (`autonomy: auto`): past the threshold,
   Ledge starts the relief by itself, and says so in « À toi » once done. Any other session waits for the user.
@@ -102,8 +106,8 @@ reason }`, said in « À toi ». `ledge handover show` prints the brief of the s
 
 - `Session` gets optional `context?: { used, window, at }`, `handover?: { state: 'briefing' | 'launching' | 'done' |
   'failed', at, to?, toName?, reason?, auto? }` and `relieves?: { id, name, at }`.
-- Client: `session.handover { rid, id }`; `handover.brief { by, text }`; `handover.show { rid, by }`.
-- Server: `session.handover.result { rid, ok, reason? }`; `handover.result { rid, text?, reason? }`.
+- Client: `session.handover { rid, id }`; `handover.brief { by, text }`; `handover.show { rid, by }`; `context.set { prefs: { near } }`.
+- Server: `session.handover.result { rid, ok, reason? }`; `handover.result { rid, text?, reason? }`; `context.prefs { prefs: { near } }`.
 - Phone: `PhoneSession` picks `context`, `handover` (its state only) and `relieves`.
 
 ## 4. Tests

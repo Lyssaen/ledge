@@ -33,7 +33,7 @@ export async function writeContext(dir: string, input: ContextInput): Promise<Co
     if (withProjects) lines.push(`- Project: ${nameOf.get(projectOf(s, projects) ?? '') ?? 'no project'}`);
     if (s.role) lines.push(`- role: ${oneLine(s.roleLabel ?? s.role)} (@${s.role})${s.autonomy ? `, autonomy ${s.autonomy}` : ''}`);
     // Its context (context handover spec §3.2): past 80 % the user may hand it over to a fresh session (« Passer le relais »).
-    if (s.context) lines.push(`- context: ${Math.round((s.context.used / s.context.window) * 100)} % of ${s.context.window} tokens${s.context.used / s.context.window >= 0.8 ? ' — near its limit: a relief can be started from its page' : ''}`);
+    if (s.context) lines.push(`- context: ${Math.round((s.context.used / s.context.window) * 100)} % of ${s.context.window} tokens (the user's threshold decides when it is near its limit; a relief is started from its « ⋯ » menu)`);
     if (s.handover) lines.push(`- relief: ${s.handover.state}${s.handover.toName ? `, relieved by ${oneLine(s.handover.toName)}` : ''}${s.handover.reason ? ` (${oneLine(s.handover.reason)})` : ''}`);
     if (s.relieves) lines.push(`- relieves ${oneLine(s.relieves.name)} (its context was full)`);
     const team = s.team ? input.teams?.find(t => t.id === s.team) : undefined;

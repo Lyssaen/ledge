@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { HandoverStateSchema } from './handover.js';
+import { ContextPrefsSchema, HandoverStateSchema } from './handover.js';
 import { AutonomySchema, PendingSchema, SessionSchema, ToolSchema, type Tool } from './session.js';
 import { ChatStepSchema, MAX_PROPOSALS } from './chat.js';
 import { DecisionSchema, NOTE_MAX } from './decisions.js';
@@ -260,7 +260,7 @@ export type PhoneClientMessage = z.infer<typeof PhoneClientMessageSchema>;
 
 /** What the daemon sends a phone. */
 export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('snapshot'), protocol: z.literal(PHONE_PROTOCOL), sessions: z.array(PhoneSessionSchema), capabilities: CapabilitiesByToolSchema, daemon: z.object({ version: z.string(), name: z.string().max(40), boot: z.string().uuid().optional() }), device: z.object({ confirm: z.boolean(), push: z.enum(['on', 'off', 'stale', 'unavailable']).optional(), chat: z.literal(true).optional() }).optional() }),
+  z.object({ type: z.literal('snapshot'), protocol: z.literal(PHONE_PROTOCOL), sessions: z.array(PhoneSessionSchema), capabilities: CapabilitiesByToolSchema, daemon: z.object({ version: z.string(), name: z.string().max(40), boot: z.string().uuid().optional() }), device: z.object({ confirm: z.boolean(), push: z.enum(['on', 'off', 'stale', 'unavailable']).optional(), chat: z.literal(true).optional(), contextNear: ContextPrefsSchema.shape.near.optional() }).optional() }),
   z.object({ type: z.literal('confirm.challenge'), purpose: ConfirmPurposeSchema, challenge: B64U.max(64), rpId: z.string().max(253), credentialId: B64U.max(1_366).optional(), expiresInMs: z.number().int().positive() }),
   z.object({ type: z.literal('session.updated'), session: PhoneSessionSchema }),
   z.object({ type: z.literal('session.removed'), id: z.string() }),

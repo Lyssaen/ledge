@@ -53,7 +53,7 @@ export function LePoint({ view, teams, decisions, waits, projects, dispatch, onA
   const attn = useMemo(() => attentionOf(view.sessions, waits), [view.sessions, waits]);
   const closed = closedLedgeTasks(teams.tasks);
   // Near their context limit (context handover spec §3.2), as « À toi » lists them.
-  const near = useMemo(() => nearLimit(view.sessions, teams.later), [view.sessions, teams.later]);
+  const near = useMemo(() => nearLimit(view.sessions, teams.later, teams.near), [view.sessions, teams.later, teams.near]);
   const given = teams.tasks.filter(x => x.giver === LEDGE_GIVER && (!taskClosed(x) || isToday(x.updatedAt)));
   const live = teams.teams ?? [];
   const state = (x: Task) => t.chat.task.state[x.state];

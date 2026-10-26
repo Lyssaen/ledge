@@ -1,4 +1,4 @@
-import { ChatTurnSchema, isArchived, IslandPrefsSchema, LEDGE_GIVER, ProjectsSchema, type Task, type Team, type IslandPrefs, type MobileState, type ChatTurn, type ChatProposal, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session, type Tool } from '@ledge/protocol';
+import { ChatTurnSchema, ContextPrefsSchema, isArchived, IslandPrefsSchema, LEDGE_GIVER, ProjectsSchema, type Task, type Team, type IslandPrefs, type MobileState, type ChatTurn, type ChatProposal, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session, type Tool } from '@ledge/protocol';
 import { createDaemonClient, type DaemonClient, type DaemonStatus } from './client';
 import { loadMachines, machineUrl, parseMachines, probeMachine, qualify, shellCommand, splitId, terminalCommand, type MachineConfig, type MobileError, type MachineState } from './machines';
 import type { TokenSource } from './token';
@@ -68,6 +68,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   let projects: Projects | null = null;
   /** The local daemon's island settings: undefined until it sends them, null while none was set. */
   let island: IslandPrefs | null | undefined;
+  /** The local daemon's context threshold: undefined until it sends it. */
+  let contextNear: number | undefined;
   /** The local daemon's mobile access state: undefined until it sends it. */
   let mobile: MobileState | undefined;
   /** The local daemon's last refused mobile.* command: cleared by the next command and by every mobile broadcast. */
@@ -186,6 +188,12 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     if (m.type === 'projects') {
       if (machine !== 'local') return;
       projects = m.projects; listeners.forEach(fn => fn());
+      return;
+    }
+    // So is the context threshold (context handover spec §3.2).
+    if (m.type === 'context.prefs') {
+      if (machine !== 'local') return;
+      contextNear = m.prefs.near; listeners.forEach(fn => fn());
       return;
     }
     // So are the island's settings: one copy per host, set from Desktop and applied by the island.
@@ -468,6 +476,14 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       mobileError: () => mobileError,
       teams: () => teams,
       tasks: () => taskList,
+      contextNear: () => contextNear,
+      setContextNear(near) {
+        const valid = ContextPrefsSchema.parse({ near });
+        const local = peers.get('local')!.client;
+        if (local.status() !== 'open') throw Object.assign(new Error('The local daemon is not connected'), { name: 'DaemonOffline' });
+        if (contextNear === undefined) throw Object.assign(new Error('Update the local Ledge daemon: it does not know the context threshold'), { name: 'DaemonOutdated' });
+        local.send({ type: 'context.set', prefs: valid });
+      },
       sendMobile(msg) {
         const local = peers.get('local')!.client;
         if (local.status() !== 'open') throw Object.assign(new Error('The local daemon is not connected'), { name: 'DaemonOffline' });

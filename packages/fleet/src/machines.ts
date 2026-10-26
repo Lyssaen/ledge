@@ -1,4 +1,4 @@
-import { MachinesSchema, type Machine, type IslandPrefs, type MobileClientMessage, type MobileState } from '@ledge/protocol';
+import { CONTEXT_NEAR, MachinesSchema, type Machine, type IslandPrefs, type MobileClientMessage, type MobileState } from '@ledge/protocol';
 import type { DaemonClient, DaemonStatus } from './client';
 import { parseServerMessage, type ClientMessage, type DaemonInfo, type Projects, type Recent, type Session, type ServerMessage, type Task, type Team } from '@ledge/protocol';
 import { useSyncExternalStore } from 'react';
@@ -52,6 +52,10 @@ export interface Fleet {
   teams(): Team[] | null;
   /** The tasks Ledge gave and those of the live teams, known to the local daemon, oldest first; sessions qualified. */
   tasks(): Task[];
+  /** The context threshold the local daemon keeps (context handover spec §3.2): undefined until it speaks of it. */
+  contextNear(): number | undefined;
+  /** Sets it on the local daemon; the effect arrives on its broadcast. Throws `DaemonOffline` / `DaemonOutdated` as `setIsland`. */
+  setContextNear(near: number): void;
 }
 /** A refused mobile.* command, as the Mobile access settings say it. */
 export interface MobileError { request: string; message: string; code?: string }
@@ -149,6 +153,11 @@ const emptyTasks = () => noTasks;
 /** The local daemon's live teams: null until it sends them (an older daemon never does). */
 export function useTeams(client: DaemonClient): Team[] | null {
   return useSyncExternalStore(client.fleet?.subscribe ?? noopSubscribe, client.fleet?.teams ?? nullSnapshot, nullSnapshot);
+}
+/** The context threshold (context handover spec §3.2): the local daemon's, else the default. */
+const defaultNear = () => CONTEXT_NEAR;
+export function useContextNear(client: DaemonClient): number {
+  return useSyncExternalStore(client.fleet?.subscribe ?? noopSubscribe, () => client.fleet?.contextNear() ?? CONTEXT_NEAR, defaultNear);
 }
 /** The tasks Ledge gave, and those of the live teams. */
 export function useTasks(client: DaemonClient): Task[] {

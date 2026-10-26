@@ -14,7 +14,7 @@ import { ThreadItemSchema } from './thread.js';
 import { DecisionSchema, NOTE_MAX } from './decisions.js';
 import { MobileStateSchema, RelayUrlSchema } from './mobile.js';
 import { TaskCmdSchema, TaskResultSchema, TaskUpdatedSchema } from './tasks.js';
-import { HandoverBriefSchema, HandoverResultSchema, HandoverShowSchema, SessionHandoverResultSchema, SessionHandoverSchema } from './handover.js';
+import { ContextPrefsMessageSchema, ContextSetSchema, HandoverBriefSchema, HandoverResultSchema, HandoverShowSchema, SessionHandoverResultSchema, SessionHandoverSchema } from './handover.js';
 import { RoleIdSchema, RolesListSchema, RolesListingSchema, TeamDissolveSchema, TeamFailedSchema, TeamIdSchema, TeamJoinSchema, TeamLaunchSchema, TeamLaunchedSchema, TeamLeaveSchema, TeamResumeSchema, TeamSaveSchema, TeamSavedSchema, TeamsMessageSchema, TeamUpdatedSchema } from './teams.js';
 
 export const PROTOCOL_PORT = 47831;
@@ -142,6 +142,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('message.body'), id: z.string(), from: z.string().optional(), to: z.string().optional(), at: z.string().optional(), text: z.string().optional(), reason: z.string().optional() }),
   TaskResultSchema,
   SessionHandoverResultSchema,
+  ContextPrefsMessageSchema,
   HandoverResultSchema,
   TaskUpdatedSchema,
   RolesListingSchema,
@@ -257,6 +258,7 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('message.read'), id: z.string().min(1).max(40), by: z.string().min(1) }),
   TaskCmdSchema,
   SessionHandoverSchema,
+  ContextSetSchema,
   HandoverBriefSchema,
   HandoverShowSchema,
   RolesListSchema,

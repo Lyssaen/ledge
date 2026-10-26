@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Box, Text, useWindowSize } from 'ink';
 import { randomUUID } from 'node:crypto';
 import { useState } from 'react';
-import { isPending, useTasks, useTeams } from '@ledge/fleet';
+import { isPending, useContextNear, useTasks, useTeams } from '@ledge/fleet';
 import { LEDGE_GIVER, taskClosed, type Session, type Team } from '@ledge/protocol';
 import { botState } from '@ledge/ui/bots/poseFor';
 import { useScreenKeys, useTui } from '../context.js';
@@ -44,7 +44,8 @@ export function Overview() {
   const sel = selected?.id ?? null;
   const closed = closedLedgeTasks(tasks);
   // Sessions near their context limit (context handover spec §3.2): H hands the selected one (else the first) over.
-  const near = useMemo(() => nearContext(d.sessions), [d.sessions]);
+  const threshold = useContextNear(tui.client);
+  const near = useMemo(() => nearContext(d.sessions, threshold), [d.sessions, threshold]);
   // The selected seat's team: its tasks box (t hides it), and the teams of its project for J and R.
   const [tasksShown, setTasksShown] = useState(true);
   const [joining, setJoining] = useState<{ index: number } | null>(null);

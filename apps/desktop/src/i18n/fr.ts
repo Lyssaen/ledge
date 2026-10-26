@@ -78,7 +78,7 @@ export const fr = {
     nav: 'Sections des réglages', back: 'Retour à l’atelier',
     saved: (what: string) => `Réglage enregistré · ${what}`,
     hints: {
-      general: 'Langue, démarrage, agent par défaut et mises à jour.',
+      general: 'Langue, démarrage, agent par défaut, contexte max et mises à jour.',
       appearance: 'Thème, couleur de Ledge, échelle et mouvements.',
       island: 'L’encoche en haut de l’écran : où elle se pose et ce qu’elle signale.',
       notifications: 'Qui vous prévient, et quand vous laisser tranquille.',
@@ -99,7 +99,9 @@ export const fr = {
       autostart: 'Lancer au démarrage de Windows', autostartHint: 'Ledge Desktop s’ouvre avec votre session Windows.',
       autostartMissing: 'Pas proposé ici : seule l’application installée peut se lancer avec Windows.',
       autostartFailed: 'Windows n’a pas pris ce réglage.', autostartOff: 'Pas de lancement au démarrage',
-      tool: 'Agent par défaut', toolHint: 'Pour le chat de Ledge et ses cartes.', toolSaved: (name: string) => `Agent par défaut : ${name}`
+      tool: 'Agent par défaut', toolHint: 'Pour le chat de Ledge et ses cartes.', toolSaved: (name: string) => `Agent par défaut : ${name}`,
+      context: 'Contexte max', contextHint: 'Au-delà, une session est proche de sa limite : « À toi » propose de passer le relais, et Ledge relève de lui-même un poste qui travaille sans demander.',
+      contextSaved: (pct: number) => `Contexte max : ${pct} %`, contextUnknown: 'Mettez à jour le daemon Ledge local pour régler ce seuil.'
     },
     updates: {
       title: 'Mises à jour',

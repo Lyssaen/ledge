@@ -1,4 +1,4 @@
-import type { PhoneSession, PhoneTeam } from '@ledge/protocol';
+import { CONTEXT_NEAR, type PhoneSession, type PhoneTeam } from '@ledge/protocol';
 import { copy } from '../copy';
 import { agentsOf, type AgentRow } from '../model/agents';
 import { requestsOf } from '../model/requests';
@@ -12,7 +12,7 @@ import { TabBar } from '../ui/TabBar';
 import { Flag, Progress, RolePill } from '../ui/teams/RolePill';
 import { closedTasks, tablesOf, type Table } from '../model/teams';
 
-function Row({ row, session, offline }: { row: AgentRow; session: PhoneSession | undefined; offline: boolean }) {
+function Row({ row, session, offline, threshold }: { row: AgentRow; session: PhoneSession | undefined; offline: boolean; threshold: number }) {
   return (
     <a href={href({ name: 'thread', sessionId: row.sessionId })} className="flex gap-3 border-b border-line py-4 hover:bg-raised/40">
       <div className="mt-[3px]"><MobileBot tool={row.tool} seed={row.sessionId} state={session?.state ?? 'idle'} frozen={offline} /></div>
@@ -30,7 +30,7 @@ function Row({ row, session, offline }: { row: AgentRow; session: PhoneSession |
             {[session.context ? copy.agents.context(Math.round((session.context.used / session.context.window) * 100)) : null,
               session.handover ? (session.handover.state === 'done' && session.handover.toName ? copy.agents.relievedBy(session.handover.toName) : copy.agents.relief[session.handover.state]) : null,
               session.relieves ? copy.agents.relieves(session.relieves.name) : null].filter(Boolean).map((x, i) => (
-              <span key={i} className={i === 0 && session.context && session.context.used / session.context.window >= 0.8 ? 'text-attention' : undefined}>{i > 0 ? ' · ' : ''}{x}</span>
+              <span key={i} className={i === 0 && session.context && session.context.used / session.context.window >= threshold ? 'text-attention' : undefined}>{i > 0 ? ' · ' : ''}{x}</span>
             ))}
           </p>
         )}
@@ -82,7 +82,7 @@ export function Agents({ store, onReconnect }: { store: MobileStore; onReconnect
               {g.tables.map(t => (
                 <div key={t.kind === 'team' ? t.team.id : 'common'} role="group" aria-label={t.kind === 'team' ? copy.agents.teamLabel(t.team.name) : copy.agents.common} className={t.kind === 'team' && t.team.state === 'resting' ? 'opacity-70' : ''}>
                   {teamed && <TableHead table={t} store={store} offline={offline} />}
-                  {t.rows.map(r => <Row key={r.sessionId} row={r} session={state.sessions.get(r.sessionId)} offline={offline} />)}
+                  {t.rows.map(r => <Row key={r.sessionId} row={r} session={state.sessions.get(r.sessionId)} offline={offline} threshold={state.device?.contextNear ?? CONTEXT_NEAR} />)}
                 </div>
               ))}
             </section>
@@ -92,7 +92,7 @@ export function Agents({ store, onReconnect }: { store: MobileStore; onReconnect
           // Two groups can share a name (a repository and a project); a session belongs to one group only.
           <section key={g.rows[0]!.sessionId} aria-label={g.label}>
             <div className="py-3 text-[11px] tracking-[.4px] text-muted">{g.label}</div>
-            {g.rows.map(r => <Row key={r.sessionId} row={r} session={state.sessions.get(r.sessionId)} offline={offline} />)}
+            {g.rows.map(r => <Row key={r.sessionId} row={r} session={state.sessions.get(r.sessionId)} offline={offline} threshold={state.device?.contextNear ?? CONTEXT_NEAR} />)}
           </section>
         ))}
         {(tables ?? groups).length === 0 && (

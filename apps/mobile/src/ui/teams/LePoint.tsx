@@ -26,14 +26,14 @@ function closedLine(t: PhoneTask): string {
  * authorisation answered in place, the rest opened; the closed tasks Ledge gave), the teams with Ledge's progress, and
  * the tasks Ledge gave that are still open.
  */
-export function LePoint({ store, sessions, teams, tasks, syncedAt, fresh }: { store: MobileStore; sessions: PhoneSession[]; teams: PhoneTeam[]; tasks: Map<string, PhoneTask>; syncedAt: string | null; fresh: boolean }) {
+export function LePoint({ store, sessions, teams, tasks, syncedAt, fresh, threshold = CONTEXT_NEAR }: { store: MobileStore; sessions: PhoneSession[]; teams: PhoneTeam[]; tasks: Map<string, PhoneTask>; syncedAt: string | null; fresh: boolean; threshold?: number }) {
   const now = useNow();
   const [busy, setBusy] = useState<string | null>(null);
   const byId = new Map(sessions.map(s => [s.id, s]));
   const requests = requestsOf(sessions);
   const closed = closedTasks(tasks.values());
   // Near their context limit (context handover spec §3.2): opened here, handed over from the PC.
-  const near = sessions.filter(s => s.state !== 'exited' && !s.handover && s.context && s.context.used / s.context.window >= CONTEXT_NEAR);
+  const near = sessions.filter(s => s.state !== 'exited' && !s.handover && s.context && s.context.used / s.context.window >= threshold);
   const open = openTasks(tasks.values()).slice(0, 5);
   const P = copy.chat.point;
   const yours = requests.length + closed.length + near.length;

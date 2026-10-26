@@ -1,6 +1,7 @@
 import { Box, Text } from 'ink';
 import { liveHelpers } from '@ledge/fleet';
 import { contextNear, offers, type Session } from '@ledge/protocol';
+import { useContextNear } from '@ledge/fleet';
 import { botState } from '@ledge/ui/bots/poseFor';
 import { useTui } from '../context.js';
 import { machineLabel, modelLabel, TOOL_NAME } from '../model/labels.js';
@@ -19,7 +20,9 @@ export function Button({ label, k, primary, off }: { label: string; k: string; p
 
 /** What the session is (state, agent, model, machine, branch, helpers) and its request with the keys that answer it. */
 export function SessionCard({ s, note }: { s: Session; note?: boolean }) {
-  const { t, g } = useTui();
+  const tui = useTui();
+  const { t, g } = tui;
+  const threshold = useContextNear(tui.client);
   const state = botState(s);
   const helpers = liveHelpers(s);
   const p = s.pending;
@@ -31,7 +34,7 @@ export function SessionCard({ s, note }: { s: Session; note?: boolean }) {
         <Text color={STATE_COLOR[state]}>{g[state]} {t.state[state]}</Text>
         <Text color={C.dim}>  {TOOL_NAME[s.tool]} · {modelLabel(s, t.session.defaultModel)}</Text>
         {/* Its context, before what is cut first on a narrow terminal (context handover spec §3.2). */}
-        {s.context ? <Text color={contextNear(s.context) ? C.yellow : C.dim}> · {t.overview.context(Math.round((s.context.used / s.context.window) * 100))}</Text> : null}
+        {s.context ? <Text color={contextNear(s.context, threshold) ? C.yellow : C.dim}> · {t.overview.context(Math.round((s.context.used / s.context.window) * 100))}</Text> : null}
         <Text color={C.dim}> · {machineLabel(s)}{s.branch ? ` · ${g.branch} ${s.branch}` : ''}</Text>
         {s.offline ? <Text color={C.yellow}>  {t.overview.offline}</Text> : s.source === 'hook_only' ? <Text color={C.faint}>  {t.overview.readOnly}</Text> : null}
       </Text>
