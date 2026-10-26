@@ -23,8 +23,8 @@ export interface ActionRowView {
 }
 
 const CODES: ReadonlySet<string> = new Set(ACTION_ERROR_CODES);
-/** A row of the protocol, as the card draws it: its target by name (`vars`; its id stays in the ChatAction, for the link), `changed`
- *  as stale, a code the front does not know yet (a newer daemon) as `failed`. */
+/** A row of the protocol, as the card draws it: its target by name (`vars`; its id stays in the ChatAction, for the link), a
+ *  request's `changed` as stale, a code the front does not know yet (a newer daemon) as `failed`. */
 export function actionRowOf(a: ChatAction): ActionRowView {
   const row: ActionRowView = { action: a.action, summary: a.summary, risk: a.risk };
   if (a.vars !== undefined) row.vars = a.vars;
@@ -41,7 +41,8 @@ export function actionRowOf(a: ChatAction): ActionRowView {
   if (a.doneAt !== undefined) row.doneAt = a.doneAt;
   if (a.error !== undefined) row.error = a.error;
   if (a.code !== undefined) row.code = CODES.has(a.code) ? a.code as ActionErrorCode : 'failed';
-  if (a.code === 'changed') row.state = 'stale';
+  // Only a request has the « request changed » state (codes.md); another action's `changed` stays a refusal.
+  if (a.code === 'changed' && a.action === 'session.decide') row.state = 'stale';
   // Not accepted from the card, since it was not read whole (codes.md): the daemon's `cut` is that state too, never a refusal.
   if ((a.detailCut && !a.state && row.decision !== 'deny') || a.code === 'cut') { row.state = 'cut'; delete row.code; delete row.error; }
   // Never shown (codes.md): the card was set aside, or a destructive row was sent unconfirmed; it is proposed again.

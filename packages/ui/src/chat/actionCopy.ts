@@ -31,7 +31,15 @@ const fr: ActionCopy = {
     manyWhy: (d: number) => `${d === 1 ? 'Une est irréversible' : `${d} sont irréversibles`} : relis ${d === 1 ? 'son' : 'leur'} détail ci-dessus. Si une étape échoue, les suivantes ne sont pas appliquées.`,
     cancel: 'Annuler', go: (n: number) => `Appliquer les ${n}`, alreadyDone: 'déjà faite'
   },
-  ignored: (n: number, at: string) => `${n > 1 ? `Plan de ${n} actions ignoré` : 'Carte ignorée'} à ${at} · rien n’a été envoyé`,
+  ignored: (n, at, sent = { done: 0, denied: 0, failed: 0 }) => {
+    const went = [
+      ...(sent.done ? [`${sent.done} ${sent.done > 1 ? 'appliquées' : 'appliquée'}`] : []),
+      ...(sent.denied ? [`${sent.denied} ${sent.denied > 1 ? 'refus envoyés' : 'refus envoyé'}`] : []),
+      ...(sent.failed ? [`${sent.failed} ${sent.failed > 1 ? 'échouées' : 'échouée'}`] : [])
+    ];
+    if (!went.length) return `${n > 1 ? `Plan de ${n} actions ignoré` : 'Carte ignorée'} à ${at} · rien n’a été envoyé`;
+    return n > 1 ? `Plan de ${n} actions : ${went.join(', ')}, le reste ignoré à ${at}` : `Carte ignorée à ${at} · l’action est partie, mais n’a pas abouti`;
+  },
   words: actionWords.fr
 };
 
@@ -62,7 +70,15 @@ const en: ActionCopy = {
     manyWhy: (d: number) => `${d === 1 ? 'One is irreversible' : `${d} are irreversible`}: read ${d === 1 ? 'its' : 'their'} detail above. If a step fails, the next ones are not applied.`,
     cancel: 'Cancel', go: (n: number) => `Apply the ${n}`, alreadyDone: 'already done'
   },
-  ignored: (n: number, at: string) => `${n > 1 ? `Plan of ${n} actions ignored` : 'Card ignored'} at ${at} · nothing was sent`,
+  ignored: (n, at, sent = { done: 0, denied: 0, failed: 0 }) => {
+    const went = [
+      ...(sent.done ? [`${sent.done} applied`] : []),
+      ...(sent.denied ? [`${sent.denied} ${sent.denied > 1 ? 'denials' : 'denial'} sent`] : []),
+      ...(sent.failed ? [`${sent.failed} failed`] : [])
+    ];
+    if (!went.length) return `${n > 1 ? `Plan of ${n} actions ignored` : 'Card ignored'} at ${at} · nothing was sent`;
+    return n > 1 ? `Plan of ${n} actions: ${went.join(', ')}, the rest ignored at ${at}` : `Card ignored at ${at} · the action was sent but did not go through`;
+  },
   words: actionWords.en
 };
 

@@ -1,3 +1,4 @@
+import { actionCopy as shipped } from '../src/chat/actionCopy';
 import { actionWords } from '../src/chat/actionWords';
 import type { ChatCopy } from '../src/chat/copy';
 
@@ -40,6 +41,7 @@ export const actionCopy: NonNullable<ChatCopy['chat']['action']> = {
     label: 'Confirmation', many: (n, all) => `Apply ${all ? 'these' : 'the'} ${n} actions, in order?`, one: s => `${s}?`, oneWhy: 'Ledge cannot undo it once sent.',
     manyWhy: d => `${d} irreversible: read the detail above. If a step fails, the next ones are not applied.`, cancel: 'Cancel', go: n => `Apply the ${n}`, alreadyDone: 'already done'
   },
-  ignored: (n, at) => `${n > 1 ? `Plan of ${n} actions ignored` : 'Card ignored'} at ${at} · nothing was sent`,
+  // The shipped words: a plan ignored once begun counts what went.
+  ignored: shipped.en.ignored,
   words: actionWords.en
 };
