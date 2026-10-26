@@ -33,7 +33,8 @@ export async function runTui(args: readonly string[]): Promise<number> {
   client.connect();
   const app = render(
     <App client={client} lang={lang} saveLang={next => saveSettings({ ...loadSettings(), lang: next })} notify={parsed.notify} glyphs={glyphsFor(process.env)} env={process.env} />,
-    { alternateScreen: true, exitOnCtrlC: false, maxFps: 30 }
+    // Incremental: a key rewrites the lines it changed, not the whole screen erased then drawn again (the flicker).
+    { alternateScreen: true, exitOnCtrlC: false, maxFps: 30, incrementalRendering: true }
   );
   // A kill leaves the terminal as Ink found it: unmounting restores the screen, the cursor and the keyboard mode.
   const stop = () => app.unmount();
