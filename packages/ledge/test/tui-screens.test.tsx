@@ -167,6 +167,33 @@ describe('ledge tui: the session thread (#95 lot A)', () => {
     } finally { await tui.cleanup(); }
   });
 
+  it('at 60×16 a four-line request keeps the field whole: the request, then the field, the thread takes what is left', async () => {
+    const long = `rm -rf coverage node_modules/.vite && ${'pnpm --filter @ledge/ledge test -- --run --coverage --reporter=verbose && '.repeat(4)}echo fin`;
+    const otto = mockupSessions()[0]!;
+    const tui = await startTui({ sessions: [{ ...otto, pending: { ...otto.pending!, text: long } }, ...mockupSessions().slice(1)] });
+    try {
+      await tui.resize(60, 16);
+      await tui.press('\r');
+      await until(() => tui.frame().includes('Otto veut exécuter (Bash) :'));
+      const read = tui.frame().split('\n');
+      expect(read.length).toBe(16);
+      expect(read.filter(l => /^│ {3}\S/.test(l)).length).toBe(4);
+      const write = read.findIndex(l => l.includes('ÉCRIRE'));
+      expect(write).toBeGreaterThan(-1);
+      expect(read[write + 1]).toContain('Répondre à Otto');
+      expect(read[write + 2]).toMatch(/^╰─+╯$/);
+      await tui.press('r');
+      await until(() => tui.frame().includes('REFUSER EN EXPLIQUANT'));
+      const reply = tui.frame().split('\n');
+      expect(reply.length).toBe(16);
+      expect(reply.filter(l => /^│ {3}\S/.test(l)).length).toBe(4);
+      const field = reply.findIndex(l => l.includes('REFUSER EN EXPLIQUANT'));
+      expect(reply[field + 1]).toContain('❯');
+      // The field one line high, the thread has the rows left.
+      expect(reply.some(l => l.includes('OTTO · CÂBLER'))).toBe(true);
+    } finally { await tui.cleanup(); }
+  });
+
   it('the request folds under an indent, four lines at most; the key bar drops keys from the end and keeps « ? aide »; the crumb shortens', async () => {
     const long = `rm -rf coverage node_modules/.vite && ${'pnpm --filter @ledge/ledge test -- --run --coverage --reporter=verbose && '.repeat(4)}echo fin`;
     const otto = mockupSessions()[0]!;
