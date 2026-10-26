@@ -39,13 +39,14 @@ describe('the action card in the Desktop\'s words (#94)', () => {
   });
 
   it('after a failure, a refusal, and once applied', () => {
-    const { unmount } = show(plan.map((r, i) => (i === 0 ? { ...r, state: 'done', doneAt: AT } : i === 1 ? { ...r, state: 'failed', error: 'Otto est sur la machine Atlas, hors ligne.' } : r)));
-    expect(document.body).toHaveTextContent('Échec : Otto est sur la machine Atlas, hors ligne.');
+    const { unmount } = show(plan.map((r, i) => (i === 0 ? { ...r, state: 'done', doneAt: AT } : i === 1 ? { ...r, state: 'failed', error: 'Otto est sur la machine Atlas, hors ligne.', code: 'failed' } : r)));
+    expect(document.body).toHaveTextContent('Échec : l’action est partie, mais n’a pas abouti.');
+    expect(document.body).not.toHaveTextContent('Atlas');
     expect(document.body).toHaveTextContent('Pas appliquée : le plan s’est arrêté à l’étape 2.');
     expect(screen.getByRole('button', { name: 'Reprendre à l’étape 2 (2)…' })).toBeTruthy();
     unmount();
-    const r = show(plan.map((x, i) => (i === 0 ? { ...x, state: 'done', doneAt: AT } : i === 1 ? { ...x, state: 'refused', error: 'Otto a été fermé entre-temps.' } : x)));
-    expect(document.body).toHaveTextContent('Refusée : Otto a été fermé entre-temps. Rien n’a été envoyé.');
+    const r = show(plan.map((x, i) => (i === 0 ? { ...x, state: 'done', doneAt: AT } : i === 1 ? { ...x, state: 'refused', error: 'Otto a été fermé entre-temps.', code: 'exited', vars: { session: 'Otto' } } : x)));
+    expect(document.body).toHaveTextContent('Refusée : Otto ne tourne plus. Rien n’a été envoyé.');
     expect(screen.getByRole('button', { name: 'Continuer sans l’étape 2 (1)…' })).toBeTruthy();
     r.unmount();
     show(plan.map(x => ({ ...x, state: 'done' as const, doneAt: AT })));

@@ -1,3 +1,4 @@
+import { actionWords } from '@ledge/ui/chat/actionWords';
 import type { Messages } from './messages';
 
 /** English counts only 1 as singular. */
@@ -951,7 +952,8 @@ export const en: Messages = {
         manyWhy: (d: number) => `${d === 1 ? 'One is irreversible' : `${d} are irreversible`}: read ${d === 1 ? 'its' : 'their'} detail above. If a step fails, the next ones are not applied.`,
         cancel: 'Cancel', go: (n: number) => `Apply the ${n}`, alreadyDone: 'already done'
       },
-      ignored: (n: number, at: string) => `${n > 1 ? `Plan of ${n} actions ignored` : 'Card ignored'} at ${at} · nothing was sent`
+      ignored: (n: number, at: string) => `${n > 1 ? `Plan of ${n} actions ignored` : 'Card ignored'} at ${at} · nothing was sent`,
+      words: actionWords.en
     },
     project: {
       label: 'Project proposal', title: (name: string) => `Project proposal · ${name}`, complete: (name: string) => `Complete ${name}`,

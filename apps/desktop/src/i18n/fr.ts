@@ -1,3 +1,4 @@
+import { actionWords } from '@ledge/ui/chat/actionWords';
 import type { BotState } from '@ledge/ui/bots/poseFor';
 import type { SectionId } from '../nav/state';
 import type { Bucket, GroupBy } from '../list/model';
@@ -994,7 +995,8 @@ export const fr = {
         manyWhy: (d: number) => `${d === 1 ? 'Une est irréversible' : `${d} sont irréversibles`} : relis ${d === 1 ? 'son' : 'leur'} détail ci-dessus. Si une étape échoue, les suivantes ne sont pas appliquées.`,
         cancel: 'Annuler', go: (n: number) => `Appliquer les ${n}`, alreadyDone: 'déjà faite'
       },
-      ignored: (n: number, at: string) => `${n > 1 ? `Plan de ${n} actions ignoré` : 'Carte ignorée'} à ${at} · rien n’a été envoyé`
+      ignored: (n: number, at: string) => `${n > 1 ? `Plan de ${n} actions ignoré` : 'Carte ignorée'} à ${at} · rien n’a été envoyé`,
+      words: actionWords.fr
     },
     project: {
       label: 'Proposition de projet', title: (name: string) => `Proposition de projet · ${name}`, complete: (name: string) => `Compléter ${name}`,

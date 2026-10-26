@@ -1,3 +1,4 @@
+import type { ActionWords } from './actionWords';
 import { createContext, useContext } from 'react';
 
 type Say = (s: string) => string;
@@ -64,6 +65,8 @@ export interface ActionCopy {
     cancel: string; go: (n: number) => string; alreadyDone: string;
   };
   ignored: (n: number, at: string) => string;
+  /** The rows' lines and why one was refused, from their `vars` (actionWords.ts). */
+  words: ActionWords;
 }
 
 const ChatCopyContext = createContext<ChatCopy | null>(null);

@@ -1,3 +1,4 @@
+import { actionWords } from '@ledge/ui/chat/actionWords';
 import type { SoundCategory } from '../sounds/preferences';
 import type { BotState } from '../bots/poseFor';
 import type { SshProblem } from '../daemon/machines';
@@ -242,7 +243,8 @@ const fr = {
         manyWhy: (d: number) => `${d === 1 ? 'Une est irréversible' : `${d} sont irréversibles`} : relis ${d === 1 ? 'son' : 'leur'} détail ci-dessus. Si une étape échoue, les suivantes ne sont pas appliquées.`,
         cancel: 'Annuler', go: (n: number) => `Appliquer les ${n}`, alreadyDone: 'déjà faite'
       },
-      ignored: (n: number, at: string) => `${n > 1 ? `Plan de ${n} actions ignoré` : 'Carte ignorée'} à ${at} · rien n’a été envoyé`
+      ignored: (n: number, at: string) => `${n > 1 ? `Plan de ${n} actions ignoré` : 'Carte ignorée'} à ${at} · rien n’a été envoyé`,
+      words: actionWords.fr
     },
     project: {
       label: 'Proposition de projet', title: (name: string) => `Proposition de projet · ${name}`, complete: (name: string) => `Compléter ${name}`,
@@ -508,7 +510,8 @@ const en: Messages = {
         manyWhy: (d: number) => `${d === 1 ? 'One is irreversible' : `${d} are irreversible`}: read ${d === 1 ? 'its' : 'their'} detail above. If a step fails, the next ones are not applied.`,
         cancel: 'Cancel', go: (n: number) => `Apply the ${n}`, alreadyDone: 'already done'
       },
-      ignored: (n: number, at: string) => `${n > 1 ? `Plan of ${n} actions ignored` : 'Card ignored'} at ${at} · nothing was sent`
+      ignored: (n: number, at: string) => `${n > 1 ? `Plan of ${n} actions ignored` : 'Card ignored'} at ${at} · nothing was sent`,
+      words: actionWords.en
     },
     project: {
       label: 'Project proposal', title: (name: string) => `Project proposal · ${name}`, complete: (name: string) => `Complete ${name}`,

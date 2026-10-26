@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode,
 import { ACTION_ERROR_CODES, type ActionErrorCode, type ChatAction } from '@ledge/protocol';
 import { Button } from '../ui/Button';
 import { Icon, ICONS } from '../ui/icons';
+import type { ActionVars } from './actionWords';
 import { useChatCopy } from './copy';
 import { inline } from './inline';
 
@@ -13,12 +14,13 @@ export type ActionRowState = 'proposed' | 'running' | 'done' | 'failed' | 'refus
 /** One action of the card, as the protocol's `ChatAction` gives it (`actionRowOf`): its registry id `action`, whose verb the
  *  front's copy holds (« Apply » for an id it does not know), the daemon's `summary` (names in **bold**, the fallback),
  *  `detail` to read in full before confirming, `target` the session or team by its name, `code` why it was refused or failed,
- *  `decision` a session.decide's (deny: its verb is « Deny »). A permission adds its `request` quoted verbatim and `deny` its
+ *  `decision` a session.decide's (deny: its verb is « Deny »), `vars` its words, for the front's own line and why (the
+ *  daemon's `summary` and `error` are French: the summary is the fallback, the error is for the log, never on screen). A permission adds its `request` quoted verbatim and `deny` its
  *  other button. */
 export interface ActionRowView {
   action?: string; summary: string; risk: ActionRisk; state?: ActionRowState; detail?: string;
   request?: { kind: string; text: string }; deny?: { summary: string }; target?: string;
-  error?: string; code?: ActionErrorCode; doneAt?: string; decision?: 'accept' | 'deny';
+  error?: string; code?: ActionErrorCode; doneAt?: string; decision?: 'accept' | 'deny'; vars?: ActionVars;
 }
 
 const CODES: ReadonlySet<string> = new Set(ACTION_ERROR_CODES);
@@ -26,8 +28,10 @@ const CODES: ReadonlySet<string> = new Set(ACTION_ERROR_CODES);
  *  as stale, a code the front does not know yet (a newer daemon) as `failed`. */
 export function actionRowOf(a: ChatAction): ActionRowView {
   const row: ActionRowView = { action: a.action, summary: a.summary, risk: a.risk };
+  if (a.vars !== undefined) row.vars = a.vars;
   if (a.detail !== undefined) row.detail = a.detail;
-  const target = a.vars?.session ?? a.vars?.team;
+  // task.cancel names its owner: the session it holds.
+  const target = a.vars?.session ?? a.vars?.owner ?? a.vars?.team;
   if (target !== undefined) row.target = target;
   if (a.vars?.decision === 'accept' || a.vars?.decision === 'deny') row.decision = a.vars.decision;
   if (a.state !== undefined) row.state = a.state;
@@ -105,6 +109,8 @@ export function ActionCard(p: ActionCardProps) {
 
   const ask = (rows: number[], key: string) => { if (risky(rows)) { asker.current = key; setConfirming(rows); } else p.onApply(rows); };
   const go = (rows: number[]) => { setConfirming(null); p.onApply(rows); };
+  const line = (r: ActionRowView) => (r.vars && r.action !== undefined ? c.words.line[r.action]?.(r.vars) : undefined) ?? r.summary;
+  const why = (r: ActionRowView) => c.words.why(r.code ?? (r.state === 'failed' ? 'failed' : undefined), r.action, r.vars ?? {});
   const verb = (r: ActionRowView) => (r.decision === 'deny' ? c.deny : (r.action !== undefined ? c.verbs[r.action] : undefined) ?? c.apply);
   const dots = (rows: readonly number[]) => (risky(rows) ? '…' : '');
   const ignore = <Button variant="ghost" size="sm" disabled={p.disabled} onClick={p.onIgnore} style={{ ...small, ...muted }}>{c.ignore}</Button>;
@@ -161,7 +167,7 @@ export function ActionCard(p: ActionCardProps) {
         style={{ display: 'grid', gridTemplateColumns: `${many ? '22px ' : ''}minmax(0,1fr)${p.narrow ? '' : ' auto'}`, gap: '4px 10px', padding: '9px 12px', alignItems: 'start', borderTop: i > 0 ? '1px solid var(--sidebar-border)' : undefined, background: destructive && !settled ? 'color-mix(in srgb, var(--destructive) 6%, transparent)' : undefined }}>
         {many && node(s, i, r)}
         <div style={{ minWidth: 0, ...fade }}>
-          <div style={{ overflowWrap: 'anywhere' }}>{inline(s === 'denied' && r.deny ? r.deny.summary : r.summary)}</div>
+          <div style={{ overflowWrap: 'anywhere' }}>{inline(s === 'denied' && r.deny ? r.deny.summary : line(r))}</div>
           {s !== 'denied' && (
             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 8px', marginTop: 3, fontSize: 11.5, lineHeight: '16px', ...muted }}>
               <span title={c.riskTip[r.risk]} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, ...(destructive ? { color: 'var(--danger-text)', fontWeight: 500 } : {}) }}><Icon size={11} {...RISK_ICON[r.risk]} />{c.risk[r.risk]}</span>
@@ -174,8 +180,8 @@ export function ActionCard(p: ActionCardProps) {
               <span style={{ display: 'block', font: "500 10.5px/15px 'Geist', system-ui, sans-serif", marginBottom: 2, ...muted }}>{r.request.kind}</span>{r.request.text}
             </pre>
           )}
-          {s === 'failed' && <div role="alert" style={{ marginTop: 5, color: 'var(--danger-text)', overflowWrap: 'anywhere' }}>{c.failed(r.error ?? '')}</div>}
-          {s === 'refused' && <div role="alert" style={{ marginTop: 5, color: 'var(--danger-text)', overflowWrap: 'anywhere' }}>{c.refused(r.error ?? '')}</div>}
+          {s === 'failed' && <div role="alert" style={{ marginTop: 5, color: 'var(--danger-text)', overflowWrap: 'anywhere' }}>{inline(c.failed(why(r)))}</div>}
+          {s === 'refused' && <div role="alert" style={{ marginTop: 5, color: 'var(--danger-text)', overflowWrap: 'anywhere' }}>{inline(c.refused(why(r)))}</div>}
           {s === 'held' && <div style={{ marginTop: 5, ...muted }}>{c.held(stopAt + 1)}</div>}
           {s === 'stale' && <div style={{ marginTop: 5, color: 'var(--warning)' }}>{c.stale(r.target ?? '')}</div>}
           {s === 'denied' && <div style={{ marginTop: 5, ...muted }}>{c.deniedNote(r.target ?? '')}</div>}
@@ -191,7 +197,7 @@ export function ActionCard(p: ActionCardProps) {
       return (
         <div id={`${id}-c`} data-action-foot role="group" aria-label={c.confirm.label} aria-labelledby={`${id}-c ${id}-q`} aria-describedby={`${id}-w`} onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); setConfirming(null); } }}
           style={{ ...foot, flexDirection: 'column', alignItems: 'stretch', gap: 8, background: 'color-mix(in srgb, var(--destructive) 5%, transparent)' }}>
-          <strong id={`${id}-q`} style={{ fontSize: 13 }}>{one ? c.confirm.one(plain(one.summary)) : c.confirm.many(confirming.length, confirming.length === p.rows.length)}</strong>
+          <strong id={`${id}-q`} style={{ fontSize: 13 }}>{one ? c.confirm.one(plain(line(one))) : c.confirm.many(confirming.length, confirming.length === p.rows.length)}</strong>
           <span id={`${id}-w`} style={{ fontSize: 12, ...muted }}>{one ? c.confirm.oneWhy : c.confirm.manyWhy(confirming.filter(i => p.rows[i]!.risk === 'destructive').length)}</span>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <Button ref={cancel} size="sm" onClick={() => setConfirming(null)} style={small}>{c.confirm.cancel}</Button>
