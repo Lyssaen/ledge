@@ -32,7 +32,7 @@ export async function runTui(args: readonly string[]): Promise<number> {
   const lang = settings.lang ?? defaultLang(process.env);
   if (!process.stdin.isTTY || !process.stdout.isTTY) { console.error(MESSAGES[lang].cli.notTty); return 2; }
   // In Windows Terminal, the TUI moves to a tab of the Ledge profile, the one whose icon is the mascot.
-  if (movesToLedgeTab(process.env, parsed.here, process.argv[1] ?? '') && await openTuiInLedgeTab(process.env)) {
+  if (movesToLedgeTab(process.env, parsed.here, process.argv[1] ?? '') && await openTuiInLedgeTab(process.env, () => console.log(MESSAGES[lang].cli.loadingProfile))) {
     console.log(MESSAGES[lang].cli.movedToTab);
     return 0;
   }

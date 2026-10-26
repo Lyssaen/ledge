@@ -89,12 +89,15 @@ export interface LedgeTab {
   wt(args: string[]): Promise<void>;
   /** How long a freshly written fragment is waited for. */
   waitMs?: number;
+  /** Called once when Windows Terminal has not read the fragment yet, before waiting for it. */
+  onWait?: () => void;
 }
 
 /**
  * Installs (or updates) the Ledge profile, then opens `ledge tui` in a new tab of it, in this window. False when the TUI
  * should stay in this tab: a path Windows cannot carry, or Windows Terminal not having read the fragment in time
- * (the next `ledge tui` finds it read).
+ * (the next `ledge tui` finds it read). Windows Terminal never lists the profile again once its entry is removed from
+ * its settings by hand, so the TUI then stays in this tab.
  */
 export async function openInLedgeTab(o: LedgeTab): Promise<boolean> {
   const commandline = profileCommandline(o.distro, o.launcher);
@@ -106,10 +109,12 @@ export async function openInLedgeTab(o: LedgeTab): Promise<boolean> {
   await writeIfChanged(join(dir, 'ledge.ico'), await readFile(o.icon ?? ICON));
   const iconWin = `${o.localAppData.win}\\Microsoft\\Windows Terminal\\Fragments\\${PROFILE}\\ledge.ico`;
   await writeIfChanged(join(dir, 'ledge.json'), fragment(commandline, iconWin));
-  // Windows Terminal reads a new fragment within a second or so; asked before, it opens its default profile instead.
-  const deadline = Date.now() + (o.waitMs ?? 3000);
-  while (!(await profileLoaded(o.localAppData.linux))) {
+  // Windows Terminal reads a new fragment some 8 s after it appears (a changed one only at its next start); asked
+  // before, it opens its default profile instead.
+  const deadline = Date.now() + (o.waitMs ?? 15000);
+  for (let first = true; !(await profileLoaded(o.localAppData.linux)); first = false) {
     if (Date.now() > deadline) return false;
+    if (first) o.onWait?.();
     await new Promise(r => setTimeout(r, 100));
   }
   await o.wt(['-w', '0', 'new-tab', '-p', PROFILE]);
@@ -119,7 +124,7 @@ export async function openInLedgeTab(o: LedgeTab): Promise<boolean> {
 const run = promisify(execFile);
 
 /** The real machine: %LOCALAPPDATA% asked to cmd.exe (from C:, as a WSL directory is a UNC path cmd refuses), wt.exe beside it. */
-export async function openTuiInLedgeTab(env: NodeJS.ProcessEnv): Promise<boolean> {
+export async function openTuiInLedgeTab(env: NodeJS.ProcessEnv, onWait?: () => void): Promise<boolean> {
   try {
     const cmd = '/mnt/c/Windows/System32/cmd.exe';
     const win = (await run(cmd, ['/d', '/c', 'echo %LOCALAPPDATA%'], { cwd: '/mnt/c', timeout: 5000 })).stdout.trim();
@@ -132,6 +137,7 @@ export async function openTuiInLedgeTab(env: NodeJS.ProcessEnv): Promise<boolean
       script: await realpath(process.argv[1]!),
       launcher: join(ledgeDir(), 'tui.sh'),
       ledgeHome: env.LEDGE_HOME,
+      onWait,
       wt: args => new Promise((resolve, reject) => {
         const child = spawn(join(linux, 'Microsoft', 'WindowsApps', 'wt.exe'), args, { cwd: '/mnt/c', stdio: 'ignore', detached: true });
         child.once('error', reject);
