@@ -743,6 +743,20 @@ describe('ledge tui: ask Ledge scrolls, in Markdown (#95 lot C)', () => {
     } finally { await tui.cleanup(); }
   });
 
+  it('a link wrapped on two lines keeps the box borders where they are', async () => {
+    const tui = await startTui();
+    try {
+      await tui.resize(80, 24);
+      await tui.press('/');
+      const answer = 'Voir [la longue description de la PR numéro deux cent douze dans le dépôt, avec toutes ses remarques](https://github.com/x/pull/212) et ==surligné== fin.';
+      tui.daemon.push({ type: 'chat.history', turns: [{ ...turns(1)[0]!, answer }] });
+      await until(() => tui.frame().includes('fin.'));
+      const rows = tui.frame().replace(/\u001b\]8;;[^\u0007]*\u0007/g, '').split('\n').filter(l => l.includes('│'));
+      expect(rows.length).toBeGreaterThan(0);
+      for (const l of rows) expect([...l].length, l).toBe(80);
+    } finally { await tui.cleanup(); }
+  });
+
   it('the help fits 80×24 from its top: the bar, the « Saisie » group, j k for the rest', async () => {
     const tui = await startTui();
     try {
