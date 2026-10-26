@@ -12,24 +12,29 @@ export type ActionRowState = 'proposed' | 'running' | 'done' | 'failed' | 'refus
 
 /** One action of the card, as the protocol's `ChatAction` gives it (`actionRowOf`): its registry id `action`, whose verb the
  *  front's copy holds (« Apply » for an id it does not know), the daemon's `summary` (names in **bold**, the fallback),
- *  `detail` to read in full before confirming, `target` the session named by its lines, `code` why it was refused or failed.
- *  A permission adds its `request` quoted verbatim and `deny` its other button. */
+ *  `detail` to read in full before confirming, `target` the session or team by its name, `code` why it was refused or failed,
+ *  `decision` a session.decide's (deny: its verb is « Deny »). A permission adds its `request` quoted verbatim and `deny` its
+ *  other button. */
 export interface ActionRowView {
   action?: string; summary: string; risk: ActionRisk; state?: ActionRowState; detail?: string;
   request?: { kind: string; text: string }; deny?: { summary: string }; target?: string;
-  error?: string; code?: ActionErrorCode; doneAt?: string;
+  error?: string; code?: ActionErrorCode; doneAt?: string; decision?: 'accept' | 'deny';
 }
 
 const CODES: ReadonlySet<string> = new Set(ACTION_ERROR_CODES);
-/** A row of the protocol, as the card draws it: a code the front does not know yet (a newer daemon) reads as `failed`. */
+/** A row of the protocol, as the card draws it: its target by name (`vars`; its id stays in the ChatAction, for the link), `changed`
+ *  as stale, a code the front does not know yet (a newer daemon) as `failed`. */
 export function actionRowOf(a: ChatAction): ActionRowView {
   const row: ActionRowView = { action: a.action, summary: a.summary, risk: a.risk };
   if (a.detail !== undefined) row.detail = a.detail;
-  if (a.session !== undefined) row.target = a.session;
+  const target = a.vars?.session ?? a.vars?.team;
+  if (target !== undefined) row.target = target;
+  if (a.vars?.decision === 'accept' || a.vars?.decision === 'deny') row.decision = a.vars.decision;
   if (a.state !== undefined) row.state = a.state;
   if (a.doneAt !== undefined) row.doneAt = a.doneAt;
   if (a.error !== undefined) row.error = a.error;
   if (a.code !== undefined) row.code = CODES.has(a.code) ? a.code as ActionErrorCode : 'failed';
+  if (a.code === 'changed') row.state = 'stale';
   return row;
 }
 
@@ -64,7 +69,7 @@ export function ActionCard(p: ActionCardProps) {
   const box = useRef<HTMLElement>(null);
   const id = useId();
   // The button that asked: its node goes while the card confirms, so it is found again by its key; gone, the first
-  // button of its row, or of the foot.
+  // button of its row, of the foot, of the card.
   const asker = useRef<string | null>(null);
   useEffect(() => {
     if (confirming) { cancel.current?.focus(); return; }
@@ -73,7 +78,7 @@ export function ActionCard(p: ActionCardProps) {
     const first = (el?: Element | null) => el?.querySelector<HTMLElement>('button:not(:disabled)');
     const back = box.current.querySelector<HTMLElement>(`[data-action-ask="${key}"]`)
       ?? (key === 'all' ? null : first(box.current.querySelectorAll('[data-action-row]')[Number(key)]))
-      ?? first(box.current.querySelector('[data-action-foot]'));
+      ?? first(box.current.querySelector('[data-action-foot]')) ?? first(box.current);
     back?.focus();
   }, [confirming]);
   const clock = (iso?: string) => (iso ? new Date(iso).toLocaleTimeString(t.time.locale, { hour: '2-digit', minute: '2-digit' }) : '');
@@ -100,7 +105,7 @@ export function ActionCard(p: ActionCardProps) {
   const risky = (rows: readonly number[]) => rows.some(i => p.rows[i]!.risk === 'destructive');
   const ask = (rows: number[], key: string) => { if (risky(rows)) { asker.current = key; setConfirming(rows); } else p.onApply(rows); };
   const go = (rows: number[]) => { setConfirming(null); p.onApply(rows); };
-  const verb = (r: ActionRowView) => (r.action !== undefined ? c.verbs[r.action] : undefined) ?? c.apply;
+  const verb = (r: ActionRowView) => (r.decision === 'deny' ? c.deny : (r.action !== undefined ? c.verbs[r.action] : undefined) ?? c.apply);
   const dots = (rows: readonly number[]) => (risky(rows) ? '…' : '');
   const ignore = <Button variant="ghost" size="sm" disabled={p.disabled} onClick={p.onIgnore} style={{ ...small, ...muted }}>{c.ignore}</Button>;
 

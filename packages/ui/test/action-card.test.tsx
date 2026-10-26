@@ -89,6 +89,13 @@ describe('the action card (#94): a plan', () => {
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Apply all (2)' }));
   });
 
+  it('the asking row applied elsewhere, no foot left: the focus goes to the card\'s first button', () => {
+    const p = card([{ ...model, state: 'stale', target: 'Nova' }, dissolve]);
+    fireEvent.click(screen.getByRole('button', { name: 'Dissolve…' }));
+    p.rerender(<ChatCopyProvider value={{ ...copy, chat: { ...copy.chat, action: actionCopy } }}><ActionCard rows={[{ ...model, state: 'stale', target: 'Nova' }, { ...dissolve, state: 'done', doneAt: AT }]} {...p} /></ChatCopyProvider>);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Open Nova' }));
+  });
+
   it('the card changes elsewhere: the confirmation keeps only the rows still open, and sends only them', () => {
     const p = card(plan());
     fireEvent.click(screen.getByRole('button', { name: 'Apply all (3)…' }));
@@ -271,8 +278,23 @@ describe('the action card (#94): a row from the protocol', () => {
   const row: ChatAction = { action: 'team.dissolve', args: { team: 't1' }, summary: 'Dissoudre l’équipe **ledge-roles**', vars: { team: 'ledge-roles' }, risk: 'destructive', team: 't1', detail: 'Ses 6 sessions…' };
 
   it('its id, summary, risk, detail and state as they come; the session it names, for a link', () => {
-    expect(actionRowOf(row)).toEqual({ action: 'team.dissolve', summary: row.summary, risk: 'destructive', detail: 'Ses 6 sessions…' });
-    expect(actionRowOf({ ...row, action: 'session.archive', session: 'otto', state: 'done', doneAt: AT })).toMatchObject({ target: 'otto', state: 'done', doneAt: AT });
+    expect(actionRowOf(row)).toEqual({ action: 'team.dissolve', summary: row.summary, risk: 'destructive', detail: 'Ses 6 sessions…', target: 'ledge-roles' });
+    expect(actionRowOf({ ...row, action: 'session.archive', session: 'otto', state: 'done', doneAt: AT })).toMatchObject({ state: 'done', doneAt: AT });
+  });
+
+  it('its target by name, not by id: « Open Nova », not « Open local:nova »', () => {
+    const decide: ChatAction = { action: 'session.decide', args: { session: 'local:nova', decision: 'accept' }, summary: 'Accepter la demande de **Nova**', vars: { session: 'Nova', decision: 'accept', kind: 'permission' }, risk: 'destructive', session: 'local:nova', state: 'refused', code: 'changed' };
+    expect(actionRowOf(decide)).toMatchObject({ target: 'Nova', state: 'stale' });
+    card([actionRowOf(decide)]);
+    expect(screen.getByRole('button', { name: 'Open Nova' })).toBeTruthy();
+    expect(document.body).not.toHaveTextContent('local:nova');
+  });
+
+  it('session.decide with vars.decision deny: its verb is Deny, not Accept', () => {
+    const deny: ChatAction = { action: 'session.decide', args: { session: 'local:nova', decision: 'deny' }, summary: 'Refuser la demande de **Nova**', vars: { session: 'Nova', decision: 'deny', kind: 'permission' }, risk: 'reversible', session: 'local:nova' };
+    expect(actionRowOf(deny).decision).toBe('deny');
+    card([actionRowOf(deny)]);
+    expect(within(rowsOf()[0]!).getAllByRole('button').map(b => b.textContent)).toEqual(['Ignore', 'Deny']);
   });
 
   it('a code it knows is kept; one it does not (a newer daemon) reads as failed', () => {
