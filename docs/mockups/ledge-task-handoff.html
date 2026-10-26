@@ -247,6 +247,129 @@ svg.i{width:12px;height:12px;flex:none;fill:none;stroke:currentColor;stroke-widt
 .c-fg{color:var(--t-fg)}.c-dim{color:var(--t-dim)}.c-faint{color:var(--t-faint)}.c-line{color:var(--t-line)}.c-violet{color:var(--t-violet)}.c-green{color:var(--t-green)}.c-red{color:var(--t-red)}.c-coral{color:var(--t-coral)}.c-blue{color:var(--t-blue)}
 .c-b{font-weight:600}
 .tui-pair{display:flex;flex-direction:column;gap:22px}
+.term .sel-bg{background:var(--t-sel)}
+.c-yellow{color:var(--t-yellow)}
+:root,:root[data-theme=light]{--t-yellow:#9a6f0c}
+:root[data-theme=dark]{--t-yellow:#e6c46a}
+
+/* ---- A team's tasks (t32a8cd): the « Tâches » tab of Ledge's home, filtered on one team ---- */
+.window.home{width:1000px}
+.tt-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--border)}
+.tt-bar .sp{flex:1}
+.chip{height:26px;padding:0 10px;border:1px solid var(--input);border-radius:999px;font-size:12px;display:inline-flex;gap:6px;align-items:center;color:var(--muted-foreground);background:var(--background)}
+.chip .n{font:11px 'Geist Mono',monospace}
+.chip.on{background:var(--secondary);color:var(--foreground);border-color:var(--ring)}
+.chip:focus-visible,.tt-row:focus-visible,.who:focus-visible{outline:2px solid var(--ring);outline-offset:1px}
+.pick{height:26px;padding:0 8px;border:1px solid var(--input);border-radius:6px;font-size:12px;color:var(--muted-foreground);display:inline-flex;align-items:center;gap:6px}
+.pick b{font-weight:500;color:var(--foreground)}
+.load{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:12px 16px 2px}
+.load .lab{font-size:11.5px;color:var(--muted-foreground);margin-right:4px}
+.who{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 9px 0 5px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--card)}
+.who b{font:500 12px 'Geist Mono',monospace}
+.who .fl{display:inline-flex;align-items:center;gap:3px;color:var(--task);font:500 11px 'Geist Mono',monospace}
+.who.zero{color:var(--muted-foreground);background:transparent}
+.who.zero b{font-weight:400}
+.who.on{border-color:var(--task);box-shadow:0 0 0 2px color-mix(in srgb,var(--task) 22%,transparent)}
+.fl-sq{display:inline-block;width:9px;height:8px;border-radius:1px;background:var(--task);flex:none}
+.tt-list{flex:1;min-width:0;padding:4px 16px 20px}
+.tt-list.scroll{max-height:640px;overflow:auto;-webkit-mask-image:linear-gradient(#000 92%,transparent)}
+.tt-group{display:flex;align-items:baseline;gap:8px;margin:16px 0 4px;padding:0 10px;font-size:12.5px;font-weight:600}
+.tt-group .n{font:500 11.5px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.tt-group .hint{font-weight:400;color:var(--muted-foreground);font-size:11.5px}
+.tt-group .more{margin-left:auto;font-weight:400;color:var(--muted-foreground);font-size:11.5px;text-decoration:underline;text-underline-offset:3px}
+.tt-group.g-open{color:var(--task)}
+.tt-row{display:grid;grid-template-columns:16px minmax(0,1fr) 150px 70px;align-items:center;column-gap:12px;width:100%;padding:7px 10px;border-bottom:1px solid var(--border);text-align:left}
+.tt-row:hover{background:var(--accent)}
+.tt-row.on{background:var(--task-soft);border-radius:8px;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--task) 45%,transparent)}
+.tt-row .mk{display:flex;justify-content:center}
+.ring{width:9px;height:9px;border-radius:50%;border:2px solid var(--info)}
+.mk .ok{color:var(--success)}.mk .ko{color:var(--danger-text)}
+.tt-main{display:flex;flex-direction:column;min-width:0}
+.tt-title{font-size:13.5px;font-weight:500;line-height:19px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.closed .tt-title{color:var(--muted-foreground);font-weight:400}
+.tt-meta{display:flex;align-items:center;gap:5px;font-size:11.5px;line-height:17px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden}
+.tt-meta code{font:10.5px 'Geist Mono',monospace}
+.tt-meta .via{display:inline-flex;align-items:center;gap:3px}
+.late{color:var(--warning);font-weight:500}
+.tt-owner{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;min-width:0;white-space:nowrap}
+.tt-row .pill{justify-self:end}
+.tt-empty{margin:28px 10px 8px;padding:22px 20px;border:1px dashed var(--input);border-radius:12px;display:flex;gap:14px;align-items:flex-start}
+.tt-empty h4{margin:0 0 4px;font-size:14px}
+.tt-empty p{margin:0;font-size:12.5px;line-height:19px;color:var(--muted-foreground)}
+.tt-empty code{font:11.5px 'Geist Mono',monospace;color:var(--foreground)}
+.tt-wait{font-size:12px;line-height:17px;padding:7px 10px;border-radius:8px;background:color-mix(in srgb,var(--warning) 11%,transparent);color:color-mix(in srgb,var(--warning) 80%,var(--foreground))}
+.tt-wait.calm{background:color-mix(in srgb,var(--task) 10%,transparent);color:var(--task)}
+
+/* ---- Where one reaches it: the team's line, its section, its room ---- */
+.ways{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px;width:1000px}
+.way{border:1px solid var(--border);border-radius:12px;background:var(--background);overflow:hidden}
+.way .wh{display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--border);background:var(--sidebar);font-size:12px;color:var(--muted-foreground)}
+.way .wh b{color:var(--foreground);font-weight:500}
+.way .wb{padding:14px}
+.way .go{line-height:17px;padding:8px 14px;border-top:1px dashed var(--border);font-size:11.5px;color:var(--muted-foreground)}
+.way .go b{color:var(--task);font-weight:500}
+.tline{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;font-size:13px}
+.tline .fla{color:var(--sidebar-primary)}
+.tline .mu{color:var(--muted-foreground);font-size:12px}
+.tline .sp{flex:1}
+.prog{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted-foreground)}
+.prog i{display:inline-block;width:56px;height:5px;border-radius:3px;background:var(--secondary);overflow:hidden}
+.prog i:after{content:'';display:block;width:50%;height:100%;background:var(--success)}
+.btn{height:26px;padding:0 10px;border:1px solid var(--input);border-radius:7px;font-size:12px;display:inline-flex;align-items:center}
+.count{height:24px;padding:0 9px;border-radius:999px;display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--task);background:color-mix(in srgb,var(--task) 13%,transparent);border:1px solid color-mix(in srgb,var(--task) 30%,transparent)}
+.count:hover,.count:focus-visible{border-color:var(--task);outline:none}
+.count .dim{color:color-mix(in srgb,var(--task) 70%,var(--muted-foreground))}
+.count.calm{color:var(--muted-foreground);background:transparent;border-color:var(--border)}
+.seats{list-style:none;margin:10px 0 0;padding:0;font-size:12.5px}
+.seats li{display:grid;grid-template-columns:90px 1fr auto 70px;gap:10px;align-items:center;padding:5px 0;border-top:1px solid var(--border)}
+.seats .h{color:var(--task);font:500 11px 'Geist Mono',monospace;display:inline-flex;gap:4px;align-items:center;justify-self:end}
+.seats .h.zero{color:var(--muted-foreground);font-weight:400}
+.miniroom{position:relative;height:178px;margin-top:10px;border:1px solid color-mix(in srgb,var(--info) 18%,var(--input));border-top:4px solid var(--info);border-radius:22px 14px 22px 14px;background:color-mix(in srgb,var(--info) 5%,var(--sidebar))}
+.miniroom .plaque{top:-15px}
+.miniroom .plaque .count{height:20px;font-size:11px;padding:0 7px}
+.miniroom .worktable{left:40px;top:44px;width:360px;height:96px}
+
+/* ---- The phone ---- */
+.phones{display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start}
+.phones.three{zoom:.86}
+.phone-wrap{display:flex;flex-direction:column;gap:8px}
+.phone{position:relative;width:360px;height:760px;border-radius:44px;border:9px solid color-mix(in srgb,var(--foreground) 88%,var(--background));background:var(--background);overflow:hidden;display:flex;flex-direction:column}
+.ph-status{display:flex;justify-content:space-between;align-items:center;height:40px;padding:0 26px;font-size:13px;font-weight:600;flex:none}
+.ph-body{flex:1;overflow:hidden;padding:4px 14px 20px;display:flex;flex-direction:column;gap:12px}
+.ph-body>*{flex:none}
+.ph-card{border:1px solid var(--border);border-radius:16px;background:var(--card);padding:14px;display:flex;flex-direction:column;gap:9px}
+.ph-card h2{margin:0;font-size:16px;display:flex;gap:8px;align-items:baseline}
+.ph-card h2 small{font-size:12px;font-weight:400;color:var(--muted-foreground)}
+.ph-h{font-size:12px;font-weight:600;color:var(--muted-foreground);margin:2px 0 -2px}
+.ph-line{display:flex;align-items:center;gap:8px;font-size:13px;min-height:28px}
+.ph-line .sp{flex:1}
+.ph-dot{width:7px;height:7px;border-radius:50%;flex:none}
+.ph-back{font-size:13px;color:var(--muted-foreground);display:inline-flex;align-items:center;gap:2px}
+.ph-title{display:flex;align-items:center;gap:8px;font-size:20px;font-weight:700;margin:2px 0 0}
+.ph-sub{font-size:12.5px;color:var(--muted-foreground);margin-top:-8px}
+.ph-load{display:flex;gap:6px;overflow:hidden;margin:0 -14px;padding:0 14px}
+.ph-load .who{flex:none;height:30px}
+.ph-group{display:flex;align-items:baseline;gap:6px;font-size:13px;font-weight:600;margin-top:4px}
+.ph-group .n{font:500 12px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.ph-group .more{margin-left:auto;font-weight:400;font-size:12.5px;color:var(--muted-foreground);text-decoration:underline;text-underline-offset:3px}
+.ph-group.g-open{color:var(--task)}
+.ph-row{display:grid;grid-template-columns:14px minmax(0,1fr) auto;gap:10px;align-items:start;padding:9px 2px;border-bottom:1px solid var(--border);text-align:left;width:100%}
+.ph-row .mk{padding-top:5px;display:flex;justify-content:center}
+.ph-row .t{font-size:14px;font-weight:500;line-height:19px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.ph-row .m{font-size:12px;color:var(--muted-foreground);line-height:17px;margin-top:2px;display:flex;flex-wrap:wrap;gap:0 5px;align-items:center}
+.ph-row .ch{color:var(--muted-foreground);padding-top:3px}
+.ph-dim{position:absolute;inset:0;background:rgb(0 0 0/.45);z-index:4}
+.ph-sheet{position:absolute;left:0;right:0;bottom:0;height:84%;z-index:5;background:var(--card);border-radius:20px 20px 0 0;border-top:1px solid var(--border);padding:8px 18px 18px;display:flex;flex-direction:column;gap:10px;box-shadow:0 -8px 30px rgb(0 0 0/.25)}
+.ph-sheet .grab{align-self:center;width:38px;height:5px;border-radius:3px;background:var(--input);margin-bottom:4px}
+.ph-sheet h3{margin:0;font-size:17px;line-height:23px}
+.ph-sheet .people{display:grid;grid-template-columns:auto 1fr;gap:5px 12px;font-size:13px}
+.ph-sheet .people span{color:var(--muted-foreground)}
+.ph-sheet p{margin:0;font-size:13.5px;line-height:20px}
+.ph-sheet .log{list-style:none;margin:0;padding:0 0 0 12px;border-left:1px solid var(--input);font-size:12.5px;display:flex;flex-direction:column;gap:6px}
+.ph-sheet .log time{font:11.5px 'Geist Mono',monospace;color:var(--muted-foreground);margin-right:6px}
+.ph-sheet .acts{margin-top:auto;display:flex;flex-direction:column;gap:8px}
+.ph-btn{height:44px;border-radius:12px;border:1px solid var(--input);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:500}
+.ph-btn.primary{background:var(--foreground);color:var(--background);border-color:transparent}
 </style>
 </head>
 <body>
@@ -254,7 +377,7 @@ svg.i{width:12px;height:12px;flex:none;fill:none;stroke:currentColor;stroke-widt
 <main class="layout"><section id="view"></section><aside class="notes" id="notes"></aside></main>
 <script>
 // ---- State in the URL: #vue=atelier&cas=give&anim=play&theme=dark ----
-const DEF = { vue: 'atelier', cas: 'give', anim: 'play', theme: 'dark', fil: 'pim', plie: '0', largeur: '120' };
+const DEF = { vue: 'atelier', cas: 'give', anim: 'play', theme: 'dark', fil: 'pim', plie: '0', largeur: '120', ecran: 'desktop', charge: 'normal' };
 const st = Object.assign({}, DEF, Object.fromEntries(new URLSearchParams(location.hash.slice(1))));
 const save = () => { history.replaceState(null, '', '#' + new URLSearchParams(Object.fromEntries(Object.entries(st).filter(([k, v]) => DEF[k] !== v || k === 'vue'))).toString()); };
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -426,8 +549,9 @@ function renderBox(W, title, lines, color = 'line') {
   const top = [T(`c-${color}`, '╭─ '), T('c-dim', title.toUpperCase()), T(`c-${color}`, ' ' + '─'.repeat(Math.max(0, W - 5 - title.length)) + '╮')];
   const body = lines.map(segs => {
     let used = 0; const out = [];
-    for (const g of segs) { if (used >= inner) break; let s = g.s; if (used + s.length > inner) s = s.slice(0, inner - used - 1) + '…'; out.push(T(g.cls, s)); used += s.length; }
-    return [T(`c-${color}`, '│ '), ...out, T('', ' '.repeat(Math.max(0, inner - used))), T(`c-${color}`, ' │')];
+    const bg = segs.sel ? ' sel-bg' : '';
+    for (const g of segs) { if (used >= inner) break; let s = g.s; if (used + s.length > inner) s = s.slice(0, inner - used - 1) + '…'; out.push({ ...g, cls: g.cls + bg, s }); used += s.length; }
+    return [T(`c-${color}`, '│ '), ...out, T(bg, ' '.repeat(Math.max(0, inner - used))), T(`c-${color}`, ' │')];
   });
   const bottom = [T(`c-${color}`, '╰' + '─'.repeat(W - 2) + '╯')];
   return [top, ...body, bottom];
@@ -457,6 +581,245 @@ function tui() {
     <div><p class="cap"><b>Actuel</b> TUI · Échanges · ${W} colonnes (vue d’ensemble en ${st.largeur === '160' ? '160' : '120'} colonnes) : seules les tâches de Ledge y passent, comme des messages</p>${term(now)}</div>
     <div><p class="cap"><b class="next">Visé</b> TUI · Échanges · ${W} colonnes : chaque transmission d’une tâche, avec son verbe</p>${term(next)}</div>
   </div>`;
+}
+
+// ---- A team's open tasks (t32a8cd): one list, grouped « À prendre / Prises / Closes aujourd'hui », everywhere a team is shown ----
+ICON.flag = '<path d="M4 22V4"/><path d="M4 4h13l-2.5 4L17 12H4"/>';
+const ROLE = { Pim: 'lead', Nova: 'dev-back', Bix: 'dev-front', Ida: 'ux-ui', Max: 'rev-front', Lu: 'rev-back' };
+const NOW = '11:32';
+const LOG_PASS = [['10:30', 'Pim', 'confiée à Nova'], ['10:31', 'Nova', 'prise'], ['10:44', 'Nova', 'passée à Lu', 'Je n’ai touché qu’à l’émission ; relis la reprise au redémarrage.']];
+// state: open (à prendre) · taken (prise) · done · refused. age: since it waits (open), since it was taken (taken); at: when it closed.
+const TT_NORMAL = [
+  { id: 't2b07aa', title: 'Relire la reprise du journal des passages', giver: 'Pim', via: ['Nova'], owner: 'Lu', state: 'open', age: '48 min', late: true,
+    text: 'Nova a corrigé l’émission en double à la reprise. Relis la reprise du journal au redémarrage, surtout les passages.', log: LOG_PASS },
+  { id: 't8e41d0', title: 'Brancher la vue Tâches de l’équipe sur la flotte', giver: 'Pim', owner: 'Bix', state: 'open', age: '12 min' },
+  { id: 't0a7b21', title: '#92 : transmission d’une tâche (Atelier, fil, TUI)', giver: 'Ledge', owner: 'Pim', state: 'taken', age: '1 h 12' },
+  { id: 't7f1c42', title: 'Carte de tâche dans le fil de session', giver: 'Pim', owner: 'Bix', state: 'taken', age: '1 h 05' },
+  { id: 't32a8cd', title: '#92 complément : les tâches ouvertes par équipe', giver: 'Pim', owner: 'Ida', state: 'taken', age: '25 min' },
+  { id: 'tc19e5b', title: 'Relire la PR #97 (aperçu du brouillon)', giver: 'Bix', owner: 'Max', state: 'taken', age: '8 min' },
+  { id: 'tfc816c', title: '#94 : maquette des cartes d’action', giver: 'Pim', owner: 'Ida', state: 'done', at: '11:06' },
+  { id: 't5c2e19', title: TASK.title, giver: 'Pim', via: ['Nova'], owner: 'Lu', state: 'done', at: '11:05' },
+  { id: 't1d3e88', title: 'Renommer le réglage « Contexte max »', giver: 'Bix', owner: 'Nova', state: 'refused', at: '10:40' }
+];
+// A busy team: 7 to take, 12 taken, 9 closed today.
+const BUSY_TITLES = ['Découper l’écran Réglages en sections', 'Traduire les erreurs du daemon', 'Tester la reprise après coupure réseau', 'Ajouter le filtre par machine', 'Relire la PR #101 (îlot)', 'Documenter ledge task pass', 'Corriger le focus du dialogue Lancer', 'Mesurer le démarrage à froid', 'Vider le cache des aperçus', 'Relire la PR #99 (journal)', 'Brancher Face ID sur Refuser', 'Raccourcir les toasts', 'Couleurs du thème clair de la TUI', 'Lister les sièges sans session', 'Migrer les réglages en v3', 'Écrire le guide des rôles', 'Relire la maquette #94', 'Supprimer l’ancien LedgeWire', 'Tester 200 tâches au téléphone'];
+const BUSY_OWN = ['Bix', 'Nova', 'Lu', 'Bix', 'Max', 'Nova', 'Bix', 'Nova', 'Bix', 'Lu', 'Bix', 'Ida', 'Bix', 'Nova', 'Nova', 'Ida', 'Max', 'Bix', 'Lu'];
+const BUSY_AGE = ['2 h 40', '1 h 52', '1 h 10', '44 min', '31 min', '9 min', '3 min', '3 h 05', '2 h 31', '2 h 02', '1 h 48', '1 h 30', '1 h 12', '58 min', '41 min', '30 min', '22 min', '11 min', '4 min'];
+const TT_BUSY = [
+  ...BUSY_TITLES.map((title, i) => ({ id: 't' + (0x3a1c0 + i * 7919).toString(16).slice(-6), title, giver: i % 4 === 1 ? 'Ledge' : i % 3 ? 'Pim' : 'Nova', via: i === 0 ? ['Lu'] : i === 9 ? ['Nova'] : i === 4 ? ['Bix', 'Lu'] : undefined,
+    owner: BUSY_OWN[i], state: i < 7 ? 'open' : 'taken', age: BUSY_AGE[i], late: i < 7 && i < 5 })),
+  ...TT_NORMAL.filter(t => t.state === 'done' || t.state === 'refused'),
+  ...['Purger les tâches closes de plus de 7 jours', 'Relire la PR #96', 'Maquette #95 : finition de la TUI', 'Rejoindre l’équipe depuis la TUI', 'Corriger le zoom de l’Atelier', 'Ajouter --json à ledge who'].map((title, i) => ({ id: 'td' + (5021 + i * 37).toString(16), title, giver: 'Pim', owner: ['Bix', 'Lu', 'Ida', 'Nova', 'Bix', 'Nova'][i], state: i === 3 ? 'refused' : 'done', at: ['10:58', '10:41', '10:22', '09:57', '09:40', '09:12'][i] }))
+];
+const TT_EMPTY = TT_NORMAL.filter(t => t.id === 'tfc816c' || t.id === 't5c2e19');
+const ttData = () => st.charge === 'vide' ? TT_EMPTY : st.charge === 'beaucoup' ? TT_BUSY : TT_NORMAL;
+const ttOpen = l => l.filter(t => t.state === 'open'), ttTaken = l => l.filter(t => t.state === 'taken'), ttClosed = l => l.filter(t => t.state === 'done' || t.state === 'refused');
+const TT_STATE = { open: 'à prendre', taken: 'prise', done: 'terminée', refused: 'refusée' };
+const ttMark = s => s === 'open' ? '<i class="fl-sq"></i>' : s === 'taken' ? '<i class="ring"></i>' : s === 'done' ? `<span class="ok">${'✓'}</span>` : '<span class="ko">✕</span>';
+const ttWhen = t => t.state === 'open' ? `<span class="${t.late ? 'late' : ''}">attend depuis ${t.age}</span>` : t.state === 'taken' ? `prise il y a ${t.age}` : `à ${t.at}`;
+const ttVia = t => t.via ? `<span class="via">${ic('pass', 11)}${t.via.length === 1 ? `via ${t.via[0]}` : `${t.via.length} passages`}</span><span>·</span>` : '';
+const roleOf = n => n === 'Ledge' ? '' : `<span class="role">@${ROLE[n]}</span>`;
+// The load of each seat: what it holds open, the part still to take in violet.
+function seatLoad(list, cls = 'load', on = '') {
+  return Object.keys(ROLE).map(n => {
+    const mine = list.filter(t => t.owner === n && (t.state === 'open' || t.state === 'taken')), take = mine.filter(t => t.state === 'open').length;
+    return `<button type="button" class="who${mine.length ? '' : ' zero'}${on === n ? ' on' : ''}" aria-label="${n} tient ${mine.length} tâche${mine.length > 1 ? 's' : ''}${take ? `, dont ${take} à prendre` : ''}">${bot(n, 18)}${n} <b>${mine.length}</b>${take ? `<span class="fl"><i class="fl-sq"></i>${take}</span>` : ''}</button>`;
+  }).join('');
+}
+
+function ttRow(t, sel) {
+  return `<button type="button" class="tt-row${sel ? ' on' : ''}${t.state === 'done' || t.state === 'refused' ? ' closed' : ''}" aria-label="${esc(t.title)}, ${TT_STATE[t.state]}, tenue par ${t.owner}">
+    <span class="mk">${ttMark(t.state)}</span>
+    <span class="tt-main"><span class="tt-title">${esc(t.title)}</span>
+      <span class="tt-meta"><code>${t.id}</code><span>·</span><span>de ${t.giver}</span><span>·</span>${ttVia(t)}${ttWhen(t)}</span></span>
+    <span class="tt-owner">${bot(t.owner, 18)}<b style="font-weight:500">${t.owner}</b>${roleOf(t.owner)}</span>
+    <span class="pill ${t.state}">${TT_STATE[t.state]}</span></button>`;
+}
+function ttGroups(list, sel, { closedOpen = true, limit = 99 } = {}) {
+  const o = ttOpen(list), k = ttTaken(list), c = ttClosed(list);
+  let h = '';
+  if (o.length) h += `<div class="tt-group g-open"><i class="fl-sq"></i>À prendre <span class="n">${o.length}</span><span class="hint">confiées, personne ne les a encore prises · la plus ancienne d’abord</span></div>${o.slice(0, limit).map(t => ttRow(t, t.id === sel)).join('')}`;
+  if (k.length) h += `<div class="tt-group">Prises <span class="n">${k.length}</span><span class="hint">la plus ancienne d’abord</span></div>${k.slice(0, limit).map(t => ttRow(t, t.id === sel)).join('')}`;
+  if (c.length) h += `<div class="tt-group">Closes aujourd’hui <span class="n">${c.length}</span><span class="more">${closedOpen ? 'Masquer' : `Afficher les ${c.length}`}</span></div>${closedOpen ? c.map(t => ttRow(t, t.id === sel)).join('') : ''}`;
+  return h;
+}
+function ttPane(t) {
+  const log = t.log ?? [['10:20', t.giver, `confiée à ${t.owner}`], ...(t.state !== 'open' ? [['10:22', t.owner, 'prise']] : [])];
+  return `<aside class="task-pane" aria-label="Tâche ${t.id}">
+    <div class="tp-head">${ic('task', 13)}Tâche <span class="id">${t.id}</span><span style="flex:1"></span><span class="pill ${t.state}">${TT_STATE[t.state]}</span></div>
+    <h2>${esc(t.title)}</h2>
+    ${t.state === 'open' ? `<div class="tt-wait${t.late ? '' : ' calm'}">Attend depuis ${t.age} que ${t.owner} la prenne.</div>` : ''}
+    <div class="people"><span>Confiée par</span><b>${mini(t.giver)} ${t.giver}</b>${t.via ? `<span>Passée par</span><b>${t.via.map(v => `${mini(v)} ${v}`).join(' › ')}</b>` : ''}<span>Tenue par</span><b>${mini(t.owner)} ${t.owner} ${roleOf(t.owner)}</b><span>Équipe</span><b>ledge-roles</b></div>
+    ${t.text ? `<p>${esc(t.text)}</p>` : ''}
+    <div class="h-label">Journal</div>
+    <ol class="log">${log.map(([at, by, what, note]) => `<li><time>${at}</time>${by} · ${what}${note ? `<em>« ${esc(note)} »</em>` : ''}</li>`).join('')}</ol>
+    <div class="actions"><span>Fil de ${t.owner}</span>${t.via ? `<span>Fil de ${t.via[t.via.length - 1]}</span>` : ''}<span>Copier l’id</span></div>
+  </aside>`;
+}
+function ttEmpty(list) {
+  const c = ttClosed(list).length;
+  return `<div class="tt-empty"><span style="color:var(--task)">${ic('task', 22)}</span><div><h4>Rien à prendre, rien en cours dans ledge-roles</h4>
+    <p>Quand un siège en confie une à un autre (<code>ledge task give @rev-back …</code>) ou que tu en confies une à Ledge, elle apparaît ici jusqu’à ce qu’elle soit close.${c ? ` ${c} tâche${c > 1 ? 's' : ''} close${c > 1 ? 's' : ''} aujourd’hui, plus bas.` : ''}</p></div></div>`;
+}
+
+function equipeDesktop() {
+  const list = ttData(), open = list.filter(t => t.state === 'open' || t.state === 'taken').length;
+  const busy = st.charge === 'beaucoup', empty = !open;
+  const sel = busy ? null : empty ? null : 't2b07aa';
+  const total = open + 2;
+  return `<p class="cap"><b class="next">Visé</b> Desktop · Ledge › onglet Tâches, filtré sur l’équipe ledge-roles · ${empty ? 'aucune tâche ouverte' : busy ? `une équipe chargée : ${open} ouvertes` : 'une tâche ouverte à côté'}</p>
+  <div class="window home">
+    <div class="pane-head">${bot('Ledge', 22)}<b>Ledge</b><span class="meta">Votre assistant</span>
+      <div class="tabs"><span>Conversation</span><span>Équipes · 2</span><span class="task-tab on">${ic('task', 12)}Tâches · ${total}</span><span>Historique</span></div></div>
+    <div class="tt-bar" role="toolbar" aria-label="Filtres des tâches">
+      <button type="button" class="chip">Toutes les équipes <span class="n">${total}</span></button>
+      <button type="button" class="chip on" aria-pressed="true">${ic('flag', 12)}ledge-roles <span class="n">${open}</span></button>
+      <button type="button" class="chip">${ic('flag', 12)}site-vitrine <span class="n">2</span></button>
+      <span class="sp"></span>
+      <span class="pick">Donneur <b>Tous</b>${ic('chev', 11)}</span>
+    </div>
+    ${empty ? '' : `<div class="load"><span class="lab">Qui tient quoi</span>${seatLoad(list)}</div>`}
+    <div class="split" style="min-height:${busy ? 700 : 560}px"><div class="tt-list${busy ? ' scroll' : ''}">${empty ? ttEmpty(list) : ''}${ttGroups(list, sel, { closedOpen: !busy })}</div>${sel ? ttPane(list.find(t => t.id === sel)) : ''}</div>
+  </div>`;
+}
+
+function equipeAcces() {
+  const line = (count = true) => `<div class="tline"><span class="fla">${ic('flag', 14)}</span><b>ledge-roles</b><span class="mu">ledge · 6 sièges</span><span class="sp"></span>
+    ${count ? `<button type="button" class="count" aria-label="6 tâches ouvertes dont 2 à prendre : voir les tâches de ledge-roles">${ic('task', 12)}6 ouvertes <span class="dim">·</span> <i class="fl-sq"></i>2 à prendre</button>` : ''}
+    <span class="prog"><i></i>1/2 tâches de Ledge</span><span class="btn">Table</span></div>`;
+  const seat = (n, s, held, take) => `<li><span class="role">@${ROLE[n]}</span><span>${mini(n)} ${n}</span><span class="state ${s[0]}">${s[1]}</span><span class="h${held ? '' : ' zero'}">${held ? `${ic('task', 11)}${held}${take ? ` <i class="fl-sq"></i>${take}` : ''}` : '—'}</span></li>`;
+  return `<p class="cap"><b class="next">Visé</b> Par où on arrive aux tâches d’une équipe · un compteur violet, partout où l’équipe est montrée</p>
+  <div class="ways">
+    <div class="way"><div class="wh"><b>Le point</b> · colonne Équipes</div><div class="wb">${line()}
+      <div class="tline" style="margin-top:12px;color:var(--muted-foreground)"><span>${ic('flag', 14)}</span><b>site-vitrine</b><span class="mu">vitrine · 3 sièges</span><span class="sp"></span><button type="button" class="count calm">${ic('task', 12)}2 ouvertes</button><span class="btn">Table</span></div></div>
+      <div class="go">Le compteur ouvre l’onglet <b>Tâches</b>, filtré sur l’équipe. Sans tâche ouverte, il disparaît.</div></div>
+    <div class="way"><div class="wh"><b>Onglet Équipes</b> · la section de l’équipe</div><div class="wb">${line()}
+      <ul class="seats">${seat('Pim', ['idle', 'Disponible'], 1, 0)}${seat('Nova', ['work', 'Au travail'], 0, 0)}${seat('Bix', ['work', 'Au travail'], 2, 1)}${seat('Ida', ['work', 'Au travail'], 1, 0)}${seat('Max', ['idle', 'Disponible'], 1, 0)}${seat('Lu', ['idle', 'Disponible'], 1, 1)}</ul></div>
+      <div class="go">Le compteur d’un siège ouvre le même onglet, filtré sur l’équipe <b>et ce siège</b>.</div></div>
+    <div class="way"><div class="wh"><b>Atelier</b> · la plaque de la salle</div><div class="wb">
+      <div class="miniroom"><div class="plaque"><i></i><b>ledge-roles</b><span>équipe dev · 6 sessions</span><button type="button" class="count">${ic('task', 11)}6 <i class="fl-sq"></i>2</button></div>
+        <div class="worktable"><div class="sheet with-task" style="left:14px;top:10px"><i class="flag"></i><p>Brancher la vue Tâches de l’équipe</p></div><div class="sheet" style="left:118px;top:10px"><p>Carte de tâche du fil</p></div><div class="sheet with-task" style="left:222px;top:26px"><i class="flag"></i><p>Relire la reprise du journal</p></div></div></div></div>
+      <div class="go">La plaque porte le compteur ; les fiches à drapeau violet de la table (#92) sont les tâches à prendre. Le compteur ouvre l’onglet <b>Tâches</b>.</div></div>
+    <div class="way"><div class="wh"><b>Une tâche</b> · le panneau « Ouvrir la tâche » (#92)</div><div class="wb">
+      <div class="people" style="display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:12px"><span style="color:var(--muted-foreground)">Tenue par</span><b>${mini('Lu')} Lu <span class="role">@rev-back</span></b><span style="color:var(--muted-foreground)">Équipe</span><b><span class="lnk" style="font-size:12px;color:var(--task);text-decoration-color:var(--task)">ledge-roles · 6 ouvertes</span></b></div></div>
+      <div class="go">Dans le panneau d’une tâche, le nom de l’équipe devient un lien vers ses tâches. Dans l’autre sens, une ligne de la liste ouvre ce panneau.</div></div>
+  </div>`;
+}
+
+// ---- The phone: « Le point » → the team → a task, in a sheet ----
+const phStatus = '<div class="ph-status"><span>11:32</span><span style="font-size:11px">●●● 5G ▮</span></div>';
+function phRow(t) {
+  return `<button type="button" class="ph-row"><span class="mk">${ttMark(t.state)}</span><span style="min-width:0"><span class="t">${esc(t.title)}</span>
+    <span class="m">${mini(t.owner)}<b style="font-weight:500;color:var(--foreground)">${t.owner}</b>${roleOf(t.owner)}<span>· de ${t.giver}</span>${t.via ? `<span>· ${ic('pass', 10)} ${t.via.length === 1 ? `par ${t.via[0]}` : `${t.via.length} passages`}</span>` : ''}</span>
+    <span class="m">${ttWhen(t)}</span></span><span class="ch">${ic('chev', 14)}</span></button>`;
+}
+function phTeam(list, sheet) {
+  const o = ttOpen(list), k = ttTaken(list), c = ttClosed(list), busy = st.charge === 'beaucoup';
+  return `<div class="phone">${phStatus}<div class="ph-body">
+    <span class="ph-back">${ic('back', 13)} Le point</span>
+    <div class="ph-title"><span style="color:var(--sidebar-primary)">${ic('flag', 18)}</span>ledge-roles</div>
+    <div class="ph-sub">équipe dev · 6 sièges · ${o.length + k.length} ouvertes</div>
+    ${o.length + k.length ? `<div class="ph-load">${seatLoad(list)}</div>` : ''}
+    ${!o.length && !k.length ? `<div class="tt-empty" style="margin:6px 0"><div><h4>Rien à prendre, rien en cours</h4><p>Les tâches que les sièges se confient apparaissent ici jusqu’à ce qu’elles soient closes.</p></div></div>` : ''}
+    ${o.length ? `<div class="ph-group g-open"><i class="fl-sq"></i>À prendre <span class="n">${o.length}</span></div>${o.slice(0, busy ? 3 : 9).map(phRow).join('')}${busy ? `<div class="ph-group"><span class="more" style="margin-left:0">Voir les ${o.length - 3} autres</span></div>` : ''}` : ''}
+    ${k.length ? `<div class="ph-group">Prises <span class="n">${k.length}</span></div>${k.slice(0, busy ? 3 : 9).map(phRow).join('')}` : ''}
+    ${c.length && (!busy) ? `<div class="ph-group">Closes aujourd’hui <span class="n">${c.length}</span><span class="more">Afficher</span></div>` : ''}
+    </div>${sheet ? `<div class="ph-dim"></div>${sheet}` : ''}</div>`;
+}
+function phPoint() {
+  return `<div class="phone">${phStatus}<div class="ph-body"><div class="ph-card"><h2>Le point <small>il y a 1 min</small></h2>
+    <div class="ph-h">À toi · 1</div>
+    <div class="ph-line"><span class="ph-dot" style="background:var(--success)"></span><b style="font-weight:500">Lu</b><span class="role">@rev-back</span><span style="color:var(--muted-foreground)">· terminée</span></div>
+    <div class="ph-h">Équipes</div>
+    <div class="ph-line"><span style="color:var(--sidebar-primary)">${ic('flag', 13)}</span><b style="font-weight:500">ledge-roles</b><span style="color:var(--muted-foreground)">6 sièges</span><span class="sp"></span>
+      <span class="count" style="height:28px">${st.charge === 'vide' ? '0 ouverte' : st.charge === 'beaucoup' ? `19 <i class="fl-sq"></i>7` : `6 <i class="fl-sq"></i>2`}${ic('chev', 12)}</span></div>
+    <div class="ph-line" style="color:var(--muted-foreground)"><span>${ic('flag', 13)}</span><b style="font-weight:500">site-vitrine</b><span>3 sièges</span><span class="sp"></span><span class="count calm" style="height:28px">2 ${ic('chev', 12)}</span></div>
+    <div class="ph-h">Confiées par Ledge</div>
+    <div class="ph-line"><code class="mono" style="font-size:11px;color:var(--muted-foreground)">t0a7b21</code><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">#92 : transmission… <span style="color:var(--muted-foreground)">→ Pim</span></span><span style="color:var(--info)">prise</span></div>
+    </div></div></div>`;
+}
+function phSheet(t) {
+  return `<div class="ph-sheet" role="dialog" aria-label="Tâche ${t.id}"><span class="grab"></span>
+    <div class="tp-head" style="display:flex;gap:8px;align-items:center;font-size:12px;color:var(--task);font-weight:500">${ic('task', 13)}Tâche <span class="mono" style="color:var(--muted-foreground);font-weight:400">${t.id}</span><span style="flex:1"></span><span class="pill ${t.state}">${TT_STATE[t.state]}</span></div>
+    <h3>${esc(t.title)}</h3>
+    <div class="tt-wait${t.late ? '' : ' calm'}">Attend depuis ${t.age} que ${t.owner} la prenne.</div>
+    <div class="people"><span>Confiée par</span><b>${mini(t.giver)} ${t.giver}</b><span>Passée par</span><b>${mini('Nova')} Nova</b><span>Tenue par</span><b>${mini(t.owner)} ${t.owner} ${roleOf(t.owner)}</b></div>
+    <p>${esc(t.text)}</p>
+    <ol class="log">${t.log.map(([at, by, what]) => `<li><time>${at}</time>${by} · ${what}</li>`).join('')}</ol>
+    <div class="acts"><span class="ph-btn primary">Ouvrir le fil de ${t.owner}</span><span class="ph-btn">Fil de Nova</span></div></div>`;
+}
+function equipeTelephone() {
+  const list = ttData(), t = TT_NORMAL[0], three = st.charge === 'normal';
+  return `<p class="cap"><b class="next">Visé</b> Téléphone · Le point › l’équipe${three ? ' › une tâche' : ''} · ${st.charge === 'vide' ? 'aucune tâche ouverte' : st.charge === 'beaucoup' ? 'une équipe chargée' : 'trois écrans de suite'}</p>
+  <div class="phones${three ? ' three' : ''}">
+    <div class="phone-wrap">${phPoint()}<span class="cap">1 · Le point : le compteur de l’équipe s’ouvre</span></div>
+    <div class="phone-wrap">${phTeam(list)}<span class="cap">2 · Les tâches de l’équipe</span></div>
+    ${three ? `<div class="phone-wrap">${phTeam(list, phSheet(t))}<span class="cap">3 · Une tâche, en feuille ; « Ouvrir le fil » mène au fil</span></div>` : ''}
+  </div>`;
+}
+
+// ---- The TUI: the box under the session card (T), and a screen of its own (t) ----
+const TT_GLYPH = { open: ['c-violet', '▤'], taken: ['c-blue', '▤'], done: ['c-green', '✓'], refused: ['c-red', '✗'] };
+const fit = (s, n) => s.length > n ? s.slice(0, n - 1) + '…' : s.padEnd(n);
+const tShort = t => t.state === 'open' ? t.age : t.state === 'taken' ? t.age : t.at;
+function tuiBox(list, W) {
+  const o = ttOpen(list), k = ttTaken(list), c = ttClosed(list);
+  const inner = W - 4, shown = [...o, ...k].slice(0, 4), rest = o.length + k.length - shown.length;
+  const tw = inner - 2 - 8 - 16 - 8;
+  const lines = shown.map(t => { const [cls, g] = TT_GLYPH[t.state]; const own = `${t.owner} @${ROLE[t.owner]}`;
+    return [G(cls, g), T('', ' '), T('c-faint', t.id + ' '), T('c-fg', fit(t.title, tw - 1) + ' '), T('c-dim', fit(own, 15) + ' '), T(t.late ? 'c-yellow' : 'c-faint', tShort(t).padStart(7))]; });
+  if (!o.length && !k.length) lines.push([T('c-faint', 'Rien à prendre, rien en cours.'), T('c-faint', c.length ? `  ${c.length} closes aujourd’hui · ` : ''), T('c-violet', c.length ? 't' : ''), T('c-faint', c.length ? ' les voir' : '')]);
+  else lines.push([T('c-faint', rest ? `+ ${rest} de plus` : ''), T('c-faint', `${rest ? ' · ' : ''}${c.length} closes aujourd’hui`), T('', ' '.repeat(Math.max(1, inner - (rest ? `+ ${rest} de plus · ` : '').length - `${c.length} closes aujourd’hui`.length - 9))), T('c-violet', 't'), T('c-faint', ' toutes')]);
+  const title = `Tâches · ▣ ledge-roles${o.length ? ` · ${o.length} à prendre` : ''}${k.length ? ` · ${k.length} prises` : ''}`;
+  return renderBox(W, title, lines);
+}
+function tuiScreen(list) {
+  const LW = 80, RW = 38;
+  const o = ttOpen(list), k = ttTaken(list), c = ttClosed(list), busy = st.charge === 'beaucoup';
+  const inner = LW - 4, tw = inner - 2 - 8 - 15 - 10 - 7;
+  const head = (label, n, cls) => [T(cls, label.toUpperCase()), T('c-faint', ` · ${n}`)];
+  const row = (t, sel) => { const [cls, g] = TT_GLYPH[t.state]; const r = [G(cls, g), T('', ' '), T('c-faint', t.id + ' '), T(t.state === 'done' || t.state === 'refused' ? 'c-dim' : 'c-fg', fit(t.title, tw - 1) + ' '), T('c-fg', t.owner + ' '), T('c-dim', fit('@' + ROLE[t.owner], 14 - t.owner.length)), T('c-dim', fit(`de ${t.giver}${t.via ? ` ↦${t.via.length}` : ''}`, 10)), T(t.late ? 'c-yellow' : 'c-faint', (t.state === 'open' || t.state === 'taken' ? tShort(t) : t.at).padStart(7))]; if (sel) r.sel = true; return r; };
+  const sel = list.length && (o[0] ?? k[0]);
+  let L = [];
+  if (!o.length && !k.length) L.push([T('c-faint', 'Rien à prendre, rien en cours dans ledge-roles.')], [T('', '')]);
+  if (o.length) L.push(head('À prendre', o.length, 'c-violet'), ...o.slice(0, busy ? 5 : 9).map(t => row(t, t === sel)));
+  if (busy) L.push([T('c-faint', `  … ${o.length - 5} de plus`)]);
+  if (k.length) L.push([T('', '')], head('Prises', k.length, 'c-blue'), ...k.slice(0, busy ? 6 : 9).map(t => row(t)));
+  if (busy) L.push([T('c-faint', `  … ${k.length - 6} de plus`)]);
+  if (c.length) L.push([T('', '')], head('Closes aujourd’hui', c.length, 'c-dim'), ...(st.charge === 'vide' ? c.map(t => row(t)) : [[T('c-faint', '  '), T('c-violet', 'c'), T('c-faint', ' les afficher')]]));
+  while (L.length < 20) L.push([T('', '')]);
+  const left = renderBox(LW, `Tâches · ▣ ledge-roles · ${o.length + k.length} ouvertes`, L, 'violet');
+  let R;
+  if (sel) {
+    const t = sel, wrap = (s, n) => { const out = []; let cur = ''; for (const w of s.split(' ')) { if ((cur + ' ' + w).trim().length > n) { out.push(cur); cur = w; } else cur = (cur + ' ' + w).trim(); } if (cur) out.push(cur); return out; };
+    R = [...wrap(t.title, RW - 4).map(s => [T('c-fg c-b', s)]), [T('', '')],
+      [T('c-dim', 'confiée par '), T('c-fg', t.giver)], ...(t.via ? [[T('c-dim', 'passée par  '), T('c-fg', t.via.join(' › '))]] : []), [T('c-dim', 'tenue par   '), T('c-fg', t.owner + ' '), T('c-dim', '@' + ROLE[t.owner])],
+      [T(t.late ? 'c-yellow' : 'c-violet', `attend depuis ${t.age}`)], [T('', '')], [T('c-dim', 'JOURNAL')],
+      ...(t.log ?? [['10:20', t.giver, `confiée à ${t.owner}`]]).map(([at, by, what]) => [T('c-faint', at + ' '), T('c-fg', by), T('c-dim', ' ' + what)])];
+    if (t.log?.[2]?.[3]) R.push(...wrap('« ' + t.log[2][3] + ' »', RW - 10).map(s => [T('', '      '), T('c-dim', s)]));
+    R.push([T('', '')], [T('c-violet', '↵'), T('c-faint', ' fil de ' + t.owner + '   '), T('c-violet', 'p'), T('c-faint', ' fil de ' + (t.via?.at(-1) ?? t.giver))]);
+  } else R = [[T('c-faint', 'Aucune tâche choisie.')]];
+  while (R.length < L.length) R.push([T('', '')]);
+  const right = renderBox(RW, sel ? `Tâche ${sel.id}` : 'Tâche', R);
+  const rows = [[T('c-coral c-b', ' ledge '), T('c-faint', '  Vue d’ensemble › '), T('c-fg', 'Tâches de l’équipe')], [T('', '')]];
+  left.forEach((l, i) => rows.push([...l, T('', '  '), ...right[i]]));
+  rows.push([T('', '')], [T('c-violet', ' j k'), T('c-faint', ' choisir   '), T('c-violet', '↵'), T('c-faint', ' fil du porteur   '), T('c-violet', 'p'), T('c-faint', ' fil du donneur   '), T('c-violet', 'c'), T('c-faint', ' closes   '), T('c-violet', 'esc'), T('c-faint', ' retour')]);
+  return rows;
+}
+function equipeTui() {
+  const list = ttData();
+  return `<div class="tui-pair">
+    <div><p class="cap"><b>Actuel</b> TUI · boîte « Tâches · ▣ équipe » sous la carte de session (touche T) : les 4 dernières, mêlées, sans porteur ni âge</p>${term(renderBox(70, 'Tâches · ▣ ledge-roles', [
+      [T('c-faint', 't7f1c42 '), T('c-fg', 'Carte de tâche dans le fil de session '), T('c-dim', 'Pim → Bix '), T('c-blue', 'prise')],
+      [T('c-faint', 't32a8cd '), T('c-fg', '#92 complément : les tâches ouvertes… '), T('c-dim', 'Pim → Ida '), T('c-blue', 'prise')],
+      [T('c-faint', 'tc19e5b '), T('c-fg', 'Relire la PR #97 '), T('c-dim', 'Bix → Max '), T('c-blue', 'prise')],
+      [T('c-faint', 't2b07aa '), T('c-fg', 'Relire la reprise du journal '), T('c-dim', 'Nova → Lu '), T('c-faint', 'ouverte')]]))}</div>
+    <div><p class="cap"><b class="next">Visé</b> TUI · la même boîte (70 colonnes) : à prendre d’abord, porteur et âge, le reste compté ; <span class="mono">t</span> ouvre l’écran</p>${term(tuiBox(list, 70))}</div>
+    <div><p class="cap"><b class="next">Visé</b> TUI · écran « Tâches de l’équipe » (touche t), 120 colonnes</p>${term(tuiScreen(list))}</div>
+  </div>`;
+}
+function equipe() {
+  return st.ecran === 'acces' ? equipeAcces() : st.ecran === 'telephone' ? equipeTelephone() : st.ecran === 'tui' ? equipeTui() : equipeDesktop();
 }
 
 // ---- Notes ----
@@ -491,8 +854,30 @@ const NOTES = {
     <li>Visé : chaque changement d’une tâche entre sessions devient une ligne : glyphe <code>▤</code> violet (ASCII <code>=</code>), route alignée, puis le verbe (<span style="color:var(--task)">confiée</span>, <span style="color:var(--task)">passée</span>, <span style="color:var(--success)">✓ terminée</span>, <span style="color:var(--danger-text)">✕ refusée</span>, abandonnée) et le titre. Le message garde <code>✉</code> et une flèche estompée.</li>
     <li>La note d’un passage suit le titre, estompée, et se coupe la première.</li>
     <li>La boîte passe de 3 à 5 lignes quand la hauteur le permet (32 rangées et plus).</li>
-    <li>Sous 100 colonnes la colonne de droite n’existe pas : rien ne change.</li></ul></div>`
+    <li>Sous 100 colonnes la colonne de droite n’existe pas : rien ne change.</li></ul></div>`,
+  equipe: `<div class="note"><h3>Tâches d’une équipe</h3><h4>Une seule liste, trois groupes, partout</h4><ul>
+    <li><b>Pas d’écran nouveau sur Desktop</b> : c’est l’onglet <b>Tâches</b> de Ledge, filtré sur l’équipe. Le filtre d’équipe passe du select à des <b>puces</b> en tête (Toutes · ledge-roles · site-vitrine), car c’est le premier axe ; « Donneur » reste un select. « État » disparaît : les groupes le remplacent.</li>
+    <li>Groupes : <span style="color:var(--task)"><b>À prendre</b></span> (drapeau violet, comme la fiche de l’Atelier), <b>Prises</b>, <b>Closes aujourd’hui</b> (repliées quand la liste est longue). Dans chaque groupe, la plus ancienne d’abord : ce qui attend remonte.</li>
+    <li>Une ligne : titre ; puis id · de qui · via qui (passages) · depuis quand ; le porteur avec son <code>@rôle</code> ; l’état en pastille. « Attend depuis » passe en ambre après 30 min.</li>
+    <li><b>Qui tient quoi</b> : une puce par siège, le nombre de tâches ouvertes qu’il tient et, en violet, celles à prendre. Un clic filtre sur ce siège. C’est ce qui sert quand l’équipe en a vingt.</li>
+    <li>Une ligne ouvre <b>le panneau « Ouvrir la tâche » de #92</b> à droite (il remplace le détail en bas de l’onglet). S’ajoute l’encart « Attend depuis 48 min que Lu la prenne. » pour une tâche à prendre.</li>
+    <li>Vide : la phrase dit comment une tâche arrive ici ; les closes du jour restent dessous.</li>
+    <li>Accès : un <b>compteur violet</b> « 6 ouvertes · 2 à prendre » sur la ligne d’équipe (Le point, onglet Équipes), sur la plaque de l’Atelier, et par siège dans l’onglet Équipes ; dans le panneau d’une tâche, le nom de l’équipe devient un lien. Le compteur disparaît sans tâche ouverte.</li>
+    <li><b>Téléphone</b> : la ligne d’équipe de « Le point » ouvre un écran de l’équipe (mêmes groupes, puces de siège défilantes) ; une tâche s’ouvre en feuille, « Ouvrir le fil de Lu » en tête.</li>
+    <li><b>TUI</b> : la boîte <kbd>T</kbd> garde sa place, met les tâches à prendre d’abord, ajoute porteur et âge, et compte le reste ; <kbd>t</kbd> (libre aujourd’hui) ouvre l’écran « Tâches de l’équipe » : liste groupée à gauche, la tâche à droite, <kbd>↵</kbd> fil du porteur, <kbd>p</kbd> fil du donneur, <kbd>c</kbd> les closes, <kbd>esc</kbd> retour.</li>
+    <li>Textes en : « To take · Taken · Closed today · Who holds what · waiting for 48 min · taken 25 min ago · passed by Nova · Nothing to take, nothing in progress in ledge-roles ».</li></ul></div>
+    <div class="note"><h3>Données</h3><h4>Ce qui manque au daemon (pour Nova)</h4><ol>
+    <li><b>Les changements des tâches entre sièges</b> n’arrivent pas aux fronts : <code>task.updated</code> ne part que pour celles de Ledge (<code>onLedgeTask</code>). La flotte liste une équipe à la connexion, puis plus rien. C’est la question 1 de #92, déjà chez Nova : sans elle, la vue se fige.</li>
+    <li><b>Un genre par entrée du journal</b> (<code>kind: given · taken · passed · done · refused · cancelled · dropped</code>). Aujourd’hui seul le texte (« passée à Lu », « prise », « annulée : … ») dit ce qui s’est passé ; « passée par », « prise il y a » et « annulée » s’en déduiraient sans lire du français.</li>
+    <li><b>Le téléphone</b> ne reçoit que les tâches de Ledge (<code>phoneTasks</code>, filtre <code>giver === ledge</code>) et sans <code>giverName</code> ni journal. Il faut les tâches des équipes vivantes (ouvertes + closes du jour, borné), avec <code>giverName</code>, les passages et le journal court de la feuille.</li>
+    <li>Le <b>rôle du porteur</b> se déduit des sièges de l’équipe (Desktop, TUI) ; le téléphone a déjà <code>ownerRole</code>. Rien à ajouter, sauf si une tâche doit garder le rôle d’origine quand le siège change de main.</li></ol></div>`
 };
+const OPEN_EQ = `<div class="note"><h3>À trancher</h3><ol>
+  <li>Le filtre d’équipe en <b>puces</b> au lieu du select : d’accord ? Au-delà de 5 équipes, les puces se replient en « + 3 ».</li>
+  <li>« Attend depuis » en ambre après <b>30 min</b> : le bon seuil ? Faut-il aussi le signaler dans « À toi » ?</li>
+  <li>Les closes : seulement <b>celles du jour</b> (comme la boîte de la TUI), ou les 24 dernières heures (comme le téléphone) ?</li>
+  <li>Une action « Relancer Lu » sur une tâche qui attend (un message au porteur) : utile, ou le fil du porteur suffit ?</li>
+  <li>TUI : <kbd>t</kbd> pour l’écran et <kbd>T</kbd> pour la boîte, ou <kbd>T</kbd> qui cycle boîte → écran → caché ?</li></ol></div>`;
 const OPEN = `<div class="note"><h3>À trancher</h3><ol>
   <li><b>Données</b> : un événement <code>task.updated</code> pour <b>toutes</b> les tâches (proposé : l’Atelier, le fil et la TUI le lisent tels quels), ou une relecture périodique du journal ?</li>
   <li>La transmission entre-t-elle dans <code>history</code> (comme <code>recordSent</code>) pour que les cartes survivent au redémarrage, ou le fil les déduit-il du journal de la tâche ?</li>
@@ -505,11 +890,12 @@ const CASE_KEYS = { atelier: Object.keys(CASES), fil: Object.keys(THREADS) };
 function seg(key, opts) { return `<span class="seg">${opts.map(([v, l]) => `<button type="button" data-k="${key}" data-v="${v}" aria-pressed="${st[key] === v}">${l}</button>`).join('')}</span>`; }
 function bar() {
   let h = `<span class="brand">Ledge.<small>#92 · transmission d’une tâche</small></span>
-    <span class="field">Vue ${seg('vue', [['atelier', 'Atelier'], ['fil', 'Fil de session'], ['tui', 'TUI']])}</span>`;
+    <span class="field">Vue ${seg('vue', [['atelier', 'Atelier'], ['fil', 'Fil de session'], ['tui', 'TUI'], ['equipe', 'Tâches d’équipe']])}</span>`;
   if (st.vue === 'atelier') h += `<span class="field">Cas ${seg('cas', Object.entries(CASES).map(([k, c]) => [k, c.label]))}</span>
     <span class="field">Animation ${seg('anim', [['play', 'Animée'], ['freeze', 'Arrêt sur image'], ['still', 'Figée / réduite']])}</span><button class="replay" type="button" id="replay">${ic('replay', 12)}Rejouer</button>`;
   if (st.vue === 'fil') h += `<span class="field">Fil ${seg('fil', Object.entries(THREADS).map(([k, v]) => [k, k === 'open' ? 'Tâche ouverte' : `Chez ${v.who}`]))}</span>
     <span class="field">Cartes ${seg('plie', [['0', 'Dépliées'], ['1', 'Repliées']])}</span>`;
+  if (st.vue === 'equipe') h += `<span class="field">Écran ${seg('ecran', [['desktop', 'Desktop'], ['acces', 'Par où on y arrive'], ['telephone', 'Téléphone'], ['tui', 'TUI']])}</span>${st.ecran === 'acces' ? '' : `<span class="field">Charge ${seg('charge', [['normal', 'Ordinaire'], ['vide', 'Vide'], ['beaucoup', 'Beaucoup']])}</span>`}`;
   if (st.vue === 'tui') h += `<span class="field">Terminal ${seg('largeur', [['120', '120 colonnes'], ['160', '160 colonnes']])}</span>`;
   h += `<span class="field">Thème ${seg('theme', [['dark', 'Sombre'], ['light', 'Clair']])}</span>`;
   return h;
@@ -518,8 +904,8 @@ let loop;
 function render() {
   document.documentElement.dataset.theme = st.theme;
   document.getElementById('bar').innerHTML = bar();
-  document.getElementById('view').innerHTML = st.vue === 'fil' ? fil() : st.vue === 'tui' ? tui() : atelier();
-  document.getElementById('notes').innerHTML = NOTES[st.vue] + OPEN;
+  document.getElementById('view').innerHTML = st.vue === 'fil' ? fil() : st.vue === 'tui' ? tui() : st.vue === 'equipe' ? equipe() : atelier();
+  document.getElementById('notes').innerHTML = NOTES[st.vue] + (st.vue === 'equipe' ? OPEN_EQ : OPEN);
   fitFloor();
   clearInterval(loop);
   if (st.vue === 'atelier' && st.anim === 'play') loop = setInterval(replay, 6000);
