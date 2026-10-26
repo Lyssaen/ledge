@@ -49,6 +49,8 @@ export async function startTui(o: { sessions?: Session[]; projects?: Projects; l
   return {
     stdin: ui.stdin as { write(data: string): void }, daemon, client, saved, press,
     frame: () => ui.lastFrame() ?? '',
+    /** All that went to the terminal, the frames and the sequences written beside them (a title, a bell). */
+    written: () => ui.stdout.frames.join(''),
     /** The terminal resized to `columns` × `rows`, as a real one says it (a `resize` on stdout). */
     async resize(columns: number, rows: number) {
       Object.defineProperty(ui.stdout, 'columns', { configurable: true, get: () => columns });

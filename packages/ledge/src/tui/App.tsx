@@ -104,9 +104,11 @@ function Shell({ client, lang, setLang: setLangState, saveLang, notify, glyphs, 
     if ('why' in cmd) { toast({ text: cmd.why === 'offline' ? t.toast.offline(s.name) : cmd.why === 'omp' ? t.toast.noTerminalOmp(s.name) : t.toast.noTerminal(s.name), tone: 'info' }); return; }
     void suspendTerminal(async () => {
       const code = await (run ?? runAttached)(cmd.argv);
+      // The attached program (tmux, a shell) may have set its own title: ours is written again.
+      if (titled.current) write(titled.current);
       if (code !== 0) toast({ text: t.toast.attachFailed(code), tone: 'error' });
     });
-  }, [fleet, suspendTerminal, run, t, toast]);
+  }, [fleet, suspendTerminal, run, t, toast, write]);
 
   const tui: Tui = {
     client, fleet, d, machines, projects, t, lang, setLang, g: glyphs, screen, go, selected, select: setSelectedId,
