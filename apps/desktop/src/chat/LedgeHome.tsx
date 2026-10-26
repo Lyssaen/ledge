@@ -179,7 +179,7 @@ function TeamsTab({ client, teams, sessions, projects, dispatch, notify, openCwd
   return (
     <div className="home-list home-teams" role="tabpanel" aria-label={t.home.tabs.teams(live.length)}>
       <div className="cat-toolbar">
-        <Tabs id="home-teams" label={c.views} value={view} onChange={v => show(v)} tabs={(['live', 'templates', 'roles'] as const).map(v => ({ value: v, label: c[v](counts[v]) }))} />
+        <Tabs id="home-teams" fit label={c.views} value={view} onChange={v => show(v)} tabs={(['live', 'templates', 'roles'] as const).map(v => ({ value: v, label: c[v](counts[v]) }))} />
         {view !== 'live' && <ScopePicker scope={scope} onChoose={cwd => { scope.choose(cwd, true); setPick({}); }} />}
         {view === 'roles' && <input type="search" className="cat-search" aria-label={c.filterLabel} placeholder={c.filter} value={query} onChange={e => setQuery(e.target.value)} />}
       </div>

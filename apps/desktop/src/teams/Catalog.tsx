@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type JSX, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useState, type JSX, type ReactNode } from 'react';
 import type { DaemonClient } from '@ledge/fleet';
 import { autonomyArgs, ompApprovalFor, ROLE_PROMPT_MAX, type Autonomy, type DefinitionProblem, type Project, type Projects, type Role, type Seat, type Session, type Team, type TeamTemplate, type Tool } from '@ledge/protocol';
 import { toolName } from '@ledge/ui/chat/format';
@@ -96,10 +96,14 @@ export function ScopePicker({ scope, onChoose }: { scope: ReturnType<typeof useS
   const [open, setOpen] = useState(false);
   const current = scope.options.find(s => s.cwd === scope.cwd);
   const all: Scope[] = [...scope.options, { cwd: null, name: c.personal }];
+  const note = useId();
+  // The rule the choice follows describes the button: the menu holds its items only.
   return (
+    <>
+    <span id={note} className="sr-only">{c.repoWins}</span>
     <Menu open={open} onOpenChange={setOpen} label={c.folderTitle} className="cat-scope" menuClassName="cat-scope-pop"
       trigger={tr => (
-        <button type="button" className="cat-scope-btn" title={c.folderTitle} {...tr}>
+        <button type="button" className="cat-scope-btn" title={c.folderTitle} aria-describedby={note} {...tr}>
           {c.folder} <strong>{scope.cwd === null ? c.personal : current?.name ?? folderName(scope.cwd)}</strong> <small>{scope.cwd ?? '~/.ledge'}</small> ▾
         </button>
       )}>
@@ -109,8 +113,8 @@ export function ScopePicker({ scope, onChoose }: { scope: ReturnType<typeof useS
           <small>{s.cwd ?? '~/.ledge'} · {s.cwd === null ? c.scopePersonal : s.project ? c.scopeProject(s.project) : c.scopeFolder}</small>
         </MenuItem>
       ))}
-      <p>{c.repoWins}</p>
     </Menu>
+    </>
   );
 }
 

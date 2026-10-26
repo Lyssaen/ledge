@@ -131,6 +131,8 @@ describe('« Teams »: the catalog of templates, roles and skipped files (#97)',
     await waitFor(() => expect(d.received).toContainEqual({ type: 'roles.list', cwd: REPO, requestId: expect.any(String) }));
     await user.click(await tabs().findByRole('tab', { name: 'Roles · 4' }));
     expect(home().getByRole('button', { name: /Folder Ledge \/w\/ledge/ })).toBeVisible();
+    // The rule the choice follows describes the button; the menu holds its items only.
+    expect(home().getByRole('button', { name: /Folder Ledge \/w\/ledge/ })).toHaveAccessibleDescription('The repository wins over ~/.ledge for the same id.');
     const listBox = home().getByRole('group', { name: 'Roles' });
     const list = within(listBox);
     const ids = () => [...listBox.querySelectorAll('[data-role]')].map(x => x.getAttribute('data-role'));
@@ -178,6 +180,7 @@ describe('« Teams »: the catalog of templates, roles and skipped files (#97)',
     expect(skipped.getByText(`${REPO}/.ledge/roles/Design.md`)).toBeVisible();
     expect(skipped.getByText('a role twice in one team')).toBeVisible();
     await user.click(home().getByRole('button', { name: /^Folder/ }));
+    expect([...screen.getByRole('menu', { name: 'The folder whose catalog is read' }).children].every(x => x.getAttribute('role') === 'menuitem')).toBe(true);
     await user.click(screen.getByRole('menuitem', { name: /Personal only/ }));
     await waitFor(() => expect(d.received).toContainEqual({ type: 'roles.list', requestId: expect.any(String) }));
     expect(await tabs().findByRole('tab', { name: 'Roles · 1' })).toBeVisible();
