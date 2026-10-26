@@ -1226,7 +1226,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     rp: () => rpOf(mobile.state().relayUrl),
     challenges: createChallengeStore(),
     credential: id => mobile.credential(id),
-    setCredential: (id, c) => mobile.setCredential(id, c)
+    setCredential: (id, c) => mobile.setCredential(id, c),
+    teams: () => teams.all(), tasks: () => tasks.all(),
+    projectName: id => (id ? projects.projects.find(p => p.id === id)?.name ?? null : null)
   });
   /** A hidden phone is told, through the relay, of what deserves it. */
   let unsubscribePush: (() => void) | undefined;

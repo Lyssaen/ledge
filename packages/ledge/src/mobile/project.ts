@@ -1,5 +1,5 @@
-import { pendingKey, PENDING_BODY_MAX, SNAPSHOT_BODY_MAX, THREAD_BUDGET, THREAD_ITEMS_MAX, THREAD_TEXT_MAX, TOOL_TEXT_MAX, TOPIC_MAX, ToolSchema } from '@ledge/protocol';
-import type { CapabilitiesByTool, FileChange, Pending, PhonePending, PhoneSession, Session, ThreadItem, Tool } from '@ledge/protocol';
+import { LEDGE_GIVER, pendingKey, PENDING_BODY_MAX, SNAPSHOT_BODY_MAX, taskClosed, THREAD_BUDGET, THREAD_ITEMS_MAX, THREAD_TEXT_MAX, TOOL_TEXT_MAX, TOPIC_MAX, ToolSchema } from '@ledge/protocol';
+import type { CapabilitiesByTool, FileChange, Pending, PhonePending, PhoneSession, PhoneTask, PhoneTeam, Session, Task, Team, ThreadItem, Tool } from '@ledge/protocol';
 import { adapterFor } from '../adapters/index.js';
 import { riskOf } from './risk.js';
 
@@ -52,7 +52,7 @@ export function toPhoneSession(s: Session, readAt: string): PhoneSession {
     startedAt: s.startedAt, lastActivityAt: s.lastActivityAt,
     // Topics are already cut to TOPIC_MAX where they are set; clipped again so no source can swell a snapshot.
     ...(s.topic !== undefined ? { topic: clip(s.topic, TOPIC_MAX).text } : {}),
-    ...pickSet(s, ['repo', 'branch', 'worktree']),
+    ...pickSet(s, ['repo', 'branch', 'worktree', 'role', 'roleLabel', 'team']),
     helpers: s.helpers.map(h => ({ id: h.id, kind: h.kind, task: h.task, state: h.state, ...pickSet(h, ['finishedAt']) })),
     // A preview only: the whole reply is in the thread.
     ...(s.lastReply ? { lastReply: { text: clip(s.lastReply.text, TOOL_TEXT_MAX).text, at: s.lastReply.at, ...pickSet(s.lastReply, ['plan']) } } : {}),
@@ -149,3 +149,23 @@ export function capabilities(): CapabilitiesByTool {
   }
   return caps;
 }
+
+/** A live team as the phone sees it: its project's name, its seats, the progress of the tasks Ledge gave it (ledge home spec §2.4). */
+export function toPhoneTeam(t: Team, tasks: readonly Task[], projectName: (id: string | null) => string | null): PhoneTeam | null {
+  if (t.state === 'dissolved') return null;
+  const mine = tasks.filter(x => x.team === t.id && x.giver === LEDGE_GIVER);
+  return { id: t.id, name: t.name.slice(0, 60), project: projectName(t.project)?.slice(0, 80) ?? null, state: t.state,
+    seats: t.seats.slice(0, 16).map(x => ({ role: x.role, sessionId: x.sessionId })), done: mine.filter(x => x.state === 'done').length, given: mine.length };
+}
+
+/** A task Ledge gave, as the phone sees it: the start of its result only. */
+export function toPhoneTask(x: Task, owner: Session | undefined, teamName: string | undefined): PhoneTask {
+  const result = x.result !== undefined ? clip(x.result, TOOL_TEXT_MAX) : undefined;
+  return { id: x.id, title: x.title.slice(0, 200), owner: x.owner, ownerName: x.ownerName.slice(0, 80), ...(owner?.role ? { ownerRole: owner.role } : {}),
+    ...(x.team ? { team: x.team } : {}), ...(teamName ? { teamName: teamName.slice(0, 60) } : {}), state: x.state,
+    ...(result ? { result: result.text, ...(result.cut ? { cut: true as const } : {}) } : {}), at: x.at, updatedAt: x.updatedAt, ...(x.seen ? { seen: true as const } : {}) };
+}
+
+/** The tasks Ledge gave that the phone lists: open ones, and those closed in the last day not put away. */
+export const phoneTasks = (tasks: readonly Task[], now: number): Task[] =>
+  tasks.filter(x => x.giver === LEDGE_GIVER && (!taskClosed(x) || (!x.seen && now - Date.parse(x.updatedAt) < 86_400_000))).slice(-200);

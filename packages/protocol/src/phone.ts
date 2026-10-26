@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { PendingSchema, SessionSchema, ToolSchema, type Tool } from './session.js';
+import { AutonomySchema, PendingSchema, SessionSchema, ToolSchema, type Tool } from './session.js';
 import { ChatStepSchema, MAX_PROPOSALS } from './chat.js';
 import { DecisionSchema, NOTE_MAX } from './decisions.js';
 import { ThreadItemSchema } from './thread.js';
@@ -87,7 +87,9 @@ export type PhonePending = z.infer<typeof PhonePendingSchema>;
 /** A session as the phone sees it: no folder, no tmux name, no machine, no message to another agent. */
 export const PhoneSessionSchema = SessionSchema.pick({
   id: true, name: true, tool: true, project: true, title: true, topic: true, repo: true, branch: true, worktree: true,
-  state: true, helpers: true, lastReply: true, startedAt: true, lastActivityAt: true
+  state: true, helpers: true, lastReply: true, startedAt: true, lastActivityAt: true,
+  /** Its role and its live team (ledge home spec §2.4): the agents screen groups a project's sessions by table. */
+  role: true, roleLabel: true, team: true
 }).extend({ pending: PhonePendingSchema.optional(), unread: z.boolean() });
 export type PhoneSession = z.infer<typeof PhoneSessionSchema>;
 
@@ -141,6 +143,37 @@ export const PhoneChatCloseSchema = z.object({
 }).strict();
 export type PhoneChatClose = z.infer<typeof PhoneChatCloseSchema>;
 
+/** A team the chat proposes, as the phone sees it (roles spec §3.8): no folder; its project's name, its seats with what they
+ *  run and their autonomy; `teamId` and `launchedAt` once launched, `failed` when the last launch did not work. */
+export const PhoneChatTeamSchema = z.object({
+  project: z.string().max(80), name: z.string().max(60), template: z.string().max(64).optional(),
+  seats: z.array(z.object({ role: z.string().max(40), label: z.string().max(40), tool: ToolSchema, model: z.string().max(200).optional(), effort: z.string().max(20).optional(), autonomy: AutonomySchema.optional() }).strict()).min(1).max(8),
+  teamId: z.string().max(40).optional(), launchedAt: z.string().datetime().optional(), failed: z.literal(true).optional()
+}).strict();
+export type PhoneChatTeam = z.infer<typeof PhoneChatTeamSchema>;
+/** A task the chat proposes to give, as the phone sees it; once given it follows its task. */
+export const PhoneChatTaskSchema = z.object({
+  to: z.string().max(80), toName: z.string().max(80).optional(), title: z.string().max(200), text: z.string().max(TOOL_TEXT_MAX).optional(),
+  taskId: z.string().max(40).optional(), ownerName: z.string().max(80).optional(), state: z.enum(['open', 'taken', 'done', 'refused', 'dropped']).optional(), failed: z.literal(true).optional()
+}).strict();
+export type PhoneChatTask = z.infer<typeof PhoneChatTaskSchema>;
+
+/** A live team as the phone sees it (ledge home spec §2.4): its project's name, its seats, the progress of Ledge's tasks. */
+export const PhoneTeamSchema = z.object({
+  id: z.string().max(40), name: z.string().max(60), project: z.string().max(80).nullable(), state: z.enum(['active', 'resting']),
+  seats: z.array(z.object({ role: z.string().max(40), sessionId: z.string().max(100).nullable() }).strict()).max(16),
+  done: z.number().int().min(0), given: z.number().int().min(0)
+}).strict();
+export type PhoneTeam = z.infer<typeof PhoneTeamSchema>;
+/** A task Ledge gave, as the phone sees it: its owner, its team, its state and the start of its result. */
+export const PhoneTaskSchema = z.object({
+  id: z.string().max(40), title: z.string().max(200), owner: z.string().max(100), ownerName: z.string().max(80), ownerRole: z.string().max(40).optional(),
+  team: z.string().max(40).optional(), teamName: z.string().max(60).optional(),
+  state: z.enum(['open', 'taken', 'done', 'refused', 'dropped']), result: z.string().max(TOOL_TEXT_MAX).optional(), cut: z.literal(true).optional(),
+  at: z.string(), updatedAt: z.string(), seen: z.literal(true).optional()
+}).strict();
+export type PhoneTask = z.infer<typeof PhoneTaskSchema>;
+
 /** Why a question ended without an answer. */
 export const ChatErrorCodeSchema = z.enum(['busy', 'timeout', 'cancelled', 'failed']);
 export type ChatErrorCode = z.infer<typeof ChatErrorCodeSchema>;
@@ -149,7 +182,8 @@ export const PhoneChatTurnSchema = z.object({
   qid: OperationIdSchema, question: z.string().max(MESSAGE_MAX), askedAt: z.string().datetime(),
   steps: z.array(PhoneChatStepSchema).max(50), answer: z.string().max(THREAD_TEXT_MAX).optional(), answeredAt: z.string().datetime().optional(),
   error: ChatErrorCodeSchema.optional(), proposals: z.array(PhoneChatProposalSchema).max(MAX_PROPOSALS).optional(),
-  relay: PhoneChatRelaySchema.optional(), closes: z.array(PhoneChatCloseSchema).min(1).max(MAX_PROPOSALS).optional(), cut: z.literal(true).optional()
+  relay: PhoneChatRelaySchema.optional(), closes: z.array(PhoneChatCloseSchema).min(1).max(MAX_PROPOSALS).optional(), cut: z.literal(true).optional(),
+  team: PhoneChatTeamSchema.optional(), tasks: z.array(PhoneChatTaskSchema).min(1).max(MAX_PROPOSALS).optional()
 }).strict();
 export type PhoneChatTurn = z.infer<typeof PhoneChatTurnSchema>;
 
@@ -208,6 +242,14 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('chat.relay'), op: OperationIdSchema, qid: OperationIdSchema }),
   z.object({ type: z.literal('chat.launch'), op: OperationIdSchema, qid: OperationIdSchema, rows: CardRowsSchema.optional(), assertion: AssertionSchema.optional() }),
   z.object({ type: z.literal('chat.close'), op: OperationIdSchema, qid: OperationIdSchema, rows: CardRowsSchema.optional(), assertion: AssertionSchema.optional() }),
+  /** The turn's team card (roles spec §3.8): launched like a session card, with the device check (purpose `launch`, the turn). */
+  z.object({ type: z.literal('chat.team'), op: OperationIdSchema, qid: OperationIdSchema, assertion: AssertionSchema.optional() }),
+  /** A row of the turn's task card: given by Ledge. */
+  z.object({ type: z.literal('chat.task'), op: OperationIdSchema, qid: OperationIdSchema, row: z.number().int().min(0).max(MAX_PROPOSALS - 1) }),
+  /** « Reprendre » a resting team. */
+  z.object({ type: z.literal('team.resume'), op: OperationIdSchema, team: z.string().min(1).max(40) }),
+  /** Puts a closed task Ledge gave away from « À traiter ». */
+  z.object({ type: z.literal('task.seen'), op: OperationIdSchema, task: z.string().min(1).max(40) }),
   /** Whether the phone's app is in front: a device that is visible gets no push. */
   z.object({ type: z.literal('presence'), visible: z.boolean() })
 ]);
@@ -232,6 +274,11 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('chat.delta'), qid: OperationIdSchema, text: z.string().max(THREAD_TEXT_MAX) }),
   z.object({ type: z.literal('chat.done'), qid: OperationIdSchema, turn: PhoneChatTurnSchema }),
   z.object({ type: z.literal('chat.error'), qid: OperationIdSchema, code: ChatErrorCodeSchema }),
+  /** The live teams, after each snapshot and on every change. */
+  z.object({ type: z.literal('teams'), teams: z.array(PhoneTeamSchema).max(50) }),
+  /** The tasks Ledge gave, open or closed lately, after each snapshot; then each change. */
+  z.object({ type: z.literal('tasks'), tasks: z.array(PhoneTaskSchema).max(200) }),
+  z.object({ type: z.literal('task.updated'), task: PhoneTaskSchema }),
   /** Never carries free text. */
   z.object({ type: z.literal('error'), code: z.enum(['invalid', 'unknown_session', 'too_large']), request: z.string().max(40).optional() })
 ]);
