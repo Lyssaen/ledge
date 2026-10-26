@@ -4,10 +4,11 @@ import { connect, type Client } from '../client.js';
 import { CODEX_HOOK_VAR } from '../spawn.js';
 
 export const TASK_USAGE = `ledge task give <nom|@rôle> "<titre>" ["<détail>"]   confier un travail à une session (@rôle : dans ton équipe)
+ledge task give ledge "<question>" "<options, recommandation>"   une décision pour l'utilisateur ; sa réponse te réveille
 ledge task list [--all]                         tes tâches (tenues ou confiées), ouvertes ; --all : closes aussi
 ledge task show <id>                            une tâche, son détail et son historique
 ledge task take <id>                            la prendre
-ledge task done <id> ["<résultat>"]             la terminer (la session qui l'a confiée est prévenue)
+ledge task done <id> "<résultat>"               la terminer, avec ce qui en est sorti (la session qui l'a confiée est prévenue)
 ledge task refuse <id> "<raison>"               la refuser, ou l'annuler si tu l'as confiée
 ledge task pass <id> <nom|@rôle> ["<note>"]     la passer à une autre session`;
 /** One deadline for connect and answer: Codex kills a hook after 5 s, and the hook calls this in-process. */
@@ -26,7 +27,7 @@ export function taskArgs(args: string[]): Op | undefined {
       ? { op, to: rest[0]!, title: rest[1]!, ...(rest[2] ? { text: rest[2] } : {}) } : undefined;
     case 'list': return rest.length === 0 ? { op } : rest.length === 1 && rest[0] === '--all' ? { op, all: true } : undefined;
     case 'show': case 'take': return fits(1, 1) && id ? { op, task: id } : undefined;
-    case 'done': return fits(1, 2) && id && (rest[1]?.length ?? 0) <= TASK_TEXT_MAX ? { op, task: id, ...(rest[1] ? { text: rest[1] } : {}) } : undefined;
+    case 'done': return fits(2, 2) && id && rest[1]!.length <= TASK_TEXT_MAX ? { op, task: id, text: rest[1]! } : undefined;
     case 'refuse': return fits(2, 2) && id && rest[1]!.length <= TASK_TEXT_MAX ? { op, task: id, text: rest[1]! } : undefined;
     case 'pass': return fits(2, 3) && id && (rest[2]?.length ?? 0) <= TASK_TEXT_MAX ? { op, task: id, to: rest[1]!, ...(rest[2] ? { text: rest[2] } : {}) } : undefined;
     default: return undefined;
@@ -65,7 +66,7 @@ export async function taskOnClient(client: Client, args: string[], by: string, m
     }
     const t = r.task!;
     switch (op.op) {
-      case 'give': return { line: `tâche ${t.id} confiée à ${t.ownerName} : elle lui arrive à son prochain moment libre`, code: 0 };
+      case 'give': return { line: t.owner === LEDGE_GIVER ? `décision ${t.id} posée à l'utilisateur (ledge decide) : sa réponse t'arrivera comme une tâche terminée` : `tâche ${t.id} confiée à ${t.ownerName} : elle lui arrive à son prochain moment libre`, code: 0 };
       case 'take': return { line: `tâche ${t.id} prise`, code: 0 };
       case 'done': return { line: `tâche ${t.id} terminée ; Ledge prévient ${t.giverName}`, code: 0 };
       case 'refuse': return { line: t.giver === by ? `tâche ${t.id} annulée ; Ledge prévient ${t.ownerName}` : `tâche ${t.id} refusée ; Ledge prévient ${t.giverName}`, code: 0 };

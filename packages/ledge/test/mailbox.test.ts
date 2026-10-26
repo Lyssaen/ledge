@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ClientMessage, Session } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
-import { createMailbox, type Mailbox, type MailboxDeps } from '../src/daemon/mailbox.js';
+import { createMailbox, MESSAGES_PER_TURN, type Mailbox, type MailboxDeps } from '../src/daemon/mailbox.js';
 import { formatLedgeMessage, formatLedgeNotice, mailId } from '../src/daemon/crossSession.js';
 
 const T0 = '2026-10-19T08:00:00.000Z';
@@ -74,14 +74,62 @@ describe('createMailbox', () => {
     expect(typed).toHaveLength(1);
   });
 
-  it('oldest first; the next waits for the target to be free again', async () => {
+  it('what waits for a busy target is typed together at its free moment, oldest first, each card delivered', async () => {
     store.upsert(pim({ state: 'working' }));
     answer = async id => { setState(id, 'working'); return null; };
     box.submit(msg({ rid: 'r1', text: 'un' })); box.submit(msg({ rid: 'r2', text: 'deux' }));
     setState('s2', 'idle'); await flush();
-    expect(typed).toHaveLength(1); expect(typed[0]![1]).toContain('un');
+    expect(typed).toEqual([['s2', [formatLedgeMessage({ from: 'Otto', tool: 'claude', text: 'un', to: 'codex', id: mailId('r1') }),
+      formatLedgeMessage({ from: 'Otto', tool: 'claude', text: 'deux', to: 'codex', id: mailId('r2') })].join(' ')]]);
+    expect(sentCalls.filter(c => c[0] === 'mark')).toEqual([['mark', 's1', 'r1', 'delivered'], ['mark', 's1', 'r2', 'delivered']]);
+    // One arriving while the target works waits for its next free moment.
+    box.submit(msg({ rid: 'r3', text: 'trois' })); await flush();
+    expect(typed).toHaveLength(1);
     setState('s2', 'idle'); await flush();
-    expect(typed).toHaveLength(2); expect(typed[1]![1]).toContain('deux');
+    expect(typed).toHaveLength(2); expect(typed[1]![1]).toContain('trois');
+  });
+
+  it('a turn takes a bounded batch; the rest waits for the next free moment', async () => {
+    store.upsert(pim({ state: 'working' }));
+    answer = async id => { setState(id, 'working'); return null; };
+    for (let i = 0; i < MESSAGES_PER_TURN + 1; i++) box.submit(msg({ rid: `r${i}`, text: `n${i}` }));
+    setState('s2', 'idle'); await flush();
+    expect(typed).toHaveLength(1);
+    expect(typed[0]![1].match(/<ledge-message /g)).toHaveLength(MESSAGES_PER_TURN);
+    setState('s2', 'idle'); await flush();
+    expect(typed[1]![1]).toContain(`n${MESSAGES_PER_TURN}`);
+  });
+
+  it('a notice is typed alone, never inside a batch of messages', async () => {
+    store.upsert(pim({ state: 'working' }));
+    answer = async id => { setState(id, 'working'); return null; };
+    box.submit(msg({ rid: 'r1', text: 'un' })); box.notify('s2', '<ledge-task id="t1" from="Otto">x</ledge-task>', 't1:1'); box.submit(msg({ rid: 'r2', text: 'deux' }));
+    setState('s2', 'idle'); await flush();
+    expect(typed[0]![1]).toContain('un'); expect(typed[0]![1]).not.toContain('ledge-task');
+    setState('s2', 'idle'); await flush();
+    expect(typed[1]![1]).toBe('<ledge-task id="t1" from="Otto">x</ledge-task>');
+    setState('s2', 'idle'); await flush();
+    expect(typed[2]![1]).toContain('deux');
+  });
+
+  it('an urgent notice (a relief asking for its brief) jumps the line', async () => {
+    store.upsert(pim({ state: 'working' }));
+    answer = async id => { setState(id, 'working'); return null; };
+    box.submit(msg({ rid: 'r1', text: 'un' }));
+    box.notify('s2', '<ledge-handover>bilan</ledge-handover>', 'handover:s2', { first: true });
+    setState('s2', 'idle'); await flush();
+    expect(typed[0]![1]).toBe('<ledge-handover>bilan</ledge-handover>');
+  });
+
+  it('a name whose session was relieved reaches its relief, down the chain', async () => {
+    store.upsert(mk('s3', { name: 'Lu', state: 'exited', handover: { state: 'done', to: 's4', toName: 'Bix', at: T0 } }));
+    store.upsert(mk('s4', { name: 'Bix', state: 'exited', handover: { state: 'done', to: 's5', toName: 'Ida', at: T0 } }));
+    store.upsert(mk('s5', { name: 'Ida', state: 'idle' }));
+    expect(box.submit(msg({ to: 'Lu' }))).toMatchObject({ outcome: 'accepted' });
+    await flush();
+    expect(typed[0]![0]).toBe('s5');
+    store.upsert(mk('s5', { name: 'Ida', state: 'exited' }));
+    expect(box.submit(msg({ rid: 'r9', to: 'Lu' }))).toMatchObject({ outcome: 'refused' });
   });
 
   it('the same rid twice is delivered once', async () => {
@@ -90,19 +138,19 @@ describe('createMailbox', () => {
     await flush(); expect(typed).toHaveLength(1);
   });
 
-  it('a refused message is failed, and the next one goes at once', async () => {
+  it('a refused batch is tried one message at a time: the refused one fails, the next one goes at once', async () => {
     answer = async (_id, t) => (t.includes('un') ? 'refused' : null);
     store.upsert(pim({ state: 'working' }));
     box.submit(msg({ rid: 'r1', text: 'un' })); box.submit(msg({ rid: 'r2', text: 'deux' }));
-    setState('s2', 'idle'); await flush(); await flush();
-    expect(typed.filter(([id]) => id === 's2')).toHaveLength(2);
+    setState('s2', 'idle'); for (let i = 0; i < 4; i++) await flush();
+    expect(typed.filter(([id]) => id === 's2')).toHaveLength(3);
     expect(sentCalls).toContainEqual(['mark', 's1', 'r1', 'failed']);
     expect(sentCalls).toContainEqual(['mark', 's1', 'r2', 'delivered']);
     // The sender, free, is told which message failed and why.
     expect(typed).toContainEqual(['s1', formatLedgeNotice({ to: 'Pim', text: 'un', reason: 'refused' })]);
   });
 
-  it('a passing refusal (a decision being typed, a prompt meanwhile) keeps the message first in line for the next free moment', async () => {
+  it('a passing refusal (a decision being typed, a prompt meanwhile) keeps the batch first in line for the next free moment', async () => {
     const passing = ['a decision is already in progress', 'a permission prompt takes accept or deny, not a reply', 'no prompt visible in the terminal, open the tab',
       'free-text answers are not supported yet, answer in the terminal', 'the request changed, look again'];
     for (const reason of passing) {
@@ -114,10 +162,8 @@ describe('createMailbox', () => {
       expect(typed).toHaveLength(1);
       expect(sentCalls.filter(c => c[0] === 'mark')).toEqual([]);
       setState('s2', 'working'); setState('s2', 'idle'); await flush();
-      expect(typed).toHaveLength(2); expect(typed[1]![1]).toContain('un');
-      expect(sentCalls).toEqual([expect.anything(), expect.anything(), ['mark', 's1', `${reason}-1`, 'delivered']]);
-      setState('s2', 'idle'); await flush();
-      expect(typed[2]![1]).toContain('deux');
+      expect(typed).toHaveLength(2); expect(typed[1]![1]).toBe(typed[0]![1]);
+      expect(sentCalls.filter(c => c[0] === 'mark')).toEqual([['mark', 's1', `${reason}-1`, 'delivered'], ['mark', 's1', `${reason}-2`, 'delivered']]);
     }
   });
 
