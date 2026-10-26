@@ -152,6 +152,8 @@ export interface ServerHandle {
   omp: OmpHost;
   /** Closes a session cleanly (its exit command, a kill as a last resort); rejects with a Refusal. */
   closeSession(id: string): Promise<{ how: CloseHow }>;
+  /** Runs the unsent-images sweep now (it also runs at start and every 24 h). */
+  sweepAttachments(): Promise<void>;
   /** Writes the resume labels that waited for their Claude process to end (the poller calls it every tick). */
   labelExited(): void;
 }
@@ -1370,6 +1372,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast,
     preview,
     omp,
+    sweepAttachments,
     closeSession: id => { const s = store.get(id); return s ? closeSession(s) : Promise.reject(unknownSession()); },
     labelExited,
     close: () => new Promise(res => { clearInterval(sweepTimer); unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); tasks.close(); handovers.close(); unsubscribeTeams(); teams.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })

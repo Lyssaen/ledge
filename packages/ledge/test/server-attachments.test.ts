@@ -1,11 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { Store } from '../src/daemon/store.js';
 import { startServer } from '../src/daemon/server.js';
+import { AttachmentStore } from '../src/daemon/attachments.js';
+import { History } from '../src/daemon/history.js';
 import { connect } from '../src/client.js';
 import type { Tmux } from '../src/tmux.js';
 
@@ -80,6 +82,30 @@ describe('attachments', () => {
     expect(await c.next('error')).toMatchObject({ request: 'chat.ask', code: 'invalid', message: 'image refused: not_image' });
     c.send({ type: 'snapshot.request' });
     expect((await c.next('chat.history')).turns).toEqual([]);
+    await c.close();
+  });
+});
+
+describe('the sweep', () => {
+  it('deletes an old unsent image and keeps the ones a history prompt or a chat turn refers to', async () => {
+    await srv.close();
+    const root = mkdtempSync(join(tmpdir(), 'ledge-sweep-')); const dir = join(root, 'attachments'); const historyDir = join(root, 'history');
+    let clock = Date.now(); const store = new AttachmentStore(dir, () => clock);
+    const history = new History({ dir: historyDir });
+    srv = await startServer({ store: new Store(), tmux, port: 0, attachments: store, history, agentEnv: async () => ({ ...process.env }), claudeBin: [process.execPath, fileURLToPath(new URL('./fake-claude.mjs', import.meta.url))] });
+    const c = await connect({ port: srv.port }); await c.next('snapshot'); await c.next('chat.history');
+    const [unsent, inHistory, inChat] = [png(10, 10, 1), png(10, 10, 2), png(10, 10, 3)];
+    c.send({ type: 'attachment.put', requestId: 'u', image: upload(unsent) }); await c.next('attachment.stored');
+    c.send({ type: 'attachment.put', requestId: 'h', image: upload(inHistory) }); await c.next('attachment.stored');
+    c.send({ type: 'chat.ask', qid: 'q1', text: 'Regarde', images: [upload(inChat)] }); await c.next('chat.done', 5000);
+    mkdirSync(historyDir, { recursive: true });
+    writeFileSync(join(historyDir, 's.jsonl'), JSON.stringify({ kind: 'prompt', id: 'prompt-1', at: '2026-10-13T10:00:00.000Z', turn: 1, text: 'x', images: [{ id: sha(inHistory), mime: 'image/png', width: 10, height: 10, bytes: inHistory.length, preview: false }] }) + '\n');
+    const files = (b: Buffer) => join(dir, `${sha(b)}.png`);
+    await srv.sweepAttachments();
+    expect([unsent, inHistory, inChat].map(b => existsSync(files(b)))).toEqual([true, true, true]); // still fresh
+    clock += 25 * 3_600_000;
+    await srv.sweepAttachments();
+    expect([unsent, inHistory, inChat].map(b => existsSync(files(b)))).toEqual([false, true, true]);
     await c.close();
   });
 });
