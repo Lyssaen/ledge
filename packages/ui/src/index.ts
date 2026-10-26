@@ -17,3 +17,4 @@ export * from './ui/Kbd';
 export * from './ui/Tabs';
 export * from './ui/icons';
 export * from './ui/BranchChip';
+export * from './images';
