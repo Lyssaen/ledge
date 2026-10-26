@@ -16,14 +16,17 @@ interface Row { role: Role; tool: Tool; on: boolean }
  * « Nouvelle équipe ici… » (atelier rooms spec §3.2): a team in one of the project's folders, from a template or from the
  * roles chosen one by one, each with its agent. The preview says where it sits (« nouvelle table dans la pièce Ledge ») and
  * warns of a seat that works without asking. Launching sends `team.launch`; the daemon's answer closes the form or says why.
+ * The catalog (#97) opens it filled: `initial` names the folder, the template, or the one role ticked of seats chosen one by one.
  */
-export function TeamLaunch({ client, teams, project, onLaunched, onCancel }: {
-  client: DaemonClient; teams: TeamsApi; project: Project; onLaunched(team: Team): void; onCancel(): void;
+export function TeamLaunch({ client, teams, project, initial, onLaunched, onCancel }: {
+  client: DaemonClient; teams: TeamsApi; project: Project; initial?: { cwd?: string; template?: string; seat?: string }; onLaunched(team: Team): void; onCancel(): void;
 }): JSX.Element {
   const { t } = useI18n();
   const c = t.teamLaunch;
   const folders = project.repos.filter(r => r.machine === 'local').map(r => r.path);
-  const [cwd, setCwd] = useState(folders[0] ?? '');
+  const [cwd, setCwd] = useState(initial?.cwd && folders.includes(initial.cwd) ? initial.cwd : folders[0] ?? '');
+  // Taken at the first reading only: another folder chosen afterwards starts on its own first template.
+  const wanted = useRef(initial);
   const [defs, setDefs] = useState<{ roles: Role[]; templates: TeamTemplate[] } | null>(null);
   const [template, setTemplate] = useState<string>('');
   const [rows, setRows] = useState<Row[]>([]);
@@ -32,16 +35,22 @@ export function TeamLaunch({ client, teams, project, onLaunched, onCancel }: {
   const [error, setError] = useState<string | null>(null);
   const live = useRef(true);
   useEffect(() => () => { live.current = false; }, []);
+  // Read again for another folder only: the teams' other news (a task, a seat) leave the form as it is.
+  const { roles } = teams;
   useEffect(() => {
     if (!cwd) return;
     setDefs(null);
-    void teams.roles(cwd).then(d => {
+    void roles(cwd).then(d => {
       if (!live.current) return;
+      const want = wanted.current;
+      wanted.current = undefined;
       setDefs(d);
-      setRows(d.roles.map(role => ({ role, tool: role.tool ?? 'claude', on: false })));
-      if (d.templates[0]) { setTemplate(d.templates[0].id); setName(d.templates[0].name); }
+      setRows(d.roles.map(role => ({ role, tool: role.tool ?? 'claude', on: role.id === want?.seat })));
+      const tpl = want?.seat && d.roles.some(r => r.id === want.seat) ? undefined : d.templates.find(x => x.id === want?.template) ?? d.templates[0];
+      setTemplate(tpl?.id ?? '');
+      if (tpl) setName(tpl.name);
     });
-  }, [cwd, teams]);
+  }, [cwd, roles]);
   const chosen = useMemo((): Array<{ role: Role | undefined; id: string; tool: Tool }> => {
     if (template) {
       const tpl = defs?.templates.find(x => x.id === template);

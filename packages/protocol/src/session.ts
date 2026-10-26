@@ -11,6 +11,25 @@ export type Tool = z.infer<typeof ToolSchema>;
 export const AutonomySchema = z.enum(['ask', 'edits', 'auto']);
 export type Autonomy = z.infer<typeof AutonomySchema>;
 
+/**
+ * Each agent's own permission switch for an autonomy (spec §3.1), added at launch and kept by a resume. Ledge never
+ * answers a prompt in the agent's place: what the agent still asks lands in « À toi ».
+ */
+export function autonomyArgs(tool: Tool, autonomy: Autonomy | undefined): string[] {
+  if (!autonomy || autonomy === 'ask') return [];
+  switch (tool) {
+    case 'claude': return ['--permission-mode', autonomy === 'edits' ? 'acceptEdits' : 'auto'];
+    case 'codex': return autonomy === 'edits' ? ['--ask-for-approval', 'on-request'] : ['--ask-for-approval', 'never', '--sandbox', 'workspace-write'];
+    case 'cursor': return autonomy === 'auto' ? ['--force'] : [];
+    case 'omp': return [];
+  }
+}
+
+/** OMP's approval mode for an autonomy: it has no switch of its own beyond these. */
+export function ompApprovalFor(autonomy: Autonomy | undefined): OmpApproval | undefined {
+  return autonomy === 'auto' ? 'yolo' : autonomy ? 'always-ask' : undefined;
+}
+
 /** How Ledge drives a session's agent: through a tmux pane (Claude Code, Codex, Cursor Agent), or through the agent's own
  *  JSONL protocol with the daemon owning the process (OMP, spec 2026-10-20 §4). A session without it is a tmux one. */
 export const BackendSchema = z.enum(['tmux', 'omp-rpc']);

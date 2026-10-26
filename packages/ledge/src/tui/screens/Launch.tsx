@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { launchDefaults, launchMessage, missingOf, MULTI_REPO_TOOLS, previewOf, reposOn, toggleRepo, withMachine, withPick, withProject, withTool, type LaunchForm } from '@ledge/fleet/launch';
+import { launchDefaults, launchMessage, missingOf, MULTI_REPO_TOOLS, NO_PICK, previewOf, reposOn, toggleRepo, withMachine, withPick, withProject, withTool, type LaunchForm, type ModelPick } from '@ledge/fleet/launch';
 import { useModels } from '@ledge/fleet/models';
 import { randomUUID } from 'node:crypto';
 import { pickName, projectOf, type ProjectColor, type Role, type TeamTemplate, type Tool } from '@ledge/protocol';
 import { useEditing, useTui } from '../context.js';
+import type { LaunchPrefill } from '../model/catalog.js';
 import { TOOL_NAME } from '../model/labels.js';
 import { C, projectColor } from '../theme.js';
 import { Frame } from '../ui/Frame.js';
@@ -34,16 +35,29 @@ function ProjectChoice({ project, on }: { project: { name: string; color?: Proje
   );
 }
 
-/** « Nouvelle session » (4): a session, or with ctrl+t a team (roles spec §3.9). */
+/** « Nouvelle session » (4): a session, or with ctrl+t a team (roles spec §3.9). « Équipes » (6) opens it with a role, or
+ *  in team mode with a template, and its folder. */
 export function Launch() {
-  const [team, setTeam] = useState(false);
-  return team ? <TeamLaunch onSession={() => setTeam(false)} /> : <SessionLaunch onTeam={() => setTeam(true)} />;
+  const { catalog } = useTui();
+  const [prefill] = useState(() => { const p = catalog.current.launch; catalog.current.launch = undefined; return p; });
+  const [team, setTeam] = useState(prefill?.template !== undefined);
+  return team ? <TeamLaunch onSession={() => setTeam(false)} prefill={prefill?.template !== undefined ? prefill : undefined} />
+    : <SessionLaunch onTeam={() => setTeam(true)} prefill={prefill?.template === undefined ? prefill : undefined} />;
 }
 
-function SessionLaunch({ onTeam }: { onTeam(): void }) {
+function SessionLaunch({ onTeam, prefill }: { onTeam(): void; prefill?: LaunchPrefill }) {
   const { client, d, machines, projects, t, g, toast, go, select, small } = useTui();
   const list = projects?.projects ?? [];
-  const [form, setForm] = useState<LaunchForm>(() => launchDefaults(list, machines, {}, 'claude'));
+  // The daemon fills the model and effort left out with the role's when it is the role's agent: the form shows them (#97).
+  const rolePick = (r: Role | undefined, tool: Tool): ModelPick =>
+    (r && (r.tool === undefined || r.tool === tool) ? { model: r.model ?? null, effort: r.effort ?? null } : NO_PICK);
+  const [form, setForm] = useState<LaunchForm>(() => {
+    const tool = prefill?.role?.tool ?? 'claude';
+    const base = withPick(launchDefaults(list, machines, prefill?.project ? { project: prefill.project } : {}, tool), rolePick(prefill?.role, tool));
+    // A folder « Équipes » read on a machine (#99) is launched there, never on another one while it is offline.
+    const f = prefill ? withMachine(base, list, prefill.machine) : base;
+    return prefill?.cwd ? { ...f, repos: [prefill.cwd] } : f;
+  });
   const [field, setField] = useState<Field>('prompt');
   const [folder, setFolder] = useState('');
   const [repoAt, setRepoAt] = useState(0);
@@ -65,6 +79,36 @@ function SessionLaunch({ onTeam }: { onTeam(): void }) {
     return own.length ? own : (machine?.recents ?? []).slice(0, 6).map(r => r.cwd);
   }, [project, form.machine, machine?.recents]);
   const withFolder: LaunchForm = folder.trim() ? { ...form, repos: MULTI_REPO_TOOLS.has(form.tool) ? [folder.trim(), ...form.repos.filter(r => r !== folder.trim())] : [folder.trim()] } : form;
+  // The daemon reads the role in the folder launched, on its machine (findRole: the repository's wins over the home's). The one
+  // « Équipes » read holds in that folder; elsewhere (any folder, for one read under « Perso seulement ») that folder is asked, and
+  // the form shows and launches the role found there, with its defaults, or none, as the Desktop's composer does.
+  const target = withFolder.repos[0] ?? null;
+  const sameMachine = !!prefill?.role && withFolder.machine === prefill.machine;
+  const readHere = sameMachine && target !== null && target === prefill!.cwd;
+  const asked = sameMachine && !readHere && target !== null ? `${withFolder.machine}\0${target}` : null;
+  const [seen, setSeen] = useState<{ key: string; role: Role | null } | null>(null);
+  useEffect(() => {
+    if (!asked) return;
+    const [machineId, cwd] = asked.split('\0') as [string, string];
+    const requestId = `tui-role-${randomUUID()}`;
+    const off = client.onMessage(m => {
+      if (m.type !== 'roles.listing' || m.requestId !== requestId) return;
+      off();
+      const found = m.error ? null : m.roles.find(r => r.id === prefill!.role!.id) ?? null;
+      setSeen({ key: asked, role: found });
+      // Another file of that id: its agent, model and effort, as the role read first filled them.
+      const was = prefill!.role!;
+      if (found && (found.tool !== was.tool || found.model !== was.model || found.effort !== was.effort))
+        setForm(f => (found.tool && found.tool !== f.tool ? withTool(f, found.tool, rolePick(found, found.tool)) : withPick(f, rolePick(found, f.tool))));
+    });
+    // A folder typed is asked once it rests.
+    const timer = setTimeout(() => client.send({ type: 'roles.list', cwd, requestId, ...(machineId !== 'local' ? { machineId } : {}) }), 250);
+    return () => { clearTimeout(timer); off(); };
+  }, [asked]); // eslint-disable-line react-hooks/exhaustive-deps
+  const checking = asked !== null && seen?.key !== asked;
+  const role = readHere ? prefill!.role : asked !== null && seen?.key === asked ? seen.role ?? undefined : undefined;
+  // Not the file « Équipes » showed: said, so that the label read is the one launched.
+  const other = !!role && role.path !== prefill?.role?.path;
   const projectIdOf = (s: Parameters<typeof projectOf>[0]) => (projects ? projectOf(s, projects) : null);
   const drawn = useMemo(() => previewOf(withFolder, d.sessions, projectIdOf), [form.machine, form.project, d.sessions.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const [name, setName] = useState<string | null>(null);
@@ -85,9 +129,10 @@ function SessionLaunch({ onTeam }: { onTeam(): void }) {
 
   const launch = () => {
     if (launching) return;
+    if (checking && !missing) { toast({ text: t.catalog.roleChecking(prefill!.role!.id), tone: 'info' }); return; }
     if (missing) { toast({ text: t.launch.missing[missing], tone: 'info' }); setField(missing === 'prompt' ? 'prompt' : missing === 'machine' ? 'machine' : 'repos'); return; }
     setLaunching({ seq: d.lastLaunched?.seq ?? 0, errorSeq: d.errors.at(-1)?.seq ?? 0, at: Date.now(), name: shownName });
-    client.send(launchMessage(withFolder, shownName));
+    client.send({ ...launchMessage(withFolder, shownName), ...(role ? { role: role.id } : {}) });
   };
 
   useInput((input, key) => {
@@ -108,7 +153,7 @@ function SessionLaunch({ onTeam }: { onTeam(): void }) {
       return;
     }
     if (!by) return;
-    if (field === 'tool') setForm(f => withTool(f, cycle(tools, f.tool, by)));
+    if (field === 'tool') setForm(f => { const next = cycle(tools, f.tool, by); return withTool(f, next, rolePick(role, next)); });
     else if (field === 'model') setForm(f => withPick(f, { model: cycle(modelIds, f.model, by), effort: null }));
     else if (field === 'effort') setForm(f => withPick(f, { model: f.model, effort: cycle(efforts, f.effort, by) }));
     else if (field === 'project') { const ids = [...list.map(p => p.id), null]; setForm(f => { const next = cycle(ids, f.project, by); return next === null ? { ...f, project: null, repos: [] } : withProject(f, list, next); }); setRepoAt(0); }
@@ -131,6 +176,9 @@ function SessionLaunch({ onTeam }: { onTeam(): void }) {
     <Frame crumb={t.launch.title} keys={[['tab', t.keys.nextField], ['← →', t.keys.choose], [t.keys.space, t.keys.tick], ['ctrl+s', t.keys.start], ['ctrl+t', t.keys.teamMode], ['ctrl+r', t.keys.redraw], ['esc', t.keys.cancel]]}>
       <TitledBox title={t.launch.title} flexGrow={1}>
         <Box><Text color={C.faint}> </Text><Box width={14} flexShrink={0}><Text color={C.dim}>{t.launch.mode}</Text></Box><Text><Text color={C.coral}>{g.radioOn} {t.launch.session}</Text>   <Text color={C.dim}>{g.radioOff} {t.launch.team}</Text>  <Text color={C.faint}>ctrl+t</Text></Text></Box>
+        {prefill?.role ? <Box><Text color={C.faint}> </Text><Box width={14} flexShrink={0}><Text color={C.dim}>{t.catalog.role}</Text></Box>
+          {role ? <Text wrap="truncate"><Text color={C.violet}>@{role.id}</Text> <Text color={C.fg}>{role.label}</Text>{other ? <Text color={C.faint}> · {t.catalog.roleReadIn(target!)}</Text> : null}</Text>
+            : <Text wrap="truncate" color={C.faint}>{checking ? t.catalog.roleChecking(prefill.role.id) : t.catalog.roleElsewhere(prefill.role.id, prefill.cwd ?? '~/.ledge')}</Text>}</Box> : null}
         {row('prompt', t.launch.instruction, <TextInput value={form.prompt} onChange={v => setForm(f => ({ ...f, prompt: v }))} active={field === 'prompt'} />)}
         <Text> </Text>
         {row('tool', t.launch.agent, <Text wrap="truncate">{tools.map(x => <Text key={x} color={x === form.tool ? C.coral : C.dim}>{x === form.tool ? g.radioOn : g.radioOff} {TOOL_NAME[x]}   </Text>)}</Text>)}
@@ -169,16 +217,19 @@ const autonomyColor = (a: 'ask' | 'edits' | 'auto'): string => ({ ask: C.faint, 
 /** The team mode (roles spec §3.9): a project and one of its folders, a template or seats chosen one by one (each with its
  *  agent), the team's name, and the preview « L'équipe workshop s'installera à une nouvelle table de la pièce Ledge » with the
  *  autonomy warning. ctrl+s sends `team.launch`; its answer says how it went. */
-function TeamLaunch({ onSession }: { onSession(): void }) {
+function TeamLaunch({ onSession, prefill }: { onSession(): void; prefill?: LaunchPrefill }) {
   const { client, machines, projects, t, g, toast, go, small } = useTui();
   const list = projects?.projects ?? [];
-  const [projectId, setProjectId] = useState<string | null>(list[0]?.id ?? null);
+  const [projectId, setProjectId] = useState<string | null>(prefill ? prefill.project : list[0]?.id ?? null);
   const project = list.find(p => p.id === projectId);
   const folders = useMemo(() => {
     const own = (project?.repos ?? []).filter(r => r.machine === 'local').map(r => r.path);
-    return own.length ? own : (machines.find(m => m.id === 'local')?.recents ?? []).slice(0, 6).map(r => r.cwd);
-  }, [project, machines]);
-  const [folderAt, setFolderAt] = useState(0);
+    const base = own.length ? own : (machines.find(m => m.id === 'local')?.recents ?? []).slice(0, 6).map(r => r.cwd);
+    return prefill?.cwd && projectId === prefill.project && !base.includes(prefill.cwd) ? [prefill.cwd, ...base] : base;
+  }, [project, machines]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [folderAt, setFolderAt] = useState(() => Math.max(0, prefill?.cwd ? folders.indexOf(prefill.cwd) : 0));
+  // The template « Équipes » chose, taken from the first listing only.
+  const wanted = useRef(prefill?.template);
   const cwd = folders[folderAt] ?? folders[0] ?? null;
   const [field, setField] = useState<TeamField>('template');
   const [defs, setDefs] = useState<{ roles: Role[]; templates: TeamTemplate[] } | null>(null);
@@ -197,8 +248,10 @@ function TeamLaunch({ onSession }: { onSession(): void }) {
       off();
       setDefs({ roles: m.roles, templates: m.templates });
       setSeats(m.roles.map(role => ({ role, tool: role.tool ?? 'claude', on: false })));
-      setTemplate(m.templates[0]?.id ?? null);
-      setName(n => n || m.templates[0]?.name || project?.name || '');
+      const first = m.templates.find(x => x.id === wanted.current) ?? m.templates[0];
+      wanted.current = undefined;
+      setTemplate(first?.id ?? null);
+      setName(n => n || first?.name || project?.name || '');
     });
     client.send({ type: 'roles.list', cwd, requestId });
     return off;
