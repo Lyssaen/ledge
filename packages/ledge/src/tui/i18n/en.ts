@@ -121,7 +121,8 @@ export const en: Messages = {
     seats: n => `${n} ${plural(n, 'seat', 'seats')}`,
     autonomyShort: { ask: 'asks', edits: 'edits', auto: 'auto' },
     ignored: n => `⚠ ${n} ${plural(n, 'file', 'files')} ignored`, see: 'see', problems: 'Ignored files', noProblem: 'No ignored file.',
-    loading: 'reading the roles…', noAnswer: 'The daemon did not answer.', noRole: 'No role here: write .ledge/roles/<id>.md', noTemplateHere: 'No template here: write .ledge/teams/<id>.yaml',
+    loading: 'reading the roles…', noAnswer: 'The daemon did not answer.',
+    offline: m => `${m} is offline.`, outdated: m => `${m}’s daemon is too old for the catalog.`, onMachine: m => `on ${m}`, noRole: 'No role here: write .ledge/roles/<id>.md', noTemplateHere: 'No template here: write .ledge/teams/<id>.yaml',
     role: 'Role'
   },
   settings: { title: 'Settings', language: 'Language', theme: 'Theme', themes: { auto: 'Auto', dark: 'Dark', light: 'Light' }, themeAuto: tone => `Auto (${tone} background)`, context: 'Max context', contextHint: 'past it: hand over', contextUnknown: 'update the daemon', contextSaved: pct => `Max context: ${pct} %`, saved: 'Setting saved.', saveFailed: m => `Setting applied, but not saved: ${m}` },

@@ -1302,6 +1302,71 @@ describe('ledge tui: « Équipes » (6), the roles and templates catalog (#97)',
       expect(tui.frame()).not.toContain('Le daemon n’a pas répondu.');
     } finally { await tui.cleanup(); }
   });
+
+  it('a project on another machine is read there (#99): c reaches it, the title names the machine, roles.list carries it, o is not offered', async () => {
+    const projects = { ...PROJECTS, projects: [...PROJECTS.projects, { id: 'srv', name: 'App', color: 'violet', repos: [{ machine: 'server', path: '/srv/applications/catalog' }] }] as typeof PROJECTS.projects };
+    const runs: string[][] = [];
+    const tui = await startTui({ projects, run: async argv => { runs.push(argv); return 0; } });
+    // The remote machine is the same mock reached through /ssh/srv: its snapshot names the alias, as a daemon behind ssh does.
+    Object.assign(tui.daemon.extras, { sshAlias: 'srv' });
+    tui.daemon.machines([{ id: 'local', label: 'Local' }, { id: 'server', label: 'serveur', ssh: 'srv' }]);
+    answer(tui);
+    const asked: Array<Record<string, unknown>> = [];
+    const send = tui.client.send.bind(tui.client);
+    tui.client.send = m => { if (m.type === 'roles.list') asked.push(m); send(m); };
+    try {
+      await tui.resize(160, 30);
+      await until(() => tui.frame().includes('serveur ●'));
+      await tui.press('6');
+      await until(() => tui.frame().includes('@BUILD · BUILDER'));
+      // Two machines: the local folder names its machine too, the first ask goes without machineId (local, as before).
+      expect(tui.frame()).toContain('LEDGE /W/LEDGE · ● LOCAL');
+      expect(asked[0]).toMatchObject({ cwd: '/w/ledge' });
+      expect(asked[0]!.machineId).toBeUndefined();
+      for (let i = 0; i < 4 && asked.at(-1)!.cwd !== '/srv/applications/catalog'; i++) {
+        const before = asked.length;
+        await tui.press('c');
+        await until(() => asked.length === before + 1);
+      }
+      expect(asked.at(-1)).toMatchObject({ cwd: '/srv/applications/catalog', machineId: 'server' });
+      await until(() => tui.frame().includes('APP /SRV/APPLICATIONS/CATALOG · ● SERVEUR') && tui.frame().includes('@BUILD · BUILDER'));
+      // Narrower, the folder is cut before the machine, which stays.
+      await tui.resize(100, 30);
+      await until(() => tui.frame().includes('… · ● SERVEUR'));
+      expect(tui.frame()).not.toContain('APP /SRV/APPLICATIONS/CATALOG');
+      expect(tui.frame()).toContain('sur serveur');
+      expect(tui.frame()).not.toContain('o  ouvrir le fichier');
+      await tui.press('o');
+      await new Promise(r => setTimeout(r, 100));
+      expect(runs).toEqual([]);
+      // Teams are the local daemon's: a template read there is shown, not launched.
+      await tui.press('\u001b[C'); // →
+      await until(() => tui.frame().includes('▣ WORKSHOP'));
+      expect(tui.frame()).not.toContain('lancer cette équipe');
+      await tui.press('\u001b[D'); // ←
+      await until(() => tui.frame().includes('@BUILD · BUILDER'));
+      await tui.press('\r');
+      await until(() => tui.frame().includes('NOUVELLE SESSION'));
+      expect(tui.frame()).toMatch(/· serveur · Claude Code/);
+    } finally { await tui.cleanup(); }
+  });
+
+  it('a machine offline is said with r to read again, a daemon too old is said (#99)', async () => {
+    const tui = await startTui();
+    let error: 'offline' | 'outdated' = 'offline';
+    tui.daemon.onMessage(m => { if (m.type === 'roles.list') tui.daemon.push({ type: 'roles.listing', requestId: m.requestId, roles: [], templates: [], problems: [], error }); });
+    try {
+      await tui.resize(160, 30);
+      await tui.press('6');
+      await until(() => tui.frame().includes('Local est hors ligne.'));
+      expect(tui.frame()).toContain('r  relire');
+      expect(tui.frame()).not.toContain('Aucun rôle ici');
+      error = 'outdated';
+      await tui.press('r');
+      await until(() => tui.frame().includes('Le daemon de Local est trop ancien pour le catalogue.'));
+      expect(tui.frame()).not.toContain('r  relire');
+    } finally { await tui.cleanup(); }
+  });
 });
 
 describe('ledge tui: a session near its context limit (context handover spec §3.2)', () => {

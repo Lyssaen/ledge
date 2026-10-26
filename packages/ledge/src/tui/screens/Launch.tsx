@@ -50,7 +50,9 @@ function SessionLaunch({ onTeam, prefill }: { onTeam(): void; prefill?: LaunchPr
   const list = projects?.projects ?? [];
   const role = prefill?.role;
   const [form, setForm] = useState<LaunchForm>(() => {
-    const f = launchDefaults(list, machines, prefill?.project ? { project: prefill.project } : {}, role?.tool ?? 'claude');
+    const base = launchDefaults(list, machines, prefill?.project ? { project: prefill.project } : {}, role?.tool ?? 'claude');
+    // A folder « Équipes » read on another machine (#99) is launched there.
+    const f = prefill && prefill.machine !== 'local' ? withMachine(base, list, prefill.machine) : base;
     return prefill?.cwd ? { ...f, repos: [prefill.cwd] } : f;
   });
   const [field, setField] = useState<Field>('prompt');

@@ -13,7 +13,8 @@ import { TitledBox } from '../ui/TitledBox.js';
 import { WIDE, windowed } from './Overview.js';
 
 type View = 'roles' | 'templates';
-type Defs = { roles: Role[]; templates: TeamTemplate[]; problems: DefinitionProblem[] };
+/** `error`: the folder's machine could not answer (#99), 'offline' or 'outdated'. */
+type Defs = { roles: Role[]; templates: TeamTemplate[]; problems: DefinitionProblem[]; error?: string };
 type Row = { kind: 'head'; key: string; text: string } | { kind: 'role'; key: string; role: Role } | { kind: 'template'; key: string; template: TeamTemplate };
 /** Read from the palette at each render: it changes with the tone. */
 const autonomyColor = (a: 'ask' | 'edits' | 'auto'): string => (a === 'auto' ? C.yellow : a === 'edits' ? C.blue : C.faint);
@@ -29,9 +30,9 @@ export function Teams() {
   const wide = columns >= WIDE;
   const left = wide ? Math.min(64, Math.max(44, Math.floor(columns * 0.42))) : columns;
   const teams = useTeams(client) ?? [];
-  const recents = machines.find(m => m.id === 'local')?.recents.map(r => r.cwd) ?? [];
+  const recents = machines.flatMap(m => m.recents.map(r => ({ machine: m.id, cwd: r.cwd })));
   // The folder chosen before opening places the list once: c then steps through it in a fixed order.
-  const [memo] = useState(() => ({ folder: catalog.current.folder }));
+  const [memo] = useState(() => ({ folder: catalog.current.folder, machine: catalog.current.machine }));
   const scopes = catalogScopes({ selected, memo, projects, recents, homeOnly: t.catalog.homeOnly });
   const [scope, setScope] = useState<Scope>(() => initialScope(scopes, selected, catalog.current));
   const [defs, setDefs] = useState<Defs | null>(null);
@@ -47,12 +48,13 @@ export function Teams() {
     const requestId = `tui-catalog-${randomUUID()}`;
     const off = client.onMessage(m => {
       if (m.type !== 'roles.listing' || m.requestId !== requestId) return;
-      off(); clearTimeout(timer); setDefs({ roles: m.roles, templates: m.templates, problems: m.problems });
+      off(); clearTimeout(timer); setDefs({ roles: m.roles, templates: m.templates, problems: m.problems, ...(m.error ? { error: m.error } : {}) });
     });
     const timer = setTimeout(() => { off(); setSilent(true); }, ROLES_MS);
-    client.send({ type: 'roles.list', requestId, ...(scope.cwd ? { cwd: scope.cwd } : {}) });
+    // Read on the folder's machine (#99); the local one is asked as before, without machineId.
+    client.send({ type: 'roles.list', requestId, ...(scope.cwd ? { cwd: scope.cwd } : {}), ...(scope.machine !== 'local' ? { machineId: scope.machine } : {}) });
     return () => { off(); clearTimeout(timer); };
-  }, [scope.cwd, reads]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [scope.cwd, scope.machine, reads]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const roles = bySource(defs?.roles ?? []), templates = bySource(defs?.templates ?? []);
   const order: Row[] = useMemo(() => view === 'roles'
@@ -62,12 +64,18 @@ export function Teams() {
   const current = order.find(r => r.key === at[view]) ?? order[0];
   const role = current?.kind === 'role' ? current.role : undefined;
   const template = current?.kind === 'template' ? current.template : undefined;
-  const project = projectOfFolder(projects, scope.cwd);
+  const project = projectOfFolder(projects, scope.cwd, scope.machine);
+  // Another machine's paths are not this one's: its files are not opened here, nor its teams launched (the local daemon's).
+  const remote = scope.machine !== 'local';
+  const machine = machines.find(m => m.id === scope.machine);
+  const machineLabel = machine?.label ?? scope.machine;
+  const reread = silent || defs?.error === 'offline';
+  const launchable = !!current && !(remote && template);
 
   useScreenKeys((input, key) => {
     if (problems && (key.escape || input === '!')) { setProblems(false); return true; }
     if (input === '!') { if (defs?.problems.length) setProblems(true); return true; }
-    if (input === 'r' && silent) { setReads(n => n + 1); return true; }
+    if (input === 'r' && reread) { setReads(n => n + 1); return true; }
     if (key.leftArrow || key.rightArrow || input === 'h' || input === 'l') { setView(v => (v === 'roles' ? 'templates' : 'roles')); setProblems(false); return true; }
     if (input === 'j' || key.downArrow || input === 'k' || key.upArrow) {
       const i = Math.max(0, order.findIndex(r => r.key === current?.key));
@@ -76,16 +84,16 @@ export function Teams() {
       return true;
     }
     if (input === 'c') {
-      const next = scopes[stepIndex(scopes.length, scopes.findIndex(x => x.cwd === scope.cwd), 1)]!;
-      catalog.current.folder = next.cwd; setScope(next); setProblems(false);
+      const next = scopes[stepIndex(scopes.length, scopes.findIndex(x => x.cwd === scope.cwd && x.machine === scope.machine), 1)]!;
+      catalog.current.folder = next.cwd; catalog.current.machine = next.machine; setScope(next); setProblems(false);
       return true;
     }
-    if (key.return && current) {
-      catalog.current.launch = { cwd: scope.cwd, project, ...(role ? { role } : {}), ...(template ? { template: template.id } : {}) };
+    if (key.return && launchable) {
+      catalog.current.launch = { cwd: scope.cwd, machine: scope.machine, project, ...(role ? { role } : {}), ...(template ? { template: template.id } : {}) };
       go('launch');
       return true;
     }
-    if (input === 'o' && current) {
+    if (input === 'o' && current && !remote) {
       const editor = (tui.env.VISUAL || tui.env.EDITOR || 'vi').split(/\s+/).filter(Boolean);
       tui.runInTerminal([...editor, role?.path ?? template!.path]);
       return true;
@@ -112,9 +120,10 @@ export function Teams() {
     </Text>
   );
   const listBox = (
-    <TitledBox title={scope.label} flexGrow={1}>
+    <TitledBox title={scope.label} mark={machines.length > 1 ? { text: `· ${g.machine} ${machineLabel}`, color: machine?.ready ? C.green : C.faint } : undefined} flexGrow={1}>
       {tabs}
       {defs === null ? <Text color={silent ? C.yellow : C.faint}>{silent ? t.catalog.noAnswer : t.catalog.loading}</Text>
+        : defs.error ? <Text color={C.yellow}>{defs.error === 'outdated' ? t.catalog.outdated(machineLabel) : t.catalog.offline(machineLabel)}</Text>
         : list.length === 0 ? <Text color={C.faint}>{view === 'roles' ? t.catalog.noRole : t.catalog.noTemplateHere}</Text>
         : windowed(list, current?.key ?? null, listHeight).map(r => {
           if (r.kind === 'head') return <Text key={r.key} wrap="truncate" color={C.faint}> {r.text}</Text>;
@@ -147,7 +156,7 @@ export function Teams() {
         {field(t.catalog.tool, <Text color={C.fg}>{role.tool ? TOOL_NAME[role.tool] : t.catalog.toolDefault}</Text>)}
         {field(t.catalog.model, <Text><Text color={role.model ? C.fg : C.faint}>{role.model ?? t.catalog.toolDefault}</Text>  <Text color={C.dim}>{t.catalog.effort}</Text> <Text color={C.fg}>{role.effort ?? '—'}</Text></Text>)}
         {field(t.catalog.autonomy, <Text color={autonomyColor(autonomy(role))}>{t.ask.autonomy[autonomy(role)]}</Text>)}
-        {field(t.catalog.file, <Text color={C.dim}>{role.path}</Text>)}
+        {field(t.catalog.file, <Text color={C.dim}>{remote ? `${t.catalog.onMachine(machineLabel)}  ` : ''}{role.path}</Text>)}
         {role.shadows ? field('', <Text color={C.dim}>{t.catalog.replaces(role.shadows)}</Text>) : null}
         {field(t.catalog.usedIn, (() => { const xs = usedIn(role.id, defs?.templates ?? []); return xs.length ? <Text>{xs.map(x => <Text key={x.id} color={C.violet}>{g.team} {x.name}  </Text>)}</Text> : <Text color={C.faint}>{t.catalog.noTemplate}</Text>; })())}
         {field(t.catalog.heldBy, (() => {
@@ -174,17 +183,17 @@ export function Teams() {
       })}
       <Text> </Text>
       {(() => { const auto = template.seats.filter(s => roleById(s.role)?.autonomy === 'auto').map(s => `@${s.role}`); return auto.length ? <Text color={C.yellow} wrap="truncate">⚠ {t.ask.autoWarning(auto.join(', '))}</Text> : null; })()}
-      {field(t.catalog.file, <Text color={C.dim}>{template.path}</Text>)}
+      {field(t.catalog.file, <Text color={C.dim}>{remote ? `${t.catalog.onMachine(machineLabel)}  ` : ''}{template.path}</Text>)}
       {field(t.catalog.teams, (() => {
         const xs = teams.filter(x => x.template === template.id && x.state !== 'dissolved');
         return xs.length ? <Text>{xs.map(x => <Text key={x.id}><Text color={C.violet}>{g.team} {x.name}</Text> <Text color={C.dim}>{x.state === 'active' ? t.catalog.active : t.catalog.resting}</Text>  </Text>)}</Text> : <Text color={C.faint}>{t.catalog.noTeam}</Text>;
       })())}
     </TitledBox>
-  ) : <TitledBox title={t.tabs.teams} flexGrow={1}><Text color={C.faint}>{defs === null ? (silent ? '' : t.catalog.loading) : view === 'roles' ? t.catalog.noRole : t.catalog.noTemplateHere}</Text></TitledBox>;
+  ) : <TitledBox title={t.tabs.teams} flexGrow={1}><Text color={C.faint}>{defs === null ? (silent ? '' : t.catalog.loading) : defs.error ? '' : view === 'roles' ? t.catalog.noRole : t.catalog.noTemplateHere}</Text></TitledBox>;
 
   const keys: Array<readonly [string, string]> = [
-    ['j k', t.keys.navigate], ['← →', t.keys.rolesTemplates], ['c', t.keys.folder], ...(silent ? [['r', t.keys.reread] as const] : []),
-    ...(current ? [['↵', view === 'roles' ? t.keys.launchRole : t.keys.launchTeam] as const, ['o', t.keys.openFile] as const] : []),
+    ['j k', t.keys.navigate], ['← →', t.keys.rolesTemplates], ['c', t.keys.folder], ...(reread ? [['r', t.keys.reread] as const] : []),
+    ...(launchable ? [['↵', view === 'roles' ? t.keys.launchRole : t.keys.launchTeam] as const] : []), ...(current && !remote ? [['o', t.keys.openFile] as const] : []),
     ...(issues.length ? [['!', t.keys.ignored] as const] : []), ['esc', t.keys.back]
   ];
   return (
