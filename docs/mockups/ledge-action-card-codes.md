@@ -17,7 +17,7 @@ garde le texte du daemon : il va dans le journal, jamais à l'écran.
 - Les phrases évitent l'accord avec le nom d'une session (« Nova », « Otto ») : un participe ne s'accorde qu'avec « la session », « l'équipe » ou « la tâche ».
 - Un code inconnu du front se lit comme `failed`. S'il manque la variable d'une phrase, on prend la variante sans nom (dernière ligne de `unknown`).
 
-## Les 22 codes
+## Les 22 codes, validés par l'utilisateur
 
 | Code | Quand | fr | en |
 |---|---|---|---|
