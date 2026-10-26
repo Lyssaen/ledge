@@ -112,5 +112,5 @@ export const fr = {
     question: (n: string, text: string) => `${n} a une question : ${text}`,
     title: (n: number) => (n > 0 ? `ledge · ${n} t’${plural(n, 'attend', 'attendent')}` : 'ledge')
   },
-  cli: { notTty: 'ledge tui: needs a terminal (stdin and stdout must be a TTY)' }
+  cli: { notTty: 'ledge tui: needs a terminal (stdin and stdout must be a TTY)', movedToTab: 'ledge tui s’ouvre dans l’onglet Ledge.' }
 };

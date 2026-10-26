@@ -42,10 +42,16 @@ ledge claude            # start Claude Code in a tracked tmux session (tab renam
 ledge claude --name max # pick the session's Ledge name
 ledge status            # list bots and what they wait for
 ledge attach <id>       # put this terminal on a running session (what the overlay opens a tab with)
-ledge tui               # follow and answer every session from this terminal (--notify bell|osc9|off)
+ledge tui               # follow and answer every session (--notify bell|osc9|off); see below for Windows Terminal
 ledge daemon            # run the daemon in the foreground (normally run by the systemd service)
 ledge uninstall         # undo ledge setup: hooks, service and ~/.local/bin/ledge (--purge: ~/.ledge too)
 ```
+
+From a WSL tab of Windows Terminal, `ledge tui` opens in a tab of its own with the Ledge mascot as its icon. A tab's
+icon comes only from its profile, so Ledge installs a `Ledge` profile as a fragment under
+`%LOCALAPPDATA%\Microsoft\Windows Terminal\Fragments\Ledge` (no admin right needed). That profile runs
+`~/.ledge/tui.sh`, which each `ledge tui` rewrites with its node and CLI. `ledge tui --here`, tmux, SSH and any other
+terminal keep the TUI where it was started.
 
 When a Claude it launched exits, Ledge appends a `custom-title` « name - topic » to its transcript, so `claude --resume` lists the conversation that way, unless the user named it (`claude -n`, `/rename`).
 

@@ -12,7 +12,7 @@ ledge read <id>                                              print a long messag
 ledge task <give|list|show|take|done|refuse|pass> …         give another session work, take it, close it (ledge task: details)
 ledge handover "<bilan>" | show                              the relief brief, when Ledge asks for it; show: read your predecessor's
 ledge team <up|list> …                                       start a team from a template, list templates, roles and live teams
-ledge tui [--notify bell|osc9|off]                           follow and answer the sessions in this terminal
+ledge tui [--notify bell|osc9|off] [--here]                  follow and answer the sessions (in a Ledge tab of Windows Terminal unless --here)
 ledge bridge                                                 exchange Ledge messages over SSH stdio
 ledge --version                                              print the installed version`;
 
