@@ -21,8 +21,8 @@ export type Modal =
   | { kind: 'search' } | { kind: 'shortcuts' }
   | { kind: 'launch'; project?: string; team?: true   // project : la table ou le projet d'où on l'a demandée (lot 7) ; team : le formulaire en mode équipe
       // Pré-remplissage depuis le catalogue (#97) : cwd, le dossier lu ; role, le rôle de la session (ses défauts) ; template, le
-      // modèle de l'équipe ; seat, le rôle coché d'une équipe montée siège par siège.
-      cwd?: string; role?: Pick<Role, 'id' | 'label' | 'tool' | 'model' | 'effort'>; template?: string; seat?: string }
+      // modèle de l'équipe ; seat, le rôle coché d'une équipe montée siège par siège ; machine, celle du dossier lu (#99), locale si absente.
+      cwd?: string; machine?: string; role?: Pick<Role, 'id' | 'label' | 'tool' | 'model' | 'effort'>; template?: string; seat?: string }
   // edit : id du projet à modifier ; file : id de la session à y ranger (lot 8) ; delete : ouvert sur sa vue de suppression (Réglages › Projets, lot 10) ;
   // proposal : le pid d'une proposition de Ledge retenue par rememberProposal (lot 11), ouverte pour être vérifiée
   | { kind: 'project'; edit?: string; file?: string; delete?: true; proposal?: string }

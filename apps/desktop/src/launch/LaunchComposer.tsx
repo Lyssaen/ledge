@@ -31,10 +31,10 @@ function emphasized(text: (a: string, b: string) => string, a: string, b: string
 /** Starting a session (the mockup's LaunchComposer, ledge-harness-integration #launch): the instruction first, then the agent, preselected as
  *  the default (Settings › General) and changed for this session only behind « Change », then the project, the machine and the repositories
  *  there; the preview shows who joins which table. Nothing is sent while a field is missing: it is named instead. From the
- *  catalog (#97), `wanted` brings a role, whose defaults fill the agent, its model and effort, and the folder it was read in. */
+ *  catalog (#97), `wanted` brings a role, whose defaults fill the agent, its model and effort, and the folder it was read in, on its machine (#99). */
 export function LaunchComposer(p: {
   client: DaemonClient; projects: readonly Project[]; machines: readonly MachineState[]; sessions: readonly Session[];
-  projectIdOf(s: Session): string | null; wanted: { project?: string; filter?: string; cwd?: string; role?: Pick<Role, 'id' | 'label' | 'tool' | 'model' | 'effort'> };
+  projectIdOf(s: Session): string | null; wanted: { project?: string; filter?: string; cwd?: string; machine?: string; role?: Pick<Role, 'id' | 'label' | 'tool' | 'model' | 'effort'> };
   onEditProject(id: string): void; onNewProject(): void;
   /** The launch in flight or its outcome (useLaunch): « Launching… » sends nothing more; a refusal or a silence is said here. */
   launch: LaunchState; onLaunch(msg: LaunchMessage, preview: { name: string; project: string; projectId: string }): void; onCancel(): void;
@@ -47,8 +47,10 @@ export function LaunchComposer(p: {
   const { projects, machines } = p;
   const [defaultTool, setDefaultTool] = useDefaultTool();
   const [form, setForm] = useState<LaunchForm>(() => {
-    const { role, cwd } = p.wanted;
+    const { role, cwd, machine } = p.wanted;
     let f = launchDefaults(projects, machines, p.wanted, role?.tool ?? defaultTool);
+    // A folder « Équipes » read on another machine (#99) is launched there.
+    if (machine && machine !== 'local') f = withMachine(f, projects, machine);
     // The role's model, with its effort or none; a role naming only an effort keeps the model remembered for the agent.
     const memo = loadPick(f.project, f.tool);
     f = withPick(f, role?.model ? { model: role.model, effort: role.effort ?? null } : role?.effort ? { model: memo.model, effort: role.effort } : memo);

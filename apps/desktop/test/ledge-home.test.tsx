@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import type { ChatTurn, ClientMessage, Role, Task, Team } from '@ledge/protocol';
-import { boot, closeDaemons, PROJECTS } from './helpers';
+import { boot, closeDaemons, LOCAL_AND_NAS, PROJECTS } from './helpers';
 import { mentionAt } from '../src/chat/LedgeHome';
 
 const T0 = new Date().toISOString();
@@ -15,8 +15,8 @@ const point = () => within(screen.getByRole('region', { name: 'The point' }));
 beforeEach(() => localStorage.clear());
 afterEach(async () => { cleanup(); await closeDaemons(); });
 
-async function openHome() {
-  const env = await boot({ home: true, machines: LOCAL, projects: PROJECTS, sessions: [
+async function openHome(opts: Partial<Pick<Parameters<typeof boot>[0] & object, 'machines' | 'projects'>> = {}) {
+  const env = await boot({ home: true, machines: LOCAL, projects: PROJECTS, ...opts, sessions: [
     fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'waiting_permission', team: 'team-a1b2', role: 'build', pending: { kind: 'permission', text: 'pnpm test', tool: 'Bash', source: 'hook' } }),
     fakeSession('pim', { name: 'Pim', cwd: '/w/ledge', state: 'working', team: 'team-a1b2', role: 'review' })
   ] });
@@ -327,5 +327,34 @@ describe('« Teams »: the catalog of templates, roles and skipped files (#97)',
     await user.click(side.getByRole('button', { name: 'Home: Ledge, the operator' }));
     await user.click(home().getByRole('tab', { name: /^Teams/ }));
     await waitFor(() => expect(lastRolesList(d)).toEqual({ type: 'roles.list', cwd: REPO, requestId: expect.any(String) }));
+  });
+
+  it('reads a folder on its machine (#99): the picker names each folder’s machine, an offline one is said with « Retry »', async () => {
+    const ledge = PROJECTS.projects[0]!;
+    const projects = { ...PROJECTS, projects: [{ ...ledge, repos: [...ledge.repos, { machine: 'nas', path: '/srv/ledge' }] }, ...PROJECTS.projects.slice(1)] };
+    const { d, user } = await openHome({ machines: LOCAL_AND_NAS, projects });
+    answerRoles(d);
+    await user.click(home().getByRole('tab', { name: /^Teams/ }));
+    await user.click(await tabs().findByRole('tab', { name: 'Roles · 4' }));
+    expect(home().getByRole('button', { name: /^Folder Ledge · ledge \/w\/ledge · Local/ })).toBeVisible();
+    await user.click(home().getByRole('button', { name: /^Folder/ }));
+    expect(screen.getByRole('menuitem', { name: /\/srv\/ledge · NAS/ })).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: /Personal only.*Local/ })).toBeVisible();
+    await user.click(screen.getByRole('menuitem', { name: /\/srv\/ledge/ }));
+    // NAS is offline: the fleet answers, nothing reaches the local daemon.
+    const alert = await home().findByRole('alert');
+    expect(alert).toHaveTextContent('NAS is offline: this folder’s catalog could not be read.');
+    expect(within(alert).getByRole('button', { name: 'Retry' })).toBeVisible();
+    expect(d.received.some(m => m.type === 'roles.list' && m.cwd === '/srv/ledge')).toBe(false);
+    expect(home().getByRole('button', { name: /^Folder Ledge · ledge \/srv\/ledge · NAS/ })).toBeVisible();
+    expect(JSON.parse(localStorage.getItem('desktop.catalog.scope')!)).toEqual({ cwd: '/srv/ledge', machine: 'nas' });
+  });
+
+  it('with one machine the picker names none', async () => {
+    const { d, user } = await openHome();
+    answerRoles(d);
+    await user.click(home().getByRole('tab', { name: /^Teams/ }));
+    await user.click(await tabs().findByRole('tab', { name: 'Roles · 4' }));
+    expect(home().getByRole('button', { name: /^Folder/ })).not.toHaveTextContent('Local');
   });
 });
