@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { act, render, renderHook, screen, fireEvent, within } from '@testing-library/react';
-import type { ChatAction, ChatTurn, ClientMessage } from '@ledge/protocol';
+import type { ChatAction, ChatTurn, ClientMessage, ServerMessage } from '@ledge/protocol';
 import { ChatView, type ChatViewProps } from '../src/chat/ChatView';
 import { ChatCopyProvider } from '../src/chat/copy';
 import { useActionCards, type ActionCardsOptions } from '../src/chat/useActionCards';
@@ -46,6 +46,14 @@ describe('the chat draws a turn\'s generic card (#94)', () => {
     render(ui({ onAct: noop, actingQid: 'q1', actingRows: [0, 1] }));
     expect([...document.querySelectorAll('[data-action-row]')].map(r => r.getAttribute('data-action-row'))).toEqual(['running', 'running']);
     expect(screen.queryByRole('button', { name: 'Ignore' })).toBeNull();
+  });
+
+  it('Deny goes to onDenyAction, with its row', () => {
+    const onDenyAction = vi.fn();
+    const decide: ChatAction = { action: 'session.decide', args: { session: 'otto', decision: 'accept' }, summary: 'Accepter', vars: { session: 'Otto', decision: 'accept', kind: 'permission' }, risk: 'destructive', session: 'local:otto', detail: 'npm test' };
+    render(ui({ onAct: noop, onDenyAction, turns: [turn({ actions: [decide] })] }));
+    fireEvent.click(screen.getByRole('button', { name: 'Deny' }));
+    expect(onDenyAction).toHaveBeenCalledWith('q1', 0);
   });
 
   it('Open: the row\'s session, by its qualified id', () => {
@@ -94,6 +102,52 @@ describe('useActionCards: chat.act and chat.ignore (#94)', () => {
     act(() => c.result.current.act('q1', [0], false));
     c.rerender({ ...c.props, turnReady: () => false });
     expect(c.result.current.actingQid).toBeNull();
+  });
+
+  it('Deny: chat.act with deny, its row alone, never confirmed; held as an apply', () => {
+    const { send, result } = setup();
+    act(() => result.current.deny('q1', 0));
+    expect(send).toHaveBeenCalledWith({ type: 'chat.act', rid: expect.any(String), qid: 'q1', rows: [0], deny: true });
+    expect(result.current.actingRows).toEqual([0]);
+    act(() => result.current.deny('q1', 0));
+    expect(send).toHaveBeenCalledOnce();
+  });
+
+  it('a plan under way: held while a row sent runs or is still to come; freed once none is', () => {
+    const { send, result, rerender, props } = setup();
+    act(() => result.current.act('q1', [0, 1], true));
+    const at = (states: Array<ChatAction['state']>) => rerender({ ...props, chat: [turn({ actions: [archive, dissolve].map((a, i) => ({ ...a, ...(states[i] ? { state: states[i] } : {}) })) })] });
+    at(['running']);
+    expect(result.current.actingQid).toBe('q1');
+    act(() => result.current.act('q1', [1], true));
+    expect(send).toHaveBeenCalledOnce();
+    at(['done']);
+    expect(result.current.actingQid).toBe('q1');
+    at(['done', 'running']);
+    expect(result.current.actingQid).toBe('q1');
+    at(['done', 'done']);
+    expect(result.current.actingQid).toBeNull();
+  });
+
+  it('a plan stopped: a row sent failed or refused frees it, the rest still proposed', () => {
+    for (const stop of ['failed', 'refused'] as const) {
+      const { result, rerender, props } = setup();
+      act(() => result.current.act('q1', [0, 1], true));
+      rerender({ ...props, chat: [turn({ actions: [{ ...archive, state: stop }, dissolve] })] });
+      expect(result.current.actingQid, stop).toBeNull();
+    }
+  });
+
+  it('its chat.acted frees it, whatever the history says; another rid\'s does not', () => {
+    let listener: ((m: ServerMessage) => void) | null = null;
+    const onMessage = (fn: (m: ServerMessage) => void) => { listener = fn; return () => { listener = null; }; };
+    const { send, result } = setup({ onMessage });
+    act(() => result.current.act('q1', [0], false));
+    const rid = (send.mock.calls[0]![0] as { rid: string }).rid;
+    act(() => listener!({ type: 'chat.acted', rid: 'other', qid: 'q1', done: [], failed: [] }));
+    expect(result.current.actingQid).toBe('q1');
+    act(() => listener!({ type: 'chat.acted', rid, qid: 'q1', done: [0], failed: [] }));
+    expect(result.current.actingQid).toBeNull();
   });
 
   it('a machine not ready: nothing is sent', () => {

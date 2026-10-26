@@ -35,6 +35,8 @@ export function actionRowOf(a: ChatAction): ActionRowView {
   const target = a.vars?.session ?? a.vars?.owner ?? a.vars?.team;
   if (target !== undefined) row.target = target;
   if (a.vars?.decision === 'accept' || a.vars?.decision === 'deny') row.decision = a.vars.decision;
+  // « Deny » answers a request to accept with deny instead (chat.act's `deny`); the summary stays the fallback of its line.
+  if (a.action === 'session.decide' && row.decision !== 'deny') row.deny = { summary: a.summary };
   if (a.state !== undefined) row.state = a.state;
   if (a.doneAt !== undefined) row.doneAt = a.doneAt;
   if (a.error !== undefined) row.error = a.error;

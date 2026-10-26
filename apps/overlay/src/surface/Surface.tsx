@@ -1,7 +1,8 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { FocusEvent } from 'react';
 import { DEFAULT_ISLAND_PREFS, proposalRows, type IslandPrefs, type Session, type Tool } from '@ledge/protocol';
 import { loadDefaultTool, saveDefaultTool } from '../defaultTool';
+import { useActionCards } from '@ledge/ui/chat/useActionCards';
 import { useDaemon, daemonStore } from '../daemon/store';
 import type { DaemonClient } from '../daemon/client';
 import { useMachines } from '../daemon/machines';
@@ -110,7 +111,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   // Geometry, pointer and frames are in real px; the handle layer is zoomed by `hs`, the opened views by `ps`. A
   // measured view (bubble, session, settings, help) reports its base height: its client rect divided by `ps`.
   const hs = handleScale, ps = panelScale;
-  const { sessions: daemonSessions, byId, status, previews, threads, lastError, recents, launcher, lastLaunched, lastListing, chat, chatLive } = useDaemon();
+  const { sessions: daemonSessions, byId, status, previews, threads, lastError, errors, recents, launcher, lastLaunched, lastListing, chat, chatLive } = useDaemon();
   const machines = useMachines(client);
   const launchMachine = client.fleet?.selected();
   const chosenMachine = machines.find(m => m.id === launchMachine);
@@ -650,6 +651,9 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const chatOffline = status !== 'open' ? t.offline : null;
   const bubblePaused = st.hovering || st.focusWithin || st.hidden || st.ack !== null;
   const send = (m: Parameters<DaemonClient['send']>[0]) => client.send(m);
+  const turnReady = (qid: string) => !client.fleet || !!client.fleet.turnMachine(qid)?.ready;
+  const onMessage = useCallback((fn: Parameters<DaemonClient['onMessage']>[0]) => client.onMessage(fn), [client]);
+  const actionCards = useActionCards({ send, chat, errors, turnReady, onMessage });
   // The thread is not in the snapshot: ask for it when a session opens (or after a reconnection emptied the threads).
   const threadWanted = st.mode === 'session' || st.mode === 'helper' ? st.selectedId : null;
   // A boolean, not the Map: the store rebuilds `threads` on every update, which would re-send the request while the reply is pending.
@@ -784,10 +788,11 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
             <ChatView contentRef={chatRef} turns={chat} live={chatLive} sessions={sessions} visible={st.mode === 'chat'} enterDelay={enter} offline={chatOffline}
               showBack={false}
               headerExtra={<IslandMenu open={menuOpen && st.mode === 'chat'} dnd={dnd} onToggle={() => setMenuOpen(o => !o)} onClose={() => setMenuOpen(false)} onSettings={() => { setMenuOpen(false); openInLedge({ kind: 'settings' }); }} onDnd={onToggleDnd} onQuit={() => { setMenuOpen(false); void quitApp(); }} />}
-              turnAvailable={qid => !client.fleet || !!client.fleet.turnMachine(qid)?.ready}
+              turnAvailable={turnReady}
               onAsk={ask} onCancel={qid => send({ type: 'chat.cancel', qid })} onReset={() => send({ type: 'chat.reset' })} onClose={() => { setMenuOpen(false); dispatch({ type: 'close' }); }} onOpenSession={id => openInLedge({ kind: 'session', id })}
               launchingQid={chatLaunching} launchingRows={chatLaunching ? launchedFrom.current.map(x => x.row) : null} onLaunchProposal={launchProposal} onTerminal={id => openInLedge({ kind: 'terminal', id })}
               closingQid={chatClosing} closingRows={chatClosing ? closedFrom.current.map(x => x.row) : null} onCloseSessions={closeSessions}
+              onAct={actionCards.act} actingQid={actionCards.actingQid} actingRows={actionCards.actingRows} onIgnoreCards={actionCards.ignore} onDenyAction={actionCards.deny}
               relayingQid={relaying} onRelay={qid => relayCard('session.relay', qid)} onRelayCancel={qid => relayCard('session.relay.cancel', qid)}
               theme={theme} frozen={unreachable} reducedMotion={reducedMotion} onDocument={ref => openInLedge({ kind: 'document', path: ref.path })} />
           </div>

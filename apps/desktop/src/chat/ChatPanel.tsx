@@ -53,9 +53,9 @@ export function ChatPanel({ client, view, paused, focus, onClose, onOpenSession,
   const turnReady = useCallback((qid: string) => !!view.fleet.turnMachine(qid)?.ready, [view.fleet]);
   const turnMachine = useCallback((qid: string) => view.fleet.turnMachine(qid)?.id, [view.fleet]);
   const cards = useChatCards({ send, chat, lastLaunched: view.lastLaunched, errors: view.errors, sessions: view.sessions, turnReady, turnMachine, onLaunched });
-  const actionCards = useActionCards({ send, chat, errors: view.errors, turnReady });
   const project = useProjectReview({ chat, projects, machines: view.machines, notify, onProposal });
   const onMessage = useCallback((fn: Parameters<DaemonClient['onMessage']>[0]) => client.onMessage(fn), [client]);
+  const actionCards = useActionCards({ send, chat, errors: view.errors, turnReady, onMessage });
   const teamCards = useTeamCards({ send, onMessage, chat });
   const teams = useTeams(client);
   const openTeam = (id: string) => { const team = teams?.find(x => x.id === id); onOpenTeam?.(team ? teamProject(team, projects) : null); };
@@ -90,7 +90,7 @@ export function ChatPanel({ client, view, paused, focus, onClose, onOpenSession,
             onOpenSession={open} onTerminal={terminal} turnAvailable={turnReady}
             launchingQid={cards.launchingQid} launchingRows={cards.launchingRows} onLaunchProposal={cards.launch}
             closingQid={cards.closingQid} closingRows={cards.closingRows} onCloseSessions={cards.close}
-            onAct={actionCards.act} actingQid={actionCards.actingQid} actingRows={actionCards.actingRows} onIgnoreCards={actionCards.ignore}
+            onAct={actionCards.act} actingQid={actionCards.actingQid} actingRows={actionCards.actingRows} onIgnoreCards={actionCards.ignore} onDenyAction={actionCards.deny}
             renderModel={(qid, agent, busy) => <CardModelPick client={client} machine={turnMachine(qid)} tool={agent} pick={cards.pick(qid)} disabled={busy} onPick={next => cards.setPick(qid, next)} />}
             relayingQid={cards.relayingQid} onRelay={cards.relay} onRelayCancel={cards.cancelRelay}
             onProject={project.review} projectNamed={project.projectNamed}

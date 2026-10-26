@@ -116,6 +116,22 @@ describe('the action card (#94): a plan', () => {
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Apply all (2)' }));
   });
 
+  it('Ignore clicked here: once ignored, the focus goes to Review', () => {
+    const p = card(plan());
+    const ignore = screen.getByRole('button', { name: 'Ignore' });
+    ignore.focus(); fireEvent.click(ignore);
+    p.rerender(<ChatCopyProvider value={{ ...copy, chat: { ...copy.chat, action: actionCopy } }}><ActionCard rows={plan()} ignoredAt={AT} {...p} /></ChatCopyProvider>);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Review' }));
+  });
+
+  it('Review clicked here: once open again, the focus goes to the card\'s first button', () => {
+    const p = card(plan(), { ignoredAt: AT });
+    const review = screen.getByRole('button', { name: 'Review' });
+    review.focus(); fireEvent.click(review);
+    p.rerender(<ChatCopyProvider value={{ ...copy, chat: { ...copy.chat, action: actionCopy } }}><ActionCard rows={plan()} {...p} /></ChatCopyProvider>);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Change' }));
+  });
+
   it('ignored elsewhere while confirming: the focus goes to Review', () => {
     const p = card(plan());
     fireEvent.click(screen.getByRole('button', { name: 'Apply all (3)…' }));
@@ -397,14 +413,14 @@ describe('the action card (#94): a request from the protocol, and one cut', () =
     expect(rowsOf()[0]!.querySelector('[data-action-detail]')).toBeNull();
   });
 
-  it('cut (detailCut): the quote ends « truncated », no Accept, Open Nova instead; Ignore stays', () => {
+  it('cut (detailCut): the quote ends « truncated », no Accept, Open Nova instead; Ignore and Deny stay', () => {
     const r = actionRowOf({ ...decide, detail: 'x'.repeat(50) + '…', detailCut: true });
     expect(r.state).toBe('cut');
     const p = card([r]);
     expect(rowsOf()[0]!.getAttribute('data-action-row')).toBe('cut');
     expect(rowsOf()[0]!.querySelector('[data-action-request]')).toHaveTextContent('… (truncated, see the session)');
     expect(rowsOf()[0]).toHaveTextContent('Too long to be quoted in full: read it in Nova to accept it. You can deny it from here.');
-    expect(within(rowsOf()[0]!).getAllByRole('button').map(b => b.textContent)).toEqual(['Ignore', 'Open Nova']);
+    expect(within(rowsOf()[0]!).getAllByRole('button').map(b => b.textContent)).toEqual(['Ignore', 'Deny', 'Open Nova']);
     fireEvent.click(screen.getByRole('button', { name: 'Open Nova' }));
     expect(p.onOpen).toHaveBeenCalledWith(0);
     expect(p.onApply).not.toHaveBeenCalled();
@@ -432,5 +448,36 @@ describe('the action card (#94): a request from the protocol, and one cut', () =
     const p = card([actionRowOf({ ...decide, detailCut: true }), model]);
     fireEvent.click(screen.getByRole('button', { name: 'Apply all (1)' }));
     expect(p.onApply).toHaveBeenCalledWith([1], { confirmed: false });
+  });
+});
+
+describe('the action card (#94): Deny, from the protocol', () => {
+  const decide: ChatAction = { action: 'session.decide', args: { session: 'local:nova', decision: 'accept' }, summary: 'Accepter la demande de permission de **Nova**', vars: { session: 'Nova', decision: 'accept', kind: 'permission' }, risk: 'destructive', session: 'local:nova', detail: 'npm test' };
+
+  it('an accept row offers Deny beside Accept…; Deny goes at once, without a confirmation', () => {
+    const p = card([actionRowOf(decide)]);
+    expect(within(rowsOf()[0]!).getAllByRole('button').map(b => b.textContent)).toEqual(['Ignore', 'Deny', 'Accept…']);
+    fireEvent.click(screen.getByRole('button', { name: 'Deny' }));
+    expect(p.onDeny).toHaveBeenCalledWith(0);
+    expect(screen.queryByRole('group', { name: /^Confirmation/ })).toBeNull();
+  });
+
+  it('denied (its summary and decision still say accept): « Denial sent », the line of the denial in the front\'s words', () => {
+    card([actionRowOf({ ...decide, state: 'denied', doneAt: AT })]);
+    const r = rowsOf()[0]!;
+    expect(r.getAttribute('data-action-row')).toBe('denied');
+    expect(r).toHaveTextContent('Deny Nova’s permission request');
+    expect(r).not.toHaveTextContent('Accept');
+    expect(r).toHaveTextContent(`Denial sent · ${at}`);
+  });
+
+  it('a cut request keeps Deny', () => {
+    card([actionRowOf({ ...decide, detailCut: true })]);
+    expect(within(rowsOf()[0]!).getAllByRole('button').map(b => b.textContent)).toEqual(['Ignore', 'Deny', 'Open Nova']);
+  });
+
+  it('a row that denies already, or another action: no second Deny', () => {
+    expect(actionRowOf({ ...decide, vars: { ...decide.vars, decision: 'deny' } }).deny).toBeUndefined();
+    expect(actionRowOf({ ...decide, action: 'session.archive' }).deny).toBeUndefined();
   });
 });

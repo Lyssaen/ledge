@@ -51,6 +51,14 @@ export function ActionCard(p: ActionCardProps) {
       ?? first(box.current.querySelector('[data-action-foot]')) ?? first(box.current);
     back?.focus();
   }, [confirming]);
+  // Ignore or Review pressed here: the card folds or opens again, the button goes; the focus follows to its first button.
+  const folding = useRef(false);
+  const ignored = p.ignoredAt !== undefined;
+  useEffect(() => {
+    if (!folding.current) return;
+    folding.current = false;
+    box.current?.querySelector<HTMLElement>('button:not(:disabled)')?.focus();
+  }, [ignored]);
   const clock = (iso?: string) => (iso ? new Date(iso).toLocaleTimeString(t.time.locale, { hour: '2-digit', minute: '2-digit' }) : '');
   const many = p.rows.length > 1;
 
@@ -69,17 +77,19 @@ export function ActionCard(p: ActionCardProps) {
   if (p.ignoredAt !== undefined) return (
     <div ref={box as RefObject<HTMLDivElement>} data-action-ignored style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, ...muted }}>
       <Icon size={11} {...ICONS.close} />{c.ignored(p.rows.length, clock(p.ignoredAt))}
-      <Button variant="ghost" size="sm" disabled={p.disabled} onClick={p.onReview} style={{ height: 22, padding: '0 6px', fontSize: 12 }}>{c.review}</Button>
+      <Button variant="ghost" size="sm" disabled={p.disabled} onClick={() => { folding.current = true; p.onReview(); }} style={{ height: 22, padding: '0 6px', fontSize: 12 }}>{c.review}</Button>
     </div>
   );
 
   const ask = (rows: number[], key: string) => { if (risky(rows)) { asker.current = key; setConfirming(rows); } else p.onApply(rows, { confirmed: false }); };
   const go = (rows: number[]) => { setConfirming(null); p.onApply(rows, { confirmed: true }); };
   const line = (r: ActionRowView) => (r.vars && r.action !== undefined ? c.words.line[r.action]?.(r.vars) : undefined) ?? r.summary;
+  // A denied row keeps its accept summary and decision (the daemon's): its line is the denial's.
+  const denial = (r: ActionRowView) => (r.vars && r.action === 'session.decide' ? c.words.line['session.decide']?.({ ...r.vars, decision: 'deny' }) : undefined) ?? r.deny?.summary ?? line(r);
   const why = (r: ActionRowView) => c.words.why(r.code ?? (r.state === 'failed' ? 'failed' : undefined), r.action, r.vars ?? {});
   const verb = (r: ActionRowView) => (r.decision === 'deny' ? c.deny : (r.action !== undefined ? c.verbs[r.action] : undefined) ?? c.apply);
   const dots = (rows: readonly number[]) => (risky(rows) ? '…' : '');
-  const ignore = <Button variant="ghost" size="sm" disabled={p.disabled} onClick={p.onIgnore} style={{ ...small, ...muted }}>{c.ignore}</Button>;
+  const ignore = <Button variant="ghost" size="sm" disabled={p.disabled} onClick={() => { folding.current = true; p.onIgnore(); }} style={{ ...small, ...muted }}>{c.ignore}</Button>;
 
   const node = (s: Shown, i: number, r: ActionRowView) => {
     const k = i + 1;
@@ -139,7 +149,7 @@ export function ActionCard(p: ActionCardProps) {
         style={{ display: 'grid', gridTemplateColumns: `${many ? '22px ' : ''}minmax(0,1fr)${p.narrow ? '' : ' auto'}`, gap: '4px 10px', padding: '9px 12px', alignItems: 'start', borderTop: i > 0 ? '1px solid var(--sidebar-border)' : undefined, background: destructive && !settled ? 'color-mix(in srgb, var(--destructive) 6%, transparent)' : undefined }}>
         {many && node(s, i, r)}
         <div style={{ minWidth: 0, ...fade }}>
-          <div style={{ overflowWrap: 'anywhere' }}>{inline(s === 'denied' && r.deny ? r.deny.summary : line(r))}</div>
+          <div style={{ overflowWrap: 'anywhere' }}>{inline(s === 'denied' ? denial(r) : line(r))}</div>
           {s !== 'denied' && (
             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 8px', marginTop: 3, fontSize: 11.5, lineHeight: '16px', ...muted }}>
               <span title={c.riskTip[r.risk]} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, ...(destructive ? { color: 'var(--danger-text)', fontWeight: 500 } : {}) }}><Icon size={11} {...RISK_ICON[r.risk]} />{c.risk[r.risk]}</span>

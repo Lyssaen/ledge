@@ -294,6 +294,19 @@ describe('the Ledge chat docked on the right', () => {
     await waitFor(() => expect(d.received.filter(m => m.type === 'chat.ignore')).toEqual([{ type: 'chat.ignore', qid: turn.qid }]));
   });
 
+  it('a generic card\'s Deny (#94): chat.act with deny for its row, then « Refus envoyé »', async () => {
+    const env = await openChat();
+    const { d, user } = env;
+    const decide: ChatAction = { action: 'session.decide', args: { session: 'otto', decision: 'accept' }, summary: 'Accepter la demande de permission de **Otto**', vars: { session: 'Otto', decision: 'accept', kind: 'permission' }, risk: 'destructive', session: 'otto', detail: 'npm test' };
+    const turn = await ask(env, 'Otto attend', 'Voici.', { actions: [decide] });
+    const card = within(panel().getByRole('region', { name: 'Proposed action' }));
+    await user.click(card.getByRole('button', { name: 'Deny' }));
+    await waitFor(() => expect(d.received.filter(m => m.type === 'chat.act')).toEqual([{ type: 'chat.act', rid: expect.any(String), qid: turn.qid, rows: [0], deny: true }]));
+    d.push({ type: 'chat.history', turns: [{ ...turn, actions: [{ ...decide, state: 'denied', doneAt: new Date().toISOString() }] }] });
+    await card.findByText(/^Denial sent/);
+    expect(card.getByText(/^Deny/, { selector: 'div' })).toBeTruthy();
+  });
+
   it('a card offers the agent\'s models once its machine lists them, and launches with the one chosen (#58)', async () => {
     forgetModels();
     const env = await openChat();

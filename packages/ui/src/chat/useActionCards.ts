@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DaemonError } from '@ledge/fleet';
-import type { ChatTurn, ClientMessage } from '@ledge/protocol';
+import type { ChatTurn, ClientMessage, ServerMessage } from '@ledge/protocol';
 
 export interface ActionCardsOptions {
   send(m: ClientMessage): void;
@@ -8,25 +8,33 @@ export interface ActionCardsOptions {
   errors: readonly DaemonError[];
   /** Whether the machine that answered this turn is online: a card of one that is not does nothing. */
   turnReady(qid: string): boolean;
+  /** The daemon's messages: its `chat.acted` frees the card it answers. */
+  onMessage?(fn: (m: ServerMessage) => void): () => void;
 }
 export interface ActionCards {
   /** The turn whose generic card is being applied, and its rows sent. */
   actingQid: string | null; actingRows: readonly number[] | null;
   /** Applies the card's rows in order (`chat.act`), `confirmed` once the card asked again. */
   act(qid: string, rows: number[], confirmed: boolean): void;
+  /** « Deny » a session.decide row: its session's request answered with deny (chat.act's `deny`), never confirmed. */
+  deny(qid: string, row: number): void;
   /** « Ignore » the turn's cards on every device, or `undo` (« Review »). */
   ignore(qid: string, undo: boolean): void;
 }
 
-interface Acting { qid: string; rows: number[]; from: string; errorSeq: number }
-/** What the daemon says of a turn's card: each row's state and code, and whether it was set aside. */
-const cardState = (chat: readonly ChatTurn[], qid: string): string => {
-  const t = chat.find(x => x.qid === qid);
-  return t?.actions ? `${t.ignoredAt ?? ''}|${t.actions.map(a => `${a.state ?? ''}:${a.code ?? ''}`).join()}` : 'gone';
+interface Acting { rid: string; qid: string; rows: number[]; errorSeq: number }
+/** Whether the rows sent are over: the turn gone or set aside, one of them stopped (failed or refused), or all of them settled.
+ *  A plan's first row running, the next ones still to come: not over. */
+const over = (chat: readonly ChatTurn[], a: Acting): boolean => {
+  const t = chat.find(x => x.qid === a.qid);
+  if (!t?.actions || t.ignoredAt) return true;
+  const states = a.rows.map(r => t.actions![r]?.state);
+  return states.some(s => s === 'failed' || s === 'refused') || states.every(s => s === 'done' || s === 'denied');
 };
 
 /** The chat's generic card (#94) for the Desktop and the island, one at a time, nothing optimistic: `chat.act { rid, qid, rows,
- *  confirmed? }` is freed once the turn's rows change (chat.history), by a refusal of it, or when its machine goes away.
+ *  confirmed? | deny? }` is freed once no row sent runs or is still to come (chat.history), by its `chat.acted`, by a refusal
+ *  of it, or when its machine goes away.
  *  `chat.ignore` waits for nothing: every device gets the turn's `ignoredAt` through chat.history. */
 export function useActionCards(o: ActionCardsOptions): ActionCards {
   const latest = useRef(o);
@@ -37,13 +45,16 @@ export function useActionCards(o: ActionCardsOptions): ActionCards {
   const [actingRows, setActingRows] = useState<readonly number[] | null>(null);
   const free = () => { acting.current = null; setActingQid(null); setActingRows(null); };
 
-  const act = useCallback((qid: string, rows: number[], confirmed: boolean) => {
+  const actOn = useCallback((qid: string, rows: number[], how: { confirmed: true } | { deny: true } | Record<string, never>) => {
     const { chat, send, turnReady, errors } = latest.current;
     if (acting.current || !turnReady(qid) || rows.length === 0) return;
-    acting.current = { qid, rows, from: cardState(chat, qid), errorSeq: errors.at(-1)?.seq ?? 0 };
+    const rid = `act-${crypto.randomUUID()}`;
+    acting.current = { rid, qid, rows, errorSeq: errors.at(-1)?.seq ?? 0 };
     setActingQid(qid); setActingRows(rows);
-    send({ type: 'chat.act', rid: `act-${crypto.randomUUID()}`, qid, rows, ...(confirmed ? { confirmed: true as const } : {}) });
+    send({ type: 'chat.act', rid, qid, rows, ...how });
   }, []);
+  const act = useCallback((qid: string, rows: number[], confirmed: boolean) => actOn(qid, rows, confirmed ? { confirmed: true } : {}), [actOn]);
+  const deny = useCallback((qid: string, row: number) => actOn(qid, [row], { deny: true }), [actOn]);
   const ignore = useCallback((qid: string, undo: boolean) => {
     const { send, turnReady } = latest.current;
     if (!turnReady(qid)) return;
@@ -54,8 +65,11 @@ export function useActionCards(o: ActionCardsOptions): ActionCards {
   const ready = actingQid ? o.turnReady(actingQid) : true;
   useEffect(() => {
     const a = acting.current;
-    if (a && (cardState(chat, a.qid) !== a.from || errors.some(e => e.seq > a.errorSeq && e.request === 'chat.act') || !ready)) free();
+    if (a && (over(chat, a) || errors.some(e => e.seq > a.errorSeq && e.request === 'chat.act') || !ready)) free();
   }, [chat, errors, ready]);
+  // The daemon's answer to the send, whatever the history says (rows already done, nothing changed).
+  const { onMessage } = o;
+  useEffect(() => onMessage?.(m => { if (m.type === 'chat.acted' && m.rid === acting.current?.rid) free(); }), [onMessage]);
 
-  return { actingQid, actingRows, act, ignore };
+  return { actingQid, actingRows, act, deny, ignore };
 }
