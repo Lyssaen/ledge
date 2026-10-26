@@ -44,10 +44,12 @@ export async function readDocument(request: DocumentRead, context: { cwd?: strin
 async function readAt(request: DocumentRead, path: string): Promise<DocumentContent | DocumentError> {
   let file;
   try {
-    // A template (named by its folder above) is read only inside that folder: a file link leading out of it, or to
-    // anything but YAML, is refused. What is opened is the real file, never followed again, so no link swapped in between counts.
+    // Every candidate is checked, not only the first: a template is named by its folder (`template`), then read only
+    // inside it: a file link leading out of it, or to anything but YAML, is refused. What is opened is the real file,
+    // never followed again, so no link swapped in between counts.
     let target = path;
     if (!markdown(path)) {
+      if (!template(path)) return failure(request, 'unsupported_type');
       target = await realpath(path);
       if (!yaml(target) || dirname(target) !== await realpath(dirname(path))) return failure(request, 'unsupported_type');
     }
