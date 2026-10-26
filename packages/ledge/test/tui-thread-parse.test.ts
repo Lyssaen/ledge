@@ -3,6 +3,7 @@ import type { ThreadItem } from '@ledge/protocol';
 import { fr } from '../src/tui/i18n/fr.js';
 import { glyphsFor } from '../src/tui/glyphs.js';
 import { threadView } from '../src/tui/model/thread.js';
+import { PALETTES, setTone } from '../src/tui/theme.js';
 
 // The parser counted: a thread drawn again must not parse its texts again.
 const parsed = vi.hoisted(() => ({ n: 0 }));
@@ -23,5 +24,22 @@ describe('ledge tui: the thread drawn again (#95 lot C)', () => {
     parsed.n = 0;
     threadView([...items, msg(601)], o);
     expect(parsed.n).toBe(1);
+  });
+
+  it('the lines kept are drawn again at another width, or in the other tone', () => {
+    const long: ThreadItem = { kind: 'reply', id: 'r1', turn: 1, at: at(1), text: 'Une réponse assez longue pour tenir sur une ligne de cent colonnes mais pas de quarante.' } as ThreadItem;
+    const items: ThreadItem[] = [{ kind: 'prompt', id: 'p1', turn: 1, at: at(0), text: 'Fais la tâche' } as ThreadItem, long];
+    const o = { t: fr, g: glyphsFor({}), width: 100, diffs: false, unfolded: false };
+    const of = (v: ReturnType<typeof threadView>) => v.lines.filter((_, i) => v.keys[i] === 'r1');
+    expect(of(threadView(items, o))).toHaveLength(1);
+    const narrow = of(threadView(items, { ...o, width: 40 }));
+    expect(narrow.length).toBeGreaterThan(1);
+    for (const l of narrow) expect(l.map(x => x.text).join('').length).toBeLessThanOrEqual(40);
+    try {
+      setTone('light');
+      const colors = of(threadView(items, { ...o, width: 40 })).flat().map(x => x.color).filter(Boolean);
+      expect(colors).toContain(PALETTES.light.fg);
+      expect(colors).not.toContain(PALETTES.dark.fg);
+    } finally { setTone('dark'); }
   });
 });
