@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { ChatAction, ChatTurn, ClientMessage } from '@ledge/protocol';
 import { daemonStore } from '@ledge/fleet';
 import { until } from './helpers.js';
@@ -1497,11 +1497,16 @@ describe('ledge tui: « Équipes » (6), the roles and templates catalog (#97)',
 
   it('a daemon that does not answer roles.list in 4 s is said; r asks the same folder again', async () => {
     const tui = await startTui();
+    // The screen's 4 s is jumped, not waited: its timeouts are faked, still running with real time for the polling and the socket.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
     try {
       await tui.press('6');
       await until(() => sent(tui.daemon.received, 'roles.list').length === 1);
       expect(tui.frame()).not.toContain('r  relire');
-      await until(() => tui.frame().includes('Le daemon n’a pas répondu.'), 10_000);
+      await vi.advanceTimersByTimeAsync(3_000);
+      expect(tui.frame()).not.toContain('Le daemon n’a pas répondu.');
+      await vi.advanceTimersByTimeAsync(1_000);
+      await until(() => tui.frame().includes('Le daemon n’a pas répondu.'));
       expect(tui.frame()).toContain('r  relire');
       answer(tui);
       await tui.press('r');
@@ -1509,7 +1514,7 @@ describe('ledge tui: « Équipes » (6), the roles and templates catalog (#97)',
       expect(sent(tui.daemon.received, 'roles.list')[1]).toMatchObject({ cwd: '/w/ledge' });
       await until(() => tui.frame().includes('@BUILD · BUILDER'));
       expect(tui.frame()).not.toContain('Le daemon n’a pas répondu.');
-    } finally { await tui.cleanup(); }
+    } finally { vi.useRealTimers(); await tui.cleanup(); }
   });
 
   it('a project on another machine is read there (#99): c reaches it, the title names the machine, roles.list carries it, o is not offered', async () => {
