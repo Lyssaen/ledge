@@ -5,7 +5,9 @@ import { CONTEXT_NEAR, contextNear, contextShare, LEDGE_GIVER, taskClosed, type 
 /** What `roles.list` answers for a folder: its roles and templates, and the files skipped with why (`problems`). */
 export interface RolesListing { roles: Role[]; templates: TeamTemplate[]; problems: DefinitionProblem[];
   /** The daemon did not answer in time: nothing is known of the folder (not an empty one). */
-  silent?: true }
+  silent?: true;
+  /** The folder's machine could not answer (#99): 'offline', or 'outdated' for a daemon without roles.list. */
+  error?: string }
 const SILENT: RolesListing = { roles: [], templates: [], problems: [], silent: true };
 
 /** What the fronts do with the local daemon's teams and Ledge's tasks (roles spec §3.3, §3.7): every command goes to the
@@ -28,9 +30,9 @@ export interface TeamsApi {
   /** The context threshold (« Contexte max », the local daemon's): past it a session is near its limit. */
   near: number;
   putLater(session: Session): void;
-  /** The roles and templates a folder can use, and the files skipped, from the local daemon (`roles.list`); without a folder,
-   *  `~/.ledge`'s alone. Empty and `silent` when it does not answer in time. */
-  roles(cwd?: string): Promise<RolesListing>;
+  /** The roles and templates a folder can use, and the files skipped, from its machine's daemon (`roles.list`, the local one by
+   *  default); without a folder, `~/.ledge`'s alone. Empty and `silent` when it does not answer in time. */
+  roles(cwd?: string, machine?: string): Promise<RolesListing>;
 }
 
 let seq = 0;
@@ -41,12 +43,12 @@ export function useTeamsApi(client: DaemonClient): TeamsApi {
   const tasks = useTasks(client);
   const teams = useMemo(() => all?.filter(t => t.state !== 'dissolved') ?? null, [all]);
   const teamOf = useCallback((s: Pick<Session, 'team'>) => (s.team ? teams?.find(t => t.id === s.team) : undefined), [teams]);
-  const roles = useCallback((cwd?: string) => new Promise<RolesListing>(resolve => {
+  const roles = useCallback((cwd?: string, machine?: string) => new Promise<RolesListing>(resolve => {
     const requestId = `roles-${Date.now()}-${++seq}`;
     const done = (r: RolesListing) => { clearTimeout(timer); off(); resolve(r); };
-    const off = client.onMessage(m => { if (m.type === 'roles.listing' && m.requestId === requestId) done({ roles: m.roles, templates: m.templates, problems: m.problems }); });
+    const off = client.onMessage(m => { if (m.type === 'roles.listing' && m.requestId === requestId) done({ roles: m.roles, templates: m.templates, problems: m.problems, ...(m.error ? { error: m.error } : {}) }); });
     const timer = setTimeout(() => done(SILENT), ROLES_TIMEOUT_MS);
-    client.send({ type: 'roles.list', ...(cwd ? { cwd } : {}), requestId });
+    client.send({ type: 'roles.list', ...(cwd ? { cwd } : {}), ...(machine && machine !== 'local' ? { machineId: machine } : {}), requestId });
   }), [client]);
   const handover = useCallback((id: string) => new Promise<string | null>(resolve => {
     const rid = `handover-${Date.now()}-${++seq}`;

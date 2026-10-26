@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type JSX, type ReactNode } from 'react';
-import type { DaemonClient } from '@ledge/fleet';
+import type { DaemonClient, MachineState } from '@ledge/fleet';
 import { autonomyArgs, ompApprovalFor, ROLE_PROMPT_MAX, type Autonomy, type DefinitionProblem, type Project, type Projects, type Role, type Seat, type Session, type Team, type TeamTemplate, type Tool } from '@ledge/protocol';
 import { toolName } from '@ledge/ui/chat/format';
 import { MarkdownDocument, ThreadMarkdown } from '@ledge/ui/documents/markdown';
@@ -18,97 +18,121 @@ export type TeamsView = 'live' | 'templates' | 'roles';
 /** What the catalog shows on the right: a role, a template, or the files skipped. */
 export interface CatalogPick { role?: string; template?: string; problems?: boolean }
 
-/** A folder the catalog can read: a project's repository, another folder, or none (`~/.ledge` alone, « Perso seulement »). */
-export interface Scope { cwd: string | null; name: string; project?: string }
+/** A folder the catalog can read on its machine (#99): a project's repository, another folder, or none (`~/.ledge` alone, « Perso
+ *  seulement », the local one's). */
+export interface Scope { cwd: string | null; machine: string; name: string; project?: string }
+/** What the catalog shows of a machine: its name, and whether the fleet reaches it. */
+export type CatalogMachine = Pick<MachineState, 'id' | 'label' | 'ready'>;
 
 export const CATALOG_SCOPE_KEY = 'desktop.catalog.scope';
 const TOOLS: readonly Tool[] = ['claude', 'codex', 'cursor', 'omp'];
 const folderName = (path: string) => path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || path;
 /** `cwd` is `root` or inside it. */
 const under = (cwd: string, root: string) => cwd === root || cwd.startsWith(root.endsWith('/') ? root : `${root}/`);
-const localRepos = (p: Project) => p.repos.filter(r => r.machine === 'local').map(r => r.path);
+const reposOn = (p: Project, machine: string) => p.repos.filter(r => r.machine === machine).map(r => r.path);
+/** A folder on a machine; `machine` is local when unsaid. */
+export interface Place { cwd: string | null; machine: string }
+const LOCAL = 'local';
+const same = (a: Place, b: Place) => a.cwd === b.cwd && a.machine === b.machine;
 
-/** The project a folder belongs to, by its local repositories: the room a team launched there sits in. */
-export function projectOfFolder(projects: Projects | null, cwd: string | null): Project | undefined {
+/** The project a folder belongs to, by its repositories on that machine: the room a team launched there sits in. */
+export function projectOfFolder(projects: Projects | null, cwd: string | null, machine: string = LOCAL): Project | undefined {
   if (!cwd) return undefined;
-  return projects?.projects.find(p => localRepos(p).some(r => under(cwd, r)));
+  return projects?.projects.find(p => reposOn(p, machine).some(r => under(cwd, r)));
 }
 
-/** The folders offered: each project's local repositories, a folder asked for outside them, and « Perso seulement » last. */
-export function scopesOf(projects: Projects | null, extra: readonly (string | null | undefined)[]): Scope[] {
+/** The folders offered: each project's repositories on every machine, a folder asked for outside them, and « Perso seulement » last. */
+export function scopesOf(projects: Projects | null, extra: readonly (Place | undefined)[]): Scope[] {
   const out: Scope[] = [];
   for (const p of projects?.projects ?? []) {
-    const repos = localRepos(p);
-    for (const cwd of repos) out.push({ cwd, name: repos.length > 1 ? `${p.name} · ${folderName(cwd)}` : p.name, project: p.name });
+    for (const r of p.repos) out.push({ cwd: r.path, machine: r.machine, name: p.repos.length > 1 ? `${p.name} · ${folderName(r.path)}` : p.name, project: p.name });
   }
-  for (const cwd of extra) if (cwd && !out.some(s => s.cwd === cwd)) out.push({ cwd, name: folderName(cwd) });
+  for (const x of extra) if (x?.cwd && !out.some(s => same(s, x))) out.push({ cwd: x.cwd, machine: x.machine, name: folderName(x.cwd) });
   return out;
 }
 
-/** The repository a folder falls in among those offered (a session's worktree, a team's folder), else the folder itself. */
-const rootOf = (cwd: string, scopes: readonly Scope[]) =>
-  scopes.filter(s => s.cwd && under(cwd, s.cwd)).sort((a, b) => b.cwd!.length - a.cwd!.length)[0]?.cwd ?? cwd;
+/** The repository a folder falls in among those offered on its machine (a session's worktree, a team's folder), else the folder itself. */
+const rootOf = (cwd: string, machine: string, scopes: readonly Scope[]) =>
+  scopes.filter(s => s.machine === machine && s.cwd && under(cwd, s.cwd)).sort((a, b) => b.cwd!.length - a.cwd!.length)[0]?.cwd ?? cwd;
+
+/** The remembered folder: a path for a local one (as before #99), `{ cwd, machine }` for another machine's, '' for none. */
+const readPlace = (saved: unknown): Place | undefined => {
+  if (typeof saved === 'string') return { cwd: saved === '' ? null : saved, machine: LOCAL };
+  if (saved && typeof saved === 'object' && typeof (saved as Place).cwd === 'string' && typeof (saved as Place).machine === 'string') return saved as Place;
+  return undefined;
+};
 
 /**
  * The folder the catalog reads (the user's decision on #97): the project of the session open in the atelier, else the last
  * folder chosen, else the atelier's project, else the first project's; none (`~/.ledge`) without any project. A folder
  * chosen in the picker is remembered; one the catalog jumps to (a team's) is not.
  */
-export function useScope(projects: Projects | null, openCwd: string | undefined, atelierProject: string | undefined) {
-  const saved = readJson(CATALOG_SCOPE_KEY);
-  const remembered = typeof saved === 'string' ? (saved === '' ? null : saved) : undefined;
-  const [cwd, setCwd] = useState<string | null | undefined>(undefined);
+export function useScope(projects: Projects | null, openCwd: string | undefined, atelierProject: string | undefined, openMachine: string = LOCAL) {
+  const raw = readJson(CATALOG_SCOPE_KEY);
+  const savedKey = JSON.stringify(raw ?? null);
+  const remembered = useMemo(() => readPlace(raw), [savedKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [chosen, setChosen] = useState<Place | undefined>(undefined);
   const base = useMemo(() => scopesOf(projects, []), [projects]);
-  const initial = useMemo((): string | null => {
-    if (openCwd) return rootOf(openCwd, base);
-    if (remembered !== undefined) return remembered;
+  const initial = useMemo((): Place => {
+    if (openCwd) return { cwd: rootOf(openCwd, openMachine, base), machine: openMachine };
+    if (remembered) return remembered;
     const filtered = projects?.projects.find(p => p.id === atelierProject);
-    return (filtered && localRepos(filtered)[0]) ?? base[0]?.cwd ?? null;
-  }, [openCwd, remembered, atelierProject, projects, base]);
-  const current = cwd === undefined ? initial : cwd;
+    const first = filtered && reposOn(filtered, LOCAL)[0];
+    if (first) return { cwd: first, machine: LOCAL };
+    const any = base.find(s => s.machine === LOCAL) ?? base[0];
+    return any ? { cwd: any.cwd, machine: any.machine } : { cwd: null, machine: LOCAL };
+  }, [openCwd, openMachine, remembered, atelierProject, projects, base]);
+  const current = chosen ?? initial;
   const options = useMemo(() => scopesOf(projects, [current, remembered]), [projects, current, remembered]);
-  const choose = (next: string | null, remember: boolean) => {
-    const root = next === null ? null : rootOf(next, options);
-    setCwd(root);
-    if (remember) writeJson(CATALOG_SCOPE_KEY, root ?? '');
+  const choose = (next: string | null, remember: boolean, machine: string = LOCAL) => {
+    const place: Place = next === null ? { cwd: null, machine: LOCAL } : { cwd: rootOf(next, machine, options), machine };
+    setChosen(place);
+    if (remember) writeJson(CATALOG_SCOPE_KEY, place.machine === LOCAL ? place.cwd ?? '' : place);
   };
-  return { cwd: current, options, choose };
+  return { cwd: current.cwd, machine: current.machine, options, choose };
 }
 
 /** What the folder holds, read at the view's opening and again for each `tick` or another folder; null while it is read. */
-export function useCatalog(teams: TeamsApi, cwd: string | null, tick: number): RolesListing | null {
+export function useCatalog(teams: TeamsApi, cwd: string | null, tick: number, machine: string = LOCAL): RolesListing | null {
   const [listing, setListing] = useState<RolesListing | null>(null);
   const { roles } = teams;
   useEffect(() => {
     let live = true;
     setListing(null);
-    void roles(cwd ?? undefined).then(l => { if (live) setListing(l); });
+    void roles(cwd ?? undefined, machine).then(l => { if (live) setListing(l); });
     return () => { live = false; };
-  }, [roles, cwd, tick]);
+  }, [roles, cwd, machine, tick]);
   return listing;
 }
 
-/** « Dossier ledge ~/w/ledge ▾ »: the folder read, and the others offered, « Perso seulement » last; the app's menu (arrows,
- *  Home / End, Échap, the focus back on the button). */
-export function ScopePicker({ scope, onChoose }: { scope: ReturnType<typeof useScope>; onChoose(cwd: string | null): void }): JSX.Element {
+/** « · ● NAS »: the folder's machine, green when the fleet reaches it; said only with more than one machine. */
+function MachineTag({ id, machines }: { id: string; machines: readonly CatalogMachine[] }): JSX.Element | null {
+  if (machines.length < 2) return null;
+  const m = machines.find(x => x.id === id);
+  return <span className={cls('cat-machine', m?.ready ? 'up' : 'down')}> · <span aria-hidden>●</span> {m?.label ?? id}</span>;
+}
+
+/** « Dossier ledge ~/w/ledge · ● Local ▾ »: the folder read and its machine, and the others offered, « Perso seulement » last;
+ *  the app's menu (arrows, Home / End, Échap, the focus back on the button). */
+export function ScopePicker({ scope, machines, onChoose }: { scope: ReturnType<typeof useScope>; machines: readonly CatalogMachine[]; onChoose(cwd: string | null, machine: string): void }): JSX.Element {
   const { t } = useI18n();
   const c = t.home.catalog;
   const [open, setOpen] = useState(false);
-  const current = scope.options.find(s => s.cwd === scope.cwd);
-  const all: Scope[] = [...scope.options, { cwd: null, name: c.personal }];
+  const current = scope.options.find(s => same(s, scope));
+  const all: Scope[] = [...scope.options, { cwd: null, machine: LOCAL, name: c.personal }];
   // The rule the choice follows, at the popup's foot (the mockup's), outside the menu's items; Menu makes it describe the menu.
   return (
     <Menu open={open} onOpenChange={setOpen} label={c.folderTitle} className="cat-scope" menuClassName="cat-scope-pop"
       footer={<p className="cat-scope-note">{c.repoWins}</p>}
       trigger={tr => (
         <button type="button" className="cat-scope-btn" title={c.folderTitle} {...tr}>
-          {c.folder} <strong>{scope.cwd === null ? c.personal : current?.name ?? folderName(scope.cwd)}</strong> <small>{scope.cwd ?? '~/.ledge'}</small> ▾
+          {c.folder} <strong>{scope.cwd === null ? c.personal : current?.name ?? folderName(scope.cwd)}</strong> <small>{scope.cwd ?? '~/.ledge'}<MachineTag id={scope.machine} machines={machines} /></small> ▾
         </button>
       )}>
       {all.map(s => (
-        <MenuItem key={s.cwd ?? ''} className={cls(s.cwd === scope.cwd && 'on')} aria-current={s.cwd === scope.cwd || undefined} onSelect={() => onChoose(s.cwd)}>
+        <MenuItem key={`${s.machine}\n${s.cwd ?? ''}`} className={cls(same(s, scope) && 'on')} aria-current={same(s, scope) || undefined} onSelect={() => onChoose(s.cwd, s.machine)}>
           <strong>{s.name}</strong>
-          <small>{s.cwd ?? '~/.ledge'} · {s.cwd === null ? c.scopePersonal : s.project ? c.scopeProject(s.project) : c.scopeFolder}</small>
+          <small>{s.cwd ?? '~/.ledge'}<MachineTag id={s.machine} machines={machines} /> · {s.cwd === null ? c.scopePersonal : s.project ? c.scopeProject(s.project) : c.scopeFolder}</small>
         </MenuItem>
       ))}
     </Menu>
@@ -120,16 +144,17 @@ const Source = ({ source }: { source: 'repo' | 'home' }) => {
   return <span className={cls('cat-src', source)}>{t.home.catalog.source[source]}</span>;
 };
 
-/** What the catalog needs of the app: the live teams and sessions (who holds what), where its buttons go. */
+/** What the catalog needs of the app: the live teams and sessions (who holds what), the machines, where its buttons go. */
 export interface CatalogCtx {
-  client: DaemonClient; teams: TeamsApi; sessions: readonly Session[]; projects: Projects | null; dispatch: (a: NavAction) => void; notify(text: string): void;
+  client: DaemonClient; teams: TeamsApi; sessions: readonly Session[]; projects: Projects | null; machines: readonly CatalogMachine[]; dispatch: (a: NavAction) => void; notify(text: string): void;
 }
-/** CatalogCtx, with « Ouvrir »: the file shown in the reader beside the detail. */
-type DetailCtx = CatalogCtx & { openFile(path: string): void };
+/** CatalogCtx, with the folder's machine and « Ouvrir »: the file shown in the reader beside the detail, a local one only
+ *  (`document.read` reads on the local daemon); `remote`, the other machine's name, when the folder is there. */
+type DetailCtx = CatalogCtx & { machine: string; remote?: string; openFile(path: string): void };
 
 /** The catalog of a folder: the list grouped by source (repository, then home), the files skipped, the detail on the right. */
-export function CatalogView({ ctx, view, cwd, listing, pick, onPick, query, onRetry }: {
-  ctx: CatalogCtx; view: 'templates' | 'roles'; cwd: string | null; listing: RolesListing | null; pick: CatalogPick; onPick(next: CatalogPick, view?: TeamsView): void; query: string;
+export function CatalogView({ ctx, view, cwd, machine = LOCAL, listing, pick, onPick, query, onRetry }: {
+  ctx: CatalogCtx; view: 'templates' | 'roles'; cwd: string | null; machine?: string; listing: RolesListing | null; pick: CatalogPick; onPick(next: CatalogPick, view?: TeamsView): void; query: string;
   /** Reads the folder again (a daemon that did not answer). */
   onRetry(): void;
 }): JSX.Element {
@@ -137,11 +162,13 @@ export function CatalogView({ ctx, view, cwd, listing, pick, onPick, query, onRe
   const c = t.home.catalog;
   // The file « Ouvrir » shows (the user's choice on #97: Ledge's reader, read only, no outside editor), until another pick.
   const [opened, setOpened] = useState<string | null>(null);
-  useEffect(() => setOpened(null), [view, cwd, pick.role, pick.template, pick.problems]);
+  useEffect(() => setOpened(null), [view, cwd, machine, pick.role, pick.template, pick.problems]);
   if (!listing) return <p className="lp-none cat-loading">{c.loading}</p>;
-  // No answer is not an empty folder: said apart, with « Réessayer ».
-  if (listing.silent) return <div className="cat-empty" role="alert"><p>{c.silent}</p><Button variant="outline" size="sm" onClick={onRetry}>{c.retry}</Button></div>;
-  const dctx: DetailCtx = { ...ctx, openFile: setOpened };
+  const label = ctx.machines.find(m => m.id === machine)?.label ?? machine;
+  // No answer is not an empty folder: said apart, with « Réessayer »; so is a machine the fleet does not reach, or too old.
+  const failure = listing.silent ? c.silent : listing.error === 'outdated' ? c.machineOutdated(label) : listing.error ? c.machineOffline(label) : null;
+  if (failure) return <div className="cat-empty" role="alert"><p>{failure}</p><Button variant="outline" size="sm" onClick={onRetry}>{c.retry}</Button></div>;
+  const dctx: DetailCtx = { ...ctx, machine, ...(machine !== LOCAL ? { remote: label } : {}), openFile: setOpened };
   const q = query.trim().toLowerCase();
   const roles = listing.roles.filter(r => !q || `${r.id} ${r.label}`.toLowerCase().includes(q));
   // A role or a template asked for (a link) that this folder does not have is said so, never shown as another; one only
@@ -153,7 +180,8 @@ export function CatalogView({ ctx, view, cwd, listing, pick, onPick, query, onRe
   const problems = listing.problems;
   const group = <T extends { source: 'repo' | 'home' }>(title: string, list: readonly T[], row: (x: T) => ReactNode) =>
     list.length > 0 && <><h4>{title}</h4>{list.map(row)}</>;
-  const held = (id: string, source: 'repo' | 'home') => ctx.sessions.filter(s => s.role === id && s.state !== 'exited' && !s.archivedAt && (source === 'home' || !cwd || under(s.cwd, cwd)));
+  const held = (id: string, source: 'repo' | 'home') => ctx.sessions.filter(s => s.role === id && s.state !== 'exited' && !s.archivedAt
+    && (source === 'home' || !cwd || ((s.machineId ?? LOCAL) === machine && under(s.cwd, cwd))));
   const usedIn = (id: string) => listing.templates.filter(x => x.seats.some(s => s.role === id));
   return (
     <div className={cls('cat-split', opened && 'reading')}>
@@ -230,7 +258,7 @@ function autonomyWhy(c: ReturnType<typeof useI18n>['t']['home']['catalog'], tool
   return autonomy === 'auto' ? `${flags} — ${c.autonomyAuto}` : flags;
 }
 
-/** « Fichier » and its buttons: copy the path, open the file. */
+/** « Fichier » and its buttons: copy the path, open the file; a file on another machine is only said where it is. */
 function FileFact({ ctx, path }: { ctx: DetailCtx; path: string }): JSX.Element {
   const { t } = useI18n();
   const c = t.home.catalog;
@@ -243,7 +271,7 @@ function FileFact({ ctx, path }: { ctx: DetailCtx; path: string }): JSX.Element 
       <dt>{c.file}</dt>
       <dd><code className="cat-path" title={path}>{path}</code>
         <Button variant="ghost" size="sm" onClick={copy}>{c.copy}</Button>
-        <Button variant="ghost" size="sm" onClick={() => ctx.openFile(path)}>{c.open}</Button>
+        {ctx.remote ? <span className="lp-none">{c.onMachine(ctx.remote)}</span> : <Button variant="ghost" size="sm" onClick={() => ctx.openFile(path)}>{c.open}</Button>}
       </dd>
     </>
   );
@@ -257,8 +285,10 @@ function RoleDetail({ ctx, cwd, role, used, held, onPick }: {
   const { t } = useI18n();
   const c = t.home.catalog;
   const autonomy = role.autonomy ?? 'ask';
-  const project = projectOfFolder(ctx.projects, cwd);
+  const project = projectOfFolder(ctx.projects, cwd, ctx.machine);
   const { id, label, tool, model, effort } = role;
+  // A team launches on the local daemon only: on another machine, a role starts a session there, never a team.
+  const noTeam = ctx.remote ? c.remoteTeam(ctx.remote) : project ? undefined : c.needProject;
   return (
     <section className="cat-detail-body" aria-label={`@${role.id}`}>
       <div className="cat-head">
@@ -267,12 +297,12 @@ function RoleDetail({ ctx, cwd, role, used, held, onPick }: {
           <small>{c.role} · <Source source={role.source} /></small>
         </div>
         <div className="cat-actions">
-          <Button variant="outline" size="sm" onClick={() => ctx.dispatch(launchModal({ ...(project ? { project: project.id } : {}), ...(cwd ? { cwd } : {}), role: { id, label, tool, model, effort } }))}>{c.launchSession}</Button>
-          <Button variant="primary" size="sm" disabled={!project} title={project ? undefined : c.needProject}
-            onClick={() => project && ctx.dispatch(launchModal({ project: project.id, team: true, ...(cwd ? { cwd } : {}), seat: role.id }))}>{c.mountTeam}</Button>
+          <Button variant="outline" size="sm" onClick={() => ctx.dispatch(launchModal({ ...(project ? { project: project.id } : {}), ...(cwd ? { cwd } : {}), ...(ctx.remote ? { machine: ctx.machine } : {}), role: { id, label, tool, model, effort } }))}>{c.launchSession}</Button>
+          <Button variant="primary" size="sm" disabled={!!noTeam} title={noTeam}
+            onClick={() => project && !noTeam && ctx.dispatch(launchModal({ project: project.id, team: true, ...(cwd ? { cwd } : {}), seat: role.id }))}>{c.mountTeam}</Button>
         </div>
       </div>
-      {!project && <p className="cat-ro">{c.needProject}</p>}
+      {noTeam && <p className="cat-ro">{noTeam}</p>}
       <dl className="cat-facts">
         <dt>{c.tool}</dt><dd>{role.tool ? toolName(role.tool) : <span className="lp-none">{c.anyTool}</span>}</dd>
         <dt>{c.model}</dt><dd>{role.model ?? <span className="lp-none">{c.toolDefault}</span>}</dd>
@@ -338,8 +368,9 @@ function TemplateDetail({ ctx, cwd, template, roles, onPick }: {
   const c = t.home.catalog;
   const roleOf = (id: string) => roles.find(r => r.id === id);
   const auto = template.seats.filter(s => roleOf(s.role)?.autonomy === 'auto').map(s => `@${s.role}`);
-  const project = projectOfFolder(ctx.projects, cwd);
-  const born = (ctx.teams.teams ?? []).filter((x: Team) => x.template === template.id && (template.source === 'home' || !cwd || under(x.cwd, cwd)));
+  const project = projectOfFolder(ctx.projects, cwd, ctx.machine);
+  const noTeam = ctx.remote ? c.remoteTeam(ctx.remote) : project ? undefined : c.needProject;
+  const born = (ctx.teams.teams ?? []).filter((x: Team) => x.template === template.id && (template.source === 'home' || !cwd || (x.machine === ctx.machine && under(x.cwd, cwd))));
   return (
     <section className="cat-detail-body" aria-label={template.name}>
       <div className="cat-head">
@@ -348,11 +379,11 @@ function TemplateDetail({ ctx, cwd, template, roles, onPick }: {
           <small>{c.template} · {c.seats(template.seats.length)} · <Source source={template.source} /></small>
         </div>
         <div className="cat-actions">
-          <Button variant="primary" size="sm" disabled={!project} title={project ? undefined : c.needProject}
-            onClick={() => project && ctx.dispatch(launchModal({ project: project.id, team: true, ...(cwd ? { cwd } : {}), template: template.id }))}>{c.launchTeam}</Button>
+          <Button variant="primary" size="sm" disabled={!!noTeam} title={noTeam}
+            onClick={() => project && !noTeam && ctx.dispatch(launchModal({ project: project.id, team: true, ...(cwd ? { cwd } : {}), template: template.id }))}>{c.launchTeam}</Button>
         </div>
       </div>
-      {!project && <p className="cat-ro">{c.needProject}</p>}
+      {noTeam && <p className="cat-ro">{noTeam}</p>}
       <div className="cat-section">
         <h3>{c.posts}</h3>
         <table className="cat-seats">

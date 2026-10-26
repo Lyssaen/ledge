@@ -20,7 +20,7 @@ import { useDefaultTool } from '../settings/tool';
 import { HOME_TABS, type HomeTab, type NavAction } from '../nav/state';
 import { teamProject } from '../atelier/layout';
 import { closedLedgeTasks, ledgeProgress, nearLimit, type TeamsApi } from '../teams/useTeamsApi';
-import { CatalogView, ScopePicker, stateKey, useCatalog, useScope, type CatalogPick, type TeamsView } from '../teams/Catalog';
+import { CatalogView, ScopePicker, stateKey, useCatalog, useScope, type CatalogMachine, type CatalogPick, type TeamsView } from '../teams/Catalog';
 import type { Wait } from '../list/time';
 import { useAgentHighlight } from './useAgentHighlight';
 import { useChatCards } from './useChatCards';
@@ -35,8 +35,8 @@ export interface LedgeHomeProps {
   task?: string;
   paused: boolean; focus: number;
   projects: Projects | null;
-  /** The folder of the session open in the atelier, and the atelier's project filter: where « Équipes »' catalog reads first (#97). */
-  openCwd?: string; atelierProject?: string;
+  /** The session open in the atelier, and the atelier's project filter: where « Équipes »' catalog reads first (#97), on its machine (#99). */
+  open?: Pick<Session, 'cwd' | 'machineId'>; atelierProject?: string;
   onLaunched(id: string): void; onTerminal(id: string): void; notify(text: string): void; onProposal(pid: string): void;
 }
 
@@ -149,9 +149,9 @@ function TeamLine({ team, teams, projects, dispatch, onTemplate }: { team: Team;
  * « Équipes » (#97): the live teams, as « Le point » shows them, and the catalog of a folder, its templates and its roles, read
  * from the local daemon at the view's opening and for each folder chosen. A live team's template and each `@role` lead there.
  */
-function TeamsTab({ client, teams, sessions, projects, dispatch, notify, openCwd, atelierProject }: {
-  client: DaemonClient; teams: TeamsApi; sessions: readonly Session[]; projects: Projects | null; dispatch: (a: NavAction) => void; notify(text: string): void;
-  openCwd?: string; atelierProject?: string;
+function TeamsTab({ client, teams, sessions, projects, machines, dispatch, notify, open, atelierProject }: {
+  client: DaemonClient; teams: TeamsApi; sessions: readonly Session[]; projects: Projects | null; machines: readonly CatalogMachine[]; dispatch: (a: NavAction) => void; notify(text: string): void;
+  open?: Pick<Session, 'cwd' | 'machineId'>; atelierProject?: string;
 }): JSX.Element {
   const { t } = useI18n();
   const c = t.home.catalog;
@@ -161,8 +161,8 @@ function TeamsTab({ client, teams, sessions, projects, dispatch, notify, openCwd
   const [pick, setPick] = useState<CatalogPick>({});
   const [query, setQuery] = useState('');
   const [tick, setTick] = useState(0);
-  const scope = useScope(projects, openCwd, atelierProject);
-  const listing = useCatalog(teams, scope.cwd, tick);
+  const scope = useScope(projects, open?.cwd, atelierProject, open?.machineId);
+  const listing = useCatalog(teams, scope.cwd, tick, scope.machine);
   const show = (next: TeamsView, nextPick: CatalogPick = { ...pick, problems: false }) => {
     setPick(nextPick);
     if (next !== view && next !== 'live') setTick(n => n + 1);
@@ -170,18 +170,18 @@ function TeamsTab({ client, teams, sessions, projects, dispatch, notify, openCwd
   };
   // From a live team: its folder's catalog, on its template or one of its roles.
   const goto = (team: Team, next: 'roles' | 'templates', id: string) => {
-    scope.choose(team.cwd, false);
+    scope.choose(team.cwd, false, team.machine);
     setQuery('');
     show(next, next === 'roles' ? { role: id } : { template: id });
   };
-  const known = listing && !listing.silent ? listing : null;
+  const known = listing && !listing.silent && !listing.error ? listing : null;
   const counts = { live: live.length, templates: known?.templates.length, roles: known?.roles.length };
   const ids = tabIds('home-teams', view);
   return (
     <div className="home-list home-teams" role="tabpanel" aria-label={t.home.tabs.teams(live.length)}>
       <div className="cat-toolbar">
         <Tabs id="home-teams" fit label={c.views} value={view} onChange={v => show(v)} tabs={(['live', 'templates', 'roles'] as const).map(v => ({ value: v, label: c[v](counts[v]) }))} />
-        {view !== 'live' && <ScopePicker scope={scope} onChoose={cwd => { scope.choose(cwd, true); setPick({}); }} />}
+        {view !== 'live' && <ScopePicker scope={scope} machines={machines} onChoose={(cwd, machine) => { scope.choose(cwd, true, machine); setPick({}); }} />}
         {view === 'roles' && <input type="search" className="cat-search" aria-label={c.filterLabel} placeholder={c.filter} value={query} onChange={e => setQuery(e.target.value)} />}
       </div>
       <div className="cat-panel" role="tabpanel" id={ids.panelId} aria-labelledby={ids.tabId}>
@@ -205,7 +205,7 @@ function TeamsTab({ client, teams, sessions, projects, dispatch, notify, openCwd
           </section>
         ))}
       </> : (
-        <CatalogView ctx={{ client, teams, sessions, projects, dispatch, notify }} view={view} cwd={scope.cwd} listing={listing} pick={pick} query={view === 'roles' ? query : ''}
+        <CatalogView ctx={{ client, teams, sessions, projects, machines, dispatch, notify }} view={view} cwd={scope.cwd} machine={scope.machine} listing={listing} pick={pick} query={view === 'roles' ? query : ''}
           onPick={(next, to) => { if (!to) return setPick(next); setQuery(''); show(to, next); }} onRetry={() => setTick(n => n + 1)} />
       )}
       </div>
@@ -405,7 +405,7 @@ export function LedgeHome(p: LedgeHomeProps): JSX.Element {
                 theme={theme} frozen={offline !== null} reducedMotion={p.paused || reduced} />
             </ChatCopyProvider>
           )}
-          {tab === 'teams' && <TeamsTab client={client} teams={teams} sessions={view.sessions} projects={p.projects} dispatch={dispatch} notify={p.notify} openCwd={p.openCwd} atelierProject={p.atelierProject} />}
+          {tab === 'teams' && <TeamsTab client={client} teams={teams} sessions={view.sessions} projects={p.projects} machines={view.machines} dispatch={dispatch} notify={p.notify} open={p.open} atelierProject={p.atelierProject} />}
           {tab === 'tasks' && <TasksTab teams={teams} shown={shownTask} onShow={setShownTask} />}
           {tab === 'history' && <HistoryTab chat={chat} onOpen={qid => {
             dispatch({ type: 'ledge', tab: 'conversation' });
