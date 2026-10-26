@@ -23,6 +23,12 @@ Mockups (captured from the real Ledge Desktop and `ledge tui` against their simu
   <img src="mockups/2026-10-26-teams/tui-overview.png" alt="TUI overview: projects, team tables, roles, tasks" width="280">
   <img src="mockups/2026-10-26-teams/tui-launch-team.png" alt="TUI new session in team mode" width="280">
 </p>
+<p>
+  <img src="mockups/2026-10-26-teams/mobile-ledge.png" alt="Phone: Ledge first, Le point" width="195">
+  <img src="mockups/2026-10-26-teams/mobile-conversation.png" alt="Phone: team launched with the device key, tasks" width="195">
+  <img src="mockups/2026-10-26-teams/mobile-inbox.png" alt="Phone: À traiter with a closed Ledge task" width="195">
+  <img src="mockups/2026-10-26-teams/mobile-agents.png" alt="Phone: agents by team, with roles" width="195">
+</p>
 
 ## 1. What exists
 

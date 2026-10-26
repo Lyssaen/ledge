@@ -65,7 +65,22 @@ line of the sidebar entry is computed from the same.
 
 ### 2.4 Phone and TUI
 
-- The phone app's chat gets « Le point » as its first screen, with the same three parts.
+- **Phone** (`apps/mobile`). Mockups: [mobile-ledge.png](mockups/2026-10-26-teams/mobile-ledge.png),
+  [mobile-conversation.png](mockups/2026-10-26-teams/mobile-conversation.png),
+  [mobile-inbox.png](mockups/2026-10-26-teams/mobile-inbox.png),
+  [mobile-agents.png](mockups/2026-10-26-teams/mobile-agents.png).
+  - The tab bar (`ui/TabBar.tsx`) puts « Ledge » first (it was « Demander à Ledge », last), then « À traiter » and
+    « Agents »; the app opens on it once paired.
+  - « Ledge » (`screens/Chat.tsx`) opens on « Le point » (À toi with Oui / Non / Voir, Équipes with progress and
+    Reprendre, Confiées par Ledge), with suggestion chips above the composer; the conversation shows the team and task
+    cards. Launching a team is an accept like a launch card today: it is confirmed with the device key when the device
+    check is on (« confirmé avec la clé de l'appareil »).
+  - « À traiter » (`screens/Inbox.tsx`) gets a « Tâches » filter and a card for each closed Ledge task (« ✓ Tâche
+    finie », the owner with its role and team, the start of the result, « Voir le résultat »).
+  - « Agents » (`screens/Agents.tsx`) groups a project's sessions by table: `⚑ team` (progress of its Ledge tasks), then
+    « table commune », then resting teams with « Reprendre »; each seat shows its role pill.
+  - The phone protocol (`packages/protocol/src/phone.ts`) carries `role` and `team` on `PhoneSession`, the live teams,
+    and `task.updated` for Ledge's tasks; `PhoneChatProposal` gets the team and task cards.
 - The TUI keeps its tab order (Overview is `1`); Ask Ledge (`3`) gets the team and task cards, and its header says
   « Opérateur ». A « Le point » box at the top of Ask Ledge is a later step.
 
