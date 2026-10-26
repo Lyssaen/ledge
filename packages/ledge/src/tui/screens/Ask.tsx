@@ -104,9 +104,11 @@ export function Ask() {
       </TitledBox>
       {cards.slice(0, 2).map((c, i) => <CardBox key={`${c.kind}:${c.qid}`} card={c} turn={d.chat.find(x => x.qid === c.qid)!} focused={i === focus} busy={busy?.qid === c.qid} />)}
       <TitledBox title={t.ask.question} flexShrink={0} color={focus === -1 ? C.coral : C.line}>
-        <Text wrap="truncate"><Text color={C.coral}>{g.cursor} </Text>
-          <TextInput value={draft} onChange={setDraft} onSubmit={ask} onEscape={() => { if (!draft) go('overview'); }} active={focus === -1} />
-        </Text>
+        <Box><Text color={C.coral}>{g.cursor} </Text>
+          <Box flexGrow={1} overflow="hidden">
+            <TextInput value={draft} onChange={setDraft} onSubmit={ask} onEscape={() => { if (!draft) go('overview'); }} active={focus === -1} />
+          </Box>
+        </Box>
       </TitledBox>
     </Frame>
   );

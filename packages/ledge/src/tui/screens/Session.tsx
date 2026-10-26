@@ -127,10 +127,13 @@ function SessionView({ s }: { s: Session }) {
         </TitledBox>
       ) : null}
       <TitledBox title={mode === 'note' ? t.overview.denyWithNote : t.keys.write} color={mode === 'read' ? C.line : C.coral}>
-        <Text wrap="truncate"><Text color={C.coral}>{g.cursor} </Text>
-          <TextInput value={draft} onChange={setDraft} onSubmit={send} onEscape={() => setMode('read')} active={mode === 'reply' || mode === 'note'}
-            placeholder={mode === 'note' ? t.session.noteFor(s.name) : t.session.replyTo(s.name)} />
-        </Text>
+        {/* The field is its own Text: inside another, the outer one's truncation would cut the end being typed. */}
+        <Box><Text color={C.coral}>{g.cursor} </Text>
+          <Box flexGrow={1} overflow="hidden">
+            <TextInput value={draft} onChange={setDraft} onSubmit={send} onEscape={() => setMode('read')} active={mode === 'reply' || mode === 'note'}
+              placeholder={mode === 'note' ? t.session.noteFor(s.name) : t.session.replyTo(s.name)} />
+          </Box>
+        </Box>
       </TitledBox>
     </Frame>
   );
