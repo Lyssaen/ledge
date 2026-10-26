@@ -63,6 +63,19 @@ describe('images in the session reply', () => {
     expect(chips()).toHaveLength(1);
   });
 
+  it('a drop on a shut field adds nothing', async () => {
+    const omp = fakeSession('omp1', { name: 'Noor', tool: 'omp', backend: 'omp-rpc', tmuxSession: null, state: 'waiting_input', pending: { kind: 'question', text: 'Name?', source: 'rpc', tool: 'omp', requestId: 'ask1', questions: [{ id: 'n', question: 'Name?', options: [{ label: 'skip' }] }] } });
+    const { d } = await open('Noor', [omp, ...listSessions()]);
+    answerPuts(d);
+    expect(field()).toBeDisabled();
+    const form = field().closest('form')!;
+    const drop = createEvent.drop(form); Object.defineProperty(drop, 'dataTransfer', { value: { files: [png()], types: ['Files'] } });
+    fireEvent(form, drop);
+    await new Promise(r => setTimeout(r, 100));
+    expect(chips()).toHaveLength(0);
+    expect(sent(d, 'attachment.put')).toEqual([]);
+  });
+
   it('Send is disabled while the put is unanswered', async () => {
     const { d } = await open('Bix');
     answerPuts(d, { hold: true });
@@ -118,12 +131,15 @@ describe('images in the session reply', () => {
   describe('OMP: the queue taken back', () => {
     const omp = () => fakeSession('omp1', { name: 'Noor', tool: 'omp', backend: 'omp-rpc', tmuxSession: null, state: 'working' });
     it('brings the images of a restored message back as chips, from the store', async () => {
-      const { d } = await open('Noor', [omp(), ...listSessions()]);
+      const { d, user } = await open('Noor', [omp(), ...listSessions()]);
       d.onMessage(m => { if (m.type === 'attachment.get') d.push({ type: 'attachment.data', requestId: m.requestId, attachment: m.attachment, mime: 'image/webp', data: btoa('0123456789') }); });
       d.push({ type: 'session.queue.restored', id: 'omp1', texts: ['hurry'], entries: [{ text: 'hurry', attachments: [ID] }] });
       await waitFor(() => expect(field()).toHaveValue('hurry'));
       await waitFor(() => expect(chips()).toHaveLength(1));
       expect(sent(d, 'attachment.get')).toEqual([expect.objectContaining({ attachment: ID, id: 'omp1' })]);
+      await waitFor(() => expect(chips()[0]).toHaveAttribute('data-chip', 'ready'));
+      await user.click(screen.getByRole('button', { name: 'Send after this turn' }));
+      await waitFor(() => expect(sent(d, 'session.reply')).toEqual([{ type: 'session.reply', id: 'omp1', text: 'hurry', attachments: [ID] }]));
     });
     it('says the images were lost when the daemon could not put them back', async () => {
       const { d } = await open('Noor', [omp(), ...listSessions()]);

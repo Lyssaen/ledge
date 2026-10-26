@@ -18,7 +18,7 @@ describe('the chat composer with images', () => {
     render(ui({ onAsk, attach: attach('ready') }));
     expect(send()).toBeEnabled();
     fireEvent.click(send());
-    expect(onAsk).toHaveBeenCalledWith('');
+    expect(onAsk).toHaveBeenCalledWith('', true);
   });
   it('with a refused or uploading chip, Send is disabled', () => {
     const { unmount } = render(ui({ attach: attach('refused') }));

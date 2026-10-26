@@ -273,15 +273,15 @@ export function LedgeHome(p: LedgeHomeProps): JSX.Element {
   const busy = chat.some(x => x.answeredAt === undefined && x.error === undefined);
   const live = teams.teams ?? [];
 
-  // Images pasted or dropped on the field travel inline with the question.
+  // Images pasted or dropped on the field travel inline with the field's question only (not a suggestion's or « Résumer »).
   const images = useAttachments(client, { inline: true });
-  const ask = (text: string) => {
+  const ask = (text: string, withImages = false) => {
     if (offline) return;
     const qid = `q-${crypto.randomUUID()}`;
     daemonStore.beginTurn({ qid, question: text, askedAt: new Date().toISOString(), steps: [] });
-    const uploads = images.uploads();
+    const uploads = withImages ? images.uploads() : [];
     send({ type: 'chat.ask', qid, text, ...(uploads.length ? { images: uploads } : {}), tool });
-    images.clear();
+    if (withImages) images.clear();
     if (tab !== 'conversation') dispatch({ type: 'ledge', tab: 'conversation' });
   };
   const open = (id: string) => { setHovered(null); dispatch({ type: 'open', id }); };

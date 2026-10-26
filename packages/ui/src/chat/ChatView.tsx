@@ -26,8 +26,8 @@ export interface ChatViewProps {
   turns: ChatTurn[]; live: { qid: string; text: string } | null; sessions: Session[]; visible: boolean; enterDelay?: number;
   /** Null when questions may be sent; otherwise why not (offline). */
   offline: string | null;
-  /** `text` is empty when only images are sent. */
-  onAsk: (text: string) => void; onCancel: (qid: string) => void; onReset: () => void; onBack?: () => void; onClose: () => void; onOpenSession: (id: string) => void;
+  /** `withImages`: the question comes from the field, so the chips under it go with it (then the text may be empty); suggestions and choices send text alone. */
+  onAsk: (text: string, withImages?: boolean) => void; onCancel: (qid: string) => void; onReset: () => void; onBack?: () => void; onClose: () => void; onOpenSession: (id: string) => void;
   /** The sober island has no session list to return to. */
   showBack?: boolean;
   /** Extra controls in the header, before close. The sober island puts its menu here. */
@@ -132,7 +132,11 @@ export function ChatView(p: ChatViewProps) {
   const [pulse, setPulse] = useState(0);
   useEffect(() => { if (!busy || !visible || p.reducedMotion) return; const id = setInterval(() => setPulse(k => k + 1), 1400); return () => clearInterval(id); }, [busy, visible, p.reducedMotion]);
   const withImages = (p.attach?.items.length ?? 0) > 0;
-  const submit = (q: string) => { const v = q.trim(); if ((!v && !withImages) || busy || p.offline || (p.attach && !p.attach.ready)) return; p.onAsk(v); setText(''); };
+  const submit = (q: string, fromField = false) => {
+    const v = q.trim(), images = fromField && withImages;
+    if ((!v && !images) || busy || p.offline || (images && !p.attach!.ready)) return;
+    p.onAsk(v, images); setText('');
+  };
   /** Pasted image files go to the images (the paste is then not a text one); a text paste is left alone. */
   const onPaste = (e: React.ClipboardEvent) => {
     const files = [...e.clipboardData.files].filter(f => f.type.startsWith('image/'));
@@ -261,15 +265,15 @@ export function ChatView(p: ChatViewProps) {
             <textarea ref={setField} data-chat-input className="ledge-field" aria-label={t.chat.ask} placeholder={t.chat.askPlaceholder} value={text} disabled={busy || !!p.offline} rows={Math.min(6, Math.max(2, text.split('\n').length))}
               onChange={e => setText(e.target.value)} onPaste={onPaste} onKeyDown={e => {
                 if (p.onFieldKey?.(e)) return;
-                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(text); } else if (e.key === 'Escape') { e.stopPropagation(); e.currentTarget.blur(); }
+                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(text, true); } else if (e.key === 'Escape') { e.stopPropagation(); e.currentTarget.blur(); }
               }}
               style={{ flex: 1, minWidth: 0, boxSizing: 'border-box', padding: '8px 10px', background: 'var(--well)', color: 'inherit', border: '1px solid var(--input)', borderRadius: 'var(--radius-md)', fontSize: 13, lineHeight: '19px', resize: 'none', fontFamily: 'inherit' }} />
           ) : (
           <input ref={setField} data-chat-input type="text" className="ledge-field" aria-label={t.chat.ask} placeholder={t.chat.askPlaceholder} value={text} disabled={busy || !!p.offline}
-            onChange={e => setText(e.target.value)} onPaste={onPaste} onKeyDown={e => { if (p.onFieldKey?.(e)) return; if (e.key === 'Enter') { e.preventDefault(); submit(text); } else if (e.key === 'Escape') { e.stopPropagation(); (e.target as HTMLInputElement).blur(); } }}
+            onChange={e => setText(e.target.value)} onPaste={onPaste} onKeyDown={e => { if (p.onFieldKey?.(e)) return; if (e.key === 'Enter') { e.preventDefault(); submit(text, true); } else if (e.key === 'Escape') { e.stopPropagation(); (e.target as HTMLInputElement).blur(); } }}
             style={{ flex: 1, minWidth: 0, height: 34, boxSizing: 'border-box', padding: '0 10px', background: 'var(--well)', color: 'inherit', border: '1px solid var(--input)', borderRadius: 'var(--radius-md)', fontSize: 13 }} />
           )}
-          <Button variant="primary" size="icon" aria-label={t.chat.send} title={t.chat.send} disabled={busy || !!p.offline || (!text.trim() && !withImages) || (!!p.attach && !p.attach.ready)} onClick={() => submit(text)} style={{ width: 34, height: 34 }}><Icon {...ICONS.send} /></Button>
+          <Button variant="primary" size="icon" aria-label={t.chat.send} title={t.chat.send} disabled={busy || !!p.offline || (!text.trim() && !withImages) || (!!p.attach && !p.attach.ready)} onClick={() => submit(text, true)} style={{ width: 34, height: 34 }}><Icon {...ICONS.send} /></Button>
         </div>
         {p.footnote}
       </div>

@@ -97,6 +97,7 @@ export function useAttachments(client: DaemonClient | undefined, mode: Attachmen
     if (gone?.item.state === 'refused') setError(null);
   };
 
+  // Restored images only know their id: their dimensions are 0×0 and only the bytes are shown.
   const restore = (ids: string[], dropped = false) => {
     setError(dropped ? copy.lost : null);
     const route = 'put' in mode ? mode.put : {};

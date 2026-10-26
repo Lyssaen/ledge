@@ -231,8 +231,8 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
           </div>
         )}
         <form className={cls(pending && 'with-pending', (session.queue?.length ?? 0) > 0 && native && 'under-queue')} onSubmit={e => { e.preventDefault(); submit(); }}
-          onDragOver={client ? e => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); } : undefined}
-          onDrop={client ? e => { if (e.dataTransfer.files.length === 0) return; e.preventDefault(); images.add([...e.dataTransfer.files]); } : undefined}>
+          onDragOver={client && !shut ? e => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); } : undefined}
+          onDrop={client && !shut ? e => { if (e.dataTransfer.files.length === 0) return; e.preventDefault(); images.add([...e.dataTransfer.files]); } : undefined}>
           {withImages && <div className="reply-chips"><AttachmentChips items={images.items} onRemove={images.remove} size={{ w: 72, h: 54 }} removeLabel={t.images.remove} lang={t.time.locale.startsWith('fr') ? 'fr' : 'en'} /></div>}
           <textarea ref={input} rows={1} aria-label={tr.label} placeholder={placeholder} value={draft} disabled={shut}
             maxLength={isNote ? NOTE_MAX : undefined} onChange={e => setDraft(e.target.value)} onKeyDown={onKeyDown} onPaste={onPaste} />
