@@ -107,6 +107,24 @@ describe('actFromChat (spec 2026-10-26 action registry §9.2)', () => {
     expect(await actFromChat(x.d, 'q1')).toEqual({ done: [0], failed: [] });
     expect(x.applied).toEqual(['a']);
   });
+  it('a cut request is refused at once, before any confirmation is asked; the rows before it still apply', async () => {
+    const cutAccept = row('session.decide', { session: 'a', decision: 'accept' }, { risk: 'destructive', detail: 'x…', detailCut: true });
+    const c = card([cutAccept]);
+    const { d, applied } = deps(c);
+    expect(await actFromChat(d, 'q1')).toEqual({ done: [], failed: [{ row: 0, message: 'a\'s request is cut on the card: accept it in the session', refused: true }] });
+    expect(c.rows[0]).toMatchObject({ state: 'refused', code: 'cut' });
+    expect(applied).toEqual([]);
+    const two = card([row('session.archive', { session: 'b' }), { ...cutAccept }]);
+    const t = deps(two);
+    expect(await actFromChat(t.d, 'q1')).toMatchObject({ done: [0], failed: [{ row: 1, refused: true }] });
+    expect(t.applied).toEqual(['b']);
+  });
+  it('the row the user saw counts too: cut on the card, it is refused even if the request is whole now', async () => {
+    const c = card([row('session.decide', { session: 'a', decision: 'accept' }, { detail: 'x…', detailCut: true })]);
+    const { d, applied } = deps(c, { resolve: (r: ChatAction) => { const { detailCut: _c, ...whole } = r; return { ...whole, detail: 'x' }; } });
+    expect((await actFromChat(d, 'q1', undefined, true)).failed).toEqual([{ row: 0, message: 'a\'s request is cut on the card: accept it in the session', refused: true }]);
+    expect(applied).toEqual([]);
+  });
   describe('« Refuser » (deny)', () => {
     const accept = (extra: Partial<ChatAction> = {}) => row('session.decide', { session: 'a', decision: 'accept', expect: { kind: 'plan', text: 'P', key: 'k' } }, { risk: 'destructive', ...extra });
     it('answers the request with deny, unconfirmed, and marks the row denied with its time', async () => {
