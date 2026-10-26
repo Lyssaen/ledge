@@ -30,8 +30,8 @@ export interface AppProps {
   lang: Lang;
   /** Saves the language; throws when it cannot (the choice still applies for this run). */
   saveLang(lang: Lang): void;
-  /** The theme chosen (auto by default), the terminal's background as found at start (dark when unknown), and how to save
-   *  the theme (throws as `saveLang`). */
+  /** The theme chosen (auto by default), the terminal's background as found at start (not asked when the theme is forced;
+   *  auto then draws dark), and how to save the theme (throws as `saveLang`). */
   theme?: ThemeChoice; background?: Tone; saveTheme?(theme: ThemeChoice): void;
   notify: NotifyMode;
   glyphs: Glyphs;
@@ -49,7 +49,7 @@ export function App(props: AppProps) {
   return <I18nProvider lang={lang}><Shell {...props} lang={lang} setLang={setLangState} theme={theme} setThemeState={setThemeState} tone={tone} /></I18nProvider>;
 }
 
-function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeState, tone, background = 'dark', saveTheme, notify, glyphs, env, run }: AppProps & { setLang(l: Lang): void; theme: ThemeChoice; setThemeState(x: ThemeChoice): void; tone: Tone }) {
+function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeState, tone, background, saveTheme, notify, glyphs, env, run }: AppProps & { setLang(l: Lang): void; theme: ThemeChoice; setThemeState(x: ThemeChoice): void; tone: Tone }) {
   const { exit, suspendTerminal } = useApp();
   // Escape sequences that print nothing (bell, OSC 9, title) go straight to the terminal, not through Ink's frame.
   const { stdout } = useStdout();

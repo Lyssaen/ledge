@@ -6,7 +6,7 @@ import { glyphsFor } from './glyphs.js';
 import { MESSAGES } from './i18n/lang.js';
 import { NOTIFY_MODES, type NotifyMode } from './notify.js';
 import { defaultLang, loadSettings, saveSettings } from './settings.js';
-import { detectTone } from './background.js';
+import { backgroundAtStart } from './background.js';
 
 export const TUI_USAGE = 'ledge tui [--notify bell|osc9|off]';
 
@@ -29,14 +29,16 @@ export async function runTui(args: readonly string[]): Promise<number> {
   const settings = loadSettings();
   const lang = settings.lang ?? defaultLang(process.env);
   if (!process.stdin.isTTY || !process.stdout.isTTY) { console.error(MESSAGES[lang].cli.notTty); return 2; }
-  // Asked before Ink takes the keyboard: a few milliseconds where the terminal answers, 150 at most where it does not.
-  const background = await detectTone(process.env, { stdin: process.stdin, stdout: process.stdout });
+  const theme = settings.theme ?? 'auto';
+  // Asked before Ink takes the keyboard, in auto only: a few milliseconds where the terminal answers, a second at most where
+  // it does not.
+  const background = await backgroundAtStart(theme, process.env, { stdin: process.stdin, stdout: process.stdout });
   const client = createTuiFleet();
   const detach = attachClient(client);
   client.connect();
   const app = render(
     <App client={client} lang={lang} saveLang={next => saveSettings({ ...loadSettings(), lang: next })}
-      theme={settings.theme ?? 'auto'} background={background} saveTheme={next => saveSettings({ ...loadSettings(), theme: next })} notify={parsed.notify} glyphs={glyphsFor(process.env)} env={process.env} />,
+      theme={theme} background={background} saveTheme={next => saveSettings({ ...loadSettings(), theme: next })} notify={parsed.notify} glyphs={glyphsFor(process.env)} env={process.env} />,
     // Incremental: a key rewrites the lines it changed, not the whole screen erased then drawn again (the flicker). Where the
     // terminal speaks the kitty keyboard protocol, shift+↵ is told from ↵ (a new line in a field).
     { alternateScreen: true, exitOnCtrlC: false, maxFps: 30, incrementalRendering: true, kittyKeyboard: { mode: 'auto', flags: ['disambiguateEscapeCodes'] } }

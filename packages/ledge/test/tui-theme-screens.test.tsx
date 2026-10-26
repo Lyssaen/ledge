@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { until } from './helpers.js';
 import { startTui } from './tui-fixture.js';
+import { PROJECT_COLORS } from '@ledge/protocol';
 import { PALETTES } from '../src/tui/theme.js';
 
 // Colours in the frames: chalk reads it when first loaded, so before the imports.
@@ -21,6 +22,32 @@ describe('ledge tui: the theme (#95 lot D)', () => {
       expect(tui.frame()).toContain(bgOf(PALETTES.light.bar));
       expect(tui.frame()).toContain(fgOf(PALETTES.light.coral));
       expect(tui.frame()).not.toContain(fgOf(PALETTES.dark.fg));
+    } finally { await tui.cleanup(); }
+  });
+
+  it('a theme forced at start: the background was not asked, Auto reads alone', async () => {
+    const tui = await startTui({ theme: 'dark' });
+    try {
+      await tui.press(',');
+      await until(() => tui.frame().includes('RÉGLAGES'));
+      expect(tui.frame()).toContain('Auto ');
+      expect(tui.frame()).not.toContain('Auto (fond');
+    } finally { await tui.cleanup(); }
+  });
+
+  it('New session, as a session and as a team: the project\'s ■ in its colour, its name not', async () => {
+    const tui = await startTui();
+    try {
+      await tui.press('+');
+      await until(() => tui.frame().includes('NOUVELLE SESSION'));
+      for (const mode of ['session', 'team']) {
+        if (mode === 'team') { await tui.press('\u0014'); await until(() => tui.frame().includes('NOUVELLE ÉQUIPE')); }
+        const f = tui.frame();
+        expect(f, mode).toContain(`${fgOf(PROJECT_COLORS.blue)}■`);
+        expect(f, mode).toContain(`${fgOf(PROJECT_COLORS.green)}■`);
+        expect(f, mode).not.toContain(`${fgOf(PROJECT_COLORS.blue)}Ledge`);
+        expect(f, mode).not.toContain(`${fgOf(PROJECT_COLORS.green)}Website`);
+      }
     } finally { await tui.cleanup(); }
   });
 
