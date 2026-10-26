@@ -106,5 +106,5 @@ export const en: Messages = {
     question: (n, text) => `${n} has a question: ${text}`,
     title: n => (n > 0 ? `ledge · ${n} waiting` : 'ledge')
   },
-  cli: { notTty: 'ledge tui: needs a terminal (stdin and stdout must be a TTY)' }
+  cli: { notTty: 'ledge tui: needs a terminal (stdin and stdout must be a TTY)', movedToTab: 'ledge tui opens in the Ledge tab.', loadingProfile: 'Windows Terminal is loading the Ledge profile…' }
 };

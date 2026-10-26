@@ -10,6 +10,13 @@ const session = (extra: Partial<Session> = {}): Session => ({
 });
 const msg = (n: number, text = 'hi'): ThreadItem => ({ kind: 'message', id: `m${n}`, at: T, turn: 0, text });
 
+describe('a task card on the phone (issue #92)', () => {
+  it('keeps task, taskOp and outgoing on a notice', () => {
+    const item: ThreadItem = { kind: 'notice', id: 'task-t1-0', at: T, turn: 0, notice: 'other', task: 't1', taskOp: 'pass', outgoing: true, name: 'Nova', summary: 'Relire', text: 'Tâche « Relire » passée à Nova' };
+    expect(toPhoneItem(item).item).toMatchObject({ task: 't1', taskOp: 'pass', outgoing: true, name: 'Nova' });
+  });
+});
+
 describe('toPhoneSession', () => {
   it('carries the context, the one it relieves, and its relief\'s state only (context handover spec §3.2)', () => {
     const p = toPhoneSession(session({ context: { used: 170_000, window: 200_000, at: T }, relieves: { id: 'x', name: 'Pim', at: T }, handover: { state: 'done', at: T, to: 'y', toName: 'Nova', auto: true } }), T);

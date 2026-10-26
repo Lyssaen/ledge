@@ -1,6 +1,7 @@
 import type { Adapter } from './types.js';
 
-export const PREVIEW_LINES = 30;
+/** Enough to fill a tall terminal pane (ledge tui, the desktop's terminal tab). */
+export const PREVIEW_LINES = 100;
 /** What the preview captures: the whole visible screen plus some scrollback, independent of prompt detection. */
 export const PREVIEW_CAPTURE_LINES = 200;
 

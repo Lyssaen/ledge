@@ -2,7 +2,8 @@ import { Text, useInput } from 'ink';
 import { C } from '../theme.js';
 
 /** A one-line field: printable keys and paste append, backspace deletes, ctrl+u clears, ↵ submits, esc leaves. The caller
- *  owns the value; `active` false leaves the keys to the screen. */
+ *  owns the value; `active` false leaves the keys to the screen. Too long, it shows its end: put it in a Box, not inside
+ *  another Text (the outer Text's wrap would win). */
 export function TextInput({ value, onChange, onSubmit, onEscape, placeholder, active, mask }: {
   value: string; onChange(v: string): void; onSubmit?(v: string): void; onEscape?(): void; placeholder?: string; active: boolean; mask?: boolean;
 }) {

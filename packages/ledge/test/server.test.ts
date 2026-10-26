@@ -735,6 +735,39 @@ describe('server', () => {
       expect((await c.next('task.result', 3000)).tasks!.map(t => t.id)).toEqual([r.task!.id]);
       c.close();
     });
+    it('a task given between two seats reaches the fronts with its transmission, and Ledge lists it (#92)', async () => {
+      store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'idle' }));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'task.cmd', rid: 't-r1', by: 'a', op: 'give', to: 'Pim', title: 'Lance les tests' });
+      const { task } = await c.next('task.updated', 3000);
+      await c.next('task.result', 3000);
+      expect(task).toMatchObject({ giver: 'a', owner: 'b' });
+      expect(task.log.at(-1)).toMatchObject({ op: 'give', from: 'a', to: 'b', fromName: 'Otto', toName: 'Pim' });
+      c.send({ type: 'task.cmd', rid: 't-r2', by: 'ledge', op: 'list' });
+      expect((await c.next('task.result', 3000)).tasks!.map(t => t.id)).toEqual([task.id]);
+      c.close();
+    });
+    it('the sender’s thread gets the card of the task it handed over; Ledge’s give and seen add none (#92)', async () => {
+      await srv.close();
+      const history = new History({ dir: tmpDir() }); srv = await startServer({ store, tmux, port: 0, history });
+      store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'idle' }));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'task.cmd', rid: 'g1', by: 'a', op: 'give', to: 'Pim', title: 'Lance les tests' });
+      const given = (await c.next('task.result', 3000)).task!;
+      expect(history.items('a')).toEqual([expect.objectContaining({ kind: 'notice', id: `task-${given.id}-0`, taskOp: 'give', outgoing: true, name: 'Pim', peer: 'b' })]);
+      c.send({ type: 'task.cmd', rid: 'g2', by: 'ledge', op: 'give', to: 'Pim', title: 'Relis' });
+      const mine = (await c.next('task.result', 3000)).task!;
+      c.send({ type: 'task.cmd', rid: 'd', by: 'b', op: 'done', task: mine.id, text: 'ok' });
+      await c.next('task.result', 3000);
+      const outgoing = history.items('b').filter(i => i.kind === 'notice' && i.outgoing);
+      expect(outgoing).toEqual([expect.objectContaining({ id: `task-${mine.id}-1`, taskOp: 'done', name: 'Ledge', summary: 'Relis\nok' })]);
+      expect(outgoing[0]).not.toHaveProperty('peer');
+      const before = [history.items('a').length, history.items('b').length];
+      c.send({ type: 'task.cmd', rid: 's', by: 'ledge', op: 'seen', task: mine.id });
+      expect((await c.next('task.result', 3000)).task).toMatchObject({ seen: true });
+      expect([history.items('a').length, history.items('b').length]).toEqual(before);
+      c.close();
+    });
     it('message.read gives a long body whole to its receiver, and refuses anyone else', async () => {
       store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'working' }));
       const c = await connect({ port: srv.port }); await c.next('snapshot');
