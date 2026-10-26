@@ -505,6 +505,7 @@ describe('session identity (SessionStart additionalContext)', () => {
     for (const t of [text, codex]) expect(t).toContain('lance `ledge read <id>` pour le lire en entier');
     // And how to give work that must not get lost.
     for (const t of [text, codex]) expect(t).toContain('`ledge task give <nom> "<titre>" "<détail>"`');
+    for (const t of [text, codex]) expect(t).toContain('`ledge task give ledge "<question>" "<options, ta recommandation>"`');
   });
 
   it('a launched session is told its current Ledge name (a rename wins over LEDGE_NAME), with the daemon\'s branch', async () => {
@@ -530,7 +531,7 @@ describe('session identity (SessionStart additionalContext)', () => {
     try {
       const mine = await give('9d8e', 'Pim', 'Tests de roles.ts');
       const done = await give('9d8e', 'Pim', 'Déjà fini');
-      c.send({ type: 'task.cmd', rid: 'd', by: '7f3a', op: 'done', task: done.id }); await c.next('task.result');
+      c.send({ type: 'task.cmd', rid: 'd', by: '7f3a', op: 'done', task: done.id, text: 'fait' }); await c.next('task.result');
       await give('7f3a', 'Bix', 'Relire le hook');
       const out = context(await runHook('SessionStart', JSON.stringify({ session_id: 'u-1', cwd: '/w/ledge-wt', source: 'compact' }), { port: srv.port }));
       expect(out.additionalContext).toContain('Tes tâches en cours (elles sont gardées par Ledge, pas dans ta conversation) :');

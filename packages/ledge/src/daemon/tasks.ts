@@ -21,12 +21,16 @@ export interface TasksDeps {
   /** Every change of every task, with the log entry it wrote (none for `seen`): the fronts show it (§3.7, issue #92). */
   onTask?: (t: Task, entry?: TaskLogEntry) => void;
   now?: () => string;
+  /** How long a session sits idle holding tasks before Ledge reminds it of them; PARKED_MS by default. */
+  parkedMs?: number;
 }
 export interface Tasks { run(cmd: TaskCmd): TaskResult; all(): Task[]; close(): void }
 
 /** Closed tasks kept for `list --all` and `show`: a week, 300 at most. */
 const CLOSED_TTL_MS = 7 * 24 * 3600 * 1000;
 const CLOSED_MAX = 300;
+/** A session idle this long with tasks it holds is « parked » (OpenRig's word): Ledge reminds it once per set of tasks. */
+export const PARKED_MS = 15 * 60_000;
 /** How much of a result or a reason the giver's pointer (and the sender's card) quotes. */
 const QUOTE = 200;
 export const quote = (s: string) => { const flat = s.trim().replace(/\s+/g, ' '); return flat.length > QUOTE ? `${flat.slice(0, QUOTE)}…` : flat; };
@@ -90,24 +94,51 @@ export function createTasks(d: TasksDeps): Tasks {
   const tellGiver = (t: Task, from: string, what: string) => { if (!givenByLedge(t)) d.mailbox.notify(t.giver, formatLedgeTask({ id: t.id, from,
     text: `Tâche « ${t.title} » ${what} (ledge task show ${t.id})` }), `${t.id}:${t.log.length}`); };
 
-  /** An owner that ends, or is removed, drops its open tasks: its giver can give them again. */
+  /** An owner that ends, or is removed, drops its open tasks: its giver can give them again. A decision it asked the user drops too. */
   const dropFor = (id: string) => {
     for (const t of [...tasks.values()]) {
-      if (t.owner !== id || taskClosed(t)) continue;
+      if (taskClosed(t)) continue;
+      if (t.owner === LEDGE_GIVER && t.giver === id) { put({ ...t, state: 'dropped' }, 'Ledge', `${t.giverName} s'est terminée avant la réponse`, { op: 'drop' }); continue; }
+      if (t.owner !== id) continue;
       const dropped = put({ ...t, state: 'dropped' }, 'Ledge', `${t.ownerName} s'est terminée sans la finir`, { op: 'drop' });
       log(`task ${t.id} dropped: ${t.ownerName} ended`);
       tellGiver(dropped, 'Ledge', `abandonnée : ${t.ownerName} s'est terminée sans la finir`);
     }
   };
   // What the last daemon left: an owner that ended meanwhile drops its tasks now.
-  for (const owner of new Set([...tasks.values()].filter(t => !taskClosed(t)).map(t => t.owner))) {
-    const s = d.store.get(owner);
-    if (!s || s.state === 'exited') dropFor(owner);
+  // A decision's owner is the user (Ledge): it waits for its asker instead.
+  for (const id of new Set([...tasks.values()].filter(t => !taskClosed(t)).map(t => (t.owner === LEDGE_GIVER ? t.giver : t.owner)))) {
+    const s = d.store.get(id);
+    if (!s || s.state === 'exited') dropFor(id);
   }
+
+  // Parked: a session idle with tasks it holds. Reminded once per set of tasks, so a lead waiting on its team is not woken each time it rests.
+  const parkedMs = d.parkedMs ?? PARKED_MS;
+  const timers = new Map<string, ReturnType<typeof setTimeout>>();
+  const remindedFor = new Map<string, string>();
+  const heldBy = (id: string) => [...tasks.values()].filter(t => t.owner === id && !taskClosed(t));
+  const setOf = (held: Task[]) => held.map(t => t.id).sort().join(',');
+  const unpark = (id: string) => { const timer = timers.get(id); if (timer) { clearTimeout(timer); timers.delete(id); } };
+  const park = (id: string) => {
+    const s = d.store.get(id);
+    if (!s || s.state !== 'idle' || timers.has(id) || !reachable(s)) return;
+    const held = heldBy(id);
+    if (!held.length || remindedFor.get(id) === setOf(held)) return;
+    timers.set(id, setTimeout(() => {
+      timers.delete(id);
+      const now_ = heldBy(id);
+      if (d.store.get(id)?.state !== 'idle' || !now_.length || remindedFor.get(id) === setOf(now_)) return;
+      remindedFor.set(id, setOf(now_));
+      const list = now_.map(t => `${t.id} « ${t.title} » (${t.state === 'open' ? 'à prendre' : 'prise'})`).join(', ');
+      d.mailbox.notify(id, formatLedgeTask({ id: now_[0]!.id, from: 'Ledge', text: `Tu es au repos et tu tiens encore ${list}. Prends ce qui est à prendre, termine (ledge task done <id> "<résultat>"), passe (ledge task pass) ou refuse ce que tu ne feras pas ; si tu attends quelqu'un, ne fais rien.` }), `park:${id}:${setOf(now_)}`);
+    }, parkedMs));
+  };
+  for (const s of d.store.all()) park(s.id);
   const unsubscribe = d.store.onChange(c => {
     if (c.type === 'recents') return;
-    if (c.type === 'removed') return dropFor(c.id);
-    if (c.session.state === 'exited') dropFor(c.session.id);
+    if (c.type === 'removed') { unpark(c.id); return dropFor(c.id); }
+    if (c.session.state === 'exited') { unpark(c.session.id); return dropFor(c.session.id); }
+    if (c.session.state === 'idle') park(c.session.id); else unpark(c.session.id);
   });
 
   function run(cmd: TaskCmd): TaskResult {
@@ -126,6 +157,17 @@ export function createTasks(d: TasksDeps): Tasks {
     }
     if (cmd.op === 'give') {
       if (!cmd.to || !cmd.title) return refuse('il faut un destinataire et un titre');
+      // A decision for the user: Ledge holds it, nobody is typed to, the fronts show it; its answer (done) wakes the asker.
+      if (cmd.to.trim().toLowerCase() === LEDGE_GIVER) {
+        if (ledge) return refuse('tu ne peux pas te confier une tâche');
+        const at = now(); const askerTeam = teamOf(me.id)?.id;
+        const task: Task = { id: newId(), title: cmd.title.trim(), ...(cmd.text?.trim() ? { text: cmd.text.trim() } : {}), giver: me.id, giverName: me.name,
+          owner: LEDGE_GIVER, ownerName: 'Ledge', ...(askerTeam ? { team: askerTeam } : {}), state: 'open', at, updatedAt: at,
+          log: [{ at, by: me.name, what: 'confiée à Ledge (décision)', ...sides('give', me, { id: LEDGE_GIVER, name: 'Ledge' }) }] };
+        tasks.set(task.id, task); save();
+        d.onTask?.(task, task.log[0]);
+        return ok(task);
+      }
       const t = target(cmd.to, ledge ? team : teamOf(me.id));
       if (typeof t === 'string') return refuse(t);
       if (t.id === me.id) return refuse('tu ne peux pas te confier une tâche');
@@ -137,6 +179,7 @@ export function createTasks(d: TasksDeps): Tasks {
       tasks.set(task.id, task); save();
       d.onTask?.(task, task.log[0]);
       tellOwner(task, me.name, `Tâche de ${me.name} :`);
+      park(t.id);
       return ok(task);
     }
     if (!cmd.task) return refuse("il faut l'id de la tâche");
@@ -160,8 +203,10 @@ export function createTasks(d: TasksDeps): Tasks {
       case 'done': {
         if (!owner) return refuse(`seule la session qui la tient (${t.ownerName}) peut la terminer`);
         const result = cmd.text?.trim();
-        const done = put({ ...t, state: 'done', ...(result ? { result } : {}) }, me.name, result ? `terminée : ${result}` : 'terminée', sides('done', ownerOf(t), giverOf(t)));
-        tellGiver(done, me.name, `terminée par ${me.name}${result ? ` : ${quote(result)}` : ''}`);
+        // OpenRig's closure reason: a giver must learn what came of its task.
+        if (!result) return refuse('il faut un résultat : ledge task done <id> "<ce qui est fait, où, tests>"');
+        const done = put({ ...t, state: 'done', result }, me.name, `terminée : ${result}`, sides('done', ownerOf(t), giverOf(t)));
+        tellGiver(done, me.name, `terminée par ${me.name} : ${quote(result)}`);
         return ok(done);
       }
       case 'refuse': {
@@ -186,7 +231,8 @@ export function createTasks(d: TasksDeps): Tasks {
         return ok(cancelled);
       }
       case 'pass': {
-        if (!owner && !ledge) return refuse(`seule la session qui la tient (${t.ownerName}) peut la passer`);
+        // Its giver too (a lead moving work between seats), without the cancel-and-give-again that loses its history; and Ledge.
+        if (!owner && !giver && !ledge) return refuse(`seule la session qui la tient (${t.ownerName}) ou celle qui l'a confiée (${t.giverName}) peut la passer`);
         if (!cmd.to) return refuse('il faut le nom de la session à qui la passer');
         const next = target(cmd.to, teamOf(me.id));
         if (typeof next === 'string') return refuse(next);
@@ -199,7 +245,8 @@ export function createTasks(d: TasksDeps): Tasks {
         const passed = put({ ...rest, ...(nextTeam ? { team: nextTeam } : {}), owner: next.id, ownerName: next.name, state: 'open' }, me.name, `passée à ${next.name}${note ? ` : ${note}` : ''}`,
           { ...sides('pass', ownerOf(t), next), ...(note ? { note } : {}) });
         tellOwner(passed, me.name, `Tâche passée par ${me.name}${note ? ` (${quote(note)})` : ''}, confiée par ${t.giverName} :`);
-        // Passed by Ledge over its owner's head: the one who held it stops.
+        park(next.id);
+        // Passed over its owner's head (by its giver or by Ledge): the one who held it stops.
         if (!owner) d.mailbox.notify(t.owner, formatLedgeTask({ id: t.id, from: me.name, text: `Tâche « ${t.title} » passée à ${next.name} par ${me.name}. Arrête d'y travailler.` }), `${t.id}:${passed.log.length}:from`);
         return ok(passed);
       }
@@ -207,7 +254,7 @@ export function createTasks(d: TasksDeps): Tasks {
     return refuse('opération inconnue');
   }
 
-  return { run, all: () => [...tasks.values()].sort((a, b) => a.at.localeCompare(b.at)), close: unsubscribe };
+  return { run, all: () => [...tasks.values()].sort((a, b) => a.at.localeCompare(b.at)), close: () => { unsubscribe(); for (const timer of timers.values()) clearTimeout(timer); timers.clear(); } };
 }
 
 export function tasksJournal(path: string): TasksJournal & { flush(): Promise<void> } {
