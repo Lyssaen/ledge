@@ -48,11 +48,12 @@ export function Ask() {
   const [review, setReview] = useState<string | null>(null);
   useEditing(focus === -1 && !confirm);
 
-  const cards = useMemo(() => openCards(d.chat), [d.chat]);
+  // Two cards at most are drawn: tab, the focus and the keys only reach those.
+  const cards = useMemo(() => openCards(d.chat).slice(0, 2), [d.chat]);
   // What a card has on screen (#94): all but the frame's two lines, the field's three and the conversation's last one, shared by
   // the cards drawn. A request taller than that is cut: never accepted unread.
   const room: Room = {
-    lines: Math.floor((height - 6) / Math.max(1, Math.min(2, cards.length))),
+    lines: Math.floor((height - 6) / Math.max(1, cards.length)),
     height: (text, indent) => text.split('\n').reduce((n, l) => n + Math.max(1, wrapSegs([{ text: l, color: C.fg }], Math.max(10, columns - 8 - indent)).length), 0)
   };
   const planOf = (turn: ChatTurn) => cardPlan(turn.actions ?? [], room);
@@ -265,7 +266,7 @@ export function Ask() {
         {lines.length === 0 ? <Text color={C.faint}>{t.ask.empty}</Text>
           : <Lines lines={lines} up={up} onHeight={setView} />}
       </TitledBox>
-      {cards.slice(0, 2).map((c, i) => {
+      {cards.map((c, i) => {
         const turn = d.chat.find(x => x.qid === c.qid)!;
         if (c.kind !== 'action') return <CardBox key={`${c.kind}:${c.qid}`} card={c} turn={turn} focused={i === focus} busy={busy?.qid === c.qid} />;
         const p = planOf(turn);

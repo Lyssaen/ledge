@@ -391,6 +391,54 @@ describe('ledge tui: the action card (#94, docs/mockups/ledge-action-card.html, 
     } finally { await tui.cleanup(); }
   });
 
+  it('a failed acceptance too tall for the screen is cut: « Réessayer » accepts nothing unread (#94)', async () => {
+    const long = Array.from({ length: 60 }, (_, i) => `Read step ${i}`).join('\n') + '\nTAIL_FAILED_COMMAND';
+    const tui = await ask(turn([decide({ detail: long, state: 'failed', code: 'failed' })]));
+    try {
+      await tui.resize(80, 24);
+      await until(() => tui.frame().includes('… (tronqué, voir la session : o)'));
+      await tui.press('\r');
+      await tui.press('y');
+      await new Promise(r => setTimeout(r, 100));
+      expect(sent(tui.daemon.received, 'chat.act')).toEqual([]);
+    } finally { await tui.cleanup(); }
+  });
+
+  it('the detail of an earlier row takes its room: the request it pushes off the screen is cut (#94)', async () => {
+    const dissolve = row('team.dissolve', { risk: 'destructive', vars: { team: 'api' }, detail: Array.from({ length: 25 }, (_, i) => `Team detail ${i}`).join('\n') });
+    const tui = await startTui();
+    try {
+      await tui.resize(80, 24);
+      await tui.press('/');
+      await until(() => tui.frame().includes('LEDGE · OPÉRATEUR'));
+      tui.daemon.push({ type: 'chat.history', turns: [turn([dissolve, decide({ detail: 'TAIL_AFTER_OTHER_DETAILS' })])] });
+      await until(() => tui.frame().includes('Team detail 0'));
+      await tui.press('\t');
+      await tui.press('\u001b[B');
+      await tui.press('\r');
+      await tui.press('y');
+      await new Promise(r => setTimeout(r, 100));
+      expect(sent(tui.daemon.received, 'chat.act')).toEqual([]);
+    } finally { await tui.cleanup(); }
+  });
+
+  it('tab reaches only the two cards drawn: a third one is never accepted unseen (#94)', async () => {
+    const tui = await startTui();
+    try {
+      await tui.press('/');
+      await until(() => tui.frame().includes('LEDGE · OPÉRATEUR'));
+      const card = (qid: string, at: number, detail: string) => turn([decide({ detail })], { qid, askedAt: NOW(at), answeredAt: NOW(at + 1), answer: qid });
+      tui.daemon.push({ type: 'chat.history', turns: [card('oldest', 1, 'HIDDEN_THIRD_PERMISSION'), card('middle', 3, 'middle'), card('newest', 5, 'newest')] });
+      await until(() => tui.frame().includes('newest'));
+      await tui.press('\t'); await tui.press('\t'); await tui.press('\t');
+      expect(tui.frame()).not.toContain('HIDDEN_THIRD_PERMISSION');
+      await tui.press('\r');
+      await tui.press('y');
+      await new Promise(r => setTimeout(r, 100));
+      expect(sent(tui.daemon.received, 'chat.act').filter(m => m.qid === 'oldest')).toEqual([]);
+    } finally { await tui.cleanup(); }
+  });
+
   it('a send stays under way until the daemon answers it: a row running frees no other one (#94)', async () => {
     const two = (a: Partial<ChatAction> = {}, b: Partial<ChatAction> = {}) => [row('session.archive', { vars: { session: 'Otto' }, session: 'otto', ...a }), row('team.dissolve', { risk: 'destructive', vars: { team: 'api' }, ...b })];
     const tui = await ask(turn(two()));

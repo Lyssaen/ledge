@@ -31,19 +31,27 @@ export function cardPlan(actions: readonly ChatAction[], room?: Room): CardPlan 
   const cutLines = Math.max(1, Math.min(CUT_LINES, left - 3));
   const states = rows.map((r): ActionRowState => {
     const s = r.state ?? 'proposed';
-    if (!room || !r.request) return s;
-    const need = room.height(r.request.text, rows.length > 1 ? 6 : 2);
-    if (s === 'proposed' && r.decision !== 'deny' && need > left) { left -= cutLines + 3; return 'cut'; }
+    if (!room) return s;
+    const indent = rows.length > 1 ? 6 : 2;
+    // A detail shows on the row chosen and in a confirmation: counted as if shown.
+    const detail = r.detail ? room.height(r.detail, indent) : 0;
+    if (!r.request) { left -= detail; return s; }
+    const need = room.height(r.request.text, indent) + detail;
+    // A failed acceptance is accepted again with « Réessayer »: cut as a proposed one.
+    if ((s === 'proposed' || s === 'failed') && r.decision !== 'deny' && need > left) { left -= cutLines + 3 + detail; return 'cut'; }
     left -= need;
     return s;
   });
-  // A request that changed was refused too: the daemon stopped there.
-  const stopAt = states.findIndex(s => s === 'failed' || s === 'refused' || s === 'stale');
+  // A request that changed was refused too: the daemon stopped there. A failed step cut stays the step it stopped at.
+  const raw = rows.map(r => r.state ?? 'proposed');
+  const stopAt = raw.findIndex(s => s === 'failed' || s === 'refused' || s === 'stale');
   const shown: Shown[] = states.map((s, i) => (s === 'proposed' && stopAt >= 0 && i > stopAt ? 'held' : s));
   const open = shown.flatMap((s, i) => (['done', 'running', 'denied', 'stale', 'cut'].includes(s) ? [] : [i]));
   // A refused step's target is gone: it would only be refused again, so « a » goes on without it.
-  const skip = stopAt >= 0 && states[stopAt] !== 'failed';
-  const all: All = { kind: stopAt < 0 ? 'all' : skip ? 'skip' : 'resume', rows: skip ? open.filter(i => i !== stopAt) : open, k: stopAt + 1 };
+  const skip = stopAt >= 0 && raw[stopAt] !== 'failed';
+  // A failed step cut is read in the session first: « a » does not go past it.
+  const rowsAll = skip ? open.filter(i => i !== stopAt) : stopAt >= 0 && states[stopAt] === 'cut' ? [] : open;
+  const all: All = { kind: stopAt < 0 ? 'all' : skip ? 'skip' : 'resume', rows: rowsAll, k: stopAt + 1 };
   return { rows, shown, open, stopAt, all, cutLines };
 }
 
