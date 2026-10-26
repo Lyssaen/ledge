@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { AutonomySchema, ToolSchema } from './session.js';
+import { EffortSchema, ModelIdSchema } from './models.js';
 import { ActionIdSchema, ActionRiskSchema } from './actions.js';
 
 /** What Ledge consulted while answering: a context file (a session's pane, reply or git summary, the sessions list) or a repository file. */
@@ -13,6 +14,8 @@ export type ChatStep = z.infer<typeof ChatStepSchema>;
  *  `launchedId` once the card started it, `error` when the last launch failed. */
 export const ChatProposalSchema = z.object({
   cwd: z.string().min(1), project: z.string(), prompt: z.string().optional(), tool: ToolSchema,
+  /** What Ledge proposed on the card's picker (spec 2026-10-26 action registry §4), the agent's own default when left out. */
+  model: ModelIdSchema.optional(), effort: EffortSchema.optional(),
   launchedId: z.string().optional(), error: z.string().optional()
 });
 export type ChatProposal = z.infer<typeof ChatProposalSchema>;

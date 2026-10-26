@@ -534,6 +534,79 @@ describe('chat service', () => {
   });
 });
 
+describe('ledge-action blocks (spec 2026-10-26 action registry §3)', () => {
+  const act = (action: string, args: object) => '```ledge-action\n' + JSON.stringify({ action, args }) + '\n```';
+  const session = (id: string, extra: Partial<Session> = {}): Session => ({ id, name: id.toUpperCase(), tool: 'claude', cwd: '/w/ledge', project: 'ledge', title: `${id} · ledge`,
+    tmuxSession: `ledge-${id}`, state: 'working', helpers: [], startedAt: '2026-10-11T08:00:00.000Z', lastActivityAt: '2026-10-11T08:00:00.000Z', source: 'launcher', ...extra });
+  const askWith = async (answer: string, sessions: Session[], extra: Partial<Parameters<typeof createChat>[0]> = {}) => {
+    const home = mkdtempSync(join(tmpdir(), 'ledge-'));
+    writeFileSync(join(home, 'chat.json'), JSON.stringify({ day: '2026-10-11', sessionId: '22222222-2222-4222-8222-222222222222' }));
+    const store = new Store({ journalPath: join(home, 'j.json') });
+    for (const x of sessions) store.upsert(x);
+    const chat = createChat({ store, tmux, home, today: () => '2026-10-11', now: () => '2026-10-11T09:00:00.000Z', env: async () => ({ ...process.env, FAKE_ANSWER: answer }), bin: [process.execPath, FAKE], ...extra });
+    const out: ServerMessage[] = [];
+    logged.length = 0;
+    await chat.ask('q1', 'x', m => out.push(m));
+    return { chat, done: out.find(m => m.type === 'chat.done') as Extract<ServerMessage, { type: 'chat.done' }> };
+  };
+
+  it('an earlier card written as ledge-action gives the same card', async () => {
+    const { chat, done } = await askWith('Je ferme.\n\n' + act('session.close', { session: 'a1' }) + '\n' + act('session.close', { session: 'b2' }), [session('a1', { name: 'Arlo' }), session('b2', { name: 'Bram' })]);
+    expect(done.closes).toEqual([{ id: 'a1', name: 'Arlo', tool: 'claude' }, { id: 'b2', name: 'Bram', tool: 'claude' }]);
+    expect(done.text).toBe('Je ferme.');
+    expect(chat.history()[0]).not.toHaveProperty('actions');
+  });
+  it('a launch written as ledge-action keeps the model and effort asked for', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'proj-'));
+    const { done } = await askWith(act('session.launch', { cwd: dir, prompt: 'go', model: 'claude-opus-5-5', effort: 'high' }), []);
+    expect(done.proposals).toEqual([{ cwd: dir, project: basename(dir), tool: 'claude', prompt: 'go', model: 'claude-opus-5-5', effort: 'high' }]);
+  });
+  it('a generic action becomes a row of turn.actions, joined to chat.done, with the names resolved', async () => {
+    const { chat, done } = await askWith('Je range Arlo.\n\n' + act('session.archive', { session: 'Arlo' }), [session('a1', { name: 'Arlo' })]);
+    const row = { action: 'session.archive', args: { session: 'a1' }, summary: 'Archiver **Arlo**', risk: 'reversible', session: 'a1' };
+    expect(done.actions).toEqual([row]);
+    expect(done.text).toBe('Je range Arlo.');
+    expect(chat.history()[0]!.actions).toEqual([row]);
+    expect(chat.action('q1', 0)).toEqual(row);
+  });
+  it('drops a refused or invalid action with a log line, and gives no row', async () => {
+    const answer = act('session.archive', { session: 'Zed' }) + act('session.kill', { session: 'a1' }) + act('session.decide', { session: 'a1', decision: 'always' });
+    const { chat, done } = await askWith(answer, [session('a1')]);
+    expect(done).not.toHaveProperty('actions');
+    expect(chat.history()[0]).not.toHaveProperty('actions');
+    expect(logged.filter(l => l.includes('action ignored'))).toEqual([
+      'chat q1: action ignored: unknown action session.kill', expect.stringContaining('chat q1: action ignored: invalid args for session.decide'), 'chat q1: action ignored: unknown session Zed'
+    ]);
+  });
+  it('generic rows sit beside an earlier card: the last earlier block still decides that card', async () => {
+    const answer = act('session.close', { session: 'a1' }) + act('session.archive', { session: 'b2' });
+    const { done } = await askWith(answer, [session('a1', { name: 'Arlo' }), session('b2', { name: 'Bram' })]);
+    expect(done.closes).toEqual([{ id: 'a1', name: 'Arlo', tool: 'claude' }]);
+    expect(done.actions?.map(a => a.action)).toEqual(['session.archive']);
+  });
+  it('caps rows per action and at 8 in all', async () => {
+    const pending = { kind: 'permission' as const, text: 'Bash: rm x', source: 'hook' as const };
+    const ids = Array.from({ length: 10 }, (_, i) => `s${i}`);
+    const answer = act('session.decide', { session: 's0', decision: 'deny' }) + act('session.decide', { session: 's0', decision: 'accept' }) + ids.map(id => act('session.archive', { session: id })).join('');
+    const { done } = await askWith(answer, ids.map(id => session(id, id === 's0' ? { state: 'waiting_permission' as const, pending } : {})));
+    expect(done.actions).toHaveLength(8);
+    expect(done.actions!.filter(a => a.action === 'session.decide')).toHaveLength(1);
+    expect(logged).toContain('chat q1: 1 session.decide beyond 1 ignored');
+    expect(logged).toContain('chat q1: 3 actions beyond 8 ignored');
+  });
+  it('marks a row running, done or failed for every client', async () => {
+    const { chat } = await askWith(act('session.archive', { session: 'a1' }), [session('a1')]);
+    const out: ServerMessage[] = [];
+    chat.markAction('q1', 0, { state: 'failed', error: 'busy' }, m => out.push(m));
+    expect(chat.action('q1', 0)).toMatchObject({ state: 'failed', error: 'busy' });
+    chat.markAction('q1', 0, { state: 'done', doneAt: '2026-10-11T09:00:00.000Z' }, m => out.push(m));
+    expect(chat.action('q1', 0)).toMatchObject({ state: 'done', doneAt: '2026-10-11T09:00:00.000Z' });
+    expect(chat.action('q1', 0)).not.toHaveProperty('error');
+    chat.markAction('q1', 4, { state: 'done' }, m => out.push(m));
+    expect(out.map(m => m.type)).toEqual(['chat.history', 'chat.history']);
+  });
+});
+
 describe('chat service slots and idle', () => {
   const kid = (code: number) => (() => {
     const child: any = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough(), stdin: new PassThrough(), kill: () => { child.emit('close', null); } });

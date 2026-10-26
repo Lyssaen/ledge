@@ -3,8 +3,10 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { spawn as nodeSpawn } from 'node:child_process';
-import { extractProposal, isArchived, MAX_PROPOSALS, proposalRows, parseProjectBlock, parseCloseBlock, parseProposalBlock, parseRelayBlock, parseTaskBlock, parseTeamBlock, projectOf, type ChatClose, type ChatProjectProposal, type ChatProposal, type ChatRelay, type ChatTaskProposal, type ChatTeamProposal, type CloseHow, type ChatTurn, type Projects, type ServerMessage, type Session, type Task, type Team, type Tool } from '@ledge/protocol';
+import { extractProposal, isArchived, LEGACY_FENCE_ACTION, MAX_PROPOSALS, proposalRows, parseActionBlock, parseProjectBlock, parseCloseBlock, parseRelayBlock, parseTaskBlock, parseTeamBlock, projectOf, type BlockKind, type ChatAction, type ChatClose, type ChatProjectProposal, type ChatProposal, type ChatRelay, type ChatTaskProposal, type ChatTeamProposal, type CloseHow, type ChatTurn, type Projects, type ServerMessage, type Session, type Task, type Team, type Tool } from '@ledge/protocol';
 import { listDefinitions, resolveSeats } from '../daemon/teams.js';
+import { resolveAction } from '../daemon/actions.js';
+import { findRole } from '../daemon/roles.js';
 import { resolveFolder } from '../daemon/folders.js';
 import type { Store } from '../daemon/store.js';
 import type { Tmux } from '../tmux.js';
@@ -46,6 +48,10 @@ export interface Chat {
   markTask(qid: string, row: number, patch: Partial<Pick<ChatTaskProposal, 'taskId' | 'ownerName' | 'state' | 'givenAt' | 'error'>>, emit: (m: ChatMessage) => void): void;
   /** A task Ledge gave changed: the card that gave it follows it (« prise », then « finie »). */
   followTask(task: Task, emit: (m: ChatMessage) => void): void;
+  /** The turn's generic card row (spec 2026-10-26 action registry §5). */
+  action(qid: string, row: number): ChatAction | undefined;
+  /** The row is running, done (`doneAt`) or failed (`error`); every client gets the new history. */
+  markAction(qid: string, row: number, patch: Partial<Pick<ChatAction, 'state' | 'doneAt' | 'error'>>, emit: (m: ChatMessage) => void): void;
   /** Resolves once no question is running (at once when there is none). */
   idle(): Promise<void>;
 }
@@ -94,6 +100,8 @@ export function tooWide(path: string, userHome: string): string | null {
   if (/^\/[^/]+$/.test(path)) return 'a top-level folder';
   return null;
 }
+/** The earlier fence each earlier card's action is read as, so a ledge-action block for it reaches the same validator. */
+const FENCE_OF = new Map(Object.entries(LEGACY_FENCE_ACTION).map(([kind, id]) => [id as string, kind as BlockKind]));
 const sameStep = (a: ChatTurn['steps'][number], b: ChatTurn['steps'][number]) => a.kind === b.kind && a.id === b.id && a.path === b.path;
 
 /** One conversation with Ledge per day, run by the chosen harness (spec 2026-10-11 §5). */
@@ -136,14 +144,15 @@ export function createChat(deps: ChatDeps): Chat {
 
   /** A block as a card: its folder must exist now; a bad block or a missing folder gives no card and a log line. */
   async function proposalFrom(raw: string, tool: Tool, qid: string): Promise<ChatProposal | undefined> {
-    const block = parseProposalBlock(raw);
-    if (!block) { log(`chat ${qid}: proposal ignored, invalid block: ${raw.slice(0, 200)}`); return undefined; }
+    const parsed = parseActionBlock('session', raw);
+    if ('error' in parsed) { log(`chat ${qid}: proposal ignored, invalid block: ${raw.slice(0, 200)}`); return undefined; }
+    const block = parsed.args as { cwd: string; prompt?: string; model?: string; effort?: ChatProposal['effort'] };
     try {
       const cwd = await resolveFolder(block.cwd, deps.userHome);
       const prompt = block.prompt?.trim();
       // launchArgs passes the prompt as a bare argv entry: a leading `-` would be read as a flag by the agent CLI.
       if (prompt?.startsWith('-')) { log(`chat ${qid}: proposal ignored: prompt starts with "-"`); return undefined; }
-      return { cwd, project: basename(cwd), tool, ...(prompt ? { prompt } : {}) };
+      return { cwd, project: basename(cwd), tool, ...(prompt ? { prompt } : {}), ...(block.model ? { model: block.model } : {}), ...(block.effort ? { effort: block.effort } : {}) };
     } catch (e) { log(`chat ${qid}: proposal ignored: ${(e as Error).message}`); return undefined; }
   }
   /** A relay block as a card: its session must be tracked, writable and still running now; otherwise no card and a log line. */
@@ -231,6 +240,24 @@ export function createChat(deps: ChatDeps): Chat {
     }
     return rows;
   }
+  /** The generic blocks as rows (spec §9.2, one plan): each resolved against the state now, at most `max` per action and 8 in all; a refused,
+   *  repeated or capped one is dropped with a log line. */
+  function actionsFrom(blocks: Array<{ id: string; args: unknown; max: number }>, qid: string): ChatAction[] {
+    const ctx = { sessions: deps.store.all(), teams: deps.teams?.() ?? [], tasks: deps.tasks?.() ?? [], findRole };
+    const rows: ChatAction[] = []; const per = new Map<string, number>(); const over = new Map<string, number>(); let beyond = 0;
+    for (const b of blocks) {
+      if ((per.get(b.id) ?? 0) >= b.max) { over.set(b.id, (over.get(b.id) ?? 0) + 1); continue; }
+      if (rows.length >= MAX_PROPOSALS) { beyond++; continue; }
+      const r = resolveAction(b.id as ChatAction['action'], b.args, ctx);
+      if ('refused' in r) { log(`chat ${qid}: action ignored: ${r.refused}`); continue; }
+      if (rows.some(x => x.action === r.action && JSON.stringify(x.args) === JSON.stringify(r.args))) { log(`chat ${qid}: action ignored: duplicate ${r.action}`); continue; }
+      per.set(b.id, (per.get(b.id) ?? 0) + 1); rows.push(r);
+    }
+    for (const [id, n] of over) log(`chat ${qid}: ${n} ${id} beyond ${actionMax(blocks, id)} ignored`);
+    if (beyond > 0) log(`chat ${qid}: ${beyond} actions beyond ${MAX_PROPOSALS} ignored`);
+    return rows;
+  }
+  const actionMax = (blocks: Array<{ id: string; max: number }>, id: string) => blocks.find(b => b.id === id)!.max;
   const turnOf = (qid: string) => turns.find(t => t.qid === qid);
   /** Sets a row and keeps `proposal` the first row, for the clients from before #24. */
   function setRow(t: ChatTurn, row: number, next: ChatProposal) {
@@ -267,7 +294,17 @@ export function createChat(deps: ChatDeps): Chat {
     if (r.code !== 0) return { ok: false, message: r.code === null ? `${label} could not start: ${r.stderr.trim() || 'not found in PATH'}` : r.stderr.trim() || `${label} exited with code ${r.code}`, resumed: resume };
     if (resultError) return { ok: false, message: resultError, resumed: false };
     // The proposal block never reaches the reader: the card stands for it (spec 2026-10-12 §3-4).
-    const { text, kind, raw, blocks } = extractProposal(answer);
+    const { text, blocks: found } = extractProposal(answer);
+    // A ledge-action block for an earlier card is read as that card's fence; the generic ones never decide which earlier card the turn gets.
+    const blocks: Array<{ kind: BlockKind; raw: string }> = []; const generic: Array<{ id: string; args: unknown; max: number }> = [];
+    for (const b of found) {
+      if (b.kind !== 'action') { blocks.push(b); continue; }
+      const r = parseActionBlock('action', b.raw);
+      if ('error' in r) { log(`chat ${turn.qid}: action ignored: ${r.error}`); continue; }
+      if (r.action.card === 'generic') generic.push({ id: r.action.id, args: r.args, max: r.action.max });
+      else blocks.push({ kind: FENCE_OF.get(r.action.id)!, raw: JSON.stringify(r.args) });
+    }
+    const kind = blocks.at(-1)?.kind ?? null; const raw = blocks.at(-1)?.raw ?? null;
     // Every session block is a row of the card (#24); the last block's kind still decides which card the turn gets.
     const sessionBlocks = kind === 'session' ? blocks.filter(b => b.kind === 'session') : [];
     if (sessionBlocks.length > MAX_PROPOSALS) log(`chat ${turn.qid}: ${sessionBlocks.length - MAX_PROPOSALS} sessions beyond ${MAX_PROPOSALS} ignored`);
@@ -285,6 +322,7 @@ export function createChat(deps: ChatDeps): Chat {
     const taskBlocks = blocks.filter(b => b.kind === 'task');
     if (taskBlocks.length > MAX_PROPOSALS) log(`chat ${turn.qid}: ${taskBlocks.length - MAX_PROPOSALS} tasks beyond ${MAX_PROPOSALS} ignored`);
     const tasks = tasksFrom(taskBlocks.slice(0, MAX_PROPOSALS), turn.qid, team);
+    const actions = actionsFrom(generic, turn.qid);
     turn.answer = text; turn.answeredAt = now();
     if (proposal) { turn.proposal = proposal; turn.proposals = proposals; }
     if (relay) turn.relay = relay;
@@ -292,7 +330,8 @@ export function createChat(deps: ChatDeps): Chat {
     if (projectProposal) turn.projectProposal = projectProposal;
     if (team) turn.team = team;
     if (tasks.length > 0) turn.tasks = tasks;
-    emit({ type: 'chat.done', qid: turn.qid, text, at: turn.answeredAt, ...(proposal ? { proposal, proposals } : {}), ...(relay ? { relay } : {}), ...(closes.length > 0 ? { closes } : {}), ...(projectProposal ? { projectProposal } : {}), ...(team ? { team } : {}), ...(tasks.length > 0 ? { tasks } : {}) });
+    if (actions.length > 0) turn.actions = actions;
+    emit({ type: 'chat.done', qid: turn.qid, text, at: turn.answeredAt, ...(proposal ? { proposal, proposals } : {}), ...(relay ? { relay } : {}), ...(closes.length > 0 ? { closes } : {}), ...(projectProposal ? { projectProposal } : {}), ...(team ? { team } : {}), ...(tasks.length > 0 ? { tasks } : {}), ...(actions.length > 0 ? { actions } : {}) });
     return { ok: true };
   }
 
@@ -352,6 +391,15 @@ export function createChat(deps: ChatDeps): Chat {
         t.tasks = t.tasks.map(c => (c.taskId === task.id && (c.state !== task.state || c.ownerName !== task.ownerName) ? (changed = true, { ...c, state: task.state, ownerName: task.ownerName }) : c));
       }
       if (changed) emit({ type: 'chat.history', turns });
+    },
+    action: (qid, row) => { rollDay(); return turnOf(qid)?.actions?.[row]; },
+    markAction(qid, row, patch, emit) {
+      const t = turnOf(qid); const a = t?.actions?.[row]; if (!t || !a) return;
+      const next: ChatAction = { ...a, ...patch };
+      if (patch.state !== 'failed') delete next.error;
+      if (patch.state !== 'done') delete next.doneAt;
+      t.actions = t.actions!.map((r, i) => (i === row ? next : r));
+      emit({ type: 'chat.history', turns });
     },
     idle: () => (busy ? new Promise<void>(res => { idleWaiters.push(res); }) : Promise.resolve()),
     cancel(qid) { if (current?.qid === qid) { current.cancelled = true; current.handle?.kill(); } },
