@@ -56,6 +56,19 @@ describe('readDocument', () => {
     await symlink(join(teams, 'workshop.yaml'), join(teams, 'alias.yml'));
     expect(await readDocument(req(join(teams, 'alias.yml')), { home: root })).toMatchObject({ type: 'document.content', text: 'name: workshop\n' });
   });
+  it('reads the home templates where the daemon lists them: a ~/.ledge/teams that is a link, LEDGE_HOME', async () => {
+    const root = await dir(); const dotfiles = join(root, 'dotfiles', 'ledge-teams'); await mkdir(dotfiles, { recursive: true });
+    await writeFile(join(dotfiles, 'a.yaml'), 'name: a\n'); await mkdir(join(root, '.ledge')); await symlink(dotfiles, join(root, '.ledge', 'teams'));
+    expect(await readDocument(req(join(root, '.ledge', 'teams', 'a.yaml')), { home: root })).toMatchObject({ type: 'document.content', text: 'name: a\n' });
+    const custom = join(root, 'custom'); await mkdir(join(custom, 'teams'), { recursive: true }); await writeFile(join(custom, 'teams', 'c.yaml'), 'name: c\n');
+    const before = process.env.LEDGE_HOME; process.env.LEDGE_HOME = custom;
+    try {
+      expect(await readDocument(req(join(custom, 'teams', 'c.yaml')), { home: root })).toMatchObject({ type: 'document.content', text: 'name: c\n' });
+      // Another `teams` folder is no template's.
+      await mkdir(join(root, 'other', 'teams'), { recursive: true }); await writeFile(join(root, 'other', 'teams', 'x.yaml'), 'x: 1\n');
+      expect(await readDocument(req(join(root, 'other', 'teams', 'x.yaml')), { home: root })).toMatchObject({ type: 'document.error', code: 'unsupported_type' });
+    } finally { if (before === undefined) delete process.env.LEDGE_HOME; else process.env.LEDGE_HOME = before; }
+  });
   it('accepts 1 MiB exactly and rejects one byte more or malformed UTF-8', async () => {
     const root = await dir(); const file = join(root, 'limit.md');
     await writeFile(file, Buffer.alloc(1_048_576, 97));

@@ -441,7 +441,7 @@ export const en: Messages = {
       tool: 'Tool', model: 'Model', effort: 'Effort', autonomy: 'Autonomy', file: 'File', anyTool: 'any', toolDefault: 'the tool’s default',
       autonomyShort: { ask: 'asks', edits: 'edits', auto: 'auto' } as Record<'ask' | 'edits' | 'auto', string>,
       autonomyAsk: 'nothing added: the agent asks before acting', autonomyAuto: 'works without asking', autonomyNone: 'nothing added', toolFlag: (tool: string, flag: string) => `${tool}: ${flag}`, ompApproval: (mode: string) => `approval mode ${mode}`,
-      copy: 'Copy', open: 'Open', reader: (name: string) => `File ${name}`, copied: (path: string) => `Path copied: ${path}`,
+      copy: 'Copy', open: 'Open', reader: (name: string) => `File ${name}`, yamlOutdated: 'This daemon does not read templates yet: update Ledge on this machine, or copy the path.', copied: (path: string) => `Path copied: ${path}`,
       shadows: 'Replaces', shadowsWhy: '(same id, the repository wins)',
       prompt: 'Instructions given to the seat at every start', promptEmpty: 'No instructions.',
       usedIn: 'Used in', noUse: 'No template.', seeTemplate: 'See the template',

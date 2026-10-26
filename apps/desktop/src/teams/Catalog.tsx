@@ -416,7 +416,8 @@ function FileReader({ client, path, onClose }: { client: DaemonClient; path: str
       </div>
       <div className="cat-reader-body">
         {doc.status === 'loading' ? <p className="lp-none">{tp.reading}</p>
-          : doc.status === 'error' ? <p className="lp-none">{errors[doc.code] ?? tp.errors.other}</p>
+          // A daemon older than #97 reads no YAML: said so, with what still works.
+          : doc.status === 'error' ? <p className="lp-none">{yaml && doc.code === 'unsupported_type' ? t.home.catalog.yamlOutdated : errors[doc.code] ?? tp.errors.other}</p>
           : body}
       </div>
     </aside>

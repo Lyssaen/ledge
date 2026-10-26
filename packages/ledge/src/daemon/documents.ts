@@ -1,12 +1,16 @@
 import { constants } from 'node:fs';
 import { open, realpath } from 'node:fs/promises';
-import { basename, isAbsolute, dirname, extname, resolve } from 'node:path';
+import { basename, isAbsolute, dirname, extname, join, resolve } from 'node:path';
 import type { DocumentRead, DocumentContent, DocumentError, DocumentErrorCode } from '@ledge/protocol';
 import { DOCUMENT_MAX_BYTES } from '@ledge/protocol';
+import { ledgeDir } from '../paths.js';
 
 const markdown = (path: string) => /^\.(?:md|markdown)$/i.test(extname(path));
-/** A team template (`.ledge/teams/<id>.yaml`, the repository's or the home's): the catalog shows it as it is written (#97). */
-const template = (path: string) => /^\.ya?ml$/i.test(extname(path)) && basename(dirname(path)) === 'teams' && basename(dirname(dirname(path))) === '.ledge';
+const yaml = (path: string) => /^\.ya?ml$/i.test(extname(path));
+/** A team template where the daemon lists them (#97): a repository's `.ledge/teams`, or the home's (`ledgeDir()/teams`,
+ *  `LEDGE_HOME` included); the catalog shows it as it is written. The folder may be a link (dotfiles), not the file's way out. */
+const template = (path: string) => yaml(path) && basename(dirname(path)) === 'teams'
+  && (basename(dirname(dirname(path))) === '.ledge' || dirname(path) === resolve(join(ledgeDir(), 'teams')));
 const readable = (path: string) => markdown(path) || template(path);
 const failure = (request: DocumentRead, code: DocumentErrorCode): DocumentError => ({
   type: 'document.error', requestId: request.requestId, path: request.path, code
@@ -40,10 +44,15 @@ export async function readDocument(request: DocumentRead, context: { cwd?: strin
 async function readAt(request: DocumentRead, path: string): Promise<DocumentContent | DocumentError> {
   let file;
   try {
-    // A template is read only where the daemon reads templates: a link out of `.ledge/teams` (or to another file) is refused.
-    if (!markdown(path) && !template(await realpath(path))) return failure(request, 'unsupported_type');
+    // A template (named by its folder above) is read only inside that folder: a file link leading out of it, or to
+    // anything but YAML, is refused. What is opened is the real file, never followed again, so no link swapped in between counts.
+    let target = path;
+    if (!markdown(path)) {
+      target = await realpath(path);
+      if (!yaml(target) || dirname(target) !== await realpath(dirname(path))) return failure(request, 'unsupported_type');
+    }
     // O_NONBLOCK also makes a path replaced by a FIFO between resolution and open safe to reject.
-    file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
+    file = await open(target, constants.O_RDONLY | constants.O_NONBLOCK | (target === path ? 0 : constants.O_NOFOLLOW));
     const stat = await file.stat();
     if (!stat.isFile()) return failure(request, 'not_file');
     if (stat.size > DOCUMENT_MAX_BYTES) return failure(request, 'too_large');

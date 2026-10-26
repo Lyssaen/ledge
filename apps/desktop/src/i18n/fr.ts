@@ -461,7 +461,7 @@ export const fr = {
       tool: 'Outil', model: 'Modèle', effort: 'Effort', autonomy: 'Autonomie', file: 'Fichier', anyTool: 'au choix', toolDefault: 'défaut de l’outil',
       autonomyShort: { ask: 'demande', edits: 'éditions', auto: 'auto' } as Record<'ask' | 'edits' | 'auto', string>,
       autonomyAsk: 'rien d’ajouté : l’agent demande avant d’agir', autonomyAuto: 'travaille sans demander', autonomyNone: 'rien d’ajouté', toolFlag: (tool: string, flag: string) => `${tool} : ${flag}`, ompApproval: (mode: string) => `mode d’approbation ${mode}`,
-      copy: 'Copier', open: 'Ouvrir', reader: (name: string) => `Fichier ${name}`, copied: (path: string) => `Chemin copié : ${path}`,
+      copy: 'Copier', open: 'Ouvrir', reader: (name: string) => `Fichier ${name}`, yamlOutdated: 'Ce daemon ne lit pas encore les modèles : mets Ledge à jour sur cette machine, ou copie le chemin.', copied: (path: string) => `Chemin copié : ${path}`,
       shadows: 'Remplace', shadowsWhy: '(même id, le dépôt l’emporte)',
       prompt: 'Consigne donnée au siège à chaque démarrage', promptEmpty: 'Aucune consigne.',
       usedIn: 'Utilisé dans', noUse: 'Aucun modèle.', seeTemplate: 'Voir le modèle',

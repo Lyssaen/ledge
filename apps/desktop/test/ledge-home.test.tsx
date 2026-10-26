@@ -228,6 +228,17 @@ describe('« Teams »: the catalog of templates, roles and skipped files (#97)',
     expect((await yaml.findByText(/name: workshop/)).closest('pre')).not.toBeNull();
   });
 
+  it('« Open » on a template, with a daemon that reads no YAML yet, says so and how to do without', async () => {
+    const { d, user } = await openHome();
+    answerRoles(d);
+    d.documentErrors.set(`${REPO}/.ledge/teams/workshop.yaml`, 'unsupported_type');
+    await user.click(home().getByRole('tab', { name: /^Teams/ }));
+    await user.click(await tabs().findByRole('button', { name: 'Templates · 1' }));
+    await user.click(within(home().getByRole('region', { name: 'workshop' })).getByRole('button', { name: 'Open' }));
+    const reader = within(await home().findByRole('complementary', { name: 'File workshop.yaml' }));
+    expect(await reader.findByText('This daemon does not read templates yet: update Ledge on this machine, or copy the path.')).toBeVisible();
+  });
+
   it('a live team leads to its template and each @role in the catalog of its folder', async () => {
     const { d, user } = await openHome();
     answerRoles(d);
