@@ -2072,7 +2072,7 @@ checksum = "20870f649af7073d53e38067b2a84312175d56ea15217e1b15bc83506ec50afb"
 
 [[package]]
 name = "ledge-desktop"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "ledge-native",
  "serde",
@@ -2091,7 +2091,7 @@ dependencies = [
 
 [[package]]
 name = "ledge-native"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "portable-pty",
  "windows 0.58.0",
