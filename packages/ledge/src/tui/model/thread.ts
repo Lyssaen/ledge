@@ -13,8 +13,8 @@ export type { Seg, Line } from './cells.js';
 export const DIFF_MAX = 30;
 /** The most lines an element of the thread takes, folded: then « … +n » (space unfolds them all). */
 export const CAP = { tool: 3, error: 3, message: 3, notice: 2, permission: 3, helper: 2 } as const;
-/** The cells a running action's time takes, « 1 min 04 » included, so that it ticking never moves the rest. */
-const LIVE_PAD = 8;
+/** The cells a running action's time takes, « 10 min 00 » included, so that it ticking never moves the rest. */
+const LIVE_PAD = 9;
 
 /** `text` cut into lines of at most `width` cells, at spaces when it can; its own newlines kept. */
 export function wrap(text: string, width: number): string[] {

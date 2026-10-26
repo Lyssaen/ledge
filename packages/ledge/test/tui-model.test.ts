@@ -128,7 +128,7 @@ describe('tui thread', () => {
   it('a running action ticks on its own: its spinner and time are live pieces, the rest is the same at any time', () => {
     const one = threadLines(items, { ...o, now: Date.parse(at(10)) }), two = threadLines(items, { ...o, now: Date.parse(at(75)) });
     const run = (ls: typeof one) => ls.find(l => l.some(x => x.text.includes('npm test')))!;
-    expect(run(one).filter(x => x.live).map(x => x.live)).toEqual([{ spin: true }, { since: Date.parse(at(4)), pad: 8 }]);
+    expect(run(one).filter(x => x.live).map(x => x.live)).toEqual([{ spin: true }, { since: Date.parse(at(4)), pad: 9 }]);
     expect(text([run(two)])[0]).toMatch(/1 min 11$/);
     expect(cells(text([run(two)])[0]!)).toBe(cells(text([run(one)])[0]!));
   });
