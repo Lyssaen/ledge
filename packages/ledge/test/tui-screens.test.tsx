@@ -465,6 +465,56 @@ describe('ledge tui: the field (#95 lot B)', () => {
     } finally { await tui.cleanup(); }
   });
 
+  it('an entry edited and refused at once (a reply still in flight): the field keeps it, edits and all; esc brings the draft back', async () => {
+    const tui = await replying();
+    try {
+      await tui.press('Ancienne réponse'); await tui.press('\r');
+      await until(() => sent(tui.daemon.received, 'session.reply').length === 1);
+      // Not landed yet: the next reply is refused.
+      await tui.press('r'); await tui.press('Mon brouillon'); await tui.press(UP);
+      await until(() => boxRows(tui.frame(), 'RÉPONDRE À BIX')[0] === '❯ Ancienne réponse');
+      await tui.press(' bis'); await tui.press('\r');
+      await until(() => tui.frame().includes('Un envoi pour Bix est déjà en cours.'));
+      expect(sent(tui.daemon.received, 'session.reply')).toHaveLength(1);
+      expect(boxRows(tui.frame(), 'RÉPONDRE À BIX')[0]).toBe('❯ Ancienne réponse bis');
+      await tui.press(ESC);
+      await until(() => boxRows(tui.frame(), 'RÉPONDRE À BIX')[0] === '❯ Mon brouillon');
+    } finally { await tui.cleanup(); }
+  });
+
+  it('an entry sent again, refused later: the draft kept is not replaced', async () => {
+    const tui = await replying();
+    try {
+      await tui.press('Ancienne réponse'); await tui.press('\r');
+      await until(() => sent(tui.daemon.received, 'session.reply').length === 1);
+      tui.daemon.upsert({ ...mockupSessions()[2]!, state: 'working', lastActivityAt: T(5) });
+      await until(() => tui.frame().includes('✓ Réponse envoyée à Bix'));
+      tui.daemon.upsert({ ...mockupSessions()[2]!, state: 'idle', lastActivityAt: T(6) });
+      await tui.press('r'); await tui.press('Mon brouillon'); await tui.press(UP);
+      await until(() => boxRows(tui.frame(), 'RÉPONDRE À BIX')[0] === '❯ Ancienne réponse');
+      await tui.press('\r');
+      await until(() => sent(tui.daemon.received, 'session.reply').length === 2);
+      tui.daemon.refuse('session busy', 'bix', 'session.reply');
+      await until(() => tui.frame().includes('session busy'));
+      await tui.press('r');
+      await until(() => tui.frame().includes('RÉPONDRE À BIX'));
+      expect(boxRows(tui.frame(), 'RÉPONDRE À BIX')[0]).toBe('❯ Mon brouillon');
+    } finally { await tui.cleanup(); }
+  });
+
+  it('a note past 4,000 characters is not sent and stays in the field, with why', async () => {
+    const tui = await startTui();
+    try {
+      await tui.press('\r');
+      await until(() => tui.frame().includes('Otto veut exécuter'));
+      await tui.press('r'); await tui.press(`${'n'.repeat(4000)}FIN`); await tui.press('\r');
+      await until(() => tui.frame().includes('Note trop longue'));
+      expect(tui.frame()).not.toContain('ne prend pas de note');
+      expect(sent(tui.daemon.received, 'session.decide')).toEqual([]);
+      expect(tui.frame()).toContain('nFIN');
+    } finally { await tui.cleanup(); }
+  });
+
   it('Ask: ctrl+n while going through the history, then « garder »: the draft is back, not the entry', async () => {
     const tui = await startTui();
     try {

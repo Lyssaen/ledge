@@ -70,15 +70,17 @@ function SessionView({ s }: { s: Session }) {
   const machine = splitId(s.id)?.machine ?? 'local';
   const canSwitch = machines.find(m => m.id === machine)?.daemon?.modelSwitch === true;
 
-  const send = (text: string, { fromHistory }: { fromHistory: boolean }) => {
-    if (!text.trim()) { setMode('read'); return; }
-    const back = (x: string) => { setDraft(x); };
-    if (mode === 'note') actions.denyWithNote(s, text.trim(), back);
-    else if (!actions.reply(s, text, back)) return;
+  /** false when refused at once: the field keeps the text. */
+  const send = (text: string, { fromHistory }: { fromHistory: boolean }): boolean => {
+    if (!text.trim()) { setMode('read'); return true; }
+    // Refused later, the text comes back as the draft; sent from the history, it does not replace a draft kept.
+    const back = (x: string) => { if (!fromHistory || !kept.drafts.get(s.id)) setDraft(x); };
+    if (!(mode === 'note' ? actions.denyWithNote(s, text.trim(), back) : actions.reply(s, text, back))) return false;
     kept.sent.set(s.id, [...(kept.sent.get(s.id) ?? []), text]);
     // An entry of the history sent again leaves the draft as it was.
     if (!fromHistory) setDraft('');
     setMode('read');
+    return true;
   };
   // Out of the field, the draft stays (and says so).
   const leave = () => { setMode('read'); setBrowsing(false); if (draft.trim()) toast({ text: t.toast.draftKept, tone: 'quiet' }); };

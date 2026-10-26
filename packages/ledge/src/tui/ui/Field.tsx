@@ -18,9 +18,9 @@ const inHistory = (b: Browse | null): b is Browse => b !== null && b.i < b.items
  *  ↵ sends; alt+↵ (shift+↵ where the terminal tells it, ctrl+j otherwise) adds a line; a paste keeps its lines.
  *  ← → by grapheme, ctrl or alt ← → by word, home end (ctrl+a ctrl+e) on the line, ↑ ↓ from row to row, suppr, ctrl+w the
  *  word before, ctrl+u all. ↑ on the first row goes back through `history` (oldest first), ↓ comes down to the draft, as it
- *  was; ↵ on an entry sends it and comes back to the draft, `fromHistory` telling the caller to keep it. The caller owns the draft; `active` false leaves the keys to the screen. */
+ *  was; ↵ on an entry sends it and comes back to the draft, `fromHistory` telling the caller to keep it; `onSubmit` false, refused, the entry stays. The caller owns the draft; `active` false leaves the keys to the screen. */
 export function Field({ value, onChange, onSubmit, onEscape, onBrowse, history = [], active, placeholder, title, color = C.coral, titleColor }: {
-  value: string; onChange(v: string): void; onSubmit(v: string, o: { fromHistory: boolean }): void; onEscape?(): void; onBrowse?(on: boolean): void;
+  value: string; onChange(v: string): void; onSubmit(v: string, o: { fromHistory: boolean }): boolean | void; onEscape?(): void; onBrowse?(on: boolean): void;
   history?: readonly string[]; active: boolean; placeholder?: string; title: string; color?: string; titleColor?: string;
 }) {
   const { t, g } = useTui();
@@ -56,10 +56,12 @@ export function Field({ value, onChange, onSubmit, onEscape, onBrowse, history =
     const { f, browse } = st.current;
     if (key.return && !key.meta && !key.shift) {
       // An entry of the history sent, the field is back to the draft, as for esc; the caller's draft is not touched.
+      // Refused at once (false), the field stays as it is, the entry and its edits with it.
       const fromHistory = inHistory(browse);
+      if (onSubmit(f.text, { fromHistory }) === false) return;
       if (fromHistory) show(browse, browse.items.length - 1);
       if (browse) show(null);
-      onSubmit(f.text, { fromHistory }); return;
+      return;
     }
     // ctrl+j comes as a linefeed, or as ctrl and j where the terminal tells keys apart.
     if (key.return || input === '\n' || (key.ctrl && input === 'j')) { set(insert(f, '\n')); return; }

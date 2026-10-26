@@ -53,9 +53,10 @@ export function Ask() {
 
   const local = machines.find(m => m.id === 'local');
   const asking = d.chat.find(x => !x.answeredAt && !x.error);
-  const ask = (text: string, { fromHistory }: { fromHistory: boolean }) => {
-    if (!text.trim()) return;
-    if (!local?.ready) { toast({ text: t.ask.offline, tone: 'info' }); return; }
+  /** false when refused (Ledge offline): the field keeps the text. */
+  const ask = (text: string, { fromHistory }: { fromHistory: boolean }): boolean => {
+    if (!text.trim()) return true;
+    if (!local?.ready) { toast({ text: t.ask.offline, tone: 'info' }); return false; }
     const qid = `q-${randomUUID()}`;
     const asked = { question: text.trim(), askedAt: new Date().toISOString() };
     daemonStore.beginTurn({ qid, ...asked, steps: [] });
@@ -63,6 +64,7 @@ export function Ask() {
     kept.asked.push(asked);
     // An entry of the history asked again leaves the draft as it was.
     if (!fromHistory) setDraft('');
+    return true;
   };
   const act = (card: Card) => {
     if (busy) return;

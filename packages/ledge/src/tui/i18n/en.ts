@@ -106,6 +106,7 @@ export const en: Messages = {
     interrupted: n => `${n}: interrupt asked`, model: (n, m) => `${n}: model ${m}`,
     notNow: n => `Nothing to answer for ${n}.`, offline: n => `${n} is offline.`, readOnly: n => `${n} is read-only: answer in its terminal.`,
     busy: n => `A send for ${n} is already in flight.`, noAlways: n => `${n} does not offer “always” here.`,
+    noteTooLong: max => `Note too long: ${max} characters at most. It stays in the field.`,
     noNote: n => `${n} takes no note here.`,
     noTerminalOmp: n => `${n} is driven by Ledge over OMP's protocol: there is no terminal to attach to.`,
     noTerminal: n => `No terminal for ${n}.`, attachFailed: code => `tmux stopped with code ${code}.`,
