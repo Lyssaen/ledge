@@ -62,6 +62,12 @@ describe('Lightbox', () => {
     fireEvent.keyDown(document, { key: 'ArrowLeft' });
     expect(p.onIndex).toHaveBeenCalledTimes(1);
   });
+  it('shows labelled, focusable chevrons when given labels', () => {
+    const p = mount({ prevLabel: 'Précédente', nextLabel: 'Suivante' });
+    fireEvent.click(screen.getByRole('button', { name: 'Suivante' }));
+    expect(p.onIndex).toHaveBeenCalledWith(1);
+    expect(screen.queryByRole('button', { name: 'Précédente' })).toBeNull(); // first image: no previous
+  });
   it('takes the focus and gives it back', () => {
     const opener = document.createElement('button'); document.body.appendChild(opener); opener.focus();
     const { unmount } = render(<Lightbox images={images} index={0} onIndex={() => {}} onClose={() => {}} title="t" closeLabel="Fermer" />);

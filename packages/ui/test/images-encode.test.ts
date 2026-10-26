@@ -3,22 +3,24 @@ import { encodeImage, formatBytes, setCodecForTests, type Codec } from '../src/i
 
 type Encode = { mime: string; q: number };
 /** A codec that records every draw and encode; `size(w, mime, q)` is the produced blob's byte length. */
-function fakeCodec(opts: { w?: number; h?: number; size?: (w: number, q: number) => number; type?: (asked: string) => string; decodeThrows?: boolean } = {}) {
+function fakeCodec(opts: { w?: number; h?: number; size?: (w: number, q: number) => number; type?: (asked: string) => string; decodeThrows?: boolean; previewThrows?: boolean } = {}) {
+  const closed = { n: 0 };
   const draws: Array<[number, number]> = [];
   const encodes: Array<Encode & { w: number }> = [];
   const codec: Codec = {
     async decode() {
       if (opts.decodeThrows) throw new Error('bad');
       return {
+        close: () => { closed.n++; },
         width: opts.w ?? 3000, height: opts.h ?? 2000,
         async draw(w, h) {
           draws.push([w, h]);
-          return { async encode(mime, q) { encodes.push({ mime, q, w }); return new Blob([new Uint8Array((opts.size ?? (() => 1000))(w, q))], { type: opts.type?.(mime) ?? mime }); } };
+          return { async encode(mime, q) { if (opts.previewThrows && w <= 480) throw new Error('boom'); encodes.push({ mime, q, w }); return new Blob([new Uint8Array((opts.size ?? (() => 1000))(w, q))], { type: opts.type?.(mime) ?? mime }); } };
         }
       };
     }
   };
-  return { codec, draws, encodes };
+  return { codec, draws, encodes, closed };
 }
 const png = (n = 10) => new Blob([new Uint8Array(n)], { type: 'image/png' });
 
@@ -66,6 +68,16 @@ describe('encodeImage', () => {
     const r = await encodeImage(png(), f.codec);
     expect(f.encodes.filter(e => e.w === 480).map(e => e.q)).toEqual([0.7, 0.5]);
     expect(r.ok && r.value.image.preview).toBeUndefined();
+  });
+  it('keeps the image when only the preview fails', async () => {
+    const r = await encodeImage(png(), fakeCodec({ previewThrows: true }).codec);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.image.preview).toBeUndefined();
+  });
+  it('releases the decoded picture on success and on tooLarge', async () => {
+    const ok = fakeCodec(); await encodeImage(png(), ok.codec);
+    const big = fakeCodec({ size: () => 500_000 }); await encodeImage(png(), big.codec);
+    expect([ok.closed.n, big.closed.n]).toEqual([1, 1]);
   });
   it('refuses a non-image without decoding', async () => {
     const f = fakeCodec();

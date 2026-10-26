@@ -25,11 +25,15 @@ const PREVIEW_QUALITIES = [0.7, 0.5];
 const canvasCodec: Codec = {
   async decode(file) {
     const bitmap = await createImageBitmap(file);
+    // iOS Safari caps the memory of all canvases: only the latest one stays sized.
+    let last: HTMLCanvasElement | null = null;
+    const release = () => { if (last) last.width = last.height = 0; last = null; };
     return {
       width: bitmap.width, height: bitmap.height,
-      close: () => bitmap.close(),
+      close: () => { release(); bitmap.close(); },
       async draw(w, h) {
-        const canvas = document.createElement('canvas');
+        release();
+        const canvas = last = document.createElement('canvas');
         canvas.width = w; canvas.height = h;
         const g = canvas.getContext('2d');
         if (!g) throw new Error('no canvas');
@@ -93,7 +97,12 @@ export async function encodeImage(file: Blob, codec: Codec = codecOverride ?? ca
   finally { source.close?.(); }
 }
 
+/** A preview that cannot be made is no reason to lose the image: none is sent, the phone then shows its « trop lourde » note. */
 async function makePreview(source: Awaited<ReturnType<Codec['decode']>>): Promise<ImageUpload['preview']> {
+  try { return await drawPreview(source); } catch { return undefined; }
+}
+
+async function drawPreview(source: Awaited<ReturnType<Codec['decode']>>): Promise<ImageUpload['preview']> {
   const { w, h } = fit(source.width, source.height, PREVIEW_LONG_SIDE);
   const drawing = await source.draw(w, h);
   for (const q of PREVIEW_QUALITIES) {
