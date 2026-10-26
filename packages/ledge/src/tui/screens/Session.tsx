@@ -73,8 +73,8 @@ function SessionView({ s }: { s: Session }) {
   /** false when refused at once: the field keeps the text. */
   const send = (text: string, { fromHistory }: { fromHistory: boolean }): boolean => {
     if (!text.trim()) { setMode('read'); return true; }
-    // Refused later, the text comes back as the draft; sent from the history, it does not replace a draft kept.
-    const back = (x: string) => { if (!fromHistory || !kept.drafts.get(s.id)) setDraft(x); };
+    // Refused later, the text comes back as the draft, unless a draft was typed since: it stays, the text is one ↑ away.
+    const back = (x: string) => { if (!kept.drafts.get(s.id)) setDraft(x); };
     if (!(mode === 'note' ? actions.denyWithNote(s, text.trim(), back) : actions.reply(s, text, back))) return false;
     kept.sent.set(s.id, [...(kept.sent.get(s.id) ?? []), text]);
     // An entry of the history sent again leaves the draft as it was.

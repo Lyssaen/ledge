@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { ClientMessage } from '@ledge/protocol';
+import { daemonStore } from '@ledge/fleet';
 import { until } from './helpers.js';
 import { mockupSessions, startTui } from './tui-fixture.js';
 
@@ -512,6 +513,57 @@ describe('ledge tui: the field (#95 lot B)', () => {
       expect(tui.frame()).not.toContain('ne prend pas de note');
       expect(sent(tui.daemon.received, 'session.decide')).toEqual([]);
       expect(tui.frame()).toContain('nFIN');
+    } finally { await tui.cleanup(); }
+  });
+
+  it('a reply typed, refused later: a draft typed since stays, the reply is one ↑ away', async () => {
+    const tui = await replying();
+    try {
+      await tui.press('Première'); await tui.press('\r');
+      await until(() => sent(tui.daemon.received, 'session.reply').length === 1);
+      await tui.press('r'); await tui.press('Nouveau brouillon');
+      await until(() => boxRows(tui.frame(), 'RÉPONDRE À BIX')[0] === '❯ Nouveau brouillon');
+      tui.daemon.refuse('session busy', 'bix', 'session.reply');
+      await until(() => tui.frame().includes('session busy'));
+      expect(boxRows(tui.frame(), 'RÉPONDRE À BIX')[0]).toBe('❯ Nouveau brouillon');
+      await tui.press(UP);
+      await until(() => boxRows(tui.frame(), 'RÉPONDRE À BIX')[0] === '❯ Première');
+    } finally { await tui.cleanup(); }
+  });
+
+  it('a note refused at once says why as a reply would: offline first, « no note » only when the tool takes none', async () => {
+    const tui = await startTui();
+    try {
+      await tui.press('\r');
+      await until(() => tui.frame().includes('Otto veut exécuter'));
+      await tui.press('r'); await tui.press('non');
+      tui.daemon.upsert({ ...mockupSessions()[0]!, offline: true });
+      await until(() => daemonStore.getState().sessions.find(x => x.id === 'local:otto')?.offline === true);
+      await tui.press('\r');
+      await until(() => tui.frame().includes('Otto est hors ligne.'));
+      expect(tui.frame()).not.toContain('ne prend pas de note');
+      expect(sent(tui.daemon.received, 'session.decide')).toEqual([]);
+    } finally { await tui.cleanup(); }
+  });
+
+  it('Ask offline: an entry of the history, retouched, stays in the field; esc brings the draft back', async () => {
+    const tui = await startTui();
+    try {
+      await tui.press('/');
+      await tui.press('Qui a besoin de moi ?'); await tui.press('\r');
+      await until(() => sent(tui.daemon.received, 'chat.ask').length === 1);
+      tui.daemon.push({ type: 'chat.done', qid: sent(tui.daemon.received, 'chat.ask')[0]!.qid, text: 'Otto.', at: T(1) });
+      await until(() => !tui.frame().includes('Ledge lit…'));
+      await tui.press('Et Luna'); await tui.press(UP); await tui.press(' bis');
+      await until(() => boxRows(tui.frame(), 'QUESTION')[0] === '❯ Qui a besoin de moi ? bis');
+      await tui.daemon.close();
+      await new Promise(r => setTimeout(r, 800));
+      await tui.press('\r');
+      await until(() => tui.frame().includes('Le daemon local est hors ligne'));
+      expect(boxRows(tui.frame(), 'QUESTION')[0]).toBe('❯ Qui a besoin de moi ? bis');
+      expect(sent(tui.daemon.received, 'chat.ask')).toHaveLength(1);
+      await tui.press(ESC);
+      await until(() => boxRows(tui.frame(), 'QUESTION')[0] === '❯ Et Luna');
     } finally { await tui.cleanup(); }
   });
 
