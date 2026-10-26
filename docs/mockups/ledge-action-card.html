@@ -121,6 +121,8 @@ svg.i{width:12px;height:12px;flex:none;fill:none;stroke:currentColor;stroke-widt
 .btn.danger{color:var(--danger-text);border-color:color-mix(in srgb,var(--destructive) 50%,var(--input))}
 .btn.danger.fill{background:var(--destructive);color:var(--destructive-foreground);border-color:transparent;height:28px}
 .btn.ghost{border-color:transparent;color:var(--muted-foreground)}
+.ignored{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted-foreground)}
+.ignored .btn{height:22px;padding:0 6px}
 .btn:disabled{opacity:.5;cursor:default}
 .btn:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
 .btn .spin{width:10px;height:10px;border-radius:50%;border:1.5px solid currentColor;border-right-color:transparent;animation:spin .8s linear infinite}
@@ -174,6 +176,10 @@ svg.i{width:12px;height:12px;flex:none;fill:none;stroke:currentColor;stroke-widt
 .pbtn.danger{color:var(--danger-fg);border-color:#f4a5a366}
 .pbtn.danger.fill{background:var(--danger-btn);color:#fff;border-color:transparent;font-weight:600}
 .pbtn.full{width:100%}
+.pbtn.ghost{border-color:transparent;color:var(--muted)}
+.prow .act .pbtn,.pfoot .pbtn{flex:none}
+.pfoot .go{display:flex;gap:8px}
+.pfoot .go .primary{flex:1}
 .pbtn:disabled{opacity:.4}
 .pfoot{display:flex;flex-direction:column;gap:8px}
 .pfoot .hint{font-size:12.5px;color:var(--muted)}
@@ -236,7 +242,7 @@ const CASES = {
         detail: 'Ses 6 sessions retournent à la table commune, ouvertes ou archivées comme elles sont. L’équipe ne pourra plus être reprise.' }
     ],
     // Row states per step of the story: p proposed, run, done, fail, refused, held (not applied: the plan stopped before it).
-    states: { proposed: ['p', 'p', 'p'], confirm: ['p', 'p', 'p'], running: ['done', 'run', 'p'], failed: ['done', 'fail', 'held'], refused: ['done', 'refused', 'held'], done: ['done', 'done', 'done'] },
+    states: { ignored: ['p', 'p', 'p'], proposed: ['p', 'p', 'p'], confirm: ['p', 'p', 'p'], running: ['done', 'run', 'p'], failed: ['done', 'fail', 'held'], refused: ['done', 'refused', 'held'], done: ['done', 'done', 'done'] },
     why: { fail: 'Otto est sur la machine Atlas, hors ligne depuis 10:12.', refused: 'Otto a été fermé entre-temps : il n’y a plus rien à archiver.' }
   },
   permission: {
@@ -244,11 +250,11 @@ const CASES = {
     q: 'Accepte la demande de Nova.',
     a: '**Nova** attend ta réponse depuis 4 min, dans ledge sur feat/task-handoff. Voici sa demande telle quelle :',
     rows: [
-      { action: 'session.decide', risk: 'destructive', sum: 'Accepter la demande de **Nova**', btn: 'Accepter', tui: 'Accepter la demande de Nova',
+      { action: 'session.decide', risk: 'destructive', sum: 'Accepter la demande de **Nova**', btn: 'Accepter', deny: 'Refuser', tui: 'Accepter la demande de Nova',
         request: { kind: 'Bash · reconstruire le daemon', text: 'rm -rf packages/ledge/dist && pnpm --filter @ledge/ledge build' },
         newRequest: { kind: 'Bash', text: 'git push --force origin feat/task-handoff' } }
     ],
-    states: { proposed: ['p'], confirm: ['p'], running: ['run'], failed: ['fail'], refused: ['refused'], done: ['done'], stale: ['stale'] },
+    states: { proposed: ['p'], confirm: ['p'], running: ['run'], failed: ['fail'], refused: ['refused'], done: ['done'], stale: ['stale'], ignored: ['p'] },
     why: { fail: 'Nova s’est arrêtée avant de recevoir la réponse.', refused: 'la machine Atlas est hors ligne.' }
   },
   one: {
@@ -256,11 +262,11 @@ const CASES = {
     q: 'Passe Otto en effort bas, il ne fait que relire.',
     a: '**Otto** tourne sur Sonnet 5.5, effort moyen. Je garde le modèle et baisse l’effort.',
     rows: [{ action: 'session.model', risk: 'reversible', sum: 'Passer **Otto** en effort bas, Sonnet 5.5 inchangé', btn: 'Changer', tui: 'Passer Otto en effort bas, Sonnet 5.5 inchangé' }],
-    states: { proposed: ['p'], confirm: ['p'], running: ['run'], failed: ['fail'], refused: ['refused'], done: ['done'] },
+    states: { proposed: ['p'], confirm: ['p'], running: ['run'], failed: ['fail'], refused: ['refused'], done: ['done'], ignored: ['p'] },
     why: { fail: 'Otto est sur la machine Atlas, hors ligne depuis 10:12.', refused: 'Otto a été fermé entre-temps.' }
   }
 };
-const ETATS = [['proposed', 'Proposée'], ['confirm', 'Confirmation'], ['running', 'En cours'], ['failed', 'Échouée, suite arrêtée'], ['refused', 'Refusée'], ['done', 'Appliquée'], ['stale', 'La demande a changé']];
+const ETATS = [['proposed', 'Proposée'], ['confirm', 'Confirmation'], ['running', 'En cours'], ['failed', 'Échouée, suite arrêtée'], ['refused', 'Refusée'], ['done', 'Appliquée'], ['stale', 'La demande a changé'], ['ignored', 'Ignorée']];
 const AT = '10:42';
 
 function model() {
@@ -279,6 +285,8 @@ function model() {
 }
 
 // ---- Desktop and overlay: one component, ActionCard ----
+// « Ignorer » hides the card, sends nothing; a quiet line keeps its trace in the chat (like the phone's RelayCard).
+const IGNORE = '<button class="btn ghost" type="button">Ignorer</button>';
 function nodeOf(s, i) {
   if (s === 'done') return `<span class="node done" aria-label="Étape ${i + 1}, appliquée">${ic('check', 11)}</span>`;
   if (s === 'fail') return `<span class="node fail" aria-label="Étape ${i + 1}, échouée">${ic('x', 11)}</span>`;
@@ -297,10 +305,10 @@ function rowHTML(m, i, narrow) {
   const dots = r.risk === 'destructive' ? '…' : '';
   let side = '';
   if (asking) side = s === 'done' ? `<span class="st ok">${ic('check', 11)} déjà faite</span>` : '';
-  else if (s === 'p' || s === 'held') side = `<button class="btn${r.risk === 'destructive' ? ' danger' : ''}" type="button">${r.btn}${dots}</button>`;
+  else if (s === 'p' || s === 'held') side = `${!many && s === 'p' ? IGNORE : ''}${r.deny ? `<button class="btn" type="button">${r.deny}</button>` : ''}<button class="btn${r.risk === 'destructive' ? ' danger' : ''}" type="button">${r.btn}${dots}</button>`;
   else if (s === 'run') side = `<button class="btn" type="button" disabled><span class="spin"></span>En cours…</button>`;
   else if (s === 'done') side = `<span class="st ok">${ic('check', 11)} Appliquée · ${AT}</span>`;
-  else if (s === 'fail') side = `<button class="btn" type="button">Réessayer</button>`;
+  else if (s === 'fail') side = `${many ? '' : IGNORE}<button class="btn" type="button">Réessayer</button>`;
   else if (s === 'refused') side = `<span class="st">Refusée</span>`;
   else if (s === 'stale') side = `<button class="btn" type="button">${ic('ext', 11)}Ouvrir Nova</button>`;
   let body = `<div class="sum">${md(r.sum)}</div>`;
@@ -328,10 +336,11 @@ function footHTML(m) {
   if (states.every(s => s === 'done')) return `<div class="afoot"><span class="done-line">${ic('check', 12)} Plan appliqué à ${AT}</span></div>`;
   if (states.includes('run')) return `<div class="afoot"><button class="btn primary" type="button" disabled><span class="spin"></span>Étape ${states.indexOf('run') + 1} sur ${c.rows.length}…</button><span class="hint">dans l’ordre, s’arrête au premier échec</span></div>`;
   const left = open.length, d = destructive.length ? '…' : '';
-  if (stopAt >= 0) return `<div class="afoot"><button class="btn primary" type="button">${ic('play', 10)}${m.all}${d}</button><span class="hint">les étapes faites ne sont pas rejouées</span></div>`;
-  return `<div class="afoot"><button class="btn primary" type="button">${ic('play', 10)}Tout appliquer (${left})${d}</button><span class="hint">dans l’ordre, s’arrête au premier échec${destructive.length ? ` · ${destructive.length} irréversible, je te redemanderai` : ''}</span></div>`;
+  if (stopAt >= 0) return `<div class="afoot"><button class="btn primary" type="button">${ic('play', 10)}${m.all}${d}</button><span class="hint">les étapes faites ne sont pas rejouées</span>${IGNORE}</div>`;
+  return `<div class="afoot"><button class="btn primary" type="button">${ic('play', 10)}Tout appliquer (${left})${d}</button><span class="hint">dans l’ordre, s’arrête au premier échec${destructive.length ? ` · ${destructive.length} irréversible, je te redemanderai` : ''}</span>${IGNORE}</div>`;
 }
 function card(m, narrow) {
+  if (st.etat === 'ignored') return `<div class="ignored">${ic('x', 11)}${m.many ? `Plan de ${m.c.rows.length} actions ignoré` : 'Carte ignorée'} à ${AT} · rien n’a été envoyé<button class="btn ghost" type="button">Revoir</button></div>`;
   return `<section class="acard${m.many ? '' : ' one'}${m.asking ? ' asking' : ''}" aria-label="${m.many ? `Plan de ${m.c.rows.length} actions` : 'Action proposée'}">${m.c.rows.map((_, i) => rowHTML(m, i, narrow)).join('')}${footHTML(m)}</section>`;
 }
 function chatTurn(m, narrow) {
@@ -358,10 +367,10 @@ function phone() {
   const rows = c.rows.map((r, i) => {
     const s = states[i];
     let act = '';
-    if (s === 'p' || s === 'held') act = `<button class="pbtn${r.risk === 'destructive' ? ' danger' : ''}" type="button">${r.btn}${r.risk === 'destructive' ? '…' : ''}</button>`;
+    if (s === 'p' || s === 'held') act = `${!many && s === 'p' ? '<button class="pbtn ghost" type="button">Ignorer</button>' : ''}${r.deny ? `<button class="pbtn" type="button">${r.deny}</button>` : ''}<button class="pbtn${r.risk === 'destructive' ? ' danger' : ''}" type="button">${r.btn}${r.risk === 'destructive' ? '…' : ''}</button>`;
     else if (s === 'run') act = `<span class="st">En cours…</span>`;
     else if (s === 'done') act = `<span class="st ok">✓ Appliquée · ${AT}</span>`;
-    else if (s === 'fail') act = `<button class="pbtn" type="button">Réessayer</button>`;
+    else if (s === 'fail') act = `${many ? '' : '<button class="pbtn ghost" type="button">Ignorer</button>'}<button class="pbtn" type="button">Réessayer</button>`;
     else if (s === 'refused') act = `<span class="st">Refusée</span>`;
     else if (s === 'stale') act = `<a class="pbtn" style="text-decoration:none">Ouvrir Nova</a>`;
     let body = `<div class="sum">${md(r.sum)}</div><div class="meta">${riskChip(r.risk)}</div>`;
@@ -376,7 +385,7 @@ function phone() {
   let foot = '';
   if (many && states.every(s => s === 'done')) foot = `<div class="pfoot"><span class="st ok" style="color:var(--ok);font-size:13px">✓ Plan appliqué à ${AT}</span></div>`;
   else if (many && states.includes('run')) foot = `<div class="pfoot"><button class="pbtn primary full" type="button" disabled>Étape ${states.indexOf('run') + 1} sur ${c.rows.length}…</button></div>`;
-  else if (many) foot = `<div class="pfoot"><button class="pbtn primary full" type="button">${m.all}${destructive.length ? '…' : ''}</button><span class="hint">Dans l’ordre ; s’arrête au premier échec.</span></div>`;
+  else if (many) foot = `<div class="pfoot"><div class="go"><button class="pbtn ghost" type="button">Ignorer</button><button class="pbtn primary" type="button">${m.all}${destructive.length ? '…' : ''}</button></div><span class="hint">Dans l’ordre ; s’arrête au premier échec.</span></div>`;
   const sheetRows = open.map((i, k) => {
     const r = c.rows[i];
     return `<li class="prow ${r.risk}${k === open.length - 1 ? ' last' : ''}" style="border:0;padding:0${many ? '' : ';grid-template-columns:minmax(0,1fr)'}">${many ? nodeOf('p', i) : ''}<div><div class="sum">${md(r.sum)}</div><div class="meta">${riskChip(r.risk)}</div>${r.detail ? `<div class="detail">${esc(r.detail)}</div>` : ''}${r.request ? request(r) : ''}</div></li>`;
@@ -392,7 +401,7 @@ function phone() {
     <div class="phone"><div class="status"><span>10:41</span><span>●●● ▮</span></div>
       <div class="ph-head"><span style="color:var(--muted)">${ic('chev', 18)}</span>${bot(22)}<b>Ledge</b></div>
       <div class="ph-body"><span class="q">${esc(c.q)}</span><p class="answer">${md(c.a)}</p>
-        <section class="pcard${many ? '' : ' one'}" aria-label="${many ? 'Plan' : 'Action proposée'}">${rows}${foot}</section></div>${sheet}</div>`;
+        ${st.etat === 'ignored' ? `<p class="st" style="margin:0;font-size:13px;color:var(--muted)">${many ? `Plan de ${c.rows.length} actions ignoré` : 'Carte ignorée'} à ${AT} · rien n’a été envoyé · <u>Revoir</u></p>` : `<section class="pcard${many ? '' : ' one'}" aria-label="${many ? 'Plan' : 'Action proposée'}">${rows}${foot}</section>`}</div>${sheet}</div>`;
 }
 
 // ---- The TUI: the Ask screen, the card as a TitledBox ----
@@ -427,13 +436,14 @@ function tui() {
   conv.push([[`  lu : les sessions · teams.md`, 'c-faint']]);
   conv.push([['']]);
   for (const l of wrapText(plain(c.a), W - 8)) conv.push([['  '], [l, 'c-fg']]);
+  if (st.etat === 'ignored') { conv.push([['']]); conv.push([[`  · ${many ? `plan de ${c.rows.length} actions ignoré` : 'carte ignorée'} à ${AT}, rien n’a été envoyé`, 'c-faint']]); }
   if (states.every(s => s === 'done')) { conv.push([['']]); conv.push([[`  ✓ ${many ? `Plan appliqué à ${AT} : Nova sur Opus 5.5 · Otto archivé · ledge-roles dissoute` : `${plain(c.rows[0].sum)} · ${AT}`}`, 'c-green']]); }
   L.push(boxTop('Ledge · Opérateur · voit 9 sessions, 1 machine', 'c-line', 'c-dim'));
   for (const s of conv) L.push(inBox(s, 'c-line'));
   for (let i = conv.length; i < 9; i++) L.push(inBox([['']], 'c-line'));
   L.push(bottom('c-line'));
   // The card, while something is left to do.
-  const settled = states.every(s => s === 'done');
+  const settled = states.every(s => s === 'done') || st.etat === 'ignored';
   if (!settled) {
     const asking = m.asking;
     const border = asking ? 'c-red dbl' : 'c-coral';
@@ -471,8 +481,9 @@ function tui() {
     else {
       const r = c.rows[focusRow] ?? c.rows[0];
       const rowBtn = btn(states[focusRow] === 'fail' ? 'Réessayer' : `${r.btn}${r.risk === 'destructive' ? '…' : ''}`, '↵', r.risk === 'destructive' ? '-d' : '-p');
-      keys = many ? [...rowBtn, ['  '], ...btn(`${m.all}${destructive.length ? '…' : ''}`, 'a'), ['   ↑↓ choisir · dans l’ordre, s’arrête au premier échec', 'c-faint']]
-        : [...rowBtn, ['   Ledge ne fait rien sans toi.', 'c-faint']];
+      const deny = r.deny && states[focusRow] === 'p' ? [['  '], ...btn(r.deny, 'n')] : [];
+      keys = many ? [...rowBtn, ['  '], ...btn(`${m.all}${destructive.length ? '…' : ''}`, 'a'), ['  '], ...btn('Ignorer', 'esc'), ['   ↑↓ choisir', 'c-faint']]
+        : [...rowBtn, ...deny, ['  '], ...btn('Ignorer', 'esc'), ['   Ledge ne fait rien sans toi.', 'c-faint']];
     }
     L.push(inBox(keys, border));
     L.push(bottom(border));
@@ -482,7 +493,7 @@ function tui() {
   L.push(bottom('c-line'));
   const keybar = m.asking ? [['y', 'c-fg'], [' appliquer   ', 'c-dim'], ['esc', 'c-fg'], [' annuler', 'c-dim']]
     : settled || st.etat === 'stale' ? [['tab', 'c-fg'], [' carte suivante   ', 'c-dim'], ['ctrl+n', 'c-fg'], [' nouvelle   ', 'c-dim'], ['esc', 'c-fg'], [' retour', 'c-dim']]
-    : [['↵', 'c-fg'], [many ? ' appliquer la ligne   ' : ' appliquer   ', 'c-dim'], ...(many ? [['a', 'c-fg'], [' tout appliquer   ', 'c-dim'], ['↑↓', 'c-fg'], [' ligne   ', 'c-dim']] : []), ['tab', 'c-fg'], [' carte suivante   ', 'c-dim'], ['ctrl+n', 'c-fg'], [' nouvelle   ', 'c-dim'], ['esc', 'c-fg'], [' retour', 'c-dim']];
+    : [['↵', 'c-fg'], [many ? ' appliquer la ligne   ' : ' appliquer   ', 'c-dim'], ...(many ? [['a', 'c-fg'], [' tout appliquer   ', 'c-dim'], ['↑↓', 'c-fg'], [' ligne   ', 'c-dim']] : []), ...(st.cas === 'permission' ? [['n', 'c-fg'], [' refuser   ', 'c-dim']] : []), ['esc', 'c-fg'], [' ignorer   ', 'c-dim'], ['tab', 'c-fg'], [' carte suivante   ', 'c-dim'], ['ctrl+n', 'c-fg'], [' nouvelle', 'c-dim']];
   L.push(ln([[' '], ...keybar]));
   return `<p class="cap"><b>Visé</b> TUI · l’écran Demander, ${W} colonnes · ${esc(c.label)} · ${label()}</p><div class="term">${L.join('')}</div>`;
 }
@@ -492,13 +503,16 @@ const NOTES = {
   card: `<div class="note"><h3>Carte</h3><h4>Un plan, une carte : les lignes sont des étapes</h4><ul>
     <li>Même coque que les cartes de fermeture et de tâche (<code>--well</code>, bordure <code>--sidebar-border</code>, 12,5 px) : la carte générique est leur cousine, pas un nouveau style.</li>
     <li><b>Le rail d’ordre</b> : à partir de 2 lignes, chaque ligne a un nœud numéroté relié aux autres, parce que l’ordre compte (on s’arrête au premier échec). Le nœud porte l’état : numéro (proposée), anneau qui tourne (en cours), ✓ (appliquée), ✕ (échouée ou refusée), pointillés (pas appliquée, le plan s’est arrêté avant). Une seule ligne : pas de rail.</li>
-    <li>Une ligne = le <code>summary</code> du daemon (noms en gras), puis le risque, <b>icône et mot</b>, lisible sans la couleur. Bouton à droite, libellé par action (« Changer », « Archiver », « Dissoudre… »), « Appliquer » en repli pour une action inconnue du front.</li>
+    <li>Une ligne = le <code>summary</code> du daemon (noms en gras), puis le risque, <b>icône et mot</b>, lisible sans la couleur. Bouton à droite, <b>un verbe par action</b> (« Changer », « Archiver », « Dissoudre… »), « Appliquer » en repli seulement, pour une action inconnue du front.</li>
+    <li><b>Permission</b> : « Refuser » à côté de « Accepter… », sans repasser par Ledge. Refuser n’a pas de « … » ni de confirmation : ne rien laisser faire ne se défait pas mal. Une fois envoyé : « ✓ Refus envoyé · 10:42 ».</li>
+    <li><b>« Ignorer »</b>, partout, en bouton discret à gauche des autres (le pied pour un plan, la ligne pour une seule action), comme « Ignorer » de la carte de relais du téléphone : la carte se replie en une ligne « Carte ignorée à 10:42 · rien n’a été envoyé · Revoir ». Ledge n’en est pas prévenu.</li>
     <li>Irréversible : fond teinté, nœud et mot en rouge, « … » sur le bouton (une confirmation suit), le <code>detail</code> sur 2 lignes, en entier dans la confirmation.</li>
     <li>Pied : « Tout appliquer (n) » ; après un échec, « Reprendre à l’étape k (n) » ; après un refus, « Continuer sans l’étape k (n) », puisque la rejouer serait refusé encore. Une fois tout fait, la carte garde sa trace : « ✓ Plan appliqué à 10:42 ».</li>
     <li><b>Confirmation dans la carte</b>, pas en modale : la carte elle-même devient la liste (bordure rouge, boutons de ligne retirés, détails dépliés, lignes faites estompées), et le pied pose la question. Le focus va sur « Annuler » ; <kbd>Échap</kbd> annule. Même composant pour le Desktop et l’overlay, sans fenêtre par-dessus l’île.</li></ul></div>`,
   phone: `<div class="note"><h3>Téléphone</h3><h4>La même carte, une feuille pour confirmer</h4><ul>
     <li>Les jetons du téléphone (sombre seulement), les boutons de 44 px, le bouton de ligne <b>sous</b> le texte : la largeur ne permet pas de les mettre côte à côte.</li>
     <li>Confirmer ouvre une feuille par le bas qui reprend chaque ligne à appliquer avec son détail entier, puis la vérification de l’appareil (<code>ConfirmPurpose</code> <code>act</code>, sujet le qid ; <code>decide</code> pour une permission). Le texte est celui de la confirmation actuelle (« Elle confirme votre identité, pas la sûreté de la commande »).</li>
+    <li>« Ignorer » en bouton fantôme à gauche, comme la carte de relais ; pour une permission, trois boutons sur une ligne : Ignorer, Refuser, Accepter….</li>
     <li>Une ligne réversible sans vérification (<code>phone: null</code>) s’applique au toucher, sans feuille.</li>
     <li>Vérification annulée ou expirée : la carte reste proposée et dit « Vérification annulée. Rien n’a été envoyé. » (texte existant).</li></ul></div>`,
   tui: `<div class="note"><h3>TUI</h3><h4>Une boîte de plus, des lignes qu’on choisit</h4><ul>
@@ -506,6 +520,7 @@ const NOTES = {
     <li><kbd>↑</kbd><kbd>↓</kbd> choisit la ligne (▸), <kbd>↵</kbd> l’applique, <kbd>a</kbd> applique tout. Le détail d’une ligne irréversible est toujours affiché, en estompé.</li>
     <li>Confirmer : la boîte passe au rouge, en trait double, liste tout, et ne se valide qu’avec <kbd>y</kbd>. <kbd>↵</kbd> ne confirme pas, pour qu’un double appui ne dissolve rien.</li>
     <li>La demande d’une permission est citée en entier, repliée sur la largeur, jamais tronquée.</li>
+    <li>Permission : <kbd>n</kbd> refuse, comme sur la carte de session. <kbd>esc</kbd> ignore la carte (comme la carte de lancement de Demander) ; la boîte disparaît et une ligne estompée reste dans la conversation.</li>
     <li>Une fois tout fait, la boîte disparaît et une ligne verte reste dans la conversation, comme pour l’équipe et les tâches.</li></ul></div>`,
   risks: `<div class="note"><h3>Risque et états</h3><table>
     <tr><td>${riskChip('read')}</td><td>rien ne change : appliquée au clic, sans « … » (aucune action de la phase 1 ; prévu pour la suite)</td></tr>
@@ -515,14 +530,14 @@ const NOTES = {
     <tr><td>Refusée</td><td>rien n’a été envoyé : la cible a changé à la nouvelle résolution (fermée, hors ligne, en lecture seule)</td></tr>
     <tr><td>La demande a changé</td><td>une permission : la demande n’est plus celle que Ledge a citée (stale) ; l’ancienne est barrée, « Ouvrir Nova »</td></tr></table></div>`
 };
-const OPEN = `<div class="note"><h3>À trancher</h3><ol>
-  <li>Le mot du risque destructif : <b>« Irréversible »</b> (ce que l’utilisateur perd) plutôt que « Destructif » ?</li>
-  <li><b>Refusée</b> contre <b>échouée</b> : le contrat n’a que <code>failed</code>. Faut-il <code>state: 'refused'</code> (ou un code dans <code>error</code>) pour dire « rien n’a été envoyé » ? « La demande a changé » en serait un cas.</li>
-  <li>La confirmation <b>dans la carte</b> (Desktop et overlay) plutôt qu’en modale : d’accord ?</li>
-  <li>Permission : la carte ne propose que ce que Ledge a écrit (« Accepter »). Faut-il aussi « Refuser » à côté, sans passer par Ledge ?</li>
-  <li>Le libellé du bouton par action (« Changer », « Archiver », « Dissoudre ») avec « Appliquer » en repli, ou « Appliquer » partout ?</li>
-  <li>Après un échec, le pied propose « Reprendre à l’étape k » ; après un refus, « Continuer sans l’étape k » : la suite d’un plan se relance-t-elle d’un bouton, ou faut-il redemander à Ledge ?</li>
-  <li>« Ignorer » existe sur le téléphone pour le lancement : l’ajouter à la carte générique, partout ?</li></ol></div>`;
+const OPEN = `<div class="note"><h3>Tranché par l’utilisateur</h3><ol>
+  <li>Le mot du risque : <b>« Irréversible »</b>, plutôt que « Destructif ».</li>
+  <li><b>Refusée</b> contre <b>échouée</b> : réglé dans le code, <code>state: 'refused'</code> (rien n’a été envoyé) distinct de <code>'failed'</code>.</li>
+  <li>La confirmation <b>dans la carte</b> (Desktop et overlay), pas de modale.</li>
+  <li>Permission : <b>« Accepter » et « Refuser »</b> côte à côte.</li>
+  <li><b>Un verbe par action</b> (« Changer », « Archiver », « Dissoudre »…), « Appliquer » en repli seulement.</li>
+  <li>Après un échec ou un refus, la suite d’un plan se relance <b>d’un bouton</b> : « Reprendre à l’étape k », « Continuer sans l’étape k ».</li>
+  <li><b>« Ignorer »</b> sur la carte générique, partout.</li></ol></div>`;
 
 // ---- Chrome ----
 function label() { return ETATS.find(([k]) => k === st.etat)[1].toLowerCase(); }
