@@ -479,7 +479,7 @@ export const en: Messages = {
   },
   teams: {
     tables: (n: number) => `${n} ${n === 1 ? 'table' : 'tables'}`,
-    treeLine: (done: number, given: number) => `team · ${done}/${given}`, treeResting: 'resting',
+    tree: 'team', treeResting: 'resting',
     common: 'common table',
     room: (name: string) => `${name} room`,
     plaqueCounts: (tables: number, sessions: number) => `${tables} ${tables === 1 ? 'table' : 'tables'} · ${sessions} ${sessions === 1 ? 'session' : 'sessions'}`,
