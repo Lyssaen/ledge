@@ -5,7 +5,7 @@ const plural = (n: number, one: string, many: string) => (n > 1 ? many : one);
 export const en: Messages = {
   lang: { fr: 'Français', en: 'English' },
   state: { approval: 'Needs you', question: 'A question', starting: 'Starting', idle: 'Available', working: 'Working', done: 'Finished', error: 'Error', readonly: 'Read-only' },
-  time: { now: 'just now', s: n => `${n}s`, min: n => `${n} min`, h: n => `${n} h`, d: n => `${n} d` },
+  time: { now: 'just now', decimal: '.', s: n => `${n}s`, min: n => `${n} min`, h: n => `${n} h`, d: n => `${n} d` },
   tabs: { overview: 'Overview', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings' },
   bar: {
     sessions: n => `${n} ${plural(n, 'session', 'sessions')}`,
@@ -43,7 +43,9 @@ export const en: Messages = {
     you: 'You', unfold: 'unfold', fold: 'fold', actions: n => `${n} ${plural(n, 'action', 'actions')}`,
     files: n => `${n} ${plural(n, 'file changed', 'files changed')}`,
     since: (label, t) => `${label} · for ${t}`,
-    wantsTo: name => `${name} wants to run:`, sentTo: 'sent to', receivedFrom: 'from',
+    wants: name => `${name} wants to run`, colon: ':', sentTo: 'sent to', receivedFrom: 'from',
+    decision: { accept: 'allowed', deny: 'denied', always: 'always allowed', unknown: 'answered in the terminal' },
+    above: n => `↑ ${n} above`, scrolled: (above, below) => `↑ ${above} above · ↓ ${below} · G end`,
     sent: { sending: 'sending…', delivered: 'delivered', read: 'read', failed: 'failed' },
     helperWorking: n => `working · ${n} ${plural(n, 'action', 'actions')}`, helperDone: 'done',
     replyTo: name => `Reply to ${name}…`, noteFor: name => `Tell ${name} why…`,
@@ -105,6 +107,10 @@ export const en: Messages = {
     approval: (n, text) => `${n} needs your approval: ${text}`,
     question: (n, text) => `${n} has a question: ${text}`,
     title: n => (n > 0 ? `ledge · ${n} waiting` : 'ledge')
+  },
+  small: {
+    tooSmall: (w, h) => `Window too small: ${w}×${h}`, atLeast: (w, h) => `needs at least ${w}×${h}`,
+    waits: name => `${name} waits for your approval`, kept: 'draft kept'
   },
   cli: { notTty: 'ledge tui: needs a terminal (stdin and stdout must be a TTY)' }
 };

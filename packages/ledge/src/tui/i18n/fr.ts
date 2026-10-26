@@ -7,7 +7,7 @@ export const fr = {
   lang: { fr: 'Français', en: 'English' },
   state: { approval: 'Votre accord', question: 'Une question', starting: 'Démarrage', idle: 'Disponible', working: 'Au travail', done: 'Terminée', error: 'Erreur', readonly: 'Lecture seule' } as Record<BotState, string>,
   time: {
-    now: 'à l’instant', s: (n: number) => `${n} s`, min: (n: number) => `${n} min`, h: (n: number) => `${n} h`, d: (n: number) => `${n} j`
+    now: 'à l’instant', decimal: ',', s: (n: number) => `${n} s`, min: (n: number) => `${n} min`, h: (n: number) => `${n} h`, d: (n: number) => `${n} j`
   },
   tabs: { overview: 'Vue d’ensemble', session: 'Session', ask: 'Demander à Ledge', launch: 'Nouvelle session', settings: 'Réglages' },
   bar: {
@@ -46,7 +46,9 @@ export const fr = {
     you: 'Vous', unfold: 'déplier', fold: 'replier', actions: (n: number) => `${n} ${plural(n, 'action', 'actions')}`,
     files: (n: number) => `${n} ${plural(n, 'fichier modifié', 'fichiers modifiés')}`,
     since: (label: string, t: string) => `${label} · depuis ${t}`,
-    wantsTo: (name: string) => `${name} veut exécuter :`, sentTo: 'envoyé à', receivedFrom: 'reçu de',
+    wants: (name: string) => `${name} veut exécuter`, colon: ' :', sentTo: 'envoyé à', receivedFrom: 'reçu de',
+    decision: { accept: 'autorisé', deny: 'refusé', always: 'toujours autorisé', unknown: 'répondu au terminal' } as Record<'accept' | 'deny' | 'always' | 'unknown', string>,
+    above: (n: number) => `↑ ${n} plus haut`, scrolled: (above: number, below: number) => `↑ ${above} plus haut · ↓ ${below} · G fin`,
     sent: { sending: 'envoi…', delivered: 'remis', read: 'lu', failed: 'échec' } as Record<'sending' | 'delivered' | 'read' | 'failed', string>,
     helperWorking: (n: number) => `au travail · ${n} ${plural(n, 'action', 'actions')}`, helperDone: 'terminé',
     replyTo: (name: string) => `Répondre à ${name}…`, noteFor: (name: string) => `Expliquer le refus à ${name}…`,
@@ -111,6 +113,10 @@ export const fr = {
     approval: (n: string, text: string) => `${n} attend ton accord : ${text}`,
     question: (n: string, text: string) => `${n} a une question : ${text}`,
     title: (n: number) => (n > 0 ? `ledge · ${n} t’${plural(n, 'attend', 'attendent')}` : 'ledge')
+  },
+  small: {
+    tooSmall: (w: number, h: number) => `Fenêtre trop petite : ${w}×${h}`, atLeast: (w: number, h: number) => `il faut au moins ${w}×${h}`,
+    waits: (name: string) => `${name} attend ton accord`, kept: 'brouillon gardé'
   },
   cli: { notTty: 'ledge tui: needs a terminal (stdin and stdout must be a TTY)' }
 };

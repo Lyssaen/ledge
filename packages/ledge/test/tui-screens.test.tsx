@@ -76,6 +76,88 @@ describe('ledge tui: session', () => {
   });
 });
 
+describe('ledge tui: the session thread (#95 lot A)', () => {
+  const many = (n: number) => [
+    { kind: 'prompt' as const, id: 'p1', at: T(0), turn: 1, text: 'Relis tout' },
+    ...Array.from({ length: n }, (_, i) => ({ kind: 'tool' as const, id: `t${i}`, at: T(1 + i), turn: 1, tool: 'Read', label: `src/fichier-${i}.ts`, status: 'success' as const, durationMs: 100, files: [] }))
+  ];
+  const openBix = async (tui: Awaited<ReturnType<typeof startTui>>) => {
+    await tui.press('j'); await tui.press('j');
+    await until(() => tui.frame().includes('BIX · DOCUMENTER'));
+    await tui.press('\r');
+    await until(() => tui.frame().includes('fichier-'));
+  };
+
+  it('says in the bottom border what is above, then what is below once scrolled; new lines keep the view, G follows again', async () => {
+    const tui = await startTui();
+    tui.daemon.thread('bix', many(40));
+    try {
+      await openBix(tui);
+      await until(() => /↑ \d+ plus haut ─╯/.test(tui.frame()));
+      await tui.press('k'); await tui.press('k'); await tui.press('k');
+      await until(() => /↑ \d+ plus haut · ↓ 3 · G fin/.test(tui.frame()));
+      const top = tui.frame().match(/fichier-\d+/)![0];
+      tui.daemon.threadItem('bix', { kind: 'tool', id: 'new', at: T(60), turn: 1, tool: 'Read', label: 'src/nouveau.ts', status: 'success', durationMs: 100, files: [] });
+      await until(() => /↓ 4 · G fin/.test(tui.frame()));
+      expect(tui.frame().match(/fichier-\d+/)![0]).toBe(top);
+      await tui.press('G');
+      await until(() => tui.frame().includes('nouveau.ts') && /↑ \d+ plus haut ─╯/.test(tui.frame()));
+    } finally { await tui.cleanup(); }
+  });
+
+  it('a resize keeps the element being read at the top', async () => {
+    const tui = await startTui();
+    tui.daemon.thread('bix', [{ kind: 'prompt', id: 'p1', at: T(0), turn: 1, text: 'Relis tout' },
+      ...Array.from({ length: 30 }, (_, i) => ({ kind: 'message' as const, id: `m${i}`, at: T(1 + i), turn: 1, text: `Message ${i} : ${'des mots qui se replient selon la largeur '.repeat(2)}fin` }))]);
+    try {
+      await tui.press('j'); await tui.press('j');
+      await until(() => tui.frame().includes('BIX · DOCUMENTER'));
+      await tui.press('\r');
+      await until(() => tui.frame().includes('Message 29'));
+      for (let i = 0; i < 12; i++) await tui.press('k');
+      const first = () => tui.frame().split('\n').find(l => /Message \d+/.test(l))?.match(/Message \d+/)?.[0];
+      const before = first();
+      await tui.resize(70, 30);
+      await until(() => first() === before);
+      await tui.resize(100, 30);
+      await until(() => first() === before);
+    } finally { await tui.cleanup(); }
+  });
+
+  it('below 60×16 says the window is too small, who waits and that the draft is kept; the draft is still there after', async () => {
+    const tui = await startTui();
+    try {
+      await tui.press('\r');
+      await until(() => tui.frame().includes('Otto veut exécuter'));
+      await tui.press('r'); await tui.press('Pas ce test');
+      await tui.resize(52, 14);
+      await until(() => tui.frame().includes('Fenêtre trop petite : 52×14'));
+      expect(tui.frame()).toContain('il faut au moins 60×16');
+      expect(tui.frame()).toContain('Otto attend ton accord · brouillon gardé');
+      await tui.resize(100, 30);
+      await until(() => tui.frame().includes('Pas ce test'));
+    } finally { await tui.cleanup(); }
+  });
+
+  it('the request folds under an indent, four lines at most; the key bar drops keys from the end and keeps « ? aide »; the crumb shortens', async () => {
+    const long = `rm -rf coverage node_modules/.vite && ${'pnpm --filter @ledge/ledge test -- --run --coverage --reporter=verbose && '.repeat(4)}echo fin`;
+    const otto = mockupSessions()[0]!;
+    const tui = await startTui({ sessions: [{ ...otto, pending: { ...otto.pending!, text: long } }, ...mockupSessions().slice(1)] });
+    try {
+      await tui.resize(64, 30);
+      await tui.press('\r');
+      await until(() => tui.frame().includes('Otto veut exécuter (Bash) :'));
+      const box = tui.frame().split('\n').filter(l => /^│ {3}\S/.test(l));
+      expect(box.length).toBe(4);
+      expect(box[3]).toMatch(/… \+\d+ +│$/);
+      const bar = tui.frame().split('\n').at(-1)!;
+      expect(bar).toMatch(/\? +aide/);
+      expect(bar).not.toContain('interrompre');
+      expect(tui.frame().split('\n')[0]).not.toContain('release/LEDGE-42');
+    } finally { await tui.cleanup(); }
+  });
+});
+
 describe('ledge tui: ask Ledge', () => {
   it('sends the question, streams the answer and launches the card’s session on ↵', async () => {
     const tui = await startTui();

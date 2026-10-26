@@ -12,6 +12,7 @@ import { C } from '../theme.js';
 import { Frame } from '../ui/Frame.js';
 import { Button } from '../ui/SessionCard.js';
 import { Lines } from '../ui/Lines.js';
+import { useThrottled } from '../ui/throttle.js';
 import { TextInput } from '../ui/TextInput.js';
 import { TitledBox } from '../ui/TitledBox.js';
 
@@ -95,7 +96,9 @@ export function Ask() {
 
   const sessions = listed(d.sessions).length;
   const width = Math.max(20, columns - 6);
-  const lines = useMemo(() => chatLines(d.chat, d.chatLive, { t, g, width }), [d.chat, d.chatLive, t, g, width]);
+  // The streamed answer comes a few words at a time: drawn at most each 100 ms.
+  const live = useThrottled(d.chatLive, 100);
+  const lines = useMemo(() => chatLines(d.chat, live, { t, g, width }), [d.chat, live, t, g, width]);
   return (
     <Frame crumb={`${t.tabs.ask}`} keys={[['↵', t.keys.send], ['tab', t.keys.nextCard], ['s', t.keys.save], ['ctrl+n', t.keys.newChat], ['ctrl+c', t.keys.stopAnswer], ['esc', t.keys.back]]}>
       <TitledBox title={t.ask.operator(sessions, Math.max(1, machines.length))} flexGrow={1}>

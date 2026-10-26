@@ -8,9 +8,10 @@ import { MESSAGES } from '../src/tui/i18n/lang.js';
 import { glyphsFor } from '../src/tui/glyphs.js';
 import { closedLedgeTasks, exchanges, keepSelection, nextWaiting, overview, step } from '../src/tui/model/overview.js';
 import { answerFor, choices } from '../src/tui/model/pending.js';
-import { diffCount, threadLines, wrap } from '../src/tui/model/thread.js';
+import { diffCount, threadLines, threadView, wrap } from '../src/tui/model/thread.js';
+import { cells } from '../src/tui/model/cells.js';
 import { chatLines, openCards } from '../src/tui/model/chat.js';
-import { ago } from '../src/tui/model/time.js';
+import { ago, took } from '../src/tui/model/time.js';
 import { asked, notification } from '../src/tui/notify.js';
 import { defaultLang, loadSettings, saveSettings, settingsPath } from '../src/tui/settings.js';
 import { tuiArgs } from '../src/tui/index.js';
@@ -115,8 +116,67 @@ describe('tui thread', () => {
     const lines = text(threadLines(items, o));
     expect(lines[0]).toMatch(/^▸ \d\d:\d\d {2}Câble la liste · 1 action · 1 fichier modifié · Deux tests échouent\.$/);
     expect(lines).toContain('  Corrige-les');
-    expect(lines.find(l => l.includes('npm test'))).toMatch(/Bash {3}npm test {2}6\.0 s$/);
-    expect(lines.find(l => l.includes('envoyé à'))).toBe('  ✉ envoyé à Nova  « Tu peux rebaser. »  remis');
+    // The meta right of the element's first line, at the thread's width.
+    const running = lines.find(l => l.includes('npm test'))!;
+    expect(running).toMatch(/^ {2}⠋ Bash {3}npm test +6,0 s$/);
+    expect(cells(running)).toBe(80);
+    const sent = lines.find(l => l.includes('envoyé à'))!;
+    expect(sent).toMatch(/^ {2}✉ envoyé à Nova {2}« Tu peux rebaser\. » +✓ remis$/);
+    expect(cells(sent)).toBe(80);
+  });
+
+  it('a running action ticks on its own: its spinner and time are live pieces, the rest is the same at any time', () => {
+    const one = threadLines(items, { ...o, now: Date.parse(at(10)) }), two = threadLines(items, { ...o, now: Date.parse(at(75)) });
+    const run = (ls: typeof one) => ls.find(l => l.some(x => x.text.includes('npm test')))!;
+    expect(run(one).filter(x => x.live).map(x => x.live)).toEqual([{ spin: true }, { since: Date.parse(at(4)), pad: 8 }]);
+    expect(text([run(two)])[0]).toMatch(/1 min 11$/);
+    expect(cells(text([run(two)])[0]!)).toBe(cells(text([run(one)])[0]!));
+  });
+
+  it('wraps each element at its real width under a hanging indent, up to its ceiling, then « … +n »; unfolded shows all', () => {
+    const long = 'pnpm --filter @ledge/ledge exec vitest run test/tui-model.test.ts test/tui-cells.test.ts test/tui-screens.test.tsx --reporter=dot --no-color --bail 1';
+    const many: ThreadItem[] = [
+      { kind: 'prompt', id: 'p', at: at(0), turn: 1, text: 'Vas-y' },
+      { kind: 'tool', id: 'b', at: at(1), turn: 1, tool: 'Bash', label: long, status: 'failed', durationMs: 8_400, error: `AssertionError: ${'expected [ Tests verts ✅ 🎉 ] '.repeat(6)}`, files: [] },
+      { kind: 'permission', id: 'q', at: at(2), turn: 1, tool: 'Bash', text: 'rm -rf node_modules/.vite', decision: 'accept' },
+      { kind: 'sent', id: 's', at: at(3), turn: 1, to: 'Nova', text: 'Garde un test avec des caractères larges (日本語) en fin de ligne : c’est là que ça débordait, peux-tu relire thread.ts avant que je pousse ?', status: 'read' },
+      { kind: 'notice', id: 'n', at: at(4), turn: 1, notice: 'other', text: 'Ledge : Nova a laissé deux remarques sur la PR #212 (calcul des cellules, DIFF_MAX) et attend ta réponse avant de valider la suite du travail.' }
+    ];
+    const lines = text(threadLines(many, { ...o, width: 50 }));
+    for (const l of lines) expect(cells(l)).toBeLessThanOrEqual(50);
+    const tool = lines.findIndex(l => l.includes('Bash') && l.includes('pnpm'));
+    expect(lines[tool]).toMatch(/8,4 s$/);
+    expect(lines[tool + 1]).toMatch(/^ {11}\S/);
+    expect(lines[tool + 2]).toMatch(/… \+\d+$/);
+    expect(lines[tool + 3]).toMatch(/^ {6}AssertionError/);
+    expect(lines.filter(l => l.startsWith('      ') && !l.startsWith('       ')).length).toBeGreaterThan(0);
+    expect(lines.find(l => l.includes('rm -rf'))).toMatch(/→ autorisé$/);
+    expect(lines.find(l => l.includes('envoyé à'))).toMatch(/✓✓ lu$/);
+    const notice = lines.findIndex(l => l.startsWith('  · Ledge'));
+    expect(lines[notice + 1]).toMatch(/… \+\d+$/);
+    const all = text(threadLines(many, { ...o, width: 50, unfolded: true }));
+    expect(all.length).toBeGreaterThan(lines.length);
+    expect(all.some(l => l.includes('…'))).toBe(false);
+  });
+
+  it('wraps each diff line, what goes on marked ↪', () => {
+    const diff = `--- a\n+++ b\n+${'const line: Line = [{ text: status.g, color: status.c }, { text: target(it), color: C.fg }];'}`;
+    const lines = text(threadLines([{ kind: 'tool', id: 'e', at: at(0), turn: 0, tool: 'Edit', label: 'thread.ts', status: 'success', files: [{ path: 'thread.ts', change: 'edit', diff }] }], { ...o, width: 50, diffs: true }));
+    expect(lines.filter(l => l.startsWith('      │ ↪ ')).length).toBeGreaterThan(0);
+    for (const l of lines) expect(cells(l)).toBeLessThanOrEqual(50);
+  });
+
+  it('a folded turn takes one line, cut with …; each line knows its item', () => {
+    const v = threadView([{ ...items[0]!, text: 'Une très longue demande '.repeat(10) } as ThreadItem, ...items.slice(1)], { ...o, width: 60 });
+    expect(v.lines.length).toBe(v.keys.length);
+    expect(text([v.lines[0]!])[0]).toMatch(/…$/);
+    expect(cells(text([v.lines[0]!])[0]!)).toBe(60);
+    expect(v.keys[0]).toBe('p1');
+    expect(v.keys[v.keys.length - 1]).toBe('s1');
+  });
+
+  it('says how long it took: « 8,4 s », « 12 s », « 1 min 04 »', () => {
+    expect([took(8_400, ','), took(12_300, ','), took(64_000, ','), took(8_400, '.'), took(7_380_000, ',')]).toEqual(['8,4 s', '12 s', '1 min 04', '8.4 s', '2 h 03']);
   });
 
   it('unfolds every turn and shows the diffs on demand', () => {

@@ -14,13 +14,13 @@ export type KeyHandler = (input: string, key: Key) => boolean;
 
 export interface Tui {
   client: DaemonClient; fleet: Fleet; d: DaemonState; machines: MachineState[]; projects: Projects | null;
-  t: Messages; lang: Lang; setLang(lang: Lang): void; g: Glyphs; now: number;
+  t: Messages; lang: Lang; setLang(lang: Lang): void; g: Glyphs;
   screen: Screen; go(screen: Screen): void;
   /** The session the overview and the session screen show. */
   selected: Session | null; select(id: string | null): void;
   toast(t: Toast): void; lastToast: Toast | null; actions: Actions;
   /** A field has the keyboard: the global keys are off. */
-  setEditing(on: boolean): void;
+  editing: boolean; setEditing(on: boolean): void;
   attach(s: Session): void;
   /** Registers the screen's key handler (see `useScreenKeys`). */
   keys: { current: KeyHandler | null };

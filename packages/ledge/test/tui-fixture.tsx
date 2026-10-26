@@ -49,6 +49,13 @@ export async function startTui(o: { sessions?: Session[]; projects?: Projects; l
   return {
     stdin: ui.stdin as { write(data: string): void }, daemon, client, saved, press,
     frame: () => ui.lastFrame() ?? '',
+    /** The terminal resized to `columns` × `rows`, as a real one says it (a `resize` on stdout). */
+    async resize(columns: number, rows: number) {
+      Object.defineProperty(ui.stdout, 'columns', { configurable: true, get: () => columns });
+      Object.defineProperty(ui.stdout, 'rows', { configurable: true, get: () => rows });
+      ui.stdout.emit('resize');
+      await new Promise(r => setTimeout(r, 50));
+    },
     async cleanup() { ui.unmount(); detach(); client.close(); await daemon.close(); daemonStore.reset(); }
   };
 }

@@ -53,10 +53,8 @@ function Shell({ client, lang, setLang: setLangState, saveLang, notify, glyphs, 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [lastToast, setToast] = useState<Toast | null>(null);
   const [editing, setEditingState] = useState(false);
-  const [now, setNow] = useState(() => Date.now());
   const keys = useRef<KeyHandler | null>(null);
 
-  useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
   useEffect(() => {
     if (!lastToast) return;
     const timer = setTimeout(() => setToast(null), TOAST_MS);
@@ -76,10 +74,13 @@ function Shell({ client, lang, setLang: setLangState, saveLang, notify, glyphs, 
 
   // A new request rings (bell or OSC 9); the title counts who waits.
   const seen = useRef<Map<string, Session> | null>(null);
+  const titled = useRef('');
   useEffect(() => {
     if (seen.current) for (const text of asked(seen.current, d.sessions, t.notify)) write(notification(text, notify, env));
     seen.current = d.byId;
-    write(title(t.notify.title(listed(d.sessions).filter(isPending).length)));
+    // Written again only when it changes: every session update would otherwise send it.
+    const next = title(t.notify.title(listed(d.sessions).filter(isPending).length));
+    if (next !== titled.current) { titled.current = next; write(next); }
   }, [d.byId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const actions = useActions({ client, sessions: d.sessions, errors: d.errors, t, toast });
@@ -103,8 +104,8 @@ function Shell({ client, lang, setLang: setLangState, saveLang, notify, glyphs, 
   }, [fleet, suspendTerminal, run, t, toast]);
 
   const tui: Tui = {
-    client, fleet, d, machines, projects, t, lang, setLang, g: glyphs, now, screen, go, selected, select: setSelectedId,
-    toast, lastToast, actions, setEditing, attach, keys
+    client, fleet, d, machines, projects, t, lang, setLang, g: glyphs, screen, go, selected, select: setSelectedId,
+    toast, lastToast, actions, editing, setEditing, attach, keys
   };
 
   useInput((input, key) => {
