@@ -247,6 +247,15 @@ describe('phone chat', () => {
     expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [{ ...row, args: { team: 'team-3fa2' } }] })).toThrow();
     expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [{ ...row, error: 'boom' }] })).toThrow();
     expect(ConfirmPurposeSchema.parse('act')).toBe('act');
+    // Its words for the phone's own language, a cut detail, an error as a code, an action this PWA does not know yet.
+    expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [{ ...row, action: 'team.later', vars: { team: 'api' }, detail: 'x…', detailCut: true, state: 'failed', code: 'failed' }] })).not.toThrow();
+    expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [{ ...row, code: 'x'.repeat(41) }] })).toThrow();
+  });
+  it('carries an ignored turn, and chat.ignore', () => {
+    expect(() => PhoneChatTurnSchema.parse({ ...turn, ignoredAt: '2026-10-20T10:00:00.000Z' })).not.toThrow();
+    expect(PhoneClientMessageSchema.parse({ type: 'chat.ignore', op: OP, qid: QID })).toEqual({ type: 'chat.ignore', op: OP, qid: QID });
+    expect(PhoneClientMessageSchema.parse({ type: 'chat.ignore', op: OP, qid: QID, undo: true })).toMatchObject({ undo: true });
+    expect(() => PhoneClientMessageSchema.parse({ type: 'chat.ignore', op: OP, qid: 'nope' })).toThrow();
   });
   it('checks the chat.act client message', () => {
     const assertion = { id: 'a', clientDataJSON: 'b', authenticatorData: 'c', signature: 'd' };

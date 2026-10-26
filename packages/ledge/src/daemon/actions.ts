@@ -1,123 +1,150 @@
 // The daemon's side of the action registry (spec 2026-10-26 action registry §2.1): whether an action is possible now, and
 // the message the daemon already handles that applies it. The chat's generic card and, in #93, the CLI share it.
-import { backendOf, isArchived, isTeamLive, LEDGE_GIVER, offers, pendingKey, riskOf, taskClosed, actionById, type ActionId, type ChatAction, type ClientMessage, type Role, type Session, type Task, type Team } from '@ledge/protocol';
+import { backendOf, isArchived, isTeamLive, LEDGE_GIVER, offers, pendingKey, riskOf, taskClosed, actionById, DETAIL_MAX, type ActionErrorCode, type ActionId, type ChatAction, type ClientMessage, type Role, type Session, type Task, type Team } from '@ledge/protocol';
 
 export interface ResolveCtx {
   sessions: readonly Session[]; teams: readonly Team[]; tasks: readonly Task[];
   /** The role `id` as a session in `cwd` would find it (the repository's wins over the home's). */
   findRole: (id: string, cwd?: string) => Role | undefined;
+  /** The sessions the same answer closes (its close card): archived once closed, they count as ended for session.archive. */
+  closing?: ReadonlySet<string>;
+  /** Whether a template of that name is already saved (team.save replaces it). */
+  templateExists?: (name: string) => boolean;
 }
-export type Resolved = ChatAction | { refused: string };
+/** Why not: the daemon's words (the log, the PC's error) and a code for a front's own. */
+export type Refusal = { refused: string; code: ActionErrorCode };
+export type Resolved = ChatAction | Refusal;
 type Args = Record<string, unknown>;
 
 /** A request Ledge may answer from the chat (spec §9.1): never a question (it takes a reply), never OMP's own dialogs. */
 const DECIDABLE = ['permission', 'diff', 'plan'] as const;
 const KIND: Record<(typeof DECIDABLE)[number], string> = { permission: 'permission', diff: 'diff', plan: 'plan' };
 
+const no = (code: ActionErrorCode, refused: string): Refusal => ({ refused, code });
+const isRefusal = (x: object): x is Refusal => 'refused' in x;
 /** A session by id, or by bot name among those not ended (the archive included): refused when none or several fit. */
-function sessionOf(ref: string, ctx: ResolveCtx): Session | string {
+function sessionOf(ref: string, ctx: ResolveCtx): Session | Refusal {
   const byId = ctx.sessions.find(s => s.id === ref);
   if (byId) return byId;
   const named = ctx.sessions.filter(s => s.name === ref);
   const live = named.filter(s => s.state !== 'exited');
   const pick = live.length ? live : named;
   if (pick.length === 1) return pick[0]!;
-  return pick.length ? `several sessions named ${ref}` : `unknown session ${ref}`;
+  return pick.length ? no('ambiguous', `several sessions named ${ref}`) : no('unknown', `unknown session ${ref}`);
 }
 /** A team by id, or by name among the live ones. */
-function teamOf(ref: string, ctx: ResolveCtx): Team | string {
+function teamOf(ref: string, ctx: ResolveCtx): Team | Refusal {
   const byId = ctx.teams.find(t => t.id === ref);
   if (byId) return byId;
   const named = ctx.teams.filter(t => t.name === ref && isTeamLive(t));
   if (named.length === 1) return named[0]!;
-  return named.length ? `several teams named ${ref}` : `unknown team ${ref}`;
+  return named.length ? no('ambiguous', `several teams named ${ref}`) : no('unknown', `unknown team ${ref}`);
 }
-function taskOf(ref: string, ctx: ResolveCtx): Task | string {
+function taskOf(ref: string, ctx: ResolveCtx): Task | Refusal {
   const t = ctx.tasks.find(x => x.id === ref);
-  if (!t) return `unknown task ${ref}`;
-  return taskClosed(t) ? `task ${t.id} is closed` : t;
+  if (!t) return no('unknown', `unknown task ${ref}`);
+  return taskClosed(t) ? no('closed', `task ${t.id} is closed`) : t;
 }
 /** A session Ledge can act on: tracked, writable, running. */
-function writable(s: Session): string | null {
-  return s.source === 'hook_only' ? `${s.name} is read-only` : s.state === 'exited' ? `${s.name} has exited` : null;
+function writable(s: Session): Refusal | null {
+  return s.source === 'hook_only' ? no('read_only', `${s.name} is read-only`) : s.state === 'exited' ? no('exited', `${s.name} has exited`) : null;
 }
 const b = (name: string) => `**${name}**`;
-const row = (action: ActionId, args: Args, summary: string, extra: Partial<ChatAction> = {}): ChatAction =>
-  ({ action, args, summary, risk: riskOf(actionById(action)!, args), ...extra });
+/** `ChatActionSchema` bounds a summary and each of its words to 300: a longer one would fail the whole chat.history. */
+const fit = (text: string, max: number) => (text.length <= max ? text : `${text.slice(0, max - 1)}…`);
+/** A title quoted in a summary: short enough that the names around it still fit. */
+const title = (t: Task) => fit(t.title, 100);
+const row = (action: ActionId, args: Args, summary: string, vars: Record<string, string | null | undefined>, extra: Partial<ChatAction> = {}): ChatAction => {
+  const words = Object.fromEntries(Object.entries(vars).flatMap(([k, v]) => (v ? [[k, fit(v, 300)]] : [])));
+  return { action, args, summary: fit(summary, 300), vars: words, risk: riskOf(actionById(action)!, args), ...extra };
+};
+/** A request quoted whole, or cut and said so (the front sends to the session for the rest). */
+const detailOf = (text: string): Pick<ChatAction, 'detail' | 'detailCut'> =>
+  (text.length <= DETAIL_MAX ? { detail: text } : { detail: `${text.slice(0, DETAIL_MAX - 1)}…`, detailCut: true });
 
 type Impl = (args: Args, ctx: ResolveCtx) => Resolved;
-const withSession = (ctx: ResolveCtx, ref: unknown, check: (s: Session) => string | null, then: (s: Session) => Resolved): Resolved => {
+const withSession = (ctx: ResolveCtx, ref: unknown, check: (s: Session) => Refusal | null, then: (s: Session) => Resolved): Resolved => {
   const s = sessionOf(String(ref), ctx);
-  if (typeof s === 'string') return { refused: s };
-  const why = check(s);
-  return why ? { refused: why } : then(s);
+  if (isRefusal(s)) return s;
+  return check(s) ?? then(s);
 };
 const withTeam = (ctx: ResolveCtx, ref: unknown, then: (t: Team) => Resolved): Resolved => {
   const t = teamOf(String(ref), ctx);
-  if (typeof t === 'string') return { refused: t };
-  return t.state === 'dissolved' ? { refused: `team ${t.name} is dissolved` } : then(t);
+  if (isRefusal(t)) return t;
+  return t.state === 'dissolved' ? no('dissolved', `team ${t.name} is dissolved`) : then(t);
 };
 
 const IMPLS: Partial<Record<ActionId, Impl>> = {
   'session.model': (a, ctx) => withSession(ctx, a.session, writable, s => {
     const model = a.model as string | null; const effort = a.effort as string | null;
-    if (model === (s.model ?? null) && effort === (s.effort ?? null)) return { refused: `${s.name} already runs that model` };
+    if (model === (s.model ?? null) && effort === (s.effort ?? null)) return no('same_model', `${s.name} already runs that model`);
     const what = model ? `${model}${effort ? `, effort ${effort}` : ''}` : effort ? `son modèle par défaut, effort ${effort}` : 'son modèle et son effort par défaut';
-    return row('session.model', { session: s.id, model, effort }, `Passer ${b(s.name)} sur ${what}`, { session: s.id });
+    return row('session.model', { session: s.id, model, effort }, `Passer ${b(s.name)} sur ${what}`, { session: s.name, model, effort }, { session: s.id });
   }),
-  'session.interrupt': (a, ctx) => withSession(ctx, a.session, s => writable(s) ?? (s.tmuxSession || backendOf(s) === 'omp-rpc' ? null : `${s.name} has no terminal`),
-    s => row('session.interrupt', { session: s.id }, `Interrompre ${b(s.name)}`, { session: s.id })),
-  'session.archive': (a, ctx) => withSession(ctx, a.session, s => (isArchived(s) ? `${s.name} is already archived` : null),
-    s => row('session.archive', { session: s.id }, `Archiver ${b(s.name)}`, { session: s.id })),
-  'session.restore': (a, ctx) => withSession(ctx, a.session, s => (isArchived(s) ? null : `${s.name} is not archived`),
-    s => row('session.restore', { session: s.id }, `Sortir ${b(s.name)} de l'archive`, { session: s.id })),
-  'session.resume': (a, ctx) => withSession(ctx, a.session, s => (s.source === 'hook_only' ? `${s.name} is read-only` : s.state !== 'exited' ? `${s.name} is still running` : null),
-    s => row('session.resume', { session: s.id }, `Reprendre ${b(s.name)} sur sa conversation`, { session: s.id })),
+  'session.interrupt': (a, ctx) => withSession(ctx, a.session, s => writable(s) ?? (s.tmuxSession || backendOf(s) === 'omp-rpc' ? null : no('no_terminal', `${s.name} has no terminal`)),
+    s => row('session.interrupt', { session: s.id }, `Interrompre ${b(s.name)}`, { session: s.name }, { session: s.id })),
+  // A running session is closed first (session.close, its clean /exit), never archived on the spot: its agent would be killed
+  // mid-work, which Ledge never proposes (spec §6.2). Ledge proposes both, in that order, in one answer: the row is applied once
+  // the close card has run (resolved again then, it is refused while the session still runs).
+  'session.archive': (a, ctx) => withSession(ctx, a.session,
+    s => (isArchived(s) ? no('archived', `${s.name} is already archived`) : s.state !== 'exited' && !ctx.closing?.has(s.id) ? no('running', `${s.name} is still running: close it first`) : null),
+    s => row('session.archive', { session: s.id }, `Archiver ${b(s.name)}`, { session: s.name }, { session: s.id })),
+  'session.restore': (a, ctx) => withSession(ctx, a.session, s => (isArchived(s) ? null : no('not_archived', `${s.name} is not archived`)),
+    s => row('session.restore', { session: s.id }, `Sortir ${b(s.name)} de l'archive`, { session: s.name }, { session: s.id })),
+  'session.resume': (a, ctx) => withSession(ctx, a.session, s => (s.source === 'hook_only' ? no('read_only', `${s.name} is read-only`) : s.state !== 'exited' ? no('running', `${s.name} is still running`) : null),
+    s => row('session.resume', { session: s.id }, `Reprendre ${b(s.name)} sur sa conversation`, { session: s.name }, { session: s.id })),
+  // The note is the row's words, never its summary: a long one would pass the summary's bounds.
   'session.decide': (a, ctx) => withSession(ctx, a.session, writable, s => {
     const p = s.pending;
-    if (!p || !(DECIDABLE as readonly string[]).includes(p.kind)) return { refused: `${s.name} has no permission, diff or plan pending` };
-    if (backendOf(s) === 'omp-rpc') return { refused: `${s.name}'s requests are answered in the session` };
+    if (!p || !(DECIDABLE as readonly string[]).includes(p.kind)) return no('no_request', `${s.name} has no permission, diff or plan pending`);
+    if (backendOf(s) === 'omp-rpc') return no('in_session', `${s.name}'s requests are answered in the session`);
     const decision = a.decision as 'accept' | 'deny'; const note = a.note as string | undefined;
-    if (note !== undefined && (decision !== 'deny' || !offers(s.tool, p.kind, 'note'))) return { refused: `no note with this answer for ${s.tool}` };
+    if (note !== undefined && (decision !== 'deny' || !offers(s.tool, p.kind, 'note'))) return no('no_note', `no note with this answer for ${s.tool}`);
     const kind = KIND[p.kind as (typeof DECIDABLE)[number]];
-    const detail = (p.body ? `${p.text}\n\n${p.body}` : p.text).slice(0, 4000);
     return row('session.decide', { session: s.id, decision, ...(note ? { note } : {}), expect: { kind: p.kind, text: p.text, key: pendingKey(p) } },
-      `${decision === 'accept' ? 'Accepter' : 'Refuser'} la demande de ${kind} de ${b(s.name)}${note ? ` (« ${note} »)` : ''}`, { session: s.id, detail });
+      `${decision === 'accept' ? 'Accepter' : 'Refuser'} la demande de ${kind} de ${b(s.name)}${note ? ', avec une note' : ''}`,
+      { session: s.name, decision, kind: p.kind, note }, { session: s.id, ...detailOf(p.body ? `${p.text}\n\n${p.body}` : p.text) });
   }),
   'team.join': (a, ctx) => withTeam(ctx, a.team, t => withSession(ctx, a.session, writable, s => {
-    if (t.seats.some(x => x.sessionId === s.id)) return { refused: `${s.name} is already in ${t.name}` };
+    if (t.seats.some(x => x.sessionId === s.id)) return no('member', `${s.name} is already in ${t.name}`);
     const role = ctx.findRole(String(a.role), s.cwd);
-    if (!role) return { refused: `unknown role ${String(a.role)}` };
-    return row('team.join', { team: t.id, session: s.id, role: role.id }, `Faire entrer ${b(s.name)} dans ${b(t.name)} comme @${role.id}`, { session: s.id, team: t.id });
+    if (!role) return no('unknown_role', `unknown role ${String(a.role)}`);
+    return row('team.join', { team: t.id, session: s.id, role: role.id }, `Faire entrer ${b(s.name)} dans ${b(t.name)} comme @${role.id}`,
+      { team: t.name, session: s.name, role: role.id }, { session: s.id, team: t.id });
   })),
   'team.leave': (a, ctx) => withTeam(ctx, a.team, t => withSession(ctx, a.session, () => null, s =>
     t.seats.some(x => x.sessionId === s.id)
-      ? row('team.leave', { team: t.id, session: s.id }, `Retirer ${b(s.name)} de ${b(t.name)}`, { session: s.id, team: t.id })
-      : { refused: `${s.name} is not in ${t.name}` })),
-  'team.resume': (a, ctx) => withTeam(ctx, a.team, t => (t.state !== 'resting' ? { refused: `team ${t.name} is not resting` }
-    : row('team.resume', { team: t.id }, `Reprendre l'équipe ${b(t.name)}`, { team: t.id }))),
-  'team.dissolve': (a, ctx) => withTeam(ctx, a.team, t => row('team.dissolve', { team: t.id }, `Dissoudre l'équipe ${b(t.name)}`, { team: t.id })),
+      ? row('team.leave', { team: t.id, session: s.id }, `Retirer ${b(s.name)} de ${b(t.name)}`, { team: t.name, session: s.name }, { session: s.id, team: t.id })
+      : no('not_member', `${s.name} is not in ${t.name}`))),
+  'team.resume': (a, ctx) => withTeam(ctx, a.team, t => (t.state !== 'resting' ? no('not_resting', `team ${t.name} is not resting`)
+    : row('team.resume', { team: t.id }, `Reprendre l'équipe ${b(t.name)}`, { team: t.name }, { team: t.id }))),
+  'team.dissolve': (a, ctx) => withTeam(ctx, a.team, t => row('team.dissolve', { team: t.id }, `Dissoudre l'équipe ${b(t.name)}`, { team: t.name }, { team: t.id })),
+  // Saving over a template of the same file replaces it for good: asked again, as any destructive row.
   'team.save': (a, ctx) => withTeam(ctx, a.team, t => {
     const seats = t.seats.flatMap(x => {
       const s = x.sessionId ? ctx.sessions.find(y => y.id === x.sessionId) : undefined;
       return [{ role: x.role, ...(s ? { tool: s.tool, ...(s.model ? { model: s.model } : {}), ...(s.effort ? { effort: s.effort } : {}) } : {}) }];
     }).filter((x, i, all) => all.findIndex(y => y.role === x.role) === i);
-    if (seats.length === 0) return { refused: `team ${t.name} has no seat` };
+    if (seats.length === 0) return no('no_seat', `team ${t.name} has no seat`);
     const name = String(a.name);
-    return row('team.save', { team: t.id, name, seats }, `Enregistrer ${b(t.name)} comme modèle « ${name} »`, { team: t.id });
+    const replaces = ctx.templateExists?.(name) ?? false;
+    return row('team.save', { team: t.id, name, seats }, replaces ? `Remplacer le modèle « ${name} » par ${b(t.name)}` : `Enregistrer ${b(t.name)} comme modèle « ${name} »`,
+      { team: t.name, name, replaces: replaces ? '1' : undefined }, { team: t.id, ...(replaces ? { risk: 'destructive' as const } : {}) });
   }),
   'task.cancel': (a, ctx) => {
     const t = taskOf(String(a.task), ctx);
-    if (typeof t === 'string') return { refused: t };
+    if (isRefusal(t)) return t;
     const reason = a.reason as string | undefined;
-    return row('task.cancel', { task: t.id, ...(reason ? { reason } : {}) }, `Annuler la tâche « ${t.title} » de ${b(t.ownerName)}`, { session: t.owner, ...(t.team ? { team: t.team } : {}) });
+    return row('task.cancel', { task: t.id, ...(reason ? { reason } : {}) }, `Annuler la tâche « ${title(t)} » de ${b(t.ownerName)}`,
+      { task: t.title, owner: t.ownerName, reason }, { session: t.owner, ...(t.team ? { team: t.team } : {}) });
   },
   'task.pass': (a, ctx) => {
     const t = taskOf(String(a.task), ctx);
-    if (typeof t === 'string') return { refused: t };
-    return withSession(ctx, a.to, s => writable(s) ?? (s.id === t.owner ? `${s.name} already holds it` : null), s => {
+    if (isRefusal(t)) return t;
+    return withSession(ctx, a.to, s => writable(s) ?? (s.id === t.owner ? no('holder', `${s.name} already holds it`) : null), s => {
       const note = a.note as string | undefined;
-      return row('task.pass', { task: t.id, to: s.id, ...(note ? { note } : {}) }, `Passer la tâche « ${t.title} » de ${b(t.ownerName)} à ${b(s.name)}`, { session: s.id });
+      return row('task.pass', { task: t.id, to: s.id, ...(note ? { note } : {}) }, `Passer la tâche « ${title(t)} » de ${b(t.ownerName)} à ${b(s.name)}`,
+        { task: t.title, owner: t.ownerName, session: s.name, note }, { session: s.id });
     });
   }
 };
@@ -126,9 +153,9 @@ const IMPLS: Partial<Record<ActionId, Impl>> = {
 export const GENERIC_ACTIONS = Object.keys(IMPLS) as ActionId[];
 
 /** A generic action's parsed args against the live state: a row ready to apply, or why not. */
-export function resolveAction(id: ActionId, args: unknown, ctx: ResolveCtx): Resolved {
-  const impl = IMPLS[id];
-  return impl ? impl(args as Args, ctx) : { refused: `${id} is not a generic action` };
+export function resolveAction(id: string, args: unknown, ctx: ResolveCtx): Resolved {
+  const impl = IMPLS[id as ActionId];
+  return impl ? impl(args as Args, ctx) : no('unknown', `${id} is not a generic action`);
 }
 
 /** A resolved row as the message the daemon already handles; `rid` names the request where the message takes one. */

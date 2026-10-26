@@ -1236,7 +1236,13 @@ function fakeChats() {
     },
     cancel(qid: string) { cancelled.push({ id, qid }); },
     async reset(emit: (m: ServerMessage) => void) { resets.push(id); turns.set(id, []); emit({ type: 'chat.history', turns: [] } as never); },
-    history: () => turns.get(id) ?? []
+    history: () => turns.get(id) ?? [],
+    ignore(qid: string, undo: boolean) {
+      const t = (turns.get(id) ?? []).find(x => x.qid === qid) as { ignoredAt?: string; actions?: unknown } | undefined;
+      if (!t?.actions) return 'no card to ignore';
+      if (undo) delete t.ignoredAt; else t.ignoredAt = T0;
+      return null;
+    }
   });
   const chats = {
     device(id: string) { touched.push(id); gone.delete(id); if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) throw new Error('invalid device id'); if (dropping.has(id)) throw new Error('device thread is being dropped'); return chatOf(id) as never; },
@@ -1787,13 +1793,13 @@ describe('phone gateway: close cards', () => {
 describe('phone gateway: generic cards (spec 2026-10-26 action registry §9)', () => {
   const rp = { rpId: 'relay.test', origin: 'https://relay.test' };
   const QA = randomUUID(); const QPC = randomUUID();
-  type Row = { action: string; args: Record<string, unknown>; summary: string; risk: 'reversible' | 'destructive'; state?: 'done' };
+  type Row = { action: string; args: Record<string, unknown>; summary: string; risk: 'reversible' | 'destructive'; state?: 'done'; detail?: string; detailCut?: true };
   const archive: Row = { action: 'session.archive', args: { session: 'a' }, summary: 'Archiver **A**', risk: 'reversible' };
   const resume: Row = { action: 'session.resume', args: { session: 'b' }, summary: 'Reprendre **B**', risk: 'reversible' };
   const dissolve: Row = { action: 'team.dissolve', args: { team: 't' }, summary: 'Dissoudre **T**', risk: 'destructive' };
 
   function make(rows: Row[], result?: { done: number[]; failed: Array<{ row: number; message: string }> } | Error) {
-    const c = fakeChats();
+    const c = fakeChats(); turnsOf = c.turns;
     const turn = (qid: string) => ({ qid, question: 'q', askedAt: T0, steps: [] as never[], actions: rows });
     c.turns.set('dev1', [turn(QA), turn(QPC)] as never);
     const owner = c.chats.owner;
@@ -1827,6 +1833,42 @@ describe('phone gateway: generic cards (spec 2026-10-26 action registry §9)', (
     return m;
   };
   const last = (g: G) => g.results('dev1').at(-1);
+  let turnsOf: ReturnType<typeof fakeChats>['turns'];
+
+  it('« Ignorer » sets the device\'s turn aside, « Revoir » opens it again; an ignored card applies no more', async () => {
+    const { calls, g } = make([archive]);
+    const ignore = { type: 'chat.ignore', op: randomUUID(), qid: QA };
+    g.send('dev1', ignore);
+    await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: ignore.op, status: 'applied' });
+    expect((turnsOf.get('dev1')![0] as { ignoredAt?: string }).ignoredAt).toBe(T0);
+    g.send('dev1', { type: 'chat.act', op: randomUUID(), qid: QA });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'rejected', reason: 'stale' });
+    expect(calls).toEqual([]);
+    g.send('dev1', { type: 'chat.ignore', op: randomUUID(), qid: QA, undo: true });
+    g.send('dev1', { type: 'chat.act', op: randomUUID(), qid: QA });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'applied' });
+    // The PC's card is not the phone's to set aside.
+    g.send('dev1', { type: 'chat.ignore', op: randomUUID(), qid: QPC });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'rejected', reason: 'unknown_session' });
+  });
+  it('a row whose request the phone only saw cut is refused there, never accepted', async () => {
+    const accept: Row = { action: 'session.decide', args: { session: 'a', decision: 'accept' }, summary: 'Accepter', risk: 'reversible', detail: 'x'.repeat(3000) };
+    const deny: Row = { ...accept, args: { session: 'a', decision: 'deny' }, summary: 'Refuser', detail: 'x…', detailCut: true };
+    const one = make([accept]);
+    one.g.send('dev1', { type: 'chat.act', op: randomUUID(), qid: QA });
+    await flush();
+    expect(last(one.g)).toMatchObject({ status: 'rejected', reason: 'not_offered' });
+    expect(one.calls).toEqual([]);
+    const two = make([deny]);
+    two.g.send('dev1', { type: 'chat.act', op: randomUUID(), qid: QA });
+    await flush();
+    // A deny goes on to its usual check (the passkey, here).
+    expect(last(two.g)).toMatchObject({ status: 'rejected', reason: 'confirm_required' });
+  });
 
   it('applies rows with no device check without a passkey', async () => {
     const { calls, g } = make([archive]);

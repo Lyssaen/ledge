@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { ContextPrefsSchema, HandoverStateSchema } from './handover.js';
 import { AutonomySchema, PendingSchema, SessionSchema, ToolSchema, type Tool } from './session.js';
-import { ChatActionStateSchema, ChatStepSchema, MAX_PROPOSALS } from './chat.js';
-import { ActionIdSchema, ActionRiskSchema } from './actions.js';
+import { ActionVarsSchema, ChatActionStateSchema, ChatStepSchema, MAX_PROPOSALS } from './chat.js';
+import { ActionRiskSchema } from './actions.js';
 import { DecisionSchema, NOTE_MAX } from './decisions.js';
 import { ThreadItemSchema } from './thread.js';
 import { MESSAGE_MAX, RefusalCodeSchema } from './messages.js';
@@ -162,11 +162,13 @@ export const PhoneChatTaskSchema = z.object({
 }).strict();
 export type PhoneChatTask = z.infer<typeof PhoneChatTaskSchema>;
 
-/** A row of the chat's generic card as the phone sees it: no args (the phone applies rows, never args), no error text. */
+/** A row of the chat's generic card as the phone sees it: no args (the phone applies rows, never args), no error text but its
+ *  `code`. A detail too long for the phone comes cut (`detailCut`): such a row can only be refused there, or opened on the PC. */
 export const PhoneChatActionSchema = z.object({
-  action: ActionIdSchema, summary: z.string().max(300), detail: z.string().max(TOOL_TEXT_MAX).optional(), risk: ActionRiskSchema,
+  action: z.string().min(1).max(40), summary: z.string().max(300), vars: ActionVarsSchema.optional(),
+  detail: z.string().max(TOOL_TEXT_MAX).optional(), detailCut: z.literal(true).optional(), risk: ActionRiskSchema,
   session: z.string().max(100).optional(), team: z.string().max(40).optional(),
-  state: ChatActionStateSchema.optional(), doneAt: z.string().datetime().optional()
+  state: ChatActionStateSchema.optional(), doneAt: z.string().datetime().optional(), code: z.string().max(40).optional()
 }).strict();
 export type PhoneChatAction = z.infer<typeof PhoneChatActionSchema>;
 
@@ -196,7 +198,7 @@ export const PhoneChatTurnSchema = z.object({
   error: ChatErrorCodeSchema.optional(), proposals: z.array(PhoneChatProposalSchema).max(MAX_PROPOSALS).optional(),
   relay: PhoneChatRelaySchema.optional(), closes: z.array(PhoneChatCloseSchema).min(1).max(MAX_PROPOSALS).optional(), cut: z.literal(true).optional(),
   team: PhoneChatTeamSchema.optional(), tasks: z.array(PhoneChatTaskSchema).min(1).max(MAX_PROPOSALS).optional(),
-  actions: z.array(PhoneChatActionSchema).min(1).max(MAX_PROPOSALS).optional()
+  actions: z.array(PhoneChatActionSchema).min(1).max(MAX_PROPOSALS).optional(), ignoredAt: z.string().datetime().optional()
 }).strict();
 export type PhoneChatTurn = z.infer<typeof PhoneChatTurnSchema>;
 
@@ -262,6 +264,8 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   /** Rows of the turn's generic card (action registry spec §5): `confirmed` as the local `chat.act`; a row whose action asks
    *  for a device check (`phone`) needs one assertion, purpose `act`, over the turn. */
   z.object({ type: z.literal('chat.act'), op: OperationIdSchema, qid: OperationIdSchema, rows: CardRowsSchema.optional(), confirmed: z.literal(true).optional(), assertion: AssertionSchema.optional() }),
+  /** « Ignorer » the turn's cards, or `undo` (« Revoir »), as the local `chat.ignore`. */
+  z.object({ type: z.literal('chat.ignore'), op: OperationIdSchema, qid: OperationIdSchema, undo: z.literal(true).optional() }),
   /** « Reprendre » a resting team. */
   z.object({ type: z.literal('team.resume'), op: OperationIdSchema, team: z.string().min(1).max(40) }),
   /** Puts a closed task Ledge gave away from « À traiter ». */

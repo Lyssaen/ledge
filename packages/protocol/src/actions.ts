@@ -99,8 +99,8 @@ export const ACTIONS: readonly ActionDef[] = [
   }),
   def({
     id: 'session.archive', args: z.object({ session: SessionRef }), card: 'generic', phone: null, risk: 'reversible', max: 8,
-    summary: 'archiver une session : elle quitte la liste mais est gardée (restaurable)',
-    when: 'quand l\'utilisateur demande d\'archiver ou de ranger des sessions',
+    summary: 'archiver une session terminée : elle quitte la liste mais est gardée (restaurable)',
+    when: 'quand l\'utilisateur demande d\'archiver ou de ranger des sessions ; une session encore en cours se ferme d\'abord : propose session.close puis session.archive, dans cet ordre, dans la même réponse',
     example: { session: 'Nova' }
   }),
   def({

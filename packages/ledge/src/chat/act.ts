@@ -1,5 +1,5 @@
 // Applies the rows of a chat's generic card (spec 2026-10-26 action registry §9.2), for the PC's overlays and for a phone alike.
-import { MAX_PROPOSALS, type ChatAction } from '@ledge/protocol';
+import { MAX_PROPOSALS, type ActionErrorCode, type ChatAction } from '@ledge/protocol';
 import type { Resolved } from '../daemon/actions.js';
 import type { Chat, ChatMessage } from './service.js';
 import { log } from '../log.js';
@@ -43,17 +43,18 @@ export async function actFromChat(deps: ActDeps, qid: string, rows?: number[], c
     for (const r of todo) {
       const row = chat.action(qid, r)!;
       chat.markAction(qid, r, { state: 'running' }, safe);
-      let refused = true;
+      let refused: ActionErrorCode | null = 'changed';
       try {
         const current = deps.resolve(row);
-        if ('refused' in current) throw new Error(current.refused);
-        if (JSON.stringify(current.args) !== JSON.stringify(row.args)) throw new Error(row.action === 'session.decide' ? 'the request has changed since the card' : 'the target has changed since the card');
-        refused = false;
+        if ('refused' in current) { refused = current.code ?? 'changed'; throw new Error(current.refused); }
+        // The same args at another risk (a template saved meanwhile under that name) is another action: confirmed for neither.
+        if (JSON.stringify(current.args) !== JSON.stringify(row.args) || current.risk !== row.risk) throw new Error(row.action === 'session.decide' ? 'the request has changed since the card' : 'the target has changed since the card');
+        refused = null;
         await deps.apply(row);
       } catch (e) {
         const message = (e as Error).message;
         failed.push({ row: r, message, ...(refused ? { refused: true as const } : {}) });
-        chat.markAction(qid, r, { state: refused ? 'refused' : 'failed', error: message }, safe);
+        chat.markAction(qid, r, { state: refused ? 'refused' : 'failed', error: message, code: refused ?? 'failed' }, safe);
         break;
       } finally { inFlight.delete(`${qid}#${r}`); }
       done.push(r);

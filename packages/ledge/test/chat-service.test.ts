@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn as nodeSpawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
-import type { Projects, ServerMessage, Session } from '@ledge/protocol';
+import { NOTE_MAX, parseServerMessage, type Projects, type ServerMessage, type Session } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
 import { createChat, tooWide, TOO_MANY } from '../src/chat/service.js';
 
@@ -562,8 +562,8 @@ describe('ledge-action blocks (spec 2026-10-26 action registry §3)', () => {
     expect(done.proposals).toEqual([{ cwd: dir, project: basename(dir), tool: 'claude', prompt: 'go', model: 'claude-opus-5-5', effort: 'high' }]);
   });
   it('a generic action becomes a row of turn.actions, joined to chat.done, with the names resolved', async () => {
-    const { chat, done } = await askWith('Je range Arlo.\n\n' + act('session.archive', { session: 'Arlo' }), [session('a1', { name: 'Arlo' })]);
-    const row = { action: 'session.archive', args: { session: 'a1' }, summary: 'Archiver **Arlo**', risk: 'reversible', session: 'a1' };
+    const { chat, done } = await askWith('Je range Arlo.\n\n' + act('session.archive', { session: 'Arlo' }), [session('a1', { name: 'Arlo', state: 'exited' })]);
+    const row = { action: 'session.archive', args: { session: 'a1' }, summary: 'Archiver **Arlo**', vars: { session: 'Arlo' }, risk: 'reversible', session: 'a1' };
     expect(done.actions).toEqual([row]);
     expect(done.text).toBe('Je range Arlo.');
     expect(chat.history()[0]!.actions).toEqual([row]);
@@ -580,30 +580,86 @@ describe('ledge-action blocks (spec 2026-10-26 action registry §3)', () => {
   });
   it('generic rows sit beside an earlier card: the last earlier block still decides that card', async () => {
     const answer = act('session.close', { session: 'a1' }) + act('session.archive', { session: 'b2' });
-    const { done } = await askWith(answer, [session('a1', { name: 'Arlo' }), session('b2', { name: 'Bram' })]);
+    const { done } = await askWith(answer, [session('a1', { name: 'Arlo' }), session('b2', { name: 'Bram', state: 'exited' })]);
     expect(done.closes).toEqual([{ id: 'a1', name: 'Arlo', tool: 'claude' }]);
     expect(done.actions?.map(a => a.action)).toEqual(['session.archive']);
   });
+  it('a running session closed by the same answer can be archived after: close card, then the archive row', async () => {
+    const { done } = await askWith(act('session.close', { session: 'a1' }) + act('session.archive', { session: 'a1' }) + act('session.archive', { session: 'b2' }), [session('a1', { name: 'Arlo' }), session('b2', { name: 'Bram' })]);
+    expect(done.closes).toEqual([{ id: 'a1', name: 'Arlo', tool: 'claude' }]);
+    expect(done.actions).toEqual([expect.objectContaining({ action: 'session.archive', args: { session: 'a1' } })]);
+    expect(logged).toContain('chat q1: action ignored: Bram is still running: close it first');
+  });
   it('caps rows per action and at 8 in all', async () => {
     const pending = { kind: 'permission' as const, text: 'Bash: rm x', source: 'hook' as const };
-    const ids = Array.from({ length: 10 }, (_, i) => `s${i}`);
-    const answer = act('session.decide', { session: 's0', decision: 'deny' }) + act('session.decide', { session: 's0', decision: 'accept' }) + ids.map(id => act('session.archive', { session: id })).join('');
-    const { done } = await askWith(answer, ids.map(id => session(id, id === 's0' ? { state: 'waiting_permission' as const, pending } : {})));
+    const ids = Array.from({ length: 11 }, (_, i) => `s${i}`);
+    const answer = act('session.decide', { session: 's0', decision: 'deny' }) + act('session.decide', { session: 's0', decision: 'accept' }) + ids.slice(1).map(id => act('session.archive', { session: id })).join('');
+    const { done } = await askWith(answer, ids.map(id => session(id, id === 's0' ? { state: 'waiting_permission' as const, pending } : { state: 'exited' as const })));
     expect(done.actions).toHaveLength(8);
     expect(done.actions!.filter(a => a.action === 'session.decide')).toHaveLength(1);
     expect(logged).toContain('chat q1: 1 session.decide beyond 1 ignored');
     expect(logged).toContain('chat q1: 3 actions beyond 8 ignored');
   });
   it('marks a row running, done or failed for every client', async () => {
-    const { chat } = await askWith(act('session.archive', { session: 'a1' }), [session('a1')]);
+    const { chat } = await askWith(act('session.archive', { session: 'a1' }), [session('a1', { state: 'exited' })]);
     const out: ServerMessage[] = [];
-    chat.markAction('q1', 0, { state: 'failed', error: 'busy' }, m => out.push(m));
+    chat.markAction('q1', 0, { state: 'failed', error: 'busy', code: 'failed' }, m => out.push(m));
     expect(chat.action('q1', 0)).toMatchObject({ state: 'failed', error: 'busy' });
     chat.markAction('q1', 0, { state: 'done', doneAt: '2026-10-11T09:00:00.000Z' }, m => out.push(m));
     expect(chat.action('q1', 0)).toMatchObject({ state: 'done', doneAt: '2026-10-11T09:00:00.000Z' });
     expect(chat.action('q1', 0)).not.toHaveProperty('error');
+    expect(chat.action('q1', 0)).not.toHaveProperty('code');
     chat.markAction('q1', 4, { state: 'done' }, m => out.push(m));
     expect(out.map(m => m.type)).toEqual(['chat.history', 'chat.history']);
+  });
+  it('a long note, a long title: the history with those rows still parses for every client', async () => {
+    const pending = { kind: 'permission' as const, text: 'Bash: rm x', source: 'hook' as const };
+    const answer = act('session.decide', { session: 'a1', decision: 'deny', note: 'n'.repeat(NOTE_MAX) });
+    const { chat } = await askWith(answer, [session('a1', { state: 'waiting_permission', pending })]);
+    expect(chat.history()[0]!.actions).toHaveLength(1);
+    expect(() => parseServerMessage({ type: 'chat.history', turns: chat.history() })).not.toThrow();
+  });
+  describe('« Ignorer » a card', () => {
+    it('sets the turn aside for every client, opens it again with undo, and refuses a turn without a card', async () => {
+      const { chat } = await askWith(act('session.archive', { session: 'a1' }), [session('a1', { state: 'exited' })]);
+      const out: ServerMessage[] = [];
+      expect(chat.ignore('q1', false, m => out.push(m))).toBeNull();
+      expect(chat.history()[0]!.ignoredAt).toBe('2026-10-11T09:00:00.000Z');
+      expect(chat.ignored('q1')).toBe(true);
+      expect(chat.ignore('q1', true, m => out.push(m))).toBeNull();
+      expect(chat.history()[0]).not.toHaveProperty('ignoredAt');
+      expect(chat.ignored('q1')).toBe(false);
+      expect(out.map(m => m.type)).toEqual(['chat.history', 'chat.history']);
+      expect(chat.ignore('nope', false, () => {})).toBe('unknown card');
+      const plain = await askWith('Rien à faire.', []);
+      expect(plain.chat.ignore('q1', false, () => {})).toBe('no card to ignore');
+    });
+    it('refuses while a row is being applied', async () => {
+      const { chat } = await askWith(act('session.archive', { session: 'a1' }), [session('a1', { state: 'exited' })]);
+      chat.markAction('q1', 0, { state: 'running' }, () => {});
+      expect(chat.ignore('q1', false, () => {})).toBe('the card is under way');
+    });
+    it('tells Ledge at the next question, once, unless the card was opened again', async () => {
+      let answer: string | undefined = act('session.archive', { session: 'a1' });
+      const { chat } = await askWith(answer, [session('a1', { state: 'exited' })], { env: async () => ({ ...process.env, ...(answer ? { FAKE_ANSWER: answer } : {}) }) });
+      chat.ignore('q1', false, () => {});
+      answer = undefined;
+      const out: ServerMessage[] = [];
+      await chat.ask('q2', 'Et ensuite ?', m => out.push(m));
+      const told = (out.find(m => m.type === 'chat.done') as Extract<ServerMessage, { type: 'chat.done' }>).text;
+      expect(told).toContain('[Ledge] L\'utilisateur a ignoré ta proposition en réponse à « x » : rien n\'en a été appliqué.');
+      expect(told).toContain('Et ensuite ?');
+      out.length = 0;
+      await chat.ask('q3', 'Encore ?', m => out.push(m));
+      expect((out.find(m => m.type === 'chat.done') as Extract<ServerMessage, { type: 'chat.done' }>).text).not.toContain('[Ledge]');
+      // Opened again before the next question: nothing to tell.
+      answer = act('session.archive', { session: 'a1' });
+      await chat.ask('q4', 'Range-la', () => {});
+      chat.ignore('q4', false, () => {}); chat.ignore('q4', true, () => {});
+      answer = undefined; out.length = 0;
+      await chat.ask('q5', 'Alors ?', m => out.push(m));
+      expect((out.find(m => m.type === 'chat.done') as Extract<ServerMessage, { type: 'chat.done' }>).text).not.toContain('[Ledge]');
+    });
   });
 });
 

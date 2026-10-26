@@ -1476,7 +1476,7 @@ describe('server', () => {
         proposal: qid => (qid === 'q1' ? proposal : undefined),
         markLaunched(qid, id, emit) { marks.push(['launched', qid, id]); proposal = { ...proposal!, launchedId: id }; emit({ type: 'chat.history', turns: [] }); },
         markFailed(qid, message, emit) { marks.push(['failed', qid, message]); proposal = { ...proposal!, error: message }; emit({ type: 'chat.history', turns: [] }); },
-        relay: () => undefined, markRelay() {}, queuedRelays: () => [], close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}, team: () => undefined, markTeam() {}, task: () => undefined, markTask() {}, followTask() {}, action: () => undefined, markAction() {}
+        relay: () => undefined, markRelay() {}, queuedRelays: () => [], close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}, team: () => undefined, markTeam() {}, task: () => undefined, markTask() {}, followTask() {}, action: () => undefined, markAction() {}, ignore: () => null, ignored: () => false
       };
       return { chat, marks };
     }
@@ -1549,7 +1549,7 @@ describe('server', () => {
           proposal: (qid, row = 0) => (qid === 'q1' ? rows[row] : undefined),
           markLaunched(_qid, id, emit, row = 0) { marks.push(['launched', row, id]); rows[row] = { ...rows[row]!, launchedId: id }; emit({ type: 'chat.history', turns: [] }); },
           markFailed(_qid, message, emit, row = 0) { marks.push(['failed', row, message]); rows[row] = { ...rows[row]!, error: message }; emit({ type: 'chat.history', turns: [] }); },
-          relay: () => undefined, markRelay() {}, queuedRelays: () => [], close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}, team: () => undefined, markTeam() {}, task: () => undefined, markTask() {}, followTask() {}, action: () => undefined, markAction() {}
+          relay: () => undefined, markRelay() {}, queuedRelays: () => [], close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}, team: () => undefined, markTeam() {}, task: () => undefined, markTask() {}, followTask() {}, action: () => undefined, markAction() {}, ignore: () => null, ignored: () => false
         };
         return { chat, marks };
       }
@@ -1603,7 +1603,7 @@ describe('server', () => {
         relay: qid => (qid === 'q1' ? r : undefined),
         markRelay(_qid, patch, emit) { const { id, name, tool, text } = r!; r = { id, name, tool, text, ...patch }; emit({ type: 'chat.history', turns: [] }); },
         queuedRelays: () => (r?.status === 'queued' ? [{ qid: 'q1', relay: r, askedAt: '2026-10-12T08:00:00.000Z' }] : []),
-        close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}, team: () => undefined, markTeam() {}, task: () => undefined, markTask() {}, followTask() {}, action: () => undefined, markAction() {}
+        close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}, team: () => undefined, markTeam() {}, task: () => undefined, markTask() {}, followTask() {}, action: () => undefined, markAction() {}, ignore: () => null, ignored: () => false
       };
       return { chat, current: () => r };
     }
@@ -2602,7 +2602,7 @@ describe('close a session', () => {
         close: (qid, row) => (qid === 'q1' ? rows[row] : undefined),
         markClosed(_qid, row, how, emit) { marks.push(['closed', row, how]); rows[row] = { ...rows[row]!, closedAt: new Date().toISOString(), how }; emit({ type: 'chat.history', turns: [] }); },
         markCloseFailed(_qid, row, message, emit) { marks.push(['failed', row, message]); rows[row] = { ...rows[row]!, error: message }; emit({ type: 'chat.history', turns: [] }); },
-        idle: async () => {}, team: () => undefined, markTeam() {}, task: () => undefined, markTask() {}, followTask() {}, action: () => undefined, markAction() {}
+        idle: async () => {}, team: () => undefined, markTeam() {}, task: () => undefined, markTask() {}, followTask() {}, action: () => undefined, markAction() {}, ignore: () => null, ignored: () => false
       };
       return { chat, marks };
     }
@@ -2696,7 +2696,7 @@ describe('close a session', () => {
       it('applies the rows through the daemon\'s handlers in order and stops at the first failure', async () => {
         const { chat, rows, marks } = actChat([archiveOf('a'), archiveOf('zz'), archiveOf('b')]);
         await closing({}, { chat });
-        store.upsert(mk('a', { state: 'idle' })); store.upsert(mk('b', { state: 'idle' }));
+        store.upsert(mk('a', { state: 'exited' })); store.upsert(mk('b', { state: 'exited' }));
         const c = await connect({ port: srv.port }); await c.next('snapshot');
         c.send({ type: 'chat.act', rid: 'r1', qid: 'q1' });
         expect(await c.next('chat.acted', 3000)).toEqual({ type: 'chat.acted', rid: 'r1', qid: 'q1', done: [0], failed: [{ row: 1, message: 'unknown session zz', refused: true }] });
@@ -2727,6 +2727,47 @@ describe('close a session', () => {
         expect(marks).toEqual([]);
         c.close();
       });
+      it('a card set aside (« Ignorer ») applies no more; chat.ignore reaches the chat and its refusal the requester', async () => {
+        const { chat, marks } = actChat([archiveOf('a')]);
+        let ignored = false; const calls: Array<[string, boolean]> = [];
+        chat.ignored = qid => qid === 'q1' && ignored;
+        chat.ignore = (qid, undo, emit) => { calls.push([qid, undo]); if (qid !== 'q1') return 'unknown card'; ignored = !undo; emit({ type: 'chat.history', turns: [] }); return null; };
+        await closing({}, { chat });
+        store.upsert(mk('a', { state: 'exited' }));
+        const c = await connect({ port: srv.port }); await c.next('snapshot');
+        c.send({ type: 'chat.ignore', qid: 'q1' });
+        await c.next('chat.history', 3000);
+        c.send({ type: 'chat.act', rid: 'r1', qid: 'q1' });
+        expect(await c.next('error')).toEqual({ type: 'error', message: 'ignored card: open it again first', request: 'chat.act', code: 'ignored' });
+        c.send({ type: 'session.close', qid: 'q1' });
+        expect(await c.next('error')).toMatchObject({ message: 'ignored card: open it again first', request: 'session.close' });
+        c.send({ type: 'chat.ignore', qid: 'q9' });
+        expect(await c.next('error')).toMatchObject({ message: 'unknown card', request: 'chat.ignore' });
+        c.send({ type: 'chat.ignore', qid: 'q1', undo: true });
+        await c.next('chat.history', 3000);
+        c.send({ type: 'chat.act', rid: 'r2', qid: 'q1' });
+        expect(await c.next('chat.acted', 3000)).toMatchObject({ done: [0] });
+        expect(calls).toEqual([['q1', false], ['q9', false], ['q1', true]]);
+        expect(marks).toEqual(['0:running', '0:done']);
+        c.close();
+      });
+      it('Ledge cancels or passes a task from its card only: a client naming itself ledge is refused', async () => {
+        const { chat, rows } = actChat([]);
+        await closing({}, { chat });
+        store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'idle' }));
+        const c = await connect({ port: srv.port }); await c.next('snapshot');
+        c.send({ type: 'task.cmd', rid: 't1', by: 'a', op: 'give', to: 'Pim', title: 'Lance les tests' });
+        const id = (await c.next('task.result', 3000)).task!.id;
+        c.send({ type: 'task.cmd', rid: 't2', by: 'ledge', op: 'cancel', task: id });
+        expect((await c.next('task.result', 3000)).reason).toBe('seul le chat de Ledge annule ou passe une tâche au nom de Ledge');
+        c.send({ type: 'task.cmd', rid: 't3', by: 'ledge', op: 'pass', task: id, to: 'a' });
+        expect((await c.next('task.result', 3000)).reason).toBe('seul le chat de Ledge annule ou passe une tâche au nom de Ledge');
+        // The card's own row goes through: Ledge cancels it.
+        rows.push({ action: 'task.cancel', args: { task: id }, summary: 'x', risk: 'destructive', session: 'b' });
+        c.send({ type: 'chat.act', rid: 'r1', qid: 'q1', confirmed: true });
+        expect(await c.next('chat.acted', 3000)).toMatchObject({ done: [0], failed: [] });
+        c.close();
+      });
     });
   });
 
@@ -2737,7 +2778,7 @@ describe('close a session', () => {
       relay: qid => (qid === 'q1' ? r : undefined),
       markRelay(_qid, patch, emit) { const { id, name, tool, text } = r!; r = { id, name, tool, text, ...patch }; emit({ type: 'chat.history', turns: [] }); },
       queuedRelays: () => (r?.status === 'queued' ? [{ qid: 'q1', relay: r, askedAt: '2026-10-12T08:00:00.000Z' }] : []),
-      close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}, team: () => undefined, markTeam() {}, task: () => undefined, markTask() {}, followTask() {}, action: () => undefined, markAction() {}
+      close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}, team: () => undefined, markTeam() {}, task: () => undefined, markTask() {}, followTask() {}, action: () => undefined, markAction() {}, ignore: () => null, ignored: () => false
     };
     const history = new History({ dir: tmpDir() });
     await closing({ 'ledge-a': ['Running…'] }, { history, chat });

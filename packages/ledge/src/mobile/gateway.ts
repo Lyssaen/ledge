@@ -8,7 +8,7 @@ import {
 } from '@ledge/protocol';
 import type { MobileService } from './service.js';
 import type { ChatThreads, ChatThreadId } from '../chat/threads.js';
-import { phoneEmitter, toPhoneHistory } from './chat.js';
+import { phoneCut, phoneEmitter, toPhoneHistory } from './chat.js';
 import type { ChatMessage } from '../chat/service.js';
 import { CloseRefused } from '../chat/close.js';
 import { ActRefused } from '../chat/act.js';
@@ -188,7 +188,7 @@ export function createPhoneGateway(deps: {
   };
 
   /** The operations that act on a tracked session: the registry's own, the credential's, the device's and the chat's are handled before it. */
-  type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.launch' | 'chat.close' | 'chat.act' | 'chat.team' | 'chat.task' | 'team.resume' | 'task.seen' }>;
+  type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.launch' | 'chat.close' | 'chat.act' | 'chat.ignore' | 'chat.team' | 'chat.task' | 'team.resume' | 'task.seen' }>;
   /** Whether the operation needs the device's own check: an accept of a request that is not low, or a reply to an OMP (rpc) dialog, which is never low. */
   const needsAssertion = (msg: SessionOperation, s: Session): boolean => {
     if (msg.type === 'session.decide') return msg.decision !== 'deny' && riskOf(s)?.risk !== 'low';
@@ -307,9 +307,13 @@ export function createPhoneGateway(deps: {
     } catch { return undefined; }
   };
 
+  /** A card set aside (« Ignorer », on any device) applies no more until it is opened again. */
+  const SET_ASIDE: Outcome = { status: 'rejected', reason: 'stale' };
+
   const chatRelay = async (deviceId: string, msg: Extract<PhoneOperation, { type: 'chat.relay' }>): Promise<Outcome> => {
     const turn = ownTurn(deviceId, msg.qid);
     if (!turn || !deps.relay) return { status: 'rejected', reason: 'unknown_session' };
+    if (turn.ignoredAt) return SET_ASIDE;
     if (!turn.relay || turn.relay.text.length > TOOL_TEXT_MAX) return { status: 'rejected', reason: 'invalid' };
     try { await deps.relay.request(msg.qid); } catch (e) { log(`phone chat.relay failed (${e instanceof Error ? e.name : 'error'})`); return { status: 'failed' }; }
     return { status: 'applied' };
@@ -318,6 +322,7 @@ export function createPhoneGateway(deps: {
   const chatLaunch = async (deviceId: string, msg: Extract<PhoneOperation, { type: 'chat.launch' }>): Promise<Outcome> => {
     const turn = ownTurn(deviceId, msg.qid);
     if (!turn || !deps.launchChat) return { status: 'rejected', reason: 'unknown_session' };
+    if (turn.ignoredAt) return SET_ASIDE;
     // Every targeted row must exist and fit the phone's card: it never confirms a text it did not see.
     const rows = proposalRows(turn);
     const targets = msg.rows ?? [...rows.keys()];
@@ -337,6 +342,7 @@ export function createPhoneGateway(deps: {
   const chatClose = async (deviceId: string, msg: Extract<PhoneOperation, { type: 'chat.close' }>): Promise<Outcome> => {
     const turn = ownTurn(deviceId, msg.qid);
     if (!turn || !deps.closeChat) return { status: 'rejected', reason: 'unknown_session' };
+    if (turn.ignoredAt) return SET_ASIDE;
     const closes = turn.closes;
     const targets = msg.rows ?? (closes ? [...closes.keys()] : []);
     if (!closes || targets.length === 0) return { status: 'rejected', reason: 'invalid' };
@@ -363,10 +369,13 @@ export function createPhoneGateway(deps: {
   const chatAct = async (deviceId: string, msg: Extract<PhoneOperation, { type: 'chat.act' }>): Promise<Outcome> => {
     const turn = ownTurn(deviceId, msg.qid);
     if (!turn || !deps.actChat) return { status: 'rejected', reason: 'unknown_session' };
+    if (turn.ignoredAt) return SET_ASIDE;
     const actions = turn.actions;
     const targets = msg.rows ?? (actions ? [...actions.keys()] : []);
     if (!actions || targets.length === 0) return { status: 'rejected', reason: 'invalid' };
     for (const r of targets) if (!actions[r]) return { status: 'rejected', reason: 'invalid' };
+    // A request the phone could only show cut is refused from there, never accepted: the rest is read on the PC.
+    if (targets.some(r => phoneCut(actions[r]!) && actions[r]!.args.decision !== 'deny')) return { status: 'rejected', reason: 'not_offered' };
     // Nothing left to apply: answered before the assertion is spent.
     if (targets.every(r => actions[r]!.state === 'done')) return { status: 'failed' };
     const todo = targets.filter(r => actions[r]!.state !== 'done');
@@ -401,6 +410,7 @@ export function createPhoneGateway(deps: {
   const chatTeam = async (deviceId: string, msg: Extract<PhoneOperation, { type: 'chat.team' }>): Promise<Outcome> => {
     const turn = ownTurn(deviceId, msg.qid);
     if (!turn?.team || !deps.teams) return { status: 'rejected', reason: 'unknown_session' };
+    if (turn.ignoredAt) return SET_ASIDE;
     if (turn.team.teamId) return { status: 'failed' };
     if (deps.credential(deviceId) === null) return { status: 'rejected', reason: 'confirm_required' };
     const refused = launchAssertionOutcome(deviceId, msg.qid, msg.assertion);
@@ -412,13 +422,22 @@ export function createPhoneGateway(deps: {
     const turn = ownTurn(deviceId, msg.qid);
     const card = turn?.tasks?.[msg.row];
     if (!card || !deps.tasks) return { status: 'rejected', reason: 'unknown_session' };
+    if (turn!.ignoredAt) return SET_ASIDE;
     if ((card.text?.length ?? 0) > TOOL_TEXT_MAX) return { status: 'rejected', reason: 'invalid' };
     if (card.taskId) return { status: 'failed' };
     const rid = msg.op;
     return ask({ type: 'task.cmd', rid, by: LEDGE_GIVER, op: 'give', qid: msg.qid, row: msg.row }, m => (m.type === 'task.result' && m.rid === rid ? m.task !== undefined : undefined));
   };
 
+  /** « Ignorer » the device's own turn, or `undo` (« Revoir »). */
+  const chatIgnore = (deviceId: string, msg: Extract<PhoneOperation, { type: 'chat.ignore' }>): Outcome => {
+    if (!ownTurn(deviceId, msg.qid) || !deps.chats) return { status: 'rejected', reason: 'unknown_session' };
+    const why = deps.chats.device(deviceId).ignore(msg.qid, msg.undo === true, emitterOf(deviceId));
+    return why === null ? { status: 'applied' } : { status: 'rejected', reason: 'invalid' };
+  };
+
   const run = async (deviceId: string, msg: PhoneOperation): Promise<Outcome> => {
+    if (msg.type === 'chat.ignore') return chatIgnore(deviceId, msg);
     if (msg.type === 'chat.team') return chatTeam(deviceId, msg);
     if (msg.type === 'chat.task') return chatTask(deviceId, msg);
     if (msg.type === 'team.resume') return deps.teams ? ask({ type: 'team.resume', team: msg.team }, () => undefined) : { status: 'rejected', reason: 'unavailable' };
@@ -604,7 +623,7 @@ export function createPhoneGateway(deps: {
       log(`phone message refused: ${request ?? '?'}`);
       // A subscription to an endpoint off the list, or a launch the schema refuses (a row twice), is an operation the phone waits an answer for.
       const op = OperationIdSchema.safeParse((raw as { op?: unknown } | null | undefined)?.op);
-      if ((request === 'push.subscribe' || request === 'chat.launch' || request === 'chat.close' || request === 'chat.act' || request === 'chat.team' || request === 'chat.task' || request === 'team.resume' || request === 'task.seen') && op.success && approved(deviceId)) return push(deviceId, { type: 'operation.result', op: op.data, status: 'rejected', reason: 'invalid' });
+      if ((request === 'push.subscribe' || request === 'chat.launch' || request === 'chat.close' || request === 'chat.act' || request === 'chat.ignore' || request === 'chat.team' || request === 'chat.task' || request === 'team.resume' || request === 'task.seen') && op.success && approved(deviceId)) return push(deviceId, { type: 'operation.result', op: op.data, status: 'rejected', reason: 'invalid' });
       return push(deviceId, { type: 'error', code: 'invalid', ...(request !== undefined ? { request } : {}) });
     }
     const msg = parsed.data;

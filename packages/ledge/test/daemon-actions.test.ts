@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { actionById, pendingKey, type ActionId, type ChatAction, type Pending, type Role, type Session, type Task, type Team } from '@ledge/protocol';
+import { actionById, ChatActionSchema, NOTE_MAX, pendingKey, TASK_TEXT_MAX, TASK_TITLE_MAX, type ActionId, type ChatAction, type Pending, type Role, type Session, type Task, type Team } from '@ledge/protocol';
 import { actionMessage, GENERIC_ACTIONS, resolveAction, type ResolveCtx } from '../src/daemon/actions.js';
 
 const T0 = '2026-10-26T08:00:00.000Z';
@@ -24,6 +24,10 @@ const ok = (id: ActionId, args: unknown, c = ctx()): ChatAction => {
   const r = resolveAction(id, actionById(id)!.args.parse(args), c);
   if ('refused' in r) throw new Error(`refused: ${r.refused}`);
   return r;
+};
+const code = (id: ActionId, args: unknown, c = ctx()): string => {
+  const r = resolveAction(id, actionById(id)!.args.parse(args), c);
+  return 'refused' in r ? r.code : 'resolved';
 };
 const refused = (id: ActionId, args: unknown, c = ctx()): string => {
   const r = resolveAction(id, actionById(id)!.args.parse(args), c);
@@ -65,6 +69,50 @@ describe('resolveAction', () => {
     expect(ok('session.resume', { session: 'Old' }).summary).toBe('Reprendre **Old** sur sa conversation');
     expect(refused('session.resume', { session: 'Bix' })).toBe('Bix is still running');
   });
+  it('session.archive refuses a running session: closed first (its clean /exit), never killed by an archive', () => {
+    expect(refused('session.archive', { session: 'Bix' })).toBe('Bix is still running: close it first');
+    expect(refused('session.archive', { session: 'Nova' })).toBe('Nova is still running: close it first');
+    expect(code('session.archive', { session: 'Bix' })).toBe('running');
+    // Closed by the same answer: archived after its close card has run (resolved again then).
+    expect(ok('session.archive', { session: 'Bix' }, ctx({ closing: new Set(['bix']) })).args).toEqual({ session: 'bix' });
+  });
+  it('a refusal carries a code for the fronts, beside the daemon\'s words', () => {
+    expect(code('session.interrupt', { session: 'Zed' })).toBe('unknown');
+    expect(code('session.interrupt', { session: 'Twin' }, ctx({ sessions: [mk('a', 'Twin'), mk('b', 'Twin')] }))).toBe('ambiguous');
+    expect(code('session.model', { session: 'Ro', model: 'opus', effort: null })).toBe('read_only');
+    expect(code('session.model', { session: 'Old', model: 'opus', effort: null })).toBe('exited');
+    expect(code('session.decide', { session: 'Bix', decision: 'accept' })).toBe('no_request');
+    expect(code('team.join', { team: 'team-dead', session: 'Bix', role: 'dev-back' })).toBe('dissolved');
+    expect(code('task.cancel', { task: 'tdone00' })).toBe('closed');
+    expect(code('task.pass', { task: 't91b0d4', to: 'Nova' })).toBe('holder');
+  });
+  it('each row carries its words (vars), for a front in its own language', () => {
+    expect(ok('session.model', { session: 'Nova', model: 'claude-opus-5-5', effort: null }).vars).toEqual({ session: 'Nova', model: 'claude-opus-5-5' });
+    expect(ok('session.decide', { session: 'Nova', decision: 'deny', note: 'Pas sur main' }).vars).toEqual({ session: 'Nova', decision: 'deny', kind: 'permission', note: 'Pas sur main' });
+    expect(ok('team.join', { team: 'api', session: 'Bix', role: 'rev-back' }).vars).toEqual({ team: 'api', session: 'Bix', role: 'rev-back' });
+    expect(ok('task.pass', { task: 't91b0d4', to: 'Bix', note: 'à toi' }).vars).toEqual({ task: 'Pagination', owner: 'Nova', session: 'Bix', note: 'à toi' });
+    expect(ok('task.cancel', { task: 't91b0d4' }).vars).toEqual({ task: 'Pagination', owner: 'Nova' });
+  });
+  it('a summary and its words stay within the row\'s bounds, whatever the note or the title', () => {
+    const note = 'n'.repeat(NOTE_MAX);
+    const deny = ok('session.decide', { session: 'Nova', decision: 'deny', note });
+    expect(deny.summary).toBe('Refuser la demande de permission de **Nova**, avec une note');
+    expect(deny.args.note).toBe(note);
+    expect(deny.vars!.note).toHaveLength(300);
+    const long = ctx({ tasks: [task({ title: 't'.repeat(TASK_TITLE_MAX), ownerName: 'o'.repeat(80) })], sessions: [...ctx().sessions, mk('far', 'f'.repeat(80))] });
+    for (const r of [ok('task.cancel', { task: 't91b0d4', reason: 'r'.repeat(500) }, long), ok('task.pass', { task: 't91b0d4', to: 'far', note: 'n'.repeat(TASK_TEXT_MAX) }, long)]) {
+      expect(r.summary.length).toBeLessThanOrEqual(300);
+      expect(() => ChatActionSchema.parse(r)).not.toThrow();
+    }
+  });
+  it('a request too long for the card is cut and marked, never shown as whole', () => {
+    const big = ctx({ sessions: [mk('p', 'P', { pending: { kind: 'plan', text: 'Le plan', body: 'x'.repeat(5000), source: 'hook' } })] });
+    const r = ok('session.decide', { session: 'P', decision: 'accept' }, big);
+    expect(r.detailCut).toBe(true);
+    expect(r.detail).toHaveLength(4000);
+    expect(r.detail!.endsWith('…')).toBe(true);
+    expect(ok('session.decide', { session: 'Nova', decision: 'accept' }).detailCut).toBeUndefined();
+  });
   it('session.decide snapshots the request, shows it verbatim, and makes accept destructive', () => {
     const r = ok('session.decide', { session: 'Nova', decision: 'accept' });
     expect(r).toMatchObject({ risk: 'destructive', detail: 'Bash: rm -rf dist', summary: 'Accepter la demande de permission de **Nova**',
@@ -102,6 +150,11 @@ describe('resolveAction', () => {
       seats: [{ role: 'dev-back', tool: 'claude', model: 'claude-sonnet-5-5' }, { role: 'rev-back', tool: 'codex' }] });
     expect(refused('team.save', { team: 'nap', name: 'x' })).toBe('team nap has no seat');
   });
+  it('team.save over a template already saved replaces it: destructive, and said so', () => {
+    const saved = ctx({ templateExists: name => name === 'api-duo' });
+    expect(ok('team.save', { team: 'api', name: 'api-duo' }, saved)).toMatchObject({ risk: 'destructive', summary: 'Remplacer le modèle « api-duo » par **api**', vars: { team: 'api', name: 'api-duo', replaces: '1' } });
+    expect(ok('team.save', { team: 'api', name: 'other' }, saved)).toMatchObject({ risk: 'reversible', vars: { team: 'api', name: 'other' } });
+  });
   it('task.cancel and task.pass', () => {
     expect(ok('task.cancel', { task: 't91b0d4', reason: 'Plus utile' })).toMatchObject({ risk: 'destructive', args: { task: 't91b0d4', reason: 'Plus utile' }, summary: 'Annuler la tâche « Pagination » de **Nova**' });
     expect(refused('task.cancel', { task: 'tdone00' })).toBe('task tdone00 is closed');
@@ -118,7 +171,7 @@ describe('actionMessage', () => {
     const msg = (id: ActionId, args: unknown) => actionMessage(ok(id, args, c), 'r1');
     expect(msg('session.model', { session: 'Nova', model: 'opus', effort: null })).toEqual({ type: 'session.model', id: 'nova', model: 'opus', effort: null });
     expect(msg('session.interrupt', { session: 'Bix' })).toEqual({ type: 'session.interrupt', id: 'bix' });
-    expect(msg('session.archive', { session: 'Bix' })).toEqual({ type: 'session.archive', id: 'bix' });
+    expect(msg('session.archive', { session: 'Old' })).toEqual({ type: 'session.archive', id: 'old' });
     expect(msg('session.restore', { session: 'Arch' })).toEqual({ type: 'session.restore', id: 'arch' });
     expect(msg('session.resume', { session: 'Old' })).toEqual({ type: 'session.resume', id: 'old' });
     expect(msg('session.decide', { session: 'Nova', decision: 'accept' })).toEqual({ type: 'session.decide', id: 'nova', decision: 'accept', expect: { kind: 'permission', text: 'Bash: rm -rf dist', key: pendingKey(permission) } });

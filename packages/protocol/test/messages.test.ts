@@ -464,12 +464,31 @@ describe('protocol: model and effort (#58)', () => {
     expect(parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, actions: [row] })).toMatchObject({ actions: [row] });
     expect(() => parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, actions: [] })).toThrow();
     expect(() => parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, actions: Array(9).fill(row) })).toThrow();
-    expect(() => parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, actions: [{ ...row, action: 'session.kill' }] })).toThrow();
+    // An action this front does not know yet still parses: it is drawn from its summary (spec §5.2).
+    expect(parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, actions: [{ ...row, action: 'session.later' }] })).toMatchObject({ actions: [{ action: 'session.later' }] });
+    expect(() => parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, actions: [{ ...row, action: '' }] })).toThrow();
+    expect(() => parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, actions: [{ ...row, summary: 'x'.repeat(301) }] })).toThrow();
     expect(() => parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, actions: [{ ...row, risk: 'harmless' }] })).toThrow();
     const turn = { qid: 'q1', question: '?', askedAt: T0, steps: [] };
     expect(ChatTurnSchema.parse({ ...turn, actions: [{ ...row, state: 'done', doneAt: T0 }] }).actions?.[0]?.state).toBe('done');
     // Refused: nothing was sent (a target changed, a request answered meanwhile); failed: sent, and it went wrong.
     expect(ChatTurnSchema.parse({ ...turn, actions: [{ ...row, state: 'refused', error: 'unknown team' }] }).actions?.[0]?.state).toBe('refused');
+  });
+  it('a generic row carries its words for each front (vars), a cut detail and an error code', () => {
+    const row = { action: 'session.decide', args: { session: 's1', decision: 'deny' }, summary: 'Refuser la demande de plan de **Nova**', risk: 'reversible',
+      vars: { session: 'Nova', decision: 'deny', kind: 'plan', note: 'Pas sur main' }, detail: 'Le plan…', detailCut: true, state: 'refused', error: 'Nova has exited', code: 'exited' };
+    const turn = { qid: 'q1', question: '?', askedAt: T0, steps: [] };
+    expect(ChatTurnSchema.parse({ ...turn, actions: [row] }).actions?.[0]).toMatchObject({ vars: row.vars, detailCut: true, code: 'exited' });
+    expect(() => ChatTurnSchema.parse({ ...turn, actions: [{ ...row, vars: { note: 'x'.repeat(301) } }] })).toThrow();
+    expect(() => ChatTurnSchema.parse({ ...turn, actions: [{ ...row, detailCut: false }] })).toThrow();
+  });
+  it('a turn may be ignored, and chat.ignore ignores it or opens it again', () => {
+    const turn = { qid: 'q1', question: '?', askedAt: T0, steps: [], ignoredAt: T0 };
+    expect(ChatTurnSchema.parse(turn).ignoredAt).toBe(T0);
+    expect(parseClientMessage({ type: 'chat.ignore', qid: 'q1' })).toEqual({ type: 'chat.ignore', qid: 'q1' });
+    expect(parseClientMessage({ type: 'chat.ignore', qid: 'q1', undo: true })).toEqual({ type: 'chat.ignore', qid: 'q1', undo: true });
+    expect(() => parseClientMessage({ type: 'chat.ignore', qid: '' })).toThrow();
+    expect(() => parseClientMessage({ type: 'chat.ignore', qid: 'q1', undo: false })).toThrow();
   });
   it('chat.done and a turn carry the close rows, one to eight', () => {
     const row = { id: 's1', name: 'Arlo', tool: 'claude' };

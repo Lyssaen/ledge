@@ -81,8 +81,24 @@ describe('actFromChat (spec 2026-10-26 action registry §9.2)', () => {
     expect(c.rows[1]).not.toHaveProperty('state');
     expect(applied).toEqual([]);
     const gone = card([row('session.archive', { session: 'a' })]);
-    const g = deps(gone, { resolve: () => ({ refused: 'unknown session a' }) });
+    const g = deps(gone, { resolve: () => ({ refused: 'unknown session a', code: 'unknown' as const }) });
     expect(await actFromChat(g.d, 'q1')).toEqual({ done: [], failed: [{ row: 0, message: 'unknown session a', refused: true }] });
-    expect(gone.rows[0]).toMatchObject({ state: 'refused', error: 'unknown session a' });
+    expect(gone.rows[0]).toMatchObject({ state: 'refused', error: 'unknown session a', code: 'unknown' });
+  });
+  it('a changed target is refused with the code changed, a failure sent with failed', async () => {
+    const c = card([row('session.interrupt', { session: 'a' })]);
+    const { d } = deps(c, { resolve: (r: ChatAction) => ({ ...r, args: { session: 'b' } }) });
+    await actFromChat(d, 'q1');
+    expect(c.rows[0]).toMatchObject({ state: 'refused', code: 'changed' });
+    const f = card([row('session.interrupt', { session: 'a' })]);
+    const x = deps(f, { apply: async () => { throw new Error('tmux died'); } });
+    await actFromChat(x.d, 'q1');
+    expect(f.rows[0]).toMatchObject({ state: 'failed', error: 'tmux died', code: 'failed' });
+  });
+  it('the same args at another risk (a template saved meanwhile) is refused: it was confirmed at the old one', async () => {
+    const c = card([row('team.save', { team: 't', name: 'api', seats: [] })]);
+    const { d, applied } = deps(c, { resolve: (r: ChatAction) => ({ ...r, risk: 'destructive' as const }) });
+    expect((await actFromChat(d, 'q1')).failed).toEqual([{ row: 0, message: 'the target has changed since the card', refused: true }]);
+    expect(applied).toEqual([]);
   });
 });
