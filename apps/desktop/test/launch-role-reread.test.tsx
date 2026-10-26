@@ -39,11 +39,12 @@ function daemon(roles: Record<string, Role[]>) {
 
 function open(d: ReturnType<typeof daemon>, wanted: Parameters<typeof LaunchComposer>[0]['wanted']) {
   const onLaunch = vi.fn();
-  render(<LangProvider lang="en"><LaunchComposer client={d.client as never} projects={PROJECTS as never} machines={MACHINES as never}
+  const draw = (machines: unknown[]) => <LangProvider lang="en"><LaunchComposer client={d.client as never} projects={PROJECTS as never} machines={machines as never}
     sessions={[]} projectIdOf={() => null} wanted={wanted} onEditProject={() => {}} onNewProject={() => {}} launch={{ status: 'idle' } as never}
-    onLaunch={onLaunch} onCancel={() => {}} paused /></LangProvider>);
+    onLaunch={onLaunch} onCancel={() => {}} paused /></LangProvider>;
+  const view = render(draw(MACHINES));
   fireEvent.change(screen.getByRole('textbox', { name: /instruction/i }), { target: { value: 'Review the change' } });
-  return onLaunch;
+  return Object.assign(onLaunch, { machines: (m: unknown[]) => view.rerender(draw(m)) });
 }
 const launch = () => fireEvent.click(screen.getByRole('button', { name: /^Launch/ }));
 
@@ -95,5 +96,22 @@ describe('the launch form reads its role again where it will run (#106)', () => 
     expect(screen.getByRole('note')).toHaveTextContent('Dev reviewer');
     launch();
     expect(onLaunch.mock.calls[0]?.[0]).toMatchObject({ cwd: '/srv/a', machineId: 'dev', role: 'review', tool: 'codex' });
+  });
+  it('the machine going offline: the form falls back to Local, and the role is read there before anything goes', async () => {
+    const d = daemon({ 'local:/w/a': [role('review', 'Local reviewer', 'repo', { autonomy: 'auto' })] });
+    const onLaunch = open(d, { project: 'a', cwd: '/srv/a', machine: 'dev', role: { id: 'review', label: 'Remote read-only reviewer', tool: 'claude' } });
+    expect(d.asked).toEqual([]);
+    launch();
+    expect(onLaunch.mock.calls[0]?.[0]).toMatchObject({ machineId: 'dev', cwd: '/srv/a', role: 'review' });
+    onLaunch.machines([MACHINES[0], { ...MACHINES[1], ready: false, status: 'unreachable' }]);
+    expect(screen.getByRole('radio', { name: 'Local' })).toBeChecked();
+    expect(d.asked).toEqual([expect.objectContaining({ type: 'roles.list', cwd: '/w/a' })]);
+    launch();
+    expect(onLaunch).toHaveBeenCalledOnce();
+    await d.answer();
+    expect(screen.getByRole('note')).toHaveTextContent('Local reviewer');
+    expect(screen.getByRole('note')).not.toHaveTextContent('Remote read-only reviewer');
+    launch();
+    expect(onLaunch.mock.calls[1]?.[0]).toMatchObject({ machineId: 'local', cwd: '/w/a', role: 'review' });
   });
 });
