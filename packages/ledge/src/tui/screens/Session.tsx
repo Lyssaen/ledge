@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Box, Text, useWindowSize } from 'ink';
-import { isPending, splitId } from '@ledge/fleet';
+import { Box, Text, useInput, useWindowSize } from 'ink';
+import { isPending, putImage, splitId } from '@ledge/fleet';
 import { offers, type Session } from '@ledge/protocol';
 import { botState } from '@ledge/ui/bots/poseFor';
 import { useEditing, useScreenKeys, useTui } from '../context.js';
+import { ChipsLine, useChips, useOpenImage, usePaste } from '../images.js';
 import { machineLabel, modelLabel, paneName, TOOL_NAME } from '../model/labels.js';
-import { threadLines, type Line } from '../model/thread.js';
+import { threadImages, threadLines, type Line } from '../model/thread.js';
 import { ago, oneLine } from '../model/time.js';
 import { C, STATE_COLOR } from '../theme.js';
 import { Frame } from '../ui/Frame.js';
@@ -48,16 +49,34 @@ function SessionView({ s }: { s: Session }) {
   const [view, setView] = useState(10);
   const maxUp = Math.max(0, lines.length - view);
 
+  const images = useMemo(() => (items ? threadImages(items, unfolded) : []).map(ref => ({ ref, route: { id: s.id } })), [items, unfolded, s.id]);
+  const chips = useChips(image => putImage(client, image, { id: s.id }));
+  const paste = usePaste(chips);
+  const openImage = useOpenImage();
+
   const machine = splitId(s.id)?.machine ?? 'local';
   const canSwitch = machines.find(m => m.id === machine)?.daemon?.modelSwitch === true;
 
   const send = (text: string) => {
-    if (!text.trim()) { setMode('read'); return; }
-    const back = (x: string) => { setDraft(x); };
-    if (mode === 'note') actions.denyWithNote(s, text.trim(), back);
-    else if (!actions.reply(s, text, back)) return;
+    if (mode === 'note') {
+      if (!text.trim()) { setMode('read'); return; }
+      actions.denyWithNote(s, text.trim(), x => setDraft(x));
+    } else {
+      if (!text.trim() && chips.items.length === 0) { setMode('read'); return; }
+      // An image still uploading or refused holds the send; a dialog question takes words only, the image waits.
+      if (chips.items.length && !chips.ready) return;
+      if (chips.items.length && p?.kind === 'question') { toast({ text: t.images.dialog, tone: 'info' }); return; }
+      const taken = chips.clear();
+      if (!actions.reply(s, text, x => { setDraft(x); chips.putBack(taken); }, { attachments: taken.flatMap(c => (c.id ? [c.id] : [])) })) { chips.putBack(taken); return; }
+    }
     setDraft(''); setMode('read');
   };
+
+  // Alt+V pastes the clipboard picture; backspace on an empty field takes the last chip back. (The field ignores these keys.)
+  useInput((input, key) => {
+    if (key.meta && input === 'v') paste();
+    else if ((key.backspace || key.delete) && draft === '') chips.removeLast();
+  }, { isActive: mode === 'reply' });
 
   useScreenKeys((input, key) => {
     if (mode === 'model') return true;
@@ -74,6 +93,7 @@ function SessionView({ s }: { s: Session }) {
     if (input === ' ') { setUnfolded(u => !u); return true; }
     if (input === 'd') { setDiffs(x => !x); return true; }
     if (input === 't') { setTerminal(x => !x); return true; }
+    if (input === 'o' && images.length) { openImage(images); return true; }
     if (input === 'a') { attach(s); return true; }
     if (input === 'i') { actions.interrupt(s); return true; }
     if (input === 'm') {
@@ -98,8 +118,8 @@ function SessionView({ s }: { s: Session }) {
   const state = botState(s);
   const title = `${s.name} · ${oneLine(s.topic ?? s.title)} · ${TOOL_NAME[s.tool]} · ${modelLabel(s, t.session.defaultModel)}`;
   const keys: Array<readonly [string, string]> = mode === 'model' ? [['↑ ↓', t.keys.choose], ['← →', t.launch.effort], ['↵', t.keys.choose], ['esc', t.keys.cancel]]
-    : mode !== 'read' ? [['↵', t.keys.send], ['esc', t.keys.back]]
-    : [['esc', t.keys.back], ...(p ? [['y n A', t.keys.answer] as const] : []), ['r', t.keys.write], ['j k', t.keys.scroll], [t.keys.space, t.keys.unfold], ['d', t.keys.diffs], ['t', t.keys.terminal], ['a', t.keys.attach], ['m', t.keys.model], ['i', t.keys.interrupt]];
+    : mode !== 'read' ? [['↵', t.keys.send], ...(mode === 'reply' ? [['alt+v', t.keys.image] as const] : []), ['esc', t.keys.back]]
+    : [['esc', t.keys.back], ...(p ? [['y n A', t.keys.answer] as const] : []), ['r', t.keys.write], ['j k', t.keys.scroll], [t.keys.space, t.keys.unfold], ['d', t.keys.diffs], ['t', t.keys.terminal], ['a', t.keys.attach], ['m', t.keys.model], ['i', t.keys.interrupt], ...(images.length ? [['o', t.keys.openImage] as const] : [])];
   return (
     <Frame crumb={`${s.repo ?? s.project}${s.branch ? ` › ${g.branch} ${s.branch}` : ''} › ${s.name} · ${machineLabel(s)}`} keys={keys}>
       <TitledBox title={terminal ? t.overview.terminal(paneName(s)) : title} flexGrow={1}>
@@ -127,6 +147,7 @@ function SessionView({ s }: { s: Session }) {
         </TitledBox>
       ) : null}
       <TitledBox title={mode === 'note' ? t.overview.denyWithNote : t.keys.write} color={mode === 'read' ? C.line : C.coral}>
+        <ChipsLine chips={chips.items} />
         {/* The field is its own Text: inside another, the outer one's truncation would cut the end being typed. */}
         <Box><Text color={C.coral}>{g.cursor} </Text>
           <Box flexGrow={1} overflow="hidden">

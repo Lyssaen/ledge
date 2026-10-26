@@ -8,7 +8,7 @@ import { MESSAGES } from '../src/tui/i18n/lang.js';
 import { glyphsFor } from '../src/tui/glyphs.js';
 import { closedLedgeTasks, exchanges, keepSelection, nextWaiting, overview, step } from '../src/tui/model/overview.js';
 import { answerFor, choices } from '../src/tui/model/pending.js';
-import { diffCount, threadLines, wrap } from '../src/tui/model/thread.js';
+import { diffCount, threadImages, threadLines, wrap } from '../src/tui/model/thread.js';
 import { chatLines, openCards } from '../src/tui/model/chat.js';
 import { ago } from '../src/tui/model/time.js';
 import { asked, notification } from '../src/tui/notify.js';
@@ -249,5 +249,34 @@ describe('tui overview with teams (roles spec §3.9)', () => {
     const lines = text(chatLines([done], null, { t: fr, g: glyphsFor({}), width: 80 }));
     expect(lines.some(l => l.includes('▣ ledge-roles · ✓ Équipe lancée à'))).toBe(true);
     expect(lines).toContain('  Implémenter · ✓ Confiée à Mila · t91b0d4 · prise');
+  });
+});
+
+describe('tui image lines', () => {
+  const ref = { id: 'a'.repeat(64), mime: 'image/png' as const, width: 1440, height: 900, bytes: 212_000, preview: false };
+  const at = '2026-10-09T18:00:00.000Z';
+  const o = { g: glyphsFor({}), now: Date.parse(at), width: 80, diffs: false, unfolded: false };
+
+  it('a prompt shows one line per image, indented, with the o hint', () => {
+    const items: ThreadItem[] = [{ kind: 'prompt', id: 'p1', at, turn: 1, text: 'Regarde', images: [ref, { ...ref, id: 'b'.repeat(64), width: 800, height: 600, bytes: 1_400_000 }] }];
+    expect(text(threadLines(items, { ...o, t: fr }))).toEqual(expect.arrayContaining(['  ▣ capture 1440×900 · 212 Ko · o ouvrir dans la visionneuse', '  ▣ capture 800×600 · 1,4 Mo · o ouvrir dans la visionneuse']));
+    expect(text(threadLines(items, { ...o, t: en }))).toContain('  ▣ capture 1440×900 · 212 KB · o open in viewer');
+  });
+
+  it('a chat question shows its images with alt+o', () => {
+    const turn: ChatTurn = { qid: 'q1', question: 'Et ça ?', askedAt: at, steps: [], attachments: [ref] };
+    expect(text(chatLines([turn], null, { t: fr, g: glyphsFor({}), width: 80 }))).toContain('  ▣ capture 1440×900 · 212 Ko · alt+o ouvrir dans la visionneuse');
+    expect(text(chatLines([turn], null, { t: en, g: glyphsFor({}), width: 80 }))).toContain('  ▣ capture 1440×900 · 212 KB · alt+o open in viewer');
+  });
+
+  it('threadImages lists the images of the turns shown in full, oldest first', () => {
+    const other = { ...ref, id: 'c'.repeat(64) };
+    const items: ThreadItem[] = [
+      { kind: 'prompt', id: 'p1', at, turn: 1, text: 'un', images: [ref] },
+      { kind: 'reply', id: 'r1', at, turn: 1, text: 'ok' },
+      { kind: 'prompt', id: 'p2', at, turn: 2, text: 'deux', images: [other] }
+    ];
+    expect(threadImages(items, false)).toEqual([other]);
+    expect(threadImages(items, true)).toEqual([ref, other]);
   });
 });

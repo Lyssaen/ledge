@@ -2,7 +2,7 @@ import { proposalRows, type ChatStep, type ChatTurn } from '@ledge/protocol';
 import type { Glyphs } from '../glyphs.js';
 import type { Messages } from '../i18n/lang.js';
 import { C } from '../theme.js';
-import { wrap, type Line } from './thread.js';
+import { imageLine, wrap, type Line } from './thread.js';
 import { clock } from './time.js';
 
 /** What a step says Ledge read: « les sessions », « le terminal d'Otto »… */
@@ -19,6 +19,7 @@ export function chatLines(turns: readonly ChatTurn[], live: { qid: string; text:
     if (out.length) out.push([{ text: '' }]);
     for (const l of wrap(turn.question, width - 2)) out.push([{ text: `${g.cursor} `, color: C.coral }, { text: l, color: C.fg, bold: true }]);
     out.push([{ text: `  ${t.ask.you} · ${clock(turn.askedAt)}`, color: C.faint }]);
+    for (const a of turn.attachments ?? []) out.push(imageLine(a, t, 'alt+o'));
     const steps = [...new Set(turn.steps.map(s => stepLabel(s, t.ask.steps)))];
     if (steps.length) out.push([{ text: `  ${t.ask.read} : ${steps.join(' · ')}`, color: C.faint }]);
     const text = turn.answer ?? (live?.qid === turn.qid ? live.text : undefined);
