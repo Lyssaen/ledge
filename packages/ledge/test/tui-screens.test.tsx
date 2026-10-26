@@ -505,6 +505,23 @@ describe('ledge tui: the field (#95 lot B)', () => {
       await until(() => boxRows(tui.frame(), 'RÉPONDRE À BIX')[0] === '❯ unX');
     } finally { await tui.cleanup(); }
   });
+
+  it('ctrl+c quits at once when the only draft was for a session gone since', async () => {
+    const tui = await replying();
+    try {
+      await tui.press('Pour plus tard'); await tui.press(ESC);
+      await until(() => tui.frame().includes('ÉCRIRE · BROUILLON'));
+      await tui.press(ESC);
+      tui.daemon.remove('bix');
+      await until(() => !tui.frame().includes('Bix'));
+      await tui.press(CTRL.c);
+      await new Promise(r => setTimeout(r, 100));
+      expect(tui.frame()).not.toContain('Brouillon en cours');
+      // Gone: a key goes nowhere.
+      await tui.press('/');
+      expect(tui.frame()).not.toContain('QUESTION');
+    } finally { await tui.cleanup(); }
+  });
 });
 
 describe('ledge tui: new session', () => {

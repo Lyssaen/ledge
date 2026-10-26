@@ -120,8 +120,10 @@ function Shell({ client, lang, setLang: setLangState, saveLang, notify, glyphs, 
   useInput((input, key) => {
     if (key.ctrl && input === 'c') {
       if (keys.current?.(input, key)) return;
-      // A draft is not lost by reflex: the first ctrl+c says so, a second one within 2 s quits.
-      if ([...kept.drafts.values()].some(x => x.trim()) && Date.now() - armed.current > QUIT_MS) {
+      // A draft is not lost by reflex: the first ctrl+c says so, a second one within 2 s quits. A session gone since takes
+      // its draft with it: there is nowhere to send it.
+      const drafts = [...kept.drafts].some(([id, x]) => x.trim() && (id === 'ask' || d.byId.has(id)));
+      if (drafts && Date.now() - armed.current > QUIT_MS) {
         armed.current = Date.now();
         toast({ text: t.toast.draftQuit, tone: 'info', ms: QUIT_MS });
         return;
