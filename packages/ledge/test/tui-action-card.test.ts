@@ -62,6 +62,13 @@ describe('the conversation and the cards of a turn with an action card', () => {
     expect(text(ignored)).toContain(`  · plan de 2 actions ignoré à ${clock(AT)}, rien n’a été envoyé · revoir : ctrl+r`);
     expect(text(turn({ ignoredAt: AT, actions: [archive('Otto')] }))).toContain(`  · carte ignorée à ${clock(AT)}, rien n’a été envoyé · revoir : ctrl+r`);
   });
+  it('a plan ignored once begun says what went and that the rest is ignored, not that nothing was sent', () => {
+    const begun = text(turn({ ignoredAt: AT, actions: [archive('Otto', { state: 'done', doneAt: AT }), archive('Bix'), archive('Ari')] }));
+    expect(begun).toContain(`  · plan de 3 actions : 1 appliquée, le reste ignoré à ${clock(AT)} · revoir : ctrl+r`);
+    expect(begun).not.toContain('rien n’a été envoyé');
+    const both = text(turn({ ignoredAt: AT, actions: [archive('Otto', { state: 'done' }), archive('Bix', { state: 'done' }), decide({ state: 'denied', doneAt: AT }), archive('Ari')] }));
+    expect(both).toContain(`  · plan de 4 actions : 2 appliquées, 1 refus envoyé, le reste ignoré à ${clock(AT)} · revoir : ctrl+r`);
+  });
   it('once applied, the box goes and a line stays: the plan, or the row', () => {
     expect(text(turn({ actions: [archive('Otto', { state: 'done', doneAt: AT }), archive('Bix', { state: 'done', doneAt: AT })] }))).toContain(`  ✓ Plan appliqué à ${clock(AT)}`);
     expect(text(turn({ actions: [archive('Otto', { state: 'done', doneAt: AT })] }))).toContain(`  ✓ Archiver Otto · ${clock(AT)}`);

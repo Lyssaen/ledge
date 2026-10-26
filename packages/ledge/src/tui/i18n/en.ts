@@ -89,7 +89,9 @@ export const en: Messages = {
       cutMark: '… (truncated, see the session: o)',
       stale: name => `${name}’s request has changed since my answer: nothing was sent.`,
       hint: { one: 'Ledge does nothing without you.', choose: '↑↓ choose', cut: '↵ does not accept: read it first', stale: 'ask Ledge again for the new request', confirm: '↵ does not confirm: type y', inOrder: 'In order; if a step fails, the next ones are not applied.' },
-      ignored: (n, at) => `· ${n > 1 ? `plan of ${n} actions ignored` : 'card ignored'} at ${at}, nothing was sent · review: ctrl+r`,
+      ignored: (n, at, sent = { done: 0, denied: 0 }) => sent.done + sent.denied
+        ? `· plan of ${n} actions: ${[...(sent.done ? [`${sent.done} applied`] : []), ...(sent.denied ? [`${sent.denied} ${sent.denied > 1 ? 'denials' : 'denial'} sent`] : [])].join(', ')}, the rest ignored at ${at} · review: ctrl+r`
+        : `· ${n > 1 ? `plan of ${n} actions ignored` : 'card ignored'} at ${at}, nothing was sent · review: ctrl+r`,
       denied: (name, at) => `Denial sent to ${name}${at ? ` · ${at}` : ''}: the command did not run`,
       done: (line, at) => `${line}${at ? ` · ${at}` : ''}`
     }
