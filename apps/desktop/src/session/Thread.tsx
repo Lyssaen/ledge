@@ -67,6 +67,11 @@ export interface ThreadProps {
   planOpen: string | null;
   /** « Lire le plan »: the plan in the side pane. Stable (the page's callback). */
   onPlan(key: string): void;
+  /** The conversation whose tab is the pane's active one (its peerKey: « Ouvert à côté »); null: none. */
+  convOpen: string | null;
+  /** « suivre la conversation »: the conversation with that peer (peerKey) beside the thread. Stable (the page's callback);
+   *  absent: no way to it (a subagent's page). */
+  onConversation?(peer: string): void;
   /** The pinned request of this thread (online only); null: none. */
   waiting?: Waiting | null;
 }
@@ -236,6 +241,8 @@ interface TurnProps {
   flash: string | null; onChange(path: string): void; onDocument(path: string): void;
   /** The open plan when it is in this exchange, else null. */
   planOpen: string | null; onPlan(key: string): void;
+  /** The open conversation when this exchange holds its first message (its header), else null. */
+  convOpen: string | null; onConversation?(peer: string): void;
   /** Messages between agents: the peers' sessions Ledge knows (by `peer`), each conversation's message ids in the thread's
    *  order (by peerKey), the folded conversations and the fold's toggle (stable). */
   peers: ReadonlyMap<string, Session>; convs: ReadonlyMap<string, readonly string[]>;
@@ -250,7 +257,7 @@ interface TurnProps {
 /** One exchange on the rail: its prompt (or the task it was told of), then what the agent said, decided and did, a row each,
  *  and its end. A past one folds to one row. Rendered again only when what it shows changes: the clock's tick reaches the
  *  exchange whose action runs, not the ones before it. */
-const Turn = memo(function Turn({ client, session, helper, items, x, at, last, folded, onUnfold, now, unread, since, dispatch, flash, onChange, onDocument, planOpen, onPlan, peers, convs, folded2, onFold, marks, waiting, wait }: TurnProps): JSX.Element {
+const Turn = memo(function Turn({ client, session, helper, items, x, at, last, folded, onUnfold, now, unread, since, dispatch, flash, onChange, onDocument, planOpen, onPlan, convOpen, onConversation, peers, convs, folded2, onFold, marks, waiting, wait }: TurnProps): JSX.Element {
   const { t } = useI18n();
   const th = t.session.thread;
   const offline = session.offline === true;
@@ -287,7 +294,8 @@ const Turn = memo(function Turn({ client, session, helper, items, x, at, last, f
     const paired = item.kind === 'sent' ? item.received : item.sent;
     return <MessageCard item={item} self={session} peer={peer} header={conv[0] === item.id && conv.length > 1 ? { count: conv.length } : null}
       folded={folded2.has(key)} lit={flash === item.id} onFold={() => onFold(key)} time={clock(item.at)}
-      onOpenPeer={() => peer && dispatch({ type: 'open', id: peer.id, ...(paired !== undefined && { item: paired }) })} />;
+      onOpenPeer={() => peer && dispatch({ type: 'open', id: peer.id, ...(paired !== undefined && { item: paired }) })}
+      following={convOpen === key} onFollow={onConversation && (() => onConversation(key))} />;
   };
   const notice = (item: NoticeItem): ReactNode => {
     const peer = item.peer !== undefined ? peers.get(item.peer) ?? null : null;
@@ -498,7 +506,7 @@ function useKeys(id: string): [ReadonlySet<string>, (key: string) => void] {
  *  The past exchanges fold to a row, except the ones that hold what is new, what runs or waits, or what the reader came back
  *  to. Memoised: the store's changes elsewhere (another session's preview, the chat, an error) leave it alone, its props
  *  being the session, its items and their exchanges, the clock and the page's stable callbacks. */
-export const Thread = memo(function Thread({ client, session, helper, items, xs, now, unread, since, dispatch, flash, onChange, onDocument, planOpen, onPlan, waiting = null }: ThreadProps): JSX.Element {
+export const Thread = memo(function Thread({ client, session, helper, items, xs, now, unread, since, dispatch, flash, onChange, onDocument, planOpen, onPlan, convOpen, onConversation, waiting = null }: ThreadProps): JSX.Element {
   const { t, lang } = useI18n();
   const offline = session.offline === true;
   const wait = useWait(session, helper, items, xs, waiting, t.session.subagent);
@@ -509,6 +517,8 @@ export const Thread = memo(function Thread({ client, session, helper, items, xs,
   const [folded, onFold] = useKeys(session.id);
   const [unfolded, onUnfold] = useKeys(session.id);
   const fresh = useMemo(() => (unread === null ? -1 : xs.findIndex(x => displayIds([x]).includes(unread))), [xs, unread]);
+  // The open conversation reaches only the exchange holding its header (its first message).
+  const convHead = convOpen === null ? undefined : convs.get(convOpen)?.[0];
   return (
     <ol className="rail">
       {xs.map((x, i) => {
@@ -521,6 +531,7 @@ export const Thread = memo(function Thread({ client, session, helper, items, xs,
             now={ticks(x) || (last && wait !== null) ? now : 0} unread={unread} since={since} dispatch={dispatch}
             flash={lit ? flash : null} onChange={onChange} onDocument={onDocument}
             planOpen={planOpen !== null && holdsPlan(x, planOpen) ? planOpen : null} onPlan={onPlan}
+            convOpen={convHead !== undefined && messagesOf(x).some(m => m.id === convHead) ? convOpen : null} onConversation={onConversation}
             peers={peers} convs={convs} folded2={folded} onFold={onFold} marks={marks} waiting={last ? waiting : null} wait={last ? wait : null} />
         );
       })}

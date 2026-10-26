@@ -2,21 +2,40 @@ import { useEffect, useRef } from 'react';
 import { useDaemon, type DaemonClient } from '@ledge/fleet';
 import type { Session, ThreadItem } from '@ledge/protocol';
 
-/** Le fil d'une session : demandé une fois par snapshot tant qu'il manque, jamais pour une session hors ligne (elle garde ce qu'elle avait) ;
- *  pendant la nouvelle demande après un snapshot, les derniers éléments de la même session. */
-export function useThread(client: Pick<DaemonClient, 'send'>, session: Session): ThreadItem[] | undefined {
+/** Les fils de plusieurs sessions, par id : chacun demandé une fois par snapshot tant qu'il manque, jamais pour une session hors
+ *  ligne (elle garde ce qu'elle avait) ; pendant la nouvelle demande après un snapshot, les derniers éléments de la même
+ *  session. Ceux d'une session sortie de la liste sont oubliés. */
+export function useThreads(client: Pick<DaemonClient, 'send'>, sessions: readonly Session[]): ReadonlyMap<string, ThreadItem[] | undefined> {
   const { threads, snapshotSeq } = useDaemon();
-  const own = threads.get(session.id);
-  const asked = useRef<string | null>(null);
-  const kept = useRef<{ id: string; items: ThreadItem[] } | null>(null);
-  if (own) kept.current = { id: session.id, items: own };
-  const offline = session.offline === true;
+  const kept = useRef<ReadonlyMap<string, ThreadItem[]>>(new Map());
+  // The snapshot each missing thread was last asked at.
+  const asked = useRef(new Map<string, number>());
+  const out = new Map<string, ThreadItem[] | undefined>();
+  const next = new Map<string, ThreadItem[]>();
+  const missing: string[] = [];
+  for (const s of sessions) {
+    const own = threads.get(s.id);
+    const items = own ?? kept.current.get(s.id);
+    if (items) next.set(s.id, items);
+    out.set(s.id, items);
+    if (!own && s.offline !== true) missing.push(s.id);
+  }
+  kept.current = next;
+  // Keyed on what is to be asked (ids, online and missing), not on the array: a new array each render asks nothing more.
+  const want = missing.join('\n');
   useEffect(() => {
-    if (own || offline) return;
-    const key = `${session.id}@${snapshotSeq}`;
-    if (asked.current === key) return;
-    asked.current = key;
-    client.send({ type: 'session.thread', id: session.id });
-  }, [client, session.id, snapshotSeq, own, offline]);
-  return own ?? (kept.current?.id === session.id ? kept.current.items : undefined);
+    const was = asked.current;
+    asked.current = new Map();
+    if (want === '') return;
+    for (const id of want.split('\n')) {
+      asked.current.set(id, snapshotSeq);
+      if (was.get(id) !== snapshotSeq) client.send({ type: 'session.thread', id });
+    }
+  }, [client, want, snapshotSeq]);
+  return out;
+}
+
+/** Le fil d'une session (useThreads pour elle seule). */
+export function useThread(client: Pick<DaemonClient, 'send'>, session: Session): ThreadItem[] | undefined {
+  return useThreads(client, [session]).get(session.id);
 }

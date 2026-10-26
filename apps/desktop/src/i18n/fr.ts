@@ -793,6 +793,25 @@ export const fr = {
       readAll: 'Lire tout le message', showLess: 'Réduire', seeIn: (n: string) => `Voir dans le fil de ${n}`,
       to: 'À', from: 'De', seeTheirs: 'voir son fil', seen: 'lu'
     },
+    /** The « Conversation » tab: the exchange between this agent and one other, merged from both threads, in the side pane. */
+    conversation: {
+      follow: 'suivre la conversation',
+      followTitle: (b: string) => `Suivre la conversation avec ${b} à côté du fil`,
+      followBeside: 'Suivre à côté', openBeside: 'Ouvert à côté',
+      tab: (b: string) => `Conversation · ${b}`,
+      tabNew: (b: string, n: number) => `Conversation · ${b}, ${plural(n, '1 nouveau message', `${n} nouveaux messages`)}`,
+      log: (a: string, b: string) => `Conversation entre ${a} et ${b}`,
+      count: (n: number) => plural(n, '1 message', `${n} messages`),
+      kicker: (from: string, to: string) => `Message ${deName(from)} à ${to}`,
+      readBy: (who: string) => `Lu par ${who}`, deliveredTo: (who: string) => `Remis à ${who}, pas encore lu`,
+      inThread: 'dans le fil', inThreadTitle: (a: string) => `Montrer dans le fil ${deName(a)}`,
+      fresh: (n: number) => plural(n, '1 nouveau message', `${n} nouveaux messages`),
+      oneSidedLead: 'Vue d’un seul côté',
+      oneSided: (b: string, a: string) => `${b} n’est pas une session que Ledge suit sur cette machine. La conversation est lue dans le fil ${deName(a)} seulement : les messages ${deName(b)} apparaissent quand ${a} les reçoit, et Ledge ne sait pas si ceux ${deName(a)} ont été lus.`,
+      empty: (a: string, b: string) => `Aucun message entre ${a} et ${b} pour l’instant.`,
+      emptyHint: 'Ils s’afficheront ici, en direct, dès que l’un écrira à l’autre.',
+      loadingPeer: (b: string) => `Lecture du fil ${deName(b)}…`
+    },
     /** Claude Code's automated cross-session notices (NoticeLine): system events, never the user's words. */
     seat: {
       task: (id: string, title: string, giver: string, state: string) => `${id} · ${title} · donnée par ${giver} · ${state}`,
