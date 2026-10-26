@@ -28,7 +28,7 @@ export const fr = {
     sendOnly: 'envoyer', newLine: 'nouvelle ligne', keepAndLeave: 'garder et sortir', lineHistory: 'ligne · historique', history: 'historique',
     word: 'mot', clear: 'effacer', resend: 'renvoyer', backToDraft: 'revenir au brouillon', keep: 'garder', wipe: 'effacer',
     line: 'ligne', page: 'page', end: 'fin', question: 'question', conversation: 'conversation', cycle: 'cartes · conversation',
-    rolesTemplates: 'rôles / modèles', folder: 'dossier', launchRole: 'lancer avec ce rôle', launchTeam: 'lancer cette équipe', openFile: 'ouvrir le fichier', ignored: 'ignorés'
+    rolesTemplates: 'rôles / modèles', folder: 'dossier', launchRole: 'lancer avec ce rôle', launchTeam: 'lancer cette équipe', openFile: 'ouvrir le fichier', ignored: 'ignorés', reread: 'relire'
   },
   overview: {
     yours: (n: number) => `À toi · ${n}`, projects: 'Projets', exchanges: 'Échanges', terminal: (name: string) => `Terminal · ${name}`,
@@ -104,7 +104,7 @@ export const fr = {
     seats: (n: number) => `${n} ${plural(n, 'poste', 'postes')}`,
     autonomyShort: { ask: 'demande', edits: 'éditions', auto: 'auto' } as Record<'ask' | 'edits' | 'auto', string>,
     ignored: (n: number) => `⚠ ${n} ${plural(n, 'fichier ignoré', 'fichiers ignorés')}`, see: 'voir', problems: 'Fichiers ignorés', noProblem: 'Aucun fichier ignoré.',
-    loading: 'lecture des rôles…', noRole: 'Aucun rôle ici : écris .ledge/roles/<id>.md', noTemplateHere: 'Aucun modèle ici : écris .ledge/teams/<id>.yaml',
+    loading: 'lecture des rôles…', noAnswer: 'Le daemon n’a pas répondu.', noRole: 'Aucun rôle ici : écris .ledge/roles/<id>.md', noTemplateHere: 'Aucun modèle ici : écris .ledge/teams/<id>.yaml',
     role: 'Rôle'
   },
   settings: { title: 'Réglages', language: 'Langue', theme: 'Thème', themes: { auto: 'Auto', dark: 'Sombre', light: 'Clair' }, themeAuto: (tone: 'dark' | 'light') => `Auto (fond ${tone === 'light' ? 'clair' : 'sombre'})`, context: 'Contexte max', contextHint: 'au-delà : passer le relais', contextUnknown: 'mettez à jour le daemon', contextSaved: (pct: number) => `Contexte max : ${pct} %`, saved: 'Réglage enregistré.', saveFailed: (m: string) => `Réglage appliqué, mais non enregistré : ${m}` },

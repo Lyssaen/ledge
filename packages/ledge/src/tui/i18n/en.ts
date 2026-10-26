@@ -25,7 +25,7 @@ export const en: Messages = {
     sendOnly: 'send', newLine: 'new line', keepAndLeave: 'keep and leave', lineHistory: 'line · history', history: 'history',
     word: 'word', clear: 'clear', resend: 'send again', backToDraft: 'back to the draft', keep: 'keep', wipe: 'clear',
     line: 'line', page: 'page', end: 'end', question: 'question', conversation: 'conversation', cycle: 'cards · conversation',
-    rolesTemplates: 'roles / templates', folder: 'folder', launchRole: 'launch with this role', launchTeam: 'launch this team', openFile: 'open the file', ignored: 'ignored'
+    rolesTemplates: 'roles / templates', folder: 'folder', launchRole: 'launch with this role', launchTeam: 'launch this team', openFile: 'open the file', ignored: 'ignored', reread: 'read again'
   },
   overview: {
     yours: n => `Yours · ${n}`, projects: 'Projects', exchanges: 'Messages', terminal: name => `Terminal · ${name}`,
@@ -106,7 +106,7 @@ export const en: Messages = {
     seats: n => `${n} ${plural(n, 'seat', 'seats')}`,
     autonomyShort: { ask: 'asks', edits: 'edits', auto: 'auto' },
     ignored: n => `⚠ ${n} ${plural(n, 'file', 'files')} ignored`, see: 'see', problems: 'Ignored files', noProblem: 'No ignored file.',
-    loading: 'reading the roles…', noRole: 'No role here: write .ledge/roles/<id>.md', noTemplateHere: 'No template here: write .ledge/teams/<id>.yaml',
+    loading: 'reading the roles…', noAnswer: 'The daemon did not answer.', noRole: 'No role here: write .ledge/roles/<id>.md', noTemplateHere: 'No template here: write .ledge/teams/<id>.yaml',
     role: 'Role'
   },
   settings: { title: 'Settings', language: 'Language', theme: 'Theme', themes: { auto: 'Auto', dark: 'Dark', light: 'Light' }, themeAuto: tone => `Auto (${tone} background)`, context: 'Max context', contextHint: 'past it: hand over', contextUnknown: 'update the daemon', contextSaved: pct => `Max context: ${pct} %`, saved: 'Setting saved.', saveFailed: m => `Setting applied, but not saved: ${m}` },

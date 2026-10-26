@@ -17,6 +17,8 @@ type Defs = { roles: Role[]; templates: TeamTemplate[]; problems: DefinitionProb
 type Row = { kind: 'head'; key: string; text: string } | { kind: 'role'; key: string; role: Role } | { kind: 'template'; key: string; template: TeamTemplate };
 /** Read from the palette at each render: it changes with the tone. */
 const autonomyColor = (a: 'ask' | 'edits' | 'auto'): string => (a === 'auto' ? C.yellow : a === 'edits' ? C.blue : C.faint);
+/** A `roles.list` not answered by then is said, with r to ask again (the Desktop's 4 s). */
+const ROLES_MS = 4_000;
 
 /** « Équipes » (6, #97): the roles and team templates a folder sees, its repository's then the home's, read only. ↵ hands
  *  the selected one to « Nouvelle session », o opens its file, c changes the folder, ! shows the files skipped. */
@@ -28,24 +30,29 @@ export function Teams() {
   const left = wide ? Math.min(64, Math.max(44, Math.floor(columns * 0.42))) : columns;
   const teams = useTeams(client) ?? [];
   const recents = machines.find(m => m.id === 'local')?.recents.map(r => r.cwd) ?? [];
-  const scopes = catalogScopes({ selected, memo: catalog.current, projects, recents, homeOnly: t.catalog.homeOnly });
+  // The folder chosen before opening places the list once: c then steps through it in a fixed order.
+  const [memo] = useState(() => ({ folder: catalog.current.folder }));
+  const scopes = catalogScopes({ selected, memo, projects, recents, homeOnly: t.catalog.homeOnly });
   const [scope, setScope] = useState<Scope>(() => initialScope(scopes, selected, catalog.current));
   const [defs, setDefs] = useState<Defs | null>(null);
   const [view, setView] = useState<View>('roles');
   const [at, setAt] = useState<Record<View, string | null>>({ roles: null, templates: null });
   const [problems, setProblems] = useState(false);
+  const [silent, setSilent] = useState(false);
+  const [reads, setReads] = useState(0);
 
-  // Read at opening and at each change of folder; nothing watches the files.
+  // Read at opening, at each change of folder and on r; nothing watches the files.
   useEffect(() => {
-    setDefs(null);
+    setDefs(null); setSilent(false);
     const requestId = `tui-catalog-${randomUUID()}`;
     const off = client.onMessage(m => {
       if (m.type !== 'roles.listing' || m.requestId !== requestId) return;
-      off(); setDefs({ roles: m.roles, templates: m.templates, problems: m.problems });
+      off(); clearTimeout(timer); setDefs({ roles: m.roles, templates: m.templates, problems: m.problems });
     });
+    const timer = setTimeout(() => { off(); setSilent(true); }, ROLES_MS);
     client.send({ type: 'roles.list', requestId, ...(scope.cwd ? { cwd: scope.cwd } : {}) });
-    return off;
-  }, [scope.cwd]); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => { off(); clearTimeout(timer); };
+  }, [scope.cwd, reads]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const roles = bySource(defs?.roles ?? []), templates = bySource(defs?.templates ?? []);
   const order: Row[] = useMemo(() => view === 'roles'
@@ -60,6 +67,7 @@ export function Teams() {
   useScreenKeys((input, key) => {
     if (problems && (key.escape || input === '!')) { setProblems(false); return true; }
     if (input === '!') { if (defs?.problems.length) setProblems(true); return true; }
+    if (input === 'r' && silent) { setReads(n => n + 1); return true; }
     if (key.leftArrow || key.rightArrow || input === 'h' || input === 'l') { setView(v => (v === 'roles' ? 'templates' : 'roles')); setProblems(false); return true; }
     if (input === 'j' || key.downArrow || input === 'k' || key.upArrow) {
       const i = Math.max(0, order.findIndex(r => r.key === current?.key));
@@ -106,7 +114,7 @@ export function Teams() {
   const listBox = (
     <TitledBox title={scope.label} flexGrow={1}>
       {tabs}
-      {defs === null ? <Text color={C.faint}>{t.catalog.loading}</Text>
+      {defs === null ? <Text color={silent ? C.yellow : C.faint}>{silent ? t.catalog.noAnswer : t.catalog.loading}</Text>
         : list.length === 0 ? <Text color={C.faint}>{view === 'roles' ? t.catalog.noRole : t.catalog.noTemplateHere}</Text>
         : windowed(list, current?.key ?? null, listHeight).map(r => {
           if (r.kind === 'head') return <Text key={r.key} wrap="truncate" color={C.faint}> {r.text}</Text>;
@@ -172,10 +180,10 @@ export function Teams() {
         return xs.length ? <Text>{xs.map(x => <Text key={x.id}><Text color={C.violet}>{g.team} {x.name}</Text> <Text color={C.dim}>{x.state === 'active' ? t.catalog.active : t.catalog.resting}</Text>  </Text>)}</Text> : <Text color={C.faint}>{t.catalog.noTeam}</Text>;
       })())}
     </TitledBox>
-  ) : <TitledBox title={t.tabs.teams} flexGrow={1}><Text color={C.faint}>{defs === null ? t.catalog.loading : view === 'roles' ? t.catalog.noRole : t.catalog.noTemplateHere}</Text></TitledBox>;
+  ) : <TitledBox title={t.tabs.teams} flexGrow={1}><Text color={C.faint}>{defs === null ? (silent ? '' : t.catalog.loading) : view === 'roles' ? t.catalog.noRole : t.catalog.noTemplateHere}</Text></TitledBox>;
 
   const keys: Array<readonly [string, string]> = [
-    ['j k', t.keys.navigate], ['← →', t.keys.rolesTemplates], ['c', t.keys.folder],
+    ['j k', t.keys.navigate], ['← →', t.keys.rolesTemplates], ['c', t.keys.folder], ...(silent ? [['r', t.keys.reread] as const] : []),
     ...(current ? [['↵', view === 'roles' ? t.keys.launchRole : t.keys.launchTeam] as const, ['o', t.keys.openFile] as const] : []),
     ...(issues.length ? [['!', t.keys.ignored] as const] : []), ['esc', t.keys.back]
   ];
