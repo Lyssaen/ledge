@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { backendOf, givenByLedge, isArchived, LEDGE_GIVER, taskClosed, type ClientMessage, type ServerMessage, type Session, type Task, type Team } from '@ledge/protocol';
+import { backendOf, givenByLedge, isArchived, LEDGE_GIVER, taskClosed, type ClientMessage, type ServerMessage, type Session, type Task, type TaskLogEntry, type Team } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { Mailbox } from './mailbox.js';
 import { formatLedgeTask } from './crossSession.js';
@@ -18,8 +18,8 @@ export interface TasksDeps {
   journal?: TasksJournal;
   /** The live teams: `@role` names a seat of the giver's team (spec 2026-10-25 roles §3.6). */
   teams?: { get(id: string): Team | undefined; teamOf(session: string): Team | undefined };
-  /** Every change of a task Ledge gave: its outcome reaches the fronts, never a terminal (§3.7). */
-  onLedgeTask?: (t: Task) => void;
+  /** Every change of every task, with the log entry it wrote (none for `seen`): the fronts show it (§3.7, issue #92). */
+  onTask?: (t: Task, entry?: TaskLogEntry) => void;
   now?: () => string;
 }
 export interface Tasks { run(cmd: TaskCmd): TaskResult; all(): Task[]; close(): void }
@@ -27,9 +27,9 @@ export interface Tasks { run(cmd: TaskCmd): TaskResult; all(): Task[]; close(): 
 /** Closed tasks kept for `list --all` and `show`: a week, 300 at most. */
 const CLOSED_TTL_MS = 7 * 24 * 3600 * 1000;
 const CLOSED_MAX = 300;
-/** How much of a result or a reason the giver's pointer quotes. */
+/** How much of a result or a reason the giver's pointer (and the sender's card) quotes. */
 const QUOTE = 200;
-const quote = (s: string) => { const flat = s.trim().replace(/\s+/g, ' '); return flat.length > QUOTE ? `${flat.slice(0, QUOTE)}…` : flat; };
+export const quote = (s: string) => { const flat = s.trim().replace(/\s+/g, ' '); return flat.length > QUOTE ? `${flat.slice(0, QUOTE)}…` : flat; };
 
 /** A session Ledge launched and can type into, live. */
 const reachable = (s: Session | undefined): boolean =>
@@ -70,10 +70,17 @@ export function createTasks(d: TasksDeps): Tasks {
     return d.store.all().find(s => (s.name === name || s.id === to) && live(s)) ?? `aucune session Ledge nommée ${to}`;
   };
   const teamOf = (id: string) => d.teams?.teamOf(id);
-  const put = (t: Task, by: string, what: string): Task => {
-    const at = now(); const next = { ...t, updatedAt: at, log: [...t.log, { at, by, what }] };
+  /** Who handed the task to whom: two sessions (or Ledge), as ids and as their names then. */
+  const sides = (op: 'give' | 'pass' | 'done' | 'refuse' | 'cancel', from: Pick<Session, 'id' | 'name'>, to: Pick<Session, 'id' | 'name'>) =>
+    ({ op, from: from.id, to: to.id, fromName: from.name, toName: to.name });
+  const giverOf = (t: Task) => ({ id: t.giver, name: t.giverName });
+  const ownerOf = (t: Task) => ({ id: t.owner, name: t.ownerName });
+  type Transmission = Pick<TaskLogEntry, 'op' | 'from' | 'to' | 'fromName' | 'toName' | 'note'>;
+  const put = (t: Task, by: string, what: string, tr: Transmission = {}): Task => {
+    const entry: TaskLogEntry = { at: now(), by, what, ...tr };
+    const next = { ...t, updatedAt: entry.at, log: [...t.log, entry] };
     tasks.set(t.id, next); save();
-    if (givenByLedge(next)) d.onLedgeTask?.(next);
+    d.onTask?.(next, entry);
     return next;
   };
   /** The owner's pointer: what the task is, and the commands that read and close it. */
@@ -87,7 +94,7 @@ export function createTasks(d: TasksDeps): Tasks {
   const dropFor = (id: string) => {
     for (const t of [...tasks.values()]) {
       if (t.owner !== id || taskClosed(t)) continue;
-      const dropped = put({ ...t, state: 'dropped' }, 'Ledge', `${t.ownerName} s'est terminée sans la finir`);
+      const dropped = put({ ...t, state: 'dropped' }, 'Ledge', `${t.ownerName} s'est terminée sans la finir`, { op: 'drop' });
       log(`task ${t.id} dropped: ${t.ownerName} ended`);
       tellGiver(dropped, 'Ledge', `abandonnée : ${t.ownerName} s'est terminée sans la finir`);
     }
@@ -113,8 +120,8 @@ export function createTasks(d: TasksDeps): Tasks {
     const team = cmd.team ? d.teams?.get(cmd.team) : undefined;
     if (cmd.team && !team) return refuse(`aucune équipe ${cmd.team}`);
     if (cmd.op === 'list') {
-      // Ledge sees its own tasks, or a team's; a session its own, or its team's when it names it.
-      const mine = [...tasks.values()].filter(t => (team ? t.team === team.id : t.owner === me.id || t.giver === me.id) && (cmd.all || !taskClosed(t)));
+      // Ledge sees every task (the fronts show the seats' too, issue #92), or a team's; a session its own, or its team's when it names it.
+      const mine = [...tasks.values()].filter(t => (team ? t.team === team.id : ledge || t.owner === me.id || t.giver === me.id) && (cmd.all || !taskClosed(t)));
       return { type: 'task.result', rid: cmd.rid, tasks: mine.sort((a, b) => a.at.localeCompare(b.at)) };
     }
     if (cmd.op === 'give') {
@@ -125,9 +132,10 @@ export function createTasks(d: TasksDeps): Tasks {
       if (!reachable(t)) return refuse(`${t.name} n'a pas été lancée par Ledge : impossible de lui confier une tâche`);
       const at = now(); const ownerTeam = teamOf(t.id)?.id;
       const task: Task = { id: newId(), title: cmd.title.trim(), ...(cmd.text?.trim() ? { text: cmd.text.trim() } : {}), giver: me.id, giverName: me.name,
-        owner: t.id, ownerName: t.name, ...(ownerTeam ? { team: ownerTeam } : {}), state: 'open', at, updatedAt: at, log: [{ at, by: me.name, what: `confiée à ${t.name}` }] };
+        owner: t.id, ownerName: t.name, ...(ownerTeam ? { team: ownerTeam } : {}), state: 'open', at, updatedAt: at,
+        log: [{ at, by: me.name, what: `confiée à ${t.name}`, ...sides('give', me, t) }] };
       tasks.set(task.id, task); save();
-      if (ledge) d.onLedgeTask?.(task);
+      d.onTask?.(task, task.log[0]);
       tellOwner(task, me.name, `Tâche de ${me.name} :`);
       return ok(task);
     }
@@ -141,18 +149,18 @@ export function createTasks(d: TasksDeps): Tasks {
       if (!ledge || !giver) return refuse('seul Ledge range ses propres tâches');
       if (!taskClosed(t)) return refuse(`la tâche ${t.id} est encore ouverte`);
       if (t.seen) return ok(t);
-      const seen = { ...t, seen: true }; tasks.set(t.id, seen); save(); d.onLedgeTask?.(seen);
+      const seen = { ...t, seen: true }; tasks.set(t.id, seen); save(); d.onTask?.(seen);
       return ok(seen);
     }
     if (taskClosed(t)) return refuse(`la tâche ${t.id} est déjà close (${t.state})`);
     switch (cmd.op) {
       case 'take':
         if (!owner) return refuse(`la tâche ${t.id} est à ${t.ownerName}, pas à toi`);
-        return ok(t.state === 'taken' ? t : put({ ...t, state: 'taken' }, me.name, 'prise'));
+        return ok(t.state === 'taken' ? t : put({ ...t, state: 'taken' }, me.name, 'prise', { op: 'take' }));
       case 'done': {
         if (!owner) return refuse(`seule la session qui la tient (${t.ownerName}) peut la terminer`);
         const result = cmd.text?.trim();
-        const done = put({ ...t, state: 'done', ...(result ? { result } : {}) }, me.name, result ? `terminée : ${result}` : 'terminée');
+        const done = put({ ...t, state: 'done', ...(result ? { result } : {}) }, me.name, result ? `terminée : ${result}` : 'terminée', sides('done', ownerOf(t), giverOf(t)));
         tellGiver(done, me.name, `terminée par ${me.name}${result ? ` : ${quote(result)}` : ''}`);
         return ok(done);
       }
@@ -160,7 +168,8 @@ export function createTasks(d: TasksDeps): Tasks {
         if (!owner && !giver) return refuse(`la tâche ${t.id} n'est ni à toi ni de toi`);
         const reason = cmd.text?.trim();
         if (!reason) return refuse('il faut une raison');
-        const refused = put({ ...t, state: 'refused', result: reason }, me.name, `${owner ? 'refusée' : 'annulée'} : ${reason}`);
+        const refused = put({ ...t, state: 'refused', result: reason }, me.name, `${owner ? 'refusée' : 'annulée'} : ${reason}`,
+          owner ? sides('refuse', ownerOf(t), giverOf(t)) : sides('cancel', giverOf(t), ownerOf(t)));
         // The other side is told: the giver when its owner refuses, the owner when its giver cancels.
         if (owner) tellGiver(refused, me.name, `refusée par ${me.name} : ${quote(reason)}`);
         if (giver && !owner) d.mailbox.notify(t.owner, formatLedgeTask({ id: t.id, from: me.name, text: `Tâche « ${t.title} » annulée par ${me.name} : ${quote(reason)}. Arrête d'y travailler.` }), `${t.id}:${refused.log.length}`);
@@ -177,7 +186,8 @@ export function createTasks(d: TasksDeps): Tasks {
         // The giver stays: a task Ledge gave still comes back to Ledge, however the team passed it inside (§3.7).
         const nextTeam = teamOf(next.id)?.id;
         const { team: _team, ...rest } = t;
-        const passed = put({ ...rest, ...(nextTeam ? { team: nextTeam } : {}), owner: next.id, ownerName: next.name, state: 'open' }, me.name, `passée à ${next.name}${note ? ` : ${note}` : ''}`);
+        const passed = put({ ...rest, ...(nextTeam ? { team: nextTeam } : {}), owner: next.id, ownerName: next.name, state: 'open' }, me.name, `passée à ${next.name}${note ? ` : ${note}` : ''}`,
+          { ...sides('pass', ownerOf(t), next), ...(note ? { note } : {}) });
         tellOwner(passed, me.name, `Tâche passée par ${me.name}${note ? ` (${quote(note)})` : ''}, confiée par ${t.giverName} :`);
         return ok(passed);
       }

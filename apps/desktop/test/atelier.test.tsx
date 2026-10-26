@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, screen, waitFor, within } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
+import type { Task } from '@ledge/protocol';
 import { boot, closeDaemons, declarations, DEFAULT_SESSIONS } from './helpers';
 import { saveReduced } from '../src/motionPreferences';
 import { fr } from '../src/i18n/fr';
@@ -286,6 +289,106 @@ describe('the atelier', () => {
       expect(fr.atelier.messageTo('Rio')).toBe('à Rio');
       expect(fr.atelier.messageLabel('Otto', 'Rio', 'Les tests passent')).toBe('Otto écrit à Rio : Les tests passent. Ouvrir l’échange');
       expect('peerTag' in fr.atelier).toBe(false);
+    });
+  });
+
+  describe('tasks handed between agents (#92)', () => {
+    const rio = fakeSession('rio', { name: 'Rio', cwd: '/w/ledge', state: 'working' });
+    const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
+    type Entry = Task['log'][number];
+    const entry = (op: 'give' | 'pass' | 'done' | 'take', from: string, to: string, ms: number, note?: string): Entry => {
+      const name = (id: string) => ({ otto: 'Otto', rio: 'Rio', nova: 'Nova', ledge: 'Ledge', ghost: 'Ghost' })[id] ?? id;
+      return op === 'take' ? { at: ago(ms), by: name(from), what: 'prise', op } : { at: ago(ms), by: name(from), what: op, op, from, to, fromName: name(from), toName: name(to), ...(note ? { note } : {}) };
+    };
+    const task = (id: string, log: Entry[], extra: Partial<Task> = {}): Task => ({ id, title: 'Relire le candidat', giver: 'otto', giverName: 'Otto', owner: 'rio', ownerName: 'Rio', state: 'open', at: log[0]!.at, updatedAt: log.at(-1)!.at, log, ...extra });
+    const wires = () => document.querySelectorAll('.exchange-wire.task-wire');
+    const bubbles = () => document.querySelectorAll('.exchange-bubble.task-bubble');
+
+    it("draws a ticket from the giver's seat to the owner's for a give between seats", async () => {
+      vi.stubEnv('VITE_LEDGE_MOTION', '1');
+      const { d } = await boot({ sessions: [...DEFAULT_SESSIONS, rio] });
+      d.push({ type: 'task.updated', task: task('t7a1b2c', [entry('give', 'otto', 'rio', 1000)]) });
+      const bubble = await screen.findByRole('button', { name: 'Otto gives “Relire le candidat” to Rio. See the task' });
+      expect(bubble).toHaveClass('task-bubble');
+      expect(bubble).toHaveTextContent('Task → Rio');
+      expect(within(bubble).getByText('Relire le candidat')).toBeVisible();
+      expect(wires()).toHaveLength(1);
+      const ticket = document.querySelector<HTMLElement>('.exchange-ticket')!;
+      expect(ticket).not.toBeNull();
+      expect(ticket).toHaveAttribute('aria-hidden', 'true');
+      expect(ticket.style.offsetPath).toBe(`path('${wires()[0]!.querySelector('path')!.getAttribute('d')}')`);
+      expect(document.querySelector('.exchange-envelope')).toBeNull();
+      // Its own hue: --sidebar-primary is the « your approval » red, which a ticket landing on a seat must not mimic.
+      expect(declarations('atelier.css', '.task-wire path')).toContain('stroke:var(--task)');
+      expect(declarations('atelier.css', '.exchange-ticket-body')).toContain('stroke:var(--task)');
+      expect(declarations('atelier.css', '.task-bubble .exchange-bubble-to')).toContain('color:var(--task)');
+      expect(readFileSync(resolve(__dirname, '../../../packages/ui/src/styles/tokens.css'), 'utf8').match(/--task:/g)).toHaveLength(2);
+    });
+    it('draws two wires for a give then a pass within 5 s, the pass with its note', async () => {
+      const { d } = await boot({ sessions: [...DEFAULT_SESSIONS, rio] });
+      d.push({ type: 'task.updated', task: task('t7a1b2c', [entry('give', 'otto', 'rio', 3000), entry('take', 'rio', 'rio', 2500), entry('pass', 'rio', 'nova', 1000, 'relis la fin')], { owner: 'nova', ownerName: 'Nova' }) });
+      await waitFor(() => expect(wires()).toHaveLength(2));
+      const pass = screen.getByRole('button', { name: 'Rio passes “Relire le candidat” to Nova. See the task' });
+      expect(pass).toHaveTextContent('Passed → Nova');
+      expect(within(pass).getByText('relis la fin')).toBeVisible();
+      expect(screen.getByRole('button', { name: /^Otto gives/ })).toBeVisible();
+    });
+    it("draws a done back to Ledge's desk, which rings when the ticket lands", async () => {
+      vi.stubEnv('VITE_LEDGE_MOTION', '1');
+      const { d } = await boot({ sessions: [...DEFAULT_SESSIONS, rio] });
+      d.push({ type: 'task.updated', task: task('t7a1b2c', [entry('give', 'ledge', 'rio', 60_000), entry('done', 'rio', 'ledge', 500)], { giver: 'ledge', giverName: 'Ledge', state: 'done', result: 'ok' }) });
+      const done = await screen.findByRole('button', { name: 'Rio hands “Relire le candidat” back to Ledge, done. See the task' });
+      expect(done).toHaveTextContent('Done → Ledge');
+      expect(wires()).toHaveLength(1);
+      await waitFor(() => expect(document.querySelector('.ledge-desk')).toHaveClass('exchange-arrived'), { timeout: 3000 });
+    });
+    it('draws nothing for a transmission 6 s old, nor for a take', async () => {
+      const { d } = await boot({ sessions: [...DEFAULT_SESSIONS, rio] });
+      d.push({ type: 'task.updated', task: task('t7a1b2c', [entry('give', 'otto', 'rio', 6000), entry('take', 'rio', 'rio', 500)], { state: 'taken' }) });
+      d.push({ type: 'task.updated', task: task('t0ffee1', [entry('give', 'otto', 'nova', 1000)], { id: 't0ffee1', owner: 'nova', ownerName: 'Nova' }) });
+      await waitFor(() => expect(wires()).toHaveLength(1));                     // the second task's give only
+      expect(screen.queryByRole('button', { name: /to Rio\. See the task$/ })).toBeNull();
+    });
+    it('draws nothing when an endpoint is not on screen, and still draws the others', async () => {
+      const { d } = await boot({ sessions: [...DEFAULT_SESSIONS, rio] });
+      d.push({ type: 'task.updated', task: task('t0ffee1', [entry('give', 'ghost', 'rio', 1000)], { id: 't0ffee1', giver: 'ghost', giverName: 'Ghost' }) });
+      d.push({ type: 'task.updated', task: task('t7a1b2c', [entry('give', 'otto', 'rio', 1000)]) });
+      await waitFor(() => expect(wires()).toHaveLength(1));
+      expect(bubbles()).toHaveLength(1);
+      expect(screen.queryByRole('button', { name: /^Ghost gives/ })).toBeNull();
+    });
+    it('keeps the line but not the ticket when paused or reduced', async () => {
+      const { d } = await boot({ sessions: [...DEFAULT_SESSIONS, rio] });         // the suite forces reduced motion
+      d.push({ type: 'task.updated', task: task('t7a1b2c', [entry('give', 'otto', 'rio', 500)]) });
+      await waitFor(() => expect(wires()).toHaveLength(1));
+      expect(document.querySelector('.task-wire path')).not.toBeNull();
+      expect(document.querySelector('.exchange-ticket')).toBeNull();
+      for (const sel of ['.office-reduced .exchange-ticket', '.office-paused .exchange-ticket']) expect(declarations('atelier.css', sel)).toContain('display:none');
+      const motion = readFileSync(resolve(__dirname, '../src/styles/atelier.css'), 'utf8').match(/@media\(prefers-reduced-motion:reduce\)\{\.exchange-wire[^@]*/)![0];
+      expect(motion).toMatch(/\.exchange-ticket[^{]*\{display:none\}/);
+    });
+    it('paused, with motion: the line stays, no ticket travels', async () => {
+      vi.stubEnv('VITE_LEDGE_MOTION', '1');
+      const { d, user } = await boot({ sessions: [...DEFAULT_SESSIONS, rio] });
+      await user.click(screen.getByRole('button', { name: 'Freeze animations' }));
+      d.push({ type: 'task.updated', task: task('t7a1b2c', [entry('give', 'otto', 'rio', 500)]) });
+      await waitFor(() => expect(wires()).toHaveLength(1));
+      expect(document.querySelector('.exchange-ticket')).toBeNull();
+    });
+    it("clicking the bubble opens the task in Ledge's tasks", async () => {
+      const { d, user } = await boot({ sessions: [...DEFAULT_SESSIONS, rio] });
+      d.push({ type: 'task.updated', task: task('t7a1b2c', [entry('give', 'otto', 'rio', 500)]) });
+      await user.click(await screen.findByRole('button', { name: /^Otto gives/ }));
+      await waitFor(() => expect(screen.getByRole('tab', { name: /^Tasks/ })).toHaveAttribute('aria-selected', 'true'));
+    });
+    it('French copy', () => {
+      expect(fr.atelier.taskTo.give('Nova')).toBe('Tâche → Nova');
+      expect(fr.atelier.taskTo.pass('Nova')).toBe('Passée → Nova');
+      expect(fr.atelier.taskTo.done('Max')).toBe('Terminée → Max');
+      expect(fr.atelier.taskTo.refuse('Max')).toBe('Refusée → Max');
+      expect(fr.atelier.taskTo.cancel('Nova')).toBe('Annulée → Nova');
+      expect(fr.atelier.taskLabel('give', 'Max', 'Nova', 'titre')).toBe('Max confie « titre » à Nova. Voir la tâche');
+      expect('ledgeTaskLabel' in fr.atelier).toBe(false);
     });
   });
 });

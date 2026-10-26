@@ -1,5 +1,5 @@
 import { isPending, liveHelpers, splitId } from '@ledge/fleet';
-import { contextNear, LEDGE_GIVER, projectOf, taskClosed, type Project, type ProjectColor, type Projects, type Session, type Task, type Team } from '@ledge/protocol';
+import { contextNear, LEDGE_GIVER, projectOf, taskClosed, transmissions, type Project, type ProjectColor, type Projects, type Session, type Task, type Team } from '@ledge/protocol';
 
 /** A session row of the tree under its branch. */
 export interface BranchRow { branch: string; sessions: Session[] }
@@ -85,16 +85,20 @@ export function nextWaiting(yours: readonly Session[], selected: string | null):
   return yours[(at + 1) % yours.length]!.id;
 }
 
-/** The latest messages between sessions, newest first, from each session's `lastMessage`; with `tasks`, the tasks Ledge
- *  gave are exchanges too, Ledge as their sender (roles spec §3.9). */
-export function exchanges(sessions: readonly Session[], max: number, tasks: readonly Task[] = [], ledge = 'Ledge'): Array<{ at: string; from: string; to: string; summary: string }> {
+/** The latest exchanges between sessions, newest first: each session's `lastMessage`, and with `tasks` every hand-over of a task
+ *  (#92: a give, pass, done, refuse or cancel between any two seats, Ledge as `ledge`). A side is named by its live session, raw
+ *  or qualified id alike, else by the name the journal kept. */
+export function exchanges(sessions: readonly Session[], max: number, tasks: readonly Task[] = [], ledge = 'Ledge'): Array<{ at: string; from: string; to: string; summary: string; kind: 'message' | 'task' }> {
   const byId = new Map(sessions.map(s => [s.id, s]));
+  const bare = (id: string) => splitId(id)?.id ?? id;
+  const find = (id: string) => byId.get(id) ?? sessions.find(x => bare(x.id) === bare(id));
+  const nameOf = (id: string, then: string) => (id === LEDGE_GIVER ? ledge : find(id)?.name ?? then);
   return [...sessions.flatMap(s => {
     const m = s.lastMessage;
     if (!m) return [];
-    const peer = m.peer ? (byId.get(m.peer) ?? sessions.find(x => splitId(x.id)?.id === m.peer)) : undefined;
-    return [{ at: m.at, from: s.name, to: peer?.name ?? m.to, summary: m.summary }];
-  }), ...tasks.filter(x => x.giver === LEDGE_GIVER).map(x => ({ at: x.at, from: ledge, to: x.ownerName, summary: x.title }))]
+    const peer = m.peer ? find(m.peer) : undefined;
+    return [{ at: m.at, from: s.name, to: peer?.name ?? m.to, summary: m.summary, kind: 'message' as const }];
+  }), ...tasks.flatMap(x => transmissions(x).map(tr => ({ at: tr.at, from: nameOf(tr.from, tr.fromName), to: nameOf(tr.to, tr.toName), summary: x.title, kind: 'task' as const })))]
     .sort((a, b) => b.at.localeCompare(a.at)).slice(0, max);
 }
 
