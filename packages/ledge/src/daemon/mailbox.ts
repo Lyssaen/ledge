@@ -3,6 +3,7 @@ import type { Store } from './store.js';
 import { formatLedgeMessage, formatLedgeNotice, inline, mailId } from './crossSession.js';
 import { free } from './relay.js';
 import { bareName } from './peers.js';
+import { reliefOf } from './handover.js';
 import { log } from '../log.js';
 import { jsonJournal, type Journal } from './journal.js';
 
@@ -28,14 +29,14 @@ export interface MailboxDeps {
 export interface Mailbox {
   submit(m: Extract<ClientMessage, { type: 'session.message' }>): MessageAck;
   read(m: Extract<ClientMessage, { type: 'message.read' }>): Extract<ServerMessage, { type: 'message.body' }>;
-  /** Ledge's own line for a session (a task's pointer), typed at its next free moment; false when it cannot be typed into. Never told back on failure. */
-  notify(target: string, text: string, rid: string): boolean;
+  /** Ledge's own line for a session (a task's pointer), typed at its next free moment (`first`: before anything waiting); false when it cannot be typed into. Never told back on failure. */
+  notify(target: string, text: string, rid: string, o?: { first?: boolean }): boolean;
   kick(id: string): void;
   close(): void;
 }
 
 /** A message to type (`from` its sender's session id), or a notice telling a sender one of its messages failed (`from` empty). */
-interface Queued { kind: 'message' | 'notice'; id: string; rid: string; from: string; sender: { name: string; tool: Tool }; target: string; to: string; text: string; summary?: string }
+interface Queued { kind: 'message' | 'notice'; id: string; rid: string; from: string; sender: { name: string; tool: Tool }; target: string; to: string; text: string; summary?: string; alone?: true }
 /** A message's body as `ledge read` gives it: `from`/`target` the session ids allowed to read it, `fromName`/`to` their names. */
 interface Body { id: string; rid: string; from: string; fromName: string; target: string; to: string; at: string; text: string }
 /** How many rids are remembered for the dedupe: past it the oldest are forgotten. */
@@ -43,6 +44,8 @@ const MAX_SEEN = 1000;
 /** Bodies kept for `ledge read`: a pointer typed into a session may be read days later. */
 const BODY_MAX = 200;
 const BODY_TTL_MS = 7 * 24 * 3600 * 1000;
+/** Messages typed together at one free moment: a busy lead is not handed one turn per report. */
+export const MESSAGES_PER_TURN = 6;
 /** `replyTo`'s refusals that pass (server.ts, adapters/types.ts): a decision being typed, or a prompt that came up
  *  meanwhile. The message waits for the next free moment; any other refusal (no session, read only, no terminal, the
  *  text not taken) fails it. */
@@ -83,36 +86,52 @@ export function createMailbox(d: MailboxDeps): Mailbox {
     notice(sender, formatLedgeNotice({ to: m.to, text: m.text, reason }), `${m.rid}:notice`);
   }
 
-  function notice(s: Session, text: string, rid: string): void {
-    queue.push({ kind: 'notice', id: mailId(rid), rid, from: '', sender: { name: 'Ledge', tool: s.tool }, target: s.id, to: s.name, text });
+  function notice(s: Session, text: string, rid: string, first = false): void {
+    const m: Queued = { kind: 'notice', id: mailId(rid), rid, from: '', sender: { name: 'Ledge', tool: s.tool }, target: s.id, to: s.name, text };
+    if (first) queue.unshift(m); else queue.push(m);
     queueMicrotask(() => kick(s.id));
   }
 
-  async function deliver(m: Queued): Promise<void> {
-    const s = d.store.get(m.target);
-    if (!s) { fail(m, GONE); save(); queueMicrotask(() => kick(m.target)); return; }
-    d.typing.add(m.target);
+  /** One notice, or up to MESSAGES_PER_TURN messages typed together on one line, oldest first. */
+  async function deliver(batch: Queued[]): Promise<void> {
+    const target = batch[0]!.target;
+    const s = d.store.get(target);
+    if (!s) { for (const m of batch) fail(m, GONE); save(); queueMicrotask(() => kick(target)); return; }
+    d.typing.add(target);
     try {
       let refused: string | null;
-      const text = m.kind === 'notice' ? m.text : formatLedgeMessage({ from: m.sender.name, tool: m.sender.tool, text: m.text, to: s.tool, id: m.id, ...(m.summary ? { summary: m.summary } : {}) });
-      try { refused = await d.replyTo(m.target, text); } catch (e) { refused = (e as Error).message; }
+      const text = batch.map(m => m.kind === 'notice' ? m.text : formatLedgeMessage({ from: m.sender.name, tool: m.sender.tool, text: m.text, to: s.tool, id: m.id, ...(m.summary ? { summary: m.summary } : {}) })).join(' ');
+      try { refused = await d.replyTo(target, text); } catch (e) { refused = (e as Error).message; }
       // First in line again; the store change that ends the decision or the prompt is the next try. A target gone meanwhile fails it.
-      const live = d.store.get(m.target);
-      if (refused && PASSING.some(re => re.test(refused!)) && live && live.state !== 'exited') { log(`${m.kind} ${m.rid} to ${m.target} waits: ${refused}`); queue.unshift(m); return; }
-      if (refused) fail(m, refused);
-      else if (m.kind === 'message') d.sent.mark(m.from, m.rid, 'delivered');
+      const live = d.store.get(target);
+      if (refused && PASSING.some(re => re.test(refused!)) && live && live.state !== 'exited') { log(`${batch.length} item(s) to ${target} wait: ${refused}`); queue.unshift(...batch); return; }
+      // A batch refused for good is tried again one message at a time: one bad message does not fail the others.
+      if (refused && batch.length > 1) { log(`batch to ${target} refused (${refused}): each tried alone`); queue.unshift(...batch.map(m => ({ ...m, alone: true as const }))); }
+      else for (const m of batch) {
+        if (refused) fail(m, refused);
+        else if (m.kind === 'message') d.sent.mark(m.from, m.rid, 'delivered');
+      }
       save();
       // A refusal leaves the session's state unchanged, so a queued relay card waits for the next store change; only the mailbox retries at once.
-      if (refused) queueMicrotask(() => kick(m.target));
-    } finally { d.typing.delete(m.target); }
+      if (refused) queueMicrotask(() => kick(target));
+    } finally { d.typing.delete(target); }
   }
 
   function kick(id: string): void {
     if (!ready(id)) return;
     const i = queue.findIndex(m => m.target === id);
     if (i < 0) return;
-    const [m] = queue.splice(i, 1);
-    void deliver(m!).catch(e => log(`${m!.kind} ${m!.rid} failed: ${(e as Error).message}`));
+    const batch = [queue.splice(i, 1)[0]!];
+    // Messages go together, up to the bound; a notice, or a message of a refused batch, goes alone and ends the batch.
+    if (batch[0]!.kind === 'message' && !batch[0]!.alone) {
+      for (let j = i; j < queue.length && batch.length < MESSAGES_PER_TURN;) {
+        const m = queue[j]!;
+        if (m.target !== id) { j++; continue; }
+        if (m.kind !== 'message' || m.alone) break;
+        batch.push(queue.splice(j, 1)[0]!);
+      }
+    }
+    void deliver(batch).catch(e => log(`${batch.length} item(s) to ${id} failed: ${(e as Error).message}`));
   }
 
   /** Every message queued for a session that has exited or is gone fails. */
@@ -130,9 +149,14 @@ export function createMailbox(d: MailboxDeps): Mailbox {
     kick(id);
   });
 
+  /** The live session by that name, else the relief of the last one relieved under it (names rotate on relief). */
   const target = (to: string): Session | undefined => {
     const name = bareName(to);
-    return d.store.all().find(s => s.name === name && s.state !== 'exited' && !isArchived(s));
+    const all = d.store.all();
+    const live = all.find(s => s.name === name && s.state !== 'exited' && !isArchived(s));
+    if (live) return live;
+    const relieved = all.filter(s => s.name === name && s.handover?.state === 'done').sort((a, b) => b.handover!.at.localeCompare(a.handover!.at))[0];
+    return relieved ? reliefOf(id => d.store.get(id), relieved) : undefined;
   };
   const remember = (rid: string, ack: MessageAck): MessageAck => {
     seen.set(rid, ack);
@@ -189,10 +213,10 @@ export function createMailbox(d: MailboxDeps): Mailbox {
       if (by !== b.from && by !== b.target) return { type: 'message.body', id, reason: `le message ${id} ne t'est pas adressé` };
       return { type: 'message.body', id, from: b.fromName, to: b.to, at: b.at, text: b.text };
     },
-    notify(target, text, rid) {
+    notify(target, text, rid, o = {}) {
       const s = d.store.get(target);
       if (!reachable(s)) return false;
-      notice(s, text, rid); save();
+      notice(s, text, rid, o.first); save();
       return true;
     },
     kick,

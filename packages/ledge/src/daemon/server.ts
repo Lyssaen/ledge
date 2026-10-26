@@ -43,7 +43,7 @@ import { cardOf, closeFromChat, CloseRefused } from '../chat/close.js';
 import { createMailbox, type MailJournal } from './mailbox.js';
 import { createTasks, type TasksJournal } from './tasks.js';
 import { createTeamsLive, type TeamsJournal } from './teamsLive.js';
-import { createHandovers } from './handover.js';
+import { createHandovers, heldNames } from './handover.js';
 import { readContext } from './context.js';
 import { autonomyArgs, findRole, ompApprovalFor } from './roles.js';
 import { listDefinitions, resolveSeats, saveTemplate } from './teams.js';
@@ -817,7 +817,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     const autonomy = role?.autonomy;
     const spawned = await spawnSession({ tool: req.tool, args: launchArgs({ ...req, dirs, autonomy }), name: req.name, cwd, tmux, now, env,
       ...(role ? { role: { id: role.id, label: role.label } } : {}), ...(team ? { team: team.id } : {}), ...(autonomy ? { autonomy } : {}),
-      taken: { names: live.filter(s => s.state !== 'exited').map(s => s.name), ids: live.map(s => s.id) } });
+      taken: { names: [...live.filter(s => s.state !== 'exited').map(s => s.name), ...heldNames(live)], ids: live.map(s => s.id) } });
     const session: Session = { ...spawned, ...(req.model ? { model: req.model } : {}), ...(req.effort ? { effort: req.effort } : {}) };
     store.upsert(session);
     store.touchRecent(session.cwd, session.project, session.startedAt);

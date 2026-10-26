@@ -64,13 +64,18 @@ export function formatLedgeMessage(m: { from: string; tool: Tool; text: string; 
   const head = ledgeBody(first.length > POINTER_HEAD ? `${first.slice(0, POINTER_HEAD)}…` : first);
   return `${open}${head} … [message de ${m.text.length} caractères, ${lineCount(m.text)} lignes : lis-le en entier avec ledge read ${attr(m.id)}]${LEDGE_CLOSE}`;
 }
+/** Every message of a prompt: the mailbox types a batch as blocks one after the other on one line. */
 export function ledgeMessages(text: string): { from: string; tool?: string; id?: string; text: string }[] | undefined {
-  const m = LEDGE_BLOCK.exec(text.trimStart());
-  if (!m) return undefined;
-  const attrs = new Map([...m[1]!.matchAll(ATTR)].map(a => [a[1]!, a[2]!] as const));
-  const from = attrs.get('from'); const tool = attrs.get('tool'); const id = attrs.get('id');
-  if (!from) return undefined;
-  return [{ from, ...(tool ? { tool } : {}), ...(id ? { id } : {}), text: stripNote(m[2]!).text.trim() }];
+  const out: { from: string; tool?: string; id?: string; text: string }[] = [];
+  let rest = text.trimStart(); let m: RegExpExecArray | null;
+  while (rest && (m = LEDGE_BLOCK.exec(rest))) {
+    const attrs = new Map([...m[1]!.matchAll(ATTR)].map(a => [a[1]!, a[2]!] as const));
+    const from = attrs.get('from'); const tool = attrs.get('tool'); const id = attrs.get('id');
+    if (!from) break;
+    out.push({ from, ...(tool ? { tool } : {}), ...(id ? { id } : {}), text: stripNote(m[2]!).text.trim() });
+    rest = rest.slice(m[0].length).trimStart();
+  }
+  return out.length ? out : undefined;
 }
 
 /** What Ledge types into a sender's prompt when it gives up on one of its messages: one line, never the user's words. */

@@ -112,6 +112,15 @@ describe('createTasks', () => {
     expect(cmd('otto', 'show', { task: b.id }).task).toMatchObject({ state: 'dropped' });
     expect(told).toEqual([['otto', expect.stringContaining('abandonnée : Nova')]]);
   });
+
+  it('pass by its giver: the lead moves a task it gave without cancelling it, the one who held it is told to stop', () => {
+    const t = give();
+    told = [];
+    const p = cmd('otto', 'pass', { task: t.id, to: 'Nova', text: 'Pim est pris' }).task!;
+    expect(p).toMatchObject({ owner: 'nova', giver: 'otto', state: 'open' });
+    expect(told.map(([to]) => to).sort()).toEqual(['nova', 'pim']);
+    expect(cmd('pim', 'pass', { task: t.id, to: 'Otto' }).reason).toContain('ou celle qui l\'a confiée (Otto)');
+  });
 });
 
 describe('ledge task (CLI)', () => {

@@ -7,6 +7,7 @@ import { Store } from '../src/daemon/store.js';
 import { History } from '../src/daemon/history.js';
 import { startServer } from '../src/daemon/server.js';
 import { claudeUsage, codexUsage, readContext } from '../src/daemon/context.js';
+import { heldNames, reliefOf } from '../src/daemon/handover.js';
 import { handoverArgs } from '../src/cli/handover.js';
 import { parseLedgeCommand } from '../src/cli/send.js';
 import { connect, type Client } from '../src/client.js';
@@ -90,6 +91,24 @@ beforeEach(() => {
 });
 afterEach(async () => { await c?.close(); await srv?.close(); srv = undefined; });
 
+describe('a relieved name', () => {
+  const T = '2026-10-26T19:00:00.000Z';
+  const s = (id: string, name: string, extra: Partial<Session> = {}): Session => ({ id, name, tool: 'claude', cwd: '/w', project: 'w', title: name, tmuxSession: `ledge-${id}`,
+    state: 'idle', helpers: [], startedAt: T, lastActivityAt: T, source: 'launcher', ...extra });
+  const relieved = (id: string, name: string, to: string) => s(id, name, { state: 'exited', handover: { state: 'done', to, toName: '', at: T } });
+  it('leads to the live end of its chain, none when the chain has ended', () => {
+    const all = [relieved('a', 'Pim', 'b'), relieved('b', 'Ida', 'c'), s('c', 'Max')];
+    const get = (id: string) => all.find(x => x.id === id);
+    expect(reliefOf(get, all[0]!)?.id).toBe('c');
+    expect(reliefOf(get, s('d', 'Lu', { state: 'exited' }))).toBeUndefined();
+    expect(reliefOf(get, relieved('e', 'Lu', 'gone'))).toBeUndefined();
+  });
+  it('is held while its relief lives, so no other seat gets it', () => {
+    const all = [relieved('a', 'Pim', 'b'), s('b', 'Ida'), relieved('c', 'Lu', 'd'), s('d', 'Bix', { state: 'exited' })];
+    expect(heldNames(all)).toEqual(['Pim']);
+  });
+});
+
 describe('the relief of a session (context handover spec §3.3)', () => {
   it('measured after its turn; asked, its brief written, a relief at its seat with the brief, its tasks passed, the old one closed', async () => {
     await start();
@@ -126,6 +145,33 @@ describe('the relief of a session (context handover spec §3.3)', () => {
     // The relief reads the brief again.
     c.send({ type: 'handover.show', rid: 'v', by: relief.id });
     expect((await c.next('handover.result')).text).toContain('Piège : LEDGE_HOME.');
+  }, 20_000);
+
+  it('the request for a brief jumps whatever waits for a busy session', async () => {
+    await start();
+    const { team, id } = await seated(170_000);
+    const pane = store.get(id)!.tmuxSession!;
+    set(id, { state: 'working' });
+    c.send({ type: 'task.cmd', rid: 'g', by: 'ledge', op: 'give', team: team.id, to: '@build', title: 'Implémenter les rôles' });
+    await c.next('task.result');
+    c.send({ type: 'session.handover', rid: 'h1', id });
+    expect(await c.next('session.handover.result')).toMatchObject({ ok: true });
+    const before = tmux.typed.filter(t => t.pane === pane).length;
+    set(id, { state: 'idle' });
+    await until(() => tmux.typed.filter(t => t.pane === pane).length > before);
+    expect(tmux.typed.filter(t => t.pane === pane)[before]!.text).toContain('<ledge-handover>');
+  }, 20_000);
+
+  it('a relieved name is not given to another seat while its relief lives', async () => {
+    await start();
+    const { id } = await seated(170_000);
+    const old = store.get(id)!.name;
+    c.send({ type: 'session.handover', rid: 'h1', id }); await c.next('session.handover.result');
+    c.send({ type: 'handover.brief', rid: 'b', by: id, text: 'Fait.' }); await c.next('handover.result');
+    await until(() => store.get(id)?.handover?.state === 'done' && store.get(id)?.state === 'exited', 5000);
+    c.send({ type: 'session.launch', tool: 'claude', cwd: work });
+    const { id: other } = await c.next('session.launched', 5000);
+    expect(store.get(other)!.name).not.toBe(old);
   }, 20_000);
 
   it('a relief’s passes leave the relieved session one card per task, toward the relief (#92)', async () => {
