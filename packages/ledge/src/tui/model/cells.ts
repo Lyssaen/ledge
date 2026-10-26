@@ -77,7 +77,7 @@ export function row(prefix: Line, body: Line, meta: Line | null, width: number, 
     lines[last] = [...cut(lines[last]!, room), tag];
   }
   return lines.map((l, k) => {
-    if (k > 0) return [pad(ind), ...l];
+    if (k > 0) return ind ? [pad(ind), ...l] : l;
     const left = [...prefix, ...l];
     return meta?.length ? [...left, pad(width - lineCells(left) - lineCells(meta)), ...meta] : left;
   });

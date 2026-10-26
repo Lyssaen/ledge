@@ -111,12 +111,13 @@ function Shell({ client, lang, setLang: setLangState, saveLang, notify, glyphs, 
     });
   }, [fleet, suspendTerminal, run, t, toast, write]);
 
+  const size = useWindowSize();
+  const small = size.columns < MIN.columns || size.rows < MIN.rows;
   const tui: Tui = {
     client, fleet, d, machines, projects, t, lang, setLang, g: glyphs, screen, go, selected, select: setSelectedId,
-    toast, lastToast, actions, editing, setEditing, attach, keys, kept
+    toast, lastToast, actions, editing, setEditing, small, attach, keys, kept
   };
 
-  const size = useWindowSize();
   useInput((input, key) => {
     if (key.ctrl && input === 'c') {
       if (keys.current?.(input, key)) return;
@@ -130,9 +131,10 @@ function Shell({ client, lang, setLang: setLangState, saveLang, notify, glyphs, 
       }
       exit(); return;
     }
-    if (editing) return;
+    // Too small, the field is not drawn: esc leaves it (the screen keeps the draft), or the screen.
+    if (editing) { if (small && key.escape && !keys.current?.(input, key)) go('overview'); return; }
     // Too small, the screen is not drawn: y, n, a… would act on a request out of view. esc and q still go.
-    if ((size.columns < MIN.columns || size.rows < MIN.rows) && !key.escape && input !== 'q') return;
+    if (small && !key.escape && input !== 'q') return;
     if (keys.current?.(input, key)) return;
     if (input === 'q') { exit(); return; }
     if (key.escape) { go(screen === 'help' || screen === 'settings' ? back : 'overview'); return; }

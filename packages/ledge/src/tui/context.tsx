@@ -25,6 +25,8 @@ export interface Tui {
   toast(t: Toast): void; lastToast: Toast | null; actions: Actions;
   /** A field has the keyboard: the global keys are off. */
   editing: boolean; setEditing(on: boolean): void;
+  /** Below `MIN`: the screen is not drawn, its keys are off but esc. */
+  small: boolean;
   attach(s: Session): void;
   kept: Kept;
   /** Registers the screen's key handler (see `useScreenKeys`). */

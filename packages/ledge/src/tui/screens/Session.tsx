@@ -88,6 +88,8 @@ function SessionView({ s }: { s: Session }) {
     if (mode !== 'read') {
       // ctrl+c leaves the field (keeping the draft) instead of quitting.
       if (key.ctrl && input === 'c') { leave(); return true; }
+      // Too small, the field is not drawn (the app sends esc here only then): esc leaves it.
+      if (key.escape) { leave(); return true; }
       return false;
     }
     if (key.pageUp) { scroll(up + view - 1); return true; }
@@ -162,7 +164,7 @@ function SessionView({ s }: { s: Session }) {
   );
 }
 
-type Ask = { lines: Line[]; buttons: Array<{ label: string; k: string; primary?: boolean }> };
+export type Ask = { lines: Line[]; buttons: Array<{ label: string; k: string; primary?: boolean }> };
 
 /** The request folded at `width` under an indent, at most `max` lines, and the keys that answer it (none while a field is
  *  open: the field has the keyboard). */
@@ -181,11 +183,12 @@ function ask(s: Session, p: Pending, t: Messages, width: number, max: number, bu
 }
 
 /** The rows the request's box takes: its borders, its lines, then a blank row and its keys, wrapped as Ink wraps them. */
-function askRows(a: Ask, width: number): number {
+export function askRows(a: Ask, width: number): number {
   let rows = 0, used = Infinity;
   for (const b of a.buttons) {
     const w = cells(b.label) + cells(b.k) + 3;
-    if (used + 2 + w > width) { rows++; used = w; } else used += 2 + w;
+    // A key wider than the box wraps on as many rows.
+    if (used + 2 + w > width) { rows += Math.max(1, Math.ceil(w / width)); used = Math.min(w, width); } else used += 2 + w;
   }
   return 2 + a.lines.length + (rows ? 1 + rows : 0);
 }

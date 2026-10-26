@@ -28,7 +28,7 @@ export function Launch() {
 }
 
 function SessionLaunch({ onTeam }: { onTeam(): void }) {
-  const { client, d, machines, projects, t, g, toast, go, select } = useTui();
+  const { client, d, machines, projects, t, g, toast, go, select, small } = useTui();
   const list = projects?.projects ?? [];
   const [form, setForm] = useState<LaunchForm>(() => launchDefaults(list, machines, {}, 'claude'));
   const [field, setField] = useState<Field>('prompt');
@@ -78,6 +78,8 @@ function SessionLaunch({ onTeam }: { onTeam(): void }) {
   };
 
   useInput((input, key) => {
+    // Too small, the form is not drawn: only esc goes.
+    if (small && !key.escape) return;
     if (key.escape) { go('overview'); return; }
     if (key.ctrl && input === 's') { launch(); return; }
     if (key.ctrl && input === 't') { onTeam(); return; }
@@ -154,7 +156,7 @@ const AUTONOMY_COLOR = { ask: C.faint, edits: C.dim, auto: C.yellow } as const;
  *  agent), the team's name, and the preview « L'équipe workshop s'installera à une nouvelle table de la pièce Ledge » with the
  *  autonomy warning. ctrl+s sends `team.launch`; its answer says how it went. */
 function TeamLaunch({ onSession }: { onSession(): void }) {
-  const { client, machines, projects, t, g, toast, go } = useTui();
+  const { client, machines, projects, t, g, toast, go, small } = useTui();
   const list = projects?.projects ?? [];
   const [projectId, setProjectId] = useState<string | null>(list[0]?.id ?? null);
   const project = list.find(p => p.id === projectId);
@@ -211,6 +213,8 @@ function TeamLaunch({ onSession }: { onSession(): void }) {
   const tools: Tool[] = ['claude', 'codex', 'cursor', 'omp'];
   const templates: Array<string | null> = [...(defs?.templates ?? []).map(x => x.id), null];
   useInput((input, key) => {
+    // Too small, the form is not drawn: only esc goes.
+    if (small && !key.escape) return;
     if (key.escape) { go('overview'); return; }
     if (key.ctrl && input === 's') { launch(); return; }
     if (key.ctrl && input === 't') { onSession(); return; }

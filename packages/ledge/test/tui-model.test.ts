@@ -12,6 +12,7 @@ import { anchorLine, diffCount, threadLines, threadView, wrap } from '../src/tui
 import { cells, type Line } from '../src/tui/model/cells.js';
 import { markdownLines } from '../src/tui/model/markdown.js';
 import { helpLines } from '../src/tui/screens/Help.js';
+import { askRows } from '../src/tui/screens/Session.js';
 import { askHistory, chatLines, chatView, openCards } from '../src/tui/model/chat.js';
 import { ago, took } from '../src/tui/model/time.js';
 import { asked, notification } from '../src/tui/notify.js';
@@ -384,5 +385,12 @@ describe('tui help (#95 lot C)', () => {
     expect(lines[4]!.trim()).toBe('');
     expect(lines[5]).toMatch(/^B/);
     expect(text(helpLines([group('A', 3), group('B', 2)], 30))).toHaveLength(8);
+  });
+});
+
+describe('tui session request (#95 lot A, second review)', () => {
+  it('a key wider than the box takes as many rows as Ink wraps it on', () => {
+    expect(askRows({ lines: [[{ text: 'Quel port ?' }]], buttons: [{ label: 'x'.repeat(50), k: '1' }] }, 20)).toBe(2 + 1 + 1 + 3);
+    expect(askRows({ lines: [[{ text: 'Quel port ?' }]], buttons: [{ label: 'a', k: '1' }, { label: 'b', k: '2' }] }, 20)).toBe(2 + 1 + 1 + 1);
   });
 });

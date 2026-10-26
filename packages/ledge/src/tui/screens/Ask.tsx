@@ -23,7 +23,7 @@ const CARD_MS = 20_000;
 const CONVO = -2;
 
 export function Ask() {
-  const { client, d, machines, t, g, toast, go, kept } = useTui();
+  const { client, d, machines, t, g, toast, go, kept, small } = useTui();
   const { columns } = useWindowSize();
   // Kept by the TUI: ctrl+c and another screen leave it as it is.
   const [draft, setDraftState] = useState(() => kept.drafts.get('ask') ?? '');
@@ -105,6 +105,8 @@ export function Ask() {
   const latest = useRef({ asking, cards, focus, confirm, turns: d.chat.length, scroll, up, view });
   latest.current = { asking, cards, focus, confirm, turns: d.chat.length, scroll, up, view };
   useInput((input, key) => {
+    // Too small, nothing is drawn: esc is the app's.
+    if (small) return;
     const l = latest.current;
     if (l.confirm) return;
     if (key.ctrl && input === 'n') { if (l.turns === 0) client.send({ type: 'chat.reset' }); else setConfirm(true); return; }

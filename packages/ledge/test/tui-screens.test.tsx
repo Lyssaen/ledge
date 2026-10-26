@@ -524,6 +524,94 @@ describe('ledge tui: the field (#95 lot B)', () => {
   });
 });
 
+describe('ledge tui: lot A, second review', () => {
+  it('below 60×16 the new session screen does nothing but esc: ctrl+s launches nothing out of view', async () => {
+    const tui = await startTui();
+    tui.daemon.options.autoLaunch = true;
+    try {
+      await tui.press('+');
+      await until(() => tui.frame().includes('NOUVELLE SESSION'));
+      await tui.press('Ajoute un test');
+      await tui.resize(52, 14);
+      await until(() => tui.frame().includes('Fenêtre trop petite'));
+      await tui.press('\u0013');
+      await tui.press('\r');
+      await new Promise(r => setTimeout(r, 100));
+      expect(sent(tui.daemon.received, 'session.launch')).toEqual([]);
+      await tui.press(ESC);
+      await tui.resize(100, 30);
+      await until(() => tui.frame().includes('PROJETS'));
+    } finally { await tui.cleanup(); }
+  });
+
+  it('below 60×16 Ask does nothing with ctrl+n or tab', async () => {
+    const tui = await startTui();
+    try {
+      await tui.press('/');
+      await until(() => tui.frame().includes('LEDGE · OPÉRATEUR'));
+      await tui.resize(52, 14);
+      await until(() => tui.frame().includes('Fenêtre trop petite'));
+      await tui.press('\u000e');
+      await tui.press('\t');
+      await new Promise(r => setTimeout(r, 100));
+      expect(sent(tui.daemon.received, 'chat.reset')).toEqual([]);
+      await tui.resize(100, 30);
+      await until(() => tui.frame().includes('LEDGE · OPÉRATEUR'));
+      expect(tui.frame()).toContain('alt+↵');
+    } finally { await tui.cleanup(); }
+  });
+
+  it('below 60×16, writing, esc leaves the field and keeps the draft', async () => {
+    const tui = await startTui();
+    try {
+      await tui.press('\r');
+      await until(() => tui.frame().includes('Otto veut exécuter'));
+      await tui.press('r'); await tui.press('Pas ce test');
+      await until(() => tui.frame().includes('garder et sortir'));
+      await tui.resize(52, 14);
+      await until(() => tui.frame().includes('Fenêtre trop petite'));
+      await tui.press(ESC);
+      await new Promise(r => setTimeout(r, 100));
+      await tui.resize(100, 30);
+      await until(() => tui.frame().includes('Otto veut exécuter'));
+      expect(tui.frame()).not.toContain('garder et sortir');
+      expect(tui.frame()).toContain('Pas ce test');
+    } finally { await tui.cleanup(); }
+  });
+
+  it('a long question folded: its lines start at the edge, none loses its end, « +n » shows', async () => {
+    const [otto, ...rest] = mockupSessions();
+    const text = `Quel port ${'longuement '.repeat(60)}fin ?`;
+    const tui = await startTui({ sessions: [{ ...otto!, state: 'waiting_input', pending: { kind: 'question', text, options: ['3000', '5173'], source: 'hook' } }, ...rest] });
+    try {
+      await tui.resize(80, 30);
+      await tui.press('\r');
+      await until(() => tui.frame().includes('Quel port'));
+      const rows = tui.frame().split('\n').filter(l => l.includes('longuement'));
+      expect(rows.length).toBe(4);
+      for (const l of rows) expect(l).toMatch(/^│ \S/);
+      expect(rows.slice(0, 3).every(l => /longuement {0,2}│$/.test(l))).toBe(true);
+      expect(rows[3]).toMatch(/… \+\d+ *│$/);
+    } finally { await tui.cleanup(); }
+  });
+
+  it('scrolled to the top of the thread, the border says only what is below', async () => {
+    const tui = await startTui();
+    tui.daemon.thread('bix', [{ kind: 'prompt', id: 'p1', at: T(0), turn: 1, text: 'Relis tout' },
+      ...Array.from({ length: 40 }, (_, i) => ({ kind: 'tool' as const, id: `t${i}`, at: T(1 + i), turn: 1, tool: 'Read', label: `src/fichier-${i}.ts`, status: 'success' as const, durationMs: 100, files: [] }))]);
+    try {
+      await tui.press('j'); await tui.press('j');
+      await until(() => tui.frame().includes('BIX · DOCUMENTER'));
+      await tui.press('\r');
+      await until(() => tui.frame().includes('fichier-'));
+      for (let i = 0; i < 4; i++) await tui.press('\u001b[5~');
+      await until(() => tui.frame().includes('Relis tout'));
+      expect(tui.frame()).toMatch(/─ ↓ \d+ · G fin ─╯/);
+      expect(tui.frame()).not.toContain('↑ 0');
+    } finally { await tui.cleanup(); }
+  });
+});
+
 describe('ledge tui: ask Ledge scrolls, in Markdown (#95 lot C)', () => {
   const OP = 'LEDGE · OPÉRATEUR';
   // Of today: the fleet keeps only the day's conversation.
