@@ -1,3 +1,4 @@
+import type { ActionWords } from './actionWords';
 import { createContext, useContext } from 'react';
 
 type Say = (s: string) => string;
@@ -42,11 +43,33 @@ export interface ChatCopy {
       label: (n: number) => string; to: string; give: string; giving: string; retry: string; waitTeam: string;
       given: (owner: string, id: string, state: string) => string; state: Record<'open' | 'taken' | 'done' | 'refused' | 'dropped', string>; failed: Say;
     };
+    /** The generic card (#94): a row per action, a plan past one. `verbs` the button of each action, by its id, `apply`
+     *  when the front knows none; `at` a time already put in words (10:42), empty when the daemon gave none. Left out by a front that does not show it yet. */
+    action?: ActionCopy;
   };
   machines: { destination: string; local: string; offline: string; choose: Say; clarification: string };
   time: { seconds: (n: number) => string; minutes: (n: number) => string; hours: (n: number) => string; locale: string };
   /** Why questions cannot be sent while the daemon is away. */
   offline: string;
+}
+
+type Risk = 'read' | 'reversible' | 'destructive';
+export interface ActionCopy {
+  label: (n: number) => string; risk: Record<Risk, string>; riskTip: Record<Risk, string>;
+  step: (k: number) => string; stepState: Record<'done' | 'failed' | 'refused' | 'running', (k: number) => string>; askAgain: string;
+  verbs: Record<string, string>; apply: string; deny: string; ignore: string; review: string; retry: string; running: string;
+  done: Say; refusedState: string; denied: Say; open: Say;
+  failed: Say; refused: Say; held: (k: number) => string; stale: Say; deniedNote: Say;
+  all: (n: number) => string; resume: (k: number, n: number) => string; skip: (k: number, n: number) => string;
+  inOrder: string; destructiveLater: (n: number) => string; notReplayed: string; progress: (k: number, n: number) => string; planDone: Say;
+  confirm: {
+    label: string; many: (n: number, all: boolean) => string; one: Say; oneWhy: string; manyWhy: (destructive: number) => string;
+    cancel: string; go: (n: number) => string; alreadyDone: string;
+  };
+  /** `sent`: the rows applied, denied or failed before the card was set aside; none, and nothing was sent. */
+  ignored: (n: number, at: string, sent?: { done: number; denied: number; failed: number }) => string;
+  /** The rows' lines and why one was refused, from their `vars` (actionWords.ts). */
+  words: ActionWords;
 }
 
 const ChatCopyContext = createContext<ChatCopy | null>(null);

@@ -1,4 +1,4 @@
-import { writeFileSync, mkdirSync, renameSync } from 'node:fs';
+import { existsSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { SeatsSchema, TeamNameSchema, type DefinitionProblem, type Role, type Seat, type TeamTemplate, type Tool } from '@ledge/protocol';
 import { definitionDirs, definitionFiles, listRoles, readSmall, unquote } from './roles.js';
@@ -122,9 +122,13 @@ export function templateId(name: string): string {
 
 const yamlScalar = (v: string): string => (/^[\w./@:+-]+$/.test(v) && !/^(true|false|null|yes|no|~)$/i.test(v) ? v : JSON.stringify(v));
 
+const templatePath = (name: string, dir: string) => join(dir, `${templateId(name)}.yaml`);
+/** Whether `saveTemplate(name)` would replace a template already saved. */
+export const templateExists = (name: string, dir = join(ledgeDir(), 'teams')): boolean => existsSync(templatePath(name, dir));
+
 /** The chat's « Enregistrer » (§3.8): an ad hoc team written to `~/.ledge/teams/<id>.yaml`, a template from then on. */
 export function saveTemplate(name: string, seats: readonly Seat[], dir = join(ledgeDir(), 'teams')): string {
-  const path = join(dir, `${templateId(name)}.yaml`);
+  const path = templatePath(name, dir);
   const lines = [`name: ${yamlScalar(name)}`, 'seats:', ...seats.map(s => `  - { ${Object.entries(s).filter(([, v]) => v !== undefined).map(([k, v]) => `${k}: ${yamlScalar(String(v))}`).join(', ')} }`), ''];
   mkdirSync(dir, { recursive: true });
   const tmp = `${path}.tmp`;

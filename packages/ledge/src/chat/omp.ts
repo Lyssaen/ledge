@@ -1,5 +1,6 @@
 import { spawn as nodeSpawn } from 'node:child_process';
-import { PERSONA, type ClaudeEvent, type RunHandle, type RunOptions } from './claude.js';
+import type { ClaudeEvent, RunHandle, RunOptions } from './claude.js';
+import { buildPersona } from './persona.js';
 import { runJsonl } from './run.js';
 
 /**
@@ -10,7 +11,7 @@ import { runJsonl } from './run.js';
  */
 export function ompChatArgs(o: RunOptions & { sessionDir?: string }): string[] {
   return ['-p', '--mode', 'json', '--tools', 'read,grep,glob', '--no-extensions', '--no-skills', '--no-rules', '--no-lsp', '--approval-mode', 'always-ask',
-    '--append-system-prompt', o.persona ?? PERSONA, ...o.addDirs.flatMap(d => ['--add-dir', d]),
+    '--append-system-prompt', o.persona ?? buildPersona('omp'), ...o.addDirs.flatMap(d => ['--add-dir', d]),
     ...(o.sessionDir ? ['--session-dir', o.sessionDir, ...(o.resume ? ['--continue'] : [])] : ['--no-session']),
     ...(o.images ?? []).map(i => `@${i.path}`)];
 }

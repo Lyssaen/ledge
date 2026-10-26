@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { contextNear, givenByLedge, LEDGE_GIVER, transmissions, projectOf, type Autonomy, type Role, type Seat, type Team } from '@ledge/protocol';
+import { actionById, contextNear, givenByLedge, LEDGE_GIVER, transmissions, projectOf, type ChatAction, type Autonomy, type Role, type Seat, type Team } from '@ledge/protocol';
 import { ATTACHMENT_LOCAL_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, backendOf } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
@@ -31,7 +31,7 @@ import { tooWide, type Chat } from '../chat/service.js';
 import { createChatThreads } from '../chat/threads.js';
 import { createForge } from '../chat/forge.js';
 import { paths } from '../paths.js';
-import { ensureDaemonToken, hostAllowed, requestAuthorized, selectDaemonProtocol } from '../auth.js';
+import { ensureDaemonToken, hostAllowed, requestAuthorized, selectDaemonProtocol, sessionKey, tokenEquals } from '../auth.js';
 import { readMachines, writeMachines } from './machines.js';
 import { readProjects, writeProjects } from './projects.js';
 import { readContextPrefs, readIsland, writeContextPrefs, writeIsland } from './island.js';
@@ -40,13 +40,16 @@ import { createModels, type Models } from './models.js';
 import { createRelay, free } from './relay.js';
 import { launchFromChat, LaunchRefused } from '../chat/launch.js';
 import { cardOf, closeFromChat, CloseRefused } from '../chat/close.js';
+import { actFromChat, ActRefused } from '../chat/act.js';
+import type { ChatMessage } from '../chat/service.js';
+import { actionMessage, resolveAction, resolveRun, runGuard, type Resolved } from './actions.js';
 import { createMailbox, type MailJournal } from './mailbox.js';
 import { createTasks, type TasksJournal } from './tasks.js';
 import { createTeamsLive, type TeamsJournal } from './teamsLive.js';
 import { createHandovers, heldNames } from './handover.js';
 import { readContext } from './context.js';
 import { autonomyArgs, findRole, ompApprovalFor } from './roles.js';
-import { listDefinitions, resolveSeats, saveTemplate } from './teams.js';
+import { listDefinitions, resolveSeats, saveTemplate, templateExists } from './teams.js';
 import { resolveRoleAddress, seatContext, teammates } from './seat.js';
 import { formatTeamNotice } from './crossSession.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
@@ -279,7 +282,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const closing = new Set<string>();
   // An injected chat (tests) is the only thread there is; otherwise the relay and the close cards work across the PC's and every device's.
   const cardThreads: Pick<typeof threads, 'all' | 'owner' | 'emitterOf' | 'queuedRelays'> = opts.chat ? {
-    all: () => [['desktop', chat]], owner: qid => (chat.relay(qid) || chat.close(qid, 0) ? 'desktop' : undefined), emitterOf: () => broadcast,
+    all: () => [['desktop', chat]], owner: qid => (chat.relay(qid) || chat.close(qid, 0) || chat.action(qid, 0) ? 'desktop' : undefined), emitterOf: () => broadcast,
     queuedRelays: () => chat.queuedRelays(broadcast).map(q => ({ thread: 'desktop' as const, ...q }))
   } : threads;
   /** `replyTo` for the mailbox and the relay, which keep the refusal's text. */
@@ -762,6 +765,71 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     p.then(done, done);
     return p;
   }
+  /** The generic card rows being applied: a second click, or another overlay, is passed over until the first one has answered. */
+  const chatActs = new Set<string>();
+  /**
+   * A generic card's rows (spec 2026-10-26 action registry §2.1), applied through the daemon's own handlers so their rules stay in
+   * one place: a row fails on the handler's `error`, or on the reason its `team.saved` or `task.result` carries.
+   */
+  function actOnCard(card: { chat: Pick<Chat, 'action' | 'markAction'>; emit: (m: ChatMessage) => void }, qid: string, rid: string, rows?: number[], confirmed?: true, deny?: true) {
+    return actFromChat({
+      chat: card.chat, emit: card.emit, inFlight: chatActs, now,
+      resolve: row => resolveAction(row.action, row.args, { sessions: store.all(), teams: teams.all(), tasks: tasks.all(), findRole, templateExists: name => templateExists(name) }),
+      apply: async row => { const r = await applyRow(row, rid); if (r.failure !== undefined) throw new Error(r.failure); }
+    }, qid, rows, confirmed, deny);
+  }
+  /** The turn's cards were set aside (« Ignorer », on any thread's device): nothing of them applies until opened again. */
+  const setAside = (qid: string) => cardThreads.all().some(([, c]) => c.ignored(qid));
+  const SET_ASIDE = 'ignored card: open it again first';
+  /** A resolved row through the daemon's own handler: its failure is the handler's `error`, or the reason its `team.saved` or
+   *  `task.result` carries; `path` the template a `team.save` wrote. Ledge's own task commands go straight to the tasks:
+   *  `by: 'ledge'` is never taken from a client (handle refuses it). */
+  async function applyRow(row: Pick<ChatAction, 'action' | 'args'>, rid: string): Promise<{ failure?: string; path?: string }> {
+    const out = actionMessage(row, rid);
+    if (out.type === 'task.cmd') { const r = tasks.run(out); return r.reason !== undefined ? { failure: r.reason } : {}; }
+    let failure: string | undefined; let path: string | undefined;
+    await handle(out, m => {
+      if (m.type === 'error') failure ??= m.message;
+      else if ((m.type === 'team.saved' || m.type === 'task.result') && m.reason) failure ??= m.reason;
+      else if (m.type === 'team.saved') path = m.path;
+    });
+    return { ...(failure !== undefined ? { failure } : {}), ...(path ? { path } : {}) };
+  }
+  /**
+   * `action.run` (#93): an action of the registry outside the chat, resolved and applied as a generic card's row, so the CLI
+   * writes no rule of its own. A destructive one asks again (`confirmed`), and the guard decides who may run it at all.
+   */
+  async function runAction(msg: Extract<ClientMessage, { type: 'action.run' }>, reply: Reply): Promise<void> {
+    const answer = (x: { row?: ChatAction; reason?: string; code?: string; path?: string }) => reply({ type: 'action.result', rid: msg.rid, action: msg.action, ...x });
+    const parsed = actionById(msg.action)!.args.safeParse(msg.args);
+    if (!parsed.success) return answer({ reason: `invalid args: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'} ${i.message}`).join('; ')}`, code: 'refused' });
+    // A session is who its key says (#93): a `by` from another environment, or none, is refused before anything is resolved.
+    const want = msg.by === undefined ? undefined : sessionKey(msg.by, token);
+    // Without a key, the session was most likely launched before Ledge gave one: it is relaunched, not suspected.
+    if (msg.by !== undefined && !msg.key)
+      return answer({ reason: `la session ${msg.by} n'a pas de clé (lancée avant cette version de Ledge, ou hors de Ledge) : reprends-la depuis Ledge, ou demande à l'utilisateur`, code: 'identity' });
+    if (msg.by !== undefined && (!want || !tokenEquals(msg.key!, want)))
+      return answer({ reason: `la clé ne correspond pas à la session ${msg.by} : lance la commande depuis cette session, telle que Ledge l'a lancée`, code: 'identity' });
+    const ctx = { sessions: store.all(), teams: teams.all(), tasks: tasks.all(), findRole, templateExists: (name: string) => templateExists(name) };
+    const r: Resolved = resolveRun(msg.action, parsed.data, ctx);
+    if ('refused' in r) return answer({ reason: r.refused, code: 'refused' });
+    const guard = runGuard(r, msg.by, ctx);
+    if (guard) return answer({ row: r, reason: guard, code: 'agent' });
+    if (r.risk === 'destructive' && !msg.confirmed) return answer({ row: r, reason: 'destructive: confirm it', code: 'confirm_required' });
+    // A session closing itself is answered first: its command would wait on its own close, and the close on its prompt.
+    const self = msg.by;
+    if (r.action === 'session.close' && self !== undefined && r.session === self) {
+      answer({ row: r });
+      closeForCard(self).catch(e => log(`self close of ${self} failed: ${(e as Error).message}`));
+      return;
+    }
+    if (r.action === 'session.close') {
+      const failure = await closeForCard(String(r.args.session)).then(() => undefined, e => (e as Error).message);
+      return answer({ row: r, ...(failure !== undefined ? { reason: failure, code: 'failed' } : {}) });
+    }
+    const { failure, path } = await applyRow(r, msg.rid);
+    return answer({ row: r, ...(failure !== undefined ? { reason: failure, code: 'failed' } : {}), ...(path ? { path } : {}) });
+  }
   type LaunchReq = { tool: Tool; cwd: string; name?: string; prompt?: string; continue?: boolean; dirs?: string[]; model?: string; effort?: string; approval?: OmpApproval; role?: string; team?: string };
   /**
    * Spawns the agent as `ledge <tool>` would and records it; throws the reason (bad folder, tmux, unknown role or team).
@@ -984,6 +1052,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'session.launch': {
         // Any failure (bad folder, tmux) reaches the requester as an `error` without id, through the caller's catch.
         if (msg.qid === undefined) return reply({ type: 'session.launched', id: (await launch(msg)).id });
+        if (setAside(msg.qid)) return refuse(SET_ASIDE);
         // A chat card (spec 2026-10-12 §4): the proposal's own fields, never the message's but the model chosen on the card (#58).
         let failure: unknown = null;
         try {
@@ -991,7 +1060,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
             chat, emit: broadcast, inFlight: chatLaunches,
             launch: async p => {
               try {
-                const session = await launch({ tool: p.tool, cwd: p.cwd, prompt: p.prompt, model: msg.model, effort: msg.effort });
+                const session = await launch({ tool: p.tool, cwd: p.cwd, prompt: p.prompt, model: msg.model ?? p.model, effort: msg.effort ?? p.effort });
                 reply({ type: 'session.launched', id: session.id });
                 return session.id;
               } catch (e) { failure = e; throw e; }
@@ -1180,7 +1249,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       case 'task.cmd': {
         // The chat's task card (roles spec §3.8) gives through its turn, which then follows its task.
-        if (msg.qid !== undefined && msg.op === 'give') return giveFromCard(msg, reply);
+        if (msg.qid !== undefined && msg.op === 'give') return setAside(msg.qid) ? reply({ type: 'task.result', rid: msg.rid, reason: SET_ASIDE }) : giveFromCard(msg, reply);
+        // Over another's head, Ledge acts only from its chat's card (actOnCard): a client naming itself `ledge` cannot.
+        if (msg.by === LEDGE_GIVER && (msg.op === 'cancel' || msg.op === 'pass')) return reply({ type: 'task.result', rid: msg.rid, reason: 'seul le chat de Ledge annule ou passe une tâche au nom de Ledge' });
         return reply(tasks.run(msg));
       }
       case 'roles.list': {
@@ -1188,7 +1259,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return reply({ type: 'roles.listing', ...(msg.requestId ? { requestId: msg.requestId } : {}), ...listDefinitions(cwd) });
       }
       case 'team.launch': {
-        if (msg.qid !== undefined) return launchTeamFromCard(msg.rid, msg.qid, reply);
+        if (msg.qid !== undefined) return setAside(msg.qid) ? reply({ type: 'team.failed', rid: msg.rid, reason: SET_ASIDE }) : launchTeamFromCard(msg.rid, msg.qid, reply);
         if (!msg.cwd) return reply({ type: 'team.failed', rid: msg.rid, reason: 'il faut un dossier' });
         const r = await launchTeam({ cwd: msg.cwd, ...(msg.template ? { template: msg.template } : {}), ...(msg.seats ? { seats: msg.seats } : {}), ...(msg.name ? { name: msg.name } : {}) });
         return reply('reason' in r ? { type: 'team.failed', rid: msg.rid, reason: r.reason, ...(r.team ? { team: r.team } : {}) } : { type: 'team.launched', rid: msg.rid, team: r.team });
@@ -1232,7 +1303,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         catch (e) { return reply({ type: 'team.saved', rid: msg.rid, reason: (e as Error).message }); }
       }
       // A chat card's instruction: a refusal reaches the requester as an `error`, the card's state everyone through chat.history.
-      case 'session.relay': return relay.request(msg.qid);
+      case 'session.relay': return setAside(msg.qid) ? refuse(SET_ASIDE) : relay.request(msg.qid);
       case 'session.relay.cancel': return relay.cancel(msg.qid);
       // A chat's close card (spec 2026-10-21 close §4), on the thread that holds the turn: each row closed answers the
       // requester, the card's state reaches the thread's clients through chat.history. A failed row is the requester's one
@@ -1240,6 +1311,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'session.close': {
         const card = cardOf(cardThreads, msg.qid);
         if (!card) return refuse('unknown close');
+        if (setAside(msg.qid)) return refuse(SET_ASIDE);
         try {
           const done = await closeFromChat({
             chat: card.chat, emit: card.emit, inFlight: chatCloses,
@@ -1249,6 +1321,16 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
           if (done.failed.length > 0) throw new Error(done.failed[0]!.message);
         } catch (e) { if (e instanceof CloseRefused) return refuse(e.message); throw e; }
         return;
+      }
+      case 'action.run': return runAction(msg, reply);
+      // A chat's generic card (spec 2026-10-26 action registry §9.2), on the thread that holds the turn: the rows apply in order and
+      // stop at the first failure; the requester gets chat.acted, the thread's clients the rows' state through chat.history.
+      case 'chat.act': {
+        const card = cardOf(cardThreads, msg.qid);
+        if (!card) return refuse('unknown action');
+        if (setAside(msg.qid)) return reply({ type: 'error', message: SET_ASIDE, request: msg.type, code: 'ignored' });
+        try { return reply({ type: 'chat.acted', rid: msg.rid, qid: msg.qid, ...(await actOnCard(card, msg.qid, msg.rid, msg.rows, msg.confirmed, msg.deny)) }); }
+        catch (e) { if (e instanceof ActRefused) return reply({ type: 'error', message: e.message, request: msg.type, ...(e.code ? { code: e.code } : {}) }); throw e; }
       }
       // Broadcast: every overlay shows the same progress, and the one that asked may be the one that reconnects.
       // A busy refusal goes to the asker only: it must not fail the flow the other overlays follow.
@@ -1278,6 +1360,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return;
       case 'chat.cancel': router.cancel(msg.qid); return chat.cancel(msg.qid);
       case 'chat.reset': return chat.reset(broadcast);
+      // « Ignorer » / « Revoir » a card of the PC's thread: every overlay gets the turn's ignoredAt through chat.history.
+      case 'chat.ignore': { const why = chat.ignore(msg.qid, msg.undo === true, broadcast); return why === null ? undefined : refuse(why); }
       case 'session.focus':
         return; // handled by the overlay plan via wt.exe; the daemon only acknowledges
       // A refusal of the service (an unknown pairing, a sign-in while disabled) reaches the sender as an `error`.
@@ -1319,7 +1403,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       const userHome = resolve(opts.home ?? homedir());
       return launchFromChat({
         chat: c, emit: threads.emitterOf(thread) ?? (() => {}), inFlight: chatLaunches,
-        launch: async p => (await launch({ tool: p.tool, cwd: p.cwd, prompt: p.prompt })).id,
+        launch: async p => (await launch({ tool: p.tool, cwd: p.cwd, prompt: p.prompt, model: p.model, effort: p.effort })).id,
         refuse: p => { const wide = tooWide(resolve(p.cwd), userHome); return wide ? `the folder is ${wide}` : null; }
       }, qid, rows);
     },
@@ -1331,6 +1415,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         chat: card.chat, emit: card.emit, inFlight: chatCloses,
         close: closeForCard
       }, qid, rows);
+    },
+    actChat: (thread, qid, rid, rows, confirmed, deny) => {
+      const card = cardOf(cardThreads, qid);
+      if (!card || card.thread !== thread) return Promise.reject(new ActRefused('unknown action'));
+      return actOnCard(card, qid, rid, rows, confirmed, deny);
     },
     onChatEnd: (deviceId, end) => notifyChatEnd?.(deviceId, end.code),
     version: opts.daemon?.version ?? 'unknown',

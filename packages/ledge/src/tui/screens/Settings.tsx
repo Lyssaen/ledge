@@ -4,18 +4,19 @@ import { useContextNear } from '@ledge/fleet';
 import { CONTEXT_NEAR_MAX, CONTEXT_NEAR_MIN } from '@ledge/protocol';
 import { useScreenKeys, useTui } from '../context.js';
 import { LANGS } from '../i18n/lang.js';
-import { C } from '../theme.js';
+import { C, THEMES } from '../theme.js';
 import { Frame } from '../ui/Frame.js';
 import { TitledBox } from '../ui/TitledBox.js';
 
-/** The TUI's settings, one per row: ↑ ↓ a row, ← → or space changes it, at once (and saved): the language, and « Contexte max »
- *  (context handover spec §3.2), the local daemon's threshold by steps of 5 %. */
+/** The TUI's settings, one per row: ↑ ↓ a row, ← → or space changes it, at once (and saved): the language, the theme (auto
+ *  follows the terminal's background), and « Contexte max » (context handover spec §3.2), the local daemon's threshold by
+ *  steps of 5 %. */
 export function Settings() {
   const tui = useTui();
-  const { t, g, lang, setLang } = tui;
+  const { t, g, lang, setLang, theme, setTheme, background } = tui;
   const near = useContextNear(tui.client);
   const known = tui.client.fleet?.contextNear() !== undefined;
-  const rows = [{ id: 'lang', label: t.settings.language }, { id: 'context', label: t.settings.context }] as const;
+  const rows = [{ id: 'lang', label: t.settings.language }, { id: 'theme', label: t.settings.theme }, { id: 'context', label: t.settings.context }] as const;
   const [at, setAt] = useState(0);
   useScreenKeys((input, key) => {
     if (key.upArrow || input === 'k') { setAt(i => (i - 1 + rows.length) % rows.length); return true; }
@@ -23,6 +24,7 @@ export function Settings() {
     const by = key.rightArrow || input === 'l' || input === ' ' || key.return ? 1 : key.leftArrow || input === 'h' ? -1 : 0;
     if (!by) return false;
     if (rows[at]!.id === 'lang') setLang(LANGS[(LANGS.indexOf(lang) + by + LANGS.length) % LANGS.length]!);
+    else if (rows[at]!.id === 'theme') setTheme(THEMES[(THEMES.indexOf(theme) + by + THEMES.length) % THEMES.length]!);
     else if (known) {
       const pct = Math.min(CONTEXT_NEAR_MAX * 100, Math.max(CONTEXT_NEAR_MIN * 100, Math.round(near * 100) + by * 5));
       try { tui.client.fleet?.setContextNear(pct / 100); tui.toast({ text: t.settings.contextSaved(pct), tone: 'ok' }); }
@@ -39,6 +41,8 @@ export function Settings() {
             <Box width={16}><Text color={C.dim}>{r.label}</Text></Box>
             {r.id === 'lang'
               ? <Text>{LANGS.map(l => <Text key={l} color={l === lang ? C.fg : C.dim} bold={l === lang}>{l === lang ? `${g.radioOn} ` : `${g.radioOff} `}{t.lang[l]}{'     '}</Text>)}</Text>
+              : r.id === 'theme'
+              ? <Text>{THEMES.map(x => <Text key={x} color={x === theme ? C.fg : C.dim} bold={x === theme}>{x === theme ? `${g.radioOn} ` : `${g.radioOff} `}{x === 'auto' && background ? t.settings.themeAuto(background) : t.settings.themes[x]}{'     '}</Text>)}</Text>
               : <Text><Text color={C.fg} bold>◂ {Math.round(near * 100)} % ▸</Text><Text color={C.faint}>   {known ? t.settings.contextHint : t.settings.contextUnknown}</Text></Text>}
           </Box>
         ))}

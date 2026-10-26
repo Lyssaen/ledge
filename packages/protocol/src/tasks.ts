@@ -56,11 +56,11 @@ export const givenByLedge = (t: Pick<Task, 'giver'>): boolean => t.giver === LED
 export const taskClosed = (t: Pick<Task, 'state'>): boolean => t.state === 'done' || t.state === 'refused' || t.state === 'dropped';
 
 /** `ledge task …`, as its session `by`; a front (Desktop, the TUI, the phone, the chat's card) gives as `ledge`.
- *  `seen` (Ledge only) puts a closed task of Ledge's away from « À toi ». `team` filters a `list`; `qid` and `row` name
+ *  `cancel`: by its giver, or by Ledge for any task. `seen` (Ledge only) puts a closed task of Ledge's away from « À toi ». `team` filters a `list`; `qid` and `row` name
  *  the chat's task card a `give` comes from, which then follows its task. */
 export const TaskCmdSchema = z.object({
   type: z.literal('task.cmd'), rid: z.string().min(1), by: z.string().min(1),
-  op: z.enum(['give', 'take', 'done', 'refuse', 'pass', 'show', 'list', 'seen']),
+  op: z.enum(['give', 'take', 'done', 'refuse', 'pass', 'show', 'list', 'seen', 'cancel']),
   task: z.string().min(1).max(40).optional(), to: z.string().min(1).optional(),
   title: z.string().min(1).max(TASK_TITLE_MAX).optional(), text: z.string().max(TASK_TEXT_MAX).optional(), all: z.boolean().optional(),
   team: z.string().min(1).max(40).optional(), qid: z.string().min(1).optional(), row: z.number().int().min(0).max(7).optional()

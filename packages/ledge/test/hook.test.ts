@@ -708,21 +708,24 @@ describe('SessionEnd against a live daemon', () => {
   });
 });
 
+// Each test starts the CLI through tsx, which transpiles it first: about 1.4 s unloaded, past 5 s on a busy machine (measured
+// against main, the CLI's own start is the same). The built hook, what an agent runs, starts in about 0.2 s.
+const CLI_MS = 20_000;
 describe('ledge hook (CLI)', () => {
   it('always exits 0, even with invalid stdin and no daemon', () => {
     const r = spawnSync('pnpm', ['exec', 'tsx', 'src/cli/index.ts', 'hook', 'Stop'], { input: '{{{', env: { ...process.env, LEDGE_HOME: home }, encoding: 'utf8' });
     expect(r.status).toBe(0);
-  });
+  }, CLI_MS);
   it('takes the agent before the event (ledge hook codex Stop) and exits 0 too', () => {
     const r = spawnSync('pnpm', ['exec', 'tsx', 'src/cli/index.ts', 'hook', 'codex', 'Whatever'], { input: '{"session_id":"s"}', env: { ...process.env, LEDGE_HOME: home }, encoding: 'utf8' });
     expect(r.status).toBe(0);
     expect(readFileSync(join(home, 'daemon.log'), 'utf8')).toContain('hook codex Whatever ignored');
-  });
+  }, CLI_MS);
   it('a Cursor hook always exits 0 and answers {} on stdout, which lets the agent go on', () => {
     const r = spawnSync('pnpm', ['exec', 'tsx', 'src/cli/index.ts', 'hook', 'cursor', 'preToolUse'], { input: '{{{', env: { ...process.env, LEDGE_HOME: home }, encoding: 'utf8' });
     expect(r.status).toBe(0);
     expect(r.stdout.trim()).toBe('{}');
-  });
+  }, CLI_MS);
 });
 
 describe('prompts and the chat marker', () => {

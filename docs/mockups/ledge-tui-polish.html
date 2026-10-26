@@ -1,0 +1,706 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ledge — Finition de la TUI (#95)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:ital,wght@0,400;0,600;1,400&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP&display=swap&text=%E6%97%A5%E6%9C%AC%E8%AA%9E">
+<!--
+  Maquette de #95 : la passe de finition de `ledge tui` (packages/ledge/src/tui/). Aucun code de production.
+  Chaque écran est composé cellule par cellule par le petit moteur en bas de page (cadres, repli, curseur), en 80 et 120
+  colonnes : « Actuel » reproduit le rendu d'aujourd'hui d'après le code (Lines.tsx, TextInput.tsx, thread.ts, chat.ts,
+  KeyBar.tsx), « Visé » la proposition. Les captures se prennent par l'URL : #ecran=fil&variante=0&largeur=80&theme=dark.
+-->
+<style>
+:root{
+  --bg:#f5f5f4;--panel:#fff;--fg:#0a0a0a;--muted:#f0efed;--muted-fg:#6f6b68;--border:#e5e3e0;--input:#dcd9d5;
+  --primary:#c10007;--primary-fg:#fef2f2;--accent:#c2410c;--shadow:0 20px 40px -14px rgba(0,0,0,.22);
+  /* The user's terminal background: Ink paints none, the terminal's own shows through. */
+  --term-bg:#fbf9f6;--term-edge:#dcd6cf;
+  /* « Visé » in a light terminal: the palette the proposal adds. */
+  --t-fg:#24201d;--t-dim:#6b625d;--t-faint:#9b928c;--t-line:#cfc6be;--t-coral:#c44a2f;--t-blue:#2c64b0;--t-red:#c2412f;
+  --t-yellow:#8a6100;--t-green:#23824b;--t-violet:#6a4bc4;--t-sb:#ece6e0;--t-kb:#e3dcd6;--t-pb:#f6d9d0;--t-code:#ece6e0;
+}
+:root[data-theme="dark"]{
+  --bg:#050505;--panel:#141414;--fg:#fafafa;--muted:#262626;--muted-fg:#a1a1a1;--border:#ffffff1a;--input:#ffffff26;
+  --primary:#9f0712;--primary-fg:#fef2f2;--accent:#f07a62;--shadow:0 20px 40px -12px rgba(0,0,0,.7);
+  --term-bg:#121110;--term-edge:#2a2725;
+  --t-fg:#e6e0dc;--t-dim:#8f8681;--t-faint:#5f5854;--t-line:#3a3532;--t-coral:#f07a62;--t-blue:#7fb2ec;--t-red:#f0806e;
+  --t-yellow:#e6c46a;--t-green:#86cf9d;--t-violet:#b9a2f0;--t-sb:#1f1d1b;--t-kb:#2c2926;--t-pb:#3a201b;--t-code:#2a2624;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:13px/19px Geist,ui-sans-serif,system-ui,sans-serif,'Noto Sans JP';-webkit-font-smoothing:antialiased}
+code,.mono{font-family:'Geist Mono',ui-monospace,monospace;font-size:11.5px}
+code{padding:0 4px;border-radius:4px;background:var(--muted)}
+
+/* ---- The mockup's own chrome ---- */
+.mock-bar{position:sticky;top:0;z-index:20;display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:10px 20px;background:var(--panel);border-bottom:1px solid var(--border)}
+.mock-bar .logo{font-weight:700;font-size:14px}
+.mock-bar .logo span{color:var(--muted-fg);font-weight:400;font-size:12px;margin-left:8px}
+.field{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted-fg)}
+.seg{display:inline-flex;flex-wrap:wrap;gap:2px;padding:2px;border:1px solid var(--border);border-radius:8px;background:var(--bg)}
+.seg button{border:0;background:none;padding:3px 9px;border-radius:6px;color:var(--muted-fg);cursor:pointer;font:inherit;font-size:12px}
+.seg button[aria-pressed="true"]{background:var(--muted);color:var(--fg)}
+.seg button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:24px;padding:24px;align-items:start}
+@media (max-width:1180px){.layout{grid-template-columns:1fr}}
+.stage{display:flex;flex-direction:column;gap:22px;min-width:0;overflow-x:auto}
+.shot h2{margin:0 0 8px;display:flex;align-items:baseline;gap:10px;font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase}
+.shot h2 .now{color:var(--muted-fg)}.shot h2 .next{color:var(--accent)}
+.shot h2 small{font:11px 'Geist Mono',monospace;letter-spacing:0;text-transform:none;color:var(--muted-fg);font-weight:400}
+
+/* ---- The terminal: one cell per character, wide ones two cells; the grid holds whatever the fallback fonts measure ---- */
+.term{--lh:17px;display:inline-block;padding:10px 12px;border-radius:10px;border:1px solid var(--term-edge);background:var(--term-bg);box-shadow:var(--shadow);
+  font:13px/var(--lh) 'Geist Mono','DejaVu Sans Mono',ui-monospace,Menlo,Consolas,monospace,'Noto Color Emoji','Noto Sans JP'}
+.term .row{height:var(--lh);white-space:pre}
+.term .c{display:inline-block;width:1ch;height:var(--lh);vertical-align:top;text-align:center;overflow:visible}
+.term .c2{width:2ch}
+/* « Actuel »: the palette theme.ts hard-codes for a dark background, whatever the terminal's. */
+.term.now{--x-fg:#e6e0dc;--x-dim:#8f8681;--x-faint:#5f5854;--x-line:#3a3532;--x-coral:#f07a62;--x-blue:#7fb2ec;--x-red:#f0806e;--x-yellow:#e6c46a;--x-green:#86cf9d;--x-violet:#b9a2f0;--x-sb:#1f1d1b;--x-kb:#2c2926;--x-pb:#3a201b;--x-code:#2a2624}
+.term.next{--x-fg:var(--t-fg);--x-dim:var(--t-dim);--x-faint:var(--t-faint);--x-line:var(--t-line);--x-coral:var(--t-coral);--x-blue:var(--t-blue);--x-red:var(--t-red);--x-yellow:var(--t-yellow);--x-green:var(--t-green);--x-violet:var(--t-violet);--x-sb:var(--t-sb);--x-kb:var(--t-kb);--x-pb:var(--t-pb);--x-code:var(--t-code)}
+.term{color:var(--x-fg)}
+.fg{color:var(--x-fg)}.dim{color:var(--x-dim)}.faint{color:var(--x-faint)}.line{color:var(--x-line)}.coral{color:var(--x-coral)}
+.blue{color:var(--x-blue)}.red{color:var(--x-red)}.yellow{color:var(--x-yellow)}.green{color:var(--x-green)}.violet{color:var(--x-violet)}
+.b{font-weight:600}.i{font-style:italic}.u .c{text-decoration:underline;text-underline-offset:2px}
+.sb .c{background:var(--x-sb)}.kb .c{background:var(--x-kb)}.pb .c{background:var(--x-pb)}.code .c{background:var(--x-code)}
+.inv .c{background:var(--x-fg);color:var(--term-bg)}
+.shell{color:#cfcac6}.shell-g{color:#8fd18f}.shell-b{color:#7fb2ec}
+
+/* ---- The notes beside it ---- */
+.notes{display:flex;flex-direction:column;gap:14px;position:sticky;top:74px}
+.card{border:1px solid var(--border);border-radius:14px;background:var(--panel);padding:16px 18px}
+.card h3{margin:0 0 4px;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);font-weight:600}
+.card h4{margin:0 0 8px;font-size:14px;font-weight:600}
+.card ul,.card ol{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px}
+.card p{margin:0 0 8px}
+.card .k{font:10.5px 'Geist Mono',monospace;padding:0 4px;border:1px solid var(--input);border-radius:4px;white-space:nowrap}
+.subset{width:100%;border-collapse:collapse;font-size:12px;margin-top:4px}
+.subset td{padding:3px 0;border-top:1px solid var(--border);vertical-align:top}
+.subset td:first-child{color:var(--muted-fg);width:42%;padding-right:8px}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="mock-bar" role="toolbar" aria-label="Réglages de la maquette">
+  <div class="logo">Ledge.<span>TUI · finition (#95)</span></div>
+  <div class="field"><span id="l-screen">Écran</span><div class="seg" id="screen" aria-labelledby="l-screen"></div></div>
+  <div class="field"><span id="l-variant">Cas</span><div class="seg" id="variant" aria-labelledby="l-variant"></div></div>
+  <div class="field" id="width-field"><span id="l-width">Largeur</span><div class="seg" id="width" aria-labelledby="l-width"></div></div>
+  <div class="field"><span id="l-theme">Terminal</span><div class="seg" id="theme" aria-labelledby="l-theme"></div></div>
+  <div class="field"><span id="l-show">Montrer</span><div class="seg" id="show" aria-labelledby="l-show"></div></div>
+</div>
+
+<div class="layout">
+  <main class="stage" id="stage" aria-live="polite"></main>
+  <aside class="notes">
+    <section class="card" data-notes="fil">
+      <h3>Fil de session</h3><h4>Replier, jamais tronquer</h4>
+      <ul>
+        <li>Chaque élément (outil, diff, permission, message envoyé / reçu, notice) se replie à la largeur <b>réelle</b>, comptée en cellules : un emoji ou un caractère comme 日 en vaut deux.</li>
+        <li>Retrait suspendu : la suite s'aligne sous le texte, pas sous l'icône. La durée et les <span class="mono">+n −n</span> restent à droite de la 1<sup>re</sup> ligne.</li>
+        <li>Plafond par élément : outil 3 lignes, message 3, erreur 3, notice 2, demande 4 ; au-delà <span class="mono">… +n</span>. <span class="k">espace</span> (déplier) montre tout.</li>
+        <li>Diff : chaque ligne repliée, la suite marquée <span class="mono">↪</span> ; toujours 30 lignes par fichier au plus.</li>
+        <li>Un tour replié (<span class="mono">▸</span>) reste sur une ligne : c'est un résumé.</li>
+        <li>Spinner : seule la ligne en cours se redessine, à largeur fixe. Durée : <span class="mono">8,4 s</span>, puis <span class="mono">12 s</span>, puis <span class="mono">1 min 04</span>.</li>
+        <li>Défilement : un indicateur dans la bordure basse (<span class="mono">↑ 18 plus haut · ↓ 9 · G fin</span>), absent quand on suit le bas.</li>
+      </ul>
+    </section>
+    <section class="card" data-notes="saisie">
+      <h3>Saisie</h3><h4>Un champ multi-ligne avec un curseur</h4>
+      <ul>
+        <li>Le champ grandit avec le texte, jusqu'à 6 lignes en 80×24 (8 en 120×32), puis défile, avec son indicateur dans la bordure.</li>
+        <li>Curseur en bloc inversé : <span class="k">← →</span>, <span class="k">ctrl ← →</span> / <span class="k">alt ← →</span> par mot, <span class="k">home</span> <span class="k">end</span> (<span class="k">ctrl a</span> <span class="k">ctrl e</span>), <span class="k">↑ ↓</span> d'une ligne à l'autre, <span class="k">suppr</span>, <span class="k">ctrl w</span> mot précédent, <span class="k">ctrl u</span> tout effacer (comme aujourd'hui).</li>
+        <li><span class="k">↵</span> envoie toujours. Nouvelle ligne : <span class="k">alt ↵</span> partout, <span class="k">maj ↵</span> quand le terminal la distingue, <span class="k">ctrl j</span> en secours.</li>
+        <li>Collage : les retours à la ligne restent des retours à la ligne, sans envoyer ; plus de <span class="mono">⏎</span>.</li>
+        <li>Historique : <span class="k">↑</span> sur la 1<sup>re</sup> ligne (ou champ vide) remonte ce qui a été envoyé ; <span class="k">↓</span> redescend jusqu'au brouillon, intact. Ask garde ses questions ; une session, ses réponses.</li>
+        <li>Le titre dit à qui l'on écrit : « Répondre à Otto », « Refuser en expliquant à Otto ».</li>
+        <li>Le brouillon d'une session survit à <span class="k">esc</span>, à <span class="k">ctrl c</span> et au changement d'écran ; il reste affiché, estompé, dans « Écrire ».</li>
+      </ul>
+    </section>
+    <section class="card" data-notes="markdown">
+      <h3>Markdown</h3><h4>Le sous-ensemble proposé</h4>
+      <table class="subset">
+        <tr><td>Titres <span class="mono">#</span> <span class="mono">##</span> <span class="mono">###</span></td><td>gras ; <span class="mono">#</span> et <span class="mono">##</span> en corail, sans les dièses</td></tr>
+        <tr><td>Gras, italique</td><td>attributs du terminal (SGR 1 / 3)</td></tr>
+        <tr><td>Code en ligne</td><td>fond discret, sans accents graves</td></tr>
+        <tr><td>Bloc de code</td><td>barre <span class="mono">│</span>, langue en tête, pas de coloration ; ligne longue repliée avec <span class="mono">↪</span></td></tr>
+        <tr><td>Listes</td><td><span class="mono">•</span>, <span class="mono">1.</span>, imbriquées (<span class="mono">◦</span>), cases <span class="mono">☐ ✓</span> ; retrait suspendu</td></tr>
+        <tr><td>Liens</td><td>texte souligné + <span class="mono">↗</span>, cliquable (OSC 8) ; sinon l'URL entre parenthèses</td></tr>
+        <tr><td>Citation, séparateur</td><td>barre <span class="mono">▎</span> en italique estompé ; <span class="mono">───</span></td></tr>
+        <tr><td>Hors sous-ensemble</td><td>tableaux (bloc monospace, non replié), images (texte alternatif), HTML et notes : tels quels</td></tr>
+      </table>
+      <p style="margin-top:10px">Le parseur est celui de <span class="mono">packages/ui</span> (remark + gfm) ; la TUI ne fait que convertir son arbre en lignes. Pendant le stream, le rendu suit ; un bloc de code pas encore fermé s'affiche déjà en bloc. En ASCII : <span class="mono">•</span> → <span class="mono">-</span>, <span class="mono">│</span> → <span class="mono">|</span>.</p>
+    </section>
+    <section class="card" data-notes="chat">
+      <h3>Demander à Ledge</h3><h4>Défiler comme dans le fil</h4>
+      <ul>
+        <li><span class="k">tab</span> fait le tour : Question → cartes → Conversation. Dans la conversation, les touches du fil : <span class="k">j k ↑ ↓</span>, <span class="k">PgUp PgDn</span>, <span class="k">G</span> ; <span class="k">esc</span> rend la main à la question.</li>
+        <li><span class="k">PgUp PgDn</span> marchent aussi depuis le champ, sans le quitter (<span class="k">↑ ↓</span> y servent à l'historique).</li>
+        <li>Même indicateur que le fil, dans la bordure basse.</li>
+        <li>Une réponse qui s'écrit pendant la lecture ne fait pas sauter la vue : <span class="mono">↓ Ledge répond · G pour suivre</span>.</li>
+        <li>La barre de touches suit le focus : « s enregistrer l'équipe » seulement sur une carte d'équipe.</li>
+      </ul>
+    </section>
+    <section class="card" data-notes="garde">
+      <h3>Ctrl+N, Ctrl+C</h3><h4>Ne rien perdre par réflexe</h4>
+      <ul>
+        <li><span class="k">ctrl n</span> ouvre une confirmation à la place du champ. « Garder » est le choix par défaut (<span class="k">n</span>, <span class="k">esc</span>) ; <span class="k">y</span> efface. Le brouillon reste.</li>
+        <li><span class="k">ctrl c</span>, dans l'ordre : une réponse s'écrit → l'arrêter (inchangé) ; un brouillon → <b>ne quitte pas</b>, une ligne jaune propose <span class="k">ctrl c</span> encore, dans les 2 s, pour quitter quand même ; sinon → quitter.</li>
+        <li>Dans une session en saisie, <span class="k">ctrl c</span> sort du champ en gardant le brouillon (inchangé), qui reste visible.</li>
+      </ul>
+    </section>
+    <section class="card" data-notes="taille">
+      <h3>Redimensionnement</h3><h4>Ce qui reste visible</h4>
+      <ul>
+        <li>Par ordre de priorité : la demande en attente (jamais coupée), le champ (3 lignes au plus sous 24 rangées), la barre d'état (fil d'Ariane raccourci, puis retiré) ; le fil prend le reste, 3 lignes au moins.</li>
+        <li>Le défilement est recadré sur l'<b>élément</b> lu : ce qui était en haut reste en haut, même si le repli change le nombre de lignes.</li>
+        <li>Barre de touches : elles tombent par priorité ; <span class="k">?</span> « aide » (toutes les touches) reste toujours.</li>
+        <li>Sous 60×16 : un écran « Fenêtre trop petite » avec la taille actuelle ; rien n'est perdu, le brouillon reste.</li>
+      </ul>
+    </section>
+    <section class="card">
+      <h3>Terminal clair</h3><h4>La palette est figée pour un fond sombre</h4>
+      <p><span class="mono">theme.ts</span> écrit le texte en <span class="mono">#e6e0dc</span> et la barre d'état sur <span class="mono">#1f1d1b</span> : sur un terminal clair, le texte disparaît (voir « Terminal : clair » + « Actuel »). Proposition : une seconde palette, choisie d'après le fond (<span class="mono">COLORFGBG</span> ou requête OSC 11), et un réglage <i>Thème : auto / sombre / clair</i> dans Réglages.</p>
+    </section>
+    <section class="card">
+      <h3>À trancher</h3>
+      <ol>
+        <li><span class="k">maj ↵</span> n'arrive pas dans tous les terminaux : afficher <span class="k">alt ↵</span> comme raccourci de nouvelle ligne ?</li>
+        <li>Gros collage : en clair (le champ défile, proposé) ou replié en jeton <span class="mono">[14 lignes collées]</span> ?</li>
+        <li>Thème clair : dans cette passe, ou une issue à part ?</li>
+        <li><span class="k">ctrl c</span> avec un brouillon : double appui (proposé) ou confirmation ?</li>
+        <li>Liens OSC 8 activés d'office ?</li>
+        <li>Tableaux Markdown laissés hors du sous-ensemble ?</li>
+      </ol>
+    </section>
+  </aside>
+</div>
+
+<script>
+/* ======================================================================================================
+   The engine: segments → lines of exactly W cells. A segment is { t: text, c: classes }.
+   ====================================================================================================== */
+const WIDE = /[ᄀ-ᅟ⺀-〾ぁ-㏿㐀-䶿一-鿿ꀀ-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦✅❌⭐]|[\u{1F300}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{1F900}-\u{1F9FF}\u{1FA70}-\u{1FAFF}]/u;
+const chars = s => Array.from(s);
+const cell = ch => (WIDE.test(ch) ? 2 : 1);
+const one = () => 1;
+const sw = (s, cw = cell) => chars(s).reduce((n, c) => n + cw(c), 0);
+const S = (t, c = '') => ({ t, c });
+const lw = (line, cw = cell) => line.reduce((n, s) => n + sw(s.t, cw), 0);
+const sp = n => S(' '.repeat(Math.max(0, n)));
+const pad = (line, w) => { const n = lw(line); return n >= w ? line : [...line, sp(w - n)]; };
+
+/** Cut to `w` cells, ending with « … » when something was cut (Ink's wrap="truncate"). */
+function cut(line, w, keep = '') {
+  if (lw(line) <= w) return line;
+  const out = []; let n = 0;
+  for (const s of line) {
+    let acc = '';
+    for (const ch of chars(s.t)) {
+      if (n + cell(ch) > w - 1) { out.push(S(acc, s.c), S('…', keep || s.c)); return out; }
+      acc += ch; n += cell(ch);
+    }
+    out.push(S(acc, s.c));
+  }
+  return out;
+}
+/** Keep the last `w` cells, starting with « … » (Ink's wrap="truncate-start"). */
+function cutStart(line, w) {
+  if (lw(line) <= w) return line;
+  const flat = []; for (const s of line) for (const ch of chars(s.t)) flat.push({ ch, c: s.c });
+  let n = 0, i = flat.length;
+  while (i > 0 && n + cell(flat[i - 1].ch) <= w - 1) { n += cell(flat[i - 1].ch); i--; }
+  return [S('…', flat[i]?.c ?? ''), ...unflat(flat.slice(i))];
+}
+function unflat(a) { const out = []; for (const x of a) { const l = out[out.length - 1]; if (l && l.c === x.c) l.t += x.ch; else out.push(S(x.ch, x.c)); } return out; }
+
+/** Segments wrapped into lines, at spaces when it can, own newlines kept. `cw` measures a character: by cells (the proposal)
+ *  or one per code point (thread.ts's `wrap` today). */
+function wrapSegs(segs, width, firstWidth = width, cw = cell) {
+  const a = []; for (const s of segs) for (const ch of chars(s.t)) a.push({ ch, c: s.c });
+  const lines = []; let i = 0, w = Math.max(4, firstWidth);
+  if (a.length === 0) return [[]];
+  while (i < a.length) {
+    let n = 0, j = i, space = -1;
+    while (j < a.length && a[j].ch !== '\n') { const c = cw(a[j].ch); if (n + c > w) break; if (a[j].ch === ' ') space = j; n += c; j++; }
+    if (j >= a.length || a[j].ch === '\n') { lines.push(unflat(a.slice(i, j))); i = j + 1; w = Math.max(4, width); if (j >= a.length) break; continue; }
+    const end = space > i ? space : j;
+    let k = end; while (k > i && a[k - 1].ch === ' ') k--;
+    lines.push(unflat(a.slice(i, k)));
+    i = end; while (i < a.length && a[i].ch === ' ') i++;
+    w = Math.max(4, width);
+  }
+  return lines;
+}
+
+/** One element of the thread, proposed: `prefix` then its body wrapped with a hanging indent, `meta` right-aligned on the
+ *  first line, at most `max` lines (the last one then says how many are left). */
+function row(prefix, body, meta, width, { indent, max = 99 } = {}) {
+  const pw = lw(prefix), mw = meta && meta.length ? lw(meta) + 2 : 0, ind = indent ?? pw;
+  let lines = wrapSegs(body, width - ind - mw, width - pw - mw);
+  if (lines.length > max) {
+    const more = lines.length - max + 1;
+    lines = lines.slice(0, max);
+    const last = max - 1, tag = ` … +${more}`;
+    const room = (last === 0 ? width - pw - mw : width - ind - mw) - sw(tag);
+    lines[last] = [...cut(lines[last], room), S(tag, 'faint')];
+  }
+  return lines.map((l, k) => {
+    if (k > 0) return [sp(ind), ...l];
+    const left = [...prefix, ...l];
+    return meta && meta.length ? [...left, sp(width - lw(left) - lw(meta)), ...meta] : left;
+  });
+}
+
+/** TitledBox: a rounded box `w` wide, its title upper-cased in the top border; `foot` right in the bottom border (proposed). */
+function box(title, body, { w, color = 'line', titleColor = 'dim', foot, footColor = 'faint' }) {
+  const inner = w - 4;
+  let label = ` ${title.toUpperCase()} `;
+  if (sw(label) > w - 3) label = chars(label).slice(0, Math.max(0, w - 5)).join('') + '… ';
+  const top = [S('╭─', color), S(label, titleColor), S('─'.repeat(Math.max(0, w - 3 - sw(label))) + '╮', color)];
+  const mid = body.map(l => [S('│ ', color), ...pad(cut(l, inner), inner), S(' │', color)]);
+  let bottom = [S('╰' + '─'.repeat(w - 2) + '╯', color)];
+  if (foot) {
+    const f = typeof foot === 'string' ? [S(foot, footColor)] : foot;
+    bottom = [S('╰' + '─'.repeat(Math.max(1, w - 5 - lw(f))) + ' ', color), ...f, S(' ─╯', color)];
+  }
+  return [top, ...mid, bottom];
+}
+/** The `h - 2` lines a box of height `h` shows, `up` lines above the bottom (Lines.tsx). */
+const tail = (lines, n, up = 0) => { const back = Math.min(up, Math.max(0, lines.length - n)); return lines.slice(Math.max(0, lines.length - n - back), lines.length - back); };
+const fill = (lines, n) => [...lines, ...Array.from({ length: Math.max(0, n - lines.length) }, () => [])];
+
+/** The status bar: logo, counts, who waits; the crumb on the right (Frame.tsx). Proposed: the crumb shortens, then goes. */
+function statusBar(W, crumb, next, crumbShort) {
+  const left = [S(' ', 'sb'), S('◖ ledge', 'coral sb'), S('  4 sessions · 1 machine', 'dim sb'), S(' · 2 t’attendent', 'red sb')];
+  let right = [S(crumb, 'dim sb'), S(' ', 'sb')];
+  if (next && lw(left) + lw(right) + 2 > W) right = crumbShort ? [S(crumbShort, 'dim sb'), S(' ', 'sb')] : [];
+  if (next && lw(left) + lw(right) + 2 > W) right = [];
+  const room = W - lw(left);
+  if (lw(right) > room - 1) right = right.length ? [...cut([S(crumb, 'dim sb')], Math.max(0, room - 2)), S(' ', 'sb')] : [];
+  return [...left, S(' '.repeat(Math.max(0, W - lw(left) - lw(right))), 'sb'), ...right];
+}
+/** The key bar (KeyBar.tsx): `key label` with two spaces between. Today: the keys that fit, the others wrap out of sight.
+ *  Proposed: they drop by priority (the list's order from the end) and « ? aide » always stays. */
+function keyBar(W, keys, next) {
+  const item = ([k, label]) => [S(` ${k} `, 'kb fg'), S(` ${label}`, 'dim')];
+  const fits = list => 1 + list.reduce((n, x, i) => n + lw(item(x)) + (i ? 2 : 0), 0) <= W - 1;
+  let list = [...keys];
+  if (next) {
+    const help = ['?', 'aide'];
+    while (list.length && !fits([...list, help])) list.pop();
+    list = [...list, help];
+  } else {
+    const shown = []; for (const k of list) { if (fits([...shown, k])) shown.push(k); else break; }
+    list = shown;
+  }
+  const out = [sp(1)];
+  list.forEach((x, i) => { if (i) out.push(sp(2)); out.push(...item(x)); });
+  return out;
+}
+/** Buttons (SessionCard.tsx's Button): ` label ` then `key `, on the primary or the plain chip. */
+const button = (label, k, primary) => [S(` ${label} `, `${primary ? 'pb' : 'kb'} fg`), S(`${k} `, `${primary ? 'pb' : 'kb'} dim`)];
+const buttons = list => { const out = []; list.forEach((b, i) => { if (i) out.push(sp(2)); out.push(...button(...b)); }); return out; };
+
+/** A whole screen, W × H: status bar, the parts (one of them grows), an optional toast, the key bar. */
+function frame(W, H, { crumb, crumbShort, parts, toast, keys, next }) {
+  const bodyH = H - 2 - (toast ? 1 : 0);
+  const fixed = parts.filter(p => !p.grow).reduce((n, p) => n + p.lines.length, 0);
+  let rows = [];
+  for (const p of parts) rows.push(...(p.grow ? p.grow(Math.max(3, bodyH - fixed)) : p.lines));
+  rows = fill(rows, bodyH).slice(0, bodyH);
+  const out = [statusBar(W, crumb, next, crumbShort), ...rows];
+  if (toast) out.push([sp(1), S(toast.t, toast.c)]);
+  out.push(keyBar(W, keys, next));
+  return out.map(r => pad(cut(r, W), W));
+}
+
+/* ======================================================================================================
+   Markdown, proposed: a subset rendered to lines (the parser would be packages/ui's; this one only knows the samples).
+   ====================================================================================================== */
+function inline(text, base = 'fg') {
+  const out = []; const re = /(\*\*[^*]+\*\*|\*[^*\s][^*]*\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/g; let last = 0, m;
+  while ((m = re.exec(text))) {
+    if (m.index > last) out.push(S(text.slice(last, m.index), base));
+    const t = m[0];
+    if (t.startsWith('**')) out.push(S(t.slice(2, -2), `${base} b`));
+    else if (t.startsWith('`')) out.push(S(t.slice(1, -1), 'code fg'));
+    else if (t.startsWith('[')) { const mm = /\[([^\]]+)\]/.exec(t); out.push(S(mm[1], 'blue u'), S(' ↗', 'faint')); }
+    else out.push(S(t.slice(1, -1), `${base} i`));
+    last = re.lastIndex;
+  }
+  if (last < text.length) out.push(S(text.slice(last), base));
+  return out;
+}
+function markdown(src, width, indent = 2, base = 'fg') {
+  const out = [], lines = src.split('\n'), I = sp(indent);
+  const para = (segs, first, cont, color) => wrapSegs(segs, width - indent - cont, width - indent - lw(first))
+    .forEach((l, k) => out.push(k ? [I, sp(cont), ...l] : [I, ...first, ...l]));
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    let m;
+    if (!l.trim()) { if (out.length && out[out.length - 1].length) out.push([]); continue; }
+    if ((m = /^(#{1,6})\s+(.*)/.exec(l))) { para(inline(m[2], m[1].length <= 2 ? 'coral b' : 'fg b'), [], 0); continue; }
+    if ((m = /^```(\w*)/.exec(l))) {
+      out.push([I, S('╭ ', 'faint'), S(m[1] || 'code', 'faint')]);
+      for (i++; i < lines.length && !lines[i].startsWith('```'); i++)
+        wrapSegs([S(lines[i], 'fg')], width - indent - 4, width - indent - 2).forEach((x, k) => out.push([I, S('│ ', 'faint'), ...(k ? [S('↪ ', 'faint')] : []), ...x]));
+      out.push([I, S('╰', 'faint')]);
+      continue;
+    }
+    if ((m = /^>\s?(.*)/.exec(l))) { wrapSegs(inline(m[1], 'dim i'), width - indent - 2).forEach(x => out.push([I, S('▎ ', 'violet'), ...x])); continue; }
+    if (/^(-{3,}|\*{3,})$/.test(l.trim())) { out.push([I, S('─'.repeat(Math.min(40, width - indent)), 'faint')]); continue; }
+    if ((m = /^(\s*)[-*]\s+(\[[ x]\]\s+)?(.*)/.exec(l))) {
+      const lvl = Math.floor(m[1].length / 2), box = m[2] ? (m[2].includes('x') ? '✓ ' : '☐ ') : '';
+      const mark = box || (lvl ? '◦ ' : '• ');
+      para(inline(m[3], base), [sp(lvl * 2), S(mark, box === '✓ ' ? 'green' : 'faint')], lvl * 2 + 2);
+      continue;
+    }
+    if ((m = /^(\s*)(\d+)\.\s+(.*)/.exec(l))) { const lvl = Math.floor(m[1].length / 2); para(inline(m[3], base), [sp(lvl * 2), S(`${m[2]}. `, 'faint')], lvl * 2 + m[2].length + 2); continue; }
+    let text = l; while (i + 1 < lines.length && lines[i + 1].trim() && !/^(#|```|>|\s*[-*]\s|\s*\d+\.\s)/.test(lines[i + 1])) text += ' ' + lines[++i].trim();
+    para(inline(text, base), [], 0);
+  }
+  while (out.length && !out[out.length - 1].length) out.pop();
+  return out;
+}
+/** Today: the text wrapped by code points (thread.ts's `wrap`), markup left as typed. */
+const raw = (text, width, color = 'fg') => wrapSegs([S(text, color)], width - 2, width - 2, one).map(l => [sp(2), ...l]);
+
+/* ======================================================================================================
+   The data: Otto's thread on fix/tui-wrap, Ledge's conversation.
+   ====================================================================================================== */
+const SPIN = '⠹';
+const PROMPT = 'Replie les lignes d’outil, de diff, de permission et de message au lieu de les tronquer. Vérifie avec des emoji ✅ et des caractères larges comme 日本語.';
+const REPLY = 'Tests verts ✅ 🎉 🎯 🚀 sur `fix/tui-wrap` : les lignes d’outil, de diff et de message se replient maintenant à la largeur **réelle** des cellules, emoji 🎯 ✅ et 日本語 compris :\n\n- `wrap` compte les cellules avec `string-width` ;\n- chaque élément a un plafond, puis « … +n » ;\n- `DIFF_MAX` reste à 30 lignes.\n\nJe lance la couverture avant de pousser.';
+const ITEMS = [
+  { k: 'folded', text: 'Ajoute les tests du repli · 6 actions · 2 fichiers modifiés · C’est fait : quatre tests couvrent le repli des questions et des réponses.' },
+  { k: 'prompt', text: PROMPT },
+  { k: 'message', text: 'Je regarde d’abord comment Lines.tsx coupe les lignes.' },
+  { k: 'tool', s: 'ok', tool: 'Read', target: 'packages/ledge/src/tui/ui/Lines.tsx', took: '0,1 s' },
+  { k: 'tool', s: 'ok', tool: 'Edit', target: 'packages/ledge/src/tui/model/thread.ts', add: 24, del: 6, took: '0,4 s',
+    diff: ['-  const line: Line = [{ text: \'  \' }, { text: status.g, color: status.c }, { text: ` ${it.tool.padEnd(6)} `, color: C.dim }, { text: target(it), color: C.fg }];',
+           '+  const head: Line = [{ text: \'  \' }, { text: status.g, color: status.c }, { text: ` ${it.tool.padEnd(6)} `, color: C.dim }];',
+           '+  return row(head, [{ text: target(it), color: C.fg }], meta, o.width, { max: 3 });'] },
+  { k: 'tool', s: 'fail', tool: 'Bash', target: 'pnpm --filter @ledge/ledge exec vitest run test/tui-model.test.ts --reporter=dot', took: '8,4 s',
+    error: 'AssertionError: expected [ \'  Tests verts ✅ 🎉 sur fix/tui-wrap, prêt à relire\' ] to deep equal [ \'  Tests verts ✅ 🎉 sur fix/tui-wrap,\', \'  prêt à relire\' ]' },
+  { k: 'sent', to: 'Nova', text: 'Le repli compte maintenant les cellules du terminal, plus les points de code : peux-tu relire thread.ts avant que je pousse ?', status: 'lu' },
+  { k: 'received', from: 'Nova', text: 'Oui, dans dix minutes. Garde un test avec des caractères larges (日本語) en fin de ligne : c’est là que ça débordait.' },
+  { k: 'notice', text: 'Ledge : Nova a laissé deux remarques sur la PR #212 (calcul des cellules, DIFF_MAX) et attend ta réponse avant de valider.' },
+  { k: 'permission', tool: 'Bash', text: 'rm -rf node_modules/.vite && pnpm --filter @ledge/ledge test -- --run', decision: 'autorisé' },
+  { k: 'reply', text: REPLY }
+];
+const RUNNING = { k: 'tool', s: 'run', tool: 'Bash', target: 'pnpm --filter @ledge/ledge test -- --run --coverage --reporter=verbose', took: '12 s' };
+const PENDING = 'rm -rf coverage node_modules/.vite && pnpm --filter @ledge/ledge test -- --run --coverage --reporter=verbose';
+
+/** The thread today (thread.ts + Lines.tsx): bodies wrapped by code points, every other element on one line, cut. */
+function threadNow(items, W, { diffs } = {}) {
+  const width = W - 6, out = [];
+  const st = { ok: ['✓', 'green'], fail: ['✗', 'red'], run: [SPIN, 'blue'] };
+  for (const it of items) {
+    if (it.k === 'folded') { out.push([S('▸ 10:02  ', 'faint'), S(it.text, 'faint')]); continue; }
+    if (it.k === 'prompt') { out.push([], [S('Vous', 'coral b'), S('  10:14', 'faint')], ...raw(it.text, width)); continue; }
+    if (it.k === 'message') { out.push(...raw(it.text, width, 'dim')); continue; }
+    if (it.k === 'reply') { out.push(...raw(it.text, width)); continue; }
+    if (it.k === 'tool') {
+      const [g, c] = st[it.s];
+      const l = [sp(2), S(g, c), S(` ${it.tool.padEnd(6)} `, 'dim'), S(it.target, 'fg')];
+      if (it.add || it.del) l.push(sp(2), S(`+${it.add}`, 'green'), sp(1), S(`−${it.del}`, 'red'));
+      l.push(S(`  ${it.took.replace(',', '.')}`, 'faint'));
+      out.push(l);
+      if (it.error) out.push([S(`      ${it.error.slice(0, 200)}`, 'red')]);
+      if (diffs && it.diff) for (const d of it.diff) out.push([S('      │ ', 'faint'), S(d, d[0] === '+' ? 'green' : 'red')]);
+      continue;
+    }
+    if (it.k === 'sent') { out.push([sp(2), S('✉ ', 'violet'), S('envoyé à ', 'dim'), S(it.to, 'fg b'), S(`  « ${it.text} »`, 'dim'), S(`  ${it.status}`, 'green')]); continue; }
+    if (it.k === 'received') { out.push([sp(2), S('✉ ', 'violet'), S('reçu de ', 'dim'), S(it.from, 'fg b'), S(`  « ${it.text} »`, 'dim')]); continue; }
+    if (it.k === 'notice') { out.push([S(`  · ${it.text}`, 'faint')]); continue; }
+    if (it.k === 'permission') { out.push([sp(2), S('◆', 'red'), S(` ${it.tool.padEnd(6)} `, 'dim'), S(it.text, 'fg'), S(` → ${it.decision}`, 'faint')]); continue; }
+  }
+  // Each line then goes through Text wrap="truncate" at the box's inner width.
+  return out.map(l => cut(l, W - 4));
+}
+/** The thread proposed: every element wrapped at its real width, with its ceiling; Markdown in the bodies. */
+function threadNext(items, W, { diffs, unfolded } = {}) {
+  const width = W - 6, out = [], cap = n => (unfolded ? 99 : n);
+  const st = { ok: ['✓', 'green'], fail: ['✗', 'red'], run: [SPIN, 'blue'] };
+  for (const it of items) {
+    if (it.k === 'folded') { out.push(cut([S('▸ 10:02  ', 'faint'), S(it.text, 'faint')], width)); continue; }
+    if (it.k === 'prompt') { out.push([], [S('Vous', 'coral b'), S('  10:14', 'faint')], ...markdown(it.text, width)); continue; }
+    if (it.k === 'message') { out.push(...markdown(it.text, width, 2, 'dim')); continue; }
+    if (it.k === 'reply') { out.push(...markdown(it.text, width)); continue; }
+    if (it.k === 'tool') {
+      const [g, c] = st[it.s];
+      const meta = [];
+      if (it.add || it.del) meta.push(S(`+${it.add}`, 'green'), sp(1), S(`−${it.del}`, 'red'), sp(2));
+      meta.push(S(it.took.padStart(5), it.s === 'run' ? 'blue' : 'faint'));
+      out.push(...row([sp(2), S(g, c), S(` ${it.tool.padEnd(6)} `, 'dim')], [S(it.target, 'fg')], meta, width, { max: cap(3) }));
+      if (it.error) out.push(...row([sp(6)], [S(it.error, 'red')], null, width, { max: cap(3) }));
+      if (diffs && it.diff) for (const d of it.diff)
+        wrapSegs([S(d, d[0] === '+' ? 'green' : 'red')], width - 10, width - 8).forEach((x, k) => out.push([S('      │ ', 'faint'), ...(k ? [S('↪ ', 'faint')] : []), ...x]));
+      continue;
+    }
+    if (it.k === 'sent') { out.push(...row([sp(2), S('✉ ', 'violet'), S('envoyé à ', 'dim'), S(it.to, 'fg b'), sp(2)], [S(`« ${it.text} »`, 'dim')], [S(`✓✓ ${it.status}`, 'green')], width, { indent: 4, max: cap(3) })); continue; }
+    if (it.k === 'received') { out.push(...row([sp(2), S('✉ ', 'violet'), S('reçu de ', 'dim'), S(it.from, 'fg b'), sp(2)], [S(`« ${it.text} »`, 'dim')], null, width, { indent: 4, max: cap(3) })); continue; }
+    if (it.k === 'notice') { out.push(...row([S('  · ', 'faint')], [S(it.text, 'faint')], null, width, { max: cap(2) })); continue; }
+    if (it.k === 'permission') { out.push(...row([sp(2), S('◆', 'red'), S(` ${it.tool.padEnd(6)} `, 'dim')], [S(it.text, 'fg')], [S(`→ ${it.decision}`, 'faint')], width, { max: cap(3) })); continue; }
+  }
+  return out;
+}
+
+const OTTO_TITLE = 'Otto · Replier les lignes du fil · Claude Code · opus';
+const OTTO_CRUMB = 'ledge › ⎇ fix/tui-wrap › Otto · Local';
+const KEYS_SESSION = [['esc', 'retour'], ['y n A', 'répondre'], ['r', 'écrire'], ['j k', 'défiler'], ['espace', 'déplier'], ['d', 'diffs'], ['t', 'terminal'], ['a', 'attacher (tmux)'], ['m', 'modèle'], ['i', 'interrompre']];
+const KEYS_SESSION_FREE = KEYS_SESSION.filter(k => k[0] !== 'y n A');
+
+/** The pending request box (Session.tsx), today and proposed. */
+function pendingBox(W, next) {
+  const inner = W - 4;
+  const body = next
+    ? [[S('Otto veut exécuter ', 'fg'), S('(Bash)', 'faint'), S(' :', 'fg')], ...row([sp(2)], [S(PENDING, 'fg b')], null, inner, { max: 4 }), [], buttons([['Autoriser', 'y', true], ['Refuser', 'n'], ['Toujours', 'A'], ['Refuser en expliquant', 'r']])]
+    : [cut([S('Otto veut exécuter : ', 'fg'), S(PENDING, 'fg b'), S('   Bash', 'faint')], inner), [], buttons([['Autoriser', 'y', true], ['Refuser', 'n'], ['Toujours', 'A'], ['Refuser en expliquant', 'r']])];
+  return box('Votre accord · depuis 2 min', body, { w: W, color: 'red', titleColor: 'red' });
+}
+/** The « Écrire » box in read mode: the placeholder, or (proposed) the draft kept, dimmed. */
+function writeBox(W, next, draft) {
+  if (next && draft) return box('Écrire · brouillon', [[S('❯ ', 'coral'), ...cut([S(draft.split('\n')[0], 'dim')], W - 6)]], { w: W, foot: `${draft.split('\n').length} lignes · r pour reprendre` });
+  return box('Écrire', [[S('❯ ', 'coral'), S('Répondre à Otto…', 'faint')]], { w: W });
+}
+
+/* ---- The multi-line field, proposed: visual rows over the draft's characters, the cursor in inverse ---- */
+function fieldRows(text, cursor, width, { placeholder } = {}) {
+  const a = chars(text), rows = [];
+  if (!a.length) return [[S('❯ ', 'coral'), S(' ', 'inv'), S(placeholder ?? '', 'faint')]];
+  let start = 0;
+  for (let i = 0; i <= a.length; i++) {
+    if (i < a.length && a[i] !== '\n') continue;
+    // Hard line [start, i): soft-wrapped at spaces, by cells.
+    let s = start;
+    do {
+      let n = 0, j = s, space = -1;
+      while (j < i && n + cell(a[j]) <= width - 2) { if (a[j] === ' ') space = j; n += cell(a[j]); j++; }
+      const end = j < i && space > s ? space + 1 : j;
+      rows.push({ a: s, b: end, last: end >= i });
+      s = end;
+    } while (s < i);
+    if (start === i) rows.push({ a: i, b: i, last: true });
+    start = i + 1;
+  }
+  return rows.map((r, k) => {
+    const segs = [k === 0 ? S('❯ ', 'coral') : sp(2)];
+    for (let p = r.a; p < r.b; p++) segs.push(S(a[p] === ' ' && p === r.b - 1 && !r.last ? ' ' : a[p], p === cursor ? 'inv' : 'fg'));
+    if (cursor === r.b && r.last) segs.push(S(' ', 'inv'));
+    return unflat(segs.map(x => ({ ch: x.t, c: x.c })));
+  });
+}
+const lineOf = (text, cursor) => chars(text).slice(0, cursor).filter(c => c === '\n').length + 1;
+
+/* ---- Ledge's conversation ---- */
+const TURNS = [
+  { q: 'Qui travaille sur la TUI en ce moment ?', at: '09:58', steps: 'les sessions',
+    a: 'Deux sessions :\n\n- **Otto** replie les lignes du fil sur `fix/tui-wrap` ;\n- **Bix** attend la maquette de #95 avant d’écrire le champ multi-ligne.' },
+  { q: 'Et les tests, ils passent ?', at: '10:06', steps: 'le terminal d’Otto',
+    a: 'Pas encore : `tui-model.test.ts` échoue sur une ligne avec un emoji, le repli comptait les points de code. Otto corrige.' },
+  { q: 'Qui a besoin de moi, et où en est la PR de Nova ?', at: '10:31', steps: 'les sessions · la réponse de Nova · l’état git de Nova',
+    a: '## Qui t’attend\n- **Otto** veut lancer `rm -rf coverage node_modules/.vite` avant la couverture : à autoriser.\n- **Luna** demande quel port pour le serveur de dev (*3000*, *5173* ou *8080*).\n\n## La PR de Nova\nNova a poussé `fix/LEDGE-42-ssh-reconnect` ; la [PR #212](https://github.com/Lyssaen/ledge/pull/212) a deux remarques ouvertes :\n\n1. le délai de reconnexion n’est pas plafonné ;\n2. un test dépend de l’horloge.\n\n```bash\npnpm --filter @ledge/fleet test -- reconnect --reporter=verbose\n```\n\n> Je peux lui relayer les deux remarques si tu veux.' }
+];
+function chatNow(turns, W) {
+  const width = W - 6, out = [];
+  for (const t of turns) {
+    if (out.length) out.push([]);
+    for (const l of wrapSegs([S(t.q, 'fg b')], width - 2, width - 2, one)) out.push([S('❯ ', 'coral'), ...l]);
+    out.push([S(`  vous · ${t.at}`, 'faint')], [S(`  lu : ${t.steps}`, 'faint')], [], ...raw(t.a, width));
+  }
+  return out.map(l => cut(l, W - 4));
+}
+function chatNext(turns, W, live) {
+  const width = W - 6, out = [];
+  for (const t of turns) {
+    if (out.length) out.push([]);
+    wrapSegs([S(t.q, 'fg b')], width - 2).forEach((l, k) => out.push([k ? sp(2) : S('❯ ', 'coral'), ...l]));
+    out.push(...row([sp(2)], [S(`vous · ${t.at} · lu : ${t.steps}`, 'faint')], null, width), [], ...markdown(t.a, width));
+  }
+  if (live) { out.push([]); wrapSegs([S(live.q, 'fg b')], width - 2).forEach((l, k) => out.push([k ? sp(2) : S('❯ ', 'coral'), ...l])); out.push([S(`  vous · ${live.at}`, 'faint')], [], ...markdown(live.a, width), [sp(2), S('▍', 'coral')]); }
+  return out;
+}
+const ASK_TITLE = 'Ledge · Opérateur · voit 4 sessions, 1 machine';
+const KEYS_ASK_NOW = [['↵', 'envoyer / lancer'], ['tab', 'carte suivante'], ['s', 'enregistrer l’équipe'], ['ctrl+n', 'nouvelle conversation'], ['ctrl+c', 'arrêter la réponse'], ['esc', 'retour']];
+const KEYS_ASK_NEXT = [['↵', 'envoyer'], ['alt+↵', 'nouvelle ligne'], ['esc', 'retour'], ['PgUp PgDn', 'défiler'], ['↑ ↓', 'historique'], ['tab', 'conversation'], ['ctrl+n', 'nouvelle conversation']];
+const KEYS_FIELD_NEXT = [['↵', 'envoyer'], ['alt+↵', 'nouvelle ligne'], ['esc', 'garder et sortir'], ['↑ ↓', 'ligne · historique'], ['ctrl ← →', 'mot'], ['ctrl+u', 'effacer']];
+
+/** The Ask screen: the conversation box (grows), then the question box. */
+function askFrame(W, H, { next, convo, up = 0, field, keys, toast, focus = 'field', foot, extra }) {
+  const parts = [
+    { grow: h => box(ASK_TITLE, fill(tail(convo, h - 2, up), h - 2), { w: W, color: focus === 'convo' ? 'coral' : 'line', foot }) },
+    ...(extra ? [{ lines: extra }] : []),
+    { lines: field }
+  ];
+  return frame(W, H, { crumb: 'Demander à Ledge', parts, keys, toast, next });
+}
+const questionBox = (W, rows, o = {}) => box(o.title ?? 'Question', rows, { w: W, color: o.color ?? 'coral', foot: o.foot });
+
+/* ======================================================================================================
+   The screens: each case gives its « Actuel » and « Visé » frames.
+   ====================================================================================================== */
+const DRAFT = 'Oui, replie aussi les lignes de notice. Deux points avant de pousser :\n- garde DIFF_MAX à 30 lignes, la limite actuelle ;\n- ajoute un test avec un emoji large ✅ en fin de ligne, c’est là que ça débordait.';
+const PASTE = 'Pourquoi ce test échoue seulement en CI ?\n FAIL  test/tui-model.test.ts > wrap > counts wide characters as two cells\nAssertionError: expected [ \'Tests verts ✅\' ] to deep equal [ \'Tests verts\', \'✅\' ]\n ❯ test/tui-model.test.ts:142:31\n    140|   it(\'counts wide characters as two cells\', () => {\n    141|     const lines = wrap(\'Tests verts ✅\', 12);\n    142|     expect(lines).toEqual([\'Tests verts\', \'✅\']);\n       |                               ^\n    143|   });\n ❯ node_modules/.pnpm/vitest@3.2.4/node_modules/vitest/dist/chunks/runner.js:88:5\n\n Test Files  1 failed | 23 passed (24)\n      Tests  1 failed | 412 passed (413)\n   Duration  6.12s';
+
+const SCREENS = {
+  fil: { label: 'Fil de session', cases: [
+    { label: 'Au travail', now: W => sessionFrame(W, false, { running: true }), next: W => sessionFrame(W, true, { running: true }) },
+    { label: 'Demande en attente', now: W => sessionFrame(W, false, { pending: true }), next: W => sessionFrame(W, true, { pending: true }) },
+    { label: 'Diffs ouverts (d)', now: W => sessionFrame(W, false, { running: true, diffs: true, up: 9 }), next: W => sessionFrame(W, true, { running: true, diffs: true, up: 14 }) },
+    { label: 'Défilé vers le haut', now: W => sessionFrame(W, false, { running: true, up: 6 }), next: W => sessionFrame(W, true, { running: true, up: 12 }) }
+  ] },
+  saisie: { label: 'Saisie', cases: [
+    { label: 'Réponse à une session', now: W => replyFrame(W, false), next: W => replyFrame(W, true) },
+    { label: 'Collage multi-ligne', now: W => pasteFrame(W, false), next: W => pasteFrame(W, true) },
+    { label: 'Historique ↑', now: W => historyFrame(W, false), next: W => historyFrame(W, true) }
+  ] },
+  markdown: { label: 'Markdown', cases: [
+    { label: 'Réponse de Ledge', now: W => askFrame(W, hOf(W), { next: false, convo: chatNow(TURNS.slice(2), W), field: questionBox(W, [[S('❯ ', 'coral'), S(' ', 'inv')]]), keys: KEYS_ASK_NOW }),
+      next: W => askFrame(W, hOf(W), { next: true, convo: chatNext(TURNS.slice(2), W), field: questionBox(W, fieldRows('', 0, W - 4, { placeholder: ' Une question pour Ledge…' })), keys: KEYS_ASK_NEXT }) },
+    { label: 'Réponse d’une session', now: W => sessionFrame(W, false, { only: true }), next: W => sessionFrame(W, true, { only: true }) }
+  ] },
+  chat: { label: 'Chat : défilement', cases: [
+    { label: 'Question (en bas)', now: W => askFrame(W, hOf(W), { next: false, convo: chatNow(TURNS, W), field: questionBox(W, [[S('❯ ', 'coral'), S(' ', 'inv')]]), keys: KEYS_ASK_NOW }),
+      next: W => { const c = chatNext(TURNS, W); return askFrame(W, hOf(W), { next: true, convo: c, field: questionBox(W, fieldRows('', 0, W - 4, { placeholder: ' Une question pour Ledge…' })), keys: KEYS_ASK_NEXT, foot: [S(`↑ ${Math.max(0, c.length - (hOf(W) - 7))} lignes plus haut · PgUp`, 'faint')] }); } },
+    { label: 'Lecture (tab)', now: W => askFrame(W, hOf(W), { next: false, convo: chatNow(TURNS, W), field: questionBox(W, [[S('❯ ', 'coral'), S(' ', 'inv')]]), keys: KEYS_ASK_NOW }),
+      next: W => { const c = chatNext(TURNS, W), view = hOf(W) - 7, up = Math.floor(Math.max(0, c.length - view) / 2); return askFrame(W, hOf(W), { next: true, convo: c, up, focus: 'convo', field: questionBox(W, [[S('❯ ', 'coral'), S('Une question pour Ledge…', 'faint')]], { color: 'line' }), keys: [['j k', 'ligne'], ['PgUp PgDn', 'page'], ['G', 'fin'], ['tab', 'cartes · question'], ['esc', 'question']], foot: [S(`↑ ${c.length - view - up} plus haut · ↓ ${up} plus bas · G fin`, 'coral')] }); } },
+    { label: 'Ledge répond pendant la lecture', now: W => askFrame(W, hOf(W), { next: false, convo: chatNow([...TURNS.slice(0, 2), { q: 'Résume la PR de Nova en trois points.', at: '10:40', steps: 'l’état git de Nova', a: 'La PR #212 de Nova change trois choses : la reconnexion ssh' }], W), field: questionBox(W, [[S('❯ ', 'coral'), S(' ', 'inv')]]), keys: KEYS_ASK_NOW }),
+      next: W => { const c = chatNext(TURNS.slice(0, 2), W, { q: 'Résume la PR de Nova en trois points.', at: '10:40', a: 'La PR #212 change trois choses :\n\n1. la reconnexion ssh' }); return askFrame(W, hOf(W), { next: true, convo: c, up: Math.min(8, Math.max(0, c.length - hOf(W) + 7)), focus: 'convo', field: questionBox(W, [[S('❯ ', 'coral'), S('Une question pour Ledge…', 'faint')]], { color: 'line' }), keys: [['j k', 'ligne'], ['PgUp PgDn', 'page'], ['G', 'fin'], ['ctrl+c', 'arrêter la réponse'], ['esc', 'question']], foot: [S('↓ Ledge répond · G pour suivre', 'coral')] }); } }
+  ] },
+  garde: { label: 'Ctrl+N · Ctrl+C', cases: [
+    { label: 'Ctrl+N', now: W => askFrame(W, hOf(W), { next: false, convo: [[S('Posez une question : qui a besoin de moi, où en est une session, que lancer…', 'faint')]], field: questionBox(W, [[S('❯ ', 'coral'), S('Et Luna, elle', 'fg'), S(' ', 'inv')]]), keys: KEYS_ASK_NOW }),
+      next: W => askFrame(W, hOf(W), { next: true, convo: chatNext(TURNS, W), field: box('Nouvelle conversation ?', [...wrapSegs([S('La conversation du jour (3 questions, depuis 09:58) sera effacée. Ton brouillon reste.', 'fg')], W - 4), [], buttons([['Garder', 'n · esc', true], ['Effacer et repartir', 'y']])], { w: W, color: 'red', titleColor: 'red' }), keys: [['n esc', 'garder'], ['y', 'effacer']] }) },
+    { label: 'Ctrl+C avec un brouillon (Ask)', now: () => shellFrame(),
+      next: W => askFrame(W, hOf(W), { next: true, convo: chatNext(TURNS, W), field: questionBox(W, fieldRows('Et Luna, elle attend quoi exactement ?', 38, W - 4)), keys: KEYS_ASK_NEXT, toast: { t: 'Brouillon en cours : ctrl+c encore pour quitter quand même (il sera perdu).', c: 'yellow' } }) },
+    { label: 'Ctrl+C en répondant (session)', now: W => sessionFrame(W, false, { running: true }), next: W => sessionFrame(W, true, { running: true, draft: DRAFT }) }
+  ] },
+  taille: { label: 'Redimensionnement', fixed: true, cases: [
+    { label: '120×32 → 80×20', ref: () => ({ rows: sessionFrame(120, false, { pending: true, anchor: 6, H: 32 }), W: 120, H: 32, cap: 'Avant la réduction : tout le fil tient, Otto lit son échange avec Nova' }),
+      now: () => { const up = lastUp; return sessionFrame(80, false, { pending: true, up, H: 20 }); }, next: () => sessionFrame(80, true, { pending: true, anchor: 6, H: 20 }), W: 80, H: 20 },
+    { label: 'Trop petit (52×14)', now: () => sessionFrame(52, false, { pending: true, H: 14 }), next: () => tooSmall(52, 14), W: 52, H: 14 }
+  ] }
+};
+const hOf = W => (W >= 120 ? 32 : 24);
+/** The scroll the last session frame used: the resized « Actuel » keeps the reference's count of lines from the bottom. */
+let lastUp = 0;
+
+function sessionFrame(W, next, o = {}) {
+  const H = o.H ?? hOf(W);
+  let items = o.only ? [ITEMS[1], ITEMS[ITEMS.length - 1]] : o.pending ? ITEMS : [...ITEMS, RUNNING];
+  const lines = next ? threadNext(items, W, o) : threadNow(items, W, o);
+  const parts = [];
+  const view = h => h - 2;
+  let foot;
+  parts.push({ grow: h => {
+    const n = view(h);
+    let want = typeof o.up === 'function' ? o.up() : o.up ?? 0;
+    // Anchored on an element: its first line at the top of the box.
+    if (o.anchor !== undefined) want = Math.max(0, lines.length - (next ? threadNext : threadNow)(items.slice(0, o.anchor), W, o).length - n);
+    const up = Math.min(want, Math.max(0, lines.length - n));
+    lastUp = up;
+    if (next && up > 0) foot = [S(`↑ ${lines.length - n - up} plus haut · ↓ ${up} · G fin`, 'faint')];
+    else if (next && lines.length > n) foot = [S(`↑ ${lines.length - n} plus haut`, 'faint')];
+    return box(OTTO_TITLE, fill(tail(lines, n, up), n), { w: W, foot });
+  } });
+  if (o.pending) parts.push({ lines: pendingBox(W, next) });
+  if (o.reply) parts.push({ lines: o.reply });
+  else parts.push({ lines: writeBox(W, next, o.draft) });
+  let keys = o.pending ? KEYS_SESSION : KEYS_SESSION_FREE;
+  if (o.keys) keys = o.keys;
+  return frame(W, H, { crumb: OTTO_CRUMB, crumbShort: 'Otto', parts, keys, next, toast: next && o.draft ? { t: 'Brouillon gardé : r pour reprendre.', c: 'dim' } : o.toast });
+}
+function replyFrame(W, next) {
+  if (!next) {
+    const shown = DRAFT.replace(/\n/g, '⏎');
+    const field = box('Écrire', [[S('❯ ', 'coral'), ...cutStart([S(shown, 'fg'), S(' ', 'inv')], W - 6)]], { w: W, color: 'coral' });
+    return sessionFrame(W, false, { running: true, reply: field, keys: [['↵', 'envoyer'], ['esc', 'retour']] });
+  }
+  const cursor = chars(DRAFT).indexOf('3', 0);
+  const rows = fieldRows(DRAFT, cursor, W - 4);
+  const field = box('Répondre à Otto', rows, { w: W, color: 'coral', titleColor: 'coral', foot: `ligne ${lineOf(DRAFT, cursor)}/${DRAFT.split('\n').length} · alt+↵ nouvelle ligne` });
+  return sessionFrame(W, true, { running: true, reply: field, keys: KEYS_FIELD_NEXT });
+}
+function pasteFrame(W, next) {
+  const convo = next ? chatNext(TURNS.slice(1, 2), W) : chatNow(TURNS.slice(1, 2), W);
+  if (!next) return askFrame(W, hOf(W), { next: false, convo, field: questionBox(W, [[S('❯ ', 'coral'), ...cutStart([S(PASTE.replace(/\n/g, '⏎'), 'fg'), S(' ', 'inv')], W - 6)]]), keys: KEYS_ASK_NOW });
+  const all = fieldRows(PASTE, chars(PASTE).length, W - 4), max = W >= 120 ? 8 : 6;
+  return askFrame(W, hOf(W), { next: true, convo, field: questionBox(W, all.slice(-max), { foot: `↑ ${all.length - max} lignes · ${PASTE.split('\n').length} lignes collées` }), keys: KEYS_FIELD_NEXT });
+}
+function historyFrame(W, next) {
+  const convo = next ? chatNext(TURNS, W) : chatNow(TURNS, W);
+  if (!next) return askFrame(W, hOf(W), { next: false, convo, field: questionBox(W, [[S('❯ ', 'coral'), S(' ', 'inv')]]), keys: KEYS_ASK_NOW });
+  const q = TURNS[2].q;
+  return askFrame(W, hOf(W), { next: true, convo, field: questionBox(W, fieldRows(q, chars(q).length, W - 4), { foot: 'historique 3/3 · ↓ ton brouillon' }), keys: [['↵', 'renvoyer'], ['↑ ↓', 'historique'], ['esc', 'revenir au brouillon']] });
+}
+/** After ctrl+c today: the TUI is gone, and the draft with it. */
+function shellFrame() {
+  const W = 80, H = 24, rows = [];
+  for (let i = 0; i < H - 3; i++) rows.push([]);
+  rows.push([S('jde@wsl ', 'shell-g'), S('~/w/ledge', 'shell-b'), S(' (main)> ', 'shell'), S('ledge tui', 'shell')]);
+  rows.push([S('jde@wsl ', 'shell-g'), S('~/w/ledge', 'shell-b'), S(' (main)> ', 'shell'), S(' ', 'inv')]);
+  rows.push([S('   ← la TUI est fermée ; « Et Luna, elle » est perdu', 'faint')]);
+  return rows.slice(-H).map(r => pad(r, W));
+}
+function tooSmall(W, H) {
+  const rows = fill([], H);
+  const mid = Math.floor(H / 2) - 2;
+  const center = (t, c) => { const n = sw(t); return [sp(Math.floor((W - n) / 2)), S(t, c)]; };
+  rows[mid] = center('◖ ledge', 'coral b');
+  rows[mid + 1] = center('Fenêtre trop petite : 52×14', 'fg');
+  rows[mid + 2] = center('il faut au moins 60×16', 'dim');
+  rows[mid + 4] = center('Otto attend ton accord · brouillon gardé', 'red');
+  return rows.map(r => pad(r, W));
+}
+
+/* ======================================================================================================
+   Rendering and the mockup's controls.
+   ====================================================================================================== */
+const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+function render(rows) {
+  return rows.map(r => '<div class="row">' + r.map(s => `<span class="${s.c}">` + chars(s.t).map(ch => `<span class="c${cell(ch) === 2 ? ' c2' : ''}">${esc(ch)}</span>`).join('') + '</span>').join('') + '</div>').join('');
+}
+function shot(kind, caption, rows, size) {
+  const label = kind === 'now' ? 'Actuel' : kind === 'next' ? 'Visé' : 'Référence';
+  return `<section class="shot"><h2><span class="${kind === 'next' ? 'next' : 'now'}">${label}</span><small>${esc(caption)} · ${size}</small></h2><div class="term ${kind === 'next' ? 'next' : 'now'}" role="img" aria-label="${label} : ${esc(caption)}">${render(rows)}</div></section>`;
+}
+
+const state = { ecran: 'fil', variante: 0, largeur: 80, theme: 'dark', montrer: 'both' };
+function readHash() {
+  for (const [k, v] of new URLSearchParams(location.hash.slice(1))) if (k in state) state[k] = k === 'variante' || k === 'largeur' ? Number(v) : v;
+  if (!SCREENS[state.ecran]) state.ecran = 'fil';
+  if (!SCREENS[state.ecran].cases[state.variante]) state.variante = 0;
+}
+function seg(el, options, value, set) {
+  el.innerHTML = options.map(([v, l]) => `<button type="button" aria-pressed="${v === value}" data-v="${v}">${esc(l)}</button>`).join('');
+  el.onclick = e => { const b = e.target.closest('button'); if (b) set(b.dataset.v); };
+}
+function draw() {
+  document.documentElement.dataset.theme = state.theme;
+  const scr = SCREENS[state.ecran], c = scr.cases[state.variante];
+  seg(document.getElementById('screen'), Object.entries(SCREENS).map(([k, s]) => [k, s.label]), state.ecran, v => { state.ecran = v; state.variante = 0; go(); });
+  seg(document.getElementById('variant'), scr.cases.map((x, i) => [String(i), x.label]), String(state.variante), v => { state.variante = Number(v); go(); });
+  seg(document.getElementById('width'), [['80', '80 colonnes'], ['120', '120 colonnes']], String(state.largeur), v => { state.largeur = Number(v); go(); });
+  seg(document.getElementById('theme'), [['dark', 'Sombre'], ['light', 'Clair']], state.theme, v => { state.theme = v; go(); });
+  seg(document.getElementById('show'), [['both', 'Actuel et visé'], ['next', 'Visé seul']], state.montrer, v => { state.montrer = v; go(); });
+  document.getElementById('width-field').hidden = !!scr.fixed;
+  const W = scr.fixed ? c.W : state.largeur, H = scr.fixed ? c.H : hOf(W), size = `${W}×${H}`;
+  let html = '';
+  if (c.ref && state.montrer === 'both') { const r = c.ref(); html += shot('ref', r.cap, r.rows, `${r.W}×${r.H}`); }
+  if (state.montrer === 'both') html += shot('now', `${scr.label} · ${c.label}`, c.now(W), c.now === SCREENS.garde.cases[1].now ? '80×24, après ctrl+c' : size);
+  html += shot('next', `${scr.label} · ${c.label}`, c.next(W), size);
+  document.getElementById('stage').innerHTML = html;
+  for (const n of document.querySelectorAll('[data-notes]')) n.hidden = n.dataset.notes !== state.ecran;
+}
+function go() { history.replaceState(null, '', '#' + new URLSearchParams(Object.entries(state).map(([k, v]) => [k, String(v)]))); draw(); }
+window.addEventListener('hashchange', () => { readHash(); draw(); });
+readHash(); draw();
+</script>
+</body>
+</html>

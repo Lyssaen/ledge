@@ -79,4 +79,38 @@ describe('keepStale', () => {
     server.set('unreachable');
     expect(got.slice(before).filter(m => m.type === 'session.preview')).toEqual([{ type: 'session.preview', id: 'server:r1', lines: ['hello'] }]);
   });
+  it('a fallen peer retrying publishes nothing new: no snapshot, so the threads on screen are not dropped and asked again', () => {
+    const { server, got } = setup();
+    server.set('unreachable');
+    const before = got.filter(m => m.type === 'snapshot').length;
+    server.set('connecting'); server.set('unreachable'); server.set('connecting'); server.set('unreachable');
+    expect(got.filter(m => m.type === 'snapshot').length).toBe(before);
+  });
+  it('a peer that never answered retrying publishes nothing new either', () => {
+    const local = peer(), server = peer();
+    const api = createFleetClient([LOCAL_MACHINE, remote], o => o.url === LOCAL_MACHINE.url ? local.client : server.client, { keepStale: true });
+    const got: ServerMessage[] = []; api.onMessage(m => got.push(m)); api.connect();
+    local.set('open'); local.emit(snap(['a']));
+    const before = got.filter(m => m.type === 'snapshot').length;
+    server.set('unreachable'); server.set('connecting'); server.set('unreachable');
+    expect(got.filter(m => m.type === 'snapshot').length).toBe(before);
+    expect(api.fleet!.machines().find(m => m.id === 'server')?.status).toBe('unreachable');
+  });
+  it('one update removing two unreachable machines applies: a closed client saying « connecting » at once breaks nothing', () => {
+    const second = { id: 'build', label: 'build', url: 'ws://127.0.0.1:47833', ssh: 'build' };
+    const local = peer(), a = peer(), b = peer();
+    // A real client tells its status as it closes, before close() returns.
+    for (const x of [a, b]) x.client.close = () => x.set('connecting');
+    const api = createFleetClient([LOCAL_MACHINE, remote, second], o => o.url === LOCAL_MACHINE.url ? local.client : o.url === remote.url ? a.client : b.client, { keepStale: true });
+    const got: ServerMessage[] = []; api.onMessage(m => got.push(m)); api.connect();
+    local.set('open'); local.emit(snap(['l1']));
+    a.set('unreachable'); b.set('unreachable');
+    expect(() => api.fleet!.configure([LOCAL_MACHINE])).not.toThrow();
+    expect(api.fleet!.machines().map(m => m.id)).toEqual(['local']);
+    // The overlay hears the fleet again afterwards.
+    const before = got.filter(m => m.type === 'snapshot').length;
+    local.emit(snap(['l1', 'l2']));
+    expect(got.filter(m => m.type === 'snapshot').length).toBeGreaterThan(before);
+    expect(lastSnapshot(got)!.sessions.map(x => x.id)).toEqual(['local:l1', 'local:l2']);
+  });
 });

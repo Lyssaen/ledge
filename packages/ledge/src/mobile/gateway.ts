@@ -3,14 +3,15 @@
 // the devices that follow it. Logs carry a type, a code or an error's name, never a message's content.
 import { hostname } from 'node:os';
 import {
-  ATTACHMENT_MAX, OperationIdSchema, PHONE_PROTOCOL, TOOL_TEXT_MAX, proposalRows, PhoneClientMessageSchema, pushEndpointAllowed, RefusalCodeSchema, UNTYPABLE, backendOf, isArchived, pendingKey,
+  ATTACHMENT_MAX, OperationIdSchema, PHONE_PROTOCOL, actionById, TOOL_TEXT_MAX, proposalRows, PhoneClientMessageSchema, pushEndpointAllowed, RefusalCodeSchema, UNTYPABLE, backendOf, isArchived, pendingKey,
   LEDGE_GIVER, type AttachmentRef, type ChatErrorCode, type ChatTurn, type CloseHow, type ClientMessage, type PhoneTask, type Task, type Team, type OperationReason, type OperationStatus, type PhoneClientMessage, type PhoneServerMessage, type ServerMessage, type Session, type ThreadItem
 } from '@ledge/protocol';
 import type { MobileService } from './service.js';
 import type { ChatThreads, ChatThreadId } from '../chat/threads.js';
-import { phoneEmitter, toPhoneHistory } from './chat.js';
+import { phoneCut, phoneEmitter, toPhoneHistory } from './chat.js';
 import type { ChatMessage } from '../chat/service.js';
 import { CloseRefused } from '../chat/close.js';
+import { ActRefused } from '../chat/act.js';
 import { AttachmentError, type AttachmentStore } from '../daemon/attachments.js';
 import { createOutbox } from './outbox.js';
 import { fingerprint, OperationRegistry, type PhoneOperation } from './operations.js';
@@ -79,6 +80,8 @@ export function createPhoneGateway(deps: {
   launchChat?: (thread: ChatThreadId, qid: string, rows?: number[]) => Promise<{ launched: string[]; failed: number }>;
   /** Closes the sessions of a turn's close card, on that thread (its own emitter and marks). */
   closeChat?: (thread: ChatThreadId, qid: string, rows?: number[]) => Promise<{ closed: Array<{ row: number; id: string; how: CloseHow }>; failed: Array<{ row: number; message: string }> }>;
+  /** Applies the rows of a turn's generic card, on that thread (its own emitter and marks); `rid` names the request. */
+  actChat?: (thread: ChatThreadId, qid: string, rid: string, rows?: number[], confirmed?: true, deny?: true) => Promise<{ done: number[]; failed: Array<{ row: number; message: string }> }>;
   /** A device's question ended (answered, or with a code). */
   onChatEnd?: (deviceId: string, end: { qid: string; code?: ChatErrorCode }) => void;
   chatThrottleMs?: number;
@@ -188,7 +191,7 @@ export function createPhoneGateway(deps: {
   };
 
   /** The operations that act on a tracked session: the registry's own, the credential's, the device's and the chat's are handled before it. */
-  type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.launch' | 'chat.close' | 'chat.team' | 'chat.task' | 'team.resume' | 'task.seen' }>;
+  type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.launch' | 'chat.close' | 'chat.act' | 'chat.ignore' | 'chat.team' | 'chat.task' | 'team.resume' | 'task.seen' }>;
   /** Whether the operation needs the device's own check: an accept of a request that is not low, or a reply to an OMP (rpc) dialog, which is never low. */
   const needsAssertion = (msg: SessionOperation, s: Session): boolean => {
     if (msg.type === 'session.decide') return msg.decision !== 'deny' && riskOf(s)?.risk !== 'low';
@@ -201,7 +204,7 @@ export function createPhoneGateway(deps: {
     `${id}:${key}${s?.pending?.source === 'rpc' && s.pending.requestId ? `:${s.pending.requestId}` : ''}`;
 
   /** The device check: the challenge is spent first, whatever the verdict, then the signature is verified and the counter kept. */
-  const checkAssertion = (deviceId: string, assertion: NonNullable<Extract<PhoneOperation, { type: 'session.decide' }>['assertion']> | undefined, purpose: 'decide' | 'launch' | 'close', subject: string | undefined): Outcome | undefined => {
+  const checkAssertion = (deviceId: string, assertion: NonNullable<Extract<PhoneOperation, { type: 'session.decide' }>['assertion']> | undefined, purpose: 'decide' | 'launch' | 'close' | 'act', subject: string | undefined): Outcome | undefined => {
     const cred = deps.credential(deviceId);
     const rp = deps.rp();
     if (!cred || !rp || !assertion || subject === undefined) return { status: 'rejected', reason: 'confirm_required' };
@@ -309,9 +312,13 @@ export function createPhoneGateway(deps: {
     } catch { return undefined; }
   };
 
+  /** A card set aside (« Ignorer », on any device) applies no more until it is opened again. */
+  const SET_ASIDE: Outcome = { status: 'rejected', reason: 'stale' };
+
   const chatRelay = async (deviceId: string, msg: Extract<PhoneOperation, { type: 'chat.relay' }>): Promise<Outcome> => {
     const turn = ownTurn(deviceId, msg.qid);
     if (!turn || !deps.relay) return { status: 'rejected', reason: 'unknown_session' };
+    if (turn.ignoredAt) return SET_ASIDE;
     if (!turn.relay || turn.relay.text.length > TOOL_TEXT_MAX) return { status: 'rejected', reason: 'invalid' };
     try { await deps.relay.request(msg.qid); } catch (e) { log(`phone chat.relay failed (${e instanceof Error ? e.name : 'error'})`); return { status: 'failed' }; }
     return { status: 'applied' };
@@ -320,6 +327,7 @@ export function createPhoneGateway(deps: {
   const chatLaunch = async (deviceId: string, msg: Extract<PhoneOperation, { type: 'chat.launch' }>): Promise<Outcome> => {
     const turn = ownTurn(deviceId, msg.qid);
     if (!turn || !deps.launchChat) return { status: 'rejected', reason: 'unknown_session' };
+    if (turn.ignoredAt) return SET_ASIDE;
     // Every targeted row must exist and fit the phone's card: it never confirms a text it did not see.
     const rows = proposalRows(turn);
     const targets = msg.rows ?? [...rows.keys()];
@@ -339,6 +347,7 @@ export function createPhoneGateway(deps: {
   const chatClose = async (deviceId: string, msg: Extract<PhoneOperation, { type: 'chat.close' }>): Promise<Outcome> => {
     const turn = ownTurn(deviceId, msg.qid);
     if (!turn || !deps.closeChat) return { status: 'rejected', reason: 'unknown_session' };
+    if (turn.ignoredAt) return SET_ASIDE;
     const closes = turn.closes;
     const targets = msg.rows ?? (closes ? [...closes.keys()] : []);
     if (!closes || targets.length === 0) return { status: 'rejected', reason: 'invalid' };
@@ -354,6 +363,43 @@ export function createPhoneGateway(deps: {
     } catch (e) {
       // A row still being closed (the phone reloaded mid-close and asked again) is that close's: under way, not failed.
       if (e instanceof CloseRefused) return { status: e.underWay ? 'applied' : 'failed' };
+      throw e;
+    }
+  };
+
+  /**
+   * A generic card (spec 2026-10-26 action registry §9.1-9.2): a destructive row needs the phone's confirmation, and it or any row
+   * the registry gives a device check (`phone`) one assertion for the turn; the rows then apply in order, stopping at the first failure.
+   */
+  const chatAct = async (deviceId: string, msg: Extract<PhoneOperation, { type: 'chat.act' }>): Promise<Outcome> => {
+    const turn = ownTurn(deviceId, msg.qid);
+    if (!turn || !deps.actChat) return { status: 'rejected', reason: 'unknown_session' };
+    if (turn.ignoredAt) return SET_ASIDE;
+    const actions = turn.actions;
+    const targets = msg.rows ?? (actions ? [...actions.keys()] : []);
+    if (!actions || targets.length === 0) return { status: 'rejected', reason: 'invalid' };
+    for (const r of targets) if (!actions[r]) return { status: 'rejected', reason: 'invalid' };
+    // Nothing left to apply: answered before the assertion is spent. The checks below read the rows still open, as act.ts does.
+    const settled = (r: number) => actions[r]!.state === 'done' || actions[r]!.state === 'denied';
+    if (targets.every(settled)) return { status: 'failed' };
+    const todo = targets.filter(r => !settled(r));
+    // « Refuser » answers a session's request only.
+    if (msg.deny && todo.some(r => actions[r]!.action !== 'session.decide')) return { status: 'rejected', reason: 'invalid' };
+    // A request the phone could only show cut is refused from there, never accepted: the rest is read on the PC.
+    if (!msg.deny && todo.some(r => phoneCut(actions[r]!) && actions[r]!.args.decision !== 'deny')) return { status: 'rejected', reason: 'not_offered' };
+    // A deny is never confirmed nor checked on the device, as the phone's own deny of a request is not.
+    if (!msg.deny && !msg.confirmed && todo.some(r => actions[r]!.risk === 'destructive')) return { status: 'rejected', reason: 'confirm_required' };
+    // A row destructive by its args (`team.save` over an existing template) is checked as one the registry marks (§5.3).
+    if (!msg.deny && todo.some(r => actions[r]!.risk === 'destructive' || actionById(actions[r]!.action)?.phone)) {
+      if (deps.credential(deviceId) === null) return { status: 'rejected', reason: 'confirm_required' };
+      const refused = checkAssertion(deviceId, msg.assertion, 'act', msg.qid);
+      if (refused) return refused;
+    }
+    try {
+      const done = await deps.actChat(`device:${deviceId}`, msg.qid, `phone:${msg.op}`, todo, msg.confirmed, msg.deny);
+      return done.failed.length === 0 && done.done.length > 0 ? { status: 'applied' } : { status: 'failed' };
+    } catch (e) {
+      if (e instanceof ActRefused) return e.code ? { status: 'rejected', reason: e.code } : { status: 'failed' };
       throw e;
     }
   };
@@ -374,6 +420,7 @@ export function createPhoneGateway(deps: {
   const chatTeam = async (deviceId: string, msg: Extract<PhoneOperation, { type: 'chat.team' }>): Promise<Outcome> => {
     const turn = ownTurn(deviceId, msg.qid);
     if (!turn?.team || !deps.teams) return { status: 'rejected', reason: 'unknown_session' };
+    if (turn.ignoredAt) return SET_ASIDE;
     if (turn.team.teamId) return { status: 'failed' };
     if (deps.credential(deviceId) === null) return { status: 'rejected', reason: 'confirm_required' };
     const refused = launchAssertionOutcome(deviceId, msg.qid, msg.assertion);
@@ -385,13 +432,22 @@ export function createPhoneGateway(deps: {
     const turn = ownTurn(deviceId, msg.qid);
     const card = turn?.tasks?.[msg.row];
     if (!card || !deps.tasks) return { status: 'rejected', reason: 'unknown_session' };
+    if (turn!.ignoredAt) return SET_ASIDE;
     if ((card.text?.length ?? 0) > TOOL_TEXT_MAX) return { status: 'rejected', reason: 'invalid' };
     if (card.taskId) return { status: 'failed' };
     const rid = msg.op;
     return ask({ type: 'task.cmd', rid, by: LEDGE_GIVER, op: 'give', qid: msg.qid, row: msg.row }, m => (m.type === 'task.result' && m.rid === rid ? m.task !== undefined : undefined));
   };
 
+  /** « Ignorer » the device's own turn, or `undo` (« Revoir »). */
+  const chatIgnore = (deviceId: string, msg: Extract<PhoneOperation, { type: 'chat.ignore' }>): Outcome => {
+    if (!ownTurn(deviceId, msg.qid) || !deps.chats) return { status: 'rejected', reason: 'unknown_session' };
+    const why = deps.chats.device(deviceId).ignore(msg.qid, msg.undo === true, emitterOf(deviceId));
+    return why === null ? { status: 'applied' } : { status: 'rejected', reason: 'invalid' };
+  };
+
   const run = async (deviceId: string, msg: PhoneOperation): Promise<Outcome> => {
+    if (msg.type === 'chat.ignore') return chatIgnore(deviceId, msg);
     if (msg.type === 'chat.team') return chatTeam(deviceId, msg);
     if (msg.type === 'chat.task') return chatTask(deviceId, msg);
     if (msg.type === 'team.resume') return deps.teams ? ask({ type: 'team.resume', team: msg.team }, () => undefined) : { status: 'rejected', reason: 'unavailable' };
@@ -416,6 +472,7 @@ export function createPhoneGateway(deps: {
     if (msg.type === 'chat.relay') return chatRelay(deviceId, msg);
     if (msg.type === 'chat.launch') return chatLaunch(deviceId, msg);
     if (msg.type === 'chat.close') return chatClose(deviceId, msg);
+    if (msg.type === 'chat.act') return chatAct(deviceId, msg);
     const refused = precheck(deviceId, msg);
     if (refused) return refused;
     const out = local(msg);
@@ -570,6 +627,13 @@ export function createPhoneGateway(deps: {
           const challenge = deps.challenges.issue({ deviceId, purpose: 'close', subject: msg.qid });
           return push(deviceId, { type: 'confirm.challenge', purpose: 'close', challenge, rpId: rp.rpId, credentialId: cred.id, expiresInMs: CHALLENGE_TTL_MS });
         }
+        if (msg.purpose === 'act') {
+          if (msg.qid === undefined || !ownTurn(deviceId, msg.qid)) return invalid();
+          const cred = deps.credential(deviceId);
+          if (!cred || cred.rpId !== rp.rpId) return invalid();
+          const challenge = deps.challenges.issue({ deviceId, purpose: 'act', subject: msg.qid });
+          return push(deviceId, { type: 'confirm.challenge', purpose: 'act', challenge, rpId: rp.rpId, credentialId: cred.id, expiresInMs: CHALLENGE_TTL_MS });
+        }
         if (msg.purpose === 'register') {
           const challenge = deps.challenges.issue({ deviceId, purpose: 'register', subject: '' });
           return push(deviceId, { type: 'confirm.challenge', purpose: 'register', challenge, rpId: rp.rpId, expiresInMs: CHALLENGE_TTL_MS });
@@ -604,7 +668,7 @@ export function createPhoneGateway(deps: {
       log(`phone message refused: ${request ?? '?'}`);
       // A subscription to an endpoint off the list, or a launch the schema refuses (a row twice), is an operation the phone waits an answer for.
       const op = OperationIdSchema.safeParse((raw as { op?: unknown } | null | undefined)?.op);
-      if ((request === 'push.subscribe' || request === 'chat.launch' || request === 'chat.close' || request === 'chat.team' || request === 'chat.task' || request === 'team.resume' || request === 'task.seen') && op.success && approved(deviceId)) return push(deviceId, { type: 'operation.result', op: op.data, status: 'rejected', reason: 'invalid' });
+      if ((request === 'push.subscribe' || request === 'chat.launch' || request === 'chat.close' || request === 'chat.act' || request === 'chat.ignore' || request === 'chat.team' || request === 'chat.task' || request === 'team.resume' || request === 'task.seen') && op.success && approved(deviceId)) return push(deviceId, { type: 'operation.result', op: op.data, status: 'rejected', reason: 'invalid' });
       return push(deviceId, { type: 'error', code: 'invalid', ...(request !== undefined ? { request } : {}) });
     }
     const msg = parsed.data;

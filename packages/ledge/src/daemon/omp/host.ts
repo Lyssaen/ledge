@@ -4,6 +4,7 @@ import { mkdir } from 'node:fs/promises';
 import type { AttachmentRef, OmpApproval, Session, SessionEvent } from '@ledge/protocol';
 import { pickName } from '@ledge/protocol';
 import { agentEnv, PARENT_AGENT_VARS } from '../../spawn.js';
+import { sessionKey, SESSION_KEY_VAR } from '../../auth.js';
 import { log } from '../../log.js';
 import type { Store } from '../store.js';
 import type { AttachmentStore } from '../attachments.js';
@@ -75,7 +76,8 @@ export function createOmpHost(deps: OmpHostDeps) {
     await mkdir(dir, { recursive: true });
     // A process left by a daemon that died is ended first: one writer per conversation.
     if (await reapOwner(dir)) log(`omp ${id}: ended the process a previous daemon left`);
-    const env = agentEnv({ ...(await deps.env()), LEDGE_SESSION: id }, o.seatEnv ?? {});
+    const key = sessionKey(id);
+    const env = agentEnv({ ...(await deps.env()), LEDGE_SESSION: id, ...(key ? { [SESSION_KEY_VAR]: key } : {}) }, o.seatEnv ?? {});
     for (const v of PARENT_AGENT_VARS) delete env[v];
     const rpc = await OmpRpc.start({ command, args: ompArgs({ dir, ...o }), cwd: o.cwd, env, ...(deps.spawn ? { spawn: deps.spawn } : {}) });
     await writeOwner(dir, rpc.pid).catch(() => undefined);

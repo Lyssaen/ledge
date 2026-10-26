@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'rea
 import { daemonStore, useDaemon, useTeams, type DaemonClient } from '@ledge/fleet';
 import { ChatView } from '@ledge/ui/chat/ChatView';
 import { ChatCopyProvider } from '@ledge/ui/chat/copy';
+import { useActionCards } from '@ledge/ui/chat/useActionCards';
 import { useAttachments } from '../images/useAttachments';
 import { TurnThumbs } from '../images/Thumbs';
 import type { Projects } from '@ledge/protocol';
@@ -56,6 +57,7 @@ export function ChatPanel({ client, view, paused, focus, onClose, onOpenSession,
   const cards = useChatCards({ send, chat, lastLaunched: view.lastLaunched, errors: view.errors, sessions: view.sessions, turnReady, turnMachine, onLaunched });
   const project = useProjectReview({ chat, projects, machines: view.machines, notify, onProposal });
   const onMessage = useCallback((fn: Parameters<DaemonClient['onMessage']>[0]) => client.onMessage(fn), [client]);
+  const actionCards = useActionCards({ send, chat, errors: view.errors, turnReady, onMessage });
   const teamCards = useTeamCards({ send, onMessage, chat });
   const teams = useTeams(client);
   const openTeam = (id: string) => { const team = teams?.find(x => x.id === id); onOpenTeam?.(team ? teamProject(team, projects) : null); };
@@ -94,6 +96,7 @@ export function ChatPanel({ client, view, paused, focus, onClose, onOpenSession,
             onOpenSession={open} onTerminal={terminal} turnAvailable={turnReady}
             launchingQid={cards.launchingQid} launchingRows={cards.launchingRows} onLaunchProposal={cards.launch}
             closingQid={cards.closingQid} closingRows={cards.closingRows} onCloseSessions={cards.close}
+            onAct={actionCards.act} actingQid={actionCards.actingQid} actingRows={actionCards.actingRows} onIgnoreCards={actionCards.ignore} onDenyAction={actionCards.deny}
             renderModel={(qid, agent, busy) => <CardModelPick client={client} machine={turnMachine(qid)} tool={agent} pick={cards.pick(qid)} disabled={busy} onPick={next => cards.setPick(qid, next)} />}
             relayingQid={cards.relayingQid} onRelay={cards.relay} onRelayCancel={cards.cancelRelay}
             onProject={project.review} projectNamed={project.projectNamed}

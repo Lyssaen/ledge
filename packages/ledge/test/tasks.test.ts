@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { transmissions, type Session, type Task, type TaskLogEntry } from '@ledge/protocol';
+import { LEDGE_GIVER, transmissions, type Session, type Task, type TaskLogEntry } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
 import { createTasks, tasksJournal, type Tasks, type TasksDeps } from '../src/daemon/tasks.js';
 import { ledgeTask } from '../src/daemon/crossSession.js';
@@ -114,6 +114,29 @@ describe('createTasks', () => {
     expect(told).toEqual([['otto', expect.stringContaining('abandonnée : Nova')]]);
   });
 
+  it('cancel: by its giver or by Ledge, closed with its reason; the owner is told to stop, and a seat giver learns it', () => {
+    const t = give();
+    told = [];
+    expect(cmd('nova', 'cancel', { task: t.id }).reason).toContain('seul celui qui l\'a confiée (Otto)');
+    const c = cmd(LEDGE_GIVER, 'cancel', { task: t.id, text: 'Plus utile' }).task!;
+    expect(c).toMatchObject({ state: 'refused', result: 'Plus utile' });
+    expect(c.log.at(-1)).toMatchObject({ by: 'Ledge', what: 'annulée : Plus utile' });
+    expect(told.map(([to]) => to)).toEqual(['pim', 'otto']);
+    expect(told[0]![1]).toContain('annulée par Ledge');
+    expect(cmd(LEDGE_GIVER, 'cancel', { task: t.id }).reason).toContain('déjà close');
+  });
+  it('cancel by the giver needs no reason', () => {
+    const t = give();
+    expect(cmd('otto', 'cancel', { task: t.id }).task).toMatchObject({ state: 'refused' });
+  });
+  it('pass by Ledge: a task it did not give changes owner, and the one who held it is told to stop', () => {
+    const t = give();
+    told = [];
+    const p = cmd(LEDGE_GIVER, 'pass', { task: t.id, to: 'nova' }).task!;
+    expect(p).toMatchObject({ owner: 'nova', ownerName: 'Nova', giver: 'otto', state: 'open' });
+    expect(told.map(([to]) => to).sort()).toEqual(['nova', 'pim']);
+    expect(cmd(LEDGE_GIVER, 'pass', { task: t.id, to: 'nova' }).reason).toBe('elle est déjà à Nova');
+  });
   it('pass by its giver: the lead moves a task it gave without cancelling it, the one who held it is told to stop', () => {
     const t = give();
     told = [];

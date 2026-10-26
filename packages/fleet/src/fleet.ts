@@ -124,11 +124,16 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     // A relief and the one it relieves are on the same machine (context handover spec §3.3).
     ...(s.handover?.to ? { handover: { ...s.handover, to: qualify(p.config.id, s.handover.to) } } : {}),
     ...(s.relieves ? { relieves: { ...s.relieves, id: qualify(p.config.id, s.relieves.id) } } : {}) });
+  /** What the overlay shows of a peer: its live sessions, its frozen ones, or none. */
+  const shows = (p: Peer): 'live' | 'stale' | 'none' => (available(p) ? 'live' : stale(p) ? 'stale' : 'none');
   const stateSessions = (p: Peer): Session[] => (stale(p) ? p.snapshot!.sessions.map(s => ({ ...s, offline: true })) : p.snapshot?.sessions ?? []).filter(s => !isArchived(s));
   /** The fleet's own inventory and status follow every change. Only `publish` tells the overlay the whole picture again:
    *  a (re)connection, a host joining or leaving, another host selected. A session's own update is relayed as itself
    *  (see `receive`): to the overlay a snapshot is a reconnection, which empties the threads and rebuilds the open view. */
   function refresh() {
+    // Mid-`apply` a closing client may speak (« connecting », at once) while `configs` and the peers disagree: the final
+    // `publish` tells it all.
+    if (configuring) return;
     state = configs.map(c => { const p = peers.get(c.id)!; return { ...c, status: p.status, ready: available(p), recents: p.snapshot?.recents ?? [], sessions: stateSessions(p), launcher: p.snapshot?.launcher ?? null, version: p.snapshot?.daemon?.version, daemon: p.snapshot?.daemon, error: p.error }; });
     const next = status(); if (next !== lastStatus) { lastStatus = next; statuses.forEach(fn => fn(next)); }
     listeners.forEach(fn => fn());
@@ -158,7 +163,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       steps: raw.steps.map(s => ({ ...s, ...(s.id ? { id: qualify(p.config.id, s.id) } : {}) })),
       ...(raw.proposal ? { proposal: launchedOn(p, raw.proposal) } : {}), ...(raw.proposals ? { proposals: raw.proposals.map(x => launchedOn(p, x)) } : {}),
       ...(raw.relay ? { relay: { ...raw.relay, id: qualify(p.config.id, raw.relay.id) } } : {}),
-      ...(raw.closes ? { closes: raw.closes.map(c => ({ ...c, id: qualify(p.config.id, c.id) })) } : {}) };
+      ...(raw.closes ? { closes: raw.closes.map(c => ({ ...c, id: qualify(p.config.id, c.id) })) } : {}),
+      ...(raw.actions ? { actions: raw.actions.map(a => ({ ...a, ...(a.session ? { session: qualify(p.config.id, a.session) } : {}) })) } : {}) };
   }
   /** Applies a confirmed list to the peers: no storage write, nothing for the overlay until `publish`. */
   function apply(next: MachineConfig[]) {
@@ -240,6 +246,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     if (m.type === 'session.thread' || m.type === 'session.thread.item' || m.type === 'session.queue.restored') { if (available(p)) emit({ ...m, id: qualify(machine, m.id) }); return; }
     if (m.type === 'session.launched') { if (!closeRows.has(machine)) operations.delete(machine); emit({ ...m, id: qualify(machine, m.id) }); return; }
     if (m.type === 'session.closed') { emit({ ...m, qid: globalQid(machine, m.qid), id: qualify(machine, m.id) }); return; }
+    if (m.type === 'chat.acted') { emit({ ...m, qid: globalQid(machine, m.qid) }); return; }
     if (m.type === 'folder.listing') {
       if (m.requestId !== undefined && listings.has(m.requestId)) { if (listings.get(m.requestId)!.machine === machine) { listings.delete(m.requestId); emit(m); } return; }
       // A daemon before 0.9.1 answers folder.create without its requestId: the listing of the new folder, or of the parent with the refusal.
@@ -278,7 +285,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       if (routing?.qid === m.qid && routing.coordinator === machine && m.type === 'chat.error') { routing = null; fail(m.qid, m.message); return; }
       const qid = globalQid(machine, m.qid), old = turns.get(qid); if (!old) return;
       if (m.type === 'chat.done') {
-        const raw = { ...old, qid: m.qid, answer: m.text, answeredAt: m.at, proposal: m.proposal, proposals: m.proposals, relay: m.relay, closes: m.closes, projectProposal: m.projectProposal, team: m.team, tasks: m.tasks };
+        const raw = { ...old, qid: m.qid, answer: m.text, answeredAt: m.at, proposal: m.proposal, proposals: m.proposals, relay: m.relay, closes: m.closes, projectProposal: m.projectProposal, team: m.team, tasks: m.tasks, actions: m.actions };
         const t = mappedTurn(p, { ...raw, steps: [] }); turns.set(qid, { ...t, steps: old.steps }); history();
       } else if (m.type === 'chat.error') fail(qid, m.message);
       else if (m.type === 'chat.step') { const step = { ...m.step, ...(m.step.id ? { id: qualify(machine, m.step.id) } : {}) }; turns.set(qid, { ...old, steps: [...old.steps, step] }); emit({ ...m, qid, step }); }
@@ -312,6 +319,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     const client = makeClient({ url: machineUrl(c, configs[0]!), token: opts.token });
     const p: Peer = { config: c, client, status: 'connecting', fresh: false, snapshot: null, previews: new Map(), off: [] }; peers.set(c.id, p);
     p.off.push(client.onMessage(m => receive(p, m)), client.onStatus(s => {
+      const shown = shows(p);
       p.status = s;
       if (s !== 'open') {
         p.fresh = false;
@@ -324,7 +332,9 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         if (routing?.coordinator === c.id) { const qid = routing.qid; routing = null; fail(qid, `${c.label} is offline`); }
         for (const [qid, b] of bindings) { const t = turns.get(qid); if (b.machine === c.id && t && !t.answeredAt && !t.error) fail(qid, `${c.label} is offline`); }
       }
-      publish();
+      // A fallen peer retrying (connecting, unreachable, again) changes nothing the overlay shows: a snapshot would drop the
+      // threads on screen and ask them again, the whole thread blinking at each retry.
+      if (shows(p) === shown) refresh(); else publish();
     }));
     if (connected) client.connect();
   }

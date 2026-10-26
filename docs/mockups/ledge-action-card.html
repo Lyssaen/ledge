@@ -1,0 +1,633 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cartes d'action</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Tokens: packages/ui/src/styles/tokens.css (subset). No new colour: the risk uses --danger-text / --destructive. */
+:root,:root[data-theme=light]{
+  --background:oklch(1 0 0);--foreground:oklch(.145 0 0);--card:oklch(1 0 0);--popover:oklch(1 0 0);
+  --primary:oklch(.205 0 0);--primary-foreground:oklch(.985 0 0);
+  --secondary:oklch(.967 .001 286.375);--muted:oklch(.97 0 0);--muted-foreground:oklch(.556 0 0);--accent:oklch(.97 0 0);
+  --border:oklch(.922 0 0);--input:oklch(.922 0 0);--ring:oklch(.708 0 0);
+  --sidebar:oklch(.985 0 0);--sidebar-foreground:oklch(.145 0 0);--sidebar-border:oklch(.922 0 0);--sidebar-accent:oklch(.97 0 0);--sidebar-primary:oklch(.577 .245 27.325);
+  --destructive:oklch(.577 .245 27.325);--destructive-foreground:oklch(.985 0 0);
+  --success:#059669;--warning:#b45309;--info:#2563eb;--danger-text:oklch(.505 .213 27.518);--well:oklch(.97 0 0);
+  --radius-md:8px;
+  --bot-shell-line:#ffffff99;--bot-visor:#22292b;
+  --page:#f4f2ef;--chrome:#fbfaf8;
+  --t-bg:#faf8f6;--t-fg:#2b2522;--t-dim:#6f6560;--t-faint:#a39a95;--t-line:#d9d2cd;--t-violet:#6d4fc4;--t-green:#2f8a55;--t-red:#c4483a;--t-coral:#c9563f;--t-blue:#2f6db5;--t-yellow:#9a6b12;--t-sel:#efeae6;--t-btn:#ece6e1;--t-btn-p:#f6dcd5;--t-btn-d:#f6d6d1;
+}
+:root[data-theme=dark]{
+  --background:oklch(.145 0 0);--foreground:oklch(.985 0 0);--card:oklch(.205 0 0);--popover:oklch(.205 0 0);
+  --primary:oklch(.922 0 0);--primary-foreground:oklch(.205 0 0);
+  --secondary:oklch(.274 .006 286.033);--muted:oklch(.269 0 0);--muted-foreground:oklch(.708 0 0);--accent:oklch(.269 0 0);
+  --border:#ffffff1a;--input:#ffffff26;--ring:oklch(.556 0 0);
+  --sidebar:oklch(.205 0 0);--sidebar-foreground:oklch(.985 0 0);--sidebar-border:#ffffff1a;--sidebar-accent:oklch(.269 0 0);--sidebar-primary:oklch(.637 .237 25.331);
+  --destructive:oklch(.704 .191 22.216);--destructive-foreground:oklch(.985 0 0);
+  --success:#34d399;--warning:#fbbf24;--info:#60a5fa;--danger-text:oklch(.704 .191 22.216);--well:oklch(.145 0 0);
+  --bot-shell-line:#859397;--bot-visor:#172124;
+  --page:#0b0b0c;--chrome:#141414;
+  /* The TUI's palette (packages/ledge/src/tui/theme.ts) and its buttons (ui/SessionCard.tsx). */
+  --t-bg:#1a1817;--t-fg:#e6e0dc;--t-dim:#8f8681;--t-faint:#5f5854;--t-line:#3a3532;--t-violet:#b9a2f0;--t-green:#86cf9d;--t-red:#f0806e;--t-coral:#f07a62;--t-blue:#7fb2ec;--t-yellow:#e6c46a;--t-sel:#2b2725;--t-btn:#2c2926;--t-btn-p:#3a201b;--t-btn-d:#4a1f1b;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--page);color:var(--foreground);font:14px/1.45 'Geist','Segoe UI',system-ui,sans-serif}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+svg.i{width:12px;height:12px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+
+/* ---- The mockup's chrome (as #92) ---- */
+.bar{position:sticky;top:0;z-index:30;display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;padding:10px 20px;background:var(--chrome);border-bottom:1px solid var(--border);font-size:12px}
+.bar .brand{font-weight:600;font-size:14px}
+.bar .brand small{font-weight:400;color:var(--muted-foreground);margin-left:6px;font-size:12px}
+.field{display:flex;align-items:center;gap:6px;color:var(--muted-foreground)}
+.seg{display:inline-flex;padding:2px;border:1px solid var(--border);border-radius:8px;background:var(--background)}
+.seg button{height:24px;padding:0 9px;border-radius:6px;color:var(--muted-foreground);white-space:nowrap}
+.seg button[aria-pressed=true]{background:var(--secondary);color:var(--foreground)}
+.seg button:disabled{opacity:.35;cursor:default}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:24px;padding:22px 20px 40px;align-items:start}
+@media(max-width:1180px){.layout{grid-template-columns:1fr}}
+.cap{display:flex;gap:10px;align-items:baseline;margin:0 0 10px;font-size:11px;color:var(--muted-foreground)}
+.cap b{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--sidebar-primary)}
+.notes{display:flex;flex-direction:column;gap:14px}
+.note{border:1px solid var(--border);border-radius:12px;background:var(--card);padding:14px 16px;font-size:12.5px;line-height:1.55}
+.note h3{margin:0 0 2px;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--sidebar-primary)}
+.note h4{margin:0 0 8px;font-size:14px;font-weight:600}
+.note ul,.note ol{margin:0;padding-left:18px}
+.note li+li{margin-top:5px}
+.note code,.note kbd{font:11px 'Geist Mono',monospace;padding:0 4px;border:1px solid var(--border);border-radius:4px;background:var(--secondary)}
+.note table{width:100%;border-collapse:collapse;font-size:12px}
+.note td{padding:5px 0;border-top:1px solid var(--border);vertical-align:top}
+.note td:first-child{padding-right:10px;white-space:nowrap}
+
+/* ---- A Ledge chat (ChatView): the question, the mascot, the answer, the card ---- */
+.chat{display:flex;flex-direction:column;background:var(--sidebar);color:var(--sidebar-foreground);border:1px solid var(--border);overflow:hidden}
+.chat-head{display:flex;align-items:center;gap:8px;height:52px;padding:0 12px;border-bottom:1px solid var(--sidebar-border)}
+.chat-head .t{display:flex;flex-direction:column;gap:2px}
+.chat-head b{font-size:14px;line-height:18px;font-weight:650}
+.chat-head b i{font-style:normal;color:var(--sidebar-primary)}
+.chat-head small{font-size:11px;line-height:14px;color:var(--muted-foreground)}
+.chat-body{display:flex;flex-direction:column;gap:10px;padding:14px 16px 16px}
+.q{align-self:flex-end;max-width:85%;padding:8px 12px;border-radius:12px 12px 4px 12px;background:var(--secondary);font-size:13px;line-height:19px}
+.turn{display:grid;grid-template-columns:24px 1fr;gap:10px;align-items:start}
+.turn>div{display:flex;flex-direction:column;gap:8px;min-width:0}
+.answer{font-size:13px;line-height:19px;margin:0}
+.chat-foot{margin-top:auto;border-top:1px solid var(--sidebar-border);padding:10px 12px}
+.ask{height:36px;border:1px solid var(--input);border-radius:8px;display:flex;align-items:center;padding:0 10px;color:var(--muted-foreground);font-size:13px}
+
+/* ---- The action card (new, packages/ui/src/chat/ActionCard.tsx) ---- */
+.acard{border:1px solid var(--sidebar-border);border-radius:var(--radius-md);background:var(--well);overflow:hidden;font-size:12.5px;line-height:18px}
+.acard.asking{border-color:color-mix(in srgb,var(--destructive) 55%,var(--sidebar-border))}
+.arow{position:relative;display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:4px 10px;padding:9px 12px;align-items:start}
+.acard.one .arow{grid-template-columns:minmax(0,1fr) auto}
+.arow+.arow{border-top:1px solid var(--sidebar-border)}
+.arow.destructive{background:color-mix(in srgb,var(--destructive) 6%,transparent)}
+.arow.destructive.settled{background:none}
+.arow.dim>*:not(.node){opacity:.55}
+/* The order rail: a numbered node per row, a thread between them (a row is a step: the rest waits on a failure). */
+.node{position:relative;z-index:1;width:20px;height:20px;margin-top:-1px;border-radius:50%;border:1.5px solid var(--input);display:grid;place-items:center;font:500 11px/1 'Geist Mono',monospace;color:var(--muted-foreground);background:var(--well)}
+.arow:not(.last) .node::after,.prow:not(.last) .node::after{content:'';position:absolute;left:50%;top:19px;width:1.5px;height:calc(var(--h,40px));background:color-mix(in srgb,var(--muted-foreground) 45%,transparent);transform:translateX(-50%);z-index:-1}
+.arow.destructive .node{border-color:color-mix(in srgb,var(--destructive) 70%,transparent);color:var(--danger-text)}
+.node.done{background:var(--success);border-color:var(--success);color:var(--background)}
+.node.fail{background:var(--destructive);border-color:var(--destructive);color:var(--destructive-foreground)}
+.node.refused{border-style:solid;border-color:var(--muted-foreground);color:var(--muted-foreground)}
+.node.held{border-style:dashed}
+/* The ring turns on its own layer, so the rail's thread below the node stays put. */
+.node.run{border-color:var(--sidebar-border)}
+.node.run::before{content:'';position:absolute;inset:-1.5px;border-radius:50%;border:1.5px solid transparent;border-top-color:var(--foreground);animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.sum{min-width:0;overflow-wrap:anywhere}
+.sum b{font-weight:600}
+.meta{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin-top:3px;color:var(--muted-foreground);font-size:11.5px;line-height:16px}
+.risk{display:inline-flex;align-items:center;gap:4px}
+.risk.destructive{color:var(--danger-text);font-weight:500}
+.detail{margin-top:5px;color:var(--muted-foreground);overflow-wrap:anywhere}
+.clamp{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.verbatim{margin:6px 0 0;padding:7px 9px;border:1px solid var(--sidebar-border);border-left:2px solid var(--muted-foreground);border-radius:4px;background:var(--sidebar);font:11.5px/17px 'Geist Mono',monospace;white-space:pre-wrap;overflow-wrap:anywhere;max-height:120px;overflow:auto;color:var(--sidebar-foreground)}
+.verbatim .k{display:block;font:500 10.5px/15px 'Geist',sans-serif;color:var(--muted-foreground);margin-bottom:2px}
+.verbatim.faded{opacity:.6}
+.verbatim .cutmark{position:sticky;bottom:-7px;display:block;margin:4px -9px -7px;padding:4px 9px;border-top:1px dashed var(--sidebar-border);background:var(--sidebar);font:500 11px/16px 'Geist',sans-serif;color:var(--muted-foreground)}
+.verbatim .cutmark a{color:var(--sidebar-foreground);text-decoration:underline;text-underline-offset:2px}
+.verbatim.old{text-decoration:line-through;text-decoration-color:color-mix(in srgb,var(--muted-foreground) 60%,transparent);opacity:.6}
+.alert{margin-top:5px;color:var(--danger-text);overflow-wrap:anywhere}
+.quiet{margin-top:5px;color:var(--muted-foreground)}
+.warnline{margin-top:5px;color:var(--warning)}
+.side{display:flex;align-items:center;gap:6px;justify-self:end;white-space:nowrap}
+.side .st{color:var(--muted-foreground);font-size:12px}
+.side .st.ok{color:var(--success)}
+.btn{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:var(--radius-md);border:1px solid var(--input);font-size:12px;font-weight:500;color:var(--sidebar-foreground);white-space:nowrap}
+.btn.primary{height:28px;background:var(--primary);color:var(--primary-foreground);border-color:transparent}
+.btn.danger{color:var(--danger-text);border-color:color-mix(in srgb,var(--destructive) 50%,var(--input))}
+.btn.danger.fill{background:var(--destructive);color:var(--destructive-foreground);border-color:transparent;height:28px}
+.btn.ghost{border-color:transparent;color:var(--muted-foreground)}
+.ignored{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted-foreground)}
+.ignored .btn{height:22px;padding:0 6px}
+.btn:disabled{opacity:.5;cursor:default}
+.btn:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+.btn .spin{width:10px;height:10px;border-radius:50%;border:1.5px solid currentColor;border-right-color:transparent;animation:spin .8s linear infinite}
+.afoot{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 12px;border-top:1px solid var(--sidebar-border)}
+.afoot .hint{color:var(--muted-foreground);font-size:12px;flex:1;min-width:160px}
+.afoot.confirm{flex-direction:column;align-items:stretch;gap:8px;background:color-mix(in srgb,var(--destructive) 5%,transparent)}
+.afoot.confirm strong{font-size:13px}
+.afoot.confirm .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.done-line{color:var(--success)}
+.focus-ring{outline:2px solid var(--ring);outline-offset:2px}
+
+/* ---- Frames ---- */
+.desk{width:640px;max-width:100%;height:640px;border-radius:12px;box-shadow:0 16px 50px rgb(0 0 0/.18)}
+.island{width:420px;max-width:100%;border-radius:22px;box-shadow:0 18px 60px rgb(0 0 0/.35)}
+.island .chat-head{height:48px}
+.island .chat-body{padding:12px 14px 14px}
+.pair{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start}
+.mini-cap{font-size:11px;color:var(--muted-foreground);margin:0 0 6px}
+
+/* ---- The phone (apps/mobile: dark only, its own Tailwind tokens) ---- */
+.phone{--bg:#0c0d0e;--surface:#17191b;--raised:#202326;--fg:#f2f1ed;--muted:#a2a6ab;--attention:#edc479;--ok:#a6d6bf;--info:#a6c8f0;--danger-fg:#f4a5a3;--danger-bg:#301b1d;--danger-btn:#8f3037;--line:#ffffff14;
+  position:relative;width:390px;height:820px;border-radius:44px;border:10px solid #000;background:var(--bg);color:var(--fg);overflow:hidden;font-size:14px;box-shadow:0 20px 60px rgb(0 0 0/.35)}
+.phone .status{height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 26px;font-size:13px;font-weight:600}
+.phone .ph-head{display:flex;align-items:center;gap:10px;padding:6px 18px 12px;border-bottom:1px solid var(--line)}
+.phone .ph-head b{font-size:17px}
+.phone .ph-body{padding:14px 18px;display:flex;flex-direction:column;gap:12px}
+.phone .q{background:var(--raised);font-size:14px;line-height:20px}
+.phone .answer{font-size:14px;line-height:21px;color:#e2e1dc}
+.pcard{display:flex;flex-direction:column;gap:10px;border-radius:12px;border:1px solid var(--line);background:var(--surface);padding:14px}
+.prow{display:grid;grid-template-columns:22px minmax(0,1fr);gap:4px 10px}
+.pcard.one .prow{grid-template-columns:minmax(0,1fr)}
+.prow+.prow{border-top:1px solid var(--line);padding-top:10px}
+.prow .node{background:var(--surface);border-color:#ffffff30;color:var(--muted)}
+.prow.destructive .node{border-color:#f4a5a399;color:var(--danger-fg)}
+.prow .node.done{background:var(--ok);border-color:var(--ok);color:#0c0d0e}
+.prow .node.fail{background:var(--danger-btn);border-color:var(--danger-btn);color:#fff}
+.prow .sum{font-size:13.5px;line-height:19px}
+.prow .meta{color:var(--muted);font-size:12.5px}
+.prow .risk.destructive{color:var(--danger-fg)}
+.prow .detail,.prow .quiet{color:var(--muted);font-size:13px}
+.prow .alert{color:var(--danger-fg);font-size:13px}
+.prow .warnline{color:var(--attention);font-size:13px}
+.prow .verbatim{background:var(--bg);border-color:var(--line);border-left-color:var(--muted);color:var(--fg);font-size:12.5px;line-height:18px}
+.prow .verbatim .k{color:var(--muted)}
+.prow .verbatim .cutmark{background:var(--bg);border-top-color:var(--line);color:var(--muted);font-size:12px}
+.onpc{display:inline-flex;flex:1;min-height:44px;align-items:center;justify-content:center;gap:8px;padding:6px 12px;border-radius:12px;border:1px dashed #ffffff26;font-size:13px;line-height:1.4;font-weight:500;color:var(--muted);text-align:center}
+.prow .act{grid-column:2;display:flex;align-items:center;gap:8px;margin-top:8px}
+.pcard.one .prow .act{grid-column:1}
+.prow .st{font-size:13px;color:var(--muted)}
+.prow .st.ok{color:var(--ok)}
+.pbtn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:44px;padding:0 16px;border-radius:12px;border:1px solid #ffffff26;font-size:13px;font-weight:500;color:var(--fg)}
+.pbtn.primary{background:#fff;color:#000;border-color:transparent;font-weight:600}
+.pbtn.danger{color:var(--danger-fg);border-color:#f4a5a366}
+.pbtn.danger.fill{background:var(--danger-btn);color:#fff;border-color:transparent;font-weight:600}
+.pbtn.full{width:100%}
+.pbtn.ghost{border-color:transparent;color:var(--muted)}
+.prow .act .pbtn,.pfoot .pbtn{flex:none}
+.pfoot .go{display:flex;gap:8px}
+.pfoot .go .primary{flex:1}
+.pbtn:disabled{opacity:.4}
+.pfoot{display:flex;flex-direction:column;gap:8px}
+.pfoot .hint{font-size:12.5px;color:var(--muted)}
+.scrim{position:absolute;inset:0;z-index:5;background:rgb(0 0 0/.55)}
+.sheet{position:absolute;z-index:6;left:0;right:0;bottom:0;max-height:78%;overflow:auto;background:var(--surface);border-top-left-radius:20px;border-top-right-radius:20px;border-top:1px solid var(--line);padding:10px 18px 28px;display:flex;flex-direction:column;gap:12px}
+.sheet .grab{width:36px;height:5px;border-radius:3px;background:#ffffff33;align-self:center}
+.sheet h3{margin:0;font-size:16px}
+.sheet ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.sheet .note-s{font-size:12.5px;color:var(--muted);margin:0}
+
+/* ---- The TUI (Ink): lines of a terminal ---- */
+.term{display:inline-block;background:var(--t-bg);color:var(--t-fg);border-radius:8px;padding:10px 12px;font:13px/18px 'Geist Mono',ui-monospace,monospace;border:1px solid var(--border);box-shadow:0 10px 30px rgb(0 0 0/.18)}
+.term .ln{white-space:pre;height:18px}
+.c-dim{color:var(--t-dim)}.c-faint{color:var(--t-faint)}.c-line{color:var(--t-line)}.c-violet{color:var(--t-violet)}.c-green{color:var(--t-green)}.c-red{color:var(--t-red)}.c-coral{color:var(--t-coral)}.c-blue{color:var(--t-blue)}.c-yellow{color:var(--t-yellow)}.c-fg{color:var(--t-fg)}
+.b{font-weight:600}
+.k-btn{background:var(--t-btn)}.k-btn-p{background:var(--t-btn-p)}.k-btn-d{background:var(--t-btn-d)}.k-sel{background:var(--t-sel)}
+</style>
+</head>
+<body>
+<div class="bar" id="bar"></div>
+<div class="layout"><main id="view"></main><aside class="notes" id="notes"></aside></div>
+<script>
+// ---- State in the URL: #vue=desktop&cas=plan&etat=proposed&theme=dark ----
+const DEF = { vue: 'desktop', cas: 'plan', etat: 'proposed', theme: 'dark' };
+const st = Object.assign({}, DEF, Object.fromEntries(new URLSearchParams(location.hash.slice(1))));
+const save = () => history.replaceState(null, '', '#' + new URLSearchParams(Object.fromEntries(Object.entries(st).filter(([k, v]) => DEF[k] !== v || k === 'vue'))).toString());
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+// The daemon's summary: plain text, bot names in **bold**.
+const md = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+const plain = s => s.replace(/\*\*/g, '');
+
+const ICON = {
+  read: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  reversible: '<path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/>',
+  destructive: '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  x: '<path d="M18 6 6 18M6 6l12 12"/>',
+  play: '<path d="M6 4l14 8-14 8z"/>',
+  chev: '<path d="m15 18-6-6 6-6"/>',
+  lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  ext: '<path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>'
+};
+const ic = (k, s = 12) => `<svg class="i" viewBox="0 0 24 24" style="width:${s}px;height:${s}px">${ICON[k]}</svg>`;
+const bot = (size = 24) => `<svg width="${size}" height="${size * .9}" viewBox="0 0 40 36" aria-hidden="true"><line x1="20" y1="2" x2="20" y2="7" stroke="#e0866d" stroke-width="2"/><circle cx="20" cy="2.5" r="2" fill="#e0866d"/><rect x="4" y="7" width="32" height="26" rx="8" fill="#e0866d"/><rect x="9" y="13" width="22" height="12" rx="5" fill="var(--bot-visor,#172124)"/><rect x="13" y="16" width="4" height="6" rx="1.5" fill="#a9dfc7"/><rect x="23" y="16" width="4" height="6" rx="1.5" fill="#a9dfc7"/></svg>`;
+
+// ---- The words: what a risk is called, before the click ----
+const RISK = { read: 'Lecture', reversible: 'Réversible', destructive: 'Irréversible' };
+const RISK_TIP = { read: 'rien ne change', reversible: 'Ledge peut le défaire', destructive: 'Ledge ne peut pas le défaire' };
+
+// A request past DETAIL_MAX: what the card receives is its start, ended by « … ».
+const CUT_TEXT = [
+  "node --input-type=module -e '",
+  'import { writeFileSync, mkdirSync } from "node:fs";',
+  'import { ACTION_IDS, actionById, ACTION_ERROR_CODES } from "./packages/protocol/dist/index.js";',
+  'mkdirSync("packages/protocol/test/fixtures/actions", { recursive: true });',
+  'for (const id of ACTION_IDS) {',
+  '  const def = actionById(id);',
+  '  const row = { id, risk: typeof def.risk === "function" ? "varies" : def.risk, max: def.max, phone: def.phone ?? null, cli: def.cli ?? null };',
+  '  writeFileSync(`packages/protocol/test/fixtures/actions/${id}.json`, JSON.stringify({ row, example: def.example }, null, 2) + "\\n");',
+  '}',
+  'writeFileSync("packages/protocol/test/fixtures/actions/codes.json", JSON.stringify(ACTION_ERROR_CODES, null, 2) + "\\n");',
+  "' && rm -rf packages/protocol/test/fixtures/actions.old && git add packages/protocol/test/fixtures/actions && pnpm --filter @ledge/protocol test -- --run --update…"
+].join('\n');
+
+// ---- The cases: what Ledge was asked, what it answered, the rows the daemon resolved ----
+const CASES = {
+  plan: {
+    label: 'Un plan (3 lignes)',
+    q: 'Passe Nova sur Opus, archive Otto et dissous ledge-roles : on a fini pour aujourd’hui.',
+    a: '**Nova** travaille encore sur #92 : le modèle change à son prochain tour. **Otto** est inactif depuis 2 h. Dissoudre **ledge-roles** renvoie ses 6 sessions à la table commune.',
+    rows: [
+      { action: 'session.model', risk: 'reversible', sum: 'Passer **Nova** sur Opus 5.5, effort élevé', btn: 'Changer', tui: 'Passer Nova sur Opus 5.5, effort élevé' },
+      { action: 'session.archive', risk: 'reversible', sum: 'Archiver **Otto**', btn: 'Archiver', tui: 'Archiver Otto' },
+      { action: 'team.dissolve', risk: 'destructive', sum: 'Dissoudre l’équipe **ledge-roles**', btn: 'Dissoudre', tui: 'Dissoudre l’équipe ledge-roles',
+        detail: 'Ses 6 sessions retournent à la table commune, ouvertes ou archivées comme elles sont. L’équipe ne pourra plus être reprise.' }
+    ],
+    // Row states per step of the story: p proposed, run, done, fail, refused, held (not applied: the plan stopped before it).
+    // A permission adds denied (« Refuser » was sent: the session got the no) and stale.
+    states: { ignored: ['p', 'p', 'p'], proposed: ['p', 'p', 'p'], confirm: ['p', 'p', 'p'], running: ['done', 'run', 'p'], failed: ['done', 'fail', 'held'], refused: ['done', 'refused', 'held'], done: ['done', 'done', 'done'] },
+    why: { fail: 'Otto est sur la machine Atlas, hors ligne depuis 10:12.', refused: 'Otto a été fermé entre-temps : il n’y a plus rien à archiver.' }
+  },
+  permission: {
+    label: 'Une permission',
+    q: 'Accepte la demande de Nova.',
+    a: '**Nova** attend ta réponse depuis 4 min, dans ledge sur feat/task-handoff. Voici sa demande telle quelle :',
+    rows: [
+      { action: 'session.decide', risk: 'destructive', sum: 'Accepter la demande de **Nova**', btn: 'Accepter', deny: 'Refuser', tui: 'Accepter la demande de Nova', denied: 'Refuser la demande de **Nova**',
+        request: { kind: 'Bash · reconstruire le daemon', text: 'rm -rf packages/ledge/dist && pnpm --filter @ledge/ledge build' },
+        newRequest: { kind: 'Bash', text: 'git push --force origin feat/task-handoff' },
+        // Past 4 000 characters (DETAIL_MAX) on the PC, 2 048 (TOOL_TEXT_MAX) on the phone, the daemon cuts it (detailCut).
+        cutRequest: { kind: 'Bash · régénérer les fixtures du protocole', text: CUT_TEXT } }
+    ],
+    states: { proposed: ['p'], confirm: ['p'], running: ['run'], failed: ['fail'], refused: ['refused'], done: ['done'], denied: ['denied'], stale: ['stale'], cut: ['cut'], ignored: ['p'] },
+    why: { fail: 'Nova s’est arrêtée avant de recevoir la réponse.', refused: 'la machine Atlas est hors ligne.' }
+  },
+  one: {
+    label: 'Une ligne réversible',
+    q: 'Passe Otto en effort bas, il ne fait que relire.',
+    a: '**Otto** tourne sur Sonnet 5.5, effort moyen. Je garde le modèle et baisse l’effort.',
+    rows: [{ action: 'session.model', risk: 'reversible', sum: 'Passer **Otto** en effort bas, Sonnet 5.5 inchangé', btn: 'Changer', tui: 'Passer Otto en effort bas, Sonnet 5.5 inchangé' }],
+    states: { proposed: ['p'], confirm: ['p'], running: ['run'], failed: ['fail'], refused: ['refused'], done: ['done'], ignored: ['p'] },
+    why: { fail: 'Otto est sur la machine Atlas, hors ligne depuis 10:12.', refused: 'Otto a été fermé entre-temps.' }
+  }
+};
+const ETATS = [['proposed', 'Proposée'], ['confirm', 'Confirmation'], ['running', 'En cours'], ['failed', 'Échouée, suite arrêtée'], ['refused', 'Refusée'], ['done', 'Appliquée'], ['denied', 'Refus envoyé'], ['stale', 'La demande a changé'], ['cut', 'Demande coupée'], ['ignored', 'Ignorée']];
+const AT = '10:42';
+
+function model() {
+  const c = CASES[st.cas];
+  if (!c.states[st.etat]) st.etat = 'proposed';
+  const states = c.states[st.etat];
+  const many = c.rows.length > 1;
+  const stopAt = states.findIndex(s => s === 'fail' || s === 'refused');
+  const open = c.rows.map((r, i) => i).filter(i => !['done', 'run', 'denied', 'stale'].includes(states[i]));
+  const destructive = open.filter(i => c.rows[i].risk === 'destructive');
+  // The plan's button: all of it, from the failed step again, or past a refused one (its target is gone: retrying it
+  // would only be refused again).
+  const all = stopAt < 0 ? `Tout appliquer (${open.length})`
+    : states[stopAt] === 'refused' ? `Continuer sans l’étape ${stopAt + 1} (${open.length - 1})` : `Reprendre à l’étape ${stopAt + 1} (${open.length})`;
+  return { c, states, many, stopAt, open, destructive, all, asking: st.etat === 'confirm' && (destructive.length > 0) };
+}
+
+// ---- Desktop and overlay: one component, ActionCard ----
+// « Ignorer » hides the card on every device and runs nothing; Ledge records it and doesn't offer the card again.
+// A quiet line keeps its trace in the chat (like the phone's RelayCard).
+const IGNORE = '<button class="btn ghost" type="button">Ignorer</button>';
+function nodeOf(s, i) {
+  if (s === 'done') return `<span class="node done" aria-label="Étape ${i + 1}, appliquée">${ic('check', 11)}</span>`;
+  if (s === 'fail') return `<span class="node fail" aria-label="Étape ${i + 1}, échouée">${ic('x', 11)}</span>`;
+  if (s === 'refused') return `<span class="node refused" aria-label="Étape ${i + 1}, refusée">${ic('x', 10)}</span>`;
+  if (s === 'run') return `<span class="node run" aria-label="Étape ${i + 1}, en cours"><span>${i + 1}</span></span>`;
+  return `<span class="node${s === 'held' ? ' held' : ''}" aria-label="Étape ${i + 1}">${i + 1}</span>`;
+}
+function riskChip(risk) { return `<span class="risk ${risk}" title="${RISK_TIP[risk]}">${ic(risk, 11)}${RISK[risk]}</span>`; }
+// A cut request: its start, then the mark, always in view at the foot of the quote, with the way to the rest.
+function cutRequest(r, phone) {
+  const q = r.cutRequest;
+  const mark = phone ? 'Demande coupée : la suite est sur le PC.' : `… (tronqué, <a href="#">voir la session</a>)`;
+  return `<pre class="verbatim"><span class="k">${esc(q.kind)}</span>${esc(q.text)}<span class="cutmark">${mark}</span></pre>`;
+}
+function request(r, old, faded) {
+  const q = old ? r.request : r.request;
+  return `<pre class="verbatim${old ? ' old' : ''}${faded ? ' faded' : ''}"><span class="k">${esc(q.kind)}</span>${esc(q.text)}</pre>`;
+}
+function rowHTML(m, i, narrow) {
+  const { c, states, many, stopAt } = m, r = c.rows[i], s = states[i];
+  const asking = m.asking;
+  const dots = r.risk === 'destructive' ? '…' : '';
+  let side = '';
+  if (asking) side = s === 'done' ? `<span class="st ok">${ic('check', 11)} déjà faite</span>` : '';
+  else if (s === 'p' || s === 'held') side = `${!many && s === 'p' ? IGNORE : ''}${r.deny ? `<button class="btn" type="button">${r.deny}</button>` : ''}<button class="btn${r.risk === 'destructive' ? ' danger' : ''}" type="button">${r.btn}${dots}</button>`;
+  else if (s === 'run') side = `<button class="btn" type="button" disabled><span class="spin"></span>En cours…</button>`;
+  else if (s === 'done') side = `<span class="st ok">${ic('check', 11)} Appliquée · ${AT}</span>`;
+  else if (s === 'fail') side = `${many ? '' : IGNORE}<button class="btn" type="button">Réessayer</button>`;
+  else if (s === 'refused') side = `<span class="st">Refusée</span>`;
+  // Neutral, not green: the no reached the session, nothing was applied.
+  else if (s === 'denied') side = `<span class="st">${ic('check', 11)} Refus envoyé · ${AT}</span>`;
+  else if (s === 'stale') side = `<button class="btn" type="button">${ic('ext', 11)}Ouvrir Nova</button>`;
+  // Cut: never accepted from the card, since it was not read whole; refused from here, accepted in the session.
+  else if (s === 'cut') side = `${IGNORE}<button class="btn" type="button">${r.deny}</button><button class="btn" type="button">${ic('ext', 11)}Ouvrir Nova</button>`;
+  // Once the no is sent, the row says what was done, without the risk of the yes it did not run.
+  let body = `<div class="sum">${md(s === 'denied' ? r.denied : r.sum)}</div>`;
+  if (s !== 'denied') body += `<div class="meta">${riskChip(r.risk)}${r.risk === 'destructive' && s === 'p' && !asking ? '<span>· je te redemanderai</span>' : ''}</div>`;
+  if (r.detail) body += `<div class="detail${asking || s === 'done' ? '' : ' clamp'}">${esc(r.detail)}</div>`;
+  if (r.request) body += s === 'cut' ? cutRequest(r) : s === 'stale' ? request(r, true) : request(r, false, s === 'denied');
+  if (s === 'fail') body += `<div class="alert" role="alert">Échec : ${esc(c.why.fail)}</div>`;
+  if (s === 'refused') body += `<div class="alert" role="alert">Refusée : ${esc(c.why.refused)} Rien n’a été envoyé.</div>`;
+  if (s === 'held') body += `<div class="quiet">Pas appliquée : le plan s’est arrêté à l’étape ${stopAt + 1}.</div>`;
+  if (s === 'stale') body += `<div class="warnline">La demande de Nova a changé depuis ma réponse : rien n’a été envoyé. Ouvre Nova pour voir la nouvelle, ou redemande-moi.</div>`;
+  if (s === 'denied') body += `<div class="quiet">Nova a reçu ton refus : la commande n’a pas été lancée.</div>`;
+  if (s === 'cut') body += `<div class="quiet">Trop longue pour être citée en entier : lis-la dans Nova pour l’accepter. Tu peux la refuser d’ici.</div>`;
+  const dim = asking && s === 'done';
+  return `<div class="arow ${r.risk}${['done', 'stale', 'refused', 'denied'].includes(s) ? ' settled' : ''}${dim ? ' dim' : ''}${i === c.rows.length - 1 ? ' last' : ''}">${many ? nodeOf(s, i) : ''}<div class="body">${body}</div>${narrow && side ? `<div class="side" style="grid-column:${many ? 2 : 1};justify-self:start">${side}</div>` : `<div class="side">${side}</div>`}</div>`;
+}
+function footHTML(m) {
+  const { c, states, many, open, destructive, stopAt } = m;
+  if (m.asking) {
+    const n = open.length, d = destructive.length;
+    const title = !many ? `${plain(c.rows[0].sum)} ?` : `Appliquer ${n === c.rows.length ? 'ces' : 'les'} ${n} actions, dans l’ordre ?`;
+    const go = !many ? c.rows[0].btn : `Appliquer les ${n}`;
+    const why = !many ? 'Ledge ne pourra pas la défaire une fois envoyée.' : `${d === 1 ? 'Une est irréversible' : `${d} sont irréversibles`} : relis ${d === 1 ? 'son' : 'leur'} détail ci-dessus. Si une étape échoue, les suivantes ne sont pas appliquées.`;
+    return `<div class="afoot confirm" role="group" aria-label="Confirmation"><strong>${esc(title)}</strong><span class="hint" style="min-width:0">${why}</span>
+      <div class="row"><button class="btn focus-ring" type="button">Annuler</button><button class="btn danger fill" type="button">${go}</button></div></div>`;
+  }
+  if (!many) return '';
+  if (states.every(s => s === 'done')) return `<div class="afoot"><span class="done-line">${ic('check', 12)} Plan appliqué à ${AT}</span></div>`;
+  if (states.includes('run')) return `<div class="afoot"><button class="btn primary" type="button" disabled><span class="spin"></span>Étape ${states.indexOf('run') + 1} sur ${c.rows.length}…</button><span class="hint">dans l’ordre, s’arrête au premier échec</span></div>`;
+  const left = open.length, d = destructive.length ? '…' : '';
+  if (stopAt >= 0) return `<div class="afoot"><button class="btn primary" type="button">${ic('play', 10)}${m.all}${d}</button><span class="hint">les étapes faites ne sont pas rejouées</span>${IGNORE}</div>`;
+  return `<div class="afoot"><button class="btn primary" type="button">${ic('play', 10)}Tout appliquer (${left})${d}</button><span class="hint">dans l’ordre, s’arrête au premier échec${destructive.length ? ` · ${destructive.length} irréversible, je te redemanderai` : ''}</span>${IGNORE}</div>`;
+}
+function card(m, narrow) {
+  if (st.etat === 'ignored') return `<div class="ignored">${ic('x', 11)}${m.many ? `Plan de ${m.c.rows.length} actions ignoré` : 'Carte ignorée'} à ${AT} · rien n’a été envoyé<button class="btn ghost" type="button">Revoir</button></div>`;
+  return `<section class="acard${m.many ? '' : ' one'}${m.asking ? ' asking' : ''}" aria-label="${m.many ? `Plan de ${m.c.rows.length} actions` : 'Action proposée'}">${m.c.rows.map((_, i) => rowHTML(m, i, narrow)).join('')}${footHTML(m)}</section>`;
+}
+function chatTurn(m, narrow) {
+  return `<span class="q">${esc(m.c.q)}</span>
+    <div class="turn">${bot(24)}<div><p class="answer">${md(m.c.a)}</p>${card(m, narrow)}</div></div>`;
+}
+function desktop() {
+  const m = model();
+  return `<p class="cap"><b>Visé</b> Desktop · panneau Ledge (LedgeHome, ChatView ancré) · ${esc(m.c.label)} · ${label()}</p>
+    <div class="chat desk"><div class="chat-head">${bot(22)}<div class="t"><b>Ledge<i>.</i></b><small>voit 9 sessions, 2 dépôts</small></div></div>
+    <div class="chat-body">${chatTurn(m, false)}</div>
+    <div class="chat-foot"><div class="ask">Demande à Ledge…</div></div></div>`;
+}
+function overlay() {
+  const m = model();
+  return `<p class="cap"><b>Visé</b> Overlay · le chat de l’île, 420 px · ${esc(m.c.label)} · ${label()}</p>
+    <div class="chat island"><div class="chat-head"><button class="btn ghost" type="button" aria-label="Retour" style="padding:0 4px">${ic('chev', 14)}</button>${bot(20)}<div class="t"><b>Ledge<i>.</i></b><small>voit 9 sessions, 2 dépôts</small></div></div>
+    <div class="chat-body">${chatTurn(m, true)}</div></div>`;
+}
+
+// ---- The phone: its own card (apps/mobile/src/ui/chat), a sheet for the confirmation ----
+function phone() {
+  const m = model(), { c, states, many, open, destructive, stopAt } = m;
+  const rows = c.rows.map((r, i) => {
+    const s = states[i];
+    let act = '';
+    if (s === 'p' || s === 'held') act = `${!many && s === 'p' ? '<button class="pbtn ghost" type="button">Ignorer</button>' : ''}${r.deny ? `<button class="pbtn" type="button">${r.deny}</button>` : ''}<button class="pbtn${r.risk === 'destructive' ? ' danger' : ''}" type="button">${r.btn}${r.risk === 'destructive' ? '…' : ''}</button>`;
+    else if (s === 'run') act = `<span class="st">En cours…</span>`;
+    else if (s === 'done') act = `<span class="st ok">✓ Appliquée · ${AT}</span>`;
+    else if (s === 'fail') act = `${many ? '' : '<button class="pbtn ghost" type="button">Ignorer</button>'}<button class="pbtn" type="button">Réessayer</button>`;
+    else if (s === 'refused') act = `<span class="st">Refusée</span>`;
+    else if (s === 'denied') act = `<span class="st">✓ Refus envoyé · ${AT}</span>`;
+    else if (s === 'stale') act = `<a class="pbtn" style="text-decoration:none">Ouvrir Nova</a>`;
+    // The phone's own « À accepter sur le PC » (RiskConfirm.tsx OnPc): a dashed place, not a button.
+    else if (s === 'cut') act = `<button class="pbtn ghost" type="button">Ignorer</button><button class="pbtn" type="button">${r.deny}</button><p class="onpc" style="margin:0"><svg class="i" viewBox="0 0 24 24" style="width:16px;height:16px;stroke-width:1.6"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>À accepter sur le PC</p>`;
+    let body = s === 'denied' ? `<div class="sum">${md(r.denied)}</div>` : `<div class="sum">${md(r.sum)}</div><div class="meta">${riskChip(r.risk)}</div>`;
+    if (r.detail) body += `<div class="detail${s === 'done' ? '' : ' clamp'}">${esc(r.detail)}</div>`;
+    if (r.request) body += s === 'cut' ? cutRequest(r, true) : request(r, s === 'stale', s === 'denied');
+    if (s === 'fail') body += `<div class="alert">Échec : ${esc(c.why.fail)}</div>`;
+    if (s === 'refused') body += `<div class="alert">Refusée : ${esc(c.why.refused)} Rien n’a été envoyé.</div>`;
+    if (s === 'held') body += `<div class="quiet">Pas appliquée : le plan s’est arrêté à l’étape ${stopAt + 1}.</div>`;
+    if (s === 'stale') body += `<div class="warnline">La demande a changé depuis : rien n’a été envoyé.</div>`;
+    if (s === 'denied') body += `<div class="quiet">Nova a reçu ton refus : la commande n’a pas été lancée.</div>`;
+    if (s === 'cut') body += `<div class="quiet">Demande trop longue pour le téléphone : elle s’accepte sur le PC. Vous pouvez la refuser d’ici.</div>`;
+    return `<div class="prow ${r.risk}${i === c.rows.length - 1 ? ' last' : ''}">${many ? nodeOf(s, i) : ''}<div>${body}</div><div class="act">${act}</div></div>`;
+  }).join('');
+  let foot = '';
+  if (many && states.every(s => s === 'done')) foot = `<div class="pfoot"><span class="st ok" style="color:var(--ok);font-size:13px">✓ Plan appliqué à ${AT}</span></div>`;
+  else if (many && states.includes('run')) foot = `<div class="pfoot"><button class="pbtn primary full" type="button" disabled>Étape ${states.indexOf('run') + 1} sur ${c.rows.length}…</button></div>`;
+  else if (many) foot = `<div class="pfoot"><div class="go"><button class="pbtn ghost" type="button">Ignorer</button><button class="pbtn primary" type="button">${m.all}${destructive.length ? '…' : ''}</button></div><span class="hint">Dans l’ordre ; s’arrête au premier échec.</span></div>`;
+  const sheetRows = open.map((i, k) => {
+    const r = c.rows[i];
+    return `<li class="prow ${r.risk}${k === open.length - 1 ? ' last' : ''}" style="border:0;padding:0${many ? '' : ';grid-template-columns:minmax(0,1fr)'}">${many ? nodeOf('p', i) : ''}<div><div class="sum">${md(r.sum)}</div><div class="meta">${riskChip(r.risk)}</div>${r.detail ? `<div class="detail">${esc(r.detail)}</div>` : ''}${r.request ? request(r) : ''}</div></li>`;
+  }).join('');
+  const check = destructive.length > 0;  // a row with a phone check (team.dissolve: act, session.decide: decide)
+  const sheet = m.asking ? `<div class="scrim"></div><div class="sheet" role="dialog" aria-modal="true" aria-label="Confirmation"><span class="grab"></span>
+      <h3>${many ? `Appliquer ces ${open.length} actions, dans l’ordre ?` : `${esc(plain(c.rows[0].sum))} ?`}</h3>
+      <ol>${sheetRows}</ol>
+      <p class="note-s">${many ? 'Si une étape échoue, les suivantes ne sont pas appliquées. ' : ''}${check ? 'Une vérification sur votre appareil sera demandée. Elle confirme votre identité, pas la sûreté de la commande.' : ''}</p>
+      <button class="pbtn danger fill full" type="button">${ic('lock', 14)}Autoriser avec Face ID</button>
+      <button class="pbtn full" type="button">Annuler</button></div>` : '';
+  return `<p class="cap"><b>Visé</b> Téléphone · sombre seulement · ${esc(c.label)} · ${label()}</p>
+    <div class="phone"><div class="status"><span>10:41</span><span>●●● ▮</span></div>
+      <div class="ph-head"><span style="color:var(--muted)">${ic('chev', 18)}</span>${bot(22)}<b>Ledge</b></div>
+      <div class="ph-body"><span class="q">${esc(c.q)}</span><p class="answer">${md(c.a)}</p>
+        ${st.etat === 'ignored' ? `<p class="st" style="margin:0;font-size:13px;color:var(--muted)">${many ? `Plan de ${c.rows.length} actions ignoré` : 'Carte ignorée'} à ${AT} · rien n’a été envoyé · <u>Revoir</u></p>` : `<section class="pcard${many ? '' : ' one'}" aria-label="${many ? 'Plan' : 'Action proposée'}">${rows}${foot}</section>`}</div>${sheet}</div>`;
+}
+
+// ---- The TUI: the Ask screen, the card as a TitledBox ----
+const W = 104;
+const len = segs => segs.reduce((n, [t]) => n + [...t].length, 0);
+const ln = segs => `<div class="ln">${segs.map(([t, cl]) => cl ? `<span class="${cl}">${esc(t)}</span>` : esc(t)).join('')}</div>`;
+function wrapText(text, width) {
+  const out = []; let line = '';
+  for (const w of text.split(' ')) { if ([...(line + ' ' + w)].length > width && line) { out.push(line); line = w; } else line = line ? line + ' ' + w : w; }
+  if (line) out.push(line); return out;
+}
+// The box's lines: round as every TitledBox, double for the confirmation (Ink's borderStyle 'double'), so it reads
+// as another state even where red and coral are close.
+const G = border => /dbl/.test(border) ? { v: '║', h: '═', tl: '╔', tr: '╗', bl: '╚', br: '╝' } : { v: '│', h: '─', tl: '╭', tr: '╮', bl: '╰', br: '╯' };
+// A row inside a box: │ + content padded to the inner width + │.
+function inBox(segs, border, sel) {
+  const pad = W - 4 - len(segs), g = G(border);
+  return ln([[`${g.v} `, border], ...segs.map(([t, c]) => [t, sel ? `${c || ''} k-sel` : c]), [' '.repeat(Math.max(0, pad)), sel ? 'k-sel' : ''], [` ${g.v}`, border]]);
+}
+function boxTop(title, border, tcol) { const t = ` ${title.toUpperCase()} `, g = G(border); return ln([[g.tl + g.h, border], [t, tcol], [g.h.repeat(Math.max(0, W - 3 - [...t].length)) + g.tr, border]]); }
+const bottom = border => { const g = G(border); return ln([[g.bl + g.h.repeat(W - 2) + g.br, border]]); };
+const btn = (label, k, kind = '') => [[` ${label} `, `c-fg k-btn${kind}`], [`${k} `, `c-dim k-btn${kind}`]];
+const right = (segs, tail) => { const gap = W - 4 - len(segs) - len(tail); return [...segs, [' '.repeat(Math.max(1, gap))], ...tail]; };
+function tui() {
+  const m = model(), { c, states, many, open, destructive, stopAt } = m;
+  const L = [];
+  L.push(ln([[' ledge ', 'c-coral b'], ['› ', 'c-faint'], ['Demander', 'c-fg']]));
+  // The conversation.
+  const conv = [];
+  conv.push([['› ', 'c-coral'], [c.q, 'c-fg b']]);
+  conv.push([[`  vous · 10:41`, 'c-faint']]);
+  conv.push([[`  lu : les sessions · teams.md`, 'c-faint']]);
+  conv.push([['']]);
+  for (const l of wrapText(plain(c.a), W - 8)) conv.push([['  '], [l, 'c-fg']]);
+  if (st.etat === 'ignored') { conv.push([['']]); conv.push([[`  · ${many ? `plan de ${c.rows.length} actions ignoré` : 'carte ignorée'} à ${AT}, rien n’a été envoyé · revoir : `, 'c-faint'], ['ctrl+r', 'c-dim']]); }
+  if (st.etat === 'denied') { conv.push([['']]); conv.push([['  ✓ ', 'c-dim'], [`Refus envoyé à Nova · ${AT} : la commande n’a pas été lancée`, 'c-fg']]); conv.push([[`    ${c.rows[0].request.text}`, 'c-faint']]); }
+  if (states.every(s => s === 'done')) { conv.push([['']]); conv.push([[`  ✓ ${many ? `Plan appliqué à ${AT} : Nova sur Opus 5.5 · Otto archivé · ledge-roles dissoute` : `${plain(c.rows[0].sum)} · ${AT}`}`, 'c-green']]); }
+  L.push(boxTop('Ledge · Opérateur · voit 9 sessions, 1 machine', 'c-line', 'c-dim'));
+  for (const s of conv) L.push(inBox(s, 'c-line'));
+  for (let i = conv.length; i < 9; i++) L.push(inBox([['']], 'c-line'));
+  L.push(bottom('c-line'));
+  // The card, while something is left to do.
+  const settled = states.every(s => s === 'done') || ['ignored', 'denied'].includes(st.etat);
+  if (!settled) {
+    const asking = m.asking;
+    const border = asking ? 'c-red dbl' : 'c-coral';
+    const title = asking ? (many ? `Confirmer · ${open.length} actions, ${destructive.length} irréversible` : `Confirmer · ${plain(c.rows[0].sum)}`) : st.cas === 'permission' ? 'Permission · Nova' : many ? `Plan · ${c.rows.length} actions` : 'Action proposée';
+    L.push(boxTop(title, border, asking ? 'c-red b' : 'c-coral'));
+    const focusRow = c.rows.findIndex((_, i) => states[i] === 'p' || states[i] === 'held' || states[i] === 'fail');
+    c.rows.forEach((r, i) => {
+      const s = states[i];
+      if (asking && s === 'done') { L.push(inBox([[`  ✓ ${r.tui}`, 'c-faint'], ['   déjà faite', 'c-faint']], border)); return; }
+      const glyph = { p: '○', held: '·', run: '◐', done: '✓', fail: '✕', refused: '✕', stale: '!', cut: '○' }[s];
+      const gcol = { p: 'c-dim', held: 'c-faint', run: 'c-blue', done: 'c-green', fail: 'c-red', refused: 'c-dim', stale: 'c-yellow', cut: 'c-dim' }[s];
+      const sel = !asking && many && i === focusRow;
+      const lead = many ? [[sel ? '▸ ' : '  ', 'c-coral'], [`${i + 1} `, 'c-dim'], [`${glyph} `, gcol]] : [[`${glyph} `, gcol]];
+      const riskTail = [[r.risk === 'destructive' ? 'irréversible' : 'réversible', r.risk === 'destructive' ? 'c-red b' : 'c-faint']];
+      const stateTail = s === 'done' ? [[`appliquée ${AT}  `, 'c-green']] : s === 'run' ? [['en cours  ', 'c-blue']] : s === 'held' ? [['pas appliquée  ', 'c-faint']] : s === 'refused' ? [['refusée  ', 'c-dim']] : s === 'cut' ? [['coupée  ', 'c-yellow']] : [];
+      L.push(inBox(right([...lead, [r.tui, s === 'held' ? 'c-dim' : 'c-fg']], [...stateTail, ...riskTail]), border, sel));
+      const ind = many ? '      ' : '  ';
+      // Cut: its first lines, then the mark; the rest is read in the session (o).
+      if (s === 'cut') {
+        L.push(inBox([[ind], [r.cutRequest.kind, 'c-faint']], border));
+        for (const l of r.cutRequest.text.split('\n').flatMap(x => wrapText(x, W - 12)).slice(0, 6)) L.push(inBox([[ind], ['│ ', 'c-line'], [l, 'c-fg']], border));
+        L.push(inBox([[ind], ['│ ', 'c-line'], ['… (tronqué, voir la session : o)', 'c-yellow']], border));
+        for (const l of wrapText('Trop longue pour être citée en entier : lis-la dans Nova pour l’accepter. Tu peux la refuser d’ici.', W - 10)) L.push(inBox([[ind], [l, 'c-dim']], border));
+      } else if (r.request) {
+        L.push(inBox([[ind], [r.request.kind, 'c-faint']], border));
+        const q = s === 'stale' ? r.request : r.request;
+        for (const l of wrapText(q.text, W - 12)) L.push(inBox([[ind], ['│ ', 'c-line'], [l, s === 'stale' ? 'c-faint' : 'c-fg']], border));
+      }
+      if (r.detail && (asking || sel || r.risk === 'destructive')) for (const l of wrapText(r.detail, W - 12)) L.push(inBox([[ind], [l, 'c-faint']], border));
+      if (s === 'fail') L.push(inBox([[ind], [`Échec : ${c.why.fail}`, 'c-red']], border));
+      if (s === 'refused') L.push(inBox([[ind], [`Refusée : ${c.why.refused} Rien n’a été envoyé.`, 'c-red']], border));
+      if (s === 'stale') L.push(inBox([[ind], ['La demande de Nova a changé depuis ma réponse : rien n’a été envoyé.', 'c-yellow']], border));
+    });
+    let keys;
+    if (asking) {
+      L.push(inBox([['']], border));
+      if (many) L.push(inBox([['  Dans l’ordre ; si une étape échoue, les suivantes ne sont pas appliquées.', 'c-dim']], border));
+      keys = [...btn(many ? `Appliquer les ${open.length}` : c.rows[0].btn, 'y', '-d'), ['  '], ...btn('Annuler', 'esc'), ['   ↵ ne confirme pas : tape y', 'c-faint']];
+    } else if (states.includes('run')) keys = [['◐ ', 'c-blue'], [many ? `étape ${states.indexOf('run') + 1} sur ${c.rows.length}…` : 'en cours…', 'c-dim']];
+    else if (st.etat === 'stale') keys = [...btn('Ouvrir Nova', 'o'), ['   redemande à Ledge pour la nouvelle demande', 'c-faint']];
+    else if (st.etat === 'cut') keys = [...btn('Refuser', 'n'), ['  '], ...btn('Ouvrir Nova', 'o'), ['  '], ...btn('Ignorer', 'esc'), ['   ↵ n’accepte pas : lis-la d’abord', 'c-faint']];
+    else {
+      const r = c.rows[focusRow] ?? c.rows[0];
+      const rowBtn = btn(states[focusRow] === 'fail' ? 'Réessayer' : `${r.btn}${r.risk === 'destructive' ? '…' : ''}`, '↵', r.risk === 'destructive' ? '-d' : '-p');
+      const deny = r.deny && states[focusRow] === 'p' ? [['  '], ...btn(r.deny, 'n')] : [];
+      keys = many ? [...rowBtn, ['  '], ...btn(`${m.all}${destructive.length ? '…' : ''}`, 'a'), ['  '], ...btn('Ignorer', 'esc'), ['   ↑↓ choisir', 'c-faint']]
+        : [...rowBtn, ...deny, ['  '], ...btn('Ignorer', 'esc'), ['   Ledge ne fait rien sans toi.', 'c-faint']];
+    }
+    L.push(inBox(keys, border));
+    L.push(bottom(border));
+  }
+  L.push(boxTop('Question', 'c-line', 'c-dim'));
+  L.push(inBox([['› ', 'c-coral'], ['', 'c-fg']], 'c-line'));
+  L.push(bottom('c-line'));
+  const keybar = m.asking ? [['y', 'c-fg'], [' appliquer   ', 'c-dim'], ['esc', 'c-fg'], [' annuler', 'c-dim']]
+    : st.etat === 'cut' ? [['n', 'c-fg'], [' refuser   ', 'c-dim'], ['o', 'c-fg'], [' ouvrir Nova   ', 'c-dim'], ['esc', 'c-fg'], [' ignorer   ', 'c-dim'], ['tab', 'c-fg'], [' carte suivante   ', 'c-dim'], ['ctrl+n', 'c-fg'], [' nouvelle', 'c-dim']]
+    : settled || st.etat === 'stale' ? [['tab', 'c-fg'], [' carte suivante   ', 'c-dim'], ...(st.etat === 'ignored' ? [['ctrl+r', 'c-fg'], [' revoir   ', 'c-dim']] : []), ['ctrl+n', 'c-fg'], [' nouvelle   ', 'c-dim'], ['esc', 'c-fg'], [' retour', 'c-dim']]
+    : [['↵', 'c-fg'], [many ? ' appliquer la ligne   ' : ' appliquer   ', 'c-dim'], ...(many ? [['a', 'c-fg'], [' tout appliquer   ', 'c-dim'], ['↑↓', 'c-fg'], [' ligne   ', 'c-dim']] : []), ...(st.cas === 'permission' ? [['n', 'c-fg'], [' refuser   ', 'c-dim']] : []), ['esc', 'c-fg'], [' ignorer   ', 'c-dim'], ['tab', 'c-fg'], [' carte suivante   ', 'c-dim'], ['ctrl+n', 'c-fg'], [' nouvelle', 'c-dim']];
+  L.push(ln([[' '], ...keybar]));
+  return `<p class="cap"><b>Visé</b> TUI · l’écran Demander, ${W} colonnes · ${esc(c.label)} · ${label()}</p><div class="term">${L.join('')}</div>`;
+}
+
+// ---- Notes ----
+const NOTES = {
+  card: `<div class="note"><h3>Carte</h3><h4>Un plan, une carte : les lignes sont des étapes</h4><ul>
+    <li>Même coque que les cartes de fermeture et de tâche (<code>--well</code>, bordure <code>--sidebar-border</code>, 12,5 px) : la carte générique est leur cousine, pas un nouveau style.</li>
+    <li><b>Le rail d’ordre</b> : à partir de 2 lignes, chaque ligne a un nœud numéroté relié aux autres, parce que l’ordre compte (on s’arrête au premier échec). Le nœud porte l’état : numéro (proposée), anneau qui tourne (en cours), ✓ (appliquée), ✕ (échouée ou refusée), pointillés (pas appliquée, le plan s’est arrêté avant). Une seule ligne : pas de rail.</li>
+    <li>Une ligne = le <code>summary</code> du daemon (noms en gras), puis le risque, <b>icône et mot</b>, lisible sans la couleur. Bouton à droite, <b>un verbe par action</b> (« Changer », « Archiver », « Dissoudre… »), « Appliquer » en repli seulement, pour une action inconnue du front.</li>
+    <li><b>Permission</b> : « Refuser » à côté de « Accepter… », sans repasser par Ledge. Refuser n’a pas de « … » ni de confirmation : ne rien laisser faire ne se défait pas mal. Une fois envoyé : « ✓ Refus envoyé · 10:42 », en gris et pas en vert, puisque rien n’a été appliqué. La ligne devient « Refuser la demande de <b>Nova</b> », sans le risque de l’acceptation qui n’a pas eu lieu ; une ligne dit « Nova a reçu ton refus : la commande n’a pas été lancée. », et la demande reste citée, estompée, pour qu’on voie ce qui a été refusé.</li>
+    <li><b>« Ignorer »</b>, partout, en bouton discret à gauche des autres (le pied pour un plan, la ligne pour une seule action), comme « Ignorer » de la carte de relais du téléphone : la carte se replie en une ligne « Carte ignorée à 10:42 · rien n’a été envoyé · Revoir ». Ignorer vaut <b>sur tous les appareils</b> : Ledge le sait, la carte se replie partout (Desktop, île, téléphone, TUI) et Ledge ne la repropose pas.</li>
+    <li><b>Demande coupée</b> : au-delà de 4 000 caractères, le daemon coupe la demande (<code>detailCut</code>). La citation finit par « … (tronqué, <u>voir la session</u>) », toujours visible au pied du bloc même quand il défile. <b>« Accepter… » laisse place à « Ouvrir Nova »</b> : on n’accepte pas ce qu’on n’a pas lu en entier. « Refuser » et « Ignorer » restent, puisque ne rien laisser faire ne demande pas d’avoir tout lu.</li>
+    <li>Irréversible : fond teinté, nœud et mot en rouge, « … » sur le bouton (une confirmation suit), le <code>detail</code> sur 2 lignes, en entier dans la confirmation.</li>
+    <li>Pied : « Tout appliquer (n) » ; après un échec, « Reprendre à l’étape k (n) » ; après un refus, « Continuer sans l’étape k (n) », puisque la rejouer serait refusé encore. Une fois tout fait, la carte garde sa trace : « ✓ Plan appliqué à 10:42 ».</li>
+    <li><b>Confirmation dans la carte</b>, pas en modale : la carte elle-même devient la liste (bordure rouge, boutons de ligne retirés, détails dépliés, lignes faites estompées), et le pied pose la question. Le focus va sur « Annuler » ; <kbd>Échap</kbd> annule. Même composant pour le Desktop et l’overlay, sans fenêtre par-dessus l’île.</li></ul></div>`,
+  phone: `<div class="note"><h3>Téléphone</h3><h4>La même carte, une feuille pour confirmer</h4><ul>
+    <li>Les jetons du téléphone (sombre seulement), les boutons de 44 px, le bouton de ligne <b>sous</b> le texte : la largeur ne permet pas de les mettre côte à côte.</li>
+    <li>Confirmer ouvre une feuille par le bas qui reprend chaque ligne à appliquer avec son détail entier, puis la vérification de l’appareil (<code>ConfirmPurpose</code> <code>act</code>, sujet le qid ; <code>decide</code> pour une permission). Le texte est celui de la confirmation actuelle (« Elle confirme votre identité, pas la sûreté de la commande »).</li>
+    <li>« Ignorer » en bouton fantôme à gauche, comme la carte de relais ; pour une permission, trois boutons sur une ligne : Ignorer, Refuser, Accepter…. Refuser n’ouvre pas de feuille (pas de vérification) : la ligne passe à « ✓ Refus envoyé · 10:42 ». Ignorée ici, la carte l’est aussi sur le Desktop et dans la TUI.</li>
+    <li><b>Demande coupée</b> : au-delà de 2 048 caractères (<code>TOOL_TEXT_MAX</code>), la citation finit par « Demande coupée : la suite est sur le PC. ». Le bouton d’acceptation laisse place à l’emplacement pointillé existant « À accepter sur le PC » (<code>OnPc</code>, comme pour une demande à impact élevé) : le daemon n’accepte d’ici que « Refuser ». Texte : « Demande trop longue pour le téléphone : elle s’accepte sur le PC. Vous pouvez la refuser d’ici. »</li>
+    <li>Une ligne réversible sans vérification (<code>phone: null</code>) s’applique au toucher, sans feuille.</li>
+    <li>Vérification annulée ou expirée : la carte reste proposée et dit « Vérification annulée. Rien n’a été envoyé. » (texte existant).</li></ul></div>`,
+  tui: `<div class="note"><h3>TUI</h3><h4>Une boîte de plus, des lignes qu’on choisit</h4><ul>
+    <li>La carte est une <code>TitledBox</code> corail comme les autres : « PLAN · 3 ACTIONS », « PERMISSION · NOVA ». Chaque ligne : numéro, glyphe d’état (<code>○ ◐ ✓ ✕ ·</code>, ASCII <code>o ~ v x .</code>), résumé, et à droite l’état puis le risque en mot.</li>
+    <li><kbd>↑</kbd><kbd>↓</kbd> choisit la ligne (▸), <kbd>↵</kbd> l’applique, <kbd>a</kbd> applique tout. Le détail d’une ligne irréversible est toujours affiché, en estompé.</li>
+    <li>Confirmer : la boîte passe au rouge, en trait double, liste tout, et ne se valide qu’avec <kbd>y</kbd>. <kbd>↵</kbd> ne confirme pas, pour qu’un double appui ne dissolve rien.</li>
+    <li>La demande d’une permission est citée en entier, repliée sur la largeur, jamais tronquée, <b>sauf au-delà de 4 000 caractères</b> : le daemon la coupe (<code>detailCut</code>), parce qu’elle voyage dans <code>chat.history</code>, qui la refuserait entière. La boîte en montre alors les 6 premières lignes et « … (tronqué, voir la session : o) » ; <kbd>↵</kbd> n’accepte pas, <kbd>o</kbd> ouvre Nova pour la lire, <kbd>n</kbd> la refuse d’ici.</li>
+    <li>Permission : <kbd>n</kbd> refuse, comme sur la carte de session ; la boîte disparaît et une ligne reste dans la conversation, « ✓ Refus envoyé à Nova · 10:42 », suivie de la commande en estompé. <kbd>esc</kbd> ignore la carte (comme la carte de lancement de Demander) ; la boîte disparaît et une ligne estompée reste dans la conversation. Ignorée ici, elle l’est partout : Ledge ne la repropose pas.</li>
+    <li><b>Revoir</b> : <kbd>ctrl+r</kbd> rouvre la dernière carte ignorée de la conversation, d’où que soit le focus, même en tapant une question. Elle revient en boîte, focalisée (<kbd>↵</kbd>, <kbd>n</kbd>, <kbd>esc</kbd> agissent sur elle), et Ledge la repropose sur tous les appareils, comme « Revoir » sur le Desktop. Un nouveau <kbd>ctrl+r</kbd> rouvre la précédente. La ligne estompée de cette carte-là finit par « revoir : ctrl+r », et la barre montre <kbd>ctrl+r</kbd> tant qu’une carte ignorée reste. Pas <kbd>r</kbd> seul : le champ Question a le focus et prend les lettres, la conversation n’a pas de curseur (<kbd>tab</kbd> va du champ aux cartes ouvertes), et <kbd>r</kbd> veut déjà dire répondre dans la vue d’ensemble et la session. Un <kbd>ctrl</kbd> se joint à <kbd>ctrl+n</kbd> et <kbd>ctrl+c</kbd>, les touches de Demander qui marchent depuis le champ ; <kbd>ctrl+r</kbd> sert déjà dans Nouvelle session (tirer un autre nom), un autre écran.</li>
+    <li>Une fois tout fait, la boîte disparaît et une ligne verte reste dans la conversation, comme pour l’équipe et les tâches.</li></ul></div>`,
+  risks: `<div class="note"><h3>Risque et états</h3><table>
+    <tr><td>${riskChip('read')}</td><td>rien ne change : appliquée au clic, sans « … » (aucune action de la phase 1 ; prévu pour la suite)</td></tr>
+    <tr><td>${riskChip('reversible')}</td><td>Ledge peut le défaire : un clic</td></tr>
+    <tr><td>${riskChip('destructive')}</td><td>Ledge ne peut pas le défaire : confirmation, et la vérification de l’appareil sur le téléphone</td></tr>
+    <tr><td>Échouée</td><td>envoyée, le daemon a répondu une erreur ; « Réessayer » ; la suite reste proposée</td></tr>
+    <tr><td>Refusée</td><td>rien n’a été envoyé : la cible a changé à la nouvelle résolution (fermée, hors ligne, en lecture seule)</td></tr>
+    <tr><td>Refus envoyé</td><td>une permission refusée par « Refuser » (<code>chat.act</code> avec <code>deny</code>, <code>state: 'denied'</code>, l’heure est <code>doneAt</code>) : le refus est parvenu à la session, qui ne lance pas la commande. Ce n’est ni « Refusée » (rien n’a été envoyé) ni « Échouée » (l’envoi a raté)</td></tr>
+    <tr><td>Demande coupée</td><td>une permission trop longue pour être citée en entier (<code>detailCut</code>) : elle se refuse d’ici et s’accepte dans la session (« Ouvrir Nova », « À accepter sur le PC »). L’écart avec « jamais tronquée » : la demande voyage dans l’historique du chat, borné à 4 000 caractères par ligne sur le PC et 2 048 au téléphone ; au-delà, c’est tout l’historique qui serait refusé</td></tr>
+    <tr><td>Ignorée</td><td>rien n’a été appliqué ; Ledge le sait : la carte est repliée sur tous les appareils et n’est plus reproposée ; « Revoir » la rouvre</td></tr>
+    <tr><td>La demande a changé</td><td>une permission : la demande n’est plus celle que Ledge a citée (stale) ; l’ancienne est barrée, « Ouvrir Nova »</td></tr></table></div>`
+};
+const OPEN = `<div class="note"><h3>Tranché par l’utilisateur</h3><ol>
+  <li>Le mot du risque : <b>« Irréversible »</b>, plutôt que « Destructif ».</li>
+  <li><b>Refusée</b> contre <b>échouée</b> : réglé dans le code, <code>state: 'refused'</code> (rien n’a été envoyé) distinct de <code>'failed'</code>.</li>
+  <li>La confirmation <b>dans la carte</b> (Desktop et overlay), pas de modale.</li>
+  <li>Permission : <b>« Accepter » et « Refuser »</b> côte à côte.</li>
+  <li><b>Un verbe par action</b> (« Changer », « Archiver », « Dissoudre »…), « Appliquer » en repli seulement.</li>
+  <li>Après un échec ou un refus, la suite d’un plan se relance <b>d’un bouton</b> : « Reprendre à l’étape k », « Continuer sans l’étape k ».</li>
+  <li><b>« Ignorer »</b> sur la carte générique, partout.</li>
+  <li>Ignorer vaut <b>sur tous les appareils</b> : Ledge le sait et ne repropose pas la carte.</li>
+  <li><b>« ✓ Refus envoyé »</b> tel que dessiné : en gris, pas en vert, et la ligne devient « Refuser la demande de <b>Nova</b> ».</li>
+  <li><b>« Demande coupée »</b> (<code>detailCut</code>) tel que dessiné : une demande coupée ne s’accepte pas depuis la carte, ni sur le PC ni au téléphone ; elle se refuse d’ici et s’accepte dans la session (« Ouvrir Nova », « À accepter sur le PC »).</li>
+  <li>Les textes des <b>22 codes de refus</b>, en fr et en en : <code>ledge-action-card-codes.md</code>.</li>
+  <li><b>Revoir une carte ignorée dans la TUI</b> : <kbd>ctrl+r</kbd> rouvre la dernière carte ignorée de la conversation, focalisée, et Ledge la repropose partout ; un nouveau <kbd>ctrl+r</kbd> rouvre la précédente.</li></ol>
+  <p style="margin:8px 0 0">La maquette est validée en entier par l’utilisateur.</p></div>
+  <div class="note"><h3>Suite non retenue pour l’instant</h3><ul>
+  <li><b>Charger le texte complet à la demande</b>, comme le corps d’une demande au téléphone, au lieu de l’envoyer dans la carte. La carte pourrait alors citer toute la demande et proposer « Accepter… ». Pas retenu : c’est plus de travail pour un cas rare.</li></ul></div>`;
+
+// ---- Chrome ----
+function label() { return ETATS.find(([k]) => k === st.etat)[1].toLowerCase(); }
+function seg(key, opts) { return `<span class="seg">${opts.map(([v, l, off]) => `<button type="button" data-k="${key}" data-v="${v}" aria-pressed="${st[key] === v}"${off ? ' disabled' : ''}>${l}</button>`).join('')}</span>`; }
+function bar() {
+  return `<span class="brand">Ledge.<small>#94 · cartes d’action</small></span>
+    <span class="field">Vue ${seg('vue', [['desktop', 'Desktop'], ['overlay', 'Overlay'], ['phone', 'Téléphone'], ['tui', 'TUI']])}</span>
+    <span class="field">Cas ${seg('cas', Object.entries(CASES).map(([k, c]) => [k, c.label]))}</span>
+    <span class="field">État ${seg('etat', ETATS.map(([k, l]) => [k, l, !CASES[st.cas].states[k]]))}</span>
+    <span class="field">Thème ${seg('theme', [['dark', 'Sombre'], ['light', 'Clair', st.vue === 'phone']])}</span>`;
+}
+function render() {
+  if (st.vue === 'phone') st.theme = 'dark';
+  model();
+  document.documentElement.dataset.theme = st.theme;
+  document.getElementById('bar').innerHTML = bar();
+  document.getElementById('view').innerHTML = st.vue === 'phone' ? phone() : st.vue === 'tui' ? tui() : st.vue === 'overlay' ? overlay() : desktop();
+  document.getElementById('notes').innerHTML = (st.vue === 'phone' ? NOTES.phone : st.vue === 'tui' ? NOTES.tui : NOTES.card) + NOTES.risks + OPEN;
+  // The rail's thread reaches the next node, whatever the row's height.
+  for (const r of document.querySelectorAll('.arow, .prow')) { const n = r.querySelector('.node'); if (n) n.style.setProperty('--h', r.offsetHeight + 'px'); }
+  save();
+}
+document.addEventListener('click', e => { const b = e.target.closest('[data-k]'); if (b && !b.disabled) { st[b.dataset.k] = b.dataset.v; render(); } });
+addEventListener('hashchange', () => { Object.assign(st, DEF, Object.fromEntries(new URLSearchParams(location.hash.slice(1)))); render(); });
+render();
+</script>
+</body>
+</html>

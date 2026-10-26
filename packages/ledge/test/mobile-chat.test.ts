@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { CHAT_HISTORY_BUDGET, PhoneChatTurnSchema, PhoneServerMessageSchema, THREAD_TEXT_MAX, type ChatTurn, type PhoneServerMessage } from '@ledge/protocol';
+import { CHAT_HISTORY_BUDGET, PhoneChatTurnSchema, PhoneServerMessageSchema, THREAD_TEXT_MAX, TOOL_TEXT_MAX, type ChatTurn, type PhoneServerMessage } from '@ledge/protocol';
 import { toPhoneHistory, toPhoneTurn, phoneEmitter } from '../src/mobile/chat.js';
 import { createOutbox } from '../src/mobile/outbox.js';
 import { ONE_AT_A_TIME, TOO_MANY } from '../src/chat/service.js';
@@ -23,6 +23,38 @@ describe('toPhoneTurn', () => {
     ]);
     expect(PhoneChatTurnSchema.safeParse(p).success).toBe(true);
     for (const r of p.closes!) expect(r).not.toHaveProperty('error');
+  });
+  it('projects the generic card without its args or its error text; a detail too long leaves the card out', () => {
+    const DONE = '2026-10-20T08:01:00.000Z';
+    const p = toPhoneTurn(turn({ answer: 'ok', actions: [
+      { action: 'session.archive', args: { session: 'a' }, summary: 'Archiver **Otto**', risk: 'reversible', session: 'a', state: 'done', doneAt: DONE },
+      { action: 'session.decide', args: { session: 'b', decision: 'accept', expect: { kind: 'permission', text: 'Bash: rm', key: 'k' } }, summary: 'Accepter', detail: 'Bash: rm', risk: 'destructive', session: 'b', state: 'failed', error: 'stale' }
+    ] }));
+    expect(p.actions).toEqual([
+      { action: 'session.archive', summary: 'Archiver **Otto**', risk: 'reversible', session: 'a', state: 'done', doneAt: DONE },
+      { action: 'session.decide', summary: 'Accepter', detail: 'Bash: rm', risk: 'destructive', session: 'b', state: 'failed' }
+    ]);
+    expect(PhoneChatTurnSchema.safeParse(p).success).toBe(true);
+    // A request too long for the phone comes cut and marked, its row with it: the other rows are not lost.
+    const long = toPhoneTurn(turn({ actions: [
+      { action: 'session.decide', args: {}, summary: 'Accepter', detail: 'x'.repeat(3000), risk: 'destructive' },
+      { action: 'session.interrupt', args: {}, summary: 'Interrompre', risk: 'reversible', vars: { session: 'Otto' } }
+    ] }));
+    expect(long.actions).toHaveLength(2);
+    expect(long.actions![0]).toMatchObject({ detailCut: true });
+    expect(long.actions![0]!.detail).toHaveLength(TOOL_TEXT_MAX);
+    expect(long.actions![0]!.detail!.endsWith('…')).toBe(true);
+    expect(long.actions![1]).toEqual({ action: 'session.interrupt', summary: 'Interrompre', risk: 'reversible', vars: { session: 'Otto' } });
+    expect(PhoneChatTurnSchema.safeParse(long).success).toBe(true);
+    // Cut by the daemon already: still marked.
+    expect(toPhoneTurn(turn({ actions: [{ action: 'session.decide', args: {}, summary: 'A', detail: 'x…', detailCut: true, risk: 'destructive' }] })).actions![0]).toMatchObject({ detail: 'x…', detailCut: true });
+  });
+  it('projects the error code of a row, and an ignored turn', () => {
+    const CAT = '2026-10-20T08:01:00.000Z';
+    const p = toPhoneTurn(turn({ ignoredAt: CAT, actions: [{ action: 'session.interrupt', args: {}, summary: 'I', risk: 'reversible', state: 'refused', error: 'Otto has exited', code: 'exited' }] }));
+    expect(p.ignoredAt).toBe(CAT);
+    expect(p.actions![0]).toEqual({ action: 'session.interrupt', summary: 'I', risk: 'reversible', state: 'refused', code: 'exited' });
+    expect(PhoneChatTurnSchema.safeParse(p).success).toBe(true);
   });
   it('carries no path, folder, machine or project proposal', () => {
     const t = turn({

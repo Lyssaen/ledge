@@ -1,3 +1,4 @@
+import { actionCopy } from '@ledge/ui/chat/actionCopy';
 import type { SoundCategory } from '../sounds/preferences';
 import type { BotState } from '../bots/poseFor';
 import type { SshProblem } from '../daemon/machines';
@@ -214,6 +215,8 @@ const fr = {
       queued: 'travaille, j’enverrai dès qu’il aura fini', sentTo: 'Envoyé à', failed: (why: string) => `Échec de l’envoi : ${why}`,
       pill: { yours: 'à toi', working: 'travaille', waiting: 'attend ta réponse', stopped: 'arrêtée' }
     },
+    // #94 : la carte générique, une ligne par action, un plan au-delà d’une (docs/mockups/ledge-action-card.html).
+    action: actionCopy.fr,
     project: {
       label: 'Proposition de projet', title: (name: string) => `Proposition de projet · ${name}`, complete: (name: string) => `Compléter ${name}`,
       repos: (n: number) => `${n} dépôt${n > 1 ? 's' : ''}`, review: 'Vérifier la proposition'
@@ -451,6 +454,8 @@ const en: Messages = {
       queued: "is working; I'll send it as soon as it's done", sentTo: 'Sent to', failed: (why: string) => `Could not send: ${why}`,
       pill: { yours: 'your turn', working: 'working', waiting: 'waiting for you', stopped: 'stopped' }
     },
+    // #94: the generic card, a row per action, a plan past one (docs/mockups/ledge-action-card.html).
+    action: actionCopy.en,
     project: {
       label: 'Project proposal', title: (name: string) => `Project proposal · ${name}`, complete: (name: string) => `Complete ${name}`,
       repos: (n: number) => `${n} ${n === 1 ? 'repository' : 'repositories'}`, review: 'Review the proposal'

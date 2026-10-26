@@ -1,3 +1,4 @@
+import { actionCopy } from '@ledge/ui/chat/actionCopy';
 import type { Messages } from './messages';
 
 /** English counts only 1 as singular. */
@@ -932,6 +933,8 @@ export const en: Messages = {
       given: (owner: string, id: string, state: string) => `Given to ${owner} · ${id} · ${state}`,
       state: { open: 'to take', taken: 'taken', done: 'done', refused: 'refused', dropped: 'dropped' }, failed: (why: string) => `Refused: ${why}`
     },
+    // #94: the generic card, a row per action, a plan past one (docs/mockups/ledge-action-card.html).
+    action: actionCopy.en,
     project: {
       label: 'Project proposal', title: (name: string) => `Project proposal · ${name}`, complete: (name: string) => `Complete ${name}`,
       repos: (n: number) => `${n} ${n === 1 ? 'repository' : 'repositories'}`, review: 'Review the proposal'
