@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { contextNear, LEDGE_GIVER, projectOf, type Autonomy, type Role, type Seat, type Team } from '@ledge/protocol';
+import { actionById, contextNear, LEDGE_GIVER, projectOf, type ChatAction, type Autonomy, type Role, type Seat, type Team } from '@ledge/protocol';
 import { DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type ChatErrorCode, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, backendOf } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
@@ -40,7 +40,7 @@ import { launchFromChat, LaunchRefused } from '../chat/launch.js';
 import { cardOf, closeFromChat, CloseRefused } from '../chat/close.js';
 import { actFromChat, ActRefused } from '../chat/act.js';
 import type { ChatMessage } from '../chat/service.js';
-import { actionMessage, resolveAction } from './actions.js';
+import { actionMessage, resolveAction, resolveRun, runGuard, type Resolved } from './actions.js';
 import { createMailbox, type MailJournal } from './mailbox.js';
 import { createTasks, type TasksJournal } from './tasks.js';
 import { createTeamsLive, type TeamsJournal } from './teamsLive.js';
@@ -739,22 +739,46 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     return actFromChat({
       chat: card.chat, emit: card.emit, inFlight: chatActs, now,
       resolve: row => resolveAction(row.action, row.args, { sessions: store.all(), teams: teams.all(), tasks: tasks.all(), findRole, templateExists: name => templateExists(name) }),
-      apply: async row => {
-        let failure: string | null = null;
-        const out = actionMessage(row, rid);
-        // Ledge's own task commands go straight to the tasks: `by: 'ledge'` is never taken from a client (handle refuses it).
-        if (out.type === 'task.cmd') { const r = tasks.run(out); if (r.reason !== undefined) throw new Error(r.reason); return; }
-        await handle(out, m => {
-          if (m.type === 'error') failure ??= m.message;
-          else if ((m.type === 'team.saved' || m.type === 'task.result') && m.reason) failure ??= m.reason;
-        });
-        if (failure !== null) throw new Error(failure);
-      }
+      apply: async row => { const r = await applyRow(row, rid); if (r.failure !== undefined) throw new Error(r.failure); }
     }, qid, rows, confirmed);
   }
   /** The turn's cards were set aside (« Ignorer », on any thread's device): nothing of them applies until opened again. */
   const setAside = (qid: string) => cardThreads.all().some(([, c]) => c.ignored(qid));
   const SET_ASIDE = 'ignored card: open it again first';
+  /** A resolved row through the daemon's own handler: its failure is the handler's `error`, or the reason its `team.saved` or
+   *  `task.result` carries; `path` the template a `team.save` wrote. Ledge's own task commands go straight to the tasks:
+   *  `by: 'ledge'` is never taken from a client (handle refuses it). */
+  async function applyRow(row: Pick<ChatAction, 'action' | 'args'>, rid: string): Promise<{ failure?: string; path?: string }> {
+    const out = actionMessage(row, rid);
+    if (out.type === 'task.cmd') { const r = tasks.run(out); return r.reason !== undefined ? { failure: r.reason } : {}; }
+    let failure: string | undefined; let path: string | undefined;
+    await handle(out, m => {
+      if (m.type === 'error') failure ??= m.message;
+      else if ((m.type === 'team.saved' || m.type === 'task.result') && m.reason) failure ??= m.reason;
+      else if (m.type === 'team.saved') path = m.path;
+    });
+    return { ...(failure !== undefined ? { failure } : {}), ...(path ? { path } : {}) };
+  }
+  /**
+   * `action.run` (#93): an action of the registry outside the chat, resolved and applied as a generic card's row, so the CLI
+   * writes no rule of its own. A destructive one asks again (`confirmed`), and the guard decides who may run it at all.
+   */
+  async function runAction(msg: Extract<ClientMessage, { type: 'action.run' }>, reply: Reply): Promise<void> {
+    const answer = (x: { row?: ChatAction; reason?: string; code?: string; path?: string }) => reply({ type: 'action.result', rid: msg.rid, action: msg.action, ...x });
+    const parsed = actionById(msg.action)!.args.safeParse(msg.args);
+    if (!parsed.success) return answer({ reason: `invalid args: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'} ${i.message}`).join('; ')}`, code: 'refused' });
+    const r: Resolved = resolveRun(msg.action, parsed.data, { sessions: store.all(), teams: teams.all(), tasks: tasks.all(), findRole, templateExists: name => templateExists(name) }, msg.by);
+    if ('refused' in r) return answer({ reason: r.refused, code: 'refused' });
+    const guard = runGuard(r.risk, msg.by);
+    if (guard) return answer({ row: r, reason: guard, code: 'agent' });
+    if (r.risk === 'destructive' && !msg.confirmed) return answer({ row: r, reason: 'destructive: confirm it', code: 'confirm_required' });
+    if (r.action === 'session.close') {
+      const failure = await closeForCard(String(r.args.session)).then(() => undefined, e => (e as Error).message);
+      return answer({ row: r, ...(failure !== undefined ? { reason: failure, code: 'failed' } : {}) });
+    }
+    const { failure, path } = await applyRow(r, msg.rid);
+    return answer({ row: r, ...(failure !== undefined ? { reason: failure, code: 'failed' } : {}), ...(path ? { path } : {}) });
+  }
   type LaunchReq = { tool: Tool; cwd: string; name?: string; prompt?: string; continue?: boolean; dirs?: string[]; model?: string; effort?: string; approval?: OmpApproval; role?: string; team?: string };
   /**
    * Spawns the agent as `ledge <tool>` would and records it; throws the reason (bad folder, tmux, unknown role or team).
@@ -1233,6 +1257,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         } catch (e) { if (e instanceof CloseRefused) return refuse(e.message); throw e; }
         return;
       }
+      case 'action.run': return runAction(msg, reply);
       // A chat's generic card (spec 2026-10-26 action registry §9.2), on the thread that holds the turn: the rows apply in order and
       // stop at the first failure; the requester gets chat.acted, the thread's clients the rows' state through chat.history.
       case 'chat.act': {

@@ -1,6 +1,6 @@
 // The daemon's side of the action registry (spec 2026-10-26 action registry §2.1): whether an action is possible now, and
 // the message the daemon already handles that applies it. The chat's generic card and, in #93, the CLI share it.
-import { backendOf, isArchived, isTeamLive, LEDGE_GIVER, offers, pendingKey, riskOf, taskClosed, actionById, DETAIL_MAX, type ActionErrorCode, type ActionId, type ChatAction, type ClientMessage, type Role, type Session, type Task, type Team } from '@ledge/protocol';
+import { backendOf, isArchived, isTeamLive, LEDGE_GIVER, offers, pendingKey, riskOf, taskClosed, actionById, DETAIL_MAX, type ActionErrorCode, type ActionId, type ActionRisk, type ChatAction, type ClientMessage, type Role, type Session, type Task, type Team } from '@ledge/protocol';
 
 export interface ResolveCtx {
   sessions: readonly Session[]; teams: readonly Team[]; tasks: readonly Task[];
@@ -151,6 +151,29 @@ const IMPLS: Partial<Record<ActionId, Impl>> = {
 
 /** The generic actions the daemon can resolve (the six earlier cards resolve in chat/service.ts). */
 export const GENERIC_ACTIONS = Object.keys(IMPLS) as ActionId[];
+
+/** The actions `action.run` takes (#93, the CLI): the generic ones, and the clean close, which the chat keeps on its close card. */
+export const RUN_ACTIONS: readonly ActionId[] = [...GENERIC_ACTIONS, 'session.close'];
+
+/**
+ * An action's parsed args against the live state, for `action.run` by `by` (a session; left out for the user). A session never
+ * closes itself: its command would wait on its own close, and the close on its prompt.
+ */
+export function resolveRun(id: ActionId, args: unknown, ctx: ResolveCtx, by?: string): Resolved {
+  if (!RUN_ACTIONS.includes(id)) return no('unknown', `${id} is not run from the CLI`);
+  if (id !== 'session.close') return resolveAction(id, args, ctx);
+  return withSession(ctx, (args as Args).session, s => writable(s) ?? (s.id === by ? no('running', `${s.name} cannot close itself`) : null),
+    s => row('session.close', { session: s.id }, `Fermer ${b(s.name)}`, { session: s.name }, { session: s.id }));
+}
+
+/**
+ * Who may run what outside the chat (#93, point (a), the user's call): until the user decides, the strictest — a session never
+ * runs a destructive action, the user does. One function, so the decision lands in one place. Null when allowed.
+ */
+export function runGuard(risk: ActionRisk, by: string | undefined): string | null {
+  return by !== undefined && risk === 'destructive'
+    ? 'une session agent ne lance pas d\'action destructive : demande-le à l\'utilisateur (il la lance lui-même avec --yes)' : null;
+}
 
 /** A generic action's parsed args against the live state: a row ready to apply, or why not. */
 export function resolveAction(id: string, args: unknown, ctx: ResolveCtx): Resolved {
