@@ -1929,6 +1929,20 @@ describe('phone gateway: generic cards (spec 2026-10-26 action registry §9)', (
     expect(last(g)).toMatchObject({ status: 'applied' });
     expect(calls).toEqual([['device:dev1', QA, [0], true]]);
   });
+  it('a row destructive by its args (a template replaced) needs the passkey too, though its action names no device check (Max)', async () => {
+    const save: Row = { action: 'team.save', args: { team: 't', name: 'existing', seats: [{ role: 'back' }] }, summary: 'Remplacer le modèle', risk: 'destructive' };
+    const { calls, g } = make([save]);
+    g.send('dev1', { type: 'chat.act', op: randomUUID(), qid: QA, confirmed: true });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'rejected', reason: 'confirm_required' });
+    expect(calls).toEqual([]);
+    const auth = await enroll(g);
+    const ch = await prepare(g, QA);
+    g.send('dev1', { type: 'chat.act', op: randomUUID(), qid: QA, confirmed: true, assertion: auth.get(rp, ch.challenge, { counter: 1 }) });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'applied' });
+    expect(calls).toEqual([['device:dev1', QA, [0], true]]);
+  });
   it('passes the done rows over, and answers failed when none is left or one failed', async () => {
     const one = make([{ ...archive, state: 'done' }, archive]);
     one.g.send('dev1', { type: 'chat.act', op: randomUUID(), qid: QA });
