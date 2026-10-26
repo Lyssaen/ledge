@@ -106,6 +106,22 @@ describe('the action card (#94): a plan', () => {
     expect(p.onApply).toHaveBeenCalledWith([1, 2]);
   });
 
+  it('the irreversible row applied elsewhere: what is left needs no confirmation, it closes', () => {
+    const p = card(plan());
+    fireEvent.click(screen.getByRole('button', { name: 'Apply all (3)…' }));
+    p.rerender(<ChatCopyProvider value={{ ...copy, chat: { ...copy.chat, action: actionCopy } }}><ActionCard rows={plan([{}, {}, { state: 'done', doneAt: AT }])} {...p} /></ChatCopyProvider>);
+    expect(screen.queryByRole('group', { name: /^Confirmation/ })).toBeNull();
+    expect(p.onApply).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Apply all (2)' }));
+  });
+
+  it('ignored elsewhere while confirming: the focus goes to Review', () => {
+    const p = card(plan());
+    fireEvent.click(screen.getByRole('button', { name: 'Apply all (3)…' }));
+    p.rerender(<ChatCopyProvider value={{ ...copy, chat: { ...copy.chat, action: actionCopy } }}><ActionCard rows={plan()} ignoredAt={AT} {...p} /></ChatCopyProvider>);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Review' }));
+  });
+
   it('the card changes elsewhere: no row asked is open any more, or it is ignored, the confirmation closes; Review does not reopen it', () => {
     const p = card(plan());
     const again = (rows: ActionRowView[], extra: Partial<ActionCardProps> = {}) =>

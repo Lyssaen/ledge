@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import { ACTION_ERROR_CODES, type ActionErrorCode, type ChatAction } from '@ledge/protocol';
 import { Button } from '../ui/Button';
 import { Icon, ICONS } from '../ui/icons';
@@ -88,21 +88,21 @@ export function ActionCard(p: ActionCardProps) {
   const stopAt = states.findIndex(s => s === 'failed' || s === 'refused');
   const shown: Shown[] = states.map((s, i) => (s === 'proposed' && stopAt >= 0 && i > stopAt ? 'held' : s));
   const open = shown.flatMap((s, i) => (['done', 'running', 'denied', 'stale'].includes(s) ? [] : [i]));
+  const risky = (rows: readonly number[]) => rows.some(i => p.rows[i]!.risk === 'destructive');
   // The card changed elsewhere (a row applied on another device, the card ignored): only the rows asked that are still
-  // open stay to confirm, none left and it closes.
+  // open stay to confirm; none left, or none irreversible, and it closes.
   if (confirming) {
     const still = p.ignoredAt === undefined ? confirming.filter(i => open.includes(i)) : [];
-    if (still.length !== confirming.length) setConfirming(still.length ? still : null);
+    if (still.length !== confirming.length) setConfirming(still.length && risky(still) ? still : null);
   }
 
   if (p.ignoredAt !== undefined) return (
-    <div data-action-ignored style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, ...muted }}>
+    <div ref={box as RefObject<HTMLDivElement>} data-action-ignored style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, ...muted }}>
       <Icon size={11} {...ICONS.close} />{c.ignored(p.rows.length, clock(p.ignoredAt))}
       <Button variant="ghost" size="sm" disabled={p.disabled} onClick={p.onReview} style={{ height: 22, padding: '0 6px', fontSize: 12 }}>{c.review}</Button>
     </div>
   );
 
-  const risky = (rows: readonly number[]) => rows.some(i => p.rows[i]!.risk === 'destructive');
   const ask = (rows: number[], key: string) => { if (risky(rows)) { asker.current = key; setConfirming(rows); } else p.onApply(rows); };
   const go = (rows: number[]) => { setConfirming(null); p.onApply(rows); };
   const verb = (r: ActionRowView) => (r.decision === 'deny' ? c.deny : (r.action !== undefined ? c.verbs[r.action] : undefined) ?? c.apply);
