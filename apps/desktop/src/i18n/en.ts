@@ -374,7 +374,11 @@ export const en: Messages = {
     seat: (name, task, machine) => `${name}, ${task}, ${machine}`,
     helperSeat: (kind, parent, task) => `${kind}, subagent of ${parent}: ${task}`,
     offline: 'Offline',
-    ledgeTaskLabel: (owner: string, title: string) => `Ledge gives “${title}” to ${owner}. See the task`,
+    taskTo: { give: n => `Task → ${n}`, pass: n => `Passed → ${n}`, done: n => `Done → ${n}`, refuse: n => `Refused → ${n}`, cancel: n => `Cancelled → ${n}` },
+    taskLabel: (op, from, to, title) => `${{
+      give: `${from} gives “${title}” to ${to}`, pass: `${from} passes “${title}” to ${to}`, done: `${from} hands “${title}” back to ${to}, done`,
+      refuse: `${from} refuses “${title}”, back to ${to}`, cancel: `${from} cancels “${title}” for ${to}`
+    }[op]}. See the task`,
     messageTo: (n) => `to ${n}`,
     messageLabel: (sender, n, summary) => `${sender} writes to ${n}: ${summary}. Open the conversation`,
     desk: 'Talk to Ledge',

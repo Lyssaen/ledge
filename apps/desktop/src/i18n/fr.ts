@@ -1,7 +1,7 @@
 import type { BotState } from '@ledge/ui/bots/poseFor';
 import type { SectionId } from '../nav/state';
 import type { Bucket, GroupBy } from '../list/model';
-import type { DaemonInfo, OmpApproval, ProjectColor, ToolStatus, UpdateFailure } from '@ledge/protocol';
+import type { DaemonInfo, OmpApproval, ProjectColor, ToolStatus, TransmissionOp, UpdateFailure } from '@ledge/protocol';
 import type { PlanDoc, ToolKind, Verb } from '../session/exchanges';
 import type { Change } from '../session/changedFiles';
 import type { TodoStatus } from '../session/todos';
@@ -394,7 +394,11 @@ export const fr = {
     seat: (name: string, task: string, machine: string) => `${name}, ${task}, ${machine}`,
     helperSeat: (kind: string, parent: string, task: string) => `${kind}, sous-agent de ${parent} : ${task}`,
     offline: 'Hors ligne',
-    ledgeTaskLabel: (owner: string, title: string) => `Ledge confie « ${title} » à ${owner}. Voir la tâche`,
+    taskTo: { give: (n: string) => `Tâche → ${n}`, pass: (n: string) => `Passée → ${n}`, done: (n: string) => `Terminée → ${n}`, refuse: (n: string) => `Refusée → ${n}`, cancel: (n: string) => `Annulée → ${n}` } satisfies Record<TransmissionOp, (n: string) => string>,
+    taskLabel: (op: TransmissionOp, from: string, to: string, title: string) => `${{
+      give: `${from} confie « ${title} » à ${to}`, pass: `${from} passe « ${title} » à ${to}`, done: `${from} rend « ${title} » à ${to}, terminée`,
+      refuse: `${from} refuse « ${title} », rendue à ${to}`, cancel: `${from} annule « ${title} » pour ${to}`
+    }[op]}. Voir la tâche`,
     messageTo: (n: string) => `à ${n}`,
     messageLabel: (sender: string, n: string, summary: string) => `${sender} écrit à ${n} : ${summary}. Ouvrir l’échange`,
     desk: 'Parler à Ledge',
