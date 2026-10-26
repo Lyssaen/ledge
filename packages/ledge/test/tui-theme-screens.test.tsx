@@ -35,6 +35,19 @@ describe('ledge tui: the theme (#95 lot D)', () => {
     } finally { await tui.cleanup(); }
   });
 
+  it('forced light at start, then Auto: the background unknown, the tone drawn stays', async () => {
+    const tui = await startTui({ theme: 'light' });
+    try {
+      await tui.press(',');
+      await until(() => tui.frame().includes('RÉGLAGES'));
+      await tui.press(DOWN); await tui.press(RIGHT);
+      await until(() => tui.themes.length === 1);
+      expect(tui.themes).toEqual(['auto']);
+      expect(tui.frame()).toContain(bgOf(PALETTES.light.bar));
+      expect(tui.frame()).not.toContain(bgOf(PALETTES.dark.bar));
+    } finally { await tui.cleanup(); }
+  });
+
   it('New session, as a session and as a team: the project\'s ■ in its colour, its name not', async () => {
     const tui = await startTui();
     try {
