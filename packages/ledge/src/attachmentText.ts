@@ -4,7 +4,8 @@ export const imageBracket = (path: string): string => `[Image attached: ${path}]
 /** The reply text followed by one bracket per image, joined by single spaces. */
 export const withImages = (text: string, paths: string[]): string => [text, ...paths.map(imageBracket)].join(' ').trim();
 
-const BRACKET = /\[Image attached: ([^\]\n]*)\]/g;
+// The blanks before a bracket go with it; the person's own spacing elsewhere stays as typed.
+const BRACKET = /[ \t]*\[Image attached: ([^\]\n]*)\]/g;
 
 /** Takes the brackets that point into `dir` (`<64 hex>.<webp|jpg|png|gif>`) out of `text`, returning their ids in order; other brackets stay. */
 export function takeImages(text: string, dir: string): { text: string; ids: string[] } {
@@ -17,5 +18,5 @@ export function takeImages(text: string, dir: string): { text: string; ids: stri
     ids.push(m[1]!);
     return '';
   });
-  return { text: rest.replace(/ {2,}/g, ' ').trim(), ids };
+  return { text: rest.trim(), ids };
 }

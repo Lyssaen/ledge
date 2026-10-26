@@ -20,4 +20,9 @@ describe('attachment text', () => {
     const other = '[Image attached: /tmp/x.png] and [Image attached: /h/.ledge/attachments/../x.webp]';
     expect(takeImages(other, dir)).toEqual({ text: other, ids: [] });
   });
+
+  it('keeps the person\'s own spacing and indentation around a bracket', () => {
+    expect(takeImages(withImages('a  b\n    indented', [p]), dir).text).toBe('a  b\n    indented');
+    expect(takeImages(`x  [Image attached: ${p}]  y   z`, dir).text).toBe('x  y   z');
+  });
 });
