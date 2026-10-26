@@ -141,7 +141,9 @@ answer may carry a team card, its task card and generic rows.
 
 3. **Generated from the registry: what you can propose.** The block's shape once, then one entry per action:
    `` `id` `` — summary — risk — when — the example's JSON. Then « Tu ne proposes jamais : … » (§6.2), so a refusal
-   names the screen instead of inventing an action.
+   names the screen instead of inventing an action. As built: the risk reads « lecture seule », « réversible » or
+   « irréversible : l'utilisateur confirme deux fois », and for `session.decide` « réversible ou irréversible selon la
+   réponse : accepter est irréversible »; the when follows « Règle : ».
 
 Tests check the structure (every registry id and example appears, the harness line matches the tool, the persona never
 mentions a shell for claude/omp), not a frozen text. `PERSONA` stays exported as `buildPersona('claude')` for the
@@ -174,8 +176,18 @@ ChatTurn.actions?: ChatAction[]   // 1..8, and chat.done carries it like `closes
 // Daemon → requester: what was applied; every client also gets the new rows through chat.history.
 { type: 'chat.acted', rid, qid, done: number[], failed: Array<{ row: number; message: string }> }
 // Phone: the same, with its device check (ConfirmPurpose gains 'act', subject the qid).
-{ type: 'chat.act', op, qid, rows?, assertion? }
+{ type: 'chat.act', op, qid, rows?, confirmed?, assertion? }
 ```
+
+As built:
+
+- A refused apply (nothing applied) answers an error: « unknown action » (no such row), « already done » (nothing left),
+  « confirm before applying a destructive action » with the code `confirm_required`.
+- A row whose re-resolve changed its args fails with « the request has changed since the card » (`session.decide`) or
+  « the target has changed since the card » (the others); a refused re-resolve fails with its reason.
+- `ChatProposal` gains `model?` and `effort?` (a `session.launch` block may carry them); the launch card applies
+  `msg.model ?? p.model` on the PC and `p.model`/`p.effort` from a phone. The phone's `PhoneChatProposal` does not carry
+  them.
 
 - Rows apply **one after the other, in order**, and stop at the first failure: the rest stay proposed (« ferme ces
   sessions puis dissous l'équipe » must not dissolve when a close failed). A row done or running is passed over.
@@ -218,11 +230,11 @@ Ida's mockup of the cards, made from this contract, is validated; Bix codes it t
 | `session.interrupt` | `{session}`                                             | `session.interrupt`                      | reversible            | —           |
 | `session.archive`   | `{session}`                                             | `session.archive`                        | reversible            | —           |
 | `session.restore`   | `{session}`                                             | `session.restore`                        | reversible            | —           |
-| `session.resume`    | `{session}`                                             | `session.resume`                         | reversible            | `launch`    |
-| `session.decide`    | `{session, decision: 'accept'\|'deny', note?}`          | `session.decide` with `expect` (§9.1)    | accept: destructive   | `decide`    |
+| `session.resume`    | `{session}`                                             | `session.resume`                         | reversible            | `act`       |
+| `session.decide`    | `{session, decision: 'accept'\|'deny', note?}`          | `session.decide` with `expect` (§9.1)    | accept: destructive   | `act`       |
 | `team.join`         | `{team, session, role}`                                 | `team.join`                              | reversible            | —           |
 | `team.leave`        | `{team, session}`                                       | `team.leave`                             | reversible            | —           |
-| `team.resume`       | `{team}`                                                | `team.resume`                            | reversible            | `launch`    |
+| `team.resume`       | `{team}`                                                | `team.resume`                            | reversible            | `act`       |
 | `team.dissolve`     | `{team}`                                                | `team.dissolve`                          | destructive           | `act`       |
 | `team.save`         | `{team, name}`                                          | `team.save` with the live team's seats   | reversible            | —           |
 | `task.cancel`       | `{task, reason?}`                                       | `task.cmd cancel` (new, §6.3)            | destructive           | `act`       |
@@ -230,7 +242,10 @@ Ida's mockup of the cards, made from this contract, is validated; Bix codes it t
 
 `session` takes an id or a live bot name, `team` an id or a live team's name, `task` an id; `resolve` turns them into
 ids and refuses an ambiguous name. `session.model` checks the model against `models.list(tool)` when the catalogue is
-known, and the effort against what the harness takes (`EFFORT_ARGS`), as `server.ts` does.
+known; the effort against what the harness takes (`EFFORT_ARGS`) stays with the `session.model` handler, at apply.
+
+Every generic row with a phone check uses `act`: one device assertion per apply, purpose `act`, subject the qid, whatever
+the rows. The legacy cards keep their own checks (`launch`, `close`).
 
 ### 6.2 Never proposed
 
@@ -241,9 +256,9 @@ later lot (« passe le relais à Nova »), not phase 1.
 
 ### 6.3 Daemon changes the coverage needs
 
-- `task.cmd` gains `op: 'cancel'`: by the task's giver, or by Ledge for any task; an open or taken task becomes
-  `dropped` with `annulée par <qui>[ : raison]` in its log, and its owner is told (`tellOwner`). No new state: the
-  fronts already draw `dropped`.
+- `task.cmd` gains `op: 'cancel'`: by the task's giver, or by Ledge for any task; an open or taken task closes as
+  `refused` with `annulée[ : raison]` in its log, and its owner is told (`tellOwner`). No new state: the fronts already
+  draw `refused`.
 - `task.cmd pass` by Ledge: allowed for any task not closed (the user is the operator), the giver stays as today.
 - `team.save` from a live team: `resolve` builds the seats from the team's seats and the sessions that hold them
   (role, tool, model, effort).
@@ -282,7 +297,7 @@ What keeps it at the level of today's « Accepter » button:
   by the existing check of `session.decide`;
 - `accept` and `deny` only, never `always`; `note` only where `offers(tool, kind, 'note')`; no OMP `ask` dialog
   (`session.answer`) in phase 1;
-- `accept` is `destructive` (dialog, then the phone's `decide` check, as the phone's own accept); `deny` is
+- `accept` is `destructive` (dialog, then the phone's `act` check); `deny` is
   `reversible`.
 
 ### 9.2 One card per action, or a plan — **a plan: one card, ordered rows, one confirmation**
@@ -305,6 +320,11 @@ turn, weaker than a system prompt against a pane that says « ignore your instru
 - Both to be proven by a probe test against the installed CLI (a persona that asks for a marker word in the answer).
   If the probe fails for a version, that harness keeps stdin, logged once. Claude and OMP already use
   `--append-system-prompt`.
+
+Probed on 2026-10-26, both hold: `codex-cli 0.164.0` with `-c developer_instructions=…` and `--ignore-user-config`
+answered with the marker; `cursor-agent` (`--mode ask --workspace <dir>`, model `auto`) read `AGENTS.md` and answered
+with it. No fallback was built: stdin carries the question alone. The routing request (`routing.ts`) gets its persona
+the same way.
 
 ## 10. Out of scope
 
