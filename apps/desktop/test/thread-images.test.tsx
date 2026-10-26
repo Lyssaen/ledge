@@ -85,3 +85,16 @@ describe('images in a chat turn', () => {
     await waitFor(() => expect(document.querySelector('[data-turn] [data-thumb="ready"]')).not.toBeNull());
   });
 });
+
+describe('the same image attached twice', () => {
+  it('shows two thumbnails without a duplicate-key warning, and each opens its own slot', async () => {
+    const F = ref('f');
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { user } = await openNova([F, F]);
+    await waitFor(() => expect(thumbs().map(t => t.dataset.thumb)).toEqual(['ready', 'ready']));
+    await user.click(thumbs()[1]!);
+    expect(await screen.findByRole('dialog')).toHaveTextContent('2/2');
+    expect(warn.mock.calls.filter(c => String(c[0]).includes('same key'))).toEqual([]);
+    warn.mockRestore();
+  });
+});

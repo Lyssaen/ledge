@@ -45,7 +45,7 @@ export function Thumbs({ client, refs, route, max, who, at, lang, copy, actions,
   if (refs.length === 0) return null;
   return (
     <div className={className} data-thumbs style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: align === 'end' ? 'flex-end' : 'flex-start' }}>
-      {refs.map((r, i) => <Thumb key={r.id} client={client} image={r} route={route} max={max} copy={copy} onOpen={() => setOpen(i)} />)}
+      {refs.map((r, i) => <Thumb key={`${r.id}:${i}`} client={client} image={r} route={route} max={max} copy={copy} onOpen={() => setOpen(i)} />)}
       {open !== null && <Viewer client={client} refs={refs} route={route} index={open} onIndex={setOpen} onClose={() => setOpen(null)} title={`${copy.capture} · ${who}, ${at}`} at={at} lang={lang} copy={copy} actions={actions} />}
     </div>
   );
