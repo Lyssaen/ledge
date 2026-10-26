@@ -10,6 +10,17 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-26-image-paste-design.md`
 
+## Spike results (Task 0)
+
+Run 2026-10-26 with a 1440×900 flat-red PNG (5 939 bytes). Claude Code 2.1.310, codex-cli 0.164.0, OMP from `@oh-my-pi/pi-coding-agent`.
+
+- **Step 1, Claude chat: works.** `claude -p --input-format stream-json --output-format stream-json --verbose --tools Read`, stdin one line `{"type":"user","message":{"role":"user","content":[{"type":"text",...},{"type":"image","source":{"type":"base64","media_type":"image/png","data":"..."}}]}}` → result `**Red.**`. No fallback needed for Task 7. (Note: `--input-format stream-json` is required with this content-array shape; the product's current plain-text stdin must switch to this JSONL line when images are present.)
+- **Step 2, OMP chat: works, `@file` position is free.** `omp -p --mode json --no-session @/abs/shot.png` (stdin = question) and `omp @/abs/shot.png -p --mode json --no-session` both answer "red". OMP inlines the file as `<file name=...>` in the user message and sends the image natively.
+- **Step 3, Codex chat: works, `resume` accepts `-i`.** `codex exec --sandbox read-only --json --skip-git-repo-check -i /abs/shot.png -` (stdin = question) → "Red." `codex exec resume <id> --json --skip-git-repo-check -i /abs/shot.png -` → "Red". **Concern:** `codex exec resume` rejects `--sandbox` placed after the id (`unexpected argument '--sandbox'`); `exec --sandbox read-only resume <id> ...` is accepted. The product's `codexArgs` puts `--sandbox` after `resume <id>`: check that existing resume path.
+- **Step 4, OMP RPC inbound limit:** `MAX_RPC_FRAME_BYTES = 1 048 576` (1 MiB incl. newline) per JSONL frame, advertised in the `ready` frame (`maxFrameBytes`); no inbound check found in `rpc-input.ts`/`rpc-mode.ts`. Protocol v2 (`negotiate_protocol`) adds `rpc_chunk` frames (≤ 256 KiB payload each, base64) reassembled up to `MAX_RPC_REASSEMBLED_BYTES = 67 108 864` (64 MiB). 5 images × ~533 KB base64 ≈ 2.7 MB exceeds one frame: send in v2 chunks, or stay ≤ 1 MiB per frame (≈ 2 images at 400 KB).
+- **Step 5, hook text for tmux agents: path kept intact for both.** Typed `look [Image attached: /abs/shot.png]` + Enter. Claude Code (project `.claude/settings.json` UserPromptSubmit hook) received `"prompt":"look [Image attached: /abs/shot.png]"`, and the agent then Read the file. Codex (hook in a scratch `CODEX_HOME/hooks.json`, trusted via `t` in the hooks review UI) received `"prompt":"look [Image attached: /abs/shot.png]"` and viewed the image. Neither rewrote the path to `[Image #1]`. Codex needs a one-time folder-trust and hook-trust confirmation; `--ignore-user-config` is not accepted by interactive `codex`.
+- **Step 6:** no rewrite observed, so Task 4 Step 5's fallback is not the primary mechanism for either agent; no task changes.
+
 ## Global Constraints
 
 - Image: long side ≤ **1600 px**, encoded ≤ **400 000 bytes** (`ATTACHMENT_MAX`); preview long side **480 px**, ≤ **40 000 bytes** (`PREVIEW_MAX`); **5** images per message (`ATTACHMENTS_MAX`). Daemon local socket accepts up to **2 000 000 bytes** (`ATTACHMENT_LOCAL_MAX`); the phone gateway keeps 400 000.
