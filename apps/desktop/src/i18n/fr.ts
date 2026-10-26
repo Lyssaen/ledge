@@ -466,7 +466,7 @@ export const fr = {
   },
   teams: {
     tables: (n: number) => plural(n, `${n} table`, `${n} tables`),
-    treeLine: (done: number, given: number) => `équipe · ${done}/${given}`, treeResting: 'au repos',
+    tree: 'équipe', treeResting: 'au repos',
     common: 'table commune',
     room: (name: string) => `Pièce ${name}`,
     plaqueCounts: (tables: number, sessions: number) => `${plural(tables, `${tables} table`, `${tables} tables`)} · ${plural(sessions, `${sessions} session`, `${sessions} sessions`)}`,
