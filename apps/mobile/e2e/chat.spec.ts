@@ -57,7 +57,7 @@ test('the phone chat: a question, its steps and answer, the instruction sent, th
   });
 
   await test.step('a suggestion asked: the steps, then the answer', async () => {
-    await page.getByRole('link', { name: copy.nav.chat }).click();
+    await page.getByRole('link', { name: copy.nav.chat, exact: true }).click();
     await expect(page.getByText(copy.chat.empty)).toBeVisible();
     await page.getByRole('button', { name: copy.chat.suggestions.waiting }).click();
     await page.getByRole('button', { name: copy.chat.send }).click();

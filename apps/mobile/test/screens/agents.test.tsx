@@ -18,7 +18,7 @@ describe('the agents', () => {
     const ledge = screen.getByRole('region', { name: 'ledge' });
     expect(within(ledge).getAllByRole('link').map(a => a.getAttribute('href'))).toEqual(['#/thread/a', '#/thread/c']);
     expect(within(ledge).getByText('Au travail')).toBeInTheDocument();
-    expect(within(ledge).getByText('Autorisation')).toBeInTheDocument();
+    expect(within(ledge).getByText('Votre accord')).toBeInTheDocument();
     const relay = screen.getByRole('region', { name: 'relay' });
     expect(within(relay).getByText('● Non lu')).toBeInTheDocument();
     expect(within(relay).getByText('Disponible')).toBeInTheDocument();

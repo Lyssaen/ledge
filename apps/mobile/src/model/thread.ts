@@ -91,7 +91,7 @@ export function threadItems(items: PcItem[], session: PhoneSession, ops: Record<
 export interface Composer {
   enabled: boolean;
   placeholder: string;
-  status: { tone: 'ok' | 'info' | 'attention' | 'muted'; label: string };
+  status: { tone: 'ok' | 'info' | 'approval' | 'attention' | 'muted'; label: string };
 }
 
 const C = copy.thread.composer;
@@ -102,7 +102,11 @@ export function composerState(session: PhoneSession, link: LinkState, sending: b
   if (link === 'handshaking') return off(C.placeholder.connecting, 'muted', C.status.connecting);
   if (link !== 'ready') return off(C.placeholder.offline, 'muted', C.status.offline);
   if (session.state === 'exited' || session.state === 'error') return off(C.placeholder.ended, 'muted', C.status.ended);
-  if (session.pending || session.state === 'waiting_permission' || session.state === 'waiting_input') return off(C.placeholder.awaiting, 'attention', C.status.awaiting);
+  // As on the desktop: an accord waits in red, a question in amber.
+  if (session.pending || session.state === 'waiting_permission' || session.state === 'waiting_input') {
+    const question = session.pending ? session.pending.kind === 'question' : session.state === 'waiting_input';
+    return off(C.placeholder.awaiting, question ? 'attention' : 'approval', C.status.awaiting);
+  }
   if (session.state !== 'idle') return off(C.placeholder.working, 'info', C.status.working);
   if (sending) return off(C.placeholder.idle(session.name), 'info', C.status.sending);
   return { enabled: true, placeholder: C.placeholder.idle(session.name), status: { tone: 'ok', label: C.status.idle } };

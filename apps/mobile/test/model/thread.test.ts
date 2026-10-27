@@ -77,6 +77,11 @@ describe('composerState', () => {
     expect(c(s(), 'ready', true)).toMatchObject({ enabled: false, status: { label: 'Envoi au PC…' } });
     expect(c(s({ state: 'exited' })).enabled).toBe(false);
   });
+  it('says a decision waits in the colour of what waits, as on the desktop: an accord red, a question amber', () => {
+    expect(c(s({ state: 'waiting_permission' })).status.tone).toBe('approval');
+    expect(c(s({ state: 'waiting_input' })).status.tone).toBe('attention');
+    expect(c(s({ state: 'waiting_permission', pending: { key: 'q', kind: 'question', text: 'Lequel ?', source: 'hook', risk: 'low', riskReason: 'question' } })).status.tone).toBe('attention');
+  });
 });
 
 describe('threadItems with images', () => {

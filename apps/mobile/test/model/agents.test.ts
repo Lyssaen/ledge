@@ -35,10 +35,10 @@ describe('agentsOf', () => {
     expect(row({ state: 'idle' }).status).toEqual({ tone: 'ok', label: 'Disponible' });
     expect(row({ state: 'exited' }).status).toEqual({ tone: 'muted', label: 'Terminée' });
     expect(row({ state: 'error' }).status).toEqual({ tone: 'danger', label: 'Erreur' });
-    expect(row({ state: 'waiting_permission', pending: pend() }).status).toEqual({ tone: 'approval', label: 'Autorisation' });
-    expect(row({ state: 'waiting_input', pending: pend({ kind: 'question', text: 'Quel thème ?', riskReason: 'question' }) }).status).toEqual({ tone: 'attention', label: 'Question' });
+    expect(row({ state: 'waiting_permission', pending: pend() }).status).toEqual({ tone: 'approval', label: 'Votre accord' });
+    expect(row({ state: 'waiting_input', pending: pend({ kind: 'question', text: 'Quel thème ?', riskReason: 'question' }) }).status).toEqual({ tone: 'attention', label: 'Une question' });
     expect(row({ state: 'waiting_permission', pending: pend({ risk: 'high', riskReason: 'pushes' }) }).status).toEqual({ tone: 'danger', label: 'Impact élevé' });
-    expect(row({ state: 'waiting_permission', pending: pend({ key: '' }) }).status.label).toBe('Autorisation');
+    expect(row({ state: 'waiting_permission', pending: pend({ key: '' }) }).status.label).toBe('Votre accord');
   });
 
   it('last: the waiting request, else the first line of the reply, else a working line', () => {

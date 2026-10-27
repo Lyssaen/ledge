@@ -47,12 +47,12 @@ export function Terminal({ store, sessionId, storage }: { store: MobileStore; se
   // The latest lines are the ones that matter: follow the end, and leave the horizontal position alone.
   useEffect(() => { const el = box.current; if (el) el.scrollTop = el.scrollHeight; }, [lines.length, lines[lines.length - 1], size]);
 
-  const back = href({ name: 'thread', sessionId });
+  const backRoute = { name: 'thread', sessionId } as const;
   const link = linkView(state);
   if (!session) {
     return (
       <>
-        <BackHeader title={copy.thread.title} backTo={back} label={copy.terminal.back} link={link} />
+        <BackHeader title={copy.thread.title} fallback={backRoute} label={copy.terminal.back} link={link} />
         <main className="min-h-0 flex-1 pt-7 text-body text-muted" role="status">{!fresh && state.syncedAt === null ? copy.thread.loading : copy.terminal.unknown}</main>
       </>
     );
@@ -81,7 +81,7 @@ export function Terminal({ store, sessionId, storage }: { store: MobileStore; se
 
   return (
     <>
-      <BackHeader title={copy.terminal.title(session.name)} backTo={back} label={copy.terminal.back} link={link} />
+      <BackHeader title={copy.terminal.title(session.name)} fallback={backRoute} label={copy.terminal.back} link={link} />
       <main className="flex min-h-0 flex-1 flex-col">
         <div className="mt-2 mb-4 flex items-center justify-between gap-2">
           <span role="status" className="text-small text-muted">{status}</span>

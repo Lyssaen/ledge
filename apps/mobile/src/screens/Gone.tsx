@@ -16,10 +16,11 @@ const PRIMARY = buttonClass({ variant: 'primary', block: true });
 export function Gone({ store, stale = false, item }: { store: MobileStore; stale?: boolean; item?: InboxItem | undefined }) {
   const link = linkView(useMobile(store));
   const back = href({ name: 'inbox' });
+  const backRoute = { name: 'inbox' } as const;
   if (stale) {
     return (
       <>
-        <BackHeader title={copy.gone.header} backTo={back} label={copy.detail.back} link={link} />
+        <BackHeader title={copy.gone.header} fallback={backRoute} label={copy.detail.back} link={link} />
         <main className="min-h-0 flex-1 overflow-y-auto pt-7">
           <h1 className="text-display leading-[1.25] font-semibold tracking-[-1px]">{copy.gone.staleTitle}</h1>
           <p className="mt-2.5 text-body text-muted">{copy.gone.staleBody}</p>
