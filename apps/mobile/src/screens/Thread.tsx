@@ -157,24 +157,26 @@ export function Thread({ store, sessionId, storage, onReconnect }: { store: Mobi
     setRefused(!sent);
   };
   const ready = thread?.status === 'ready';
+  // The repository and branch: a line of their own, or after the name on a phone on its side.
+  const where = <>{session.repo ?? session.project}{session.branch && <> · <code className={`font-mono text-[.9em] ${session.worktree ? 'underline decoration-dotted underline-offset-2' : ''}`}>{session.branch}</code></>}</>;
 
   return (
     <>
-      <header className="flex-none border-b border-line pt-2 pb-3">
+      <header className="flex-none border-b border-line pt-2 pb-3 phone-side:pt-1 phone-side:pb-2">
         <div className="flex items-center gap-2.5">
           <BackLink fallback={{ name: 'agents' }} label={copy.thread.back} />
           <MobileBot tool={session.tool} seed={session.id} state={session.state} frozen={!fresh} />
           <div className="min-w-0 flex-1">
-            <h1 className="text-title leading-[1.25] font-semibold tracking-[-.2px] [overflow-wrap:anywhere]">{session.topic ?? session.project}</h1>
-            <p className="mt-[3px] text-meta text-muted">{session.name} · {copy.tools[session.tool]}</p>
+            <h1 className="text-title leading-[1.25] font-semibold tracking-[-.2px] [overflow-wrap:anywhere] phone-side:truncate phone-side:text-base">{session.topic ?? session.project}</h1>
+            <p className="mt-[3px] text-meta text-muted phone-side:truncate">{session.name} · {copy.tools[session.tool]}<span className="hidden phone-side:inline"> · {where}</span></p>
           </div>
           <a href={href({ name: 'terminal', sessionId })} aria-label={copy.thread.terminal(session.name)} className={iconButtonClass({ variant: 'outline' })}>
             <Icon name="terminal" />
           </a>
         </div>
-        <p className="mt-2 ml-[46px] text-meta [overflow-wrap:anywhere] text-muted">{session.repo ?? session.project}{session.branch && <> · <code className={`font-mono text-[.9em] ${session.worktree ? 'underline decoration-dotted underline-offset-2' : ''}`}>{session.branch}</code></>}</p>
+        <p className="mt-2 ml-[46px] text-meta [overflow-wrap:anywhere] text-muted phone-side:hidden">{where}</p>
       </header>
-      <main ref={scroller} aria-label={copy.thread.log(session.name)} className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto overscroll-contain pt-5 pb-4">
+      <main ref={scroller} aria-label={copy.thread.log(session.name)} className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto overscroll-contain pt-5 pb-4 phone-side:pt-3 phone-side:pb-3">
         {thread?.more && <p className="text-center text-meta text-muted">{copy.thread.more}</p>}
         {!ready && items.length === 0 && <p className="text-center text-meta text-muted" role="status">{fresh ? copy.thread.loading : copy.thread.unavailable}</p>}
         {ready && items.length === 0 && <p className="text-center text-meta text-muted">{copy.thread.empty}</p>}
