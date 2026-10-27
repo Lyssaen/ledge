@@ -28,9 +28,9 @@ export function TeamCard({ store, qid, team, canConfirm }: { store: MobileStore;
   const shown: Note | null = team.failed ? 'failed' : note;
   return (
     <section aria-label={copy.chat.team.label} className={CARD}>
-      <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[13px]">
+      <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-body">
         <span className="text-muted">{copy.chat.team.team}</span>
-        <div><span className="flex items-center gap-1.5 font-semibold"><Flag />{team.name}</span>{!done && <span className="text-xs text-muted">{copy.chat.team.newTable(team.project)}</span>}</div>
+        <div><span className="flex items-center gap-1.5 font-semibold"><Flag />{team.name}</span>{!done && <span className="text-small text-muted">{copy.chat.team.newTable(team.project)}</span>}</div>
         <span className="text-muted">{copy.chat.team.seats}</span>
         <ul className="flex flex-col gap-1">
           {team.seats.map(s => (
@@ -41,16 +41,16 @@ export function TeamCard({ store, qid, team, canConfirm }: { store: MobileStore;
           ))}
         </ul>
       </div>
-      {!done && auto.length > 0 && <p role="note" className="text-[13px] text-attention">{copy.chat.team.autoWarning(auto.join(', '))}</p>}
+      {!done && auto.length > 0 && <p role="note" className="text-body text-attention">{copy.chat.team.autoWarning(auto.join(', '))}</p>}
       {done && (
         <div role="status" className="border-t border-line pt-2.5">
-          <p className="text-[13px] text-ok">✓ {copy.chat.team.launched(time(team.launchedAt ?? new Date().toISOString()))}</p>
-          <p className="text-xs text-muted">{copy.chat.team.byKey} · <a href={href({ name: 'agents' })} className="text-info underline underline-offset-2">{copy.chat.team.openAgents}</a></p>
+          <p className="text-body text-ok">✓ {copy.chat.team.launched(time(team.launchedAt ?? new Date().toISOString()))}</p>
+          <p className="text-small text-muted">{copy.chat.team.byKey} · <a href={href({ name: 'agents' })} className="text-info underline underline-offset-2">{copy.chat.team.openAgents}</a></p>
         </div>
       )}
-      {!done && shown && <p role="status" className={`text-[13px] ${shown === 'failed' ? 'text-danger-fg' : 'text-muted'}`}>{shown === 'failed' ? copy.chat.team.notLaunched : copy.confirm[shown]}</p>}
+      {!done && shown && <p role="status" className={`text-body ${shown === 'failed' ? 'text-danger-fg' : 'text-muted'}`}>{shown === 'failed' ? copy.chat.team.notLaunched : copy.confirm[shown]}</p>}
       {!done && !canConfirm && (
-        <p className="text-[13px] text-attention">{copy.chat.launchSetup} <a href={href({ name: 'connection' })} className="text-info underline underline-offset-2">{copy.connection.title}</a></p>
+        <p className="text-body text-attention">{copy.chat.launchSetup} <a href={href({ name: 'connection' })} className="text-info underline underline-offset-2">{copy.connection.title}</a></p>
       )}
       {!done && (
         <div className="flex gap-2">

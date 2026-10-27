@@ -7,13 +7,14 @@ import { href, navigate } from '../../router';
 import type { MobileStore } from '../../state/store';
 import { useNow } from '../../useNow';
 import { Flag, Progress, RolePill } from './RolePill';
+import { buttonClass } from '../Button';
 
-const SMALL = 'inline-flex h-10 min-w-[64px] flex-none items-center justify-center rounded-control border border-white/15 px-3 text-[13px] font-medium disabled:opacity-40';
-const YES = 'inline-flex h-10 min-w-[64px] flex-none items-center justify-center rounded-control bg-danger-btn px-3 text-[13px] font-semibold disabled:opacity-40';
-const HEAD = 'mt-1 text-[11px] tracking-[.4px] text-muted';
+const SMALL = buttonClass({ size: 'sm', className: 'min-w-[64px] flex-none' });
+const YES = buttonClass({ variant: 'primary', size: 'sm', className: 'min-w-[64px] flex-none' });
+const HEAD = 'mt-1 text-meta tracking-[.4px] text-muted';
 
 function Dot({ tone }: { tone: 'attention' | 'ok' | 'danger' }) {
-  return <span aria-hidden="true" className={`size-2 flex-none rounded-full ${tone === 'ok' ? 'bg-ok' : tone === 'danger' ? 'bg-danger-fg' : 'bg-attention'}`} />;
+  return <span aria-hidden="true" className={`size-2 flex-none rounded-full ${tone === 'ok' ? 'bg-ok' : tone === 'danger' ? 'bg-approval' : 'bg-attention'}`} />;
 }
 
 /** A closed task of Ledge: « Voir » opens its owner's thread and puts the task away. */
@@ -46,8 +47,8 @@ export function LePoint({ store, sessions, teams, tasks, syncedAt, fresh, thresh
   const see = (t: PhoneTask) => { void store.seeTask(t.id); navigate({ name: 'thread', sessionId: t.owner }); };
   return (
     <section aria-label={P.label} className="flex flex-col gap-2.5 rounded-card border border-line bg-surface p-4">
-      <h2 className="flex items-baseline gap-2 text-base font-bold">{P.title}{syncedAt && <span className="text-xs font-normal text-muted">{P.ago(ageLabel(syncedAt, now))}</span>}</h2>
-      {yours === 0 && <p className="text-[13px] text-muted">{P.calm}</p>}
+      <h2 className="flex items-baseline gap-2 text-base font-bold">{P.title}{syncedAt && <span className="text-small font-normal text-muted">{P.ago(ageLabel(syncedAt, now))}</span>}</h2>
+      {yours === 0 && <p className="text-body text-muted">{P.calm}</p>}
       {yours > 0 && (
         <div role="group" aria-label={P.yoursLabel} className="flex flex-col gap-2">
           <h3 className={HEAD}>{P.yours} · {yours}</h3>
@@ -58,7 +59,7 @@ export function LePoint({ store, sessions, teams, tasks, syncedAt, fresh, thresh
             return (
               <div key={id} className="flex items-center gap-2">
                 <Dot tone="danger" />
-                <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 text-[13px]">
+                <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 text-body">
                   <span className="font-medium">{r.botName}</span>{s?.role && <RolePill role={s.role} />}
                   <span className="min-w-0 truncate font-mono">{headline(r)}</span>
                 </span>
@@ -74,7 +75,7 @@ export function LePoint({ store, sessions, teams, tasks, syncedAt, fresh, thresh
           {closed.map(t => (
             <div key={t.id} className="flex items-center gap-2">
               <Dot tone={t.state === 'done' ? 'ok' : 'attention'} />
-              <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 text-[13px]">
+              <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 text-body">
                 <span className="font-medium">{t.ownerName}</span>{t.ownerRole && <RolePill role={t.ownerRole} />}<span>{closedLine(t)}</span>
               </span>
               <button type="button" className={SMALL} onClick={() => see(t)}>{P.see}</button>
@@ -83,7 +84,7 @@ export function LePoint({ store, sessions, teams, tasks, syncedAt, fresh, thresh
           {near.map(s => (
             <div key={`near:${s.id}`} className="flex items-center gap-2">
               <Dot tone="attention" />
-              <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 text-[13px]" title={P.nearHint}>
+              <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 text-body" title={P.nearHint}>
                 <span className="font-medium">{s.name}</span>{s.role && <RolePill role={s.role} />}<span className="text-attention">· {P.near(Math.round((s.context!.used / s.context!.window) * 100))}</span>
               </span>
               <a href={href({ name: 'thread', sessionId: s.id })} className={SMALL}>{P.see}</a>
@@ -95,12 +96,12 @@ export function LePoint({ store, sessions, teams, tasks, syncedAt, fresh, thresh
         <div role="group" aria-label={P.teamsLabel} className="flex flex-col gap-2">
           <h3 className={HEAD}>{P.teams}</h3>
           {teams.map(t => t.state === 'active' ? (
-            <div key={t.id} className="flex items-center gap-2 text-[13px]">
+            <div key={t.id} className="flex items-center gap-2 text-body">
               <Flag /><span className="font-medium">{t.name}</span><span className="flex-1 text-muted">{P.seats(t.seats.length)}</span>
               {t.given > 0 && <Progress done={t.done} given={t.given} />}
             </div>
           ) : (
-            <div key={t.id} className="flex items-center gap-2 text-[13px] text-muted">
+            <div key={t.id} className="flex items-center gap-2 text-body text-muted">
               <Flag dim /><span className="flex-1"><span className="font-medium">{t.name}</span> · {P.resting}</span>
               <button type="button" className={SMALL} disabled={!fresh} onClick={() => void store.resumeTeam(t.id)}>{P.resume}</button>
             </div>
@@ -111,8 +112,8 @@ export function LePoint({ store, sessions, teams, tasks, syncedAt, fresh, thresh
         <div role="group" aria-label={P.givenLabel} className="flex flex-col gap-2">
           <h3 className={HEAD}>{P.given}</h3>
           {open.map(t => (
-            <a key={t.id} href={href({ name: 'thread', sessionId: t.owner })} className="flex items-center gap-2 text-[13px]">
-              <code className="flex-none font-mono text-xs text-muted">{t.id}</code>
+            <a key={t.id} href={href({ name: 'thread', sessionId: t.owner })} className="flex items-center gap-2 text-body">
+              <code className="flex-none font-mono text-small text-muted">{t.id}</code>
               <span className="min-w-0 flex-1 truncate">{t.title} <span className="text-muted">→ {t.ownerName}</span></span>
               <span className={t.state === 'taken' ? 'text-info' : 'text-muted'}>{P.state[t.state]}</span>
             </a>

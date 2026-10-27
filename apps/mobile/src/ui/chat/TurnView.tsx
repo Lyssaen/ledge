@@ -8,6 +8,8 @@ import { LaunchCards } from './LaunchCard';
 import { RelayCard } from './RelayCard';
 import { TaskCards } from './TaskCard';
 import { TeamCard } from './TeamCard';
+import { buttonClass } from '../Button';
+import { Icon } from '../icons';
 
 const ICON = 'size-3.5 flex-none fill-none stroke-current [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:1.6]';
 
@@ -35,7 +37,7 @@ function Steps({ steps, sessions, running }: { steps: PhoneChatStep[]; sessions:
       {steps.map((s, i) => {
         const doing = running && i === steps.length - 1;
         return (
-          <li key={`${i}:${s.kind}:${s.id ?? ''}`} className={`flex items-center gap-2 text-xs text-muted ${doing ? 'motion-safe:animate-pulse' : ''}`}>
+          <li key={`${i}:${s.kind}:${s.id ?? ''}`} className={`flex items-center gap-2 text-small text-muted ${doing ? 'motion-safe:animate-pulse' : ''}`}>
             {doing
               ? <svg className={`${ICON} motion-safe:animate-spin`} viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-6.22-8.56" /></svg>
               : <svg className={`${ICON} text-ok`} viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>}
@@ -70,16 +72,16 @@ export function TurnView({ store, turn, live, sessions, list, canConfirm, onStop
       {live && text && <p aria-live="polite" className="px-1 whitespace-pre-wrap break-words">{text}</p>}
       {!live && text && <Answer text={text} names={names} />}
       {!live && turn.answer && <Sources names={sourcesOf(steps)} ids={names} />}
-      {!live && turn.cut && <span className="px-1 text-xs text-muted">{copy.chat.cut}</span>}
-      {!live && turn.error && <p role="status" className="px-1 text-[13px] text-danger-fg">{ERROR[turn.error]}</p>}
+      {!live && turn.cut && <span className="px-1 text-small text-muted">{copy.chat.cut}</span>}
+      {!live && turn.error && <p role="status" className="px-1 text-body text-danger-fg">{ERROR[turn.error]}</p>}
       {!live && turn.closes && <CloseCards store={store} qid={turn.qid} closes={turn.closes} canConfirm={canConfirm} sessions={list} />}
       {!live && !turn.closes && relay && <RelayCard store={store} qid={turn.qid} relay={relay} repo={list.find(x => x.id === relay.id)?.repo} known={list.some(x => x.id === relay.id)} />}
       {!live && !turn.closes && turn.proposals && turn.proposals.length > 0 && <LaunchCards store={store} qid={turn.qid} proposals={turn.proposals} canConfirm={canConfirm} sessionIds={new Set(list.map(x => x.id))} />}
       {!live && turn.team && <TeamCard store={store} qid={turn.qid} team={turn.team} canConfirm={canConfirm} />}
       {!live && turn.tasks && turn.tasks.length > 0 && <TaskCards store={store} qid={turn.qid} tasks={turn.tasks} waiting={!!turn.team && turn.team.teamId === undefined} />}
       {live && (
-        <button type="button" onClick={onStop} className="inline-flex h-9 items-center gap-2 self-start rounded-control border border-white/15 px-3.5 text-[13px] font-medium">
-          <svg className={ICON} viewBox="0 0 24 24" aria-hidden="true"><rect width="12" height="12" x="6" y="6" rx="1" /></svg>
+        <button type="button" onClick={onStop} className={buttonClass({ size: 'sm', className: 'self-start' })}>
+          <Icon name="stop" className="size-3.5" />
           {copy.chat.stop}
         </button>
       )}

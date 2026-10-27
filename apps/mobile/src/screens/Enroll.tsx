@@ -88,7 +88,7 @@ export function ProtectRow({ store }: { store: MobileStore }) {
   return (
     <ProtectedRow>
       <div className="flex flex-col items-end gap-2">
-        <Action e={e} className="inline-flex min-h-10 items-center justify-center rounded-control border border-line px-3 text-[13px] font-medium disabled:opacity-45" />
+        <Action e={e} className="inline-flex min-h-10 items-center justify-center rounded-control border border-line px-3 text-body font-medium disabled:opacity-45" />
       </div>
     </ProtectedRow>
   );
@@ -124,8 +124,8 @@ export function ProtectStep({ store, onDone }: { store: MobileStore; onDone: () 
   return (
     <>
       <section aria-labelledby="protect-title" className="flex flex-col gap-3 rounded-control border border-line bg-surface p-4">
-        <h2 id="protect-title" className="text-[17px] leading-[1.35] font-semibold">{E.title}</h2>
-        <p className="text-[13px] leading-[1.6] text-muted">{E.body}</p>
+        <h2 id="protect-title" className="text-title leading-[1.35] font-semibold">{E.title}</h2>
+        <p className="text-body leading-[1.6] text-muted">{E.body}</p>
         <Action e={e} className={PRIMARY} />
       </section>
       <a href={inbox} onClick={onDone} className={OUTLINE}>{E.later}</a>

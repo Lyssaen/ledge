@@ -1,6 +1,5 @@
 // « Demander à Ledge »: the phone's own thread with Ledge. The turns are the PC's; this screen only asks, stops and starts over.
 import { useEffect, useRef, useState } from 'react';
-import { ResidentMascot } from '@ledge/ui/bots/ResidentMascot';
 import { copy } from '../copy';
 import { useChat, useMobile, type MobileStore } from '../state/store';
 import { Composer } from '../ui/chat/Composer';
@@ -12,6 +11,9 @@ import { closedTasks } from '../model/teams';
 import { useAttachments } from '../ui/useAttachments';
 import { LePoint } from '../ui/teams/LePoint';
 import type { PhoneTeam } from '@ledge/protocol';
+import { chipClass, iconButtonClass } from '../ui/Button';
+import { Icon } from '../ui/icons';
+import { Mascot } from '../ui/MobileBot';
 
 /** With teams, the operator's: « Monte une équipe… » and where the first active team is at. */
 function teamSuggestions(teams: PhoneTeam[]): string[] {
@@ -73,18 +75,18 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
   return (
     <>
       <header className="flex flex-none items-center gap-3 border-b border-line pt-3 pb-3">
-        <div aria-hidden="true" className="flex-none"><ResidentMascot size={36} theme="dark" frozen={offline} /></div>
+        <div aria-hidden="true" className="flex-none"><Mascot size={36} frozen={offline} /></div>
         <div className="min-w-0 flex-1">
           <LinkStatus link={linkView(state)} />
-          <h1 className="text-xl leading-[26px] font-bold tracking-[-0.4px]">{copy.chat.title}<span className="text-danger-fg">.</span></h1>
-          <p className="text-xs text-muted">{teams ? copy.chat.operator(sessions.length, teams.length) : copy.chat.subtitle(sessions.length, repos.size)}</p>
+          <h1 className="text-heading leading-[26px] font-bold tracking-[-0.4px]">{copy.chat.title}<span className="text-primary">.</span></h1>
+          <p className="text-small text-muted">{teams ? copy.chat.operator(sessions.length, teams.length) : copy.chat.subtitle(sessions.length, repos.size)}</p>
         </div>
         <button
           type="button" disabled={running} onClick={() => { setRefused(null); store.resetChat(); }}
           aria-label={copy.chat.reset} title={copy.chat.reset}
-          className="grid size-11 flex-none place-items-center rounded-control disabled:opacity-40"
+          className={iconButtonClass()}
         >
-          <svg className="size-5 fill-none stroke-current [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:1.5]" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.38 2.62a2.12 2.12 0 1 1 3 3L12.36 14.64a2 2 0 0 1-.85.51l-2.87.84.84-2.87a2 2 0 0 1 .5-.85z" /></svg>
+          <Icon name="edit" stroke={1.5} />
         </button>
       </header>
       <main className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain py-4">
@@ -93,7 +95,7 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
             <LePoint store={store} sessions={sessions} teams={teams} tasks={state.tasks} syncedAt={state.syncedAt} fresh={state.fresh} {...(state.device?.contextNear !== undefined ? { threshold: state.device.contextNear } : {})} />
             <div className="flex flex-wrap gap-2">
               {teamSuggestions(teams).map(s => (
-                <button key={s} type="button" onClick={() => setText(s)} className="inline-flex min-h-11 items-center rounded-full border border-line bg-surface px-3.5 text-[13px] font-medium">{s}</button>
+                <button key={s} type="button" onClick={() => setText(s)} className={chipClass()}>{s}</button>
               ))}
             </div>
           </div>
@@ -102,7 +104,7 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
           <div className="flex flex-1 flex-col justify-end gap-2.5">
             <p className="mb-1.5 text-muted">{copy.chat.empty}</p>
             {suggestionsOf(sessions).map(s => (
-              <button key={s} type="button" onClick={() => setText(s)} className="flex min-h-12 w-full items-center rounded-xl border border-line bg-surface px-3.5 text-left text-sm font-medium">{s}</button>
+              <button key={s} type="button" onClick={() => setText(s)} className={`${chipClass()} self-start py-2 text-left`}>{s}</button>
             ))}
           </div>
         )}
@@ -111,7 +113,7 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
         ))}
         <div ref={end} />
       </main>
-      {note && <p role="status" className="flex-none pb-2 text-[13px] text-attention">{note}</p>}
+      {note && <p role="status" className="flex-none pb-2 text-body text-attention">{note}</p>}
       <Composer value={text} onChange={setText} onSend={send} canSend={(text.trim() !== '' || images.items.length > 0) && images.ready && !running && !offline} images={images} attachDisabled={running || offline} />
       <TabBar count={requestsOf(sessions).length + closedTasks(state.tasks.values()).length} active="chat" chat />
     </>

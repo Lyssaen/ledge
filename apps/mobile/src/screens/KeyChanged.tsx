@@ -23,13 +23,13 @@ export function KeyChanged({ pcName, known, received, onRelink, onSignOut }: {
         <h1 className={H1}>{K.title(pcName ?? copy.yourPc)}</h1>
         <p className="text-muted">{K.body}</p>
       </div>
-      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2.5 rounded-control border border-line bg-surface p-4 text-[13px]">
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2.5 rounded-control border border-line bg-surface p-4 text-body">
         <dt className="text-muted">{K.known}</dt>
         <dd className="font-mono">{known ? K.knownDetail(groupFingerprint(known.fingerprint, 2), pinnedOn(known.pinnedAt)) : copy.connection.unknown}</dd>
         <dt className="text-muted">{K.received}</dt>
         <dd className="font-mono">{received ? K.receivedDetail(groupFingerprint(received, 2)) : copy.connection.unknown}</dd>
       </dl>
-      <div className="flex flex-col gap-3 text-[13px] leading-[1.6] text-muted">
+      <div className="flex flex-col gap-3 text-body leading-[1.6] text-muted">
         <p><strong className="text-fg">{K.reinstalledTitle}</strong> {K.reinstalledBody}</p>
         <p><strong className="text-fg">{K.otherwise}</strong> {K.warning}</p>
       </div>

@@ -9,9 +9,10 @@ import { Notice } from '../ui/Notice';
 import type { ConfirmedExpect, MobileStore } from '../state/store';
 import { usePlatform } from './device';
 import { OnPc, RiskConfirm, type ConfirmReason } from './RiskConfirm';
+import { buttonClass } from '../ui/Button';
 
-const btn = 'inline-flex min-h-12 flex-1 items-center justify-center rounded-control border border-line px-4 py-2.5 text-center text-[13px] leading-[1.4] font-medium disabled:opacity-45';
-const full = 'inline-flex min-h-12 w-full items-center justify-center rounded-control border px-4 py-2.5 text-[13px] font-medium disabled:opacity-45';
+const half = (variant?: 'primary') => buttonClass({ variant, className: 'flex-1' });
+const full = (variant?: 'primary' | 'ghost') => buttonClass({ variant, block: true });
 
 export interface DecisionFooterProps {
   item: InboxItem;
@@ -71,13 +72,13 @@ export function DecisionFooter(p: DecisionFooterProps) {
   const [checking, setChecking] = useBusy();
   const platform = usePlatform();
 
-  const thread = <a href={href({ name: 'thread', sessionId: item.sessionId })} className={`${full} border-transparent text-muted`}>{copy.result.thread(item.botName)}</a>;
+  const thread = <a href={href({ name: 'thread', sessionId: item.sessionId })} className={full('ghost')}>{copy.result.thread(item.botName)}</a>;
   // The board's order: what to do, then the way to the thread, then what a tap does.
   const wrap = (children: ReactNode, hint?: string, withThread = true) => (
     <footer className="flex flex-none flex-col gap-2.5 border-t border-line bg-bg pt-3 pb-4">
       {children}
       {withThread && thread}
-      {hint && <p className="text-center text-[10px] text-muted">{hint}</p>}
+      {hint && <p className="text-center text-meta text-muted">{hint}</p>}
     </footer>
   );
 
@@ -96,20 +97,20 @@ export function DecisionFooter(p: DecisionFooterProps) {
     ) : null
   ) : multi ? (
     <div className="flex flex-col gap-2.5">
-      {multi.missing > 0 && <p className="text-center text-xs text-muted">{copy.answers.missing(multi.missing)}</p>}
-      <button type="button" disabled={!enabled || multi.missing > 0} onClick={multi.onSend} className={`${full} border-transparent bg-fg text-[#121415]`}>{copy.answers.send}</button>
-      <button type="button" disabled={!enabled} onClick={multi.onCancel} className={`${full} border-line`}>{copy.answers.cancel}</button>
+      {multi.missing > 0 && <p className="text-center text-small text-muted">{copy.answers.missing(multi.missing)}</p>}
+      <button type="button" disabled={!enabled || multi.missing > 0} onClick={multi.onSend} className={full('primary')}>{copy.answers.send}</button>
+      <button type="button" disabled={!enabled} onClick={multi.onCancel} className={full()}>{copy.answers.cancel}</button>
     </div>
   ) : confirmable && guard ? (
     <RiskConfirm store={guard} item={item} enabled={enabled} reason={deviceReason} onConfirm={(a, expect) => guard.decide(item.sessionId, 'accept', { assertion: a, expect })} onDeny={() => onDecide('deny')} />
   ) : answerable ? (
-    <button type="button" disabled={!enabled || choice === null || answerBlocked} onClick={() => onAnswer?.()} className={`${full} border-transparent bg-fg text-[#121415]`}>{D.send}</button>
+    <button type="button" disabled={!enabled || choice === null || answerBlocked} onClick={() => onAnswer?.()} className={full('primary')}>{D.send}</button>
   ) : (
     <div className="flex gap-2.5">
-      <button type="button" disabled={!enabled} onClick={() => onDecide('deny')} className={btn}>{D.deny}</button>
+      <button type="button" disabled={!enabled} onClick={() => onDecide('deny')} className={half()}>{D.deny}</button>
       {onPc
         ? <OnPc />
-        : <button type="button" disabled={!enabled} onClick={() => onDecide('accept')} className={`${btn} border-transparent bg-fg text-[#121415]`}>{D.allow}</button>}
+        : <button type="button" disabled={!enabled} onClick={() => onDecide('accept')} className={half('primary')}>{D.allow}</button>}
     </div>
   );
   const linkHint = !fresh ? D.offlineHint : optionReply ? (confirmable ? D.answerHint : D.onPcHint) : multi ? D.answerHint : onPc && !answerable && !confirmable ? D.onPcHint : answerable ? D.answerHint : D.hint;
@@ -120,7 +121,7 @@ export function DecisionFooter(p: DecisionFooterProps) {
     return wrap(<>
       <Notice title={D.changed} tone="warning" role="status" />
       {buttons(false)}
-      <button type="button" onClick={onReread} className={`${full} border-line bg-surface`}>{D.reread}</button>
+      <button type="button" onClick={onReread} className={full()}>{D.reread}</button>
     </>);
   }
 
@@ -130,7 +131,7 @@ export function DecisionFooter(p: DecisionFooterProps) {
     case 'uncertain':
       return wrap(<>
         <Notice title={D.uncertain} tone="warning" role="alert"><p>{D.uncertainBody}</p></Notice>
-        {onCheck && <button type="button" disabled={checking} onClick={() => { setChecking(true); onCheck(); }} className={`${full} border-transparent bg-fg text-[#121415]`}>{checking ? D.checking : D.check}</button>}
+        {onCheck && <button type="button" disabled={checking} onClick={() => { setChecking(true); onCheck(); }} className={full('primary')}>{checking ? D.checking : D.check}</button>}
       </>);
     case 'rejected': case 'failed': {
       const r = outcome.reason;
@@ -140,7 +141,7 @@ export function DecisionFooter(p: DecisionFooterProps) {
       if (r === 'stale') {
         return wrap(<>
           <Notice title={D.changed} tone="warning" role="alert" />
-          <a href={href({ name: 'inbox' })} className={`${full} border-line bg-surface`}>{copy.result.back}</a>
+          <a href={href({ name: 'inbox' })} className={full()}>{copy.result.back}</a>
         </>, undefined, false);
       }
       const notice = <Notice title={reasonText(item, r)} tone="warning" role="alert" />;

@@ -55,15 +55,15 @@ export function CloseCards({ store, qid, closes, canConfirm, sessions }: { store
       <ul className="flex flex-col gap-2">
         {rows.map(({ row, i, name, state }) => (
           <li key={i} className="flex items-center justify-between gap-2">
-            <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">{name} <span className="font-normal text-muted">· {copy.tools[row.tool]}</span></span>
-            {state !== 'open' && <span className={`text-[13px] ${state === 'failed' ? 'text-danger-fg' : state === 'closing' ? 'text-attention' : 'text-ok'}`}>{text[state]}</span>}
+            <span className="min-w-0 flex-1 truncate text-body font-semibold">{name} <span className="font-normal text-muted">· {copy.tools[row.tool]}</span></span>
+            {state !== 'open' && <span className={`text-body ${state === 'failed' ? 'text-danger-fg' : state === 'closing' ? 'text-attention' : 'text-ok'}`}>{text[state]}</span>}
             {(state === 'open' || state === 'failed') && <button type="button" className={GHOST} disabled={held || !canConfirm} onClick={() => go([i])}>{copy.chat.closeRow}</button>}
           </li>
         ))}
       </ul>
-      {note && <p className="text-[13px] text-muted">{copy.confirm[note]}</p>}
+      {note && <p className="text-body text-muted">{copy.confirm[note]}</p>}
       {open.length > 0 && !canConfirm && (
-        <p className="text-[13px] text-attention">{copy.chat.closeSetup} <a href={href({ name: 'connection' })} className="text-info underline underline-offset-2">{copy.connection.title}</a></p>
+        <p className="text-body text-attention">{copy.chat.closeSetup} <a href={href({ name: 'connection' })} className="text-info underline underline-offset-2">{copy.connection.title}</a></p>
       )}
       {open.length >= 2 && (
         <div className="flex gap-2">

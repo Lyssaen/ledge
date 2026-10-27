@@ -1,11 +1,11 @@
 import type { ReactNode } from 'react';
+import { buttonClass } from './Button';
 
-const BUTTON = 'inline-flex min-h-14 w-full items-center justify-center gap-2.5 rounded-control px-4 text-base font-semibold disabled:opacity-45';
-/** The one action the board leads to. */
-export const PRIMARY = `${BUTTON} bg-fg text-[#121415]`;
-export const OUTLINE = `${BUTTON} border border-line`;
+/** The one action the board leads to, and the other ways out: the large buttons of ui/Button. */
+export const PRIMARY = buttonClass({ variant: 'primary', size: 'lg', block: true });
+export const OUTLINE = buttonClass({ size: 'lg', block: true });
 export const ICON = 'size-5 flex-none fill-none stroke-current [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:1.5]';
-export const H1 = 'text-2xl leading-8 font-semibold tracking-[-.025em]';
+export const H1 = 'text-display leading-8 font-semibold tracking-[-.025em]';
 
 /** A screen of the account and pairing boards: one column, no tab bar, its actions at the bottom. */
 export function Board({ children, top = 'pt-24' }: { children: ReactNode; top?: string }) {

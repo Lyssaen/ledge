@@ -15,15 +15,16 @@ import { ReplyView } from '../ui/ReplyView';
 import { PhoneThumbs } from '../ui/PhoneThumbs';
 import { useAttachments } from '../ui/useAttachments';
 import { Reply, replyFailure, replyProblem } from './Reply';
+import { buttonClass, iconButtonClass } from '../ui/Button';
+import { Icon } from '../ui/icons';
 
-const ICON = 'size-5 fill-none stroke-current [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:1.6]';
 
 function AgentReply({ text }: { text: string }) {
   const doc = useMemo(() => parseReply(text), [text]);
   return <ReplyView doc={doc} />;
 }
 
-const Cut = ({ align }: { align: 'start' | 'end' }) => <div className={`text-[10px] text-muted ${align === 'end' ? 'text-right' : ''}`}>{copy.thread.cut}</div>;
+const Cut = ({ align }: { align: 'start' | 'end' }) => <div className={`text-meta text-muted ${align === 'end' ? 'text-right' : ''}`}>{copy.thread.cut}</div>;
 
 function Bubble({ item, store }: { item: ThreadItem; store: MobileStore }) {
   switch (item.kind) {
@@ -32,11 +33,11 @@ function Bubble({ item, store }: { item: ThreadItem; store: MobileStore }) {
       const refs = item.images ?? (item.attachments ?? []).flatMap(id => store.knownImage(id) ?? []);
       return (
       <div className="flex flex-col items-end gap-1">
-        {item.text && <div className="max-w-[94%] rounded-2xl rounded-br-[4px] bg-[#292d30] p-3.5 text-[13px] [overflow-wrap:anywhere] whitespace-pre-wrap">{item.text}</div>}
+        {item.text && <div className="max-w-[94%] rounded-2xl rounded-br-[4px] bg-raised p-3.5 text-body [overflow-wrap:anywhere] whitespace-pre-wrap">{item.text}</div>}
         <PhoneThumbs store={store} refs={refs} align="end" />
         {item.cut && <Cut align="end" />}
         {item.delivery && (
-          <div role={item.delivery === 'sending' ? 'status' : undefined} className={`text-[10px] ${item.delivery === 'uncertain' ? 'text-attention' : item.delivery === 'sending' ? 'text-muted' : 'text-ok'}`}>
+          <div role={item.delivery === 'sending' ? 'status' : undefined} className={`text-meta ${item.delivery === 'uncertain' ? 'text-attention' : item.delivery === 'sending' ? 'text-muted' : 'text-ok'}`}>
             {item.delivery === 'sending' ? copy.thread.delivery.sending : item.delivery === 'uncertain' ? copy.thread.delivery.uncertain : item.fresh ? copy.thread.delivery.takenNow : copy.thread.delivery.taken}
           </div>
         )}
@@ -45,19 +46,19 @@ function Bubble({ item, store }: { item: ThreadItem; store: MobileStore }) {
     }
     case 'agent': return (
       <div className="flex flex-col items-start gap-1">
-        <article aria-label={copy.thread.agentLabel} className="max-w-[94%] rounded-2xl rounded-bl-[4px] border border-line bg-surface p-3.5 text-[13px] [overflow-wrap:anywhere]">
+        <article aria-label={copy.thread.agentLabel} className="max-w-[94%] rounded-2xl rounded-bl-[4px] border border-line bg-surface p-3.5 text-body [overflow-wrap:anywhere]">
           <AgentReply text={item.text} />
         </article>
         {item.cut && <Cut align="start" />}
       </div>
     );
-    case 'event': return <div className="text-center text-[10px] text-muted">{item.label}</div>;
+    case 'event': return <div className="text-center text-meta text-muted">{item.label}</div>;
     case 'awaiting': return (
       <Notice title={copy.thread.awaiting} tone="warning">
         <p className="[overflow-wrap:anywhere]">{headline(item.item)}</p>
-        <a href={href({ name: 'request', sessionId: item.item.sessionId, key: item.item.key })} className="mt-3 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-control border border-line bg-surface px-4 py-2.5 text-[13px] font-medium">
+        <a href={href({ name: 'request', sessionId: item.item.sessionId, key: item.item.key })} className={buttonClass({ block: true, className: 'mt-3' })}>
           {copy.thread.examine}
-          <svg className={ICON} viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" /></svg>
+          <Icon name="arrowRight" />
         </a>
       </Notice>
     );
@@ -66,8 +67,8 @@ function Bubble({ item, store }: { item: ThreadItem; store: MobileStore }) {
 
 function BackTo({ label }: { label: string }) {
   return (
-    <a href={href({ name: 'agents' })} aria-label={label} className="-ml-2 inline-flex size-11 flex-none items-center justify-center rounded-control">
-      <svg className={ICON} viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+    <a href={href({ name: 'agents' })} aria-label={label} className={iconButtonClass({ className: '-ml-2' })}>
+      <Icon name="back" />
     </a>
   );
 }
@@ -140,7 +141,7 @@ export function Thread({ store, sessionId, storage, onReconnect }: { store: Mobi
             <LinkStatus link={linkView(state)} />
           </div>
         </header>
-        <main className="min-h-0 flex-1 pt-7 text-[13px] text-muted" role="status">{waiting ? copy.thread.loading : copy.thread.unknown}</main>
+        <main className="min-h-0 flex-1 pt-7 text-body text-muted" role="status">{waiting ? copy.thread.loading : copy.thread.unknown}</main>
       </>
     );
   }
@@ -172,19 +173,19 @@ export function Thread({ store, sessionId, storage, onReconnect }: { store: Mobi
           <BackTo label={copy.thread.back} />
           <MobileBot tool={session.tool} seed={session.id} state={session.state} frozen={!fresh} />
           <div className="min-w-0 flex-1">
-            <h1 className="text-[17px] leading-[1.25] font-semibold tracking-[-.2px] [overflow-wrap:anywhere]">{session.topic ?? session.project}</h1>
-            <p className="mt-[3px] text-[11px] text-muted">{session.name} · {copy.tools[session.tool]}</p>
+            <h1 className="text-title leading-[1.25] font-semibold tracking-[-.2px] [overflow-wrap:anywhere]">{session.topic ?? session.project}</h1>
+            <p className="mt-[3px] text-meta text-muted">{session.name} · {copy.tools[session.tool]}</p>
           </div>
-          <a href={href({ name: 'terminal', sessionId })} aria-label={copy.thread.terminal(session.name)} className="inline-flex size-11 flex-none items-center justify-center rounded-control border border-line">
-            <svg className={ICON} viewBox="0 0 24 24" aria-hidden="true"><path d="m4 17 6-6-6-6M12 19h8" /></svg>
+          <a href={href({ name: 'terminal', sessionId })} aria-label={copy.thread.terminal(session.name)} className={iconButtonClass({ variant: 'outline' })}>
+            <Icon name="terminal" />
           </a>
         </div>
-        <p className="mt-2 ml-[46px] text-[11px] [overflow-wrap:anywhere] text-muted">{session.repo ?? session.project}{session.branch && <> · <code className={`font-mono text-[.9em] ${session.worktree ? 'underline decoration-dotted underline-offset-2' : ''}`}>{session.branch}</code></>}</p>
+        <p className="mt-2 ml-[46px] text-meta [overflow-wrap:anywhere] text-muted">{session.repo ?? session.project}{session.branch && <> · <code className={`font-mono text-[.9em] ${session.worktree ? 'underline decoration-dotted underline-offset-2' : ''}`}>{session.branch}</code></>}</p>
       </header>
       <main ref={scroller} aria-label={copy.thread.log(session.name)} className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto overscroll-contain pt-5 pb-4">
-        {thread?.more && <p className="text-center text-[11px] text-muted">{copy.thread.more}</p>}
-        {!ready && items.length === 0 && <p className="text-center text-[11px] text-muted" role="status">{fresh ? copy.thread.loading : copy.thread.unavailable}</p>}
-        {ready && items.length === 0 && <p className="text-center text-[11px] text-muted">{copy.thread.empty}</p>}
+        {thread?.more && <p className="text-center text-meta text-muted">{copy.thread.more}</p>}
+        {!ready && items.length === 0 && <p className="text-center text-meta text-muted" role="status">{fresh ? copy.thread.loading : copy.thread.unavailable}</p>}
+        {ready && items.length === 0 && <p className="text-center text-meta text-muted">{copy.thread.empty}</p>}
         {items.map(it => <Bubble key={it.key} item={it} store={store} />)}
       </main>
       <Reply name={session.name} composer={composer} draft={draft} onDraft={changeDraft} onSend={send} fresh={fresh} taken={takenNow} checking={last?.phase === 'uncertain' && fresh} error={error} onReconnect={onReconnect} images={images} dialog={dialog} />

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import type { AttachmentRef } from '@ledge/protocol';
 import { copy } from '../copy';
 import type { MobileStore } from '../state/store';
+import { useDialog } from './Dialog';
 import { useImageUrl } from './useImageUrl';
 
 const C = copy.images;
@@ -31,7 +32,7 @@ function useShareable(url: string | null, name: string, mime: string): File | nu
 
 /**
  * One of a message's images, full screen. Two fingers zoom (1× to 4×), a vertical swipe of more than 120 px or ✕ closes.
- * Only the shown image is fetched whole.
+ * Only the shown image is fetched whole. On a keyboard, Escape closes it. Always on black, whatever the theme: a photo's frame.
  */
 export function ImageViewer({ store, refs, index, onIndex, onClose }: { store: MobileStore; refs: AttachmentRef[]; index: number; onIndex(i: number): void; onClose(): void }) {
   const shown = refs[index]!;
@@ -66,10 +67,13 @@ export function ImageViewer({ store, refs, index, onIndex, onClose }: { store: M
     }
   };
 
+  const box = useRef<HTMLDivElement>(null);
+  useDialog(box, onClose);
+
   const share = () => { if (file) void navigator.share({ files: [file] }).catch(() => undefined); };
   // The gesture container captures the pointer: the buttons must not start a gesture of its own.
   const stop = (e: React.PointerEvent) => e.stopPropagation();
-  const button = 'inline-flex min-h-11 items-center rounded-full bg-white/15 px-4 text-[13px] font-medium text-white';
+  const button = 'inline-flex min-h-11 items-center rounded-full bg-white/15 px-4 text-body font-medium text-white';
   const nav = (to: number, label: string, side: string, d: string) => to >= 0 && to < refs.length && (
     <button type="button" aria-label={label} title={label} onPointerDown={stop} onClick={() => onIndex(to)} className={`absolute top-1/2 ${side} grid size-11 -translate-y-1/2 place-items-center rounded-full bg-white/15 text-white`}>
       <svg className="size-5 fill-none stroke-current [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:1.6]" viewBox="0 0 24 24" aria-hidden="true"><path d={d} /></svg>
@@ -77,9 +81,9 @@ export function ImageViewer({ store, refs, index, onIndex, onClose }: { store: M
   );
 
   return createPortal(
-    <div role="dialog" aria-modal="true" aria-label={C.view} className="fixed inset-0 z-50 flex flex-col bg-black/90 text-white" style={{ opacity: drag ? Math.max(0.4, 1 - Math.abs(drag) / 400) : 1 }}>
+    <div ref={box} role="dialog" aria-modal="true" aria-label={C.view} tabIndex={-1} className="fixed inset-0 z-50 flex flex-col bg-black/90 text-white outline-none" style={{ opacity: drag ? Math.max(0.4, 1 - Math.abs(drag) / 400) : 1 }}>
       <div className="flex items-center gap-2 px-3 py-2.5">
-        <span className="min-w-0 flex-1 text-xs text-white/70">{shown.width}×{shown.height}{refs.length > 1 ? ` · ${index + 1}/${refs.length}` : ''}</span>
+        <span className="min-w-0 flex-1 text-small text-white/70">{shown.width}×{shown.height}{refs.length > 1 ? ` · ${index + 1}/${refs.length}` : ''}</span>
         {file && <button type="button" onPointerDown={stop} onClick={share} className={button}>{C.share}</button>}
         {url && <a href={url} download={name} onPointerDown={stop} className={button}>{C.save}</a>}
         <button type="button" aria-label={C.close} title={C.close} onPointerDown={stop} onClick={onClose} className="grid size-11 place-items-center rounded-full bg-white/15">
@@ -89,7 +93,7 @@ export function ImageViewer({ store, refs, index, onIndex, onClose }: { store: M
       <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden" style={{ touchAction: 'none' }}
         onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
         {url && <img src={url} alt="" draggable={false} className="max-h-full max-w-full select-none object-contain" style={{ transform: `translateY(${drag}px) scale(${scale})`, transition: pointers.current.size ? 'none' : 'transform .15s' }} />}
-        {!url && <p role="status" className="text-sm text-white/70">{failed ? C.unavailable : '…'}</p>}
+        {!url && <p role="status" className="text-body text-white/70">{failed ? C.unavailable : '…'}</p>}
         {nav(index - 1, C.prev, 'left-3', 'm15 18-6-6 6-6')}
         {nav(index + 1, C.next, 'right-3', 'm9 18 6-6-6-6')}
       </div>

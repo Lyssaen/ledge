@@ -2,7 +2,10 @@ import type { PhoneSession, Tool } from '@ledge/protocol';
 import { copy } from '../copy';
 import { firstLine, requestsOf, type InboxItem } from './requests';
 
-export type Tone = 'attention' | 'info' | 'ok' | 'muted' | 'danger';
+export type Tone = 'approval' | 'attention' | 'info' | 'ok' | 'muted' | 'danger';
+
+/** As on the desktop: an accord waits in red, a question in amber, a plan or a change to read in blue. */
+export const kindTone: Record<InboxItem['kind'], Tone> = { permission: 'approval', question: 'attention', plan: 'info', diff: 'info' };
 
 /** One session of the « Agents » list. */
 export interface AgentRow {
@@ -23,9 +26,12 @@ export interface AgentRow {
 }
 
 function statusOf(s: PhoneSession, pending: InboxItem | undefined): AgentRow['status'] {
-  if (pending) return { tone: 'attention', label: pending.risk === 'high' && pending.kind !== 'question' ? copy.risk.badge : copy.kind[pending.kind] };
+  if (pending) {
+    const high = pending.risk === 'high' && pending.kind !== 'question';
+    return { tone: high ? 'danger' : kindTone[pending.kind], label: high ? copy.risk.badge : copy.kind[pending.kind] };
+  }
   switch (s.state) {
-    case 'waiting_permission': return { tone: 'attention', label: copy.kind.permission };
+    case 'waiting_permission': return { tone: 'approval', label: copy.kind.permission };
     case 'waiting_input': return { tone: 'attention', label: copy.kind.question };
     case 'idle': return { tone: 'ok', label: copy.agents.state.idle };
     case 'exited': return { tone: 'muted', label: copy.agents.state.exited };

@@ -6,6 +6,8 @@ import { localStore } from '../state/storage';
 import { useMobile, type MobileStore } from '../state/store';
 import { BackHeader, linkView } from '../ui/Header';
 import { useNow } from '../useNow';
+import { buttonClass, iconButtonClass } from '../ui/Button';
+import { Icon } from '../ui/icons';
 
 const SIZE_KEY = 'ledge.mobile.terminalSize';
 export const SIZE_MIN = 11;
@@ -22,8 +24,7 @@ function saveSize(n: number, storage?: Storage): void {
   try { localStore(storage)?.setItem(SIZE_KEY, String(n)); } catch { /* blocked storage: the size lasts for this visit */ }
 }
 
-const STEP = 'inline-flex size-11 items-center justify-center rounded-control border border-line bg-surface text-[13px] font-medium disabled:opacity-45';
-const ICON = 'size-5 fill-none stroke-current [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:1.6]';
+const STEP = iconButtonClass({ variant: 'outline', className: 'text-body font-medium' });
 
 type Interrupt = Op & { message: Extract<Op['message'], { type: 'session.interrupt' }> };
 
@@ -52,7 +53,7 @@ export function Terminal({ store, sessionId, storage }: { store: MobileStore; se
     return (
       <>
         <BackHeader title={copy.thread.title} backTo={back} label={copy.terminal.back} link={link} />
-        <main className="min-h-0 flex-1 pt-7 text-[13px] text-muted" role="status">{!fresh && state.syncedAt === null ? copy.thread.loading : copy.terminal.unknown}</main>
+        <main className="min-h-0 flex-1 pt-7 text-body text-muted" role="status">{!fresh && state.syncedAt === null ? copy.thread.loading : copy.terminal.unknown}</main>
       </>
     );
   }
@@ -83,27 +84,27 @@ export function Terminal({ store, sessionId, storage }: { store: MobileStore; se
       <BackHeader title={copy.terminal.title(session.name)} backTo={back} label={copy.terminal.back} link={link} />
       <main className="flex min-h-0 flex-1 flex-col">
         <div className="mt-2 mb-4 flex items-center justify-between gap-2">
-          <span role="status" className="text-xs text-muted">{status}</span>
+          <span role="status" className="text-small text-muted">{status}</span>
           <div className="flex gap-2">
             <button type="button" disabled={size <= SIZE_MIN} onClick={() => resize(-1)} aria-label={copy.terminal.smaller} className={STEP}>A−</button>
             <button type="button" disabled={size >= SIZE_MAX} onClick={() => resize(1)} aria-label={copy.terminal.larger} className={STEP}>A+</button>
           </div>
         </div>
-        <div ref={box} tabIndex={0} aria-label={copy.terminal.output} className="mb-3 min-h-0 flex-1 overflow-auto rounded-card border border-line bg-[#090a0b] p-4">
+        <div ref={box} tabIndex={0} aria-label={copy.terminal.output} className="mb-3 min-h-0 flex-1 overflow-auto rounded-card border border-line bg-term-bg p-4">
           {lines.length === 0
-            ? <p className="text-xs text-muted">{copy.terminal.empty}</p>
-            : <pre data-size={size} style={{ fontSize: size }} className="m-0 w-max min-w-full font-mono leading-[1.5] whitespace-pre text-[#c5ccc7]">{lines.join('\n')}</pre>}
+            ? <p className="text-small text-muted">{copy.terminal.empty}</p>
+            : <pre data-size={size} style={{ fontSize: size }} className="m-0 w-max min-w-full font-mono leading-[1.5] whitespace-pre text-term-fg">{lines.join('\n')}</pre>}
         </div>
       </main>
       <footer className="flex flex-none flex-col gap-2.5 border-t border-line bg-bg pt-3 pb-[max(16px,env(safe-area-inset-bottom))] [@media(max-height:650px)]:pb-2.5">
-        <p className="text-center text-[10px] text-muted">{copy.terminal.scrollHint}</p>
-        {problem && <p role="alert" className="text-center text-xs text-attention">{problem}</p>}
-        <button type="button" disabled={!enabled} onClick={interrupt} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-control border border-line bg-surface px-4 py-2.5 text-[13px] font-medium disabled:opacity-45">
-          <svg className={ICON} viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+        <p className="text-center text-meta text-muted">{copy.terminal.scrollHint}</p>
+        {problem && <p role="alert" className="text-center text-small text-attention">{problem}</p>}
+        <button type="button" disabled={!enabled} onClick={interrupt} className={buttonClass({ block: true })}>
+          <Icon name="stop" />
           {label}
         </button>
-        {why && !inFlight && !justSent && <p className="text-center text-[11px] text-muted">{why}</p>}
-        <p className="text-center text-[10px] text-muted">{copy.terminal.note}</p>
+        {why && !inFlight && !justSent && <p className="text-center text-meta text-muted">{why}</p>}
+        <p className="text-center text-meta text-muted">{copy.terminal.note}</p>
       </footer>
     </>
   );

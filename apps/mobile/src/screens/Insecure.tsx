@@ -5,7 +5,7 @@ import { OUTLINE } from '../ui/Board';
 export function Insecure() {
   return (
     <main className="app flex flex-col justify-center gap-2 text-center" role="alert">
-      <h1 className="text-2xl leading-8 font-semibold tracking-[-.025em]">{copy.insecure.title}</h1>
+      <h1 className="text-display leading-8 font-semibold tracking-[-.025em]">{copy.insecure.title}</h1>
       <p className="text-muted">{copy.insecure.body}</p>
     </main>
   );
@@ -15,7 +15,7 @@ export function Insecure() {
 export function BootFailed() {
   return (
     <main className="app flex flex-col justify-center gap-4 text-center" role="alert">
-      <h1 className="text-2xl leading-8 font-semibold tracking-[-.025em]">{copy.bootFailed.title}</h1>
+      <h1 className="text-display leading-8 font-semibold tracking-[-.025em]">{copy.bootFailed.title}</h1>
       <p className="text-muted">{copy.bootFailed.body}</p>
       <button type="button" onClick={() => globalThis.location.reload()} className={OUTLINE}>{copy.bootFailed.reload}</button>
     </main>

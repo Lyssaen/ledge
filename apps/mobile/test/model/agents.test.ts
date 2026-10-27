@@ -29,15 +29,15 @@ describe('agentsOf', () => {
     expect(g!.rows.map(r => [r.task, r.branch])).toEqual([['Un', 'one'], ['Deux', 'two']]);
   });
 
-  it('labels every state with text, not only colour', () => {
+  it('labels every state with text, not only colour, coloured as on the desktop', () => {
     const row = (x: Partial<PhoneSession>) => agentsOf([s('x', x)])[0]!.rows[0]!;
     expect(row({ state: 'working' }).status).toEqual({ tone: 'info', label: 'Au travail' });
     expect(row({ state: 'idle' }).status).toEqual({ tone: 'ok', label: 'Disponible' });
     expect(row({ state: 'exited' }).status).toEqual({ tone: 'muted', label: 'Terminée' });
     expect(row({ state: 'error' }).status).toEqual({ tone: 'danger', label: 'Erreur' });
-    expect(row({ state: 'waiting_permission', pending: pend() }).status).toEqual({ tone: 'attention', label: 'Autorisation' });
+    expect(row({ state: 'waiting_permission', pending: pend() }).status).toEqual({ tone: 'approval', label: 'Autorisation' });
     expect(row({ state: 'waiting_input', pending: pend({ kind: 'question', text: 'Quel thème ?', riskReason: 'question' }) }).status).toEqual({ tone: 'attention', label: 'Question' });
-    expect(row({ state: 'waiting_permission', pending: pend({ risk: 'high', riskReason: 'pushes' }) }).status).toEqual({ tone: 'attention', label: 'Impact élevé' });
+    expect(row({ state: 'waiting_permission', pending: pend({ risk: 'high', riskReason: 'pushes' }) }).status).toEqual({ tone: 'danger', label: 'Impact élevé' });
     expect(row({ state: 'waiting_permission', pending: pend({ key: '' }) }).status.label).toBe('Autorisation');
   });
 

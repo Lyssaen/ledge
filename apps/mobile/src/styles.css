@@ -1,37 +1,60 @@
 /* The shared tokens and mascots of @ledge/ui sit in a layer below Tailwind's, so its theme keeps its own radii. */
 @layer ledge-ui;
 @import 'tailwindcss';
+/* Geist, served by the app itself: the relay's CSP takes fonts from 'self' only. */
+@import '@fontsource-variable/geist';
+@import '@fontsource-variable/geist-mono';
 @import '@ledge/ui/styles/tokens.css' layer(ledge-ui);
 @import '@ledge/ui/bots/bots.css' layer(ledge-ui);
 @import '@ledge/ui/bots/resident.css' layer(ledge-ui);
 
-/* Tokens of the Ledge mobile UI (dark only); the background is the one of @ledge/ui. */
+/* The mobile UI's colours are the shared tokens of @ledge/ui (tokens.css), light or dark after `data-theme` (src/theme.ts):
+   the same meaning as on the desktop. `inline`, so each utility reads the variable of the theme shown. */
+@theme inline {
+  --color-bg: var(--background);
+  --color-surface: var(--card);
+  --color-raised: var(--muted);
+  --color-well: var(--well);
+  --color-fg: var(--foreground);
+  --color-muted: var(--muted-foreground);
+  --color-line: var(--border);
+  --color-input: var(--input);
+  /* The brand: the chat's send, the waiting count. */
+  --color-primary: var(--primary);
+  --color-primary-fg: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  /* States, as the desktop's badges: an accord waits in red, a question in amber, a run in blue, a free agent in green. */
+  --color-approval: var(--danger-text);
+  --color-attention: var(--warning);
+  --color-ok: var(--success);
+  --color-info: var(--info);
+  --color-danger-fg: var(--danger-text);
+  --color-danger-bg: var(--status-danger-soft);
+  /* A team's flag, and a seat's role pill (roles spec): the desktop's sidebar colour. */
+  --color-team: var(--sidebar-primary);
+  --color-role: var(--sidebar-primary);
+  --color-term-bg: var(--term-bg);
+  --color-term-fg: var(--term-fg);
+}
 @theme {
-  --color-bg: #0c0d0e;
-  --color-surface: #17191b;
-  --color-raised: #202326;
-  --color-fg: #f2f1ed;
-  --color-muted: #a2a6ab;
-  --color-attention: #edc479;
-  --color-ok: #a6d6bf;
-  --color-info: #a6c8f0;
-  --color-danger-fg: #f4a5a3;
-  --color-danger-bg: #301b1d;
-  --color-danger-btn: #8f3037;
-  --color-line: #ffffff14;
-  /* A team's flag, and a seat's role pill (roles spec). */
-  --color-team: #b9a2ef;
-  --color-role: #f0a08f;
   --radius-card: 16px;
   --radius-control: 12px;
   --font-sans: 'Geist Variable', system-ui, sans-serif;
   --font-mono: 'Geist Mono Variable', ui-monospace, monospace;
+  /* The type scale, in rem so the browser's text size scales it; 11 px is the floor. A field keeps text-base (16 px),
+     below which iOS zooms on focus. */
+  --text-meta: 0.6875rem; --text-meta--line-height: 1rem;          /* 11: times, badges, hints */
+  --text-small: 0.75rem; --text-small--line-height: 1.125rem;      /* 12: secondary lines */
+  --text-body: 0.875rem; --text-body--line-height: 1.375rem;       /* 14: body, buttons (the desktop's) */
+  /* text-base, 16: a card's title, a field, a board's button */
+  --text-title: 1.125rem; --text-title--line-height: 1.5rem;       /* 18: a thread's or a section's title */
+  --text-heading: 1.3125rem; --text-heading--line-height: 1.75rem; /* 21: an empty state, a sheet */
+  --text-display: 1.625rem; --text-display--line-height: 2rem;     /* 26: a screen's title */
 }
 
-:root { color-scheme: dark; }
 * { -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; height: 100%; background: var(--color-bg); }
-body { font: 14px/1.5 var(--font-sans); color: var(--color-fg); }
+body { font: 0.875rem/1.5 var(--font-sans); color: var(--color-fg); }
 button, input, textarea, select { font: inherit; }
 button, a, summary { touch-action: manipulation; }
 button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 2px solid var(--color-info); outline-offset: 4px; }

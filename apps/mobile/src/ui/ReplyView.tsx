@@ -17,7 +17,7 @@ export function inline(text: string, depth = 0, plain?: Plain): ReactNode[] {
     const at = m.index;
     if (at > last) out.push(...T(text.slice(last, at)));
     const g = m.groups!;
-    if (g.code) out.push(<code key={at} className="rounded-md bg-white/[0.06] px-[5px] py-px font-mono text-[.92em] [overflow-wrap:anywhere]">{g.code.slice(1, -1)}</code>);
+    if (g.code) out.push(<code key={at} className="rounded-md bg-fg/[0.06] px-[5px] py-px font-mono text-[.92em] [overflow-wrap:anywhere]">{g.code.slice(1, -1)}</code>);
     else if (g.b) out.push(<strong key={at} className="font-semibold">{inline(g.b, depth + 1, plain)}</strong>);
     else out.push(<em key={at}>{inline(g.i!, depth + 1, plain)}</em>);
     last = at + m[0].length;
@@ -30,11 +30,11 @@ function BlockView({ b }: { b: Block }) {
   const plain = useContext(PlainText);
   switch (b.type) {
     case 'p': return <p className="[&+*]:mt-2.5">{inline(b.text, 0, plain)}</p>;
-    case 'code': return <pre className="my-2.5 overflow-x-auto rounded-lg bg-black/30 p-2.5 font-mono text-xs leading-[1.6] whitespace-pre">{b.text}</pre>;
+    case 'code': return <pre className="my-2.5 overflow-x-auto rounded-lg bg-well p-2.5 font-mono text-small leading-[1.6] whitespace-pre">{b.text}</pre>;
     case 'list': {
       const L = b.ordered ? 'ol' : 'ul';
       return (
-        <L className={`my-2.5 flex flex-col gap-1 pl-[18px] text-[#c8cbce] ${b.ordered ? 'list-decimal' : 'list-disc'}`}>
+        <L className={`my-2.5 flex flex-col gap-1 pl-[18px] text-fg/80 ${b.ordered ? 'list-decimal' : 'list-disc'}`}>
           {b.items.map((it, i) => (
             <li key={i}>
               {it.checked !== undefined && <span aria-hidden="true">{it.checked ? '☑ ' : '☐ '}</span>}{inline(it.text, 0, plain)}
@@ -46,7 +46,7 @@ function BlockView({ b }: { b: Block }) {
     }
     case 'table': return (
       <div className="my-2.5 overflow-x-auto" tabIndex={0}>
-        <table className="w-full border-collapse text-xs">
+        <table className="w-full border-collapse text-small">
           <thead><tr>{b.header.map((h, i) => <th key={i} className="border-b border-line px-2 py-1.5 font-semibold" style={{ textAlign: b.align[i] ?? 'left' }}>{inline(h, 0, plain)}</th>)}</tr></thead>
           <tbody>{b.rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j} className="border-b border-line px-2 py-1.5 align-top" style={{ textAlign: b.align[j] ?? 'left' }}>{inline(c, 0, plain)}</td>)}</tr>)}</tbody>
         </table>
@@ -63,14 +63,14 @@ function SectionView({ s }: { s: Section }) {
   if (s.kind === 'next') {
     return (
       <div className="mt-3 rounded-[10px] border border-info/[0.13] bg-info/[0.03] p-3">
-        <div className="mb-1.5 text-[10px] font-medium tracking-[.5px] text-info uppercase">{copy.thread.suggestion}</div>
+        <div className="mb-1.5 text-meta font-medium tracking-[.5px] text-info uppercase">{copy.thread.suggestion}</div>
         {body}
       </div>
     );
   }
   return (
     <section className="mt-2.5">
-      {s.title && <h3 className="mb-1 text-[13px] font-semibold">{inline(s.title, 0, plain)}</h3>}
+      {s.title && <h3 className="mb-1 text-body font-semibold">{inline(s.title, 0, plain)}</h3>}
       {body}
     </section>
   );
@@ -80,7 +80,7 @@ function SectionView({ s }: { s: Section }) {
 export function ReplyView({ doc, plain }: { doc: ReplyDoc; plain?: Plain }) {
   return (
     <PlainText.Provider value={plain}>
-      {doc.title && <strong className="block text-[13px] font-semibold">{inline(doc.title, 0, plain)}</strong>}
+      {doc.title && <strong className="block text-body font-semibold">{inline(doc.title, 0, plain)}</strong>}
       {doc.lead && <p className="mt-1.5">{inline(doc.lead, 0, plain)}</p>}
       {doc.sections.map((s, i) => <SectionView key={i} s={s} />)}
     </PlainText.Provider>

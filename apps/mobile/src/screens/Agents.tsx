@@ -7,26 +7,28 @@ import { useMobile, type MobileStore } from '../state/store';
 import { Header, linkView } from '../ui/Header';
 import { MobileBot } from '../ui/MobileBot';
 import { OfflineBanner } from '../ui/Notice';
-import { StatusBadge } from '../ui/StatusBadge';
+import { Tag } from '../ui/Tag';
 import { TabBar } from '../ui/TabBar';
 import { Flag, Progress, RolePill } from '../ui/teams/RolePill';
 import { closedTasks, tablesOf, type Table } from '../model/teams';
+import { buttonClass } from '../ui/Button';
+import { Icon } from '../ui/icons';
 
 function Row({ row, session, offline, threshold }: { row: AgentRow; session: PhoneSession | undefined; offline: boolean; threshold: number }) {
   return (
-    <a href={href({ name: 'thread', sessionId: row.sessionId })} className="flex gap-3 border-b border-line py-4 hover:bg-raised/40">
+    <a href={href({ name: 'thread', sessionId: row.sessionId })} className="flex gap-3 border-b border-line py-4 hover:bg-raised/40 active:bg-raised/60">
       <div className="mt-[3px]"><MobileBot tool={row.tool} seed={row.sessionId} state={session?.state ?? 'idle'} frozen={offline} /></div>
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
-          <h3 className="min-w-0 text-sm font-semibold [overflow-wrap:anywhere]">{row.task}</h3>
-          {row.unread && <span className="flex-none text-[10px] text-info">{copy.agents.unread}</span>}
+          <h3 className="min-w-0 text-body font-semibold [overflow-wrap:anywhere]">{row.task}</h3>
+          {row.unread && <span className="flex-none text-meta text-info">{copy.agents.unread}</span>}
         </div>
-        <div className="my-[3px] text-[11px] [overflow-wrap:anywhere] text-muted">
+        <div className="my-[3px] text-meta [overflow-wrap:anywhere] text-muted">
           <span className="inline-flex flex-wrap items-center gap-1.5">{row.botName}{row.role && <RolePill role={row.role} />}</span>{row.branch && <> · <code className={`font-mono text-[.9em] ${row.worktree ? 'underline decoration-dotted underline-offset-2' : ''}`}>{row.branch}</code></>}
         </div>
-        {row.last && <p className="mt-[5px] line-clamp-2 text-xs [overflow-wrap:anywhere] text-muted">{row.last}</p>}
+        {row.last && <p className="mt-[5px] line-clamp-2 text-small [overflow-wrap:anywhere] text-muted">{row.last}</p>}
         {session && (session.context || session.handover || session.relieves) && (
-          <p className="mt-[5px] text-[11px] text-muted">
+          <p className="mt-[5px] text-meta text-muted">
             {[session.context ? copy.agents.context(Math.round((session.context.used / session.context.window) * 100)) : null,
               session.handover ? (session.handover.state === 'done' && session.handover.toName ? copy.agents.relievedBy(session.handover.toName) : copy.agents.relief[session.handover.state]) : null,
               session.relieves ? copy.agents.relieves(session.relieves.name) : null].filter(Boolean).map((x, i) => (
@@ -34,26 +36,26 @@ function Row({ row, session, offline, threshold }: { row: AgentRow; session: Pho
             ))}
           </p>
         )}
-        <div className="mt-2"><StatusBadge {...row.status} /></div>
+        <div className="mt-2"><Tag {...row.status} /></div>
       </div>
-      <svg className="mt-1 size-5 flex-none self-center fill-none stroke-muted [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:1.6]" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
+      <span className="self-center text-muted"><Icon name="chevron" /></span>
     </a>
   );
 }
 
 /** A table's heading: ⚑ a team with Ledge's progress, or « Reprendre » when it rests; the common table by its name. */
 function TableHead({ table, store, offline }: { table: Table; store: MobileStore; offline: boolean }) {
-  if (table.kind === 'common') return <div className="pt-3 pb-1 text-[11px] tracking-[.4px] text-muted">{copy.agents.common}</div>;
+  if (table.kind === 'common') return <div className="pt-3 pb-1 text-meta tracking-[.4px] text-muted">{copy.agents.common}</div>;
   const t: PhoneTeam = table.team;
   if (t.state === 'resting') return (
-    <div className="flex items-center gap-2 pt-3 pb-1 text-[13px] text-muted">
+    <div className="flex items-center gap-2 pt-3 pb-1 text-body text-muted">
       <Flag dim /><span className="flex-1"><span className="font-semibold">{t.name}</span> · {copy.agents.resting}</span>
-      <button type="button" disabled={offline} onClick={() => void store.resumeTeam(t.id)} className="inline-flex h-10 items-center rounded-control border border-white/15 px-3 text-[13px] font-medium text-fg disabled:opacity-40">{copy.agents.resume}</button>
+      <button type="button" disabled={offline} onClick={() => void store.resumeTeam(t.id)} className={buttonClass({ size: 'sm' })}>{copy.agents.resume}</button>
     </div>
   );
   return (
-    <div className="flex items-center gap-2 pt-3 pb-1 text-[13px]">
-      <Flag /><span className="font-semibold">{t.name}</span><span className="min-w-0 flex-1 truncate text-xs text-muted">{copy.agents.team}</span>
+    <div className="flex items-center gap-2 pt-3 pb-1 text-body">
+      <Flag /><span className="font-semibold">{t.name}</span><span className="min-w-0 flex-1 truncate text-small text-muted">{copy.agents.team}</span>
       {t.given > 0 && <Progress done={t.done} given={t.given} />}
     </div>
   );
@@ -78,7 +80,7 @@ export function Agents({ store, onReconnect }: { store: MobileStore; onReconnect
           const teamed = g.tables.some(t => t.kind === 'team');
           return (
             <section key={g.key} aria-label={g.label}>
-              <div className="py-3 text-[11px] tracking-[.4px] text-muted">{teamed ? copy.agents.tables(g.label, g.tables.length).toUpperCase() : g.label}</div>
+              <div className="py-3 text-meta tracking-[.4px] text-muted">{teamed ? copy.agents.tables(g.label, g.tables.length).toUpperCase() : g.label}</div>
               {g.tables.map(t => (
                 <div key={t.kind === 'team' ? t.team.id : 'common'} role="group" aria-label={t.kind === 'team' ? copy.agents.teamLabel(t.team.name) : copy.agents.common} className={t.kind === 'team' && t.team.state === 'resting' ? 'opacity-70' : ''}>
                   {teamed && <TableHead table={t} store={store} offline={offline} />}
@@ -91,14 +93,14 @@ export function Agents({ store, onReconnect }: { store: MobileStore; onReconnect
         {!tables && groups.map(g => (
           // Two groups can share a name (a repository and a project); a session belongs to one group only.
           <section key={g.rows[0]!.sessionId} aria-label={g.label}>
-            <div className="py-3 text-[11px] tracking-[.4px] text-muted">{g.label}</div>
+            <div className="py-3 text-meta tracking-[.4px] text-muted">{g.label}</div>
             {g.rows.map(r => <Row key={r.sessionId} row={r} session={state.sessions.get(r.sessionId)} offline={offline} threshold={state.device?.contextNear ?? CONTEXT_NEAR} />)}
           </section>
         ))}
         {(tables ?? groups).length === 0 && (
           <div className="flex flex-col items-center gap-3 px-3 py-12 text-center">
-            <h2 className="text-[21px] leading-[1.3] tracking-[-.5px]">{copy.agents.empty}</h2>
-            <p className="max-w-[260px] text-[13px] text-muted">{copy.agents.emptyHint}</p>
+            <h2 className="text-heading leading-[1.3] tracking-[-.5px]">{copy.agents.empty}</h2>
+            <p className="max-w-[260px] text-body text-muted">{copy.agents.emptyHint}</p>
           </div>
         )}
       </main>

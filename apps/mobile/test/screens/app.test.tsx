@@ -171,6 +171,20 @@ describe('the app', () => {
     expect(screen.getByRole('dialog', { name: 'Nouvelle version · 0.6.1' })).toBeInTheDocument();
   });
 
+  it('the sheet takes the focus, Escape is « Plus tard », and the focus comes back where it was', () => {
+    const u = fakeUpdates({ version: '0.5.4', fingerprint: '8e1702af' });
+    app('ready', { updates: u.watch });
+    const gear = screen.getByRole('link', { name: /connexion/i });
+    gear.focus();
+    act(() => u.set({ waiting: { version: '0.6.0', fingerprint: '3f9ac21e' } }));
+    const sheet = screen.getByRole('dialog', { name: 'Nouvelle version · 0.6.0' });
+    expect(sheet).toHaveFocus();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(u.accept).not.toHaveBeenCalled();
+    expect(gear).toHaveFocus();
+  });
+
   it('the build on the connection screen follows the service worker', () => {
     const u = fakeUpdates();
     app('ready', { hash: '#/connection', updates: u.watch });
