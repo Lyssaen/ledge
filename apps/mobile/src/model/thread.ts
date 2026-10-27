@@ -45,13 +45,19 @@ function eventLabel(item: Extract<PcItem, { kind: 'permission' }>, sessionId: st
 
 /** How long a taken instruction is said to be taken « à l’instant », and keeps the composer closed. */
 export const TAKEN_WINDOW = 20_000;
-/** An applied instruction older than everything the PC still lists by this much has fallen off its window. */
-const FALLEN_OFF = 300_000;
+
+/** Whether the PC's prompt is this phone's instruction: the same text but for the spaces around it, or its start when the PC shortened it. */
+const sameText = (prompt: string, sent: string, shortened: boolean) => {
+  const p = prompt.trim(), m = sent.trim();
+  return p === m || (shortened && p.length > 0 && m.startsWith(p));
+};
 
 /**
- * The thread in the PC's order (a row updated in place keeps its place; nothing is sorted by time), then what this
- * phone sent that the PC's thread does not show yet, then the request still waiting. Tools, helpers and messages
- * between agents are left to the terminal; a permission shows once decided.
+ * The thread in the PC's order (a row updated in place keeps its place; the PC's rows are not sorted by time), what
+ * this phone sent that the PC's thread does not show yet in its place in time, what is still on its way, then the
+ * request still waiting. A taken instruction the PC never lists (a command such as `/new`, or a prompt that fell off its
+ * window) goes once the PC lists something `TAKEN_WINDOW` past it: the PC moved on without it. Tools, helpers and
+ * messages between agents are left to the terminal; a permission shows once decided.
  */
 export function threadItems(items: PcItem[], session: PhoneSession, ops: Record<string, Op>, now: number = Date.now(), cut: string[] = []): ThreadItem[] {
   const out: ThreadItem[] = [];
@@ -64,7 +70,7 @@ export function threadItems(items: PcItem[], session: PhoneSession, ops: Record<
   for (const o of mine) {
     if (o.phase !== 'applied') continue;
     const ids = o.message.attachments ?? [];
-    const hit = items.find(i => i.kind === 'prompt' && i.text === o.message.text && !claimed.has(i.id) && sameIds(i.images?.map(x => x.id) ?? [], ids));
+    const hit = items.find(i => i.kind === 'prompt' && sameText(i.text, o.message.text, shortened.has(i.id)) && !claimed.has(i.id) && sameIds(i.images?.map(x => x.id) ?? [], ids));
     if (hit) { claimed.add(hit.id); shown.add(o.op); }
   }
   for (const i of items) {
@@ -75,13 +81,17 @@ export function threadItems(items: PcItem[], session: PhoneSession, ops: Record<
       if (label) out.push({ key: i.id, kind: 'event', label, at: i.at });
     }
   }
-  const oldest = items[0]?.at;
+  const newest = Math.max(...items.map(i => Date.parse(i.at)));
   for (const o of mine) {
+    const at = Date.parse(o.at);
     const base = { key: o.op, kind: 'me' as const, text: o.message.text, at: o.at, ...(o.message.attachments?.length ? { attachments: o.message.attachments } : {}) };
     if (o.phase === 'sending') out.push({ ...base, delivery: 'sending' });
     else if (o.phase === 'uncertain') out.push({ ...base, delivery: 'uncertain' });
-    else if (o.phase === 'applied' && !shown.has(o.op) && !(oldest && Date.parse(oldest) - Date.parse(o.at) > FALLEN_OFF))
-      out.push({ ...base, delivery: 'taken', ...(now - Date.parse(o.at) < TAKEN_WINDOW ? { fresh: true } : {}) });
+    else if (o.phase === 'applied' && !shown.has(o.op) && !(newest - at > TAKEN_WINDOW)) {
+      // Before the first of the PC's rows that came after it (a live one stays last: it is the newest).
+      const next = out.findIndex(i => i.kind !== 'awaiting' && !(i.kind === 'me' && i.delivery && i.delivery !== 'taken') && Date.parse(i.at) > at);
+      out.splice(next < 0 ? out.length : next, 0, { ...base, delivery: 'taken', ...(now - at < TAKEN_WINDOW ? { fresh: true } : {}) });
+    }
   }
   const awaiting = requestsOf([session])[0];
   if (awaiting) out.push({ key: `awaiting-${awaiting.key}`, kind: 'awaiting', item: awaiting });

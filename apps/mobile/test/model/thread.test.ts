@@ -57,6 +57,26 @@ describe('threadItems', () => {
     expect(threadItems([prompt('p', 6, 'Lance les tests')], s(), ops(instruction({ phase: 'applied' })))).toMatchObject([{ key: 'p', delivery: 'taken' }]);
   });
 
+  it('drops what the terminal took once the PC has moved past it without listing it, never pinning it at the end', () => {
+    // The capture's case: three taken instructions, one of them a command (`/new`) no transcript ever shows, and a later reply.
+    const sent = (op: string, m: number, text: string): Op => ({ op, message: { type: 'session.reply', op, id: 'a', text, expect: null }, phase: 'applied', at: T(m) });
+    const items = threadItems([reply('r1', 1, 'Le code n’est toujours pas commité.'), reply('r2', 9, 'ouais compacte aussi l’en-tête du fil en paysage')], s(),
+      ops(sent('o1', 2, 'Oui go'), sent('o2', 3, 'Est-ce que tu sais me montrer les photos de tes changements ?'), sent('o3', 4, '/new')), Date.parse(T(10)));
+    expect(items.map(i => i.key)).toEqual(['r1', 'r2']);
+  });
+
+  it('places a taken instruction the PC does not list yet in time order, not after what came later', () => {
+    const at = Date.parse(T(5));
+    const later: ThreadItem = { kind: 'reply', id: 'r', at: new Date(at + 5_000).toISOString(), turn: 1, text: 'Je regarde.' };
+    const items = threadItems([reply('r0', 1, 'Prête.'), later], s(), ops(instruction({ phase: 'applied' })), at + 6_000);
+    expect(items.map(i => i.key)).toEqual(['r0', OP, 'r']);
+  });
+
+  it('recognizes its instruction in the PC\'s prompt despite surrounding spaces, or shortened by the PC', () => {
+    expect(threadItems([prompt('p', 6, '  Lance les tests\n')], s(), ops(instruction({ phase: 'applied' })))).toMatchObject([{ key: 'p', delivery: 'taken' }]);
+    expect(threadItems([prompt('p', 6, 'Lance les')], s(), ops(instruction({ phase: 'applied' })), Date.now(), ['p'])).toMatchObject([{ key: 'p', delivery: 'taken' }]);
+  });
+
   it('an answer to a request is not an instruction of the thread', () => {
     const answer = instruction({ message: { type: 'session.reply', op: OP, id: 'a', text: '1', expect: { key: 'k', kind: 'question', text: '?' } } });
     expect(threadItems([], s(), ops(answer))).toEqual([]);
@@ -99,7 +119,7 @@ describe('threadItems with images', () => {
   it('an op without an image does not claim a prompt that has one', () => {
     const pic: ThreadItem = { kind: 'prompt', ...base('t2', 7), text: '', images: [IMG] };
     const items = threadItems([pic], s(), ops(withImages()), Date.parse(T(30)));
-    expect(items).toHaveLength(2);
+    expect(items).toHaveLength(1); // the op, unclaimed, is past: the PC moved on without it
     expect(items[0]).toMatchObject({ key: 't2' });
     expect(items[0]).not.toHaveProperty('delivery');
   });
