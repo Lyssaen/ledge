@@ -1,6 +1,6 @@
-import { ResidentMascot } from '@ledge/ui/bots/ResidentMascot';
 import { copy } from '../copy';
 import { Board, Fill, ICON, PRIMARY } from '../ui/Board';
+import { Mascot } from '../ui/MobileBot';
 
 /** The relay's own route: GitHub, then back to `/?signin=<issue>`. */
 export const GITHUB_START = '/auth/github/start';
@@ -23,7 +23,7 @@ export function Login({ server, error }: { server: string; error: string | null 
   return (
     <Board>
       <div className="flex flex-col items-center gap-3.5 text-center">
-        <ResidentMascot size={88} theme="dark" />
+        <Mascot size={88} />
         <h1 className="text-[28px] leading-[34px] font-bold tracking-[-.025em]">{copy.login.title}</h1>
         <p className="max-w-[300px] text-muted">{copy.login.subtitle}</p>
       </div>

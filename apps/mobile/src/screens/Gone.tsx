@@ -4,8 +4,9 @@ import { href } from '../router';
 import { useMobile, type MobileStore } from '../state/store';
 import { BackHeader, linkView } from '../ui/Header';
 import { Result } from './Result';
+import { buttonClass } from '../ui/Button';
 
-const PRIMARY = 'inline-flex min-h-12 w-full items-center justify-center rounded-control bg-fg px-4 py-2.5 text-[13px] font-medium text-[#121415]';
+const PRIMARY = buttonClass({ variant: 'primary', block: true });
 
 /**
  * A request that no longer waits. Only a fresh state may say « already handled on the PC » (the board's Result,

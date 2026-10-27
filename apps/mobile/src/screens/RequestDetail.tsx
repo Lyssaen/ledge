@@ -18,6 +18,8 @@ import { DecisionFooter } from './DecisionFooter';
 import { Gone } from './Gone';
 import { MultiQuestionForm, QuestionForm } from './QuestionForm';
 import { Result } from './Result';
+import { buttonClass } from '../ui/Button';
+import { Icon } from '../ui/icons';
 
 function Lost({ onReconnect }: { onReconnect?: (() => void) | undefined }) {
   const [busy, setBusy] = useBusy();
@@ -25,7 +27,7 @@ function Lost({ onReconnect }: { onReconnect?: (() => void) | undefined }) {
     <Notice title={copy.link.lostTitle} tone="warning" role="status">
       <p>{copy.link.lostDetail}</p>
       {onReconnect && (
-        <button type="button" disabled={busy} onClick={() => { setBusy(true); onReconnect(); }} className="mt-3 inline-flex min-h-12 w-full items-center justify-center rounded-control border border-line bg-surface px-4 py-2.5 text-[13px] font-medium disabled:opacity-45">
+        <button type="button" disabled={busy} onClick={() => { setBusy(true); onReconnect(); }} className={buttonClass({ block: true, className: 'mt-3' })}>
           {busy ? copy.link.reconnecting : copy.link.reconnect}
         </button>
       )}
@@ -144,7 +146,7 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect }: { s
       {options.map((o, i) => (
         <li key={`${i}:${o}`}>
           <button type="button" disabled={!optionsLive} aria-pressed={picked === i} onClick={() => tapOption(i)}
-            className="flex min-h-12 w-full flex-col items-start justify-center rounded-control border border-line bg-surface px-3 py-3 text-left text-[13px] [overflow-wrap:anywhere] disabled:opacity-45 aria-pressed:border-fg/40 aria-pressed:bg-raised">
+            className="flex min-h-12 w-full flex-col items-start justify-center rounded-control border border-line bg-surface px-3 py-3 text-left text-[13px] [overflow-wrap:anywhere] disabled:opacity-45 active:bg-raised aria-pressed:border-fg/40 aria-pressed:bg-raised">
             {o}
             {req.optionDetails?.[i] && <small className="mt-0.5 text-[11px] text-muted">{req.optionDetails[i]}</small>}
           </button>
@@ -168,7 +170,7 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect }: { s
     <>
       <BackHeader title={copy.detail.heading[req.kind]} backTo={back} label={copy.detail.back} link={link} />
       <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[22px]">
-        <div className="mt-4 flex items-start gap-3 rounded-[14px] border border-line bg-surface p-3.5">
+        <div className="mt-4 flex items-start gap-3 rounded-card border border-line bg-surface p-3.5">
           <MobileBot tool={req.tool} seed={req.sessionId} state={state.sessions.get(sessionId)?.state ?? 'idle'} frozen={!fresh} />
           <div className="min-w-0 flex-1">
             <strong className="block text-[13px] [overflow-wrap:anywhere]">{req.task}</strong>
@@ -211,7 +213,7 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect }: { s
               <details className="group mt-[18px] border-t border-line">
                 <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between text-xs [&::-webkit-details-marker]:hidden">
                   {copy.detail.context}
-                  <svg className="size-4 flex-none fill-none stroke-current text-muted [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:1.6]" viewBox="0 0 24 24" aria-hidden="true"><path d="m4 17 6-6-6-6M12 19h8" /></svg>
+                  <Icon name="terminal" className="size-4 text-muted" />
                 </summary>
                 <pre className="pt-2 pb-4 font-mono text-xs leading-[1.7] break-words whitespace-pre-wrap text-muted [overflow-wrap:anywhere]">{lines.join('\n')}</pre>
               </details>

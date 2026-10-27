@@ -4,6 +4,8 @@ import { AttachmentChips } from '@ledge/ui/images';
 import { copy } from '../../copy';
 import { AttachButton, pastedImages } from '../Attach';
 import type { Attachments } from '../useAttachments';
+import { iconButtonClass } from '../Button';
+import { Icon } from '../icons';
 
 const MIN = 44;
 const MAX = 120;
@@ -32,10 +34,10 @@ export function Composer({ value, onChange, onSend, canSend, images, attachDisab
           e.preventDefault();
           if (canSend) onSend();
         }}
-        className="max-h-[120px] min-h-11 flex-1 resize-none rounded-[22px] border border-white/15 bg-surface px-3.5 py-[11px] text-base leading-5 text-fg placeholder:text-muted"
+        className="max-h-[120px] min-h-11 flex-1 resize-none rounded-[22px] border border-input bg-surface px-3.5 py-[11px] text-base leading-5 text-fg placeholder:text-muted"
       />
-      <button type="submit" disabled={!canSend} aria-label={copy.chat.send} className="grid size-11 flex-none place-items-center rounded-full bg-danger-btn text-fg disabled:opacity-40">
-        <svg className="size-5 fill-none stroke-current [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:1.6]" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 7-7 7 7" /><path d="M12 19V5" /></svg>
+      <button type="submit" disabled={!canSend} aria-label={copy.chat.send} className={iconButtonClass({ variant: 'brand', round: true })}>
+        <Icon name="arrowUp" />
       </button>
       {images.error && <p role="alert" className="w-full text-[13px] text-attention">{images.error}</p>}
     </form>

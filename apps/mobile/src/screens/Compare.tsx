@@ -1,11 +1,12 @@
 import { useState, type ReactNode } from 'react';
-import { ResidentMascot } from '@ledge/ui/bots/ResidentMascot';
 import { copy } from '../copy';
 import type { Reach } from '../link/link';
 import type { PairingState } from '../link/pairing';
 import { href } from '../router';
 import { Notice } from '../ui/Notice';
-import { Board, Fill, H1, ICON, OUTLINE, PRIMARY, Spinner } from '../ui/Board';
+import { Board, Fill, H1, OUTLINE, PRIMARY, Spinner } from '../ui/Board';
+import { Icon } from '../ui/icons';
+import { Mascot } from '../ui/MobileBot';
 
 const C = copy.compare;
 
@@ -68,7 +69,7 @@ export function Compare({ step, login, pcName, lost, stalled = false, reach = 'p
     return (
       <Board top="pt-40">
         <div className="flex flex-col items-center gap-3.5 text-center">
-          <ResidentMascot size={88} theme="dark" />
+          <Mascot size={88} />
           <h1 className={H1}>{C.doneTitle(step.pc.name ?? pcName ?? copy.yourPc)}</h1>
           <p className="max-w-[300px] text-muted">{C.doneBody}</p>
         </div>
@@ -84,7 +85,7 @@ export function Compare({ step, login, pcName, lost, stalled = false, reach = 'p
         <Account login={login} />
         <section role="alert" className="rounded-control border border-danger-fg/15 bg-danger-bg p-4 text-danger-fg">
           <div className="mb-2 flex items-center gap-2.5">
-            <svg className={ICON} viewBox="0 0 24 24" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg>
+            <Icon name="warning" stroke={1.5} />
             <strong>{C.cancelledTitle}</strong>
           </div>
           <p className="text-[13px] leading-[1.6]">{C.cancelledBody}</p>

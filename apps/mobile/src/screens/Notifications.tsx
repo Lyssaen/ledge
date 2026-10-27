@@ -52,9 +52,9 @@ export function NotificationsRow({ store, fetchImpl }: { store: MobileStore; fet
               <button
                 type="button" role="switch" aria-checked={on} aria-label={N.row} disabled={n.busy}
                 onClick={() => { void (on ? n.disable() : n.enable()); }}
-                className={`relative h-6 w-10 flex-none rounded-full border border-line transition-colors disabled:opacity-45 ${on ? 'bg-accent' : 'bg-surface'}`}
+                className={`relative h-6 w-10 flex-none rounded-full border border-line transition-colors disabled:opacity-45 ${on ? 'border-transparent bg-ok' : 'bg-raised'}`}
               >
-                <span className={`absolute top-0.5 h-4.5 w-4.5 rounded-full bg-white shadow transition-all ${on ? 'left-[18px]' : 'left-0.5'}`} aria-hidden="true" />
+                <span className={`absolute top-0.5 h-4.5 w-4.5 rounded-full bg-white shadow-sm transition-all ${on ? 'left-[18px]' : 'left-0.5'}`} aria-hidden="true" />
               </button>
             </>
           )}

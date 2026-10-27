@@ -6,9 +6,11 @@ import type { InboxItem } from '../model/requests';
 import type { ConfirmChallenge, ConfirmedExpect, MobileStore } from '../state/store';
 import { Notice } from '../ui/Notice';
 import { isApple } from './device';
+import { buttonClass } from '../ui/Button';
+import { Icon } from '../ui/icons';
 
 const C = copy.confirm;
-const full = 'inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-control border px-4 py-2.5 text-[13px] font-medium disabled:opacity-45';
+const full = (variant?: 'primary') => buttonClass({ variant, block: true });
 
 /** What the PC said about the device check of the last accept, when it refused it. */
 export type ConfirmReason = 'assertion_expired' | 'assertion_invalid' | 'confirm_required';
@@ -99,14 +101,14 @@ export function RiskConfirm({ store, item, enabled, reason, onConfirm, onDeny, d
   const needsNew = shown === 'expired' || shown === 'failed' || shown === 'prepareFailed' || shown === 'changed';
   const label = asking ? C.asking : challenge ? (isApple() ? C.goApple : C.go) : C.preparing;
   return (
-    <section aria-labelledby="confirm-title" className="flex flex-col gap-3 rounded-[14px] border border-line bg-surface p-4">
+    <section aria-labelledby="confirm-title" className="flex flex-col gap-3 rounded-card border border-line bg-surface p-4">
       <h2 id="confirm-title" className="text-[17px] leading-[1.35] font-semibold">{C.heading}</h2>
       <p className="text-xs leading-[1.6] text-muted">{C.note}</p>
       {shown && <Notice title={shown === 'changed' ? copy.decide.changed : C[shown]} tone="warning" role="alert" />}
       {needsNew
-        ? <button type="button" disabled={!enabled} onClick={retry} className={`${full} border-transparent bg-fg text-[#121415]`}>{C.retry}</button>
-        : <button type="button" disabled={!enabled || asking || !challenge} onClick={() => { void go(); }} className={`${full} border-transparent bg-fg text-[#121415]`}>{label}</button>}
-      <button type="button" disabled={!enabled} onClick={onDeny} className={`${full} border-line`}>{denyLabel ?? copy.decide.deny}</button>
+        ? <button type="button" disabled={!enabled} onClick={retry} className={full('primary')}>{C.retry}</button>
+        : <button type="button" disabled={!enabled || asking || !challenge} onClick={() => { void go(); }} className={full('primary')}>{label}</button>}
+      <button type="button" disabled={!enabled} onClick={onDeny} className={full()}>{denyLabel ?? copy.decide.deny}</button>
     </section>
   );
 }
@@ -118,7 +120,7 @@ export function RiskConfirm({ store, item, enabled, reason, onConfirm, onDeny, d
 export function OnPc() {
   return (
     <p className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-control border border-dashed border-line px-4 py-2.5 text-center text-[13px] leading-[1.4] font-medium text-muted">
-      <svg className="size-4 flex-none fill-none stroke-current [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:1.6]" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2" /><path d="M8 20h8M12 16v4" /></svg>
+      <Icon name="monitor" className="size-4" />
       {copy.decide.onPc}
     </p>
   );

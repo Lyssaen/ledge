@@ -8,8 +8,9 @@ import { useBusy } from '../useBusy';
 import { AttachButton, pastedImages } from '../ui/Attach';
 import { Notice } from '../ui/Notice';
 import type { Attachments } from '../ui/useAttachments';
+import { buttonClass, chipClass, iconButtonClass } from '../ui/Button';
+import { Icon } from '../ui/icons';
 
-const ICON = 'size-5 fill-none stroke-current [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:1.6]';
 const TONE = { ok: 'text-ok', info: 'text-info', attention: 'text-attention', muted: 'text-muted' } as const;
 const C = copy.thread.composer;
 
@@ -54,7 +55,7 @@ export function Reply({ name, composer, draft, onDraft, onSend, fresh, taken, ch
           <Notice title={error.title} tone="warning" role="alert">
             <p>{error.body}</p>
             {!fresh && onReconnect && (
-              <button type="button" disabled={busy} onClick={() => { setBusy(true); onReconnect(); }} className="mt-2 inline-flex min-h-12 w-full items-center justify-center rounded-control border border-line bg-surface px-4 py-2.5 text-[13px] font-medium disabled:opacity-45">
+              <button type="button" disabled={busy} onClick={() => { setBusy(true); onReconnect(); }} className={buttonClass({ block: true, className: 'mt-2' })}>
                 {busy ? copy.link.reconnecting : C.reconnect}
               </button>
             )}
@@ -64,7 +65,7 @@ export function Reply({ name, composer, draft, onDraft, onSend, fresh, taken, ch
       {composer.enabled && (
         <div role="group" aria-label={C.quickLabel} className="flex gap-1.5 overflow-x-auto pb-2 [scrollbar-width:none]">
           {QUICK_REPLIES.map(q => (
-            <button key={q} type="button" onClick={() => { onDraft(q); ref.current?.focus(); }} className="min-h-11 flex-none rounded-[10px] border border-line px-3 text-xs whitespace-nowrap">{q}</button>
+            <button key={q} type="button" onClick={() => { onDraft(q); ref.current?.focus(); }} className={`${chipClass()} whitespace-nowrap`}>{q}</button>
           ))}
         </div>
       )}
@@ -77,8 +78,8 @@ export function Reply({ name, composer, draft, onDraft, onSend, fresh, taken, ch
           onPaste={e => { const files = pastedImages(e); if (files.length === 0 || !composer.enabled) return; e.preventDefault(); images.add(files); }}
           aria-invalid={problem !== null} aria-describedby={problem ? 'draft-problem' : undefined}
           className="max-h-[120px] min-h-12 w-full min-w-0 resize-none rounded-control border border-line bg-surface p-3 text-base leading-[22px] text-fg placeholder:text-muted disabled:opacity-60" />
-        <button type="button" disabled={!canSend} onClick={onSend} aria-label={C.send(name)} className="inline-flex size-12 flex-none items-center justify-center rounded-control bg-fg text-[#16181a] disabled:opacity-45">
-          <svg className={ICON} viewBox="0 0 24 24" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z" /><path d="M22 2 11 13" /></svg>
+        <button type="button" disabled={!canSend} onClick={onSend} aria-label={C.send(name)} className={iconButtonClass({ variant: 'primary', large: true })}>
+          <Icon name="plane" />
         </button>
       </div>
       {withImages && dialog && <p role="status" className="px-0.5 pt-1.5 text-[11px] text-attention">{copy.images.dialog}</p>}

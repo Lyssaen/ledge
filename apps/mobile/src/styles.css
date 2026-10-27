@@ -5,30 +5,41 @@
 @import '@ledge/ui/bots/bots.css' layer(ledge-ui);
 @import '@ledge/ui/bots/resident.css' layer(ledge-ui);
 
-/* Tokens of the Ledge mobile UI (dark only); the background is the one of @ledge/ui. */
+/* The mobile UI's colours are the shared tokens of @ledge/ui (tokens.css), light or dark after `data-theme` (src/theme.ts):
+   the same meaning as on the desktop. `inline`, so each utility reads the variable of the theme shown. */
+@theme inline {
+  --color-bg: var(--background);
+  --color-surface: var(--card);
+  --color-raised: var(--muted);
+  --color-well: var(--well);
+  --color-fg: var(--foreground);
+  --color-muted: var(--muted-foreground);
+  --color-line: var(--border);
+  --color-input: var(--input);
+  /* The brand: the chat's send, the waiting count. */
+  --color-primary: var(--primary);
+  --color-primary-fg: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  /* States, as the desktop's badges: an accord waits in red, a question in amber, a run in blue, a free agent in green. */
+  --color-approval: var(--danger-text);
+  --color-attention: var(--warning);
+  --color-ok: var(--success);
+  --color-info: var(--info);
+  --color-danger-fg: var(--danger-text);
+  --color-danger-bg: var(--status-danger-soft);
+  /* A team's flag, and a seat's role pill (roles spec): the desktop's sidebar colour. */
+  --color-team: var(--sidebar-primary);
+  --color-role: var(--sidebar-primary);
+  --color-term-bg: var(--term-bg);
+  --color-term-fg: var(--term-fg);
+}
 @theme {
-  --color-bg: #0c0d0e;
-  --color-surface: #17191b;
-  --color-raised: #202326;
-  --color-fg: #f2f1ed;
-  --color-muted: #a2a6ab;
-  --color-attention: #edc479;
-  --color-ok: #a6d6bf;
-  --color-info: #a6c8f0;
-  --color-danger-fg: #f4a5a3;
-  --color-danger-bg: #301b1d;
-  --color-danger-btn: #8f3037;
-  --color-line: #ffffff14;
-  /* A team's flag, and a seat's role pill (roles spec). */
-  --color-team: #b9a2ef;
-  --color-role: #f0a08f;
   --radius-card: 16px;
   --radius-control: 12px;
-  --font-sans: 'Geist Variable', system-ui, sans-serif;
-  --font-mono: 'Geist Mono Variable', ui-monospace, monospace;
+  --font-sans: 'Geist Variable', 'Geist', system-ui, sans-serif;
+  --font-mono: 'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace;
 }
 
-:root { color-scheme: dark; }
 * { -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; height: 100%; background: var(--color-bg); }
 body { font: 14px/1.5 var(--font-sans); color: var(--color-fg); }

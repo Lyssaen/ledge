@@ -7,14 +7,16 @@ import { useMobile, type MobileStore } from '../state/store';
 import { Header, linkView } from '../ui/Header';
 import { MobileBot } from '../ui/MobileBot';
 import { OfflineBanner } from '../ui/Notice';
-import { StatusBadge } from '../ui/StatusBadge';
+import { Tag } from '../ui/Tag';
 import { TabBar } from '../ui/TabBar';
 import { Flag, Progress, RolePill } from '../ui/teams/RolePill';
 import { closedTasks, tablesOf, type Table } from '../model/teams';
+import { buttonClass } from '../ui/Button';
+import { Icon } from '../ui/icons';
 
 function Row({ row, session, offline, threshold }: { row: AgentRow; session: PhoneSession | undefined; offline: boolean; threshold: number }) {
   return (
-    <a href={href({ name: 'thread', sessionId: row.sessionId })} className="flex gap-3 border-b border-line py-4 hover:bg-raised/40">
+    <a href={href({ name: 'thread', sessionId: row.sessionId })} className="flex gap-3 border-b border-line py-4 hover:bg-raised/40 active:bg-raised/60">
       <div className="mt-[3px]"><MobileBot tool={row.tool} seed={row.sessionId} state={session?.state ?? 'idle'} frozen={offline} /></div>
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
@@ -34,9 +36,9 @@ function Row({ row, session, offline, threshold }: { row: AgentRow; session: Pho
             ))}
           </p>
         )}
-        <div className="mt-2"><StatusBadge {...row.status} /></div>
+        <div className="mt-2"><Tag {...row.status} /></div>
       </div>
-      <svg className="mt-1 size-5 flex-none self-center fill-none stroke-muted [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:1.6]" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
+      <span className="self-center text-muted"><Icon name="chevron" /></span>
     </a>
   );
 }
@@ -48,7 +50,7 @@ function TableHead({ table, store, offline }: { table: Table; store: MobileStore
   if (t.state === 'resting') return (
     <div className="flex items-center gap-2 pt-3 pb-1 text-[13px] text-muted">
       <Flag dim /><span className="flex-1"><span className="font-semibold">{t.name}</span> · {copy.agents.resting}</span>
-      <button type="button" disabled={offline} onClick={() => void store.resumeTeam(t.id)} className="inline-flex h-10 items-center rounded-control border border-white/15 px-3 text-[13px] font-medium text-fg disabled:opacity-40">{copy.agents.resume}</button>
+      <button type="button" disabled={offline} onClick={() => void store.resumeTeam(t.id)} className={buttonClass({ size: 'sm' })}>{copy.agents.resume}</button>
     </div>
   );
   return (

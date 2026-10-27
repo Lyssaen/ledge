@@ -1,5 +1,4 @@
 import { useState, type ReactNode } from 'react';
-import { ResidentMascot } from '@ledge/ui/bots/ResidentMascot';
 import type { PhoneSession, PhoneTask } from '@ledge/protocol';
 import { copy } from '../copy';
 import { ageLabel, filterItems, headline, requestsOf, type Filter, type InboxItem } from '../model/requests';
@@ -8,22 +7,24 @@ import { useMobile, type MobileStore } from '../state/store';
 import { useNow } from '../useNow';
 import { Badge } from '../ui/Badge';
 import { Header, linkView } from '../ui/Header';
-import { MobileBot } from '../ui/MobileBot';
+import { Mascot, MobileBot } from '../ui/MobileBot';
 import { OfflineBanner } from '../ui/Notice';
 import { TabBar } from '../ui/TabBar';
 import { Flag, RolePill } from '../ui/teams/RolePill';
 import { closedTasks } from '../model/teams';
 import { navigate } from '../router';
+import { buttonClass, chipClass } from '../ui/Button';
+import { Icon } from '../ui/icons';
+import { Tag } from '../ui/Tag';
 
 type InboxFilter = Filter | 'tasks';
 const FILTERS: Filter[] = ['all', 'permission', 'question'];
-const CHEVRON = 'size-5 fill-none stroke-current [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:1.6]';
 
 export const clock = (iso: string | null): string => iso ? new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '';
 
 function Row({ item, session, now, offline }: { item: InboxItem; session: PhoneSession | undefined; now: number; offline: boolean }) {
   return (
-    <a href={href({ name: 'request', sessionId: item.sessionId, key: item.key })} className="block rounded-card border border-line bg-surface p-4 transition-colors hover:bg-raised">
+    <a href={href({ name: 'request', sessionId: item.sessionId, key: item.key })} className="block rounded-card border border-line bg-surface p-4 transition-colors hover:bg-raised active:bg-raised">
       <div className="flex items-center gap-2.5">
         <MobileBot tool={item.tool} seed={item.sessionId} state={session?.state ?? 'waiting_permission'} frozen={offline} />
         <span className="min-w-0 flex-1 truncate text-xs font-medium">{item.botName} · {item.task}</span>
@@ -33,8 +34,7 @@ function Row({ item, session, now, offline }: { item: InboxItem; session: PhoneS
       <div className="text-[11px] [overflow-wrap:anywhere] text-muted">{item.repo}{item.branch && <> · <code className={`font-mono text-[.9em] ${item.worktree ? 'underline decoration-dotted underline-offset-2' : ''}`}>{item.branch}</code></>}</div>
       <div className="mt-3 flex items-center justify-between gap-2.5 text-[11px]">
         <Badge kind={item.kind} risk={item.risk} />
-        <span className="flex items-center gap-1 text-muted">{offline ? copy.inbox.lastKnown : copy.inbox.examine}
-          <svg className={CHEVRON} viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
+        <span className="flex items-center gap-1 text-muted">{offline ? copy.inbox.lastKnown : copy.inbox.examine}<Icon name="chevron" />
         </span>
       </div>
     </a>
@@ -54,9 +54,8 @@ function TaskRow({ task, now, onSee }: { task: PhoneTask; now: number; onSee: ()
       <h3 className="mt-[11px] mb-[3px] text-base leading-[1.4] font-semibold [overflow-wrap:anywhere]">{title}</h3>
       <p className="line-clamp-2 text-[11px] [overflow-wrap:anywhere] text-muted">{copy.inbox.ledgeTask} · <code className="font-mono">{task.id}</code>{task.result ? ` · ${task.result}` : ''}</p>
       <div className="mt-3 flex items-center justify-between gap-2.5 text-[11px]">
-        <span className={`inline-flex h-6 items-center rounded-md px-2 ${task.state === 'done' ? 'bg-ok/10 text-ok' : 'bg-attention/10 text-attention'}`}>{task.state === 'done' ? `✓ ${copy.inbox.taskDone}` : copy.inbox.taskClosed}</span>
-        <button type="button" onClick={onSee} className="flex min-h-11 items-center gap-1 text-muted">{copy.inbox.seeResult}
-          <svg className={CHEVRON} viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
+        <Tag tone={task.state === 'done' ? 'ok' : 'attention'} label={task.state === 'done' ? `✓ ${copy.inbox.taskDone}` : copy.inbox.taskClosed} />
+        <button type="button" onClick={onSee} className="flex min-h-11 items-center gap-1 text-muted">{copy.inbox.seeResult}<Icon name="chevron" />
         </button>
       </div>
     </article>
@@ -88,7 +87,7 @@ export function Inbox({ store, onReconnect, notice }: { store: MobileStore; onRe
         {offline && <div className="mb-3">{notice ?? <OfflineBanner onReconnect={onReconnect} />}</div>}
         <div role="group" aria-label={copy.inbox.filtersLabel} className="mb-1.5 flex gap-1">
           {filters.map(f => (
-            <button key={f} type="button" aria-pressed={filter === f} onClick={() => setFilter(f)} className={`min-h-11 rounded-[10px] px-3 text-xs ${filter === f ? 'bg-raised text-fg' : 'text-muted'}`}>{copy.inbox.filters[f]}</button>
+            <button key={f} type="button" aria-pressed={filter === f} onClick={() => setFilter(f)} className={chipClass(filter === f)}>{copy.inbox.filters[f]}</button>
           ))}
         </div>
         <div className="flex items-center justify-between py-3 text-[11px] tracking-[.4px] text-muted"><span>{offline ? copy.inbox.lastKnown.toUpperCase() : copy.inbox.oldestFirst}</span><span>{list.length + tasks.length}</span></div>
@@ -98,11 +97,10 @@ export function Inbox({ store, onReconnect, notice }: { store: MobileStore; onRe
         </div>
         {list.length === 0 && tasks.length === 0 && (
           <div className="flex flex-col items-center gap-3 px-3 py-12 text-center">
-            {!waiting && <div aria-hidden="true"><ResidentMascot size={96} theme="dark" frozen={offline} /></div>}
+            {!waiting && <div aria-hidden="true"><Mascot size={96} frozen={offline} /></div>}
             <h2 className="text-[21px] leading-[1.3] tracking-[-.5px]">{waiting ? copy.inbox.emptyFilter : copy.inbox.upToDate}</h2>
             <p className="max-w-[260px] text-[13px] text-muted">{waiting ? copy.inbox.emptyFilterHint : copy.inbox.upToDateHint}</p>
-            {!waiting && <a href={href({ name: 'agents' })} className="mt-1 inline-flex min-h-11 items-center gap-1 rounded-control border border-line px-4 text-[13px]">{copy.inbox.seeAgents}
-              <svg className={CHEVRON} viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg></a>}
+            {!waiting && <a href={href({ name: 'agents' })} className={buttonClass({ size: 'sm', className: 'mt-1' })}>{copy.inbox.seeAgents}<Icon name="chevron" /></a>}
           </div>
         )}
         {offline && <p className="mt-4 text-xs text-muted">{copy.inbox.offlineNote}</p>}

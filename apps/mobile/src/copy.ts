@@ -269,7 +269,10 @@ export const copy = {
     account: 'Compte', relay: 'Serveur', pcFingerprint: 'Empreinte du PC', version: 'Version de l’app', appFingerprint: 'Empreinte de l’app',
     /** A value not known yet (the build, before the service worker gives it). */
     none: '—',
-    signOut: 'Se déconnecter'
+    signOut: 'Se déconnecter',
+    /** The theme: the phone's setting, or one of the two. */
+    appearance: 'Apparence',
+    themes: { system: 'Système', light: 'Clair', dark: 'Sombre' }
   },
   /** The user left while the PC could not confirm that it removed this phone: shown on the screen they land on. */
   forget: {

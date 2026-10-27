@@ -20,7 +20,7 @@ function Row({ store, qid, row, task, waiting }: { store: MobileStore; qid: stri
   return (
     <section aria-label={copy.chat.task.label} className={CARD}>
       <p className="text-[13px]"><span className="font-mono text-role">{task.toName ?? task.to}</span> · <span className="font-semibold">{task.title}</span></p>
-      {task.text && <p className="whitespace-pre-wrap break-words text-[13px] text-[#c8cbce]">{task.text}</p>}
+      {task.text && <p className="whitespace-pre-wrap break-words text-[13px] text-fg/80">{task.text}</p>}
       {given && <p role="status" className="text-[13px] text-ok">{copy.chat.task.given(task.ownerName ?? task.toName ?? task.to, task.taskId!, copy.chat.point.state[task.state ?? 'open'])}</p>}
       {!given && (failed || task.failed) && <p role="status" className="text-[13px] text-danger-fg">{copy.chat.task.notGiven}</p>}
       {!given && (

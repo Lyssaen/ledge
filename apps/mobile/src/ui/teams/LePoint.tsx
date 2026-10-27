@@ -7,13 +7,14 @@ import { href, navigate } from '../../router';
 import type { MobileStore } from '../../state/store';
 import { useNow } from '../../useNow';
 import { Flag, Progress, RolePill } from './RolePill';
+import { buttonClass } from '../Button';
 
-const SMALL = 'inline-flex h-10 min-w-[64px] flex-none items-center justify-center rounded-control border border-white/15 px-3 text-[13px] font-medium disabled:opacity-40';
-const YES = 'inline-flex h-10 min-w-[64px] flex-none items-center justify-center rounded-control bg-danger-btn px-3 text-[13px] font-semibold disabled:opacity-40';
+const SMALL = buttonClass({ size: 'sm', className: 'min-w-[64px] flex-none' });
+const YES = buttonClass({ variant: 'primary', size: 'sm', className: 'min-w-[64px] flex-none' });
 const HEAD = 'mt-1 text-[11px] tracking-[.4px] text-muted';
 
 function Dot({ tone }: { tone: 'attention' | 'ok' | 'danger' }) {
-  return <span aria-hidden="true" className={`size-2 flex-none rounded-full ${tone === 'ok' ? 'bg-ok' : tone === 'danger' ? 'bg-danger-fg' : 'bg-attention'}`} />;
+  return <span aria-hidden="true" className={`size-2 flex-none rounded-full ${tone === 'ok' ? 'bg-ok' : tone === 'danger' ? 'bg-approval' : 'bg-attention'}`} />;
 }
 
 /** A closed task of Ledge: « Voir » opens its owner's thread and puts the task away. */

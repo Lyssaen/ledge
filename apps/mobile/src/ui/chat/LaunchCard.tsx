@@ -26,7 +26,7 @@ function Row({ store, qid, row, proposal, canConfirm, known }: { store: MobileSt
   return (
     <section aria-label={copy.chat.launchLabel} className={CARD}>
       <h3 className="text-[13px] font-semibold">{copy.chat.launchHead(copy.tools[proposal.tool], proposal.project)}</h3>
-      {proposal.prompt && <p className="whitespace-pre-wrap break-words text-[13px] text-[#c8cbce]">{proposal.prompt}</p>}
+      {proposal.prompt && <p className="whitespace-pre-wrap break-words text-[13px] text-fg/80">{proposal.prompt}</p>}
       {done && <p role="status" className="text-[13px] text-ok">{copy.chat.launchedTo}{known ? threadLink(proposal.launchedId!, copy.chat.seeThread) : copy.chat.seeThread}</p>}
       {!done && shown && <p role="status" className={`text-[13px] ${shown === 'failed' ? 'text-danger-fg' : 'text-muted'}`}>{shown === 'failed' ? copy.chat.notLaunched : copy.confirm[shown]}</p>}
       {!done && !canConfirm && (

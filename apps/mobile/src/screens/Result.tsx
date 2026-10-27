@@ -6,6 +6,8 @@ import { useMobile, type MobileStore } from '../state/store';
 import { BackHeader, linkView } from '../ui/Header';
 import { MobileBot } from '../ui/MobileBot';
 import { Notice } from '../ui/Notice';
+import { buttonClass } from '../ui/Button';
+import { Icon } from '../ui/icons';
 
 /**
  * The closing screen of a request (board « Demande traitée »): what the phone can honestly say, with the request it
@@ -21,8 +23,8 @@ export function Result({ store, title, body, item, final = false, children }: {
       <BackHeader title={copy.result.header} backTo={back} label={copy.detail.back} link={link} />
       <main className="min-h-0 flex-1 overflow-y-auto pb-[22px]">
         <div className="flex flex-col items-start gap-4 pt-7">
-          <div className="grid size-14 place-items-center rounded-full border border-ok/20 bg-ok/[0.045] text-ok">
-            <svg className="size-[26px] fill-none stroke-current [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:1.6]" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>
+          <div className="grid size-14 place-items-center rounded-full border border-ok/20 bg-ok/10 text-ok">
+            <Icon name="check" className="size-[26px]" />
           </div>
           {item && (
             <span className="flex items-center gap-2 text-[11px] font-medium tracking-[0.4px] text-muted">
@@ -41,8 +43,8 @@ export function Result({ store, title, body, item, final = false, children }: {
           )}
           {final && <p className="text-[13px] text-muted">{copy.result.final}</p>}
           {children}
-          <a href={back} className="inline-flex min-h-12 w-full items-center justify-center rounded-control bg-fg px-4 py-2.5 text-[13px] font-medium text-[#121415]">{copy.result.back}</a>
-          {item && <a href={href({ name: 'thread', sessionId: item.sessionId })} className="inline-flex min-h-12 w-full items-center justify-center rounded-control border border-line px-4 py-2.5 text-[13px] font-medium">{copy.result.thread(item.botName)}</a>}
+          <a href={back} className={buttonClass({ variant: 'primary', block: true })}>{copy.result.back}</a>
+          {item && <a href={href({ name: 'thread', sessionId: item.sessionId })} className={buttonClass({ block: true })}>{copy.result.thread(item.botName)}</a>}
         </div>
       </main>
     </>

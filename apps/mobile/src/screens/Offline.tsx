@@ -1,6 +1,7 @@
 import { copy } from '../copy';
 import { useBusy } from '../useBusy';
 import { Board, Fill, H1, ICON, OUTLINE } from '../ui/Board';
+import { buttonClass } from '../ui/Button';
 
 /**
  * Board Offline: the PC is not on the relay. Shown at the top of the last known inbox; « Réessayer » tries the link
@@ -15,7 +16,7 @@ export function Offline({ pcName, since, onRetry }: { pcName: string | null; sin
         <strong className="text-[15px]">{copy.offline.title(pcName)}</strong>
       </div>
       <p className="text-muted">{since ? copy.offline.body(since) : copy.offline.bodyUnknown}</p>
-      <button type="button" disabled={busy} onClick={() => { setBusy(true); onRetry(); }} className="mt-3 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-control border border-line bg-surface px-4 text-[13px] font-medium disabled:opacity-45">
+      <button type="button" disabled={busy} onClick={() => { setBusy(true); onRetry(); }} className={buttonClass({ block: true, className: 'mt-3' })}>
         <svg className={`${ICON} size-4`} viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M8 16H3v5" /></svg>
         {copy.offline.retry}
       </button>

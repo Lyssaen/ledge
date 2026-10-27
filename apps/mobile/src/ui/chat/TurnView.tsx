@@ -8,6 +8,8 @@ import { LaunchCards } from './LaunchCard';
 import { RelayCard } from './RelayCard';
 import { TaskCards } from './TaskCard';
 import { TeamCard } from './TeamCard';
+import { buttonClass } from '../Button';
+import { Icon } from '../icons';
 
 const ICON = 'size-3.5 flex-none fill-none stroke-current [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:1.6]';
 
@@ -78,8 +80,8 @@ export function TurnView({ store, turn, live, sessions, list, canConfirm, onStop
       {!live && turn.team && <TeamCard store={store} qid={turn.qid} team={turn.team} canConfirm={canConfirm} />}
       {!live && turn.tasks && turn.tasks.length > 0 && <TaskCards store={store} qid={turn.qid} tasks={turn.tasks} waiting={!!turn.team && turn.team.teamId === undefined} />}
       {live && (
-        <button type="button" onClick={onStop} className="inline-flex h-9 items-center gap-2 self-start rounded-control border border-white/15 px-3.5 text-[13px] font-medium">
-          <svg className={ICON} viewBox="0 0 24 24" aria-hidden="true"><rect width="12" height="12" x="6" y="6" rx="1" /></svg>
+        <button type="button" onClick={onStop} className={buttonClass({ size: 'sm', className: 'self-start' })}>
+          <Icon name="stop" className="size-3.5" />
           {copy.chat.stop}
         </button>
       )}

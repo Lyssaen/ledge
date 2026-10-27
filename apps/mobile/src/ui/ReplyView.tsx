@@ -17,7 +17,7 @@ export function inline(text: string, depth = 0, plain?: Plain): ReactNode[] {
     const at = m.index;
     if (at > last) out.push(...T(text.slice(last, at)));
     const g = m.groups!;
-    if (g.code) out.push(<code key={at} className="rounded-md bg-white/[0.06] px-[5px] py-px font-mono text-[.92em] [overflow-wrap:anywhere]">{g.code.slice(1, -1)}</code>);
+    if (g.code) out.push(<code key={at} className="rounded-md bg-fg/[0.06] px-[5px] py-px font-mono text-[.92em] [overflow-wrap:anywhere]">{g.code.slice(1, -1)}</code>);
     else if (g.b) out.push(<strong key={at} className="font-semibold">{inline(g.b, depth + 1, plain)}</strong>);
     else out.push(<em key={at}>{inline(g.i!, depth + 1, plain)}</em>);
     last = at + m[0].length;
@@ -30,11 +30,11 @@ function BlockView({ b }: { b: Block }) {
   const plain = useContext(PlainText);
   switch (b.type) {
     case 'p': return <p className="[&+*]:mt-2.5">{inline(b.text, 0, plain)}</p>;
-    case 'code': return <pre className="my-2.5 overflow-x-auto rounded-lg bg-black/30 p-2.5 font-mono text-xs leading-[1.6] whitespace-pre">{b.text}</pre>;
+    case 'code': return <pre className="my-2.5 overflow-x-auto rounded-lg bg-well p-2.5 font-mono text-xs leading-[1.6] whitespace-pre">{b.text}</pre>;
     case 'list': {
       const L = b.ordered ? 'ol' : 'ul';
       return (
-        <L className={`my-2.5 flex flex-col gap-1 pl-[18px] text-[#c8cbce] ${b.ordered ? 'list-decimal' : 'list-disc'}`}>
+        <L className={`my-2.5 flex flex-col gap-1 pl-[18px] text-fg/80 ${b.ordered ? 'list-decimal' : 'list-disc'}`}>
           {b.items.map((it, i) => (
             <li key={i}>
               {it.checked !== undefined && <span aria-hidden="true">{it.checked ? '☑ ' : '☐ '}</span>}{inline(it.text, 0, plain)}

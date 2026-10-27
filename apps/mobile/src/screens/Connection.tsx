@@ -8,13 +8,18 @@ import { useMobile, type MobileStore } from '../state/store';
 import type { BuildInfo } from '../sw/types';
 import { BackHeader, linkView } from '../ui/Header';
 import { OUTLINE } from '../ui/Board';
+import { Segmented } from '../ui/Segmented';
+import { setTheme, useThemeChoice, type ThemeChoice } from '../theme';
 import { ProtectRow } from './Enroll';
 import { NotificationsRow } from './Notifications';
 
 const N = copy.connection;
+const THEMES: { value: ThemeChoice; label: string }[] = [
+  { value: 'system', label: N.themes.system }, { value: 'light', label: N.themes.light }, { value: 'dark', label: N.themes.dark }
+];
 const status = (s: LinkState): string => s === 'ready' ? N.states.online : s === 'handshaking' ? N.states.connecting : N.states.offline;
 
-/** The account, the relay, the PC this phone trusts and the app it runs, each one checkable, and the way out. */
+/** The account, the relay, the PC this phone trusts and the app it runs, each one checkable, the theme, and the way out. */
 export function Connection({ store, login, relay, pinned, linkState, build, onSignOut, fetchImpl }: {
   store: MobileStore; fetchImpl?: typeof fetch; login: string | null; relay: string; pinned: PinnedPc | null; linkState: LinkState;
   /** The running app's version and fingerprint, from the service worker; null until it gives them. */
@@ -22,6 +27,7 @@ export function Connection({ store, login, relay, pinned, linkState, build, onSi
   onSignOut: () => void;
 }) {
   const state = useMobile(store);
+  const theme = useThemeChoice();
   const pc = pinned?.name ?? state.daemon?.name ?? null;
   const rows: [string, string, boolean][] = [
     [N.account, login ? copy.account(login) : N.unknown, false],
@@ -46,6 +52,10 @@ export function Connection({ store, login, relay, pinned, linkState, build, onSi
           <ProtectRow store={store} />
           <NotificationsRow store={store} fetchImpl={fetchImpl} />
         </dl>
+        <section aria-labelledby="appearance-title" className="flex flex-col gap-2.5">
+          <h2 id="appearance-title" className="text-[13px] text-muted">{N.appearance}</h2>
+          <Segmented name="theme" legend={N.appearance} options={THEMES} value={theme} onChange={v => setTheme(v)} />
+        </section>
         <div className="flex-grow" aria-hidden="true" />
         <button type="button" onClick={onSignOut} className={OUTLINE}>{N.signOut}</button>
       </main>

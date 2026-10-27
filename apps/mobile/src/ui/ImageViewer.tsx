@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import type { AttachmentRef } from '@ledge/protocol';
 import { copy } from '../copy';
 import type { MobileStore } from '../state/store';
+import { useDialog } from './Dialog';
 import { useImageUrl } from './useImageUrl';
 
 const C = copy.images;
@@ -31,7 +32,7 @@ function useShareable(url: string | null, name: string, mime: string): File | nu
 
 /**
  * One of a message's images, full screen. Two fingers zoom (1× to 4×), a vertical swipe of more than 120 px or ✕ closes.
- * Only the shown image is fetched whole.
+ * Only the shown image is fetched whole. On a keyboard, Escape closes it. Always on black, whatever the theme: a photo's frame.
  */
 export function ImageViewer({ store, refs, index, onIndex, onClose }: { store: MobileStore; refs: AttachmentRef[]; index: number; onIndex(i: number): void; onClose(): void }) {
   const shown = refs[index]!;
@@ -66,6 +67,9 @@ export function ImageViewer({ store, refs, index, onIndex, onClose }: { store: M
     }
   };
 
+  const box = useRef<HTMLDivElement>(null);
+  useDialog(box, onClose);
+
   const share = () => { if (file) void navigator.share({ files: [file] }).catch(() => undefined); };
   // The gesture container captures the pointer: the buttons must not start a gesture of its own.
   const stop = (e: React.PointerEvent) => e.stopPropagation();
@@ -77,7 +81,7 @@ export function ImageViewer({ store, refs, index, onIndex, onClose }: { store: M
   );
 
   return createPortal(
-    <div role="dialog" aria-modal="true" aria-label={C.view} className="fixed inset-0 z-50 flex flex-col bg-black/90 text-white" style={{ opacity: drag ? Math.max(0.4, 1 - Math.abs(drag) / 400) : 1 }}>
+    <div ref={box} role="dialog" aria-modal="true" aria-label={C.view} tabIndex={-1} className="fixed inset-0 z-50 flex flex-col bg-black/90 text-white outline-none" style={{ opacity: drag ? Math.max(0.4, 1 - Math.abs(drag) / 400) : 1 }}>
       <div className="flex items-center gap-2 px-3 py-2.5">
         <span className="min-w-0 flex-1 text-xs text-white/70">{shown.width}×{shown.height}{refs.length > 1 ? ` · ${index + 1}/${refs.length}` : ''}</span>
         {file && <button type="button" onPointerDown={stop} onClick={share} className={button}>{C.share}</button>}
