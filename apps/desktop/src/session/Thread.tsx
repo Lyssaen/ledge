@@ -5,7 +5,7 @@ import type { BotState } from '@ledge/ui/bots/poseFor';
 import { ThreadMarkdown } from '@ledge/ui/documents/markdown';
 import type { DocumentReference } from '@ledge/ui/documents/references';
 import { liveTool, target } from '@ledge/ui/thread/tools';
-import { helperThread } from '@ledge/ui/thread/turns';
+import { helperThread, OPEN_TURNS } from '@ledge/ui/thread/turns';
 import { Badge } from '@ledge/ui/ui/Badge';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
@@ -503,9 +503,9 @@ function useKeys(id: string): [ReadonlySet<string>, (key: string) => void] {
 }
 
 /** The rail (the mockup's track B): one list of exchanges, each a list of rows `node · content · time` strung on one line.
- *  The past exchanges fold to a row, except the ones that hold what is new, what runs or waits, or what the reader came back
- *  to. Memoised: the store's changes elsewhere (another session's preview, the chat, an error) leave it alone, its props
- *  being the session, its items and their exchanges, the clock and the page's stable callbacks. */
+ *  The exchanges before the last OPEN_TURNS fold to a row, except the ones that hold what is new, what runs or waits, or
+ *  what the reader came back to. Memoised: the store's changes elsewhere (another session's preview, the chat, an error)
+ *  leave it alone, its props being the session, its items and their exchanges, the clock and the page's stable callbacks. */
 export const Thread = memo(function Thread({ client, session, helper, items, xs, now, unread, since, dispatch, flash, onChange, onDocument, planOpen, onPlan, convOpen, onConversation, waiting = null }: ThreadProps): JSX.Element {
   const { t, lang } = useI18n();
   const offline = session.offline === true;
@@ -524,7 +524,7 @@ export const Thread = memo(function Thread({ client, session, helper, items, xs,
       {xs.map((x, i) => {
         const last = i === xs.length - 1;
         const lit = flash !== null && holds(x, flash);
-        const open = last || (fresh >= 0 && i >= fresh) || lit || (planOpen !== null && holdsPlan(x, planOpen)) || pending(x, !offline);
+        const open = i >= xs.length - OPEN_TURNS || (fresh >= 0 && i >= fresh) || lit || (planOpen !== null && holdsPlan(x, planOpen)) || pending(x, !offline);
         return (
           <Turn key={x.key} client={client} session={session} helper={helper} items={items} x={x} at={timeMark(x.at, now, lang)} last={last}
             folded={open ? null : !unfolded.has(x.key)} onUnfold={onUnfold}

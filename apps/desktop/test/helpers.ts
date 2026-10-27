@@ -102,10 +102,26 @@ export function ottoThread(): ThreadItem[] {
   ];
 }
 
-/** Unfolds a past exchange of the thread shown (by default ottoThread's turn 1, « Câble la liste »): the rail folds it to its
- *  row, as the reader finds it. */
+/** ottoThread with two short exchanges between its turns (« Relis » and « Pousse »): its turn 1 is then older than the
+ *  last OPEN_TURNS, folded to its row; « Corrige-les » becomes turn 4. */
+export function ottoFolded(): ThreadItem[] {
+  const items = ottoThread();
+  const at = (i: number) => new Date(Date.parse(items.find(x => x.id === 'prompt-2')!.at) - (40 - i) * 1000).toISOString();
+  const between: ThreadItem[] = [
+    { kind: 'prompt', id: 'prompt-b1', at: at(0), turn: 2, text: 'Relis' },
+    { kind: 'reply', id: 'reply-b1', at: at(5), turn: 2, text: 'Relu.' },
+    { kind: 'prompt', id: 'prompt-b2', at: at(10), turn: 3, text: 'Pousse' },
+    { kind: 'reply', id: 'reply-b2', at: at(15), turn: 3, text: 'Poussé.' }
+  ];
+  return [...items.filter(x => x.turn === 1), ...between, ...items.filter(x => x.turn === 2).map(x => ({ ...x, turn: 4 }))];
+}
+
+/** Shows a past exchange of the thread in full (by default ottoThread's turn 1, « Câble la liste »): one of the last
+ *  OPEN_TURNS is open already, an older one is folded to its row, and that row unfolds it. */
 export async function unfoldPast(user: UserEvent, prompt: RegExp = /Câble la liste/): Promise<void> {
-  await user.click(await screen.findByRole('button', { name: prompt, expanded: false }));
+  await waitFor(() => expect(screen.queryByRole('button', { name: prompt, expanded: false }) ?? screen.queryAllByText(prompt).find(e => e.closest('.turn.open'))).toBeTruthy());
+  const fold = screen.queryByRole('button', { name: prompt, expanded: false });
+  if (fold) await user.click(fold);
 }
 
 export type MockDaemon = Awaited<ReturnType<typeof createMockDaemon>>;

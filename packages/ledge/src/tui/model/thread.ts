@@ -1,5 +1,5 @@
 import type { AttachmentRef, ThreadItem, ToolItem } from '@ledge/protocol';
-import { turns, type Turn } from '@ledge/ui/thread/turns';
+import { OPEN_TURNS, turns, type Turn } from '@ledge/ui/thread/turns';
 import { rawTarget, SPINNER } from '@ledge/ui/thread/tools';
 import type { Glyphs } from '../glyphs.js';
 import type { Messages } from '../i18n/lang.js';
@@ -117,7 +117,7 @@ export function foldedLine(turn: Turn, o: Pick<Opts, 't' | 'g'>): Line {
 export type ThreadView = { lines: Line[]; keys: string[]; turns: Map<string, string> };
 
 /** The session's main thread as lines, each with the item it shows (what a scroll stays on), and each item's turn (its first
- *  item's key: the folded turn's line). Past turns folded unless unfolded, the last one in full. Each element wraps at the
+ *  item's key: the folded turn's line). Past turns folded unless unfolded, the last OPEN_TURNS in full. Each element wraps at the
  *  real width, up to its ceiling unless unfolded. */
 export function threadView(items: ThreadItem[], o: Omit<Opts, 'cap'> & { unfolded: boolean }): ThreadView {
   const all = turns(items);
@@ -125,10 +125,10 @@ export function threadView(items: ThreadItem[], o: Omit<Opts, 'cap'> & { unfolde
   const opts: Opts = { ...o, cap: n => (o.unfolded ? Infinity : n) };
   const push = (key: string, l: Line[]) => { for (const x of l) { lines.push(x); keys.push(key); } };
   all.forEach((turn, i) => {
-    const last = i === all.length - 1;
+    const recent = i >= all.length - OPEN_TURNS;
     const first = turn.prompt?.id ?? turn.items[0]?.id ?? String(i);
     for (const it of turn.items) turnOf.set(it.id, first);
-    if (!last && !o.unfolded) { push(first, [cut(foldedLine(turn, o), o.width)]); return; }
+    if (!recent && !o.unfolded) { push(first, [cut(foldedLine(turn, o), o.width)]); return; }
     if (lines.length) push(first, [[{ text: '' }]]);
     for (const it of turn.items) push(it.id, itemLines(it, opts));
   });
@@ -144,8 +144,8 @@ export function anchorLine(v: Pick<ThreadView, 'keys' | 'turns'>, anchor: { key:
 }
 
 export const threadLines = (items: ThreadItem[], o: Omit<Opts, 'cap'> & { unfolded: boolean }): Line[] => threadView(items, o).lines;
-/** The images of the turns shown in full (the last one, or all unfolded), oldest first. */
+/** The images of the turns shown in full (the last OPEN_TURNS, or all unfolded), oldest first. */
 export function threadImages(items: ThreadItem[], unfolded: boolean): AttachmentRef[] {
   const all = turns(items);
-  return (unfolded ? all : all.slice(-1)).flatMap(turn => turn.items.flatMap(it => (it.kind === 'prompt' ? it.images ?? [] : [])));
+  return (unfolded ? all : all.slice(-OPEN_TURNS)).flatMap(turn => turn.items.flatMap(it => (it.kind === 'prompt' ? it.images ?? [] : [])));
 }

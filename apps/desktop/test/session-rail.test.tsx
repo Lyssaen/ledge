@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { act, cleanup, screen, within } from '@testing-library/react';
 import type { Session, ThreadItem } from '@ledge/protocol';
-import { boot, closeDaemons, listSessions, ottoThread, unfoldPast } from './helpers';
+import { boot, closeDaemons, listSessions, ottoFolded, ottoThread, unfoldPast } from './helpers';
 import { resetAvatarForTests, setAvatar } from '../src/shell/avatar';
 
 afterEach(async () => { cleanup(); localStorage.clear(); resetAvatarForTests(); await closeDaemons(); });
@@ -19,8 +19,8 @@ async function open(name: string, id: string, items: ThreadItem[], helpers?: Ses
 }
 
 describe('the rail (issue #34)', () => {
-  it('a past exchange unfolds from its row and folds back; the current one has no row', async () => {
-    const { user } = await open('Otto', 'otto', ottoThread());
+  it('an exchange older than the last three unfolds from its row and folds back; the current one has no row', async () => {
+    const { user } = await open('Otto', 'otto', ottoFolded());
     await unfoldPast(user);
     expect(document.querySelectorAll('.turn.folded')).toHaveLength(0);
     expect(document.querySelector('.turn.current .turn-fold')).toBeNull();

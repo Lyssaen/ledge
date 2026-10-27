@@ -17,11 +17,11 @@ const open = async (page: Page, name: string) => { await page.getByRole('tree').
 const thread = (page: Page) => page.locator('.session-thread');
 const gap = (page: Page) => thread(page).evaluate(el => el.scrollHeight - el.scrollTop - el.clientHeight);
 
-test('the session reads as a rail; the past exchange unfolds; Y allows the pinned request once', async ({ page }) => {
+test('the session reads as a rail; the past exchange stays open, one of the last three; Y allows the pinned request once', async ({ page }) => {
   const daemon = await fakeDaemon(page, fleet, { projects: twoProjects, threads: { otto: ottoThread } });
   await page.goto('/'); await openAtelier(page);
   await open(page, 'Otto');
-  await thread(page).getByRole('button', { name: /Câble la liste/ }).click();
+  await expect(thread(page).locator('.turn.folded')).toHaveCount(0);
   await expect(thread(page).getByText('Câble la liste', { exact: true })).toBeVisible();
   await expect(thread(page).locator('.turn').first().locator('li.action-row')).toHaveCount(4);
   await page.keyboard.press('y');
