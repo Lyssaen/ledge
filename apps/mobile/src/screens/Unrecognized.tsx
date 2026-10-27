@@ -17,7 +17,7 @@ export function Unrecognized({ pcName, onRelink, onSignOut }: { pcName: string |
         <h1 className={H1}>{U.title(pcName)}</h1>
         <p className="text-muted">{U.body}</p>
       </div>
-      <p className="text-[13px] leading-[1.6] text-muted">{U.kept}</p>
+      <p className="text-body leading-[1.6] text-muted">{U.kept}</p>
       <Fill />
       <div className="flex flex-col gap-3">
         <button type="button" onClick={onRelink} className={PRIMARY}>{U.relink}</button>

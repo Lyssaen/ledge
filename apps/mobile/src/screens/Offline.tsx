@@ -10,10 +10,10 @@ import { buttonClass } from '../ui/Button';
 export function Offline({ pcName, since, onRetry }: { pcName: string | null; since: string; onRetry: () => void }) {
   const [busy, setBusy] = useBusy();
   return (
-    <section role="status" className="rounded-control border border-attention/15 bg-attention/[0.045] p-4 text-[13px] leading-[1.6]">
+    <section role="status" className="rounded-control border border-attention/15 bg-attention/[0.045] p-4 text-body leading-[1.6]">
       <div className="mb-1.5 flex items-center gap-2.5">
         <svg className={`${ICON} text-attention`} viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h.01" /><path d="M8.5 16.43a5 5 0 0 1 7 0" /><path d="M5 12.86a10 10 0 0 1 5.17-2.69" /><path d="M19 12.86a10 10 0 0 0-1.86-1.29" /><path d="M2 8.82a15 15 0 0 1 4.18-2.66" /><path d="M22 8.82a15 15 0 0 0-11.29-3.76" /><path d="m2 2 20 20" /></svg>
-        <strong className="text-[15px]">{copy.offline.title(pcName)}</strong>
+        <strong className="text-base">{copy.offline.title(pcName)}</strong>
       </div>
       <p className="text-muted">{since ? copy.offline.body(since) : copy.offline.bodyUnknown}</p>
       <button type="button" disabled={busy} onClick={() => { setBusy(true); onRetry(); }} className={buttonClass({ block: true, className: 'mt-3' })}>

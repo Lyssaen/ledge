@@ -100,7 +100,7 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect }: { s
       return (
         <>
           <BackHeader title={copy.gone.header} backTo={back} label={copy.detail.back} link={link} />
-          <main className="min-h-0 flex-1 pt-7 text-[13px] text-muted" role="status">{copy.loading}</main>
+          <main className="min-h-0 flex-1 pt-7 text-body text-muted" role="status">{copy.loading}</main>
         </>
       );
     }
@@ -146,9 +146,9 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect }: { s
       {options.map((o, i) => (
         <li key={`${i}:${o}`}>
           <button type="button" disabled={!optionsLive} aria-pressed={picked === i} onClick={() => tapOption(i)}
-            className="flex min-h-12 w-full flex-col items-start justify-center rounded-control border border-line bg-surface px-3 py-3 text-left text-[13px] [overflow-wrap:anywhere] disabled:opacity-45 active:bg-raised aria-pressed:border-fg/40 aria-pressed:bg-raised">
+            className="flex min-h-12 w-full flex-col items-start justify-center rounded-control border border-line bg-surface px-3 py-3 text-left text-body [overflow-wrap:anywhere] disabled:opacity-45 active:bg-raised aria-pressed:border-fg/40 aria-pressed:bg-raised">
             {o}
-            {req.optionDetails?.[i] && <small className="mt-0.5 text-[11px] text-muted">{req.optionDetails[i]}</small>}
+            {req.optionDetails?.[i] && <small className="mt-0.5 text-meta text-muted">{req.optionDetails[i]}</small>}
           </button>
         </li>
       ))}
@@ -173,14 +173,14 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect }: { s
         <div className="mt-4 flex items-start gap-3 rounded-card border border-line bg-surface p-3.5">
           <MobileBot tool={req.tool} seed={req.sessionId} state={state.sessions.get(sessionId)?.state ?? 'idle'} frozen={!fresh} />
           <div className="min-w-0 flex-1">
-            <strong className="block text-[13px] [overflow-wrap:anywhere]">{req.task}</strong>
-            <p className="mt-0.5 text-[11px] text-muted">{req.botName} · {copy.tools[req.tool]}</p>
-            <p className="mt-0.5 text-[11px] [overflow-wrap:anywhere] text-muted">{req.repo}{req.branch && <> · <code className={`font-mono text-[.9em] ${req.worktree ? 'underline decoration-dotted underline-offset-2' : ''}`}>{req.branch}</code></>}</p>
+            <strong className="block text-body [overflow-wrap:anywhere]">{req.task}</strong>
+            <p className="mt-0.5 text-meta text-muted">{req.botName} · {copy.tools[req.tool]}</p>
+            <p className="mt-0.5 text-meta [overflow-wrap:anywhere] text-muted">{req.repo}{req.branch && <> · <code className={`font-mono text-[.9em] ${req.worktree ? 'underline decoration-dotted underline-offset-2' : ''}`}>{req.branch}</code></>}</p>
           </div>
         </div>
         <div className="mt-[22px] mb-3">
           <Badge kind={req.kind} risk={req.risk} />
-          <h1 className="mt-2.5 text-[25px] leading-[1.25] font-semibold tracking-[-1px] [overflow-wrap:anywhere]">{req.kind === 'permission' ? copy.detail.commandTitle : headline(req)}</h1>
+          <h1 className="mt-2.5 text-display leading-[1.25] font-semibold tracking-[-1px] [overflow-wrap:anywhere]">{req.kind === 'permission' ? copy.detail.commandTitle : headline(req)}</h1>
         </div>
         {isQuestion ? (
           <>
@@ -191,7 +191,7 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect }: { s
                 other={canOther ? { text: otherText, onText: t => { setOtherText(t); setRefused(false); }, problem: free.problem } : undefined}
                 onSubmit={fresh && !changed && !busy && item !== undefined ? send : undefined} />
             )}
-            {!canOther && !optionMode && !askQuestions && options.length > 0 && <p className="mb-3.5 text-xs text-muted">{copy.decide.otherUnsupported}</p>}
+            {!canOther && !optionMode && !askQuestions && options.length > 0 && <p className="mb-3.5 text-small text-muted">{copy.decide.otherUnsupported}</p>}
           </>
         ) : (
           <>
@@ -199,23 +199,23 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect }: { s
             {optionMode && optionList}
             {!optionMode && options.length > 0 && (
               <ul aria-label={copy.detail.options} className="my-3.5 flex list-none flex-col gap-2 p-0">
-                {options.map(o => <li key={o} className="rounded-control border border-line bg-surface px-3 py-3 text-[13px] [overflow-wrap:anywhere]">{o}</li>)}
+                {options.map(o => <li key={o} className="rounded-control border border-line bg-surface px-3 py-3 text-body [overflow-wrap:anywhere]">{o}</li>)}
               </ul>
             )}
             {consequence && <Notice title={consequence.title} tone="danger"><p>{consequence.body}</p></Notice>}
             {lowNotice && <Notice title={lowNotice.title}><p className="text-muted">{lowNotice.body}</p></Notice>}
-            <dl className="my-[18px] grid grid-cols-[74px_minmax(0,1fr)] gap-x-3 gap-y-2.5 text-xs">
+            <dl className="my-[18px] grid grid-cols-[74px_minmax(0,1fr)] gap-x-3 gap-y-2.5 text-small">
               {req.branch && <><dt className="text-muted">{copy.detail.branch}</dt><dd className="m-0 [overflow-wrap:anywhere]"><code className="font-mono text-[.9em]">{req.branch}</code></dd></>}
               {consequence?.destination && <><dt className="text-muted">{copy.detail.destination}</dt><dd className="m-0 [overflow-wrap:anywhere]"><code className="font-mono text-[.9em]">{consequence.destination}</code></dd></>}
               <dt className="text-muted">{copy.detail.asked}</dt><dd className="m-0">{copy.detail.ago(ageLabel(req.since, now))}</dd>
             </dl>
             {lines.length > 0 && (
               <details className="group mt-[18px] border-t border-line">
-                <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between text-xs [&::-webkit-details-marker]:hidden">
+                <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between text-small [&::-webkit-details-marker]:hidden">
                   {copy.detail.context}
                   <Icon name="terminal" className="size-4 text-muted" />
                 </summary>
-                <pre className="pt-2 pb-4 font-mono text-xs leading-[1.7] break-words whitespace-pre-wrap text-muted [overflow-wrap:anywhere]">{lines.join('\n')}</pre>
+                <pre className="pt-2 pb-4 font-mono text-small leading-[1.7] break-words whitespace-pre-wrap text-muted [overflow-wrap:anywhere]">{lines.join('\n')}</pre>
               </details>
             )}
           </>

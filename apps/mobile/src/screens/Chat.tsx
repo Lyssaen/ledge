@@ -78,8 +78,8 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
         <div aria-hidden="true" className="flex-none"><Mascot size={36} frozen={offline} /></div>
         <div className="min-w-0 flex-1">
           <LinkStatus link={linkView(state)} />
-          <h1 className="text-xl leading-[26px] font-bold tracking-[-0.4px]">{copy.chat.title}<span className="text-primary">.</span></h1>
-          <p className="text-xs text-muted">{teams ? copy.chat.operator(sessions.length, teams.length) : copy.chat.subtitle(sessions.length, repos.size)}</p>
+          <h1 className="text-heading leading-[26px] font-bold tracking-[-0.4px]">{copy.chat.title}<span className="text-primary">.</span></h1>
+          <p className="text-small text-muted">{teams ? copy.chat.operator(sessions.length, teams.length) : copy.chat.subtitle(sessions.length, repos.size)}</p>
         </div>
         <button
           type="button" disabled={running} onClick={() => { setRefused(null); store.resetChat(); }}
@@ -113,7 +113,7 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
         ))}
         <div ref={end} />
       </main>
-      {note && <p role="status" className="flex-none pb-2 text-[13px] text-attention">{note}</p>}
+      {note && <p role="status" className="flex-none pb-2 text-body text-attention">{note}</p>}
       <Composer value={text} onChange={setText} onSend={send} canSend={(text.trim() !== '' || images.items.length > 0) && images.ready && !running && !offline} images={images} attachDisabled={running || offline} />
       <TabBar count={requestsOf(sessions).length + closedTasks(state.tasks.values()).length} active="chat" chat />
     </>

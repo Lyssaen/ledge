@@ -8,5 +8,5 @@ const TONE: Record<Tone, string> = {
 
 /** A state said in words; the colour only backs it up. Every badge of the phone is one. */
 export function Tag({ tone, label }: { tone: Tone; label: string }) {
-  return <span className={`inline-flex h-[22px] flex-none items-center rounded-md px-2 text-[11px] leading-none font-medium whitespace-nowrap ${TONE[tone]}`}>{label}</span>;
+  return <span className={`inline-flex h-[22px] flex-none items-center rounded-md px-2 text-meta leading-none font-medium whitespace-nowrap ${TONE[tone]}`}>{label}</span>;
 }

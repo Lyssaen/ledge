@@ -216,7 +216,7 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
 
   return (
     <div className="app flex flex-col" data-route={route.name}>
-      {forgetNote && state !== 'ready' && <p role="status" className="mx-4 my-3 text-[13px] text-muted">{copy.forget.pending}</p>}
+      {forgetNote && state !== 'ready' && <p role="status" className="mx-4 my-3 text-body text-muted">{copy.forget.pending}</p>}
       {screen}
       {updates && waiting && waiting.fingerprint !== later && (
         <Update next={waiting} current={build} onLater={() => setLater(waiting.fingerprint)} onApply={() => updates.accept()} />

@@ -24,7 +24,7 @@ function saveSize(n: number, storage?: Storage): void {
   try { localStore(storage)?.setItem(SIZE_KEY, String(n)); } catch { /* blocked storage: the size lasts for this visit */ }
 }
 
-const STEP = iconButtonClass({ variant: 'outline', className: 'text-[13px] font-medium' });
+const STEP = iconButtonClass({ variant: 'outline', className: 'text-body font-medium' });
 
 type Interrupt = Op & { message: Extract<Op['message'], { type: 'session.interrupt' }> };
 
@@ -53,7 +53,7 @@ export function Terminal({ store, sessionId, storage }: { store: MobileStore; se
     return (
       <>
         <BackHeader title={copy.thread.title} backTo={back} label={copy.terminal.back} link={link} />
-        <main className="min-h-0 flex-1 pt-7 text-[13px] text-muted" role="status">{!fresh && state.syncedAt === null ? copy.thread.loading : copy.terminal.unknown}</main>
+        <main className="min-h-0 flex-1 pt-7 text-body text-muted" role="status">{!fresh && state.syncedAt === null ? copy.thread.loading : copy.terminal.unknown}</main>
       </>
     );
   }
@@ -84,7 +84,7 @@ export function Terminal({ store, sessionId, storage }: { store: MobileStore; se
       <BackHeader title={copy.terminal.title(session.name)} backTo={back} label={copy.terminal.back} link={link} />
       <main className="flex min-h-0 flex-1 flex-col">
         <div className="mt-2 mb-4 flex items-center justify-between gap-2">
-          <span role="status" className="text-xs text-muted">{status}</span>
+          <span role="status" className="text-small text-muted">{status}</span>
           <div className="flex gap-2">
             <button type="button" disabled={size <= SIZE_MIN} onClick={() => resize(-1)} aria-label={copy.terminal.smaller} className={STEP}>A−</button>
             <button type="button" disabled={size >= SIZE_MAX} onClick={() => resize(1)} aria-label={copy.terminal.larger} className={STEP}>A+</button>
@@ -92,19 +92,19 @@ export function Terminal({ store, sessionId, storage }: { store: MobileStore; se
         </div>
         <div ref={box} tabIndex={0} aria-label={copy.terminal.output} className="mb-3 min-h-0 flex-1 overflow-auto rounded-card border border-line bg-term-bg p-4">
           {lines.length === 0
-            ? <p className="text-xs text-muted">{copy.terminal.empty}</p>
+            ? <p className="text-small text-muted">{copy.terminal.empty}</p>
             : <pre data-size={size} style={{ fontSize: size }} className="m-0 w-max min-w-full font-mono leading-[1.5] whitespace-pre text-term-fg">{lines.join('\n')}</pre>}
         </div>
       </main>
       <footer className="flex flex-none flex-col gap-2.5 border-t border-line bg-bg pt-3 pb-[max(16px,env(safe-area-inset-bottom))] [@media(max-height:650px)]:pb-2.5">
-        <p className="text-center text-[10px] text-muted">{copy.terminal.scrollHint}</p>
-        {problem && <p role="alert" className="text-center text-xs text-attention">{problem}</p>}
+        <p className="text-center text-meta text-muted">{copy.terminal.scrollHint}</p>
+        {problem && <p role="alert" className="text-center text-small text-attention">{problem}</p>}
         <button type="button" disabled={!enabled} onClick={interrupt} className={buttonClass({ block: true })}>
           <Icon name="stop" />
           {label}
         </button>
-        {why && !inFlight && !justSent && <p className="text-center text-[11px] text-muted">{why}</p>}
-        <p className="text-center text-[10px] text-muted">{copy.terminal.note}</p>
+        {why && !inFlight && !justSent && <p className="text-center text-meta text-muted">{why}</p>}
+        <p className="text-center text-meta text-muted">{copy.terminal.note}</p>
       </footer>
     </>
   );

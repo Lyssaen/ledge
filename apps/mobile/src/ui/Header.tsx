@@ -12,7 +12,7 @@ export const linkView = (s: Pick<MobileState, 'fresh' | 'daemon'>): LinkView => 
 /** The PC and the link, with the way to the connection screen. */
 export function LinkStatus({ link }: { link: LinkView }) {
   return (
-    <div className="flex min-w-0 items-center gap-1.5 text-[11px] whitespace-nowrap text-muted">
+    <div className="flex min-w-0 items-center gap-1.5 text-meta whitespace-nowrap text-muted">
       <i className={`inline-block size-1.5 flex-none rounded-full ${link.fresh ? 'bg-ok' : 'bg-muted'}`} />
       <span className="truncate">{link.pc ? `${link.pc} · ` : ''}{link.fresh ? copy.link.online : copy.link.offline}</span>
     </div>
@@ -28,8 +28,8 @@ export function Header({ title, subtitle, link }: { title: string; subtitle: str
           <Icon name="gear" />
         </a>
       </div>
-      <h1 className="mt-3 text-[29px] leading-[1.15] font-semibold tracking-[-1px]">{title}</h1>
-      <p className="mt-2 text-[13px] text-muted">{subtitle}</p>
+      <h1 className="mt-3 text-display leading-[1.15] font-semibold tracking-[-1px]">{title}</h1>
+      <p className="mt-2 text-body text-muted">{subtitle}</p>
     </header>
   );
 }

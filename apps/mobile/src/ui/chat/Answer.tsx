@@ -41,7 +41,7 @@ export function Answer({ text, names }: { text: string; names: SessionNames }) {
 export function Sources({ names, ids }: { names: string[]; ids: SessionNames }) {
   if (names.length === 0) return null;
   return (
-    <span className="px-1 text-xs text-muted">
+    <span className="px-1 text-small text-muted">
       {copy.chat.sources}
       {names.map((n, i) => <span key={n}>{i > 0 && ', '}{ids.has(n) ? threadLink(ids.get(n)!, n) : n}</span>)}
     </span>

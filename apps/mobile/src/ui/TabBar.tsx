@@ -2,7 +2,7 @@ import { copy } from '../copy';
 import { href } from '../router';
 import { Icon } from './icons';
 
-const tab = (on: boolean) => `flex min-h-12 items-center justify-center gap-2 rounded-control text-[13px] transition-colors duration-100 active:bg-raised ${on ? 'bg-raised text-fg' : 'text-muted'}`;
+const tab = (on: boolean) => `flex min-h-12 items-center justify-center gap-2 rounded-control text-body transition-colors duration-100 active:bg-raised ${on ? 'bg-raised text-fg' : 'text-muted'}`;
 
 /** « Ledge » first when the PC offers the chat (ledge home spec §2.4), then « À traiter » and « Agents »; `count` is what waits there. */
 export function TabBar({ count, active = 'inbox', chat = false }: { count: number; active?: 'inbox' | 'agents' | 'chat'; chat?: boolean }) {
@@ -17,7 +17,7 @@ export function TabBar({ count, active = 'inbox', chat = false }: { count: numbe
       <a href={href({ name: 'inbox' })} aria-current={active === 'inbox' ? 'page' : undefined} className={tab(active === 'inbox')}>
         <Icon name="inbox" />
         {copy.nav.inbox}
-        {count > 0 && <span className="inline-grid h-[19px] min-w-[19px] place-items-center rounded-md bg-primary px-[5px] text-[11px] font-bold text-primary-fg">{count}</span>}
+        {count > 0 && <span className="inline-grid h-[19px] min-w-[19px] place-items-center rounded-md bg-primary px-[5px] text-meta font-bold text-primary-fg">{count}</span>}
       </a>
       <a href={href({ name: 'agents' })} aria-current={active === 'agents' ? 'page' : undefined} className={tab(active === 'agents')}>
         <Icon name="message" />

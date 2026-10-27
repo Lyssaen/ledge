@@ -21,8 +21,8 @@ export function Gone({ store, stale = false, item }: { store: MobileStore; stale
       <>
         <BackHeader title={copy.gone.header} backTo={back} label={copy.detail.back} link={link} />
         <main className="min-h-0 flex-1 overflow-y-auto pt-7">
-          <h1 className="text-[25px] leading-[1.25] font-semibold tracking-[-1px]">{copy.gone.staleTitle}</h1>
-          <p className="mt-2.5 text-[13px] text-muted">{copy.gone.staleBody}</p>
+          <h1 className="text-display leading-[1.25] font-semibold tracking-[-1px]">{copy.gone.staleTitle}</h1>
+          <p className="mt-2.5 text-body text-muted">{copy.gone.staleBody}</p>
           <a href={back} className={`mt-6 ${PRIMARY}`}>{copy.gone.back}</a>
         </main>
       </>

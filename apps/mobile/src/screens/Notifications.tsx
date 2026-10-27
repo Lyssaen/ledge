@@ -42,7 +42,7 @@ export function NotificationsRow({ store, fetchImpl }: { store: MobileStore; fet
   if (!n.push) return null;
   const on = n.push === 'on';
   return (
-    <div className="flex flex-col gap-2 border-b border-line px-4 py-3 text-[13px] last:border-b-0">
+    <div className="flex flex-col gap-2 border-b border-line px-4 py-3 text-body last:border-b-0">
       <div className="flex items-center justify-between gap-4">
         <dt className="flex-none text-muted">{N.row}</dt>
         <dd className="flex min-w-0 items-center gap-3 text-right">
@@ -85,8 +85,8 @@ export function NotifyStep({ store, onDone, fetchImpl }: { store: MobileStore; o
   return (
     <>
       <section aria-labelledby="notify-title" className="flex flex-col gap-3 rounded-control border border-line bg-surface p-4">
-        <h2 id="notify-title" className="text-[17px] leading-[1.35] font-semibold">{N.title}</h2>
-        <p className="text-[13px] leading-[1.6] text-muted">{N.body}</p>
+        <h2 id="notify-title" className="text-title leading-[1.35] font-semibold">{N.title}</h2>
+        <p className="text-body leading-[1.6] text-muted">{N.body}</p>
         {n.problem && <Notice title={n.problem} tone="warning" role="alert" />}
         <button type="button" disabled={n.busy || !fresh} onClick={go} className={PRIMARY}>{n.busy ? N.working : fresh ? N.enable : N.waiting}</button>
       </section>

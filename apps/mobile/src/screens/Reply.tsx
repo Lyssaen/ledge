@@ -1,15 +1,13 @@
 import { useRef } from 'react';
 import { UNTYPABLE } from '@ledge/protocol';
-import { AttachmentChips } from '@ledge/ui/images';
 import { copy } from '../copy';
 import { MESSAGE_MAX, QUICK_REPLIES, type Composer } from '../model/thread';
 import type { Op } from '../state/operations';
 import { useBusy } from '../useBusy';
-import { AttachButton, pastedImages } from '../ui/Attach';
 import { Notice } from '../ui/Notice';
 import type { Attachments } from '../ui/useAttachments';
-import { buttonClass, chipClass, iconButtonClass } from '../ui/Button';
-import { Icon } from '../ui/icons';
+import { buttonClass, chipClass } from '../ui/Button';
+import { MessageField } from '../ui/MessageField';
 
 const TONE = { ok: 'text-ok', info: 'text-info', attention: 'text-attention', muted: 'text-muted' } as const;
 const C = copy.thread.composer;
@@ -48,8 +46,8 @@ export function Reply({ name, composer, draft, onDraft, onSend, fresh, taken, ch
   // Text or images; an image still uploading, or refused, holds the send back.
   const canSend = composer.enabled && (!!draft.trim() || withImages) && problem === null && images.ready && !(withImages && dialog);
   return (
-    <footer className="flex-none border-t border-line bg-bg px-3.5 pt-2 pb-3 [@media(max-height:650px)]:pb-2">
-      <div className={`flex items-center gap-1.5 px-0.5 pb-2 text-[11px] ${TONE[status.tone]}`}><i className="inline-block size-1.5 flex-none rounded-full bg-current" />{status.label}</div>
+    <footer className="flex-none border-t border-line bg-bg pt-2 pb-3 [@media(max-height:650px)]:pb-2">
+      <div className={`flex items-center gap-1.5 pb-2 text-meta ${TONE[status.tone]}`}><i className="inline-block size-1.5 flex-none rounded-full bg-current" />{status.label}</div>
       {error && (
         <div className="mb-2.5">
           <Notice title={error.title} tone="warning" role="alert">
@@ -69,22 +67,14 @@ export function Reply({ name, composer, draft, onDraft, onSend, fresh, taken, ch
           ))}
         </div>
       )}
-      {withImages && <div className="pb-2"><AttachmentChips items={images.items} onRemove={images.remove} size={{ w: 72, h: 54 }} removeLabel={copy.images.remove} lang="fr" /></div>}
-      <div className="flex items-end gap-2">
-        <AttachButton onFiles={images.add} disabled={!composer.enabled} />
-        <label htmlFor="draft" className="sr-only">{C.label(name)}</label>
-        <textarea id="draft" ref={ref} rows={1} value={draft} disabled={!composer.enabled} placeholder={composer.placeholder} onChange={e => onDraft(e.target.value)}
-          enterKeyHint="send" onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); if (canSend) onSend(); } }}
-          onPaste={e => { const files = pastedImages(e); if (files.length === 0 || !composer.enabled) return; e.preventDefault(); images.add(files); }}
-          aria-invalid={problem !== null} aria-describedby={problem ? 'draft-problem' : undefined}
-          className="max-h-[120px] min-h-12 w-full min-w-0 resize-none rounded-control border border-line bg-surface p-3 text-base leading-[22px] text-fg placeholder:text-muted disabled:opacity-60" />
-        <button type="button" disabled={!canSend} onClick={onSend} aria-label={C.send(name)} className={iconButtonClass({ variant: 'primary', large: true })}>
-          <Icon name="plane" />
-        </button>
-      </div>
-      {withImages && dialog && <p role="status" className="px-0.5 pt-1.5 text-[11px] text-attention">{copy.images.dialog}</p>}
-      {images.error && <p role="alert" className="px-0.5 pt-1.5 text-[11px] text-attention">{images.error}</p>}
-      {problem && <p id="draft-problem" role="status" className="px-0.5 pt-1.5 text-[11px] text-attention">{problem === 'long' ? C.tooLong(MESSAGE_MAX) : C.untypable}</p>}
+      <MessageField
+        id="draft" label={C.label(name)} sendLabel={C.send(name)} value={draft} onChange={onDraft} onSend={onSend} canSend={canSend}
+        oneLine images={images} placeholder={composer.placeholder} disabled={!composer.enabled} fieldRef={ref}
+        invalid={problem !== null} describedBy={problem ? 'draft-problem' : undefined}
+      />
+      {withImages && dialog && <p role="status" className="pt-1.5 text-meta text-attention">{copy.images.dialog}</p>}
+      {images.error && <p role="alert" className="pt-1.5 text-meta text-attention">{images.error}</p>}
+      {problem && <p id="draft-problem" role="status" className="pt-1.5 text-meta text-attention">{problem === 'long' ? C.tooLong(MESSAGE_MAX) : C.untypable}</p>}
     </footer>
   );
 }

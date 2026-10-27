@@ -20,7 +20,7 @@ function Thumb({ store, image, onOpen }: { store: MobileStore; image: Attachment
   }, [seen]);
   const { url, failed } = useImageUrl(store, image.id, true, seen && image.preview);
   // Nothing small was made: the phone does not fetch the whole picture for a thumbnail.
-  if (!image.preview) return <p className="max-w-full rounded-lg border border-line bg-surface p-2.5 text-xs text-muted">{C.noPreview}</p>;
+  if (!image.preview) return <p className="max-w-full rounded-lg border border-line bg-surface p-2.5 text-small text-muted">{C.noPreview}</p>;
   return <div ref={box} className="max-w-full"><ImageThumb url={url} failed={failed} width={image.width} height={image.height} maxW={240} maxH={240} alt="" unavailable={C.unavailable} onOpen={onOpen} /></div>;
 }
 

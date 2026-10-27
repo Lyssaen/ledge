@@ -25,12 +25,12 @@ function Row({ store, qid, row, proposal, canConfirm, known }: { store: MobileSt
   const shown: Note | null = proposal.failed ? 'failed' : note;
   return (
     <section aria-label={copy.chat.launchLabel} className={CARD}>
-      <h3 className="text-[13px] font-semibold">{copy.chat.launchHead(copy.tools[proposal.tool], proposal.project)}</h3>
-      {proposal.prompt && <p className="whitespace-pre-wrap break-words text-[13px] text-fg/80">{proposal.prompt}</p>}
-      {done && <p role="status" className="text-[13px] text-ok">{copy.chat.launchedTo}{known ? threadLink(proposal.launchedId!, copy.chat.seeThread) : copy.chat.seeThread}</p>}
-      {!done && shown && <p role="status" className={`text-[13px] ${shown === 'failed' ? 'text-danger-fg' : 'text-muted'}`}>{shown === 'failed' ? copy.chat.notLaunched : copy.confirm[shown]}</p>}
+      <h3 className="text-body font-semibold">{copy.chat.launchHead(copy.tools[proposal.tool], proposal.project)}</h3>
+      {proposal.prompt && <p className="whitespace-pre-wrap break-words text-body text-fg/80">{proposal.prompt}</p>}
+      {done && <p role="status" className="text-body text-ok">{copy.chat.launchedTo}{known ? threadLink(proposal.launchedId!, copy.chat.seeThread) : copy.chat.seeThread}</p>}
+      {!done && shown && <p role="status" className={`text-body ${shown === 'failed' ? 'text-danger-fg' : 'text-muted'}`}>{shown === 'failed' ? copy.chat.notLaunched : copy.confirm[shown]}</p>}
       {!done && !canConfirm && (
-        <p className="text-[13px] text-attention">{copy.chat.launchSetup} <a href={href({ name: 'connection' })} className="text-info underline underline-offset-2">{copy.connection.title}</a></p>
+        <p className="text-body text-attention">{copy.chat.launchSetup} <a href={href({ name: 'connection' })} className="text-info underline underline-offset-2">{copy.connection.title}</a></p>
       )}
       {!done && (
         <div className="flex gap-2">

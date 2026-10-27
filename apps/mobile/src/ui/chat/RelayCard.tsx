@@ -23,13 +23,13 @@ export function RelayCard({ store, qid, relay, repo, known }: { store: MobileSto
     void store.relay(qid).then(r => { if (r.status === 'applied') setApplied(true); else if (r.status === 'failed' || r.status === 'rejected') setFailed(true); }, () => setFailed(true)).finally(() => setBusy(false));
   };
   const outcome = relay.status === 'sent'
-    ? <p role="status" className="text-[13px] text-ok">{copy.chat.sentTo(relay.name)}{known ? threadLink(relay.id, copy.chat.seeThread) : copy.chat.seeThread}</p>
-    : relay.status === 'queued' ? <p role="status" className="text-[13px] text-attention">{copy.chat.queued(relay.name)}</p>
-    : relay.failed || failed ? <p role="status" className="text-[13px] text-danger-fg">{copy.chat.notSent}</p> : null;
+    ? <p role="status" className="text-body text-ok">{copy.chat.sentTo(relay.name)}{known ? threadLink(relay.id, copy.chat.seeThread) : copy.chat.seeThread}</p>
+    : relay.status === 'queued' ? <p role="status" className="text-body text-attention">{copy.chat.queued(relay.name)}</p>
+    : relay.failed || failed ? <p role="status" className="text-body text-danger-fg">{copy.chat.notSent}</p> : null;
   return (
     <section aria-label={copy.chat.relayLabel} className={CARD}>
-      <h3 className="text-[13px] font-semibold">{copy.chat.relayHead(relay.name)}{repo ? ` · ${repo}` : ''}</h3>
-      <p className="whitespace-pre-wrap break-words text-[13px] text-fg/80">{relay.text}</p>
+      <h3 className="text-body font-semibold">{copy.chat.relayHead(relay.name)}{repo ? ` · ${repo}` : ''}</h3>
+      <p className="whitespace-pre-wrap break-words text-body text-fg/80">{relay.text}</p>
       {outcome}
       {!done && (
         <div className="flex gap-2">

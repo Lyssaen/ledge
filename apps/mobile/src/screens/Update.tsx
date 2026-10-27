@@ -16,13 +16,13 @@ export function Update({ next, current, onLater, onApply }: { next: BuildInfo; c
   return (
     <Sheet labelledBy="update-title" onClose={onLater}>
       <div className="flex flex-col gap-1.5">
-        <h2 id="update-title" className="text-xl leading-[26px] font-semibold tracking-[-.02em]">{U.version(next.version)}</h2>
+        <h2 id="update-title" className="text-heading leading-[26px] font-semibold tracking-[-.02em]">{U.version(next.version)}</h2>
         <p className="text-muted">{U.body}</p>
       </div>
       <div className="flex flex-col gap-2 rounded-control border border-line bg-bg p-3.5">
-        <span className="text-xs leading-4 text-muted">{U.fingerprint}</span>
-        <code className="font-mono text-[15px] leading-[22px] tracking-[.02em] [word-spacing:4px]">{formatFingerprint(next.fingerprint)}</code>
-        <span className="text-xs leading-4 text-muted">
+        <span className="text-small leading-4 text-muted">{U.fingerprint}</span>
+        <code className="font-mono text-base leading-[22px] tracking-[.02em] [word-spacing:4px]">{formatFingerprint(next.fingerprint)}</code>
+        <span className="text-small leading-4 text-muted">
           {U.current}
           <span className="font-mono">{current ? U.currentBuild(current.version, shortFingerprint(current.fingerprint)) : copy.connection.none}</span>
         </span>

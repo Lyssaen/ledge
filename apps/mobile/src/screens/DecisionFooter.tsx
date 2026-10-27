@@ -78,7 +78,7 @@ export function DecisionFooter(p: DecisionFooterProps) {
     <footer className="flex flex-none flex-col gap-2.5 border-t border-line bg-bg pt-3 pb-4">
       {children}
       {withThread && thread}
-      {hint && <p className="text-center text-[10px] text-muted">{hint}</p>}
+      {hint && <p className="text-center text-meta text-muted">{hint}</p>}
     </footer>
   );
 
@@ -97,7 +97,7 @@ export function DecisionFooter(p: DecisionFooterProps) {
     ) : null
   ) : multi ? (
     <div className="flex flex-col gap-2.5">
-      {multi.missing > 0 && <p className="text-center text-xs text-muted">{copy.answers.missing(multi.missing)}</p>}
+      {multi.missing > 0 && <p className="text-center text-small text-muted">{copy.answers.missing(multi.missing)}</p>}
       <button type="button" disabled={!enabled || multi.missing > 0} onClick={multi.onSend} className={full('primary')}>{copy.answers.send}</button>
       <button type="button" disabled={!enabled} onClick={multi.onCancel} className={full()}>{copy.answers.cancel}</button>
     </div>

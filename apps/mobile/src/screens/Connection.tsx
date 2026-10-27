@@ -42,7 +42,7 @@ export function Connection({ store, login, relay, pinned, linkState, build, onSi
     <>
       <BackHeader title={N.title} backTo={href({ name: 'inbox' })} label={N.back} link={linkView(state)} />
       <main className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto pt-5 pb-[34px]">
-        <dl className="flex flex-col rounded-control border border-line bg-surface text-[13px]">
+        <dl className="flex flex-col rounded-control border border-line bg-surface text-body">
           {rows.map(([label, value, mono]) => (
             <div key={label} className="flex items-baseline justify-between gap-4 border-b border-line px-4 py-3 last:border-b-0">
               <dt className="flex-none text-muted">{label}</dt>
@@ -53,7 +53,7 @@ export function Connection({ store, login, relay, pinned, linkState, build, onSi
           <NotificationsRow store={store} fetchImpl={fetchImpl} />
         </dl>
         <section aria-labelledby="appearance-title" className="flex flex-col gap-2.5">
-          <h2 id="appearance-title" className="text-[13px] text-muted">{N.appearance}</h2>
+          <h2 id="appearance-title" className="text-body text-muted">{N.appearance}</h2>
           <Segmented name="theme" legend={N.appearance} options={THEMES} value={theme} onChange={v => setTheme(v)} />
         </section>
         <div className="flex-grow" aria-hidden="true" />

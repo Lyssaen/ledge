@@ -6,8 +6,8 @@ import { buttonClass } from './Button';
 const tones = { plain: 'border-line bg-surface', warning: 'border-attention/25 bg-attention/[0.06]', danger: 'border-danger-fg/25 bg-danger-bg' } as const;
 export function Notice({ title, tone = 'plain', children, role }: { title: string; tone?: keyof typeof tones; children?: ReactNode; role?: 'alert' | 'status' }) {
   return (
-    <div role={role} className={`rounded-control border p-3.5 text-xs leading-[1.65] ${tones[tone]}`}>
-      <strong className="mb-[5px] block text-[13px]">{title}</strong>
+    <div role={role} className={`rounded-control border p-3.5 text-small leading-[1.65] ${tones[tone]}`}>
+      <strong className="mb-[5px] block text-body">{title}</strong>
       {children}
     </div>
   );

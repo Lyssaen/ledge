@@ -24,14 +24,14 @@ export function Login({ server, error }: { server: string; error: string | null 
     <Board>
       <div className="flex flex-col items-center gap-3.5 text-center">
         <Mascot size={88} />
-        <h1 className="text-[28px] leading-[34px] font-bold tracking-[-.025em]">{copy.login.title}</h1>
+        <h1 className="text-display leading-[34px] font-bold tracking-[-.025em]">{copy.login.title}</h1>
         <p className="max-w-[300px] text-muted">{copy.login.subtitle}</p>
       </div>
-      <div className="flex h-8 items-center gap-2.5 self-center rounded-full border border-line px-3 text-xs text-muted">
+      <div className="flex h-8 items-center gap-2.5 self-center rounded-full border border-line px-3 text-small text-muted">
         <svg className={`${ICON} size-3.5`} viewBox="0 0 24 24" aria-hidden="true"><rect width="20" height="8" x="2" y="2" rx="2" ry="2" /><rect width="20" height="8" x="2" y="14" rx="2" ry="2" /><line x1="6" x2="6.01" y1="6" y2="6" /><line x1="6" x2="6.01" y1="18" y2="18" /></svg>
         <span className="font-mono">{server}</span>
       </div>
-      {error && <p role="alert" className="rounded-control border border-danger-fg/15 bg-danger-bg p-3.5 text-[13px] text-danger-fg">{error}</p>}
+      {error && <p role="alert" className="rounded-control border border-danger-fg/15 bg-danger-bg p-3.5 text-body text-danger-fg">{error}</p>}
       <Fill />
       <ul className="flex flex-col gap-3.5 text-fg/85">
         {copy.login.notes.map((note, i) => (

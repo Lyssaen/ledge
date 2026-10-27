@@ -19,8 +19,8 @@ const VARIANT: Record<ButtonVariant, string> = {
 const ICON_GHOST = 'border-transparent bg-transparent text-fg hover:bg-raised/60 active:bg-raised';
 const SIZE: Record<ButtonSize, string> = {
   lg: 'min-h-14 px-4 text-base font-semibold',
-  md: 'min-h-12 px-4 py-2.5 text-[13px] leading-[1.4] font-medium',
-  sm: 'min-h-11 px-3.5 text-[13px] font-medium'
+  md: 'min-h-12 px-4 py-2.5 text-body leading-[1.4] font-medium',
+  sm: 'min-h-11 px-3.5 text-body font-medium'
 };
 
 export interface ButtonStyle { variant?: ButtonVariant; size?: ButtonSize; block?: boolean; className?: string | undefined }
@@ -46,5 +46,5 @@ export const iconButtonClass = ({ variant = 'ghost', round = false, large = fals
  * an action.
  */
 export const chipClass = (pressed?: boolean): string =>
-  `inline-flex min-h-11 flex-none items-center rounded-full border px-3.5 text-[13px] font-medium transition-colors duration-100 active:bg-raised ${
+  `inline-flex min-h-11 flex-none items-center rounded-full border px-3.5 text-body font-medium transition-colors duration-100 active:bg-raised ${
     pressed === undefined ? 'border-line bg-surface text-fg' : pressed ? 'border-fg/25 bg-raised text-fg' : 'border-transparent text-muted'}`;

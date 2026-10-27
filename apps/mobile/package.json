@@ -13,6 +13,8 @@
     "serve:local": "tsx e2e/harness.ts"
   },
   "dependencies": {
+    "@fontsource-variable/geist": "^5.3.0",
+    "@fontsource-variable/geist-mono": "^5.3.0",
     "@ledge/protocol": "workspace:*",
     "@ledge/seal": "workspace:*",
     "@ledge/ui": "workspace:*",

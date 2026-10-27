@@ -5,7 +5,7 @@ import { buttonClass } from './Button';
 export const PRIMARY = buttonClass({ variant: 'primary', size: 'lg', block: true });
 export const OUTLINE = buttonClass({ size: 'lg', block: true });
 export const ICON = 'size-5 flex-none fill-none stroke-current [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:1.5]';
-export const H1 = 'text-2xl leading-8 font-semibold tracking-[-.025em]';
+export const H1 = 'text-display leading-8 font-semibold tracking-[-.025em]';
 
 /** A screen of the account and pairing boards: one column, no tab bar, its actions at the bottom. */
 export function Board({ children, top = 'pt-24' }: { children: ReactNode; top?: string }) {

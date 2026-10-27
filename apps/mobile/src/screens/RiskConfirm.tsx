@@ -102,8 +102,8 @@ export function RiskConfirm({ store, item, enabled, reason, onConfirm, onDeny, d
   const label = asking ? C.asking : challenge ? (isApple() ? C.goApple : C.go) : C.preparing;
   return (
     <section aria-labelledby="confirm-title" className="flex flex-col gap-3 rounded-card border border-line bg-surface p-4">
-      <h2 id="confirm-title" className="text-[17px] leading-[1.35] font-semibold">{C.heading}</h2>
-      <p className="text-xs leading-[1.6] text-muted">{C.note}</p>
+      <h2 id="confirm-title" className="text-title leading-[1.35] font-semibold">{C.heading}</h2>
+      <p className="text-small leading-[1.6] text-muted">{C.note}</p>
       {shown && <Notice title={shown === 'changed' ? copy.decide.changed : C[shown]} tone="warning" role="alert" />}
       {needsNew
         ? <button type="button" disabled={!enabled} onClick={retry} className={full('primary')}>{C.retry}</button>
@@ -119,7 +119,7 @@ export function RiskConfirm({ store, item, enabled, reason, onConfirm, onDeny, d
  */
 export function OnPc() {
   return (
-    <p className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-control border border-dashed border-line px-4 py-2.5 text-center text-[13px] leading-[1.4] font-medium text-muted">
+    <p className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-control border border-dashed border-line px-4 py-2.5 text-center text-body leading-[1.4] font-medium text-muted">
       <Icon name="monitor" className="size-4" />
       {copy.decide.onPc}
     </p>
