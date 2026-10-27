@@ -1,11 +1,11 @@
 import { useMemo } from 'react';
-import { Box, Text, useWindowSize } from 'ink';
+import { Box, Text } from 'ink';
 import { randomUUID } from 'node:crypto';
 import { useState } from 'react';
 import { isPending, useContextNear, useTasks, useTeams } from '@ledge/fleet';
 import { LEDGE_GIVER, taskClosed, type Session, type Team } from '@ledge/protocol';
 import { botState } from '@ledge/ui/bots/poseFor';
-import { useScreenKeys, useTui } from '../context.js';
+import { useScreenKeys, useScreenSize, useTui } from '../context.js';
 import { closedLedgeTasks, exchanges, helperCount, nearContext, nextWaiting, overview, step } from '../model/overview.js';
 import { fit, machineLabel, paneName } from '../model/labels.js';
 import { clock, oneLine } from '../model/time.js';
@@ -35,7 +35,7 @@ export function windowed<T extends { key: string }>(rows: readonly T[], selected
 export function Overview() {
   const tui = useTui();
   const { d, projects, t, g, selected, select, actions, go, attach } = tui;
-  const { columns, rows: height } = useWindowSize();
+  const { columns, rows: height } = useScreenSize();
   const wide = columns >= WIDE;
   // The left column: wide enough for a topic, never more than half the terminal.
   const left = wide ? Math.min(64, Math.max(44, Math.floor(columns * 0.42))) : columns;

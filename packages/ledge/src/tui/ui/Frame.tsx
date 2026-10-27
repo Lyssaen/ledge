@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
-import { Box, Text, useWindowSize } from 'ink';
+import { Box, Text } from 'ink';
 import { isPending } from '@ledge/fleet';
-import { useTui } from '../context.js';
+import { useScreenSize, useTui } from '../context.js';
 import { cells } from '../model/cells.js';
 import { C } from '../theme.js';
 import { fitKeys, KeyBar } from './KeyBar.js';
@@ -16,7 +16,7 @@ export function Frame({ crumb, crumbShort, keys, kept, children }: {
   crumb: string; crumbShort?: string; keys: ReadonlyArray<readonly [string, string]>; kept?: boolean; children: ReactNode;
 }) {
   const { d, machines, t, g, lastToast, editing } = useTui();
-  const { rows, columns } = useWindowSize();
+  const { rows, columns } = useScreenSize();
   const live = listed(d.sessions);
   const pending = live.filter(isPending);
   const waiting = pending.length;

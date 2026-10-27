@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import type { ChatAction, ChatTurn, ClientMessage } from '@ledge/protocol';
 import { daemonStore } from '@ledge/fleet';
 import { until } from './helpers.js';
+import { cells } from '../src/tui/model/cells.js';
 import { mockupSessions, PROJECTS, startTui } from './tui-fixture.js';
 
 const sent = <T extends ClientMessage['type']>(received: ClientMessage[], type: T) => received.filter((m): m is Extract<ClientMessage, { type: T }> => m.type === type);
@@ -73,6 +74,28 @@ describe('ledge tui: session', () => {
       await tui.press('\r');
       await until(() => sent(tui.daemon.received, 'session.model').length === 1);
       expect(sent(tui.daemon.received, 'session.model')[0]).toEqual({ type: 'session.model', id: 'otto', model: 'sonnet', effort: null });
+    } finally { await tui.cleanup(); }
+  });
+});
+
+describe('ledge tui: Windows Terminal', () => {
+  // Windows Terminal says 236 columns where 235 show: the last one goes under the scrollbar, and the boxes' right edge with it.
+  it('leaves the last column empty: the boxes close one column early', async () => {
+    const tui = await startTui({ env: { WT_SESSION: 'x' } });
+    try {
+      await tui.resize(100, 30);
+      const edges = () => tui.frame().split('\n').filter(l => /^[╭│╰]/.test(l)).map(l => [cells(l), l.at(-1)]);
+      await until(() => edges().every(([w, c]) => w === 99 && /[╮│╯]/.test(c as string)));
+      await tui.press('\r');
+      await until(() => tui.frame().includes('ÉCRIRE') && edges().every(([w, c]) => w === 99 && /[╮│╯]/.test(c as string)));
+    } finally { await tui.cleanup(); }
+  });
+
+  it('elsewhere, the boxes take the whole width', async () => {
+    const tui = await startTui();
+    try {
+      await tui.resize(100, 30);
+      await until(() => tui.frame().split('\n').filter(l => /^[╭│╰]/.test(l)).every(l => cells(l) === 100));
     } finally { await tui.cleanup(); }
   });
 });

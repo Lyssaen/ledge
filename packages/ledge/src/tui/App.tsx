@@ -6,7 +6,7 @@ import { useActions, type Toast } from './actions.js';
 import { attachCommand, runAttached } from './attach.js';
 import { readClipboardImage, type ClipboardImage } from './clipboard.js';
 import { openImage } from './openImage.js';
-import { SCREENS, TuiContext, type Kept, type KeyHandler, type Screen, type Tui } from './context.js';
+import { SCREENS, screenSize, TuiContext, type Kept, type KeyHandler, type Screen, type Tui } from './context.js';
 import type { Glyphs } from './glyphs.js';
 import { I18nProvider, MESSAGES, type Lang } from './i18n/lang.js';
 import { keepSelection, listed, overview } from './model/overview.js';
@@ -139,7 +139,7 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
     });
   }, [suspendTerminal, run, t, toast]);
 
-  const size = useWindowSize();
+  const size = screenSize(useWindowSize(), env);
   const small = size.columns < MIN.columns || size.rows < MIN.rows;
   const tui: Tui = {
     client, fleet, d, machines, projects, t, lang, setLang, theme, setTheme, tone, background, g: glyphs, screen, go, selected, select: setSelectedId,

@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Box, Text, useWindowSize } from 'ink';
+import { Box, Text } from 'ink';
 import { randomUUID } from 'node:crypto';
 import { useTeams } from '@ledge/fleet';
 import { projectOf, ROLE_PROMPT_MAX, type DefinitionProblem, type Role, type TeamTemplate } from '@ledge/protocol';
-import { useScreenKeys, useTui } from '../context.js';
+import { useScreenKeys, useScreenSize, useTui } from '../context.js';
 import { bySource, catalogScopes, heldBy, initialScope, projectOfFolder, stepIndex, usedIn, type Scope } from '../model/catalog.js';
 import { fit, TOOL_NAME } from '../model/labels.js';
 import { C } from '../theme.js';
@@ -26,7 +26,7 @@ const ROLES_MS = 4_000;
 export function Teams() {
   const tui = useTui();
   const { client, d, projects, machines, t, g, selected, catalog, go } = tui;
-  const { columns, rows: height } = useWindowSize();
+  const { columns, rows: height } = useScreenSize();
   const wide = columns >= WIDE;
   const left = wide ? Math.min(64, Math.max(44, Math.floor(columns * 0.42))) : columns;
   const teams = useTeams(client) ?? [];

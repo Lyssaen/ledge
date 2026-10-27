@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef } from 'react';
-import type { Key } from 'ink';
+import { useWindowSize, type Key } from 'ink';
 import type { DaemonClient, DaemonState, Fleet, MachineState } from '@ledge/fleet';
 import type { Projects, Session } from '@ledge/protocol';
 import type { Actions, Toast } from './actions.js';
@@ -54,6 +54,13 @@ export const useTui = (): Tui => {
   if (!tui) throw new Error('useTui outside the TUI');
   return tui;
 };
+
+/** The room the TUI draws in: the terminal, less its last column under Windows Terminal, which says one column more than it
+ *  shows (the last one goes under its scrollbar, and the boxes' right edge with it). */
+export function screenSize({ columns, rows }: { columns: number; rows: number }, env: NodeJS.ProcessEnv): { columns: number; rows: number } {
+  return { columns: env.WT_SESSION ? Math.max(1, columns - 1) : columns, rows };
+}
+export const useScreenSize = (): { columns: number; rows: number } => screenSize(useWindowSize(), useTui().env);
 
 /** The screen's keys, asked first by the App; the latest handler is used, so it may read the render's state. */
 export function useScreenKeys(handler: KeyHandler): void {
