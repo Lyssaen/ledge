@@ -36,6 +36,8 @@
   --color-term-bg: var(--term-bg);
   --color-term-fg: var(--term-fg);
 }
+/* A phone on its side (landscape, short), as the block at the end of this file: the screens that compact their header there. */
+@custom-variant phone-side (@media (orientation: landscape) and (max-height: 500px));
 @theme {
   --radius-card: 16px;
   --radius-control: 12px;
@@ -80,4 +82,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 /* A phone on its side (landscape, short): the whole width; its notch is then on a side, cleared by the padding above. */
 @media (orientation: landscape) and (max-height: 500px) {
   .app { max-width: none; }
+  /* The tabs become a rail on the left, so the short height goes to the thread and the composer. */
+  .app:has(> .tabbar) { padding-left: calc(env(safe-area-inset-left) + 92px); }
+  .tabbar {
+    position: fixed; inset: 0 auto 0 0; z-index: 20; width: calc(env(safe-area-inset-left) + 76px);
+    display: flex; flex-direction: column; justify-content: center; gap: 6px;
+    padding: env(safe-area-inset-top) 6px env(safe-area-inset-bottom) calc(env(safe-area-inset-left) + 6px);
+    border-top: 0; border-right: 1px solid var(--color-line);
+  }
+  .tabbar > a { position: relative; flex-direction: column; gap: 2px; min-height: 56px; font-size: var(--text-meta); line-height: var(--text-meta--line-height); }
+  /* The count, on the icon's corner instead of after the label. */
+  .tabbar > a > span { position: absolute; top: 4px; right: 6px; }
 }
