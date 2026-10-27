@@ -69,6 +69,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   box-sizing: border-box;
 }
 
+/* The installed app on iOS (`black-translucent`, index.html) draws the status bar over the page in white text, whatever the
+   theme: in the light theme a dark band behind it keeps the clock and battery readable. The inset is 0 elsewhere. */
+@media (display-mode: standalone) {
+  :root[data-theme="light"] body::before {
+    content: ""; position: fixed; inset: 0 0 auto; z-index: 30; height: env(safe-area-inset-top, 0px); background: #0a0a0a;
+  }
+}
+
 /* A phone on its side (landscape, short): the whole width; its notch is then on a side, cleared by the padding above. */
 @media (orientation: landscape) and (max-height: 500px) {
   .app { max-width: none; }

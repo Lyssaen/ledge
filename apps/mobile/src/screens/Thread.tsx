@@ -54,7 +54,7 @@ function Bubble({ item, store }: { item: ThreadItem; store: MobileStore }) {
     );
     case 'event': return <div className="text-center text-meta text-muted">{item.label}</div>;
     case 'awaiting': return (
-      <Notice title={copy.thread.awaiting} tone="warning">
+      <Notice title={copy.thread.awaiting} tone={item.item.kind === 'question' ? 'warning' : 'approval'}>
         <p className="[overflow-wrap:anywhere]">{headline(item.item)}</p>
         <a href={href({ name: 'request', sessionId: item.item.sessionId, key: item.item.key })} className={buttonClass({ block: true, className: 'mt-3' })}>
           {copy.thread.examine}
