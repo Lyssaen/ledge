@@ -6,6 +6,9 @@ type Reply = Extract<ThreadItem, { kind: 'reply' }>;
 export type Turn = { n: number; prompt?: Prompt; reply?: Reply; items: ThreadItem[] };
 export type HelperRow = { id: string; kind: string; task: string; state: Helper['state'] };
 
+/** The exchanges a thread shows open, the newest ones: the ones before fold to their row, so a little history stays in sight. */
+export const OPEN_TURNS = 3;
+
 const byTime = (a: ThreadItem, b: ThreadItem) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0);
 
 /** The daemon keeps both the agent's last message (from the transcript) and the reply that repeats it: the reply is

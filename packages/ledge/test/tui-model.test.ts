@@ -130,12 +130,21 @@ describe('tui thread', () => {
     { kind: 'tool', id: 't2', at: at(4), turn: 2, tool: 'Bash', label: 'npm test', status: 'running', files: [] },
     { kind: 'sent', id: 's1', at: at(5), turn: 2, to: 'Nova', text: 'Tu peux rebaser.', status: 'delivered' }
   ];
+  // Two short turns between: turn 1 is then older than the last OPEN_TURNS, folded.
+  const older: ThreadItem[] = [
+    ...items.filter(i => i.turn === 1),
+    { kind: 'prompt', id: 'pb', at: at(2.2), turn: 2, text: 'Relis' }, { kind: 'reply', id: 'rb', at: at(2.4), turn: 2, text: 'Relu.' },
+    { kind: 'prompt', id: 'pc', at: at(2.6), turn: 3, text: 'Pousse' }, { kind: 'reply', id: 'rc', at: at(2.8), turn: 3, text: 'Poussé.' },
+    ...items.filter(i => i.turn === 2).map(i => ({ ...i, turn: 4 }))
+  ];
   const o = { t: fr, g: glyphsFor({}), now: Date.parse(at(10)), width: 80, diffs: false, unfolded: false };
 
-  it('folds past turns on one line and shows the last one in full', () => {
-    const lines = text(threadLines(items, o));
+  it('folds the turns before the last three on one line and shows the last three in full', () => {
+    expect(text(threadLines(items, o))).toEqual(expect.arrayContaining(['  Câble la liste', '  Corrige-les']));
+    const lines = text(threadLines(older, o));
     expect(lines[0]).toMatch(/^▸ \d\d:\d\d {2}Câble la liste · 1 action · 1 fichier modifié · Deux tests échouent\.$/);
-    expect(lines).toContain('  Corrige-les');
+    expect(lines).toEqual(expect.arrayContaining(['  Relis', '  Pousse', '  Corrige-les']));
+    expect(lines.filter(l => l.startsWith('▸'))).toHaveLength(1);
     // The meta right of the element's first line, at the thread's width.
     const running = lines.find(l => l.includes('npm test'))!;
     expect(running).toMatch(/^ {2}⠋ Bash {3}npm test +6,0 s$/);
@@ -187,7 +196,7 @@ describe('tui thread', () => {
   });
 
   it('a folded turn takes one line, cut with …; each line knows its item', () => {
-    const v = threadView([{ ...items[0]!, text: 'Une très longue demande '.repeat(10) } as ThreadItem, ...items.slice(1)], { ...o, width: 60 });
+    const v = threadView([{ ...older[0]!, text: 'Une très longue demande '.repeat(10) } as ThreadItem, ...older.slice(1)], { ...o, width: 60 });
     expect(v.lines.length).toBe(v.keys.length);
     expect(text([v.lines[0]!])[0]).toMatch(/…$/);
     expect(cells(text([v.lines[0]!])[0]!)).toBe(60);
@@ -196,7 +205,7 @@ describe('tui thread', () => {
   });
 
   it('a line kept at the top whose item folds away falls back on its turn, at the turn’s line', () => {
-    const open = threadView(items, { ...o, unfolded: true }), folded = threadView(items, o);
+    const open = threadView(older, { ...o, unfolded: true }), folded = threadView(older, o);
     const tool = open.keys.findIndex(k => k !== 'p1' && !folded.keys.includes(k) && open.turns.get(k) === 'p1');
     expect(tool).toBeGreaterThan(-1);
     expect(anchorLine(open, { key: open.keys[tool]!, offset: 1 })).toBe(tool + 1);
@@ -467,7 +476,9 @@ describe('tui image lines', () => {
     const items: ThreadItem[] = [
       { kind: 'prompt', id: 'p1', at, turn: 1, text: 'un', images: [ref] },
       { kind: 'reply', id: 'r1', at, turn: 1, text: 'ok' },
-      { kind: 'prompt', id: 'p2', at, turn: 2, text: 'deux', images: [other] }
+      { kind: 'prompt', id: 'p2', at, turn: 2, text: 'deux' },
+      { kind: 'prompt', id: 'p3', at, turn: 3, text: 'trois' },
+      { kind: 'prompt', id: 'p4', at, turn: 4, text: 'quatre', images: [other] }
     ];
     expect(threadImages(items, false)).toEqual([other]);
     expect(threadImages(items, true)).toEqual([ref, other]);

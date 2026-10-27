@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import type { ThreadItem } from '@ledge/protocol';
-import { boot, closeDaemons, declarations, listSessions, ottoThread, unfoldPast } from './helpers';
+import { boot, closeDaemons, declarations, listSessions, ottoFolded, ottoThread, unfoldPast } from './helpers';
 import { createSessionMemory, memoKey } from '../src/session/memory';
 import { saveReduced } from '../src/motionPreferences';
 
@@ -17,23 +17,24 @@ vi.mock('@ledge/ui/documents/markdown', async importOriginal => {
 afterEach(async () => { cleanup(); localStorage.clear(); saveReduced(false); vi.unstubAllEnvs(); vi.useRealTimers(); renders.clear(); await closeDaemons(); });
 
 const thread = () => within(screen.getByRole('tabpanel', { name: 'Session thread' }));
-async function openOtto(o: { offline?: boolean; withThread?: boolean } = {}) {
+async function openOtto(o: { offline?: boolean; withThread?: boolean; folded?: boolean } = {}) {
   const sessions = listSessions().map(s => (s.name === 'Otto' && o.offline ? { ...s, offline: true } : s));
   const env = await boot({ sessions, list: true });
-  if (o.withThread !== false) env.d.thread('otto', ottoThread());
+  if (o.withThread !== false) env.d.thread('otto', o.folded ? ottoFolded() : ottoThread());
   await env.user.click(screen.getByRole('button', { name: /^Otto,/ }));
   return env;
 }
 
 describe('the session page', () => {
-  it('the page replaces the pending place: one exchange per prompt, the past one folded to a row that unfolds', async () => {
-    const { user } = await openOtto();
+  it('the page replaces the pending place: one exchange per prompt, the last three open, an older one folded to a row that unfolds', async () => {
+    const { user } = await openOtto({ folded: true });
     expect(screen.queryByText('This screen is coming soon.')).toBeNull();
-    // The past exchange is one row: its prompt, what it did; the current one is open.
+    // The exchange before the last three is one row: its prompt, what it did; the last three are open.
     const fold = await thread().findByRole('button', { name: /Câble la liste/, expanded: false });
     expect(fold).toHaveTextContent(/^Exchange at \d\d:\d\d · Câble la liste · 4 actions · 1 file changed$/);
-    expect(document.querySelectorAll('.session-thread .turn')).toHaveLength(2);
+    expect(document.querySelectorAll('.session-thread .turn')).toHaveLength(4);
     expect(document.querySelectorAll('.session-thread .turn.folded')).toHaveLength(1);
+    expect(thread().getByText('Relis').closest('.prompt-block')).toHaveTextContent('You');
     expect(thread().getByText('Corrige-les').closest('.prompt-block')).toHaveTextContent('You');
     await user.click(fold);
     expect(fold).toHaveAttribute('aria-expanded', 'true');
@@ -175,7 +176,7 @@ describe('the session page', () => {
   });
 
   it('a machine that falls freezes the thread it sent: a notice on top and at the end, nothing runs live', async () => {
-    const { d } = await openOtto();
+    const { d } = await openOtto({ folded: true });
     await thread().findByText('Corrige-les');
     await d.close();
     expect(await screen.findByText('Connection lost with Local')).toBeVisible();
