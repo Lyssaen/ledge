@@ -18,9 +18,10 @@ export function Result({ store, title, body, item, final = false, children }: {
 }) {
   const link = linkView(useMobile(store));
   const back = href({ name: 'inbox' });
+  const backRoute = { name: 'inbox' } as const;
   return (
     <>
-      <BackHeader title={copy.result.header} backTo={back} label={copy.detail.back} link={link} />
+      <BackHeader title={copy.result.header} fallback={backRoute} label={copy.detail.back} link={link} />
       <main className="min-h-0 flex-1 overflow-y-auto pb-[22px]">
         <div className="flex flex-col items-start gap-4 pt-7">
           <div className="grid size-14 place-items-center rounded-full border border-ok/20 bg-ok/10 text-ok">

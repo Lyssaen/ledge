@@ -8,7 +8,7 @@ import { loadDraft, markCleared, saveDraft, wasCleared } from '../state/drafts';
 import { isLive } from '../state/operations';
 import { useMobile, type MobileStore } from '../state/store';
 import { useNow } from '../useNow';
-import { LinkStatus, linkView } from '../ui/Header';
+import { BackLink, LinkStatus, linkView } from '../ui/Header';
 import { MobileBot } from '../ui/MobileBot';
 import { Notice } from '../ui/Notice';
 import { ReplyView } from '../ui/ReplyView';
@@ -63,14 +63,6 @@ function Bubble({ item, store }: { item: ThreadItem; store: MobileStore }) {
       </Notice>
     );
   }
-}
-
-function BackTo({ label }: { label: string }) {
-  return (
-    <a href={href({ name: 'agents' })} aria-label={label} className={iconButtonClass({ className: '-ml-2' })}>
-      <Icon name="back" />
-    </a>
-  );
 }
 
 /**
@@ -136,7 +128,7 @@ export function Thread({ store, sessionId, storage, onReconnect }: { store: Mobi
       <>
         <header className="flex-none border-b border-line pt-2 pb-3">
           <div className="flex items-center gap-2.5">
-            <BackTo label={copy.thread.back} />
+            <BackLink fallback={{ name: 'agents' }} label={copy.thread.back} />
             <span className="min-w-0 flex-1 truncate">{copy.thread.title}</span>
             <LinkStatus link={linkView(state)} />
           </div>
@@ -170,7 +162,7 @@ export function Thread({ store, sessionId, storage, onReconnect }: { store: Mobi
     <>
       <header className="flex-none border-b border-line pt-2 pb-3">
         <div className="flex items-center gap-2.5">
-          <BackTo label={copy.thread.back} />
+          <BackLink fallback={{ name: 'agents' }} label={copy.thread.back} />
           <MobileBot tool={session.tool} seed={session.id} state={session.state} frozen={!fresh} />
           <div className="min-w-0 flex-1">
             <h1 className="text-title leading-[1.25] font-semibold tracking-[-.2px] [overflow-wrap:anywhere]">{session.topic ?? session.project}</h1>

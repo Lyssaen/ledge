@@ -3,7 +3,7 @@
 import { useEffect, useReducer, useRef, useState } from 'react';
 import { MeResponseSchema } from '@ledge/protocol';
 import type { LinkState, PhoneLink } from './link/link';
-import { href, openFromWorker, useRoute } from './router';
+import { openFromWorker, replaceRoute, useRoute } from './router';
 import { Agents } from './screens/Agents';
 import { Chat } from './screens/Chat';
 import { Compare } from './screens/Compare';
@@ -141,13 +141,13 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
   useEffect(() => {
     if (!toLedge) return;
     landing.current = false;
-    globalThis.location.replace(href({ name: 'chat' }));
+    replaceRoute({ name: 'chat' });
   }, [toLedge]);
   useEffect(() => { if (route.name !== 'inbox') landing.current = false; }, [route.name]);
 
   // `#/chat` without the chat announced goes to the inbox; before the PC's first snapshot nothing is known, so the address stays.
   const chatOff = route.name === 'chat' && mobile.fresh && !mobile.device?.chat;
-  useEffect(() => { if (chatOff) globalThis.location.replace(href({ name: 'inbox' })); }, [chatOff]);
+  useEffect(() => { if (chatOff) replaceRoute({ name: 'inbox' }); }, [chatOff]);
 
   const pinned = link.pinned();
   // The pinned PC only while pairing: the name the old PC gave is not the one being paired.

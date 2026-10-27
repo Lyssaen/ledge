@@ -1,5 +1,5 @@
 import { copy } from '../copy';
-import { href } from '../router';
+import { backTarget, goBack, href, type Route } from '../router';
 import type { MobileState } from '../state/store';
 import { iconButtonClass } from './Button';
 import { Icon } from './icons';
@@ -34,14 +34,26 @@ export function Header({ title, subtitle, link }: { title: string; subtitle: str
   );
 }
 
+/**
+ * « Retour »: to the screen the user came from in the app, named after it; opened from outside (a shared link, a
+ * notification), to `fallback`, named by `label`.
+ */
+export function BackLink({ fallback, label }: { fallback: Route; label: string }) {
+  const to = backTarget(fallback);
+  const name = !to.inApp ? label : to.known ? copy.nav.backTo[to.route.name] ?? copy.nav.back : copy.nav.back;
+  return (
+    <a href={href(to.route)} aria-label={name} title={name} onClick={e => { e.preventDefault(); goBack(fallback); }} className={iconButtonClass({ className: '-ml-2' })}>
+      <Icon name="back" />
+    </a>
+  );
+}
+
 /** Back header of the detail screens. */
-export function BackHeader({ title, backTo, label, link }: { title: string; backTo: string; label: string; link: LinkView }) {
+export function BackHeader({ title, fallback, label, link }: { title: string; fallback: Route; label: string; link: LinkView }) {
   return (
     <header className="flex-none border-b border-line pt-2 pb-3">
       <div className="flex items-center gap-2.5">
-        <a href={backTo} aria-label={label} className={iconButtonClass({ className: '-ml-2' })}>
-          <Icon name="back" />
-        </a>
+        <BackLink fallback={fallback} label={label} />
         <span className="min-w-0 flex-1 truncate">{title}</span>
         <LinkStatus link={link} />
       </div>

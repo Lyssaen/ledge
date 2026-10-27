@@ -10,7 +10,7 @@ export function TabBar({ count, active = 'inbox', chat = false }: { count: numbe
     <nav aria-label={copy.nav.label} className={`grid flex-none ${chat ? 'grid-cols-3' : 'grid-cols-2'} border-t border-line bg-bg pt-2 pb-3`}>
       {chat && (
         <a href={href({ name: 'chat' })} aria-current={active === 'chat' ? 'page' : undefined} className={`${tab(active === 'chat')} px-1 text-center leading-tight`}>
-          <Icon name="search" />
+          <Icon name="chat" />
           {copy.nav.chat}
         </a>
       )}
@@ -20,7 +20,7 @@ export function TabBar({ count, active = 'inbox', chat = false }: { count: numbe
         {count > 0 && <span className="inline-grid h-[19px] min-w-[19px] place-items-center rounded-md bg-primary px-[5px] text-meta font-bold text-primary-fg">{count}</span>}
       </a>
       <a href={href({ name: 'agents' })} aria-current={active === 'agents' ? 'page' : undefined} className={tab(active === 'agents')}>
-        <Icon name="message" />
+        <Icon name="grid" />
         {copy.nav.agents}
       </a>
     </nav>
