@@ -133,7 +133,8 @@ export const copy = {
     reconnect: 'Reconnecter et actualiser',
     reconnecting: 'Reconnexion…'
   },
-  kind: { permission: 'Autorisation', question: 'Question', plan: 'Plan', diff: 'Modification' },
+  /** A request's badge: the desktop's words for what waits on the user. */
+  kind: { permission: 'Votre accord', question: 'Une question', plan: 'Plan', diff: 'Modification' },
   tools: { claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor Agent', omp: 'OMP' },
   detail: {
     back: 'Retour aux demandes',

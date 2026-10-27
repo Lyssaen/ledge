@@ -9,7 +9,7 @@ import type { Attachments } from '../ui/useAttachments';
 import { buttonClass, chipClass } from '../ui/Button';
 import { MessageField } from '../ui/MessageField';
 
-const TONE = { ok: 'text-ok', info: 'text-info', attention: 'text-attention', muted: 'text-muted' } as const;
+const TONE = { ok: 'text-ok', info: 'text-info', approval: 'text-approval', attention: 'text-attention', muted: 'text-muted' } as const;
 const C = copy.thread.composer;
 
 /** What stops an instruction from going, checked as the PC checks it, on the text as it will be sent (trimmed). */
