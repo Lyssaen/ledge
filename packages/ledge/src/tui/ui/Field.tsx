@@ -1,6 +1,6 @@
 import { useReducer, useRef } from 'react';
-import { Box, usePaste, useInput, useWindowSize } from 'ink';
-import { useTui } from '../context.js';
+import { Box, usePaste, useInput } from 'ink';
+import { useScreenSize, useTui } from '../context.js';
 import { back, del, end, fieldLines, home, insert, killWord, layout, left, lineAt, newlines, right, rowOf, scrollTop, vertical, wordLeft, wordRight, type Field as State } from '../model/field.js';
 import { C } from '../theme.js';
 import { LineText } from './Lines.js';
@@ -24,7 +24,7 @@ export function Field({ value, onChange, onSubmit, onEscape, onBrowse, history =
   history?: readonly string[]; active: boolean; placeholder?: string; title: string; color?: string; titleColor?: string;
 }) {
   const { t, g } = useTui();
-  const { columns, rows: height } = useWindowSize();
+  const { columns, rows: height } = useScreenSize();
   // Held in a ref, changed at once: keys read together (ssh, a busy machine) each start from the one before, not from the
   // last render. A value changed from outside (sent, given back) puts the cursor at its end and leaves the history.
   const st = useRef<{ f: State; browse: Browse | null; pasted: number }>({ f: { text: value, cursor: value.length }, browse: null, pasted: 0 });

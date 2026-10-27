@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Box, Text, useInput, useWindowSize } from 'ink';
+import { Box, Text, useInput } from 'ink';
 import { isPending, putImage, splitId } from '@ledge/fleet';
 import { offers, type Pending, type Session } from '@ledge/protocol';
 import { botState } from '@ledge/ui/bots/poseFor';
-import { useEditing, useScreenKeys, useTui } from '../context.js';
+import { useEditing, useScreenKeys, useScreenSize, useTui } from '../context.js';
 import { ChipsLine, useChips, useOpenImage, usePaste } from '../images.js';
 import { machineLabel, modelLabel, paneName, TOOL_NAME } from '../model/labels.js';
 import { cells, pad, row, type Line } from '../model/cells.js';
@@ -33,7 +33,7 @@ export function SessionScreen() {
 
 function SessionView({ s }: { s: Session }) {
   const { client, d, t, g, actions, attach, toast, machines, kept, lastToast, tone } = useTui();
-  const { columns, rows } = useWindowSize();
+  const { columns, rows } = useScreenSize();
   const [mode, setMode] = useState<Mode>('read');
   // The draft outlives the field, the screen and ctrl+c: it is kept by the TUI, by session.
   const [draft, setDraftState] = useState(() => kept.drafts.get(s.id) ?? '');

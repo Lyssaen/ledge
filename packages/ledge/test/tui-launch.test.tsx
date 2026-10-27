@@ -15,7 +15,7 @@ function launchOn(machines: Array<{ id: string; label: string; ready: boolean }>
     machines: machines.map(m => ({ ...m, recents: [], daemon: { models: false } })),
     projects: { projects: [{ id: 'a', name: 'A', color: 'blue', repos: [{ machine: 'local', path: '/w/a' }] }], rules: [] },
     catalog: { current: { launch: prefill } }, t: MESSAGES.fr, g: glyphsFor({}), small: false, editing: true, setEditing: () => {},
-    toast: (x: { text: string }) => { toasts.push(x.text); }, go: () => {}, select: () => {}
+    toast: (x: { text: string }) => { toasts.push(x.text); }, go: () => {}, select: () => {}, env: {}
   };
   const ui = render(<TuiContext.Provider value={ctx as never}><Launch /></TuiContext.Provider>);
   const press = async (s: string) => { ui.stdin.write(s); await new Promise(r => setTimeout(r, 30)); };

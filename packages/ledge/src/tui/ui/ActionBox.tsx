@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
-import { Box, Text, useWindowSize } from 'ink';
+import { Box, Text } from 'ink';
 import type { ChatTurn } from '@ledge/protocol';
 import type { ActionRowView } from '@ledge/ui/chat/actionRow';
-import { useTui } from '../context.js';
+import { useScreenSize, useTui } from '../context.js';
 import { cardPlan, lineOf, verbOf, whyOf, type CardPlan, type Shown } from '../model/actionCard.js';
 import { clock } from '../model/time.js';
 import { wrapSegs, type Line } from '../model/cells.js';
@@ -25,7 +25,7 @@ export interface ActionBoxProps { turn: ChatTurn; plan?: CardPlan; focused: bool
  */
 export function ActionBox({ turn, focused, busy, sel, confirming, plan }: ActionBoxProps) {
   const { t, g } = useTui();
-  const { columns } = useWindowSize();
+  const { columns } = useScreenSize();
   const a = t.ask.action, c = a.copy;
   const p = plan ?? cardPlan(turn.actions ?? []);
   const many = p.rows.length > 1;

@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Text, useInput, useWindowSize } from 'ink';
+import { Box, Text, useInput } from 'ink';
 import { daemonStore } from '@ledge/fleet';
 import { LEDGE_GIVER, proposalRows, type ChatTurn } from '@ledge/protocol';
-import { useEditing, useScreenKeys, useTui } from '../context.js';
+import { useEditing, useScreenKeys, useScreenSize, useTui } from '../context.js';
 import { ChipsLine, type Chip, useChips, useOpenImage, usePaste } from '../images.js';
 import { askHistory, chatView, openCards, type Card } from '../model/chat.js';
 import { cardPlan, moveRow, selectedRow, type Room } from '../model/actionCard.js';
@@ -28,7 +28,7 @@ const CONVO = -2;
 
 export function Ask() {
   const { client, d, machines, t, g, toast, go, kept, small, tone, select } = useTui();
-  const { columns, rows: height } = useWindowSize();
+  const { columns, rows: height } = useScreenSize();
   // Kept by the TUI: ctrl+c and another screen leave it as it is.
   const [draft, setDraftState] = useState(() => kept.drafts.get('ask') ?? '');
   const setDraft = (x: string) => { setDraftState(x); if (x) kept.drafts.set('ask', x); else kept.drafts.delete('ask'); };

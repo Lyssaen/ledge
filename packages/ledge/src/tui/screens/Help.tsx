@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { useWindowSize } from 'ink';
-import { useScreenKeys, useTui } from '../context.js';
+import { useScreenKeys, useScreenSize, useTui } from '../context.js';
 import { cut, lineCells, pad, type Line } from '../model/cells.js';
 import { C } from '../theme.js';
 import { Frame } from '../ui/Frame.js';
@@ -38,7 +37,7 @@ export function helpLines(groups: ReadonlyArray<readonly [string, ReadonlyArray<
 /** Every key, screen by screen; j k PgUp PgDn when they do not all fit. */
 export function Help() {
   const { t } = useTui();
-  const { columns } = useWindowSize();
+  const { columns } = useScreenSize();
   const k = t.keys;
   const groups: Array<[string, Array<[string, string]>]> = [
     [t.help.global, [['1…6', t.help.screens], ['/', k.ask], ['+', k.launch], [',', k.settings], ['?', k.help], ['esc', k.back], ['q', k.quit]]],
