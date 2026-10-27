@@ -87,10 +87,35 @@ function block(n: Node, width: number, ctx: Ctx): Line[] {
       const start = list.start ?? 1;
       return listItems(list, width, ctx, start, String(start + n.children!.length - 1).length);
     }
-    // Out of the subset: a table stays as it was written, cut, not wrapped; HTML and footnotes as they were written.
-    case 'table': return source(n, ctx).split('\n').map(l => cut([{ ...ctx.base, text: l, italic: false }], width));
+    case 'table': return table(n, width, ctx);
+    // Out of the subset: HTML and footnotes as they were written.
     default: return wrapSegs([{ ...ctx.base, text: source(n, ctx) }], width);
   }
+}
+
+/** A table in columns aligned as its source asks, a bar between them, its head in bold over a rule. Too wide, its widest
+ *  columns narrowed and their cells wrapped, a rule then between its rows; with no room even for that, as it was written, cut. */
+function table(n: Node, width: number, ctx: Ctx): Line[] {
+  const { g } = ctx;
+  const align = (n as { align?: (string | null)[] | null }).align ?? [];
+  const rows = n.children!.map((r, i) => r.children!.map(c => inline(c.children!, i ? ctx.base : { ...ctx.base, bold: true }, ctx)));
+  const cols = Math.max(1, ...rows.map(r => r.length));
+  const room = width - 3 * (cols - 1);
+  if (room < 4 * cols) return source(n, ctx).split('\n').map(l => cut([{ ...ctx.base, text: l, italic: false }], width));
+  const w = Array.from({ length: cols }, (_, j) => Math.max(1, ...rows.map(r => lineCells(r[j] ?? []))));
+  for (let over = w.reduce((a, b) => a + b, 0) - room; over > 0; over--) w[w.indexOf(Math.max(...w))]!--;
+  const sep: Seg = { text: ` ${g.bar} `, color: C.faint };
+  const rule: Line = [{ text: w.map(x => g.rule.repeat(x)).join(`${g.rule}${g.cross}${g.rule}`), color: C.faint }];
+  const drawn = rows.map(r => {
+    const cells = w.map((x, j) => wrapSegs(r[j] ?? [], x));
+    return Array.from({ length: Math.max(...cells.map(c => c.length)) }, (_, k) => cells.flatMap((c, j): Line => {
+      const l = c[k] ?? [], free = Math.max(0, w[j]! - lineCells(l)), last = j === cols - 1;
+      const left = align[j] === 'right' ? free : align[j] === 'center' ? Math.floor(free / 2) : 0;
+      return [...(j ? [sep] : []), ...(left ? [pad(left)] : []), ...l, ...(last ? [] : [pad(free - left)])];
+    }));
+  });
+  const wrapped = drawn.slice(1).some(r => r.length > 1);
+  return drawn.flatMap((r, i) => (i === 0 ? [...r, rule] : i > 1 && wrapped ? [rule, ...r] : r));
 }
 
 /** Each item after its mark (• ◦, 1., ☐ ✓), its lines under its text. */
@@ -122,7 +147,7 @@ function tree(text: string): Root {
 }
 
 /** A Markdown text as lines of at most `width` cells, in `color`: the subset the TUI draws (titles, bold, italics, code,
- *  lists, links, quotes, rules); a table, HTML and footnotes as they were written. The parser is packages/ui's. */
+ *  lists, links, quotes, rules, tables); HTML and footnotes as they were written. The parser is packages/ui's. */
 export function markdownLines(text: string, o: { width: number; g: Glyphs; color: string }): Line[] {
   const src = text.replace(/\r/g, '');
   return blocks(tree(src).children as Node[], Math.max(10, o.width), { src, g: o.g, base: { color: o.color }, depth: 0 });

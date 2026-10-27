@@ -7,6 +7,8 @@ const UNICODE = {
   team: '▣', common: '▭',
   /** Markdown: a list's marks, a quote's bar, a rule, a code block's corners, a link's arrow, the end of a streamed answer. */
   bullet: '•', subBullet: '◦', quote: '▎', rule: '─', codeTop: '╭', codeEnd: '╰', link: '↗', caret: '▍',
+  /** Where a table's rule crosses its columns' bars. */
+  cross: '┼',
   /** An action card's row (#94): proposed is `idle`, applied `ok`, failed or refused `fail`. */
   running: '◐', held: '·', stale: '!',
   /** Links are clickable (OSC 8); without, their address follows them. */
@@ -21,6 +23,7 @@ const ASCII: Glyphs = {
   cont: '>', logo: '(', cursor: '>', radioOn: '(*)', radioOff: '( )', boxOn: '[x]', boxOff: '[ ]', prev: '<', next: '>', ellipsis: '...', bar: '|',
   team: '[T]', common: '[ ]',
   bullet: '-', subBullet: 'o', quote: '|', rule: '-', codeTop: '+', codeEnd: '+', link: '', caret: '_',
+  cross: '+',
   running: '~', held: '.', stale: '!',
   task: '[=]',
   links: false

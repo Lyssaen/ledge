@@ -392,11 +392,27 @@ describe('tui markdown (#95 lot C)', () => {
     expect(text(md('[PR](https://x.io/p)', 80, glyphsFor({ LEDGE_TUI_LINKS: '0' })))).toEqual(['PR (https://x.io/p)']);
   });
 
-  it('a quote behind its bar in dim italics; a rule; a table as it was written, cut, not wrapped; an image by its text', () => {
-    const lines = md('> Je peux lui relayer les remarques.\n\n---\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n![le logo](x.png)', 24);
-    expect(text(lines)).toEqual(['▎ Je peux lui relayer', '▎ les remarques.', '', '─'.repeat(24), '', '| a | b |', '|---|---|', '| 1 | 2 |', '', 'le logo']);
+  it('a quote behind its bar in dim italics; a rule; an image by its text', () => {
+    const lines = md('> Je peux lui relayer les remarques.\n\n---\n\n![le logo](x.png)', 24);
+    expect(text(lines)).toEqual(['▎ Je peux lui relayer', '▎ les remarques.', '', '─'.repeat(24), '', 'le logo']);
     expect(seg(lines, 'relayer')).toMatchObject({ italic: true });
-    expect(text(md('| une colonne bien trop longue |\n|---|', 12))[0]).toBe('| une colon…');
+  });
+
+  it('a table in aligned columns, its head in bold over a rule; too wide, its cells wrapped and its rows ruled', () => {
+    const src = '| Story | Sous-tâches |\n|---|--:|\n| ST7-266 | 304 à 308, 310 à 314 |\n| **ST7-261** | 331 |';
+    const lines = md(src, 40);
+    expect(text(lines)).toEqual([
+      'Story   │          Sous-tâches', '────────┼─────────────────────', 'ST7-266 │ 304 à 308, 310 à 314', 'ST7-261 │                  331'
+    ]);
+    expect(seg(lines, 'Story')).toMatchObject({ bold: true });
+    expect(seg(lines, 'ST7-261')).toMatchObject({ bold: true });
+    expect(seg(lines, 'ST7-266')!.bold).toBeUndefined();
+    expect(text(md(src, 24))).toEqual([
+      'Story   │    Sous-tâches', '────────┼───────────────', 'ST7-266 │ 304 à 308, 310', '        │          à 314', '────────┼───────────────', 'ST7-261 │            331'
+    ]);
+    expect(text(md('| a | b |\n|---|---|\n| 1 | 2 |', 40, ascii))).toEqual(['a | b', '--+--', '1 | 2']);
+    // No room for its columns: as it was written, cut.
+    expect(text(md('| a | b | c |\n|---|---|---|\n| 1 | 2 | 3 |', 12))[0]).toBe('| a | b | c |'.slice(0, 11) + '…');
   });
 
   it('wraps at the real width: an emoji or 日 counts two cells', () => {
