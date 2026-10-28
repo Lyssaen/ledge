@@ -24,8 +24,8 @@ const Label = ({ id, children }: { id: string; children: ReactNode }) => <label 
 const Hint = ({ bad = false, children }: { bad?: boolean; children: ReactNode }) => <p className={`mt-1 text-meta ${bad ? 'text-danger-fg' : 'text-muted'}`}>{children}</p>;
 
 /** « Supprimer »: the definitions that still seat the role are named, and the delete stays possible. */
-function DeleteSheet({ id, seating, busy, note, onConfirm, onClose }: {
-  id: string; seating: string[]; busy: boolean; note: OutcomeNote | null; onConfirm: () => void; onClose: () => void;
+function DeleteSheet({ id, seating, busy, blocked, note, onConfirm, onClose }: {
+  id: string; seating: string[]; busy: boolean; /** The PC's file moved (« changed ») and its new version has not arrived: the base is not the PC's. */ blocked: boolean; note: OutcomeNote | null; onConfirm: () => void; onClose: () => void;
 }) {
   const title = useId();
   return (
@@ -35,7 +35,7 @@ function DeleteSheet({ id, seating, busy, note, onConfirm, onClose }: {
       {note && <p role="status" className={`text-body ${note.quiet ? 'text-muted' : 'text-danger-fg'}`}>{note.text}</p>}
       <div className="flex gap-2">
         <Button variant="ghost" className="flex-1" disabled={busy} onClick={onClose}>{t.cancel}</Button>
-        <Button variant="brand" className="flex-[2]" disabled={busy} onClick={onConfirm}>{t.delete}</Button>
+        <Button variant="brand" className="flex-[2]" disabled={busy || blocked} onClick={onConfirm}>{t.delete}</Button>
       </div>
     </Sheet>
   );
@@ -59,6 +59,11 @@ function Form({ store, roleKey, initial }: { store: MobileStore; roleKey: string
   // After « changed »: the catalog that was current then; the editor waits for another before it lets the user save over it.
   const [waiting, setWaiting] = useState<typeof catalog | undefined>(undefined);
   const [reloaded, setReloaded] = useState(false);
+  // The role was deleted on the PC: what the user typed stays on screen, but there is no file left to write over.
+  const [gone, setGone] = useState(false);
+  // A write that resolves after the user left the screen must not navigate: `history.back()` would pop one screen too far.
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   const isNew = initial === null;
   const where = isNew ? { scope: project === null ? 'home' as const : 'repo' as const, project } : shown ? { scope: shown.scope, project: shown.project } : null;
@@ -79,8 +84,8 @@ function Form({ store, roleKey, initial }: { store: MobileStore; roleKey: string
   useEffect(() => {
     if (waiting === undefined || catalog === waiting) return;
     const fresh = catalog?.roles.find(r => key !== null && r.id === key.id && r.scope === key.scope && r.project === key.project);
-    if (fresh) setShown(fresh);
-    setWaiting(undefined); setReloaded(true);
+    if (fresh) { setShown(fresh); setReloaded(true); } else if (key !== null) { setGone(true); setReloaded(false); }
+    setWaiting(undefined);
   }, [catalog, waiting, key]);
   useEffect(() => {
     if (waiting === undefined) return;
@@ -104,7 +109,7 @@ function Form({ store, roleKey, initial }: { store: MobileStore; roleKey: string
   const effortOk = effort.trim() === '' || EffortSchema.safeParse(effort.trim()).success;
   const locked = !isNew && (cut || readFailed);
   const canConfirm = !!state.device?.confirm;
-  const valid = idOk && !taken && labelOk && modelOk && effortOk && !locked && waiting === undefined;
+  const valid = idOk && !taken && labelOk && modelOk && effortOk && !locked && !gone && waiting === undefined;
   const ready = valid && canConfirm && state.fresh && !busy;
 
   const draft = () => ({
@@ -120,10 +125,12 @@ function Form({ store, roleKey, initial }: { store: MobileStore; roleKey: string
     setBusy(true); onNote(null);
     void store.define(req)
       .then(r => {
-        if (r.status === 'applied') { onApplied(); return; }
+        if (r.status === 'applied') { if (mounted.current) onApplied(); return; }
         onNote(outcomeNote(r, t.notSaved, { exists: t.taken, invalid: t.invalid }));
         // The file moved under the user: the catalog tells how, and the editor adopts it once it arrives.
         if (r.status === 'rejected' && r.reason === 'changed') { setWaiting(catalog); store.requestCatalog(); }
+        // Asked again so the id that is taken shows as such, before the next try.
+        if (r.status === 'rejected' && r.reason === 'exists') store.requestCatalog();
       }, () => onNote({ text: t.notSaved, quiet: false }))
       .finally(() => setBusy(false));
   };
@@ -155,7 +162,7 @@ function Form({ store, roleKey, initial }: { store: MobileStore; roleKey: string
             {isNew ? (
               <div className={`${FIELD} flex items-center font-mono ${newId !== '' && !idOk ? 'border-danger-fg' : ''}`}>
                 <span className="text-role" aria-hidden="true">@</span>
-                <input id={`${ids}-id`} type="text" value={newId} maxLength={40} autoComplete="off" autoCapitalize="none" spellCheck={false} aria-invalid={newId !== '' && !idOk}
+                <input id={`${ids}-id`} type="text" value={newId} maxLength={40} autoComplete="off" autoCapitalize="none" spellCheck={false} aria-invalid={newId !== '' && !idOk} aria-describedby={newId !== '' && !idOk ? `${ids}-rule` : undefined}
                   onChange={e => setNewId(e.target.value)} className="min-w-0 flex-1 bg-transparent py-3 outline-none" />
               </div>
             ) : <div className={`${FIELD} flex items-center font-mono text-muted`}><span className="text-role">@</span>{id}</div>}
@@ -165,7 +172,7 @@ function Form({ store, roleKey, initial }: { store: MobileStore; roleKey: string
             <input id={`${ids}-label`} type="text" value={label} maxLength={ROLE_LABEL_MAX} autoComplete="off" onChange={e => set({ label: e.target.value })} className={FIELD} />
           </div>
         </div>
-        {isNew && <Hint bad={newId !== '' && !idOk}>{t.idRule}</Hint>}
+        {isNew && <p id={`${ids}-rule`} className={`mt-1 text-meta ${newId !== '' && !idOk ? 'text-danger-fg' : 'text-muted'}`}>{t.idRule}</p>}
         {taken && <p role="alert" className="mt-1 text-small text-danger-fg">{t.idTaken(scopeLabel(where!.scope, where!.project))}</p>}
         {shown?.shadows && <Hint>{t.shadows(shown.id)}</Hint>}
         {shown?.shadowed && <Hint>{t.shadowed(shown.id)}</Hint>}
@@ -233,6 +240,7 @@ function Form({ store, roleKey, initial }: { store: MobileStore; roleKey: string
           </>
         ) : <p className="text-body text-muted">{t.fixedScope(fixedWhere)}</p>}
 
+        {gone && <p className="mt-3 text-body text-attention">{t.gone}</p>}
         {stale && (
           <div className="mt-3 text-body text-attention">
             <p>{t.changedKept}</p>
@@ -245,9 +253,9 @@ function Form({ store, roleKey, initial }: { store: MobileStore; roleKey: string
         {canConfirm
           ? <p className="mt-2 text-center text-small text-muted">{t.saveNote}</p>
           : <p className="mt-2 text-center text-body text-attention">{copy.chat.launchSetup} <a href={href({ name: 'connection' })} className="text-info underline underline-offset-2">{copy.connection.title}</a></p>}
-        {!isNew && <Button variant="outline" block className="mt-4" disabled={!state.fresh || !canConfirm} onClick={() => { setDeleteNote(null); setDeleting(true); }}>{t.delete}</Button>}
+        {!isNew && <Button variant="outline" block className="mt-4" disabled={!state.fresh || !canConfirm || gone} onClick={() => { setDeleteNote(null); setDeleting(true); }}>{t.delete}</Button>}
       </main>
-      {deleting && shown && <DeleteSheet id={shown.id} seating={seating} busy={busy} note={deleteNote} onConfirm={deleteRole} onClose={() => setDeleting(false)} />}
+      {deleting && shown && <DeleteSheet id={shown.id} seating={seating} busy={busy} blocked={waiting !== undefined || gone} note={deleteNote} onConfirm={deleteRole} onClose={() => setDeleting(false)} />}
     </>
   );
 }

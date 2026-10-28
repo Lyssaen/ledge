@@ -132,8 +132,8 @@ export const copy = {
       newTitle: 'Nouveau rôle', idLabel: 'Identifiant', labelLabel: 'Libellé', idRule: 'Minuscules, chiffres, - et _ · 40 caractères au plus, commence par une lettre ou un chiffre.',
       idTaken: (scope: string) => `Cet identifiant est déjà pris (${scope}).`, labelRule: 'Un libellé de 40 caractères au plus.',
       prompt: 'Consigne', promptFetching: 'Lecture de la consigne entière…', promptFailed: 'Consigne illisible pour le moment.', promptRetry: 'Réessayer',
-      defaults: 'PAR DÉFAUT', tool: 'Outil', model: 'Modèle', effort: 'Effort', autonomy: 'Autonomie', unset: 'Par défaut',
-      modelRule: 'Un identifiant de modèle valide, ou vide.', effortRule: 'Des lettres minuscules, ou vide.',
+      defaults: 'PAR DÉFAUT', tool: 'Outil', model: 'IA', effort: 'Effort', autonomy: 'Autonomie', unset: 'Par défaut',
+      modelRule: 'Un identifiant d’IA valide, ou vide.', effortRule: 'Des lettres minuscules, ou vide.',
       scopeHead: 'RANGER DANS', scopeLegend: 'Portée du rôle', home: 'Maison', repo: (project: string) => `Dépôt ${project}`,
       homeHint: 'Maison : disponible pour tous vos projets.', repoHint: (project: string) => `Dépôt : seulement dans ${project}.`,
       fixedScope: (scope: string) => `Rangé dans : ${scope}.`,
@@ -142,7 +142,7 @@ export const copy = {
       seatedIn: (names: string) => `encore dans : ${names}`, deleteHint: 'Ces équipes perdront ce siège.', cancel: 'Annuler',
       notSaved: 'Pas enregistré.', changedKept: 'Votre texte est gardé. Enregistrer écrase la version du PC.', takePc: 'Reprendre la version du PC',
       taken: 'Cet identifiant est déjà pris.', invalid: 'Ce rôle ne peut pas être enregistré tel quel.',
-      missing: 'Ce rôle n’existe pas sur ce PC.'
+      missing: 'Ce rôle n’existe pas sur ce PC.', gone: 'Ce rôle n’existe plus sur le PC. Votre texte est gardé ici, mais il ne peut plus être enregistré.'
     }
   },
   agents: {

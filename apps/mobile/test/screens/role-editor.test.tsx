@@ -44,9 +44,17 @@ describe('the role editor', () => {
     open('new');
     type('Identifiant', 'Dev');
     type('Libellé', 'Dev');
-    expect(screen.getByText(/Minuscules, chiffres, - et _/)).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: 'Identifiant' })).toHaveAttribute('aria-invalid', 'true');
+    const id = screen.getByRole('textbox', { name: 'Identifiant' });
+    // The rule is the error: it is what the field says is wrong, and it turns to the error tone.
+    expect(id).toHaveAttribute('aria-invalid', 'true');
+    expect(id).toHaveAccessibleDescription(/Minuscules, chiffres, - et _/);
+    expect(screen.getByText(/Minuscules, chiffres, - et _/)).toHaveClass('text-danger-fg');
     expect(save()).toBeDisabled();
+    // A valid id is not flagged, and the rule goes back to a plain hint.
+    type('Identifiant', 'dev');
+    expect(id).toHaveAttribute('aria-invalid', 'false');
+    expect(id).not.toHaveAccessibleDescription();
+    expect(screen.getByText(/Minuscules, chiffres, - et _/)).not.toHaveClass('text-danger-fg');
   });
 
   it('counts the prompt as n/8000, and blocks typing past 8000', () => {
@@ -79,7 +87,7 @@ describe('the role editor', () => {
     type('Libellé', 'Testeur');
     fireEvent.click(screen.getByRole('radio', { name: 'Dépôt paper-service' }));
     fireEvent.change(screen.getByRole('combobox', { name: 'Outil' }), { target: { value: 'codex' } });
-    type('Modèle', 'gpt-5');
+    type('IA', 'gpt-5');
     type('Effort', 'high');
     fireEvent.change(screen.getByRole('combobox', { name: 'Autonomie' }), { target: { value: 'edits' } });
     await act(async () => { fireEvent.click(save()); });
@@ -256,5 +264,65 @@ describe('the role editor', () => {
     t.view.unmount();
     render(<RoleEditor store={t.store} roleKey="home~~ghost" />);
     expect(screen.getByText('Ce rôle n’existe pas sur ce PC.')).toBeInTheDocument();
+  });
+
+  it('a write that resolves after the user left the editor does not navigate', async () => {
+    const t = open('home~~dev');
+    const back = vi.spyOn(globalThis.history, 'back').mockImplementation(() => undefined);
+    let settle!: (r: { status: 'applied' }) => void;
+    t.define.mockReturnValueOnce(new Promise(r => { settle = r; }));
+    fireEvent.click(save());
+    t.view.unmount();
+    await act(async () => { settle({ status: 'applied' }); });
+    expect(back).not.toHaveBeenCalled();
+    expect(globalThis.location.hash).toBe('#/role/x');
+    back.mockRestore();
+  });
+
+  it('after « changed » on a delete, « Supprimer » waits for the new catalog', async () => {
+    const t = open('home~~leader');
+    t.define.mockResolvedValueOnce({ status: 'rejected', reason: 'changed' });
+    fireEvent.click(screen.getByRole('button', { name: 'Supprimer' }));
+    const confirm = () => within(screen.getByRole('dialog')).getByRole('button', { name: 'Supprimer' });
+    await act(async () => { fireEvent.click(confirm()); });
+    expect(confirm()).toBeDisabled();
+    act(() => t.deliver({ type: 'teams.catalog', catalog: catalog({ roles: [role('leader', { label: 'Chef', prompt: 'p', hash: OTHER })] }) }));
+    expect(confirm()).toBeEnabled();
+    await act(async () => { fireEvent.click(confirm()); });
+    expect(t.define).toHaveBeenLastCalledWith({ type: 'role.delete', scope: 'home', id: 'leader', base: OTHER });
+  });
+
+  it('« exists » asks for the catalog again, so the taken id then shows as taken', async () => {
+    const t = open('new');
+    t.define.mockResolvedValueOnce({ status: 'rejected', reason: 'exists' });
+    type('Identifiant', 'tester');
+    type('Libellé', 'Testeur');
+    const asked = t.of('teams.catalog').length;
+    await act(async () => { fireEvent.click(save()); });
+    expect(t.of('teams.catalog').length).toBe(asked + 1);
+    act(() => t.deliver({ type: 'teams.catalog', catalog: catalog({ roles: [...catalog().roles, role('tester')] }) }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Cet identifiant est déjà pris');
+    expect(save()).toBeDisabled();
+  });
+
+  it('a role deleted on the PC keeps the text on screen but cannot be saved or deleted over the old base', async () => {
+    const t = open('home~~leader');
+    t.define.mockResolvedValueOnce({ status: 'rejected', reason: 'changed' });
+    type(/Consigne/, 'Mon texte');
+    await act(async () => { fireEvent.click(save()); });
+    act(() => t.deliver({ type: 'teams.catalog', catalog: catalog({ roles: [role('dev')] }) }));
+    expect(screen.getByText(/Ce rôle n’existe plus sur le PC/)).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: /Consigne/ })).toHaveValue('Mon texte');
+    expect(save()).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Supprimer' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Reprendre la version du PC' })).toBeNull();
+    expect(t.define).toHaveBeenCalledTimes(1);
+  });
+
+  it('the delete sheet lists every template that seats the role', () => {
+    const base = catalog();
+    open('home~~leader', catalog({ templates: [...base.templates, { id: 'autre', name: 'Autre', scope: 'home', project: null, hash: HASH, seats: [{ role: 'leader' }] }] }));
+    fireEvent.click(screen.getByRole('button', { name: 'Supprimer' }));
+    expect(screen.getByRole('dialog')).toHaveTextContent('encore dans : Revue MR, Autre');
   });
 });
