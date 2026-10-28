@@ -1,20 +1,15 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { ATTACHMENT_MAX, PREVIEW_MAX, padPlain, PAD_TIERS, PLAIN_MAX, SNAPSHOT_BODY_MAX, TOPIC_MAX, PhoneServerMessageSchema, pendingKey, type ClientMessage, type MobileState, type Pending, type PhoneServerMessage, type ServerMessage, type Session, type Task, type Team, type ThreadItem } from '@ledge/protocol';
+import { ATTACHMENT_MAX, PREVIEW_MAX, padPlain, PAD_TIERS, PLAIN_MAX, SNAPSHOT_BODY_MAX, TOPIC_MAX, PhoneServerMessageSchema, pendingKey, type Pending, type ServerMessage, type Session, type Task, type Team } from '@ledge/protocol';
 import { hostname } from 'node:os';
-import { AttachmentStore } from '../src/daemon/attachments.js';
 import { createPhoneGateway } from '../src/mobile/gateway.js';
-import { createChallengeStore } from '../src/mobile/challenges.js';
-import { challengeOf, rpOf, type DeviceCredential } from '../src/mobile/webauthn.js';
+import { challengeOf } from '../src/mobile/webauthn.js';
 import { launchFromChat } from '../src/chat/launch.js';
 import { CloseRefused } from '../src/chat/close.js';
 import { toPhoneTurn } from '../src/mobile/chat.js';
 import { tooWide } from '../src/chat/service.js';
 import { softAuthenticator } from './mobile-soft-authenticator.js';
-import { T0, T1, PUSH, LS, PICK, seen, SEEN_LS, mk, fakeMobile, flush, setup, decide, stopAll } from './helpers/gateway.js';
+import { T0, T1, PUSH, LS, PICK, seen, SEEN_LS, mk, flush, setup, decide, stopAll } from './helpers/gateway.js';
 
 
 afterEach(stopAll);

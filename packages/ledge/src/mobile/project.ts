@@ -172,11 +172,22 @@ export const CATALOG_BUDGET = 262_144;
 /** A cut prompt keeps its first characters: enough to tell the roles apart; the editor asks `teams.role` for the whole. */
 const CUT_PROMPT = 200;
 
-/** A path or a folder in a reason, down to its last name: a phone never sees where a file lives. */
-const hidePaths = (reason: string, path: string): string => {
-  const name = baseName(path);
-  return reason.split(path).join(name).replace(/(?<![\w.~-])(?:[A-Za-z]:)?(?:[\\/][^\s\\/:"'`]+){2,}/g, m => baseName(m));
-};
+/**
+ * Why a file is not a role or a team, as the phone reads it: a fixed phrase. The daemon's reasons carry file names, a line of the
+ * file or an error message of the system (which holds a path), so none of them is passed on: each known kind has its phrase, and
+ * anything else is « fichier illisible ». The phone never sees a path.
+ */
+const PROBLEM_KINDS: [RegExp, string][] = [
+  [/^file over /, 'fichier trop volumineux'],
+  [/^prompt over /, 'consigne trop longue'],
+  [/^unknown key /, 'clé inconnue dans l\'en-tête'],
+  [/^(front matter line without a key|line without a key|not a key: value pair|indented line outside a list|line outside a seat|tabs are not allowed)/, 'syntaxe illisible'],
+  [/^name: /, 'nom d\'équipe invalide'],
+  [/^seats(\.|: )/, 'sièges invalides'],
+  [/^(id|label|prompt|tool|model|effort|autonomy|source|path|hash|role)(\.[\w.]+)?: /, 'champ de rôle invalide']
+];
+const UNREADABLE = 'fichier illisible';
+export const problemReason = (reason: string): string => PROBLEM_KINDS.find(([re]) => re.test(reason))?.[1] ?? UNREADABLE;
 const baseName = (path: string): string => path.split(/[\\/]/).filter(Boolean).pop() ?? '';
 
 /**
@@ -186,22 +197,22 @@ const baseName = (path: string): string => path.split(/[\\/]/).filter(Boolean).p
  * What the phone schema would refuse (an id or a seat count it does not know) is left out and told as a problem.
  */
 export function toPhoneCatalog(l: DefinitionsListing, projectName: (id: string | null) => string | null): PhoneCatalog {
-  const repoIds = new Set<string>();
-  const homeIds = new Set<string>();
-  for (const sc of l.scopes) for (const r of sc.roles) (sc.scope === 'repo' ? repoIds : homeIds).add(r.id);
-  // A scope of a project the phone has no name for cannot be addressed: skipped.
+  // A scope of a project the phone has no name for cannot be addressed: skipped, and it shadows nothing.
   const scopes = l.scopes.flatMap(sc => {
     const name = sc.scope === 'repo' ? projectName(sc.project) : null;
     return sc.scope === 'repo' && name === null ? [] : [{ sc, project: name?.slice(0, 80) ?? null }];
   });
+  const repoIds = new Set<string>();
+  const homeIds = new Set<string>();
+  for (const { sc } of scopes) for (const r of sc.roles) (sc.scope === 'repo' ? repoIds : homeIds).add(r.id);
   const problems: PhoneProblem[] = [];
-  const problem = (file: string, scope: 'home' | 'repo', project: string | null, reason: string, path = file) => {
-    problems.push({ file: clip(baseName(file) || file, 80).text, scope, project, reason: clip(hidePaths(reason, path), 200).text });
+  const problem = (file: string, scope: 'home' | 'repo', project: string | null, reason: string) => {
+    problems.push({ file: clip(baseName(file) || file, 80).text, scope, project, reason });
   };
   const roles: PhoneRole[] = [];
   const templates: PhoneTemplate[] = [];
   for (const { sc, project } of scopes) {
-    for (const p of sc.problems) problem(p.path, sc.scope, project, p.reason);
+    for (const p of sc.problems) problem(p.path, sc.scope, project, problemReason(p.reason));
     for (const r of sc.roles) {
       const candidate = {
         id: r.id, label: r.label, prompt: r.prompt, ...pickSet(r, ['tool', 'model', 'effort', 'autonomy']), scope: sc.scope, project, hash: r.hash ?? '',
@@ -215,7 +226,8 @@ export function toPhoneCatalog(l: DefinitionsListing, projectName: (id: string |
       if (ok.success) templates.push(ok.data); else problem(t.path, sc.scope, project, 'équipe illisible sur le téléphone');
     }
   }
-  const frame = (rs: PhoneRole[]): PhoneCatalog => ({ projects: scopes.flatMap(x => (x.project === null ? [] : [x.project])).slice(0, 50), roles: rs.slice(0, 200), templates: templates.slice(0, 100), problems: problems.slice(0, 50) });
+  const tpls = templates.slice(0, 100);
+  const frame = (rs: PhoneRole[]): PhoneCatalog => ({ projects: scopes.flatMap(x => (x.project === null ? [] : [x.project])).slice(0, 50), roles: rs.slice(0, 200), templates: tpls, problems: problems.slice(0, 50) });
   const size = (v: unknown) => Buffer.byteLength(JSON.stringify(v), 'utf8');
   const cutRole = (r: PhoneRole): PhoneRole => (r.prompt.length > CUT_PROMPT ? { ...r, prompt: clip(r.prompt, CUT_PROMPT).text, cut: true } : r);
   // Everything cut first, then the prompts made whole in order while they fit: the first that does not fit ends it.
@@ -228,6 +240,9 @@ export function toPhoneCatalog(l: DefinitionsListing, projectName: (id: string |
     used = grown;
     out[i] = roles[i]!;
   }
+  // Last resort, so the budget always holds: the prompts still cut go, last role first, then the last templates.
+  for (let i = out.length - 1; i >= 0 && size(frame(out)) > CATALOG_BUDGET; i--) out[i] = { ...out[i]!, prompt: '', cut: true };
+  while (tpls.length > 0 && size(frame(out)) > CATALOG_BUDGET) tpls.pop();
   return frame(out);
 }
 

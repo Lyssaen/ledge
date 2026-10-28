@@ -89,13 +89,14 @@ export function createTeamsOps(deps: TeamsOpsDeps) {
   };
 
   const run = async (deviceId: string, msg: TeamsOperation): Promise<Outcome> => {
+    // A repo scope names its project and a home scope none (the message schema says so too): refused before the digest and any dispatch.
+    if ('scope' in msg && (msg.scope === 'repo') !== (msg.project !== undefined)) return invalid;
     // Over the message as parsed, like the phone's: a message the digest refuses is no operation.
     let digest: string;
     try { digest = await teamsDigest(msg); }
     catch { return invalid; }
     const refused = deps.checkAssertion(deviceId, msg.assertion, teamsPurpose(msg.type), digest);
     if (refused) return refused;
-    // A repo scope names its project and a home scope none: the message schema already refuses the rest.
     let project: string | undefined;
     if ('project' in msg && msg.project !== undefined) {
       const id = deps.projectByName(msg.project);

@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { PhoneServerMessageSchema, teamsDigest, teamsPurpose, type ClientMessage, type ServerMessage, type Team, type TeamsOperation } from '@ledge/protocol';
-import { CATALOG_BUDGET } from '../src/mobile/project.js';
+import { CATALOG_BUDGET, problemReason, toPhoneCatalog } from '../src/mobile/project.js';
 import { createTeamsOps } from '../src/mobile/teamsOps.js';
 import { softAuthenticator } from './mobile-soft-authenticator.js';
 import { T0, flush, setup, stopAll } from './helpers/gateway.js';
@@ -75,6 +75,9 @@ const settled = async (g: G, op: string) => {
   for (let i = 0; i < 400 && !g.results('dev1').some(r => r.op === op && r.status !== 'received'); i++) await new Promise(r => setTimeout(r, 5));
 };
 
+/** Waits (up to 2 s) for a condition the gateway reaches asynchronously: a count of results, not a number of ticks. */
+const until = async (done: () => boolean) => { for (let i = 0; i < 400 && !done(); i++) await new Promise(r => setTimeout(r, 5)); };
+
 const draft = (prompt = 'Lead the team.') => ({ id: 'newrole', label: 'New role', prompt });
 const roleWrite = (extra: object = {}) => ({ type: 'role.write' as const, scope: 'repo' as const, project: 'Repo', role: draft(), base: null, ...extra });
 const SEATS = [{ role: 'lead' }, { role: 'qa' }];
@@ -101,7 +104,7 @@ describe('phone gateway: team catalog', () => {
     expect(text).not.toContain('secret-repo');
     expect(m.catalog.projects).toEqual(['Repo']);
     expect(m.catalog.problems.map(p => [p.file, p.scope, p.project])).toEqual([['broken.md', 'home', null], ['x.yaml', 'repo', 'Repo']]);
-    expect(m.catalog.problems[0]!.reason).toContain('broken.md');
+    expect(m.catalog.problems.map(p => p.reason)).toEqual(['fichier illisible', 'fichier illisible']);
   });
 
   it('a repository role takes its project\'s name and marks the home role of the same id: shadows / shadowed', async () => {
@@ -324,15 +327,14 @@ describe('phone gateway: teams operations behind the passkey', () => {
     g.send('dev1', signed);
     await settled(g, op);
     g.send('dev1', signed);
-    await flush();
+    await until(() => finals(g).length >= 2);
     expect(finals(g).map(r => r.status)).toEqual(['applied', 'applied']);
     expect(writes()).toHaveLength(1);
     // Same id, a different role prompt (with a valid assertion of its own): a conflict, the daemon is not asked.
     const other = roleWrite({ role: draft('second') });
     const ch2 = await prepare(g, other);
     g.send('dev1', { ...other, op, assertion: auth.get(rp, ch2.challenge, { counter: 2 }) });
-    await settled(g, op);
-    await flush();
+    await until(() => finals(g).length >= 3);
     expect(last(g)).toEqual({ type: 'operation.result', op, status: 'rejected', reason: 'conflict' });
     expect(writes()).toHaveLength(1);
   });
@@ -348,12 +350,93 @@ describe('phone gateway: teams operations behind the passkey', () => {
     expect(writes()).toEqual([]);
   });
 
+  it('a repo scope without a project, or a home scope with one, is rejected invalid before the digest and any dispatch', async () => {
+    const fail = () => { throw new Error('must not be reached'); };
+    const ops = createTeamsOps({ dispatch: async () => fail(), projectByName: () => 'p', projectName: () => 'P', log: () => {}, push: () => {}, checkAssertion: fail, ask: async () => fail() });
+    const bad = [
+      { type: 'role.write', scope: 'repo', role: draft(), base: null },
+      { type: 'role.write', scope: 'home', project: 'Repo', role: draft(), base: null },
+      { type: 'role.delete', scope: 'repo', id: 'lead', base: HASH },
+      { type: 'template.write', scope: 'home', project: 'Repo', name: 'Duo', seats: SEATS, base: null },
+      { type: 'template.delete', scope: 'repo', id: 'duo', base: HASH }
+    ];
+    for (const b of bad) expect(await ops.run('dev1', { ...b, op: randomUUID() } as never)).toEqual({ status: 'rejected', reason: 'invalid' });
+  });
+
   it('a message the digest refuses is rejected invalid, never a crash', async () => {
     const ops = createTeamsOps({
       dispatch: async () => { throw new Error('must not be reached'); }, projectByName: () => 'p', projectName: () => 'P', log: () => {}, push: () => {},
       checkAssertion: () => { throw new Error('must not be reached'); }, ask: async () => { throw new Error('must not be reached'); }
     });
     expect(await ops.run('dev1', { type: 'role.write', op: randomUUID(), scope: 'home', role: draft(), base: null, unexpected: 1 } as never)).toEqual({ status: 'rejected', reason: 'invalid' });
+  });
+});
+
+describe('phone catalog: problems, shadowing, budget', () => {
+  const home = (roles: ReturnType<typeof role>[], problems: { path: string; reason: string }[] = [], templates: Listing['scopes'][number]['templates'] = []): Listing => ({ type: 'definitions.listing', scopes: [{ scope: 'home', project: null, roles, templates, problems }] });
+  const names = (id: string | null) => (id === 'p-repo' ? 'Repo' : null);
+
+  it('a problem\'s reason is a fixed phrase: no path of any form, none of the daemon\'s text, reaches the phone', () => {
+    const raw = ['~/.ledge/roles/x.md', './a/b', 'C:\\Users\\John Smith\\.ledge\\roles\\x.md', '/work', 'ENOENT: no such file or directory, open \'/home/me/.ledge/roles/x.md\''];
+    const wrapped = [...raw.flatMap(p => [p, `cannot read ${p}`, `unknown key ${p}`, `line without a key: ${p}`, `name: ${p}`, `seats: ${p}`, `label: ${p}`])];
+    const l = home([], wrapped.map((reason, i) => ({ path: `${HOME}/roles/p${i}.md`, reason })));
+    const c = toPhoneCatalog(l, names);
+    const known = new Set(['fichier illisible', 'fichier trop volumineux', 'consigne trop longue', 'clé inconnue dans l\'en-tête', 'syntaxe illisible', 'nom d\'équipe invalide', 'sièges invalides', 'champ de rôle invalide']);
+    for (const p of c.problems) {
+      expect(known.has(p.reason)).toBe(true);
+      for (const bad of ['/', '\\', '~', 'John', 'Smith', 'ENOENT', 'work', '.ledge']) expect(p.reason).not.toContain(bad);
+      expect(p.file).not.toMatch(/[\\/~]/);
+    }
+    expect(c.problems.length).toBeGreaterThan(0);
+  });
+
+  it('each kind of reason our own code produces maps to its phrase; anything else is « fichier illisible »', () => {
+    expect(problemReason('file over 64 KB')).toBe('fichier trop volumineux');
+    expect(problemReason('prompt over 8000 characters')).toBe('consigne trop longue');
+    expect(problemReason('unknown key foo')).toBe('clé inconnue dans l\'en-tête');
+    expect(problemReason('front matter line without a key: abc')).toBe('syntaxe illisible');
+    expect(problemReason('tabs are not allowed in YAML')).toBe('syntaxe illisible');
+    expect(problemReason('name: a name of 1 to 60 characters')).toBe('nom d\'équipe invalide');
+    expect(problemReason('seats.0.role: Invalid')).toBe('sièges invalides');
+    expect(problemReason('tool: Invalid enum value')).toBe('champ de rôle invalide');
+    expect(problemReason('EACCES: permission denied, open \'/x/y\'')).toBe('fichier illisible');
+    expect(problemReason('')).toBe('fichier illisible');
+  });
+
+  it('shadows / shadowed only count the scopes sent to the phone: a project it has no name for shadows nothing', () => {
+    const l: Listing = { type: 'definitions.listing', scopes: [
+      { scope: 'home', project: null, roles: [role('qa', 'home'), role('lead', 'home')], templates: [], problems: [] },
+      { scope: 'repo', project: 'p-unknown', roles: [role('qa', 'repo')], templates: [], problems: [] },
+      { scope: 'repo', project: 'p-repo', roles: [role('lead', 'repo')], templates: [], problems: [] }
+    ] };
+    const c = toPhoneCatalog(l, names);
+    const get = (id: string, sc: string) => c.roles.find(r => r.id === id && r.scope === sc);
+    expect(get('qa', 'home')).not.toHaveProperty('shadowed');
+    expect(get('qa', 'repo')).toBeUndefined();
+    expect(get('lead', 'home')).toMatchObject({ shadowed: true });
+    expect(get('lead', 'repo')).toMatchObject({ shadows: true });
+  });
+
+  it('the budget is in bytes: 60 roles of 8000 multibyte characters stay within CATALOG_BUDGET as encoded', () => {
+    const roles = Array.from({ length: 60 }, (_, i) => role(`r${i}`, 'home', { prompt: '日'.repeat(8000) }));
+    const c = toPhoneCatalog(home(roles), names);
+    expect(Buffer.byteLength(JSON.stringify(c), 'utf8')).toBeLessThanOrEqual(CATALOG_BUDGET);
+    expect(c.roles.some(r => r.cut === true)).toBe(true);
+    expect(c.roles.some(r => r.prompt.length === 8000)).toBe(true);
+    // 8000 characters of 3 bytes is more than 262144 / 60 bytes each: a count of characters alone would have let it through.
+    expect(JSON.stringify(c).length).toBeLessThan(Buffer.byteLength(JSON.stringify(c), 'utf8'));
+  });
+
+  it('when even every prompt cut is over the budget, the frame still fits: prompts go, then the last templates', () => {
+    const seats = Array.from({ length: 8 }, (_, i) => ({ role: `r${i}`, model: 'm'.repeat(200), name: '日'.repeat(40) }));
+    const templates = Array.from({ length: 100 }, (_, i) => ({ id: `t${i}`, name: `T${i}`, seats, source: 'home' as const, path: `${HOME}/teams/t${i}.yaml`, hash: HASH }));
+    const roles = Array.from({ length: 200 }, (_, i) => role(`r${i}`, 'home', { prompt: '日'.repeat(500) }));
+    const full = toPhoneCatalog(home([], [], templates), names);
+    expect(Buffer.byteLength(JSON.stringify(full), 'utf8')).toBeLessThanOrEqual(CATALOG_BUDGET);
+    expect(full.templates.length).toBeLessThan(100);
+    const c = toPhoneCatalog(home(roles, [], templates), names);
+    expect(Buffer.byteLength(JSON.stringify(c), 'utf8')).toBeLessThanOrEqual(CATALOG_BUDGET);
+    expect(PhoneServerMessageSchema.safeParse({ type: 'teams.catalog', catalog: c }).success).toBe(true);
   });
 });
 
