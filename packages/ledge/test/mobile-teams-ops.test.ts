@@ -138,6 +138,17 @@ describe('phone gateway: team catalog', () => {
     expect(JSON.stringify(m.catalog).length).toBeLessThanOrEqual(CATALOG_BUDGET);
   });
 
+  it('the snapshot says the PC serves the catalog only when it does: daemon.teams', async () => {
+    const daemonOf = async (g: ReturnType<typeof setup>) => {
+      g.send('dev1', { type: 'snapshot.request' });
+      await flush();
+      const snap = g.got('dev1').find(x => x.type === 'snapshot');
+      return snap?.type === 'snapshot' ? snap.daemon : undefined;
+    };
+    expect(await daemonOf(make().g)).toMatchObject({ teams: true });
+    expect(await daemonOf(setup({ dispatch: async () => {} }))).not.toHaveProperty('teams');
+  });
+
   it('without teamCatalog the read is an error invalid', async () => {
     const g = setup({ dispatch: async () => {} });
     g.send('dev1', { type: 'teams.catalog' });
