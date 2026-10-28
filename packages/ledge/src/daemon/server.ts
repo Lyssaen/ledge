@@ -919,13 +919,14 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         const id = msg.role.id; const path = asRole(id); const text = roleText(msg.role);
         if (!path) return invalid(`identifiant de rôle invalide : ${id}`);
         if (text === null) return invalid('une valeur du rôle ne peut pas s\'écrire dans le fichier');
+        // A file that does not parse reads as none: the write then counts as a create and its recipients are told.
         const before = existsSync(path) ? loadRole(id, path, msg.scope, []) : undefined;
         const r = writeDefinition(path, text, msg.base);
         if ('code' in r) return { id, code: r.code };
         const now = loadRole(id, path, msg.scope, []);
         // The prompt or the label changed (or the file is new, which switches the sessions whose home role it now shadows): the seats holding it are told.
         if (now && (!before || before.prompt !== now.prompt || before.label !== now.label)) {
-          const notice = formatRoleNotice({ role: id, text: `Ta consigne de rôle a changé (@${id}${now.label ? `, ${now.label}` : ''}). La voici en entier ; elle remplace la précédente :\n\n${now.prompt}` });
+          const notice = formatRoleNotice({ role: id, text: `Ta consigne de rôle a changé (@${id}${now.label && now.label !== id ? `, ${now.label}` : ''}). La voici en entier ; elle remplace la précédente :\n\n${now.prompt}` });
           for (const s of promptRecipients(id, path, store.all(), findRole)) mailbox.notify(s.id, notice, `role:${id}:${r.hash}:${s.id}`);
         }
         return { id, hash: r.hash };

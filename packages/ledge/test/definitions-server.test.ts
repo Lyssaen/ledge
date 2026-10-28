@@ -142,6 +142,17 @@ describe('definitions over the protocol', () => {
     await c.close();
   });
 
+  it('a role whose label is its id is told as (@id), with no comma', async () => {
+    await start();
+    store.upsert(mk('in', { role: 'dev', cwd: repo1 }));
+    const c = await client();
+    c.send({ type: 'role.write', rid: 'w1', scope: 'repo', project: 'p1', role: draft('dev', { label: 'dev', prompt: 'Sans label.' }), base: null });
+    await c.next('definition.result');
+    await until(() => sent.length >= 1);
+    expect(sent[0]![1]).toContain('(@dev). La voici');
+    await c.close();
+  });
+
   it('template.write with no id names the file after the name; a second create with it answers exists; a stale delete answers changed', async () => {
     await start();
     const c = await client();
