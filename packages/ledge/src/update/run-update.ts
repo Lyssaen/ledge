@@ -29,6 +29,15 @@ export interface UpdaterDeps {
 /** Spec 2026-10-12 auto-update §6: every refusal leaves the install untouched; the restart comes only after npm succeeded. */
 export function createDaemonUpdater(deps: UpdaterDeps) {
   let busy = false; let restarting = false;
+  /** Saves the journal, then asks systemd for the restart; when systemctl refuses, this process keeps running and says so. */
+  const restartService = async (version: string, send: (m: ServerMessage) => void): Promise<void> => {
+    send({ type: 'update.progress', version, step: 'restarting' });
+    await deps.save();
+    const code = await deps.restart();
+    if (code !== 0) { log(`update: systemctl restart failed (${code})`); return send({ type: 'update.failed', version, reason: 'no-systemd', command: RESTART_COMMAND }); }
+    // Once the restart is requested, stay busy: the process is about to be stopped, a second request must not start another npm.
+    restarting = true;
+  };
   return {
     running: () => busy,
     /** `reply` reaches only the asking client: a busy refusal must not fail the flow other overlays are following. */
@@ -46,17 +55,26 @@ export function createDaemonUpdater(deps: UpdaterDeps) {
         log(`update: ${shown}`);
         const r = await deps.npm(cmd);
         if (r.code !== 0) { log(`update: npm failed (${r.code})\n${r.output}`); return send({ type: 'update.failed', version, reason: 'npm-failed', detail: lastLines(r.output), command: shown }); }
-        send({ type: 'update.progress', version, step: 'restarting' });
-        await deps.save();
-        // The new version is installed but this one keeps running: say how to restart it by hand.
-        const code = await deps.restart();
-        if (code !== 0) { log(`update: systemctl restart failed (${code})`); return send({ type: 'update.failed', version, reason: 'no-systemd', command: RESTART_COMMAND }); }
-        // Once the restart is requested, stay busy: the process is about to be stopped, a second request must not start another npm.
-        restarting = true;
+        // The new version is installed: if systemd refuses, this one keeps running and the person is told how to restart it.
+        await restartService(version, send);
       } catch (e) {
         // Every flow ends with a reason (spec §2): an unexpected throw must not leave the overlay waiting.
         log(`update: ${(e as Error).stack ?? String(e)}`);
         send({ type: 'update.failed', version, reason: 'npm-failed', detail: e instanceof Error ? e.message : String(e) });
+      } finally { if (!restarting) busy = false; }
+    },
+    /** The restart alone, for the phone (spec 2026-10-28 mobile daemon update): the update's guards but npm, then the same restart. */
+    async restart(send: (m: ServerMessage) => void, reply: (m: ServerMessage) => void = send): Promise<void> {
+      const version = deps.info().version;
+      if (busy) return reply({ type: 'update.failed', version, reason: 'busy' });
+      if (!deps.info().systemd) return send({ type: 'update.failed', version, reason: 'no-systemd', command: RESTART_COMMAND });
+      busy = true;
+      try {
+        if (await deps.atRisk()) return send({ type: 'update.failed', version, reason: 'sessions-at-risk' });
+        await restartService(version, send);
+      } catch (e) {
+        log(`restart: ${(e as Error).stack ?? String(e)}`);
+        send({ type: 'update.failed', version, reason: 'no-systemd', command: RESTART_COMMAND });
       } finally { if (!restarting) busy = false; }
     }
   };

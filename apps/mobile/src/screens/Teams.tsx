@@ -116,6 +116,8 @@ export function Teams({ store, onReconnect }: { store: MobileStore; onReconnect?
         {!catalog && (waited || state.catalogRefused ? (
           <Notice title={copy.teams.unavailable} tone="plain">
             {outdated && <p>{copy.teams.outdated}</p>}
+            {/* The Connexion screen says what this PC allows: an update from here, or by hand on the PC. */}
+            {outdated && <a href={href({ name: 'connection' })} className={buttonClass({ variant: 'primary', block: true, className: 'mt-3' })}>{copy.teams.updatePc}</a>}
             <button type="button" onClick={() => { if (offline && onReconnect) onReconnect(); else setAttempt(n => n + 1); }} className={buttonClass({ block: true, className: 'mt-3' })}>{copy.teams.retry}</button>
           </Notice>
         ) : <p role="status" className="py-6 text-center text-body text-muted">{copy.teams.loading}</p>)}

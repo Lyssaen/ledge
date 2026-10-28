@@ -110,6 +110,44 @@ describe('createDaemonUpdater', () => {
   });
 });
 
+describe('createDaemonUpdater: restart alone', () => {
+  it('says so, saves the journal, then restarts, without npm; and stays busy', async () => {
+    const d = deps(); const u = createDaemonUpdater(d); const { sent, send } = collect();
+    await u.restart(send);
+    expect(sent).toEqual([{ type: 'update.progress', version: '0.2.2', step: 'restarting' }]);
+    expect(d.calls).toEqual(['save', 'restart']);
+    const b = collect();
+    await u.update('0.3.0', b.send);
+    expect(b.sent).toEqual([{ type: 'update.failed', version: '0.3.0', reason: 'busy' }]);
+  });
+  it('refuses without systemd, with sessions at risk, and while an update runs, touching nothing', async () => {
+    const noSystemd = deps({ info: () => ({ ...NPM_INFO, systemd: false }) }); const a = collect();
+    await createDaemonUpdater(noSystemd).restart(a.send);
+    expect(a.sent).toEqual([{ type: 'update.failed', version: '0.2.2', reason: 'no-systemd', command: 'systemctl --user restart ledge-daemon' }]);
+    const risky = deps({ atRisk: async () => true }); const b = collect();
+    await createDaemonUpdater(risky).restart(b.send);
+    expect(b.sent).toEqual([{ type: 'update.failed', version: '0.2.2', reason: 'sessions-at-risk' }]);
+    let release!: () => void;
+    const slow = deps({ npm: () => new Promise(r => { release = () => r({ code: 0, output: '' }); }) });
+    const u = createDaemonUpdater(slow); const c = collect(); const asker = collect();
+    const running = u.update('0.3.0', c.send);
+    await new Promise(r => setTimeout(r, 0));
+    await u.restart(c.send, asker.send);
+    expect(asker.sent).toEqual([{ type: 'update.failed', version: '0.2.2', reason: 'busy' }]);
+    release(); await running;
+    expect([...noSystemd.calls, ...risky.calls]).toEqual([]);
+  });
+  it('a refused systemctl lets a later restart through', async () => {
+    let code = 1;
+    const d = deps({ restart: async () => code }); const u = createDaemonUpdater(d); const a = collect();
+    await u.restart(a.send);
+    expect(a.sent.at(-1)).toMatchObject({ type: 'update.failed', reason: 'no-systemd' });
+    code = 0; const b = collect();
+    await u.restart(b.send);
+    expect(b.sent).toEqual([{ type: 'update.progress', version: '0.2.2', step: 'restarting' }]);
+  });
+});
+
 describe('realUpdaterDeps: OMP processes the daemon owns', () => {
   it('a live OMP session puts the update at risk (a restart would end it), whatever tmux says; none, tmux decides', async () => {
     const live = realUpdaterDeps({ info: NPM_INFO, save: async () => {}, ownedLive: () => 1 });

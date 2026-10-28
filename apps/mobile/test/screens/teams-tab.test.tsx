@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PhoneCatalog, PhoneRole, PhoneTeam } from '@ledge/protocol';
 import { CATALOG_WAIT_MS, Teams } from '../../src/screens/Teams';
+import { href } from '../../src/router';
 import { snapshot } from '../state/helpers';
 import { setup } from './setup';
 
@@ -217,6 +218,7 @@ describe('the catalog request', () => {
     act(() => t.deliver({ type: 'error', code: 'invalid', request: 'teams.catalog' }));
     expect(screen.getByText('Catalogue indisponible')).toBeInTheDocument();
     expect(screen.getByText(/mettez Ledge à jour sur le PC/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Mettre à jour le PC' })).toHaveAttribute('href', href({ name: 'connection' }));
     expect(screen.queryByText('Lecture du catalogue…')).toBeNull();
   });
 
@@ -226,6 +228,7 @@ describe('the catalog request', () => {
     act(() => t.deliver({ type: 'error', code: 'invalid', request: 'teams.catalog' }));
     expect(screen.getByText('Catalogue indisponible')).toBeInTheDocument();
     expect(screen.queryByText(/mettez Ledge à jour/)).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Mettre à jour le PC' })).toBeNull();
     const asked = t.of('teams.catalog').length;
     fireEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
     expect(t.of('teams.catalog')).toHaveLength(asked + 1);

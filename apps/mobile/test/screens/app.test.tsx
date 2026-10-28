@@ -83,7 +83,9 @@ describe('the app', () => {
       'Empreinte du PC': 'abcd EFGH ijkl MNOP qrst uv',
       'État': 'Connecté',
       'Version de l’app': '0.9.1',
-      'Empreinte de l’app': '0123 4567 89ab cdef 0123 4567'
+      'Empreinte de l’app': '0123 4567 89ab cdef 0123 4567',
+      // No snapshot yet: the PC's version is not known.
+      'Version du PC': '—'
     });
     fireEvent.click(screen.getByRole('button', { name: 'Se déconnecter' }));
     // The PC is asked to remove this phone first; the phone signs out once it said applied.

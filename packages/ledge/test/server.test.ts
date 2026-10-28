@@ -1976,7 +1976,7 @@ describe('update.daemon', () => {
     await srv.close();
     const seen: string[] = [];
     srv = await startServer({ store, tmux, port: 0, agentEnv: async () => ({ ...process.env }), daemon: { version: '0.2.2', install: 'npm', systemd: true },
-      updater: { running: () => false, update: async (v, send) => { seen.push(v); send({ type: 'update.progress', version: v, step: 'installing' }); } } });
+      updater: { running: () => false, update: async (v, send) => { seen.push(v); send({ type: 'update.progress', version: v, step: 'installing' }); }, restart: async () => {} } });
     const c = await connect({ port: srv.port });
     const snap = await c.next('snapshot');
     expect(snap.daemon).toEqual({ version: '0.2.2', install: 'npm', systemd: true, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true, teams: true });
