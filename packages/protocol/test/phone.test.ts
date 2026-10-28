@@ -163,6 +163,12 @@ describe('phone device confirmation (lot 6a)', () => {
     expect(() => PhoneServerMessageSchema.parse({ type: 'confirm.challenge', purpose: 'decide', challenge: 'abc_-', rpId: 'relay.example', credentialId: 'AbC', expiresInMs: 60_000 })).not.toThrow();
     expect(() => PhoneServerMessageSchema.parse({ type: 'confirm.challenge', purpose: 'register', challenge: 'abc', rpId: 'relay.example', expiresInMs: 0 })).toThrow();
   });
+  it('a confirm.challenge may echo the digest of its prepare, a 64-hex string, and keeps it', () => {
+    const base = { type: 'confirm.challenge', purpose: 'define', challenge: 'abc', rpId: 'relay.example', credentialId: 'AbC', expiresInMs: 60_000 };
+    expect(PhoneServerMessageSchema.parse({ ...base, digest: 'a'.repeat(64) })).toMatchObject({ digest: 'a'.repeat(64) });
+    expect(() => PhoneServerMessageSchema.parse({ ...base, digest: 'nope' })).toThrow();
+    expect(() => PhoneServerMessageSchema.parse(base)).not.toThrow();
+  });
   it('still parses a lot 5 snapshot and takes the new fields', () => {
     expect(() => PhoneServerMessageSchema.parse(snap)).not.toThrow();
     expect(() => PhoneServerMessageSchema.parse({ ...snap, device: { confirm: true }, daemon: { version: '1', name: 'pc', boot: OP } })).not.toThrow();

@@ -124,6 +124,8 @@ export const AssertionSchema = z.object({
 });
 export type Assertion = z.infer<typeof AssertionSchema>;
 
+/** The digest of a `define` or `team` operation (`teamsDigest`): a sha256 in lower-case hex. */
+const TeamsDigestSchema = z.string().regex(/^[0-9a-f]{64}$/);
 /** What a challenge is for. `define` (a role or template file) and `team` (a live team) carry the `digest` of the operation they confirm. */
 export const ConfirmPurposeSchema = z.enum(['register', 'decide', 'launch', 'close', 'act', 'define', 'team']);
 export type ConfirmPurpose = z.infer<typeof ConfirmPurposeSchema>;
@@ -237,7 +239,7 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session.read'), id: sessionId, at: z.string().datetime() }),
   /** Asks for a challenge. One object for both purposes: the gateway refuses a `decide` without `id` and `expect`. */
   z.object({ type: z.literal('confirm.prepare'), purpose: ConfirmPurposeSchema, id: sessionId.optional(), expect: PhoneExpectSchema.optional(), qid: OperationIdSchema.optional(),
-    /** sha256 of the `define` or `team` operation the challenge is for (`teamsDigest`). */ digest: z.string().regex(/^[0-9a-f]{64}$/).optional() }),
+    /** sha256 of the `define` or `team` operation the challenge is for (`teamsDigest`). */ digest: TeamsDigestSchema.optional() }),
   z.object({ type: z.literal('credential.register'), op: OperationIdSchema, credential: CredentialSchema }),
   z.object({
     type: z.literal('session.decide'), op: OperationIdSchema, id: sessionId, decision: DecisionSchema, note: z.string().trim().min(1).max(NOTE_MAX).optional(),
@@ -314,7 +316,8 @@ export type PhoneClientMessage = z.infer<typeof PhoneClientMessageSchema>;
 /** What the daemon sends a phone. */
 export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('snapshot'), protocol: z.literal(PHONE_PROTOCOL), sessions: z.array(PhoneSessionSchema), capabilities: CapabilitiesByToolSchema, daemon: z.object({ version: z.string(), name: z.string().max(40), boot: z.string().uuid().optional() }), device: z.object({ confirm: z.boolean(), push: z.enum(['on', 'off', 'stale', 'unavailable']).optional(), chat: z.literal(true).optional(), contextNear: ContextPrefsSchema.shape.near.optional() }).optional() }),
-  z.object({ type: z.literal('confirm.challenge'), purpose: ConfirmPurposeSchema, challenge: B64U.max(64), rpId: z.string().max(253), credentialId: B64U.max(1_366).optional(), expiresInMs: z.number().int().positive() }),
+  z.object({ type: z.literal('confirm.challenge'), purpose: ConfirmPurposeSchema, challenge: B64U.max(64), rpId: z.string().max(253), credentialId: B64U.max(1_366).optional(), expiresInMs: z.number().int().positive(),
+    /** Echoed from the `confirm.prepare` of a `define` or `team` challenge, so the phone matches each challenge to its own call. Absent from an older gateway. */ digest: TeamsDigestSchema.optional() }),
   z.object({ type: z.literal('session.updated'), session: PhoneSessionSchema }),
   z.object({ type: z.literal('session.removed'), id: z.string() }),
   /** `pending.cut` is set when even this body was shortened. */

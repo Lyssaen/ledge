@@ -663,7 +663,8 @@ export function createPhoneGateway(deps: {
           const cred = deps.credential(deviceId);
           if (!cred || cred.rpId !== rp.rpId) return invalid();
           const challenge = deps.challenges.issue({ deviceId, purpose: msg.purpose, subject: msg.digest });
-          return push(deviceId, { type: 'confirm.challenge', purpose: msg.purpose, challenge, rpId: rp.rpId, credentialId: cred.id, expiresInMs: CHALLENGE_TTL_MS });
+          // The digest is echoed: a phone that superseded a call finds this challenge's own among the late ones.
+          return push(deviceId, { type: 'confirm.challenge', purpose: msg.purpose, challenge, rpId: rp.rpId, credentialId: cred.id, expiresInMs: CHALLENGE_TTL_MS, digest: msg.digest });
         }
         // A purpose added to the enum without a branch above fails to compile here.
         const unhandled: never = msg.purpose;

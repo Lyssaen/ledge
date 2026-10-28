@@ -24,7 +24,8 @@ const flush = () => new Promise(r => setTimeout(r, 0));
 /** The digest is computed asynchronously: the challenge is asked once it is. */
 const prepared = (t: { of: (type: 'confirm.prepare') => unknown[] }, n = 1) => vi.waitFor(() => expect(t.of('confirm.prepare')).toHaveLength(n));
 const ASSERTION = { id: 'a', clientDataJSON: 'b', authenticatorData: 'c', signature: 'd' };
-const challenge = (purpose: 'define' | 'team') => ({ type: 'confirm.challenge' as const, purpose, challenge: 'Y2g', rpId: 'pc.local', credentialId: 'Y3I', expiresInMs: 60_000 });
+/** `digest` is what a current gateway echoes from the prepare; without it the challenge is an older gateway's. */
+const challenge = (purpose: 'define' | 'team', digest?: string) => ({ type: 'confirm.challenge' as const, purpose, challenge: 'Y2g', rpId: 'pc.local', credentialId: 'Y3I', expiresInMs: 60_000, ...(digest ? { digest } : {}) });
 const HASH = 'a'.repeat(16);
 const write = (prompt: string) => ({ type: 'role.write' as const, scope: 'home' as const, role: { id: 'lead', label: 'Chef', prompt }, base: null });
 const role = (over: Partial<PhoneRole> = {}): PhoneRole => ({ id: 'lead', label: 'Chef', prompt: 'p', scope: 'home', project: null, hash: HASH, ...over });
@@ -117,11 +118,12 @@ describe('define and teamOp', () => {
     const second = t.store.define(write('second'));
     await prepared(t, 2);
     await expect(first).resolves.toMatchObject({ status: 'failed' });
-    // The PC answers both prepares in order: the first challenge is the superseded call's.
-    t.deliver(challenge('define'));
+    const [a, b] = t.of('confirm.prepare');
+    // The first call's challenge (its own digest) is not the second's.
+    t.deliver(challenge('define', a!.digest));
     await flush();
     expect(t.of('role.write')).toEqual([]);
-    t.deliver(challenge('define'));
+    t.deliver(challenge('define', b!.digest));
     await flush();
     expect(t.of('role.write').map(m => m.role.prompt)).toEqual(['second']);
     t.deliver({ type: 'operation.result', op: t.of('role.write')[0]!.op, status: 'applied' });
@@ -194,7 +196,8 @@ describe('define and teamOp', () => {
     await expect(second).resolves.toEqual({ status: 'applied' });
   });
 
-  it('a challenge for a superseded call does not sign the new one: A then B, A\'s answer comes first', async () => {
+  /** Two defines, A superseded by B: both prepares are out, `A` and `B` are their digests. */
+  async function twoCalls() {
     const t = setup();
     vi.mocked(getAssertion).mockResolvedValue(ASSERTION);
     const a = t.store.define(write('A'));
@@ -202,17 +205,71 @@ describe('define and teamOp', () => {
     const b = t.store.define(write('B'));
     await prepared(t, 2);
     await expect(a).resolves.toMatchObject({ status: 'failed' });
-    // A's challenge (for A's digest) arrives first: it must not be taken for B's.
-    t.deliver({ ...challenge('define'), challenge: 'QQ' });
+    const [pa, pb] = t.of('confirm.prepare');
+    return { t, b, A: pa!.digest!, B: pb!.digest! };
+  }
+  const signedOver = (challenges: string[]) => expect(vi.mocked(getAssertion).mock.calls.map(c => c[0].challenge)).toEqual(challenges);
+
+  it('a superseded call\'s challenge does not sign the new one: A\'s late answer comes first, then B\'s', async () => {
+    const { t, b, A, B } = await twoCalls();
+    t.deliver({ ...challenge('define', A), challenge: 'QQ' });
     await flush();
     expect(getAssertion).not.toHaveBeenCalled();
     expect(t.of('role.write')).toEqual([]);
-    t.deliver({ ...challenge('define'), challenge: 'Qg' });
+    t.deliver({ ...challenge('define', B), challenge: 'Qg' });
     await vi.waitFor(() => expect(t.of('role.write')).toHaveLength(1));
-    expect(vi.mocked(getAssertion).mock.calls.map(c => c[0].challenge)).toEqual(['Qg']);
+    signedOver(['Qg']);
     expect(t.of('role.write')[0]!.role.prompt).toBe('B');
     t.deliver({ type: 'operation.result', op: t.of('role.write')[0]!.op, status: 'applied' });
     await expect(b).resolves.toEqual({ status: 'applied' });
+  });
+
+  it('B\'s challenge arrives before A\'s late one: B is signed over its own, A\'s is ignored', async () => {
+    const { t, b, A, B } = await twoCalls();
+    t.deliver({ ...challenge('define', B), challenge: 'Qg' });
+    await vi.waitFor(() => expect(t.of('role.write')).toHaveLength(1));
+    t.deliver({ ...challenge('define', A), challenge: 'QQ' });
+    await flush();
+    signedOver(['Qg']);
+    expect(t.of('role.write').map(m => m.role.prompt)).toEqual(['B']);
+    t.deliver({ type: 'operation.result', op: t.of('role.write')[0]!.op, status: 'applied' });
+    await expect(b).resolves.toEqual({ status: 'applied' });
+  });
+
+  it('a challenge of the other teams purpose, or for another digest, does not settle a team call', async () => {
+    const t = setup();
+    vi.mocked(getAssertion).mockResolvedValue(ASSERTION);
+    const done = t.store.teamOp({ type: 'team.dissolve', team: 'team-a1b2' });
+    await prepared(t);
+    const [p] = t.of('confirm.prepare');
+    t.deliver(challenge('define', p!.digest));
+    t.deliver(challenge('team', 'f'.repeat(64)));
+    await flush();
+    expect(getAssertion).not.toHaveBeenCalled();
+    t.deliver(challenge('team', p!.digest));
+    await vi.waitFor(() => expect(t.of('team.dissolve')).toHaveLength(1));
+    t.deliver({ type: 'operation.result', op: t.of('team.dissolve')[0]!.op, status: 'applied' });
+    await expect(done).resolves.toEqual({ status: 'applied' });
+  });
+
+  it('a request-less error with A superseded settles only the pending B, and leaves nothing behind for the next call', async () => {
+    const { t, b, A } = await twoCalls();
+    t.deliver({ type: 'error', code: 'invalid' });
+    await expect(b).resolves.toMatchObject({ status: 'failed' });
+    expect(getAssertion).not.toHaveBeenCalled();
+    // A fresh call is neither swallowed nor settled by A's late challenge.
+    const c = t.store.define(write('C'));
+    await prepared(t, 3);
+    const C = t.of('confirm.prepare')[2]!.digest;
+    t.deliver({ ...challenge('define', A), challenge: 'QQ' });
+    await flush();
+    expect(getAssertion).not.toHaveBeenCalled();
+    t.deliver({ ...challenge('define', C), challenge: 'Qw' });
+    await vi.waitFor(() => expect(t.of('role.write')).toHaveLength(1));
+    signedOver(['Qw']);
+    expect(t.of('role.write')[0]!.role.prompt).toBe('C');
+    t.deliver({ type: 'operation.result', op: t.of('role.write')[0]!.op, status: 'applied' });
+    await expect(c).resolves.toEqual({ status: 'applied' });
   });
 
   it('a challenge without a credential is confirm_required, with no passkey prompt', async () => {

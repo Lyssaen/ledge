@@ -580,8 +580,6 @@ describe('the store, device confirmation', () => {
     const superseded = expect(first).rejects.toThrow('superseded');
     const second = t.store.prepareConfirm({ purpose: 'register' });
     await superseded;
-    // The PC answers both prepares in order: the first challenge belongs to the superseded call.
-    t.deliver(challenge('register'));
     t.deliver(challenge('register'));
     await expect(second).resolves.toMatchObject({ purpose: 'register' });
   });

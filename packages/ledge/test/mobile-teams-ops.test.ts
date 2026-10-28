@@ -181,6 +181,19 @@ describe('phone gateway: teams operations behind the passkey', () => {
     expect(g.got('dev1').filter(m => m.type === 'confirm.challenge').slice(-2).map(m => m.type === 'confirm.challenge' && m.purpose)).toEqual(['team', 'define']);
   });
 
+  it('echoes the digest of a define/team prepare in its challenge, and none for a purpose without one', async () => {
+    const { g } = make();
+    await enroll(g);
+    g.send('dev1', { type: 'confirm.prepare', purpose: 'team', digest: 'a'.repeat(64) });
+    g.send('dev1', { type: 'confirm.prepare', purpose: 'define', digest: 'b'.repeat(64) });
+    await flush();
+    const challenges = g.got('dev1').filter(m => m.type === 'confirm.challenge');
+    expect(challenges.slice(-2).map(m => m.type === 'confirm.challenge' && [m.purpose, m.digest])).toEqual([['team', 'a'.repeat(64)], ['define', 'b'.repeat(64)]]);
+    g.send('dev1', { type: 'confirm.prepare', purpose: 'register' });
+    await flush();
+    expect(g.got('dev1').filter(m => m.type === 'confirm.challenge').at(-1)).not.toHaveProperty('digest');
+  });
+
   it('role.write without an assertion is rejected confirm_required, nothing dispatched', async () => {
     const { g, writes } = make();
     await enroll(g);

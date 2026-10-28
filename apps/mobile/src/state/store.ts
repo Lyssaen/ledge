@@ -205,24 +205,11 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
   const expirers = new Set<() => void>();
   /** The relay or launch of a turn that is under way, shared by a second tap. */
   const chatActions = new Map<string, Promise<ChatAction>>();
-  /** The `prepareConfirm` waiting for its challenge. */
-  let preparing: { purpose: ConfirmChallenge['purpose']; resolve: (c: ConfirmChallenge) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> } | null = null;
   /**
-   * The challenges still to come for a `prepareConfirm` that was superseded or timed out: the PC answers every `confirm.prepare` in order,
-   * so the next one of that purpose is theirs, not the pending call's. Ignored once older than `STALE_MS` (an answer that never came).
+   * The `prepareConfirm` waiting for its challenge. A `define` or `team` call also holds the `digest` it asked for: a late challenge of a call
+   * that was superseded carries another one, and is not this call's.
    */
-  let stale: { purpose: ConfirmChallenge['purpose']; at: number }[] = [];
-  const STALE_MS = 2 * PREPARE_MS;
-  const outlive = (p: NonNullable<typeof preparing>) => { stale.push({ purpose: p.purpose, at: Date.now() }); };
-  /** True when this challenge is the late answer of a call that was given up. */
-  const lateChallenge = (purpose: ConfirmChallenge['purpose']): boolean => {
-    const now = Date.now();
-    stale = stale.filter(s => now - s.at < STALE_MS);
-    const at = stale.findIndex(s => s.purpose === purpose);
-    if (at < 0) return false;
-    stale.splice(at, 1);
-    return true;
-  };
+  let preparing: { purpose: ConfirmChallenge['purpose']; digest?: string; resolve: (c: ConfirmChallenge) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> } | null = null;
   const settle = (outcome: ConfirmChallenge | Error) => {
     const p = preparing;
     if (!p) return;
@@ -322,7 +309,6 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     settleForget(false);
     // Requests sent on the lost channel get no answer.
     threadAsks = [];
-    stale = [];
     settle(new Error('lost'));
     endReads(new Error('lost'));
     images.lost();
@@ -441,16 +427,13 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         setChat(reduceChat(chatState, m, askedSinceReady));
         return;
       case 'confirm.challenge':
-        // The late answer of a call that was superseded or timed out is not for the one pending now.
-        if (lateChallenge(m.purpose)) return;
-        if (preparing?.purpose === m.purpose) settle(m);
+        // A challenge that names another digest answers a call that was superseded; one without (an older gateway) settles by purpose.
+        if (preparing?.purpose === m.purpose && (m.digest === undefined || preparing.digest === undefined || m.digest === preparing.digest)) settle(m);
         return;
       case 'error':
         if (m.request === 'teams.role') { const read = roleReads[0]; if (read) endRead(read, new Error('error')); return; }
         // A refused catalog read is not about the challenge being prepared.
         if (m.request === 'teams.catalog') return;
-        // An error answering a call that was given up is not the pending call's.
-        if (stale.length && (m.request === undefined || m.request === 'confirm.prepare')) { stale.shift(); return; }
         settle(new Error('error'));
         if (m.code === 'unknown_session' && m.request === 'session.thread') {
           const id = threadAsks.shift();
@@ -547,7 +530,6 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     threadAsks = [];
     historyAsked = false;
     chatState = emptyChat();
-    stale = [];
     settle(new Error('lost'));
     endReads(new Error('lost'));
     previewsDirty = false;
@@ -601,9 +583,8 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         if (closed || !ready()) { reject(new Error('not_ready')); return; }
         const m = PhoneClientMessageSchema.safeParse({ type: 'confirm.prepare', ...req });
         if (!m.success) { reject(new Error('invalid')); return; }
-        if (preparing) outlive(preparing);
         settle(new Error('superseded'));
-        preparing = { purpose: req.purpose, resolve, reject, timer: setTimeout(() => { if (preparing) outlive(preparing); settle(new Error('timeout')); }, PREPARE_MS) };
+        preparing = { purpose: req.purpose, ...('digest' in req ? { digest: req.digest } : {}), resolve, reject, timer: setTimeout(() => settle(new Error('timeout')), PREPARE_MS) };
         send(m.data);
       });
     },
