@@ -2,13 +2,14 @@ import { useEffect, useId, useState } from 'react';
 import type { PhoneCatalog, PhoneProblem, PhoneRole, PhoneTemplate } from '@ledge/protocol';
 import { copy } from '../copy';
 import { catalogKey, scopeLabel } from '../model/catalog';
+import { outcomeNote, type OutcomeNote } from '../model/teamsOutcome';
 import { requestsOf } from '../model/requests';
 import { closedTasks } from '../model/teams';
 import { href } from '../router';
-import type { ChatAction } from '../state/chat';
 import { useMobile, type MobileStore } from '../state/store';
 import { Button, buttonClass } from '../ui/Button';
 import { Sheet } from '../ui/Dialog';
+import { FIELD } from '../ui/field';
 import { Header, linkView } from '../ui/Header';
 import { Icon } from '../ui/icons';
 import { Notice, OfflineBanner } from '../ui/Notice';
@@ -19,21 +20,8 @@ import { Flag, RolePill } from '../ui/teams/RolePill';
 /** How long the tab waits for the PC's catalog before saying it is unavailable: a refused read is never answered. */
 export const CATALOG_WAIT_MS = 8_000;
 
-const FIELD = 'min-h-12 w-full min-w-0 rounded-control border border-input bg-surface px-3 text-base text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-info';
 const HEAD = 'py-3 text-meta tracking-[.4px] text-muted';
 const ROW = 'min-w-0 flex-1 py-3 active:bg-raised/60';
-
-/** What a launch came to, for the dialog, as the chat's team card says it: a passkey that was cancelled or expired is a quiet note, a refusal says why when it can. */
-function noteOf(r: ChatAction): { text: string; quiet: boolean } {
-  switch (r.status) {
-    case 'cancelled': return { text: copy.confirm.cancelled, quiet: true };
-    case 'expired': return { text: copy.confirm.expired, quiet: true };
-    case 'rejected':
-      if (r.reason === 'assertion_expired') return { text: copy.confirm.expired, quiet: true };
-      return { text: copy.teams.reason[r.reason] ?? copy.chat.team.notLaunched, quiet: false };
-    default: return { text: copy.chat.team.notLaunched, quiet: false };
-  }
-}
 
 /** « Lever »: the project and the name of the team a definition raises. Its seats go as the definition has them. */
 function LeverSheet({ store, catalog, template, canConfirm, onClose, onLaunched }: {
@@ -44,13 +32,13 @@ function LeverSheet({ store, catalog, template, canConfirm, onClose, onLaunched 
   const [project, setProject] = useState(template.project !== null && catalog.projects.includes(template.project) ? template.project : '');
   const [name, setName] = useState(template.name);
   const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<{ text: string; quiet: boolean } | null>(null);
+  const [note, setNote] = useState<OutcomeNote | null>(null);
   const given = name.trim();
   const ready = project !== '' && given.length > 0 && canConfirm;
   const go = () => {
     setBusy(true); setNote(null);
     void store.teamOp({ type: 'team.launch', project, name: given, seats: template.seats, template: template.id })
-      .then(r => { if (r.status === 'applied') { onLaunched(given); onClose(); } else setNote(noteOf(r)); }, () => setNote({ text: copy.chat.team.notLaunched, quiet: false }))
+      .then(r => { if (r.status === 'applied') { onLaunched(given); onClose(); } else setNote(outcomeNote(r, copy.chat.team.notLaunched)); }, () => setNote({ text: copy.chat.team.notLaunched, quiet: false }))
       .finally(() => setBusy(false));
   };
   return (

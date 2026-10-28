@@ -126,7 +126,24 @@ export const copy = {
       conflict: 'Une autre opération est en cours sur le PC. Réessayez.'
     } as Partial<Record<string, string>>,
     loading: 'Lecture du catalogue…', unavailable: 'Catalogue indisponible', retry: 'Réessayer',
-    problemsHead: 'FICHIERS ILLISIBLES', problemsLabel: 'Fichiers illisibles'
+    problemsHead: 'FICHIERS ILLISIBLES', problemsLabel: 'Fichiers illisibles',
+    /** The role editor (« Nouveau rôle » and a role's own page). */
+    role: {
+      newTitle: 'Nouveau rôle', idLabel: 'Identifiant', labelLabel: 'Libellé', idRule: 'Minuscules, chiffres, - et _ · 40 caractères au plus, commence par une lettre ou un chiffre.',
+      idTaken: (scope: string) => `Cet identifiant est déjà pris (${scope}).`, labelRule: 'Un libellé de 40 caractères au plus.',
+      prompt: 'Consigne', promptFetching: 'Lecture de la consigne entière…', promptFailed: 'Consigne illisible pour le moment.', promptRetry: 'Réessayer',
+      defaults: 'PAR DÉFAUT', tool: 'Outil', model: 'Modèle', effort: 'Effort', autonomy: 'Autonomie', unset: 'Par défaut',
+      modelRule: 'Un identifiant de modèle valide, ou vide.', effortRule: 'Des lettres minuscules, ou vide.',
+      scopeHead: 'RANGER DANS', scopeLegend: 'Portée du rôle', home: 'Maison', repo: (project: string) => `Dépôt ${project}`,
+      homeHint: 'Maison : disponible pour tous vos projets.', repoHint: (project: string) => `Dépôt : seulement dans ${project}.`,
+      fixedScope: (scope: string) => `Rangé dans : ${scope}.`,
+      shadows: (id: string) => `@${id} de ce dépôt cache le @${id} de Maison.`, shadowed: (id: string) => `@${id} de Maison est caché par le @${id} du dépôt.`,
+      save: 'Enregistrer le rôle', saveNote: 'Votre passkey confirme l’écriture sur le PC.', delete: 'Supprimer', deleteTitle: (id: string) => `Supprimer @${id} ?`,
+      seatedIn: (names: string) => `encore dans : ${names}`, deleteHint: 'Ces équipes perdront ce siège.', cancel: 'Annuler',
+      notSaved: 'Pas enregistré.', changedKept: 'Votre texte est gardé. Enregistrer écrase la version du PC.', takePc: 'Reprendre la version du PC',
+      taken: 'Cet identifiant est déjà pris.', invalid: 'Ce rôle ne peut pas être enregistré tel quel.',
+      missing: 'Ce rôle n’existe pas sur ce PC.'
+    }
   },
   agents: {
     title: 'Agents',
