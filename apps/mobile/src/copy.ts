@@ -126,6 +126,7 @@ export const copy = {
       conflict: 'Une autre opération est en cours sur le PC. Réessayez.'
     } as Partial<Record<string, string>>,
     loading: 'Lecture du catalogue…', unavailable: 'Catalogue indisponible', retry: 'Réessayer',
+    outdated: 'Ce PC ne sait pas encore lire les équipes : mettez Ledge à jour sur le PC.',
     problemsHead: 'FICHIERS ILLISIBLES', problemsLabel: 'Fichiers illisibles',
     /** The role editor (« Nouveau rôle » and a role's own page). */
     role: {

@@ -44,6 +44,19 @@ describe('the teams catalog in the store', () => {
     expect(t.store.getState().catalog).toBeNull();
   });
 
+  it('notes a refused catalog read, and forgets it on the next read and on a catalog', () => {
+    const t = setup();
+    t.store.requestCatalog();
+    expect(t.store.getState().catalogRefused).toBe(false);
+    t.deliver({ type: 'error', code: 'invalid', request: 'teams.catalog' });
+    expect(t.store.getState().catalogRefused).toBe(true);
+    t.store.requestCatalog();
+    expect(t.store.getState().catalogRefused).toBe(false);
+    t.deliver({ type: 'error', code: 'invalid', request: 'teams.catalog' });
+    t.deliver({ type: 'teams.catalog', catalog: catalog() });
+    expect(t.store.getState().catalogRefused).toBe(false);
+  });
+
   it('readRole resolves on the teams.role of that id, and rejects on an error frame', async () => {
     const t = setup();
     const read = t.store.readRole({ scope: 'home', id: 'lead' });

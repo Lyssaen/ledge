@@ -32,7 +32,8 @@ export interface MobileState {
   capabilities: CapabilitiesByTool | null;
   /** What the PC offers for confirming on the device; null until a snapshot, and from a PC that says nothing (lot 5). */
   device: { confirm: boolean; push?: 'on' | 'off' | 'stale' | 'unavailable'; chat?: true; contextNear?: number } | null;
-  daemon: { version: string; name: string } | null;
+  /** `teams`: the PC serves the team catalog (absent from older daemons, and from 0.26.0, which serves it without saying so). */
+  daemon: { version: string; name: string; teams?: true } | null;
   /** True from a snapshot until the channel is lost: what is shown is the PC's state now, not the last known one. */
   fresh: boolean;
   /** When the PC last said something about its sessions. */
@@ -44,6 +45,8 @@ export interface MobileState {
   tasks: Map<string, PhoneTask>;
   /** The roles and team definitions the PC offers, with the repositories a project can name; null until asked and answered. Never cached across reloads. */
   catalog: PhoneCatalog | null;
+  /** The PC refused the last catalog read: with `daemon.teams` its read failed, without it the PC may not know the request. Cleared by the next read. */
+  catalogRefused: boolean;
 }
 
 /** The request a challenge is asked for, as `session.decide` names it. */
@@ -180,7 +183,8 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     ops: loadOps(storage),
     teams: null,
     tasks: new Map(),
-    catalog: null
+    catalog: null,
+    catalogRefused: false
   };
   let reads = loadReads(storage);
   /** The PC's boot id of this run, from its snapshot; null until one, and when the PC sends none. Never cached. */
@@ -343,7 +347,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         set({ teams: m.teams });
         return;
       case 'teams.catalog':
-        set({ catalog: m.catalog });
+        set({ catalog: m.catalog, catalogRefused: false });
         return;
       case 'teams.role': {
         const read = roleReads.find(r => r.ref.id === m.role.id && r.ref.scope === m.role.scope && (r.ref.project ?? null) === m.role.project);
@@ -433,7 +437,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
       case 'error':
         if (m.request === 'teams.role') { const read = roleReads[0]; if (read) endRead(read, new Error('error')); return; }
         // A refused catalog read is not about the challenge being prepared.
-        if (m.request === 'teams.catalog') return;
+        if (m.request === 'teams.catalog') { set({ catalogRefused: true }); return; }
         settle(new Error('error'));
         if (m.code === 'unknown_session' && m.request === 'session.thread') {
           const id = threadAsks.shift();
@@ -536,7 +540,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     previewsDirty = false;
     clearLastState(storage);
     clearOps(storage);
-    set({ sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, fresh: false, syncedAt: null, ops: {}, teams: null, tasks: new Map(), catalog: null });
+    set({ sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, fresh: false, syncedAt: null, ops: {}, teams: null, tasks: new Map(), catalog: null, catalogRefused: false });
   }
 
   let wasReady = ready();
@@ -590,7 +594,11 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
       });
     },
 
-    requestCatalog() { if (!closed && ready()) send({ type: 'teams.catalog' }); },
+    requestCatalog() {
+      if (closed || !ready()) return;
+      if (state.catalogRefused) set({ catalogRefused: false });
+      send({ type: 'teams.catalog' });
+    },
 
     readRole(ref) {
       return new Promise<PhoneRole>((resolve, reject) => {

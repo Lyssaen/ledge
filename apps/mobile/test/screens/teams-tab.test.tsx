@@ -25,10 +25,11 @@ const catalog = (extra: Partial<PhoneCatalog> = {}): PhoneCatalog => ({
 });
 const live = (extra: Partial<PhoneTeam> = {}): PhoneTeam => ({ id: 'team-a1b2', name: 'Revue paper-service', project: 'paper-service', state: 'active', template: 'revue-mr', seats: [{ role: 'leader', sessionId: null }], done: 0, given: 0, createdAt: new Date().toISOString(), ...extra });
 
-/** A tab on a PC that has answered with `c`. */
-function open(c: PhoneCatalog | null = catalog(), { confirm = true } = {}) {
+/** A tab on a PC that has answered with `c`; `teams`: the PC says it serves the catalog. */
+function open(c: PhoneCatalog | null = catalog(), { confirm = true, teams = false } = {}) {
   const t = setup();
-  t.deliver(snapshot([], 'PC-Desan', undefined, { confirm, chat: true }));
+  const snap = snapshot([], 'PC-Desan', undefined, { confirm, chat: true });
+  t.deliver(teams && snap.type === 'snapshot' ? { ...snap, daemon: { ...snap.daemon, teams: true } } : snap);
   const view = render(<Teams store={t.store} />);
   if (c) act(() => t.deliver({ type: 'teams.catalog', catalog: c }));
   return { ...t, view };
@@ -207,6 +208,28 @@ describe('the catalog request', () => {
     expect(screen.getByText('2 équipes · 3 rôles')).toBeInTheDocument();
     act(() => { vi.advanceTimersByTime(CATALOG_WAIT_MS); });
     expect(screen.queryByText('Catalogue indisponible')).toBeNull();
+  });
+
+  it('says at once that a PC which does not serve the catalog needs updating, when it refuses the read', () => {
+    vi.useFakeTimers();
+    const t = open(null);
+    expect(screen.getByText('Lecture du catalogue…')).toBeInTheDocument();
+    act(() => t.deliver({ type: 'error', code: 'invalid', request: 'teams.catalog' }));
+    expect(screen.getByText('Catalogue indisponible')).toBeInTheDocument();
+    expect(screen.getByText(/mettez Ledge à jour sur le PC/)).toBeInTheDocument();
+    expect(screen.queryByText('Lecture du catalogue…')).toBeNull();
+  });
+
+  it('says « Catalogue indisponible » at once, without asking for an update, when a PC that serves the catalog refuses the read', () => {
+    vi.useFakeTimers();
+    const t = open(null, { teams: true });
+    act(() => t.deliver({ type: 'error', code: 'invalid', request: 'teams.catalog' }));
+    expect(screen.getByText('Catalogue indisponible')).toBeInTheDocument();
+    expect(screen.queryByText(/mettez Ledge à jour/)).toBeNull();
+    const asked = t.of('teams.catalog').length;
+    fireEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
+    expect(t.of('teams.catalog')).toHaveLength(asked + 1);
+    expect(screen.getByText('Lecture du catalogue…')).toBeInTheDocument();
   });
 
   it('shows the loading line, not « indisponible », while a link that is not fresh yet may still deliver; then offers to reconnect', () => {

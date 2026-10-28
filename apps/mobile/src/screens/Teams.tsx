@@ -17,7 +17,7 @@ import { TabBar } from '../ui/TabBar';
 import { Tag } from '../ui/Tag';
 import { Flag, RolePill } from '../ui/teams/RolePill';
 
-/** How long the tab waits for the PC's catalog before saying it is unavailable: a refused read is never answered. */
+/** How long the tab waits for the PC's catalog before saying it is unavailable: a read the PC never got is never answered. A refusal says so at once. */
 export const CATALOG_WAIT_MS = 8_000;
 
 const HEAD = 'py-3 text-meta tracking-[.4px] text-muted';
@@ -91,7 +91,7 @@ export function Teams({ store, onReconnect }: { store: MobileStore; onReconnect?
 
   // Asked on mount, when the link turns fresh, and on « Réessayer ».
   useEffect(() => { store.requestCatalog(); }, [store, state.fresh, attempt]);
-  // The PC never answers a refused read: past the wait, the tab says so instead of waiting for ever.
+  // A read the PC never got is never answered: past the wait, the tab says so instead of waiting for ever.
   useEffect(() => {
     setWaited(false);
     if (have) return;
@@ -105,14 +105,17 @@ export function Teams({ store, onReconnect }: { store: MobileStore; onReconnect?
   const raised = (state.teams ?? []).filter(t => t.template !== undefined && templateIds.has(t.template));
   const canConfirm = !!state.device?.confirm;
   const lever = catalog !== null && catalog.projects.length > 0;
+  // Refused by a PC that does not say it serves the catalog: most likely one older than the Équipes tab.
+  const outdated = state.catalogRefused && !state.daemon?.teams;
 
   return (
     <>
       <Header title={copy.nav.teams} subtitle={catalog ? copy.teams.subtitle(catalog.templates.length, catalog.roles.length) : ''} link={linkView(state)} />
       <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[22px]">
         {offline && <div className="mb-3"><OfflineBanner onReconnect={onReconnect} /></div>}
-        {!catalog && (waited ? (
+        {!catalog && (waited || state.catalogRefused ? (
           <Notice title={copy.teams.unavailable} tone="plain">
+            {outdated && <p>{copy.teams.outdated}</p>}
             <button type="button" onClick={() => { if (offline && onReconnect) onReconnect(); else setAttempt(n => n + 1); }} className={buttonClass({ block: true, className: 'mt-3' })}>{copy.teams.retry}</button>
           </Notice>
         ) : <p role="status" className="py-6 text-center text-body text-muted">{copy.teams.loading}</p>)}
