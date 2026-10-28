@@ -41,8 +41,9 @@ describe('team definitions from any client', () => {
     for (const id of ['../x', 'a/b', '.hidden', '..']) {
       expect(ok({ ...td, id })).toBe(false);
       expect(ok({ type: 'template.write', rid: 'r', scope: 'home', id, name: 'T', seats, base: null })).toBe(false);
-      expect(ok({ type: 'team.launch', rid: 'r', cwd: '/r', template: id })).toBe(false);
     }
+    // Launch only looks the id up among the listed templates: a file named `my.team.yaml` stays launchable.
+    expect(ok({ type: 'team.launch', rid: 'r', cwd: '/r', template: 'my.team' })).toBe(true);
     expect(ok({ type: 'template.write', rid: 'r', scope: 'repo', name: 'T', seats, base: null })).toBe(false);
     expect(ok({ type: 'template.write', rid: 'r', scope: 'repo', project: 'ledge', name: 'T', seats, base: null })).toBe(true);
   });

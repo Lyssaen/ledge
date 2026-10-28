@@ -70,7 +70,7 @@ export const RolesListingSchema = z.object({ type: z.literal('roles.listing'), r
 
 /** `team.launch`: a template by id, or ad hoc seats (the chat card's); with `qid`, the chat's team card of that turn. */
 export const TeamLaunchSchema = z.object({
-  type: z.literal('team.launch'), rid: z.string().min(1).max(100), cwd: z.string().min(1).optional(), template: TemplateIdSchema.optional(),
+  type: z.literal('team.launch'), rid: z.string().min(1).max(100), cwd: z.string().min(1).optional(), template: z.string().min(1).max(64).optional(),
   seats: SeatsSchema.optional(), name: TeamNameSchema.optional(), qid: z.string().min(1).optional(), machineId: z.string().optional(),
   /** The project's name, for a client that holds no path (the phone): the daemon resolves its folder. */ project: ProjectIdSchema.optional()
 });
