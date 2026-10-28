@@ -163,7 +163,7 @@ export const copy = {
       handNamed: 'Ce fichier porte un nom fait main : il ne se modifie que sur le PC. Vous pouvez quand même lever l’équipe.',
       changedKept: 'Vos modifications sont gardées. Enregistrer écrase la version du PC.',
       missing: 'Cette équipe n’existe pas sur ce PC.', gone: 'Cette équipe n’existe plus sur le PC. Vos modifications sont gardées ici, mais elles ne peuvent plus être enregistrées.',
-      restart: 'Redémarrer ce siège', restartHint: 'La conversation du siège n’est pas reprise.', notRestarted: 'Pas redémarré.',
+      restart: 'Redémarrer ce siège', restartHint: 'La conversation du siège n’est pas reprise.', notRestarted: 'Pas redémarré.', start: 'Démarrer ce siège', notStarted: 'Pas démarré.',
       nextStart: 'au prochain démarrage du siège'
     }
   },

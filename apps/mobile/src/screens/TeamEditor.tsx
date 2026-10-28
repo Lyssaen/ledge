@@ -1,8 +1,9 @@
-import { useId, useRef, useState, type ReactNode } from 'react';
+import { useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { EffortSchema, ModelIdSchema, TEAM_SEATS_MAX, TeamNameSchema, TemplateIdSchema, ToolSchema, type PhoneRole, type PhoneTeam, type PhoneTemplate } from '@ledge/protocol';
 import { copy } from '../copy';
 import { autoSeats, catalogKey, parseCatalogKey, rolesNotSeated, roleFor, scopeLabel } from '../model/catalog';
 import { outcomeNote, type OutcomeNote } from '../model/teamsOutcome';
+import { pendingAfter, runningSettings, type SeatSettings } from '../model/teamsPending';
 import { goBack, href, navigate } from '../router';
 import type { ChatAction } from '../state/chat';
 import { useMobile, type MobileStore } from '../state/store';
@@ -24,8 +25,6 @@ export type TeamEditorMode = { kind: 'template'; key: string } | { kind: 'copy';
 
 /** What the user has typed over the team as shown; a field absent here follows the team. */
 interface Edits { name?: string; project?: string; scope?: Scope; seats?: Seat[] }
-/** What a saved composition leaves to do on a seat: a restart (its tool changed), or its IA / effort taking effect at its next start. */
-interface Pending { restart: boolean; next: boolean }
 
 const Label = ({ id, children }: { id: string; children: ReactNode }) => <label htmlFor={id} className="mb-1 block text-small text-muted">{children}</label>;
 const HEAD = 'text-meta tracking-[.4px] text-muted';
@@ -133,7 +132,6 @@ function Form({ store, mode, initial }: { store: MobileStore; mode: TeamEditorMo
   const [changing, setChanging] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteNote, setDeleteNote] = useState<OutcomeNote | null>(null);
-  const [pending, setPending] = useState<Record<string, Pending>>({});
   const [restarting, setRestarting] = useState<{ role: string; note: OutcomeNote | null } | null>(null);
   const [reloaded, setReloaded] = useState(false);
   // The definition was deleted on the PC: what the user typed stays on screen, but there is no file left to write over.
@@ -150,6 +148,13 @@ function Form({ store, mode, initial }: { store: MobileStore; mode: TeamEditorMo
   const teamNow = !isTemplate ? (isLive ? liveNow ?? initial as PhoneTeam : initial as PhoneTeam) : null;
   // A live team that is no longer there (dissolved on the PC): nothing left to compose.
   const teamGone = isLive && liveNow === null;
+
+  // What each seat runs with, from when the screen opened (seats that are leaving included): it moves only when a seat is started again.
+  // `applied` is what the last saved composition asks of each seat; the two together say what is left to do.
+  const settingsOf = (project: string | null, s: Seat): SeatSettings => { const r = catalog ? roleFor(catalog, project, s.role) : undefined; return { tool: s.tool ?? r?.tool, model: s.model ?? r?.model, effort: s.effort ?? r?.effort }; };
+  const [ran, setRan] = useState<ReadonlyMap<string, SeatSettings>>(() => isLive && teamNow && catalog ? runningSettings(teamNow, id => settingsOf(teamNow.project, { role: id })) : new Map());
+  const [applied, setApplied] = useState<ReadonlyArray<SeatSettings & { role: string }>>([]);
+  const pending = useMemo(() => pendingAfter(ran, applied), [ran, applied]);
 
   const defaults = {
     name: shown?.name ?? teamNow?.name ?? '',
@@ -203,7 +208,7 @@ function Form({ store, mode, initial }: { store: MobileStore; mode: TeamEditorMo
       { fallback: t.notSaved, reasons: { exists: t.exists, invalid: t.invalid }, onNote: setNote, write: true, onApplied: () => goBack({ name: 'teams' }) });
   };
   const deleteTemplate = () => {
-    if (!shown || !online || handNamed || gone) return;
+    if (!shown || !online || handNamed || gone || changed.waiting) return;
     run(() => store.define({ type: 'template.delete', scope: shown.scope, ...(shown.project !== null ? { project: shown.project } : {}), id: shown.id, base: shown.hash }),
       { fallback: t.notDeleted, onNote: setDeleteNote, write: true, onApplied: () => { setDeleting(false); goBack({ name: 'teams' }); } });
   };
@@ -215,31 +220,23 @@ function Form({ store, mode, initial }: { store: MobileStore; mode: TeamEditorMo
   };
   const compose = () => {
     if (!canCompose || mode.kind !== 'live' || !teamNow || !catalog) return;
-    const before = seatsOfTeam(teamNow);
-    const effective = (s: Seat) => { const r = roleFor(catalog, teamNow.project, s.role); return { tool: s.tool ?? r?.tool, model: s.model ?? r?.model, effort: s.effort ?? r?.effort }; };
-    const sent = seats;
+    const sent = seats.map(x => ({ role: x.role, ...settingsOf(teamNow.project, x) }));
     run(() => store.teamOp({ type: 'team.compose', team: mode.teamId, seats: outSeats }),
-      { fallback: t.notSaved, reasons: { invalid: t.notSaved }, onNote: setNote, onApplied: () => {
-        setNote({ text: t.composed, quiet: true });
-        setPending(prev => Object.fromEntries(sent.flatMap((s): [string, Pending][] => {
-          const old = before.find(b => b.role === s.role);
-          const was = old ? effective(old) : null;
-          const now = effective(s);
-          const restart = (prev[s.role]?.restart ?? false) || (was !== null && was.tool !== now.tool);
-          const next = (prev[s.role]?.next ?? false) || (was !== null && (was.model !== now.model || was.effort !== now.effort));
-          return restart || next ? [[s.role, { restart, next }]] : [];
-        })));
-      } });
+      { fallback: t.notSaved, reasons: { invalid: t.notSaved, changed: t.notSaved }, onNote: setNote, onApplied: () => { setNote({ text: t.composed, quiet: true }); setApplied(sent); } });
   };
+  // A seat that holds no session is started; one that holds one is restarted (a start on a held seat is refused).
+  const sessionOf = (role: string) => liveNow?.seats.find(x => x.role === role)?.sessionId ?? null;
   const restart = (role: string) => {
     if (mode.kind !== 'live' || !online) return;
+    const action = sessionOf(role) === null ? 'start' : 'restart';
+    const asked = applied.find(x => x.role === role);
     setBusy(true); setNote(null); setRestarting({ role, note: null });
-    void store.teamOp({ type: 'team.seat', team: mode.teamId, role, action: 'restart' })
+    void store.teamOp({ type: 'team.seat', team: mode.teamId, role, action })
       .then(r => {
         if (!mounted.current) return;
-        if (r.status === 'applied') { setPending(prev => Object.fromEntries(Object.entries(prev).filter(([k]) => k !== role))); setRestarting(null); }
-        else setRestarting({ role, note: outcomeNote(r, t.notRestarted) });
-      }, () => { if (mounted.current) setRestarting({ role, note: { text: t.notRestarted, quiet: false } }); })
+        if (r.status === 'applied') { if (asked) setRan(prev => new Map(prev).set(role, asked)); setRestarting(null); }
+        else setRestarting({ role, note: outcomeNote(r, action === 'start' ? t.notStarted : t.notRestarted) });
+      }, () => { if (mounted.current) setRestarting({ role, note: { text: action === 'start' ? t.notStarted : t.notRestarted, quiet: false } }); })
       .finally(() => { if (mounted.current) setBusy(false); });
   };
 
@@ -279,8 +276,11 @@ function Form({ store, mode, initial }: { store: MobileStore; mode: TeamEditorMo
         <ul aria-label={t.seatsLabel} className="flex flex-col gap-2">
           {seats.map(s => {
             const r = roleOf(s.role);
-            const own = s.tool !== undefined || s.model !== undefined || s.effort !== undefined;
+            // A definition's own values are its overrides; a live team's composed values are what it runs with, so only a change made here is « modifié ».
+            const base = mode.kind === 'template' ? undefined : defaults.seats.find(x => x.role === s.role);
+            const own = mode.kind === 'template' || !base ? s.tool !== undefined || s.model !== undefined || s.effort !== undefined : base.tool !== s.tool || base.model !== s.model || base.effort !== s.effort;
             const p = pending[s.role];
+            const held = sessionOf(s.role) !== null;
             return (
               <li key={s.role} className="rounded-card bg-surface px-3 py-2.5">
                 <div className="flex items-center gap-2.5">
@@ -294,8 +294,8 @@ function Form({ store, mode, initial }: { store: MobileStore; mode: TeamEditorMo
                 {catalog && !r && <p className="mt-1 text-small text-attention">{t.unknownRole(s.role)}</p>}
                 {p?.restart && (
                   <div className="mt-2 text-small text-muted">
-                    <Button size="sm" disabled={!online || teamGone} onClick={() => restart(s.role)}>{t.restart}</Button>
-                    <p className="mt-1">{t.restartHint}</p>
+                    <Button size="sm" disabled={!online || teamGone} onClick={() => restart(s.role)}>{held ? t.restart : t.start}</Button>
+                    {held && <p className="mt-1">{t.restartHint}</p>}
                     {restarting?.role === s.role && restarting.note && <p role="status" className={`mt-1 ${restarting.note.quiet ? 'text-muted' : 'text-danger-fg'}`}>{restarting.note.text}</p>}
                   </div>
                 )}
@@ -381,7 +381,9 @@ export function TeamEditor({ store, mode }: { store: MobileStore; mode: TeamEdit
   const first = useRef<PhoneTemplate | PhoneTeam | null>(null);
   if (!first.current && found) first.current = found;
 
-  if (!catalog || (!isNew && !first.current)) return <EditorPending store={store} waited={gate.waited} retry={gate.retry} missing={catalog ? t.missing : null} />;
+  // The PC pushes the live teams on its own: until they have come, a team that is not there yet is not a team that does not exist.
+  if (!catalog || (mode.kind !== 'template' && teams === null)) return <EditorPending store={store} waited={gate.waited} retry={gate.retry} missing={null} />;
+  if (!isNew && !first.current) return <EditorPending store={store} waited={gate.waited} retry={gate.retry} missing={t.missing} />;
   const formKey = mode.kind === 'template' ? (isNew ? 'new' : catalogKey(first.current as PhoneTemplate)) : `${mode.kind}:${mode.teamId}`;
   return <Form key={formKey} store={store} mode={mode} initial={isNew ? null : first.current} />;
 }

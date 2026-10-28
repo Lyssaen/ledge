@@ -402,6 +402,43 @@ describe('the team editor, a copy of a live team', () => {
     open({ kind: 'copy', teamId: 'team-ffff' });
     expect(screen.getByText('Cette équipe n’existe pas sur ce PC.')).toBeInTheDocument();
   });
+
+  it('launches from a copy without naming a template, with the copy\'s seats', async () => {
+    const t = open(copyOf, { teams: [team({ seats: [{ role: 'leader', sessionId: 's1', tool: 'codex' }, { role: 'qa', sessionId: null, leaving: true }, { role: 'dev', sessionId: 's3' }] })] });
+    await click(/^Lancer/);
+    expect(t.teamOp).toHaveBeenCalledExactlyOnceWith({ type: 'team.launch', project: 'ledge', name: 'Revue en cours', seats: [{ role: 'leader', tool: 'codex' }, { role: 'dev' }] });
+  });
+
+  it('does not mark the composed values as « modifié », only what is changed here', () => {
+    open(copyOf, { teams: [team({ seats: [{ role: 'leader', sessionId: 's1', tool: 'codex' }, { role: 'dev', sessionId: 's3' }] })] });
+    expect(screen.queryByText(/modifié/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Changer @dev' }));
+    fireEvent.change(within(screen.getByRole('dialog')).getByRole('textbox', { name: 'IA' }), { target: { value: 'gpt-4' } });
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Appliquer' }));
+    expect(screen.getAllByText(/modifié/)).toHaveLength(1);
+  });
+});
+
+describe('the team editor, before the live teams have arrived', () => {
+  const early = (mode: TeamEditorMode) => {
+    const t = setup();
+    t.deliver(snapshot([], 'PC-Desan', undefined, { confirm: true, chat: true }));
+    act(() => t.deliver({ type: 'teams.catalog', catalog: catalog() }));
+    render(<TeamEditor store={t.store} mode={mode} />);
+    return t;
+  };
+  it.each([['compose', live], ['copy', copyOf]] as const)('a deep link to a %s shows the loading state, then the team', (_n, mode) => {
+    const t = early(mode);
+    expect(screen.getByText('Lecture du catalogue…')).toBeInTheDocument();
+    expect(screen.queryByText(/n’existe pas/)).toBeNull();
+    act(() => t.deliver({ type: 'teams', teams: [team()] }));
+    expect(screen.getByRole('textbox', { name: 'Nom' })).toHaveValue('Revue en cours');
+  });
+  it('says the team is not there once the teams have arrived without it', () => {
+    const t = early(live);
+    act(() => t.deliver({ type: 'teams', teams: [] }));
+    expect(screen.getByText('Cette équipe n’existe pas sur ce PC.')).toBeInTheDocument();
+  });
 });
 
 describe('the team editor, a live composition', () => {
@@ -459,6 +496,70 @@ describe('the team editor, a live composition', () => {
     await click('Redémarrer ce siège');
     expect(t.teamOp).toHaveBeenLastCalledWith({ type: 'team.seat', team: 'team-a1b2', role: 'leader', action: 'restart' });
     expect(screen.queryByRole('button', { name: 'Redémarrer ce siège' })).toBeNull();
+  });
+
+  const toCodex = async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Changer @leader' }));
+    fireEvent.change(within(screen.getByRole('dialog')).getByRole('combobox', { name: 'Outil' }), { target: { value: 'codex' } });
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Appliquer' }));
+    await click('Enregistrer');
+  };
+
+  it('a seat that holds no session is started, not restarted, and says nothing about the conversation', async () => {
+    const t = open(live, { teams: [team({ seats: [{ role: 'leader', sessionId: null }, { role: 'qa', sessionId: 's2' }, { role: 'dev', sessionId: 's3', model: 'gpt-4' }] })] });
+    await toCodex();
+    expect(screen.queryByRole('button', { name: 'Redémarrer ce siège' })).toBeNull();
+    expect(screen.queryByText(/conversation du siège/)).toBeNull();
+    await click('Démarrer ce siège');
+    expect(t.teamOp).toHaveBeenLastCalledWith({ type: 'team.seat', team: 'team-a1b2', role: 'leader', action: 'start' });
+    expect(screen.queryByRole('button', { name: 'Démarrer ce siège' })).toBeNull();
+  });
+
+  it('a refused start says so', async () => {
+    const t = open(live, { teams: [team({ seats: [{ role: 'leader', sessionId: null }, { role: 'qa', sessionId: 's2' }] })] });
+    await toCodex();
+    t.teamOp.mockResolvedValueOnce({ status: 'rejected', reason: 'conflict' });
+    await click('Démarrer ce siège');
+    expect(screen.getByRole('status')).toHaveTextContent('Une autre opération est en cours sur le PC.');
+  });
+
+  it('changing the tool and then back in a second composition leaves no restart', async () => {
+    open(live);
+    await toCodex();
+    expect(screen.getByRole('button', { name: 'Redémarrer ce siège' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Changer @leader' }));
+    fireEvent.change(within(screen.getByRole('dialog')).getByRole('combobox', { name: 'Outil' }), { target: { value: 'claude' } });
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Appliquer' }));
+    await click('Enregistrer');
+    expect(screen.queryByRole('button', { name: 'Redémarrer ce siège' })).toBeNull();
+  });
+
+  it('a seat that was leaving and is added again with another tool is offered a restart', async () => {
+    open(live, { teams: [team({ seats: [{ role: 'leader', sessionId: 's1' }, { role: 'qa', sessionId: 's2', tool: 'claude', leaving: true }] })] });
+    add('qa');
+    fireEvent.click(screen.getByRole('button', { name: 'Changer @qa' }));
+    fireEvent.change(within(screen.getByRole('dialog')).getByRole('combobox', { name: 'Outil' }), { target: { value: 'codex' } });
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Appliquer' }));
+    await click('Enregistrer');
+    expect(screen.getByRole('button', { name: 'Redémarrer ce siège' })).toBeInTheDocument();
+  });
+
+  it('does not mark a seat « modifié » for the tool the team was composed with', () => {
+    open(live, { teams: [team({ seats: [{ role: 'leader', sessionId: 's1', tool: 'codex' }, { role: 'dev', sessionId: 's3', model: 'gpt-4' }] })] });
+    expect(screen.queryByText(/modifié/)).toBeNull();
+  });
+
+  it('a composition refused as « changed » says it was not saved and does not lock the screen or ask for the catalog', async () => {
+    const t = open(live);
+    t.teamOp.mockResolvedValueOnce({ status: 'rejected', reason: 'changed' });
+    const asked = t.of('teams.catalog').length;
+    remove('qa');
+    await click('Enregistrer');
+    expect(screen.getByRole('status')).toHaveTextContent('Pas enregistré.');
+    expect(t.of('teams.catalog').length).toBe(asked);
+    expect(save()).toBeEnabled();
+    await click('Enregistrer');
+    expect(t.teamOp).toHaveBeenCalledTimes(2);
   });
 
   it('a refused restart says so and keeps the button', async () => {
