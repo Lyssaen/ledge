@@ -14,7 +14,8 @@ import { CloseRefused } from '../chat/close.js';
 import { ActRefused } from '../chat/act.js';
 import { AttachmentError, type AttachmentStore } from '../daemon/attachments.js';
 import { createOutbox } from './outbox.js';
-import { fingerprint, OperationRegistry, type PhoneOperation } from './operations.js';
+import { fingerprint, OperationRegistry, type Outcome, type PhoneOperation } from './operations.js';
+import { createTeamsOps } from './teamsOps.js';
 import { capabilities, clip, phoneTasks, toPhoneFullRequest, toPhoneItem, toPhoneSession, toPhoneTask, toPhoneTeam, toPhoneThread } from './project.js';
 import { riskOf } from './risk.js';
 import { CHALLENGE_TTL_MS, type ChallengeStore } from './challenges.js';
@@ -43,8 +44,6 @@ interface Follower {
 }
 
 type PushStatus = 'on' | 'off' | 'stale' | 'unavailable';
-
-type Outcome = { status: Extract<OperationStatus, 'applied' | 'rejected' | 'failed'>; reason?: OperationReason };
 
 /** The plain shape of a message type: only such a name is logged or echoed back. */
 /** How long a signing-out device's answer may wait in the queue before its revoke goes ahead anyway. */
@@ -90,6 +89,10 @@ export function createPhoneGateway(deps: {
   tasks?: () => Task[];
   /** A project's name, by id. */
   projectName?: (id: string | null) => string | null;
+  /** The id of the project of this name, or null: the phone names its projects, never a folder. */
+  projectByName?: (name: string) => string | null;
+  /** The daemon answers `definitions.list` and the role and team operations: without it the phone's catalog and writes are unavailable. */
+  teamCatalog?: true;
   /** The context threshold the user chose (context handover spec §3.2). */
   contextNear?: () => number;
 }): PhoneGateway {
@@ -204,7 +207,7 @@ export function createPhoneGateway(deps: {
     `${id}:${key}${s?.pending?.source === 'rpc' && s.pending.requestId ? `:${s.pending.requestId}` : ''}`;
 
   /** The device check: the challenge is spent first, whatever the verdict, then the signature is verified and the counter kept. */
-  const checkAssertion = (deviceId: string, assertion: NonNullable<Extract<PhoneOperation, { type: 'session.decide' }>['assertion']> | undefined, purpose: 'decide' | 'launch' | 'close' | 'act', subject: string | undefined): Outcome | undefined => {
+  const checkAssertion = (deviceId: string, assertion: NonNullable<Extract<PhoneOperation, { type: 'session.decide' }>['assertion']> | undefined, purpose: 'decide' | 'launch' | 'close' | 'act' | 'define' | 'team', subject: string | undefined): Outcome | undefined => {
     const cred = deps.credential(deviceId);
     const rp = deps.rp();
     if (!cred || !rp || !assertion || subject === undefined) return { status: 'rejected', reason: 'confirm_required' };
@@ -404,16 +407,20 @@ export function createPhoneGateway(deps: {
     }
   };
 
-  /** Dispatches a local message and reads its answer: `ok` says which answers mean applied, the rest (and an `error`) are refusals. */
-  const ask = async (out: ClientMessage, ok: (m: ServerMessage) => boolean | undefined): Promise<Outcome> => {
+  /**
+   * Dispatches a local message and reads its answer: `ok` says which answers mean applied (true), failed (false) or what else
+   * (an outcome). An `error` is a refusal by its code (`opts.error` when the caller says what it always means); no answer at all is
+   * applied, or `opts.silent`.
+   */
+  const ask = async (out: ClientMessage, ok: (m: ServerMessage) => boolean | Outcome | undefined, opts: { silent?: Outcome; error?: Outcome } = {}): Promise<Outcome> => {
     let outcome: Outcome | undefined;
     await deps.dispatch(out, m => {
       if (outcome) return;
-      if (m.type === 'error') { outcome = outcomeOf(m.code); return; }
+      if (m.type === 'error') { outcome = opts.error ?? outcomeOf(m.code); return; }
       const verdict = ok(m);
-      if (verdict !== undefined) outcome = verdict ? { status: 'applied' } : { status: 'failed' };
+      if (verdict !== undefined) outcome = typeof verdict === 'object' ? verdict : verdict ? { status: 'applied' } : { status: 'failed' };
     });
-    return outcome ?? { status: 'applied' };
+    return outcome ?? opts.silent ?? { status: 'applied' };
   };
 
   /** The turn's team card (roles spec §3.8): like a launch card, the device's check over the turn first. */
@@ -446,9 +453,13 @@ export function createPhoneGateway(deps: {
     return why === null ? { status: 'applied' } : { status: 'rejected', reason: 'invalid' };
   };
 
+  /** The phone's roles and teams: only for a daemon that serves them (`teamCatalog`) and names its projects. */
+  const teamsOps = deps.teamCatalog && deps.projectByName ? createTeamsOps({
+    dispatch: deps.dispatch, projectByName: deps.projectByName, projectName: deps.projectName ?? (() => null), checkAssertion, ask, push: (deviceId, m) => push(deviceId, m), log
+  }) : undefined;
+
   const run = async (deviceId: string, msg: PhoneOperation): Promise<Outcome> => {
-    // Task 6 gives the roles and teams operations their handlers.
-    if (isTeamsOperation(msg)) return { status: 'rejected', reason: 'unavailable' };
+    if (isTeamsOperation(msg)) return teamsOps ? teamsOps.run(deviceId, msg) : { status: 'rejected', reason: 'unavailable' };
     if (msg.type === 'chat.ignore') return chatIgnore(deviceId, msg);
     if (msg.type === 'chat.team') return chatTeam(deviceId, msg);
     if (msg.type === 'chat.task') return chatTask(deviceId, msg);
@@ -578,9 +589,12 @@ export function createPhoneGateway(deps: {
         if (!deps.chats) return push(deviceId, { type: 'error', code: 'invalid', request: msg.type });
         void chatRead(deviceId, msg);
         return;
-      // Task 6 answers the catalog and one role.
-      case 'teams.catalog': case 'teams.role':
-        return push(deviceId, { type: 'error', code: 'invalid', request: msg.type });
+      case 'teams.catalog':
+        if (!teamsOps) return push(deviceId, { type: 'error', code: 'invalid', request: msg.type });
+        return teamsOps.catalog(deviceId);
+      case 'teams.role':
+        if (!teamsOps) return push(deviceId, { type: 'error', code: 'invalid', request: msg.type });
+        return teamsOps.role(deviceId, msg);
       case 'presence':
         follower(deviceId).visible = msg.visible;
         return;
@@ -643,8 +657,14 @@ export function createPhoneGateway(deps: {
           const challenge = deps.challenges.issue({ deviceId, purpose: 'register', subject: '' });
           return push(deviceId, { type: 'confirm.challenge', purpose: 'register', challenge, rpId: rp.rpId, expiresInMs: CHALLENGE_TTL_MS });
         }
-        // Task 6 issues the challenges of the roles and teams operations, over their digest.
-        if (msg.purpose === 'define' || msg.purpose === 'team') return invalid();
+        if (msg.purpose === 'define' || msg.purpose === 'team') {
+          // Bound to the operation's digest: the phone computes it over what it will send, and a challenge covers nothing else.
+          if (!teamsOps || msg.digest === undefined) return invalid();
+          const cred = deps.credential(deviceId);
+          if (!cred || cred.rpId !== rp.rpId) return invalid();
+          const challenge = deps.challenges.issue({ deviceId, purpose: msg.purpose, subject: msg.digest });
+          return push(deviceId, { type: 'confirm.challenge', purpose: msg.purpose, challenge, rpId: rp.rpId, credentialId: cred.id, expiresInMs: CHALLENGE_TTL_MS });
+        }
         // A purpose added to the enum without a branch above fails to compile here.
         const unhandled: never = msg.purpose;
         void unhandled;
@@ -675,7 +695,7 @@ export function createPhoneGateway(deps: {
       log(`phone message refused: ${request ?? '?'}`);
       // A subscription to an endpoint off the list, or a launch the schema refuses (a row twice), is an operation the phone waits an answer for.
       const op = OperationIdSchema.safeParse((raw as { op?: unknown } | null | undefined)?.op);
-      if ((request === 'push.subscribe' || request === 'chat.launch' || request === 'chat.close' || request === 'chat.act' || request === 'chat.ignore' || request === 'chat.team' || request === 'chat.task' || request === 'team.resume' || request === 'task.seen') && op.success && approved(deviceId)) return push(deviceId, { type: 'operation.result', op: op.data, status: 'rejected', reason: 'invalid' });
+      if (((request !== undefined && (TEAMS_OPERATION_TYPES as readonly string[]).includes(request)) || request === 'push.subscribe' || request === 'chat.launch' || request === 'chat.close' || request === 'chat.act' || request === 'chat.ignore' || request === 'chat.team' || request === 'chat.task' || request === 'team.resume' || request === 'task.seen') && op.success && approved(deviceId)) return push(deviceId, { type: 'operation.result', op: op.data, status: 'rejected', reason: 'invalid' });
       return push(deviceId, { type: 'error', code: 'invalid', ...(request !== undefined ? { request } : {}) });
     }
     const msg = parsed.data;

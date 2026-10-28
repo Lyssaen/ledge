@@ -1,12 +1,21 @@
 // Makes a phone's writes idempotent: an operation id (a uuid the phone picks) runs once, and a retry gets the stored outcome.
 // In memory only, so a daemon restart forgets every operation.
-import type { OperationReason, OperationStatus, PhoneClientMessage } from '@ledge/protocol';
+import { canonicalJson, isTeamsOperation, type OperationReason, type OperationStatus, type PhoneClientMessage } from '@ledge/protocol';
 
 export type PhoneOperation = Extract<PhoneClientMessage, { op: string }>;
+
+/** What an operation came to: the answer the phone gets. */
+export type Outcome = { status: Extract<OperationStatus, 'applied' | 'rejected' | 'failed'>; reason?: OperationReason };
 
 export interface OperationRecord { op: string; owner: string; fingerprint: string; status: OperationStatus; reason?: OperationReason; at: number }
 
 export type BeginResult = { kind: 'fresh' | 'replay'; record: OperationRecord } | { kind: 'conflict' };
+
+/** Everything of a role or team operation but its id and its assertion. */
+function teamsContent(m: PhoneOperation): string {
+  const { op: _op, assertion: _assertion, ...rest } = m as PhoneOperation & { assertion?: unknown };
+  return canonicalJson(rest);
+}
 
 /** What the operation does, never its id. */
 export function fingerprint(m: PhoneOperation): string {
@@ -14,7 +23,9 @@ export function fingerprint(m: PhoneOperation): string {
   const f = m as { id?: string; decision?: string; note?: string; text?: string; expect?: { key: string } | null; credential?: { id: string }; requestId?: string; answers?: unknown; subscription?: { endpoint: string }; key?: string; qid?: string; rows?: number[]; row?: number; team?: string; task?: string; attachments?: string[] };
   return JSON.stringify([m.type, f.id ?? null, f.decision ?? null, f.note ?? null, f.text ?? null, f.expect?.key ?? null, f.credential?.id ?? null, f.requestId ?? null, f.answers ?? null, f.subscription?.endpoint ?? null, f.key ?? null, f.qid ?? null, f.rows ?? null,
     ...(f.row !== undefined || f.team !== undefined || f.task !== undefined ? [f.row ?? null, f.team ?? null, f.task ?? null] : []),
-    ...(f.attachments?.length ? [f.attachments] : [])]);
+    ...(f.attachments?.length ? [f.attachments] : []),
+    // A role or team operation is its whole content: the same id with another prompt, seats or base is another operation.
+    ...(isTeamsOperation(m) ? [teamsContent(m)] : [])]);
 }
 
 /** Bounded (24 h, 500 records): the oldest finished record goes first, and a record still `received` is never evicted. */

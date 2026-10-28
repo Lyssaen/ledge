@@ -1607,7 +1607,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     credential: id => mobile.credential(id),
     setCredential: (id, c) => mobile.setCredential(id, c),
     teams: () => teams.all(), tasks: () => tasks.all(), contextNear: () => contextPrefs.near,
-    projectName: id => (id ? projects.projects.find(p => p.id === id)?.name ?? null : null)
+    projectName: id => (id ? projects.projects.find(p => p.id === id)?.name ?? null : null),
+    // A project's folder is its first local repo: only a project with one can be named by the phone.
+    projectByName: name => projects.projects.find(p => p.name === name && p.repos.some(r => r.machine === 'local'))?.id ?? null,
+    teamCatalog: true
   });
   /** A hidden phone is told, through the relay, of what deserves it. */
   let unsubscribePush: (() => void) | undefined;
