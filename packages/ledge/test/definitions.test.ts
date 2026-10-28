@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Role, RoleDraft, Session } from '@ledge/protocol';
 import { listRoles, parseRole, quoteScalar } from '../src/daemon/roles.js';
-import { listTemplates, parseTemplate, saveTemplate } from '../src/daemon/teams.js';
+import { listTemplates, parseTemplate, parseTemplateText, saveTemplate } from '../src/daemon/teams.js';
 import { definitionHash, deleteDefinition, promptRecipients, roleText, scopeDefinitions, scopeDir, templateText, writeDefinition } from '../src/daemon/definitions.js';
 
 let home: string; let repo: string; let dir: string;
@@ -95,6 +95,7 @@ describe('writeDefinition', () => {
     expect(readFileSync(path, 'utf8')).toBe('one\n');
     expect(writeDefinition(path, 'two\n', null)).toEqual({ code: 'exists' });
     expect(readFileSync(path, 'utf8')).toBe('one\n');
+    expect(readdirSync(dir)).toEqual(['new.md']);
   });
 
   it('replaces with the hash it was given, and leaves a hand edit alone otherwise', () => {
@@ -151,6 +152,16 @@ describe('listing', () => {
     write(join(home, 'teams', 'q.yaml'), 'name: "Revue #2" # c\nseats:\n  - role: lead # c\n    name: "Zoe #1"\n');
     expect(listRoles().roles[0]).toMatchObject({ label: 'C# · a #b', tool: 'codex' });
     expect(listTemplates().templates[0]).toMatchObject({ name: 'Revue #2', seats: [{ role: 'lead', name: 'Zoe #1' }] });
+  });
+});
+
+describe('a value that is only a comment', () => {
+  it('is empty, in a role and in a template seat', () => {
+    write(join(home, 'roles', 'c.md'), '---\nlabel: C\ntool: # default\n---\np');
+    const role = listRoles().roles[0]!;
+    expect(role.label).toBe('C'); expect(role.tool).toBeUndefined();
+    // As before the change, the seat's value is the empty string (the seat schema then decides), not "# none".
+    expect(parseTemplateText('name: C\nseats:\n  - role: lead\n    model: # none\n    name: x # n\n')).toEqual({ name: 'C', seats: [{ role: 'lead', model: '', name: 'x' }] });
   });
 });
 

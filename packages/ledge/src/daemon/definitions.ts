@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, renameSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { linkSync, mkdirSync, readFileSync, renameSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import type { DefinitionCode, DefinitionProblem, DefinitionScope, Role, RoleDraft, Session, TeamTemplate } from '@ledge/protocol';
 import { definitionFiles, definitionHash, loadRole, quoteScalar, repoRoot } from './roles.js';
@@ -36,7 +36,16 @@ export function writeDefinition(path: string, text: string, base: string | null)
   else if (now === undefined || definitionHash(now) !== base) return { code: 'changed' };
   mkdirSync(dirname(path), { recursive: true });
   const tmp = `${path}.${process.pid}.tmp`;
-  try { writeFileSync(tmp, text); renameSync(tmp, path); } catch (e) { rmSync(tmp, { force: true }); throw e; }
+  try {
+    writeFileSync(tmp, text);
+    // A new file is published by a hard link, which fails if the name was taken since the check above; a known version is replaced.
+    if (base === null) linkSync(tmp, path); else renameSync(tmp, path);
+  } catch (e) {
+    rmSync(tmp, { force: true });
+    if (base === null && (e as NodeJS.ErrnoException).code === 'EEXIST') return { code: 'exists' };
+    throw e;
+  }
+  rmSync(tmp, { force: true });
   return { hash: definitionHash(readFileSync(path, 'utf8')) };
 }
 

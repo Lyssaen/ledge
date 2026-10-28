@@ -65,7 +65,7 @@ export function scalarValue(raw: string): string {
     const end = v.indexOf(q, 1);
     if (end > 0 && /^(\s+#.*)?$/.test(v.slice(end + 1))) return v.slice(1, end);
   }
-  return unquote(v.replace(/\s+#.*$/, '').trim());
+  return unquote(v.replace(/(^|\s)#.*$/, '').trim());
 }
 
 /** How a value is written so `scalarValue` reads it back: bare when plain, else in the quote it does not hold; null when no quote
