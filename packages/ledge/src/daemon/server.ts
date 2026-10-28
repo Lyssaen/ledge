@@ -1044,7 +1044,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     // The seats it adds are held as `team.seat start` holds them: a start landing meanwhile is refused, never a second session.
     const keys = added.map(s => `${t.id}:${s.role}`);
     const busy = added.find(s => seatsInFlight.has(`${t.id}:${s.role}`));
-    if (busy) return changed({ team: t, reason: `@${busy.role} : une opération est déjà en cours sur ce siège` });
+    // No team in this reply: a team with a reason reads as « saved, a seat did not start », and nothing was saved.
+    if (busy) return changed({ reason: `@${busy.role} : une opération est déjà en cours sur ce siège` });
     for (const k of keys) seatsInFlight.add(k);
     try {
       const r = teams.compose(msg.team, msg.seats);
