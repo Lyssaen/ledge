@@ -33,7 +33,7 @@ export const SeatSchema = z.object({
 export type Seat = z.infer<typeof SeatSchema>;
 
 /** A role is unique in a team: `@role` must name one seat. */
-const uniqueRoles = (seats: readonly { role: string }[]) => new Set(seats.map(s => s.role)).size === seats.length;
+export const uniqueRoles = (seats: readonly { role: string }[]) => new Set(seats.map(s => s.role)).size === seats.length;
 export const SeatsSchema = z.array(SeatSchema).min(1).max(TEAM_SEATS_MAX).refine(uniqueRoles, 'a role twice in one team');
 
 export const TeamNameSchema = z.string().trim().min(1).max(60);

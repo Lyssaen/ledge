@@ -1,23 +1,27 @@
 import { z } from 'zod';
 import { AutonomySchema, ToolSchema } from './session.js';
 import { EffortSchema, ModelIdSchema } from './models.js';
-import { DefinitionHashSchema, DefinitionScopeSchema, ROLE_PROMPT_MAX, RoleIdSchema, SeatsSchema, TeamNameSchema, TemplateIdSchema } from './teams.js';
+import { DefinitionHashSchema, DefinitionScopeSchema, ROLE_LABEL_MAX, ROLE_PROMPT_MAX, RoleDraftSchema, RoleIdSchema, SeatSchema, TEAM_SEATS_MAX, TeamNameSchema, TemplateIdSchema, uniqueRoles } from './teams.js';
 import type { PhoneClientMessage } from './phone.js';
 
 /** What the phone sees of the role and team definitions: names and ids only, never a path (every object is strict). */
 const scope = DefinitionScopeSchema;
+
+/** The phone's seats and role draft are strict: an unknown key is refused, not stripped, so what the phone hashes is what the daemon reads. The daemon's own schemas stay as they are. */
+export const PhoneSeatsSchema = z.array(SeatSchema.strict()).min(1).max(TEAM_SEATS_MAX).refine(uniqueRoles, 'a role twice in one team');
+export const PhoneRoleDraftSchema = RoleDraftSchema.strict();
 /** A project's name, as the phone knows it; `null` for a home definition. */
 const projectName = z.string().max(80).nullable();
 
 /** `cut`: the prompt was shortened to fit the frame, the editor asks `teams.role` for the whole. `shadows`: it hides a home role of the same id; `shadowed`: a repository role hides it. */
 export const PhoneRoleSchema = z.object({
-  id: RoleIdSchema, label: z.string().min(1).max(40), prompt: z.string().max(ROLE_PROMPT_MAX), cut: z.literal(true).optional(),
+  id: RoleIdSchema, label: z.string().min(1).max(ROLE_LABEL_MAX), prompt: z.string().max(ROLE_PROMPT_MAX), cut: z.literal(true).optional(),
   tool: ToolSchema.optional(), model: ModelIdSchema.optional(), effort: EffortSchema.optional(), autonomy: AutonomySchema.optional(),
   scope, project: projectName, hash: DefinitionHashSchema, shadows: z.literal(true).optional(), shadowed: z.literal(true).optional()
 }).strict();
 export type PhoneRole = z.infer<typeof PhoneRoleSchema>;
 
-export const PhoneTemplateSchema = z.object({ id: TemplateIdSchema, name: TeamNameSchema, seats: SeatsSchema, scope, project: projectName, hash: DefinitionHashSchema }).strict();
+export const PhoneTemplateSchema = z.object({ id: TemplateIdSchema, name: TeamNameSchema, seats: PhoneSeatsSchema, scope, project: projectName, hash: DefinitionHashSchema }).strict();
 export type PhoneTemplate = z.infer<typeof PhoneTemplateSchema>;
 
 /** A file that could not be read: its name (never a path), where it lives, and why. */
@@ -36,9 +40,6 @@ export const TEAMS_OPERATION_TYPES = ['role.write', 'role.delete', 'template.wri
 export type TeamsOperation = Extract<PhoneClientMessage, { type: (typeof TEAMS_OPERATION_TYPES)[number] }>;
 export const isTeamsOperation = (m: { type: string }): m is TeamsOperation => (TEAMS_OPERATION_TYPES as readonly string[]).includes(m.type);
 
-/** `define`: role and template files; `team`: live teams. */
-export const teamsPurpose = (type: TeamsOperation['type']): 'define' | 'team' => type.startsWith('team.') ? 'team' : 'define';
-
 /** JSON with the keys of every object sorted, and `undefined` fields dropped: the same content always gives the same text. */
 export function canonicalJson(v: unknown): string {
   const sort = (x: unknown): unknown => {
@@ -50,11 +51,4 @@ export function canonicalJson(v: unknown): string {
     return x;
   };
   return JSON.stringify(sort(v));
-}
-
-/** The lowercase sha256 of an operation without its `op` and `assertion`, which the challenge's subject carries. It runs in a browser and in Node. */
-export async function teamsDigest(m: TeamsOperation): Promise<string> {
-  const { op: _op, assertion: _assertion, ...rest } = m;
-  const bytes = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonicalJson(rest))));
-  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
 }

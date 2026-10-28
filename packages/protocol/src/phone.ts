@@ -9,8 +9,8 @@ import { ThreadItemSchema } from './thread.js';
 import { MESSAGE_MAX, RefusalCodeSchema } from './messages.js';
 import { PushSubscriptionSchema } from './push.js';
 import { EffortSchema, ModelIdSchema } from './models.js';
-import { DefinitionHashSchema, DefinitionScopeSchema, RoleDraftSchema, RoleIdSchema, SeatsSchema, TeamIdSchema, TeamNameSchema, TemplateIdSchema, scopeIssue } from './teams.js';
-import { PhoneCatalogSchema, PhoneRoleSchema } from './phoneTeams.js';
+import { DefinitionHashSchema, DefinitionScopeSchema, RoleIdSchema, TeamIdSchema, TeamNameSchema, TemplateIdSchema, scopeIssue } from './teams.js';
+import { PhoneCatalogSchema, PhoneRoleDraftSchema, PhoneRoleSchema, PhoneSeatsSchema, canonicalJson, type TeamsOperation } from './phoneTeams.js';
 
 /** The phone/PC messages have their own schemas: a type or a field that is not here never crosses the relay. */
 export const PHONE_PROTOCOL = 1;
@@ -296,13 +296,13 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('teams.catalog') }),
   z.object({ type: z.literal('teams.role'), ...teamsScope, id: RoleIdSchema }).strict(),
   /** `base` is the hash the phone was shown, null to create. */
-  z.object({ type: z.literal('role.write'), ...teamsOp, ...teamsScope, role: RoleDraftSchema, base: DefinitionHashSchema.nullable() }).strict(),
+  z.object({ type: z.literal('role.write'), ...teamsOp, ...teamsScope, role: PhoneRoleDraftSchema, base: DefinitionHashSchema.nullable() }).strict(),
   z.object({ type: z.literal('role.delete'), ...teamsOp, ...teamsScope, id: RoleIdSchema, base: DefinitionHashSchema }).strict(),
   /** No `id`: create, the id comes from the name. */
-  z.object({ type: z.literal('template.write'), ...teamsOp, ...teamsScope, id: TemplateIdSchema.optional(), name: TeamNameSchema, seats: SeatsSchema, base: DefinitionHashSchema.nullable() }).strict(),
+  z.object({ type: z.literal('template.write'), ...teamsOp, ...teamsScope, id: TemplateIdSchema.optional(), name: TeamNameSchema, seats: PhoneSeatsSchema, base: DefinitionHashSchema.nullable() }).strict(),
   z.object({ type: z.literal('template.delete'), ...teamsOp, ...teamsScope, id: TemplateIdSchema, base: DefinitionHashSchema }).strict(),
-  z.object({ type: z.literal('team.launch'), ...teamsOp, project: z.string().min(1).max(80), name: TeamNameSchema, seats: SeatsSchema, template: z.string().min(1).max(64).optional() }).strict(),
-  z.object({ type: z.literal('team.compose'), ...teamsOp, team: TeamIdSchema, seats: SeatsSchema }).strict(),
+  z.object({ type: z.literal('team.launch'), ...teamsOp, project: z.string().min(1).max(80), name: TeamNameSchema, seats: PhoneSeatsSchema, template: z.string().min(1).max(64).optional() }).strict(),
+  z.object({ type: z.literal('team.compose'), ...teamsOp, team: TeamIdSchema, seats: PhoneSeatsSchema }).strict(),
   z.object({ type: z.literal('team.seat'), ...teamsOp, team: TeamIdSchema, role: RoleIdSchema, action: z.enum(['start', 'restart']) }).strict(),
   z.object({ type: z.literal('team.dissolve'), ...teamsOp, team: TeamIdSchema }).strict()
 ]).superRefine((m, ctx) => {
@@ -344,3 +344,22 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('error'), code: z.enum(['invalid', 'unknown_session', 'too_large']), request: z.string().max(40).optional() })
 ]);
 export type PhoneServerMessage = z.infer<typeof PhoneServerMessageSchema>;
+
+/** `define`: role and template files; `team`: live teams. */
+export const teamsPurpose = (type: TeamsOperation['type']): 'define' | 'team' => type.startsWith('team.') ? 'team' : 'define';
+
+/** Only the shape of `op` matters to the parse below; it is dropped before hashing. */
+const DIGEST_OP = '00000000-0000-4000-8000-000000000000';
+
+/**
+ * The lowercase sha256 of an operation as the daemon reads it: `m` goes through `PhoneClientMessageSchema` first (so ` Duo ` and `Duo`
+ * hash alike, and an unknown key throws instead of being dropped on one side only), then `op` and `assertion` are left out, then
+ * `canonicalJson`. The phone and the daemon call it with the raw and the parsed message and get the same digest. It runs in a browser
+ * and in Node. Throws when `m` is not a valid operation.
+ */
+export async function teamsDigest(m: Omit<TeamsOperation, 'op' | 'assertion'> & { op?: string; assertion?: unknown }): Promise<string> {
+  const { op: _op, assertion: _assertion, ...raw } = m;
+  const { op: _parsedOp, assertion: _parsedAssertion, ...rest } = PhoneClientMessageSchema.parse({ ...raw, op: DIGEST_OP }) as TeamsOperation;
+  const bytes = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonicalJson(rest))));
+  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+}

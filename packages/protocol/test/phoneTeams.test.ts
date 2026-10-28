@@ -12,18 +12,51 @@ const ok = (m: unknown) => PhoneClientMessageSchema.safeParse(m).success;
 
 describe('teamsDigest', () => {
   const digest = (m: unknown) => teamsDigest(m as TeamsOperation);
+  const base = { type: 'template.write', op: OP, scope: 'repo', project: 'ledge', id: 'duo', name: 'Duo', seats: [{ role: 'dev', tool: 'claude', model: 'm1', effort: 'low' }, { role: 'review' }], base: hash } as const;
   it('ignores key order, op and assertion', async () => {
     const reordered = { base: null, role: { prompt: 'Tu codes.', label: 'Dev', id: 'dev' }, scope: 'home', op: OP2, type: 'role.write', assertion };
     expect(await digest(reordered)).toBe(await digest(roleWrite));
     expect(await digest(roleWrite)).toMatch(/^[0-9a-f]{64}$/);
   });
-  it('ignores undefined fields', async () => {
+  it('ignores undefined fields, and an op left out', async () => {
     expect(await digest({ ...roleWrite, project: undefined })).toBe(await digest(roleWrite));
+    const { op: _op, ...noOp } = roleWrite;
+    expect(await digest(noOp)).toBe(await digest(roleWrite));
   });
-  it('differs when the prompt, the base or the operation changes', async () => {
-    const d = await digest(roleWrite);
-    expect(await digest({ ...roleWrite, role: { ...draft, prompt: 'Tu codes?' } })).not.toBe(d);
-    expect(await digest({ ...roleWrite, base: hash })).not.toBe(d);
+  it('hashes the parsed form: a padded name equals the trimmed one', async () => {
+    expect(await digest({ ...base, name: ' Duo ' })).toBe(await digest(base));
+    const parsed = PhoneClientMessageSchema.parse({ ...base, name: ' Duo ' });
+    expect(await digest(parsed)).toBe(await digest(base));
+  });
+  it('refuses to hash what the phone boundary refuses, instead of dropping the extra key', async () => {
+    await expect(digest({ ...roleWrite, role: { ...draft, path: '/x' } })).rejects.toThrow();
+  });
+  const changes: [string, (m: any) => unknown][] = [
+    ['seat tool', m => ({ ...m, seats: [{ ...m.seats[0], tool: 'codex' }, m.seats[1]] })],
+    ['seat model', m => ({ ...m, seats: [{ ...m.seats[0], model: 'm2' }, m.seats[1]] })],
+    ['seat effort', m => ({ ...m, seats: [{ ...m.seats[0], effort: 'high' }, m.seats[1]] })],
+    ['seat order', m => ({ ...m, seats: [m.seats[1], m.seats[0]] })],
+    ['scope', m => ({ ...m, scope: 'home', project: undefined })],
+    ['project', m => ({ ...m, project: 'other' })],
+    ['name', m => ({ ...m, name: 'Duo2' })],
+    ['id', m => ({ ...m, id: 'duo2' })],
+    ['base', m => ({ ...m, base: 'b'.repeat(16) })],
+    ['type', m => ({ type: 'template.delete', op: m.op, scope: m.scope, project: m.project, id: m.id, base: m.base })]
+  ];
+  it.each(changes)('changing the %s changes the digest', async (_n, change) => {
+    expect(await digest(change(base))).not.toBe(await digest(base));
+  });
+  const roleChanges: [string, (m: any) => unknown][] = [
+    ['role.prompt', m => ({ ...m, role: { ...m.role, prompt: 'Tu codes?' } })],
+    ['role.label', m => ({ ...m, role: { ...m.role, label: 'Dev2' } })],
+    ['role.id', m => ({ ...m, role: { ...m.role, id: 'dev2' } })],
+    ['base', m => ({ ...m, base: hash })],
+    ['type', m => ({ type: 'role.delete', op: m.op, scope: m.scope, id: m.role.id, base: hash })]
+  ];
+  it.each(roleChanges)('changing the %s of a role.write changes the digest', async (_n, change) => {
+    expect(await digest(change(roleWrite))).not.toBe(await digest(roleWrite));
+  });
+  it('tells a role.delete from a template.delete of the same id and base', async () => {
     const del = { op: OP, scope: 'home', id: 'dev', base: hash };
     expect(await digest({ type: 'role.delete', ...del })).not.toBe(await digest({ type: 'template.delete', ...del }));
   });
@@ -64,6 +97,12 @@ describe('phone team operations', () => {
   });
   it('refuses a cwd or a path on any of them', () => {
     for (const o of ops) { expect(ok({ ...o, cwd: '/r' }), o.type).toBe(false); expect(ok({ ...o, path: '/r' }), o.type).toBe(false); }
+  });
+  it('refuses an unknown key inside a role or a seat', () => {
+    expect(ok({ ...roleWrite, role: { ...draft, path: '/x' } })).toBe(false);
+    expect(ok({ ...ops[2], seats: [{ role: 'dev', cwd: '/r' }] })).toBe(false);
+    expect(ok({ ...ops[4], seats: [{ role: 'dev', cwd: '/r' }] })).toBe(false);
+    expect(ok({ ...ops[5], seats: [{ role: 'dev', path: '/r' }] })).toBe(false);
   });
   it('refuses a team.launch with no seat, and a repo scope without a project', () => {
     expect(ok({ ...ops[4], seats: [] })).toBe(false);

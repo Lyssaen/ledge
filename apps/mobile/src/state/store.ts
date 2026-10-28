@@ -374,7 +374,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         const { reason: _old, ...rest } = o;
         patchOp(m.op, () => ({ ...rest, received: true, ...(boot ? { boot } : {}), phase: m.status as Op['phase'], ...(m.status !== 'applied' && m.reason ? { reason: m.reason } : {}) }));
         // The request changed under this answer: ask for the one there now, with its body.
-        if (m.status === 'rejected' && m.reason === 'stale' && ready() && 'id' in o.message && typeof o.message.id === 'string') send({ type: 'session.pending', id: o.message.id });
+        if (m.status === 'rejected' && m.reason === 'stale' && ready() && o.message.type.startsWith('session.') && 'id' in o.message && typeof o.message.id === 'string') send({ type: 'session.pending', id: o.message.id });
         return;
       }
       case 'chat.history': case 'chat.step': case 'chat.delta': case 'chat.done': case 'chat.error':
