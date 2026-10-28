@@ -3,8 +3,9 @@ import type { Socket } from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
+import { existsSync } from 'node:fs';
 import { WebSocketServer, WebSocket } from 'ws';
-import { actionById, contextNear, givenByLedge, LEDGE_GIVER, transmissions, projectOf, type ChatAction, type Autonomy, type Role, type Seat, type Team } from '@ledge/protocol';
+import { actionById, contextNear, RoleIdSchema, TemplateIdSchema, type DefinitionCode, givenByLedge, LEDGE_GIVER, transmissions, projectOf, type ChatAction, type Autonomy, type Role, type Seat, type Team } from '@ledge/protocol';
 import { ATTACHMENT_LOCAL_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, backendOf } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
@@ -48,10 +49,11 @@ import { createTasks, type TasksJournal } from './tasks.js';
 import { createTeamsLive, type TeamsJournal } from './teamsLive.js';
 import { createHandovers, heldNames } from './handover.js';
 import { readContext } from './context.js';
-import { autonomyArgs, findRole, ompApprovalFor } from './roles.js';
-import { listDefinitions, resolveSeats, saveTemplate, templateExists } from './teams.js';
+import { autonomyArgs, findRole, loadRole, ompApprovalFor } from './roles.js';
+import { listDefinitions, resolveSeats, saveTemplate, templateExists, templateId } from './teams.js';
+import { deleteDefinition, promptRecipients, roleText, scopeDefinitions, scopeDir, templateText, writeDefinition } from './definitions.js';
 import { resolveRoleAddress, seatContext, teammates } from './seat.js';
-import { formatTeamNotice } from './crossSession.js';
+import { formatRoleNotice, formatTeamNotice } from './crossSession.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
 import { createRouter } from '../chat/routing.js';
 import { serveSsh } from '../transport/ssh.js';
@@ -893,6 +895,63 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     return session;
   }
 
+  /** The first repo of a project on this machine, as a folder that exists; undefined when it has none or it does not resolve. */
+  async function projectFolder(projectId: string): Promise<string | undefined> {
+    const repo = projects.projects.find(p => p.id === projectId)?.repos.find(r => r.machine === 'local');
+    return repo ? resolveFolder(repo.path, opts.home).catch(() => undefined) : undefined;
+  }
+  /** A role or template write or delete (spec 2026-10-28 mobile teams): the file layer's answer, and the prompt change told to the seats it reaches. */
+  async function changeDefinition(msg: Extract<ClientMessage, { type: 'role.write' | 'role.delete' | 'template.write' | 'template.delete' }>): Promise<{ id?: string; hash?: string; code?: DefinitionCode; reason?: string }> {
+    const folder = msg.scope === 'repo' ? await projectFolder(msg.project!) : undefined;
+    if (msg.scope === 'repo' && !folder) return { code: 'unknown_project', reason: `aucun dossier local pour le projet ${msg.project}` };
+    const invalid = (reason: string) => ({ code: 'invalid' as const, reason });
+    const fileOf = (kind: 'roles' | 'teams', id: string, ext: string) => join(scopeDir(kind, msg.scope, folder), `${id}${ext}`);
+    // An id becomes a file name: checked again here, whatever the message schema let through.
+    const asRole = (id: string) => (RoleIdSchema.safeParse(id).success ? fileOf('roles', id, '.md') : undefined);
+    const asTemplate = (id: string) => {
+      if (!TemplateIdSchema.safeParse(id).success) return undefined;
+      // A template kept in a `.yml` file is edited there; a new one is `.yaml`.
+      const yaml = fileOf('teams', id, '.yaml'); const yml = fileOf('teams', id, '.yml');
+      return !existsSync(yaml) && existsSync(yml) ? yml : yaml;
+    };
+    switch (msg.type) {
+      case 'role.write': {
+        const id = msg.role.id; const path = asRole(id); const text = roleText(msg.role);
+        if (!path) return invalid(`identifiant de rôle invalide : ${id}`);
+        if (text === null) return invalid('une valeur du rôle ne peut pas s\'écrire dans le fichier');
+        const before = existsSync(path) ? loadRole(id, path, msg.scope, []) : undefined;
+        const r = writeDefinition(path, text, msg.base);
+        if ('code' in r) return { id, code: r.code };
+        const now = loadRole(id, path, msg.scope, []);
+        // The prompt or the label changed (or the file is new, which switches the sessions whose home role it now shadows): the seats holding it are told.
+        if (now && (!before || before.prompt !== now.prompt || before.label !== now.label)) {
+          const notice = formatRoleNotice({ role: id, text: `Ta consigne de rôle a changé (@${id}${now.label ? `, ${now.label}` : ''}). La voici en entier ; elle remplace la précédente :\n\n${now.prompt}` });
+          for (const s of promptRecipients(id, path, store.all(), findRole)) mailbox.notify(s.id, notice, `role:${id}:${r.hash}:${s.id}`);
+        }
+        return { id, hash: r.hash };
+      }
+      case 'role.delete': {
+        const path = asRole(msg.id);
+        if (!path) return invalid(`identifiant de rôle invalide : ${msg.id}`);
+        const r = deleteDefinition(path, msg.base);
+        return 'code' in r ? { id: msg.id, code: r.code } : { id: msg.id };
+      }
+      case 'template.write': {
+        const id = msg.id ?? templateId(msg.name); const path = asTemplate(id); const text = templateText(msg.name, msg.seats);
+        if (!path) return invalid(`identifiant d'équipe invalide : ${id}`);
+        if (text === null) return invalid('une valeur de l\'équipe ne peut pas s\'écrire dans le fichier');
+        const r = writeDefinition(path, text, msg.base);
+        return 'code' in r ? { id, code: r.code } : { id, hash: r.hash };
+      }
+      case 'template.delete': {
+        const path = asTemplate(msg.id);
+        if (!path) return invalid(`identifiant d'équipe invalide : ${msg.id}`);
+        const r = deleteDefinition(path, msg.base);
+        return 'code' in r ? { id: msg.id, code: r.code } : { id: msg.id };
+      }
+    }
+  }
+
   /** `team.launch` (roles spec §3.4): resolves the folder, its project and every role (one unknown refuses the whole
    *  launch), creates the live team and spawns its seats in order. A seat that fails stops there: the others stay. */
   async function launchTeam(req: { cwd: string; template?: string; seats?: Seat[]; name?: string; defaults?: { tool: Tool; model?: string; effort?: string } }): Promise<{ team: Team } | { reason: string; team?: Team }> {
@@ -1302,8 +1361,21 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         }
         catch (e) { return reply({ type: 'team.saved', rid: msg.rid, reason: (e as Error).message }); }
       }
-      // Team definitions and live seats from any client: answered in later tasks, refused until then.
-      case 'definitions.list': case 'role.write': case 'role.delete': case 'template.write': case 'template.delete': case 'team.compose': case 'team.seat':
+      case 'definitions.list': {
+        const scopes: Extract<ServerMessage, { type: 'definitions.listing' }>['scopes'] = [
+          { scope: 'home', project: null, ...scopeDefinitions({ roles: scopeDir('roles', 'home'), teams: scopeDir('teams', 'home') }, 'home') }
+        ];
+        for (const p of projects.projects) {
+          const folder = await projectFolder(p.id);
+          if (folder) scopes.push({ scope: 'repo', project: p.id, ...scopeDefinitions({ roles: scopeDir('roles', 'repo', folder), teams: scopeDir('teams', 'repo', folder) }, 'repo') });
+        }
+        return reply({ type: 'definitions.listing', ...(msg.requestId ? { requestId: msg.requestId } : {}), scopes });
+      }
+      case 'role.write': case 'role.delete': case 'template.write': case 'template.delete':
+        // A disk failure still answers the request that is waiting for its `rid`.
+        return reply({ type: 'definition.result', rid: msg.rid, ...(await changeDefinition(msg).catch((e: Error) => ({ code: 'invalid' as const, reason: e.message }))) });
+      // Live seats from any client: answered in a later task, refused until then.
+      case 'team.compose': case 'team.seat':
         return refuse('not yet');
       // A chat card's instruction: a refusal reaches the requester as an `error`, the card's state everyone through chat.history.
       case 'session.relay': return setAside(msg.qid) ? refuse(SET_ASIDE) : relay.request(msg.qid);
