@@ -11,12 +11,12 @@ import type { Tmux } from '../src/tmux.js';
 import { until } from './helpers.js';
 
 type NewSession = { name: string; cwd: string; env: Record<string, string>; command: string[] };
-function fakeTmux(failOn?: (o: NewSession) => boolean): Tmux & { created: NewSession[]; killed: string[] } {
-  const created: NewSession[] = []; const killed: string[] = []; const panes = new Set<string>();
+function fakeTmux(failOn?: (o: NewSession) => boolean): Tmux & { created: NewSession[]; killed: string[]; gate: { hold?: Promise<void>; held: number } } {
+  const created: NewSession[] = []; const killed: string[] = []; const gate: { hold?: Promise<void>; held: number } = { held: 0 }; const panes = new Set<string>();
   return {
-    created, killed,
+    created, killed, gate,
     async newSession(o) { if (failOn?.(o)) throw new Error('tmux: no server'); created.push(o); panes.add(o.name); },
-    async sendText() {}, async sendKeys() {}, async capture() { return ''; },
+    async sendText() { if (gate.hold) { gate.held++; await gate.hold; } }, async sendKeys() { if (gate.hold) { gate.held++; await gate.hold; } }, async capture() { return ''; },
     async hasSession(n) { return panes.has(n); }, async listSessions() { return [...panes]; },
     async setOption() {}, async killSession(n) { killed.push(n); panes.delete(n); }, attachArgs: n => ['attach', n]
   };
@@ -214,6 +214,10 @@ describe('live composition', () => {
     await new Promise(r => setTimeout(r, 400));
     expect(tmux.killed).toEqual([]);
     expect(store.get(build)!.state).not.toBe('exited');
+    // Idle yet with a prompt still pending is not free either.
+    edit(build, { state: 'idle' });
+    await new Promise(r => setTimeout(r, 400));
+    expect(tmux.killed).toEqual([]);
     // The prompt is answered, the turn ends: it is free, a burst of changes closes it once.
     edit(build, { state: 'idle', pending: undefined });
     for (let i = 0; i < 5; i++) edit(build, { title: `u${i}` });
@@ -221,6 +225,44 @@ describe('live composition', () => {
     await until(async () => !(await teamNow(team.id)).seats.some(s => s.role === 'build'));
     expect(tmux.killed).toEqual([store.get(build)!.tmuxSession]);
     expect(store.get(build)!.team).toBeUndefined();
+    await c.close();
+  });
+
+  it('a removed seat whose session is mid-reply is not closed until the lock clears', async () => {
+    await start();
+    const c = await client();
+    const team = await launched(c, [{ role: 'lead' }, { role: 'build' }]);
+    const build = sid(team, 'build');
+    edit(build, { state: 'idle' });
+    // The typing is held by the fake tmux; releasing it makes the injection fail, which ends the lock.
+    let release = () => {}; tmux.gate.hold = new Promise<void>((_, reject) => { release = () => reject(new Error('released')); });
+    c.send({ type: 'session.reply', id: build, text: 'continue' });
+    await until(() => tmux.gate.held > 0);
+    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'lead' }] });
+    await c.next('team.changed');
+    for (let i = 0; i < 3; i++) edit(build, { title: `w${i}` });
+    await new Promise(r => setTimeout(r, 400));
+    expect(tmux.killed).toEqual([]);
+    tmux.gate.hold = undefined; release();
+    await new Promise(r => setTimeout(r, 100));
+    edit(build, { title: 'after' });
+    await until(() => store.get(build)?.state === 'exited');
+    expect(tmux.killed).toEqual([store.get(build)!.tmuxSession]);
+    await c.close();
+  });
+
+  it('a removed seat whose session Ledge cannot close (read only) is let go: the seat goes, the session stays', async () => {
+    await start();
+    const c = await client();
+    const team = await launched(c, [{ role: 'lead' }, { role: 'build' }]);
+    const build = sid(team, 'build');
+    edit(build, { state: 'working' });
+    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'lead' }] });
+    await c.next('team.changed');
+    edit(build, { source: 'hook_only', state: 'idle' });
+    await until(async () => !(await teamNow(team.id)).seats.some(s => s.role === 'build'));
+    expect(store.get(build)).toMatchObject({ state: 'idle', team: undefined });
+    expect(tmux.killed).toEqual([]);
     await c.close();
   });
 

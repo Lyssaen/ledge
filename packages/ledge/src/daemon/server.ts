@@ -282,6 +282,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const typing = new Set<string>();
   /** Sessions being closed: neither the relay nor the mailbox delivers to them, even free; their queues fail once they exit. */
   const closing = new Set<string>();
+  /** Sessions of removed team seats whose close was refused (logged once each, retried on later changes). */
+  const leaverRefused = new Set<string>();
   /** Sessions of removed team seats being closed: a burst of store changes closes each once. */
   const leaverCloses = new Set<string>();
   // An injected chat (tests) is the only thread there is; otherwise the relay and the close cards work across the PC's and every device's.
@@ -1006,16 +1008,24 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
    * goes when the session exits (`teamsLive`), however it ended.
    */
   function closeLeavers(): void {
+    const leaving = new Set<string>();
     for (const t of teams.all()) {
       if (t.state === 'dissolved') continue;
       for (const seat of t.seats) {
         if (!seat.leaving || !seat.sessionId) continue;
+        leaving.add(seat.sessionId);
         const s = store.get(seat.sessionId);
-        if (!free(s) || leaverCloses.has(s.id) || closing.has(s.id)) continue;
+        // A session mid-reply or mid-relay finishes it first: the next change tries again.
+        if (!free(s) || leaverCloses.has(s.id) || closing.has(s.id) || typing.has(s.id) || inFlight.has(s.id)) continue;
         leaverCloses.add(s.id);
-        closeSession(s).catch(e => log(`team ${t.id}: close of @${seat.role} (${s.id}) refused: ${(e as Error).message}`)).finally(() => leaverCloses.delete(s.id));
+        closeSession(s).catch(e => {
+          // A session Ledge cannot close (started without it) is let go of: the seat goes, the session stays as it is. Another refusal is logged once, and retried.
+          if (e instanceof Refusal && e.code === 'read_only') { log(`team ${t.id}: @${seat.role} (${s.id}) cannot be closed, left to itself: ${e.message}`); teams.leave(t.id, s.id); return; }
+          if (!leaverRefused.has(s.id)) { leaverRefused.add(s.id); log(`team ${t.id}: close of @${seat.role} (${s.id}) refused: ${(e as Error).message}`); }
+        }).finally(() => leaverCloses.delete(s.id));
       }
     }
+    for (const id of leaverRefused) if (!leaving.has(id)) leaverRefused.delete(id);
   }
 
   /** `team.compose`: the new composition applied at once, a session started in each added seat, the removed ones closed at their free moment. */

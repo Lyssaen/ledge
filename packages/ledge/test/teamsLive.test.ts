@@ -154,6 +154,28 @@ describe('compose', () => {
     expect(again.team.seats.map(s => [s.role, s.leaving ?? false])).toEqual([['lead', false], ['qa', false], ['dev', true]]);
   });
 
+  it('a leaving seat that loses its session another way — leave, join elsewhere — is dropped, never left without one', () => {
+    const t = seated();
+    teams.compose(t.id, [{ role: 'lead' }, { role: 'qa' }]);
+    expect(teams.get(t.id)!.seats.find(s => s.role === 'dev')).toMatchObject({ sessionId: 'otto', leaving: true });
+    teams.leave(t.id, 'otto');
+    expect(teams.get(t.id)!.seats.map(s => s.role)).toEqual(['lead', 'qa']);
+    expect(store.get('otto')!.team).toBeUndefined();
+    const u = seated();
+    teams.compose(u.id, [{ role: 'lead' }, { role: 'qa' }]);
+    const joined = teams.join(u.id, 'otto', 'qa', 'QA') as Team;
+    expect(joined.seats).toEqual([{ role: 'lead', sessionId: 'pim' }, { role: 'qa', sessionId: 'otto' }]);
+  });
+
+  it('a persisted leaving seat is dropped at load when its session ended or is missing', () => {
+    const persisted: Team = { id: 'team-abcd', name: 'p', project: 'ledge', machine: 'local', cwd: '/w/ledge', state: 'active', createdAt: T0, updatedAt: T0,
+      seats: [{ role: 'lead', sessionId: 'pim' }, { role: 'dev', sessionId: 'otto', leaving: true }, { role: 'qa', sessionId: 'ghost', leaving: true }, { role: 'rev', sessionId: 'nova', leaving: true }, { role: 'ops', sessionId: null, leaving: true }] };
+    store.upsert({ ...store.get('otto')!, state: 'exited' });
+    const again = createTeamsLive({ store, journal: { load: () => [persisted], save() {} }, now: () => T0 });
+    expect(again.get('team-abcd')!.seats).toEqual([{ role: 'lead', sessionId: 'pim' }, { role: 'rev', sessionId: 'nova', leaving: true }]);
+    again.close();
+  });
+
   it('refuses a dissolved team and an unknown one', () => {
     const t = seated();
     teams.dissolve(t.id);

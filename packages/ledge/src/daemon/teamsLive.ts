@@ -71,8 +71,16 @@ export function createTeamsLive(d: TeamsLiveDeps): TeamsLive {
     [...teams.values()].find(t => t.state !== 'dissolved' && t.seats.some(s => s.sessionId === session));
 
   /** Active while a seat lives, resting once every seated session has ended; a team none of whose seats has started yet stays as it is. */
-  const settle = (t: Team): void => {
+  const settle = (t0: Team): void => {
+    let t = teams.get(t0.id) ?? t0;
     if (t.state === 'dissolved') return;
+    // A seat on its way out goes once it holds no live session (ended, deleted, left, or ended while the daemon was down); its session is out of the team.
+    const stale = t.seats.filter(s => s.leaving && !(s.sessionId && live(d.store.get(s.sessionId))));
+    if (stale.length) {
+      const id = t.id;
+      t = put({ ...t, seats: t.seats.filter(s => !stale.includes(s)) });
+      for (const s of stale) if (s.sessionId && d.store.get(s.sessionId)?.team === id) d.store.patch(s.sessionId, { team: undefined });
+    }
     const seated = t.seats.filter(s => s.sessionId);
     if (!seated.length) return;
     const anyLive = seated.some(s => live(d.store.get(s.sessionId!)));
@@ -85,15 +93,7 @@ export function createTeamsLive(d: TeamsLiveDeps): TeamsLive {
     if (c.type === 'recents') return;
     const id = c.type === 'removed' ? c.id : c.session.id;
     for (const t of [...teams.values()]) {
-      const seat = t.seats.find(s => s.sessionId === id);
-      if (!seat) continue;
-      // A seat on its way out goes once its session has ended or is gone; the session is then out of the team.
-      if (seat.leaving && !live(d.store.get(id))) {
-        put({ ...t, seats: t.seats.filter(s => s !== seat) });
-        if (c.type === 'updated') d.store.patch(id, { team: undefined });
-        settle(teams.get(t.id)!);
-        continue;
-      }
+      if (!t.seats.some(s => s.sessionId === id)) continue;
       // A deleted session frees its seat for good: nothing is left to resume there.
       if (c.type === 'removed') put({ ...t, seats: t.seats.map(s => (s.sessionId === id ? { ...s, sessionId: null } : s)) });
       settle(teams.get(t.id)!);
@@ -167,8 +167,8 @@ export function createTeamsLive(d: TeamsLiveDeps): TeamsLive {
       const kept = given.map(g => ({ role: g.role, sessionId: before.get(g.role)?.sessionId ?? null, ...seatOverrides(g) }));
       const added = given.filter(g => !before.has(g.role)).map(g => g.role);
       const gone = t.seats.filter(s => !listed.has(s.role));
-      // A seat already leaving stays so; a removed one with a live session starts to; the others are dropped, their session out of the team.
-      const stays = (s: Team['seats'][number]) => s.leaving || (!!s.sessionId && live(d.store.get(s.sessionId)));
+      // A removed seat with a live session leaves (one already leaving stays so); the others are dropped, their session out of the team.
+      const stays = (s: Team['seats'][number]) => !!s.sessionId && live(d.store.get(s.sessionId));
       const staying = gone.filter(stays).map(s => ({ ...s, leaving: true as const }));
       for (const s of gone) if (!stays(s) && s.sessionId && d.store.get(s.sessionId)?.team === id) d.store.patch(s.sessionId, { team: undefined });
       const removed = gone.filter(s => !s.leaving).map(s => s.role);
