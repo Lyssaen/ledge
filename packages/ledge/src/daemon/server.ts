@@ -1302,6 +1302,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         }
         catch (e) { return reply({ type: 'team.saved', rid: msg.rid, reason: (e as Error).message }); }
       }
+      // Team definitions and live seats from any client: answered in later tasks, refused until then.
+      case 'definitions.list': case 'role.write': case 'role.delete': case 'template.write': case 'template.delete': case 'team.compose': case 'team.seat':
+        return refuse('not yet');
       // A chat card's instruction: a refusal reaches the requester as an `error`, the card's state everyone through chat.history.
       case 'session.relay': return setAside(msg.qid) ? refuse(SET_ASIDE) : relay.request(msg.qid);
       case 'session.relay.cancel': return relay.cancel(msg.qid);
