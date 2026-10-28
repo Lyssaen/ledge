@@ -17,7 +17,7 @@ import { DecisionSchema, NOTE_MAX } from './decisions.js';
 import { MobileStateSchema, RelayUrlSchema } from './mobile.js';
 import { TaskCmdSchema, TaskResultSchema, TaskUpdatedSchema } from './tasks.js';
 import { ContextPrefsMessageSchema, ContextSetSchema, HandoverBriefSchema, HandoverResultSchema, HandoverShowSchema, SessionHandoverResultSchema, SessionHandoverSchema } from './handover.js';
-import { RoleIdSchema, RolesListSchema, RolesListingSchema, TeamDissolveSchema, TeamFailedSchema, TeamIdSchema, TeamJoinSchema, TeamLaunchSchema, TeamLaunchedSchema, TeamLeaveSchema, TeamResumeSchema, TeamSaveSchema, TeamSavedSchema, TeamsMessageSchema, TeamUpdatedSchema } from './teams.js';
+import { DefinitionResultSchema, DefinitionsListSchema, DefinitionsListingSchema, RoleDeleteSchema, RoleWriteSchema, TeamChangedSchema, TeamComposeSchema, TeamSeatSchema, TemplateDeleteSchema, TemplateWriteSchema, scopeIssue, RoleIdSchema, RolesListSchema, RolesListingSchema, TeamDissolveSchema, TeamFailedSchema, TeamIdSchema, TeamJoinSchema, TeamLaunchSchema, TeamLaunchedSchema, TeamLeaveSchema, TeamResumeSchema, TeamSaveSchema, TeamSavedSchema, TeamsMessageSchema, TeamUpdatedSchema } from './teams.js';
 
 export const PROTOCOL_PORT = 47831;
 
@@ -162,6 +162,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   TaskUpdatedSchema,
   RolesListingSchema,
   TeamsMessageSchema, TeamUpdatedSchema, TeamLaunchedSchema, TeamFailedSchema, TeamSavedSchema,
+  DefinitionsListingSchema, DefinitionResultSchema, TeamChangedSchema,
   z.object({ type: z.literal('error'), message: z.string(), id: z.string().optional(), /** Le type du message client refusé. */ request: z.string().optional(),
     /** Ce que le front doit reconnaître au-delà du texte (NOTE_NOT_TYPED) ; une chaîne libre, qu'un front plus ancien ignore. */ code: z.string().optional() })
 ]);
@@ -291,8 +292,12 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   HandoverBriefSchema,
   HandoverShowSchema,
   RolesListSchema,
-  TeamLaunchSchema, TeamJoinSchema, TeamLeaveSchema, TeamResumeSchema, TeamDissolveSchema, TeamSaveSchema
-]);
+  TeamLaunchSchema, TeamJoinSchema, TeamLeaveSchema, TeamResumeSchema, TeamDissolveSchema, TeamSaveSchema,
+  DefinitionsListSchema, RoleWriteSchema, RoleDeleteSchema, TemplateWriteSchema, TemplateDeleteSchema, TeamComposeSchema, TeamSeatSchema
+]).superRefine((m, ctx) => {
+  const issue = 'scope' in m ? scopeIssue(m) : null;
+  if (issue) ctx.addIssue({ code: z.ZodIssueCode.custom, message: issue, path: ['project'] });
+});
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 /** The commands of the mobile access service. */
 export type MobileClientMessage = Extract<ClientMessage, { type: `mobile.${string}` }>;

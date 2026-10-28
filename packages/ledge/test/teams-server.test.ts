@@ -11,14 +11,14 @@ import type { Tmux } from '../src/tmux.js';
 import { until } from './helpers.js';
 
 type NewSession = { name: string; cwd: string; env: Record<string, string>; command: string[] };
-function fakeTmux(failOn?: (o: NewSession) => boolean): Tmux & { created: NewSession[] } {
-  const created: NewSession[] = []; const panes = new Set<string>();
+function fakeTmux(failOn?: (o: NewSession) => boolean): Tmux & { created: NewSession[]; killed: string[]; gate: { hold?: Promise<void>; held: number } } {
+  const created: NewSession[] = []; const killed: string[] = []; const gate: { hold?: Promise<void>; held: number } = { held: 0 }; const panes = new Set<string>();
   return {
-    created,
+    created, killed, gate,
     async newSession(o) { if (failOn?.(o)) throw new Error('tmux: no server'); created.push(o); panes.add(o.name); },
-    async sendText() {}, async sendKeys() {}, async capture() { return ''; },
+    async sendText() { if (gate.hold) { gate.held++; await gate.hold; } }, async sendKeys() { if (gate.hold) { gate.held++; await gate.hold; } }, async capture() { return ''; },
     async hasSession(n) { return panes.has(n); }, async listSessions() { return [...panes]; },
-    async setOption() {}, async killSession(n) { panes.delete(n); }, attachArgs: n => ['attach', n]
+    async setOption() {}, async killSession(n) { killed.push(n); panes.delete(n); }, attachArgs: n => ['attach', n]
   };
 }
 
@@ -27,7 +27,7 @@ const role = (id: string, front: string, prompt = `Tu es ${id}.`) => { mkdirSync
 async function start(failOn?: (o: NewSession) => boolean) {
   store = new Store();
   tmux = fakeTmux(failOn);
-  srv = await startServer({ store, tmux, port: 0, agentEnv: async () => ({ ...process.env, ...(answer ? { FAKE_ANSWER: answer } : {}) }), claudeBin: [process.execPath, fileURLToPath(new URL('./fake-claude.mjs', import.meta.url))] });
+  srv = await startServer({ store, tmux, port: 0, agentEnv: async () => ({ ...process.env, ...(answer ? { FAKE_ANSWER: answer } : {}) }), claudeBin: [process.execPath, fileURLToPath(new URL('./fake-claude.mjs', import.meta.url))], close: { freeMs: 150, exitMs: 150 } });
 }
 async function client(): Promise<Client> { const c = await connect({ port: srv.port }); await c.next('snapshot'); return c; }
 
@@ -186,6 +186,204 @@ describe('roles and teams over the protocol', () => {
     expect(store.get(id)).toMatchObject({ role: 'build', team: team.id, autonomy: 'edits' });
     expect(tmux.created.at(-1)!.env).toMatchObject({ LEDGE_ROLE: 'build', LEDGE_TEAM: team.id });
     expect(tmux.created.at(-1)!.command).toEqual(expect.arrayContaining(['--resume', '--permission-mode', 'acceptEdits']));
+    await c.close();
+  });
+});
+
+describe('live composition', () => {
+  const launched = async (c: Client, seats: { role: string; tool?: 'claude' | 'codex'; model?: string }[]) => {
+    c.send({ type: 'team.launch', rid: 'r0', cwd: work, name: 'live', seats: seats as never });
+    return (await c.next('team.launched', 5000)).team;
+  };
+  const teamNow = async (id: string) => { const l = await connect({ port: srv.port }); const m = await l.next('teams'); await l.close(); return m.teams.find(t => t.id === id)!; };
+  const edit = (id: string, extra: Partial<Session>) => store.upsert({ ...store.get(id)!, ...extra });
+  const sid = (team: { seats: { role: string; sessionId: string | null }[] }, role: string) => team.seats.find(s => s.role === role)!.sessionId!;
+
+  it('a removed seat on a permission prompt is not closed; at its next free moment it is closed exactly once, and the seat goes', async () => {
+    await start();
+    const c = await client();
+    const team = await launched(c, [{ role: 'lead' }, { role: 'build' }]);
+    const build = sid(team, 'build');
+    edit(build, { state: 'waiting_permission', pending: { kind: 'permission', text: 'Bash: ls', source: 'hook' } });
+    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'lead' }] });
+    const changed = await c.next('team.changed');
+    expect(changed).toMatchObject({ rid: 'c1', team: { seats: [{ role: 'lead' }, { role: 'build', leaving: true }] } });
+    expect(changed.reason).toBeUndefined();
+    // Store changes while the prompt waits: nothing is closed.
+    for (let i = 0; i < 3; i++) edit(build, { title: `t${i}` });
+    await new Promise(r => setTimeout(r, 400));
+    expect(tmux.killed).toEqual([]);
+    expect(store.get(build)!.state).not.toBe('exited');
+    // Idle yet with a prompt still pending is not free either.
+    edit(build, { state: 'idle' });
+    await new Promise(r => setTimeout(r, 400));
+    expect(tmux.killed).toEqual([]);
+    // The prompt is answered, the turn ends: it is free, a burst of changes closes it once.
+    edit(build, { state: 'idle', pending: undefined });
+    for (let i = 0; i < 5; i++) edit(build, { title: `u${i}` });
+    await until(() => store.get(build)?.state === 'exited');
+    await until(async () => !(await teamNow(team.id)).seats.some(s => s.role === 'build'));
+    expect(tmux.killed).toEqual([store.get(build)!.tmuxSession]);
+    expect(store.get(build)!.team).toBeUndefined();
+    await c.close();
+  });
+
+  it('a removed seat whose session is mid-reply is not closed until the lock clears', async () => {
+    await start();
+    const c = await client();
+    const team = await launched(c, [{ role: 'lead' }, { role: 'build' }]);
+    const build = sid(team, 'build');
+    edit(build, { state: 'idle' });
+    // The typing is held by the fake tmux; releasing it makes the injection fail, which ends the lock.
+    let release = () => {}; tmux.gate.hold = new Promise<void>((_, reject) => { release = () => reject(new Error('released')); });
+    c.send({ type: 'session.reply', id: build, text: 'continue' });
+    await until(() => tmux.gate.held > 0);
+    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'lead' }] });
+    await c.next('team.changed');
+    for (let i = 0; i < 3; i++) edit(build, { title: `w${i}` });
+    await new Promise(r => setTimeout(r, 400));
+    expect(tmux.killed).toEqual([]);
+    tmux.gate.hold = undefined; release();
+    await new Promise(r => setTimeout(r, 100));
+    edit(build, { title: 'after' });
+    await until(() => store.get(build)?.state === 'exited');
+    expect(tmux.killed).toEqual([store.get(build)!.tmuxSession]);
+    await c.close();
+  });
+
+  it('a removed seat whose session Ledge cannot close (read only) is let go: the seat goes, the session stays', async () => {
+    await start();
+    const c = await client();
+    const team = await launched(c, [{ role: 'lead' }, { role: 'build' }]);
+    const build = sid(team, 'build');
+    edit(build, { state: 'working' });
+    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'lead' }] });
+    await c.next('team.changed');
+    edit(build, { source: 'hook_only', state: 'idle' });
+    await until(async () => !(await teamNow(team.id)).seats.some(s => s.role === 'build'));
+    expect(store.get(build)).toMatchObject({ state: 'idle', team: undefined });
+    expect(tmux.killed).toEqual([]);
+    await c.close();
+  });
+
+  it('a removed seat the user closes on the PC meanwhile still goes', async () => {
+    await start();
+    const c = await client();
+    const team = await launched(c, [{ role: 'lead' }, { role: 'build' }]);
+    const build = sid(team, 'build');
+    edit(build, { state: 'waiting_permission', pending: { kind: 'permission', text: 'Bash: ls', source: 'hook' } });
+    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'lead' }] });
+    await c.next('team.changed');
+    store.upsert({ ...store.get(build)!, state: 'exited', pending: undefined } as Session);
+    await until(async () => (await teamNow(team.id)).seats.length === 1);
+    expect(tmux.killed).toEqual([]);
+    await c.close();
+  });
+
+  it('adding a role launches one session in it, seated in the team; a role that fails to launch is named and the composition stays', async () => {
+    await start(o => o.env.LEDGE_ROLE === 'lead');
+    const c = await client();
+    const team = await launched(c, [{ role: 'build' }]);
+    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'build' }, { role: 'review' }] });
+    const changed = await c.next('team.changed', 5000);
+    expect(changed.reason).toBeUndefined();
+    const review = changed.team!.seats.find(s => s.role === 'review')!;
+    expect(review.sessionId).toBeTruthy();
+    expect(store.get(review.sessionId!)).toMatchObject({ role: 'review', team: team.id, tool: 'codex' });
+    expect(tmux.created).toHaveLength(2);
+    c.send({ type: 'team.compose', rid: 'c2', team: team.id, seats: [{ role: 'build' }, { role: 'review' }, { role: 'lead' }] });
+    const failed = await c.next('team.changed', 5000);
+    expect(failed.reason).toContain('@lead');
+    expect(failed.team!.seats.map(s => [s.role, !!s.sessionId])).toEqual([['build', true], ['review', true], ['lead', false]]);
+    c.send({ type: 'team.compose', rid: 'c3', team: 'team-0000', seats: [{ role: 'build' }] });
+    expect(await c.next('team.changed')).toMatchObject({ rid: 'c3', reason: expect.stringContaining('team-0000') });
+    await c.close();
+  });
+
+  it('team.seat restart closes the old session and launches one with the seat’s tool; start fills a free seat', async () => {
+    await start();
+    const c = await client();
+    const team = await launched(c, [{ role: 'lead' }, { role: 'build' }]);
+    const old = sid(team, 'lead');
+    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'lead', tool: 'codex' }, { role: 'build' }, { role: 'review', model: 'o3' }] });
+    await c.next('team.changed', 5000);
+    c.send({ type: 'team.seat', rid: 's1', team: team.id, role: 'lead', action: 'restart' });
+    const r = await c.next('team.changed', 5000);
+    expect(r).toMatchObject({ rid: 's1' }); expect(r.reason).toBeUndefined();
+    const fresh = r.team!.seats.find(s => s.role === 'lead')!.sessionId!;
+    expect(fresh).not.toBe(old);
+    expect(tmux.killed).toContain(store.get(old)!.tmuxSession);
+    expect(store.get(old)!.state).toBe('exited');
+    expect(store.get(fresh)).toMatchObject({ tool: 'codex', role: 'lead', team: team.id });
+    // A live seat cannot be started again.
+    c.send({ type: 'team.seat', rid: 's2', team: team.id, role: 'build', action: 'start' });
+    expect((await c.next('team.changed')).reason).toContain('@build');
+    c.send({ type: 'team.seat', rid: 's3', team: team.id, role: 'nope', action: 'start' });
+    expect((await c.next('team.changed')).reason).toContain('@nope');
+    await c.close();
+  });
+
+  it('team.seat start launches into a free seat', async () => {
+    let down = true;
+    await start(o => down && o.env.LEDGE_ROLE === 'review');
+    const c = await client();
+    const team = await launched(c, [{ role: 'build' }]);
+    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'build' }, { role: 'review' }] });
+    expect((await c.next('team.changed', 5000)).reason).toContain('@review');
+    down = false;
+    c.send({ type: 'team.seat', rid: 's1', team: team.id, role: 'review', action: 'start' });
+    const r = await c.next('team.changed', 5000);
+    expect(r.reason).toBeUndefined();
+    expect(store.get(r.team!.seats.find(s => s.role === 'review')!.sessionId!)).toMatchObject({ tool: 'codex', team: team.id });
+    await c.close();
+  });
+
+  it('two team.seat start sent back to back launch exactly one session; the second is refused', async () => {
+    let down = true;
+    await start(o => down && o.env.LEDGE_ROLE === 'review');
+    const c = await client();
+    const team = await launched(c, [{ role: 'build' }]);
+    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'build' }, { role: 'review' }] });
+    expect((await c.next('team.changed', 5000)).reason).toContain('@review');
+    down = false;
+    const before = tmux.created.length;
+    c.send({ type: 'team.seat', rid: 's1', team: team.id, role: 'review', action: 'start' });
+    c.send({ type: 'team.seat', rid: 's2', team: team.id, role: 'review', action: 'start' });
+    const answers = [await c.next('team.changed', 5000), await c.next('team.changed', 5000)];
+    expect(answers.filter(a => a.reason === undefined)).toHaveLength(1);
+    expect(answers.filter(a => a.reason !== undefined)).toHaveLength(1);
+    expect(tmux.created).toHaveLength(before + 1);
+    const seated = (await teamNow(team.id)).seats.find(s => s.role === 'review')!.sessionId!;
+    expect(store.all().filter(x => x.role === 'review' && x.team === team.id && x.state !== 'exited').map(x => x.id)).toEqual([seated]);
+    await c.close();
+  });
+
+  it('team.launch with a project and no folder: the project’s local folder, else team.failed; seats given, the template is only recorded', async () => {
+    await start();
+    const c = await client();
+    c.send({ type: 'team.launch', rid: 'p1', project: 'nowhere', seats: [{ role: 'lead' }] });
+    expect(await c.next('team.failed')).toEqual({ type: 'team.failed', rid: 'p1', reason: 'aucun dossier local pour ce projet' });
+    expect(tmux.created).toEqual([]);
+    c.send({ type: 'team.launch', rid: 'p2', cwd: work, template: 'not-a-file', seats: [{ role: 'lead' }] });
+    const { team } = await c.next('team.launched', 5000);
+    expect(team.template).toBe('not-a-file');
+    await c.close();
+  });
+
+  it('team.resume resumes a seat with the seat’s model override; a seat whose tool changed is not resumed', async () => {
+    await start();
+    const c = await client();
+    const team = await launched(c, [{ role: 'lead', model: 'sonnet' }, { role: 'build' }]);
+    const lead = sid(team, 'lead'); const build = sid(team, 'build');
+    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'lead', model: 'opus' }, { role: 'build', tool: 'codex' }] });
+    await c.next('team.changed', 5000);
+    for (const id of [lead, build]) store.upsert({ ...store.get(id)!, state: 'exited', exitedAt: new Date().toISOString(), agentSessionId: 'abc' } as Session);
+    const before = tmux.created.length;
+    c.send({ type: 'team.resume', team: team.id });
+    expect((await c.next('error')).message).toBe('@build : outil changé, redémarre le siège');
+    expect(tmux.created).toHaveLength(before + 1);
+    expect(tmux.created.at(-1)!.command).toEqual(expect.arrayContaining(['--resume', '--model', 'opus']));
+    expect(store.get(build)!.state).toBe('exited');
     await c.close();
   });
 });

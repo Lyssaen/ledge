@@ -40,6 +40,9 @@ function statusOf(s: PhoneSession, pending: InboxItem | undefined): AgentRow['st
   }
 }
 
+/** A session's state as its row in « Agents » says it, a request waiting on it included. */
+export const sessionStatus = (s: PhoneSession): AgentRow['status'] => statusOf(s, requestsOf([s])[0]);
+
 function lastOf(s: PhoneSession, pending: InboxItem | undefined): string {
   if (pending) return pending.kind === 'question' ? pending.text : (firstLine(pending.text) || copy.kind[pending.kind]);
   const reply = s.lastReply ? firstLine(s.lastReply.text) : '';

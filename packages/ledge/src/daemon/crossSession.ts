@@ -92,6 +92,10 @@ export function formatLedgeNotice(n: { to: string; text: string; reason: string 
 export function formatTeamNotice(n: { team: string; text: string }): string {
   return `<ledge-notice team="${attr(n.team)}">${ledgeBody(n.text)}</ledge-notice>`;
 }
+/** What Ledge types to a running session whose role's prompt changed (spec 2026-10-28 mobile teams §3.6): the new prompt in full. */
+export function formatRoleNotice(n: { role: string; text: string }): string {
+  return `<ledge-notice role="${attr(n.role)}">${ledgeBody(n.text)}</ledge-notice>`;
+}
 const TEAM_NOTICE = /^<ledge-notice\b([^>]*\bteam="[^"]*"[^>]*)>([\s\S]*?)(?:<\/ledge-notice>|$)/;
 /** A prompt that is Ledge telling a session it joined a team: the team and the lines it carries. */
 export function ledgeTeamNotice(text: string): { team: string; text: string } | undefined {

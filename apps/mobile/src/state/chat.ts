@@ -12,7 +12,9 @@ export interface ChatState {
 
 /** What a relay or a launch came to, once its operation is final. */
 export type ChatAction =
-  | { status: 'applied' | 'failed' }
+  | { status: 'failed' }
+  /** `warn`: a composition saved whose added seat did not start. */
+  | { status: 'applied'; warn?: 'seat_failed' }
   | { status: 'rejected'; reason: OperationReason }
   | { status: 'cancelled' }
   | { status: 'expired' };

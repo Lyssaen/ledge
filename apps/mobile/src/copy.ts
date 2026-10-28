@@ -28,10 +28,10 @@ export const copy = {
     offlineNote: 'Vous pouvez consulter les demandes. Aucune décision ne sera envoyée hors connexion.'
   },
   nav: {
-    label: 'Navigation principale', inbox: 'À traiter', agents: 'Agents', chat: 'Ledge',
+    label: 'Navigation principale', inbox: 'À traiter', agents: 'Agents', chat: 'Ledge', teams: 'Équipes',
     /** « Retour », named after the screen it leads to; plain when that screen is not known (after a reload). */
     back: 'Retour',
-    backTo: { inbox: 'Retour aux demandes', agents: 'Retour aux agents', chat: 'Retour à Ledge', thread: 'Retour au fil', terminal: 'Retour au terminal', request: 'Retour à la demande', connection: 'Retour à la connexion' } as Partial<Record<string, string>>
+    backTo: { inbox: 'Retour aux demandes', agents: 'Retour aux agents', teams: 'Retour aux équipes', chat: 'Retour à Ledge', thread: 'Retour au fil', terminal: 'Retour au terminal', request: 'Retour à la demande', connection: 'Retour à la connexion' } as Partial<Record<string, string>>
   },
   images: {
     attach: 'Joindre une image', remove: 'Retirer l\'image', tooLarge: 'Image trop lourde, même réduite', notImage: 'Ce fichier n\'est pas une image', max: '5 images au plus par message',
@@ -101,6 +101,84 @@ export const copy = {
       pane: (name: string) => `Regarde le terminal de ${name}…`,
       reply: (name: string) => `Lit la dernière réponse de ${name}…`,
       look: (name: string) => `Regarde ${name}…`
+    }
+  },
+  /** The Équipes tab: the team definitions and the roles the PC offers, and « Lever » (raising a team from a definition). The word « modèle » stays out of the phone. */
+  teams: {
+    subtitle: (teams: number, roles: number) => `${teams} ${teams > 1 ? 'équipes' : 'équipe'} · ${roles} ${roles > 1 ? 'rôles' : 'rôle'}`,
+    newTeam: 'Nouvelle équipe', newRole: '+ Nouveau rôle',
+    teamsHead: 'ÉQUIPES', teamsLabel: 'Équipes disponibles', rolesHead: 'RÔLES', rolesLabel: 'Rôles',
+    noTeams: 'Aucune équipe définie.', noRoles: 'Aucun rôle défini.',
+    lever: 'Lever', noProject: 'Aucun projet avec un dépôt local sur ce PC : impossible de lever une équipe.',
+    autonomy: { ask: 'demande', edits: 'édite', auto: 'auto' } as Record<'ask' | 'edits' | 'auto', string>,
+    live: (name: string) => `${name} est levée · la suivre dans Agents ›`,
+    launched: (name: string) => `${name} levée.`,
+    levering: (name: string) => `Lever ${name}`, name: 'Nom', project: 'Projet', pickProject: 'Choisir un projet',
+    launchSeats: (n: number) => `Lancer l'équipe · ${n} ${n > 1 ? 'sièges' : 'siège'}`, cancel: 'Annuler',
+    /** Why the PC or the phone refused an operation of this tab, for the reasons the chat has no copy for; any other reason says only that it was not launched (`copy.chat.team.notLaunched`). */
+    reason: {
+      changed: 'le fichier a changé sur le PC',
+      exists: 'Un fichier de ce nom existe déjà.',
+      unknown_project: 'Ce projet n’a pas de dépôt sur ce PC.',
+      invalid: 'Cette équipe ne peut pas être levée telle quelle.',
+      confirm_required: 'La confirmation avec l’appareil est requise.',
+      assertion_invalid: 'La vérification de l’appareil a été refusée. Réessayez.',
+      conflict: 'Une autre opération est en cours sur le PC. Réessayez.'
+    } as Partial<Record<string, string>>,
+    loading: 'Lecture du catalogue…', unavailable: 'Catalogue indisponible', retry: 'Réessayer',
+    problemsHead: 'FICHIERS ILLISIBLES', problemsLabel: 'Fichiers illisibles',
+    /** The role editor (« Nouveau rôle » and a role's own page). */
+    role: {
+      newTitle: 'Nouveau rôle', idLabel: 'Identifiant', labelLabel: 'Libellé', idRule: 'Minuscules, chiffres, - et _ · 40 caractères au plus, commence par une lettre ou un chiffre.',
+      idTaken: (scope: string) => `Cet identifiant est déjà pris (${scope}).`, labelRule: 'Un libellé de 40 caractères au plus.',
+      prompt: 'Consigne', promptFetching: 'Lecture de la consigne entière…', promptFailed: 'Consigne illisible pour le moment.', promptRetry: 'Réessayer',
+      defaults: 'PAR DÉFAUT', tool: 'Outil', model: 'IA', effort: 'Effort', autonomy: 'Autonomie', unset: 'Par défaut',
+      modelRule: 'Un identifiant d’IA valide, ou vide.', effortRule: 'Des lettres minuscules, ou vide.',
+      scopeHead: 'RANGER DANS', scopeLegend: 'Portée du rôle', home: 'Maison', repo: (project: string) => `Dépôt ${project}`,
+      homeHint: 'Maison : disponible pour tous vos projets.', repoHint: (project: string) => `Dépôt : seulement dans ${project}.`,
+      fixedScope: (scope: string) => `Rangé dans : ${scope}.`,
+      shadows: (id: string) => `@${id} de ce dépôt cache le @${id} de Maison.`, shadowed: (id: string) => `@${id} de Maison est caché par le @${id} du dépôt.`,
+      shadowedIn: (id: string, projects: readonly string[]) => `@${id} de Maison est masqué dans ${projects.join(', ')}.`,
+      save: 'Enregistrer le rôle', saveNote: 'Votre passkey confirme l’écriture sur le PC.', delete: 'Supprimer', deleteTitle: (id: string) => `Supprimer @${id} ?`,
+      seatedIn: (names: string) => `encore dans : ${names}`, deleteHint: 'Ces équipes perdront ce siège.', cancel: 'Annuler',
+      notSaved: 'Pas enregistré.', changedKept: 'Votre texte est gardé. Enregistrer écrase la version du PC.', takePc: 'Reprendre la version du PC',
+      taken: 'Cet identifiant est déjà pris.', invalid: 'Ce rôle ne peut pas être enregistré tel quel.',
+      missing: 'Ce rôle n’existe pas sur ce PC.', gone: 'Ce rôle n’existe plus sur le PC. Votre texte est gardé ici, mais il ne peut plus être enregistré.'
+    },
+    /** The team editor (a team's own page, a copy of a live team, a live team's composition). */
+    team: {
+      nameRule: 'Un nom de 60 caractères au plus.',
+      composeTitle: 'Modifier la composition', copyTitle: 'Enregistrer comme équipe',
+      seats: (n: number, max: number) => `SIÈGES · ${n} SUR ${max}`, seatsLabel: 'Sièges',
+      noSeats: 'Aucun siège : ajoutez au moins un rôle.',
+      addRole: 'Ajouter un rôle', newRole: 'Nouveau rôle…', noRoleLeft: 'Tous les rôles sont déjà dans l’équipe.',
+      change: 'Changer', changeSeat: (role: string) => `Changer @${role}`, removeSeat: (role: string) => `Retirer @${role}`,
+      modified: 'modifié', apply: 'Appliquer', unknownRole: (role: string) => `@${role} n’existe pas sur ce PC : retirez-le de l’équipe.`,
+      scopeHead: 'RANGER DANS', scopeLegend: 'Où ranger l’équipe', home: 'Maison', repo: (project: string) => project ? `Dépôt ${project}` : 'Dépôt',
+      homeHint: 'Maison : disponible pour tous vos projets.', repoHint: (project: string) => project ? `Dépôt : seulement dans ${project}.` : 'Dépôt : choisissez le projet ci-dessus.',
+      fixedScope: (scope: string) => `Rangée dans : ${scope}.`,
+      launchNote: 'Votre passkey confirme le lancement.', saveNote: 'Votre passkey confirme l’écriture sur le PC.', composeNote: 'Votre passkey confirme le changement de composition.',
+      save: 'Enregistrer', delete: 'Supprimer', deleteTitle: (name: string) => `Supprimer ${name} ?`, deleteHint: 'Les équipes déjà levées ne changent pas.',
+      notSaved: 'Pas enregistré.', notDeleted: 'Pas supprimée.', exists: 'Une équipe de ce nom existe déjà.', invalid: 'Cette équipe ne peut pas être enregistrée telle quelle.',
+      composed: 'Composition enregistrée.',
+      /** Saved, but the seats named (or one, when none can be) did not start. */
+      composedUnstarted: (roles: readonly string[]) => roles.length === 0 ? 'Composition enregistrée ; un siège n\'a pas démarré.'
+        : `Composition enregistrée ; ${roles.map(r => `@${r}`).join(', ')} n${roles.length > 1 ? '\'ont' : '\'a'} pas démarré.`,
+      composeChanged: 'La composition a changé sur le PC.',
+      handNamed: 'Ce fichier porte un nom fait main : il ne se modifie que sur le PC. Vous pouvez quand même lever l’équipe.',
+      changedKept: 'Vos modifications sont gardées. Enregistrer écrase la version du PC.',
+      missing: 'Cette équipe n’existe pas sur ce PC.', gone: 'Cette équipe n’existe plus sur le PC. Vos modifications sont gardées ici, mais elles ne peuvent plus être enregistrées.',
+      restart: 'Redémarrer ce siège', restartHint: 'La conversation du siège n’est pas reprise.', notRestarted: 'Pas redémarré.', start: 'Démarrer ce siège', notStarted: 'Pas démarré.',
+      nextStart: 'au prochain démarrage du siège'
+    },
+    /** The live team's sheet, opened from its header in Agents. */
+    sheet: {
+      seats: (n: number) => `SIÈGES · ${n}`, seatsLabel: 'Sièges', free: 'libre', leaving: 'termine puis part', unknownSession: 'session inconnue',
+      since: (at: string) => `au travail depuis ${at}`, resting: 'au repos', from: (name: string) => `d'après « ${name} »`,
+      readPrompt: 'Lire et modifier la consigne', compose: 'Modifier la composition', saveAs: 'Enregistrer comme équipe',
+      dissolve: 'Dissoudre l\'équipe', dissolveTitle: (name: string) => `Dissoudre ${name} ?`,
+      dissolveHint: 'Irréversible. Les sessions de l’équipe restent ouvertes.', dissolveNote: 'Votre passkey confirme la dissolution.',
+      notDissolved: 'Pas dissoute.', loading: 'Lecture de l’équipe…', unavailable: 'Équipe indisponible'
     }
   },
   agents: {
@@ -266,7 +344,12 @@ export const copy = {
   },
   gone: {
     header: 'Demande', title: 'Déjà traitée sur le PC', body: 'Cette demande a été résolue ailleurs. Aucune nouvelle décision n’a été envoyée.', back: 'Retour aux demandes',
-    staleTitle: 'Cette demande ne figure plus dans le dernier état connu.', staleBody: 'Reconnectez-vous pour vérifier si elle attend toujours une décision.'
+    staleTitle: 'Cette demande ne figure plus dans le dernier état connu.', staleBody: 'Reconnectez-vous pour vérifier si elle attend toujours une décision.',
+    /** The same screen for a live team that is no longer on the PC (dissolved there, or here). */
+    team: {
+      header: 'Équipe', title: 'Cette équipe n’existe plus', body: 'Elle a été dissoute. Ses sessions encore ouvertes restent dans Agents.', back: 'Retour aux agents',
+      staleTitle: 'Cette équipe ne figure plus dans le dernier état connu.', staleBody: 'Reconnectez-vous pour vérifier si elle existe encore.'
+    }
   },
   loading: 'Chargement de la demande…',
   connection: {

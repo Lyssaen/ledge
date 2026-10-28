@@ -1,128 +1,18 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { ATTACHMENT_MAX, PREVIEW_MAX, padPlain, PAD_TIERS, PLAIN_MAX, SNAPSHOT_BODY_MAX, TOPIC_MAX, PhoneServerMessageSchema, pendingKey, type ClientMessage, type MobileState, type Pending, type PhoneServerMessage, type ServerMessage, type Session, type Task, type Team, type ThreadItem } from '@ledge/protocol';
+import { ATTACHMENT_MAX, PREVIEW_MAX, padPlain, PAD_TIERS, PLAIN_MAX, SNAPSHOT_BODY_MAX, TOPIC_MAX, PhoneServerMessageSchema, pendingKey, type Pending, type ServerMessage, type Session, type Task, type Team } from '@ledge/protocol';
 import { hostname } from 'node:os';
-import { AttachmentStore } from '../src/daemon/attachments.js';
 import { createPhoneGateway } from '../src/mobile/gateway.js';
-import { createChallengeStore } from '../src/mobile/challenges.js';
-import { challengeOf, rpOf, type DeviceCredential } from '../src/mobile/webauthn.js';
+import { challengeOf } from '../src/mobile/webauthn.js';
 import { launchFromChat } from '../src/chat/launch.js';
 import { CloseRefused } from '../src/chat/close.js';
 import { toPhoneTurn } from '../src/mobile/chat.js';
 import { tooWide } from '../src/chat/service.js';
 import { softAuthenticator } from './mobile-soft-authenticator.js';
+import { T0, T1, PUSH, LS, PICK, seen, SEEN_LS, mk, flush, setup, decide, stopAll } from './helpers/gateway.js';
 
-const T0 = '2026-10-20T08:00:00.000Z';
-const T1 = '2026-10-20T09:00:00.000Z';
-const PUSH = { kind: 'permission', text: 'git push', tool: 'Bash', source: 'hook' } as const;
-const LS = { kind: 'permission', text: 'ls src', tool: 'Bash', source: 'hook' } as const;
-const PICK: Pending = { kind: 'question', text: 'Which one?', options: ['red', 'green', 'blue'], source: 'pane' };
-/** What the phone sends back as `expect` for request `p`. */
-const seen = (p: Omit<Pending, 'source'> & { source?: Pending['source'] }) => ({ kind: p.kind, text: p.text, key: pendingKey({ source: 'pane', ...p }) });
-const SEEN_LS = seen(LS);
 
-const mk = (id: string, extra: Partial<Session> = {}): Session => ({
-  id, name: id, tool: 'claude', cwd: '/w/repo', project: 'repo', title: `t ${id}`, tmuxSession: `ledge-${id}`, state: 'working', helpers: [],
-  startedAt: T0, lastActivityAt: T0, source: 'launcher', ...extra
-});
-
-/** A MobileService stand-in: approved devices, sealed texts sent per device, and a hand on its message and change listeners. */
-function fakeMobile(ids: string[], relayUrl = 'https://relay.test') {
-  let devices = ids;
-  const sent: Array<[string, string]> = [];
-  /** How many texts had been sent when each device was revoked: the answer must be among them. */
-  const revoked: Array<{ id: string; sentBefore: number }> = [];
-  const messageFns = new Set<(d: string, t: string) => void>();
-  const changeFns = new Set<() => void>();
-  const offline = new Set<string>();
-  const pushes = new Map<string, { endpoint: string; p256dh: string; auth: string; key: string }>();
-  let relayKey: string | null | undefined = 'K1';
-  return {
-    sent,
-    pushes,
-    setRelayKey(k: string | null | undefined) { relayKey = k; for (const fn of changeFns) fn(); },
-    setOnline(id: string, on: boolean) { if (on) offline.delete(id); else offline.add(id); for (const fn of changeFns) fn(); },
-    revoked,
-    receive(deviceId: string, text: string) { for (const fn of messageFns) fn(deviceId, text); },
-    setDevices(next: string[]) { devices = next; for (const fn of changeFns) fn(); },
-    mobile: {
-      async send(deviceId: string, text: string) { sent.push([deviceId, text]); return devices.includes(deviceId); },
-      pushOf: (id: string) => pushes.get(id) ?? null,
-      setPush(id: string, p: { endpoint: string; p256dh: string; auth: string; key: string } | null) { if (p) pushes.set(id, p); else pushes.delete(id); for (const fn of changeFns) fn(); },
-      relayPushKey: () => relayKey,
-      async revoke(id: string) { revoked.push({ id, sentBefore: sent.length }); devices = devices.filter(d => d !== id); for (const fn of changeFns) fn(); },
-      onMessage(fn: (d: string, t: string) => void) { messageFns.add(fn); return () => { messageFns.delete(fn); }; },
-      onChange(fn: () => void) { changeFns.add(fn); return () => { changeFns.delete(fn); }; },
-      state: (): MobileState => ({
-        enabled: true, relayUrl, account: null, signin: null, signinError: null, link: { state: 'online' },
-        devices: devices.map(id => ({ id, label: id, approvedAt: T0, online: !offline.has(id) })), pairings: []
-      })
-    }
-  };
-}
-
-const flush = async () => { for (let i = 0; i < 5; i++) await new Promise(r => setImmediate(r)); };
-
-const stops: Array<() => void> = [];
-afterEach(() => { for (const s of stops.splice(0)) s(); });
-
-function setup(opts: { boot?: string; dispatch?: (msg: ClientMessage, reply: (m: ServerMessage) => void) => Promise<void>; relayUrl?: string; chats?: Parameters<typeof createPhoneGateway>[0]['chats']; relay?: Parameters<typeof createPhoneGateway>[0]['relay']; launchChat?: Parameters<typeof createPhoneGateway>[0]['launchChat']; closeChat?: Parameters<typeof createPhoneGateway>[0]['closeChat']; actChat?: Parameters<typeof createPhoneGateway>[0]['actChat']; teams?: () => Team[]; tasks?: () => Task[]; onChatEnd?: Parameters<typeof createPhoneGateway>[0]['onChatEnd']; devices?: string[]; attachments?: AttachmentStore } = {}) {
-  const fm = fakeMobile(opts.devices ?? ['dev1', 'dev2'], opts.relayUrl);
-  const clock = { t: 1_000_000 };
-  const challenges = createChallengeStore({ now: () => clock.t });
-  const creds = new Map<string, DeviceCredential>();
-  const stored: string[] = [];
-  const sessions = new Map<string, Session>([
-    ['a', mk('a', { state: 'waiting_permission', pending: { ...PUSH }, lastReply: { text: 'done', at: T1 } })],
-    ['b', mk('b', { state: 'waiting_permission', pending: { ...LS } })],
-    ['c', mk('c', { tmuxSession: null })],
-    ['q', mk('q', { state: 'waiting_input', pending: { ...PICK, options: [...PICK.options!] } })]
-  ]);
-  const previews = new Map<string, string[]>([['a', ['$ ls', 'src']]]);
-  const threads = new Map<string, ThreadItem[]>([['a', [{ kind: 'message', id: 'm1', at: T0, turn: 0, text: 'hello' }]]]);
-  const dispatched: ClientMessage[] = [];
-  const logs: string[] = [];
-  const dispatch = opts.dispatch ?? (async (msg: ClientMessage) => { dispatched.push(msg); });
-  const attachments = opts.attachments ?? new AttachmentStore(join(mkdtempSync(join(tmpdir(), 'ledge-gw-att-')), 'attachments'));
-  const gw = createPhoneGateway({
-    mobile: fm.mobile,
-    attachments,
-    ...(opts.chats ? { chats: opts.chats } : {}),
-    ...(opts.relay ? { relay: opts.relay } : {}),
-    ...(opts.launchChat ? { launchChat: opts.launchChat } : {}),
-    ...(opts.closeChat ? { closeChat: opts.closeChat } : {}),
-    ...(opts.actChat ? { actChat: opts.actChat } : {}),
-    ...(opts.onChatEnd ? { onChatEnd: opts.onChatEnd } : {}),
-    ...(opts.teams ? { teams: opts.teams, projectName: (id: string | null) => (id === 'repo' ? 'Repo' : null) } : {}),
-    ...(opts.tasks ? { tasks: opts.tasks } : {}),
-    sessions: () => [...sessions.values()],
-    session: id => sessions.get(id),
-    thread: id => threads.get(id),
-    preview: id => previews.get(id),
-    dispatch: async (msg, reply) => { if (opts.dispatch) dispatched.push(msg); await dispatch(msg, reply); },
-    version: '1.2.3',
-    boot: opts.boot ?? randomUUID(),
-    log: line => logs.push(line),
-    now: () => T0,
-    rp: () => rpOf(fm.mobile.state().relayUrl),
-    challenges,
-    credential: id => creds.get(id) ?? null,
-    setCredential: (id, c) => { stored.push(id); creds.set(id, c); }
-  });
-  stops.push(() => gw.stop());
-  /** What `deviceId` received, parsed. */
-  const got = (deviceId: string): PhoneServerMessage[] => fm.sent.filter(([d]) => d === deviceId).map(([, t]) => JSON.parse(t) as PhoneServerMessage);
-  const results = (deviceId: string) => got(deviceId).filter(m => m.type === 'operation.result');
-  const send = (deviceId: string, m: unknown) => fm.receive(deviceId, typeof m === 'string' ? m : JSON.stringify(m));
-  return { fm, gw, sessions, dispatched, logs, got, results, send, clock, creds, stored, attachments };
-}
-
-const decide = (id: string, decision: 'accept' | 'deny' | 'always', pending: Session['pending'] & object, extra: { key?: string; op?: string } = {}) => ({
-  type: 'session.decide', op: extra.op ?? randomUUID(), id, decision, expect: { kind: pending.kind, text: pending.text, key: extra.key ?? pendingKey(pending) }
-});
+afterEach(stopAll);
 
 describe('phone gateway: input', () => {
   it('refuses invalid JSON and every message off the whitelist with error invalid, dispatches nothing, logs no text', async () => {
@@ -1989,7 +1879,7 @@ describe('phone gateway: teams and Ledge\'s tasks (ledge home spec §2.4)', () =
     await flush();
     const got = g.got('dev1');
     for (const m of got) expect(PhoneServerMessageSchema.safeParse(m).success).toBe(true);
-    expect(got.find(m => m.type === 'teams')).toEqual({ type: 'teams', teams: [{ id: 'team-a1b2', name: 'repo-roles', project: 'Repo', state: 'active', seats: [{ role: 'build', sessionId: 'a' }, { role: 'qa', sessionId: null }], done: 1, given: 2 }] });
+    expect(got.find(m => m.type === 'teams')).toEqual({ type: 'teams', teams: [{ id: 'team-a1b2', name: 'repo-roles', project: 'Repo', state: 'active', seats: [{ role: 'build', sessionId: 'a' }, { role: 'qa', sessionId: null }], createdAt: '2026-10-20T08:00:00.000Z', done: 1, given: 2 }] });
     const listed = got.find(m => m.type === 'tasks');
     expect(listed?.type === 'tasks' && listed.tasks.map(x => [x.id, x.ownerRole, x.teamName, x.result])).toEqual([['t000001', 'build', 'repo-roles', 'fait'], ['t000002', 'build', 'repo-roles', undefined]]);
     const snap = got.find(m => m.type === 'snapshot');

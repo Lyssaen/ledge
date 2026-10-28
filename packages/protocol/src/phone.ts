@@ -8,6 +8,9 @@ import { DecisionSchema, NOTE_MAX } from './decisions.js';
 import { ThreadItemSchema } from './thread.js';
 import { MESSAGE_MAX, RefusalCodeSchema } from './messages.js';
 import { PushSubscriptionSchema } from './push.js';
+import { EffortSchema, ModelIdSchema } from './models.js';
+import { DefinitionHashSchema, DefinitionScopeSchema, RoleIdSchema, TeamIdSchema, TeamNameSchema, TemplateIdSchema, scopeIssue } from './teams.js';
+import { PhoneCatalogSchema, PhoneRoleDraftSchema, PhoneRoleSchema, PhoneSeatsSchema, canonicalJson, type TeamsOperation } from './phoneTeams.js';
 
 /** The phone/PC messages have their own schemas: a type or a field that is not here never crosses the relay. */
 export const PHONE_PROTOCOL = 1;
@@ -53,8 +56,8 @@ export type OperationId = z.infer<typeof OperationIdSchema>;
 export const OperationStatusSchema = z.enum(['received', 'applied', 'rejected', 'failed']);
 export type OperationStatus = z.infer<typeof OperationStatusSchema>;
 
-/** Why an operation was refused: a refusal code of the local fronts, or one only a phone can meet. */
-export const OperationReasonSchema = z.enum([...RefusalCodeSchema.options, 'untypable', 'confirm_required', 'conflict', 'assertion_invalid', 'assertion_expired']);
+/** Why an operation was refused: a refusal code of the local fronts, or one only a phone can meet. `seat_failed` comes with `applied`: a composition saved whose added seat did not start. */
+export const OperationReasonSchema = z.enum([...RefusalCodeSchema.options, 'untypable', 'confirm_required', 'conflict', 'assertion_invalid', 'assertion_expired', 'changed', 'exists', 'unknown_project', 'seat_failed']);
 export type OperationReason = z.infer<typeof OperationReasonSchema>;
 
 /** What an adapter knows how to type for a phone, beyond accept, deny and an option number. A phone hides an answer its session's tool cannot give. */
@@ -121,8 +124,10 @@ export const AssertionSchema = z.object({
 });
 export type Assertion = z.infer<typeof AssertionSchema>;
 
-/** What a challenge is for. */
-export const ConfirmPurposeSchema = z.enum(['register', 'decide', 'launch', 'close', 'act']);
+/** The digest of a `define` or `team` operation (`teamsDigest`): a sha256 in lower-case hex. */
+const TeamsDigestSchema = z.string().regex(/^[0-9a-f]{64}$/);
+/** What a challenge is for. `define` (a role or template file) and `team` (a live team) carry the `digest` of the operation they confirm. */
+export const ConfirmPurposeSchema = z.enum(['register', 'decide', 'launch', 'close', 'act', 'define', 'team']);
 export type ConfirmPurpose = z.infer<typeof ConfirmPurposeSchema>;
 
 /** The phone's chat: no folder, no path, no machine, no free error text; every object is strict, `pick` included. */
@@ -176,7 +181,14 @@ export type PhoneChatAction = z.infer<typeof PhoneChatActionSchema>;
 /** A live team as the phone sees it (ledge home spec §2.4): its project's name, its seats, the progress of Ledge's tasks. */
 export const PhoneTeamSchema = z.object({
   id: z.string().max(40), name: z.string().max(60), project: z.string().max(80).nullable(), state: z.enum(['active', 'resting']),
-  seats: z.array(z.object({ role: z.string().max(40), sessionId: z.string().max(100).nullable() }).strict()).max(16),
+  template: z.string().max(64).optional(),
+  /** Absent from a daemon older than the phone: the phone then says no start time. */
+  createdAt: z.string().optional(),
+  /** `tool`, `model` and `effort` are what the seat was composed with; `leaving` is a seat that finishes its turn and is then closed. */
+  seats: z.array(z.object({
+    role: z.string().max(40), sessionId: z.string().max(100).nullable(),
+    tool: ToolSchema.optional(), model: ModelIdSchema.optional(), effort: EffortSchema.optional(), leaving: z.literal(true).optional()
+  }).strict()).max(16),
   done: z.number().int().min(0), given: z.number().int().min(0)
 }).strict();
 export type PhoneTeam = z.infer<typeof PhoneTeamSchema>;
@@ -214,7 +226,11 @@ const PhoneExpectSchema = PendingSchema.pick({ kind: true, text: true }).extend(
 /** The rows of a card the phone acts on: indexes into the card, none twice. */
 const CardRowsSchema = z.array(z.number().int().min(0).max(MAX_PROPOSALS - 1)).min(1).max(MAX_PROPOSALS).refine(r => new Set(r).size === r.length, 'a row twice');
 
-/** What the daemon accepts from a phone: this union is the whitelist. */
+/** A phone-made write or live-team change: strict, a project is a name, a team or role an id, and nothing is a path. A passkey assertion over `teamsDigest` backs it. */
+const teamsOp = { op: OperationIdSchema, assertion: AssertionSchema.optional() };
+const teamsScope = { scope: DefinitionScopeSchema, project: z.string().min(1).max(80).optional() };
+
+/** What the daemon accepts from a phone: this union is the whitelist. A repo scope names a project and a home scope none: `scopeIssue`, over the whole (a union cannot hold refined members). */
 export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('snapshot.request') }),
   z.object({ type: z.literal('session.thread'), id: sessionId }),
@@ -224,7 +240,8 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session.watch'), id: sessionId.nullable() }),
   z.object({ type: z.literal('session.read'), id: sessionId, at: z.string().datetime() }),
   /** Asks for a challenge. One object for both purposes: the gateway refuses a `decide` without `id` and `expect`. */
-  z.object({ type: z.literal('confirm.prepare'), purpose: ConfirmPurposeSchema, id: sessionId.optional(), expect: PhoneExpectSchema.optional(), qid: OperationIdSchema.optional() }),
+  z.object({ type: z.literal('confirm.prepare'), purpose: ConfirmPurposeSchema, id: sessionId.optional(), expect: PhoneExpectSchema.optional(), qid: OperationIdSchema.optional(),
+    /** sha256 of the `define` or `team` operation the challenge is for (`teamsDigest`). */ digest: TeamsDigestSchema.optional() }),
   z.object({ type: z.literal('credential.register'), op: OperationIdSchema, credential: CredentialSchema }),
   z.object({
     type: z.literal('session.decide'), op: OperationIdSchema, id: sessionId, decision: DecisionSchema, note: z.string().trim().min(1).max(NOTE_MAX).optional(),
@@ -278,14 +295,31 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   /** Puts a closed task Ledge gave away from « À traiter ». */
   z.object({ type: z.literal('task.seen'), op: OperationIdSchema, task: z.string().min(1).max(40) }),
   /** Whether the phone's app is in front: a device that is visible gets no push. */
-  z.object({ type: z.literal('presence'), visible: z.boolean() })
-]);
+  z.object({ type: z.literal('presence'), visible: z.boolean() }),
+  /** The roles, templates and problems of every scope the phone may name; then one role whole, when the catalog cut its prompt. */
+  z.object({ type: z.literal('teams.catalog') }),
+  z.object({ type: z.literal('teams.role'), ...teamsScope, id: RoleIdSchema }).strict(),
+  /** `base` is the hash the phone was shown, null to create. */
+  z.object({ type: z.literal('role.write'), ...teamsOp, ...teamsScope, role: PhoneRoleDraftSchema, base: DefinitionHashSchema.nullable() }).strict(),
+  z.object({ type: z.literal('role.delete'), ...teamsOp, ...teamsScope, id: RoleIdSchema, base: DefinitionHashSchema }).strict(),
+  /** No `id`: create, the id comes from the name. */
+  z.object({ type: z.literal('template.write'), ...teamsOp, ...teamsScope, id: TemplateIdSchema.optional(), name: TeamNameSchema, seats: PhoneSeatsSchema, base: DefinitionHashSchema.nullable() }).strict(),
+  z.object({ type: z.literal('template.delete'), ...teamsOp, ...teamsScope, id: TemplateIdSchema, base: DefinitionHashSchema }).strict(),
+  z.object({ type: z.literal('team.launch'), ...teamsOp, project: z.string().min(1).max(80), name: TeamNameSchema, seats: PhoneSeatsSchema, template: z.string().min(1).max(64).optional() }).strict(),
+  z.object({ type: z.literal('team.compose'), ...teamsOp, team: TeamIdSchema, seats: PhoneSeatsSchema }).strict(),
+  z.object({ type: z.literal('team.seat'), ...teamsOp, team: TeamIdSchema, role: RoleIdSchema, action: z.enum(['start', 'restart']) }).strict(),
+  z.object({ type: z.literal('team.dissolve'), ...teamsOp, team: TeamIdSchema }).strict()
+]).superRefine((m, ctx) => {
+  const issue = 'scope' in m ? scopeIssue(m) : null;
+  if (issue) ctx.addIssue({ code: z.ZodIssueCode.custom, message: issue, path: ['project'] });
+});
 export type PhoneClientMessage = z.infer<typeof PhoneClientMessageSchema>;
 
 /** What the daemon sends a phone. */
 export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('snapshot'), protocol: z.literal(PHONE_PROTOCOL), sessions: z.array(PhoneSessionSchema), capabilities: CapabilitiesByToolSchema, daemon: z.object({ version: z.string(), name: z.string().max(40), boot: z.string().uuid().optional() }), device: z.object({ confirm: z.boolean(), push: z.enum(['on', 'off', 'stale', 'unavailable']).optional(), chat: z.literal(true).optional(), contextNear: ContextPrefsSchema.shape.near.optional() }).optional() }),
-  z.object({ type: z.literal('confirm.challenge'), purpose: ConfirmPurposeSchema, challenge: B64U.max(64), rpId: z.string().max(253), credentialId: B64U.max(1_366).optional(), expiresInMs: z.number().int().positive() }),
+  z.object({ type: z.literal('confirm.challenge'), purpose: ConfirmPurposeSchema, challenge: B64U.max(64), rpId: z.string().max(253), credentialId: B64U.max(1_366).optional(), expiresInMs: z.number().int().positive(),
+    /** Echoed from the `confirm.prepare` of a `define` or `team` challenge, so the phone matches each challenge to its own call. Absent from an older gateway. */ digest: TeamsDigestSchema.optional() }),
   z.object({ type: z.literal('session.updated'), session: PhoneSessionSchema }),
   z.object({ type: z.literal('session.removed'), id: z.string() }),
   /** `pending.cut` is set when even this body was shortened. */
@@ -301,6 +335,8 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('chat.delta'), qid: OperationIdSchema, text: z.string().max(THREAD_TEXT_MAX) }),
   z.object({ type: z.literal('chat.done'), qid: OperationIdSchema, turn: PhoneChatTurnSchema }),
   z.object({ type: z.literal('chat.error'), qid: OperationIdSchema, code: ChatErrorCodeSchema }),
+  z.object({ type: z.literal('teams.catalog'), catalog: PhoneCatalogSchema }),
+  z.object({ type: z.literal('teams.role'), role: PhoneRoleSchema }),
   /** The live teams, after each snapshot and on every change. */
   z.object({ type: z.literal('teams'), teams: z.array(PhoneTeamSchema).max(50) }),
   /** The tasks Ledge gave, open or closed lately, after each snapshot; then each change. */
@@ -313,3 +349,22 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('error'), code: z.enum(['invalid', 'unknown_session', 'too_large']), request: z.string().max(40).optional() })
 ]);
 export type PhoneServerMessage = z.infer<typeof PhoneServerMessageSchema>;
+
+/** `define`: role and template files; `team`: live teams. */
+export const teamsPurpose = (type: TeamsOperation['type']): 'define' | 'team' => type.startsWith('team.') ? 'team' : 'define';
+
+/** Only the shape of `op` matters to the parse below; it is dropped before hashing. */
+const DIGEST_OP = '00000000-0000-4000-8000-000000000000';
+
+/**
+ * The lowercase sha256 of an operation as the daemon reads it: `m` goes through `PhoneClientMessageSchema` first (so ` Duo ` and `Duo`
+ * hash alike, and an unknown key throws instead of being dropped on one side only), then `op` and `assertion` are left out, then
+ * `canonicalJson`. The phone and the daemon call it with the raw and the parsed message and get the same digest. It runs in a browser
+ * and in Node. Throws when `m` is not a valid operation.
+ */
+export async function teamsDigest(m: Omit<TeamsOperation, 'op' | 'assertion'> & { op?: string; assertion?: unknown }): Promise<string> {
+  const { op: _op, assertion: _assertion, ...raw } = m;
+  const { op: _parsedOp, assertion: _parsedAssertion, ...rest } = PhoneClientMessageSchema.parse({ ...raw, op: DIGEST_OP }) as TeamsOperation;
+  const bytes = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonicalJson(rest))));
+  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+}

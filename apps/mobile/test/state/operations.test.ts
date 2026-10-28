@@ -125,6 +125,36 @@ describe('resendable across a PC restart', () => {
   });
 });
 
+const HASH = 'a'.repeat(16);
+const templateOp = (n: number, phase: OpPhase, id = 'duo'): Op => ({
+  op: uuid(n), phase, at: at(n), message: { type: 'template.write', op: uuid(n), scope: 'home', id, name: 'Duo', seats: [{ role: 'lead' }], base: HASH, assertion: { id: 'a', clientDataJSON: 'b', authenticatorData: 'c', signature: 'd' } }
+});
+
+describe('teams operations', () => {
+  it('are never deduped by their target: a second template.write of the same id is new while the first is uncertain', () => {
+    const next = templateOp(2, 'sending').message;
+    expect(isNew(byId(templateOp(1, 'uncertain')), next, null, NOW)).toBe(true);
+    expect(isNew(byId(templateOp(1, 'sending')), next, null, NOW)).toBe(true);
+    const del = { type: 'role.delete' as const, op: uuid(4), scope: 'home' as const, id: 'lead', base: HASH };
+    expect(isNew(byId({ op: uuid(3), phase: 'uncertain', at: at(3), message: { ...del, op: uuid(3) } }), del, null, NOW)).toBe(true);
+    // the op's own id still dedupes
+    expect(isNew(byId(templateOp(1, 'uncertain')), templateOp(1, 'sending').message, null, NOW)).toBe(false);
+  });
+
+  it('stay in memory: neither the assertion nor a prompt is written to storage', () => {
+    const storage = new MemoryStorage();
+    const role: Op = { op: uuid(5), phase: 'uncertain', at: at(5), message: { type: 'role.write', op: uuid(5), scope: 'home', role: { id: 'lead', label: 'Chef', prompt: 'SECRET-PROMPT' }, base: null } };
+    const team: Op = { op: uuid(6), phase: 'uncertain', at: at(6), message: { type: 'team.dissolve', op: uuid(6), team: 'team-a1b2' } };
+    saveOps(byId(templateOp(1, 'uncertain'), role, team, replyOp(7, 'uncertain')), storage);
+    const raw = storage.getItem(OPS_KEY) ?? '';
+    expect(raw).not.toContain('SECRET-PROMPT');
+    expect(raw).not.toContain('signature');
+    expect(Object.keys(loadOps(storage))).toEqual([uuid(7)]);
+    storage.setItem(OPS_KEY, JSON.stringify(byId(templateOp(1, 'uncertain'), replyOp(8, 'uncertain'))));
+    expect(Object.keys(loadOps(storage))).toEqual([uuid(8)]);
+  });
+});
+
 describe('saveOps / loadOps', () => {
   it('round-trips, and an operation still on its way when the page went is uncertain', () => {
     const storage = new MemoryStorage();

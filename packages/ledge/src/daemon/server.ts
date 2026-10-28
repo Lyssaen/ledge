@@ -3,8 +3,9 @@ import type { Socket } from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
+import { existsSync } from 'node:fs';
 import { WebSocketServer, WebSocket } from 'ws';
-import { actionById, contextNear, givenByLedge, LEDGE_GIVER, transmissions, projectOf, type ChatAction, type Autonomy, type Role, type Seat, type Team } from '@ledge/protocol';
+import { actionById, contextNear, isArchived, RoleIdSchema, TemplateIdSchema, type DefinitionCode, givenByLedge, LEDGE_GIVER, transmissions, projectOf, type ChatAction, type Autonomy, type Role, type Seat, type Team } from '@ledge/protocol';
 import { ATTACHMENT_LOCAL_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, backendOf } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
@@ -48,10 +49,11 @@ import { createTasks, type TasksJournal } from './tasks.js';
 import { createTeamsLive, type TeamsJournal } from './teamsLive.js';
 import { createHandovers, heldNames } from './handover.js';
 import { readContext } from './context.js';
-import { autonomyArgs, findRole, ompApprovalFor } from './roles.js';
-import { listDefinitions, resolveSeats, saveTemplate, templateExists } from './teams.js';
+import { autonomyArgs, findRole, loadRole, ompApprovalFor } from './roles.js';
+import { listDefinitions, resolveSeats, saveTemplate, templateExists, templateId, type ResolvedSeat } from './teams.js';
+import { deleteDefinition, promptRecipients, roleText, scopeDefinitions, scopeDir, templateText, writeDefinition } from './definitions.js';
 import { resolveRoleAddress, seatContext, teammates } from './seat.js';
-import { formatTeamNotice } from './crossSession.js';
+import { formatRoleNotice, formatTeamNotice } from './crossSession.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
 import { createRouter } from '../chat/routing.js';
 import { serveSsh } from '../transport/ssh.js';
@@ -280,6 +282,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const typing = new Set<string>();
   /** Sessions being closed: neither the relay nor the mailbox delivers to them, even free; their queues fail once they exit. */
   const closing = new Set<string>();
+  /** Sessions of removed team seats whose close was refused (logged once each, retried on later changes). */
+  const leaverRefused = new Set<string>();
+  /** Sessions of removed team seats being closed: a burst of store changes closes each once. */
+  const leaverCloses = new Set<string>();
   // An injected chat (tests) is the only thread there is; otherwise the relay and the close cards work across the PC's and every device's.
   const cardThreads: Pick<typeof threads, 'all' | 'owner' | 'emitterOf' | 'queuedRelays'> = opts.chat ? {
     all: () => [['desktop', chat]], owner: qid => (chat.relay(qid) || chat.close(qid, 0) || chat.action(qid, 0) ? 'desktop' : undefined), emitterOf: () => broadcast,
@@ -355,6 +361,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       if (c.session.state === 'idle' && was !== undefined && was !== 'idle' && c.session.transcriptPath) void measure(c.session.id).catch(e => log(`context of ${c.session.id} not read: ${(e as Error).message}`));
     }
     if (c.type === 'updated') labelExit(c.session);
+    closeLeavers();
     if (c.type === 'updated' && c.session.modelNext) void applyModelNext(c.session.id).catch(e => log(`model change of ${c.session.id} failed: ${(e as Error).message}`));
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
@@ -893,28 +900,186 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     return session;
   }
 
+  /** The first repo of a project on this machine, as a folder that exists; undefined when it has none or it does not resolve. */
+  async function projectFolder(projectId: string): Promise<string | undefined> {
+    const repo = projects.projects.find(p => p.id === projectId)?.repos.find(r => r.machine === 'local');
+    return repo ? resolveFolder(repo.path, opts.home).catch(() => undefined) : undefined;
+  }
+  /** A role or template write or delete (spec 2026-10-28 mobile teams): the file layer's answer, and the prompt change told to the seats it reaches. */
+  async function changeDefinition(msg: Extract<ClientMessage, { type: 'role.write' | 'role.delete' | 'template.write' | 'template.delete' }>): Promise<{ id?: string; hash?: string; code?: DefinitionCode; reason?: string }> {
+    const folder = msg.scope === 'repo' ? await projectFolder(msg.project!) : undefined;
+    if (msg.scope === 'repo' && !folder) return { code: 'unknown_project', reason: `aucun dossier local pour le projet ${msg.project}` };
+    const invalid = (reason: string) => ({ code: 'invalid' as const, reason });
+    const fileOf = (kind: 'roles' | 'teams', id: string, ext: string) => join(scopeDir(kind, msg.scope, folder), `${id}${ext}`);
+    // An id becomes a file name: checked again here, whatever the message schema let through.
+    const asRole = (id: string) => (RoleIdSchema.safeParse(id).success ? fileOf('roles', id, '.md') : undefined);
+    const asTemplate = (id: string) => {
+      if (!TemplateIdSchema.safeParse(id).success) return undefined;
+      // A template kept in a `.yml` file is edited there; a new one is `.yaml`.
+      const yaml = fileOf('teams', id, '.yaml'); const yml = fileOf('teams', id, '.yml');
+      return !existsSync(yaml) && existsSync(yml) ? yml : yaml;
+    };
+    switch (msg.type) {
+      case 'role.write': {
+        const id = msg.role.id; const path = asRole(id); const text = roleText(msg.role);
+        if (!path) return invalid(`identifiant de rôle invalide : ${id}`);
+        if (text === null) return invalid('une valeur du rôle ne peut pas s\'écrire dans le fichier');
+        // A file that does not parse reads as none: the write then counts as a create and its recipients are told.
+        const before = existsSync(path) ? loadRole(id, path, msg.scope, []) : undefined;
+        const r = writeDefinition(path, text, msg.base);
+        if ('code' in r) return { id, code: r.code };
+        const now = loadRole(id, path, msg.scope, []);
+        // The prompt or the label changed (or the file is new, which switches the sessions whose home role it now shadows): the seats holding it are told.
+        if (now && (!before || before.prompt !== now.prompt || before.label !== now.label)) {
+          const notice = formatRoleNotice({ role: id, text: `Ta consigne de rôle a changé (@${id}${now.label && now.label !== id ? `, ${now.label}` : ''}). La voici en entier ; elle remplace la précédente :\n\n${now.prompt}` });
+          for (const s of promptRecipients(id, path, store.all(), findRole)) mailbox.notify(s.id, notice, `role:${id}:${r.hash}:${s.id}`);
+        }
+        return { id, hash: r.hash };
+      }
+      case 'role.delete': {
+        const path = asRole(msg.id);
+        if (!path) return invalid(`identifiant de rôle invalide : ${msg.id}`);
+        const r = deleteDefinition(path, msg.base);
+        return 'code' in r ? { id: msg.id, code: r.code } : { id: msg.id };
+      }
+      case 'template.write': {
+        const id = msg.id ?? templateId(msg.name); const path = asTemplate(id); const text = templateText(msg.name, msg.seats);
+        if (!path) return invalid(`identifiant d'équipe invalide : ${id}`);
+        if (text === null) return invalid('une valeur de l\'équipe ne peut pas s\'écrire dans le fichier');
+        const r = writeDefinition(path, text, msg.base);
+        return 'code' in r ? { id, code: r.code } : { id, hash: r.hash };
+      }
+      case 'template.delete': {
+        const path = asTemplate(msg.id);
+        if (!path) return invalid(`identifiant d'équipe invalide : ${msg.id}`);
+        const r = deleteDefinition(path, msg.base);
+        return 'code' in r ? { id: msg.id, code: r.code } : { id: msg.id };
+      }
+    }
+  }
+
+  /** One seat's session, spawned as `launchTeam` spawns them: its tool, model and effort resolved over the role's defaults. */
+  const launchSeat = (team: Team, cwd: string, seat: ResolvedSeat): Promise<Session> =>
+    launch({ tool: seat.tool, cwd, role: seat.role.id, team: team.id, ...(seat.name ? { name: seat.name } : {}), ...(seat.model ? { model: seat.model } : {}), ...(seat.effort ? { effort: seat.effort } : {}) });
+  /**
+   * Starts a session in each of the given seats of a team, every one tried: the reason names the roles that failed, null when none did.
+   * What failed stays a free seat (the user may start it again), what started stays.
+   */
+  async function startSeats(team: Team, seats: readonly Seat[]): Promise<string | null> {
+    const resolved = resolveSeats(seats, listDefinitions(team.cwd).roles);
+    if ('unknown' in resolved) return `rôle inconnu : ${resolved.unknown.join(', ')} (écris .ledge/roles/<id>.md)`;
+    const failures: string[] = [];
+    for (const seat of resolved) {
+      try { await launchSeat(team, team.cwd, seat); }
+      catch (e) { log(`team ${team.id}: seat @${seat.role.id} failed: ${(e as Error).message}`); failures.push(`@${seat.role.id} : ${(e as Error).message}`); }
+    }
+    return failures.length ? failures.join(' ; ') : null;
+  }
+
   /** `team.launch` (roles spec §3.4): resolves the folder, its project and every role (one unknown refuses the whole
-   *  launch), creates the live team and spawns its seats in order. A seat that fails stops there: the others stay. */
+   *  launch), creates the live team and spawns its seats in order. A seat that fails stops there: the others stay.
+   *  With `seats` given, `template` is only recorded on the team (a phone's launch of a team it composed, from a template). */
   async function launchTeam(req: { cwd: string; template?: string; seats?: Seat[]; name?: string; defaults?: { tool: Tool; model?: string; effort?: string } }): Promise<{ team: Team } | { reason: string; team?: Team }> {
     const cwd = await resolveFolder(req.cwd, opts.home);
     const defs = listDefinitions(cwd);
-    const template = req.template ? defs.templates.find(t => t.id === req.template) : undefined;
-    if (req.template && !template) return { reason: `aucun modèle d'équipe ${req.template} (.ledge/teams/${req.template}.yaml)` };
-    const seats = template?.seats ?? req.seats;
+    const template = !req.seats && req.template ? defs.templates.find(t => t.id === req.template) : undefined;
+    if (!req.seats && req.template && !template) return { reason: `aucun modèle d'équipe ${req.template} (.ledge/teams/${req.template}.yaml)` };
+    const seats = req.seats ?? template?.seats;
     if (!seats?.length) return { reason: 'une équipe a au moins un siège' };
     const resolved = resolveSeats(seats, defs.roles, req.defaults);
     if ('unknown' in resolved) return { reason: `rôle inconnu : ${resolved.unknown.join(', ')} (écris .ledge/roles/<id>.md)` };
     const name = req.name ?? template?.name ?? (basename(cwd) || cwd);
-    const team = teams.create({ name, ...(template ? { template: template.id } : {}), project: projectOf({ cwd }, projects), cwd, roles: seats.map(s => s.role) });
+    const recorded = req.seats ? req.template : template?.id;
+    const team = teams.create({ name, ...(recorded ? { template: recorded } : {}), project: projectOf({ cwd }, projects), cwd, roles: seats });
     log(`team ${team.id} (${name}) launching ${resolved.length} seats in ${cwd}`);
     for (const seat of resolved) {
-      try { await launch({ tool: seat.tool, cwd, role: seat.role.id, team: team.id, ...(seat.name ? { name: seat.name } : {}), ...(seat.model ? { model: seat.model } : {}), ...(seat.effort ? { effort: seat.effort } : {}) }); }
+      try { await launchSeat(team, cwd, seat); }
       catch (e) {
         log(`team ${team.id}: seat @${seat.role.id} failed: ${(e as Error).message}`);
         return { reason: `@${seat.role.id} : ${(e as Error).message}`, team: teams.get(team.id)! };
       }
     }
     return { team: teams.get(team.id)! };
+  }
+
+  /**
+   * A seat removed from a live team finishes its turn, then its session is closed (spec 2026-10-28 mobile teams §3.6): at the session's
+   * next free moment, never on a permission prompt. A refused close is logged; the next store change tries again. The seat itself
+   * goes when the session exits (`teamsLive`), however it ended.
+   */
+  function closeLeavers(): void {
+    const leaving = new Set<string>();
+    for (const t of teams.all()) {
+      if (t.state === 'dissolved') continue;
+      for (const seat of t.seats) {
+        if (!seat.leaving || !seat.sessionId) continue;
+        leaving.add(seat.sessionId);
+        const s = store.get(seat.sessionId);
+        // A session mid-reply or mid-relay finishes it first: the next change tries again.
+        if (!free(s) || leaverCloses.has(s.id) || closing.has(s.id) || typing.has(s.id) || inFlight.has(s.id)) continue;
+        leaverCloses.add(s.id);
+        closeSession(s).catch(e => {
+          // A session Ledge cannot close (started without it) is let go of: the seat goes, the session stays as it is. Another refusal is logged once, and retried.
+          if (e instanceof Refusal && e.code === 'read_only') { log(`team ${t.id}: @${seat.role} (${s.id}) cannot be closed, left to itself: ${e.message}`); teams.leave(t.id, s.id); return; }
+          if (!leaverRefused.has(s.id)) { leaverRefused.add(s.id); log(`team ${t.id}: close of @${seat.role} (${s.id}) refused: ${(e as Error).message}`); }
+        }).finally(() => leaverCloses.delete(s.id));
+      }
+    }
+    for (const id of leaverRefused) if (!leaving.has(id)) leaverRefused.delete(id);
+  }
+
+  /** The seats being started or restarted (team + role): a second tap meanwhile is refused, never a second session. */
+  const seatsInFlight = new Set<string>();
+  /** `team.compose`: the new composition applied at once, a session started in each added seat, the removed ones closed at their free moment. */
+  async function composeTeam(msg: Extract<ClientMessage, { type: 'team.compose' }>): Promise<Extract<ServerMessage, { type: 'team.changed' }>> {
+    const changed = (extra: { team?: Team; reason?: string }) => ({ type: 'team.changed' as const, rid: msg.rid, ...extra });
+    const t = teams.get(msg.team); if (!t) return changed({ reason: `aucune équipe ${msg.team}` });
+    const known = new Set(t.seats.map(s => s.role));
+    const added = msg.seats.filter(s => !known.has(s.role));
+    if (added.length) {
+      const roles = new Set(listDefinitions(t.cwd).roles.map(r => r.id));
+      const unknown = added.filter(s => !roles.has(s.role)).map(s => s.role);
+      if (unknown.length) return changed({ reason: `rôle inconnu : ${unknown.join(', ')} (écris .ledge/roles/<id>.md)` });
+    }
+    // The seats it adds are held as `team.seat start` holds them: a start landing meanwhile is refused, never a second session.
+    const keys = added.map(s => `${t.id}:${s.role}`);
+    const busy = added.find(s => seatsInFlight.has(`${t.id}:${s.role}`));
+    // No team in this reply: a team with a reason reads as « saved, a seat did not start », and nothing was saved.
+    if (busy) return changed({ reason: `@${busy.role} : une opération est déjà en cours sur ce siège` });
+    for (const k of keys) seatsInFlight.add(k);
+    try {
+      const r = teams.compose(msg.team, msg.seats);
+      if (typeof r === 'string') return changed({ reason: r });
+      log(`team ${t.id} composed: +${r.added.join(',') || '-'} −${r.removed.join(',') || '-'}`);
+      const failed = r.added.length ? await startSeats(r.team, msg.seats.filter(s => r.added.includes(s.role))) : null;
+      closeLeavers();
+      return changed({ team: teams.get(t.id)!, ...(failed ? { reason: failed } : {}) });
+    } finally { for (const k of keys) seatsInFlight.delete(k); }
+  }
+
+  /** `team.seat`: a session started in a free seat, or the seat's session replaced by a fresh one (restart). */
+  async function seatTeam(msg: Extract<ClientMessage, { type: 'team.seat' }>): Promise<Extract<ServerMessage, { type: 'team.changed' }>> {
+    const key = `${msg.team}:${msg.role}`;
+    if (seatsInFlight.has(key)) return { type: 'team.changed', rid: msg.rid, ...(teams.get(msg.team) ? { team: teams.get(msg.team)! } : {}), reason: `@${msg.role} : une opération est déjà en cours sur ce siège` };
+    seatsInFlight.add(key);
+    try { return await seatTeamNow(msg); } finally { seatsInFlight.delete(key); }
+  }
+  async function seatTeamNow(msg: Extract<ClientMessage, { type: 'team.seat' }>): Promise<Extract<ServerMessage, { type: 'team.changed' }>> {
+    const changed = (extra: { team?: Team; reason?: string }) => ({ type: 'team.changed' as const, rid: msg.rid, ...extra });
+    const t = teams.get(msg.team); if (!t) return changed({ reason: `aucune équipe ${msg.team}` });
+    if (t.state === 'dissolved') return changed({ reason: `l'équipe ${t.name} est dissoute` });
+    const seat = t.seats.find(s => s.role === msg.role);
+    if (!seat) return changed({ reason: `aucun siège @${msg.role} dans ${t.name}` });
+    if (seat.leaving) return changed({ reason: `@${msg.role} part de ${t.name}` });
+    const cur = seat.sessionId ? store.get(seat.sessionId) : undefined;
+    const running = !!cur && cur.state !== 'exited' && !isArchived(cur);
+    if (msg.action === 'start' && running) return changed({ team: t, reason: `@${msg.role} est déjà tenu par ${cur.name}` });
+    if (msg.action === 'restart' && running) {
+      try { await closeSession(cur); }
+      catch (e) { return changed({ team: teams.get(t.id)!, reason: `@${msg.role} : ${(e as Error).message}` }); }
+    }
+    const failed = await startSeats(t, [{ role: seat.role, ...(seat.tool ? { tool: seat.tool } : {}), ...(seat.model ? { model: seat.model } : {}), ...(seat.effort ? { effort: seat.effort } : {}) }]);
+    return changed({ team: teams.get(t.id)!, ...(failed ? { reason: failed } : {}) });
   }
 
   /** The chat's team card (roles spec §3.8): launched once, from the card's own fields; its outcome stays on the card. */
@@ -959,9 +1124,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     for (const seat of t.seats) {
       const s = seat.sessionId ? store.get(seat.sessionId) : undefined;
       if (!s || s.state !== 'exited') continue;
+      // The seat was composed for another agent than the one that ended: its conversation is not that agent's.
+      if (seat.tool && seat.tool !== s.tool) { failures.push(`@${seat.role} : outil changé, redémarre le siège`); continue; }
       const key = resumeKey(s);
       if (!key) { failures.push(`@${seat.role} : aucune conversation à reprendre`); continue; }
-      const refused = await respawn(s, key, s.model, s.effort);
+      const refused = await respawn(s, key, seat.model ?? s.model, seat.effort ?? s.effort);
       if (refused) failures.push(`@${seat.role} : ${refused}`);
     }
     return failures.length ? failures.join(' ; ') : null;
@@ -1260,8 +1427,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       case 'team.launch': {
         if (msg.qid !== undefined) return setAside(msg.qid) ? reply({ type: 'team.failed', rid: msg.rid, reason: SET_ASIDE }) : launchTeamFromCard(msg.rid, msg.qid, reply);
-        if (!msg.cwd) return reply({ type: 'team.failed', rid: msg.rid, reason: 'il faut un dossier' });
-        const r = await launchTeam({ cwd: msg.cwd, ...(msg.template ? { template: msg.template } : {}), ...(msg.seats ? { seats: msg.seats } : {}), ...(msg.name ? { name: msg.name } : {}) });
+        // A client that holds no path (the phone) names the project: its first local repo is the folder.
+        const cwd = msg.cwd ?? (msg.project ? await projectFolder(msg.project) : undefined);
+        if (!cwd) return reply({ type: 'team.failed', rid: msg.rid, reason: msg.project && !msg.cwd ? 'aucun dossier local pour ce projet' : 'il faut un dossier' });
+        const r = await launchTeam({ cwd, ...(msg.template ? { template: msg.template } : {}), ...(msg.seats ? { seats: msg.seats } : {}), ...(msg.name ? { name: msg.name } : {}) });
         return reply('reason' in r ? { type: 'team.failed', rid: msg.rid, reason: r.reason, ...(r.team ? { team: r.team } : {}) } : { type: 'team.launched', rid: msg.rid, team: r.team });
       }
       case 'team.join': {
@@ -1302,6 +1471,21 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         }
         catch (e) { return reply({ type: 'team.saved', rid: msg.rid, reason: (e as Error).message }); }
       }
+      case 'definitions.list': {
+        const scopes: Extract<ServerMessage, { type: 'definitions.listing' }>['scopes'] = [
+          { scope: 'home', project: null, ...scopeDefinitions({ roles: scopeDir('roles', 'home'), teams: scopeDir('teams', 'home') }, 'home') }
+        ];
+        for (const p of projects.projects) {
+          const folder = await projectFolder(p.id);
+          if (folder) scopes.push({ scope: 'repo', project: p.id, ...scopeDefinitions({ roles: scopeDir('roles', 'repo', folder), teams: scopeDir('teams', 'repo', folder) }, 'repo') });
+        }
+        return reply({ type: 'definitions.listing', ...(msg.requestId ? { requestId: msg.requestId } : {}), scopes });
+      }
+      case 'role.write': case 'role.delete': case 'template.write': case 'template.delete':
+        // A disk failure still answers the request that is waiting for its `rid`.
+        return reply({ type: 'definition.result', rid: msg.rid, ...(await changeDefinition(msg).catch((e: Error) => ({ code: 'invalid' as const, reason: e.message }))) });
+      case 'team.compose': return reply(await composeTeam(msg).catch((e: Error) => ({ type: 'team.changed' as const, rid: msg.rid, reason: e.message })));
+      case 'team.seat': return reply(await seatTeam(msg).catch((e: Error) => ({ type: 'team.changed' as const, rid: msg.rid, reason: e.message })));
       // A chat card's instruction: a refusal reaches the requester as an `error`, the card's state everyone through chat.history.
       case 'session.relay': return setAside(msg.qid) ? refuse(SET_ASIDE) : relay.request(msg.qid);
       case 'session.relay.cancel': return relay.cancel(msg.qid);
@@ -1431,7 +1615,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     credential: id => mobile.credential(id),
     setCredential: (id, c) => mobile.setCredential(id, c),
     teams: () => teams.all(), tasks: () => tasks.all(), contextNear: () => contextPrefs.near,
-    projectName: id => (id ? projects.projects.find(p => p.id === id)?.name ?? null : null)
+    projectName: id => (id ? projects.projects.find(p => p.id === id)?.name ?? null : null),
+    // A project's folder is its first local repo: only a project with one can be named by the phone.
+    projectByName: name => projects.projects.find(p => p.name === name && p.repos.some(r => r.machine === 'local'))?.id ?? null,
+    teamCatalog: true
   });
   /** A hidden phone is told, through the relay, of what deserves it. */
   let unsubscribePush: (() => void) | undefined;

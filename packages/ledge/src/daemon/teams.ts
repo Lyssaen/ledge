@@ -1,14 +1,14 @@
 import { existsSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { SeatsSchema, TeamNameSchema, type DefinitionProblem, type Role, type Seat, type TeamTemplate, type Tool } from '@ledge/protocol';
-import { definitionDirs, definitionFiles, listRoles, readSmall, unquote } from './roles.js';
+import { definitionDirs, definitionFiles, definitionHash, listRoles, quoteScalar, readSmall, scalarValue } from './roles.js';
 import { ledgeDir } from '../paths.js';
 import { log } from '../log.js';
 
 type Value = string | Value[] | { [k: string]: Value };
 
-/** A scalar of the YAML subset: quotes taken off, a trailing comment dropped. */
-const scalar = (raw: string): string => unquote(raw.replace(/\s+#.*$/, '').trim());
+/** A scalar of the YAML subset: quotes taken off, a trailing comment dropped from an unquoted value. */
+const scalar = scalarValue;
 
 /** `{ role: build, tool: claude }`: a flow mapping of scalars. */
 function flowMap(raw: string): Record<string, string> {
@@ -75,6 +75,14 @@ export function parseTemplate(id: string, text: string, source: 'repo' | 'home',
   return { id, name: name.data, seats: seats.data, source, path };
 }
 
+/** One template file read, with the hash of its text; undefined, logged and told in `problems`, when it is not a template. */
+export function loadTemplate(id: string, path: string, source: 'repo' | 'home', problems: DefinitionProblem[]): TeamTemplate | undefined {
+  let t: TeamTemplate | string;
+  try { const text = readSmall(path); t = parseTemplate(id, text, source, path); if (typeof t !== 'string') t = { ...t, hash: definitionHash(text) }; } catch (e) { t = (e as Error).message; }
+  if (typeof t === 'string') { log(`team ${path} skipped: ${t}`); problems.push({ path, reason: t }); return undefined; }
+  return t;
+}
+
 /** The team templates of a folder: the repository's, then the home's of another id. */
 export function listTemplates(cwd?: string): { templates: TeamTemplate[]; problems: DefinitionProblem[] } {
   const templates = new Map<string, TeamTemplate>(); const problems: DefinitionProblem[] = [];
@@ -82,10 +90,8 @@ export function listTemplates(cwd?: string): { templates: TeamTemplate[]; proble
     for (const path of definitionFiles(dir, ['.yaml', '.yml'])) {
       const id = path.slice(dir.length + 1).replace(/\.ya?ml$/, '');
       if (templates.has(id)) continue;
-      let t: TeamTemplate | string;
-      try { t = parseTemplate(id, readSmall(path), source, path); } catch (e) { t = (e as Error).message; }
-      if (typeof t === 'string') { log(`team ${path} skipped: ${t}`); problems.push({ path, reason: t }); continue; }
-      templates.set(id, t);
+      const t = loadTemplate(id, path, source, problems);
+      if (t) templates.set(id, t);
     }
   }
   return { templates: [...templates.values()].sort((a, b) => a.id.localeCompare(b.id)), problems };
@@ -120,7 +126,27 @@ export function templateId(name: string): string {
   return id || 'team';
 }
 
-const yamlScalar = (v: string): string => (/^[\w./@:+-]+$/.test(v) && !/^(true|false|null|yes|no|~)$/i.test(v) ? v : JSON.stringify(v));
+const SEAT_KEYS = ['role', 'tool', 'model', 'effort', 'name'] as const;
+
+/** The YAML of a template, seats as blocks (a name may hold `,` or `}`); null when a value cannot be written: a quote of each
+ *  kind, a line break, or a tab (the parser refuses tabs). */
+export function templateText(name: string, seats: readonly Seat[]): string | null {
+  const q = (v: string) => (v.includes('\t') ? null : quoteScalar(v));
+  const head = q(name);
+  if (head === null) return null;
+  const lines = [`name: ${head}`, 'seats:'];
+  for (const s of seats) {
+    let first = true;
+    for (const k of SEAT_KEYS) {
+      if (s[k] === undefined) continue;
+      const v = q(String(s[k]));
+      if (v === null) return null;
+      lines.push(`${first ? '  - ' : '    '}${k}: ${v}`);
+      first = false;
+    }
+  }
+  return `${lines.join('\n')}\n`;
+}
 
 const templatePath = (name: string, dir: string) => join(dir, `${templateId(name)}.yaml`);
 /** Whether `saveTemplate(name)` would replace a template already saved. */
@@ -129,10 +155,11 @@ export const templateExists = (name: string, dir = join(ledgeDir(), 'teams')): b
 /** The chat's « Enregistrer » (§3.8): an ad hoc team written to `~/.ledge/teams/<id>.yaml`, a template from then on. */
 export function saveTemplate(name: string, seats: readonly Seat[], dir = join(ledgeDir(), 'teams')): string {
   const path = templatePath(name, dir);
-  const lines = [`name: ${yamlScalar(name)}`, 'seats:', ...seats.map(s => `  - { ${Object.entries(s).filter(([, v]) => v !== undefined).map(([k, v]) => `${k}: ${yamlScalar(String(v))}`).join(', ')} }`), ''];
+  const text = templateText(name, seats);
+  if (text === null) throw new Error('a team name or seat value cannot be written as YAML');
   mkdirSync(dir, { recursive: true });
   const tmp = `${path}.tmp`;
-  writeFileSync(tmp, lines.join('\n'));
+  writeFileSync(tmp, text);
   renameSync(tmp, path);
   return path;
 }

@@ -96,6 +96,29 @@ describe('a team made with Ledge’s chat', () => {
   }, 30_000);
 });
 
+describe('a live team recomposed from the phone', () => {
+  it('a seat start racing the compose that adds the seat is refused: one session, not two', async () => {
+    role('rev', 'label: Rev');
+    await start();
+    const c = await client();
+    c.send({ type: 'team.launch', rid: 'r1', cwd: work, name: 'duo', seats: [{ role: 'lead' }] });
+    const { team } = await c.next('team.launched', 5000);
+    // @rev takes a while to spawn: the window in which the seat exists and holds no session yet.
+    const spawn = tmux.newSession.bind(tmux);
+    tmux.newSession = async o => { if (o.env.LEDGE_ROLE === 'rev') await new Promise(r => setTimeout(r, 150)); return spawn(o); };
+    // Both arrive together: the compose adds @rev and starts it, the start finds the seat already there.
+    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'lead' }, { role: 'rev' }] });
+    c.send({ type: 'team.seat', rid: 's1', team: team.id, role: 'rev', action: 'start' });
+    const first = await c.next('team.changed', 5000);
+    const second = await c.next('team.changed', 5000);
+    const [composed, started] = first.rid === 'c1' ? [first, second] : [second, first];
+    expect(composed.reason).toBeUndefined();
+    expect(started.reason).toContain('déjà en cours');
+    expect(tmux.created.filter(o => o.env.LEDGE_ROLE === 'rev')).toHaveLength(1);
+    await c.close();
+  }, 15_000);
+});
+
 describe('the tasks of a role', () => {
   it('Ledge gives @build three tasks: its seat gets them one at a time, oldest first, each once it is free again', async () => {
     const tasks = ['Écrire roles.ts', 'Tester roles.ts', 'Documenter les rôles'];

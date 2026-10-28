@@ -503,6 +503,8 @@ describe('session identity (SessionStart additionalContext)', () => {
     expect(codex).toContain('Pour écrire à une autre session Ledge, lance `ledge send <nom> "<message>"` (seul, sans && ni |). Ledge exécute lui-même `ledge send`, `ledge read`, `ledge task` et `ledge who` : leur résultat t\'arrive comme « Command blocked by PreToolUse hook: … », c\'est la réponse, pas une erreur.');
     // Both are told how to read a long message whole.
     for (const t of [text, codex]) expect(t).toContain('lance `ledge read <id>` pour le lire en entier');
+    // A `<ledge-notice>` is not only an undelivered message: a role prompt or team change arrives the same way.
+    for (const t of [text, codex]) expect(t).toContain('Une `<ledge-notice>` vient de Ledge : soit un de tes messages n\'a pas pu être remis, soit un changement te concerne (ta consigne de rôle, ton équipe).');
     // And how to give work that must not get lost.
     for (const t of [text, codex]) expect(t).toContain('`ledge task give <nom> "<titre>" "<détail>"`');
     for (const t of [text, codex]) expect(t).toContain('`ledge task give ledge "<question>" "<options, ta recommandation>"`');
