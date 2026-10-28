@@ -143,6 +143,28 @@ export const copy = {
       notSaved: 'Pas enregistré.', changedKept: 'Votre texte est gardé. Enregistrer écrase la version du PC.', takePc: 'Reprendre la version du PC',
       taken: 'Cet identifiant est déjà pris.', invalid: 'Ce rôle ne peut pas être enregistré tel quel.',
       missing: 'Ce rôle n’existe pas sur ce PC.', gone: 'Ce rôle n’existe plus sur le PC. Votre texte est gardé ici, mais il ne peut plus être enregistré.'
+    },
+    /** The team editor (a team's own page, a copy of a live team, a live team's composition). */
+    team: {
+      nameRule: 'Un nom de 60 caractères au plus.',
+      composeTitle: 'Modifier la composition', copyTitle: 'Enregistrer comme équipe',
+      seats: (n: number, max: number) => `SIÈGES · ${n} SUR ${max}`, seatsLabel: 'Sièges',
+      noSeats: 'Aucun siège : ajoutez au moins un rôle.',
+      addRole: 'Ajouter un rôle', newRole: 'Nouveau rôle…', noRoleLeft: 'Tous les rôles sont déjà dans l’équipe.',
+      change: 'Changer', changeSeat: (role: string) => `Changer @${role}`, removeSeat: (role: string) => `Retirer @${role}`,
+      modified: 'modifié', apply: 'Appliquer', unknownRole: (role: string) => `@${role} n’existe pas sur ce PC : retirez-le de l’équipe.`,
+      scopeHead: 'RANGER DANS', scopeLegend: 'Où ranger l’équipe', home: 'Maison', repo: (project: string) => project ? `Dépôt ${project}` : 'Dépôt',
+      homeHint: 'Maison : disponible pour tous vos projets.', repoHint: (project: string) => project ? `Dépôt : seulement dans ${project}.` : 'Dépôt : choisissez le projet ci-dessus.',
+      fixedScope: (scope: string) => `Rangée dans : ${scope}.`,
+      launchNote: 'Votre passkey confirme le lancement.', saveNote: 'Votre passkey confirme l’écriture sur le PC.', composeNote: 'Votre passkey confirme le changement de composition.',
+      save: 'Enregistrer', delete: 'Supprimer', deleteTitle: (name: string) => `Supprimer ${name} ?`, deleteHint: 'Les équipes déjà levées ne changent pas.',
+      notSaved: 'Pas enregistré.', notDeleted: 'Pas supprimée.', exists: 'Une équipe de ce nom existe déjà.', invalid: 'Cette équipe ne peut pas être enregistrée telle quelle.',
+      composed: 'Composition enregistrée.',
+      handNamed: 'Ce fichier porte un nom fait main : il ne se modifie que sur le PC. Vous pouvez quand même lever l’équipe.',
+      changedKept: 'Vos modifications sont gardées. Enregistrer écrase la version du PC.',
+      missing: 'Cette équipe n’existe pas sur ce PC.', gone: 'Cette équipe n’existe plus sur le PC. Vos modifications sont gardées ici, mais elles ne peuvent plus être enregistrées.',
+      restart: 'Redémarrer ce siège', restartHint: 'La conversation du siège n’est pas reprise.', notRestarted: 'Pas redémarré.',
+      nextStart: 'au prochain démarrage du siège'
     }
   },
   agents: {

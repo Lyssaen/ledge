@@ -5,12 +5,12 @@ import { catalogKey, parseCatalogKey, scopeLabel, teamsSeating } from '../model/
 import { outcomeNote, type OutcomeNote } from '../model/teamsOutcome';
 import { goBack, href, navigate } from '../router';
 import { useMobile, type DefineRequest, type MobileStore, type RoleRef } from '../state/store';
-import { Button, buttonClass, chipClass } from '../ui/Button';
+import { Button, chipClass } from '../ui/Button';
 import { Sheet } from '../ui/Dialog';
 import { FIELD } from '../ui/field';
 import { BackHeader, linkView } from '../ui/Header';
-import { Notice, OfflineBanner } from '../ui/Notice';
-import { CATALOG_WAIT_MS } from './Teams';
+import { OfflineBanner } from '../ui/Notice';
+import { EditorPending, useCatalogGate, useChangedWait, useMounted } from './teamsEditing';
 
 const t = copy.teams.role;
 const EFFORT_MAX = 20;
@@ -56,14 +56,10 @@ function Form({ store, roleKey, initial }: { store: MobileStore; roleKey: string
   const [deleteNote, setDeleteNote] = useState<OutcomeNote | null>(null);
   const [readFailed, setReadFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  // After « changed »: the catalog that was current then; the editor waits for another before it lets the user save over it.
-  const [waiting, setWaiting] = useState<typeof catalog | undefined>(undefined);
-  const [reloaded, setReloaded] = useState(false);
   // The role was deleted on the PC: what the user typed stays on screen, but there is no file left to write over.
   const [gone, setGone] = useState(false);
-  // A write that resolves after the user left the screen must not navigate: `history.back()` would pop one screen too far.
-  const mounted = useRef(true);
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const [reloaded, setReloaded] = useState(false);
+  const mounted = useMounted();
 
   const isNew = initial === null;
   const where = isNew ? { scope: project === null ? 'home' as const : 'repo' as const, project } : shown ? { scope: shown.scope, project: shown.project } : null;
@@ -81,17 +77,11 @@ function Form({ store, roleKey, initial }: { store: MobileStore; roleKey: string
   }, [store, shown?.hash, cut, attempt]);
 
   // « changed »: the next catalog brings the version the PC has now. It becomes the base of the next save; the user's text stays over it.
-  useEffect(() => {
-    if (waiting === undefined || catalog === waiting) return;
-    const fresh = catalog?.roles.find(r => key !== null && r.id === key.id && r.scope === key.scope && r.project === key.project);
-    if (fresh) { setShown(fresh); setReloaded(true); } else if (key !== null) { setGone(true); setReloaded(false); }
-    setWaiting(undefined);
-  }, [catalog, waiting, key]);
-  useEffect(() => {
-    if (waiting === undefined) return;
-    const timer = setTimeout(() => setWaiting(undefined), CATALOG_WAIT_MS);
-    return () => clearTimeout(timer);
-  }, [waiting]);
+  const changed = useChangedWait(store, catalog, fresh => {
+    const found = fresh?.roles.find(r => key !== null && r.id === key.id && r.scope === key.scope && r.project === key.project);
+    if (found) { setShown(found); setReloaded(true); } else if (key !== null) { setGone(true); setReloaded(false); }
+  });
+  const waiting = changed.waiting;
 
   const label = edits.label ?? shown?.label ?? '';
   const prompt = edits.prompt ?? shown?.prompt ?? '';
@@ -109,7 +99,7 @@ function Form({ store, roleKey, initial }: { store: MobileStore; roleKey: string
   const effortOk = effort.trim() === '' || EffortSchema.safeParse(effort.trim()).success;
   const locked = !isNew && (cut || readFailed);
   const canConfirm = !!state.device?.confirm;
-  const valid = idOk && !taken && labelOk && modelOk && effortOk && !locked && !gone && waiting === undefined;
+  const valid = idOk && !taken && labelOk && modelOk && effortOk && !locked && !gone && !waiting;
   const ready = valid && canConfirm && state.fresh && !busy;
 
   const draft = () => ({
@@ -128,7 +118,7 @@ function Form({ store, roleKey, initial }: { store: MobileStore; roleKey: string
         if (r.status === 'applied') { if (mounted.current) onApplied(); return; }
         onNote(outcomeNote(r, t.notSaved, { exists: t.taken, invalid: t.invalid }));
         // The file moved under the user: the catalog tells how, and the editor adopts it once it arrives.
-        if (r.status === 'rejected' && r.reason === 'changed') { setWaiting(catalog); store.requestCatalog(); }
+        if (r.status === 'rejected' && r.reason === 'changed') changed.begin();
         // Asked again so the id that is taken shows as such, before the next try.
         if (r.status === 'rejected' && r.reason === 'exists') store.requestCatalog();
       }, () => onNote({ text: t.notSaved, quiet: false }))
@@ -255,17 +245,15 @@ function Form({ store, roleKey, initial }: { store: MobileStore; roleKey: string
           : <p className="mt-2 text-center text-body text-attention">{copy.chat.launchSetup} <a href={href({ name: 'connection' })} className="text-info underline underline-offset-2">{copy.connection.title}</a></p>}
         {!isNew && <Button variant="outline" block className="mt-4" disabled={!state.fresh || !canConfirm || gone} onClick={() => { setDeleteNote(null); setDeleting(true); }}>{t.delete}</Button>}
       </main>
-      {deleting && shown && <DeleteSheet id={shown.id} seating={seating} busy={busy} blocked={waiting !== undefined || gone} note={deleteNote} onConfirm={deleteRole} onClose={() => setDeleting(false)} />}
+      {deleting && shown && <DeleteSheet id={shown.id} seating={seating} busy={busy} blocked={waiting || gone} note={deleteNote} onConfirm={deleteRole} onClose={() => setDeleting(false)} />}
     </>
   );
 }
 
 /** The role editor: « Nouveau rôle » (`roleKey` `new`), or the role a catalog key names. It waits for the PC's catalog, then hands the form the role it holds. */
 export function RoleEditor({ store, roleKey }: { store: MobileStore; roleKey: string }) {
-  const state = useMobile(store);
-  const { catalog } = state;
-  const [attempt, setAttempt] = useState(0);
-  const [waited, setWaited] = useState(false);
+  const { catalog } = useMobile(store);
+  const gate = useCatalogGate(store);
   const isNew = roleKey === 'new';
   const key = isNew ? null : parseCatalogKey(roleKey);
   const found = catalog?.roles.find(r => key !== null && r.id === key.id && r.scope === key.scope && r.project === key.project) ?? null;
@@ -273,28 +261,6 @@ export function RoleEditor({ store, roleKey }: { store: MobileStore; roleKey: st
   const first = useRef<PhoneRole | null>(null);
   if (!first.current && found) first.current = found;
 
-  useEffect(() => { store.requestCatalog(); }, [store, state.fresh, attempt]);
-  useEffect(() => {
-    setWaited(false);
-    if (catalog) return;
-    const timer = setTimeout(() => setWaited(true), CATALOG_WAIT_MS);
-    return () => clearTimeout(timer);
-  }, [catalog, state.fresh, attempt]);
-
-  if (!catalog || (!isNew && !first.current)) {
-    return (
-      <>
-        <BackHeader title={copy.nav.teams} fallback={{ name: 'teams' }} label={copy.nav.backTo.teams ?? copy.nav.back} link={linkView(state)} />
-        <main className="min-h-0 flex-1 overflow-y-auto pb-[22px]">
-          {!catalog ? (waited ? (
-            <div className="mt-3"><Notice title={copy.teams.unavailable} tone="plain">
-              <button type="button" onClick={() => setAttempt(n => n + 1)} className={buttonClass({ block: true, className: 'mt-3' })}>{copy.teams.retry}</button>
-            </Notice></div>
-          ) : <p role="status" className="py-6 text-center text-body text-muted">{copy.teams.loading}</p>)
-            : <p className="py-6 text-center text-body text-muted">{t.missing}</p>}
-        </main>
-      </>
-    );
-  }
+  if (!catalog || (!isNew && !first.current)) return <EditorPending store={store} waited={gate.waited} retry={gate.retry} missing={catalog ? t.missing : null} />;
   return <Form key={isNew ? 'new' : catalogKey(first.current!)} store={store} roleKey={roleKey} initial={isNew ? null : first.current} />;
 }
