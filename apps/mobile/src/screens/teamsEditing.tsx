@@ -6,6 +6,8 @@ import { useMobile, type MobileStore } from '../state/store';
 import { BackHeader, linkView } from '../ui/Header';
 import { buttonClass } from '../ui/Button';
 import { Notice } from '../ui/Notice';
+import { outcomeNote, type OutcomeNote } from '../model/teamsOutcome';
+import type { Route } from '../router';
 import { CATALOG_WAIT_MS } from './Teams';
 
 /** Whether the screen is still on: a write that resolves after the user left must not navigate (`history.back()` would pop one screen too far). */
@@ -57,12 +59,18 @@ export function useChangedWait(store: MobileStore, catalog: PhoneCatalog | null,
   return { waiting: from !== undefined, begin: () => { setFrom(catalog); store.requestCatalog(); } };
 }
 
-/** What an editor shows until it has what it opens on: the wait for the catalog, its retry, or `missing` when the PC answered without it. */
-export function EditorPending({ store, waited, retry, missing }: { store: MobileStore; waited: boolean; retry: () => void; missing: string | null }) {
+/** Starts (`start`, a seat that holds no session) or restarts (`restart`) a seat of a live team, after the device's confirmation. Null once it is done, else the note that says why not. */
+export function seatAction(store: MobileStore, team: string, role: string, action: 'start' | 'restart'): Promise<OutcomeNote | null> {
+  const fallback = action === 'start' ? copy.teams.team.notStarted : copy.teams.team.notRestarted;
+  return store.teamOp({ type: 'team.seat', team, role, action }).then(r => r.status === 'applied' ? null : outcomeNote(r, fallback), () => ({ text: fallback, quiet: false }));
+}
+
+/** What a screen shows until it has what it opens on: the wait for the catalog, its retry, or `missing` when the PC answered without it. It leads back to the Équipes tab, or to `back`. */
+export function EditorPending({ store, waited, retry, missing, back }: { store: MobileStore; waited: boolean; retry: () => void; missing: string | null; back?: { route: Route; title: string; label: string } }) {
   const state = useMobile(store);
   return (
     <>
-      <BackHeader title={copy.nav.teams} fallback={{ name: 'teams' }} label={copy.nav.backTo.teams ?? copy.nav.back} link={linkView(state)} />
+      <BackHeader title={back?.title ?? copy.nav.teams} fallback={back?.route ?? { name: 'teams' }} label={back?.label ?? copy.nav.backTo.teams ?? copy.nav.back} link={linkView(state)} />
       <main className="min-h-0 flex-1 overflow-y-auto pb-[22px]">
         {missing !== null ? <p className="py-6 text-center text-body text-muted">{missing}</p>
           : waited ? (

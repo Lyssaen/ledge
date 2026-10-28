@@ -14,7 +14,8 @@ import { BackHeader, linkView } from '../ui/Header';
 import { Icon } from '../ui/icons';
 import { OfflineBanner } from '../ui/Notice';
 import { RolePill } from '../ui/teams/RolePill';
-import { EditorPending, useCatalogGate, useChangedWait, useMounted } from './teamsEditing';
+import { SeatMeta } from '../ui/teams/SeatMeta';
+import { EditorPending, seatAction, useCatalogGate, useChangedWait, useMounted } from './teamsEditing';
 
 const t = copy.teams.team;
 type Seat = PhoneTemplate['seats'][number];
@@ -28,7 +29,6 @@ interface Edits { name?: string; project?: string; scope?: Scope; seats?: Seat[]
 
 const Label = ({ id, children }: { id: string; children: ReactNode }) => <label htmlFor={id} className="mb-1 block text-small text-muted">{children}</label>;
 const HEAD = 'text-meta tracking-[.4px] text-muted';
-const isAuto = (a: string | undefined) => a === 'auto';
 
 /** A live team's seats as a composition: the ones not leaving, with what each was composed with. */
 const seatsOfTeam = (team: PhoneTeam): Seat[] => team.seats.filter(s => !s.leaving).map(s => ({
@@ -105,15 +105,6 @@ function DeleteSheet({ name, busy, blocked, note, onConfirm, onClose }: { name: 
       </div>
     </Sheet>
   );
-}
-
-/** The seat's second line: tool · IA · autonomy, the seat's own value over its role's default; effort only when the seat sets one. */
-function SeatMeta({ seat, role }: { seat: Seat; role: PhoneRole | undefined }) {
-  const tool = seat.tool ?? role?.tool;
-  const model = seat.model ?? role?.model;
-  const autonomy = role?.autonomy ?? 'ask';
-  const text = [tool ? copy.tools[tool] : null, model ?? null, copy.teams.autonomy[autonomy], seat.effort ?? null].filter(x => x !== null).join(' · ');
-  return <span className={isAuto(autonomy) ? 'text-attention' : ''}>{text}</span>;
 }
 
 /** The form itself. `initial` is the definition or live team it opens on (null for a new team); the screen is keyed by what it edits. */
@@ -231,12 +222,12 @@ function Form({ store, mode, initial }: { store: MobileStore; mode: TeamEditorMo
     const action = sessionOf(role) === null ? 'start' : 'restart';
     const asked = applied.find(x => x.role === role);
     setBusy(true); setNote(null); setRestarting({ role, note: null });
-    void store.teamOp({ type: 'team.seat', team: mode.teamId, role, action })
-      .then(r => {
+    void seatAction(store, mode.teamId, role, action)
+      .then(failed => {
         if (!mounted.current) return;
-        if (r.status === 'applied') { if (asked) setRan(prev => new Map(prev).set(role, asked)); setRestarting(null); }
-        else setRestarting({ role, note: outcomeNote(r, action === 'start' ? t.notStarted : t.notRestarted) });
-      }, () => { if (mounted.current) setRestarting({ role, note: { text: action === 'start' ? t.notStarted : t.notRestarted, quiet: false } }); })
+        if (!failed) { if (asked) setRan(prev => new Map(prev).set(role, asked)); setRestarting(null); }
+        else setRestarting({ role, note: failed });
+      })
       .finally(() => { if (mounted.current) setBusy(false); });
   };
 

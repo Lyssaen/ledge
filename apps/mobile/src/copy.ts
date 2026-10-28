@@ -165,6 +165,15 @@ export const copy = {
       missing: 'Cette équipe n’existe pas sur ce PC.', gone: 'Cette équipe n’existe plus sur le PC. Vos modifications sont gardées ici, mais elles ne peuvent plus être enregistrées.',
       restart: 'Redémarrer ce siège', restartHint: 'La conversation du siège n’est pas reprise.', notRestarted: 'Pas redémarré.', start: 'Démarrer ce siège', notStarted: 'Pas démarré.',
       nextStart: 'au prochain démarrage du siège'
+    },
+    /** The live team's sheet, opened from its header in Agents. */
+    sheet: {
+      seats: (n: number) => `SIÈGES · ${n}`, seatsLabel: 'Sièges', free: 'libre', leaving: 'termine puis part', unknownSession: 'session inconnue',
+      since: (at: string) => `au travail depuis ${at}`, resting: 'au repos', from: (name: string) => `d'après « ${name} »`,
+      readPrompt: 'Lire et modifier la consigne', compose: 'Modifier la composition', saveAs: 'Enregistrer comme équipe',
+      dissolve: 'Dissoudre l\'équipe', dissolveTitle: (name: string) => `Dissoudre ${name} ?`,
+      dissolveHint: 'Irréversible. Les sessions de l’équipe restent ouvertes.', dissolveNote: 'Votre passkey confirme la dissolution.',
+      notDissolved: 'Pas dissoute.'
     }
   },
   agents: {
@@ -330,7 +339,12 @@ export const copy = {
   },
   gone: {
     header: 'Demande', title: 'Déjà traitée sur le PC', body: 'Cette demande a été résolue ailleurs. Aucune nouvelle décision n’a été envoyée.', back: 'Retour aux demandes',
-    staleTitle: 'Cette demande ne figure plus dans le dernier état connu.', staleBody: 'Reconnectez-vous pour vérifier si elle attend toujours une décision.'
+    staleTitle: 'Cette demande ne figure plus dans le dernier état connu.', staleBody: 'Reconnectez-vous pour vérifier si elle attend toujours une décision.',
+    /** The same screen for a live team that is no longer on the PC (dissolved there, or here). */
+    team: {
+      header: 'Équipe', title: 'Cette équipe n’existe plus', body: 'Elle a été dissoute. Ses sessions encore ouvertes restent dans Agents.', back: 'Retour aux agents',
+      staleTitle: 'Cette équipe ne figure plus dans le dernier état connu.', staleBody: 'Reconnectez-vous pour vérifier si elle existe encore.'
+    }
   },
   loading: 'Chargement de la demande…',
   connection: {
