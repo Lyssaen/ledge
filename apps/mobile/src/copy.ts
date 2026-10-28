@@ -126,7 +126,7 @@ export const copy = {
       conflict: 'Une autre opération est en cours sur le PC. Réessayez.'
     } as Partial<Record<string, string>>,
     loading: 'Lecture du catalogue…', unavailable: 'Catalogue indisponible', retry: 'Réessayer',
-    outdated: 'Ce PC ne sait pas encore lire les équipes : mettez Ledge à jour sur le PC.',
+    outdated: 'Ce PC ne sait pas encore lire les équipes : mettez Ledge à jour sur le PC.', updatePc: 'Mettre à jour le PC',
     problemsHead: 'FICHIERS ILLISIBLES', problemsLabel: 'Fichiers illisibles',
     /** The role editor (« Nouveau rôle » and a role's own page). */
     role: {
@@ -362,7 +362,42 @@ export const copy = {
     signOut: 'Se déconnecter',
     /** The theme: the phone's setting, or one of the two. */
     appearance: 'Apparence',
-    themes: { system: 'Système', light: 'Clair', dark: 'Sombre' }
+    themes: { system: 'Système', light: 'Clair', dark: 'Sombre' },
+    pcVersion: 'Version du PC',
+    /** « Le PC »: updating or restarting the PC's daemon from the phone (spec 2026-10-28 mobile daemon update). */
+    pcUpdate: {
+      title: 'Le PC',
+      behind: 'Le PC a du retard sur l’app',
+      versions: (pc: string, app: string) => `PC ${pc} · app ${app}`,
+      why: 'Certaines fonctions de l’app demandent la même version sur le PC.',
+      update: 'Mettre à jour le PC',
+      keepGoing: 'Vos sessions continuent. Le lien se coupe quelques secondes pendant le redémarrage.',
+      manual: 'Le PC ne peut pas se mettre à jour seul',
+      clone: 'Son daemon tourne depuis un clone git. Mettez-le à jour sur le PC, puis redémarrez le daemon ici.',
+      byHand: 'Mettez Ledge à jour sur le PC.',
+      restart: 'Redémarrer le daemon', restartHint: 'Sans rien installer. Les sessions continuent.', restartGo: 'Redémarrer',
+      updating: (v: string) => `Mise à jour vers ${v}`, restarting: 'Redémarrage du daemon', running: 'En cours',
+      steps: { asked: 'Confirmée avec l’appareil', installing: 'Installation par npm', restarting: 'Redémarrage du daemon', back: 'Retour du lien' },
+      leave: 'Vous pouvez quitter l’app : la mise à jour continue sur le PC.',
+      done: (v: string) => `Le PC est en ${v}`, restarted: 'Le daemon a redémarré', upToDate: 'À jour', close: 'Fermer',
+      failed: 'Le PC n’a pas été mis à jour', notRestarted: 'Le daemon n’a pas redémarré', unchanged: (v: string) => `Rien n’a changé : il reste en ${v}.`, refused: 'Refusé',
+      reasons: {
+        'sessions-at-risk': 'Redémarrer le daemon arrêterait des sessions qu’il fait tourner lui-même (OMP). Terminez-les sur le PC, puis réessayez.',
+        'npm-failed': 'npm a échoué sur le PC. Le détail est dans le journal du daemon.',
+        busy: 'Une mise à jour est déjà en cours sur le PC.',
+        'git-install': 'Son daemon tourne depuis un clone git : mettez-le à jour sur le PC.',
+        'no-systemd': 'Le PC n’a pas pu redémarrer le daemon : faites-le sur le PC.',
+        timeout: 'Le PC ne répond plus. Vérifiez-le sur place.'
+      } as Record<string, string>,
+      retry: 'Réessayer',
+      confirmUpdate: 'Mettre à jour le PC ?',
+      confirmUpdateBody: (pc: string, from: string, to: string) => `${pc} passe de ${from} à ${to}. npm installe la version, puis le daemon redémarre. Vos sessions continuent.`,
+      confirmRestart: 'Redémarrer le daemon ?',
+      confirmRestartBody: (pc: string) => `Le daemon de ${pc} redémarre sans rien installer. Vos sessions continuent, et le lien revient en quelques secondes.`,
+      passkey: 'La passkey de ce téléphone confirme l’action. Sans elle, le PC refuse.',
+      noPasskey: 'Protégez d’abord les accords avec l’appareil, plus haut.',
+      confirm: 'Confirmer', cancel: 'Annuler', notDone: 'Pas fait.'
+    }
   },
   /** The user left while the PC could not confirm that it removed this phone: shown on the screen they land on. */
   forget: {

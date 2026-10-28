@@ -1618,7 +1618,15 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     projectName: id => (id ? projects.projects.find(p => p.id === id)?.name ?? null : null),
     // A project's folder is its first local repo: only a project with one can be named by the phone.
     projectByName: name => projects.projects.find(p => p.name === name && p.repos.some(r => r.machine === 'local'))?.id ?? null,
-    teamCatalog: true
+    teamCatalog: true,
+    // The phone's « Mettre à jour le PC » and « Redémarrer le daemon »: the updater Desktop's `update.daemon` uses, progress broadcast.
+    ...(opts.updater && opts.daemon ? {
+      pc: {
+        canUpdate: opts.daemon.install === 'npm' && opts.daemon.systemd, canRestart: opts.daemon.systemd,
+        update: (version: string, reply: (m: ServerMessage) => void) => { void opts.updater!.update(version, broadcast, reply); },
+        restart: (reply: (m: ServerMessage) => void) => { void opts.updater!.restart(broadcast, reply); }
+      }
+    } : {})
   });
   /** A hidden phone is told, through the relay, of what deserves it. */
   let unsubscribePush: (() => void) | undefined;

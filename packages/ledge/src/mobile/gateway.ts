@@ -4,8 +4,9 @@
 import { hostname } from 'node:os';
 import {
   ATTACHMENT_MAX, TEAMS_OPERATION_TYPES, isTeamsOperation, OperationIdSchema, PHONE_PROTOCOL, actionById, TOOL_TEXT_MAX, proposalRows, PhoneClientMessageSchema, pushEndpointAllowed, RefusalCodeSchema, UNTYPABLE, backendOf, isArchived, pendingKey,
-  LEDGE_GIVER, type AttachmentRef, type ChatErrorCode, type ChatTurn, type CloseHow, type ClientMessage, type PhoneTask, type Task, type Team, type OperationReason, type OperationStatus, type PhoneClientMessage, type PhoneServerMessage, type ServerMessage, type Session, type ThreadItem
+  LEDGE_GIVER, SEMVER, pcSubject, type AttachmentRef, type ChatErrorCode, type ChatTurn, type CloseHow, type ClientMessage, type PhoneTask, type Task, type Team, type OperationReason, type OperationStatus, type PhoneClientMessage, type PhoneServerMessage, type ServerMessage, type Session, type ThreadItem
 } from '@ledge/protocol';
+import { compareVersions } from '@ledge/ui/semver';
 import type { MobileService } from './service.js';
 import type { ChatThreads, ChatThreadId } from '../chat/threads.js';
 import { phoneCut, phoneEmitter, toPhoneHistory } from './chat.js';
@@ -93,6 +94,11 @@ export function createPhoneGateway(deps: {
   projectByName?: (name: string) => string | null;
   /** The daemon answers `definitions.list` and the role and team operations: without it the phone's catalog and writes are unavailable. */
   teamCatalog?: true;
+  /**
+   * The daemon's own update and restart, for the phone only (spec 2026-10-28 mobile daemon update): never a `ClientMessage`.
+   * Each runs on its own; its progress and refusals are broadcast, and `reply` gets a refusal meant for the asker alone (busy).
+   */
+  pc?: { canUpdate: boolean; canRestart: boolean; update: (version: string, reply: (m: ServerMessage) => void) => void; restart: (reply: (m: ServerMessage) => void) => void };
   /** The context threshold the user chose (context handover spec §3.2). */
   contextNear?: () => number;
 }): PhoneGateway {
@@ -159,7 +165,7 @@ export function createPhoneGateway(deps: {
     const f = followers.get(deviceId);
     if (f) f.pushStatus = push;
     return {
-    type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, boot: deps.boot, name: clip(hostname(), 40).text, ...(teamsOps ? { teams: true as const } : {}) },
+    type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, boot: deps.boot, name: clip(hostname(), 40).text, ...(teamsOps ? { teams: true as const } : {}), ...(deps.pc?.canUpdate ? { update: true as const } : {}), ...(deps.pc?.canRestart ? { restart: true as const } : {}) },
     device: { confirm: deps.credential(deviceId) !== null, push, ...(deps.chats ? { chat: true as const } : {}), ...(deps.contextNear ? { contextNear: deps.contextNear() } : {}) }
     };
   };
@@ -194,7 +200,7 @@ export function createPhoneGateway(deps: {
   };
 
   /** The operations that act on a tracked session: the registry's own, the credential's, the device's and the chat's are handled before it. */
-  type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.launch' | 'chat.close' | 'chat.act' | 'chat.ignore' | 'chat.team' | 'chat.task' | 'team.resume' | 'task.seen' | (typeof TEAMS_OPERATION_TYPES)[number] }>;
+  type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.launch' | 'chat.close' | 'chat.act' | 'chat.ignore' | 'chat.team' | 'chat.task' | 'team.resume' | 'task.seen' | 'daemon.update' | 'daemon.restart' | (typeof TEAMS_OPERATION_TYPES)[number] }>;
   /** Whether the operation needs the device's own check: an accept of a request that is not low, or a reply to an OMP (rpc) dialog, which is never low. */
   const needsAssertion = (msg: SessionOperation, s: Session): boolean => {
     if (msg.type === 'session.decide') return msg.decision !== 'deny' && riskOf(s)?.risk !== 'low';
@@ -207,7 +213,7 @@ export function createPhoneGateway(deps: {
     `${id}:${key}${s?.pending?.source === 'rpc' && s.pending.requestId ? `:${s.pending.requestId}` : ''}`;
 
   /** The device check: the challenge is spent first, whatever the verdict, then the signature is verified and the counter kept. */
-  const checkAssertion = (deviceId: string, assertion: NonNullable<Extract<PhoneOperation, { type: 'session.decide' }>['assertion']> | undefined, purpose: 'decide' | 'launch' | 'close' | 'act' | 'define' | 'team', subject: string | undefined): Outcome | undefined => {
+  const checkAssertion = (deviceId: string, assertion: NonNullable<Extract<PhoneOperation, { type: 'session.decide' }>['assertion']> | undefined, purpose: 'decide' | 'launch' | 'close' | 'act' | 'define' | 'team' | 'pc', subject: string | undefined): Outcome | undefined => {
     const cred = deps.credential(deviceId);
     const rp = deps.rp();
     if (!cred || !rp || !assertion || subject === undefined) return { status: 'rejected', reason: 'confirm_required' };
@@ -458,7 +464,26 @@ export function createPhoneGateway(deps: {
     dispatch: deps.dispatch, projectByName: deps.projectByName, projectName: deps.projectName ?? (() => null), checkAssertion, ask, push: (deviceId, m) => push(deviceId, m), log
   }) : undefined;
 
+  /**
+   * Updating or restarting the PC's daemon. Accepted once the passkey holds, before npm runs: `applied` means started, not done.
+   * The updater's progress and refusals then reach every phone through `forward`; a busy refusal reaches this one alone.
+   */
+  const pcOperation = (deviceId: string, msg: Extract<PhoneOperation, { type: 'daemon.update' | 'daemon.restart' }>): Outcome => {
+    const pc = deps.pc;
+    const update = msg.type === 'daemon.update';
+    if (!pc || !(update ? pc.canUpdate : pc.canRestart)) return { status: 'rejected', reason: 'unavailable' };
+    // Never back, and nothing to do for the running version: refused before the challenge is spent.
+    if (update && (!SEMVER.test(deps.version) || compareVersions(msg.version, deps.version) <= 0)) return { status: 'rejected', reason: 'invalid' };
+    const refused = checkAssertion(deviceId, msg.assertion, 'pc', update ? pcSubject('update', msg.version) : pcSubject('restart'));
+    if (refused) return refused;
+    const reply = (m: ServerMessage) => { if (m.type === 'update.failed') push(deviceId, { type: 'daemon.failed', version: m.version, reason: m.reason }); };
+    log(`phone: device ${deviceId} asked the daemon to ${update ? `update to ${msg.version}` : 'restart'}`);
+    if (update) pc.update(msg.version, reply); else pc.restart(reply);
+    return { status: 'applied' };
+  };
+
   const run = async (deviceId: string, msg: PhoneOperation): Promise<Outcome> => {
+    if (msg.type === 'daemon.update' || msg.type === 'daemon.restart') return pcOperation(deviceId, msg);
     if (isTeamsOperation(msg)) return teamsOps ? teamsOps.run(deviceId, msg) : { status: 'rejected', reason: 'unavailable' };
     if (msg.type === 'chat.ignore') return chatIgnore(deviceId, msg);
     if (msg.type === 'chat.team') return chatTeam(deviceId, msg);
@@ -666,6 +691,16 @@ export function createPhoneGateway(deps: {
           // The digest is echoed: a phone that superseded a call finds this challenge's own among the late ones.
           return push(deviceId, { type: 'confirm.challenge', purpose: msg.purpose, challenge, rpId: rp.rpId, credentialId: cred.id, expiresInMs: CHALLENGE_TTL_MS, digest: msg.digest });
         }
+        if (msg.purpose === 'pc') {
+          // Bound to the action, and for an update to its version: a challenge covers neither another version nor a restart.
+          const pc = deps.pc;
+          if (!pc || !msg.action || (msg.action === 'update') !== (msg.version !== undefined)) return invalid();
+          if (!(msg.action === 'update' ? pc.canUpdate : pc.canRestart)) return invalid();
+          const cred = deps.credential(deviceId);
+          if (!cred || cred.rpId !== rp.rpId) return invalid();
+          const challenge = deps.challenges.issue({ deviceId, purpose: 'pc', subject: pcSubject(msg.action, msg.version) });
+          return push(deviceId, { type: 'confirm.challenge', purpose: 'pc', challenge, rpId: rp.rpId, credentialId: cred.id, expiresInMs: CHALLENGE_TTL_MS });
+        }
         // A purpose added to the enum without a branch above fails to compile here.
         const unhandled: never = msg.purpose;
         void unhandled;
@@ -768,6 +803,13 @@ export function createPhoneGateway(deps: {
             if (m.task.team) { const teams = phoneTeams(); for (const [deviceId, f] of followers) if (f.subscribed) push(deviceId, { type: 'teams', teams }, 'teams'); }
             return;
           }
+          // The daemon updating or restarting itself, whoever asked. Never npm's output nor a command: both hold the PC's paths.
+          case 'update.progress':
+            for (const [deviceId, f] of followers) if (f.subscribed) push(deviceId, { type: 'daemon.progress', version: m.version, step: m.step });
+            return;
+          case 'update.failed':
+            for (const [deviceId, f] of followers) if (f.subscribed) push(deviceId, { type: 'daemon.failed', version: m.version, reason: m.reason });
+            return;
           case 'session.preview':
             for (const [deviceId, f] of followers) {
               if (f.watching === m.id) push(deviceId, { type: 'session.preview', id: m.id, lines: [...m.lines] }, `session.preview:${m.id}`);

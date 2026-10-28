@@ -159,13 +159,60 @@ header p { margin: 6px 0 0; color: var(--page-muted); max-width: 66ch; }
 .ver dt { color: var(--muted-fg); } .ver dd { margin: 0; font-family: var(--mono); font-size: 11px; }
 .sw { width: 32px; height: 18px; border-radius: 99px; background: var(--brand); position: relative; flex-shrink: 0; }
 .sw::after { content: ""; position: absolute; left: 16px; top: 3px; width: 12px; height: 12px; border-radius: 50%; background: var(--brand-fg); }
-@media (prefers-reduced-motion: reduce) { .dot.run, .pip.busy { animation: none; } }
+/* Phone: the mobile app's Connexion and Équipes screens (apps/mobile), 390 px wide */
+.lead { margin: -8px 0 0; color: var(--page-muted); max-width: 72ch; }
+.phone { position: relative; width: 100%; max-width: 390px; height: 760px; background: var(--panel); color: var(--fg); border: 1px solid var(--page-line); border-radius: 32px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 20px 40px -12px rgb(0 0 0 / .55); }
+.p-status { display: flex; justify-content: space-between; padding: 12px 26px 0; font-size: 12px; font-weight: 600; }
+.p-head { display: flex; align-items: center; gap: 10px; padding: 14px 16px 6px; }
+.p-head .back { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 10px; color: var(--muted-fg); font-size: 20px; }
+.p-head h2 { margin: 0; font-size: 26px; line-height: 32px; font-weight: 700; letter-spacing: -0.02em; }
+.p-link { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 11px; line-height: 16px; color: var(--muted-fg); border: 1px solid var(--input); border-radius: 99px; padding: 2px 9px; }
+.p-link i { width: 7px; height: 7px; border-radius: 50%; background: var(--success); }
+.p-link.wait i { background: var(--info); animation: pulse 1.2s ease-in-out infinite; }
+.p-main { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 16px 24px; display: flex; flex-direction: column; gap: 22px; }
+.p-dl { margin: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--well); }
+.p-dl div { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding: 11px 16px; border-bottom: 1px solid var(--border); font-size: 14px; line-height: 22px; }
+.p-dl div:last-child { border-bottom: none; }
+.p-dl dt { color: var(--muted-fg); } .p-dl dd { margin: 0; text-align: right; } .p-dl dd.mono { font-size: 13px; }
+.p-dl dd.late { color: var(--warning); }
+.p-sec { display: flex; flex-direction: column; gap: 10px; }
+.p-sec > h3 { margin: 0; font-size: 14px; line-height: 22px; font-weight: 400; color: var(--muted-fg); }
+.p-card { border: 1px solid var(--input); border-radius: 16px; background: var(--well); padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.p-card.is-error { border-color: color-mix(in oklab, var(--danger) 45%, var(--input)); }
+.p-card.is-done { border-color: color-mix(in oklab, var(--success) 40%, var(--input)); }
+.p-card .uh .t strong { font-size: 15px; line-height: 20px; }
+.p-card .uh .t span { font-size: 13px; line-height: 18px; }
+.p-card .steps li { font-size: 13px; line-height: 18px; }
+.p-text { margin: 0; font-size: 13px; line-height: 19px; color: var(--muted-fg); }
+.p-btn { width: 100%; height: 48px; border-radius: 12px; font: 600 15px/20px var(--sans); border: 1px solid transparent; cursor: pointer; }
+.p-btn.primary { background: var(--brand); color: var(--brand-fg); }
+.p-btn.outline { background: transparent; color: var(--fg); border-color: var(--input); }
+.p-btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.p-row { display: flex; align-items: center; gap: 12px; border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+.p-row .t { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.p-row .t strong { font-size: 14px; line-height: 20px; font-weight: 500; }
+.p-row .t span { font-size: 12px; line-height: 17px; color: var(--muted-fg); }
+.p-row .btn { height: 36px; font-size: 13px; }
+.p-notice { border: 1px solid var(--border); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 20px; color: var(--muted-fg); }
+.p-notice strong { font-size: 14px; color: var(--fg); }
+.p-notice .p-btn { margin-top: 6px; }
+.p-tabbar { display: flex; border-top: 1px solid var(--border); padding: 8px 8px 22px; }
+.p-tabbar span { flex: 1; text-align: center; font-size: 11px; line-height: 16px; color: var(--muted-fg); padding-top: 22px; position: relative; }
+.p-tabbar span::before { content: ""; position: absolute; top: 2px; left: 50%; width: 18px; height: 16px; margin-left: -9px; border: 1.5px solid currentColor; border-radius: 5px; }
+.p-tabbar span.on { color: var(--fg); }
+.p-scrim { position: absolute; inset: 0; background: rgb(0 0 0 / .55); }
+.p-sheet { position: absolute; left: 0; right: 0; bottom: 0; background: var(--panel); border-top: 1px solid var(--input); border-radius: 22px 22px 0 0; padding: 10px 16px 30px; display: flex; flex-direction: column; gap: 14px; }
+.p-sheet .grab { width: 40px; height: 4px; border-radius: 4px; background: var(--input); margin: 0 auto 4px; }
+.p-sheet h4 { margin: 0; font-size: 21px; line-height: 28px; font-weight: 600; letter-spacing: -0.01em; }
+.p-sheet .two { display: flex; gap: 8px; } .p-sheet .two .outline { flex: 1; } .p-sheet .two .primary { flex: 2; }
+.p-key { display: flex; align-items: center; gap: 10px; font-size: 12px; line-height: 17px; color: var(--muted-fg); border: 1px dashed var(--input); border-radius: 10px; padding: 9px 12px; }
+@media (prefers-reduced-motion: reduce) { .dot.run, .pip.busy, .p-link.wait i { animation: none; } }
 </style>
 
 <div class="wrap">
   <header>
     <h1>Ledge<b>.</b> se met à jour</h1>
-    <p>Maquette du parcours de mise à jour : un point sur l'île signale qu'une version est disponible, une carte en haut de la liste propose de tout mettre à jour d'un clic (daemon WSL puis application Windows). Choisissez un état pour voir la carte évoluer.</p>
+    <p>Maquette du parcours de mise à jour : un point sur l'île signale qu'une version est disponible, une carte en haut de la liste propose de tout mettre à jour d'un clic (daemon WSL puis application Windows). Choisissez un état pour voir la carte évoluer. Plus bas, le même parcours lancé depuis le téléphone.</p>
   </header>
 
   <div class="states" role="group" aria-label="État de la mise à jour" id="states">
@@ -245,6 +292,24 @@ header p { margin: 6px 0 0; color: var(--page-muted); max-width: 66ch; }
         <p>Si le daemon et l'application n'ont pas la même version (mise à jour interrompue, clone git en avance), la ligne Versions passe en orange et la carte propose d'aligner la moitié en retard.</p>
       </div>
     </div>
+  </div>
+
+  <div class="section-title">Téléphone · mettre à jour le PC depuis l'app mobile</div>
+  <p class="lead">Le téléphone connaît sa propre version, et le PC donne la sienne à chaque connexion. Quand le PC est en retard sur l'app, l'écran Connexion propose de le mettre à jour, confirmé par la passkey. Le daemon fait le même travail que pour le bouton du desktop.</p>
+  <div class="states" role="group" aria-label="État sur le téléphone" id="pstates">
+    <button type="button" data-p="offer" aria-pressed="true">PC en retard</button>
+    <button type="button" data-p="confirm" aria-pressed="false">Confirmation</button>
+    <button type="button" data-p="running" aria-pressed="false">En cours</button>
+    <button type="button" data-p="back" aria-pressed="false">Redémarrage</button>
+    <button type="button" data-p="done" aria-pressed="false">Terminé</button>
+    <button type="button" data-p="risk" aria-pressed="false">Sessions en danger</button>
+    <button type="button" data-p="manual" aria-pressed="false">Installé depuis git</button>
+    <button type="button" data-p="teams" aria-pressed="false">Depuis Équipes</button>
+    <button type="button" data-p="restart" aria-pressed="false">Redémarrer seul</button>
+  </div>
+  <div class="stage">
+    <div class="phone" id="phone" aria-label="Écran du téléphone"></div>
+    <div class="notes-col" id="pnotes"></div>
   </div>
 </div>
 
@@ -332,4 +397,108 @@ function show(k) {
 document.getElementById('states').addEventListener('click', e => { const b = e.target.closest('button[data-s]'); if (b) show(b.dataset.s); });
 let start = 'available'; try { const v = localStorage.getItem('ledge-upd-state'); if (v && S[v]) start = v; } catch (e) {}
 show(start);
+
+/* Phone: the Connexion screen with a « Le PC » section, the Équipes tab, the confirmation sheets. */
+const PC = 'Atelier', OLD = '0.25.0', NEW = '0.26.0';
+const rows = (pcVersion, late, state = 'En ligne') => `<dl class="p-dl">
+  <div><dt>Compte</dt><dd>@gch</dd></div>
+  <div><dt>PC</dt><dd>${PC}</dd></div>
+  <div><dt>État</dt><dd>${state}</dd></div>
+  <div><dt>Version de l’app</dt><dd class="mono">${NEW}</dd></div>
+  <div><dt>Version du PC</dt><dd class="mono${late ? ' late' : ''}">${pcVersion}</dd></div>
+</dl>`;
+const restartRow = (disabled) => `<div class="p-row"><span class="t"><strong>Redémarrer le daemon</strong><span>Sans rien installer. Les sessions continuent.</span></span><button type="button" class="btn outline"${disabled ? ' disabled style="opacity:.5"' : ''}>Redémarrer</button></div>`;
+const section = (card, restart = true, restartOff = false) => `<section class="p-sec"><h3>Le PC</h3>${card}${restart ? restartRow(restartOff) : ''}</section>`;
+const steps = (list) => `<ol class="steps">${list.map(([s, t, m]) => `<li${s === 'todo' ? ' class="todo"' : ''}><span class="dot ${s}">${s === 'ok' ? '✓' : s === 'bad' ? '✕' : ''}</span><span>${t}</span><span class="m">${m ?? ''}</span></li>`).join('')}</ol>`;
+const offerCard = `<div class="p-card">
+  <div class="uh"><span class="bot lg ledge"><i></i><i></i></span><span class="t"><strong>Le PC a du retard sur l’app</strong><span>PC ${OLD} · app ${NEW}</span></span><span class="badge new">${NEW}</span></div>
+  <p class="p-text">Certaines fonctions de l’app demandent la même version sur le PC.</p>
+  <button type="button" class="p-btn primary">Mettre à jour le PC</button>
+  <div class="hint"><span>ⓘ</span><span>Vos sessions continuent. Le lien se coupe quelques secondes pendant le redémarrage.</span></div>
+</div>`;
+const connexion = (body, link = '') => ({ title: 'Connexion', back: true, link, body: rows(OLD, true, link ? 'Connexion…' : 'En ligne') + body });
+const sheet = (title, text, cta) => `<div class="p-scrim"></div><div class="p-sheet" role="dialog" aria-label="${title}"><div class="grab"></div>
+  <h4>${title}</h4><p class="p-text" style="font-size:14px;line-height:21px">${text}</p>
+  <div class="p-key"><span style="font-size:18px">🔑</span><span>La passkey de ce téléphone confirme l’action. Sans elle, le PC refuse.</span></div>
+  <div class="two"><button type="button" class="p-btn outline">Annuler</button><button type="button" class="p-btn primary">${cta}</button></div></div>`;
+
+const P = {
+  offer: {
+    screen: connexion(section(offerCard)),
+    notes: `<div><h3>Quand la carte apparaît</h3><p>La version de l’app (celle du build, la même que <code>packages/ledge</code>) est plus récente que <code>daemon.version</code> du snapshot. Le PC annonce aussi <code>daemon.update: true</code> quand il peut se mettre à jour seul (installé par npm, sous systemd). Sinon, c’est l’état « Installé depuis git ».</p></div>
+      <div><h3>La version visée</h3><p>Toujours celle de l’app, jamais « la dernière sur npm » : une version plus récente que l’app pourrait ne pas la comprendre. Le gateway refuse aussi un retour en arrière.</p></div>
+      <div><h3>Une ligne de plus</h3><p>« Version du PC » rejoint la liste. Elle passe en orange quand le PC a du retard.</p></div>`
+  },
+  confirm: {
+    screen: { ...connexion(section(offerCard)), sheet: sheet('Mettre à jour le PC ?', `${PC} passe de ${OLD} à ${NEW}. npm installe la version, puis le daemon redémarre. Vos sessions continuent.`, 'Confirmer') },
+    notes: `<div><h3>Confirmé par la passkey</h3><p>Comme pour lever une équipe : le téléphone prépare un défi lié à cette opération précise (<code>daemon.update</code>, version ${NEW}), et la passkey le signe. Un lien volé ne suffit pas à redémarrer le PC.</p></div>
+      <div><h3>Sans passkey</h3><p>Le bouton reste visible, mais la feuille renvoie vers « Protéger les accords », sur cet écran.</p></div>`
+  },
+  running: {
+    screen: connexion(section(`<div class="p-card">
+      <div class="uh"><span class="bot lg ledge"><i></i><i></i></span><span class="t"><strong>Mise à jour vers ${NEW}</strong><span>Sur ${PC}</span></span><span class="badge run">En cours</span></div>
+      ${steps([['ok', 'Confirmée avec l’appareil'], ['run', 'Installation par npm', '0:42'], ['todo', 'Redémarrage du daemon'], ['todo', 'Retour du lien']])}
+      <div class="hint"><span>ⓘ</span><span>Vous pouvez quitter l’app : la mise à jour continue sur le PC.</span></div>
+    </div>`, true, true)),
+    notes: `<div><h3>En cours</h3><p>Le daemon envoie <code>update.progress</code> (installation, puis redémarrage). Le gateway le relaie au téléphone. Le bouton Redémarrer est grisé : le daemon refuserait de toute façon (<code>busy</code>).</p></div>
+      <div><h3>npm</h3><p>Jusqu’à 3 minutes, avec le npm du Node qui fait tourner le daemon. Si npm échoue, rien n’a changé : la carte dit « npm a échoué sur le PC », et le détail reste dans le journal du daemon (la sortie de npm contient des chemins).</p></div>`
+  },
+  back: {
+    screen: connexion(section(`<div class="p-card">
+      <div class="uh"><span class="bot lg ledge"><i></i><i></i></span><span class="t"><strong>Mise à jour vers ${NEW}</strong><span>Le daemon redémarre</span></span><span class="badge run">En cours</span></div>
+      ${steps([['ok', 'Confirmée avec l’appareil'], ['ok', 'Installée par npm', NEW], ['ok', 'Redémarrage du daemon'], ['run', 'Retour du lien', '0:04']])}
+    </div>`, true, true), 'wait'),
+    notes: `<div><h3>Le lien se coupe</h3><p>Le daemon s’arrête : la pastille du haut passe à « Connexion… ». Le téléphone se reconnecte seul, comme après une mise en veille.</p></div>
+      <div><h3>Quand c’est fini</h3><p>Au retour, le snapshot annonce <code>daemon.version</code> ≥ ${NEW} : c’est réussi. Sans retour avec la bonne version au bout de 4 minutes, la carte passe en échec (« Le PC ne répond plus »).</p></div>`
+  },
+  done: {
+    screen: { title: 'Connexion', back: true, link: '', body: rows(NEW, false) + section(`<div class="p-card is-done">
+      <div class="uh"><span class="bot lg ledge"><i></i><i></i></span><span class="t"><strong>Le PC est en ${NEW}</strong><span>${PC} · 13 sessions retrouvées</span></span><span class="badge ok">À jour</span></div>
+    </div>`) },
+    notes: `<div><h3>Terminé</h3><p>La carte verte reste jusqu’à ce qu’on quitte l’écran, puis disparaît : un PC à jour ne montre que la ligne Redémarrer. Les écrans qui attendaient le PC (Équipes) redemandent leurs données d’eux-mêmes, puisque le lien est revenu.</p></div>`
+  },
+  risk: {
+    screen: connexion(section(`<div class="p-card is-error">
+      <div class="uh"><span class="bot lg ledge"><i></i><i></i></span><span class="t"><strong>Le PC n’a pas été mis à jour</strong><span>Rien n’a changé : il reste en ${OLD}</span></span><span class="badge bad">Refusé</span></div>
+      <p class="p-text">Redémarrer le daemon arrêterait des sessions qu’il fait tourner lui-même (OMP). Terminez-les sur le PC, puis réessayez.</p>
+      <button type="button" class="p-btn outline">Réessayer</button>
+    </div>`)),
+    notes: `<div><h3>Le garde-fou reste</h3><p>Le daemon refuse avec <code>sessions-at-risk</code> si un redémarrage tuerait des sessions : celles d’OMP qu’il possède, ou un vieux serveur tmux encore dans son service. Pas d’option pour forcer depuis le téléphone.</p></div>
+      <div><h3>Les autres échecs</h3><ul><li><code>npm-failed</code> : « npm a échoué sur le PC. Le détail est dans le journal du daemon. »</li><li><code>busy</code> : « Une mise à jour est déjà en cours sur le PC. »</li><li>Pas de retour en 4 min : « Le PC ne répond plus ».</li></ul></div>`
+  },
+  manual: {
+    screen: connexion(section(`<div class="p-card">
+      <div class="uh"><span class="bot lg ledge"><i></i><i></i></span><span class="t"><strong>Le PC a du retard sur l’app</strong><span>Son daemon tourne depuis un clone git</span></span><span class="badge warn">Manuel</span></div>
+      <p class="p-text">Ledge ne touche pas à un clone. Mettez-le à jour sur le PC (git pull, puis le build), et redémarrez le daemon ici.</p>
+    </div>`)),
+    notes: `<div><h3>Installé depuis git, ou sans systemd</h3><p>Le snapshot n’a pas <code>daemon.update</code> : pas de bouton. La commande que le desktop affiche (<code>manual</code>) n’est pas envoyée : elle contient le chemin du clone, et le téléphone ne voit jamais un chemin du PC. Sans systemd, la carte dit seulement « mettez Ledge à jour sur le PC ».</p></div>
+      <div><h3>Redémarrer reste possible</h3><p>La ligne Redémarrer ne demande que systemd : utile après avoir lancé la commande soi-même.</p></div>`
+  },
+  teams: {
+    screen: { title: 'Équipes', back: false, link: '', tabbar: true, body: `<div class="p-notice"><strong>Catalogue indisponible</strong>Ce PC ne sait pas encore lire les équipes : mettez Ledge à jour sur le PC.
+      <button type="button" class="p-btn primary">Mettre à jour le PC</button><button type="button" class="p-btn outline">Réessayer</button></div>` },
+    notes: `<div><h3>Depuis l’onglet Équipes</h3><p>Le message de la PR #129 gagne un bouton qui ouvre l’écran Connexion : la carte « Le PC » y dit ce que ce PC permet (la mise à jour d’ici, ou à la main sur le PC).</p></div>
+      <div><h3>La première fois, à la main</h3><p>Un daemon d’avant cette fonction (0.26.0 et plus ancien) n’annonce rien : Connexion dit « Mettez Ledge à jour sur le PC ». Une fois le PC en 0.27.0, les mises à jour suivantes se font depuis le téléphone.</p></div>`
+  },
+  restart: {
+    screen: { title: 'Connexion', back: true, link: '', body: rows(NEW, false) + section(''), sheet: sheet('Redémarrer le daemon ?', `Le daemon d’${PC} redémarre sans rien installer. Vos sessions continuent, et le lien revient en quelques secondes.`, 'Redémarrer') },
+    notes: `<div><h3>Redémarrer seul</h3><p>Nouvelle opération <code>daemon.restart</code>, aussi confirmée par la passkey. Mêmes refus que la mise à jour (<code>busy</code>, pas de systemd, sessions en danger), sans npm.</p></div>
+      <div><h3>À quoi ça sert</h3><p>Après une installation à la main (npm ou git), pour que le daemon charge la nouvelle version. C’est ce qu’il a fallu faire pour la 0.26.0.</p></div>`
+  }
+};
+const phone = document.getElementById('phone'), pnotes = document.getElementById('pnotes');
+function showPhone(k) {
+  const s = P[k].screen;
+  phone.innerHTML = `<div class="p-status"><span>9:41</span><span>●●● ▮</span></div>
+    <div class="p-head">${s.back ? '<span class="back">‹</span>' : ''}<h2>${s.title}</h2><span class="p-link${s.link ? ' ' + s.link : ''}"><i></i>${s.link ? 'Connexion…' : PC}</span></div>
+    <div class="p-main">${s.body}</div>
+    ${s.tabbar ? '<div class="p-tabbar"><span>À traiter</span><span>Agents</span><span>Ledge</span><span class="on">Équipes</span></div>' : ''}
+    ${s.sheet ?? ''}`;
+  pnotes.innerHTML = P[k].notes;
+  document.querySelectorAll('#pstates button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.p === k)));
+  try { localStorage.setItem('ledge-upd-phone', k); } catch (e) {}
+}
+document.getElementById('pstates').addEventListener('click', e => { const b = e.target.closest('button[data-p]'); if (b) showPhone(b.dataset.p); });
+let pstart = 'offer'; try { const v = localStorage.getItem('ledge-upd-phone'); if (v && P[v]) pstart = v; } catch (e) {}
+showPhone(pstart);
 </script>

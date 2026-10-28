@@ -36,10 +36,12 @@ export const UNCERTAIN_MS = 10_000;
 /**
  * Operations that stay in this page's memory. Push changes: replayed after a reload they could undo a later choice, and
  * they carry the endpoint (a secret). A chat relay, launch or close: after a reload nothing leaves without a new gesture.
- * A role, template or live-team operation too: it carries a passkey assertion and a role's prompt.
+ * A role, template or live-team operation too: it carries a passkey assertion and a role's prompt. An update or a restart of
+ * the PC's daemon: it carries an assertion, and a gesture made before a reload is not repeated after it.
  */
 const isVolatile = (m: { type: string }) => m.type === 'push.subscribe' || m.type === 'push.unsubscribe' || m.type === 'chat.relay' || m.type === 'chat.launch' || m.type === 'chat.close'
-  || m.type === 'chat.team' || m.type === 'chat.task' || m.type === 'team.resume' || m.type === 'task.seen' || isTeamsOperation(m);
+  || m.type === 'chat.team' || m.type === 'chat.task' || m.type === 'team.resume' || m.type === 'task.seen' || isTeamsOperation(m)
+  || m.type === 'daemon.update' || m.type === 'daemon.restart';
 
 export const isLive = (p: OpPhase) => p === 'sending' || p === 'uncertain';
 

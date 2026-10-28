@@ -2,13 +2,14 @@
 // of it. Every write is an operation named by a uuid, sent again with that same uuid after a lost connection.
 import { useSyncExternalStore } from 'react';
 import {
-  PhoneClientMessageSchema, teamsDigest, teamsPurpose, type Assertion, type AttachmentRef, type CapabilitiesByTool, type Credential, type ImageUpload, type PhoneClientMessage, type PhonePending, type PhoneServerMessage,
+  PhoneClientMessageSchema, teamsDigest, teamsPurpose, type Assertion, type PcAction, type AttachmentRef, type CapabilitiesByTool, type Credential, type ImageUpload, type PhoneClientMessage, type PhonePending, type PhoneServerMessage,
   type PhoneCatalog, type PhoneRole, type PhoneSession, type PhoneTask, type PhoneTeam, type PushSubscription, type TeamsOperation, type ThreadItem
 } from '@ledge/protocol';
 import type { PhoneLink } from '../link/link';
 import { getAssertion } from '../link/webauthn';
 import { createImages } from './images';
 import { asked, emptyChat, reduceChat, type ChatAction, type ChatState } from './chat';
+import { PC_STALL_MS, pcFailed, pcProgress, pcRunning, pcSnapshot, type PcRun } from './pc';
 import { clearOps, expectKey, isLive, isNew, loadOps, newOperationId, pruneOps, resendable, saveOps, UNCERTAIN_MS, type Op, type OpMessage } from './operations';
 import { clearLastState, loadLastState, loadReads, saveLastState, saveReads } from './persist';
 
@@ -32,8 +33,11 @@ export interface MobileState {
   capabilities: CapabilitiesByTool | null;
   /** What the PC offers for confirming on the device; null until a snapshot, and from a PC that says nothing (lot 5). */
   device: { confirm: boolean; push?: 'on' | 'off' | 'stale' | 'unavailable'; chat?: true; contextNear?: number } | null;
-  /** `teams`: the PC serves the team catalog (absent from older daemons, and from 0.26.0, which serves it without saying so). */
-  daemon: { version: string; name: string; teams?: true } | null;
+  /**
+   * `teams`: the PC serves the team catalog (absent from older daemons, and from 0.26.0, which serves it without saying so).
+   * `update`: it can install a version and restart; `restart`: it can restart (both absent from daemons before 0.27.0).
+   */
+  daemon: { version: string; name: string; boot?: string; teams?: true; update?: true; restart?: true } | null;
   /** True from a snapshot until the channel is lost: what is shown is the PC's state now, not the last known one. */
   fresh: boolean;
   /** When the PC last said something about its sessions. */
@@ -47,13 +51,15 @@ export interface MobileState {
   catalog: PhoneCatalog | null;
   /** The PC refused the last catalog read: with `daemon.teams` its read failed, without it the PC may not know the request. Cleared by the next read. */
   catalogRefused: boolean;
+  /** The PC's daemon updating or restarting, as this phone follows it; null when nothing runs nor just ended. Never cached. */
+  pc: PcRun | null;
 }
 
 /** The request a challenge is asked for, as `session.decide` names it. */
 export type PhoneExpect = Extract<PhoneClientMessage, { type: 'session.decide' }>['expect'];
 export type ConfirmChallenge = Extract<PhoneServerMessage, { type: 'confirm.challenge' }>;
 export type ConfirmRequest = { purpose: 'register' } | { purpose: 'decide'; id: string; expect: PhoneExpect } | { purpose: 'launch'; qid: string } | { purpose: 'close'; qid: string }
-  | { purpose: 'define' | 'team'; digest: string };
+  | { purpose: 'define' | 'team'; digest: string } | { purpose: 'pc'; action: 'update'; version: string } | { purpose: 'pc'; action: 'restart' };
 
 type WithoutAuth<M> = M extends unknown ? Omit<M, 'op' | 'assertion'> : never;
 /** A role or team-definition write, as `role.write` and the others name it, before the phone gives it an `op` and the passkey's `assertion`. */
@@ -107,6 +113,13 @@ export interface MobileStore {
   define(req: DefineRequest): Promise<ChatAction>;
   /** Launches, recomposes, starts a seat of, or dissolves a live team, after the device's confirmation (same as `define`). */
   teamOp(req: TeamRequest): Promise<ChatAction>;
+  /**
+   * Installs `version` on the PC then restarts its daemon (`update`), or restarts it alone (`restart`), after the device's
+   * confirmation. Once applied, `getState().pc` follows it until the PC comes back with it, refuses, or `PC_STALL_MS` passes.
+   */
+  pcAction(action: PcAction, version?: string): Promise<ChatAction>;
+  /** Forgets an update or a restart that ended (done or failed). */
+  dismissPc(): void;
   /** Answers the questions of OMP's dialog `requestId` together, or declines it (`cancel`). The op's id, or null when nothing was sent. */
   answer(id: string, requestId: string, answers: Answer[], opts: { expect: PhoneExpect; cancel?: boolean }): string | null;
   /** Registers the passkey with the PC. The op's id, or null when nothing was sent. */
@@ -184,11 +197,25 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     teams: null,
     tasks: new Map(),
     catalog: null,
-    catalogRefused: false
+    catalogRefused: false,
+    pc: null
   };
   let reads = loadReads(storage);
   /** The PC's boot id of this run, from its snapshot; null until one, and when the PC sends none. Never cached. */
   let boot: string | null = null;
+  /** Ends a followed update or restart the PC never came back from: armed by the first step, cleared at the end. */
+  let pcTimer: ReturnType<typeof setTimeout> | null = null;
+  function watchPc() {
+    if (pcTimer !== null || !pcRunning(state.pc)) return;
+    pcTimer = setTimeout(() => {
+      pcTimer = null;
+      if (pcRunning(state.pc)) set({ pc: { ...state.pc, step: 'failed', reason: 'timeout' } });
+    }, PC_STALL_MS);
+  }
+  function stopPcWatch() {
+    if (pcTimer !== null) clearTimeout(pcTimer);
+    pcTimer = null;
+  }
   /** What the phone last said about its app being in front; said again after every ready. */
   let visible: boolean | null = null;
   /** The last thread opened: asked again after every ready. */
@@ -333,7 +360,9 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         reads = Object.fromEntries(Object.entries(reads).filter(([id]) => sessions.has(id)));
         saveReads(reads, storage);
         boot = m.daemon.boot ?? null;
-        set({ sessions, previews, threads, capabilities: m.capabilities, device: m.device ?? null, daemon: m.daemon, fresh: true, syncedAt: now });
+        const pc = pcSnapshot(state.pc, m.daemon);
+        if (!pcRunning(pc)) stopPcWatch();
+        set({ sessions, previews, threads, capabilities: m.capabilities, device: m.device ?? null, daemon: m.daemon, fresh: true, syncedAt: now, pc });
         persist();
         // The instructions and interrupts left uncertain (those in flight on this link are `sending`) go again if this PC may not have applied them.
         if (ready()) resend(o => o.phase === 'uncertain' && expectKey(o.message) === undefined);
@@ -349,6 +378,16 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
       case 'teams.catalog':
         set({ catalog: m.catalog, catalogRefused: false });
         return;
+      case 'daemon.progress':
+        set({ pc: pcProgress(state.pc, m, boot) });
+        watchPc();
+        return;
+      case 'daemon.failed': {
+        const pc = pcFailed(state.pc, m);
+        if (!pcRunning(pc)) stopPcWatch();
+        set({ pc });
+        return;
+      }
       case 'teams.role': {
         const read = roleReads.find(r => r.ref.id === m.role.id && r.ref.scope === m.role.scope && (r.ref.project ?? null) === m.role.project);
         if (read) endRead(read, m.role);
@@ -497,8 +536,13 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     // `teamsDigest` refuses what the PC would refuse: nothing is asked, nothing is sent.
     try { digest = await teamsDigest(frozen); }
     catch { return { status: 'rejected', reason: 'invalid' }; }
+    return signedOperation({ purpose: teamsPurpose(frozen.type), digest }, (o, assertion) => ({ ...frozen, op: o, assertion }));
+  }
+
+  /** Asks the challenge of `prep`, has the passkey sign it, then writes the operation `build` makes with that assertion. */
+  async function signedOperation(prep: ConfirmRequest, build: (op: string, assertion: Assertion) => OpMessage): Promise<ChatAction> {
     let challenge: ConfirmChallenge;
-    try { challenge = await store.prepareConfirm({ purpose: teamsPurpose(frozen.type), digest }); }
+    try { challenge = await store.prepareConfirm(prep); }
     catch (e) { return { status: e instanceof Error && e.message === 'timeout' ? 'expired' : 'failed' }; }
     if (!challenge.credentialId) return { status: 'rejected', reason: 'confirm_required' };
     const at = Date.now();
@@ -506,7 +550,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     if (signed === 'cancelled') return { status: 'cancelled' };
     if (signed === 'failed') return { status: 'failed' };
     if (Date.now() - at >= challenge.expiresInMs) return { status: 'expired' };
-    const op = write(o => ({ ...frozen, op: o, assertion: signed }));
+    const op = write(o => build(o, signed));
     // The link dropped after the passkey: the PC never got it, so the screen stays as it was and can be tapped again.
     // Nothing was sent (the link dropped after the passkey, or the message no longer parses): not an expired passkey, a failed attempt.
     return op === null ? { status: 'failed' } : finalOf(op);
@@ -540,7 +584,8 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     previewsDirty = false;
     clearLastState(storage);
     clearOps(storage);
-    set({ sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, fresh: false, syncedAt: null, ops: {}, teams: null, tasks: new Map(), catalog: null, catalogRefused: false });
+    set({ sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, fresh: false, syncedAt: null, ops: {}, teams: null, tasks: new Map(), catalog: null, catalogRefused: false, pc: null });
+    stopPcWatch();
   }
 
   let wasReady = ready();
@@ -614,6 +659,24 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     define: req => confirmedOperation(req).then(done => { if (done.status === 'applied') store.requestCatalog(); return done; }),
 
     teamOp: req => confirmedOperation(req),
+
+    async pcAction(action, version) {
+      if (!state.device?.confirm) return { status: 'rejected', reason: 'confirm_required' };
+      const target = action === 'update' ? version : state.daemon?.version ?? '';
+      if (target === undefined) return { status: 'rejected', reason: 'invalid' };
+      const bootAsked = boot;
+      const done = await signedOperation(
+        action === 'update' ? { purpose: 'pc', action, version: target } : { purpose: 'pc', action },
+        (o, assertion) => (action === 'update' ? { type: 'daemon.update', op: o, version: target, assertion } : { type: 'daemon.restart', op: o, assertion }));
+      // The daemon's first step may have come before the answer: it is kept.
+      if (done.status === 'applied' && !pcRunning(state.pc)) set({ pc: { action, version: target, boot: bootAsked, step: 'asked' } });
+      if (done.status === 'applied') watchPc();
+      return done;
+    },
+
+    dismissPc() {
+      if (state.pc && !pcRunning(state.pc)) set({ pc: null });
+    },
 
     registerCredential(c) {
       return write(op => ({ type: 'credential.register', op, credential: c }));
@@ -810,6 +873,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
       offState();
       offMessage();
       for (const id of [...timers.keys()]) stopTimer(id);
+      stopPcWatch();
       listeners.clear();
     }
   };
