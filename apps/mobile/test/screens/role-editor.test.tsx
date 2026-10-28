@@ -1,12 +1,16 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PhoneCatalog, PhoneRole } from '@ledge/protocol';
+import { goBack } from '../../src/router';
 import { RoleEditor } from '../../src/screens/RoleEditor';
 import { snapshot } from '../state/helpers';
 import { setup } from './setup';
 
+// `goBack` branches on the router's module-level history position, which every hash change moves: its own behaviour is the router's
+// (router.test.ts), so the editor is tested on what it asks of it, whatever order the tests run in.
+vi.mock('../../src/router', async importOriginal => ({ ...(await importOriginal<typeof import('../../src/router')>()), goBack: vi.fn() }));
 afterEach(() => { vi.useRealTimers(); });
-beforeEach(() => { globalThis.location.hash = '#/role/x'; });
+beforeEach(() => { vi.mocked(goBack).mockClear(); globalThis.location.hash = '#/role/x'; });
 
 const HASH = 'a'.repeat(16);
 const OTHER = 'b'.repeat(16);
@@ -78,7 +82,7 @@ describe('the role editor', () => {
     expect(t.define).toHaveBeenCalledTimes(1);
     // Strict draft: no `project` on a home scope, no empty default.
     expect(t.define.mock.calls[0]![0]).toStrictEqual({ type: 'role.write', scope: 'home', role: { id: 'tester', label: 'Testeur', prompt: 'Tu testes.' }, base: null });
-    expect(globalThis.location.hash).toBe('#/teams');
+    expect(goBack).toHaveBeenCalledExactlyOnceWith({ name: 'teams' });
   });
 
   it('saves a new Dépôt role on the project picked, with its defaults', async () => {
@@ -268,15 +272,13 @@ describe('the role editor', () => {
 
   it('a write that resolves after the user left the editor does not navigate', async () => {
     const t = open('home~~dev');
-    const back = vi.spyOn(globalThis.history, 'back').mockImplementation(() => undefined);
     let settle!: (r: { status: 'applied' }) => void;
     t.define.mockReturnValueOnce(new Promise(r => { settle = r; }));
     fireEvent.click(save());
     t.view.unmount();
     await act(async () => { settle({ status: 'applied' }); });
-    expect(back).not.toHaveBeenCalled();
+    expect(goBack).not.toHaveBeenCalled();
     expect(globalThis.location.hash).toBe('#/role/x');
-    back.mockRestore();
   });
 
   it('after « changed » on a delete, « Supprimer » waits for the new catalog', async () => {
