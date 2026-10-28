@@ -28,10 +28,10 @@ export const copy = {
     offlineNote: 'Vous pouvez consulter les demandes. Aucune décision ne sera envoyée hors connexion.'
   },
   nav: {
-    label: 'Navigation principale', inbox: 'À traiter', agents: 'Agents', chat: 'Ledge',
+    label: 'Navigation principale', inbox: 'À traiter', agents: 'Agents', chat: 'Ledge', teams: 'Équipes',
     /** « Retour », named after the screen it leads to; plain when that screen is not known (after a reload). */
     back: 'Retour',
-    backTo: { inbox: 'Retour aux demandes', agents: 'Retour aux agents', chat: 'Retour à Ledge', thread: 'Retour au fil', terminal: 'Retour au terminal', request: 'Retour à la demande', connection: 'Retour à la connexion' } as Partial<Record<string, string>>
+    backTo: { inbox: 'Retour aux demandes', agents: 'Retour aux agents', teams: 'Retour aux équipes', chat: 'Retour à Ledge', thread: 'Retour au fil', terminal: 'Retour au terminal', request: 'Retour à la demande', connection: 'Retour à la connexion' } as Partial<Record<string, string>>
   },
   images: {
     attach: 'Joindre une image', remove: 'Retirer l\'image', tooLarge: 'Image trop lourde, même réduite', notImage: 'Ce fichier n\'est pas une image', max: '5 images au plus par message',

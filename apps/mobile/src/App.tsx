@@ -18,6 +18,7 @@ import { Offline, Replaced } from './screens/Offline';
 import { RequestDetail } from './screens/RequestDetail';
 import { StorageUnavailable } from './screens/StorageUnavailable';
 import { Terminal } from './screens/Terminal';
+import { TeamsPage, TeamsTab } from './screens/TeamsPlaceholder';
 import { Thread } from './screens/Thread';
 import { Unrecognized } from './screens/Unrecognized';
 import { Update } from './screens/Update';
@@ -201,6 +202,8 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
     }
     switch (route.name) {
       case 'agents': return <Agents store={store} onReconnect={retry} />;
+      case 'teams': return <TeamsTab store={store} />;
+      case 'team': case 'team-copy': case 'role': case 'live': case 'compose': return <TeamsPage store={store} />;
       case 'chat': return mobile.device?.chat ? <Chat store={store} onReconnect={retry} /> : <Inbox store={store} onReconnect={retry} />;
       case 'thread': return <Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} />;
       case 'terminal': return <Terminal key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} />;
