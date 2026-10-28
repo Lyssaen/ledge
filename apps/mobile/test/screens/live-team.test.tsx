@@ -1,8 +1,9 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PhoneCatalog, PhoneRole, PhoneTeam, PhoneTemplate } from '@ledge/protocol';
 import { goBack } from '../../src/router';
 import { LiveTeam } from '../../src/screens/LiveTeam';
+import { CATALOG_WAIT_MS } from '../../src/screens/Teams';
 import { session } from '../model/fixtures';
 import { snapshot } from '../state/helpers';
 import { app } from './app-setup';
@@ -11,7 +12,6 @@ import { setup } from './setup';
 // `goBack` branches on the router's module-level history position, which every hash change moves: its own behaviour is the router's
 // (router.test.ts), so the sheet is tested on what it asks of it, whatever order the tests run in.
 vi.mock('../../src/router', async importOriginal => ({ ...(await importOriginal<typeof import('../../src/router')>()), goBack: vi.fn() }));
-afterEach(() => { vi.useRealTimers(); });
 beforeEach(() => { vi.mocked(goBack).mockClear(); globalThis.location.hash = '#/live/team-a1b2'; });
 
 const HASH = 'a'.repeat(16);
@@ -37,14 +37,14 @@ const team = (extra: Partial<PhoneTeam> = {}): PhoneTeam => ({
 const SESSIONS = [session('s1', { name: 'Otto', state: 'working' }), session('s2', { name: 'Bram', state: 'waiting_input' })];
 
 /** The sheet on a PC that has answered with `c` and holds `teams`; `teamOp` is stubbed to apply. */
-function open({ c = catalog(), teams = [team()], confirm = true, sessions = SESSIONS, teamId = 'team-a1b2' }: { c?: PhoneCatalog | null; teams?: PhoneTeam[] | null; confirm?: boolean; sessions?: typeof SESSIONS; teamId?: string } = {}) {
+function open({ c = catalog(), teams = [team()], confirm = true, sessions = SESSIONS, teamId = 'team-a1b2', onReconnect }: { c?: PhoneCatalog | null; teams?: PhoneTeam[] | null; confirm?: boolean; sessions?: typeof SESSIONS; teamId?: string; onReconnect?: () => void } = {}) {
   const t = setup();
   t.deliver(snapshot(sessions, 'PC-Desan', undefined, { confirm, chat: true }));
   act(() => {
     if (c) t.deliver({ type: 'teams.catalog', catalog: c });
     if (teams) t.deliver({ type: 'teams', teams });
   });
-  const view = render(<LiveTeam store={t.store} teamId={teamId} />);
+  const view = render(<LiveTeam store={t.store} teamId={teamId} {...(onReconnect ? { onReconnect } : {})} />);
   const teamOp = vi.spyOn(t.store, 'teamOp').mockResolvedValue({ status: 'applied' });
   return { ...t, view, teamOp };
 }
@@ -57,6 +57,12 @@ describe('the live team sheet, header', () => {
     expect(screen.getByRole('heading', { name: 'Revue paper-service' })).toBeInTheDocument();
     expect(screen.getByText("ledge · au travail depuis 14:02 · d'après « Revue MR »")).toBeInTheDocument();
     expect(screen.getByText('2/3')).toBeInTheDocument();
+  });
+
+  it('shows the team\'s name once: the back header says where it leads', () => {
+    open();
+    expect(screen.getAllByText('Revue paper-service')).toHaveLength(1);
+    expect(screen.getByRole('link', { name: /^Retour/ })).toBeInTheDocument();
   });
 
   it('a resting team says « au repos » in place of the start time', () => {
@@ -126,6 +132,12 @@ describe('the live team sheet, seats', () => {
     expect(within(seat('review')).getByText('Claude Code · sonnet · demande')).toBeInTheDocument();
   });
 
+  it('the seat\'s own effort beats the role\'s on the sheet', () => {
+    open({ teams: [team({ seats: [{ role: 'leader', sessionId: 's1', effort: 'low' }] })] });
+    expect(within(seat('leader')).getByText('Claude Code · opus · low · demande')).toBeInTheDocument();
+    expect(within(seat('leader')).queryByText(/high/)).toBeNull();
+  });
+
   it('autonomy comes from the role, and « auto » is in the warning tone', () => {
     open({ teams: [team({ project: 'paper-service', seats: [{ role: 'dev', sessionId: 's2' }] })] });
     const line = within(seat('dev')).getByText('Codex · gpt-5 · auto');
@@ -137,6 +149,13 @@ describe('the live team sheet, seats', () => {
     expect(within(seat('leader')).getByText(/Tu découpes la story\./)).toHaveTextContent('Tu découpes la story. Tu confies les tâches.');
     expect(within(seat('leader')).queryByText(/Tu fais le point/)).toBeNull();
     expect(within(seat('leader')).getByRole('link', { name: 'Lire et modifier la consigne' })).toHaveAttribute('href', '#/role/home~~leader');
+  });
+
+  it('a prompt that starts with a title and a blank line previews the title and the next line, CRLF or not', () => {
+    const c = catalog({ roles: [role('leader', { prompt: '# Chef\r\n\r\nTu découpes la story.\r\nTu confies.' })] });
+    open({ c, teams: [team({ seats: [{ role: 'leader', sessionId: 's1' }] })] });
+    expect(within(seat('leader')).getByText(/# Chef/)).toHaveTextContent('# Chef Tu découpes la story.');
+    expect(within(seat('leader')).queryByText(/Tu confies/)).toBeNull();
   });
 
   it('links to the project\'s own role when it has one, and reads its prompt', () => {
@@ -238,6 +257,37 @@ describe('the live team sheet, actions', () => {
     expect(goBack).not.toHaveBeenCalled();
   });
 
+  it('the confirmation says what the passkey does', () => {
+    open();
+    fireEvent.click(screen.getByRole('button', { name: 'Dissoudre l\'équipe' }));
+    expect(within(screen.getByRole('dialog')).getByText('Votre passkey confirme la dissolution.')).toBeInTheDocument();
+  });
+
+  it('the confirm button turns off, and says why, when the link is lost while the sheet is open', () => {
+    const t = open();
+    fireEvent.click(screen.getByRole('button', { name: 'Dissoudre l\'équipe' }));
+    act(() => t.set('pc_offline'));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByRole('button', { name: 'Dissoudre l\'équipe' })).toBeDisabled();
+    expect(within(dialog).getByText(/PC hors ligne\./)).toBeInTheDocument();
+    expect(t.teamOp).not.toHaveBeenCalled();
+  });
+
+  it('a team that vanishes while the dissolve is pending shows Gone, and the answer still leads back to Agents once', async () => {
+    const t = open();
+    let finish!: (r: { status: 'applied' }) => void;
+    t.teamOp.mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    fireEvent.click(screen.getByRole('button', { name: 'Dissoudre l\'équipe' }));
+    await click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Dissoudre l\'équipe' }));
+    act(() => t.deliver({ type: 'teams', teams: [] }));
+    expect(screen.getByRole('heading', { name: 'Cette équipe n’existe plus' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(goBack).not.toHaveBeenCalled();
+    await act(async () => { finish({ status: 'applied' }); });
+    expect(goBack).toHaveBeenCalledTimes(1);
+    expect(goBack).toHaveBeenCalledWith({ name: 'agents' });
+  });
+
   it('without a passkey, the operations are off and Connexion is the way', () => {
     const t = open({ confirm: false });
     expect(within(seat('review')).getByRole('button', { name: 'Démarrer ce siège' })).toBeDisabled();
@@ -249,9 +299,33 @@ describe('the live team sheet, actions', () => {
 });
 
 describe('the live team sheet, waiting and vanishing', () => {
-  it('waits for the live teams and the catalog', () => {
+  it('waiting for the live teams says so, and not the catalog', () => {
     open({ teams: null });
-    expect(screen.getByRole('status')).toHaveTextContent('Lecture du catalogue…');
+    expect(screen.getByRole('status')).toHaveTextContent('Lecture de l’équipe…');
+  });
+
+  it('past the wait, the live teams\' retry is a new link (the PC pushes them; nothing asks)', () => {
+    vi.useFakeTimers();
+    try {
+      const onReconnect = vi.fn();
+      open({ teams: null, onReconnect });
+      act(() => { vi.advanceTimersByTime(CATALOG_WAIT_MS); });
+      expect(screen.getByText('Équipe indisponible')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Reconnecter et actualiser' }));
+      expect(onReconnect).toHaveBeenCalledTimes(1);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('waiting for the catalog says so, and its retry asks for the catalog again', () => {
+    vi.useFakeTimers();
+    try {
+      const t = open({ c: null });
+      expect(screen.getByRole('status')).toHaveTextContent('Lecture du catalogue…');
+      act(() => { vi.advanceTimersByTime(CATALOG_WAIT_MS); });
+      const before = t.sent.filter(m => m.type === 'teams.catalog').length;
+      fireEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
+      expect(t.sent.filter(m => m.type === 'teams.catalog').length).toBe(before + 1);
+    } finally { vi.useRealTimers(); }
   });
 
   it('a team no longer in the live teams shows the Gone screen', () => {

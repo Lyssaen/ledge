@@ -210,7 +210,7 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
       case 'team': return <TeamEditor key={`team:${route.key}`} store={store} mode={{ kind: 'template', key: route.key }} />;
       case 'team-copy': return <TeamEditor key={`copy:${route.teamId}`} store={store} mode={{ kind: 'copy', teamId: route.teamId }} />;
       case 'compose': return <TeamEditor key={`live:${route.teamId}`} store={store} mode={{ kind: 'live', teamId: route.teamId }} />;
-      case 'live': return <LiveTeam key={route.teamId} store={store} teamId={route.teamId} />;
+      case 'live': return <LiveTeam key={route.teamId} store={store} teamId={route.teamId} onReconnect={retry} />;
       case 'chat': return mobile.device?.chat ? <Chat store={store} onReconnect={retry} /> : <Inbox store={store} onReconnect={retry} />;
       case 'thread': return <Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} />;
       case 'terminal': return <Terminal key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} />;

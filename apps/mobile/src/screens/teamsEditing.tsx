@@ -65,8 +65,8 @@ export function seatAction(store: MobileStore, team: string, role: string, actio
   return store.teamOp({ type: 'team.seat', team, role, action }).then(r => r.status === 'applied' ? null : outcomeNote(r, fallback), () => ({ text: fallback, quiet: false }));
 }
 
-/** What a screen shows until it has what it opens on: the wait for the catalog, its retry, or `missing` when the PC answered without it. It leads back to the Équipes tab, or to `back`. */
-export function EditorPending({ store, waited, retry, missing, back }: { store: MobileStore; waited: boolean; retry: () => void; missing: string | null; back?: { route: Route; title: string; label: string } }) {
+/** What a screen shows until it has what it opens on: the wait for the catalog, its retry, or `missing` when the PC answered without it (`wording` when what it waits for is not the catalog). It leads back to the Équipes tab, or to `back`. */
+export function EditorPending({ store, waited, retry, missing, back, wording }: { store: MobileStore; waited: boolean; retry: () => void; missing: string | null; back?: { route: Route; title: string; label: string }; wording?: { loading: string; unavailable: string; retry: string } }) {
   const state = useMobile(store);
   return (
     <>
@@ -74,10 +74,10 @@ export function EditorPending({ store, waited, retry, missing, back }: { store: 
       <main className="min-h-0 flex-1 overflow-y-auto pb-[22px]">
         {missing !== null ? <p className="py-6 text-center text-body text-muted">{missing}</p>
           : waited ? (
-            <div className="mt-3"><Notice title={copy.teams.unavailable} tone="plain">
-              <button type="button" onClick={retry} className={buttonClass({ block: true, className: 'mt-3' })}>{copy.teams.retry}</button>
+            <div className="mt-3"><Notice title={wording?.unavailable ?? copy.teams.unavailable} tone="plain">
+              <button type="button" onClick={retry} className={buttonClass({ block: true, className: 'mt-3' })}>{wording?.retry ?? copy.teams.retry}</button>
             </Notice></div>
-          ) : <p role="status" className="py-6 text-center text-body text-muted">{copy.teams.loading}</p>}
+          ) : <p role="status" className="py-6 text-center text-body text-muted">{wording?.loading ?? copy.teams.loading}</p>}
       </main>
     </>
   );

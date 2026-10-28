@@ -173,7 +173,7 @@ export const copy = {
       readPrompt: 'Lire et modifier la consigne', compose: 'Modifier la composition', saveAs: 'Enregistrer comme équipe',
       dissolve: 'Dissoudre l\'équipe', dissolveTitle: (name: string) => `Dissoudre ${name} ?`,
       dissolveHint: 'Irréversible. Les sessions de l’équipe restent ouvertes.', dissolveNote: 'Votre passkey confirme la dissolution.',
-      notDissolved: 'Pas dissoute.'
+      notDissolved: 'Pas dissoute.', loading: 'Lecture de l’équipe…', unavailable: 'Équipe indisponible'
     }
   },
   agents: {

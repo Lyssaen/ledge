@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import type { PhoneCatalog, PhoneRole, PhoneTeam, PhoneTemplate } from '@ledge/protocol';
 import { copy } from '../copy';
 import { sessionStatus, type Tone } from '../model/agents';
@@ -13,6 +13,7 @@ import { OfflineBanner } from '../ui/Notice';
 import { Flag, Progress, RolePill } from '../ui/teams/RolePill';
 import { SeatMeta } from '../ui/teams/SeatMeta';
 import { Gone } from './Gone';
+import { CATALOG_WAIT_MS } from './Teams';
 import { clock } from './Inbox';
 import { EditorPending, seatAction, useCatalogGate, useMounted } from './teamsEditing';
 
@@ -28,19 +29,25 @@ function templateOf(team: PhoneTeam, catalog: PhoneCatalog): PhoneTemplate | und
 }
 
 /** The first two lines of a role's prompt, as the catalog has it (cut for the phone or not). */
-const preview = (prompt: string): string => prompt.split('\n').filter(l => l.trim() !== '').slice(0, 2).join('\n');
+const preview = (prompt: string): string => prompt.split(/\r?\n/).filter(l => l.trim() !== '').slice(0, 2).join('\n');
 
 /** « Dissoudre l'équipe »: irreversible, so it asks first; it cannot be closed while it runs. */
-function DissolveSheet({ name, busy, note, onConfirm, onClose }: { name: string; busy: boolean; note: OutcomeNote | null; onConfirm: () => void; onClose: () => void }) {
+function DissolveSheet({ name, busy, canConfirm, fresh, note, onConfirm, onClose }: { name: string; busy: boolean; canConfirm: boolean; fresh: boolean; note: OutcomeNote | null; onConfirm: () => void; onClose: () => void }) {
   const id = useId();
   return (
     <Sheet labelledBy={`${id}-title`} onClose={() => { if (!busy) onClose(); }}>
       <h2 id={`${id}-title`} className="text-heading leading-[1.3] font-semibold tracking-[-.5px] [overflow-wrap:anywhere]">{t.dissolveTitle(name)}</h2>
       <p className="text-body text-muted">{t.dissolveHint}</p>
       {note && <p role="status" className={`text-body ${note.quiet ? 'text-muted' : 'text-danger-fg'}`}>{note.text}</p>}
+      {/* The button stays off while the link or the passkey is missing, and says why: it never does nothing silently. */}
+      {!canConfirm
+        ? <p className="text-body text-attention">{copy.chat.launchSetup} <a href={href({ name: 'connection' })} className="text-info underline underline-offset-2">{copy.connection.title}</a></p>
+        : !fresh
+          ? <p className="text-body text-attention">{copy.offline.pcOffline}. {copy.link.lostBody}</p>
+          : <p className="text-small text-muted">{t.dissolveNote}</p>}
       <div className="flex gap-2">
         <Button variant="ghost" className="flex-1" disabled={busy} onClick={onClose}>{copy.teams.cancel}</Button>
-        <Button variant="brand" className="flex-[2]" disabled={busy} onClick={onConfirm}>{t.dissolve}</Button>
+        <Button variant="brand" className="flex-[2]" disabled={busy || !canConfirm || !fresh} onClick={onConfirm}>{t.dissolve}</Button>
       </div>
     </Sheet>
   );
@@ -88,7 +95,7 @@ function Body({ store, team, catalog, mounted }: { store: MobileStore; team: Pho
   const where = [team.project, team.state === 'resting' ? t.resting : t.since(clock(team.createdAt)), template ? t.from(template.name) : null].filter(x => x).join(' · ');
   return (
     <>
-      <BackHeader title={team.name} fallback={AGENTS} label={copy.nav.backTo.agents ?? copy.nav.back} link={linkView(state)} />
+      <BackHeader title={copy.nav.agents} fallback={AGENTS} label={copy.nav.backTo.agents ?? copy.nav.back} link={linkView(state)} />
       <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[22px]">
         {!state.fresh && <div className="mt-3"><OfflineBanner /></div>}
         <div className="mt-3 flex items-center gap-2">
@@ -110,7 +117,7 @@ function Body({ store, team, catalog, mounted }: { store: MobileStore; team: Pho
                   <span className="min-w-0 flex-1 font-semibold [overflow-wrap:anywhere]">{role?.label}</span>
                   <Holder seat={s} store={store} />
                 </div>
-                <div className="mt-1 text-small [overflow-wrap:anywhere] text-muted"><SeatMeta seat={s} role={role} sheet /></div>
+                <div className="mt-1 text-small [overflow-wrap:anywhere] text-muted"><SeatMeta seat={s} role={role} order="sheet" /></div>
                 {role && <p className="mt-2 line-clamp-2 rounded-control bg-bg px-2.5 py-2 text-small whitespace-pre-line [overflow-wrap:anywhere] text-muted">{preview(role.prompt)}</p>}
                 {role && <a href={href({ name: 'role', key: catalogKey(role) })} className="mt-1.5 inline-block text-small text-info underline underline-offset-2">{t.readPrompt}</a>}
                 {free && (
@@ -131,22 +138,39 @@ function Body({ store, team, catalog, mounted }: { store: MobileStore; team: Pho
         <Button variant="ghost" block className="mt-2 text-danger-fg" disabled={!online} onClick={() => { setDissolveNote(null); setDissolving(true); }}>{t.dissolve}</Button>
         {!canConfirm && <p className="mt-2 text-center text-body text-attention">{copy.chat.launchSetup} <a href={href({ name: 'connection' })} className="text-info underline underline-offset-2">{copy.connection.title}</a></p>}
       </main>
-      {dissolving && <DissolveSheet name={team.name} busy={busy} note={dissolveNote} onConfirm={dissolve} onClose={() => setDissolving(false)} />}
+      {dissolving && <DissolveSheet name={team.name} busy={busy} canConfirm={canConfirm} fresh={state.fresh} note={dissolveNote} onConfirm={dissolve} onClose={() => setDissolving(false)} />}
     </>
   );
+}
+
+/** The live teams the sheet opens on: `waited` once the PC has not pushed them for `CATALOG_WAIT_MS`, so the screen says so instead of waiting for ever. */
+function useTeamsWait(have: boolean, fresh: boolean): { waited: boolean; retry: () => void } {
+  const [attempt, setAttempt] = useState(0);
+  const [waited, setWaited] = useState(false);
+  useEffect(() => {
+    setWaited(false);
+    if (have) return;
+    const timer = setTimeout(() => setWaited(true), CATALOG_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, [have, fresh, attempt]);
+  return { waited, retry: () => setAttempt(n => n + 1) };
 }
 
 /**
  * A live team's sheet: its seats, who holds each, what they run with and the role's prompt, and the actions on the team.
  * It waits for the PC's live teams and catalog; a team that is not (or no longer) there is the Gone screen.
  */
-export function LiveTeam({ store, teamId }: { store: MobileStore; teamId: string }) {
+export function LiveTeam({ store, teamId, onReconnect }: { store: MobileStore; teamId: string; onReconnect?: () => void }) {
   const { teams, catalog, fresh } = useMobile(store);
   const gate = useCatalogGate(store);
+  const wait = useTeamsWait(teams !== null, fresh);
   // This screen's, not the sheet's: the team leaves `teams` as soon as it is dissolved, and the answer must still lead back to Agents.
   const mounted = useMounted();
   const team = teams?.find(x => x.id === teamId);
+  const back = { route: AGENTS, title: copy.nav.agents, label: copy.nav.backTo.agents ?? copy.nav.back };
   if (teams && !team) return <Gone store={store} team stale={!fresh} />;
-  if (!team || !catalog) return <EditorPending store={store} waited={gate.waited} retry={gate.retry} missing={null} back={{ route: AGENTS, title: copy.nav.agents, label: copy.nav.backTo.agents ?? copy.nav.back }} />;
-  return <Body store={store} team={team} catalog={catalog} mounted={mounted} />;
+  // The PC pushes its live teams (nothing asks for them): the only retry is a new link, as in the Équipes tab when it is offline.
+  if (!teams) return <EditorPending store={store} waited={wait.waited} retry={() => { if (onReconnect) onReconnect(); wait.retry(); }} missing={null} back={back} wording={{ loading: t.loading, unavailable: t.unavailable, retry: copy.link.reconnect }} />;
+  if (!catalog) return <EditorPending store={store} waited={gate.waited} retry={gate.retry} missing={null} back={back} />;
+  return <Body store={store} team={team!} catalog={catalog} mounted={mounted} />;
 }
