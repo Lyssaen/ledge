@@ -98,6 +98,70 @@ describe('live teams', () => {
   });
 });
 
+describe('compose', () => {
+  const seated = () => {
+    const t = teams.create({ name: 'ledge-roles', project: 'ledge', cwd: '/w/ledge', roles: ['lead', 'dev', 'qa'] });
+    teams.seat(t.id, 'lead', store.get('pim')!, 'Chef'); teams.seat(t.id, 'dev', store.get('otto')!, 'Dev');
+    return t;
+  };
+
+  it('keeps the given order and the kept roles’ sessions; adds a free seat; drops a free seat; the overrides are stored as given, the name ignored', () => {
+    const t = seated();
+    const r = teams.compose(t.id, [{ role: 'lead', model: 'sonnet', name: 'Zed' }, { role: 'dev' }, { role: 'rev', tool: 'codex', effort: 'high' }]);
+    expect(typeof r).toBe('object');
+    const done = r as Exclude<typeof r, string>;
+    expect(done.added).toEqual(['rev']); expect(done.removed).toEqual(['qa']);
+    expect(done.team.seats).toEqual([{ role: 'lead', sessionId: 'pim', model: 'sonnet' }, { role: 'dev', sessionId: 'otto' }, { role: 'rev', sessionId: null, tool: 'codex', effort: 'high' }]);
+    expect(teams.get(t.id)!.seats).toEqual(done.team.seats);
+    expect(changes.at(-1)!.seats).toEqual(done.team.seats);
+  });
+
+  it('a removed seat with a live session leaves; once the session has exited the seat is gone and the session is out of the team', () => {
+    const t = seated();
+    const r = teams.compose(t.id, [{ role: 'lead' }]) as Exclude<ReturnType<TeamsLive['compose']>, string>;
+    expect(r.removed).toEqual(['dev', 'qa']);
+    expect(r.team.seats).toEqual([{ role: 'lead', sessionId: 'pim' }, { role: 'dev', sessionId: 'otto', leaving: true }]);
+    expect(teams.teamOf('otto')?.id).toBe(t.id);
+    store.upsert({ ...store.get('otto')!, state: 'exited' });
+    expect(teams.get(t.id)!.seats).toEqual([{ role: 'lead', sessionId: 'pim' }]);
+    expect(store.get('otto')!.team).toBeUndefined();
+  });
+
+  it('a leaving seat goes too when its session is deleted; an ended session on a removed seat is dropped at once', () => {
+    const t = seated();
+    store.upsert({ ...store.get('otto')!, state: 'exited' });
+    teams.compose(t.id, [{ role: 'lead' }]);
+    expect(teams.get(t.id)!.seats).toEqual([{ role: 'lead', sessionId: 'pim' }]);
+    expect(store.get('otto')!.team).toBeUndefined();
+    const u = teams.create({ name: 'u', project: 'ledge', cwd: '/w/ledge', roles: ['lead', 'dev'] });
+    teams.seat(u.id, 'lead', store.get('mila')!, 'Chef');
+    teams.compose(u.id, [{ role: 'dev' }]);
+    expect(teams.get(u.id)!.seats).toEqual([{ role: 'dev', sessionId: null }, { role: 'lead', sessionId: 'mila', leaving: true }]);
+    store.remove('mila');
+    expect(teams.get(u.id)!.seats).toEqual([{ role: 'dev', sessionId: null }]);
+  });
+
+  it('listing a leaving role again keeps its seat and its session, and clears leaving; a leaving seat is not counted twice', () => {
+    const t = seated();
+    teams.compose(t.id, [{ role: 'lead' }]);
+    const r = teams.compose(t.id, [{ role: 'lead' }, { role: 'dev', model: 'opus' }]) as Exclude<ReturnType<TeamsLive['compose']>, string>;
+    expect(r.added).toEqual([]); expect(r.removed).toEqual([]);
+    expect(r.team.seats).toEqual([{ role: 'lead', sessionId: 'pim' }, { role: 'dev', sessionId: 'otto', model: 'opus' }]);
+    // Still leaving, left alone by a later composition that does not name it.
+    teams.compose(t.id, [{ role: 'lead' }]);
+    const again = teams.compose(t.id, [{ role: 'lead' }, { role: 'qa' }]) as Exclude<ReturnType<TeamsLive['compose']>, string>;
+    expect(again.removed).toEqual([]);
+    expect(again.team.seats.map(s => [s.role, s.leaving ?? false])).toEqual([['lead', false], ['qa', false], ['dev', true]]);
+  });
+
+  it('refuses a dissolved team and an unknown one', () => {
+    const t = seated();
+    teams.dissolve(t.id);
+    expect(typeof teams.compose(t.id, [{ role: 'lead' }])).toBe('string');
+    expect(typeof teams.compose('team-0000', [{ role: 'lead' }])).toBe('string');
+  });
+});
+
 describe('a seat’s context and @role', () => {
   it('tells its role, its prompt, its team and the operator', () => {
     const text = seatContext({ role: { id: 'review', label: 'Relecteur', prompt: 'Tu relis sans modifier.' }, team: { name: 'ledge-roles', members: [{ name: 'Pim', role: 'lead' }, { name: 'Otto', role: 'build' }] } });

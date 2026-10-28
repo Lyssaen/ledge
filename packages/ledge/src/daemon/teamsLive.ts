@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { isArchived, TeamSchema, type Session, type Team } from '@ledge/protocol';
+import { isArchived, TeamSchema, type Seat, type Session, type Team } from '@ledge/protocol';
 import type { Store } from './store.js';
 import { jsonJournal, type Journal } from './journal.js';
 import { log } from '../log.js';
@@ -19,7 +19,7 @@ export interface TeamsLive {
   all(): Team[];
   get(id: string): Team | undefined;
   /** A new active team with free seats (their sessions come as they are spawned). */
-  create(t: { name: string; template?: string; project: string | null; machine?: string; cwd: string; roles: string[] }): Team;
+  create(t: { name: string; template?: string; project: string | null; machine?: string; cwd: string; roles: (string | Pick<Seat, 'role' | 'tool' | 'model' | 'effort'>)[] }): Team;
   /** A seat's session, once spawned: the session is told its team on its record. */
   seat(team: string, role: string, session: Session, roleLabel: string): Team;
   /** A live session takes a role in the team (a free one or a new one); refused with the reason. */
@@ -27,11 +27,20 @@ export interface TeamsLive {
   /** The session goes back to its project's common table; its open tasks stay its own. */
   leave(team: string, session: string): Team | string;
   dissolve(team: string): Team | string;
+  /**
+   * A live team's new composition (spec 2026-10-28 mobile teams §3.6). The seats keep the given order; a kept role keeps its session and
+   * takes the given `tool`/`model`/`effort` (`name` is ignored); an added role is a free seat. A removed role with a live session
+   * becomes `leaving` (the daemon closes it at its next free moment), a free or ended one is dropped. Listing a leaving role again keeps it.
+   */
+  compose(team: string, seats: readonly Seat[]): { team: Team; added: string[]; removed: string[] } | string;
   /** The team of a session, while it sits in one that is not dissolved. */
   teamOf(session: string): Team | undefined;
   onChange(listener: (t: Team) => void): () => void;
   close(): void;
 }
+
+/** What a seat may change of its role's defaults. */
+const seatOverrides = (s: Pick<Seat, 'tool' | 'model' | 'effort'>) => ({ ...(s.tool ? { tool: s.tool } : {}), ...(s.model ? { model: s.model } : {}), ...(s.effort ? { effort: s.effort } : {}) });
 
 const live = (s: Session | undefined): boolean => !!s && s.state !== 'exited' && !isArchived(s);
 
@@ -76,7 +85,15 @@ export function createTeamsLive(d: TeamsLiveDeps): TeamsLive {
     if (c.type === 'recents') return;
     const id = c.type === 'removed' ? c.id : c.session.id;
     for (const t of [...teams.values()]) {
-      if (!t.seats.some(s => s.sessionId === id)) continue;
+      const seat = t.seats.find(s => s.sessionId === id);
+      if (!seat) continue;
+      // A seat on its way out goes once its session has ended or is gone; the session is then out of the team.
+      if (seat.leaving && !live(d.store.get(id))) {
+        put({ ...t, seats: t.seats.filter(s => s !== seat) });
+        if (c.type === 'updated') d.store.patch(id, { team: undefined });
+        settle(teams.get(t.id)!);
+        continue;
+      }
       // A deleted session frees its seat for good: nothing is left to resume there.
       if (c.type === 'removed') put({ ...t, seats: t.seats.map(s => (s.sessionId === id ? { ...s, sessionId: null } : s)) });
       settle(teams.get(t.id)!);
@@ -98,11 +115,14 @@ export function createTeamsLive(d: TeamsLiveDeps): TeamsLive {
     create(t) {
       const at = now();
       return put({ id: newId(), name: t.name, ...(t.template ? { template: t.template } : {}), project: t.project, machine: t.machine ?? 'local', cwd: t.cwd,
-        state: 'active', seats: t.roles.map(role => ({ role, sessionId: null })), createdAt: at, updatedAt: at });
+        state: 'active', seats: t.roles.map(r => (typeof r === 'string' ? { role: r, sessionId: null } : { role: r.role, sessionId: null, ...seatOverrides(r) })), createdAt: at, updatedAt: at });
     },
     seat(id, role, session, roleLabel) {
       const t = teams.get(id); if (!t) throw new Error(`unknown team ${id}`);
       unseatElsewhere(session.id, id);
+      // A session replaced on its seat (a restart) is out of the team.
+      const prev = t.seats.find(s => s.role === role)?.sessionId;
+      if (prev && prev !== session.id && d.store.get(prev)?.team === id) d.store.patch(prev, { team: undefined });
       const seats = t.seats.some(s => s.role === role) ? t.seats.map(s => (s.role === role ? { ...s, sessionId: session.id } : s)) : [...t.seats, { role, sessionId: session.id }];
       d.store.patch(session.id, { team: id, role, roleLabel });
       const next = put({ ...t, seats });
@@ -138,6 +158,23 @@ export function createTeamsLive(d: TeamsLiveDeps): TeamsLive {
       const at = now();
       log(`team ${t.id} (${t.name}) dissolved`);
       return put({ ...t, state: 'dissolved', dissolvedAt: at });
+    },
+    compose(id, given) {
+      const t = teams.get(id); if (!t) return `aucune équipe ${id}`;
+      if (t.state === 'dissolved') return `l'équipe ${t.name} est dissoute`;
+      const before = new Map(t.seats.map(s => [s.role, s]));
+      const listed = new Set(given.map(g => g.role));
+      const kept = given.map(g => ({ role: g.role, sessionId: before.get(g.role)?.sessionId ?? null, ...seatOverrides(g) }));
+      const added = given.filter(g => !before.has(g.role)).map(g => g.role);
+      const gone = t.seats.filter(s => !listed.has(s.role));
+      // A seat already leaving stays so; a removed one with a live session starts to; the others are dropped, their session out of the team.
+      const stays = (s: Team['seats'][number]) => s.leaving || (!!s.sessionId && live(d.store.get(s.sessionId)));
+      const staying = gone.filter(stays).map(s => ({ ...s, leaving: true as const }));
+      for (const s of gone) if (!stays(s) && s.sessionId && d.store.get(s.sessionId)?.team === id) d.store.patch(s.sessionId, { team: undefined });
+      const removed = gone.filter(s => !s.leaving).map(s => s.role);
+      const next = put({ ...t, seats: [...kept, ...staying] });
+      settle(next);
+      return { team: teams.get(id)!, added, removed };
     },
     teamOf,
     onChange(listener) { listeners.add(listener); return () => listeners.delete(listener); },
