@@ -103,6 +103,33 @@ export const copy = {
       look: (name: string) => `Regarde ${name}…`
     }
   },
+  /** The Équipes tab: the team definitions and the roles the PC offers, and « Lever » (raising a team from a definition). The word « modèle » stays out of the phone. */
+  teams: {
+    subtitle: (teams: number, roles: number) => `${teams} ${teams > 1 ? 'équipes' : 'équipe'} · ${roles} ${roles > 1 ? 'rôles' : 'rôle'}`,
+    newTeam: 'Nouvelle équipe', newRole: '+ Nouveau rôle',
+    teamsHead: 'ÉQUIPES', teamsLabel: 'Équipes disponibles', rolesHead: 'RÔLES', rolesLabel: 'Rôles',
+    noTeams: 'Aucune équipe définie.', noRoles: 'Aucun rôle défini.',
+    lever: 'Lever', noProject: 'Aucun projet avec un dépôt local sur ce PC : impossible de lever une équipe.',
+    autonomy: { ask: 'demande', edits: 'édite', auto: 'auto' } as Record<'ask' | 'edits' | 'auto', string>,
+    live: (name: string) => `${name} est levée · la suivre dans Agents ›`,
+    launched: (name: string) => `${name} levée.`,
+    levering: (name: string) => `Lever ${name}`, name: 'Nom', project: 'Projet', pickProject: 'Choisir un projet',
+    launchSeats: (n: number) => `Lancer l'équipe · ${n} ${n > 1 ? 'sièges' : 'siège'}`, cancel: 'Annuler',
+    notLaunched: 'Pas levée.',
+    /** Why the PC or the phone refused an operation of this tab; any other reason says only that it was not done. */
+    reason: {
+      changed: 'le fichier a changé sur le PC',
+      exists: 'Un fichier de ce nom existe déjà.',
+      unknown_project: 'Ce projet n’a pas de dépôt sur ce PC.',
+      invalid: 'Cette équipe ne peut pas être levée telle quelle.',
+      confirm_required: 'La confirmation avec l’appareil est requise.',
+      assertion_invalid: 'La vérification de l’appareil a été refusée. Réessayez.',
+      assertion_expired: 'La vérification a expiré. Recommencez.',
+      conflict: 'Une autre opération est en cours sur le PC. Réessayez.'
+    } as Partial<Record<string, string>>,
+    loading: 'Lecture du catalogue…', unavailable: 'Catalogue indisponible', retry: 'Réessayer',
+    problemsHead: 'FICHIERS ILLISIBLES', problemsLabel: 'Fichiers illisibles'
+  },
   agents: {
     title: 'Agents',
     subtitle: (sessions: number, projects: number) => `${sessions} ${sessions > 1 ? 'sessions' : 'session'} · ${projects} ${projects > 1 ? 'projets' : 'projet'} sur ce PC`,

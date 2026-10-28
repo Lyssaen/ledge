@@ -43,7 +43,7 @@ function Row({ row, session, offline, threshold }: { row: AgentRow; session: Pho
   );
 }
 
-/** A table's heading: ⚑ a team with Ledge's progress, or « Reprendre » when it rests; the common table by its name. */
+/** A table's heading: ⚑ a team with Ledge's progress, a link to its sheet, or « Reprendre » when it rests; the common table by its name. */
 function TableHead({ table, store, offline }: { table: Table; store: MobileStore; offline: boolean }) {
   if (table.kind === 'common') return <div className="pt-3 pb-1 text-meta tracking-[.4px] text-muted">{copy.agents.common}</div>;
   const t: PhoneTeam = table.team;
@@ -54,10 +54,11 @@ function TableHead({ table, store, offline }: { table: Table; store: MobileStore
     </div>
   );
   return (
-    <div className="flex items-center gap-2 pt-3 pb-1 text-body">
+    <a href={href({ name: 'live', teamId: t.id })} className="-mx-1 flex min-h-11 items-center gap-2 rounded-control px-1 pt-3 pb-1 text-body active:bg-raised/60">
       <Flag /><span className="font-semibold">{t.name}</span><span className="min-w-0 flex-1 truncate text-small text-muted">{copy.agents.team}</span>
       {t.given > 0 && <Progress done={t.done} given={t.given} />}
-    </div>
+      <span className="flex-none text-muted"><Icon name="chevron" /></span>
+    </a>
   );
 }
 

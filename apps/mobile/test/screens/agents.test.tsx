@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Agents } from '../../src/screens/Agents';
 import { pending, session } from '../model/fixtures';
 import { snapshot } from '../state/helpers';
+import type { PhoneTeam } from '@ledge/protocol';
 import { setup } from './setup';
 
 describe('the agents', () => {
@@ -51,5 +52,28 @@ describe('the agents', () => {
     act(() => t.set('pc_offline'));
     expect(screen.getByText('Dernier état connu · connexion perdue')).toBeInTheDocument();
     expect(screen.getByText('PC hors ligne')).toBeInTheDocument();
+  });
+
+  describe('a team\'s header', () => {
+    const team = (extra: Partial<PhoneTeam> = {}): PhoneTeam => ({ id: 'team-a1b2', name: 'ledge-roles', project: 'ledge', state: 'active', seats: [{ role: 'build', sessionId: 'a' }], done: 1, given: 2, createdAt: '2026-10-28T10:00:00.000Z', ...extra });
+
+    it('links an active team to its sheet', () => {
+      const t = setup();
+      t.deliver(snapshot([session('a', { name: 'Kai', repo: 'ledge', role: 'build', team: 'team-a1b2' }), session('b', { name: 'Pim', repo: 'ledge' })]));
+      t.deliver({ type: 'teams', teams: [team()] });
+      render(<Agents store={t.store} />);
+      const head = screen.getByRole('link', { name: /ledge-roles/ });
+      expect(head).toHaveAttribute('href', '#/live/team-a1b2');
+      expect(within(head).getByText('1/2')).toBeInTheDocument();
+    });
+
+    it('keeps « Reprendre » on a resting team, which is not a link', () => {
+      const t = setup();
+      t.deliver(snapshot([session('a', { name: 'Kai', repo: 'ledge', role: 'build', team: 'team-a1b2', state: 'exited' })]));
+      t.deliver({ type: 'teams', teams: [team({ state: 'resting' })] });
+      render(<Agents store={t.store} />);
+      expect(screen.getByRole('button', { name: 'Reprendre' })).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: /ledge-roles/ })).toBeNull();
+    });
   });
 });
