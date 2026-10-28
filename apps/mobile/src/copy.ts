@@ -115,8 +115,7 @@ export const copy = {
     launched: (name: string) => `${name} levée.`,
     levering: (name: string) => `Lever ${name}`, name: 'Nom', project: 'Projet', pickProject: 'Choisir un projet',
     launchSeats: (n: number) => `Lancer l'équipe · ${n} ${n > 1 ? 'sièges' : 'siège'}`, cancel: 'Annuler',
-    notLaunched: 'Pas levée.',
-    /** Why the PC or the phone refused an operation of this tab; any other reason says only that it was not done. */
+    /** Why the PC or the phone refused an operation of this tab, for the reasons the chat has no copy for; any other reason says only that it was not launched (`copy.chat.team.notLaunched`). */
     reason: {
       changed: 'le fichier a changé sur le PC',
       exists: 'Un fichier de ce nom existe déjà.',
@@ -124,7 +123,6 @@ export const copy = {
       invalid: 'Cette équipe ne peut pas être levée telle quelle.',
       confirm_required: 'La confirmation avec l’appareil est requise.',
       assertion_invalid: 'La vérification de l’appareil a été refusée. Réessayez.',
-      assertion_expired: 'La vérification a expiré. Recommencez.',
       conflict: 'Une autre opération est en cours sur le PC. Réessayez.'
     } as Partial<Record<string, string>>,
     loading: 'Lecture du catalogue…', unavailable: 'Catalogue indisponible', retry: 'Réessayer',

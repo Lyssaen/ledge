@@ -41,7 +41,7 @@ describe('the Équipes tab', () => {
     expect(screen.getByText('2 équipes · 3 rôles')).toBeInTheDocument();
     expect(screen.getByText('maison')).toBeInTheDocument();
     expect(screen.getByText('dépôt paper-service')).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: 'Lever' })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: /^Lever / })).toHaveLength(2);
     expect(screen.getByRole('link', { name: 'Nouvelle équipe' })).toHaveAttribute('href', '#/team/new');
     const feature = screen.getByRole('link', { name: /Feature TDD/ });
     expect(feature).toHaveAttribute('href', '#/team/repo~paper-service~feature-tdd');
@@ -64,7 +64,7 @@ describe('the Équipes tab', () => {
   it('« Lever » on the Dépôt team preselects its project, and confirming launches the template with its own seats', async () => {
     const t = open();
     const teamOp = vi.spyOn(t.store, 'teamOp').mockResolvedValue({ status: 'applied' });
-    fireEvent.click(within(screen.getByRole('link', { name: /Feature TDD/ }).closest('li')!).getByRole('button', { name: 'Lever' }));
+    fireEvent.click(within(screen.getByRole('link', { name: /Feature TDD/ }).closest('li')!).getByRole('button', { name: 'Lever Feature TDD' }));
     const dialog = screen.getByRole('dialog');
     expect(within(dialog).getByRole('combobox', { name: 'Projet' })).toHaveValue('paper-service');
     expect(within(dialog).getByRole('textbox', { name: 'Nom' })).toHaveValue('Feature TDD');
@@ -80,7 +80,7 @@ describe('the Équipes tab', () => {
   it('a Maison team has no project until one is picked, and the launch uses the name as edited', async () => {
     const t = open();
     const teamOp = vi.spyOn(t.store, 'teamOp').mockResolvedValue({ status: 'applied' });
-    fireEvent.click(within(screen.getByRole('link', { name: /Revue MR/ }).closest('li')!).getByRole('button', { name: 'Lever' }));
+    fireEvent.click(within(screen.getByRole('link', { name: /Revue MR/ }).closest('li')!).getByRole('button', { name: 'Lever Revue MR' }));
     const dialog = screen.getByRole('dialog');
     const go = within(dialog).getByRole('button', { name: 'Lancer l\'équipe · 2 sièges' });
     expect(within(dialog).getByRole('combobox', { name: 'Projet' })).toHaveValue('');
@@ -95,7 +95,7 @@ describe('the Équipes tab', () => {
   it('keeps the dialog open and says why when the launch is refused, or not confirmed', async () => {
     const t = open();
     const teamOp = vi.spyOn(t.store, 'teamOp').mockResolvedValueOnce({ status: 'rejected', reason: 'unknown_project' }).mockResolvedValueOnce({ status: 'cancelled' });
-    fireEvent.click(within(screen.getByRole('link', { name: /Feature TDD/ }).closest('li')!).getByRole('button', { name: 'Lever' }));
+    fireEvent.click(within(screen.getByRole('link', { name: /Feature TDD/ }).closest('li')!).getByRole('button', { name: 'Lever Feature TDD' }));
     const go = () => within(screen.getByRole('dialog')).getByRole('button', { name: 'Lancer l\'équipe · 3 sièges' });
     await act(async () => { fireEvent.click(go()); });
     expect(within(screen.getByRole('dialog')).getByRole('status')).toHaveTextContent('Ce projet n’a pas de dépôt sur ce PC.');
@@ -105,15 +105,52 @@ describe('the Équipes tab', () => {
     expect(go()).toBeEnabled();
   });
 
+  it('does not close, nor launch twice, while the launch waits; a refusal then lands on the sheet', async () => {
+    const t = open();
+    let settle!: (r: { status: 'rejected'; reason: 'unknown_project' }) => void;
+    const teamOp = vi.spyOn(t.store, 'teamOp').mockReturnValue(new Promise(r => { settle = r; }));
+    fireEvent.click(screen.getByRole('button', { name: 'Lever Feature TDD' }));
+    const dialog = screen.getByRole('dialog');
+    const go = within(dialog).getByRole('button', { name: 'Lancer l\'équipe · 3 sièges' });
+    fireEvent.click(go);
+    fireEvent.click(go);
+    expect(teamOp).toHaveBeenCalledTimes(1);
+    expect(within(dialog).getByRole('button', { name: 'Annuler' })).toBeDisabled();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    await act(async () => { settle({ status: 'rejected', reason: 'unknown_project' }); });
+    expect(within(screen.getByRole('dialog')).getByRole('status')).toHaveTextContent('Ce projet n’a pas de dépôt sur ce PC.');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('says a launch the device did not confirm as the chat card does: quietly when cancelled or expired, « Pas lancée. » otherwise', async () => {
+    const t = open();
+    const teamOp = vi.spyOn(t.store, 'teamOp')
+      .mockResolvedValueOnce({ status: 'rejected', reason: 'assertion_expired' }).mockResolvedValueOnce({ status: 'failed' }).mockResolvedValueOnce({ status: 'rejected', reason: 'conflict' });
+    fireEvent.click(screen.getByRole('button', { name: 'Lever Feature TDD' }));
+    const go = () => within(screen.getByRole('dialog')).getByRole('button', { name: 'Lancer l\'équipe · 3 sièges' });
+    const status = () => within(screen.getByRole('dialog')).getByRole('status');
+    await act(async () => { fireEvent.click(go()); });
+    expect(status()).toHaveTextContent('La vérification a expiré. Recommencez.');
+    expect(status()).toHaveClass('text-muted');
+    await act(async () => { fireEvent.click(go()); });
+    expect(status()).toHaveTextContent('Pas lancée.');
+    expect(status()).toHaveClass('text-danger-fg');
+    await act(async () => { fireEvent.click(go()); });
+    expect(status()).toHaveTextContent('Une autre opération est en cours sur le PC. Réessayez.');
+    expect(teamOp).toHaveBeenCalledTimes(3);
+  });
+
   it('offers no « Lever » when the PC has no project with a local repository, and says so', () => {
     open(catalog({ projects: [] }));
-    expect(screen.queryByRole('button', { name: 'Lever' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Lever / })).toBeNull();
     expect(screen.getByText('Aucun projet avec un dépôt local sur ce PC : impossible de lever une équipe.')).toBeInTheDocument();
   });
 
   it('asks for the device protection first when the phone cannot confirm', () => {
     open(catalog(), { confirm: false });
-    fireEvent.click(screen.getAllByRole('button', { name: 'Lever' })[1]!);
+    fireEvent.click(screen.getByRole('button', { name: 'Lever Feature TDD' }));
     expect(within(screen.getByRole('dialog')).getByRole('button', { name: 'Lancer l\'équipe · 3 sièges' })).toBeDisabled();
     expect(screen.getByText('Protégez d\'abord vos accords depuis Connexion.')).toBeInTheDocument();
   });
@@ -161,7 +198,7 @@ describe('the catalog request', () => {
     act(() => { vi.advanceTimersByTime(CATALOG_WAIT_MS); });
     expect(screen.getByText('Catalogue indisponible')).toBeInTheDocument();
     expect(screen.queryByText('Lecture du catalogue…')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Lever' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Lever / })).toBeNull();
     const asked = t.of('teams.catalog').length;
     fireEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
     expect(t.of('teams.catalog')).toHaveLength(asked + 1);
@@ -172,11 +209,18 @@ describe('the catalog request', () => {
     expect(screen.queryByText('Catalogue indisponible')).toBeNull();
   });
 
-  it('says it at once, with the way back, when the link is lost before any catalog', () => {
+  it('shows the loading line, not « indisponible », while a link that is not fresh yet may still deliver; then offers to reconnect', () => {
+    vi.useFakeTimers();
     const t = setup('pc_offline');
-    render(<Teams store={t.store} />);
-    expect(screen.getByText('Catalogue indisponible')).toBeInTheDocument();
+    const onReconnect = vi.fn();
+    render(<Teams store={t.store} onReconnect={onReconnect} />);
     expect(screen.getByText('PC hors ligne')).toBeInTheDocument();
+    expect(screen.getByText('Lecture du catalogue…')).toBeInTheDocument();
+    expect(screen.queryByText('Catalogue indisponible')).toBeNull();
+    act(() => { vi.advanceTimersByTime(CATALOG_WAIT_MS); });
+    expect(screen.getByText('Catalogue indisponible')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
+    expect(onReconnect).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the last catalog, with « Lever » disabled, once the link is lost', () => {
@@ -184,6 +228,6 @@ describe('the catalog request', () => {
     act(() => t.set('pc_offline'));
     expect(screen.getByText('PC hors ligne')).toBeInTheDocument();
     expect(screen.getByText('Revue MR')).toBeInTheDocument();
-    for (const b of screen.getAllByRole('button', { name: 'Lever' })) expect(b).toBeDisabled();
+    for (const b of screen.getAllByRole('button', { name: /^Lever / })) expect(b).toBeDisabled();
   });
 });

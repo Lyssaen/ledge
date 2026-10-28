@@ -23,13 +23,15 @@ const FIELD = 'min-h-12 w-full min-w-0 rounded-control border border-input bg-su
 const HEAD = 'py-3 text-meta tracking-[.4px] text-muted';
 const ROW = 'min-w-0 flex-1 py-3 active:bg-raised/60';
 
-/** What a launch came to, for the dialog: a refusal says why, anything else that is not applied says it was not done. */
-function noteOf(r: ChatAction): string {
+/** What a launch came to, for the dialog, as the chat's team card says it: a passkey that was cancelled or expired is a quiet note, a refusal says why when it can. */
+function noteOf(r: ChatAction): { text: string; quiet: boolean } {
   switch (r.status) {
-    case 'cancelled': return copy.confirm.cancelled;
-    case 'expired': return copy.confirm.expired;
-    case 'rejected': return copy.teams.reason[r.reason] ?? copy.teams.notLaunched;
-    default: return copy.teams.notLaunched;
+    case 'cancelled': return { text: copy.confirm.cancelled, quiet: true };
+    case 'expired': return { text: copy.confirm.expired, quiet: true };
+    case 'rejected':
+      if (r.reason === 'assertion_expired') return { text: copy.confirm.expired, quiet: true };
+      return { text: copy.teams.reason[r.reason] ?? copy.chat.team.notLaunched, quiet: false };
+    default: return { text: copy.chat.team.notLaunched, quiet: false };
   }
 }
 
@@ -42,17 +44,18 @@ function LeverSheet({ store, catalog, template, canConfirm, onClose, onLaunched 
   const [project, setProject] = useState(template.project !== null && catalog.projects.includes(template.project) ? template.project : '');
   const [name, setName] = useState(template.name);
   const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
+  const [note, setNote] = useState<{ text: string; quiet: boolean } | null>(null);
   const given = name.trim();
   const ready = project !== '' && given.length > 0 && canConfirm;
   const go = () => {
     setBusy(true); setNote(null);
     void store.teamOp({ type: 'team.launch', project, name: given, seats: template.seats, template: template.id })
-      .then(r => { if (r.status === 'applied') { onLaunched(given); onClose(); } else setNote(noteOf(r)); }, () => setNote(copy.teams.notLaunched))
+      .then(r => { if (r.status === 'applied') { onLaunched(given); onClose(); } else setNote(noteOf(r)); }, () => setNote({ text: copy.chat.team.notLaunched, quiet: false }))
       .finally(() => setBusy(false));
   };
   return (
-    <Sheet labelledBy={`${id}-title`} onClose={onClose}>
+    // While the launch waits, nothing closes the sheet: its outcome must land here, and a late success must not close one the user reopened.
+    <Sheet labelledBy={`${id}-title`} onClose={() => { if (!busy) onClose(); }}>
       <h2 id={`${id}-title`} className="text-heading leading-[1.3] font-semibold tracking-[-.5px] [overflow-wrap:anywhere]">{copy.teams.levering(template.name)}</h2>
       <div>
         <label htmlFor={`${id}-name`} className="mb-2 block text-small text-muted">{copy.teams.name}</label>
@@ -66,9 +69,9 @@ function LeverSheet({ store, catalog, template, canConfirm, onClose, onLaunched 
         </select>
       </div>
       {!canConfirm && <p className="text-body text-attention">{copy.chat.launchSetup} <a href={href({ name: 'connection' })} className="text-info underline underline-offset-2">{copy.connection.title}</a></p>}
-      {note && <p role="status" className="text-body text-danger-fg">{note}</p>}
+      {note && <p role="status" className={`text-body ${note.quiet ? 'text-muted' : 'text-danger-fg'}`}>{note.text}</p>}
       <div className="flex gap-2">
-        <Button variant="ghost" className="flex-1" onClick={onClose}>{copy.teams.cancel}</Button>
+        <Button variant="ghost" className="flex-1" disabled={busy} onClick={onClose}>{copy.teams.cancel}</Button>
         <Button variant="primary" className="flex-[2]" disabled={busy || !ready} onClick={go}>{copy.teams.launchSeats(template.seats.length)}</Button>
       </div>
     </Sheet>
@@ -120,9 +123,9 @@ export function Teams({ store, onReconnect }: { store: MobileStore; onReconnect?
       <Header title={copy.nav.teams} subtitle={catalog ? copy.teams.subtitle(catalog.templates.length, catalog.roles.length) : ''} link={linkView(state)} />
       <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[22px]">
         {offline && <div className="mb-3"><OfflineBanner onReconnect={onReconnect} /></div>}
-        {!catalog && (waited || offline ? (
+        {!catalog && (waited ? (
           <Notice title={copy.teams.unavailable} tone="plain">
-            <button type="button" onClick={() => setAttempt(n => n + 1)} className={buttonClass({ block: true, className: 'mt-3' })}>{copy.teams.retry}</button>
+            <button type="button" onClick={() => { if (offline && onReconnect) onReconnect(); else setAttempt(n => n + 1); }} className={buttonClass({ block: true, className: 'mt-3' })}>{copy.teams.retry}</button>
           </Notice>
         ) : <p role="status" className="py-6 text-center text-body text-muted">{copy.teams.loading}</p>)}
         {catalog && (
@@ -140,7 +143,7 @@ export function Teams({ store, onReconnect }: { store: MobileStore; onReconnect?
                       <span className="flex flex-wrap items-center gap-2"><Flag /><span className="font-semibold [overflow-wrap:anywhere]">{t.name}</span><Tag tone="muted" label={scopeLabel(t.scope, t.project)} /></span>
                       <span className="mt-1.5 flex flex-wrap gap-1.5">{t.seats.map(s => <RolePill key={s.role} role={s.role} />)}</span>
                     </a>
-                    {lever && <Button size="sm" disabled={offline} onClick={() => { setLaunched(null); setLeveling(t); }}>{copy.teams.lever}</Button>}
+                    {lever && <Button size="sm" aria-label={copy.teams.levering(t.name)} disabled={offline} onClick={() => { setLaunched(null); setLeveling(t); }}>{copy.teams.lever}</Button>}
                   </li>
                 ))}
               </ul>
