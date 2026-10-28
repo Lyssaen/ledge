@@ -338,6 +338,26 @@ describe('live composition', () => {
     await c.close();
   });
 
+  it('two team.seat start sent back to back launch exactly one session; the second is refused', async () => {
+    let down = true;
+    await start(o => down && o.env.LEDGE_ROLE === 'review');
+    const c = await client();
+    const team = await launched(c, [{ role: 'build' }]);
+    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'build' }, { role: 'review' }] });
+    expect((await c.next('team.changed', 5000)).reason).toContain('@review');
+    down = false;
+    const before = tmux.created.length;
+    c.send({ type: 'team.seat', rid: 's1', team: team.id, role: 'review', action: 'start' });
+    c.send({ type: 'team.seat', rid: 's2', team: team.id, role: 'review', action: 'start' });
+    const answers = [await c.next('team.changed', 5000), await c.next('team.changed', 5000)];
+    expect(answers.filter(a => a.reason === undefined)).toHaveLength(1);
+    expect(answers.filter(a => a.reason !== undefined)).toHaveLength(1);
+    expect(tmux.created).toHaveLength(before + 1);
+    const seated = (await teamNow(team.id)).seats.find(s => s.role === 'review')!.sessionId!;
+    expect(store.all().filter(x => x.role === 'review' && x.team === team.id && x.state !== 'exited').map(x => x.id)).toEqual([seated]);
+    await c.close();
+  });
+
   it('team.launch with a project and no folder: the project’s local folder, else team.failed; seats given, the template is only recorded', async () => {
     await start();
     const c = await client();

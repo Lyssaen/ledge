@@ -1047,8 +1047,16 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     return changed({ team: teams.get(t.id)!, ...(failed ? { reason: failed } : {}) });
   }
 
+  /** The seats being started or restarted (team + role): a second tap meanwhile is refused, never a second session. */
+  const seatsInFlight = new Set<string>();
   /** `team.seat`: a session started in a free seat, or the seat's session replaced by a fresh one (restart). */
   async function seatTeam(msg: Extract<ClientMessage, { type: 'team.seat' }>): Promise<Extract<ServerMessage, { type: 'team.changed' }>> {
+    const key = `${msg.team}:${msg.role}`;
+    if (seatsInFlight.has(key)) return { type: 'team.changed', rid: msg.rid, ...(teams.get(msg.team) ? { team: teams.get(msg.team)! } : {}), reason: `@${msg.role} : une opération est déjà en cours sur ce siège` };
+    seatsInFlight.add(key);
+    try { return await seatTeamNow(msg); } finally { seatsInFlight.delete(key); }
+  }
+  async function seatTeamNow(msg: Extract<ClientMessage, { type: 'team.seat' }>): Promise<Extract<ServerMessage, { type: 'team.changed' }>> {
     const changed = (extra: { team?: Team; reason?: string }) => ({ type: 'team.changed' as const, rid: msg.rid, ...extra });
     const t = teams.get(msg.team); if (!t) return changed({ reason: `aucune équipe ${msg.team}` });
     if (t.state === 'dissolved') return changed({ reason: `l'équipe ${t.name} est dissoute` });
