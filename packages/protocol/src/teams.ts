@@ -37,6 +37,8 @@ const uniqueRoles = (seats: readonly { role: string }[]) => new Set(seats.map(s 
 export const SeatsSchema = z.array(SeatSchema).min(1).max(TEAM_SEATS_MAX).refine(uniqueRoles, 'a role twice in one team');
 
 export const TeamNameSchema = z.string().trim().min(1).max(60);
+/** A template id is a file name (`.ledge/teams/<id>.yaml`): no `/`, no `.`, so no path leaves the folder. */
+export const TemplateIdSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/);
 /** A team template (`.ledge/teams/<id>.yaml`). */
 export const TeamTemplateSchema = z.object({ id: z.string().min(1).max(64), name: TeamNameSchema, seats: SeatsSchema, source: z.enum(['repo', 'home']), path: z.string(), hash: DefinitionHashSchema.optional() });
 export type TeamTemplate = z.infer<typeof TeamTemplateSchema>;
@@ -68,7 +70,7 @@ export const RolesListingSchema = z.object({ type: z.literal('roles.listing'), r
 
 /** `team.launch`: a template by id, or ad hoc seats (the chat card's); with `qid`, the chat's team card of that turn. */
 export const TeamLaunchSchema = z.object({
-  type: z.literal('team.launch'), rid: z.string().min(1).max(100), cwd: z.string().min(1).optional(), template: z.string().min(1).max(64).optional(),
+  type: z.literal('team.launch'), rid: z.string().min(1).max(100), cwd: z.string().min(1).optional(), template: TemplateIdSchema.optional(),
   seats: SeatsSchema.optional(), name: TeamNameSchema.optional(), qid: z.string().min(1).optional(), machineId: z.string().optional(),
   /** The project's name, for a client that holds no path (the phone): the daemon resolves its folder. */ project: ProjectIdSchema.optional()
 });
@@ -91,7 +93,7 @@ const scopeFields = { rid: z.string().min(1).max(100), scope: DefinitionScopeSch
 /** `repo` names its project, `home` names none. A discriminated union cannot hold refined objects: `ClientMessageSchema` applies this to the whole. */
 export const scopeIssue = (m: { scope?: DefinitionScope; project?: string | undefined }): string | null =>
   m.scope === undefined || (m.scope === 'repo') === (m.project !== undefined) ? null : 'a repo scope names a project, a home scope none';
-const DefinitionBaseSchema = z.string().min(1).max(64);
+const DefinitionBaseSchema = DefinitionHashSchema;
 
 /** `definitions.list`: every scope's roles, templates and problems; a project's scope only when it has a local repo. */
 export const DefinitionsListSchema = z.object({ type: z.literal('definitions.list'), requestId: z.string().max(100).optional() });
@@ -100,9 +102,9 @@ export const RoleWriteSchema = z.object({ type: z.literal('role.write'), ...scop
 export const RoleDeleteSchema = z.object({ type: z.literal('role.delete'), ...scopeFields, id: RoleIdSchema, base: DefinitionBaseSchema });
 /** No `id`: create, the id comes from the name. */
 export const TemplateWriteSchema = z.object({
-  type: z.literal('template.write'), ...scopeFields, id: z.string().min(1).max(64).optional(), name: TeamNameSchema, seats: SeatsSchema, base: DefinitionBaseSchema.nullable()
+  type: z.literal('template.write'), ...scopeFields, id: TemplateIdSchema.optional(), name: TeamNameSchema, seats: SeatsSchema, base: DefinitionBaseSchema.nullable()
 });
-export const TemplateDeleteSchema = z.object({ type: z.literal('template.delete'), ...scopeFields, id: z.string().min(1).max(64), base: DefinitionBaseSchema });
+export const TemplateDeleteSchema = z.object({ type: z.literal('template.delete'), ...scopeFields, id: TemplateIdSchema, base: DefinitionBaseSchema });
 /** A live team's new composition: seats added start, seats removed leave at their next free moment. */
 export const TeamComposeSchema = z.object({ type: z.literal('team.compose'), rid: z.string().min(1).max(100), team: TeamIdSchema, seats: SeatsSchema });
 export const TeamSeatSchema = z.object({ type: z.literal('team.seat'), rid: z.string().min(1).max(100), team: TeamIdSchema, role: RoleIdSchema, action: z.enum(['start', 'restart']) });

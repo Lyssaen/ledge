@@ -35,6 +35,22 @@ describe('team definitions from any client', () => {
     expect(ok({ ...tw, seats: Array.from({ length: 9 }, (_, i) => ({ role: `r${i}` })) })).toBe(false);
     expect(ok({ ...tw, seats: [{ role: 'dev' }, { role: 'dev' }] })).toBe(false);
   });
+  it('template ids are file names: no path gets through, and the scope rule holds here too', () => {
+    const td = { type: 'template.delete', rid: 'r', scope: 'home', id: 'duo', base: '0123456789abcdef' };
+    expect(ok(td)).toBe(true);
+    for (const id of ['../x', 'a/b', '.hidden', '..']) {
+      expect(ok({ ...td, id })).toBe(false);
+      expect(ok({ type: 'template.write', rid: 'r', scope: 'home', id, name: 'T', seats, base: null })).toBe(false);
+      expect(ok({ type: 'team.launch', rid: 'r', cwd: '/r', template: id })).toBe(false);
+    }
+    expect(ok({ type: 'template.write', rid: 'r', scope: 'repo', name: 'T', seats, base: null })).toBe(false);
+    expect(ok({ type: 'template.write', rid: 'r', scope: 'repo', project: 'ledge', name: 'T', seats, base: null })).toBe(true);
+  });
+  it('a base is a file hash, or null to create', () => {
+    expect(ok({ ...rw, base: 'xyz' })).toBe(false);
+    expect(ok({ type: 'role.delete', rid: 'r', scope: 'home', id: 'dev', base: 'xyz' })).toBe(false);
+    expect(ok({ ...rw, base: '0123456789abcdef' })).toBe(true);
+  });
   it('team.seat takes start or restart only', () => {
     const ts = { type: 'team.seat', rid: 'r1', team: 'team-abcd', role: 'dev' };
     expect(ok({ ...ts, action: 'restart' })).toBe(true);
