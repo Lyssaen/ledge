@@ -56,8 +56,8 @@ export type OperationId = z.infer<typeof OperationIdSchema>;
 export const OperationStatusSchema = z.enum(['received', 'applied', 'rejected', 'failed']);
 export type OperationStatus = z.infer<typeof OperationStatusSchema>;
 
-/** Why an operation was refused: a refusal code of the local fronts, or one only a phone can meet. */
-export const OperationReasonSchema = z.enum([...RefusalCodeSchema.options, 'untypable', 'confirm_required', 'conflict', 'assertion_invalid', 'assertion_expired', 'changed', 'exists', 'unknown_project']);
+/** Why an operation was refused: a refusal code of the local fronts, or one only a phone can meet. `seat_failed` comes with `applied`: a composition saved whose added seat did not start. */
+export const OperationReasonSchema = z.enum([...RefusalCodeSchema.options, 'untypable', 'confirm_required', 'conflict', 'assertion_invalid', 'assertion_expired', 'changed', 'exists', 'unknown_project', 'seat_failed']);
 export type OperationReason = z.infer<typeof OperationReasonSchema>;
 
 /** What an adapter knows how to type for a phone, beyond accept, deny and an option number. A phone hides an answer its session's tool cannot give. */
@@ -181,7 +181,9 @@ export type PhoneChatAction = z.infer<typeof PhoneChatActionSchema>;
 /** A live team as the phone sees it (ledge home spec §2.4): its project's name, its seats, the progress of Ledge's tasks. */
 export const PhoneTeamSchema = z.object({
   id: z.string().max(40), name: z.string().max(60), project: z.string().max(80).nullable(), state: z.enum(['active', 'resting']),
-  template: z.string().max(64).optional(), createdAt: z.string(),
+  template: z.string().max(64).optional(),
+  /** Absent from a daemon older than the phone: the phone then says no start time. */
+  createdAt: z.string().optional(),
   /** `tool`, `model` and `effort` are what the seat was composed with; `leaving` is a seat that finishes its turn and is then closed. */
   seats: z.array(z.object({
     role: z.string().max(40), sessionId: z.string().max(100).nullable(),

@@ -160,14 +160,18 @@ describe('catalog', () => {
 describe('phone additions', () => {
   it('knows the new operation reasons and purposes', async () => {
     const { OperationReasonSchema, ConfirmPurposeSchema } = await import('../src/index.js');
-    for (const r of ['changed', 'exists', 'unknown_project']) expect(OperationReasonSchema.safeParse(r).success).toBe(true);
+    for (const r of ['changed', 'exists', 'unknown_project', 'seat_failed']) expect(OperationReasonSchema.safeParse(r).success).toBe(true);
     for (const p of ['define', 'team']) expect(ConfirmPurposeSchema.safeParse(p).success).toBe(true);
   });
   it('a phone team carries its createdAt, template and seat launch overrides', async () => {
     const { PhoneTeamSchema } = await import('../src/index.js');
     const t = { id: 'team-abcd', name: 'T', project: 'ledge', state: 'active', seats: [{ role: 'dev', sessionId: null, tool: 'claude', leaving: true }], done: 0, given: 0, createdAt: '2026-10-28T10:00:00.000Z', template: 'duo' };
     expect(PhoneTeamSchema.safeParse(t).success).toBe(true);
-    const { createdAt, ...old } = t;
-    expect(PhoneTeamSchema.safeParse(old).success).toBe(false);
+  });
+  it('a team from an older daemon (no createdAt, template or seat extras) still parses: the phone and the daemon update apart', async () => {
+    const { PhoneTeamSchema, PhoneServerMessageSchema } = await import('../src/index.js');
+    const old = { id: 'team-abcd', name: 'T', project: null, state: 'active', seats: [{ role: 'dev', sessionId: 's1' }], done: 0, given: 0 };
+    expect(PhoneTeamSchema.safeParse(old).success).toBe(true);
+    expect(PhoneServerMessageSchema.safeParse({ type: 'teams', teams: [old] }).success).toBe(true);
   });
 });

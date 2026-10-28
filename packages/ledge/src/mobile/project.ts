@@ -190,6 +190,29 @@ const UNREADABLE = 'fichier illisible';
 export const problemReason = (reason: string): string => PROBLEM_KINDS.find(([re]) => re.test(reason))?.[1] ?? UNREADABLE;
 const baseName = (path: string): string => path.split(/[\\/]/).filter(Boolean).pop() ?? '';
 
+/** The scopes of a listing the phone can address, each with its project's name, and the role ids each side holds (what shadows what). */
+function phoneScopes(l: DefinitionsListing, projectName: (id: string | null) => string | null) {
+  // A scope of a project the phone has no name for cannot be addressed: skipped, and it shadows nothing.
+  const scopes = l.scopes.flatMap(sc => {
+    const name = sc.scope === 'repo' ? projectName(sc.project) : null;
+    return sc.scope === 'repo' && name === null ? [] : [{ sc, project: name?.slice(0, 80) ?? null }];
+  });
+  const repoIds = new Map<string, string[]>(); // role id → the projects holding it
+  const homeIds = new Set<string>();
+  for (const { sc, project } of scopes) for (const r of sc.roles) {
+    if (sc.scope !== 'repo') { homeIds.add(r.id); continue; }
+    const names = repoIds.get(r.id) ?? [];
+    if (project && !names.includes(project)) names.push(project);
+    repoIds.set(r.id, names);
+  }
+  return { scopes, repoIds, homeIds };
+}
+
+const roleCandidate = (r: DefinitionsListing['scopes'][number]['roles'][number], sc: DefinitionsListing['scopes'][number], project: string | null, homeIds: ReadonlySet<string>, repoIds: ReadonlyMap<string, readonly string[]>) => ({
+  id: r.id, label: r.label, prompt: r.prompt, ...pickSet(r, ['tool', 'model', 'effort', 'autonomy']), scope: sc.scope, project, hash: r.hash ?? '',
+  ...(sc.scope === 'repo' && homeIds.has(r.id) ? { shadows: true as const } : {}), ...(sc.scope === 'home' && repoIds.has(r.id) ? { shadowed: true as const, shadowedIn: repoIds.get(r.id)!.slice(0, 8) } : {})
+});
+
 /**
  * The role and team definitions as the phone sees them: no path (a problem keeps the basename of its file), a repository item
  * under its project's name, a role flagged when a repository role and a home role share its id. The prompts are sent whole while
@@ -197,14 +220,7 @@ const baseName = (path: string): string => path.split(/[\\/]/).filter(Boolean).p
  * What the phone schema would refuse (an id or a seat count it does not know) is left out and told as a problem.
  */
 export function toPhoneCatalog(l: DefinitionsListing, projectName: (id: string | null) => string | null): PhoneCatalog {
-  // A scope of a project the phone has no name for cannot be addressed: skipped, and it shadows nothing.
-  const scopes = l.scopes.flatMap(sc => {
-    const name = sc.scope === 'repo' ? projectName(sc.project) : null;
-    return sc.scope === 'repo' && name === null ? [] : [{ sc, project: name?.slice(0, 80) ?? null }];
-  });
-  const repoIds = new Set<string>();
-  const homeIds = new Set<string>();
-  for (const { sc } of scopes) for (const r of sc.roles) (sc.scope === 'repo' ? repoIds : homeIds).add(r.id);
+  const { scopes, repoIds, homeIds } = phoneScopes(l, projectName);
   const problems: PhoneProblem[] = [];
   const problem = (file: string, scope: 'home' | 'repo', project: string | null, reason: string) => {
     problems.push({ file: clip(baseName(file) || file, 80).text, scope, project, reason });
@@ -214,11 +230,7 @@ export function toPhoneCatalog(l: DefinitionsListing, projectName: (id: string |
   for (const { sc, project } of scopes) {
     for (const p of sc.problems) problem(p.path, sc.scope, project, problemReason(p.reason));
     for (const r of sc.roles) {
-      const candidate = {
-        id: r.id, label: r.label, prompt: r.prompt, ...pickSet(r, ['tool', 'model', 'effort', 'autonomy']), scope: sc.scope, project, hash: r.hash ?? '',
-        ...(sc.scope === 'repo' && homeIds.has(r.id) ? { shadows: true as const } : {}), ...(sc.scope === 'home' && repoIds.has(r.id) ? { shadowed: true as const } : {})
-      };
-      const ok = PhoneRoleSchema.safeParse(candidate);
+      const ok = PhoneRoleSchema.safeParse(roleCandidate(r, sc, project, homeIds, repoIds));
       if (ok.success) roles.push(ok.data); else problem(r.path, sc.scope, project, 'rôle illisible sur le téléphone');
     }
     for (const t of sc.templates) {
@@ -244,6 +256,19 @@ export function toPhoneCatalog(l: DefinitionsListing, projectName: (id: string |
   for (let i = out.length - 1; i >= 0 && size(frame(out)) > CATALOG_BUDGET; i--) out[i] = { ...out[i]!, prompt: '', cut: true };
   while (tpls.length > 0 && size(frame(out)) > CATALOG_BUDGET) tpls.pop();
   return frame(out);
+}
+
+/**
+ * One role whole, as the catalog shows it but never cut: found in the listing itself, so a role the catalog dropped for its budget
+ * (the 200-entry cap, the bytes) can still be read by its address. Undefined when there is none, or the phone could not hold it.
+ */
+export function toPhoneRole(l: DefinitionsListing, projectName: (id: string | null) => string | null, scope: 'home' | 'repo', projectId: string | null, id: string): PhoneRole | undefined {
+  const { scopes, repoIds, homeIds } = phoneScopes(l, projectName);
+  const at = scopes.find(x => x.sc.scope === scope && x.sc.project === projectId);
+  const r = at?.sc.roles.find(x => x.id === id);
+  if (!at || !r) return undefined;
+  const ok = PhoneRoleSchema.safeParse(roleCandidate(r, at.sc, at.project, homeIds, repoIds));
+  return ok.success ? ok.data : undefined;
 }
 
 /** A task Ledge gave, as the phone sees it: the start of its result only. */

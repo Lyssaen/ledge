@@ -465,6 +465,29 @@ describe('the team editor, a live composition', () => {
     expect(globalThis.location.hash).toBe('#/team/x');
   });
 
+  it('a composition saved whose new seat did not start says so, naming the seat, and does not say « Pas enregistré »', async () => {
+    const t = open(live);
+    remove('qa');
+    add('rev'); add('doc');
+    // The PC's push of the team comes before its answer: @rev holds a session, @doc did not start.
+    t.teamOp.mockImplementationOnce(async () => {
+      act(() => t.deliver({ type: 'teams', teams: [team({ seats: [{ role: 'leader', sessionId: 's1' }, { role: 'dev', sessionId: 's3' }, { role: 'rev', sessionId: 's4' }, { role: 'doc', sessionId: null }] })] }));
+      return { status: 'applied', warn: 'seat_failed' };
+    });
+    await click('Enregistrer');
+    expect(screen.getByRole('status')).toHaveTextContent("Composition enregistrée ; @doc n'a pas démarré.");
+    expect(screen.queryByText('Pas enregistré.')).toBeNull();
+    expect(goBack).not.toHaveBeenCalled();
+  });
+
+  it('several new seats that did not start are all named', async () => {
+    const t = open(live);
+    add('rev'); add('doc');
+    t.teamOp.mockResolvedValueOnce({ status: 'applied', warn: 'seat_failed' });
+    await click('Enregistrer');
+    expect(screen.getByRole('status')).toHaveTextContent("Composition enregistrée ; @rev, @doc n'ont pas démarré.");
+  });
+
   it('seats that are leaving are not listed, but their role can be added again', async () => {
     const t = open(live, { teams: [team({ seats: [{ role: 'leader', sessionId: 's1' }, { role: 'qa', sessionId: 's2', leaving: true }] })] });
     expect(screen.queryByText('@qa')).toBeNull();
@@ -549,13 +572,13 @@ describe('the team editor, a live composition', () => {
     expect(screen.queryByText(/modifié/)).toBeNull();
   });
 
-  it('a composition refused as « changed » says it was not saved and does not lock the screen or ask for the catalog', async () => {
+  it('a composition refused as « changed » says the composition changed on the PC and does not lock the screen or ask for the catalog', async () => {
     const t = open(live);
     t.teamOp.mockResolvedValueOnce({ status: 'rejected', reason: 'changed' });
     const asked = t.of('teams.catalog').length;
     remove('qa');
     await click('Enregistrer');
-    expect(screen.getByRole('status')).toHaveTextContent('Pas enregistré.');
+    expect(screen.getByRole('status')).toHaveTextContent('La composition a changé sur le PC.');
     expect(t.of('teams.catalog').length).toBe(asked);
     expect(save()).toBeEnabled();
     await click('Enregistrer');

@@ -133,6 +133,16 @@ describe('the role editor', () => {
     expect(t.define.mock.calls[0]![0]).toMatchObject({ scope: 'repo', project: 'ledge', base: HASH });
   });
 
+  it('a Maison role hidden by repository roles names the projects that hide it', () => {
+    open('home~~dev', catalog({ roles: [role('dev', { shadowed: true, shadowedIn: ['ledge', 'paper-service'] })] }));
+    expect(screen.getByText('@dev de Maison est masqué dans ledge, paper-service.')).toBeInTheDocument();
+  });
+
+  it('a Maison role hidden by an older daemon (no project names) keeps the plain line', () => {
+    open('home~~dev', catalog({ roles: [role('dev', { shadowed: true })] }));
+    expect(screen.getByText('@dev de Maison est caché par le @dev du dépôt.')).toBeInTheDocument();
+  });
+
   it('a cut role is read in full first: the textarea and save stay disabled until the teams.role reply, then the whole prompt is edited', async () => {
     const t = open('home~~leader', catalog({ roles: [role('leader', { label: 'Chef', prompt: 'x'.repeat(200), cut: true })] }));
     expect(t.of('teams.role')).toStrictEqual([{ type: 'teams.role', scope: 'home', id: 'leader' }]);

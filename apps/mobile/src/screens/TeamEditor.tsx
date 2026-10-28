@@ -179,11 +179,11 @@ function Form({ store, mode, initial }: { store: MobileStore; mode: TeamEditorMo
   const seatRoles = seats.map(s => roleOf(s.role)).filter(r => r !== undefined);
   const warned = autoSeats(seats, seatRoles);
 
-  const run = (send: () => Promise<ChatAction>, opts: { fallback: string; reasons?: Partial<Record<string, string>>; onNote: (n: OutcomeNote | null) => void; onApplied: () => void; write?: boolean }) => {
+  const run = (send: () => Promise<ChatAction>, opts: { fallback: string; reasons?: Partial<Record<string, string>>; onNote: (n: OutcomeNote | null) => void; onApplied: (r: ChatAction) => void; write?: boolean }) => {
     setBusy(true); opts.onNote(null);
     void send()
       .then(r => {
-        if (r.status === 'applied') { if (mounted.current) opts.onApplied(); return; }
+        if (r.status === 'applied') { if (mounted.current) opts.onApplied(r); return; }
         opts.onNote(outcomeNote(r, opts.fallback, opts.reasons));
         // The file moved under the user: the catalog tells how, and the editor adopts it once it arrives.
         if (opts.write && r.status === 'rejected' && r.reason === 'changed') changed.begin();
@@ -213,7 +213,13 @@ function Form({ store, mode, initial }: { store: MobileStore; mode: TeamEditorMo
     if (!canCompose || mode.kind !== 'live' || !teamNow || !catalog) return;
     const sent = seats.map(x => ({ role: x.role, ...settingsOf(teamNow.project, x) }));
     run(() => store.teamOp({ type: 'team.compose', team: mode.teamId, seats: outSeats }),
-      { fallback: t.notSaved, reasons: { invalid: t.notSaved, changed: t.notSaved }, onNote: setNote, onApplied: () => { setNote({ text: t.composed, quiet: true }); setApplied(sent); } });
+      { fallback: t.notSaved, reasons: { invalid: t.notSaved, changed: t.composeChanged }, onNote: setNote, onApplied: r => {
+        // The PC's push of the team comes before its answer: a seat added here that holds no session now is one that did not start.
+        const held = (role: string) => !!store.getState().teams?.find(x => x.id === mode.teamId)?.seats.find(x => x.role === role)?.sessionId;
+        const unstarted = seats.map(x => x.role).filter(role => !teamNow.seats.some(x => x.role === role) && !held(role));
+        setNote(r.status === 'applied' && r.warn ? outcomeNote(r, t.composed, {}, unstarted) : { text: t.composed, quiet: true });
+        setApplied(sent);
+      } });
   };
   // A seat that holds no session is started; one that holds one is restarted (a start on a held seat is refused).
   const sessionOf = (role: string) => liveNow?.seats.find(x => x.role === role)?.sessionId ?? null;
@@ -338,7 +344,7 @@ function Form({ store, mode, initial }: { store: MobileStore; mode: TeamEditorMo
             <Button size="sm" className="mt-2" onClick={() => { setEdits({}); setNote(null); setReloaded(false); }}>{copy.teams.role.takePc}</Button>
           </div>
         )}
-        {note && <p role="status" className={`mt-3 text-body ${note.quiet ? 'text-muted' : 'text-danger-fg'}`}>{note.text}</p>}
+        {note && <p role="status" className={`mt-3 text-body ${note.warn ? 'text-attention' : note.quiet ? 'text-muted' : 'text-danger-fg'}`}>{note.text}</p>}
 
         {isLive ? (
           <Button variant="brand" size="lg" block className="mt-5" disabled={!canCompose} onClick={compose}>{t.save}</Button>

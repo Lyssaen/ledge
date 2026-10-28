@@ -165,7 +165,7 @@ function Form({ store, roleKey, initial }: { store: MobileStore; roleKey: string
         {isNew && <p id={`${ids}-rule`} className={`mt-1 text-meta ${newId !== '' && !idOk ? 'text-danger-fg' : 'text-muted'}`}>{t.idRule}</p>}
         {taken && <p role="alert" className="mt-1 text-small text-danger-fg">{t.idTaken(scopeLabel(where!.scope, where!.project))}</p>}
         {shown?.shadows && <Hint>{t.shadows(shown.id)}</Hint>}
-        {shown?.shadowed && <Hint>{t.shadowed(shown.id)}</Hint>}
+        {shown?.shadowed && <Hint>{shown.shadowedIn ? t.shadowedIn(shown.id, shown.shadowedIn) : t.shadowed(shown.id)}</Hint>}
 
         <div className="mt-3">
           <div className="mb-1 flex items-baseline justify-between gap-2 text-small text-muted">

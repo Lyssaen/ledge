@@ -165,6 +165,35 @@ describe('phone gateway: team catalog', () => {
   });
 });
 
+describe('phone gateway: teams.role past the catalog cut', () => {
+  it('reads a role the catalog dropped for its 200-entry cap, whole and with its flags', async () => {
+    const roles = Array.from({ length: 230 }, (_, i) => role(`r${i}`, 'home', { prompt: `prompt of r${i}` }));
+    const listed = listing([]);
+    listed.scopes[0] = { ...listed.scopes[0]!, roles };
+    const { g } = make({ listed });
+    expect(toPhoneCatalog(listed, id => (id === 'p-repo' ? 'Repo' : null)).roles.some(r => r.id === 'r229')).toBe(false);
+    g.send('dev1', { type: 'teams.role', scope: 'home', id: 'r229' });
+    await flush();
+    const got = g.got('dev1');
+    expect(got).toHaveLength(1);
+    expect(PhoneServerMessageSchema.safeParse(got[0]).success).toBe(true);
+    expect(got[0]).toMatchObject({ type: 'teams.role', role: { id: 'r229', scope: 'home', project: null, prompt: 'prompt of r229' } });
+  });
+
+  it('reads a role the byte budget dropped from a repository scope, and still refuses an id that is nowhere', async () => {
+    const roles = Array.from({ length: 60 }, (_, i) => role(`r${i}`, 'repo', { prompt: '日'.repeat(2000) }));
+    const listed = listing([]);
+    listed.scopes[1] = { ...listed.scopes[1]!, roles };
+    const { g } = make({ listed });
+    g.send('dev1', { type: 'teams.role', scope: 'repo', project: 'Repo', id: 'r59' });
+    g.send('dev1', { type: 'teams.role', scope: 'repo', project: 'Repo', id: 'nope' });
+    await flush();
+    const got = g.got('dev1');
+    expect(got.find(m => m.type === 'teams.role')).toMatchObject({ role: { id: 'r59', scope: 'repo', project: 'Repo', prompt: '日'.repeat(2000) } });
+    expect(got.filter(m => m.type === 'error')).toEqual([{ type: 'error', code: 'invalid', request: 'teams.role' }]);
+  });
+});
+
 describe('phone gateway: teams operations behind the passkey', () => {
   it('confirm.prepare define/team needs a digest and a credential: otherwise error invalid; with both, a challenge of that purpose', async () => {
     const { g } = make();
@@ -319,6 +348,16 @@ describe('phone gateway: teams operations behind the passkey', () => {
     expect(writes()).toEqual([{ type: 'team.compose', rid: op1, team: 'team-a1b2', seats: SEATS }, { type: 'team.seat', rid: op2, team: 'team-a1b2', role: 'qa', action: 'start' }]);
   });
 
+  it('a compose that was saved but whose new seat did not start is applied with seat_failed; a seat start that failed stays failed', async () => {
+    const team: Team = { id: 'team-a1b2', name: 'Duo', project: 'p-repo', machine: 'local', cwd: '/w', state: 'active', seats: [{ role: 'lead', sessionId: 'a' }, { role: 'qa', sessionId: null }], createdAt: T0, updatedAt: T0 };
+    const { g } = make({ answer: m => (m.type === 'team.compose' || m.type === 'team.seat' ? { type: 'team.changed', rid: m.rid, team, reason: '@qa : spawn failed' } : undefined) });
+    const auth = await enroll(g);
+    const op1 = await confirmed(g, auth, { type: 'team.compose', team: 'team-a1b2', seats: SEATS });
+    const op2 = await confirmed(g, auth, { type: 'team.seat', team: 'team-a1b2', role: 'qa', action: 'start' }, 2);
+    expect(finals(g)).toEqual([{ type: 'operation.result', op: op1, status: 'applied', reason: 'seat_failed' }, { type: 'operation.result', op: op2, status: 'failed' }]);
+    for (const r of finals(g)) expect(PhoneServerMessageSchema.safeParse(r).success).toBe(true);
+  });
+
   it('team.dissolve is relayed as is: silence is applied, a daemon error is failed', async () => {
     let n = 0;
     const { g, writes } = make({ answer: m => (m.type === 'team.dissolve' && n++ === 1 ? { type: 'error', message: 'aucune équipe', request: 'team.dissolve' } : undefined) });
@@ -428,6 +467,19 @@ describe('phone catalog: problems, shadowing, budget', () => {
     expect(get('qa', 'repo')).toBeUndefined();
     expect(get('lead', 'home')).toMatchObject({ shadowed: true });
     expect(get('lead', 'repo')).toMatchObject({ shadows: true });
+  });
+
+  it('a home role says which projects hide it: shadowedIn names each, once', () => {
+    const l: Listing = { type: 'definitions.listing', scopes: [
+      { scope: 'home', project: null, roles: [role('lead', 'home'), role('qa', 'home')], templates: [], problems: [] },
+      { scope: 'repo', project: 'p-repo', roles: [role('lead', 'repo')], templates: [], problems: [] },
+      { scope: 'repo', project: 'p-other', roles: [role('lead', 'repo')], templates: [], problems: [] }
+    ] };
+    const c = toPhoneCatalog(l, id => (id === 'p-repo' ? 'Repo' : id === 'p-other' ? 'Autre' : null));
+    const get = (id: string, sc: string) => c.roles.find(r => r.id === id && r.scope === sc);
+    expect(get('lead', 'home')).toMatchObject({ shadowed: true, shadowedIn: ['Repo', 'Autre'] });
+    expect(get('qa', 'home')).not.toHaveProperty('shadowedIn');
+    expect(get('lead', 'repo')).not.toHaveProperty('shadowedIn');
   });
 
   it('the budget is in bytes: 60 roles of 8000 multibyte characters stay within CATALOG_BUDGET as encoded', () => {

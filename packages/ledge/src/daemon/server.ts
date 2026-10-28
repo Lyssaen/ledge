@@ -1028,6 +1028,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     for (const id of leaverRefused) if (!leaving.has(id)) leaverRefused.delete(id);
   }
 
+  /** The seats being started or restarted (team + role): a second tap meanwhile is refused, never a second session. */
+  const seatsInFlight = new Set<string>();
   /** `team.compose`: the new composition applied at once, a session started in each added seat, the removed ones closed at their free moment. */
   async function composeTeam(msg: Extract<ClientMessage, { type: 'team.compose' }>): Promise<Extract<ServerMessage, { type: 'team.changed' }>> {
     const changed = (extra: { team?: Team; reason?: string }) => ({ type: 'team.changed' as const, rid: msg.rid, ...extra });
@@ -1039,16 +1041,21 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       const unknown = added.filter(s => !roles.has(s.role)).map(s => s.role);
       if (unknown.length) return changed({ reason: `rôle inconnu : ${unknown.join(', ')} (écris .ledge/roles/<id>.md)` });
     }
-    const r = teams.compose(msg.team, msg.seats);
-    if (typeof r === 'string') return changed({ reason: r });
-    log(`team ${t.id} composed: +${r.added.join(',') || '-'} −${r.removed.join(',') || '-'}`);
-    const failed = r.added.length ? await startSeats(r.team, msg.seats.filter(s => r.added.includes(s.role))) : null;
-    closeLeavers();
-    return changed({ team: teams.get(t.id)!, ...(failed ? { reason: failed } : {}) });
+    // The seats it adds are held as `team.seat start` holds them: a start landing meanwhile is refused, never a second session.
+    const keys = added.map(s => `${t.id}:${s.role}`);
+    const busy = added.find(s => seatsInFlight.has(`${t.id}:${s.role}`));
+    if (busy) return changed({ team: t, reason: `@${busy.role} : une opération est déjà en cours sur ce siège` });
+    for (const k of keys) seatsInFlight.add(k);
+    try {
+      const r = teams.compose(msg.team, msg.seats);
+      if (typeof r === 'string') return changed({ reason: r });
+      log(`team ${t.id} composed: +${r.added.join(',') || '-'} −${r.removed.join(',') || '-'}`);
+      const failed = r.added.length ? await startSeats(r.team, msg.seats.filter(s => r.added.includes(s.role))) : null;
+      closeLeavers();
+      return changed({ team: teams.get(t.id)!, ...(failed ? { reason: failed } : {}) });
+    } finally { for (const k of keys) seatsInFlight.delete(k); }
   }
 
-  /** The seats being started or restarted (team + role): a second tap meanwhile is refused, never a second session. */
-  const seatsInFlight = new Set<string>();
   /** `team.seat`: a session started in a free seat, or the seat's session replaced by a fresh one (restart). */
   async function seatTeam(msg: Extract<ClientMessage, { type: 'team.seat' }>): Promise<Extract<ServerMessage, { type: 'team.changed' }>> {
     const key = `${msg.team}:${msg.role}`;

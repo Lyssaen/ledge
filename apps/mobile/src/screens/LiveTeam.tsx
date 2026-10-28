@@ -92,7 +92,7 @@ function Body({ store, team, catalog, mounted }: { store: MobileStore; team: Pho
       .finally(() => { if (mounted.current) setBusy(false); });
   };
 
-  const where = [team.project, team.state === 'resting' ? t.resting : t.since(clock(team.createdAt)), template ? t.from(template.name) : null].filter(x => x).join(' · ');
+  const where = [team.project, team.state === 'resting' ? t.resting : (team.createdAt ? t.since(clock(team.createdAt)) : null), template ? t.from(template.name) : null].filter(x => x).join(' · ');
   return (
     <>
       <BackHeader title={copy.nav.agents} fallback={AGENTS} label={copy.nav.backTo.agents ?? copy.nav.back} link={linkView(state)} />

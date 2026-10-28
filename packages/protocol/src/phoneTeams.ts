@@ -13,11 +13,11 @@ export const PhoneRoleDraftSchema = RoleDraftSchema.strict();
 /** A project's name, as the phone knows it; `null` for a home definition. */
 const projectName = z.string().max(80).nullable();
 
-/** `cut`: the prompt was shortened to fit the frame, the editor asks `teams.role` for the whole. `shadows`: it hides a home role of the same id; `shadowed`: a repository role hides it. */
+/** `cut`: the prompt was shortened to fit the frame, the editor asks `teams.role` for the whole. `shadows`: it hides a home role of the same id; `shadowed`: a repository role hides it, `shadowedIn` names the projects (absent from older daemons). */
 export const PhoneRoleSchema = z.object({
   id: RoleIdSchema, label: z.string().min(1).max(ROLE_LABEL_MAX), prompt: z.string().max(ROLE_PROMPT_MAX), cut: z.literal(true).optional(),
   tool: ToolSchema.optional(), model: ModelIdSchema.optional(), effort: EffortSchema.optional(), autonomy: AutonomySchema.optional(),
-  scope, project: projectName, hash: DefinitionHashSchema, shadows: z.literal(true).optional(), shadowed: z.literal(true).optional()
+  scope, project: projectName, hash: DefinitionHashSchema, shadows: z.literal(true).optional(), shadowed: z.literal(true).optional(), shadowedIn: z.array(z.string().max(80)).min(1).max(8).optional()
 }).strict();
 export type PhoneRole = z.infer<typeof PhoneRoleSchema>;
 

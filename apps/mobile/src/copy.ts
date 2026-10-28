@@ -138,6 +138,7 @@ export const copy = {
       homeHint: 'Maison : disponible pour tous vos projets.', repoHint: (project: string) => `Dépôt : seulement dans ${project}.`,
       fixedScope: (scope: string) => `Rangé dans : ${scope}.`,
       shadows: (id: string) => `@${id} de ce dépôt cache le @${id} de Maison.`, shadowed: (id: string) => `@${id} de Maison est caché par le @${id} du dépôt.`,
+      shadowedIn: (id: string, projects: readonly string[]) => `@${id} de Maison est masqué dans ${projects.join(', ')}.`,
       save: 'Enregistrer le rôle', saveNote: 'Votre passkey confirme l’écriture sur le PC.', delete: 'Supprimer', deleteTitle: (id: string) => `Supprimer @${id} ?`,
       seatedIn: (names: string) => `encore dans : ${names}`, deleteHint: 'Ces équipes perdront ce siège.', cancel: 'Annuler',
       notSaved: 'Pas enregistré.', changedKept: 'Votre texte est gardé. Enregistrer écrase la version du PC.', takePc: 'Reprendre la version du PC',
@@ -160,6 +161,10 @@ export const copy = {
       save: 'Enregistrer', delete: 'Supprimer', deleteTitle: (name: string) => `Supprimer ${name} ?`, deleteHint: 'Les équipes déjà levées ne changent pas.',
       notSaved: 'Pas enregistré.', notDeleted: 'Pas supprimée.', exists: 'Une équipe de ce nom existe déjà.', invalid: 'Cette équipe ne peut pas être enregistrée telle quelle.',
       composed: 'Composition enregistrée.',
+      /** Saved, but the seats named (or one, when none can be) did not start. */
+      composedUnstarted: (roles: readonly string[]) => roles.length === 0 ? 'Composition enregistrée ; un siège n\'a pas démarré.'
+        : `Composition enregistrée ; ${roles.map(r => `@${r}`).join(', ')} n${roles.length > 1 ? '\'ont' : '\'a'} pas démarré.`,
+      composeChanged: 'La composition a changé sur le PC.',
       handNamed: 'Ce fichier porte un nom fait main : il ne se modifie que sur le PC. Vous pouvez quand même lever l’équipe.',
       changedKept: 'Vos modifications sont gardées. Enregistrer écrase la version du PC.',
       missing: 'Cette équipe n’existe pas sur ce PC.', gone: 'Cette équipe n’existe plus sur le PC. Vos modifications sont gardées ici, mais elles ne peuvent plus être enregistrées.',

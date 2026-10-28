@@ -5,7 +5,7 @@
 import { randomUUID } from 'node:crypto';
 import { teamsDigest, teamsPurpose, type ClientMessage, type PhoneClientMessage, type PhoneServerMessage, type ServerMessage, type TeamsOperation } from '@ledge/protocol';
 import type { Outcome, PhoneOperation } from './operations.js';
-import { toPhoneCatalog, type DefinitionsListing } from './project.js';
+import { toPhoneCatalog, toPhoneRole, type DefinitionsListing } from './project.js';
 
 type Assertion = NonNullable<Extract<PhoneOperation, { type: 'role.write' }>['assertion']>;
 
@@ -49,12 +49,10 @@ export function createTeamsOps(deps: TeamsOpsDeps) {
     const project = msg.project === undefined ? null : deps.projectByName(msg.project);
     if (msg.project !== undefined && project === null) return refuse();
     const l = await listing();
-    const found = l?.scopes.find(s => s.scope === msg.scope && s.project === project)?.roles.find(r => r.id === msg.id);
-    // The catalog's own projection (its flags, its names), with the prompt the catalog may have cut.
-    const shown = l && found ? toPhoneCatalog(l, deps.projectName).roles.find(r => r.id === msg.id && r.scope === msg.scope && r.project === (msg.project ?? null)) : undefined;
-    if (!found || !shown) return refuse();
-    const { cut: _cut, ...rest } = shown;
-    deps.push(deviceId, { type: 'teams.role', role: { ...rest, prompt: found.prompt } });
+    // From the listing itself, not the catalog: a role the catalog dropped for its budget can still be read by its address.
+    const shown = l ? toPhoneRole(l, deps.projectName, msg.scope, project, msg.id) : undefined;
+    if (!shown) return refuse();
+    deps.push(deviceId, { type: 'teams.role', role: shown });
   };
 
   /** The daemon's message for an operation, its project named by id. */
@@ -74,14 +72,18 @@ export function createTeamsOps(deps: TeamsOpsDeps) {
   };
 
   /** What the daemon's answer to the operation `rid` comes to. */
-  const outcomeOf = (rid: string) => (m: ServerMessage): boolean | Outcome | undefined => {
+  const outcomeOf = (rid: string, type: TeamsOperation['type']) => (m: ServerMessage): boolean | Outcome | undefined => {
     switch (m.type) {
       case 'definition.result':
         if (m.rid !== rid) return undefined;
         if (!m.code) return true;
         if (m.code === 'missing') return FAILED;
         return { status: 'rejected', reason: m.code };
-      case 'team.changed': return m.rid === rid ? !m.reason : undefined;
+      case 'team.changed':
+        if (m.rid !== rid) return undefined;
+        // A composition answers with its team and a reason when it was saved but an added seat did not start: applied, with the warning.
+        if (m.reason && m.team && type === 'team.compose') return { status: 'applied', reason: 'seat_failed' };
+        return !m.reason;
       case 'team.launched': return m.rid === rid ? true : undefined;
       case 'team.failed': return m.rid === rid ? false : undefined;
       default: return undefined;
@@ -105,7 +107,7 @@ export function createTeamsOps(deps: TeamsOpsDeps) {
     }
     const out = toDaemon(msg, project);
     // The dissolve answers nothing when it is done: silence is applied. Every other answer names its `rid`; none is a failure.
-    return deps.ask(out, outcomeOf(msg.op), { silent: msg.type === 'team.dissolve' ? { status: 'applied' } : FAILED, error: FAILED });
+    return deps.ask(out, outcomeOf(msg.op, msg.type), { silent: msg.type === 'team.dissolve' ? { status: 'applied' } : FAILED, error: FAILED });
   };
 
   return {

@@ -175,6 +175,18 @@ describe('define and teamOp', () => {
     expect(t.of('teams.catalog')).toHaveLength(0);
   });
 
+  it('a compose the PC saved but whose seat did not start resolves applied with a warning', async () => {
+    const t = setup();
+    vi.mocked(getAssertion).mockResolvedValue(ASSERTION);
+    const done = t.store.teamOp({ type: 'team.compose', team: 'team-a1b2', seats: [{ role: 'lead' }] });
+    await prepared(t);
+    t.deliver(challenge('team'));
+    await flush();
+    const [sent] = t.of('team.compose');
+    t.deliver({ type: 'operation.result', op: sent!.op, status: 'applied', reason: 'seat_failed' });
+    await expect(done).resolves.toEqual({ status: 'applied', warn: 'seat_failed' });
+  });
+
   it('a second template.write of the same id is sent while the first is still uncertain', async () => {
     const t = setup();
     vi.mocked(getAssertion).mockResolvedValue(ASSERTION);

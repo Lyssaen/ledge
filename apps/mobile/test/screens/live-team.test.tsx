@@ -59,6 +59,12 @@ describe('the live team sheet, header', () => {
     expect(screen.getByText('2/3')).toBeInTheDocument();
   });
 
+  it('a team from an older daemon has no start time: the line says the rest and nothing broken', () => {
+    const { createdAt: _createdAt, ...old } = team();
+    open({ teams: [old] });
+    expect(screen.getByText("ledge · d'après « Revue MR »")).toBeInTheDocument();
+  });
+
   it('shows the team\'s name once: the back header says where it leads', () => {
     open();
     expect(screen.getAllByText('Revue paper-service')).toHaveLength(1);
