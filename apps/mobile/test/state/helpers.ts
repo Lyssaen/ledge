@@ -20,7 +20,7 @@ export function fakeLink(initial: LinkState = 'ready') {
   const listeners = new Set<() => void>();
   const handlers = new Set<(m: PhoneServerMessage) => void>();
   const sent: PhoneClientMessage[] = [];
-  /** The link's own calls (pairing, relink, signOut, retry), in order. */
+  /** The link's own calls (pairing, relink, signOut, retry, resume), in order. */
   const calls: string[] = [];
   let pairingState: PairingState | null = null;
   let pinned: PinnedPc | null = null;
@@ -54,6 +54,7 @@ export function fakeLink(initial: LinkState = 'ready') {
     async relink() { calls.push('relink'); },
     async signOut() { calls.push('signOut'); },
     retry() { calls.push('retry'); },
+    resume() { calls.push('resume'); },
     pinned: () => pinned,
     receivedKey: () => received,
     close() {}
