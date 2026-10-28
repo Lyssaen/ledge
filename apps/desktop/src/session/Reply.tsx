@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type JSX, type KeyboardEvent, type MutableRefObject } from 'react';
-import type { DaemonClient } from '@ledge/fleet';
+import { isBusy, type DaemonClient } from '@ledge/fleet';
 import { NOTE_MAX, offers, type Helper, type Session } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
@@ -191,7 +191,7 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
 
   const name = session.name;
   const placeholder = working ? tr.placeholder.queued(name) : sort === 'plan' ? tr.placeholder.plan : sort === 'approval' ? tr.placeholder.approval : sort === 'question' ? tr.placeholder.question(name)
-    : session.state === 'exited' || session.state === 'idle' ? tr.placeholder.done(name) : tr.placeholder.idle(name);
+    : session.state === 'exited' || (session.state === 'idle' && !isBusy(session)) ? tr.placeholder.done(name) : tr.placeholder.idle(name);
   const hint = stopping ? tr.stopping
     : withImages && pending ? t.images.dialog
     : working && text ? <><Kbd>↵</Kbd> {tr.whenQueued} · <Kbd>Ctrl ↵</Kbd> {tr.whenNow}</>
