@@ -79,6 +79,10 @@ describe('filterArchived / helpers', () => {
     expect(isFinished(fakeSession('a', { state: 'idle' }))).toBe(true);
     expect(isFinished(fakeSession('a', { state: 'exited', offline: true }))).toBe(false);
     expect(isFinished(fakeSession('a', { state: 'working' }))).toBe(false);
+    // A turn ended while a background subagent still works: the agent is not done until the subagent stops.
+    const helper = { id: 'h1', kind: 'general-purpose', task: 'search', state: 'working' as const };
+    expect(isFinished(fakeSession('a', { state: 'idle', helpers: [helper] }))).toBe(false);
+    expect(isFinished(fakeSession('a', { state: 'idle', helpers: [{ ...helper, state: 'exited' }] }))).toBe(true);
   });
   it('filterArchived matches name, task and project', () => {
     const old = fakeSession('old', { name: 'Nova', topic: 'Migration', archivedAt: '2026-10-18T10:00:00.000Z' });

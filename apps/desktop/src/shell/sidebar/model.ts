@@ -1,3 +1,4 @@
+import { isBusy } from '@ledge/fleet';
 import type { Helper, Projects, Session, Team } from '@ledge/protocol';
 import { teamProject } from '../../atelier/layout';
 import { fold, taskOf } from '../../nav/agents';
@@ -6,8 +7,9 @@ const UNASSIGNED = 'Sans projet';
 
 export const branchOf = (s: Pick<Session, 'branch'>): string => s.branch?.trim() || 'main';
 
-export const isFinished = (s: Pick<Session, 'state' | 'offline'>): boolean =>
-  !s.offline && (s.state === 'exited' || s.state === 'idle');
+/** Exited, or at rest with no subagent still at work (a background one outlives its parent's turn). */
+export const isFinished = (s: Session): boolean =>
+  !s.offline && (s.state === 'exited' || (s.state === 'idle' && !isBusy(s)));
 
 export interface BranchGroup {
   branch: string;
