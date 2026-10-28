@@ -17,7 +17,7 @@ afterEach(() => { vi.mocked(getAssertion).mockReset(); });
 const QID = '0b1e8f7a-4c1d-4a55-9d0e-2f3a4b5c6d7e';
 const NOW = new Date().toISOString();
 const ON = { confirm: true, chat: true as const };
-const team = (extra: Partial<PhoneTeam> = {}): PhoneTeam => ({ id: 'team-a1b2', name: 'ledge-roles', project: 'Ledge', state: 'active', seats: [{ role: 'build', sessionId: 'otto' }, { role: 'qa', sessionId: 'mila' }, { role: 'review', sessionId: null }], done: 1, given: 2, ...extra });
+const team = (extra: Partial<PhoneTeam> = {}): PhoneTeam => ({ id: 'team-a1b2', name: 'ledge-roles', project: 'Ledge', state: 'active', seats: [{ role: 'build', sessionId: 'otto' }, { role: 'qa', sessionId: 'mila' }, { role: 'review', sessionId: null }], done: 1, given: 2, createdAt: NOW, ...extra });
 const task = (id: string, extra: Partial<PhoneTask> = {}): PhoneTask => ({ id, title: `Tâche ${id}`, owner: 'otto', ownerName: 'Otto', ownerRole: 'build', team: 'team-a1b2', teamName: 'ledge-roles', state: 'taken', at: NOW, updatedAt: NOW, ...extra });
 const sessions = () => [
   session('mila', { name: 'Mila', repo: 'ledge', role: 'qa', team: 'team-a1b2', state: 'waiting_permission', pending: pending() }),

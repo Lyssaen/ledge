@@ -160,7 +160,7 @@ export function toPhoneTeam(t: Team, tasks: readonly Task[], projectName: (id: s
   if (t.state === 'dissolved') return null;
   const mine = tasks.filter(x => x.team === t.id && x.giver === LEDGE_GIVER);
   return { id: t.id, name: t.name.slice(0, 60), project: projectName(t.project)?.slice(0, 80) ?? null, state: t.state,
-    seats: t.seats.slice(0, 16).map(x => ({ role: x.role, sessionId: x.sessionId })), done: mine.filter(x => x.state === 'done').length, given: mine.length };
+    createdAt: t.createdAt, seats: t.seats.slice(0, 16).map(x => ({ role: x.role, sessionId: x.sessionId })), done: mine.filter(x => x.state === 'done').length, given: mine.length };
 }
 
 /** A task Ledge gave, as the phone sees it: the start of its result only. */

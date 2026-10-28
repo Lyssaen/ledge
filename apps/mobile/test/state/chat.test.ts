@@ -319,7 +319,7 @@ describe('teams and Ledge\'s tasks in the store (ledge home spec §2.4)', () => 
   it('keeps the teams and tasks the PC sends, a task.updated replacing one; null teams from a PC that sends none', () => {
     const t = setup();
     expect(t.store.getState().teams).toBeNull();
-    t.deliver({ type: 'teams', teams: [{ id: 'team-a1b2', name: 'r', project: null, state: 'active', seats: [], done: 0, given: 0 }] });
+    t.deliver({ type: 'teams', teams: [{ id: 'team-a1b2', name: 'r', project: null, state: 'active', seats: [], done: 0, given: 0, createdAt: 'a' }] });
     t.deliver({ type: 'tasks', tasks: [{ id: 't1', title: 'x', owner: 'o', ownerName: 'O', state: 'taken', at: 'a', updatedAt: 'a' }] });
     t.deliver({ type: 'task.updated', task: { id: 't1', title: 'x', owner: 'o', ownerName: 'O', state: 'done', at: 'a', updatedAt: 'b' } });
     expect(t.store.getState().teams).toHaveLength(1);

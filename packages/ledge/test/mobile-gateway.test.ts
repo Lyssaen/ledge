@@ -1989,7 +1989,7 @@ describe('phone gateway: teams and Ledge\'s tasks (ledge home spec §2.4)', () =
     await flush();
     const got = g.got('dev1');
     for (const m of got) expect(PhoneServerMessageSchema.safeParse(m).success).toBe(true);
-    expect(got.find(m => m.type === 'teams')).toEqual({ type: 'teams', teams: [{ id: 'team-a1b2', name: 'repo-roles', project: 'Repo', state: 'active', seats: [{ role: 'build', sessionId: 'a' }, { role: 'qa', sessionId: null }], done: 1, given: 2 }] });
+    expect(got.find(m => m.type === 'teams')).toEqual({ type: 'teams', teams: [{ id: 'team-a1b2', name: 'repo-roles', project: 'Repo', state: 'active', seats: [{ role: 'build', sessionId: 'a' }, { role: 'qa', sessionId: null }], createdAt: '2026-10-20T08:00:00.000Z', done: 1, given: 2 }] });
     const listed = got.find(m => m.type === 'tasks');
     expect(listed?.type === 'tasks' && listed.tasks.map(x => [x.id, x.ownerRole, x.teamName, x.result])).toEqual([['t000001', 'build', 'repo-roles', 'fait'], ['t000002', 'build', 'repo-roles', undefined]]);
     const snap = got.find(m => m.type === 'snapshot');

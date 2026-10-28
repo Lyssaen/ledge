@@ -3,7 +3,7 @@
 // the devices that follow it. Logs carry a type, a code or an error's name, never a message's content.
 import { hostname } from 'node:os';
 import {
-  ATTACHMENT_MAX, OperationIdSchema, PHONE_PROTOCOL, actionById, TOOL_TEXT_MAX, proposalRows, PhoneClientMessageSchema, pushEndpointAllowed, RefusalCodeSchema, UNTYPABLE, backendOf, isArchived, pendingKey,
+  ATTACHMENT_MAX, TEAMS_OPERATION_TYPES, isTeamsOperation, OperationIdSchema, PHONE_PROTOCOL, actionById, TOOL_TEXT_MAX, proposalRows, PhoneClientMessageSchema, pushEndpointAllowed, RefusalCodeSchema, UNTYPABLE, backendOf, isArchived, pendingKey,
   LEDGE_GIVER, type AttachmentRef, type ChatErrorCode, type ChatTurn, type CloseHow, type ClientMessage, type PhoneTask, type Task, type Team, type OperationReason, type OperationStatus, type PhoneClientMessage, type PhoneServerMessage, type ServerMessage, type Session, type ThreadItem
 } from '@ledge/protocol';
 import type { MobileService } from './service.js';
@@ -191,7 +191,7 @@ export function createPhoneGateway(deps: {
   };
 
   /** The operations that act on a tracked session: the registry's own, the credential's, the device's and the chat's are handled before it. */
-  type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.launch' | 'chat.close' | 'chat.act' | 'chat.ignore' | 'chat.team' | 'chat.task' | 'team.resume' | 'task.seen' }>;
+  type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.launch' | 'chat.close' | 'chat.act' | 'chat.ignore' | 'chat.team' | 'chat.task' | 'team.resume' | 'task.seen' | (typeof TEAMS_OPERATION_TYPES)[number] }>;
   /** Whether the operation needs the device's own check: an accept of a request that is not low, or a reply to an OMP (rpc) dialog, which is never low. */
   const needsAssertion = (msg: SessionOperation, s: Session): boolean => {
     if (msg.type === 'session.decide') return msg.decision !== 'deny' && riskOf(s)?.risk !== 'low';
@@ -447,6 +447,8 @@ export function createPhoneGateway(deps: {
   };
 
   const run = async (deviceId: string, msg: PhoneOperation): Promise<Outcome> => {
+    // Task 6 gives the roles and teams operations their handlers.
+    if (isTeamsOperation(msg)) return { status: 'rejected', reason: 'unavailable' };
     if (msg.type === 'chat.ignore') return chatIgnore(deviceId, msg);
     if (msg.type === 'chat.team') return chatTeam(deviceId, msg);
     if (msg.type === 'chat.task') return chatTask(deviceId, msg);
@@ -576,6 +578,9 @@ export function createPhoneGateway(deps: {
         if (!deps.chats) return push(deviceId, { type: 'error', code: 'invalid', request: msg.type });
         void chatRead(deviceId, msg);
         return;
+      // Task 6 answers the catalog and one role.
+      case 'teams.catalog': case 'teams.role':
+        return push(deviceId, { type: 'error', code: 'invalid', request: msg.type });
       case 'presence':
         follower(deviceId).visible = msg.visible;
         return;
@@ -638,6 +643,8 @@ export function createPhoneGateway(deps: {
           const challenge = deps.challenges.issue({ deviceId, purpose: 'register', subject: '' });
           return push(deviceId, { type: 'confirm.challenge', purpose: 'register', challenge, rpId: rp.rpId, expiresInMs: CHALLENGE_TTL_MS });
         }
+        // Task 6 issues the challenges of the roles and teams operations, over their digest.
+        if (msg.purpose === 'define' || msg.purpose === 'team') return invalid();
         // A purpose added to the enum without a branch above fails to compile here.
         const unhandled: never = msg.purpose;
         void unhandled;
