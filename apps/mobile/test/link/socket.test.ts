@@ -279,4 +279,80 @@ describe('openRelaySocket', () => {
     sock.reconnect();
     expect(FakeWs.instances).toHaveLength(1);
   });
+
+  it('an attempt without a welcome within 10 s is dropped, told as failed, and retried on the backoff', async () => {
+    const failed = vi.fn();
+    openRelaySocket({ url: 'https://relay.example', WebSocketImpl: Impl, fetchImpl: answer(200) as unknown as typeof fetch, onFrame: () => {}, onState: () => {}, onAttemptFailed: failed });
+    const stuck = last();
+    await vi.advanceTimersByTimeAsync(9_999);
+    expect(FakeWs.instances).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(stuck.closedWith).toBe(1000);
+    expect(failed).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(FakeWs.instances).toHaveLength(2);
+    last().welcome();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(FakeWs.instances).toHaveLength(2);
+  });
+
+  it('resume() on an open socket: a new one at once, the old one closed with 1000', () => {
+    const { sock, states } = open();
+    const ws = last();
+    ws.welcome();
+    sock.resume();
+    expect(ws.closedWith).toBe(1000);
+    expect(FakeWs.instances).toHaveLength(2);
+    expect(states).toEqual(['connecting', 'open', 'connecting']);
+  });
+
+  it('resume() while waiting out a long backoff: a new attempt at once, and the backoff started over', async () => {
+    const { sock } = open();
+    last().welcome();
+    // Opened without a welcome, then lost: a plain loss each time, so the backoff grows to 30 s.
+    last().drop(1006);
+    for (let i = 0; i < 5; i++) {
+      await vi.advanceTimersByTimeAsync(30_000);
+      last().open();
+      last().drop(1006);
+    }
+    const n = FakeWs.instances.length;
+    sock.resume();
+    expect(FakeWs.instances).toHaveLength(n + 1);
+    last().open();
+    last().drop(1006);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(FakeWs.instances).toHaveLength(n + 2);
+  });
+
+  it('resume() leaves an attempt younger than 2 s alone, and replaces an older one', async () => {
+    const { sock } = open();
+    const first = last();
+    sock.resume();
+    expect(FakeWs.instances).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(2_000);
+    sock.resume();
+    expect(first.closedWith).toBe(1000);
+    expect(FakeWs.instances).toHaveLength(2);
+  });
+
+  it('resume() does nothing while /auth/me is asked, within the 10 s of a 4008, or after close()', async () => {
+    let answerMe: (r: Response) => void = () => {};
+    const slow = vi.fn(() => new Promise<Response>((r) => { answerMe = r; }));
+    const { sock } = open(slow as unknown as ReturnType<typeof answer>);
+    last().drop(1006);
+    sock.resume();
+    expect(FakeWs.instances).toHaveLength(1);
+    answerMe({ status: 200 } as Response);
+    await vi.advanceTimersByTimeAsync(1_000);
+    last().welcome();
+    last().drop(4008);
+    sock.resume();
+    expect(FakeWs.instances).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(FakeWs.instances).toHaveLength(3);
+    sock.close();
+    sock.resume();
+    expect(FakeWs.instances).toHaveLength(3);
+  });
 });

@@ -49,6 +49,11 @@ export interface PhoneLink {
    * being tried or a 4008 asked to wait.
    */
   retry(): void;
+  /**
+   * The page is back in front, or online again: a new socket at once, the backoff started over (see `RelaySocket.resume`);
+   * its welcome brings the hello, and the ready the store's resync. Nothing in `key_changed`, `denied`, or once closed.
+   */
+  resume(): void;
   /** The PC this phone trusts, named from its snapshots; null when unpaired. */
   pinned(): PinnedPc | null;
   /** The fingerprint the PC answered with once its key changed; null otherwise. */
@@ -470,6 +475,10 @@ export function createPhoneLink(opts: {
       }
       if (socketState === 'open' && pcOnline === true) helloIfDue();
       else sock.reconnect();
+    },
+    resume() {
+      if (finished || keyChanged || denied) return;
+      sock.resume();
     },
     pinned: () => pinned,
     receivedKey: () => receivedKey,
