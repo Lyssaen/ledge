@@ -1,6 +1,6 @@
 // The phone's own operations (a decision, a reply, an interrupt): each named by a uuid it made, so sending it again
 // after a lost connection is recognised by the PC, which replays the result it already gave.
-import { OperationReasonSchema, PhoneClientMessageSchema, type OperationReason, type PhoneClientMessage } from '@ledge/protocol';
+import { OperationReasonSchema, PhoneClientMessageSchema, isTeamsOperation, type OperationReason, type PhoneClientMessage } from '@ledge/protocol';
 import { z } from 'zod';
 import { localStore } from './storage';
 
@@ -36,9 +36,10 @@ export const UNCERTAIN_MS = 10_000;
 /**
  * Operations that stay in this page's memory. Push changes: replayed after a reload they could undo a later choice, and
  * they carry the endpoint (a secret). A chat relay, launch or close: after a reload nothing leaves without a new gesture.
+ * A role, template or live-team operation too: it carries a passkey assertion and a role's prompt.
  */
 const isVolatile = (m: { type: string }) => m.type === 'push.subscribe' || m.type === 'push.unsubscribe' || m.type === 'chat.relay' || m.type === 'chat.launch' || m.type === 'chat.close'
-  || m.type === 'chat.team' || m.type === 'chat.task' || m.type === 'team.resume' || m.type === 'task.seen';
+  || m.type === 'chat.team' || m.type === 'chat.task' || m.type === 'team.resume' || m.type === 'task.seen' || isTeamsOperation(m);
 
 export const isLive = (p: OpPhase) => p === 'sending' || p === 'uncertain';
 
@@ -84,6 +85,9 @@ export function resendable(o: Op, boot: string | null, now: number = Date.now())
  */
 export function isNew(ops: Record<string, Op>, m: OpMessage, boot: string | null, now: number = Date.now()): boolean {
   if (ops[m.op]) return false;
+  // A role, template or team operation names its target by `id`/`team`, not a session: a second one on the same target is a new, deliberate
+  // edit (the PC's `base` hash refuses it when stale), never a repeat of the first.
+  if (isTeamsOperation(m)) return true;
   // A registration or a push change names no session: only its own op id dedupes it (a new attempt is a new op).
   if (!('id' in m)) return true;
   const key = expectKey(m);

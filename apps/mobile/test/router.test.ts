@@ -19,6 +19,8 @@ const routes: Route[] = [
   { name: 'team-copy', teamId: 'team-a1b2' },
   { name: 'role', key: 'home~~lead' },
   { name: 'role', key: 'repo~mon dépôt~lead' },
+  { name: 'team', key: 'repo~a/b~x' },
+  { name: 'role', key: 'repo~a/b~x' },
   { name: 'live', teamId: 'team-a1b2' },
   { name: 'compose', teamId: 'team-a1b2' }
 ];

@@ -117,6 +117,10 @@ describe('define and teamOp', () => {
     const second = t.store.define(write('second'));
     await prepared(t, 2);
     await expect(first).resolves.toMatchObject({ status: 'failed' });
+    // The PC answers both prepares in order: the first challenge is the superseded call's.
+    t.deliver(challenge('define'));
+    await flush();
+    expect(t.of('role.write')).toEqual([]);
     t.deliver(challenge('define'));
     await flush();
     expect(t.of('role.write').map(m => m.role.prompt)).toEqual(['second']);
@@ -167,6 +171,69 @@ describe('define and teamOp', () => {
     t.deliver({ type: 'operation.result', op: sent!.op, status: 'applied' });
     await expect(done).resolves.toEqual({ status: 'applied' });
     expect(t.of('teams.catalog')).toHaveLength(0);
+  });
+
+  it('a second template.write of the same id is sent while the first is still uncertain', async () => {
+    const t = setup();
+    vi.mocked(getAssertion).mockResolvedValue(ASSERTION);
+    const tpl = (name: string) => ({ type: 'template.write' as const, scope: 'home' as const, id: 'duo', name, seats: [{ role: 'lead' }], base: HASH });
+    void t.store.define(tpl('Duo'));
+    await prepared(t);
+    t.deliver(challenge('define'));
+    await vi.waitFor(() => expect(t.of('template.write')).toHaveLength(1));
+    // The reply is lost: the link drops and the first op stays uncertain.
+    t.set('connecting' as never);
+    t.set('ready');
+    t.deliver(snapshot([], 'Atelier', undefined, { confirm: true, chat: true }));
+    const second = t.store.define(tpl('Duo 2'));
+    await prepared(t, 2);
+    t.deliver(challenge('define'));
+    await vi.waitFor(() => expect(t.of('template.write').map(m => m.name)).toContain('Duo 2'));
+    const sent = t.of('template.write').find(m => m.name === 'Duo 2')!;
+    t.deliver({ type: 'operation.result', op: sent.op, status: 'applied' });
+    await expect(second).resolves.toEqual({ status: 'applied' });
+  });
+
+  it('a challenge for a superseded call does not sign the new one: A then B, A\'s answer comes first', async () => {
+    const t = setup();
+    vi.mocked(getAssertion).mockResolvedValue(ASSERTION);
+    const a = t.store.define(write('A'));
+    await prepared(t);
+    const b = t.store.define(write('B'));
+    await prepared(t, 2);
+    await expect(a).resolves.toMatchObject({ status: 'failed' });
+    // A's challenge (for A's digest) arrives first: it must not be taken for B's.
+    t.deliver({ ...challenge('define'), challenge: 'QQ' });
+    await flush();
+    expect(getAssertion).not.toHaveBeenCalled();
+    expect(t.of('role.write')).toEqual([]);
+    t.deliver({ ...challenge('define'), challenge: 'Qg' });
+    await vi.waitFor(() => expect(t.of('role.write')).toHaveLength(1));
+    expect(vi.mocked(getAssertion).mock.calls.map(c => c[0].challenge)).toEqual(['Qg']);
+    expect(t.of('role.write')[0]!.role.prompt).toBe('B');
+    t.deliver({ type: 'operation.result', op: t.of('role.write')[0]!.op, status: 'applied' });
+    await expect(b).resolves.toEqual({ status: 'applied' });
+  });
+
+  it('a challenge without a credential is confirm_required, with no passkey prompt', async () => {
+    const t = setup();
+    const done = t.store.define(write('x'));
+    await prepared(t);
+    const { credentialId: _c, ...bare } = challenge('define');
+    t.deliver(bare);
+    await expect(done).resolves.toEqual({ status: 'rejected', reason: 'confirm_required' });
+    expect(getAssertion).not.toHaveBeenCalled();
+    expect(t.of('role.write')).toEqual([]);
+  });
+
+  it('an operation that cannot be written after the passkey is failed, not expired', async () => {
+    const t = setup();
+    vi.mocked(getAssertion).mockImplementation(async () => { t.set('connecting' as never); return ASSERTION; });
+    const done = t.store.define(write('x'));
+    await prepared(t);
+    t.deliver(challenge('define'));
+    await expect(done).resolves.toEqual({ status: 'failed' });
+    expect(t.of('role.write')).toEqual([]);
   });
 
   it('a cancelled passkey sends nothing', async () => {
