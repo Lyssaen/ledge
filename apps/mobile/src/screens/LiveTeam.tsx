@@ -121,7 +121,7 @@ function Body({ store, team, catalog, mounted }: { store: MobileStore; team: Pho
                 </div>
                 <div className="mt-1 flex items-center gap-2 text-small [overflow-wrap:anywhere] text-muted">
                   <span className="min-w-0 flex-1"><SeatMeta seat={s} role={role} order="sheet" /></span>
-                  {state.daemon?.models && !s.leaving && <Button size="sm" aria-label={copy.model.seat.change(s.role)} onClick={() => setChanging(s.role)}>{copy.teams.team.change}</Button>}
+                  {state.daemon?.models && !s.leaving && <Button size="sm" disabled={!online} aria-label={copy.model.seat.change(s.role)} onClick={() => setChanging(s.role)}>{copy.teams.team.change}</Button>}
                 </div>
                 {free && state.daemon?.models && <p className="text-small text-muted">{copy.model.seat.later}</p>}
                 {role && <p className="mt-2 line-clamp-2 rounded-control bg-bg px-2.5 py-2 text-small whitespace-pre-line [overflow-wrap:anywhere] text-muted">{preview(role.prompt)}</p>}

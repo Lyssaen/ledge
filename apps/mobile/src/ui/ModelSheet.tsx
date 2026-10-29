@@ -13,9 +13,10 @@ const ROW = 'flex min-h-12 w-full items-center gap-3 rounded-control border bord
  * What a model change asks, as the mockup draws it: « Par défaut » then the models the PC knows, the effort the picked
  * model takes, a note, and the footer the caller gives. Nothing is sent from here: picking only moves `pick`.
  */
-export function ModelSheet({ tool, models, error, current, pick, onPick, note, actions }: {
+export function ModelSheet({ tool, models, error, current, pick, onPick, note, actions, defaultHint = copy.model.defaultHint }: {
   tool: string; models: PhoneModelChoice[]; error: boolean | undefined; current: Pick; pick: Pick; onPick: (p: Pick) => void;
   note: string; actions: ReactNode;
+  /** What « Par défaut » gives; the agent's own choice unless the caller knows better (a seat's role). */ defaultHint?: string;
 }) {
   const known = current.model === null || models.some(m => m.id === current.model);
   const levels = efforts(tool, models, pick);
@@ -41,7 +42,7 @@ export function ModelSheet({ tool, models, error, current, pick, onPick, note, a
       </div>
       {error && <p role="status" className="text-meta text-attention">{copy.model.listError}</p>}
       <div className="flex max-h-[45vh] flex-col gap-1.5 overflow-y-auto">
-        {row(null, copy.model.byDefault, copy.model.defaultHint)}
+        {row(null, copy.model.byDefault, defaultHint)}
         {!known && current.model !== null && row(current.model, current.model, undefined)}
         {models.map(m => row(m.id, m.label, modelHint(tool, m)))}
       </div>

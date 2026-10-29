@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { PhoneTeam } from '@ledge/protocol';
 import { copy } from '../copy';
 import { roleFor } from '../model/catalog';
-import { samePick, type Pick } from '../model/modelChoice';
+import { isBusy, modelLabel, samePick, type Pick } from '../model/modelChoice';
 import { outcomeNote, seatModelNote, type OutcomeNote } from '../model/teamsOutcome';
 import { useMobile, type MobileStore } from '../state/store';
 import { Button } from '../ui/Button';
@@ -47,8 +47,9 @@ export function SeatModelSheet({ store, team, role, onClose }: { store: MobileSt
 
   const s = copy.model.seat;
   const working = holder?.state === 'working';
+  // The PC applies at once only to a free agent: one waiting on a request gets it at the end of its turn too.
   const note = holder && canSwitch
-    ? `${s.saved}\n${working ? s.nowWorking(holder.name) : s.now(holder.name)}`
+    ? `${s.saved}\n${isBusy(holder) ? s.nowWorking(holder.name) : s.now(holder.name)}`
     : `${s.saved}\n${s.later}`;
   const label = def?.label ?? `@${role}`;
   return (
@@ -62,7 +63,7 @@ export function SeatModelSheet({ store, team, role, onClose }: { store: MobileSt
       </div>
       <ModelSheet
         tool={tool} models={listing.models} error={listing.error} current={current} pick={pick} onPick={setPick}
-        note={note}
+        note={note} {...(def?.model ? { defaultHint: s.roleDefault(modelLabel(tool, def.model, listing.models)) } : {})}
         actions={
           <>
             {done && <p role="status" className="text-body">{done}</p>}

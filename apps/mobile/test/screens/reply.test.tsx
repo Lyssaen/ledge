@@ -53,6 +53,14 @@ describe('an instruction from the phone', () => {
 });
 
 describe('the model chip in the quick row', () => {
+  it('no empty quick row when the composer is off and there is no chip', () => {
+    const t = setup();
+    t.deliver(snapshot([session('a', { name: 'Kai', state: 'working', canSwitch: true })]));
+    render(<Thread store={t.store} sessionId="a" storage={t.storage} />);
+    act(() => t.deliver({ type: 'session.thread', id: 'a', items: [], cut: [], more: false }));
+    expect(screen.queryByRole('group', { name: 'Consignes rapides' })).toBeNull();
+  });
+
   it('sits before the first quick reply', () => {
     const t = setup();
     const sn = snapshot([session('a', { name: 'Kai', model: 'opus', canSwitch: true })]) as Extract<PhoneServerMessage, { type: 'snapshot' }>;

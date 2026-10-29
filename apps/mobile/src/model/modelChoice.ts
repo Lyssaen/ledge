@@ -25,6 +25,12 @@ export const modelHint = (tool: string, m: PhoneModelChoice): string | undefined
 
 export const samePick = (a: Pick, b: Pick): boolean => a.model === b.model && a.effort === b.effort;
 
+/**
+ * The agent is not free as the PC reads it before a model change (its `free()`: idle or in error, no request waiting): the
+ * change then waits for the end of its turn. What the PC alone knows (a text being typed, a close) the phone cannot see.
+ */
+export const isBusy = (s: PhoneSession): boolean => !((s.state === 'idle' || s.state === 'error') && !s.pending);
+
 /** What the session runs now. */
 export const running = (s: PhoneSession): Pick => ({ model: s.model ?? null, effort: s.effort ?? null });
 

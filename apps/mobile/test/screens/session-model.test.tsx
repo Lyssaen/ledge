@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import type { PhoneServerMessage } from '@ledge/protocol';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { SessionModelChip, SessionModelNote } from '../../src/screens/SessionModel';
 import { session } from '../model/fixtures';
 import { snapshot } from '../state/helpers';
@@ -142,6 +142,32 @@ describe('the model chip', () => {
   it('the note says the agent works when it does', () => {
     opened({ state: 'working' });
     expect(openSheet().getByText('Cleo travaille : le changement attendra la fin de son tour.')).toBeInTheDocument();
+  });
+
+  it('the note says the agent works while it waits on a permission (the PC defers the change then too)', () => {
+    opened({ state: 'waiting_permission' });
+    expect(openSheet().getByText('Cleo travaille : le changement attendra la fin de son tour.')).toBeInTheDocument();
+  });
+
+  it('the note says it restarts now when the agent is free', () => {
+    opened({ state: 'idle' });
+    expect(openSheet().getByText('Cleo redémarre sur la même conversation et garde son contexte.')).toBeInTheDocument();
+  });
+
+  it('the chip cannot be used while the link is not fresh', () => {
+    const { t } = opened();
+    act(() => t.set('pc_offline'));
+    expect(screen.getByRole('button', { name: /Modèle et effort :/ })).toBeDisabled();
+  });
+
+  it('an uncertain change says it was sent, not that it was not applied', async () => {
+    const { t } = opened();
+    vi.spyOn(t.store, 'changeModel').mockResolvedValue({ status: 'expired' });
+    const sheet = openSheet();
+    fireEvent.click(sheet.getByRole('button', { name: /Sonnet/ }));
+    await act(async () => { fireEvent.click(sheet.getByRole('button', { name: 'Appliquer' })); });
+    expect(screen.getByRole('alert')).toHaveTextContent('Changement de modèle envoyé ; vérifiez sur le PC');
+    expect(screen.getByRole('alert')).not.toHaveTextContent('non appliqué');
   });
 
   it('a late failure shows its line', () => {

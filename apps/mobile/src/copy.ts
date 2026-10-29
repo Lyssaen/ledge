@@ -234,6 +234,7 @@ export const copy = {
     applied: 'Appliqué',
     scheduled: 'Appliqué au prochain tour',
     notApplied: 'Changement de modèle non appliqué',
+    uncertain: 'Changement de modèle envoyé ; vérifiez sur le PC',
     failed: {
       not_launched: 'pas lancé par Ledge', ended: 'session terminée', no_conversation: 'aucune conversation à reprendre',
       not_running: "l'agent ne tourne pas", effort_in_model: "cet outil prend l'effort dans le modèle",
@@ -250,6 +251,8 @@ export const copy = {
       now: (name: string) => `Appliqué aussi tout de suite à ${name}, sur la même conversation.`,
       nowWorking: (name: string) => `Appliqué aussi tout de suite à ${name}, sur la même conversation : il travaille, ce sera à la fin de ce tour.`,
       later: 'au prochain démarrage du siège',
+      /** « Par défaut » on a seat whose role sets a model: clearing the seat's own value gives the role's. */
+      roleDefault: (model: string) => `Celui du rôle : ${model}`,
       passkey: 'Votre passkey confirme le changement.',
       restarts: (name: string) => `${name} redémarre sur la même conversation.`,
       close: 'Fermer',

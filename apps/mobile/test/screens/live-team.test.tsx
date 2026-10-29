@@ -382,6 +382,15 @@ describe('the live team sheet, seat model', () => {
     expect(screen.getByRole('dialog')).toHaveTextContent('Modèle et effort');
   });
 
+  it('Changer is disabled like Lever and Dissoudre when the device cannot confirm', () => {
+    const t = setup();
+    const m = snapshot(SESSIONS.map(s => ({ ...s, canSwitch: true as const })), 'PC-Desan', undefined, { confirm: false, chat: true }) as Extract<import('@ledge/protocol').PhoneServerMessage, { type: 'snapshot' }>;
+    t.deliver({ ...m, daemon: { ...m.daemon!, models: true } });
+    act(() => { t.deliver({ type: 'teams.catalog', catalog: catalog() }); t.deliver({ type: 'teams', teams: [team()] }); });
+    render(<LiveTeam store={t.store} teamId="team-a1b2" />);
+    expect(within(seat('leader')).getByRole('button', { name: 'Changer le modèle de @leader' })).toBeDisabled();
+  });
+
   it('no Changer without daemon.models', () => {
     withModels(false);
     expect(screen.queryByRole('button', { name: /Changer le modèle/ })).toBeNull();

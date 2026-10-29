@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ModelRefusal, PhoneSession } from '@ledge/protocol';
 import { copy } from '../copy';
-import { effortLabel, modelLabel, running, samePick, type Pick } from '../model/modelChoice';
+import { effortLabel, isBusy, modelLabel, running, samePick, type Pick } from '../model/modelChoice';
 import { useMobile, type MobileStore } from '../state/store';
 import { Button, chipClass } from '../ui/Button';
 import { Sheet } from '../ui/Dialog';
@@ -13,11 +13,11 @@ const NONE: { models: never[]; error?: true } = { models: [] };
 const upNext = (s: PhoneSession): Pick => s.modelNext ? { model: s.modelNext.model ?? null, effort: s.modelNext.effort ?? null } : running(s);
 
 /** Whether the phone can change this session's model: the PC knows how, and the session was launched by Ledge. */
-const available = (daemon: { models?: true } | null, s: PhoneSession): boolean => !!daemon?.models && s.canSwitch === true;
+export const available = (daemon: { models?: true } | null, s: PhoneSession): boolean => !!daemon?.models && s.canSwitch === true;
 
 /** The chip at the head of the quick row: the session's model and effort, and the sheet that changes them. */
 export function SessionModelChip({ store, session }: { store: MobileStore; session: PhoneSession }) {
-  const { daemon, models } = useMobile(store);
+  const { daemon, models, fresh } = useMobile(store);
   const [open, setOpen] = useState(false);
   const can = available(daemon, session);
   useEffect(() => { if (can) store.requestModels(session.tool); }, [can, store, session.tool]);
@@ -28,7 +28,7 @@ export function SessionModelChip({ store, session }: { store: MobileStore; sessi
   const text = [modelLabel(session.tool, shown.model ?? undefined, listing.models), shown.effort ? effortLabel(shown.effort) : null].filter(Boolean).join(' · ');
   return (
     <>
-      <button type="button" aria-haspopup="dialog" aria-label={copy.model.chip(next ? `${text}, ${copy.model.nextTurn}` : text)}
+      <button type="button" disabled={!fresh} aria-haspopup="dialog" aria-label={copy.model.chip(next ? `${text}, ${copy.model.nextTurn}` : text)}
         onClick={() => { store.requestModels(session.tool); setOpen(true); }} className={`${chipClass()} gap-2 whitespace-nowrap`}>
         <span>{text}</span>
         {next && <span className="text-meta font-normal text-attention">{copy.model.nextTurn}</span>}
@@ -59,10 +59,12 @@ function ChangeSheet({ store, session, onClose }: { store: MobileStore; session:
     const done = await store.changeModel(session.id, to.model, to.effort);
     setBusy(false);
     if (done.status === 'applied') { onClose(); return; }
+    // Sent, with no answer the phone can trust: it may have been applied.
+    if (done.status === 'expired') { setRefused(copy.model.uncertain); return; }
     const reason = done.status === 'rejected' ? done.reason : null;
     setRefused(reason && reason in copy.model.failed ? copy.model.failed[reason as ModelRefusal] : copy.model.notApplied);
   };
-  const working = session.state === 'working';
+  const working = isBusy(session);
   return (
     <Sheet labelledBy={MODEL_TITLE_ID} onClose={onClose}>
       <ModelSheet

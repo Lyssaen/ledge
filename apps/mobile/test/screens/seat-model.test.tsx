@@ -72,8 +72,20 @@ describe('the seat model sheet', () => {
   });
 
   it('held and can switch, idle: the note says it applies right away', () => {
-    opened('leader', { s1: { state: 'waiting_input' } });
+    opened('leader', { s1: { state: 'idle' } });
     expect(screen.getByRole('dialog')).toHaveTextContent('Appliqué aussi tout de suite à Otto, sur la même conversation.');
+  });
+
+  it('held, waiting on a permission: the note says it waits for the end of the turn', () => {
+    opened('leader', { s1: { state: 'waiting_permission' } });
+    expect(screen.getByRole('dialog')).toHaveTextContent('il travaille, ce sera à la fin de ce tour.');
+  });
+
+  it('Par défaut names the role\'s model when the role sets one', () => {
+    opened('leader');
+    const row = within(screen.getByRole('dialog')).getByRole('button', { name: /Par défaut/ });
+    expect(row).toHaveTextContent('Celui du rôle : Opus');
+    expect(row).not.toHaveTextContent("Celui que l'agent prend de lui-même");
   });
 
   it('Appliquer composes the team with the seat\'s new model and effort, other seats unchanged', async () => {
