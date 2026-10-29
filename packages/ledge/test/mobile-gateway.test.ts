@@ -134,7 +134,9 @@ describe('phone gateway: reads and forward', () => {
     await flush();
     expect(g.got('dev1')).toEqual([
       { type: 'session.thread', id: 'a', items: [{ kind: 'message', id: 'm1', at: T0, turn: 0, text: 'hello' }], cut: [], more: false },
-      { type: 'error', code: 'unknown_session', request: 'session.thread' }
+      // An error goes ahead of the updates still queued.
+      { type: 'error', code: 'unknown_session', request: 'session.thread' },
+      { type: 'session.checklist', id: 'a', checklist: null }
     ]);
   });
 

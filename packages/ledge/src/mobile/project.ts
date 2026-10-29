@@ -1,5 +1,7 @@
 import { LEDGE_GIVER, pendingKey, PENDING_BODY_MAX, SNAPSHOT_BODY_MAX, taskClosed, THREAD_BUDGET, THREAD_ITEMS_MAX, THREAD_TEXT_MAX, TOOL_TEXT_MAX, TOPIC_MAX, ToolSchema } from '@ledge/protocol';
 import { PhoneRoleSchema, PhoneTemplateSchema } from '@ledge/protocol';
+import { CHECKLIST_TASKS_MAX, CHECKLIST_TEXT_MAX, doneCount } from '@ledge/protocol';
+import type { PhoneChecklist, PhoneChecklistSummary, Todo } from '@ledge/protocol';
 import type { CapabilitiesByTool, FileChange, Pending, PhoneCatalog, PhonePending, PhoneProblem, PhoneRole, PhoneSession, PhoneTask, PhoneTeam, PhoneTemplate, ServerMessage, Session, Task, Team, ThreadItem, Tool } from '@ledge/protocol';
 import { adapterFor } from '../adapters/index.js';
 import { riskOf } from './risk.js';
@@ -46,7 +48,32 @@ export function toPhoneRequest(s: Session, bodyMax: number): PhonePending | unde
 /** The request with its whole body (up to `PENDING_BODY_MAX`), for `session.pending`. */
 export const toPhoneFullRequest = (s: Session): PhonePending | undefined => toPhoneRequest(s, PENDING_BODY_MAX);
 
-export function toPhoneSession(s: Session, readAt: string): PhoneSession {
+/** Whether the phone's checklist leaves something out: more tasks than it carries, or a text it clips. */
+const checklistCut = (todos: readonly Todo[]): boolean =>
+  todos.length > CHECKLIST_TASKS_MAX || todos.some(t => t.text.length > CHECKLIST_TEXT_MAX);
+
+/** The agent's checklist for the session screen: its first tasks, texts clipped; `done` and `total` count the whole list. */
+export function toPhoneChecklist(todos: readonly Todo[] | null): PhoneChecklist | null {
+  if (!todos) return null;
+  return {
+    tasks: todos.slice(0, CHECKLIST_TASKS_MAX).map(t => ({ text: clip(t.text, CHECKLIST_TEXT_MAX).text, status: t.status })),
+    done: doneCount(todos), total: todos.length,
+    ...(checklistCut(todos) ? { cut: true as const } : {})
+  };
+}
+
+/** The checklist for « Agents »: the counts and the first task in progress, from the whole list (one past the cap still shows). */
+export function checklistSummary(todos: readonly Todo[] | null): PhoneChecklistSummary | undefined {
+  if (!todos) return undefined;
+  const current = todos.find(t => t.status === 'in_progress');
+  return {
+    done: doneCount(todos), total: todos.length,
+    ...(current ? { current: clip(current.text, CHECKLIST_TEXT_MAX).text } : {}),
+    ...(checklistCut(todos) ? { cut: true as const } : {})
+  };
+}
+
+export function toPhoneSession(s: Session, readAt: string, checklist?: PhoneChecklistSummary): PhoneSession {
   const pending = toPhoneRequest(s, SNAPSHOT_BODY_MAX);
   return {
     id: s.id, name: s.name, tool: s.tool, project: s.project, title: s.title, state: s.state,
@@ -60,6 +87,7 @@ export function toPhoneSession(s: Session, readAt: string): PhoneSession {
     // A preview only: the whole reply is in the thread.
     ...(s.lastReply ? { lastReply: { text: clip(s.lastReply.text, TOOL_TEXT_MAX).text, at: s.lastReply.at, ...pickSet(s.lastReply, ['plan']) } } : {}),
     ...(pending ? { pending } : {}),
+    ...(checklist ? { checklist } : {}),
     unread: !!s.lastReply && s.lastReply.at > readAt
   };
 }

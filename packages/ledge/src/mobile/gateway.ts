@@ -6,6 +6,7 @@ import {
   ATTACHMENT_MAX, TEAMS_OPERATION_TYPES, isTeamsOperation, OperationIdSchema, PHONE_PROTOCOL, actionById, TOOL_TEXT_MAX, proposalRows, PhoneClientMessageSchema, pushEndpointAllowed, RefusalCodeSchema, UNTYPABLE, backendOf, isArchived, pendingKey,
   LEDGE_GIVER, SEMVER, pcSubject, type AttachmentRef, type ChatErrorCode, type ChatTurn, type CloseHow, type ClientMessage, type PhoneTask, type Task, type Team, type OperationReason, type OperationStatus, type PhoneClientMessage, type PhoneServerMessage, type ServerMessage, type Session, type ThreadItem
 } from '@ledge/protocol';
+import { latestTodos, TODO_TOOLS, type PhoneChecklist, type PhoneChecklistSummary } from '@ledge/protocol';
 import { compareVersions } from '@ledge/ui/semver';
 import type { MobileService } from './service.js';
 import type { ChatThreads, ChatThreadId } from '../chat/threads.js';
@@ -18,6 +19,7 @@ import { createOutbox } from './outbox.js';
 import { fingerprint, OperationRegistry, type Outcome, type PhoneOperation } from './operations.js';
 import { createTeamsOps } from './teamsOps.js';
 import { capabilities, clip, phoneTasks, toPhoneFullRequest, toPhoneItem, toPhoneSession, toPhoneTask, toPhoneTeam, toPhoneThread } from './project.js';
+import { checklistSummary, toPhoneChecklist } from './project.js';
 import { riskOf } from './risk.js';
 import { CHALLENGE_TTL_MS, type ChallengeStore } from './challenges.js';
 import { challengeOf, verifyAssertion, verifyRegistration, type DeviceCredential, type Rp } from './webauthn.js';
@@ -152,7 +154,18 @@ export function createPhoneGateway(deps: {
     const s = deps.session(id);
     return s && !isArchived(s) ? s : undefined;
   };
-  const projected = (deviceId: string, s: Session) => toPhoneSession(s, followers.get(deviceId)?.reads.get(s.id) ?? startedAt);
+  /** Each session's checklist from its main thread, computed when first asked and kept while a device follows. */
+  const checklists = new Map<string, { list: PhoneChecklist | null; summary: PhoneChecklistSummary | undefined }>();
+  const computeChecklist = (id: string) => {
+    const todos = latestTodos(deps.thread(id) ?? []);
+    return { list: toPhoneChecklist(todos), summary: checklistSummary(todos) };
+  };
+  const checklistOf = (id: string) => {
+    let c = checklists.get(id);
+    if (!c) checklists.set(id, c = computeChecklist(id));
+    return c;
+  };
+  const projected = (deviceId: string, s: Session) => toPhoneSession(s, followers.get(deviceId)?.reads.get(s.id) ?? startedAt, checklistOf(s.id).summary);
   const pushStatus = (deviceId: string): PushStatus => {
     const key = mobile.relayPushKey();
     if (key === null) return 'unavailable';
@@ -165,7 +178,7 @@ export function createPhoneGateway(deps: {
     const f = followers.get(deviceId);
     if (f) f.pushStatus = push;
     return {
-    type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, boot: deps.boot, name: clip(hostname(), 40).text, ...(teamsOps ? { teams: true as const } : {}), ...(deps.pc?.canUpdate ? { update: true as const } : {}), ...(deps.pc?.canRestart ? { restart: true as const } : {}) },
+    type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, boot: deps.boot, name: clip(hostname(), 40).text, ...(teamsOps ? { teams: true as const } : {}), ...(deps.pc?.canUpdate ? { update: true as const } : {}), ...(deps.pc?.canRestart ? { restart: true as const } : {}), checklist: true as const },
     device: { confirm: deps.credential(deviceId) !== null, push, ...(deps.chats ? { chat: true as const } : {}), ...(deps.contextNear ? { contextNear: deps.contextNear() } : {}) }
     };
   };
@@ -629,7 +642,8 @@ export function createPhoneGateway(deps: {
         return teamsAndTasks(deviceId);
       case 'session.thread': {
         if (!live(msg.id)) return push(deviceId, { type: 'error', code: 'unknown_session', request: msg.type });
-        return push(deviceId, { type: 'session.thread', id: msg.id, ...toPhoneThread(deps.thread(msg.id) ?? []) });
+        push(deviceId, { type: 'session.thread', id: msg.id, ...toPhoneThread(deps.thread(msg.id) ?? []) });
+        return push(deviceId, { type: 'session.checklist', id: msg.id, checklist: checklistOf(msg.id).list }, `session.checklist:${msg.id}`);
       }
       case 'session.pending': {
         const session = live(msg.id);
@@ -763,10 +777,26 @@ export function createPhoneGateway(deps: {
 
   /** A session gone for the phone (removed or archived): its read mark and watch go with it. */
   const removed = (id: string) => {
+    checklists.delete(id);
     for (const [deviceId, f] of followers) {
       f.reads.delete(id);
       if (f.watching === id) f.watching = null;
       if (f.subscribed) push(deviceId, { type: 'session.removed', id });
+    }
+  };
+
+  /** A main-thread checklist update, already in the thread: its watchers get the new list, the followers the session when its summary moved. */
+  const checklistChanged = (id: string, item: ThreadItem) => {
+    if (item.kind !== 'tool' || item.helperId !== undefined || !TODO_TOOLS.has(item.tool) || !checklists.has(id)) return;
+    const before = checklists.get(id)!;
+    const now = computeChecklist(id);
+    checklists.set(id, now);
+    if (JSON.stringify(now.list) !== JSON.stringify(before.list)) {
+      for (const [deviceId, f] of followers) if (f.watching === id) push(deviceId, { type: 'session.checklist', id, checklist: now.list }, `session.checklist:${id}`);
+    }
+    const s = live(id);
+    if (s && JSON.stringify(now.summary) !== JSON.stringify(before.summary)) {
+      for (const [deviceId, f] of followers) if (f.subscribed) push(deviceId, { type: 'session.updated', session: projected(deviceId, s) }, `session.updated:${id}`);
     }
   };
 
@@ -775,7 +805,9 @@ export function createPhoneGateway(deps: {
 
   return {
     forward(m) {
-      if (stopped || followers.size === 0) return;
+      if (stopped) return;
+      // Nothing is kept for nobody: a device that comes back gets the checklists computed afresh.
+      if (followers.size === 0) { checklists.clear(); return; }
       try {
         switch (m.type) {
           case 'session.updated':
@@ -816,6 +848,7 @@ export function createPhoneGateway(deps: {
             }
             return;
           case 'session.thread.item': {
+            checklistChanged(m.id, m.item);
             const watchers = [...followers].filter(([, f]) => f.watching === m.id);
             if (watchers.length === 0) return;
             const { item, cut } = toPhoneItem(m.item);
