@@ -2214,6 +2214,8 @@ describe('phone gateway: a session\'s model (#58)', () => {
     g.gw.forward({ type: 'error', id: 'b', message: 'x', request: 'session.reply', code: 'restart_failed' });
     g.gw.forward({ type: 'error', id: 'b', message: 'x', request: 'session.model', code: 'busy' });
     g.gw.forward({ type: 'error', message: 'x', request: 'session.model', code: 'ended' });
+    // A session the phone cannot see (unknown, or archived): nothing.
+    g.gw.forward({ type: 'error', id: 'nope', message: 'x', request: 'session.model', code: 'restart_failed' });
     await flush();
     const after = g.got('dev1').slice(before);
     expect(after).toEqual([{ type: 'session.model.failed', id: 'b', reason: 'restart_failed' }]);
@@ -2221,6 +2223,51 @@ describe('phone gateway: a session\'s model (#58)', () => {
     expect(JSON.stringify(g.fm.sent)).not.toContain('SECRET');
     // A device that follows no session hears nothing.
     expect(g.got('dev2')).toEqual([]);
+  });
+
+  it('a late failure while no phone follows is replayed after the snapshot of the next subscribe', async () => {
+    const g = setup({ deps: { models: true }, dispatch: daemon({ answer: m => [{ type: 'session.model.accepted', id: m.id, when: 'turn' }] }) });
+    const fail = (id: string): ServerMessage => ({ type: 'error', id, message: 'could not restart', request: 'session.model', code: 'restart_failed' });
+    // The phone locked: nobody follows the sessions when the change fails at the end of the turn.
+    g.gw.forward(fail('b'));
+    g.gw.forward(fail('c'));
+    // A failure for a session the phone cannot see is neither pushed nor kept.
+    g.gw.forward(fail('nope'));
+    // The update that drops `modelNext` (model and effort unchanged) keeps it; `c` is removed and its failure goes with it.
+    g.gw.forward({ type: 'session.updated', session: mk('b', { state: 'idle' }) });
+    g.gw.forward({ type: 'session.removed', id: 'c' });
+    g.sessions.delete('c');
+    g.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    const got = g.got('dev1');
+    expect(got[0]?.type).toBe('snapshot');
+    expect(got.filter(m => m.type === 'session.model.failed')).toEqual([{ type: 'session.model.failed', id: 'b', reason: 'restart_failed' }]);
+    expect(got.findIndex(m => m.type === 'session.model.failed')).toBeGreaterThan(0);
+    // A new change accepted for the session: a later subscribe does not hear the old failure again.
+    g.send('dev1', change('b'));
+    await flush();
+    g.send('dev2', { type: 'snapshot.request' });
+    await flush();
+    expect(g.got('dev2').filter(m => m.type === 'session.model.failed')).toEqual([]);
+  });
+
+  it('a kept failure goes when the session\'s model or effort changes', async () => {
+    const g = setup({ deps: { models: true } });
+    const fail = (id: string): ServerMessage => ({ type: 'error', id, message: 'x', request: 'session.model', code: 'refused' });
+    g.gw.forward(fail('b'));
+    g.gw.forward(fail('c'));
+    g.gw.forward({ type: 'session.updated', session: mk('b', { model: 'sonnet' }) });
+    g.gw.forward({ type: 'session.updated', session: mk('c', { effort: 'low' }) });
+    g.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    expect(g.got('dev1').filter(m => m.type === 'session.model.failed')).toEqual([]);
+    // Archived: gone for the phone, and so is its failure.
+    g.gw.forward(fail('a'));
+    g.gw.forward({ type: 'session.updated', session: mk('a', { archivedAt: T1 }) });
+    g.sessions.set('a', mk('a', { archivedAt: T1 }));
+    g.send('dev2', { type: 'snapshot.request' });
+    await flush();
+    expect(g.got('dev2').filter(m => m.type === 'session.model.failed')).toEqual([]);
   });
 
   it('a replayed session.model op is not dispatched twice', async () => {

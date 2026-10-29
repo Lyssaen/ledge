@@ -7,7 +7,7 @@ import {
   ATTACHMENT_MAX, TEAMS_OPERATION_TYPES, isTeamsOperation, OperationIdSchema, PHONE_PROTOCOL, actionById, TOOL_TEXT_MAX, proposalRows, PhoneClientMessageSchema, pushEndpointAllowed, RefusalCodeSchema, UNTYPABLE, backendOf, isArchived, pendingKey,
   LEDGE_GIVER, SEMVER, pcSubject, type AttachmentRef, type ChatErrorCode, type ChatTurn, type CloseHow, type ClientMessage, type PhoneTask, type Task, type Team, type OperationReason, type OperationStatus, type PhoneClientMessage, type PhoneServerMessage, type ServerMessage, type Session, type ThreadItem
 } from '@ledge/protocol';
-import { ModelRefusalSchema, type PhoneSeatModel, type Tool } from '@ledge/protocol';
+import { ModelRefusalSchema, type ModelRefusal, type PhoneSeatModel, type Tool } from '@ledge/protocol';
 import { compareVersions } from '@ledge/ui/semver';
 import type { MobileService } from './service.js';
 import type { ChatThreads, ChatThreadId } from '../chat/threads.js';
@@ -116,6 +116,11 @@ export function createPhoneGateway(deps: {
   const registry = new OperationRegistry();
   const followers = new Map<string, Follower>();
   let stopped = false;
+  /**
+   * The last model change that failed once applied, by session (#58), with the model and effort it then ran: a phone that did not
+   * follow when it failed (locked) hears it after its next snapshot. Gone with a new change accepted, a new model or effort, the session.
+   */
+  const modelFailures = new Map<string, { reason: ModelRefusal; model: string | undefined; effort: string | undefined }>();
 
   const follower = (deviceId: string): Follower => {
     let f = followers.get(deviceId);
@@ -201,6 +206,23 @@ export function createPhoneGateway(deps: {
   });
 
   const push = (deviceId: string, msg: PhoneServerMessage, key?: string) => { if (!stopped) outbox.push(deviceId, msg, key); };
+  /** After a snapshot: the kept model failures of the sessions still there. */
+  const replayModelFailures = (deviceId: string) => {
+    for (const [id, f] of modelFailures) if (live(id)) push(deviceId, { type: 'session.model.failed', id, reason: f.reason });
+  };
+  /** What the daemon says that keeps or drops a model failure, followed or not. */
+  const keepModelFailure = (m: ServerMessage) => {
+    if (m.type === 'session.removed') { modelFailures.delete(m.id); return; }
+    if (m.type === 'session.updated') {
+      const f = modelFailures.get(m.session.id);
+      if (f && (isArchived(m.session) || f.model !== m.session.model || f.effort !== m.session.effort)) modelFailures.delete(m.session.id);
+      return;
+    }
+    if (m.type !== 'error' || m.request !== 'session.model' || m.id === undefined) return;
+    const reason = ModelRefusalSchema.safeParse(m.code);
+    const s = live(m.id);
+    if (reason.success && s) modelFailures.set(m.id, { reason: reason.data, model: s.model, effort: s.effort });
+  };
   const result = (deviceId: string, op: string, status: OperationStatus, reason?: OperationReason, models?: PhoneSeatModel[]) => {
     // A device revoked while its operation ran hears nothing more.
     if (stopped || !approved(deviceId)) return;
@@ -454,6 +476,8 @@ export function createPhoneGateway(deps: {
       if (m.type === 'session.model.accepted' && m.id === out.id) when ??= m.when;
       if (m.type === 'error' && m.request === 'session.model' && (m.id === undefined || m.id === out.id)) refusal ??= { code: m.code };
     });
+    // A new change accepted answers the last failure.
+    if (when) modelFailures.delete(out.id);
     if (when) return when === 'turn' ? { status: 'applied', reason: 'scheduled' } : { status: 'applied' };
     const model = ModelRefusalSchema.safeParse(refusal?.code);
     if (model.success) return { status: 'rejected', reason: model.data };
@@ -681,6 +705,7 @@ export function createPhoneGateway(deps: {
       case 'snapshot.request':
         follower(deviceId).subscribed = true;
         push(deviceId, snapshot(deviceId), 'snapshot');
+        replayModelFailures(deviceId);
         return teamsAndTasks(deviceId);
       case 'session.thread': {
         if (!live(msg.id)) return push(deviceId, { type: 'error', code: 'unknown_session', request: msg.type });
@@ -830,6 +855,7 @@ export function createPhoneGateway(deps: {
 
   return {
     forward(m) {
+      if (!stopped) try { keepModelFailure(m); } catch (e) { log(`phone model failure of ${m.type} failed (${e instanceof Error ? e.name : 'error'})`); }
       if (stopped || followers.size === 0) return;
       try {
         switch (m.type) {
@@ -844,7 +870,7 @@ export function createPhoneGateway(deps: {
           case 'error': {
             // A model change accepted, then failed once applied (#58): its code, never the daemon's text, to whoever follows the sessions.
             const reason = ModelRefusalSchema.safeParse(m.code);
-            if (m.request !== 'session.model' || m.id === undefined || !reason.success) return;
+            if (m.request !== 'session.model' || m.id === undefined || !reason.success || !live(m.id)) return;
             for (const [deviceId, f] of followers) if (f.subscribed) push(deviceId, { type: 'session.model.failed', id: m.id, reason: reason.data });
             return;
           }
