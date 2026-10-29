@@ -90,7 +90,8 @@ Anti-goals:
 - **Shared parser** lives in `packages/protocol` (it already holds the thread types the parser reads), as plain functions
   beside the schemas.
 - **Which checklist.** The main thread's, never a subagent's. The latest update wins; an empty one means no checklist.
-  Without history (or until the first update after a daemon restart), no checklist. Several tasks in progress: the row
+  Without history, no checklist; after a daemon restart, the checklist comes back from the session's logged history.
+  Several tasks in progress: the row
   shows the first. OMP's blocked tasks count as not done, their blocker in the full list.
 - **Push rate.** The summary is pushed with the session only when it changes (done, total, or current task), not per
   thread item.

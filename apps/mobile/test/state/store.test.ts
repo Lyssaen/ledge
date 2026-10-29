@@ -643,6 +643,19 @@ describe('the store, device confirmation', () => {
     t.store.decide('a', 'accept');
     expect(t.of('session.decide')[0]).not.toHaveProperty('assertion');
   });
+
+  it('session.checklist fills the checklist of a session, null keeps an entry, session.removed drops it', () => {
+    const t = setup();
+    t.deliver(snapshot([session('a')]));
+    const checklist = { tasks: [{ text: 'Écrire', status: 'in_progress' as const }], done: 0, total: 1 };
+    t.deliver({ type: 'session.checklist', id: 'a', checklist });
+    expect(t.state().checklists.get('a')).toEqual(checklist);
+    t.deliver({ type: 'session.checklist', id: 'a', checklist: null });
+    expect(t.state().checklists.has('a')).toBe(true);
+    expect(t.state().checklists.get('a')).toBeNull();
+    t.deliver({ type: 'session.removed', id: 'a' });
+    expect(t.state().checklists.has('a')).toBe(false);
+  });
 });
 
 describe('models and model changes', () => {

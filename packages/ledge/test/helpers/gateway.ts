@@ -114,7 +114,7 @@ export function setup(opts: { boot?: string; dispatch?: (msg: ClientMessage, rep
   const got = (deviceId: string): PhoneServerMessage[] => fm.sent.filter(([d]) => d === deviceId).map(([, t]) => JSON.parse(t) as PhoneServerMessage);
   const results = (deviceId: string) => got(deviceId).filter(m => m.type === 'operation.result');
   const send = (deviceId: string, m: unknown) => fm.receive(deviceId, typeof m === 'string' ? m : JSON.stringify(m));
-  return { fm, gw, sessions, dispatched, logs, got, results, send, clock, creds, stored, attachments };
+  return { fm, gw, sessions, threads, dispatched, logs, got, results, send, clock, creds, stored, attachments };
 }
 
 export const decide = (id: string, decision: 'accept' | 'deny' | 'always', pending: Session['pending'] & object, extra: { key?: string; op?: string } = {}) => ({

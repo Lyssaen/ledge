@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useState, type JSX, type ReactNode } from 'react';
-import type { ToolItem } from '@ledge/protocol';
+import { type ToolItem, doneCount, todosOf } from '@ledge/protocol';
 import { Badge } from '@ledge/ui/ui/Badge';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { elapsedMs, SPINNER, SPINNER_STILL, target } from '@ledge/ui/thread/tools';
@@ -10,7 +10,6 @@ import { SHELL_ICONS } from '../shell/icons';
 import { parseDiff } from './diff';
 import { Delta } from './DiffView';
 import { fmtDur, kindOf, summarize, verbOf, type Summary as Sum, type ToolKind } from './exchanges';
-import { doneCount, todosOf } from './todos';
 
 const KINDS: readonly ToolKind[] = ['read', 'search', 'command', 'edit'];
 export const KIND_ICON: Record<ToolKind, readonly string[]> = { read: SHELL_ICONS.file, search: SHELL_ICONS.search, command: SHELL_ICONS.terminal, edit: SHELL_ICONS.pencil };

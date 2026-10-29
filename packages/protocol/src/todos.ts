@@ -1,4 +1,4 @@
-import type { ThreadItem, ToolItem } from '@ledge/protocol';
+import type { ThreadItem, ToolItem } from './thread.js';
 
 export type TodoStatus = 'pending' | 'in_progress' | 'completed';
 export interface Todo { text: string; status: TodoStatus }

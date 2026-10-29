@@ -1,8 +1,7 @@
 import { expect, it } from 'vitest';
-import type { ToolItem } from '@ledge/protocol';
+import { type ToolItem, latestTodos, todosOf } from '@ledge/protocol';
 import { T0 } from '@ledge/fleet/test/mockDaemon';
 import { exchanges, summarize } from '../src/session/exchanges';
-import { latestTodos, todosOf } from '../src/session/todos';
 
 const todo = (id: string, todos: unknown, tool = 'TodoWrite'): ToolItem => ({ kind: 'tool', id, at: T0, turn: 1, tool, label: tool, input: JSON.stringify(todos, null, 2), status: 'success', files: [] });
 const v1 = todo('d1', { todos: [{ content: 'Lire', status: 'completed', activeForm: 'Lecture' }, { content: 'Écrire', status: 'in_progress', activeForm: 'Écriture des tests' }, { content: 'Publier', status: 'pending', activeForm: 'Publication' }] });

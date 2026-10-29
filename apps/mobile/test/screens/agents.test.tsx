@@ -76,4 +76,40 @@ describe('the agents', () => {
       expect(screen.queryByRole('link', { name: /ledge-roles/ })).toBeNull();
     });
   });
+
+  describe('the progress of a checklist', () => {
+    const withPlan = () => snapshot([
+      session('a', { name: 'Kai', topic: 'Inbox', checklist: { done: 3, total: 7, current: 'Ajout du test' } }),
+      session('b', { name: 'Ada', topic: 'Relais', checklist: { done: 7, total: 7 } }),
+      session('c', { name: 'Zoé', topic: 'Tests' })
+    ]);
+    const deliver = (flag: boolean) => {
+      const t = setup();
+      const m = withPlan();
+      if (m.type === 'snapshot' && flag) m.daemon = { ...m.daemon, checklist: true };
+      t.deliver(m);
+      render(<Agents store={t.store} />);
+    };
+
+    it('shows done/total, its label and the current task when the PC sends checklists', () => {
+      deliver(true);
+      expect(screen.getByText('3/7')).toBeInTheDocument();
+      expect(screen.getByLabelText('3 sur 7 tâches faites')).toBeInTheDocument();
+      expect(screen.getByText('Ajout du test')).toBeInTheDocument();
+    });
+
+    it('all done: 7/7 and no current line; no checklist: nothing', () => {
+      deliver(true);
+      expect(screen.getByText('7/7')).toBeInTheDocument();
+      expect(screen.getAllByLabelText(/tâches faites/)).toHaveLength(2);
+      expect(screen.getAllByText(/\d\/\d/)).toHaveLength(2);
+    });
+
+    it('shows nothing from a PC without the flag', () => {
+      deliver(false);
+      expect(screen.queryByText('3/7')).toBeNull();
+      expect(screen.queryByLabelText(/tâches faites/)).toBeNull();
+      expect(screen.queryByText('Ajout du test')).toBeNull();
+    });
+  });
 });

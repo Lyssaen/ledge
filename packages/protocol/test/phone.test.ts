@@ -367,3 +367,31 @@ describe('phone model change', () => {
     expect(() => PhoneServerMessageSchema.parse({ type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: [], capabilities: { claude: caps, codex: caps, cursor: caps, omp: caps }, daemon: { version: '1.0.0', name: 'pc', models: true } })).not.toThrow();
   });
 });
+
+describe('phone checklist', () => {
+  const full = SessionSchema.parse({
+    id: 's1', name: 'bot', tool: 'claude', cwd: '/home/x', project: 'p', title: 't', repoPath: '/home/x/r', workdir: '/home/x/w',
+    tmuxSession: 'ledge-s1', state: 'idle', startedAt: '2026-10-20T10:00:00.000Z', lastActivityAt: '2026-10-20T10:00:00.000Z', source: 'launcher', machineId: 'm'
+  });
+  const cap = { freeTextAnswer: true };
+  const snap = { type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: [], capabilities: { claude: cap, codex: cap, cursor: cap, omp: cap }, daemon: { version: '1.0.0', name: 'pc' } };
+  it('keeps the summary on a session, and accepts a session without one', () => {
+    const checklist = { done: 2, total: 5, current: 'Write the test' };
+    expect(PhoneSessionSchema.parse({ ...full, unread: false, checklist }).checklist).toEqual(checklist);
+    expect(PhoneSessionSchema.parse({ ...full, unread: false })).not.toHaveProperty('checklist');
+  });
+  it('bounds the summary text', () => {
+    expect(() => PhoneSessionSchema.parse({ ...full, unread: false, checklist: { done: 0, total: 1, current: 'x'.repeat(201) } })).toThrow();
+  });
+  it('sends the list, or null when there is none', () => {
+    expect(() => PhoneServerMessageSchema.parse({ type: 'session.checklist', id: 'a', checklist: null })).not.toThrow();
+    expect(() => PhoneServerMessageSchema.parse({ type: 'session.checklist', id: 'a', checklist: { tasks: [{ text: 'a', status: 'in_progress' }], done: 0, total: 1 } })).not.toThrow();
+    const tasks = Array.from({ length: 51 }, () => ({ text: 'a', status: 'pending' }));
+    expect(() => PhoneServerMessageSchema.parse({ type: 'session.checklist', id: 'a', checklist: { tasks, done: 0, total: 51 } })).toThrow();
+  });
+  it('announces the capability in the snapshot, optionally', () => {
+    expect(PhoneServerMessageSchema.parse({ ...snap, daemon: { version: '1.0.0', name: 'pc', checklist: true } })).toMatchObject({ daemon: { checklist: true } });
+    expect(PhoneServerMessageSchema.parse(snap)).not.toHaveProperty('daemon.checklist');
+    expect(() => PhoneServerMessageSchema.parse({ ...snap, daemon: { version: '1.0.0', name: 'pc', checklist: false } })).toThrow();
+  });
+});
