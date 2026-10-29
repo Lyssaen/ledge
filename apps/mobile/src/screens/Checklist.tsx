@@ -5,8 +5,8 @@ import { Icon } from '../ui/icons';
 
 const BOX = 'mt-px inline-flex size-4 flex-none items-center justify-center rounded-[4px] border';
 
-/** An agent's checklist: folded to its progress and current task, unfolded to every task. */
-/** `current` is the gateway's current task over the whole list, for when the capped `tasks` hold none in progress. */
+/** An agent's checklist: folded to its progress and current task, unfolded to every task.
+ *  `current` is the gateway's current task over the whole list, for when the capped `tasks` hold none in progress. */
 export function Checklist({ checklist, current: whole }: { checklist: PhoneChecklist; current?: string }) {
   const [open, setOpen] = useState(false);
   const { tasks, done, total } = checklist;
