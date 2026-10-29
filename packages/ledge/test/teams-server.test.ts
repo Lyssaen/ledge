@@ -370,6 +370,70 @@ describe('live composition', () => {
     await c.close();
   });
 
+  it('compose applies a held seat\'s new model to its session', async () => {
+    await start();
+    const c = await client();
+    const team = await launched(c, [{ role: 'lead' }, { role: 'build' }]);
+    const build = sid(team, 'build');
+    edit(build, { state: 'idle', agentSessionId: 'u-1' });
+    const before = tmux.created.length;
+    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'lead' }, { role: 'build', model: 'sonnet' }] });
+    const changed = await c.next('team.changed', 5000);
+    expect(changed.reason).toBeUndefined();
+    expect(changed.models).toEqual([{ role: 'build', session: build, when: 'now' }]);
+    await until(() => tmux.created.length === before + 1);
+    expect(tmux.created.at(-1)!.command).toEqual(expect.arrayContaining(['--resume', 'u-1', '--model', 'sonnet']));
+    await until(() => store.get(build)?.model === 'sonnet');
+    await c.close();
+  });
+
+  it('compose on a free seat sends no model change', async () => {
+    await start(o => o.env.LEDGE_ROLE === 'review');
+    const c = await client();
+    const team = await launched(c, [{ role: 'build' }]);
+    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'build' }, { role: 'review' }] });
+    expect((await c.next('team.changed', 5000)).reason).toContain('@review');
+    c.send({ type: 'team.compose', rid: 'c2', team: team.id, seats: [{ role: 'build' }, { role: 'review', model: 'o3' }] });
+    const changed = await c.next('team.changed', 5000);
+    expect(changed).toMatchObject({ rid: 'c2', team: { seats: [{ role: 'build' }, { role: 'review', model: 'o3', sessionId: null }] } });
+    expect(changed.models).toBeUndefined();
+    await c.close();
+  });
+
+  it('compose on a seat held by a hook_only session reports not_launched', async () => {
+    await start();
+    const c = await client();
+    const team = await launched(c, [{ role: 'lead' }, { role: 'build' }]);
+    const build = sid(team, 'build');
+    edit(build, { state: 'idle', agentSessionId: 'u-1', source: 'hook_only' });
+    const before = tmux.created.length;
+    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'lead' }, { role: 'build', model: 'sonnet' }] });
+    const changed = await c.next('team.changed', 5000);
+    expect(changed.reason).toBeUndefined();
+    expect(changed.models).toEqual([{ role: 'build', session: build, code: 'not_launched' }]);
+    // The save stands: the seat carries its new model, the session is left as it is.
+    expect(changed.team!.seats.find(s => s.role === 'build')).toMatchObject({ model: 'sonnet', sessionId: build });
+    expect(tmux.created).toHaveLength(before);
+    expect(store.get(build)?.modelNext).toBeUndefined();
+    await c.close();
+  });
+
+  it('compose changing a held seat\'s tool reports nothing', async () => {
+    await start();
+    const c = await client();
+    const team = await launched(c, [{ role: 'lead' }, { role: 'build' }]);
+    const build = sid(team, 'build');
+    edit(build, { state: 'idle', agentSessionId: 'u-1' });
+    const before = tmux.created.length;
+    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'lead' }, { role: 'build', tool: 'codex', model: 'o3' }] });
+    const changed = await c.next('team.changed', 5000);
+    expect(changed.models).toBeUndefined();
+    await new Promise(r => setTimeout(r, 200));
+    expect(tmux.created).toHaveLength(before);
+    expect(store.get(build)?.modelNext).toBeUndefined();
+    await c.close();
+  });
+
   it('team.resume resumes a seat with the seat’s model override; a seat whose tool changed is not resumed', async () => {
     await start();
     const c = await client();

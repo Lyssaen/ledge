@@ -178,6 +178,17 @@ describe('server: OMP sessions', () => {
     expect(store.get(id)).toMatchObject({ model: 'openai-codex/gpt-6.1-sol' });
     await c.close();
   });
+  it('a refused set_model broadcasts code refused', async () => {
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.launch', tool: 'omp', cwd: dir, model: 'anthropic/claude-opus-5-5' });
+    const { id } = await c.next('session.launched');
+    await until(() => store.get(id)!.state === 'idle');
+    c.send({ type: 'session.model', id, model: 'anthropic/nope', effort: null });
+    expect(await c.next('session.model.accepted')).toEqual({ type: 'session.model.accepted', id, when: 'now' });
+    expect(await c.next('error')).toMatchObject({ type: 'error', id, request: 'session.model', code: 'refused' });
+    expect(store.get(id)!.modelNext).toBeUndefined();
+    await c.close();
+  });
   it('asked while OMP works, the change waits for its free moment (modelNext) and is then applied', async () => {
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'session.launch', tool: 'omp', cwd: dir, prompt: 'slow work', model: 'anthropic/claude-opus-5-5' });
