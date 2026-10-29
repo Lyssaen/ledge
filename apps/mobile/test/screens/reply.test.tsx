@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { MESSAGE_MAX } from '@ledge/protocol';
+import { MESSAGE_MAX, type PhoneServerMessage } from '@ledge/protocol';
 import { describe, expect, it } from 'vitest';
 import { Thread } from '../../src/screens/Thread';
 import { session } from '../model/fixtures';
@@ -49,5 +49,18 @@ describe('an instruction from the phone', () => {
     fireEvent.change(field, { target: { value: 'Lance les tests' } });
     expect(fireEvent.keyDown(field, { key: 'Enter' })).toBe(false);
     expect(t.of('session.reply')).toMatchObject([{ text: 'Lance les tests' }]);
+  });
+});
+
+describe('the model chip in the quick row', () => {
+  it('sits before the first quick reply', () => {
+    const t = setup();
+    const sn = snapshot([session('a', { name: 'Kai', model: 'opus', canSwitch: true })]) as Extract<PhoneServerMessage, { type: 'snapshot' }>;
+    t.deliver({ ...sn, daemon: { ...sn.daemon!, models: true } });
+    render(<Thread store={t.store} sessionId="a" storage={t.storage} />);
+    act(() => t.deliver({ type: 'session.thread', id: 'a', items: [], cut: [], more: false }));
+    const row = screen.getByRole('group', { name: 'Consignes rapides' });
+    expect(row.firstElementChild).toBe(screen.getByRole('button', { name: /Modèle et effort :/ }));
+    expect(row.children.length).toBeGreaterThan(1);
   });
 });

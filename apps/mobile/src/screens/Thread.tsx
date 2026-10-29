@@ -15,6 +15,7 @@ import { ReplyView } from '../ui/ReplyView';
 import { PhoneThumbs } from '../ui/PhoneThumbs';
 import { useAttachments } from '../ui/useAttachments';
 import { Reply, replyFailure, replyProblem } from './Reply';
+import { SessionModelChip, SessionModelNote } from './SessionModel';
 import { buttonClass, iconButtonClass } from '../ui/Button';
 import { Icon } from '../ui/icons';
 
@@ -182,7 +183,8 @@ export function Thread({ store, sessionId, storage, onReconnect }: { store: Mobi
         {ready && items.length === 0 && <p className="text-center text-meta text-muted">{copy.thread.empty}</p>}
         {items.map(it => <Bubble key={it.key} item={it} store={store} />)}
       </main>
-      <Reply name={session.name} composer={composer} draft={draft} onDraft={changeDraft} onSend={send} fresh={fresh} taken={takenNow} checking={last?.phase === 'uncertain' && fresh} error={error} onReconnect={onReconnect} images={images} dialog={dialog} />
+      <Reply name={session.name} composer={composer} draft={draft} onDraft={changeDraft} onSend={send} fresh={fresh} taken={takenNow} checking={last?.phase === 'uncertain' && fresh} error={error} onReconnect={onReconnect} images={images} dialog={dialog}
+        lead={<SessionModelChip store={store} session={session} />} leadNote={<SessionModelNote store={store} session={session} />} />
     </>
   );
 }

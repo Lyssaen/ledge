@@ -215,6 +215,33 @@ export const copy = {
   /** A request's badge: the desktop's words for what waits on the user. */
   kind: { permission: 'Votre accord', question: 'Une question', plan: 'Plan', diff: 'Modification' },
   tools: { claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor Agent', omp: 'OMP' },
+  /** Changing a live session's model and effort (the chip above the reply field and its sheet). */
+  model: {
+    title: 'Modèle et effort',
+    subtitle: (tool: string) => `Les modèles de ${tool} connus du PC`,
+    byDefault: 'Par défaut',
+    defaultHint: "Celui que l'agent prend de lui-même",
+    current: 'actuel',
+    effortTitle: 'Effort',
+    effortHint: 'Temps de réflexion par tour',
+    noteIdle: (name: string) => `${name} redémarre sur la même conversation et garde son contexte.`,
+    noteWorking: (name: string) => `${name} travaille : le changement attendra la fin de son tour.`,
+    apply: 'Appliquer',
+    cancel: 'Annuler',
+    cancelPending: 'Annuler le changement',
+    nextTurn: 'au prochain tour',
+    listError: 'Liste des modèles indisponible',
+    applied: 'Appliqué',
+    scheduled: 'Appliqué au prochain tour',
+    notApplied: 'Changement de modèle non appliqué',
+    failed: {
+      not_launched: 'pas lancé par Ledge', ended: 'session terminée', no_conversation: 'aucune conversation à reprendre',
+      not_running: "l'agent ne tourne pas", effort_in_model: "cet outil prend l'effort dans le modèle",
+      restart_failed: 'le redémarrage a échoué', refused: "refusé par l'outil"
+    },
+    failedLine: (reason: string) => `Changement de modèle non appliqué : ${reason}`,
+    chip: (what: string) => `Modèle et effort : ${what}`
+  },
   detail: {
     back: 'Retour aux demandes',
     heading: { permission: 'Une autorisation', question: 'Une question', plan: 'Un plan', diff: 'Des modifications' },
