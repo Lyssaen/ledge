@@ -272,3 +272,15 @@ describe('push operations are never persisted', () => {
     store.close();
   });
 });
+
+describe('a session.model operation', () => {
+  const modelOp = (n: number): Op => ({ op: uuid(n), phase: 'uncertain', at: at(n), message: { type: 'session.model', op: uuid(n), id: 'a', model: 'opus', effort: null } });
+  it('a session.model op is not replayed after reload', () => {
+    const storage = new MemoryStorage();
+    saveOps(byId(modelOp(1), replyOp(2, 'uncertain')), storage);
+    expect(Object.keys(loadOps(storage))).toEqual([uuid(2)]);
+  });
+  it('a second one on the same session is new', () => {
+    expect(isNew(byId(modelOp(1)), modelOp(2).message, null)).toBe(true);
+  });
+});

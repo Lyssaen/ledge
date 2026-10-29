@@ -1,6 +1,6 @@
 // The phone's own operations (a decision, a reply, an interrupt): each named by a uuid it made, so sending it again
 // after a lost connection is recognised by the PC, which replays the result it already gave.
-import { OperationReasonSchema, PhoneClientMessageSchema, isTeamsOperation, type OperationReason, type PhoneClientMessage } from '@ledge/protocol';
+import { OperationReasonSchema, PhoneClientMessageSchema, isTeamsOperation, type OperationReason, type PhoneClientMessage, type PhoneSeatModel } from '@ledge/protocol';
 import { z } from 'zod';
 import { localStore } from './storage';
 
@@ -19,6 +19,8 @@ export interface Op {
   message: OpMessage;
   phase: OpPhase;
   reason?: OperationReason;
+  /** What a composition did to each seat's model, from the PC's result. */
+  models?: PhoneSeatModel[];
   /** When the phone first sent it. */
   at: string;
   /** The PC said `received` (or a final status): it may have applied the op. Absent on an op that never got that far. */
@@ -37,11 +39,12 @@ export const UNCERTAIN_MS = 10_000;
  * Operations that stay in this page's memory. Push changes: replayed after a reload they could undo a later choice, and
  * they carry the endpoint (a secret). A chat relay, launch or close: after a reload nothing leaves without a new gesture.
  * A role, template or live-team operation too: it carries a passkey assertion and a role's prompt. An update or a restart of
- * the PC's daemon: it carries an assertion, and a gesture made before a reload is not repeated after it.
+ * the PC's daemon: it carries an assertion, and a gesture made before a reload is not repeated after it. A model change too: a choice
+ * made before a reload is not applied after it, on a session that may have moved on.
  */
 const isVolatile = (m: { type: string }) => m.type === 'push.subscribe' || m.type === 'push.unsubscribe' || m.type === 'chat.relay' || m.type === 'chat.launch' || m.type === 'chat.close'
   || m.type === 'chat.team' || m.type === 'chat.task' || m.type === 'team.resume' || m.type === 'task.seen' || isTeamsOperation(m)
-  || m.type === 'daemon.update' || m.type === 'daemon.restart';
+  || m.type === 'daemon.update' || m.type === 'daemon.restart' || m.type === 'session.model';
 
 export const isLive = (p: OpPhase) => p === 'sending' || p === 'uncertain';
 
@@ -90,6 +93,8 @@ export function isNew(ops: Record<string, Op>, m: OpMessage, boot: string | null
   // A role, template or team operation names its target by `id`/`team`, not a session: a second one on the same target is a new, deliberate
   // edit (the PC's `base` hash refuses it when stale), never a repeat of the first.
   if (isTeamsOperation(m)) return true;
+  // A model change is a deliberate choice: a second one on the session replaces the first (the PC keeps the latest), it never repeats it.
+  if (m.type === 'session.model') return true;
   // A registration or a push change names no session: only its own op id dedupes it (a new attempt is a new op).
   if (!('id' in m)) return true;
   const key = expectKey(m);

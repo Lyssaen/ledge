@@ -1,6 +1,6 @@
 // The phone's chat with Ledge, as the store keeps it: the turns the PC sent, the question being answered, and why the
 // last one failed. Pure reducers: the store sends, these only say what each message of the PC changes.
-import type { ChatErrorCode, OperationReason, PhoneChatStep, PhoneChatTurn, PhoneServerMessage } from '@ledge/protocol';
+import type { ChatErrorCode, OperationReason, PhoneChatStep, PhoneSeatModel, PhoneChatTurn, PhoneServerMessage } from '@ledge/protocol';
 
 export interface ChatState {
   turns: PhoneChatTurn[];
@@ -13,8 +13,8 @@ export interface ChatState {
 /** What a relay or a launch came to, once its operation is final. */
 export type ChatAction =
   | { status: 'failed' }
-  /** `warn`: a composition saved whose added seat did not start. */
-  | { status: 'applied'; warn?: 'seat_failed' }
+  /** `warn`: a composition saved whose added seat did not start. `scheduled`: a model change that waits for the end of the turn. `models`: what a composition did to each seat's model. */
+  | { status: 'applied'; warn?: 'seat_failed'; scheduled?: true; models?: PhoneSeatModel[] }
   | { status: 'rejected'; reason: OperationReason }
   | { status: 'cancelled' }
   | { status: 'expired' };
