@@ -1499,6 +1499,118 @@ describe('server', () => {
       expect(tmux.created).toEqual([]);
       c.close();
     });
+    it('refuses a hook_only session with code not_launched', async () => {
+      store.upsert(live('ro', { source: 'hook_only' }));
+      const c = await ask({ id: 'ro', model: 'sonnet', effort: null });
+      expect(await c.next('error')).toMatchObject({ type: 'error', id: 'ro', request: 'session.model', code: 'not_launched' });
+      c.close();
+    });
+    it('refuses an exited session with code ended', async () => {
+      store.upsert(live('end', { state: 'exited', tmuxSession: null }));
+      const c = await ask({ id: 'end', model: 'sonnet', effort: null });
+      expect(await c.next('error')).toMatchObject({ type: 'error', id: 'end', request: 'session.model', code: 'ended' });
+      c.close();
+    });
+    it('refuses a session without conversation with code no_conversation', async () => {
+      store.upsert(live('nokey', { agentSessionId: undefined }));
+      const c = await ask({ id: 'nokey', model: 'sonnet', effort: null });
+      expect(await c.next('error')).toMatchObject({ type: 'error', id: 'nokey', request: 'session.model', code: 'no_conversation' });
+      c.close();
+    });
+    it('refuses an effort for cursor with code effort_in_model', async () => {
+      store.upsert(live('cu', { tool: 'cursor', model: 'auto', effort: undefined }));
+      const c = await ask({ id: 'cu', model: 'gpt-5.3-codex', effort: 'high' });
+      expect(await c.next('error')).toMatchObject({ type: 'error', id: 'cu', request: 'session.model', code: 'effort_in_model' });
+      expect(tmux.created).toEqual([]);
+      c.close();
+    });
+    it('answers accepted now when the session is idle', async () => {
+      store.upsert(live('ab12'));
+      const c = await ask({ id: 'ab12', model: 'sonnet', effort: null });
+      expect(await c.next('session.model.accepted')).toEqual({ type: 'session.model.accepted', id: 'ab12', when: 'now' });
+      await until(() => tmux.created.length === 1);
+      expect(tmux.created[0]!.command.slice(-4)).toEqual(['--resume', 'u-1', '--model', 'sonnet']);
+      c.close();
+    });
+    it('answers accepted turn while the agent works', async () => {
+      store.upsert(live('ab12', { state: 'working' }));
+      const c = await ask({ id: 'ab12', model: 'sonnet', effort: null });
+      expect(await c.next('session.model.accepted')).toEqual({ type: 'session.model.accepted', id: 'ab12', when: 'turn' });
+      expect(store.get('ab12')?.modelNext).toEqual({ model: 'sonnet' });
+      expect(tmux.created).toEqual([]);
+      store.apply('ab12', { name: 'Stop', at: T0, source: 'hook' });
+      await until(() => tmux.created.length === 1);
+      c.close();
+    });
+    it('answers accepted none for a no-op and clears modelNext', async () => {
+      store.upsert(live('ab12', { state: 'working', modelNext: { model: 'haiku' } }));
+      const c = await ask({ id: 'ab12', model: 'opus', effort: 'high' });
+      expect(await c.next('session.model.accepted')).toEqual({ type: 'session.model.accepted', id: 'ab12', when: 'none' });
+      expect(store.get('ab12')?.modelNext).toBeUndefined();
+      expect(tmux.created).toEqual([]);
+      c.close();
+    });
+    it('a second change asked while the first is applied is kept, then applied after it', async () => {
+      store.upsert(live('ab12'));
+      let release!: () => void; const gate = new Promise<void>(r => { release = r; });
+      let killing = false; const kill = tmux.killSession.bind(tmux);
+      tmux.killSession = async n => { killing = true; await gate; return kill(n); };
+      const c = await ask({ id: 'ab12', model: 'sonnet', effort: null });
+      expect(await c.next('session.model.accepted')).toMatchObject({ when: 'now' });
+      await until(() => killing);
+      c.send({ type: 'session.model', id: 'ab12', model: 'haiku', effort: null });
+      expect(await c.next('session.model.accepted')).toEqual({ type: 'session.model.accepted', id: 'ab12', when: 'turn' });
+      release();
+      await until(() => store.get('ab12')?.model === 'sonnet');
+      expect(store.get('ab12')?.modelNext).toEqual({ model: 'haiku' });
+      // Its next free moment applies the second one.
+      store.apply('ab12', { name: 'Stop', at: T0, source: 'hook' });
+      await until(() => store.get('ab12')?.model === 'haiku');
+      expect(tmux.created.at(-1)!.command.slice(-4)).toEqual(['--resume', 'u-1', '--model', 'haiku']);
+      expect(store.get('ab12')?.modelNext).toBeUndefined();
+      c.close();
+    });
+    it('going back to the former model while a change is applied is kept for after it', async () => {
+      store.upsert(live('ab12'));
+      let release!: () => void; const gate = new Promise<void>(r => { release = r; });
+      let killing = false; const kill = tmux.killSession.bind(tmux);
+      tmux.killSession = async n => { killing = true; await gate; return kill(n); };
+      const c = await ask({ id: 'ab12', model: 'sonnet', effort: null });
+      expect(await c.next('session.model.accepted')).toMatchObject({ when: 'now' });
+      await until(() => killing);
+      c.send({ type: 'session.model', id: 'ab12', model: 'opus', effort: 'high' });
+      expect(await c.next('session.model.accepted')).toMatchObject({ when: 'turn' });
+      release();
+      await until(() => store.get('ab12')?.model === 'sonnet');
+      expect(store.get('ab12')?.modelNext).toEqual({ model: 'opus', effort: 'high' });
+      c.close();
+    });
+    it('a change asked while a failing respawn runs is refused with code ended once it failed', async () => {
+      store.upsert(live('ab12'));
+      let release!: () => void; const gate = new Promise<void>(r => { release = r; });
+      let killing = false; const kill = tmux.killSession.bind(tmux);
+      tmux.killSession = async n => { killing = true; await gate; return kill(n); };
+      tmux.newSession = async () => { throw new Error('tmux is gone'); };
+      const c = await ask({ id: 'ab12', model: 'sonnet', effort: null });
+      expect(await c.next('session.model.accepted')).toMatchObject({ when: 'now' });
+      await until(() => killing);
+      c.send({ type: 'session.model', id: 'ab12', model: 'haiku', effort: null });
+      expect(await c.next('session.model.accepted')).toMatchObject({ when: 'turn' });
+      release();
+      expect(await c.next('error')).toMatchObject({ id: 'ab12', code: 'restart_failed' });
+      expect(await c.next('error')).toMatchObject({ id: 'ab12', request: 'session.model', code: 'ended' });
+      expect(store.get('ab12')?.modelNext).toBeUndefined();
+      c.close();
+    });
+    it('broadcasts restart_failed when the respawn fails', async () => {
+      store.upsert(live('ab12'));
+      tmux.newSession = async () => { throw new Error('tmux is gone'); };
+      const c = await ask({ id: 'ab12', model: 'sonnet', effort: null });
+      expect(await c.next('session.model.accepted')).toMatchObject({ when: 'now' });
+      expect(await c.next('error')).toMatchObject({ type: 'error', id: 'ab12', request: 'session.model', message: 'tmux is gone', code: 'restart_failed' });
+      expect(store.get('ab12')?.modelNext).toBeUndefined();
+      c.close();
+    });
   });
 
   describe('launch from a chat card', () => {

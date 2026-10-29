@@ -127,3 +127,28 @@ describe('fingerprint of credential.register', () => {
     expect(fingerprint(reg('cred1', 'a'))).not.toBe(fingerprint(reg('cred2', 'a')));
   });
 });
+
+describe('model changes (#58)', () => {
+  const change = (model: string | null, effort: string | null): PhoneOperation => ({ type: 'session.model', op: uid(1), id: 's1', model, effort });
+
+  it('fingerprint differs by model and by effort', () => {
+    const f = fingerprint(change('opus', 'high'));
+    expect(fingerprint({ ...change('opus', 'high'), op: uid(2) })).toBe(f);
+    expect(fingerprint(change('sonnet', 'high'))).not.toBe(f);
+    expect(fingerprint(change('opus', 'low'))).not.toBe(f);
+    expect(fingerprint(change(null, 'high'))).not.toBe(f);
+    expect(fingerprint(change('opus', null))).not.toBe(f);
+  });
+
+  it('the registry replays models', () => {
+    const r = new OperationRegistry();
+    const models = [{ role: 'lead', session: 's1', status: 'scheduled' as const }, { role: 'qa', session: 's2', status: 'refused' as const, reason: 'not_launched' as const }];
+    r.begin('dev1', uid(1), 'fp');
+    r.finish(uid(1), 'applied', undefined, models);
+    expect(r.begin('dev1', uid(1), 'fp')).toMatchObject({ kind: 'replay', record: { status: 'applied', models } });
+    // A record finished without models replays none.
+    r.begin('dev1', uid(2), 'fp');
+    r.finish(uid(2), 'applied');
+    expect(r.get(uid(2))).not.toHaveProperty('models');
+  });
+});

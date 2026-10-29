@@ -547,3 +547,10 @@ describe('protocol: model and effort (#58)', () => {
     expect(() => ChatTurnSchema.parse({ ...turn, closes: Array(9).fill(row) })).toThrow();
   });
 });
+
+describe('session.model.accepted', () => {
+  it('says when the change applies', () => {
+    expect(ServerMessageSchema.safeParse({ type: 'session.model.accepted', id: 'a', when: 'turn' }).success).toBe(true);
+    expect(ServerMessageSchema.safeParse({ type: 'session.model.accepted', id: 'a', when: 'later' }).success).toBe(false);
+  });
+});

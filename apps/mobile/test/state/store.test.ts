@@ -643,4 +643,154 @@ describe('the store, device confirmation', () => {
     t.store.decide('a', 'accept');
     expect(t.of('session.decide')[0]).not.toHaveProperty('assertion');
   });
+
+  it('session.checklist fills the checklist of a session, null keeps an entry, session.removed drops it', () => {
+    const t = setup();
+    t.deliver(snapshot([session('a')]));
+    const checklist = { tasks: [{ text: 'Écrire', status: 'in_progress' as const }], done: 0, total: 1 };
+    t.deliver({ type: 'session.checklist', id: 'a', checklist });
+    expect(t.state().checklists.get('a')).toEqual(checklist);
+    t.deliver({ type: 'session.checklist', id: 'a', checklist: null });
+    expect(t.state().checklists.has('a')).toBe(true);
+    expect(t.state().checklists.get('a')).toBeNull();
+    t.deliver({ type: 'session.removed', id: 'a' });
+    expect(t.state().checklists.has('a')).toBe(false);
+  });
+});
+
+describe('models and model changes', () => {
+  const UUID = '11111111-1111-4111-8111-111111111111';
+  const withBoot = (boot: string) => { const s = snapshot([session('a')], 'Atelier', boot); return s; };
+  const choice = { id: 'opus', label: 'Opus' };
+
+  it('requestModels sends once per tool and stores the listing', () => {
+    const t = setup();
+    t.deliver(snapshot([]));
+    t.store.requestModels('claude');
+    t.store.requestModels('claude');
+    t.store.requestModels('codex');
+    expect(t.of('models.list')).toEqual([{ type: 'models.list', tool: 'claude' }, { type: 'models.list', tool: 'codex' }]);
+    t.deliver({ type: 'models.listing', tool: 'claude', models: [choice] });
+    expect(t.state().models.claude).toEqual({ models: [choice] });
+    t.store.requestModels('claude');
+    expect(t.of('models.list')).toHaveLength(2);
+  });
+
+  it('requestModels asks again after an error listing', () => {
+    const t = setup();
+    t.deliver(snapshot([]));
+    t.store.requestModels('claude');
+    t.deliver({ type: 'models.listing', tool: 'claude', models: [], error: true });
+    expect(t.state().models.claude).toEqual({ models: [], error: true });
+    t.store.requestModels('claude');
+    expect(t.of('models.list')).toHaveLength(2);
+  });
+
+  it('requestModels asks again after the link dropped before the listing came', () => {
+    const t = setup();
+    t.deliver(withBoot(UUID));
+    t.store.requestModels('claude');
+    t.set('connecting' as never);
+    t.set('ready');
+    t.deliver(withBoot(UUID));
+    t.store.requestModels('claude');
+    expect(t.of('models.list')).toHaveLength(2);
+    t.deliver({ type: 'models.listing', tool: 'claude', models: [choice] });
+    t.set('connecting' as never);
+    t.set('ready');
+    t.store.requestModels('claude');
+    expect(t.of('models.list')).toHaveLength(2);
+  });
+
+  it('a session.model.failed for an unknown session is ignored', () => {
+    const t = setup();
+    t.deliver(snapshot([session('a')]));
+    t.deliver({ type: 'session.model.failed', id: 'zz', reason: 'refused' });
+    expect(t.state().modelFailures).toEqual({});
+  });
+
+  it('a new boot forgets the listings', () => {
+    const t = setup();
+    t.deliver(withBoot(UUID));
+    t.store.requestModels('claude');
+    t.deliver({ type: 'models.listing', tool: 'claude', models: [choice] });
+    t.deliver(withBoot(UUID));
+    expect(t.state().models.claude).toBeDefined();
+    t.deliver(withBoot('22222222-2222-4222-8222-222222222222'));
+    expect(t.state().models).toEqual({});
+    t.store.requestModels('claude');
+    expect(t.of('models.list')).toHaveLength(2);
+  });
+
+  it('changeModel resolves applied scheduled on reason scheduled', async () => {
+    const t = setup();
+    t.deliver(snapshot([session('a')]));
+    const done = t.store.changeModel('a', 'opus', 'high');
+    const [sent] = t.of('session.model');
+    expect(sent).toMatchObject({ type: 'session.model', id: 'a', model: 'opus', effort: 'high' });
+    t.deliver({ type: 'operation.result', op: sent!.op, status: 'applied', reason: 'scheduled' });
+    await expect(done).resolves.toEqual({ status: 'applied', scheduled: true });
+  });
+
+  it('changeModel with null model and effort resolves applied', async () => {
+    const t = setup();
+    t.deliver(snapshot([session('a')]));
+    const done = t.store.changeModel('a', null, null);
+    const [sent] = t.of('session.model');
+    expect(sent).toMatchObject({ model: null, effort: null });
+    t.deliver({ type: 'operation.result', op: sent!.op, status: 'applied' });
+    await expect(done).resolves.toEqual({ status: 'applied' });
+  });
+
+  it('changeModel resolves rejected not_launched', async () => {
+    const t = setup();
+    t.deliver(snapshot([session('a')]));
+    const done = t.store.changeModel('a', 'opus', null);
+    t.deliver({ type: 'operation.result', op: t.of('session.model')[0]!.op, status: 'rejected', reason: 'not_launched' });
+    await expect(done).resolves.toEqual({ status: 'rejected', reason: 'not_launched' });
+  });
+
+  it('a second change while the first is unanswered is sent too', () => {
+    const t = setup();
+    t.deliver(snapshot([session('a')]));
+    void t.store.changeModel('a', 'opus', null);
+    void t.store.changeModel('a', 'sonnet', null);
+    expect(t.of('session.model').map(m => m.model)).toEqual(['opus', 'sonnet']);
+  });
+
+  it('session.model.failed is kept per session and cleared by the next changeModel', () => {
+    const t = setup();
+    t.deliver(snapshot([session('a'), session('b')]));
+    t.deliver({ type: 'session.model.failed', id: 'a', reason: 'restart_failed' });
+    t.deliver({ type: 'session.model.failed', id: 'b', reason: 'refused' });
+    expect(t.state().modelFailures).toEqual({ a: 'restart_failed', b: 'refused' });
+    void t.store.changeModel('a', 'opus', null);
+    expect(t.state().modelFailures).toEqual({ b: 'refused' });
+  });
+
+  it('a failure survives the op result and a modelNext change, and goes when model or effort changes', () => {
+    const t = setup();
+    t.deliver(snapshot([session('a', { model: 'sonnet', modelNext: { model: 'opus' } })]));
+    t.deliver({ type: 'session.model.failed', id: 'a', reason: 'restart_failed' });
+    // The daemon cleared modelNext before broadcasting the failure; the op's own result may come after.
+    t.deliver({ type: 'session.updated', session: session('a', { model: 'sonnet' }) });
+    expect(t.state().modelFailures).toEqual({ a: 'restart_failed' });
+    t.deliver({ type: 'session.updated', session: session('a', { model: 'sonnet', modelNext: { model: 'haiku' } }) });
+    expect(t.state().modelFailures).toEqual({ a: 'restart_failed' });
+    t.deliver({ type: 'session.updated', session: session('a', { model: 'opus' }) });
+    expect(t.state().modelFailures).toEqual({});
+    t.deliver({ type: 'session.model.failed', id: 'a', reason: 'refused' });
+    t.deliver(snapshot([session('a', { model: 'opus', effort: 'high' })]));
+    expect(t.state().modelFailures).toEqual({});
+  });
+
+  it('failed then applied keeps the failure', async () => {
+    const t = setup();
+    t.deliver(snapshot([session('a')]));
+    const done = t.store.changeModel('a', 'opus', null);
+    t.deliver({ type: 'session.model.failed', id: 'a', reason: 'restart_failed' });
+    t.deliver({ type: 'operation.result', op: t.of('session.model')[0]!.op, status: 'applied' });
+    await done;
+    expect(t.state().modelFailures).toEqual({ a: 'restart_failed' });
+  });
 });

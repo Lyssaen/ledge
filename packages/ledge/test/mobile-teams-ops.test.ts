@@ -530,3 +530,34 @@ describe('phone gateway: teams push', () => {
     expect(JSON.stringify(m)).not.toContain('/w/repo');
   });
 });
+
+describe('phone gateway: a composition\'s seat models (#58)', () => {
+  it('compose outcome carries seat models', async () => {
+    const team: Team = { id: 'team-a1b2', name: 'Duo', project: 'p-repo', machine: 'local', cwd: '/w', state: 'active', seats: [{ role: 'lead', sessionId: 'a' }, { role: 'qa', sessionId: 'b' }, { role: 'ops', sessionId: 'c' }], createdAt: T0, updatedAt: T0 };
+    const models = [{ role: 'lead', session: 'a', when: 'now' as const }, { role: 'qa', session: 'b', when: 'turn' as const }, { role: 'ops', session: 'c', code: 'not_launched' as const }];
+    const { g, writes } = make({ answer: m => (m.type === 'team.compose' ? { type: 'team.changed', rid: m.rid, team, models } : undefined) });
+    const auth = await enroll(g);
+    const body = { type: 'team.compose' as const, team: 'team-a1b2', seats: SEATS };
+    const ch = await prepare(g, body);
+    const op = randomUUID();
+    const signed = { ...body, op, assertion: auth.get(rp, ch.challenge, { counter: 1 }) };
+    g.send('dev1', signed);
+    await settled(g, op);
+    const seats = [{ role: 'lead', session: 'a', status: 'applied' }, { role: 'qa', session: 'b', status: 'scheduled' }, { role: 'ops', session: 'c', status: 'refused', reason: 'not_launched' }];
+    expect(last(g)).toEqual({ type: 'operation.result', op, status: 'applied', models: seats });
+    expect(PhoneServerMessageSchema.safeParse(last(g)).success).toBe(true);
+    // Sent again (a reconnect): the stored outcome, its seats with it; the daemon is not asked twice.
+    g.send('dev1', signed);
+    await until(() => finals(g).length >= 2);
+    expect(finals(g).at(-1)).toEqual({ type: 'operation.result', op, status: 'applied', models: seats });
+    expect(writes()).toHaveLength(1);
+  });
+
+  it('a compose saved with a seat that did not start keeps seat_failed and its seat models', async () => {
+    const team: Team = { id: 'team-a1b2', name: 'Duo', project: 'p-repo', machine: 'local', cwd: '/w', state: 'active', seats: [{ role: 'lead', sessionId: 'a' }, { role: 'qa', sessionId: null }], createdAt: T0, updatedAt: T0 };
+    const { g } = make({ answer: m => (m.type === 'team.compose' ? { type: 'team.changed', rid: m.rid, team, reason: '@qa : spawn failed', models: [{ role: 'lead', session: 'a', when: 'turn' }] } : undefined) });
+    const auth = await enroll(g);
+    const op = await confirmed(g, auth, { type: 'team.compose', team: 'team-a1b2', seats: SEATS });
+    expect(last(g)).toEqual({ type: 'operation.result', op, status: 'applied', reason: 'seat_failed', models: [{ role: 'lead', session: 'a', status: 'scheduled' }] });
+  });
+});

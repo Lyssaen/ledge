@@ -6,7 +6,7 @@ import { basename, join, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import { WebSocketServer, WebSocket } from 'ws';
 import { actionById, contextNear, isArchived, RoleIdSchema, TemplateIdSchema, type DefinitionCode, givenByLedge, LEDGE_GIVER, transmissions, projectOf, type ChatAction, type Autonomy, type Role, type Seat, type Team } from '@ledge/protocol';
-import { ATTACHMENT_LOCAL_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, backendOf } from '@ledge/protocol';
+import { ATTACHMENT_LOCAL_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, type ModelRefusal, type RefusalCode, backendOf } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
 import { AttachmentError, AttachmentStore } from './attachments.js';
@@ -102,6 +102,9 @@ export { resolveFolder };
 
 /** A deny with a note whose deny keys went but whose input box never came back: refused, the note not typed (NOTE_NOT_TYPED). */
 class NoteNotTyped extends Refusal { constructor() { super('denied, but the note could not be typed', NOTE_NOT_TYPED); } }
+
+/** What `team.compose` tells of a kept seat's new model: applied `now` or at the turn's end, or refused with a code. */
+type SeatModelOutcome = NonNullable<Extract<ServerMessage, { type: 'team.changed' }>['models']>[number];
 
 /** Where `handle` sends its answers: the one socket that asked, or the phone gateway's device. */
 type Reply = (m: ServerMessage) => void;
@@ -719,38 +722,94 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** The change waiting in `modelNext` of an OMP session, applied at its free moment; a refusal leaves the session as it is and is logged. */
   async function applyOmpModel(s: Session): Promise<void> {
     const next = s.modelNext!;
-    typing.add(s.id);
+    typing.add(s.id); applyingModel.set(s.id, null);
     try { await omp.setModel(s.id, next); log(`model of ${s.id} is now ${next.model ?? 'unchanged'}${next.effort ? ` · ${next.effort}` : ''}`); }
     catch (e) {
       const message = (e as Error).message;
       log(`model change of ${s.id} failed: ${message}`);
       // The model may have changed anyway (the effort refused): the record keeps the truth, the request is dropped, the fronts told.
       store.patch(s.id, { modelNext: undefined });
-      broadcast({ type: 'error', id: s.id, message, request: 'session.model' });
-    } finally { typing.delete(s.id); }
+      modelFailed(s.id, message, 'refused');
+    } finally { typing.delete(s.id); afterModelApply(s.id); }
+  }
+
+  /** A model change accepted earlier that fails once applied: every front told, with the code the phone reads (the request's id). */
+  const modelFailed = (id: string, message: string, code: ModelRefusal) => broadcast({ type: 'error', id, message, request: 'session.model', code });
+  /**
+   * The model changes being applied (respawn, set_model), by session, with the change asked meanwhile (accepted as `turn`):
+   * the apply rewrites the record without `modelNext`, so the later request is kept here and put back once it is done.
+   */
+  const applyingModel = new Map<string, { model?: string; effort?: string } | null>();
+  /** After an apply: the change asked meanwhile waits again for a free moment, is dropped when it is what now runs, or is
+   *  refused with its code when the session can no longer switch (the respawn failed: ended). */
+  function afterModelApply(id: string): void {
+    const later = applyingModel.get(id); applyingModel.delete(id);
+    const s = store.get(id); if (!later || !s) return;
+    const refusal = modelRefusal(s, later.effort ?? null);
+    if (refusal) { store.patch(id, { modelNext: undefined }); return modelFailed(id, refusal.message, refusal.refused); }
+    store.patch(id, { modelNext: later.model === s.model && later.effort === s.effort ? undefined : later });
+  }
+  /** The session can take a model change at once: free, nothing typed into it, not being closed, no chat card waiting for it. */
+  function canApplyNow(id: string): boolean {
+    return free(store.get(id)) && !typing.has(id) && !closing.has(id) && !cardThreads.queuedRelays().some(q => q.relay.id === id);
+  }
+  /** Why the session cannot change model, in the order a front is told (absent: it can). */
+  function modelRefusal(s: Session, effort: string | null): { refused: ModelRefusal; message: string } | null {
+    const inPlace = backendOf(s) === 'omp-rpc';
+    // Started without Ledge: Ledge can neither restart it nor drive it.
+    if (s.source === 'hook_only') return { refused: 'not_launched', message: READ_ONLY };
+    if (s.state === 'exited') return { refused: 'ended', message: 'the session has ended' };
+    if (!resumeKey(s)) return { refused: 'no_conversation', message: 'no conversation to resume' };
+    if (inPlace && !omp.isLive(s.id)) return { refused: 'not_running', message: 'the session is not running' };
+    if (effort && !inPlace && !EFFORT_ARGS[s.tool as TmuxTool]) return { refused: 'effort_in_model', message: `${s.tool} takes its effort in the model id` };
+    return null;
+  }
+  /**
+   * `session.model`, and a held seat's new model on `team.compose`: refused with a code, or accepted and applied `now` (the
+   * session is free), at the end of its `turn` (`modelNext`), or not at all (`none`: the model it already runs).
+   */
+  async function changeModel(id: string, model: string | null, effort: string | null): Promise<{ refused: ModelRefusal; message: string } | { when: 'now' | 'turn' | 'none' }> {
+    const s = store.get(id); if (!s) throw unknownSession();
+    const refusal = modelRefusal(s, effort); if (refusal) return refusal;
+    const next = { ...(model ? { model } : {}), ...(effort ? { effort } : {}) };
+    // Asked while another change is applied: kept for after it (even the model it runs now, which the apply is leaving).
+    if (applyingModel.has(id)) { applyingModel.set(id, next); store.patch(id, { modelNext: next }); return { when: 'turn' }; }
+    // The model it already runs: a change asked earlier is dropped, nothing restarts.
+    if (next.model === s.model && next.effort === s.effort) { if (s.modelNext) store.patch(id, { modelNext: undefined }); return { when: 'none' }; }
+    // Decided before the patch: the store's listener starts the change at once (applyModelNext) when the session can take it.
+    const when = canApplyNow(id) ? 'now' : 'turn';
+    store.patch(id, { modelNext: next });
+    return { when };
   }
 
   /** A model change waiting for the session's free moment (`modelNext`): the agent stopped and resumed on that model. */
   async function applyModelNext(id: string): Promise<void> {
     const s = store.get(id);
-    if (!s?.modelNext || !free(s) || typing.has(id) || closing.has(id) || cardThreads.queuedRelays().some(q => q.relay.id === id)) return;
+    if (!s?.modelNext || !canApplyNow(id)) return;
     // OMP changes its model in place (set_model on the same process): nothing is stopped, the conversation is never left.
     if (backendOf(s) === 'omp-rpc') return applyOmpModel(s);
-    const key = resumeKey(s);
-    if (!key || s.source !== 'launcher') { store.patch(id, { modelNext: undefined }); return; }
     const { model, effort } = s.modelNext;
+    // Accepted, then no longer applicable (the session lost what a respawn needs): dropped, and said with the refusal's code.
+    const refusal = modelRefusal(s, effort ?? null);
+    if (refusal) { store.patch(id, { modelNext: undefined }); return modelFailed(id, refusal.message, refusal.refused); }
+    const key = resumeKey(s)!; // modelRefusal refuses a session without one
     // Held like a typing: neither the mailbox nor the relay writes into the agent being replaced.
-    typing.add(id);
+    typing.add(id); applyingModel.set(id, null);
     try {
       for (const [k, at] of respawned) if (Date.now() - at > RESPAWN_HOOKS_MS) respawned.delete(k);
       respawned.set(id, Date.now());
       await endSession(s);
       const ended = store.get(id);
-      if (!ended || ended.archivedAt !== undefined) return;
+      if (!ended || ended.archivedAt !== undefined) { store.patch(id, { modelNext: undefined }); return; }
       const refused = await respawn({ ...ended, modelNext: undefined }, key, model, effort);
       // The session stays ended, as it was before the respawn: Resume brings it back on its former model.
-      if (refused) log(`model change of ${id} failed: ${refused}`);
-    } finally { typing.delete(id); }
+      if (refused) { log(`model change of ${id} failed: ${refused}`); modelFailed(id, refused, 'restart_failed'); }
+    } catch (e) {
+      // The old agent could not be stopped: the change is dropped rather than tried again at each update.
+      log(`model change of ${id} failed: ${(e as Error).message}`);
+      store.patch(id, { modelNext: undefined });
+      modelFailed(id, (e as Error).message, 'restart_failed');
+    } finally { typing.delete(id); afterModelApply(id); }
   }
 
   /** The chat cards being launched: a second click, or another overlay, is refused until the first one has answered. */
@@ -1030,9 +1089,34 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
 
   /** The seats being started or restarted (team + role): a second tap meanwhile is refused, never a second session. */
   const seatsInFlight = new Set<string>();
-  /** `team.compose`: the new composition applied at once, a session started in each added seat, the removed ones closed at their free moment. */
+  /**
+   * The kept seats of a composition whose model or effort changed, the agent the same: the change asked of the session holding
+   * each (as resolved over the role's defaults, like a launch into the seat), and what came of it. A free seat, or one whose agent
+   * changed, has no entry: its next session starts on the seat's values. Never throws: the composition is saved already.
+   */
+  async function seatModels(before: ReadonlyMap<string, Team['seats'][number]>, team: Team): Promise<SeatModelOutcome[]> {
+    const out: SeatModelOutcome[] = [];
+    const roles = listDefinitions(team.cwd).roles;
+    for (const seat of team.seats) {
+      const was = before.get(seat.role);
+      if (!was || seat.leaving || was.tool !== seat.tool || (was.model === seat.model && was.effort === seat.effort)) continue;
+      const holder = seat.sessionId ? store.get(seat.sessionId) : undefined;
+      if (!holder) continue;
+      const resolved = resolveSeats([seat], roles);
+      const want = 'unknown' in resolved ? seat : resolved[0]!;
+      try {
+        const r = await changeModel(holder.id, want.model ?? null, want.effort ?? null);
+        if ('refused' in r) out.push({ role: seat.role, session: holder.id, code: r.refused });
+        else if (r.when !== 'none') out.push({ role: seat.role, session: holder.id, when: r.when });
+      } catch (e) { log(`team ${team.id}: model of @${seat.role} (${holder.id}) not changed: ${(e as Error).message}`); }
+    }
+    return out;
+  }
+
+  /** `team.compose`: the new composition applied at once, a session started in each added seat, the removed ones closed at their
+   *  free moment, the kept seats' new models asked of their sessions. */
   async function composeTeam(msg: Extract<ClientMessage, { type: 'team.compose' }>): Promise<Extract<ServerMessage, { type: 'team.changed' }>> {
-    const changed = (extra: { team?: Team; reason?: string }) => ({ type: 'team.changed' as const, rid: msg.rid, ...extra });
+    const changed = (extra: { team?: Team; reason?: string; models?: SeatModelOutcome[] }) => ({ type: 'team.changed' as const, rid: msg.rid, ...extra });
     const t = teams.get(msg.team); if (!t) return changed({ reason: `aucune équipe ${msg.team}` });
     const known = new Set(t.seats.map(s => s.role));
     const added = msg.seats.filter(s => !known.has(s.role));
@@ -1048,12 +1132,14 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     if (busy) return changed({ reason: `@${busy.role} : une opération est déjà en cours sur ce siège` });
     for (const k of keys) seatsInFlight.add(k);
     try {
+      const before = new Map(t.seats.map(s => [s.role, s]));
       const r = teams.compose(msg.team, msg.seats);
       if (typeof r === 'string') return changed({ reason: r });
       log(`team ${t.id} composed: +${r.added.join(',') || '-'} −${r.removed.join(',') || '-'}`);
       const failed = r.added.length ? await startSeats(r.team, msg.seats.filter(s => r.added.includes(s.role))) : null;
       closeLeavers();
-      return changed({ team: teams.get(t.id)!, ...(failed ? { reason: failed } : {}) });
+      const models = await seatModels(before, teams.get(t.id)!);
+      return changed({ team: teams.get(t.id)!, ...(failed ? { reason: failed } : {}), ...(models.length ? { models } : {}) });
     } finally { for (const k of keys) seatsInFlight.delete(k); }
   }
 
@@ -1157,7 +1243,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
 
   async function handle(msg: ClientMessage, reply: Reply): Promise<void> {
     /** A refusal names the request it answers, so a front can tell a refused reply from a refused decision; a coded one says why. */
-    const refuse = (r: Refusal | string, id?: string) => reply({ type: 'error', ...(id !== undefined ? { id } : {}), message: typeof r === 'string' ? r : r.message, request: msg.type, ...(typeof r === 'string' ? {} : { code: r.code }) });
+    const refuse = (r: { message: string; code: RefusalCode | ModelRefusal } | string, id?: string) => reply({ type: 'error', ...(id !== undefined ? { id } : {}), message: typeof r === 'string' ? r : r.message, request: msg.type, ...(typeof r === 'string' ? {} : { code: r.code }) });
     switch (msg.type) {
       case 'document.read': {
         const session = msg.sessionId ? store.get(msg.sessionId) : undefined;
@@ -1373,18 +1459,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return;
       }
       case 'session.model': {
-        const s = store.get(msg.id); if (!s) return refuse('unknown session', msg.id);
-        if (s.source === 'hook_only') return refuse(READ_ONLY, msg.id);
-        if (s.state === 'exited') return refuse('the session has ended', msg.id);
-        if (!resumeKey(s)) return refuse('no conversation to resume', msg.id);
-        if (backendOf(s) === 'omp-rpc' && !omp.isLive(s.id)) return refuse('the session is not running', msg.id);
-        if (msg.effort && backendOf(s) !== 'omp-rpc' && !EFFORT_ARGS[s.tool as TmuxTool]) return refuse(`${s.tool} takes its effort in the model id`, msg.id);
-        const next = { ...(msg.model ? { model: msg.model } : {}), ...(msg.effort ? { effort: msg.effort } : {}) };
-        // The model it already runs: a change asked earlier is dropped, nothing restarts.
-        if (next.model === s.model && next.effort === s.effort) { if (s.modelNext) store.patch(msg.id, { modelNext: undefined }); return; }
-        store.patch(msg.id, { modelNext: next });
-        await applyModelNext(msg.id);
-        return;
+        if (!store.get(msg.id)) return refuse('unknown session', msg.id);
+        // Answered as soon as decided: a failure once applied reaches every front as an `error` with the same id.
+        const r = await changeModel(msg.id, msg.model, msg.effort);
+        if ('refused' in r) return refuse({ message: r.message, code: r.refused }, msg.id);
+        return reply({ type: 'session.model.accepted', id: msg.id, when: r.when });
       }
       case 'session.delete': {
         const s = store.get(msg.id); if (!s) return refuse(unknownSession(), msg.id);
@@ -1619,6 +1698,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     // A project's folder is its first local repo: only a project with one can be named by the phone.
     projectByName: name => projects.projects.find(p => p.name === name && p.repos.some(r => r.machine === 'local'))?.id ?? null,
     teamCatalog: true,
+    // The phone's model switch (#58): `session.model` answers with a code, and `models.list` asks this machine's agents.
+    models: true,
     // The phone's « Mettre à jour le PC » and « Redémarrer le daemon »: the updater Desktop's `update.daemon` uses, progress broadcast.
     ...(opts.updater && opts.daemon ? {
       pc: {

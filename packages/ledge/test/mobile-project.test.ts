@@ -3,6 +3,8 @@ import { CapabilitiesByToolSchema, PhoneSessionSchema, PhoneSessionSchema as S, 
 import { adapterFor } from '../src/adapters/index.js';
 import { toPhoneTurn } from '../src/mobile/chat.js';
 import { capabilities, toPhoneFullRequest, toPhoneItem, toPhoneSession, toPhoneThread } from '../src/mobile/project.js';
+import { checklistSummary, toPhoneChecklist } from '../src/mobile/project.js';
+import type { Todo } from '@ledge/protocol';
 
 const T = '2026-10-20T10:00:00.000Z';
 const session = (extra: Partial<Session> = {}): Session => ({
@@ -124,5 +126,74 @@ describe('images on the phone projection', () => {
     const t = toPhoneTurn({ qid: '8b4f6d3e-0000-4000-8000-000000000000', question: 'q', askedAt: T, steps: [], attachments: [ref] } as never);
     expect(t.attachments).toEqual([ref]);
     expect(toPhoneTurn({ qid: 'x', question: 'q', askedAt: T, steps: [] } as never)).not.toHaveProperty('attachments');
+  });
+});
+
+describe('a session\'s model on the phone (#58)', () => {
+  it('projects model, effort, modelNext', () => {
+    const p = toPhoneSession(session({ model: 'opus', effort: 'high', modelNext: { model: 'sonnet' } }), T);
+    expect(p).toMatchObject({ model: 'opus', effort: 'high', modelNext: { model: 'sonnet' } });
+    expect(p.modelNext).toEqual({ model: 'sonnet' });
+    expect(PhoneSessionSchema.safeParse(p).success).toBe(true);
+    // None set: none sent.
+    const bare = toPhoneSession(session(), T);
+    for (const k of ['model', 'effort', 'modelNext']) expect(bare).not.toHaveProperty(k);
+    // Clipped like the other strings: no source swells a snapshot.
+    const long = toPhoneSession(session({ model: 'm'.repeat(500), effort: 'e'.repeat(50), modelNext: { model: 'n'.repeat(500), effort: 'f'.repeat(50) } }), T);
+    expect([long.model?.length, long.effort?.length, long.modelNext?.model?.length, long.modelNext?.effort?.length]).toEqual([200, 20, 200, 20]);
+  });
+
+  it('canSwitch only for a launcher session not exited', () => {
+    expect(toPhoneSession(session(), T).canSwitch).toBe(true);
+    expect(toPhoneSession(session({ state: 'idle' }), T).canSwitch).toBe(true);
+    expect(toPhoneSession(session({ state: 'exited' }), T)).not.toHaveProperty('canSwitch');
+    expect(toPhoneSession(session({ source: 'hook_only' }), T)).not.toHaveProperty('canSwitch');
+    expect(PhoneSessionSchema.safeParse(toPhoneSession(session(), T)).success).toBe(true);
+  });
+});
+
+describe('the checklist for the phone', () => {
+  const todo = (text: string, status: Todo['status'] = 'pending'): Todo => ({ text, status });
+
+  it('is null without a list', () => {
+    expect(toPhoneChecklist(null)).toBeNull();
+    expect(checklistSummary(null)).toBeUndefined();
+  });
+
+  it('caps the tasks and counts the whole list', () => {
+    const todos = Array.from({ length: 80 }, (_, i) => todo(`t${i}`, i < 3 ? 'completed' : 'pending'));
+    const c = toPhoneChecklist(todos)!;
+    expect(c.tasks).toHaveLength(50);
+    expect(c).toMatchObject({ done: 3, total: 80, cut: true });
+  });
+
+  it('clips a long text', () => {
+    const c = toPhoneChecklist([todo('x'.repeat(300))])!;
+    expect(c.tasks[0]!.text).toHaveLength(200);
+    expect(c.cut).toBe(true);
+    expect(toPhoneChecklist([todo('short')])).toEqual({ tasks: [{ text: 'short', status: 'pending' }], done: 0, total: 1 });
+  });
+
+  it('sums up with the first task in progress', () => {
+    expect(checklistSummary([todo('a', 'completed'), todo('A', 'in_progress'), todo('B', 'in_progress'), todo('b')])).toEqual({ done: 1, total: 4, current: 'A' });
+    expect(checklistSummary([todo('a', 'completed'), todo('b', 'completed')])).toEqual({ done: 2, total: 2 });
+  });
+
+  it('clips the current task', () => {
+    const s = checklistSummary([todo('x'.repeat(300), 'in_progress')])!;
+    expect(s.current!.length).toBe(200);
+    expect(s.cut).toBe(true);
+  });
+
+  it('shows a current task past the cap', () => {
+    const todos = [...Array.from({ length: 60 }, (_, i) => todo(`t${i}`, 'completed')), todo('late', 'in_progress')];
+    expect(checklistSummary(todos)).toEqual({ done: 60, total: 61, current: 'late', cut: true });
+  });
+
+  it('rides on the session only when given', () => {
+    expect(toPhoneSession(session(), T)).not.toHaveProperty('checklist');
+    const p = toPhoneSession(session(), T, { done: 1, total: 2, current: 'A' });
+    expect(p.checklist).toEqual({ done: 1, total: 2, current: 'A' });
+    expect(PhoneSessionSchema.safeParse(p).success).toBe(true);
   });
 });

@@ -6,9 +6,10 @@ import { ActionVarsSchema, ChatActionStateSchema, ChatStepSchema, MAX_PROPOSALS 
 import { ActionRiskSchema } from './actions.js';
 import { DecisionSchema, NOTE_MAX } from './decisions.js';
 import { ThreadItemSchema } from './thread.js';
+import type { TodoStatus } from './todos.js';
 import { MESSAGE_MAX, RefusalCodeSchema, SEMVER, UpdateFailureSchema } from './messages.js';
 import { PushSubscriptionSchema } from './push.js';
-import { EffortSchema, ModelIdSchema } from './models.js';
+import { EffortSchema, ModelChoiceSchema, ModelIdSchema, ModelRefusalSchema } from './models.js';
 import { DefinitionHashSchema, DefinitionScopeSchema, RoleIdSchema, TeamIdSchema, TeamNameSchema, TemplateIdSchema, scopeIssue } from './teams.js';
 import { PhoneCatalogSchema, PhoneRoleDraftSchema, PhoneRoleSchema, PhoneSeatsSchema, canonicalJson, type TeamsOperation } from './phoneTeams.js';
 
@@ -37,6 +38,22 @@ export const THREAD_ITEMS_MAX = 200;
 export const THREAD_BUDGET = 524_288;
 export const THREAD_TEXT_MAX = 8_192;
 export const TOOL_TEXT_MAX = 2_048;
+/** The agent's checklist as the phone gets it: the most tasks, and the longest text of a task or of the current one. */
+export const CHECKLIST_TASKS_MAX = 50;
+export const CHECKLIST_TEXT_MAX = 200;
+/** The three `TodoStatus` values (`satisfies` checks each one is a `TodoStatus`, not that none is missing). */
+const ChecklistStatusSchema = z.enum(['pending', 'in_progress', 'completed'] as const satisfies readonly TodoStatus[]);
+/** What the session screen shows: every task. `done` and `total` count the agent's whole list; `cut` is set when the gateway capped the list or clipped any text. */
+export const PhoneChecklistSchema = z.object({
+  tasks: z.array(z.object({ text: z.string().max(CHECKLIST_TEXT_MAX), status: ChecklistStatusSchema })).max(CHECKLIST_TASKS_MAX),
+  done: z.number().int().nonnegative(), total: z.number().int().nonnegative(), cut: z.literal(true).optional()
+});
+export type PhoneChecklist = z.infer<typeof PhoneChecklistSchema>;
+/** What « Agents » shows: the counts and the task in progress. `cut` is set when the gateway capped the list or clipped any text. */
+export const PhoneChecklistSummarySchema = z.object({
+  done: z.number().int().nonnegative(), total: z.number().int().nonnegative(), current: z.string().max(CHECKLIST_TEXT_MAX).optional(), cut: z.literal(true).optional()
+});
+export type PhoneChecklistSummary = z.infer<typeof PhoneChecklistSummarySchema>;
 /** A request's full body (a plan) as the phone gets it. */
 export const PENDING_BODY_MAX = 65_536;
 /** A request's body inside a snapshot or an update; the whole body comes on demand with `session.pending`. */
@@ -57,7 +74,7 @@ export const OperationStatusSchema = z.enum(['received', 'applied', 'rejected', 
 export type OperationStatus = z.infer<typeof OperationStatusSchema>;
 
 /** Why an operation was refused: a refusal code of the local fronts, or one only a phone can meet. `seat_failed` comes with `applied`: a composition saved whose added seat did not start. */
-export const OperationReasonSchema = z.enum([...RefusalCodeSchema.options, 'untypable', 'confirm_required', 'conflict', 'assertion_invalid', 'assertion_expired', 'changed', 'exists', 'unknown_project', 'seat_failed']);
+export const OperationReasonSchema = z.enum([...RefusalCodeSchema.options, 'untypable', 'confirm_required', 'conflict', 'assertion_invalid', 'assertion_expired', 'changed', 'exists', 'unknown_project', 'seat_failed', 'scheduled', ...ModelRefusalSchema.options]);
 export type OperationReason = z.infer<typeof OperationReasonSchema>;
 
 /** What an adapter knows how to type for a phone, beyond accept, deny and an option number. A phone hides an answer its session's tool cannot give. */
@@ -90,15 +107,21 @@ void sameTools;
 export const PhonePendingSchema = PendingSchema.extend({ key: z.string().max(64), risk: RiskSchema, riskReason: RiskReasonSchema, cut: z.literal(true).optional() });
 export type PhonePending = z.infer<typeof PhonePendingSchema>;
 
+/** What the phone's session carries of a model change (#58) that no session has: the daemon can switch it from a phone. */
+const SwitchableSessionSchema = SessionSchema.extend({ canSwitch: z.literal(true).optional() });
+
 /** A session as the phone sees it: no folder, no tmux name, no machine, no message to another agent. */
-export const PhoneSessionSchema = SessionSchema.pick({
+export const PhoneSessionSchema = SwitchableSessionSchema.pick({
   id: true, name: true, tool: true, project: true, title: true, topic: true, repo: true, branch: true, worktree: true,
   state: true, helpers: true, lastReply: true, startedAt: true, lastActivityAt: true,
+  /** Its model, effort and the change waiting for its next free moment: the phone shows them and offers to change them. */
+  model: true, effort: true, modelNext: true, canSwitch: true,
   /** Its role and its live team (ledge home spec §2.4): the agents screen groups a project's sessions by table. */
   role: true, roleLabel: true, team: true,
   /** Its context and its relief (context handover spec §3.2): the phone shows the gauge; the relief is started from the PC. */
   context: true, relieves: true
-}).extend({ pending: PhonePendingSchema.optional(), unread: z.boolean(), handover: z.object({ state: HandoverStateSchema, toName: z.string().max(80).optional() }).strict().optional() });
+}).extend({ pending: PhonePendingSchema.optional(), unread: z.boolean(), handover: z.object({ state: HandoverStateSchema, toName: z.string().max(80).optional() }).strict().optional(),
+  /** Absent: the agent has no checklist. */ checklist: PhoneChecklistSummarySchema.optional() });
 export type PhoneSession = z.infer<typeof PhoneSessionSchema>;
 
 /** Base64url without padding: what WebAuthn fields look like once the phone encodes them. */
@@ -270,6 +293,10 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
     cancel: z.literal(true).optional(), expect: PhoneExpectSchema
   }),
   z.object({ type: z.literal('session.interrupt'), op: OperationIdSchema, id: sessionId }),
+  /** Changes a live session's model and effort, `null` for the agent's own default; answered by `operation.result` and, when refused, `session.model.failed`. */
+  z.object({ type: z.literal('session.model'), op: OperationIdSchema, id: sessionId, model: ModelIdSchema.nullable(), effort: EffortSchema.nullable() }),
+  /** The models an agent offers on the PC. */
+  z.object({ type: z.literal('models.list'), tool: ToolSchema }),
   /** The phone drops its passkey from the daemon. */
   z.object({ type: z.literal('device.forget'), op: OperationIdSchema }),
   /** The phone's push subscription, with the VAPID key it was made with (so a key change is seen). */
@@ -326,21 +353,39 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
 });
 export type PhoneClientMessage = z.infer<typeof PhoneClientMessageSchema>;
 
+/** A model as the phone lists it: strings clipped by the gateway, no key it does not know. */
+export const PhoneModelChoiceSchema = z.object({
+  id: ModelChoiceSchema.shape.id.max(120), label: z.string().max(80), description: z.string().max(200).optional(),
+  efforts: z.array(EffortSchema).max(8).optional(), defaultEffort: EffortSchema.optional(), isDefault: z.boolean().optional()
+}).strict();
+export type PhoneModelChoice = z.infer<typeof PhoneModelChoiceSchema>;
+/** What a composition did to one seat's model, as the phone reads it. */
+export const PhoneSeatModelSchema = z.object({ role: z.string().max(40), session: sessionId, status: z.enum(['applied', 'scheduled', 'refused']), reason: ModelRefusalSchema.optional() });
+export type PhoneSeatModel = z.infer<typeof PhoneSeatModelSchema>;
+
 /** What the daemon sends a phone. */
 export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('snapshot'), protocol: z.literal(PHONE_PROTOCOL), sessions: z.array(PhoneSessionSchema), capabilities: CapabilitiesByToolSchema, daemon: z.object({ version: z.string(), name: z.string().max(40), boot: z.string().uuid().optional(), teams: z.literal(true).optional(),
+    /** The daemon takes `session.model`. */ models: z.literal(true).optional(),
+    /** The daemon sends `session.checklist` and a session's `checklist` summary. */ checklist: z.literal(true).optional(),
     /** `update`: the daemon can install a version and restart (npm, systemd); `restart`: it can restart (systemd). */ update: z.literal(true).optional(), restart: z.literal(true).optional() }), device: z.object({ confirm: z.boolean(), push: z.enum(['on', 'off', 'stale', 'unavailable']).optional(), chat: z.literal(true).optional(), contextNear: ContextPrefsSchema.shape.near.optional() }).optional() }),
   z.object({ type: z.literal('confirm.challenge'), purpose: ConfirmPurposeSchema, challenge: B64U.max(64), rpId: z.string().max(253), credentialId: B64U.max(1_366).optional(), expiresInMs: z.number().int().positive(),
     /** Echoed from the `confirm.prepare` of a `define` or `team` challenge, so the phone matches each challenge to its own call. Absent from an older gateway. */ digest: TeamsDigestSchema.optional() }),
   z.object({ type: z.literal('session.updated'), session: PhoneSessionSchema }),
   z.object({ type: z.literal('session.removed'), id: z.string() }),
+  /** A session's checklist, sent to the phone that watches it; `null`: it has none (any more). */
+  z.object({ type: z.literal('session.checklist'), id: z.string(), checklist: PhoneChecklistSchema.nullable() }),
   /** `pending.cut` is set when even this body was shortened. */
   z.object({ type: z.literal('session.pending'), id: z.string(), pending: PhonePendingSchema }),
   z.object({ type: z.literal('session.preview'), id: z.string(), lines: z.array(z.string()) }),
   /** `cut`: the ids of the items shortened; `more`: older items were left out. */
   z.object({ type: z.literal('session.thread'), id: z.string(), items: z.array(ThreadItemSchema), cut: z.array(z.string()), more: z.boolean() }),
   z.object({ type: z.literal('session.thread.item'), id: z.string(), item: ThreadItemSchema, cut: z.literal(true).optional() }),
-  z.object({ type: z.literal('operation.result'), op: OperationIdSchema, status: OperationStatusSchema, reason: OperationReasonSchema.optional() }),
+  z.object({ type: z.literal('operation.result'), op: OperationIdSchema, status: OperationStatusSchema, reason: OperationReasonSchema.optional(), models: z.array(PhoneSeatModelSchema).max(16).optional() }),
+  /** The models an agent offers; `error`: it could not be asked, `models` is then what Ledge knows without it. */
+  z.object({ type: z.literal('models.listing'), tool: ToolSchema, models: z.array(PhoneModelChoiceSchema).max(40), error: z.literal(true).optional() }),
+  /** A model change that was accepted and then failed (the agent could not restart). */
+  z.object({ type: z.literal('session.model.failed'), id: z.string(), reason: ModelRefusalSchema }),
   z.object({ type: z.literal('chat.history'), turns: z.array(PhoneChatTurnSchema).max(50) }),
   z.object({ type: z.literal('chat.step'), qid: OperationIdSchema, step: PhoneChatStepSchema }),
   /** The whole text so far, not an increment. */

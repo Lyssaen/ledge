@@ -1,9 +1,8 @@
-import type { AttachmentRef, FileChange, Helper, HelperItem, NoticeItem, Pending, ReceivedItem, SentItem, Session, ThreadItem, ToolItem } from '@ledge/protocol';
+import { type AttachmentRef, type FileChange, type Helper, type HelperItem, type NoticeItem, type Pending, type ReceivedItem, type SentItem, type Session, type ThreadItem, type ToolItem, TODO_TOOLS } from '@ledge/protocol';
 import { helperThread, turns } from '@ledge/ui/thread/turns';
 import { elapsedMs, liveTool } from '@ledge/ui/thread/tools';
 import { findDocumentReferences } from '@ledge/ui/documents/references';
 import type { Lang } from '../i18n/lang';
-import { TODO_TOOLS } from './todos';
 
 export type ToolKind = 'read' | 'search' | 'command' | 'edit';
 const EDIT = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'apply_patch']);

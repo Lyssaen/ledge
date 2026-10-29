@@ -2,7 +2,7 @@ import { useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { EffortSchema, ModelIdSchema, TEAM_SEATS_MAX, TeamNameSchema, TemplateIdSchema, ToolSchema, type PhoneRole, type PhoneTeam, type PhoneTemplate } from '@ledge/protocol';
 import { copy } from '../copy';
 import { autoSeats, catalogKey, parseCatalogKey, rolesNotSeated, roleFor, scopeLabel } from '../model/catalog';
-import { outcomeNote, type OutcomeNote } from '../model/teamsOutcome';
+import { outcomeNote, seatModelNote, type OutcomeNote } from '../model/teamsOutcome';
 import { pendingAfter, runningSettings, type SeatSettings } from '../model/teamsPending';
 import { goBack, href, navigate } from '../router';
 import type { ChatAction } from '../state/chat';
@@ -31,12 +31,12 @@ const Label = ({ id, children }: { id: string; children: ReactNode }) => <label 
 const HEAD = 'text-meta tracking-[.4px] text-muted';
 
 /** A live team's seats as a composition: the ones not leaving, with what each was composed with. */
-const seatsOfTeam = (team: PhoneTeam): Seat[] => team.seats.filter(s => !s.leaving).map(s => ({
+export const seatsOfTeam = (team: PhoneTeam): Seat[] => team.seats.filter(s => !s.leaving).map(s => ({
   role: s.role, ...(s.tool ? { tool: s.tool } : {}), ...(s.model ? { model: s.model } : {}), ...(s.effort ? { effort: s.effort } : {})
 }));
 
 /** A seat as the protocol takes it: strict, no empty field. */
-const seatOut = (s: Seat): Seat => ({
+export const seatOut = (s: Seat): Seat => ({
   role: s.role,
   ...(s.tool ? { tool: s.tool } : {}),
   ...(s.model?.trim() ? { model: s.model.trim() } : {}),
@@ -144,6 +144,8 @@ function Form({ store, mode, initial }: { store: MobileStore; mode: TeamEditorMo
   // `applied` is what the last saved composition asks of each seat; the two together say what is left to do.
   const settingsOf = (project: string | null, s: Seat): SeatSettings => { const r = catalog ? roleFor(catalog, project, s.role) : undefined; return { tool: s.tool ?? r?.tool, model: s.model ?? r?.model, effort: s.effort ?? r?.effort }; };
   const [ran, setRan] = useState<ReadonlyMap<string, SeatSettings>>(() => isLive && teamNow && catalog ? runningSettings(teamNow, id => settingsOf(teamNow.project, { role: id })) : new Map());
+  // What the last composition's answer says of each seat's model (a seat it names shows that instead of « au prochain démarrage »).
+  const [modelNotes, setModelNotes] = useState<Readonly<Record<string, string>>>({});
   const [applied, setApplied] = useState<ReadonlyArray<SeatSettings & { role: string }>>([]);
   const pending = useMemo(() => pendingAfter(ran, applied), [ran, applied]);
 
@@ -219,6 +221,9 @@ function Form({ store, mode, initial }: { store: MobileStore; mode: TeamEditorMo
         const unstarted = seats.map(x => x.role).filter(role => !teamNow.seats.some(x => x.role === role) && !held(role));
         setNote(r.status === 'applied' && r.warn ? outcomeNote(r, t.composed, {}, unstarted) : { text: t.composed, quiet: true });
         setApplied(sent);
+        const named = r.status === 'applied' ? r.models : undefined;
+        const sessions = store.getState().sessions;
+        setModelNotes(Object.fromEntries((named ?? []).map(m => { const holder = sessions.get(m.session); return [m.role, seatModelNote(named, m.role, holder?.name ?? m.session, holder?.canSwitch === true)]; })));
       } });
   };
   // A seat that holds no session is started; one that holds one is restarted (a start on a held seat is refused).
@@ -296,7 +301,7 @@ function Form({ store, mode, initial }: { store: MobileStore; mode: TeamEditorMo
                     {restarting?.role === s.role && restarting.note && <p role="status" className={`mt-1 ${restarting.note.quiet ? 'text-muted' : 'text-danger-fg'}`}>{restarting.note.text}</p>}
                   </div>
                 )}
-                {!p?.restart && p?.next && <p className="mt-1 text-small text-info">{t.nextStart}</p>}
+                {!p?.restart && p?.next && <p className="mt-1 text-small text-info">{modelNotes[s.role] ?? t.nextStart}</p>}
               </li>
             );
           })}

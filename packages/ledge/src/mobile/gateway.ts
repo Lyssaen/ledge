@@ -2,10 +2,13 @@
 // through the operation registry and then the local fronts' own `dispatch`. What the daemon broadcasts is projected for
 // the devices that follow it. Logs carry a type, a code or an error's name, never a message's content.
 import { hostname } from 'node:os';
+import { randomUUID } from 'node:crypto';
 import {
   ATTACHMENT_MAX, TEAMS_OPERATION_TYPES, isTeamsOperation, OperationIdSchema, PHONE_PROTOCOL, actionById, TOOL_TEXT_MAX, proposalRows, PhoneClientMessageSchema, pushEndpointAllowed, RefusalCodeSchema, UNTYPABLE, backendOf, isArchived, pendingKey,
   LEDGE_GIVER, SEMVER, pcSubject, type AttachmentRef, type ChatErrorCode, type ChatTurn, type CloseHow, type ClientMessage, type PhoneTask, type Task, type Team, type OperationReason, type OperationStatus, type PhoneClientMessage, type PhoneServerMessage, type ServerMessage, type Session, type ThreadItem
 } from '@ledge/protocol';
+import { ModelRefusalSchema, type ModelRefusal, type PhoneSeatModel, type Tool } from '@ledge/protocol';
+import { latestTodos, TODO_TOOLS, type PhoneChecklist, type PhoneChecklistSummary } from '@ledge/protocol';
 import { compareVersions } from '@ledge/ui/semver';
 import type { MobileService } from './service.js';
 import type { ChatThreads, ChatThreadId } from '../chat/threads.js';
@@ -18,6 +21,8 @@ import { createOutbox } from './outbox.js';
 import { fingerprint, OperationRegistry, type Outcome, type PhoneOperation } from './operations.js';
 import { createTeamsOps } from './teamsOps.js';
 import { capabilities, clip, phoneTasks, toPhoneFullRequest, toPhoneItem, toPhoneSession, toPhoneTask, toPhoneTeam, toPhoneThread } from './project.js';
+import { canSwitch, toPhoneModels } from './project.js';
+import { checklistSummary, toPhoneChecklist } from './project.js';
 import { riskOf } from './risk.js';
 import { CHALLENGE_TTL_MS, type ChallengeStore } from './challenges.js';
 import { challengeOf, verifyAssertion, verifyRegistration, type DeviceCredential, type Rp } from './webauthn.js';
@@ -51,6 +56,9 @@ type PushStatus = 'on' | 'off' | 'stale' | 'unavailable';
 const FLUSH_BEFORE_REVOKE_MS = 5_000;
 
 const REQUEST_NAME = /^[a-z][a-z.]{0,39}$/;
+
+/** How long a phone's `models.list` waits for the daemon's listing (whose agent probe gives up after 15 s) before it is told none came. */
+const MODELS_WAIT_MS = 20_000;
 
 export function createPhoneGateway(deps: {
   mobile: Pick<MobileService, 'send' | 'onMessage' | 'state' | 'onChange' | 'revoke' | 'pushOf' | 'setPush' | 'relayPushKey'>;
@@ -101,6 +109,8 @@ export function createPhoneGateway(deps: {
   pc?: { canUpdate: boolean; canRestart: boolean; update: (version: string, reply: (m: ServerMessage) => void) => void; restart: (reply: (m: ServerMessage) => void) => void };
   /** The context threshold the user chose (context handover spec §3.2). */
   contextNear?: () => number;
+  /** The daemon takes `session.model` with coded answers and lists an agent's models (#58): the phone offers the switch. */
+  models?: true;
 }): PhoneGateway {
   const { mobile, log } = deps;
   /** The read mark of a session no device marked: what was replied before the gateway started counts as read. */
@@ -108,6 +118,11 @@ export function createPhoneGateway(deps: {
   const registry = new OperationRegistry();
   const followers = new Map<string, Follower>();
   let stopped = false;
+  /**
+   * The last model change that failed once applied, by session (#58), with the model and effort it then ran: a phone that did not
+   * follow when it failed (locked) hears it after its next snapshot. Gone with a new change accepted, a new model or effort, the session.
+   */
+  const modelFailures = new Map<string, { reason: ModelRefusal; model: string | undefined; effort: string | undefined }>();
 
   const follower = (deviceId: string): Follower => {
     let f = followers.get(deviceId);
@@ -152,7 +167,18 @@ export function createPhoneGateway(deps: {
     const s = deps.session(id);
     return s && !isArchived(s) ? s : undefined;
   };
-  const projected = (deviceId: string, s: Session) => toPhoneSession(s, followers.get(deviceId)?.reads.get(s.id) ?? startedAt);
+  /** Each session's checklist from its main thread, computed when first asked and kept while a device follows. */
+  const checklists = new Map<string, { list: PhoneChecklist | null; summary: PhoneChecklistSummary | undefined }>();
+  const computeChecklist = (id: string) => {
+    const todos = latestTodos(deps.thread(id) ?? []);
+    return { list: toPhoneChecklist(todos), summary: checklistSummary(todos) };
+  };
+  const checklistOf = (id: string) => {
+    let c = checklists.get(id);
+    if (!c) checklists.set(id, c = computeChecklist(id));
+    return c;
+  };
+  const projected = (deviceId: string, s: Session) => toPhoneSession(s, followers.get(deviceId)?.reads.get(s.id) ?? startedAt, checklistOf(s.id).summary);
   const pushStatus = (deviceId: string): PushStatus => {
     const key = mobile.relayPushKey();
     if (key === null) return 'unavailable';
@@ -164,10 +190,12 @@ export function createPhoneGateway(deps: {
     const push = pushStatus(deviceId);
     const f = followers.get(deviceId);
     if (f) f.pushStatus = push;
-    return {
-    type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, boot: deps.boot, name: clip(hostname(), 40).text, ...(teamsOps ? { teams: true as const } : {}), ...(deps.pc?.canUpdate ? { update: true as const } : {}), ...(deps.pc?.canRestart ? { restart: true as const } : {}) },
+    const message: Extract<PhoneServerMessage, { type: 'snapshot' }> = {
+    type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, boot: deps.boot, name: clip(hostname(), 40).text, ...(teamsOps ? { teams: true as const } : {}), ...(deps.pc?.canUpdate ? { update: true as const } : {}), ...(deps.pc?.canRestart ? { restart: true as const } : {}), checklist: true as const },
     device: { confirm: deps.credential(deviceId) !== null, push, ...(deps.chats ? { chat: true as const } : {}), ...(deps.contextNear ? { contextNear: deps.contextNear() } : {}) }
     };
+    // The daemon takes `session.model` and lists an agent's models (#58).
+    return deps.models ? { ...message, daemon: { ...message.daemon, models: true } } : message;
   };
 
   const phoneTeams = () => (deps.teams?.() ?? []).flatMap(t => { const x = toPhoneTeam(t, deps.tasks?.() ?? [], deps.projectName ?? (() => null)); return x ? [x] : []; });
@@ -186,17 +214,40 @@ export function createPhoneGateway(deps: {
       followers.delete(deviceId);
     },
     onOverflow: deviceId => {
-      if (followers.get(deviceId)?.subscribed) { outbox.push(deviceId, snapshot(deviceId), 'snapshot'); teamsAndTasks(deviceId); }
+      if (followers.get(deviceId)?.subscribed) {
+        outbox.push(deviceId, snapshot(deviceId), 'snapshot');
+        teamsAndTasks(deviceId);
+        // The full list of the session it is watching, which the snapshot does not carry.
+        const watching = followers.get(deviceId)?.watching;
+        if (watching) outbox.push(deviceId, { type: 'session.checklist', id: watching, checklist: checklistOf(watching).list }, `session.checklist:${watching}`);
+      }
     },
     log,
     ...deps.outbox
   });
 
   const push = (deviceId: string, msg: PhoneServerMessage, key?: string) => { if (!stopped) outbox.push(deviceId, msg, key); };
-  const result = (deviceId: string, op: string, status: OperationStatus, reason?: OperationReason) => {
+  /** After a snapshot: the kept model failures of the sessions still there. */
+  const replayModelFailures = (deviceId: string) => {
+    for (const [id, f] of modelFailures) if (live(id)) push(deviceId, { type: 'session.model.failed', id, reason: f.reason });
+  };
+  /** What the daemon says that keeps or drops a model failure, followed or not. */
+  const keepModelFailure = (m: ServerMessage) => {
+    if (m.type === 'session.removed') { modelFailures.delete(m.id); return; }
+    if (m.type === 'session.updated') {
+      const f = modelFailures.get(m.session.id);
+      if (f && (isArchived(m.session) || f.model !== m.session.model || f.effort !== m.session.effort)) modelFailures.delete(m.session.id);
+      return;
+    }
+    if (m.type !== 'error' || m.request !== 'session.model' || m.id === undefined) return;
+    const reason = ModelRefusalSchema.safeParse(m.code);
+    const s = live(m.id);
+    if (reason.success && s) modelFailures.set(m.id, { reason: reason.data, model: s.model, effort: s.effort });
+  };
+  const result = (deviceId: string, op: string, status: OperationStatus, reason?: OperationReason, models?: PhoneSeatModel[]) => {
     // A device revoked while its operation ran hears nothing more.
     if (stopped || !approved(deviceId)) return;
-    push(deviceId, { type: 'operation.result', op, status, ...(reason ? { reason } : {}) });
+    push(deviceId, { type: 'operation.result', op, status, ...(reason ? { reason } : {}), ...(models ? { models } : {}) });
   };
 
   /** The operations that act on a tracked session: the registry's own, the credential's, the device's and the chat's are handled before it. */
@@ -274,6 +325,10 @@ export function createPhoneGateway(deps: {
       case 'session.interrupt':
         // The local handler returns silently without a terminal: the phone would read a no-op as applied. OMP stops over its RPC.
         return s.tmuxSession || backendOf(s) === 'omp-rpc' ? undefined : { status: 'rejected', reason: 'read_only' };
+      case 'session.model':
+        // What the phone was shown (`canSwitch`): an ended session, or one Ledge did not launch, never reaches the daemon.
+        if (canSwitch(s)) return undefined;
+        return { status: 'rejected', reason: s.state === 'exited' ? 'ended' : 'not_launched' };
     }
   };
 
@@ -285,6 +340,7 @@ export function createPhoneGateway(deps: {
       case 'session.reply': return { type: 'session.reply', id: msg.id, text: msg.text, ...(msg.attachments?.length ? { attachments: msg.attachments } : {}) };
       case 'session.answer': return { type: 'session.answer', id: msg.id, requestId: msg.requestId, answers: msg.answers, ...(msg.cancel ? { cancel: true } : {}) };
       case 'session.interrupt': return { type: 'session.interrupt', id: msg.id };
+      case 'session.model': return { type: 'session.model', id: msg.id, model: msg.model, effort: msg.effort };
     }
   };
 
@@ -429,6 +485,44 @@ export function createPhoneGateway(deps: {
     return outcome ?? opts.silent ?? { status: 'applied' };
   };
 
+  /**
+   * A model change (#58), by its correlated answer: accepted is applied (`turn`: scheduled for the session's next free moment),
+   * an `error` of the request a refusal by its model code or its refusal code; anything else failed. An accept wins over an
+   * error that came with it: a failure once applied reaches the phone apart, as `session.model.failed` (`forward`).
+   */
+  const modelChange = async (out: Extract<ClientMessage, { type: 'session.model' }>): Promise<Outcome> => {
+    let when: 'now' | 'turn' | 'none' | undefined;
+    let refusal: { code?: string } | undefined;
+    await deps.dispatch(out, m => {
+      if (m.type === 'session.model.accepted' && m.id === out.id) when ??= m.when;
+      if (m.type === 'error' && m.request === 'session.model' && (m.id === undefined || m.id === out.id)) refusal ??= { code: m.code };
+    });
+    // A new change accepted answers the last failure.
+    if (when) modelFailures.delete(out.id);
+    if (when) return when === 'turn' ? { status: 'applied', reason: 'scheduled' } : { status: 'applied' };
+    const model = ModelRefusalSchema.safeParse(refusal?.code);
+    if (model.success) return { status: 'rejected', reason: model.data };
+    const known = RefusalCodeSchema.safeParse(refusal?.code);
+    return known.success ? { status: 'rejected', reason: known.data } : { status: 'failed' };
+  };
+
+  /** An agent's models, asked of the local daemon (never another machine's); none, in error, when it could not answer in time. */
+  const modelsList = async (deviceId: string, tool: Tool) => {
+    const requestId = randomUUID();
+    let listing: Extract<ServerMessage, { type: 'models.listing' }> | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        deps.dispatch({ type: 'models.list', requestId, tool }, m => { if (m.type === 'models.listing' && m.requestId === requestId) listing ??= m; }),
+        new Promise<void>(r => { timer = setTimeout(r, MODELS_WAIT_MS); })
+      ]);
+    } catch (e) { log(`phone models.list failed (${e instanceof Error ? e.name : 'error'})`); }
+    finally { clearTimeout(timer); }
+    // The agent could not be asked: what Ledge knows without it, said in error; never the daemon's text, which may hold a path.
+    if (!listing) return push(deviceId, { type: 'models.listing', tool, models: [], error: true });
+    push(deviceId, { type: 'models.listing', tool, models: toPhoneModels(listing.models), ...(listing.error !== undefined ? { error: true as const } : {}) });
+  };
+
   /** The turn's team card (roles spec §3.8): like a launch card, the device's check over the turn first. */
   const chatTeam = async (deviceId: string, msg: Extract<PhoneOperation, { type: 'chat.team' }>): Promise<Outcome> => {
     const turn = ownTurn(deviceId, msg.qid);
@@ -514,6 +608,7 @@ export function createPhoneGateway(deps: {
     const refused = precheck(deviceId, msg);
     if (refused) return refused;
     const out = local(msg);
+    if (out.type === 'session.model') return modelChange(out);
     let error: { code?: string } | undefined;
     await deps.dispatch(out, m => {
       if (m.type === 'error' && (m.request === undefined || m.request === out.type)) error ??= { code: m.code };
@@ -524,7 +619,7 @@ export function createPhoneGateway(deps: {
   const write = async (deviceId: string, msg: PhoneOperation) => {
     const begun = registry.begin(deviceId, msg.op, fingerprint(msg));
     if (begun.kind === 'conflict') return result(deviceId, msg.op, 'rejected', 'conflict');
-    if (begun.kind === 'replay') return result(deviceId, msg.op, begun.record.status, begun.record.reason);
+    if (begun.kind === 'replay') return result(deviceId, msg.op, begun.record.status, begun.record.reason, begun.record.models);
     let outcome: Outcome;
     try {
       result(deviceId, msg.op, 'received');
@@ -534,8 +629,8 @@ export function createPhoneGateway(deps: {
       log(`phone ${msg.type} failed (${e instanceof Error ? e.name : 'error'})`);
       outcome = { status: 'failed' };
     }
-    registry.finish(msg.op, outcome.status, outcome.reason);
-    result(deviceId, msg.op, outcome.status, outcome.reason);
+    registry.finish(msg.op, outcome.status, outcome.reason, outcome.models);
+    result(deviceId, msg.op, outcome.status, outcome.reason, outcome.models);
     // The phone learns it can confirm from the snapshot that follows.
     if (msg.type === 'credential.register' && outcome.status === 'applied' && approved(deviceId)) push(deviceId, snapshot(deviceId), 'snapshot');
     if (msg.type === 'device.forget' && outcome.status === 'applied') {
@@ -623,13 +718,20 @@ export function createPhoneGateway(deps: {
       case 'presence':
         follower(deviceId).visible = msg.visible;
         return;
+      case 'models.list':
+        // Ignored by a gateway that does not say `models`: the phone never offers the switch there.
+        if (!deps.models) return;
+        void modelsList(deviceId, msg.tool).catch((e: unknown) => log(`phone models.list failed (${e instanceof Error ? e.name : 'error'})`));
+        return;
       case 'snapshot.request':
         follower(deviceId).subscribed = true;
         push(deviceId, snapshot(deviceId), 'snapshot');
+        replayModelFailures(deviceId);
         return teamsAndTasks(deviceId);
       case 'session.thread': {
         if (!live(msg.id)) return push(deviceId, { type: 'error', code: 'unknown_session', request: msg.type });
-        return push(deviceId, { type: 'session.thread', id: msg.id, ...toPhoneThread(deps.thread(msg.id) ?? []) });
+        push(deviceId, { type: 'session.thread', id: msg.id, ...toPhoneThread(deps.thread(msg.id) ?? []) });
+        return push(deviceId, { type: 'session.checklist', id: msg.id, checklist: checklistOf(msg.id).list }, `session.checklist:${msg.id}`);
       }
       case 'session.pending': {
         const session = live(msg.id);
@@ -731,6 +833,8 @@ export function createPhoneGateway(deps: {
       log(`phone message refused: ${request ?? '?'}`);
       // A subscription to an endpoint off the list, or a launch the schema refuses (a row twice), is an operation the phone waits an answer for.
       const op = OperationIdSchema.safeParse((raw as { op?: unknown } | null | undefined)?.op);
+      // A model change the schema refuses (#58) is answered the same way.
+      if (request === 'session.model' && op.success && approved(deviceId)) return push(deviceId, { type: 'operation.result', op: op.data, status: 'rejected', reason: 'invalid' });
       if (((request !== undefined && (TEAMS_OPERATION_TYPES as readonly string[]).includes(request)) || request === 'push.subscribe' || request === 'chat.launch' || request === 'chat.close' || request === 'chat.act' || request === 'chat.ignore' || request === 'chat.team' || request === 'chat.task' || request === 'team.resume' || request === 'task.seen') && op.success && approved(deviceId)) return push(deviceId, { type: 'operation.result', op: op.data, status: 'rejected', reason: 'invalid' });
       return push(deviceId, { type: 'error', code: 'invalid', ...(request !== undefined ? { request } : {}) });
     }
@@ -763,10 +867,26 @@ export function createPhoneGateway(deps: {
 
   /** A session gone for the phone (removed or archived): its read mark and watch go with it. */
   const removed = (id: string) => {
+    checklists.delete(id);
     for (const [deviceId, f] of followers) {
       f.reads.delete(id);
       if (f.watching === id) f.watching = null;
       if (f.subscribed) push(deviceId, { type: 'session.removed', id });
+    }
+  };
+
+  /** A main-thread checklist update, already in the thread: its watchers get the new list, the followers the session when its summary moved. */
+  const checklistChanged = (id: string, item: ThreadItem) => {
+    if (item.kind !== 'tool' || item.helperId !== undefined || !TODO_TOOLS.has(item.tool) || !checklists.has(id)) return;
+    const before = checklists.get(id)!;
+    const now = computeChecklist(id);
+    checklists.set(id, now);
+    if (JSON.stringify(now.list) !== JSON.stringify(before.list)) {
+      for (const [deviceId, f] of followers) if (f.watching === id) push(deviceId, { type: 'session.checklist', id, checklist: now.list }, `session.checklist:${id}`);
+    }
+    const s = live(id);
+    if (s && JSON.stringify(now.summary) !== JSON.stringify(before.summary)) {
+      for (const [deviceId, f] of followers) if (f.subscribed) push(deviceId, { type: 'session.updated', session: projected(deviceId, s) }, `session.updated:${id}`);
     }
   };
 
@@ -775,7 +895,10 @@ export function createPhoneGateway(deps: {
 
   return {
     forward(m) {
-      if (stopped || followers.size === 0) return;
+      if (!stopped) try { keepModelFailure(m); } catch (e) { log(`phone model failure of ${m.type} failed (${e instanceof Error ? e.name : 'error'})`); }
+      if (stopped) return;
+      // Nothing is kept for nobody: a device that comes back gets the checklists computed afresh.
+      if (followers.size === 0) { checklists.clear(); return; }
       try {
         switch (m.type) {
           case 'session.updated':
@@ -786,6 +909,13 @@ export function createPhoneGateway(deps: {
             return;
           case 'session.removed':
             return removed(m.id);
+          case 'error': {
+            // A model change accepted, then failed once applied (#58): its code, never the daemon's text, to whoever follows the sessions.
+            const reason = ModelRefusalSchema.safeParse(m.code);
+            if (m.request !== 'session.model' || m.id === undefined || !reason.success || !live(m.id)) return;
+            for (const [deviceId, f] of followers) if (f.subscribed) push(deviceId, { type: 'session.model.failed', id: m.id, reason: reason.data });
+            return;
+          }
           case 'context.prefs':
             // The threshold rides on the snapshot's device: a change sends each following device a fresh one.
             for (const [deviceId, f] of followers) if (f.subscribed) push(deviceId, snapshot(deviceId), 'snapshot');
@@ -816,6 +946,7 @@ export function createPhoneGateway(deps: {
             }
             return;
           case 'session.thread.item': {
+            checklistChanged(m.id, m.item);
             const watchers = [...followers].filter(([, f]) => f.watching === m.id);
             if (watchers.length === 0) return;
             const { item, cut } = toPhoneItem(m.item);

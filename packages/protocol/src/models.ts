@@ -27,3 +27,10 @@ export const ModelsListingSchema = z.object({
 });
 export type ModelsList = z.infer<typeof ModelsListSchema>;
 export type ModelsListing = z.infer<typeof ModelsListingSchema>;
+
+/** Why a model change was refused (#58): travels as the `code` of an `error`, as the `reason` of a phone's failure and per seat of a team change. */
+export const ModelRefusalSchema = z.enum(['not_launched', 'ended', 'no_conversation', 'not_running', 'effort_in_model', 'restart_failed', 'refused']);
+export type ModelRefusal = z.infer<typeof ModelRefusalSchema>;
+/** The daemon took a model change: `now` the agent restarts, `turn` it waits for the session's next free moment, `none` nothing changes. */
+export const SessionModelAcceptedSchema = z.object({ type: z.literal('session.model.accepted'), id: z.string(), when: z.enum(['now', 'turn', 'none']) });
+export type SessionModelAccepted = z.infer<typeof SessionModelAcceptedSchema>;

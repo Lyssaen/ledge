@@ -215,6 +215,56 @@ export const copy = {
   /** A request's badge: the desktop's words for what waits on the user. */
   kind: { permission: 'Votre accord', question: 'Une question', plan: 'Plan', diff: 'Modification' },
   tools: { claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor Agent', omp: 'OMP' },
+  /** Changing a live session's model and effort (the chip above the reply field and its sheet). */
+  model: {
+    title: 'Modèle et effort',
+    subtitle: (tool: string) => `Les modèles de ${tool} connus du PC`,
+    byDefault: 'Par défaut',
+    defaultHint: "Celui que l'agent prend de lui-même",
+    current: 'actuel',
+    effortTitle: 'Effort',
+    effortHint: 'Temps de réflexion par tour',
+    noteIdle: (name: string) => `${name} redémarre sur la même conversation et garde son contexte.`,
+    noteWorking: (name: string) => `${name} travaille : le changement attendra la fin de son tour.`,
+    apply: 'Appliquer',
+    cancel: 'Annuler',
+    cancelPending: 'Annuler le changement',
+    nextTurn: 'au prochain tour',
+    listError: 'Liste des modèles indisponible',
+    applied: 'Appliqué',
+    scheduled: 'Appliqué au prochain tour',
+    notApplied: 'Changement de modèle non appliqué',
+    uncertain: 'Changement de modèle envoyé ; vérifiez sur le PC',
+    failed: {
+      not_launched: 'pas lancé par Ledge', ended: 'session terminée', no_conversation: 'aucune conversation à reprendre',
+      not_running: "l'agent ne tourne pas", effort_in_model: "cet outil prend l'effort dans le modèle",
+      restart_failed: 'le redémarrage a échoué', refused: "refusé par l'outil"
+    },
+    failedLine: (reason: string) => `Changement de modèle non appliqué : ${reason}`,
+    chip: (what: string) => `Modèle et effort : ${what}`,
+    /** The seat card's sheet: what a model change on a live team's seat saves, and what it does to the session holding it. */
+    seat: {
+      change: (role: string) => `Changer le modèle de @${role}`,
+      heldBy: (label: string, name: string, working: boolean) => `${label} · tenu par ${name}${working ? ', qui travaille' : ''}`,
+      tool: 'Outil', toolRestart: 'changer redémarre le siège',
+      saved: 'Enregistré sur le siège pour ses prochains démarrages.',
+      now: (name: string) => `Appliqué aussi tout de suite à ${name}, sur la même conversation.`,
+      nowWorking: (name: string) => `Appliqué aussi tout de suite à ${name}, sur la même conversation : il travaille, ce sera à la fin de ce tour.`,
+      later: 'au prochain démarrage du siège',
+      /** « Par défaut » on a seat whose role sets a model: clearing the seat's own value gives the role's. */
+      roleDefault: (model: string) => `Celui du rôle : ${model}`,
+      passkey: 'Votre passkey confirme le changement.',
+      restarts: (name: string) => `${name} redémarre sur la même conversation.`,
+      close: 'Fermer',
+      outcome: {
+        saved: 'Enregistré',
+        next: 'Enregistré · au prochain démarrage du siège',
+        applied: (name: string) => `Enregistré ; appliqué à ${name}`,
+        scheduled: (name: string) => `Enregistré ; appliqué à ${name} à la fin de son tour`,
+        notApplied: (name: string, reason: string) => `Enregistré sur le siège ; pas appliqué à ${name} : ${reason}`
+      }
+    }
+  },
   detail: {
     back: 'Retour aux demandes',
     heading: { permission: 'Une autorisation', question: 'Une question', plan: 'Un plan', diff: 'Des modifications' },
@@ -545,6 +595,14 @@ export const copy = {
     compare: (v: string) => `Comparer avec la release ${v} sur GitHub`,
     later: 'Plus tard',
     apply: 'Mettre à jour'
+  },
+  checklist: {
+    title: 'Plan de travail',
+    allDone: 'Tout est fait',
+    paused: 'En pause',
+    progress: (done: number, total: number) => `${done} sur ${total} tâches faites`,
+    box: { completed: 'Fait', in_progress: 'En cours', pending: 'À faire' },
+    cut: 'Liste raccourcie : la suite est sur le PC'
   },
   offline: {
     lastKnown: (t: string) => `Dernier état connu · ${t}`,

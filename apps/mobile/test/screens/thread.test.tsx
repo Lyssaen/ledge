@@ -81,3 +81,33 @@ describe('the thread', () => {
     expect(screen.getByText('Cette session n’existe plus sur le PC.')).toBeInTheDocument();
   });
 });
+
+describe('the checklist on the thread', () => {
+  const checklist = { tasks: [{ text: 'Écrire', status: 'in_progress' as const }], done: 0, total: 1 };
+  const flagged = (flag: boolean) => {
+    const t = setup();
+    const m = snapshot([session('a', { name: 'Kai', topic: 'Inbox mobile' })]);
+    if (m.type === 'snapshot' && flag) m.daemon = { ...m.daemon, checklist: true };
+    t.deliver(m);
+    render(<Thread store={t.store} sessionId="a" storage={t.storage} />);
+    return t;
+  };
+
+  it('shows the head once the PC sends a list', () => {
+    const t = flagged(true);
+    act(() => t.deliver({ type: 'session.checklist', id: 'a', checklist }));
+    expect(screen.getByRole('button', { name: /Plan de travail/ })).toBeInTheDocument();
+  });
+
+  it('shows none for a null checklist', () => {
+    const t = flagged(true);
+    act(() => t.deliver({ type: 'session.checklist', id: 'a', checklist: null }));
+    expect(screen.queryByRole('button', { name: /Plan de travail/ })).not.toBeInTheDocument();
+  });
+
+  it('shows none when the PC does not announce the feature', () => {
+    const t = flagged(false);
+    act(() => t.deliver({ type: 'session.checklist', id: 'a', checklist }));
+    expect(screen.queryByRole('button', { name: /Plan de travail/ })).not.toBeInTheDocument();
+  });
+});

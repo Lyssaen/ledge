@@ -323,3 +323,75 @@ describe('phone attachments', () => {
     expect(PhoneServerMessageSchema.parse({ type: 'attachment.error', requestId: 'r1', reason: 'too_large' }).type).toBe('attachment.error');
   });
 });
+
+describe('phone model change', () => {
+  const sess = SessionSchema.parse({
+    id: 's1', name: 'bot', tool: 'claude', cwd: '/home/x', project: 'p', title: 't', tmuxSession: 'ledge-s1', state: 'idle',
+    startedAt: '2026-10-20T10:00:00.000Z', lastActivityAt: '2026-10-20T10:00:00.000Z', source: 'launcher'
+  });
+  const psess = { ...sess, unread: false };
+  const caps = { freeTextAnswer: true };
+  it('a session carries its model, effort, pending change and canSwitch', () => {
+    const p = PhoneSessionSchema.parse({ ...psess, model: 'opus', effort: 'high', modelNext: { model: 'sonnet' }, canSwitch: true });
+    expect(p).toMatchObject({ model: 'opus', effort: 'high', modelNext: { model: 'sonnet' }, canSwitch: true });
+    expect(() => PhoneSessionSchema.parse({ ...psess, canSwitch: false })).toThrow();
+  });
+  it('the client asks for models and changes one', () => {
+    expect(() => PhoneClientMessageSchema.parse({ type: 'session.model', op: OP, id: 's1', model: null, effort: null })).not.toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ type: 'session.model', op: OP, id: 's1', model: 'opus', effort: 'high' })).not.toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ type: 'session.model', id: 's1', model: null, effort: null })).toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ type: 'models.list', tool: 'claude' })).not.toThrow();
+  });
+  it('the daemon lists models strictly and reports a failure', () => {
+    const m = { id: 'opus', label: 'Opus', description: 'd', efforts: ['low'], defaultEffort: 'low', isDefault: true };
+    expect(() => PhoneServerMessageSchema.parse({ type: 'models.listing', tool: 'claude', models: [m] })).not.toThrow();
+    expect(() => PhoneServerMessageSchema.parse({ type: 'models.listing', tool: 'claude', models: [], error: true })).not.toThrow();
+    expect(() => PhoneServerMessageSchema.parse({ type: 'models.listing', tool: 'claude', models: [{ ...m, extra: 1 }] })).toThrow();
+    expect(() => PhoneServerMessageSchema.parse({ type: 'models.listing', tool: 'claude', models: [{ ...m, label: 'x'.repeat(81) }] })).toThrow();
+    expect(() => PhoneServerMessageSchema.parse({ type: 'session.model.failed', id: 's1', reason: 'restart_failed' })).not.toThrow();
+    expect(() => PhoneServerMessageSchema.parse({ type: 'session.model.failed', id: 's1', reason: 'boom' })).toThrow();
+  });
+  it('an operation result may be scheduled and carry seat models', () => {
+    expect(() => PhoneServerMessageSchema.parse({ type: 'operation.result', op: OP, status: 'applied', reason: 'scheduled' })).not.toThrow();
+    expect(() => PhoneServerMessageSchema.parse({ type: 'operation.result', op: OP, status: 'applied', models: [{ role: 'leader', session: 's1', status: 'scheduled' }] })).not.toThrow();
+    expect(() => PhoneServerMessageSchema.parse({ type: 'operation.result', op: OP, status: 'applied', models: [{ role: 'r', session: 's', status: 'refused', reason: 'not_running' }] })).not.toThrow();
+    expect(OperationReasonSchema.options).toContain('restart_failed');
+  });
+  it('a seat model is bounded like a role id and a session id', () => {
+    const seat = (x: object) => PhoneServerMessageSchema.safeParse({ type: 'operation.result', op: OP, status: 'applied', models: [{ role: 'r', session: 's', status: 'applied', ...x }] }).success;
+    expect(seat({ role: 'r'.repeat(40), session: 's'.repeat(100) })).toBe(true);
+    expect(seat({ role: 'r'.repeat(41) })).toBe(false);
+    expect(seat({ session: 's'.repeat(101) })).toBe(false);
+  });
+  it('the snapshot announces the model change', () => {
+    expect(() => PhoneServerMessageSchema.parse({ type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: [], capabilities: { claude: caps, codex: caps, cursor: caps, omp: caps }, daemon: { version: '1.0.0', name: 'pc', models: true } })).not.toThrow();
+  });
+});
+
+describe('phone checklist', () => {
+  const full = SessionSchema.parse({
+    id: 's1', name: 'bot', tool: 'claude', cwd: '/home/x', project: 'p', title: 't', repoPath: '/home/x/r', workdir: '/home/x/w',
+    tmuxSession: 'ledge-s1', state: 'idle', startedAt: '2026-10-20T10:00:00.000Z', lastActivityAt: '2026-10-20T10:00:00.000Z', source: 'launcher', machineId: 'm'
+  });
+  const cap = { freeTextAnswer: true };
+  const snap = { type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: [], capabilities: { claude: cap, codex: cap, cursor: cap, omp: cap }, daemon: { version: '1.0.0', name: 'pc' } };
+  it('keeps the summary on a session, and accepts a session without one', () => {
+    const checklist = { done: 2, total: 5, current: 'Write the test' };
+    expect(PhoneSessionSchema.parse({ ...full, unread: false, checklist }).checklist).toEqual(checklist);
+    expect(PhoneSessionSchema.parse({ ...full, unread: false })).not.toHaveProperty('checklist');
+  });
+  it('bounds the summary text', () => {
+    expect(() => PhoneSessionSchema.parse({ ...full, unread: false, checklist: { done: 0, total: 1, current: 'x'.repeat(201) } })).toThrow();
+  });
+  it('sends the list, or null when there is none', () => {
+    expect(() => PhoneServerMessageSchema.parse({ type: 'session.checklist', id: 'a', checklist: null })).not.toThrow();
+    expect(() => PhoneServerMessageSchema.parse({ type: 'session.checklist', id: 'a', checklist: { tasks: [{ text: 'a', status: 'in_progress' }], done: 0, total: 1 } })).not.toThrow();
+    const tasks = Array.from({ length: 51 }, () => ({ text: 'a', status: 'pending' }));
+    expect(() => PhoneServerMessageSchema.parse({ type: 'session.checklist', id: 'a', checklist: { tasks, done: 0, total: 51 } })).toThrow();
+  });
+  it('announces the capability in the snapshot, optionally', () => {
+    expect(PhoneServerMessageSchema.parse({ ...snap, daemon: { version: '1.0.0', name: 'pc', checklist: true } })).toMatchObject({ daemon: { checklist: true } });
+    expect(PhoneServerMessageSchema.parse(snap)).not.toHaveProperty('daemon.checklist');
+    expect(() => PhoneServerMessageSchema.parse({ ...snap, daemon: { version: '1.0.0', name: 'pc', checklist: false } })).toThrow();
+  });
+});

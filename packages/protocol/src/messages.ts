@@ -4,7 +4,7 @@ import { ChatStepSchema, ChatTurnSchema, ChatProposalSchema, ChatProposalsSchema
 import { ActionIdSchema } from './actions.js';
 import { ATTACHMENTS_MAX, AttachmentDataSchema, AttachmentErrorSchema, AttachmentGetSchema, AttachmentIdSchema, AttachmentPutSchema, AttachmentStoredSchema, ImageUploadSchema } from './attachments.js';
 import { ReposInspectSchema, ReposInfoSchema } from './repos.js';
-import { ModelsListSchema, ModelsListingSchema, ModelIdSchema, EffortSchema } from './models.js';
+import { ModelsListSchema, ModelsListingSchema, ModelIdSchema, EffortSchema, SessionModelAcceptedSchema } from './models.js';
 import { ReposScanSchema, ReposFoundSchema } from './scan.js';
 import { DocumentReadSchema, DocumentContentSchema, DocumentErrorSchema } from './documents.js';
 import { RoutingContextSchema, RouteResultSchema } from './routing.js';
@@ -93,6 +93,7 @@ export const UpdateFailureSchema = z.enum(['git-install', 'no-systemd', 'session
 export type UpdateFailure = z.infer<typeof UpdateFailureSchema>;
 
 export const ServerMessageSchema = z.discriminatedUnion('type', [
+  SessionModelAcceptedSchema,
   z.object({ type: z.literal('chat.routed'), qid: z.string(), result: RouteResultSchema }),
   DocumentContentSchema,
   DocumentErrorSchema,

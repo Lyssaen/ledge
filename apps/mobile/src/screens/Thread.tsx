@@ -14,7 +14,9 @@ import { Notice } from '../ui/Notice';
 import { ReplyView } from '../ui/ReplyView';
 import { PhoneThumbs } from '../ui/PhoneThumbs';
 import { useAttachments } from '../ui/useAttachments';
+import { Checklist } from './Checklist';
 import { Reply, replyFailure, replyProblem } from './Reply';
+import { SessionModelChip, SessionModelNote, available as modelSwitchable } from './SessionModel';
 import { buttonClass, iconButtonClass } from '../ui/Button';
 import { Icon } from '../ui/icons';
 
@@ -177,12 +179,14 @@ export function Thread({ store, sessionId, storage, onReconnect }: { store: Mobi
         <p className="mt-2 ml-[46px] text-meta [overflow-wrap:anywhere] text-muted phone-side:hidden">{where}</p>
       </header>
       <main ref={scroller} aria-label={copy.thread.log(session.name)} className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto overscroll-contain pt-5 pb-4 phone-side:pt-3 phone-side:pb-3">
+        {state.daemon?.checklist && state.checklists.get(sessionId) && <Checklist checklist={state.checklists.get(sessionId)!} current={session?.checklist?.current} />}
         {thread?.more && <p className="text-center text-meta text-muted">{copy.thread.more}</p>}
         {!ready && items.length === 0 && <p className="text-center text-meta text-muted" role="status">{fresh ? copy.thread.loading : copy.thread.unavailable}</p>}
         {ready && items.length === 0 && <p className="text-center text-meta text-muted">{copy.thread.empty}</p>}
         {items.map(it => <Bubble key={it.key} item={it} store={store} />)}
       </main>
-      <Reply name={session.name} composer={composer} draft={draft} onDraft={changeDraft} onSend={send} fresh={fresh} taken={takenNow} checking={last?.phase === 'uncertain' && fresh} error={error} onReconnect={onReconnect} images={images} dialog={dialog} />
+      <Reply name={session.name} composer={composer} draft={draft} onDraft={changeDraft} onSend={send} fresh={fresh} taken={takenNow} checking={last?.phase === 'uncertain' && fresh} error={error} onReconnect={onReconnect} images={images} dialog={dialog}
+        {...(modelSwitchable(state.daemon, session) ? { lead: <SessionModelChip store={store} session={session} />, leadNote: <SessionModelNote store={store} session={session} /> } : {})} />
     </>
   );
 }

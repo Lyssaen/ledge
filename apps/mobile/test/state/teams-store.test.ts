@@ -200,6 +200,18 @@ describe('define and teamOp', () => {
     await expect(done).resolves.toEqual({ status: 'applied', warn: 'seat_failed' });
   });
 
+  it('teamOp compose resolves applied with models', async () => {
+    const t = setup();
+    vi.mocked(getAssertion).mockResolvedValue(ASSERTION);
+    const done = t.store.teamOp({ type: 'team.compose', team: 'team-a1b2', seats: [{ role: 'lead' }] });
+    await prepared(t);
+    t.deliver(challenge('team'));
+    await flush();
+    const models = [{ role: 'lead', session: 's1', status: 'scheduled' as const }, { role: 'dev', session: 's2', status: 'refused' as const, reason: 'not_running' as const }];
+    t.deliver({ type: 'operation.result', op: t.of('team.compose')[0]!.op, status: 'applied', models });
+    await expect(done).resolves.toEqual({ status: 'applied', models });
+  });
+
   it('a second template.write of the same id is sent while the first is still uncertain', async () => {
     const t = setup();
     vi.mocked(getAssertion).mockResolvedValue(ASSERTION);

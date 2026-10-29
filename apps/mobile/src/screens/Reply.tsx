@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, type ReactNode } from 'react';
 import { UNTYPABLE } from '@ledge/protocol';
 import { copy } from '../copy';
 import { MESSAGE_MAX, QUICK_REPLIES, type Composer } from '../model/thread';
@@ -32,7 +32,8 @@ export function replyFailure(o: Op): { title: string; body: string } {
  * The composer of a thread (boards Continue and Sent): an instruction for an agent that is free, with quick ones. A
  * text the PC would refuse (too long, or not typable on one line) is said so here and never sent.
  */
-export function Reply({ name, composer, draft, onDraft, onSend, fresh, taken, checking, error, onReconnect, images, dialog }: {
+export function Reply({ name, composer, draft, onDraft, onSend, fresh, taken, checking, error, onReconnect, images, dialog, lead, leadNote }: {
+  /** The chip that opens at the head of the quick row, and the line under the row it may need. */ lead?: ReactNode; leadNote?: ReactNode;
   name: string; composer: Composer; draft: string; onDraft: (t: string) => void; onSend: () => void; fresh: boolean;
   /** The images waiting under the field. */ images: Attachments;
   /** A dialog waits: the images would be refused, they go after the answer. */ dialog: boolean;
@@ -60,13 +61,15 @@ export function Reply({ name, composer, draft, onDraft, onSend, fresh, taken, ch
           </Notice>
         </div>
       )}
-      {composer.enabled && (
+      {(composer.enabled || lead) && (
         <div role="group" aria-label={C.quickLabel} className="flex gap-1.5 overflow-x-auto pb-2 [scrollbar-width:none]">
-          {QUICK_REPLIES.map(q => (
+          {lead}
+          {composer.enabled && QUICK_REPLIES.map(q => (
             <button key={q} type="button" onClick={() => { onDraft(q); ref.current?.focus(); }} className={`${chipClass()} whitespace-nowrap`}>{q}</button>
           ))}
         </div>
       )}
+      {leadNote}
       <MessageField
         id="draft" label={C.label(name)} sendLabel={C.send(name)} value={draft} onChange={onDraft} onSend={onSend} canSend={canSend}
         oneLine images={images} placeholder={composer.placeholder} disabled={!composer.enabled} fieldRef={ref}

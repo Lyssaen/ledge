@@ -14,7 +14,7 @@ import { closedTasks, tablesOf, type Table } from '../model/teams';
 import { buttonClass } from '../ui/Button';
 import { Icon } from '../ui/icons';
 
-function Row({ row, session, offline, threshold }: { row: AgentRow; session: PhoneSession | undefined; offline: boolean; threshold: number }) {
+function Row({ row, session, offline, threshold, plan }: { row: AgentRow; session: PhoneSession | undefined; offline: boolean; threshold: number; plan?: boolean }) {
   return (
     <a href={href({ name: 'thread', sessionId: row.sessionId })} className="flex gap-3 border-b border-line py-4 hover:bg-raised/40 active:bg-raised/60">
       <div className="mt-[3px]"><MobileBot tool={row.tool} seed={row.sessionId} state={session?.state ?? 'idle'} frozen={offline} /></div>
@@ -36,7 +36,19 @@ function Row({ row, session, offline, threshold }: { row: AgentRow; session: Pho
             ))}
           </p>
         )}
-        <div className="mt-2"><Tag {...row.status} /></div>
+        <div className="mt-2 flex items-center gap-2.5">
+          <Tag {...row.status} />
+          {plan && row.progress && (
+            <span role="img" aria-label={copy.checklist.progress(row.progress.done, row.progress.total)} className="inline-flex items-center gap-1.5 text-meta text-muted">
+              <Icon name="plan" className="size-[13px]" stroke={1.8} />
+              <span className="font-mono text-fg">{row.progress.done}/{row.progress.total}</span>
+              <span className="h-1 w-10 overflow-hidden rounded-[2px] bg-raised"><span className="block h-full bg-ok" style={{ width: `${row.progress.total ? (row.progress.done / row.progress.total) * 100 : 0}%` }} /></span>
+            </span>
+          )}
+        </div>
+        {plan && row.progress?.current && (
+          <p className="mt-[5px] truncate text-[12px] leading-[18px] text-muted"><span className="mr-1.5 inline-block size-1.5 rounded-full bg-info align-[1px]" />{row.progress.current}</p>
+        )}
       </div>
       <span className="self-center text-muted"><Icon name="chevron" /></span>
     </a>
@@ -85,7 +97,7 @@ export function Agents({ store, onReconnect }: { store: MobileStore; onReconnect
               {g.tables.map(t => (
                 <div key={t.kind === 'team' ? t.team.id : 'common'} role="group" aria-label={t.kind === 'team' ? copy.agents.teamLabel(t.team.name) : copy.agents.common} className={t.kind === 'team' && t.team.state === 'resting' ? 'opacity-70' : ''}>
                   {teamed && <TableHead table={t} store={store} offline={offline} />}
-                  {t.rows.map(r => <Row key={r.sessionId} row={r} session={state.sessions.get(r.sessionId)} offline={offline} threshold={state.device?.contextNear ?? CONTEXT_NEAR} />)}
+                  {t.rows.map(r => <Row key={r.sessionId} row={r} session={state.sessions.get(r.sessionId)} offline={offline} threshold={state.device?.contextNear ?? CONTEXT_NEAR} plan={!!state.daemon?.checklist} />)}
                 </div>
               ))}
             </section>
@@ -95,7 +107,7 @@ export function Agents({ store, onReconnect }: { store: MobileStore; onReconnect
           // Two groups can share a name (a repository and a project); a session belongs to one group only.
           <section key={g.rows[0]!.sessionId} aria-label={g.label}>
             <div className="py-3 text-meta tracking-[.4px] text-muted">{g.label}</div>
-            {g.rows.map(r => <Row key={r.sessionId} row={r} session={state.sessions.get(r.sessionId)} offline={offline} threshold={state.device?.contextNear ?? CONTEXT_NEAR} />)}
+            {g.rows.map(r => <Row key={r.sessionId} row={r} session={state.sessions.get(r.sessionId)} offline={offline} threshold={state.device?.contextNear ?? CONTEXT_NEAR} plan={!!state.daemon?.checklist} />)}
           </section>
         ))}
         {(tables ?? groups).length === 0 && (

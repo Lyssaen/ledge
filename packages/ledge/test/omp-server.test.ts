@@ -178,6 +178,30 @@ describe('server: OMP sessions', () => {
     expect(store.get(id)).toMatchObject({ model: 'openai-codex/gpt-6.1-sol' });
     await c.close();
   });
+  it('a second change asked while set_model runs is applied after it, never lost', async () => {
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.launch', tool: 'omp', cwd: dir, model: 'anthropic/claude-opus-5-5' });
+    const { id } = await c.next('session.launched');
+    await until(() => store.get(id)!.state === 'idle');
+    c.send({ type: 'session.model', id, model: 'openai-codex/gpt-6.1-sol', effort: null });
+    c.send({ type: 'session.model', id, model: 'anthropic/claude-opus-5-5', effort: null });
+    expect(await c.next('session.model.accepted')).toMatchObject({ when: 'now' });
+    expect(await c.next('session.model.accepted')).toMatchObject({ when: 'turn' });
+    await until(() => cmdTypes().filter(l => l.cmd?.type === 'set_model').length === 2);
+    await until(() => store.get(id)!.model === 'anthropic/claude-opus-5-5' && !store.get(id)!.modelNext);
+    await c.close();
+  });
+  it('a refused set_model broadcasts code refused', async () => {
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.launch', tool: 'omp', cwd: dir, model: 'anthropic/claude-opus-5-5' });
+    const { id } = await c.next('session.launched');
+    await until(() => store.get(id)!.state === 'idle');
+    c.send({ type: 'session.model', id, model: 'anthropic/nope', effort: null });
+    expect(await c.next('session.model.accepted')).toEqual({ type: 'session.model.accepted', id, when: 'now' });
+    expect(await c.next('error')).toMatchObject({ type: 'error', id, request: 'session.model', code: 'refused' });
+    expect(store.get(id)!.modelNext).toBeUndefined();
+    await c.close();
+  });
   it('asked while OMP works, the change waits for its free moment (modelNext) and is then applied', async () => {
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'session.launch', tool: 'omp', cwd: dir, prompt: 'slow work', model: 'anthropic/claude-opus-5-5' });

@@ -1,5 +1,8 @@
 import { LEDGE_GIVER, pendingKey, PENDING_BODY_MAX, SNAPSHOT_BODY_MAX, taskClosed, THREAD_BUDGET, THREAD_ITEMS_MAX, THREAD_TEXT_MAX, TOOL_TEXT_MAX, TOPIC_MAX, ToolSchema } from '@ledge/protocol';
 import { PhoneRoleSchema, PhoneTemplateSchema } from '@ledge/protocol';
+import { EffortSchema, PhoneModelChoiceSchema, type ModelChoice, type PhoneModelChoice } from '@ledge/protocol';
+import { CHECKLIST_TASKS_MAX, CHECKLIST_TEXT_MAX, doneCount } from '@ledge/protocol';
+import type { PhoneChecklist, PhoneChecklistSummary, Todo } from '@ledge/protocol';
 import type { CapabilitiesByTool, FileChange, Pending, PhoneCatalog, PhonePending, PhoneProblem, PhoneRole, PhoneSession, PhoneTask, PhoneTeam, PhoneTemplate, ServerMessage, Session, Task, Team, ThreadItem, Tool } from '@ledge/protocol';
 import { adapterFor } from '../adapters/index.js';
 import { riskOf } from './risk.js';
@@ -46,7 +49,32 @@ export function toPhoneRequest(s: Session, bodyMax: number): PhonePending | unde
 /** The request with its whole body (up to `PENDING_BODY_MAX`), for `session.pending`. */
 export const toPhoneFullRequest = (s: Session): PhonePending | undefined => toPhoneRequest(s, PENDING_BODY_MAX);
 
-export function toPhoneSession(s: Session, readAt: string): PhoneSession {
+/** Whether the phone's checklist leaves something out: more tasks than it carries, or a text it clips. */
+const checklistCut = (todos: readonly Todo[]): boolean =>
+  todos.length > CHECKLIST_TASKS_MAX || todos.some(t => t.text.length > CHECKLIST_TEXT_MAX);
+
+/** The agent's checklist for the session screen: its first tasks, texts clipped; `done` and `total` count the whole list. */
+export function toPhoneChecklist(todos: readonly Todo[] | null): PhoneChecklist | null {
+  if (!todos) return null;
+  return {
+    tasks: todos.slice(0, CHECKLIST_TASKS_MAX).map(t => ({ text: clip(t.text, CHECKLIST_TEXT_MAX).text, status: t.status })),
+    done: doneCount(todos), total: todos.length,
+    ...(checklistCut(todos) ? { cut: true as const } : {})
+  };
+}
+
+/** The checklist for « Agents »: the counts and the first task in progress, from the whole list (one past the cap still shows). */
+export function checklistSummary(todos: readonly Todo[] | null): PhoneChecklistSummary | undefined {
+  if (!todos) return undefined;
+  const current = todos.find(t => t.status === 'in_progress');
+  return {
+    done: doneCount(todos), total: todos.length,
+    ...(current ? { current: clip(current.text, CHECKLIST_TEXT_MAX).text } : {}),
+    ...(checklistCut(todos) ? { cut: true as const } : {})
+  };
+}
+
+export function toPhoneSession(s: Session, readAt: string, checklist?: PhoneChecklistSummary): PhoneSession {
   const pending = toPhoneRequest(s, SNAPSHOT_BODY_MAX);
   return {
     id: s.id, name: s.name, tool: s.tool, project: s.project, title: s.title, state: s.state,
@@ -56,10 +84,19 @@ export function toPhoneSession(s: Session, readAt: string): PhoneSession {
     ...pickSet(s, ['repo', 'branch', 'worktree', 'role', 'roleLabel', 'team', 'context', 'relieves']),
     // Its relief's state only (context handover spec §3.2): the phone shows it, the PC starts it.
     ...(s.handover ? { handover: { state: s.handover.state, ...(s.handover.toName ? { toName: s.handover.toName.slice(0, 80) } : {}) } } : {}),
+    // Its model, effort and the change waiting for its next free moment (#58), cut to the bounds of a model id and an effort.
+    ...(s.model !== undefined ? { model: clip(s.model, MODEL_MAX).text } : {}),
+    ...(s.effort !== undefined ? { effort: clip(s.effort, EFFORT_MAX).text } : {}),
+    ...(s.modelNext ? { modelNext: {
+      ...(s.modelNext.model !== undefined ? { model: clip(s.modelNext.model, MODEL_MAX).text } : {}),
+      ...(s.modelNext.effort !== undefined ? { effort: clip(s.modelNext.effort, EFFORT_MAX).text } : {})
+    } } : {}),
+    ...(canSwitch(s) ? { canSwitch: true as const } : {}),
     helpers: s.helpers.map(h => ({ id: h.id, kind: h.kind, task: h.task, state: h.state, ...pickSet(h, ['finishedAt']) })),
     // A preview only: the whole reply is in the thread.
     ...(s.lastReply ? { lastReply: { text: clip(s.lastReply.text, TOOL_TEXT_MAX).text, at: s.lastReply.at, ...pickSet(s.lastReply, ['plan']) } } : {}),
     ...(pending ? { pending } : {}),
+    ...(checklist ? { checklist } : {}),
     unread: !!s.lastReply && s.lastReply.at > readAt
   };
 }
@@ -282,3 +319,37 @@ export function toPhoneTask(x: Task, owner: Session | undefined, teamName: strin
 /** The tasks Ledge gave that the phone lists: open ones, and those closed in the last day not put away. */
 export const phoneTasks = (tasks: readonly Task[], now: number): Task[] =>
   tasks.filter(x => x.giver === LEDGE_GIVER && (!taskClosed(x) || (!x.seen && now - Date.parse(x.updatedAt) < 86_400_000))).slice(-200);
+
+/** The bounds of a model id and an effort (`ModelIdSchema`, `EffortSchema`): what the phone shows of a session's. */
+const MODEL_MAX = 200;
+const EFFORT_MAX = 20;
+/** At most this many models in a phone's listing (`PhoneModelChoiceSchema`'s bounds below). */
+const MODELS_MAX = 40;
+
+/**
+ * Whether the daemon can switch the session's model (#58): one Ledge launched and that has not ended. The daemon this ships
+ * with always has the switch, so the gateway's `models` flag does not enter into it.
+ */
+export function canSwitch(s: Session): boolean {
+  return s.source === 'launcher' && s.state !== 'exited';
+}
+
+/**
+ * An agent's models for the phone (#58): strings cut to its bounds, efforts the schema refuses dropped, no key it does not
+ * know. A model whose id is too long to be sent back whole, or that the phone's schema still refuses, is left out.
+ */
+export function toPhoneModels(models: readonly ModelChoice[]): PhoneModelChoice[] {
+  const out: PhoneModelChoice[] = [];
+  for (const m of models) {
+    if (out.length >= MODELS_MAX) break;
+    const efforts = m.efforts?.filter(e => EffortSchema.safeParse(e).success).slice(0, 8);
+    const c = PhoneModelChoiceSchema.safeParse({
+      id: m.id, label: clip(m.label, 80).text,
+      ...(m.description !== undefined ? { description: clip(m.description, 200).text } : {}),
+      ...(efforts ? { efforts } : {}),
+      ...pickSet(m, ['defaultEffort', 'isDefault'])
+    });
+    if (c.success) out.push(c.data);
+  }
+  return out;
+}

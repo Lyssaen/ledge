@@ -1,6 +1,6 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { ATTACHMENT_MAX, PREVIEW_MAX, padPlain, PAD_TIERS, PLAIN_MAX, SNAPSHOT_BODY_MAX, TOPIC_MAX, PhoneServerMessageSchema, pendingKey, type Pending, type ServerMessage, type Session, type Task, type Team } from '@ledge/protocol';
+import { ATTACHMENT_MAX, PREVIEW_MAX, padPlain, PAD_TIERS, PLAIN_MAX, SNAPSHOT_BODY_MAX, TOPIC_MAX, PhoneServerMessageSchema, pendingKey, type ClientMessage, type Pending, type ServerMessage, type Session, type Task, type Team } from '@ledge/protocol';
 import { hostname } from 'node:os';
 import { createPhoneGateway } from '../src/mobile/gateway.js';
 import { challengeOf } from '../src/mobile/webauthn.js';
@@ -134,7 +134,9 @@ describe('phone gateway: reads and forward', () => {
     await flush();
     expect(g.got('dev1')).toEqual([
       { type: 'session.thread', id: 'a', items: [{ kind: 'message', id: 'm1', at: T0, turn: 0, text: 'hello' }], cut: [], more: false },
-      { type: 'error', code: 'unknown_session', request: 'session.thread' }
+      // An error goes ahead of the updates still queued.
+      { type: 'error', code: 'unknown_session', request: 'session.thread' },
+      { type: 'session.checklist', id: 'a', checklist: null }
     ]);
   });
 
@@ -2065,5 +2067,233 @@ describe('phone gateway: images', () => {
     await flush();
     expect(c.images).toEqual([[ref]]);
     expect(g.got('dev1')).toContainEqual({ type: 'chat.error', qid: q2, code: 'failed' });
+  });
+});
+
+describe('phone gateway: a session\'s model (#58)', () => {
+  /** A daemon that answers each `session.model` with what `answer` gives, and `models.list` with `listing`. */
+  const daemon = (o: { answer?: (m: Extract<ClientMessage, { type: 'session.model' }>) => ServerMessage[]; listing?: (m: Extract<ClientMessage, { type: 'models.list' }>) => ServerMessage[] } = {}) => async (msg: ClientMessage, reply: (m: ServerMessage) => void) => {
+    if (msg.type === 'session.model') for (const m of o.answer?.(msg) ?? []) reply(m);
+    if (msg.type === 'models.list') for (const m of o.listing?.(msg) ?? []) reply(m);
+  };
+  const change = (id: string, extra: object = {}) => ({ type: 'session.model', op: randomUUID(), id, model: 'opus', effort: 'high', ...extra });
+  const finals = (g: ReturnType<typeof setup>) => g.results('dev1').filter(r => r.status !== 'received').map(r => r.type === 'operation.result' && [r.status, r.reason ?? null]);
+
+  it('snapshot says models when the daemon can', async () => {
+    const on = setup({ deps: { models: true } });
+    const off = setup();
+    for (const g of [on, off]) g.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    const [snap] = on.got('dev1');
+    expect(PhoneServerMessageSchema.parse(snap)).toMatchObject({ type: 'snapshot', daemon: { models: true } });
+    // Each launcher session not ended can switch, whatever the flag: the flag only says the daemon takes it.
+    expect(snap?.type === 'snapshot' && snap.sessions.map(s => s.canSwitch)).toEqual([true, true, true, true]);
+    const [old] = off.got('dev1');
+    expect(old?.type === 'snapshot' && old.daemon).not.toHaveProperty('models');
+  });
+
+  it('models.list relays to the local daemon and pushes the listing', async () => {
+    const many = Array.from({ length: 50 }, (_, i) => ({ id: `m${i}`, label: `M${i}` }));
+    const g = setup({ deps: { models: true }, dispatch: daemon({ listing: m => [
+      // Another request's listing is not this one's.
+      { type: 'models.listing', requestId: 'someone-else', tool: 'claude', models: [{ id: 'stray', label: 'Stray' }] },
+      { type: 'models.listing', requestId: m.requestId, tool: 'claude', models: [
+        { id: 'opus', label: 'L'.repeat(100), description: 'D'.repeat(300), efforts: ['low', 'medium', 'high', 'xhigh', 'max', 'a', 'b', 'c', 'd', 'e'], defaultEffort: 'high', isDefault: true, secret: '/home/me' } as never,
+        { id: 'x'.repeat(121), label: 'too long an id' },
+        ...many
+      ] }
+    ] }) });
+    g.send('dev1', { type: 'models.list', tool: 'claude' });
+    await flush();
+    expect(g.dispatched).toEqual([{ type: 'models.list', requestId: expect.any(String), tool: 'claude' }]);
+    const [listing] = g.got('dev1');
+    expect(PhoneServerMessageSchema.safeParse(listing).success).toBe(true);
+    if (listing?.type !== 'models.listing') throw new Error('no listing');
+    expect(listing).not.toHaveProperty('error');
+    expect(listing.tool).toBe('claude');
+    expect(listing.models).toHaveLength(40);
+    // Its strings cut to the phone's bounds, no key it does not know; an id too long to be sent back whole is left out.
+    expect(listing.models[0]).toEqual({ id: 'opus', label: 'L'.repeat(80), description: 'D'.repeat(200), efforts: ['low', 'medium', 'high', 'xhigh', 'max', 'a', 'b', 'c'], defaultEffort: 'high', isDefault: true });
+    expect(listing.models.slice(1).map(x => x.id)).toEqual(many.slice(0, 39).map(x => x.id));
+    // Without the flag, the read is ignored: nothing reaches the daemon, nothing comes back.
+    const off = setup({ dispatch: daemon() });
+    off.send('dev1', { type: 'models.list', tool: 'claude' });
+    await flush();
+    expect(off.dispatched).toEqual([]);
+    expect(off.got('dev1')).toEqual([]);
+  });
+
+  it('models.list failure pushes error true', async () => {
+    // The agent could not be asked: what Ledge knows, said in error. A daemon error, or no answer at all: none, in error.
+    let n = 0;
+    const g = setup({ deps: { models: true }, dispatch: daemon({ listing: m => [
+      [{ type: 'models.listing', requestId: m.requestId, tool: m.tool, models: [{ id: 'opus', label: 'Opus' }], error: 'not signed in at /home/me' }] as ServerMessage[],
+      [{ type: 'error', message: 'boom', request: 'models.list' }] as ServerMessage[],
+      [] as ServerMessage[]
+    ][n++]! }) });
+    for (const tool of ['claude', 'codex', 'cursor']) { g.send('dev1', { type: 'models.list', tool }); await flush(); }
+    expect(g.got('dev1')).toEqual([
+      { type: 'models.listing', tool: 'claude', models: [{ id: 'opus', label: 'Opus' }], error: true },
+      { type: 'models.listing', tool: 'codex', models: [], error: true },
+      { type: 'models.listing', tool: 'cursor', models: [], error: true }
+    ]);
+    // A daemon that never answers: the phone is told once the wait is over.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const slow = setup({ deps: { models: true }, dispatch: () => new Promise<void>(() => {}) });
+      slow.send('dev1', { type: 'models.list', tool: 'claude' });
+      await flush();
+      expect(slow.got('dev1')).toEqual([]);
+      vi.advanceTimersByTime(20_000);
+      await flush();
+      expect(slow.got('dev1')).toEqual([{ type: 'models.listing', tool: 'claude', models: [], error: true }]);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('session.model on an exited session is rejected ended without reaching the daemon', async () => {
+    const g = setup({ deps: { models: true }, dispatch: daemon() });
+    g.sessions.set('x', mk('x', { state: 'exited' }));
+    g.sessions.set('y', mk('y', { state: 'exited', source: 'hook_only' }));
+    g.send('dev1', change('x'));
+    g.send('dev1', change('y'));
+    g.send('dev1', change('nope'));
+    await flush();
+    expect(finals(g)).toEqual([['rejected', 'ended'], ['rejected', 'ended'], ['rejected', 'unknown_session']]);
+    expect(g.dispatched).toEqual([]);
+  });
+
+  it('session.model on a hook_only session is rejected not_launched', async () => {
+    const g = setup({ deps: { models: true }, dispatch: daemon() });
+    g.sessions.set('h', mk('h', { source: 'hook_only', state: 'idle' }));
+    g.send('dev1', change('h'));
+    await flush();
+    expect(finals(g)).toEqual([['rejected', 'not_launched']]);
+    expect(g.dispatched).toEqual([]);
+  });
+
+  it('session.model accepted turn → applied scheduled', async () => {
+    const g = setup({ deps: { models: true }, dispatch: daemon({ answer: m => [{ type: 'session.model.accepted', id: m.id, when: 'turn' }] }) });
+    const m = change('b', { model: null, effort: 'low' });
+    g.send('dev1', m);
+    await flush();
+    expect(g.dispatched).toEqual([{ type: 'session.model', id: 'b', model: null, effort: 'low' }]);
+    expect(g.results('dev1')).toEqual([
+      { type: 'operation.result', op: m.op, status: 'received' },
+      { type: 'operation.result', op: m.op, status: 'applied', reason: 'scheduled' }
+    ]);
+    for (const r of g.results('dev1')) expect(PhoneServerMessageSchema.safeParse(r).success).toBe(true);
+  });
+
+  it('accepted now → applied', async () => {
+    const answers: ServerMessage[][] = [
+      [{ type: 'session.model.accepted', id: 'b', when: 'now' }],
+      [{ type: 'session.model.accepted', id: 'b', when: 'none' }],
+      // A late failure that beat the answer to the socket: the change was accepted, the failure is the phone's session.model.failed.
+      [{ type: 'error', id: 'b', message: 'could not restart', request: 'session.model', code: 'restart_failed' }, { type: 'session.model.accepted', id: 'b', when: 'now' }],
+      // Another session's answer is not this one's.
+      [{ type: 'session.model.accepted', id: 'a', when: 'now' }]
+    ];
+    const g = setup({ deps: { models: true }, dispatch: daemon({ answer: () => answers.shift()! }) });
+    for (let i = 0; i < 4; i++) { g.send('dev1', change('b')); await flush(); }
+    expect(finals(g)).toEqual([['applied', null], ['applied', null], ['applied', null], ['failed', null]]);
+  });
+
+  it('daemon refusal effort_in_model → rejected effort_in_model', async () => {
+    const refusal = (code?: string): ServerMessage => ({ type: 'error', id: 'b', message: 'no', request: 'session.model', ...(code ? { code } : {}) });
+    const answers: ServerMessage[][] = [[refusal('effort_in_model')], [refusal('no_conversation')], [refusal('busy')], [refusal('from_the_future')], [refusal()], [{ type: 'error', message: 'other', request: 'session.reply', code: 'busy' }], []];
+    const g = setup({ deps: { models: true }, dispatch: daemon({ answer: () => answers.shift()! }) });
+    for (let i = 0; i < 7; i++) { g.send('dev1', change('b')); await flush(); }
+    expect(finals(g)).toEqual([['rejected', 'effort_in_model'], ['rejected', 'no_conversation'], ['rejected', 'busy'], ['failed', null], ['failed', null], ['failed', null], ['failed', null]]);
+  });
+
+  it('a late restart_failed reaches the phone as session.model.failed', async () => {
+    const g = setup({ deps: { models: true } });
+    g.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    const before = g.got('dev1').length;
+    g.gw.forward({ type: 'error', id: 'b', message: 'could not restart: SECRET', request: 'session.model', code: 'restart_failed' });
+    // Not a model change's, or not a model refusal: nothing.
+    g.gw.forward({ type: 'error', id: 'b', message: 'x', request: 'session.reply', code: 'restart_failed' });
+    g.gw.forward({ type: 'error', id: 'b', message: 'x', request: 'session.model', code: 'busy' });
+    g.gw.forward({ type: 'error', message: 'x', request: 'session.model', code: 'ended' });
+    // A session the phone cannot see (unknown, or archived): nothing.
+    g.gw.forward({ type: 'error', id: 'nope', message: 'x', request: 'session.model', code: 'restart_failed' });
+    await flush();
+    const after = g.got('dev1').slice(before);
+    expect(after).toEqual([{ type: 'session.model.failed', id: 'b', reason: 'restart_failed' }]);
+    expect(PhoneServerMessageSchema.safeParse(after[0]).success).toBe(true);
+    expect(JSON.stringify(g.fm.sent)).not.toContain('SECRET');
+    // A device that follows no session hears nothing.
+    expect(g.got('dev2')).toEqual([]);
+  });
+
+  it('a late failure while no phone follows is replayed after the snapshot of the next subscribe', async () => {
+    const g = setup({ deps: { models: true }, dispatch: daemon({ answer: m => [{ type: 'session.model.accepted', id: m.id, when: 'turn' }] }) });
+    const fail = (id: string): ServerMessage => ({ type: 'error', id, message: 'could not restart', request: 'session.model', code: 'restart_failed' });
+    // The phone locked: nobody follows the sessions when the change fails at the end of the turn.
+    g.gw.forward(fail('b'));
+    g.gw.forward(fail('c'));
+    // A failure for a session the phone cannot see is neither pushed nor kept.
+    g.gw.forward(fail('nope'));
+    // The update that drops `modelNext` (model and effort unchanged) keeps it; `c` is removed and its failure goes with it.
+    g.gw.forward({ type: 'session.updated', session: mk('b', { state: 'idle' }) });
+    g.gw.forward({ type: 'session.removed', id: 'c' });
+    g.sessions.delete('c');
+    g.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    const got = g.got('dev1');
+    expect(got[0]?.type).toBe('snapshot');
+    expect(got.filter(m => m.type === 'session.model.failed')).toEqual([{ type: 'session.model.failed', id: 'b', reason: 'restart_failed' }]);
+    expect(got.findIndex(m => m.type === 'session.model.failed')).toBeGreaterThan(0);
+    // A new change accepted for the session: a later subscribe does not hear the old failure again.
+    g.send('dev1', change('b'));
+    await flush();
+    g.send('dev2', { type: 'snapshot.request' });
+    await flush();
+    expect(g.got('dev2').filter(m => m.type === 'session.model.failed')).toEqual([]);
+  });
+
+  it('a kept failure goes when the session\'s model or effort changes', async () => {
+    const g = setup({ deps: { models: true } });
+    const fail = (id: string): ServerMessage => ({ type: 'error', id, message: 'x', request: 'session.model', code: 'refused' });
+    g.gw.forward(fail('b'));
+    g.gw.forward(fail('c'));
+    g.gw.forward({ type: 'session.updated', session: mk('b', { model: 'sonnet' }) });
+    g.gw.forward({ type: 'session.updated', session: mk('c', { effort: 'low' }) });
+    g.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    expect(g.got('dev1').filter(m => m.type === 'session.model.failed')).toEqual([]);
+    // Archived: gone for the phone, and so is its failure.
+    g.gw.forward(fail('a'));
+    g.gw.forward({ type: 'session.updated', session: mk('a', { archivedAt: T1 }) });
+    g.sessions.set('a', mk('a', { archivedAt: T1 }));
+    g.send('dev2', { type: 'snapshot.request' });
+    await flush();
+    expect(g.got('dev2').filter(m => m.type === 'session.model.failed')).toEqual([]);
+  });
+
+  it('a replayed session.model op is not dispatched twice', async () => {
+    const g = setup({ deps: { models: true }, dispatch: daemon({ answer: m => [{ type: 'session.model.accepted', id: m.id, when: 'turn' }] }) });
+    const m = change('b');
+    g.send('dev1', m);
+    await flush();
+    g.send('dev1', m);
+    await flush();
+    expect(g.dispatched).toHaveLength(1);
+    expect(g.results('dev1').map(r => r.type === 'operation.result' && [r.status, r.reason ?? null])).toEqual([['received', null], ['applied', 'scheduled'], ['applied', 'scheduled']]);
+    // The same op id for another model is a conflict, never a second restart.
+    g.send('dev1', { ...m, model: 'sonnet' });
+    await flush();
+    expect(g.results('dev1').at(-1)).toEqual({ type: 'operation.result', op: m.op, status: 'rejected', reason: 'conflict' });
+    expect(g.dispatched).toHaveLength(1);
+  });
+
+  it('an unparsable session.model gets operation.result rejected', async () => {
+    const g = setup({ deps: { models: true }, dispatch: daemon() });
+    const m = change('b', { model: '-rf' });
+    g.send('dev1', m);
+    await flush();
+    expect(g.got('dev1')).toEqual([{ type: 'operation.result', op: m.op, status: 'rejected', reason: 'invalid' }]);
+    expect(g.dispatched).toEqual([]);
   });
 });
