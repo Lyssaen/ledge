@@ -63,4 +63,19 @@ describe('the checklist', () => {
     fireEvent.click(head());
     expect(screen.getAllByText('Lint')).toHaveLength(2);
   });
+
+  it('names the current task past the cap, when the capped list has none in progress', () => {
+    // Gateway-style: 60 tasks, 55 done, task 56 in progress; the list holds the first 50 only.
+    const capped = list(Array.from({ length: 50 }, () => 'completed' as Status), { done: 55, total: 60, cut: true });
+    render(<Checklist checklist={capped} current="Tâche 56" />);
+    expect(head()).toHaveTextContent('55/60');
+    expect(head()).toHaveTextContent('Tâche 56');
+    expect(head()).not.toHaveTextContent('En pause');
+  });
+
+  it('prefers a task in progress in the list to the given current', () => {
+    render(<Checklist checklist={seven} current="Ailleurs" />);
+    expect(head()).toHaveTextContent('Tâche 4');
+    expect(head()).not.toHaveTextContent('Ailleurs');
+  });
 });

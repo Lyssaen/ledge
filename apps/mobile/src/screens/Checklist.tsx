@@ -6,11 +6,12 @@ import { Icon } from '../ui/icons';
 const BOX = 'mt-px inline-flex size-4 flex-none items-center justify-center rounded-[4px] border';
 
 /** An agent's checklist: folded to its progress and current task, unfolded to every task. */
-export function Checklist({ checklist }: { checklist: PhoneChecklist }) {
+/** `current` is the gateway's current task over the whole list, for when the capped `tasks` hold none in progress. */
+export function Checklist({ checklist, current: whole }: { checklist: PhoneChecklist; current?: string }) {
   const [open, setOpen] = useState(false);
   const { tasks, done, total } = checklist;
-  const current = tasks.find(t => t.status === 'in_progress')?.text ?? (done === total ? copy.checklist.allDone : copy.checklist.paused);
-  const currentTask = tasks.some(t => t.status === 'in_progress');
+  const current = tasks.find(t => t.status === 'in_progress')?.text ?? whole ?? (done === total ? copy.checklist.allDone : copy.checklist.paused);
+  const currentTask = tasks.some(t => t.status === 'in_progress') || !!whole;
   const keys = useMemo(() => {
     const seen = new Map<string, number>();
     return tasks.map(x => { const n = seen.get(x.text) ?? 0; seen.set(x.text, n + 1); return n === 0 ? x.text : `${x.text}#${n}`; });
