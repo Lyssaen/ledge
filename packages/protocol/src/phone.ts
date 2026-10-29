@@ -6,6 +6,7 @@ import { ActionVarsSchema, ChatActionStateSchema, ChatStepSchema, MAX_PROPOSALS 
 import { ActionRiskSchema } from './actions.js';
 import { DecisionSchema, NOTE_MAX } from './decisions.js';
 import { ThreadItemSchema } from './thread.js';
+import type { TodoStatus } from './todos.js';
 import { MESSAGE_MAX, RefusalCodeSchema, SEMVER, UpdateFailureSchema } from './messages.js';
 import { PushSubscriptionSchema } from './push.js';
 import { EffortSchema, ModelIdSchema } from './models.js';
@@ -37,6 +38,22 @@ export const THREAD_ITEMS_MAX = 200;
 export const THREAD_BUDGET = 524_288;
 export const THREAD_TEXT_MAX = 8_192;
 export const TOOL_TEXT_MAX = 2_048;
+/** The agent's checklist as the phone gets it: the most tasks, and the longest text of a task or of the current one. */
+export const CHECKLIST_TASKS_MAX = 50;
+export const CHECKLIST_TEXT_MAX = 200;
+/** The same three statuses as `TodoStatus`. */
+const ChecklistStatusSchema = z.enum(['pending', 'in_progress', 'completed'] as const satisfies readonly TodoStatus[]);
+/** What the session screen shows: every task. `done` and `total` count the agent's whole list; `cut` is set when the gateway capped it. */
+export const PhoneChecklistSchema = z.object({
+  tasks: z.array(z.object({ text: z.string().max(CHECKLIST_TEXT_MAX), status: ChecklistStatusSchema })).max(CHECKLIST_TASKS_MAX),
+  done: z.number().int().nonnegative(), total: z.number().int().nonnegative(), cut: z.literal(true).optional()
+});
+export type PhoneChecklist = z.infer<typeof PhoneChecklistSchema>;
+/** What « Agents » shows: the counts and the task in progress. `cut` is set when the gateway shortened `current`. */
+export const PhoneChecklistSummarySchema = z.object({
+  done: z.number().int().nonnegative(), total: z.number().int().nonnegative(), current: z.string().max(CHECKLIST_TEXT_MAX).optional(), cut: z.literal(true).optional()
+});
+export type PhoneChecklistSummary = z.infer<typeof PhoneChecklistSummarySchema>;
 /** A request's full body (a plan) as the phone gets it. */
 export const PENDING_BODY_MAX = 65_536;
 /** A request's body inside a snapshot or an update; the whole body comes on demand with `session.pending`. */
@@ -98,7 +115,8 @@ export const PhoneSessionSchema = SessionSchema.pick({
   role: true, roleLabel: true, team: true,
   /** Its context and its relief (context handover spec §3.2): the phone shows the gauge; the relief is started from the PC. */
   context: true, relieves: true
-}).extend({ pending: PhonePendingSchema.optional(), unread: z.boolean(), handover: z.object({ state: HandoverStateSchema, toName: z.string().max(80).optional() }).strict().optional() });
+}).extend({ pending: PhonePendingSchema.optional(), unread: z.boolean(), handover: z.object({ state: HandoverStateSchema, toName: z.string().max(80).optional() }).strict().optional(),
+  /** Absent: the agent has no checklist. */ checklist: PhoneChecklistSummarySchema.optional() });
 export type PhoneSession = z.infer<typeof PhoneSessionSchema>;
 
 /** Base64url without padding: what WebAuthn fields look like once the phone encodes them. */
@@ -329,11 +347,14 @@ export type PhoneClientMessage = z.infer<typeof PhoneClientMessageSchema>;
 /** What the daemon sends a phone. */
 export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('snapshot'), protocol: z.literal(PHONE_PROTOCOL), sessions: z.array(PhoneSessionSchema), capabilities: CapabilitiesByToolSchema, daemon: z.object({ version: z.string(), name: z.string().max(40), boot: z.string().uuid().optional(), teams: z.literal(true).optional(),
+    /** The daemon sends `session.checklist` and a session's `checklist` summary. */ checklist: z.literal(true).optional(),
     /** `update`: the daemon can install a version and restart (npm, systemd); `restart`: it can restart (systemd). */ update: z.literal(true).optional(), restart: z.literal(true).optional() }), device: z.object({ confirm: z.boolean(), push: z.enum(['on', 'off', 'stale', 'unavailable']).optional(), chat: z.literal(true).optional(), contextNear: ContextPrefsSchema.shape.near.optional() }).optional() }),
   z.object({ type: z.literal('confirm.challenge'), purpose: ConfirmPurposeSchema, challenge: B64U.max(64), rpId: z.string().max(253), credentialId: B64U.max(1_366).optional(), expiresInMs: z.number().int().positive(),
     /** Echoed from the `confirm.prepare` of a `define` or `team` challenge, so the phone matches each challenge to its own call. Absent from an older gateway. */ digest: TeamsDigestSchema.optional() }),
   z.object({ type: z.literal('session.updated'), session: PhoneSessionSchema }),
   z.object({ type: z.literal('session.removed'), id: z.string() }),
+  /** A session's checklist, sent to the phone that watches it; `null`: it has none (any more). */
+  z.object({ type: z.literal('session.checklist'), id: z.string(), checklist: PhoneChecklistSchema.nullable() }),
   /** `pending.cut` is set when even this body was shortened. */
   z.object({ type: z.literal('session.pending'), id: z.string(), pending: PhonePendingSchema }),
   z.object({ type: z.literal('session.preview'), id: z.string(), lines: z.array(z.string()) }),
