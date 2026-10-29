@@ -722,7 +722,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** The change waiting in `modelNext` of an OMP session, applied at its free moment; a refusal leaves the session as it is and is logged. */
   async function applyOmpModel(s: Session): Promise<void> {
     const next = s.modelNext!;
-    typing.add(s.id);
+    typing.add(s.id); applyingModel.set(s.id, null);
     try { await omp.setModel(s.id, next); log(`model of ${s.id} is now ${next.model ?? 'unchanged'}${next.effort ? ` · ${next.effort}` : ''}`); }
     catch (e) {
       const message = (e as Error).message;
@@ -730,11 +730,25 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       // The model may have changed anyway (the effort refused): the record keeps the truth, the request is dropped, the fronts told.
       store.patch(s.id, { modelNext: undefined });
       modelFailed(s.id, message, 'refused');
-    } finally { typing.delete(s.id); }
+    } finally { typing.delete(s.id); afterModelApply(s.id); }
   }
 
   /** A model change accepted earlier that fails once applied: every front told, with the code the phone reads (the request's id). */
   const modelFailed = (id: string, message: string, code: ModelRefusal) => broadcast({ type: 'error', id, message, request: 'session.model', code });
+  /**
+   * The model changes being applied (respawn, set_model), by session, with the change asked meanwhile (accepted as `turn`):
+   * the apply rewrites the record without `modelNext`, so the later request is kept here and put back once it is done.
+   */
+  const applyingModel = new Map<string, { model?: string; effort?: string } | null>();
+  /** After an apply: the change asked meanwhile waits again for a free moment, is dropped when it is what now runs, or is
+   *  refused with its code when the session can no longer switch (the respawn failed: ended). */
+  function afterModelApply(id: string): void {
+    const later = applyingModel.get(id); applyingModel.delete(id);
+    const s = store.get(id); if (!later || !s) return;
+    const refusal = modelRefusal(s, later.effort ?? null);
+    if (refusal) { store.patch(id, { modelNext: undefined }); return modelFailed(id, refusal.message, refusal.refused); }
+    store.patch(id, { modelNext: later.model === s.model && later.effort === s.effort ? undefined : later });
+  }
   /** The session can take a model change at once: free, nothing typed into it, not being closed, no chat card waiting for it. */
   function canApplyNow(id: string): boolean {
     return free(store.get(id)) && !typing.has(id) && !closing.has(id) && !cardThreads.queuedRelays().some(q => q.relay.id === id);
@@ -758,6 +772,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     const s = store.get(id); if (!s) throw unknownSession();
     const refusal = modelRefusal(s, effort); if (refusal) return refusal;
     const next = { ...(model ? { model } : {}), ...(effort ? { effort } : {}) };
+    // Asked while another change is applied: kept for after it (even the model it runs now, which the apply is leaving).
+    if (applyingModel.has(id)) { applyingModel.set(id, next); store.patch(id, { modelNext: next }); return { when: 'turn' }; }
     // The model it already runs: a change asked earlier is dropped, nothing restarts.
     if (next.model === s.model && next.effort === s.effort) { if (s.modelNext) store.patch(id, { modelNext: undefined }); return { when: 'none' }; }
     // Decided before the patch: the store's listener starts the change at once (applyModelNext) when the session can take it.
@@ -778,7 +794,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     if (refusal) { store.patch(id, { modelNext: undefined }); return modelFailed(id, refusal.message, refusal.refused); }
     const key = resumeKey(s)!; // modelRefusal refuses a session without one
     // Held like a typing: neither the mailbox nor the relay writes into the agent being replaced.
-    typing.add(id);
+    typing.add(id); applyingModel.set(id, null);
     try {
       for (const [k, at] of respawned) if (Date.now() - at > RESPAWN_HOOKS_MS) respawned.delete(k);
       respawned.set(id, Date.now());
@@ -793,7 +809,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       log(`model change of ${id} failed: ${(e as Error).message}`);
       store.patch(id, { modelNext: undefined });
       modelFailed(id, (e as Error).message, 'restart_failed');
-    } finally { typing.delete(id); }
+    } finally { typing.delete(id); afterModelApply(id); }
   }
 
   /** The chat cards being launched: a second click, or another overlay, is refused until the first one has answered. */
