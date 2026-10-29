@@ -673,6 +673,29 @@ describe('models and model changes', () => {
     expect(t.of('models.list')).toHaveLength(2);
   });
 
+  it('requestModels asks again after the link dropped before the listing came', () => {
+    const t = setup();
+    t.deliver(withBoot(UUID));
+    t.store.requestModels('claude');
+    t.set('connecting' as never);
+    t.set('ready');
+    t.deliver(withBoot(UUID));
+    t.store.requestModels('claude');
+    expect(t.of('models.list')).toHaveLength(2);
+    t.deliver({ type: 'models.listing', tool: 'claude', models: [choice] });
+    t.set('connecting' as never);
+    t.set('ready');
+    t.store.requestModels('claude');
+    expect(t.of('models.list')).toHaveLength(2);
+  });
+
+  it('a session.model.failed for an unknown session is ignored', () => {
+    const t = setup();
+    t.deliver(snapshot([session('a')]));
+    t.deliver({ type: 'session.model.failed', id: 'zz', reason: 'refused' });
+    expect(t.state().modelFailures).toEqual({});
+  });
+
   it('a new boot forgets the listings', () => {
     const t = setup();
     t.deliver(withBoot(UUID));
@@ -696,7 +719,7 @@ describe('models and model changes', () => {
     await expect(done).resolves.toEqual({ status: 'applied', scheduled: true });
   });
 
-  it('changeModel resolves applied, with the seats a compose changed', async () => {
+  it('changeModel with null model and effort resolves applied', async () => {
     const t = setup();
     t.deliver(snapshot([session('a')]));
     const done = t.store.changeModel('a', null, null);

@@ -358,6 +358,8 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
   function onLost() {
     historyAsked = false;
     askedSinceReady.clear();
+    // A list asked on the lost channel never comes: it is asked again. Those already answered stay.
+    for (const tool of [...modelAsks]) if (!state.models[tool]) modelAsks.delete(tool);
     settleForget(false);
     // Requests sent on the lost channel get no answer.
     threadAsks = [];
@@ -406,6 +408,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         set({ models: { ...state.models, [m.tool]: { models: m.models, ...(m.error ? { error: true as const } : {}) } } });
         return;
       case 'session.model.failed':
+        if (!state.sessions.has(m.id)) return;
         set({ modelFailures: { ...state.modelFailures, [m.id]: m.reason } });
         return;
       case 'daemon.progress':
