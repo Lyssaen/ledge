@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { AutonomySchema, ToolSchema } from './session.js';
-import { ModelIdSchema, EffortSchema } from './models.js';
+import { ModelIdSchema, EffortSchema, ModelRefusalSchema } from './models.js';
 import { ProjectIdSchema } from './projects.js';
 
 /** A role id: the name of its file, `@<id>` inside a team. */
@@ -117,8 +117,10 @@ export const DefinitionsListingSchema = z.object({
 });
 /** The answer of a write or a delete: no `code` means done, `hash` the new version of the file written. */
 export const DefinitionResultSchema = z.object({ type: z.literal('definition.result'), rid: z.string(), id: z.string().optional(), hash: DefinitionHashSchema.optional(), code: DefinitionCodeSchema.optional(), reason: z.string().optional() });
-/** The answer of `team.compose` and `team.seat`: the team as it now is, or why not. */
-export const TeamChangedSchema = z.object({ type: z.literal('team.changed'), rid: z.string(), team: TeamSchema.optional(), reason: z.string().optional() });
+/** What a composition did to one seat's model: `when` it applies, or the `code` it was refused with. */
+export const SeatModelOutcomeSchema = z.object({ role: z.string(), session: z.string(), when: z.enum(['now', 'turn']).optional(), code: ModelRefusalSchema.optional() });
+/** The answer of `team.compose` and `team.seat`: the team as it now is, or why not; `models` what happened to the seats' models. */
+export const TeamChangedSchema = z.object({ type: z.literal('team.changed'), rid: z.string(), team: TeamSchema.optional(), reason: z.string().optional(), models: z.array(SeatModelOutcomeSchema).max(16).optional() });
 
 export const TeamsMessageSchema = z.object({ type: z.literal('teams'), teams: z.array(TeamSchema) });
 export const TeamUpdatedSchema = z.object({ type: z.literal('team.updated'), team: TeamSchema });

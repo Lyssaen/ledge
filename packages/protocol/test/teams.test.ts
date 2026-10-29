@@ -91,3 +91,13 @@ describe('team definitions from any client', () => {
     expect(ServerMessageSchema.safeParse({ type: 'definition.result', rid: 'r', code: 'nope' }).success).toBe(false);
   });
 });
+
+describe('team.changed models', () => {
+  const entry = (n: number) => Array.from({ length: n }, () => ({ role: 'r', session: 's', when: 'now' }));
+  it('carries the model outcome of each seat, at most 16', () => {
+    for (const models of [[{ role: 'leader', session: 's1', when: 'now' }], [{ role: 'r', session: 's2', code: 'not_launched' }], entry(16)])
+      expect(ServerMessageSchema.safeParse({ type: 'team.changed', rid: 'r', models }).success).toBe(true);
+    expect(ServerMessageSchema.safeParse({ type: 'team.changed', rid: 'r', models: entry(17) }).success).toBe(false);
+    expect(ServerMessageSchema.safeParse({ type: 'team.changed', rid: 'r', models: [{ role: 'r', session: 's', code: 'boom' }] }).success).toBe(false);
+  });
+});

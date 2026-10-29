@@ -285,6 +285,7 @@ export function createPhoneGateway(deps: {
       case 'session.reply': return { type: 'session.reply', id: msg.id, text: msg.text, ...(msg.attachments?.length ? { attachments: msg.attachments } : {}) };
       case 'session.answer': return { type: 'session.answer', id: msg.id, requestId: msg.requestId, answers: msg.answers, ...(msg.cancel ? { cancel: true } : {}) };
       case 'session.interrupt': return { type: 'session.interrupt', id: msg.id };
+      case 'session.model': return { type: 'session.model', id: msg.id, model: msg.model, effort: msg.effort };
     }
   };
 
@@ -511,6 +512,8 @@ export function createPhoneGateway(deps: {
     if (msg.type === 'chat.launch') return chatLaunch(deviceId, msg);
     if (msg.type === 'chat.close') return chatClose(deviceId, msg);
     if (msg.type === 'chat.act') return chatAct(deviceId, msg);
+    // Not served yet: the daemon does not announce `models` in its snapshot.
+    if (msg.type === 'session.model') return { status: 'rejected', reason: 'unavailable' };
     const refused = precheck(deviceId, msg);
     if (refused) return refused;
     const out = local(msg);
