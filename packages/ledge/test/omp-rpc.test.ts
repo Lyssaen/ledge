@@ -52,8 +52,10 @@ describe('OmpRpc', () => {
   it('delivers events in order and keeps responses out of them', async () => {
     const rpc = await start(); const seen: string[] = [];
     rpc.onFrame(f => seen.push(f.type));
+    // Listen before the prompt: the fake writes the response and the whole turn at once, so they can all arrive in one chunk.
+    const settled = new Promise<void>(res => rpc.onFrame(f => f.type === 'session_settled' && res()));
     await rpc.request('prompt', { message: 'hello' });
-    await new Promise<void>(res => rpc.onFrame(f => f.type === 'session_settled' && res()));
+    await settled;
     expect(seen).toContain('agent_start'); expect(seen).not.toContain('response');
     expect(seen.indexOf('agent_start')).toBeLessThan(seen.indexOf('agent_end'));
     expect(seen.indexOf('agent_end')).toBeLessThan(seen.indexOf('session_settled'));
