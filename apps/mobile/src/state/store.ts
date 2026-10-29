@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from 'react';
 import {
   PhoneClientMessageSchema, teamsDigest, teamsPurpose, type Assertion, type PcAction, type AttachmentRef, type CapabilitiesByTool, type Credential, type ImageUpload, type PhoneClientMessage, type PhonePending, type PhoneServerMessage,
-  type PhoneCatalog, type PhoneRole, type PhoneSession, type PhoneTask, type PhoneTeam, type PushSubscription, type TeamsOperation, type ThreadItem
+  type PhoneCatalog, type PhoneChecklist, type PhoneRole, type PhoneSession, type PhoneTask, type PhoneTeam, type PushSubscription, type TeamsOperation, type ThreadItem
 } from '@ledge/protocol';
 import type { PhoneLink } from '../link/link';
 import { getAssertion } from '../link/webauthn';
@@ -37,7 +37,7 @@ export interface MobileState {
    * `teams`: the PC serves the team catalog (absent from older daemons, and from 0.26.0, which serves it without saying so).
    * `update`: it can install a version and restart; `restart`: it can restart (both absent from daemons before 0.27.0).
    */
-  daemon: { version: string; name: string; boot?: string; teams?: true; update?: true; restart?: true } | null;
+  daemon: { version: string; name: string; boot?: string; teams?: true; update?: true; restart?: true; checklist?: true } | null;
   /** True from a snapshot until the channel is lost: what is shown is the PC's state now, not the last known one. */
   fresh: boolean;
   /** When the PC last said something about its sessions. */
@@ -51,6 +51,8 @@ export interface MobileState {
   catalog: PhoneCatalog | null;
   /** The PC refused the last catalog read: with `daemon.teams` its read failed, without it the PC may not know the request. Cleared by the next read. */
   catalogRefused: boolean;
+  /** Each session's full checklist, as `session.checklist` sent it (null: it has none now). Never cached. */
+  checklists: Map<string, PhoneChecklist | null>;
   /** The PC's daemon updating or restarting, as this phone follows it; null when nothing runs nor just ended. Never cached. */
   pc: PcRun | null;
 }
@@ -198,6 +200,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     tasks: new Map(),
     catalog: null,
     catalogRefused: false,
+    checklists: new Map(),
     pc: null
   };
   let reads = loadReads(storage);
@@ -362,7 +365,8 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         boot = m.daemon.boot ?? null;
         const pc = pcSnapshot(state.pc, m.daemon);
         if (!pcRunning(pc)) stopPcWatch();
-        set({ sessions, previews, threads, capabilities: m.capabilities, device: m.device ?? null, daemon: m.daemon, fresh: true, syncedAt: now, pc });
+        const checklists = new Map([...state.checklists].filter(([id]) => sessions.has(id)));
+        set({ sessions, previews, threads, checklists, capabilities: m.capabilities, device: m.device ?? null, daemon: m.daemon, fresh: true, syncedAt: now, pc });
         persist();
         // The instructions and interrupts left uncertain (those in flight on this link are `sending`) go again if this PC may not have applied them.
         if (ready()) resend(o => o.phase === 'uncertain' && expectKey(o.message) === undefined);
@@ -413,10 +417,15 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         const threads = new Map(state.threads);
         gone(threads, m.id);
         if (m.id in reads) { const { [m.id]: _drop, ...rest } = reads; reads = rest; saveReads(reads, storage); }
-        set({ sessions, previews, threads, syncedAt: now });
+        const checklists = new Map(state.checklists);
+        checklists.delete(m.id);
+        set({ sessions, previews, threads, checklists, syncedAt: now });
         persist();
         return;
       }
+      case 'session.checklist':
+        set({ checklists: new Map(state.checklists).set(m.id, m.checklist) });
+        return;
       case 'session.pending': {
         const s = state.sessions.get(m.id);
         if (!s) return;
@@ -584,7 +593,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     previewsDirty = false;
     clearLastState(storage);
     clearOps(storage);
-    set({ sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, fresh: false, syncedAt: null, ops: {}, teams: null, tasks: new Map(), catalog: null, catalogRefused: false, pc: null });
+    set({ sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, fresh: false, syncedAt: null, ops: {}, teams: null, tasks: new Map(), catalog: null, catalogRefused: false, checklists: new Map(), pc: null });
     stopPcWatch();
   }
 

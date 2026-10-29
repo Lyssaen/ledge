@@ -55,4 +55,10 @@ describe('agentsOf', () => {
     expect(g!.rows.map(r => r.unread)).toEqual([true, false, false]);
     expect(g!.rows[1]!.pending).toMatchObject({ key: 'p1', sessionId: 'b' });
   });
+
+  it('a checklist summary becomes the row\'s progress, and no checklist leaves no key', () => {
+    const [g] = agentsOf([s('a', { checklist: { done: 3, total: 7, current: 'Ajout du test' } }), s('b')]);
+    expect(g!.rows[0]!.progress).toEqual({ done: 3, total: 7, current: 'Ajout du test' });
+    expect(g!.rows[1]).not.toHaveProperty('progress');
+  });
 });

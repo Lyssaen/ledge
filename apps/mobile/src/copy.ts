@@ -546,6 +546,14 @@ export const copy = {
     later: 'Plus tard',
     apply: 'Mettre à jour'
   },
+  checklist: {
+    title: 'Plan de travail',
+    allDone: 'Tout est fait',
+    paused: 'En pause',
+    progress: (done: number, total: number) => `${done} sur ${total} tâches faites`,
+    box: { completed: 'Fait', in_progress: 'En cours', pending: 'À faire' },
+    cut: 'Liste raccourcie : la suite est sur le PC'
+  },
   offline: {
     lastKnown: (t: string) => `Dernier état connu · ${t}`,
     title: (pc: string | null) => pc ? `${pc} ne répond plus` : 'Votre PC ne répond plus',
