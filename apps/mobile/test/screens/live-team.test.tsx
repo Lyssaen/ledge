@@ -366,3 +366,29 @@ describe('the live team sheet, in the app', () => {
     expect(screen.getByRole('button', { name: 'Dissoudre l\'équipe' })).toBeInTheDocument();
   });
 });
+
+describe('the live team sheet, seat model', () => {
+  const withModels = (on: boolean) => {
+    const t = setup();
+    const m = snapshot(SESSIONS.map(s => ({ ...s, canSwitch: true as const })), 'PC-Desan', undefined, { confirm: true, chat: true }) as Extract<import('@ledge/protocol').PhoneServerMessage, { type: 'snapshot' }>;
+    t.deliver(on ? { ...m, daemon: { ...m.daemon!, models: true } } : m);
+    act(() => { t.deliver({ type: 'teams.catalog', catalog: catalog() }); t.deliver({ type: 'teams', teams: [team()] }); });
+    render(<LiveTeam store={t.store} teamId="team-a1b2" />);
+  };
+
+  it('Changer opens the seat model sheet', () => {
+    withModels(true);
+    fireEvent.click(within(seat('leader')).getByRole('button', { name: 'Changer le modèle de @leader' }));
+    expect(screen.getByRole('dialog')).toHaveTextContent('Modèle et effort');
+  });
+
+  it('no Changer without daemon.models', () => {
+    withModels(false);
+    expect(screen.queryByRole('button', { name: /Changer le modèle/ })).toBeNull();
+  });
+
+  it('a free seat says au prochain démarrage du siège', () => {
+    withModels(true);
+    expect(within(seat('review')).getByText('au prochain démarrage du siège')).toBeInTheDocument();
+  });
+});

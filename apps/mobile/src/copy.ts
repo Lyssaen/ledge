@@ -240,7 +240,27 @@ export const copy = {
       restart_failed: 'le redémarrage a échoué', refused: "refusé par l'outil"
     },
     failedLine: (reason: string) => `Changement de modèle non appliqué : ${reason}`,
-    chip: (what: string) => `Modèle et effort : ${what}`
+    chip: (what: string) => `Modèle et effort : ${what}`,
+    /** The seat card's sheet: what a model change on a live team's seat saves, and what it does to the session holding it. */
+    seat: {
+      change: (role: string) => `Changer le modèle de @${role}`,
+      heldBy: (label: string, name: string, working: boolean) => `${label} · tenu par ${name}${working ? ', qui travaille' : ''}`,
+      tool: 'Outil', toolRestart: 'changer redémarre le siège',
+      saved: 'Enregistré sur le siège pour ses prochains démarrages.',
+      now: (name: string) => `Appliqué aussi tout de suite à ${name}, sur la même conversation.`,
+      nowWorking: (name: string) => `Appliqué aussi tout de suite à ${name}, sur la même conversation : il travaille, ce sera à la fin de ce tour.`,
+      later: 'au prochain démarrage du siège',
+      passkey: 'Votre passkey confirme le changement.',
+      restarts: (name: string) => `${name} redémarre sur la même conversation.`,
+      close: 'Fermer',
+      outcome: {
+        saved: 'Enregistré',
+        next: 'Enregistré · au prochain démarrage du siège',
+        applied: (name: string) => `Enregistré ; appliqué à ${name}`,
+        scheduled: (name: string) => `Enregistré ; appliqué à ${name} à la fin de son tour`,
+        notApplied: (name: string, reason: string) => `Enregistré sur le siège ; pas appliqué à ${name} : ${reason}`
+      }
+    }
   },
   detail: {
     back: 'Retour aux demandes',

@@ -15,6 +15,7 @@ import { SeatMeta } from '../ui/teams/SeatMeta';
 import { Gone } from './Gone';
 import { CATALOG_WAIT_MS } from './Teams';
 import { clock } from './Inbox';
+import { SeatModelSheet } from './SeatModel';
 import { EditorPending, seatAction, useCatalogGate, useMounted } from './teamsEditing';
 
 const t = copy.teams.sheet;
@@ -68,6 +69,7 @@ function Body({ store, team, catalog, mounted }: { store: MobileStore; team: Pho
   const [busy, setBusy] = useState(false);
   const [starting, setStarting] = useState<{ role: string; note: OutcomeNote } | null>(null);
   const [dissolving, setDissolving] = useState(false);
+  const [changing, setChanging] = useState<string | null>(null);
   const [dissolveNote, setDissolveNote] = useState<OutcomeNote | null>(null);
   const canConfirm = !!state.device?.confirm;
   const online = canConfirm && state.fresh && !busy;
@@ -117,7 +119,11 @@ function Body({ store, team, catalog, mounted }: { store: MobileStore; team: Pho
                   <span className="min-w-0 flex-1 font-semibold [overflow-wrap:anywhere]">{role?.label}</span>
                   <Holder seat={s} store={store} />
                 </div>
-                <div className="mt-1 text-small [overflow-wrap:anywhere] text-muted"><SeatMeta seat={s} role={role} order="sheet" /></div>
+                <div className="mt-1 flex items-center gap-2 text-small [overflow-wrap:anywhere] text-muted">
+                  <span className="min-w-0 flex-1"><SeatMeta seat={s} role={role} order="sheet" /></span>
+                  {state.daemon?.models && !s.leaving && <Button size="sm" aria-label={copy.model.seat.change(s.role)} onClick={() => setChanging(s.role)}>{copy.teams.team.change}</Button>}
+                </div>
+                {free && state.daemon?.models && <p className="text-small text-muted">{copy.model.seat.later}</p>}
                 {role && <p className="mt-2 line-clamp-2 rounded-control bg-bg px-2.5 py-2 text-small whitespace-pre-line [overflow-wrap:anywhere] text-muted">{preview(role.prompt)}</p>}
                 {role && <a href={href({ name: 'role', key: catalogKey(role) })} className="mt-1.5 inline-block text-small text-info underline underline-offset-2">{t.readPrompt}</a>}
                 {free && (
@@ -138,6 +144,7 @@ function Body({ store, team, catalog, mounted }: { store: MobileStore; team: Pho
         <Button variant="ghost" block className="mt-2 text-danger-fg" disabled={!online} onClick={() => { setDissolveNote(null); setDissolving(true); }}>{t.dissolve}</Button>
         {!canConfirm && <p className="mt-2 text-center text-body text-attention">{copy.chat.launchSetup} <a href={href({ name: 'connection' })} className="text-info underline underline-offset-2">{copy.connection.title}</a></p>}
       </main>
+      {changing !== null && <SeatModelSheet store={store} team={team} role={changing} onClose={() => setChanging(null)} />}
       {dissolving && <DissolveSheet name={team.name} busy={busy} canConfirm={canConfirm} fresh={state.fresh} note={dissolveNote} onConfirm={dissolve} onClose={() => setDissolving(false)} />}
     </>
   );

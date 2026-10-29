@@ -54,7 +54,7 @@ export function ModelSheet({ tool, models, error, current, pick, onPick, note, a
           </div>
         </div>
       )}
-      <p className="text-small text-muted">{note}</p>
+      <p className="text-small whitespace-pre-line text-muted">{note}</p>
       {actions}
     </>
   );

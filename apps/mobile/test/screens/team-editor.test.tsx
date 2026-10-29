@@ -4,6 +4,7 @@ import type { PhoneCatalog, PhoneRole, PhoneTeam, PhoneTemplate } from '@ledge/p
 import { goBack } from '../../src/router';
 import { TeamEditor } from '../../src/screens/TeamEditor';
 import type { TeamEditorMode } from '../../src/screens/TeamEditor';
+import { session } from '../model/fixtures';
 import { snapshot } from '../state/helpers';
 import { setup } from './setup';
 
@@ -629,5 +630,19 @@ describe('the team editor, a live composition', () => {
     t.view.unmount();
     await act(async () => { settle({ status: 'applied' }); });
     expect(goBack).not.toHaveBeenCalled();
+  });
+});
+
+describe('the team editor, a live composition naming seat models', () => {
+  it('a compose whose result names a seat shows its model note instead of nextStart', async () => {
+    const t = open(live);
+    t.deliver(snapshot([session('s1', { name: 'Otto', canSwitch: true })], 'PC-Desan', undefined, { confirm: true, chat: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Changer @leader' }));
+    fireEvent.change(within(screen.getByRole('dialog')).getByRole('textbox', { name: 'IA' }), { target: { value: 'sonnet' } });
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Appliquer' }));
+    t.teamOp.mockResolvedValueOnce({ status: 'applied', models: [{ role: 'leader', session: 's1', status: 'applied' }] });
+    await click('Enregistrer');
+    expect(screen.getByText('Enregistré ; appliqué à Otto')).toBeInTheDocument();
+    expect(screen.queryByText('au prochain démarrage du siège')).toBeNull();
   });
 });
