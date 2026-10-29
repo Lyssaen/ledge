@@ -3,7 +3,7 @@
 // given for one content never covers another. The phone names a project, never a folder: the id is found here, and a name
 // the daemon does not know is refused before anything is sent.
 import { randomUUID } from 'node:crypto';
-import { teamsDigest, teamsPurpose, type ClientMessage, type PhoneClientMessage, type PhoneServerMessage, type ServerMessage, type TeamsOperation } from '@ledge/protocol';
+import { teamsDigest, teamsPurpose, type ClientMessage, type PhoneClientMessage, type PhoneSeatModel, type PhoneServerMessage, type ServerMessage, type TeamsOperation } from '@ledge/protocol';
 import type { Outcome, PhoneOperation } from './operations.js';
 import { toPhoneCatalog, toPhoneRole, type DefinitionsListing } from './project.js';
 
@@ -24,6 +24,15 @@ export interface TeamsOpsDeps {
 
 const FAILED: Outcome = { status: 'failed' };
 const invalid: Outcome = { status: 'rejected', reason: 'invalid' };
+
+/** What a composition did to its seats' models, as the phone reads it (#58): `now` applied, `turn` scheduled, a code refused; none, nothing. */
+function withSeats(models: Extract<ServerMessage, { type: 'team.changed' }>['models']): { models?: PhoneSeatModel[] } {
+  const seats = (models ?? []).flatMap((x): PhoneSeatModel[] => {
+    if (x.code) return [{ role: x.role, session: x.session, status: 'refused', reason: x.code }];
+    return x.when ? [{ role: x.role, session: x.session, status: x.when === 'now' ? 'applied' : 'scheduled' }] : [];
+  });
+  return seats.length ? { models: seats } : {};
+}
 
 export function createTeamsOps(deps: TeamsOpsDeps) {
   /** Every scope's definitions, as the daemon lists them now; undefined when it could not. */
@@ -79,11 +88,14 @@ export function createTeamsOps(deps: TeamsOpsDeps) {
         if (!m.code) return true;
         if (m.code === 'missing') return FAILED;
         return { status: 'rejected', reason: m.code };
-      case 'team.changed':
+      case 'team.changed': {
         if (m.rid !== rid) return undefined;
+        // What it did to the held seats' models rides with a saved composition's outcome.
+        const seats = withSeats(m.models);
         // A composition answers with its team and a reason when it was saved but an added seat did not start: applied, with the warning.
-        if (m.reason && m.team && type === 'team.compose') return { status: 'applied', reason: 'seat_failed' };
-        return !m.reason;
+        if (m.reason && m.team && type === 'team.compose') return { status: 'applied', reason: 'seat_failed', ...seats };
+        return m.reason ? FAILED : { status: 'applied', ...seats };
+      }
       case 'team.launched': return m.rid === rid ? true : undefined;
       case 'team.failed': return m.rid === rid ? false : undefined;
       default: return undefined;

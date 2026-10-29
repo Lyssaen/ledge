@@ -1,13 +1,13 @@
 // Makes a phone's writes idempotent: an operation id (a uuid the phone picks) runs once, and a retry gets the stored outcome.
 // In memory only, so a daemon restart forgets every operation.
-import { canonicalJson, isTeamsOperation, type OperationReason, type OperationStatus, type PhoneClientMessage } from '@ledge/protocol';
+import { canonicalJson, isTeamsOperation, type OperationReason, type OperationStatus, type PhoneClientMessage, type PhoneSeatModel } from '@ledge/protocol';
 
 export type PhoneOperation = Extract<PhoneClientMessage, { op: string }>;
 
-/** What an operation came to: the answer the phone gets. */
-export type Outcome = { status: Extract<OperationStatus, 'applied' | 'rejected' | 'failed'>; reason?: OperationReason };
+/** What an operation came to: the answer the phone gets. `models`: what a composition did to its seats' models (#58). */
+export type Outcome = { status: Extract<OperationStatus, 'applied' | 'rejected' | 'failed'>; reason?: OperationReason; models?: PhoneSeatModel[] };
 
-export interface OperationRecord { op: string; owner: string; fingerprint: string; status: OperationStatus; reason?: OperationReason; at: number }
+export interface OperationRecord { op: string; owner: string; fingerprint: string; status: OperationStatus; reason?: OperationReason; models?: PhoneSeatModel[]; at: number }
 
 export type BeginResult = { kind: 'fresh' | 'replay'; record: OperationRecord } | { kind: 'conflict' };
 
@@ -24,6 +24,8 @@ export function fingerprint(m: PhoneOperation): string {
   return JSON.stringify([m.type, f.id ?? null, f.decision ?? null, f.note ?? null, f.text ?? null, f.expect?.key ?? null, f.credential?.id ?? null, f.requestId ?? null, f.answers ?? null, f.subscription?.endpoint ?? null, f.key ?? null, f.qid ?? null, f.rows ?? null,
     ...(f.row !== undefined || f.team !== undefined || f.task !== undefined ? [f.row ?? null, f.team ?? null, f.task ?? null] : []),
     ...(f.attachments?.length ? [f.attachments] : []),
+    // A model change is its model and effort: the same id for another model is another operation (null, the agent's default, too).
+    ...(m.type === 'session.model' ? [m.model, m.effort] : []),
     // A role or team operation is its whole content: the same id with another prompt, seats or base is another operation.
     ...(isTeamsOperation(m) ? [teamsContent(m)] : [])]);
 }
@@ -55,11 +57,12 @@ export class OperationRegistry {
   }
 
   /** An operation already forgotten (expired) is left forgotten. */
-  finish(op: string, status: OperationStatus, reason?: OperationReason): void {
+  finish(op: string, status: OperationStatus, reason?: OperationReason, models?: PhoneSeatModel[]): void {
     const r = this.records.get(op);
     if (!r) return;
     r.status = status;
     if (reason) r.reason = reason; else delete r.reason;
+    if (models) r.models = models; else delete r.models;
   }
 
   get(op: string): OperationRecord | undefined {

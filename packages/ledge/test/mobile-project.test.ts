@@ -126,3 +126,26 @@ describe('images on the phone projection', () => {
     expect(toPhoneTurn({ qid: 'x', question: 'q', askedAt: T, steps: [] } as never)).not.toHaveProperty('attachments');
   });
 });
+
+describe('a session\'s model on the phone (#58)', () => {
+  it('projects model, effort, modelNext', () => {
+    const p = toPhoneSession(session({ model: 'opus', effort: 'high', modelNext: { model: 'sonnet' } }), T);
+    expect(p).toMatchObject({ model: 'opus', effort: 'high', modelNext: { model: 'sonnet' } });
+    expect(p.modelNext).toEqual({ model: 'sonnet' });
+    expect(PhoneSessionSchema.safeParse(p).success).toBe(true);
+    // None set: none sent.
+    const bare = toPhoneSession(session(), T);
+    for (const k of ['model', 'effort', 'modelNext']) expect(bare).not.toHaveProperty(k);
+    // Clipped like the other strings: no source swells a snapshot.
+    const long = toPhoneSession(session({ model: 'm'.repeat(500), effort: 'e'.repeat(50), modelNext: { model: 'n'.repeat(500), effort: 'f'.repeat(50) } }), T);
+    expect([long.model?.length, long.effort?.length, long.modelNext?.model?.length, long.modelNext?.effort?.length]).toEqual([200, 20, 200, 20]);
+  });
+
+  it('canSwitch only for a launcher session not exited', () => {
+    expect(toPhoneSession(session(), T).canSwitch).toBe(true);
+    expect(toPhoneSession(session({ state: 'idle' }), T).canSwitch).toBe(true);
+    expect(toPhoneSession(session({ state: 'exited' }), T)).not.toHaveProperty('canSwitch');
+    expect(toPhoneSession(session({ source: 'hook_only' }), T)).not.toHaveProperty('canSwitch');
+    expect(PhoneSessionSchema.safeParse(toPhoneSession(session(), T)).success).toBe(true);
+  });
+});

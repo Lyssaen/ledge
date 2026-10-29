@@ -1,5 +1,6 @@
 import { LEDGE_GIVER, pendingKey, PENDING_BODY_MAX, SNAPSHOT_BODY_MAX, taskClosed, THREAD_BUDGET, THREAD_ITEMS_MAX, THREAD_TEXT_MAX, TOOL_TEXT_MAX, TOPIC_MAX, ToolSchema } from '@ledge/protocol';
 import { PhoneRoleSchema, PhoneTemplateSchema } from '@ledge/protocol';
+import { EffortSchema, PhoneModelChoiceSchema, type ModelChoice, type PhoneModelChoice } from '@ledge/protocol';
 import type { CapabilitiesByTool, FileChange, Pending, PhoneCatalog, PhonePending, PhoneProblem, PhoneRole, PhoneSession, PhoneTask, PhoneTeam, PhoneTemplate, ServerMessage, Session, Task, Team, ThreadItem, Tool } from '@ledge/protocol';
 import { adapterFor } from '../adapters/index.js';
 import { riskOf } from './risk.js';
@@ -56,6 +57,14 @@ export function toPhoneSession(s: Session, readAt: string): PhoneSession {
     ...pickSet(s, ['repo', 'branch', 'worktree', 'role', 'roleLabel', 'team', 'context', 'relieves']),
     // Its relief's state only (context handover spec §3.2): the phone shows it, the PC starts it.
     ...(s.handover ? { handover: { state: s.handover.state, ...(s.handover.toName ? { toName: s.handover.toName.slice(0, 80) } : {}) } } : {}),
+    // Its model, effort and the change waiting for its next free moment (#58), cut to the bounds of a model id and an effort.
+    ...(s.model !== undefined ? { model: clip(s.model, MODEL_MAX).text } : {}),
+    ...(s.effort !== undefined ? { effort: clip(s.effort, EFFORT_MAX).text } : {}),
+    ...(s.modelNext ? { modelNext: {
+      ...(s.modelNext.model !== undefined ? { model: clip(s.modelNext.model, MODEL_MAX).text } : {}),
+      ...(s.modelNext.effort !== undefined ? { effort: clip(s.modelNext.effort, EFFORT_MAX).text } : {})
+    } } : {}),
+    ...(canSwitch(s) ? { canSwitch: true as const } : {}),
     helpers: s.helpers.map(h => ({ id: h.id, kind: h.kind, task: h.task, state: h.state, ...pickSet(h, ['finishedAt']) })),
     // A preview only: the whole reply is in the thread.
     ...(s.lastReply ? { lastReply: { text: clip(s.lastReply.text, TOOL_TEXT_MAX).text, at: s.lastReply.at, ...pickSet(s.lastReply, ['plan']) } } : {}),
@@ -282,3 +291,37 @@ export function toPhoneTask(x: Task, owner: Session | undefined, teamName: strin
 /** The tasks Ledge gave that the phone lists: open ones, and those closed in the last day not put away. */
 export const phoneTasks = (tasks: readonly Task[], now: number): Task[] =>
   tasks.filter(x => x.giver === LEDGE_GIVER && (!taskClosed(x) || (!x.seen && now - Date.parse(x.updatedAt) < 86_400_000))).slice(-200);
+
+/** The bounds of a model id and an effort (`ModelIdSchema`, `EffortSchema`): what the phone shows of a session's. */
+const MODEL_MAX = 200;
+const EFFORT_MAX = 20;
+/** At most this many models in a phone's listing (`PhoneModelChoiceSchema`'s bounds below). */
+const MODELS_MAX = 40;
+
+/**
+ * Whether the daemon can switch the session's model (#58): one Ledge launched and that has not ended. The daemon this ships
+ * with always has the switch, so the gateway's `models` flag does not enter into it.
+ */
+export function canSwitch(s: Session): boolean {
+  return s.source === 'launcher' && s.state !== 'exited';
+}
+
+/**
+ * An agent's models for the phone (#58): strings cut to its bounds, efforts the schema refuses dropped, no key it does not
+ * know. A model whose id is too long to be sent back whole, or that the phone's schema still refuses, is left out.
+ */
+export function toPhoneModels(models: readonly ModelChoice[]): PhoneModelChoice[] {
+  const out: PhoneModelChoice[] = [];
+  for (const m of models) {
+    if (out.length >= MODELS_MAX) break;
+    const efforts = m.efforts?.filter(e => EffortSchema.safeParse(e).success).slice(0, 8);
+    const c = PhoneModelChoiceSchema.safeParse({
+      id: m.id, label: clip(m.label, 80).text,
+      ...(m.description !== undefined ? { description: clip(m.description, 200).text } : {}),
+      ...(efforts ? { efforts } : {}),
+      ...pickSet(m, ['defaultEffort', 'isDefault'])
+    });
+    if (c.success) out.push(c.data);
+  }
+  return out;
+}

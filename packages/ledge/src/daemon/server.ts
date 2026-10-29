@@ -1698,6 +1698,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     // A project's folder is its first local repo: only a project with one can be named by the phone.
     projectByName: name => projects.projects.find(p => p.name === name && p.repos.some(r => r.machine === 'local'))?.id ?? null,
     teamCatalog: true,
+    // The phone's model switch (#58): `session.model` answers with a code, and `models.list` asks this machine's agents.
+    models: true,
     // The phone's « Mettre à jour le PC » and « Redémarrer le daemon »: the updater Desktop's `update.daemon` uses, progress broadcast.
     ...(opts.updater && opts.daemon ? {
       pc: {
