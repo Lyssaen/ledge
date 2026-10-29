@@ -90,17 +90,20 @@ void sameTools;
 export const PhonePendingSchema = PendingSchema.extend({ key: z.string().max(64), risk: RiskSchema, riskReason: RiskReasonSchema, cut: z.literal(true).optional() });
 export type PhonePending = z.infer<typeof PhonePendingSchema>;
 
+/** What the phone's session carries of a model change (#58) that no session has: the daemon can switch it from a phone. */
+const SwitchableSessionSchema = SessionSchema.extend({ canSwitch: z.literal(true).optional() });
+
 /** A session as the phone sees it: no folder, no tmux name, no machine, no message to another agent. */
-export const PhoneSessionSchema = SessionSchema.pick({
+export const PhoneSessionSchema = SwitchableSessionSchema.pick({
   id: true, name: true, tool: true, project: true, title: true, topic: true, repo: true, branch: true, worktree: true,
   state: true, helpers: true, lastReply: true, startedAt: true, lastActivityAt: true,
+  /** Its model, effort and the change waiting for its next free moment: the phone shows them and offers to change them. */
+  model: true, effort: true, modelNext: true, canSwitch: true,
   /** Its role and its live team (ledge home spec §2.4): the agents screen groups a project's sessions by table. */
   role: true, roleLabel: true, team: true,
   /** Its context and its relief (context handover spec §3.2): the phone shows the gauge; the relief is started from the PC. */
-  context: true, relieves: true,
-  /** Its model, effort and the change waiting for its next free moment: the phone shows them and offers to change them. */
-  model: true, effort: true, modelNext: true
-}).extend({ /** The daemon can switch this session's model from a phone. */ canSwitch: z.literal(true).optional(), pending: PhonePendingSchema.optional(), unread: z.boolean(), handover: z.object({ state: HandoverStateSchema, toName: z.string().max(80).optional() }).strict().optional() });
+  context: true, relieves: true
+}).extend({ pending: PhonePendingSchema.optional(), unread: z.boolean(), handover: z.object({ state: HandoverStateSchema, toName: z.string().max(80).optional() }).strict().optional() });
 export type PhoneSession = z.infer<typeof PhoneSessionSchema>;
 
 /** Base64url without padding: what WebAuthn fields look like once the phone encodes them. */
@@ -339,12 +342,13 @@ export const PhoneModelChoiceSchema = z.object({
 }).strict();
 export type PhoneModelChoice = z.infer<typeof PhoneModelChoiceSchema>;
 /** What a composition did to one seat's model, as the phone reads it. */
-export const PhoneSeatModelSchema = z.object({ role: z.string(), session: z.string(), status: z.enum(['applied', 'scheduled', 'refused']), reason: ModelRefusalSchema.optional() });
+export const PhoneSeatModelSchema = z.object({ role: z.string().max(40), session: sessionId, status: z.enum(['applied', 'scheduled', 'refused']), reason: ModelRefusalSchema.optional() });
 export type PhoneSeatModel = z.infer<typeof PhoneSeatModelSchema>;
 
 /** What the daemon sends a phone. */
 export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('snapshot'), protocol: z.literal(PHONE_PROTOCOL), sessions: z.array(PhoneSessionSchema), capabilities: CapabilitiesByToolSchema, daemon: z.object({ version: z.string(), name: z.string().max(40), boot: z.string().uuid().optional(), teams: z.literal(true).optional(), /** The daemon takes `session.model`. */ models: z.literal(true).optional(),
+  z.object({ type: z.literal('snapshot'), protocol: z.literal(PHONE_PROTOCOL), sessions: z.array(PhoneSessionSchema), capabilities: CapabilitiesByToolSchema, daemon: z.object({ version: z.string(), name: z.string().max(40), boot: z.string().uuid().optional(), teams: z.literal(true).optional(),
+    /** The daemon takes `session.model`. */ models: z.literal(true).optional(),
     /** `update`: the daemon can install a version and restart (npm, systemd); `restart`: it can restart (systemd). */ update: z.literal(true).optional(), restart: z.literal(true).optional() }), device: z.object({ confirm: z.boolean(), push: z.enum(['on', 'off', 'stale', 'unavailable']).optional(), chat: z.literal(true).optional(), contextNear: ContextPrefsSchema.shape.near.optional() }).optional() }),
   z.object({ type: z.literal('confirm.challenge'), purpose: ConfirmPurposeSchema, challenge: B64U.max(64), rpId: z.string().max(253), credentialId: B64U.max(1_366).optional(), expiresInMs: z.number().int().positive(),
     /** Echoed from the `confirm.prepare` of a `define` or `team` challenge, so the phone matches each challenge to its own call. Absent from an older gateway. */ digest: TeamsDigestSchema.optional() }),

@@ -357,6 +357,12 @@ describe('phone model change', () => {
     expect(() => PhoneServerMessageSchema.parse({ type: 'operation.result', op: OP, status: 'applied', models: [{ role: 'r', session: 's', status: 'refused', reason: 'not_running' }] })).not.toThrow();
     expect(OperationReasonSchema.options).toContain('restart_failed');
   });
+  it('a seat model is bounded like a role id and a session id', () => {
+    const seat = (x: object) => PhoneServerMessageSchema.safeParse({ type: 'operation.result', op: OP, status: 'applied', models: [{ role: 'r', session: 's', status: 'applied', ...x }] }).success;
+    expect(seat({ role: 'r'.repeat(40), session: 's'.repeat(100) })).toBe(true);
+    expect(seat({ role: 'r'.repeat(41) })).toBe(false);
+    expect(seat({ session: 's'.repeat(101) })).toBe(false);
+  });
   it('the snapshot announces the model change', () => {
     expect(() => PhoneServerMessageSchema.parse({ type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: [], capabilities: { claude: caps, codex: caps, cursor: caps, omp: caps }, daemon: { version: '1.0.0', name: 'pc', models: true } })).not.toThrow();
   });
