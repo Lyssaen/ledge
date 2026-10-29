@@ -199,7 +199,13 @@ export function createPhoneGateway(deps: {
       followers.delete(deviceId);
     },
     onOverflow: deviceId => {
-      if (followers.get(deviceId)?.subscribed) { outbox.push(deviceId, snapshot(deviceId), 'snapshot'); teamsAndTasks(deviceId); }
+      if (followers.get(deviceId)?.subscribed) {
+        outbox.push(deviceId, snapshot(deviceId), 'snapshot');
+        teamsAndTasks(deviceId);
+        // The full list of the session it is watching, which the snapshot does not carry.
+        const watching = followers.get(deviceId)?.watching;
+        if (watching) outbox.push(deviceId, { type: 'session.checklist', id: watching, checklist: checklistOf(watching).list }, `session.checklist:${watching}`);
+      }
     },
     log,
     ...deps.outbox

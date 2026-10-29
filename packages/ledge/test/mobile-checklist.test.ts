@@ -129,4 +129,25 @@ describe('phone gateway: the checklist', () => {
     const c = ofType(g.got('dev1'), 'session.checklist')[0]!;
     expect(c.checklist!.tasks).toEqual(latestTodos(g.threads.get('a')!));
   });
+
+  it('a queue overflow sends the watched checklist again, after the snapshot', async () => {
+    const g = setup({ deps: { outbox: { frames: 1, windowMs: 40 } } });
+    g.threads.get('a')!.push(update(PLAN));
+    g.send('dev1', { type: 'snapshot.request' });
+    g.send('dev1', { type: 'session.watch', id: 'a' });
+    await flush();
+    await new Promise(r => setTimeout(r, 100));
+    const before = g.got('dev1').length;
+    // The window lets one frame out: the rest queues, past 300 messages the queue is dropped and resynced.
+    for (let i = 0; i < 310; i++) {
+      const item = { kind: 'message', id: `o${i}`, at: T0, turn: 1, text: `m${i}` } as ThreadItem;
+      g.gw.forward({ type: 'session.thread.item', id: 'a', item });
+    }
+    await new Promise(r => setTimeout(r, 200));
+    expect(g.logs.some(l => l.includes('queue overflow'))).toBe(true);
+    const types = g.got('dev1').slice(before).map(m => m.type);
+    const snap = types.lastIndexOf('snapshot');
+    expect(snap).toBeGreaterThanOrEqual(0);
+    expect(types.indexOf('session.checklist', snap)).toBeGreaterThan(snap);
+  });
 });
