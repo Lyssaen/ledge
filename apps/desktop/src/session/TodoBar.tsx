@@ -5,7 +5,7 @@ import { useMotionPreferences } from '../motionPreferences';
 import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
 import { Spinner } from './ActionGroup';
-import { doneCount, type Todo } from './todos';
+import { doneCount, type Todo } from '@ledge/protocol';
 
 export interface TodoBarProps {
   /** latestTodos: the shown thread's latest list. */
