@@ -107,7 +107,7 @@ Rules (decide here, tests pin them):
   - `broadcasts restart_failed when the respawn fails` → error with `code:'restart_failed'`, `modelNext` undefined.
   - omp-server.test.ts: `a refused set_model broadcasts code refused`.
   - teams-server.test.ts: `compose applies a held seat's new model to its session` → `team.changed.models` = `[{role, session, when:'now'}]` and the session respawns with the model; `compose on a free seat sends no model change` → no `models`; `compose on a seat held by a hook_only session reports not_launched` → `[{role, session, code:'not_launched'}]`, save still applied; `compose changing a held seat's tool reports nothing` → no `models`.
-- [ ] **Step 2: Run** `pnpm --filter @ledge/ledge exec vitest run test/server.test.ts test/teams-server.test.ts test/omp-server.test.ts` — new cases FAIL. (If the package filter name differs, read `packages/ledge/package.json`.)
+- [ ] **Step 2: Run** `pnpm --filter @paradow/ledge exec vitest run test/server.test.ts test/teams-server.test.ts test/omp-server.test.ts` — new cases FAIL.
 - [ ] **Step 3: Implement** `canApplyNow`, `changeModel`, the coded failures and the compose apply. Keep Desktop's behaviour otherwise (Desktop ignores `session.model.accepted` and unknown `error.code`; check `apps/desktop` handles an unknown server message type without crashing — grep its message switch).
 - [ ] **Step 4: Run** the same command — PASS; then the whole `packages/ledge` suite.
 - [ ] **Step 5: Commit** `feat(ledge): coded, correlated model change; compose applies it to the seat's session`
@@ -134,9 +134,9 @@ Rules:
   - gateway: `snapshot says models when the daemon can`; `models.list relays to the local daemon and pushes the listing`; `models.list failure pushes error true`; `session.model on an exited session is rejected ended without reaching the daemon`; `session.model on a hook_only session is rejected not_launched`; `session.model accepted turn → applied scheduled`; `accepted now → applied`; `daemon refusal effort_in_model → rejected effort_in_model`; `a late restart_failed reaches the phone as session.model.failed`; `a replayed session.model op is not dispatched twice` (Review Focus 2); `an unparsable session.model gets operation.result rejected`.
   - operations: `fingerprint differs by model and by effort`; `the registry replays models`.
   - teams-ops: `compose outcome carries seat models`.
-- [ ] **Step 2: Run** `pnpm --filter @ledge/ledge exec vitest run test/mobile-*.test.ts` — new cases FAIL.
+- [ ] **Step 2: Run** `pnpm --filter @paradow/ledge exec vitest run test/mobile-*.test.ts` — new cases FAIL.
 - [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** the same — PASS; then `pnpm --filter @ledge/ledge typecheck`.
+- [ ] **Step 4: Run** the same — PASS; then `pnpm --filter @paradow/ledge typecheck`.
 - [ ] **Step 5: Commit** `feat(ledge): phone gateway relays model lists and model changes`
 
 ### Task 4: Mobile store
