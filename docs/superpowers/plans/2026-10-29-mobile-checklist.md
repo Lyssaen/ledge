@@ -108,7 +108,7 @@ Gateway behaviour:
   - `session.thread` answers the thread then `session.checklist` with the whole capped list.
   - « recomputes after a time with no follower »: snapshot, device leaves (or a gateway with no follower), thread gains an update and it is forwarded, device asks a snapshot → the new summary.
   - parity: the `session.checklist` tasks equal `latestTodos(thread)` from `@ledge/protocol` for the same thread (daemon and Desktop give the same list).
-- [ ] **Step 3:** Run `pnpm --filter ledge exec vitest run test/mobile-project.test.ts test/mobile-checklist.test.ts` (check the package name in `packages/ledge/package.json`) → FAIL.
+- [ ] **Step 3:** Run `pnpm --filter @paradow/ledge exec vitest run test/mobile-project.test.ts test/mobile-checklist.test.ts` → FAIL.
 - [ ] **Step 4:** Implement in `project.ts`, then `gateway.ts` as described.
 - [ ] **Step 5:** Run the two files, then the whole `packages/ledge` suite and its typecheck → PASS (existing snapshot assertions using `toMatchObject` keep passing; fix any `toEqual` on `daemon` by adding `checklist: true`).
 - [ ] **Step 6: Commit** `feat(ledge): the gateway sends each session's checklist to the phone`
@@ -129,7 +129,7 @@ Gateway behaviour:
 Look (AgentsProgress mockup): on the tag line, after `<Tag>`: plan icon, mono `done/total`, a 40×4 bar (track `bg-raised`, fill `bg-ok`, width `done/total`), `aria-label={copy.checklist.progress(done, total)}`. Under it, when `current`: 12px muted line, a 6px `bg-info` dot, text truncated with an ellipsis on one line.
 
 - [ ] **Step 1: Write tests:** model — a session with `checklist: { done: 3, total: 7, current: 'Ajout du test' }` gives `progress` equal to it; without, no `progress` key. Screen — with `daemon.checklist`: row shows `3/7`, the label « 3 sur 7 tâches faites », the current task; all done (`7/7`, no current): shows `7/7` and no current line; no checklist: neither; same session from a daemon without the flag: nothing. Store — `session.checklist` sets `checklists.get('a')`, `null` keeps an entry `null`, `session.removed` drops it.
-- [ ] **Step 2:** Run `pnpm --filter @ledge/mobile exec vitest run test/model/agents.test.ts test/screens/agents.test.tsx test/state/store.test.ts` (check the package name) → FAIL.
+- [ ] **Step 2:** Run `pnpm --filter @ledge/mobile exec vitest run test/model/agents.test.ts test/screens/agents.test.tsx test/state/store.test.ts` → FAIL.
 - [ ] **Step 3:** Implement.
 - [ ] **Step 4:** Run the files, the mobile suite and its typecheck → PASS.
 - [ ] **Step 5: Commit** `feat(mobile): the agent's progress on its row in Agents`
