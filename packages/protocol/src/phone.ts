@@ -41,15 +41,15 @@ export const TOOL_TEXT_MAX = 2_048;
 /** The agent's checklist as the phone gets it: the most tasks, and the longest text of a task or of the current one. */
 export const CHECKLIST_TASKS_MAX = 50;
 export const CHECKLIST_TEXT_MAX = 200;
-/** The same three statuses as `TodoStatus`. */
+/** The three `TodoStatus` values (`satisfies` checks each one is a `TodoStatus`, not that none is missing). */
 const ChecklistStatusSchema = z.enum(['pending', 'in_progress', 'completed'] as const satisfies readonly TodoStatus[]);
-/** What the session screen shows: every task. `done` and `total` count the agent's whole list; `cut` is set when the gateway capped it. */
+/** What the session screen shows: every task. `done` and `total` count the agent's whole list; `cut` is set when the gateway capped the list or clipped any text. */
 export const PhoneChecklistSchema = z.object({
   tasks: z.array(z.object({ text: z.string().max(CHECKLIST_TEXT_MAX), status: ChecklistStatusSchema })).max(CHECKLIST_TASKS_MAX),
   done: z.number().int().nonnegative(), total: z.number().int().nonnegative(), cut: z.literal(true).optional()
 });
 export type PhoneChecklist = z.infer<typeof PhoneChecklistSchema>;
-/** What « Agents » shows: the counts and the task in progress. `cut` is set when the gateway shortened `current`. */
+/** What « Agents » shows: the counts and the task in progress. `cut` is set when the gateway capped the list or clipped any text. */
 export const PhoneChecklistSummarySchema = z.object({
   done: z.number().int().nonnegative(), total: z.number().int().nonnegative(), current: z.string().max(CHECKLIST_TEXT_MAX).optional(), cut: z.literal(true).optional()
 });

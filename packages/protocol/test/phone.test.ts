@@ -346,7 +346,8 @@ describe('phone checklist', () => {
     expect(() => PhoneServerMessageSchema.parse({ type: 'session.checklist', id: 'a', checklist: { tasks, done: 0, total: 51 } })).toThrow();
   });
   it('announces the capability in the snapshot, optionally', () => {
-    expect(() => PhoneServerMessageSchema.parse({ ...snap, daemon: { version: '1.0.0', name: 'pc', checklist: true } })).not.toThrow();
-    expect(() => PhoneServerMessageSchema.parse(snap)).not.toThrow();
+    expect(PhoneServerMessageSchema.parse({ ...snap, daemon: { version: '1.0.0', name: 'pc', checklist: true } })).toMatchObject({ daemon: { checklist: true } });
+    expect(PhoneServerMessageSchema.parse(snap)).not.toHaveProperty('daemon.checklist');
+    expect(() => PhoneServerMessageSchema.parse({ ...snap, daemon: { version: '1.0.0', name: 'pc', checklist: false } })).toThrow();
   });
 });
