@@ -120,7 +120,7 @@ Rules (decide here, tests pin them):
 
 **Interfaces:**
 - Consumes: Tasks 1-2 wire messages.
-- Produces: gateway deps `models?: true`; snapshot `daemon.models` when set; `toPhoneSession(s, readAt, opts?: { models?: boolean })` adds `model`, `effort`, `modelNext` (clipped like other strings) and `canSwitch: true` when `opts.models && s.source === 'launcher' && s.state !== 'exited'`; `Outcome` gains `models?: PhoneSeatModel[]`, stored and replayed by the registry and pushed in `operation.result`.
+- Produces: gateway deps `models?: true`; snapshot `daemon.models` when set; `toPhoneSession(s, readAt)` — signature unchanged (Cleo-2's branch adds a third `checklist?` parameter) — adds `model`, `effort`, `modelNext` (clipped like other strings) and `canSwitch: true` when `s.source === 'launcher' && s.state !== 'exited'` (the daemon this ships with always has the model switch; old PWAs ignore the field); `Outcome` gains `models?: PhoneSeatModel[]`, stored and replayed by the registry and pushed in `operation.result`.
 
 Rules:
 - `models.list` read: dispatch local `{type:'models.list', requestId, tool}` (no `machineId`), await `models.listing` with that `requestId`, push phone `models.listing { tool, models (clipped to PhoneModelChoice, max 40), error? }`. Daemon error/timeout → `{tool, models: [], error: true}`. Ignored when the flag is off.
@@ -130,7 +130,7 @@ Rules:
 - Compose: `teamsOps.outcomeOf` maps `team.changed.models` to `PhoneSeatModel[]` (`when:'now'`→`applied`, `'turn'`→`scheduled`, `code`→`refused`+`reason`).
 
 - [ ] **Step 1: Write failing tests**:
-  - project: `projects model, effort, modelNext`, `canSwitch only for a launcher session not exited and only with the flag`.
+  - project: `projects model, effort, modelNext`, `canSwitch only for a launcher session not exited`.
   - gateway: `snapshot says models when the daemon can`; `models.list relays to the local daemon and pushes the listing`; `models.list failure pushes error true`; `session.model on an exited session is rejected ended without reaching the daemon`; `session.model on a hook_only session is rejected not_launched`; `session.model accepted turn → applied scheduled`; `accepted now → applied`; `daemon refusal effort_in_model → rejected effort_in_model`; `a late restart_failed reaches the phone as session.model.failed`; `a replayed session.model op is not dispatched twice` (Review Focus 2); `an unparsable session.model gets operation.result rejected`.
   - operations: `fingerprint differs by model and by effort`; `the registry replays models`.
   - teams-ops: `compose outcome carries seat models`.
