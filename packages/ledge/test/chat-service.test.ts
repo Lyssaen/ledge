@@ -436,6 +436,11 @@ describe('chat service', () => {
         'chat q1: close ignored: unknown session zz', 'chat q1: close ignored: read-only session h1', 'chat q1: close ignored: session has exited x1', 'chat q1: close ignored: duplicate session a1'
       ]);
     });
+    it('takes a session by its bot name, as the registry tells Ledge to write it; a name two live sessions share is refused', async () => {
+      const { chat } = await askWith(closeFence('Arlo', 'Bram'), [session('a1', { name: 'Arlo' }), session('b2', { name: 'Bram' }), session('b3', { name: 'Bram' })]);
+      expect(chat.history()[0]!.closes).toEqual([{ id: 'a1', name: 'Arlo', tool: 'claude' }]);
+      expect(logged.filter(l => l.includes('close ignored'))).toEqual(['chat q1: close ignored: several sessions named Bram']);
+    });
     it('ignores close rows beyond 8', async () => {
       const ids = Array.from({ length: 10 }, (_, i) => `s${i}`);
       const { chat } = await askWith(closeFence(...ids), ids.map(id => session(id)));
@@ -487,6 +492,11 @@ describe('chat service', () => {
       expect(chat.history()[0]).toMatchObject({ answer: 'Je transmets à Otto.', relay });
       expect(chat.relay('q1')).toEqual(relay);
       expect(chat.history()[0]).not.toHaveProperty('proposal');
+    });
+
+    it('a block naming a session by its bot name finds it', async () => {
+      const { chat } = await askWith('{"session": "Otto", "text": "Lance les tests"}', [session('s1')]);
+      expect(chat.relay('q1')).toEqual({ id: 's1', name: 'Otto', tool: 'codex', text: 'Lance les tests' });
     });
 
     it.each([
