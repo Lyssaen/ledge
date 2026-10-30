@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { tmpdir } from 'node:os';
+import { mkdtempSync, mkdirSync, symlinkSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 // @ts-expect-error plain ESM script without types
 import { probeEnv, assertSafeTarget, assertUnder, probeRigSpec, questionsJson, parseSse, teardownPlan, markers } from '../scripts/openrig-probe.mjs';
@@ -61,5 +62,36 @@ describe('teardownPlan', () => {
 describe('markers', () => {
   it('are distinct and carry the run id', () => {
     const m = markers('r1'); expect(new Set(Object.values(m)).size).toBe(4); for (const v of Object.values(m)) expect(v).toContain('r1');
+  });
+});
+
+describe('fix round 1', () => {
+  it('strips every RIGGED_ key', () => {
+    expect(probeEnv({ RIGGED_FOO: '1', RIGGED_HOME: '/h', PATH: '/bin' }, { home: '/tmp/openrig-qa-a', port: 7512 }).RIGGED_FOO).toBeUndefined();
+  });
+  const ok = { home: join(tmpdir(), 'openrig-qa-ledge-a'), port: 7512, realHome: '/home/u' };
+  it('coerces the port and refuses invalid ones', () => {
+    expect(() => assertSafeTarget({ ...ok, port: '7433' as unknown as number })).toThrow(/refused: port 7433/);
+    for (const port of [0, 70000, 75.5, NaN]) expect(() => assertSafeTarget({ ...ok, port })).toThrow(/refused: port/);
+  });
+  it('refuses a symlink into ~/.openrig and a symlink out of tmp', () => {
+    const d = mkdtempSync(join(tmpdir(), 'openrig-qa-fix-'));
+    try {
+      mkdirSync(join(d, 'real', '.openrig'), { recursive: true });
+      symlinkSync(join(d, 'real', '.openrig'), join(d, 'openrig-qa-link'));
+      expect(() => assertSafeTarget({ home: join(d, 'openrig-qa-link'), port: 7512, realHome: join(d, 'real') })).toThrow(/refused: home/);
+      expect(() => assertSafeTarget({ home: join(d, 'real', '.openrig', 'x'), port: 7512, realHome: join(d, 'real') })).toThrow(/refused: home/);
+    } finally { rmSync(d, { recursive: true, force: true }); }
+  });
+  it('assertUnder accepts a child and a name starting with two dots', () => {
+    expect(() => assertUnder('/tmp/openrig-qa-a/..x/f', '/tmp/openrig-qa-a')).not.toThrow();
+    expect(() => assertUnder('/tmp/openrig-qa-a/../b', '/tmp/openrig-qa-a')).toThrow(/refused: wrote outside/);
+  });
+  it('teardownPlan refuses a non-probe home and tags env kinds', () => {
+    expect(() => teardownPlan({ home: '/home/u/.openrig', port: 7512 })).toThrow(/refused/);
+    expect(teardownPlan({ home: '/tmp/openrig-qa-ledge-a', port: 7512 }).map((s: { env: string }) => s.env)).toEqual(['probe', 'probe', 'tmux', 'none']);
+  });
+  it('parseSse accepts CRLF', () => {
+    expect(parseSse('id: 1\r\ndata: {"type":"a"}\r\n\r\n').events).toEqual([{ id: 1, type: 'a', data: { type: 'a' } }]);
   });
 });

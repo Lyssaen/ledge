@@ -1,23 +1,25 @@
 #!/usr/bin/env node
 // Probe of a throwaway OpenRig daemon. This file holds the pure building blocks; the driver comes later.
 // It never targets ~/.openrig or port 7433: assertSafeTarget refuses both.
-import { tmpdir } from 'node:os';
-import { basename, relative, resolve, isAbsolute } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { existsSync, realpathSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
+import { basename, relative, resolve, isAbsolute, sep } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const RIG = 'ledge-probe';
 
 const fail = (msg) => { throw new Error(`openrig-probe: refused: ${msg}`); };
 const isUnder = (path, dir) => {
   const rel = relative(resolve(dir), resolve(path));
-  return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
+  return rel !== '' && rel !== '..' && !rel.startsWith('..' + sep) && !isAbsolute(rel);
 };
+const real = (p) => { const r = resolve(p); try { return existsSync(r) ? realpathSync(r) : r; } catch { return r; } };
 
 /** Environment of a probe command: no inherited OpenRig, Ledge or tmux identity, only the throwaway ones. */
 export function probeEnv(base, o) {
   const env = {};
   for (const [k, v] of Object.entries(base)) {
-    if (k.startsWith('OPENRIG_') || k === 'RIGGED_HOME' || k === 'LEDGE_SESSION' || k === 'TMUX' || k === 'TMUX_PANE' || k === 'TMUX_TMPDIR') continue;
+    if (k.startsWith('OPENRIG_') || k.startsWith('RIGGED_') || k === 'LEDGE_SESSION' || k === 'TMUX' || k === 'TMUX_PANE' || k === 'TMUX_TMPDIR') continue;
     env[k] = v;
   }
   env.OPENRIG_HOME = o.home;
@@ -31,10 +33,14 @@ export function probeEnv(base, o) {
 
 /** Refuses the user's own daemon (port 7433 or OPENRIG_PORT) and any home that is not a temp `openrig-qa-*` directory. */
 export function assertSafeTarget(o) {
-  if (o.port === 7433 || (o.userPort !== undefined && String(o.port) === String(o.userPort))) fail(`port ${o.port} belongs to the user's daemon`);
-  const roots = [tmpdir(), '/tmp'];
-  if (!roots.some((r) => isUnder(o.home, r)) || !basename(resolve(o.home)).startsWith('openrig-qa-')) {
-    fail(`home ${o.home} is not a temp openrig-qa-* directory (real home: ${o.realHome})`);
+  const port = Number(o.port);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) fail(`port ${o.port} is not a valid port`);
+  if (port === 7433 || (o.userPort !== undefined && port === Number(o.userPort))) fail(`port ${port} belongs to the user's daemon`);
+  const home = real(o.home);
+  if (o.realHome && (home === real(resolve(o.realHome, '.openrig')) || isUnder(home, real(resolve(o.realHome, '.openrig'))))) fail(`home ${o.home} is the user's ~/.openrig`);
+  const roots = [tmpdir(), '/tmp'].map(real);
+  if (!roots.some((r) => isUnder(home, r)) || !basename(home).startsWith('openrig-qa-')) {
+    fail(`home ${o.home} is not a temp openrig-qa-* directory`);
   }
 }
 
@@ -77,7 +83,7 @@ export function questionsJson() {
 
 /** Parses SSE frames out of a buffer; returns the complete events and the unfinished tail. */
 export function parseSse(buffer) {
-  const parts = buffer.split('\n\n');
+  const parts = buffer.replace(/\r\n/g, '\n').split('\n\n');
   const rest = parts.pop() ?? '';
   const events = [];
   for (const frame of parts) {
@@ -96,13 +102,14 @@ export function parseSse(buffer) {
   return { events, rest };
 }
 
-/** Teardown steps, in order. `rig` steps run with probeEnv, `tmux` with TMUX_TMPDIR set. */
+/** Teardown steps, in order; throws on a non-probe home. `env` says what each step runs with: probeEnv, only TMUX_TMPDIR, or nothing special. */
 export function teardownPlan(o) {
+  assertSafeTarget({ home: o.home, port: o.port, realHome: o.realHome ?? homedir() });
   return [
-    { cmd: 'rig', args: ['down', RIG] },
-    { cmd: 'rig', args: ['daemon', 'stop'] },
-    { cmd: 'tmux', args: ['kill-server'] },
-    { cmd: 'rm', args: ['-rf', o.home] },
+    { cmd: 'rig', args: ['down', RIG], env: 'probe' },
+    { cmd: 'rig', args: ['daemon', 'stop'], env: 'probe' },
+    { cmd: 'tmux', args: ['kill-server'], env: 'tmux' },
+    { cmd: 'rm', args: ['-rf', o.home], env: 'none' },
   ];
 }
 
@@ -116,7 +123,7 @@ export function markers(run) {
   };
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   console.error('openrig-probe: no driver yet');
   process.exit(1);
 }
