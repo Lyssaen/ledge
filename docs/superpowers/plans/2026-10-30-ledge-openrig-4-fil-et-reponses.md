@@ -27,7 +27,7 @@ Avant la tâche 1, l'exécutant lit les exports réels des lots 1 et 2 et **adap
   - `cli(machine): { run(args: string[], o?: { stdin?: string }): Promise<{ code: number; stdout: string; stderr: string }> }` ;
   - `http(machine): { post(path: string, body: unknown, o?: { session?: string }): Promise<{ status: number; json: unknown }> ; get(path: string): Promise<{ status: number; json: unknown }> }`.
 - Les `ledge ask` du lot 1 (`daemon/asks.ts`, `~/.ledge/asks.json`) sont présentés comme des `Escalation` de `source: 'ask'`, d'id `ask-<id>`, et `asks.answer(id: string, text: string): string | null` (null = réveil envoyé, sinon la raison) existe. Si le lot 2 ne les verse pas dans `escalations`, la tâche 3 ajoute l'adaptateur `asksAsEscalations(asks): Escalation[]`.
-- Le faux `packages/ledge/test/fakes/openrig.ts` exporte `createFakeOpenRig()`, avec un pont branché sur ce faux, `pushEscalation(e)`, `pushExchange(x)`, et le journal `calls` des appels CLI et HTTP reçus.
+- Le faux `packages/ledge/test/fakes/openrig.ts` exporte `createFakeOpenRig()`, avec un pont branché sur ce faux, `pushEscalation(e)`, `pushExchange(x)`, et le journal `calls` des appels CLI et HTTP reçus (pour un appel HTTP : `body` et `headers`, noms en minuscules).
 - `@ledge/fleet` tient déjà `rigs`, `escalations` et `exchanges` (par `machine/rigId`) dans `DaemonState`.
 - Noms du contrat fixés par le lot 2 : `LedgeDecision` et `LedgeRule` (et non `Decision`/`Rule`), `SessionRigSchema`, `RIG_RESULT_CODES`, `EXCHANGES_MAX` (200). L'appariement des sièges passe par `session.event.openrig`.
 - Lot 6 : il ajoute `Escalation.answer.delivery?: 'queued' | 'sent'` et rend les gestionnaires idempotents par `rid` en les enveloppant. Ce lot n'ajoute rien pour cela : il garde `answers.answer` comme point d'entrée unique, que le lot 6 enveloppe.
@@ -175,7 +175,7 @@ export interface Answers {
 }
 export function createAnswers(d: { bridge: OpenRigBridge; asks: { answer(id: string, text: string): string | null }; path: AnswerPath; localMachine: string; now?: () => string; journal?: { replyRow(id: string): string | undefined; setReplyRow(id: string, row: string): void } }): Answers;
 export function answerBody(e: Escalation, answers: Record<string, string>): string;   // « Réponse de Ledge : <question> → <libellé> », une ligne par question ; une valeur qui n'est pas un id d'option est un texte libre, citée telle quelle
-export function readAnswerPath(factsMarkdown: string): AnswerPath;                     // lit la ligne « Chemin de réponse : reply-and-approve | approve-only | resolve » de la fiche
+export function readAnswerPath(factsMarkdown: string): AnswerPath;                     // lit la ligne « Chemin de réponse : reply-and-approve | approve-only | resolve » de la fiche, nue ou en liste (un `- ` de tête est toléré : la fiche l'écrit en liste)
 ```
 
 Règles :
@@ -201,6 +201,8 @@ test('reply-and-approve creates the reply row then approves', async () => {
   expect(r.ok).toBe(true);
   expect(fake.calls.map(c => c.kind)).toEqual(['cli:queue create', 'http:/api/mission-control/action']);
   expect(fake.calls[1].body).toMatchObject({ verb: 'approve', qitemId: 'qi-1' });
+  expect(fake.calls[1].headers).toMatchObject({ 'x-openrig-session': 'ledge@external' });   // fixé par la fiche de faits, D8
+  expect(fake.calls[1].body).not.toHaveProperty('actorSession');
   expect(bridge.escalations.get('qi-1')).toMatchObject({ state: 'answered', answer: { by: 'user', answers: { q1: 'sqlite' } } });
 });
 test('second answer while the first is in flight gets already_answered', async () => {
@@ -212,6 +214,10 @@ test('second answer while the first is in flight gets already_answered', async (
   expect(fake.calls.filter(c => c.kind === 'cli:queue create')).toHaveLength(1);
 });
 test('an answered escalation refuses another answer', async () => { /* … already_answered */ });
+test('a 409 qitem_already_terminal from approve is already_answered, not failed', async () => {   // fixé par la fiche de faits, D7
+  fake.failNext('http:/api/mission-control/action', { status: 409, body: { error: 'qitem_already_terminal', state: 'done' } });
+  expect(await answers.answer('qi-1', { q1: 'sqlite' }, 'user')).toEqual({ ok: false, code: 'already_answered', reason: expect.any(String) });
+});
 test('retry after a failed approve reuses the reply row', async () => {
   fake.failNext('http:/api/mission-control/action');
   expect((await answers.answer('qi-1', { q1: 'sqlite' }, 'user'))).toMatchObject({ ok: false, code: 'failed' });
@@ -226,6 +232,7 @@ test('a remote escalation is unreachable until lot 6', async () => { /* machine 
 test('an empty or missing answer is invalid, free text is not', async () => { /* { q1: '' } → invalid ; {} sur une decision → invalid ; { q1: 'les deux, en lecture seule' } → ok */ });
 test('readAnswerPath reads the facts sheet line', () => {
   expect(readAnswerPath('…\nChemin de réponse : resolve\n…')).toEqual({ kind: 'resolve' });
+  expect(readAnswerPath('## Retenu\n- Chemin de réponse : reply-and-approve\n')).toEqual({ kind: 'reply-and-approve' });   // forme liste de la fiche
 });
 test('onAnswered fires once per successful answer', async () => { /* … */ });
 ```
