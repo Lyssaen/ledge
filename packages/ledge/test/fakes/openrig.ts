@@ -56,7 +56,7 @@ export async function createFakeOpenRig(opts: { port?: number; version?: string 
     if (path === '/api/kernel/status') return json(res, { state: f.kernel.state, kernel_state: f.kernel.state, agents: [] });
     if (path === '/api/queue/list') {
       const d = q.get('destinationSession'), s = q.get('state'), src = q.get('sourceSession');
-      return json(res, f.queue.filter(r => (!d || r.destinationSession === d) && (!s || r.state === s) && (!src || r.sourceSession === src)));
+      return json(res, f.queue.filter(r => (!d || r.destinationSession === d) && (!s || s.split(',').includes(r.state)) && (!src || r.sourceSession === src)));
     }
     if (path === '/api/queue/outbox/list') { const s = q.get('senderSession'); return json(res, s ? (f.outbox.get(s) ?? []) : [...f.outbox.values()].flat()); }
     if (path === '/api/events') return sse(req, res, q, lastEventId);
