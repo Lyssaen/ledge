@@ -55,18 +55,22 @@ Celles du plan maître s'appliquent toutes (version minimale `0.6.14`, accès se
   export const DEFAULT_PORT = 7433;
   export const INSTALL_COMMAND = 'npm install -g @openrig/cli@0.6.14 && rig setup';
   export type Registration = 'external' | 'host-seat';     // §4.2 : leurre Slack, ou plan B human-ledge@host
-  export const REGISTRATION: Registration;                 // repli : 'external'
+  export const REGISTRATION: Registration;                 // 'external' (fixé par la fiche de faits, D2, D9)
   export const HUMAN_ID = 'ledge';
   export const HUMAN_ADDRESS: string;                      // 'ledge@external' (repli), 'human-ledge@host' en plan B
-  export const HUMAN_BINDING: string;                      // repli : 'slack:ledge-none:ledge-none:primary'
+  export const HUMAN_BINDING: string;                      // 'slack:ledge-decoy:file:<chemin d'un fichier absent>:primary', le fichier n'est jamais créé (fixé par la fiche de faits, D2)
   export const OPERATOR_HUMAN_SESSIONS: readonly string[]; // repli : ['operator-human@kernel']
   export const HUMAN_GATE_TIER = 'human-gate';
   export const EVENTS: { queueCreated: 'queue.created'; queueUpdated: 'queue.updated'; queueHandedOff: 'queue.handed_off';
     sessionStatus: 'session.status_changed'; nodeLaunched: 'node.launched'; activity: 'agent.activity';
     rigCreated: 'rig.created'; rigDeleted: 'rig.deleted'; rigStopped: 'rig.stopped'; nodeAdded: 'node.added'; nodeRemoved: 'node.removed' };
-  export const OUTBOX_EVENT: string | null;               // repli : null → polling GET /api/queue/outbox/list?senderSession=<ref> toutes les 5 s
+  // Observés et à ajouter : 'seat.activity_changed' (activité d'un siège terminal), 'queue.claimed', 'mission_control.action_executed',
+  // 'rig.imported' (émis par `rig up`, pas 'rig.created'), 'node.startup_ready', 'bootstrap.completed'. Ignorés : 'view.changed', 'watchdog.*'.
+  // Les autres noms ci-dessus existent dans le source 0.6.14 mais n'ont pas été observés. (fixé par la fiche de faits, D10)
+  export const OUTBOX_EVENT: string | null;               // null → polling GET /api/queue/outbox/list?senderSession=<ref> toutes les 5 s, lignes `outbox-…` seulement (fixé par la fiche de faits, D11)
   export const OPEN_QUEUE_STATES: readonly string[];       // repli : ['pending', 'in-progress', 'blocked']
   export const QUEUE_ROW: { questions: string; intent: string; evidence: string; replyTo: string; body: string }; // noms de champs d'une ligne de /api/queue/list
+  // = { questions: 'humanQuestions', intent: 'humanIntent', evidence: 'evidenceRef', replyTo: 'replyTo', body: 'body' } (fixé par la fiche de faits, D4)
   export function openrigBase(env: NodeJS.ProcessEnv): string; // http://127.0.0.1:<OPENRIG_PORT|7433>
   ```
 
@@ -230,7 +234,7 @@ Celles du plan maître s'appliquent toutes (version minimale `0.6.14`, accès se
     version(): Promise<string | null>;             // `rig --version`, première ligne x.y.z
     daemonStart(): Promise<{ ok: boolean; detail?: string }>; // `rig daemon start`, délai 90 s
     humans(): Promise<string[] | null>;            // `rig gateway human list --json` → ids ; null si la commande échoue
-    addHuman(): Promise<{ ok: boolean; detail?: string }>;    // `rig gateway human add ledge --display-name Ledge --binding <HUMAN_BINDING>`
+    addHuman(): Promise<{ ok: boolean; detail?: string }>;    // `rig gateway human add ledge --display-name Ledge --binding <HUMAN_BINDING> --delivery-class D --actor ledge` (fixé par la fiche de faits, D2)
   }
   export function createRigCli(exec: RigExec): RigCli;
   // presence.ts

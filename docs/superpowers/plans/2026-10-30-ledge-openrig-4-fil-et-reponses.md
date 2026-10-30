@@ -183,10 +183,11 @@ Règles :
 - L'escalade passe tout de suite `answered`, avec `answer: { by, answers, at, rule? }` (`bridge.escalations.patch`). En cas d'échec, elle revient à son état d'avant (`pending` ou `grace`), sans `answer`.
 - **Ligne de réponse idempotente** : l'id de la ligne créée par `rig queue create … --json` est noté (`journal.setReplyRow`) avant la fermeture. Une nouvelle tentative qui trouve une ligne notée ne la recrée pas.
 - Commandes, selon `path` :
-  - `reply-and-approve` : `rig queue create --destination <from> --summary "Réponse de Ledge : <résumé>" --body-file <tmp> --json`, plus `--reply-to <id>` pour un `update`, puis `POST /api/mission-control/action { verb: 'approve', qitemId: id, annotation: answerBody }` ;
+  - `reply-and-approve` : `rig queue create --source ledge@external --destination <from> --summary "Réponse de Ledge : <résumé>" --body-file <tmp> --json`, plus `--reply-to <id>` pour un `update`, puis `POST /api/mission-control/action { verb: 'approve', qitemId: id, annotation: answerBody }` avec l'en-tête `X-OpenRig-Session: ledge@external` (`http.post(…, { session: 'ledge@external' })`, sans `actorSession` dans le corps). C'est le chemin retenu : `approve` ferme la ligne et réveille le travail bloqué, mais ne porte pas le texte au siège (`annotation` ne va qu'à l'audit). Le siège ne voit que le `summary` de la ligne de réponse : le résumé doit contenir la réponse. (fixé par la fiche de faits, D5, D6, D8)
   - `approve-only` : seulement l'`approve` ;
   - `resolve` : la commande exacte de la fiche de faits.
 - `intent: 'update'` avec `answers` vide : seulement l'`approve` (« vu »), quel que soit le chemin.
+- Un `approve` qui rend 409 `{ error: 'qitem_already_terminal' }` (ligne déjà fermée ailleurs) renvoie `already_answered`, pas `failed`. (fixé par la fiche de faits, D7)
 - `source: 'ask'` : `asks.answer(id sans 'ask-', answerBody)`, sans OpenRig.
 - Une escalade d'une autre machine que `localMachine` renvoie `unreachable`, avec la raison « réponse à distance : lot 6 ».
 - `bridge.status(machine).state !== 'running'` renvoie `openrig_down`, sans rien marquer.
@@ -357,7 +358,7 @@ export function createSeatSend(d: { bridge: OpenRigBridge }): {
 Règles :
 - Seuls comptent les rigs `running` ou `partial`, et les sièges qui ne sont ni `stopped` ni `crashed`. Pour un siège arrêté, la raison est « @build est arrêté (factory) ».
 - Une adresse ambiguë donne la raison « Plusieurs agents s'appellent @build : » suivie des `candidates` (`@build@factory`, `@build@starter`).
-- La signature du message est le préfixe `[Ledge] `, à remplacer si la fiche de faits en fixe une autre.
+- La signature du message est le préfixe `[Ledge] `, à remplacer si la fiche de faits en fixe une autre. `rig send` part avec `OPENRIG_SESSION_NAME=ledge@external` : sans identité, OpenRig le livre non signé. L'envoi signé `ledge@external` n'a pas été observé ; on le vérifie au premier essai réel. (fixé par la fiche de faits, D11)
 - Un mot `@x` qui n'est l'adresse d'aucun siège : `fromSay` renvoie `null`, et le texte va à Ledge comme une question.
 - Dans le fil, un envoi réussi donne l'élément `user` avec `to: '@build'`, sans bulle de Ledge. Un échec donne l'élément `user`, puis une bulle de Ledge avec la raison.
 
