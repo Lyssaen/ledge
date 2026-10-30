@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { spawn as nodeSpawn } from 'node:child_process';
 import { extractProposal, isArchived, LEGACY_FENCE_ACTION, MAX_PROPOSALS, proposalRows, parseActionBlock, parseProjectBlock, parseCloseBlock, parseRelayBlock, projectOf, type BlockKind, type ChatAction, type ChatClose, type ChatProjectProposal, type ChatProposal, type ChatRelay, type CloseHow, type ChatTurn, type AttachmentRef, type Projects, type ServerMessage, type Session, type Tool } from '@ledge/protocol';
-import { resolveAction } from '../daemon/actions.js';
+import { resolveAction, sessionOf } from '../daemon/actions.js';
 import { resolveFolder } from '../daemon/folders.js';
 import type { Store } from '../daemon/store.js';
 import type { Tmux } from '../tmux.js';
@@ -163,10 +163,12 @@ export function createChat(deps: ChatDeps): Chat {
     if (!block) { log(`chat ${qid}: relay ignored, invalid block: ${raw.slice(0, 200)}`); return undefined; }
     // A leading `!` would put Claude Code in bash mode, and the chat model can be steered by pane or repo content.
     if (block.text.trimStart().startsWith('!')) { log(`chat ${qid}: relay ignored: bash-mode instruction ${block.session}`); return undefined; }
-    const s = deps.store.get(block.session);
-    const why = !s ? 'unknown session' : s.source === 'hook_only' ? 'read-only session' : s.state === 'exited' ? 'session has exited' : null;
+    const found = sessionOf(block.session, { sessions: deps.store.all() });
+    if ('refused' in found) { log(`chat ${qid}: relay ignored: ${found.refused}`); return undefined; }
+    const s = found;
+    const why = s.source === 'hook_only' ? 'read-only session' : s.state === 'exited' ? 'session has exited' : null;
     if (why) { log(`chat ${qid}: relay ignored: ${why} ${block.session}`); return undefined; }
-    return { id: s!.id, name: s!.name, tool: s!.tool, text: block.text };
+    return { id: s.id, name: s.name, tool: s.tool, text: block.text };
   }
   /** The close blocks as rows: each session must be tracked, writable, still running now and not already a row; the others are dropped with a log line. */
   function closesFrom(blocks: Array<{ raw: string }>, qid: string): ChatClose[] {
@@ -174,10 +176,12 @@ export function createChat(deps: ChatDeps): Chat {
     for (const { raw } of blocks) {
       const block = parseCloseBlock(raw);
       if (!block) { log(`chat ${qid}: close ignored, invalid block: ${raw.slice(0, 200)}`); continue; }
-      const s = deps.store.get(block.session);
-      const why = !s ? 'unknown session' : s.source === 'hook_only' ? 'read-only session' : s.state === 'exited' ? 'session has exited' : rows.some(r => r.id === s.id) ? 'duplicate session' : null;
+      const found = sessionOf(block.session, { sessions: deps.store.all() });
+      if ('refused' in found) { log(`chat ${qid}: close ignored: ${found.refused}`); continue; }
+      const s = found;
+      const why = s.source === 'hook_only' ? 'read-only session' : s.state === 'exited' ? 'session has exited' : rows.some(r => r.id === s.id) ? 'duplicate session' : null;
       if (why) { log(`chat ${qid}: close ignored: ${why} ${block.session}`); continue; }
-      rows.push({ id: s!.id, name: s!.name, tool: s!.tool });
+      rows.push({ id: s.id, name: s.name, tool: s.tool });
     }
     return rows;
   }

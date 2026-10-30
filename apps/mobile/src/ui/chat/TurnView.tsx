@@ -2,6 +2,7 @@ import type { ChatErrorCode, PhoneChatStep, PhoneChatTurn } from '@ledge/protoco
 import { copy } from '../../copy';
 import type { MobileStore } from '../../state/store';
 import { PhoneThumbs } from '../PhoneThumbs';
+import { ActionCards } from './ActionCard';
 import { Answer, Sources } from './Answer';
 import { CloseCards } from './CloseCard';
 import { LaunchCards } from './LaunchCard';
@@ -75,6 +76,7 @@ export function TurnView({ store, turn, live, sessions, list, canConfirm, onStop
       {!live && turn.closes && <CloseCards store={store} qid={turn.qid} closes={turn.closes} canConfirm={canConfirm} sessions={list} />}
       {!live && !turn.closes && relay && <RelayCard store={store} qid={turn.qid} relay={relay} repo={list.find(x => x.id === relay.id)?.repo} known={list.some(x => x.id === relay.id)} />}
       {!live && !turn.closes && turn.proposals && turn.proposals.length > 0 && <LaunchCards store={store} qid={turn.qid} proposals={turn.proposals} canConfirm={canConfirm} sessionIds={new Set(list.map(x => x.id))} />}
+      {!live && turn.actions && <ActionCards store={store} qid={turn.qid} actions={turn.actions} ignoredAt={turn.ignoredAt} canConfirm={canConfirm} />}
       {live && (
         <button type="button" onClick={onStop} className={buttonClass({ size: 'sm', className: 'self-start' })}>
           <Icon name="stop" className="size-3.5" />

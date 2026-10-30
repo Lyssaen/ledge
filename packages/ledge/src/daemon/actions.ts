@@ -19,7 +19,7 @@ const KIND: Record<(typeof DECIDABLE)[number], string> = { permission: 'permissi
 const no = (code: ActionErrorCode, refused: string): Refusal => ({ refused, code });
 const isRefusal = (x: object): x is Refusal => 'refused' in x;
 /** A session by id, or by bot name among those not ended (the archive included): refused when none or several fit. */
-function sessionOf(ref: string, ctx: ResolveCtx): Session | Refusal {
+export function sessionOf(ref: string, ctx: Pick<ResolveCtx, 'sessions'>): Session | Refusal {
   const byId = ctx.sessions.find(s => s.id === ref);
   if (byId) return byId;
   const named = ctx.sessions.filter(s => s.name === ref);

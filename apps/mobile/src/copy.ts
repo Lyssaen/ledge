@@ -1,4 +1,5 @@
-import { MESSAGE_MAX } from '@ledge/protocol';
+import { MESSAGE_MAX, type ActionErrorCode } from '@ledge/protocol';
+import { actionWords, type ActionVars } from '@ledge/ui/chat/actionWords';
 
 /** Every French string of the phone app lives here (decision D13). */
 export const copy = {
@@ -63,6 +64,49 @@ export const copy = {
     closeLabel: 'Sessions à fermer', closeRow: 'Fermer', closeAll: (n: number) => `Fermer tout (${n})`,
     closing: 'Fermeture…', closed: 'Fermée', killed: 'Fermée de force', ended: 'Terminée',
     closeFailed: 'Échec de la fermeture', closeSetup: 'Protégez d\'abord vos accords depuis Connexion.',
+    /** The generic card (#94, docs/mockups/ledge-action-card.html, « Téléphone »): the rows' lines are the PC's (actionWords),
+     *  the sentences that speak to the user say « vous » (ledge-action-card-codes.md). */
+    action: {
+      label: (n: number) => n > 1 ? `Plan de ${n} actions` : 'Action proposée',
+      risk: { read: 'Lecture', reversible: 'Réversible', destructive: 'Irréversible' },
+      step: (k: number) => `Étape ${k}`,
+      stepState: { done: (k: number) => `Étape ${k}, appliquée`, failed: (k: number) => `Étape ${k}, échouée`, refused: (k: number) => `Étape ${k}, refusée`, running: (k: number) => `Étape ${k}, en cours` },
+      verbs: {
+        'session.model': 'Changer', 'session.interrupt': 'Interrompre', 'session.archive': 'Archiver', 'session.restore': 'Restaurer', 'session.resume': 'Reprendre',
+        'session.decide': 'Accepter'
+      } as Record<string, string>,
+      apply: 'Appliquer', deny: 'Refuser', ignore: 'Ignorer', review: 'Revoir', retry: 'Réessayer', running: 'En cours…',
+      done: (at: string) => `Appliquée${at ? ` · ${at}` : ''}`, refusedState: 'Refusée', denied: (at: string) => `Refus envoyé${at ? ` · ${at}` : ''}`,
+      open: (name: string) => `Ouvrir ${name}`,
+      failed: (why: string) => `Échec : ${why}`, refused: (why: string) => `Refusée : ${why} Rien n’a été envoyé.`,
+      held: (k: number) => `Pas appliquée : le plan s’est arrêté à l’étape ${k}.`,
+      stale: 'La demande a changé depuis : rien n’a été envoyé.',
+      deniedNote: (name: string) => `${name} a reçu votre refus : la commande n’a pas été lancée.`,
+      cutMark: 'Demande coupée : la suite est sur le PC.',
+      cutNote: 'Demande trop longue pour le téléphone : elle s’accepte sur le PC. Vous pouvez la refuser d’ici.',
+      all: (n: number) => `Tout appliquer (${n})`, resume: (k: number, n: number) => `Reprendre à l’étape ${k} (${n})`, skip: (k: number, n: number) => `Continuer sans l’étape ${k} (${n})`,
+      inOrder: 'Dans l’ordre ; s’arrête au premier échec.', notReplayed: 'Les étapes faites ne sont pas rejouées.',
+      progress: (k: number, n: number) => `Étape ${k} sur ${n}…`, planDone: (at: string) => `Plan appliqué${at ? ` à ${at}` : ''}`,
+      notSent: 'Pas envoyé. Réessayez.',
+      sheet: { many: (n: number) => `Appliquer ces ${n} actions, dans l’ordre ?`, one: (line: string) => `${line} ?`, stops: 'Si une étape échoue, les suivantes ne sont pas appliquées.', cancel: 'Annuler' },
+      ignored: (n: number, at: string, sent: { done: number; denied: number; failed: number }) => {
+        const went = [
+          ...(sent.done ? [`${sent.done} ${sent.done > 1 ? 'appliquées' : 'appliquée'}`] : []),
+          ...(sent.denied ? [`${sent.denied} ${sent.denied > 1 ? 'refus envoyés' : 'refus envoyé'}`] : []),
+          ...(sent.failed ? [`${sent.failed} ${sent.failed > 1 ? 'échouées' : 'échouée'}`] : [])
+        ];
+        if (!went.length) return `${n > 1 ? `Plan de ${n} actions ignoré` : 'Carte ignorée'} à ${at} · rien n’a été envoyé`;
+        return n > 1 ? `Plan de ${n} actions : ${went.join(', ')}, le reste ignoré à ${at}` : `Carte ignorée à ${at} · l’action est partie, mais n’a pas abouti`;
+      },
+      /** A row's line, from its words; undefined when one is missing (the daemon's summary then). */
+      line: (action: string, v: ActionVars): string | undefined => actionWords.fr.line[action]?.(v),
+      kind: actionWords.fr.kind,
+      /** Why a row was refused or failed: the PC's words, but the phone says « vous » where it asks something of the user. */
+      why: (code: ActionErrorCode | undefined, action: string | undefined, v: ActionVars): string => {
+        if (code === 'changed') return 'la situation a changé depuis : redemandez à Ledge.';
+        return actionWords.fr.why(code, action, v).replace('redemande à Ledge', 'redemandez à Ledge');
+      }
+    },
     steps: {
       sessions: (n: number) => `Lit les ${n} sessions…`,
       pane: (name: string) => `Regarde le terminal de ${name}…`,
