@@ -88,6 +88,10 @@ export type Helper = z.infer<typeof HelperSchema>;
 export const TopicSourceSchema = z.enum(['user', 'pane', 'prompt']);
 export type TopicSource = z.infer<typeof TopicSourceSchema>;
 
+/** What a live session knows of its OpenRig seat (paired through `session.event.openrig`). Lives here, not in openrig.ts, to avoid an import cycle through chat.ts. */
+export const SessionRigSchema = z.object({ machine: z.string(), rigId: z.string(), rigName: z.string(), seat: z.string(), pod: z.string(), member: z.string() });
+export type SessionRig = z.infer<typeof SessionRigSchema>;
+
 export const SessionSchema =z.object({
   /** Origin is annotated by the overlay, never used as an unqualified session id on the wire. */
   machineId: z.string().optional(), machineName: z.string().optional(), repoId: z.string().optional(),
@@ -151,7 +155,9 @@ export const SessionSchema =z.object({
   /** When the session was put in the archive (session management): set, it leaves the live list and waits to be restored, resumed or deleted. */
   archivedAt: z.string().datetime().optional(),
   /** When the session was last taken out of the archive: the poller's retirement clock restarts from it, not from `exitedAt`. */
-  restoredAt: z.string().datetime().optional()
+  restoredAt: z.string().datetime().optional(),
+  /** The OpenRig seat this session runs in (paired from the hook's `openrig.sessionName`). */
+  rig: SessionRigSchema.optional()
 });
 export type Session = z.infer<typeof SessionSchema>;
 

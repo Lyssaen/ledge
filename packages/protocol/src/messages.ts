@@ -15,6 +15,7 @@ import { ProjectsSchema } from './projects.js';
 import { ThreadItemSchema } from './thread.js';
 import { DecisionSchema, NOTE_MAX } from './decisions.js';
 import { MobileStateSchema, RelayUrlSchema } from './mobile.js';
+import { OpenRigStatusMessageSchema, RigSnapshotSchema, RigUpdatedSchema, RigRemovedSchema, RigExchangeSchema, RigExchangesSchema, EscalationUpdatedSchema, EscalationRemovedSchema, LedgeThreadItemMessageSchema, LedgeThreadHistorySchema, DecisionsMessageSchema, RulesMessageSchema, MandateMessageSchema, BrainStatusMessageSchema, RigPlanMessageSchema, RigResultSchema, RigActSchema, RigPrepareSchema, RigLaunchSchema, RigAdoptSchema, RigSendSchema, RigExchangesRequestSchema, EscalationAnswerSchema, LedgeSaySchema, LedgeThreadRequestSchema, MandateUpdateSchema, RuleSetSchema, DecisionRevisitSchema, CategoryEscalateSchema, BrainSetSchema } from './openrig.js';
 import { AskAnswerSchema, AskCreateSchema, AskResultSchema, AskUpdatedSchema, AsksMessageSchema } from './asks.js';
 import { ContextPrefsMessageSchema, ContextSetSchema, HandoverBriefSchema, HandoverResultSchema, HandoverShowSchema, SessionHandoverResultSchema, SessionHandoverSchema } from './handover.js';
 
@@ -86,7 +87,8 @@ export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(
   /** Takes `session.model`: a live session's model and effort changed (#58, lot 2). */ modelSwitch: z.boolean().optional(),
   /** Takes `approval` on an OMP `session.launch` (auto mode). */ ompApproval: z.boolean().optional(),
   /** Its home folder, so a client shows the folders under it as `~` (absent from older daemons). */ home: z.string().optional(), mobile: z.boolean().optional(),
-  /** Knows `ask.create` / `ask.answer`: a session's decision for the user (`ledge ask`). */ asks: z.boolean().optional() });
+  /** Knows `ask.create` / `ask.answer`: a session's decision for the user (`ledge ask`). */ asks: z.boolean().optional(),
+  /** Reads OpenRig (rigs, escalations, exchanges) through its local bridge. */ openrig: z.boolean().optional() });
 export type DaemonInfo = z.infer<typeof DaemonInfoSchema>;
 export const UpdateFailureSchema = z.enum(['git-install', 'no-systemd', 'sessions-at-risk', 'npm-failed', 'busy']);
 export type UpdateFailure = z.infer<typeof UpdateFailureSchema>;
@@ -159,6 +161,8 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   ContextPrefsMessageSchema,
   HandoverResultSchema,
   AsksMessageSchema, AskUpdatedSchema, AskResultSchema,
+  OpenRigStatusMessageSchema, RigSnapshotSchema, RigUpdatedSchema, RigRemovedSchema, RigExchangeSchema, RigExchangesSchema, EscalationUpdatedSchema, EscalationRemovedSchema,
+  LedgeThreadItemMessageSchema, LedgeThreadHistorySchema, DecisionsMessageSchema, RulesMessageSchema, MandateMessageSchema, BrainStatusMessageSchema, RigPlanMessageSchema, RigResultSchema,
   z.object({ type: z.literal('error'), message: z.string(), id: z.string().optional(), /** Le type du message client refusé. */ request: z.string().optional(),
     /** Ce que le front doit reconnaître au-delà du texte (NOTE_NOT_TYPED) ; une chaîne libre, qu'un front plus ancien ignore. */ code: z.string().optional() })
 ]);
@@ -250,7 +254,8 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session.thread'), id: z.string() }),
   z.object({ type: z.literal('session.register'), session: SessionSchema }),
   /** `agent` and `cwd` describe the session when the daemon does not know it yet (a hook from an agent started without ledge). */
-  z.object({ type: z.literal('session.event'), id: z.string(), event: SessionEventSchema, agent: ToolSchema.optional(), cwd: z.string().optional() }),
+  z.object({ type: z.literal('session.event'), id: z.string(), event: SessionEventSchema, agent: ToolSchema.optional(), cwd: z.string().optional(),
+    /** The OpenRig seat a hook ran in: its session name (`dev-build@starter`) and node id, what pairs the session with its seat. */ openrig: z.object({ sessionName: z.string().min(1).max(200), nodeId: z.string().max(200).optional() }).optional() }),
   z.object({ type: z.literal('session.unregister'), id: z.string(), exitCode: z.number().int().nullable() }),
   z.object({ type: z.literal('snapshot.request') }),
   z.object({ type: z.literal('chat.ask'), qid: z.string().min(1), text: z.string(), images: z.array(ImageUploadSchema).max(ATTACHMENTS_MAX).optional(), tool: ToolSchema.optional() }),
@@ -285,6 +290,8 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   ContextSetSchema,
   HandoverBriefSchema,
   HandoverShowSchema,
+  RigActSchema, RigPrepareSchema, RigLaunchSchema, RigAdoptSchema, RigSendSchema, RigExchangesRequestSchema, EscalationAnswerSchema,
+  LedgeSaySchema, LedgeThreadRequestSchema, MandateUpdateSchema, RuleSetSchema, DecisionRevisitSchema, CategoryEscalateSchema, BrainSetSchema,
 ]);
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 /** The commands of the mobile access service. */

@@ -25,3 +25,4 @@ export * from './push.js';
 export * from './handover.js';
 export * from './actions.js';
 export * from './todos.js';
+export * from './openrig.js';
