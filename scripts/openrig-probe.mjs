@@ -153,7 +153,7 @@ export const STEPS = [
   ['sse.open', 'GET /api/events?replay=0 as a stream, kept open to the end; each event stamped on arrival'],
   ['rig.up', 'git init <home>/ws, list files, rig up <home>/spec/rig.yaml --cwd <home>/ws --yes --json, list again'],
   ['rig.plan', 'git init <home>/ws2, rig up starter --plan --cwd <home>/ws2 --json, list ws2 before/after'],
-  ['read.mirror', 'GET /api/ps, /api/rigs, /api/rigs/summary, /api/rigs/<id>/graph, /api/kernel, /api/attention'],
+  ['read.mirror', 'GET /api/ps, /api/rigs, /api/rigs/summary, /api/rigs/<id>/graph, /api/kernel/status (0.6.14 has no /api/kernel), /api/attention'],
   ['esc.before-register', `as ${SEAT}: rig queue create --destination ${LEDGE} --human-intent decision ... --json (before any human is registered)`],
   ['human.add', 'rig gateway human add ledge ... --binding slack:ledge-decoy:file:<home>/decoy-slack.env:primary --delivery-class D --actor ledge-probe (file absent); human.add.file retries with the file created empty; then human show'],
   ['human.second', 'rig gateway human add other ... (the single-human boundary)'],
@@ -200,11 +200,12 @@ function findQitemId(v) {
   return undefined;
 }
 
-function exec(cmd, args, env, { timeout = 60_000 } = {}) {
+function exec(cmd, args, env, { timeout = 60_000, onSpawn } = {}) {
   return new Promise((done) => {
     let out = '', err = '', settled = false;
     const finish = (r) => { if (!settled) { settled = true; clearTimeout(t); done(r); } };
     const child = spawn(cmd, args, { env, stdio: ['ignore', 'pipe', 'pipe'] });
+    onSpawn?.(child);
     const t = setTimeout(() => { err += `\n[probe: killed after ${timeout} ms]`; child.kill('SIGKILL'); }, timeout);
     child.stdout.on('data', (d) => { out += d; });
     child.stderr.on('data', (d) => { err += d; });
@@ -276,18 +277,26 @@ class Probe {
     this.current = 'preflight';
     this.raw = { live: '', resume: '' };
     this.guard = null;
+    this.aborting = false;
+    this.child = null;
   }
+  /** After a signal: no new command or request; the in-flight command is asked to stop. */
+  abort() { this.aborting = true; try { this.child?.kill('SIGTERM'); } catch { /* gone */ } }
+  check() { if (this.aborting) throw new Refused('openrig-probe: aborting on a signal'); }
   push(step) { this.steps.push(step); return step; }
   data(id, data, note) { this.current = id; return this.push({ id, at: now(), data, ...(note ? { note } : {}) }); }
-  async cmd(id, args, { seat, note, cmd = 'rig', timeout } = {}) {
+  async cmd(id, args, { seat, note, cmd = 'rig', timeout, extraEnv } = {}) {
+    this.check();
     this.current = id;
     const at = now();
-    const env = cmd === 'tmux' ? tmuxEnv(this.home, this.port) : probeEnv(process.env, { home: this.home, port: this.port, seat });
-    const r = await exec(cmd, args, env, { timeout });
+    const env = { ...(cmd === 'tmux' ? tmuxEnv(this.home, this.port) : probeEnv(process.env, { home: this.home, port: this.port, seat })), ...extraEnv };
+    const r = await exec(cmd, args, env, { timeout, onSpawn: (c) => { this.child = c; } });
+    this.child = null;
     this.push({ id, at, cmd: [cmd, ...args], ...(seat ? { env: { seat } } : {}), exit: r.exit, stdout: r.stdout, stderr: r.stderr, ...(note ? { note } : {}) });
     return { ...r, json: tryJson(r.stdout) };
   }
   async http(id, method, path, { body, headers, note } = {}) {
+    this.check();
     this.current = id;
     const at = now();
     const http = { method, path, ...(body !== undefined ? { body } : {}), status: 0 };
@@ -405,6 +414,7 @@ export async function main(argv) {
 
 async function go(opts) {
   // preflight: version first, before anything is created.
+  // Safe under sanitized(): --version prints a constant and reads no OPENRIG_HOME; no OpenRig or tmux identity is passed.
   const v = spawnSync('rig', ['--version'], { encoding: 'utf8', env: sanitized() });
   const version = (v.stdout ?? '').trim();
   const first = version.split(/\s+/)[0];
@@ -419,43 +429,55 @@ async function go(opts) {
   const p = new Probe({ run, home, port, version });
   const reportPath = resolve(opts.report ?? join(tmpdir(), `openrig-probe-report-${run}.json`));
   const writeReport = () => { writeFileSync(reportPath, JSON.stringify(p.report(), null, 2)); };
-  let tornDown = false;
-  const doTeardown = async () => {
-    if (tornDown) return;
-    tornDown = true;
-    const at = now();
-    const t = await teardown(home, port, { keep: opts.keep });
-    p.push({ id: 'teardown', at, data: t, ...(opts.keep ? { note: '--keep: home left in place' } : {}) });
-    writeReport();
-    console.log(`openrig-probe: teardown: port ${t.portClosed ? 'closed' : 'STILL OPEN'}, home ${t.homeGone ? 'removed' : 'still there'}`);
+  // One teardown, run by the finally below. A signal only stops new steps and waits for it; repeated signals too.
+  let finished;
+  const done = new Promise((r) => { finished = r; });
+  let signalled = null;
+  const onSignal = (sig) => {
+    if (!signalled) console.error(`openrig-probe: ${sig}, stopping and tearing down`);
+    else console.error(`openrig-probe: ${sig} again, teardown already running`);
+    signalled ??= sig;
+    p.abort();
+    done.then(() => process.exit(130));
   };
-  const onSignal = (sig) => { console.error(`openrig-probe: ${sig}, tearing down`); doTeardown().finally(() => process.exit(130)); };
-  process.once('SIGINT', onSignal);
-  process.once('SIGTERM', onSignal);
+  process.on('SIGINT', onSignal);
+  process.on('SIGTERM', onSignal);
 
   const before = userMtimes();
   const ws = join(home, 'ws');
   const ws2 = join(home, 'ws2');
   const files = { q: join(home, 'questions.json'), b: join(home, 'body.md'), r: join(home, 'reply.md'), proof: join(ws, 'PROOF.md') };
-  writeFileSync(join(home, '.openrig-fixture'), `ledge openrig probe ${run}\n`);
-  writeFileSync(join(home, '.probe-port'), `${port}\n`);
-  for (const d of ['tmux', 'shared-docs', 'spec']) mkdirSync(join(home, d), { recursive: true });
-  writeFileSync(join(home, 'spec', 'rig.yaml'), probeRigSpec());
-  writeFileSync(files.q, questionsJson());
-  writeFileSync(files.b, `# Probe decision ${run}\n\nThe probe asks Ledge to choose a branch. Nothing real depends on it.\n`);
-  writeFileSync(files.r, `Réponse de Ledge : ${m.decision}\n`);
-  p.push({ id: 'preflight', at: now(), cmd: ['rig', '--version'], exit: v.status, stdout: v.stdout, stderr: v.stderr,
-    data: { home, port, userOpenrigPort: process.env.OPENRIG_PORT ?? null, mtimes: before, markers: m } });
   p.guard = { before, after: null, changed: null };
-  console.log(`openrig-probe: run ${run}, home ${home}, port ${port}`);
+  const humansUnchanged = (id) => {
+    const now_ = userMtimes()['gateway/humans/'];
+    if (now_ !== before['gateway/humans/']) {
+      p.data(id, { 'gateway/humans/': { before: before['gateway/humans/'], after: now_ } }, '~/.openrig/gateway/humans changed');
+      throw new Refused(`openrig-probe: refused: ~/.openrig/gateway/humans changed during the probe (${before['gateway/humans/']} -> ${now_})`);
+    }
+  };
 
   let live;
   let code = 0;
   try {
+    writeFileSync(join(home, '.openrig-fixture'), `ledge openrig probe ${run}\n`);
+    writeFileSync(join(home, '.probe-port'), `${port}\n`);
+    for (const d of ['tmux', 'shared-docs', 'spec']) mkdirSync(join(home, d), { recursive: true });
+    writeFileSync(join(home, 'spec', 'rig.yaml'), probeRigSpec());
+    writeFileSync(files.q, questionsJson());
+    writeFileSync(files.b, `# Probe decision ${run}\n\nThe probe asks Ledge to choose a branch. Nothing real depends on it.\n`);
+    writeFileSync(files.r, `Réponse de Ledge : ${m.decision}\n`);
+    p.push({ id: 'preflight', at: now(), cmd: ['rig', '--version'], exit: v.status, stdout: v.stdout, stderr: v.stderr,
+      data: { home, port, userOpenrigPort: process.env.OPENRIG_PORT ?? null, mtimes: before, markers: m } });
+    console.log(`openrig-probe: run ${run}, home ${home}, port ${port}`);
+
     // start
-    const st = await p.cmd('start', ['daemon', 'start', '--port', String(port), '--no-kernel'], { timeout: 90_000 });
+    // SHELL=/bin/sh reaches the daemon and the tmux server it starts, whose default-shell runs in the seat panes:
+    // typed envelopes then land in sh, not in the user's login shell.
+    const st = await p.cmd('start', ['daemon', 'start', '--port', String(port), '--no-kernel'], { timeout: 90_000, extraEnv: { SHELL: '/bin/sh' },
+      note: 'env adds SHELL=/bin/sh for the seat panes' });
     let healthy = false;
     for (const deadline = Date.now() + 30_000; Date.now() < deadline;) {
+      p.check();
       try { const r = await fetch(`${p.base}/healthz`, { signal: AbortSignal.timeout(2000) }); if (r.ok) { healthy = true; break; } } catch { /* not yet */ }
       await sleep(500);
     }
@@ -529,12 +551,17 @@ async function go(opts) {
         r = await add('human.add.file', 'ledge', 'Ledge', `slack:ledge-decoy:file:${decoy}:primary`);
       }
       const path = r.json?.path;
+      if (r.exit === 0 && typeof path !== 'string') {
+        p.data('guard.path', { path: path ?? null, underHome: false }, 'human add succeeded without a parseable path');
+        throw new Refused('openrig-probe: refused: human add succeeded but printed no path to check');
+      }
       if (typeof path === 'string') {
         try { assertUnder(path, home); p.data('guard.path', { path, underHome: true }); } catch (e) {
           p.data('guard.path', { path, underHome: false }, e.message);
           throw new Refused(e.message);
         }
       }
+      humansUnchanged('guard.path');
       await p.cmd('human.add', ['gateway', 'human', 'show', 'ledge', '--json']);
     });
 
@@ -679,10 +706,18 @@ async function go(opts) {
     p.data('guard', p.guard, 'the real daemon may write on its own: noted, not concluded');
     writeReport();
     console.log(`openrig-probe: report ${reportPath}`);
-    await doTeardown();
+    try {
+      const at = now();
+      const t = await teardown(home, port, { keep: opts.keep });
+      const notes = [opts.keep && '--keep: home left in place', signalled && `after ${signalled}`].filter(Boolean);
+      p.push({ id: 'teardown', at, data: t, ...(notes.length ? { note: notes.join(' | ') } : {}) });
+      writeReport();
+      console.log(`openrig-probe: teardown: port ${t.portClosed ? 'closed' : 'STILL OPEN'}, home ${t.homeGone ? 'removed' : 'still there'}`);
+    } finally { finished(); }
     process.removeListener('SIGINT', onSignal);
     process.removeListener('SIGTERM', onSignal);
   }
+  if (signalled) return 130;
   return code;
 }
 

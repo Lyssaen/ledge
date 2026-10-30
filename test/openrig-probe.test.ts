@@ -138,3 +138,14 @@ describe('openrig-probe CLI', () => {
     expect(r.status).toBe(1); expect(r.stderr).toMatch(/refused: rig 0\.7\.0, the probe is written for 0\.6\.14/);
   });
 });
+
+describe('0.6.14 shapes', () => {
+  it('questions and options carry ids OpenRig accepts', () => {
+    const idRe = /^[A-Za-z0-9_-]{1,40}$/;
+    for (const q of JSON.parse(questionsJson())) {
+      expect(q.id).toMatch(idRe);
+      for (const o of q.options) expect(o.id).toMatch(idRe);
+    }
+  });
+  it('the pod has a label', () => expect(probeRigSpec()).toMatch(/- id: probe\n {4}label: Probe\n/));
+});
