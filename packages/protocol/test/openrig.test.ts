@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as P from '../src/index.js';
-import { ALWAYS_USER, EXCHANGES_MAX, EscalationSchema, RIG_RESULT_CODES, SessionSchema, parseClientMessage, parseServerMessage } from '../src/index.js';
+import { RigSpecInfoSchema, ALWAYS_USER, EXCHANGES_MAX, EscalationSchema, RIG_RESULT_CODES, SessionSchema, parseClientMessage, parseServerMessage } from '../src/index.js';
 
 const now = '2026-10-30T10:00:00.000Z';
 const seat = { ref: 'dev-build@starter', address: '@build', name: 'build', runtime: 'claude-code', state: 'working' as const };
@@ -75,5 +75,11 @@ describe('openrig contract', () => {
     expect(P.DecisionSchema.options).toEqual(['accept', 'deny', 'always']);
     expect(P.LedgeDecisionSchema).toBeDefined();
     expect(P.LedgeRuleSchema).toBeDefined();
+  });
+  it('RigSpecInfoSchema takes registry, refuses an unknown source; rig.specs messages parse', () => {
+    expect(RigSpecInfoSchema.safeParse({ id: 'x', name: 'x', source: 'registry', seats: [] }).success).toBe(true);
+    expect(RigSpecInfoSchema.safeParse({ id: 'x', name: 'x', source: 'other', seats: [] }).success).toBe(false);
+    expect(parseClientMessage({ type: 'rig.specs.request', requestId: 'r', machineId: 'm' }).type).toBe('rig.specs.request');
+    expect(parseServerMessage({ type: 'rig.specs', requestId: 'r', machine: 'local', specs: [{ id: 'x', name: 'x', source: 'builtin', seats: [{ address: '@a', member: 'a', pod: 'p', runtime: 'codex' }] }], error: 'unsupported' }).type).toBe('rig.specs');
   });
 });

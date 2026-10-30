@@ -118,6 +118,15 @@ export const RigPrepareSchema = z.object({ type: z.literal('rig.prepare'), rid: 
 export const RigLaunchSchema = z.object({ type: z.literal('rig.launch'), rid: z.string(), planId: z.string() });
 export const RigAdoptSchema = z.object({ type: z.literal('rig.adopt'), rid: z.string(), machine: z.string(), rigId: z.string(), projectId: z.string() });
 export const RigSendSchema = z.object({ type: z.literal('rig.send'), rid: z.string(), machine: z.string(), seatRef: z.string(), text: z.string() });
+export const RigSpecSeatSchema = z.object({ address: z.string(), member: z.string(), pod: z.string(), runtime: z.string(),
+  model: z.string().optional(), effort: z.string().optional(), profile: z.string().optional() });
+export type RigSpecSeat = z.infer<typeof RigSpecSeatSchema>;
+export const RigSpecInfoSchema = z.object({ id: z.string(), name: z.string(), summary: z.string().optional(),
+  source: z.enum(['builtin', 'library', 'registry']), path: z.string().optional(), seats: z.array(RigSpecSeatSchema) });
+export type RigSpecInfo = z.infer<typeof RigSpecInfoSchema>;
+export const RigSpecsRequestSchema = z.object({ type: z.literal('rig.specs.request'), requestId: z.string(), machineId: z.string().optional() });
+export const RigSpecsSchema = z.object({ type: z.literal('rig.specs'), requestId: z.string(), machine: z.string(), specs: z.array(RigSpecInfoSchema),
+  error: z.enum(['openrig_down', 'unsupported', 'failed']).optional() });
 export const RigExchangesRequestSchema = z.object({ type: z.literal('rig.exchanges.request'), machine: z.string(), rigId: z.string() });
 export const EscalationAnswerSchema = z.object({ type: z.literal('escalation.answer'), rid: z.string(), id: z.string(), answers: z.record(z.string()), by: z.literal('user') });
 export const LedgeSaySchema = z.object({ type: z.literal('ledge.say'), rid: z.string(), text: z.string() });

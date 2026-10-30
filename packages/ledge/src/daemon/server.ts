@@ -46,6 +46,8 @@ import { actionMessage, resolveAction, resolveRun, runGuard, type Resolved } fro
 import { createMailbox, type MailJournal } from './mailbox.js';
 import { createAsks, type Asks, type AsksJournal } from './asks.js';
 import type { Bridge } from './openrig/bridge.js';
+import { listSpecs } from './openrig/specs.js';
+import { OpenRigUnreachable } from './openrig/http.js';
 import { pairSession, restorePairs, unpairGone } from './openrig/pairing.js';
 import { createHandovers, heldNames } from './handover.js';
 import { readContext } from './context.js';
@@ -1269,6 +1271,14 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         if (!bridge) return notYet();
         if (msg.machine !== 'local') return reply({ type: 'error', message: `machine ${msg.machine} is not this daemon's`, request: msg.type, code: 'unreachable' });
         return reply({ type: 'rig.exchanges', machine: 'local', rigId: msg.rigId, items: bridge.exchanges(msg.rigId) });
+      // The rig specs of this machine (the Rigs tab's « Specs »); the Desktop routes a remote machine's request to its own daemon.
+      case 'rig.specs.request': {
+        const base = { type: 'rig.specs' as const, requestId: msg.requestId, machine: 'local' };
+        const st = bridge?.status().state; const http = bridge?.http();
+        if (!bridge || !http || st !== 'running') return reply({ ...base, specs: [], error: st === 'unsupported' ? 'unsupported' : 'openrig_down' });
+        try { return reply({ ...base, specs: await listSpecs(http) }); }
+        catch (e) { log(`openrig: specs not listed: ${(e as Error).message}`); return reply({ ...base, specs: [], error: e instanceof OpenRigUnreachable ? 'openrig_down' : 'failed' }); }
+      }
       // OpenRig writes and Ledge's own voice come in later lots.
       case 'rig.act': case 'rig.prepare': case 'rig.launch': case 'rig.adopt': case 'rig.send': case 'escalation.answer': case 'ledge.say':
       case 'ledge.thread.request': case 'mandate.update': case 'rule.set': case 'decision.revisit': case 'category.escalate': case 'brain.set':

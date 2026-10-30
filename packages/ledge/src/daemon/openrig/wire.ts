@@ -7,6 +7,8 @@ export const NodeEntrySchema = z.object({ logicalId: z.string(), canonicalSessio
 export const KernelStatusSchema = z.object({ state: z.string().optional(), kernel_state: z.string().optional() }).passthrough();
 export const QueueRowSchema = z.object({ qitemId: z.string(), sourceSession: z.string().optional(), destinationSession: z.string(), state: z.string() }).passthrough();
 export const OutboxRowSchema = z.object({ outboxId: z.string(), senderSession: z.string().optional(), destinationSession: z.string().optional(), deliveryState: z.string().optional() }).passthrough();
+export const SpecEntrySchema = z.object({ id: z.string(), name: z.string(), sourceType: z.string().optional(), sourcePath: z.string().optional(), summary: z.string().optional() }).passthrough();
+export const SpecDetailSchema = z.object({ entry: SpecEntrySchema, yaml: z.string() }).passthrough();
 
 /** OpenRig time (SQLite "YYYY-MM-DD HH:MM:SS", UTC, or ISO) to an ISO datetime; null when absent or unparsable. */
 export function openrigTime(v: unknown): string | null {
@@ -21,3 +23,4 @@ export type NodeEntry = z.infer<typeof NodeEntrySchema>;
 export type KernelStatus = z.infer<typeof KernelStatusSchema>;
 export type QueueRow = z.infer<typeof QueueRowSchema>;
 export type OutboxRow = z.infer<typeof OutboxRowSchema>;
+export type SpecEntry = z.infer<typeof SpecEntrySchema>;

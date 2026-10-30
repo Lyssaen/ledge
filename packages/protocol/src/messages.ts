@@ -15,7 +15,7 @@ import { ProjectsSchema } from './projects.js';
 import { ThreadItemSchema } from './thread.js';
 import { DecisionSchema, NOTE_MAX } from './decisions.js';
 import { MobileStateSchema, RelayUrlSchema } from './mobile.js';
-import { OpenRigStatusMessageSchema, RigSnapshotSchema, RigUpdatedSchema, RigRemovedSchema, RigExchangeSchema, RigExchangesSchema, EscalationUpdatedSchema, EscalationRemovedSchema, LedgeThreadItemMessageSchema, LedgeThreadHistorySchema, DecisionsMessageSchema, RulesMessageSchema, MandateMessageSchema, BrainStatusMessageSchema, RigPlanMessageSchema, RigResultSchema, RigActSchema, RigPrepareSchema, RigLaunchSchema, RigAdoptSchema, RigSendSchema, RigExchangesRequestSchema, EscalationAnswerSchema, LedgeSaySchema, LedgeThreadRequestSchema, MandateUpdateSchema, RuleSetSchema, DecisionRevisitSchema, CategoryEscalateSchema, BrainSetSchema } from './openrig.js';
+import { OpenRigStatusMessageSchema, RigSnapshotSchema, RigUpdatedSchema, RigRemovedSchema, RigExchangeSchema, RigExchangesSchema, EscalationUpdatedSchema, EscalationRemovedSchema, LedgeThreadItemMessageSchema, LedgeThreadHistorySchema, DecisionsMessageSchema, RulesMessageSchema, MandateMessageSchema, BrainStatusMessageSchema, RigPlanMessageSchema, RigResultSchema, RigActSchema, RigPrepareSchema, RigLaunchSchema, RigAdoptSchema, RigSendSchema, RigExchangesRequestSchema, RigSpecsRequestSchema, RigSpecsSchema, EscalationAnswerSchema, LedgeSaySchema, LedgeThreadRequestSchema, MandateUpdateSchema, RuleSetSchema, DecisionRevisitSchema, CategoryEscalateSchema, BrainSetSchema } from './openrig.js';
 import { AskAnswerSchema, AskCreateSchema, AskResultSchema, AskUpdatedSchema, AsksMessageSchema } from './asks.js';
 import { ContextPrefsMessageSchema, ContextSetSchema, HandoverBriefSchema, HandoverResultSchema, HandoverShowSchema, SessionHandoverResultSchema, SessionHandoverSchema } from './handover.js';
 
@@ -161,7 +161,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   ContextPrefsMessageSchema,
   HandoverResultSchema,
   AsksMessageSchema, AskUpdatedSchema, AskResultSchema,
-  OpenRigStatusMessageSchema, RigSnapshotSchema, RigUpdatedSchema, RigRemovedSchema, RigExchangeSchema, RigExchangesSchema, EscalationUpdatedSchema, EscalationRemovedSchema,
+  OpenRigStatusMessageSchema, RigSnapshotSchema, RigUpdatedSchema, RigRemovedSchema, RigExchangeSchema, RigExchangesSchema, RigSpecsSchema, EscalationUpdatedSchema, EscalationRemovedSchema,
   LedgeThreadItemMessageSchema, LedgeThreadHistorySchema, DecisionsMessageSchema, RulesMessageSchema, MandateMessageSchema, BrainStatusMessageSchema, RigPlanMessageSchema, RigResultSchema,
   z.object({ type: z.literal('error'), message: z.string(), id: z.string().optional(), /** Le type du message client refusé. */ request: z.string().optional(),
     /** Ce que le front doit reconnaître au-delà du texte (NOTE_NOT_TYPED) ; une chaîne libre, qu'un front plus ancien ignore. */ code: z.string().optional() })
@@ -290,7 +290,7 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   ContextSetSchema,
   HandoverBriefSchema,
   HandoverShowSchema,
-  RigActSchema, RigPrepareSchema, RigLaunchSchema, RigAdoptSchema, RigSendSchema, RigExchangesRequestSchema, EscalationAnswerSchema,
+  RigActSchema, RigPrepareSchema, RigLaunchSchema, RigAdoptSchema, RigSendSchema, RigExchangesRequestSchema, RigSpecsRequestSchema, EscalationAnswerSchema,
   LedgeSaySchema, LedgeThreadRequestSchema, MandateUpdateSchema, RuleSetSchema, DecisionRevisitSchema, CategoryEscalateSchema, BrainSetSchema,
 ]);
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;

@@ -9,10 +9,13 @@ export interface FakeRig { rigId: string; name: string; status: 'running' | 'par
 export interface FakeQueueRow { qitemId: string; sourceSession: string; destinationSession: string; state: string; tier?: string | null; summary?: string; body?: string; humanIntent?: string | null; humanQuestions?: unknown[] | null; evidenceRef?: string | null; replyTo?: string | null; createdAt?: string; [k: string]: unknown }
 export interface FakeOutboxRow { outboxId: string; senderSession: string; destinationSession: string; body: string; deliveryState: string; [k: string]: unknown }
 
+export interface FakeSpec { id: string; name: string; sourceType: 'builtin' | 'user_file'; yaml: string; sourcePath?: string; /** the detail route answers 404 */ missing?: boolean }
+
 export interface FakeOpenRig {
   url: string; port: number;
   version: string | null;                          // null: /healthz without semver (unstamped build)
   rigs: FakeRig[];
+  specs: FakeSpec[];                               // /api/specs/library (rig kind), empty by default
   queue: FakeQueueRow[]; outbox: Map<string, FakeOutboxRow[]>; humans: string[];
   kernel: { state: 'ready' | 'booting' | 'absent' };
   emit(event: { type: string } & Record<string, unknown>): number;   // appends to the journal, returns seq
@@ -29,7 +32,7 @@ export async function createFakeOpenRig(opts: { port?: number; version?: string 
   let server: Server | null = null;
   const f: FakeOpenRig = {
     url: '', port: opts.port ?? 0, version: opts.version === undefined ? '0.6.14' : opts.version,
-    rigs: [], queue: [], outbox: new Map(), humans: [], kernel: { state: 'ready' }, requests: [], hangEvents: 0,
+    rigs: [], specs: [], queue: [], outbox: new Map(), humans: [], kernel: { state: 'ready' }, requests: [], hangEvents: 0,
     emit(event) {
       const e = { ...event, seq: journal.length + 1 }; journal.push(e);
       for (const s of streams) if (!s.rigId || (e as { rigId?: unknown }).rigId === s.rigId) write(s.res, e);
@@ -46,6 +49,8 @@ export async function createFakeOpenRig(opts: { port?: number; version?: string 
   const json = (res: ServerResponse, body: unknown, code = 200) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
   const ps = (r: FakeRig) => { const { nodes, ...rest } = r; return { rigName: r.name, nodeCount: nodes.length, runningCount: nodes.filter(n => n.sessionStatus === 'running').length, activeCount: nodes.filter(n => n.activityState?.activity === 'working').length, ...rest }; };
 
+  const entry = (s: FakeSpec) => ({ id: s.id, kind: 'rig', name: s.name, version: '0.2', sourceType: s.sourceType, sourcePath: s.sourcePath ?? `/specs/${s.name}/rig.yaml` });
+
   function handle(req: import('node:http').IncomingMessage, res: ServerResponse) {
     const u = new URL(req.url ?? '/', 'http://x'); const path = u.pathname; const q = u.searchParams;
     const lastEventId = req.headers['last-event-id'] as string | undefined;
@@ -55,6 +60,9 @@ export async function createFakeOpenRig(opts: { port?: number; version?: string 
     if (path === '/api/ps') return json(res, f.rigs.map(ps));
     const m = /^\/api\/rigs\/([^/]+)\/nodes$/.exec(path);
     if (m) { const rig = f.rigs.find(r => r.rigId === decodeURIComponent(m[1]!)); return rig ? json(res, rig.nodes.map(n => ({ rigId: rig.rigId, rigName: rig.name, ...n }))) : json(res, { error: 'rig_not_found' }, 404); }
+    if (path === '/api/specs/library') return json(res, f.specs.filter(() => !q.get('kind') || q.get('kind') === 'rig').map(s => entry(s)));
+    const sm = /^\/api\/specs\/library\/([^/]+)$/.exec(path);
+    if (sm) { const s = f.specs.find(x => x.id === decodeURIComponent(sm[1]!)); return s && !s.missing ? json(res, { entry: entry(s), yaml: s.yaml }) : json(res, { error: 'not found' }, 404); }
     if (path === '/api/kernel/status') return json(res, { state: f.kernel.state, kernel_state: f.kernel.state, agents: [] });
     if (path === '/api/queue/list') {
       const d = q.get('destinationSession'), s = q.get('state'), src = q.get('sourceSession');

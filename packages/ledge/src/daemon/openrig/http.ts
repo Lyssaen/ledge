@@ -1,7 +1,7 @@
 import type { z } from 'zod';
 import { log } from '../../log.js';
 import { HealthSchema, PsEntrySchema, NodeEntrySchema, KernelStatusSchema, QueueRowSchema, OutboxRowSchema,
-  type Health, type PsEntry, type NodeEntry, type KernelStatus, type QueueRow, type OutboxRow } from './wire.js';
+  SpecEntrySchema, SpecDetailSchema, type SpecEntry, type Health, type PsEntry, type NodeEntry, type KernelStatus, type QueueRow, type OutboxRow } from './wire.js';
 
 export type Fetch = typeof fetch;
 /** Connection refused/reset (WSL mirrored networking resets instead of refusing) or timeout. */
@@ -14,6 +14,10 @@ export interface OpenRigHttp {
   kernel(): Promise<KernelStatus>;
   queue(q: { destinationSession?: string; state?: readonly string[] }): Promise<QueueRow[]>;
   outbox(senderSession: string): Promise<OutboxRow[]>;
+  /** GET /api/specs/library?kind=rig */
+  specs(): Promise<SpecEntry[]>;
+  /** GET /api/specs/library/:id */
+  spec(id: string): Promise<{ entry: SpecEntry; yaml: string }>;
 }
 
 const NETWORK_CODES = new Set(['ECONNREFUSED', 'ECONNRESET', 'EPIPE', 'ETIMEDOUT', 'UND_ERR_SOCKET', 'UND_ERR_CONNECT_TIMEOUT']);
@@ -64,6 +68,8 @@ export function createOpenRigHttp(opts: { base: string; fetch?: Fetch; timeoutMs
       if (q.state?.length) parts.push(`state=${q.state.map(encodeURIComponent).join(',')}`);
       return rows('queue', QueueRowSchema, await get(`/api/queue/list${parts.length ? `?${parts.join('&')}` : ''}`));
     },
+    async specs() { return rows('spec', SpecEntrySchema, await get('/api/specs/library?kind=rig')); },
+    async spec(id) { return SpecDetailSchema.parse(await get(`/api/specs/library/${encodeURIComponent(id)}`)); },
     async outbox(senderSession) { return rows('outbox', OutboxRowSchema, await get(`/api/queue/outbox/list?senderSession=${encodeURIComponent(senderSession)}`)); },
   };
 }
