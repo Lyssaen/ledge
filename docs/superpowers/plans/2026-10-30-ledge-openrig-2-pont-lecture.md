@@ -55,18 +55,26 @@ Celles du plan maître s'appliquent toutes (version minimale `0.6.14`, accès se
   export const DEFAULT_PORT = 7433;
   export const INSTALL_COMMAND = 'npm install -g @openrig/cli@0.6.14 && rig setup';
   export type Registration = 'external' | 'host-seat';     // §4.2 : leurre Slack, ou plan B human-ledge@host
-  export const REGISTRATION: Registration;                 // repli : 'external'
+  export const REGISTRATION: Registration;                 // 'external' (fixé par la fiche de faits, D2, D9)
   export const HUMAN_ID = 'ledge';
   export const HUMAN_ADDRESS: string;                      // 'ledge@external' (repli), 'human-ledge@host' en plan B
-  export const HUMAN_BINDING: string;                      // repli : 'slack:ledge-none:ledge-none:primary'
+  export const HUMAN_BINDING: string;                      // 'slack:ledge-decoy:file:<chemin d'un fichier absent>:primary', le fichier n'est jamais créé (fixé par la fiche de faits, D2)
   export const OPERATOR_HUMAN_SESSIONS: readonly string[]; // repli : ['operator-human@kernel']
   export const HUMAN_GATE_TIER = 'human-gate';
-  export const EVENTS: { queueCreated: 'queue.created'; queueUpdated: 'queue.updated'; queueHandedOff: 'queue.handed_off';
-    sessionStatus: 'session.status_changed'; nodeLaunched: 'node.launched'; activity: 'agent.activity';
-    rigCreated: 'rig.created'; rigDeleted: 'rig.deleted'; rigStopped: 'rig.stopped'; nodeAdded: 'node.added'; nodeRemoved: 'node.removed' };
-  export const OUTBOX_EVENT: string | null;               // repli : null → polling GET /api/queue/outbox/list?senderSession=<ref> toutes les 5 s
+  export const EVENTS: { queueCreated: 'queue.created'; queueUpdated: 'queue.updated'; queueClaimed: 'queue.claimed';
+    missionControlAction: 'mission_control.action_executed'; rigImported: 'rig.imported'; bootstrapCompleted: 'bootstrap.completed';
+    nodeLaunched: 'node.launched'; nodeStartupReady: 'node.startup_ready'; seatActivity: 'seat.activity_changed' };
+  // Observés par la sonde (fixé par la fiche de faits, D10). `rig up` émet 'rig.imported' (pas 'rig.created'). 'seat.activity_changed' ne porte que
+  // `seatNodeId`, `sessionName`, `seq`, `at` : ni `rigId` ni état ; l'état se relit dans `activityState.activity` de `/api/rigs/:rigId/nodes`
+  // ('working' | 'idle-at-prompt' | 'unknown'). Ignorés : 'view.changed', 'watchdog.*'.
+  export const EVENTS_UNOBSERVED: { queueHandedOff: 'queue.handed_off'; sessionDetached: 'session.detached'; sessionStopped: 'session.stopped';
+    rigDeleted: 'rig.deleted'; rigStopped: 'rig.stopped'; nodeAdded: 'node.added'; nodeRemoved: 'node.removed' };
+  // Source 0.6.14, non observés : appliqués s'ils arrivent, jamais seuls garants du miroir (resync `ps` périodique, Task 10). 'session.status_changed'
+  // n'existe pas dans le source 0.6.14 ; 'agent.activity' et 'rig.created' y existent mais ne sont pas suivis. (fixé par la fiche de faits, D10)
+  export const OUTBOX_EVENT: string | null;               // null → polling GET /api/queue/outbox/list?senderSession=<ref> toutes les 5 s, lignes `outbox-…` seulement (fixé par la fiche de faits, D11)
   export const OPEN_QUEUE_STATES: readonly string[];       // repli : ['pending', 'in-progress', 'blocked']
   export const QUEUE_ROW: { questions: string; intent: string; evidence: string; replyTo: string; body: string }; // noms de champs d'une ligne de /api/queue/list
+  // = { questions: 'humanQuestions', intent: 'humanIntent', evidence: 'evidenceRef', replyTo: 'replyTo', body: 'body' } (fixé par la fiche de faits, D4)
   export function openrigBase(env: NodeJS.ProcessEnv): string; // http://127.0.0.1:<OPENRIG_PORT|7433>
   ```
 
@@ -230,7 +238,7 @@ Celles du plan maître s'appliquent toutes (version minimale `0.6.14`, accès se
     version(): Promise<string | null>;             // `rig --version`, première ligne x.y.z
     daemonStart(): Promise<{ ok: boolean; detail?: string }>; // `rig daemon start`, délai 90 s
     humans(): Promise<string[] | null>;            // `rig gateway human list --json` → ids ; null si la commande échoue
-    addHuman(): Promise<{ ok: boolean; detail?: string }>;    // `rig gateway human add ledge --display-name Ledge --binding <HUMAN_BINDING>`
+    addHuman(): Promise<{ ok: boolean; detail?: string }>;    // `rig gateway human add ledge --display-name Ledge --binding <HUMAN_BINDING> --delivery-class D --actor ledge` (fixé par la fiche de faits, D2)
   }
   export function createRigCli(exec: RigExec): RigCli;
   // presence.ts
@@ -246,7 +254,7 @@ Celles du plan maître s'appliquent toutes (version minimale `0.6.14`, accès se
   - faux en marche sans `semver`, CLI qui dit `0.6.14` → `running`, version lue par le CLI ;
   - **Review Focus 2** : faux en `'0.7.0'` → `{ state: 'unsupported', version: '0.7.0', detail: 'OpenRig 0.7.0 non pris en charge' }` ;
   - faux arrêté, CLI présent → `stopped` ; CLI absent (exec code 127) → `absent`.
-  - `createRigCli(exec).addHuman()` appelle exactement `['gateway', 'human', 'add', 'ledge', '--display-name', 'Ledge', '--binding', HUMAN_BINDING]`.
+  - `createRigCli(exec).addHuman()` appelle exactement `['gateway', 'human', 'add', 'ledge', '--display-name', 'Ledge', '--binding', HUMAN_BINDING, '--delivery-class', 'D', '--actor', 'ledge']` (fixé par la fiche de faits, D2).
 - [ ] **Step 2 :** → FAIL.
 - [ ] **Step 3 :** implémenter.
 - [ ] **Step 4 :** → PASS.
@@ -279,7 +287,8 @@ Celles du plan maître s'appliquent toutes (version minimale `0.6.14`, accès se
   export function createMirror(opts: { machine: string; projects: () => Projects; home: string }): Mirror;
   ```
 - Valeurs fixées [P] :
-  - `seatState` : `startupStatus` `pending` → `starting` ; `challenged` → `trust` ; `sessionStatus` `stopped`/`detached` → `stopped` ; `exited`/`crashed`/`failed` → `crashed` ; sinon `ready`, et `working` quand la dernière `agent.activity` du siège dit actif.
+  - `seatState` : `startupStatus` `pending` → `starting` ; `challenged` → `trust` ; `sessionStatus` `stopped`/`detached` → `stopped` ; `exited`/`crashed`/`failed` → `crashed` ; sinon `ready`, et `working` quand `activityState.activity` du nœud vaut `'working'` (relu après `seat.activity_changed`) (fixé par la fiche de faits, D10).
+  - `applyEvent` : `rig.imported`, `node.launched`, `node.startup_ready` → `refetch: [rigId]` ; `seat.activity_changed` (sans `rigId`) → siège trouvé par `byRef(sessionName)`, `refetch: [rig.id]` ; un `sessionName` inconnu → `refetch: []`. Les noms de `EVENTS_UNOBSERVED` (source 0.6.14, non observés) suivent la même règle quand ils portent un `rigId` (fixé par la fiche de faits, D10).
   - `Rig.lifecycle` : `PsEntry.status` `running|partial|stopped` tel quel, `launching` tant qu'un siège est `starting`.
   - `Rig.kernel` : vrai pour le rig nommé `kernel` (ou désigné tel par `/api/kernel/status`, selon la fiche).
   - `offProject` : `cwd` sous `<home>/.ledge/rigs/` ; `projectId` : `projectOf({ machineId: machine, cwd }, projects())` ; `repos: []` (lot 5).
@@ -288,8 +297,9 @@ Celles du plan maître s'appliquent toutes (version minimale `0.6.14`, accès se
 - [ ] **Step 1 : test qui échoue** — `openrig-mirror.test.ts` :
   - `parseSessionName('dev-build@starter')` → `{ pod: 'dev', member: 'build', rig: 'starter' }` ; `'nope'` → `null` ;
   - `replace` avec un rig `starter` de 2 sièges → un `Rig` à 2 `seats`, `ref: 'dev-build@starter'`, `address: '@build'` ;
-  - `applyEvent({ type: 'session.status_changed', rigId, nodeId, status: 'exited' })` → le siège passe `crashed`, `updated` contient le rig ;
-  - `applyEvent({ type: 'node.added', rigId })` → `refetch: [rigId]` ;
+  - `applyEvent({ type: 'rig.imported', rigId })` → `refetch: [rigId]` ; idem `{ type: 'node.launched', rigId, nodeId, sessionName }` (fixé par la fiche de faits, D10) ;
+  - `applyEvent({ type: 'seat.activity_changed', seatNodeId, sessionName: 'dev-build@starter', seq: 16, at })` → `refetch: [starterId]` par `byRef` ; puis `setNodes(starterId, nodes)` avec `activityState: { activity: 'working', … }` sur ce nœud → le siège passe `working` ; un `sessionName` inconnu → `refetch: []` (fixé par la fiche de faits, D10) ;
+  - `applyEvent({ type: 'session.detached', rigId, nodeId, sessionName })` (source 0.6.14, non observé) → `refetch: [rigId]` ;
   - **Review Focus 5** : `replace` avec un rig `factory` absent alors que le miroir l'avait → `removed: [factoryId]` ;
   - `markUnreachable()` → chaque rig `lifecycle: 'unreachable'`, aucun retiré ;
   - un rig dont le cwd est `<home>/.ledge/rigs/x` → `offProject: true`, `projectId: null`.
@@ -386,6 +396,7 @@ Celles du plan maître s'appliquent toutes (version minimale `0.6.14`, accès se
     probeMs?: number;                             // 5000
     retryMs?: number;                             // 600000 (démarrage, inscription)
     outboxMs?: number;                            // 5000, si OUTBOX_EVENT est null
+    resyncMs?: number;                            // 60000 : relecture `ps` + `nodes` de filet, des noms d'événements n'étant pas observés (fixé par la fiche de faits, D10)
     now?: () => string;
     notice?: (text: string) => void;              // « J'ai démarré OpenRig sur <machine> » ; lot 4 le branche sur le fil
   }
@@ -411,6 +422,7 @@ Celles du plan maître s'appliquent toutes (version minimale `0.6.14`, accès se
   5. Un `queue.created/updated/handed_off` qui touche une ligne humaine → relecture de la queue humaine (regroupée sur 200 ms) puis `book.replace`. Les autres → `exchangeFromEvent`.
   6. Inscription (si `REGISTRATION === 'external'`) : à `running`, quand au moins un rig non noyau existe et que `humans()` ne contient pas `ledge` → `addHuman()`. `human` vaut `registered`, `missing` ou `failed`.
   7. Les rigs connus (noms) et le curseur s'écrivent dans `openrig.json` par `createCursorWriter`.
+  8. Filet : à `running`, toutes les `resyncMs`, relire `ps` et les `nodes` de chaque rig, puis `mirror.replace` (seuls les rigs changés sont diffusés). Couvre les événements de `EVENTS_UNOBSERVED` qui n'arriveraient pas (fixé par la fiche de faits, D10).
 
 - [ ] **Step 1 : tests qui échouent** — `openrig-bridge.test.ts`, avec le faux et `fakeRigCli`, `probeMs: 20` :
   - `starts with a known rig`: `openrig.json` connaît `starter`, faux arrêté → `daemonStart` appelé une fois, `notice` reçoit `"J'ai démarré OpenRig sur local"`, puis `openrig.status { state: 'running' }` et `rig.snapshot` avec `starter` ;
@@ -423,6 +435,7 @@ Celles du plan maître s'appliquent toutes (version minimale `0.6.14`, accès se
     3. pendant la coupure, on ajoute au faux une escalade E2 (ligne + `queue.created` au journal) et un échange X4 ;
     4. `fake.restart()` → la requête SSE porte `Last-Event-ID` = dernier seq reçu avant la coupure (lu dans `fake.requests`) ;
     5. attendu : `starter` revient `running` ; E2 émise une fois ; E1 **pas** réémise (contenu inchangé) ; X4 émis une fois ; aucun id de `rig.exchange` deux fois sur toute la durée du test.
+  - `resyncs from ps` : `resyncMs: 50`, un rig ajouté au faux **sans** événement → `rig.updated` pour lui à la relecture suivante (fixé par la fiche de faits, D10) ;
   - `unsupported reads nothing` : faux en `0.7.0` → seule `/healthz` dans `fake.requests`, aucune inscription.
 - [ ] **Step 2 :** → FAIL.
 - [ ] **Step 3 :** implémenter `createBridge`.

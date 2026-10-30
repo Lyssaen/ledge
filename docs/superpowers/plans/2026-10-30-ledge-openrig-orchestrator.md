@@ -50,7 +50,7 @@ Ordre conseillé : 0 ∥ 1, puis 2, puis 3 ∥ 4, puis 5, puis 6 ∥ 7, puis 8 �
   - au démarrage du daemon Ledge, si des rigs tournaient avant ;
   - au lancement d'un rig ;
   - à une action sur un rig.
-- **Inscription :** Ledge s'inscrit lui-même comme l'humain `ledge` sur chaque machine où un rig tourne, avec le leurre Slack, ou selon le repli fixé au lot 0 (spec §4.2).
+- **Inscription :** Ledge s'inscrit lui-même comme l'humain `ledge` sur chaque machine où un rig tourne, avec le leurre Slack : `rig gateway human add ledge --display-name Ledge --binding slack:ledge-decoy:file:<fichier absent>:primary --delivery-class D --actor ledge`, sans créer le fichier. Le repli `human-ledge@host` n'est pas retenu (spec §4.2). (fixé par la fiche de faits, D2, D9)
 - **Le mandat :** les catégories `design`, `architecture` et `critical` ne sont **jamais** tranchées par Ledge seul. Le refus est appliqué dans le daemon (spec §5.3).
 - **Le cerveau :** il attend **60 s** avant de trancher seul. La première réponse enregistrée gagne, et l'autre reçoit le code `already_answered` (spec §5.3).
 - **La transition :** `ledge who`, `ledge send` et `ledge read` restent ; `ledge ask "<question>" "<options, ta recommandation>"` remplace `ledge task give ledge` (spec §7).
@@ -176,11 +176,11 @@ Ajustements fixés par le lot 2 :
 - **Routes OpenRig 0.6.14** :
   - sièges : `GET /api/rigs/:rigId/nodes` ;
   - noyau : `GET /api/kernel/status` ;
-  - pas d'événement pour `rig send`, d'où un sondage de `GET /api/queue/outbox/list?senderSession=<ref>` toutes les 5 s, à confirmer au lot 0 ;
+  - pas d'événement pour `rig send`, d'où un sondage de `GET /api/queue/outbox/list?senderSession=<ref>` toutes les 5 s, pour chaque siège, en ne gardant que les lignes `outbox-…` (les `wake-intent-…` sont des réveils de la queue) (fixé par la fiche de faits, D11) ;
   - version : `/healthz` ne la donne que pour une build estampillée, sinon `rig --version`.
-- **Un seul humain par OpenRig** (`rig gateway human add` refuse un second humain distinct). Si un autre humain que `ledge` est déjà inscrit, Ledge le remplace (`--replace` ; l'ancien record est archivé, pas effacé) et le dit dans le fil. C'est l'application de « définir directement Ledge comme humain » (spec §4.2). `--delivery-class` est obligatoire, et la liaison suit le format `kind:connectorRef:secretsRef:role`. Le 2026-10-30, `~/.openrig/gateway/humans/` n'existait pas.
-- **Où va le texte d'une réponse avec `approve`** : `reason` est stocké comme `closureTarget`, et `annotation` ne sert qu'à `annotate`. Le lot 4 suit le fait D5 de la fiche du lot 0, pas la formulation de la spec §4.4.
-- **`/api/mission-control/action`** exige un acteur (en-tête `X-OpenRig-Session` ou `actorSession`), et un jeton s'il est configuré (`OPENRIG_AUTH_BEARER_TOKEN`, à prévoir sur une EC2). Le repli `resolve` passe par cette route HTTP, puisque `rig queue resolve` exige l'environnement d'un siège.
+- **Un seul humain par OpenRig** (`rig gateway human add` refuse un second humain distinct). Si un autre humain que `ledge` est déjà inscrit, Ledge le remplace (`--replace` ; l'ancien record est archivé, pas effacé ; flag présent dans `--help` 0.6.14, comportement non sondé ; le refus observé en D3 dit seulement d'ôter d'abord l'humain existant par `rig gateway human remove <entityId>`) et le dit dans le fil. C'est l'application de « définir directement Ledge comme humain » (spec §4.2). `--delivery-class` est obligatoire, et la liaison suit le format `kind:connectorRef:secretsRef:role`. Le 2026-10-30, `~/.openrig/gateway/humans/` n'existait pas.
+- **Où va le texte d'une réponse avec `approve`** : `reason` est stocké comme `closureTarget`, et `annotation` ne va qu'à l'audit. Ni l'un ni l'autre n'atteint le siège ; `approve` ferme la ligne et réveille le travail bloqué. La réponse passe donc par une ligne `rig queue create --source ledge@external --destination <siège>`, dont le siège ne voit que le `summary`, puis par `approve`. Un second `approve` rend 409 `qitem_already_terminal`, traduit en `already_answered`. (fixé par la fiche de faits, D5, D6, D7)
+- **`/api/mission-control/action`** exige un acteur. Ledge envoie l'en-tête `X-OpenRig-Session: ledge@external` (provenance `transport:v1`, contre `claimed:v1` pour `actorSession` dans le corps) (fixé par la fiche de faits, D8). Il exige aussi un jeton s'il est configuré (`OPENRIG_AUTH_BEARER_TOKEN`, à prévoir sur une EC2). Le repli `resolve` passe par cette route HTTP, puisque `rig queue resolve` exige l'environnement d'un siège.
 - **Événements SSE** : sans ligne `event:`. Le type est dans `data.type`, et `id` est le numéro de séquence.
 - **Réponse libre** : la clé `text` dans `answers` (`{ text: "…" }`). Une `ask` a `questions: []`.
 - **Chemin de l'operator** (`operator.human`) : non vérifié par la sonde, lancée en `--no-kernel` pour éviter un coût LLM. Le lot 2 le traite au mieux et le marque à vérifier lors du parcours réel.
@@ -209,7 +209,7 @@ Ajustements fixés par le lot 2 :
   - `POST /api/down { rigId, snapshot: true }` ;
   - reprendre = `POST /api/rigs/:rigId/restore/:snapshotId`, sur le dernier `GET /api/rigs/:rigId/snapshots` ;
   - les routes de siège exigent `reason` et acceptent `operator` ; la relève prend `source: 'fresh'`.
-- **Adresse de Ledge comme expéditeur** (`OPENRIG_SESSION_NAME` de `rig send`, acteur `operator`) : `ledge@external` par défaut, à confirmer par le fait du lot 0.
+- **Adresse de Ledge comme expéditeur** (`OPENRIG_SESSION_NAME` de `rig send`, acteur `operator`) : `ledge@external` par défaut. Sans `OPENRIG_SESSION_NAME`, `rig send` part non signé ; l'envoi signé `ledge@external` n'a pas été observé, à vérifier au premier essai du lot 4. (fixé par la fiche de faits, D11)
 - **Pré-remplir la fenêtre de lancement par le cerveau** (spec §8.4) : c'est le lot 7. `ledge brain propose rig-launch --goal … --spec … --project …` produit une carte qui ouvre la fenêtre du lot 5 pré-remplie (`rig.prepare` côté daemon).
 - **Hors chantier (0.6.14)** : la liste du registre d'OpenRig (pas de route locale ; « Depuis le registre… » reste visible mais désactivé, avec « bientôt »), « Préparer un dépôt », et l'adaptation d'une spec aux fournisseurs disponibles.
 - **Idempotence par `rid`** dans chaque daemon, pour `escalation.answer`, `rig.act`, `rig.launch`, `rig.send` et `rig.prepare`. Le lot 6 l'apporte en enveloppant les gestionnaires des lots 4 et 5.
