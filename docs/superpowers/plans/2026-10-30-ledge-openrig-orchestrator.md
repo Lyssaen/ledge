@@ -35,8 +35,9 @@ Chaque lot a son plan détaillé, se livre seul (branche depuis `origin/main`, P
 | 7 | `2026-10-30-ledge-openrig-7-cerveau.md` | 4 (6 pour le distant) | Cerveau permanent, `ledge brain`, garde du mandat, mémoire, onglet Mandat, Revenir dessus, grâce de 60 s |
 | 8 | `2026-10-30-ledge-openrig-8-tui.md` (Tuin, branche `docs/ledge-openrig-8-tui`, 0262f343) | 1, 2, 4, 5 | TUI selon la maquette de Tuin |
 | 9 | plan de Mobi : `.worktrees/mobi-mockup/docs/superpowers/plans/2026-10-30-ledge-mobile-orchestrator.md` | 2, 4, 5 (7 pour l'avis de Ledge) | Mobile selon la maquette de Mobi ; correspondance ci-dessous |
+| 10 | §Bureaux ci-dessous ; plan détaillé à écrire d'après `2026-10-31-ledge-bureaux-design.md` §5 | 2, 3, 4, 6, 7 (+ mascottes commitées) | L'Atelier devient l'étage de bureaux en pixel art |
 
-Ordre conseillé : 0 ∥ 1, puis 2, puis 3 ∥ 4, puis 5, puis 6 ∥ 7, puis 8 ∥ 9.
+Ordre conseillé : 0 ∥ 1, puis 2, puis 3 ∥ 4, puis 5, puis 6 ∥ 7, puis 8 ∥ 9. Le lot 10 (Bureaux) vient après les lots OpenRig (2 à 7). Il peut avancer en parallèle des lots 8 et 9.
 
 - **Le lot 0 exige l'accord explicite de l'utilisateur** au moment de démarrer l'OpenRig jetable. Il ne touche jamais `~/.openrig`.
 - Le lot 2 se branche sur la fiche de faits du lot 0. Si celle-ci retient le repli `human-ledge@host`, seul le module `openrig/answer.ts` (lot 4) change de forme ; le contrat de protocole ne bouge pas.
@@ -274,3 +275,36 @@ Ces cas ne sont couverts par aucun parcours heureux. Chaque ligne a son test dan
   7. arrêter le rig.
 - [ ] Même parcours sur une EC2 de la liste des machines.
 - [ ] `grep -rnE "ledge task|ledge team|roleLabel|LEDGE_ROLE|LEDGE_TEAM|useTeamsApi|TeamCard|TaskCard|phoneTeams" packages apps --include=*.ts --include=*.tsx` ne renvoie rien.
+
+## Lot 10 : les Bureaux (remplacement de l'Atelier)
+
+Demandé par l'utilisateur le 2026-10-31, par la session Otto-3. Spec : `docs/superpowers/specs/2026-10-31-ledge-bureaux-design.md`, non commitée sur `design/approved-logo-mascots`. Elle est à verser dans `ledge-open-rig` avec ses captures `docs/mockups/ledge-bureaux/shots/`. Maquette : https://claude.ai/artifact/4wcv9chArCBAfshBpqRfUM, sources dans `~/Workspace/graphics-resources/web/ledge-bureaux/`.
+
+**Découpage** (spec §5, une étape = une ou deux tâches) :
+1. Mascottes : `LogoBot` et `LedgeSketch` deviennent les composants de `packages/ui/src/bots/`.
+2. Ressources : les sprites de jour et de nuit et `offices.json` dans `apps/desktop`, ou le générateur déplacé dans `scripts/`. Les anciens sprites sont retirés.
+3. Placement pur en TS (`layout`, `buildLayout`, `planRest`, `restDemand`), avec tests : first-fit, espace au milieu, repos sans déplacer de bureau, zones avant salles, nouvelle aile, salle de plus au-delà de la capacité.
+4. Monde et présences (`buildWorld`, `route`, `updatePresence`, la marche) dans `usePresence`, alimenté par les sessions et les rigs du daemon.
+5. Composants `Floor`, `Room`, `Seat`, `Walker`, `Bubble` et `LedgeOffice`. Ils remplacent `ProjectTable`, `Plants`, `LedgeDesk`, `Unassigned` et `MessageLayer`.
+6. Vue : fusion dans `useAtelierView` (résolution d'après la largeur, zoom sous le curseur, plein écran), en gardant les raccourcis et `J`/`K`.
+7. Jour et nuit sur `useTheme()`.
+8. Données réelles (voir les correspondances ci-dessous).
+
+**Dépendances, et ce que les lots OpenRig doivent lui laisser :**
+- **Lot 2** : les rigs, sièges et états (`Rig`, `RigSeat`, `Session.rig`), l'état d'OpenRig par machine (`OpenRigStatus`), le noyau (`Rig.kernel`).
+- **Lot 3** : le modèle de scène pur dans `@ledge/ui` (`packages/ui/src/rigs/model.ts` : pièces projet, rig et noyau, `rigPlace`, `isStandalone`), que `usePresence` réutilise. L'UI de l'Atelier du lot 3 (tables de rig) est provisoire : les Bureaux la remplacent.
+- **Lot 4** : les échanges entre agents (`Exchange`, `rig.exchange`), qui alimentent les visites, et le fil de Ledge.
+- **Lot 6** : un noyau par machine, donc plusieurs baies dans la salle technique.
+- **Lot 7** : les demandes de Ledge aux agents (`ledge brain send`, un `Exchange` de `kind: 'ledge'`), qui alimentent les invitations dans le bureau de Ledge.
+- **Prérequis hors chantier** : `LogoBot` et `LedgeSketch` (`packages/ui/src/preview/`) sont encore non commités sur `design/approved-logo-mascots`. Il faut les commiter et les verser dans `ledge-open-rig` avant l'étape 1.
+
+**Correspondances** (spec §4, complétées par le contrat) :
+- **Bureau** : un `Project` = un bureau de projet ; un `Rig` sans `kernel` = un bureau de rig ; les sessions sans projet ni rig = l'open-space.
+- **Noyaux** [P, réponse proposée à la question ouverte « noyaux »] :
+  - un noyau = le rig `kernel: true` d'une machine, donc une baie par machine où OpenRig tourne ;
+  - son état vient de `OpenRigStatus.state` : `running` donne des voyants verts qui clignotent ; `stopped`, `error` et `unsupported` donnent du rouge ; `starting` donne de l'orange ; `unreachable` donne une baie éteinte ;
+  - le nom au-dessus de la baie est celui de la machine.
+- **Visites** : un `Exchange` de `kind` `message`, `task` ou `handoff` entre deux sièges ou sessions.
+- **Invitations chez Ledge** : un `Exchange` de `kind: 'ledge'` (Ledge écrit à un siège), ou une escalade tranchée par Ledge dont la réponse part vers le siège.
+
+**Question ouverte qui bloque l'étape 8 (et elle seule)** : la source réelle de l'avancement dans les bulles. Les candidates sont le dernier élément du fil de la session (`session.thread.item`), l'étape du hook, ou la todo de l'agent. Les étapes 1 à 7 n'en dépendent pas.
