@@ -22,6 +22,8 @@ export interface Asks {
   create(by: string, question: string, options: string): Ask | Refusal;
   answer(id: string, text: string): Ask | Refusal;
   all(): Ask[];
+  /** Called after every change of every ask (the OpenRig bridge mirrors open asks); returns its unsubscribe. */
+  onChange(fn: () => void): () => void;
   close(): void;
 }
 
@@ -42,6 +44,7 @@ const reachable = (s: Session | undefined): boolean =>
 export function createAsks(d: AsksDeps): Asks {
   const now = d.now ?? (() => new Date().toISOString());
   const asks = new Map<string, Ask>();
+  const watchers = new Set<() => void>();
   for (const a of d.journal?.load() ?? []) asks.set(a.id, a);
 
   const save = () => {
@@ -53,7 +56,11 @@ export function createAsks(d: AsksDeps): Asks {
     d.journal?.save([...asks.values()]);
   };
   const newId = (): string => { for (;;) { const id = `a${randomBytes(3).toString('hex')}`; if (!asks.has(id)) return id; } };
-  const put = (a: Ask): Ask => { asks.set(a.id, a); save(); d.onAsk?.(a); return a; };
+  const put = (a: Ask): Ask => {
+    asks.set(a.id, a); save(); d.onAsk?.(a);
+    for (const fn of watchers) { try { fn(); } catch (e) { log(`ask watcher threw: ${(e as Error).message}`); } }
+    return a;
+  };
   const dropFor = (session: string) => {
     for (const a of [...asks.values()]) if (a.state === 'open' && a.from === session) {
       put({ ...a, state: 'dropped', closedAt: now() });
@@ -90,6 +97,7 @@ export function createAsks(d: AsksDeps): Asks {
       return answered;
     },
     all: () => [...asks.values()].sort((a, b) => a.at.localeCompare(b.at)),
+    onChange: fn => { watchers.add(fn); return () => { watchers.delete(fn); }; },
     close: () => unsubscribe()
   };
 }

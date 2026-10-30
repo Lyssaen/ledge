@@ -116,4 +116,10 @@ describe('createAsks', () => {
     const a = ask(); asks.answer(a.id, 'B');
     expect(seen.map(x => x.state)).toEqual(['open', 'answered']);
   });
+
+  it('onChange fires on every change until unsubscribed', () => {
+    let n = 0; const off = asks.onChange(() => n++);
+    const a = ask(); expect(n).toBe(1);
+    off(); asks.answer(a.id, 'B'); expect(n).toBe(1);
+  });
 });
