@@ -35,7 +35,7 @@ export function openEventStream(opts: { base: string; fetch?: Fetch; lastEventId
   (async () => {
     try {
       const res = await doFetch(url, { headers, signal: ac.signal });
-      if (!res.ok || !res.body) return end(new Error(`OpenRig /api/events answered ${res.status}`));
+      if (!res.ok || !res.body) return end(Object.assign(new Error(`OpenRig /api/events answered ${res.status}`), { status: res.status }));
       if (closed) return;
       opts.onOpen();
       const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = '';

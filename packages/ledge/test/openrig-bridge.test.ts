@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ServerMessageSchema, type Ask, type Projects } from '@ledge/protocol';
+import { ServerMessageSchema, type Ask, type Projects, type Session } from '@ledge/protocol';
+import { Store } from '../src/daemon/store.js';
+import { pairSession } from '../src/daemon/openrig/pairing.js';
 import { createFakeOpenRig, fakeRigCli, type FakeOpenRig, type FakeRig } from './fakes/openrig.js';
 import { createBridge, type Bridge, type BridgeDeps, type BridgeMessage } from '../src/daemon/openrig/bridge.js';
 import { readOpenRigFile } from '../src/daemon/openrig/cursor.js';
@@ -19,6 +21,7 @@ const starter = (): FakeRig => ({ rigId: 'r1', name: 'starter', status: 'running
   { logicalId: 'dev.test', canonicalSessionName: 'dev-test@starter', runtime: 'codex', sessionStatus: 'running', startupStatus: 'ready', cwd: '/w/app', activityState: { activity: 'idle-at-prompt' } }] });
 const humanRow = (id: string) => ({ qitemId: id, sourceSession: 'dev-build@starter', destinationSession: 'ledge@external', state: 'pending', summary: `question ${id}`, createdAt: '2026-10-30 10:00:00' });
 /** Seat-to-seat queue event (an exchange, not an escalation). */
+const polls = (ref: string) => fake!.requests.filter(r => r.path === '/api/queue/outbox/list' && r.search?.includes(encodeURIComponent(ref))).length;
 const task = (id: string) => ({ type: 'queue.created', qitemId: id, sourceSession: 'dev-build@starter', destinationSession: 'dev-test@starter', summary: `do ${id}` });
 
 function setup(over: Partial<BridgeDeps> & { rigs?: string[]; exec?: RigExec } = {}) {
@@ -141,7 +144,7 @@ describe('OpenRig bridge', () => {
   it('resumes after an OpenRig restart', async () => {
     fake = await createFakeOpenRig(); fake.rigs.push(starter()); fake.humans.push('ledge'); fake.queue.push(humanRow('E1'));
     const { b, of, msgs, file } = setup({ exec: fakeRigCli(fake) });
-    await b.start(); await until(() => b.status().state === 'running');
+    await b.start(); await until(() => b.status().state === 'running'); await until(() => polls('dev-build@starter') >= 2); // first listing seeded
     // 1. three exchanges: two queue tasks (SSE) and one `rig send` (outbox poll).
     fake.emit(task('X1')); fake.emit(task('X2'));
     fake.outbox.set('dev-build@starter', [{ outboxId: 'outbox-X3', senderSession: 'dev-build@starter', destinationSession: 'dev-test@starter', body: 'hello', deliveryState: 'delivered' }]);
@@ -220,39 +223,83 @@ describe('OpenRig bridge', () => {
 
   it('broadcasts each outbox id once, past the log dedupe window', async () => {
     fake = await createFakeOpenRig(); fake.rigs.push(starter()); fake.humans.push('ledge');
-    fake.outbox.set('dev-build@starter', Array.from({ length: 450 }, (_, i) => ({ outboxId: `outbox-${i}`, senderSession: 'dev-build@starter', destinationSession: 'dev-test@starter', body: `m${i}`, deliveryState: 'delivered' })));
-    const polls = () => fake!.requests.filter(r => r.path === '/api/queue/outbox/list' && r.search?.includes('dev-build')).length;
+    // A row listed before Ledge starts is history: logged for rig.exchanges, not broadcast.
+    fake.outbox.set('dev-test@starter', [{ outboxId: 'outbox-old', senderSession: 'dev-test@starter', destinationSession: 'dev-build@starter', body: 'old', deliveryState: 'delivered' }]);
     const { b, of } = setup({ exec: fakeRigCli(fake) });
-    await b.start(); await until(() => of('rig.exchange').length === 450);
-    const p = polls(); await until(() => polls() >= p + 3);
+    await b.start(); await until(() => polls('dev-build@starter') >= 2 && polls('dev-test@starter') >= 2);
+    expect(of('rig.exchange')).toHaveLength(0); expect(b.exchanges('r1').map(x => x.id)).toEqual(['o-outbox-old']);
+    fake.outbox.set('dev-build@starter', Array.from({ length: 450 }, (_, i) => ({ outboxId: `outbox-${i}`, senderSession: 'dev-build@starter', destinationSession: 'dev-test@starter', body: `m${i}`, deliveryState: 'delivered' })));
+    await until(() => of('rig.exchange').length === 450);
+    const p = polls('dev-build@starter'); await until(() => polls('dev-build@starter') >= p + 3);
     const ids = of('rig.exchange').map(m => m.exchange.id); expect(new Set(ids).size).toBe(450); expect(ids).toHaveLength(450);
     // a new row is still picked up, once
     fake.outbox.get('dev-build@starter')!.push({ outboxId: 'outbox-new', senderSession: 'dev-build@starter', destinationSession: 'dev-test@starter', body: 'n', deliveryState: 'delivered' });
     await until(() => of('rig.exchange').some(m => m.exchange.id === 'o-outbox-new'));
-    const q = polls(); await until(() => polls() >= q + 2); expect(of('rig.exchange')).toHaveLength(451);
+    const q = polls('dev-build@starter'); await until(() => polls('dev-build@starter') >= q + 2); expect(of('rig.exchange')).toHaveLength(451);
   });
 
-  it('never moves the cursor back', async () => {
+  it('keeps the cursor when the stream open times out, and replays the outage', async () => {
     fake = await createFakeOpenRig(); fake.rigs.push(starter()); fake.humans.push('ledge');
-    for (let i = 1; i <= 5; i++) fake.emit({ type: 'view.changed' });
-    const d = mkdtempSync(join(tmpdir(), 'ledge-bridge-')); dirs.push(d); const file = join(d, 'openrig.json');
-    writeFileSync(file, JSON.stringify({ version: 1, machines: { local: { lastEventId: 3, rigs: [], at: '2026-10-30T10:00:00.000Z' } } }));
-    // A server that ignores Last-Event-ID and replays its whole journal.
-    const base = fetch;
-    const f = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (!String(input).includes('/api/events')) return base(input, init);
-      const h = new Headers(init?.headers); h.delete('last-event-id'); return base(String(input).replace('?replay=0', ''), { ...init, headers: h });
-    }) as typeof fetch;
-    const { b, of } = setup({ exec: fakeRigCli(fake), fetch: f, file });
+    const { b, of } = setup({ exec: fakeRigCli(fake), openMs: 60 });
     await b.start(); await until(() => b.status().state === 'running');
-    fake.emit(task('Z1')); await until(() => of('rig.exchange').length === 1);
+    fake.emit(task('Y1')); await until(() => of('rig.exchange').length === 1);
+    await fake.stop(); await until(() => b.status().state === 'stopped');
+    fake.emit(task('Y2')); fake.hangEvents = 1; await fake.restart();
+    await until(() => b.status().state === 'running');
+    const sse = fake.requests.filter(r => r.path === '/api/events').slice(-2);
+    expect(sse.map(r => r.lastEventId)).toEqual(['1', '1']); // the hung open, then the retry: same cursor
+    await until(() => of('rig.exchange').some(m => m.exchange.id === 'q-Y2'));
+  });
+
+  it('follows a wiped OpenRig journal (seq below the cursor)', async () => {
+    fake = await createFakeOpenRig(); fake.rigs.push(starter()); fake.humans.push('ledge');
+    const d = mkdtempSync(join(tmpdir(), 'ledge-bridge-')); dirs.push(d); const file = join(d, 'openrig.json');
+    writeFileSync(file, JSON.stringify({ version: 1, machines: { local: { lastEventId: 500, rigs: ['starter'], at: '2026-10-30T10:00:00.000Z' } } }));
+    const { b, of } = setup({ exec: fakeRigCli(fake), file });
+    await b.start(); await until(() => b.status().state === 'running');
+    expect(fake.requests.find(r => r.path === '/api/events')!.lastEventId).toBe('500');
+    fake.queue.push(humanRow('J1')); fake.emit({ type: 'queue.created', qitemId: 'J1', sourceSession: 'dev-build@starter', destinationSession: 'ledge@external' });
+    fake.emit(task('J2'));
+    await until(() => of('escalation.updated').some(m => m.escalation.id === 'J1') && of('rig.exchange').some(m => m.exchange.id === 'q-J2'));
     await b.stop(); bridge = null;
-    expect(readOpenRigFile(file).machines.local!.lastEventId).toBe(6);
-    // replaying 1..6 again with a cursor of 6 applies nothing
-    const again = setup({ exec: fakeRigCli(fake), fetch: f, file });
-    await again.b.start(); await until(() => again.b.status().state === 'running'); await sleep(50);
-    expect(again.of('rig.exchange')).toHaveLength(0);
-    await again.b.stop(); expect(readOpenRigFile(file).machines.local!.lastEventId).toBe(6);
+    expect(readOpenRigFile(file).machines.local!.lastEventId).toBe(2);
+  });
+
+  it('a failed read changes nothing (body that is no list)', async () => {
+    fake = await createFakeOpenRig(); fake.rigs.push(starter()); fake.humans.push('ledge'); fake.queue.push(humanRow('E1'));
+    let broken = false; const base = fetch;
+    const f = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const u = String(input);
+      if (broken && (u.includes('/api/ps') || u.includes('/api/queue/list'))) return new Response('{}', { status: 200 });
+      return base(input, init);
+    }) as typeof fetch;
+    const { b, of } = setup({ exec: fakeRigCli(fake), fetch: f, resyncMs: 40 });
+    await b.start(); await until(() => b.status().state === 'running' && b.escalations().length === 1);
+    b.pair('s1', 'dev-build@starter');
+    broken = true; const n = fake.requests.length;
+    fake.emit({ type: 'queue.updated', qitemId: 'E1' }); // human re-read, broken too
+    await until(() => fake!.requests.length >= n + 6); await sleep(250);
+    expect(of('rig.removed')).toHaveLength(0); expect(of('escalation.removed')).toHaveLength(0);
+    expect(b.rigs()[0]!.seats.find(s => s.ref === 'dev-build@starter')!.sessionId).toBe('s1');
+    expect(b.escalations().map(e => e.id)).toEqual(['E1']);
+  });
+
+  it('restored pairing holds the seat; an exited session frees it', async () => {
+    fake = await createFakeOpenRig(); fake.rigs.push(starter()); fake.humans.push('ledge');
+    const T0 = '2026-10-30T10:00:00.000Z';
+    const sess = (id: string, over: Partial<Session> = {}): Session => ({ id, name: id, tool: 'codex', cwd: '/w/app', project: 'app', title: id, tmuxSession: null, state: 'working', helpers: [], startedAt: T0, lastActivityAt: T0, source: 'hook_only', ...over });
+    const store = new Store();
+    // Ledge restarted: the store kept A's seat, the new bridge's mirror does not know it yet.
+    store.upsert(sess('A', { rig: { machine: 'local', rigId: 'r1', rigName: 'starter', seat: 'dev-test@starter', pod: 'dev', member: 'test' } }));
+    store.upsert(sess('B'));
+    const { b } = setup({ exec: fakeRigCli(fake), alive: id => { const s = store.get(id); return !!s && s.state !== 'exited'; } });
+    await b.start(); await until(() => b.status().state === 'running');
+    expect(pairSession(store, b, { id: 'A', cwd: '/w/app', agent: 'codex' })).toBe(false); // restored, store unchanged
+    expect(b.rigs()[0]!.seats.find(s => s.ref === 'dev-test@starter')!.sessionId).toBe('A');
+    expect(pairSession(store, b, { id: 'B', cwd: '/w/app', agent: 'codex' })).toBe(false); expect(store.get('B')!.rig).toBeUndefined();
+    store.upsert({ ...store.get('A')!, state: 'exited' });
+    expect(b.unpairedRefs()).toContain('dev-test@starter');
+    expect(pairSession(store, b, { id: 'B', cwd: '/w/app', agent: 'codex' })).toBe(true); expect(store.get('B')!.rig?.seat).toBe('dev-test@starter');
   });
 
   it('a registration in flight across a disconnect does not register', async () => {

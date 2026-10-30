@@ -1,7 +1,7 @@
 import { EXCHANGES_MAX, type Exchange } from '@ledge/protocol';
 import { EVENTS, EVENTS_UNOBSERVED, HUMAN_ADDRESS, HUMAN_GATE_TIER, OPERATOR_HUMAN_SESSIONS, OUTBOX_EVENT } from './facts.js';
 import type { OpenRigEvent } from './sse.js';
-import type { OutboxRow } from './wire.js';
+import { openrigTime, type OutboxRow } from './wire.js';
 
 interface Ctx { machine: string; rigOf(ref: string): string | undefined }
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v ? v : undefined);
@@ -32,8 +32,7 @@ export function exchangeFromOutbox(row: OutboxRow, ctx: Ctx & { at?: string }): 
   const body = str(row.body) ?? '';
   const m = /\n---\n([\s\S]*)\n---(?:\n|$)/.exec(body);
   const text = m?.[1] ?? body;
-  const stamp = [row.createdAt, row.sentAt, row.timestamp].map(str).find((s): s is string => !!s && !Number.isNaN(Date.parse(s)));
-  const at = stamp ? new Date(stamp).toISOString() : ctx.at ?? new Date().toISOString();
+  const at = [row.createdAt, row.sentAt, row.timestamp].map(openrigTime).find((s): s is string => s !== null) ?? ctx.at ?? new Date().toISOString();
   return build(`o-${row.outboxId}`, 'message', row.senderSession, row.destinationSession, text, at, ctx);
 }
 

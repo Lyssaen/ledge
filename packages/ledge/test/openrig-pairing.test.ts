@@ -54,9 +54,15 @@ describe('pairSession', () => {
     expect(pairSession(launched, b, { id: 'a', cwd: '/w/app', agent: 'claude' })).toBe(false);
     const paired = new Store(); paired.upsert(sess('a', { rig: SR('x@y') }));
     expect(pairSession(paired, b, { id: 'a', cwd: '/w/app', agent: 'claude' })).toBe(false);
-    expect(b.calls).toEqual([]);
+    expect(b.calls).toEqual(['pair:a:x@y']); expect(paired.get('a')!.rig).toEqual(SR('x@y')); // restore attempt only, no cwd fallback
     const noCwd = new Store(); noCwd.upsert(sess('a'));
     expect(pairSession(noCwd, b, { id: 'a', agent: 'claude' })).toBe(false);
+  });
+  it('a session that kept its rig re-tells the bridge (Ledge restarted), store untouched', () => {
+    const store = new Store(); store.upsert(sess('a', { rig: SR() })); let updates = 0; store.onChange(c => { if (c.type === 'updated') updates++; });
+    const b = fake([rig('r1', 'starter', [['dev-build@starter', 'claude-code']])]);
+    expect(pairSession(store, b, { id: 'a', cwd: '/w/app', agent: 'claude' })).toBe(false);
+    expect(b.calls).toEqual(['pair:a:dev-build@starter']); expect(updates).toBe(0);
   });
   it('an unknown session pairs nothing', () => {
     const b = fake([rig('r1', 'starter', [['dev-build@starter', 'claude-code']])]);

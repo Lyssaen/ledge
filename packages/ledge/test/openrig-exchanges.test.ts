@@ -45,6 +45,7 @@ describe('exchangeFromOutbox', () => {
   it('takes at from a row timestamp, else ctx.at', () => {
     expect(exchangeFromOutbox({ ...row, createdAt: '2026-10-31T09:00:00.000Z' }, ctx)?.at).toBe('2026-10-31T09:00:00.000Z');
     expect(exchangeFromOutbox({ ...row, createdAt: 'garbage' }, { ...ctx, at: undefined })?.at).toMatch(/^\d{4}-/);
+    expect(exchangeFromOutbox({ ...row, createdAt: '2026-10-31 09:00:00' }, ctx)?.at).toBe('2026-10-31T09:00:00.000Z'); // SQLite time is UTC
   });
 });
 

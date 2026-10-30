@@ -9,7 +9,7 @@ import { createRigCli, realRigExec, type RigExec } from './cli.js';
 import { probeOpenRig } from './presence.js';
 import { createMirror } from './mirror.js';
 import { parseSessionName } from './seats.js';
-import { createEscalationBook, rowToEscalation } from './escalations.js';
+import { createEscalationBook, createFirstSeen, rowToEscalation } from './escalations.js';
 import { askToEscalation } from './asks.js';
 import { createExchangeLog, exchangeFromEvent, exchangeFromOutbox } from './exchanges.js';
 import { readHumanQueue, readRigs, versionCache } from './bridge-read.js';
@@ -23,6 +23,8 @@ export interface BridgeDeps {
   projects: () => Projects; home: string; file?: string;
   asks?: { all(): Ask[]; onChange(fn: () => void): () => void };
   sessionName: (sessionId: string) => string | undefined;
+  /** False for a session that is gone or exited: its seat is free again for pairByCwd. Default: every paired session is alive. */
+  alive?: (sessionId: string) => boolean;
   probeMs?: number;                             // 5000
   retryMs?: number;                             // 600000 (start, registration)
   outboxMs?: number;                            // 5000, while OUTBOX_EVENT is null
@@ -68,7 +70,8 @@ export function createBridge(deps: BridgeDeps): Bridge {
   const mirror = createMirror({ machine, projects: deps.projects, home: deps.home });
   const rigBook = createEscalationBook(); const askBook = createEscalationBook(); const xlog = createExchangeLog();
   const listeners = new Set<(m: BridgeMessage) => void>();
-  const ctx = { machine, rigOf: (ref: string) => mirror.byRef(ref)?.rig.id, isKernelSeat: (ref: string) => mirror.byRef(ref)?.rig.kernel === true };
+  const firstSeen = createFirstSeen(now);
+  const ctx = { machine, rigOf: (ref: string) => mirror.byRef(ref)?.rig.id, isKernelSeat: (ref: string) => mirror.byRef(ref)?.rig.kernel === true, seenAt: firstSeen.at };
 
   let status: OpenRigStatus = { machine, state: 'stopped' }; let human: 'registered' | 'missing' | 'failed' = 'missing';
   let active = false; let armed = false; let probed = false;
@@ -102,13 +105,14 @@ export function createBridge(deps: BridgeDeps): Bridge {
     for (const id of [...nodesByRig.keys()]) if (!snap.rigs.some(r => r.rigId === id)) nodesByRig.delete(id);
     for (const [id, list] of snap.nodes) nodesByRig.set(id, list);
   };
-  const applyHuman = (rows: QueueRow[]) => emitEsc(rigBook.replace(rows.map(r => rowToEscalation(r, ctx))));
+  const applyHuman = (rows: QueueRow[]) => { emitEsc(rigBook.replace(rows.map(r => rowToEscalation(r, ctx)))); firstSeen.retain(new Set(rows.map(r => r.qitemId))); };
   const syncAsks = () => {
     if (!deps.asks) return;
     emitEsc(askBook.replace(deps.asks.all().filter(a => a.state === 'open').map(a => askToEscalation(a, { machine, nameOf: deps.sessionName }))));
   };
 
-  // While connected: each reader checks `gen` after its awaits, so a reconnect drops stale results.
+  // While connected: each reader checks `gen` after its awaits, so a reconnect drops stale results. A failed read (unreachable,
+  // non-200, a body that is no list) throws and changes nothing: the mirror and the books keep what they had until the next read.
   const resync = serial(async () => {
     const h = http; const g = gen; if (!h || !live) return;
     const snap = await readRigs(h); if (g !== gen) return;
@@ -124,8 +128,13 @@ export function createBridge(deps: BridgeDeps): Bridge {
       let rows; try { rows = await h.outbox(ref); } catch (e) { if (e instanceof OpenRigUnreachable) return; continue; }
       if (g !== gen) return;
       // Only ids absent from the previous listing reach the log: a long listing never re-broadcasts past the log's dedupe window.
-      const seen = outboxSeen.get(ref) ?? new Set<string>(); outboxSeen.set(ref, new Set(rows.map(r => r.outboxId)));
-      for (const row of rows) if (!seen.has(row.outboxId)) emitExchange(exchangeFromOutbox(row, { ...ctx, at: now() }));
+      // The first listing of a seat only fills the log (history for rig.exchanges): starting Ledge does not replay it as news.
+      const seen = outboxSeen.get(ref); outboxSeen.set(ref, new Set(rows.map(r => r.outboxId)));
+      for (const row of rows) {
+        if (seen?.has(row.outboxId)) continue;
+        const x = exchangeFromOutbox(row, { ...ctx, at: now() });
+        if (seen) emitExchange(x); else if (x) xlog.add(x);
+      }
     }
   });
   const refetchers = new Map<string, () => Promise<void>>();
@@ -158,18 +167,24 @@ export function createBridge(deps: BridgeDeps): Bridge {
     if (touchesHuman(e)) scheduleHuman(); else emitExchange(exchangeFromEvent(e, { ...ctx, at: now() }));
   }
 
-  /** Resolves with the stream once it is open; null when it ended before (non-200, refused), missed the `openMs` deadline
-   *  (a hung open would otherwise hold the probe loop forever) or was cancelled by a disconnect. */
-  function openStream(g: number, from: number | null, buffer: OpenRigEvent[]): Promise<EventStream | null> {
+  /** Resolves with the stream once it is open; null when it ended before, missed the `openMs` deadline (a hung open would
+   *  otherwise hold the probe loop forever) or was cancelled by a disconnect. `refused`: OpenRig answered 4xx (cursor rejected). */
+  function openStream(g: number, from: number | null, buffer: OpenRigEvent[]): Promise<{ stream: EventStream | null; refused: boolean }> {
     return new Promise(resolve => {
-      let opened = false; let settled = false;
-      const settle = (v: EventStream | null) => { if (settled) return; settled = true; clearTimeout(timer); opening.delete(cancel); if (!v) s.close(); resolve(v); };
+      let opened = false; let settled = false; let first = true;
+      const settle = (v: EventStream | null, refused = false) => { if (settled) return; settled = true; clearTimeout(timer); opening.delete(cancel); if (!v) s.close(); resolve({ stream: v, refused }); };
       const cancel = () => settle(null);
       const s: EventStream = openEventStream({ base, fetch: deps.fetch, lastEventId: from,
-        onEvent: e => { if (g !== gen) return; if (live) apply(e); else buffer.push(e); },
+        onEvent: e => {
+          if (g !== gen) return;
+          // Resuming after `from`, OpenRig only sends later seqs: an earlier one first means its journal was wiped. Follow the new journal.
+          if (first && from !== null && e.seq <= from) { log(`openrig: event journal restarted (seq ${e.seq} after cursor ${from}), following it`); cursor = null; }
+          first = false;
+          if (live) apply(e); else buffer.push(e);
+        },
         onOpen: () => { opened = true; settle(s); },
         onEnd: err => {
-          if (!opened) return settle(null);
+          if (!opened) { const st = (err as { status?: number } | undefined)?.status; return settle(null, st !== undefined && st >= 400 && st < 500); }
           if (g !== gen) return;
           log(`openrig: event stream ended${err ? `: ${err.message}` : ''}`); disconnect(); setStatus('stopped');
         } });
@@ -181,26 +196,27 @@ export function createBridge(deps: BridgeDeps): Bridge {
   /** SSE first (events buffered), then the full read, then the buffer, then live. */
   async function connect(version: string | undefined) {
     const g = ++gen; const buffer: OpenRigEvent[] = [];
-    let s = await openStream(g, cursor, buffer);
-    if (!s && cursor !== null && g === gen) {
+    let { stream: s, refused } = await openStream(g, cursor, buffer);
+    if (!s && refused && cursor !== null && g === gen) { // only an explicit refusal drops the cursor; a timeout, reset or 5xx keeps it
       log(`openrig: the event stream refused cursor ${cursor}, starting from now with a full re-read`);
-      cursor = null; writer?.set(machine, { lastEventId: null }); s = await openStream(g, null, buffer);
+      cursor = null; writer?.set(machine, { lastEventId: null }); ({ stream: s } = await openStream(g, null, buffer));
     }
-    if (!s) return; // /healthz answers but /api/events does not: the next probe tries again
+    if (!s) return; // /healthz answers but /api/events does not: the next probe tries again from the same cursor
     if (g !== gen || !active) return s.close();
     stream = s; const h = http!;
     let snap, rows;
-    try { snap = await readRigs(h); rows = await readHumanQueue(h); }
+    try { snap = await readRigs(h); }
     catch (e) { if (g === gen) { log(`openrig: initial read failed: ${(e as Error).message}`); s.close(); stream = null; } return; }
+    try { rows = await readHumanQueue(h); } catch (e) { rows = null; log(`openrig: human queue not read, kept as it was: ${(e as Error).message}`); }
     if (g !== gen || !active) return;
     keepNodes(snap); const { removed } = mirror.replace(snap); live = true; humanOk = false;
     if (!mirror.rigs().some(r => !r.kernel)) human = 'missing'; // no stale 'registered' from an earlier connection
     setStatus('running', { version });
     removed.forEach(removeRig);
     emit({ type: 'rig.snapshot', machine, rigs: mirror.rigs() }); saveRigs();
-    applyHuman(rows);
+    if (rows) applyHuman(rows);
     for (const e of buffer.splice(0)) apply(e);
-    connTimers.push(every(outboxMs, pollOutbox), every(resyncMs, resync));
+    connTimers.push(every(outboxMs, pollOutbox), every(resyncMs, () => Promise.all([resync(), rereadHuman()]))); // the human queue too: safety net
     void pollOutbox(); void register();
   }
 
@@ -314,8 +330,8 @@ export function createBridge(deps: BridgeDeps): Bridge {
       const cwdOf = (rigId: string, ref: string) => nodesByRig.get(rigId)?.find(n => (n.canonicalSessionName ?? n.logicalId) === ref)?.cwd;
       const seats = mirror.rigs().flatMap(r => r.seats.filter(s => cwdOf(r.id, s.ref) === cwd)).filter(s => toolOf(s.runtime) === tool);
       const mine = seats.find(s => s.sessionId === sessionId); if (mine) return pair(sessionId, mine.ref);
-      const free = seats.filter(s => !s.sessionId); return free.length === 1 ? pair(sessionId, free[0]!.ref) : null;
+      const free = seats.filter(s => !s.sessionId || deps.alive?.(s.sessionId) === false); return free.length === 1 ? pair(sessionId, free[0]!.ref) : null;
     },
-    unpairedRefs: () => mirror.rigs().flatMap(r => r.seats.filter(s => !s.sessionId).map(s => s.ref)),
+    unpairedRefs: () => mirror.rigs().flatMap(r => r.seats.filter(s => !s.sessionId || deps.alive?.(s.sessionId) === false).map(s => s.ref)),
   };
 }

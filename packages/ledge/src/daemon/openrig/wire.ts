@@ -8,6 +8,13 @@ export const KernelStatusSchema = z.object({ state: z.string().optional(), kerne
 export const QueueRowSchema = z.object({ qitemId: z.string(), sourceSession: z.string().optional(), destinationSession: z.string(), state: z.string() }).passthrough();
 export const OutboxRowSchema = z.object({ outboxId: z.string(), senderSession: z.string().optional(), destinationSession: z.string().optional(), deliveryState: z.string().optional() }).passthrough();
 
+/** OpenRig time (SQLite "YYYY-MM-DD HH:MM:SS", UTC, or ISO) to an ISO datetime; null when absent or unparsable. */
+export function openrigTime(v: unknown): string | null {
+  if (typeof v !== 'string' || !v) return null;
+  const t = Date.parse(/^\d{4}-\d{2}-\d{2} \d/.test(v) ? `${v.replace(' ', 'T')}Z` : v);
+  return Number.isNaN(t) ? null : new Date(t).toISOString();
+}
+
 export type Health = z.infer<typeof HealthSchema>;
 export type PsEntry = z.infer<typeof PsEntrySchema>;
 export type NodeEntry = z.infer<typeof NodeEntrySchema>;

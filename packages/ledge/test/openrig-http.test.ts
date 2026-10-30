@@ -41,6 +41,14 @@ describe('OpenRig http client', () => {
     expect((r as Record<string, unknown>).newField).toBe(1);
   });
 
+  it('a body that is no list, or a list with no readable row, throws (never an empty answer)', async () => {
+    const h = (body: unknown) => createOpenRigHttp({ base: fake.url, fetch: async () => new Response(JSON.stringify(body)) });
+    await expect(h({}).ps()).rejects.toThrow(/not a list/);
+    await expect(h({ error: 'x' }).queue({})).rejects.toThrow(/not a list/);
+    await expect(h([{ nope: 1 }, { nope: 2 }]).ps()).rejects.toThrow(/no readable row/);
+    expect(await h([]).ps()).toEqual([]); expect(await h({ items: [] }).outbox('a@b')).toEqual([]);
+  });
+
   it('outbox lists by sender', async () => {
     fake.outbox.set('ledge@external', [{ outboxId: 'outbox-1', senderSession: 'ledge@external', destinationSession: 'a@r1', body: 'hi', deliveryState: 'delivered' }]);
     expect((await createOpenRigHttp({ base: fake.url }).outbox('ledge@external')).map(o => o.outboxId)).toEqual(['outbox-1']);

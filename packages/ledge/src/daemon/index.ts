@@ -75,6 +75,7 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   const agentEnv = async () => ({ ...process.env, ...(await loginShellEnv()) });
   // The bridge reads the server's asks and projects only once started, after startServer: lazy adapters over `server`.
   const bridge = createBridge({ env: agentEnv, projects: () => server.projects(), home: homedir(), sessionName: id => store.get(id)?.name,
+    alive: id => { const s = store.get(id); return !!s && s.state !== 'exited'; },
     asks: { all: () => server.asks.all(), onChange: f => server.asks.onChange(f) } });
   const server = await startServer({ store, tmux, port: opts.port, daemon, updater, history, mobile, mobileUnavailable, mail, asks: askJournal, attachments, agentEnv, openrig: bridge });
   await bridge.start();

@@ -46,7 +46,7 @@ import { actionMessage, resolveAction, resolveRun, runGuard, type Resolved } fro
 import { createMailbox, type MailJournal } from './mailbox.js';
 import { createAsks, type Asks, type AsksJournal } from './asks.js';
 import type { Bridge } from './openrig/bridge.js';
-import { pairSession, unpairGone } from './openrig/pairing.js';
+import { pairSession, restorePairs, unpairGone } from './openrig/pairing.js';
 import { createHandovers, heldNames } from './handover.js';
 import { readContext } from './context.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
@@ -301,6 +301,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const unsubscribeBridge = bridge?.onMessage(m => {
     broadcast(m);
     if (m.type === 'rig.snapshot' || m.type === 'rig.removed') unpairGone(store, bridge.rigs());
+    if (m.type === 'rig.snapshot') restorePairs(store, bridge);
   });
   // The relief of a session whose context is nearly full (context handover spec §3.3). `launch` and `closeSession` are hoisted.
   const handovers = createHandovers({ store, mailbox, launch: req => launch(req), close: s => closeSession(s),

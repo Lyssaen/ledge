@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { EscalationSchema } from '@ledge/protocol';
 import type { Ask } from '@ledge/protocol';
-import { isHumanRow, rowToEscalation, createEscalationBook } from '../src/daemon/openrig/escalations';
+import { isHumanRow, rowToEscalation, createEscalationBook, createFirstSeen } from '../src/daemon/openrig/escalations';
 import { askToEscalation } from '../src/daemon/openrig/asks';
 
 const ctx = { machine: 'local', rigOf: (r: string) => (r.endsWith('@starter') ? 'starter' : undefined) };
@@ -33,6 +33,15 @@ describe('rowToEscalation', () => {
 });
 
 describe('isHumanRow', () => {
+  it('a missing or malformed createdAt is stable across re-reads (no re-broadcast)', () => {
+    let t = 0; const seen = createFirstSeen(() => new Date(Date.UTC(2026, 9, 30, 10, 0, t++)).toISOString());
+    const c = { ...ctx, seenAt: seen.at }; const book = createEscalationBook();
+    const read = () => [rowToEscalation(row({ createdAt: 'garbage' }), c), rowToEscalation(row({ qitemId: 'qi-2', createdAt: undefined }), c)];
+    expect(book.replace(read()).updated).toHaveLength(2);
+    expect(book.replace(read())).toEqual({ updated: [], removed: [] });
+    expect(EscalationSchema.parse(book.all()[0]).createdAt).toBe('2026-10-30T10:00:00.000Z');
+    seen.retain(new Set(['qi-2'])); expect(rowToEscalation(row({ createdAt: 'garbage' }), c).createdAt).not.toBe('2026-10-30T10:00:00.000Z');
+  });
   it('detects human rows', () => {
     expect(isHumanRow(row())).toBe(true);
     expect(isHumanRow(row({ destinationSession: 'operator-human@kernel' }))).toBe(true);

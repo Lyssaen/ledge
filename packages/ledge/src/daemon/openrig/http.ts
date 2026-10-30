@@ -38,15 +38,18 @@ export function createOpenRigHttp(opts: { base: string; fetch?: Fetch; timeoutMs
     catch (e) { if (isUnreachable(e)) throw new OpenRigUnreachable(`OpenRig unreachable at ${opts.base}: body ${(e as Error).name}`); throw e; }
   }
 
-  /** Bare array or `{ items: [...] }`; rows failing the schema are skipped, logged once per type. */
+  /** Bare array or `{ items: [...] }`; rows failing the schema are skipped, logged once per type. A body that is no list, or a
+   *  non-empty list where no row parses, throws: the caller keeps what it had instead of reading an empty answer. */
   function rows<S extends z.ZodTypeAny>(kind: string, schema: S, raw: unknown): z.infer<S>[] {
-    const list = Array.isArray(raw) ? raw : Array.isArray((raw as { items?: unknown } | null)?.items) ? (raw as { items: unknown[] }).items : [];
+    const list = Array.isArray(raw) ? raw : Array.isArray((raw as { items?: unknown } | null)?.items) ? (raw as { items: unknown[] }).items : null;
+    if (!list) throw new Error(`OpenRig ${kind} answer is not a list`);
     const out: z.infer<S>[] = [];
     for (const item of list) {
       const p = schema.safeParse(item);
       if (p.success) out.push(p.data);
       else if (!warned.has(kind)) { warned.add(kind); log(`openrig: skipped a ${kind} row that does not match its schema (${p.error.issues[0]?.path.join('.') || 'root'}); further ones are silent`); }
     }
+    if (list.length && !out.length) throw new Error(`OpenRig ${kind} answer has no readable row (${list.length} rows)`);
     return out;
   }
 
