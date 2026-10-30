@@ -1,11 +1,9 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { BRIEF_MAX, isArchived, taskClosed, type ClientMessage, type Handover, type Session, type Task, type Team, type Tool } from '@ledge/protocol';
+import { BRIEF_MAX, isArchived, type Autonomy, type Handover, type Session, type Tool } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { Mailbox } from './mailbox.js';
 import { log } from '../log.js';
-
-type TaskCmd = Extract<ClientMessage, { type: 'task.cmd' }>;
 
 /** How long a session has to write its brief before Ledge writes one itself. */
 export const BRIEF_MS = 10 * 60_000;
@@ -16,10 +14,8 @@ export interface HandoverDeps {
   store: Pick<Store, 'get' | 'all' | 'upsert' | 'patch' | 'onChange'>;
   /** The request for a brief goes before anything waiting: past the brief's deadline Ledge writes an empty one. */
   mailbox: Pick<Mailbox, 'notify'>;
-  tasks: { run(cmd: TaskCmd): { reason?: string }; all(): Task[] };
-  teams: { get(id: string): Team | undefined };
-  /** Launches the relief as `session.launch` would (its role seats it at its team's table). */
-  launch(req: { tool: Tool; cwd: string; prompt: string; model?: string; effort?: string; role?: string; team?: string }): Promise<Session>;
+  /** Launches the relief as `session.launch` would. */
+  launch(req: { tool: Tool; cwd: string; prompt: string; model?: string; effort?: string; autonomy?: Autonomy }): Promise<Session>;
   /** Stops the relieved session's agent. */
   close(s: Session): Promise<unknown>;
   /** Where briefs are kept, one `<session id>.md` each. */
@@ -66,7 +62,7 @@ const quote = (s: string, max: number) => (s.length > max ? `${s.slice(0, max)}�
 
 /**
  * The relief of a session whose context is nearly full (context handover spec §3.3): its brief asked at its next free
- * moment, a fresh session at the same seat given that brief, its open tasks passed to it, and the old one closed.
+ * moment, a fresh session given that brief, and the old one closed.
  */
 export function createHandovers(d: HandoverDeps): Handovers {
   const now = d.now ?? (() => new Date().toISOString());
@@ -79,18 +75,13 @@ export function createHandovers(d: HandoverDeps): Handovers {
     const cur = d.store.get(id);
     if (cur) d.store.upsert({ ...cur, handover: { ...h, at: now() } });
   };
-  const openTasks = (id: string) => d.tasks.all().filter(t => t.owner === id && !taskClosed(t));
 
-  /** What Ledge writes when the session wrote nothing: where it worked, its last reply, the tasks it held and those it gave still open. */
+  /** What Ledge writes when the session wrote nothing: where it worked and its last reply. */
   const fallback = (s: Session): string => {
-    const held = openTasks(s.id);
-    const given = d.tasks.all().filter(t => t.giver === s.id && !taskClosed(t));
     return [
       `Bilan écrit par Ledge : ${s.name} n'a pas écrit le sien. Il n'a noté ni décisions ni pièges : vérifie avant de défaire quoi que ce soit.`,
       ...(s.branch ? ['', `Branche : ${s.branch} (${s.workdir ?? s.cwd})`] : []),
-      ...(s.lastReply?.text ? ['', 'Sa dernière réponse :', s.lastReply.text] : []),
-      ...(held.length ? ['', 'Ses tâches en cours :', ...held.map(t => `- ${t.id} « ${t.title} » (confiée par ${t.giverName})`)] : []),
-      ...(given.length ? ['', 'Les tâches qu\'il a confiées, encore ouvertes :', ...given.map(t => `- ${t.id} « ${t.title} » à ${t.ownerName}`)] : [])
+      ...(s.lastReply?.text ? ['', 'Sa dernière réponse :', s.lastReply.text] : [])
     ].join('\n');
   };
 
@@ -100,20 +91,16 @@ export function createHandovers(d: HandoverDeps): Handovers {
     try { mkdirSync(d.dir, { recursive: true }); writeFileSync(file(id), `${brief.trim()}\n`); }
     catch (e) { log(`brief of ${id} not kept: ${(e as Error).message}`); }
     mark(id, { state: 'launching', ...(auto ? { auto: true } : {}) });
-    const team = s.team ? d.teams.get(s.team) : undefined;
-    const live = team && team.state !== 'dissolved' ? team : undefined;
-    const seat = s.role ? ` (@${s.role}${live ? `, équipe ${live.name}` : ''})` : '';
     const prompt = [
-      `Tu prends la relève de ${s.name}${seat}, dont le contexte était plein. Voici son bilan :`,
+      `Tu prends la relève de ${s.name}, dont le contexte était plein. Voici son bilan :`,
       '',
       quote(brief.trim(), PROMPT_BRIEF_MAX),
       '',
-      'Ses tâches en cours te sont passées par Ledge : elles t\'arrivent une à une. Relis le bilan complet avec `ledge handover show`.'
+      'Relis le bilan complet avec `ledge handover show`.'
     ].join('\n');
     let relief: Session;
     try {
-      relief = await d.launch({ tool: s.tool, cwd: s.cwd, prompt, ...(s.model ? { model: s.model } : {}), ...(s.effort ? { effort: s.effort } : {}),
-        ...(s.role ? { role: s.role } : {}), ...(s.role && live ? { team: live.id } : {}) });
+      relief = await d.launch({ tool: s.tool, cwd: s.cwd, prompt, ...(s.model ? { model: s.model } : {}), ...(s.effort ? { effort: s.effort } : {}), ...(s.autonomy ? { autonomy: s.autonomy } : {}) });
     } catch (e) {
       const reason = (e as Error).message;
       log(`relief of ${s.name} (${id}) not launched: ${reason}`);
@@ -123,13 +110,6 @@ export function createHandovers(d: HandoverDeps): Handovers {
     const at = now();
     const fresh = d.store.get(relief.id) ?? relief;
     d.store.upsert({ ...fresh, relieves: { id, name: s.name, at } });
-    // Its open tasks follow it; their giver stays (a task Ledge gave still comes back to Ledge).
-    for (const t of openTasks(id)) {
-      const r = d.tasks.run({ type: 'task.cmd', rid: `handover-${t.id}`, by: id, op: 'pass', task: t.id, to: relief.id, text: `relève de ${s.name}` });
-      if (r.reason) log(`task ${t.id} not passed to ${relief.name}: ${r.reason}`);
-    }
-    // Its seat is the relief's now (the launch took it): the old record leaves the table.
-    if (s.team) d.store.patch(id, { team: undefined });
     const cur = d.store.get(id);
     if (cur && cur.state !== 'exited') await d.close(cur).catch(e => log(`relieved ${id} not closed: ${(e as Error).message}`));
     mark(id, { state: 'done', to: relief.id, toName: relief.name, ...(auto ? { auto: true } : {}) });
@@ -145,7 +125,7 @@ export function createHandovers(d: HandoverDeps): Handovers {
     void relieve(id, brief ?? fallback(s), w.auto).catch(e => { log(`relief of ${id} failed: ${(e as Error).message}`); mark(id, { state: 'failed', reason: (e as Error).message }); });
   };
 
-  // A session that ends before writing its brief: Ledge writes it (its tasks were dropped by its end, their givers told).
+  // A session that ends before writing its brief: Ledge writes it.
   const unsubscribe = d.store.onChange(c => {
     if (c.type === 'removed') { const w = waiting.get(c.id); if (w) { clearTimeout(w.timer); waiting.delete(c.id); } return; }
     if (c.type === 'updated' && c.session.state === 'exited' && waiting.has(c.session.id)) finish(c.session.id, undefined);

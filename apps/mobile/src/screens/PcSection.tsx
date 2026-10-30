@@ -1,13 +1,26 @@
 import { useId, useState } from 'react';
 import type { PcAction } from '@ledge/protocol';
 import { copy } from '../copy';
-import { outcomeNote, type OutcomeNote } from '../model/teamsOutcome';
+import type { ChatAction } from '../state/chat';
 import { olderThan, pcRunning, type PcRun } from '../state/pc';
 import { useMobile, type MobileStore } from '../state/store';
 import { Button } from '../ui/Button';
 import { Sheet } from '../ui/Dialog';
 
 const P = copy.connection.pcUpdate;
+/** What a passkey-confirmed operation came to: a cancelled or expired passkey is a quiet note, a refusal says why when it has words for it. */
+interface OutcomeNote { text: string; quiet: boolean }
+function outcomeNote(r: ChatAction, fallback: string): OutcomeNote {
+  switch (r.status) {
+    case 'cancelled': return { text: copy.confirm.cancelled, quiet: true };
+    case 'expired': return { text: copy.confirm.expired, quiet: true };
+    case 'rejected':
+      if (r.reason === 'assertion_expired') return { text: copy.confirm.expired, quiet: true };
+      return { text: P.refusals[r.reason] ?? fallback, quiet: false };
+    default: return { text: fallback, quiet: false };
+  }
+}
+
 const CARD = 'flex flex-col gap-3 rounded-card border bg-surface p-3.5';
 
 /** « Mettre à jour le PC ? » or « Redémarrer le daemon ? »: the versions, the passkey, then the confirmed operation. */

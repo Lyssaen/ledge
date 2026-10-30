@@ -1,6 +1,5 @@
 import { isBusy } from '@ledge/fleet';
-import type { Helper, Projects, Session, Team } from '@ledge/protocol';
-import { teamProject } from '../../atelier/layout';
+import type { Helper, Projects, Session } from '@ledge/protocol';
 import { fold, taskOf } from '../../nav/agents';
 
 const UNASSIGNED = 'Sans projet';
@@ -22,12 +21,9 @@ export interface ProjectGroup {
   name: string;
   repo?: string;
   flatten: boolean;
-  /** The common table's sessions, by branch (all of them when the project has no team). */
+  /** The project's sessions, by branch. */
   branches: BranchGroup[];
-  /** The project's live teams (atelier rooms spec §3.4), each with its seats' sessions, after the common table. */
-  teams: TeamGroup[];
 }
-export interface TeamGroup { team: Team; sessions: Session[] }
 
 function branchGroups(sessions: readonly Session[]): BranchGroup[] {
   const byBranch = new Map<string, Session[]>();
@@ -46,31 +42,26 @@ function branchGroups(sessions: readonly Session[]): BranchGroup[] {
   });
 }
 
-function projectGroup(id: string | null, name: string, sessions: readonly Session[], teams: readonly Team[] = []): ProjectGroup {
-  const seated = (s: Session) => teams.some(t => t.id === s.team);
-  const common = sessions.filter(s => !seated(s));
-  const branches = branchGroups(common);
+function projectGroup(id: string | null, name: string, sessions: readonly Session[]): ProjectGroup {
+  const branches = branchGroups(sessions);
   const repo = sessions.find(s => s.repo)?.repo;
   return {
     id,
     name,
     ...(repo !== undefined ? { repo } : {}),
     flatten: id === null || branches.length <= 1,
-    branches,
-    teams: teams.map(team => ({ team, sessions: sessions.filter(s => s.team === team.id) }))
+    branches
   };
 }
 
 export function treeModel(
   sessions: readonly Session[],
   projects: Projects | null,
-  projectIdOf: (s: Session) => string | null,
-  teams: readonly Team[] = []
+  projectIdOf: (s: Session) => string | null
 ): ProjectGroup[] {
   if (!projects) return [projectGroup(null, UNASSIGNED, sessions)];
-  const live = teams.filter(t => t.state !== 'dissolved');
   const groups = projects.projects.map(p =>
-    projectGroup(p.id, p.name, sessions.filter(s => projectIdOf(s) === p.id), live.filter(t => teamProject(t, projects) === p.id))
+    projectGroup(p.id, p.name, sessions.filter(s => projectIdOf(s) === p.id))
   );
   const loose = sessions.filter(s => projectIdOf(s) === null);
   if (loose.length) groups.push(projectGroup(null, UNASSIGNED, loose));

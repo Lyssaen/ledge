@@ -11,8 +11,9 @@ export const en: Messages = {
     label: 'Sidebar', newSession: 'New session', searchLabel: 'Search a session',
     views: 'Views', atelier: 'Atelier', chat: 'Chat Ledge', projects: 'Projects', newProject: 'New project', unassigned: 'No project',
     machines: 'Machines', manageMachines: 'Manage machines', agents: (n) => pluralEn(n, `${n} agent`, `${n} agents`), offline: 'offline', daemonUpdating: 'daemon updating', settings: 'Settings', shortcuts: 'Keyboard shortcuts',
-    ledgeHome: 'Home: Ledge, the operator', ledgeLine: (yours: number, teams: number) => `${yours} yours · ${teams} active ${teams === 1 ? 'team' : 'teams'}`,
-    ask: 'Ask Ledge', askPlaceholder: 'Ask Ledge…',
+    ledgeHome: 'Home: Ledge, the operator', ledgeLine: (yours: number) => `${yours} yours`,
+    askLedge: 'Ask Ledge', askPlaceholder: 'Ask Ledge…',
+    ask: { kicker: 'Decision', from: n => `from ${n}`, placeholder: 'Your answer…', send: 'Answer', sending: 'Sending…', sent: n => `Answer sent to ${n}`, refused: r => `Refused: ${r}` },
     openChat: 'Open the conversation with Ledge',
     active: (n) => `${n} active`,
     yours: 'Your turn', yoursMore: (n) => `See the other ${n}`, yoursLess: 'Show less',
@@ -375,11 +376,6 @@ export const en: Messages = {
     seat: (name, task, machine) => `${name}, ${task}, ${machine}`,
     helperSeat: (kind, parent, task) => `${kind}, subagent of ${parent}: ${task}`,
     offline: 'Offline',
-    taskTo: { give: n => `Task → ${n}`, pass: n => `Passed → ${n}`, done: n => `Done → ${n}`, refuse: n => `Refused → ${n}`, cancel: n => `Cancelled → ${n}` },
-    taskLabel: (op, from, to, title) => `${{
-      give: `${from} gives “${title}” to ${to}`, pass: `${from} passes “${title}” to ${to}`, done: `${from} hands “${title}” back to ${to}, done`,
-      refuse: `${from} refuses “${title}”, back to ${to}`, cancel: `${from} cancels “${title}” for ${to}`
-    }[op]}. See the task`,
     messageTo: (n) => `to ${n}`,
     messageLabel: (sender, n, summary) => `${sender} writes to ${n}: ${summary}. Open the conversation`,
     desk: 'Talk to Ledge',
@@ -406,101 +402,34 @@ export const en: Messages = {
     unconfirmed: (name) => `${name} was not moved: Ledge did not confirm. Try again.`
   },
   home: {
-    operator: (sessions: number, teams: number, machines: number) => `Operator · sees ${sessions} ${sessions === 1 ? 'session' : 'sessions'}, ${teams} ${teams === 1 ? 'team' : 'teams'}, ${machines} ${machines === 1 ? 'machine' : 'machines'} · read only`,
+    operator: (sessions: number, machines: number) => `Operator · sees ${sessions} ${sessions === 1 ? 'session' : 'sessions'}, ${machines} ${machines === 1 ? 'machine' : 'machines'} · read only`,
     tabsLabel: 'Ledge views',
-    tabs: { conversation: 'Conversation', teams: (n: number) => `Teams · ${n}`, tasks: (n: number) => `Tasks · ${n}`, history: 'History' },
+    tabs: { conversation: 'Conversation', history: 'History' },
     toAtelier: 'Back to the atelier',
     point: {
-      title: 'The point', yours: 'Yours', teams: 'Teams', given: 'Given by Ledge',
+      title: 'The point', yours: 'Yours',
       summarize: 'Summarise the day', summarizeQuestion: 'Summarise the day: what moved, what waits for my decision, what is stuck.',
-      nothingYours: 'Nothing waits for you.', noTeam: 'No team at work.', noTask: 'Ledge gave no task today.',
-      seats: (n: number) => `${n} ${n === 1 ? 'seat' : 'seats'}`, progress: (done: number, given: number) => `${done}/${given} Ledge ${given === 1 ? 'task' : 'tasks'}`,
-      table: 'Table', resume: 'Resume', resting: 'resting', allow: 'Yes', deny: 'No', see: 'See', dismiss: 'Dismiss',
-      closed: (owner: string, title: string, state: 'done' | 'refused' | 'dropped') => state === 'done' ? `${owner} finished “${title}”` : state === 'refused' ? `${owner} refused “${title}”` : `${owner} dropped “${title}”`,
-      ofLedge: 'Ledge’s task', owner: (owner: string, state: string) => `${owner} · ${state}`
+      nothingYours: 'Nothing waits for you.', allow: 'Yes', deny: 'No', see: 'See'
     },
-    suggestions: (team?: string) => ['Set up a team…', 'Give a task to…', team ? `Where is ${team} at?` : 'Where are the teams at?', 'Who needs me?'],
+    suggestions: ['Who needs me?', 'Where are my sessions at?'] as readonly string[],
     readOnly: 'read only · nothing without your click',
-    mentions: 'Mention', mentionSession: (name: string) => `session ${name}`, mentionTeam: (name: string) => `team ${name}`,
-    tasks: {
-      filters: 'Filters', all: 'All', open: 'Open', closed: 'Closed', giver: 'Giver', anyGiver: 'Anyone', ledge: 'Ledge', seats: 'The seats', team: 'Team', anyTeam: 'All',
-      none: 'No task.', result: 'Result', reason: 'Reason', log: 'History', from: (giver: string, owner: string) => `from ${giver} to ${owner}`, close: 'Close'
-    },
-    teams: { none: 'No team at work. Ask Ledge to set one up.', dissolved: 'dissolved' },
-    catalog: {
-      views: 'Team views', live: (n?: number) => `Live · ${n ?? 0}`, templates: (n?: number) => (n === undefined ? 'Templates' : `Templates · ${n}`), roles: (n?: number) => (n === undefined ? 'Roles' : `Roles · ${n}`),
-      folder: 'Folder', folderTitle: 'The folder whose catalog is read', personal: 'Personal only',
-      scopeProject: (name: string) => `project ${name} · repository + ~/.ledge`, scopeFolder: 'folder · repository + ~/.ledge', scopePersonal: 'no folder: ~/.ledge only',
-      repoWins: 'The repository wins over ~/.ledge for the same id.',
-      filter: 'Filter the roles…', filterLabel: 'Filter the roles', rolesList: 'Roles', templatesList: 'Templates',
-      repoRoles: 'Repository · .ledge/roles', homeRoles: 'Personal · ~/.ledge/roles', repoTeams: 'Repository · .ledge/teams', homeTeams: 'Personal · ~/.ledge/teams',
-      ignored: 'Skipped', ignoredRow: (n: number) => `${n} ${n === 1 ? 'file' : 'files'} not read`, ignoredHint: 'Ledge skips them without blocking the rest',
-      ignoredTitle: 'Skipped files', ignoredBody: 'Read by the daemon but not understood: neither a role nor a template.',
-      loading: 'Reading the roles and templates…', noRole: 'No role in this folder.', noRoleHint: 'A role is written in .ledge/roles/<id>.md (the repository) or ~/.ledge/roles/<id>.md (personal).',
-      noTemplate: 'No template in this folder.', noTemplateHint: 'A template is written in .ledge/teams/<id>.yaml; « Save » on a chat team card writes one.', noMatch: 'No role matches.',
-      inTemplates: (n: number) => `in ${n} ${n === 1 ? 'template' : 'templates'}`, heldBy: (names: string) => `held by ${names}`, seats: (n: number) => `${n} ${n === 1 ? 'seat' : 'seats'}`,
-      toolDefaults: 'the tool’s defaults', source: { repo: 'repository', home: 'personal' } as Record<'repo' | 'home', string>,
-      role: 'Role', template: 'Team template', fromTemplate: 'template', seeRole: (id: string) => `See role @${id}`,
-      launchSession: 'Start a session', mountTeam: 'Set up a team…', launchTeam: 'Launch this team…',
-      needProject: 'This folder belongs to no project: a team sits in a project’s room.',
-      tool: 'Tool', model: 'Model', effort: 'Effort', autonomy: 'Autonomy', file: 'File', anyTool: 'any', toolDefault: 'the tool’s default',
-      autonomyShort: { ask: 'asks', edits: 'edits', auto: 'auto' } as Record<'ask' | 'edits' | 'auto', string>,
-      autonomyAsk: 'nothing added: the agent asks before acting', autonomyAuto: 'works without asking', autonomyNone: 'nothing added', toolFlag: (tool: string, flag: string) => `${tool}: ${flag}`, ompApproval: (mode: string) => `approval mode ${mode}`,
-      copy: 'Copy', open: 'Open', reader: (name: string) => `File ${name}`, yamlOutdated: 'This daemon does not read templates yet: update Ledge on this machine, or copy the path.', copied: (path: string) => `Path copied: ${path}`,
-      shadows: 'Replaces', shadowsWhy: '(same id, the repository wins)',
-      prompt: 'Instructions given to the seat at every start', promptEmpty: 'No instructions.',
-      usedIn: 'Used in', noUse: 'No template.', seeTemplate: 'See the template',
-      heldNow: 'Held right now', noHolder: 'No seat holds this role.', openSession: 'Open the session',
-      roleReadOnly: 'Read only: a role is changed in its file.',
-      posts: 'Seats', colRole: 'Role', colLabel: 'Label', colRun: 'Tool · model · effort', colAutonomy: 'Autonomy',
-      unknownRoleIn: (id: string) => `@${id}: role unknown in this folder.`, unknownTemplateIn: (id: string) => `${id}: template unknown in this folder.`,
-      silent: 'The daemon did not answer: this folder’s catalog could not be read.', retry: 'Retry',
-      machineOffline: (machine: string) => `${machine} is offline: this folder’s catalog could not be read.`,
-      machineOutdated: (machine: string) => `${machine}’s daemon is too old for the catalog: update Ledge there.`,
-      onMachine: (machine: string) => `on ${machine}`, remoteTeam: (machine: string) => `A team launches on Local only: this folder is on ${machine}.`,
-      overWord: 'blue', overNote: 'what the template changes of the role’s defaults.', unknownRole: 'Role unknown in this folder',
-      autoWarn: (roles: readonly string[]) => `${new Intl.ListFormat('en', { type: 'conjunction' }).format(roles)} ${roles.length === 1 ? 'works' : 'work'} without asking (autonomy auto, set by the role’s file).`,
-      born: 'Teams born of it', noneBorn: 'none', active: 'active', resting: 'resting',
-      templateReadOnly: 'Read only: a template is changed in its file; « Save » on a chat team card writes one.'
-    },
+    mentions: 'Mention', mentionSession: (name: string) => `session ${name}`,
     history: { none: 'No conversation today.', open: 'See in the conversation' }
   },
   handover: {
     nearShort: (name: string, pct: number) => `${name} · context ${pct} %`, nearHint: 'near its limit', failedShort: (name: string) => `Relief of ${name} failed`, retry: 'Retry',
-    pass: 'Hand over', passTitle: 'A fresh session takes its place: it writes its brief, its tasks are passed on', later: 'Later',
+    pass: 'Hand over', passTitle: 'A fresh session takes its place: it writes its brief', later: 'Later',
     gauge: (pct: number) => `context ${pct} %`,
     state: { briefing: 'relief: brief asked', launching: 'relief: launching…', done: 'relieved', failed: 'relief failed' } as Record<'briefing' | 'launching' | 'done' | 'failed', string>,
     relievedBy: (name: string) => `relieved by ${name}`, relieves: (name: string) => `relieves ${name}`,
     refused: (why: string) => `Relief refused: ${why}`, auto: 'by Ledge'
   },
-  teamLaunch: {
-    title: (project: string) => `New team · ${project}`, folder: 'Folder', noFolder: 'No folder of this project on this machine', loading: 'Reading the roles and templates…',
-    template: 'Template', custom: 'Seats chosen one by one', seats: 'Seats', noRole: 'No role: write ~/.ledge/roles/<id>.md', agentOf: (role: string) => `Agent of @${role}`,
-    name: 'Team name', preview: (team: string, project: string) => `Team ${team} will sit at a new table in the ${project} room.`,
-    unknown: (roles: string) => `Unknown roles in this folder: ${roles}`, launch: 'Launch the team', launching: 'Launching…',
-    failed: (why: string) => `The team was not launched: ${why}`, noAnswer: 'Ledge did not answer.', launched: (team: string, project: string) => `Team ${team} settles in the ${project} room.`
-  },
-  teams: {
-    tables: (n: number) => `${n} ${n === 1 ? 'table' : 'tables'}`,
-    tree: 'team', treeResting: 'resting',
-    common: 'common table',
+  rooms: {
     room: (name: string) => `${name} room`,
-    plaqueCounts: (tables: number, sessions: number) => `${tables} ${tables === 1 ? 'table' : 'tables'} · ${sessions} ${sessions === 1 ? 'session' : 'sessions'}`,
+    plaqueCounts: (sessions: number) => `${sessions} ${sessions === 1 ? 'session' : 'sessions'}`,
     waiting: (n: number) => `${n} waiting`, working: (n: number) => `${n} working`,
     roomMenu: (name: string) => `Actions of the ${name} room`, roomMenuTitle: 'Room actions',
-    newSessionHere: 'New session here', newTeamHere: 'New team here…', entrance: 'ENTRANCE',
-    teamTable: (name: string) => `Team ${name}`,
-    teamLine: (done: number, given: number) => `team · operator Ledge · ${done}/${given} ${given === 1 ? 'task' : 'tasks'}`,
-    restingLine: 'team resting', resume: 'Resume',
-    teamMenu: (name: string) => `Actions of team ${name}`, teamMenuTitle: 'Team actions',
-    openTasks: 'See the tasks', dissolve: 'Dissolve the team',
-    dissolveTitle: (name: string) => `Dissolve team ${name}?`,
-    dissolveBody: 'Its table leaves the room; its sessions stay, at the common table or in the archives, and its tasks stay with their sessions.',
-    dropJoin: 'Drop to join', dropLeave: 'Drop to go back to the common table',
-    sheet: (id: string, title: string, giver: string) => `${id} · ${title} · ${giver}`,
-    chooseRole: (name: string, team: string) => `${name}'s role in ${team}`, otherRole: 'another role…', loadingRoles: 'Reading the roles…', noRole: 'No other role',
-    joined: (name: string, team: string, role: string) => `${name} joins ${team} as @${role}.`,
-    left: (name: string) => `${name} goes back to the common table.`
+    newSessionHere: 'New session here', entrance: 'ENTRANCE'
   },
   zoom: {
     bar: 'Atelier zoom', out: 'Zoom out', outTitle: 'Zoom out (−)', in: 'Zoom in', inTitle: 'Zoom in (+)',
@@ -778,17 +707,7 @@ export const en: Messages = {
       loadingPeer: (b) => `Reading ${b}'s thread…`
     },
     /** Claude Code's automated cross-session notices (NoticeLine): system events, never the user's words. */
-    seat: {
-      task: (id: string, title: string, giver: string, state: string) => `${id} · ${title} · given by ${giver} · ${state}`,
-      seeTasks: 'See the tasks', pinned: 'Current task', autonomy: { ask: 'asks', edits: 'edits without asking', auto: 'autonomous' }
-    },
     notice: {
-      task: 'TASK', taskFrom: (name: string) => `Task from ${name}`, seeTask: 'See the task',
-      taskOut: {
-        give: n => `Task given to ${n}`, pass: n => `Task passed to ${n}`, done: n => `Task handed back to ${n} (done)`,
-        refuse: n => `Task refused, handed back to ${n}`, cancel: n => `Task cancelled for ${n}`
-      },
-      team: 'TEAM', teamJoined: 'Team joined',
       kicker: 'Automated notice', other: 'Automated notice between sessions', anotherSession: 'another session',
       idle: (n, time) => `${n} finished${time ? ` · ${time}` : ''}`,
       exited: (n, time) => `Session ${n} closed${time ? ` · ${time}` : ''}`,
@@ -824,9 +743,6 @@ export const en: Messages = {
     }
   },
   launch: {
-    role: 'Role', roleHint: 'its instructions and defaults apply to the session', roleRemove: 'Remove',
-    roleReading: 'read again in this folder…', roleGone: (id: string, cwd: string) => `@${id} does not exist in ${cwd}: the role was removed.`,
-    roleUnread: (id: string, cwd: string) => `Ledge could not read @${id} again in ${cwd}: the role was removed.`,
     prompt: 'Instruction', placeholder: 'What should the agent do? Describe the expected result.',
     suggestions: 'Suggestions', ideas: ['Review the latest pull request', 'Fix the failing tests', 'Update the documentation'],
     agent: 'Agent', agentHint: 'The engine of this session', change: 'Change', chooseFor: 'Choose for this session', byDefaultTag: 'Default', thisSession: 'This session', defaultMark: 'Default',
@@ -977,19 +893,6 @@ export const en: Messages = {
       send: 'Send', sending: 'Sending…', cancel: 'Cancel', retry: 'Retry', orRephrase: 'or rephrase your request',
       queued: "is working; I'll send it as soon as it's done", sentTo: 'Sent to', failed: (why: string) => `Could not send: ${why}`,
       pill: { yours: 'your turn', working: 'working', waiting: 'waiting for you', stopped: 'stopped' }
-    },
-    team: {
-      label: 'Proposed team', folder: 'Folder', table: (project: string) => `Table`, newTable: (project: string) => `new table in the ${project} room`, seats: 'Seats',
-      autonomy: { ask: 'asks before acting', edits: 'edits without asking', auto: 'autonomous' },
-      autoWarning: (roles: string) => `${roles} will work without asking: edits and commands without your approval.`,
-      launch: 'Launch the team', launching: 'Launching…', retry: 'Retry', save: 'Save', saved: (path: string) => `Saved: ${path}`,
-      launched: (at: string) => `Team launched at ${at}`, openTable: 'Open the table', failed: (why: string) => `Failed: ${why}`, template: (id: string) => `template ${id}`
-    },
-    task: {
-      label: (n: number) => n === 1 ? 'Task to give' : `${n} tasks to give`, to: 'to', give: 'Give', giving: 'Sending…', retry: 'Retry',
-      waitTeam: 'active once the team is launched',
-      given: (owner: string, id: string, state: string) => `Given to ${owner} · ${id} · ${state}`,
-      state: { open: 'to take', taken: 'taken', done: 'done', refused: 'refused', dropped: 'dropped' }, failed: (why: string) => `Refused: ${why}`
     },
     // #94: the generic card, a row per action, a plan past one (docs/mockups/ledge-action-card.html).
     action: actionCopy.en,

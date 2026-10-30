@@ -1,9 +1,7 @@
 import { z } from 'zod';
-import { CloseBlockSchema, ProjectBlockSchema, ProposalBlockSchema, RelayBlockSchema, TaskBlockSchema, TeamBlockSchema, type BlockKind } from './proposal.js';
+import { CloseBlockSchema, ProjectBlockSchema, ProposalBlockSchema, RelayBlockSchema, type BlockKind } from './proposal.js';
 import { EffortSchema, ModelIdSchema } from './models.js';
-import { RoleIdSchema, TeamNameSchema } from './teams.js';
 import { NOTE_MAX } from './decisions.js';
-import { TASK_TEXT_MAX } from './tasks.js';
 
 /**
  * What the user loses if the click was a mistake (action registry spec §2): `read` nothing (applied on click),
@@ -12,16 +10,15 @@ import { TASK_TEXT_MAX } from './tasks.js';
 export const ActionRiskSchema = z.enum(['read', 'reversible', 'destructive']);
 export type ActionRisk = z.infer<typeof ActionRiskSchema>;
 
-/** The card a registry action is drawn on: the generic one (spec §5), or one of the six cards that came before it. */
-export type ActionCard = 'generic' | 'launch' | 'relay' | 'close' | 'project' | 'team' | 'task';
-/** The device check a phone needs before applying it (`ConfirmPurpose` of phone.ts): the six earlier cards keep theirs;
+/** The card a registry action is drawn on: the generic one (spec §5), or one of the cards that came before it. */
+export type ActionCard = 'generic' | 'launch' | 'relay' | 'close' | 'project';
+/** The device check a phone needs before applying it (`ConfirmPurpose` of phone.ts): the earlier cards keep theirs;
  *  a generic row asks `act`, one check over the turn for every row applied (spec §5.1). */
 export type ActionPhoneCheck = 'launch' | 'close' | 'decide' | 'act';
 
 export const ACTION_IDS = [
-  'session.launch', 'session.relay', 'session.close', 'project.propose', 'team.launch', 'task.give',
-  'session.model', 'session.interrupt', 'session.archive', 'session.restore', 'session.resume', 'session.decide',
-  'team.join', 'team.leave', 'team.resume', 'team.dissolve', 'team.save', 'task.cancel', 'task.pass'
+  'session.launch', 'session.relay', 'session.close', 'project.propose',
+  'session.model', 'session.interrupt', 'session.archive', 'session.restore', 'session.resume', 'session.decide'
 ] as const;
 export const ActionIdSchema = z.enum(ACTION_IDS);
 export type ActionId = z.infer<typeof ActionIdSchema>;
@@ -41,9 +38,6 @@ const def = <A extends z.ZodTypeAny>(d: ActionDef<A>): ActionDef => d as unknown
 
 /** A session as Ledge names it: its id or its bot name, as sessions.md gives them. */
 const SessionRef = z.string().trim().min(1).max(80);
-/** A team as Ledge names it: its id (`team-…`) or its name, as teams.md gives them. */
-const TeamRef = z.string().trim().min(1).max(60);
-const TaskRef = z.string().trim().min(1).max(40);
 
 const LaunchArgs = ProposalBlockSchema.extend({ model: ModelIdSchema.optional(), effort: EffortSchema.optional() });
 
@@ -71,18 +65,6 @@ export const ACTIONS: readonly ActionDef[] = [
     summary: 'créer un projet, ou compléter un projet existant (addTo), avec ses dépôts',
     when: 'seulement si l\'utilisateur demande explicitement de créer ou de compléter un projet : lis projects.md, ne cite que des chemins absolus lus dans sessions.md, folders.md ou projects.md, jamais un dépôt qui appartient déjà à un projet ; ta réponse dit le nom, chaque dépôt et pourquoi',
     example: { name: 'Facturation', description: 'Le service et son front', repos: [{ path: '/home/alice/projets/billing-api', why: 'le service' }] }
-  }),
-  def({
-    id: 'team.launch', args: TeamBlockSchema, card: 'team', phone: 'launch', risk: 'reversible', max: 1, cli: 'ledge team up <modèle> --cwd <dossier>',
-    summary: 'monter une équipe dans un dossier : un modèle de teams.md (template), ou des sièges (rôle de roles.md, agent, et si demandé model, effort)',
-    when: 'quand l\'utilisateur demande explicitement de monter, lancer ou composer une équipe, avec la même règle de dossier sûr qu\'une session ; 8 sièges au plus, un rôle une seule fois, seulement des rôles de roles.md disponibles dans ce dossier (s\'il en manque un, dis lequel et le fichier à écrire, ~/.ledge/roles/<id>.md). Ne choisis jamais l\'autonomie : c\'est celle du rôle',
-    example: { cwd: '/home/alice/projets/api', name: 'api', seats: [{ role: 'dev-back', tool: 'claude' }, { role: 'rev-back', tool: 'codex' }] }
-  }),
-  def({
-    id: 'task.give', args: TaskBlockSchema, card: 'task', phone: null, risk: 'reversible', max: 8, cli: 'ledge task give <session|@rôle> "<titre>" "<détail>"',
-    summary: 'confier une tâche à une session, ou à un @rôle d\'une équipe (team : son id dans teams.md ; sans team, un siège de l\'équipe proposée dans la même réponse)',
-    when: 'quand l\'utilisateur demande explicitement de confier une tâche, ou juste après team.launch quand il a dit ce que l\'équipe doit faire. Une fois l\'équipe lancée, ne propose rien pour ce que les sièges se confient entre eux',
-    example: { to: '@dev-back', title: 'Pagination de /invoices', text: 'Ajoute la pagination par curseur et ses tests' }
   }),
   def({
     id: 'session.model', card: 'generic', phone: null, risk: 'reversible', max: 8,
@@ -122,48 +104,6 @@ export const ACTIONS: readonly ActionDef[] = [
     summary: 'accepter ou refuser la demande en attente d\'une session (permission, diff ou plan), note possible avec un refus ; jamais « toujours »',
     when: 'seulement quand l\'utilisateur demande explicitement d\'accepter ou de refuser la demande d\'une session précise, et que sessions.md montre une demande en attente pour elle ; cite la demande telle quelle dans ta réponse',
     example: { session: 'Nova', decision: 'deny', note: 'Pas sur main : crée une branche' }
-  }),
-  def({
-    id: 'team.join', args: z.object({ team: TeamRef, session: SessionRef, role: RoleIdSchema }), card: 'generic', phone: null, risk: 'reversible', max: 8,
-    summary: 'faire entrer une session dans une équipe en cours, à un rôle de roles.md',
-    when: 'quand l\'utilisateur demande d\'ajouter une session existante à une équipe',
-    example: { team: 'team-3fa2', session: 'Nova', role: 'dev-back' }
-  }),
-  def({
-    id: 'team.leave', args: z.object({ team: TeamRef, session: SessionRef }), card: 'generic', phone: null, risk: 'reversible', max: 8,
-    summary: 'faire sortir une session d\'une équipe (la session continue)',
-    when: 'quand l\'utilisateur demande de retirer une session d\'une équipe',
-    example: { team: 'team-3fa2', session: 'Nova' }
-  }),
-  def({
-    id: 'team.resume', args: z.object({ team: TeamRef }), card: 'generic', phone: 'act', risk: 'reversible', max: 1,
-    summary: 'reprendre une équipe au repos : chaque siège reprend sa conversation',
-    when: 'quand l\'utilisateur demande de reprendre ou relancer une équipe au repos',
-    example: { team: 'team-3fa2' }
-  }),
-  def({
-    id: 'team.dissolve', args: z.object({ team: TeamRef }), card: 'generic', phone: 'act', risk: 'destructive', max: 1, cli: 'ledge team dissolve <équipe>',
-    summary: 'dissoudre une équipe : elle disparaît, ses sessions restent ; irréversible',
-    when: 'seulement quand l\'utilisateur demande explicitement de dissoudre une équipe précise',
-    example: { team: 'team-3fa2' }
-  }),
-  def({
-    id: 'team.save', args: z.object({ team: TeamRef, name: TeamNameSchema }), card: 'generic', phone: null, risk: 'reversible', max: 1,
-    summary: 'enregistrer une équipe en cours comme modèle (~/.ledge/teams/<nom>.yaml)',
-    when: 'quand l\'utilisateur demande d\'enregistrer ou de garder la composition d\'une équipe',
-    example: { team: 'team-3fa2', name: 'api' }
-  }),
-  def({
-    id: 'task.cancel', args: z.object({ task: TaskRef, reason: z.string().trim().min(1).max(500).optional() }), card: 'generic', phone: 'act', risk: 'destructive', max: 8,
-    summary: 'annuler une tâche ouverte ou prise ; la session qui la tient est prévenue ; irréversible',
-    when: 'seulement quand l\'utilisateur demande explicitement d\'annuler une tâche de tasks.md',
-    example: { task: 't91b0d4', reason: 'Plus nécessaire' }
-  }),
-  def({
-    id: 'task.pass', args: z.object({ task: TaskRef, to: SessionRef, note: z.string().trim().min(1).max(TASK_TEXT_MAX).optional() }), card: 'generic', phone: null, risk: 'reversible', max: 8,
-    summary: 'passer une tâche de tasks.md à une autre session (elle redevient ouverte)',
-    when: 'quand l\'utilisateur demande de réassigner ou de passer une tâche à une autre session',
-    example: { task: 't91b0d4', to: 'Bix' }
   })
 ];
 
@@ -176,7 +116,7 @@ export const riskOf = (a: ActionDef, args: unknown): ActionRisk => (typeof a.ris
 export const ActionBlockSchema = z.object({ action: z.string().trim().min(1).max(40), args: z.record(z.unknown()).default({}) });
 /** The action each fence written before the registry stands for (spec §3.1): its JSON is that action's args. */
 export const LEGACY_FENCE_ACTION: Record<Exclude<BlockKind, 'action'>, ActionId> = {
-  session: 'session.launch', relay: 'session.relay', close: 'session.close', project: 'project.propose', team: 'team.launch', task: 'task.give'
+  session: 'session.launch', relay: 'session.relay', close: 'session.close', project: 'project.propose'
 };
 
 /** A block as a registry action with its args parsed, whatever fence it came in; or why not (for the log line). */

@@ -3,9 +3,8 @@ import type { Socket } from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
-import { existsSync } from 'node:fs';
 import { WebSocketServer, WebSocket } from 'ws';
-import { actionById, contextNear, isArchived, RoleIdSchema, TemplateIdSchema, type DefinitionCode, givenByLedge, LEDGE_GIVER, transmissions, projectOf, type ChatAction, type Autonomy, type Role, type Seat, type Team } from '@ledge/protocol';
+import { actionById, autonomyArgs, contextNear, ompApprovalFor, askShown, type ChatAction, type Autonomy } from '@ledge/protocol';
 import { ATTACHMENT_LOCAL_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, type ModelRefusal, type RefusalCode, backendOf } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
@@ -45,15 +44,9 @@ import { actFromChat, ActRefused } from '../chat/act.js';
 import type { ChatMessage } from '../chat/service.js';
 import { actionMessage, resolveAction, resolveRun, runGuard, type Resolved } from './actions.js';
 import { createMailbox, type MailJournal } from './mailbox.js';
-import { createTasks, type TasksJournal } from './tasks.js';
-import { createTeamsLive, type TeamsJournal } from './teamsLive.js';
+import { createAsks, type AsksJournal } from './asks.js';
 import { createHandovers, heldNames } from './handover.js';
 import { readContext } from './context.js';
-import { autonomyArgs, findRole, loadRole, ompApprovalFor } from './roles.js';
-import { listDefinitions, resolveSeats, saveTemplate, templateExists, templateId, type ResolvedSeat } from './teams.js';
-import { deleteDefinition, promptRecipients, roleText, scopeDefinitions, scopeDir, templateText, writeDefinition } from './definitions.js';
-import { resolveRoleAddress, seatContext, teammates } from './seat.js';
-import { formatRoleNotice, formatTeamNotice } from './crossSession.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
 import { createRouter } from '../chat/routing.js';
 import { serveSsh } from '../transport/ssh.js';
@@ -102,9 +95,6 @@ export { resolveFolder };
 
 /** A deny with a note whose deny keys went but whose input box never came back: refused, the note not typed (NOTE_NOT_TYPED). */
 class NoteNotTyped extends Refusal { constructor() { super('denied, but the note could not be typed', NOTE_NOT_TYPED); } }
-
-/** What `team.compose` tells of a kept seat's new model: applied `now` or at the turn's end, or refused with a code. */
-type SeatModelOutcome = NonNullable<Extract<ServerMessage, { type: 'team.changed' }>['models']>[number];
 
 /** Where `handle` sends its answers: the one socket that asked, or the phone gateway's device. */
 type Reply = (m: ServerMessage) => void;
@@ -185,7 +175,7 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; tasks?: TasksJournal; teams?: TeamsJournal; handoverBriefMs?: number; attachments?: AttachmentStore }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; asks?: AsksJournal; handoverBriefMs?: number; attachments?: AttachmentStore }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -193,7 +183,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   // the login shell's on top of it, as a terminal would.
   const agentEnv = opts.agentEnv ?? (async () => ({ ...process.env, ...(await loginShellEnv()) }));
   const attachments = opts.attachments ?? new AttachmentStore(paths().attachments);
-  const threads = createChatThreads({ attachments, store, tmux, home: paths().dir, userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now, projects: () => projects, forge: createForge({ env: agentEnv }), teams: () => teams.all(), tasks: () => tasks.all() });
+  const threads = createChatThreads({ attachments, store, tmux, home: paths().dir, userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now, projects: () => projects, forge: createForge({ env: agentEnv }) });
   const chat: Chat = opts.chat ?? threads.desktop;
   const router = createRouter({ env: agentEnv });
   const omp = opts.omp ?? createOmpHost({ store, env: agentEnv, dir: join(paths().dir, 'omp'), now, attachments });
@@ -235,7 +225,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** The island's settings, set from Desktop (atelier spec §7); never sent to a remote peer. */
   let island = readIsland(islandFile);
   const islandMsg = (): ServerMessage => ({ type: 'island', prefs: island });
-  // The context threshold (context handover spec §3.2): past it a session is near its limit, and an `auto` seat is relieved.
+  // The context threshold (context handover spec §3.2): past it a session is near its limit, and an `auto` session is relieved.
   const contextFile = opts.contextFile ?? join(paths().dir, 'context.json');
   let contextPrefs = readContextPrefs(contextFile);
   const contextMsg = (): ServerMessage => ({ type: 'context.prefs', prefs: contextPrefs });
@@ -285,10 +275,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const typing = new Set<string>();
   /** Sessions being closed: neither the relay nor the mailbox delivers to them, even free; their queues fail once they exit. */
   const closing = new Set<string>();
-  /** Sessions of removed team seats whose close was refused (logged once each, retried on later changes). */
-  const leaverRefused = new Set<string>();
-  /** Sessions of removed team seats being closed: a burst of store changes closes each once. */
-  const leaverCloses = new Set<string>();
   // An injected chat (tests) is the only thread there is; otherwise the relay and the close cards work across the PC's and every device's.
   const cardThreads: Pick<typeof threads, 'all' | 'owner' | 'emitterOf' | 'queuedRelays'> = opts.chat ? {
     all: () => [['desktop', chat]], owner: qid => (chat.relay(qid) || chat.close(qid, 0) || chat.action(qid, 0) ? 'desktop' : undefined), emitterOf: () => broadcast,
@@ -302,24 +288,14 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     sent: { record: (id, m) => { history?.recordSent(id, m); }, mark: (id, rid, status) => history?.markSent(id, rid, status) }
   });
   const relay = createRelay({ threads: cardThreads, store, replyTo: replyText, now, typing, closing, next: id => mailbox.kick(id) });
-  /** The live teams (spec 2026-10-25 roles §3.3): every change reaches the local fronts. */
-  const teams = createTeamsLive({ store, now, ...(opts.teams ? { journal: opts.teams } : {}) });
-  const unsubscribeTeams = teams.onChange(team => broadcast({ type: 'team.updated', team }));
-  const tasks = createTasks({ store, mailbox, now, teams, ...(opts.tasks ? { journal: opts.tasks } : {}), onTask: (task, entry) => {
-    broadcast({ type: 'task.updated', task });
-    // The card that gave it follows it, on whichever thread holds it: only Ledge gives from a card.
-    if (givenByLedge(task)) for (const [thread, c] of cardThreads.all()) c.followTask?.(task, cardThreads.emitterOf(thread) ?? broadcast);
-    // A session that handed it over sees it in its thread, as a message it sent (issue #92); Ledge has no thread.
-    const index = entry ? task.log.lastIndexOf(entry) : -1;
-    const tr = transmissions(task).find(x => x.index === index);
-    if (tr && tr.from !== LEDGE_GIVER) history?.recordTask(tr.from, { task, tr, ...(tr.to !== LEDGE_GIVER ? { peer: tr.to } : {}) });
-  } });
+  /** The decisions lone sessions ask the user (`ledge ask`): every change reaches the local fronts. */
+  const asks = createAsks({ store, mailbox, now, ...(opts.asks ? { journal: opts.asks } : {}), onAsk: ask => broadcast({ type: 'ask.updated', ask }) });
   // The relief of a session whose context is nearly full (context handover spec §3.3). `launch` and `closeSession` are hoisted.
-  const handovers = createHandovers({ store, mailbox, tasks, teams, launch: req => launch(req), close: s => closeSession(s),
+  const handovers = createHandovers({ store, mailbox, launch: req => launch(req), close: s => closeSession(s),
     dir: join(paths().dir, 'handovers'), now, ...(opts.handoverBriefMs !== undefined ? { briefMs: opts.handoverBriefMs } : {}) });
   /** Each session's state last seen: a turn's end (→ idle) is when its context is read again. */
   const lastState = new Map<string, Session['state']>();
-  /** Reads a session's context after a turn (§3.1); a seat working without asking is relieved by Ledge past the threshold (§3.2). */
+  /** Reads a session's context after a turn (§3.1); a session working without asking is relieved by Ledge past the threshold (§3.2). */
   const measure = async (id: string): Promise<void> => {
     const s = store.get(id); if (!s) return;
     const context = await readContext(s, now());
@@ -327,7 +303,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     if (!context || !cur) return;
     if (cur.context?.used !== context.used || cur.context.window !== context.window) store.upsert({ ...cur, context });
     const h = cur.handover?.state;
-    if (contextNear(context, contextPrefs.near) && cur.autonomy === 'auto' && cur.team && h !== 'briefing' && h !== 'launching' && h !== 'done' && h !== 'failed') {
+    if (contextNear(context, contextPrefs.near) && cur.autonomy === 'auto' && h !== 'briefing' && h !== 'launching' && h !== 'done' && h !== 'failed') {
       const refused = handovers.start(id, { auto: true });
       if (refused) log(`automatic relief of ${cur.name} not started: ${refused}`);
     }
@@ -364,15 +340,14 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       if (c.session.state === 'idle' && was !== undefined && was !== 'idle' && c.session.transcriptPath) void measure(c.session.id).catch(e => log(`context of ${c.session.id} not read: ${(e as Error).message}`));
     }
     if (c.type === 'updated') labelExit(c.session);
-    closeLeavers();
     if (c.type === 'updated' && c.session.modelNext) void applyModelNext(c.session.id).catch(e => log(`model change of ${c.session.id} failed: ${(e as Error).message}`));
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const sendSnapshot = (reply: Reply) => {
-    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true, teams: true, ...(mobile || unavailable ? { mobile: true } : {}) } } : {}) });
+    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true, asks: true, ...(mobile || unavailable ? { mobile: true } : {}) } } : {}) });
     reply(machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
     reply(projectsMsg()); // then the shared projects (build spec §5)
-    reply({ type: 'teams', teams: teams.all() }); // then the live teams (roles spec §3.3)
+    reply({ type: 'asks', asks: asks.all().filter(askShown) }); // then the decisions waiting for the user
     reply(islandMsg()); // then the island's settings
     if (mobile) reply({ type: 'mobile', state: mobile.state() }); // then mobile access
     else if (unavailable) reply({ type: 'mobile', state: unavailable });
@@ -678,7 +653,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       const cwd = await resolveFolder(s.cwd, opts.home);
       const env = await agentEnv();
       const spawned = await spawnSession({ tool: s.tool, id: s.id, name: s.name, args: [...RESUME_ARGS[s.tool](key), ...(model ? MODEL_ARGS[s.tool](model) : []), ...(effort ? EFFORT_ARGS[s.tool]?.(effort) ?? [] : []), ...autonomyArgs(s.tool, s.autonomy)], cwd, tmux, now, env,
-        ...(s.role ? { role: { id: s.role, label: s.roleLabel ?? s.role } } : {}), ...(s.team && teams.get(s.team)?.state !== 'dissolved' ? { team: s.team } : {}), ...(s.autonomy ? { autonomy: s.autonomy } : {}), taken: { names: store.all().filter(o => o.id !== s.id && o.state !== 'exited').map(o => o.name), ids: [] } });
+        ...(s.autonomy ? { autonomy: s.autonomy } : {}), taken: { names: store.all().filter(o => o.id !== s.id && o.state !== 'exited').map(o => o.name), ids: [] } });
       // Deleted or archived while it spawned: that request wins, the agent just started is stopped and not recorded.
       const cur = store.get(s.id);
       if (!cur || cur.archivedAt !== undefined) {
@@ -704,9 +679,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     store.upsert({ ...rest, state: 'starting', source: 'launcher' });
     try {
       const cwd = await resolveFolder(s.cwd, opts.home);
-      const spawned = await omp.launch({ id: s.id, name: s.name, cwd, resumeFile: file, ...(model ? { model } : {}), ...(effort ? { effort } : {}), ...(s.approval ? { approval: s.approval } : {}), ...ompSeat(s) });
-      const { topic, topicSource, repo, repoPath, branch, worktree, repoId, project, role, roleLabel, team, autonomy } = s;
-      store.upsert({ ...spawned, ...(role ? { role } : {}), ...(roleLabel ? { roleLabel } : {}), ...(team ? { team } : {}), ...(autonomy ? { autonomy } : {}), ...(topic ? { topic } : {}), ...(topicSource ? { topicSource } : {}), ...(repo ? { repo } : {}), ...(repoPath ? { repoPath } : {}), ...(branch ? { branch } : {}), ...(worktree !== undefined ? { worktree } : {}), ...(repoId ? { repoId } : {}), project });
+      const spawned = await omp.launch({ id: s.id, name: s.name, cwd, resumeFile: file, ...(model ? { model } : {}), ...(effort ? { effort } : {}), ...(s.approval ? { approval: s.approval } : {}) });
+      const { topic, topicSource, repo, repoPath, branch, worktree, repoId, project, autonomy } = s;
+      store.upsert({ ...spawned, ...(autonomy ? { autonomy } : {}), ...(topic ? { topic } : {}), ...(topicSource ? { topicSource } : {}), ...(repo ? { repo } : {}), ...(repoPath ? { repoPath } : {}), ...(branch ? { branch } : {}), ...(worktree !== undefined ? { worktree } : {}), ...(repoId ? { repoId } : {}), project });
       log(`resumed ${spawned.name} (omp) in ${spawned.cwd} as ${spawned.id}`);
       return null;
     } catch (e) {
@@ -765,7 +740,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     return null;
   }
   /**
-   * `session.model`, and a held seat's new model on `team.compose`: refused with a code, or accepted and applied `now` (the
+   * `session.model`: refused with a code, or accepted and applied `now` (the
    * session is free), at the end of its `turn` (`modelNext`), or not at all (`none`: the model it already runs).
    */
   async function changeModel(id: string, model: string | null, effort: string | null): Promise<{ refused: ModelRefusal; message: string } | { when: 'now' | 'turn' | 'none' }> {
@@ -835,31 +810,24 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const chatActs = new Set<string>();
   /**
    * A generic card's rows (spec 2026-10-26 action registry §2.1), applied through the daemon's own handlers so their rules stay in
-   * one place: a row fails on the handler's `error`, or on the reason its `team.saved` or `task.result` carries.
+   * one place: a row fails on the handler's `error`.
    */
   function actOnCard(card: { chat: Pick<Chat, 'action' | 'markAction'>; emit: (m: ChatMessage) => void }, qid: string, rid: string, rows?: number[], confirmed?: true, deny?: true) {
     return actFromChat({
       chat: card.chat, emit: card.emit, inFlight: chatActs, now,
-      resolve: row => resolveAction(row.action, row.args, { sessions: store.all(), teams: teams.all(), tasks: tasks.all(), findRole, templateExists: name => templateExists(name) }),
+      resolve: row => resolveAction(row.action, row.args, { sessions: store.all() }),
       apply: async row => { const r = await applyRow(row, rid); if (r.failure !== undefined) throw new Error(r.failure); }
     }, qid, rows, confirmed, deny);
   }
   /** The turn's cards were set aside (« Ignorer », on any thread's device): nothing of them applies until opened again. */
   const setAside = (qid: string) => cardThreads.all().some(([, c]) => c.ignored(qid));
   const SET_ASIDE = 'ignored card: open it again first';
-  /** A resolved row through the daemon's own handler: its failure is the handler's `error`, or the reason its `team.saved` or
-   *  `task.result` carries; `path` the template a `team.save` wrote. Ledge's own task commands go straight to the tasks:
-   *  `by: 'ledge'` is never taken from a client (handle refuses it). */
-  async function applyRow(row: Pick<ChatAction, 'action' | 'args'>, rid: string): Promise<{ failure?: string; path?: string }> {
+  /** A resolved row through the daemon's own handler: its failure is the handler's `error`. */
+  async function applyRow(row: Pick<ChatAction, 'action' | 'args'>, rid: string): Promise<{ failure?: string }> {
     const out = actionMessage(row, rid);
-    if (out.type === 'task.cmd') { const r = tasks.run(out); return r.reason !== undefined ? { failure: r.reason } : {}; }
-    let failure: string | undefined; let path: string | undefined;
-    await handle(out, m => {
-      if (m.type === 'error') failure ??= m.message;
-      else if ((m.type === 'team.saved' || m.type === 'task.result') && m.reason) failure ??= m.reason;
-      else if (m.type === 'team.saved') path = m.path;
-    });
-    return { ...(failure !== undefined ? { failure } : {}), ...(path ? { path } : {}) };
+    let failure: string | undefined;
+    await handle(out, m => { if (m.type === 'error') failure ??= m.message; });
+    return failure !== undefined ? { failure } : {};
   }
   /**
    * `action.run` (#93): an action of the registry outside the chat, resolved and applied as a generic card's row, so the CLI
@@ -876,7 +844,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       return answer({ reason: `la session ${msg.by} n'a pas de clé (lancée avant cette version de Ledge, ou hors de Ledge) : reprends-la depuis Ledge, ou demande à l'utilisateur`, code: 'identity' });
     if (msg.by !== undefined && (!want || !tokenEquals(msg.key!, want)))
       return answer({ reason: `la clé ne correspond pas à la session ${msg.by} : lance la commande depuis cette session, telle que Ledge l'a lancée`, code: 'identity' });
-    const ctx = { sessions: store.all(), teams: teams.all(), tasks: tasks.all(), findRole, templateExists: (name: string) => templateExists(name) };
+    const ctx = { sessions: store.all() };
     const r: Resolved = resolveRun(msg.action, parsed.data, ctx);
     if ('refused' in r) return answer({ reason: r.refused, code: 'refused' });
     const guard = runGuard(r, msg.by, ctx);
@@ -893,332 +861,52 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       const failure = await closeForCard(String(r.args.session)).then(() => undefined, e => (e as Error).message);
       return answer({ row: r, ...(failure !== undefined ? { reason: failure, code: 'failed' } : {}) });
     }
-    const { failure, path } = await applyRow(r, msg.rid);
-    return answer({ row: r, ...(failure !== undefined ? { reason: failure, code: 'failed' } : {}), ...(path ? { path } : {}) });
+    const { failure } = await applyRow(r, msg.rid);
+    return answer({ row: r, ...(failure !== undefined ? { reason: failure, code: 'failed' } : {}) });
   }
-  type LaunchReq = { tool: Tool; cwd: string; name?: string; prompt?: string; continue?: boolean; dirs?: string[]; model?: string; effort?: string; approval?: OmpApproval; role?: string; team?: string };
-  /**
-   * Spawns the agent as `ledge <tool>` would and records it; throws the reason (bad folder, tmux, unknown role or team).
-   * A role (roles spec §3.4) fills the model and effort left out, when it is the role's own agent, and adds its autonomy;
-   * a team seats the session at once.
-   */
+  type LaunchReq = { tool: Tool; cwd: string; name?: string; prompt?: string; continue?: boolean; dirs?: string[]; model?: string; effort?: string; approval?: OmpApproval; autonomy?: Autonomy };
+  /** Spawns the agent as `ledge <tool>` would and records it; throws the reason (bad folder, tmux). */
   async function launch(req: LaunchReq): Promise<Session> {
     const cwd = await resolveFolder(req.cwd, opts.home);
-    const role = req.role ? findRole(req.role, cwd) : undefined;
-    if (req.role && !role) throw new Error(`rôle inconnu : ${req.role} (aucun fichier .ledge/roles/${req.role}.md)`);
-    const team = req.team ? teams.get(req.team) : undefined;
-    if (req.team && (!team || team.state === 'dissolved')) throw new Error(`aucune équipe ${req.team} en cours`);
-    if (team && !role) throw new Error('une session rejoint une équipe avec un rôle');
-    const own = role && (role.tool === undefined || role.tool === req.tool);
-    const filled: LaunchReq = { ...req, cwd, ...(!req.model && own && role.model ? { model: role.model } : {}), ...(!req.effort && own && role.effort ? { effort: role.effort } : {}) };
+    const filled: LaunchReq = { ...req, cwd };
     if (filled.approval && filled.tool !== 'omp') throw new Error(`launch: ${filled.tool} takes no approval mode`);
-    const session = filled.tool === 'omp' ? await launchOmp(filled, role, team) : await launchTmux({ ...filled, tool: filled.tool }, role, team);
-    if (role && team) teams.seat(team.id, role.id, session, role.label);
+    const session = filled.tool === 'omp' ? await launchOmp(filled) : await launchTmux({ ...filled, tool: filled.tool });
     return store.get(session.id) ?? session;
   }
-  /** What an OMP seat gets through its own channel (`--append-system-prompt`): its role and team, its env. */
-  function ompSeat(s: Pick<Session, 'id' | 'role' | 'roleLabel' | 'team' | 'cwd'>): { appendSystemPrompt?: string; seatEnv?: Record<string, string> } {
-    if (!s.role) return {};
-    const team = s.team ? teams.get(s.team) : undefined;
-    const live = team && team.state !== 'dissolved' ? team : undefined;
-    const text = seatContext({ role: findRole(s.role, s.cwd), roleId: s.role, roleLabel: s.roleLabel, ...(live ? { team: { name: live.name, members: teammates(live, store.all()).filter(m => m.name !== store.get(s.id)?.name) } } : {}) });
-    return { appendSystemPrompt: text, seatEnv: { LEDGE_ROLE: s.role, ...(live ? { LEDGE_TEAM: live.id } : {}) } };
-  }
   /** `omp --mode rpc-ui` owned by the daemon: no pane. `continue` has no meaning here (a folder's latest journal is never picked). */
-  async function launchOmp(req: LaunchReq, role?: Role, team?: Team): Promise<Session> {
+  async function launchOmp(req: LaunchReq): Promise<Session> {
     if (req.continue) throw new Error('launch: OMP resumes an exact conversation, not the latest of a folder');
     const cwd = req.cwd;
     const dirs = req.dirs?.length ? await Promise.all(req.dirs.map(d => resolveFolder(d, opts.home))) : undefined;
-    const approval = req.approval ?? ompApprovalFor(role?.autonomy);
-    const seat = role ? ompSeat({ id: '', cwd, role: role.id, roleLabel: role.label, ...(team ? { team: team.id } : {}) }) : {};
-    const launched = await omp.launch({ cwd, ...(req.name ? { name: req.name } : {}), ...(dirs ? { dirs } : {}), ...(req.model ? { model: req.model } : {}), ...(req.effort ? { effort: req.effort } : {}), ...(approval ? { approval } : {}), ...seat });
-    const session: Session = { ...launched, ...(role ? { role: role.id, roleLabel: role.label, ...(role.autonomy && role.autonomy !== 'ask' ? { autonomy: role.autonomy } : {}) } : {}) };
-    if (role) store.upsert(session);
+    const approval = req.approval ?? ompApprovalFor(req.autonomy);
+    const launched = await omp.launch({ cwd, ...(req.name ? { name: req.name } : {}), ...(dirs ? { dirs } : {}), ...(req.model ? { model: req.model } : {}), ...(req.effort ? { effort: req.effort } : {}), ...(approval ? { approval } : {}) });
+    const session: Session = { ...launched, ...(req.autonomy && req.autonomy !== 'ask' ? { autonomy: req.autonomy } : {}) };
+    if (session.autonomy) store.upsert(session);
     store.touchRecent(session.cwd, session.project, session.startedAt);
-    log(`launched ${session.name} (omp) in ${session.cwd} as ${session.id}${role ? ` as @${role.id}` : ''}`);
+    log(`launched ${session.name} (omp) in ${session.cwd} as ${session.id}`);
     const prompt = req.prompt?.trim();
     // The session exists and is usable: a first instruction that fails is its error state, not a failed launch.
     if (prompt) await omp.send(session.id, prompt).catch(e => log(`first prompt of ${session.id} failed: ${(e as Error).message}`));
     return store.get(session.id) ?? session;
   }
-  async function launchTmux(req: LaunchReq & { tool: TmuxTool }, role?: Role, team?: Team): Promise<Session> {
+  async function launchTmux(req: LaunchReq & { tool: TmuxTool }): Promise<Session> {
     if (req.dirs?.length && !MULTI_DIR_ARGS[req.tool]) throw new Error(`launch: ${req.tool} takes one folder`);
     if (req.effort && !EFFORT_ARGS[req.tool]) throw new Error(`launch: ${req.tool} takes its effort in the model id`);
     const cwd = req.cwd;
     const dirs = req.dirs?.length ? await Promise.all(req.dirs.map(d => resolveFolder(d, opts.home))) : undefined;
     const live = store.all();
     const env = await agentEnv();
-    const autonomy = role?.autonomy;
+    const autonomy = req.autonomy;
     const spawned = await spawnSession({ tool: req.tool, args: launchArgs({ ...req, dirs, autonomy }), name: req.name, cwd, tmux, now, env,
-      ...(role ? { role: { id: role.id, label: role.label } } : {}), ...(team ? { team: team.id } : {}), ...(autonomy ? { autonomy } : {}),
+      ...(autonomy ? { autonomy } : {}),
       taken: { names: [...live.filter(s => s.state !== 'exited').map(s => s.name), ...heldNames(live)], ids: live.map(s => s.id) } });
     const session: Session = { ...spawned, ...(req.model ? { model: req.model } : {}), ...(req.effort ? { effort: req.effort } : {}) };
     store.upsert(session);
     store.touchRecent(session.cwd, session.project, session.startedAt);
-    log(`launched ${session.name} (${session.tool}) in ${session.cwd} as ${session.id}${role ? ` as @${role.id}` : ''}`);
+    log(`launched ${session.name} (${session.tool}) in ${session.cwd} as ${session.id}`);
     return session;
   }
 
-  /** The first repo of a project on this machine, as a folder that exists; undefined when it has none or it does not resolve. */
-  async function projectFolder(projectId: string): Promise<string | undefined> {
-    const repo = projects.projects.find(p => p.id === projectId)?.repos.find(r => r.machine === 'local');
-    return repo ? resolveFolder(repo.path, opts.home).catch(() => undefined) : undefined;
-  }
-  /** A role or template write or delete (spec 2026-10-28 mobile teams): the file layer's answer, and the prompt change told to the seats it reaches. */
-  async function changeDefinition(msg: Extract<ClientMessage, { type: 'role.write' | 'role.delete' | 'template.write' | 'template.delete' }>): Promise<{ id?: string; hash?: string; code?: DefinitionCode; reason?: string }> {
-    const folder = msg.scope === 'repo' ? await projectFolder(msg.project!) : undefined;
-    if (msg.scope === 'repo' && !folder) return { code: 'unknown_project', reason: `aucun dossier local pour le projet ${msg.project}` };
-    const invalid = (reason: string) => ({ code: 'invalid' as const, reason });
-    const fileOf = (kind: 'roles' | 'teams', id: string, ext: string) => join(scopeDir(kind, msg.scope, folder), `${id}${ext}`);
-    // An id becomes a file name: checked again here, whatever the message schema let through.
-    const asRole = (id: string) => (RoleIdSchema.safeParse(id).success ? fileOf('roles', id, '.md') : undefined);
-    const asTemplate = (id: string) => {
-      if (!TemplateIdSchema.safeParse(id).success) return undefined;
-      // A template kept in a `.yml` file is edited there; a new one is `.yaml`.
-      const yaml = fileOf('teams', id, '.yaml'); const yml = fileOf('teams', id, '.yml');
-      return !existsSync(yaml) && existsSync(yml) ? yml : yaml;
-    };
-    switch (msg.type) {
-      case 'role.write': {
-        const id = msg.role.id; const path = asRole(id); const text = roleText(msg.role);
-        if (!path) return invalid(`identifiant de rôle invalide : ${id}`);
-        if (text === null) return invalid('une valeur du rôle ne peut pas s\'écrire dans le fichier');
-        // A file that does not parse reads as none: the write then counts as a create and its recipients are told.
-        const before = existsSync(path) ? loadRole(id, path, msg.scope, []) : undefined;
-        const r = writeDefinition(path, text, msg.base);
-        if ('code' in r) return { id, code: r.code };
-        const now = loadRole(id, path, msg.scope, []);
-        // The prompt or the label changed (or the file is new, which switches the sessions whose home role it now shadows): the seats holding it are told.
-        if (now && (!before || before.prompt !== now.prompt || before.label !== now.label)) {
-          const notice = formatRoleNotice({ role: id, text: `Ta consigne de rôle a changé (@${id}${now.label && now.label !== id ? `, ${now.label}` : ''}). La voici en entier ; elle remplace la précédente :\n\n${now.prompt}` });
-          for (const s of promptRecipients(id, path, store.all(), findRole)) mailbox.notify(s.id, notice, `role:${id}:${r.hash}:${s.id}`);
-        }
-        return { id, hash: r.hash };
-      }
-      case 'role.delete': {
-        const path = asRole(msg.id);
-        if (!path) return invalid(`identifiant de rôle invalide : ${msg.id}`);
-        const r = deleteDefinition(path, msg.base);
-        return 'code' in r ? { id: msg.id, code: r.code } : { id: msg.id };
-      }
-      case 'template.write': {
-        const id = msg.id ?? templateId(msg.name); const path = asTemplate(id); const text = templateText(msg.name, msg.seats);
-        if (!path) return invalid(`identifiant d'équipe invalide : ${id}`);
-        if (text === null) return invalid('une valeur de l\'équipe ne peut pas s\'écrire dans le fichier');
-        const r = writeDefinition(path, text, msg.base);
-        return 'code' in r ? { id, code: r.code } : { id, hash: r.hash };
-      }
-      case 'template.delete': {
-        const path = asTemplate(msg.id);
-        if (!path) return invalid(`identifiant d'équipe invalide : ${msg.id}`);
-        const r = deleteDefinition(path, msg.base);
-        return 'code' in r ? { id: msg.id, code: r.code } : { id: msg.id };
-      }
-    }
-  }
-
-  /** One seat's session, spawned as `launchTeam` spawns them: its tool, model and effort resolved over the role's defaults. */
-  const launchSeat = (team: Team, cwd: string, seat: ResolvedSeat): Promise<Session> =>
-    launch({ tool: seat.tool, cwd, role: seat.role.id, team: team.id, ...(seat.name ? { name: seat.name } : {}), ...(seat.model ? { model: seat.model } : {}), ...(seat.effort ? { effort: seat.effort } : {}) });
-  /**
-   * Starts a session in each of the given seats of a team, every one tried: the reason names the roles that failed, null when none did.
-   * What failed stays a free seat (the user may start it again), what started stays.
-   */
-  async function startSeats(team: Team, seats: readonly Seat[]): Promise<string | null> {
-    const resolved = resolveSeats(seats, listDefinitions(team.cwd).roles);
-    if ('unknown' in resolved) return `rôle inconnu : ${resolved.unknown.join(', ')} (écris .ledge/roles/<id>.md)`;
-    const failures: string[] = [];
-    for (const seat of resolved) {
-      try { await launchSeat(team, team.cwd, seat); }
-      catch (e) { log(`team ${team.id}: seat @${seat.role.id} failed: ${(e as Error).message}`); failures.push(`@${seat.role.id} : ${(e as Error).message}`); }
-    }
-    return failures.length ? failures.join(' ; ') : null;
-  }
-
-  /** `team.launch` (roles spec §3.4): resolves the folder, its project and every role (one unknown refuses the whole
-   *  launch), creates the live team and spawns its seats in order. A seat that fails stops there: the others stay.
-   *  With `seats` given, `template` is only recorded on the team (a phone's launch of a team it composed, from a template). */
-  async function launchTeam(req: { cwd: string; template?: string; seats?: Seat[]; name?: string; defaults?: { tool: Tool; model?: string; effort?: string } }): Promise<{ team: Team } | { reason: string; team?: Team }> {
-    const cwd = await resolveFolder(req.cwd, opts.home);
-    const defs = listDefinitions(cwd);
-    const template = !req.seats && req.template ? defs.templates.find(t => t.id === req.template) : undefined;
-    if (!req.seats && req.template && !template) return { reason: `aucun modèle d'équipe ${req.template} (.ledge/teams/${req.template}.yaml)` };
-    const seats = req.seats ?? template?.seats;
-    if (!seats?.length) return { reason: 'une équipe a au moins un siège' };
-    const resolved = resolveSeats(seats, defs.roles, req.defaults);
-    if ('unknown' in resolved) return { reason: `rôle inconnu : ${resolved.unknown.join(', ')} (écris .ledge/roles/<id>.md)` };
-    const name = req.name ?? template?.name ?? (basename(cwd) || cwd);
-    const recorded = req.seats ? req.template : template?.id;
-    const team = teams.create({ name, ...(recorded ? { template: recorded } : {}), project: projectOf({ cwd }, projects), cwd, roles: seats });
-    log(`team ${team.id} (${name}) launching ${resolved.length} seats in ${cwd}`);
-    for (const seat of resolved) {
-      try { await launchSeat(team, cwd, seat); }
-      catch (e) {
-        log(`team ${team.id}: seat @${seat.role.id} failed: ${(e as Error).message}`);
-        return { reason: `@${seat.role.id} : ${(e as Error).message}`, team: teams.get(team.id)! };
-      }
-    }
-    return { team: teams.get(team.id)! };
-  }
-
-  /**
-   * A seat removed from a live team finishes its turn, then its session is closed (spec 2026-10-28 mobile teams §3.6): at the session's
-   * next free moment, never on a permission prompt. A refused close is logged; the next store change tries again. The seat itself
-   * goes when the session exits (`teamsLive`), however it ended.
-   */
-  function closeLeavers(): void {
-    const leaving = new Set<string>();
-    for (const t of teams.all()) {
-      if (t.state === 'dissolved') continue;
-      for (const seat of t.seats) {
-        if (!seat.leaving || !seat.sessionId) continue;
-        leaving.add(seat.sessionId);
-        const s = store.get(seat.sessionId);
-        // A session mid-reply or mid-relay finishes it first: the next change tries again.
-        if (!free(s) || leaverCloses.has(s.id) || closing.has(s.id) || typing.has(s.id) || inFlight.has(s.id)) continue;
-        leaverCloses.add(s.id);
-        closeSession(s).catch(e => {
-          // A session Ledge cannot close (started without it) is let go of: the seat goes, the session stays as it is. Another refusal is logged once, and retried.
-          if (e instanceof Refusal && e.code === 'read_only') { log(`team ${t.id}: @${seat.role} (${s.id}) cannot be closed, left to itself: ${e.message}`); teams.leave(t.id, s.id); return; }
-          if (!leaverRefused.has(s.id)) { leaverRefused.add(s.id); log(`team ${t.id}: close of @${seat.role} (${s.id}) refused: ${(e as Error).message}`); }
-        }).finally(() => leaverCloses.delete(s.id));
-      }
-    }
-    for (const id of leaverRefused) if (!leaving.has(id)) leaverRefused.delete(id);
-  }
-
-  /** The seats being started or restarted (team + role): a second tap meanwhile is refused, never a second session. */
-  const seatsInFlight = new Set<string>();
-  /**
-   * The kept seats of a composition whose model or effort changed, the agent the same: the change asked of the session holding
-   * each (as resolved over the role's defaults, like a launch into the seat), and what came of it. A free seat, or one whose agent
-   * changed, has no entry: its next session starts on the seat's values. Never throws: the composition is saved already.
-   */
-  async function seatModels(before: ReadonlyMap<string, Team['seats'][number]>, team: Team): Promise<SeatModelOutcome[]> {
-    const out: SeatModelOutcome[] = [];
-    const roles = listDefinitions(team.cwd).roles;
-    for (const seat of team.seats) {
-      const was = before.get(seat.role);
-      if (!was || seat.leaving || was.tool !== seat.tool || (was.model === seat.model && was.effort === seat.effort)) continue;
-      const holder = seat.sessionId ? store.get(seat.sessionId) : undefined;
-      if (!holder) continue;
-      const resolved = resolveSeats([seat], roles);
-      const want = 'unknown' in resolved ? seat : resolved[0]!;
-      try {
-        const r = await changeModel(holder.id, want.model ?? null, want.effort ?? null);
-        if ('refused' in r) out.push({ role: seat.role, session: holder.id, code: r.refused });
-        else if (r.when !== 'none') out.push({ role: seat.role, session: holder.id, when: r.when });
-      } catch (e) { log(`team ${team.id}: model of @${seat.role} (${holder.id}) not changed: ${(e as Error).message}`); }
-    }
-    return out;
-  }
-
-  /** `team.compose`: the new composition applied at once, a session started in each added seat, the removed ones closed at their
-   *  free moment, the kept seats' new models asked of their sessions. */
-  async function composeTeam(msg: Extract<ClientMessage, { type: 'team.compose' }>): Promise<Extract<ServerMessage, { type: 'team.changed' }>> {
-    const changed = (extra: { team?: Team; reason?: string; models?: SeatModelOutcome[] }) => ({ type: 'team.changed' as const, rid: msg.rid, ...extra });
-    const t = teams.get(msg.team); if (!t) return changed({ reason: `aucune équipe ${msg.team}` });
-    const known = new Set(t.seats.map(s => s.role));
-    const added = msg.seats.filter(s => !known.has(s.role));
-    if (added.length) {
-      const roles = new Set(listDefinitions(t.cwd).roles.map(r => r.id));
-      const unknown = added.filter(s => !roles.has(s.role)).map(s => s.role);
-      if (unknown.length) return changed({ reason: `rôle inconnu : ${unknown.join(', ')} (écris .ledge/roles/<id>.md)` });
-    }
-    // The seats it adds are held as `team.seat start` holds them: a start landing meanwhile is refused, never a second session.
-    const keys = added.map(s => `${t.id}:${s.role}`);
-    const busy = added.find(s => seatsInFlight.has(`${t.id}:${s.role}`));
-    // No team in this reply: a team with a reason reads as « saved, a seat did not start », and nothing was saved.
-    if (busy) return changed({ reason: `@${busy.role} : une opération est déjà en cours sur ce siège` });
-    for (const k of keys) seatsInFlight.add(k);
-    try {
-      const before = new Map(t.seats.map(s => [s.role, s]));
-      const r = teams.compose(msg.team, msg.seats);
-      if (typeof r === 'string') return changed({ reason: r });
-      log(`team ${t.id} composed: +${r.added.join(',') || '-'} −${r.removed.join(',') || '-'}`);
-      const failed = r.added.length ? await startSeats(r.team, msg.seats.filter(s => r.added.includes(s.role))) : null;
-      closeLeavers();
-      const models = await seatModels(before, teams.get(t.id)!);
-      return changed({ team: teams.get(t.id)!, ...(failed ? { reason: failed } : {}), ...(models.length ? { models } : {}) });
-    } finally { for (const k of keys) seatsInFlight.delete(k); }
-  }
-
-  /** `team.seat`: a session started in a free seat, or the seat's session replaced by a fresh one (restart). */
-  async function seatTeam(msg: Extract<ClientMessage, { type: 'team.seat' }>): Promise<Extract<ServerMessage, { type: 'team.changed' }>> {
-    const key = `${msg.team}:${msg.role}`;
-    if (seatsInFlight.has(key)) return { type: 'team.changed', rid: msg.rid, ...(teams.get(msg.team) ? { team: teams.get(msg.team)! } : {}), reason: `@${msg.role} : une opération est déjà en cours sur ce siège` };
-    seatsInFlight.add(key);
-    try { return await seatTeamNow(msg); } finally { seatsInFlight.delete(key); }
-  }
-  async function seatTeamNow(msg: Extract<ClientMessage, { type: 'team.seat' }>): Promise<Extract<ServerMessage, { type: 'team.changed' }>> {
-    const changed = (extra: { team?: Team; reason?: string }) => ({ type: 'team.changed' as const, rid: msg.rid, ...extra });
-    const t = teams.get(msg.team); if (!t) return changed({ reason: `aucune équipe ${msg.team}` });
-    if (t.state === 'dissolved') return changed({ reason: `l'équipe ${t.name} est dissoute` });
-    const seat = t.seats.find(s => s.role === msg.role);
-    if (!seat) return changed({ reason: `aucun siège @${msg.role} dans ${t.name}` });
-    if (seat.leaving) return changed({ reason: `@${msg.role} part de ${t.name}` });
-    const cur = seat.sessionId ? store.get(seat.sessionId) : undefined;
-    const running = !!cur && cur.state !== 'exited' && !isArchived(cur);
-    if (msg.action === 'start' && running) return changed({ team: t, reason: `@${msg.role} est déjà tenu par ${cur.name}` });
-    if (msg.action === 'restart' && running) {
-      try { await closeSession(cur); }
-      catch (e) { return changed({ team: teams.get(t.id)!, reason: `@${msg.role} : ${(e as Error).message}` }); }
-    }
-    const failed = await startSeats(t, [{ role: seat.role, ...(seat.tool ? { tool: seat.tool } : {}), ...(seat.model ? { model: seat.model } : {}), ...(seat.effort ? { effort: seat.effort } : {}) }]);
-    return changed({ team: teams.get(t.id)!, ...(failed ? { reason: failed } : {}) });
-  }
-
-  /** The chat's team card (roles spec §3.8): launched once, from the card's own fields; its outcome stays on the card. */
-  const teamCardsInFlight = new Set<string>();
-  async function launchTeamFromCard(rid: string, qid: string, reply: Reply): Promise<void> {
-    const card = cardOf(cardThreads, qid);
-    const p = card?.chat.team(qid);
-    if (!card || !p) return reply({ type: 'team.failed', rid, reason: 'carte d\'équipe inconnue' });
-    if (p.teamId) return reply({ type: 'team.failed', rid, reason: 'équipe déjà lancée', ...(teams.get(p.teamId) ? { team: teams.get(p.teamId)! } : {}) });
-    if (teamCardsInFlight.has(qid)) return reply({ type: 'team.failed', rid, reason: 'lancement déjà en cours' });
-    teamCardsInFlight.add(qid);
-    try {
-      const r = await launchTeam({ cwd: p.cwd, ...(p.template ? { template: p.template } : { seats: p.seats.map(s => ({ role: s.role, tool: s.tool, ...(s.model ? { model: s.model } : {}), ...(s.effort ? { effort: s.effort } : {}), ...(s.name ? { name: s.name } : {}) })) }), name: p.name });
-      if ('reason' in r) {
-        card.chat.markTeam(qid, { error: r.reason, ...(r.team ? { teamId: r.team.id, launchedAt: now() } : {}) }, card.emit);
-        return reply({ type: 'team.failed', rid, reason: r.reason, ...(r.team ? { team: r.team } : {}) });
-      }
-      card.chat.markTeam(qid, { teamId: r.team.id, launchedAt: now() }, card.emit);
-      reply({ type: 'team.launched', rid, team: r.team });
-    } finally { teamCardsInFlight.delete(qid); }
-  }
-
-  /** The chat's task card row: given by Ledge, `@role` resolved in the card's team, or in the team its turn launched. */
-  function giveFromCard(msg: Extract<ClientMessage, { type: 'task.cmd' }>, reply: Reply): void {
-    const qid = msg.qid!; const row = msg.row ?? 0;
-    const card = cardOf(cardThreads, qid);
-    const c = card?.chat.task(qid, row);
-    if (!card || !c) return reply({ type: 'task.result', rid: msg.rid, reason: 'carte de tâche inconnue' });
-    if (c.taskId) return reply({ type: 'task.result', rid: msg.rid, reason: `déjà confiée (${c.taskId})` });
-    const team = c.team ?? card.chat.team(qid)?.teamId;
-    if (c.to.startsWith('@') && !team) return reply({ type: 'task.result', rid: msg.rid, reason: 'active une fois l\'équipe lancée' });
-    const r = tasks.run({ type: 'task.cmd', rid: msg.rid, by: LEDGE_GIVER, op: 'give', to: c.to, title: c.title, ...(c.text ? { text: c.text } : {}), ...(team ? { team } : {}) });
-    if (r.task) card.chat.markTask(qid, row, { taskId: r.task.id, ownerName: r.task.ownerName, state: r.task.state, givenAt: now() }, card.emit);
-    else card.chat.markTask(qid, row, { error: r.reason ?? 'refusée' }, card.emit);
-    reply(r);
-  }
-
-  /** `team.resume`: each seat's archived or ended session continues its own conversation, so the team comes back as it was. */
-  async function resumeTeam(t: Team): Promise<string | null> {
-    if (t.state === 'dissolved') return `l'équipe ${t.name} est dissoute`;
-    const failures: string[] = [];
-    for (const seat of t.seats) {
-      const s = seat.sessionId ? store.get(seat.sessionId) : undefined;
-      if (!s || s.state !== 'exited') continue;
-      // The seat was composed for another agent than the one that ended: its conversation is not that agent's.
-      if (seat.tool && seat.tool !== s.tool) { failures.push(`@${seat.role} : outil changé, redémarre le siège`); continue; }
-      const key = resumeKey(s);
-      if (!key) { failures.push(`@${seat.role} : aucune conversation à reprendre`); continue; }
-      const refused = await respawn(s, key, seat.model ?? s.model, seat.effort ?? s.effort);
-      if (refused) failures.push(`@${seat.role} : ${refused}`);
-    }
-    return failures.length ? failures.join(' ; ') : null;
-  }
   /** The scan in flight (lot 11): a `repos.scan` arriving while one walks gets that walk's result, under its own requestId. */
   let scanning: ReturnType<typeof scanRepos> | null = null;
   function sharedScan(): ReturnType<typeof scanRepos> {
@@ -1273,7 +961,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'context.set': {
         writeContextPrefs(msg.prefs, contextFile); // first: a failing write leaves memory unchanged and reaches the sender
         contextPrefs = msg.prefs;
-        // Sessions already past the new threshold: an `auto` seat is relieved at its next turn's end.
+        // Sessions already past the new threshold: an `auto` session is relieved at its next turn's end.
         return broadcast(contextMsg());
       }
       case 'island.set': {
@@ -1475,10 +1163,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       // An agent's message to another session: acked at once, typed when the target is free.
       case 'session.message': {
-        // `@role` names a seat of the sender's team (roles spec §3.6).
-        const r = resolveRoleAddress(msg.to, msg.from, store.all(), teams.all());
-        if ('reason' in r) return reply({ type: 'message.ack', rid: msg.rid, outcome: 'refused', reason: r.reason });
-        return reply(mailbox.submit({ ...msg, to: r.to }));
+        return reply(mailbox.submit(msg));
       }
       case 'message.read': return reply(mailbox.read(msg));
       case 'session.handover': {
@@ -1493,78 +1178,14 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         const r = handovers.show(msg.by);
         return reply({ type: 'handover.result', rid: msg.rid, ...('text' in r ? { text: r.text } : { reason: r.reason }) });
       }
-      case 'task.cmd': {
-        // The chat's task card (roles spec §3.8) gives through its turn, which then follows its task.
-        if (msg.qid !== undefined && msg.op === 'give') return setAside(msg.qid) ? reply({ type: 'task.result', rid: msg.rid, reason: SET_ASIDE }) : giveFromCard(msg, reply);
-        // Over another's head, Ledge acts only from its chat's card (actOnCard): a client naming itself `ledge` cannot.
-        if (msg.by === LEDGE_GIVER && (msg.op === 'cancel' || msg.op === 'pass')) return reply({ type: 'task.result', rid: msg.rid, reason: 'seul le chat de Ledge annule ou passe une tâche au nom de Ledge' });
-        return reply(tasks.run(msg));
+      case 'ask.create': {
+        const r = asks.create(msg.by, msg.question, msg.options);
+        return reply('code' in r ? { type: 'ask.result', rid: msg.rid, code: r.code, reason: r.reason } : { type: 'ask.result', rid: msg.rid, ask: r });
       }
-      case 'roles.list': {
-        const cwd = msg.cwd ? await resolveFolder(msg.cwd, opts.home).catch(() => undefined) : undefined;
-        return reply({ type: 'roles.listing', ...(msg.requestId ? { requestId: msg.requestId } : {}), ...listDefinitions(cwd) });
+      case 'ask.answer': {
+        const r = asks.answer(msg.id, msg.text);
+        return reply('code' in r ? { type: 'ask.result', rid: msg.rid, code: r.code, reason: r.reason } : { type: 'ask.result', rid: msg.rid, ask: r });
       }
-      case 'team.launch': {
-        if (msg.qid !== undefined) return setAside(msg.qid) ? reply({ type: 'team.failed', rid: msg.rid, reason: SET_ASIDE }) : launchTeamFromCard(msg.rid, msg.qid, reply);
-        // A client that holds no path (the phone) names the project: its first local repo is the folder.
-        const cwd = msg.cwd ?? (msg.project ? await projectFolder(msg.project) : undefined);
-        if (!cwd) return reply({ type: 'team.failed', rid: msg.rid, reason: msg.project && !msg.cwd ? 'aucun dossier local pour ce projet' : 'il faut un dossier' });
-        const r = await launchTeam({ cwd, ...(msg.template ? { template: msg.template } : {}), ...(msg.seats ? { seats: msg.seats } : {}), ...(msg.name ? { name: msg.name } : {}) });
-        return reply('reason' in r ? { type: 'team.failed', rid: msg.rid, reason: r.reason, ...(r.team ? { team: r.team } : {}) } : { type: 'team.launched', rid: msg.rid, team: r.team });
-      }
-      case 'team.join': {
-        const s = store.get(msg.session); if (!s) return refuse(unknownSession());
-        const role = findRole(msg.role, s.cwd);
-        if (!role) return refuse(`rôle inconnu : ${msg.role} (aucun fichier .ledge/roles/${msg.role}.md)`);
-        const r = teams.join(msg.team, msg.session, role.id, role.label);
-        if (typeof r === 'string') return refuse(r);
-        // Its role and its teammates reach it at its next free moment, as its next start would tell it.
-        const text = seatContext({ role, team: { name: r.name, members: teammates(r, store.all()).filter(m => m.name !== s.name) } });
-        mailbox.notify(s.id, formatTeamNotice({ team: r.id, text }), `${r.id}:join:${s.id}:${now()}`);
-        log(`${s.name} joined team ${r.id} as @${role.id}`);
-        return;
-      }
-      case 'team.leave': {
-        const r = teams.leave(msg.team, msg.session);
-        if (typeof r === 'string') return refuse(r);
-        return;
-      }
-      case 'team.resume': {
-        const t = teams.get(msg.team); if (!t) return refuse(`aucune équipe ${msg.team}`);
-        const refused = await resumeTeam(t);
-        if (refused) refuse(refused);
-        return;
-      }
-      case 'team.dissolve': {
-        const r = teams.dissolve(msg.team);
-        if (typeof r === 'string') return refuse(r);
-        return;
-      }
-      case 'team.save': {
-        try {
-          const path = saveTemplate(msg.name, msg.seats);
-          const card = msg.qid ? cardOf(cardThreads, msg.qid) : undefined;
-          if (card && card.chat.team(msg.qid!)) card.chat.markTeam(msg.qid!, { savedPath: path }, card.emit);
-          log(`team template saved: ${path}`);
-          return reply({ type: 'team.saved', rid: msg.rid, path });
-        }
-        catch (e) { return reply({ type: 'team.saved', rid: msg.rid, reason: (e as Error).message }); }
-      }
-      case 'definitions.list': {
-        const scopes: Extract<ServerMessage, { type: 'definitions.listing' }>['scopes'] = [
-          { scope: 'home', project: null, ...scopeDefinitions({ roles: scopeDir('roles', 'home'), teams: scopeDir('teams', 'home') }, 'home') }
-        ];
-        for (const p of projects.projects) {
-          const folder = await projectFolder(p.id);
-          if (folder) scopes.push({ scope: 'repo', project: p.id, ...scopeDefinitions({ roles: scopeDir('roles', 'repo', folder), teams: scopeDir('teams', 'repo', folder) }, 'repo') });
-        }
-        return reply({ type: 'definitions.listing', ...(msg.requestId ? { requestId: msg.requestId } : {}), scopes });
-      }
-      case 'role.write': case 'role.delete': case 'template.write': case 'template.delete':
-        // A disk failure still answers the request that is waiting for its `rid`.
-        return reply({ type: 'definition.result', rid: msg.rid, ...(await changeDefinition(msg).catch((e: Error) => ({ code: 'invalid' as const, reason: e.message }))) });
-      case 'team.compose': return reply(await composeTeam(msg).catch((e: Error) => ({ type: 'team.changed' as const, rid: msg.rid, reason: e.message })));
-      case 'team.seat': return reply(await seatTeam(msg).catch((e: Error) => ({ type: 'team.changed' as const, rid: msg.rid, reason: e.message })));
       // A chat card's instruction: a refusal reaches the requester as an `error`, the card's state everyone through chat.history.
       case 'session.relay': return setAside(msg.qid) ? refuse(SET_ASIDE) : relay.request(msg.qid);
       case 'session.relay.cancel': return relay.cancel(msg.qid);
@@ -1693,11 +1314,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     challenges: createChallengeStore(),
     credential: id => mobile.credential(id),
     setCredential: (id, c) => mobile.setCredential(id, c),
-    teams: () => teams.all(), tasks: () => tasks.all(), contextNear: () => contextPrefs.near,
-    projectName: id => (id ? projects.projects.find(p => p.id === id)?.name ?? null : null),
-    // A project's folder is its first local repo: only a project with one can be named by the phone.
-    projectByName: name => projects.projects.find(p => p.name === name && p.repos.some(r => r.machine === 'local'))?.id ?? null,
-    teamCatalog: true,
+    contextNear: () => contextPrefs.near,
     // The phone's model switch (#58): `session.model` answers with a code, and `models.list` asks this machine's agents.
     models: true,
     // A session's « Fermer » on the phone: the cards' close, so a close under way (a card's, another phone's) is shared.
@@ -1766,6 +1383,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     sweepAttachments,
     closeSession: id => { const s = store.get(id); return s ? closeSession(s) : Promise.reject(unknownSession()); },
     labelExited,
-    close: () => new Promise(res => { clearInterval(sweepTimer); unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); tasks.close(); handovers.close(); unsubscribeTeams(); teams.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
+    close: () => new Promise(res => { clearInterval(sweepTimer); unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
   };
 }

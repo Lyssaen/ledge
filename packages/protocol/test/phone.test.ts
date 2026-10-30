@@ -163,11 +163,30 @@ describe('phone device confirmation (lot 6a)', () => {
     expect(() => PhoneServerMessageSchema.parse({ type: 'confirm.challenge', purpose: 'decide', challenge: 'abc_-', rpId: 'relay.example', credentialId: 'AbC', expiresInMs: 60_000 })).not.toThrow();
     expect(() => PhoneServerMessageSchema.parse({ type: 'confirm.challenge', purpose: 'register', challenge: 'abc', rpId: 'relay.example', expiresInMs: 0 })).toThrow();
   });
-  it('a confirm.challenge may echo the digest of its prepare, a 64-hex string, and keeps it', () => {
-    const base = { type: 'confirm.challenge', purpose: 'define', challenge: 'abc', rpId: 'relay.example', credentialId: 'AbC', expiresInMs: 60_000 };
-    expect(PhoneServerMessageSchema.parse({ ...base, digest: 'a'.repeat(64) })).toMatchObject({ digest: 'a'.repeat(64) });
-    expect(() => PhoneServerMessageSchema.parse({ ...base, digest: 'nope' })).toThrow();
-    expect(() => PhoneServerMessageSchema.parse(base)).not.toThrow();
+  it('the phone whitelist holds no team, role, template or task message', () => {
+    const types = PhoneClientMessageSchema.options.map(o => o.shape.type.value);
+    expect(types.filter(t => /^(team|teams|role|template|task)\.|^chat\.(team|task)$/.test(t))).toEqual([]);
+    expect(types).toContain('daemon.update');
+    expect(() => PhoneClientMessageSchema.parse({ type: 'teams.catalog' })).toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ type: 'team.resume', op: OP, team: 't' })).toThrow();
+  });
+  it('the phone server messages hold no team, role or task message', () => {
+    const types = PhoneServerMessageSchema.options.map(o => o.shape.type.value);
+    expect(types.filter(t => /^(team|teams|role|task)(\.|$)/.test(t))).toEqual([]);
+  });
+  it('daemon.update still takes a passkey assertion', () => expect(PhoneClientMessageSchema.safeParse({ type: 'daemon.update', op: OP, version: '1.2.3', assertion }).success).toBe(true));
+  it('a challenge is for register, decide, launch, close, act or pc, and prepare carries no digest', () => {
+    expect(ConfirmPurposeSchema.options).toEqual(['register', 'decide', 'launch', 'close', 'act', 'pc']);
+    expect(PhoneClientMessageSchema.parse({ type: 'confirm.prepare', purpose: 'pc', digest: 'a'.repeat(64) })).not.toHaveProperty('digest');
+  });
+  it('a session carries no role, role label or team, and the snapshot no teams flag', () => {
+    const s = PhoneSessionSchema.parse({ id: 's1', name: 'bot', tool: 'claude', project: 'p', title: 't', state: 'idle', startedAt: '2026-10-20T10:00:00.000Z', lastActivityAt: '2026-10-20T10:00:00.000Z', cwd: '/x', unread: false, role: 'r', roleLabel: 'R', team: 't' });
+    for (const k of ['role', 'roleLabel', 'team']) expect(s).not.toHaveProperty(k);
+    const snapshot = PhoneServerMessageSchema.parse({ ...snap, daemon: { version: '1', name: 'pc', teams: true } }) as { daemon: object };
+    expect(snapshot.daemon).not.toHaveProperty('teams');
+  });
+  it('the operation reasons hold no definition code', () => {
+    for (const r of ['changed', 'exists', 'unknown_project', 'seat_failed']) expect(OperationReasonSchema.options).not.toContain(r);
   });
   it('still parses a lot 5 snapshot and takes the new fields', () => {
     expect(() => PhoneServerMessageSchema.parse(snap)).not.toThrow();
@@ -250,14 +269,14 @@ describe('phone chat', () => {
     expect(ConfirmPurposeSchema.parse('close')).toBe('close');
   });
   it('carries the generic rows without their args, strictly', () => {
-    const row = { action: 'team.dissolve', summary: 'Dissoudre **api**', risk: 'destructive', team: 'team-3fa2' };
+    const row = { action: 'session.archive', summary: 'Archiver **api**', risk: 'reversible', session: 'local:api' };
     expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [row] })).not.toThrow();
     expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [{ ...row, state: 'refused' }] })).not.toThrow();
-    expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [{ ...row, args: { team: 'team-3fa2' } }] })).toThrow();
+    expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [{ ...row, args: { session: 'local:api' } }] })).toThrow();
     expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [{ ...row, error: 'boom' }] })).toThrow();
     expect(ConfirmPurposeSchema.parse('act')).toBe('act');
     // Its words for the phone's own language, a cut detail, an error as a code, an action this PWA does not know yet.
-    expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [{ ...row, action: 'team.later', vars: { team: 'api' }, detail: 'x…', detailCut: true, state: 'failed', code: 'failed' }] })).not.toThrow();
+    expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [{ ...row, action: 'session.later', vars: { session: 'api' }, detail: 'x…', detailCut: true, state: 'failed', code: 'failed' }] })).not.toThrow();
     expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [{ ...row, code: 'x'.repeat(41) }] })).toThrow();
   });
   it('carries an ignored turn, and chat.ignore', () => {
@@ -351,17 +370,9 @@ describe('phone model change', () => {
     expect(() => PhoneServerMessageSchema.parse({ type: 'session.model.failed', id: 's1', reason: 'restart_failed' })).not.toThrow();
     expect(() => PhoneServerMessageSchema.parse({ type: 'session.model.failed', id: 's1', reason: 'boom' })).toThrow();
   });
-  it('an operation result may be scheduled and carry seat models', () => {
+  it('an operation result may be scheduled', () => {
     expect(() => PhoneServerMessageSchema.parse({ type: 'operation.result', op: OP, status: 'applied', reason: 'scheduled' })).not.toThrow();
-    expect(() => PhoneServerMessageSchema.parse({ type: 'operation.result', op: OP, status: 'applied', models: [{ role: 'leader', session: 's1', status: 'scheduled' }] })).not.toThrow();
-    expect(() => PhoneServerMessageSchema.parse({ type: 'operation.result', op: OP, status: 'applied', models: [{ role: 'r', session: 's', status: 'refused', reason: 'not_running' }] })).not.toThrow();
     expect(OperationReasonSchema.options).toContain('restart_failed');
-  });
-  it('a seat model is bounded like a role id and a session id', () => {
-    const seat = (x: object) => PhoneServerMessageSchema.safeParse({ type: 'operation.result', op: OP, status: 'applied', models: [{ role: 'r', session: 's', status: 'applied', ...x }] }).success;
-    expect(seat({ role: 'r'.repeat(40), session: 's'.repeat(100) })).toBe(true);
-    expect(seat({ role: 'r'.repeat(41) })).toBe(false);
-    expect(seat({ session: 's'.repeat(101) })).toBe(false);
   });
   it('the snapshot announces the model change', () => {
     expect(() => PhoneServerMessageSchema.parse({ type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: [], capabilities: { claude: caps, codex: caps, cursor: caps, omp: caps }, daemon: { version: '1.0.0', name: 'pc', models: true } })).not.toThrow();

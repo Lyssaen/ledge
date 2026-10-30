@@ -277,7 +277,7 @@ describe('the Ledge chat docked on the right', () => {
     const { d, user } = env;
     const actions: ChatAction[] = [
       { action: 'session.archive', args: { session: 'otto' }, summary: 'Archiver **Otto**', vars: { session: 'Otto' }, risk: 'reversible', session: 'otto' },
-      { action: 'team.dissolve', args: { team: 't1' }, summary: 'Dissoudre l’équipe **qa**', vars: { team: 'qa' }, risk: 'destructive', team: 't1' }
+      { action: 'session.close', args: { session: 'bix' }, summary: 'Fermer **Bix**', vars: { session: 'Bix' }, risk: 'destructive', session: 'bix' }
     ];
     const turn = await ask(env, 'Range', 'Voici.', { actions });
     const card = within(panel().getByRole('region', { name: 'Plan of 2 actions' }));

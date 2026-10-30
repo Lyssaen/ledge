@@ -18,10 +18,6 @@ import { Offline, Replaced } from './screens/Offline';
 import { RequestDetail } from './screens/RequestDetail';
 import { StorageUnavailable } from './screens/StorageUnavailable';
 import { Terminal } from './screens/Terminal';
-import { Teams } from './screens/Teams';
-import { RoleEditor } from './screens/RoleEditor';
-import { TeamEditor } from './screens/TeamEditor';
-import { LiveTeam } from './screens/LiveTeam';
 import { Thread } from './screens/Thread';
 import { Unrecognized } from './screens/Unrecognized';
 import { Update } from './screens/Update';
@@ -205,12 +201,6 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
     }
     switch (route.name) {
       case 'agents': return <Agents store={store} onReconnect={retry} />;
-      case 'teams': return <Teams store={store} onReconnect={retry} />;
-      case 'role': return <RoleEditor store={store} roleKey={route.key} />;
-      case 'team': return <TeamEditor key={`team:${route.key}`} store={store} mode={{ kind: 'template', key: route.key }} />;
-      case 'team-copy': return <TeamEditor key={`copy:${route.teamId}`} store={store} mode={{ kind: 'copy', teamId: route.teamId }} />;
-      case 'compose': return <TeamEditor key={`live:${route.teamId}`} store={store} mode={{ kind: 'live', teamId: route.teamId }} />;
-      case 'live': return <LiveTeam key={route.teamId} store={store} teamId={route.teamId} onReconnect={retry} />;
       case 'chat': return mobile.device?.chat ? <Chat store={store} onReconnect={retry} /> : <Inbox store={store} onReconnect={retry} />;
       case 'thread': return <Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} />;
       case 'terminal': return <Terminal key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} />;

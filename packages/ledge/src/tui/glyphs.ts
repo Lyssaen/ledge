@@ -3,8 +3,6 @@ const UNICODE = {
   approval: '◆', question: '?', working: '●', idle: '○', starting: '◌', done: '·', error: '✗', readonly: '○',
   branch: '⎇', helper: '↳', message: '✉', arrow: '→', ok: '✓', fail: '✗', live: '◌', folded: '▸', unfolded: '▾', project: '■', machine: '●',
   cont: '↪', logo: '◖', cursor: '❯', radioOn: '◉', radioOff: '○', boxOn: '✓', boxOff: '☐', prev: '◂', next: '▸', ellipsis: '…', bar: '│',
-  /** A team's table and the common table (roles spec §3.9). */
-  team: '▣', common: '▭',
   /** Markdown: a list's marks, a quote's bar, a rule, a code block's corners, a link's arrow, the end of a streamed answer. */
   bullet: '•', subBullet: '◦', quote: '▎', rule: '─', codeTop: '╭', codeEnd: '╰', link: '↗', caret: '▍',
   /** Where a table's rule crosses its columns' bars. */
@@ -12,20 +10,16 @@ const UNICODE = {
   /** An action card's row (#94): proposed is `idle`, applied `ok`, failed or refused `fail`. */
   running: '◐', held: '·', stale: '!',
   /** Links are clickable (OSC 8); without, their address follows them. */
-  links: true as boolean,
-  /** A task handed between seats in « Échanges » (#92). */
-  task: '▤'
+  links: true as boolean
 };
 export type Glyphs = typeof UNICODE;
 const ASCII: Glyphs = {
   approval: '!', question: '?', working: '*', idle: 'o', starting: '.', done: '-', error: 'x', readonly: 'o',
   branch: 'git:', helper: '>', message: '@', arrow: '->', ok: 'v', fail: 'x', live: '~', folded: '+', unfolded: '-', project: '#', machine: '*',
   cont: '>', logo: '(', cursor: '>', radioOn: '(*)', radioOff: '( )', boxOn: '[x]', boxOff: '[ ]', prev: '<', next: '>', ellipsis: '...', bar: '|',
-  team: '[T]', common: '[ ]',
   bullet: '-', subBullet: 'o', quote: '|', rule: '-', codeTop: '+', codeEnd: '+', link: '', caret: '_',
   cross: '+',
   running: '~', held: '.', stale: '!',
-  task: '[=]',
   links: false
 };
 

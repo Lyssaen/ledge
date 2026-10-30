@@ -174,7 +174,7 @@ beforeEach(() => localStorage.clear());
 afterEach(async () => { cleanup(); await closeDaemons(); });
 
 describe('putting an agent away', () => {
-  it('the cards of No project are draggable, with their grip; so are the seats, to another table (atelier rooms spec §3.3)', async () => {
+  it('the cards of No project are draggable, with their grip; so are the seats, to another room’s table', async () => {
     await boot();
     const card = document.querySelector('.unassigned-card')!;
     expect(card).toHaveAttribute('draggable', 'true');

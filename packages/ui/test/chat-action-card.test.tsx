@@ -9,7 +9,7 @@ import { T0, fakeSession } from './fixtures';
 
 const noop = () => {};
 const archive: ChatAction = { action: 'session.archive', args: { session: 'otto' }, summary: 'Archiver **Otto**', vars: { session: 'Otto' }, risk: 'reversible', session: 'local:otto' };
-const dissolve: ChatAction = { action: 'team.dissolve', args: { team: 't1' }, summary: 'Dissoudre l’équipe **qa**', vars: { team: 'qa' }, risk: 'destructive', team: 't1' };
+const dissolve: ChatAction = { action: 'session.close', args: { session: 'otto' }, summary: 'Fermer **Bix**', vars: { session: 'Bix' }, risk: 'destructive', session: 'local:bix' };
 const turn = (o: Partial<ChatTurn> = {}): ChatTurn => ({ qid: 'q1', question: 'q', askedAt: T0, answeredAt: T0, steps: [], answer: 'Voici.', actions: [archive, dissolve], ...o });
 const base: ChatViewProps = { turns: [turn()], live: null, sessions: [fakeSession('local:otto')], visible: true, offline: null, onAsk: noop, onCancel: noop, onReset: noop, onBack: noop, onClose: noop, onOpenSession: noop, now: Date.parse(T0), docked: true };
 const withCard = { ...copy, chat: { ...copy.chat, action: actionCopy } };
@@ -21,7 +21,7 @@ describe('the chat draws a turn\'s generic card (#94)', () => {
     render(ui({ onAct }));
     const card = screen.getByRole('region', { name: 'Plan of 2 actions' });
     expect(card).toHaveTextContent('Archive Otto');
-    expect(card).toHaveTextContent('Dissolve the team qa');
+    expect(card).toHaveTextContent('Close Bix');
     fireEvent.click(screen.getByRole('button', { name: 'Apply all (2)…' }));
     fireEvent.click(screen.getByRole('button', { name: 'Apply the 2' }));
     expect(onAct).toHaveBeenCalledWith('q1', [0, 1], true);
@@ -175,5 +175,14 @@ describe('useActionCards: chat.act and chat.ignore (#94)', () => {
     act(() => result.current.ignore('q1', false));
     act(() => result.current.ignore('q1', true));
     expect(send.mock.calls.map(c => c[0])).toEqual([{ type: 'chat.ignore', qid: 'q1' }, { type: 'chat.ignore', qid: 'q1', undo: true }]);
+  });
+});
+
+describe('old turns that carry a team or tasks', () => {
+  it('ChatView draws no team or task card for an old turn that carries one', () => {
+    const old = turn({ actions: [], ...({ team: { name: 'qa', seats: [], state: 'proposed' }, tasks: [{ to: 'a', title: 'b' }] } as object) });
+    const { container } = render(ui({ turns: [old] }));
+    expect(container.querySelector('[data-card="team"]')).toBeNull();
+    expect(container.querySelector('[data-card="task"]')).toBeNull();
   });
 });

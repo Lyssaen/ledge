@@ -1,16 +1,16 @@
 import { isPending, liveHelpers, splitId } from '@ledge/fleet';
-import { contextNear, LEDGE_GIVER, projectOf, taskClosed, transmissions, type Project, type ProjectColor, type Projects, type Session, type Task, type Team } from '@ledge/protocol';
+import type { FleetAsk } from '@ledge/fleet';
+import { askShown, contextNear, projectOf, type Project, type ProjectColor, type Projects, type Session } from '@ledge/protocol';
 
 /** A session row of the tree under its branch. */
 export interface BranchRow { branch: string; sessions: Session[] }
 /** A project of the tree: a project of the daemon's list, or a repository outside any (`color` absent). */
-export interface ProjectNode { key: string; label: string; color?: ProjectColor; branches: BranchRow[]; count: number;
-  /** The project's live teams (roles spec §3.9), after its common table: each with its live seats and Ledge's tasks done of given. */
-  teams: TeamRow[] }
-export interface TeamRow { key: string; team: Team; sessions: Session[]; done: number; given: number }
+export interface ProjectNode { key: string; label: string; color?: ProjectColor; branches: BranchRow[]; count: number }
 export interface Overview {
   /** The sessions waiting for the user, the oldest request first. */
   yours: Session[];
+  /** The decisions waiting for the user (`ledge ask`), oldest first: also items of « À toi ». */
+  asks: FleetAsk[];
   tree: ProjectNode[];
   /** Every session in the order `j`/`k` walks them: the tree's order. */
   order: string[];
@@ -24,38 +24,25 @@ const machineOf = (s: Session): string => s.machineId ?? splitId(s.id)?.machine 
 
 /** The tree: the daemon's projects in their order, then repositories outside any project in the order their first session
  *  started; inside each, branches in the order their first session started. A session without a branch sits under « - ». */
-export function overview(sessions: readonly Session[], projects: Projects | null, teams: readonly Team[] = [], tasks: readonly Task[] = []): Overview {
+export function overview(sessions: readonly Session[], projects: Projects | null, asks: readonly FleetAsk[] = []): Overview {
   const live = listed(sessions);
   const yours = live.filter(isPending).sort((a, b) => a.lastActivityAt.localeCompare(b.lastActivityAt) || a.id.localeCompare(b.id));
   const nodes = new Map<string, ProjectNode>();
   const known = new Map<string, Project>((projects?.projects ?? []).map(p => [p.id, p]));
-  for (const p of projects?.projects ?? []) nodes.set(`p:${p.id}`, { key: `p:${p.id}`, label: p.name, color: p.color, branches: [], count: 0, teams: [] });
-  // A team's room is the project its folder falls in (the atelier's rule).
-  const rooms = new Map<string, TeamRow>();
-  for (const team of teams) {
-    if (team.state === 'dissolved') continue;
-    const pid = projects ? projectOf({ machineId: team.machine, cwd: team.cwd }, projects) ?? team.project : team.project;
-    const node = pid ? nodes.get(`p:${pid}`) : undefined;
-    if (!node) continue;
-    const mine = tasks.filter(x => x.team === team.id && x.giver === LEDGE_GIVER);
-    const row: TeamRow = { key: `${node.key}|team:${team.id}`, team, sessions: [], done: mine.filter(x => x.state === 'done').length, given: mine.length };
-    node.teams.push(row); rooms.set(team.id, row);
-  }
+  for (const p of projects?.projects ?? []) nodes.set(`p:${p.id}`, { key: `p:${p.id}`, label: p.name, color: p.color, branches: [], count: 0 });
   for (const s of live) {
     const pid = projects ? projectOf({ machineId: machineOf(s), cwd: s.cwd }, projects) : null;
     const key = pid && known.has(pid) ? `p:${pid}` : `r:${machineOf(s)}:${s.repoPath ?? s.cwd}`;
     let node = nodes.get(key);
-    if (!node) { node = { key, label: s.repo ?? s.project, branches: [], count: 0, teams: [] }; nodes.set(key, node); }
-    const seat = s.team ? rooms.get(s.team) : undefined;
-    if (seat && node.teams.includes(seat)) { seat.sessions.push(s); node.count += 1; continue; }
+    if (!node) { node = { key, label: s.repo ?? s.project, branches: [], count: 0 }; nodes.set(key, node); }
     const branch = s.branch ?? '-';
     let row = node.branches.find(b => b.branch === branch);
     if (!row) { row = { branch, sessions: [] }; node.branches.push(row); }
     row.sessions.push(s); node.count += 1;
   }
-  const tree = [...nodes.values()].filter(n => n.count > 0 || n.teams.length > 0);
-  const order = tree.flatMap(n => [...n.branches.flatMap(b => b.sessions.map(s => s.id)), ...n.teams.flatMap(x => x.sessions.map(s => s.id))]);
-  return { yours, tree, order, machines: new Set(live.map(machineOf)).size };
+  const tree = [...nodes.values()].filter(n => n.count > 0);
+  const order = tree.flatMap(n => n.branches.flatMap(b => b.sessions.map(s => s.id)));
+  return { yours, asks: asks.filter(askShown).sort((a, b) => a.at.localeCompare(b.at)), tree, order, machines: new Set(live.map(machineOf)).size };
 }
 
 /** The live helpers' count shown as `+n` next to a session. */
@@ -85,26 +72,20 @@ export function nextWaiting(yours: readonly Session[], selected: string | null):
   return yours[(at + 1) % yours.length]!.id;
 }
 
-/** The latest exchanges between sessions, newest first: each session's `lastMessage`, and with `tasks` every hand-over of a task
- *  (#92: a give, pass, done, refuse or cancel between any two seats, Ledge as `ledge`). A side is named by its live session, raw
+/** The latest messages between sessions, newest first: each session's `lastMessage`. A side is named by its live session, raw
  *  or qualified id alike, else by the name the journal kept. */
-export function exchanges(sessions: readonly Session[], max: number, tasks: readonly Task[] = [], ledge = 'Ledge'): Array<{ at: string; from: string; to: string; summary: string; kind: 'message' | 'task' }> {
-  const byId = new Map(sessions.map(s => [s.id, s]));
+export function exchanges(sessions: readonly Session[], max: number): Array<{ at: string; from: string; to: string; summary: string }> {
   const bare = (id: string) => splitId(id)?.id ?? id;
-  const find = (id: string) => byId.get(id) ?? sessions.find(x => bare(x.id) === bare(id));
-  const nameOf = (id: string, then: string) => (id === LEDGE_GIVER ? ledge : find(id)?.name ?? then);
-  return [...sessions.flatMap(s => {
+  const find = (id: string) => sessions.find(x => x.id === id) ?? sessions.find(x => bare(x.id) === bare(id));
+  return sessions.flatMap(s => {
     const m = s.lastMessage;
     if (!m) return [];
     const peer = m.peer ? find(m.peer) : undefined;
-    return [{ at: m.at, from: s.name, to: peer?.name ?? m.to, summary: m.summary, kind: 'message' as const }];
-  }), ...tasks.flatMap(x => transmissions(x).map(tr => ({ at: tr.at, from: nameOf(tr.from, tr.fromName), to: nameOf(tr.to, tr.toName), summary: x.title, kind: 'task' as const })))]
-    .sort((a, b) => b.at.localeCompare(a.at)).slice(0, max);
+    return [{ at: m.at, from: s.name, to: peer?.name ?? m.to, summary: m.summary }];
+  }).sort((a, b) => b.at.localeCompare(a.at)).slice(0, max);
 }
 
-/** The closed tasks Ledge gave that the user has not put away: items of « À toi » (roles spec §3.7). */
 /** The sessions « À toi » lists for their context (context handover spec §3.2): live ones past 80 % with no relief under way, and failed reliefs. */
 export const nearContext = (sessions: readonly Session[], near?: number): Session[] =>
   sessions.filter(s => s.state !== 'exited' && !s.archivedAt && (s.handover ? s.handover.state === 'failed' : contextNear(s.context, near)));
 
-export const closedLedgeTasks = (tasks: readonly Task[]): Task[] => tasks.filter(x => x.giver === LEDGE_GIVER && taskClosed(x) && !x.seen);

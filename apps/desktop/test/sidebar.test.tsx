@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import { activeCount } from '../src/nav/agents';
+import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { boot, closeDaemons, listSessions, TWO_PROJECTS } from './helpers';
 import { MESSAGES } from '../src/i18n/messages';
 
@@ -24,17 +25,49 @@ describe('the sidebar shell', () => {
   });
 
   it('Ledge’s entry (ledge home spec §2.1): its live line, and a click goes to the home view, lit, with its composer focused', async () => {
-    const { side, user, d } = await boot({ projects: TWO_PROJECTS, sessions: listSessions() });
+    const { side, user } = await boot({ projects: TWO_PROJECTS, sessions: listSessions() });
     const entry = side.getByRole('button', { name: 'Home: Ledge, the operator' });
-    expect(entry).toHaveTextContent(/\d+ yours · 0 active teams/);
+    expect(entry).toHaveTextContent(/\d+ yours/);
     await user.click(entry);
     const home = await screen.findByRole('region', { name: 'Home: Ledge, the operator' });
     await waitFor(() => expect(within(home).getByRole('textbox', { name: 'Ask Ledge' })).toHaveFocus());
     expect(entry).toHaveAttribute('aria-current', 'page');
     expect(screen.queryByRole('complementary', { name: 'Chat Ledge' })).toBeNull();
-    // A team at work shows in the line.
-    d.push({ type: 'teams', teams: [{ id: 'team-a1b2', name: 'ledge-roles', project: null, machine: 'local', cwd: '/w/ledge', state: 'active', seats: [], createdAt: '2026-10-26T08:00:00.000Z', updatedAt: '2026-10-26T08:00:00.000Z' }] });
-    await waitFor(() => expect(entry).toHaveTextContent('· 1 active team'));
+  });
+
+  it('Your turn lists open asks after the waiting sessions, and the Ledge line counts them', async () => {
+    const at = new Date().toISOString();
+    const near = fakeSession('pim', { name: 'Pim', cwd: '/w/ledge', state: 'idle', context: { used: 170_000, window: 200_000, at } });
+    const { d, side, user } = await boot({ projects: TWO_PROJECTS, sessions: [...listSessions(), near] });
+    const entry = side.getByRole('button', { name: 'Home: Ledge, the operator' });
+    await waitFor(() => expect(entry).toHaveTextContent('3 yours'));
+    d.push({ type: 'asks', asks: [{ id: 'a1b2c34', from: 'nova', fromName: 'Nova', question: 'Which database?', options: 'A or B (I recommend B)', at, state: 'open' }] });
+    const yours = within(side.getByRole('region', { name: 'Your turn' }));
+    await yours.findByText('Which database?');
+    await waitFor(() => expect(entry).toHaveTextContent('4 yours'));
+    const cards = [...document.querySelectorAll('.st-attn .st-card')];
+    expect(cards.map(c => (c.matches('[data-ask]') ? 'ask' : c.matches('[data-near]') ? 'near' : 'session'))).toEqual(['session', 'session', 'ask', 'near']);
+    const card = document.querySelector<HTMLElement>('[data-ask="a1b2c34"]')!;
+    expect(within(card).getByText('Decision')).toBeVisible();
+    expect(within(card).getByText('from Nova')).toBeVisible();
+    expect(within(card).getByText('A or B (I recommend B)')).toBeVisible();
+    await user.type(within(card).getByPlaceholderText('Your answer…'), ' B ');
+    await user.click(within(card).getByRole('button', { name: 'Answer' }));
+    await waitFor(() => expect(d.received).toContainEqual({ type: 'ask.answer', rid: expect.any(String), id: 'a1b2c34', text: 'B' }));
+  });
+
+  it('the tree draws no team row; every session of a project sits under it by branch', async () => {
+    const seat = (id: string, name: string, branch: string) => fakeSession(id, { name, cwd: '/w/ledge', state: 'working', branch, ...{ team: 'team-a1b2', role: 'build' } });
+    const { d, side } = await boot({ projects: TWO_PROJECTS, sessions: [seat('otto', 'Otto', 'desktop'), seat('nova', 'Nova', 'main')] });
+    // An older daemon still speaks of teams: the front ignores them.
+    d.push({ type: 'teams', teams: [{ id: 'team-a1b2', name: 'ledge-dev', project: 'ledge', machine: 'local', cwd: '/w/ledge', state: 'active', seats: [{ role: 'build', sessionId: 'otto' }], createdAt: '2026-10-26T08:00:00.000Z', updatedAt: '2026-10-26T08:00:00.000Z' }] } as never);
+    const tree = within(side.getByRole('tree'));
+    expect(await tree.findByRole('button', { name: /^Otto/ })).toBeVisible();
+    expect(tree.getByRole('button', { name: /^Nova/ })).toBeVisible();
+    expect(document.querySelector('.st-team, .st-common')).toBeNull();
+    expect(tree.queryByText('ledge-dev')).toBeNull();
+    expect(tree.getByText('desktop')).toBeVisible();
+    expect(tree.getByText('main')).toBeVisible();
   });
 
   it('the question field under the entry: Enter with text goes home and sends chat.ask', async () => {

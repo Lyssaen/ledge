@@ -12,25 +12,19 @@ export type Route =
   | { name: 'login' }
   | { name: 'link' }
   | { name: 'key-changed' }
-  | { name: 'update' }
-  /** The Équipes tab. `team`: the editor of a team definition (`key` is `new` or a catalog key, `model/catalog.ts`); `team-copy`: a live team's composition as a new team; `role`: a role's editor. */
-  | { name: 'teams' }
-  | { name: 'team'; key: string }
-  | { name: 'team-copy'; teamId: string }
-  | { name: 'role'; key: string }
-  | { name: 'live'; teamId: string }
-  | { name: 'compose'; teamId: string };
+  | { name: 'update' };
 
-const SIMPLE = ['agents', 'chat', 'connection', 'login', 'link', 'key-changed', 'update', 'teams'] as const;
+const SIMPLE = ['agents', 'chat', 'connection', 'login', 'link', 'key-changed', 'update'] as const;
+/** Routes of the removed Équipes tab, which a bookmark or a cached app may still carry: they open the agents. */
+const REMOVED = ['teams', 'team', 'team-copy', 'role', 'live', 'compose'];
 
 export function parseRoute(hash: string): Route {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean);
   try {
     if (parts[0] === 'request' && parts.length === 3) return { name: 'request', sessionId: decodeURIComponent(parts[1]!), key: decodeURIComponent(parts[2]!) };
-    if ((parts[0] === 'team' || parts[0] === 'role') && parts.length === 2) return { name: parts[0], key: decodeURIComponent(parts[1]!) };
-    if ((parts[0] === 'team-copy' || parts[0] === 'live' || parts[0] === 'compose') && parts.length === 2) return { name: parts[0], teamId: decodeURIComponent(parts[1]!) };
     if ((parts[0] === 'thread' || parts[0] === 'terminal') && parts.length === 2) return { name: parts[0], sessionId: decodeURIComponent(parts[1]!) };
   } catch { /* malformed escape: fall through to the inbox */ }
+  if (REMOVED.includes(parts[0] ?? '')) return { name: 'agents' };
   const simple = SIMPLE.find((n) => n === parts[0]);
   if (simple && parts.length === 1) return { name: simple };
   return { name: 'inbox' };
@@ -38,8 +32,6 @@ export function parseRoute(hash: string): Route {
 
 export function href(r: Route): string {
   if (r.name === 'request') return `#/request/${encodeURIComponent(r.sessionId)}/${encodeURIComponent(r.key)}`;
-  if (r.name === 'team' || r.name === 'role') return `#/${r.name}/${encodeURIComponent(r.key)}`;
-  if (r.name === 'team-copy' || r.name === 'live' || r.name === 'compose') return `#/${r.name}/${encodeURIComponent(r.teamId)}`;
   if (r.name === 'thread' || r.name === 'terminal') return `#/${r.name}/${encodeURIComponent(r.sessionId)}`;
   return r.name === 'inbox' ? '#/' : `#/${r.name}`;
 }

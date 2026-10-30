@@ -24,13 +24,13 @@ export async function handoverOnClient(client: Client, args: string[], by: strin
     client.send(op.op === 'show' ? { type: 'handover.show', rid, by } : { type: 'handover.brief', rid, by, text: op.text });
     const r = await client.next('handover.result', ms);
     if (r.reason !== undefined) return { line: `refusé : ${r.reason}`, code: 1 };
-    return op.op === 'show' ? { line: r.text ?? '', code: 0 } : { line: 'bilan reçu : Ledge lance la session qui prend ta relève et lui passe tes tâches. Arrête-toi là.', code: 0 };
+    return op.op === 'show' ? { line: r.text ?? '', code: 0 } : { line: 'bilan reçu : Ledge lance la session qui prend ta relève. Arrête-toi là.', code: 0 };
   } catch (e) {
     return { line: `pas de réponse de Ledge : ${(e as Error).message}`, code: 1 };
   }
 }
 
-/** `ledge handover …` from a session Ledge launched (its id from the environment, as `ledge task`). */
+/** `ledge handover …` from a session Ledge launched (its id from the environment, as `ledge send`). */
 export async function runHandover(args: string[], opts: { port?: number; env?: NodeJS.ProcessEnv; timeoutMs?: number } = {}): Promise<{ line: string; code: number }> {
   if (!handoverArgs(args)) return { line: HANDOVER_USAGE, code: args.length ? 1 : 0 };
   const env = opts.env ?? process.env;

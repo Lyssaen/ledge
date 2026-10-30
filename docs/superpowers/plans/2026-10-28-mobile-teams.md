@@ -1,5 +1,7 @@
 # Teams and roles from the phone: implementation plan
 
+> Remplacé par 2026-10-30-ledge-openrig-orchestrator-design (lot 1 : équipes, rôles et tâches retirés).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** From the phone, see, write and delete roles and team definitions, launch a team on a project, follow a live team

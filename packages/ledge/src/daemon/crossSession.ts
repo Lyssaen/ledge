@@ -87,35 +87,16 @@ export function formatLedgeNotice(n: { to: string; text: string; reason: string 
   const quote = ledgeBody(flat.length > NOTICE_QUOTE ? `${flat.slice(0, NOTICE_QUOTE)}…` : flat);
   return `<ledge-notice to="${to}">Ledge n'a pas pu remettre ton message à ${to} (« ${quote}${NOTICE_REASON}${ledgeBody(n.reason)}</ledge-notice>`;
 }
-/** What Ledge types to a session that joins a team at its next free moment (spec 2026-10-25 roles §3.3): its role and
- *  its teammates, the lines its next start would give it. */
-export function formatTeamNotice(n: { team: string; text: string }): string {
-  return `<ledge-notice team="${attr(n.team)}">${ledgeBody(n.text)}</ledge-notice>`;
+/** What Ledge types to a session whose `ledge ask` the user answered: one line naming the decision and the user's words,
+ *  both escaped as every body Ledge types. */
+const ANSWER_BLOCK = /^<ledge-answer\b([^>]*)>([\s\S]*?)(?:<\/ledge-answer>|$)/;
+export function formatLedgeAnswer(a: { id: string; question: string; text: string }): string {
+  return `<ledge-answer id="${attr(a.id)}">Réponse de l'utilisateur à « ${ledgeBody(a.question)} » : ${ledgeBody(a.text)}</ledge-answer>`;
 }
-/** What Ledge types to a running session whose role's prompt changed (spec 2026-10-28 mobile teams §3.6): the new prompt in full. */
-export function formatRoleNotice(n: { role: string; text: string }): string {
-  return `<ledge-notice role="${attr(n.role)}">${ledgeBody(n.text)}</ledge-notice>`;
-}
-const TEAM_NOTICE = /^<ledge-notice\b([^>]*\bteam="[^"]*"[^>]*)>([\s\S]*?)(?:<\/ledge-notice>|$)/;
-/** A prompt that is Ledge telling a session it joined a team: the team and the lines it carries. */
-export function ledgeTeamNotice(text: string): { team: string; text: string } | undefined {
-  const m = TEAM_NOTICE.exec(text.trimStart());
-  if (!m) return undefined;
-  const team = new Map([...m[1]!.matchAll(ATTR)].map(a => [a[1]!, a[2]!] as const)).get('team');
-  return team ? { team, text: m[2]!.trim() } : undefined;
-}
-/** What Ledge types about a task (spec 2026-10-25 session tasks §3.3): one line naming the task and the session the
- *  change comes from, never the user's words. `text` is Ledge's own wording around the title and result, escaped here. */
-const TASK_BLOCK = /^<ledge-task\b([^>]*)>([\s\S]*?)(?:<\/ledge-task>|$)/;
-export function formatLedgeTask(t: { id: string; from: string; text: string }): string {
-  return `<ledge-task id="${attr(t.id)}" from="${attr(t.from)}">${ledgeBody(t.text)}</ledge-task>`;
-}
-export function ledgeTask(text: string): { id: string; from?: string; text: string } | undefined {
-  const m = TASK_BLOCK.exec(text.trimStart());
-  if (!m) return undefined;
-  const attrs = new Map([...m[1]!.matchAll(ATTR)].map(a => [a[1]!, a[2]!] as const));
-  const id = attrs.get('id'); const from = attrs.get('from');
-  return id ? { id, ...(from ? { from } : {}), text: m[2]!.trim() } : undefined;
+export function ledgeAnswer(text: string): { id: string; text: string } | undefined {
+  const m = ANSWER_BLOCK.exec(text.trimStart());
+  const id = m ? new Map([...m[1]!.matchAll(ATTR)].map(a => [a[1]!, a[2]!] as const)).get('id') : undefined;
+  return id ? { id, text: m![2]!.trim() } : undefined;
 }
 /** A prompt that is a Ledge notice: the target it names, the reason that ends it, and its text. */
 export function ledgeNotice(text: string): { to: string; reason?: string; text: string } | undefined {

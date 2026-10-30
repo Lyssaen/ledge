@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApp, useInput, useStdout, useWindowSize } from 'ink';
-import { isPending, useDaemon, useMachines, useProjects, useTasks, useTeams, type DaemonClient, type Fleet } from '@ledge/fleet';
+import { isPending, useDaemon, useMachines, useProjects, useAsks, type DaemonClient, type Fleet } from '@ledge/fleet';
 import type { Session } from '@ledge/protocol';
 import { useActions, type Toast } from './actions.js';
 import { attachCommand, runAttached } from './attach.js';
@@ -19,8 +19,6 @@ import { Settings } from './screens/Settings.js';
 import { Help } from './screens/Help.js';
 import { MIN } from './ui/Frame.js';
 import { setTone, tone as toneNow, toneFor, type ThemeChoice, type Tone } from './theme.js';
-import { Teams } from './screens/Teams.js';
-import type { CatalogMemo } from './model/catalog.js';
 
 /** How long a toast stays. */
 export const TOAST_MS = 5000;
@@ -63,8 +61,7 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
   const d = useDaemon();
   const machines = useMachines(client);
   const projects = useProjects(client);
-  const teams = useTeams(client);
-  const tasks = useTasks(client);
+  const asks = useAsks(client);
   const fleet = client.fleet as Fleet;
   const t = MESSAGES[lang];
   const [screen, setScreen] = useState<Screen>('overview');
@@ -76,7 +73,6 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
   const kept = useRef<Kept>({ drafts: new Map(), sent: new Map(), asked: [] }).current;
   // When ctrl+c was last pressed with a draft waiting.
   const armed = useRef(0);
-  const catalog = useRef<CatalogMemo>({});
 
   useEffect(() => {
     if (!lastToast) return;
@@ -87,7 +83,7 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
   const setEditing = useCallback((on: boolean) => setEditingState(on), []);
 
   // The selection follows its session; the first one waiting for the user is chosen at start.
-  const view = useMemo(() => overview(d.sessions, projects, teams ?? [], tasks), [d.sessions, projects, teams, tasks]);
+  const view = useMemo(() => overview(d.sessions, projects, asks), [d.sessions, projects, asks]);
   const order = useRef<string[]>([]);
   useEffect(() => {
     setSelectedId(cur => cur === null && view.yours[0] ? view.yours[0].id : keepSelection(view.order, cur, order.current));
@@ -143,7 +139,7 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
   const small = size.columns < MIN.columns || size.rows < MIN.rows;
   const tui: Tui = {
     client, fleet, d, machines, projects, t, lang, setLang, theme, setTheme, tone, background, g: glyphs, screen, go, selected, select: setSelectedId,
-    toast, lastToast, actions, editing, setEditing, small, attach, runInTerminal, env, catalog, keys, kept,
+    toast, lastToast, actions, editing, setEditing, small, attach, runInTerminal, env, keys, kept,
     readImage: readImage ?? (() => readClipboardImage(env)), openFile: openFile ?? (file => openImage(file, env))
   };
 
@@ -171,9 +167,9 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
     if (input === ',') { go('settings'); return; }
     if (input === '/') { go('ask'); return; }
     if (input === '+') { go('launch'); return; }
-    if (/^[1-6]$/.test(input)) { go(SCREENS[Number(input) - 1]!); return; }
+    if (/^[1-5]$/.test(input)) { go(SCREENS[Number(input) - 1]!); return; }
   });
 
-  const Body = { overview: Overview, session: SessionScreen, ask: Ask, launch: Launch, settings: Settings, teams: Teams, help: Help }[screen];
+  const Body = { overview: Overview, session: SessionScreen, ask: Ask, launch: Launch, settings: Settings, help: Help }[screen];
   return <TuiContext.Provider value={tui}><Body /></TuiContext.Provider>;
 }

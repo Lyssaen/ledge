@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { daemonStore, projectOf, useDaemon, useIsland, useMobile, useMobileError, useProjects, useTokenMissing, type DaemonClient } from '@ledge/fleet';
+import { daemonStore, projectOf, useAsks, useDaemon, useIsland, useMobile, useMobileError, useProjects, useTokenMissing, type DaemonClient } from '@ledge/fleet';
 import type { Project, Projects, Session } from '@ledge/protocol';
 import { LangProvider, loadLang, messagesFor, saveLang, useI18n, type Lang } from './i18n/lang';
 import { loadMessages } from './i18n/messages';
@@ -35,8 +35,7 @@ import { takeWhatsNew } from './update/notes';
 import { openWhatsNew, useWhatsNew } from './update/whatsNewView';
 import { WhatsNew } from './update/WhatsNew';
 import { useLaunch } from './launch/useLaunch';
-import { TeamLaunch } from './launch/TeamLaunch';
-import { closedLedgeTasks, useTeamsApi } from './teams/useTeamsApi';
+import { useRelief } from './session/useRelief';
 import { Atelier } from './atelier/Atelier';
 import { AtelierAway } from './atelier/Away';
 import { atelierOpen, attachAtelier, canDetach, detachAtelier, onAtelier, showMainWindow } from './atelier/detach';
@@ -112,7 +111,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const { sessions, machines, status, localDown, fleet, client: fleetClient, errors } = fleetView;
   const termStore = useTermStore(fleetClient);
   const projects = useProjects(fleetClient);
-  const teams = useTeamsApi(fleetClient);
+  const relief = useRelief(fleetClient);
+  const asks = useAsks(fleetClient);
   const island = useIsland(fleetClient);
   const mobile = useMobile(fleetClient);
   const mobileError = useMobileError(fleetClient);
@@ -304,44 +304,34 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         <Sidebar nav={nav} dispatch={dispatch} sessions={sessions} archived={fleetView.archived} machines={machines} updating={daemonUpdates.updating} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing}
           actions={actions} decisions={decisions} waits={waits} menu={{ open: (id, at, opener) => sessionMenu.open(id, at, opener ?? null) }}
           onAsk={askLedge} onTerminal={sessionMenu.terminal} revealArchives={revealArchives} revealCurrent={revealCurrent}
-          ledge={{ closedTasks: closedLedgeTasks(teams.tasks).length, activeTeams: (teams.teams ?? []).filter(x => x.state === 'active').length }} teams={teams} />
+          relief={relief} asks={asks} onAnswerAsk={(a, text) => fleet.answerAsk(a.machine, a.id, text)} />
         <section className="workspace">
           {tokenMissing && <DaemonOutdated />}
           <TopBar nav={nav} dispatch={dispatch} session={session} helper={helper} projects={projects} projectIdOf={projectIdOf} terminal={sessionPrefs.terminal} onTerminal={toggleTerminal}
-            onRevealArchives={() => setRevealArchives(n => n + 1)} onDetach={canDetach() && !detached ? detach : undefined} teamOf={teams.teamOf}
+            onRevealArchives={() => setRevealArchives(n => n + 1)} onDetach={canDetach() && !detached ? detach : undefined}
             manage={{ open: sessionMenu.menu?.id === session?.id && sessionMenu.menu !== null, onOpen: (at, opener) => session && sessionMenu.open(session.id, at, opener) }} />
           {place.kind === 'settings' ? <SettingsPlace section={place.section} ctx={settings} />
-            : place.kind === 'home' ? <HomePlace label={t.side.ledgeHome} client={fleetClient} view={fleetView} teams={teams} decisions={decisions} waits={waits} tab={place.tab} task={place.task} dispatch={dispatch}
-                paused={nav.paused} focus={nav.chatFocus} projects={projects} onLaunched={chatLaunched} onTerminal={showTerminal} notify={notify} onProposal={openProposal}
-                open={place.back?.kind === 'session' ? sessions.find(x => x.id === (place.back as { id: string }).id) : undefined} atelierProject={place.project} />
-            : session && place.kind === 'session' ? <SessionPlace client={fleetClient} session={session} nav={nav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify} actions={actions} teams={teams}
+            : place.kind === 'home' ? <HomePlace label={t.side.ledgeHome} client={fleetClient} view={fleetView} relief={relief} decisions={decisions} waits={waits} tab={place.tab} dispatch={dispatch}
+                paused={nav.paused} focus={nav.chatFocus} projects={projects} onLaunched={chatLaunched} onTerminal={showTerminal} notify={notify} onProposal={openProposal} />
+            : session && place.kind === 'session' ? <SessionPlace client={fleetClient} session={session} nav={nav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify} actions={actions}
                 prefs={sessionPrefs} setPrefs={setSessionPrefs} onRevealCurrent={() => setRevealCurrent(n => n + 1)} />
             : detached ? <AtelierAway onShow={detach} onAttach={attach} />
             : <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu}
-                teams={teams} archived={fleetView.archived} notify={notify} />}
+                />}
           {(onOverview || place.kind === 'home') && <Footer dispatch={dispatch} localDown={localDown} island={island} />}
         </section>
         {nav.chat && (
           <ChatPlace label={t.side.chat} client={fleetClient} view={fleetView} paused={nav.paused} focus={nav.chatFocus} onClose={() => dispatch({ type: 'chat', open: false })}
             onOpenSession={id => dispatch({ type: 'open', id })} onTerminal={showTerminal} onLaunched={chatLaunched}
-            projects={projects} notify={notify} onProposal={openProposal} onOpenTeam={room => dispatch({ type: 'home', ...(room ? { project: room } : {}) })} />
+            projects={projects} notify={notify} onProposal={openProposal} />
         )}
       </div>
       {nav.modal?.kind === 'search' && <SearchPalette sessions={sessions} projectName={projectName} order={order} onOpen={id => dispatch({ type: 'open', id })} onClose={close} />}
       {nav.modal?.kind === 'shortcuts' && <ShortcutsHelp onClose={close} />}
-      {nav.modal?.kind === 'launch' && nav.modal.team && projects?.projects.find(x => x.id === (nav.modal as { project?: string }).project) && (() => {
-        const room = projects.projects.find(x => x.id === (nav.modal as { project?: string }).project)!;
-        return (
-          <Modal title={t.teamLaunch.title(room.name)} wide onClose={close}>
-            <TeamLaunch client={fleetClient} teams={teams} project={room} onCancel={close} initial={nav.modal as { cwd?: string; template?: string; seat?: string }}
-              onLaunched={team => { close(); dispatch({ type: 'home', project: room.id }); notify(t.teamLaunch.launched(team.name, room.name)); }} />
-          </Modal>
-        );
-      })()}
-      {nav.modal?.kind === 'launch' && !nav.modal.team && (
+      {nav.modal?.kind === 'launch' && (
         <Modal title={t.modalTitles.launch} wide onClose={close}>
           <LaunchPlace client={fleetClient} projects={projects?.projects ?? NO_PROJECTS} machines={machines} sessions={sessions} projectIdOf={projectIdOf}
-            wanted={{ ...(nav.modal.project !== undefined && { project: nav.modal.project }), ...(filter && { filter }), ...(nav.modal.cwd && { cwd: nav.modal.cwd }), ...(nav.modal.machine && { machine: nav.modal.machine }), ...(nav.modal.role && { role: nav.modal.role }) }}
+            wanted={{ ...(nav.modal.project !== undefined && { project: nav.modal.project }), ...(filter && { filter }), ...(nav.modal.cwd && { cwd: nav.modal.cwd }), ...(nav.modal.machine && { machine: nav.modal.machine }) }}
             onEditProject={id => dispatch({ type: 'modal', modal: { kind: 'project', edit: id } })} onNewProject={() => dispatch({ type: 'modal', modal: { kind: 'project' } })}
             launch={launcher.state} onLaunch={(msg, preview) => { launched.current = preview; launcher.launch(msg); }} onCancel={close} paused={nav.paused} />
         </Modal>
@@ -351,7 +341,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           proposal={nav.modal.proposal} projects={projects} sessions={sessions} machines={machines} client={fleetClient} fleet={fleet} projectIdOf={projectIdOf} paused={nav.paused}
           notify={notify} onClose={close} onSaved={projectSaved} onDeleted={projectDeleted} />
       )}
-      <SessionMenuHost state={sessionMenu} actions={actions} filing={filing} projects={projects?.projects ?? NO_PROJECTS} currentOf={projectIdOf} onOpen={s => dispatch({ type: 'open', id: s.id })} onHandover={s => { void teams.handover(s.id); }} />
+      <SessionMenuHost state={sessionMenu} actions={actions} filing={filing} projects={projects?.projects ?? NO_PROJECTS} currentOf={projectIdOf} onOpen={s => dispatch({ type: 'open', id: s.id })} onHandover={s => { void relief.handover(s.id); }} />
       <WhatsNew />
       {actions.pending && <ConfirmDialog c={actions.pending} onConfirm={actions.confirm} onCancel={actions.cancel} />}
       <PairingDialog shown={pairing} mobile={mobile} fleet={fleet} notify={notify} />

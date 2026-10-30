@@ -1,6 +1,6 @@
 import { CONTEXT_NEAR, MachinesSchema, type Machine, type IslandPrefs, type MobileClientMessage, type MobileState } from '@ledge/protocol';
 import type { DaemonClient, DaemonStatus } from './client';
-import { parseServerMessage, type ClientMessage, type DaemonInfo, type Projects, type Recent, type Session, type ServerMessage, type Task, type Team } from '@ledge/protocol';
+import { parseServerMessage, type ClientMessage, type Ask, type DaemonInfo, type Projects, type Recent, type Session, type ServerMessage } from '@ledge/protocol';
 import { useSyncExternalStore } from 'react';
 import { DAEMON_PROTOCOL_PREFIX, type TokenSource } from './token';
 
@@ -11,6 +11,8 @@ export interface MachineState extends MachineConfig { status: DaemonStatus; read
 export const canManage = (machine: { daemon?: DaemonInfo }): boolean => machine.daemon?.archive === true;
 /** A one-off connection test: the remote Ledge answered with its snapshot, or the raw error SSH or the daemon gave. */
 export type ProbeResult = { ok: true; version?: string; sessions: number } | { ok: false; error: string };
+/** A decision a session of `machine` asked the user (`ledge ask`); its `from` is that machine's own session id. */
+export type FleetAsk = Ask & { machine: string };
 export interface Fleet {
   primary: DaemonClient;
   subscribe(fn: () => void): () => void;
@@ -48,10 +50,10 @@ export interface Fleet {
   mobileError(): MobileError | undefined;
   /** Sends a mobile access command to the local daemon; the effect arrives on its broadcast. Throws `DaemonOffline` when not connected, `DaemonOutdated` when it never sent the state. */
   sendMobile(msg: MobileClientMessage): void;
-  /** The local daemon's live teams (roles spec §3.3), their seats' sessions qualified: null until it sends them, kept while it is down. */
-  teams(): Team[] | null;
-  /** The tasks Ledge gave and those of the live teams, known to the local daemon, oldest first; sessions qualified. */
-  tasks(): Task[];
+  /** The open asks of every machine, oldest first: kept while the machine is connected, one stable list until a change. */
+  asks(): FleetAsk[];
+  /** Answers an ask on its machine's daemon, and says whether it took the answer (4 s at most): a refusal, a machine not connected or silent is `{ ok: false, reason }`. */
+  answerAsk(machine: string, id: string, text: string): Promise<{ ok: true } | { ok: false; reason: string }>;
   /** The context threshold the local daemon keeps (context handover spec §3.2): undefined until it speaks of it. */
   contextNear(): number | undefined;
   /** Sets it on the local daemon; the effect arrives on its broadcast. Throws `DaemonOffline` / `DaemonOutdated` as `setIsland`. */
@@ -148,20 +150,16 @@ export function useMachines(client: DaemonClient): MachineState[] {
 }
 const nullSnapshot = () => null;
 /** The local daemon's projects, null until it sends them. */
-const noTasks: Task[] = [];
-const emptyTasks = () => noTasks;
-/** The local daemon's live teams: null until it sends them (an older daemon never does). */
-export function useTeams(client: DaemonClient): Team[] | null {
-  return useSyncExternalStore(client.fleet?.subscribe ?? noopSubscribe, client.fleet?.teams ?? nullSnapshot, nullSnapshot);
-}
 /** The context threshold (context handover spec §3.2): the local daemon's, else the default. */
 const defaultNear = () => CONTEXT_NEAR;
 export function useContextNear(client: DaemonClient): number {
   return useSyncExternalStore(client.fleet?.subscribe ?? noopSubscribe, () => client.fleet?.contextNear() ?? CONTEXT_NEAR, defaultNear);
 }
-/** The tasks Ledge gave, and those of the live teams. */
-export function useTasks(client: DaemonClient): Task[] {
-  return useSyncExternalStore(client.fleet?.subscribe ?? noopSubscribe, client.fleet?.tasks ?? emptyTasks, emptyTasks);
+/** The decisions waiting for the user on every machine. */
+const noAsks: FleetAsk[] = [];
+const emptyAsks = () => noAsks;
+export function useAsks(client: DaemonClient): FleetAsk[] {
+  return useSyncExternalStore(client.fleet?.subscribe ?? noopSubscribe, client.fleet?.asks ?? emptyAsks, emptyAsks);
 }
 export function useProjects(client: DaemonClient): Projects | null {
   return useSyncExternalStore(client.fleet?.subscribe ?? noopSubscribe, client.fleet?.projects ?? nullSnapshot, nullSnapshot);

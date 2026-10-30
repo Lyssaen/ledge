@@ -45,6 +45,24 @@ describe('Store', () => {
     const s2 = new Store(); await s2.load();
     expect(s2.get('a')?.tmuxSession).toBe('ledge-a');
   });
+  it('drops the autonomy a role gave an old record, and keeps one a lone session has', async () => {
+    const s = new Store();
+    s.upsert({ ...mk('l'), autonomy: 'auto' });
+    await s.save();
+    const file = JSON.parse(readFileSync(join(dir, 'sessions.json'), 'utf8')) as { sessions: Record<string, unknown>[] };
+    file.sessions.push({ ...mk('r'), role: 'build', roleLabel: 'Build', team: 'team-a1b2', autonomy: 'auto' }, { ...mk('t'), team: 'team-a1b2', autonomy: 'edits' });
+    writeFileSync(join(dir, 'sessions.json'), JSON.stringify(file));
+    const s2 = new Store(); await s2.load();
+    expect(s2.get('r')).not.toHaveProperty('autonomy');
+    expect(s2.get('t')).not.toHaveProperty('autonomy');
+    expect(s2.get('l')?.autonomy).toBe('auto');
+  });
+  it('an old sessions.json with role/roleLabel/team loads, without them', async () => {
+    writeFileSync(join(dir, 'sessions.json'), JSON.stringify({ sessions: [{ ...mk('r'), role: 'build', roleLabel: 'Build', team: 'team-a1b2', autonomy: 'auto' }] }));
+    const s = new Store(); await s.load();
+    expect(s.get('r')).toMatchObject({ id: 'r' });
+    for (const k of ['role', 'roleLabel', 'team']) expect(s.get('r')).not.toHaveProperty(k);
+  });
   it('debounces saves after changes', async () => {
     const s = new Store(); s.upsert(mk('a')); s.upsert(mk('b'));
     await sleep(350);

@@ -11,7 +11,7 @@ export type ActionRowState = 'proposed' | 'running' | 'done' | 'failed' | 'refus
 
 /** One action of the card, as the protocol's `ChatAction` gives it (`actionRowOf`): its registry id `action`, whose verb the
  *  front's copy holds (« Apply » for an id it does not know), the daemon's `summary` (names in **bold**, the fallback),
- *  `detail` to read in full before confirming, `target` the session or team by its name, `code` why it was refused or failed,
+ *  `detail` to read in full before confirming, `target` the session by its name, `code` why it was refused or failed,
  *  `decision` a session.decide's (deny: its verb is « Deny »), `vars` its words, for the front's own line and why (the
  *  daemon's `summary` and `error` are French: the summary is the fallback, the error is for the log, never on screen).
  *  A permission adds its `request` quoted verbatim (`kind` its kind, in the front's words when it knows it) and `deny` its
@@ -31,8 +31,7 @@ export function actionRowOf(a: ChatAction): ActionRowView {
   // A session.decide's detail is the request itself, quoted under its kind.
   if (a.detail !== undefined && a.action === 'session.decide' && a.vars?.kind) row.request = { kind: a.vars.kind, text: a.detail };
   else if (a.detail !== undefined) row.detail = a.detail;
-  // task.cancel names its owner: the session it holds.
-  const target = a.vars?.session ?? a.vars?.owner ?? a.vars?.team;
+  const target = a.vars?.session;
   if (target !== undefined) row.target = target;
   if (a.vars?.decision === 'accept' || a.vars?.decision === 'deny') row.decision = a.vars.decision;
   // « Deny » answers a request to accept with deny instead (chat.act's `deny`); the summary stays the fallback of its line.

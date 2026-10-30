@@ -1,5 +1,7 @@
 # Task transmission shown like a message — Implementation Plan
 
+> Remplacé par 2026-10-30-ledge-openrig-orchestrator-design (lot 1 : équipes, rôles et tâches retirés).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** every hand-over of a task between agents (give, pass, done, refuse, cancel) is seen like a message: a wire with a travelling ticket in the atelier, a card in the sender's thread, a line in the TUI's « Échanges ».

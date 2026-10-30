@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { createServer } from 'node:net';
 import { spawnSync } from 'node:child_process';
 import { formatWho } from '../src/cli/who.js';
-import { mapClaudeHook, mapHook, mapCursorHook, runHook, codexLedgeId, underCodexDaemon, identityContext, tasksContext, REPLY_MAX, INPUT_MAX, toolOutput, trimInput } from '../src/cli/hook.js';
+import { mapClaudeHook, mapHook, mapCursorHook, runHook, codexLedgeId, underCodexDaemon, identityContext, REPLY_MAX, INPUT_MAX, toolOutput, trimInput } from '../src/cli/hook.js';
 import type { Session } from '@ledge/protocol';
 import { startServer } from '../src/daemon/server.js';
 import { Store } from '../src/daemon/store.js';
@@ -386,6 +386,11 @@ describe('runHook: Claude SendMessage to a Claude', () => {
         { to: 'uds:/s/x.sock', message: `${note} Salut`, summary: 'Un salut', content: `${note} Salut` });
     } finally { await srv.close(); }
   });
+  it('a Claude SendMessage to @build is resolved as a plain name (unknown → the real tool proceeds)', async () => {
+    peer();
+    const srv = await serve();
+    try { expect(await runHook('PreToolUse', send('@build'), { port: srv.port })).toBeUndefined(); } finally { await srv.close(); }
+  });
   it('a target with no live peer is refused, never guessed', async () => {
     const srv = await serve();
     try {
@@ -459,6 +464,14 @@ describe('runHook: Codex runs `ledge send` and `ledge who` itself', () => {
       expect(Date.now() - t0).toBeLessThan(2000);
     } finally { d.close(); }
   });
+  it('`ledge ask` is run by the hook and denied with its output, the ask created by the launcher session of the hook', async () => {
+    const store = new Store(); store.upsert(sess('b', 'Pim'));
+    const srv = await startServer({ store, tmux, port: 0 });
+    try {
+      const r = reason(await runHook('PreToolUse', bash('ledge ask "Quelle base ?" "Postgres ou SQLite (je recommande SQLite)"'), { port: srv.port, tool: 'codex' }));
+      expect(r).toMatchObject({ permissionDecision: 'deny', permissionDecisionReason: expect.stringMatching(/^décision a[0-9a-f]{6} posée à l'utilisateur : sa réponse te réveillera$/) });
+    } finally { await srv.close(); }
+  });
   it('`ledge who` answers with the directory', async () => {
     const store = new Store(); store.upsert(sess('a', 'Otto')); store.upsert(sess('b', 'Pim'));
     const srv = await startServer({ store, tmux, port: 0 });
@@ -500,14 +513,18 @@ describe('session identity (SessionStart additionalContext)', () => {
     expect(codex).toContain('Tu es Nova, projet api');
     expect(codex).not.toMatch(/branche [^,]/);
     expect(codex).not.toContain('SendMessage');
-    expect(codex).toContain('Pour écrire à une autre session Ledge, lance `ledge send <nom> "<message>"` (seul, sans && ni |). Ledge exécute lui-même `ledge send`, `ledge read`, `ledge task` et `ledge who` : leur résultat t\'arrive comme « Command blocked by PreToolUse hook: … », c\'est la réponse, pas une erreur.');
+    expect(codex).toContain('Pour écrire à une autre session Ledge, lance `ledge send <nom> "<message>"` (seul, sans && ni |). Ledge exécute lui-même `ledge send`, `ledge read`, `ledge ask` et `ledge who` : leur résultat t\'arrive comme « Command blocked by PreToolUse hook: … », c\'est la réponse, pas une erreur.');
     // Both are told how to read a long message whole.
     for (const t of [text, codex]) expect(t).toContain('lance `ledge read <id>` pour le lire en entier');
-    // A `<ledge-notice>` is not only an undelivered message: a role prompt or team change arrives the same way.
-    for (const t of [text, codex]) expect(t).toContain('Une `<ledge-notice>` vient de Ledge : soit un de tes messages n\'a pas pu être remis, soit un changement te concerne (ta consigne de rôle, ton équipe).');
-    // And how to give work that must not get lost.
-    for (const t of [text, codex]) expect(t).toContain('`ledge task give <nom> "<titre>" "<détail>"`');
-    for (const t of [text, codex]) expect(t).toContain('`ledge task give ledge "<question>" "<options, ta recommandation>"`');
+    // A `<ledge-notice>` is not only an undelivered message: a change that concerns the session arrives the same way.
+    for (const t of [text, codex]) expect(t).toContain('Une `<ledge-notice>` vient de Ledge : soit un de tes messages n\'a pas pu être remis, soit un changement te concerne.');
+  });
+
+  it('identityContext names ledge ask and no longer ledge task give ledge', () => {
+    const t = identityContext({ name: 'Pim', tool: 'claude', project: 'ledge', cwd: '/w' });
+    expect(t).toContain('ledge ask "<question>" "<options, ta recommandation>"');
+    expect(t).toContain('<ledge-answer>');
+    expect(t).not.toMatch(/ledge task give ledge/);
   });
 
   it('a launched session is told its current Ledge name (a rename wins over LEDGE_NAME), with the daemon\'s branch', async () => {
@@ -522,31 +539,22 @@ describe('session identity (SessionStart additionalContext)', () => {
     } finally { await srv.close(); delete process.env.LEDGE_NAME; }
   });
 
-  it('after a compaction it is told the open tasks it holds (not those it gave, nor closed ones), and the relief it is (context handover §2)', async () => {
-    const store = new Store();
-    store.upsert(pim({ relieves: { id: '1b2c', name: 'Otto', at } }));
-    store.upsert(pim({ id: '9d8e', name: 'Bix', tmuxSession: 'ledge-9d8e' }));
-    const srv = await startServer({ store, tmux: {} as never, port: 0 });
-    const c = await connect({ port: srv.port });
-    const give = async (by: string, to: string, title: string) => { c.send({ type: 'task.cmd', rid: title, by, op: 'give', to, title }); return (await c.next('task.result')).task!; };
-    process.env.LEDGE_SESSION = '7f3a'; process.env.LEDGE_NAME = 'Pim';
+  it('SessionStart identity has no seat or tasks block, and makes no task.cmd request', async () => {
+    const { WebSocketServer } = await import('ws');
+    const got: Array<{ type?: string }> = [];
+    const wss = new WebSocketServer({ port: 0, host: '127.0.0.1' }); await new Promise(r => wss.once('listening', r));
+    wss.on('connection', ws => {
+      ws.send(JSON.stringify({ type: 'snapshot', sessions: [pim({ relieves: { id: '1b2c', name: 'Otto', at } })] }));
+      ws.on('message', d => got.push(JSON.parse(String(d))));
+    });
+    process.env.LEDGE_SESSION = '7f3a'; process.env.LEDGE_NAME = 'Pim'; process.env.LEDGE_ROLE = 'build';
     try {
-      const mine = await give('9d8e', 'Pim', 'Tests de roles.ts');
-      const done = await give('9d8e', 'Pim', 'Déjà fini');
-      c.send({ type: 'task.cmd', rid: 'd', by: '7f3a', op: 'done', task: done.id, text: 'fait' }); await c.next('task.result');
-      await give('7f3a', 'Bix', 'Relire le hook');
-      const out = context(await runHook('SessionStart', JSON.stringify({ session_id: 'u-1', cwd: '/w/ledge-wt', source: 'compact' }), { port: srv.port }));
-      expect(out.additionalContext).toContain('Tes tâches en cours (elles sont gardées par Ledge, pas dans ta conversation) :');
-      expect(out.additionalContext).toContain(`- ${mine.id} · ouverte · « Tests de roles.ts » · confiée par Bix`);
-      expect(out.additionalContext).not.toContain('Déjà fini');
-      expect(out.additionalContext).not.toContain('Relire le hook');
+      const out = context(await runHook('SessionStart', JSON.stringify({ session_id: 'u-1', cwd: '/w/ledge-wt', source: 'compact' }), { port: (wss.address() as { port: number }).port }));
+      expect(out.additionalContext).toContain('Tu es Pim');
       expect(out.additionalContext).toContain('Tu as pris la relève de Otto, dont le contexte était plein : relis son bilan avec `ledge handover show`.');
-    } finally { await c.close(); await srv.close(); delete process.env.LEDGE_NAME; }
-  });
-
-  it('a session without open tasks gets no tasks block', () => {
-    expect(tasksContext([])).toBeUndefined();
-    expect(identityContext({ name: 'Pim', tool: 'claude', project: 'ledge', cwd: '/w' })).not.toContain('Tes tâches en cours');
+      expect(out.additionalContext).not.toMatch(/Tes tâches en cours|rôle|équipe|@build/);
+      expect(got.map(m => m.type)).not.toContain('task.cmd');
+    } finally { wss.close(); delete process.env.LEDGE_NAME; delete process.env.LEDGE_ROLE; }
   });
 
   it('without a daemon, the name comes from LEDGE_NAME and the project from the folder', async () => {

@@ -1,5 +1,7 @@
 # Teams and roles from the phone
 
+> Remplacé par 2026-10-30-ledge-openrig-orchestrator-design (lot 1 : équipes, rôles et tâches retirés).
+
 Date: 2026-10-28. Status: design.
 
 Builds on [roles, teams and Ledge as their operator](2026-10-25-roles-teams-operator-design.md) (roles, templates,

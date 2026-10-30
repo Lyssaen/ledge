@@ -1,5 +1,7 @@
 # Teams in Ledge: overview of the three specs
 
+> Remplacé par 2026-10-30-ledge-openrig-orchestrator-design (lot 1 : équipes, rôles et tâches retirés).
+
 Date: 2026-10-26. Status: design.
 
 | Spec | What it adds |

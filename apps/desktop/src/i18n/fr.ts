@@ -2,7 +2,7 @@ import { actionCopy } from '@ledge/ui/chat/actionCopy';
 import type { BotState } from '@ledge/ui/bots/poseFor';
 import type { SectionId } from '../nav/state';
 import type { Bucket, GroupBy } from '../list/model';
-import type { DaemonInfo, OmpApproval, ProjectColor, ToolStatus, TransmissionOp, UpdateFailure, TodoStatus } from '@ledge/protocol';
+import type { DaemonInfo, OmpApproval, ProjectColor, ToolStatus, UpdateFailure, TodoStatus } from '@ledge/protocol';
 import type { PlanDoc, ToolKind, Verb } from '../session/exchanges';
 import type { Change } from '../session/changedFiles';
 import type { FinishedNotify, SoundCategory, SoundVolume } from '@ledge/ui/sounds/preferences';
@@ -25,8 +25,9 @@ export const fr = {
     label: 'Barre latérale', newSession: 'Nouvelle session', searchLabel: 'Rechercher une session',
     views: 'Vues', atelier: 'Atelier', chat: 'Chat Ledge', projects: 'Projets', newProject: 'Nouveau projet', unassigned: 'Sans projet',
     machines: 'Machines', manageMachines: 'Gérer les machines', agents: (n: number) => plural(n, `${n} agent`, `${n} agents`), offline: 'hors ligne', daemonUpdating: 'mise à jour du daemon', settings: 'Réglages', shortcuts: 'Raccourcis clavier',
-    ledgeHome: 'Accueil : Ledge, l’opérateur', ledgeLine: (yours: number, teams: number) => `${yours} à toi · ${plural(teams, `${teams} équipe active`, `${teams} équipes actives`)}`,
-    ask: 'Demander à Ledge', askPlaceholder: 'Demander à Ledge…',
+    ledgeHome: 'Accueil : Ledge, l’opérateur', ledgeLine: (yours: number) => `${yours} à toi`,
+    askLedge: 'Demander à Ledge', askPlaceholder: 'Demander à Ledge…',
+    ask: { kicker: 'Décision', from: (n: string) => `de ${n}`, placeholder: 'Ta réponse…', send: 'Répondre', sending: 'Envoi…', sent: (n: string) => `Réponse envoyée à ${n}`, refused: (r: string) => `Refusé : ${r}` },
     openChat: 'Ouvrir la conversation avec Ledge',
     active: (n: number) => plural(n, `${n} actif`, `${n} actifs`),
     yours: 'À toi', yoursMore: (n: number) => `Voir les ${n} autres`, yoursLess: 'Réduire',
@@ -394,11 +395,6 @@ export const fr = {
     seat: (name: string, task: string, machine: string) => `${name}, ${task}, ${machine}`,
     helperSeat: (kind: string, parent: string, task: string) => `${kind}, sous-agent de ${parent} : ${task}`,
     offline: 'Hors ligne',
-    taskTo: { give: (n: string) => `Tâche → ${n}`, pass: (n: string) => `Passée → ${n}`, done: (n: string) => `Terminée → ${n}`, refuse: (n: string) => `Refusée → ${n}`, cancel: (n: string) => `Annulée → ${n}` } satisfies Record<TransmissionOp, (n: string) => string>,
-    taskLabel: (op: TransmissionOp, from: string, to: string, title: string) => `${{
-      give: `${from} confie « ${title} » à ${to}`, pass: `${from} passe « ${title} » à ${to}`, done: `${from} rend « ${title} » à ${to}, terminée`,
-      refuse: `${from} refuse « ${title} », rendue à ${to}`, cancel: `${from} annule « ${title} » pour ${to}`
-    }[op]}. Voir la tâche`,
     messageTo: (n: string) => `à ${n}`,
     messageLabel: (sender: string, n: string, summary: string) => `${sender} écrit à ${n} : ${summary}. Ouvrir l’échange`,
     desk: 'Parler à Ledge',
@@ -425,101 +421,34 @@ export const fr = {
     unconfirmed: (name: string) => `${name} n'a pas été rangé : Ledge n'a pas confirmé. Réessayez.`
   },
   home: {
-    operator: (sessions: number, teams: number, machines: number) => `Opérateur · voit ${plural(sessions, `${sessions} session`, `${sessions} sessions`)}, ${plural(teams, `${teams} équipe`, `${teams} équipes`)}, ${plural(machines, `${machines} machine`, `${machines} machines`)} · lecture seule`,
+    operator: (sessions: number, machines: number) => `Opérateur · voit ${plural(sessions, `${sessions} session`, `${sessions} sessions`)}, ${plural(machines, `${machines} machine`, `${machines} machines`)} · lecture seule`,
     tabsLabel: 'Vues de Ledge',
-    tabs: { conversation: 'Conversation', teams: (n: number) => `Équipes · ${n}`, tasks: (n: number) => `Tâches · ${n}`, history: 'Historique' },
+    tabs: { conversation: 'Conversation', history: 'Historique' },
     toAtelier: 'Retour à l’atelier',
     point: {
-      title: 'Le point', yours: 'À toi', teams: 'Équipes', given: 'Confiées par Ledge',
+      title: 'Le point', yours: 'À toi',
       summarize: 'Résumer la journée', summarizeQuestion: 'Résume la journée : ce qui a avancé, ce qui attend ma décision, ce qui bloque.',
-      nothingYours: 'Rien ne t’attend.', noTeam: 'Aucune équipe en cours.', noTask: 'Ledge n’a confié aucune tâche aujourd’hui.',
-      seats: (n: number) => plural(n, `${n} siège`, `${n} sièges`), progress: (done: number, given: number) => `${done}/${given} ${plural(given, 'tâche', 'tâches')} de Ledge`,
-      table: 'Table', resume: 'Reprendre', resting: 'au repos', allow: 'Oui', deny: 'Non', see: 'Voir', dismiss: 'Ranger',
-      closed: (owner: string, title: string, state: 'done' | 'refused' | 'dropped') => state === 'done' ? `${owner} a fini « ${title} »` : state === 'refused' ? `${owner} a refusé « ${title} »` : `${owner} a abandonné « ${title} »`,
-      ofLedge: 'tâche de Ledge', owner: (owner: string, state: string) => `${owner} · ${state}`
+      nothingYours: 'Rien ne t’attend.', allow: 'Oui', deny: 'Non', see: 'Voir'
     },
-    suggestions: (team?: string) => ['Monte une équipe…', 'Confie une tâche à…', team ? `Où en est ${team} ?` : 'Où en sont les équipes ?', 'Qui a besoin de moi ?'],
+    suggestions: ['Qui a besoin de moi ?', 'Où en sont mes sessions ?'] as readonly string[],
     readOnly: 'lecture seule · rien sans ton clic',
-    mentions: 'Mentionner', mentionSession: (name: string) => `session ${name}`, mentionTeam: (name: string) => `équipe ${name}`,
-    tasks: {
-      filters: 'Filtres', all: 'Toutes', open: 'Ouvertes', closed: 'Closes', giver: 'Donneur', anyGiver: 'Tous', ledge: 'Ledge', seats: 'Les sièges', team: 'Équipe', anyTeam: 'Toutes',
-      none: 'Aucune tâche.', result: 'Résultat', reason: 'Raison', log: 'Historique', from: (giver: string, owner: string) => `de ${giver} à ${owner}`, close: 'Fermer'
-    },
-    teams: { none: 'Aucune équipe en cours. Demande à Ledge d’en monter une.', dissolved: 'dissoute' },
-    catalog: {
-      views: 'Vues des équipes', live: (n?: number) => `En cours · ${n ?? 0}`, templates: (n?: number) => (n === undefined ? 'Modèles' : `Modèles · ${n}`), roles: (n?: number) => (n === undefined ? 'Rôles' : `Rôles · ${n}`),
-      folder: 'Dossier', folderTitle: 'Le dossier dont le catalogue est lu', personal: 'Perso seulement',
-      scopeProject: (name: string) => `projet ${name} · dépôt + ~/.ledge`, scopeFolder: 'dossier · dépôt + ~/.ledge', scopePersonal: 'sans dossier : ~/.ledge seulement',
-      repoWins: 'Le dépôt l’emporte sur ~/.ledge pour un même id.',
-      filter: 'Filtrer les rôles…', filterLabel: 'Filtrer les rôles', rolesList: 'Rôles', templatesList: 'Modèles',
-      repoRoles: 'Dépôt · .ledge/roles', homeRoles: 'Perso · ~/.ledge/roles', repoTeams: 'Dépôt · .ledge/teams', homeTeams: 'Perso · ~/.ledge/teams',
-      ignored: 'Ignorés', ignoredRow: (n: number) => plural(n, `${n} fichier non lu`, `${n} fichiers non lus`), ignoredHint: 'Ledge les saute sans bloquer le reste',
-      ignoredTitle: 'Fichiers ignorés', ignoredBody: 'Lus par le daemon mais pas compris : ni rôle ni modèle.',
-      loading: 'Lecture des rôles et des modèles…', noRole: 'Aucun rôle dans ce dossier.', noRoleHint: 'Un rôle s’écrit dans .ledge/roles/<id>.md (le dépôt) ou ~/.ledge/roles/<id>.md (perso).',
-      noTemplate: 'Aucun modèle dans ce dossier.', noTemplateHint: 'Un modèle s’écrit dans .ledge/teams/<id>.yaml ; « Enregistrer » sur une carte d’équipe du chat en crée un.', noMatch: 'Aucun rôle ne correspond.',
-      inTemplates: (n: number) => `dans ${n} ${plural(n, 'modèle', 'modèles')}`, heldBy: (names: string) => `tenu par ${names}`, seats: (n: number) => `${n} ${plural(n, 'poste', 'postes')}`,
-      toolDefaults: 'défauts de l’outil', source: { repo: 'dépôt', home: 'perso' } as Record<'repo' | 'home', string>,
-      role: 'Rôle', template: 'Modèle d’équipe', fromTemplate: 'modèle', seeRole: (id: string) => `Voir le rôle @${id}`,
-      launchSession: 'Lancer une session', mountTeam: 'Monter une équipe…', launchTeam: 'Lancer cette équipe…',
-      needProject: 'Ce dossier n’est d’aucun projet : une équipe s’installe dans la pièce d’un projet.',
-      tool: 'Outil', model: 'Modèle', effort: 'Effort', autonomy: 'Autonomie', file: 'Fichier', anyTool: 'au choix', toolDefault: 'défaut de l’outil',
-      autonomyShort: { ask: 'demande', edits: 'éditions', auto: 'auto' } as Record<'ask' | 'edits' | 'auto', string>,
-      autonomyAsk: 'rien d’ajouté : l’agent demande avant d’agir', autonomyAuto: 'travaille sans demander', autonomyNone: 'rien d’ajouté', toolFlag: (tool: string, flag: string) => `${tool} : ${flag}`, ompApproval: (mode: string) => `mode d’approbation ${mode}`,
-      copy: 'Copier', open: 'Ouvrir', reader: (name: string) => `Fichier ${name}`, yamlOutdated: 'Ce daemon ne lit pas encore les modèles : mets Ledge à jour sur cette machine, ou copie le chemin.', copied: (path: string) => `Chemin copié : ${path}`,
-      shadows: 'Remplace', shadowsWhy: '(même id, le dépôt l’emporte)',
-      prompt: 'Consigne donnée au siège à chaque démarrage', promptEmpty: 'Aucune consigne.',
-      usedIn: 'Utilisé dans', noUse: 'Aucun modèle.', seeTemplate: 'Voir le modèle',
-      heldNow: 'Tenu en ce moment', noHolder: 'Aucun siège ne tient ce rôle.', openSession: 'Ouvrir la session',
-      roleReadOnly: 'Lecture seule : un rôle se modifie dans son fichier.',
-      posts: 'Postes', colRole: 'Rôle', colLabel: 'Libellé', colRun: 'Outil · modèle · effort', colAutonomy: 'Autonomie',
-      unknownRoleIn: (id: string) => `@${id} : rôle inconnu dans ce dossier.`, unknownTemplateIn: (id: string) => `${id} : modèle inconnu dans ce dossier.`,
-      silent: 'Le daemon n’a pas répondu : le catalogue de ce dossier n’a pas pu être lu.', retry: 'Réessayer',
-      machineOffline: (machine: string) => `${machine} est hors ligne : le catalogue de ce dossier n’a pas pu être lu.`,
-      machineOutdated: (machine: string) => `Le daemon de ${machine} est trop ancien pour le catalogue : mets Ledge à jour sur cette machine.`,
-      onMachine: (machine: string) => `sur ${machine}`, remoteTeam: (machine: string) => `Une équipe ne se lance qu’en local : ce dossier est sur ${machine}.`,
-      overWord: 'bleu', overNote: 'ce que le modèle change aux défauts du rôle.', unknownRole: 'Rôle inconnu dans ce dossier',
-      autoWarn: (roles: readonly string[]) => `${andList(roles)} ${plural(roles.length, 'travaille', 'travaillent')} sans demander (autonomie auto, fixée par le fichier du rôle).`,
-      born: 'Équipes nées', noneBorn: 'aucune', active: 'active', resting: 'au repos',
-      templateReadOnly: 'Lecture seule : un modèle se modifie dans son fichier ; « Enregistrer » sur une carte d’équipe du chat en crée un.'
-    },
+    mentions: 'Mentionner', mentionSession: (name: string) => `session ${name}`,
     history: { none: 'Aucune conversation aujourd’hui.', open: 'Voir dans la conversation' }
   },
   handover: {
     nearShort: (name: string, pct: number) => `${name} · contexte ${pct} %`, nearHint: 'limite proche', failedShort: (name: string) => `Relève de ${name} échouée`, retry: 'Réessayer',
-    pass: 'Passer le relais', passTitle: 'Une nouvelle session prend sa place : il écrit son bilan, ses tâches lui sont passées', later: 'Plus tard',
+    pass: 'Passer le relais', passTitle: 'Une nouvelle session prend sa place : il écrit son bilan', later: 'Plus tard',
     gauge: (pct: number) => `contexte ${pct} %`,
     state: { briefing: 'relève : bilan demandé', launching: 'relève : lancement…', done: 'relevée', failed: 'relève échouée' } as Record<'briefing' | 'launching' | 'done' | 'failed', string>,
     relievedBy: (name: string) => `relevée par ${name}`, relieves: (name: string) => `relève de ${name}`,
     refused: (why: string) => `Relève refusée : ${why}`, auto: 'par Ledge'
   },
-  teamLaunch: {
-    title: (project: string) => `Nouvelle équipe · ${project}`, folder: 'Dossier', noFolder: 'Aucun dossier de ce projet sur cette machine', loading: 'Lecture des rôles et des modèles…',
-    template: 'Modèle', custom: 'Sièges choisis un par un', seats: 'Sièges', noRole: 'Aucun rôle : écris ~/.ledge/roles/<id>.md', agentOf: (role: string) => `Agent de @${role}`,
-    name: 'Nom de l’équipe', preview: (team: string, project: string) => `L’équipe ${team} s’installera à une nouvelle table de la pièce ${project}.`,
-    unknown: (roles: string) => `Rôles inconnus dans ce dossier : ${roles}`, launch: 'Lancer l’équipe', launching: 'Lancement…',
-    failed: (why: string) => `L’équipe n’a pas été lancée : ${why}`, noAnswer: 'Ledge n’a pas répondu.', launched: (team: string, project: string) => `L’équipe ${team} s’installe dans la pièce ${project}.`
-  },
-  teams: {
-    tables: (n: number) => plural(n, `${n} table`, `${n} tables`),
-    tree: 'équipe', treeResting: 'au repos',
-    common: 'table commune',
+  rooms: {
     room: (name: string) => `Pièce ${name}`,
-    plaqueCounts: (tables: number, sessions: number) => `${plural(tables, `${tables} table`, `${tables} tables`)} · ${plural(sessions, `${sessions} session`, `${sessions} sessions`)}`,
+    plaqueCounts: (sessions: number) => plural(sessions, `${sessions} session`, `${sessions} sessions`),
     waiting: (n: number) => plural(n, `${n} attend`, `${n} attendent`), working: (n: number) => plural(n, `${n} au travail`, `${n} au travail`),
     roomMenu: (name: string) => `Actions de la pièce ${name}`, roomMenuTitle: 'Actions de la pièce',
-    newSessionHere: 'Nouvelle session ici', newTeamHere: 'Nouvelle équipe ici…', entrance: 'ENTRÉE',
-    teamTable: (name: string) => `Équipe ${name}`,
-    teamLine: (done: number, given: number) => `équipe · opérateur Ledge · ${done}/${given} ${plural(given, 'tâche', 'tâches')}`,
-    restingLine: 'équipe au repos', resume: 'Reprendre',
-    teamMenu: (name: string) => `Actions de l'équipe ${name}`, teamMenuTitle: "Actions de l'équipe",
-    openTasks: 'Voir les tâches', dissolve: "Dissoudre l'équipe",
-    dissolveTitle: (name: string) => `Dissoudre l'équipe ${name} ?`,
-    dissolveBody: 'Sa table disparaît de la pièce ; ses sessions restent, à la table commune ou dans les archives, et ses tâches restent à leurs sessions.',
-    dropJoin: 'Lâcher pour rejoindre', dropLeave: 'Lâcher pour revenir à la table commune',
-    sheet: (id: string, title: string, giver: string) => `${id} · ${title} · ${giver}`,
-    chooseRole: (name: string, team: string) => `Rôle de ${name} dans ${team}`, otherRole: 'autre rôle…', loadingRoles: 'Lecture des rôles…', noRole: 'Aucun autre rôle',
-    joined: (name: string, team: string, role: string) => `${name} rejoint ${team} comme @${role}.`,
-    left: (name: string) => `${name} revient à la table commune.`
+    newSessionHere: 'Nouvelle session ici', entrance: 'ENTRÉE'
   },
   zoom: {
     bar: "Zoom de l'atelier", out: 'Dézoomer', outTitle: 'Dézoomer (−)', in: 'Zoomer', inTitle: 'Zoomer (+)',
@@ -812,18 +741,7 @@ export const fr = {
       loadingPeer: (b: string) => `Lecture du fil ${deName(b)}…`
     },
     /** Claude Code's automated cross-session notices (NoticeLine): system events, never the user's words. */
-    seat: {
-      task: (id: string, title: string, giver: string, state: string) => `${id} · ${title} · donnée par ${giver} · ${state}`,
-      seeTasks: 'Voir les tâches', pinned: 'Tâche en cours', autonomy: { ask: 'demande', edits: 'modifie sans demander', auto: 'autonome' }
-    },
     notice: {
-      task: 'TÂCHE', taskFrom: (name: string) => `Tâche de ${name}`, seeTask: 'Voir la tâche',
-      /** The sender's card of a task it handed over (issue #92), by what it did. */
-      taskOut: {
-        give: (n: string) => `Tâche confiée à ${n}`, pass: (n: string) => `Tâche passée à ${n}`, done: (n: string) => `Tâche rendue à ${n} (terminée)`,
-        refuse: (n: string) => `Tâche refusée, rendue à ${n}`, cancel: (n: string) => `Tâche annulée pour ${n}`
-      },
-      team: 'ÉQUIPE', teamJoined: 'Équipe rejointe',
       kicker: 'Avis automatique', other: 'Avis automatique entre sessions', anotherSession: 'une autre session',
       idle: (n: string, time?: string) => `${n} a terminé${time ? ` · ${time}` : ''}`,
       exited: (n: string, time?: string) => `Session ${n} fermée${time ? ` · ${time}` : ''}`,
@@ -860,9 +778,6 @@ export const fr = {
     }
   },
   launch: {
-    role: 'Rôle', roleHint: 'sa consigne et ses défauts s’appliquent à la session', roleRemove: 'Retirer',
-    roleReading: 'relu dans ce dossier…', roleGone: (id: string, cwd: string) => `@${id} n’existe pas dans ${cwd} : le rôle a été retiré.`,
-    roleUnread: (id: string, cwd: string) => `Ledge n’a pas pu relire @${id} dans ${cwd} : le rôle a été retiré.`,
     prompt: 'Consigne', placeholder: 'Que doit faire l’agent ? Décrivez le résultat attendu.',
     suggestions: 'Suggestions', ideas: ['Relire la dernière pull request', 'Corriger les tests qui échouent', 'Mettre à jour la documentation'] as readonly string[],
     agent: 'Agent', agentHint: 'Le moteur de cette session', change: 'Changer', chooseFor: 'Choisir pour cette session', byDefaultTag: 'Par défaut', thisSession: 'Cette session', defaultMark: 'Défaut',
@@ -1020,19 +935,6 @@ export const fr = {
       send: 'Envoyer', sending: 'Envoi…', cancel: 'Annuler', retry: 'Réessayer', orRephrase: 'ou reformule ta demande',
       queued: 'travaille, j’enverrai dès qu’il aura fini', sentTo: 'Envoyé à', failed: (why: string) => `Échec de l’envoi : ${why}`,
       pill: { yours: 'à toi', working: 'travaille', waiting: 'attend ta réponse', stopped: 'arrêtée' }
-    },
-    team: {
-      label: 'Équipe proposée', folder: 'Dossier', table: (project: string) => `Table`, newTable: (project: string) => `nouvelle table dans la pièce ${project}`, seats: 'Sièges',
-      autonomy: { ask: 'demande avant d’agir', edits: 'modifie sans demander', auto: 'autonome' },
-      autoWarning: (roles: string) => `${roles} travaillera sans demander : modifications et commandes sans ton accord.`,
-      launch: 'Lancer l’équipe', launching: 'Lancement…', retry: 'Réessayer', save: 'Enregistrer', saved: (path: string) => `Enregistrée : ${path}`,
-      launched: (at: string) => `Équipe lancée à ${at}`, openTable: 'Ouvrir la table', failed: (why: string) => `Échec : ${why}`, template: (id: string) => `modèle ${id}`
-    },
-    task: {
-      label: (n: number) => n === 1 ? 'Tâche à confier' : `${n} tâches à confier`, to: 'à', give: 'Confier', giving: 'Envoi…', retry: 'Réessayer',
-      waitTeam: 'active une fois l’équipe lancée',
-      given: (owner: string, id: string, state: string) => `Confiée à ${owner} · ${id} · ${state}`,
-      state: { open: 'à prendre', taken: 'prise', done: 'finie', refused: 'refusée', dropped: 'abandonnée' }, failed: (why: string) => `Refusée : ${why}`
     },
     // #94 : la carte générique, une ligne par action, un plan au-delà d’une (docs/mockups/ledge-action-card.html).
     action: actionCopy.fr,

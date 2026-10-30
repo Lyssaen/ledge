@@ -6,7 +6,7 @@ export const ToolSchema = z.enum(['claude', 'codex', 'cursor', 'omp']);
 export const OmpApprovalSchema = z.enum(['always-ask', 'write', 'yolo']);
 export type OmpApproval = z.infer<typeof OmpApprovalSchema>;
 export type Tool = z.infer<typeof ToolSchema>;
-/** How far a seat may go without asking (spec 2026-10-25 roles §3.1): each agent's own permission switch at launch,
+/** How far a session may go without asking: each agent's own permission switch at launch,
  *  never Ledge answering in its place. `ask` adds nothing. */
 export const AutonomySchema = z.enum(['ask', 'edits', 'auto']);
 export type Autonomy = z.infer<typeof AutonomySchema>;
@@ -128,11 +128,7 @@ export const SessionSchema =z.object({
   effort: z.string().optional(),
   /** OMP: the approval mode it was launched with, kept by a resume; left out, `always-ask`. */
   approval: OmpApprovalSchema.optional(),
-  /** The role it was launched with or took in a team (spec 2026-10-25 roles §3.3): its id, its label as it was then. */
-  role: z.string().optional(), roleLabel: z.string().optional(),
-  /** The live team it sits in (`team-…`); left out, the project's common table. */
-  team: z.string().optional(),
-  /** Its role's autonomy, as launched (kept by a resume); left out, `ask`. */
+  /** Its autonomy, as launched (kept by a resume); left out, `ask`. */
   autonomy: AutonomySchema.optional(),
   /** Its context as its agent last reported it, after a turn (context handover spec §3.1); left out, not measured. */
   context: ContextSchema.optional(),

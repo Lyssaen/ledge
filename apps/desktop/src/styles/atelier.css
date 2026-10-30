@@ -388,14 +388,6 @@
 .office-shell .agent-seat.exchange-lit,.office-shell .ledge-desk.exchange-lit{outline:2px solid var(--ring);outline-offset:3px;border-radius:var(--radius-lg)}
 .office-shell .ledge-desk.exchange-arrived{position:relative}
 .office-shell .agent-seat.exchange-arrived:after,.office-shell .ledge-desk.exchange-arrived:after{content:'';position:absolute;inset:-6px;border-radius:var(--radius-lg);border:2px solid var(--foreground);opacity:.5;animation:seat-ring 1.4s ease-out forwards;pointer-events:none}
-/* A task handed between agents (#92): the same line in the task colour (the thread's TÂCHE kicker), a ticket with a folded
- * corner travelling along it instead of the envelope, no sway: it is work, not mail. */
-.task-wire path{stroke:var(--task);stroke-opacity:.8}
-.exchange-ticket{position:absolute;left:0;top:0;width:24px;height:20px;margin:-10px 0 0 -12px;offset-rotate:0deg;filter:drop-shadow(0 2px 0 var(--border));pointer-events:none;animation:envelope-fly 1.3s cubic-bezier(.45,0,.3,1) both,envelope-out .4s ease-in 1.5s forwards}
-.exchange-ticket svg{display:block;width:100%;height:100%;overflow:visible}
-.exchange-ticket-body{fill:var(--popover);stroke:var(--task);stroke-width:1.4;stroke-linejoin:round}
-.exchange-ticket-fold,.exchange-ticket-lines{fill:none;stroke:var(--task);stroke-width:1.4;stroke-linejoin:round;stroke-linecap:round}
-.task-bubble .exchange-bubble-to{color:var(--task)}
 @keyframes wire-draw{from{opacity:0}to{opacity:1}}
 @keyframes wire-flow{to{stroke-dashoffset:-14}}
 @keyframes envelope-fly{from{offset-distance:0%;opacity:0;scale:.6}12%{opacity:1;scale:1}to{offset-distance:100%;opacity:1;scale:1}}
@@ -406,8 +398,8 @@
 @keyframes bubble-out{to{opacity:0}}
 /* Frozen or reduced (the app's setting or the OS one): no travelling envelope, the bubble and the line hold still. */
 .office-reduced .exchange-bubble,.office-paused .exchange-bubble,.office-reduced .exchange-wire path,.office-paused .exchange-wire path{animation:none}
-.office-reduced .exchange-envelope,.office-paused .exchange-envelope,.office-reduced .exchange-ticket,.office-paused .exchange-ticket,.office-reduced .agent-seat.exchange-arrived:after,.office-paused .agent-seat.exchange-arrived:after,.office-reduced .ledge-desk.exchange-arrived:after,.office-paused .ledge-desk.exchange-arrived:after{display:none}
-@media(prefers-reduced-motion:reduce){.exchange-wire path,.exchange-bubble{animation:none}.exchange-envelope,.exchange-ticket,.agent-seat.exchange-arrived:after,.ledge-desk.exchange-arrived:after{display:none}}
+.office-reduced .exchange-envelope,.office-paused .exchange-envelope,.office-reduced .agent-seat.exchange-arrived:after,.office-paused .agent-seat.exchange-arrived:after,.office-reduced .ledge-desk.exchange-arrived:after,.office-paused .ledge-desk.exchange-arrived:after{display:none}
+@media(prefers-reduced-motion:reduce){.exchange-wire path,.exchange-bubble{animation:none}.exchange-envelope,.agent-seat.exchange-arrived:after,.ledge-desk.exchange-arrived:after{display:none}}
 
 /* The atelier's rooms (atelier rooms spec §2, variant C): low walls with a line in the project's colour on the back one, the
    plaque centred on it, an opening in the front wall; inside, the tables side by side. No decoration but the tables' plants. */
@@ -423,19 +415,8 @@
 .room-plaque .plaque-name{font-weight:600;overflow:hidden;text-overflow:ellipsis}
 .room-plaque .plaque-counts,.room-plaque .plaque-waiting,.room-plaque .plaque-working{color:var(--muted-foreground);font-size:11px;display:inline-flex;align-items:center;gap:4px}
 .room-entrance{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);font:600 9px/1 'Geist Mono',monospace;letter-spacing:.2em;color:var(--muted-foreground);opacity:.8;pointer-events:none}
-.room-tables{position:relative;display:flex;flex-wrap:wrap;justify-content:center;gap:0 var(--table-gap);z-index:1}
+.room-tables{position:relative;display:flex;flex-wrap:wrap;justify-content:center;z-index:1}
 .office-shell .atelier-table{position:relative;flex:0 0 var(--room);min-width:min(var(--room),100%);margin:0 0 8px}
 .atelier-table:has(.room-menu),.atelier-room:has(.room-plaque .room-menu){z-index:6}
 .is-dragging .atelier-table.drop-over .room-heading,.atelier-table.drop-over .room-heading{border-color:var(--sidebar-primary)}
-.atelier-table.table-resting{opacity:.6}
-.atelier-table.table-resting:hover,.atelier-table.table-resting:focus-within{opacity:.85}
-.room-heading .heading-common,.room-heading .heading-team-line{color:var(--muted-foreground);font-size:11px;white-space:nowrap}
-.room-heading .team-flag{color:var(--project);font-size:13px;line-height:1}
-.room-heading .team-name{font-weight:600}
-.room-heading.team-heading .heading-names{display:flex;align-items:baseline;gap:6px;min-width:0}
-.room-heading .team-resume{font-size:11px;padding:2px 8px;border:1px solid var(--input);border-radius:var(--radius-md);background:var(--secondary);color:var(--foreground);cursor:pointer}
-.room-heading .team-resume:hover{border-color:var(--sidebar-primary)}
-.office-shell .agent-seat .seat-role,.role-pill{display:inline-block;font:10px/14px 'Geist Mono',monospace;padding:0 6px;border-radius:999px;background:color-mix(in srgb,var(--project,var(--sidebar-primary)) 16%,transparent);color:color-mix(in srgb,var(--project,var(--sidebar-primary)) 70%,var(--foreground));margin-bottom:2px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.role-menu .role-label{margin-left:8px;color:var(--muted-foreground);font-size:11px}
-.role-chooser{position:fixed;width:0;height:0}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}

@@ -1,9 +1,8 @@
-import { LEDGE_GIVER, pendingKey, PENDING_BODY_MAX, SNAPSHOT_BODY_MAX, taskClosed, THREAD_BUDGET, THREAD_ITEMS_MAX, THREAD_TEXT_MAX, TOOL_TEXT_MAX, TOPIC_MAX, ToolSchema } from '@ledge/protocol';
-import { PhoneRoleSchema, PhoneTemplateSchema } from '@ledge/protocol';
+import { pendingKey, PENDING_BODY_MAX, SNAPSHOT_BODY_MAX, THREAD_BUDGET, THREAD_ITEMS_MAX, THREAD_TEXT_MAX, TOOL_TEXT_MAX, TOPIC_MAX, ToolSchema } from '@ledge/protocol';
 import { EffortSchema, PhoneModelChoiceSchema, type ModelChoice, type PhoneModelChoice } from '@ledge/protocol';
 import { CHECKLIST_TASKS_MAX, CHECKLIST_TEXT_MAX, doneCount } from '@ledge/protocol';
 import type { PhoneChecklist, PhoneChecklistSummary, Todo } from '@ledge/protocol';
-import type { CapabilitiesByTool, FileChange, Pending, PhoneCatalog, PhonePending, PhoneProblem, PhoneRole, PhoneSession, PhoneTask, PhoneTeam, PhoneTemplate, ServerMessage, Session, Task, Team, ThreadItem, Tool } from '@ledge/protocol';
+import type { CapabilitiesByTool, FileChange, Pending, PhonePending, PhoneSession, Session, ThreadItem, Tool } from '@ledge/protocol';
 import { adapterFor } from '../adapters/index.js';
 import { riskOf } from './risk.js';
 
@@ -81,7 +80,7 @@ export function toPhoneSession(s: Session, readAt: string, checklist?: PhoneChec
     startedAt: s.startedAt, lastActivityAt: s.lastActivityAt,
     // Topics are already cut to TOPIC_MAX where they are set; clipped again so no source can swell a snapshot.
     ...(s.topic !== undefined ? { topic: clip(s.topic, TOPIC_MAX).text } : {}),
-    ...pickSet(s, ['repo', 'branch', 'worktree', 'role', 'roleLabel', 'team', 'context', 'relieves', 'exitedAt']),
+    ...pickSet(s, ['repo', 'branch', 'worktree', 'context', 'relieves', 'exitedAt']),
     // Known up front: the phone shows neither Close nor Resume for it, rather than learning it from a refusal.
     ...(s.source === 'hook_only' ? { readOnly: true as const } : {}),
     // Its relief's state only (context handover spec §3.2): the phone shows it, the PC starts it.
@@ -155,7 +154,7 @@ export function toPhoneItem(item: ThreadItem): { item: ThreadItem; cut: boolean 
       const summary = optText(item.summary), reason = optText(item.reason);
       out = {
         kind: 'notice', ...base, notice: item.notice, text: text(item.text),
-        ...pickSet(item, ['name', 'peer', 'time', 'status', 'count', 'task', 'team', 'taskOp', 'outgoing']),
+        ...pickSet(item, ['name', 'peer', 'time', 'status', 'count']),
         ...(item.recipients ? { recipients: [...item.recipients] } : {}),
         ...(summary.v !== undefined ? { summary: summary.v } : {}),
         ...(reason.v !== undefined ? { reason: reason.v } : {})
@@ -194,133 +193,6 @@ export function capabilities(): CapabilitiesByTool {
   }
   return caps;
 }
-
-/** A live team as the phone sees it: its project's name, its seats, the progress of the tasks Ledge gave it (ledge home spec §2.4). */
-export function toPhoneTeam(t: Team, tasks: readonly Task[], projectName: (id: string | null) => string | null): PhoneTeam | null {
-  if (t.state === 'dissolved') return null;
-  const mine = tasks.filter(x => x.team === t.id && x.giver === LEDGE_GIVER);
-  return { id: t.id, name: t.name.slice(0, 60), project: projectName(t.project)?.slice(0, 80) ?? null, state: t.state,
-    ...(t.template ? { template: t.template.slice(0, 64) } : {}), createdAt: t.createdAt,
-    seats: t.seats.slice(0, 16).map(x => ({ role: x.role, sessionId: x.sessionId, ...pickSet(x, ['tool', 'model', 'effort', 'leaving']) })), done: mine.filter(x => x.state === 'done').length, given: mine.length };
-}
-
-export type DefinitionsListing = Extract<ServerMessage, { type: 'definitions.listing' }>;
-
-/** The most a catalog may weigh on the wire (bytes of its JSON): the phone's frame is 1 MiB, the rest of the budget is the sealing and the padding. Past it, prompts are sent cut. */
-export const CATALOG_BUDGET = 262_144;
-/** A cut prompt keeps its first characters: enough to tell the roles apart; the editor asks `teams.role` for the whole. */
-const CUT_PROMPT = 200;
-
-/**
- * Why a file is not a role or a team, as the phone reads it: a fixed phrase. The daemon's reasons carry file names, a line of the
- * file or an error message of the system (which holds a path), so none of them is passed on: each known kind has its phrase, and
- * anything else is « fichier illisible ». The phone never sees a path.
- */
-const PROBLEM_KINDS: [RegExp, string][] = [
-  [/^file over /, 'fichier trop volumineux'],
-  [/^prompt over /, 'consigne trop longue'],
-  [/^unknown key /, 'clé inconnue dans l\'en-tête'],
-  [/^(front matter line without a key|line without a key|not a key: value pair|indented line outside a list|line outside a seat|tabs are not allowed)/, 'syntaxe illisible'],
-  [/^name: /, 'nom d\'équipe invalide'],
-  [/^seats(\.|: )/, 'sièges invalides'],
-  [/^(id|label|prompt|tool|model|effort|autonomy|source|path|hash|role)(\.[\w.]+)?: /, 'champ de rôle invalide']
-];
-const UNREADABLE = 'fichier illisible';
-export const problemReason = (reason: string): string => PROBLEM_KINDS.find(([re]) => re.test(reason))?.[1] ?? UNREADABLE;
-const baseName = (path: string): string => path.split(/[\\/]/).filter(Boolean).pop() ?? '';
-
-/** The scopes of a listing the phone can address, each with its project's name, and the role ids each side holds (what shadows what). */
-function phoneScopes(l: DefinitionsListing, projectName: (id: string | null) => string | null) {
-  // A scope of a project the phone has no name for cannot be addressed: skipped, and it shadows nothing.
-  const scopes = l.scopes.flatMap(sc => {
-    const name = sc.scope === 'repo' ? projectName(sc.project) : null;
-    return sc.scope === 'repo' && name === null ? [] : [{ sc, project: name?.slice(0, 80) ?? null }];
-  });
-  const repoIds = new Map<string, string[]>(); // role id → the projects holding it
-  const homeIds = new Set<string>();
-  for (const { sc, project } of scopes) for (const r of sc.roles) {
-    if (sc.scope !== 'repo') { homeIds.add(r.id); continue; }
-    const names = repoIds.get(r.id) ?? [];
-    if (project && !names.includes(project)) names.push(project);
-    repoIds.set(r.id, names);
-  }
-  return { scopes, repoIds, homeIds };
-}
-
-const roleCandidate = (r: DefinitionsListing['scopes'][number]['roles'][number], sc: DefinitionsListing['scopes'][number], project: string | null, homeIds: ReadonlySet<string>, repoIds: ReadonlyMap<string, readonly string[]>) => ({
-  id: r.id, label: r.label, prompt: r.prompt, ...pickSet(r, ['tool', 'model', 'effort', 'autonomy']), scope: sc.scope, project, hash: r.hash ?? '',
-  ...(sc.scope === 'repo' && homeIds.has(r.id) ? { shadows: true as const } : {}), ...(sc.scope === 'home' && repoIds.has(r.id) ? { shadowed: true as const, shadowedIn: repoIds.get(r.id)!.slice(0, 8) } : {})
-});
-
-/**
- * The role and team definitions as the phone sees them: no path (a problem keeps the basename of its file), a repository item
- * under its project's name, a role flagged when a repository role and a home role share its id. The prompts are sent whole while
- * the catalog fits `CATALOG_BUDGET`; from the first that does not fit, each one is cut to its first 200 characters (`cut: true`).
- * What the phone schema would refuse (an id or a seat count it does not know) is left out and told as a problem.
- */
-export function toPhoneCatalog(l: DefinitionsListing, projectName: (id: string | null) => string | null): PhoneCatalog {
-  const { scopes, repoIds, homeIds } = phoneScopes(l, projectName);
-  const problems: PhoneProblem[] = [];
-  const problem = (file: string, scope: 'home' | 'repo', project: string | null, reason: string) => {
-    problems.push({ file: clip(baseName(file) || file, 80).text, scope, project, reason });
-  };
-  const roles: PhoneRole[] = [];
-  const templates: PhoneTemplate[] = [];
-  for (const { sc, project } of scopes) {
-    for (const p of sc.problems) problem(p.path, sc.scope, project, problemReason(p.reason));
-    for (const r of sc.roles) {
-      const ok = PhoneRoleSchema.safeParse(roleCandidate(r, sc, project, homeIds, repoIds));
-      if (ok.success) roles.push(ok.data); else problem(r.path, sc.scope, project, 'rôle illisible sur le téléphone');
-    }
-    for (const t of sc.templates) {
-      const ok = PhoneTemplateSchema.safeParse({ id: t.id, name: t.name, seats: t.seats.map(x => ({ role: x.role, ...pickSet(x, ['tool', 'model', 'effort', 'name']) })), scope: sc.scope, project, hash: t.hash ?? '' });
-      if (ok.success) templates.push(ok.data); else problem(t.path, sc.scope, project, 'équipe illisible sur le téléphone');
-    }
-  }
-  const tpls = templates.slice(0, 100);
-  const frame = (rs: PhoneRole[]): PhoneCatalog => ({ projects: scopes.flatMap(x => (x.project === null ? [] : [x.project])).slice(0, 50), roles: rs.slice(0, 200), templates: tpls, problems: problems.slice(0, 50) });
-  const size = (v: unknown) => Buffer.byteLength(JSON.stringify(v), 'utf8');
-  const cutRole = (r: PhoneRole): PhoneRole => (r.prompt.length > CUT_PROMPT ? { ...r, prompt: clip(r.prompt, CUT_PROMPT).text, cut: true } : r);
-  // Everything cut first, then the prompts made whole in order while they fit: the first that does not fit ends it.
-  const out = roles.slice(0, 200).map(cutRole);
-  let used = size(frame(out));
-  for (let i = 0; i < out.length; i++) {
-    if (out[i] === roles[i]) continue;
-    const grown = used - size(out[i]) + size(roles[i]);
-    if (grown > CATALOG_BUDGET) break;
-    used = grown;
-    out[i] = roles[i]!;
-  }
-  // Last resort, so the budget always holds: the prompts still cut go, last role first, then the last templates.
-  for (let i = out.length - 1; i >= 0 && size(frame(out)) > CATALOG_BUDGET; i--) out[i] = { ...out[i]!, prompt: '', cut: true };
-  while (tpls.length > 0 && size(frame(out)) > CATALOG_BUDGET) tpls.pop();
-  return frame(out);
-}
-
-/**
- * One role whole, as the catalog shows it but never cut: found in the listing itself, so a role the catalog dropped for its budget
- * (the 200-entry cap, the bytes) can still be read by its address. Undefined when there is none, or the phone could not hold it.
- */
-export function toPhoneRole(l: DefinitionsListing, projectName: (id: string | null) => string | null, scope: 'home' | 'repo', projectId: string | null, id: string): PhoneRole | undefined {
-  const { scopes, repoIds, homeIds } = phoneScopes(l, projectName);
-  const at = scopes.find(x => x.sc.scope === scope && x.sc.project === projectId);
-  const r = at?.sc.roles.find(x => x.id === id);
-  if (!at || !r) return undefined;
-  const ok = PhoneRoleSchema.safeParse(roleCandidate(r, at.sc, at.project, homeIds, repoIds));
-  return ok.success ? ok.data : undefined;
-}
-
-/** A task Ledge gave, as the phone sees it: the start of its result only. */
-export function toPhoneTask(x: Task, owner: Session | undefined, teamName: string | undefined): PhoneTask {
-  const result = x.result !== undefined ? clip(x.result, TOOL_TEXT_MAX) : undefined;
-  return { id: x.id, title: x.title.slice(0, 200), owner: x.owner, ownerName: x.ownerName.slice(0, 80), ...(owner?.role ? { ownerRole: owner.role } : {}),
-    ...(x.team ? { team: x.team } : {}), ...(teamName ? { teamName: teamName.slice(0, 60) } : {}), state: x.state,
-    ...(result ? { result: result.text, ...(result.cut ? { cut: true as const } : {}) } : {}), at: x.at, updatedAt: x.updatedAt, ...(x.seen ? { seen: true as const } : {}) };
-}
-
-/** The tasks Ledge gave that the phone lists: open ones, and those closed in the last day not put away. */
-export const phoneTasks = (tasks: readonly Task[], now: number): Task[] =>
-  tasks.filter(x => x.giver === LEDGE_GIVER && (!taskClosed(x) || (!x.seen && now - Date.parse(x.updatedAt) < 86_400_000))).slice(-200);
 
 /** The bounds of a model id and an effort (`ModelIdSchema`, `EffortSchema`): what the phone shows of a session's. */
 const MODEL_MAX = 200;

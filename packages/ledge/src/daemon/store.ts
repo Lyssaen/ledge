@@ -53,7 +53,12 @@ export class Store {
     let dropped = 0;
     for (const item of list) {
       const r = SessionSchema.safeParse(item);
-      if (r.success) this.sessions.set(r.data.id, r.data);
+      if (r.success) {
+        // An old record seated by a role or team got its autonomy from that role (removed, spec 2026-10-30 §7): not carried over.
+        const { autonomy: _a, ...bare } = r.data;
+        const seated = item as { role?: unknown; team?: unknown };
+        this.sessions.set(r.data.id, seated.role || seated.team ? bare : r.data);
+      }
       else { dropped++; log(`journal entry dropped: ${r.error.issues[0]?.message ?? 'invalid'}`); }
     }
     // Journals from before the launch form have no recents: they simply start empty.
@@ -84,7 +89,7 @@ export class Store {
   }
 
   /** Facts no event carries (the session's repository): the changed fields only, nothing emitted when they are equal. */
-  patch(id: string, fields: Partial<Pick<Session, 'repo' | 'repoPath' | 'branch' | 'worktree' | 'repoId' | 'lastMessage' | 'workdir' | 'modelNext' | 'role' | 'roleLabel' | 'team'>>): void {
+  patch(id: string, fields: Partial<Pick<Session, 'repo' | 'repoPath' | 'branch' | 'worktree' | 'repoId' | 'lastMessage' | 'workdir' | 'modelNext'>>): void {
     const cur = this.sessions.get(id); if (!cur) return;
     if ((Object.keys(fields) as Array<keyof typeof fields>).every(k => cur[k] === fields[k])) return;
     this.upsert({ ...cur, ...fields });

@@ -207,18 +207,18 @@ describe('messages between agents in the thread', () => {
     await waitFor(() => expect(document.querySelector('.session-page')).toHaveAttribute('data-session', 'local:nova'));
   });
 
-  it('a task card, either side, says who handed it to whom and opens the task (#92)', async () => {
-    const { user } = await openOtto([
-      { kind: 'notice', id: 'task-t1-0', at: at(0), turn: 1, notice: 'other', task: 't1', taskOp: 'give', outgoing: true, name: 'nova', peer: 'nova', summary: 'Relire le reducer', text: 'Tâche « Relire le reducer » confiée à nova' },
+  it('a notice of a task from before the removal stays a readable line: its summary, no TÂCHE kicker, no link to a task', async () => {
+    await openOtto(([
+      { kind: 'notice', id: 'task-t1-0', at: at(0), turn: 1, notice: 'other', task: 't1', taskOp: 'give', outgoing: true, name: 'nova', peer: 'nova', summary: 'Relire le reducer', text: 'Tâche « Relire le reducer » confiée à Nova' },
       { kind: 'notice', id: 'notice-2-0', at: at(1), turn: 1, notice: 'other', task: 't2', name: 'Max', summary: 'Lance les tests', text: 'Tâche de Max : « Lance les tests »' }
-    ]);
+    ] as unknown) as ThreadItem[]);
     const out = (await thread().findByText('Relire le reducer')).closest<HTMLElement>('[data-notice="task-t1-0"]')!;
-    expect(out).toHaveTextContent('TÂCHE');
-    expect(out).toHaveTextContent('Tâche confiée à Nova');
+    expect(out).toHaveTextContent('Avis automatique');
+    expect(out).not.toHaveTextContent('TÂCHE');
+    expect(out).toHaveAttribute('title', 'Tâche « Relire le reducer » confiée à Nova');
     const incoming = document.querySelector<HTMLElement>('[data-notice="notice-2-0"]')!;
-    expect(incoming).toHaveTextContent('Tâche de Max');
-    expect(within(incoming).getByRole('button', { name: 'Voir la tâche' })).toBeVisible();
-    await user.click(within(out).getByRole('button', { name: 'Voir la tâche' }));
-    await waitFor(() => expect(screen.getByRole('tab', { name: /^Tâches/ })).toHaveAttribute('aria-selected', 'true'));
+    expect(incoming).toHaveTextContent('Lance les tests');
+    expect(within(incoming).queryByRole('button', { name: 'Voir la tâche' })).toBeNull();
+    expect(out.className).not.toMatch(/notice-task/);
   });
 });

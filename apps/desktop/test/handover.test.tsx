@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { boot, closeDaemons, PROJECTS } from './helpers';
-import { nearLimit } from '../src/teams/useTeamsApi';
+import { nearLimit } from '../src/session/useRelief';
 
 const AT = '2026-10-26T08:00:00.000Z';
 const ctx = (used: number) => ({ used, window: 200_000, at: AT });
@@ -13,11 +13,11 @@ afterEach(async () => { cleanup(); await closeDaemons(); });
 describe('a session near its context limit (context handover spec §3.2)', () => {
   it('« Your turn » lists it with « Hand over » and « Later »; the session page shows the gauge and the button', async () => {
     const { d, side, user } = await boot({ projects: PROJECTS, sessions: [
-      fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'idle', role: 'build', context: ctx(170_000) }),
+      fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'idle', context: ctx(170_000) }),
       fakeSession('pim', { name: 'Pim', cwd: '/w/ledge', state: 'working', context: ctx(60_000) })
     ] });
     const yours = within(side.getByRole('region', { name: 'Your turn' }));
-    expect(yours.getByText('Otto @build · context 85 %')).toBeVisible();
+    expect(yours.getByText('Otto · context 85 %')).toBeVisible();
     expect(yours.queryByText(/Pim · context/)).toBeNull();
     d.onMessage(m => { if (m.type === 'session.handover') d.push({ type: 'session.handover.result', rid: m.rid, ok: true }); });
     await user.click(yours.getByRole('button', { name: 'Hand over' }));
@@ -32,9 +32,9 @@ describe('a session near its context limit (context handover spec §3.2)', () =>
     await user.click(item);
     await waitFor(() => expect(d.received.filter(m => m.type === 'session.handover')).toHaveLength(2));
     // Under way: the page says so, « Your turn » lets it be.
-    d.push({ type: 'session.updated', session: fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'idle', role: 'build', context: ctx(170_000), handover: { state: 'briefing', at: AT } }) });
+    d.push({ type: 'session.updated', session: fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'idle', context: ctx(170_000), handover: { state: 'briefing', at: AT } }) });
     expect(await screen.findByText('relief: brief asked')).toBeVisible();
-    await waitFor(() => expect(side.queryByText(/Otto @build · context/)).toBeNull());
+    await waitFor(() => expect(side.queryByText(/Otto · context/)).toBeNull());
   });
 
   it('« Max context » in Settings › General: the daemon\'s threshold, set there; the lists follow it', async () => {
@@ -53,13 +53,13 @@ describe('a session near its context limit (context handover spec §3.2)', () =>
   });
 
   it('« The point » lists it as « Your turn » does; « Later » in « Your turn » puts it away from both', async () => {
-    const { side, user } = await boot({ home: true, projects: PROJECTS, sessions: [fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'idle', role: 'build', context: ctx(170_000) })] });
+    const { side, user } = await boot({ home: true, projects: PROJECTS, sessions: [fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'idle', context: ctx(170_000) })] });
     const point = within(await screen.findByRole('region', { name: 'The point' }));
     const row = (await point.findByText('Otto · context 85 %')).closest('.lp-row') as HTMLElement;
     expect(within(row).getByRole('button', { name: 'Hand over' })).toBeVisible();
-    expect(side.getByText('Otto @build · context 85 %')).toBeVisible();
-    await user.click(within(side.getByText('Otto @build · context 85 %').closest('.st-card') as HTMLElement).getByRole('button', { name: 'Later' }));
-    await waitFor(() => expect(side.queryByText(/Otto @build · context/)).toBeNull());
+    expect(side.getByText('Otto · context 85 %')).toBeVisible();
+    await user.click(within(side.getByText('Otto · context 85 %').closest('.st-card') as HTMLElement).getByRole('button', { name: 'Later' }));
+    await waitFor(() => expect(side.queryByText(/Otto · context/)).toBeNull());
     expect(point.queryByText(/Otto · context/)).toBeNull();
   });
 

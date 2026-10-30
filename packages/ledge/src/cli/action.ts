@@ -9,7 +9,7 @@ import { SESSION_KEY_VAR } from '../auth.js';
 
 export const CLOSE_USAGE = 'ledge close <session>… [--json]                 fermer proprement des sessions (leur conversation reste reprenable)';
 export const DAEMON_DOWN = 'daemon not running (start a session with `ledge claude`, or run `ledge daemon`)';
-/** A deadline, not a delay: a clean close waits for the prompt, then for the exit; a resumed team starts its seats in turn. */
+/** A deadline, not a delay: a clean close waits for the prompt, then for the exit. */
 export const RUN_MS = 60_000;
 
 export type ActionResult = Omit<Extract<ServerMessage, { type: 'action.result' }>, 'type' | 'rid'>;
@@ -22,7 +22,7 @@ export function actionArgs(id: ActionId, args: Record<string, unknown>): Record<
 
 /** A session running the command: its id and the key Ledge gave it (`SESSION_KEY_VAR`), for the daemon to check. */
 export interface Caller { by: string; key?: string }
-/** The session that runs the command (its id from the environment, as `ledge task`), or `undefined` for the user's own terminal. */
+/** The session that runs the command (its id from the environment, as `ledge send`), or `undefined` for the user's own terminal. */
 export function callerOf(env: NodeJS.ProcessEnv): Caller | undefined {
   const by = env[CODEX_HOOK_VAR] || env.LEDGE_SESSION;
   const key = env[SESSION_KEY_VAR];
