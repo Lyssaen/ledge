@@ -18,7 +18,7 @@ export interface FakeOpenRig {
   emit(event: { type: string } & Record<string, unknown>): number;   // appends to the journal, returns seq
   stop(): Promise<void>;                           // closes the port and destroys open SSE streams (journal kept)
   restart(): Promise<void>;                        // reopens on the same port, same journal
-  requests: { method: string; path: string; lastEventId?: string }[];
+  requests: { method: string; path: string; search?: string; lastEventId?: string }[];
 }
 
 export async function createFakeOpenRig(opts: { port?: number; version?: string | null } = {}): Promise<FakeOpenRig> {
@@ -47,7 +47,7 @@ export async function createFakeOpenRig(opts: { port?: number; version?: string 
   function handle(req: import('node:http').IncomingMessage, res: ServerResponse) {
     const u = new URL(req.url ?? '/', 'http://x'); const path = u.pathname; const q = u.searchParams;
     const lastEventId = req.headers['last-event-id'] as string | undefined;
-    f.requests.push({ method: req.method ?? 'GET', path, ...(lastEventId !== undefined ? { lastEventId } : {}) });
+    f.requests.push({ method: req.method ?? 'GET', path, ...(u.search ? { search: u.search } : {}), ...(lastEventId !== undefined ? { lastEventId } : {}) });
     if (req.method !== 'GET') return json(res, { error: 'not_found' }, 404);
     if (path === '/healthz') return json(res, { status: 'ok', pid: process.pid, ...(f.version !== null ? { semver: f.version } : {}) });
     if (path === '/api/ps') return json(res, f.rigs.map(ps));
