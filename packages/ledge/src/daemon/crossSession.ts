@@ -117,6 +117,17 @@ export function ledgeTask(text: string): { id: string; from?: string; text: stri
   const id = attrs.get('id'); const from = attrs.get('from');
   return id ? { id, ...(from ? { from } : {}), text: m[2]!.trim() } : undefined;
 }
+/** What Ledge types to a session whose `ledge ask` the user answered: one line naming the decision and the user's words,
+ *  both escaped as every body Ledge types. */
+const ANSWER_BLOCK = /^<ledge-answer\b([^>]*)>([\s\S]*?)(?:<\/ledge-answer>|$)/;
+export function formatLedgeAnswer(a: { id: string; question: string; text: string }): string {
+  return `<ledge-answer id="${attr(a.id)}">Réponse de l'utilisateur à « ${ledgeBody(a.question)} » : ${ledgeBody(a.text)}</ledge-answer>`;
+}
+export function ledgeAnswer(text: string): { id: string; text: string } | undefined {
+  const m = ANSWER_BLOCK.exec(text.trimStart());
+  const id = m ? new Map([...m[1]!.matchAll(ATTR)].map(a => [a[1]!, a[2]!] as const)).get('id') : undefined;
+  return id ? { id, text: m![2]!.trim() } : undefined;
+}
 /** A prompt that is a Ledge notice: the target it names, the reason that ends it, and its text. */
 export function ledgeNotice(text: string): { to: string; reason?: string; text: string } | undefined {
   const m = NOTICE_BLOCK.exec(text.trimStart());

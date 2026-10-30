@@ -7,7 +7,7 @@ import { filesOf } from './files.js';
 import { agentMessages } from './transcript.js';
 import { QUESTION_TOOLS } from './state.js';
 import { quote } from './tasks.js';
-import { crossSession, crossSessionNotices, stripNote, ledgeBody, ledgeMessages, ledgeNotice, ledgeTask, ledgeTeamNotice, mailId, type CrossSessionNotice } from './crossSession.js';
+import { crossSession, crossSessionNotices, stripNote, ledgeBody, ledgeMessages, ledgeAnswer, ledgeNotice, ledgeTask, ledgeTeamNotice, mailId, type CrossSessionNotice } from './crossSession.js';
 export { crossSession } from './crossSession.js';
 
 /** Native tracking (spec 2026-10-13 §3–4): one thread per session, reduced from the events the store applies. */
@@ -173,6 +173,11 @@ export class History {
           const peer = task.from ? this.peerOf(task.from) : undefined;
           return this.put(id, { kind: 'notice', id: `notice-${turn + 1}-0`, at: ev.at, turn: turn + 1, notice: 'other', task: task.id,
             ...(task.from ? { name: task.from } : {}), ...(peer ? { peer } : {}), summary: task.text.replaceAll(' ⏎ ', '\n'), text: task.text });
+        }
+        const answer = ledgeAnswer(text);
+        if (answer) { // the user's answer to a decision this session asked (`ledge ask`): a system event, no prompt
+          this.turns.set(id, turn + 1);
+          return this.put(id, { kind: 'notice', id: `notice-${turn + 1}-0`, at: ev.at, turn: turn + 1, notice: 'other', summary: answer.text.replaceAll(' ⏎ ', '\n'), text: answer.text });
         }
         const joined = ledgeTeamNotice(text);
         if (joined) { // Ledge seating this session in a team: a system event, no prompt

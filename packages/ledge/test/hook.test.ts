@@ -459,6 +459,14 @@ describe('runHook: Codex runs `ledge send` and `ledge who` itself', () => {
       expect(Date.now() - t0).toBeLessThan(2000);
     } finally { d.close(); }
   });
+  it('`ledge ask` is run by the hook and denied with its output, the ask created by the launcher session of the hook', async () => {
+    const store = new Store(); store.upsert(sess('b', 'Pim'));
+    const srv = await startServer({ store, tmux, port: 0 });
+    try {
+      const r = reason(await runHook('PreToolUse', bash('ledge ask "Quelle base ?" "Postgres ou SQLite (je recommande SQLite)"'), { port: srv.port, tool: 'codex' }));
+      expect(r).toMatchObject({ permissionDecision: 'deny', permissionDecisionReason: expect.stringMatching(/^décision a[0-9a-f]{6} posée à l'utilisateur : sa réponse te réveillera$/) });
+    } finally { await srv.close(); }
+  });
   it('`ledge who` answers with the directory', async () => {
     const store = new Store(); store.upsert(sess('a', 'Otto')); store.upsert(sess('b', 'Pim'));
     const srv = await startServer({ store, tmux, port: 0 });
@@ -500,14 +508,18 @@ describe('session identity (SessionStart additionalContext)', () => {
     expect(codex).toContain('Tu es Nova, projet api');
     expect(codex).not.toMatch(/branche [^,]/);
     expect(codex).not.toContain('SendMessage');
-    expect(codex).toContain('Pour écrire à une autre session Ledge, lance `ledge send <nom> "<message>"` (seul, sans && ni |). Ledge exécute lui-même `ledge send`, `ledge read`, `ledge task` et `ledge who` : leur résultat t\'arrive comme « Command blocked by PreToolUse hook: … », c\'est la réponse, pas une erreur.');
+    expect(codex).toContain('Pour écrire à une autre session Ledge, lance `ledge send <nom> "<message>"` (seul, sans && ni |). Ledge exécute lui-même `ledge send`, `ledge read`, `ledge ask` et `ledge who` : leur résultat t\'arrive comme « Command blocked by PreToolUse hook: … », c\'est la réponse, pas une erreur.');
     // Both are told how to read a long message whole.
     for (const t of [text, codex]) expect(t).toContain('lance `ledge read <id>` pour le lire en entier');
     // A `<ledge-notice>` is not only an undelivered message: a role prompt or team change arrives the same way.
     for (const t of [text, codex]) expect(t).toContain('Une `<ledge-notice>` vient de Ledge : soit un de tes messages n\'a pas pu être remis, soit un changement te concerne (ta consigne de rôle, ton équipe).');
-    // And how to give work that must not get lost.
-    for (const t of [text, codex]) expect(t).toContain('`ledge task give <nom> "<titre>" "<détail>"`');
-    for (const t of [text, codex]) expect(t).toContain('`ledge task give ledge "<question>" "<options, ta recommandation>"`');
+  });
+
+  it('identityContext names ledge ask and no longer ledge task give ledge', () => {
+    const t = identityContext({ name: 'Pim', tool: 'claude', project: 'ledge', cwd: '/w' });
+    expect(t).toContain('ledge ask "<question>" "<options, ta recommandation>"');
+    expect(t).toContain('<ledge-answer>');
+    expect(t).not.toMatch(/ledge task give ledge/);
   });
 
   it('a launched session is told its current Ledge name (a rename wins over LEDGE_NAME), with the daemon\'s branch', async () => {

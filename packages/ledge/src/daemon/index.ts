@@ -16,6 +16,7 @@ import { ledgePeer, readPeers } from './peers.js';
 import { createMobileService, type MobileService } from '../mobile/service.js';
 import { fileJournal } from './mailbox.js';
 import { tasksJournal } from './tasks.js';
+import { asksJournal } from './asks.js';
 import { teamsJournal } from './teamsLive.js';
 
 export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket?: string } = {}): Promise<{ stop(): Promise<void>; port: number }> {
@@ -58,8 +59,9 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   catch (e) { log(`mobile access not available: ${(e as Error).message}`); mobileUnavailable = (e as Error).message.slice(0, 200); }
   const mail = fileJournal(paths().mail);
   const taskJournal = tasksJournal(paths().tasks);
+  const askJournal = asksJournal(paths().asks);
   const teamJournal = teamsJournal(paths().teams);
-  const server = await startServer({ store, tmux, port: opts.port, daemon, updater, history, mobile, mobileUnavailable, mail, tasks: taskJournal, teams: teamJournal, attachments });
+  const server = await startServer({ store, tmux, port: opts.port, daemon, updater, history, mobile, mobileUnavailable, mail, tasks: taskJournal, asks: askJournal, teams: teamJournal, attachments });
   ompLive = () => server.omp.liveCount();
   const poller = startPoller({ store, tmux, broadcastPreview: server.preview, labelExited: server.labelExited });
   await writeFile(paths().pid, String(process.pid));
@@ -67,7 +69,7 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   let stopping: Promise<void> | null = null;
   const stop = () => stopping ??= (async () => {
     process.off('SIGTERM', onSignal); process.off('SIGINT', onSignal);
-    poller.stop(); await server.close(); await mobile?.stop(); await store.save(); await history.flush(); await mail.flush(); await taskJournal.flush(); await teamJournal.flush(); await rm(paths().pid, { force: true }); log('daemon stopped');
+    poller.stop(); await server.close(); await mobile?.stop(); await store.save(); await history.flush(); await mail.flush(); await taskJournal.flush(); await askJournal.flush(); await teamJournal.flush(); await rm(paths().pid, { force: true }); log('daemon stopped');
   })();
   const onSignal = () => { stop().finally(() => process.exit(0)); };
   process.once('SIGTERM', onSignal);

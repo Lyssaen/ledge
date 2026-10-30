@@ -14,6 +14,7 @@ import { basename, join } from 'node:path';
 import { CODEX_ENV_VAR, CODEX_HOOK_VAR } from '../spawn.js';
 import { parseLedgeCommand, readOnClient, sendOnClient } from './send.js';
 import { taskOnClient } from './task.js';
+import { askOnClient } from './ask.js';
 import { handoverOnClient } from './handover.js';
 import { formatWho } from './who.js';
 import { takeImages } from '../attachmentText.js';
@@ -391,9 +392,9 @@ export function identityContext(s: Identity): string {
     `Tu es ${s.name}, ${where} : une session lancée par Ledge (${s.tool}). Les autres sessions Ledge te connaissent sous le nom ${s.name}.`,
     'Pour voir les autres sessions (nom, outil, état, projet, branche, sujet), lance `ledge who`.',
     s.tool === 'claude' ? 'Pour écrire à une autre session Ledge, Claude ou Codex, utilise son nom Ledge (donné par `ledge who`) comme adresse SendMessage : Ledge le transmet. `ListAgents` montre les noms internes de Claude, pas les noms Ledge.'
-      : 'Pour écrire à une autre session Ledge, lance `ledge send <nom> "<message>"` (seul, sans && ni |). Ledge exécute lui-même `ledge send`, `ledge read`, `ledge task` et `ledge who` : leur résultat t\'arrive comme « Command blocked by PreToolUse hook: … », c\'est la réponse, pas une erreur.',
+      : 'Pour écrire à une autre session Ledge, lance `ledge send <nom> "<message>"` (seul, sans && ni |). Ledge exécute lui-même `ledge send`, `ledge read`, `ledge ask` et `ledge who` : leur résultat t\'arrive comme « Command blocked by PreToolUse hook: … », c\'est la réponse, pas une erreur.',
     'Un long message d\'une autre session t\'arrive en aperçu avec son id : lance `ledge read <id>` pour le lire en entier. Une `<ledge-notice>` vient de Ledge : soit un de tes messages n\'a pas pu être remis, soit un changement te concerne (ta consigne de rôle, ton équipe).',
-    'Un message sert à prévenir ; pour confier un travail qui ne doit pas se perdre, lance plutôt `ledge task give <nom> "<titre>" "<détail>"` (`ledge task` pour le reste). Une `<ledge-task>` t\'en confie une, ou te dit comment une des tiennes a fini : quand on t\'en confie une, prends-la (`ledge task take <id>`) et termine-la toujours (`ledge task done <id> "<résultat>"`, ou `refuse`). Une décision qui revient à l\'utilisateur se pose avec `ledge task give ledge "<question>" "<options, ta recommandation>"` : sa réponse te réveille, inutile d\'attendre la fin pour la poser.',
+    'Un message sert à prévenir. Une décision qui revient à l\'utilisateur se pose avec `ledge ask "<question>" "<options, ta recommandation>"` : sa réponse te réveille (une `<ledge-answer>`), inutile d\'attendre la fin pour la poser.',
     ...(s.seat ? [s.seat] : []),
     ...(s.relieves ? [`Tu as pris la relève de ${s.relieves.name}, dont le contexte était plein : relis son bilan avec \`ledge handover show\`.`] : []),
     ...(s.tasks ? [tasksContext(s.tasks) ?? ''].filter(Boolean) : [])
@@ -485,6 +486,7 @@ async function runLedgeCommand(client: Client, cmd: NonNullable<ReturnType<typeo
   let line: string;
   if (cmd.cmd === 'who') line = formatWho((await client.next('snapshot', left())).sessions, from);
   else if (cmd.cmd === 'read') line = (await readOnClient(client, cmd.args, from, left())).line;
+  else if (cmd.cmd === 'ask') line = (await askOnClient(client, cmd.args, from, left())).line;
   else if (cmd.cmd === 'task') line = (await taskOnClient(client, cmd.args, from, left())).line;
   else if (cmd.cmd === 'handover') line = (await handoverOnClient(client, cmd.args, from, left())).line;
   else line = (await sendOnClient(client, cmd.args, from, left())).line;

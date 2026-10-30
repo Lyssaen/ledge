@@ -15,6 +15,7 @@ import { ProjectsSchema } from './projects.js';
 import { ThreadItemSchema } from './thread.js';
 import { DecisionSchema, NOTE_MAX } from './decisions.js';
 import { MobileStateSchema, RelayUrlSchema } from './mobile.js';
+import { AskAnswerSchema, AskCreateSchema, AskResultSchema, AskUpdatedSchema, AsksMessageSchema } from './asks.js';
 import { TaskCmdSchema, TaskResultSchema, TaskUpdatedSchema } from './tasks.js';
 import { ContextPrefsMessageSchema, ContextSetSchema, HandoverBriefSchema, HandoverResultSchema, HandoverShowSchema, SessionHandoverResultSchema, SessionHandoverSchema } from './handover.js';
 import { DefinitionResultSchema, DefinitionsListSchema, DefinitionsListingSchema, RoleDeleteSchema, RoleWriteSchema, TeamChangedSchema, TeamComposeSchema, TeamSeatSchema, TemplateDeleteSchema, TemplateWriteSchema, scopeIssue, RoleIdSchema, RolesListSchema, RolesListingSchema, TeamDissolveSchema, TeamFailedSchema, TeamIdSchema, TeamJoinSchema, TeamLaunchSchema, TeamLaunchedSchema, TeamLeaveSchema, TeamResumeSchema, TeamSaveSchema, TeamSavedSchema, TeamsMessageSchema, TeamUpdatedSchema } from './teams.js';
@@ -87,7 +88,8 @@ export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(
   /** Takes `session.model`: a live session's model and effort changed (#58, lot 2). */ modelSwitch: z.boolean().optional(),
   /** Takes `approval` on an OMP `session.launch` (auto mode). */ ompApproval: z.boolean().optional(),
   /** Its home folder, so a client shows the folders under it as `~` (absent from older daemons). */ home: z.string().optional(), mobile: z.boolean().optional(),
-  /** Knows roles, teams and tasks given by Ledge (spec 2026-10-25 roles). */ teams: z.boolean().optional() });
+  /** Knows roles, teams and tasks given by Ledge (spec 2026-10-25 roles). */ teams: z.boolean().optional(),
+  /** Knows `ask.create` / `ask.answer`: a session's decision for the user (`ledge ask`). */ asks: z.boolean().optional() });
 export type DaemonInfo = z.infer<typeof DaemonInfoSchema>;
 export const UpdateFailureSchema = z.enum(['git-install', 'no-systemd', 'sessions-at-risk', 'npm-failed', 'busy']);
 export type UpdateFailure = z.infer<typeof UpdateFailureSchema>;
@@ -161,6 +163,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   ContextPrefsMessageSchema,
   HandoverResultSchema,
   TaskUpdatedSchema,
+  AsksMessageSchema, AskUpdatedSchema, AskResultSchema,
   RolesListingSchema,
   TeamsMessageSchema, TeamUpdatedSchema, TeamLaunchedSchema, TeamFailedSchema, TeamSavedSchema,
   DefinitionsListingSchema, DefinitionResultSchema, TeamChangedSchema,
@@ -288,6 +291,7 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   /** `ledge read <id>`: a message's whole body, for its receiver or its sender (`by`, a session id). */
   z.object({ type: z.literal('message.read'), id: z.string().min(1).max(40), by: z.string().min(1) }),
   TaskCmdSchema,
+  AskCreateSchema, AskAnswerSchema,
   SessionHandoverSchema,
   ContextSetSchema,
   HandoverBriefSchema,

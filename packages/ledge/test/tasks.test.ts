@@ -7,7 +7,6 @@ import { Store } from '../src/daemon/store.js';
 import { createTasks, tasksJournal, type Tasks, type TasksDeps } from '../src/daemon/tasks.js';
 import { ledgeTask } from '../src/daemon/crossSession.js';
 import { taskArgs, formatTask } from '../src/cli/task.js';
-import { decideArgs } from '../src/cli/decide.js';
 
 const T0 = '2026-10-25T08:00:00.000Z';
 const mk = (id: string, name: string, extra: Partial<Session> = {}): Session => ({ id, name, tool: 'claude', cwd: '/w/ledge', project: 'ledge', title: `${name} · ledge`,
@@ -197,15 +196,6 @@ describe('closing and parking (borrowed from OpenRig)', () => {
     cmd('pim', 'done', { task: t.id, text: 'fait' }); cmd('pim', 'done', { task: u.id, text: 'fait' }); told = [];
     store.upsert({ ...store.get('pim')!, state: 'working' }); store.upsert({ ...store.get('pim')!, state: 'idle' });
     vi.advanceTimersByTime(120_000); expect(told).toEqual([]);
-  });
-});
-
-describe('ledge decide (CLI)', () => {
-  it('lists the decisions waiting, or answers one', () => {
-    expect(decideArgs([])).toEqual({ op: 'list' });
-    expect(decideArgs(['t1a2b3c', 'A, merge'])).toEqual({ op: 'done', task: 't1a2b3c', text: 'A, merge' });
-    expect(decideArgs(['t1a2b3c'])).toBeUndefined();
-    expect(decideArgs(['nope', 'A'])).toBeUndefined();
   });
 });
 

@@ -13,6 +13,13 @@ async function fakeDaemon(ack: { outcome: string; reason?: string } | null) {
   return { got, port: (wss.address() as { port: number }).port, close: () => wss.close() };
 }
 
+describe('parseLedgeCommand', () => {
+  it('reads a lone ledge ask', () => {
+    expect(parseLedgeCommand('ledge ask "Q ?" "A ou B"')).toEqual({ cmd: 'ask', args: ['Q ?', 'A ou B'] });
+    expect(parseLedgeCommand('ledge ask "Q ?" "A" && ls')).toBeUndefined();
+  });
+});
+
 describe('ledge send', () => {
   it('accepted: the message is handed over', async () => {
     const d = await fakeDaemon({ outcome: 'accepted' });

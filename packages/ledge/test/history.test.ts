@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AttachmentRef, SessionEvent, Task, TaskTransmission } from '@ledge/protocol';
 import { History, MAX_ITEMS, SYNC_MS, handBack, crossSession } from '../src/daemon/history.js';
-import { formatLedgeMessage, formatLedgeNotice, formatLedgeTask, formatTeamNotice, mailId } from '../src/daemon/crossSession.js';
+import { formatLedgeMessage, formatLedgeNotice, formatLedgeAnswer, formatLedgeTask, formatTeamNotice, mailId } from '../src/daemon/crossSession.js';
 import { paths } from '../src/paths.js';
 
 const T0 = '2026-10-13T10:00:00.000Z';
@@ -504,6 +504,14 @@ describe('messages through the Ledge mailbox', () => {
     const h = new History({ peerOf });
     h.record('fce8', ev('UserPromptSubmit', { text: formatLedgeTask({ id: 't1a2b3c', from: 'Pim', text: 'Tâche de Pim : « Lance les tests ».' }) }, 1));
     expect(h.items('fce8')).toEqual([expect.objectContaining({ kind: 'notice', notice: 'other', task: 't1a2b3c', name: 'Pim', peer: 'c0de', summary: 'Tâche de Pim : « Lance les tests ».', text: 'Tâche de Pim : « Lance les tests ».' })]);
+  });
+
+  it('a <ledge-answer> prompt becomes an `other` notice, not a user prompt', () => {
+    const h = new History({ peerOf });
+    h.record('fce8', ev('UserPromptSubmit', { text: formatLedgeAnswer({ id: 'a1b2c3d', question: 'Quelle base ?', text: 'SQLite' }) }, 1));
+    const items = h.items('fce8');
+    expect(items).toEqual([expect.objectContaining({ kind: 'notice', notice: 'other', summary: "Réponse de l'utilisateur à « Quelle base ? » : SQLite" })]);
+    expect(items.some(i => i.kind === 'prompt')).toBe(false);
   });
 
   it('a team notice (a session that joined a team) is a notice naming the team, never a prompt', () => {

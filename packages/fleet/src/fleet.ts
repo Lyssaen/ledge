@@ -1,6 +1,6 @@
-import { ChatTurnSchema, ContextPrefsSchema, isArchived, IslandPrefsSchema, LEDGE_GIVER, ProjectsSchema, type Task, type Team, type IslandPrefs, type MobileState, type ChatTurn, type ChatProposal, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session, type Tool, type ImageUpload } from '@ledge/protocol';
+import { askShown, ChatTurnSchema, ContextPrefsSchema, isArchived, IslandPrefsSchema, LEDGE_GIVER, ProjectsSchema, type Ask, type Task, type Team, type IslandPrefs, type MobileState, type ChatTurn, type ChatProposal, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session, type Tool, type ImageUpload } from '@ledge/protocol';
 import { createDaemonClient, type DaemonClient, type DaemonStatus } from './client';
-import { LOCAL_MACHINE, loadMachines, machineUrl, parseMachines, probeMachine, qualify, shellCommand, splitId, terminalCommand, type MachineConfig, type MobileError, type MachineState } from './machines';
+import { LOCAL_MACHINE, loadMachines, machineUrl, parseMachines, probeMachine, qualify, shellCommand, splitId, terminalCommand, type FleetAsk, type MachineConfig, type MobileError, type MachineState } from './machines';
 import type { TokenSource } from './token';
 
 type Snapshot = Extract<ServerMessage, { type: 'snapshot' }>;
@@ -9,6 +9,8 @@ const toWire = (list: MachineConfig[]): Machine[] => list.map(({ id, label, ssh 
 type Binding = { machine: string; raw: string };
 /** The commands tracked as a machine's operation in flight (`operations`, set in `send`): their answer, their refusal or the machine's drop ends it. */
 const OPERATIONS: ReadonlySet<string> = new Set(['session.launch', 'session.relay', 'session.relay.cancel', 'session.close']);
+/** How long an `ask.answer` waits for its `ask.result`. */
+const ANSWER_MS = 4000;
 type PendingRoute = { qid: string; text: string; tool?: Tool; images?: ImageUpload[]; coordinator: string };
 
 export interface FleetOptions {
@@ -98,6 +100,17 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     const ask = (extra: { team?: string }) => { const rid = `fleet-tasks-${++listSeq}`; taskLists.add(rid); p.client.send({ type: 'task.cmd', rid, by: LEDGE_GIVER, op: 'list', all: true, ...extra }); };
     ask({});
     for (const t of teams ?? []) if (t.state !== 'dissolved') ask({ team: t.id });
+  };
+  /** Each machine's asks (`ledge ask`) by id: a decision belongs to the machine of its session, so none is local-only. `askList`: the open ones, oldest first, one array until the next change. */
+  const askMap = new Map<string, Map<string, Ask>>(); let askList: FleetAsk[] = [];
+  /** `ask.answer` requestId -> the machine asked and how to settle the caller's promise. */
+  const askAnswers = new Map<string, { machine: string; settle: (r: { ok: true } | { ok: false; reason: string }) => void }>();
+  const putAsks = (machine: string, list: Ask[] | undefined, one?: Ask) => {
+    const mine = list ? new Map<string, Ask>() : askMap.get(machine) ?? new Map<string, Ask>();
+    for (const a of list ?? (one ? [one] : [])) mine.set(a.id, a);
+    askMap.set(machine, mine);
+    askList = [...askMap].flatMap(([m, asks]) => [...asks.values()].filter(askShown).map(a => ({ ...a, machine: m }))).sort((a, b) => a.at.localeCompare(b.at));
+    listeners.forEach(fn => fn());
   };
   let routing: PendingRoute | null = null, resetAt = '', lastStatus: DaemonStatus = 'connecting';
   const emit = (m: ServerMessage) => messages.forEach(fn => fn(m));
@@ -217,6 +230,12 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       island = m.prefs; listeners.forEach(fn => fn());
       return;
     }
+    // Asks are every machine's, consumed here and never relayed: the ask carries its machine.
+    if (m.type === 'asks') { putAsks(machine, m.asks); return; }
+    if (m.type === 'ask.updated') { putAsks(machine, undefined, m.ask); return; }
+    if (m.type === 'ask.result') { const a = askAnswers.get(m.rid); if (a?.machine === machine) a.settle(m.ask ? { ok: true } : { ok: false, reason: m.reason ?? 'refusée' }); return; }
+    // A daemon that does not know `ask.answer` says so: the answer was not taken.
+    if (m.type === 'error' && m.request === 'ask.answer') { for (const a of [...askAnswers.values()]) if (a.machine === machine) a.settle({ ok: false, reason: m.message }); return; }
     // Teams and tasks are the local daemon's (one team, one machine): a remote machine's are ignored.
     if (m.type === 'teams' || m.type === 'team.updated') {
       if (machine !== 'local') return;
@@ -335,6 +354,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         const op = operations.get(c.id), closing = closeRows.has(c.id);
         if (endOperation(c.id)) emit({ type: 'error', message: `${c.label} is offline`, ...(op === 'launch' ? { request: 'session.launch' } : closing ? { request: 'session.close' } : {}) });
         for (const [requestId, owner] of attachmentAsks) if (owner === c.id) { attachmentAsks.delete(requestId); emit({ type: 'attachment.error', requestId, reason: 'offline' }); }
+        for (const [rid, a] of [...askAnswers]) if (a.machine === c.id) { askAnswers.delete(rid); a.settle({ ok: false, reason: 'hors ligne' }); }
+        if (askMap.delete(c.id)) putAsks(c.id, []); // a machine that fell has no decision to answer
         answerUnfoundInspections(c.id); answerUnfoundListings(c.id, 'offline'); answerFailedScans(c.id, 'offline'); answerFailedModels(c.id, 'offline'); answerFailedRoles(c.id, 'offline');
         for (const [requestId, owner] of documents) if (owner === c.id) { documents.delete(requestId); emit({ type: 'document.error', requestId, path: '', code: 'read_failed' }); }
         if (routing?.coordinator === c.id) { const qid = routing.qid; routing = null; fail(qid, `${c.label} is offline`); }
@@ -512,6 +533,17 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       mobileError: () => mobileError,
       teams: () => teams,
       tasks: () => taskList,
+      asks: () => askList,
+      answerAsk(machine, id, text) {
+        const p = peers.get(machine);
+        if (!available(p)) return Promise.resolve({ ok: false, reason: 'hors ligne' });
+        const rid = `fleet-ask-${++listSeq}`;
+        return new Promise(resolve => {
+          const timer = setTimeout(() => { askAnswers.delete(rid); resolve({ ok: false, reason: 'pas de réponse du daemon' }); }, ANSWER_MS);
+          askAnswers.set(rid, { machine, settle: r => { clearTimeout(timer); askAnswers.delete(rid); resolve(r); } });
+          p!.client.send({ type: 'ask.answer', rid, id, text });
+        });
+      },
       contextNear: () => contextNear,
       setContextNear(near) {
         const valid = ContextPrefsSchema.parse({ near });
