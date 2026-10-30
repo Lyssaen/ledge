@@ -11,7 +11,6 @@ type Binding = { machine: string; raw: string };
 const OPERATIONS: ReadonlySet<string> = new Set(['session.launch', 'session.relay', 'session.relay.cancel', 'session.close']);
 /** How long an `ask.answer` waits for its `ask.result`. */
 const ANSWER_MS = 4000;
-/** What older daemons still send about the teams, roles and tasks Ledge dropped: those messages end here. */
 type PendingRoute = { qid: string; text: string; tool?: Tool; images?: ImageUpload[]; coordinator: string };
 
 export interface FleetOptions {

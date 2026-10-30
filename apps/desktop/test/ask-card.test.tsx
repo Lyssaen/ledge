@@ -53,4 +53,14 @@ describe('the ask card', () => {
     expect(screen.getByPlaceholderText('Ta réponse…')).toHaveValue('B');
     expect(screen.getByRole('button', { name: 'Répondre' })).toBeEnabled();
   });
+
+  it('a rejected answer shows the refused state with the error message and keeps the text', async () => {
+    const user = userEvent.setup();
+    show(vi.fn().mockRejectedValue(new Error('daemon injoignable')));
+    await user.type(screen.getByPlaceholderText('Ta réponse…'), 'B');
+    await user.click(screen.getByRole('button', { name: 'Répondre' }));
+    expect(await screen.findByText('Refusé : daemon injoignable')).toBeVisible();
+    expect(screen.getByPlaceholderText('Ta réponse…')).toHaveValue('B');
+    expect(screen.getByRole('button', { name: 'Répondre' })).toBeEnabled();
+  });
 });

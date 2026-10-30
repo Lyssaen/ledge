@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AskSchema, type Ask, type Session } from '@ledge/protocol';
@@ -71,6 +71,20 @@ describe('createAsks', () => {
     const a = ask();
     store.remove('s1');
     expect(asks.all().find(x => x.id === a.id)!.state).toBe('dropped');
+  });
+
+  it('create: a blank question is refused with code invalid', () => {
+    expect(asks.create('s1', '   ', 'A, B')).toMatchObject({ code: 'invalid' });
+    expect(asks.all()).toEqual([]);
+  });
+
+  it('journal: a malformed entry is dropped, the valid ones load', async () => {
+    const path = join(dir, 'asks.json'); const journal = asksJournal(path);
+    asks = make({ journal });
+    const good = ask(); await journal.flush(); asks.close();
+    const bad = { ...good, id: 'abcdef1', question: '' };
+    writeFileSync(path, JSON.stringify([good, bad, { nope: true }]));
+    expect(asksJournal(path).load()!.map(a => a.id)).toEqual([good.id]);
   });
 
   it('answer: unknown id refused with code unknown', () => {

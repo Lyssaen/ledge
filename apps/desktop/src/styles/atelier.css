@@ -419,6 +419,4 @@
 .office-shell .atelier-table{position:relative;flex:0 0 var(--room);min-width:min(var(--room),100%);margin:0 0 8px}
 .atelier-table:has(.room-menu),.atelier-room:has(.room-plaque .room-menu){z-index:6}
 .is-dragging .atelier-table.drop-over .room-heading,.atelier-table.drop-over .room-heading{border-color:var(--sidebar-primary)}
-.role-menu .role-label{margin-left:8px;color:var(--muted-foreground);font-size:11px}
-.role-chooser{position:fixed;width:0;height:0}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}

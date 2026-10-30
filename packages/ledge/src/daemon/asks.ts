@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { backendOf, isArchived, type Ask, type AskRefusal, type Session } from '@ledge/protocol';
+import { AskSchema, backendOf, isArchived, type Ask, type AskRefusal, type Session } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { Mailbox } from './mailbox.js';
 import { formatLedgeAnswer } from './crossSession.js';
@@ -73,6 +73,7 @@ export function createAsks(d: AsksDeps): Asks {
 
   return {
     create(by, question, options) {
+      if (!question.trim()) return { code: 'invalid', reason: 'la question est vide' };
       const s = d.store.get(by);
       if (!reachable(s)) return { code: 'not_session', reason: 'seule une session lancée par Ledge pose une décision' };
       const at = now();
@@ -94,5 +95,10 @@ export function createAsks(d: AsksDeps): Asks {
 }
 
 export function asksJournal(path: string): AsksJournal & { flush(): Promise<void> } {
-  return jsonJournal<Ask[]>(path, 'asks', raw => (Array.isArray(raw) ? raw as Ask[] : undefined));
+  return jsonJournal<Ask[]>(path, 'asks', raw => {
+    if (!Array.isArray(raw)) return undefined;
+    const kept = raw.flatMap(e => { const r = AskSchema.safeParse(e); return r.success ? [r.data] : []; });
+    if (kept.length < raw.length) log(`asks journal: ${raw.length - kept.length} malformed ask(s) dropped`);
+    return kept;
+  });
 }

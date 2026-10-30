@@ -122,6 +122,17 @@ describe('agentEnv', () => {
   });
 });
 
+describe('launch --role', () => {
+  it('is refused, never passed to the agent', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    for (const argv of [['--role', 'dev'], ['--role=dev'], ['--name', 'x', '--role']]) {
+      expect(await launch('claude', argv)).toBe(1);
+    }
+    expect(err).toHaveBeenCalledWith("--role a été retiré (les équipes et rôles de Ledge n'existent plus)");
+    err.mockRestore();
+  });
+});
+
 describe('launch', () => {
   // One throwaway tmux server per test: reusing a socket races with the previous kill-server.
   let n = 0; let socket: string; let tmux: Tmux;

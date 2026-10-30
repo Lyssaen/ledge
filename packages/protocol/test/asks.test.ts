@@ -15,6 +15,9 @@ describe('asks', () => {
     expect(ServerMessageSchema.safeParse({ type: 'ask.result', rid: 'r', code: 'closed', reason: 'déjà répondue' }).success).toBe(true);
     expect(ServerMessageSchema.safeParse({ type: 'asks', asks: [] }).success).toBe(true);
   });
+  it('ask.create refuses a blank question', () => {
+    expect(ClientMessageSchema.safeParse({ type: 'ask.create', rid: 'r', by: 's1', question: '   ', options: '' }).success).toBe(false);
+  });
   it('only an open ask is shown', () => {
     expect(['open', 'answered', 'dropped'].map(state => askShown({ state: state as 'open' }))).toEqual([true, false, false]);
   });

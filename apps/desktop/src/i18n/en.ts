@@ -418,7 +418,7 @@ export const en: Messages = {
   },
   handover: {
     nearShort: (name: string, pct: number) => `${name} · context ${pct} %`, nearHint: 'near its limit', failedShort: (name: string) => `Relief of ${name} failed`, retry: 'Retry',
-    pass: 'Hand over', passTitle: 'A fresh session takes its place: it writes its brief, its tasks are passed on', later: 'Later',
+    pass: 'Hand over', passTitle: 'A fresh session takes its place: it writes its brief', later: 'Later',
     gauge: (pct: number) => `context ${pct} %`,
     state: { briefing: 'relief: brief asked', launching: 'relief: launching…', done: 'relieved', failed: 'relief failed' } as Record<'briefing' | 'launching' | 'done' | 'failed', string>,
     relievedBy: (name: string) => `relieved by ${name}`, relieves: (name: string) => `relieves ${name}`,

@@ -437,7 +437,7 @@ export const fr = {
   },
   handover: {
     nearShort: (name: string, pct: number) => `${name} · contexte ${pct} %`, nearHint: 'limite proche', failedShort: (name: string) => `Relève de ${name} échouée`, retry: 'Réessayer',
-    pass: 'Passer le relais', passTitle: 'Une nouvelle session prend sa place : il écrit son bilan, ses tâches lui sont passées', later: 'Plus tard',
+    pass: 'Passer le relais', passTitle: 'Une nouvelle session prend sa place : il écrit son bilan', later: 'Plus tard',
     gauge: (pct: number) => `contexte ${pct} %`,
     state: { briefing: 'relève : bilan demandé', launching: 'relève : lancement…', done: 'relevée', failed: 'relève échouée' } as Record<'briefing' | 'launching' | 'done' | 'failed', string>,
     relievedBy: (name: string) => `relevée par ${name}`, relieves: (name: string) => `relève de ${name}`,

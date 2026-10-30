@@ -144,6 +144,10 @@ const UNTRACKED: Record<'foreign' | 'unauthorized' | 'unresponsive' | 'unreachab
 };
 
 export async function launch(tool: TmuxTool, argv: string[], opts: LaunchOptions = {}): Promise<number> {
+  if (argv.some(a => a === '--role' || a.startsWith('--role='))) {
+    console.error("--role a été retiré (les équipes et rôles de Ledge n'existent plus)");
+    return 1;
+  }
   await ensureLedgeDir();
   const { name, args } = parseLaunchArgs(argv);
   const port = opts.port ?? PROTOCOL_PORT;

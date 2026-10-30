@@ -17,6 +17,8 @@ ledge tui [--notify bell|osc9|off] [--here]                  follow and answer t
 ledge bridge                                                 exchange Ledge messages over SSH stdio
 ledge --version                                              print the installed version`;
 
+import { removedCommand } from './removed.js';
+
 /**
  * A hook must never fail the agent: everything is caught, the exit code is always 0. Cursor Agent reads a JSON
  * answer on stdout: `{}` lets the agent go on as it would have.
@@ -60,6 +62,7 @@ async function main(argv: string[]): Promise<number> {
     case 'bridge': { const { bridge } = await import('./bridge.js'); await bridge(); return 0; }
     case 'claude': case 'codex': case 'cursor': { const { launch } = await import('./launch.js'); return launch(cmd, rest); }
     case 'attach': { const { attach } = await import('./attach.js'); return attach(rest.find(a => !a.startsWith('--')) ?? '', { readOnly: rest.includes('--read-only') }); }
+    case 'task': case 'team': console.log(removedCommand(cmd)); return 1;
     default: console.log(USAGE); return cmd ? 1 : 0;
   }
 }

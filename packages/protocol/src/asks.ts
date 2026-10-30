@@ -21,7 +21,7 @@ export type AskRefusal = z.infer<typeof AskRefusalSchema>;
 
 // client
 export const AskCreateSchema = z.object({ type: z.literal('ask.create'), rid: z.string().min(1).max(100), by: z.string().min(1),
-  question: AskSchema.shape.question, options: AskSchema.shape.options });
+  question: z.string().trim().min(1).max(ASK_QUESTION_MAX), options: AskSchema.shape.options });
 export const AskAnswerSchema = z.object({ type: z.literal('ask.answer'), rid: z.string().min(1).max(100), id: AskIdSchema,
   text: z.string().trim().min(1).max(ASK_ANSWER_MAX), machineId: z.string().optional() });
 // server

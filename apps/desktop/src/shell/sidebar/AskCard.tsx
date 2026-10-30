@@ -14,7 +14,8 @@ export function AskCard({ ask, onAnswer }: { ask: FleetAsk; onAnswer(text: strin
     const answer = text.trim();
     if (!answer || sending) return;
     setState({ kind: 'sending' });
-    const r = await onAnswer(answer);
+    let r: { ok: true } | { ok: false; reason: string };
+    try { r = await onAnswer(answer); } catch (e) { r = { ok: false, reason: (e as Error).message }; }
     setState(r.ok ? { kind: 'sent' } : { kind: 'refused', reason: r.reason });
   };
   return (
