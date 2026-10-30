@@ -7,6 +7,7 @@ import {
 } from '@ledge/protocol';
 import type { PhoneLink } from '../link/link';
 import { getAssertion } from '../link/webauthn';
+import { actionChecked } from '../model/actionCard';
 import { createImages } from './images';
 import { asked, emptyChat, reduceChat, type ChatAction, type ChatState } from './chat';
 import { PC_STALL_MS, pcFailed, pcProgress, pcRunning, pcSnapshot, type PcRun } from './pc';
@@ -65,6 +66,8 @@ export interface MobileState {
 export type PhoneExpect = Extract<PhoneClientMessage, { type: 'session.decide' }>['expect'];
 export type ConfirmChallenge = Extract<PhoneServerMessage, { type: 'confirm.challenge' }>;
 export type ConfirmRequest = { purpose: 'register' } | { purpose: 'decide'; id: string; expect: PhoneExpect } | { purpose: 'launch'; qid: string } | { purpose: 'close'; qid: string }
+  /** A turn's generic card (`chat.act`). */
+  | { purpose: 'act'; qid: string }
   /** A session's own close (`session.close`) or resume (`session.resume`). */
   | { purpose: 'close' | 'act'; id: string }
   | { purpose: 'define' | 'team'; digest: string } | { purpose: 'pc'; action: 'update'; version: string } | { purpose: 'pc'; action: 'restart' };
@@ -181,6 +184,11 @@ export interface MobileStore {
   closeSessions(qid: string, rows?: number[]): Promise<ChatAction>;
   /** Launches the turn's team (roles spec §3.8), after the device's confirmation like a launch card. */
   launchTeam(qid: string): Promise<ChatAction>;
+  /** Applies rows of the turn's generic card (action registry spec §9.2), in order; the device's check first when one of them
+   *  asks for it. `deny`: « Refuser » a session's request instead, with no check. */
+  act(qid: string, rows: number[], o?: { deny?: true }): Promise<ChatAction>;
+  /** « Ignorer » the turn's cards on every device, or `undo` (« Revoir »). */
+  ignoreTurn(qid: string, undo?: true): Promise<ChatAction>;
   /** Gives the turn's task `row` to its seat, in Ledge's name. */
   giveTask(qid: string, row: number): Promise<ChatAction>;
   /** Wakes a resting team. */
@@ -916,6 +924,33 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         if (Date.now() - at >= challenge.expiresInMs) return { status: 'expired' };
         const op = write(o => ({ type: 'chat.team', op: o, qid, assertion: signed }));
         return op === null ? { status: 'expired' } : finalOf(op);
+      });
+    },
+
+    act(qid, rows, o) {
+      return chatAction(`act:${qid}:${rows.join(',')}${o?.deny ? ':deny' : ''}`, async () => {
+        const actions = chatState.turns.find(t => t.qid === qid)?.actions;
+        if (!actions || rows.some(r => !actions[r])) return { status: 'rejected', reason: 'invalid' };
+        if (o?.deny) {
+          const op = write(w => ({ type: 'chat.act', op: w, qid, rows, deny: true }));
+          return op === null ? { status: 'failed' } : finalOf(op);
+        }
+        const todo = rows.map(r => actions[r]!);
+        const confirmed = todo.some(a => a.risk === 'destructive') ? { confirmed: true as const } : {};
+        if (!todo.some(actionChecked)) {
+          const op = write(w => ({ type: 'chat.act', op: w, qid, rows, ...confirmed }));
+          return op === null ? { status: 'failed' } : finalOf(op);
+        }
+        // A phone without a passkey cannot confirm: the PC would refuse, and no prompt is worth showing.
+        if (!state.device?.confirm) return { status: 'rejected', reason: 'confirm_required' };
+        return signedOperation({ purpose: 'act', qid }, (w, assertion) => ({ type: 'chat.act', op: w, qid, rows, ...confirmed, assertion }));
+      });
+    },
+
+    ignoreTurn(qid, undo) {
+      return chatAction(`ignore:${qid}`, async () => {
+        const op = write(w => ({ type: 'chat.ignore', op: w, qid, ...(undo ? { undo } : {}) }));
+        return op === null ? { status: 'failed' } : finalOf(op);
       });
     },
 
