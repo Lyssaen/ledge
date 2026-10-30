@@ -229,7 +229,11 @@ Ajustements fixés par le lot 2 :
 | `stop(rig)`, `restartSeat(rig, seat)` | `rig.act { verb: 'down' }`, `rig.act { seatRef, verb: 'restart' }` |
 | `holdsSeat(sessionId)` | `session.rig` présent |
 
-Le relais mobile laisse passer ces messages. La clé d'accès est exigée pour `rig.act`, `rig.launch` et `rig.prepare`, mais pas pour `escalation.answer` (spec §10).
+Le relais mobile laisse passer ces messages. La clé d'accès est exigée pour `rig.act` et `rig.launch`, les seuls actes ; elle ne l'est pas pour `rig.prepare` (qui prépare un plan sans rien lancer, et que la clé de `launch` lie) ni pour `escalation.answer` (spec §10). Le lot 9 :
+- projette ces types en `Phone<Nom>` sans `cwd`, `machine` ni commande ;
+- nomme un rig par une clé opaque `hash(machine, rigId)`, que la passerelle retraduit ;
+- copie au plus 20 `Exchange` dans l'élément `exchanges` du fil ;
+- ajoute `rig` (et `brain`) à `PhoneSessionSchema` si les lots 2 et 7 ne l'ont pas fait.
 
 ## Lot 8 : TUI (cadre, à détailler avec Tuin)
 
