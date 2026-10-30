@@ -1,4 +1,4 @@
-import { PROJECT_COLORS, type Projects, type ProjectColor, type Rig, type RigSeat, type SeatState, type Session } from '@ledge/protocol';
+import { PROJECT_COLORS, type Escalation, type Projects, type ProjectColor, type Rig, type RigSeat, type SeatState, type Session } from '@ledge/protocol';
 
 export const rigKey = (r: Pick<Rig, 'machine' | 'id'>): string => `${r.machine}/${r.id}`;
 /** The Atelier filter naming one rig. */
@@ -93,4 +93,53 @@ export function allSeats(rigs: readonly Rig[]): { rig: Rig; seat: RigSeat }[] {
 export function seatAt(rigs: readonly Rig[], machine: string, rigId: string, who: string): RigSeat | undefined {
   const rig = rigs.find(r => r.machine === machine && r.id === rigId);
   return rig?.seats.find(s => s.ref === who) ?? rig?.seats.find(s => s.address === who) ?? rig?.seats.find(s => s.name === who);
+}
+
+/** A session that is not a seat of a rig OpenRig still reports: no `rig`, or one the rig mirror does not know (it stays in Projets). */
+export function isStandalone(s: Session, rigs: readonly Rig[]): boolean {
+  const r = s.rig;
+  return !r || !rigs.some(x => x.machine === r.machine && x.id === r.rigId);
+}
+
+export interface RigRow { key: string; rig: Rig; place: RigPlace; seats: Session[]; working: number; waiting: number; remote: boolean }
+export interface KernelRow { key: string; rig: Rig; shown: Session[]; hiddenCount: number }
+
+/** The sidebar's Rigs section: rigs by name (kernels apart, one per machine, after them); seats still running, in the rig's order. */
+export function rigsModel(rigs: readonly Rig[], byId: ReadonlyMap<string, Session>, projects: Projects | null): { rigs: RigRow[]; kernels: KernelRow[] } {
+  const rows = rigs.filter(r => !r.kernel).sort((a, b) => a.name.localeCompare(b.name)).map((rig): RigRow => {
+    const seats = rig.seats.filter(s => s.state !== 'stopped').map(s => seatSession(s, rig, byId));
+    return { key: rigKey(rig), rig, place: rigPlace(rig, projects), seats, working: workingCount(rig),
+      waiting: seats.filter(s => s.state === 'waiting_permission' || s.state === 'waiting_input').length, remote: rig.machine !== 'local' };
+  });
+  const machines = new Set<string>();
+  const kernels: KernelRow[] = [];
+  for (const rig of rigs) {
+    if (!rig.kernel || machines.has(rig.machine)) continue;
+    machines.add(rig.machine);
+    const { shown, hidden } = kernelSplit(rig);
+    kernels.push({ key: rigKey(rig), rig, shown: shown.map(s => seatSession(s, rig, byId)), hiddenCount: hidden.length });
+  }
+  return { rigs: rows, kernels };
+}
+
+/** The line Ledge has in the sidebar: what waits for the user, else what Ledge last said, else calm. */
+export interface LedgeLine {
+  preview: { kind: 'decision'; count: number; rig?: string } | { kind: 'grace'; rig?: string } | { kind: 'said'; text: string } | { kind: 'calm'; rigs: number };
+  at?: string;
+  unread: number;
+}
+
+export function ledgeLine(escalations: readonly Escalation[], rigs: readonly Rig[], said?: { text: string; at: string }): LedgeLine {
+  const open = escalations.filter(e => e.intent === 'decision' && (e.state === 'pending' || e.state === 'grace'))
+    .sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0));
+  const rigOf = (e: Escalation | undefined): { rig?: string } => {
+    const name = e?.rigId ? rigs.find(r => r.machine === e.machine && r.id === e.rigId)?.name : undefined;
+    return name ? { rig: name } : {};
+  };
+  const pending = open.filter(e => e.state === 'pending');
+  if (pending.length) return { preview: { kind: 'decision', count: pending.length, ...rigOf(pending[0]) }, at: pending[0]!.createdAt, unread: open.length };
+  const grace = open[0];
+  if (grace) return { preview: { kind: 'grace', ...rigOf(grace) }, at: grace.createdAt, unread: open.length };
+  if (said) return { preview: { kind: 'said', text: said.text }, at: said.at, unread: 0 };
+  return { preview: { kind: 'calm', rigs: rigs.filter(r => !r.kernel).length }, unread: 0 };
 }

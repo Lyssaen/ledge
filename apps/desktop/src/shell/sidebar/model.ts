@@ -1,5 +1,6 @@
 import { isBusy } from '@ledge/fleet';
-import type { Helper, Projects, Session } from '@ledge/protocol';
+import type { Helper, Projects, Rig, Session } from '@ledge/protocol';
+import { isStandalone } from '@ledge/ui/rigs/model';
 import { fold, taskOf } from '../../nav/agents';
 
 const UNASSIGNED = 'Sans projet';
@@ -54,11 +55,14 @@ function projectGroup(id: string | null, name: string, sessions: readonly Sessio
   };
 }
 
+/** `rigs`: the seats of a known rig leave the tree (they live in the Rigs section); without it nothing is filtered. */
 export function treeModel(
   sessions: readonly Session[],
   projects: Projects | null,
-  projectIdOf: (s: Session) => string | null
+  projectIdOf: (s: Session) => string | null,
+  rigs?: readonly Rig[]
 ): ProjectGroup[] {
+  if (rigs) sessions = sessions.filter(s => isStandalone(s, rigs));
   if (!projects) return [projectGroup(null, UNASSIGNED, sessions)];
   const groups = projects.projects.map(p =>
     projectGroup(p.id, p.name, sessions.filter(s => projectIdOf(s) === p.id))
