@@ -13,6 +13,9 @@
 
 **Spec :** `docs/superpowers/specs/2026-10-30-ledge-openrig-orchestrator-design.md` (§4.3, §8.1, §8.2 Rigs, §8.3). Plan maître : `docs/superpowers/plans/2026-10-30-ledge-openrig-orchestrator.md` (contrat de protocole et Global Constraints, qui font foi). Maquettes : `docs/mockups/ledge-openrig/shots/` (`s1a.png`, `c-A.png`, `new-home.png`, `new-atelier-factory.png`, `w-3-piece.png`, `p-rigs-live.png`, `p-rigs-spec.png`).
 
+
+> **Emplacement partagé (lot 8, TUI) :** les modèles purs de ce lot s'écrivent dans `@ledge/ui`, pas dans `apps/desktop`. Les rigs vont dans `packages/ui/src/rigs/model.ts`, avec `isStandalone`. Le lancement va dans `packages/ui/src/launch/rigModel.ts`, importé par `@ledge/ui/launch/rigModel`. Desktop les importe de là. Le TUI (lot 8) les réutilise tels quels.
+
 ## Global Constraints
 
 Celles du plan maître s'appliquent toutes. En particulier :
