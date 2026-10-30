@@ -3,9 +3,10 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer } from 'node:net';
+import { WebSocketServer } from 'ws';
 import { spawnSync } from 'node:child_process';
 import { formatWho } from '../src/cli/who.js';
-import { mapClaudeHook, mapHook, mapCursorHook, runHook, codexLedgeId, underCodexDaemon, identityContext, REPLY_MAX, INPUT_MAX, toolOutput, trimInput } from '../src/cli/hook.js';
+import { mapClaudeHook, mapHook, mapCursorHook, runHook, codexLedgeId, underCodexDaemon, openrigSeat, identityContext, REPLY_MAX, INPUT_MAX, toolOutput, trimInput } from '../src/cli/hook.js';
 import type { Session } from '@ledge/protocol';
 import { startServer } from '../src/daemon/server.js';
 import { Store } from '../src/daemon/store.js';
@@ -796,5 +797,36 @@ describe('the agent conversation id', () => {
     const helper = mapCursorHook('postToolUse', { session_id: 'b335', tool_name: 'Read' }, at, { LEDGE_SESSION: 'ab12', CURSOR_TRANSCRIPT_PATH: '/t/b617.jsonl' })!;
     expect(helper.event.helperId).toBe('b335');
     expect(helper.event.agentSessionId).toBeUndefined();
+  });
+});
+
+describe('openrigSeat', () => {
+  it('reads the seat from the environment', () => {
+    expect(openrigSeat('claude', { OPENRIG_SESSION_NAME: 'dev-build@starter', OPENRIG_NODE_ID: 'n1' })).toEqual({ sessionName: 'dev-build@starter', nodeId: 'n1' });
+    expect(openrigSeat('claude', { OPENRIG_SESSION_NAME: 'dev-build@starter' })).toEqual({ sessionName: 'dev-build@starter' });
+    expect(openrigSeat('claude', {})).toBeUndefined();
+    expect(openrigSeat('cursor', { OPENRIG_SESSION_NAME: 'a-b@c' })).toEqual({ sessionName: 'a-b@c' });
+  });
+  it('a Codex hook under a shared app-server sends none (the env may be another session\'s)', () => {
+    expect(openrigSeat('codex', { OPENRIG_SESSION_NAME: 'x' }, () => true)).toBeUndefined();
+    expect(openrigSeat('codex', { OPENRIG_SESSION_NAME: 'x' }, () => false)).toEqual({ sessionName: 'x' });
+  });
+  it('rides on the mapped hooks', () => {
+    process.env.OPENRIG_SESSION_NAME = 'dev-build@starter';
+    try {
+      expect(mapHook('claude', 'Stop', { session_id: 's' }, at)?.openrig).toEqual({ sessionName: 'dev-build@starter' });
+      expect(mapCursorHook('stop', { session_id: 's', workspace_roots: ['/w'] }, at, { OPENRIG_SESSION_NAME: 'a-b@c' })?.openrig).toEqual({ sessionName: 'a-b@c' });
+    } finally { delete process.env.OPENRIG_SESSION_NAME; }
+  });
+  it('runHook sends it on the session.event', async () => {
+    const wss = new WebSocketServer({ port: 0, host: '127.0.0.1' }); await new Promise(r => wss.once('listening', r));
+    const got: Array<Record<string, unknown>> = [];
+    wss.on('connection', ws => ws.on('message', d => got.push(JSON.parse(String(d)))));
+    process.env.OPENRIG_SESSION_NAME = 'dev-build@starter'; process.env.OPENRIG_NODE_ID = 'n1';
+    try {
+      await runHook('Stop', JSON.stringify({ session_id: 's' }), { port: (wss.address() as { port: number }).port, timeoutMs: 300 });
+      await new Promise(r => setTimeout(r, 50));
+      expect(got.find(m => m.type === 'session.event')).toMatchObject({ openrig: { sessionName: 'dev-build@starter', nodeId: 'n1' } });
+    } finally { delete process.env.OPENRIG_SESSION_NAME; delete process.env.OPENRIG_NODE_ID; wss.close(); }
   });
 });

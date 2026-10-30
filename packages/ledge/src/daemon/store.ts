@@ -1,5 +1,6 @@
 import { readFile, writeFile, rename, mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import { RecentSchema, SessionSchema, type Recent, type Session, type SessionEvent } from '@ledge/protocol';
 import { reduce } from './state.js';
 import { paths } from '../paths.js';
@@ -89,10 +90,12 @@ export class Store {
   }
 
   /** Facts no event carries (the session's repository): the changed fields only, nothing emitted when they are equal. */
-  patch(id: string, fields: Partial<Pick<Session, 'repo' | 'repoPath' | 'branch' | 'worktree' | 'repoId' | 'lastMessage' | 'workdir' | 'modelNext'>>): void {
+  patch(id: string, fields: Partial<Pick<Session, 'repo' | 'repoPath' | 'branch' | 'worktree' | 'repoId' | 'lastMessage' | 'workdir' | 'modelNext' | 'rig'>>): void {
     const cur = this.sessions.get(id); if (!cur) return;
-    if ((Object.keys(fields) as Array<keyof typeof fields>).every(k => cur[k] === fields[k])) return;
-    this.upsert({ ...cur, ...fields });
+    if ((Object.keys(fields) as Array<keyof typeof fields>).every(k => (k === 'rig' ? isDeepStrictEqual(cur.rig, fields.rig) : cur[k] === fields[k]))) return;
+    const next: Session = { ...cur, ...fields } as Session;
+    if ('rig' in fields && fields.rig === undefined) delete next.rig; // `rig: undefined` unpairs
+    this.upsert(next);
   }
 
   /** Sets the archive date (kept if already set), then drops the oldest archives past `ARCHIVE_MAX`. */

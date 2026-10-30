@@ -87,7 +87,7 @@ export function toolOutput(response: unknown): string | undefined {
 /** SessionEnd reasons after which the same agent process keeps running (Claude Code 2.1). */
 const NON_TERMINAL_END_REASONS = new Set(['clear', 'resume']);
 
-export type MappedHook = { id: string; event: SessionEvent; agent: Tool; cwd?: string };
+export type MappedHook = { id: string; event: SessionEvent; agent: Tool; cwd?: string; openrig?: { sessionName: string; nodeId?: string } };
 
 /** Claude Code hooks (the payload shapes Codex hooks share), see `mapHook`. */
 export function mapClaudeHook(eventName: string, payload: unknown, at: string): MappedHook | null {
@@ -117,6 +117,17 @@ export function codexLedgeId(env: NodeJS.ProcessEnv = process.env, daemon: () =>
 }
 
 /**
+ * The OpenRig seat a hook runs in (its session name and node id), from the environment. Codex follows `codexLedgeId`'s
+ * rule: under a shared app-server the environment may be another session's, so it sends none (Ledge then pairs by folder).
+ */
+const seat = (o: MappedHook['openrig']) => (o ? { openrig: o } : {});
+export function openrigSeat(agent: Tool, env: NodeJS.ProcessEnv = process.env, daemon: () => boolean = underCodexDaemon): { sessionName: string; nodeId?: string } | undefined {
+  const sessionName = env.OPENRIG_SESSION_NAME; if (!sessionName) return undefined;
+  if (agent === 'codex' && daemon()) return undefined;
+  return { sessionName, ...(env.OPENRIG_NODE_ID ? { nodeId: env.OPENRIG_NODE_ID } : {}) };
+}
+
+/**
  * One hook call as a session event. Codex hooks take Claude Code's names and payloads, plus `Interrupt`; their session
  * comes from `codexLedgeId`, never `LEDGE_SESSION` (the shared Codex daemon may carry another session's). Without a
  * Ledge id, the agent's own session id names a read-only session.
@@ -134,7 +145,7 @@ export function mapHook(agent: Tool, eventName: string, payload: unknown, at: st
   const task = agent === 'claude' && event.helperId ? helperDescription(str(p.transcript_path), event.helperId) : undefined;
   // The agent's own conversation id, which `--resume` takes; a subagent's hooks share the session's, so they add none.
   const agentSessionId = !event.helperId ? str(p.session_id) : undefined;
-  return { id, event: { ...event, ...(task ? { task } : {}), ...(agentSessionId ? { agentSessionId } : {}) }, agent, ...(cwd ? { cwd } : {}) };
+  return { id, event: { ...event, ...(task ? { task } : {}), ...(agentSessionId ? { agentSessionId } : {}) }, agent, ...(cwd ? { cwd } : {}), ...seat(openrigSeat(agent)) };
 }
 
 /**
@@ -304,7 +315,7 @@ export function mapCursorHook(eventName: string, payload: unknown, at: string, e
   const cwd = str(roots[0]) || undefined;
   const event = helper ? mapCursorHelperEvent(eventName, p, at, sessionId) : mapCursorEvent(eventName, p, at, !!env.LEDGE_SESSION, transcript);
   // The conversation id (what `--resume` takes) rides on the session's own events, never on a subagent's.
-  return event ? { id, event: helper || event.helperId ? event : { ...event, agentSessionId: sessionId }, agent: 'cursor', ...(cwd ? { cwd } : {}) } : null;
+  return event ? { id, event: helper || event.helperId ? event : { ...event, agentSessionId: sessionId }, agent: 'cursor', ...(cwd ? { cwd } : {}), ...seat(openrigSeat('cursor', env)) } : null;
 }
 
 function mapCursorHelperEvent(eventName: string, p: Payload, at: string, helperId: string): SessionEvent | null {
@@ -473,7 +484,7 @@ export async function runHook(eventName: string, stdin: string, opts: { port?: n
     const timeoutMs = opts.timeoutMs ?? (identify ? 1000 : intercept || command ? SEND_MESSAGE_MS : 100);
     deadline = Date.now() + timeoutMs;
     const client = await connect({ port: opts.port, timeoutMs });
-    client.send({ type: 'session.event', id: mapped.id, event: mapped.event, agent: mapped.agent, ...(mapped.cwd ? { cwd: mapped.cwd } : {}) });
+    client.send({ type: 'session.event', id: mapped.id, event: mapped.event, agent: mapped.agent, ...(mapped.cwd ? { cwd: mapped.cwd } : {}), ...seat(mapped.openrig) });
     if (identify) {
       const snapshot = await client.next('snapshot', Math.max(0, deadline - Date.now())).catch(() => undefined);
       known = snapshot?.sessions.find(s => s.id === mapped!.id);

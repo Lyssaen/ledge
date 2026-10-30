@@ -8,3 +8,4 @@ export * from './projects';
 export * from './proposals';
 export * from './token';
 export * from './attachments';
+export * from './rigs';

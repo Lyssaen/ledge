@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
 import { actionById, autonomyArgs, contextNear, ompApprovalFor, askShown, type ChatAction, type Autonomy } from '@ledge/protocol';
-import { ATTACHMENT_LOCAL_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, type ModelRefusal, type RefusalCode, backendOf } from '@ledge/protocol';
+import { ATTACHMENT_LOCAL_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type DaemonInfo, type Projects, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, type ModelRefusal, type RefusalCode, backendOf } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
 import { AttachmentError, AttachmentStore } from './attachments.js';
@@ -44,7 +44,9 @@ import { actFromChat, ActRefused } from '../chat/act.js';
 import type { ChatMessage } from '../chat/service.js';
 import { actionMessage, resolveAction, resolveRun, runGuard, type Resolved } from './actions.js';
 import { createMailbox, type MailJournal } from './mailbox.js';
-import { createAsks, type AsksJournal } from './asks.js';
+import { createAsks, type Asks, type AsksJournal } from './asks.js';
+import type { Bridge } from './openrig/bridge.js';
+import { pairSession, restorePairs, unpairGone } from './openrig/pairing.js';
 import { createHandovers, heldNames } from './handover.js';
 import { readContext } from './context.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
@@ -155,6 +157,10 @@ export interface ServerHandle {
   sweepAttachments(): Promise<void>;
   /** Writes the resume labels that waited for their Claude process to end (the poller calls it every tick). */
   labelExited(): void;
+  /** The decisions lone sessions ask the user: the OpenRig bridge mirrors the open ones. */
+  asks: Asks;
+  /** The shared projects, as last set. */
+  projects(): Projects;
 }
 
 /**
@@ -175,7 +181,7 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; asks?: AsksJournal; handoverBriefMs?: number; attachments?: AttachmentStore }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; asks?: AsksJournal; handoverBriefMs?: number; attachments?: AttachmentStore; openrig?: Bridge }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -290,6 +296,13 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const relay = createRelay({ threads: cardThreads, store, replyTo: replyText, now, typing, closing, next: id => mailbox.kick(id) });
   /** The decisions lone sessions ask the user (`ledge ask`): every change reaches the local fronts. */
   const asks = createAsks({ store, mailbox, now, ...(opts.asks ? { journal: opts.asks } : {}), onAsk: ask => broadcast({ type: 'ask.updated', ask }) });
+  /** The local OpenRig mirror: every change reaches the fronts; a rig gone takes its sessions' seats with it (never on a mere disconnect). */
+  const bridge = opts.openrig;
+  const unsubscribeBridge = bridge?.onMessage(m => {
+    broadcast(m);
+    if (m.type === 'rig.snapshot' || m.type === 'rig.removed') unpairGone(store, bridge.rigs());
+    if (m.type === 'rig.snapshot') restorePairs(store, bridge);
+  });
   // The relief of a session whose context is nearly full (context handover spec §3.3). `launch` and `closeSession` are hoisted.
   const handovers = createHandovers({ store, mailbox, launch: req => launch(req), close: s => closeSession(s),
     dir: join(paths().dir, 'handovers'), now, ...(opts.handoverBriefMs !== undefined ? { briefMs: opts.handoverBriefMs } : {}) });
@@ -344,7 +357,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const sendSnapshot = (reply: Reply) => {
-    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true, asks: true, ...(mobile || unavailable ? { mobile: true } : {}) } } : {}) });
+    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true, asks: true, ...(mobile || unavailable ? { mobile: true } : {}), ...(bridge ? { openrig: true } : {}) } } : {}) });
     reply(machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
     reply(projectsMsg()); // then the shared projects (build spec §5)
     reply({ type: 'asks', asks: asks.all().filter(askShown) }); // then the decisions waiting for the user
@@ -353,7 +366,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     else if (unavailable) reply({ type: 'mobile', state: unavailable });
     for (const [id, lines] of previews) if (store.get(id)) reply({ type: 'session.preview', id, lines });
     reply({ type: 'chat.history', turns: chat.history() });
-    reply(contextMsg()); // last: the context threshold (context handover spec §3.2)
+    reply(contextMsg()); // the context threshold (context handover spec §3.2)
+    if (bridge) for (const m of bridge.replay()) reply(m); // last: the OpenRig mirror (status, rigs, escalations)
   };
   const preview = (id: string, lines: string[]) => {
     if (!store.get(id)) return;
@@ -932,6 +946,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   async function handle(msg: ClientMessage, reply: Reply): Promise<void> {
     /** A refusal names the request it answers, so a front can tell a refused reply from a refused decision; a coded one says why. */
     const refuse = (r: { message: string; code: RefusalCode | ModelRefusal } | string, id?: string) => reply({ type: 'error', ...(id !== undefined ? { id } : {}), message: typeof r === 'string' ? r : r.message, request: msg.type, ...(typeof r === 'string' ? {} : { code: r.code }) });
+    const notYet = () => reply({ type: 'error', message: 'not supported yet', request: msg.type, code: 'unavailable' });
     switch (msg.type) {
       case 'document.read': {
         const session = msg.sessionId ? store.get(msg.sessionId) : undefined;
@@ -1054,6 +1069,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
           settleByHook(msg.id, ev); store.apply(msg.id, msg.event);
         }
         logDroppedRequest(msg.id, msg.event, before, store.get(msg.id));
+        if (bridge) pairSession(store, bridge, msg);
         return;
       }
       case 'session.thread':
@@ -1248,6 +1264,15 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'chat.ignore': { const why = chat.ignore(msg.qid, msg.undo === true, broadcast); return why === null ? undefined : refuse(why); }
       case 'session.focus':
         return; // handled by the overlay plan via wt.exe; the daemon only acknowledges
+      // The OpenRig mirror's exchanges: this daemon answers for its own machine only (lot 6 routes the others).
+      case 'rig.exchanges.request':
+        if (!bridge) return notYet();
+        if (msg.machine !== 'local') return reply({ type: 'error', message: `machine ${msg.machine} is not this daemon's`, request: msg.type, code: 'unreachable' });
+        return reply({ type: 'rig.exchanges', machine: 'local', rigId: msg.rigId, items: bridge.exchanges(msg.rigId) });
+      // OpenRig writes and Ledge's own voice come in later lots.
+      case 'rig.act': case 'rig.prepare': case 'rig.launch': case 'rig.adopt': case 'rig.send': case 'escalation.answer': case 'ledge.say':
+      case 'ledge.thread.request': case 'mandate.update': case 'rule.set': case 'decision.revisit': case 'category.escalate': case 'brain.set':
+        return notYet();
       // A refusal of the service (an unknown pairing, a sign-in while disabled) reaches the sender as an `error`.
       case 'mobile.set': case 'mobile.signin': case 'mobile.signin.cancel': case 'mobile.signout': case 'mobile.retry':
       case 'mobile.pairing.approve': case 'mobile.pairing.deny': case 'mobile.device.revoke':
@@ -1383,6 +1408,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     sweepAttachments,
     closeSession: id => { const s = store.get(id); return s ? closeSession(s) : Promise.reject(unknownSession()); },
     labelExited,
-    close: () => new Promise(res => { clearInterval(sweepTimer); unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
+    asks,
+    projects: () => projects,
+    close: () => new Promise(res => { clearInterval(sweepTimer); unsubscribe(); unsubscribeBridge?.(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
   };
 }

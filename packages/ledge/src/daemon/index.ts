@@ -17,6 +17,9 @@ import { ledgePeer, readPeers } from './peers.js';
 import { createMobileService, type MobileService } from '../mobile/service.js';
 import { fileJournal } from './mailbox.js';
 import { asksJournal } from './asks.js';
+import { createBridge } from './openrig/bridge.js';
+import { loginShellEnv } from '../shell-path.js';
+import { homedir } from 'node:os';
 
 /** What older Ledge versions left under the Ledge dir: never read, never removed, told once at startup (spec §7). */
 const OLD_TEAM_DATA = ['tasks.json', 'teams-live.json', 'teams', 'roles'] as const;
@@ -68,7 +71,14 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   catch (e) { log(`mobile access not available: ${(e as Error).message}`); mobileUnavailable = (e as Error).message.slice(0, 200); }
   const mail = fileJournal(paths().mail);
   const askJournal = asksJournal(paths().asks);
-  const server = await startServer({ store, tmux, port: opts.port, daemon, updater, history, mobile, mobileUnavailable, mail, asks: askJournal, attachments });
+  // One agent environment for the agents and for `rig` (facts: OpenRig runs under the user's login shell).
+  const agentEnv = async () => ({ ...process.env, ...(await loginShellEnv()) });
+  // The bridge reads the server's asks and projects only once started, after startServer: lazy adapters over `server`.
+  const bridge = createBridge({ env: agentEnv, projects: () => server.projects(), home: homedir(), sessionName: id => store.get(id)?.name,
+    alive: id => { const s = store.get(id); return !!s && s.state !== 'exited'; },
+    asks: { all: () => server.asks.all(), onChange: f => server.asks.onChange(f) } });
+  const server = await startServer({ store, tmux, port: opts.port, daemon, updater, history, mobile, mobileUnavailable, mail, asks: askJournal, attachments, agentEnv, openrig: bridge });
+  await bridge.start();
   ompLive = () => server.omp.liveCount();
   const poller = startPoller({ store, tmux, broadcastPreview: server.preview, labelExited: server.labelExited });
   await writeFile(paths().pid, String(process.pid));
@@ -76,7 +86,7 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   let stopping: Promise<void> | null = null;
   const stop = () => stopping ??= (async () => {
     process.off('SIGTERM', onSignal); process.off('SIGINT', onSignal);
-    poller.stop(); await server.close(); await mobile?.stop(); await store.save(); await history.flush(); await mail.flush(); await askJournal.flush(); await rm(paths().pid, { force: true }); log('daemon stopped');
+    poller.stop(); await bridge.stop(); await server.close(); await mobile?.stop(); await store.save(); await history.flush(); await mail.flush(); await askJournal.flush(); await rm(paths().pid, { force: true }); log('daemon stopped');
   })();
   const onSignal = () => { stop().finally(() => process.exit(0)); };
   process.once('SIGTERM', onSignal);
