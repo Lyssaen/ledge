@@ -1,11 +1,9 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { launchDefaults, launchMessage, missingOf, MULTI_REPO_TOOLS, NO_PICK, previewOf, reposOn, toggleRepo, withMachine, withPick, withProject, withTool, type LaunchForm, type ModelPick } from '@ledge/fleet/launch';
 import { useModels } from '@ledge/fleet/models';
-import { randomUUID } from 'node:crypto';
-import { pickName, projectOf, type ProjectColor, type Role, type TeamTemplate, type Tool } from '@ledge/protocol';
+import { pickName, projectOf, type ProjectColor, type Tool } from '@ledge/protocol';
 import { useEditing, useTui } from '../context.js';
-import type { LaunchPrefill } from '../model/catalog.js';
 import { TOOL_NAME } from '../model/labels.js';
 import { C, projectColor } from '../theme.js';
 import { Frame } from '../ui/Frame.js';
@@ -35,28 +33,12 @@ function ProjectChoice({ project, on }: { project: { name: string; color?: Proje
   );
 }
 
-/** « Nouvelle session » (4): a session, or with ctrl+t a team (roles spec §3.9). « Équipes » (6) opens it with a role, or
- *  in team mode with a template, and its folder. */
+/** « Nouvelle session » (4). */
 export function Launch() {
-  const { catalog } = useTui();
-  const [prefill] = useState(() => { const p = catalog.current.launch; catalog.current.launch = undefined; return p; });
-  const [team, setTeam] = useState(prefill?.template !== undefined);
-  return team ? <TeamLaunch onSession={() => setTeam(false)} prefill={prefill?.template !== undefined ? prefill : undefined} />
-    : <SessionLaunch onTeam={() => setTeam(true)} prefill={prefill?.template === undefined ? prefill : undefined} />;
-}
-
-function SessionLaunch({ onTeam, prefill }: { onTeam(): void; prefill?: LaunchPrefill }) {
   const { client, d, machines, projects, t, g, toast, go, select, small } = useTui();
   const list = projects?.projects ?? [];
-  // The daemon fills the model and effort left out with the role's when it is the role's agent: the form shows them (#97).
-  const rolePick = (r: Role | undefined, tool: Tool): ModelPick =>
-    (r && (r.tool === undefined || r.tool === tool) ? { model: r.model ?? null, effort: r.effort ?? null } : NO_PICK);
   const [form, setForm] = useState<LaunchForm>(() => {
-    const tool = prefill?.role?.tool ?? 'claude';
-    const base = withPick(launchDefaults(list, machines, prefill?.project ? { project: prefill.project } : {}, tool), rolePick(prefill?.role, tool));
-    // A folder « Équipes » read on a machine (#99) is launched there, never on another one while it is offline.
-    const f = prefill ? withMachine(base, list, prefill.machine) : base;
-    return prefill?.cwd ? { ...f, repos: [prefill.cwd] } : f;
+    return launchDefaults(list, machines, {}, 'claude');
   });
   const [field, setField] = useState<Field>('prompt');
   const [folder, setFolder] = useState('');
@@ -79,36 +61,6 @@ function SessionLaunch({ onTeam, prefill }: { onTeam(): void; prefill?: LaunchPr
     return own.length ? own : (machine?.recents ?? []).slice(0, 6).map(r => r.cwd);
   }, [project, form.machine, machine?.recents]);
   const withFolder: LaunchForm = folder.trim() ? { ...form, repos: MULTI_REPO_TOOLS.has(form.tool) ? [folder.trim(), ...form.repos.filter(r => r !== folder.trim())] : [folder.trim()] } : form;
-  // The daemon reads the role in the folder launched, on its machine (findRole: the repository's wins over the home's). The one
-  // « Équipes » read holds in that folder; elsewhere (any folder, for one read under « Perso seulement ») that folder is asked, and
-  // the form shows and launches the role found there, with its defaults, or none, as the Desktop's composer does.
-  const target = withFolder.repos[0] ?? null;
-  const sameMachine = !!prefill?.role && withFolder.machine === prefill.machine;
-  const readHere = sameMachine && target !== null && target === prefill!.cwd;
-  const asked = sameMachine && !readHere && target !== null ? `${withFolder.machine}\0${target}` : null;
-  const [seen, setSeen] = useState<{ key: string; role: Role | null } | null>(null);
-  useEffect(() => {
-    if (!asked) return;
-    const [machineId, cwd] = asked.split('\0') as [string, string];
-    const requestId = `tui-role-${randomUUID()}`;
-    const off = client.onMessage(m => {
-      if (m.type !== 'roles.listing' || m.requestId !== requestId) return;
-      off();
-      const found = m.error ? null : m.roles.find(r => r.id === prefill!.role!.id) ?? null;
-      setSeen({ key: asked, role: found });
-      // Another file of that id: its agent, model and effort, as the role read first filled them.
-      const was = prefill!.role!;
-      if (found && (found.tool !== was.tool || found.model !== was.model || found.effort !== was.effort))
-        setForm(f => (found.tool && found.tool !== f.tool ? withTool(f, found.tool, rolePick(found, found.tool)) : withPick(f, rolePick(found, f.tool))));
-    });
-    // A folder typed is asked once it rests.
-    const timer = setTimeout(() => client.send({ type: 'roles.list', cwd, requestId, ...(machineId !== 'local' ? { machineId } : {}) }), 250);
-    return () => { clearTimeout(timer); off(); };
-  }, [asked]); // eslint-disable-line react-hooks/exhaustive-deps
-  const checking = asked !== null && seen?.key !== asked;
-  const role = readHere ? prefill!.role : asked !== null && seen?.key === asked ? seen.role ?? undefined : undefined;
-  // Not the file « Équipes » showed: said, so that the label read is the one launched.
-  const other = !!role && role.path !== prefill?.role?.path;
   const projectIdOf = (s: Parameters<typeof projectOf>[0]) => (projects ? projectOf(s, projects) : null);
   const drawn = useMemo(() => previewOf(withFolder, d.sessions, projectIdOf), [form.machine, form.project, d.sessions.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const [name, setName] = useState<string | null>(null);
@@ -129,10 +81,9 @@ function SessionLaunch({ onTeam, prefill }: { onTeam(): void; prefill?: LaunchPr
 
   const launch = () => {
     if (launching) return;
-    if (checking && !missing) { toast({ text: t.catalog.roleChecking(prefill!.role!.id), tone: 'info' }); return; }
     if (missing) { toast({ text: t.launch.missing[missing], tone: 'info' }); setField(missing === 'prompt' ? 'prompt' : missing === 'machine' ? 'machine' : 'repos'); return; }
     setLaunching({ seq: d.lastLaunched?.seq ?? 0, errorSeq: d.errors.at(-1)?.seq ?? 0, at: Date.now(), name: shownName });
-    client.send({ ...launchMessage(withFolder, shownName), ...(role ? { role: role.id } : {}) });
+    client.send(launchMessage(withFolder, shownName));
   };
 
   useInput((input, key) => {
@@ -140,7 +91,6 @@ function SessionLaunch({ onTeam, prefill }: { onTeam(): void; prefill?: LaunchPr
     if (small && !key.escape) return;
     if (key.escape) { go('overview'); return; }
     if (key.ctrl && input === 's') { launch(); return; }
-    if (key.ctrl && input === 't') { onTeam(); return; }
     if (key.ctrl && input === 'r') { setName(pickName([...d.sessions.map(s => s.name), shownName])); return; }
     if (key.tab || key.downArrow || (key.return && field !== 'name')) { setField(f => cycle(FIELDS, f, key.shift ? -1 : 1)); return; }
     if (key.upArrow) { setField(f => cycle(FIELDS, f, -1)); return; }
@@ -153,7 +103,7 @@ function SessionLaunch({ onTeam, prefill }: { onTeam(): void; prefill?: LaunchPr
       return;
     }
     if (!by) return;
-    if (field === 'tool') setForm(f => { const next = cycle(tools, f.tool, by); return withTool(f, next, rolePick(role, next)); });
+    if (field === 'tool') setForm(f => { const next = cycle(tools, f.tool, by); return withTool(f, next, NO_PICK); });
     else if (field === 'model') setForm(f => withPick(f, { model: cycle(modelIds, f.model, by), effort: null }));
     else if (field === 'effort') setForm(f => withPick(f, { model: f.model, effort: cycle(efforts, f.effort, by) }));
     else if (field === 'project') { const ids = [...list.map(p => p.id), null]; setForm(f => { const next = cycle(ids, f.project, by); return next === null ? { ...f, project: null, repos: [] } : withProject(f, list, next); }); setRepoAt(0); }
@@ -173,12 +123,8 @@ function SessionLaunch({ onTeam, prefill }: { onTeam(): void; prefill?: LaunchPr
     ))}</Text>
   );
   return (
-    <Frame crumb={t.launch.title} keys={[['tab', t.keys.nextField], ['← →', t.keys.choose], [t.keys.space, t.keys.tick], ['ctrl+s', t.keys.start], ['ctrl+t', t.keys.teamMode], ['ctrl+r', t.keys.redraw], ['esc', t.keys.cancel]]}>
+    <Frame crumb={t.launch.title} keys={[['tab', t.keys.nextField], ['← →', t.keys.choose], [t.keys.space, t.keys.tick], ['ctrl+s', t.keys.start], ['ctrl+r', t.keys.redraw], ['esc', t.keys.cancel]]}>
       <TitledBox title={t.launch.title} flexGrow={1}>
-        <Box><Text color={C.faint}> </Text><Box width={14} flexShrink={0}><Text color={C.dim}>{t.launch.mode}</Text></Box><Text><Text color={C.coral}>{g.radioOn} {t.launch.session}</Text>   <Text color={C.dim}>{g.radioOff} {t.launch.team}</Text>  <Text color={C.faint}>ctrl+t</Text></Text></Box>
-        {prefill?.role ? <Box><Text color={C.faint}> </Text><Box width={14} flexShrink={0}><Text color={C.dim}>{t.catalog.role}</Text></Box>
-          {role ? <Text wrap="truncate"><Text color={C.violet}>@{role.id}</Text> <Text color={C.fg}>{role.label}</Text>{other ? <Text color={C.faint}> · {t.catalog.roleReadIn(target!)}</Text> : null}</Text>
-            : <Text wrap="truncate" color={C.faint}>{checking ? t.catalog.roleChecking(prefill.role.id) : t.catalog.roleElsewhere(prefill.role.id, prefill.cwd ?? '~/.ledge')}</Text>}</Box> : null}
         {row('prompt', t.launch.instruction, <TextInput value={form.prompt} onChange={v => setForm(f => ({ ...f, prompt: v }))} active={field === 'prompt'} />)}
         <Text> </Text>
         {row('tool', t.launch.agent, <Text wrap="truncate">{tools.map(x => <Text key={x} color={x === form.tool ? C.coral : C.dim}>{x === form.tool ? g.radioOn : g.radioOff} {TOOL_NAME[x]}   </Text>)}</Text>)}
@@ -209,130 +155,3 @@ function SessionLaunch({ onTeam, prefill }: { onTeam(): void; prefill?: LaunchPr
   );
 }
 
-const TEAM_FIELDS = ['project', 'folder', 'template', 'seats', 'name'] as const;
-type TeamField = typeof TEAM_FIELDS[number];
-/** Read at each render: the palette changes with the theme. */
-const autonomyColor = (a: 'ask' | 'edits' | 'auto'): string => ({ ask: C.faint, edits: C.dim, auto: C.yellow })[a];
-
-/** The team mode (roles spec §3.9): a project and one of its folders, a template or seats chosen one by one (each with its
- *  agent), the team's name, and the preview « L'équipe workshop s'installera à une nouvelle table de la pièce Ledge » with the
- *  autonomy warning. ctrl+s sends `team.launch`; its answer says how it went. */
-function TeamLaunch({ onSession, prefill }: { onSession(): void; prefill?: LaunchPrefill }) {
-  const { client, machines, projects, t, g, toast, go, small } = useTui();
-  const list = projects?.projects ?? [];
-  const [projectId, setProjectId] = useState<string | null>(prefill ? prefill.project : list[0]?.id ?? null);
-  const project = list.find(p => p.id === projectId);
-  const folders = useMemo(() => {
-    const own = (project?.repos ?? []).filter(r => r.machine === 'local').map(r => r.path);
-    const base = own.length ? own : (machines.find(m => m.id === 'local')?.recents ?? []).slice(0, 6).map(r => r.cwd);
-    return prefill?.cwd && projectId === prefill.project && !base.includes(prefill.cwd) ? [prefill.cwd, ...base] : base;
-  }, [project, machines]); // eslint-disable-line react-hooks/exhaustive-deps
-  const [folderAt, setFolderAt] = useState(() => Math.max(0, prefill?.cwd ? folders.indexOf(prefill.cwd) : 0));
-  // The template « Équipes » chose, taken from the first listing only.
-  const wanted = useRef(prefill?.template);
-  const cwd = folders[folderAt] ?? folders[0] ?? null;
-  const [field, setField] = useState<TeamField>('template');
-  const [defs, setDefs] = useState<{ roles: Role[]; templates: TeamTemplate[] } | null>(null);
-  const [template, setTemplate] = useState<string | null>(null);
-  const [seats, setSeats] = useState<Array<{ role: Role; tool: Tool; on: boolean }>>([]);
-  const [seatAt, setSeatAt] = useState(0);
-  const [name, setName] = useState('');
-  const [launching, setLaunching] = useState(false);
-  useEditing(true);
-  useEffect(() => {
-    if (!cwd) { setDefs({ roles: [], templates: [] }); return; }
-    setDefs(null);
-    const requestId = `tui-roles-${randomUUID()}`;
-    const off = client.onMessage(m => {
-      if (m.type !== 'roles.listing' || m.requestId !== requestId) return;
-      off();
-      setDefs({ roles: m.roles, templates: m.templates });
-      setSeats(m.roles.map(role => ({ role, tool: role.tool ?? 'claude', on: false })));
-      const first = m.templates.find(x => x.id === wanted.current) ?? m.templates[0];
-      wanted.current = undefined;
-      setTemplate(first?.id ?? null);
-      setName(n => n || first?.name || project?.name || '');
-    });
-    client.send({ type: 'roles.list', cwd, requestId });
-    return off;
-  }, [cwd]); // eslint-disable-line react-hooks/exhaustive-deps
-  const tpl = defs?.templates.find(x => x.id === template);
-  const chosen = tpl
-    ? tpl.seats.map(x => { const role = defs!.roles.find(r => r.id === x.role); return { id: x.role, tool: x.tool ?? role?.tool ?? 'claude' as Tool, autonomy: role?.autonomy ?? 'ask' }; })
-    : seats.filter(x => x.on).map(x => ({ id: x.role.id, tool: x.tool, autonomy: x.role.autonomy ?? 'ask' }));
-  const auto = chosen.filter(x => x.autonomy === 'auto').map(x => `@${x.id}`);
-  const teamName = name.trim() || tpl?.name || project?.name || 'team';
-
-  const launch = () => {
-    if (launching || !cwd) return;
-    if (!chosen.length) { toast({ text: t.launch.noSeat, tone: 'info' }); return; }
-    const rid = randomUUID();
-    setLaunching(true);
-    const off = client.onMessage(m => {
-      if ((m.type !== 'team.launched' && m.type !== 'team.failed') || m.rid !== rid) return;
-      off(); setLaunching(false);
-      if (m.type === 'team.launched') { toast({ text: t.launch.teamLaunched(m.team.name), tone: 'ok' }); go('overview'); }
-      else toast({ text: t.launch.teamFailed(m.reason), tone: 'error' });
-    });
-    client.send({ type: 'team.launch', rid, cwd, name: teamName, ...(tpl ? { template: tpl.id } : { seats: chosen.map(x => ({ role: x.id, tool: x.tool })) }) });
-  };
-
-  const tools: Tool[] = ['claude', 'codex', 'cursor', 'omp'];
-  const templates: Array<string | null> = [...(defs?.templates ?? []).map(x => x.id), null];
-  useInput((input, key) => {
-    // Too small, the form is not drawn: only esc goes.
-    if (small && !key.escape) return;
-    if (key.escape) { go('overview'); return; }
-    if (key.ctrl && input === 's') { launch(); return; }
-    if (key.ctrl && input === 't') { onSession(); return; }
-    if (key.tab || key.downArrow || key.return) { setField(f => cycle(TEAM_FIELDS, f, key.shift ? -1 : 1)); return; }
-    if (key.upArrow) { setField(f => cycle(TEAM_FIELDS, f, -1)); return; }
-    if (field === 'name') return;
-    const by = key.rightArrow || input === 'l' ? 1 : key.leftArrow || input === 'h' ? -1 : 0;
-    if (field === 'project' && by) { const ids = list.map(p => p.id); if (ids.length) { setProjectId(cur => cycle(ids, cur ?? ids[0]!, by)); setFolderAt(0); } }
-    else if (field === 'folder' && by && folders.length) setFolderAt(i => (i + by + folders.length) % folders.length);
-    else if (field === 'template' && by) { const next = cycle(templates, template, by); setTemplate(next); const x = defs?.templates.find(y => y.id === next); if (x) setName(x.name); }
-    else if (field === 'seats' && !tpl) {
-      if (input === 'j') setSeatAt(i => (seats.length ? (i + 1) % seats.length : 0));
-      else if (input === 'k') setSeatAt(i => (seats.length ? (i + seats.length - 1) % seats.length : 0));
-      else if (input === ' ') setSeats(xs => xs.map((x, i) => (i === seatAt ? { ...x, on: !x.on } : x)));
-      else if (by) setSeats(xs => xs.map((x, i) => (i === seatAt ? { ...x, tool: cycle(tools, x.tool, by) } : x)));
-    }
-  });
-
-  const row = (f: TeamField, label: string, value: ReactNode) => (
-    <Box key={f} backgroundColor={field === f ? C.sel : undefined}>
-      <Text color={field === f ? C.coral : C.faint}>{field === f ? '▌' : ' '}</Text>
-      <Box width={14} flexShrink={0}><Text color={C.dim}>{label}</Text></Box>
-      <Box flexGrow={1} overflow="hidden" flexDirection="column">{value}</Box>
-    </Box>
-  );
-  return (
-    <Frame crumb={t.launch.teamTitle} keys={[['tab', t.keys.nextField], ['← →', t.keys.choose], [t.keys.space, t.keys.tick], ['ctrl+s', t.keys.start], ['ctrl+t', t.keys.teamMode], ['esc', t.keys.cancel]]}>
-      <TitledBox title={t.launch.teamTitle} flexGrow={1}>
-        <Box><Text color={C.faint}> </Text><Box width={14} flexShrink={0}><Text color={C.dim}>{t.launch.mode}</Text></Box><Text><Text color={C.dim}>{g.radioOff} {t.launch.session}</Text>   <Text color={C.coral}>{g.radioOn} {t.launch.team}</Text>  <Text color={C.faint}>ctrl+t</Text></Text></Box>
-        {row('project', t.launch.project, <Text wrap="truncate">{list.length === 0 ? <Text color={C.faint}>{t.launch.none}</Text> : list.map(p => <ProjectChoice key={p.id} project={p} on={p.id === projectId} />)}</Text>)}
-        {row('folder', t.launch.folder, <Text wrap="truncate">{cwd ? <><Text color={C.fg}>{cwd}</Text>{folders.length > 1 ? <Text color={C.faint}>  ({folderAt + 1}/{folders.length})</Text> : null}</> : <Text color={C.faint}>{t.launch.none}</Text>}</Text>)}
-        {row('template', t.launch.template, defs === null ? <Text color={C.faint}>{t.launch.loadingRoles}</Text> : <Text wrap="truncate">{templates.map(x => <Text key={x ?? '-'} color={x === template ? C.fg : C.dim} bold={x === template}>{x === template ? `${g.prev} ${x ?? t.launch.custom} ${g.next}` : x ?? t.launch.custom}{'   '}</Text>)}</Text>)}
-        {row('seats', t.launch.seats, tpl
-          ? <Text wrap="truncate">{chosen.map(x => <Text key={x.id}><Text color={C.violet}>@{x.id}</Text> <Text color={C.dim}>{TOOL_NAME[x.tool]}</Text>{'   '}</Text>)}</Text>
-          : seats.length === 0 ? <Text color={C.faint}>{t.launch.noRole}</Text>
-          : <>{seats.map((x, i) => (
-            <Text key={x.role.id} wrap="truncate" backgroundColor={field === 'seats' && i === seatAt ? C.line : undefined}>
-              <Text color={x.on ? C.green : C.faint}>{x.on ? g.boxOn : g.boxOff}</Text> <Text color={C.violet}>@{x.role.id}</Text> {x.role.label} <Text color={C.dim}>{g.prev} {TOOL_NAME[x.tool]} {g.next}</Text> <Text color={autonomyColor(x.role.autonomy ?? 'ask')}>{t.ask.autonomy[x.role.autonomy ?? 'ask']}</Text>
-            </Text>
-          ))}</>)}
-        {row('name', t.launch.teamName, <TextInput value={name} onChange={setName} active={field === 'name'} placeholder={teamName} />)}
-      </TitledBox>
-      <TitledBox title={t.launch.preview} color={C.coral} titleColor={C.coral}>
-        <Text wrap="truncate"><Text color={C.coral}>{g.team}</Text> <Text color={C.fg} bold>{t.launch.teamPreview(teamName, project?.name ?? cwd ?? '-')}</Text></Text>
-        <Text wrap="truncate">{chosen.map(x => <Text key={x.id}><Text color={C.violet}>@{x.id}</Text> <Text color={C.dim}>{TOOL_NAME[x.tool]}</Text> <Text color={autonomyColor(x.autonomy)}>{t.ask.autonomy[x.autonomy]}</Text>{'   '}</Text>)}</Text>
-        {auto.length ? <Text color={C.yellow} wrap="truncate">{t.ask.autoWarning(auto.join(', '))}</Text> : null}
-        <Box marginTop={1} columnGap={2}>
-          <Button label={launching ? t.launch.launching : t.ask.launchTeam} k="ctrl+s" primary />
-          <Button label={t.launch.cancel} k="esc" />
-        </Box>
-      </TitledBox>
-    </Frame>
-  );
-}

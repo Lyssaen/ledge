@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
-import type { ChatTurn, Task, ThreadItem } from '@ledge/protocol';
+import type { ChatTurn, ThreadItem } from '@ledge/protocol';
 import { fr } from '../src/tui/i18n/fr.js';
 import { en } from '../src/tui/i18n/en.js';
 import { MESSAGES } from '../src/tui/i18n/lang.js';
 import { glyphsFor } from '../src/tui/glyphs.js';
-import { closedLedgeTasks, exchanges, keepSelection, nextWaiting, overview, step } from '../src/tui/model/overview.js';
+import { exchanges, keepSelection, nextWaiting, overview, step } from '../src/tui/model/overview.js';
 import { answerFor, choices } from '../src/tui/model/pending.js';
 import { anchorLine, diffCount, threadImages, threadLines, threadView, wrap } from '../src/tui/model/thread.js';
 import { cells, type Line } from '../src/tui/model/cells.js';
@@ -68,21 +68,6 @@ describe('tui overview model', () => {
       fakeSession('n', { name: 'Nova', lastMessage: { id: 'm2', to: 'otto', summary: 'Relance', at: '2026-10-09T18:01:00.000Z' } })
     ], 5);
     expect(list.map(x => `${x.from}→${x.to}:${x.summary}`)).toEqual(['Otto→Nova:Rebase', 'Nova→otto:Relance']);
-  });
-
-  it('mixes the task hand-overs between any two seats with the messages, newest first; an old journal shows none (#92)', () => {
-    const T = (m: number) => `2026-10-09T18:0${m}:00.000Z`;
-    const relire: Task = { id: 't1', title: 'Relire', giver: 'o', giverName: 'Otto', owner: 'b', ownerName: 'Bix', state: 'open', at: T(0), updatedAt: T(3), log: [
-      { at: T(0), by: 'Otto', what: 'confiée à Nova', op: 'give', from: 'o', to: 'n', fromName: 'Otto', toName: 'Nova' },
-      { at: T(1), by: 'Nova', what: 'prise', op: 'take' },
-      { at: T(3), by: 'Nova', what: 'passée à Bix', op: 'pass', from: 'local:n', to: 'b', fromName: 'Nova', toName: 'Bix', note: 'la fin' }
-    ] };
-    const old: Task = { ...relire, id: 't2', title: 'Ancienne', log: [{ at: T(4), by: 'Otto', what: 'confiée à Nova' }] };
-    const list = exchanges([
-      fakeSession('o', { name: 'Otto', lastMessage: { id: 'm1', to: 'nova', peer: 'n', summary: 'Rebase', at: T(2) } }),
-      fakeSession('n', { name: 'Nova' })
-    ], 5, [relire, old]);
-    expect(list.map(x => `${x.kind}:${x.from}→${x.to}:${x.summary}`)).toEqual(['task:Nova→Bix:Relire', 'message:Otto→Nova:Rebase', 'task:Otto→Nova:Relire']);
   });
 
   it('says how long ago, short', () => {
@@ -335,22 +320,19 @@ describe('tui settings', () => {
   it('every language has its messages', () => { expect(Object.keys(MESSAGES)).toEqual(['fr', 'en']); });
 });
 
-describe('tui overview with teams (roles spec §3.9)', () => {
-  const team = { id: 'team-a1b2', name: 'ledge-roles', project: 'ledge', machine: 'local', cwd: '/w/ledge', state: 'active' as const, seats: [{ role: 'build', sessionId: 'nova' }], createdAt: '2026-10-09T16:00:00.000Z', updatedAt: '2026-10-09T16:00:00.000Z' };
-  const task = (id: string, extra: object) => ({ id, title: `Tâche ${id}`, giver: 'ledge', giverName: 'Ledge', owner: 'nova', ownerName: 'Nova', team: 'team-a1b2', state: 'open' as const, at: '2026-10-09T16:05:00.000Z', updatedAt: '2026-10-09T16:05:00.000Z', log: [], ...extra });
-  it('a project lists its common table’s branches, then its teams with their seats; Ledge’s progress per team', () => {
-    const sessions = mockupSessions().map(s => (s.id === 'nova' ? { ...s, team: 'team-a1b2', role: 'build' } : s));
-    const v = overview(sessions, PROJECTS, [team, { ...team, id: 'team-c3d4', name: 'mobile', state: 'resting', seats: [] }, { ...team, id: 'team-e5f6', state: 'dissolved' }], [task('t000001', { state: 'done' }), task('t000002', {})]);
-    const ledge = v.tree[0]!;
-    expect(ledge.branches.flatMap(b => b.sessions.map(s => s.name))).toEqual(['Otto', 'Bix']);
-    expect(ledge.teams.map(x => [x.team.name, x.team.state, x.sessions.map(s => s.name), `${x.done}/${x.given}`])).toEqual([['ledge-roles', 'active', ['Nova'], '1/2'], ['mobile', 'resting', [], '0/0']]);
-    expect(v.order).toEqual(['otto', 'bix', 'nova', 'luna']);
+describe('tui overview without teams', () => {
+  const ask = (id: string, extra: object = {}) => ({ id, from: 'nova', fromName: 'Nova', question: 'Quelle base ?', options: 'sqlite, postgres', at: '2026-10-09T16:05:00.000Z', state: 'open' as const, machine: 'local', ...extra });
+  it('overview builds one table per project, no team table', () => {
+    const v = overview(mockupSessions(), PROJECTS, []);
+    expect(v.tree.map(n => n.label)).toEqual(['Ledge', 'Website']);
+    expect(v.tree[0]!.branches.flatMap(b => b.sessions.map(s => s.name))).toEqual(['Otto', 'Nova', 'Bix']);
+    expect(Object.keys(v.tree[0]!)).not.toContain('teams');
+    expect(v.order).toEqual(['otto', 'nova', 'bix', 'luna']);
   });
-  it('Ledge is a sender in the exchanges; the closed tasks Ledge gave are items of « À toi » until seen', () => {
-    const given = { at: '2026-10-09T17:00:00.000Z', by: 'Ledge', what: 'confiée à Nova', op: 'give' as const, from: 'ledge', to: 'nova', fromName: 'Ledge', toName: 'Nova' };
-    const tasks = [task('t000001', { state: 'done', at: '2026-10-09T17:00:00.000Z', log: [given] }), task('t000002', { state: 'done', seen: true }), task('t000003', { giver: 'otto', giverName: 'Otto', state: 'done' })];
-    expect(exchanges([], 3, tasks, 'Ledge (moi)')[0]).toEqual({ at: '2026-10-09T17:00:00.000Z', from: 'Ledge (moi)', to: 'Nova', summary: 'Tâche t000001', kind: 'task' });
-    expect(closedLedgeTasks(tasks).map(x => x.id)).toEqual(['t000001']);
+  it('overview lists an open ask in À toi as « ? Nova : Quelle base ? »', () => {
+    const v = overview(mockupSessions(), PROJECTS, [ask('a1b2c3d'), ask('a000001', { state: 'answered' })]);
+    expect(v.asks.map(a => a.id)).toEqual(['a1b2c3d']);
+    expect(MESSAGES.fr.overview.askLine(v.asks[0]!.fromName, v.asks[0]!.question)).toBe('? Nova : Quelle base ?');
   });
 });
 
