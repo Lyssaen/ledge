@@ -307,4 +307,10 @@ Demandé par l'utilisateur le 2026-10-31, par la session Otto-3. Spec : `docs/su
 - **Visites** : un `Exchange` de `kind` `message`, `task` ou `handoff` entre deux sièges ou sessions.
 - **Invitations chez Ledge** : un `Exchange` de `kind: 'ledge'` (Ledge écrit à un siège), ou une escalade tranchée par Ledge dont la réponse part vers le siège.
 
-**Question ouverte qui bloque l'étape 8 (et elle seule)** : la source réelle de l'avancement dans les bulles. Les candidates sont le dernier élément du fil de la session (`session.thread.item`), l'étape du hook, ou la todo de l'agent. Les étapes 1 à 7 n'en dépendent pas.
+**Avancement des bulles** (décision de l'utilisateur, 2026-10-31) : les bulles montrent **les réflexions des agents**. Ledge ne les capte pas encore. L'étape 8 doit donc ajouter une source côté daemon :
+- **Claude** : les blocs `thinking` de la transcription JSONL, déjà lue par `daemon/transcript.ts`.
+- **Codex** : les résumés de raisonnement de son journal.
+- **OMP** : les événements de réflexion de son RPC.
+- **Message** : un extrait court (une phrase, environ 80 caractères) est diffusé au plus toutes les 10 s par session, dans un message `session.thought { id, text, at }` [P pour le nom, le débit et la longueur].
+- **Repli** : quand un outil ne donne pas ses réflexions (bloc vide ou caviardé), on prend le dernier message de l'agent.
+- **Limite** : l'extrait n'est jamais écrit sur disque ni relayé au téléphone [P].
