@@ -153,8 +153,8 @@ Tout passe par OpenRig, jamais par tmux. [U]
 
 | Geste Ledge | Appel OpenRig |
 |---|---|
-| Arrêter un rig | `POST /api/down` (rig) |
-| Relancer / reprendre un rig | `POST /api/rigs/:id/up`, `/restore` |
+| Arrêter un rig | `POST /api/down { rigId, snapshot: true }` |
+| Relancer / reprendre un rig | `POST /api/rigs/:id/up`, ou `POST /api/rigs/:rigId/restore/:snapshotId` sur le dernier instantané |
 | Relancer un siège | `POST /api/seat/restart/:seatRef` |
 | Arrêter un siège | `POST /api/seat/stop/:seatRef` |
 | Relève (contexte plein) | `POST /api/seat/handover/:seatRef` |
@@ -209,7 +209,7 @@ Ledge suit déjà des machines distantes : chacune figure dans `machines.json` a
 ### 5.1 Une session permanente
 
 - Le cerveau est une session Ledge ordinaire, nommée « Ledge » et marquée `brain: true`. Elle tourne dans tmux (`ledge-brain`), sur l'outil choisi dans Réglages › Ledge › Outil (Claude par défaut, ou Codex, Cursor, OMP). [U pour « quel que soit l'outil », P pour le défaut]
-- Le daemon la démarre à son propre démarrage, si l'utilisateur l'a activée (Réglages › Ledge › « Ledge pense en continu », activé par défaut à la première ouverture de l'onglet Mandat). Il la relance si elle meurt, au plus 3 fois en 10 min, puis il l'affiche en panne.
+- Le daemon la démarre à son propre démarrage, si l'utilisateur l'a activée (Réglages › Ledge › « Ledge pense en continu », ou la proposition faite à la première ouverture de l'écran Ledge, voir plus bas). Il la relance si elle meurt, au plus 3 fois en 10 min, puis il l'affiche en panne.
 - Elle reprend son historique (`--resume` pour Claude, l'équivalent sinon), et repart sur une conversation neuve chaque jour, avec un résumé de la veille. Si son contexte dépasse 70 %, Ledge la relève avec le mécanisme de relève actuel (`daemon/handover.ts`, conservé). [P]
 - **Sans cerveau** (désactivé, en panne, ou pas encore activé) : le fil de Ledge répond avec le chat ponctuel d'aujourd'hui (`chat/service.ts`, `claude -p --restricted` par jour), qui garde ses cartes d'action (lancer, relayer, fermer, ranger, que l'utilisateur clique). Le cerveau, une fois actif, remplace ce coureur ponctuel et propose les mêmes cartes avec `ledge brain propose`. Il n'y a pas de régression pour qui n'active pas le cerveau. [P]
 - Activation : proposée à la première ouverture de l'écran Ledge quand OpenRig est présent, puis mémorisée. [P]
@@ -270,7 +270,7 @@ Ledge suit déjà des machines distantes : chacune figure dans `machines.json` a
   - **groupe d'échanges** : les échanges entre agents d'un rig dans une fenêtre de temps, repliés (« factory · 3 échanges · 16:36 → 16:42 », « Replier/Voir »). [U, proposition A]
 - Saisie : « Écrire à Ledge… (@build pour un agent d'un rig) ». `@siège` écrit directement au siège, par `rig send` signé Ledge, et l'échange s'affiche dans le fil. [U d'après la maquette, P pour le chemin]
 - Suggestions sous la saisie : « Lance un rig… », « Où en est factory ? », « Qu'as-tu tranché ? », « Qui a besoin de moi ? ».
-- Le cerveau répond dans le fil. Tant qu'il est arrêté, les messages attendent (« Ledge est arrêté · Démarrer ») et les escalades remontent directement à l'utilisateur, sans avis. [P]
+- Le cerveau répond dans le fil. Tant qu'il est arrêté, le chat ponctuel répond à sa place (§5.1), le fil montre une fois « Ledge est arrêté · Démarrer », et les escalades remontent directement à l'utilisateur, sans avis. [P]
 
 ## 7. Retrait du système d'équipes de Ledge
 
