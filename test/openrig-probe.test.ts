@@ -4,7 +4,7 @@ import { homedir, tmpdir } from 'node:os';
 import { mkdtempSync, mkdirSync, symlinkSync, rmSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 // @ts-expect-error plain ESM script without types
-import { probeEnv, assertSafeTarget, assertUnder, probeRigSpec, questionsJson, parseSse, teardownPlan, markers } from '../scripts/openrig-probe.mjs';
+import { probeEnv, assertSafeTarget, assertUnder, probeRigSpec, questionsJson, parseSse, teardownPlan, markers, tmuxSocket, assertReportDir } from '../scripts/openrig-probe.mjs';
 
 describe('probeEnv', () => {
   it('drops every inherited OpenRig, Ledge and tmux identity and sets the throwaway ones', () => {
@@ -57,7 +57,15 @@ describe('parseSse', () => {
 describe('teardownPlan', () => {
   it('downs the rig, stops the daemon, kills the isolated tmux server, then removes the home, in that order', () => {
     expect(teardownPlan({ home: '/tmp/openrig-qa-ledge-a', port: 7512 }).map(s => [s.cmd, ...s.args].join(' '))).toEqual([
-      'rig down ledge-probe', 'rig daemon stop', 'tmux kill-server', 'rm -rf /tmp/openrig-qa-ledge-a']);
+      'rig down ledge-probe', 'rig daemon stop', `tmux -S /tmp/openrig-qa-ledge-a/tmux/tmux-${process.getuid?.() ?? 0}/default kill-server`,
+      'rm -rf /tmp/openrig-qa-ledge-a']);
+  });
+  it('kills only the tmux server whose socket is named under the home, never a bare tmux', () => {
+    const home = join(tmpdir(), 'openrig-qa-ledge-a');
+    const t = teardownPlan({ home, port: 7512, uid: 1234 }).find((s: { cmd: string }) => s.cmd === 'tmux');
+    expect(t.args).toEqual(['-S', join(home, 'tmux', 'tmux-1234', 'default'), 'kill-server']);
+    expect(() => assertUnder(t.args[1], home)).not.toThrow();
+    expect(tmuxSocket(home, 1234)).toBe(t.args[1]);
   });
 });
 describe('markers', () => {
@@ -131,6 +139,17 @@ describe('openrig-probe CLI', () => {
     const r = run('--teardown', homedir() + '/.openrig');
     expect(r.status).toBe(1); expect(r.stderr).toMatch(/^openrig-probe: refused: home/);
   });
+  it('--go refuses a --report in a missing folder before creating anything', () => {
+    const before = readdirSync(tmpdir()).filter(n => n.startsWith('openrig-qa-ledge-'));
+    const fake = mkdtempSync(join(tmpdir(), 'probe-bin-')); dirs.push(fake);
+    writeFileSync(join(fake, 'rig'), '#!/bin/sh\necho rig must not run >&2; exit 9\n', { mode: 0o755 });
+    const missing = join(fake, 'no-such-dir', 'report.json');
+    const r = spawnSync(process.execPath, ['scripts/openrig-probe.mjs', '--go', '--report', missing], { encoding: 'utf8', env: { PATH: `${fake}:${process.env.PATH}` } });
+    expect(r.status).toBe(1); expect(r.stderr).toMatch(/^openrig-probe: refused: report folder .*no-such-dir is missing or not writable/);
+    expect(r.stderr).not.toMatch(/rig must not run/);
+    expect(readdirSync(tmpdir()).filter(n => n.startsWith('openrig-qa-ledge-'))).toEqual(before);
+  });
+  it('assertReportDir accepts a writable folder', () => expect(() => assertReportDir(join(tmpdir(), 'x.json'))).not.toThrow());
   it('refuses to start when the installed rig is not 0.6.14', () => {
     const fake = mkdtempSync(join(tmpdir(), 'probe-bin-')); dirs.push(fake);
     writeFileSync(join(fake, 'rig'), '#!/bin/sh\necho 0.7.0\n', { mode: 0o755 });

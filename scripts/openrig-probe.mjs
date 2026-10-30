@@ -3,7 +3,7 @@
 // against a temp daemon and writes a raw JSON report. It concludes nothing; a later step reads the report.
 // It never targets ~/.openrig or port 7433: assertSafeTarget refuses both.
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { accessSync, constants as fsConstants, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createConnection, createServer } from 'node:net';
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, join, relative, resolve, isAbsolute, sep } from 'node:path';
@@ -115,13 +115,22 @@ export function parseSse(buffer) {
   return { events, rest };
 }
 
+/**
+ * Socket of the probe's tmux server. The 0.6.14 daemon runs tmux bare (no -L/-S, adapters/tmux-server.js) with TMUX
+ * unset and TMUX_TMPDIR=<home>/tmux, so tmux puts it at <home>/tmux/tmux-<uid>/default. Every probe tmux command names
+ * it with -S: a bare tmux whose TMUX_TMPDIR is missing falls back to /tmp/tmux-<uid>/default, the user's server.
+ */
+export function tmuxSocket(home, uid = process.getuid?.() ?? 0) {
+  return join(home, 'tmux', `tmux-${uid}`, 'default');
+}
+
 /** Teardown steps, in order; throws on a non-probe home. `env` says what each step runs with: probeEnv, only TMUX_TMPDIR, or nothing special. */
 export function teardownPlan(o) {
   assertSafeTarget({ home: o.home, port: o.port, realHome: o.realHome ?? homedir() });
   return [
     { cmd: 'rig', args: ['down', RIG], env: 'probe' },
     { cmd: 'rig', args: ['daemon', 'stop'], env: 'probe' },
-    { cmd: 'tmux', args: ['kill-server'], env: 'tmux' },
+    { cmd: 'tmux', args: ['-S', tmuxSocket(o.home, o.uid), 'kill-server'], env: 'tmux' },
     { cmd: 'rm', args: ['-rf', o.home], env: 'none' },
   ];
 }
@@ -348,27 +357,56 @@ class Probe {
   }
 }
 
-/** Runs the teardown plan for a home, with a last-resort SIGTERM to a daemon whose environ names this home. */
+/**
+ * Runs the teardown plan for a home. The tmux step is skipped when the probe socket is absent. When the port is still
+ * open after the stop steps (or unknown), every process whose environ names this home is sent SIGTERM: a daemon
+ * orphaned by a signal during `rig daemon start` has no daemon.json pid yet. The home is kept while the port stays open.
+ */
 async function teardown(home, port, { keep = false } = {}) {
   const plan = teardownPlan({ home, port });
-  let pid;
-  try { pid = Number(JSON.parse(readFileSync(join(home, 'daemon.json'), 'utf8')).pid); } catch { /* none */ }
   const results = [];
   for (const s of plan) {
-    if (keep && s.cmd === 'rm') continue;
-    const env = s.env === 'probe' ? probeEnv(process.env, { home, port }) : s.env === 'tmux' ? tmuxEnv(home, port) : sanitized();
-    const r = await exec(s.cmd, s.args, env, { timeout: 30_000 });
-    results.push({ cmd: [s.cmd, ...s.args], exit: r.exit, stdout: r.stdout, stderr: r.stderr });
-    if (s.cmd === 'tmux' && port > 1 && await portOpen(port) && pid && ownsHome(pid, home)) {
-      try { process.kill(pid, 'SIGTERM'); results.push({ cmd: ['kill', '-TERM', String(pid)], exit: 0, note: 'port still open after rig daemon stop' }); } catch { /* gone */ }
-      for (let i = 0; i < 20 && await portOpen(port); i++) await sleep(250);
+    if (s.cmd === 'rm') {
+      if (keep) continue;
+      if (port > 1 && await portOpen(port)) { results.push({ cmd: [s.cmd, ...s.args], skipped: true, note: `port ${port} still open: home kept` }); continue; }
+    }
+    if (s.cmd === 'tmux' && !existsSync(s.args[1])) {
+      results.push({ cmd: [s.cmd, ...s.args], skipped: true, note: 'no probe tmux socket' });
+    } else {
+      const env = s.env === 'probe' ? probeEnv(process.env, { home, port }) : s.env === 'tmux' ? tmuxEnv(home, port) : sanitized();
+      const r = await exec(s.cmd, s.args, env, { timeout: 30_000 });
+      results.push({ cmd: [s.cmd, ...s.args], exit: r.exit, stdout: r.stdout, stderr: r.stderr });
+    }
+    if (s.cmd === 'tmux' && (port <= 1 || await portOpen(port))) {
+      for (const pid of pidsOwningHome(home)) {
+        try { process.kill(pid, 'SIGTERM'); results.push({ cmd: ['kill', '-TERM', String(pid)], exit: 0, note: `OPENRIG_HOME=${home} in its environ, port ${port > 1 ? 'still open' : 'unknown'} after rig daemon stop` }); } catch { /* gone */ }
+      }
+      if (port > 1) for (let i = 0; i < 20 && await portOpen(port); i++) await sleep(250);
     }
   }
   const portClosed = port > 1 ? !(await portOpen(port)) : null;
   return { results, portClosed, homeGone: !existsSync(home) };
 }
+/** Pids (not this process) whose /proc/<pid>/environ holds OPENRIG_HOME=<home>. */
+function pidsOwningHome(home) {
+  let names = [];
+  try { names = readdirSync('/proc').filter((n) => /^\d+$/.test(n)); } catch { return []; }
+  return names.map(Number).filter((pid) => pid !== process.pid && ownsHome(pid, home));
+}
 function ownsHome(pid, home) {
   try { return readFileSync(`/proc/${pid}/environ`, 'utf8').split('\0').includes(`OPENRIG_HOME=${home}`); } catch { return false; }
+}
+
+/** Refuses a --report path whose folder is missing or not writable, before anything is created. */
+export function assertReportDir(reportPath) {
+  const dir = dirname(resolve(reportPath));
+  try {
+    if (!statSync(dir).isDirectory()) fail(`report folder ${dir} is not a directory`);
+    accessSync(dir, fsConstants.W_OK);
+  } catch (e) {
+    if (String(e?.message).startsWith('openrig-probe: refused:')) throw e;
+    fail(`report folder ${dir} is missing or not writable`);
+  }
 }
 
 function printPlan() {
@@ -413,6 +451,7 @@ export async function main(argv) {
 }
 
 async function go(opts) {
+  if (opts.report !== undefined) assertReportDir(opts.report);
   // preflight: version first, before anything is created.
   // Safe under sanitized(): --version prints a constant and reads no OPENRIG_HOME; no OpenRig or tmux identity is passed.
   const v = spawnSync('rig', ['--version'], { encoding: 'utf8', env: sanitized() });
@@ -428,7 +467,12 @@ async function go(opts) {
   const m = markers(run);
   const p = new Probe({ run, home, port, version });
   const reportPath = resolve(opts.report ?? join(tmpdir(), `openrig-probe-report-${run}.json`));
-  const writeReport = () => { writeFileSync(reportPath, JSON.stringify(p.report(), null, 2)); };
+  const writeReport = () => {
+    try { writeFileSync(reportPath, JSON.stringify(p.report(), null, 2)); return true; } catch (e) {
+      console.error(`openrig-probe: report not written to ${reportPath}: ${e?.message ?? e}`);
+      return false;
+    }
+  };
   // One teardown, run by the finally below. A signal only stops new steps and waits for it; repeated signals too.
   let finished;
   const done = new Promise((r) => { finished = r; });
@@ -496,8 +540,8 @@ async function go(opts) {
         p.push({ id, at: now(), note: `driver error: ${e?.stack ?? e}` });
       }
     };
-    const pane = (id) => p.cmd(id, ['capture-pane', '-p', '-S', '-500', '-t', SEAT], { cmd: 'tmux',
-      note: 'brief form plus -S -500 (scrollback), so markers that scrolled off are still seen' });
+    const pane = (id) => p.cmd(id, ['-S', tmuxSocket(home), 'capture-pane', '-p', '-S', '-500', '-t', SEAT], { cmd: 'tmux',
+      note: 'brief form plus -S -500 (scrollback), so markers that scrolled off are still seen; -S <socket> names the probe server' });
     const create = (id, args, o) => p.cmd(id, ['queue', 'create', ...args, '--json'], o);
     const escArgs = (summary) => ['--destination', LEDGE, '--human-intent', 'decision', '--summary', summary,
       '--evidence-ref', files.proof, '--human-questions-file', files.q, '--body-file', files.b];
@@ -704,8 +748,7 @@ async function go(opts) {
     const after = userMtimes();
     p.guard = { before, after, changed: Object.keys(before).filter((k) => before[k] !== after[k]) };
     p.data('guard', p.guard, 'the real daemon may write on its own: noted, not concluded');
-    writeReport();
-    console.log(`openrig-probe: report ${reportPath}`);
+    if (writeReport()) console.log(`openrig-probe: report ${reportPath}`);
     try {
       const at = now();
       const t = await teardown(home, port, { keep: opts.keep });
