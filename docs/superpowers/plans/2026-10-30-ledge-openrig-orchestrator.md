@@ -33,7 +33,7 @@ Chaque lot a son plan détaillé, se livre seul (branche depuis `origin/main`, P
 | 5 | `2026-10-30-ledge-openrig-5-cycle-et-lancement.md` | 2, 3 | Actions de cycle de vie, refus `rig_managed`, lancement en 3 temps, hors projet, dépôts trouvés, Ranger |
 | 6 | `2026-10-30-ledge-openrig-6-rigs-distants.md` | 2, 4, 5 | Rigs sur une machine distante (EC2) : pont par machine, agrégation, actions et réponses relayées |
 | 7 | `2026-10-30-ledge-openrig-7-cerveau.md` | 4 (6 pour le distant) | Cerveau permanent, `ledge brain`, garde du mandat, mémoire, onglet Mandat, Revenir dessus, grâce de 60 s |
-| 8 | §TUI ci-dessous | 2, 4, 5 | TUI selon la maquette de Tuin |
+| 8 | `2026-10-30-ledge-openrig-8-tui.md` (Tuin, branche `docs/ledge-openrig-8-tui`, 0262f343) | 1, 2, 4, 5 | TUI selon la maquette de Tuin |
 | 9 | plan de Mobi : `.worktrees/mobi-mockup/docs/superpowers/plans/2026-10-30-ledge-mobile-orchestrator.md` | 2, 4, 5 (7 pour l'avis de Ledge) | Mobile selon la maquette de Mobi ; correspondance ci-dessous |
 
 Ordre conseillé : 0 ∥ 1, puis 2, puis 3 ∥ 4, puis 5, puis 6 ∥ 7, puis 8 ∥ 9.
@@ -235,7 +235,11 @@ Le relais mobile laisse passer ces messages. La clé d'accès est exigée pour `
 - copie au plus 20 `Exchange` dans l'élément `exchanges` du fil ;
 - ajoute `rig` (et `brain`) à `PhoneSessionSchema` si les lots 2 et 7 ne l'ont pas fait.
 
-## Lot 8 : TUI (cadre, à détailler avec Tuin)
+## Lot 8 : TUI (cadre ; plan détaillé de Tuin : `2026-10-30-ledge-openrig-8-tui.md`)
+
+Le plan de Tuin ajoute deux choses au contrat :
+- le message `session.preview.subscribe { id | null, color: true }`, qui renvoie `session.preview.color` au seul abonné, et `DaemonInfo.colorPreview` ;
+- la remontée des modèles purs du Desktop (lots 3 et 5 : `rigs/model.ts`, `launch/rigModel.ts`, `isStandalone`) dans `@ledge/ui`, pour que le TUI les partage. Les lots 3 et 5 les écrivent directement dans `packages/ui/src/rigs/` et `packages/ui/src/launch/` ; à défaut, la tâche 1 du lot 8 les déplace.
 
 Maquette : https://claude.ai/artifact/39cmxt4BPuZRSArkHPcowt (sources `.worktrees/tuin-tui-mockup/docs/mockups/ledge-tui-openrig/`). Ce cadre fixe ce que le TUI consomme ; Tuin, ou la session qui exécute, en écrit le plan détaillé quand les lots 2, 4 et 5 sont fusionnés.
 
