@@ -439,7 +439,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         }
         stopTimer(m.op);
         const { reason: _old, ...rest } = o;
-        patchOp(m.op, () => ({ ...rest, received: true, ...(boot ? { boot } : {}), phase: m.status as Op['phase'], ...(m.reason ? { reason: m.reason } : {}), ...(m.models ? { models: m.models } : {}), ...(m.how ? { how: m.how } : {}) }));
+        patchOp(m.op, () => ({ ...rest, received: true, ...(boot ? { boot } : {}), phase: m.status as Op['phase'], ...(m.reason ? { reason: m.reason } : {}), ...(m.how ? { how: m.how } : {}) }));
         // The request changed under this answer: ask for the one there now, with its body.
         if (m.status === 'rejected' && m.reason === 'stale' && ready() && o.message.type.startsWith('session.') && 'id' in o.message && typeof o.message.id === 'string') send({ type: 'session.pending', id: o.message.id });
         return;

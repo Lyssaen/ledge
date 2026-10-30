@@ -80,6 +80,12 @@ export class History {
         try { const it = JSON.parse(line) as ThreadItem; if (typeof it?.id === 'string') byId.set(it.id, it); /* a Map keeps the first position: the thread order survives */ } catch { /* a partial or corrupt line: skip it */ }
       }
       const items = [...byId.values()].slice(-MAX_ITEMS); let lost = false;
+      // A notice from before the removal of Ledge tasks and teams carries fields nothing reads any more: dropped on load.
+      items.forEach((it, i) => {
+        if (it.kind !== 'notice') return;
+        const { task: _t, team: _m, taskOp: _o, outgoing: _g, ...rest } = it as typeof it & Record<string, unknown>;
+        items[i] = rest as typeof it;
+      });
       items.forEach((it, i) => {
         if (it.kind !== 'sent' || it.via !== 'ledge') return;
         this.mailed.add(it.id);
@@ -262,7 +268,7 @@ export class History {
     if (!opts.force && now - (this.synced.get(key) ?? 0) < SYNC_MS) return [];
     this.synced.set(key, now);
     const items = this.items(id);
-    const since = opts.helperId ? items.find(i => i.id === opts.helperId)?.at : [...items].reverse().find(i => i.kind === 'prompt' || i.kind === 'received' || (i.kind === 'notice' && !i.outgoing))?.at; // an outgoing task card is mid-turn: not an anchor
+    const since = opts.helperId ? items.find(i => i.id === opts.helperId)?.at : [...items].reverse().find(i => i.kind === 'prompt' || i.kind === 'received' || i.kind === 'notice')?.at;
     if (!since) return []; // a daemon that joined mid-turn: the old tail would flood the thread
     const have = new Set(items.map(i => i.id));
     const turn = this.turns.get(id) ?? 0;

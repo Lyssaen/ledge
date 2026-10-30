@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { actionById, autonomyArgs, contextNear, ompApprovalFor, givenByLedge, askShown, type ChatAction, type Autonomy } from '@ledge/protocol';
+import { actionById, autonomyArgs, contextNear, ompApprovalFor, askShown, type ChatAction, type Autonomy } from '@ledge/protocol';
 import { ATTACHMENT_LOCAL_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, type ModelRefusal, type RefusalCode, backendOf } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
@@ -1186,10 +1186,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         const r = asks.answer(msg.id, msg.text);
         return reply('code' in r ? { type: 'ask.result', rid: msg.rid, code: r.code, reason: r.reason } : { type: 'ask.result', rid: msg.rid, ask: r });
       }
-      // A client older than this daemon's lot 1 asks for what was removed (teams, roles, tasks): refused by name, never a crash.
-      case 'task.cmd': case 'roles.list': case 'definitions.list': case 'role.write': case 'role.delete': case 'template.write': case 'template.delete':
-      case 'team.launch': case 'team.join': case 'team.leave': case 'team.resume': case 'team.dissolve': case 'team.save': case 'team.compose': case 'team.seat':
-        return reply({ type: 'error', message: 'invalid message', code: 'invalid', request: msg.type });
       // A chat card's instruction: a refusal reaches the requester as an `error`, the card's state everyone through chat.history.
       case 'session.relay': return setAside(msg.qid) ? refuse(SET_ASIDE) : relay.request(msg.qid);
       case 'session.relay.cancel': return relay.cancel(msg.qid);

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { daemonStore } from '@ledge/fleet';
-import { LEDGE_GIVER, proposalRows, type ChatTurn } from '@ledge/protocol';
+import { proposalRows, type ChatTurn } from '@ledge/protocol';
 import { useEditing, useScreenKeys, useScreenSize, useTui } from '../context.js';
 import { ChipsLine, type Chip, useChips, useOpenImage, usePaste } from '../images.js';
 import { askHistory, chatView, openCards, type Card } from '../model/chat.js';

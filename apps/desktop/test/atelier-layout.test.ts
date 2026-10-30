@@ -79,7 +79,7 @@ it('the scene of each filter, and the J / K order', () => {
 it('a project room has one table with all its sessions, whatever their old team or role', () => {
   const projects: Projects = { projects: ['ledge', 'pay'].map(id => ({ id, name: id, color: 'blue' as const, description: '', repos: [{ machine: 'local', path: `/w/${id}` }] })), rules: [] };
   const idOf = (s: Session) => projectOf(s, projects);
-  const order = mainOrder([main('otto', { team: 'team-0001', role: 'build' }), main('nova', { team: 'team-0001' }), main('pim'), main('kit', { cwd: '/w/pay' }), main('zed', { cwd: '/w/pay', team: 'team-0001' })], projects);
+  const order = mainOrder([main('otto'), main('nova'), main('pim'), main('kit', { cwd: '/w/pay' }), main('zed', { cwd: '/w/pay' })], projects);
   const scene = sceneOf(order, projects, idOf, 'all');
   expect(scene.rooms.map(r => [r.project.id, r.mains.map(m => m.name)])).toEqual([['ledge', ['nova', 'otto', 'pim']], ['pay', ['kit', 'zed']]]);
   expect(walkOrder(scene).map(s => s.name)).toEqual(['nova', 'otto', 'pim', 'kit', 'zed']);

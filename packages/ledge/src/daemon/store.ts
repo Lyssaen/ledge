@@ -56,7 +56,8 @@ export class Store {
       if (r.success) {
         // An old record seated by a role or team got its autonomy from that role (removed, spec 2026-10-30 §7): not carried over.
         const { autonomy: _a, ...bare } = r.data;
-        this.sessions.set(r.data.id, r.data.role || r.data.team ? bare : r.data);
+        const seated = item as { role?: unknown; team?: unknown };
+        this.sessions.set(r.data.id, seated.role || seated.team ? bare : r.data);
       }
       else { dropped++; log(`journal entry dropped: ${r.error.issues[0]?.message ?? 'invalid'}`); }
     }

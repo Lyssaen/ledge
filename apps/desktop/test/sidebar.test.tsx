@@ -57,10 +57,10 @@ describe('the sidebar shell', () => {
   });
 
   it('the tree draws no team row; every session of a project sits under it by branch', async () => {
-    const seat = (id: string, name: string, branch: string) => fakeSession(id, { name, cwd: '/w/ledge', state: 'working', branch, team: 'team-a1b2', role: 'build' });
+    const seat = (id: string, name: string, branch: string) => fakeSession(id, { name, cwd: '/w/ledge', state: 'working', branch, ...{ team: 'team-a1b2', role: 'build' } });
     const { d, side } = await boot({ projects: TWO_PROJECTS, sessions: [seat('otto', 'Otto', 'desktop'), seat('nova', 'Nova', 'main')] });
     // An older daemon still speaks of teams: the front ignores them.
-    d.push({ type: 'teams', teams: [{ id: 'team-a1b2', name: 'ledge-dev', project: 'ledge', machine: 'local', cwd: '/w/ledge', state: 'active', seats: [{ role: 'build', sessionId: 'otto' }], createdAt: '2026-10-26T08:00:00.000Z', updatedAt: '2026-10-26T08:00:00.000Z' }] });
+    d.push({ type: 'teams', teams: [{ id: 'team-a1b2', name: 'ledge-dev', project: 'ledge', machine: 'local', cwd: '/w/ledge', state: 'active', seats: [{ role: 'build', sessionId: 'otto' }], createdAt: '2026-10-26T08:00:00.000Z', updatedAt: '2026-10-26T08:00:00.000Z' }] } as never);
     const tree = within(side.getByRole('tree'));
     expect(await tree.findByRole('button', { name: /^Otto/ })).toBeVisible();
     expect(tree.getByRole('button', { name: /^Nova/ })).toBeVisible();

@@ -1325,7 +1325,7 @@ describe('server', () => {
       c.close();
     });
     it('a resumed session that had role/roleLabel/team in sessions.json resumes without them and without a role autonomy', async () => {
-      store.upsert(ended('ro1', { agentSessionId: 'u-1', role: 'build', roleLabel: 'Build', team: 'team-a1b2', autonomy: 'auto' }));
+      store.upsert(ended('ro1', { agentSessionId: 'u-1', ...{ role: 'build', roleLabel: 'Build', team: 'team-a1b2' }, autonomy: 'auto' }));
       await store.save(); await store.load(); // the daemon's start: the role's autonomy is dropped on load
       const c = await resume('ro1'); await until(() => !!store.get('ro1')?.tmuxSession);
       expect(tmux.created[0]!.command).not.toContain('--permission-mode');

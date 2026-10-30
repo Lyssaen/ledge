@@ -293,7 +293,7 @@ describe('the atelier', () => {
 
   describe('project rooms', () => {
     it('a project room has one table with all its sessions, and no team heading', async () => {
-      await boot({ sessions: [...DEFAULT_SESSIONS, fakeSession('rio', { name: 'Rio', cwd: '/w/ledge', state: 'working', team: 'team-a1b2', role: 'build' })] });
+      await boot({ sessions: [...DEFAULT_SESSIONS, fakeSession('rio', { name: 'Rio', cwd: '/w/ledge', state: 'working', ...{ team: 'team-a1b2', role: 'build' } })] });
       const room = document.querySelector<HTMLElement>('[data-room="ledge"]')!;
       expect(room.querySelectorAll('.atelier-table')).toHaveLength(1);
       expect(within(room).getByRole('button', { name: /^Rio,/ })).toBeVisible();

@@ -7,7 +7,7 @@ import {
   ATTACHMENT_MAX, OperationIdSchema, PHONE_PROTOCOL, actionById, TOOL_TEXT_MAX, proposalRows, PhoneClientMessageSchema, pushEndpointAllowed, RefusalCodeSchema, UNTYPABLE, backendOf, isArchived, pendingKey,
   SEMVER, pcSubject, type AttachmentRef, type ChatErrorCode, type ChatTurn, type CloseHow, type ClientMessage, type OperationReason, type OperationStatus, type PhoneClientMessage, type PhoneServerMessage, type ServerMessage, type Session, type ThreadItem
 } from '@ledge/protocol';
-import { ModelRefusalSchema, type ModelRefusal, type PhoneSeatModel, type Tool } from '@ledge/protocol';
+import { ModelRefusalSchema, type ModelRefusal, type Tool } from '@ledge/protocol';
 import { latestTodos, TODO_TOOLS, type PhoneChecklist, type PhoneChecklistSummary } from '@ledge/protocol';
 import type { ConfirmPurpose } from '@ledge/protocol';
 import { compareVersions } from '@ledge/ui/semver';
@@ -230,10 +230,10 @@ export function createPhoneGateway(deps: {
     const s = live(m.id);
     if (reason.success && s) modelFailures.set(m.id, { reason: reason.data, model: s.model, effort: s.effort });
   };
-  const result = (deviceId: string, op: string, status: OperationStatus, reason?: OperationReason, models?: PhoneSeatModel[], how?: CloseHow) => {
+  const result = (deviceId: string, op: string, status: OperationStatus, reason?: OperationReason, how?: CloseHow) => {
     // A device revoked while its operation ran hears nothing more.
     if (stopped || !approved(deviceId)) return;
-    push(deviceId, { type: 'operation.result', op, status, ...(reason ? { reason } : {}), ...(models ? { models } : {}), ...(how ? { how } : {}) });
+    push(deviceId, { type: 'operation.result', op, status, ...(reason ? { reason } : {}), ...(how ? { how } : {}) });
   };
 
   /** The operations that act on a tracked session: the registry's own, the credential's, the device's and the chat's are handled before it. */
@@ -608,7 +608,7 @@ export function createPhoneGateway(deps: {
   const write = async (deviceId: string, msg: PhoneOperation) => {
     const begun = registry.begin(deviceId, msg.op, fingerprint(msg));
     if (begun.kind === 'conflict') return result(deviceId, msg.op, 'rejected', 'conflict');
-    if (begun.kind === 'replay') return result(deviceId, msg.op, begun.record.status, begun.record.reason, begun.record.models, begun.record.how);
+    if (begun.kind === 'replay') return result(deviceId, msg.op, begun.record.status, begun.record.reason, begun.record.how);
     let outcome: Outcome;
     try {
       result(deviceId, msg.op, 'received');
@@ -618,8 +618,8 @@ export function createPhoneGateway(deps: {
       log(`phone ${msg.type} failed (${e instanceof Error ? e.name : 'error'})`);
       outcome = { status: 'failed' };
     }
-    registry.finish(msg.op, outcome.status, outcome.reason, outcome.models, outcome.how);
-    result(deviceId, msg.op, outcome.status, outcome.reason, outcome.models, outcome.how);
+    registry.finish(msg.op, outcome.status, outcome.reason, outcome.how);
+    result(deviceId, msg.op, outcome.status, outcome.reason, outcome.how);
     // The phone learns it can confirm from the snapshot that follows.
     if (msg.type === 'credential.register' && outcome.status === 'applied' && approved(deviceId)) push(deviceId, snapshot(deviceId), 'snapshot');
     if (msg.type === 'device.forget' && outcome.status === 'applied') {

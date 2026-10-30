@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { ATTACHMENT_MAX, PREVIEW_MAX, padPlain, PAD_TIERS, PLAIN_MAX, SNAPSHOT_BODY_MAX, TOPIC_MAX, PhoneServerMessageSchema, pendingKey, type ClientMessage, type Pending, type ServerMessage, type Session, type Task, type Team } from '@ledge/protocol';
+import { ATTACHMENT_MAX, PREVIEW_MAX, padPlain, PAD_TIERS, PLAIN_MAX, SNAPSHOT_BODY_MAX, TOPIC_MAX, PhoneServerMessageSchema, pendingKey, type ClientMessage, type Pending, type ServerMessage, type Session } from '@ledge/protocol';
 import { hostname } from 'node:os';
 import { createPhoneGateway } from '../src/mobile/gateway.js';
 import { challengeOf } from '../src/mobile/webauthn.js';
@@ -1871,7 +1871,7 @@ describe('phone gateway: generic cards (spec 2026-10-26 action registry §9)', (
 describe('phone gateway: no teams, no tasks (lot 1)', () => {
   it('after a snapshot the gateway pushes no teams and no tasks, and a session carries no role or team', async () => {
     const g = setup();
-    g.sessions.set('a', { ...g.sessions.get('a')!, role: 'build', roleLabel: 'Build', team: 'team-a1b2' });
+    g.sessions.set('a', { ...g.sessions.get('a')!, ...{ role: 'build', roleLabel: 'Build', team: 'team-a1b2' } });
     g.send('dev1', { type: 'snapshot.request' });
     await flush();
     const got = g.got('dev1');
@@ -1900,8 +1900,8 @@ describe('phone gateway: no teams, no tasks (lot 1)', () => {
     g.send('dev1', { type: 'snapshot.request' });
     await flush();
     const before = g.got('dev1').length;
-    g.gw.forward({ type: 'team.updated', team: { id: 'team-a1b2', name: 'x', project: 'repo', machine: 'local', cwd: '/w/repo', state: 'resting', seats: [], createdAt: T0, updatedAt: T0 } } as ServerMessage);
-    g.gw.forward({ type: 'task.updated', task: { id: 't000005', title: 't', giver: 'ledge', giverName: 'Ledge', owner: 'a', ownerName: 'a', state: 'taken', at: T0, updatedAt: T0, log: [] } } as ServerMessage);
+    g.gw.forward({ type: 'team.updated', team: { id: 'team-a1b2', name: 'x', project: 'repo', machine: 'local', cwd: '/w/repo', state: 'resting', seats: [], createdAt: T0, updatedAt: T0 } } as unknown as ServerMessage);
+    g.gw.forward({ type: 'task.updated', task: { id: 't000005', title: 't', giver: 'ledge', giverName: 'Ledge', owner: 'a', ownerName: 'a', state: 'taken', at: T0, updatedAt: T0, log: [] } } as unknown as ServerMessage);
     await flush();
     expect(g.got('dev1').slice(before)).toEqual([]);
   });

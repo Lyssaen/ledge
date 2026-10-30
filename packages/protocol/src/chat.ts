@@ -63,7 +63,7 @@ export const DETAIL_MAX = 4000;
  *  wire, so a code a front does not know yet reads as `failed`. */
 export const ACTION_ERROR_CODES = [
   'unknown', 'ambiguous', 'read_only', 'exited', 'running', 'archived', 'not_archived', 'no_terminal', 'same_model', 'no_request',
-  'in_session', 'no_note', 'closed',
+  'in_session', 'no_note',
   'changed', 'cut', 'failed'
 ] as const;
 export type ActionErrorCode = (typeof ACTION_ERROR_CODES)[number];

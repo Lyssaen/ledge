@@ -12,7 +12,6 @@ const OPERATIONS: ReadonlySet<string> = new Set(['session.launch', 'session.rela
 /** How long an `ask.answer` waits for its `ask.result`. */
 const ANSWER_MS = 4000;
 /** What older daemons still send about the teams, roles and tasks Ledge dropped: those messages end here. */
-const REMOVED_MESSAGES: ReadonlySet<string> = new Set(['teams', 'team.updated', 'task.updated', 'task.result', 'team.launched', 'team.failed', 'team.changed', 'team.saved', 'roles.listing', 'definitions.listing', 'definition.result']);
 type PendingRoute = { qid: string; text: string; tool?: Tool; images?: ImageUpload[]; coordinator: string };
 
 export interface FleetOptions {
@@ -216,8 +215,6 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     if (m.type === 'ask.result') { const a = askAnswers.get(m.rid); if (a?.machine === machine) a.settle(m.ask ? { ok: true } : { ok: false, reason: m.reason ?? 'refusée' }); return; }
     // A daemon that does not know `ask.answer` says so: the answer was not taken.
     if (m.type === 'error' && m.request === 'ask.answer') { for (const a of [...askAnswers.values()]) if (a.machine === machine) a.settle({ ok: false, reason: m.message }); return; }
-    // What older Ledge daemons still send about teams, roles and tasks (removed, spec 2026-10-30 §7): ignored, never relayed.
-    if (REMOVED_MESSAGES.has(m.type)) return;
     // Mobile access is the local daemon's alone (its relay session and approved devices): a remote machine's is ignored.
     if (m.type === 'mobile') {
       if (machine !== 'local') return;

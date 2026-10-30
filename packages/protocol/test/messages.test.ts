@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseClientMessage, parseServerMessage, ServerMessageSchema, SessionSchema, SessionEventSchema, PROTOCOL_PORT, NAMES, pickName, ThreadItemSchema, offers, NOTE_NOT_TYPED, isArchived, ChatTurnSchema, RefusalCodeSchema } from '../src/index.js';
+import { parseClientMessage, parseServerMessage, ServerMessageSchema, SessionSchema, SessionEventSchema, PROTOCOL_PORT, NAMES, pickName, ThreadItemSchema, offers, NOTE_NOT_TYPED, isArchived, ChatTurnSchema, RefusalCodeSchema, ClientMessageSchema, DaemonInfoSchema } from '../src/index.js';
 
 const T0 = '2026-10-09T18:02:00.000Z';
 
@@ -559,5 +559,24 @@ describe('chat.done without team or tasks', () => {
   it('a chat.done with an old team or tasks field parses, without them', () => {
     const r = ServerMessageSchema.parse({ type: 'chat.done', qid: 'q', text: 't', at: T0, team: { name: 'x' }, tasks: [{ to: 'a', title: 'b' }] });
     expect(r).not.toHaveProperty('team'); expect(r).not.toHaveProperty('tasks');
+  });
+
+  it('no client or server message type is about teams, roles, templates, definitions or Ledge tasks', () => {
+    const all = [...ClientMessageSchema.options, ...ServerMessageSchema.options].map(o => o.shape.type.value as string);
+    expect(all.filter(t => /^(team|teams|role|roles|template|definition|definitions|task)\b/.test(t))).toEqual([]);
+  });
+  it('SessionSchema strips role, roleLabel and team from an old record', () => {
+    const s = SessionSchema.parse({ ...session, role: 'dev', roleLabel: 'Dev', team: 'team-ab12' });
+    expect(s).not.toHaveProperty('role'); expect(s).not.toHaveProperty('roleLabel'); expect(s).not.toHaveProperty('team');
+  });
+  it('session.launch drops role and team; DaemonInfo drops teams and keeps asks', () => {
+    const l = parseClientMessage({ type: 'session.launch', tool: 'claude', cwd: '/w', role: 'build', team: 'team-ab12' });
+    expect(l).not.toHaveProperty('role'); expect(l).not.toHaveProperty('team');
+    expect(DaemonInfoSchema.parse({ version: '1', install: 'npm', systemd: true, teams: true, asks: true })).toEqual(expect.objectContaining({ asks: true }));
+    expect(DaemonInfoSchema.parse({ version: '1', install: 'npm', systemd: true, teams: true })).not.toHaveProperty('teams');
+  });
+  it('a notice drops task, team and taskOp from an old record', () => {
+    const n = ThreadItemSchema.parse({ kind: 'notice', id: 'n1', at: T0, turn: 1, notice: 'other', text: 'x', task: 't1', team: 'team-a', taskOp: 'give', outgoing: true });
+    expect(n).not.toHaveProperty('task'); expect(n).not.toHaveProperty('team'); expect(n).not.toHaveProperty('taskOp'); expect(n).not.toHaveProperty('outgoing');
   });
 });

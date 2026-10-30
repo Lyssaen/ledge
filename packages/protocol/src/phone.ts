@@ -300,9 +300,6 @@ export const PhoneModelChoiceSchema = z.object({
   efforts: z.array(EffortSchema).max(8).optional(), defaultEffort: EffortSchema.optional(), isDefault: z.boolean().optional()
 }).strict();
 export type PhoneModelChoice = z.infer<typeof PhoneModelChoiceSchema>;
-/** What a composition did to one seat's model, as the phone reads it. */
-export const PhoneSeatModelSchema = z.object({ role: z.string().max(40), session: sessionId, status: z.enum(['applied', 'scheduled', 'refused']), reason: ModelRefusalSchema.optional() });
-export type PhoneSeatModel = z.infer<typeof PhoneSeatModelSchema>;
 
 /** What the daemon sends a phone. */
 export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
@@ -323,7 +320,7 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
   /** `cut`: the ids of the items shortened; `more`: older items were left out. */
   z.object({ type: z.literal('session.thread'), id: z.string(), items: z.array(ThreadItemSchema), cut: z.array(z.string()), more: z.boolean() }),
   z.object({ type: z.literal('session.thread.item'), id: z.string(), item: ThreadItemSchema, cut: z.literal(true).optional() }),
-  z.object({ type: z.literal('operation.result'), op: OperationIdSchema, status: OperationStatusSchema, reason: OperationReasonSchema.optional(), models: z.array(PhoneSeatModelSchema).max(16).optional(),
+  z.object({ type: z.literal('operation.result'), op: OperationIdSchema, status: OperationStatusSchema, reason: OperationReasonSchema.optional(),
     /** How an applied `session.close` ended the agent: `killed` when it had to be forced. */ how: CloseHowSchema.optional() }),
   /** The models an agent offers; `error`: it could not be asked, `models` is then what Ledge knows without it. */
   z.object({ type: z.literal('models.listing'), tool: ToolSchema, models: z.array(PhoneModelChoiceSchema).max(40), error: z.literal(true).optional() }),

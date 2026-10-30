@@ -1,6 +1,6 @@
 // The phone's own operations (a decision, a reply, an interrupt): each named by a uuid it made, so sending it again
 // after a lost connection is recognised by the PC, which replays the result it already gave.
-import { OperationReasonSchema, PhoneClientMessageSchema, type CloseHow, type OperationReason, type PhoneClientMessage, type PhoneSeatModel } from '@ledge/protocol';
+import { OperationReasonSchema, PhoneClientMessageSchema, type CloseHow, type OperationReason, type PhoneClientMessage } from '@ledge/protocol';
 import { z } from 'zod';
 import { localStore } from './storage';
 
@@ -19,8 +19,6 @@ export interface Op {
   message: OpMessage;
   phase: OpPhase;
   reason?: OperationReason;
-  /** What a composition did to each seat's model, from the PC's result. */
-  models?: PhoneSeatModel[];
   /** How an applied `session.close` ended the agent. */
   how?: CloseHow;
   /** A `session.close` or `session.resume`: the session's `startedAt` (the PC's) when it was sent. A new one says it was started again since. */

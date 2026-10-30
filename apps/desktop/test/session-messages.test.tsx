@@ -208,10 +208,10 @@ describe('messages between agents in the thread', () => {
   });
 
   it('a notice of a task from before the removal stays a readable line: its summary, no TÂCHE kicker, no link to a task', async () => {
-    await openOtto([
+    await openOtto(([
       { kind: 'notice', id: 'task-t1-0', at: at(0), turn: 1, notice: 'other', task: 't1', taskOp: 'give', outgoing: true, name: 'nova', peer: 'nova', summary: 'Relire le reducer', text: 'Tâche « Relire le reducer » confiée à Nova' },
       { kind: 'notice', id: 'notice-2-0', at: at(1), turn: 1, notice: 'other', task: 't2', name: 'Max', summary: 'Lance les tests', text: 'Tâche de Max : « Lance les tests »' }
-    ]);
+    ] as unknown) as ThreadItem[]);
     const out = (await thread().findByText('Relire le reducer')).closest<HTMLElement>('[data-notice="task-t1-0"]')!;
     expect(out).toHaveTextContent('Avis automatique');
     expect(out).not.toHaveTextContent('TÂCHE');

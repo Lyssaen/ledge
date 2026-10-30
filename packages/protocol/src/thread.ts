@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { TRANSMISSION_OPS } from './tasks.js';
 import { AttachmentRefSchema } from './attachments.js';
 
 /** Native session tracking (spec 2026-10-13 §3): what a session's thread is made of. */
@@ -33,11 +32,6 @@ export const ThreadItemSchema = z.discriminatedUnion('kind', [
    *  about as quoted, `peer` its Ledge session id; a delivery notice says the outcome of `count` messages to `recipients`. */
   z.object({
     kind: z.literal('notice'), ...base, notice: z.enum(['idle', 'exited', 'unavailable', 'expired', 'delivery', 'other']),
-    /** An `other` notice from Ledge: `task`, the task a `<ledge-task>` is about; `team`, the team a `<ledge-notice team>` seated the
-     *  session in (roles spec §3.3). An older front, which knows neither, shows it as any other notice. */
-    task: z.string().optional(), team: z.string().optional(),
-    /** A task this session handed over (`outgoing`), and how (issue #92). */
-    taskOp: z.enum(TRANSMISSION_OPS).optional(), outgoing: z.literal(true).optional(),
     name: z.string().optional(), peer: z.string().optional(), time: z.string().optional(), summary: z.string().optional(),
     status: z.enum(['held', 'denied', 'expired', 'delivered', 'refused', 'dropped', 'unknown']).optional(),
     count: z.number().int().positive().optional(), recipients: z.array(z.string()).optional(), reason: z.string().optional(), text: z.string()

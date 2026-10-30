@@ -509,6 +509,16 @@ describe('messages through the Ledge mailbox', () => {
     expect(item).not.toHaveProperty('task');
   });
 
+  it('an old journal notice with task/team/taskOp loads, without them', async () => {
+    mkdirSync(join(dir, 'history'), { recursive: true });
+    const old = { kind: 'notice', id: 'n1', at: '2026-10-09T18:00:00.000Z', turn: 1, notice: 'other', text: 'Tâche', task: 't1a2b3c', team: 'team-a1b2', taskOp: 'give', outgoing: true };
+    writeFileSync(join(dir, 'history', 'old.jsonl'), JSON.stringify(old) + '\n');
+    const h = new History(); await h.load();
+    const [item] = h.items('old');
+    expect(item).toMatchObject({ kind: 'notice', id: 'n1', text: 'Tâche' });
+    for (const k of ['task', 'team', 'taskOp', 'outgoing']) expect(item).not.toHaveProperty(k);
+  });
+
   it('a <ledge-answer> prompt becomes an `other` notice, not a user prompt', () => {
     const h = new History({ peerOf });
     h.record('fce8', ev('UserPromptSubmit', { text: formatLedgeAnswer({ id: 'a1b2c3d', question: 'Quelle base ?', text: 'SQLite' }) }, 1));

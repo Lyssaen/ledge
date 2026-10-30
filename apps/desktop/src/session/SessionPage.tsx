@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent } from 'react';
 import type { DaemonClient } from '@ledge/fleet';
-import { contextShare, isArchived, type Helper, type Session, type ThreadItem, taskClosed, latestTodos } from '@ledge/protocol';
+import { contextShare, isArchived, type Helper, type Session, type ThreadItem, latestTodos } from '@ledge/protocol';
 import { Icon } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import type { Decisions } from '../fleet/decisions';

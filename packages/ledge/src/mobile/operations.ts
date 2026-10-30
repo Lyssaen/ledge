@@ -1,13 +1,13 @@
 // Makes a phone's writes idempotent: an operation id (a uuid the phone picks) runs once, and a retry gets the stored outcome.
 // In memory only, so a daemon restart forgets every operation.
-import { type CloseHow, type OperationReason, type OperationStatus, type PhoneClientMessage, type PhoneSeatModel } from '@ledge/protocol';
+import { type CloseHow, type OperationReason, type OperationStatus, type PhoneClientMessage } from '@ledge/protocol';
 
 export type PhoneOperation = Extract<PhoneClientMessage, { op: string }>;
 
-/** What an operation came to: the answer the phone gets. `models`: what a composition did to its seats' models (#58); `how`: how a `session.close` ended the agent. */
-export type Outcome = { status: Extract<OperationStatus, 'applied' | 'rejected' | 'failed'>; reason?: OperationReason; models?: PhoneSeatModel[]; how?: CloseHow };
+/** What an operation came to: the answer the phone gets. `how`: how a `session.close` ended the agent. */
+export type Outcome = { status: Extract<OperationStatus, 'applied' | 'rejected' | 'failed'>; reason?: OperationReason; how?: CloseHow };
 
-export interface OperationRecord { op: string; owner: string; fingerprint: string; status: OperationStatus; reason?: OperationReason; models?: PhoneSeatModel[]; how?: CloseHow; at: number }
+export interface OperationRecord { op: string; owner: string; fingerprint: string; status: OperationStatus; reason?: OperationReason; how?: CloseHow; at: number }
 
 export type BeginResult = { kind: 'fresh' | 'replay'; record: OperationRecord } | { kind: 'conflict' };
 
@@ -49,12 +49,11 @@ export class OperationRegistry {
   }
 
   /** An operation already forgotten (expired) is left forgotten. */
-  finish(op: string, status: OperationStatus, reason?: OperationReason, models?: PhoneSeatModel[], how?: CloseHow): void {
+  finish(op: string, status: OperationStatus, reason?: OperationReason, how?: CloseHow): void {
     const r = this.records.get(op);
     if (!r) return;
     r.status = status;
     if (reason) r.reason = reason; else delete r.reason;
-    if (models) r.models = models; else delete r.models;
     if (how) r.how = how; else delete r.how;
   }
 

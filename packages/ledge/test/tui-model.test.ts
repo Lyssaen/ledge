@@ -202,14 +202,6 @@ describe('tui thread', () => {
     expect([took(8_400, ','), took(12_300, ','), took(64_000, ','), took(8_400, '.'), took(7_380_000, ',')]).toEqual(['8,4 s', '12 s', '1 min 04', '8.4 s', '2 h 03']);
   });
 
-  it('prints the card of a task the session handed over, by its plain line (#92)', () => {
-    const card: ThreadItem = { kind: 'notice', id: 'task-t1-0', at: at(6), turn: 2, notice: 'other', task: 't1', taskOp: 'give', outgoing: true, name: 'Nova', summary: 'Relire', text: 'Tâche « Relire » confiée à Nova' };
-    const incoming: ThreadItem = { kind: 'notice', id: 'n2', at: at(7), turn: 2, notice: 'other', task: 't2', name: 'Otto', summary: 'Tâche de Otto', text: '<ledge-task …>' };
-    const lines = text(threadLines([...items, card, incoming], o));
-    expect(lines).toContain('  · Tâche « Relire » confiée à Nova');
-    expect(lines).toContain('  · Tâche de Otto');
-  });
-
   it('unfolds every turn and shows the diffs on demand', () => {
     const lines = text(threadLines(items, { ...o, unfolded: true, diffs: true }));
     expect(lines.find(l => l.includes('SessionList.tsx'))).toContain('+2 −1');
