@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { mkdtempSync, mkdirSync, symlinkSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 // @ts-expect-error plain ESM script without types
@@ -93,5 +93,24 @@ describe('fix round 1', () => {
   });
   it('parseSse accepts CRLF', () => {
     expect(parseSse('id: 1\r\ndata: {"type":"a"}\r\n\r\n').events).toEqual([{ id: 1, type: 'a', data: { type: 'a' } }]);
+  });
+});
+
+describe('fix round 2', () => {
+  it('resolves through the nearest existing ancestor (symlinked parent, dangling link)', () => {
+    const d = mkdtempSync(join(tmpdir(), 'openrig-qa-fix2-'));
+    try {
+      mkdirSync(join(d, 'real', '.openrig'), { recursive: true });
+      symlinkSync(join(d, 'real', '.openrig'), join(d, 'link'));
+      symlinkSync(join(d, 'real', '.openrig', 'gone'), join(d, 'openrig-qa-dangling'));
+      const realHome = join(d, 'real');
+      expect(() => assertSafeTarget({ home: join(d, 'link', 'openrig-qa-new'), port: 7512, realHome })).toThrow(/refused: home/);
+      expect(() => assertSafeTarget({ home: join(d, 'openrig-qa-dangling'), port: 7512, realHome })).toThrow(/refused: home/);
+      expect(() => assertSafeTarget({ home: join(d, 'openrig-qa-ok', 'x'), port: 7512, realHome })).toThrow(/refused: home/);
+      expect(() => assertSafeTarget({ home: join(d, 'openrig-qa-ok'), port: 7512, realHome })).not.toThrow();
+    } finally { rmSync(d, { recursive: true, force: true }); }
+  });
+  it('defaults realHome to the real home directory', () => {
+    expect(() => assertSafeTarget({ home: join(homedir(), '.openrig'), port: 7512 } as never)).toThrow(/refused: home/);
   });
 });

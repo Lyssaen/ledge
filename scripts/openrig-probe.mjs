@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // Probe of a throwaway OpenRig daemon. This file holds the pure building blocks; the driver comes later.
 // It never targets ~/.openrig or port 7433: assertSafeTarget refuses both.
-import { existsSync, realpathSync } from 'node:fs';
+import { readlinkSync, realpathSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { basename, relative, resolve, isAbsolute, sep } from 'node:path';
+import { basename, dirname, relative, resolve, isAbsolute, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const RIG = 'ledge-probe';
@@ -13,7 +13,15 @@ const isUnder = (path, dir) => {
   const rel = relative(resolve(dir), resolve(path));
   return rel !== '' && rel !== '..' && !rel.startsWith('..' + sep) && !isAbsolute(rel);
 };
-const real = (p) => { const r = resolve(p); try { return existsSync(r) ? realpathSync(r) : r; } catch { return r; } };
+// Resolves symlinks through the nearest existing ancestor and re-appends the missing tail; follows dangling links.
+const real = (p, depth = 0) => {
+  const r = resolve(p);
+  if (depth > 20) return r;
+  try { return realpathSync(r); } catch { /* missing or dangling */ }
+  try { return real(resolve(dirname(r), readlinkSync(r)), depth + 1); } catch { /* not a link */ }
+  const up = dirname(r);
+  return up === r ? r : resolve(real(up, depth + 1), basename(r));
+};
 
 /** Environment of a probe command: no inherited OpenRig, Ledge or tmux identity, only the throwaway ones. */
 export function probeEnv(base, o) {
@@ -37,7 +45,8 @@ export function assertSafeTarget(o) {
   if (!Number.isInteger(port) || port < 1 || port > 65535) fail(`port ${o.port} is not a valid port`);
   if (port === 7433 || (o.userPort !== undefined && port === Number(o.userPort))) fail(`port ${port} belongs to the user's daemon`);
   const home = real(o.home);
-  if (o.realHome && (home === real(resolve(o.realHome, '.openrig')) || isUnder(home, real(resolve(o.realHome, '.openrig'))))) fail(`home ${o.home} is the user's ~/.openrig`);
+  const rig = real(resolve(o.realHome ?? homedir(), '.openrig'));
+  if (home === rig || isUnder(home, rig)) fail(`home ${o.home} is the user's ~/.openrig`);
   const roots = [tmpdir(), '/tmp'].map(real);
   if (!roots.some((r) => isUnder(home, r)) || !basename(home).startsWith('openrig-qa-')) {
     fail(`home ${o.home} is not a temp openrig-qa-* directory`);
