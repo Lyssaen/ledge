@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { ATTACHMENTS_MAX, ATTACHMENT_MAX, AttachmentDataSchema, AttachmentErrorSchema, AttachmentGetSchema, AttachmentIdSchema, AttachmentPutSchema, AttachmentRefSchema, AttachmentStoredSchema, ImageUploadSchema, b64Max } from './attachments.js';
 import { ContextPrefsSchema, HandoverStateSchema } from './handover.js';
 import { AutonomySchema, PendingSchema, SessionSchema, ToolSchema, type Tool } from './session.js';
-import { ActionVarsSchema, ChatActionStateSchema, ChatStepSchema, MAX_PROPOSALS } from './chat.js';
+import { ActionVarsSchema, ChatActionStateSchema, ChatStepSchema, MAX_PROPOSALS, type CloseHow } from './chat.js';
 import { ActionRiskSchema } from './actions.js';
 import { DecisionSchema, NOTE_MAX } from './decisions.js';
 import { ThreadItemSchema } from './thread.js';
@@ -119,9 +119,12 @@ export const PhoneSessionSchema = SwitchableSessionSchema.pick({
   /** Its role and its live team (ledge home spec §2.4): the agents screen groups a project's sessions by table. */
   role: true, roleLabel: true, team: true,
   /** Its context and its relief (context handover spec §3.2): the phone shows the gauge; the relief is started from the PC. */
-  context: true, relieves: true
+  context: true, relieves: true,
+  /** When it ended: « Terminée · à 18:42 » in the list. */
+  exitedAt: true
 }).extend({ pending: PhonePendingSchema.optional(), unread: z.boolean(), handover: z.object({ state: HandoverStateSchema, toName: z.string().max(80).optional() }).strict().optional(),
-  /** Absent: the agent has no checklist. */ checklist: PhoneChecklistSummarySchema.optional() });
+  /** Absent: the agent has no checklist. */ checklist: PhoneChecklistSummarySchema.optional(),
+  /** Started without Ledge (`hook_only`): the phone can neither close nor resume it. */ readOnly: z.literal(true).optional() });
 export type PhoneSession = z.infer<typeof PhoneSessionSchema>;
 
 /** Base64url without padding: what WebAuthn fields look like once the phone encodes them. */
@@ -170,10 +173,13 @@ export const PhoneChatRelaySchema = z.object({
 }).strict();
 export type PhoneChatRelay = z.infer<typeof PhoneChatRelaySchema>;
 
+/** How a close ended the agent: its exit command, or its terminal killed as a last resort. */
+export const CloseHowSchema = z.enum(['exit', 'killed'] as const satisfies readonly CloseHow[]);
+
 /** A session the card closes: no error text, `failed` says the last attempt did not work. */
 export const PhoneChatCloseSchema = z.object({
   id: z.string().min(1), name: z.string(), tool: ToolSchema,
-  how: z.enum(['exit', 'killed']).optional(), closedAt: z.string().datetime().optional(), failed: z.literal(true).optional()
+  how: CloseHowSchema.optional(), closedAt: z.string().datetime().optional(), failed: z.literal(true).optional()
 }).strict();
 export type PhoneChatClose = z.infer<typeof PhoneChatCloseSchema>;
 
@@ -268,7 +274,10 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   /** The session whose terminal the phone shows; null when it shows none. */
   z.object({ type: z.literal('session.watch'), id: sessionId.nullable() }),
   z.object({ type: z.literal('session.read'), id: sessionId, at: z.string().datetime() }),
-  /** Asks for a challenge. One object for both purposes: the gateway refuses a `decide` without `id` and `expect`. */
+  /**
+   * Asks for a challenge. One object for every purpose: the gateway refuses a `decide` without `id` and `expect`. A `close`
+   * or `act` names a turn of the chat (`qid`) or a session (`id`, for `session.close` and `session.resume`).
+   */
   z.object({ type: z.literal('confirm.prepare'), purpose: ConfirmPurposeSchema, id: sessionId.optional(), expect: PhoneExpectSchema.optional(), qid: OperationIdSchema.optional(),
     /** sha256 of the `define` or `team` operation the challenge is for (`teamsDigest`). */ digest: TeamsDigestSchema.optional(),
     /** A `pc` challenge: what it is for, and for an update the version it covers. */ action: PcActionSchema.optional(), version: z.string().regex(SEMVER).optional() }),
@@ -293,6 +302,10 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
     cancel: z.literal(true).optional(), expect: PhoneExpectSchema
   }),
   z.object({ type: z.literal('session.interrupt'), op: OperationIdSchema, id: sessionId }),
+  /** Ends a live session as `/exit` would, killed as a last resort; answered with its `how`. Passkey, purpose `close`, over the session. */
+  z.object({ type: z.literal('session.close'), op: OperationIdSchema, id: sessionId, assertion: AssertionSchema.optional() }),
+  /** Starts an ended session again on its conversation. Passkey, purpose `act`, over the session. */
+  z.object({ type: z.literal('session.resume'), op: OperationIdSchema, id: sessionId, assertion: AssertionSchema.optional() }),
   /** Changes a live session's model and effort, `null` for the agent's own default; answered by `operation.result` and, when refused, `session.model.failed`. */
   z.object({ type: z.literal('session.model'), op: OperationIdSchema, id: sessionId, model: ModelIdSchema.nullable(), effort: EffortSchema.nullable() }),
   /** The models an agent offers on the PC. */
@@ -368,7 +381,8 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('snapshot'), protocol: z.literal(PHONE_PROTOCOL), sessions: z.array(PhoneSessionSchema), capabilities: CapabilitiesByToolSchema, daemon: z.object({ version: z.string(), name: z.string().max(40), boot: z.string().uuid().optional(), teams: z.literal(true).optional(),
     /** The daemon takes `session.model`. */ models: z.literal(true).optional(),
     /** The daemon sends `session.checklist` and a session's `checklist` summary. */ checklist: z.literal(true).optional(),
-    /** `update`: the daemon can install a version and restart (npm, systemd); `restart`: it can restart (systemd). */ update: z.literal(true).optional(), restart: z.literal(true).optional() }), device: z.object({ confirm: z.boolean(), push: z.enum(['on', 'off', 'stale', 'unavailable']).optional(), chat: z.literal(true).optional(), contextNear: ContextPrefsSchema.shape.near.optional() }).optional() }),
+    /** `update`: the daemon can install a version and restart (npm, systemd); `restart`: it can restart (systemd). */ update: z.literal(true).optional(), restart: z.literal(true).optional(),
+    /** The daemon takes `session.close` and `session.resume`. */ sessionClose: z.literal(true).optional() }), device: z.object({ confirm: z.boolean(), push: z.enum(['on', 'off', 'stale', 'unavailable']).optional(), chat: z.literal(true).optional(), contextNear: ContextPrefsSchema.shape.near.optional() }).optional() }),
   z.object({ type: z.literal('confirm.challenge'), purpose: ConfirmPurposeSchema, challenge: B64U.max(64), rpId: z.string().max(253), credentialId: B64U.max(1_366).optional(), expiresInMs: z.number().int().positive(),
     /** Echoed from the `confirm.prepare` of a `define` or `team` challenge, so the phone matches each challenge to its own call. Absent from an older gateway. */ digest: TeamsDigestSchema.optional() }),
   z.object({ type: z.literal('session.updated'), session: PhoneSessionSchema }),
@@ -381,7 +395,8 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
   /** `cut`: the ids of the items shortened; `more`: older items were left out. */
   z.object({ type: z.literal('session.thread'), id: z.string(), items: z.array(ThreadItemSchema), cut: z.array(z.string()), more: z.boolean() }),
   z.object({ type: z.literal('session.thread.item'), id: z.string(), item: ThreadItemSchema, cut: z.literal(true).optional() }),
-  z.object({ type: z.literal('operation.result'), op: OperationIdSchema, status: OperationStatusSchema, reason: OperationReasonSchema.optional(), models: z.array(PhoneSeatModelSchema).max(16).optional() }),
+  z.object({ type: z.literal('operation.result'), op: OperationIdSchema, status: OperationStatusSchema, reason: OperationReasonSchema.optional(), models: z.array(PhoneSeatModelSchema).max(16).optional(),
+    /** How an applied `session.close` ended the agent: `killed` when it had to be forced. */ how: CloseHowSchema.optional() }),
   /** The models an agent offers; `error`: it could not be asked, `models` is then what Ledge knows without it. */
   z.object({ type: z.literal('models.listing'), tool: ToolSchema, models: z.array(PhoneModelChoiceSchema).max(40), error: z.literal(true).optional() }),
   /** A model change that was accepted and then failed (the agent could not restart). */

@@ -25,6 +25,8 @@ export interface AgentRow {
   role?: string;
   /** Its checklist's progress, from the daemon that sends them. */
   progress?: { done: number; total: number; current?: string };
+  /** When an ended session ended, said next to « Terminée ». */
+  endedAt?: string;
 }
 
 function statusOf(s: PhoneSession, pending: InboxItem | undefined): AgentRow['status'] {
@@ -78,7 +80,8 @@ export function agentsOf(sessions: PhoneSession[]): Array<{ label: string; rows:
         sessionId: s.id, task: s.topic ?? s.project, botName: s.name, tool: s.tool,
         ...(s.branch ? { branch: s.branch } : {}), ...(s.worktree ? { worktree: true } : {}),
         last: lastOf(s, pending), status: statusOf(s, pending), unread: s.unread, ...(s.role ? { role: s.role } : {}),
-        ...(pending ? { pending } : {}), ...(s.checklist ? { progress: s.checklist } : {})
+        ...(pending ? { pending } : {}), ...(s.checklist ? { progress: s.checklist } : {}),
+        ...(s.state === 'exited' && s.exitedAt ? { endedAt: s.exitedAt } : {})
       };
     })
   }));

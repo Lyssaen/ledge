@@ -111,6 +111,11 @@ export function createPhoneGateway(deps: {
   contextNear?: () => number;
   /** The daemon takes `session.model` with coded answers and lists an agent's models (#58): the phone offers the switch. */
   models?: true;
+  /**
+   * Ends a live session as the chat's close cards do (its exit command, a kill as a last resort), sharing a close already under
+   * way. With it the phone offers « Fermer » and « Reprendre » on a session's page; it rejects with the daemon's refusal.
+   */
+  closeSession?: (id: string) => Promise<{ how: CloseHow }>;
 }): PhoneGateway {
   const { mobile, log } = deps;
   /** The read mark of a session no device marked: what was replied before the gateway started counts as read. */
@@ -191,7 +196,7 @@ export function createPhoneGateway(deps: {
     const f = followers.get(deviceId);
     if (f) f.pushStatus = push;
     const message: Extract<PhoneServerMessage, { type: 'snapshot' }> = {
-    type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, boot: deps.boot, name: clip(hostname(), 40).text, ...(teamsOps ? { teams: true as const } : {}), ...(deps.pc?.canUpdate ? { update: true as const } : {}), ...(deps.pc?.canRestart ? { restart: true as const } : {}), checklist: true as const },
+    type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, boot: deps.boot, name: clip(hostname(), 40).text, ...(teamsOps ? { teams: true as const } : {}), ...(deps.pc?.canUpdate ? { update: true as const } : {}), ...(deps.pc?.canRestart ? { restart: true as const } : {}), checklist: true as const, ...(deps.closeSession ? { sessionClose: true as const } : {}) },
     device: { confirm: deps.credential(deviceId) !== null, push, ...(deps.chats ? { chat: true as const } : {}), ...(deps.contextNear ? { contextNear: deps.contextNear() } : {}) }
     };
     // The daemon takes `session.model` and lists an agent's models (#58).
@@ -244,14 +249,14 @@ export function createPhoneGateway(deps: {
     const s = live(m.id);
     if (reason.success && s) modelFailures.set(m.id, { reason: reason.data, model: s.model, effort: s.effort });
   };
-  const result = (deviceId: string, op: string, status: OperationStatus, reason?: OperationReason, models?: PhoneSeatModel[]) => {
+  const result = (deviceId: string, op: string, status: OperationStatus, reason?: OperationReason, models?: PhoneSeatModel[], how?: CloseHow) => {
     // A device revoked while its operation ran hears nothing more.
     if (stopped || !approved(deviceId)) return;
-    push(deviceId, { type: 'operation.result', op, status, ...(reason ? { reason } : {}), ...(models ? { models } : {}) });
+    push(deviceId, { type: 'operation.result', op, status, ...(reason ? { reason } : {}), ...(models ? { models } : {}), ...(how ? { how } : {}) });
   };
 
   /** The operations that act on a tracked session: the registry's own, the credential's, the device's and the chat's are handled before it. */
-  type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.launch' | 'chat.close' | 'chat.act' | 'chat.ignore' | 'chat.team' | 'chat.task' | 'team.resume' | 'task.seen' | 'daemon.update' | 'daemon.restart' | (typeof TEAMS_OPERATION_TYPES)[number] }>;
+  type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.launch' | 'chat.close' | 'chat.act' | 'chat.ignore' | 'chat.team' | 'chat.task' | 'team.resume' | 'task.seen' | 'daemon.update' | 'daemon.restart' | 'session.close' | 'session.resume' | (typeof TEAMS_OPERATION_TYPES)[number] }>;
   /** Whether the operation needs the device's own check: an accept of a request that is not low, or a reply to an OMP (rpc) dialog, which is never low. */
   const needsAssertion = (msg: SessionOperation, s: Session): boolean => {
     if (msg.type === 'session.decide') return msg.decision !== 'deny' && riskOf(s)?.risk !== 'low';
@@ -469,6 +474,45 @@ export function createPhoneGateway(deps: {
     }
   };
 
+  /** What a challenge over a session is bound to (`session.close`, `session.resume`): never a turn's qid, whatever the session's id. */
+  const sessionSubject = (id: string) => `session:${id}`;
+
+  /**
+   * « Fermer » and « Reprendre » on a session's page: what the phone was shown is checked before the challenge is spent, then the
+   * device's check over the session. The close is the cards' own (`closeSession`), the resume the local `session.resume`.
+   */
+  const sessionEnd = async (deviceId: string, msg: Extract<PhoneOperation, { type: 'session.close' | 'session.resume' }>): Promise<Outcome> => {
+    const close = deps.closeSession;
+    if (!close) return { status: 'rejected', reason: 'unavailable' };
+    const closing = msg.type === 'session.close';
+    const s = live(msg.id);
+    if (!s) return { status: 'rejected', reason: 'unknown_session' };
+    if (s.source === 'hook_only') return { status: 'rejected', reason: 'read_only' };
+    if (closing && s.state === 'exited') return { status: 'rejected', reason: 'ended' };
+    if (!closing && s.state !== 'exited') return { status: 'rejected', reason: 'busy' };
+    if (deps.credential(deviceId) === null) return { status: 'rejected', reason: 'confirm_required' };
+    const refused = checkAssertion(deviceId, msg.assertion, closing ? 'close' : 'act', sessionSubject(msg.id));
+    if (refused) return refused;
+    if (!closing) {
+      let error: { code?: string } | undefined;
+      await deps.dispatch({ type: 'session.resume', id: msg.id }, m => { if (m.type === 'error' && m.request === 'session.resume') error ??= { code: m.code }; });
+      if (!error) return { status: 'applied' };
+      return error.code === 'no_conversation' ? { status: 'rejected', reason: 'no_conversation' } : outcomeOf(error.code);
+    }
+    try {
+      const { how } = await close(msg.id);
+      log(`phone: device ${deviceId} closed ${msg.id} (${how})`);
+      return { status: 'applied', how };
+    } catch (e) {
+      // Ended meanwhile, by the PC or by the agent itself: what the phone asked for is done.
+      if (live(msg.id)?.state === 'exited') return { status: 'rejected', reason: 'ended' };
+      const code = RefusalCodeSchema.safeParse(e instanceof Error ? (e as Error & { code?: unknown }).code : undefined);
+      if (code.success) return { status: 'rejected', reason: code.data };
+      log(`phone session.close failed (${e instanceof Error ? e.name : 'error'})`);
+      return { status: 'failed' };
+    }
+  };
+
   /**
    * Dispatches a local message and reads its answer: `ok` says which answers mean applied (true), failed (false) or what else
    * (an outcome). An `error` is a refusal by its code (`opts.error` when the caller says what it always means); no answer at all is
@@ -605,6 +649,7 @@ export function createPhoneGateway(deps: {
     if (msg.type === 'chat.launch') return chatLaunch(deviceId, msg);
     if (msg.type === 'chat.close') return chatClose(deviceId, msg);
     if (msg.type === 'chat.act') return chatAct(deviceId, msg);
+    if (msg.type === 'session.close' || msg.type === 'session.resume') return sessionEnd(deviceId, msg);
     const refused = precheck(deviceId, msg);
     if (refused) return refused;
     const out = local(msg);
@@ -619,7 +664,7 @@ export function createPhoneGateway(deps: {
   const write = async (deviceId: string, msg: PhoneOperation) => {
     const begun = registry.begin(deviceId, msg.op, fingerprint(msg));
     if (begun.kind === 'conflict') return result(deviceId, msg.op, 'rejected', 'conflict');
-    if (begun.kind === 'replay') return result(deviceId, msg.op, begun.record.status, begun.record.reason, begun.record.models);
+    if (begun.kind === 'replay') return result(deviceId, msg.op, begun.record.status, begun.record.reason, begun.record.models, begun.record.how);
     let outcome: Outcome;
     try {
       result(deviceId, msg.op, 'received');
@@ -629,8 +674,8 @@ export function createPhoneGateway(deps: {
       log(`phone ${msg.type} failed (${e instanceof Error ? e.name : 'error'})`);
       outcome = { status: 'failed' };
     }
-    registry.finish(msg.op, outcome.status, outcome.reason, outcome.models);
-    result(deviceId, msg.op, outcome.status, outcome.reason, outcome.models);
+    registry.finish(msg.op, outcome.status, outcome.reason, outcome.models, outcome.how);
+    result(deviceId, msg.op, outcome.status, outcome.reason, outcome.models, outcome.how);
     // The phone learns it can confirm from the snapshot that follows.
     if (msg.type === 'credential.register' && outcome.status === 'applied' && approved(deviceId)) push(deviceId, snapshot(deviceId), 'snapshot');
     if (msg.type === 'device.forget' && outcome.status === 'applied') {
@@ -766,6 +811,15 @@ export function createPhoneGateway(deps: {
           const challenge = deps.challenges.issue({ deviceId, purpose: 'launch', subject: msg.qid });
           return push(deviceId, { type: 'confirm.challenge', purpose: 'launch', challenge, rpId: rp.rpId, credentialId: cred.id, expiresInMs: CHALLENGE_TTL_MS });
         }
+        // A session's own « Fermer » or « Reprendre »: bound to the session, for a daemon that takes them.
+        if ((msg.purpose === 'close' || msg.purpose === 'act') && msg.qid === undefined && msg.id !== undefined) {
+          if (!deps.closeSession) return invalid();
+          if (!live(msg.id)) return push(deviceId, { type: 'error', code: 'unknown_session', request: msg.type });
+          const cred = deps.credential(deviceId);
+          if (!cred || cred.rpId !== rp.rpId) return invalid();
+          const challenge = deps.challenges.issue({ deviceId, purpose: msg.purpose, subject: sessionSubject(msg.id) });
+          return push(deviceId, { type: 'confirm.challenge', purpose: msg.purpose, challenge, rpId: rp.rpId, credentialId: cred.id, expiresInMs: CHALLENGE_TTL_MS });
+        }
         if (msg.purpose === 'close') {
           if (msg.qid === undefined || !ownTurn(deviceId, msg.qid)) return invalid();
           const cred = deps.credential(deviceId);
@@ -835,7 +889,7 @@ export function createPhoneGateway(deps: {
       const op = OperationIdSchema.safeParse((raw as { op?: unknown } | null | undefined)?.op);
       // A model change the schema refuses (#58) is answered the same way.
       if (request === 'session.model' && op.success && approved(deviceId)) return push(deviceId, { type: 'operation.result', op: op.data, status: 'rejected', reason: 'invalid' });
-      if (((request !== undefined && (TEAMS_OPERATION_TYPES as readonly string[]).includes(request)) || request === 'push.subscribe' || request === 'chat.launch' || request === 'chat.close' || request === 'chat.act' || request === 'chat.ignore' || request === 'chat.team' || request === 'chat.task' || request === 'team.resume' || request === 'task.seen') && op.success && approved(deviceId)) return push(deviceId, { type: 'operation.result', op: op.data, status: 'rejected', reason: 'invalid' });
+      if (((request !== undefined && (TEAMS_OPERATION_TYPES as readonly string[]).includes(request)) || request === 'push.subscribe' || request === 'chat.launch' || request === 'chat.close' || request === 'chat.act' || request === 'chat.ignore' || request === 'chat.team' || request === 'chat.task' || request === 'team.resume' || request === 'task.seen' || request === 'session.close' || request === 'session.resume') && op.success && approved(deviceId)) return push(deviceId, { type: 'operation.result', op: op.data, status: 'rejected', reason: 'invalid' });
       return push(deviceId, { type: 'error', code: 'invalid', ...(request !== undefined ? { request } : {}) });
     }
     const msg = parsed.data;

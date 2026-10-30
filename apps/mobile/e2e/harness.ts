@@ -65,6 +65,11 @@ export interface FakeDaemon {
   closeCard: boolean;
   /** The `qid` of every close typed, in order. */
   closed: string[];
+  /** True: the snapshot says `daemon.sessionClose`, and the PC closes and resumes a session from its page. */
+  sessionClose: boolean;
+  /** The ids of the sessions closed, then resumed, from their page, in order. */
+  ended: string[];
+  resumed: string[];
   /** Replaces a session (or adds it) and tells the phone. */
   update(s: PhoneSession): Promise<void>;
   stop(): void;
@@ -75,7 +80,7 @@ function runDaemon(pc: FakePc): FakeDaemon {
   let seen = 0;
   let busy = false;
   const d: FakeDaemon = {
-    sessions: [waiting()], typed: [], answer: true, device: null, push: null, subscription: null, chat: false, hold: false, turns: [], launched: [], closeCard: false, closed: [],
+    sessions: [waiting()], typed: [], answer: true, device: null, push: null, subscription: null, chat: false, hold: false, turns: [], launched: [], closeCard: false, closed: [], sessionClose: false, ended: [], resumed: [],
     finishChat() { d.turns = d.turns.map((t) => (t.answer === undefined ? finished(t) : t)); },
     async update(s) {
       d.sessions = [...d.sessions.filter((x) => x.id !== s.id), s];
@@ -85,7 +90,7 @@ function runDaemon(pc: FakePc): FakeDaemon {
   };
   const snapshot = (): PhoneServerMessage => ({
     type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: d.sessions,
-    capabilities: { claude: CAPS, codex: CAPS, cursor: CAPS, omp: { freeTextAnswer: false } }, daemon: { version: '0.0.0-e2e', name: PC_NAME, boot },
+    capabilities: { claude: CAPS, codex: CAPS, cursor: CAPS, omp: { freeTextAnswer: false } }, daemon: { version: '0.0.0-e2e', name: PC_NAME, boot, ...(d.sessionClose ? { sessionClose: true as const } : {}) },
     ...(d.device || d.push || d.chat ? { device: { confirm: d.device ? d.device.registered : true, ...(d.push ? { push: d.push } : {}), ...(d.chat ? { chat: true as const } : {}) } } : {})
   });
   /** The scripted answer: short on purpose, a card is never cut (TOOL_TEXT_MAX). */
@@ -155,7 +160,7 @@ function runDaemon(pc: FakePc): FakeDaemon {
       return s && pc.send({ type: 'session.updated', session: s });
     }
     if (m.type === 'confirm.prepare') {
-      const r = d.device?.prepare(m, m.purpose === 'launch' || m.purpose === 'close' ? d.turns.some((t) => t.qid === m.qid) : d.sessions.some((x) => x.id === m.id));
+      const r = d.device?.prepare(m, m.qid ? d.turns.some((t) => t.qid === m.qid) : d.sessions.some((x) => x.id === m.id));
       if (r === undefined) return;
       return pc.send(typeof r === 'string' ? { type: 'error', code: r, request: m.type } : r);
     }
@@ -176,6 +181,23 @@ function runDaemon(pc: FakePc): FakeDaemon {
       d.push = 'off';
       await pc.send({ type: 'operation.result', op: m.op, status: 'applied' });
       return pc.send(snapshot());
+    }
+    if (m.type === 'session.close' || m.type === 'session.resume') {
+      // As the gateway: the session's state first, then the device check, which spends its challenge.
+      const s = d.sessions.find((x) => x.id === m.id);
+      const closing = m.type === 'session.close';
+      if (!d.sessionClose || !s) return pc.send({ type: 'operation.result', op: m.op, status: 'rejected', reason: 'unknown_session' });
+      if (closing === (s.state === 'exited')) return pc.send({ type: 'operation.result', op: m.op, status: 'rejected', reason: closing ? 'ended' : 'busy' });
+      const refused = d.device?.assertSession(m);
+      if (refused) return pc.send({ type: 'operation.result', op: m.op, status: 'rejected', reason: refused });
+      (closing ? d.ended : d.resumed).push(m.id);
+      const { pending: _gone, exitedAt: _was, ...rest } = s;
+      // As the daemon: a resume starts a new run, with a new `startedAt`; an end keeps it.
+      const after: PhoneSession = closing ? { ...rest, state: 'exited', exitedAt: new Date().toISOString() } : { ...rest, state: 'idle', startedAt: new Date().toISOString() };
+      d.sessions = d.sessions.map((x) => (x.id === m.id ? after : x));
+      await pc.send({ type: 'operation.result', op: m.op, status: 'received' });
+      await pc.send({ type: 'session.updated', session: after });
+      return pc.send({ type: 'operation.result', op: m.op, status: 'applied', ...(closing ? { how: 'exit' as const } : {}) });
     }
     if (m.type !== 'session.decide') return;
     if (d.typed.includes(m.op)) {

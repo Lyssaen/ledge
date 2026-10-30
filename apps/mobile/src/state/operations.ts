@@ -1,6 +1,6 @@
 // The phone's own operations (a decision, a reply, an interrupt): each named by a uuid it made, so sending it again
 // after a lost connection is recognised by the PC, which replays the result it already gave.
-import { OperationReasonSchema, PhoneClientMessageSchema, isTeamsOperation, type OperationReason, type PhoneClientMessage, type PhoneSeatModel } from '@ledge/protocol';
+import { OperationReasonSchema, PhoneClientMessageSchema, isTeamsOperation, type CloseHow, type OperationReason, type PhoneClientMessage, type PhoneSeatModel } from '@ledge/protocol';
 import { z } from 'zod';
 import { localStore } from './storage';
 
@@ -21,6 +21,10 @@ export interface Op {
   reason?: OperationReason;
   /** What a composition did to each seat's model, from the PC's result. */
   models?: PhoneSeatModel[];
+  /** How an applied `session.close` ended the agent. */
+  how?: CloseHow;
+  /** A `session.close` or `session.resume`: the session's `startedAt` (the PC's) when it was sent. A new one says it was started again since. */
+  startedAt?: string;
   /** When the phone first sent it. */
   at: string;
   /** The PC said `received` (or a final status): it may have applied the op. Absent on an op that never got that far. */
@@ -40,11 +44,11 @@ export const UNCERTAIN_MS = 10_000;
  * they carry the endpoint (a secret). A chat relay, launch or close: after a reload nothing leaves without a new gesture.
  * A role, template or live-team operation too: it carries a passkey assertion and a role's prompt. An update or a restart of
  * the PC's daemon: it carries an assertion, and a gesture made before a reload is not repeated after it. A model change too: a choice
- * made before a reload is not applied after it, on a session that may have moved on.
+ * made before a reload is not applied after it, on a session that may have moved on. A session's close or resume: an assertion too.
  */
 const isVolatile = (m: { type: string }) => m.type === 'push.subscribe' || m.type === 'push.unsubscribe' || m.type === 'chat.relay' || m.type === 'chat.launch' || m.type === 'chat.close'
   || m.type === 'chat.team' || m.type === 'chat.task' || m.type === 'team.resume' || m.type === 'task.seen' || isTeamsOperation(m)
-  || m.type === 'daemon.update' || m.type === 'daemon.restart' || m.type === 'session.model';
+  || m.type === 'daemon.update' || m.type === 'daemon.restart' || m.type === 'session.model' || m.type === 'session.close' || m.type === 'session.resume';
 
 export const isLive = (p: OpPhase) => p === 'sending' || p === 'uncertain';
 

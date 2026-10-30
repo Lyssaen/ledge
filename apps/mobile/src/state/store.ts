@@ -37,7 +37,7 @@ export interface MobileState {
    * `teams`: the PC serves the team catalog (absent from older daemons, and from 0.26.0, which serves it without saying so).
    * `update`: it can install a version and restart; `restart`: it can restart (both absent from daemons before 0.27.0).
    */
-  daemon: { version: string; name: string; boot?: string; teams?: true; models?: true; update?: true; restart?: true; checklist?: true } | null;
+  daemon: { version: string; name: string; boot?: string; teams?: true; models?: true; update?: true; restart?: true; checklist?: true; sessionClose?: true } | null;
   /** The models each agent offers on the PC, by tool, as `models.listing` said; kept for the link's life, reset when the PC boots again. `error`: the agent could not be asked. */
   models: Record<string, { models: PhoneModelChoice[]; error?: true }>;
   /** Why the last model change of a session failed after the PC accepted it, by session id. Kept until a new change is sent or the session's model or effort changes. */
@@ -65,6 +65,8 @@ export interface MobileState {
 export type PhoneExpect = Extract<PhoneClientMessage, { type: 'session.decide' }>['expect'];
 export type ConfirmChallenge = Extract<PhoneServerMessage, { type: 'confirm.challenge' }>;
 export type ConfirmRequest = { purpose: 'register' } | { purpose: 'decide'; id: string; expect: PhoneExpect } | { purpose: 'launch'; qid: string } | { purpose: 'close'; qid: string }
+  /** A session's own close (`session.close`) or resume (`session.resume`). */
+  | { purpose: 'close' | 'act'; id: string }
   | { purpose: 'define' | 'team'; digest: string } | { purpose: 'pc'; action: 'update'; version: string } | { purpose: 'pc'; action: 'restart' };
 
 type WithoutAuth<M> = M extends unknown ? Omit<M, 'op' | 'assertion'> : never;
@@ -135,6 +137,10 @@ export interface MobileStore {
   /** Registers the passkey with the PC. The op's id, or null when nothing was sent. */
   registerCredential(c: Credential): string | null;
   interrupt(id: string): string | null;
+  /** Closes the session (`session.close`) with the device's assertion over it. The op's id, or null when nothing was sent (not ready, a close already on its way). */
+  sessionClose(id: string, assertion: Assertion): string | null;
+  /** Starts the ended session again on its conversation (`session.resume`), as `sessionClose`. */
+  sessionResume(id: string, assertion: Assertion): string | null;
   /** Gives the PC this phone's push subscription and the VAPID key it was made with. The op's id, or null when nothing was sent. */
   pushSubscribe(subscription: PushSubscription, key: string): string | null;
   /** Asks the PC to stop notifying this phone. The op's id, or null when nothing was sent. */
@@ -503,7 +509,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         }
         stopTimer(m.op);
         const { reason: _old, ...rest } = o;
-        patchOp(m.op, () => ({ ...rest, received: true, ...(boot ? { boot } : {}), phase: m.status as Op['phase'], ...(m.reason ? { reason: m.reason } : {}), ...(m.models ? { models: m.models } : {}) }));
+        patchOp(m.op, () => ({ ...rest, received: true, ...(boot ? { boot } : {}), phase: m.status as Op['phase'], ...(m.reason ? { reason: m.reason } : {}), ...(m.models ? { models: m.models } : {}), ...(m.how ? { how: m.how } : {}) }));
         // The request changed under this answer: ask for the one there now, with its body.
         if (m.status === 'rejected' && m.reason === 'stale' && ready() && o.message.type.startsWith('session.') && 'id' in o.message && typeof o.message.id === 'string') send({ type: 'session.pending', id: o.message.id });
         return;
@@ -528,14 +534,15 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     }
   }
 
-  function write(build: (op: string) => OpMessage): string | null {
+  /** Sends an operation and keeps it; `keep` adds what the phone notes of it at the send. */
+  function write(build: (op: string) => OpMessage, keep: Pick<Op, 'startedAt'> = {}): string | null {
     if (closed || !ready()) return null;
     const parsed = PhoneClientMessageSchema.safeParse(build(newOperationId()));
     // A message the PC would refuse as invalid gets an error, not an operation result: it is never sent.
     if (!parsed.success || !('op' in parsed.data)) return null;
     const message = parsed.data as OpMessage;
     if (!isNew(state.ops, message, boot)) return null;
-    setOps({ ...state.ops, [message.op]: { op: message.op, message, phase: 'sending', at: new Date().toISOString() } });
+    setOps({ ...state.ops, [message.op]: { op: message.op, message, phase: 'sending', at: new Date().toISOString(), ...keep } });
     send(message);
     arm(message.op);
     return message.op;
@@ -759,6 +766,19 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     interrupt(id) {
       if (!state.sessions.has(id)) return null;
       return write(op => ({ type: 'session.interrupt', op, id }));
+    },
+
+    // Each keeps the session's `startedAt` as the PC gave it: a new one later says the session was started again since.
+    sessionClose(id, assertion) {
+      const s = state.sessions.get(id);
+      if (!s) return null;
+      return write(op => ({ type: 'session.close', op, id, assertion }), { startedAt: s.startedAt });
+    },
+
+    sessionResume(id, assertion) {
+      const s = state.sessions.get(id);
+      if (!s) return null;
+      return write(op => ({ type: 'session.resume', op, id, assertion }), { startedAt: s.startedAt });
     },
 
     pushSubscribe(subscription, key) {

@@ -329,6 +329,12 @@ export function createDeviceCheck(publicUrl: string) {
       if (m.purpose === 'register') {
         return { type: 'confirm.challenge', purpose: 'register', challenge: challenges.issue({ deviceId, purpose: 'register', subject: '' }), rpId: rp.rpId, expiresInMs: CHALLENGE_TTL_MS };
       }
+      // A session's own close or resume: bound to the session.
+      if ((m.purpose === 'close' || m.purpose === 'act') && !m.qid && m.id) {
+        if (!live) return 'unknown_session';
+        if (!credential || credential.rpId !== rp.rpId) return 'invalid';
+        return { type: 'confirm.challenge', purpose: m.purpose, challenge: challenges.issue({ deviceId, purpose: m.purpose, subject: `session:${m.id}` }), rpId: rp.rpId, credentialId: credential.id, expiresInMs: CHALLENGE_TTL_MS };
+      }
       if (m.purpose === 'launch' || m.purpose === 'close') {
         if (!m.qid) return 'invalid';
         if (!live) return 'invalid';
@@ -372,6 +378,19 @@ export function createDeviceCheck(publicUrl: string) {
       const challenge = challengeOf(m.assertion.clientDataJSON);
       if (challenge === null) return 'assertion_invalid';
       const verdict = challenges.consume(challenge, { deviceId, purpose: 'close', subject: m.qid });
+      if (verdict === 'expired') return 'assertion_expired';
+      if (verdict !== 'ok') return 'assertion_invalid';
+      const verified = verifyAssertion(m.assertion, credential, rp, challenge);
+      if (!verified.ok) return 'assertion_invalid';
+      credential = { ...credential, counter: verified.counter };
+      return undefined;
+    },
+    /** The assertion of a session's close (purpose `close`) or resume (`act`); undefined lets it through. The challenge is spent first. */
+    assertSession(m: Extract<PhoneClientMessage, { type: 'session.close' | 'session.resume' }>): Reason | undefined {
+      if (!credential || !rp || !m.assertion) return 'confirm_required';
+      const challenge = challengeOf(m.assertion.clientDataJSON);
+      if (challenge === null) return 'assertion_invalid';
+      const verdict = challenges.consume(challenge, { deviceId, purpose: m.type === 'session.close' ? 'close' : 'act', subject: `session:${m.id}` });
       if (verdict === 'expired') return 'assertion_expired';
       if (verdict !== 'ok') return 'assertion_invalid';
       const verified = verifyAssertion(m.assertion, credential, rp, challenge);

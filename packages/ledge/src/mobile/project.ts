@@ -81,7 +81,9 @@ export function toPhoneSession(s: Session, readAt: string, checklist?: PhoneChec
     startedAt: s.startedAt, lastActivityAt: s.lastActivityAt,
     // Topics are already cut to TOPIC_MAX where they are set; clipped again so no source can swell a snapshot.
     ...(s.topic !== undefined ? { topic: clip(s.topic, TOPIC_MAX).text } : {}),
-    ...pickSet(s, ['repo', 'branch', 'worktree', 'role', 'roleLabel', 'team', 'context', 'relieves']),
+    ...pickSet(s, ['repo', 'branch', 'worktree', 'role', 'roleLabel', 'team', 'context', 'relieves', 'exitedAt']),
+    // Known up front: the phone shows neither Close nor Resume for it, rather than learning it from a refusal.
+    ...(s.source === 'hook_only' ? { readOnly: true as const } : {}),
     // Its relief's state only (context handover spec §3.2): the phone shows it, the PC starts it.
     ...(s.handover ? { handover: { state: s.handover.state, ...(s.handover.toName ? { toName: s.handover.toName.slice(0, 80) } : {}) } } : {}),
     // Its model, effort and the change waiting for its next free moment (#58), cut to the bounds of a model id and an effort.

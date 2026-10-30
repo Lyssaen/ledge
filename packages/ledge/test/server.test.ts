@@ -1357,7 +1357,7 @@ describe('server', () => {
       const c = await resume('live');
       expect(await c.next('error')).toEqual({ type: 'error', id: 'live', message: 'the session is still running', request: 'session.resume', code: 'busy' });
       c.send({ type: 'session.resume', id: 'none' });
-      expect(await c.next('error')).toEqual({ type: 'error', id: 'none', message: 'no conversation to resume', request: 'session.resume' });
+      expect(await c.next('error')).toEqual({ type: 'error', id: 'none', message: 'no conversation to resume', request: 'session.resume', code: 'no_conversation' });
       c.send({ type: 'session.resume', id: 'cx' });
       expect(await c.next('error')).toMatchObject({ id: 'cx', message: 'no conversation to resume' });
       c.send({ type: 'session.resume', id: 'nope' });
@@ -2696,6 +2696,19 @@ describe('close a session', () => {
     expect(tmux.sent.at(-1)).toEqual(['kill', 'ledge-a']);
     expect(store.get('a')).toMatchObject({ state: 'exited' });
     expect(logged()).toMatch(/close of a: killed \(.+\)/);
+  });
+
+  it('a session its close had to kill resumes on its own conversation', async () => {
+    await closing({ 'ledge-a': ['> '] }, { leaves: false });
+    store.upsert(mk('a', { state: 'idle', cwd: tmpdir(), agentSessionId: 'u-1' }));
+    expect(await srv.closeSession('a')).toEqual({ how: 'killed' });
+    // The kill leaves the agent's conversation id: the resume continues it, not a new one.
+    expect(store.get('a')).toMatchObject({ state: 'exited', agentSessionId: 'u-1' });
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.resume', id: 'a' });
+    await until(() => tmux.created.length > 0, 3000);
+    expect(tmux.created.at(-1)!.command.slice(-2)).toEqual(['--resume', 'u-1']);
+    c.close();
   });
 
   it('kills without typing when the prompt is never freed', async () => {
