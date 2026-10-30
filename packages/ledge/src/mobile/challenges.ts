@@ -1,12 +1,13 @@
 import { randomBytes } from 'node:crypto';
+import type { ConfirmPurpose } from '@ledge/protocol';
 
 // Single-use challenges the daemon issues to a phone before it asks for a passkey assertion. Each challenge is bound
-// to one device, one purpose and one subject, and is consumed on first use. Imports only node:crypto, like webauthn.ts.
+// to one device, one purpose and one subject, and is consumed on first use. Imports only node:crypto (and a protocol type), like webauthn.ts.
 
 export const CHALLENGE_TTL_MS = 60_000;
 const MAX_OUTSTANDING = 1_000;
 
-export interface ChallengeBinding { deviceId: string; purpose: 'register' | 'decide' | 'launch' | 'close' | 'act' | 'define' | 'team' | 'pc'; subject: string }
+export interface ChallengeBinding { deviceId: string; purpose: ConfirmPurpose; subject: string }
 export type ChallengeVerdict = 'ok' | 'expired' | 'mismatch' | 'unknown';
 interface Pending { binding: ChallengeBinding; issuedAt: number; slot: string }
 

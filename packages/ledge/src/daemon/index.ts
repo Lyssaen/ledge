@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { writeFile, rm } from 'node:fs/promises';
 import { backendOf } from '@ledge/protocol';
 import { join } from 'node:path';
@@ -15,12 +16,20 @@ import { createDaemonUpdater, realUpdaterDeps } from '../update/run-update.js';
 import { ledgePeer, readPeers } from './peers.js';
 import { createMobileService, type MobileService } from '../mobile/service.js';
 import { fileJournal } from './mailbox.js';
-import { tasksJournal } from './tasks.js';
 import { asksJournal } from './asks.js';
-import { teamsJournal } from './teamsLive.js';
+
+/** What older Ledge versions left under the Ledge dir: never read, never removed, told once at startup (spec §7). */
+const OLD_TEAM_DATA = ['tasks.json', 'teams-live.json', 'teams', 'roles'] as const;
+export function logIgnoredTeamData(dir: string, log: (line: string) => void): void {
+  for (const name of OLD_TEAM_DATA) {
+    const path = join(dir, name);
+    if (existsSync(path)) log(`ignored ${path}: Ledge teams, roles and tasks were removed (2026-10-30-ledge-openrig-orchestrator-design §7)`);
+  }
+}
 
 export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket?: string } = {}): Promise<{ stop(): Promise<void>; port: number }> {
   await ensureLedgeDir();
+  logIgnoredTeamData(paths().dir, log);
   const store = new Store();
   const loaded = await store.load();
   const tmux = opts.tmux ?? realTmux(opts.tmuxSocket ?? 'ledge');
@@ -58,10 +67,8 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   try { mobile = await createMobileService(); }
   catch (e) { log(`mobile access not available: ${(e as Error).message}`); mobileUnavailable = (e as Error).message.slice(0, 200); }
   const mail = fileJournal(paths().mail);
-  const taskJournal = tasksJournal(paths().tasks);
   const askJournal = asksJournal(paths().asks);
-  const teamJournal = teamsJournal(paths().teams);
-  const server = await startServer({ store, tmux, port: opts.port, daemon, updater, history, mobile, mobileUnavailable, mail, tasks: taskJournal, asks: askJournal, teams: teamJournal, attachments });
+  const server = await startServer({ store, tmux, port: opts.port, daemon, updater, history, mobile, mobileUnavailable, mail, asks: askJournal, attachments });
   ompLive = () => server.omp.liveCount();
   const poller = startPoller({ store, tmux, broadcastPreview: server.preview, labelExited: server.labelExited });
   await writeFile(paths().pid, String(process.pid));
@@ -69,7 +76,7 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   let stopping: Promise<void> | null = null;
   const stop = () => stopping ??= (async () => {
     process.off('SIGTERM', onSignal); process.off('SIGINT', onSignal);
-    poller.stop(); await server.close(); await mobile?.stop(); await store.save(); await history.flush(); await mail.flush(); await taskJournal.flush(); await askJournal.flush(); await teamJournal.flush(); await rm(paths().pid, { force: true }); log('daemon stopped');
+    poller.stop(); await server.close(); await mobile?.stop(); await store.save(); await history.flush(); await mail.flush(); await askJournal.flush(); await rm(paths().pid, { force: true }); log('daemon stopped');
   })();
   const onSignal = () => { stop().finally(() => process.exit(0)); };
   process.once('SIGTERM', onSignal);

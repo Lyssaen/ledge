@@ -38,48 +38,15 @@ describe('readDocument', () => {
     expect(await readDocument(req(join(root, 'folder.md')), { home: root })).toMatchObject({ type: 'document.error', code: 'not_file' });
     expect(await readDocument(req(join(root, 'note.txt')), { home: root })).toMatchObject({ type: 'document.error', code: 'unsupported_type' });
   });
-  it('reads a team template of a .ledge/teams folder, and no other YAML', async () => {
+  it('no longer reads a team template: YAML is not a document, in .ledge/teams or anywhere', async () => {
     const root = await dir(); await mkdir(join(root, '.ledge', 'teams'), { recursive: true });
-    await writeFile(join(root, '.ledge', 'teams', 'workshop.yaml'), 'name: workshop\n'); await writeFile(join(root, 'config.yaml'), 'x: 1\n');
-    expect(await readDocument(req(join(root, '.ledge', 'teams', 'workshop.yaml')), { home: root })).toMatchObject({ type: 'document.content', text: 'name: workshop\n' });
-    expect(await readDocument(req(join(root, 'config.yaml')), { home: root })).toMatchObject({ type: 'document.error', code: 'unsupported_type' });
-    // Out of .ledge/teams by `..`, below it, or through a link to a file elsewhere: refused.
-    const teams = join(root, '.ledge', 'teams');
-    expect(await readDocument(req(`${teams}/../../config.yaml`), { home: root })).toMatchObject({ type: 'document.error', code: 'unsupported_type' });
-    await mkdir(join(teams, 'sub')); await writeFile(join(teams, 'sub', 'deep.yaml'), 'x: 1\n');
-    expect(await readDocument(req(join(teams, 'sub', 'deep.yaml')), { home: root })).toMatchObject({ type: 'document.error', code: 'unsupported_type' });
-    await writeFile(join(root, 'secret'), 'token\n');
-    await symlink(join(root, 'config.yaml'), join(teams, 'linked.yaml')); await symlink(join(root, 'secret'), join(teams, 'secret.yaml'));
-    expect(await readDocument(req(join(teams, 'linked.yaml')), { home: root })).toMatchObject({ type: 'document.error', code: 'unsupported_type' });
-    expect(await readDocument(req(join(teams, 'secret.yaml')), { home: root })).toMatchObject({ type: 'document.error', code: 'unsupported_type' });
-    // A link to another template stays a template.
-    await symlink(join(teams, 'workshop.yaml'), join(teams, 'alias.yml'));
-    expect(await readDocument(req(join(teams, 'alias.yml')), { home: root })).toMatchObject({ type: 'document.content', text: 'name: workshop\n' });
+    await writeFile(join(root, '.ledge', 'teams', 'workshop.yaml'), 'name: workshop\n');
+    expect(await readDocument(req(join(root, '.ledge', 'teams', 'workshop.yaml')), { home: root })).toMatchObject({ type: 'document.error', code: 'unsupported_type' });
   });
-  it('reads the home templates where the daemon lists them: a ~/.ledge/teams that is a link, LEDGE_HOME', async () => {
-    const root = await dir(); const dotfiles = join(root, 'dotfiles', 'ledge-teams'); await mkdir(dotfiles, { recursive: true });
-    await writeFile(join(dotfiles, 'a.yaml'), 'name: a\n'); await mkdir(join(root, '.ledge')); await symlink(dotfiles, join(root, '.ledge', 'teams'));
-    expect(await readDocument(req(join(root, '.ledge', 'teams', 'a.yaml')), { home: root })).toMatchObject({ type: 'document.content', text: 'name: a\n' });
-    const custom = join(root, 'custom'); await mkdir(join(custom, 'teams'), { recursive: true }); await writeFile(join(custom, 'teams', 'c.yaml'), 'name: c\n');
-    const before = process.env.LEDGE_HOME; process.env.LEDGE_HOME = custom;
-    try {
-      expect(await readDocument(req(join(custom, 'teams', 'c.yaml')), { home: root })).toMatchObject({ type: 'document.content', text: 'name: c\n' });
-      // Another `teams` folder is no template's.
-      await mkdir(join(root, 'other', 'teams'), { recursive: true }); await writeFile(join(root, 'other', 'teams', 'x.yaml'), 'x: 1\n');
-      expect(await readDocument(req(join(root, 'other', 'teams', 'x.yaml')), { home: root })).toMatchObject({ type: 'document.error', code: 'unsupported_type' });
-    } finally { if (before === undefined) delete process.env.LEDGE_HOME; else process.env.LEDGE_HOME = before; }
-  });
-  it('checks every candidate folder of a relative path, not the first one only (Bo, t085940)', async () => {
-    const root = await dir(); const repo = join(root, 'repo'); await mkdir(join(repo, '.ledge', 'teams'), { recursive: true }); await mkdir(join(repo, '.ledge', 'foo'));
-    await writeFile(join(repo, 'config.yaml'), 'secret: 1\n');
-    // From the session's workdir in .ledge/teams, 'config.yaml' falls back on its cwd: no template there.
-    expect(await readDocument(req('config.yaml'), { cwd: repo, workdir: join(repo, '.ledge', 'teams'), home: root })).toMatchObject({ type: 'document.error', code: 'unsupported_type' });
-    // '../teams/x.yaml' is a template from .ledge/foo, not from the cwd, where it lands out of the repository.
-    await mkdir(join(root, 'teams')); await writeFile(join(root, 'teams', 'x.yaml'), 'x: 1\n');
-    expect(await readDocument(req('../teams/x.yaml'), { cwd: repo, workdir: join(repo, '.ledge', 'foo'), home: root })).toMatchObject({ type: 'document.error', code: 'unsupported_type' });
-    // The template itself, there, is read.
-    await writeFile(join(repo, '.ledge', 'teams', 'x.yaml'), 'name: x\n');
-    expect(await readDocument(req('../teams/x.yaml'), { cwd: repo, workdir: join(repo, '.ledge', 'foo'), home: root })).toMatchObject({ type: 'document.content', text: 'name: x\n' });
+  it('tries every candidate folder of a relative path, not the first one only', async () => {
+    const root = await dir(); const repo = join(root, 'repo'); await mkdir(join(repo, 'sub'), { recursive: true });
+    await writeFile(join(repo, 'notes.md'), 'from the cwd\n');
+    expect(await readDocument(req('notes.md'), { cwd: repo, workdir: join(repo, 'sub'), home: root })).toMatchObject({ type: 'document.content', text: 'from the cwd\n' });
   });
   it('accepts 1 MiB exactly and rejects one byte more or malformed UTF-8', async () => {
     const root = await dir(); const file = join(root, 'limit.md');

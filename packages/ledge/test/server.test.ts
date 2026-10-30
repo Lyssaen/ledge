@@ -723,52 +723,30 @@ describe('server', () => {
 
   describe('session.message', () => {
     const line = 'Salut';
-    it('task.cmd gives a task and the owner gets its pointer typed', async () => {
-      tmux = fakeTmux({ 'ledge-b': [fx('codex-idle-after-turn')] }); await srv.close();
-      srv = await startServer({ store, tmux, port: 0 });
-      store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'idle' }));
+    it('task.cmd, roles.list, definitions.list and team.launch answer { type: "error", code: "invalid", request: <type> }', async () => {
       const c = await connect({ port: srv.port }); await c.next('snapshot');
-      c.send({ type: 'task.cmd', rid: 't-r1', by: 'a', op: 'give', to: 'Pim', title: 'Lance les tests' });
-      const r = await c.next('task.result', 3000);
-      expect(r.task).toMatchObject({ owner: 'b', state: 'open', title: 'Lance les tests' });
-      await until(() => tmux.sent.some(x => x[0] === 'keys' && x[2] === 'Enter'), 3000);
-      expect(tmux.sent[0]).toEqual(['text', 'ledge-b', expect.stringContaining(`<ledge-task id="${r.task!.id}" from="Otto">Tâche de Otto : « Lance les tests »`)]);
-      c.send({ type: 'task.cmd', rid: 't-r2', by: 'b', op: 'list' });
-      expect((await c.next('task.result', 3000)).tasks!.map(t => t.id)).toEqual([r.task!.id]);
+      const removed: Array<Record<string, unknown>> = [
+        { type: 'task.cmd', rid: 't1', by: 'a', op: 'list' }, { type: 'roles.list', requestId: 'r1' }, { type: 'definitions.list', requestId: 'd1' },
+        { type: 'team.launch', rid: 'l1', cwd: '/w', seats: [{ role: 'build' }] }, { type: 'team.join', rid: 'j1', team: 'team-a1b2', session: 'a', role: 'build' },
+        { type: 'team.seat', rid: 's1', team: 'team-a1b2', role: 'build', action: 'start' }
+      ];
+      for (const m of removed) {
+        c.send(m as never);
+        expect(await c.next('error', 3000)).toMatchObject({ type: 'error', code: 'invalid', request: m.type });
+      }
+      c.send({ type: 'snapshot.request' }); await c.next('snapshot'); // still alive
       c.close();
     });
-    it('a task given between two seats reaches the fronts with its transmission, and Ledge lists it (#92)', async () => {
-      store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'idle' }));
-      const c = await connect({ port: srv.port }); await c.next('snapshot');
-      c.send({ type: 'task.cmd', rid: 't-r1', by: 'a', op: 'give', to: 'Pim', title: 'Lance les tests' });
-      const { task } = await c.next('task.updated', 3000);
-      await c.next('task.result', 3000);
-      expect(task).toMatchObject({ giver: 'a', owner: 'b' });
-      expect(task.log.at(-1)).toMatchObject({ op: 'give', from: 'a', to: 'b', fromName: 'Otto', toName: 'Pim' });
-      c.send({ type: 'task.cmd', rid: 't-r2', by: 'ledge', op: 'list' });
-      expect((await c.next('task.result', 3000)).tasks!.map(t => t.id)).toEqual([task.id]);
-      c.close();
-    });
-    it('the sender’s thread gets the card of the task it handed over; Ledge’s give and seen add none (#92)', async () => {
-      await srv.close();
-      const history = new History({ dir: tmpDir() }); srv = await startServer({ store, tmux, port: 0, history });
-      store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'idle' }));
-      const c = await connect({ port: srv.port }); await c.next('snapshot');
-      c.send({ type: 'task.cmd', rid: 'g1', by: 'a', op: 'give', to: 'Pim', title: 'Lance les tests' });
-      const given = (await c.next('task.result', 3000)).task!;
-      expect(history.items('a')).toEqual([expect.objectContaining({ kind: 'notice', id: `task-${given.id}-0`, taskOp: 'give', outgoing: true, name: 'Pim', peer: 'b' })]);
-      c.send({ type: 'task.cmd', rid: 'g2', by: 'ledge', op: 'give', to: 'Pim', title: 'Relis' });
-      const mine = (await c.next('task.result', 3000)).task!;
-      c.send({ type: 'task.cmd', rid: 'd', by: 'b', op: 'done', task: mine.id, text: 'ok' });
-      await c.next('task.result', 3000);
-      const outgoing = history.items('b').filter(i => i.kind === 'notice' && i.outgoing);
-      expect(outgoing).toEqual([expect.objectContaining({ id: `task-${mine.id}-1`, taskOp: 'done', name: 'Ledge', summary: 'Relis\nok' })]);
-      expect(outgoing[0]).not.toHaveProperty('peer');
-      const before = [history.items('a').length, history.items('b').length];
-      c.send({ type: 'task.cmd', rid: 's', by: 'ledge', op: 'seen', task: mine.id });
-      expect((await c.next('task.result', 3000)).task).toMatchObject({ seen: true });
-      expect([history.items('a').length, history.items('b').length]).toEqual(before);
-      c.close();
+    it('the snapshot daemon info has no teams flag, and no teams message follows the snapshot', async () => {
+      const s2 = await startServer({ store: new Store(), tmux: fakeTmux({}), port: 0, daemon: { version: '0.2.2', install: 'npm', systemd: true } });
+      const ws = await open(s2.port); const got = collect(ws);
+      await until(() => got.some(m => m.type === 'context.prefs'));
+      await new Promise(res => setTimeout(res, 100));
+      expect(got.map(m => m.type)).not.toContain('teams');
+      const snap = got.find(m => m.type === 'snapshot');
+      expect(snap?.type === 'snapshot' && snap.daemon).toBeTruthy();
+      expect(snap?.type === 'snapshot' && snap.daemon).not.toHaveProperty('teams');
+      ws.close(); await s2.close();
     });
     it('message.read gives a long body whole to its receiver, and refuses anyone else', async () => {
       store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'working' }));
@@ -1145,25 +1123,25 @@ describe('server', () => {
     it('a client that connects later gets the last preview right after the snapshot', async () => {
       store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim' }));
       srv.preview('a', ['old']); srv.preview('a', ['● latest']);
-      const r = await recorder(); await r.until(9);
-      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'projects', 'teams', 'asks', 'island', 'session.preview', 'chat.history', 'context.prefs']);
-      expect(r.got[6]).toEqual({ type: 'session.preview', id: 'a', lines: ['● latest'] });
+      const r = await recorder(); await r.until(8);
+      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'projects', 'asks', 'island', 'session.preview', 'chat.history', 'context.prefs']);
+      expect(r.got[5]).toEqual({ type: 'session.preview', id: 'a', lines: ['● latest'] });
       r.ws.terminate();
     });
     it('a snapshot.request gets the previews again after the snapshot', async () => {
       store.upsert(mk('a')); srv.preview('a', ['● hi']);
       const r = await recorder(); await r.until(3);
-      r.ws.send(JSON.stringify({ type: 'snapshot.request' })); await r.until(18);
-      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'projects', 'teams', 'asks', 'island', 'session.preview', 'chat.history', 'context.prefs', 'snapshot', 'machines', 'projects', 'teams', 'asks', 'island', 'session.preview', 'chat.history', 'context.prefs']);
+      r.ws.send(JSON.stringify({ type: 'snapshot.request' })); await r.until(16);
+      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'projects', 'asks', 'island', 'session.preview', 'chat.history', 'context.prefs', 'snapshot', 'machines', 'projects', 'asks', 'island', 'session.preview', 'chat.history', 'context.prefs']);
       r.ws.terminate();
     });
     it('a removed session drops its preview; a preview for an unknown session is ignored', async () => {
       store.upsert(mk('a')); srv.preview('a', ['● hi']); srv.preview('ghost', ['boo']);
       store.remove('a');
       const r = await recorder(); await r.until(1); await new Promise(res => setTimeout(res, 50));
-      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'projects', 'teams', 'asks', 'island', 'chat.history', 'context.prefs']);
+      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'projects', 'asks', 'island', 'chat.history', 'context.prefs']);
       store.upsert(mk('a'));
-      r.ws.send(JSON.stringify({ type: 'snapshot.request' })); await r.until(8); await new Promise(res => setTimeout(res, 50));
+      r.ws.send(JSON.stringify({ type: 'snapshot.request' })); await r.until(7); await new Promise(res => setTimeout(res, 50));
       expect(r.got.filter(m => m.type === 'session.preview')).toEqual([]);
       r.ws.terminate();
     });
@@ -1344,6 +1322,16 @@ describe('server', () => {
       const c = await resume('m1'); await until(() => !!store.get('m1')?.tmuxSession);
       expect(tmux.created[0]!.command.slice(-6)).toEqual(['resume', 'cx-1', '-m', 'gpt-6-luna', '-c', 'model_reasoning_effort="high"']);
       expect(store.get('m1')).toMatchObject({ model: 'gpt-6-luna', effort: 'high' });
+      c.close();
+    });
+    it('a resumed session that had role/roleLabel/team in sessions.json resumes without them and without a role autonomy', async () => {
+      store.upsert(ended('ro1', { agentSessionId: 'u-1', role: 'build', roleLabel: 'Build', team: 'team-a1b2' }));
+      const c = await resume('ro1'); await until(() => !!store.get('ro1')?.tmuxSession);
+      expect(tmux.created[0]!.command).not.toContain('--permission-mode');
+      expect(tmux.created[0]!.env).not.toHaveProperty('LEDGE_ROLE'); expect(tmux.created[0]!.env).not.toHaveProperty('LEDGE_TEAM');
+      const resumed = store.get('ro1')!;
+      expect(resumed).not.toHaveProperty('role'); expect(resumed).not.toHaveProperty('roleLabel'); expect(resumed).not.toHaveProperty('team');
+      expect(resumed.autonomy).toBeUndefined();
       c.close();
     });
     it('falls back to the transcript name for Claude', async () => {
@@ -2091,7 +2079,7 @@ describe('update.daemon', () => {
       updater: { running: () => false, update: async (v, send) => { seen.push(v); send({ type: 'update.progress', version: v, step: 'installing' }); }, restart: async () => {} } });
     const c = await connect({ port: srv.port });
     const snap = await c.next('snapshot');
-    expect(snap.daemon).toEqual({ version: '0.2.2', install: 'npm', systemd: true, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true, teams: true, asks: true });
+    expect(snap.daemon).toEqual({ version: '0.2.2', install: 'npm', systemd: true, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true, asks: true });
     c.send({ type: 'update.daemon', version: '0.3.0' });
     expect(await c.next('update.progress')).toMatchObject({ step: 'installing' });
     expect(seen).toEqual(['0.3.0']);
@@ -2355,7 +2343,7 @@ describe('island settings', () => {
     const s = await startServer({ store: new Store(), tmux: fakeTmux({}), port: 0 });
     const ws = await open(s.port); const got = collect(ws);
     await until(() => got.some(m => m.type === 'island'));
-    expect(got.map(m => m.type).slice(0, 6)).toEqual(['snapshot', 'machines', 'projects', 'teams', 'asks', 'island']);
+    expect(got.map(m => m.type).slice(0, 5)).toEqual(['snapshot', 'machines', 'projects', 'asks', 'island']);
     expect(got.find(m => m.type === 'island')).toEqual({ type: 'island', prefs: null });
     ws.close(); await s.close();
   });
@@ -2396,7 +2384,7 @@ describe('mobile access', () => {
     const m = await withMobile();
     const ws = await open(m.s.port); const got = collect(ws);
     await until(() => got.some(x => x.type === 'mobile'));
-    expect(got.map(x => x.type).slice(0, 7)).toEqual(['snapshot', 'machines', 'projects', 'teams', 'asks', 'island', 'mobile']);
+    expect(got.map(x => x.type).slice(0, 6)).toEqual(['snapshot', 'machines', 'projects', 'asks', 'island', 'mobile']);
     expect(got.find(x => x.type === 'mobile')).toMatchObject({ type: 'mobile', state: { enabled: false, account: null, link: { state: 'off' }, devices: [], pairings: [] } });
     const snap = got.find(x => x.type === 'snapshot');
     expect(snap?.type === 'snapshot' && snap.daemon?.mobile).toBe(true);
@@ -2928,19 +2916,6 @@ describe('close a session', () => {
         expect(await c.next('chat.acted', 3000)).toMatchObject({ done: [0] });
         expect(calls).toEqual([['q1', false], ['q9', false], ['q1', true]]);
         expect(marks).toEqual(['0:running', '0:done']);
-        c.close();
-      });
-      it('a client naming itself ledge cannot cancel or pass a task', async () => {
-        const { chat } = actChat([]);
-        await closing({}, { chat });
-        store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'idle' }));
-        const c = await connect({ port: srv.port }); await c.next('snapshot');
-        c.send({ type: 'task.cmd', rid: 't1', by: 'a', op: 'give', to: 'Pim', title: 'Lance les tests' });
-        const id = (await c.next('task.result', 3000)).task!.id;
-        c.send({ type: 'task.cmd', rid: 't2', by: 'ledge', op: 'cancel', task: id });
-        expect((await c.next('task.result', 3000)).reason).toBe('seul le chat de Ledge annule ou passe une tâche au nom de Ledge');
-        c.send({ type: 'task.cmd', rid: 't3', by: 'ledge', op: 'pass', task: id, to: 'a' });
-        expect((await c.next('task.result', 3000)).reason).toBe('seul le chat de Ledge annule ou passe une tâche au nom de Ledge');
         c.close();
       });
     });

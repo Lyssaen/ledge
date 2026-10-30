@@ -30,7 +30,7 @@ const CLOSED_TTL_MS = 7 * 24 * 3600 * 1000;
 const CLOSED_MAX = 200;
 const closed = (a: Ask) => a.state !== 'open';
 
-/** A session Ledge launched and can type into, live (the rule of tasks.ts). */
+/** A session Ledge launched and can type into, live (the rule `ledge send` follows). */
 const reachable = (s: Session | undefined): boolean =>
   !!s && s.source === 'launcher' && s.state !== 'exited' && !isArchived(s) && (!!s.tmuxSession || backendOf(s) === 'omp-rpc');
 

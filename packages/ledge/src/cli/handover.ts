@@ -30,7 +30,7 @@ export async function handoverOnClient(client: Client, args: string[], by: strin
   }
 }
 
-/** `ledge handover …` from a session Ledge launched (its id from the environment, as `ledge task`). */
+/** `ledge handover …` from a session Ledge launched (its id from the environment, as `ledge send`). */
 export async function runHandover(args: string[], opts: { port?: number; env?: NodeJS.ProcessEnv; timeoutMs?: number } = {}): Promise<{ line: string; code: number }> {
   if (!handoverArgs(args)) return { line: HANDOVER_USAGE, code: args.length ? 1 : 0 };
   const env = opts.env ?? process.env;

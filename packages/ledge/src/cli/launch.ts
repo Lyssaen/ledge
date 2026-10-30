@@ -1,40 +1,28 @@
 import { spawn } from 'node:child_process';
 import { readFile, rm } from 'node:fs/promises';
 import { createConnection } from 'node:net';
-import type { Role, Session, Tool } from '@ledge/protocol';
+import type { Session, Tool } from '@ledge/protocol';
 import { PROTOCOL_PORT } from '@ledge/protocol';
 import { connect, DaemonRefusedError, type Client } from '../client.js';
 import { realTmux, type Tmux } from '../tmux.js';
 import { ensureLedgeDir } from '../paths.js';
 import { exitFile, spawnSession, type TmuxTool } from '../spawn.js';
 import { log } from '../log.js';
-import { autonomyArgs, findRole } from '../daemon/roles.js';
-import { EFFORT_ARGS, MODEL_ARGS } from '../daemon/server.js';
 
 export { agentEnv, exitFile } from '../spawn.js';
 
 const TMUX_SOCKET = 'ledge';
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
-export function parseLaunchArgs(argv: string[]): { name?: string; role?: string; args: string[] } {
-  const args: string[] = []; let name: string | undefined; let role: string | undefined;
+export function parseLaunchArgs(argv: string[]): { name?: string; args: string[] } {
+  const args: string[] = []; let name: string | undefined;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     if (a === '--name') { name = argv[++i]; continue; }
-    if (a === '--role') { role = argv[++i]; continue; }
     if (a === '--') { args.push(...argv.slice(i + 1)); break; }
     args.push(a);
   }
-  return { name, ...(role ? { role } : {}), args };
-}
-
-/** The agent arguments a role adds (roles spec §3.4): its model and effort when it is the role's own agent and the user
- *  gave none, and its autonomy, before the user's own arguments. */
-export function roleArgs(tool: TmuxTool, role: Role, args: readonly string[]): string[] {
-  const own = role.tool === undefined || role.tool === tool;
-  const hasModel = args.some(a => a === '--model' || a === '-m' || a.startsWith('--model='));
-  const hasEffort = args.some(a => a === '--effort' || a.startsWith('--effort=') || a.includes('model_reasoning_effort'));
-  return [...(own && role.model && !hasModel ? MODEL_ARGS[tool](role.model) : []), ...(own && role.effort && !hasEffort ? EFFORT_ARGS[tool]?.(role.effort) ?? [] : []), ...autonomyArgs(tool, role.autonomy)];
+  return { name, args };
 }
 
 function portOpen(port: number): Promise<boolean> {
@@ -98,7 +86,7 @@ export async function ensureDaemon(opts: { port?: number; spawnDaemon?: () => vo
 export class DaemonError extends Error {}
 
 /** Spawns the agent's tmux session (see `spawnSession`) with names and ids free in the daemon's snapshot, then registers it. */
-export async function createSession(opts: { tool: TmuxTool; args: string[]; command?: string[]; recordExit?: boolean; name?: string; role?: Role; cwd: string; tmux: Tmux; client: Client | null; now?: () => string; env?: NodeJS.ProcessEnv }): Promise<Session> {
+export async function createSession(opts: { tool: TmuxTool; args: string[]; command?: string[]; recordExit?: boolean; name?: string; cwd: string; tmux: Tmux; client: Client | null; now?: () => string; env?: NodeJS.ProcessEnv }): Promise<Session> {
   const names: string[] = []; const ids: string[] = [];
   if (opts.client) {
     let snap;
@@ -106,8 +94,7 @@ export async function createSession(opts: { tool: TmuxTool; args: string[]; comm
     catch (e) { throw new DaemonError(`daemon did not answer: ${(e as Error).message}`); }
     for (const s of snap.sessions) { names.push(s.name); ids.push(s.id); }
   }
-  const { role, ...rest } = opts;
-  const session = await spawnSession({ ...rest, ...(role ? { args: [...roleArgs(opts.tool, role, opts.args), ...opts.args], role: { id: role.id, label: role.label }, ...(role.autonomy ? { autonomy: role.autonomy } : {}) } : {}), taken: { names, ids } });
+  const session = await spawnSession({ ...opts, taken: { names, ids } });
   // The agent already runs: a lost register only means an untracked session, never a failed launch.
   try { opts.client?.send({ type: 'session.register', session }); }
   catch (e) { log(`register failed for ${session.id}: ${(e as Error).message}`); }
@@ -158,17 +145,15 @@ const UNTRACKED: Record<'foreign' | 'unauthorized' | 'unresponsive' | 'unreachab
 
 export async function launch(tool: TmuxTool, argv: string[], opts: LaunchOptions = {}): Promise<number> {
   await ensureLedgeDir();
-  const { name, role: roleId, args } = parseLaunchArgs(argv);
+  const { name, args } = parseLaunchArgs(argv);
   const port = opts.port ?? PROTOCOL_PORT;
   const socket = opts.tmuxSocket ?? TMUX_SOCKET;
   const tmux = realTmux(socket);
   const cwd = opts.cwd ?? process.cwd();
-  const role = roleId ? findRole(roleId, cwd) : undefined;
-  if (roleId && !role) { console.error(`ledge: rôle inconnu : ${roleId} (aucun fichier .ledge/roles/${roleId}.md ni ~/.ledge/roles/${roleId}.md)`); return 1; }
   const daemon = await ensureDaemon({ port, spawnDaemon: opts.spawnDaemon, retryDelayMs: opts.retryDelayMs });
   let client = daemon.client;
   if (!daemon.client) console.error(UNTRACKED[daemon.reason](port));
-  const create = (c: Client | null) => createSession({ tool, args, command: opts.command, recordExit: true, name, ...(role ? { role } : {}), cwd, tmux, client: c });
+  const create = (c: Client | null) => createSession({ tool, args, command: opts.command, recordExit: true, name, cwd, tmux, client: c });
   let session: Session;
   try { session = await create(client); }
   catch (e) {

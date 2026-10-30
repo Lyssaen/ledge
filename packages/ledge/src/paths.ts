@@ -20,7 +20,7 @@ export function ledgeDir(): string {
 
 export function paths() {
   const dir = ledgeDir();
-  return { dir, tmuxConf: join(dir, 'tmux.conf'), journal: join(dir, 'sessions.json'), log: join(dir, 'daemon.log'), pid: join(dir, 'daemon.pid'), history: join(dir, 'history'), mail: join(dir, 'mail.json'), tasks: join(dir, 'tasks.json'), asks: join(dir, 'asks.json'), teams: join(dir, 'teams-live.json'), machines: join(dir, 'machines.json'), projects: join(dir, 'projects.json'), island: join(dir, 'island.json'), token: join(dir, 'token'), mobile: join(dir, 'mobile.json'), mobileSession: join(dir, 'mobile-session.json'), mobileKey: join(dir, 'mobile-key'), devices: join(dir, 'devices.json'), revocations: join(dir, 'revocations.json'), attachments: join(dir, 'attachments') };
+  return { dir, tmuxConf: join(dir, 'tmux.conf'), journal: join(dir, 'sessions.json'), log: join(dir, 'daemon.log'), pid: join(dir, 'daemon.pid'), history: join(dir, 'history'), mail: join(dir, 'mail.json'), asks: join(dir, 'asks.json'), machines: join(dir, 'machines.json'), projects: join(dir, 'projects.json'), island: join(dir, 'island.json'), token: join(dir, 'token'), mobile: join(dir, 'mobile.json'), mobileSession: join(dir, 'mobile-session.json'), mobileKey: join(dir, 'mobile-key'), devices: join(dir, 'devices.json'), revocations: join(dir, 'revocations.json'), attachments: join(dir, 'attachments') };
 }
 
 export async function ensureLedgeDir(): Promise<void> {
