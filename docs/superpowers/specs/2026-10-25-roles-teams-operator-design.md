@@ -1,5 +1,7 @@
 # Roles, teams and Ledge as their operator: Ledge delegates, the team works on its own
 
+> Remplacé par 2026-10-30-ledge-openrig-orchestrator-design (lot 1 : équipes, rôles et tâches retirés).
+
 Date: 2026-10-25, revised 2026-10-26. Status: design.
 
 Companion specs: [the atelier's rooms](2026-10-26-atelier-rooms-design.md) (how a team is drawn) and

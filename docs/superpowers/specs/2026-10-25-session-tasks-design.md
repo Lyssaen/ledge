@@ -1,5 +1,7 @@
 # Tasks between sessions: work that is given, taken and closed, not only said
 
+> Remplacé par 2026-10-30-ledge-openrig-orchestrator-design (lot 1 : équipes, rôles et tâches retirés).
+
 Date: 2026-10-25. Status: design.
 
 ## 1. Intent

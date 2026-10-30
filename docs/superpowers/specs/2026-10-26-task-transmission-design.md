@@ -1,5 +1,7 @@
 # A task handed between agents, seen like a message
 
+> Remplacé par 2026-10-30-ledge-openrig-orchestrator-design (lot 1 : équipes, rôles et tâches retirés).
+
 Date: 2026-10-26. Status: design. Issue: [#92](https://github.com/Lyssaen/ledge/issues/92).
 
 Builds on [session tasks](2026-10-25-session-tasks-design.md) and the
