@@ -13,7 +13,7 @@ const at = new Date(AT).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '
 // The mockup's cases (docs/mockups/ledge-action-card.html): a plan of three, one reversible row, a permission.
 const model: ActionRowView = { summary: 'Switch **Nova** to Opus 5.5', risk: 'reversible', action: 'session.model' };
 const archive: ActionRowView = { summary: 'Archive **Otto**', risk: 'reversible', action: 'session.archive' };
-const dissolve: ActionRowView = { summary: 'Dissolve the team **ledge-roles**', risk: 'destructive', action: 'team.dissolve', detail: 'Its 6 sessions go back to the common table.' };
+const dissolve: ActionRowView = { summary: 'Close **Otto**', risk: 'destructive', action: 'session.close', detail: 'Its conversation can be resumed.' };
 const permission: ActionRowView = {
   summary: 'Accept **Nova**\'s request', risk: 'destructive', action: 'session.decide', target: 'Nova',
   request: { kind: 'Bash · rebuild the daemon', text: 'rm -rf packages/ledge/dist' }, deny: { summary: 'Deny **Nova**\'s request' }
@@ -36,7 +36,7 @@ describe('the action card (#94): a plan', () => {
     expect(rowsOf().map(r => r.getAttribute('data-action-row'))).toEqual(['proposed', 'proposed', 'proposed']);
     expect(within(rowsOf()[0]!).getByRole('button', { name: 'Change' })).toBeTruthy();
     expect(within(rowsOf()[1]!).getByRole('button', { name: 'Archive' })).toBeTruthy();
-    expect(within(rowsOf()[2]!).getByRole('button', { name: 'Dissolve…' })).toBeTruthy();
+    expect(within(rowsOf()[2]!).getByRole('button', { name: 'Close…' })).toBeTruthy();
     expect(rowsOf()[0]).toHaveTextContent('Reversible');
     expect(rowsOf()[2]).toHaveTextContent('Irreversible');
     expect(rowsOf()[2]).toHaveTextContent('I will ask again');
@@ -76,9 +76,9 @@ describe('the action card (#94): a plan', () => {
 
   it('esc or Cancel: the focus goes back to the button that asked, not to the page', () => {
     card(plan());
-    fireEvent.click(within(rowsOf()[2]!).getByRole('button', { name: 'Dissolve…' }));
+    fireEvent.click(within(rowsOf()[2]!).getByRole('button', { name: 'Close…' }));
     fireEvent.keyDown(screen.getByRole('group', { name: /^Confirmation/ }), { key: 'Escape' });
-    expect(document.activeElement).toBe(within(rowsOf()[2]!).getByRole('button', { name: 'Dissolve…' }));
+    expect(document.activeElement).toBe(within(rowsOf()[2]!).getByRole('button', { name: 'Close…' }));
     fireEvent.click(screen.getByRole('button', { name: 'Apply all (3)…' }));
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Apply all (3)…' }));
@@ -86,14 +86,14 @@ describe('the action card (#94): a plan', () => {
 
   it('the asking row applied elsewhere: the confirmation closes, the focus goes to the foot', () => {
     const p = card(plan());
-    fireEvent.click(within(rowsOf()[2]!).getByRole('button', { name: 'Dissolve…' }));
+    fireEvent.click(within(rowsOf()[2]!).getByRole('button', { name: 'Close…' }));
     p.rerender(<ChatCopyProvider value={{ ...copy, chat: { ...copy.chat, action: actionCopy } }}><ActionCard rows={plan([{}, {}, { state: 'done', doneAt: AT }])} {...p} /></ChatCopyProvider>);
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Apply all (2)' }));
   });
 
   it('the asking row applied elsewhere, no foot left: the focus goes to the card\'s first button', () => {
     const p = card([{ ...model, state: 'stale', target: 'Nova' }, dissolve]);
-    fireEvent.click(screen.getByRole('button', { name: 'Dissolve…' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close…' }));
     p.rerender(<ChatCopyProvider value={{ ...copy, chat: { ...copy.chat, action: actionCopy } }}><ActionCard rows={[{ ...model, state: 'stale', target: 'Nova' }, { ...dissolve, state: 'done', doneAt: AT }]} {...p} /></ChatCopyProvider>);
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Open Nova' }));
   });
@@ -144,7 +144,7 @@ describe('the action card (#94): a plan', () => {
     const p = card(plan());
     const again = (rows: ActionRowView[], extra: Partial<ActionCardProps> = {}) =>
       p.rerender(<ChatCopyProvider value={{ ...copy, chat: { ...copy.chat, action: actionCopy } }}><ActionCard rows={rows} {...p} {...extra} /></ChatCopyProvider>);
-    fireEvent.click(within(rowsOf()[2]!).getByRole('button', { name: 'Dissolve…' }));
+    fireEvent.click(within(rowsOf()[2]!).getByRole('button', { name: 'Close…' }));
     again(plan([{}, {}, { state: 'done', doneAt: AT }]));
     expect(screen.queryByRole('group', { name: /^Confirmation/ })).toBeNull();
     expect(document.body).not.toHaveTextContent('already done');
@@ -158,8 +158,8 @@ describe('the action card (#94): a plan', () => {
 
   it('the confirmation is named by its question and described by its why; a row\'s state reads at 12 px', () => {
     card(plan([{ state: 'done', doneAt: AT }]));
-    fireEvent.click(within(rowsOf()[2]!).getByRole('button', { name: 'Dissolve…' }));
-    const confirm = screen.getByRole('group', { name: 'Confirmation Dissolve the team ledge-roles?' });
+    fireEvent.click(within(rowsOf()[2]!).getByRole('button', { name: 'Close…' }));
+    const confirm = screen.getByRole('group', { name: 'Confirmation Close Otto?' });
     expect(document.getElementById(confirm.getAttribute('aria-describedby')!)).toHaveTextContent('Ledge cannot undo it once sent.');
     fireEvent.keyDown(confirm, { key: 'Escape' });
     expect(rowsOf()[0]!.querySelector<HTMLElement>('[data-action-side] span')!.style.fontSize).toBe('12px');
@@ -167,12 +167,12 @@ describe('the action card (#94): a plan', () => {
 
   it('an irreversible row asks too, alone; the rows already done read « already done », dimmed', () => {
     const p = card(plan([{ state: 'done', doneAt: AT }]));
-    fireEvent.click(screen.getByRole('button', { name: 'Dissolve…' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close…' }));
     const confirm = screen.getByRole('group', { name: /^Confirmation/ });
-    expect(confirm).toHaveTextContent('Dissolve the team ledge-roles?');
+    expect(confirm).toHaveTextContent('Close Otto?');
     expect(rowsOf()[0]).toHaveTextContent('already done');
     expect(rowsOf()[0]!.hasAttribute('data-dim')).toBe(true);
-    fireEvent.click(within(confirm).getByRole('button', { name: 'Dissolve' }));
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Close' }));
     expect(p.onApply).toHaveBeenCalledWith([2], { confirmed: true });
   });
 
@@ -209,7 +209,7 @@ describe('the action card (#94): a plan', () => {
     expect(within(rowsOf()[1]!).queryByRole('button')).toBeNull();
     expect(rowsOf()[1]).toHaveTextContent('Refused');
     fireEvent.click(screen.getByRole('button', { name: 'Continue without step 2 (1)…' }));
-    fireEvent.click(within(screen.getByRole('group', { name: /^Confirmation/ })).getByRole('button', { name: 'Dissolve' }));
+    fireEvent.click(within(screen.getByRole('group', { name: /^Confirmation/ })).getByRole('button', { name: 'Close' }));
     expect(p.onApply).toHaveBeenLastCalledWith([2], { confirmed: true });
   });
 
@@ -340,11 +340,10 @@ describe('the action card (#94): a permission', () => {
 });
 
 describe('the action card (#94): a row from the protocol', () => {
-  const row: ChatAction = { action: 'team.dissolve', args: { team: 't1' }, summary: 'Dissoudre l’équipe **ledge-roles**', vars: { team: 'ledge-roles' }, risk: 'destructive', team: 't1', detail: 'Ses 6 sessions…' };
+  const row: ChatAction = { action: 'session.close', args: { session: 'local:otto' }, summary: 'Fermer **Otto**', vars: { session: 'Otto' }, risk: 'destructive', session: 'local:otto', detail: 'Sa conversation reste reprenable…' };
 
   it('its id, summary, risk, detail and state as they come; the session it names, for a link', () => {
-    expect(actionRowOf(row)).toEqual({ action: 'team.dissolve', summary: row.summary, risk: 'destructive', detail: 'Ses 6 sessions…', target: 'ledge-roles', vars: { team: 'ledge-roles' } });
-    expect(actionRowOf({ ...row, action: 'task.cancel', vars: { task: 'Relire', owner: 'Max' }, session: 'local:max' }).target).toBe('Max');
+    expect(actionRowOf(row)).toEqual({ action: 'session.close', summary: row.summary, risk: 'destructive', detail: 'Sa conversation reste reprenable…', target: 'Otto', vars: { session: 'Otto' } });
     expect(actionRowOf({ ...row, action: 'session.archive', session: 'otto', state: 'done', doneAt: AT })).toMatchObject({ state: 'done', doneAt: AT });
   });
 
@@ -364,7 +363,7 @@ describe('the action card (#94): a row from the protocol', () => {
   });
 
   it('changed on another action than session.decide: a refusal, « things have changed », no Open; the plan stops there (codes.md)', () => {
-    const save: ChatAction = { action: 'team.save', args: { team: 't1' }, summary: 'Enregistrer **ledge-roles**', vars: { team: 'ledge-roles' }, risk: 'reversible', team: 't1', state: 'refused', code: 'changed', error: 'the target has changed since the card' };
+    const save: ChatAction = { action: 'session.archive', args: { session: 'local:bix' }, summary: 'Archiver **Bix**', vars: { session: 'Bix' }, risk: 'reversible', session: 'local:bix', state: 'refused', code: 'changed', error: 'the target has changed since the card' };
     expect(actionRowOf(save)).toMatchObject({ state: 'refused', code: 'changed' });
     card([{ ...model, state: 'done', doneAt: AT }, actionRowOf(save), dissolve]);
     expect(nodes()[1]).toBe('Step 2, refused');
@@ -383,28 +382,28 @@ describe('the action card (#94): a row from the protocol', () => {
   });
 
   it('a code it knows is kept; one it does not (a newer daemon) reads as failed', () => {
-    expect(actionRowOf({ ...row, state: 'refused', code: 'dissolved', error: 'déjà dissoute' })).toMatchObject({ state: 'refused', code: 'dissolved', error: 'déjà dissoute' });
+    expect(actionRowOf({ ...row, state: 'refused', code: 'archived', error: 'déjà archivée' })).toMatchObject({ state: 'refused', code: 'archived', error: 'déjà archivée' });
     expect(actionRowOf({ ...row, state: 'failed', code: 'quota_exceeded' }).code).toBe('failed');
   });
 });
 
 describe('the action card (#94): its words from the row\'s vars, in the front\'s language', () => {
-  const dissolveRow: ChatAction = { action: 'team.dissolve', args: { team: 't1' }, summary: 'Dissoudre l’équipe **ledge-roles**', vars: { team: 'ledge-roles' }, risk: 'destructive', team: 't1' };
+  const dissolveRow: ChatAction = { action: 'session.close', args: { session: 'local:otto' }, summary: 'Fermer **Otto**', vars: { session: 'Otto' }, risk: 'destructive', session: 'local:otto' };
 
   it('the line from vars, its names in bold, never the daemon\'s French summary', () => {
     card([actionRowOf(dissolveRow)]);
-    expect(rowsOf()[0]).toHaveTextContent('Dissolve the team ledge-roles');
-    expect(rowsOf()[0]!.querySelector('strong')?.textContent).toBe('ledge-roles');
-    expect(document.body).not.toHaveTextContent('Dissoudre');
-    fireEvent.click(screen.getByRole('button', { name: 'Dissolve…' }));
-    expect(screen.getByRole('group', { name: /^Confirmation/ })).toHaveTextContent('Dissolve the team ledge-roles?');
+    expect(rowsOf()[0]).toHaveTextContent('Close Otto');
+    expect(rowsOf()[0]!.querySelector('strong')?.textContent).toBe('Otto');
+    expect(document.body).not.toHaveTextContent('Fermer');
+    fireEvent.click(screen.getByRole('button', { name: 'Close…' }));
+    expect(screen.getByRole('group', { name: /^Confirmation/ })).toHaveTextContent('Close Otto?');
   });
 
   it('a word missing, or an action the front does not know: the summary', () => {
     card([actionRowOf({ ...dissolveRow, vars: {} })]);
-    expect(rowsOf()[0]).toHaveTextContent('Dissoudre l’équipe ledge-roles');
-    card([actionRowOf({ ...dissolveRow, action: 'team.fork' })]);
-    expect(rowsOf()[1]).toHaveTextContent('Dissoudre l’équipe ledge-roles');
+    expect(rowsOf()[0]).toHaveTextContent('Fermer Otto');
+    card([actionRowOf({ ...dissolveRow, action: 'session.fork' })]);
+    expect(rowsOf()[1]).toHaveTextContent('Fermer Otto');
   });
 
   it('each line of the registry: session.model and session.decide by their words', () => {
@@ -412,15 +411,14 @@ describe('the action card (#94): its words from the row\'s vars, in the front\'s
     expect(w['session.model']!({ session: 'Nova', model: 'opus', effort: 'high' })).toBe('Switch **Nova** to opus, effort high');
     expect(w['session.model']!({ session: 'Nova' })).toBe('Switch **Nova** to its default model and effort');
     expect(w['session.decide']!({ session: 'Nova', decision: 'deny', kind: 'plan', note: 'x' })).toBe('Deny **Nova**’s plan request, with a note');
-    expect(actionWords.fr.line['task.pass']!({ task: 'Relire', owner: 'Max', session: 'Gus' })).toBe('Passer la tâche « Relire » de **Max** à **Gus**');
     const generic = ACTIONS.filter(a => a.card === 'generic').map(a => a.id).sort();
     for (const l of ['fr', 'en'] as const) expect(generic.filter(id => !actionWords[l].line[id]), l).toEqual([]);
   });
 
   it('refused or failed: the front\'s words by code, the daemon\'s error never on screen', () => {
-    card([actionRowOf({ ...dissolveRow, state: 'refused', code: 'dissolved', error: 'team ledge-roles is dissolved' })]);
-    expect(rowsOf()[0]).toHaveTextContent('Refused: the team ledge-roles was dissolved in the meantime. Nothing was sent.');
-    expect(document.body).not.toHaveTextContent('team ledge-roles is dissolved');
+    card([actionRowOf({ ...dissolveRow, state: 'refused', code: 'archived', error: 'daemon words: archived twice' })]);
+    expect(rowsOf()[0]).toHaveTextContent('Refused: Otto is already archived. Nothing was sent.');
+    expect(document.body).not.toHaveTextContent('archived twice');
     card([actionRowOf({ ...dissolveRow, state: 'failed', code: 'quota_exceeded', error: 'quota' })]);
     expect(rowsOf()[1]).toHaveTextContent('Failed: the action was sent but did not go through.');
     card([actionRowOf({ ...dissolveRow, state: 'refused', error: 'nope' })]);
@@ -429,9 +427,8 @@ describe('the action card (#94): its words from the row\'s vars, in the front\'s
 
   it('a code whose word is missing reads « no longer possible »; unknown speaks of what the action is about', () => {
     const why = actionWords.fr.why;
-    expect(why('member', 'team.join', { session: 'Nova' })).toBe('cette action n’est plus possible.');
-    expect(why('unknown', 'team.join', { session: 'Nova', team: 'qa' })).toBe('Ledge ne trouve plus l’équipe **qa**.');
-    expect(why('unknown', 'task.cancel', { task: 'Relire', owner: 'Max' })).toBe('Ledge ne trouve plus la tâche « Relire ».');
+    expect(why('archived', 'session.archive', {})).toBe('cette action n’est plus possible.');
+    expect(why('unknown', 'session.model', { session: 'Nova' })).toBe('Ledge ne trouve plus **Nova**.');
     expect(why('running', 'session.resume', { session: 'Otto' })).toBe('**Otto** tourne déjà : rien à reprendre.');
     for (const code of ACTION_ERROR_CODES) for (const l of ['fr', 'en'] as const) expect(actionWords[l].why(code, undefined, {}), `${l} ${code}`).toBeTruthy();
   });

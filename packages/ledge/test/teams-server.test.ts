@@ -127,52 +127,6 @@ describe('roles and teams over the protocol', () => {
     await c.close();
   });
 
-  it('the chat’s team card launches its team, then its task cards give to @role and follow their task', async () => {
-    answer = `Je propose une équipe.\n\`\`\`ledge-team\n{"cwd": "${work}", "name": "ledge-roles", "seats": [{"role": "lead"}, {"role": "build"}]}\n\`\`\`\n\`\`\`ledge-task\n{"to": "@build", "title": "Implémenter les rôles", "text": "roles.ts"}\n\`\`\``;
-    await start();
-    const c = await client();
-    c.send({ type: 'chat.ask', qid: 'q1', text: 'Monte une équipe' });
-    const done = await c.next('chat.done', 10_000);
-    expect(done.team).toMatchObject({ name: 'ledge-roles', cwd: work, seats: [{ role: 'lead', label: 'Chef', tool: 'claude' }, { role: 'build', label: 'Build', model: 'opus', autonomy: 'edits' }] });
-    expect(done.tasks).toEqual([{ to: '@build', title: 'Implémenter les rôles', text: 'roles.ts' }]);
-    // Before the team: the task card waits.
-    c.send({ type: 'task.cmd', rid: 't0', by: 'ledge', op: 'give', qid: 'q1', row: 0 });
-    expect((await c.next('task.result')).reason).toBe("active une fois l'équipe lancée");
-    c.send({ type: 'team.launch', rid: 'r1', qid: 'q1' });
-    const { team } = await c.next('team.launched', 5000);
-    const turnOf = (h: ChatTurn[]) => h.find(t => t.qid === 'q1')!;
-    // The history queued meanwhile is read until the card says it is launched.
-    await until(async () => turnOf((await c.next('chat.history')).turns)?.team?.teamId === team.id);
-    c.send({ type: 'team.launch', rid: 'r2', qid: 'q1' });
-    expect((await c.next('team.failed')).reason).toBe('équipe déjà lancée');
-    c.send({ type: 'task.cmd', rid: 't1', by: 'ledge', op: 'give', qid: 'q1', row: 0 });
-    const given = await c.next('task.result');
-    const build = team.seats.find(s => s.role === 'build')!.sessionId!;
-    expect(given.task).toMatchObject({ giver: 'ledge', owner: build, team: team.id, title: 'Implémenter les rôles' });
-    expect((await c.next('task.updated')).task.id).toBe(given.task!.id);
-    // The owner takes it: the card follows.
-    c.send({ type: 'task.cmd', rid: 't2', by: build, op: 'take', task: given.task!.id });
-    await c.next('task.result');
-    await until(async () => turnOf((await c.next('chat.history')).turns)?.tasks?.[0]?.state === 'taken');
-    // « Enregistrer » writes the ad hoc team as a template, and the card says so.
-    c.send({ type: 'team.save', rid: 's1', qid: 'q1', name: 'ledge-roles', seats: [{ role: 'lead' }, { role: 'build' }] });
-    const saved = await c.next('team.saved');
-    expect(existsSync(saved.path!)).toBe(true);
-    expect(readFileSync(saved.path!, 'utf8')).toContain('role: build');
-    await c.close();
-  });
-
-  it('a card with an unknown role, or a task to an unknown session, gives no card', async () => {
-    answer = `\`\`\`ledge-team\n{"cwd": "${work}", "seats": [{"role": "ops"}]}\n\`\`\`\n\`\`\`ledge-task\n{"to": "zzzz", "title": "x"}\n\`\`\``;
-    await start();
-    const c = await client();
-    c.send({ type: 'chat.ask', qid: 'q1', text: 'Monte une équipe' });
-    const done = await c.next('chat.done', 10_000);
-    expect(done.team).toBeUndefined();
-    expect(done.tasks).toBeUndefined();
-    await c.close();
-  });
-
   it('a seat resumed keeps its role and team; team.resume brings a resting team back', async () => {
     await start();
     const c = await client();

@@ -21,18 +21,8 @@ describe('teamArgs', () => {
     expect(teamArgs(['up', '--seat', 'lead:vim'])).toBeUndefined();
     expect(teamArgs(['up'])).toBeUndefined();
     expect(teamArgs(['list', '--json'])).toEqual({ op: 'list', json: true });
-  });
-
-  it('turns each verb into a registry action, its args checked by the registry', () => {
-    expect(teamArgs(['join', 'api', 'Nova', '@dev-back'])).toEqual({ op: 'run', action: 'team.join', args: { team: 'api', session: 'Nova', role: 'dev-back' } });
-    expect(teamArgs(['leave', 'api', 'Nova', '--json'])).toEqual({ op: 'run', action: 'team.leave', args: { team: 'api', session: 'Nova' }, json: true });
-    expect(teamArgs(['resume', 'team-3fa2'])).toEqual({ op: 'run', action: 'team.resume', args: { team: 'team-3fa2' } });
-    expect(teamArgs(['dissolve', 'api', '--close-sessions', '--yes'])).toEqual({ op: 'run', action: 'team.dissolve', args: { team: 'api' }, closeSessions: true, yes: true });
-    expect(teamArgs(['save', 'api', 'atelier'])).toEqual({ op: 'run', action: 'team.save', args: { team: 'api', name: 'atelier' } });
-    expect(teamArgs(['join', 'api', 'Nova', '@Dev Back'])).toBeUndefined();
-    expect(teamArgs(['join', 'api', 'Nova'])).toBeUndefined();
-    expect(teamArgs(['leave', 'api', 'Nova', '--close-sessions'])).toBeUndefined();
-    expect(teamArgs(['resume', 'api', '--force'])).toBeUndefined();
+    // The registry holds no team action any more: the other verbs are not verbs.
+    for (const verb of ['join', 'leave', 'resume', 'dissolve', 'save']) expect(teamArgs([verb, 'api', 'Nova', 'x'])).toBeUndefined();
   });
 
   it('closeArgs: one session or more', () => {
@@ -75,54 +65,20 @@ describe('ledge team and ledge close against a daemon', () => {
   });
   afterEach(async () => { await srv.close(); });
 
-  it('up with ad hoc seats, list --json, a destructive verb asked again, refused to an agent, then dissolved with its sessions closed', async () => {
+  it('up with ad hoc seats, then list --json', async () => {
     const up = await runTeam(['up', '--seat', 'lead', '--seat', 'build', '--name', 'api'], user());
     expect(up).toMatchObject({ code: 0, line: expect.stringContaining('équipe api lancée') });
     const listed = JSON.parse((await runTeam(['list', '--json'], user())).line);
     const team = listed.teams.find((t: { name: string }) => t.name === 'api');
     expect(team.seats.map((s: { role: string; session?: { tool: string } }) => [s.role, s.session?.tool])).toEqual([['lead', 'claude'], ['build', 'claude']]);
-    const [lead, build] = team.seats.map((s: { sessionId: string }) => s.sessionId) as [string, string];
-
-    expect(await runTeam(['dissolve', 'api'], user())).toEqual({ line: 'Dissoudre l\'équipe api : irréversible ; relance avec --yes pour confirmer', code: 1 });
-    expect(await runTeam(['dissolve', 'api', '--yes'], { ...user(), env: { LEDGE_SESSION: lead, LEDGE_SESSION_KEY: sessionKey(lead) } })).toMatchObject({ code: 1, line: expect.stringMatching(/^refusé : une session agent/) });
-    const done = await runTeam(['dissolve', 'api', '--yes', '--close-sessions'], user());
-    expect(done.code).toBe(0);
-    expect(done.line.split('\n')).toContain('fait : Dissoudre l\'équipe api');
-    expect(store.get(lead)!.state).toBe('exited');
-    expect(store.get(build)!.state).toBe('exited');
   });
 
-  it('dissolve --close-sessions by its @leader: the other seats closed first, the team dissolved, the leader itself last', async () => {
-    writeFileSync(join(process.env.LEDGE_HOME!, 'roles', 'leader.md'), '---\nlabel: leader\n---\nTu mènes.\n');
-    await runTeam(['up', '--seat', 'leader', '--seat', 'build', '--seat', 'lead', '--name', 'api'], user());
-    const team = JSON.parse((await runTeam(['list', '--json'], user())).line).teams[0];
-    const [leader, build, lead] = team.seats.map((s: { sessionId: string }) => s.sessionId) as [string, string, string];
-    const done = await runTeam(['dissolve', 'api', '--yes', '--close-sessions'], { ...user(), env: { LEDGE_SESSION: leader, LEDGE_SESSION_KEY: sessionKey(leader) } });
-    expect(done.code).toBe(0);
-    const lines = done.line.split('\n');
-    expect(lines.indexOf('fait : Dissoudre l\'équipe api')).toBe(2);
-    expect(lines.at(-1)).toContain(store.get(leader)!.name);
-    expect(store.get(build)!.state).toBe('exited');
-    expect(store.get(lead)!.state).toBe('exited');
-    await until(() => store.get(leader)!.state === 'exited');
-    expect(JSON.parse((await runTeam(['list', '--json'], user())).line).teams).toEqual([]);
-  });
-  it('dissolve --close-sessions refused to an agent closes nothing', async () => {
+  it('ledge close: a session closes itself, in JSON; anything else is refused to an agent', async () => {
     await runTeam(['up', '--seat', 'lead', '--seat', 'build', '--name', 'api'], user());
     const team = JSON.parse((await runTeam(['list', '--json'], user())).line).teams[0];
     const [lead, build] = team.seats.map((s: { sessionId: string }) => s.sessionId) as [string, string];
-    expect(await runTeam(['dissolve', 'api', '--yes', '--close-sessions'], { ...user(), env: { LEDGE_SESSION: lead, LEDGE_SESSION_KEY: sessionKey(lead) } })).toMatchObject({ code: 1 });
-    expect(store.get(build)!.state).not.toBe('exited');
-    expect(store.get(lead)!.state).not.toBe('exited');
-  });
-
-  it('ledge close: a session closes itself, its @leader one of its team, in JSON; anything else is refused', async () => {
-    writeFileSync(join(process.env.LEDGE_HOME!, 'roles', 'leader.md'), '---\nlabel: leader\n---\nTu mènes.\n');
-    await runTeam(['up', '--seat', 'leader', '--seat', 'build', '--name', 'api'], user());
-    const team = JSON.parse((await runTeam(['list', '--json'], user())).line).teams[0];
-    const [lead, build] = team.seats.map((s: { sessionId: string }) => s.sessionId) as [string, string];
     expect(await runClose([store.get(lead)!.name], { port: srv.port, env: { LEDGE_SESSION: build, LEDGE_SESSION_KEY: sessionKey(build) } })).toMatchObject({ code: 1, line: expect.stringMatching(/^refusé : une session agent/) });
-    const r = await runClose([store.get(build)!.name, '--json'], { port: srv.port, env: { LEDGE_SESSION: lead, LEDGE_SESSION_KEY: sessionKey(lead) } });
+    const r = await runClose([store.get(build)!.name, '--json'], { port: srv.port, env: {} });
     expect(r.code).toBe(0);
     expect(JSON.parse(r.line)).toMatchObject({ ok: true, action: 'session.close', row: { args: { session: build } } });
     expect(store.get(build)!.state).toBe('exited');
@@ -130,6 +86,6 @@ describe('ledge team and ledge close against a daemon', () => {
   });
 
   it('a verb with no daemon says how to start one', async () => {
-    expect(await runTeam(['resume', 'api'], { port: 1, env: {} })).toMatchObject({ code: 1, line: expect.stringContaining('daemon not running') });
+    expect(await runTeam(['up', '--seat', 'lead'], { port: 1, env: {} })).toMatchObject({ code: 1, line: expect.stringContaining('daemon not running') });
   });
 });

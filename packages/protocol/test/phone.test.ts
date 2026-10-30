@@ -250,14 +250,14 @@ describe('phone chat', () => {
     expect(ConfirmPurposeSchema.parse('close')).toBe('close');
   });
   it('carries the generic rows without their args, strictly', () => {
-    const row = { action: 'team.dissolve', summary: 'Dissoudre **api**', risk: 'destructive', team: 'team-3fa2' };
+    const row = { action: 'session.archive', summary: 'Archiver **api**', risk: 'reversible', session: 'local:api' };
     expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [row] })).not.toThrow();
     expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [{ ...row, state: 'refused' }] })).not.toThrow();
-    expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [{ ...row, args: { team: 'team-3fa2' } }] })).toThrow();
+    expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [{ ...row, args: { session: 'local:api' } }] })).toThrow();
     expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [{ ...row, error: 'boom' }] })).toThrow();
     expect(ConfirmPurposeSchema.parse('act')).toBe('act');
     // Its words for the phone's own language, a cut detail, an error as a code, an action this PWA does not know yet.
-    expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [{ ...row, action: 'team.later', vars: { team: 'api' }, detail: 'x…', detailCut: true, state: 'failed', code: 'failed' }] })).not.toThrow();
+    expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [{ ...row, action: 'session.later', vars: { session: 'api' }, detail: 'x…', detailCut: true, state: 'failed', code: 'failed' }] })).not.toThrow();
     expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [{ ...row, code: 'x'.repeat(41) }] })).toThrow();
   });
   it('carries an ignored turn, and chat.ignore', () => {

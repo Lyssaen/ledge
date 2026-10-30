@@ -121,17 +121,8 @@ export function Ask() {
     if (busy || card.kind === 'action') return;
     const turn = d.chat.find(x => x.qid === card.qid);
     if (!turn) return;
-    if (card.kind === 'task') {
-      // A task to `@role` waits for the team proposed with it.
-      const row = card.rows.find(r => { const c = turn.tasks![r]!; return !c.to.startsWith('@') || c.team || turn.team?.teamId; });
-      if (row === undefined) { toast({ text: t.ask.waitTeam, tone: 'info' }); return; }
-      setBusy({ qid: card.qid, turn, errorSeq: d.errors.at(-1)?.seq ?? 0, at: Date.now() });
-      client.send({ type: 'task.cmd', rid: randomUUID(), by: LEDGE_GIVER, op: 'give', qid: card.qid, row });
-      return;
-    }
     setBusy({ qid: card.qid, turn, errorSeq: d.errors.at(-1)?.seq ?? 0, at: Date.now() });
-    if (card.kind === 'team') client.send({ type: 'team.launch', rid: randomUUID(), qid: card.qid });
-    else if (card.kind === 'launch') {
+    if (card.kind === 'launch') {
       const first = proposalRows(turn)[card.rows[0]!]!;
       client.send({ type: 'session.launch', tool: first.tool, cwd: first.cwd, ...(first.prompt ? { prompt: first.prompt } : {}), qid: card.qid, rows: card.rows });
     } else if (card.kind === 'relay') client.send({ type: turn.relay?.status === 'queued' ? 'session.relay.cancel' : 'session.relay', qid: card.qid });
@@ -240,17 +231,11 @@ export function Ask() {
     if (focus < 0) return false;
     if (cards[focus]!.kind === 'action') return actionKey(cards[focus]!.qid, input, key);
     if (key.return) { act(cards[focus]!); return true; }
-    // s saves a proposed ad hoc team as a template (« Enregistrer »).
-    if (input === 's' && cards[focus]!.kind === 'team') {
-      const team = d.chat.find(x => x.qid === cards[focus]!.qid)?.team;
-      if (team && !team.template && !team.savedPath) client.send({ type: 'team.save', rid: randomUUID(), qid: cards[focus]!.qid, name: team.name, seats: team.seats.map(x => ({ role: x.role, tool: x.tool, ...(x.model ? { model: x.model } : {}), ...(x.effort ? { effort: x.effort } : {}) })) });
-      return true;
-    }
     if (key.escape) { setFocus(-1); return true; }
     return false;
   });
 
-  // The keys follow the focus: s only on a team's card, ctrl+c only while Ledge answers.
+  // The keys follow the focus: ctrl+c only while Ledge answers.
   const stop = asking ? [['ctrl+c', t.keys.stopAnswer] as const] : [];
   const card = cards[focus];
   const review$ = ignored ? [['ctrl+r', t.keys.review] as const] : [];
@@ -276,7 +261,7 @@ export function Ask() {
     : focus === -1 ? [['↵', t.keys.sendOnly], ...review$, ['alt+↵', t.keys.newLine], ['esc', t.keys.back], ['PgUp PgDn', t.keys.scroll], ['↑ ↓', t.keys.history], ['tab', cards.length ? t.keys.nextCard : t.keys.conversation], ['alt+v', t.keys.image], ...(turnImages.length ? [['alt+o', t.keys.openImage] as const] : []), ['ctrl+n', t.keys.newChat], ...stop]
     : focus === CONVO ? [['j k', t.keys.line], ['PgUp PgDn', t.keys.page], ['G', t.keys.end], ...stop, ['tab', t.keys.question], ['esc', t.keys.question]]
     : card?.kind === 'action' ? [...actionKeys(card.qid), ...stop, ...review$]
-    : [['↵', t.keys.send], ['tab', focus + 1 < cards.length ? t.keys.nextCard : t.keys.conversation], ...(card?.kind === 'team' ? [['s', t.keys.save] as const] : []), ['ctrl+n', t.keys.newChat], ...stop, ['esc', t.keys.back]];
+    : [['↵', t.keys.send], ['tab', focus + 1 < cards.length ? t.keys.nextCard : t.keys.conversation], ['ctrl+n', t.keys.newChat], ...stop, ['esc', t.keys.back]];
   // Scrolled: how much is above and below, or that the answer goes on below; at the bottom, what is above.
   const foot = up > 0 ? (asking && live?.qid === asking.qid ? t.ask.answering : t.session.scrolled(lines.length - view - up, up))
     : lines.length > view ? (focus === CONVO ? t.session.above(lines.length - view) : t.ask.above(lines.length - view)) : undefined;
@@ -309,34 +294,6 @@ export function Ask() {
 function CardBox({ card, turn, focused, busy }: { card: Exclude<Card, { kind: 'action' }>; turn: ChatTurn; focused: boolean; busy: boolean }) {
   const { t, g } = useTui();
   const color = focused ? C.coral : C.line;
-  if (card.kind === 'team') {
-    const team = turn.team!;
-    const auto = team.seats.filter(x => x.autonomy === 'auto').map(x => `@${x.role}`);
-    return (
-      <TitledBox title={t.ask.teamCard(team.name)} flexShrink={0} color={color} titleColor={C.coral}>
-        <Text wrap="truncate"><Text color={C.dim}>{t.ask.folder.padEnd(13)}</Text><Text color={C.faint}>{team.cwd}</Text></Text>
-        <Text wrap="truncate"><Text color={C.dim}>{t.ask.table.padEnd(13)}</Text>{g.team} {t.ask.newTable(team.projectName ?? team.project)}</Text>
-        {team.seats.map(x => (
-          <Text key={x.role} wrap="truncate"><Text color={C.dim}>{''.padEnd(13)}</Text><Text color={C.violet}>@{x.role}</Text> {x.label} <Text color={C.faint}>{[TOOL_NAME[x.tool], x.model, x.effort].filter(Boolean).join(' · ')}</Text> <Text color={x.autonomy === 'auto' ? C.yellow : C.faint}>{t.ask.autonomy[x.autonomy ?? 'ask']}</Text></Text>
-        ))}
-        {auto.length ? <Text color={C.yellow} wrap="truncate">{t.ask.autoWarning(auto.join(', '))}</Text> : null}
-        {team.error ? <Text color={C.red} wrap="truncate">{team.error}</Text> : null}
-        <Box columnGap={2}><Button label={busy ? `${g.live} ${t.ask.launchTeam}` : t.ask.launchTeam} k="↵" primary={focused} />{!team.template ? (team.savedPath ? <Text color={C.faint}>{t.ask.saved}</Text> : <Button label={t.ask.save} k="s" />) : null}<Text color={C.faint}>{t.ask.nothingWithoutYou}</Text></Box>
-      </TitledBox>
-    );
-  }
-  if (card.kind === 'task') {
-    const tasks = turn.tasks!;
-    const waits = !!turn.team && !turn.team.teamId;
-    return (
-      <TitledBox title={t.ask.taskCard} flexShrink={0} color={color} titleColor={C.violet}>
-        {card.rows.map(r => { const c = tasks[r]!; return (
-          <Text key={r} wrap="truncate"><Text color={C.fg}>{c.title}</Text> <Text color={C.faint}>{c.toName ?? c.to}</Text>{c.error ? <Text color={C.red}>  {c.error}</Text> : null}</Text>
-        ); })}
-        <Box columnGap={2}><Button label={busy ? `${g.live} ${t.ask.give}` : t.ask.give} k="↵" primary={focused && !waits} />{waits ? <Text color={C.faint}>{t.ask.waitTeam}</Text> : null}</Box>
-      </TitledBox>
-    );
-  }
   if (card.kind === 'launch') {
     const rows = proposalRows(turn);
     return (

@@ -1021,18 +1021,13 @@ export const fr = {
       queued: 'travaille, j’enverrai dès qu’il aura fini', sentTo: 'Envoyé à', failed: (why: string) => `Échec de l’envoi : ${why}`,
       pill: { yours: 'à toi', working: 'travaille', waiting: 'attend ta réponse', stopped: 'arrêtée' }
     },
+    // Words of the team launch and task screens, still on the chat's copy until they go (lot 1, task 3).
     team: {
-      label: 'Équipe proposée', folder: 'Dossier', table: (project: string) => `Table`, newTable: (project: string) => `nouvelle table dans la pièce ${project}`, seats: 'Sièges',
       autonomy: { ask: 'demande avant d’agir', edits: 'modifie sans demander', auto: 'autonome' },
-      autoWarning: (roles: string) => `${roles} travaillera sans demander : modifications et commandes sans ton accord.`,
-      launch: 'Lancer l’équipe', launching: 'Lancement…', retry: 'Réessayer', save: 'Enregistrer', saved: (path: string) => `Enregistrée : ${path}`,
-      launched: (at: string) => `Équipe lancée à ${at}`, openTable: 'Ouvrir la table', failed: (why: string) => `Échec : ${why}`, template: (id: string) => `modèle ${id}`
+      autoWarning: (roles: string) => `${roles} travaillera sans demander : modifications et commandes sans ton accord.`
     },
     task: {
-      label: (n: number) => n === 1 ? 'Tâche à confier' : `${n} tâches à confier`, to: 'à', give: 'Confier', giving: 'Envoi…', retry: 'Réessayer',
-      waitTeam: 'active une fois l’équipe lancée',
-      given: (owner: string, id: string, state: string) => `Confiée à ${owner} · ${id} · ${state}`,
-      state: { open: 'à prendre', taken: 'prise', done: 'finie', refused: 'refusée', dropped: 'abandonnée' }, failed: (why: string) => `Refusée : ${why}`
+      state: { open: 'à prendre', taken: 'prise', done: 'finie', refused: 'refusée', dropped: 'abandonnée' }
     },
     // #94 : la carte générique, une ligne par action, un plan au-delà d’une (docs/mockups/ledge-action-card.html).
     action: actionCopy.fr,

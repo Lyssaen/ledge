@@ -32,17 +32,6 @@ export interface ChatCopy {
     };
     /** The project card (lot 11): `title` a new project, `complete` an existing one to add to. Desktop only shows it; the island fills it. */
     project: { label: string; title: Say; complete: Say; repos: (n: number) => string; review: string };
-    /** The team card (roles spec §3.8); left out by a front that does not show it yet (the card is then not drawn). */
-    team?: {
-      label: string; folder: string; table: Say; newTable: Say; seats: string; autonomy: Record<'ask' | 'edits' | 'auto', string>;
-      autoWarning: (roles: string) => string; launch: string; launching: string; retry: string; save: string; saved: Say;
-      launched: Say; openTable: string; failed: Say; template: Say;
-    };
-    /** The task cards (roles spec §3.8), with the team card. `state` names a given task's state as the daemon tells it. */
-    task?: {
-      label: (n: number) => string; to: string; give: string; giving: string; retry: string; waitTeam: string;
-      given: (owner: string, id: string, state: string) => string; state: Record<'open' | 'taken' | 'done' | 'refused' | 'dropped', string>; failed: Say;
-    };
     /** The generic card (#94): a row per action, a plan past one. `verbs` the button of each action, by its id, `apply`
      *  when the front knows none; `at` a time already put in words (10:42), empty when the daemon gave none. Left out by a front that does not show it yet. */
     action?: ActionCopy;

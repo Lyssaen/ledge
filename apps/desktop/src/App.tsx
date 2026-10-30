@@ -324,7 +324,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         {nav.chat && (
           <ChatPlace label={t.side.chat} client={fleetClient} view={fleetView} paused={nav.paused} focus={nav.chatFocus} onClose={() => dispatch({ type: 'chat', open: false })}
             onOpenSession={id => dispatch({ type: 'open', id })} onTerminal={showTerminal} onLaunched={chatLaunched}
-            projects={projects} notify={notify} onProposal={openProposal} onOpenTeam={room => dispatch({ type: 'home', ...(room ? { project: room } : {}) })} />
+            projects={projects} notify={notify} onProposal={openProposal} />
         )}
       </div>
       {nav.modal?.kind === 'search' && <SearchPalette sessions={sessions} projectName={projectName} order={order} onOpen={id => dispatch({ type: 'open', id })} onClose={close} />}

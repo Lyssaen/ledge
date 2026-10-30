@@ -26,7 +26,6 @@ import { CatalogView, ScopePicker, stateKey, useCatalog, useScope, type CatalogM
 import type { Wait } from '../list/time';
 import { useAgentHighlight } from './useAgentHighlight';
 import { useChatCards } from './useChatCards';
-import { useTeamCards } from './useTeamCards';
 import { CardModelPick } from './CardModelPick';
 import { useProjectReview } from './projectReview';
 
@@ -275,7 +274,6 @@ function HistoryTab({ chat, onOpen }: { chat: readonly ChatTurn[]; onOpen(qid: s
         <button key={turn.qid} type="button" className="lp-row" onClick={() => onOpen(turn.qid)} title={t.home.history.open}>
           <small>{clock(turn.askedAt)}</small>
           <span className="lp-text">{turn.question}</span>
-          {turn.team && <span className="team-flag" aria-hidden>⚑</span>}
         </button>
       ))}
     </div>
@@ -308,7 +306,6 @@ export function LedgeHome(p: LedgeHomeProps): JSX.Element {
   const turnMachine = useCallback((qid: string) => view.fleet.turnMachine(qid)?.id, [view.fleet]);
   const cards = useChatCards({ send, chat, lastLaunched: view.lastLaunched, errors: view.errors, sessions: view.sessions, turnReady, turnMachine, onLaunched: p.onLaunched });
   const actionCards = useActionCards({ send, chat, errors: view.errors, turnReady, onMessage });
-  const teamCards = useTeamCards({ send, onMessage, chat });
   const project = useProjectReview({ chat, projects: p.projects, machines: view.machines, notify: p.notify, onProposal: p.onProposal });
   const [hovered, setHovered] = useState<string | null>(null);
   useAgentHighlight(hovered);
@@ -334,11 +331,6 @@ export function LedgeHome(p: LedgeHomeProps): JSX.Element {
   };
   const open = (id: string) => { setHovered(null); dispatch({ type: 'open', id }); };
   const showTask = (id: string | null) => { setShownTask(id); if (id && tab !== 'tasks') dispatch({ type: 'ledge', tab: 'tasks' }); };
-  const openTable = (teamId: string) => {
-    const team = live.find(x => x.id === teamId);
-    const room = team ? teamProject(team, p.projects) : null;
-    dispatch({ type: 'home', ...(room ? { project: room } : {}) });
-  };
 
   // `@` names a session, `#` a team: the list completes the word being typed, inserted as the name the context folder knows.
   const mention = mentionAt(draft);
@@ -406,8 +398,7 @@ export function LedgeHome(p: LedgeHomeProps): JSX.Element {
                 renderModel={(qid, agent, b) => <CardModelPick client={client} machine={turnMachine(qid)} tool={agent} pick={cards.pick(qid)} disabled={b} onPick={next => cards.setPick(qid, next)} />}
                 relayingQid={cards.relayingQid} onRelay={cards.relay} onRelayCancel={cards.cancelRelay}
                 onProject={project.review} projectNamed={project.projectNamed}
-                onLaunchTeam={teamCards.launchTeam} onSaveTeam={teamCards.saveTeam} onOpenTeam={openTable} onGiveTask={teamCards.giveTask}
-                teamBusy={teamCards.teamBusy} taskBusy={teamCards.taskBusy} clock={clock}
+                clock={clock}
                 onAgentHover={setHovered} inputRef={inputRef}
                 theme={theme} frozen={offline !== null} reducedMotion={p.paused || reduced} />
             </ChatCopyProvider>

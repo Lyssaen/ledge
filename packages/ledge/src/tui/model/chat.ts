@@ -35,9 +35,6 @@ export function chatView(turns: readonly ChatTurn[], live: { qid: string; text: 
       out.push([{ text: '' }], ...markdownLines(text, { width: width - 2, g, color: C.fg }).map(l => [pad(2), ...l]));
       if (streaming !== undefined) out.push([pad(2), { text: g.caret, color: C.coral }]);
     } else out.push([{ text: `  ${t.ask.reading}`, color: C.faint }]);
-    // The team and task cards keep their outcome in the conversation once acted on (roles spec §3.8).
-    if (turn.team?.teamId && turn.team.launchedAt) out.push([{ text: `  ${g.team} ${turn.team.name} · ${t.ask.teamLaunched(clock(turn.team.launchedAt))}`, color: C.green }]);
-    for (const c of turn.tasks ?? []) if (c.taskId) out.push([{ text: `  ${c.title} · ${t.ask.given(c.ownerName ?? c.toName ?? c.to, c.taskId, t.ask.taskState[c.state ?? 'open'])}`, color: C.green }]);
     out.push(...actionTrace(turn, t, g, width));
     for (const l of out) { lines.push(l); keys.push(turn.qid); }
   }
@@ -50,7 +47,7 @@ export const chatLines = (turns: readonly ChatTurn[], live: { qid: string; text:
  *  row is applied or denied, the plan or its row, and each denial with the request it answered, faded. */
 function actionTrace(turn: ChatTurn, t: Messages, g: Glyphs, width: number): Line[] {
   const a = t.ask.action, c = a.copy;
-  const cards = !!(turn.actions || turn.proposal || turn.relay || turn.closes || turn.team || turn.tasks || turn.projectProposal);
+  const cards = !!(turn.actions || turn.proposal || turn.relay || turn.closes || turn.projectProposal);
   if (turn.ignoredAt) {
     // What went before the rest was set aside is counted, a step failed too (it went): a plan begun did send something.
     const shown = turn.actions ? cardPlan(turn.actions).shown : [];
@@ -85,8 +82,6 @@ export type Asked = Pick<ChatTurn, 'question' | 'askedAt'>;
 
 /** A card the answer carries, to act on with ↵. */
 export type Card =
-  | { kind: 'team'; qid: string }
-  | { kind: 'task'; qid: string; rows: number[] }
   | { kind: 'launch'; qid: string; rows: number[] }
   | { kind: 'relay'; qid: string }
   | { kind: 'close'; qid: string; rows: number[] }
@@ -100,9 +95,6 @@ export function openCards(turns: readonly ChatTurn[]): Card[] {
     // Ignored (on any device): none of its cards is offered until it is opened again (ctrl+r).
     if (!turn.answeredAt || turn.ignoredAt) continue;
     if (turn.actions && !cardClosed(turn.actions)) out.push({ kind: 'action', qid: turn.qid });
-    if (turn.team && !turn.team.teamId) out.push({ kind: 'team', qid: turn.qid });
-    const tasks = (turn.tasks ?? []).map((c, i) => (c.taskId ? -1 : i)).filter(i => i >= 0);
-    if (tasks.length) out.push({ kind: 'task', qid: turn.qid, rows: tasks });
     const launch = proposalRows(turn).map((p, i) => (p.launchedId ? -1 : i)).filter(i => i >= 0);
     if (launch.length) out.push({ kind: 'launch', qid: turn.qid, rows: launch });
     if (turn.relay && turn.relay.status !== 'sent') out.push({ kind: 'relay', qid: turn.qid });

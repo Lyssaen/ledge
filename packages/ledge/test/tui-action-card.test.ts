@@ -15,7 +15,7 @@ const decide = (extra: Partial<ChatAction> = {}) => row('session.decide', { risk
 
 describe('the action card as the TUI plans it', () => {
   it('a plan not started: every row open, « all » applies them all', () => {
-    const p = cardPlan([archive('Otto'), archive('Bix'), row('team.dissolve', { risk: 'destructive', vars: { team: 'api' } })]);
+    const p = cardPlan([archive('Otto'), archive('Bix'), row('session.decide', { risk: 'destructive', vars: { session: 'Otto' } })]);
     expect(p.shown).toEqual(['proposed', 'proposed', 'proposed']);
     expect(p.open).toEqual([0, 1, 2]);
     expect(p.all).toEqual({ kind: 'all', rows: [0, 1, 2], k: 0 });
@@ -48,7 +48,7 @@ describe('the action card as the TUI plans it', () => {
     const stale = cardPlan([archive('Otto', { state: 'done' }), decide({ state: 'refused', code: 'changed' }), archive('Ari')]);
     expect(stale.shown).toEqual(['done', 'stale', 'held']);
     expect(stale.all).toEqual({ kind: 'skip', rows: [2], k: 2 });
-    const save = cardPlan([archive('Otto', { state: 'done' }), row('team.save', { vars: { team: 'api' }, state: 'refused', code: 'changed' }), archive('Ari')]);
+    const save = cardPlan([archive('Otto', { state: 'done' }), row('session.model', { vars: { session: 'Otto' }, state: 'refused', code: 'changed' }), archive('Ari')]);
     expect(save.shown).toEqual(['done', 'refused', 'held']);
     expect(save.rows[1]).toMatchObject({ state: 'refused', code: 'changed' });
     expect(save.all).toEqual({ kind: 'skip', rows: [2], k: 2 });

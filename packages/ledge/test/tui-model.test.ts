@@ -352,16 +352,6 @@ describe('tui overview with teams (roles spec §3.9)', () => {
     expect(exchanges([], 3, tasks, 'Ledge (moi)')[0]).toEqual({ at: '2026-10-09T17:00:00.000Z', from: 'Ledge (moi)', to: 'Nova', summary: 'Tâche t000001', kind: 'task' });
     expect(closedLedgeTasks(tasks).map(x => x.id)).toEqual(['t000001']);
   });
-  it('the team and task cards: open until acted on, then their outcome stays in the conversation', () => {
-    const turn: ChatTurn = { qid: 'q1', question: 'Monte une équipe', askedAt: '2026-10-09T16:00:00.000Z', steps: [], answer: 'Voici.', answeredAt: '2026-10-09T16:00:05.000Z',
-      team: { cwd: '/w/ledge', project: 'ledge', name: 'ledge-roles', seats: [{ role: 'build', label: 'Build', tool: 'claude' }] }, tasks: [{ to: '@build', title: 'Implémenter' }] };
-    expect(openCards([turn])).toEqual([{ kind: 'team', qid: 'q1' }, { kind: 'task', qid: 'q1', rows: [0] }]);
-    const done: ChatTurn = { ...turn, team: { ...turn.team!, teamId: 'team-a1b2', launchedAt: '2026-10-09T16:01:00.000Z' }, tasks: [{ ...turn.tasks![0]!, taskId: 't91b0d4', ownerName: 'Mila', state: 'taken' }] };
-    expect(openCards([done])).toEqual([]);
-    const lines = text(chatLines([done], null, { t: fr, g: glyphsFor({}), width: 80 }));
-    expect(lines.some(l => l.includes('▣ ledge-roles · ✓ Équipe lancée à'))).toBe(true);
-    expect(lines).toContain('  Implémenter · ✓ Confiée à Mila · t91b0d4 · prise');
-  });
 });
 
 describe('tui markdown (#95 lot C)', () => {

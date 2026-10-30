@@ -278,7 +278,7 @@ describe('ledge tui: the action card (#94, docs/mockups/ledge-action-card.html, 
   const plan = (states: Array<Partial<ChatAction>> = [{}, {}, {}]): ChatAction[] => [
     row('session.model', { vars: { session: 'Nova', model: 'Opus 5.5', effort: 'élevé' }, session: 'nova', ...states[0] }),
     row('session.archive', { vars: { session: 'Otto' }, session: 'otto', ...states[1] }),
-    row('team.dissolve', { risk: 'destructive', vars: { team: 'ledge-roles' }, detail: 'Ses 6 sessions retournent à la table commune.', ...states[2] })
+    row('session.close', { risk: 'destructive', vars: { session: 'Bix' }, session: 'bix', detail: 'Sa conversation reste reprenable.', ...states[2] })
   ];
   const decide = (extra: Partial<ChatAction> = {}) => row('session.decide', { risk: 'destructive', session: 'nova', detail: 'rm -rf packages/ledge/dist', vars: { session: 'Nova', decision: 'accept', kind: 'permission' }, ...extra });
   const turn = (actions: ChatAction[], extra: Partial<ChatTurn> = {}): ChatTurn => ({ qid: 'q1', question: 'Range tout', askedAt: NOW(1), answeredAt: NOW(2), answer: 'Voici le plan.', steps: [], actions, ...extra });
@@ -303,9 +303,9 @@ describe('ledge tui: the action card (#94, docs/mockups/ledge-action-card.html, 
     try {
       await until(() => tui.frame().includes('PLAN · 3 ACTIONS'));
       expect(tui.frame()).toContain('1 ○ Passer Nova sur Opus 5.5, effort élevé');
-      expect(tui.frame()).toContain('3 ○ Dissoudre l’équipe ledge-roles');
+      expect(tui.frame()).toContain('3 ○ Fermer Bix');
       expect(tui.frame()).toContain('irréversible');
-      expect(tui.frame()).toContain('Ses 6 sessions retournent à la table commune.');
+      expect(tui.frame()).toContain('Sa conversation reste reprenable.');
       await tui.press('\r');
       await until(() => sent(tui.daemon.received, 'chat.act').length === 1);
       expect(sent(tui.daemon.received, 'chat.act')[0]).toMatchObject({ qid: 'q1', rows: [0] });
@@ -330,7 +330,7 @@ describe('ledge tui: the action card (#94, docs/mockups/ledge-action-card.html, 
       await until(() => tui.frame().includes('PLAN · 3 ACTIONS'));
       await tui.press(DOWN); await tui.press(DOWN);
       await tui.press('\r');
-      await until(() => tui.frame().includes('CONFIRMER · DISSOUDRE L’ÉQUIPE LEDGE-ROLES'));
+      await until(() => tui.frame().includes('CONFIRMER · FERMER BIX'));
       await tui.press('\u001b');
       await until(() => tui.frame().includes('PLAN · 3 ACTIONS'));
       expect(sent(tui.daemon.received, 'chat.act')).toEqual([]);
@@ -428,7 +428,7 @@ describe('ledge tui: the action card (#94, docs/mockups/ledge-action-card.html, 
   });
 
   it('the detail of an earlier row takes its room: the request it pushes off the screen is cut (#94)', async () => {
-    const dissolve = row('team.dissolve', { risk: 'destructive', vars: { team: 'api' }, detail: Array.from({ length: 25 }, (_, i) => `Team detail ${i}`).join('\n') });
+    const dissolve = row('session.close', { risk: 'destructive', vars: { session: 'Bix' }, session: 'bix', detail: Array.from({ length: 25 }, (_, i) => `Team detail ${i}`).join('\n') });
     const tui = await startTui();
     try {
       await tui.resize(80, 24);
@@ -463,7 +463,7 @@ describe('ledge tui: the action card (#94, docs/mockups/ledge-action-card.html, 
   });
 
   it('a send stays under way until the daemon answers it: a row running frees no other one (#94)', async () => {
-    const two = (a: Partial<ChatAction> = {}, b: Partial<ChatAction> = {}) => [row('session.archive', { vars: { session: 'Otto' }, session: 'otto', ...a }), row('team.dissolve', { risk: 'destructive', vars: { team: 'api' }, ...b })];
+    const two = (a: Partial<ChatAction> = {}, b: Partial<ChatAction> = {}) => [row('session.archive', { vars: { session: 'Otto' }, session: 'otto', ...a }), row('session.close', { risk: 'destructive', vars: { session: 'Bix' }, session: 'bix', ...b })];
     const tui = await ask(turn(two()));
     try {
       await until(() => tui.frame().includes('PLAN · 2 ACTIONS'));

@@ -74,32 +74,6 @@ describe('« Ledge » on the phone (ledge home spec §2.4)', () => {
     expect(screen.getByText(/Fil du téléphone/)).toBeInTheDocument();
   });
 
-  it('the team card: its seats and autonomy, the device check on launch, then « Équipe lancée … confirmé avec la clé de l’appareil »', async () => {
-    const t = withTeams([]);
-    const card = { project: 'Ledge', name: 'ledge-roles', seats: [{ role: 'build', label: 'Builder', tool: 'claude' as const, model: 'opus', autonomy: 'edits' as const }, { role: 'qa', label: 'QA', tool: 'claude' as const, autonomy: 'auto' as const }] };
-    t.deliver(chat.history(chat.turn(QID, { answer: 'Je propose l’équipe.', answeredAt: NOW, team: card, tasks: [{ to: '@build', title: 'Implémenter les rôles' }] })));
-    render(<Chat store={t.store} />);
-    const region = screen.getByRole('region', { name: 'Équipe proposée' });
-    expect(within(region).getByText('nouvelle table dans la pièce Ledge')).toBeInTheDocument();
-    expect(within(region).getByText('@qa')).toBeInTheDocument();
-    expect(within(region).getByRole('note')).toHaveTextContent('@qa travaillera sans demander.');
-    const taskCard = screen.getByRole('region', { name: 'Tâche à confier' });
-    expect(within(taskCard).getByRole('button', { name: 'Confier' })).toBeDisabled();
-    expect(within(taskCard).getByText('active une fois l’équipe lancée')).toBeInTheDocument();
-    vi.mocked(getAssertion).mockResolvedValue({ id: 'a', clientDataJSON: 'b', authenticatorData: 'c', signature: 'd' });
-    fireEvent.click(within(region).getByRole('button', { name: 'Lancer l’équipe' }));
-    expect(t.of('confirm.prepare')).toEqual([{ type: 'confirm.prepare', purpose: 'launch', qid: QID }]);
-    act(() => t.deliver({ type: 'confirm.challenge', purpose: 'launch', challenge: 'Y2g', rpId: 'pc.local', credentialId: 'Y3I', expiresInMs: 60_000 }));
-    await waitFor(() => expect(t.of('chat.team')).toMatchObject([{ qid: QID, assertion: { id: 'a' } }]));
-    act(() => t.deliver(chat.history(chat.turn(QID, { answer: 'Je propose l’équipe.', answeredAt: NOW, team: { ...card, teamId: 'team-a1b2', launchedAt: NOW }, tasks: [{ to: '@build', title: 'Implémenter les rôles' }] }))));
-    expect(await within(region).findByText(/Équipe lancée à/)).toBeInTheDocument();
-    expect(within(region).getByText(/confirmé avec la clé de l’appareil/)).toBeInTheDocument();
-    fireEvent.click(within(taskCard).getByRole('button', { name: 'Confier' }));
-    expect(t.of('chat.task')).toMatchObject([{ qid: QID, row: 0 }]);
-    act(() => t.deliver(chat.history(chat.turn(QID, { answer: 'Je propose l’équipe.', answeredAt: NOW, team: { ...card, teamId: 'team-a1b2', launchedAt: NOW }, tasks: [{ to: '@build', title: 'Implémenter les rôles', taskId: 't91b0d4', ownerName: 'Otto', state: 'taken' }] }))));
-    expect(await within(taskCard).findByText('Confiée à Otto · t91b0d4 · prise')).toBeInTheDocument();
-  });
-
   it('the app opens on « Ledge » once paired, but a link to a screen stays put', async () => {
     const a = app('ready', { hash: '#/' });
     act(() => a.deliver(snapshot(sessions(), 'PC-Desan', undefined, ON)));

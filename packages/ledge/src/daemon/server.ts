@@ -194,7 +194,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   // the login shell's on top of it, as a terminal would.
   const agentEnv = opts.agentEnv ?? (async () => ({ ...process.env, ...(await loginShellEnv()) }));
   const attachments = opts.attachments ?? new AttachmentStore(paths().attachments);
-  const threads = createChatThreads({ attachments, store, tmux, home: paths().dir, userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now, projects: () => projects, forge: createForge({ env: agentEnv }), teams: () => teams.all(), tasks: () => tasks.all() });
+  const threads = createChatThreads({ attachments, store, tmux, home: paths().dir, userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now, projects: () => projects, forge: createForge({ env: agentEnv }) });
   const chat: Chat = opts.chat ?? threads.desktop;
   const router = createRouter({ env: agentEnv });
   const omp = opts.omp ?? createOmpHost({ store, env: agentEnv, dir: join(paths().dir, 'omp'), now, attachments });
@@ -308,8 +308,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const unsubscribeTeams = teams.onChange(team => broadcast({ type: 'team.updated', team }));
   const tasks = createTasks({ store, mailbox, now, teams, ...(opts.tasks ? { journal: opts.tasks } : {}), onTask: (task, entry) => {
     broadcast({ type: 'task.updated', task });
-    // The card that gave it follows it, on whichever thread holds it: only Ledge gives from a card.
-    if (givenByLedge(task)) for (const [thread, c] of cardThreads.all()) c.followTask?.(task, cardThreads.emitterOf(thread) ?? broadcast);
     // A session that handed it over sees it in its thread, as a message it sent (issue #92); Ledge has no thread.
     const index = entry ? task.log.lastIndexOf(entry) : -1;
     const tr = transmissions(task).find(x => x.index === index);
@@ -839,31 +837,24 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const chatActs = new Set<string>();
   /**
    * A generic card's rows (spec 2026-10-26 action registry §2.1), applied through the daemon's own handlers so their rules stay in
-   * one place: a row fails on the handler's `error`, or on the reason its `team.saved` or `task.result` carries.
+   * one place: a row fails on the handler's `error`.
    */
   function actOnCard(card: { chat: Pick<Chat, 'action' | 'markAction'>; emit: (m: ChatMessage) => void }, qid: string, rid: string, rows?: number[], confirmed?: true, deny?: true) {
     return actFromChat({
       chat: card.chat, emit: card.emit, inFlight: chatActs, now,
-      resolve: row => resolveAction(row.action, row.args, { sessions: store.all(), teams: teams.all(), tasks: tasks.all(), findRole, templateExists: name => templateExists(name) }),
+      resolve: row => resolveAction(row.action, row.args, { sessions: store.all() }),
       apply: async row => { const r = await applyRow(row, rid); if (r.failure !== undefined) throw new Error(r.failure); }
     }, qid, rows, confirmed, deny);
   }
   /** The turn's cards were set aside (« Ignorer », on any thread's device): nothing of them applies until opened again. */
   const setAside = (qid: string) => cardThreads.all().some(([, c]) => c.ignored(qid));
   const SET_ASIDE = 'ignored card: open it again first';
-  /** A resolved row through the daemon's own handler: its failure is the handler's `error`, or the reason its `team.saved` or
-   *  `task.result` carries; `path` the template a `team.save` wrote. Ledge's own task commands go straight to the tasks:
-   *  `by: 'ledge'` is never taken from a client (handle refuses it). */
-  async function applyRow(row: Pick<ChatAction, 'action' | 'args'>, rid: string): Promise<{ failure?: string; path?: string }> {
+  /** A resolved row through the daemon's own handler: its failure is the handler's `error`. */
+  async function applyRow(row: Pick<ChatAction, 'action' | 'args'>, rid: string): Promise<{ failure?: string }> {
     const out = actionMessage(row, rid);
-    if (out.type === 'task.cmd') { const r = tasks.run(out); return r.reason !== undefined ? { failure: r.reason } : {}; }
-    let failure: string | undefined; let path: string | undefined;
-    await handle(out, m => {
-      if (m.type === 'error') failure ??= m.message;
-      else if ((m.type === 'team.saved' || m.type === 'task.result') && m.reason) failure ??= m.reason;
-      else if (m.type === 'team.saved') path = m.path;
-    });
-    return { ...(failure !== undefined ? { failure } : {}), ...(path ? { path } : {}) };
+    let failure: string | undefined;
+    await handle(out, m => { if (m.type === 'error') failure ??= m.message; });
+    return failure !== undefined ? { failure } : {};
   }
   /**
    * `action.run` (#93): an action of the registry outside the chat, resolved and applied as a generic card's row, so the CLI
@@ -880,7 +871,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       return answer({ reason: `la session ${msg.by} n'a pas de clé (lancée avant cette version de Ledge, ou hors de Ledge) : reprends-la depuis Ledge, ou demande à l'utilisateur`, code: 'identity' });
     if (msg.by !== undefined && (!want || !tokenEquals(msg.key!, want)))
       return answer({ reason: `la clé ne correspond pas à la session ${msg.by} : lance la commande depuis cette session, telle que Ledge l'a lancée`, code: 'identity' });
-    const ctx = { sessions: store.all(), teams: teams.all(), tasks: tasks.all(), findRole, templateExists: (name: string) => templateExists(name) };
+    const ctx = { sessions: store.all() };
     const r: Resolved = resolveRun(msg.action, parsed.data, ctx);
     if ('refused' in r) return answer({ reason: r.refused, code: 'refused' });
     const guard = runGuard(r, msg.by, ctx);
@@ -897,8 +888,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       const failure = await closeForCard(String(r.args.session)).then(() => undefined, e => (e as Error).message);
       return answer({ row: r, ...(failure !== undefined ? { reason: failure, code: 'failed' } : {}) });
     }
-    const { failure, path } = await applyRow(r, msg.rid);
-    return answer({ row: r, ...(failure !== undefined ? { reason: failure, code: 'failed' } : {}), ...(path ? { path } : {}) });
+    const { failure } = await applyRow(r, msg.rid);
+    return answer({ row: r, ...(failure !== undefined ? { reason: failure, code: 'failed' } : {}) });
   }
   type LaunchReq = { tool: Tool; cwd: string; name?: string; prompt?: string; continue?: boolean; dirs?: string[]; model?: string; effort?: string; approval?: OmpApproval; role?: string; team?: string };
   /**
@@ -1170,41 +1161,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     }
     const failed = await startSeats(t, [{ role: seat.role, ...(seat.tool ? { tool: seat.tool } : {}), ...(seat.model ? { model: seat.model } : {}), ...(seat.effort ? { effort: seat.effort } : {}) }]);
     return changed({ team: teams.get(t.id)!, ...(failed ? { reason: failed } : {}) });
-  }
-
-  /** The chat's team card (roles spec §3.8): launched once, from the card's own fields; its outcome stays on the card. */
-  const teamCardsInFlight = new Set<string>();
-  async function launchTeamFromCard(rid: string, qid: string, reply: Reply): Promise<void> {
-    const card = cardOf(cardThreads, qid);
-    const p = card?.chat.team(qid);
-    if (!card || !p) return reply({ type: 'team.failed', rid, reason: 'carte d\'équipe inconnue' });
-    if (p.teamId) return reply({ type: 'team.failed', rid, reason: 'équipe déjà lancée', ...(teams.get(p.teamId) ? { team: teams.get(p.teamId)! } : {}) });
-    if (teamCardsInFlight.has(qid)) return reply({ type: 'team.failed', rid, reason: 'lancement déjà en cours' });
-    teamCardsInFlight.add(qid);
-    try {
-      const r = await launchTeam({ cwd: p.cwd, ...(p.template ? { template: p.template } : { seats: p.seats.map(s => ({ role: s.role, tool: s.tool, ...(s.model ? { model: s.model } : {}), ...(s.effort ? { effort: s.effort } : {}), ...(s.name ? { name: s.name } : {}) })) }), name: p.name });
-      if ('reason' in r) {
-        card.chat.markTeam(qid, { error: r.reason, ...(r.team ? { teamId: r.team.id, launchedAt: now() } : {}) }, card.emit);
-        return reply({ type: 'team.failed', rid, reason: r.reason, ...(r.team ? { team: r.team } : {}) });
-      }
-      card.chat.markTeam(qid, { teamId: r.team.id, launchedAt: now() }, card.emit);
-      reply({ type: 'team.launched', rid, team: r.team });
-    } finally { teamCardsInFlight.delete(qid); }
-  }
-
-  /** The chat's task card row: given by Ledge, `@role` resolved in the card's team, or in the team its turn launched. */
-  function giveFromCard(msg: Extract<ClientMessage, { type: 'task.cmd' }>, reply: Reply): void {
-    const qid = msg.qid!; const row = msg.row ?? 0;
-    const card = cardOf(cardThreads, qid);
-    const c = card?.chat.task(qid, row);
-    if (!card || !c) return reply({ type: 'task.result', rid: msg.rid, reason: 'carte de tâche inconnue' });
-    if (c.taskId) return reply({ type: 'task.result', rid: msg.rid, reason: `déjà confiée (${c.taskId})` });
-    const team = c.team ?? card.chat.team(qid)?.teamId;
-    if (c.to.startsWith('@') && !team) return reply({ type: 'task.result', rid: msg.rid, reason: 'active une fois l\'équipe lancée' });
-    const r = tasks.run({ type: 'task.cmd', rid: msg.rid, by: LEDGE_GIVER, op: 'give', to: c.to, title: c.title, ...(c.text ? { text: c.text } : {}), ...(team ? { team } : {}) });
-    if (r.task) card.chat.markTask(qid, row, { taskId: r.task.id, ownerName: r.task.ownerName, state: r.task.state, givenAt: now() }, card.emit);
-    else card.chat.markTask(qid, row, { error: r.reason ?? 'refusée' }, card.emit);
-    reply(r);
   }
 
   /** `team.resume`: each seat's archived or ended session continues its own conversation, so the team comes back as it was. */
@@ -1499,7 +1455,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       case 'task.cmd': {
         // The chat's task card (roles spec §3.8) gives through its turn, which then follows its task.
-        if (msg.qid !== undefined && msg.op === 'give') return setAside(msg.qid) ? reply({ type: 'task.result', rid: msg.rid, reason: SET_ASIDE }) : giveFromCard(msg, reply);
         // Over another's head, Ledge acts only from its chat's card (actOnCard): a client naming itself `ledge` cannot.
         if (msg.by === LEDGE_GIVER && (msg.op === 'cancel' || msg.op === 'pass')) return reply({ type: 'task.result', rid: msg.rid, reason: 'seul le chat de Ledge annule ou passe une tâche au nom de Ledge' });
         return reply(tasks.run(msg));
@@ -1517,7 +1472,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return reply({ type: 'roles.listing', ...(msg.requestId ? { requestId: msg.requestId } : {}), ...listDefinitions(cwd) });
       }
       case 'team.launch': {
-        if (msg.qid !== undefined) return setAside(msg.qid) ? reply({ type: 'team.failed', rid: msg.rid, reason: SET_ASIDE }) : launchTeamFromCard(msg.rid, msg.qid, reply);
         // A client that holds no path (the phone) names the project: its first local repo is the folder.
         const cwd = msg.cwd ?? (msg.project ? await projectFolder(msg.project) : undefined);
         if (!cwd) return reply({ type: 'team.failed', rid: msg.rid, reason: msg.project && !msg.cwd ? 'aucun dossier local pour ce projet' : 'il faut un dossier' });
@@ -1555,8 +1509,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'team.save': {
         try {
           const path = saveTemplate(msg.name, msg.seats);
-          const card = msg.qid ? cardOf(cardThreads, msg.qid) : undefined;
-          if (card && card.chat.team(msg.qid!)) card.chat.markTeam(msg.qid!, { savedPath: path }, card.emit);
           log(`team template saved: ${path}`);
           return reply({ type: 'team.saved', rid: msg.rid, path });
         }

@@ -326,29 +326,12 @@ describe('teams and Ledge\'s tasks in the store (ledge home spec §2.4)', () => 
     expect(t.store.getState().tasks.get('t1')?.state).toBe('done');
   });
 
-  it('launchTeam is confirmed like a launch and sends chat.team; chat.task, team.resume and task.seen are not stored', async () => {
+  it('team.resume and task.seen are sent and not stored', async () => {
     const t = setup();
-    vi.mocked(getAssertion).mockResolvedValue(ASSERTION);
-    const done = t.store.launchTeam(qid);
-    expect(t.of('confirm.prepare')).toEqual([{ type: 'confirm.prepare', purpose: 'launch', qid }]);
-    t.deliver(CHALLENGE);
-    await flush();
-    const [sent] = t.of('chat.team');
-    expect(sent).toMatchObject({ qid, assertion: ASSERTION });
-    t.deliver({ type: 'operation.result', op: sent!.op, status: 'applied' });
-    await expect(done).resolves.toEqual({ status: 'applied' });
-    void t.store.giveTask(qid, 1);
     void t.store.resumeTeam('team-a1b2');
     void t.store.seeTask('t1');
-    expect(t.of('chat.task')).toMatchObject([{ qid, row: 1 }]);
     expect(t.of('team.resume')).toMatchObject([{ team: 'team-a1b2' }]);
     expect(t.of('task.seen')).toMatchObject([{ task: 't1' }]);
     expect(JSON.parse(t.storage.getItem(OPS_KEY) ?? '{}')).toEqual({});
-  });
-
-  it('launchTeam without a credential is confirm_required, with no WebAuthn call', async () => {
-    const t = setup({ confirm: false, chat: true });
-    await expect(t.store.launchTeam(qid)).resolves.toEqual({ status: 'rejected', reason: 'confirm_required' });
-    expect(getAssertion).not.toHaveBeenCalled();
   });
 });

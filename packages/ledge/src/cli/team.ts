@@ -24,13 +24,9 @@ export type TeamCmd =
   | { op: 'run'; action: ActionId; args: Record<string, unknown>; closeSessions?: true; yes?: true; json?: true };
 
 /** Each verb that is a registry action: its id and how its positional arguments fill the action's args. */
-const VERBS: Record<string, { action: ActionId; args: (p: string[]) => Record<string, unknown> | undefined; n: number }> = {
-  join: { action: 'team.join', n: 3, args: ([team, session, role]) => ({ team, session, role: role!.replace(/^@/, '') }) },
-  leave: { action: 'team.leave', n: 2, args: ([team, session]) => ({ team, session }) },
-  resume: { action: 'team.resume', n: 1, args: ([team]) => ({ team }) },
-  dissolve: { action: 'team.dissolve', n: 1, args: ([team]) => ({ team }) },
-  save: { action: 'team.save', n: 2, args: ([team, name]) => ({ team, name }) }
-};
+/** Each verb that is a registry action: its id and how its positional arguments fill the action's args. The chat and the registry
+ *  no longer hold a team action (lot 1, task 2), so no verb remains; the whole `ledge team` goes in task 6a. */
+const VERBS: Record<string, { action: ActionId; args: (p: string[]) => Record<string, unknown> | undefined; n: number }> = {};
 
 /** A seat as `--seat role[:tool]` writes it. */
 function seatOf(v: string): Seat | undefined {
@@ -152,7 +148,7 @@ async function runVerb(cmd: Extract<TeamCmd, { op: 'run' }>, port: number | unde
     // Unconfirmed, a dissolve the caller may run answers `confirm_required` with its row; anything else is the answer.
     const asked = await runOnClient(client, cmd.action, cmd.args, { by });
     if (asked.code !== 'confirm_required') return resultLine(asked, cmd.json);
-    const team = teams.find(t => t.id === asked.row?.team);
+    const team = teams.find(t => t.id === (asked.row as { team?: string } | undefined)?.team);
     const live = (team?.seats ?? []).flatMap(seat => {
       const s = snapshot.sessions.find(x => x.id === seat.sessionId);
       return s && s.state !== 'exited' && s.source !== 'hook_only' ? [s] : [];

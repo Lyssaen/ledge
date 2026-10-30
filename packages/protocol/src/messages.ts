@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { AskQuestionSchema, PendingSchema, SessionSchema, ToolSchema, OmpApprovalSchema } from './session.js';
-import { ChatStepSchema, ChatTurnSchema, ChatProposalSchema, ChatProposalsSchema, ChatRelaySchema, ChatClosesSchema, MAX_PROPOSALS, ChatProjectProposalSchema, ChatTeamProposalSchema, ChatTasksSchema, ChatActionsSchema, ChatActionSchema } from './chat.js';
+import { ChatStepSchema, ChatTurnSchema, ChatProposalSchema, ChatProposalsSchema, ChatRelaySchema, ChatClosesSchema, MAX_PROPOSALS, ChatProjectProposalSchema, ChatActionsSchema, ChatActionSchema } from './chat.js';
 import { ActionIdSchema } from './actions.js';
 import { ATTACHMENTS_MAX, AttachmentDataSchema, AttachmentErrorSchema, AttachmentGetSchema, AttachmentIdSchema, AttachmentPutSchema, AttachmentStoredSchema, ImageUploadSchema } from './attachments.js';
 import { ReposInspectSchema, ReposInfoSchema } from './repos.js';
@@ -133,7 +133,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   /** The chat (spec 2026-10-11 §5): what Ledge reads, its words as they come, the final text, or why it stopped; the day's turns after each snapshot. */
   z.object({ type: z.literal('chat.step'), qid: z.string(), step: ChatStepSchema }),
   z.object({ type: z.literal('chat.delta'), qid: z.string(), text: z.string() }),
-  z.object({ type: z.literal('chat.done'), qid: z.string(), text: z.string(), at: z.string().datetime(), proposal: ChatProposalSchema.optional(), proposals: ChatProposalsSchema.optional(), relay: ChatRelaySchema.optional(), closes: ChatClosesSchema.optional(), projectProposal: ChatProjectProposalSchema.optional(), team: ChatTeamProposalSchema.optional(), tasks: ChatTasksSchema.optional(), actions: ChatActionsSchema.optional() }),
+  z.object({ type: z.literal('chat.done'), qid: z.string(), text: z.string(), at: z.string().datetime(), proposal: ChatProposalSchema.optional(), proposals: ChatProposalsSchema.optional(), relay: ChatRelaySchema.optional(), closes: ChatClosesSchema.optional(), projectProposal: ChatProjectProposalSchema.optional(), actions: ChatActionsSchema.optional() }),
   /** What a `chat.act` applied: the rows done, and the one that failed with why (the rows after it stay proposed). */
   z.object({ type: z.literal('chat.acted'), rid: z.string(), qid: z.string(), done: z.array(z.number().int().min(0)), failed: z.array(z.object({ row: z.number().int().min(0), message: z.string(), /** nothing was sent */ refused: z.literal(true).optional() })) }),
   /** What an `action.run` came to: `row` the action as the daemon resolved it (its summary, its risk); `reason` why it was not

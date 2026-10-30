@@ -978,18 +978,13 @@ export const en: Messages = {
       queued: "is working; I'll send it as soon as it's done", sentTo: 'Sent to', failed: (why: string) => `Could not send: ${why}`,
       pill: { yours: 'your turn', working: 'working', waiting: 'waiting for you', stopped: 'stopped' }
     },
+    // Words of the team launch and task screens, still on the chat's copy until they go (lot 1, task 3).
     team: {
-      label: 'Proposed team', folder: 'Folder', table: (project: string) => `Table`, newTable: (project: string) => `new table in the ${project} room`, seats: 'Seats',
       autonomy: { ask: 'asks before acting', edits: 'edits without asking', auto: 'autonomous' },
-      autoWarning: (roles: string) => `${roles} will work without asking: edits and commands without your approval.`,
-      launch: 'Launch the team', launching: 'Launching…', retry: 'Retry', save: 'Save', saved: (path: string) => `Saved: ${path}`,
-      launched: (at: string) => `Team launched at ${at}`, openTable: 'Open the table', failed: (why: string) => `Failed: ${why}`, template: (id: string) => `template ${id}`
+      autoWarning: (roles: string) => `${roles} will work without asking: edits and commands without your approval.`
     },
     task: {
-      label: (n: number) => n === 1 ? 'Task to give' : `${n} tasks to give`, to: 'to', give: 'Give', giving: 'Sending…', retry: 'Retry',
-      waitTeam: 'active once the team is launched',
-      given: (owner: string, id: string, state: string) => `Given to ${owner} · ${id} · ${state}`,
-      state: { open: 'to take', taken: 'taken', done: 'done', refused: 'refused', dropped: 'dropped' }, failed: (why: string) => `Refused: ${why}`
+      state: { open: 'to take', taken: 'taken', done: 'done', refused: 'refused', dropped: 'dropped' }
     },
     // #94: the generic card, a row per action, a plan past one (docs/mockups/ledge-action-card.html).
     action: actionCopy.en,

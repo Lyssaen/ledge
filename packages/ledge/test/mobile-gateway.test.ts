@@ -1696,7 +1696,7 @@ describe('phone gateway: generic cards (spec 2026-10-26 action registry §9)', (
   type Row = { action: string; args: Record<string, unknown>; summary: string; risk: 'reversible' | 'destructive'; state?: 'done'; detail?: string; detailCut?: true };
   const archive: Row = { action: 'session.archive', args: { session: 'a' }, summary: 'Archiver **A**', risk: 'reversible' };
   const resume: Row = { action: 'session.resume', args: { session: 'b' }, summary: 'Reprendre **B**', risk: 'reversible' };
-  const dissolve: Row = { action: 'team.dissolve', args: { team: 't' }, summary: 'Dissoudre **T**', risk: 'destructive' };
+  const dissolve: Row = { action: 'session.close', args: { session: 't' }, summary: 'Fermer **T**', risk: 'destructive' };
 
   function make(rows: Row[], result?: { done: number[]; failed: Array<{ row: number; message: string }> } | Error) {
     const c = fakeChats(); turnsOf = c.turns;
@@ -1830,7 +1830,7 @@ describe('phone gateway: generic cards (spec 2026-10-26 action registry §9)', (
     expect(calls).toEqual([['device:dev1', QA, [0], true]]);
   });
   it('a row destructive by its args (a template replaced) needs the passkey too, though its action names no device check (Max)', async () => {
-    const save: Row = { action: 'team.save', args: { team: 't', name: 'existing', seats: [{ role: 'back' }] }, summary: 'Remplacer le modèle', risk: 'destructive' };
+    const save: Row = { action: 'session.archive', args: { session: 't' }, summary: 'Archiver le modèle', risk: 'destructive' };
     const { calls, g } = make([save]);
     g.send('dev1', { type: 'chat.act', op: randomUUID(), qid: QA, confirmed: true });
     await flush();
@@ -1905,43 +1905,6 @@ describe('phone gateway: teams and Ledge\'s tasks (ledge home spec §2.4)', () =
     await flush();
     expect(g.dispatched).toEqual([{ type: 'team.resume', team: 'team-a1b2' }, expect.objectContaining({ type: 'task.cmd', by: 'ledge', op: 'seen', task: 't000001' }), expect.objectContaining({ type: 'task.cmd', task: 't0000ff' })]);
     expect(g.results('dev1').filter(r => r.status !== 'received').map(r => r.status)).toEqual(['applied', 'applied', 'failed']);
-  });
-
-  it('chat.team needs the device\'s check over its own turn; then team.launch with the qid, its outcome from team.launched', async () => {
-    const c = fakeChats();
-    const QA = randomUUID();
-    const card = { cwd: '/w/repo', project: 'repo', projectName: 'Repo', name: 'repo-roles', seats: [{ role: 'build', label: 'Build', tool: 'claude', autonomy: 'edits' }] };
-    c.turns.set('dev1', [{ qid: QA, question: 'q', askedAt: T0, steps: [], team: card, tasks: [{ to: '@build', title: 'Implémenter' }] } as never]);
-    const g = setup({ chats: c.chats, relayUrl: 'https://relay.test', teams: () => [], tasks: () => [], dispatch: async (msg, reply) => {
-      if (msg.type === 'team.launch') reply({ type: 'team.launched', rid: msg.rid, team: team() });
-      if (msg.type === 'task.cmd') reply({ type: 'task.result', rid: msg.rid, task: task('t91b0d4') } as ServerMessage);
-    } });
-    g.send('dev1', { type: 'chat.team', op: randomUUID(), qid: QA });
-    await flush();
-    expect(g.results('dev1').at(-1)).toMatchObject({ status: 'rejected', reason: 'confirm_required' });
-    const auth = softAuthenticator();
-    g.send('dev1', { type: 'confirm.prepare', purpose: 'register' });
-    await flush();
-    const reg = g.got('dev1').find(m => m.type === 'confirm.challenge');
-    if (reg?.type !== 'confirm.challenge') throw new Error('no challenge');
-    g.send('dev1', { type: 'credential.register', op: randomUUID(), credential: auth.create(rp, reg.challenge) });
-    await flush();
-    const before = g.got('dev1').length;
-    g.send('dev1', { type: 'confirm.prepare', purpose: 'launch', qid: QA });
-    await flush();
-    const ch = g.got('dev1').slice(before).find(m => m.type === 'confirm.challenge');
-    if (ch?.type !== 'confirm.challenge') throw new Error('no challenge');
-    const op = randomUUID();
-    g.send('dev1', { type: 'chat.team', op, qid: QA, assertion: auth.get(rp, ch.challenge, { counter: 1 }) });
-    await flush();
-    expect(g.results('dev1').at(-1)).toEqual({ type: 'operation.result', op, status: 'applied' });
-    expect(g.dispatched).toContainEqual({ type: 'team.launch', rid: op, qid: QA });
-    // The task card: given by Ledge, no device check needed (it only gives work to a seat already launched).
-    g.send('dev1', { type: 'chat.task', op: randomUUID(), qid: QA, row: 0 });
-    g.send('dev1', { type: 'chat.task', op: randomUUID(), qid: QA, row: 3 });
-    await flush();
-    expect(g.dispatched).toContainEqual(expect.objectContaining({ type: 'task.cmd', by: 'ledge', op: 'give', qid: QA, row: 0 }));
-    expect(g.results('dev1').filter(r => r.status !== 'received').slice(-2).map(r => r.status === 'rejected' ? r.reason : r.status).sort()).toEqual(['applied', 'unknown_session']);
   });
 
   it('team.updated and task.updated reach the following devices; another giver\'s task does not', async () => {

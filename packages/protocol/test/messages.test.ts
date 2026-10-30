@@ -492,21 +492,21 @@ describe('protocol: model and effort (#58)', () => {
     expect(() => parseServerMessage({ ...acted, failed: [{ row: 1, message: 'x', refused: false }] })).toThrow();
   });
   it('action.run names a registry action and its args, by a session or the user; action.result answers it with the row or why not', () => {
-    const run = { type: 'action.run', rid: 'r1', by: 's1', action: 'team.dissolve', args: { team: 'api' }, confirmed: true };
+    const run = { type: 'action.run', rid: 'r1', by: 's1', action: 'session.close', args: { session: 'api' }, confirmed: true };
     expect(parseClientMessage(run)).toEqual(run);
-    expect(parseClientMessage({ type: 'action.run', rid: 'r1', action: 'team.resume', args: { team: 'api' } })).not.toHaveProperty('by');
+    expect(parseClientMessage({ type: 'action.run', rid: 'r1', action: 'session.resume', args: { session: 'api' } })).not.toHaveProperty('by');
     expect(() => parseClientMessage({ ...run, action: 'session.kill' })).toThrow();
     expect(() => parseClientMessage({ ...run, confirmed: false })).toThrow();
-    const row = { action: 'team.dissolve', args: { team: 'team-3fa2' }, summary: 'Dissoudre **api**', risk: 'destructive', team: 'team-3fa2' };
-    const done = { type: 'action.result', rid: 'r1', action: 'team.dissolve', row };
+    const row = { action: 'session.close', args: { session: 'local:api' }, summary: 'Fermer **api**', risk: 'reversible', session: 'local:api' };
+    const done = { type: 'action.result', rid: 'r1', action: 'session.close', row };
     expect(parseServerMessage(done)).toEqual(done);
-    const refused = { type: 'action.result', rid: 'r1', action: 'team.dissolve', row, reason: 'confirm', code: 'confirm_required' };
+    const refused = { type: 'action.result', rid: 'r1', action: 'session.close', row, reason: 'confirm', code: 'confirm_required' };
     expect(parseServerMessage(refused)).toEqual(refused);
-    expect(parseServerMessage({ type: 'action.result', rid: 'r1', action: 'team.save', path: '/h/.ledge/teams/api.yaml' })).toMatchObject({ path: '/h/.ledge/teams/api.yaml' });
-    expect(parseServerMessage({ type: 'action.result', rid: 'r1', action: 'team.save', reason: 'x', code: 'something-newer' })).toMatchObject({ code: 'something-newer' });
+    expect(parseServerMessage({ type: 'action.result', rid: 'r1', action: 'session.close', path: '/h/.ledge/teams/api.yaml' })).toMatchObject({ path: '/h/.ledge/teams/api.yaml' });
+    expect(parseServerMessage({ type: 'action.result', rid: 'r1', action: 'session.close', reason: 'x', code: 'something-newer' })).toMatchObject({ code: 'something-newer' });
   });
   it('chat.done and a turn carry the generic rows, one to eight, each a registry action', () => {
-    const row = { action: 'team.dissolve', args: { team: 'team-3fa2' }, summary: 'Dissoudre **api**', risk: 'destructive', team: 'team-3fa2' };
+    const row = { action: 'session.close', args: { session: 'local:api' }, summary: 'Fermer **api**', risk: 'reversible', session: 'local:api' };
     expect(parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, actions: [row] })).toMatchObject({ actions: [row] });
     expect(() => parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, actions: [] })).toThrow();
     expect(() => parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, actions: Array(9).fill(row) })).toThrow();
@@ -552,5 +552,12 @@ describe('session.model.accepted', () => {
   it('says when the change applies', () => {
     expect(ServerMessageSchema.safeParse({ type: 'session.model.accepted', id: 'a', when: 'turn' }).success).toBe(true);
     expect(ServerMessageSchema.safeParse({ type: 'session.model.accepted', id: 'a', when: 'later' }).success).toBe(false);
+  });
+});
+
+describe('chat.done without team or tasks', () => {
+  it('a chat.done with an old team or tasks field parses, without them', () => {
+    const r = ServerMessageSchema.parse({ type: 'chat.done', qid: 'q', text: 't', at: T0, team: { name: 'x' }, tasks: [{ to: 'a', title: 'b' }] });
+    expect(r).not.toHaveProperty('team'); expect(r).not.toHaveProperty('tasks');
   });
 });

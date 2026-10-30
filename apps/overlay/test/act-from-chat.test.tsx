@@ -14,7 +14,7 @@ const client = (): DaemonClient => ({ connect() {}, close() {}, send: m => { sen
 const apply = (m: Parameters<typeof daemonStore.apply>[0]) => act(() => { daemonStore.apply(m); });
 const actions: ChatAction[] = [
   { action: 'session.archive', args: { session: 'a' }, summary: 'Archiver **Otto**', vars: { session: 'Otto' }, risk: 'reversible', session: 'a' },
-  { action: 'team.dissolve', args: { team: 't1' }, summary: 'Dissoudre l’équipe **qa**', vars: { team: 'qa' }, risk: 'destructive', team: 't1' }
+  { action: 'session.close', args: { session: 'bix' }, summary: 'Fermer **Bix**', vars: { session: 'Bix' }, risk: 'destructive', session: 'bix' }
 ];
 
 function askAndAct(): string {

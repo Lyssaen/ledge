@@ -256,7 +256,7 @@ export function createPhoneGateway(deps: {
   };
 
   /** The operations that act on a tracked session: the registry's own, the credential's, the device's and the chat's are handled before it. */
-  type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.launch' | 'chat.close' | 'chat.act' | 'chat.ignore' | 'chat.team' | 'chat.task' | 'team.resume' | 'task.seen' | 'daemon.update' | 'daemon.restart' | 'session.close' | 'session.resume' | (typeof TEAMS_OPERATION_TYPES)[number] }>;
+  type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.launch' | 'chat.close' | 'chat.act' | 'chat.ignore' | 'team.resume' | 'task.seen' | 'daemon.update' | 'daemon.restart' | 'session.close' | 'session.resume' | (typeof TEAMS_OPERATION_TYPES)[number] }>;
   /** Whether the operation needs the device's own check: an accept of a request that is not low, or a reply to an OMP (rpc) dialog, which is never low. */
   const needsAssertion = (msg: SessionOperation, s: Session): boolean => {
     if (msg.type === 'session.decide') return msg.decision !== 'deny' && riskOf(s)?.risk !== 'low';
@@ -459,7 +459,7 @@ export function createPhoneGateway(deps: {
     if (!msg.deny && todo.some(r => phoneCut(actions[r]!) && actions[r]!.args.decision !== 'deny')) return { status: 'rejected', reason: 'not_offered' };
     // A deny is never confirmed nor checked on the device, as the phone's own deny of a request is not.
     if (!msg.deny && !msg.confirmed && todo.some(r => actions[r]!.risk === 'destructive')) return { status: 'rejected', reason: 'confirm_required' };
-    // A row destructive by its args (`team.save` over an existing template) is checked as one the registry marks (§5.3).
+    // A row destructive, or one the registry marks for a device check, needs the passkey (§5.3).
     if (!msg.deny && todo.some(r => actions[r]!.risk === 'destructive' || actionById(actions[r]!.action)?.phone)) {
       if (deps.credential(deviceId) === null) return { status: 'rejected', reason: 'confirm_required' };
       const refused = checkAssertion(deviceId, msg.assertion, 'act', msg.qid);
@@ -567,29 +567,6 @@ export function createPhoneGateway(deps: {
     push(deviceId, { type: 'models.listing', tool, models: toPhoneModels(listing.models), ...(listing.error !== undefined ? { error: true as const } : {}) });
   };
 
-  /** The turn's team card (roles spec §3.8): like a launch card, the device's check over the turn first. */
-  const chatTeam = async (deviceId: string, msg: Extract<PhoneOperation, { type: 'chat.team' }>): Promise<Outcome> => {
-    const turn = ownTurn(deviceId, msg.qid);
-    if (!turn?.team || !deps.teams) return { status: 'rejected', reason: 'unknown_session' };
-    if (turn.ignoredAt) return SET_ASIDE;
-    if (turn.team.teamId) return { status: 'failed' };
-    if (deps.credential(deviceId) === null) return { status: 'rejected', reason: 'confirm_required' };
-    const refused = launchAssertionOutcome(deviceId, msg.qid, msg.assertion);
-    if (refused) return refused;
-    const rid = msg.op;
-    return ask({ type: 'team.launch', rid, qid: msg.qid }, m => (m.type === 'team.launched' && m.rid === rid ? true : m.type === 'team.failed' && m.rid === rid ? false : undefined));
-  };
-  const chatTask = async (deviceId: string, msg: Extract<PhoneOperation, { type: 'chat.task' }>): Promise<Outcome> => {
-    const turn = ownTurn(deviceId, msg.qid);
-    const card = turn?.tasks?.[msg.row];
-    if (!card || !deps.tasks) return { status: 'rejected', reason: 'unknown_session' };
-    if (turn!.ignoredAt) return SET_ASIDE;
-    if ((card.text?.length ?? 0) > TOOL_TEXT_MAX) return { status: 'rejected', reason: 'invalid' };
-    if (card.taskId) return { status: 'failed' };
-    const rid = msg.op;
-    return ask({ type: 'task.cmd', rid, by: LEDGE_GIVER, op: 'give', qid: msg.qid, row: msg.row }, m => (m.type === 'task.result' && m.rid === rid ? m.task !== undefined : undefined));
-  };
-
   /** « Ignorer » the device's own turn, or `undo` (« Revoir »). */
   const chatIgnore = (deviceId: string, msg: Extract<PhoneOperation, { type: 'chat.ignore' }>): Outcome => {
     if (!ownTurn(deviceId, msg.qid) || !deps.chats) return { status: 'rejected', reason: 'unknown_session' };
@@ -624,8 +601,6 @@ export function createPhoneGateway(deps: {
     if (msg.type === 'daemon.update' || msg.type === 'daemon.restart') return pcOperation(deviceId, msg);
     if (isTeamsOperation(msg)) return teamsOps ? teamsOps.run(deviceId, msg) : { status: 'rejected', reason: 'unavailable' };
     if (msg.type === 'chat.ignore') return chatIgnore(deviceId, msg);
-    if (msg.type === 'chat.team') return chatTeam(deviceId, msg);
-    if (msg.type === 'chat.task') return chatTask(deviceId, msg);
     if (msg.type === 'team.resume') return deps.teams ? ask({ type: 'team.resume', team: msg.team }, () => undefined) : { status: 'rejected', reason: 'unavailable' };
     if (msg.type === 'task.seen') {
       if (!deps.tasks) return { status: 'rejected', reason: 'unavailable' };
@@ -889,7 +864,7 @@ export function createPhoneGateway(deps: {
       const op = OperationIdSchema.safeParse((raw as { op?: unknown } | null | undefined)?.op);
       // A model change the schema refuses (#58) is answered the same way.
       if (request === 'session.model' && op.success && approved(deviceId)) return push(deviceId, { type: 'operation.result', op: op.data, status: 'rejected', reason: 'invalid' });
-      if (((request !== undefined && (TEAMS_OPERATION_TYPES as readonly string[]).includes(request)) || request === 'push.subscribe' || request === 'chat.launch' || request === 'chat.close' || request === 'chat.act' || request === 'chat.ignore' || request === 'chat.team' || request === 'chat.task' || request === 'team.resume' || request === 'task.seen' || request === 'session.close' || request === 'session.resume') && op.success && approved(deviceId)) return push(deviceId, { type: 'operation.result', op: op.data, status: 'rejected', reason: 'invalid' });
+      if (((request !== undefined && (TEAMS_OPERATION_TYPES as readonly string[]).includes(request)) || request === 'push.subscribe' || request === 'chat.launch' || request === 'chat.close' || request === 'chat.act' || request === 'chat.ignore' || request === 'team.resume' || request === 'task.seen' || request === 'session.close' || request === 'session.resume') && op.success && approved(deviceId)) return push(deviceId, { type: 'operation.result', op: op.data, status: 'rejected', reason: 'invalid' });
       return push(deviceId, { type: 'error', code: 'invalid', ...(request !== undefined ? { request } : {}) });
     }
     const msg = parsed.data;

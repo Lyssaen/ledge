@@ -183,27 +183,12 @@ export const PhoneChatCloseSchema = z.object({
 }).strict();
 export type PhoneChatClose = z.infer<typeof PhoneChatCloseSchema>;
 
-/** A team the chat proposes, as the phone sees it (roles spec §3.8): no folder; its project's name, its seats with what they
- *  run and their autonomy; `teamId` and `launchedAt` once launched, `failed` when the last launch did not work. */
-export const PhoneChatTeamSchema = z.object({
-  project: z.string().max(80), name: z.string().max(60), template: z.string().max(64).optional(),
-  seats: z.array(z.object({ role: z.string().max(40), label: z.string().max(40), tool: ToolSchema, model: z.string().max(200).optional(), effort: z.string().max(20).optional(), autonomy: AutonomySchema.optional() }).strict()).min(1).max(8),
-  teamId: z.string().max(40).optional(), launchedAt: z.string().datetime().optional(), failed: z.literal(true).optional()
-}).strict();
-export type PhoneChatTeam = z.infer<typeof PhoneChatTeamSchema>;
-/** A task the chat proposes to give, as the phone sees it; once given it follows its task. */
-export const PhoneChatTaskSchema = z.object({
-  to: z.string().max(80), toName: z.string().max(80).optional(), title: z.string().max(200), text: z.string().max(TOOL_TEXT_MAX).optional(),
-  taskId: z.string().max(40).optional(), ownerName: z.string().max(80).optional(), state: z.enum(['open', 'taken', 'done', 'refused', 'dropped']).optional(), failed: z.literal(true).optional()
-}).strict();
-export type PhoneChatTask = z.infer<typeof PhoneChatTaskSchema>;
-
 /** A row of the chat's generic card as the phone sees it: no args (the phone applies rows, never args), no error text but its
  *  `code`. A detail too long for the phone comes cut (`detailCut`): such a row can only be refused there, or opened on the PC. */
 export const PhoneChatActionSchema = z.object({
   action: z.string().min(1).max(40), summary: z.string().max(300), vars: ActionVarsSchema.optional(),
   detail: z.string().max(TOOL_TEXT_MAX).optional(), detailCut: z.literal(true).optional(), risk: ActionRiskSchema,
-  session: z.string().max(100).optional(), team: z.string().max(40).optional(),
+  session: z.string().max(100).optional(),
   state: ChatActionStateSchema.optional(), doneAt: z.string().datetime().optional(), code: z.string().max(40).optional()
 }).strict();
 export type PhoneChatAction = z.infer<typeof PhoneChatActionSchema>;
@@ -240,7 +225,6 @@ export const PhoneChatTurnSchema = z.object({
   steps: z.array(PhoneChatStepSchema).max(50), answer: z.string().max(THREAD_TEXT_MAX).optional(), answeredAt: z.string().datetime().optional(),
   error: ChatErrorCodeSchema.optional(), proposals: z.array(PhoneChatProposalSchema).max(MAX_PROPOSALS).optional(),
   relay: PhoneChatRelaySchema.optional(), closes: z.array(PhoneChatCloseSchema).min(1).max(MAX_PROPOSALS).optional(), cut: z.literal(true).optional(),
-  team: PhoneChatTeamSchema.optional(), tasks: z.array(PhoneChatTaskSchema).min(1).max(MAX_PROPOSALS).optional(),
   actions: z.array(PhoneChatActionSchema).min(1).max(MAX_PROPOSALS).optional(), ignoredAt: z.string().datetime().optional(),
   attachments: z.array(AttachmentRefSchema).max(ATTACHMENTS_MAX).optional()
 }).strict();
@@ -326,10 +310,6 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('chat.relay'), op: OperationIdSchema, qid: OperationIdSchema }),
   z.object({ type: z.literal('chat.launch'), op: OperationIdSchema, qid: OperationIdSchema, rows: CardRowsSchema.optional(), assertion: AssertionSchema.optional() }),
   z.object({ type: z.literal('chat.close'), op: OperationIdSchema, qid: OperationIdSchema, rows: CardRowsSchema.optional(), assertion: AssertionSchema.optional() }),
-  /** The turn's team card (roles spec §3.8): launched like a session card, with the device check (purpose `launch`, the turn). */
-  z.object({ type: z.literal('chat.team'), op: OperationIdSchema, qid: OperationIdSchema, assertion: AssertionSchema.optional() }),
-  /** A row of the turn's task card: given by Ledge. */
-  z.object({ type: z.literal('chat.task'), op: OperationIdSchema, qid: OperationIdSchema, row: z.number().int().min(0).max(MAX_PROPOSALS - 1) }),
   /** Rows of the turn's generic card (action registry spec §5): `confirmed` as the local `chat.act`; a row whose action asks
    *  for a device check (`phone`) needs one assertion, purpose `act`, over the turn. */
   z.object({ type: z.literal('chat.act'), op: OperationIdSchema, qid: OperationIdSchema, rows: CardRowsSchema.optional(), confirmed: z.literal(true).optional(), assertion: AssertionSchema.optional(),

@@ -29,7 +29,7 @@ export const actionCopy: NonNullable<ChatCopy['chat']['action']> = {
   riskTip: { read: 'nothing changes', reversible: 'Ledge can undo it', destructive: 'Ledge cannot undo it' },
   step: k => `Step ${k}`, stepState: { done: k => `Step ${k}, applied`, failed: k => `Step ${k}, failed`, refused: k => `Step ${k}, refused`, running: k => `Step ${k}, running` },
   askAgain: 'I will ask again',
-  verbs: { 'session.model': 'Change', 'session.archive': 'Archive', 'team.dissolve': 'Dissolve', 'session.decide': 'Accept' },
+  verbs: { 'session.model': 'Change', 'session.archive': 'Archive', 'session.close': 'Close', 'session.decide': 'Accept' },
   apply: 'Apply', deny: 'Deny', ignore: 'Ignore', review: 'Review', retry: 'Retry', running: 'Running…',
   done: at => `Applied${at ? ` · ${at}` : ''}`, refusedState: 'Refused', denied: at => `Denial sent${at ? ` · ${at}` : ''}`, open: n => `Open ${n}`,
   failed: w => `Failed: ${w}`, refused: w => `Refused: ${w} Nothing was sent.`, held: k => `Not applied: the plan stopped at step ${k}.`,

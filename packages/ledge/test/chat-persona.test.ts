@@ -44,3 +44,7 @@ describe('buildPersona (spec 2026-10-26 action registry §4)', () => {
     expect(PERSONA).toBe(buildPersona('claude'));
   });
 });
+
+describe('buildPersona: no team', () => {
+  it('the persona speaks of no team', () => expect(buildPersona('claude')).not.toMatch(/teams\.md|tasks\.md|équipe/));
+});

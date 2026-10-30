@@ -65,35 +65,6 @@ describe('Ledge’s home view (ledge home spec)', () => {
     await waitFor(() => expect(d.received).toContainEqual({ type: 'task.cmd', rid: expect.any(String), by: 'ledge', op: 'seen', task: 't000001' }));
   });
 
-  it('a team card launches its team and keeps the outcome; its task cards wait for it, then give and follow their task', async () => {
-    const { d, user } = await openHome();
-    await user.type(home().getByRole('textbox', { name: 'Ask Ledge' }), 'Monte une équipe{Enter}');
-    await waitFor(() => expect(d.received.some(m => m.type === 'chat.ask')).toBe(true));
-    const { qid } = d.received.find((m): m is Extract<ClientMessage, { type: 'chat.ask' }> => m.type === 'chat.ask')!;
-    const proposed: ChatTurn = { qid, question: 'Monte une équipe', askedAt: T0, steps: [], answer: 'Une équipe.', answeredAt: T0,
-      team: { cwd: '/w/ledge', project: 'ledge', projectName: 'Ledge', name: 'ledge-roles', seats: [{ role: 'build', label: 'Build', tool: 'claude', model: 'opus', autonomy: 'edits' }, { role: 'review', label: 'Relecteur', tool: 'codex', autonomy: 'auto' }] },
-      tasks: [{ to: '@build', title: 'Implémenter les rôles' }] };
-    d.push({ type: 'chat.history', turns: [proposed] });
-    const card = await screen.findByRole('region', { name: 'Proposed team' });
-    expect(within(card).getByText('new table in the Ledge room')).toBeVisible();
-    expect(within(card).getByText('@review')).toBeVisible();
-    expect(within(card).getByRole('note')).toHaveTextContent('@review will work without asking');
-    const tasks = screen.getByRole('region', { name: 'Task to give' });
-    expect(within(tasks).getByRole('button', { name: 'Give' })).toBeDisabled();
-    expect(within(tasks).getByText('active once the team is launched')).toBeVisible();
-    await user.click(within(card).getByRole('button', { name: /Launch the team/ }));
-    await waitFor(() => expect(d.received).toContainEqual({ type: 'team.launch', rid: expect.any(String), qid }));
-    const rid = (d.received.find(m => m.type === 'team.launch') as { rid: string }).rid;
-    d.push({ type: 'team.launched', rid, team });
-    d.push({ type: 'chat.history', turns: [{ ...proposed, team: { ...proposed.team!, teamId: team.id, launchedAt: T0 } }] });
-    await within(card).findByText(/Team launched at/);
-    expect(within(card).getByRole('button', { name: 'Open the table' })).toBeVisible();
-    await user.click(within(tasks).getByRole('button', { name: 'Give' }));
-    await waitFor(() => expect(d.received).toContainEqual({ type: 'task.cmd', rid: expect.any(String), by: 'ledge', op: 'give', qid, row: 0 }));
-    d.push({ type: 'chat.history', turns: [{ ...proposed, team: { ...proposed.team!, teamId: team.id, launchedAt: T0 }, tasks: [{ ...proposed.tasks![0]!, taskId: 't91b0d4', ownerName: 'Otto', state: 'taken', givenAt: T0 }] }] });
-    expect(await within(tasks).findByText(/Given to Otto · t91b0d4 · taken/)).toBeVisible();
-  });
-
   it('@ and # complete a session and a team in the composer', () => {
     expect(mentionAt('ask @ot')).toEqual({ sigil: '@', query: 'ot', start: 4 });
     expect(mentionAt('#led')).toEqual({ sigil: '#', query: 'led', start: 0 });
