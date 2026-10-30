@@ -39,7 +39,9 @@ const PHANTOM_STATE: Record<SeatState, Session['state']> = {
 /**
  * The Desktop session of a seat: the paired one (`seat.sessionId` is already machine-qualified by the fleet), else a phantom
  * read-only session. Phantom neutral fields: `project`/`title` '', `tmuxSession` null, `helpers` [], `startedAt` and
- * `lastActivityAt` the epoch (the seat has no start time), `machineId` the rig's machine.
+ * `lastActivityAt` the epoch (the seat has no start time), `machineId` the rig's machine. These timestamps and the empty
+ * title/task are placeholders: consumers must not render a time or task line when `isSeatPlaceholder(s.id)`.
+ * Seat state mapping: unreachable becomes `state: 'idle'` + `offline: true`; crashed `error`; stopped `exited`.
  */
 export function seatSession(seat: RigSeat, rig: Rig, byId: ReadonlyMap<string, Session>): Session {
   const paired = seat.sessionId ? byId.get(seat.sessionId) : undefined;
@@ -95,10 +97,15 @@ export function seatAt(rigs: readonly Rig[], machine: string, rigId: string, who
   return rig?.seats.find(s => s.ref === who) ?? rig?.seats.find(s => s.address === who) ?? rig?.seats.find(s => s.name === who);
 }
 
-/** A session that is not a seat of a rig OpenRig still reports: no `rig`, or one the rig mirror does not know (it stays in Projets). */
+/**
+ * Whether a session belongs in Projets: false only when a rig of the same machine has a running seat (any seat of a kernel, hidden
+ * ones included) paired to this very session id. Everything else stays (no rig, unknown rig, stopped seat, pairing race, seat paired
+ * to another session), so a session is never missing from both Projets and Rigs.
+ */
 export function isStandalone(s: Session, rigs: readonly Rig[]): boolean {
   const r = s.rig;
-  return !r || !rigs.some(x => x.machine === r.machine && x.id === r.rigId);
+  if (!r) return true;
+  return !rigs.some(x => x.machine === r.machine && x.seats.some(seat => seat.sessionId === s.id && seat.state !== 'stopped'));
 }
 
 export interface RigRow { key: string; rig: Rig; place: RigPlace; seats: Session[]; working: number; waiting: number; remote: boolean }
@@ -106,7 +113,7 @@ export interface KernelRow { key: string; rig: Rig; shown: Session[]; hiddenCoun
 
 /** The sidebar's Rigs section: rigs by name (kernels apart, one per machine, after them); seats still running, in the rig's order. */
 export function rigsModel(rigs: readonly Rig[], byId: ReadonlyMap<string, Session>, projects: Projects | null): { rigs: RigRow[]; kernels: KernelRow[] } {
-  const rows = rigs.filter(r => !r.kernel).sort((a, b) => a.name.localeCompare(b.name)).map((rig): RigRow => {
+  const rows = rigs.filter(r => !r.kernel).sort((a, b) => a.name.localeCompare(b.name) || a.machine.localeCompare(b.machine)).map((rig): RigRow => {
     const seats = rig.seats.filter(s => s.state !== 'stopped').map(s => seatSession(s, rig, byId));
     return { key: rigKey(rig), rig, place: rigPlace(rig, projects), seats, working: workingCount(rig),
       waiting: seats.filter(s => s.state === 'waiting_permission' || s.state === 'waiting_input').length, remote: rig.machine !== 'local' };
@@ -116,9 +123,10 @@ export function rigsModel(rigs: readonly Rig[], byId: ReadonlyMap<string, Sessio
   for (const rig of rigs) {
     if (!rig.kernel || machines.has(rig.machine)) continue;
     machines.add(rig.machine);
-    const { shown, hidden } = kernelSplit(rig);
+    const { shown, hidden } = kernelSplit({ ...rig, seats: rig.seats.filter(x => x.state !== 'stopped') });
     kernels.push({ key: rigKey(rig), rig, shown: shown.map(s => seatSession(s, rig, byId)), hiddenCount: hidden.length });
   }
+  kernels.sort((a, b) => Number(b.rig.machine === 'local') - Number(a.rig.machine === 'local') || a.rig.machine.localeCompare(b.rig.machine));
   return { rigs: rows, kernels };
 }
 

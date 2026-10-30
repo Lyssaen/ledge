@@ -7,19 +7,26 @@ import { attentionOf, branchOf, filterArchived, isFinished, quickDecide, treeMod
 const idOf = (s: ReturnType<typeof fakeSession>) => projectOf(s, TWO_PROJECTS);
 
 const rigOf = (id: string) => ({ machine: 'local', rigId: id, rigName: id, seat: 's', pod: 'p', member: 'm' });
-const aRig = (id: string) => ({ id, name: id, machine: 'local', cwd: '/w', projectId: null, offProject: false, lifecycle: 'running' as const, kernel: false, seats: [], repos: [] });
+const aRig = (id: string, state: 'ready' | 'stopped' = 'ready', sessionId?: string) => ({ id, name: id, machine: 'local', cwd: '/w', projectId: null, offProject: false, lifecycle: 'running' as const, kernel: false,
+  seats: [{ ref: 's@x', address: '@s', name: 's', runtime: 'claude-code', state, ...(sessionId ? { sessionId } : {}) }], repos: [] });
 
 describe('treeModel', () => {
   it('a session paired to a known rig leaves Projets', () => {
     const otto = fakeSession('otto', { cwd: '/w/ledge' });
     const build = fakeSession('build', { cwd: '/w/ledge', rig: rigOf('r1') });
-    const groups = treeModel([otto, build], TWO_PROJECTS, idOf, [aRig('r1')]);
+    const groups = treeModel([otto, build], TWO_PROJECTS, idOf, [aRig('r1', 'ready', build.id)]);
     expect(groups.flatMap(g => g.branches.flatMap(b => b.sessions)).map(s => s.id)).toEqual([otto.id]);
   });
 
   it('a session paired to an unknown rig stays in Projets', () => {
     const build = fakeSession('build', { cwd: '/w/ledge', rig: rigOf('gone') });
     const groups = treeModel([build], TWO_PROJECTS, idOf, [aRig('r1')]);
+    expect(groups.flatMap(g => g.branches.flatMap(b => b.sessions)).map(s => s.id)).toEqual([build.id]);
+  });
+
+  it('a session whose seat is stopped stays in Projets', () => {
+    const build = fakeSession('build', { cwd: '/w/ledge', rig: rigOf('r1') });
+    const groups = treeModel([build], TWO_PROJECTS, idOf, [aRig('r1', 'stopped', build.id)]);
     expect(groups.flatMap(g => g.branches.flatMap(b => b.sessions)).map(s => s.id)).toEqual([build.id]);
   });
 

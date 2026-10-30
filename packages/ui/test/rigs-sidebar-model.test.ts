@@ -16,9 +16,15 @@ const esc = (id: string, state: Escalation['state'], over: Partial<Escalation> =
 
 describe('isStandalone', () => {
   it('a session without a rig is standalone', () => expect(isStandalone(sess('a', 'idle'), [STARTER])).toBe(true));
-  it('paired to a known rig: not standalone', () => expect(isStandalone(sess('a', 'idle', R('local', 'r-s')), [STARTER])).toBe(false));
-  it('paired to an unknown rig: standalone', () => expect(isStandalone(sess('a', 'idle', R('local', 'gone')), [STARTER])).toBe(true));
-  it('same rig id on another machine is unknown', () => expect(isStandalone(sess('a', 'idle', R('nas', 'r-s')), [STARTER])).toBe(true));
+  it('paired to a running seat of a known rig: not standalone', () => expect(isStandalone(sess('local:dev', 'idle', R('local', 'r-s')), [STARTER])).toBe(false));
+  it('paired to an unknown rig: standalone', () => expect(isStandalone(sess('local:dev', 'idle', R('local', 'gone')), [rig('nas', 'x')])).toBe(true));
+  it('same seat on another machine is unknown', () => expect(isStandalone(sess('local:dev', 'idle', R('nas', 'r-s')), [STARTER])).toBe(true));
+  it('stopped seat: standalone', () => expect(isStandalone(sess('local:qa', 'idle', R('local', 'r-s')),
+    [rig('local', 'r-s', { seats: [seat('qa', { state: 'stopped', sessionId: 'local:qa' })] })])).toBe(true));
+  it('seat without sessionId (pairing race): standalone', () => expect(isStandalone(sess('local:pm', 'idle', R('local', 'r-s')), [STARTER])).toBe(true));
+  it('seat paired to another session: standalone', () => expect(isStandalone(sess('local:other', 'idle', R('local', 'r-s')), [STARTER])).toBe(true));
+  it('any seat of a kernel counts, hidden ones included', () => expect(isStandalone(sess('local:adv', 'idle', R('local', 'k')),
+    [rig('local', 'k', { kernel: true, seats: [seat('advisor', { sessionId: 'local:adv' })] })])).toBe(false));
 });
 
 describe('rigsModel', () => {
@@ -36,6 +42,16 @@ describe('rigsModel', () => {
     expect(starter).toMatchObject({ remote: false, working: 1, waiting: 1, place: { kind: 'none' } });
     expect(starter!.seats.map(s => s.name)).toEqual(['local:dev', 'pm']); // paired session keeps its own name
     expect(starter!.seats[0]!.id).toBe('local:dev');
+  });
+  it('kernel rows skip stopped seats, local first then by machine', () => {
+    const kn = (machine: string, over: Partial<Rig> = {}) => rig(machine, 'k' + machine, { kernel: true, seats: [seat('orch'), seat('advisor', { state: 'stopped' }), seat('advisor2')], ...over });
+    const k = rigsModel([kn('zeta'), kn('alpha'), kn('local')], new Map(), null).kernels;
+    expect(k.map(x => x.rig.machine)).toEqual(['local', 'alpha', 'zeta']);
+    expect(k[0]).toMatchObject({ hiddenCount: 1 });
+    expect(k[0]!.shown.map(s => s.name)).toEqual(['orch']);
+  });
+  it('same name: ordered by machine', () => {
+    expect(rigsModel([rig('b', 'x', { name: 'f' }), rig('a', 'y', { name: 'f' })], new Map(), null).rigs.map(r => r.rig.machine)).toEqual(['a', 'b']);
   });
   it('one kernel per machine', () => {
     const k2 = rig('local', 'k2', { kernel: true });
