@@ -1,6 +1,7 @@
 import { CONTEXT_NEAR, MachinesSchema, type Machine, type IslandPrefs, type MobileClientMessage, type MobileState } from '@ledge/protocol';
 import type { DaemonClient, DaemonStatus } from './client';
 import { parseServerMessage, type ClientMessage, type Ask, type DaemonInfo, type Projects, type Recent, type Session, type ServerMessage } from '@ledge/protocol';
+import type { Escalation, Exchange, OpenRigStatus, Rig } from '@ledge/protocol';
 import { useSyncExternalStore } from 'react';
 import { DAEMON_PROTOCOL_PREFIX, type TokenSource } from './token';
 
@@ -54,6 +55,16 @@ export interface Fleet {
   asks(): FleetAsk[];
   /** Answers an ask on its machine's daemon, and says whether it took the answer (4 s at most): a refusal, a machine not connected or silent is `{ ok: false, reason }`. */
   answerAsk(machine: string, id: string, text: string): Promise<{ ok: true } | { ok: false; reason: string }>;
+  /** The rigs of every machine, `machine` rewritten to the fleet's id (a fallen machine's are kept, 'unreachable'): one stable list until a change. */
+  rigs(): Rig[];
+  /** The escalations of every machine (kept while a machine is down). Their `id` is the machine's own: pair it with `machine`. */
+  escalations(): Escalation[];
+  /** OpenRig's status per machine that reported one. */
+  openrig(): OpenRigStatus[];
+  /** The exchanges loaded for a rig (`requestExchanges` or the live feed), null when none. */
+  exchanges(machine: string, rigId: string): Exchange[] | null;
+  /** Asks the machine's daemon for a rig's recent exchanges; false when the machine is not reachable (nothing sent). */
+  requestExchanges(machine: string, rigId: string): boolean;
   /** The context threshold the local daemon keeps (context handover spec §3.2): undefined until it speaks of it. */
   contextNear(): number | undefined;
   /** Sets it on the local daemon; the effect arrives on its broadcast. Throws `DaemonOffline` / `DaemonOutdated` as `setIsland`. */
@@ -176,4 +187,17 @@ export function useMobile(client: DaemonClient): MobileState | undefined {
 /** The local daemon's last refused mobile.* command. */
 export function useMobileError(client: DaemonClient): MobileError | undefined {
   return useSyncExternalStore(client.fleet?.subscribe ?? noopSubscribe, client.fleet?.mobileError ?? undefinedSnapshot, undefinedSnapshot);
+}
+const noRigs: Rig[] = [], noEscalations: Escalation[] = [], noStatuses: OpenRigStatus[] = [];
+/** The rigs of every machine. */
+export function useRigs(client: DaemonClient): Rig[] {
+  return useSyncExternalStore(client.fleet?.subscribe ?? noopSubscribe, client.fleet?.rigs ?? (() => noRigs), () => noRigs);
+}
+/** The escalations of every machine. */
+export function useEscalations(client: DaemonClient): Escalation[] {
+  return useSyncExternalStore(client.fleet?.subscribe ?? noopSubscribe, client.fleet?.escalations ?? (() => noEscalations), () => noEscalations);
+}
+/** OpenRig's status per machine. */
+export function useOpenRig(client: DaemonClient): OpenRigStatus[] {
+  return useSyncExternalStore(client.fleet?.subscribe ?? noopSubscribe, client.fleet?.openrig ?? (() => noStatuses), () => noStatuses);
 }

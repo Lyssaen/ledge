@@ -2,6 +2,7 @@ import { askShown, ChatTurnSchema, ContextPrefsSchema, isArchived, IslandPrefsSc
 import { createDaemonClient, type DaemonClient, type DaemonStatus } from './client';
 import { LOCAL_MACHINE, loadMachines, machineUrl, parseMachines, probeMachine, qualify, shellCommand, splitId, terminalCommand, type FleetAsk, type MachineConfig, type MobileError, type MachineState } from './machines';
 import type { TokenSource } from './token';
+import { createRigBook, isRigMessage } from './rigs';
 
 type Snapshot = Extract<ServerMessage, { type: 'snapshot' }>;
 type Peer = { config: MachineConfig; client: DaemonClient; status: DaemonStatus; fresh: boolean; snapshot: Snapshot | null; previews: Map<string, string[]>; off: (() => void)[]; error?: string; restarting?: boolean };
@@ -83,6 +84,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   const askMap = new Map<string, Map<string, Ask>>(); let askList: FleetAsk[] = [];
   /** `ask.answer` requestId -> the machine asked and how to settle the caller's promise. */
   const askAnswers = new Map<string, { machine: string; settle: (r: { ok: true } | { ok: false; reason: string }) => void }>();
+  /** Rigs, escalations, OpenRig statuses and exchanges of every machine (lot 2): consumed here, never relayed raw. */
+  const book = createRigBook();
   const putAsks = (machine: string, list: Ask[] | undefined, one?: Ask) => {
     const mine = list ? new Map<string, Ask>() : askMap.get(machine) ?? new Map<string, Ask>();
     for (const a of list ?? (one ? [one] : [])) mine.set(a.id, a);
@@ -118,6 +121,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   /** keepStale: a fallen peer, the local one included, keeps its last snapshot, flagged offline (spec §6). */
   const stale = (p: Peer | undefined): boolean => !!opts.keepStale && !!p && !available(p) && !!p.snapshot;
   const session = (p: Peer, s: Session): Session => ({ ...s, id: qualify(p.config.id, s.id), machineId: p.config.id, machineName: p.config.label, ...(stale(p) ? { offline: true } : {}),
+    ...(s.rig?.machine === 'local' ? { rig: { ...s.rig, machine: p.config.id } } : {}),
     // A relief and the one it relieves are on the same machine (context handover spec §3.3).
     ...(s.handover?.to ? { handover: { ...s.handover, to: qualify(p.config.id, s.handover.to) } } : {}),
     ...(s.relieves ? { relieves: { ...s.relieves, id: qualify(p.config.id, s.relieves.id) } } : {}) });
@@ -214,6 +218,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     if (m.type === 'ask.result') { const a = askAnswers.get(m.rid); if (a?.machine === machine) a.settle(m.ask ? { ok: true } : { ok: false, reason: m.reason ?? 'refusée' }); return; }
     // A daemon that does not know `ask.answer` says so: the answer was not taken.
     if (m.type === 'error' && m.request === 'ask.answer') { for (const a of [...askAnswers.values()]) if (a.machine === machine) a.settle({ ok: false, reason: m.message }); return; }
+    if (isRigMessage(m)) { if (book.apply(machine, m)) listeners.forEach(fn => fn()); return; }
     // Mobile access is the local daemon's alone (its relay session and approved devices): a remote machine's is ignored.
     if (m.type === 'mobile') {
       if (machine !== 'local') return;
@@ -226,7 +231,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     if (m.type === 'update.failed') p.restarting = false;
     if (m.type === 'snapshot') {
       if (p.config.ssh && m.sshAlias !== p.config.ssh) { p.error = 'Update the local Ledge daemon: SSH transport is unavailable'; p.client.close(); publish(); return; }
-      p.snapshot = m; p.fresh = true; p.error = undefined; p.restarting = false; p.previews.clear(); publish(); return;
+      book.reset(machine); p.snapshot = m; p.fresh = true; p.error = undefined; p.restarting = false; p.previews.clear(); publish(); return;
     }
     // A session's traffic is relayed as it came, qualified; a peer without a snapshot yet has nothing to relay against.
     if (m.type === 'session.updated') { if (p.snapshot) p.snapshot = { ...p.snapshot, sessions: [...p.snapshot.sessions.filter(s => s.id !== m.session.id), m.session] }; if (available(p)) emit({ type: 'session.updated', session: session(p, m.session) }); refresh(); return; }
@@ -318,6 +323,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         if (endOperation(c.id)) emit({ type: 'error', message: `${c.label} is offline`, ...(op === 'launch' ? { request: 'session.launch' } : closing ? { request: 'session.close' } : {}) });
         for (const [requestId, owner] of attachmentAsks) if (owner === c.id) { attachmentAsks.delete(requestId); emit({ type: 'attachment.error', requestId, reason: 'offline' }); }
         for (const [rid, a] of [...askAnswers]) if (a.machine === c.id) { askAnswers.delete(rid); a.settle({ ok: false, reason: 'hors ligne' }); }
+        book.dropped(c.id);
         if (askMap.delete(c.id)) putAsks(c.id, []); // a machine that fell has no decision to answer
         answerUnfoundInspections(c.id); answerUnfoundListings(c.id, 'offline'); answerFailedScans(c.id, 'offline'); answerFailedModels(c.id, 'offline');
         for (const [requestId, owner] of documents) if (owner === c.id) { documents.delete(requestId); emit({ type: 'document.error', requestId, path: '', code: 'read_failed' }); }
@@ -414,6 +420,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
           listings.set(msg.requestId, { machine, path: msg.parent, created: `${msg.parent === '/' ? '' : msg.parent}/${msg.name.trim()}` });
         }
       }
+      if (msg.type === 'rig.exchanges.request') { machine = msg.machine; outgoing = { ...msg, machine: 'local' }; }
       if (msg.type === 'update.daemon') machine = 'local';
       if (msg.type === 'snapshot.request') { publish(); history(); return; }
       const target = peers.get(machine);
@@ -481,6 +488,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       mobile: () => mobile,
       mobileError: () => mobileError,
       asks: () => askList,
+      rigs: () => book.rigs(), escalations: () => book.escalations(), openrig: () => book.statuses(), exchanges: (machine, rigId) => book.exchanges(machine, rigId),
+      requestExchanges(machine, rigId) { const p = peers.get(machine); if (!available(p)) return false; p!.client.send({ type: 'rig.exchanges.request', machine: 'local', rigId }); return true; },
       answerAsk(machine, id, text) {
         const p = peers.get(machine);
         if (!available(p)) return Promise.resolve({ ok: false, reason: 'hors ligne' });
