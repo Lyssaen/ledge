@@ -2,13 +2,13 @@ import { randomUUID } from 'node:crypto';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir, hostname } from 'node:os';
 import { join } from 'node:path';
-import { pendingKey, type ClientMessage, type MobileState, type Pending, type PhoneServerMessage, type ServerMessage, type Session, type Task, type Team, type ThreadItem } from '@ledge/protocol';
+import { pendingKey, type ClientMessage, type MobileState, type Pending, type PhoneServerMessage, type ServerMessage, type Session, type ThreadItem } from '@ledge/protocol';
 import { AttachmentStore } from '../../src/daemon/attachments.js';
 import { createPhoneGateway } from '../../src/mobile/gateway.js';
 import { createChallengeStore } from '../../src/mobile/challenges.js';
 import { rpOf, type DeviceCredential } from '../../src/mobile/webauthn.js';
 
-// The phone gateway's test harness, shared by mobile-gateway.test.ts and mobile-teams-ops.test.ts.
+// The phone gateway's test harness, shared by mobile-gateway.test.ts.
 
 export const T0 = '2026-10-20T08:00:00.000Z';
 export const T1 = '2026-10-20T09:00:00.000Z';
@@ -65,7 +65,7 @@ export const stops: Array<() => void> = [];
 /** Stops every gateway `setup` made: call it from the test file's `afterEach`. */
 export const stopAll = () => { for (const s of stops.splice(0)) s(); };
 
-export function setup(opts: { boot?: string; dispatch?: (msg: ClientMessage, reply: (m: ServerMessage) => void) => Promise<void>; relayUrl?: string; chats?: Parameters<typeof createPhoneGateway>[0]['chats']; relay?: Parameters<typeof createPhoneGateway>[0]['relay']; launchChat?: Parameters<typeof createPhoneGateway>[0]['launchChat']; closeChat?: Parameters<typeof createPhoneGateway>[0]['closeChat']; actChat?: Parameters<typeof createPhoneGateway>[0]['actChat']; teams?: () => Team[]; tasks?: () => Task[]; deps?: Partial<Parameters<typeof createPhoneGateway>[0]>; onChatEnd?: Parameters<typeof createPhoneGateway>[0]['onChatEnd']; devices?: string[]; attachments?: AttachmentStore } = {}) {
+export function setup(opts: { boot?: string; dispatch?: (msg: ClientMessage, reply: (m: ServerMessage) => void) => Promise<void>; relayUrl?: string; chats?: Parameters<typeof createPhoneGateway>[0]['chats']; relay?: Parameters<typeof createPhoneGateway>[0]['relay']; launchChat?: Parameters<typeof createPhoneGateway>[0]['launchChat']; closeChat?: Parameters<typeof createPhoneGateway>[0]['closeChat']; actChat?: Parameters<typeof createPhoneGateway>[0]['actChat']; deps?: Partial<Parameters<typeof createPhoneGateway>[0]>; onChatEnd?: Parameters<typeof createPhoneGateway>[0]['onChatEnd']; devices?: string[]; attachments?: AttachmentStore } = {}) {
   const fm = fakeMobile(opts.devices ?? ['dev1', 'dev2'], opts.relayUrl);
   const clock = { t: 1_000_000 };
   const challenges = createChallengeStore({ now: () => clock.t });
@@ -92,8 +92,6 @@ export function setup(opts: { boot?: string; dispatch?: (msg: ClientMessage, rep
     ...(opts.closeChat ? { closeChat: opts.closeChat } : {}),
     ...(opts.actChat ? { actChat: opts.actChat } : {}),
     ...(opts.onChatEnd ? { onChatEnd: opts.onChatEnd } : {}),
-    ...(opts.teams ? { teams: opts.teams, projectName: (id: string | null) => (id === 'repo' ? 'Repo' : null) } : {}),
-    ...(opts.tasks ? { tasks: opts.tasks } : {}),
     sessions: () => [...sessions.values()],
     session: id => sessions.get(id),
     thread: id => threads.get(id),

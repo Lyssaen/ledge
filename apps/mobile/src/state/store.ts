@@ -2,8 +2,8 @@
 // of it. Every write is an operation named by a uuid, sent again with that same uuid after a lost connection.
 import { useSyncExternalStore } from 'react';
 import {
-  PhoneClientMessageSchema, teamsDigest, teamsPurpose, type Assertion, type PcAction, type AttachmentRef, type CapabilitiesByTool, type Credential, type ImageUpload, type PhoneClientMessage, type PhonePending, type PhoneServerMessage,
-  type ModelRefusal, type PhoneCatalog, type PhoneChecklist, type PhoneModelChoice, type PhoneRole, type PhoneSession, type PhoneTask, type PhoneTeam, type PushSubscription, type TeamsOperation, type ThreadItem
+  PhoneClientMessageSchema, type Assertion, type PcAction, type AttachmentRef, type CapabilitiesByTool, type Credential, type ImageUpload, type PhoneClientMessage, type PhonePending, type PhoneServerMessage,
+  type ModelRefusal, type PhoneChecklist, type PhoneModelChoice, type PhoneSession, type PushSubscription, type ThreadItem
 } from '@ledge/protocol';
 import type { PhoneLink } from '../link/link';
 import { getAssertion } from '../link/webauthn';
@@ -34,10 +34,9 @@ export interface MobileState {
   /** What the PC offers for confirming on the device; null until a snapshot, and from a PC that says nothing (lot 5). */
   device: { confirm: boolean; push?: 'on' | 'off' | 'stale' | 'unavailable'; chat?: true; contextNear?: number } | null;
   /**
-   * `teams`: the PC serves the team catalog (absent from older daemons, and from 0.26.0, which serves it without saying so).
    * `update`: it can install a version and restart; `restart`: it can restart (both absent from daemons before 0.27.0).
    */
-  daemon: { version: string; name: string; boot?: string; teams?: true; models?: true; update?: true; restart?: true; checklist?: true; sessionClose?: true } | null;
+  daemon: { version: string; name: string; boot?: string; models?: true; update?: true; restart?: true; checklist?: true; sessionClose?: true } | null;
   /** The models each agent offers on the PC, by tool, as `models.listing` said; kept for the link's life, reset when the PC boots again. `error`: the agent could not be asked. */
   models: Record<string, { models: PhoneModelChoice[]; error?: true }>;
   /** Why the last model change of a session failed after the PC accepted it, by session id. Kept until a new change is sent or the session's model or effort changes. */
@@ -47,14 +46,6 @@ export interface MobileState {
   /** When the PC last said something about its sessions. */
   syncedAt: string | null;
   ops: Record<string, Op>;
-  /** The PC's live teams with the progress of Ledge's tasks; null from a PC that sends none (ledge home spec §2.4). */
-  teams: PhoneTeam[] | null;
-  /** The tasks Ledge gave, by id: the open ones and those closed lately, not put away. Never cached. */
-  tasks: Map<string, PhoneTask>;
-  /** The roles and team definitions the PC offers, with the repositories a project can name; null until asked and answered. Never cached across reloads. */
-  catalog: PhoneCatalog | null;
-  /** The PC refused the last catalog read: with `daemon.teams` its read failed, without it the PC may not know the request. Cleared by the next read. */
-  catalogRefused: boolean;
   /** Each session's full checklist, as `session.checklist` sent it (null: it has none now). Never cached. */
   checklists: Map<string, PhoneChecklist | null>;
   /** The PC's daemon updating or restarting, as this phone follows it; null when nothing runs nor just ended. Never cached. */
@@ -67,15 +58,7 @@ export type ConfirmChallenge = Extract<PhoneServerMessage, { type: 'confirm.chal
 export type ConfirmRequest = { purpose: 'register' } | { purpose: 'decide'; id: string; expect: PhoneExpect } | { purpose: 'launch'; qid: string } | { purpose: 'close'; qid: string }
   /** A session's own close (`session.close`) or resume (`session.resume`). */
   | { purpose: 'close' | 'act'; id: string }
-  | { purpose: 'define' | 'team'; digest: string } | { purpose: 'pc'; action: 'update'; version: string } | { purpose: 'pc'; action: 'restart' };
-
-type WithoutAuth<M> = M extends unknown ? Omit<M, 'op' | 'assertion'> : never;
-/** A role or team-definition write, as `role.write` and the others name it, before the phone gives it an `op` and the passkey's `assertion`. */
-export type DefineRequest = WithoutAuth<Extract<TeamsOperation, { type: 'role.write' | 'role.delete' | 'template.write' | 'template.delete' }>>;
-/** A live-team change (launch, composition, seat, dissolve), before its `op` and `assertion`. */
-export type TeamRequest = WithoutAuth<Extract<TeamsOperation, { type: 'team.launch' | 'team.compose' | 'team.seat' | 'team.dissolve' }>>;
-/** The role a `teams.role` read names. */
-export interface RoleRef { scope: 'home' | 'repo'; project?: string; id: string }
+  | { purpose: 'pc'; action: 'update'; version: string } | { purpose: 'pc'; action: 'restart' };
 
 /** How long `prepareConfirm` waits for the PC's challenge. */
 export const PREPARE_MS = 10_000;
@@ -111,20 +94,6 @@ export interface MobileStore {
   requestModels(tool: string): void;
   /** Changes a live session's model and effort (`null`: the agent's own default). Resolves when the PC answers; a late failure lands in `getState().modelFailures`. */
   changeModel(id: string, model: string | null, effort: string | null): Promise<ChatAction>;
-  /** Asks the PC for the catalog; it comes back as `teams.catalog` and lands in `getState().catalog`. */
-  requestCatalog(): void;
-  /**
-   * The whole role, when the catalog cut its prompt. Resolves on the PC's next `teams.role` of that role; rejects
-   * (Error message `error` when the PC has no such role, `timeout` after `PREPARE_MS`, `not_ready`, `lost`).
-   */
-  readRole(r: RoleRef): Promise<PhoneRole>;
-  /**
-   * Writes or deletes a role or a team definition, after the device's confirmation: the challenge is for the digest of `req` as it
-   * is when this is called, so a challenge prepared for other content never carries this one. Asks for the catalog again once applied.
-   */
-  define(req: DefineRequest): Promise<ChatAction>;
-  /** Launches, recomposes, starts a seat of, or dissolves a live team, after the device's confirmation (same as `define`). */
-  teamOp(req: TeamRequest): Promise<ChatAction>;
   /**
    * Installs `version` on the PC then restarts its daemon (`update`), or restarts it alone (`restart`), after the device's
    * confirmation. Once applied, `getState().pc` follows it until the PC comes back with it, refuses, or `PC_STALL_MS` passes.
@@ -179,10 +148,6 @@ export interface MobileStore {
   launch(qid: string, rows?: number[]): Promise<ChatAction>;
   /** Closes the turn's sessions (`rows`, or all of them), after the device's confirmation. (Not `close`: that stops the store.) */
   closeSessions(qid: string, rows?: number[]): Promise<ChatAction>;
-  /** Wakes a resting team. */
-  resumeTeam(team: string): Promise<ChatAction>;
-  /** Puts away a closed task Ledge gave: it leaves « À toi » and « À traiter ». */
-  seeTask(task: string): Promise<ChatAction>;
   /** Stops listening to the link and every timer. */
   close(): void;
 }
@@ -217,10 +182,6 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     fresh: false,
     syncedAt: last?.syncedAt ?? null,
     ops: loadOps(storage),
-    teams: null,
-    tasks: new Map(),
-    catalog: null,
-    catalogRefused: false,
     checklists: new Map(),
     pc: null
   };
@@ -263,10 +224,9 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
   /** The relay or launch of a turn that is under way, shared by a second tap. */
   const chatActions = new Map<string, Promise<ChatAction>>();
   /**
-   * The `prepareConfirm` waiting for its challenge. A `define` or `team` call also holds the `digest` it asked for: a late challenge of a call
-   * that was superseded carries another one, and is not this call's.
+   * The `prepareConfirm` waiting for its challenge.
    */
-  let preparing: { purpose: ConfirmChallenge['purpose']; digest?: string; resolve: (c: ConfirmChallenge) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> } | null = null;
+  let preparing: { purpose: ConfirmChallenge['purpose']; resolve: (c: ConfirmChallenge) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> } | null = null;
   const settle = (outcome: ConfirmChallenge | Error) => {
     const p = preparing;
     if (!p) return;
@@ -274,14 +234,6 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     clearTimeout(p.timer);
     if (outcome instanceof Error) p.reject(outcome); else p.resolve(outcome);
   };
-  /** The `readRole`s waiting for their role, oldest first: the PC answers in order, and its `invalid` error names no role. */
-  let roleReads: { ref: RoleRef; resolve: (r: PhoneRole) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }[] = [];
-  const endRead = (read: (typeof roleReads)[number], outcome: PhoneRole | Error) => {
-    roleReads = roleReads.filter(r => r !== read);
-    clearTimeout(read.timer);
-    if (outcome instanceof Error) read.reject(outcome); else read.resolve(outcome);
-  };
-  const endReads = (e: Error) => { for (const r of [...roleReads]) endRead(r, e); };
   /** The `forgetDevice` waiting for its result. */
   type Forgetting = { op: string; resolve: (applied: boolean) => void; timer: ReturnType<typeof setTimeout>; promise: Promise<boolean> };
   let forgetting: Forgetting | null = null;
@@ -369,7 +321,6 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     // Requests sent on the lost channel get no answer.
     threadAsks = [];
     settle(new Error('lost'));
-    endReads(new Error('lost'));
     images.lost();
     for (const id of [...timers.keys()]) stopTimer(id);
     const ops = Object.values(state.ops).filter(o => o.phase === 'sending');
@@ -404,12 +355,6 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
       case 'attachment.stored': case 'attachment.data': case 'attachment.error':
         images.handle(m);
         return;
-      case 'teams':
-        set({ teams: m.teams });
-        return;
-      case 'teams.catalog':
-        set({ catalog: m.catalog, catalogRefused: false });
-        return;
       case 'models.listing':
         set({ models: { ...state.models, [m.tool]: { models: m.models, ...(m.error ? { error: true as const } : {}) } } });
         return;
@@ -427,17 +372,6 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         set({ pc });
         return;
       }
-      case 'teams.role': {
-        const read = roleReads.find(r => r.ref.id === m.role.id && r.ref.scope === m.role.scope && (r.ref.project ?? null) === m.role.project);
-        if (read) endRead(read, m.role);
-        return;
-      }
-      case 'tasks':
-        set({ tasks: new Map(m.tasks.map(x => [x.id, x])) });
-        return;
-      case 'task.updated':
-        set({ tasks: new Map(state.tasks).set(m.task.id, m.task) });
-        return;
       case 'session.updated': {
         const sessions = new Map(state.sessions).set(m.session.id, keepBody(state.sessions.get(m.session.id)?.pending, m.session));
         set({ sessions, syncedAt: now, modelFailures: failuresKept(state.modelFailures, state.sessions, sessions) });
@@ -514,13 +448,9 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         setChat(reduceChat(chatState, m, askedSinceReady));
         return;
       case 'confirm.challenge':
-        // A challenge that names another digest answers a call that was superseded; one without (an older gateway) settles by purpose.
-        if (preparing?.purpose === m.purpose && (m.digest === undefined || preparing.digest === undefined || m.digest === preparing.digest)) settle(m);
+        if (preparing?.purpose === m.purpose) settle(m);
         return;
       case 'error':
-        if (m.request === 'teams.role') { const read = roleReads[0]; if (read) endRead(read, new Error('error')); return; }
-        // A refused catalog read is not about the challenge being prepared.
-        if (m.request === 'teams.catalog') { set({ catalogRefused: true }); return; }
         settle(new Error('error'));
         if (m.code === 'unknown_session' && m.request === 'session.thread') {
           const id = threadAsks.shift();
@@ -551,7 +481,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         const o = state.ops[op];
         let out: ChatAction | null = null;
         if (!o) out = { status: 'expired' };
-        else if (o.phase === 'applied') out = { status: 'applied', ...(o.reason === 'seat_failed' ? { warn: 'seat_failed' as const } : {}), ...(o.reason === 'scheduled' ? { scheduled: true as const } : {}), ...(o.models ? { models: o.models } : {}) };
+        else if (o.phase === 'applied') out = { status: 'applied', ...(o.reason === 'scheduled' ? { scheduled: true as const } : {}) };
         else if (o.phase === 'failed') out = { status: 'failed' };
         else if (o.phase === 'rejected') out = { status: 'rejected', reason: o.reason ?? 'invalid' };
         else if (o.phase === 'uncertain' && !resendable(o, boot)) out = { status: 'expired' };
@@ -566,22 +496,6 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
       expirers.add(expire);
       check();
     });
-  }
-
-  /**
-   * A role, template or live-team operation behind the passkey. `req` is copied and hashed now, at the call: the challenge is
-   * prepared for that digest, and the operation written after the passkey is that same copy. A later call for other content
-   * supersedes this one's challenge (`prepareConfirm`), and a challenge never stands for content it was not prepared for.
-   */
-  async function confirmedOperation(req: DefineRequest | TeamRequest): Promise<ChatAction> {
-    // A phone without a passkey cannot confirm: the PC would refuse, and no prompt is worth showing.
-    if (!state.device?.confirm) return { status: 'rejected', reason: 'confirm_required' };
-    const frozen = structuredClone(req);
-    let digest: string;
-    // `teamsDigest` refuses what the PC would refuse: nothing is asked, nothing is sent.
-    try { digest = await teamsDigest(frozen); }
-    catch { return { status: 'rejected', reason: 'invalid' }; }
-    return signedOperation({ purpose: teamsPurpose(frozen.type), digest }, (o, assertion) => ({ ...frozen, op: o, assertion }));
   }
 
   /** Asks the challenge of `prep`, has the passkey sign it, then writes the operation `build` makes with that assertion. */
@@ -615,7 +529,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
   /** The link has no PC any more (forgotten, or pairing a new one): nothing of the old PC is kept or sent again. */
   function forget() {
     const held = chatState.turns.length || chatState.live || chatState.error || state.sessions.size || state.threads.size || state.previews.size || state.daemon || state.capabilities
-      || state.device || state.syncedAt || state.teams || state.catalog || Object.keys(state.models).length || Object.keys(state.modelFailures).length || state.tasks.size || Object.keys(state.ops).length || Object.keys(reads).length || lastThread !== null;
+      || state.device || state.syncedAt || Object.keys(state.models).length || Object.keys(state.modelFailures).length || Object.keys(state.ops).length || Object.keys(reads).length || lastThread !== null;
     if (!held) return;
     for (const id of [...timers.keys()]) stopTimer(id);
     reads = {};
@@ -625,11 +539,10 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     historyAsked = false;
     chatState = emptyChat();
     settle(new Error('lost'));
-    endReads(new Error('lost'));
     previewsDirty = false;
     clearLastState(storage);
     clearOps(storage);
-    set({ sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, fresh: false, syncedAt: null, ops: {}, teams: null, tasks: new Map(), catalog: null, catalogRefused: false, checklists: new Map(), pc: null, models: {}, modelFailures: {} });
+    set({ sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, fresh: false, syncedAt: null, ops: {}, checklists: new Map(), pc: null, models: {}, modelFailures: {} });
     modelAsks.clear();
     stopPcWatch();
   }
@@ -680,31 +593,10 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         const m = PhoneClientMessageSchema.safeParse({ type: 'confirm.prepare', ...req });
         if (!m.success) { reject(new Error('invalid')); return; }
         settle(new Error('superseded'));
-        preparing = { purpose: req.purpose, ...('digest' in req ? { digest: req.digest } : {}), resolve, reject, timer: setTimeout(() => settle(new Error('timeout')), PREPARE_MS) };
+        preparing = { purpose: req.purpose, resolve, reject, timer: setTimeout(() => settle(new Error('timeout')), PREPARE_MS) };
         send(m.data);
       });
     },
-
-    requestCatalog() {
-      if (closed || !ready()) return;
-      if (state.catalogRefused) set({ catalogRefused: false });
-      send({ type: 'teams.catalog' });
-    },
-
-    readRole(ref) {
-      return new Promise<PhoneRole>((resolve, reject) => {
-        if (closed || !ready()) { reject(new Error('not_ready')); return; }
-        const m = PhoneClientMessageSchema.safeParse({ type: 'teams.role', scope: ref.scope, ...(ref.project !== undefined ? { project: ref.project } : {}), id: ref.id });
-        if (!m.success) { reject(new Error('invalid')); return; }
-        const read = { ref, resolve, reject, timer: setTimeout(() => endRead(read, new Error('timeout')), PREPARE_MS) };
-        roleReads.push(read);
-        send(m.data);
-      });
-    },
-
-    define: req => confirmedOperation(req).then(done => { if (done.status === 'applied') store.requestCatalog(); return done; }),
-
-    teamOp: req => confirmedOperation(req),
 
     requestModels(tool) {
       if (closed || !ready() || modelAsks.has(tool) && !state.models[tool]?.error) return;
@@ -897,28 +789,13 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
       });
     },
 
-    resumeTeam(team) {
-      return chatAction(`resume:${team}`, async () => {
-        const op = write(o => ({ type: 'team.resume', op: o, team }));
-        return op === null ? { status: 'failed' } : finalOf(op);
-      });
-    },
-
-    seeTask(task) {
-      return chatAction(`seen:${task}`, async () => {
-        const op = write(o => ({ type: 'task.seen', op: o, task }));
-        return op === null ? { status: 'failed' } : finalOf(op);
-      });
-    },
-
     close() {
       if (closed) return;
       closed = true;
       for (const expire of [...expirers]) expire();
       settleForget(false);
       settle(new Error('lost'));
-      endReads(new Error('lost'));
-      images.close();
+        images.close();
       if (previewsDirty) persist();
       offState();
       offMessage();

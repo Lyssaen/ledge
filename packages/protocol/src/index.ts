@@ -22,7 +22,6 @@ export * from './relay.js';
 export * from './relayAuth.js';
 export * from './mobile.js';
 export * from './phone.js';
-export * from './phoneTeams.js';
 export * from './push.js';
 export * from './teams.js';
 export * from './handover.js';

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { ATTACHMENTS_MAX, ATTACHMENT_MAX, AttachmentDataSchema, AttachmentErrorSchema, AttachmentGetSchema, AttachmentIdSchema, AttachmentPutSchema, AttachmentRefSchema, AttachmentStoredSchema, ImageUploadSchema, b64Max } from './attachments.js';
 import { ContextPrefsSchema, HandoverStateSchema } from './handover.js';
-import { AutonomySchema, PendingSchema, SessionSchema, ToolSchema, type Tool } from './session.js';
+import { PendingSchema, SessionSchema, ToolSchema, type Tool } from './session.js';
 import { ActionVarsSchema, ChatActionStateSchema, ChatStepSchema, MAX_PROPOSALS, type CloseHow } from './chat.js';
 import { ActionRiskSchema } from './actions.js';
 import { DecisionSchema, NOTE_MAX } from './decisions.js';
@@ -10,8 +10,6 @@ import type { TodoStatus } from './todos.js';
 import { MESSAGE_MAX, RefusalCodeSchema, SEMVER, UpdateFailureSchema } from './messages.js';
 import { PushSubscriptionSchema } from './push.js';
 import { EffortSchema, ModelChoiceSchema, ModelIdSchema, ModelRefusalSchema } from './models.js';
-import { DefinitionHashSchema, DefinitionScopeSchema, RoleIdSchema, TeamIdSchema, TeamNameSchema, TemplateIdSchema, scopeIssue } from './teams.js';
-import { PhoneCatalogSchema, PhoneRoleDraftSchema, PhoneRoleSchema, PhoneSeatsSchema, canonicalJson, type TeamsOperation } from './phoneTeams.js';
 
 /** The phone/PC messages have their own schemas: a type or a field that is not here never crosses the relay. */
 export const PHONE_PROTOCOL = 1;
@@ -73,8 +71,8 @@ export type OperationId = z.infer<typeof OperationIdSchema>;
 export const OperationStatusSchema = z.enum(['received', 'applied', 'rejected', 'failed']);
 export type OperationStatus = z.infer<typeof OperationStatusSchema>;
 
-/** Why an operation was refused: a refusal code of the local fronts, or one only a phone can meet. `seat_failed` comes with `applied`: a composition saved whose added seat did not start. */
-export const OperationReasonSchema = z.enum([...RefusalCodeSchema.options, 'untypable', 'confirm_required', 'conflict', 'assertion_invalid', 'assertion_expired', 'changed', 'exists', 'unknown_project', 'seat_failed', 'scheduled', ...ModelRefusalSchema.options]);
+/** Why an operation was refused: a refusal code of the local fronts, or one only a phone can meet.  */
+export const OperationReasonSchema = z.enum([...RefusalCodeSchema.options, 'untypable', 'confirm_required', 'conflict', 'assertion_invalid', 'assertion_expired', 'scheduled', ...ModelRefusalSchema.options]);
 export type OperationReason = z.infer<typeof OperationReasonSchema>;
 
 /** What an adapter knows how to type for a phone, beyond accept, deny and an option number. A phone hides an answer its session's tool cannot give. */
@@ -116,8 +114,6 @@ export const PhoneSessionSchema = SwitchableSessionSchema.pick({
   state: true, helpers: true, lastReply: true, startedAt: true, lastActivityAt: true,
   /** Its model, effort and the change waiting for its next free moment: the phone shows them and offers to change them. */
   model: true, effort: true, modelNext: true, canSwitch: true,
-  /** Its role and its live team (ledge home spec §2.4): the agents screen groups a project's sessions by table. */
-  role: true, roleLabel: true, team: true,
   /** Its context and its relief (context handover spec §3.2): the phone shows the gauge; the relief is started from the PC. */
   context: true, relieves: true,
   /** When it ended: « Terminée · à 18:42 » in the list. */
@@ -150,11 +146,8 @@ export const AssertionSchema = z.object({
 });
 export type Assertion = z.infer<typeof AssertionSchema>;
 
-/** The digest of a `define` or `team` operation (`teamsDigest`): a sha256 in lower-case hex. */
-const TeamsDigestSchema = z.string().regex(/^[0-9a-f]{64}$/);
-/** What a challenge is for. `define` (a role or template file) and `team` (a live team) carry the `digest` of the operation they confirm. */
 /** `pc`: updating or restarting the PC's daemon (spec 2026-10-28 mobile daemon update). */
-export const ConfirmPurposeSchema = z.enum(['register', 'decide', 'launch', 'close', 'act', 'define', 'team', 'pc']);
+export const ConfirmPurposeSchema = z.enum(['register', 'decide', 'launch', 'close', 'act', 'pc']);
 export type ConfirmPurpose = z.infer<typeof ConfirmPurposeSchema>;
 
 /** The phone's chat: no folder, no path, no machine, no free error text; every object is strict, `pick` included. */
@@ -193,29 +186,6 @@ export const PhoneChatActionSchema = z.object({
 }).strict();
 export type PhoneChatAction = z.infer<typeof PhoneChatActionSchema>;
 
-/** A live team as the phone sees it (ledge home spec §2.4): its project's name, its seats, the progress of Ledge's tasks. */
-export const PhoneTeamSchema = z.object({
-  id: z.string().max(40), name: z.string().max(60), project: z.string().max(80).nullable(), state: z.enum(['active', 'resting']),
-  template: z.string().max(64).optional(),
-  /** Absent from a daemon older than the phone: the phone then says no start time. */
-  createdAt: z.string().optional(),
-  /** `tool`, `model` and `effort` are what the seat was composed with; `leaving` is a seat that finishes its turn and is then closed. */
-  seats: z.array(z.object({
-    role: z.string().max(40), sessionId: z.string().max(100).nullable(),
-    tool: ToolSchema.optional(), model: ModelIdSchema.optional(), effort: EffortSchema.optional(), leaving: z.literal(true).optional()
-  }).strict()).max(16),
-  done: z.number().int().min(0), given: z.number().int().min(0)
-}).strict();
-export type PhoneTeam = z.infer<typeof PhoneTeamSchema>;
-/** A task Ledge gave, as the phone sees it: its owner, its team, its state and the start of its result. */
-export const PhoneTaskSchema = z.object({
-  id: z.string().max(40), title: z.string().max(200), owner: z.string().max(100), ownerName: z.string().max(80), ownerRole: z.string().max(40).optional(),
-  team: z.string().max(40).optional(), teamName: z.string().max(60).optional(),
-  state: z.enum(['open', 'taken', 'done', 'refused', 'dropped']), result: z.string().max(TOOL_TEXT_MAX).optional(), cut: z.literal(true).optional(),
-  at: z.string(), updatedAt: z.string(), seen: z.literal(true).optional()
-}).strict();
-export type PhoneTask = z.infer<typeof PhoneTaskSchema>;
-
 /** Why a question ended without an answer. */
 export const ChatErrorCodeSchema = z.enum(['busy', 'timeout', 'cancelled', 'failed']);
 export type ChatErrorCode = z.infer<typeof ChatErrorCodeSchema>;
@@ -240,16 +210,15 @@ const PhoneExpectSchema = PendingSchema.pick({ kind: true, text: true }).extend(
 /** The rows of a card the phone acts on: indexes into the card, none twice. */
 const CardRowsSchema = z.array(z.number().int().min(0).max(MAX_PROPOSALS - 1)).min(1).max(MAX_PROPOSALS).refine(r => new Set(r).size === r.length, 'a row twice');
 
-/** A phone-made write or live-team change: strict, a project is a name, a team or role an id, and nothing is a path. A passkey assertion over `teamsDigest` backs it. */
-const teamsOp = { op: OperationIdSchema, assertion: AssertionSchema.optional() };
+/** A signed phone operation (`daemon.update`, `daemon.restart`): strict, and a passkey assertion backs it. */
+const signedOp = { op: OperationIdSchema, assertion: AssertionSchema.optional() };
 /** What a `pc` challenge covers: installing a version then restarting, or restarting alone. */
 export const PcActionSchema = z.enum(['update', 'restart']);
 export type PcAction = z.infer<typeof PcActionSchema>;
 /** The subject a `pc` challenge is bound to: a challenge for one version covers neither another nor a restart. */
 export const pcSubject = (action: PcAction, version?: string): string => (action === 'update' ? `update@${version ?? ''}` : 'restart');
-const teamsScope = { scope: DefinitionScopeSchema, project: z.string().min(1).max(80).optional() };
 
-/** What the daemon accepts from a phone: this union is the whitelist. A repo scope names a project and a home scope none: `scopeIssue`, over the whole (a union cannot hold refined members). */
+/** What the daemon accepts from a phone: this union is the whitelist. */
 export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('snapshot.request') }),
   z.object({ type: z.literal('session.thread'), id: sessionId }),
@@ -263,7 +232,6 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
    * or `act` names a turn of the chat (`qid`) or a session (`id`, for `session.close` and `session.resume`).
    */
   z.object({ type: z.literal('confirm.prepare'), purpose: ConfirmPurposeSchema, id: sessionId.optional(), expect: PhoneExpectSchema.optional(), qid: OperationIdSchema.optional(),
-    /** sha256 of the `define` or `team` operation the challenge is for (`teamsDigest`). */ digest: TeamsDigestSchema.optional(),
     /** A `pc` challenge: what it is for, and for an update the version it covers. */ action: PcActionSchema.optional(), version: z.string().regex(SEMVER).optional() }),
   z.object({ type: z.literal('credential.register'), op: OperationIdSchema, credential: CredentialSchema }),
   z.object({
@@ -317,33 +285,13 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
     deny: z.literal(true).optional() }),
   /** « Ignorer » the turn's cards, or `undo` (« Revoir »), as the local `chat.ignore`. */
   z.object({ type: z.literal('chat.ignore'), op: OperationIdSchema, qid: OperationIdSchema, undo: z.literal(true).optional() }),
-  /** « Reprendre » a resting team. */
-  z.object({ type: z.literal('team.resume'), op: OperationIdSchema, team: z.string().min(1).max(40) }),
-  /** Puts a closed task Ledge gave away from « À traiter ». */
-  z.object({ type: z.literal('task.seen'), op: OperationIdSchema, task: z.string().min(1).max(40) }),
   /** Whether the phone's app is in front: a device that is visible gets no push. */
   z.object({ type: z.literal('presence'), visible: z.boolean() }),
-  /** The roles, templates and problems of every scope the phone may name; then one role whole, when the catalog cut its prompt. */
-  z.object({ type: z.literal('teams.catalog') }),
-  z.object({ type: z.literal('teams.role'), ...teamsScope, id: RoleIdSchema }).strict(),
-  /** `base` is the hash the phone was shown, null to create. */
-  z.object({ type: z.literal('role.write'), ...teamsOp, ...teamsScope, role: PhoneRoleDraftSchema, base: DefinitionHashSchema.nullable() }).strict(),
-  z.object({ type: z.literal('role.delete'), ...teamsOp, ...teamsScope, id: RoleIdSchema, base: DefinitionHashSchema }).strict(),
-  /** No `id`: create, the id comes from the name. */
-  z.object({ type: z.literal('template.write'), ...teamsOp, ...teamsScope, id: TemplateIdSchema.optional(), name: TeamNameSchema, seats: PhoneSeatsSchema, base: DefinitionHashSchema.nullable() }).strict(),
-  z.object({ type: z.literal('template.delete'), ...teamsOp, ...teamsScope, id: TemplateIdSchema, base: DefinitionHashSchema }).strict(),
-  z.object({ type: z.literal('team.launch'), ...teamsOp, project: z.string().min(1).max(80), name: TeamNameSchema, seats: PhoneSeatsSchema, template: z.string().min(1).max(64).optional() }).strict(),
-  z.object({ type: z.literal('team.compose'), ...teamsOp, team: TeamIdSchema, seats: PhoneSeatsSchema }).strict(),
-  z.object({ type: z.literal('team.seat'), ...teamsOp, team: TeamIdSchema, role: RoleIdSchema, action: z.enum(['start', 'restart']) }).strict(),
-  z.object({ type: z.literal('team.dissolve'), ...teamsOp, team: TeamIdSchema }).strict(),
   /** Installs `version` on the PC, then restarts its daemon; the phone asks for its own build's version. Passkey, purpose `pc`. */
-  z.object({ type: z.literal('daemon.update'), ...teamsOp, version: z.string().regex(SEMVER) }).strict(),
+  z.object({ type: z.literal('daemon.update'), ...signedOp, version: z.string().regex(SEMVER) }).strict(),
   /** Restarts the PC's daemon without installing anything. Passkey, purpose `pc`. */
-  z.object({ type: z.literal('daemon.restart'), ...teamsOp }).strict()
-]).superRefine((m, ctx) => {
-  const issue = 'scope' in m ? scopeIssue(m) : null;
-  if (issue) ctx.addIssue({ code: z.ZodIssueCode.custom, message: issue, path: ['project'] });
-});
+  z.object({ type: z.literal('daemon.restart'), ...signedOp }).strict()
+]);
 export type PhoneClientMessage = z.infer<typeof PhoneClientMessageSchema>;
 
 /** A model as the phone lists it: strings clipped by the gateway, no key it does not know. */
@@ -358,13 +306,13 @@ export type PhoneSeatModel = z.infer<typeof PhoneSeatModelSchema>;
 
 /** What the daemon sends a phone. */
 export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('snapshot'), protocol: z.literal(PHONE_PROTOCOL), sessions: z.array(PhoneSessionSchema), capabilities: CapabilitiesByToolSchema, daemon: z.object({ version: z.string(), name: z.string().max(40), boot: z.string().uuid().optional(), teams: z.literal(true).optional(),
+  z.object({ type: z.literal('snapshot'), protocol: z.literal(PHONE_PROTOCOL), sessions: z.array(PhoneSessionSchema), capabilities: CapabilitiesByToolSchema, daemon: z.object({ version: z.string(), name: z.string().max(40), boot: z.string().uuid().optional(),
     /** The daemon takes `session.model`. */ models: z.literal(true).optional(),
     /** The daemon sends `session.checklist` and a session's `checklist` summary. */ checklist: z.literal(true).optional(),
     /** `update`: the daemon can install a version and restart (npm, systemd); `restart`: it can restart (systemd). */ update: z.literal(true).optional(), restart: z.literal(true).optional(),
     /** The daemon takes `session.close` and `session.resume`. */ sessionClose: z.literal(true).optional() }), device: z.object({ confirm: z.boolean(), push: z.enum(['on', 'off', 'stale', 'unavailable']).optional(), chat: z.literal(true).optional(), contextNear: ContextPrefsSchema.shape.near.optional() }).optional() }),
   z.object({ type: z.literal('confirm.challenge'), purpose: ConfirmPurposeSchema, challenge: B64U.max(64), rpId: z.string().max(253), credentialId: B64U.max(1_366).optional(), expiresInMs: z.number().int().positive(),
-    /** Echoed from the `confirm.prepare` of a `define` or `team` challenge, so the phone matches each challenge to its own call. Absent from an older gateway. */ digest: TeamsDigestSchema.optional() }),
+  }),
   z.object({ type: z.literal('session.updated'), session: PhoneSessionSchema }),
   z.object({ type: z.literal('session.removed'), id: z.string() }),
   /** A session's checklist, sent to the phone that watches it; `null`: it has none (any more). */
@@ -387,17 +335,10 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('chat.delta'), qid: OperationIdSchema, text: z.string().max(THREAD_TEXT_MAX) }),
   z.object({ type: z.literal('chat.done'), qid: OperationIdSchema, turn: PhoneChatTurnSchema }),
   z.object({ type: z.literal('chat.error'), qid: OperationIdSchema, code: ChatErrorCodeSchema }),
-  z.object({ type: z.literal('teams.catalog'), catalog: PhoneCatalogSchema }),
   /** The daemon updating or restarting itself, whoever asked: npm runs, then the service restarts (the link drops right after). */
   z.object({ type: z.literal('daemon.progress'), version: z.string().max(40), step: z.enum(['installing', 'restarting']) }),
   /** Nothing was changed. Never npm's output nor a command: both hold the PC's paths. */
   z.object({ type: z.literal('daemon.failed'), version: z.string().max(40), reason: UpdateFailureSchema }),
-  z.object({ type: z.literal('teams.role'), role: PhoneRoleSchema }),
-  /** The live teams, after each snapshot and on every change. */
-  z.object({ type: z.literal('teams'), teams: z.array(PhoneTeamSchema).max(50) }),
-  /** The tasks Ledge gave, open or closed lately, after each snapshot; then each change. */
-  z.object({ type: z.literal('tasks'), tasks: z.array(PhoneTaskSchema).max(200) }),
-  z.object({ type: z.literal('task.updated'), task: PhoneTaskSchema }),
   AttachmentStoredSchema,
   AttachmentDataSchema,
   AttachmentErrorSchema,
@@ -406,21 +347,15 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
 ]);
 export type PhoneServerMessage = z.infer<typeof PhoneServerMessageSchema>;
 
-/** `define`: role and template files; `team`: live teams. */
-export const teamsPurpose = (type: TeamsOperation['type']): 'define' | 'team' => type.startsWith('team.') ? 'team' : 'define';
-
-/** Only the shape of `op` matters to the parse below; it is dropped before hashing. */
-const DIGEST_OP = '00000000-0000-4000-8000-000000000000';
-
-/**
- * The lowercase sha256 of an operation as the daemon reads it: `m` goes through `PhoneClientMessageSchema` first (so ` Duo ` and `Duo`
- * hash alike, and an unknown key throws instead of being dropped on one side only), then `op` and `assertion` are left out, then
- * `canonicalJson`. The phone and the daemon call it with the raw and the parsed message and get the same digest. It runs in a browser
- * and in Node. Throws when `m` is not a valid operation.
- */
-export async function teamsDigest(m: Omit<TeamsOperation, 'op' | 'assertion'> & { op?: string; assertion?: unknown }): Promise<string> {
-  const { op: _op, assertion: _assertion, ...raw } = m;
-  const { op: _parsedOp, assertion: _parsedAssertion, ...rest } = PhoneClientMessageSchema.parse({ ...raw, op: DIGEST_OP }) as TeamsOperation;
-  const bytes = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonicalJson(rest))));
-  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+/** JSON with the keys of every object sorted, and `undefined` fields dropped: the same content always gives the same text. */
+export function canonicalJson(v: unknown): string {
+  const sort = (x: unknown): unknown => {
+    if (Array.isArray(x)) return x.map(sort);
+    if (x !== null && typeof x === 'object') {
+      const o = x as Record<string, unknown>;
+      return Object.fromEntries(Object.keys(o).sort().filter(k => o[k] !== undefined).map(k => [k, sort(o[k])]));
+    }
+    return x;
+  };
+  return JSON.stringify(sort(v));
 }

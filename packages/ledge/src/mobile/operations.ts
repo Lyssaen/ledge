@@ -1,6 +1,6 @@
 // Makes a phone's writes idempotent: an operation id (a uuid the phone picks) runs once, and a retry gets the stored outcome.
 // In memory only, so a daemon restart forgets every operation.
-import { canonicalJson, isTeamsOperation, type CloseHow, type OperationReason, type OperationStatus, type PhoneClientMessage, type PhoneSeatModel } from '@ledge/protocol';
+import { type CloseHow, type OperationReason, type OperationStatus, type PhoneClientMessage, type PhoneSeatModel } from '@ledge/protocol';
 
 export type PhoneOperation = Extract<PhoneClientMessage, { op: string }>;
 
@@ -11,23 +11,15 @@ export interface OperationRecord { op: string; owner: string; fingerprint: strin
 
 export type BeginResult = { kind: 'fresh' | 'replay'; record: OperationRecord } | { kind: 'conflict' };
 
-/** Everything of a role or team operation but its id and its assertion. */
-function teamsContent(m: PhoneOperation): string {
-  const { op: _op, assertion: _assertion, ...rest } = m as PhoneOperation & { assertion?: unknown };
-  return canonicalJson(rest);
-}
-
 /** What the operation does, never its id. */
 export function fingerprint(m: PhoneOperation): string {
   // Read as the union of every message's fields: a field the message lacks is null. The signed parts of a credential are not part of it.
-  const f = m as { id?: string; decision?: string; note?: string; text?: string; expect?: { key: string } | null; credential?: { id: string }; requestId?: string; answers?: unknown; subscription?: { endpoint: string }; key?: string; qid?: string; rows?: number[]; row?: number; team?: string; task?: string; attachments?: string[] };
+  const f = m as { id?: string; decision?: string; note?: string; text?: string; expect?: { key: string } | null; credential?: { id: string }; requestId?: string; answers?: unknown; subscription?: { endpoint: string }; key?: string; qid?: string; rows?: number[]; row?: number; attachments?: string[] };
   return JSON.stringify([m.type, f.id ?? null, f.decision ?? null, f.note ?? null, f.text ?? null, f.expect?.key ?? null, f.credential?.id ?? null, f.requestId ?? null, f.answers ?? null, f.subscription?.endpoint ?? null, f.key ?? null, f.qid ?? null, f.rows ?? null,
-    ...(f.row !== undefined || f.team !== undefined || f.task !== undefined ? [f.row ?? null, f.team ?? null, f.task ?? null] : []),
+    ...(f.row !== undefined ? [f.row ?? null] : []),
     ...(f.attachments?.length ? [f.attachments] : []),
     // A model change is its model and effort: the same id for another model is another operation (null, the agent's default, too).
-    ...(m.type === 'session.model' ? [m.model, m.effort] : []),
-    // A role or team operation is its whole content: the same id with another prompt, seats or base is another operation.
-    ...(isTeamsOperation(m) ? [teamsContent(m)] : [])]);
+    ...(m.type === 'session.model' ? [m.model, m.effort] : [])]);
 }
 
 /** Bounded (24 h, 500 records): the oldest finished record goes first, and a record still `received` is never evicted. */

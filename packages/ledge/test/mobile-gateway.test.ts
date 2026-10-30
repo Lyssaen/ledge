@@ -1868,60 +1868,42 @@ describe('phone gateway: generic cards (spec 2026-10-26 action registry §9)', (
   });
 });
 
-describe('phone gateway: teams and Ledge\'s tasks (ledge home spec §2.4)', () => {
-  const rp = { rpId: 'relay.test', origin: 'https://relay.test' };
-  const team = (extra: Partial<Team> = {}): Team => ({ id: 'team-a1b2', name: 'repo-roles', project: 'repo', machine: 'local', cwd: '/w/repo', state: 'active', seats: [{ role: 'build', sessionId: 'a' }, { role: 'qa', sessionId: null }], createdAt: T0, updatedAt: T0, ...extra });
-  const task = (id: string, extra: Partial<Task> = {}): Task => ({ id, title: `Tâche ${id}`, giver: 'ledge', giverName: 'Ledge', owner: 'a', ownerName: 'a', team: 'team-a1b2', state: 'taken', at: T0, updatedAt: new Date().toISOString(), log: [], ...extra });
-
-  it('after a snapshot, the teams (not the dissolved) with Ledge\'s progress, and Ledge\'s tasks only', async () => {
-    const tasks = [task('t000001', { state: 'done', result: 'fait' }), task('t000002'), task('t000003', { giver: 'b', giverName: 'b' })];
-    const g = setup({ teams: () => [team(), team({ id: 'team-dead', state: 'dissolved' })], tasks: () => tasks });
-    g.sessions.set('a', { ...g.sessions.get('a')!, role: 'build', team: 'team-a1b2' });
+describe('phone gateway: no teams, no tasks (lot 1)', () => {
+  it('after a snapshot the gateway pushes no teams and no tasks, and a session carries no role or team', async () => {
+    const g = setup();
+    g.sessions.set('a', { ...g.sessions.get('a')!, role: 'build', roleLabel: 'Build', team: 'team-a1b2' });
     g.send('dev1', { type: 'snapshot.request' });
     await flush();
     const got = g.got('dev1');
     for (const m of got) expect(PhoneServerMessageSchema.safeParse(m).success).toBe(true);
-    expect(got.find(m => m.type === 'teams')).toEqual({ type: 'teams', teams: [{ id: 'team-a1b2', name: 'repo-roles', project: 'Repo', state: 'active', seats: [{ role: 'build', sessionId: 'a' }, { role: 'qa', sessionId: null }], createdAt: '2026-10-20T08:00:00.000Z', done: 1, given: 2 }] });
-    const listed = got.find(m => m.type === 'tasks');
-    expect(listed?.type === 'tasks' && listed.tasks.map(x => [x.id, x.ownerRole, x.teamName, x.result])).toEqual([['t000001', 'build', 'repo-roles', 'fait'], ['t000002', 'build', 'repo-roles', undefined]]);
+    expect(got.some(m => ['teams', 'tasks', 'task.updated'].includes(m.type))).toBe(false);
     const snap = got.find(m => m.type === 'snapshot');
-    expect(snap?.type === 'snapshot' && snap.sessions.find(x => x.id === 'a')).toMatchObject({ role: 'build', team: 'team-a1b2' });
+    expect(snap?.type === 'snapshot' && snap.daemon).not.toHaveProperty('teams');
+    const a = snap?.type === 'snapshot' ? snap.sessions.find(x => x.id === 'a') : undefined;
+    expect(a).toBeDefined();
+    for (const k of ['role', 'roleLabel', 'team']) expect(a).not.toHaveProperty(k);
   });
 
-  it('a daemon without teams sends neither', async () => {
+  it('a cached phone sending teams.catalog gets { type: "error", code: "invalid", request: "teams.catalog" }', async () => {
+    const g = setup();
+    for (const type of ['teams.catalog', 'teams.role', 'team.resume', 'task.seen', 'role.write', 'team.launch']) {
+      const before = g.got('dev1').length;
+      g.send('dev1', { type } as never);
+      await flush();
+      expect(g.got('dev1').slice(before)).toEqual([{ type: 'error', code: 'invalid', request: type }]);
+    }
+    expect(g.dispatched).toEqual([]);
+  });
+
+  it('team.updated and task.updated reach no device', async () => {
     const g = setup();
     g.send('dev1', { type: 'snapshot.request' });
     await flush();
-    expect(g.got('dev1').some(m => m.type === 'teams' || m.type === 'tasks')).toBe(false);
-  });
-
-  it('team.resume and task.seen are dispatched; their answers make the outcome', async () => {
-    const g = setup({ teams: () => [team()], tasks: () => [], dispatch: async (msg, reply) => {
-      if (msg.type === 'task.cmd') reply(msg.task === 't000001' ? { type: 'task.result', rid: msg.rid, task: task('t000001', { seen: true }) } as ServerMessage : { type: 'task.result', rid: msg.rid, reason: 'unknown' } as ServerMessage);
-    } });
-    g.send('dev1', { type: 'team.resume', op: randomUUID(), team: 'team-a1b2' });
-    g.send('dev1', { type: 'task.seen', op: randomUUID(), task: 't000001' });
-    g.send('dev1', { type: 'task.seen', op: randomUUID(), task: 't0000ff' });
-    await flush();
-    expect(g.dispatched).toEqual([{ type: 'team.resume', team: 'team-a1b2' }, expect.objectContaining({ type: 'task.cmd', by: 'ledge', op: 'seen', task: 't000001' }), expect.objectContaining({ type: 'task.cmd', task: 't0000ff' })]);
-    expect(g.results('dev1').filter(r => r.status !== 'received').map(r => r.status)).toEqual(['applied', 'applied', 'failed']);
-  });
-
-  it('team.updated and task.updated reach the following devices; another giver\'s task does not', async () => {
-    let forward: ((m: ServerMessage) => void) | undefined;
-    const tasks: Task[] = [];
-    const g = setup({ teams: () => [team()], tasks: () => tasks });
-    g.send('dev1', { type: 'snapshot.request' });
-    await flush();
-    forward = (m: ServerMessage) => g.gw.forward(m);
     const before = g.got('dev1').length;
-    forward({ type: 'team.updated', team: team({ state: 'resting' }) });
-    forward({ type: 'task.updated', task: task('t000004', { giver: 'b', giverName: 'b', team: undefined }) });
-    tasks.push(task('t000005'));
-    forward({ type: 'task.updated', task: task('t000005') });
+    g.gw.forward({ type: 'team.updated', team: { id: 'team-a1b2', name: 'x', project: 'repo', machine: 'local', cwd: '/w/repo', state: 'resting', seats: [], createdAt: T0, updatedAt: T0 } } as ServerMessage);
+    g.gw.forward({ type: 'task.updated', task: { id: 't000005', title: 't', giver: 'ledge', giverName: 'Ledge', owner: 'a', ownerName: 'a', state: 'taken', at: T0, updatedAt: T0, log: [] } } as ServerMessage);
     await flush();
-    const after = g.got('dev1').slice(before).map(m => m.type);
-    expect(after).toEqual(['teams', 'task.updated', 'teams']);
+    expect(g.got('dev1').slice(before)).toEqual([]);
   });
 });
 

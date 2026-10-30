@@ -30,9 +30,6 @@
   --color-info: var(--info);
   --color-danger-fg: var(--danger-text);
   --color-danger-bg: var(--status-danger-soft);
-  /* A team's flag, and a seat's role pill (roles spec): the desktop's sidebar colour. */
-  --color-team: var(--sidebar-primary);
-  --color-role: var(--sidebar-primary);
   --color-term-bg: var(--term-bg);
   --color-term-fg: var(--term-fg);
 }

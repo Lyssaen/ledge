@@ -1657,11 +1657,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     challenges: createChallengeStore(),
     credential: id => mobile.credential(id),
     setCredential: (id, c) => mobile.setCredential(id, c),
-    teams: () => teams.all(), tasks: () => tasks.all(), contextNear: () => contextPrefs.near,
-    projectName: id => (id ? projects.projects.find(p => p.id === id)?.name ?? null : null),
-    // A project's folder is its first local repo: only a project with one can be named by the phone.
-    projectByName: name => projects.projects.find(p => p.name === name && p.repos.some(r => r.machine === 'local'))?.id ?? null,
-    teamCatalog: true,
+    contextNear: () => contextPrefs.near,
     // The phone's model switch (#58): `session.model` answers with a code, and `models.list` asks this machine's agents.
     models: true,
     // A session's « Fermer » on the phone: the cards' close, so a close under way (a card's, another phone's) is shared.

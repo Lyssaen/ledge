@@ -313,25 +313,3 @@ describe('the phone chat in the store', () => {
     expect(qid).toBeTruthy();
   });
 });
-
-describe('teams and Ledge\'s tasks in the store (ledge home spec §2.4)', () => {
-  const qid = '0b0e6f4c-27e6-4c1a-9a53-0d8a7d2a3c11';
-  it('keeps the teams and tasks the PC sends, a task.updated replacing one; null teams from a PC that sends none', () => {
-    const t = setup();
-    expect(t.store.getState().teams).toBeNull();
-    t.deliver({ type: 'teams', teams: [{ id: 'team-a1b2', name: 'r', project: null, state: 'active', seats: [], done: 0, given: 0, createdAt: 'a' }] });
-    t.deliver({ type: 'tasks', tasks: [{ id: 't1', title: 'x', owner: 'o', ownerName: 'O', state: 'taken', at: 'a', updatedAt: 'a' }] });
-    t.deliver({ type: 'task.updated', task: { id: 't1', title: 'x', owner: 'o', ownerName: 'O', state: 'done', at: 'a', updatedAt: 'b' } });
-    expect(t.store.getState().teams).toHaveLength(1);
-    expect(t.store.getState().tasks.get('t1')?.state).toBe('done');
-  });
-
-  it('team.resume and task.seen are sent and not stored', async () => {
-    const t = setup();
-    void t.store.resumeTeam('team-a1b2');
-    void t.store.seeTask('t1');
-    expect(t.of('team.resume')).toMatchObject([{ team: 'team-a1b2' }]);
-    expect(t.of('task.seen')).toMatchObject([{ task: 't1' }]);
-    expect(JSON.parse(t.storage.getItem(OPS_KEY) ?? '{}')).toEqual({});
-  });
-});
