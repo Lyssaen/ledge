@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
+import { spawnSync } from 'node:child_process';
 import { homedir, tmpdir } from 'node:os';
-import { mkdtempSync, mkdirSync, symlinkSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, symlinkSync, rmSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 // @ts-expect-error plain ESM script without types
 import { probeEnv, assertSafeTarget, assertUnder, probeRigSpec, questionsJson, parseSse, teardownPlan, markers } from '../scripts/openrig-probe.mjs';
@@ -112,5 +113,28 @@ describe('fix round 2', () => {
   });
   it('defaults realHome to the real home directory', () => {
     expect(() => assertSafeTarget({ home: join(homedir(), '.openrig'), port: 7512 } as never)).toThrow(/refused: home/);
+  });
+});
+
+const dirs: string[] = [];
+afterEach(() => { for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }); });
+
+describe('openrig-probe CLI', () => {
+  const run = (...a: string[]) => spawnSync(process.execPath, ['scripts/openrig-probe.mjs', ...a], { encoding: 'utf8', env: { PATH: process.env.PATH } });
+  it('without --go, prints what it would do and exits 2, creating nothing', () => {
+    const before = readdirSync(tmpdir()).filter(n => n.startsWith('openrig-qa-ledge-'));
+    const r = run();
+    expect(r.status).toBe(2); expect(r.stdout).toMatch(/--go/); expect(r.stdout).toMatch(/OPENRIG_HOME=.*openrig-qa-ledge-/);
+    expect(readdirSync(tmpdir()).filter(n => n.startsWith('openrig-qa-ledge-'))).toEqual(before);
+  });
+  it('--teardown refuses a home that is not a probe home', () => {
+    const r = run('--teardown', homedir() + '/.openrig');
+    expect(r.status).toBe(1); expect(r.stderr).toMatch(/^openrig-probe: refused: home/);
+  });
+  it('refuses to start when the installed rig is not 0.6.14', () => {
+    const fake = mkdtempSync(join(tmpdir(), 'probe-bin-')); dirs.push(fake);
+    writeFileSync(join(fake, 'rig'), '#!/bin/sh\necho 0.7.0\n', { mode: 0o755 });
+    const r = spawnSync(process.execPath, ['scripts/openrig-probe.mjs', '--go'], { encoding: 'utf8', env: { PATH: `${fake}:${process.env.PATH}` } });
+    expect(r.status).toBe(1); expect(r.stderr).toMatch(/refused: rig 0\.7\.0, the probe is written for 0\.6\.14/);
   });
 });
