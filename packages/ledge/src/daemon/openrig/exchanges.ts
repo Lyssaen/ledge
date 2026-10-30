@@ -30,7 +30,7 @@ export function exchangeFromOutbox(row: OutboxRow, ctx: Ctx & { at?: string }): 
   if (!row.outboxId.startsWith('outbox-')) return null;
   if (isHuman(row.destinationSession, str((row as { tier?: unknown }).tier))) return null;
   const body = str(row.body) ?? '';
-  const m = /^---\n([\s\S]*?)\n---(?:\n|$)/m.exec(body);
+  const m = /\n---\n([\s\S]*)\n---(?:\n|$)/.exec(body);
   const text = m?.[1] ?? body;
   const stamp = [row.createdAt, row.sentAt, row.timestamp].map(str).find((s): s is string => !!s && !Number.isNaN(Date.parse(s)));
   const at = stamp ? new Date(stamp).toISOString() : ctx.at ?? new Date().toISOString();
@@ -42,20 +42,25 @@ export interface ExchangeLog {
   add(x: Exchange): boolean;
   /** At most `max` items, oldest to newest. */
   list(rigId: string): Exchange[];
+  /** Dedupe entries kept for a rig (bounded by 2*max). */
+  size(rigId: string): number;
   forgetRig(rigId: string): void;
 }
 
 export function createExchangeLog(max: number = EXCHANGES_MAX): ExchangeLog {
-  const byRig = new Map<string, Exchange[]>(); const seen = new Set<string>();
+  // Per rig: the window plus a dedupe set (window ids and recently evicted ids, insertion-ordered, capped at 2*max).
+  const byRig = new Map<string, { items: Exchange[]; known: Set<string> }>();
   return {
     add(x) {
-      if (seen.has(x.id)) return false;
-      seen.add(x.id);
-      const l = byRig.get(x.rigId) ?? []; byRig.set(x.rigId, l); l.push(x);
-      while (l.length > max) l.shift();
+      let r = byRig.get(x.rigId); if (!r) byRig.set(x.rigId, r = { items: [], known: new Set() });
+      if (r.known.has(x.id)) return false;
+      r.known.add(x.id); r.items.push(x);
+      while (r.items.length > max) r.items.shift();
+      while (r.known.size > 2 * max) r.known.delete(r.known.values().next().value as string);
       return true;
     },
-    list: rigId => [...(byRig.get(rigId) ?? [])],
-    forgetRig(rigId) { for (const x of byRig.get(rigId) ?? []) seen.delete(x.id); byRig.delete(rigId); },
+    list: rigId => [...(byRig.get(rigId)?.items ?? [])],
+    size: rigId => byRig.get(rigId)?.known.size ?? 0,
+    forgetRig(rigId) { byRig.delete(rigId); },
   };
 }

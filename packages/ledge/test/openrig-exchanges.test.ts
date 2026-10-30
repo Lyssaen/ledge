@@ -32,6 +32,9 @@ describe('exchangeFromOutbox', () => {
   it('extracts the text between the --- lines', () => {
     expect(exchangeFromOutbox(row, ctx)).toMatchObject({ id: 'o-outbox-1', kind: 'message', text: 'hello there', rigId: 'starter', at });
   });
+  it('keeps a --- inside the text', () => {
+    expect(exchangeFromOutbox({ ...row, body: 'From: a\nTo: b\n---\nabove\n---\nbelow\n---\n↩ Reply: x' }, ctx)?.text).toBe('above\n---\nbelow');
+  });
   it('falls back to the whole body', () => {
     expect(exchangeFromOutbox({ ...row, body: 'plain' }, ctx)?.text).toBe('plain');
   });
@@ -56,6 +59,13 @@ describe('createExchangeLog', () => {
     for (let i = 0; i < 205; i++) log.add(mk(i));
     const l = log.list('r');
     expect(l).toHaveLength(200); expect(l[0]!.id).toBe('q-5'); expect(l[199]!.id).toBe('q-204');
+  });
+  it('bounds dedupe memory but still refuses recently evicted ids', () => {
+    const log = createExchangeLog();
+    for (let i = 0; i < 10000; i++) log.add(mk(i));
+    expect(log.size('r')).toBeLessThanOrEqual(400);
+    expect(log.add(mk(9700))).toBe(false); // evicted from the window, still remembered
+    expect(log.list('r')).toHaveLength(200);
   });
   it('forgetRig clears a rig', () => {
     const log = createExchangeLog(); log.add(mk(1)); log.forgetRig('r');
