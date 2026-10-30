@@ -27,25 +27,22 @@ test('open Otto from the tree, show Bix from +N finished and archive him, reread
   await expect(page.getByRole('status').filter({ hasText: /Archived session/ })).toContainText(/Archived session/);
 });
 
-// #98: a team is one row; in the rail (< 850 px) team and common-table rows hide, as branches and seats do, and the project keeps its swatch.
-test('teams in the tree: one row each, hidden in the rail', async ({ page }) => {
-  const seat = (id: string, name: string, role: string) => session(id, { name, title: `${name} · ledge`, cwd: '/w/ledge', project: 'ledge', team: 'team-a1b2', role });
-  const daemon = await fakeDaemon(page, [seat('nova', 'Nova', 'review'), seat('pim', 'Pim', 'lead'), otto], { projects: twoProjects });
-  const T = new Date().toISOString();
+// `ledge ask`: a session's decision lands in « Your turn » with its question and options; answering sends ask.answer, and the card leaves.
+test('an ask from the fake daemon shows in Your turn and is answered', async ({ page }) => {
+  const at = new Date().toISOString();
+  const daemon = await fakeDaemon(page, [otto], { projects: twoProjects, asks: [{ id: 'a1b2c34', from: 'otto', fromName: 'Otto', question: 'Which database?', options: 'A or B (I recommend B)', at, state: 'open' }] });
   await page.goto('/'); await openAtelier(page);
-  daemon.push({ type: 'teams', teams: [{ id: 'team-a1b2', name: 'ledge-dev', project: 'ledge', machine: 'local', cwd: '/w/ledge', state: 'active', seats: [{ role: 'lead', sessionId: 'pim' }, { role: 'review', sessionId: 'nova' }], createdAt: T, updatedAt: T }] });
-  const tree = page.getByRole('tree');
-  const team = tree.locator('.st-team');
-  await expect(team).toHaveCount(1);
-  const name = await team.locator('strong').boundingBox(), tag = await team.locator('.st-main span').boundingBox();
-  expect(Math.abs((name!.y + name!.height) - (tag!.y + tag!.height))).toBeLessThan(4);
-  if (process.env.LEDGE_RAIL_SHOTS) await page.screenshot({ path: `${process.env.LEDGE_RAIL_SHOTS}/wide.png` });
-  await page.setViewportSize({ width: 800, height: 800 });
-  await expect(team).toBeHidden();
-  await expect(tree.locator('.st-common')).toBeHidden();
-  await expect(tree.locator('.st-project').first()).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  const rail = await page.locator('aside.sidebar').boundingBox();
-  expect(rail!.width).toBeLessThan(90);
-  if (process.env.LEDGE_RAIL_SHOTS) await page.screenshot({ path: `${process.env.LEDGE_RAIL_SHOTS}/rail.png` });
+  const yours = page.getByRole('region', { name: 'Your turn' });
+  const card = yours.locator('[data-ask="a1b2c34"]');
+  await expect(card).toContainText('Decision');
+  await expect(card).toContainText('from Otto');
+  await expect(card).toContainText('Which database?');
+  await expect(card).toContainText('A or B (I recommend B)');
+  await expect(page.getByRole('button', { name: 'Home: Ledge, the operator' })).toContainText('1 yours');
+  await expect(card.getByRole('button', { name: 'Answer' })).toBeDisabled();
+  await card.getByPlaceholder('Your answer…').fill('B');
+  await card.getByRole('button', { name: 'Answer' }).click();
+  await expect.poll(() => daemon.received.filter(m => m.type === 'ask.answer')).toEqual([{ type: 'ask.answer', rid: expect.any(String), id: 'a1b2c34', text: 'B' }]);
+  await expect(card).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Home: Ledge, the operator' })).toContainText('0 yours');
 });

@@ -149,15 +149,3 @@ p.composer-missing{margin:0;white-space:normal;max-width:45%}
 .composer:has(.integrated-harness) .composer-footer{flex-shrink:0}
 
 /* « Nouvelle équipe ici… » (atelier rooms spec §3.2). */
-.team-launch{display:flex;flex-direction:column;gap:12px;padding:4px 16px 16px;font-size:13px}
-.team-launch .field{display:flex;flex-direction:column;gap:4px}
-.team-launch .field>span,.team-launch legend{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted-foreground)}
-.team-launch select,.team-launch input[type=text]{height:30px;border:1px solid var(--input);border-radius:var(--radius-sm);background:var(--well);color:inherit;padding:0 8px}
-.team-launch .team-seats{border:1px solid var(--input);border-radius:var(--radius-md);padding:8px 10px;display:flex;flex-direction:column;gap:6px}
-.team-launch .team-seat{display:flex;align-items:center;gap:10px;justify-content:space-between}
-.team-launch .team-preview{border:1px solid var(--sidebar-border);border-radius:var(--radius-md);background:var(--well);padding:8px 12px}
-.team-launch .team-preview p{margin:0 0 6px}
-.team-launch .team-preview ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:3px}
-.team-launch .warn{color:var(--warning,#b45309);margin:6px 0 0}
-.team-launch .error{color:var(--destructive);margin:6px 0 0}
-.team-launch .composer-actions{display:flex;justify-content:flex-end;gap:8px}

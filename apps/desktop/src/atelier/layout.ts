@@ -1,4 +1,4 @@
-import { projectOf, type Helper, type Project, type Projects, type Session, type Team } from '@ledge/protocol';
+import type { Helper, Project, Projects, Session } from '@ledge/protocol';
 import type { BotState } from '@ledge/ui/bots/poseFor';
 import type { ProjectFilter } from '../nav/state';
 
@@ -77,48 +77,21 @@ export function sheetState(state: BotState, offline?: boolean): 'approval' | 'qu
 const HELPER_STATE: Record<Helper['state'], BotState> = { starting: 'starting', working: 'working', waiting_input: 'question', waiting_permission: 'approval', idle: 'idle', exited: 'done', error: 'error' };
 export const helperState = (h: Helper): BotState => HELPER_STATE[h.state];
 
-/** A table of a room (atelier rooms spec §3.1): the project's common table (today's project table), or a live team's. */
-export interface AtelierTable { key: string; kind: 'common' | 'team'; team?: Team; mains: Session[] }
-/** A project's room: its walls hold its tables, the common one first, then the teams by creation. */
-export interface AtelierRoom { project: Project; tables: AtelierTable[] }
+/** A project's room (atelier rooms spec §2): its walls hold the project's one table, with its main agents. */
+export interface AtelierRoom { project: Project; mains: Session[] }
 export interface AtelierScene { rooms: AtelierRoom[]; unassigned: Session[]; empty: Project | null }
 
-/** The project a live team's room is: the one its folder falls in now, else the one it was created in. */
-export function teamProject(team: Team, projects: Projects | null): string | null {
-  if (!projects) return team.project;
-  const known = new Set(projects.projects.map(p => p.id));
-  const now = projectOf({ cwd: team.cwd, machineId: team.machine }, projects);
-  return now ?? (team.project !== null && known.has(team.project) ? team.project : null);
-}
-
 /**
- * The rooms of the atelier (atelier rooms spec §3.1). A session sits at its team's table when that team lives in its
- * project's room, else at the room's common table. A team's table is drawn while the team is active or resting, even
- * with no live seat (a resting team shows its seats' ended or archived sessions, found by `lookup`); a dissolved team has
- * none. The common table is drawn when it has sessions, or when the room has no team table. « Sans projet » is unchanged.
+ * The rooms of the atelier (atelier rooms spec §3.1): one per project with a session, holding that project's table.
+ * « Sans projet » is the sessions no project claims.
  */
-export function sceneOf(order: readonly Session[], projects: Projects | null, projectIdOf: (s: Session) => string | null, filter: ProjectFilter,
-  teams: readonly Team[] = [], lookup: (id: string) => Session | undefined = () => undefined): AtelierScene {
+export function sceneOf(order: readonly Session[], projects: Projects | null, projectIdOf: (s: Session) => string | null, filter: ProjectFilter): AtelierScene {
   const list = projects?.projects ?? [];
   const known = new Set(list.map(p => p.id));
   const idOf = (s: Session) => { const id = projectIdOf(s); return id !== null && known.has(id) ? id : null; };
   const showTables = filter === 'all' || filter !== 'none';
-  const live = teams.filter(t => t.state !== 'dissolved');
-  const roomOf = new Map(live.map(t => [t.id, teamProject(t, projects)]));
   const rooms = showTables
-    ? list.filter(p => filter === 'all' || p.id === filter).map(project => {
-      const mains = order.filter(s => idOf(s) === project.id);
-      const atTeam = (s: Session) => !!s.team && roomOf.get(s.team) === project.id;
-      const teamTables: AtelierTable[] = live.filter(t => roomOf.get(t.id) === project.id).map(team => {
-        const seated = mains.filter(s => s.team === team.id);
-        // A resting team keeps its seats' bots: their sessions, ended or archived, in seat order.
-        const resting = team.state === 'resting' ? team.seats.flatMap(x => { const s = x.sessionId ? (seated.find(m => m.id === x.sessionId) ?? lookup(x.sessionId)) : undefined; return s ? [s] : []; }) : [];
-        return { key: `team:${team.id}`, kind: 'team' as const, team, mains: seated.length ? seated : resting };
-      });
-      const common = mains.filter(s => !atTeam(s));
-      const tables: AtelierTable[] = [...(common.length > 0 || teamTables.length === 0 ? [{ key: `common:${project.id}`, kind: 'common' as const, mains: common }] : []), ...teamTables];
-      return { project, tables };
-    }).filter(r => r.tables.some(t => t.mains.length > 0 || t.kind === 'team'))
+    ? list.filter(p => filter === 'all' || p.id === filter).map(project => ({ project, mains: order.filter(s => idOf(s) === project.id) })).filter(r => r.mains.length > 0)
     : [];
   const unassigned = filter === 'all' || filter === 'none' ? order.filter(s => idOf(s) === null) : [];
   const target = filter === 'all' || filter === 'none' ? undefined : list.find(p => p.id === filter);
@@ -126,13 +99,12 @@ export function sceneOf(order: readonly Session[], projects: Projects | null, pr
   return { rooms, unassigned, empty };
 }
 
-/** Room, then table, then seat (Alt ←/→, Alt 1…9, J / K); `MAX_SEATS` applies per table. A resting team's seats are not walked. */
+/** Room, then seat (Alt ←/→, Alt 1…9, J / K); `MAX_SEATS` applies per table. */
 export function walkOrder(scene: AtelierScene, maxSeats = MAX_SEATS): Session[] {
-  return [...scene.rooms.flatMap(r => r.tables.flatMap(t => (t.team?.state === 'resting' ? [] : t.mains.slice(0, maxSeats)))), ...scene.unassigned];
+  return [...scene.rooms.flatMap(r => r.mains.slice(0, maxSeats)), ...scene.unassigned];
 }
 
-/** Room margins (atelier units, before zoom): 110 px at the sides and front, 150 px at the back; 70 px between tables. */
-export const ROOM_SIDE = 110, ROOM_BACK = 150, TABLE_GAP = 70;
-/** A room's width: its tables side by side, the gaps between them and its two side margins. */
-export const roomTileWidth = (tables: readonly { mains: readonly unknown[] }[], maxSeats = MAX_SEATS): number =>
-  tables.reduce((w, t, i) => w + roomWidth(t.mains.length, maxSeats) + (i > 0 ? TABLE_GAP : 0), 0) + 2 * ROOM_SIDE;
+/** Room margins (atelier units, before zoom): 110 px at the sides and front, 150 px at the back. */
+export const ROOM_SIDE = 110, ROOM_BACK = 150;
+/** A room's width: its table and its two side margins. */
+export const roomTileWidth = (sessions: number, maxSeats = MAX_SEATS): number => roomWidth(sessions, maxSeats) + 2 * ROOM_SIDE;

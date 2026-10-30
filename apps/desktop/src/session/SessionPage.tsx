@@ -22,14 +22,11 @@ import { SidePane, tabId, type PanePlan, type PaneTab } from './SidePane';
 import { Tags, Thread } from './Thread';
 import { marksOf } from './markers';
 import { TodoBar } from './TodoBar';
-import type { TeamsApi } from '../teams/useTeamsApi';
 import { toolName } from '@ledge/ui/chat/format';
 import { useConversations } from './useConversations';
 import { atEnd, displayIds, exchanges, helperOf, pendingPlan, unreadFrom, type PlanDoc, type Segment } from './exchanges';
 
 export interface SessionPageProps {
-  /** The live teams and Ledge's tasks (atelier rooms spec §3.5): the meta line's team, the task pinned above the reply. */
-  teams?: TeamsApi;
   /** The parent on a subagent's page. */
   session: Session;
   helper: Helper | null;
@@ -391,9 +388,6 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   };
 
   const machine = machineOf(session);
-  const team = p.teams?.teamOf(session);
-  // The seat's current task (§3.5): the one it holds, taken first, the latest.
-  const held = helper === null ? (p.teams?.tasks ?? []).filter(x => x.owner === session.id && !taskClosed(x)).sort((a, b) => Number(b.state === 'taken') - Number(a.state === 'taken') || b.updatedAt.localeCompare(a.updatedAt))[0] : undefined;
   const since = whenOf(session, undefined, now, t.list.when).text;
   const waitedFor = whenOf(session, p.waits.get(session.id)?.since, now, t.list.when).text;
   const place = p.nav.place;
@@ -410,7 +404,7 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
             </button>
           ))}
         </div>
-        <span className="pane-meta mono" title={t.session.meta}>{[machine, repoOf(session), ...(team ? [`⚑ ${team.name}`] : []), ...(session.role ? [toolName(session.tool), session.model, session.autonomy ? t.session.seat.autonomy[session.autonomy] : null] : []), ...(share !== undefined ? [t.handover.gauge(Math.round(share * 100))] : [])].filter(Boolean).join(' · ')}</span>
+        <span className="pane-meta mono" title={t.session.meta}>{[machine, repoOf(session), ...(share !== undefined ? [t.handover.gauge(Math.round(share * 100))] : [])].filter(Boolean).join(' · ')}</span>
         {/* Its relief (context handover spec §3.3): under way, done (the relief opens), or the one it relieves. */}
         {session.handover && (session.handover.state === 'done' && session.handover.to
           ? <button type="button" className="kids-pill" onClick={() => p.dispatch({ type: 'open', id: session.handover!.to! })}>{t.handover.relievedBy(session.handover.toName ?? '')}</button>
@@ -447,13 +441,6 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
             )}
             {view === 'thread' && !atBottom && <button type="button" className="to-latest" onClick={toLatest}><Icon d={SHELL_ICONS.arrowDown} size={13} />{th.latest}</button>}
           </div>
-          {!archived && held && (
-            <div className="pinned-task" role="note" aria-label={t.session.seat.pinned} data-task={held.id}>
-              <span className="kicker mono">{t.session.notice.task}</span>
-              <span className="pinned-text">{t.session.seat.task(held.id, held.title, held.giverName, t.chat.task.state[held.state])}</span>
-              <button type="button" className="message-link" onClick={() => p.dispatch({ type: 'ledge', tab: 'tasks', task: held.id })}>{t.session.seat.seeTasks}</button>
-            </div>
-          )}
           {!archived && <Reply session={session} helper={helper} asker={asker} since={waitedFor} decisions={p.decisions} memory={memory} memoKey={key}
             notify={p.notify} dispatch={p.dispatch} focusOnArrival={place.kind === 'session' && place.focus === 'reply'} keys={replyKeys} onReadPlan={readPlan} client={p.client} />}
         </div>

@@ -26,10 +26,10 @@ describe('nav state', () => {
     expect(home.chat).toBe(false);
     expect(home.chatFocus).toBe(chatOpen.chatFocus + 1);
     // Another tab keeps the way back.
-    const tasks = navReducer(home, { type: 'ledge', tab: 'tasks' });
-    expect(tasks.place).toMatchObject({ kind: 'home', tab: 'tasks', back: { kind: 'session', id: 'a' } });
-    expect(navReducer(tasks, { type: 'ledge' }).place).toMatchObject({ tab: 'tasks' });
-    expect(navReducer(tasks, { type: 'escape' }).place).toEqual({ kind: 'session', id: 'a', view: 'atelier', project: 'ledge' });
+    const history = navReducer(home, { type: 'ledge', tab: 'history' });
+    expect(history.place).toMatchObject({ kind: 'home', tab: 'history', back: { kind: 'session', id: 'a' } });
+    expect(navReducer(history, { type: 'ledge' }).place).toMatchObject({ tab: 'history' });
+    expect(navReducer(history, { type: 'escape' }).place).toEqual({ kind: 'session', id: 'a', view: 'atelier', project: 'ledge' });
     // From Settings: back to what Settings was over.
     const fromSettings = navReducer(navReducer(page, { type: 'settings' }), { type: 'ledge' });
     expect(fromSettings.place).toMatchObject({ kind: 'home', back: { kind: 'session', id: 'a' } });

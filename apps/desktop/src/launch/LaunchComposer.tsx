@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type JSX, type KeyboardEvent, type ReactNode } from 'react';
 import type { DaemonClient, MachineState } from '@ledge/fleet';
-import type { OmpApproval, Project, Role, Session } from '@ledge/protocol';
+import type { OmpApproval, Project, Session } from '@ledge/protocol';
 import { Bot } from '@ledge/ui/bots/Bot';
 import { Button } from '@ledge/ui/ui/Button';
 import { Kbd } from '@ledge/ui/ui/Kbd';
@@ -17,7 +17,6 @@ import type { LaunchState } from './useLaunch';
 import { cls } from '../shell/cls';
 import { ProjectSwatch } from '../projects/ProjectSwatch';
 import { useDefaultTool } from '../settings/tool';
-import { listRoles } from '../teams/useTeamsApi';
 
 const TOOLS: readonly Tool[] = ['claude', 'codex', 'cursor', 'omp'];
 const APPROVALS: readonly OmpApproval[] = ['always-ask', 'write', 'yolo'];
@@ -31,11 +30,11 @@ function emphasized(text: (a: string, b: string) => string, a: string, b: string
 
 /** Starting a session (the mockup's LaunchComposer, ledge-harness-integration #launch): the instruction first, then the agent, preselected as
  *  the default (Settings › General) and changed for this session only behind « Change », then the project, the machine and the repositories
- *  there; the preview shows who joins which table. Nothing is sent while a field is missing: it is named instead. From the
- *  catalog (#97), `wanted` brings a role, whose defaults fill the agent, its model and effort, and the folder it was read in, on its machine (#99). */
+ *  there; the preview shows who joins which table. Nothing is sent while a field is missing: it is named instead. `wanted`
+ *  can bring the folder and its machine (#99). */
 export function LaunchComposer(p: {
   client: DaemonClient; projects: readonly Project[]; machines: readonly MachineState[]; sessions: readonly Session[];
-  projectIdOf(s: Session): string | null; wanted: { project?: string; filter?: string; cwd?: string; machine?: string; role?: Pick<Role, 'id' | 'label' | 'tool' | 'model' | 'effort'> };
+  projectIdOf(s: Session): string | null; wanted: { project?: string; filter?: string; cwd?: string; machine?: string };
   onEditProject(id: string): void; onNewProject(): void;
   /** The launch in flight or its outcome (useLaunch): « Launching… » sends nothing more; a refusal or a silence is said here. */
   launch: LaunchState; onLaunch(msg: LaunchMessage, preview: { name: string; project: string; projectId: string }): void; onCancel(): void;
@@ -48,21 +47,13 @@ export function LaunchComposer(p: {
   const { projects, machines } = p;
   const [defaultTool, setDefaultTool] = useDefaultTool();
   const [form, setForm] = useState<LaunchForm>(() => {
-    const { role, cwd, machine } = p.wanted;
-    let f = launchDefaults(projects, machines, p.wanted, role?.tool ?? defaultTool);
+    const { cwd, machine } = p.wanted;
+    let f = launchDefaults(projects, machines, p.wanted, defaultTool);
     // A folder « Équipes » read on another machine (#99) is launched there.
     if (machine && machine !== 'local') f = withMachine(f, projects, machine);
-    // The role's model, with its effort or none; a role naming only an effort keeps the model remembered for the agent.
-    const memo = loadPick(f.project, f.tool);
-    f = withPick(f, role?.model ? { model: role.model, effort: role.effort ?? null } : role?.effort ? { model: memo.model, effort: role.effort } : memo);
+    f = withPick(f, loadPick(f.project, f.tool));
     return cwd && reposOn(projects.find(x => x.id === f.project), f.machine).some(r => r.path === cwd) ? { ...f, repos: [cwd] } : f;
   });
-  const [role, setRole] = useState(p.wanted.role);
-  // Where the role was read (#106): the daemon reads it again in the first folder, on its machine, the repository's winning over the
-  // home's. Elsewhere, the form reads it there too before anything is sent, and shows that one, or lets it go.
-  const [roleAt, setRoleAt] = useState(`${p.wanted.machine ?? 'local'}:${p.wanted.cwd ?? ''}`);
-  const at = `${form.machine ?? ''}:${form.repos[0] ?? ''}`;
-  const rereading = !!role && !!form.repos[0] && roleAt !== at;
   const [tried, setTried] = useState(false);
   const [choosing, setChoosing] = useState(false);
   const [feedback, setFeedback] = useState('');
@@ -112,27 +103,6 @@ export function LaunchComposer(p: {
     });
   }, [infos]);
 
-  useEffect(() => {
-    if (!rereading || !role) return;
-    let live = true;
-    const cwd = form.repos[0]!;
-    void listRoles(p.client, cwd, form.machine ?? undefined).then(l => {
-      if (!live) return;
-      const found = l.roles.find(r => r.id === role.id);
-      setRoleAt(at);
-      if (!found) { setRole(undefined); setFeedback(l.silent || l.error ? t.launch.roleUnread(role.id, cwd) : t.launch.roleGone(role.id, cwd)); return; }
-      setRole(found);
-      // Its defaults, as the role read first filled them: its agent, its model and effort.
-      if (found.tool === role.tool && found.model === role.model && found.effort === role.effort) return;
-      setForm(f => {
-        const g = found.tool && found.tool !== f.tool ? withTool(f, found.tool, loadPick(f.project, found.tool)) : f;
-        const memo = loadPick(g.project, g.tool);
-        return withPick(g, found.model ? { model: found.model, effort: found.effort ?? null } : found.effort ? { model: memo.model, effort: found.effort } : memo);
-      });
-    });
-    return () => { live = false; };
-  }, [rereading, at, role?.id]);
-
   const missing = missingOf(form, machines);
   const { name, seat } = previewOf(form, p.sessions, p.projectIdOf);
   // Without any project, the repositories are missing because the project is: the alert names the « No project yet » block.
@@ -140,10 +110,10 @@ export function LaunchComposer(p: {
   const launching = p.launch.status === 'launching';
   const submit = () => {
     setTried(true);
-    if (missing || launching || !project || unavailable || rereading) return;
+    if (missing || launching || !project || unavailable) return;
     if (!outdated) savePick(project.id, form.tool, { model: form.model, effort: form.effort });
     const sent = { ...(outdated ? withPick(form, NO_PICK) : form), approval: approvable ? form.approval : 'always-ask' as const };
-    p.onLaunch({ ...launchMessage(sent, name), ...(role ? { role: role.id } : {}) }, { name, project: project.name, projectId: project.id });
+    p.onLaunch(launchMessage(sent, name), { name, project: project.name, projectId: project.id });
   };
   // Only Ctrl / ⌘ ↵ and « Launch » send: a plain Enter on a tile or a chip would submit the form implicitly (the textarea keeps its newline).
   const onKeyDown = (e: KeyboardEvent) => {
@@ -177,13 +147,6 @@ export function LaunchComposer(p: {
           <textarea ref={field} value={form.prompt} onChange={e => { const prompt = e.target.value; setForm(f => ({ ...f, prompt })); }} rows={4}
             placeholder={t.launch.placeholder} aria-invalid={invalid('prompt')} />
         </label>
-        {role && (
-          <div className="composer-role" role="note">
-            <span className="composer-label">{t.launch.role}</span>
-            <span className="role-pill">@{role.id}</span><strong>{role.label}</strong><small>{rereading ? t.launch.roleReading : t.launch.roleHint}</small>
-            <Button type="button" variant="ghost" size="sm" onClick={() => setRole(undefined)}>{t.launch.roleRemove}</Button>
-          </div>
-        )}
         {!form.prompt && (
           <div className="composer-suggestions" role="group" aria-label={t.launch.suggestions}>
             {t.launch.ideas.map(s => <button type="button" key={s} onClick={() => { setForm(f => ({ ...f, prompt: s })); field.current?.focus(); }}>{s}</button>)}

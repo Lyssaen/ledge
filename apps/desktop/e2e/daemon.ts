@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Page, WebSocketRoute } from '@playwright/test';
-import type { ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, FoundRepo, IslandPrefs, Machines, ModelChoice, Projects, Recent, Session, Team, ThreadItem, Tool } from '@ledge/protocol';
-import type { RolesListing } from '../src/teams/useTeamsApi';
+import type { Ask, ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, FoundRepo, IslandPrefs, Machines, ModelChoice, Projects, Recent, Session, ThreadItem, Tool } from '@ledge/protocol';
 
 /** How long a launched session stays `starting` in the fake daemon before it is `working`. */
 export const LAUNCH_SETTLE_MS = 1500;
@@ -35,10 +34,10 @@ export type Found = { repos: FoundRepo[]; truncated?: boolean } | 'offline' | 'o
  *  A `repos.scan` is answered by its `machineId` (default `local`) from `extras.found` with `repos.found` (after `scanDelayMs`, to hold the scan view): no entry, an empty list.
  *  Like the daemon it keeps the island's settings (`extras.island`, default null: none set yet), sent after the projects, and an `island.set`
  *  replaces them and is broadcast back as `island`; `island: 'unknown'` plays a daemon too old to speak of them.
- *  With `extras.teams` it speaks of teams (`teams` after the snapshot), and a `roles.list` is answered from `extras.roles` by its `cwd`
- *  (`~` without one), an unknown folder with nothing.
+ *  It speaks of the decisions sessions asked (`asks` after the snapshot): `extras.asks`, none by default; an `ask.answer` closes its ask (`ask.updated`
+ *  `answered`, then `ask.result`), and one already closed is refused as the daemon does (`code` `closed`, `déjà répondue`).
  *  The route is anchored so it never catches `/ssh/<alias>` (see `fakeRemote`). Register before `page.goto`. */
-export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual'; chat?: ChatReply; found?: Record<string, Found>; scanDelayMs?: number; island?: IslandPrefs | null | 'unknown'; models?: Partial<Record<Tool, ModelChoice[]>>; teams?: Team[]; roles?: Record<string, Omit<RolesListing, 'silent'>> } = {}) {
+export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual'; chat?: ChatReply; found?: Record<string, Found>; scanDelayMs?: number; island?: IslandPrefs | null | 'unknown'; models?: Partial<Record<Tool, ModelChoice[]>>; asks?: Ask[] } = {}) {
   const threads = new Map(Object.entries(extras.threads ?? {}).map(([id, items]) => [id, [...items]]));
   const sessions = new Map(initial.map(s => [s.id, s]));
   const received: ClientMessage[] = [];
@@ -48,6 +47,7 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
   let socket: WebSocketRoute | null = null;
   let up = true;
   let launches = 0;
+  const asks = new Map((extras.asks ?? []).map(a => [a.id, a]));
   const turns = new Map<string, ChatTurn>();
   const images = new Map<string, { mime: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; data: string; preview: boolean }>();
   await page.routeWebSocket(/127\.0\.0\.1:47831\/?$/, ws => {
@@ -57,7 +57,7 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
     ws.send(JSON.stringify({ type: 'machines', machines }));
     if (projects) ws.send(JSON.stringify({ type: 'projects', projects }));
     if (island !== 'unknown') ws.send(JSON.stringify({ type: 'island', prefs: island }));
-    if (extras.teams) ws.send(JSON.stringify({ type: 'teams', teams: extras.teams }));
+    ws.send(JSON.stringify({ type: 'asks', asks: [...asks.values()] }));
     ws.onMessage(m => {
       let msg: ClientMessage;
       try { msg = JSON.parse(String(m)); } catch { return; }
@@ -88,7 +88,16 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
       }
       if (msg.type === 'machines.set') { machines = msg.machines; ws.send(JSON.stringify({ type: 'machines', machines })); }
       // #58: the agent's models from `extras.models`; without an entry, an empty list.
-      if (msg.type === 'roles.list') ws.send(JSON.stringify({ type: 'roles.listing', requestId: msg.requestId, ...(extras.roles?.[msg.cwd ?? '~'] ?? { roles: [], templates: [], problems: [] }) }));
+      if (msg.type === 'ask.answer') {
+        const ask = asks.get(msg.id);
+        if (!ask || ask.state !== 'open') ws.send(JSON.stringify({ type: 'ask.result', rid: msg.rid, code: ask ? 'closed' : 'unknown', reason: ask ? 'déjà répondue' : 'décision inconnue' }));
+        else {
+          const answered: Ask = { ...ask, state: 'answered', answer: { text: msg.text, at: new Date().toISOString() }, closedAt: new Date().toISOString() };
+          asks.set(ask.id, answered);
+          ws.send(JSON.stringify({ type: 'ask.updated', ask: answered }));
+          ws.send(JSON.stringify({ type: 'ask.result', rid: msg.rid, ask: answered }));
+        }
+      }
       if (msg.type === 'models.list') ws.send(JSON.stringify({ type: 'models.listing', requestId: msg.requestId, tool: msg.tool, models: extras.models?.[msg.tool] ?? [] }));
       if (msg.type === 'repos.inspect') {
         ws.send(JSON.stringify({ type: 'repos.info', requestId: msg.requestId, repos: msg.paths.map(path => ({ path, ...(extras.repoInfo?.[path] ?? { exists: true, branch: 'main' }) })) }));

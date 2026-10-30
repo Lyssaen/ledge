@@ -302,7 +302,7 @@ const Turn = memo(function Turn({ client, session, helper, items, x, at, last, f
     return (
       <li className="r notice-row">
         <span className="n node" aria-hidden="true"><Icon d={SHELL_ICONS.mail} size={12} /></span>
-        <NoticeLine item={item} peer={peer} onOpenPeer={() => peer && dispatch({ type: 'open', id: peer.id })} onOpenTask={task => dispatch({ type: 'ledge', tab: 'tasks', task })} />
+        <NoticeLine item={item} peer={peer} onOpenPeer={() => peer && dispatch({ type: 'open', id: peer.id })} />
         <span className="tm">{clock(item.at)}</span>
       </li>
     );
