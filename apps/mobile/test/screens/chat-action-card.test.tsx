@@ -28,7 +28,7 @@ describe('the action card', () => {
   it('draws an acceptance with its risk, and confirms it in a sheet before any check', async () => {
     const t = open({ actions: [accept] });
     const spy = vi.spyOn(t.store, 'act').mockResolvedValue({ status: 'applied' });
-    expect(within(card()).getAllByText('Nova')[0]!.tagName).toBe('STRONG');
+    expect(within(card()).getByText('Nova', { selector: 'strong' })).toBeInTheDocument();
     expect(within(card()).getByText(C.risk.destructive)).toBeInTheDocument();
     fireEvent.click(within(card()).getByRole('button', { name: 'Accepter…' }));
     expect(spy).not.toHaveBeenCalled();
