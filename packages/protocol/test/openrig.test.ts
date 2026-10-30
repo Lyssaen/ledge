@@ -31,7 +31,7 @@ describe('openrig contract', () => {
       { type: 'escalation.updated', escalation: e }, { type: 'escalation.removed', id: 'q1' },
       { type: 'rig.result', rid: 'x', ok: false, code: 'unreachable', reason: 'down' },
       { type: 'ledge.thread.item', item: { kind: 'ledge', id: 'i', at: now, text: 't' } },
-      { type: 'ledge.thread.history', items: [], before: now },
+      { type: 'ledge.thread.history', items: [], before: 'i1' },
       { type: 'decisions', items: [] }, { type: 'rules', items: [] }, { type: 'mandate', text: 't', path: '/p' },
       { type: 'brain.status', status: { state: 'on', tool: 'claude' } },
       { type: 'rig.plan', rid: 'x', plan: { id: 'p', machine: 'local', spec: 's', goal: 'g', where: { kind: 'off-project', name: 'n' }, cwd: '/w', seats: [{ address: '@a', runtime: 'claude-code', autonomy: 'auto' }], writes: [], command: 'rig up', required: false } },
@@ -46,12 +46,21 @@ describe('openrig contract', () => {
       { type: 'rig.launch', rid: 'x', planId: 'p' }, { type: 'rig.adopt', rid: 'x', machine: 'local', rigId: 'r1', projectId: 'p' },
       { type: 'rig.send', rid: 'x', machine: 'local', seatRef: 'dev-build@starter', text: 'go' },
       { type: 'escalation.answer', rid: 'x', id: 'q1', answers: { text: 'ok' }, by: 'user' },
-      { type: 'ledge.say', rid: 'x', text: 't' }, { type: 'ledge.thread.request' }, { type: 'ledge.thread.request', before: now },
+      { type: 'ledge.say', rid: 'x', text: 't' }, { type: 'ledge.thread.request' }, { type: 'ledge.thread.request', before: 'i1' },
       { type: 'mandate.update', rid: 'x', text: 't' }, { type: 'rule.set', rid: 'x', id: 'r', status: 'rejected' },
       { type: 'decision.revisit', rid: 'x', id: 'd' }, { type: 'category.escalate', rid: 'x', category: 'code' },
       { type: 'brain.set', rid: 'x', enabled: true, tool: 'claude' },
       { type: 'session.event', id: 's', event: { name: 'Stop', at: now, source: 'hook' }, openrig: { sessionName: 'dev-build@starter' } },
     ]) expect(() => parseClientMessage(m), m.type).not.toThrow();
+  });
+  it('session.event parses without openrig and refuses an empty sessionName', () => {
+    const ev = { name: 'Stop', at: now, source: 'hook' };
+    expect(parseClientMessage({ type: 'session.event', id: 's', event: ev }).type).toBe('session.event');
+    expect(() => parseClientMessage({ type: 'session.event', id: 's', event: ev, openrig: { sessionName: '' } })).toThrow();
+  });
+  it('thread cursor is a plain item id', () => {
+    expect(() => parseClientMessage({ type: 'ledge.thread.request', before: 'item-42' })).not.toThrow();
+    expect(() => parseServerMessage({ type: 'ledge.thread.history', items: [], before: 'item-42' })).not.toThrow();
   });
   it('SessionSchema keeps rig; DaemonInfo takes openrig', () => {
     const rigRef = { machine: 'local', rigId: 'r1', rigName: 'starter', seat: 'dev-build@starter', pod: 'dev', member: 'build' };
