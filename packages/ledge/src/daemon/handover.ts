@@ -5,7 +5,6 @@ import type { Store } from './store.js';
 import type { Mailbox } from './mailbox.js';
 import { log } from '../log.js';
 
-
 /** How long a session has to write its brief before Ledge writes one itself. */
 export const BRIEF_MS = 10 * 60_000;
 /** How much of the brief the relief's first instruction quotes; the whole one is `ledge handover show`. */

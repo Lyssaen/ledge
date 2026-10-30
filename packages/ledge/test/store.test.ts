@@ -45,6 +45,17 @@ describe('Store', () => {
     const s2 = new Store(); await s2.load();
     expect(s2.get('a')?.tmuxSession).toBe('ledge-a');
   });
+  it('drops the autonomy a role gave an old record, and keeps one a lone session has', async () => {
+    const s = new Store();
+    s.upsert({ ...mk('r'), role: 'build', roleLabel: 'Build', team: 'team-a1b2', autonomy: 'auto' });
+    s.upsert({ ...mk('t'), team: 'team-a1b2', autonomy: 'edits' });
+    s.upsert({ ...mk('l'), autonomy: 'auto' });
+    await s.save();
+    const s2 = new Store(); await s2.load();
+    expect(s2.get('r')).not.toHaveProperty('autonomy');
+    expect(s2.get('t')).not.toHaveProperty('autonomy');
+    expect(s2.get('l')?.autonomy).toBe('auto');
+  });
   it('debounces saves after changes', async () => {
     const s = new Store(); s.upsert(mk('a')); s.upsert(mk('b'));
     await sleep(350);

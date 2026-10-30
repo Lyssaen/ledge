@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { Session, SessionEvent, Tool } from '@ledge/protocol';
 import { connect, sendMessageAndAwaitAck, type Client } from '../client.js';
 import { log } from '../log.js';

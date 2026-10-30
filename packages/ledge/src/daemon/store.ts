@@ -53,7 +53,11 @@ export class Store {
     let dropped = 0;
     for (const item of list) {
       const r = SessionSchema.safeParse(item);
-      if (r.success) this.sessions.set(r.data.id, r.data);
+      if (r.success) {
+        // An old record seated by a role or team got its autonomy from that role (removed, spec 2026-10-30 §7): not carried over.
+        const { autonomy: _a, ...bare } = r.data;
+        this.sessions.set(r.data.id, r.data.role || r.data.team ? bare : r.data);
+      }
       else { dropped++; log(`journal entry dropped: ${r.error.issues[0]?.message ?? 'invalid'}`); }
     }
     // Journals from before the launch form have no recents: they simply start empty.

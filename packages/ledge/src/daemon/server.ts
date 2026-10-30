@@ -3,9 +3,8 @@ import type { Socket } from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
-import { existsSync } from 'node:fs';
 import { WebSocketServer, WebSocket } from 'ws';
-import { actionById, autonomyArgs, contextNear, isArchived, ompApprovalFor, givenByLedge, askShown, projectOf, type ChatAction, type Autonomy } from '@ledge/protocol';
+import { actionById, autonomyArgs, contextNear, ompApprovalFor, givenByLedge, askShown, type ChatAction, type Autonomy } from '@ledge/protocol';
 import { ATTACHMENT_LOCAL_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, type ModelRefusal, type RefusalCode, backendOf } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
@@ -680,7 +679,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     store.upsert({ ...rest, state: 'starting', source: 'launcher' });
     try {
       const cwd = await resolveFolder(s.cwd, opts.home);
-      const spawned = await omp.launch({ id: s.id, name: s.name, cwd, resumeFile: file, ...(model ? { model } : {}), ...(effort ? { effort } : {}), ...(s.approval ? { approval: s.approval } : {}), });
+      const spawned = await omp.launch({ id: s.id, name: s.name, cwd, resumeFile: file, ...(model ? { model } : {}), ...(effort ? { effort } : {}), ...(s.approval ? { approval: s.approval } : {}) });
       const { topic, topicSource, repo, repoPath, branch, worktree, repoId, project, autonomy } = s;
       store.upsert({ ...spawned, ...(autonomy ? { autonomy } : {}), ...(topic ? { topic } : {}), ...(topicSource ? { topicSource } : {}), ...(repo ? { repo } : {}), ...(repoPath ? { repoPath } : {}), ...(branch ? { branch } : {}), ...(worktree !== undefined ? { worktree } : {}), ...(repoId ? { repoId } : {}), project });
       log(`resumed ${spawned.name} (omp) in ${spawned.cwd} as ${spawned.id}`);
@@ -908,11 +907,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     return session;
   }
 
-  /** The first repo of a project on this machine, as a folder that exists; undefined when it has none or it does not resolve. */
-  async function projectFolder(projectId: string): Promise<string | undefined> {
-    const repo = projects.projects.find(p => p.id === projectId)?.repos.find(r => r.machine === 'local');
-    return repo ? resolveFolder(repo.path, opts.home).catch(() => undefined) : undefined;
-  }
   /** The scan in flight (lot 11): a `repos.scan` arriving while one walks gets that walk's result, under its own requestId. */
   let scanning: ReturnType<typeof scanRepos> | null = null;
   function sharedScan(): ReturnType<typeof scanRepos> {
