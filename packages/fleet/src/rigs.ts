@@ -13,13 +13,20 @@ export interface RigBook {
   rigs(): Rig[]; escalations(): Escalation[]; statuses(): OpenRigStatus[]; exchanges(machine: string, rigId: string): Exchange[] | null;
 }
 const SEP = '\0';
+/** Structural equality, blind to key order (the browser has no node:util isDeepStrictEqual). Undefined fields count as absent. */
+export function same(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null || Array.isArray(a) !== Array.isArray(b)) return false;
+  if (Array.isArray(a)) return a.length === (b as unknown[]).length && a.every((v, i) => same(v, (b as unknown[])[i]));
+  const ka = Object.keys(a).filter(k => (a as Record<string, unknown>)[k] !== undefined), kb = Object.keys(b).filter(k => (b as Record<string, unknown>)[k] !== undefined);
+  return ka.length === kb.length && ka.every(k => same((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
+}
 export function createRigBook(): RigBook {
   const rigMap = new Map<string, Rig>(), statusMap = new Map<string, OpenRigStatus>(), exchangeMap = new Map<string, Exchange[]>();
   const escMap = new Map<string, { esc: Escalation; from: string }>();
   let rigList: Rig[] = [], escList: Escalation[] = [], statusList: OpenRigStatus[] = [];
   const key = (machine: string, id: string) => `${machine}${SEP}${id}`;
   const publish = () => { rigList = [...rigMap.values()]; escList = [...escMap.values()].map(e => e.esc); statusList = [...statusMap.values()]; };
-  const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
   const fixRig = (machine: string, r: Rig): Rig => { const mine = r.machine === 'local' ? machine : r.machine; return { ...r, machine: mine, seats: r.seats.map(s => (s.sessionId ? { ...s, sessionId: qualify(mine, s.sessionId) } : s)) }; };
   const forgetMachine = (machine: string): boolean => {
     let changed = false;

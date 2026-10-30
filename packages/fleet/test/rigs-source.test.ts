@@ -112,3 +112,12 @@ describe('rigs from every machine', () => {
     expect(n).toBe(3);
   });
 });
+
+describe('same (rig book equality)', () => {
+  it('ignores key order and undefined fields, sees real changes', async () => {
+    const { same } = await import('../src/rigs');
+    expect(same({ a: 1, b: { c: [1, 2] } }, { b: { c: [1, 2] }, a: 1 })).toBe(true);
+    expect(same({ a: 1, x: undefined }, { a: 1 })).toBe(true);
+    expect(same({ a: [1, 2] }, { a: [2, 1] })).toBe(false); expect(same({ a: 1 }, { a: '1' })).toBe(false); expect(same([], {})).toBe(false);
+  });
+});
