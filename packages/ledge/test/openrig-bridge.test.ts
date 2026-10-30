@@ -210,6 +210,75 @@ describe('OpenRig bridge', () => {
     await until(() => of('rig.updated').some(m => m.rig.seats[0]!.state === 'working'));
   });
 
+  it('recovers from an /api/events open that never answers', async () => {
+    fake = await createFakeOpenRig(); fake.rigs.push(starter()); fake.humans.push('ledge'); fake.hangEvents = 2;
+    const { b } = setup({ exec: fakeRigCli(fake), openMs: 60 });
+    await b.start(); await until(() => b.status().state === 'running');
+    expect(fake.requests.filter(r => r.path === '/api/events').length).toBeGreaterThanOrEqual(3);
+    expect(fake.hangEvents).toBe(0);
+  });
+
+  it('broadcasts each outbox id once, past the log dedupe window', async () => {
+    fake = await createFakeOpenRig(); fake.rigs.push(starter()); fake.humans.push('ledge');
+    fake.outbox.set('dev-build@starter', Array.from({ length: 450 }, (_, i) => ({ outboxId: `outbox-${i}`, senderSession: 'dev-build@starter', destinationSession: 'dev-test@starter', body: `m${i}`, deliveryState: 'delivered' })));
+    const polls = () => fake!.requests.filter(r => r.path === '/api/queue/outbox/list' && r.search?.includes('dev-build')).length;
+    const { b, of } = setup({ exec: fakeRigCli(fake) });
+    await b.start(); await until(() => of('rig.exchange').length === 450);
+    const p = polls(); await until(() => polls() >= p + 3);
+    const ids = of('rig.exchange').map(m => m.exchange.id); expect(new Set(ids).size).toBe(450); expect(ids).toHaveLength(450);
+    // a new row is still picked up, once
+    fake.outbox.get('dev-build@starter')!.push({ outboxId: 'outbox-new', senderSession: 'dev-build@starter', destinationSession: 'dev-test@starter', body: 'n', deliveryState: 'delivered' });
+    await until(() => of('rig.exchange').some(m => m.exchange.id === 'o-outbox-new'));
+    const q = polls(); await until(() => polls() >= q + 2); expect(of('rig.exchange')).toHaveLength(451);
+  });
+
+  it('never moves the cursor back', async () => {
+    fake = await createFakeOpenRig(); fake.rigs.push(starter()); fake.humans.push('ledge');
+    for (let i = 1; i <= 5; i++) fake.emit({ type: 'view.changed' });
+    const d = mkdtempSync(join(tmpdir(), 'ledge-bridge-')); dirs.push(d); const file = join(d, 'openrig.json');
+    writeFileSync(file, JSON.stringify({ version: 1, machines: { local: { lastEventId: 3, rigs: [], at: '2026-10-30T10:00:00.000Z' } } }));
+    // A server that ignores Last-Event-ID and replays its whole journal.
+    const base = fetch;
+    const f = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (!String(input).includes('/api/events')) return base(input, init);
+      const h = new Headers(init?.headers); h.delete('last-event-id'); return base(String(input).replace('?replay=0', ''), { ...init, headers: h });
+    }) as typeof fetch;
+    const { b, of } = setup({ exec: fakeRigCli(fake), fetch: f, file });
+    await b.start(); await until(() => b.status().state === 'running');
+    fake.emit(task('Z1')); await until(() => of('rig.exchange').length === 1);
+    await b.stop(); bridge = null;
+    expect(readOpenRigFile(file).machines.local!.lastEventId).toBe(6);
+    // replaying 1..6 again with a cursor of 6 applies nothing
+    const again = setup({ exec: fakeRigCli(fake), fetch: f, file });
+    await again.b.start(); await until(() => again.b.status().state === 'running'); await sleep(50);
+    expect(again.of('rig.exchange')).toHaveLength(0);
+    await again.b.stop(); expect(readOpenRigFile(file).machines.local!.lastEventId).toBe(6);
+  });
+
+  it('a registration in flight across a disconnect does not register', async () => {
+    fake = await createFakeOpenRig(); fake.rigs.push(starter());
+    const inner = fakeRigCli(fake); let release!: () => void; const gate = new Promise<void>(r => { release = r; });
+    const exec = (async (args: string[]) => { if (args.slice(0, 3).join(' ') === 'gateway human list') await gate; return inner(args); }) as RigExec;
+    const { b } = setup({ exec });
+    await b.start(); await until(() => b.status().state === 'running');
+    await fake.stop(); await until(() => b.status().state === 'stopped');
+    release(); await sleep(50);
+    expect(inner.calls.some(c => c.slice(0, 3).join(' ') === 'gateway human add')).toBe(false);
+    expect(b.status().human).toBeUndefined();
+  });
+
+  it('pairs by cwd on each seat\'s own cwd, only when unique', async () => {
+    fake = await createFakeOpenRig(); fake.humans.push('ledge');
+    const n = (member: string, runtime: string, cwd: string) => ({ logicalId: `dev.${member}`, canonicalSessionName: `dev-${member}@mixed`, runtime, sessionStatus: 'running', startupStatus: 'ready', cwd });
+    fake.rigs.push({ rigId: 'm', name: 'mixed', status: 'running', nodes: [n('a', 'claude-code', '/w/app'), n('b', 'claude-code', '/w/app'), n('c', 'claude-code', '/w/other'), n('d', 'codex', '/w/app')] });
+    const { b } = setup({ exec: fakeRigCli(fake) });
+    await b.start(); await until(() => b.status().state === 'running');
+    expect(b.pairByCwd('s1', '/w/other', 'claude')).toMatchObject({ seat: 'dev-c@mixed' }); // the rig's cwd is /w/app: per-seat cwd matters
+    expect(b.pairByCwd('s2', '/w/app', 'claude')).toBeNull();                               // two free claude seats there
+    expect(b.pairByCwd('s3', '/w/app', 'codex')).toMatchObject({ seat: 'dev-d@mixed' });
+    expect(b.pairByCwd('s4', '/w/nowhere', 'codex')).toBeNull();
+  });
+
   it('unsupported reads nothing', async () => {
     fake = await createFakeOpenRig({ version: '0.7.0' }); fake.rigs.push(starter());
     const exec = fakeRigCli(fake); const { b, of } = setup({ exec });

@@ -19,15 +19,17 @@ export interface FakeOpenRig {
   stop(): Promise<void>;                           // closes the port and destroys open SSE streams (journal kept)
   restart(): Promise<void>;                        // reopens on the same port, same journal
   requests: { method: string; path: string; search?: string; lastEventId?: string }[];
+  /** The next n `/api/events` requests are accepted but never answered (no headers), until stop(). */
+  hangEvents: number;
 }
 
 export async function createFakeOpenRig(opts: { port?: number; version?: string | null } = {}): Promise<FakeOpenRig> {
   const journal: ({ type: string; seq: number; rigId?: unknown } & Record<string, unknown>)[] = [];
-  const streams = new Set<{ res: ServerResponse; rigId: string | null }>();
+  const streams = new Set<{ res: ServerResponse; rigId: string | null }>(); const hung = new Set<ServerResponse>();
   let server: Server | null = null;
   const f: FakeOpenRig = {
     url: '', port: opts.port ?? 0, version: opts.version === undefined ? '0.6.14' : opts.version,
-    rigs: [], queue: [], outbox: new Map(), humans: [], kernel: { state: 'ready' }, requests: [],
+    rigs: [], queue: [], outbox: new Map(), humans: [], kernel: { state: 'ready' }, requests: [], hangEvents: 0,
     emit(event) {
       const e = { ...event, seq: journal.length + 1 }; journal.push(e);
       for (const s of streams) if (!s.rigId || (e as { rigId?: unknown }).rigId === s.rigId) write(s.res, e);
@@ -35,7 +37,7 @@ export async function createFakeOpenRig(opts: { port?: number; version?: string 
     },
     async stop() {
       const s = server; server = null; if (!s) return;
-      for (const st of streams) st.res.destroy(); streams.clear();
+      for (const st of streams) st.res.destroy(); streams.clear(); for (const r of hung) r.destroy(); hung.clear();
       await new Promise<void>(r => { s.close(() => r()); s.closeAllConnections(); });
     },
     async restart() { await f.stop(); await listen(); },
@@ -59,6 +61,7 @@ export async function createFakeOpenRig(opts: { port?: number; version?: string 
       return json(res, f.queue.filter(r => (!d || r.destinationSession === d) && (!s || s.split(',').includes(r.state)) && (!src || r.sourceSession === src)));
     }
     if (path === '/api/queue/outbox/list') { const s = q.get('senderSession'); return json(res, s ? (f.outbox.get(s) ?? []) : [...f.outbox.values()].flat()); }
+    if (path === '/api/events' && f.hangEvents > 0) { f.hangEvents--; hung.add(res); res.on('close', () => hung.delete(res)); return; }
     if (path === '/api/events') return sse(req, res, q, lastEventId);
     json(res, { error: 'not_found' }, 404);
   }

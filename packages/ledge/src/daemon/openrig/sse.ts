@@ -27,7 +27,7 @@ export function openEventStream(opts: { base: string; fetch?: Fetch; lastEventId
   onEvent(e: OpenRigEvent): void; onOpen(): void; onEnd(error?: Error): void }): EventStream {
   const doFetch = opts.fetch ?? fetch; const ac = new AbortController();
   let closed = false; let ended = false; let max = -Infinity;
-  const end = (error?: Error) => { if (closed || ended) return; ended = true; opts.onEnd(error); };
+  const end = (error?: Error) => { if (closed || ended) return; ended = true; ac.abort(); opts.onEnd(error); }; // abort releases the socket (non-200 body, throwing onOpen)
   const url = `${opts.base}/api/events${opts.lastEventId === null ? '?replay=0' : ''}`;
   const headers: Record<string, string> = { accept: 'text/event-stream' };
   if (opts.lastEventId !== null) headers['last-event-id'] = String(opts.lastEventId);

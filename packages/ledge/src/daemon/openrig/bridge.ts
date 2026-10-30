@@ -13,7 +13,8 @@ import { createEscalationBook, rowToEscalation } from './escalations.js';
 import { askToEscalation } from './asks.js';
 import { createExchangeLog, exchangeFromEvent, exchangeFromOutbox } from './exchanges.js';
 import { readHumanQueue, readRigs, versionCache } from './bridge-read.js';
-import type { QueueRow } from './wire.js';
+import type { NodeEntry, QueueRow } from './wire.js';
+import type { MirrorSnapshot } from './mirror.js';
 
 export type BridgeMessage = Extract<ServerMessage, { type: 'openrig.status' | 'rig.snapshot' | 'rig.updated' | 'rig.removed' | 'rig.exchange' | 'escalation.updated' | 'escalation.removed' }>;
 export interface BridgeDeps {
@@ -26,6 +27,7 @@ export interface BridgeDeps {
   retryMs?: number;                             // 600000 (start, registration)
   outboxMs?: number;                            // 5000, while OUTBOX_EVENT is null
   resyncMs?: number;                            // 60000: safety re-read of `ps` + `nodes` (facts D10)
+  openMs?: number;                              // 5000: deadline for /api/events to answer its headers
   now?: () => string;
   notice?: (text: string) => void;
 }
@@ -44,6 +46,7 @@ export interface Bridge {
 
 const QUEUE_EVENTS = new Set<string>([EVENTS.queueCreated, EVENTS.queueUpdated, EVENTS.queueClaimed, EVENTS_UNOBSERVED.queueHandedOff]);
 const HUMAN_REREAD_MS = 200; const ENSURE_MS = 60_000;
+/** OpenRig runtime to Ledge Tool: `claude-code` is Claude Code; other runtimes (codex, …) carry the tool's own name. */
 const toolOf = (runtime: string) => (runtime === 'claude-code' ? 'claude' : runtime);
 const every = (ms: number, fn: () => unknown) => { const t = setInterval(() => void fn(), ms); t.unref(); return t; };
 
@@ -59,7 +62,7 @@ function serial(fn: () => Promise<void>): () => Promise<void> {
 
 export function createBridge(deps: BridgeDeps): Bridge {
   const machine = deps.machine ?? 'local'; const probeMs = deps.probeMs ?? 5000; const retryMs = deps.retryMs ?? 600_000;
-  const outboxMs = deps.outboxMs ?? 5000; const resyncMs = deps.resyncMs ?? 60_000;
+  const outboxMs = deps.outboxMs ?? 5000; const resyncMs = deps.resyncMs ?? 60_000; const openMs = deps.openMs ?? 5000;
   const now = deps.now ?? (() => new Date().toISOString()); const notice = deps.notice ?? (() => {});
   const cli = createRigCli(deps.exec ?? realRigExec(deps.env)); const probeWith = versionCache(cli);
   const mirror = createMirror({ machine, projects: deps.projects, home: deps.home });
@@ -76,6 +79,9 @@ export function createBridge(deps: BridgeDeps): Bridge {
   let registering = false; let humanOk = false; let regAt: number | null = null;
   let probeTimer: NodeJS.Timeout | null = null; const connTimers: NodeJS.Timeout[] = []; let humanTimer: NodeJS.Timeout | null = null;
   let unsubAsks: (() => void) | null = null;
+  const opening = new Set<() => void>(); // cancels of streams not open yet
+  const nodesByRig = new Map<string, NodeEntry[]>(); // per-seat cwd for pairByCwd
+  const outboxSeen = new Map<string, Set<string>>(); // seat ref -> outbox ids of its latest listing (never pruned by ref: a rig may come back)
 
   const emit = (m: BridgeMessage) => { if (!active) return; for (const fn of listeners) { try { fn(m); } catch (e) { log(`openrig: listener threw: ${(e as Error).message}`); } } };
   function setStatus(state: OpenRigStatus['state'], extra: { version?: string; detail?: string } = {}) {
@@ -84,7 +90,7 @@ export function createBridge(deps: BridgeDeps): Bridge {
     status = next; emit({ type: 'openrig.status', status });
   }
   const setHuman = (h: typeof human) => { human = h; if (status.state === 'running') setStatus('running', { version: status.version }); };
-  const removeRig = (rigId: string) => { xlog.forgetRig(rigId); emit({ type: 'rig.removed', machine, rigId }); };
+  const removeRig = (rigId: string) => { xlog.forgetRig(rigId); refetchers.delete(rigId); nodesByRig.delete(rigId); emit({ type: 'rig.removed', machine, rigId }); };
   const emitRigs = (r: { updated: Rig[]; removed: string[] }) => { for (const rig of r.updated) emit({ type: 'rig.updated', rig }); r.removed.forEach(removeRig); };
   const emitEsc = (r: { updated: Escalation[]; removed: string[] }) => {
     for (const escalation of r.updated) emit({ type: 'escalation.updated', escalation });
@@ -92,6 +98,10 @@ export function createBridge(deps: BridgeDeps): Bridge {
   };
   const emitExchange = (x: Exchange | null) => { if (x && xlog.add(x)) emit({ type: 'rig.exchange', exchange: x }); };
   const saveRigs = () => { const names = mirror.rigs().map(r => r.name); if (!isDeepStrictEqual(names, knownRigs)) { knownRigs = names; writer?.set(machine, { rigs: names }); } };
+  const keepNodes = (snap: MirrorSnapshot) => {
+    for (const id of [...nodesByRig.keys()]) if (!snap.rigs.some(r => r.rigId === id)) nodesByRig.delete(id);
+    for (const [id, list] of snap.nodes) nodesByRig.set(id, list);
+  };
   const applyHuman = (rows: QueueRow[]) => emitEsc(rigBook.replace(rows.map(r => rowToEscalation(r, ctx))));
   const syncAsks = () => {
     if (!deps.asks) return;
@@ -102,7 +112,7 @@ export function createBridge(deps: BridgeDeps): Bridge {
   const resync = serial(async () => {
     const h = http; const g = gen; if (!h || !live) return;
     const snap = await readRigs(h); if (g !== gen) return;
-    emitRigs(mirror.replace(snap)); saveRigs();
+    keepNodes(snap); emitRigs(mirror.replace(snap)); saveRigs();
   });
   const rereadHuman = serial(async () => {
     const h = http; const g = gen; if (!h || !live) return;
@@ -113,7 +123,9 @@ export function createBridge(deps: BridgeDeps): Bridge {
     for (const ref of mirror.rigs().flatMap(r => r.seats.map(s => s.ref))) {
       let rows; try { rows = await h.outbox(ref); } catch (e) { if (e instanceof OpenRigUnreachable) return; continue; }
       if (g !== gen) return;
-      for (const row of rows) emitExchange(exchangeFromOutbox(row, { ...ctx, at: now() }));
+      // Only ids absent from the previous listing reach the log: a long listing never re-broadcasts past the log's dedupe window.
+      const seen = outboxSeen.get(ref) ?? new Set<string>(); outboxSeen.set(ref, new Set(rows.map(r => r.outboxId)));
+      for (const row of rows) if (!seen.has(row.outboxId)) emitExchange(exchangeFromOutbox(row, { ...ctx, at: now() }));
     }
   });
   const refetchers = new Map<string, () => Promise<void>>();
@@ -123,7 +135,7 @@ export function createBridge(deps: BridgeDeps): Bridge {
       const h = http; const g = gen; if (!h || !live) return;
       const before = mirror.rigs().find(r => r.id === rigId); if (!before) return void resync(); // unknown rig (rig.imported): re-read `ps`
       const nodes = await h.nodes(rigId).catch(() => null); if (!nodes || g !== gen) return; // 404: the resync settles removal
-      const rig = mirror.setNodes(rigId, nodes); if (rig && !isDeepStrictEqual(rig, before)) emit({ type: 'rig.updated', rig });
+      nodesByRig.set(rigId, nodes); const rig = mirror.setNodes(rigId, nodes); if (rig && !isDeepStrictEqual(rig, before)) emit({ type: 'rig.updated', rig });
     }));
     void run();
   };
@@ -139,24 +151,30 @@ export function createBridge(deps: BridgeDeps): Bridge {
   };
 
   function apply(e: OpenRigEvent) {
+    if (cursor !== null && e.seq <= cursor) return; // seq persists across OpenRig restarts (D12): the cursor never moves back
     cursor = e.seq; writer?.set(machine, { lastEventId: e.seq });
     const r = mirror.applyEvent(e); emitRigs(r); r.refetch.forEach(refetch);
     if (!QUEUE_EVENTS.has(e.type)) return;
     if (touchesHuman(e)) scheduleHuman(); else emitExchange(exchangeFromEvent(e, { ...ctx, at: now() }));
   }
 
-  /** Resolves with the stream once it is open, null when it ended before (non-200, refused). */
+  /** Resolves with the stream once it is open; null when it ended before (non-200, refused), missed the `openMs` deadline
+   *  (a hung open would otherwise hold the probe loop forever) or was cancelled by a disconnect. */
   function openStream(g: number, from: number | null, buffer: OpenRigEvent[]): Promise<EventStream | null> {
     return new Promise(resolve => {
-      let opened = false;
+      let opened = false; let settled = false;
+      const settle = (v: EventStream | null) => { if (settled) return; settled = true; clearTimeout(timer); opening.delete(cancel); if (!v) s.close(); resolve(v); };
+      const cancel = () => settle(null);
       const s: EventStream = openEventStream({ base, fetch: deps.fetch, lastEventId: from,
         onEvent: e => { if (g !== gen) return; if (live) apply(e); else buffer.push(e); },
-        onOpen: () => { opened = true; resolve(s); },
+        onOpen: () => { opened = true; settle(s); },
         onEnd: err => {
-          if (!opened) return resolve(null);
+          if (!opened) return settle(null);
           if (g !== gen) return;
           log(`openrig: event stream ended${err ? `: ${err.message}` : ''}`); disconnect(); setStatus('stopped');
         } });
+      const timer = setTimeout(() => { log(`openrig: /api/events did not open within ${openMs} ms`); cancel(); }, openMs); timer.unref();
+      opening.add(cancel);
     });
   }
 
@@ -175,7 +193,8 @@ export function createBridge(deps: BridgeDeps): Bridge {
     try { snap = await readRigs(h); rows = await readHumanQueue(h); }
     catch (e) { if (g === gen) { log(`openrig: initial read failed: ${(e as Error).message}`); s.close(); stream = null; } return; }
     if (g !== gen || !active) return;
-    const { removed } = mirror.replace(snap); live = true; humanOk = false;
+    keepNodes(snap); const { removed } = mirror.replace(snap); live = true; humanOk = false;
+    if (!mirror.rigs().some(r => !r.kernel)) human = 'missing'; // no stale 'registered' from an earlier connection
     setStatus('running', { version });
     removed.forEach(removeRig);
     emit({ type: 'rig.snapshot', machine, rigs: mirror.rigs() }); saveRigs();
@@ -187,7 +206,7 @@ export function createBridge(deps: BridgeDeps): Bridge {
 
   /** Drops the connection; the rigs stay, marked unreachable, until the next connect re-reads them. */
   function disconnect() {
-    const was = live || stream !== null; gen++; stream?.close(); stream = null; live = false;
+    const was = live || stream !== null; gen++; for (const cancel of [...opening]) cancel(); stream?.close(); stream = null; live = false;
     for (const t of connTimers.splice(0)) clearInterval(t);
     if (humanTimer) { clearTimeout(humanTimer); humanTimer = null; }
     if (was) for (const rig of mirror.markUnreachable()) emit({ type: 'rig.updated', rig });
@@ -197,14 +216,15 @@ export function createBridge(deps: BridgeDeps): Bridge {
     if (REGISTRATION !== 'external' || registering || !live || humanOk) return;
     if (regAt !== null && Date.now() - regAt < retryMs) return;
     if (!mirror.rigs().some(r => !r.kernel)) return;
-    registering = true;
+    registering = true; const g = gen;
+    const stale = () => g !== gen || !live; // a disconnect or stop happened during an await: this run must not touch state
     try {
-      const list = await cli.humans();
+      const list = await cli.humans(); if (stale()) return;
       if (list?.includes(HUMAN_ID)) { humanOk = true; return setHuman('registered'); }
       regAt = Date.now();
       if (list === null) { log('openrig: `rig gateway human list` failed, Ledge is not registered'); return setHuman('failed'); }
       const other = list.find(id => id !== HUMAN_ID);
-      const r = await cli.addHuman(other ? { replace: true } : undefined);
+      const r = await cli.addHuman(other ? { replace: true } : undefined); if (stale()) return;
       if (!r.ok) { log(`openrig: registering Ledge as the human failed: ${r.detail ?? ''}`); return setHuman('failed'); }
       humanOk = true; setHuman('registered');
       if (other) notice(`J'ai remplacé l'humain ${other} par Ledge sur ${machine}`);
@@ -291,7 +311,8 @@ export function createBridge(deps: BridgeDeps): Bridge {
     },
     pair,
     pairByCwd(sessionId, cwd, tool) {
-      const seats = mirror.rigs().filter(r => r.cwd === cwd).flatMap(r => r.seats).filter(s => toolOf(s.runtime) === tool);
+      const cwdOf = (rigId: string, ref: string) => nodesByRig.get(rigId)?.find(n => (n.canonicalSessionName ?? n.logicalId) === ref)?.cwd;
+      const seats = mirror.rigs().flatMap(r => r.seats.filter(s => cwdOf(r.id, s.ref) === cwd)).filter(s => toolOf(s.runtime) === tool);
       const mine = seats.find(s => s.sessionId === sessionId); if (mine) return pair(sessionId, mine.ref);
       const free = seats.filter(s => !s.sessionId); return free.length === 1 ? pair(sessionId, free[0]!.ref) : null;
     },

@@ -49,6 +49,15 @@ describe('openEventStream', () => {
       fetch: (async () => new Response('no', { status: 503 })) as typeof fetch });
     await until(() => ends.length > 1); expect(ends[1]!.message).toContain('503'); bad.close();
   });
+  it('aborts the request when it ends by itself (non-200, throwing onOpen)', async () => {
+    const signals: AbortSignal[] = []; const ends: unknown[] = [];
+    const bad = (async (_u: RequestInfo | URL, init?: RequestInit) => { signals.push(init!.signal!); return new Response('no', { status: 410 }); }) as typeof fetch;
+    openEventStream({ base: 'http://x', fetch: bad, lastEventId: 3, onEvent: () => {}, onOpen: () => {}, onEnd: e => ends.push(e) });
+    const ok = (async (_u: RequestInfo | URL, init?: RequestInit) => { signals.push(init!.signal!); return new Response(new ReadableStream({ start() {} }), { status: 200 }); }) as typeof fetch;
+    openEventStream({ base: 'http://x', fetch: ok, lastEventId: null, onEvent: () => {}, onOpen: () => { throw new Error('boom'); }, onEnd: e => ends.push(e) });
+    await until(() => ends.length === 2);
+    expect(signals.map(s => s.aborted)).toEqual([true, true]);
+  });
   it('parses chunked frames, comments, multi-line data, junk, and skips non-increasing seq', async () => {
     const enc = new TextEncoder();
     const body = ['data: {"type":"a",', '"seq":1}\nid: 1\n\n:keep-alive\n\nda', 'ta: not json\nid: 2\n\ndata: {"type":"b"\ndata: ,"seq":3}\nid: 3\n\n',
