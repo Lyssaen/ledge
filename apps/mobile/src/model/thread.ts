@@ -3,6 +3,7 @@ import { copy } from '../copy';
 import type { LinkState } from '../link/link';
 import type { Op } from '../state/operations';
 import { requestsOf, type InboxItem } from './requests';
+import { closedHere, endedClock } from './sessionEnd';
 
 export { MESSAGE_MAX } from '@ledge/protocol';
 
@@ -93,6 +94,8 @@ export function threadItems(items: PcItem[], session: PhoneSession, ops: Record<
       out.splice(next < 0 ? out.length : next, 0, { ...base, delivery: 'taken', ...(now - at < TAKEN_WINDOW ? { fresh: true } : {}) });
     }
   }
+  // This phone's close, at the moment the session ended: last, since nothing comes after an end.
+  if (session.exitedAt && closedHere(session, ops)) out.push({ key: `closed-${session.exitedAt}`, kind: 'event', label: copy.sessionEnd.closedHere(endedClock(session.exitedAt)), at: session.exitedAt });
   const awaiting = requestsOf([session])[0];
   if (awaiting) out.push({ key: `awaiting-${awaiting.key}`, kind: 'awaiting', item: awaiting });
   return out;

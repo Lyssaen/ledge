@@ -32,8 +32,9 @@ export function replyFailure(o: Op): { title: string; body: string } {
  * The composer of a thread (boards Continue and Sent): an instruction for an agent that is free, with quick ones. A
  * text the PC would refuse (too long, or not typable on one line) is said so here and never sent.
  */
-export function Reply({ name, composer, draft, onDraft, onSend, fresh, taken, checking, error, onReconnect, images, dialog, lead, leadNote }: {
+export function Reply({ name, composer, draft, onDraft, onSend, fresh, taken, checking, error, alert, onReconnect, images, dialog, lead, leadNote }: {
   /** The chip that opens at the head of the quick row, and the line under the row it may need. */ lead?: ReactNode; leadNote?: ReactNode;
+  /** Said above the field instead of `error`: why the session was not closed (the composer is back, the draft kept). */ alert?: ReactNode;
   name: string; composer: Composer; draft: string; onDraft: (t: string) => void; onSend: () => void; fresh: boolean;
   /** The images waiting under the field. */ images: Attachments;
   /** A dialog waits: the images would be refused, they go after the answer. */ dialog: boolean;
@@ -49,7 +50,8 @@ export function Reply({ name, composer, draft, onDraft, onSend, fresh, taken, ch
   return (
     <footer className="flex-none border-t border-line bg-bg pt-2 pb-3 [@media(max-height:650px)]:pb-2">
       <div className={`flex items-center gap-1.5 pb-2 text-meta ${TONE[status.tone]}`}><i className="inline-block size-1.5 flex-none rounded-full bg-current" />{status.label}</div>
-      {error && (
+      {alert && <div className="mb-2.5">{alert}</div>}
+      {!alert && error && (
         <div className="mb-2.5">
           <Notice title={error.title} tone="warning" role="alert">
             <p>{error.body}</p>

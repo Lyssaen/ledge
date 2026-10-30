@@ -1,0 +1,549 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fermer une session</title>
+<style>
+/* Les tokens de @ledge/ui (packages/ui/src/styles/tokens.css) et de l'app mobile (apps/mobile/src/styles.css). */
+:root {
+  --bg: oklch(1 0 0); --surface: oklch(1 0 0); --raised: oklch(0.97 0 0); --fg: oklch(0.145 0 0); --muted: oklch(0.556 0 0);
+  --line: oklch(0.922 0 0); --input: oklch(0.922 0 0);
+  --ok: #059669; --attention: #b45309; --info: #2563eb; --danger: oklch(0.505 0.213 27.518); --danger-bg: oklch(0.97 0.014 17);
+  --page: #f4f4f5; --note: #fffbe6; --note-line: #e9d98a;
+  --shadow: 0 20px 40px -12px rgba(0,0,0,0.25);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: oklch(0.145 0 0); --surface: oklch(0.205 0 0); --raised: oklch(0.269 0 0); --fg: oklch(0.985 0 0); --muted: oklch(0.708 0 0);
+    --line: #ffffff1a; --input: #ffffff26; --ok: #34d399; --attention: #fbbf24; --info: #60a5fa; --danger: oklch(0.704 0.191 22.216); --danger-bg: oklch(0.26 0.06 22);
+    --page: #0b0b0c; --note: #23200f; --note-line: #4a4320; --shadow: 0 20px 40px -12px rgba(0,0,0,0.7);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: oklch(0.145 0 0); --surface: oklch(0.205 0 0); --raised: oklch(0.269 0 0); --fg: oklch(0.985 0 0); --muted: oklch(0.708 0 0);
+  --line: #ffffff1a; --input: #ffffff26; --ok: #34d399; --attention: #fbbf24; --info: #60a5fa; --danger: oklch(0.704 0.191 22.216); --danger-bg: oklch(0.26 0.06 22);
+  --page: #0b0b0c; --note: #23200f; --note-line: #4a4320; --shadow: 0 20px 40px -12px rgba(0,0,0,0.7);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--fg); font: 14px/1.5 "Geist", system-ui, -apple-system, "Segoe UI", sans-serif; }
+.doc { max-width: 1240px; margin: 0 auto; padding: 32px 16px 80px; }
+h1.doc-title { font-size: 26px; line-height: 32px; margin: 0 0 6px; letter-spacing: -.5px; }
+.lede { color: var(--muted); max-width: 760px; margin: 0 0 8px; }
+.toggle { margin: 12px 0 28px; display: flex; gap: 8px; }
+.toggle button { min-height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--input); background: var(--surface); color: var(--fg); font: inherit; cursor: pointer; }
+h2.part { font-size: 18px; margin: 44px 0 4px; }
+.part-note { color: var(--muted); margin: 0 0 18px; max-width: 760px; }
+.row { display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-start; }
+.cell { width: 360px; max-width: 100%; }
+.cap { font-weight: 600; margin: 0 0 8px; }
+.cap small { display: block; font-weight: 400; color: var(--muted); }
+
+/* Le téléphone : 360 × 740, gouttière 16 px, comme apps/mobile. */
+.phone { position: relative; width: 360px; max-width: 100%; height: 740px; border-radius: 36px; border: 1px solid var(--line); background: var(--bg); overflow: hidden; display: flex; flex-direction: column; padding: 0 16px; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+.phone.short { height: 600px; }
+.sbar { height: 34px; flex: none; display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 600; padding: 0 8px; }
+header.th { flex: none; border-bottom: 1px solid var(--line); padding: 8px 0 12px; }
+.hrow { display: flex; align-items: center; gap: 10px; }
+.icon-btn { width: 44px; height: 44px; flex: none; display: inline-grid; place-items: center; border-radius: 12px; border: 1px solid var(--input); color: var(--fg); background: transparent; }
+.icon-btn.ghost { border-color: transparent; }
+.icon-btn[aria-disabled="true"] { opacity: .45; }
+.icon-btn.hl { outline: 2px dashed var(--info); outline-offset: 3px; }
+.bot { width: 36px; height: 36px; flex: none; border-radius: 12px; background: color-mix(in oklch, var(--info) 18%, var(--raised)); display: grid; place-items: center; font-size: 11px; font-weight: 700; color: var(--info); }
+.bot.done { background: var(--raised); color: var(--muted); }
+.bot.busy { background: color-mix(in oklch, var(--attention) 18%, var(--raised)); color: var(--attention); }
+.t-title { font-size: 18px; line-height: 24px; font-weight: 600; letter-spacing: -.2px; margin: 0; }
+.meta { font-size: 11px; line-height: 16px; color: var(--muted); }
+.small { font-size: 12px; line-height: 18px; }
+.muted { color: var(--muted); }
+.where { margin: 8px 0 0 46px; }
+main.log { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 14px; padding: 20px 0 16px; }
+.me { align-self: flex-end; max-width: 94%; background: var(--raised); border-radius: 16px 16px 4px 16px; padding: 14px; }
+.agent { align-self: flex-start; max-width: 94%; background: var(--surface); border: 1px solid var(--line); border-radius: 16px 16px 16px 4px; padding: 14px; }
+.event { text-align: center; font-size: 11px; line-height: 16px; color: var(--muted); }
+footer.reply { flex: none; border-top: 1px solid var(--line); padding: 8px 0 16px; }
+.status { display: flex; align-items: center; gap: 6px; font-size: 11px; line-height: 16px; padding-bottom: 8px; }
+.status i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; display: inline-block; }
+.field { min-height: 48px; border: 1px solid var(--input); border-radius: 12px; display: flex; align-items: center; padding: 0 12px; color: var(--muted); gap: 8px; }
+.field .send { margin-left: auto; width: 36px; height: 36px; border-radius: 10px; background: var(--fg); color: var(--bg); display: grid; place-items: center; opacity: .45; }
+.ok { color: var(--ok); } .att { color: var(--attention); } .inf { color: var(--info); } .dan { color: var(--danger); }
+
+.btn { display: flex; width: 100%; min-height: 48px; align-items: center; justify-content: center; gap: 8px; border-radius: 12px; border: 1px solid var(--input); background: transparent; color: var(--fg); font: 500 14px/1.4 inherit; padding: 10px 16px; text-align: center; }
+.btn.primary { background: var(--fg); color: var(--bg); border-color: transparent; }
+.btn[aria-disabled="true"] { opacity: .45; }
+.btn.sm { width: auto; min-height: 44px; padding: 0 14px; }
+.notice { border-radius: 12px; border: 1px solid; padding: 14px; font-size: 12px; line-height: 1.65; }
+.notice strong { display: block; font-size: 14px; margin-bottom: 5px; }
+.notice.warning { border-color: color-mix(in oklch, var(--attention) 25%, transparent); background: color-mix(in oklch, var(--attention) 6%, transparent); }
+.notice.danger { border-color: color-mix(in oklch, var(--danger) 25%, transparent); background: var(--danger-bg); }
+.notice ul { margin: 0; padding-left: 18px; }
+.notice ul li + li { margin-top: 4px; }
+
+/* La feuille (ui/Dialog.tsx, Sheet) sur l'écran assombri. */
+.dim { position: absolute; inset: 0; background: rgba(0,0,0,.5); }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; background: var(--surface); border-top: 1px solid var(--line); border-radius: 28px 28px 0 0; padding: 12px 20px 34px; display: flex; flex-direction: column; gap: 16px; box-shadow: var(--shadow); }
+.grip { width: 36px; height: 5px; border-radius: 99px; background: color-mix(in oklch, var(--muted) 40%, transparent); align-self: center; }
+.sheet h3 { font-size: 21px; line-height: 28px; letter-spacing: -.3px; margin: 0; }
+.sheet p { margin: 0; }
+.stack { display: flex; flex-direction: column; gap: 10px; }
+
+.tag { display: inline-flex; height: 22px; align-items: center; border-radius: 6px; padding: 0 8px; font-size: 11px; font-weight: 500; white-space: nowrap; }
+.tag.ok { background: color-mix(in oklch, var(--ok) 10%, transparent); }
+.tag.inf { background: color-mix(in oklch, var(--info) 10%, transparent); }
+.tag.att { background: color-mix(in oklch, var(--attention) 10%, transparent); }
+.tag.mut { color: var(--muted); background: color-mix(in oklch, var(--fg) 5%, transparent); }
+.lrow { display: flex; gap: 12px; border-bottom: 1px solid var(--line); padding: 16px 0; }
+.lrow h4 { margin: 0; font-size: 14px; font-weight: 600; }
+.lrow .chev { align-self: center; color: var(--muted); }
+.group { padding: 12px 0; font-size: 11px; letter-spacing: .4px; color: var(--muted); }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+.end-card { border: 1px solid var(--line); background: var(--surface); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.end-card strong { font-size: 14px; }
+
+/* Les notes de la maquette : hors de l'écran. */
+.notes { margin: 12px 0 0; padding: 12px 14px; background: var(--note); border: 1px solid var(--note-line); border-radius: 12px; font-size: 12.5px; line-height: 1.55; }
+.notes ol, .notes ul { margin: 4px 0 0; padding-left: 18px; }
+.notes code, .spec code { font-family: "Geist Mono", ui-monospace, monospace; font-size: .92em; }
+.pin { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--info); color: #fff; font-size: 11px; font-weight: 700; margin-right: 4px; vertical-align: 1px; }
+.spec { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 20px 22px; margin-top: 16px; max-width: 900px; }
+.spec h3 { margin: 18px 0 6px; font-size: 15px; } .spec h3:first-child { margin-top: 0; }
+.spec table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.spec th, .spec td { text-align: left; border-bottom: 1px solid var(--line); padding: 7px 8px; vertical-align: top; }
+.spec th { color: var(--muted); font-weight: 500; }
+.spec ul { margin: 4px 0; padding-left: 20px; }
+@media (max-width: 420px) { .phone { height: auto; min-height: 640px; } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-term" viewBox="0 0 24 24"><path d="m4 17 6-6-6-6M12 19h8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 3v9M6.3 6.3a8 8 0 1 0 11.4 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-resume" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.6M4 4v4h4M10 9l5 3-5 3z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-spin" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.22-8.56" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24"><path d="m5 12 7-7 7 7M12 19V5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  </defs>
+</svg>
+
+<div class="doc">
+  <h1 class="doc-title">Fermer une session depuis le téléphone</h1>
+  <p class="lede">Maquette de référence pour la tâche Ledge t585479 (td5205e). Écrans de l'app mobile (<code>apps/mobile</code>), largeur 360 px, gouttière 16 px, tokens de <code>@ledge/ui</code>. Les encadrés jaunes sont des notes : ils ne s'affichent pas dans l'app.</p>
+  <p class="lede">En bref : un bouton <b>Fermer</b> dans l'en-tête de la page de session, une feuille de confirmation qui dit ce qui va se passer puis demande la vérification de l'appareil, un pied de page qui suit la fermeture, et <b>Reprendre</b> à la place du champ de saisie une fois la session terminée. La liste montre <b>Fermeture…</b> puis <b>Terminée · 18:42</b>.</p>
+  <div class="toggle" role="group" aria-label="Thème de la maquette">
+    <button type="button" onclick="document.documentElement.dataset.theme='light'">Clair</button>
+    <button type="button" onclick="document.documentElement.dataset.theme='dark'">Sombre</button>
+  </div>
+
+  <!-- ============ 1. Entrée ============ -->
+  <h2 class="part">1. Où se trouve « Fermer »</h2>
+  <p class="part-note">Sur la page de la session seulement, à droite du bouton Terminal. Pas dans la liste : chaque ligne est un lien vers la session, et un geste de balayage ne se découvre pas et ne se fait pas au clavier.</p>
+  <div class="row">
+    <div class="cell">
+      <p class="cap">1a · Page de session, session en cours</p>
+      <div class="phone">
+        <div class="sbar"><span>18:40</span><span>●●● 5G</span></div>
+        <header class="th">
+          <div class="hrow">
+            <span class="icon-btn ghost"><svg width="20" height="20"><use href="#i-back"/></svg></span>
+            <span class="bot">NO</span>
+            <div style="min-width:0;flex:1"><p class="t-title">Pagination de /invoices</p><p class="meta" style="margin:3px 0 0">Nova · Claude</p></div>
+            <span class="icon-btn"><svg width="20" height="20"><use href="#i-term"/></svg></span>
+            <span class="icon-btn hl"><svg width="20" height="20"><use href="#i-power"/></svg></span>
+          </div>
+          <p class="meta where">billing-api · <code>feat/pagination</code></p>
+        </header>
+        <main class="log">
+          <div class="me">Ajoute la pagination par curseur et ses tests</div>
+          <div class="agent">C'est fait : <code>/invoices</code> accepte <code>cursor</code> et <code>limit</code>. Les 14 tests passent.</div>
+        </main>
+        <footer class="reply">
+          <div class="status ok"><i></i>Disponible pour votre consigne</div>
+          <div class="field">Écrire à Nova…<span class="send"><svg width="18" height="18"><use href="#i-up"/></svg></span></div>
+        </footer>
+      </div>
+      <div class="notes">
+        <span class="pin">1</span><b>Nouveau bouton</b> : <code>iconButtonClass({ variant: 'outline' })</code>, 44 × 44, icône <code>power</code> (nouvelle, ci-dessous). Nom accessible et info-bulle : <b>« Fermer Nova »</b>.
+        <ul>
+          <li><b>Affiché</b> si le PC sait fermer depuis un téléphone, la session n'est pas en lecture seule (démarrée hors de Ledge) et n'est pas terminée (<code>state !== 'exited'</code>). Une session en <code>error</code> l'affiche : c'est le moyen de la nettoyer.</li>
+          <li><b>Toujours actif</b> sauf pendant une fermeture en cours (alors <code>aria-disabled</code>, nom « Fermeture de Nova en cours »). Hors ligne ou appareil non protégé, il ouvre quand même la feuille, qui dit pourquoi (2d, 2e) : un bouton grisé sans raison laisse l'utilisateur deviner.</li>
+          <li>Icône : <code>['M12 3v9', 'M6.3 6.3a8 8 0 1 0 11.4 0']</code>, trait 2, grille 24.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 2. Confirmation ============ -->
+  <h2 class="part">2. La confirmation</h2>
+  <p class="part-note">La feuille (<code>Sheet</code> de <code>ui/Dialog.tsx</code>) dit d'abord ce qui arrive à l'agent et que sa conversation reste reprenable, puis ce que la fermeture coupe, s'il y a quelque chose. La vérification de l'appareil part du même bouton, comme dans <code>RiskConfirm</code> : le défi est demandé dès l'ouverture de la feuille.</p>
+  <div class="row">
+    <div class="cell">
+      <p class="cap">2a · Session libre<small>Le cas courant : rien n'est coupé.</small></p>
+      <div class="phone">
+        <div class="sbar"><span>18:41</span><span>●●● 5G</span></div>
+        <header class="th"><div class="hrow"><span class="icon-btn ghost"><svg width="20" height="20"><use href="#i-back"/></svg></span><span class="bot">NO</span><div style="flex:1"><p class="t-title">Pagination de /invoices</p></div></div></header>
+        <div class="dim"></div>
+        <section class="sheet" role="dialog" aria-labelledby="s2a">
+          <span class="grip"></span>
+          <h3 id="s2a">Fermer Nova ?</h3>
+          <p class="muted">Ledge quitte l’agent proprement, comme /exit dans son terminal. Sa conversation est gardée : vous pourrez la reprendre d’ici ou depuis le PC.</p>
+          <p class="small muted">Une vérification sur votre appareil sera demandée.</p>
+          <div class="stack">
+            <span class="btn primary">Fermer avec Face ID</span>
+            <span class="btn">Annuler</span>
+          </div>
+        </section>
+      </div>
+      <div class="notes">Bouton principal : <code>variant: 'primary'</code>, pas <code>brand</code> (rouge) : la fermeture est réversible, ce n'est pas une destruction. Libellé : « Fermer avec Face ID » sur Apple, « Fermer avec mon appareil » ailleurs (même règle que <code>isApple()</code>).</div>
+    </div>
+
+    <div class="cell">
+      <p class="cap">2b · Session au travail, une demande en attente, des sous-agents<small>Chaque ligne n'apparaît que si elle s'applique.</small></p>
+      <div class="phone">
+        <div class="sbar"><span>18:41</span><span>●●● 5G</span></div>
+        <header class="th"><div class="hrow"><span class="icon-btn ghost"><svg width="20" height="20"><use href="#i-back"/></svg></span><span class="bot busy">NO</span><div style="flex:1"><p class="t-title">Pagination de /invoices</p></div></div></header>
+        <div class="dim"></div>
+        <section class="sheet" role="dialog" aria-labelledby="s2b">
+          <span class="grip"></span>
+          <h3 id="s2b">Fermer Nova ?</h3>
+          <p class="muted">Ledge quitte l’agent proprement, comme /exit dans son terminal. Sa conversation est gardée : vous pourrez la reprendre d’ici ou depuis le PC.</p>
+          <div class="notice warning">
+            <strong>Ce que la fermeture coupe</strong>
+            <ul>
+              <li>Nova travaille : son tour en cours sera interrompu. Ce qui est déjà fait reste fait.</li>
+              <li>La demande en attente sera refusée.</li>
+              <li>2 sous-agents s’arrêtent avec la session.</li>
+            </ul>
+          </div>
+          <p class="small muted">Si l’agent ne répond pas, Ledge ferme son terminal de force. Une vérification sur votre appareil sera demandée.</p>
+          <div class="stack">
+            <span class="btn primary">Fermer avec Face ID</span>
+            <span class="btn">Annuler</span>
+          </div>
+        </section>
+      </div>
+      <div class="notes">
+        Lignes de l'encadré (<code>Notice tone="warning"</code>), dans cet ordre :
+        <ol>
+          <li><code>state === 'working'</code> → « Nova travaille : son tour en cours sera interrompu. Ce qui est déjà fait reste fait. » ; <code>waiting_permission</code> ou <code>waiting_input</code> (le PC interrompt aussi ce tour) → « Le tour en cours de Nova sera interrompu. Ce qui est déjà fait reste fait. » <i>(ajouté après livraison, t990d61)</i></li>
+          <li><code>pending</code> autorisation, plan ou diff → « La demande en attente sera refusée. » ; question → « La question en attente restera sans réponse. » (c'est ce que fait <code>closeSession</code> : il refuse la demande interrompue.)</li>
+          <li><code>helpers.length = n</code> → « 1 sous-agent s’arrête avec la session. » / « n sous-agents s’arrêtent avec la session. »</li>
+        </ol>
+        Aucune ligne → pas d'encadré (2a). La phrase « Si l’agent ne répond pas… » n'apparaît qu'avec l'encadré : sur une session libre, le repli est rare et la phrase inquiète pour rien.
+      </div>
+    </div>
+
+    <div class="cell">
+      <p class="cap">2c · La vérification : en préparation, puis annulée<small>Repris tel quel de <code>RiskConfirm</code>.</small></p>
+      <div class="phone short">
+        <div class="sbar"><span>18:41</span><span>●●● 5G</span></div>
+        <div class="dim"></div>
+        <section class="sheet" role="dialog" aria-labelledby="s2c">
+          <span class="grip"></span>
+          <h3 id="s2c">Fermer Nova ?</h3>
+          <p class="muted">Ledge quitte l’agent proprement, comme /exit dans son terminal. Sa conversation est gardée : vous pourrez la reprendre d’ici ou depuis le PC.</p>
+          <div class="notice warning" role="alert"><strong>Vérification annulée. Rien n’a été envoyé.</strong></div>
+          <p class="small muted">Une vérification sur votre appareil sera demandée.</p>
+          <div class="stack">
+            <span class="btn primary">Fermer avec Face ID</span>
+            <span class="btn">Annuler</span>
+          </div>
+        </section>
+      </div>
+      <div class="notes">
+        Libellés du bouton principal, selon l'étape (textes existants de <code>copy.confirm</code>) :
+        <ul>
+          <li>défi pas encore reçu : « Préparation de la vérification… » (inactif) ;</li>
+          <li>invite de l'appareil ouverte : « Vérification en cours sur cet appareil… » (inactif) ;</li>
+          <li>annulée : encadré <code>confirm.cancelled</code>, le bouton redevient « Fermer avec Face ID » ;</li>
+          <li>expirée ou échouée : encadré <code>confirm.expired</code> / <code>confirm.failed</code>, le bouton devient « Réessayer ».</li>
+        </ul>
+        La feuille se ferme dès que la fermeture est envoyée : le suivi se fait sur la page (3a), pas dans la feuille, car il peut durer jusqu'à 30 s.
+      </div>
+    </div>
+  </div>
+
+  <div class="row" style="margin-top:28px">
+    <div class="cell">
+      <p class="cap">2d · PC injoignable<small>La feuille s'ouvre, mais ne propose que de se reconnecter.</small></p>
+      <div class="phone short">
+        <div class="sbar"><span>18:41</span><span>●●● 5G</span></div>
+        <div class="dim"></div>
+        <section class="sheet" role="dialog" aria-labelledby="s3c">
+          <span class="grip"></span>
+          <h3 id="s3c">Fermer Nova ?</h3>
+          <div class="notice warning" role="status"><strong>PC injoignable</strong>Reconnectez-vous pour fermer Nova. Rien n’a été envoyé.</div>
+          <div class="stack">
+            <span class="btn primary">Reconnecter</span>
+            <span class="btn">Annuler</span>
+          </div>
+        </section>
+      </div>
+      <div class="notes">« Reconnecter » appelle le même <code>onReconnect</code> que la bannière hors ligne. Une fois le lien revenu, la feuille repasse en 2a / 2b sans se fermer.</div>
+    </div>
+    <div class="cell">
+      <p class="cap">2e · Appareil non protégé<small>Aucune clé d'appareil : la fermeture ne peut pas être confirmée.</small></p>
+      <div class="phone short">
+        <div class="sbar"><span>18:41</span><span>●●● 5G</span></div>
+        <div class="dim"></div>
+        <section class="sheet" role="dialog" aria-labelledby="s3d">
+          <span class="grip"></span>
+          <h3 id="s3d">Fermer Nova ?</h3>
+          <div class="notice warning" role="status"><strong>Vérification impossible</strong>Protégez d’abord vos accords depuis Connexion. Vous pouvez aussi fermer Nova sur le PC.</div>
+          <div class="stack">
+            <span class="btn primary">Ouvrir Connexion</span>
+            <span class="btn">Annuler</span>
+          </div>
+        </section>
+      </div>
+      <div class="notes">Même condition que <code>canConfirm</code> dans <code>CloseCards</code>. « Ouvrir Connexion » est un lien vers <code>href({ name: 'connection' })</code> stylé en bouton.</div>
+    </div>
+  </div>
+
+  <!-- ============ 4. Pendant / après ============ -->
+  <h2 class="part">3. Pendant la fermeture, après, et si elle échoue</h2>
+  <p class="part-note">Le pied de page remplace le champ de saisie : c'est là que l'utilisateur regarde, et écrire à un agent qui s'en va n'a pas de sens.</p>
+  <div class="row">
+    <div class="cell">
+      <p class="cap">3a · Fermeture en cours</p>
+      <div class="phone">
+        <div class="sbar"><span>18:41</span><span>●●● 5G</span></div>
+        <header class="th">
+          <div class="hrow">
+            <span class="icon-btn ghost"><svg width="20" height="20"><use href="#i-back"/></svg></span>
+            <span class="bot busy">NO</span>
+            <div style="min-width:0;flex:1"><p class="t-title">Pagination de /invoices</p><p class="meta" style="margin:3px 0 0">Nova · Claude</p></div>
+            <span class="icon-btn"><svg width="20" height="20"><use href="#i-term"/></svg></span>
+            <span class="icon-btn" aria-disabled="true"><svg width="20" height="20"><use href="#i-power"/></svg></span>
+          </div>
+        </header>
+        <main class="log">
+          <div class="me">Ajoute la pagination par curseur et ses tests</div>
+          <div class="agent">C'est fait : <code>/invoices</code> accepte <code>cursor</code> et <code>limit</code>. Les 14 tests passent.</div>
+        </main>
+        <footer class="reply" role="status">
+          <div class="status att"><svg class="spin" width="12" height="12" aria-hidden="true"><use href="#i-spin"/></svg>Fermeture de Nova…</div>
+          <p class="small muted" style="margin:0 0 4px">L’agent termine ce qu’il tape, puis quitte. Cela peut prendre jusqu’à 30 s.</p>
+        </footer>
+      </div>
+      <div class="notes">Tant que l'opération est vivante (<code>isLive(op.phase)</code>) ou appliquée sans que la session soit encore <code>exited</code>. Ton <code>attention</code>, comme « Fermeture… » de la carte du chat. Le pied de page est <code>role="status"</code> : le lecteur d'écran annonce le changement, et le focus, rendu par la feuille au bouton Fermer désormais inactif, va sur ce pied de page (<code>tabIndex={-1}</code>).</div>
+    </div>
+
+    <div class="cell">
+      <p class="cap">3b · Session terminée<small>Pour toute session terminée, fermée d'ici ou non.</small></p>
+      <div class="phone">
+        <div class="sbar"><span>18:42</span><span>●●● 5G</span></div>
+        <header class="th">
+          <div class="hrow">
+            <span class="icon-btn ghost"><svg width="20" height="20"><use href="#i-back"/></svg></span>
+            <span class="bot done">NO</span>
+            <div style="min-width:0;flex:1"><p class="t-title">Pagination de /invoices</p><p class="meta" style="margin:3px 0 0">Nova · Claude</p></div>
+            <span class="icon-btn"><svg width="20" height="20"><use href="#i-term"/></svg></span>
+          </div>
+        </header>
+        <main class="log">
+          <div class="me">Ajoute la pagination par curseur et ses tests</div>
+          <div class="agent">C'est fait : <code>/invoices</code> accepte <code>cursor</code> et <code>limit</code>. Les 14 tests passent.</div>
+          <div class="event">Session fermée depuis le téléphone · 18:42</div>
+        </main>
+        <footer class="reply">
+          <div class="end-card">
+            <strong>Session terminée</strong>
+            <p class="small muted" style="margin:0">Sa conversation est gardée. Reprendre relance l’agent sur cette conversation, dans le même dossier.</p>
+            <span class="btn primary"><svg width="18" height="18"><use href="#i-resume"/></svg>Reprendre Nova</span>
+          </div>
+        </footer>
+      </div>
+      <div class="notes">
+        Le bouton Fermer disparaît (session terminée). La ligne d'événement vient du fil du PC ; « depuis le téléphone » quand la fermeture vient de ce téléphone (comme <code>fromPhone</code> d'une interruption).
+        <br>Si le PC a dû forcer (<code>how: 'killed'</code>), une ligne de plus, ton <code>attention</code>, au-dessus du bouton : « Fermée de force : l’agent ne répondait pas. Son dernier tour peut manquer. »
+        <br>Si le PC ne sait pas reprendre depuis un téléphone, pas de bouton : seulement « Sa conversation est gardée : reprenez-la depuis le PC. »
+        <br>Session démarrée hors de Ledge (<code>readOnly</code>) : ni texte de reprise ni bouton, seulement le titre « Session terminée » (Ledge ne peut pas la reprendre).
+        <br><i>Révision après livraison (t990d61) : le titre « Session terminée » est l'en-tête de la carte (<code>h2</code>, <code>text-body font-semibold</code>) au lieu d'une ligne d'état ; Reprendre est le bouton principal (seule action de l'écran), avec l'icône <code>resume</code>.</i>
+      </div>
+    </div>
+
+    <div class="cell">
+      <p class="cap">3c · La fermeture a échoué<small>Le champ de saisie revient, l'erreur au-dessus.</small></p>
+      <div class="phone">
+        <div class="sbar"><span>18:42</span><span>●●● 5G</span></div>
+        <header class="th">
+          <div class="hrow">
+            <span class="icon-btn ghost"><svg width="20" height="20"><use href="#i-back"/></svg></span>
+            <span class="bot">NO</span>
+            <div style="min-width:0;flex:1"><p class="t-title">Pagination de /invoices</p><p class="meta" style="margin:3px 0 0">Nova · Claude</p></div>
+            <span class="icon-btn"><svg width="20" height="20"><use href="#i-term"/></svg></span>
+            <span class="icon-btn"><svg width="20" height="20"><use href="#i-power"/></svg></span>
+          </div>
+        </header>
+        <main class="log">
+          <div class="me">Ajoute la pagination par curseur et ses tests</div>
+          <div class="agent">C'est fait : <code>/invoices</code> accepte <code>cursor</code> et <code>limit</code>. Les 14 tests passent.</div>
+        </main>
+        <footer class="reply">
+          <div class="status ok"><i></i>Disponible pour votre consigne</div>
+          <div class="notice warning" role="alert" style="margin-bottom:10px">
+            <strong>Nova n’a pas été fermée</strong>
+            Le PC n’a pas pu arrêter l’agent. Vérifiez sur le PC, ou réessayez.
+            <span class="btn sm" style="margin-top:8px">Réessayer</span>
+          </div>
+          <div class="field">Écrire à Nova…<span class="send"><svg width="18" height="18"><use href="#i-up"/></svg></span></div>
+        </footer>
+      </div>
+      <div class="notes">
+        Textes selon la réponse du PC (le titre « Nova n’a pas été fermée » est commun) :
+        <ul>
+          <li><code>failed</code> / refus inconnu → « Le PC n’a pas pu arrêter l’agent. Vérifiez sur le PC, ou réessayez. » + Réessayer (rouvre la feuille).</li>
+          <li><code>read_only</code> → « Elle a été démarrée hors de Ledge : fermez-la dans son terminal sur le PC. » Pas de Réessayer.</li>
+          <li><code>uncertain</code> (lien perdu après l'envoi) → titre « Fermeture non confirmée », « La connexion a été perdue. Nova est peut-être déjà fermée : son état se mettra à jour à la reconnexion. » + Reconnecter.</li>
+          <li>Refus « déjà en cours de fermeture » (une autre fenêtre ferme la même session) → pas d'erreur : on affiche 3a.</li>
+          <li>Refus « déjà terminée » → pas d'erreur : on affiche 3b.</li>
+          <li><i>Ajouté après livraison (tf0a18d) :</i> refus de la vérification par le PC → titre « Nova n’a pas été fermée », texte <code>confirm.expired</code> (« La vérification a expiré. Recommencez. ») ou <code>confirm.failed</code> (« La vérification de l’appareil n’a pas abouti. Rien n’a été envoyé. Réessayez. ») + Réessayer.</li>
+          <li><i>Ajouté après livraison (tf0a18d) :</i> fermeture non confirmée que le lien revenu ne renverra pas (le PC a redémarré, ou trop tard) → c'est un échec : texte <code>closeFailed</code> + Réessayer. Tant qu'elle peut repartir seule, « Fermeture non confirmée » reste affiché et le bouton Fermer de l'en-tête reste inactif (« Fermeture de Nova en cours »).</li>
+        </ul>
+        L'encadré disparaît à la prochaine action (Réessayer, envoi d'un message) ou quand la session change d'état.
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 5. Liste ============ -->
+  <h2 class="part">4. La liste des sessions</h2>
+  <p class="part-note">Une session fermée garde sa place et se lit à son étiquette et à son bot éteint. Pas d'opacité réduite sur la ligne : le texte gris passerait sous le contraste AA (4,5:1).</p>
+  <div class="row">
+    <div class="cell">
+      <p class="cap">4a · En cours, en fermeture, terminée</p>
+      <div class="phone">
+        <div class="sbar"><span>18:42</span><span>●●● 5G</span></div>
+        <header style="padding:8px 0 4px"><p style="font-size:26px;line-height:32px;font-weight:600;margin:0;letter-spacing:-.5px">Agents</p><p class="meta" style="margin:2px 0 0">3 sessions · 1 projet sur ce PC</p></header>
+        <div class="group">billing-api</div>
+        <div class="lrow">
+          <span class="bot">OR</span>
+          <div style="flex:1;min-width:0"><h4>Tests de l'export CSV</h4><div class="meta" style="margin:3px 0">Orso · <code>feat/export</code></div><p class="small muted" style="margin:5px 0 0">Travaille sur les dernières modifications.</p><div style="margin-top:8px"><span class="tag inf inf">Au travail</span></div></div>
+          <span class="chev"><svg width="20" height="20"><use href="#i-chev"/></svg></span>
+        </div>
+        <div class="lrow">
+          <span class="bot busy">PI</span>
+          <div style="flex:1;min-width:0"><h4>Refonte du client HTTP</h4><div class="meta" style="margin:3px 0">Pim · <code>refactor/http</code></div><p class="small muted" style="margin:5px 0 0">J'ai remplacé axios par fetch dans les trois modules.</p><div style="margin-top:8px"><span class="tag att att">Fermeture…</span></div></div>
+          <span class="chev"><svg width="20" height="20"><use href="#i-chev"/></svg></span>
+        </div>
+        <div class="lrow">
+          <span class="bot done">NO</span>
+          <div style="flex:1;min-width:0"><h4>Pagination de /invoices</h4><div class="meta" style="margin:3px 0">Nova · <code>feat/pagination</code></div><p class="small muted" style="margin:5px 0 0">C'est fait : /invoices accepte cursor et limit.</p><div style="margin-top:8px;display:flex;align-items:center;gap:8px"><span class="tag mut">Terminée</span><span class="meta">à 18:42</span></div></div>
+          <span class="chev"><svg width="20" height="20"><use href="#i-chev"/></svg></span>
+        </div>
+      </div>
+      <div class="notes">
+        <ul>
+          <li><b>Fermeture…</b> : <code>Tag tone="attention"</code>, texte <code>copy.chat.closing</code>, tant qu'une fermeture de ce téléphone est en cours pour la session. Il prend le pas sur l'état de la session.</li>
+          <li><b>Terminée</b> : l'étiquette existante (<code>copy.agents.state.exited</code>, ton <code>muted</code>), même mot que la liste du PC. Nouveau : l'heure à côté, <code>text-meta text-muted</code> : « à 18:42 » aujourd'hui, « hier », sinon « le 27 oct. ».</li>
+          <li><b>Pas de Reprendre dans la ligne</b> (voir la question posée à l'utilisateur) : reprendre se fait depuis la page (3b), où l'on voit ce que l'agent faisait.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 6. Reprendre ============ -->
+  <h2 class="part">5. Reprendre</h2>
+  <p class="part-note">Inclus : sans lui, « reprenable » ne veut rien dire sur le téléphone. Même mécanique que la fermeture : feuille, vérification de l'appareil, suivi dans le pied de page.</p>
+  <div class="row">
+    <div class="cell">
+      <p class="cap">5a · Confirmation de la reprise</p>
+      <div class="phone short">
+        <div class="sbar"><span>18:50</span><span>●●● 5G</span></div>
+        <div class="dim"></div>
+        <section class="sheet" role="dialog" aria-labelledby="s6a">
+          <span class="grip"></span>
+          <h3 id="s6a">Reprendre Nova ?</h3>
+          <p class="muted">L’agent repart sur sa conversation, dans le même dossier et sur la même branche.</p>
+          <p class="small muted">Une vérification sur votre appareil sera demandée.</p>
+          <div class="stack">
+            <span class="btn primary">Reprendre avec Face ID</span>
+            <span class="btn">Annuler</span>
+          </div>
+        </section>
+      </div>
+      <div class="notes">Mêmes étapes et mêmes textes de vérification que 2c. PC injoignable ou appareil non protégé : mêmes feuilles que 2d / 2e, avec « reprendre Nova ».</div>
+    </div>
+    <div class="cell">
+      <p class="cap">5b · Reprise en cours, puis échec</p>
+      <div class="phone short">
+        <div class="sbar"><span>18:50</span><span>●●● 5G</span></div>
+        <header class="th"><div class="hrow"><span class="icon-btn ghost"><svg width="20" height="20"><use href="#i-back"/></svg></span><span class="bot done">NO</span><div style="flex:1"><p class="t-title">Pagination de /invoices</p><p class="meta" style="margin:3px 0 0">Nova · Claude</p></div><span class="icon-btn"><svg width="20" height="20"><use href="#i-term"/></svg></span></div></header>
+        <main class="log"><div class="event">Session fermée depuis le téléphone · 18:42</div></main>
+        <footer class="reply" role="status">
+          <div class="status inf"><svg class="spin" width="12" height="12" aria-hidden="true"><use href="#i-spin"/></svg>Reprise de Nova…</div>
+          <div class="notice warning" role="alert" style="margin-top:6px">
+            <strong>Nova n’a pas repris</strong>
+            Aucune conversation à reprendre pour cette session.
+          </div>
+        </footer>
+      </div>
+      <div class="notes">
+        Les deux états sont superposés ici pour gagner de la place : dans l'app, l'un remplace l'autre.
+        <ul>
+          <li>En cours : ton <code>info</code>, « Reprise de Nova… ». Dès que la session n'est plus <code>exited</code>, le champ de saisie revient et le bouton Fermer réapparaît.</li>
+          <li>Échec : <code>no_conversation</code> → « Aucune conversation à reprendre pour cette session. » ; autre échec → « Le PC n’a pas pu relancer l’agent. Vérifiez sur le PC, ou réessayez. » + Réessayer. La carte « Session terminée » (3b) revient sous l'erreur.</li>
+          <li><i>Ajouté après livraison (tf0a18d) :</i> reprise non confirmée (lien perdu après l'envoi) → carte 3b, avec au-dessus l'encadré « Reprise non confirmée » : « La connexion a été perdue. Nova a peut-être déjà repris : son état se mettra à jour à la reconnexion. » + Reconnecter (hors ligne seulement). Le bouton Reprendre est inactif (<code>aria-disabled</code>, opacité 45 %) tant que la reprise peut repartir seule, car une deuxième serait refusée.</li>
+          <li><i>Ajouté après livraison (tf0a18d) :</i> reprise non confirmée que le lien revenu ne renverra pas → échec : texte <code>resumeFailed</code> + Réessayer, bouton Reprendre actif. Refus de la vérification → titre « Nova n’a pas repris », texte <code>confirm.expired</code> ou <code>confirm.failed</code> + Réessayer.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ Spec ============ -->
+  <h2 class="part">6. Spécification pour le dev</h2>
+  <div class="spec">
+    <h3>Ce qui manque aujourd'hui (protocole et daemon)</h3>
+    <ul>
+      <li>Message téléphone → PC <code>session.close { op, id, assertion }</code>, défi <code>confirm.prepare { purpose: 'close', id }</code> (aujourd'hui <code>close</code> ne vise qu'une carte, par <code>qid</code>). Le PC répond <code>how: 'exit' | 'killed'</code> et réutilise <code>closeForCard</code> pour partager une fermeture déjà en cours.</li>
+      <li>Message <code>session.resume { op, id, assertion }</code>, défi <code>purpose: 'act', id</code> (comme l'action <code>session.resume</code> du registre).</li>
+      <li><code>PhoneSession</code> : <code>readOnly: true</code> pour une session <code>hook_only</code> (le téléphone ne le sait aujourd'hui qu'après un refus), et <code>exitedAt</code> pour l'heure de la liste.</li>
+      <li>Une capacité du daemon (ex. <code>daemon.sessionClose</code>) : un PC plus ancien → pas de bouton Fermer ni Reprendre.</li>
+    </ul>
+
+    <h3>Écrans et composants</h3>
+    <table>
+      <tr><th>Où</th><th>Changement</th></tr>
+      <tr><td><code>screens/Thread.tsx</code> (en-tête)</td><td>Bouton icône <code>power</code> après Terminal (1a). Règles d'affichage dans la note 1.</td></tr>
+      <tr><td>Nouveau <code>screens/SessionClose.tsx</code></td><td>Feuille <code>Sheet</code> de fermeture (2a–2e) et de reprise (5a) ; la vérification réutilise la logique de <code>RiskConfirm</code> (défi demandé à l'ouverture, minuterie d'expiration, textes <code>copy.confirm</code>).</td></tr>
+      <tr><td><code>screens/Reply.tsx</code> / <code>Thread.tsx</code></td><td>Pied de page : fermeture en cours (3a), terminée avec Reprendre (3b), reprise en cours (5b) ; encadré d'erreur au-dessus du champ (3c).</td></tr>
+      <tr><td><code>model/agents.ts</code>, <code>screens/Agents.tsx</code></td><td>Étiquette « Fermeture… » (attention) pendant l'opération ; « Terminée » + heure.</td></tr>
+      <tr><td><code>ui/icons.tsx</code></td><td>Icône <code>power</code>.</td></tr>
+      <tr><td><code>copy.ts</code></td><td>Tous les textes de cette page, mot pour mot (apostrophes typographiques ’).</td></tr>
+    </table>
+
+    <h3>Valeurs</h3>
+    <ul>
+      <li>Boutons : <code>buttonClass({ variant: 'primary', block: true })</code> et <code>buttonClass({ block: true })</code> (48 px de haut) ; bouton icône 44 × 44 ; Réessayer en <code>size: 'sm'</code> (44 px).</li>
+      <li>Feuille : <code>Sheet</code> existante (rayon 28 px, gouttière 20 px, <code>gap-4</code>), titre <code>text-heading</code> (21 px), corps <code>text-body text-muted</code>, note <code>text-small text-muted</code>.</li>
+      <li>Encadrés : <code>Notice tone="warning"</code> ; pied de page : la ligne d'état existante de <code>Reply</code> (point de 6 px ou spinner 12 px, <code>text-meta</code>).</li>
+      <li>Carte « Session terminée » : <code>rounded-card border border-line bg-surface p-4 gap-2.5</code>.</li>
+    </ul>
+
+    <h3>Accessibilité</h3>
+    <ul>
+      <li>Bouton Fermer : <code>aria-label</code> et <code>title</code> « Fermer Nova » ; pendant la fermeture <code>aria-disabled</code> et « Fermeture de Nova en cours ».</li>
+      <li>Feuille : <code>role="dialog"</code>, <code>aria-labelledby</code> le titre, focus sur la feuille à l'ouverture, Échap et le voile ferment (<code>useDialog</code>). Ordre de tabulation : bouton principal, Annuler.</li>
+      <li>Erreurs en <code>role="alert"</code>, suivi en <code>role="status"</code> ; le spinner est <code>aria-hidden</code> et le texte dit l'état ; pas d'animation avec <code>prefers-reduced-motion</code>.</li>
+      <li>L'état ne passe jamais par la seule couleur : chaque étiquette a son mot.</li>
+    </ul>
+
+    <h3>Critères d'acceptation</h3>
+    <ol>
+      <li>Sur une session libre lancée par Ledge, Fermer → Face ID → la session passe « Terminée » sur le téléphone et sur le PC, sa conversation se reprend.</li>
+      <li>Sur une session au travail avec une autorisation en attente, la feuille montre les deux lignes de 2b ; après fermeture, l'autorisation est refusée.</li>
+      <li>Annuler, Échap, le voile ou une vérification annulée n'envoient rien.</li>
+      <li>PC injoignable : la feuille montre 2d ; rien n'est envoyé.</li>
+      <li>Session démarrée hors de Ledge, ou terminée : pas de bouton Fermer.</li>
+      <li>Pendant la fermeture, la liste montre « Fermeture… » et le bouton Fermer est inactif ; un deuxième envoi est impossible.</li>
+      <li>Un refus du PC montre l'encadré de 3c avec le bon texte, et le brouillon du champ est conservé.</li>
+      <li>Depuis 3b, Reprendre → Face ID → le champ de saisie revient quand l'agent est relancé.</li>
+      <li>Lecteur d'écran (VoiceOver / TalkBack) : chaque bouton est nommé, la feuille est annoncée par son titre, les changements d'état sont annoncés.</li>
+    </ol>
+  </div>
+</div>
+</body>
+</html>

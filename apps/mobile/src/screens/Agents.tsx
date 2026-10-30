@@ -1,6 +1,8 @@
 import { CONTEXT_NEAR, type PhoneSession, type PhoneTeam } from '@ledge/protocol';
 import { copy } from '../copy';
 import { agentsOf, type AgentRow } from '../model/agents';
+import { closingHere, endedAtLabel } from '../model/sessionEnd';
+import { useNow } from '../useNow';
 import { requestsOf } from '../model/requests';
 import { href } from '../router';
 import { useMobile, type MobileStore } from '../state/store';
@@ -14,7 +16,11 @@ import { closedTasks, tablesOf, type Table } from '../model/teams';
 import { buttonClass } from '../ui/Button';
 import { Icon } from '../ui/icons';
 
-function Row({ row, session, offline, threshold, plan }: { row: AgentRow; session: PhoneSession | undefined; offline: boolean; threshold: number; plan?: boolean }) {
+/**
+ * One session. A close of this phone under way reads « Fermeture… » over the session's own state; an ended one says when. Closing
+ * and resuming are done from the session's page, where what the agent was doing shows: a row is only a link.
+ */
+function Row({ row, session, offline, threshold, plan, closing, now }: { row: AgentRow; session: PhoneSession | undefined; offline: boolean; threshold: number; plan?: boolean; closing: boolean; now: number }) {
   return (
     <a href={href({ name: 'thread', sessionId: row.sessionId })} className="flex gap-3 border-b border-line py-4 hover:bg-raised/40 active:bg-raised/60">
       <div className="mt-[3px]"><MobileBot tool={row.tool} seed={row.sessionId} state={session?.state ?? 'idle'} frozen={offline} /></div>
@@ -37,7 +43,8 @@ function Row({ row, session, offline, threshold, plan }: { row: AgentRow; sessio
           </p>
         )}
         <div className="mt-2 flex items-center gap-2.5">
-          <Tag {...row.status} />
+          <Tag {...(closing ? { tone: 'attention' as const, label: copy.chat.closing } : row.status)} />
+          {!closing && row.endedAt && <span className="text-meta text-muted">{endedAtLabel(row.endedAt, now)}</span>}
           {plan && row.progress && (
             <span role="img" aria-label={copy.checklist.progress(row.progress.done, row.progress.total)} className="inline-flex items-center gap-1.5 text-meta text-muted">
               <Icon name="plan" className="size-[13px]" stroke={1.8} />
@@ -77,8 +84,10 @@ function TableHead({ table, store, offline }: { table: Table; store: MobileStore
 /** Every session of the PC, by repository, each opening its thread. */
 export function Agents({ store, onReconnect }: { store: MobileStore; onReconnect?: () => void }) {
   const state = useMobile(store);
+  const now = useNow();
   const sessions = [...state.sessions.values()];
   const groups = agentsOf(sessions);
+  const closing = new Set(sessions.filter(s => closingHere(s, state.ops, now)).map(s => s.id));
   const offline = !state.fresh;
   // A PC that knows teams: each project's sessions by table (ledge home spec §2.4).
   const tables = state.teams ? tablesOf(sessions, state.teams) : null;
@@ -97,7 +106,7 @@ export function Agents({ store, onReconnect }: { store: MobileStore; onReconnect
               {g.tables.map(t => (
                 <div key={t.kind === 'team' ? t.team.id : 'common'} role="group" aria-label={t.kind === 'team' ? copy.agents.teamLabel(t.team.name) : copy.agents.common} className={t.kind === 'team' && t.team.state === 'resting' ? 'opacity-70' : ''}>
                   {teamed && <TableHead table={t} store={store} offline={offline} />}
-                  {t.rows.map(r => <Row key={r.sessionId} row={r} session={state.sessions.get(r.sessionId)} offline={offline} threshold={state.device?.contextNear ?? CONTEXT_NEAR} plan={!!state.daemon?.checklist} />)}
+                  {t.rows.map(r => <Row key={r.sessionId} row={r} session={state.sessions.get(r.sessionId)} offline={offline} threshold={state.device?.contextNear ?? CONTEXT_NEAR} plan={!!state.daemon?.checklist} closing={closing.has(r.sessionId)} now={now} />)}
                 </div>
               ))}
             </section>
@@ -107,7 +116,7 @@ export function Agents({ store, onReconnect }: { store: MobileStore; onReconnect
           // Two groups can share a name (a repository and a project); a session belongs to one group only.
           <section key={g.rows[0]!.sessionId} aria-label={g.label}>
             <div className="py-3 text-meta tracking-[.4px] text-muted">{g.label}</div>
-            {g.rows.map(r => <Row key={r.sessionId} row={r} session={state.sessions.get(r.sessionId)} offline={offline} threshold={state.device?.contextNear ?? CONTEXT_NEAR} plan={!!state.daemon?.checklist} />)}
+            {g.rows.map(r => <Row key={r.sessionId} row={r} session={state.sessions.get(r.sessionId)} offline={offline} threshold={state.device?.contextNear ?? CONTEXT_NEAR} plan={!!state.daemon?.checklist} closing={closing.has(r.sessionId)} now={now} />)}
           </section>
         ))}
         {(tables ?? groups).length === 0 && (

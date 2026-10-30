@@ -2297,3 +2297,194 @@ describe('phone gateway: a session\'s model (#58)', () => {
     expect(g.dispatched).toEqual([]);
   });
 });
+
+describe('phone gateway: a session closed or resumed from its page', () => {
+  const rp = { rpId: 'relay.test', origin: 'https://relay.test' };
+  /** A gateway whose daemon closes as `close` says (by default: the session ends by its exit command) and resumes as `resume` answers. */
+  function make(o: { close?: (id: string) => Promise<{ how: 'exit' | 'killed' }>; resume?: (reply: (m: ServerMessage) => void) => void; closeSession?: false } = {}) {
+    const closed: string[] = [];
+    let g!: ReturnType<typeof setup>;
+    const close = o.close ?? (async (id: string) => { g.sessions.set(id, { ...g.sessions.get(id)!, state: 'exited', exitedAt: T1 }); return { how: 'exit' as const }; });
+    g = setup({
+      relayUrl: 'https://relay.test',
+      dispatch: async (msg, reply) => { if (msg.type === 'session.resume') o.resume?.(reply); },
+      deps: o.closeSession === false ? {} : { closeSession: async id => { closed.push(id); return close(id); } }
+    });
+    return { g, closed };
+  }
+  type G = ReturnType<typeof setup>;
+  const enroll = async (g: G) => {
+    const auth = softAuthenticator();
+    g.send('dev1', { type: 'confirm.prepare', purpose: 'register' });
+    await flush();
+    const reg = g.got('dev1').find(m => m.type === 'confirm.challenge');
+    if (reg?.type !== 'confirm.challenge') throw new Error('no challenge');
+    g.send('dev1', { type: 'credential.register', op: randomUUID(), credential: auth.create(rp, reg.challenge) });
+    await flush();
+    return auth;
+  };
+  const prepare = async (g: G, req: object) => {
+    const before = g.got('dev1').length;
+    g.send('dev1', { type: 'confirm.prepare', ...req });
+    await flush();
+    const m = g.got('dev1').slice(before).find(x => x.type === 'confirm.challenge');
+    if (m?.type !== 'confirm.challenge') throw new Error('no challenge');
+    return m;
+  };
+  const last = (g: G) => g.results('dev1').at(-1);
+  let counter = 0;
+  /** The device's check of `id`'s close (or resume), and the operation it signs. */
+  const signed = async (g: G, auth: ReturnType<typeof softAuthenticator>, type: 'session.close' | 'session.resume', id: string) => {
+    const ch = await prepare(g, { purpose: type === 'session.close' ? 'close' : 'act', id });
+    return { type, op: randomUUID(), id, assertion: auth.get(rp, ch.challenge, { counter: ++counter }) };
+  };
+
+  it('says it takes them in the snapshot, with each session read-only or not and when it ended', async () => {
+    const on = make();
+    on.g.sessions.set('h', mk('h', { source: 'hook_only', tmuxSession: null }));
+    on.g.sessions.set('x', mk('x', { state: 'exited', exitedAt: T1 }));
+    const off = make({ closeSession: false });
+    for (const { g } of [on, off]) g.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    const snap = PhoneServerMessageSchema.parse(on.g.got('dev1')[0]);
+    if (snap.type !== 'snapshot') throw new Error('no snapshot');
+    expect(snap.daemon.sessionClose).toBe(true);
+    expect(snap.sessions.find(s => s.id === 'h')).toMatchObject({ readOnly: true });
+    expect(snap.sessions.find(s => s.id === 'x')).toMatchObject({ state: 'exited', exitedAt: T1 });
+    expect(snap.sessions.find(s => s.id === 'a')).not.toHaveProperty('readOnly');
+    const old = off.g.got('dev1')[0];
+    expect(old?.type === 'snapshot' && old.daemon).not.toHaveProperty('sessionClose');
+  });
+
+  it('closes the session after the passkey check and says how; a retry of the same op gets the same answer', async () => {
+    counter = 0;
+    const { g, closed } = make({ close: async () => ({ how: 'killed' }) });
+    const auth = await enroll(g);
+    const m = await signed(g, auth, 'session.close', 'c');
+    g.send('dev1', m);
+    await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: m.op, status: 'applied', how: 'killed' });
+    expect(closed).toEqual(['c']);
+    g.send('dev1', m);
+    await flush();
+    expect(last(g)).toEqual({ type: 'operation.result', op: m.op, status: 'applied', how: 'killed' });
+    expect(closed).toEqual(['c']);
+    // The challenge is spent: the same assertion under a new op is refused.
+    g.send('dev1', { ...m, op: randomUUID() });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'rejected', reason: 'assertion_invalid' });
+    expect(closed).toEqual(['c']);
+  });
+
+  it('refuses before the challenge is spent: an unknown, a read-only or an ended session, and a phone without a passkey or an assertion', async () => {
+    counter = 0;
+    const { g, closed } = make();
+    g.send('dev1', { type: 'session.close', op: randomUUID(), id: 'a' });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'rejected', reason: 'confirm_required' });
+    const auth = await enroll(g);
+    g.send('dev1', { type: 'session.close', op: randomUUID(), id: 'a' });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'rejected', reason: 'confirm_required' });
+    const ch = await prepare(g, { purpose: 'close', id: 'a' });
+    g.sessions.set('h', mk('h', { source: 'hook_only', tmuxSession: null }));
+    g.sessions.set('x', mk('x', { state: 'exited' }));
+    for (const id of ['nope', 'h', 'x']) g.send('dev1', { type: 'session.close', op: randomUUID(), id, assertion: auth.get(rp, ch.challenge, { counter: 1 }) });
+    await flush();
+    expect(g.results('dev1').filter(r => r.status === 'rejected').slice(-3).map(r => r.reason)).toEqual(['unknown_session', 'read_only', 'ended']);
+    // The challenge still stands for the session it was asked for.
+    g.send('dev1', { type: 'session.close', op: randomUUID(), id: 'a', assertion: auth.get(rp, ch.challenge, { counter: 2 }) });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'applied', how: 'exit' });
+    expect(closed).toEqual(['a']);
+  });
+
+  it("a challenge stands for its own session and purpose only: not another session's close, a resume, nor a card's close", async () => {
+    counter = 0;
+    const { g, closed } = make();
+    const auth = await enroll(g);
+    const forA = await prepare(g, { purpose: 'close', id: 'a' });
+    g.send('dev1', { type: 'session.close', op: randomUUID(), id: 'b', assertion: auth.get(rp, forA.challenge, { counter: 1 }) });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'rejected', reason: 'assertion_invalid' });
+    g.sessions.set('x', mk('x', { state: 'exited' }));
+    const closeX = await prepare(g, { purpose: 'close', id: 'x' });
+    g.send('dev1', { type: 'session.resume', op: randomUUID(), id: 'x', assertion: auth.get(rp, closeX.challenge, { counter: 2 }) });
+    await flush();
+    expect(last(g)).toMatchObject({ status: 'rejected', reason: 'assertion_invalid' });
+    expect(closed).toEqual([]);
+    expect(g.dispatched).toEqual([]);
+  });
+
+  it('reads a refusal of the daemon by its code, a close that ended meanwhile as ended, and anything else as failed', async () => {
+    counter = 0;
+    const cases: Array<[(g: G) => (id: string) => Promise<{ how: 'exit' | 'killed' }>, string, string | undefined]> = [
+      [() => async () => { throw Object.assign(new Error('a close is already in progress'), { code: 'busy' }); }, 'rejected', 'busy'],
+      [g => async id => { g.sessions.set(id, { ...g.sessions.get(id)!, state: 'exited' }); throw Object.assign(new Error('the session has already exited'), { code: 'busy' }); }, 'rejected', 'ended'],
+      [() => async () => { throw new Error('tmux is gone'); }, 'failed', undefined]
+    ];
+    for (const [close, status, reason] of cases) {
+      let g!: G;
+      ({ g } = make({ close: id => close(g)(id) }));
+      const auth = await enroll(g);
+      g.send('dev1', await signed(g, auth, 'session.close', 'c'));
+      await flush();
+      expect(last(g)).toEqual({ type: 'operation.result', op: expect.any(String), status, ...(reason ? { reason } : {}) });
+    }
+  });
+
+  it('resumes an ended session after the passkey check, through the local session.resume', async () => {
+    counter = 0;
+    const answers: Array<[((reply: (m: ServerMessage) => void) => void) | undefined, object]> = [
+      [undefined, { status: 'applied' }],
+      [reply => reply({ type: 'error', id: 'x', message: 'no conversation to resume', request: 'session.resume', code: 'no_conversation' }), { status: 'rejected', reason: 'no_conversation' }],
+      [reply => reply({ type: 'error', id: 'x', message: 'spawn failed', request: 'session.resume' }), { status: 'failed' }]
+    ];
+    for (const [resume, outcome] of answers) {
+      const { g } = make(resume ? { resume } : {});
+      g.sessions.set('x', mk('x', { state: 'exited', exitedAt: T1 }));
+      const auth = await enroll(g);
+      g.send('dev1', await signed(g, auth, 'session.resume', 'x'));
+      await flush();
+      expect(last(g)).toMatchObject(outcome);
+      expect(g.dispatched).toEqual([{ type: 'session.resume', id: 'x' }]);
+    }
+  });
+
+  it('refuses to resume a session still running or read-only, before the challenge is spent', async () => {
+    counter = 0;
+    const { g } = make();
+    g.sessions.set('h', mk('h', { source: 'hook_only', tmuxSession: null, state: 'exited' }));
+    const auth = await enroll(g);
+    const ch = await prepare(g, { purpose: 'act', id: 'a' });
+    for (const id of ['a', 'h']) g.send('dev1', { type: 'session.resume', op: randomUUID(), id, assertion: auth.get(rp, ch.challenge, { counter: 1 }) });
+    await flush();
+    expect(g.results('dev1').filter(r => r.status === 'rejected').map(r => r.reason)).toEqual(['busy', 'read_only']);
+    expect(g.dispatched).toEqual([]);
+  });
+
+  it('prepares a challenge over a session only for a daemon that closes from the phone, and for a session it knows', async () => {
+    const off = make({ closeSession: false }).g;
+    await enroll(off);
+    const before = off.got('dev1').length;
+    off.send('dev1', { type: 'confirm.prepare', purpose: 'close', id: 'a' });
+    await flush();
+    expect(off.got('dev1').slice(before)).toEqual([{ type: 'error', code: 'invalid', request: 'confirm.prepare' }]);
+    const { g } = make();
+    await enroll(g);
+    const at = g.got('dev1').length;
+    g.send('dev1', { type: 'confirm.prepare', purpose: 'act', id: 'nope' });
+    await flush();
+    expect(g.got('dev1').slice(at)).toEqual([{ type: 'error', code: 'unknown_session', request: 'confirm.prepare' }]);
+    expect(await prepare(g, { purpose: 'act', id: 'a' })).toMatchObject({ purpose: 'act', rpId: 'relay.test' });
+  });
+
+  it('answers a session.close the schema refuses with rejected', async () => {
+    const { g, closed } = make();
+    const op = randomUUID();
+    g.send('dev1', { type: 'session.close', op, id: '' });
+    await flush();
+    expect(g.got('dev1')).toEqual([{ type: 'operation.result', op, status: 'rejected', reason: 'invalid' }]);
+    expect(closed).toEqual([]);
+  });
+});

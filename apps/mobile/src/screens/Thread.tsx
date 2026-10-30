@@ -17,6 +17,8 @@ import { useAttachments } from '../ui/useAttachments';
 import { Checklist } from './Checklist';
 import { Reply, replyFailure, replyProblem } from './Reply';
 import { SessionModelChip, SessionModelNote, available as modelSwitchable } from './SessionModel';
+import { EndErrorNotice, EndFooter, EndSheet } from './SessionClose';
+import { closeHeld, endingOf, lastEndOp, resumeHeld } from '../model/sessionEnd';
 import { buttonClass, iconButtonClass } from '../ui/Button';
 import { Icon } from '../ui/icons';
 
@@ -91,6 +93,17 @@ export function Thread({ store, sessionId, storage, onReconnect }: { store: Mobi
     }
   });
   const changeDraft = (t: string) => { setDraft(t); saveDraft(sessionId, t, storage); setRefused(false); };
+  // The close or resume sheet; once it sent its operation, the footer that follows it takes the focus.
+  const [sheet, setSheet] = useState<'close' | 'resume' | null>(null);
+  const [sent, setSent] = useState(false);
+  // The close or resume whose error was put away: by the next gesture, or by the session changing state.
+  const [cleared, setCleared] = useState<string | null>(null);
+  const endOp = lastEndOp(sessionId, ops)?.op ?? null;
+  const stateNow = useRef(session?.state);
+  useEffect(() => {
+    if (stateNow.current !== session?.state && stateNow.current !== undefined) setCleared(endOp);
+    stateNow.current = session?.state;
+  }, [session?.state, endOp]);
 
   // The thread is asked once on open; the store asks it again after every reconnection.
   useEffect(() => {
@@ -151,6 +164,7 @@ export function Thread({ store, sessionId, storage, onReconnect }: { store: Mobi
   const send = () => {
     const text = draft.trim();
     if ((!text && images.items.length === 0) || !composer.enabled || replyProblem(draft) || !images.ready || (images.items.length > 0 && dialog)) return;
+    setCleared(endOp);
     const ids = images.ids();
     const taken = images.clear();
     const sent = store.reply(sessionId, text, ids.length ? { attachments: ids } : {});
@@ -159,6 +173,14 @@ export function Thread({ store, sessionId, storage, onReconnect }: { store: Mobi
     setRefused(!sent);
   };
   const ready = thread?.status === 'ready';
+  const boot = state.daemon?.boot ?? null;
+  const ending = endingOf(session, ops, now, { fresh, boot });
+  // A close under way, or one whose outcome is unknown and that goes again by itself once the link is back: a second is refused.
+  const shut = closeHeld(session, ops, boot, now);
+  // What the PC can do from a phone, for a session Ledge launched: an older PC shows neither Close nor Resume.
+  const closable = !!state.daemon?.sessionClose && !session.readOnly;
+  const endError = ending.kind === 'open' && ending.error && ending.error.op !== cleared ? ending.error : null;
+  const openSheet = (mode: 'close' | 'resume') => { setCleared(endOp); setSent(false); setSheet(mode); };
   // The repository and branch: a line of their own, or after the name on a phone on its side.
   const where = <>{session.repo ?? session.project}{session.branch && <> · <code className={`font-mono text-[.9em] ${session.worktree ? 'underline decoration-dotted underline-offset-2' : ''}`}>{session.branch}</code></>}</>;
 
@@ -175,6 +197,14 @@ export function Thread({ store, sessionId, storage, onReconnect }: { store: Mobi
           <a href={href({ name: 'terminal', sessionId })} aria-label={copy.thread.terminal(session.name)} className={iconButtonClass({ variant: 'outline' })}>
             <Icon name="terminal" />
           </a>
+          {closable && session.state !== 'exited' && (
+            <button
+              type="button" aria-label={shut ? copy.sessionEnd.closingNamed(session.name) : copy.sessionEnd.close(session.name)} title={shut ? copy.sessionEnd.closingNamed(session.name) : copy.sessionEnd.close(session.name)}
+              aria-disabled={shut || undefined} onClick={() => { if (!shut) openSheet('close'); }} className={iconButtonClass({ variant: 'outline', className: shut ? 'opacity-45' : '' })}
+            >
+              <Icon name="power" />
+            </button>
+          )}
         </div>
         <p className="mt-2 ml-[46px] text-meta [overflow-wrap:anywhere] text-muted phone-side:hidden">{where}</p>
       </header>
@@ -185,8 +215,12 @@ export function Thread({ store, sessionId, storage, onReconnect }: { store: Mobi
         {ready && items.length === 0 && <p className="text-center text-meta text-muted">{copy.thread.empty}</p>}
         {items.map(it => <Bubble key={it.key} item={it} store={store} />)}
       </main>
-      <Reply name={session.name} composer={composer} draft={draft} onDraft={changeDraft} onSend={send} fresh={fresh} taken={takenNow} checking={last?.phase === 'uncertain' && fresh} error={error} onReconnect={onReconnect} images={images} dialog={dialog}
-        {...(modelSwitchable(state.daemon, session) ? { lead: <SessionModelChip store={store} session={session} />, leadNote: <SessionModelNote store={store} session={session} /> } : {})} />
+      {ending.kind === 'open'
+        ? <Reply name={session.name} composer={composer} draft={draft} onDraft={changeDraft} onSend={send} fresh={fresh} taken={takenNow} checking={last?.phase === 'uncertain' && fresh} error={error} onReconnect={onReconnect} images={images} dialog={dialog}
+          alert={endError && <EndErrorNotice error={endError} fresh={fresh} onRetry={() => openSheet('close')} onReconnect={onReconnect} />}
+          {...(modelSwitchable(state.daemon, session) ? { lead: <SessionModelChip store={store} session={session} />, leadNote: <SessionModelNote store={store} session={session} /> } : {})} />
+        : <EndFooter key={ending.kind} ending={ending.kind === 'ended' && ending.error?.op === cleared ? { ...ending, error: null } : ending} name={session.name} canResume={closable} resumeHeld={resumeHeld(session, ops, boot, now)} readOnly={!!session.readOnly} fresh={fresh} focus={sent} onResume={() => openSheet('resume')} onReconnect={onReconnect} />}
+      {sheet && <EndSheet store={store} session={session} mode={sheet} onClose={() => setSheet(null)} onSent={() => { setSent(true); setSheet(null); }} onReconnect={onReconnect} />}
     </>
   );
 }

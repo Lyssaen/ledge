@@ -395,3 +395,32 @@ describe('phone checklist', () => {
     expect(() => PhoneServerMessageSchema.parse({ ...snap, daemon: { version: '1.0.0', name: 'pc', checklist: false } })).toThrow();
   });
 });
+
+describe('phone session close and resume', () => {
+  const assertion = { id: 'AbC_-9', clientDataJSON: 'eyJ0', authenticatorData: 'SZYN', signature: 'MEUC' };
+  const caps = { freeTextAnswer: true };
+  const snap = { type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: [], capabilities: { claude: caps, codex: caps, cursor: caps, omp: caps }, daemon: { version: '1.0.0', name: 'pc' } };
+  const session = { id: 's1', name: 'Nova', tool: 'claude', project: 'p', title: 't', state: 'exited', helpers: [], startedAt: '2026-10-29T18:00:00.000Z', lastActivityAt: '2026-10-29T18:42:00.000Z', unread: false };
+
+  it('takes session.close and session.resume on a session, with the device check', () => {
+    for (const type of ['session.close', 'session.resume']) {
+      expect(() => PhoneClientMessageSchema.parse({ type, op: OP, id: 's1', assertion })).not.toThrow();
+      expect(() => PhoneClientMessageSchema.parse({ type, op: OP, id: '' })).toThrow();
+      expect(() => PhoneClientMessageSchema.parse({ type, op: 'nope', id: 's1' })).toThrow();
+    }
+  });
+  it('a close or act challenge may name a session instead of a turn', () => {
+    for (const purpose of ['close', 'act']) expect(() => PhoneClientMessageSchema.parse({ type: 'confirm.prepare', purpose, id: 's1' })).not.toThrow();
+  });
+  it('the daemon says it takes them; a result says how the agent was closed', () => {
+    expect(PhoneServerMessageSchema.parse({ ...snap, daemon: { version: '1', name: 'pc', sessionClose: true } })).toMatchObject({ daemon: { sessionClose: true } });
+    expect(() => PhoneServerMessageSchema.parse({ ...snap, daemon: { version: '1', name: 'pc', sessionClose: false } })).toThrow();
+    for (const how of ['exit', 'killed']) expect(PhoneServerMessageSchema.parse({ type: 'operation.result', op: OP, status: 'applied', how })).toMatchObject({ how });
+    expect(() => PhoneServerMessageSchema.parse({ type: 'operation.result', op: OP, status: 'applied', how: 'crashed' })).toThrow();
+  });
+  it('a session says when it ended and whether it was started outside Ledge', () => {
+    expect(PhoneSessionSchema.parse({ ...session, exitedAt: '2026-10-29T18:42:00.000Z', readOnly: true })).toMatchObject({ exitedAt: '2026-10-29T18:42:00.000Z', readOnly: true });
+    expect(() => PhoneSessionSchema.parse({ ...session, readOnly: false })).toThrow();
+    expect(() => PhoneSessionSchema.parse({ ...session, exitedAt: 'yesterday' })).toThrow();
+  });
+});

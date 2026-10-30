@@ -1453,7 +1453,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'session.resume': {
         const s = store.get(msg.id); if (!s) return refuse(unknownSession(), msg.id);
         if (s.state !== 'exited') return refuse(new Refusal('the session is still running', 'busy'), msg.id);
-        const key = resumeKey(s); if (!key) return refuse('no conversation to resume', msg.id);
+        const key = resumeKey(s); if (!key) return refuse({ message: 'no conversation to resume', code: 'no_conversation' }, msg.id);
         const refused = await respawn(s, key, s.model, s.effort);
         if (refused) refuse(refused, msg.id);
         return;
@@ -1700,6 +1700,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     teamCatalog: true,
     // The phone's model switch (#58): `session.model` answers with a code, and `models.list` asks this machine's agents.
     models: true,
+    // A session's « Fermer » on the phone: the cards' close, so a close under way (a card's, another phone's) is shared.
+    closeSession: closeForCard,
     // The phone's « Mettre à jour le PC » and « Redémarrer le daemon »: the updater Desktop's `update.daemon` uses, progress broadcast.
     ...(opts.updater && opts.daemon ? {
       pc: {
