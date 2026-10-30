@@ -31,7 +31,7 @@ export function exchangeFromOutbox(row: OutboxRow, ctx: Ctx & { at?: string }): 
   if (isHuman(row.destinationSession, str((row as { tier?: unknown }).tier))) return null;
   const body = str(row.body) ?? '';
   const m = /^---\n([\s\S]*?)\n---(?:\n|$)/m.exec(body);
-  const text = m ? m[1] : body;
+  const text = m?.[1] ?? body;
   const stamp = [row.createdAt, row.sentAt, row.timestamp].map(str).find((s): s is string => !!s && !Number.isNaN(Date.parse(s)));
   const at = stamp ? new Date(stamp).toISOString() : ctx.at ?? new Date().toISOString();
   return build(`o-${row.outboxId}`, 'message', row.senderSession, row.destinationSession, text, at, ctx);
