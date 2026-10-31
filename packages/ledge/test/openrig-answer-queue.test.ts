@@ -257,12 +257,12 @@ afterEach(async () => {
 });
 
 /** A daemon in `home` (LEDGE_HOME while it starts: its thread, token and openrig.json live there). */
-async function daemon(home: string, fake: FakeOpenRig, o: { port?: number; exec?: FakeRigCli; machinesFile?: string; remoteConnect?: (m: Machine, url: string) => DaemonClient; shift?: () => number } = {}): Promise<Daemon> {
+async function daemon(home: string, fake: FakeOpenRig, o: { port?: number; exec?: FakeRigCli; machinesFile?: string; remoteConnect?: (m: Machine, url: string) => DaemonClient; shift?: () => number; fetch?: typeof fetch } = {}): Promise<Daemon> {
   const was = process.env.LEDGE_HOME; process.env.LEDGE_HOME = home;
   try {
     const store = new Store(); let srv: ServerHandle | null = null;
     const now = () => new Date(Date.now() + (o.shift?.() ?? 0)).toISOString();
-    const bridge = createBridge({ env: async () => ({ OPENRIG_PORT: String(fake.port) }), exec: o.exec ?? fakeRigCli(fake), projects: () => none, home, file: join(home, 'openrig.json'), now,
+    const bridge = createBridge({ env: async () => ({ OPENRIG_PORT: String(fake.port) }), exec: o.exec ?? fakeRigCli(fake), projects: () => none, home, file: join(home, 'openrig.json'), now, ...(o.fetch ? { fetch: o.fetch } : {}),
       asks: { all: () => srv!.asks.all(), onChange: f => srv!.asks.onChange(f) }, sessionName: id => store.get(id)?.name, probeMs: 20, outboxMs: 30, resyncMs: 50 });
     srv = await startServer({ store, tmux: noTmux, port: o.port ?? 0, home, daemon: { version: '0.0.0', install: 'git', systemd: false }, agentEnv: async () => ({ ...process.env }),
       openrig: bridge, ...(o.machinesFile ? { machinesFile: o.machinesFile } : {}), ...(o.remoteConnect ? { remoteConnect: o.remoteConnect } : {}) });
@@ -368,6 +368,72 @@ describe('Review Focus 1: answers wait for an unreachable machine and go once', 
     expect(answersTo('r1')).toBe(1);
     // Settled by the memo's ok: no « n'est pas partie » in Ledge's thread.
     await new Promise(r => setTimeout(r, 100));
+    expect(msgs.some(m => m.type === 'ledge.thread.item' && m.item.kind === 'ledge' && 'text' in m.item && String(m.item.text).includes("n'est pas partie"))).toBe(false);
+    await new Promise<void>(r => { ws.once('close', () => r()); ws.close(); });
+  }, 30_000);
+
+  it('a remote whose OpenRig queue failed to load: openrig_down, not memoized; the same rid goes once the queue loads, OpenRig gets one answer', async () => {
+    const homeA = tmp('ledge-aq-remote-'), homeB = tmp('ledge-aq-local-');
+    const fakeA = await createFakeOpenRig(); fakes.push(fakeA);
+    fakeA.rigs.push(starter()); fakeA.humans.push('ledge'); fakeA.queue.push(humanRow('E1'));
+    const execA = fakeRigCli(fakeA);
+    let broken = false; const base = fetch;
+    const brokenQueue = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (broken && String(input).includes('/api/queue/list')) return new Response('{}', { status: 200 });
+      return base(input, init);
+    }) as typeof fetch;
+    let a = await daemon(homeA, fakeA, { exec: execA, fetch: brokenQueue });
+    const portA = a.srv.port;
+    await until(() => a.bridge.escalations().some(e => e.id === 'E1'));
+    copyFileSync(join(homeA, 'token'), join(homeB, 'token'));
+    process.env.LEDGE_HOME = homeB;
+    const fakeB = await createFakeOpenRig(); fakes.push(fakeB);
+    const machinesFile = join(homeB, 'machines.json');
+    writeMachines([{ id: 'local', label: 'PC' }, { id: 'ec2', label: 'EC2', ssh: 'ec2' }], machinesFile);
+    const toPeer: ClientMessage[] = []; const fromPeer: ServerMessage[] = [];
+    const token = createTokenSource(async () => { const t = readDaemonToken(); return t ? { kind: 'token', token: t } : { kind: 'absent' }; });
+    const remoteConnect = (): DaemonClient => {
+      const c = createDaemonClient({ url: `ws://127.0.0.1:${portA}`, WebSocketImpl: WebSocket as never, token, minBackoffMs: 30, maxBackoffMs: 150 });
+      return { ...c, send: m => { toPeer.push(m); c.send(m); }, onMessage: fn => c.onMessage(m => { fromPeer.push(m); fn(m); }) };
+    };
+    const b = await daemon(homeB, fakeB, { machinesFile, remoteConnect });
+    process.env.LEDGE_HOME = homeB;
+    const ws = new WebSocket(`ws://127.0.0.1:${b.srv.port}`, { headers: { authorization: `Bearer ${readDaemonToken()}` } });
+    const msgs: ServerMessage[] = [];
+    ws.on('message', d => msgs.push(parseServerMessage(JSON.parse(String(d)))));
+    await new Promise<void>((res, rej) => { ws.once('open', () => res()); ws.once('error', rej); });
+    const last = (id: string) => msgs.filter((m): m is Extract<ServerMessage, { type: 'escalation.updated' }> => m.type === 'escalation.updated' && m.escalation.id === id).at(-1)?.escalation;
+    const delivered = () => execA.calls.filter(c => c.join(' ').includes('queue create')).length + fakeA.requests.filter(r => r.method === 'POST').length;
+    const answersTo = (rid: string) => toPeer.filter(m => m.type === 'escalation.answer' && m.rid === rid).length;
+    await until(() => last('E1')?.machine === 'ec2', 8000);
+    const answers = Object.fromEntries(last('E1')!.questions.map(q => [q.id, q.options[0]!.id]));
+
+    // ec2 goes down, the user answers: queued.
+    await stopDaemon(a);
+    await until(() => msgs.some(m => m.type === 'openrig.status' && m.status.machine === 'ec2' && m.status.state === 'unreachable'), 8000);
+    ws.send(JSON.stringify({ type: 'escalation.answer', rid: 'r1', id: 'E1', answers, by: 'user' }));
+    await until(() => last('E1')?.answer?.delivery === 'queued');
+    const before = delivered();
+
+    // ec2 comes back, its OpenRig running but its human queue failing to load: it lists nothing.
+    broken = true;
+    process.env.LEDGE_HOME = homeA;
+    a = await daemon(homeA, fakeA, { exec: execA, port: portA, fetch: brokenQueue });
+    process.env.LEDGE_HOME = homeB;
+    await until(() => a.bridge.status().state === 'running', 8000);
+    expect(a.bridge.humanRead()).toBe(false);
+    // The listing over, r1 goes anyway; the remote daemon answers « not read yet ».
+    await until(() => fromPeer.some(m => m.type === 'rig.result' && m.rid === 'r1' && !m.ok && m.code === 'openrig_down'), 8000);
+    expect(answersTo('r1')).toBe(1);
+    expect(readOpenRigFile(join(homeB, 'openrig.json')).outbox?.map(x => x.rid)).toEqual(['r1']);
+    expect(delivered()).toBe(before);
+
+    // The queue loads: E1 is listed, r1 goes again (same rid), and is delivered this time (the refusal was not memoized).
+    broken = false;
+    await until(() => readOpenRigFile(join(homeB, 'openrig.json')).outbox === undefined, 8000);
+    expect(answersTo('r1')).toBe(2);
+    expect(fromPeer.filter(m => m.type === 'rig.result' && m.rid === 'r1').at(-1)).toEqual(ok('r1'));
+    expect(delivered() - before).toBe(1);
     expect(msgs.some(m => m.type === 'ledge.thread.item' && m.item.kind === 'ledge' && 'text' in m.item && String(m.item.text).includes("n'est pas partie"))).toBe(false);
     await new Promise<void>(r => { ws.once('close', () => r()); ws.close(); });
   }, 30_000);

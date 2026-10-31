@@ -9,8 +9,12 @@ export interface RidMemo {
 interface Entry { at: number; sent: ServerMessage[]; done: Promise<void> }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** Refusals that say « not now », not « no »: never replayed, the same rid runs again later (an answer that waited on OpenRig). */
+const TRANSIENT: ReadonlySet<string> = new Set(['openrig_down', 'unreachable']);
+const transient = (m: ServerMessage) => m.type === 'rig.result' && !m.ok && m.code !== undefined && TRANSIENT.has(m.code);
 
-/** Idempotence of the rig commands: only messages sent through the wrapped `reply` are kept, broadcasts are not. A run that throws is forgotten. */
+/** Idempotence of the rig commands: only messages sent through the wrapped `reply` are kept, broadcasts are not. A run that throws,
+ *  or that answered a transient refusal (`openrig_down`, `unreachable`), is forgotten once over (who waited on it got that refusal). */
 export function createRidMemo(opts: { ttlMs?: number; max?: number; now?: () => number } = {}): RidMemo {
   const ttl = opts.ttlMs ?? DAY_MS; const max = opts.max ?? 2000; const now = opts.now ?? Date.now;
   const entries = new Map<string, Entry>();
@@ -30,6 +34,7 @@ export function createRidMemo(opts: { ttlMs?: number; max?: number; now?: () => 
       entries.set(key, entry);
       forget();
       try { await entry.done; } catch (e) { if (entries.get(key) === entry) entries.delete(key); throw e; }
+      if (entry.sent.some(transient) && entries.get(key) === entry) entries.delete(key);
     },
   };
 }

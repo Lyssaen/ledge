@@ -39,6 +39,27 @@ describe('createRidMemo', () => {
     t = 2000; await memo.once('rig.act', 'r1', r, run); expect(runs).toBe(5);
   });
 
+  it('forgets a run that answered a transient refusal (openrig_down, unreachable): the same rid runs again; a waiter got the refusal', async () => {
+    const memo = createRidMemo(); let runs = 0; let release!: () => void; const gate = new Promise<void>(r => { release = r; });
+    const down: ServerMessage = { type: 'rig.result', rid: 'r1', ok: false, code: 'openrig_down', reason: 'pas lu' };
+    const run = async (reply: (m: ServerMessage) => void) => { if (++runs === 1) { await gate; reply(down); } else reply(ok('r1')); };
+    const a: ServerMessage[] = []; const b: ServerMessage[] = []; const c: ServerMessage[] = []; const d: ServerMessage[] = [];
+    const p1 = memo.once('escalation.answer', 'r1', m => a.push(m), run);
+    const p2 = memo.once('escalation.answer', 'r1', m => b.push(m), run);
+    await Promise.resolve(); release(); await Promise.all([p1, p2]);
+    expect(a).toEqual([down]); expect(b).toEqual([down]);
+    await memo.once('escalation.answer', 'r1', m => c.push(m), run);
+    expect(runs).toBe(2); expect(c).toEqual([ok('r1')]);
+    await memo.once('escalation.answer', 'r1', m => d.push(m), run); // a definite outcome is kept
+    expect(runs).toBe(2); expect(d).toEqual([ok('r1')]);
+    let n = 0; const unreachable = async (reply: (m: ServerMessage) => void) => { n++; reply({ type: 'rig.result', rid: 'r2', ok: false, code: 'unreachable', reason: 'x' }); };
+    await memo.once('rig.act', 'r2', () => undefined, unreachable); await memo.once('rig.act', 'r2', () => undefined, unreachable);
+    expect(n).toBe(2);
+    let f = 0; const failed = async (reply: (m: ServerMessage) => void) => { f++; reply({ type: 'rig.result', rid: 'r3', ok: false, code: 'failed', reason: 'x' }); };
+    await memo.once('rig.act', 'r3', () => undefined, failed); await memo.once('rig.act', 'r3', () => undefined, failed);
+    expect(f).toBe(1);
+  });
+
   it('forgets a run that threw so a retry runs again', async () => {
     const memo = createRidMemo(); let runs = 0;
     const run = async () => { if (++runs === 1) throw new Error('boom'); };
