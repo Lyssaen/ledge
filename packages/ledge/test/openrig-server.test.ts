@@ -8,7 +8,7 @@ import { Store } from '../src/daemon/store.js';
 import { startServer, type ServerHandle } from '../src/daemon/server.js';
 import { createBridge, type Bridge } from '../src/daemon/openrig/bridge.js';
 import type { Tmux } from '../src/tmux.js';
-import { createFakeOpenRig, fakeRigCli, type FakeOpenRig, type FakeRig } from './fakes/openrig.js';
+import { createFakeOpenRig, fakeRigCli, type FakeOpenRig, type FakeRig, type FakeRigCli } from './fakes/openrig.js';
 import { authHeaders, until } from './helpers.js';
 
 const noTmux = new Proxy({} as Tmux, { get: () => async () => { throw new Error('no tmux in this test'); } });
@@ -30,7 +30,7 @@ async function client(port: number) {
   return { msgs, of, send: (m: ClientMessage) => ws.send(JSON.stringify(m)), close: () => new Promise<void>(r => { ws.once('close', () => r()); ws.close(); }) };
 }
 
-let srv: ServerHandle | null = null; let bridge: Bridge | null = null; let fake: FakeOpenRig | null = null; const dirs: string[] = [];
+let srv: ServerHandle | null = null; let bridge: Bridge | null = null; let fake: FakeOpenRig | null = null; const dirs: string[] = []; let rigExec: FakeRigCli | null = null;
 afterEach(async () => { await bridge?.stop(); bridge = null; await srv?.close(); srv = null; await fake?.stop(); fake = null; for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }); });
 
 async function setup(withBridge: boolean) {
@@ -39,7 +39,7 @@ async function setup(withBridge: boolean) {
   let server: ServerHandle | null = null;
   if (withBridge) {
     fake = await createFakeOpenRig(); fake.rigs.push(starter()); fake.humans.push('ledge'); fake.queue.push(humanRow('E1'));
-    bridge = createBridge({ env: async () => ({ OPENRIG_PORT: String(fake!.port) }), exec: fakeRigCli(fake), projects: () => none, home: dir, file: join(dir, 'openrig.json'),
+    bridge = createBridge({ env: async () => ({ OPENRIG_PORT: String(fake!.port) }), exec: (rigExec = fakeRigCli(fake)), projects: () => none, home: dir, file: join(dir, 'openrig.json'),
       asks: { all: () => server!.asks.all(), onChange: f => server!.asks.onChange(f) }, sessionName: id => store.get(id)?.name, probeMs: 20, outboxMs: 30, resyncMs: 50 });
   }
   server = srv = await startServer({ store, tmux: noTmux, port: 0, home: dir, daemon: { version: '0.0.0', install: 'git', systemd: false }, agentEnv: async () => ({ ...process.env }),
@@ -93,6 +93,24 @@ describe('server with the OpenRig bridge', () => {
     await c.close();
   });
 
+  it('rig.send writes to a seat signed Ledge; a remote machine is unreachable; an @seat in ledge.say is sent, not asked', async () => {
+    const { server } = await setup(true);
+    const c = await client(server.port);
+    c.send({ type: 'rig.send', rid: 's1', machine: 'local', seatRef: 'dev-build@starter', text: 'relance' });
+    c.send({ type: 'rig.send', rid: 's2', machine: 'mac', seatRef: 'dev-build@starter', text: 'relance' });
+    c.send({ type: 'rig.send', rid: 's4', machine: 'local', seatRef: '-x', text: 'a' });
+    c.send({ type: 'rig.send', rid: 's5', machine: 'local', seatRef: 'dev-build@starter', text: '  ' });
+    await until(() => c.of('rig.result').length === 4);
+    expect(c.of('rig.result').filter(r => r.rid === 's4' || r.rid === 's5')).toEqual([expect.objectContaining({ ok: false, code: 'invalid' }), expect.objectContaining({ ok: false, code: 'invalid' })]);
+    expect(c.of('rig.result').find(r => r.rid === 's1')).toMatchObject({ ok: true });
+    expect(c.of('rig.result').find(r => r.rid === 's2')).toMatchObject({ ok: false, code: 'unreachable' });
+    expect(rigExec!.calls.filter(a => a[0] === 'send')).toEqual([['send', 'dev-build@starter', '[Ledge] relance']]);
+    c.send({ type: 'ledge.say', rid: 's3', text: '@build lance les tests' });
+    await until(() => c.of('ledge.thread.item').some(m => m.item.kind === 'user' && m.item.to === '@build'));
+    expect(rigExec!.calls.filter(a => a[0] === 'send').at(-1)).toEqual(['send', 'dev-build@starter', '[Ledge] lance les tests']);
+    await c.close();
+  });
+
   it('without a bridge: no openrig flag, rig requests are refused as unavailable', async () => {
     const { server } = await setup(false);
     const c = await client(server.port);
@@ -102,6 +120,9 @@ describe('server with the OpenRig bridge', () => {
     c.send({ type: 'rig.act', rid: 'a1', machine: 'local', rigId: 'r1', verb: 'up' } as ClientMessage);
     await until(() => c.of('error').length === 2);
     for (const e of c.of('error')) expect(e).toMatchObject({ code: 'unavailable' });
+    c.send({ type: 'rig.send', rid: 's1', machine: 'local', seatRef: 'dev-build@starter', text: 'x' });
+    await until(() => c.of('rig.result').length === 1);
+    expect(c.of('rig.result')[0]).toMatchObject({ ok: false, code: 'openrig_down' });
     expect(c.msgs.some(m => m.type === 'openrig.status' || m.type === 'rig.snapshot')).toBe(false);
     await c.close();
   });

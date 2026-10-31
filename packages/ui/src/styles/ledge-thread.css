@@ -1,0 +1,71 @@
+/* Ledge's thread (lot 4, packages/ui/src/chat/ledge): the decision in message, exchange groups, bubbles and the settled
+   line, after docs/mockups/ledge-openrig/shots/c-A.png and nn-open.png. Lyssaën tokens only (tokens.css), so light and
+   dark follow the root theme. Buttons keep the shared .ledge-btn variants (base.css): the recommended option is primary. */
+
+/* Bubbles */
+.lt-row { display: flex; gap: 12px; align-items: flex-start; }
+.lt-row[data-author="user"] { justify-content: flex-end; }
+.lt-avatar { flex: none; width: 32px; height: 32px; }
+.lt-col { display: flex; flex-direction: column; gap: 6px; min-width: 0; max-width: 100%; }
+.lt-row[data-author="user"] .lt-col { align-items: flex-end; max-width: 80%; }
+.lt-meta { font-size: 13px; color: var(--muted-foreground); }
+.lt-meta strong { color: var(--sidebar-foreground); font-weight: 600; }
+.lt-bubble { border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--card); color: var(--card-foreground);
+  padding: 12px 16px; line-height: 1.55; overflow-wrap: anywhere; }
+.lt-bubble[data-author="user"] { background: var(--secondary); color: var(--secondary-foreground); }
+.lt-bubble > .lt-card { margin-top: 12px; }
+.lt-bubble > .lt-card:first-child { margin-top: 0; }
+.lt-to { color: var(--muted-foreground); }
+
+/* Category pill */
+.lt-chip { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600;
+  line-height: 20px; white-space: nowrap; background: var(--muted); color: var(--muted-foreground); }
+.lt-chip[data-tone="amber"] { background: var(--status-warning-soft); color: var(--warning); }
+
+/* Decision in message */
+.lt-card { display: flex; flex-direction: column; gap: 8px; padding: 14px 18px; border: 1px solid var(--border);
+  border-radius: var(--radius-lg); background: var(--card); color: var(--card-foreground); }
+.lt-card[data-tone="amber"] { border-color: color-mix(in srgb, var(--warning) 55%, transparent); }
+.lt-card[data-compact] { padding: 12px 14px; gap: 6px; }
+.lt-card-head { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; color: var(--muted-foreground); }
+.lt-card-from { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lt-card-age { white-space: nowrap; }
+.lt-card-title { margin: 0; font-weight: 600; font-size: 15px; line-height: 1.4; color: var(--card-foreground); }
+.lt-card-advice, .lt-card-note, .lt-card-outcome { margin: 0; color: var(--muted-foreground); line-height: 1.5; }
+.lt-card-note[data-tone="danger"] { color: var(--danger-text); }
+.lt-card-outcome { color: var(--sidebar-foreground); }
+.lt-card-actions { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.lt-questions { display: flex; flex-direction: column; gap: 8px; flex: 1 1 auto; min-width: 0; }
+.lt-question { display: flex; flex-direction: column; gap: 4px; }
+.lt-question-text { font-size: 13px; color: var(--muted-foreground); }
+.lt-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.lt-btn { padding: 4px 12px; border-radius: var(--radius-sm); font-size: 14px; line-height: 20px; }
+.lt-btn[aria-pressed="true"] { border-color: var(--sidebar-primary); background: color-mix(in srgb, var(--sidebar-primary) 10%, transparent); }
+.lt-card[data-compact] .lt-btn { padding: 6px 14px; }
+.lt-card-talk { margin-left: auto; }
+.lt-ask { display: flex; gap: 8px; flex: 1 1 auto; min-width: 0; }
+.lt-ask-field { flex: 1 1 auto; min-width: 0; padding: 4px 10px; border: 1px solid var(--input); border-radius: var(--radius-sm);
+  background: transparent; color: var(--sidebar-foreground); font-size: 14px; line-height: 20px; }
+
+/* A text button that reads as a link (« En parler », « Replier ▾ ») */
+.lt-link { padding: 0; border: 0; background: none; cursor: pointer; color: var(--muted-foreground); font-size: 14px; }
+.lt-link:hover { color: var(--sidebar-foreground); }
+
+/* Exchange groups */
+.lt-group { border-left: 2px solid var(--border); padding: 2px 0 2px 16px; }
+.lt-group-head { display: flex; align-items: baseline; gap: 0; min-width: 0; font-size: 14px; color: var(--muted-foreground); }
+.lt-group-rig { font-weight: 600; color: var(--sidebar-foreground); }
+.lt-group-sum { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lt-group-toggle { margin-left: auto; padding-left: 12px; white-space: nowrap; }
+.lt-group-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.lt-exchange-head { font-size: 14px; color: var(--sidebar-foreground); }
+.lt-exchange-head strong { font-weight: 600; }
+.lt-exchange-meta { color: var(--muted-foreground); }
+.lt-exchange-text { margin-top: 2px; line-height: 1.5; overflow-wrap: anywhere; }
+.lt-group-missing { margin-top: 10px; font-size: 13px; color: var(--muted-foreground); }
+
+/* The settled line */
+.lt-decided { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; }
+.lt-decided-text { color: var(--card-foreground); }
+.lt-decided-rule { color: var(--muted-foreground); }
+.lt-decided .lt-btn { margin-left: auto; }

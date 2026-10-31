@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import WebSocket from 'ws';
 import { createMockDaemon, fakeSession } from './mockDaemon';
+import { sayAnswer } from './ledgeSay';
 import { frameOf, unionFrame, FRAME_PAD } from '../src/surface/frame';
 import { SHOULDER_R } from '../src/surface/Shoulders';
 // The native side, stubbed: `invoke` records commands, the window's `listen` keeps the handler so a test can emit a shell event,
@@ -252,10 +253,10 @@ describe('<Surface> under Tauri', () => {
     const ask = document.querySelector('[data-chat-input]') as HTMLInputElement;
     fireEvent.change(ask, { target: { value: 'ouvre une session' } });
     fireEvent.keyDown(ask, { key: 'Enter' });
-    await vi.waitFor(() => expect(mock.received.some(m => m.type === 'chat.ask')).toBe(true));
-    const qid = mock.received.find(m => m.type === 'chat.ask')!.qid;
+    await vi.waitFor(() => expect(mock.received.some(m => m.type === 'ledge.say')).toBe(true));
+    const say = mock.received.find((m): m is Extract<typeof m, { type: 'ledge.say' }> => m.type === 'ledge.say')!;
     const proposal = { cwd: '/w/api-gateway', project: 'api-gateway', tool: 'claude' as const, prompt: 'Fix it' };
-    await act(async () => { mock.push({ type: 'chat.done', qid, text: 'Voici.', at: new Date().toISOString(), proposal }); await sleep(20); });
+    await act(async () => { for (const m of sayAnswer(say, { answer: 'Voici.', proposal }).messages) mock.push(m); await sleep(20); });
     fireEvent.click(document.querySelector('[data-launch-card] button') as HTMLElement);
     await vi.waitFor(() => expect(mock.received.some(m => m.type === 'session.launch')).toBe(true));
     native.invoke.mockImplementation(async (cmd: string) => (cmd === 'focus_terminal' ? false : cmd === 'open_terminal' ? true : undefined));
@@ -266,8 +267,11 @@ describe('<Surface> under Tauri', () => {
 
   it('the island asks Ledge, not Windows Terminal', async () => {
     await mount({ tauri: true });
-    // The session's card (a bot's peek holds it): its « Voir l'onglet du terminal » is the `o` key's focusTab.
-    fireEvent.click((await screen.findAllByRole('button', { name: /^Otto .*, / }))[0]!);
+    // The session's card (its peek holds it, opened from its finish balloon: the notch has no bot row, lot 4): its « Voir l'onglet du terminal » is the `o` key's focusTab.
+    await act(async () => { mock.upsert(fakeSession('a', { state: 'idle' })); await sleep(50); });
+    await act(async () => { vi.advanceTimersByTime(540); });
+    await act(async () => { vi.advanceTimersByTime(6100); });
+    fireEvent.click(document.querySelector('[data-unread-say]')!);
     const focus = await waitFor(() => { const b = document.querySelector<HTMLButtonElement>('[data-layer="session"] button[aria-label="Voir l’onglet du terminal"], [data-layer="session"] button[aria-label="Focus terminal tab"]'); expect(b).not.toBeNull(); return b!; });
     native.invoke.mockClear();
     await act(async () => { fireEvent.click(focus); await sleep(20); });
@@ -285,9 +289,9 @@ describe('<Surface> under Tauri', () => {
 
   it('sends the bounding frame (island plus fillets); the page is drawn in work-area coordinates, never shifted', async () => {
     await mount({ tauri: true });
-    // Two quiet sessions plus Ledge on a 1024 px wide jsdom viewport: the 40 px filet at x 492, 10 px high.
-    expect(surface()).toHaveStyle({ left: '492px', top: '0px', width: '40px', height: '10px' });
-    await waitFor(() => expect(lastFrame()).toEqual({ left: 492 - SHOULDER_R - FRAME_PAD.left, top: 0, width: 40 + 2 * SHOULDER_R + FRAME_PAD.left + FRAME_PAD.right, height: 10 + FRAME_PAD.bottom }));
+    // Two quiet sessions and Ledge alone (lot 4) on a 1024 px wide jsdom viewport: the 21 px filet at x 502, 10 px high.
+    expect(surface()).toHaveStyle({ left: '502px', top: '0px', width: '21px', height: '10px' });
+    await waitFor(() => expect(lastFrame()).toEqual({ left: 502 - SHOULDER_R - FRAME_PAD.left, top: 0, width: 21 + 2 * SHOULDER_R + FRAME_PAD.left + FRAME_PAD.right, height: 10 + FRAME_PAD.bottom }));
     // The window covers the work area and only its region follows the frame: the page needs no offset wrapper.
     expect(content()).toBeNull();
   });
@@ -302,7 +306,7 @@ describe('<Surface> under Tauri', () => {
       return new Promise<undefined>(r => pending.push(() => r(undefined)));
     });
     await mount({ tauri: true });
-    const handleLeft = 492 - SHOULDER_R - FRAME_PAD.left;
+    const handleLeft = 502 - SHOULDER_R - FRAME_PAD.left;
     await waitFor(() => expect(seen.at(-1)).toBe(handleLeft));
     await answer();
     // Handle to list: the list is wider, so its frame starts further left and holds the island's; it goes out at once.
@@ -322,11 +326,11 @@ describe('<Surface> under Tauri', () => {
   it('an island at 2x on a 4K work area: the surface and the frame are the 512-unit ones doubled', async () => {
     // A 4K work area (2160 logical px), island 200 %: the island lays out in a 512 x 1080 unit screen and is drawn at 2x.
     await mount({ tauri: true, screenH: 2160, handleScale: 2, panelScale: 1 });
-    expect(surface()).toHaveStyle({ left: '472px', top: '0px', width: '80px', height: '20px' });
+    expect(surface()).toHaveStyle({ left: '492px', top: '0px', width: '42px', height: '20px' });
     expect((document.querySelector('[data-zoom="handle"]') as HTMLElement).style.zoom).toBe('2');
     expect((document.querySelector('[data-panel]') as HTMLElement).style.zoom).toBe('1');
-    const left = 472 - SHOULDER_R - FRAME_PAD.left;
-    await waitFor(() => expect(lastFrame()).toEqual({ left, top: 0, width: 80 + 2 * SHOULDER_R + FRAME_PAD.left + FRAME_PAD.right, height: 20 + FRAME_PAD.bottom }));
+    const left = 492 - SHOULDER_R - FRAME_PAD.left;
+    await waitFor(() => expect(lastFrame()).toEqual({ left, top: 0, width: 42 + 2 * SHOULDER_R + FRAME_PAD.left + FRAME_PAD.right, height: 20 + FRAME_PAD.bottom }));
     // The windows keep their own scale: the chat opens at its base 480 px, centred on the real screen.
     await waitFor(() => expect(native.shortcut).not.toBeNull());
     await act(async () => { native.shortcut!({ state: 'Pressed' }); });
@@ -357,7 +361,7 @@ describe('<Surface> under Tauri', () => {
     expect(surface()).toHaveAttribute('data-mode', 'handle');
     await waitFor(() => expect(calls('set_outside_watch').at(-1)).toEqual({ on: false }));
     // The shell watches the top band over the island's span (the band's depth and overhang are its own).
-    expect(calls('set_hot_zone').at(-1)).toEqual({ left: 492, width: 40 });
+    expect(calls('set_hot_zone').at(-1)).toEqual({ left: 502, width: 21 });
   });
 
   it('a press outside a keyboard-opened panel folds it without handing focus back over the window just clicked', async () => {

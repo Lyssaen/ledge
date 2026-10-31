@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, existsSync, readdirSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { dirname } from 'node:path';
 import { join } from 'node:path';
-import type { Projects, Session } from '@ledge/protocol';
+import type { Escalation, Projects, Rig, RigSeat, Session } from '@ledge/protocol';
 import { writeContext, stepFor } from '../src/chat/context.js';
 
 const T0 = '2026-10-11T10:00:00.000Z';
@@ -132,5 +132,32 @@ describe('writeContext: no roles, teams or tasks', () => {
     await writeContext(dir, { sessions: [mk('a')], now: T0, capture: async () => null, git: async () => null });
     const files = readdirSync(dir);
     expect(files).not.toContain('teams.md'); expect(files).not.toContain('roles.md'); expect(files).not.toContain('tasks.md');
+  });
+});
+
+describe('writeContext: rigs and escalations (lot 4)', () => {
+  const seat = (address: string, state: RigSeat['state']): RigSeat => ({ ref: `dev-${address.slice(1)}@factory`, address, name: address.slice(1), runtime: 'claude-code', state });
+  const rig = (name: string, kernel: boolean, seats: RigSeat[]): Rig => ({ id: name, name, machine: 'local', cwd: '/w/app', projectId: null, offProject: false, lifecycle: 'running', kernel, seats, repos: [] });
+  const esc = (id: string, state: Escalation['state']): Escalation => ({ id, source: 'rig', machine: 'local', rigId: 'factory', from: 'dev-build@factory', intent: 'decision',
+    summary: `Résumé ${id}`, questions: [{ id: 'q', question: 'Le cache ?', options: [{ id: 'a', label: 'Garder' }, { id: 'b', label: 'Supprimer' }] }], createdAt: T0, state });
+
+  it('the context lists rigs and pending escalations', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ctx-'));
+    const factory = rig('factory', false, [seat('@build', 'working'), seat('@review-a', 'working'), seat('@review-b', 'working'), seat('@qa', 'working'), seat('@docs', 'idle'), seat('@plan', 'ready'), seat('@old', 'stopped')]);
+    await writeContext(dir, { sessions: [], now: T0, capture: async () => null, git: async () => null,
+      rigs: [factory, rig('kernel', true, [seat('@advisor', 'working')])], escalations: [esc('qi-1', 'pending'), esc('qi-2', 'grace'), esc('qi-3', 'answered')] });
+    const rigs = readFileSync(join(dir, 'rigs.md'), 'utf8');
+    expect(rigs).toContain('factory · 4/6 au travail');
+    expect(rigs).not.toContain('kernel ·');
+    const escs = readFileSync(join(dir, 'escalations.md'), 'utf8');
+    expect(escs).toContain('qi-1'); expect(escs).toContain('Résumé qi-1'); expect(escs).toContain('dev-build@factory'); expect(escs).toContain('Garder');
+    expect(escs).toContain('qi-2');
+    expect(escs).not.toContain('qi-3');
+  });
+
+  it('writes neither file without OpenRig', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ctx-'));
+    await writeContext(dir, { sessions: [], now: T0, capture: async () => null, git: async () => null });
+    expect(existsSync(join(dir, 'rigs.md'))).toBe(false); expect(existsSync(join(dir, 'escalations.md'))).toBe(false);
   });
 });

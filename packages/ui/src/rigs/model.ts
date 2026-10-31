@@ -108,6 +108,30 @@ export function isStandalone(s: Session, rigs: readonly Rig[]): boolean {
   return !rigs.some(x => x.machine === r.machine && x.seats.some(seat => seat.sessionId === s.id && seat.state !== 'stopped'));
 }
 
+/** A choice of the `@` completion: what the list shows and what the field gets. */
+export interface SeatMention { key: string; label: string; insert: string }
+const MENTION_RIG = new Set<Rig['lifecycle']>(['running', 'partial']);
+const MENTION_DOWN = new Set<SeatState>(['stopped', 'crashed']);
+/**
+ * The `@` completion of the Ledge screen (R19): the seats of this machine's running or partial rigs (kernel aside) whose address starts
+ * with `query`, each under the address the daemon resolves (lot 4 task 6): « @build · factory » inserting `@build` when no other live
+ * seat (kernel included) has that address, « @build@factory » otherwise.
+ */
+export function seatMentions(rigs: readonly Rig[], query: string): SeatMention[] {
+  const live = rigs.filter(r => r.machine === 'local' && MENTION_RIG.has(r.lifecycle))
+    .flatMap(rig => rig.seats.filter(s => !MENTION_DOWN.has(s.state)).map(seat => ({ rig, seat })));
+  const holders = new Map<string, number>();
+  for (const { seat } of live) holders.set(seat.address, (holders.get(seat.address) ?? 0) + 1);
+  const q = query.toLowerCase();
+  return live.filter(({ rig, seat }) => !rig.kernel && seat.address.replace(/^@/, '').toLowerCase().startsWith(q))
+    .sort((a, b) => a.seat.address.localeCompare(b.seat.address) || a.rig.name.localeCompare(b.rig.name))
+    .map(({ rig, seat }) => {
+      const shared = (holders.get(seat.address) ?? 0) > 1;
+      const insert = shared ? `${seat.address}@${rig.name}` : seat.address;
+      return { key: `${rigKey(rig)}/${seat.ref}`, label: shared ? insert : `${seat.address} · ${rig.name}`, insert };
+    });
+}
+
 export interface RigRow { key: string; rig: Rig; place: RigPlace; seats: Session[]; working: number; waiting: number; remote: boolean }
 export interface KernelRow { key: string; rig: Rig; shown: Session[]; hiddenCount: number }
 

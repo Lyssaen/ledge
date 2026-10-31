@@ -162,7 +162,7 @@ Messages **client** (ajoutés à `ClientMessageSchema`) :
 - `rig.send { rid, machine, seatRef, text }` ;
 - `rig.exchanges.request { machine, rigId }` ;
 - `escalation.answer { rid, id, answers: Record<string,string>, by: 'user' }` ;
-- `ledge.say { rid, text }`, `ledge.thread.request { before? }` ;
+- `ledge.say { rid, text, about? }` (`about` : lot 4), `ledge.thread.request { before? }` ;
 - `mandate.update { rid, text }`, `rule.set { rid, id, status: 'active'|'rejected' }` ;
 - `decision.revisit { rid, id, text? }` ;
 - `category.escalate { rid, category }` (« Me le remonter désormais ») ;
@@ -186,13 +186,14 @@ Ajustements fixés par le lot 2 :
 - **Réponse libre** : la clé `text` dans `answers` (`{ text: "…" }`). Une `ask` a `questions: []`.
 - **Chemin de l'operator** (`operator.human`) : non vérifié par la sonde, lancée en `--no-kernel` pour éviter un coût LLM. Le lot 2 le traite au mieux et le marque à vérifier lors du parcours réel.
 - **Lot 1** ajoute `packages/protocol/src/asks.ts`, les messages `ask.*`, `DaemonInfoSchema.asks`, et retire les parties équipes du protocole téléphone (`PhoneSessionSchema.role`/`team`, `daemon.teams`, `ConfirmPurpose` `define`/`team`). `PHONE_PROTOCOL` reste à 1.
-- **Ajouts des lots 4 et 7** :
-  - `LedgeThreadItem` : `qid?` sur les éléments `ledge` et `user`, et `pending?: true` sur `ledge`.
-  - Un `ledge.thread.item` dont l'id existe déjà **remplace** l'ancien : c'est ainsi qu'un groupe d'échanges grandit ou qu'une bulle se termine.
+- **Ajouts des lots 4 et 7** (le lot 4 est livré dans `openrig.ts` et `messages.ts`, tâche 1) :
+  - `LedgeThreadItem` : `qid?: string` sur les éléments `ledge` et `user` (le tour du coureur ponctuel dont les cartes suivent la bulle), et `pending?: true` sur `ledge` seul (bulle « Ledge lit… » tant que le tour n'est pas fini).
+  - Règle d'upsert (commentaire au-dessus de `LedgeThreadItemSchema`) : un `ledge.thread.item` dont l'id existe déjà **remplace** l'ancien chez le client ; c'est ainsi qu'un groupe d'échanges grandit ou qu'une bulle se termine.
   - Les cartes d'action passent par le tour de chat référencé et par `chat.act`. L'élément `card` reste pour le TUI et le mobile.
-  - `ledge.say` gagne `about?: escalationId` (« En parler »).
-  - `RIG_RESULT_CODES` gagne `'invalid'`.
-  - Nouveaux exports : `MANDATE_CATEGORY_LABEL`, `MANDATE_CATEGORY_TAGS`, `EXCHANGE_GROUP_MS` (10 min) et `THREAD_PAGE` (50).
+  - `ledge.say` gagne `about?: string` = id d'escalade (« En parler »).
+  - `RIG_RESULT_CODES` gagne `'invalid'` (réponse vide, ou question sans réponse). `AnswerCode` (lot 4, tâche 3) en est un sous-ensemble.
+  - Nouveaux exports du lot 4 : `MANDATE_CATEGORY_LABEL: Record<MandateCategory, { fr, en }>`, `EXCHANGE_GROUP_MS` (600 000, 10 min) et `THREAD_PAGE` (50).
+  - Lot 7 : `MANDATE_CATEGORY_TAGS`.
   - Ajouts du lot 7 :
     - `SessionSchema.brain?: true` ;
     - `BrainStatusSchema` gagne `enabled: boolean | null` (null = jamais demandé), `restarts?` et `reason?` ;

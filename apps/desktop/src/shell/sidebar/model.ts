@@ -1,5 +1,5 @@
-import { isBusy } from '@ledge/fleet';
-import type { Helper, Projects, Rig, Session } from '@ledge/protocol';
+import { isBusy, type FleetAsk } from '@ledge/fleet';
+import type { Escalation, Helper, Projects, Rig, Session } from '@ledge/protocol';
 import { isStandalone } from '@ledge/ui/rigs/model';
 import { fold, taskOf } from '../../nav/agents';
 
@@ -74,12 +74,14 @@ export function treeModel(
 
 export type AttnKind = 'approval' | 'question' | 'error';
 
-export interface AttnItem {
+export interface SessionAttn {
   session: Session;
   helper?: Helper;
   kind: AttnKind;
   since: string;
 }
+/** What « À toi » lists: a standalone session waiting on the user, or a decision an OpenRig seat or the operator raised (lot 4). */
+export type AttnItem = (SessionAttn) | { kind: 'escalation'; escalation: Escalation; since: string };
 
 const attnKind = (state: Session['state']): AttnKind | null => {
   switch (state) {
@@ -98,13 +100,30 @@ export function quickDecide(s: Pick<Session, 'offline' | 'source' | 'pending'>):
   return k === 'permission' || k === 'diff';
 }
 
+const byAge = (a: { since: string }, b: { since: string }): number => (a.since < b.since ? -1 : a.since > b.since ? 1 : 0);
+
+/**
+ * « À toi »: the standalone sessions waiting on the user (rig seats are relieved by OpenRig, not Ledge: spec §8.1) and the pending or
+ * grace `decision` escalations, oldest first. An `ask` is shown by the ask card (free-text reply), never here, and while a session has an
+ * open ask its own line is dropped (matched by session name and machine).
+ */
 export function attentionOf(
   sessions: readonly Session[],
-  waits: ReadonlyMap<string, { since: string }>
+  waits: ReadonlyMap<string, { since: string }>,
+  escalations: readonly Escalation[] = [],
+  rigs?: readonly Rig[],
+  asks: readonly Pick<FleetAsk, 'fromName' | 'machine' | 'state'>[] = []
 ): AttnItem[] {
+  const open = (e: Escalation) => e.state === 'pending' || e.state === 'grace';
+  const asking = new Set<string>([
+    ...asks.filter(a => a.state === 'open').map(a => `${a.machine}\u0000${a.fromName}`),
+    ...escalations.filter(e => e.source === 'ask' && open(e)).map(e => `${e.machine}\u0000${e.from}`)
+  ]);
   const items: AttnItem[] = [];
   for (const session of sessions) {
     if (session.offline) continue;
+    if (rigs && !isStandalone(session, rigs)) continue;
+    if (asking.has(`${session.machineId ?? 'local'}\u0000${session.name}`)) continue;
     const kind = attnKind(session.state);
     if (!kind) continue;
     const helperId = session.pending?.helperId;
@@ -116,7 +135,11 @@ export function attentionOf(
       since: waits.get(session.id)?.since ?? session.lastActivityAt
     });
   }
-  return items.sort((a, b) => (a.since < b.since ? -1 : a.since > b.since ? 1 : 0));
+  for (const escalation of escalations) {
+    if (escalation.intent !== 'decision' || escalation.source === 'ask' || !open(escalation)) continue;
+    items.push({ kind: 'escalation', escalation, since: escalation.createdAt });
+  }
+  return items.sort(byAge);
 }
 
 export function filterArchived(

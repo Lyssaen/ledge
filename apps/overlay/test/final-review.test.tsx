@@ -190,10 +190,14 @@ describe('final review fixes', () => {
     expect(mode()).toBe('bubble');
   });
 
-  it('an exited bot opens a peek, not a rename field', () => {
-    snapshot([otto({ topic: 'Done work', state: 'exited' })]);
+  it('a peek from a balloon shows the topic, not a rename field, and stays when the session exits', () => {
+    snapshot([otto()]);
     mount();
-    fireEvent.click(screen.getByRole('button', { name: /Otto .*open/ }));
+    // The notch has no bot row (lot 4): the finish's balloon opens the peek, which stays when the session then exits.
+    update(otto({ topic: 'Done work', state: 'idle' }));
+    tick(540); tick(6100);
+    fireEvent.click(document.querySelector('[data-unread-say]')!);
+    update(otto({ topic: 'Done work', state: 'exited' }));
     expect(mode()).toBe('peek');
     expect(within(layer('peek')).getByText('Done work')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Done work' })).toBeNull();

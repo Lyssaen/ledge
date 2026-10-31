@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Page, WebSocketRoute } from '@playwright/test';
-import type { Ask, ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, Escalation, Exchange, FoundRepo, IslandPrefs, Machines, ModelChoice, OpenRigStatus, Projects, Recent, Rig, RigSpecInfo, Session, ThreadItem, Tool } from '@ledge/protocol';
+import type { Ask, ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, Escalation, Exchange, FoundRepo, LedgeThreadItem, IslandPrefs, Machines, ModelChoice, OpenRigStatus, Projects, Recent, Rig, RigSpecInfo, Session, ThreadItem, Tool } from '@ledge/protocol';
 
 /** How long a launched session stays `starting` in the fake daemon before it is `working`. */
 export const LAUNCH_SETTLE_MS = 1500;
@@ -39,9 +39,13 @@ export type Found = { repos: FoundRepo[]; truncated?: boolean } | 'offline' | 'o
  *  It speaks of OpenRig (lot 3) after the snapshot: `openrig.status` (`extras.openrig`, none by default), one `rig.snapshot` per machine of
  *  `extras.rigs` (the local one always, empty when there are none), then an `escalation.updated` per `extras.escalations`. A `rig.specs.request`
  *  is answered `rig.specs` from `extras.specs` (none by default); a `rig.exchanges.request` is answered `rig.exchanges` from `extras.exchanges`,
- *  keyed by rig id. `pushRig`, `removeRig` and `exchange` play the daemon's later news. Every client message is kept in `received`.
+ *  keyed by rig id. `pushRig`, `removeRig` and `exchange` play the daemon's later news.
+ *  Ledge's thread (lot 4): after the escalations, `ledge.thread.history` from `extras.thread`; `ledge.thread.request` answers the same. An `escalation.answer`
+ *  is accepted after `extras.answerDelayMs` (`escalation.updated` answered, `rig.result` ok), a later one gets `rig.result` `already_answered`. A `ledge.say` adds the
+ *  user's item (`to` for a leading `@seat`, which is all it does), else plays `extras.chat` as `chat.ask` does (`chat.history` first) and finishes Ledge's bubble.
+ *  `pushEscalation`, `pushExchange` and `threadItem` play the later news. Every client message is kept in `received`.
  *  The route is anchored so it never catches `/ssh/<alias>` (see `fakeRemote`). Register before `page.goto`. */
-export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual'; chat?: ChatReply; found?: Record<string, Found>; scanDelayMs?: number; island?: IslandPrefs | null | 'unknown'; models?: Partial<Record<Tool, ModelChoice[]>>; asks?: Ask[]; rigs?: Rig[]; escalations?: Escalation[]; openrig?: OpenRigStatus; specs?: RigSpecInfo[]; exchanges?: Record<string, Exchange[]> } = {}) {
+export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual'; chat?: ChatReply; found?: Record<string, Found>; scanDelayMs?: number; island?: IslandPrefs | null | 'unknown'; models?: Partial<Record<Tool, ModelChoice[]>>; asks?: Ask[]; rigs?: Rig[]; escalations?: Escalation[]; openrig?: OpenRigStatus; specs?: RigSpecInfo[]; exchanges?: Record<string, Exchange[]>; thread?: LedgeThreadItem[]; answerDelayMs?: number } = {}) {
   const threads = new Map(Object.entries(extras.threads ?? {}).map(([id, items]) => [id, [...items]]));
   const sessions = new Map(initial.map(s => [s.id, s]));
   const received: ClientMessage[] = [];
@@ -51,9 +55,13 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
   let socket: WebSocketRoute | null = null;
   let up = true;
   let launches = 0;
+  const answering = new Set<string>();
   const asks = new Map((extras.asks ?? []).map(a => [a.id, a]));
   const rigs = new Map((extras.rigs ?? []).map(r => [`${r.machine}/${r.id}`, r]));
   const exchanges = new Map(Object.entries(extras.exchanges ?? {}).map(([rigId, items]) => [rigId, [...items]]));
+  const escalations = new Map((extras.escalations ?? []).map(e => [e.id, e]));
+  const thread: LedgeThreadItem[] = [...(extras.thread ?? [])];
+  let says = 0;
   const turns = new Map<string, ChatTurn>();
   const images = new Map<string, { mime: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; data: string; preview: boolean }>();
   await page.routeWebSocket(/127\.0\.0\.1:47831\/?$/, ws => {
@@ -68,7 +76,8 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
     const byMachine = new Map<string, Rig[]>([['local', []]]);
     for (const r of rigs.values()) byMachine.set(r.machine, [...(byMachine.get(r.machine) ?? []), r]);
     for (const [machine, list] of byMachine) ws.send(JSON.stringify({ type: 'rig.snapshot', machine, rigs: list }));
-    for (const escalation of extras.escalations ?? []) ws.send(JSON.stringify({ type: 'escalation.updated', escalation }));
+    for (const escalation of escalations.values()) ws.send(JSON.stringify({ type: 'escalation.updated', escalation }));
+    ws.send(JSON.stringify({ type: 'ledge.thread.history', items: thread }));
     ws.onMessage(m => {
       let msg: ClientMessage;
       try { msg = JSON.parse(String(m)); } catch { return; }
@@ -141,6 +150,49 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
         const answer = { type: 'repos.found', requestId: msg.requestId, repos: typeof f === 'string' ? [] : f.repos, truncated: typeof f === 'string' ? false : f.truncated ?? false, ...(typeof f === 'string' ? { error: f } : {}) };
         setTimeout(() => { try { ws.send(JSON.stringify(answer)); } catch { /* the page is gone */ } }, extras.scanDelayMs ?? 0);
       }
+      if (msg.type === 'ledge.thread.request') ws.send(JSON.stringify({ type: 'ledge.thread.history', items: msg.before === undefined ? thread : [], ...(msg.before === undefined ? {} : { before: msg.before }) }));
+      // The first answer to an escalation is accepted after `answerDelayMs`; a later one, or one for a closed escalation, is `already_answered`.
+      if (msg.type === 'escalation.answer') {
+        const e = escalations.get(msg.id);
+        const taken = e === undefined || e.state === 'answered' || e.state === 'closed' || answering.has(msg.id);
+        if (taken) ws.send(JSON.stringify({ type: 'rig.result', rid: msg.rid, ok: false, code: 'already_answered' }));
+        else {
+          answering.add(msg.id);
+          setTimeout(() => {
+            const now = escalations.get(msg.id)!;
+            if (now.state === 'answered') { try { ws.send(JSON.stringify({ type: 'rig.result', rid: msg.rid, ok: false, code: 'already_answered' })); } catch { /* the page is gone */ } return; }
+            const answered: Escalation = { ...now, state: 'answered', answer: { by: 'user', answers: msg.answers, at: new Date().toISOString() } };
+            escalations.set(msg.id, answered);
+            try {
+              ws.send(JSON.stringify({ type: 'escalation.updated', escalation: answered }));
+              ws.send(JSON.stringify({ type: 'rig.result', rid: msg.rid, ok: true }));
+            } catch { /* the page is gone */ }
+          }, extras.answerDelayMs ?? 0);
+        }
+      }
+      // `ledge.say`: the user's item (with `to` for a leading `@seat`), then `extras.chat` played as `chat.ask` does, then the Ledge bubble finished.
+      if (msg.type === 'ledge.say') {
+        const n = ++says, qid = `say-${n}`, at = new Date().toISOString();
+        const at2 = /^@(\S+)/.exec(msg.text.trim());
+        const user: LedgeThreadItem = { kind: 'user', id: `u-${n}`, at, text: msg.text, ...(at2 ? { to: `@${at2[1]}` } : {}), ...(at2 ? {} : { qid }) };
+        thread.push(user);
+        ws.send(JSON.stringify({ type: 'ledge.thread.item', item: user }));
+        if (!at2) {
+          const reply = extras.chat ?? { text: 'Nothing to report.' };
+          const steps = reply.steps ?? [];
+          turns.set(qid, { qid, question: msg.text, askedAt: at, steps, answer: reply.text, answeredAt: at, ...(reply.proposal ? { proposal: reply.proposal } : {}), ...(reply.projectProposal ? { projectProposal: reply.projectProposal } : {}) });
+          // The fleet only follows a turn it knows: the history comes first.
+          ws.send(JSON.stringify({ type: 'chat.history', turns: [{ qid, question: msg.text, askedAt: at, steps: [] }] }));
+          const pending: LedgeThreadItem = { kind: 'ledge', id: `l-${n}`, at, text: '', qid, pending: true };
+          ws.send(JSON.stringify({ type: 'ledge.thread.item', item: pending }));
+          for (const step of steps) ws.send(JSON.stringify({ type: 'chat.step', qid, step }));
+          ws.send(JSON.stringify({ type: 'chat.delta', qid, text: reply.text }));
+          ws.send(JSON.stringify({ type: 'chat.done', qid, text: reply.text, at, ...(reply.proposal ? { proposal: reply.proposal } : {}), ...(reply.projectProposal ? { projectProposal: reply.projectProposal } : {}) }));
+          const done: LedgeThreadItem = { kind: 'ledge', id: `l-${n}`, at, text: reply.text, qid };
+          thread.push(done);
+          ws.send(JSON.stringify({ type: 'ledge.thread.item', item: done }));
+        }
+      }
       if (msg.type === 'chat.ask') {
         const reply = extras.chat ?? { text: 'Nothing to report.' };
         const steps = reply.steps ?? [];
@@ -187,6 +239,12 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
     removeRig(machine: string, id: string) { rigs.delete(`${machine}/${id}`); push({ type: 'rig.removed', machine, rigId: id }); },
     /** Stores an exchange between a rig's agents (kept for `rig.exchanges.request`) and broadcasts it as `rig.exchange`. */
     exchange(e: Exchange) { exchanges.set(e.rigId, [...(exchanges.get(e.rigId) ?? []), e]); push({ type: 'rig.exchange', exchange: e }); },
+    /** Alias of `exchange`: an exchange between a rig's agents, as the daemon pushes it. */
+    pushExchange(e: Exchange) { exchanges.set(e.rigId, [...(exchanges.get(e.rigId) ?? []), e]); push({ type: 'rig.exchange', exchange: e }); },
+    /** Adds or replaces an escalation, broadcast as `escalation.updated` (an `answered` one stops later answers: they get `already_answered`). */
+    pushEscalation(e: Escalation) { escalations.set(e.id, e); push({ type: 'escalation.updated', escalation: e }); },
+    /** Adds an item to Ledge's thread, broadcast as `ledge.thread.item`. */
+    threadItem(item: LedgeThreadItem) { const at = thread.findIndex(i => i.id === item.id); if (at >= 0) thread[at] = item; else thread.push(item); push({ type: 'ledge.thread.item', item }); },
     /** Answers a `session.launch` as the daemon does: the session is broadcast first, then `session.launched` with its raw id. */
     launched(s: Session) { sessions.set(s.id, s); push({ type: 'session.updated', session: s }); push({ type: 'session.launched', id: s.id }); },
     /** Refuses a launch as the daemon does: an `error` with no id, naming its request (spec §9.2). */

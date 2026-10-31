@@ -15,6 +15,10 @@ export const HUMAN_ADDRESS: string = REGISTRATION === 'external' ? 'ledge@extern
 export const HUMAN_BINDING = `slack:ledge-decoy:file:${join(tmpdir(), 'ledge-decoy-slack.env')}:primary`;
 export const OPERATOR_HUMAN_SESSIONS: readonly string[] = ['operator-human@kernel']; // fallback value, not probed
 export const HUMAN_GATE_TIER = 'human-gate'; // D9
+// D5, D6, D8: a reply row to the seat (`rig queue create --source ledge@external`), then `approve` of the human row. The daemon
+// ships no docs/: this constant is the sheet's « Chemin de réponse » line (a test reads the sheet and compares).
+export type AnswerPathKind = 'reply-and-approve' | 'approve-only' | 'resolve';
+export const ANSWER_PATH: AnswerPathKind = 'reply-and-approve';
 
 // D10: names observed by the probe. `rig up` emits 'rig.imported' (not 'rig.created'). 'seat.activity_changed' carries only seatNodeId/sessionName/seq/at:
 // the state is re-read from activityState.activity in /api/rigs/:rigId/nodes. Ignored: 'view.changed', 'watchdog.*'.

@@ -1,6 +1,9 @@
 import { useState, type JSX, type MouseEvent } from 'react';
-import type { FleetAsk } from '@ledge/fleet';
-import type { Project, Session } from '@ledge/protocol';
+import { useAnswerState, type FleetAsk } from '@ledge/fleet';
+import type { Escalation, Project, Rig, Session } from '@ledge/protocol';
+import { Bot } from '@ledge/ui/bots/Bot';
+import { seatName } from '@ledge/ui/chat/ledge/threadModel';
+import { seatSession } from '@ledge/ui/rigs/model';
 import { Kbd } from '@ledge/ui/ui/Kbd';
 import { useI18n } from '../../i18n/lang';
 import { spanOf } from '../../list/time';
@@ -9,9 +12,54 @@ import { ProjectSwatch } from '../../projects/ProjectSwatch';
 import { cls } from '../cls';
 import { HelperBot, SessionBot } from '../SessionBot';
 import { AskCard } from './AskCard';
+import { useMotionPreferences } from '../../motionPreferences';
+import { useTheme } from '../theme';
 import { quickDecide, type AttnItem } from './model';
 
 const CAP = 4;
+const NO_RIGS: readonly Rig[] = [];
+
+/** One escalation of « À toi »: who (seat, rig, age), « Catégorie · résumé », then the options when they are one question of two
+ *  at most (the recommended one filled), else « Voir » opening the Ledge screen. Ledge answering within its grace says so. */
+function EscalationRow(p: {
+  escalation: Escalation; since: string; rigs: readonly Rig[]; paused: boolean;
+  onAnswer?(id: string, answers: Record<string, string>): void; onSee?(e: Escalation): void;
+}): JSX.Element {
+  const { t } = useI18n();
+  const theme = useTheme();
+  const { reduced } = useMotionPreferences();
+  const e = p.escalation;
+  const answer = useAnswerState(e.id);
+  const rig = p.rigs.find(r => r.machine === e.machine && r.id === e.rigId);
+  const seat = rig?.seats.find(x => x.ref === e.from);
+  const who = seatName(e.from);
+  const tool = seat && rig ? seatSession(seat, rig, new Map()).tool : 'claude';
+  const copy = t.ledgeThread;
+  const lead = [e.category ? copy.category(e.category) : null, e.summary].filter(Boolean).join(' · ');
+  const q = e.questions.length === 1 ? e.questions[0]! : null;
+  const busy = answer.state === 'sending' || answer.state === 'done';
+  const note = answer.state === 'refused' ? (answer.code === 'already_answered' ? copy.escalation.alreadyAnswered : copy.escalation.refused(answer.code ?? 'failed', answer.reason)) : e.state === 'grace' ? copy.escalation.grace : '';
+  return (
+    <div className="st-card st-esc" data-escalation={e.id}>
+      <span className="st-bot"><Bot tool={tool} state="question" pose={1} size={18} theme={theme} seed={e.from} paused={p.paused} reducedMotion={reduced} /></span>
+      <div className="st-card-body">
+        <div className="st-l1">
+          <span className="st-name">{who}</span>
+          {rig && <span className="st-where">{rig.name}</span>}
+          <span className="st-time t-question">{shortWhen(p.since, t.list.when.units, t.list.when.now)}</span>
+        </div>
+        <div className="st-l2">
+          <span className="st-req" title={lead}>{lead}</span>
+          {q && q.options.length > 0 && q.options.length <= 2 ? q.options.map(o => (
+            <button key={o.id} type="button" className={cls('st-qa', o.recommended && 'pri')} disabled={busy}
+              onClick={() => p.onAnswer?.(e.id, { [q.id]: o.id })}>{o.label}</button>
+          )) : <button type="button" className="st-qa" onClick={() => p.onSee?.(e)}>{t.side.see}</button>}
+        </div>
+        {note && <div className="st-l2"><span className="st-where" role="status">{note}</span></div>}
+      </div>
+    </div>
+  );
+}
 
 /** « 12 min » / « 1 h » / « 3 d », or the list's « just now ». Same units as the tree. */
 function shortWhen(iso: string, units: { min: string; h: string; d: string }, nowLabel: string): string {
@@ -36,6 +84,10 @@ export function Attention(p: {
   near?: readonly Session[];
   onHandover?(id: string): void;
   onLater?(id: string): void;
+  /** The rigs, for the escalation rows (rig name, the seat's bot). */
+  rigs?: readonly Rig[];
+  onAnswerEscalation?(id: string, answers: Record<string, string>): void;
+  onSeeEscalation?(escalation: Escalation): void;
 }): JSX.Element | null {
   const { t } = useI18n();
   const [all, setAll] = useState(false);
@@ -53,6 +105,10 @@ export function Attention(p: {
         <Kbd>Alt ↓</Kbd>
       </div>
       {shown.map(item => {
+        if (item.kind === 'escalation') {
+          return <EscalationRow key={`esc:${item.escalation.machine}:${item.escalation.id}`} escalation={item.escalation} since={item.since}
+            rigs={p.rigs ?? NO_RIGS} paused={p.paused} onAnswer={p.onAnswerEscalation} onSee={p.onSeeEscalation} />;
+        }
         const who = item.helper?.kind ?? item.session.name;
         const project = p.projectOf(item.session);
         const where = item.helper ? t.side.ofHelper(item.session.name) : (project?.name ?? t.side.unassigned);

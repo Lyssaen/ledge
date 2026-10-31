@@ -63,6 +63,15 @@ export async function wake(page: Page) {
   await hoverHandle(page);
   await expect(surface(page)).toHaveAttribute('data-awake', 'true');
 }
+/** Opens a session's peek the only way the notch offers since lot 4 (no bot row): `finished` turns it idle, its finish notice
+ *  folds after 6 s, and the balloon left under Ledge opens the peek. */
+export async function peekFromBalloon(page: Page, finished: () => void) {
+  finished();
+  const say = page.locator('[data-unread-say]');
+  await expect(say).toHaveCSS('opacity', '1', { timeout: 15_000 });
+  await say.click();
+  await expectMode(page, 'peek');
+}
 /** Opens the chat by clicking Ledge. The composer takes focus once the panel is up. */
 export async function openChat(page: Page) {
   await wake(page);

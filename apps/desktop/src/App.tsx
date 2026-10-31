@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { daemonStore, projectOf, useAsks, useDaemon, useEscalations, useIsland, useMobile, useMobileError, useOpenRig, useProjects, useRigs, useTokenMissing, type DaemonClient } from '@ledge/fleet';
+import { answerEscalation, daemonStore, projectOf, useAsks, useDaemon, useEscalations, useIsland, useMobile, useMobileError, useOpenRig, useProjects, useRigs, useTokenMissing, type DaemonClient } from '@ledge/fleet';
 import { openSeatTerminal } from './rigs/terminal';
 import { useRigExchanges } from './rigs/useRigExchanges';
 import type { Project, Projects, Rig, Session } from '@ledge/protocol';
@@ -305,6 +305,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           actions={actions} decisions={decisions} waits={waits} menu={{ open: (id, at, opener) => sessionMenu.open(id, at, opener ?? null) }}
           onTerminal={sessionMenu.terminal} revealArchives={revealArchives} revealCurrent={revealCurrent}
           relief={relief} asks={asks} onAnswerAsk={(a, text) => fleet.answerAsk(a.machine, a.id, text)}
+          onAnswerEscalation={(id, answers) => { answerEscalation(fleetClient, id, answers); }}
           rigs={rigs} escalations={escalations} openrig={openrig} />
         <section className="workspace">
           {tokenMissing && <DaemonOutdated />}

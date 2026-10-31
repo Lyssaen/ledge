@@ -39,7 +39,7 @@ export function useKeys(dispatch: (a: NavAction) => void, ctx: { state: NavState
       // / goes to Ledge's home view, its composer focused (ledge home spec §2.1); in a field, / is typed. Ctrl / asks Ledge
       // beside what is shown, in the docked panel (already open: its field takes the focus again).
       if (!state.modal && e.key === '/' && mod && !e.altKey) { e.preventDefault(); dispatch({ type: 'chat', open: true }); return; }
-      if (!state.modal && e.key === '/' && !mod && !e.altKey && !typing(document.activeElement)) { e.preventDefault(); dispatch({ type: 'ledge' }); return; }
+      if (!state.modal && e.key === '/' && !mod && !e.altKey && !typing(document.activeElement)) { e.preventDefault(); dispatch({ type: 'ledge', tab: 'conversation' }); return; }
       if (state.modal || state.chat || typing(document.activeElement)) return;
 
       const { place } = state;

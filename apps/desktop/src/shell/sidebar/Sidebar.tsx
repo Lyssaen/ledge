@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, type JSX } from 'react';
 import type { FleetAsk, MachineState } from '@ledge/fleet';
 import type { Escalation, OpenRigStatus, Project, Projects, Rig, Session } from '@ledge/protocol';
-import { ledgeLine, rigsModel } from '@ledge/ui/rigs/model';
+import { isStandalone, ledgeLine, rigsModel } from '@ledge/ui/rigs/model';
 import { Kbd } from '@ledge/ui/ui/Kbd';
 import { Icon } from '@ledge/ui/ui/icons';
 import type { Filing } from '../../atelier/filing';
@@ -17,7 +17,7 @@ import { SHELL_ICONS } from '../icons';
 import { Archives } from './Archives';
 import { Attention } from './Attention';
 import { LedgeLine } from './LedgeLine';
-import { attentionOf, treeModel } from './model';
+import { attentionOf, treeModel, type SessionAttn } from './model';
 import { loadSidebarPrefs, saveSidebarPrefs } from './prefs';
 import { RigsSection } from './RigsSection';
 import { Tree } from './Tree';
@@ -47,6 +47,8 @@ export function Sidebar(p: {
   onAnswerAsk?(ask: FleetAsk, text: string): Promise<{ ok: true } | { ok: false; reason: string }>;
   /** OpenRig (lot 3): every machine's rigs, the escalations Ledge raised, OpenRig's status per machine. */
   rigs?: readonly Rig[]; escalations?: readonly Escalation[]; openrig?: readonly OpenRigStatus[];
+  /** Answers an escalation of « À toi » (`answerEscalation`, one send through the daemon). */
+  onAnswerEscalation?(id: string, answers: Record<string, string>): void;
 }): JSX.Element {
   const { t } = useI18n();
   const keysTip = useId();
@@ -59,9 +61,10 @@ export function Sidebar(p: {
   const byId = useMemo(() => new Map(p.sessions.map(s => [s.id, s])), [p.sessions]);
   const rigRows = useMemo(() => rigsModel(rigs, byId, p.projects), [rigs, byId, p.projects]);
   const line = useMemo(() => ledgeLine(p.escalations ?? NO_ESCALATIONS, rigs), [p.escalations, rigs]);
-  const attn = useMemo(() => attentionOf(p.sessions, p.waits), [p.sessions, p.waits]);
+  const standalone = useMemo(() => p.sessions.filter(s => isStandalone(s, rigs)), [p.sessions, rigs]);
+  const attn = useMemo(() => attentionOf(p.sessions, p.waits, p.escalations ?? NO_ESCALATIONS, rigs, p.asks), [p.sessions, p.waits, p.escalations, rigs, p.asks]);
   // Sessions near their context limit, less those put away with « Plus tard » (context handover spec §3.2).
-  const near = useMemo(() => nearLimit(p.sessions, p.relief?.later, p.relief?.near), [p.sessions, p.relief?.later, p.relief?.near]);
+  const near = useMemo(() => nearLimit(standalone, p.relief?.later, p.relief?.near), [standalone, p.relief?.later, p.relief?.near]);
   const root = useRef<HTMLElement>(null);
   const keys = useRef({ attn, current, dispatch: p.dispatch, quiet: false });
   keys.current = { attn, current, dispatch: p.dispatch, quiet: p.nav.modal !== null || p.nav.chat || p.actions.pending !== null };
@@ -78,10 +81,12 @@ export function Sidebar(p: {
         (nodes.find(el => el.dataset.treeKey === keys.current.current) ?? nodes[0])?.focus();
         return;
       }
-      if (e.altKey && !e.ctrlKey && !e.metaKey && e.key === 'ArrowDown' && keys.current.attn.length) {
+      if (e.altKey && !e.ctrlKey && !e.metaKey && e.key === 'ArrowDown' && keys.current.attn.some(a => a.kind !== 'escalation')) {
         e.preventDefault();
-        const { attn: items, current: open, dispatch } = keys.current;
-        const i = items.findIndex(a => a.session.id === open);
+        const { dispatch } = keys.current;
+        const items = keys.current.attn.filter((a): a is SessionAttn => a.kind !== 'escalation');
+        if (!items.length) return;
+        const i = items.findIndex(a => a.session.id === keys.current.current);
         const next = items[(i + 1) % items.length]!;
         dispatch({ type: 'open', id: next.session.id, ...(next.helper ? { helper: next.helper.id } : {}) });
       }
@@ -112,6 +117,7 @@ export function Sidebar(p: {
           onOpen={(id, helper, focus) => p.dispatch({ type: 'open', id, ...(helper !== undefined ? { helper } : {}), ...(focus !== undefined ? { focus } : {}) })}
           onDecide={(s, ok) => { p.decisions.decide(s, ok ? 'accept' : 'deny'); }}
           asks={p.asks} onAnswerAsk={p.onAnswerAsk}
+          rigs={rigs} onAnswerEscalation={p.onAnswerEscalation} onSeeEscalation={e => p.dispatch({ type: 'ledge', tab: 'conversation', focus: e.id })}
           near={near} onHandover={id => { void p.relief?.handover(id); }}
           onLater={id => { const s = p.sessions.find(x => x.id === id); if (s) p.relief?.putLater(s); }}
           onMenu={(id, e) => {

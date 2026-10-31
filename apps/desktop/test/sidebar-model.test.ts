@@ -77,7 +77,7 @@ describe('attentionOf', () => {
     const kit = fakeSession('kit', { name: 'Kit', cwd: '/tmp', state: 'waiting_input', lastActivityAt: '2026-10-18T10:12:00.000Z', pending: { kind: 'question', text: 'Quel port ?', source: 'hook' } });
     const nova = fakeSession('nova', { state: 'working' });
     const items = attentionOf([nova, kit, otto], new Map([[otto.id, { since: '2026-10-18T09:48:00.000Z' }]]));
-    expect(items.map(i => [i.session.name, i.helper?.kind, i.kind])).toEqual([
+    expect(items.map(i => (i.kind === 'escalation' ? ['escalation'] : [i.session.name, i.helper?.kind, i.kind]))).toEqual([
       ['Otto', 'Explore', 'approval'],
       ['Kit', undefined, 'question']
     ]);

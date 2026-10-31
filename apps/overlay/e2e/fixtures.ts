@@ -31,8 +31,8 @@ export async function received<T extends ClientMessage['type']>(list: ClientMess
   await expect.poll(() => (found = list.find((m): m is Extract<ClientMessage, { type: T }> => m.type === type && pred(m as Extract<ClientMessage, { type: T }>)))).toBeTruthy();
   return found!;
 }
-/** The app is up and showing the daemon's sessions on the handle. */
-export async function ready(page: Page, bots: number) {
+/** The app is up and Ledge watches the daemon's `sessions` (the handle has no bot row since lot 4: it carries the count). */
+export async function ready(page: Page, sessions: number) {
   await page.goto('/');
-  await expect(layer(page, 'handle').locator('button:not([data-resident]):not([data-overflow]):not(:has([data-update-pip]))')).toHaveCount(bots);
+  await expect(layer(page, 'handle')).toHaveAttribute('data-sessions', String(sessions));
 }

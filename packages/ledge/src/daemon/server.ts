@@ -49,6 +49,11 @@ import type { Bridge } from './openrig/bridge.js';
 import { listSpecs } from './openrig/specs.js';
 import { OpenRigUnreachable } from './openrig/http.js';
 import { pairSession, restorePairs, unpairGone } from './openrig/pairing.js';
+import { createAnswers, type Answers } from './openrig/answer.js';
+import { ANSWER_PATH } from './openrig/facts.js';
+import { createLedgeThread } from './ledgeThread.js';
+import { createLedgeSay } from './ledgeSay.js';
+import { createSeatSend } from './openrig/seatSend.js';
 import { createHandovers, heldNames } from './handover.js';
 import { readContext } from './context.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
@@ -191,7 +196,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   // the login shell's on top of it, as a terminal would.
   const agentEnv = opts.agentEnv ?? (async () => ({ ...process.env, ...(await loginShellEnv()) }));
   const attachments = opts.attachments ?? new AttachmentStore(paths().attachments);
-  const threads = createChatThreads({ attachments, store, tmux, home: paths().dir, userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now, projects: () => projects, forge: createForge({ env: agentEnv }) });
+  const mirror = opts.openrig;
+  const threads = createChatThreads({ attachments, store, tmux, home: paths().dir, userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now, projects: () => projects, forge: createForge({ env: agentEnv }),
+    ...(mirror ? { openrig: () => ({ rigs: mirror.rigs(), escalations: mirror.escalations() }) } : {}) });
   const chat: Chat = opts.chat ?? threads.desktop;
   const router = createRouter({ env: agentEnv });
   const omp = opts.omp ?? createOmpHost({ store, env: agentEnv, dir: join(paths().dir, 'omp'), now, attachments });
@@ -300,10 +307,26 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const asks = createAsks({ store, mailbox, now, ...(opts.asks ? { journal: opts.asks } : {}), onAsk: ask => broadcast({ type: 'ask.updated', ask }) });
   /** The local OpenRig mirror: every change reaches the fronts; a rig gone takes its sessions' seats with it (never on a mere disconnect). */
   const bridge = opts.openrig;
+  /** Ledge's thread (with or without OpenRig): every item, new or grown, reaches the local fronts. */
+  const thread = createLedgeThread({ path: paths().ledgeThread, now });
+  const unsubscribeThread = thread.onItem(item => broadcast({ type: 'ledge.thread.item', item }));
+  const seatSend = bridge ? createSeatSend({ bridge }) : null;
+  /** Messages to Ledge (`ledge.say`): one at a time through the desktop chat, whose `chat.*` every front gets. */
+  const ledgeSay = createLedgeSay({ thread, chat, escalations: id => bridge?.escalation(id), broadcast, tool: () => threads.deviceTool(),
+    // `@seat …` goes to a rig seat; without OpenRig every text is a question to Ledge.
+    toSeat: (rid, text) => (seatSend ? seatSend.fromSay(rid, text) : Promise.resolve(null)) });
+  /** Answers to escalations, the one way to answer them (only with an OpenRig bridge). */
+  const answers: Answers | null = bridge ? createAnswers({
+    port: { escalation: bridge.escalation, patch: bridge.patchEscalation, status: bridge.status, cli: bridge.cli, http: bridge.http,
+      replyRow: bridge.replyRow, setReplyRow: bridge.setReplyRow },
+    asks, path: { kind: ANSWER_PATH }, localMachine: 'local', now }) : null;
   const unsubscribeBridge = bridge?.onMessage(m => {
     broadcast(m);
     if (m.type === 'rig.snapshot' || m.type === 'rig.removed') unpairGone(store, bridge.rigs());
     if (m.type === 'rig.snapshot') restorePairs(store, bridge);
+    // The bridge sends escalation.updated on every change and again after a reconnect: only an id the thread lacks is new.
+    if (m.type === 'escalation.updated' && !thread.hasEscalation(m.escalation.id)) thread.append({ kind: 'escalation', escalationId: m.escalation.id });
+    if (m.type === 'rig.exchange') thread.exchange(m.exchange);
   });
   // The relief of a session whose context is nearly full (context handover spec §3.3). `launch` and `closeSession` are hoisted.
   const handovers = createHandovers({ store, mailbox, launch: req => launch(req), close: s => closeSession(s),
@@ -369,7 +392,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     for (const [id, lines] of previews) if (store.get(id)) reply({ type: 'session.preview', id, lines });
     reply({ type: 'chat.history', turns: chat.history() });
     reply(contextMsg()); // the context threshold (context handover spec §3.2)
-    if (bridge) for (const m of bridge.replay()) reply(m); // last: the OpenRig mirror (status, rigs, escalations)
+    if (bridge) for (const m of bridge.replay()) reply(m); // then the OpenRig mirror (status, rigs, escalations)
+    reply({ type: 'ledge.thread.history', ...thread.page() }); // last: Ledge's thread, whose items name those escalations
   };
   const preview = (id: string, lines: string[]) => {
     if (!store.get(id)) return;
@@ -1280,8 +1304,30 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         catch (e) { log(`openrig: specs not listed: ${(e as Error).message}`); return reply({ ...base, specs: [], error: e instanceof OpenRigUnreachable ? 'openrig_down' : 'failed' }); }
       }
       // OpenRig writes and Ledge's own voice come in later lots.
-      case 'rig.act': case 'rig.prepare': case 'rig.launch': case 'rig.adopt': case 'rig.send': case 'escalation.answer': case 'ledge.say':
-      case 'ledge.thread.request': case 'mandate.update': case 'rule.set': case 'decision.revisit': case 'category.escalate': case 'brain.set':
+      case 'ledge.thread.request': return reply({ type: 'ledge.thread.history', ...thread.page(msg.before) });
+      // To the sender only: every client learns the escalation's new state from the bridge's escalation.updated.
+      case 'escalation.answer': {
+        if (!answers) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'openrig_down', reason: "OpenRig n'est pas branché" });
+        const r = await answers.answer(msg.id, msg.answers, msg.by);
+        return reply(r.ok ? { type: 'rig.result', rid: msg.rid, ok: true } : { type: 'rig.result', rid: msg.rid, ok: false, code: r.code, reason: r.reason });
+      }
+      // To the sender: accepted as soon as the user item is in the thread; the answer reaches every front through the thread.
+      case 'ledge.say': {
+        if (msg.text.trim() === '') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'invalid', reason: 'empty message' });
+        const answered = ledgeSay.say(msg.rid, msg.text, msg.about);
+        reply({ type: 'rig.result', rid: msg.rid, ok: true });
+        return answered;
+      }
+      // Writing to a seat; to the sender only. The Desktop routes another machine's seats to its own daemon (lot 6).
+      case 'rig.send': {
+        if (msg.machine !== 'local') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'unreachable', reason: `machine ${msg.machine} is not this daemon's` });
+        if (msg.text.trim() === '' || msg.seatRef.startsWith('-')) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'invalid', reason: 'empty message or bad seat' });
+        if (!bridge || !seatSend) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'openrig_down', reason: "OpenRig n'est pas branché" });
+        const r = await seatSend.send(msg.machine, msg.seatRef, msg.text);
+        return reply(r.ok ? { type: 'rig.result', rid: msg.rid, ok: true } : { type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: r.reason });
+      }
+      case 'rig.act': case 'rig.prepare': case 'rig.launch': case 'rig.adopt':
+      case 'mandate.update': case 'rule.set': case 'decision.revisit': case 'category.escalate': case 'brain.set':
         return notYet();
       // A refusal of the service (an unknown pairing, a sign-in while disabled) reaches the sender as an `error`.
       case 'mobile.set': case 'mobile.signin': case 'mobile.signin.cancel': case 'mobile.signout': case 'mobile.retry':
@@ -1420,6 +1466,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     labelExited,
     asks,
     projects: () => projects,
-    close: () => new Promise(res => { clearInterval(sweepTimer); unsubscribe(); unsubscribeBridge?.(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
+    close: () => new Promise<void>(res => { clearInterval(sweepTimer); unsubscribe(); unsubscribeBridge?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
   };
 }

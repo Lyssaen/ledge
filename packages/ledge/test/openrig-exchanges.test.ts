@@ -21,6 +21,10 @@ describe('exchangeFromEvent', () => {
     expect(exchangeFromEvent(q({ type: 'queue.updated' }), ctx)).toBeNull();
     expect(exchangeFromEvent(q({ sourceSession: 'a@x', destinationSession: 'b@y' }), ctx)).toBeNull();
   });
+  it("marks Ledge's own rows (from ledge@external) as kind ledge", () => {
+    expect(exchangeFromEvent(q({ sourceSession: 'ledge@external' }), ctx)).toMatchObject({ id: 'q-42', kind: 'ledge', from: 'ledge@external', rigId: 'starter' });
+    expect(exchangeFromOutbox({ outboxId: 'outbox-9', senderSession: 'ledge@external', destinationSession: 'b@starter', body: 'hi' }, ctx)).toMatchObject({ kind: 'ledge' });
+  });
   it('uses the receiver rig when the sender has none', () => {
     expect(exchangeFromEvent(q({ sourceSession: 'a@x' }), ctx)?.rigId).toBe('starter');
   });

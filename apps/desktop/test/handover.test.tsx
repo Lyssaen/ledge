@@ -52,17 +52,6 @@ describe('a session near its context limit (context handover spec §3.2)', () =>
     expect(await side.findByText('Otto · context 75 %')).toBeVisible();
   });
 
-  it('« The point » lists it as « Your turn » does; « Later » in « Your turn » puts it away from both', async () => {
-    const { side, user } = await boot({ home: true, projects: PROJECTS, sessions: [fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'idle', context: ctx(170_000) })] });
-    const point = within(await screen.findByRole('region', { name: 'The point' }));
-    const row = (await point.findByText('Otto · context 85 %')).closest('.lp-row') as HTMLElement;
-    expect(within(row).getByRole('button', { name: 'Hand over' })).toBeVisible();
-    expect(side.getByText('Otto · context 85 %')).toBeVisible();
-    await user.click(within(side.getByText('Otto · context 85 %').closest('.st-card') as HTMLElement).getByRole('button', { name: 'Later' }));
-    await waitFor(() => expect(side.queryByText(/Otto · context/)).toBeNull());
-    expect(point.queryByText(/Otto · context/)).toBeNull();
-  });
-
   it('« Later » puts it away until it grows by 5 points; a failed relief is listed with its reason', () => {
     const s = (id: string, used: number, extra = {}) => fakeSession(id, { name: id, context: ctx(used), ...extra });
     expect(nearLimit([s('a', 170_000), s('b', 100_000), s('c', 170_000, { handover: { state: 'briefing', at: AT } }), s('d', 170_000, { state: 'exited' })]).map(x => x.id)).toEqual(['a']);

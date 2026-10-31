@@ -1,8 +1,10 @@
 import { actionCopy } from '@ledge/ui/chat/actionCopy';
+import { MANDATE_CATEGORY_LABEL } from '@ledge/protocol';
 import type { Messages } from './messages';
 
 /** English counts only 1 as singular. */
 const pluralEn = (n: number, one: string, many: string) => (n === 1 ? one : many);
+const solo = (n: number) => `${n} standalone ${pluralEn(n, 'session', 'sessions')}`;
 const andList = (xs: readonly string[]) => new Intl.ListFormat('en', { type: 'conjunction' }).format(xs);
 
 /** Desktop's copy in English, shaped by the French (see messages.ts, which loads it on demand). */
@@ -416,20 +418,44 @@ export const en: Messages = {
     unconfirmed: (name) => `${name} was not moved: Ledge did not confirm. Try again.`
   },
   home: {
-    operator: (sessions: number, machines: number) => `Operator · sees ${sessions} ${sessions === 1 ? 'session' : 'sessions'}, ${machines} ${machines === 1 ? 'machine' : 'machines'} · read only`,
+    header: (rigs, agents, sessions) => `OpenRig orchestrator · ${rigs} ${pluralEn(rigs, 'rig', 'rigs')}, ${agents} ${pluralEn(agents, 'agent', 'agents')} · ${solo(sessions)} · settles within its mandate`,
+    solo,
     tabsLabel: 'Ledge views',
-    tabs: { conversation: 'Conversation', rigs: 'Rigs', history: 'History' },
+    tabs: { conversation: 'Conversation', rigs: 'Rigs', mandat: 'Mandate' },
     rigsCount: (n) => (n > 0 ? `Rigs · ${n}` : 'Rigs'),
     toAtelier: 'Back to the atelier',
-    point: {
-      title: 'The point', yours: 'Yours',
-      summarize: 'Summarise the day', summarizeQuestion: 'Summarise the day: what moved, what waits for my decision, what is stuck.',
-      nothingYours: 'Nothing waits for you.', allow: 'Yes', deny: 'No', see: 'See'
-    },
-    suggestions: ['Who needs me?', 'Where are my sessions at?'] as readonly string[],
-    readOnly: 'read only · nothing without your click',
+    thread: 'Ledge’s thread', older: 'See older',
+    placeholder: "Write to Ledge… (@build for a rig's agent)",
+    suggest: { launch: 'Launch a rig…', whereIs: (rig) => `Where is ${rig} at?`, sessions: 'Where are my sessions at?', decided: 'What did you settle?', needsMe: 'Who needs me?' },
+    footer: 'settles within its mandate · design, architecture and critical calls come back to you',
     mentions: 'Mention', mentionSession: (name: string) => `session ${name}`,
-    history: { none: 'No conversation today.', open: 'See in the conversation' }
+    talkAbout: (summary) => `About « ${summary} »: `,
+    mandat: { title: 'Mandate', body: "Ledge's mandate arrives with its brain." },
+    rail: {
+      label: 'Ledge rail', yours: (n) => `Your turn · ${n}`, rigs: (n) => `Rigs · ${n}`,
+      collapsed: (yours, rigs) => `Your turn · ${yours} · Rigs · ${rigs}`,
+      atWork: (name, n, m) => `${name} ${n}/${m} at work`, table: 'Table',
+      settled: (n) => `Settled today · ${n}`, revisit: 'Revisit',
+      summarise: 'Summarise the day', summarisePrompt: 'Summarise my day: what the rigs did, what I settled, what is waiting for me.'
+    }
+  },
+  ledgeThread: {
+    days: { today: 'TODAY', yesterday: 'YESTERDAY', date: (day) => `${day.slice(8, 10)}/${day.slice(5, 7)}` },
+    age: { now: 'just now', minutes: (n) => `${n} min`, hours: (n) => `${n} h`, days: (n) => `${n} d`, ago: (span) => `${span} ago` },
+    category: (c) => MANDATE_CATEGORY_LABEL[c].en,
+    bubbles: { ledge: 'Ledge', you: 'You' },
+    escalation: {
+      advice: (text) => `My view: ${text}`, talk: 'Talk about it', grace: 'Ledge is on it…',
+      answeredByYou: (label) => `Answered by you: ${label}`, answeredByLedge: (label) => `Settled by Ledge: ${label}`,
+      alreadyAnswered: 'Already answered', closed: 'Closed', refused: (code, reason) => reason ?? `Failed (${code})`,
+      seen: 'Seen', askLabel: 'Your answer', askPlaceholder: 'Answer…', send: 'Send'
+    },
+    exchanges: {
+      count: (n) => (n === 1 ? '1 exchange' : `${n} exchanges between agents`), fold: 'Fold', unfold: 'See',
+      missing: (n) => (n === 1 ? '1 exchange no longer available' : `${n} exchanges no longer available`),
+      kind: { task: 'task', message: 'message', handoff: 'handover', ledge: 'Ledge' }
+    },
+    decided: { line: (to, summary) => `I settled for ${to}: ${summary}`, rule: (rule) => `Rule ${rule}`, revisit: 'Revisit' }
   },
   rigsTab: {
     tabs: 'Rig views',

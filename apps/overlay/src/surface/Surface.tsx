@@ -7,14 +7,14 @@ import { useDaemon, daemonStore } from '../daemon/store';
 import type { DaemonClient } from '../daemon/client';
 import { useMachines } from '../daemon/machines';
 import type { DocumentOrigin } from '../documents/useDocumentReader';
-import { botState, poseFor } from '../bots/poseFor';
 import type { ResidentGesture } from '../bots/ResidentMascot';
-import { groupSessions } from '@ledge/fleet';
+import { groupSessions, sayToLedge } from '@ledge/fleet';
 import { displayOrder, headersBefore } from './groups';
 import { FILET, LEDGE_ID, scaledLayout, SIZES, SURFACE_CHROME_Y, type IslandPosition, type Layout } from './geometry';
 import { createSurfaceController } from './controller';
 import type { SurfaceState } from './machine';
-import { Handle, type HandleBot } from './Handle';
+import { Handle, type HandleMeasure } from './Handle';
+import { useHandleLine } from './useHandleLine';
 import { UnreadSay, UNREAD_SAY_BOX, SAY_TAIL_X } from './UnreadSay';
 import { pickSay, pickSpeaker, sayKindOf, SAY_LINGER_MS, type SayCandidate } from './say';
 import { Bubble, type BubbleAck } from './Bubble';
@@ -23,9 +23,9 @@ import { openInLedge, subscribeOpenInLedge } from '../desktop/openInLedge';
 import { SettingsView } from './SettingsView';
 import { HelpView } from './HelpView';
 import { HelperView } from './HelperView';
-import { TurnThumbs } from './TurnThumbs';
 import { LaunchView, LAUNCH_FOOTER_H, type LaunchRequest } from './LaunchView';
-import { ChatView, CHAT_HEADER_H, CHAT_COMPOSER_H } from './ChatView';
+import { CHAT_HEADER_H, CHAT_COMPOSER_H } from './ChatView';
+import { LedgeFeed } from './LedgeFeed';
 import { loadOpenTab } from './openTabPreference';
 import { DETAIL_HEADER_H } from './DetailHeader';
 import { useMeasuredHeight } from './useMeasuredHeight';
@@ -112,7 +112,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   // Geometry, pointer and frames are in real px; the handle layer is zoomed by `hs`, the opened views by `ps`. A
   // measured view (bubble, session, settings, help) reports its base height: its client rect divided by `ps`.
   const hs = handleScale, ps = panelScale;
-  const { sessions: daemonSessions, byId, status, previews, threads, lastError, errors, recents, launcher, lastLaunched, lastListing, chat, chatLive } = useDaemon();
+  const { sessions: daemonSessions, byId, status, previews, threads, lastError, errors, recents, launcher, lastLaunched, lastListing, chat } = useDaemon();
   const machines = useMachines(client);
   const launchMachine = client.fleet?.selected();
   const chosenMachine = machines.find(m => m.id === launchMachine);
@@ -146,7 +146,6 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
     if (st.mode !== 'reader' && reader.state.current) reader.close();
     if (st.mode === 'handle' || st.mode === 'bubble') documentSourceFocus.current = null;
   }, [st.mode, reader.state.current, reader.close]);
-  const [hoverId, setHoverId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const surfaceRef = useRef<HTMLDivElement>(null);
   const pointer = useRef<{ x: number; y: number } | null>(null);
@@ -355,9 +354,10 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
     surfaceRef.current?.querySelector<HTMLTextAreaElement>('[data-layer="session"] [data-reply]')?.focus();
   }, [st.mode, st.selectedId]);
 
-  // The finishing bot is big from the moment its notice is due until the bubble folds.
-  const liftedId = st.queue.length === 0 && st.done.length > 0 && (st.unfoldDue || (st.mode === 'bubble' && st.bubbleKind === 'finished')) ? st.done[0] : null;
-  const bots: HandleBot[] = useMemo(() => sessions.map(s => ({ id: s.id, name: s.name, tool: s.tool, state: botState(s), pose: poseFor(s.id, s.state), pending: isPending(s), lifted: s.id === liftedId, held: !!finishedUnread[s.id], readOnly: s.source === 'hook_only', machine: s.machineId })), [sessions, liftedId, finishedUnread]);
+  // The closed notch is Ledge alone (lot 4): its line, and the widths it and the trailing slot measure, size it.
+  const line = useHandleLine(client, sessions, t);
+  const [handleSizes, setHandleSizes] = useState<HandleMeasure>({ line: 0, trailing: 0 });
+  const onHandleMeasure = useCallback((m: HandleMeasure) => setHandleSizes(p => (p.line === m.line && p.trailing === m.trailing ? p : m)), []);
   const previousResident = useRef({ ids: new Set(sessions.map(s => s.id)), pending: new Set(sessions.filter(isPending).map(s => s.id)) });
   const signalCounter = useRef(0);
   const [residentSignal, setResidentSignal] = useState<{ key: number; kind: ResidentGesture }>();
@@ -382,10 +382,18 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
       setLedgePreview(turn.answer?.trim() || undefined);
       sounds.onChange({ kind: 'finished', id: LEDGE_ID });
       if (finishedBubble && !dnd) dispatch({ type: 'finished', id: LEDGE_ID });
-      if (ctl.state().mode !== 'chat') { setLedgeUnread(true); setLedgeSaySeed(turn.qid); }
       setResidentSignal({ key: ++signalCounter.current, kind: 'happy' });
     }
   }, [chat]); // eslint-disable-line react-hooks/exhaustive-deps -- finishedBubble/dnd/sounds read the live values of this render
+  // Unread: a new element of Ledge's thread while the notch is not open on it (an answer finished, a decision in message, one
+  // Ledge settled), never the user's own messages nor the exchanges between agents (the closed notch already shows those).
+  // Live items only: the history sent on connect is not news.
+  useEffect(() => client.onMessage(m => {
+    if (m.type !== 'ledge.thread.item') return;
+    const i = m.item;
+    const news = (i.kind === 'ledge' && !i.pending && !!i.text) || i.kind === 'decided' || i.kind === 'escalation';
+    if (news && ctl.state().mode !== 'chat') { setLedgeUnread(true); setLedgeSaySeed(i.id); }
+  }), [client, ctl]);
   useEffect(() => { if (st.mode === 'chat') setLedgeUnread(false); }, [st.mode]);
   useEffect(() => {
     if ((st.mode !== 'session' && st.mode !== 'peek') || !st.selectedId) return;
@@ -592,7 +600,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const strip = useDelayed(discreet && covered && st.mode === 'handle' && !st.hot && !st.hovering && bandPointer === null && !sayShown, STRIP_BACK_MS);
   // The resting filet wakes into the compact island and its robots while the pointer is over it or near it, or the keyboard is in it.
   const awake = st.mode === 'handle' && !strip && (st.hovering || st.hot || st.focusWithin || bandPointer !== null);
-  const geo = scaledLayout({ bots: bots.map(b => ({ id: b.id, pending: b.pending || !!b.lifted || !!b.held, machine: b.machine })), mode: st.mode, screenH, screenW, position: islandPosition, strip, awake, pip: !!updatePip, dnd, readerExpanded: st.documentExpanded, bubbleH: st.mode === 'peek' ? (peekH ? peekH + SURFACE_CHROME_Y : undefined) : bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH, helperH, detailH: st.mode === 'chat' ? chatBody : detailBody ? DETAIL_HEADER_H + detailBody + SURFACE_CHROME_Y : undefined, askH: ASK_H, reading: st.reading, groups: groups.length, listExtraH: (focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0) + noticeExtraH + (disconnected.length ? 28 : 0) }, { handle: hs, panel: ps });
+  const geo = scaledLayout({ bots: sessions.map(s => ({ id: s.id, pending: isPending(s), machine: s.machineId })), line: handleSizes.line, trailing: handleSizes.trailing, mode: st.mode, screenH, screenW, position: islandPosition, strip, awake, pip: !!updatePip, dnd, readerExpanded: st.documentExpanded, bubbleH: st.mode === 'peek' ? (peekH ? peekH + SURFACE_CHROME_Y : undefined) : bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH, helperH, detailH: st.mode === 'chat' ? chatBody : detailBody ? DETAIL_HEADER_H + detailBody + SURFACE_CHROME_Y : undefined, askH: ASK_H, reading: st.reading, groups: groups.length, listExtraH: (focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0) + noticeExtraH + (disconnected.length ? 28 : 0) }, { handle: hs, panel: ps });
   geoRef.current = geo;
   // The shell watches the top band over the island's span (its depth and overhang are the shell's own constants).
   const hot = visible ? { left: Math.round(geo.handle.left), w: Math.round(geo.handle.w) } : HIDDEN_HOT;
@@ -696,8 +704,8 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   // The status line hangs centred under the island (its scale); the unread say hangs under its speaker, the coachmark under the panel, both at the windows' size.
   const statusW = sizes.status.w || STATUS_BOX.w * hs, statusH = sizes.status.h || STATUS_BOX.h * hs;
   const statusLeft = geo.left + geo.w / 2 - statusW / 2, statusTop = geo.h + 6 * hs;
-  const saySlot = speaker && speaker.id !== LEDGE_ID ? geo.slots.find(s => s.id === speaker.id) : undefined;
-  const speakerX = saySlot ? saySlot.center : geo.left + (FILET.pad + FILET.ledge / 2) * hs;
+  // Every balloon hangs under Ledge: the notch has no bot row to hang a session's from.
+  const speakerX = geo.left + (FILET.pad + FILET.ledge / 2) * hs;
   const sayLeft = speakerX - SAY_TAIL_X * ps, sayTop = geo.h + 4 * ps;
   if (sayShown) extras.push({ left: sayLeft, top: sayTop, w: sizes.say.w || UNREAD_SAY_BOX.w * ps, h: sizes.say.h || UNREAD_SAY_BOX.h * ps });
   if (unreachable) extras.push({ left: statusLeft, top: statusTop, w: statusW, h: statusH });
@@ -718,11 +726,9 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
     r.click(); r.focus();
   };
   const openRow = (id: string) => dispatch({ type: 'rowClick', id });
-  /** Asks Ledge: the turn appears at once in the store, the daemon streams its steps and answer back. */
+  /** Writes to Ledge (`ledge.say`, lot 4): the message and Ledge's answer come back in its thread, which the open notch shows. */
   const ask = (text: string) => {
-    const qid = `q-${crypto.randomUUID()}`;
-    daemonStore.beginTurn({ qid, question: text, askedAt: new Date().toISOString(), steps: [] });
-    send({ type: 'chat.ask', qid, text, tool: defaultTool });
+    sayToLedge(client, text);
     if (ctl.state().mode !== 'chat') dispatch({ type: 'chat' });
   };
   useKeyboard({
@@ -762,7 +768,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
         style={{ position: 'absolute', left: geo.left, top: 0, width: geo.w, height: geo.h, boxSizing: 'border-box', overflow: 'clip', background: 'var(--notch)', color: 'var(--sidebar-foreground)', borderRadius: `0px 0px ${radius}px ${radius}px`, opacity: unreachable ? 0.6 : 1, willChange: 'left, width, height',
           transition: surfaceTransition }}>
         <div data-zoom="handle" style={{ position: 'absolute', left: 0, top: 0, zoom: hs }}>
-          <Handle updatePip={updatePip} updateVersion={updateVersion} onUpdate={() => openInLedge({ kind: 'update' })} bots={bots} slots={geo.slots} visible={st.mode === 'handle'} strip={strip} awake={awake} hoverId={hoverId} onHover={setHoverId} onOpen={id => dispatch({ type: 'botClick', id })} onOpenHome={() => dispatch({ type: ledgeUnread ? 'chat' : 'homeClick' })} left={geo.left} scale={hs} pointer={st.mode === 'handle' ? residentPointer : null} residentSignal={residentSignal} unread={ledgeUnread} shortcut={shortcut} sayId={sayShown && speaker && speaker.id !== LEDGE_ID ? speaker.id : null} dnd={dnd} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
+          <Handle updatePip={updatePip} updateVersion={updateVersion} onUpdate={() => openInLedge({ kind: 'update' })} sessions={sessions.length} line={line} onMeasure={onHandleMeasure} visible={st.mode === 'handle'} strip={strip} awake={awake} onOpenHome={() => dispatch({ type: ledgeUnread ? 'chat' : 'homeClick' })} left={geo.left} scale={hs} pointer={st.mode === 'handle' ? residentPointer : null} residentSignal={residentSignal} unread={ledgeUnread} shortcut={shortcut} dnd={dnd} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
         </div>
         <div data-zoom="panel" style={{ position: 'absolute', left: 0, top: 0, zoom: ps }}>
         <Bubble ref={bubbleRef} kind={st.bubbleKind} elapsedMs={st.bubbleId ? elapsed[st.bubbleId] : undefined} preview={st.bubbleId === LEDGE_ID ? ledgePreview : offlineMachine ? offlineMachine.label : undefined} session={bubbleSession} moreCount={Math.max(0, st.queue.length - 1)} visible={st.mode === 'bubble'} paused={bubblePaused} remainingMs={ctl.bubbleRemaining() ?? undefined}
@@ -786,16 +792,16 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
               onAsk={ask} onOpenChat={() => dispatch({ type: 'chat' })} onTyping={on => dispatch({ type: 'typing', on })} askDisabled={chatOffline !== null} />
           </div>
           <div aria-hidden={st.mode !== 'chat' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'chat' ? 'auto' : 'none', transform: `translateX(${st.mode === 'chat' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
-            <ChatView contentRef={chatRef} turnImages={turn => <TurnThumbs client={client} turn={turn} />} turns={chat} live={chatLive} sessions={sessions} visible={st.mode === 'chat'} enterDelay={enter} offline={chatOffline}
-              showBack={false}
+            <LedgeFeed client={client} contentRef={chatRef} sessions={sessions} visible={st.mode === 'chat'} enterDelay={enter} offline={chatOffline}
               headerExtra={<IslandMenu open={menuOpen && st.mode === 'chat'} dnd={dnd} onToggle={() => setMenuOpen(o => !o)} onClose={() => setMenuOpen(false)} onSettings={() => { setMenuOpen(false); openInLedge({ kind: 'settings' }); }} onDnd={onToggleDnd} onQuit={() => { setMenuOpen(false); void quitApp(); }} />}
-              turnAvailable={turnReady}
-              onAsk={ask} onCancel={qid => send({ type: 'chat.cancel', qid })} onReset={() => send({ type: 'chat.reset' })} onClose={() => { setMenuOpen(false); dispatch({ type: 'close' }); }} onOpenSession={id => openInLedge({ kind: 'session', id })}
-              launchingQid={chatLaunching} launchingRows={chatLaunching ? launchedFrom.current.map(x => x.row) : null} onLaunchProposal={launchProposal} onTerminal={id => openInLedge({ kind: 'terminal', id })}
-              closingQid={chatClosing} closingRows={chatClosing ? closedFrom.current.map(x => x.row) : null} onCloseSessions={closeSessions}
-              onAct={actionCards.act} actingQid={actionCards.actingQid} actingRows={actionCards.actingRows} onIgnoreCards={actionCards.ignore} onDenyAction={actionCards.deny}
-              relayingQid={relaying} onRelay={qid => relayCard('session.relay', qid)} onRelayCancel={qid => relayCard('session.relay.cancel', qid)}
-              theme={theme} frozen={unreachable} reducedMotion={reducedMotion} onDocument={ref => openInLedge({ kind: 'document', path: ref.path })} />
+              onSettings={() => openInLedge({ kind: 'settings' })} onClose={() => { setMenuOpen(false); dispatch({ type: 'close' }); }} onOpenSession={id => openInLedge({ kind: 'session', id })}
+              onDocument={ref => openInLedge({ kind: 'document', path: ref.path })} theme={theme} frozen={unreachable} reducedMotion={reducedMotion}
+              cards={{ sessions, offline: chatOffline, turnAvailable: turnReady, onOpenSession: id => openInLedge({ kind: 'session', id }), onTerminal: id => openInLedge({ kind: 'terminal', id }),
+                launchingQid: chatLaunching, launchingRows: chatLaunching ? launchedFrom.current.map(x => x.row) : null, onLaunchProposal: launchProposal,
+                closingQid: chatClosing, closingRows: chatClosing ? closedFrom.current.map(x => x.row) : null, onCloseSessions: closeSessions,
+                onAct: actionCards.act, actingQid: actionCards.actingQid, actingRows: actionCards.actingRows, onIgnoreCards: actionCards.ignore, onDenyAction: actionCards.deny,
+                relayingQid: relaying, onRelay: qid => relayCard('session.relay', qid), onRelayCancel: qid => relayCard('session.relay.cancel', qid),
+                theme, reducedMotion }} />
           </div>
           <div aria-hidden={st.mode !== 'launch' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'launch' ? 'auto' : 'none', transform: `translateX(${st.mode === 'launch' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
             <LaunchView key={`${launchOpen}-${launchMachine ?? ''}`} contentRef={launchRef} visible={st.mode === 'launch'} enterDelay={enter} recents={recents} sessions={sessions.filter(s => !launchMachine || s.machineId === launchMachine)} offline={unreachable || (chosenMachine && !chosenMachine.ready) ? t.offline : null} busy={!!launching} failure={launchFailure}

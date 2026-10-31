@@ -6,7 +6,7 @@ import type { ClientMessage, OpenRigStatus, Projects, Rig, RigSeat, RigSpecInfo,
 import { forgetRigSpecs, type DaemonClient } from '@ledge/fleet';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { LangProvider } from '../src/i18n/lang';
-import { RigsTab, visibleRigs } from '../src/rigs/RigsTab';
+import { RigsTab, rigsCount, visibleRigs } from '../src/rigs/RigsTab';
 import { initialNav, navReducer, type NavAction, type NavState } from '../src/nav/state';
 
 const PROJECTS: Projects = { projects: [{ id: 'ledge', name: 'Ledge', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] }], rules: [] };
@@ -69,8 +69,8 @@ describe('the Rigs tab of the Ledge screen', () => {
     renderTab();
     await screen.findByRole('tab', { name: 'Specs · 2' });
     const tabs = screen.getByRole('tablist', { name: 'Vues des rigs' });
-    expect(within(tabs).getAllByRole('tab').map(t => t.textContent)).toEqual(['En cours · 3', 'Specs · 2', 'Agents · 8']);
-    expect(within(tabs).getByRole('tab', { name: 'En cours · 3' })).toHaveAttribute('aria-selected', 'true');
+    expect(within(tabs).getAllByRole('tab').map(t => t.textContent)).toEqual(['En cours · 2', 'Specs · 2', 'Agents · 8']);
+    expect(within(tabs).getByRole('tab', { name: 'En cours · 2' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getAllByRole('article').map(a => a.getAttribute('aria-label'))).toEqual(['factory', 'starter', 'Noyau OpenRig']);
     const factory = within(card('factory'));
     expect(card('factory')).toHaveTextContent('rig · 6 sièges · dans Ledge · ⎇ feat/rigs · spec factory');
@@ -134,6 +134,14 @@ describe('the Rigs tab of the Ledge screen', () => {
   it('visibleRigs : les rigs d’une machine où OpenRig ne répond pas ne comptent pas', () => {
     const remote: Rig = { ...STARTER, id: 'r9', machine: 'dev' };
     expect(visibleRigs([FACTORY, remote], [RUNNING, { machine: 'dev', state: 'stopped' }])).toEqual([FACTORY]);
+  });
+
+  it('rigsCount : une seule règle pour « Rigs · n » et « En cours · n », les rigs visibles hors noyau (arrêtés compris)', () => {
+    const remote: Rig = { ...STARTER, id: 'r9', machine: 'dev' };
+    expect(rigsCount([KERNEL, FACTORY, STARTER], [RUNNING])).toBe(2);
+    expect(rigsCount([KERNEL, FACTORY, { ...STARTER, lifecycle: 'stopped' }], [RUNNING])).toBe(2);
+    expect(rigsCount([KERNEL, FACTORY, remote], [RUNNING, { machine: 'dev', state: 'stopped' }])).toBe(1);
+    expect(rigsCount([KERNEL], [RUNNING])).toBe(0);
   });
 
   it('lancement en cours : « 4/7 prêts » et « attend ta confiance dans le dossier »', () => {

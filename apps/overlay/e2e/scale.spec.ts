@@ -11,15 +11,14 @@ const storeScales = (page: import('@playwright/test').Page, s: { handle?: string
 test.describe('4K work area', () => {
   test.use({ viewport: { width: 3840, height: 2160 } });
 
-  test('both on Auto: the handle and its bots at 2x, the windows at their base size', async ({ page }) => {
+  test('both on Auto: the handle and Ledge at 2x, the windows at their base size', async ({ page }) => {
     await fakeDaemon(page, team());
     await ready(page, 3);
     await expect(page.locator('html')).toHaveAttribute('data-handle-scale', '2');
     await expect(page.locator('html')).toHaveAttribute('data-panel-scale', '1');
-    await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(filetWidth([3]) * 2, 0);
-    const bots = layer(page, 'handle').locator('button:not([data-resident]):not(:has([data-update-pip]))');
-    await expect.poll(async () => (await box(bots.nth(0))).width).toBeCloseTo(10, 0); // a dash: 5 x 2
-    await expect.poll(async () => (await box(bots.nth(2))).width).toBeCloseTo(10, 0);
+    await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(filetWidth([]) * 2, 0);
+    const mark = layer(page, 'handle').locator('[data-ledge-mark]');
+    await expect.poll(async () => (await box(mark)).width).toBeCloseTo(18, 0); // Ledge's rectangle: 9 x 2
     // Still on the top edge, centred on the real screen. Hovering it does not open a panel.
     const s = await box(surface(page));
     expect(s.y).toBe(0); expect(Math.abs(s.x + s.width / 2 - 1920)).toBeLessThan(4);
@@ -28,13 +27,13 @@ test.describe('4K work area', () => {
     await expectMode(page, 'handle');
   });
 
-  test('hovering the 2x handle leaves it folded while a new companion arrives', async ({ page }) => {
+  test('hovering the 2x handle leaves it folded while a new session arrives', async ({ page }) => {
     const d = await fakeDaemon(page, team());
     await ready(page, 3);
     await hoverHandle(page);
     await page.mouse.move(1920, 200, { steps: 4 });
     d.upsert(session('d', { name: 'Zed' }));
-    await expect(layer(page, 'handle').getByRole('button', { name: /Zed/ })).toBeVisible();
+    await expect(layer(page, 'handle')).toHaveAttribute('data-sessions', '4');
     await page.waitForTimeout(900);
     await expectMode(page, 'handle');
   });
@@ -43,7 +42,7 @@ test.describe('4K work area', () => {
     await storeScales(page, { panel: '1.5' });
     const d = await fakeDaemon(page, [session('a'), session('b', { name: 'Pim' })]);
     await ready(page, 2);
-    await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(filetWidth([2]) * 2, 0); // the notch keeps its Auto 200 %
+    await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(filetWidth([]) * 2, 0); // the notch keeps its Auto 200 %
     d.upsert(session('b', { name: 'Pim', state: 'waiting_permission', pending: { kind: 'permission', text: 'Run pnpm test', source: 'hook' } }));
     await expectMode(page, 'bubble');
     await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(440 * 1.5, 0);
@@ -69,6 +68,6 @@ test('at 1920x1080 both Autos stay at 100%', async ({ page }) => {
   await ready(page, 3);
   await expect(page.locator('html')).toHaveAttribute('data-handle-scale', '1');
   await expect(page.locator('html')).toHaveAttribute('data-panel-scale', '1');
-  await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(filetWidth([3]), 0);
-  await expect.poll(async () => (await box(layer(page, 'handle').locator('button:not([data-resident]):not(:has([data-update-pip]))').nth(0))).width).toBeCloseTo(5, 0);
+  await expect.poll(async () => (await box(surface(page))).width).toBeCloseTo(filetWidth([]), 0);
+  await expect.poll(async () => (await box(layer(page, 'handle').locator('[data-ledge-mark]'))).width).toBeCloseTo(9, 0);
 });

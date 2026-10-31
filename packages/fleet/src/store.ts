@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { isArchived, type ChatTurn, type DaemonInfo, type Recent, type ServerMessage, type Session, type ThreadItem } from '@ledge/protocol';
+import { isArchived, type ChatTurn, type LedgeThreadItem, type DaemonInfo, type Recent, type ServerMessage, type Session, type ThreadItem } from '@ledge/protocol';
 import type { DaemonClient, DaemonStatus } from './client';
 
 /** A daemon `error` reply; `seq` tells two identical messages apart. */
@@ -8,6 +8,15 @@ export interface DaemonError { id?: string; message: string; seq: number; /** Le
 export const ERRORS_KEPT = 20;
 /** The daemon's last `session.launched` answer (to this client's `session.launch`); `seq` tells two apart. */
 export interface Launched { id: string; seq: number }
+export interface AnswerAttempt { id: string; result?: { ok: boolean; code?: string; reason?: string } }
+/** How many answer attempts the store remembers. */
+export const ANSWERS_KEPT = 50;
+/** Upsert by id (a known id is replaced in place), then sort by `at`; arrival order breaks ties. */
+export function mergeThread(items: readonly LedgeThreadItem[], incoming: readonly LedgeThreadItem[]): LedgeThreadItem[] {
+  const out = [...items];
+  for (const it of incoming) { const at = out.findIndex(i => i.id === it.id); if (at >= 0) out[at] = it; else out.push(it); }
+  return out.sort((a, b) => a.at.localeCompare(b.at));
+}
 export interface DaemonState {
   /** The live sessions (archived ones excluded). */
   sessions: Session[];
@@ -29,12 +38,16 @@ export interface DaemonState {
   daemon: DaemonInfo | null;
   /** How many snapshots arrived (one per connection), so a reconnect after a restart is detectable. */
   snapshotSeq: number;
+  /** The Ledge thread (local daemon only), oldest first; `threadBefore` = cursor of the older page, absent when none. */
+  ledgeThread: LedgeThreadItem[]; threadBefore?: string; threadLoading: boolean;
+  /** The escalation answers sent, by rid, with the daemon's `rig.result` once it came. */
+  answering: Map<string, AnswerAttempt>;
   /** The daemon's last update.progress / update.failed message; `seq` tells two identical ones apart. */
   lastUpdate: { msg: Extract<ServerMessage, { type: 'update.progress' | 'update.failed' }>; seq: number } | null;
 }
 /** The daemon's last `folder.listing` answer (to this client's `folder.list` or `folder.create`); `seq` tells two apart. */
 export type FolderListing = Omit<Extract<ServerMessage, { type: 'folder.listing' }>, 'type'> & { seq: number };
-const empty = (): DaemonState => ({ sessions: [], archived: [], byId: new Map(), status: 'connecting', previews: new Map(), threads: new Map(), lastError: null, errors: [], recents: [], launcher: null, lastLaunched: null, lastListing: null, chat: [], chatLive: null, daemon: null, snapshotSeq: 0, lastUpdate: null });
+const empty = (): DaemonState => ({ sessions: [], archived: [], byId: new Map(), status: 'connecting', previews: new Map(), threads: new Map(), lastError: null, errors: [], recents: [], launcher: null, lastLaunched: null, lastListing: null, chat: [], chatLive: null, daemon: null, snapshotSeq: 0, ledgeThread: [], threadLoading: false, answering: new Map(), lastUpdate: null });
 const archivedOf = (m: Map<string, Session>) => [...m.values()].filter(isArchived).sort((a, b) => (b.archivedAt ?? '').localeCompare(a.archivedAt ?? '') || a.id.localeCompare(b.id));
 let state: DaemonState = empty();
 const subs = new Set<() => void>();
@@ -48,7 +61,29 @@ export const daemonStore = {
   reset() { state = empty(); emit(); },
   /** The overlay lists its own question at once; the daemon's events fill it in. */
   beginTurn(turn: ChatTurn) { state = { ...state, chat: [...state.chat.filter(t => t.qid !== turn.qid), turn], chatLive: null }; emit(); },
+  /** A request for the older page is on its way. */
+  beginThreadLoad() { state = { ...state, threadLoading: true }; emit(); },
+  /** An escalation answer was sent under `rid`. */
+  beginAnswer(rid: string, id: string) { state = { ...state, answering: new Map([...state.answering, [rid, { id }]].slice(-ANSWERS_KEPT) as [string, AnswerAttempt][]) }; emit(); },
+  /** Settles an attempt without a result yet (no answer in time). */
+  settleAnswer(rid: string, result: NonNullable<AnswerAttempt['result']>) {
+    const a = state.answering.get(rid); if (!a || a.result) return;
+    state = { ...state, answering: new Map(state.answering).set(rid, { ...a, result }) }; emit();
+  },
   apply(m: ServerMessage) {
+    if (m.type === 'ledge.thread.history') {
+      // The page asked for (loading) goes before what is held; a history after a snapshot is the newest page, merged in.
+      const older = state.threadLoading;
+      const heldOlder = state.ledgeThread.length > 0 && m.items.length > 0 && state.ledgeThread[0]!.at < m.items.reduce((lo, i) => (i.at < lo ? i.at : lo), m.items[0]!.at);
+      const threadBefore = older || !heldOlder ? m.before : state.threadBefore;
+      const { threadBefore: _o, ...rest } = state;
+      state = { ...rest, ledgeThread: mergeThread(state.ledgeThread, m.items), threadLoading: false, ...(threadBefore !== undefined ? { threadBefore } : {}) }; emit(); return;
+    }
+    if (m.type === 'ledge.thread.item') { state = { ...state, ledgeThread: mergeThread(state.ledgeThread, [m.item]) }; emit(); return; }
+    if (m.type === 'rig.result') {
+      const a = state.answering.get(m.rid); if (!a) return;
+      state = { ...state, answering: new Map(state.answering).set(m.rid, { ...a, result: { ok: m.ok, ...(m.code ? { code: m.code } : {}), ...(m.reason ? { reason: m.reason } : {}) } }) }; emit(); return;
+    }
     if (m.type === 'chat.history') { state = { ...state, chat: m.turns, chatLive: null }; emit(); return; }
     if (m.type === 'chat.step' || m.type === 'chat.delta' || m.type === 'chat.done' || m.type === 'chat.error') {
       const chat = state.chat.map(t => t.qid !== m.qid ? t

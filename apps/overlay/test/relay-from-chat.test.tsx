@@ -5,6 +5,7 @@ import type { DaemonClient } from '../src/daemon/client';
 import { daemonStore } from '../src/daemon/store';
 import { Surface } from '../src/surface/Surface';
 import { fakeSession } from './mockDaemon';
+import { answerSay } from './ledgeSay';
 
 const bridge = vi.hoisted(() => ({ focusOverlay: vi.fn(async () => {}), releaseFocus: vi.fn(async () => {}), focusTerminal: vi.fn(async (_t: string) => true) }));
 vi.mock('../src/tauri/bridge', async orig => ({ ...(await orig<typeof import('../src/tauri/bridge')>()), ...bridge }));
@@ -23,9 +24,8 @@ function askAndRelay(): { qid: string; turn: (r: ChatRelay) => ChatTurn } {
   act(() => { fireEvent.keyDown(window, { key: 'l', ctrlKey: true, altKey: true }); });
   const input = screen.getByRole('textbox', { name: 'Ask Ledge' });
   fireEvent.change(input, { target: { value: 'tell Otto to run the overlay tests' } }); fireEvent.keyDown(input, { key: 'Enter' });
-  const ask = sent.find(m => m.type === 'chat.ask') as Extract<ClientMessage, { type: 'chat.ask' }>;
   const at = new Date().toISOString();
-  apply({ type: 'chat.done', qid: ask.qid, text: 'I will pass it on to Otto.', at, relay });
+  const ask = answerSay(sent, { answer: 'I will pass it on to Otto.', relay });
   return { qid: ask.qid, turn: r => ({ qid: ask.qid, question: ask.text, askedAt: at, steps: [], answer: 'I will pass it on to Otto.', answeredAt: at, relay: r }) };
 }
 const card = () => screen.getByRole('region', { name: 'Instruction to send' });

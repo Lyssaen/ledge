@@ -1,4 +1,5 @@
 import { actionCopy } from '@ledge/ui/chat/actionCopy';
+import { MANDATE_CATEGORY_LABEL, type Exchange, type MandateCategory } from '@ledge/protocol';
 import type { SoundCategory } from '../sounds/preferences';
 import type { BotState } from '../bots/poseFor';
 import type { SshProblem } from '../daemon/machines';
@@ -23,6 +24,39 @@ const fr = {
   /** The bot's accessible state, read after the tool name. */
   botLabel: { starting: 'Démarrage', working: 'Au travail', approval: 'Attend votre accord', question: 'A une question', idle: 'Disponible', error: 'Erreur', done: 'Terminée', readonly: 'Lecture seule' } as Record<BotState, string>,
   botReadOnly: 'Lecture seule',
+  /** The closed notch's line beside Ledge (lot 4, `nn-closed-*`): « who : what » and the line's accessible names. */
+  notchLine: {
+    summary: (who: string, what: string) => `${who} : ${what}`,
+    exchange: (rig: string, from: string, to: string, text: string) => `${rig} · ${from} → ${to} : ${text}`,
+    forYou: (category: string | undefined, summary: string, n: number) => `${category ? `${category} · ` : ''}${summary ? `${summary} · ` : ''}${n} pour toi`
+  },
+  /** Ledge's thread (lot 4), as Desktop says it: the words `@ledge/ui`'s thread components read (`LedgeThreadCopyProvider`). */
+  ledgeThread: {
+    days: { today: 'AUJOURD’HUI', yesterday: 'HIER', date: (day: string) => `${day.slice(8, 10)}/${day.slice(5, 7)}` },
+    age: { now: 'à l’instant', minutes: (n: number) => `${n} min`, hours: (n: number) => `${n} h`, days: (n: number) => `${n} j`, ago: (span: string) => `il y a ${span}` },
+    category: (c: MandateCategory) => MANDATE_CATEGORY_LABEL[c].fr,
+    bubbles: { ledge: 'Ledge', you: 'Toi' },
+    escalation: {
+      advice: (text: string) => `Mon avis : ${text}`, talk: 'En parler', grace: 'Ledge s\'en occupe…',
+      answeredByYou: (label: string) => `Répondu par toi : ${label}`, answeredByLedge: (label: string) => `Tranché par Ledge : ${label}`,
+      alreadyAnswered: 'Déjà répondu', closed: 'Fermée', refused: (code: string, reason?: string) => reason ?? `Échec (${code})`,
+      seen: 'Vu', askLabel: 'Ta réponse', askPlaceholder: 'Répondre…', send: 'Envoyer'
+    },
+    exchanges: {
+      count: (n: number) => (n === 1 ? '1 échange' : `${n} échanges entre agents`), fold: 'Replier', unfold: 'Voir',
+      missing: (n: number) => (n === 1 ? '1 échange plus disponible' : `${n} échanges plus disponibles`),
+      kind: { task: 'tâche', message: 'message', handoff: 'relève', ledge: 'Ledge' } as Record<Exchange['kind'], string>
+    },
+    decided: { line: (to: string, summary: string) => `J'ai tranché pour ${to} : ${summary}`, rule: (rule: string) => `Règle ${rule}`, revisit: 'Revenir dessus' }
+  },
+  /** The open notch (lot 4, `nn-open.png`): Ledge's mixed feed, its filter and its composer. */
+  feed: {
+    subtitle: (rigs: number, agents: number) => `Orchestre ${rigs} ${plural(rigs, 'rig', 'rigs')} · ${agents} ${plural(agents, 'agent', 'agents')} · tranche dans son mandat`,
+    onlyLedge: 'Seulement Ledge', placeholder: 'Écrire à Ledge… (@build pour un agent)', thread: 'Fil de Ledge', settings: 'Réglages',
+    you: 'Toi', ledge: 'Ledge', toYou: 'toi', decision: 'décision',
+    talkAbout: (summary: string) => `À propos de « ${summary} » : `,
+    emptyTitle: 'Rien dans le fil pour l’instant.', emptyHint: 'Les échanges de tes agents, ce que Ledge tranche et tes messages arriveront ici.'
+  },
   resident: { name: 'Ledge', offline: 'Ledge · connexion perdue', tip: (n: number) => n === 0 ? 'Aucune session · cliquer pour ouvrir' : `${n} session${n > 1 ? 's' : ''} · cliquer pour ouvrir`, unread: 'a répondu', unreadTip: 'Ledge a répondu · cliquer pour ouvrir', strip: (n: number) => n === 0 ? 'Ledge, aucune session, ouvrir' : `Ledge, ${n} session${n > 1 ? 's' : ''}, ouvrir`, more: (n: number) => `${n} autre${n > 1 ? 's' : ''} session${n > 1 ? 's' : ''}, ouvrir la liste` },
   say: {
     ledge: ['Hey ! Je t’ai répondu !', 'C’est prêt, jette un œil.', 'Voilà ce que j’en pense.', 'Je t’attendais là-dessus.'],
@@ -264,6 +298,36 @@ const en: Messages = {
   state: { approval: 'Approval', question: 'Question', starting: 'Starting', idle: 'Available', working: 'Running', done: 'Done', error: 'Error', readonly: 'Read only' },
   botLabel: { starting: 'Starting', working: 'Working', approval: 'Needs your approval', question: 'Has a question', idle: 'Available', error: 'Error', done: 'Finished', readonly: 'Read-only' },
   botReadOnly: 'Read-only',
+  notchLine: {
+    summary: (who, what) => `${who}: ${what}`,
+    exchange: (rig, from, to, text) => `${rig} · ${from} → ${to}: ${text}`,
+    forYou: (category, summary, n) => `${category ? `${category} · ` : ''}${summary ? `${summary} · ` : ''}${n} for you`
+  },
+  ledgeThread: {
+    days: { today: 'TODAY', yesterday: 'YESTERDAY', date: (day) => `${day.slice(8, 10)}/${day.slice(5, 7)}` },
+    age: { now: 'just now', minutes: (n) => `${n} min`, hours: (n) => `${n} h`, days: (n) => `${n} d`, ago: (span) => `${span} ago` },
+    category: (c) => MANDATE_CATEGORY_LABEL[c].en,
+    bubbles: { ledge: 'Ledge', you: 'You' },
+    escalation: {
+      advice: (text) => `My view: ${text}`, talk: 'Talk about it', grace: 'Ledge is on it…',
+      answeredByYou: (label) => `Answered by you: ${label}`, answeredByLedge: (label) => `Settled by Ledge: ${label}`,
+      alreadyAnswered: 'Already answered', closed: 'Closed', refused: (code, reason) => reason ?? `Failed (${code})`,
+      seen: 'Seen', askLabel: 'Your answer', askPlaceholder: 'Answer…', send: 'Send'
+    },
+    exchanges: {
+      count: (n) => (n === 1 ? '1 exchange' : `${n} exchanges between agents`), fold: 'Fold', unfold: 'See',
+      missing: (n) => (n === 1 ? '1 exchange no longer available' : `${n} exchanges no longer available`),
+      kind: { task: 'task', message: 'message', handoff: 'handover', ledge: 'Ledge' }
+    },
+    decided: { line: (to, summary) => `I settled for ${to}: ${summary}`, rule: (rule) => `Rule ${rule}`, revisit: 'Revisit' }
+  },
+  feed: {
+    subtitle: (rigs, agents) => `Orchestrates ${rigs} ${plural(rigs, 'rig', 'rigs')} · ${agents} ${plural(agents, 'agent', 'agents')} · settles within its mandate`,
+    onlyLedge: 'Only Ledge', placeholder: 'Write to Ledge… (@build for an agent)', thread: 'Ledge’s thread', settings: 'Settings',
+    you: 'You', ledge: 'Ledge', toYou: 'you', decision: 'decision',
+    talkAbout: (summary) => `About « ${summary} »: `,
+    emptyTitle: 'Nothing in the thread yet.', emptyHint: 'Your agents’ exchanges, what Ledge settles and your messages will show up here.'
+  },
   resident: { name: 'Ledge', offline: 'Ledge · connection lost', tip: (n: number) => n === 0 ? 'No sessions · click to open' : `${n} session${n > 1 ? 's' : ''} · click to open`, unread: 'replied', unreadTip: 'Ledge replied · click to open', strip: (n: number) => n === 0 ? 'Ledge, no sessions, open' : `Ledge, ${n} session${n > 1 ? 's' : ''}, open`, more: (n: number) => `${n} more session${n > 1 ? 's' : ''}, open the list` },
   say: {
     ledge: ['Hey! I answered you!', "It's ready, take a look.", "Here's what I think.", "I've been waiting on this."],

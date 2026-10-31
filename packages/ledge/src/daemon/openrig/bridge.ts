@@ -5,7 +5,7 @@ import { EVENTS, EVENTS_UNOBSERVED, HUMAN_ADDRESS, HUMAN_GATE_TIER, HUMAN_ID, OP
 import { createOpenRigHttp, OpenRigUnreachable, type Fetch, type OpenRigHttp } from './http.js';
 import { openEventStream, type EventStream, type OpenRigEvent } from './sse.js';
 import { createCursorWriter, readOpenRigFile } from './cursor.js';
-import { createRigCli, realRigExec, type RigExec } from './cli.js';
+import { createRigCli, realRigExec, type RigCli, type RigExec } from './cli.js';
 import { probeOpenRig } from './presence.js';
 import { createMirror } from './mirror.js';
 import { parseSessionName } from './seats.js';
@@ -33,11 +33,27 @@ export interface BridgeDeps {
   now?: () => string;
   notice?: (text: string) => void;
 }
+/** Fields to change on an escalation; a key set to `undefined` is removed (a rollback drops `answer`). */
+export type EscalationPatch = { [K in keyof Escalation]?: Escalation[K] | undefined };
+/** An answered (or in-flight) escalation stays visible this long after its last patch, whatever OpenRig re-reads say. */
+export const PATCH_TTL_MS = 24 * 3600_000;
+
 export interface Bridge {
   start(): Promise<void>; stop(): Promise<void>;
   /** The HTTP client of the current OpenRig, null before the first probe. */
   http(): OpenRigHttp | null;
+  /** The `rig` CLI (lot 4: `queueCreate`). */
+  cli(): RigCli;
   status(): OpenRigStatus; rigs(): Rig[]; escalations(): Escalation[]; exchanges(rigId: string): Exchange[];
+  /** One escalation as clients see it (patches included). */
+  escalation(id: string): Escalation | undefined;
+  /** Lays `p` over the escalation and broadcasts `escalation.updated`; undefined (nothing sent) for an unknown id. The patched
+   *  escalation outlives re-reads, and the closing of its row, for PATCH_TTL_MS. A patch that brings it back to its row as read
+   *  drops the overlay (rollback); one back to `pending`/`grace` without answer whose row is gone removes it. */
+  patchEscalation(id: string, p: EscalationPatch): Escalation | undefined;
+  /** The reply row noted for an escalation (openrig.json `replyRows`). */
+  replyRow(id: string): string | undefined;
+  setReplyRow(id: string, row: string): void;
   /** Messages to replay after each `snapshot`: openrig.status, rig.snapshot, then one escalation.updated per escalation. */
   replay(): BridgeMessage[];
   onMessage(fn: (m: BridgeMessage) => void): () => void;
@@ -77,7 +93,7 @@ export function createBridge(deps: BridgeDeps): Bridge {
 
   let status: OpenRigStatus = { machine, state: 'stopped' }; let human: 'registered' | 'missing' | 'failed' = 'missing';
   let active = false; let armed = false; let probed = false;
-  let base = ''; let http: OpenRigHttp | null = null;
+  let base = ''; let bearer: string | undefined; let http: OpenRigHttp | null = null;
   let writer: ReturnType<typeof createCursorWriter> | null = null; let cursor: number | null = null; let knownRigs: string[] = [];
   let gen = 0; let stream: EventStream | null = null; let live = false;
   let probing: Promise<void> | null = null; let starting: Promise<void> | null = null; let failedAt: number | null = null; let autoFailed = false;
@@ -97,9 +113,22 @@ export function createBridge(deps: BridgeDeps): Bridge {
   const setHuman = (h: typeof human) => { human = h; if (status.state === 'running') setStatus('running', { version: status.version }); };
   const removeRig = (rigId: string) => { xlog.forgetRig(rigId); refetchers.delete(rigId); nodesByRig.delete(rigId); emit({ type: 'rig.removed', machine, rigId }); };
   const emitRigs = (r: { updated: Rig[]; removed: string[] }) => { for (const rig of r.updated) emit({ type: 'rig.updated', rig }); r.removed.forEach(removeRig); };
+  // Patched escalations (answered, in flight, rolled to grace…), laid over the books: a re-read rebuilds rows as `pending` and
+  // drops closed ones, which would erase « Répondu par toi ». Masked ids get no broadcast from the books.
+  const overlay = new Map<string, { e: Escalation; at: number }>();
+  const booked = (id: string) => rigBook.get(id) ?? askBook.get(id);
+  const sweep = () => {
+    const t = Date.parse(now());
+    for (const [id, o] of [...overlay]) {
+      if (t - o.at <= PATCH_TTL_MS) continue;
+      overlay.delete(id); const b = booked(id);
+      emit(b ? { type: 'escalation.updated', escalation: b } : { type: 'escalation.removed', id });
+    }
+  };
   const emitEsc = (r: { updated: Escalation[]; removed: string[] }) => {
-    for (const escalation of r.updated) emit({ type: 'escalation.updated', escalation });
-    for (const id of r.removed) emit({ type: 'escalation.removed', id });
+    sweep();
+    for (const escalation of r.updated) if (!overlay.has(escalation.id)) emit({ type: 'escalation.updated', escalation });
+    for (const id of r.removed) if (!overlay.has(id)) emit({ type: 'escalation.removed', id });
   };
   const emitExchange = (x: Exchange | null) => { if (x && xlog.add(x)) emit({ type: 'rig.exchange', exchange: x }); };
   const saveRigs = () => { const names = mirror.rigs().map(r => r.name); if (!isDeepStrictEqual(names, knownRigs)) { knownRigs = names; writer?.set(machine, { rigs: names }); } };
@@ -264,8 +293,9 @@ export function createBridge(deps: BridgeDeps): Bridge {
   }
 
   async function probe() {
-    const b = openrigBase(await deps.env());
-    if (b !== base || !http) { if (http) { disconnect(); setStatus('stopped'); } base = b; http = createOpenRigHttp({ base, fetch: deps.fetch }); }
+    const env = await deps.env(); const b = openrigBase(env); const token = env.OPENRIG_AUTH_BEARER_TOKEN || undefined;
+    if (b !== base || !http) { if (http) { disconnect(); setStatus('stopped'); } base = b; bearer = token; http = createOpenRigHttp({ base, fetch: deps.fetch, token }); }
+    else if (token !== bearer) { bearer = token; http = createOpenRigHttp({ base, fetch: deps.fetch, token }); } // same daemon, new token: the connection stays
     const p = await probeOpenRig(probeWith(http));
     if (!active) return;
     const first = armed; armed = false; probed = true;
@@ -296,13 +326,19 @@ export function createBridge(deps: BridgeDeps): Bridge {
     return { machine, rigId: hit.rig.id, rigName: hit.rig.name, seat: sessionName, pod: p.pod, member: p.member };
   }
 
-  const escalations = () => [...rigBook.all(), ...askBook.all()];
+  const escalations = () => {
+    sweep();
+    const list = [...rigBook.all(), ...askBook.all()]; const ids = new Set(list.map(e => e.id));
+    return [...list.map(e => overlay.get(e.id)?.e ?? e), ...[...overlay.values()].filter(o => !ids.has(o.e.id)).map(o => o.e)];
+  };
+  const escalation = (id: string) => { sweep(); return overlay.get(id)?.e ?? booked(id); };
+  const cursorFile = () => (writer ??= createCursorWriter({ file: deps.file, now }));
 
   return {
     async start() {
       if (active) return; active = true; armed = true;
       const m = readOpenRigFile(deps.file).machines[machine]; knownRigs = m?.rigs ?? []; cursor = m?.lastEventId ?? null;
-      writer = createCursorWriter({ file: deps.file, now });
+      cursorFile();
       if (deps.asks) { unsubAsks = deps.asks.onChange(syncAsks); syncAsks(); }
       probeTimer = every(probeMs, tick); void tick();
     },
@@ -312,9 +348,22 @@ export function createBridge(deps: BridgeDeps): Bridge {
       unsubAsks?.(); unsubAsks = null;
       await writer?.flush();
     },
-    http: () => http,
+    http: () => http, cli: () => cli,
     status: () => status, rigs: () => mirror.rigs(), exchanges: rigId => xlog.list(rigId),
-    escalations,
+    escalations, escalation,
+    patchEscalation(id, p) {
+      const cur = escalation(id); if (!cur) return undefined;
+      const next = { ...cur, ...p } as Escalation;
+      for (const k of Object.keys(p) as (keyof Escalation)[]) if (p[k] === undefined) delete next[k];
+      const b = booked(id);
+      if (b && isDeepStrictEqual(b, next)) overlay.delete(id);
+      else if (!b && (next.state === 'pending' || next.state === 'grace') && !next.answer) { overlay.delete(id); emit({ type: 'escalation.removed', id }); return next; }
+      else overlay.set(id, { e: next, at: Date.parse(now()) });
+      emit({ type: 'escalation.updated', escalation: next });
+      return next;
+    },
+    replyRow: id => cursorFile().replyRow(id),
+    setReplyRow: (id, row) => cursorFile().setReplyRow(id, row),
     replay() {
       return [{ type: 'openrig.status', status }, { type: 'rig.snapshot', machine, rigs: mirror.rigs() },
         ...escalations().map((escalation): BridgeMessage => ({ type: 'escalation.updated', escalation }))];

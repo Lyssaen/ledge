@@ -51,7 +51,7 @@ describe('the sidebar shell', () => {
     await waitFor(() => expect(entry).toHaveTextContent('A decision is waiting for you · factory'));
     expect(entry).toHaveAccessibleName(/1 unread$/);
     const cards = [...document.querySelectorAll('.st-attn .st-card')];
-    expect(cards.map(c => (c.matches('[data-ask]') ? 'ask' : c.matches('[data-near]') ? 'near' : 'session'))).toEqual(['session', 'session', 'ask', 'near']);
+    expect(cards.map(c => (c.matches('[data-ask]') ? 'ask' : c.matches('[data-near]') ? 'near' : c.matches('[data-escalation]') ? 'escalation' : 'session'))).toEqual(['session', 'session', 'escalation', 'ask', 'near']);
     const card = document.querySelector<HTMLElement>('[data-ask="a1b2c34"]')!;
     expect(within(card).getByText('Decision')).toBeVisible();
     expect(within(card).getByText('from Nova')).toBeVisible();
@@ -75,7 +75,7 @@ describe('the sidebar shell', () => {
     expect(tree.getByText('main')).toBeVisible();
   });
 
-  it('no question field in the sidebar any more: / goes home, its composer focused, and Enter there sends chat.ask', async () => {
+  it('no question field in the sidebar any more: / goes home, its composer focused, and Enter there sends ledge.say', async () => {
     // One machine: with two, the fleet sends chat.route instead of chat.ask (chat.test boots the same way).
     const { d, user, side } = await boot({ projects: TWO_PROJECTS, sessions: listSessions(), machines: [{ id: 'local', label: 'Local' }] });
     expect(side.queryByRole('textbox')).toBeNull();
@@ -85,7 +85,8 @@ describe('the sidebar shell', () => {
     await waitFor(() => expect(field).toHaveFocus());
     await user.keyboard('hello{Enter}');
     expect(screen.queryByRole('complementary', { name: 'Chat Ledge' })).toBeNull();
-    await waitFor(() => expect(d.received).toContainEqual({ type: 'chat.ask', qid: expect.stringMatching(/^q-/), text: 'hello', tool: 'claude' }));
+    await waitFor(() => expect(d.received).toContainEqual({ type: 'ledge.say', rid: expect.any(String), text: 'hello' }));
+    expect(d.received.some(m => m.type === 'chat.ask')).toBe(false);
   });
 
   it('a ? beside Settings lists the shortcuts in its tooltip and opens their dialog', async () => {
