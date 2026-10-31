@@ -30,6 +30,14 @@ describe('treeModel', () => {
     expect(groups.flatMap(g => g.branches.flatMap(b => b.sessions)).map(s => s.id)).toEqual([build.id]);
   });
 
+  it('the brain session is not listed in Projets, with or without rigs', () => {
+    const otto = fakeSession('otto', { cwd: '/w/ledge' });
+    const brain = fakeSession('Ledge', { cwd: '/home/u/.ledge/brain', brain: true });
+    const ids = (rigs?: ReturnType<typeof aRig>[]) => treeModel([otto, brain], TWO_PROJECTS, idOf, rigs).flatMap(g => g.branches.flatMap(b => b.sessions)).map(s => s.id);
+    expect(ids()).toEqual([otto.id]);
+    expect(ids([aRig('r1')])).toEqual([otto.id]);
+  });
+
   it('without rigs, nothing is filtered', () => {
     const build = fakeSession('build', { cwd: '/w/ledge', rig: rigOf('r1') });
     expect(treeModel([build], TWO_PROJECTS, idOf).flatMap(g => g.branches.flatMap(b => b.sessions))).toEqual([build]);
@@ -82,6 +90,11 @@ describe('attentionOf', () => {
       ['Kit', undefined, 'question']
     ]);
     expect(items[0]!.since).toBe('2026-10-18T09:48:00.000Z');
+  });
+
+  it('the brain session never lands in À toi', () => {
+    const brain = fakeSession('brain', { name: 'Ledge', brain: true, state: 'waiting_input', pending: { kind: 'question', text: 'Trust?', source: 'hook' } });
+    expect(attentionOf([brain], new Map())).toEqual([]);
   });
 });
 

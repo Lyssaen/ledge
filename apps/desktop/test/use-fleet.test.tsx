@@ -18,6 +18,14 @@ describe('useFleet', () => {
     await waitFor(() => expect(client.fleet!.machinesSource()).toBe('daemon'));
     unmount(); await d.close();
   });
+  it('the brain session is not among the sessions Desktop lists (C27)', async () => {
+    const d = await createMockDaemon(); d.upsert(fakeSession('otto')); d.upsert(fakeSession('brain', { name: 'Ledge', brain: true }));
+    const client = createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket });
+    const { result, unmount } = renderHook(() => useFleet(client));
+    await waitFor(() => expect(result.current.machines[0]?.status).toBe('open'));
+    await waitFor(() => expect(result.current.sessions.map(s => s.id)).toEqual(['local:otto']));
+    unmount(); await d.close();
+  });
   it('flags localDown only once local is unreachable, never while connecting', async () => {
     const d = await createMockDaemon(); const url = d.url; await d.close();   // nothing listens any more
     const client = createDesktopFleet({ url, WebSocketImpl: WebSocket });

@@ -55,14 +55,14 @@ function projectGroup(id: string | null, name: string, sessions: readonly Sessio
   };
 }
 
-/** `rigs`: the seats of a known rig leave the tree (they live in the Rigs section); without it nothing is filtered. */
+/** `rigs`: the seats of a known rig leave the tree (they live in the Rigs section); without it only the brain session leaves. */
 export function treeModel(
   sessions: readonly Session[],
   projects: Projects | null,
   projectIdOf: (s: Session) => string | null,
   rigs?: readonly Rig[]
 ): ProjectGroup[] {
-  if (rigs) sessions = sessions.filter(s => isStandalone(s, rigs));
+  sessions = sessions.filter(s => isStandalone(s, rigs ?? []));
   if (!projects) return [projectGroup(null, UNASSIGNED, sessions)];
   const groups = projects.projects.map(p =>
     projectGroup(p.id, p.name, sessions.filter(s => projectIdOf(s) === p.id))
@@ -122,7 +122,7 @@ export function attentionOf(
   const items: AttnItem[] = [];
   for (const session of sessions) {
     if (session.offline) continue;
-    if (rigs && !isStandalone(session, rigs)) continue;
+    if (!isStandalone(session, rigs ?? [])) continue;
     if (asking.has(`${session.machineId ?? 'local'}\u0000${session.name}`)) continue;
     const kind = attnKind(session.state);
     if (!kind) continue;

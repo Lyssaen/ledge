@@ -100,9 +100,11 @@ export function seatAt(rigs: readonly Rig[], machine: string, rigId: string, who
 /**
  * Whether a session belongs in Projets: false only when a rig of the same machine has a running seat (any seat of a kernel, hidden
  * ones included) paired to this very session id. Everything else stays (no rig, unknown rig, stopped seat, pairing race, seat paired
- * to another session), so a session is never missing from both Projets and Rigs.
+ * to another session), so a session is never missing from both Projets and Rigs. The brain session (`brain: true`) is never standalone.
  */
 export function isStandalone(s: Session, rigs: readonly Rig[]): boolean {
+  // Ledge's own brain (lot 7) is never a session of the user's: no list shows it (C27).
+  if (s.brain) return false;
   const r = s.rig;
   if (!r) return true;
   return !rigs.some(x => x.machine === r.machine && x.seats.some(seat => seat.sessionId === s.id && seat.state !== 'stopped'));

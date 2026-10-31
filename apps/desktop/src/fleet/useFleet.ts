@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { attachClient, createDaemonClient, createFleetClient, loadMachines, LOCAL_MACHINE, useDaemon, useMachines, type DaemonClient, type DaemonError, type DaemonStatus, type Fleet, type MachineState } from '@ledge/fleet';
 import type { Session } from '@ledge/protocol';
 import { daemonTokenSource } from '../tauri/bridge';
@@ -21,7 +21,7 @@ let singleton: DaemonClient | null = null;
 const defaultClient = (): DaemonClient => (singleton ??= createDesktopFleet());
 
 export interface FleetView {
-  sessions: Session[]; /** The archived sessions, most recently archived first. */ archived: Session[]; machines: MachineState[]; status: DaemonStatus; fleet: Fleet; client: DaemonClient; localDown: boolean;
+  /** The live sessions, the brain session (lot 7) left out. */ sessions: Session[]; /** The archived sessions, most recently archived first. */ archived: Session[]; machines: MachineState[]; status: DaemonStatus; fleet: Fleet; client: DaemonClient; localDown: boolean;
   /** The daemon's last `error` reply (a refused decision, a machine offline at send), its session id qualified. */
   lastError: DaemonError | null;
   /** The last errors (a refused send, a machine offline at send), oldest first, the session ids qualified. */
@@ -45,5 +45,7 @@ export function useFleet(client: DaemonClient = defaultClient()): FleetView {
   const machines = useMachines(client);
   // Only a settled failure counts: the first machine starts as 'connecting', which must not flash the notice at boot.
   const localDown = machines[0]?.status === 'unreachable';
-  return { sessions: daemon.sessions, archived: daemon.archived, machines, status: daemon.status, fleet: client.fleet!, client, localDown, lastError: daemon.lastError, errors: daemon.errors, lastLaunched: daemon.lastLaunched };
+  // Ledge's brain session is the daemon's, not one of the user's: no Desktop list shows it (C27).
+  const sessions = useMemo(() => (daemon.sessions.some(s => s.brain) ? daemon.sessions.filter(s => !s.brain) : daemon.sessions), [daemon.sessions]);
+  return { sessions, archived: daemon.archived, machines, status: daemon.status, fleet: client.fleet!, client, localDown, lastError: daemon.lastError, errors: daemon.errors, lastLaunched: daemon.lastLaunched };
 }
