@@ -9,7 +9,7 @@ import { openImage } from './openImage.js';
 import { SCREENS, screenSize, TuiContext, type Kept, type KeyHandler, type Screen, type Tui } from './context.js';
 import type { Glyphs } from './glyphs.js';
 import { I18nProvider, MESSAGES, type Lang } from './i18n/lang.js';
-import { keepSelection, listed, overview } from './model/overview.js';
+import { keepSelection, listed, openDecisions, overview } from './model/overview.js';
 import { asked, notification, title, type NotifyMode } from './notify.js';
 import { Overview } from './screens/Overview.js';
 import { SessionScreen } from './screens/Session.js';
@@ -101,10 +101,10 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
   useEffect(() => {
     if (seen.current) for (const text of asked(seen.current, d.sessions, t.notify)) write(notification(text, notify, env));
     seen.current = d.byId;
-    // Written again only when it changes: every session update would otherwise send it.
-    const next = title(t.notify.title(listed(d.sessions).filter(isPending).length));
+    // Written again only when it changes: every session update would otherwise send it. The decisions waiting count too.
+    const next = title(t.notify.title(listed(d.sessions).filter(isPending).length + openDecisions(tasks).length));
     if (next !== titled.current) { titled.current = next; write(next); }
-  }, [d.byId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [d.byId, tasks]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const actions = useActions({ client, sessions: d.sessions, errors: d.errors, t, toast });
 
