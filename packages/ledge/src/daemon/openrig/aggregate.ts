@@ -14,6 +14,8 @@ export interface RigAggregate {
   exchanges(machine: string, rigId: string): Exchange[] | null;
   /** Lays a local state (an answer waiting in the queue, lot 6 Task 6) over a remote escalation, broadcast again; null takes it off. */
   overlay(id: string, patch: Partial<Escalation> | null): void;
+  /** The projects changed: a rig.snapshot again for each remote machine, its rigs filed in the projects as they are now. */
+  refresh(): void;
 }
 
 interface Resync { seen: Set<string>; snapshot: boolean; timer: NodeJS.Timeout | null }
@@ -25,8 +27,10 @@ const SETTLE_MS = 1000;
 /**
  * A peer's daemon replays its status, its rig.snapshot then every escalation after each `snapshot` (bridge.replay), and
  * nothing of OpenRig after them. So the escalations it no longer has are those missing from that burst: the burst ends at
- * the peer's first message that is not an escalation after its rig.snapshot, or `settleMs` after its last message.
- * A live rig.snapshot (the peer's OpenRig reconnecting) is not followed by the escalations, so only a peer `open` starts a resync.
+ * the peer's first message that is not an escalation after its rig.snapshot, or `settleMs` after its last message. The timer
+ * starts only at that rig.snapshot (an open peer knows OpenRig, so it always replays one): the frames before it (machines,
+ * projects, chat history…) may be slow over SSH. A live rig.snapshot (the peer's OpenRig reconnecting) is not followed by the
+ * escalations, so only a peer `open` starts a resync. Overlays are never dropped here: the answer queue (Task 6) owns them.
  */
 export function createRigAggregate(opts: { bridge: Bridge; remote: RemotePeers; machines: () => Machines; projects: () => Projects; settleMs?: number }): RigAggregate {
   const { bridge, remote } = opts; const settleMs = opts.settleMs ?? SETTLE_MS;
@@ -52,7 +56,7 @@ export function createRigAggregate(opts: { bridge: Bridge; remote: RemotePeers; 
   const over = (e: Escalation): Escalation => { const o = overlays.get(e.id); return o ? { ...e, ...o } : e; };
   const remoteEsc = (id: string): Escalation | undefined => { const m = owner.get(id); return m ? peers.get(m)?.escs.get(id) : undefined; };
 
-  const dropEscalation = (p: Remote, id: string) => { p.escs.delete(id); owner.delete(id); overlays.delete(id); emit({ type: 'escalation.removed', id }); };
+  const dropEscalation = (p: Remote, id: string) => { p.escs.delete(id); owner.delete(id); emit({ type: 'escalation.removed', id }); };
   const stopResync = (p: Remote) => { if (p.resync?.timer) clearTimeout(p.resync.timer); p.resync = null; };
   const finishResync = (p: Remote) => {
     const r = p.resync; if (!r) return; stopResync(p);
@@ -84,9 +88,10 @@ export function createRigAggregate(opts: { bridge: Bridge; remote: RemotePeers; 
       return;
     }
     const p = peer(machine);
-    if (s === 'open') { stopResync(p); p.resync = { seen: new Set(), snapshot: false, timer: null }; arm(p); return; }
+    if (s === 'open') { stopResync(p); p.resync = { seen: new Set(), snapshot: false, timer: null }; return; }
     if (s === 'unreachable') return markUnreachable(p, { machine, state: 'unreachable' });
-    markUnreachable(p, { machine, state: 'unsupported', detail: `Ledge sur ${labelOf(machine)} ne connaît pas OpenRig : mets-le à jour` });
+    const v = remote.version(machine);
+    markUnreachable(p, { machine, state: 'unsupported', detail: `Ledge ${v ? `${v} ` : ''}sur ${labelOf(machine)} ne connaît pas OpenRig : mets-le à jour` });
   });
 
   remote.onMessage((machine, m: RemoteMessage) => {
@@ -94,7 +99,7 @@ export function createRigAggregate(opts: { bridge: Bridge; remote: RemotePeers; 
     if (r) {
       if (m.type === 'escalation.updated') r.seen.add(m.escalation.id);
       if (r.snapshot && m.type !== 'escalation.updated' && m.type !== 'escalation.removed') finishResync(p);
-      else { if (m.type === 'rig.snapshot') r.snapshot = true; arm(p); }
+      else { if (m.type === 'rig.snapshot') r.snapshot = true; if (r.snapshot) arm(p); }
     }
     switch (m.type) {
       case 'openrig.status': p.status = m.status; return emit(m);
@@ -151,6 +156,13 @@ export function createRigAggregate(opts: { bridge: Bridge; remote: RemotePeers; 
       if (patch) overlays.set(id, patch); else if (!overlays.delete(id)) return;
       const e = bridge.escalation(id) ?? remoteEsc(id);
       if (e) emit({ type: 'escalation.updated', escalation: over(e) });
+    },
+    refresh() {
+      for (const machine of order()) {
+        const p = peers.get(machine)!;
+        const rigs = remoteRigs(machine, p); p.rigs = new Map(rigs.map(rig => [rig.id, rig]));
+        emit({ type: 'rig.snapshot', machine, rigs });
+      }
     }
   };
 }

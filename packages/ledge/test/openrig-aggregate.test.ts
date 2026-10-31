@@ -39,14 +39,14 @@ function fakeBridge() {
 
 function fakeRemote() {
   const msgFns = new Set<(machine: string, m: RemoteMessage) => void>(), stFns = new Set<(machine: string, s: 'open' | 'unreachable' | 'unsupported' | 'removed') => void>();
-  const statuses = new Map<string, 'open' | 'connecting' | 'unreachable' | 'unsupported'>();
+  const statuses = new Map<string, 'open' | 'connecting' | 'unreachable' | 'unsupported'>(); const versions = new Map<string, string>();
   const remote: RemotePeers = {
-    setMachines() {}, status: m => statuses.get(m) ?? 'unreachable', send: () => true, close() {},
+    setMachines() {}, status: m => statuses.get(m) ?? 'unreachable', version: m => versions.get(m), send: () => true, close() {},
     onMessage(fn) { msgFns.add(fn); return () => { msgFns.delete(fn); }; },
     onStatus(fn) { stFns.add(fn); return () => { stFns.delete(fn); }; }
   };
   return {
-    remote,
+    remote, versions,
     msg: (machine: string, m: RemoteMessage) => msgFns.forEach(f => f(machine, m)),
     status: (machine: string, s: 'open' | 'unreachable' | 'unsupported' | 'removed') => { if (s !== 'removed') statuses.set(machine, s); else statuses.delete(machine); stFns.forEach(f => f(machine, s)); }
   };
@@ -142,10 +142,60 @@ describe('RigAggregate', () => {
     expect(s.agg.rigs().map(r => r.id)).toEqual(['r1']);
   });
 
-  it('a peer without OpenRig is unsupported, with the update hint', () => {
+  it('a peer without OpenRig is unsupported, with the update hint naming its version', () => {
+    const s = setup();
+    s.versions.set('ec2', '0.12.0');
+    s.status('ec2', 'unsupported');
+    expect(s.out).toContainEqual({ type: 'openrig.status', status: { machine: 'ec2', state: 'unsupported', detail: 'Ledge 0.12.0 sur ec2-build ne connaît pas OpenRig : mets-le à jour' } });
+  });
+
+  it('the update hint without a version', () => {
     const s = setup();
     s.status('ec2', 'unsupported');
     expect(s.out).toContainEqual({ type: 'openrig.status', status: { machine: 'ec2', state: 'unsupported', detail: 'Ledge sur ec2-build ne connaît pas OpenRig : mets-le à jour' } });
+  });
+
+  it('a slow replay (open long before the rig.snapshot) removes no escalation', async () => {
+    const s = setup();
+    s.ec2Replay([rig('r2', 'ec2')], [esc('E1', 'ec2')]);
+    s.agg.overlay('E1', { state: 'answered' });
+    await sleep(60);
+    s.out.length = 0;
+    s.status('ec2', 'unreachable');
+    s.status('ec2', 'open');
+    await sleep(80); // machines, projects, asks… of the peer's snapshot, slowly, over SSH
+    expect(s.out.some(m => m.type === 'escalation.removed')).toBe(false);
+    s.msg('ec2', { type: 'openrig.status', status: { machine: 'ec2', state: 'running' } });
+    s.msg('ec2', { type: 'rig.snapshot', machine: 'ec2', rigs: [rig('r2', 'ec2')] });
+    s.msg('ec2', { type: 'escalation.updated', escalation: esc('E1', 'ec2') });
+    await sleep(60);
+    expect(s.out.some(m => m.type === 'escalation.removed')).toBe(false);
+    expect(s.agg.escalation('E1')?.state).toBe('answered');
+  });
+
+  it('keeps an overlay over a resync removal: the answer queue owns it', async () => {
+    const s = setup();
+    s.ec2Replay([], [esc('E1', 'ec2')]);
+    s.agg.overlay('E1', { state: 'answered' });
+    s.ec2Replay([]);
+    await sleep(60);
+    expect(s.agg.escalation('E1')).toBeUndefined();
+    s.ec2Replay([], [esc('E1', 'ec2')]);
+    expect(s.agg.escalation('E1')?.state).toBe('answered');
+  });
+
+  it('refresh files the remote rigs again in the projects as they are now', () => {
+    let projects = none;
+    const b = fakeBridge(), r = fakeRemote();
+    const agg = createRigAggregate({ bridge: b.bridge, remote: r.remote, machines: () => [LOCAL, EC2], projects: () => projects, settleMs: 20 });
+    const out: BridgeMessage[] = []; agg.onMessage(m => out.push(m));
+    r.status('ec2', 'open');
+    r.msg('ec2', { type: 'rig.snapshot', machine: 'ec2', rigs: [rig('r2', 'ec2', { cwd: '/home/ubuntu/app' })] });
+    expect(agg.rigs().find(x => x.id === 'r2')?.projectId).toBeNull();
+    projects = { projects: [{ id: 'app', name: 'App', color: 'red', description: '', repos: [], rigs: [] }], rules: [{ machine: 'ec2', path: '/home/ubuntu/app', project: 'app' }] } as unknown as Projects;
+    out.length = 0;
+    agg.refresh();
+    expect(out).toEqual([{ type: 'rig.snapshot', machine: 'ec2', rigs: [rig('r2', 'ec2', { cwd: '/home/ubuntu/app', projectId: 'app' })] }]);
   });
 
   it('recomputes a remote rig projectId from the local projects', () => {
@@ -247,8 +297,22 @@ describe('server with the rig aggregate', () => {
     expect(msgs.findIndex(m => m.type === 'snapshot')).toBeLessThan(msgs.findIndex(m => m.type === 'rig.snapshot'));
 
     // A remote change reaches the client; the machine leaving machines.json takes its rig away.
-    peer.emit({ type: 'rig.updated', rig: rig('r9', 'local', { lifecycle: 'partial' }) });
+    peer.emit({ type: 'rig.updated', rig: rig('r9', 'local', { lifecycle: 'partial', cwd: '/home/ubuntu/app' }) });
     await until(() => msgs.some(m => m.type === 'rig.updated' && m.rig.id === 'r9' && m.rig.machine === 'ec2'));
+
+    // A remote escalation is one item of Ledge's thread, even sent again.
+    peer.emit({ type: 'escalation.updated', escalation: esc('RE1', 'local') });
+    peer.emit({ type: 'escalation.updated', escalation: { ...esc('RE1', 'local'), summary: 'Which one?' } });
+    await until(() => msgs.filter(m => m.type === 'escalation.updated' && m.escalation.id === 'RE1').length === 2);
+    const items = () => msgs.filter(m => m.type === 'ledge.thread.item' && m.item.kind === 'escalation' && m.item.escalationId === 'RE1');
+    await until(() => items().length === 1);
+    await new Promise(r => setTimeout(r, 50));
+    expect(items()).toHaveLength(1);
+
+    // New projects file the remote rig live.
+    ws.send(JSON.stringify({ type: 'projects.set', projects: { projects: [{ id: 'app', name: 'App', color: 'red', description: '', repos: [], rigs: [] }], rules: [{ machine: 'ec2', path: '/home/ubuntu/app', project: 'app' }] } }));
+    await until(() => msgs.some(m => m.type === 'rig.snapshot' && m.machine === 'ec2' && m.rigs.some(r => r.id === 'r9' && r.projectId === 'app')));
+
     ws.send(JSON.stringify({ type: 'machines.set', machines: [LOCAL] }));
     await until(() => msgs.some(m => m.type === 'rig.removed' && m.machine === 'ec2' && m.rigId === 'r9'));
     expect(peer.o.closed).toBe(1);

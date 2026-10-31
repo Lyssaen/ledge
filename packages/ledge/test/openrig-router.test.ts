@@ -28,7 +28,7 @@ function setup(opts: { status?: PeerStatus; statuses?: OpenRigStatus[] } = {}) {
   const peerStatus = new Map<string, PeerStatus>([['ec2', opts.status ?? 'open']]);
   const remote: RemotePeers = {
     setMachines() {}, close() {},
-    status: m => peerStatus.get(m) ?? 'unreachable',
+    status: m => peerStatus.get(m) ?? 'unreachable', version: () => undefined,
     send(machine, msg) { if (peerStatus.get(machine) !== 'open') return false; sent.push({ machine, msg }); return true; },
     onMessage(fn) { msgFns.add(fn); return () => { msgFns.delete(fn); }; },
     onStatus(fn) { stFns.add(fn); return () => { stFns.delete(fn); }; }

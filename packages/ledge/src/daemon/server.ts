@@ -218,7 +218,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const attachments = opts.attachments ?? new AttachmentStore(paths().attachments);
   const mirror = opts.openrig;
   const threads = createChatThreads({ attachments, store, tmux, home: paths().dir, userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now, projects: () => projects, forge: createForge({ env: agentEnv }),
-    ...(mirror ? { openrig: () => ({ rigs: mirror.rigs(), escalations: mirror.escalations() }) } : {}) });
+    // Every machine's rigs and escalations (the aggregate, made further down once the server listens).
+    ...(mirror ? { openrig: () => ({ rigs: aggregate?.rigs() ?? mirror.rigs(), escalations: aggregate?.escalations() ?? mirror.escalations() }) } : {}) });
   const chat: Chat = opts.chat ?? threads.desktop;
   const router = createRouter({ env: agentEnv });
   const omp = opts.omp ?? createOmpHost({ store, env: agentEnv, dir: join(paths().dir, 'omp'), now, attachments });
@@ -344,7 +345,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** The repositories off-project rigs work in, looked for every 30 s. */
   const stopRepoWatch = bridge ? watchRigRepos({ bridge, sessions: () => store.all() }) : null;
   /** Messages to Ledge (`ledge.say`): one at a time through the desktop chat, whose `chat.*` every front gets. */
-  const ledgeSay = createLedgeSay({ thread, chat, escalations: id => bridge?.escalation(id), broadcast, tool: () => threads.deviceTool(),
+  const ledgeSay = createLedgeSay({ thread, chat, escalations: id => aggregate?.escalation(id) ?? bridge?.escalation(id), broadcast, tool: () => threads.deviceTool(),
     // `@seat …` goes to a rig seat; without OpenRig every text is a question to Ledge.
     toSeat: (rid, text) => (seatSend ? seatSend.fromSay(rid, text) : Promise.resolve(null)) });
   /** Answers to escalations, the one way to answer them (only with an OpenRig bridge). */
@@ -356,7 +357,12 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const remote = bridge ? createRemotePeers({ port, ...(opts.remoteConnect ? { connect: opts.remoteConnect } : {}) }) : null;
   /** The local mirror and the remote peers as one view: what every front gets, each rig with its real machine. */
   const aggregate = bridge && remote ? createRigAggregate({ bridge, remote, machines: () => machines, projects: () => projects }) : null;
-  const unsubscribeAggregate = aggregate?.onMessage(m => broadcast(m));
+  const unsubscribeAggregate = aggregate?.onMessage(m => {
+    broadcast(m);
+    // Ledge's thread names the remote escalations and exchanges too (the local ones come from the bridge, below), once per id.
+    if (m.type === 'escalation.updated' && m.escalation.machine !== 'local' && !thread.hasEscalation(m.escalation.id)) thread.append({ kind: 'escalation', escalationId: m.escalation.id });
+    if (m.type === 'rig.exchange' && m.exchange.machine !== 'local') thread.exchange(m.exchange);
+  });
   // PLACEHOLDER until lot 6 Task 6 (createAnswerQueue): an answer to an unreachable machine is refused instead of queued.
   const answerQueue: AnswerQueue = {
     enqueue: (a, reply) => reply({ type: 'rig.result', rid: a.rid, ok: false, code: 'unreachable', reason: `${machines.find(m => m.id === a.machine)?.label ?? a.machine} est injoignable` }),
@@ -1047,7 +1053,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'projects.set': {
         writeProjects(msg.projects, projectsFile); // first: a failing write leaves memory unchanged and reaches the sender
         projects = msg.projects; // already validated by parseClientMessage
-        bridge?.refresh(); // the rigs filed in a project follow it
+        bridge?.refresh(); aggregate?.refresh(); // the rigs filed in a project follow it, remote ones too
         return broadcast(projectsMsg());
       }
       case 'context.set': {
@@ -1432,7 +1438,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         const next = adoptRig(projects, msg.projectId, msg.rigId);
         if ('refused' in next) return result({ ok: false, code: 'failed', reason: next.refused });
         try { writeProjects(next, projectsFile); } catch (e) { log(`openrig: adopt not saved: ${(e as Error).message}`); return result({ ok: false, code: 'failed', reason: (e as Error).message }); }
-        projects = next; bridge.refresh(); broadcast(projectsMsg());
+        projects = next; bridge.refresh(); aggregate?.refresh(); broadcast(projectsMsg());
         return result({ ok: true });
       }
       case 'mandate.update': case 'rule.set': case 'decision.revisit': case 'category.escalate': case 'brain.set':

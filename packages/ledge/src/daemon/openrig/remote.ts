@@ -11,6 +11,8 @@ export interface RemotePeers {
   /** Adds, keeps or closes the peers (the machines with `ssh`). */
   setMachines(list: Machines): void;
   status(machine: string): PeerStatus;
+  /** The Ledge version the peer's daemon gave in its last snapshot (undefined before one, or from a daemon that gives none). */
+  version(machine: string): string | undefined;
   /** `machine` already rewritten to 'local' by the caller; false when the peer is not open. */
   send(machine: string, msg: ClientMessage): boolean;
   /** `machine` = the peer's id; the content is already rewritten. */
@@ -50,7 +52,7 @@ async function readToken(): Promise<TokenRead> {
   catch { return { kind: 'unavailable' }; }
 }
 
-interface Peer { machine: Machine; client: DaemonClient; status: PeerStatus; off: Array<() => void> }
+interface Peer { machine: Machine; client: DaemonClient; status: PeerStatus; version?: string; off: Array<() => void> }
 
 /** `port` may be a function: the server creates its peers after it listens. Peers dial the local daemon's own `/ssh/<alias>`. */
 export function createRemotePeers(opts: { port: number | (() => number); connect?: (machine: Machine, url: string) => DaemonClient; labelOf?: (id: string) => string }): RemotePeers {
@@ -76,7 +78,7 @@ export function createRemotePeers(opts: { port: number | (() => number); connect
     }));
     p.off.push(client.onMessage(m => {
       if (peers.get(machine.id) !== p) return;
-      if (m.type === 'snapshot') { setStatus(p, m.daemon?.openrig ? 'open' : 'unsupported'); return; }
+      if (m.type === 'snapshot') { p.version = m.daemon?.version; setStatus(p, m.daemon?.openrig ? 'open' : 'unsupported'); return; }
       if (p.status !== 'open') return;
       const out = rewriteFromPeer(machine.id, m);
       if (out) msgFns.forEach(f => f(machine.id, out));
@@ -93,6 +95,7 @@ export function createRemotePeers(opts: { port: number | (() => number); connect
       for (const m of wanted.values()) if (!peers.has(m.id)) start(m);
     },
     status: machine => peers.get(machine)?.status ?? 'unreachable',
+    version: machine => peers.get(machine)?.version,
     send(machine, msg) {
       const p = peers.get(machine);
       if (!p || p.status !== 'open' || p.client.status() !== 'open') return false;

@@ -75,6 +75,7 @@ describe('RemotePeers', () => {
   it('a daemon without OpenRig is unsupported: no relay', () => {
     const { peers, f, got, states } = openEc2(setup(), false);
     expect(peers.status('ec2')).toBe('unsupported');
+    expect(peers.version('ec2')).toBe('0.30.0');
     expect(states).toEqual([['ec2', 'unsupported']]);
     f.emit({ type: 'rig.snapshot', machine: 'local', rigs: [rig('r1')] });
     expect(got).toEqual([]);
