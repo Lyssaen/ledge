@@ -62,6 +62,7 @@ import { createPlans, prepareRigPlan } from './openrig/plan.js';
 import { createLaunches } from './openrig/launch.js';
 import { mandateSummary } from './openrig/seatContext.js';
 import { execGitSlow } from './openrig/workspace.js';
+import { watchRigRepos } from './openrig/repos.js';
 import { createHandovers, heldNames } from './handover.js';
 import { readContext } from './context.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
@@ -329,6 +330,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     mandate: () => { const f = paths().mandate; let text: string | null = null; try { if (existsSync(f)) text = readFileSync(f, 'utf8'); } catch { /* unreadable: the default */ } return mandateSummary(text); },
     file: paths().rigLaunches, now: Date.now, setTimer: setTimeout, clearTimer: clearTimeout }) : null;
   launches?.resume();
+  /** The repositories off-project rigs work in, looked for every 30 s. */
+  const stopRepoWatch = bridge ? watchRigRepos({ bridge, sessions: () => store.all() }) : null;
   /** Messages to Ledge (`ledge.say`): one at a time through the desktop chat, whose `chat.*` every front gets. */
   const ledgeSay = createLedgeSay({ thread, chat, escalations: id => bridge?.escalation(id), broadcast, tool: () => threads.deviceTool(),
     // `@seat …` goes to a rig seat; without OpenRig every text is a question to Ledge.
@@ -1528,6 +1531,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     asks,
     projects: () => projects,
     say: text => { thread.append({ kind: 'ledge', text }); },
-    close: () => new Promise<void>(res => { clearInterval(sweepTimer); unsubscribe(); unsubscribeBridge?.(); launches?.close(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
+    close: () => new Promise<void>(res => { clearInterval(sweepTimer); unsubscribe(); unsubscribeBridge?.(); launches?.close(); stopRepoWatch?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
   };
 }
