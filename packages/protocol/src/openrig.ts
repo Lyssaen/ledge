@@ -37,9 +37,14 @@ export type RigRepo = z.infer<typeof RigRepoSchema>;
 
 export const RigLifecycleSchema = z.enum(['launching', 'running', 'partial', 'stopped', 'unreachable']);
 export type RigLifecycle = z.infer<typeof RigLifecycleSchema>;
+export const RIG_NAME = /^[a-z0-9][a-z0-9-]{0,39}$/;
+/** What a launch left on its rig: the plan it came from, the goal, the lead seat, and the goal's delivery state. */
+export const RigLaunchInfoSchema = z.object({ planId: z.string(), goal: z.string(), lead: z.string(),
+  startedAt: z.string().datetime(), goalSentAt: z.string().datetime().optional(), lateNotice: z.boolean().optional() });
+export type RigLaunchInfo = z.infer<typeof RigLaunchInfoSchema>;
 export const RigSchema = z.object({ id: z.string(), name: z.string(), machine: z.string(), spec: z.string().optional(),
   cwd: z.string(), projectId: z.string().nullable(), offProject: z.boolean(), branch: z.string().optional(),
-  lifecycle: RigLifecycleSchema, kernel: z.boolean(), seats: z.array(RigSeatSchema), repos: z.array(RigRepoSchema) });
+  lifecycle: RigLifecycleSchema, kernel: z.boolean(), seats: z.array(RigSeatSchema), repos: z.array(RigRepoSchema), launch: RigLaunchInfoSchema.optional() });
 export type Rig = z.infer<typeof RigSchema>;
 
 export const EscalationQuestionSchema = z.object({ id: z.string(), question: z.string(),
@@ -136,7 +141,7 @@ export const RigResultSchema = z.object({ type: z.literal('rig.result'), rid: z.
 
 // Client messages.
 export const RigActSchema = z.object({ type: z.literal('rig.act'), rid: z.string(), machine: z.string(), rigId: z.string().optional(), seatRef: z.string().optional(), verb: RigVerbSchema });
-export const RigPrepareSchema = z.object({ type: z.literal('rig.prepare'), rid: z.string(), machine: z.string(), spec: z.string(), goal: z.string(), where: RigLaunchWhereSchema });
+export const RigPrepareSchema = z.object({ type: z.literal('rig.prepare'), rid: z.string(), machine: z.string(), spec: z.string(), goal: z.string().max(8000), where: RigLaunchWhereSchema });
 export const RigLaunchSchema = z.object({ type: z.literal('rig.launch'), rid: z.string(), planId: z.string() });
 export const RigAdoptSchema = z.object({ type: z.literal('rig.adopt'), rid: z.string(), machine: z.string(), rigId: z.string(), projectId: z.string() });
 export const RigSendSchema = z.object({ type: z.literal('rig.send'), rid: z.string(), machine: z.string(), seatRef: z.string(), text: z.string() });

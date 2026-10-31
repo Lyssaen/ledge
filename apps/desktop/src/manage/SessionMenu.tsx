@@ -9,6 +9,7 @@ import { machineOf } from '../nav/agents';
 import { Menu, MenuItem } from '../shell/Menu';
 import { Modal } from '../shell/Modal';
 import { SHELL_ICONS } from '../shell/icons';
+import { useRigControls } from '../rigs/useRigActions';
 import type { SessionActions } from './useSessionActions';
 import type { SessionMenuState } from './useSessionMenu';
 
@@ -53,6 +54,20 @@ export function SessionMenu({ session: s, at, actions, filing, projects, current
       <span><Icon d={icon} size={14} />{label}</span>{o.hint && <small aria-hidden="true"><Kbd>{o.hint}</Kbd></small>}
     </MenuItem>
   );
+  // A rig's seat (spec §4.5): its life is OpenRig's. « Terminer », « Archiver » and « Supprimer » give way to « Relancer ce siège »,
+  // « Relève » and « Arrêter… » (the rig's confirmation, from the seat); without the app's rig gestures they wait, disabled.
+  const rigs = useRigControls();
+  const seatItems = (): ReactNode => {
+    const a = t.rigActions;
+    const pair = rigs?.paired(s) ?? null;
+    const act = (verb: 'restart' | 'handover') => { if (pair) void rigs?.act(pair.machine, verb, { rigId: pair.rigId, seatRef: pair.seatRef }); };
+    const off = !pair || s.offline || undefined;
+    return <>
+      {item(a.restartSeat, SHELL_ICONS.resume, () => act('restart'), { disabled: off })}
+      {item(a.handover, SHELL_ICONS.resume, () => act('handover'), { disabled: off })}
+      {item(a.stop, SHELL_ICONS.stop, () => { if (pair?.rig) rigs?.askStop(pair.rig, pair.seat ?? undefined); }, { danger: true, disabled: !pair?.rig || s.offline || undefined })}
+    </>;
+  };
   const note: ReactNode = s.helpers.length > 0 ? <p className="session-menu-note">{m.kids(s.helpers.length, s.name)}</p> : null;
   return (
     <Menu open onOpenChange={o => { if (!o) onClose(); }} label={m.label(s.name)} className="session-menu-wrap" menuClassName="session-menu" at={at} trigger={() => null}>
@@ -68,9 +83,10 @@ export function SessionMenu({ session: s, at, actions, filing, projects, current
           {projects.filter(p => p.id !== current).map(p => <MenuItem key={p.id} onSelect={() => filing.file(s, p.id)}><span>{p.name}</span></MenuItem>)}
         </div>
       )}
-      {onHandover && canHandOver(s) && item(s.handover?.state === 'failed' ? t.handover.retry : t.handover.pass, SHELL_ICONS.resume, () => onHandover(s),
+      {!s.rig && onHandover && canHandOver(s) && item(s.handover?.state === 'failed' ? t.handover.retry : t.handover.pass, SHELL_ICONS.resume, () => onHandover(s),
         { ...(s.context ? { hint: t.handover.gauge(Math.round((s.context.used / s.context.window) * 100)) } : {}) })}
       <hr />
+      {s.rig ? seatItems() : <>
       {exited
         ? item(m.resume, SHELL_ICONS.resume, () => actions.resume(s.id), { disabled: outdated })
         : item(m.end, SHELL_ICONS.stop, () => actions.request('end', [s.id]), { disabled: s.offline ? m.cannotEnd(machine) : s.source === 'hook_only' ? m.outsideLedge : undefined })}
@@ -78,6 +94,7 @@ export function SessionMenu({ session: s, at, actions, filing, projects, current
       {note}
       <hr />
       {item(m.delete, SHELL_ICONS.trash, () => actions.request('delete', [s.id]), { hint: m.deleteKey, key: 'Delete', danger: true, disabled: outdated })}
+      </>}
     </Menu>
   );
 }

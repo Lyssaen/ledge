@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { ProjectsSchema, projectOf as protocolProjectOf, type Project, type Projects } from '@ledge/protocol';
 import { newProjectId, projectOf, withoutProject, withProject, withRule } from '../src/projects';
 
-const A: Project = { id: 'a', name: 'A', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] };
-const B: Project = { id: 'b', name: 'B', color: 'green', description: '', repos: [{ machine: 'local', path: '/w/ledge/docs' }, { machine: 'devbox', path: '/w/api' }] };
+const A: Project = { id: 'a', name: 'A', color: 'blue', description: '', rigs: [], repos: [{ machine: 'local', path: '/w/ledge' }] };
+const B: Project = { id: 'b', name: 'B', color: 'green', description: '', rigs: [], repos: [{ machine: 'local', path: '/w/ledge/docs' }, { machine: 'devbox', path: '/w/api' }] };
 const state: Projects = { projects: [A, B], rules: [{ machine: 'local', path: '/tmp/scratch', project: 'b' }] };
 const at = (cwd: string, machineId?: string) => ({ cwd, machineId });
 

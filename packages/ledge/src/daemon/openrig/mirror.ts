@@ -1,9 +1,11 @@
 import { isDeepStrictEqual } from 'node:util';
-import { join, relative, isAbsolute, sep } from 'node:path';
-import { projectOf, type Projects, type Rig, type RigLifecycle, type RigSeat } from '@ledge/protocol';
+import { relative, isAbsolute, sep } from 'node:path';
+import { type Projects, type Rig, type RigLifecycle, type RigSeat } from '@ledge/protocol';
 import { EVENTS, EVENTS_UNOBSERVED } from './facts.js';
 import type { OpenRigEvent } from './sse.js';
 import { toSeat } from './seats.js';
+import { paths } from '../../paths.js';
+import { rigProjectId } from './adopt.js';
 import type { KernelStatus, NodeEntry, PsEntry } from './wire.js';
 
 export interface MirrorSnapshot { rigs: PsEntry[]; nodes: Map<string, NodeEntry[]>; kernel: KernelStatus | null }
@@ -19,10 +21,10 @@ export interface Mirror {
 interface Entry { ps: PsEntry; nodes: NodeEntry[] }
 const REFETCH = new Set<string>([EVENTS.rigImported, EVENTS.nodeLaunched, EVENTS.nodeStartupReady, ...Object.values(EVENTS_UNOBSERVED)]);
 
-export function createMirror(opts: { machine: string; projects: () => Projects; home: string }): Mirror {
+export function createMirror(opts: { machine: string; projects: () => Projects; rigsRoot?: string }): Mirror {
   const entries = new Map<string, Entry>(); const pairs = new Map<string, string>(); // seat ref -> Ledge session id
   let kernel: KernelStatus | null = null; let unreachable = false;
-  const rigsRoot = join(opts.home, '.ledge', 'rigs');
+  const rigsRoot = opts.rigsRoot ?? paths().rigs;
   const underRigs = (cwd: string) => { const r = relative(rigsRoot, cwd); return r !== '' && r !== '..' && !r.startsWith('..' + sep) && !isAbsolute(r); };
   const nameOf = (ps: PsEntry) => String(ps.rigName ?? ps.name ?? ps.rigId);
   const isKernel = (ps: PsEntry) => {
@@ -35,7 +37,7 @@ export function createMirror(opts: { machine: string; projects: () => Projects; 
     const cwd = nodes.find(n => typeof n.cwd === 'string' && n.cwd)?.cwd as string | undefined ?? '';
     const base = (ps.status === 'running' || ps.status === 'partial' || ps.status === 'stopped' ? ps.status : 'running') as RigLifecycle;
     const lifecycle: RigLifecycle = unreachable ? 'unreachable' : seats.some(s => s.state === 'starting') ? 'launching' : base;
-    return { id: ps.rigId, name: nameOf(ps), machine: opts.machine, cwd, projectId: cwd ? projectOf({ machineId: opts.machine, cwd }, opts.projects()) : null,
+    return { id: ps.rigId, name: nameOf(ps), machine: opts.machine, cwd, projectId: rigProjectId({ id: ps.rigId, cwd, machine: opts.machine }, opts.projects()),
       offProject: cwd !== '' && underRigs(cwd), lifecycle, kernel: isKernel(ps), seats, repos: [] };
   };
   const all = () => [...entries.values()].map(build);

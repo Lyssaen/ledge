@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { Socket } from 'node:net';
 import { randomUUID } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
@@ -39,6 +40,7 @@ import { readDocument } from './documents.js';
 import { createModels, type Models } from './models.js';
 import { createRelay, free } from './relay.js';
 import { launchFromChat, LaunchRefused } from '../chat/launch.js';
+import { rigManaged, RigManagedError } from './openrig/guard.js';
 import { cardOf, closeFromChat, CloseRefused } from '../chat/close.js';
 import { actFromChat, ActRefused } from '../chat/act.js';
 import type { ChatMessage } from '../chat/service.js';
@@ -51,9 +53,17 @@ import { OpenRigUnreachable } from './openrig/http.js';
 import { pairSession, restorePairs, unpairGone } from './openrig/pairing.js';
 import { createAnswers, type Answers } from './openrig/answer.js';
 import { ANSWER_PATH } from './openrig/facts.js';
+import { actOnRig } from './openrig/actions.js';
+import { HUMAN_ADDRESS } from './openrig/facts.js';
 import { createLedgeThread } from './ledgeThread.js';
 import { createLedgeSay } from './ledgeSay.js';
 import { createSeatSend } from './openrig/seatSend.js';
+import { createPlans, prepareRigPlan } from './openrig/plan.js';
+import { createLaunches } from './openrig/launch.js';
+import { adoptRig } from './openrig/adopt.js';
+import { mandateSummary } from './openrig/seatContext.js';
+import { execGitSlow } from './openrig/workspace.js';
+import { watchRigRepos } from './openrig/repos.js';
 import { createHandovers, heldNames } from './handover.js';
 import { readContext } from './context.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
@@ -168,6 +178,8 @@ export interface ServerHandle {
   asks: Asks;
   /** The shared projects, as last set. */
   projects(): Projects;
+  /** Ledge's voice: a line in its thread (what it did on its own, e.g. starting OpenRig). */
+  say(text: string): void;
 }
 
 /**
@@ -311,6 +323,16 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const thread = createLedgeThread({ path: paths().ledgeThread, now });
   const unsubscribeThread = thread.onItem(item => broadcast({ type: 'ledge.thread.item', item }));
   const seatSend = bridge ? createSeatSend({ bridge }) : null;
+  /** The launch plans `rig.prepare` made, taken once by `rig.launch`. */
+  const rigPlans = createPlans(Date.now);
+  /** Rigs launched from a plan, until their lead has the goal; picked up again after a restart. */
+  const launches = bridge && seatSend ? createLaunches({ cli: bridge.cli(), bridge, git: execGitSlow,
+    send: (ref, text) => seatSend.send('local', ref, text), say: text => { thread.append({ kind: 'ledge', text }); },
+    mandate: () => { const f = paths().mandate; let text: string | null = null; try { if (existsSync(f)) text = readFileSync(f, 'utf8'); } catch { /* unreadable: the default */ } return mandateSummary(text); },
+    file: paths().rigLaunches, now: Date.now, setTimer: setTimeout, clearTimer: clearTimeout }) : null;
+  launches?.resume();
+  /** The repositories off-project rigs work in, looked for every 30 s. */
+  const stopRepoWatch = bridge ? watchRigRepos({ bridge, sessions: () => store.all() }) : null;
   /** Messages to Ledge (`ledge.say`): one at a time through the desktop chat, whose `chat.*` every front gets. */
   const ledgeSay = createLedgeSay({ thread, chat, escalations: id => bridge?.escalation(id), broadcast, tool: () => threads.deviceTool(),
     // `@seat …` goes to a rig seat; without OpenRig every text is a question to Ledge.
@@ -537,6 +559,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
 
   /** A live session Ledge launched is stopped (its tmux killed, a failure only logged) and marked exited; any other is left as it is. */
   async function endSession(s: Session): Promise<void> {
+    if (s.rig) throw new RigManagedError();
     if (s.source !== 'launcher' || s.state === 'exited') return;
     if (backendOf(s) === 'omp-rpc') { await omp.close(s.id).catch(e => log(`close of omp ${s.id} failed: ${(e as Error).message}`)); store.apply(s.id, { name: 'PaneGone', at: now(), source: 'daemon' }); return; }
     if (s.tmuxSession) await tmux.killSession(s.tmuxSession).catch(e => log(`kill of ${s.tmuxSession} failed: ${(e as Error).message}`));
@@ -569,6 +592,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     const id = s.id; const cur = store.get(id);
     if (!cur) throw unknownSession();
     if (cur.source === 'hook_only') throw readOnly();
+    if (cur.rig) throw new RigManagedError();
     if (cur.state === 'exited') throw new Refusal('the session has already exited', 'busy');
     if (closing.has(id)) throw new Refusal('a close is already in progress', 'busy');
     closing.add(id);
@@ -685,6 +709,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
    * default where left out): session.resume, and a model change on a live session. Null once spawned, the refusal otherwise.
    */
   async function respawn(s: Session, key: string, model: string | undefined, effort: string | undefined): Promise<string | null> {
+    { const r = rigManaged(s); if (r) return r.message; }
     if (s.tool === 'omp') return respawnOmp(s, key, model, effort);
     // Marked live before the first await: a second resume arriving while this one spawns is then refused.
     const { archivedAt: _a, exitedAt: _e, exitCode: _c, modelNext: _n, ...rest } = s;
@@ -840,6 +865,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     const running = cardSessionCloses.get(id);
     if (running) return running;
     const s = store.get(id); if (!s) throw unknownSession();
+    if (s.rig) return Promise.reject(new RigManagedError());
     const p = closeSession(s);
     cardSessionCloses.set(id, p);
     const done = () => { if (cardSessionCloses.get(id) === p) cardSessionCloses.delete(id); };
@@ -997,6 +1023,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'projects.set': {
         writeProjects(msg.projects, projectsFile); // first: a failing write leaves memory unchanged and reaches the sender
         projects = msg.projects; // already validated by parseClientMessage
+        bridge?.refresh(); // the rigs filed in a project follow it
         return broadcast(projectsMsg());
       }
       case 'context.set': {
@@ -1155,6 +1182,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'session.kill': {
         const s = store.get(msg.id); if (!s) return;
         if (s.source === 'hook_only') return refuse(readOnly(), msg.id);
+        { const r = rigManaged(s); if (r) return refuse(r, msg.id); }
         if (backendOf(s) === 'omp-rpc') return endSession(s);
         if (s.tmuxSession) await tmux.killSession(s.tmuxSession);
         store.apply(msg.id, { name: 'PaneGone', at: now(), source: 'daemon' });
@@ -1171,6 +1199,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       case 'session.archive': {
         const s = store.get(msg.id); if (!s) return refuse(unknownSession(), msg.id);
+        { const r = rigManaged(s); if (r) return refuse(r, msg.id); }
         await endSession(s);
         store.archive(msg.id, now());
         return;
@@ -1182,6 +1211,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       case 'session.resume': {
         const s = store.get(msg.id); if (!s) return refuse(unknownSession(), msg.id);
+        { const r = rigManaged(s); if (r) return refuse(r, msg.id); }
         if (s.state !== 'exited') return refuse(new Refusal('the session is still running', 'busy'), msg.id);
         const key = resumeKey(s); if (!key) return refuse({ message: 'no conversation to resume', code: 'no_conversation' }, msg.id);
         const refused = await respawn(s, key, s.model, s.effort);
@@ -1189,7 +1219,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return;
       }
       case 'session.model': {
-        if (!store.get(msg.id)) return refuse('unknown session', msg.id);
+        const target = store.get(msg.id); if (!target) return refuse('unknown session', msg.id);
+        { const r = rigManaged(target); if (r) return refuse(r, msg.id); }
         // Answered as soon as decided: a failure once applied reaches every front as an `error` with the same id.
         const r = await changeModel(msg.id, msg.model, msg.effort);
         if ('refused' in r) return refuse({ message: r.message, code: r.refused }, msg.id);
@@ -1197,6 +1228,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       case 'session.delete': {
         const s = store.get(msg.id); if (!s) return refuse(unknownSession(), msg.id);
+        { const r = rigManaged(s); if (r) return refuse(r, msg.id); }
         // A running hook_only session is not stopped by Ledge: like a dismissed one, its next hook brings it back.
         if (s.source === 'launcher' || s.state === 'exited') markDeleted(msg.id);
         await endSession(s);
@@ -1318,6 +1350,16 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         reply({ type: 'rig.result', rid: msg.rid, ok: true });
         return answered;
       }
+      // Lifecycle of a rig or a seat, through OpenRig; to the sender only (the mirror shows the effect by SSE).
+      case 'rig.act': {
+        if (msg.machine !== 'local') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'unreachable', reason: `machine ${msg.machine} is not this daemon's` });
+        if (!bridge) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'openrig_down', reason: "OpenRig n'est pas branché" });
+        // Cancelling a launch: forget it first, so a seat turning ready while `down` runs cannot get the goal.
+        if (msg.verb === 'down' && msg.rigId !== undefined && launches?.pending().some(l => l.rigId === msg.rigId)) await launches.cancel(msg.rigId);
+        const r = await actOnRig({ http: () => bridge.http(), ensureRunning: why => bridge.ensureRunning(why), operator: HUMAN_ADDRESS },
+          { verb: msg.verb, ...(msg.rigId !== undefined ? { rigId: msg.rigId } : {}), ...(msg.seatRef !== undefined ? { seatRef: msg.seatRef } : {}) });
+        return reply(r.ok ? { type: 'rig.result', rid: msg.rid, ok: true } : { type: 'rig.result', rid: msg.rid, ok: false, code: r.code, reason: r.reason });
+      }
       // Writing to a seat; to the sender only. The Desktop routes another machine's seats to its own daemon (lot 6).
       case 'rig.send': {
         if (msg.machine !== 'local') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'unreachable', reason: `machine ${msg.machine} is not this daemon's` });
@@ -1326,7 +1368,49 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         const r = await seatSend.send(msg.machine, msg.seatRef, msg.text);
         return reply(r.ok ? { type: 'rig.result', rid: msg.rid, ok: true } : { type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: r.reason });
       }
-      case 'rig.act': case 'rig.prepare': case 'rig.launch': case 'rig.adopt':
+      case 'rig.prepare': {
+        if (msg.machine !== 'local') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'unreachable', reason: `machine ${msg.machine} is not this daemon's` });
+        if (!bridge) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'openrig_down', reason: "OpenRig n'est pas branché" });
+        // Ledge starts OpenRig itself for a launch, and says so in its thread (the bridge's notice); only a start that fails is refused.
+        const status = await bridge.ensureRunning('launch');
+        const http = bridge.http();
+        if (!http || status.state !== 'running') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'openrig_down', reason: status.detail ?? `OpenRig ${status.state}` });
+        try {
+          const plan = await prepareRigPlan({ http, home: paths().dir, projects: () => projects, machine: msg.machine }, msg);
+          if ('refused' in plan) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: plan.refused });
+          rigPlans.put(plan);
+          return reply({ type: 'rig.plan', rid: msg.rid, plan });
+        } catch (e) {
+          log(`openrig: plan not made: ${(e as Error).message}`);
+          return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: e instanceof OpenRigUnreachable ? 'openrig_down' : 'failed', reason: (e as Error).message });
+        }
+      }
+      // A plan `rig.prepare` made, launched once; to the sender only (the mirror and the thread show the rest).
+      case 'rig.launch': {
+        if (!bridge || !launches) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'openrig_down', reason: "OpenRig n'est pas branché" });
+        const plan = rigPlans.take(msg.planId);
+        if (plan === 'used') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: 'plan already launched' });
+        if (plan === null) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: 'plan expired' });
+        try {
+          const r = await launches.launch(plan);
+          return reply(r.ok ? { type: 'rig.result', rid: msg.rid, ok: true } : { type: 'rig.result', rid: msg.rid, ok: false, code: r.code, reason: r.reason });
+        } catch (e) {
+          log(`openrig: launch failed: ${(e as Error).message}`);
+          return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: (e as Error).message });
+        }
+      }
+      // Files a rig in a project: only projects.json changes; the mirror recomputes the rig's project.
+      case 'rig.adopt': {
+        const result = (r: { ok: true } | { ok: false; code: 'failed' | 'unreachable' | 'openrig_down'; reason: string }): void => reply({ type: 'rig.result', rid: msg.rid, ...r });
+        if (!bridge) return result({ ok: false, code: 'openrig_down', reason: "OpenRig n'est pas branché" });
+        if (msg.machine !== 'local') return result({ ok: false, code: 'unreachable', reason: `La machine ${msg.machine} n'est pas joignable d'ici` });
+        if (!bridge.rigs().some(r => r.id === msg.rigId)) return result({ ok: false, code: 'failed', reason: 'unknown rig' });
+        const next = adoptRig(projects, msg.projectId, msg.rigId);
+        if ('refused' in next) return result({ ok: false, code: 'failed', reason: next.refused });
+        try { writeProjects(next, projectsFile); } catch (e) { log(`openrig: adopt not saved: ${(e as Error).message}`); return result({ ok: false, code: 'failed', reason: (e as Error).message }); }
+        projects = next; bridge.refresh(); broadcast(projectsMsg());
+        return result({ ok: true });
+      }
       case 'mandate.update': case 'rule.set': case 'decision.revisit': case 'category.escalate': case 'brain.set':
         return notYet();
       // A refusal of the service (an unknown pairing, a sign-in while disabled) reaches the sender as an `error`.
@@ -1466,6 +1550,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     labelExited,
     asks,
     projects: () => projects,
-    close: () => new Promise<void>(res => { clearInterval(sweepTimer); unsubscribe(); unsubscribeBridge?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
+    say: text => { thread.append({ kind: 'ledge', text }); },
+    close: () => new Promise<void>(res => { clearInterval(sweepTimer); unsubscribe(); unsubscribeBridge?.(); launches?.close(); stopRepoWatch?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
   };
 }

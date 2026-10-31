@@ -38,6 +38,11 @@ describe('openrig contract', () => {
     ]) expect(() => parseServerMessage(m), m.type).not.toThrow();
     expect(() => parseServerMessage({ type: 'rig.result', rid: 'x', ok: false, code: 'bogus' })).toThrow();
   });
+  it('rig.prepare caps the goal at 8000 characters', () => {
+    const m = (goal: string) => ({ type: 'rig.prepare', rid: 'x', machine: 'local', spec: 's', goal, where: { kind: 'off-project', name: 'n' } });
+    expect(parseClientMessage(m('g'.repeat(8000)))).toMatchObject({ type: 'rig.prepare' });
+    expect(() => parseClientMessage(m('g'.repeat(8001)))).toThrow();
+  });
   it('client messages parse', () => {
     for (const m of [
       { type: 'rig.exchanges.request', machine: 'local', rigId: 'r1' },
@@ -81,5 +86,16 @@ describe('openrig contract', () => {
     expect(RigSpecInfoSchema.safeParse({ id: 'x', name: 'x', source: 'other', seats: [] }).success).toBe(false);
     expect(parseClientMessage({ type: 'rig.specs.request', requestId: 'r', machineId: 'm' }).type).toBe('rig.specs.request');
     expect(parseServerMessage({ type: 'rig.specs', requestId: 'r', machine: 'local', specs: [{ id: 'x', name: 'x', source: 'builtin', seats: [{ address: '@a', member: 'a', pod: 'p', runtime: 'codex' }] }], error: 'unsupported' }).type).toBe('rig.specs');
+  });
+});
+
+describe('lot 5 contract', () => {
+  const L = { planId: 'p1', goal: 'ship it', lead: 'lead@starter', startedAt: '2026-10-31T10:00:00.000Z' };
+  const RIG = { id: 'r1', name: 'starter', machine: 'local', cwd: '/tmp/x', projectId: null, offProject: true, lifecycle: 'running', kernel: false, seats: [], repos: [] };
+  it('RigSchema accepts launch and keeps it', () => expect(P.RigSchema.parse({ ...RIG, launch: L }).launch).toEqual(L));
+  it('RigSchema accepts a rig without launch', () => expect(P.RigSchema.parse(RIG).launch).toBeUndefined());
+  it('RIG_NAME refuses ../x, a b, Factory, 41 chars and accepts a-b', () => {
+    for (const bad of ['../x', 'a b', 'Factory', 'a'.repeat(41), '-a', '']) expect(P.RIG_NAME.test(bad), bad).toBe(false);
+    for (const ok of ['a-b', 'a'.repeat(40), '0x']) expect(P.RIG_NAME.test(ok), ok).toBe(true);
   });
 });

@@ -148,3 +148,49 @@ p.composer-missing{margin:0;white-space:normal;max-width:45%}
 .composer:has(.integrated-harness) .composer-body{overflow-y:auto}
 .composer:has(.integrated-harness) .composer-footer{flex-shrink:0}
 
+/* « Nouveau rig » (mockups l-1, l-2, w-1): the New session form's parts, a spec row with its own « Changer », the plan's boxes. */
+.modal-backdrop:has(.rig-launch){z-index:1000}
+.modal.rig-launch{max-height:calc(100dvh - 48px);display:flex;flex-direction:column;overflow:hidden}
+.rig-launch .composer{min-height:0;overflow:hidden}
+.rig-launch .composer-body{overflow-y:auto}
+.rig-launch .composer-footer{flex-shrink:0}
+.rig-flag{color:var(--sidebar-primary);font-size:15px;line-height:1}
+.composer .rig-spec-current{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:1px solid var(--input);border-radius:var(--radius-lg);background:var(--card)}
+.rig-spec-change{font-size:11px;color:var(--muted-foreground);padding:2px 4px;border-radius:var(--radius-sm)}
+.rig-spec-change:hover{color:var(--foreground)}
+.rig-spec-change:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+.rig-spec-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+.rig-spec-tiles .tool-tile{text-align:left;color:inherit;border:1px solid var(--border);background:var(--card)}
+.rig-spec-tiles .tool-tile.selected{border-color:var(--sidebar-primary);background:color-mix(in srgb,var(--sidebar-primary) 9%,var(--card))}
+.rig-spec-tiles .tool-tile:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+.rig-spec-tiles .tool-tile.disabled{opacity:.6;cursor:not-allowed}
+.rig-recommends{margin:10px 0 0;font-size:12px;color:var(--muted-foreground)}
+.rig-providers p{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px;margin:0;font-size:13px}
+.rig-providers p span{font-size:12px;color:var(--muted-foreground)}
+.rig-workspace{display:flex;flex-direction:column;gap:6px}
+.rig-workspace .composer-label{margin:0}
+.rig-workspace-field{display:flex;align-items:center;height:34px;padding:0 10px;border:1px solid var(--input);border-radius:var(--radius-md);background:var(--background);font:13px 'Geist Mono',monospace}
+.rig-workspace-field[aria-invalid=true]{border-color:var(--destructive)}
+.rig-workspace-field:focus-within{outline:2px solid var(--ring);outline-offset:1px}
+.rig-workspace-field>span{color:var(--muted-foreground)}
+.rig-workspace-field input{flex:1;min-width:0;border:0;background:transparent;color:var(--foreground);font:inherit;outline:none}
+.rig-workspace small.composer-missing{white-space:normal}
+.rig-install{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin:-8px 0 0;font-size:11px}
+.rig-install code{font:11px 'Geist Mono',monospace;padding:2px 6px;border-radius:5px;background:var(--card);border:1px solid var(--border)}
+.rig-norepo{margin:0;font-size:12px}
+.rig-branch{display:inline-flex;align-items:center;gap:6px;margin-left:auto;font:11px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.rig-branch input{width:150px;height:26px;padding:0 8px;border:1px solid var(--input);border-radius:var(--radius-md);background:var(--background);color:var(--foreground);font:inherit}
+.chip-group[aria-invalid=true] .rig-branch input{border-color:color-mix(in srgb,var(--destructive) 60%,var(--border))}
+.rig-copy{display:flex;align-items:center;gap:8px;flex-basis:100%}
+.rig-copy .chip-note{margin-left:0}
+.rig-launch-status{margin:0;padding:0 20px 12px;font-size:11px;color:var(--muted-foreground);text-align:right}
+p.rig-launch-status.composer-missing{max-width:none;color:var(--destructive)}
+.rig-plan-box{margin:0;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--well);font-size:13px;line-height:20px}
+.rig-plan-box p{margin:0 0 8px}
+.rig-plan-box code{font:12px 'Geist Mono',monospace}
+.rig-plan-seats{list-style:none;display:flex;flex-direction:column;gap:6px}
+.rig-plan-seats li{display:flex;align-items:center;gap:10px}
+.rig-plan .rig-plan-address{font-size:11px;padding:1px 6px;border-radius:5px;color:var(--sidebar-primary);background:color-mix(in srgb,var(--sidebar-primary) 12%,transparent)}
+.rig-plan-box .chip code,.rig-plan-box .chip{font-size:12px}
+.rig-plan-after{display:flex;gap:10px;align-items:flex-start}
+.rig-plan .composer-preview code{font:11px 'Geist Mono',monospace}

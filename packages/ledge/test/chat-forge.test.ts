@@ -7,7 +7,7 @@ import { FORGE_COMMANDS, asksForge, createForge, forgeOf, redact, type ForgeRun 
 
 const T = '2026-10-19T09:00:00.000Z';
 const projects = (repos: Array<{ machine: string; path: string }>, name = 'Ledge'): Projects =>
-  ({ projects: [{ id: 'ledge', name, color: 'blue', description: '', repos }], rules: [] });
+  ({ projects: [{ id: 'ledge', name, color: 'blue', description: '', rigs: [], repos }], rules: [] });
 
 /** A runner answering `git config` with the folder's remote and recording every forge call. */
 function fakeRun(remotes: Record<string, string>, answer: (file: string, args: string[]) => { code: number | null; stdout?: string; stderr?: string } = () => ({ code: 0, stdout: 'row\n' })) {

@@ -89,7 +89,7 @@ describe('the project editor: a new project from the sidebar', () => {
     await waitFor(() => expect(setsOf(d)).toHaveLength(1));
     const sent = setsOf(d)[0]!.projects;
     expect(sent.projects.slice(0, 3)).toEqual(PROJECTS.projects);
-    expect(sent.projects[3]).toEqual({ id: 'paper-rendering', name: 'Paper Rendering', color: 'violet', description: '', repos: [{ machine: 'local', path: '/home/me/paper' }] });
+    expect(sent.projects[3]).toEqual({ id: 'paper-rendering', name: 'Paper Rendering', color: 'violet', description: '', rigs: [], repos: [{ machine: 'local', path: '/home/me/paper' }] });
     // One send at a time: a second Ctrl ↵ while saving sends nothing.
     await ctrlEnter(user);
     await tick();
@@ -169,7 +169,7 @@ describe('the project editor: a new project from the sidebar', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(setsOf(d)).toHaveLength(2);
     expect(setsOf(d)[1]!.projects.projects).toHaveLength(4);
-    expect(setsOf(d)[1]!.projects.projects[3]).toEqual({ id: 'paper-rendering', name: 'Paper Rendering', color: 'violet', description: 'Fonts and pages', repos: [] });
+    expect(setsOf(d)[1]!.projects.projects[3]).toEqual({ id: 'paper-rendering', name: 'Paper Rendering', color: 'violet', description: 'Fonts and pages', rigs: [], repos: [] });
     expect(screen.getByRole('status')).toHaveTextContent('Paper Rendering saved.');
   });
 
@@ -214,8 +214,8 @@ describe('the project editor: editing a project', () => {
    *  (The protocol refuses a repository in two projects, so a shared one never comes from the daemon: only a draft can hold one.) */
   const EDITED: Projects = {
     projects: [
-      { id: 'ledge', name: 'Ledge', color: 'blue', description: 'Agents at work', repos: [{ machine: 'local', path: '/w/ledge' }, { machine: 'local', path: '/w/notes' }, { machine: 'local', path: '/w/gone' }, { machine: 'dev', path: '/srv/ledge' }] },
-      { id: 'docs', name: 'Docs', color: 'amber', description: '', repos: [{ machine: 'local', path: '/w/docs' }] }
+      { id: 'ledge', name: 'Ledge', color: 'blue', description: 'Agents at work', rigs: [], repos: [{ machine: 'local', path: '/w/ledge' }, { machine: 'local', path: '/w/notes' }, { machine: 'local', path: '/w/gone' }, { machine: 'dev', path: '/srv/ledge' }] },
+      { id: 'docs', name: 'Docs', color: 'amber', description: '', rigs: [], repos: [{ machine: 'local', path: '/w/docs' }] }
     ],
     rules: []
   };
@@ -383,7 +383,7 @@ describe('the project editor: « Move to › New project… »', () => {
     await user.click(dialog.getByRole('button', { name: /^Create the project/ }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     const sent = setsOf(d)[0]!.projects;
-    expect(sent.projects.at(-1)).toEqual({ id: 'scratch', name: 'Scratch', color: 'violet', description: '', repos: [{ machine: 'local', path: '/tmp' }] });
+    expect(sent.projects.at(-1)).toEqual({ id: 'scratch', name: 'Scratch', color: 'violet', description: '', rigs: [], repos: [{ machine: 'local', path: '/tmp' }] });
     expect(sent.rules).toEqual([{ machine: 'local', path: '/tmp', project: 'scratch' }]);
     expect(screen.getByRole('status')).toHaveTextContent('Project Scratch created. Kit joins its table.');
     expect(within(screen.getByRole('region', { name: 'Scratch table' })).getByRole('button', { name: /^Kit,/ })).toBeVisible();
@@ -441,7 +441,7 @@ describe('the notice of a new project with its agents', () => {
 
 describe('useProjectSave', () => {
   const state: Projects = { projects: [], rules: [] };
-  const next: Projects = { projects: [{ id: 'a', name: 'A', color: 'blue', description: '', repos: [] }], rules: [] };
+  const next: Projects = { projects: [{ id: 'a', name: 'A', color: 'blue', description: '', rigs: [], repos: [] }], rules: [] };
   const holds = (p: Projects) => p.projects.some(x => x.id === 'a');
 
   it('names each refusal; one send at a time; a broadcast after reset is ignored', () => {

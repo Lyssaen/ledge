@@ -21,7 +21,12 @@ export interface OpenRigHttp {
   /** POST /api/mission-control/action as `session` (header `X-OpenRig-Session`, facts D8). Any HTTP status resolves (409
    *  `qitem_already_terminal` included, D7); `json` is null for a body that is no JSON. Only an unreachable OpenRig rejects. */
   action(body: Record<string, unknown>, o: { session: string }): Promise<{ status: number; json: unknown }>;
+  /** Any route, with a 30 s timeout (a rig going down or up takes longer than a read). A non-2xx status resolves like any other;
+   *  `json` is null for a body that is no JSON. Only an unreachable OpenRig rejects (OpenRigUnreachable). */
+  call(method: 'GET' | 'POST', path: string, body?: Record<string, unknown>): Promise<{ status: number; json: unknown }>;
 }
+/** Timeout of `call`: lifecycle writes outlast the 3 s of a read. */
+export const CALL_TIMEOUT_MS = 30_000;
 
 const NETWORK_CODES = new Set(['ECONNREFUSED', 'ECONNRESET', 'EPIPE', 'ETIMEDOUT', 'UND_ERR_SOCKET', 'UND_ERR_CONNECT_TIMEOUT']);
 const isUnreachable = (e: unknown): boolean => {
@@ -69,6 +74,18 @@ export function createOpenRigHttp(opts: { base: string; fetch?: Fetch; timeoutMs
     return out;
   }
 
+  async function write(path: string, method: 'GET' | 'POST', body: Record<string, unknown> | undefined, ms: number, extra: Record<string, string> = {}): Promise<{ status: number; json: unknown }> {
+    const headers: Record<string, string> = { ...extra };
+    if (body !== undefined) headers['content-type'] = 'application/json';
+    if (opts.token) headers.authorization = `Bearer ${opts.token}`;
+    const res = await send(path, { method, headers, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) }, ms);
+    let text: string;
+    try { text = await res.text(); }
+    catch (e) { if (isUnreachable(e)) throw new OpenRigUnreachable(`OpenRig unreachable at ${opts.base}: body ${(e as Error).name}`); throw e; }
+    let json: unknown = null; try { json = JSON.parse(text); } catch { /* not JSON */ }
+    return { status: res.status, json };
+  }
+
   return {
     async health() { return HealthSchema.parse(await get('/healthz')); },
     async ps() { return rows('ps', PsEntrySchema, await get('/api/ps')); },
@@ -83,15 +100,7 @@ export function createOpenRigHttp(opts: { base: string; fetch?: Fetch; timeoutMs
     async specs() { return rows('spec', SpecEntrySchema, await get('/api/specs/library?kind=rig')); },
     async spec(id) { return SpecDetailSchema.parse(await get(`/api/specs/library/${encodeURIComponent(id)}`)); },
     async outbox(senderSession) { return rows('outbox', OutboxRowSchema, await get(`/api/queue/outbox/list?senderSession=${encodeURIComponent(senderSession)}`)); },
-    async action(body, o) {
-      const headers: Record<string, string> = { 'content-type': 'application/json', 'x-openrig-session': o.session };
-      if (opts.token) headers.authorization = `Bearer ${opts.token}`;
-      const res = await send('/api/mission-control/action', { method: 'POST', headers, body: JSON.stringify(body) }, actionTimeoutMs);
-      let text: string;
-      try { text = await res.text(); }
-      catch (e) { if (isUnreachable(e)) throw new OpenRigUnreachable(`OpenRig unreachable at ${opts.base}: body ${(e as Error).name}`); throw e; }
-      let json: unknown = null; try { json = JSON.parse(text); } catch { /* not JSON */ }
-      return { status: res.status, json };
-    },
+    async action(body, o) { return write('/api/mission-control/action', 'POST', body, actionTimeoutMs, { 'x-openrig-session': o.session }); },
+    async call(method, path, body) { return write(path, method, body, Math.max(timeoutMs, CALL_TIMEOUT_MS)); },
   };
 }

@@ -33,9 +33,9 @@ export function transfer(): { setData(k: string, v: string): void; getData(k: st
 
 export const PROJECTS: Projects = {
   projects: [
-    { id: 'ledge', name: 'Ledge', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] },
-    { id: 'pay', name: 'Payment Service Platform Migration Europe', color: 'green', description: '', repos: [{ machine: 'local', path: '/w/pay' }] },
-    { id: 'docs', name: 'Docs', color: 'amber', description: '', repos: [{ machine: 'local', path: '/w/docs' }] }
+    { id: 'ledge', name: 'Ledge', color: 'blue', description: '', rigs: [], repos: [{ machine: 'local', path: '/w/ledge' }] },
+    { id: 'pay', name: 'Payment Service Platform Migration Europe', color: 'green', description: '', rigs: [], repos: [{ machine: 'local', path: '/w/pay' }] },
+    { id: 'docs', name: 'Docs', color: 'amber', description: '', rigs: [], repos: [{ machine: 'local', path: '/w/docs' }] }
   ],
   rules: []
 };

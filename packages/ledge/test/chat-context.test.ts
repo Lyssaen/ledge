@@ -25,8 +25,8 @@ describe('writeContext', () => {
 
   const PROJECTS: Projects = {
     projects: [
-      { id: 'ledge', name: 'Ledge', color: 'blue', description: 'The agent cockpit.', repos: [{ machine: 'local', path: '/w/ledge' }, { machine: 'devbox', path: '/srv/ledge' }] },
-      { id: 'api', name: 'API', color: 'green', description: '', repos: [{ machine: 'local', path: '/w/api' }] }
+      { id: 'ledge', name: 'Ledge', color: 'blue', description: 'The agent cockpit.', rigs: [], repos: [{ machine: 'local', path: '/w/ledge' }, { machine: 'devbox', path: '/srv/ledge' }] },
+      { id: 'api', name: 'API', color: 'green', description: '', rigs: [], repos: [{ machine: 'local', path: '/w/api' }] }
     ],
     rules: [{ machine: 'local', path: '/tmp/scratch', project: 'api' }]
   };

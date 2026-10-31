@@ -24,6 +24,10 @@ export interface FakeOpenRig {
   restart(): Promise<void>;                        // reopens on the same port, same journal
   /** POST requests also keep their parsed JSON `body` and their `headers` (names lower-cased). */
   requests: { method: string; path: string; search?: string; lastEventId?: string; body?: unknown; headers?: Record<string, string> }[];
+  /** Snapshots listed by `GET /api/rigs/:id/snapshots`, per rig id. */
+  snapshots: Map<string, { id: string; createdAt: string }[]>;
+  /** Scripts the answer of one route (`method`, raw path as sent, e.g. a `%40` seat ref): any status and JSON body, once set for good. */
+  reply(method: string, path: string, status: number, json: unknown): void;
   /** The next n `/api/events` requests are accepted but never answered (no headers), until stop(). */
   hangEvents: number;
   /** A human row (to `ledge@external` unless given): added with `queue.created`, or replaced with `queue.updated` when its id is known. */
@@ -35,10 +39,11 @@ export interface FakeOpenRig {
 export async function createFakeOpenRig(opts: { port?: number; version?: string | null } = {}): Promise<FakeOpenRig> {
   const journal: ({ type: string; seq: number; rigId?: unknown } & Record<string, unknown>)[] = [];
   const streams = new Set<{ res: ServerResponse; rigId: string | null }>(); const hung = new Set<ServerResponse>();
-  let server: Server | null = null;
+  let server: Server | null = null; const scripted = new Map<string, { status: number; body: unknown }>();
   const f: FakeOpenRig = {
     url: '', port: opts.port ?? 0, version: opts.version === undefined ? '0.6.14' : opts.version,
-    rigs: [], specs: [], queue: [], outbox: new Map(), humans: [], kernel: { state: 'ready' }, requests: [], hangEvents: 0,
+    rigs: [], specs: [], queue: [], outbox: new Map(), humans: [], kernel: { state: 'ready' }, requests: [], hangEvents: 0, snapshots: new Map(),
+    reply(method, path, status, body) { scripted.set(`${method} ${path}`, { status, body }); },
     emit(event) {
       const e = { ...event, seq: journal.length + 1 }; journal.push(e);
       for (const s of streams) if (!s.rigId || (e as { rigId?: unknown }).rigId === s.rigId) write(s.res, e);
@@ -88,12 +93,18 @@ export async function createFakeOpenRig(opts: { port?: number; version?: string 
         let body: unknown = raw; try { body = JSON.parse(raw); } catch { /* kept as text */ }
         const headers: Record<string, string> = {}; for (const [k, v] of Object.entries(req.headers)) if (typeof v === 'string') headers[k.toLowerCase()] = v;
         Object.assign(rec, { body, headers });
+        const sc = scripted.get(`POST ${path}`); if (sc) return json(res, sc.body, sc.status);
         if (path === '/api/mission-control/action') return action(body, res);
+        // Lifecycle (OpenRig 0.6.14 routes): answers ok; the effect reaches Ledge through the tests' own `emit`.
+        if (path === '/api/down' || /^\/api\/rigs\/[^/]+\/(up|restore\/[^/]+)$/.test(path) || /^\/api\/seat\/(restart|stop|handover)\/[^/]+$/.test(path)) return json(res, { ok: true });
         json(res, { error: 'not_found' }, 404);
       });
       return;
     }
     if (req.method !== 'GET') return json(res, { error: 'not_found' }, 404);
+    const scripted_ = scripted.get(`GET ${path}`); if (scripted_) return json(res, scripted_.body, scripted_.status);
+    const snap = /^\/api\/rigs\/([^/]+)\/snapshots$/.exec(path);
+    if (snap) return json(res, f.snapshots.get(decodeURIComponent(snap[1]!)) ?? []);
     if (path === '/healthz') return json(res, { status: 'ok', pid: process.pid, ...(f.version !== null ? { semver: f.version } : {}) });
     if (path === '/api/ps') return json(res, f.rigs.map(ps));
     const m = /^\/api\/rigs\/([^/]+)\/nodes$/.exec(path);
@@ -141,18 +152,20 @@ export type FakeRigCli = RigExec & { calls: string[][]; envs: (Record<string, st
  * `queue create … --json` appends a pending row to `rig.queue` (body read from `--body-file`) and prints it with its `qitemId`;
  * with `hold`, it waits for that promise first (the call is recorded at once).
  */
-export function fakeRigCli(rig: FakeOpenRig | null, opts: { startFails?: boolean; version?: string; hold?: Promise<unknown> } = {}): FakeRigCli {
+export function fakeRigCli(rig: FakeOpenRig | null, opts: { startFails?: boolean; version?: string; hold?: Promise<unknown>; calls?: { args: string[]; env?: Record<string, string> }[];
+  /** `rig up <spec> --cwd <cwd> --yes --json`: what it prints; without it `up` is an unknown command. */ up?: (spec: string, cwd: string) => { code: number; stdout: string; stderr: string } } = {}): FakeRigCli {
   const calls: string[][] = []; const envs: (Record<string, string> | undefined)[] = [];
   const ok = (stdout = ''): { code: number; stdout: string; stderr: string } => ({ code: 0, stdout, stderr: '' });
   const fail = (code: number, stderr: string) => ({ code, stdout: '', stderr });
   const exec = (async (args: string[], o?: { env?: Record<string, string> }) => {
-    calls.push([...args]); envs.push(o?.env); const j = args.join(' ');
+    calls.push([...args]); envs.push(o?.env); opts.calls?.push({ args: [...args], ...(o?.env ? { env: o.env } : {}) }); const j = args.join(' ');
     if (args[0] === '--version') { const v = opts.version ?? rig?.version; return rig === null && opts.version === undefined ? fail(127, 'rig: command not found') : ok(`${v ?? '0.0.0'} (fake)\n`); }
     if (j === 'daemon start') {
       if (opts.startFails) return fail(1, 'daemon failed to start: port busy (fake)');
       if (!rig) return fail(127, 'rig: command not found');
       await rig.restart(); return ok('daemon started\n');
     }
+    if (args[0] === 'up' && opts.up) return opts.up(args[1]!, args[args.indexOf('--cwd') + 1]!);
     if (!rig) return fail(127, 'rig: command not found');
     if (j.startsWith('gateway human list')) return ok(JSON.stringify(rig.humans.map(id => ({ id }))));
     if (j.startsWith('gateway human add ')) {

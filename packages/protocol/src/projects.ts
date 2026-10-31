@@ -25,7 +25,9 @@ export const ProjectSchema = z.object({
   name: z.string().trim().min(1).max(80),
   color: ProjectColorSchema,
   description: z.string().max(500).default(''),
-  repos: z.array(RepoSchema).max(50)
+  repos: z.array(RepoSchema).max(50),
+  /** Ids of the OpenRig rigs filed in this project (a rig lives in one project at most). */
+  rigs: z.array(z.string().min(1).max(200)).max(200).default([])
 });
 export type Project = z.infer<typeof ProjectSchema>;
 
@@ -33,13 +35,13 @@ export type Project = z.infer<typeof ProjectSchema>;
 export const RuleSchema = z.object({ machine: MachineIdSchema, path: PathSchema, project: ProjectIdSchema });
 export type Rule = z.infer<typeof RuleSchema>;
 
-export type ProjectsProblemCode = 'duplicate_id' | 'duplicate_name' | 'duplicate_repo' | 'duplicate_rule' | 'unknown_project';
+export type ProjectsProblemCode = 'duplicate_id' | 'duplicate_name' | 'duplicate_repo' | 'duplicate_rig' | 'duplicate_rule' | 'unknown_project';
 export interface ProjectsProblem { code: ProjectsProblemCode; path: (string | number)[] }
 
 /** What makes a set of projects inconsistent as a whole; the editor shows them, the daemon refuses on them. */
 export function projectsProblems(p: { projects: readonly Project[]; rules: readonly Rule[] }): ProjectsProblem[] {
   const out: ProjectsProblem[] = [];
-  const ids = new Set<string>(), names = new Set<string>(), repos = new Set<string>(), rules = new Set<string>();
+  const ids = new Set<string>(), names = new Set<string>(), repos = new Set<string>(), rigIds = new Set<string>(), rules = new Set<string>();
   p.projects.forEach((project, i) => {
     if (ids.has(project.id)) out.push({ code: 'duplicate_id', path: ['projects', i, 'id'] });
     ids.add(project.id);
@@ -50,6 +52,10 @@ export function projectsProblems(p: { projects: readonly Project[]; rules: reado
       const key = `${repo.machine}\n${repo.path}`;
       if (repos.has(key)) out.push({ code: 'duplicate_repo', path: ['projects', i, 'repos', j] });
       repos.add(key);
+    });
+    project.rigs.forEach((rig, j) => {
+      if (rigIds.has(rig)) out.push({ code: 'duplicate_rig', path: ['projects', i, 'rigs', j] });
+      rigIds.add(rig);
     });
   });
   p.rules.forEach((rule, i) => {

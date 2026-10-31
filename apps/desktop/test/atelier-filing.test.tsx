@@ -10,7 +10,7 @@ import { fileSession, ruleFor, useFiling } from '../src/atelier/filing';
 import { Toast, useToast } from '../src/shell/Toast';
 
 const named = (name: string) => Object.assign(new Error(name), { name });
-const projects: Projects = { projects: [{ id: 'ledge', name: 'Ledge', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] }], rules: [] };
+const projects: Projects = { projects: [{ id: 'ledge', name: 'Ledge', color: 'blue', description: '', rigs: [], repos: [{ machine: 'local', path: '/w/ledge' }] }], rules: [] };
 
 describe('fileSession', () => {
   it('writes the folder rule, and names each refusal', () => {

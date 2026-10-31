@@ -15,6 +15,8 @@ import { handoverOnClient } from './handover.js';
 import { formatWho } from './who.js';
 import { takeImages } from '../attachmentText.js';
 import { paths } from '../paths.js';
+import { mandateSummary, rigSeatContext } from '../daemon/openrig/seatContext.js';
+import { HUMAN_ADDRESS } from '../daemon/openrig/facts.js';
 
 type Payload = Record<string, unknown>;
 const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
@@ -457,6 +459,14 @@ async function runLedgeCommand(client: Client, cmd: NonNullable<ReturnType<typeo
   return deny(line);
 }
 
+function seatStart(seat: string): string {
+  let text: string | null = null;
+  try { text = readFileSync(paths().mandate, 'utf8'); } catch { /* none yet: the default mandate */ }
+  const rig = seat.slice(seat.indexOf('@') + 1);
+  const additionalContext = rigSeatContext({ seat, rig, human: HUMAN_ADDRESS, mandate: mandateSummary(text) });
+  return JSON.stringify({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext } });
+}
+
 /**
  * Always resolves, always fast: a hook must never slow the agent down. Resolves with what the hook prints for the agent:
  * on SessionStart, a session Ledge launched gets its identity as `additionalContext` (Claude Code and Codex read it);
@@ -497,6 +507,8 @@ export async function runHook(eventName: string, stdin: string, opts: { port?: n
     log(`hook ${label} dropped: ${(e as Error).message}`);
   }
   if (relayed) return relayed;
+  // An OpenRig seat Ledge did not launch learns its human at every start (start, resume, /clear), whatever the daemon did.
+  if (eventName === 'SessionStart' && mapped?.openrig && !identify && !process.env.LEDGE_SESSION) return seatStart(mapped.openrig.sessionName);
   if (!identify || !mapped) return undefined;
   const found = await identity(agent, mapped.cwd, known, deadline);
   const who = found ? { ...found, ...(known?.relieves ? { relieves: known.relieves } : {}) } : undefined;

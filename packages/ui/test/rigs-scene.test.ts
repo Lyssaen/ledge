@@ -5,7 +5,7 @@ import { sceneOf, tableSeats, type AtelierScene } from '../src/rigs/scene';
 const seat = (name: string, over: Partial<RigSeat> = {}): RigSeat => ({ ref: `${name}@x`, address: `@${name}`, name, runtime: 'claude-code', state: 'ready', ...over });
 const rig = (machine: string, id: string, over: Partial<Rig> = {}): Rig => ({ id, name: id, machine, cwd: '/w', projectId: null, offProject: false,
   lifecycle: 'running', kernel: false, seats: [], repos: [], ...over });
-const project = (id: string): Project => ({ id, name: id, color: 'blue', description: '', repos: [] }) as Project;
+const project = (id: string): Project => ({ id, name: id, color: 'blue', description: '', rigs: [], repos: [] }) as Project;
 const twoProjects = { projects: [project('ledge'), project('pay'), project('docs')], rules: [] } as unknown as Projects;
 const sess = (id: string, cwd: string, r?: Session['rig']): Session => ({ id, name: id, state: 'idle', cwd, ...(r ? { rig: r } : {}) } as Session);
 const R = (machine: string, rigId: string) => ({ machine, rigId, rigName: rigId, seat: 's', pod: 'p', member: 'm' });

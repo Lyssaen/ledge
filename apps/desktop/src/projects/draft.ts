@@ -107,7 +107,7 @@ export function alsoIn(repo: Repo, d: ProjectDraft, state: Projects): Project | 
 export function afterSave(state: Projects, d: ProjectDraft, sessions: readonly Session[]): { next: Projects; id: string } {
   const name = d.name.trim();
   const id = d.id ?? newProjectId(name, state.projects.map(p => p.id));
-  let next = withProject(state, { id, name, color: d.color, description: d.description, repos: keptRepos(d).map(r => ({ machine: r.machine, path: normalizePath(r.path) })) });
+  let next = withProject(state, { id, name, color: d.color, description: d.description, rigs: state.projects.find(p => p.id === id)?.rigs ?? [], repos: keptRepos(d).map(r => ({ machine: r.machine, path: normalizePath(r.path) })) });
   for (const s of sessions) if (d.file.includes(s.id)) next = withRule(next, ruleFor(s, id));
   return { next, id };
 }

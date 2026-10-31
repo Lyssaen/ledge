@@ -20,7 +20,7 @@ function setup() {
   api.connect(); local.set('open'); local.emit(snap());
   return { api, local, server };
 }
-const A: Project = { id: 'a', name: 'A', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] };
+const A: Project = { id: 'a', name: 'A', color: 'blue', description: '', rigs: [], repos: [{ machine: 'local', path: '/w/ledge' }] };
 const state: Projects = { projects: [A], rules: [{ machine: 'local', path: '/tmp/x', project: 'a' }] };
 const projectsSent = (p: { sent: unknown[] }) => p.sent.filter(m => (m as { type: string }).type === 'projects.set');
 

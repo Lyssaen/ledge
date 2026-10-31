@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { PROJECT_COLORS, ProjectsSchema, normalizePath, parseClientMessage, projectOf, parseServerMessage, projectsProblems, type ProjectColor, type Projects, type Repo } from '../src/index.js';
 
-const p = (id: string, name: string, repos: Repo[] = [], color: ProjectColor = 'blue') => ({ id, name, color, description: '', repos });
+const p = (id: string, name: string, repos: Repo[] = [], color: ProjectColor = 'blue') => ({ id, name, color, description: '', repos, rigs: [] as string[] });
 const r = (machine: string, path: string): Repo => ({ machine, path });
 
 describe('projects schema', () => {
@@ -16,7 +16,7 @@ describe('projects schema', () => {
   });
   it('accepts a valid set and trims names, defaults the description', () => {
     const out = ProjectsSchema.parse({ projects: [{ id: 'ledge', name: '  Ledge ', color: 'blue', repos: [r('local', '/w/ledge')] }], rules: [{ machine: 'devbox', path: '/srv/x', project: 'ledge' }] });
-    expect(out.projects[0]).toEqual({ id: 'ledge', name: 'Ledge', color: 'blue', description: '', repos: [r('local', '/w/ledge')] });
+    expect(out.projects[0]).toEqual({ id: 'ledge', name: 'Ledge', color: 'blue', description: '', repos: [r('local', '/w/ledge')], rigs: [] });
   });
   it('refuses an empty name, an unknown colour, a relative or non-normalized path, a bad id', () => {
     for (const bad of [p('a', '   '), { ...p('a', 'A'), color: 'orange' }, p('a', 'A', [r('local', 'w/x')]), p('a', 'A', [r('local', '/w/x/')]), p('A B', 'A')])
@@ -39,8 +39,8 @@ describe('projects schema', () => {
 });
 
 describe('projectOf', () => {
-  const A = { id: 'a', name: 'A', color: 'blue' as const, description: '', repos: [{ machine: 'local', path: '/w/ledge' }] };
-  const B = { id: 'b', name: 'B', color: 'green' as const, description: '', repos: [{ machine: 'local', path: '/w/ledge/docs' }, { machine: 'devbox', path: '/w/api' }] };
+  const A = { id: 'a', name: 'A', color: 'blue' as const, description: '', rigs: [] as string[], repos: [{ machine: 'local', path: '/w/ledge' }] };
+  const B = { id: 'b', name: 'B', color: 'green' as const, description: '', rigs: [] as string[], repos: [{ machine: 'local', path: '/w/ledge/docs' }, { machine: 'devbox', path: '/w/api' }] };
   const state: Projects = { projects: [A, B], rules: [{ machine: 'local', path: '/tmp/scratch', project: 'b' }] };
   const at = (cwd: string, machineId?: string) => ({ cwd, machineId });
   it('matches a repo folder and what is under it, never a sibling sharing the prefix', () => {
@@ -62,4 +62,17 @@ describe('projectOf', () => {
   it('ignores a rule naming a project that is gone', () => {
     expect(projectOf(at('/tmp/scratch'), { projects: [A], rules: [{ machine: 'local', path: '/tmp/scratch', project: 'zz' }] })).toBeNull();
   });
+});
+
+describe('rigs filed in projects', () => {
+  const mk = (id: string, rigs?: string[]) => ({ id, name: id, color: 'blue', repos: [], ...(rigs ? { rigs } : {}) });
+  it('a projects.json without rigs reads with rigs: []', () =>
+    expect(ProjectsSchema.parse({ projects: [mk('a')], rules: [] }).projects[0]!.rigs).toEqual([]));
+  it('a rig filed in two projects gives duplicate_rig', () => {
+    const state = { projects: [mk('a', ['r1']), mk('b', ['r1'])].map(p => ({ ...p, description: '' })), rules: [] } as unknown as Projects;
+    expect(projectsProblems(state)).toContainEqual({ code: 'duplicate_rig', path: ['projects', 1, 'rigs', 0] });
+    expect(ProjectsSchema.safeParse(state).success).toBe(false);
+  });
+  it('distinct rigs are fine', () =>
+    expect(ProjectsSchema.safeParse({ projects: [mk('a', ['r1']), mk('b', ['r2'])], rules: [] }).success).toBe(true));
 });

@@ -3,6 +3,7 @@ import { PROJECT_COLORS, type OpenRigStatus, type Rig, type RigSeat, type Sessio
 import { kernelSplit, readyCount, rigColor, runtimeLabel, workingCount, type RigPlace } from '@ledge/ui/rigs/model';
 import { useI18n } from '../i18n/lang';
 import { cls } from '../shell/cls';
+import { isLaunching } from './LaunchNote';
 import { Menu, MenuItem } from '../shell/Menu';
 
 /** A seat's line: address, name, state, « · {outil} · {modèle} · contexte {p} % ». A seat paired with a Ledge session is a button that opens it. */
@@ -44,8 +45,7 @@ function Terminals({ rig, name, onTerminal }: { rig: Rig; name: string; onTermin
 /**
  * A rig of the Rigs tab, « En cours » (spec §8.2, maquette p-rigs-live): its flag, name, « rig · n sièges · {lieu} · ⎇ {branche} · spec
  * {spec} » (each missing piece left out), « sur {machine} » when remote, the share of seats at work (« {r}/{n} prêts » while it launches),
- * « Table » and « Terminaux », then one line per seat. `actions`, `seatAction` and `footer` are lot 5's (Arrêter…, a seat's actions…):
- * this lot renders nothing that acts on a rig.
+ * « Table » and « Terminaux », then one line per seat. `actions`, `seatAction` and `footer` are what acts on it (lot 5: `RigsLive`).
  */
 export function RigCard(p: {
   rig: Rig; place: RigPlace; byId: ReadonlyMap<string, Session>; onTable(): void; onTerminal(seat: RigSeat): void; onOpen(id: string): void;
@@ -56,9 +56,11 @@ export function RigCard(p: {
   // One rule everywhere (sidebar, atelier plaque): a stopped seat is not at the table.
   const rig = { ...p.rig, seats: p.rig.seats.filter(x => x.state !== 'stopped') };
   const n = rig.seats.length;
-  const launching = rig.lifecycle === 'launching';
+  // A rig Ledge launched says « démarre » until its goal is given (lot 5); its seats count as ready, as any rig whose seats start.
+  const starting = isLaunching(rig);
+  const launching = starting || rig.lifecycle === 'launching';
   const count = launching ? readyCount(rig) : workingCount(rig);
-  const pieces = [r.rig, r.seats(n),
+  const pieces = [r.rig, starting ? t.rigActions.starting : r.seats(n),
     p.place.kind === 'project' ? r.inProject(p.place.name) : p.place.kind === 'off' ? r.off : null,
     rig.branch ? r.branch(rig.branch) : null,
     rig.spec ? `${r.spec} ${rig.spec}` : null,

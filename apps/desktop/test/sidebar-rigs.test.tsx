@@ -14,7 +14,7 @@ beforeEach(() => localStorage.clear());
 afterEach(() => cleanup());
 
 const AT = '2026-10-30T14:44:00.000Z';
-const PROJECTS: Projects = { projects: [{ id: 'ledge', name: 'Ledge', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] }], rules: [] };
+const PROJECTS: Projects = { projects: [{ id: 'ledge', name: 'Ledge', color: 'blue', description: '', rigs: [], repos: [{ machine: 'local', path: '/w/ledge' }] }], rules: [] };
 const seat = (name: string, extra: Partial<RigSeat> = {}): RigSeat => ({ ref: `${name}@factory`, address: `@${name}`, name, runtime: 'claude-code', state: 'working', ...extra });
 const FACTORY: Rig = { id: 'r-factory', name: 'factory', machine: 'local', cwd: '/w/ledge', projectId: null, offProject: false, lifecycle: 'running', kernel: false, repos: [],
   seats: [seat('build', { sessionId: 'local:build' }), seat('orch-lead', { state: 'idle' }), seat('qa', { state: 'stopped' })] };

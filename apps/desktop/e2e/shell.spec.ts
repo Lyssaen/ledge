@@ -48,7 +48,7 @@ test('at 520 px the sidebar is hidden and Ctrl+/ opens the chat', async ({ page 
 
 test('at 1000 px the top bar stays on one line with a long project name', async ({ page }) => {
   await page.setViewportSize({ width: 1000, height: 700 });
-  await fakeDaemon(page, eight, { projects: { projects: [{ id: 'ledge', name: 'Payment Service Platform Migration Europe', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] }], rules: [] } });
+  await fakeDaemon(page, eight, { projects: { projects: [{ id: 'ledge', name: 'Payment Service Platform Migration Europe', color: 'blue', description: '', rigs: [], repos: [{ machine: 'local', path: '/w/ledge' }] }], rules: [] } });
   await page.goto('/'); await openAtelier(page);
   const project = page.getByRole('tree').getByRole('button', { name: /^Payment Service Platform/ });
   await project.click();   // the atelier's rug names the project too

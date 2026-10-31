@@ -2175,7 +2175,7 @@ const collect = (ws: WebSocket) => inbox.get(ws)!;
 const dev = { id: 'dev', label: 'Devbox', ssh: 'dev-server' };
 
 const projectsState = {
-  projects: [{ id: 'ledge', name: 'Ledge', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] }],
+  projects: [{ id: 'ledge', name: 'Ledge', color: 'blue', description: '', rigs: [], repos: [{ machine: 'local', path: '/w/ledge' }] }],
   rules: [{ machine: 'dev', path: '/srv/x', project: 'ledge' }]
 };
 

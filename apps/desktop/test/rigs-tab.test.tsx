@@ -9,7 +9,7 @@ import { LangProvider } from '../src/i18n/lang';
 import { RigsTab, rigsCount, visibleRigs } from '../src/rigs/RigsTab';
 import { initialNav, navReducer, type NavAction, type NavState } from '../src/nav/state';
 
-const PROJECTS: Projects = { projects: [{ id: 'ledge', name: 'Ledge', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] }], rules: [] };
+const PROJECTS: Projects = { projects: [{ id: 'ledge', name: 'Ledge', color: 'blue', description: '', rigs: [], repos: [{ machine: 'local', path: '/w/ledge' }] }], rules: [] };
 const seat = (name: string, extra: Partial<RigSeat> = {}): RigSeat => ({ ref: `${name}@factory`, address: `@${name}`, name, runtime: 'claude-code', model: 'opus', state: 'working', ...extra });
 const FACTORY: Rig = { id: 'r1', name: 'factory', machine: 'local', spec: 'factory', cwd: '/w/ledge', projectId: 'ledge', offProject: false, branch: 'feat/rigs', lifecycle: 'running', kernel: false, repos: [],
   seats: [seat('orch-lead', { address: '@lead', contextPct: 41 }), seat('build', { contextPct: 63, sessionId: 'local:build' }),

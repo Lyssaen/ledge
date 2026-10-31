@@ -343,7 +343,38 @@ export const en: Messages = {
   chunkFailed: 'This part of Ledge could not load. Restart the app.',
   close: 'Close',
   modalTitles: { launch: 'New session', rigLaunch: 'New rig' },
-  rigLaunch: { soon: 'Launching a rig is coming soon.', close: 'Close' },
+  rigLaunch: {
+    goal: 'Goal given to the lead', suggestions: 'Goal ideas',
+    ideas: ['Fix the failing tests', 'Ship an issue', 'Review a PR'],
+    ideasOff: ['Explore an unknown repository', 'Compare two repositories', 'Prototype an idea'],
+    spec: 'OpenRig spec', specHint: 'The team OpenRig sets up', recommended: 'Recommended by Ledge', change: 'Change', noSpec: 'Choose a spec',
+    specsLoading: 'Reading the specs…', specsFailed: 'The specs could not be read.',
+    chooseFor: 'Choose for this rig', seatsOf: (n, what) => `${n} ${pluralEn(n, 'seat', 'seats')} · ${what}`,
+    registry: 'From the registry…', registryWhat: 'openrig.dev/rigs', soon: 'Soon',
+    recommends: (spec, why) => `Ledge recommends ${spec}: ${why === 'long' ? 'work followed over several days, with reviews.' : 'a bounded change, quickly reviewed.'}`,
+    providers: 'Providers', providerSeats: (n, label) => `${n} ${label} ${pluralEn(n, 'seat', 'seats')}`,
+    where: 'Where the rig works', project: 'Project', offProject: '+ New space, off project', machine: 'Machine',
+    why: {
+      absent: (m) => `OpenRig is not installed on ${m}`, unsupported: (v) => `OpenRig ${v} not supported`,
+      offline: 'offline', unreachable: 'OpenRig unreachable'
+    },
+    copyInstall: 'Copy the command', copied: 'Copied',
+    repos: (m) => `Folders and repositories on ${m}`, noRepo: (p, m) => `${p} has no repository on ${m}.`,
+    branch: 'new branch', copy: 'Work in a copy',
+    workspace: 'Workspace', workspaceHelp: 'Ledge creates it empty, named after the goal. OpenRig installs the rig there.', invalidName: 'Invalid name',
+    opens: 'will open its room', opensOff: 'will open its room, off project',
+    summary: (n, where, machine) => `1 table · ${n} ${pluralEn(n, 'seat', 'seats')} · ${where} · ${machine}`, inProject: (p) => `in ${p}`,
+    cancel: 'Cancel', seePlan: 'See the plan', launch: 'Launch the rig', preparing: 'Preparing the plan…', launching: 'Launching…',
+    missing: { goal: 'Give the lead a goal.', spec: 'Choose a spec.', repo: 'Choose a repository.', branch: 'Name the new branch.', name: 'Invalid name', machine: 'Choose a machine where OpenRig can launch the rig.' },
+    planTitle: (spec) => `${spec} rig plan`,
+    starts: (n) => `What starts · ${n} ${pluralEn(n, 'seat', 'seats')}`,
+    changes: (cwd) => `What changes in ${cwd}`, writes: 'OpenRig adds',
+    copyChip: (spec) => `Work in a copy: .worktrees/rig-${spec}`,
+    after: 'After the launch',
+    afterText: (lead, n) => `I give the goal to ${lead} as soon as the ${n} seats are ready. I settle Git, tests and handovers; I bring you design, architecture and critical calls.`,
+    planFoot: (n, k) => `${n} ${pluralEn(n, 'seat', 'seats')} · ${k} ${pluralEn(k, 'provider', 'providers')}`,
+    back: 'Back', refused: (why) => `Refused: ${why}`
+  },
   search: {
     title: 'Go to a session', placeholder: 'Agent, task, project or machine…', empty: 'No session matches this search.', results: 'Sessions',
     browse: 'Browse', open: 'Open', closeKey: 'Close', enter: 'Enter', escape: 'Esc'
@@ -482,6 +513,30 @@ export const en: Messages = {
     launch: 'Launch this rig…', machine: 'Machine',
     loading: 'Reading the specs…', none: 'No spec in the library.', failed: 'The specs could not be read.',
     agents: 'Agents', agentCols: { address: 'Address', name: 'Name', rig: 'Rig', state: 'State', tool: 'Tool · model', context: 'Context' }, noAgents: 'No seat.'
+  },
+  rigActions: {
+    stop: 'Stop…', stopRigBar: 'Stop the rig…', resume: 'Resume', restore: 'Resume from the last snapshot',
+    restartSeat: 'Restart this seat', handover: 'Hand over', cancelLaunch: 'Cancel the launch', openPrompt: 'Open the prompt',
+    starting: 'starting', more: (name) => `More actions for ${name}`, seatMenu: (name) => `Actions of ${name}`,
+    stopTitle: (rig) => `Stop ${rig}?`,
+    stopBody: (n) => `Its ${n} seats stop. OpenRig keeps a snapshot to resume it. The files stay.`,
+    stopRig: 'Stop the rig', stopSeat: 'Only this seat', cancel: 'Cancel',
+    goalWaits: (lead, n) => `The goal waits: I give it to ${lead} as soon as the ${n} seats are ready.`,
+    trustWaits: (seat) => `${seat} waits for you to trust the folder, I don’t answer in its place.`,
+    rigThread: 'Rig thread', repos: (n) => `Repositories · ${n}`, adopt: 'File in a project…',
+    openrigDown: (machine) => `OpenRig is not answering on ${machine}`, refused: (reason) => `Action refused: ${reason}`
+  },
+  rigRepos: {
+    title: (n) => `Repositories found · ${n}`, sub: 'what the rig cloned or opened', none: 'No repository found yet. I look every 30 s.',
+    branch: (b) => `⎇ ${b}`, modified: (m) => `${m} modified ${m === 1 ? 'file' : 'files'}`,
+    cloned: (by) => (by ? `cloned by ${by}` : 'cloned'), opened: (by) => (by ? `read by ${by}` : 'read'),
+    created: (by) => (by ? `created by ${by}` : 'created'), noRemote: 'no remote repository yet',
+    proposeOnly: (rig, project) => `I suggest filing ${rig} in ${project}: it is the only modified repository. I move nothing without you.`,
+    proposeName: (rig, project) => `I suggest filing ${rig} in ${project}: one of its repositories has that name. I move nothing without you.`,
+    fileIn: (project) => `File in ${project}`, choose: 'File in a project…',
+    adoptTitle: (rig) => `File ${rig} in a project`, projects: 'Projects', noProjects: 'No project yet.',
+    adoptNote: (project) => `The rig keeps its room and its files; its plaque will say “in ${project}”.`,
+    adoptPick: 'Pick a project.', adopt: 'File', cancel: 'Cancel', plaque: (n, names) => `${n} ${n === 1 ? 'repository' : 'repositories'} · ${names}`
   },
   handover: {
     nearShort: (name: string, pct: number) => `${name} · context ${pct} %`, nearHint: 'near its limit', failedShort: (name: string) => `Relief of ${name} failed`, retry: 'Retry',

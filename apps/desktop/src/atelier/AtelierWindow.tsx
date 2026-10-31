@@ -23,6 +23,8 @@ import { SHELL_ICONS } from '../shell/icons';
 import { useSessionActions } from '../manage/useSessionActions';
 import { useSessionMenu } from '../manage/useSessionMenu';
 import { SessionMenuHost } from '../manage/SessionMenu';
+import { useRigControlsHost } from '../rigs/StopRig';
+import { RigControlsContext } from '../rigs/useRigActions';
 import { ConfirmDialog } from '../manage/ConfirmDialog';
 import { Atelier } from './Atelier';
 import { useRelief } from '../session/useRelief';
@@ -81,11 +83,12 @@ function AtelierAlone({ client }: { client?: DaemonClient }) {
   const filing = useFiling({ fleet, projects, sessions, projectIdOf, notify });
   const actions = useSessionActions({ client: fleetClient, sessions, archived: fleetView.archived, machines, errors, notify });
   const sessionMenu = useSessionMenu({ client: fleetClient, sessions, onShowTerminal: terminalToMain });
+  const rigControls = useRigControlsHost({ client: fleetClient, notify, rigs, projects, dispatch });
   const screenKeys = useRef<ScreenKeys>({ current: null }).current;
   useKeys(dispatch, { state: nav, order, screen: screenKeys, undo, confirming: actions.pending ? { cancel: actions.cancel } : null });
-  const blocked = actions.pending !== null || sessionMenu.renaming !== null;
+  const blocked = actions.pending !== null || sessionMenu.renaming !== null || rigControls.blocking;
   return (
-    <ScreenKeysContext.Provider value={screenKeys}>
+    <ScreenKeysContext.Provider value={screenKeys}><RigControlsContext.Provider value={rigControls.controls}>
       {/* In full screen the bar goes, as the main window's does; the zoom bar keeps the way out (and Escape). */}
       {!nav.fullscreen && <AtelierBar blocked={blocked} dispatch={dispatch} />}
       <div className={`application atelier-alone ${nav.fullscreen ? 'immersive' : ''} ${filing.dragging ? 'is-dragging' : ''}`} inert={blocked}>
@@ -102,8 +105,9 @@ function AtelierAlone({ client }: { client?: DaemonClient }) {
       </div>
       <SessionMenuHost state={sessionMenu} actions={actions} filing={filing} projects={projects?.projects ?? []} currentOf={projectIdOf} onOpen={s => dispatch({ type: 'open', id: s.id })} onHandover={s => { void relief.handover(s.id); }} />
       {actions.pending && <ConfirmDialog c={actions.pending} onConfirm={actions.confirm} onCancel={actions.cancel} />}
+      {rigControls.dialog}
       <Toast notice={notice} action={noticeAction} onAction={undo} />
-    </ScreenKeysContext.Provider>
+    </RigControlsContext.Provider></ScreenKeysContext.Provider>
   );
 }
 

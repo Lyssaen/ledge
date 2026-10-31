@@ -5,7 +5,7 @@ import { afterSave, alsoIn, COLOR_ORDER, deletion, draftOf, draftProblem, newDra
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 
 const r = (machine: string, path: string): Repo => ({ machine, path });
-const p = (id: string, color: ProjectColor, name = id, repos: Repo[] = []): Project => ({ id, name, color, description: '', repos });
+const p = (id: string, color: ProjectColor, name = id, repos: Repo[] = []): Project => ({ id, name, color, description: '', rigs: [], repos });
 const session = (extra: Partial<Session>): Session => fakeSession('x', { machineId: 'local', cwd: '/w/ledge', ...extra });
 
 const ledge = p('ledge', 'blue', 'Ledge', [r('local', '/w/ledge')]);

@@ -7,7 +7,7 @@ import type { NodeEntry } from '../src/daemon/openrig/wire.js';
 const none: Projects = { version: 1, projects: [], rules: [] } as unknown as Projects;
 const node = (over: Record<string, unknown> = {}): NodeEntry => ({ rigId: 'r1', logicalId: 'dev.build', podId: 'dev', canonicalSessionName: 'dev-build@starter', runtime: 'claude-code', sessionStatus: 'running', startupStatus: 'ready', cwd: '/w/app', activityState: { activity: 'idle-at-prompt' }, ...over }) as NodeEntry;
 const nodes2 = () => [node(), node({ logicalId: 'dev.test', canonicalSessionName: 'dev-test@starter' })];
-const mk = (home = '/home/u') => createMirror({ machine: 'local', projects: () => none, home });
+const mk = (rigsRoot = '/home/u/.ledge/rigs') => createMirror({ machine: 'local', projects: () => none, rigsRoot });
 const snap = (m: ReturnType<typeof mk>, extra: { id: string; name: string; nodes: NodeEntry[] }[] = []) => {
   const list = [{ id: 'r1', name: 'starter', nodes: nodes2() }, ...extra];
   return m.replace({ rigs: list.map(r => ({ rigId: r.id, rigName: r.name, status: 'running' })), nodes: new Map(list.map(r => [r.id, r.nodes])), kernel: null });
@@ -62,6 +62,15 @@ describe('mirror', () => {
     const m = mk(); m.replace({ rigs: [{ rigId: 'a', rigName: 'a' }, { rigId: 'b', rigName: 'b' }], kernel: null,
       nodes: new Map([['a', [node({ cwd: '/home/u/.ledge/rigs/x' })]], ['b', [node({ cwd: '/home/u/.ledge/rigsX/x' })]]]) });
     expect(m.byName('a')).toMatchObject({ offProject: true, projectId: null }); expect(m.byName('b')!.offProject).toBe(false);
+  });
+  it('follows LEDGE_HOME by default (paths().rigs)', () => {
+    const saved = process.env.LEDGE_HOME; process.env.LEDGE_HOME = '/tmp/ledge-home-x';
+    try {
+      const m = createMirror({ machine: 'local', projects: () => none });
+      m.replace({ rigs: [{ rigId: 'a', rigName: 'a' }, { rigId: 'b', rigName: 'b' }], kernel: null,
+        nodes: new Map([['a', [node({ cwd: '/tmp/ledge-home-x/rigs/x' })]], ['b', [node({ cwd: '/home/u/.ledge/rigs/x' })]]]) });
+      expect(m.byName('a')!.offProject).toBe(true); expect(m.byName('b')!.offProject).toBe(false);
+    } finally { if (saved === undefined) delete process.env.LEDGE_HOME; else process.env.LEDGE_HOME = saved; }
   });
   it('detects kernel and launching', () => {
     const m = mk(); m.replace({ rigs: [{ rigId: 'k', rigName: 'kernel', status: 'running' }, { rigId: 'z', rigName: 'z', status: 'running' }], kernel: { state: 'ready', rigName: 'z' },
