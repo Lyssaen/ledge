@@ -14,8 +14,18 @@ export const BRAIN_ID = 'brain';
 export const BRAIN_NAME = 'Ledge';
 export const SHIM_TEXT = "Le cerveau de Ledge passe par `ledge brain …` (rig, tmux et l'API d'OpenRig lui sont fermés).";
 const SHIM = `#!/bin/sh\necho "${SHIM_TEXT.replace(/[`"$\\]/g, c => `\\${c}`)}" >&2\nexit 1\n`;
-/** The Claude brain may run `ledge brain …` without asking, and nothing else is widened (ruling C12). */
-export const BRAIN_CLAUDE_SETTINGS = { permissions: { allow: ['Bash(ledge brain:*)'] } };
+/**
+ * The Claude brain may run `ledge brain …` without asking, and nothing else is widened (ruling C12): the user's own settings
+ * merge with these, so the default mode is pinned here (and by `brainArgs`, which beats every settings file) and the doors
+ * the brain must not use are denied.
+ */
+export const BRAIN_CLAUDE_SETTINGS = { permissions: { defaultMode: 'default', allow: ['Bash(ledge brain:*)'],
+  deny: ['Bash(rig:*)', 'Bash(tmux:*)', 'Bash(curl:*)', 'Bash(wget:*)', 'WebFetch'] } };
+
+/** Arguments every brain launch and resume carries: a Claude brain never inherits auto or bypass mode from the user's settings. */
+export function brainArgs(tool: Tool): string[] {
+  return tool === 'claude' ? ['--permission-mode', 'default'] : [];
+}
 
 /** The brain's own environment on top of the agent's: the shims first in PATH, and LEDGE_BRAIN. */
 export function brainEnv(dir: string, base: NodeJS.ProcessEnv): Record<string, string> {
@@ -67,6 +77,8 @@ export function createBrain(d: BrainDeps): Brain {
   let down: string | undefined;
   /** A launch under way: nothing alive in the store yet, but the brain is starting. */
   let launching: Promise<void> | null = null;
+  /** A brain that died while a launch was in flight, judged once that launch is over. */
+  let deferred: string | undefined;
   /** Ids whose next exit is intended (stop, disable, relief). */
   const expected = new Set<string>();
   /** Each brain session's state last seen, so a death is seen once, on the change to exited. */
@@ -78,12 +90,17 @@ export function createBrain(d: BrainDeps): Brain {
 
   const status = (): BrainStatus => {
     const s = session();
-    const base = { tool: settings.tool, enabled: settings.enabled, restarts: restarts.length };
-    if (settings.enabled !== true) return { state: 'off', ...base };
+    const t = now();
+    const base = { tool: settings.tool, enabled: settings.enabled, restarts: restarts.filter(x => t - x < RESTART_WINDOW_MS).length };
+    const alive = (): BrainStatus => {
+      const ctx = s!.context;
+      return { state: s!.state === 'starting' ? 'starting' : 'on', ...base, sessionId: s!.id, ...(ctx && ctx.window > 0 ? { contextPct: Math.round(ctx.used / ctx.window * 100) } : {}) };
+    };
+    // A brain still alive is never shown off (a close that failed leaves it running).
+    if (settings.enabled !== true) return s ? alive() : { state: 'off', ...base };
     if (down !== undefined) return { state: 'down', ...base, reason: down };
     if (!s) return { state: 'starting', ...base };
-    const ctx = s.context;
-    return { state: s.state === 'starting' ? 'starting' : 'on', ...base, sessionId: s.id, ...(ctx ? { contextPct: Math.round(ctx.used / ctx.window * 100) } : {}) };
+    return alive();
   };
   const emit = (): void => {
     const s = status(); const key = JSON.stringify(s);
@@ -127,7 +144,14 @@ export function createBrain(d: BrainDeps): Brain {
         down = `Le cerveau n'a pas pu démarrer : ${(err as Error).message}`;
         log(`brain launch failed: ${(err as Error).message}`);
       }
-    })().finally(() => { launching = null; emit(); });
+    })().finally(() => {
+      launching = null;
+      // A death that landed while this launch was in flight was set aside: looked at again now.
+      const id = deferred; deferred = undefined;
+      const dead = id !== undefined ? d.store.get(id) : undefined;
+      if (dead && dead.state === 'exited' && dead.archivedAt === undefined) onExit(dead);
+      emit();
+    });
     launching = p;
     emit();
     return p;
@@ -177,7 +201,8 @@ export function createBrain(d: BrainDeps): Brain {
     if (expected.delete(s.id)) return;
     const h = s.handover?.state;
     if (h === 'launching' || h === 'done') return; // the relief closes the old brain (C10; Task 10 completes it)
-    if (settings.enabled !== true || down !== undefined || launching || session()) return;
+    if (launching) { deferred = s.id; return; } // looked at again once that launch is over
+    if (settings.enabled !== true || down !== undefined || session()) return;
     const t = now();
     restarts = restarts.filter(x => t - x < RESTART_WINDOW_MS);
     if (restarts.length >= RESTARTS_MAX) {

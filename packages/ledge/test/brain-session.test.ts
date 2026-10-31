@@ -17,6 +17,7 @@ import { DEFAULT_MANDATE } from '../src/daemon/brain/mandate.js';
 const at = (ms: number): string => new Date(Date.UTC(2026, 9, 31, 10) + ms).toISOString();
 
 let root: string; let brainDir: string; let settingsPath: string; let store: Store; let memory: Memory;
+let gate: Promise<void> | null = null; let closeFails = false;
 let clock: number; let launched: BrainLaunch[]; let closed: string[]; let brain: Brain; let statuses: BrainStatus[];
 
 /** The fake launch registers a brain record in `starting`, as the server's launch path would. */
@@ -26,9 +27,10 @@ const launch = async (o: BrainLaunch): Promise<Session> => {
   const s: Session = { id, name: o.name, tool: o.tool, cwd: o.cwd, project: 'brain', title: `${o.name} · brain`, tmuxSession: `ledge-${id}`,
     state: 'starting', helpers: [], startedAt: at(clock), lastActivityAt: at(clock), source: 'launcher', brain: true };
   store.upsert(s);
+  if (gate) await gate;
   return s;
 };
-const close = async (s: Session): Promise<void> => { closed.push(s.id); store.upsert({ ...store.get(s.id)!, state: 'exited', exitedAt: at(clock) }); };
+const close = async (s: Session): Promise<void> => { if (closeFails) throw new Error('tmux gone'); closed.push(s.id); store.upsert({ ...store.get(s.id)!, state: 'exited', exitedAt: at(clock) }); };
 const make = (): Brain => createBrain({ store, settingsPath, dir: brainDir, launch, close, mandate: async () => DEFAULT_MANDATE, memory,
   env: async () => ({ PATH: '/usr/bin:/bin' }), now: () => clock });
 const live = (): Session => store.all().find(s => s.brain && s.state !== 'exited')!;
@@ -37,7 +39,7 @@ const die = (id: string, extra: Partial<Session> = {}): void => { store.upsert({
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'brain-')); brainDir = join(root, 'brain'); settingsPath = join(root, 'brain.json');
   store = new Store({ journalPath: join(root, 'sessions.json') }); memory = createMemory({ dir: join(root, 'memoire') });
-  clock = 0; launched = []; closed = []; statuses = [];
+  clock = 0; launched = []; closed = []; statuses = []; gate = null; closeFails = false;
   brain = make(); brain.onStatus(s => statuses.push(s));
 });
 afterEach(() => { brain.dispose(); rmSync(root, { recursive: true, force: true }); });
@@ -97,7 +99,8 @@ describe('the brain session', () => {
     expect(readFileSync(join(brainDir, 'CLAUDE.md'), 'utf8')).toContain(BRAIN_ROLE);
     expect(readFileSync(join(brainDir, 'AGENTS.md'), 'utf8')).toContain(BRAIN_ROLE);
     const perms = JSON.parse(readFileSync(join(brainDir, '.claude', 'settings.json'), 'utf8'));
-    expect(perms).toEqual({ permissions: { allow: ['Bash(ledge brain:*)'] } });
+    expect(perms).toEqual({ permissions: { defaultMode: 'default', allow: ['Bash(ledge brain:*)'],
+      deny: ['Bash(rig:*)', 'Bash(tmux:*)', 'Bash(curl:*)', 'Bash(wget:*)', 'WebFetch'] } });
     expect(readBrainSettings(settingsPath)).toMatchObject({ enabled: true, tool: 'claude' });
     expect(brain.status()).toMatchObject({ state: 'starting', enabled: true, sessionId: 'brain', restarts: 0 });
     store.upsert({ ...live(), state: 'idle', context: { used: 50_000, window: 200_000, at: at(0) } });
@@ -181,6 +184,38 @@ describe('the brain session', () => {
     expect(launched).toHaveLength(2);
   });
 
+  it('a death during a launch in flight is judged once the launch is over', async () => {
+    let open!: () => void; gate = new Promise<void>(r => { open = r; });
+    const p = brain.set({ enabled: true });
+    await new Promise(r => setTimeout(r, 20)); // the record is in the store, the launch not over
+    expect(launched).toHaveLength(1);
+    die('brain'); gate = null; open(); await p; await brain.settled();
+    expect(launched).toHaveLength(2);
+    expect(brain.status()).toMatchObject({ state: 'starting', restarts: 1 });
+  });
+
+  it('restarts older than the window are no longer counted', async () => {
+    await brain.set({ enabled: true });
+    die('brain'); await brain.settled();
+    expect(brain.status().restarts).toBe(1);
+    clock += RESTART_WINDOW_MS + 1;
+    expect(brain.status().restarts).toBe(0);
+  });
+
+  it('a failed close never shows a live brain as off', async () => {
+    await brain.set({ enabled: true });
+    closeFails = true;
+    await expect(brain.set({ enabled: false })).rejects.toThrow('tmux gone');
+    expect(brain.status()).toMatchObject({ state: 'starting', enabled: false, sessionId: 'brain' });
+  });
+
+  it('a context without a window gives no percentage', async () => {
+    await brain.set({ enabled: true });
+    store.upsert({ ...live(), state: 'idle', context: { used: 10, window: 0, at: at(0) } });
+    expect(brain.status().state).toBe('on');
+    expect(brain.status().contextPct).toBeUndefined();
+  });
+
   it('changing the tool replaces the session', async () => {
     await brain.set({ enabled: true });
     await brain.set({ enabled: true, tool: 'codex' }); await brain.settled();
@@ -224,8 +259,19 @@ describe('the brain in the daemon', () => {
     const dir = join(home, 'brain');
     expect(spawned[0]).toMatchObject({ name: 'ledge-brain', cwd: dir, env: { PATH: `${dir}/bin:/login/bin`, HOME: home, LEDGE_BRAIN: '1', LEDGE_SESSION: 'brain', LEDGE_NAME: 'Ledge' } });
     expect(store.get('brain')).toMatchObject({ brain: true, name: 'Ledge', state: 'starting' });
+    expect(spawned[0]!.command.join(' ')).toContain('--permission-mode default');
     expect(readBrainSettings(join(home, 'brain.json'))).toMatchObject({ enabled: true, tool: 'claude' });
     await until(() => c.msgs.some(m => m.type === 'brain.status' && m.status.state === 'starting' && m.status.sessionId === 'brain'));
+    c.close();
+  });
+
+  it('never gives another session the brain arguments', async () => {
+    const store = new Store(); const s = await serve(store);
+    const c = await client(s.port);
+    c.send({ type: 'session.launch', tool: 'claude', cwd: home } as ClientMessage);
+    await until(() => spawned.length === 1);
+    expect(spawned[0]!.command.join(' ')).not.toContain('--permission-mode');
+    expect(spawned[0]!.env.LEDGE_BRAIN).toBeUndefined();
     c.close();
   });
 
@@ -236,6 +282,7 @@ describe('the brain in the daemon', () => {
     await serve(store);
     await until(() => store.get('brain')?.state === 'starting');
     expect(spawned[0]!.command).toEqual(expect.arrayContaining(['--resume', 'conv-1']));
+    expect(spawned[0]!.command.join(' ')).toContain('--permission-mode default');
     expect(spawned[0]!.env).toMatchObject({ LEDGE_BRAIN: '1', PATH: `${join(home, 'brain')}/bin:/login/bin` });
     expect(store.get('brain')).toMatchObject({ brain: true, agentSessionId: 'conv-1' });
     expect(existsSync(join(home, 'brain', 'CLAUDE.md'))).toBe(true);

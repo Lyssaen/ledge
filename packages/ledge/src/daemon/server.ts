@@ -65,7 +65,7 @@ import { mandateSummary } from './openrig/seatContext.js';
 import { execGitSlow } from './openrig/workspace.js';
 import { watchRigRepos } from './openrig/repos.js';
 import { createHandovers, heldNames } from './handover.js';
-import { createBrain, brainEnv } from './brain/session.js';
+import { createBrain, brainArgs, brainEnv } from './brain/session.js';
 import { isBrainTool } from './brain/settings.js';
 import { createMemory } from './brain/memory.js';
 import { ensureMandate } from './brain/mandate.js';
@@ -743,7 +743,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       const base = await agentEnv();
       // A brain keeps its shims and LEDGE_BRAIN on a resume (C9), and its brain mark.
       const env = s.brain ? { ...base, ...brainEnv(paths().brainDir, base) } : base;
-      const spawned = await spawnSession({ tool: s.tool, id: s.id, name: s.name, ...(s.brain ? { brain: true as const } : {}), args: [...RESUME_ARGS[s.tool](key), ...(model ? MODEL_ARGS[s.tool](model) : []), ...(effort ? EFFORT_ARGS[s.tool]?.(effort) ?? [] : []), ...autonomyArgs(s.tool, s.autonomy)], cwd, tmux, now, env,
+      const spawned = await spawnSession({ tool: s.tool, id: s.id, name: s.name, ...(s.brain ? { brain: true as const } : {}), args: [...RESUME_ARGS[s.tool](key), ...(model ? MODEL_ARGS[s.tool](model) : []), ...(effort ? EFFORT_ARGS[s.tool]?.(effort) ?? [] : []), ...(s.brain ? brainArgs(s.tool) : autonomyArgs(s.tool, s.autonomy))], cwd, tmux, now, env,
         ...(s.autonomy ? { autonomy: s.autonomy } : {}), taken: { names: store.all().filter(o => o.id !== s.id && o.state !== 'exited').map(o => o.name), ids: [] } });
       // Deleted or archived while it spawned: that request wins, the agent just started is stopped and not recorded.
       const cur = store.get(s.id);
@@ -993,7 +993,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     const base = await agentEnv();
     const env = req.env ? { ...base, ...req.env } : base;
     const autonomy = req.autonomy;
-    const spawned = await spawnSession({ tool: req.tool, args: launchArgs({ ...req, dirs, autonomy }), name: req.name, cwd, tmux, now, env,
+    const spawned = await spawnSession({ tool: req.tool, args: [...(req.brain ? brainArgs(req.tool) : []), ...launchArgs({ ...req, dirs, autonomy })], name: req.name, cwd, tmux, now, env,
       ...(autonomy ? { autonomy } : {}), ...(req.id ? { id: req.id } : {}), ...(req.brain ? { brain: true as const } : {}),
       taken: { names: [...live.filter(s => s.state !== 'exited').map(s => s.name), ...heldNames(live)], ids: live.map(s => s.id) } });
     const session: Session = { ...spawned, ...(req.model ? { model: req.model } : {}), ...(req.effort ? { effort: req.effort } : {}) };
@@ -1448,6 +1448,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         try { await brain.set({ enabled: msg.enabled, ...(msg.tool ? { tool: msg.tool } : {}) }); }
         catch (e) { return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: (e as Error).message }); }
         const st = brain.status();
+        if (!msg.enabled && brain.session()) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: "Le cerveau de Ledge tourne encore : sa fermeture n'a pas abouti." });
         return reply(st.state === 'down' ? { type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', ...(st.reason ? { reason: st.reason } : {}) } : { type: 'rig.result', rid: msg.rid, ok: true });
       }
       // A refusal of the service (an unknown pairing, a sign-in while disabled) reaches the sender as an `error`.
