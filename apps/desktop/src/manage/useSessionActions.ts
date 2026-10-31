@@ -54,7 +54,8 @@ export function useSessionActions(o: { client: Pick<DaemonClient, 'send'>; sessi
     let list: Session[] = [];
     for (const id of ids) {
       const s = byId.get(id);
-      if (s && !seen.has(id)) { seen.add(id); list.push(s); }
+      // A rig's seat lives and ends by OpenRig (spec §4.5): never ended, archived or deleted from here while listed, whatever asked (a key, a bulk menu).
+      if (s && !(s.rig && !inArchive.has(id)) && !seen.has(id)) { seen.add(id); list.push(s); }
     }
     // Ending needs nothing new from the daemon, and a session that does not run (or cannot be reached) has nothing to stop.
     list = kind === 'end' ? list.filter(s => isLive(s) && !inArchive.has(s.id)) : list.filter(s => allowedSession(s) && (kind === 'delete' || !inArchive.has(s.id)));

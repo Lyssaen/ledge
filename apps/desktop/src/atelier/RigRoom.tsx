@@ -11,6 +11,7 @@ import { cls } from '../shell/cls';
 import { Menu, MenuItem } from '../shell/Menu';
 import { SHELL_ICONS } from '../shell/icons';
 import { SessionBot, StateBadge } from '../shell/SessionBot';
+import { useRigControls } from '../rigs/useRigActions';
 import { ROOM_BACK, ROOM_SIDE, RUG_SIDE, layoutTable, type AtelierRoom } from './layout';
 
 export type RigAtelierRoom = Extract<AtelierRoom, { kind: 'rig' | 'kernel' }>;
@@ -20,7 +21,8 @@ const colorOf = (room: RigAtelierRoom) => (room.kind === 'kernel' ? 'var(--muted
 /**
  * A rig's or the kernel's room (lot 3, maquettes new-atelier-factory / w-3-piece): walls in the rig's colour, the plaque on the back wall
  * (swatch, name, « rig · n sièges », where it works, « sur {machine} » when remote, « injoignable », « n au travail », « … »), the table
- * inside (`children`). The « … » offers « Terminaux » (one item per running seat) and « Fil du rig », then `extraActions` (lot 5).
+ * inside (`children`). The « … » offers « Terminaux » (one item per running seat) and « Fil du rig », then `extraActions`, then (with the
+ * app's rig gestures) « Arrêter… » and, off any project, « Ranger dans un projet… ».
  */
 export function RigRoom({ room, width, dispatch, onTerminal, children, extraActions }: {
   room: RigAtelierRoom; width: number; dispatch: (a: NavAction) => void; onTerminal(seat: RigSeat): void; children: ReactNode; extraActions?: ReactNode;
@@ -35,6 +37,7 @@ export function RigRoom({ room, width, dispatch, onTerminal, children, extraActi
   const working = workingCount(rig);
   const seats = rig.seats.filter(s => s.state !== 'stopped');
   const label = t.rooms.rigMenu(name);
+  const controls = useRigControls();
   return (
     <section className={cls('project-room atelier-room rig-room', rig.lifecycle === 'unreachable' && 'rig-unreachable')} data-room={room.key} data-kind={room.kind} aria-label={t.rooms.room(name)}
       style={{ '--room': `${width}px`, '--project': color, '--room-side': `${ROOM_SIDE}px`, '--room-back': `${ROOM_BACK}px` } as CSSProperties}>
@@ -65,6 +68,11 @@ export function RigRoom({ room, width, dispatch, onTerminal, children, extraActi
           ))}
           <MenuItem onSelect={() => dispatch({ type: 'ledge', tab: 'conversation' })}><span>{t.rooms.rigThread}</span></MenuItem>
           {extraActions}
+          {/* Lot 5: « Arrêter… » (its confirmation) and, for a rig off any project, « Ranger dans un projet… ». */}
+          {controls && room.kind === 'rig' && rig.lifecycle !== 'unreachable' && rig.lifecycle !== 'stopped' && (
+            <MenuItem onSelect={() => controls.askStop(rig)}><span>{t.rigActions.stop}</span></MenuItem>
+          )}
+          {controls && room.kind === 'rig' && rig.offProject && <MenuItem onSelect={() => controls.askAdopt(rig)}><span>{t.rigActions.adopt}</span></MenuItem>}
         </Menu>
       </div>
       <div className="room-tables">{children}</div>

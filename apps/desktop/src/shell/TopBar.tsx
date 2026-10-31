@@ -11,6 +11,26 @@ import { isArchived } from '@ledge/protocol';
 import { SHELL_ICONS } from './icons';
 import { ApprovalBadge, HelperBot, SessionBot, StateBadge } from './SessionBot';
 import { ProjectSwatch } from '../projects/ProjectSwatch';
+import { useRigControls } from '../rigs/useRigActions';
+
+/** An isolated rig room's bar (maquette w-3): « Fil du rig », then, off any project, « Dépôts · n » and « Ranger dans un projet… », then
+ *  « Arrêter le rig… » (its confirmation). Without the app's rig gestures, only the thread. */
+function RigBar({ rig, dispatch }: { rig: Rig; dispatch: (a: NavAction) => void }) {
+  const { t } = useI18n();
+  const a = t.rigActions;
+  const controls = useRigControls();
+  const live = rig.lifecycle !== 'unreachable' && rig.lifecycle !== 'stopped';
+  return (
+    <span className="rig-bar">
+      <Button size="sm" onClick={() => dispatch({ type: 'ledge', tab: 'conversation' })}>{a.rigThread}</Button>
+      {controls && rig.offProject && <>
+        <Button size="sm" onClick={() => controls.showRepos(rig)}>{a.repos(rig.repos.length)}</Button>
+        <Button size="sm" onClick={() => controls.askAdopt(rig)}>{a.adopt}</Button>
+      </>}
+      {controls && live && <Button size="sm" disabled={controls.busy(rig.machine, rig.id)} onClick={() => controls.askStop(rig)}>{a.stopRigBar}</Button>}
+    </span>
+  );
+}
 
 /** The session menu opens under its button, its right edge on the button's (Menu keeps it inside the window). */
 const MENU_WIDTH = 260;
@@ -87,6 +107,7 @@ export function TopBar({ nav, dispatch, session, helper, projects, rigs = [], pr
         <span title={label}>{label}</span>
         <button aria-label={t.crumb.clearFilter} title={t.crumb.clearFilterTitle} onClick={() => dispatch({ type: 'home' })}><Icon d={ICONS.close.d} size={12} /></button>
       </span>
+      {rig && <RigBar rig={rig} dispatch={dispatch} />}
     </>;
   };
 

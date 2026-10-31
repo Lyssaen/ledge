@@ -52,6 +52,8 @@ import { useFiling } from './atelier/filing';
 import { useSessionActions } from './manage/useSessionActions';
 import { useSessionMenu } from './manage/useSessionMenu';
 import { SessionMenuHost } from './manage/SessionMenu';
+import { useRigControlsHost } from './rigs/StopRig';
+import { RigControlsContext } from './rigs/useRigActions';
 import { ConfirmDialog } from './manage/ConfirmDialog';
 import { loadedWorkspace, SessionPlace } from './session/lazy';
 import { createSessionMemory } from './session/memory';
@@ -203,6 +205,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const actions = useSessionActions({ client: fleetClient, sessions, archived: fleetView.archived, machines, errors, notify });
   // The session menu, from the atelier's seats and the session page's header « … » (one at a time).
   const sessionMenu = useSessionMenu({ client: fleetClient, sessions, onShowTerminal: showTerminal });
+  // Acting on rigs and seats (lot 5): the Rigs tab, the rig rooms, the top bar and a paired session's menu share it; « Arrêter… » shows here.
+  const rigControls = useRigControlsHost({ client: fleetClient, notify, rigs, dispatch });
   const decisions = useDecisions({ client: fleetClient, sessions, errors, notify });
   const screenKeys = useRef<ScreenKeys>({ current: null }).current;
   // Drafts, reading positions and the last item seen, per session and subagent: they survive navigation, not a restart.
@@ -296,9 +300,9 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
 
   // A dialog over the application (a modal, a confirmation, the rename dialog): what lies behind it, the title bar's controls
   // included, takes neither clicks nor the focus.
-  const blocked = nav.modal !== null || actions.pending !== null || sessionMenu.renaming !== null || whatsNew || pairing !== null;
+  const blocked = nav.modal !== null || actions.pending !== null || sessionMenu.renaming !== null || whatsNew || pairing !== null || rigControls.blocking;
   return (
-    <ScreenKeysContext.Provider value={screenKeys}><TermStoreContext.Provider value={termStore}>
+    <ScreenKeysContext.Provider value={screenKeys}><TermStoreContext.Provider value={termStore}><RigControlsContext.Provider value={rigControls.controls}>
       {!nav.fullscreen && <TitleBar dispatch={dispatch} sessions={sessions} waits={waits} blocked={blocked} />}
       <div className={`application ${nav.fullscreen ? 'immersive' : ''} ${filing.dragging ? 'is-dragging' : ''}`} data-readonly={localDown ? 'true' : undefined} inert={blocked}>
         <Sidebar nav={nav} dispatch={dispatch} sessions={sessions} archived={fleetView.archived} machines={machines} updating={daemonUpdates.updating} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing}
@@ -351,9 +355,10 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       <SessionMenuHost state={sessionMenu} actions={actions} filing={filing} projects={projects?.projects ?? NO_PROJECTS} currentOf={projectIdOf} onOpen={s => dispatch({ type: 'open', id: s.id })} onHandover={s => { void relief.handover(s.id); }} />
       <WhatsNew />
       {actions.pending && <ConfirmDialog c={actions.pending} onConfirm={actions.confirm} onCancel={actions.cancel} />}
+      {rigControls.dialog}
       <PairingDialog shown={pairing} mobile={mobile} fleet={fleet} notify={notify} />
       <Toast notice={notice} action={noticeAction} onAction={undo} />
-    </TermStoreContext.Provider></ScreenKeysContext.Provider>
+    </RigControlsContext.Provider></TermStoreContext.Provider></ScreenKeysContext.Provider>
   );
 }
 

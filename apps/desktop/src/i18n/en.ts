@@ -514,6 +514,18 @@ export const en: Messages = {
     loading: 'Reading the specs…', none: 'No spec in the library.', failed: 'The specs could not be read.',
     agents: 'Agents', agentCols: { address: 'Address', name: 'Name', rig: 'Rig', state: 'State', tool: 'Tool · model', context: 'Context' }, noAgents: 'No seat.'
   },
+  rigActions: {
+    stop: 'Stop…', stopRigBar: 'Stop the rig…', resume: 'Resume', restore: 'Resume from the last snapshot',
+    restartSeat: 'Restart this seat', handover: 'Hand over', cancelLaunch: 'Cancel the launch', openPrompt: 'Open the prompt',
+    starting: 'starting', more: (name) => `More actions for ${name}`, seatMenu: (name) => `Actions of ${name}`,
+    stopTitle: (rig) => `Stop ${rig}?`,
+    stopBody: (n) => `Its ${n} seats stop. OpenRig keeps a snapshot to resume it. The files stay.`,
+    stopRig: 'Stop the rig', stopSeat: 'Only this seat', cancel: 'Cancel',
+    goalWaits: (lead, n) => `The goal waits: I give it to ${lead} as soon as the ${n} seats are ready.`,
+    trustWaits: (seat) => `${seat} waits for you to trust the folder, I don’t answer in its place.`,
+    rigThread: 'Rig thread', repos: (n) => `Repositories · ${n}`, adopt: 'File in a project…',
+    openrigDown: (machine) => `OpenRig is not answering on ${machine}`, refused: (reason) => `Action refused: ${reason}`
+  },
   handover: {
     nearShort: (name: string, pct: number) => `${name} · context ${pct} %`, nearHint: 'near its limit', failedShort: (name: string) => `Relief of ${name} failed`, retry: 'Retry',
     pass: 'Hand over', passTitle: 'A fresh session takes its place: it writes its brief', later: 'Later',

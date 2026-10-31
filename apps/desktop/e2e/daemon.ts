@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Page, WebSocketRoute } from '@playwright/test';
-import type { Ask, ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, Escalation, Exchange, FoundRepo, LedgeThreadItem, IslandPrefs, Machines, ModelChoice, OpenRigStatus, Projects, Recent, Rig, RigPlan, RigSpecInfo, Session, ThreadItem, Tool } from '@ledge/protocol';
+import type { Ask, ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, Escalation, Exchange, FoundRepo, LedgeThreadItem, IslandPrefs, Machines, ModelChoice, OpenRigStatus, Projects, Recent, Rig, RigPlan, RigResultCode, RigSpecInfo, Session, ThreadItem, Tool } from '@ledge/protocol';
 
 /** How long a launched session stays `starting` in the fake daemon before it is `working`. */
 export const LAUNCH_SETTLE_MS = 1500;
@@ -42,13 +42,13 @@ export type Found = { repos: FoundRepo[]; truncated?: boolean } | 'offline' | 'o
  *  keyed by rig id. `pushRig`, `removeRig` and `exchange` play the daemon's later news.
  *  Launching (lot 5): a `rig.prepare` is answered `rig.plan`, computed from the spec in `extras.specs` (its fields overridden by `extras.plans[spec]`),
  *  or `rig.result` failed for an unknown spec; a `rig.launch` takes its plan once (`rig.result` ok, then the rig pushed `launching`),
- *  a plan taken again is refused `plan already launched`, an unknown one `plan expired`.
+ *  a plan taken again is refused `plan already launched`, an unknown one `plan expired`. A `rig.act` is answered `rig.result` ok, or `extras.rigAct`.
  *  Ledge's thread (lot 4): after the escalations, `ledge.thread.history` from `extras.thread`; `ledge.thread.request` answers the same. An `escalation.answer`
  *  is accepted after `extras.answerDelayMs` (`escalation.updated` answered, `rig.result` ok), a later one gets `rig.result` `already_answered`. A `ledge.say` adds the
  *  user's item (`to` for a leading `@seat`, which is all it does), else plays `extras.chat` as `chat.ask` does (`chat.history` first) and finishes Ledge's bubble.
  *  `pushEscalation`, `pushExchange` and `threadItem` play the later news. Every client message is kept in `received`.
  *  The route is anchored so it never catches `/ssh/<alias>` (see `fakeRemote`). Register before `page.goto`. */
-export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual'; chat?: ChatReply; found?: Record<string, Found>; scanDelayMs?: number; island?: IslandPrefs | null | 'unknown'; models?: Partial<Record<Tool, ModelChoice[]>>; asks?: Ask[]; rigs?: Rig[]; escalations?: Escalation[]; openrig?: OpenRigStatus; specs?: RigSpecInfo[]; exchanges?: Record<string, Exchange[]>; thread?: LedgeThreadItem[]; answerDelayMs?: number; plans?: Record<string, Partial<RigPlan>> } = {}) {
+export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual'; chat?: ChatReply; found?: Record<string, Found>; scanDelayMs?: number; island?: IslandPrefs | null | 'unknown'; models?: Partial<Record<Tool, ModelChoice[]>>; asks?: Ask[]; rigs?: Rig[]; escalations?: Escalation[]; openrig?: OpenRigStatus; specs?: RigSpecInfo[]; exchanges?: Record<string, Exchange[]>; thread?: LedgeThreadItem[]; answerDelayMs?: number; plans?: Record<string, Partial<RigPlan>>; rigAct?: { ok: false; code: RigResultCode; reason?: string } } = {}) {
   const threads = new Map(Object.entries(extras.threads ?? {}).map(([id, items]) => [id, [...items]]));
   const sessions = new Map(initial.map(s => [s.id, s]));
   const received: ClientMessage[] = [];
@@ -154,6 +154,8 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
           ws.send(JSON.stringify({ type: 'rig.updated', rig }));
         }
       }
+      // A rig action (lot 5) is accepted (`rig.result` ok), or refused as `extras.rigAct` says; the rig itself is left as it is.
+      if (msg.type === 'rig.act') ws.send(JSON.stringify({ type: 'rig.result', rid: msg.rid, ...(extras.rigAct ?? { ok: true }) }));
       if (msg.type === 'models.list') ws.send(JSON.stringify({ type: 'models.listing', requestId: msg.requestId, tool: msg.tool, models: extras.models?.[msg.tool] ?? [] }));
       if (msg.type === 'repos.inspect') {
         ws.send(JSON.stringify({ type: 'repos.info', requestId: msg.requestId, repos: msg.paths.map(path => ({ path, ...(extras.repoInfo?.[path] ?? { exists: true, branch: 'main' }) })) }));

@@ -298,6 +298,11 @@ button.rc-seat-main:hover { background: var(--sidebar-accent); }
 .rc-more { margin-left: 4px; padding: 2px 6px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--muted-foreground); font-size: 11.5px; cursor: pointer; }
 .rc-more:hover { background: var(--sidebar-accent); }
 .rc-health { margin: 4px 0; font-size: 12px; }
+.rc-launch-note { display: flex; gap: 10px; align-items: baseline; margin: 8px 0 0; padding: 10px 12px; border: 1px solid var(--sidebar-border); border-radius: var(--radius-md); background: var(--well); font-size: 13px; line-height: 1.5; }
+.rc-launch-note strong { font-weight: 600; }
+.rc-trust-note { color: var(--muted-foreground); }
+.rc-more-actions:disabled { opacity: .5; cursor: default; }
+.app-header .rig-bar { display: inline-flex; align-items: center; gap: 6px; margin-left: 6px; flex-shrink: 0; }
 .rigs-specs { display: grid; grid-template-columns: minmax(200px, 300px) minmax(0, 1fr); gap: 16px; align-items: start; }
 @media (max-width: 760px) { .rigs-specs { grid-template-columns: 1fr; } }
 .rs-list ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }

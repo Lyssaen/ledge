@@ -541,6 +541,19 @@ export const fr = {
     loading: 'Lecture des specs…', none: 'Aucune spec dans la bibliothèque.', failed: 'Les specs n’ont pas pu être lues.',
     agents: 'Agents', agentCols: { address: 'Adresse', name: 'Nom', rig: 'Rig', state: 'État', tool: 'Outil · modèle', context: 'Contexte' }, noAgents: 'Aucun siège.'
   },
+  /** Lot 5: acting on a rig or a seat (spec §4.5), its launch (§4.6), the isolated rig room's bar. */
+  rigActions: {
+    stop: 'Arrêter…', stopRigBar: 'Arrêter le rig…', resume: 'Reprendre', restore: 'Reprendre depuis le dernier instantané',
+    restartSeat: 'Relancer ce siège', handover: 'Relève', cancelLaunch: 'Annuler le lancement', openPrompt: 'Ouvrir l’invite',
+    starting: 'démarre', more: (name: string) => `Plus d’actions pour ${name}`, seatMenu: (name: string) => `Actions de ${name}`,
+    stopTitle: (rig: string) => `Arrêter ${rig} ?`,
+    stopBody: (n: number) => `Ses ${n} sièges s’arrêtent. OpenRig garde un instantané pour le reprendre. Les fichiers restent.`,
+    stopRig: 'Arrêter le rig', stopSeat: 'Seulement ce siège', cancel: 'Annuler',
+    goalWaits: (lead: string, n: number) => `Le but attend : je le donne à ${lead} dès que les ${n} sièges sont prêts.`,
+    trustWaits: (seat: string) => `${seat} attend ta confiance dans le dossier, je ne réponds pas à sa place.`,
+    rigThread: 'Fil du rig', repos: (n: number) => `Dépôts · ${n}`, adopt: 'Ranger dans un projet…',
+    openrigDown: (machine: string) => `OpenRig ne répond pas sur ${machine}`, refused: (reason: string) => `Action refusée : ${reason}`
+  },
   handover: {
     nearShort: (name: string, pct: number) => `${name} · contexte ${pct} %`, nearHint: 'limite proche', failedShort: (name: string) => `Relève de ${name} échouée`, retry: 'Réessayer',
     pass: 'Passer le relais', passTitle: 'Une nouvelle session prend sa place : il écrit son bilan', later: 'Plus tard',
