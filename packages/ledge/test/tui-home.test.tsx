@@ -228,7 +228,7 @@ describe('ledge tui: writing to Ledge', () => {
     } finally { await tui.cleanup(); }
   });
 
-  it('alt+2 asks where the most active rig is; alt+1 opens the launch instead of sending', async () => {
+  it('alt+2 asks where the most active rig is; alt+1 opens the rig launch instead of sending', async () => {
     const tui = await startTui({ openrig: {} });
     try {
       await tui.resize(160, 46);
@@ -241,7 +241,7 @@ describe('ledge tui: writing to Ledge', () => {
       await until(() => sent(tui.daemon.received, 'ledge.say').length === 2);
       expect(sent(tui.daemon.received, 'ledge.say')[1]).toMatchObject({ text: 'Qui a besoin de moi ?' });
       await tui.press(ALT('1'));
-      await until(() => tui.frame().includes('NOUVELLE SESSION'));
+      await until(() => tui.frame().includes('NOUVEAU RIG · LE BUT, LA SPEC, OÙ'));
       expect(sent(tui.daemon.received, 'ledge.say')).toHaveLength(2);
     } finally { await tui.cleanup(); }
   });

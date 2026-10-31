@@ -194,6 +194,46 @@ export const en: Messages = {
     missing: { prompt: 'Write an instruction.', machine: 'No machine online.', repos: 'Pick a repository or a folder.' },
     launching: 'Launching…', launched: name => `✓ ${name} is started`,
   },
+  rigLaunch: {
+    title: 'New rig · the goal, the spec, where', planTitle: 'New rig · Ledge’s plan', startTitle: 'New rig · the start',
+    crumb: 'Launch › the goal · (the plan) · the start', mode: 'Mode', rig: 'rig', session: 'session',
+    goal: 'Goal', goalHint: 'Ledge uses it to propose the plan, then to decide along the way.',
+    spec: 'Spec', specsLoading: 'reading the specs…', specsFailed: 'The specs could not be read.', noSpec: 'no spec', recommended: 'recommended by Ledge',
+    seatsOf: (n, names, runtimes) => `${n} ${plural(n, 'seat', 'seats')}: ${names} · ${runtimes}`,
+    where: 'Where', inProject: 'in a project', offProject: 'off any project (new space)',
+    whereHint: project => `The rig gets its own room, “in ${project}” on its plate.`, offHint: 'Ledge makes an empty space, named after the goal.',
+    repo: 'Repository', noRepo: (project, machine) => `${project} has no repository on ${machine}`,
+    branch: 'Branch', newBranch: '(new)', copyRow: 'Copy', copy: 'Work in a copy', machine: 'Machine',
+    name: 'Name', nameHint: '(from the goal · ctrl+r for another)', preview: 'Preview',
+    previewLine: (spec, where, n, machine) => ` · rig ${spec} · ${where} · ${n} ${plural(n, 'seat', 'seats')} · ${machine}`,
+    inProjectOf: project => `in ${project}`, offPlace: 'off any project',
+    launch: 'Launch', seePlan: 'See the plan', cancel: 'Cancel', launchRig: 'Launch the rig', back: 'Back',
+    planOptional: 'Optional plan: the rig writes in a .worktrees/ copy.', planImposed: 'The plan is asked once: the rig would write in your repository.',
+    why: {
+      absent: m => `OpenRig is not installed on ${m}`, unsupported: m => `The OpenRig version on ${m} is not supported`,
+      offline: m => `${m} is offline`, unreachable: m => `OpenRig is unreachable on ${m}`
+    },
+    install: 'To install it:',
+    missing: { goal: 'Give the lead a goal.', spec: 'Pick a spec.', repo: 'Pick a repository.', branch: 'Name the new branch.', name: 'Invalid name: lowercase letters, digits and dashes.' },
+    preparing: 'Ledge is preparing the plan…', launching: 'Launching…', refused: why => `Refused: ${why}`, timeout: s => `no answer after ${s} s`,
+    plan: {
+      intro: 'Here is how I would set the rig up. Nothing is launched.', head: { seat: 'SEAT', agent: 'AGENT', autonomy: 'AUTONOMY' },
+      folder: 'Folder', writes: 'Adds to the folder:', command: 'Command'
+    },
+    starting: {
+      openrig: 'OpenRig', preparing: 'preparing the launch…', running: 'running', copy: 'Copy', folder: 'Folder', space: 'Space',
+      human: 'Ledge, the rig’s human', humanCommand: 'rig gateway human add ledge', up: name => `rig up ${name}`,
+      upDetail: (spec, n) => `spec ${spec} · ${n} ${plural(n, 'seat', 'seats')}`,
+      seats: 'Seats', ready: (k, n) => `${k}/${n} ready`,
+      coming: names => `${names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0]} ${names.length > 1 ? 'are' : 'is'} starting…`,
+      tasks: 'First tasks', tasksWait: 'queued as soon as the seats are ready', tasksSent: lead => `goal given to ${lead}`
+    },
+    trust: seat => `${seat} waits for your trust in the folder · ↵ open the prompt`,
+    openRoom: 'Open its room', cancelLaunch: 'Cancel the launch', backToLedge: 'Back to Ledge',
+    leave: 'You can go: Ledge will tell you if the start gets stuck.', notNamed: 'The rig has no name yet: nothing to cancel for now.',
+    cancelled: name => `${name}: launch cancelled`,
+    keys: { mode: 'rig or session', seePlan: 'see the plan', openRoom: 'open its room', trust: 'open the prompt', cancelLaunch: 'cancel the launch', ledge: 'Ledge' }
+  },
   settings: { title: 'Settings', language: 'Language', theme: 'Theme', themes: { auto: 'Auto', dark: 'Dark', light: 'Light' }, themeAuto: tone => `Auto (${tone} background)`, context: 'Max context', contextHint: 'past it: hand over', contextUnknown: 'update the daemon', contextSaved: pct => `Max context: ${pct} %`, saved: 'Setting saved.', saveFailed: m => `Setting applied, but not saved: ${m}` },
   help: { title: 'Help', global: 'Everywhere', overview: 'Home', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings', screens: 'switch screen', field: 'Typing', wordBefore: 'delete the word before',
     more: (above, below) => [above ? `↑ ${above} above` : '', below ? `↓ ${below} below` : ''].filter(Boolean).join(' · ') },

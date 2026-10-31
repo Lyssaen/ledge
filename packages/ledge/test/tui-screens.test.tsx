@@ -1298,14 +1298,15 @@ describe('ledge tui: no teams', () => {
     } finally { await tui.cleanup(); }
   });
 
-  it('Launch offers no role field', async () => {
+  it('Launch offers no role field; ctrl+t switches to a rig, not a team', async () => {
     const tui = await startTui();
     try {
       await tui.press('+');
       await until(() => tui.frame().includes('NOUVELLE SESSION'));
       expect(tui.frame()).not.toMatch(/rôle|équipe/i);
       await tui.press('\u0014');
-      expect(tui.frame()).toContain('NOUVELLE SESSION');
+      await until(() => tui.frame().includes('NOUVEAU RIG'));
+      expect(tui.frame()).not.toMatch(/rôle|équipe/i);
     } finally { await tui.cleanup(); }
   });
 });

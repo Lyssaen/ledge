@@ -203,6 +203,47 @@ export const fr = {
     missing: { prompt: 'Écrivez une instruction.', machine: 'Aucune machine en ligne.', repos: 'Choisissez un dépôt ou un dossier.' } as Record<'prompt' | 'machine' | 'repos', string>,
     launching: 'Lancement…', launched: (name: string) => `✓ ${name} est lancée`,
   },
+  /** « Nouveau rig » in three steps: the form, Ledge's plan, the start. */
+  rigLaunch: {
+    title: 'Nouveau rig · le but, la spec, où', planTitle: 'Nouveau rig · le plan de Ledge', startTitle: 'Nouveau rig · le démarrage',
+    crumb: 'Lancer › le but · (le plan) · le démarrage', mode: 'Mode', rig: 'rig', session: 'session',
+    goal: 'But', goalHint: 'Ledge s’en sert pour proposer le plan, puis pour trancher en route.',
+    spec: 'Spec', specsLoading: 'lecture des specs…', specsFailed: 'Les specs n’ont pas pu être lues.', noSpec: 'aucune spec', recommended: 'recommandée par Ledge',
+    seatsOf: (n: number, names: string, runtimes: string) => `${n} ${plural(n, 'siège', 'sièges')} : ${names} · ${runtimes}`,
+    where: 'Où', inProject: 'dans un projet', offProject: 'hors projet (nouvel espace)',
+    whereHint: (project: string) => `Le rig aura sa propre pièce, « dans ${project} » sur la plaque.`, offHint: 'Ledge crée un espace vide, nommé d’après le but.',
+    repo: 'Dépôt', noRepo: (project: string, machine: string) => `${project} n’a pas de dépôt sur ${machine}`,
+    branch: 'Branche', newBranch: '(nouvelle)', copyRow: 'Copie', copy: 'Travailler dans une copie', machine: 'Machine',
+    name: 'Nom', nameHint: '(tiré du but · ctrl+r pour un autre)', preview: 'Aperçu',
+    previewLine: (spec: string, where: string, n: number, machine: string) => ` · rig ${spec} · ${where} · ${n} ${plural(n, 'siège', 'sièges')} · ${machine}`,
+    inProjectOf: (project: string) => `dans ${project}`, offPlace: 'hors projet',
+    launch: 'Lancer', seePlan: 'Voir le plan', cancel: 'Annuler', launchRig: 'Lancer le rig', back: 'Retour',
+    planOptional: 'Plan facultatif : le rig écrit dans une copie .worktrees/.', planImposed: 'Le plan est demandé une fois : le rig écrirait dans ton dépôt.',
+    why: {
+      absent: (m: string) => `OpenRig n’est pas installé sur ${m}`, unsupported: (m: string) => `La version d’OpenRig sur ${m} n’est pas prise en charge`,
+      offline: (m: string) => `${m} est hors ligne`, unreachable: (m: string) => `OpenRig est injoignable sur ${m}`
+    },
+    install: 'Pour l’installer :',
+    missing: { goal: 'Donne un but au lead.', spec: 'Choisis une spec.', repo: 'Choisis un dépôt.', branch: 'Nomme la nouvelle branche.', name: 'Nom invalide : minuscules, chiffres et tirets.' } as Record<'goal' | 'spec' | 'repo' | 'branch' | 'name', string>,
+    preparing: 'Ledge prépare le plan…', launching: 'Lancement…', refused: (why: string) => `Refusé : ${why}`, timeout: (s: number) => `pas de réponse après ${s} s`,
+    plan: {
+      intro: 'Voici comment je monterais le rig. Rien n’est lancé.', head: { seat: 'SIÈGE', agent: 'AGENT', autonomy: 'AUTONOMIE' },
+      folder: 'Dossier', writes: 'Ajoute dans le dossier :', command: 'Commande'
+    },
+    starting: {
+      openrig: 'OpenRig', preparing: 'prépare le lancement…', running: 'en marche', copy: 'Copie', folder: 'Dossier', space: 'Espace',
+      human: 'Ledge, humain du rig', humanCommand: 'rig gateway human add ledge', up: (name: string) => `rig up ${name}`,
+      upDetail: (spec: string, n: number) => `spec ${spec} · ${n} ${plural(n, 'siège', 'sièges')}`,
+      seats: 'Sièges', ready: (k: number, n: number) => `${k}/${n} ${plural(k, 'prêt', 'prêts')}`,
+      coming: (names: readonly string[]) => `${names.length > 1 ? `${names.slice(0, -1).join(', ')} et ${names.at(-1)}` : names[0]} ${plural(names.length, 'démarre', 'démarrent')}…`,
+      tasks: 'Premières tâches', tasksWait: 'dans la file dès que les sièges sont prêts', tasksSent: (lead: string) => `but donné à ${lead}`
+    },
+    trust: (seat: string) => `${seat} attend ta confiance dans le dossier · ↵ ouvrir l’invite`,
+    openRoom: 'Ouvrir sa pièce', cancelLaunch: 'Annuler le lancement', backToLedge: 'Revenir à Ledge',
+    leave: 'Tu peux partir : Ledge te dira si le démarrage coince.', notNamed: 'Le rig n’est pas encore nommé : rien à annuler pour l’instant.',
+    cancelled: (name: string) => `${name} : lancement annulé`,
+    keys: { mode: 'rig ou session', seePlan: 'voir le plan', openRoom: 'ouvrir sa pièce', trust: 'ouvrir l’invite', cancelLaunch: 'annuler le lancement', ledge: 'Ledge' }
+  },
   settings: { title: 'Réglages', language: 'Langue', theme: 'Thème', themes: { auto: 'Auto', dark: 'Sombre', light: 'Clair' }, themeAuto: (tone: 'dark' | 'light') => `Auto (fond ${tone === 'light' ? 'clair' : 'sombre'})`, context: 'Contexte max', contextHint: 'au-delà : passer le relais', contextUnknown: 'mettez à jour le daemon', contextSaved: (pct: number) => `Contexte max : ${pct} %`, saved: 'Réglage enregistré.', saveFailed: (m: string) => `Réglage appliqué, mais non enregistré : ${m}` },
   help: {
     title: 'Aide', global: 'Partout', overview: 'Accueil', session: 'Session', ask: 'Demander à Ledge', launch: 'Nouvelle session', settings: 'Réglages',

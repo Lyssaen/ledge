@@ -15,6 +15,8 @@ import type { ThemeChoice, Tone } from './theme.js';
 export type Screen = 'home' | 'session' | 'launch' | 'settings' | 'help';
 /** The screens the digits name: `1` Ledge and `2` a rig are the home, focused on one or the other; `3` the session. */
 export const SCREENS: readonly Screen[] = ['home', 'home', 'session'];
+/** What the launch screen launches: a session, or a rig (ctrl+t switches). */
+export type LaunchMode = 'session' | 'rig';
 
 /** What the home shows on its right, chosen in its left column. */
 export type Focus = { kind: 'ledge' } | { kind: 'yours'; id: string } | { kind: 'session'; id: string }
@@ -37,7 +39,9 @@ export interface Tui {
   /** The theme chosen, the tone drawn (what the palette `C` holds now), the terminal's background as found at start
    *  (undefined: not asked, the theme was forced). */
   theme: ThemeChoice; setTheme(theme: ThemeChoice): void; tone: Tone; background: Tone | undefined;
-  screen: Screen; go(screen: Screen): void;
+  /** `launch` opens the launch screen on a session (the default) or a rig. */
+  screen: Screen; go(screen: Screen, o?: { launch?: LaunchMode }): void;
+  launchMode: LaunchMode; setLaunchMode(mode: LaunchMode): void;
   /** What the home's left column has chosen; `selected` is its session (a session, a waiting one, a paired seat), and
    *  `select(id)` chooses a session (null: Ledge). */
   focus: Focus; setFocus(f: Focus): void;

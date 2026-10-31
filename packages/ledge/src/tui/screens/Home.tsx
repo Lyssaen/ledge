@@ -73,6 +73,8 @@ export function Home() {
   useScreenKeys((input, key) => {
     // The rail opened over the left column: esc closes it before anything else.
     if (railOpen && key.escape) { setRailOpen(false); return true; }
+    // + on Ledge's Rigs tab launches a rig.
+    if (input === '+' && tab === 'rigs') { go('launch', { launch: 'rig' }); return true; }
     if (showConv && conv.current?.(input, key)) return true;
     if (ledgeish) {
       if (input === ']' && folded) { setRailOpen(o => !o); return true; }

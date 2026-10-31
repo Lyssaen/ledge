@@ -10,6 +10,7 @@ import { Frame } from '../ui/Frame.js';
 import { Button } from '../ui/SessionCard.js';
 import { TextInput } from '../ui/TextInput.js';
 import { TitledBox } from '../ui/TitledBox.js';
+import { RigLaunch } from './RigLaunch.js';
 
 const FIELDS = ['prompt', 'tool', 'model', 'effort', 'project', 'machine', 'repos', 'folder', 'name'] as const;
 type Field = typeof FIELDS[number];
@@ -33,9 +34,14 @@ function ProjectChoice({ project, on }: { project: { name: string; color?: Proje
   );
 }
 
-/** « Nouvelle session » (4). */
+/** The launch screen (`+`): a session, or a rig (ctrl+t switches; « Lance un rig… » and `+` on a rig open the rig). */
 export function Launch() {
-  const { client, d, machines, projects, t, g, toast, go, select, small } = useTui();
+  return useTui().launchMode === 'rig' ? <RigLaunch /> : <SessionLaunch />;
+}
+
+/** « Nouvelle session ». */
+function SessionLaunch() {
+  const { client, d, machines, projects, t, g, toast, go, select, small, setLaunchMode } = useTui();
   const list = projects?.projects ?? [];
   const [form, setForm] = useState<LaunchForm>(() => {
     return launchDefaults(list, machines, {}, 'claude');
@@ -91,6 +97,7 @@ export function Launch() {
     if (small && !key.escape) return;
     if (key.escape) { go('home'); return; }
     if (key.ctrl && input === 's') { launch(); return; }
+    if (key.ctrl && input === 't') { setLaunchMode('rig'); return; }
     if (key.ctrl && input === 'r') { setName(pickName([...d.sessions.map(s => s.name), shownName])); return; }
     if (key.tab || key.downArrow || (key.return && field !== 'name')) { setField(f => cycle(FIELDS, f, key.shift ? -1 : 1)); return; }
     if (key.upArrow) { setField(f => cycle(FIELDS, f, -1)); return; }
@@ -123,8 +130,9 @@ export function Launch() {
     ))}</Text>
   );
   return (
-    <Frame crumb={t.launch.title} keys={[['tab', t.keys.nextField], ['← →', t.keys.choose], [t.keys.space, t.keys.tick], ['ctrl+s', t.keys.start], ['ctrl+r', t.keys.redraw], ['esc', t.keys.cancel]]}>
+    <Frame crumb={t.launch.title} keys={[['tab', t.keys.nextField], ['← →', t.keys.choose], [t.keys.space, t.keys.tick], ['ctrl+t', t.rigLaunch.keys.mode], ['ctrl+s', t.keys.start], ['ctrl+r', t.keys.redraw], ['esc', t.keys.cancel]]}>
       <TitledBox title={t.launch.title} flexGrow={1}>
+        <Box><Text> </Text><Box width={14} flexShrink={0}><Text color={C.dim}>{t.rigLaunch.mode}</Text></Box><Text color={C.dim}>{g.radioOff} {t.rigLaunch.rig}   </Text><Text color={C.coral}>{g.radioOn} </Text><Text color={C.fg} bold>{t.rigLaunch.session}</Text><Text color={C.faint}>  ctrl+t</Text></Box>
         {row('prompt', t.launch.instruction, <TextInput value={form.prompt} onChange={v => setForm(f => ({ ...f, prompt: v }))} active={field === 'prompt'} />)}
         <Text> </Text>
         {row('tool', t.launch.agent, <Text wrap="truncate">{tools.map(x => <Text key={x} color={x === form.tool ? C.coral : C.dim}>{x === form.tool ? g.radioOn : g.radioOff} {TOOL_NAME[x]}   </Text>)}</Text>)}

@@ -60,7 +60,7 @@ export function LedgeComposer({ draft, setDraft, active, browsing, onBrowse, his
 
   const busiest = mostActiveRig(rigs);
   const suggestions: Array<{ label: string; run(): void }> = [
-    { label: t.compose.launchRig, run: () => go('launch') },
+    { label: t.compose.launchRig, run: () => go('launch', { launch: 'rig' }) },
     ...(busiest ? [{ label: t.compose.whereIs(busiest.name), run: () => onSay(t.compose.whereIs(busiest.name)) }] : []),
     { label: t.compose.decided, run: () => onSay(t.compose.decided) },
     { label: t.compose.needsMe, run: () => onSay(t.compose.needsMe) }

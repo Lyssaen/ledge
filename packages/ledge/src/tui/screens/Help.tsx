@@ -45,7 +45,7 @@ export function Help() {
     [t.help.session, [['y n A 1…9', k.answer], ['r ↵', k.write], ['j k PgUp PgDn', k.scroll], [t.keys.space, k.unfold], ['d', k.diffs], ['t', k.terminal], ['a', k.attach], ['m', k.model], ['i', k.interrupt]]],
     [t.help.ask, [['↵', k.send], ['tab', k.cycle], ['PgUp PgDn', k.scroll], ['j k G', k.scroll], ['ctrl+n', k.newChat], ['ctrl+c', k.stopAnswer]]],
     [t.help.field, [['↵', k.sendOnly], ['alt+↵ ctrl+j', k.newLine], ['↑ ↓', k.lineHistory], ['ctrl ← →', k.word], ['ctrl+w', t.help.wordBefore], ['ctrl+u', k.clear], ['esc', k.keepAndLeave]]],
-    [t.help.launch, [['tab ↑ ↓', k.nextField], ['← →', k.choose], [t.keys.space, k.tick], ['ctrl+r', t.keys.redraw], ['ctrl+s', k.start], ['esc', k.cancel]]],
+    [t.help.launch, [['tab ↑ ↓', k.nextField], ['← →', k.choose], [t.keys.space, k.tick], ['ctrl+t', t.rigLaunch.keys.mode], ['ctrl+r', t.keys.redraw], ['ctrl+s', k.start], ['v', t.rigLaunch.keys.seePlan], ['esc', k.cancel]]],
     [t.help.settings, [['↑ ↓', k.navigate], ['← →', k.change]]]
   ];
   const lines = helpLines(groups, Math.max(20, columns - 4));

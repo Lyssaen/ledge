@@ -8,7 +8,7 @@ import { attachCommand, runAttached } from './attach.js';
 import { readClipboardImage, type ClipboardImage } from './clipboard.js';
 import { openImage } from './openImage.js';
 import { useBrain } from './brain.js';
-import { LEDGE_FOCUS, screenSize, TuiContext, type Focus, type Kept, type KeyHandler, type Screen, type Tui } from './context.js';
+import { LEDGE_FOCUS, screenSize, TuiContext, type Focus, type Kept, type KeyHandler, type LaunchMode, type Screen, type Tui } from './context.js';
 import type { Glyphs } from './glyphs.js';
 import { I18nProvider, MESSAGES, type Lang } from './i18n/lang.js';
 import { listed } from './model/overview.js';
@@ -71,6 +71,7 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
   const t = MESSAGES[lang];
   const [screen, setScreen] = useState<Screen>('home');
   const [back, setBack] = useState<Screen>('home');
+  const [launchMode, setLaunchMode] = useState<LaunchMode>('session');
   const [focus, setFocus] = useState<Focus>({ kind: 'ledge' });
   const [ledgeFocus, setLedgeFocus] = useState<number>(LEDGE_FOCUS.left);
   const brain = useBrain(client);
@@ -122,7 +123,8 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
 
   const actions = useActions({ client, sessions: d.sessions, errors: d.errors, t, toast });
 
-  const go = useCallback((next: Screen) => {
+  const go = useCallback((next: Screen, o: { launch?: LaunchMode } = {}) => {
+    if (next === 'launch' && o.launch) setLaunchMode(o.launch);
     setScreen(cur => { if (next === 'help' || next === 'settings') setBack(cur === 'help' || cur === 'settings' ? 'home' : cur); return next; });
   }, []);
   const setLang = useCallback((next: Lang) => {
@@ -156,7 +158,7 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
   const size = screenSize(useWindowSize(), env);
   const small = size.columns < MIN.columns || size.rows < MIN.rows;
   const tui: Tui = {
-    client, fleet, d, machines, projects, t, lang, setLang, theme, setTheme, tone, background, g: glyphs, screen, go, focus, setFocus, selected, select, left, rigs, escalations, openrig,
+    client, fleet, d, machines, projects, t, lang, setLang, theme, setTheme, tone, background, g: glyphs, screen, go, launchMode, setLaunchMode, focus, setFocus, selected, select, left, rigs, escalations, openrig,
     ledgeFocus, setLedgeFocus, brain, toast, lastToast, actions, editing, setEditing, small, attach, runInTerminal, env, keys, kept,
     readImage: readImage ?? (() => readClipboardImage(env)), openFile: openFile ?? (file => openImage(file, env))
   };
@@ -185,7 +187,8 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
     if (input === ',') { go('settings'); return; }
     // `/` writes to Ledge, from anywhere: the home on Ledge, its field.
     if (input === '/') { setFocus({ kind: 'ledge' }); setLedgeFocus(LEDGE_FOCUS.field); go('home'); return; }
-    if (input === '+') { go('launch'); return; }
+    // + launches a session, a rig from the Rigs (a rig, one of its seats, the kernel chosen).
+    if (input === '+') { go('launch', { launch: focus.kind === 'rig' || focus.kind === 'seat' || focus.kind === 'kernel' ? 'rig' : 'session' }); return; }
     // 1 Ledge, 2 the rig of the selection (else the first), 3 the session chosen.
     if (input === '1') { setFocus({ kind: 'ledge' }); go('home'); return; }
     if (input === '2') {
