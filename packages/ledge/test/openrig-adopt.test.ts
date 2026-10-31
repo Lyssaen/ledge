@@ -62,7 +62,7 @@ afterEach(async () => {
 async function setup() {
   saved = process.env.LEDGE_HOME;
   const dir = mkdtempSync(join(tmpdir(), 'ledge-adopt-')); dirs.push(dir); process.env.LEDGE_HOME = dir;
-  const rigDir = join(dir, '.ledge', 'rigs', 'starter'); mkdirSync(rigDir, { recursive: true }); writeFileSync(join(rigDir, 'notes.md'), 'hello');
+  const rigDir = join(dir, 'rigs', 'starter'); mkdirSync(rigDir, { recursive: true }); writeFileSync(join(rigDir, 'notes.md'), 'hello');
   const projectsFile = join(dir, 'projects.json');
   const initial = state(proj('website', ['r1']), proj('ledge'));
   writeFileSync(projectsFile, JSON.stringify(initial));
