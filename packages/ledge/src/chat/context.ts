@@ -3,10 +3,16 @@ import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { DEFAULT_PROJECTS, projectOf, taskClosed, type ChatStep, type Projects, type Recent, type Role, type Session, type Task, type Team, type TeamTemplate } from '@ledge/protocol';
 import { listDefinitions } from '../daemon/teams.js';
+import { LEDGE_MD, writeLedgeMd, type LedgeInfo } from './guide.js';
+import { writeNotes } from './notes.js';
 
 export interface ContextInput { sessions: Session[]; recents?: Recent[]; projects?: Projects; teams?: Team[]; tasks?: Task[];
   /** The roles and templates by folder (roles spec §3.8): the home's and each session's repository's; read from disk when left out. */
   definitions?: (cwd?: string) => { roles: Role[]; templates: TeamTemplate[] };
+  /** What `ledge.md` holds (the guide, the version, the agents installed); no `ledge.md` when left out. */
+  ledge?: LedgeInfo;
+  /** The user's notes folder (`~/.ledge/context`): copied as `context-<name>.md` with `context-index.md`; none when left out. */
+  notesDir?: string;
   capture: (s: Session) => Promise<string[] | null>; git: (cwd: string) => Promise<string | null>; now: string }
 export interface Context { dir: string; steps: Map<string, ChatStep>; repoPaths: string[] }
 
@@ -17,7 +23,7 @@ const STATE: Record<Session['state'], string> = {
 
 /**
  * The folder Ledge reads before answering (spec 2026-10-11 §5.3): `sessions.md` names every session and the files that
- * describe it; `folders.md` lists the recent folders; `projects.md` the projects, their repositories and remembered folders (only where the daemon holds some); `pane-<id>.txt`, `reply-<id>.md` and `git-<id>.txt` exist only where there is something to read.
+ * describe it; `folders.md` lists the recent folders; `ledge.md` what Ledge is and does; `context-index.md` and `context-<name>.md` the user's notes; `projects.md` the projects, their repositories and remembered folders (only where the daemon holds some); `pane-<id>.txt`, `reply-<id>.md` and `git-<id>.txt` exist only where there is something to read.
  */
 export async function writeContext(dir: string, input: ContextInput): Promise<Context> {
   await rm(dir, { recursive: true, force: true }); await mkdir(dir, { recursive: true });
@@ -58,6 +64,8 @@ export async function writeContext(dir: string, input: ContextInput): Promise<Co
   if (withProjects) await writeFile(join(dir, 'projects.md'), ['# Projects', '', ...(projects.projects.length ? projects.projects.flatMap(p => [`## ${oneLine(p.name)}`, ...(p.description.trim() ? [oneLine(p.description)] : []), '', ...p.repos.map(r => `- ${r.machine}: ${r.path}`), '']) : ['No projects.', '']),
     ...(projects.rules.length ? ['## Filed folders', '', ...projects.rules.map(r => `- ${r.machine}: ${r.path} → ${nameOf.get(r.project) ?? r.project}`), ''] : [])].join('\n'));
   if (input.teams || input.tasks) await writeTeamsContext(dir, input, steps);
+  if (input.ledge) { await writeLedgeMd(dir, input.ledge); steps.set(LEDGE_MD, { kind: 'repo', name: 'Ledge', path: LEDGE_MD }); }
+  if (input.notesDir) await writeNotes(dir, input.notesDir, steps);
   const repoPaths = [...new Set(input.sessions.map(s => s.repoPath ?? s.cwd).filter(p => p && !coversHome(p)).map(p => resolve(p)))];
   return { dir, steps, repoPaths };
 }

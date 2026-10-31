@@ -12,6 +12,8 @@ import type { Store } from '../daemon/store.js';
 import type { Tmux } from '../tmux.js';
 import { gitSummary } from '../daemon/git.js';
 import { writeContext, stepFor } from './context.js';
+import { installedAgents, readGuide } from './guide.js';
+import { LEDGE_VERSION } from '../version.js';
 import { asksForge, type Forge } from './forge.js';
 import { runClaude, type ClaudeEvent, type RunHandle, type RunOptions } from './claude.js';
 import { runCodex } from './codex.js';
@@ -80,6 +82,8 @@ export interface ChatDeps {
   slots?: { take(): boolean; give(): void };
   /** Resolves an attached image's id to its file (the daemon's attachment store). */
   attachments?: { path(id: string): string | null };
+  /** The user's notes folder (`~/.ledge/context`), copied into the context at each question; none when left out. */
+  notesDir?: string;
   now?: () => string; today?: () => string; uuid?: () => string; bin?: string[]; bins?: Partial<Record<Tool, string[]>>; spawn?: typeof nodeSpawn; timeoutMs?: number;
 }
 
@@ -311,16 +315,16 @@ export function createChat(deps: ChatDeps): Chat {
   }
 
   async function run(turn: ChatTurn, emit: (m: ChatMessage) => void, fresh: boolean, mine: Running, tool: Tool): Promise<{ ok: true } | { ok: false; message: string; resumed: boolean }> {
-    const ctx = await writeContext(contextDir, { sessions: deps.store.all().filter(s => !isArchived(s)), recents: deps.store.recents(), projects: deps.projects?.(), teams: deps.teams?.(), tasks: deps.tasks?.(), now: now(), capture, git: cwd => gitSummary(cwd) });
+    // The chat runs on the CLI's own login: an API key the daemon inherited is never billed (spec §5.2).
+    const env: NodeJS.ProcessEnv = { ...(await deps.env()), LEDGE_CHAT: '1' }; delete env.LEDGE_SESSION; delete env.LEDGE_NAME; delete env.ANTHROPIC_API_KEY;
+    const ledge = { guide: await readGuide(), version: LEDGE_VERSION, agents: await installedAgents(env.PATH) };
+    const ctx = await writeContext(contextDir, { sessions: deps.store.all().filter(s => !isArchived(s)), recents: deps.store.recents(), projects: deps.projects?.(), teams: deps.teams?.(), tasks: deps.tasks?.(), now: now(), capture, git: cwd => gitSummary(cwd), ledge, ...(deps.notesDir ? { notesDir: deps.notesDir } : {}) });
     // Only a question about the forge runs gh/glab: the others never wait on the network.
     if (deps.forge && asksForge(turn.question)) await deps.forge.write(ctx, deps.projects?.() ?? { projects: [], rules: [] }).catch(e => log(`chat ${turn.qid}: forge files not written (${e instanceof Error ? e.message : String(e)})`));
     if (mine.cancelled) return CANCELLED;
     const { sessionId, resume } = await daySession(fresh, tool);
     const label = TOOL_LABEL[tool];
     const images = (turn.attachments ?? []).flatMap(a => { const path = deps.attachments?.path(a.id); return path ? [{ path, mime: a.mime }] : []; });
-    // The chat runs on the CLI's own login: an API key the daemon inherited is never billed (spec §5.2).
-    const env: NodeJS.ProcessEnv = { ...(await deps.env()), LEDGE_CHAT: '1' }; delete env.LEDGE_SESSION; delete env.LEDGE_NAME; delete env.ANTHROPIC_API_KEY;
-    if (mine.cancelled) return CANCELLED;
     let answer = ''; let resultError: string | null = null;
     const handle = runTool(tool, { question: mine.told.text ? `${mine.told.text}\n\n${turn.question}` : turn.question, cwd: ctx.dir, addDirs: ctx.repoPaths, sessionId, resume, env, bin: deps.bins?.[tool] ?? deps.bin, ...(images.length > 0 ? { images } : {}), ...(tool === 'omp' ? { sessionDir: join(deps.home, 'chat', 'omp', sessionId) } : {}) }, e => {
       if (e.type === 'tool') { const step = e.path ? stepFor(e.path, ctx) : null; if (step && !turn.steps.some(s => sameStep(s, step))) { turn.steps.push(step); emit({ type: 'chat.step', qid: turn.qid, step }); } }

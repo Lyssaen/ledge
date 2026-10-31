@@ -196,7 +196,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   // the login shell's on top of it, as a terminal would.
   const agentEnv = opts.agentEnv ?? (async () => ({ ...process.env, ...(await loginShellEnv()) }));
   const attachments = opts.attachments ?? new AttachmentStore(paths().attachments);
-  const threads = createChatThreads({ attachments, store, tmux, home: paths().dir, userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now, projects: () => projects, forge: createForge({ env: agentEnv }), teams: () => teams.all(), tasks: () => tasks.all() });
+  const threads = createChatThreads({ attachments, store, tmux, home: paths().dir, notesDir: join(paths().dir, 'context'), userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now, projects: () => projects, forge: createForge({ env: agentEnv }), teams: () => teams.all(), tasks: () => tasks.all() });
   const chat: Chat = opts.chat ?? threads.desktop;
   const router = createRouter({ env: agentEnv });
   const omp = opts.omp ?? createOmpHost({ store, env: agentEnv, dir: join(paths().dir, 'omp'), now, attachments });
