@@ -1,7 +1,8 @@
-import { existsSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { SeatsSchema, TeamNameSchema, type DefinitionProblem, type Role, type Seat, type TeamTemplate, type Tool } from '@ledge/protocol';
 import { definitionDirs, definitionFiles, definitionHash, listRoles, quoteScalar, readSmall, scalarValue } from './roles.js';
+import { writeDefinition } from './definitions.js';
 import { ledgeDir } from '../paths.js';
 import { log } from '../log.js';
 
@@ -149,17 +150,17 @@ export function templateText(name: string, seats: readonly Seat[]): string | nul
 }
 
 const templatePath = (name: string, dir: string) => join(dir, `${templateId(name)}.yaml`);
-/** Whether `saveTemplate(name)` would replace a template already saved. */
-export const templateExists = (name: string, dir = join(ledgeDir(), 'teams')): boolean => existsSync(templatePath(name, dir));
+/** The hash of the template `saveTemplate(name)` would replace, as `base` names it; undefined when there is none. */
+export function templateHash(name: string, dir = join(ledgeDir(), 'teams')): string | undefined {
+  try { return definitionHash(readFileSync(templatePath(name, dir), 'utf8')); } catch (e) { if ((e as NodeJS.ErrnoException).code === 'ENOENT') return undefined; throw e; }
+}
 
-/** The chat's « Enregistrer » (§3.8): an ad hoc team written to `~/.ledge/teams/<id>.yaml`, a template from then on. */
-export function saveTemplate(name: string, seats: readonly Seat[], dir = join(ledgeDir(), 'teams')): string {
+/** The chat's « Enregistrer » (§3.8): an ad hoc team written to `~/.ledge/teams/<id>.yaml`, a template from then on. A template
+ *  already there is replaced only at the version `base` names (#143): without it `exists`, at another version `changed`, the file untouched. */
+export function saveTemplate(name: string, seats: readonly Seat[], base?: string, dir = join(ledgeDir(), 'teams')): { path: string; code?: 'exists' | 'changed' } {
   const path = templatePath(name, dir);
   const text = templateText(name, seats);
   if (text === null) throw new Error('a team name or seat value cannot be written as YAML');
-  mkdirSync(dir, { recursive: true });
-  const tmp = `${path}.tmp`;
-  writeFileSync(tmp, text);
-  renameSync(tmp, path);
-  return path;
+  const r = writeDefinition(path, text, base ?? null);
+  return 'code' in r ? { path, code: r.code } : { path };
 }

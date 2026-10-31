@@ -22,7 +22,7 @@ export interface TeamsLive {
   all(): Team[];
   get(id: string): Team | undefined;
   /** A new active team with free seats (their sessions come as they are spawned). */
-  create(t: { name: string; template?: string; project: string | null; machine?: string; cwd: string; roles: (string | Pick<Seat, 'role' | 'tool' | 'model' | 'effort'>)[] }): Team;
+  create(t: { name: string; template?: string; project: string | null; machine?: string; cwd: string; roles: (string | Pick<Seat, 'role' | 'tool' | 'model' | 'effort' | 'name'>)[] }): Team;
   /** A seat's session, once spawned: the session is told its team on its record. */
   seat(team: string, role: string, session: Session, roleLabel: string): Team;
   /** A live session takes a role in the team (a free one or a new one); refused with the reason. */
@@ -32,7 +32,7 @@ export interface TeamsLive {
   dissolve(team: string): Team | string;
   /**
    * A live team's new composition (spec 2026-10-28 mobile teams §3.6). The seats keep the given order; a kept role keeps its session and
-   * takes the given `tool`/`model`/`effort` (`name` is ignored); an added role is a free seat. A removed role with a live session
+   * takes the given `tool`/`model`/`effort`/`name`; an added role is a free seat. A removed role with a live session
    * becomes `leaving` (the daemon closes it at its next free moment), a free or ended one is dropped. Listing a leaving role again keeps it.
    */
   compose(team: string, seats: readonly Seat[]): { team: Team; added: string[]; removed: string[] } | string;
@@ -42,8 +42,8 @@ export interface TeamsLive {
   close(): void;
 }
 
-/** What a seat may change of its role's defaults. */
-const seatOverrides = (s: Pick<Seat, 'tool' | 'model' | 'effort'>) => ({ ...(s.tool ? { tool: s.tool } : {}), ...(s.model ? { model: s.model } : {}), ...(s.effort ? { effort: s.effort } : {}) });
+/** What a seat may change of its role's defaults, and the bot name it asks for (#144). */
+const seatOverrides = (s: Pick<Seat, 'tool' | 'model' | 'effort' | 'name'>) => ({ ...(s.tool ? { tool: s.tool } : {}), ...(s.model ? { model: s.model } : {}), ...(s.effort ? { effort: s.effort } : {}), ...(s.name ? { name: s.name } : {}) });
 
 const live = (s: Session | undefined): boolean => !!s && s.state !== 'exited' && !isArchived(s);
 

@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { spawn as nodeSpawn } from 'node:child_process';
 import { extractProposal, isArchived, LEGACY_FENCE_ACTION, MAX_PROPOSALS, proposalRows, parseActionBlock, parseProjectBlock, parseCloseBlock, parseRelayBlock, parseTaskBlock, parseTeamBlock, projectOf, type BlockKind, type ChatAction, type ChatClose, type ChatProjectProposal, type ChatProposal, type ChatRelay, type ChatTaskProposal, type ChatTeamProposal, type CloseHow, type ChatTurn, type AttachmentRef, type Projects, type ServerMessage, type Session, type Task, type Team, type Tool } from '@ledge/protocol';
-import { listDefinitions, resolveSeats, templateExists } from '../daemon/teams.js';
+import { listDefinitions, resolveSeats, templateHash } from '../daemon/teams.js';
 import { resolveAction, sessionOf } from '../daemon/actions.js';
 import { findRole } from '../daemon/roles.js';
 import { resolveFolder } from '../daemon/folders.js';
@@ -43,8 +43,8 @@ export interface Chat {
   markCloseFailed(qid: string, row: number, message: string, emit: (m: ChatMessage) => void): void;
   /** The turn's team card (roles spec §3.8), if the turn is still in the day's history. */
   team(qid: string): ChatTeamProposal | undefined;
-  /** The team card's outcome: launched (`teamId`, `launchedAt`), failed (`error`), saved (`savedPath`); every client gets the new history. */
-  markTeam(qid: string, patch: Partial<Pick<ChatTeamProposal, 'teamId' | 'launchedAt' | 'error' | 'savedPath'>>, emit: (m: ChatMessage) => void): void;
+  /** The team card's outcome: launched (`teamId`, `launchedAt`), failed (`error`), saved (`savedPath`) or not (`saveError`); every client gets the new history. */
+  markTeam(qid: string, patch: Partial<Pick<ChatTeamProposal, 'teamId' | 'launchedAt' | 'error' | 'savedPath' | 'saveError'>>, emit: (m: ChatMessage) => void): void;
   /** The turn's task card row. */
   task(qid: string, row: number): ChatTaskProposal | undefined;
   /** The row's task was given (its id and state) or the give failed (`error`). */
@@ -264,7 +264,7 @@ export function createChat(deps: ChatDeps): Chat {
   /** The generic blocks as rows (spec §9.2, one plan): each resolved against the state now, at most `max` per action and 8 in all; a refused,
    *  repeated or capped one is dropped with a log line. */
   function actionsFrom(blocks: Array<{ id: string; args: unknown; max: number }>, qid: string, closing: ReadonlySet<string>): ChatAction[] {
-    const ctx = { sessions: deps.store.all(), teams: deps.teams?.() ?? [], tasks: deps.tasks?.() ?? [], findRole, templateExists: (name: string) => templateExists(name), closing };
+    const ctx = { sessions: deps.store.all(), teams: deps.teams?.() ?? [], tasks: deps.tasks?.() ?? [], findRole, templateHash: (name: string) => templateHash(name), closing };
     const rows: ChatAction[] = []; const per = new Map<string, number>(); const over = new Map<string, number>(); let beyond = 0;
     for (const b of blocks) {
       if ((per.get(b.id) ?? 0) >= b.max) { over.set(b.id, (over.get(b.id) ?? 0) + 1); continue; }
@@ -396,6 +396,7 @@ export function createChat(deps: ChatDeps): Chat {
       const t = turnOf(qid); if (!t?.team) return;
       const next: ChatTeamProposal = { ...t.team, ...patch };
       if (patch.teamId) delete next.error;
+      if (patch.savedPath) delete next.saveError;
       t.team = next;
       emit({ type: 'chat.history', turns });
     },

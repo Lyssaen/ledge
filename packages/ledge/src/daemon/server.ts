@@ -50,7 +50,7 @@ import { createTeamsLive, type TeamsJournal } from './teamsLive.js';
 import { createHandovers, heldNames } from './handover.js';
 import { readContext } from './context.js';
 import { autonomyArgs, findRole, loadRole, ompApprovalFor } from './roles.js';
-import { listDefinitions, resolveSeats, saveTemplate, templateExists, templateId, type ResolvedSeat } from './teams.js';
+import { listDefinitions, resolveSeats, saveTemplate, templateHash, templateId, type ResolvedSeat } from './teams.js';
 import { deleteDefinition, promptRecipients, roleText, scopeDefinitions, scopeDir, templateText, writeDefinition } from './definitions.js';
 import { resolveRoleAddress, seatContext, seatKey, seatView, teammates } from './seat.js';
 import { formatRoleNotice, formatTeamNotice } from './crossSession.js';
@@ -856,7 +856,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   function actOnCard(card: { chat: Pick<Chat, 'action' | 'markAction'>; emit: (m: ChatMessage) => void }, qid: string, rid: string, rows?: number[], confirmed?: true, deny?: true) {
     return actFromChat({
       chat: card.chat, emit: card.emit, inFlight: chatActs, now,
-      resolve: row => resolveAction(row.action, row.args, { sessions: store.all(), teams: teams.all(), tasks: tasks.all(), findRole, templateExists: name => templateExists(name) }),
+      resolve: row => resolveAction(row.action, row.args, { sessions: store.all(), teams: teams.all(), tasks: tasks.all(), findRole, templateHash: name => templateHash(name) }),
       apply: async row => { const r = await applyRow(row, rid); if (r.failure !== undefined) throw new Error(r.failure); }
     }, qid, rows, confirmed, deny);
   }
@@ -892,7 +892,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       return answer({ reason: `la session ${msg.by} n'a pas de clé (lancée avant cette version de Ledge, ou hors de Ledge) : reprends-la depuis Ledge, ou demande à l'utilisateur`, code: 'identity' });
     if (msg.by !== undefined && (!want || !tokenEquals(msg.key!, want)))
       return answer({ reason: `la clé ne correspond pas à la session ${msg.by} : lance la commande depuis cette session, telle que Ledge l'a lancée`, code: 'identity' });
-    const ctx = { sessions: store.all(), teams: teams.all(), tasks: tasks.all(), findRole, templateExists: (name: string) => templateExists(name) };
+    const ctx = { sessions: store.all(), teams: teams.all(), tasks: tasks.all(), findRole, templateHash: (name: string) => templateHash(name) };
     const r: Resolved = resolveRun(msg.action, parsed.data, ctx);
     if ('refused' in r) return answer({ reason: r.refused, code: 'refused' });
     const guard = runGuard(r, msg.by, ctx);
@@ -1180,7 +1180,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       try { await closeSession(cur); }
       catch (e) { return changed({ team: teams.get(t.id)!, reason: `@${msg.role} : ${(e as Error).message}` }); }
     }
-    const failed = await startSeats(t, [{ role: seat.role, ...(seat.tool ? { tool: seat.tool } : {}), ...(seat.model ? { model: seat.model } : {}), ...(seat.effort ? { effort: seat.effort } : {}) }]);
+    const failed = await startSeats(t, [{ role: seat.role, ...(seat.tool ? { tool: seat.tool } : {}), ...(seat.model ? { model: seat.model } : {}), ...(seat.effort ? { effort: seat.effort } : {}), ...(seat.name ? { name: seat.name } : {}) }]);
     return changed({ team: teams.get(t.id)!, ...(failed ? { reason: failed } : {}) });
   }
 
@@ -1562,11 +1562,18 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       case 'team.save': {
         try {
-          const path = saveTemplate(msg.name, msg.seats);
+          const r = saveTemplate(msg.name, msg.seats, msg.base);
           const card = msg.qid ? cardOf(cardThreads, msg.qid) : undefined;
-          if (card && card.chat.team(msg.qid!)) card.chat.markTeam(msg.qid!, { savedPath: path }, card.emit);
-          log(`team template saved: ${path}`);
-          return reply({ type: 'team.saved', rid: msg.rid, path });
+          const onCard = card && card.chat.team(msg.qid!) ? card : undefined;
+          // A template already there is the user's, maybe edited by hand: never replaced without the version they were shown (#143).
+          if (r.code) {
+            const reason = `le modèle « ${msg.name} » ${r.code === 'exists' ? 'existe déjà' : 'a changé depuis'} (${r.path}) : il n'a pas été remplacé`;
+            onCard?.chat.markTeam(msg.qid!, { saveError: reason }, onCard.emit);
+            return reply({ type: 'team.saved', rid: msg.rid, path: r.path, reason, code: r.code });
+          }
+          onCard?.chat.markTeam(msg.qid!, { savedPath: r.path }, onCard.emit);
+          log(`team template saved: ${r.path}`);
+          return reply({ type: 'team.saved', rid: msg.rid, path: r.path });
         }
         catch (e) { return reply({ type: 'team.saved', rid: msg.rid, reason: (e as Error).message }); }
       }

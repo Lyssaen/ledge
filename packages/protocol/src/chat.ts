@@ -56,7 +56,8 @@ export type ChatProjectProposal = z.infer<typeof ChatProjectProposalSchema>;
 
 /** A team the chat proposes to start (roles spec §3.8): the folder as the daemon resolved it, the project it falls in, and
  *  every seat with what it will be launched with, so the card shows the autonomy of each before the click. `teamId` and
- *  `launchedAt` once launched, `error` when the last launch failed, `savedPath` once written as a template. */
+ *  `launchedAt` once launched, `error` when the last launch failed, `savedPath` once written as a template, `saveError` when the last
+ *  « Enregistrer » was refused (a template of that name already there, say). */
 export const ChatTeamSeatSchema = z.object({
   role: z.string().min(1), label: z.string(), tool: ToolSchema, model: z.string().optional(), effort: z.string().optional(),
   autonomy: AutonomySchema.optional(), name: z.string().optional()
@@ -65,7 +66,8 @@ export type ChatTeamSeat = z.infer<typeof ChatTeamSeatSchema>;
 export const ChatTeamProposalSchema = z.object({
   cwd: z.string().min(1), project: z.string(), projectName: z.string().optional(), name: z.string().min(1), template: z.string().optional(),
   seats: z.array(ChatTeamSeatSchema).min(1).max(8),
-  teamId: z.string().optional(), launchedAt: z.string().datetime().optional(), error: z.string().optional(), savedPath: z.string().optional()
+  teamId: z.string().optional(), launchedAt: z.string().datetime().optional(), error: z.string().optional(), savedPath: z.string().optional(),
+  saveError: z.string().optional()
 });
 export type ChatTeamProposal = z.infer<typeof ChatTeamProposalSchema>;
 

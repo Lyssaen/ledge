@@ -170,10 +170,19 @@ describe('resolveAction', () => {
       seats: [{ role: 'dev-back', tool: 'claude', model: 'claude-sonnet-5-5' }, { role: 'rev-back', tool: 'codex' }] });
     expect(refused('team.save', { team: 'nap', name: 'x' })).toBe('team nap has no seat');
   });
-  it('team.save over a template already saved replaces it: destructive, and said so', () => {
-    const saved = ctx({ templateExists: name => name === 'api-duo' });
-    expect(ok('team.save', { team: 'api', name: 'api-duo' }, saved)).toMatchObject({ risk: 'destructive', summary: 'Remplacer le modèle « api-duo » par **api**', vars: { team: 'api', name: 'api-duo', replaces: '1' } });
-    expect(ok('team.save', { team: 'api', name: 'other' }, saved)).toMatchObject({ risk: 'reversible', vars: { team: 'api', name: 'other' } });
+  it('team.save over a template already saved replaces it: destructive, said so, and only at the version the card read (#143)', () => {
+    const saved = ctx({ templateHash: name => (name === 'api-duo' ? '0123456789abcdef' : undefined) });
+    const replace = ok('team.save', { team: 'api', name: 'api-duo' }, saved);
+    expect(replace).toMatchObject({ risk: 'destructive', summary: 'Remplacer le modèle « api-duo » par **api**', vars: { team: 'api', name: 'api-duo', replaces: '1' }, args: { base: '0123456789abcdef' } });
+    expect(actionMessage(replace, 'r1')).toMatchObject({ type: 'team.save', name: 'api-duo', base: '0123456789abcdef' });
+    const fresh = ok('team.save', { team: 'api', name: 'other' }, saved);
+    expect(fresh).toMatchObject({ risk: 'reversible', vars: { team: 'api', name: 'other' } });
+    expect(fresh.args).not.toHaveProperty('base');
+    expect(actionMessage(fresh, 'r1')).not.toHaveProperty('base');
+  });
+  it('team.save keeps the name each seat asks for (#144)', () => {
+    const named = ctx({ teams: [team({ seats: [{ role: 'dev-back', sessionId: 'nova', name: 'Zed' }, { role: 'rev-back', sessionId: null, name: 'Ari' }] })] });
+    expect(ok('team.save', { team: 'api', name: 'duo' }, named).args.seats).toEqual([{ role: 'dev-back', tool: 'claude', model: 'claude-sonnet-5-5', name: 'Zed' }, { role: 'rev-back', name: 'Ari' }]);
   });
   it('task.cancel and task.pass', () => {
     expect(ok('task.cancel', { task: 't91b0d4', reason: 'Plus utile' })).toMatchObject({ risk: 'destructive', args: { task: 't91b0d4', reason: 'Plus utile' }, summary: 'Annuler la tâche « Pagination » de **Nova**' });

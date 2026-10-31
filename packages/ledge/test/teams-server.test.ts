@@ -9,6 +9,7 @@ import { startServer } from '../src/daemon/server.js';
 import { connect, type Client } from '../src/client.js';
 import type { Tmux } from '../src/tmux.js';
 import { until } from './helpers.js';
+import { definitionHash } from '../src/daemon/definitions.js';
 import { runHook } from '../src/cli/hook.js';
 
 type NewSession = { name: string; cwd: string; env: Record<string, string>; command: string[] };
@@ -160,6 +161,19 @@ describe('roles and teams over the protocol', () => {
     const saved = await c.next('team.saved');
     expect(existsSync(saved.path!)).toBe(true);
     expect(readFileSync(saved.path!, 'utf8')).toContain('role: build');
+    // Saved again under that name, the template is not replaced behind the user's back (#143): the card says why.
+    const kept = readFileSync(saved.path!, 'utf8');
+    c.send({ type: 'team.save', rid: 's2', qid: 'q1', name: 'ledge-roles', seats: [{ role: 'lead' }] });
+    const again = await c.next('team.saved');
+    expect(again).toMatchObject({ path: saved.path, code: 'exists' });
+    expect(again.reason).toContain('existe déjà');
+    expect(readFileSync(saved.path!, 'utf8')).toBe(kept);
+    await until(async () => turnOf((await c.next('chat.history')).turns)?.team?.saveError !== undefined);
+    // At the version it was shown, it is replaced, and the card's refusal goes.
+    c.send({ type: 'team.save', rid: 's3', qid: 'q1', name: 'ledge-roles', seats: [{ role: 'lead' }], base: definitionHash(kept) });
+    expect(await c.next('team.saved')).toEqual({ type: 'team.saved', rid: 's3', path: saved.path });
+    expect(readFileSync(saved.path!, 'utf8')).not.toContain('role: build');
+    await until(async () => { const tm = turnOf((await c.next('chat.history')).turns)?.team; return !!tm && tm.saveError === undefined; });
     await c.close();
   });
 

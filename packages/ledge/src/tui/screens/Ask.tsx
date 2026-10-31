@@ -243,7 +243,7 @@ export function Ask() {
     // s saves a proposed ad hoc team as a template (« Enregistrer »).
     if (input === 's' && cards[focus]!.kind === 'team') {
       const team = d.chat.find(x => x.qid === cards[focus]!.qid)?.team;
-      if (team && !team.template && !team.savedPath) client.send({ type: 'team.save', rid: randomUUID(), qid: cards[focus]!.qid, name: team.name, seats: team.seats.map(x => ({ role: x.role, tool: x.tool, ...(x.model ? { model: x.model } : {}), ...(x.effort ? { effort: x.effort } : {}) })) });
+      if (team && !team.template && !team.savedPath) client.send({ type: 'team.save', rid: randomUUID(), qid: cards[focus]!.qid, name: team.name, seats: team.seats.map(x => ({ role: x.role, tool: x.tool, ...(x.model ? { model: x.model } : {}), ...(x.effort ? { effort: x.effort } : {}), ...(x.name ? { name: x.name } : {}) })) });
       return true;
     }
     if (key.escape) { setFocus(-1); return true; }
@@ -321,6 +321,7 @@ function CardBox({ card, turn, focused, busy }: { card: Exclude<Card, { kind: 'a
         ))}
         {auto.length ? <Text color={C.yellow} wrap="truncate">{t.ask.autoWarning(auto.join(', '))}</Text> : null}
         {team.error ? <Text color={C.red} wrap="truncate">{team.error}</Text> : null}
+        {team.saveError && !team.savedPath ? <Text color={C.red} wrap="truncate">{team.saveError}</Text> : null}
         <Box columnGap={2}><Button label={busy ? `${g.live} ${t.ask.launchTeam}` : t.ask.launchTeam} k="↵" primary={focused} />{!team.template ? (team.savedPath ? <Text color={C.faint}>{t.ask.saved}</Text> : <Button label={t.ask.save} k="s" />) : null}<Text color={C.faint}>{t.ask.nothingWithoutYou}</Text></Box>
       </TitledBox>
     );

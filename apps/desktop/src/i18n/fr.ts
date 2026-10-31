@@ -1036,7 +1036,7 @@ export const fr = {
       label: 'Équipe proposée', folder: 'Dossier', table: (project: string) => `Table`, newTable: (project: string) => `nouvelle table dans la pièce ${project}`, seats: 'Sièges',
       autonomy: { ask: 'demande avant d’agir', edits: 'modifie sans demander', auto: 'autonome' },
       autoWarning: (roles: string) => `${roles} travaillera sans demander : modifications et commandes sans ton accord.`,
-      launch: 'Lancer l’équipe', launching: 'Lancement…', retry: 'Réessayer', save: 'Enregistrer', saved: (path: string) => `Enregistrée : ${path}`,
+      launch: 'Lancer l’équipe', launching: 'Lancement…', retry: 'Réessayer', save: 'Enregistrer', saved: (path: string) => `Enregistrée : ${path}`, notSaved: (why: string) => `Non enregistrée : ${why}`,
       launched: (at: string) => `Équipe lancée à ${at}`, openTable: 'Ouvrir la table', failed: (why: string) => `Échec : ${why}`, template: (id: string) => `modèle ${id}`
     },
     task: {
