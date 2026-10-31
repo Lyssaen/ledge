@@ -4,12 +4,15 @@ import { qualify } from './machines';
 export type RigMessage = Extract<ServerMessage, { type: 'openrig.status' | 'rig.snapshot' | 'rig.updated' | 'rig.removed' | 'rig.exchange' | 'rig.exchanges' | 'escalation.updated' | 'escalation.removed' }>;
 export const isRigMessage = (m: ServerMessage): m is RigMessage => /^(openrig\.status|rig\.(snapshot|updated|removed|exchange|exchanges)|escalation\.(updated|removed))$/.test(m.type);
 export interface RigBook {
-  /** Applies a peer's message (its `machine` fields rewritten: `'local'` becomes `machine`); true when what is visible changed. */
+  /** Applies a message of the peer `machine` (its `machine` fields rewritten: `'local'` becomes `machine`); true when what is visible changed.
+   *  The book remembers which peer gave each entry: an aggregating local daemon (lot 6) gives the rigs of other machines too. */
   apply(machine: string, m: RigMessage): boolean;
-  /** The peer sent a snapshot: forgets all it held of `machine` (the rig.snapshot that follows refills it). */
+  /** The peer sent a snapshot: forgets all it gave (the rig.snapshot that follows refills it), whatever machine it was of. */
   reset(machine: string): boolean;
-  /** The machine fell: its rigs turn 'unreachable' (kept), its escalations stay, its status turns 'unreachable'. */
+  /** The peer fell: the rigs it gave turn 'unreachable' (kept), the escalations stay, its statuses turn 'unreachable'. */
   dropped(machine: string): void;
+  /** Forgets every rig, escalation, exchange and status of a machine not in `ids` (a machine removed from the list). */
+  prune(ids: readonly string[]): boolean;
   rigs(): Rig[]; escalations(): Escalation[]; statuses(): OpenRigStatus[]; exchanges(machine: string, rigId: string): Exchange[] | null;
 }
 const SEP = '\0';
@@ -22,49 +25,53 @@ export function same(a: unknown, b: unknown): boolean {
   return ka.length === kb.length && ka.every(k => same((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
 }
 export function createRigBook(): RigBook {
-  const rigMap = new Map<string, Rig>(), statusMap = new Map<string, OpenRigStatus>(), exchangeMap = new Map<string, Exchange[]>();
-  const escMap = new Map<string, { esc: Escalation; from: string }>();
+  // Each entry keeps `from`, the peer that gave it.
+  const rigMap = new Map<string, { rig: Rig; from: string }>(), statusMap = new Map<string, { status: OpenRigStatus; from: string }>();
+  const exchangeMap = new Map<string, { list: Exchange[]; from: string }>(), escMap = new Map<string, { esc: Escalation; from: string }>();
   let rigList: Rig[] = [], escList: Escalation[] = [], statusList: OpenRigStatus[] = [];
   const key = (machine: string, id: string) => `${machine}${SEP}${id}`;
-  const publish = () => { rigList = [...rigMap.values()]; escList = [...escMap.values()].map(e => e.esc); statusList = [...statusMap.values()]; };
+  const publish = () => { rigList = [...rigMap.values()].map(r => r.rig); escList = [...escMap.values()].map(e => e.esc); statusList = [...statusMap.values()].map(s => s.status); };
   const fixRig = (machine: string, r: Rig): Rig => { const mine = r.machine === 'local' ? machine : r.machine; return { ...r, machine: mine, seats: r.seats.map(s => (s.sessionId ? { ...s, sessionId: qualify(mine, s.sessionId) } : s)) }; };
-  const forgetMachine = (machine: string): boolean => {
+  /** Deletes the entries `drop` picks (by peer or by machine); true when one went. */
+  const forget = (drop: (from: string, machine: string) => boolean): boolean => {
     let changed = false;
-    for (const [k, r] of rigMap) if (r.machine === machine) { rigMap.delete(k); changed = true; }
-    for (const [k, e] of escMap) if (e.from === machine) { escMap.delete(k); changed = true; }
-    for (const k of exchangeMap.keys()) if (k.startsWith(machine + SEP)) { exchangeMap.delete(k); changed = true; }
-    if (statusMap.delete(machine)) changed = true;
+    for (const [k, r] of rigMap) if (drop(r.from, r.rig.machine)) { rigMap.delete(k); changed = true; }
+    for (const [k, e] of escMap) if (drop(e.from, e.esc.machine)) { escMap.delete(k); changed = true; }
+    for (const [k, x] of exchangeMap) if (drop(x.from, k.slice(0, k.indexOf(SEP)))) { exchangeMap.delete(k); changed = true; }
+    for (const [k, s] of statusMap) if (drop(s.from, k)) { statusMap.delete(k); changed = true; }
+    if (changed) publish();
     return changed;
   };
   return {
     apply(machine, m) {
       const mine = (x: string) => (x === 'local' ? machine : x);
       let changed = true;
-      if (m.type === 'openrig.status') { const s = { ...m.status, machine: mine(m.status.machine) }; changed = !same(statusMap.get(s.machine), s); statusMap.set(s.machine, s); }
+      if (m.type === 'openrig.status') { const s = { ...m.status, machine: mine(m.status.machine) }; changed = !same(statusMap.get(s.machine)?.status, s); statusMap.set(s.machine, { status: s, from: machine }); }
       else if (m.type === 'rig.snapshot') {
         const at = mine(m.machine);
-        for (const [k, r] of rigMap) if (r.machine === at) rigMap.delete(k);
-        for (const r of m.rigs) { const f = fixRig(at, { ...r, machine: r.machine === 'local' ? at : r.machine }); rigMap.set(key(f.machine, f.id), f); }
+        for (const [k, r] of rigMap) if (r.rig.machine === at) rigMap.delete(k);
+        for (const r of m.rigs) { const f = fixRig(at, { ...r, machine: r.machine === 'local' ? at : r.machine }); rigMap.set(key(f.machine, f.id), { rig: f, from: machine }); }
       }
-      else if (m.type === 'rig.updated') { const f = fixRig(machine, m.rig); const k = key(f.machine, f.id); changed = !same(rigMap.get(k), f); rigMap.set(k, f); }
+      else if (m.type === 'rig.updated') { const f = fixRig(machine, m.rig); const k = key(f.machine, f.id); changed = !same(rigMap.get(k)?.rig, f); rigMap.set(k, { rig: f, from: machine }); }
       else if (m.type === 'rig.removed') { changed = rigMap.delete(key(mine(m.machine), m.rigId)); }
       else if (m.type === 'rig.exchange') {
-        const x = { ...m.exchange, machine: mine(m.exchange.machine) }, k = key(x.machine, x.rigId), list = exchangeMap.get(k) ?? [];
-        changed = !list.some(e => e.id === x.id); if (changed) exchangeMap.set(k, [...list, x].slice(-EXCHANGES_MAX));
+        const x = { ...m.exchange, machine: mine(m.exchange.machine) }, k = key(x.machine, x.rigId), list = exchangeMap.get(k)?.list ?? [];
+        changed = !list.some(e => e.id === x.id); if (changed) exchangeMap.set(k, { list: [...list, x].slice(-EXCHANGES_MAX), from: machine });
       }
-      else if (m.type === 'rig.exchanges') { const at = mine(m.machine); exchangeMap.set(key(at, m.rigId), m.items.map(x => ({ ...x, machine: mine(x.machine) })).slice(-EXCHANGES_MAX)); }
+      else if (m.type === 'rig.exchanges') { const at = mine(m.machine); exchangeMap.set(key(at, m.rigId), { list: m.items.map(x => ({ ...x, machine: mine(x.machine) })).slice(-EXCHANGES_MAX), from: machine }); }
       else if (m.type === 'escalation.updated') { const e = { ...m.escalation, machine: mine(m.escalation.machine) }, k = key(e.machine, e.id); changed = !same(escMap.get(k)?.esc, e); escMap.set(k, { esc: e, from: machine }); }
       else { changed = false; for (const [k, e] of escMap) if (e.from === machine && e.esc.id === m.id) { escMap.delete(k); changed = true; } }
       if (changed && m.type !== 'rig.exchange' && m.type !== 'rig.exchanges') publish();
       return changed;
     },
-    reset(machine) { const changed = forgetMachine(machine); if (changed) publish(); return changed; },
+    reset: machine => forget(from => from === machine),
+    prune: ids => forget((_, machine) => !ids.includes(machine)),
     dropped(machine) {
-      for (const [k, r] of rigMap) if (r.machine === machine && r.lifecycle !== 'unreachable') rigMap.set(k, { ...r, lifecycle: 'unreachable' });
-      const s = statusMap.get(machine); if (s && s.state !== 'unreachable') statusMap.set(machine, { ...s, state: 'unreachable' });
+      for (const [k, r] of rigMap) if (r.from === machine && r.rig.lifecycle !== 'unreachable') rigMap.set(k, { ...r, rig: { ...r.rig, lifecycle: 'unreachable' } });
+      for (const [k, s] of statusMap) if (s.from === machine && s.status.state !== 'unreachable') statusMap.set(k, { ...s, status: { ...s.status, state: 'unreachable' } });
       publish();
     },
     rigs: () => rigList, escalations: () => escList, statuses: () => statusList,
-    exchanges: (machine, rigId) => exchangeMap.get(key(machine, rigId)) ?? null
+    exchanges: (machine, rigId) => exchangeMap.get(key(machine, rigId))?.list ?? null
   };
 }
