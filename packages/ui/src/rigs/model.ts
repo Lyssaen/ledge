@@ -182,3 +182,7 @@ export function exchangeArcs(exchanges: readonly Exchange[], rig: Rig, byId: Rea
   }
   return arcs;
 }
+
+const RUNTIME_LABELS: Readonly<Record<string, string>> = { 'claude-code': 'Claude Code', codex: 'Codex' };
+/** A seat's runtime as people read it: claude-code is « Claude Code », codex « Codex », any other runtime stays as OpenRig names it. */
+export const runtimeLabel = (runtime: string): string => RUNTIME_LABELS[runtime] ?? runtime;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PROJECT_COLORS, type Exchange, type Projects, type Rig, type RigSeat, type Session } from '@ledge/protocol';
-import { allSeats, exchangeArcs, isSeatPlaceholder, shortCwd, kernelFilter, kernelSplit, parseRigFilter, readyCount, rigColor, rigFilter, rigKey, rigPlace, SEAT_ORDER, seatAt, seatSession, workingCount } from '../src/rigs/model';
+import { allSeats, exchangeArcs, isSeatPlaceholder, shortCwd, kernelFilter, kernelSplit, parseRigFilter, readyCount, rigColor, rigFilter, rigKey, rigPlace, runtimeLabel, SEAT_ORDER, seatAt, seatSession, workingCount } from '../src/rigs/model';
 
 const seat = (name: string, over: Partial<RigSeat> = {}): RigSeat => ({ ref: `${name}@factory`, address: `@${name}`, name, runtime: 'claude-code', state: 'ready', ...over });
 const rig = (over: Partial<Rig> = {}): Rig => ({ id: 'r1', name: 'factory', machine: 'local', cwd: '/w/ledge', projectId: null, offProject: false,
@@ -122,5 +122,14 @@ describe('exchangeArcs', () => {
     expect(exchangeArcs([{ ...EX, from: 'build', to: 'gone' }], FACTORY, byId, T)).toEqual([]);
     expect(exchangeArcs([{ ...EX, from: 'build', to: 'design', rigId: 'r9' }], FACTORY, byId, T)).toEqual([]);
     expect(exchangeArcs([{ ...EX, from: 'build', to: 'design', machine: 'nas' }], FACTORY, byId, T)).toEqual([]);
+  });
+});
+
+describe('runtimeLabel', () => {
+  it('reads claude-code and codex as their product names, keeps any other runtime raw', () => {
+    expect(runtimeLabel('claude-code')).toBe('Claude Code');
+    expect(runtimeLabel('codex')).toBe('Codex');
+    expect(runtimeLabel('terminal')).toBe('terminal');
+    expect(runtimeLabel('pi')).toBe('pi');
   });
 });
