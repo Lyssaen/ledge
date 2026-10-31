@@ -54,6 +54,8 @@ export function transmissions(t: Task): TaskTransmission[] {
 export type TaskState = Task['state'];
 export const givenByLedge = (t: Pick<Task, 'giver'>): boolean => t.giver === LEDGE_GIVER;
 export const taskClosed = (t: Pick<Task, 'state'>): boolean => t.state === 'done' || t.state === 'refused' || t.state === 'dropped';
+/** A decision a session put to the user (`ledge task give ledge …`), not answered yet: an item of « À toi » on every front. */
+export const openDecision = (t: Pick<Task, 'owner' | 'state'>): boolean => t.owner === LEDGE_GIVER && !taskClosed(t);
 
 /** `ledge task …`, as its session `by`; a front (Desktop, the TUI, the phone, the chat's card) gives as `ledge`.
  *  `cancel`: by its giver, or by Ledge for any task. `seen` (Ledge only) puts a closed task of Ledge's away from « À toi ». `team` filters a `list`; `qid` and `row` name

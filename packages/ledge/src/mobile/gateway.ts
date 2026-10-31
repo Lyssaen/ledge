@@ -20,7 +20,7 @@ import { AttachmentError, type AttachmentStore } from '../daemon/attachments.js'
 import { createOutbox } from './outbox.js';
 import { fingerprint, OperationRegistry, type Outcome, type PhoneOperation } from './operations.js';
 import { createTeamsOps } from './teamsOps.js';
-import { capabilities, clip, phoneTasks, toPhoneFullRequest, toPhoneItem, toPhoneSession, toPhoneTask, toPhoneTeam, toPhoneThread } from './project.js';
+import { capabilities, clip, forPhone, phoneTasks, toPhoneFullRequest, toPhoneItem, toPhoneSession, toPhoneTask, toPhoneTeam, toPhoneThread } from './project.js';
 import { canSwitch, toPhoneModels } from './project.js';
 import { checklistSummary, toPhoneChecklist } from './project.js';
 import { riskOf } from './risk.js';
@@ -980,7 +980,7 @@ export function createPhoneGateway(deps: {
             return;
           }
           case 'task.updated': {
-            if (m.task.giver !== LEDGE_GIVER) return;
+            if (!forPhone(m.task)) return;
             const task = phoneTask(m.task);
             for (const [deviceId, f] of followers) if (f.subscribed) push(deviceId, { type: 'task.updated', task });
             // Ledge's progress on its team moves with it.

@@ -138,6 +138,15 @@ const IMPLS: Partial<Record<ActionId, Impl>> = {
     return row('task.cancel', { task: t.id, ...(reason ? { reason } : {}) }, `Annuler la tâche « ${title(t)} » de ${b(t.ownerName)}`,
       { task: t.title, owner: t.ownerName, reason }, { session: t.owner, ...(t.team ? { team: t.team } : {}) });
   },
+  // The user's own answer to a decision a session put to it: shown whole on the card, never Ledge's choice.
+  'task.answer': (a, ctx) => {
+    const t = taskOf(String(a.task), ctx);
+    if (isRefusal(t)) return t;
+    if (t.owner !== LEDGE_GIVER) return no('not_decision', `task ${t.id} is not a decision put to the user`);
+    const answer = String(a.answer);
+    return row('task.answer', { task: t.id, answer }, `Répondre à la décision « ${title(t)} » de ${b(t.giverName)}`,
+      { task: t.title, session: t.giverName, answer }, { session: t.giver, ...(t.team ? { team: t.team } : {}), ...detailOf(answer) });
+  },
   'task.pass': (a, ctx) => {
     const t = taskOf(String(a.task), ctx);
     if (isRefusal(t)) return t;
@@ -218,6 +227,7 @@ export function actionMessage(r: Pick<ChatAction, 'action' | 'args'>, rid: strin
     case 'team.dissolve': return { type: 'team.dissolve', team };
     case 'team.save': return { type: 'team.save', rid, name: String(a.name), seats: a.seats as Extract<ClientMessage, { type: 'team.save' }>['seats'] };
     case 'task.cancel': return { type: 'task.cmd', rid, by: LEDGE_GIVER, op: 'cancel', task: String(a.task), ...(a.reason ? { text: String(a.reason) } : {}) };
+    case 'task.answer': return { type: 'task.cmd', rid, by: LEDGE_GIVER, op: 'done', task: String(a.task), text: String(a.answer) };
     case 'task.pass': return { type: 'task.cmd', rid, by: LEDGE_GIVER, op: 'pass', task: String(a.task), to: String(a.to), ...(a.note ? { text: String(a.note) } : {}) };
     default: throw new Error(`${r.action} is not a generic action`);
   }

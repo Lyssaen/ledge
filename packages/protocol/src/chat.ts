@@ -92,7 +92,7 @@ export const DETAIL_MAX = 4000;
 export const ACTION_ERROR_CODES = [
   'unknown', 'ambiguous', 'read_only', 'exited', 'running', 'archived', 'not_archived', 'no_terminal', 'same_model', 'no_request',
   'in_session', 'no_note', 'member', 'not_member', 'unknown_role', 'not_resting', 'dissolved', 'no_seat', 'closed', 'holder',
-  'changed', 'cut', 'failed'
+  'changed', 'cut', 'not_decision', 'failed'
 ] as const;
 export type ActionErrorCode = (typeof ACTION_ERROR_CODES)[number];
 /** A row of the chat's generic card (action registry spec §5.1): an action the daemon resolved, ready to apply. `action` is a

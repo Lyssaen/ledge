@@ -1,4 +1,4 @@
-import { pendingKey, type ChatErrorCode, type PushPayload, type Session } from '@ledge/protocol';
+import { pendingKey, type ChatErrorCode, type PushPayload, type Session, type Task } from '@ledge/protocol';
 
 const TAG_MAX = 32;
 const TITLE_MAX = 80;
@@ -59,5 +59,13 @@ export function chatEndPayload(code: ChatErrorCode | undefined, badge: number): 
   return {
     v: 1, kind: 'chat', title: 'Ledge a répondu', body: code ? CHAT_ERROR_BODY[code] : 'Touchez pour lire la réponse.',
     url: '/#/chat', badge: Math.max(0, Math.min(999, badge)), tag: 'chat'
+  };
+}
+
+/** A decision a session just put to the user (`ledge task give ledge …`): it opens Ledge's chat, where « À toi » lists it. */
+export function decisionPayload(t: Task, badge: number): PushPayload {
+  return {
+    v: 1, kind: 'decision', title: cut(`${t.giverName} attend votre décision`, TITLE_MAX), body: cut(t.title.trim(), BODY_MAX),
+    url: '/#/chat', badge: Math.max(0, Math.min(999, badge)), tag: safeTag(t.id)
   };
 }

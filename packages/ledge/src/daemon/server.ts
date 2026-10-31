@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import { WebSocketServer, WebSocket } from 'ws';
-import { actionById, contextNear, isArchived, RoleIdSchema, TemplateIdSchema, type DefinitionCode, givenByLedge, LEDGE_GIVER, transmissions, projectOf, type ChatAction, type Autonomy, type Role, type Seat, type Team } from '@ledge/protocol';
+import { actionById, contextNear, isArchived, RoleIdSchema, TemplateIdSchema, type DefinitionCode, givenByLedge, LEDGE_GIVER, openDecision, transmissions, type Task, projectOf, type ChatAction, type Autonomy, type Role, type Seat, type Team } from '@ledge/protocol';
 import { ATTACHMENT_LOCAL_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, type ModelRefusal, type RefusalCode, backendOf } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
@@ -60,7 +60,7 @@ import { serveSsh } from '../transport/ssh.js';
 import type { MobileService } from '../mobile/service.js';
 import { createPhoneGateway, type PhoneGateway } from '../mobile/gateway.js';
 import { createNotifier } from '../mobile/push/notifier.js';
-import { chatEndPayload } from '../mobile/push/triggers.js';
+import { chatEndPayload, decisionPayload } from '../mobile/push/triggers.js';
 import { pushFor } from '../mobile/push/triggers.js';
 import { createChallengeStore } from '../mobile/challenges.js';
 import { rpOf } from '../mobile/webauthn.js';
@@ -252,6 +252,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   let gateway: PhoneGateway | undefined;
   /** The notifier is made after the gateway: a chat end reaches it through this. */
   let notifyChatEnd: ((deviceId: string, code?: ChatErrorCode) => void) | undefined;
+  /** A new decision put to the user, pushed to the phones (set once the notifier is). */
+  let notifyDecision: ((task: Task) => void) | undefined;
   /** Every local front gets it; the phone gateway passes on only what it knows. */
   const broadcast = (msg: ServerMessage) => { for (const c of localClients) send(c, msg); gateway?.forward(msg); };
   threads.setEmitter('desktop', broadcast);
@@ -313,6 +315,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     const index = entry ? task.log.lastIndexOf(entry) : -1;
     const tr = transmissions(task).find(x => x.index === index);
     if (tr && tr.from !== LEDGE_GIVER) history?.recordTask(tr.from, { task, tr, ...(tr.to !== LEDGE_GIVER ? { peer: tr.to } : {}) });
+    if (tr?.op === 'give' && tr.to === LEDGE_GIVER) notifyDecision?.(task);
   } });
   // The relief of a session whose context is nearly full (context handover spec §3.3). `launch` and `closeSession` are hoisted.
   const handovers = createHandovers({ store, mailbox, tasks, teams, launch: req => launch(req), close: s => closeSession(s),
@@ -1718,6 +1721,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     notifyChatEnd = (deviceId, code) => {
       const badge = store.all().filter(s => s.pending).length;
       void notifier.notify(chatEndPayload(code, badge), undefined, deviceId).catch(e => log(`push failed (${e instanceof Error ? e.name : 'error'})`));
+    };
+    notifyDecision = task => {
+      const badge = store.all().filter(s => s.pending).length + tasks.all().filter(openDecision).length;
+      void notifier.notify(decisionPayload(task, badge), undefined).catch(e => log(`push failed (${e instanceof Error ? e.name : 'error'})`));
     };
     unsubscribePush = store.onApply((before, after) => {
       const p = pushFor(before, after, store.all());

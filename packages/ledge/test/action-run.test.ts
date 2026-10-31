@@ -70,6 +70,18 @@ describe('action.run', () => {
     expect(await run('team.resume', { team: t.id })).toMatchObject({ code: 'refused', reason: 'team api is dissolved' });
   });
 
+  it('task.answer: the user answers a decision a session put to it, confirmed; never a session, not even the @leader asking', async () => {
+    const t = await team();
+    const lead = t.seats[0]!.sessionId!;
+    c.send({ type: 'task.cmd', rid: 'ask', by: lead, op: 'give', to: 'ledge', title: 'Fusionner ?', text: 'oui / non' });
+    const d = (await c.next('task.result', 3000)).task!;
+    expect(await run('task.answer', { task: d.id, answer: 'oui' })).toMatchObject({ code: 'confirm_required', row: { risk: 'destructive', detail: 'oui' } });
+    expect(await run('task.answer', { task: d.id, answer: 'oui' }, { by: lead, confirmed: true })).toMatchObject({ code: 'agent' });
+    expect((await run('task.answer', { task: d.id, answer: 'Oui, fusionne' }, { confirmed: true })).reason).toBeUndefined();
+    c.send({ type: 'task.cmd', rid: 'show', by: 'ledge', op: 'show', task: d.id });
+    expect((await c.next('task.result', 3000)).task).toMatchObject({ state: 'done', result: 'Oui, fusionne' });
+    expect(await run('task.answer', { task: d.id, answer: 'non' }, { confirmed: true })).toMatchObject({ code: 'refused', reason: `task ${d.id} is closed` });
+  });
   it('refuses what is not possible now, bad args, and an action the CLI does not run', async () => {
     expect(await run('team.resume', { team: 'zz' })).toMatchObject({ code: 'refused', reason: 'unknown team zz' });
     expect(await run('team.join', { team: 'zz' })).toMatchObject({ code: 'refused', reason: expect.stringContaining('session') });

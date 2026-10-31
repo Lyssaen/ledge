@@ -217,7 +217,7 @@ export function createTasks(d: TasksDeps): Tasks {
           owner ? sides('refuse', ownerOf(t), giverOf(t)) : sides('cancel', giverOf(t), ownerOf(t)));
         // The other side is told: the giver when its owner refuses, the owner when its giver cancels.
         if (owner) tellGiver(refused, me.name, `refusée par ${me.name} : ${quote(reason)}`);
-        if (giver && !owner) d.mailbox.notify(t.owner, formatLedgeTask({ id: t.id, from: me.name, text: `Tâche « ${t.title} » annulée par ${me.name} : ${quote(reason)}. Arrête d'y travailler.` }), `${t.id}:${refused.log.length}`);
+        if (giver && !owner && t.owner !== LEDGE_GIVER) d.mailbox.notify(t.owner, formatLedgeTask({ id: t.id, from: me.name, text: `Tâche « ${t.title} » annulée par ${me.name} : ${quote(reason)}. Arrête d'y travailler.` }), `${t.id}:${refused.log.length}`);
         return ok(refused);
       }
       case 'cancel': {
@@ -227,7 +227,8 @@ export function createTasks(d: TasksDeps): Tasks {
         // Handed back from its giver to its owner, whoever cancels it: `by` keeps who did (as for a pass by Ledge).
         const cancelled = put({ ...t, state: 'refused', ...(reason ? { result: reason } : {}) }, me.name, `annulée${reason ? ` : ${reason}` : ''}`,
           sides('cancel', giverOf(t), ownerOf(t)));
-        d.mailbox.notify(t.owner, formatLedgeTask({ id: t.id, from: me.name, text: `Tâche « ${t.title} » annulée par ${me.name}${reason ? ` : ${quote(reason)}` : ''}. Arrête d'y travailler.` }), `${t.id}:${cancelled.log.length}`);
+        // A decision put to the user has nobody typing it: Ledge is not a session.
+        if (t.owner !== LEDGE_GIVER) d.mailbox.notify(t.owner, formatLedgeTask({ id: t.id, from: me.name, text: `Tâche « ${t.title} » annulée par ${me.name}${reason ? ` : ${quote(reason)}` : ''}. Arrête d'y travailler.` }), `${t.id}:${cancelled.log.length}`);
         // A task a seat gave another, cancelled by Ledge: its giver learns it too.
         if (!giver) tellGiver(cancelled, me.name, `annulée par ${me.name}${reason ? ` : ${quote(reason)}` : ''}`);
         return ok(cancelled);
