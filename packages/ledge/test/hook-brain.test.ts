@@ -43,14 +43,17 @@ describe('brainRefusal', () => {
     'rig send dev-build@factory hi', 'cd x && tmux kill-session -t a', 'curl -s http://127.0.0.1:7433/api/ps',
     'FOO=1 rig ps', 'sudo tmux ls', 'echo $(rig ps)', 'x | tmux', 'wget localhost:7433/api', 'a; rig ps', 'a || rig ps',
     'echo `tmux ls`', 'ls\nrig ps', '(rig ps)', 'env A=b rig ps', 'nohup tmux new -d', '/usr/local/bin/rig ps', 'nc localhost 7433',
-    'if true; then rig ps; fi', 'curl http://localhost:7433'
+    'if true; then rig ps; fi', 'curl http://localhost:7433',
+    'sudo -u bob rig ps', 'timeout 5 rig ps', 'nice -n 10 rig ps', 'nice rig ps', 'stdbuf -oL tmux ls', 'watch -n 2 rig ps', 'watch rig ps',
+    'ls | xargs rig down', 'xargs -I{} tmux kill-session -t {}', 'curl http://LOCALHOST:7433', 'curl 0:7433', 'curl http://127.1:7433/api'
   ])('brain is refused « %s »', cmd => {
     expect(brainRefusal(cmd)).toMatch(/passe par `ledge brain …`/);
     expect(BRAIN_FORBIDDEN.test(cmd)).toBe(true);
   });
   test.each([
     'ledge brain rigs', 'git log --oneline', 'echo trigger', 'ledge brain rig up starter --goal "x" --because u1',
-    'ledge brain rig down x --because u1', 'echo rig', 'rigor ps', 'tmuxinator', 'curl https://example.com:7433', 'curl http://localhost:8080'
+    'ledge brain rig down x --because u1', 'echo rig', 'rigor ps', 'tmuxinator', 'curl https://example.com:7433', 'curl http://localhost:8080',
+    'curl http://10.0.0.10:7433', 'sudo apt install x', 'timeout 5 git fetch', 'watch git status'
   ])('brain may run « %s »', cmd => { expect(brainRefusal(cmd)).toBeNull(); });
 });
 
@@ -120,6 +123,25 @@ describe('runHook: the brain session', () => {
     process.env.LEDGE_CODEX_HOOK_SESSION = 'brain';
     const o = out(await runHook('PreToolUse', bash('curl -s http://127.0.0.1:7433/api/ps'), { port: 1, timeoutMs: 100, tool: 'codex' }));
     expect(o.permissionDecision).toBe('deny');
+  });
+  it('under a shared Codex daemon, an inherited LEDGE_BRAIN does not make another thread a brain', async () => {
+    process.env.LEDGE_BRAIN = '1'; process.env.LEDGE_CODEX_HOOK_SESSION = 'abcd';
+    const daemon = () => true;
+    expect(await runHook('PreToolUse', bash('rig ps', 'abcd'), { port: 1, timeoutMs: 100, tool: 'codex', daemon })).toBeUndefined();
+    const start = await runHook('SessionStart', JSON.stringify({ session_id: 'abcd', cwd: '/w' }), { port: 1, timeoutMs: 100, tool: 'codex', daemon });
+    expect(start === undefined || !out(start).additionalContext!.includes('Tu es Ledge,')).toBe(true);
+    // without the per-thread id either, the shared daemon's LEDGE_BRAIN is still not trusted
+    delete process.env.LEDGE_CODEX_HOOK_SESSION;
+    expect(await runHook('PreToolUse', bash('rig ps'), { port: 1, timeoutMs: 100, tool: 'codex', daemon })).toBeUndefined();
+  });
+  it('the real brain under a shared Codex daemon is still known by its id', async () => {
+    process.env.LEDGE_BRAIN = '1'; process.env.LEDGE_CODEX_HOOK_SESSION = 'brain';
+    const o = out(await runHook('PreToolUse', bash('rig ps', 'brain'), { port: 1, timeoutMs: 100, tool: 'codex', daemon: () => true }));
+    expect(o.permissionDecision).toBe('deny');
+  });
+  it('a Codex brain with no shared daemon is known by LEDGE_BRAIN', async () => {
+    process.env.LEDGE_BRAIN = '1';
+    expect(out(await runHook('PreToolUse', bash('tmux ls'), { port: 1, timeoutMs: 100, tool: 'codex', daemon: () => false })).permissionDecision).toBe('deny');
   });
   it('codex brain runs ledge brain in the hook', async () => {
     process.env.LEDGE_CODEX_HOOK_SESSION = 'brain'; process.env.LEDGE_SESSION_KEY = 'k-brain';

@@ -465,16 +465,20 @@ async function runLedgeCommand(client: Client, cmd: NonNullable<ReturnType<typeo
 
 /** A shell word in command position: at the start, or after `;` `&` `|` `(` `{` `!`, a backquote or a newline (so after
  *  `&&`, `||`, `$(` too), behind any `VAR=value` and any of the wrappers or keywords that run the next word. */
-const COMMAND_AT = '(?:^|[;&|({!`\\n])\\s*(?:(?:[A-Za-z_][A-Za-z0-9_]*=\\S*|sudo|env|exec|command|nohup|time|then|do|else|elif|if|while|until)\\s+(?:-\\S+\\s+)*)*';
-/** OpenRig's local API, whatever client reaches it. */
-const OPENRIG_API = '\\b(?:curl|wget|https?|httpie|xh|nc|ncat|netcat|telnet|socat)\\b[^;&|\\n]*?(?:127\\.0\\.0\\.1|localhost|0\\.0\\.0\\.0|::1)\\]?(?::|\\s+)7433\\b'
-  + '|/dev/(?:tcp|udp)/(?:127\\.0\\.0\\.1|localhost)/7433\\b';
+const WRAPPERS = 'sudo|env|exec|command|nohup|time|timeout|nice|stdbuf|watch|xargs|then|do|else|elif|if|while|until';
+/** A wrapper's own arguments before the command it runs: `-x`, `-x value`, or a number (`timeout 5`, `nice -n 10`). */
+const WRAPPER_ARG = '(?:-\\S+(?:\\s+[^-\\s;&|]\\S*)?|\\d[\\w.]*)\\s+';
+const COMMAND_AT = `(?:^|[;&|({!\`\\n])\\s*(?:(?:[A-Za-z_][A-Za-z0-9_]*=\\S*|${WRAPPERS})\\s+(?:${WRAPPER_ARG})*)*`;
+/** OpenRig's local API, whatever client reaches it, on any loopback spelling. */
+const LOOPBACK = '(?<![\\w.])(?:127(?:\\.\\d+){1,3}|localhost|0\\.0\\.0\\.0|0|::1)';
+const OPENRIG_API = `\\b(?:curl|wget|https?|httpie|xh|nc|ncat|netcat|telnet|socat)\\b[^;&|\\n]*?${LOOPBACK}\\]?(?::|\\s+)7433\\b`
+  + `|/dev/(?:tcp|udp)/${LOOPBACK}/7433\\b`;
 /**
  * What the brain session may never run itself (C3): `rig` or `tmux` as a command, wherever it sits in a chain, and any
- * call to OpenRig's API on port 7433. As an argument (`ledge brain rig down …`, `echo rig`) it passes. The PATH shims
+ * call to OpenRig's API on port 7433 (case-insensitive: `LOCALHOST` is the same host). As an argument (`ledge brain rig down …`, `echo rig`) it passes. The PATH shims
  * stop what slips past (`bash -c 'rig …'`).
  */
-export const BRAIN_FORBIDDEN = new RegExp(`${COMMAND_AT}(?:\\S*/)?(?:rig|tmux)(?=$|[\\s;&|)\`])|${OPENRIG_API}`, 'm');
+export const BRAIN_FORBIDDEN = new RegExp(`${COMMAND_AT}(?:\\S*/)?(?:rig|tmux)(?=$|[\\s;&|)\`])|${OPENRIG_API}`, 'mi');
 const BRAIN_REFUSAL = "Le cerveau de Ledge ne lance ni rig, ni tmux, ni l'API d'OpenRig lui-même : passe par `ledge brain …`.";
 /** The reason a brain session's shell command is refused, or `null` when it may run. */
 export function brainRefusal(command: string): string | null {
@@ -482,6 +486,13 @@ export function brainRefusal(command: string): string | null {
 }
 /** A brain session, from its environment: LEDGE_BRAIN, or its Ledge id `brain` / `brain-<hex>` (the daemon's record is the real gate). */
 const isBrainId = (id: string | undefined) => id === 'brain' || !!id?.startsWith('brain-');
+/** A brain hook. Codex follows `codexLedgeId`'s rule: a per-thread id is authoritative, and LEDGE_BRAIN counts only when
+ *  no shared app-server runs the hook (its environment is whichever Codex started it, maybe the brain). */
+function isBrain(agent: Tool, id: string | undefined, env: NodeJS.ProcessEnv, daemon: () => boolean = underCodexDaemon): boolean {
+  if (isBrainId(id)) return true;
+  if (env.LEDGE_BRAIN !== '1') return false;
+  return agent !== 'codex' || (!env[CODEX_HOOK_VAR] && !daemon());
+}
 /** What the brain is told at every start: its instructions are the CLAUDE.md / AGENTS.md of its folder (C16). */
 export const BRAIN_CONTEXT = "Tu es Ledge, l'humain des rigs OpenRig de l'utilisateur et son seul interlocuteur. Tes consignes, ton mandat et ta mémoire sont dans CLAUDE.md / AGENTS.md de ce dossier ; tu n'agis que par `ledge brain …`.";
 
@@ -498,7 +509,7 @@ function seatStart(seat: string): string {
  * on SessionStart, a session Ledge launched gets its identity as `additionalContext` (Claude Code and Codex read it);
  * that one hook waits for the daemon's snapshot, within a second.
  */
-export async function runHook(eventName: string, stdin: string, opts: { port?: number; timeoutMs?: number; tool?: Tool } = {}): Promise<string | undefined> {
+export async function runHook(eventName: string, stdin: string, opts: { port?: number; timeoutMs?: number; tool?: Tool; daemon?: () => boolean } = {}): Promise<string | undefined> {
   const agent = opts.tool ?? 'claude';
   const label = agent === 'claude' ? eventName : `${agent} ${eventName}`;
   // Ledge's own chat runs Claude Code headless: its hooks (if any ran) must never make a session.
@@ -512,7 +523,7 @@ export async function runHook(eventName: string, stdin: string, opts: { port?: n
     if (!mapped) { log(`hook ${label} ignored: unknown event, malformed payload, non-terminal SessionEnd or subagent event without a session of its own`); return undefined; }
     const launchedId = agent === 'codex' ? codexLedgeId() : agent === 'claude' ? process.env.LEDGE_SESSION : undefined;
     // Cursor has no blocking hook: its brain is held by the PATH shims alone.
-    brain = agent !== 'cursor' && (process.env.LEDGE_BRAIN === '1' || isBrainId(launchedId));
+    brain = agent !== 'cursor' && isBrain(agent, launchedId, process.env, opts.daemon);
     identify = !brain && eventName === 'SessionStart' && !!launchedId && mapped.id === launchedId;
     const input = ((payload as Payload).tool_input ?? {}) as Payload;
     const shell = eventName === 'PreToolUse' && str((payload as Payload).tool_name) === 'Bash' && typeof input.command === 'string' ? input.command : undefined;
