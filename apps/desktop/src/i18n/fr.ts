@@ -2,7 +2,7 @@ import { actionCopy } from '@ledge/ui/chat/actionCopy';
 import type { BotState } from '@ledge/ui/bots/poseFor';
 import type { SectionId } from '../nav/state';
 import type { Bucket, GroupBy } from '../list/model';
-import type { DaemonInfo, OmpApproval, ProjectColor, ToolStatus, UpdateFailure, TodoStatus } from '@ledge/protocol';
+import type { DaemonInfo, OmpApproval, OpenRigState, ProjectColor, RigLifecycle, RigSpecInfo, SeatState, ToolStatus, UpdateFailure, TodoStatus } from '@ledge/protocol';
 import type { PlanDoc, ToolKind, Verb } from '../session/exchanges';
 import type { Change } from '../session/changedFiles';
 import type { FinishedNotify, SoundCategory, SoundVolume } from '@ledge/ui/sounds/preferences';
@@ -438,7 +438,8 @@ export const fr = {
   home: {
     operator: (sessions: number, machines: number) => `Opérateur · voit ${plural(sessions, `${sessions} session`, `${sessions} sessions`)}, ${plural(machines, `${machines} machine`, `${machines} machines`)} · lecture seule`,
     tabsLabel: 'Vues de Ledge',
-    tabs: { conversation: 'Conversation', history: 'Historique' },
+    tabs: { conversation: 'Conversation', rigs: 'Rigs', history: 'Historique' },
+    rigsCount: (n: number) => (n > 0 ? `Rigs · ${n}` : 'Rigs'),
     toAtelier: 'Retour à l’atelier',
     point: {
       title: 'Le point', yours: 'À toi',
@@ -449,6 +450,33 @@ export const fr = {
     readOnly: 'lecture seule · rien sans ton clic',
     mentions: 'Mentionner', mentionSession: (name: string) => `session ${name}`,
     history: { none: 'Aucune conversation aujourd’hui.', open: 'Voir dans la conversation' }
+  },
+  /** The Rigs tab of the Ledge screen (spec §8.2): En cours · Specs · Agents. */
+  rigsTab: {
+    tabs: 'Vues des rigs',
+    sub: { live: (n: number) => `En cours · ${n}`, specs: (n?: number) => (n === undefined ? 'Specs' : `Specs · ${n}`), agents: (n: number) => `Agents · ${n}` },
+    rig: 'rig', seats: (n: number) => `${n} ${plural(n, 'siège', 'sièges')}`, inProject: (name: string) => `dans ${name}`, off: 'hors projet',
+    branch: (b: string) => `⎇ ${b}`, spec: 'spec', onMachine: (m: string) => `sur ${m}`,
+    working: (w: number, n: number) => `${w}/${n} au travail`, ready: (r: number, n: number) => `${r}/${n} prêts`,
+    table: 'Table', tableTitle: (name: string) => `Voir ${name} dans l’atelier`, terminals: 'Terminaux', terminalsOf: (name: string) => `Terminaux de ${name}`,
+    seatState: { working: 'Au travail', ready: 'Disponible', idle: 'Disponible', starting: 'démarre…', trust: 'attend ta confiance dans le dossier',
+      stopped: 'arrêté', crashed: 'en panne', unreachable: 'injoignable' } as Record<SeatState, string>,
+    context: (p: number) => `contexte ${p} %`, open: (name: string) => `Ouvrir la session de ${name}`,
+    kernelWhat: 'la mécanique · operator et queue · toujours allumé', rest: 'au repos', health: 'Santé',
+    version: (v?: string) => (v ? `OpenRig ${v}` : 'OpenRig, version inconnue'),
+    openrigState: { absent: 'absent', stopped: 'arrêté', starting: 'démarre', running: 'allumé', unsupported: 'non pris en charge', error: 'en erreur', unreachable: 'injoignable' } as Record<OpenRigState, string>,
+    human: { registered: 'humain inscrit', missing: 'humain non inscrit', failed: 'inscription de l’humain échouée' } as Record<'registered' | 'missing' | 'failed', string>,
+    noRigs: 'Aucun rig en cours.',
+    library: 'Bibliothèque · ~/.openrig/specs', registry: 'Registre · openrig.dev/rigs', registryNone: 'Rien de lu depuis le registre',
+    specsList: 'Specs', specOf: (name: string) => `Spec ${name}`, specSeats: (n: number) => `${n} ${plural(n, 'siège', 'sièges')}`,
+    specLine: (n: number, source: string) => `Spec OpenRig · ${n} ${plural(n, 'siège', 'sièges')} · ${source}`,
+    source: { builtin: 'intégrée', library: 'bibliothèque', registry: 'registre' } as Record<RigSpecInfo['source'], string>,
+    seatsTitle: 'Sièges', cols: { seat: 'Siège', role: 'Rôle', tool: 'Outil · modèle · effort', autonomy: 'Autonomie' },
+    file: 'Fichier', copy: 'Copier', copied: 'Copié', born: 'Rigs nés', bornNone: 'Aucun pour l’instant',
+    lifecycle: { launching: 'se lance', running: 'active', partial: 'partielle', stopped: 'arrêtée', unreachable: 'injoignable' } as Record<RigLifecycle, string>,
+    launch: 'Lancer ce rig…', machine: 'Machine',
+    loading: 'Lecture des specs…', none: 'Aucune spec dans la bibliothèque.', failed: 'Les specs n’ont pas pu être lues.',
+    agents: 'Agents', agentCols: { address: 'Adresse', name: 'Nom', rig: 'Rig', state: 'État', tool: 'Outil · modèle', context: 'Contexte' }, noAgents: 'Aucun siège.'
   },
   handover: {
     nearShort: (name: string, pct: number) => `${name} · contexte ${pct} %`, nearHint: 'limite proche', failedShort: (name: string) => `Relève de ${name} échouée`, retry: 'Réessayer',

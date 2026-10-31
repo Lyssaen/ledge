@@ -34,6 +34,13 @@ describe('nav state', () => {
     const fromSettings = navReducer(navReducer(page, { type: 'settings' }), { type: 'ledge' });
     expect(fromSettings.place).toMatchObject({ kind: 'home', back: { kind: 'session', id: 'a' } });
   });
+  it('the Rigs tab keeps its sub-tab and its chosen spec from tab to tab', () => {
+    const specs = navReducer(navReducer(s0, { type: 'ledge', tab: 'rigs', rigs: 'specs' }), { type: 'ledge', tab: 'rigs', spec: 'factory' });
+    expect(specs.place).toMatchObject({ kind: 'home', tab: 'rigs', rigs: 'specs', spec: 'factory' });
+    const back = navReducer(navReducer(specs, { type: 'ledge', tab: 'conversation' }), { type: 'ledge', tab: 'rigs' });
+    expect(back.place).toMatchObject({ tab: 'rigs', rigs: 'specs', spec: 'factory' });
+    expect(navReducer(s0, { type: 'ledge', tab: 'rigs' }).place).not.toHaveProperty('rigs');
+  });
   it('asking for the chat when it is already open asks its field for the focus again; closing it does not', () => {
     const opened = navReducer(s0, { type: 'chat', open: true });
     expect(opened.chat).toBe(true);

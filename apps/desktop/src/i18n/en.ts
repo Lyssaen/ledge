@@ -418,7 +418,8 @@ export const en: Messages = {
   home: {
     operator: (sessions: number, machines: number) => `Operator · sees ${sessions} ${sessions === 1 ? 'session' : 'sessions'}, ${machines} ${machines === 1 ? 'machine' : 'machines'} · read only`,
     tabsLabel: 'Ledge views',
-    tabs: { conversation: 'Conversation', history: 'History' },
+    tabs: { conversation: 'Conversation', rigs: 'Rigs', history: 'History' },
+    rigsCount: (n) => (n > 0 ? `Rigs · ${n}` : 'Rigs'),
     toAtelier: 'Back to the atelier',
     point: {
       title: 'The point', yours: 'Yours',
@@ -429,6 +430,32 @@ export const en: Messages = {
     readOnly: 'read only · nothing without your click',
     mentions: 'Mention', mentionSession: (name: string) => `session ${name}`,
     history: { none: 'No conversation today.', open: 'See in the conversation' }
+  },
+  rigsTab: {
+    tabs: 'Rig views',
+    sub: { live: (n) => `Running · ${n}`, specs: (n) => (n === undefined ? 'Specs' : `Specs · ${n}`), agents: (n) => `Agents · ${n}` },
+    rig: 'rig', seats: (n) => `${n} ${pluralEn(n, 'seat', 'seats')}`, inProject: (name) => `in ${name}`, off: 'off project',
+    branch: (b) => `⎇ ${b}`, spec: 'spec', onMachine: (m) => `on ${m}`,
+    working: (w, n) => `${w}/${n} working`, ready: (r, n) => `${r}/${n} ready`,
+    table: 'Table', tableTitle: (name) => `Show ${name} in the atelier`, terminals: 'Terminals', terminalsOf: (name) => `Terminals of ${name}`,
+    seatState: { working: 'Working', ready: 'Available', idle: 'Available', starting: 'starting…', trust: 'waits for you to trust the folder',
+      stopped: 'stopped', crashed: 'crashed', unreachable: 'unreachable' },
+    context: (p) => `context ${p} %`, open: (name) => `Open ${name}’s session`,
+    kernelWhat: 'the machinery · operator and queue · always on', rest: 'at rest', health: 'Health',
+    version: (v) => (v ? `OpenRig ${v}` : 'OpenRig, unknown version'),
+    openrigState: { absent: 'absent', stopped: 'stopped', starting: 'starting', running: 'running', unsupported: 'not supported', error: 'in error', unreachable: 'unreachable' },
+    human: { registered: 'human registered', missing: 'human not registered', failed: 'human registration failed' },
+    noRigs: 'No rig running.',
+    library: 'Library · ~/.openrig/specs', registry: 'Registry · openrig.dev/rigs', registryNone: 'Nothing read from the registry',
+    specsList: 'Specs', specOf: (name) => `Spec ${name}`, specSeats: (n) => `${n} ${pluralEn(n, 'seat', 'seats')}`,
+    specLine: (n, source) => `OpenRig spec · ${n} ${pluralEn(n, 'seat', 'seats')} · ${source}`,
+    source: { builtin: 'built-in', library: 'library', registry: 'registry' },
+    seatsTitle: 'Seats', cols: { seat: 'Seat', role: 'Role', tool: 'Tool · model · effort', autonomy: 'Autonomy' },
+    file: 'File', copy: 'Copy', copied: 'Copied', born: 'Rigs born', bornNone: 'None yet',
+    lifecycle: { launching: 'launching', running: 'active', partial: 'partial', stopped: 'stopped', unreachable: 'unreachable' },
+    launch: 'Launch this rig…', machine: 'Machine',
+    loading: 'Reading the specs…', none: 'No spec in the library.', failed: 'The specs could not be read.',
+    agents: 'Agents', agentCols: { address: 'Address', name: 'Name', rig: 'Rig', state: 'State', tool: 'Tool · model', context: 'Context' }, noAgents: 'No seat.'
   },
   handover: {
     nearShort: (name: string, pct: number) => `${name} · context ${pct} %`, nearHint: 'near its limit', failedShort: (name: string) => `Relief of ${name} failed`, retry: 'Retry',

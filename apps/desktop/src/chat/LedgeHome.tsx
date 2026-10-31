@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent } from 'react';
-import { daemonStore, useDaemon, type DaemonClient } from '@ledge/fleet';
+import { daemonStore, useDaemon, useRigs, type DaemonClient } from '@ledge/fleet';
 import { contextShare, type ChatTurn, type Projects } from '@ledge/protocol';
 import { ChatView } from '@ledge/ui/chat/ChatView';
 import { ChatCopyProvider } from '@ledge/ui/chat/copy';
@@ -18,7 +18,8 @@ import { cls } from '../shell/cls';
 import { SessionBot } from '../shell/SessionBot';
 import { attentionOf, quickDecide } from '../shell/sidebar/model';
 import { useDefaultTool } from '../settings/tool';
-import { HOME_TABS, type HomeTab, type NavAction } from '../nav/state';
+import { HOME_TABS, type HomeTab, type NavAction, type NavState } from '../nav/state';
+import { RigsTab } from '../rigs/RigsTab';
 import { nearLimit, type Relief } from '../session/useRelief';
 import type { Wait } from '../list/time';
 import { useAgentHighlight } from './useAgentHighlight';
@@ -28,7 +29,7 @@ import { useProjectReview } from './projectReview';
 
 export interface LedgeHomeProps {
   client: DaemonClient; view: FleetView; relief: Relief; decisions: Decisions; waits: ReadonlyMap<string, Wait>;
-  tab: HomeTab; dispatch: (a: NavAction) => void;
+  tab: HomeTab; nav: NavState; dispatch: (a: NavAction) => void;
   paused: boolean; focus: number;
   projects: Projects | null;
   onLaunched(id: string): void; onTerminal(id: string): void; notify(text: string): void; onProposal(pid: string): void;
@@ -193,7 +194,8 @@ export function LedgeHome(p: LedgeHomeProps): JSX.Element {
       <Button variant="ghost" size="icon" aria-label={t.home.toAtelier} title={t.home.toAtelier} onClick={() => dispatch({ type: 'escape' })}><Icon {...ICONS.close} /></Button>
     </div>
   );
-  const counts: Record<HomeTab, string> = { conversation: t.home.tabs.conversation, history: t.home.tabs.history };
+  const rigCount = useRigs(client).filter(r => !r.kernel).length;
+  const counts: Record<HomeTab, string> = { conversation: t.home.tabs.conversation, rigs: t.home.rigsCount(rigCount), history: t.home.tabs.history };
   return (
     <section className="ledge-home" aria-label={t.side.ledgeHome}>
       <div className="home-column">
@@ -222,6 +224,7 @@ export function LedgeHome(p: LedgeHomeProps): JSX.Element {
                 theme={theme} frozen={offline !== null} reducedMotion={p.paused || reduced} />
             </ChatCopyProvider>
           )}
+          {tab === 'rigs' && <RigsTab nav={p.nav} dispatch={dispatch} client={client} sessions={view.sessions} projects={p.projects} />}
           {tab === 'history' && <HistoryTab chat={chat} onOpen={qid => {
             dispatch({ type: 'ledge', tab: 'conversation' });
             requestAnimationFrame(() => [...document.querySelectorAll<HTMLElement>('[data-turn]')][chat.findIndex(x => x.qid === qid)]?.scrollIntoView({ block: 'start' }));

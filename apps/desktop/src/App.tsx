@@ -312,7 +312,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
             onRevealArchives={() => setRevealArchives(n => n + 1)} onDetach={canDetach() && !detached ? detach : undefined}
             manage={{ open: sessionMenu.menu?.id === session?.id && sessionMenu.menu !== null, onOpen: (at, opener) => session && sessionMenu.open(session.id, at, opener) }} />
           {place.kind === 'settings' ? <SettingsPlace section={place.section} ctx={settings} />
-            : place.kind === 'home' ? <HomePlace label={t.side.ledgeHome} client={fleetClient} view={fleetView} relief={relief} decisions={decisions} waits={waits} tab={place.tab} dispatch={dispatch}
+            : place.kind === 'home' ? <HomePlace label={t.side.ledgeHome} client={fleetClient} view={fleetView} relief={relief} decisions={decisions} waits={waits} tab={place.tab} nav={nav} dispatch={dispatch}
                 paused={nav.paused} focus={nav.chatFocus} projects={projects} onLaunched={chatLaunched} onTerminal={showTerminal} notify={notify} onProposal={openProposal} />
             : session && place.kind === 'session' ? <SessionPlace client={fleetClient} session={session} nav={nav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify} actions={actions}
                 prefs={sessionPrefs} setPrefs={setSessionPrefs} onRevealCurrent={() => setRevealCurrent(n => n + 1)} />

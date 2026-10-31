@@ -1,4 +1,4 @@
-import type { Escalation, OpenRigStatus, Rig, RigSeat, SessionRig } from '@ledge/protocol';
+import type { Escalation, OpenRigStatus, Rig, RigSeat, RigSpecInfo, SessionRig } from '@ledge/protocol';
 import { test, expect } from './fixtures';
 import { fakeDaemon, session, twoProjects, openAtelier } from './daemon';
 
@@ -101,4 +101,28 @@ test('atelier: a double-click on factory shows its room alone; an exchange bubbl
   await expect(page.locator('.project-filter[data-filter="rig"]')).toHaveCount(0);
   await expect(atelier.locator('[data-room]').first()).toBeVisible();
   expect(errors).toEqual([]);
+});
+
+test('Ledge screen › Rigs: running rigs, the daemon’s spec, the seats, and never a rig.act', async ({ page }) => {
+  const spec: RigSpecInfo = { id: 'factory', name: 'factory', source: 'library', path: '~/.openrig/specs/rigs/factory/rig.yaml',
+    seats: [{ address: '@build', member: 'build', pod: 'Builder', runtime: 'claude-code', model: 'opus', effort: 'high' }, { address: '@lead', member: 'lead', pod: 'Lead', runtime: 'codex', model: 'gpt-5.5' }] };
+  const daemon = await fakeDaemon(page, [otto, buildSeat, orchLead], { projects: twoProjects, rigs: [{ ...FACTORY, spec: 'factory' }, KERNEL], openrig: RUNNING, specs: [spec] });
+  await page.goto('/');
+  const home = page.locator('section.ledge-home');
+  await home.getByRole('tab', { name: 'Rigs · 1' }).click();
+  const sub = home.getByRole('tablist', { name: 'Rig views' });
+  await expect(sub.getByRole('tab', { name: 'Running · 2' })).toHaveAttribute('aria-selected', 'true');
+  await expect(home.getByRole('article', { name: 'factory' })).toContainText('1/2 working');
+  await expect(home.getByRole('article', { name: 'OpenRig kernel' })).toBeVisible();
+  await sub.getByRole('tab', { name: 'Specs · 1' }).click();
+  await expect(home.getByRole('region', { name: 'Spec factory' })).toContainText('OpenRig spec · 2 seats · library');
+  await expect(home.getByRole('region', { name: 'Spec factory' })).toContainText('~/.openrig/specs/rigs/factory/rig.yaml');
+  await sub.getByRole('tab', { name: 'Agents · 2' }).click();
+  const agents = home.getByRole('table', { name: 'Agents' });
+  await expect(agents.getByRole('row')).toHaveCount(3);
+  await expect(agents).toContainText('orch-lead');
+  await agents.getByRole('row', { name: /build/ }).click();
+  await expect(page.locator('section.ledge-home')).toHaveCount(0);
+  expect(daemon.received.filter(m => m.type.startsWith('rig.act'))).toEqual([]);
+  expect(daemon.received.some(m => m.type === 'rig.specs.request')).toBe(true);
 });
