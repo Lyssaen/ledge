@@ -21,6 +21,8 @@ export function startPoller(opts: {
   broadcastPreview?: (id: string, lines: string[]) => void;
   /** Whether a client follows this session in color: only then is it captured with its colors. */
   colorWanted?: (id: string) => boolean;
+  /** Whether a colored image of `id` is already held for its followers: an unchanged pane then needs no new capture. */
+  colorCached?: (id: string) => boolean;
   /** The last PREVIEW_CAPTURE_LINES lines of the colored capture, for the clients that follow `id`. */
   sendColorPreview?: (id: string, lines: string[]) => void;
   gitInfo?: typeof defaultGitInfo;
@@ -36,8 +38,6 @@ export function startPoller(opts: {
   const hashes = new Map<string, string>();
   /** The last preview sent per session, so an unchanged one is not sent again. */
   const previews = new Map<string, string>();
-  /** Sessions whose colored preview was sent for the current subscription (the first image is immediate). */
-  const colorSent = new Set<string>();
   const matches = new Map<string, NonNullable<ReturnType<ReturnType<typeof defaultAdapterFor>['detectPrompt']>>>();
   /** The last pane title emitted per session, so each distinct title is sent once. */
   const titles = new Map<string, string>();
@@ -45,7 +45,7 @@ export function startPoller(opts: {
   const restSince = new Map<string, number>();
   /** Sessions whose repository has been read once; later refreshes ride the dead check. */
   const gitSeen = new Set<string>();
-  const forget = (id: string) => { hashes.delete(id); matches.delete(id); previews.delete(id); restSince.delete(id); titles.delete(id); gitSeen.delete(id); colorSent.delete(id); };
+  const forget = (id: string) => { hashes.delete(id); matches.delete(id); previews.delete(id); restSince.delete(id); titles.delete(id); gitSeen.delete(id); };
   let lastDeadCheck = 0;
   let running = false;
 
@@ -135,11 +135,10 @@ export function startPoller(opts: {
 
   /** A second, colored capture for the clients that follow this session: on a change of the plain capture, or at once for a new subscription. Prompt detection never reads it. */
   async function colorPreview(s: Session, changed: boolean): Promise<void> {
-    if (!opts.colorWanted?.(s.id)) { colorSent.delete(s.id); return; }
-    if (!changed && colorSent.has(s.id)) return;
+    if (!opts.colorWanted?.(s.id)) return;
+    if (!changed && opts.colorCached?.(s.id)) return;
     const colored = await tmux.capture(s.tmuxSession!, PREVIEW_CAPTURE_LINES, { color: true });
     if (colored === null) return;
-    colorSent.add(s.id);
     opts.sendColorPreview?.(s.id, colored.split('\n').slice(-PREVIEW_CAPTURE_LINES));
   }
 

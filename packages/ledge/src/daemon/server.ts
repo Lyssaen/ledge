@@ -168,6 +168,8 @@ export interface ServerHandle {
   preview(id: string, lines: string[]): void;
   /** Whether some client follows this session in color (`session.preview.subscribe`). */
   colorWanted(id: string): boolean;
+  /** Whether a colored image of this session is held (dropped when no client follows it any more). */
+  colorCached(id: string): boolean;
   /** Sends the colored preview to the clients that follow `id`, and to them only. */
   sendColorPreview(id: string, lines: string[]): void;
   /** The OMP processes this daemon owns. */
@@ -425,6 +427,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const colorFollow = new Map<WebSocket, string>();
   const colorLast = new Map<string, string[]>();
   const colorWanted = (id: string) => { for (const v of colorFollow.values()) if (v === id) return true; return false; };
+  const colorCached = (id: string) => colorLast.has(id);
   const sendColorPreview = (id: string, lines: string[]) => {
     colorLast.set(id, lines);
     for (const [ws, followed] of colorFollow) if (followed === id) send(ws, { type: 'session.preview.color', id, lines });
@@ -1566,6 +1569,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast,
     preview,
     colorWanted,
+    colorCached,
     sendColorPreview,
     omp,
     sweepAttachments,

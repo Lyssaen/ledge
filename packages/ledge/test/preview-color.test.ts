@@ -37,7 +37,7 @@ beforeEach(async () => {
   panes = { 'ledge-s1': { plain: '● ok', color: GREEN }, 'ledge-s2': { plain: '● two', color: '\x1b[31m● two\x1b[0m' } };
   fake = fakeTmux(panes);
   srv = await startServer({ store, tmux: fake.tmux, port: 0 });
-  poller = startPoller({ store, tmux: fake.tmux, intervalMs: 1_000_000, gitInfo: async () => null, broadcastPreview: srv.preview, colorWanted: srv.colorWanted, sendColorPreview: srv.sendColorPreview });
+  poller = startPoller({ store, tmux: fake.tmux, intervalMs: 1_000_000, gitInfo: async () => null, broadcastPreview: srv.preview, colorWanted: srv.colorWanted, colorCached: srv.colorCached, sendColorPreview: srv.sendColorPreview });
 });
 afterEach(async () => { poller.stop(); await srv.close(); });
 
@@ -96,5 +96,33 @@ describe('color previews', () => {
     a.send({ type: 'session.preview.subscribe', id: null, color: true });
     await until(() => !srv.colorWanted('s2'));
     await a.close();
+  });
+  it('a quick s1 -> s2 -> s1 between two ticks still gets a first image on an idle pane', async () => {
+    const a = await connect({ port: srv.port }); await a.next('snapshot');
+    a.send({ type: 'session.preview.subscribe', id: 's1', color: true });
+    await until(() => srv.colorWanted('s1'));
+    await poller.tick(); await a.next('session.preview.color');
+    a.send({ type: 'session.preview.subscribe', id: 's2', color: true });
+    a.send({ type: 'session.preview.subscribe', id: 's1', color: true });
+    await new Promise(r => setTimeout(r, 100)); // both messages handled, no tick between
+    await poller.tick(); // the pane did not change
+    expect(await a.next('session.preview.color')).toEqual({ type: 'session.preview.color', id: 's1', lines: [GREEN] });
+    await a.close();
+  });
+  it('with two followers, one closing leaves the other receiving', async () => {
+    const a = await connect({ port: srv.port }); await a.next('snapshot');
+    const b = await connect({ port: srv.port }); await b.next('snapshot');
+    a.send({ type: 'session.preview.subscribe', id: 's1', color: true });
+    b.send({ type: 'session.preview.subscribe', id: 's1', color: true });
+    await until(() => srv.colorWanted('s1'));
+    await new Promise(r => setTimeout(r, 100));
+    await poller.tick(); await b.next('session.preview.color');
+    await a.close();
+    await new Promise(r => setTimeout(r, 100));
+    expect(srv.colorWanted('s1')).toBe(true);
+    panes['ledge-s1'] = { plain: 'new', color: '\x1b[33mnew\x1b[0m' };
+    await poller.tick();
+    expect((await b.next('session.preview.color')).lines).toEqual(['\x1b[33mnew\x1b[0m']);
+    await b.close();
   });
 });
