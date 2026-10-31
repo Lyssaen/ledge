@@ -148,6 +148,7 @@ export const en: Messages = {
     loading: 'Loading the thread…', empty: 'Nothing in this thread yet.', noSession: 'Pick a session on the home screen.',
     model: m => `model: ${m}`, defaultModel: 'default', notice: 'Ledge',
     seatTitle: (name, address, rig) => `Write to ${name} · ${address} · ${rig}`, seatPlaceholder: name => `Write to ${name}…`,
+    seatRemote: 'This seat is on another machine: write to it from there.',
     seatFoot: 'rig send signed by Ledge · the exchange also shows in Ledge’s thread'
   },
   ask: {

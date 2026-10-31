@@ -1380,6 +1380,39 @@ describe('ledge tui: a rig seat\'s session screen (lot 8 task 11)', () => {
     } finally { await tui.cleanup(); }
   });
 
+  it('addresses the rig by its name, not its id', async () => {
+    const { mockupRigs, mockupSeatSession } = await import('./tui-fixture.js');
+    const seatSession = mockupSeatSession();
+    const tui = await startTui({ openrig: { rigs: mockupRigs().map(r => (r.id === 'factory' ? { ...r, id: 'f-9', name: 'factory' } : r)) },
+      sessions: [...mockupSessions(), { ...seatSession, rig: { ...seatSession.rig!, rigId: 'f-9' } }] });
+    try {
+      await openBuild(tui);
+      await tui.press('\r');
+      await tui.press('go');
+      await tui.press('\r');
+      await until(() => sent(tui.daemon.received, 'ledge.say').length === 1);
+      expect(sent(tui.daemon.received, 'ledge.say')[0]).toMatchObject({ text: '@build@factory go' });
+    } finally { await tui.cleanup(); }
+  });
+
+  it('a remote rig\'s seat offers no field and says so', async () => {
+    const { mockupSeatSession } = await import('./tui-fixture.js');
+    const seatSession = mockupSeatSession();
+    const tui = await startTui({ openrig: {}, sessions: [...mockupSessions(), { ...seatSession, rig: { ...seatSession.rig!, machine: 'lab' } }] });
+    try {
+      await tui.resize(160, 46);
+      await until(() => tui.frame().includes('factory'));
+      await tui.pick('build');
+      await tui.press('\r');
+      await tui.press('3');
+      await until(() => tui.frame().includes('› @build ›'));
+      await tui.press('\r');
+      await until(() => tui.frame().includes('sur une autre machine'));
+      expect(tui.frame()).not.toContain('ÉCRIRE À BUILD · @BUILD · FACTORY');
+      expect(sent(tui.daemon.received, 'ledge.say')).toEqual([]);
+    } finally { await tui.cleanup(); }
+  });
+
   it('a standalone session still types into its pane', async () => {
     const tui = await startTui({ openrig: {} });
     try {

@@ -160,6 +160,7 @@ export const fr = {
     loading: 'Chargement du fil…', empty: 'Rien encore dans ce fil.', noSession: 'Choisissez une session dans l’accueil.',
     model: (m: string) => `modèle : ${m}`, defaultModel: 'par défaut', notice: 'Ledge',
     seatTitle: (name: string, address: string, rig: string) => `Écrire à ${name} · ${address} · ${rig}`, seatPlaceholder: (name: string) => `Écrire à ${name}…`,
+    seatRemote: 'Ce siège est sur une autre machine : écris-lui depuis là-bas.',
     seatFoot: 'rig send signé Ledge · l’échange s’affiche aussi dans le fil de Ledge'
   },
   ask: {
