@@ -50,6 +50,8 @@ import { createAsks, type Asks, type AsksJournal } from './asks.js';
 import type { Bridge } from './openrig/bridge.js';
 import { createRemotePeers } from './openrig/remote.js';
 import { createRigAggregate } from './openrig/aggregate.js';
+import { createRigRouter, isRigCommand } from './openrig/router.js';
+import type { AnswerQueue } from './openrig/answerQueue.js';
 import type { DaemonClient } from '@ledge/fleet/client';
 import { listSpecs } from './openrig/specs.js';
 import { OpenRigUnreachable } from './openrig/http.js';
@@ -355,6 +357,14 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** The local mirror and the remote peers as one view: what every front gets, each rig with its real machine. */
   const aggregate = bridge && remote ? createRigAggregate({ bridge, remote, machines: () => machines, projects: () => projects }) : null;
   const unsubscribeAggregate = aggregate?.onMessage(m => broadcast(m));
+  // PLACEHOLDER until lot 6 Task 6 (createAnswerQueue): an answer to an unreachable machine is refused instead of queued.
+  const answerQueue: AnswerQueue = {
+    enqueue: (a, reply) => reply({ type: 'rig.result', rid: a.rid, ok: false, code: 'unreachable', reason: `${machines.find(m => m.id === a.machine)?.label ?? a.machine} est injoignable` }),
+    pending: () => [], flush: () => {}, settle: () => {}, drop: () => {}
+  };
+  /** Rig commands and answers go to their machine: 'local' to `handle` (its rid memo), another one to its peer. */
+  const rigRouter = aggregate && remote ? createRigRouter({ aggregate, remote, answers: answerQueue, local: (msg, reply) => handle(msg, reply),
+    labelOf: id => machines.find(m => m.id === id)?.label ?? id }) : null;
   // Local side effects only: the fronts get the bridge's messages through the aggregate.
   const unsubscribeBridge = bridge?.onMessage(m => {
     if (m.type === 'rig.snapshot' || m.type === 'rig.removed') unpairGone(store, bridge.rigs());
@@ -1440,7 +1450,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
    * is only a session's (a mobile.* id names a pairing or a device). Never rejects.
    */
   function dispatch(msg: ClientMessage, reply: Reply): Promise<void> {
-    return handle(msg, reply).catch(e => {
+    return (rigRouter && isRigCommand(msg) ? rigRouter.route(msg, reply) : handle(msg, reply)).catch(e => {
       if (msg.type === 'document.read') return reply({ type: 'document.error', requestId: msg.requestId, path: msg.path, code: 'read_failed' });
       log(`${msg.type} failed: ${(e as Error).message}`);
       reply({ type: 'error', ...(msg.type.startsWith('session.') && 'id' in msg ? { id: msg.id } : {}), message: (e as Error).message, request: msg.type, ...(e instanceof Refusal ? { code: e.code } : {}) });
@@ -1567,6 +1577,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     asks,
     projects: () => projects,
     say: text => { thread.append({ kind: 'ledge', text }); },
-    close: () => new Promise<void>(res => { clearInterval(sweepTimer); unsubscribe(); unsubscribeBridge?.(); unsubscribeAggregate?.(); remote?.close(); launches?.close(); stopRepoWatch?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
+    close: () => new Promise<void>(res => { clearInterval(sweepTimer); unsubscribe(); unsubscribeBridge?.(); unsubscribeAggregate?.(); rigRouter?.close(); remote?.close(); launches?.close(); stopRepoWatch?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
   };
 }
