@@ -89,6 +89,21 @@ describe('live teams', () => {
     expect(changes.at(-1)!.state).toBe('dissolved');
   });
 
+  it('a team dissolved over a week ago is purged at the next change, and told to onPurged (issue #146)', () => {
+    let at = T0; const purged: string[] = [];
+    const live = createTeamsLive({ store, now: () => at, onPurged: t => purged.push(t.id) });
+    const old = live.create({ name: 'vieille', project: null, cwd: '/w', roles: ['build'] });
+    live.dissolve(old.id);
+    at = '2026-11-01T08:00:00.000Z';
+    live.create({ name: 'tôt', project: null, cwd: '/w', roles: ['build'] });
+    expect(purged).toEqual([]);
+    at = '2026-11-03T08:00:01.000Z';
+    live.create({ name: 'tard', project: null, cwd: '/w', roles: ['build'] });
+    expect(live.get(old.id)).toBeUndefined();
+    expect(purged).toEqual([old.id]);
+    live.close();
+  });
+
   it('outlives the daemon through its journal, and settles what changed meanwhile', async () => {
     const path = join(mkdtempSync(join(tmpdir(), 'teams-j-')), 'teams-live.json');
     const journal = teamsJournal(path);

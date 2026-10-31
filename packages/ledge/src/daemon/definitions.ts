@@ -81,7 +81,7 @@ export function scopeDefinitions(dir: { roles: string; teams: string }, scope: D
   return { roles: roles.sort((a, b) => a.id.localeCompare(b.id)), templates: [...templates.values()].sort((a, b) => a.id.localeCompare(b.id)), problems };
 }
 
-/** The sessions to tell a role's prompt changed (spec §3.6): launched by Ledge and still running, holding `roleId`, which resolves
+/** The sessions to tell a role changed, its prompt or its autonomy (spec §3.6, issue #147): launched by Ledge and still running, holding `roleId`, which resolves
  *  from their folder to the file at `path`. */
 export function promptRecipients(roleId: string, path: string, sessions: readonly Session[], resolve: (id: string, cwd: string) => Role | undefined): Session[] {
   return sessions.filter(s => s.role === roleId && s.source === 'launcher' && s.state !== 'exited' && s.archivedAt === undefined && resolve(roleId, s.cwd)?.path === path);

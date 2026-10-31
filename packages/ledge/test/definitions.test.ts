@@ -163,6 +163,14 @@ describe('listing', () => {
     expect(listTemplates().templates[0]!.hash).toBe(definitionHash(readFileSync(join(home, 'teams', 'duo.yaml'), 'utf8')));
   });
 
+  it('tells a template whose file name is not a template id in problems, instead of listing it (issue #145)', () => {
+    write(join(home, 'teams', 'mon.equipe.yaml'), 'name: Mon équipe\nseats:\n  - { role: lead }\n');
+    write(join(home, 'teams', 'duo.yaml'), 'name: Duo\nseats:\n  - { role: lead }\n');
+    const { templates, problems } = listTemplates();
+    expect(templates.map(t => t.id)).toEqual(['duo']);
+    expect(problems).toEqual([{ path: join(home, 'teams', 'mon.equipe.yaml'), reason: expect.stringContaining('nom de fichier invalide') }]);
+  });
+
   it('keeps a quoted value holding " #" whole in a role and a template', () => {
     write(join(home, 'roles', 'q.md'), '---\nlabel: "C# · a #b" # trailing\ntool: codex # the agent\n---\np');
     write(join(home, 'teams', 'q.yaml'), 'name: "Revue #2" # c\nseats:\n  - role: lead # c\n    name: "Zoe #1"\n');

@@ -100,6 +100,20 @@ describe('createTasks', () => {
     expect(told).toEqual([['otto', expect.stringContaining("abandonnée : Pim s'est terminée sans la finir")]]);
   });
 
+  it('forgetTeam takes a purged team off its tasks, which stay their owner\'s and giver\'s (issue #146)', () => {
+    const t = give(); const other = give('Relis');
+    const seen: Task[] = [];
+    const saved: Task[] = [{ ...t, team: 'team-dead' }, { ...other, team: 'team-live' }];
+    tasks.close(); tasks = createTasks({ store, mailbox: { notify }, now: () => T0, journal: { load: () => saved, save: () => {} }, onTask: x => seen.push(x) });
+    tasks.forgetTeam('team-dead');
+    expect(tasks.all().find(x => x.id === t.id)!.team).toBeUndefined();
+    expect(tasks.all().find(x => x.id === other.id)!.team).toBe('team-live');
+    expect(seen.map(x => x.id)).toEqual([t.id]);
+    expect(cmd('pim', 'list').tasks!.map(x => x.id)).toContain(t.id);
+    tasks.forgetTeam('team-dead');
+    expect(seen).toHaveLength(1);
+  });
+
   it('with a journal, tasks outlive the daemon; an owner gone meanwhile drops them', () => {
     const journal = tasksJournal(join(mkdtempSync(join(tmpdir(), 'tasks-j-')), 'tasks.json'));
     let saved: Task[] | undefined;
