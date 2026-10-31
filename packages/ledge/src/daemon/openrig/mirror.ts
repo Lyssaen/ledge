@@ -1,9 +1,10 @@
 import { isDeepStrictEqual } from 'node:util';
 import { join, relative, isAbsolute, sep } from 'node:path';
-import { projectOf, type Projects, type Rig, type RigLifecycle, type RigSeat } from '@ledge/protocol';
+import { type Projects, type Rig, type RigLifecycle, type RigSeat } from '@ledge/protocol';
 import { EVENTS, EVENTS_UNOBSERVED } from './facts.js';
 import type { OpenRigEvent } from './sse.js';
 import { toSeat } from './seats.js';
+import { rigProjectId } from './adopt.js';
 import type { KernelStatus, NodeEntry, PsEntry } from './wire.js';
 
 export interface MirrorSnapshot { rigs: PsEntry[]; nodes: Map<string, NodeEntry[]>; kernel: KernelStatus | null }
@@ -35,7 +36,7 @@ export function createMirror(opts: { machine: string; projects: () => Projects; 
     const cwd = nodes.find(n => typeof n.cwd === 'string' && n.cwd)?.cwd as string | undefined ?? '';
     const base = (ps.status === 'running' || ps.status === 'partial' || ps.status === 'stopped' ? ps.status : 'running') as RigLifecycle;
     const lifecycle: RigLifecycle = unreachable ? 'unreachable' : seats.some(s => s.state === 'starting') ? 'launching' : base;
-    return { id: ps.rigId, name: nameOf(ps), machine: opts.machine, cwd, projectId: cwd ? projectOf({ machineId: opts.machine, cwd }, opts.projects()) : null,
+    return { id: ps.rigId, name: nameOf(ps), machine: opts.machine, cwd, projectId: rigProjectId({ id: ps.rigId, cwd, machine: opts.machine }, opts.projects()),
       offProject: cwd !== '' && underRigs(cwd), lifecycle, kernel: isKernel(ps), seats, repos: [] };
   };
   const all = () => [...entries.values()].map(build);

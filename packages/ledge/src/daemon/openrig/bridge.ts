@@ -62,6 +62,8 @@ export interface Bridge {
   /** Ledge-only fields of a rig (`launch`, `repos`), kept per rig id and laid over every rig the mirror rebuilds; emits `rig.updated`.
    *  `launch: null` clears it. Returns the annotated rig, null for an unknown rig. */
   annotate(rigId: string, extra: { launch?: RigLaunchInfo | null; repos?: RigRepo[] }): Rig | null;
+  /** Emits `rig.updated` for every rig, rebuilt from the current projects (a filed rig changes project without OpenRig saying so). */
+  refresh(): void;
   pair(sessionId: string, sessionName: string): SessionRig | null;
   pairByCwd(sessionId: string, cwd: string, tool: Tool): SessionRig | null;
   unpairedRefs(): string[];
@@ -397,6 +399,7 @@ export function createBridge(deps: BridgeDeps): Bridge {
       const out = annotated(rig); emit({ type: 'rig.updated', rig });
       return out;
     },
+    refresh() { for (const rig of rigsNow()) emit({ type: 'rig.updated', rig }); },
     pair,
     pairByCwd(sessionId, cwd, tool) {
       const cwdOf = (rigId: string, ref: string) => nodesByRig.get(rigId)?.find(n => (n.canonicalSessionName ?? n.logicalId) === ref)?.cwd;

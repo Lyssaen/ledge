@@ -60,6 +60,7 @@ import { createLedgeSay } from './ledgeSay.js';
 import { createSeatSend } from './openrig/seatSend.js';
 import { createPlans, prepareRigPlan } from './openrig/plan.js';
 import { createLaunches } from './openrig/launch.js';
+import { adoptRig } from './openrig/adopt.js';
 import { mandateSummary } from './openrig/seatContext.js';
 import { execGitSlow } from './openrig/workspace.js';
 import { watchRigRepos } from './openrig/repos.js';
@@ -1021,6 +1022,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'projects.set': {
         writeProjects(msg.projects, projectsFile); // first: a failing write leaves memory unchanged and reaches the sender
         projects = msg.projects; // already validated by parseClientMessage
+        bridge?.refresh(); // the rigs filed in a project follow it
         return broadcast(projectsMsg());
       }
       case 'context.set': {
@@ -1390,7 +1392,18 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
           return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: (e as Error).message });
         }
       }
-      case 'rig.adopt':
+      // Files a rig in a project: only projects.json changes; the mirror recomputes the rig's project.
+      case 'rig.adopt': {
+        const result = (r: { ok: true } | { ok: false; code: 'failed' | 'unreachable' | 'openrig_down'; reason: string }): void => reply({ type: 'rig.result', rid: msg.rid, ...r });
+        if (!bridge) return result({ ok: false, code: 'openrig_down', reason: "OpenRig n'est pas branché" });
+        if (msg.machine !== 'local') return result({ ok: false, code: 'unreachable', reason: `La machine ${msg.machine} n'est pas joignable d'ici` });
+        if (!bridge.rigs().some(r => r.id === msg.rigId)) return result({ ok: false, code: 'failed', reason: 'unknown rig' });
+        const next = adoptRig(projects, msg.projectId, msg.rigId);
+        if ('refused' in next) return result({ ok: false, code: 'failed', reason: next.refused });
+        try { writeProjects(next, projectsFile); } catch (e) { log(`openrig: adopt not saved: ${(e as Error).message}`); return result({ ok: false, code: 'failed', reason: (e as Error).message }); }
+        projects = next; bridge.refresh(); broadcast(projectsMsg());
+        return result({ ok: true });
+      }
       case 'mandate.update': case 'rule.set': case 'decision.revisit': case 'category.escalate': case 'brain.set':
         return notYet();
       // A refusal of the service (an unknown pairing, a sign-in while disabled) reaches the sender as an `error`.
