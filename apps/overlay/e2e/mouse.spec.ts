@@ -1,7 +1,7 @@
 import { test, expect, layer, expectMode, ready, surface } from './fixtures';
 import { filetWidth, islandWidth, ISLAND } from '../src/surface/geometry';
 import { fakeDaemon, session } from './daemon';
-import { hoverHandle, wake } from './scenarios';
+import { hoverHandle, peekFromBalloon, wake } from './scenarios';
 
 test('hovering the top edge or the handle does not open a panel', async ({ page }) => {
   await fakeDaemon(page, [session('a'), session('b', { name: 'Pim', project: 'speos-api' })]);
@@ -19,12 +19,11 @@ test('hovering the top edge or the handle does not open a panel', async ({ page 
   await expectMode(page, 'handle');
 });
 
-test('a bot click opens a peek; Open in Ledge notes the session; Escape folds', async ({ page }) => {
-  await fakeDaemon(page, [session('a'), session('b', { name: 'Pim', project: 'speos-api', topic: 'Split the settings view' })]);
+test('a finish balloon opens a peek; Open in Ledge notes the session; Escape folds', async ({ page }) => {
+  const pim = { name: 'Pim', project: 'speos-api', topic: 'Split the settings view' };
+  const d = await fakeDaemon(page, [session('a'), session('b', pim)]);
   await ready(page, 2);
-  await wake(page);
-  await layer(page, 'handle').getByRole('button', { name: /^Pim/ }).click();
-  await expectMode(page, 'peek');
+  await peekFromBalloon(page, () => d.upsert(session('b', { ...pim, state: 'idle' })));
   const peek = layer(page, 'peek');
   await expect(peek).toContainText('Pim');
   await expect(peek).toContainText('Split the settings view');
@@ -48,11 +47,10 @@ test('a click outside a keyboard-opened chat folds it', async ({ page }) => {
 for (const panel of ['1', '1.5', '2']) {
   test(`the peek is as tall as its card at a ${panel} window size: its buttons are never cut off`, async ({ page }) => {
     await page.addInitScript(v => { try { localStorage.setItem('ledge.panelScale', v); } catch { /* ignore */ } }, panel);
-    await fakeDaemon(page, [session('a'), session('b', { name: 'Pim', project: 'speos-api', topic: 'Split the settings view into tabs and keep the machines list' })]);
+    const pim = { name: 'Pim', project: 'speos-api', topic: 'Split the settings view into tabs and keep the machines list' };
+    const d = await fakeDaemon(page, [session('a'), session('b', pim)]);
     await ready(page, 2);
-    await wake(page);
-    await layer(page, 'handle').getByRole('button', { name: /^Pim/ }).click();
-    await expectMode(page, 'peek');
+    await peekFromBalloon(page, () => d.upsert(session('b', { ...pim, state: 'idle' })));
     const bottom = async () => { const s = (await surface(page).boundingBox())!; return s.y + s.height; };
     // The surface grows from the notch: wait until it has settled, then the card's last pixel is inside it.
     await expect.poll(async () => { const a = await bottom(); await page.waitForTimeout(150); return a === await bottom() && a > 40; }).toBe(true);
@@ -62,27 +60,22 @@ for (const panel of ['1', '1.5', '2']) {
   });
 }
 
-test('hovering the filet grows it into the compact island with its robots; leaving rests it again', async ({ page }) => {
+test('hovering the filet grows it into the compact island, Ledge alone; leaving rests it again', async ({ page }) => {
   await fakeDaemon(page, [session('a'), session('b', { name: 'Pim', project: 'speos-api' }), session('c', { name: 'Ada' })]);
   await ready(page, 3);
   const handle = layer(page, 'handle');
-  await expect(surface(page)).toHaveCSS('width', `${filetWidth([3])}px`);
+  await expect(surface(page)).toHaveCSS('width', `${filetWidth([])}px`);
   await expect(handle.locator('svg.bot')).toHaveCount(0);
   const s = (await surface(page).boundingBox())!;
   await page.mouse.move(s.x + s.width / 2, s.y + s.height / 2);
   await expect(surface(page)).toHaveAttribute('data-awake', 'true');
-  await expect(surface(page)).toHaveCSS('width', `${islandWidth(3)}px`);
+  await expect(surface(page)).toHaveCSS('width', `${islandWidth(0)}px`);
   await expect(surface(page)).toHaveCSS('height', `${ISLAND.h}px`);
-  await expect(handle.locator('svg.bot')).toHaveCount(3);
+  await expect(handle.locator('svg.bot')).toHaveCount(0);
   await expect(handle.locator('[data-resident] svg').first()).toBeVisible();
-  // A robot opens its peek, as a dash does.
-  await handle.getByRole('button', { name: /^Pim/ }).click();
-  await expectMode(page, 'peek');
-  await page.keyboard.press('Escape');
-  await expectMode(page, 'handle');
   await page.mouse.move(200, 400);
   await expect(surface(page)).not.toHaveAttribute('data-awake', 'true');
-  await expect(surface(page)).toHaveCSS('width', `${filetWidth([3])}px`);
+  await expect(surface(page)).toHaveCSS('width', `${filetWidth([])}px`);
   await expect(handle.locator('svg.bot')).toHaveCount(0);
 });
 

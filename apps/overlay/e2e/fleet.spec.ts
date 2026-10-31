@@ -40,11 +40,11 @@ test('one project, common chat clarification, remote confirmation and disconnect
   await page.keyboard.press('Escape');
   await page.keyboard.press('Escape');
   await expectMode(page, 'handle');
-  await expect(layer(page, 'handle').getByRole('button', { name: /^Nova/ })).toHaveCount(0);
-  await expect(layer(page, 'handle').getByRole('button', { name: /^Otto/ })).toBeVisible();
+  // The remote machine's session left with its link; Ledge watches the local one alone.
+  await expect(layer(page, 'handle')).toHaveAttribute('data-sessions', '1');
 });
 
-test('the folded notch puts a hairline before each machine', async ({ page }) => {
+test('the folded notch holds Ledge alone across machines: no hairline, no dash (lot 4)', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('ledge.machines', JSON.stringify([
     { id: 'local', label: 'Local', url: 'ws://127.0.0.1:47831' },
     { id: 'server', label: 'dev-server', url: 'ws://127.0.0.1:47832', ssh: 'dev-server' }
@@ -55,16 +55,8 @@ test('the folded notch puts a hairline before each machine', async ({ page }) =>
   });
   await ready(page, 3);
   const handle = layer(page, 'handle');
-  await expect(surface(page)).toHaveCSS('width', `${filetWidth([2, 1])}px`);
-  await expect.poll(() => handle.evaluate(el => {
-    const out: string[] = [];
-    const walk = (node: Element) => {
-      if (node.hasAttribute('data-machine-separator')) { out.push('|'); return; }
-      if (node.hasAttribute('data-resident')) { out.push('ledge'); return; }
-      if (node.tagName === 'BUTTON' && !node.querySelector('[data-update-pip]')) { out.push(node.getAttribute('aria-label')!.split(' ')[0]!); return; }
-      for (const child of node.children) walk(child);
-    };
-    for (const child of el.children) walk(child);
-    return out;
-  })).toEqual(['ledge', '|', 'Ida', 'Kai', '|', 'Nova']);
+  await expect(surface(page)).toHaveCSS('width', `${filetWidth([])}px`);
+  await expect(handle.locator('[data-machine-separator]')).toHaveCount(0);
+  await expect(handle.locator('[data-dot]')).toHaveCount(0);
+  await expect(handle.locator('[data-resident] [data-ledge-mark]')).toBeVisible();
 });

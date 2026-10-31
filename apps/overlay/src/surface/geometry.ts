@@ -4,6 +4,11 @@ export const SIZES = { bubbleW: 440, bubbleH: 128, listW: 380, sessionW: 480, re
 export const ISLAND = { h: 38, padL: 12, padR: 14, resident: 22, sepGap: 8, companion: 22, gap: 8, max: 6, pill: 30, moon: 12, stripH: 10, stripPad: 10, dotW: 6, dotH: 4, dotGap: 4 } as const;
 /** The resting notch (the validated filet): 10 px, Ledge's rectangle, a hairline before each machine, one dash per session. */
 export const FILET = { h: 10, pad: 6, ledge: 9, sep: 7, dash: 5, gap: 2, pip: 5 } as const;
+/** Ledge's line in the closed notch (lot 4, `nn-closed-*`): the gap after the mascot, the message's widest span before it is cut. */
+export const LINE = { gap: 10, text: 360 } as const;
+/** What the closed notch holds besides Ledge, measured in handle px: Ledge's line, and the trailing slot at the right (another
+ *  feature's, e.g. the music), which brings its vertical rule. 0 or absent: nothing there. */
+export interface HandleExtras { line?: number; trailing?: number }
 /** The surface's top + bottom border (border-box): added to a measured content height so nothing is clipped. None:
  *  the notch is borderless so it merges with the screen edge. */
 export const SURFACE_BORDER = 0;
@@ -16,9 +21,7 @@ export const LEDGE_ID = 'ledge';
 /** The detail views that share the list's width and the DetailHeader: settings, help and the launch form. */
 export const DETAIL_VIEWS: readonly Mode[] = ['settings', 'help', 'launch'];
 const DETAIL_FALLBACK_H: Record<'settings' | 'help' | 'launch', number> = { settings: SIZES.settingsH, help: SIZES.helpH, launch: SIZES.launchH };
-/** A companion's place in the island: `center` is its x on screen (real px). */
-export interface Slot { id: string; size: number; center: number }
-export interface Layout { left: number; top: number; w: number; h: number; slots: Slot[]; handle: { left: number; w: number; h: number } }
+export interface Layout { left: number; top: number; w: number; h: number; handle: { left: number; w: number; h: number } }
 
 /** The island groups the companions by machine (this machine first, the others in list order) and shows each
  *  machine's asks first, then its other sessions in list order (stable). One machine: asks first, then the others. */
@@ -34,20 +37,25 @@ export const pipeBefore = (prev: { id: string; machine?: string } | undefined, b
 export const islandPipes = (ordered: Array<{ id: string; machine?: string }>): number => ordered.slice(0, ISLAND.max).filter((b, i, a) => pipeBefore(a[i - 1], b)).length;
 
 /** The compact island's width for `n` sessions: six companions at most, then the "+n" pill; the DND moon when on;
- *  `pipes` separators between machines (`islandPipes`). */
-export function islandWidth(n: number, dnd = false, pipes = 0): number {
+ *  `pipes` separators between machines (`islandPipes`); Ledge's line after its gap and the trailing slot after its rule (`extras`). */
+export function islandWidth(n: number, dnd = false, pipes = 0, extras: HandleExtras = {}): number {
   const moon = dnd ? ISLAND.gap + ISLAND.moon : 0;
-  if (n === 0) return ISLAND.padL + ISLAND.resident + moon + ISLAND.padR;
+  const line = extras.line ? LINE.gap + extras.line : 0;
+  const trailing = extras.trailing ? ISLAND.sepGap + SIZES.separatorH + ISLAND.sepGap + extras.trailing : 0;
+  const ends = ISLAND.padL + ISLAND.resident + line + moon + trailing + ISLAND.padR;
+  if (n === 0) return ends;
   const shown = Math.min(n, ISLAND.max);
-  return ISLAND.padL + ISLAND.resident + ISLAND.sepGap + SIZES.separatorH + ISLAND.sepGap + shown * ISLAND.companion + (shown - 1) * ISLAND.gap + pipes * (ISLAND.sepGap + SIZES.separatorH) + (n > ISLAND.max ? ISLAND.gap + ISLAND.pill : 0) + moon + ISLAND.padR;
+  return ends + ISLAND.sepGap + SIZES.separatorH + ISLAND.sepGap + shown * ISLAND.companion + (shown - 1) * ISLAND.gap + pipes * (ISLAND.sepGap + SIZES.separatorH) + (n > ISLAND.max ? ISLAND.gap + ISLAND.pill : 0);
 }
 
 /** One machine's dashes: 5 px each, 2 px between them. */
 export const filetGroupWidth = (n: number) => n <= 0 ? 0 : n * FILET.dash + (n - 1) * FILET.gap;
 
-/** The resting notch's width. `groups` is the session count of each machine, in island order. `pip` adds the update dash. */
-export function filetWidth(groups: number[], pip = false): number {
-  return FILET.pad * 2 + FILET.ledge + groups.reduce((w, n) => w + FILET.sep + filetGroupWidth(n), 0) + (pip ? FILET.pip : 0);
+/** The resting notch's width. `groups` is the session count of each machine, in island order. `pip` adds the update dash.
+ *  `extras`: Ledge's line mark after its gap, the trailing slot after its hairline. */
+export function filetWidth(groups: number[], pip = false, extras: HandleExtras = {}): number {
+  return FILET.pad * 2 + FILET.ledge + groups.reduce((w, n) => w + FILET.sep + filetGroupWidth(n), 0) + (pip ? FILET.pip : 0)
+    + (extras.line ? FILET.sep + extras.line : 0) + (extras.trailing ? FILET.sep + extras.trailing : 0);
 }
 
 /** The machines of an `islandOrder` list, each kept together. */
@@ -76,7 +84,8 @@ const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v
 export const expandedWidth = (screenW: number, min: number) => clamp(Math.round(screenW * 0.6), min, SIZES.expandedMaxW);
 
 /** `detailH` is the measured height of the settings or help view (the fixed sizes are fallbacks). `listExtraH` is the extra height of the list: an expanded (focused) row, the notice, the update card. `bubbleH` is the measured bubble height; `SIZES.bubbleH` is only the fallback before the first measurement. `strip` draws the discreet strip instead of the compact island (handle mode only). */
-export interface LayoutInput { bots: Array<{ id: string; pending: boolean; machine?: string }>; mode: Mode; screenH: number; screenW: number; position?: IslandPosition; strip?: boolean; /** The update dash on the resting notch. */ pip?: boolean; /** The pointer is over the notch: the compact island instead of the filet (handle mode). */ awake?: boolean; dnd?: boolean; readerExpanded?: boolean; bubbleH?: number; sessionH?: number; /** Measured height of the open helper view. */ helperH?: number; reading?: boolean; listExtraH?: number; groups?: number; detailH?: number; /** Extra height of the ask field above the list rows (`ASK_H`). */ askH?: number }
+export interface LayoutInput { bots: Array<{ id: string; pending: boolean; machine?: string }>; mode: Mode; screenH: number; screenW: number; position?: IslandPosition; strip?: boolean; /** The update dash on the resting notch. */ pip?: boolean; /** The pointer is over the notch: the compact island instead of the filet (handle mode). */ awake?: boolean; dnd?: boolean; readerExpanded?: boolean; bubbleH?: number; sessionH?: number; /** Measured height of the open helper view. */ helperH?: number; reading?: boolean; listExtraH?: number; groups?: number; detailH?: number; /** Extra height of the ask field above the list rows (`ASK_H`). */ askH?: number;
+  /** The closed notch's measured line and trailing slot (handle px): with Ledge alone, they alone widen it, never the sessions. */ line?: number; trailing?: number }
 
 /** Everything hangs from the top edge of the work area, centred on the island's axis; `left` is clamped into the screen. */
 export function layout(input: LayoutInput): Layout {
@@ -85,31 +94,14 @@ export function layout(input: LayoutInput): Layout {
   const maxH = screenH - SIZES.margin;
   const axis = islandAxis(screenW, input.position);
   const place = (w: number) => clamp(Math.round(axis - w / 2), 0, Math.max(0, screenW - w));
-  const ordered = islandOrder(bots);
-  const groups = machineGroups(ordered);
-  // At rest the notch is the filet; awake (under the pointer) it is the compact island with its robots.
+  // At rest the notch is the filet; awake (under the pointer) it is the compact island. Either way it holds Ledge alone (lot 4):
+  // no bot row, so the sessions do not count; its line and the trailing slot do.
   const filet = mode === 'handle' && !input.awake;
-  const handleW = filet ? filetWidth(groups.map(g => g.length), !!input.pip) : islandWidth(n, input.dnd, islandPipes(ordered));
+  const extras = { line: input.line, trailing: input.trailing };
+  const handleW = filet ? filetWidth([], !!input.pip, extras) : islandWidth(0, input.dnd, 0, extras);
   const handle = { left: place(handleW), w: handleW, h: filet ? FILET.h : ISLAND.h };
-  const slots: Slot[] = [];
-  if (filet) {
-    let cursor = FILET.pad + FILET.ledge;
-    for (const group of groups) {
-      cursor += FILET.sep;
-      group.forEach((b, i) => {
-        slots.push({ id: b.id, size: FILET.dash, center: handle.left + cursor + FILET.dash / 2 });
-        cursor += FILET.dash + (i < group.length - 1 ? FILET.gap : 0);
-      });
-    }
-  } else {
-    let x = handle.left + ISLAND.padL + ISLAND.resident + ISLAND.sepGap + SIZES.separatorH + ISLAND.sepGap;
-    ordered.slice(0, ISLAND.max).forEach((b, i, shown) => {
-      if (pipeBefore(shown[i - 1], b)) x += ISLAND.sepGap + SIZES.separatorH;
-      slots.push({ id: b.id, size: ISLAND.companion, center: x + ISLAND.companion / 2 }); x += ISLAND.companion + ISLAND.gap;
-    });
-  }
-  const view = (w: number, h: number): Layout => ({ left: place(w), top: 0, w, h: Math.min(maxH, h), slots, handle });
-  if (mode === 'handle') return { left: handle.left, top: 0, w: handleW, h: handle.h, slots, handle };
+  const view = (w: number, h: number): Layout => ({ left: place(w), top: 0, w, h: Math.min(maxH, h), handle });
+  if (mode === 'handle') return { left: handle.left, top: 0, w: handleW, h: handle.h, handle };
   if (mode === 'bubble') return view(SIZES.bubbleW, input.bubbleH ?? SIZES.bubbleH);
   if (mode === 'peek') return view(360, input.bubbleH ?? 160);
   // The native frame adds a small shadow outside this width.
@@ -125,17 +117,16 @@ export function layout(input: LayoutInput): Layout {
 }
 
 /**
- * The layout under the two UI scales, in real (logical) px. The island (its slots and the handle-mode surface) is
+ * The layout under the two UI scales, in real (logical) px. The island (the handle-mode surface) is
  * laid out in a screen of `screenW / handle` x `screenH / handle` units and multiplied by `handle`; the opened views
  * in a screen divided by `panel`, multiplied by `panel`. Heights in the input are base content heights plus `SURFACE_CHROME_Y`.
  */
 export function scaledLayout(input: LayoutInput, scales: { handle: number; panel: number }): Layout {
   const hs = scales.handle, ps = scales.panel;
   const hl = layout({ ...input, mode: 'handle', screenH: input.screenH / hs, screenW: input.screenW / hs });
-  const slots = hl.slots.map(s => ({ id: s.id, size: s.size * hs, center: s.center * hs }));
   const handle = { left: hl.handle.left * hs, w: hl.handle.w * hs, h: hl.handle.h * hs };
-  if (input.mode === 'handle') return { left: hl.left * hs, top: 0, w: hl.w * hs, h: hl.h * hs, slots, handle };
+  if (input.mode === 'handle') return { left: hl.left * hs, top: 0, w: hl.w * hs, h: hl.h * hs, handle };
   const pl = layout({ ...input, screenH: input.screenH / ps, screenW: input.screenW / ps });
   // The surface's border is 1 real px whatever the scale: only the content inside it is zoomed.
-  return { left: pl.left * ps, top: 0, w: pl.w * ps, h: (pl.h - SURFACE_CHROME_Y) * ps + SURFACE_CHROME_Y, slots, handle };
+  return { left: pl.left * ps, top: 0, w: pl.w * ps, h: (pl.h - SURFACE_CHROME_Y) * ps + SURFACE_CHROME_Y, handle };
 }

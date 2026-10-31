@@ -31,6 +31,8 @@ const toRow = (n: number) => { for (let i = 0; i < 9; i++) press('k'); for (let 
 const surface = () => document.querySelector('[data-surface]') as HTMLElement;
 const layer = (name: string) => document.querySelector(`[data-layer="${name}"]`) as HTMLElement;
 const mode = () => surface().getAttribute('data-mode');
+/** The notch has no bot row (lot 4): a session's peek opens from its balloon, here once its finish notice has folded. */
+const peekFinished = (s: Session) => { update(s); tick(540); tick(6100); fireEvent.click(document.querySelector('[data-unread-say]')!); };
 
 const otto = (extra: Partial<Session> = {}) => fakeSession('a', extra);
 const pim = (extra: Partial<Session> = {}) => fakeSession('b', { name: 'Pim', tool: 'codex', project: 'speos-api', startedAt: '2026-10-09T18:01:00.000Z', ...extra });
@@ -71,7 +73,7 @@ describe('prototype parity', () => {
   it('theme changes material without replacing SVG or resetting state', () => {
     snapshot([otto(), pim()]);
     const { rerender } = render(<Surface screenH={1080} theme="dark" client={rec.client} dnd={false} onToggleDnd={() => {}} />);
-    fireEvent.click(screen.getByRole('button', { name: /Otto working, open/ }));
+    peekFinished(otto({ state: 'idle' }));
     const svg = layer('peek').querySelector('svg.bot') as SVGSVGElement;
     const phase = svg.style.getPropertyValue('--bot-phase'); const state = svg.getAttribute('data-state');
     expect(svg).toHaveAttribute('data-material', 'signal');
@@ -170,7 +172,9 @@ describe('prototype parity', () => {
     update(otto({ state: 'idle' }));
     tick(900);
     expect(mode()).toBe('handle');
-    fireEvent.click(screen.getByRole('button', { name: /Otto available, open/ }));
+    // The notch has no bot to click (lot 4): its next finish speaks under Ledge and the balloon opens its peek.
+    update(otto({ state: 'working' }));
+    peekFinished(otto({ state: 'idle' }));
     const view = layer('peek');
     expect(within(view).getByText('Available')).toBeInTheDocument();
     expect(within(view).queryByText(/passed|tests? ran|all green|✓/i)).toBeNull();
@@ -186,12 +190,11 @@ describe('prototype parity', () => {
     const team = Array.from({ length: 12 }, (_, i) => fakeSession(`s${String(i).padStart(2, '0')}`, { name: `Bot${i}`, ...(i % 4 === 1 ? asks(`cmd ${i}`) : {}) }));
     snapshot(team);
     const big = render(<Surface screenH={1080} theme="dark" client={rec.client} dnd onToggleDnd={() => {}} />);
-    // Every session is a dash, asks first; the filet stays inside the 1024 px viewport.
-    const buttons = within(layer('handle')).getAllByRole('button', { name: /open$/ }).filter(b => !b.hasAttribute('data-resident'));
-    expect(buttons).toHaveLength(12);
-    for (const b of buttons) expect(b).toHaveStyle({ width: '5px' });
-    expect(buttons.slice(0, 3).every(b => /needs your approval/.test(b.getAttribute('aria-label')!))).toBe(true);
-    expect(layer('handle').querySelector('[data-overflow]')).toBeNull();
+    // Ledge alone, whatever the team: no dash per session, its line counts the three asks; the filet stays inside the 1024 px viewport.
+    expect(layer('handle').querySelectorAll('[data-dot]')).toHaveLength(0);
+    expect(layer('handle').querySelector('[data-ledge-line]')).toHaveAttribute('data-kind', 'forYou');
+    expect(layer('handle').querySelector('[data-ledge-line]')!.getAttribute('aria-label')).toMatch(/· 3 for you$/);
+    expect(surface()).toHaveStyle({ width: `${filetWidth([])}px` });
     const left = parseFloat(surface().style.left), w = parseFloat(surface().style.width);
     expect(surface()).toHaveStyle({ top: '0px', height: '10px' });
     expect(left).toBeGreaterThanOrEqual(0); expect(left + w).toBeLessThanOrEqual(1024);
@@ -281,7 +284,8 @@ describe('prototype parity', () => {
     update(lu(question('Which strategy?', ['Backfill', 'Shadow'])));
     tick(540);
     expect(mode()).toBe('handle');
-    fireEvent.click(screen.getByRole('button', { name: /Lu has a question, open/ }));
+    // The notch has no bot to click (lot 4): the shortcut brings the ask up.
+    shortcut();
     expect(mode()).toBe('bubble');
     tick(6000);
     expect(mode()).toBe('bubble');
@@ -392,7 +396,7 @@ describe('carried items', () => {
   it('a mouse open of a bot shows the peek; Escape folds it and never leaves focus in an inert layer', () => {
     snapshot([otto(), pim()]);
     render(<Surface screenH={1080} theme="dark" client={rec.client} dnd={false} onToggleDnd={() => {}} />);
-    fireEvent.click(screen.getByRole('button', { name: /Pim working, open/ }));
+    peekFinished(pim({ state: 'idle' }));
     expect(mode()).toBe('peek');
     press('Escape');
     expect(mode()).toBe('handle');
