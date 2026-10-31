@@ -202,7 +202,9 @@ body:has(.titlebar) .modal-backdrop { top: var(--titlebar-h); }
 
 /* The Ledge screen (spec §8, c-A.png): header, tabs, Ledge's thread and its composer; the rail beside it comes with task 10. */
 .ledge-home { flex: 1; min-width: 0; min-height: 0; display: flex; justify-content: center; background: var(--sidebar); overflow: hidden; }
-.ledge-home .home-column { width: 100%; max-width: 1360px; min-height: 0; display: flex; flex-direction: column; border-left: 1px solid var(--sidebar-border); border-right: 1px solid var(--sidebar-border); }
+.ledge-home .home-column { width: 100%; max-width: 920px; min-height: 0; display: flex; flex-direction: column; border-left: 1px solid var(--sidebar-border); border-right: 1px solid var(--sidebar-border); }
+/* The conversation and its rail take the width; Rigs and Mandat stay a reading column. */
+.ledge-home .home-column[data-tab="conversation"] { max-width: 1360px; }
 .ledge-home a[href^="ledge://session/"] { color: var(--sidebar-primary); text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
 .home-head { display: flex; align-items: center; gap: 10px; height: 60px; flex: none; padding: 0 12px; border-bottom: 1px solid var(--sidebar-border); }
 .home-title { display: flex; flex-direction: column; min-width: 0; }
@@ -212,7 +214,6 @@ body:has(.titlebar) .modal-backdrop { top: var(--titlebar-h); }
 .home-tabs button { padding: 7px 12px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted-foreground); font-size: 12.5px; cursor: pointer; }
 .home-tabs button.on { color: var(--sidebar-foreground); border-bottom-color: var(--sidebar-primary); font-weight: 600; }
 .home-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.home-body > [data-layer="chat"] { flex: 1; }
 .lp-none { margin: 2px 0; color: var(--muted-foreground); font-size: 12px; }
 .ledge-home .st-qa { height: 22px; padding: 0 8px; border-radius: var(--radius-sm); font-size: 11px; font-weight: 500; border: 1px solid var(--input); background: none; color: var(--sidebar-foreground); cursor: pointer; flex: none; }
 .ledge-home .st-qa:hover { background: var(--sidebar-accent); }

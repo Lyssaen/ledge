@@ -47,7 +47,7 @@ export function LedgeHome(p: LedgeHomeProps): JSX.Element {
   const labels: Record<HomeTab, string> = { conversation: t.home.tabs.conversation, rigs: t.home.rigsCount(rigs), mandat: t.home.tabs.mandat };
   return (
     <section className="ledge-home" aria-label={t.side.ledgeHome}>
-      <div className="home-column">
+      <div className="home-column" data-tab={tab}>
         <div className="home-head">
           <ResidentMascot size={30} theme={theme} paused={p.paused} reducedMotion={p.paused || reduced} />
           <div className="home-title">
