@@ -59,6 +59,7 @@ export async function prepareRigPlan(d: { http: OpenRigHttp; home: string; proje
     const project = d.projects().projects.find(p => p.id === w.projectId);
     if (!project || !project.repos.some(r => r.machine === d.machine && r.path === w.repo)) return { refused: 'unknown repo' };
     if (w.copy && w.branch.trim() === '') return { refused: 'branch required' };
+    if (w.copy && w.branch.startsWith('-')) return { refused: 'invalid branch' }; // never read by git as an option
   } else {
     if (!RIG_NAME.test(w.name)) return { refused: 'invalid name' };
     if (nonEmptyDir(join(d.home, 'rigs', w.name))) return { refused: 'workspace exists' };

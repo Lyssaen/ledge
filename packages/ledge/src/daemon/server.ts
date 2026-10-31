@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { Socket } from 'node:net';
 import { randomUUID } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
@@ -58,6 +59,9 @@ import { createLedgeThread } from './ledgeThread.js';
 import { createLedgeSay } from './ledgeSay.js';
 import { createSeatSend } from './openrig/seatSend.js';
 import { createPlans, prepareRigPlan } from './openrig/plan.js';
+import { createLaunches } from './openrig/launch.js';
+import { mandateSummary } from './openrig/seatContext.js';
+import { execGitSlow } from './openrig/workspace.js';
 import { createHandovers, heldNames } from './handover.js';
 import { readContext } from './context.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
@@ -319,6 +323,12 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const seatSend = bridge ? createSeatSend({ bridge }) : null;
   /** The launch plans `rig.prepare` made, taken once by `rig.launch`. */
   const rigPlans = createPlans(Date.now);
+  /** Rigs launched from a plan, until their lead has the goal; picked up again after a restart. */
+  const launches = bridge && seatSend ? createLaunches({ cli: bridge.cli(), bridge, git: execGitSlow,
+    send: (ref, text) => seatSend.send('local', ref, text), say: text => { thread.append({ kind: 'ledge', text }); },
+    mandate: () => { const f = paths().mandate; let text: string | null = null; try { if (existsSync(f)) text = readFileSync(f, 'utf8'); } catch { /* unreadable: the default */ } return mandateSummary(text); },
+    file: paths().rigLaunches, now: Date.now, setTimer: setTimeout, clearTimer: clearTimeout }) : null;
+  launches?.resume();
   /** Messages to Ledge (`ledge.say`): one at a time through the desktop chat, whose `chat.*` every front gets. */
   const ledgeSay = createLedgeSay({ thread, chat, escalations: id => bridge?.escalation(id), broadcast, tool: () => threads.deviceTool(),
     // `@seat …` goes to a rig seat; without OpenRig every text is a question to Ledge.
@@ -1363,7 +1373,21 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
           return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: e instanceof OpenRigUnreachable ? 'openrig_down' : 'failed', reason: (e as Error).message });
         }
       }
-      case 'rig.launch': case 'rig.adopt':
+      // A plan `rig.prepare` made, launched once; to the sender only (the mirror and the thread show the rest).
+      case 'rig.launch': {
+        if (!bridge || !launches) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'openrig_down', reason: "OpenRig n'est pas branché" });
+        const plan = rigPlans.take(msg.planId);
+        if (plan === 'used') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: 'plan already launched' });
+        if (plan === null) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: 'plan expired' });
+        try {
+          const r = await launches.launch(plan);
+          return reply(r.ok ? { type: 'rig.result', rid: msg.rid, ok: true } : { type: 'rig.result', rid: msg.rid, ok: false, code: r.code, reason: r.reason });
+        } catch (e) {
+          log(`openrig: launch failed: ${(e as Error).message}`);
+          return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: (e as Error).message });
+        }
+      }
+      case 'rig.adopt':
       case 'mandate.update': case 'rule.set': case 'decision.revisit': case 'category.escalate': case 'brain.set':
         return notYet();
       // A refusal of the service (an unknown pairing, a sign-in while disabled) reaches the sender as an `error`.
@@ -1504,6 +1528,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     asks,
     projects: () => projects,
     say: text => { thread.append({ kind: 'ledge', text }); },
-    close: () => new Promise<void>(res => { clearInterval(sweepTimer); unsubscribe(); unsubscribeBridge?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
+    close: () => new Promise<void>(res => { clearInterval(sweepTimer); unsubscribe(); unsubscribeBridge?.(); launches?.close(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
   };
 }

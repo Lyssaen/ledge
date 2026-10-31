@@ -84,6 +84,8 @@ describe('prepareRigPlan', () => {
     expect(await prepareRigPlan(d, { spec: 'factory', goal: 'G', where: { ...copyWhere, projectId: 'zz' } })).toEqual({ refused: 'unknown repo' });
     expect(await prepareRigPlan({ ...d, machine: 'other' }, { spec: 'factory', goal: 'G', where: copyWhere })).toEqual({ refused: 'unknown repo' });
     expect(await prepareRigPlan(d, { spec: 'factory', goal: 'G', where: { ...copyWhere, branch: '' } })).toEqual({ refused: 'branch required' });
+    expect(await prepareRigPlan(d, { spec: 'factory', goal: 'G', where: { ...copyWhere, branch: '--force' } })).toEqual({ refused: 'invalid branch' });
+    expect(await prepareRigPlan(d, { spec: 'factory', goal: 'G', where: { ...copyWhere, branch: '-b' } })).toEqual({ refused: 'invalid branch' });
   });
 });
 
