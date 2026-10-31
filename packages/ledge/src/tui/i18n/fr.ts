@@ -23,6 +23,7 @@ export const fr = {
     tokenMissing: 'pas de jeton : lancez une session avec `ledge claude` ou `ledge daemon`'
   },
   keys: {
+    seats: 'sièges', openSeat: 'ouvrir le siège', attachSeat: 'attacher', ledge: 'Ledge',
     image: 'image', openImage: "ouvrir l'image",
     navigate: 'naviguer', open: 'ouvrir', answer: 'répondre', attach: 'attacher (tmux)', ask: 'demander à Ledge', launch: 'nouvelle session',
     settings: 'réglages', help: 'aide', quit: 'quitter', back: 'retour', write: 'écrire', diffs: 'diffs', terminal: 'terminal', model: 'modèle',
@@ -91,6 +92,22 @@ export const fr = {
     alt: (n: number) => `alt+1…${n}`, mentionTitle: '@ un agent d’un rig'
   },
   /** A rig seat's state (« Attend Ledge »: an escalation of this seat is open). */
+  /** A rig's room and the OpenRig kernel's (the mockup's « La pièce d’un rig » and « Le noyau »). */
+  room: {
+    rig: 'rig', mark: 'sa pièce, sa table', seats: (n: number) => `${n} ${plural(n, 'siège', 'sièges')}`, since: (at: string) => `depuis ${at}`,
+    lead: (seat: string) => `lead ${seat}`, unreachable: 'injoignable',
+    head: { seat: 'SIÈGE', name: 'NOM', state: 'ÉTAT', agent: 'AGENT', context: 'CONTEXTE', on: 'SUR', role: 'RÔLE' },
+    exchanges: (rig: string) => `Échanges · ${rig}`, rigSend: 'rig send', loading: 'Chargement des échanges…',
+    queue: (scope: string) => `File OpenRig · ${scope}`, all: 'tout', emptyQueue: 'File vide.',
+    queueState: { 'en cours': 'en cours', 'à toi': 'à toi', fait: 'fait' } as Record<'en cours' | 'à toi' | 'fait', string>,
+    terminal: (seat: string, where: string) => `Terminal · ${seat} · ${where}`, noTerminal: 'Pas encore de terminal suivi.',
+    kernel: 'Noyau OpenRig · la mécanique', kernelMark: 'toujours allumé', kernelWhere: 'noyau', orders: 'Ordres de Ledge à l’operator',
+    daemon: { running: 'daemon en marche', stopped: 'daemon arrêté', starting: 'daemon qui démarre', error: 'daemon en erreur', unreachable: 'injoignable', absent: 'OpenRig absent', unsupported: 'version non prise en charge' } as Record<'running' | 'stopped' | 'starting' | 'error' | 'unreachable' | 'absent' | 'unsupported', string>,
+    version: (v: string) => `OpenRig ${v}`, human: (address: string) => `humain : ${address}`, noHuman: 'humain non enregistré',
+    tucked: (n: number) => `+${n} ${plural(n, 'rangé', 'rangés')}`, advisor: '(doublon de Ledge)', humanSeat: '(remplacé par Ledge)',
+    roles: { operator: 'fait tourner OpenRig, reçoit les ordres de Ledge', queue: 'range le flux entrant en tâches' } as Record<string, string>,
+    you: 'toi', noTerminalCommand: (seat: string) => `Pas de terminal à attacher pour ${seat}.`
+  },
   seat: { waitsLedge: 'Attend Ledge', working: 'Au travail', idle: 'Disponible', starting: 'Démarrage', stopped: 'Arrêté', crashed: 'Planté', unreachable: 'Injoignable' },
   overview: {
     yours: (n: number) => `À toi · ${n}`, projects: 'Projets', exchanges: 'Échanges', terminal: (name: string) => `Terminal · ${name}`, inColor: '· en couleurs',

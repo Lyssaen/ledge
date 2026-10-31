@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { Box, Text } from 'ink';
 import { randomUUID } from 'node:crypto';
 import { sayToLedge, useAsks, useContextNear } from '@ledge/fleet';
 import { askShown, type Escalation, type Rig, type RigSeat } from '@ledge/protocol';
-import { kernelSplit } from '@ledge/ui/rigs/model';
 import { revisitDecision } from '../brain.js';
 import { LEDGE_FOCUS, useScreenKeys, useScreenSize, useTui, type Focus, type KeyHandler } from '../context.js';
 import { focusOrder, nextYours, seatStateLabel, stepFocus, unmirroredAsks, type LeftRow } from '../model/left.js';
@@ -13,6 +12,7 @@ import { Frame } from '../ui/Frame.js';
 import { LeftColumn } from '../ui/LeftColumn.js';
 import { LedgeRail, RAIL_W, settledToday } from '../ui/LedgeRail.js';
 import { LEDGE_TABS, LedgeTabs, type LedgeTab } from '../ui/LedgeTabs.js';
+import { RigRoom } from '../ui/RigRoom.js';
 import { SessionDetail } from '../ui/SessionDetail.js';
 import { TitledBox } from '../ui/TitledBox.js';
 
@@ -50,6 +50,10 @@ export function Home() {
   useEffect(() => { if (!ledgeish) setLedgeFocus(LEDGE_FOCUS.left); }, [ledgeish, setLedgeFocus]);
   const conv = useRef<KeyHandler | null>(null);
   const [convBar, setConvBar] = useState<Array<readonly [string, string]>>([]);
+  // A rig's room or the kernel's, on the right when wide: its keys (j k its seats, ↵ a w) and its key bar.
+  const room = useRef<KeyHandler | null>(null);
+  const [roomBar, setRoomBar] = useState<Array<readonly [string, string]>>([]);
+  const roomShown = wide && (focus.kind === 'rig' || focus.kind === 'kernel');
   const showConv = ledgeish && (wide || active);
   // Ledge's tabs (an escalation of « À toi » is talked over in the conversation), and the rail opened over the left column.
   const [tabState, setTab] = useState<LedgeTab>('conversation');
@@ -83,6 +87,7 @@ export function Home() {
       if (input === 'm' && focus.kind === 'ledge') { setTab('mandat'); if (!wide) setLedgeFocus(LEDGE_FOCUS.convo); return true; }
     }
     if (active) return false;
+    if (roomShown && room.current?.(input, key)) return true;
     if (input === 'H') {
       const s = (selected && selected.source === 'launcher' && selected.state !== 'exited' && selected.tool !== 'omp' && (!selected.handover || selected.handover.state === 'failed') ? selected : undefined) ?? near.find(x => x.handover?.state !== 'failed') ?? near[0];
       if (!s) return true;
@@ -112,7 +117,7 @@ export function Home() {
     return false;
   });
 
-  const keys: Array<readonly [string, string]> = active ? convBar : [
+  const keys: Array<readonly [string, string]> = active ? convBar : roomShown ? [...roomBar, ['/', t.keys.ask], ['+', t.keys.launch], [',', t.keys.settings], ['?', t.keys.help], ['q', t.keys.quit]] : [
     ['j k', t.keys.navigate], ['↵', ledgeish ? t.keys.write : t.keys.open], ...(showConv ? convBar : []), ...(yoursCount ? [['tab', t.keys.next] as const] : []), ...(selected?.pending ? [['y n', t.keys.answer] as const] : []),
     ...(selected ? [['a', t.keys.attach] as const] : []), ...(near.length ? [['H', t.keys.handover] as const] : []),
     ...(ledgeish && folded ? [[']', railOpen ? t.keys.close : t.keys.point] as const] : []), ...(ledgeish ? [['R', t.keys.summarize] as const] : []),
@@ -125,53 +130,28 @@ export function Home() {
         {(wide ? !(railShown && folded) : !active) ? <LeftColumn rows={rows} width={leftW} height={height - 2 - (tui.lastToast ? 1 : 0)} asks={shownAsks} near={near} /> : null}
         {showConv ? <LedgeTabs tab={tab} width={!wide ? columns : columns - (railShown ? RAIL_W : 0) - (railShown && folded ? 0 : leftW)} folded={folded && !railShown}
           {...(yoursEsc ? { escalation: yoursEsc } : {})} keys={conv} onBar={setConvBar} onTab={moveTab} />
-          : wide ? <Box flexDirection="column" flexGrow={1}><Content focus={focus} /></Box> : null}
+          : wide ? <Box flexDirection="column" flexGrow={1}><Content focus={focus} room={room} onRoomBar={setRoomBar} side={three} height={height - 2 - (tui.lastToast ? 1 : 0)} /></Box> : null}
         {railShown ? <LedgeRail width={RAIL_W} /> : null}
       </Box>
     </Frame>
   );
 }
 
-/** What the right of the home shows for a focus other than Ledge's conversation. Tasks 8 and 9 fill a rig's room here. */
-function Content({ focus }: { focus: Focus }) {
+/** What the right of the home shows for a focus other than Ledge's conversation: a session, a rig's room, the kernel's. */
+function Content({ focus, room, onRoomBar, side, height }: { focus: Focus; room: MutableRefObject<KeyHandler | null>; onRoomBar(b: Array<readonly [string, string]>): void; side: boolean; height: number }) {
   const { selected, rigs, escalations } = useTui();
   // A rig or a seat gone: the focus moves on at the next render.
   const none = <Box flexGrow={1} />;
   switch (focus.kind) {
     case 'ledge': case 'yours': case 'session': return <SessionDetail s={selected} />;
-    case 'rig': {
-      const rig = rigs.find(r => r.machine === focus.machine && r.id === focus.rigId);
-      return rig ? <RigRoom rig={rig} seats={rig.seats.filter(s => s.state !== 'stopped')} escalations={escalations} /> : none;
-    }
+    case 'rig': case 'kernel': return <RigRoom target={focus} side={side} height={height} keys={room} onBar={onRoomBar} />;
     case 'seat': {
       if (selected) return <SessionDetail s={selected} />;
       const rig = rigs.find(r => r.machine === focus.machine && r.id === focus.rigId);
       const seat = rig?.seats.find(s => s.ref === focus.ref);
       return rig && seat ? <SeatAlone rig={rig} seat={seat} escalations={escalations} /> : none;
     }
-    case 'kernel': {
-      const rig = rigs.find(r => r.kernel && r.machine === focus.machine);
-      return <RigRoom rig={rig} kernel seats={rig ? kernelSplit({ ...rig, seats: rig.seats.filter(s => s.state !== 'stopped') }).shown : []} escalations={escalations} />;
-    }
   }
-}
-
-/** A rig's room (task 9 draws it whole): its seats and their state. The kernel's room is the same, its seats tucked away aside. */
-function RigRoom({ rig, kernel, seats, escalations }: { rig: Rig | undefined; kernel?: boolean; seats: RigSeat[]; escalations: Escalation[] }) {
-  const { t, g } = useTui();
-  return (
-    <TitledBox title={kernel ? `${g.kernel} ${t.home.kernel}` : `${g.rig} ${rig?.name ?? ''}`} flexGrow={1}>
-      {seats.length === 0 ? <Text color={C.faint}>{t.home.noSeat}</Text> : seats.map(s => {
-        const st = seatStateLabel(s, escalations, t.seat);
-        return (
-          <Text key={s.ref} wrap="truncate">
-            <Text color={C.violet}>{s.address.padEnd(12)}</Text><Text color={C.fg} bold>{s.name.padEnd(12)}</Text>
-            <Text color={st.color}>{g[st.glyph] as string} {st.label.padEnd(14)}</Text><Text color={C.dim}>{s.runtime}{s.model ? ` · ${s.model}` : ''}</Text>
-          </Text>
-        );
-      })}
-    </TitledBox>
-  );
 }
 
 /** A seat with no Ledge session paired: its state, nothing more to show yet. */

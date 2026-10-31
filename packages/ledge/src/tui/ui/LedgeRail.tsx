@@ -12,7 +12,7 @@ import { TitledBox } from './TitledBox.js';
  *  keeps the mockup's 80 at 160 columns. */
 export const RAIL_W = 33;
 /** A rig's bar, in cells. */
-const BAR = 12;
+export const BAR = 12;
 
 /** The decisions Ledge took itself today (local day), oldest first. None when its brain sent none. */
 export function settledToday(decisions: readonly LedgeDecision[] | undefined, now = new Date()): LedgeDecision[] {

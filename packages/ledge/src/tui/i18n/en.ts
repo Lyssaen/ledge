@@ -20,6 +20,7 @@ export const en: Messages = {
     tokenMissing: 'no token: start a session with `ledge claude` or run `ledge daemon`'
   },
   keys: {
+    seats: 'seats', openSeat: 'open the seat', attachSeat: 'attach', ledge: 'Ledge',
     image: 'image', openImage: 'open image',
     navigate: 'move', open: 'open', answer: 'answer', attach: 'attach (tmux)', ask: 'ask Ledge', launch: 'new session',
     settings: 'settings', help: 'help', quit: 'quit', back: 'back', write: 'write', diffs: 'diffs', terminal: 'terminal', model: 'model',
@@ -83,6 +84,21 @@ export const en: Messages = {
     foot: 'decides within its mandate · design, architecture and critique are yours', footShort: 'design, architecture, critique are yours',
     launchRig: 'Launch a rig…', whereIs: rig => `Where is ${rig}?`, decided: 'What did you decide?', needsMe: 'Who needs me?',
     alt: n => `alt+1…${n}`, mentionTitle: '@ an agent of a rig'
+  },
+  room: {
+    rig: 'rig', mark: 'its room, its table', seats: (n: number) => `${n} ${n > 1 ? 'seats' : 'seat'}`, since: (at: string) => `since ${at}`,
+    lead: (seat: string) => `lead ${seat}`, unreachable: 'unreachable',
+    head: { seat: 'SEAT', name: 'NAME', state: 'STATE', agent: 'AGENT', context: 'CONTEXT', on: 'ON', role: 'ROLE' },
+    exchanges: (rig: string) => `Exchanges · ${rig}`, rigSend: 'rig send', loading: 'Loading the exchanges…',
+    queue: (scope: string) => `OpenRig queue · ${scope}`, all: 'all', emptyQueue: 'Queue empty.',
+    queueState: { 'en cours': 'in progress', 'à toi': 'yours', fait: 'done' },
+    terminal: (seat: string, where: string) => `Terminal · ${seat} · ${where}`, noTerminal: 'No terminal followed yet.',
+    kernel: 'OpenRig core · the machinery', kernelMark: 'always on', kernelWhere: 'core', orders: 'Ledge’s orders to the operator',
+    daemon: { running: 'daemon running', stopped: 'daemon stopped', starting: 'daemon starting', error: 'daemon failing', unreachable: 'unreachable', absent: 'OpenRig absent', unsupported: 'unsupported version' },
+    version: (v: string) => `OpenRig ${v}`, human: (address: string) => `human: ${address}`, noHuman: 'human not registered',
+    tucked: (n: number) => `+${n} tucked away`, advisor: '(Ledge’s double)', humanSeat: '(replaced by Ledge)',
+    roles: { operator: 'runs OpenRig, takes Ledge’s orders', queue: 'sorts the incoming flow into tasks' },
+    you: 'you', noTerminalCommand: (seat: string) => `No terminal to attach for ${seat}.`
   },
   seat: { waitsLedge: 'Waits for Ledge', working: 'Working', idle: 'Available', starting: 'Starting', stopped: 'Stopped', crashed: 'Crashed', unreachable: 'Unreachable' },
   overview: {

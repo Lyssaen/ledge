@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { ClientMessage, LedgeThreadItem } from '@ledge/protocol';
+import type { ClientMessage, Exchange, LedgeThreadItem } from '@ledge/protocol';
 import { until } from './helpers.js';
 import { mockupEscalations, mockupRigs, startTui } from './tui-fixture.js';
 
@@ -305,6 +305,136 @@ describe('ledge tui: writing to Ledge', () => {
       await tui.press('\r');
       await until(() => tui.frame().includes('@build est arrêté (factory)'));
       expect(tui.frame()).toContain('relance les tests ciblés');
+    } finally { await tui.cleanup(); }
+  });
+});
+
+/** factory's exchanges as the daemon keeps them (oldest first). */
+const factoryExchanges = (): Exchange[] => {
+  const at = (min: number) => new Date(Date.now() - (60 - min) * 60_000).toISOString();
+  return [
+    { id: 'o-1', machine: 'local', rigId: 'factory', from: 'ledge', to: 'orch-lead@factory', kind: 'ledge', text: 'Reprise après reboot : priorité aux sessions.', at: at(20) },
+    { id: 'q-114', machine: 'local', rigId: 'factory', from: 'orch-lead@factory', to: 'build@factory', kind: 'task', text: 'Patch daemon : relire la file au démarrage.', at: at(22) },
+    { id: 'q-118', machine: 'local', rigId: 'factory', from: 'orch-lead@factory', to: 'qa@factory', kind: 'task', text: 'Vérifier la reprise sur deux rigs.', at: at(36) },
+    { id: 'o-2', machine: 'local', rigId: 'factory', from: 'build@factory', to: 'review-a@factory', kind: 'message', text: 'Candidat prêt (3f2a1c0), tests verts.', at: at(42) }
+  ];
+};
+/** The daemon answers `rig.exchanges.request` with `items` for that rig. */
+const answerExchanges = (daemon: Awaited<ReturnType<typeof startTui>>['daemon'], items: Record<string, Exchange[]>) =>
+  daemon.onMessage(m => { if (m.type === 'rig.exchanges.request') daemon.push({ type: 'rig.exchanges', machine: 'local', rigId: m.rigId, items: items[m.rigId] ?? [] }); });
+
+describe('ledge tui: a rig\'s room and the kernel\'s', () => {
+  it('the rig room draws its plate, seats, exchanges, queue and terminal', async () => {
+    const started = new Date(2026, 9, 30, 14, 2).toISOString();
+    const rigs = mockupRigs().map(r => (r.id === 'factory' ? { ...r, branch: 'feat/rigs', spec: 'factory', launch: { planId: 'p1', goal: 'g', lead: 'orch-lead@factory', startedAt: started } } : r));
+    const tui = await startTui({ openrig: { rigs } });
+    answerExchanges(tui.daemon, { factory: factoryExchanges() });
+    try {
+      await tui.resize(160, 46);
+      await until(() => tui.frame().includes('factory'));
+      await tui.press('2');
+      await until(() => tui.frame().includes('▣ FACTORY · RIG · DANS LEDGE'));
+      await until(() => tui.frame().includes('Patch daemon'));
+      const f = tui.frame();
+      expect(f).toContain('● 4/6 au travail ████████░░░░  ⎇ feat/rigs · spec factory · 6 sièges · depuis 14:02 · Local · lead orch-lead');
+      expect(f).toMatch(/SIÈGE +NOM +ÉTAT +AGENT +CONTEXTE +SUR/);
+      expect(f).toMatch(/@lead +orch-lead +◆ Attend Ledge +Claude Code · opus/);
+      expect(f).toMatch(/@build +build +● Au travail .*Reprise après reboot/);
+      expect(f).toContain('ÉCHANGES · FACTORY · RIG SEND');
+      expect(f).toMatch(/ledge → orch-lead/);
+      expect(f).toContain('FILE OPENRIG · FACTORY · 3');
+      expect(f).toMatch(/q-117 ◆ ledge à toi/);
+      expect(f).toContain('TERMINAL · ORCH-LEAD · FACTORY');
+      expect(f).toContain('Pas encore de terminal suivi.');
+      expect(f).toMatch(/j k +sièges/);
+      expect(tui.daemon.received).toContainEqual(expect.objectContaining({ type: 'rig.exchanges.request', rigId: 'factory' }));
+      // j: the next seat, build, paired to a session: its terminal.
+      tui.daemon.preview('build', ['● Bash(pnpm vitest)', '  ⎿  12 passed']);
+      await tui.press('j');
+      await until(() => tui.frame().includes('TERMINAL · BUILD · FACTORY'));
+      await until(() => tui.frame().includes('12 passed'));
+      // ↵ opens its session.
+      await tui.press('\r');
+      await until(() => tui.frame().includes('ÉCRIRE'));
+    } finally { await tui.cleanup(); }
+  });
+
+  it('w opens Ledge\'s field with the seat address', async () => {
+    const tui = await startTui({ openrig: {} });
+    try {
+      await tui.resize(160, 46);
+      await until(() => tui.frame().includes('factory'));
+      await tui.press('2');
+      await until(() => tui.frame().includes('▣ FACTORY · RIG'));
+      for (let i = 0; i < 3; i++) await tui.press('j');
+      await until(() => tui.frame().includes('TERMINAL · REVIEW-A · FACTORY'));
+      await tui.press('w');
+      await until(() => tui.frame().includes('❯ @review-a '));
+      expect(tui.frame()).toContain('LEDGE · CONVERSATION');
+      await tui.press('relis 3f2a1c0');
+      await tui.press('\r');
+      await until(() => sent(tui.daemon.received, 'ledge.say').length === 1);
+      expect(sent(tui.daemon.received, 'ledge.say')[0]).toMatchObject({ text: '@review-a relis 3f2a1c0' });
+    } finally { await tui.cleanup(); }
+  });
+
+  it('a attaches the seat through OpenRig\'s terminal command', async () => {
+    const runs: string[][] = [];
+    const tui = await startTui({ openrig: {}, run: async argv => { runs.push(argv); return 0; } });
+    try {
+      await tui.resize(160, 46);
+      await until(() => tui.frame().includes('factory'));
+      await tui.press('2');
+      await until(() => tui.frame().includes('▣ FACTORY · RIG'));
+      await tui.press('a');
+      await until(() => runs.length === 1);
+      expect(runs[0]!.join(' ')).toContain('orch-lead@factory');
+    } finally { await tui.cleanup(); }
+  });
+
+  it('an unreachable rig turns its actions off', async () => {
+    const rigs = mockupRigs().map(r => (r.id === 'factory' ? { ...r, lifecycle: 'unreachable' as const } : r));
+    const runs: string[][] = [];
+    const tui = await startTui({ openrig: { rigs }, run: async argv => { runs.push(argv); return 0; } });
+    try {
+      await tui.resize(160, 46);
+      await until(() => tui.frame().includes('factory'));
+      await tui.press('2');
+      await until(() => tui.frame().includes('▣ FACTORY · RIG'));
+      expect(tui.frame()).toMatch(/○ injoignable/);
+      expect(tui.frame()).not.toMatch(/a +attacher/);
+      await tui.press('w');
+      await tui.press('a');
+      await new Promise(r => setTimeout(r, 100));
+      expect(tui.frame()).toContain('▣ FACTORY · RIG');
+      expect(tui.frame()).not.toContain('❯ @lead');
+      expect(runs).toEqual([]);
+    } finally { await tui.cleanup(); }
+  });
+
+  it('the kernel room shows operator and queue, and the hidden seats as +2', async () => {
+    const tui = await startTui({ openrig: { status: { machine: 'local', state: 'running', version: '0.6.14', human: 'registered' } } });
+    answerExchanges(tui.daemon, {
+      factory: factoryExchanges(),
+      kernel: [{ id: 'o-9', machine: 'local', rigId: 'kernel', from: 'ledge', to: 'operator@kernel', kind: 'ledge', text: 'Remonte factory et starter.', at: new Date().toISOString() }]
+    });
+    try {
+      await tui.resize(160, 46);
+      await until(() => tui.frame().includes('◈ Noyau OpenRig'));
+      for (let i = 0; i < 40 && !tui.frame().includes('LA MÉCANIQUE'); i++) await tui.press('k');
+      await until(() => tui.frame().includes('◈ NOYAU OPENRIG · LA MÉCANIQUE'));
+      await until(() => tui.frame().includes('Remonte factory et starter.') && tui.frame().includes('q-118'));
+      const f = tui.frame();
+      expect(f).toMatch(/● daemon en marche · 127\.0\.0\.1:7433 · OpenRig 0\.6\.14 · .*humain : ledge@external/);
+      expect(f).toMatch(/@operator +operator +○ Disponible +Codex/);
+      expect(f).toMatch(/@queue +queue/);
+      expect(f).toMatch(/\+2 rangés +advisor \(doublon de Ledge\) · human \(remplacé par Ledge\)/);
+      expect(f).toContain('ORDRES DE LEDGE À L’OPERATOR');
+      expect(f).toContain('FILE OPENRIG · TOUT · 3');
+      expect(f).toMatch(/q-118 ▤ qa@factory +en cours/);
+      expect(f).toMatch(/q-117 ◆ ledge@external +à toi/);
+      expect(f).toContain('TERMINAL · OPERATOR · NOYAU');
+      expect(tui.daemon.received).toContainEqual(expect.objectContaining({ type: 'rig.exchanges.request', rigId: 'kernel' }));
     } finally { await tui.cleanup(); }
   });
 });
