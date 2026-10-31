@@ -6,7 +6,7 @@ import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
 import { actionById, autonomyArgs, contextNear, ompApprovalFor, askShown, type ChatAction, type Autonomy } from '@ledge/protocol';
-import { ATTACHMENT_LOCAL_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type DaemonInfo, type Projects, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, type ModelRefusal, type RefusalCode, backendOf } from '@ledge/protocol';
+import { ATTACHMENT_LOCAL_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type DaemonInfo, type Projects, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Machine, type Tool, type OmpApproval, type CloseHow, type ModelRefusal, type RefusalCode, backendOf } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
 import { AttachmentError, AttachmentStore } from './attachments.js';
@@ -48,6 +48,9 @@ import { actionMessage, resolveAction, resolveRun, runGuard, type Resolved } fro
 import { createMailbox, type MailJournal } from './mailbox.js';
 import { createAsks, type Asks, type AsksJournal } from './asks.js';
 import type { Bridge } from './openrig/bridge.js';
+import { createRemotePeers } from './openrig/remote.js';
+import { createRigAggregate } from './openrig/aggregate.js';
+import type { DaemonClient } from '@ledge/fleet/client';
 import { listSpecs } from './openrig/specs.js';
 import { OpenRigUnreachable } from './openrig/http.js';
 import { pairSession, restorePairs, unpairGone } from './openrig/pairing.js';
@@ -201,7 +204,9 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; asks?: AsksJournal; handoverBriefMs?: number; attachments?: AttachmentStore; openrig?: Bridge }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; asks?: AsksJournal; handoverBriefMs?: number; attachments?: AttachmentStore; openrig?: Bridge;
+  /** How the remote peers reach a machine's daemon (default: this daemon's own `/ssh/<alias>`); tests point it at another daemon. */
+  remoteConnect?: (machine: Machine, url: string) => DaemonClient }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -345,8 +350,13 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     port: { escalation: bridge.escalation, patch: bridge.patchEscalation, status: bridge.status, cli: bridge.cli, http: bridge.http,
       replyRow: bridge.replyRow, setReplyRow: bridge.setReplyRow },
     asks, path: { kind: ANSWER_PATH }, localMachine: 'local', now }) : null;
+  /** The daemons of the remote machines (lot 6), dialled through this daemon's own `/ssh/<alias>` once it listens (end of startServer). */
+  const remote = bridge ? createRemotePeers({ port, ...(opts.remoteConnect ? { connect: opts.remoteConnect } : {}) }) : null;
+  /** The local mirror and the remote peers as one view: what every front gets, each rig with its real machine. */
+  const aggregate = bridge && remote ? createRigAggregate({ bridge, remote, machines: () => machines, projects: () => projects }) : null;
+  const unsubscribeAggregate = aggregate?.onMessage(m => broadcast(m));
+  // Local side effects only: the fronts get the bridge's messages through the aggregate.
   const unsubscribeBridge = bridge?.onMessage(m => {
-    broadcast(m);
     if (m.type === 'rig.snapshot' || m.type === 'rig.removed') unpairGone(store, bridge.rigs());
     if (m.type === 'rig.snapshot') restorePairs(store, bridge);
     // The bridge sends escalation.updated on every change and again after a reconnect: only an id the thread lacks is new.
@@ -407,7 +417,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const sendSnapshot = (reply: Reply) => {
-    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true, asks: true, ...(mobile || unavailable ? { mobile: true } : {}), ...(bridge ? { openrig: true } : {}) } } : {}) });
+    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true, asks: true, ...(mobile || unavailable ? { mobile: true } : {}), ...(bridge ? { openrig: true } : {}), ...(aggregate ? { openrigFleet: true } : {}) } } : {}) });
     reply(machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
     reply(projectsMsg()); // then the shared projects (build spec §5)
     reply({ type: 'asks', asks: asks.all().filter(askShown) }); // then the decisions waiting for the user
@@ -417,7 +427,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     for (const [id, lines] of previews) if (store.get(id)) reply({ type: 'session.preview', id, lines });
     reply({ type: 'chat.history', turns: chat.history() });
     reply(contextMsg()); // the context threshold (context handover spec §3.2)
-    if (bridge) for (const m of bridge.replay()) reply(m); // then the OpenRig mirror (status, rigs, escalations)
+    if (aggregate) for (const m of aggregate.replay()) reply(m); // then the OpenRig mirror of every machine (statuses, rigs, escalations)
     reply({ type: 'ledge.thread.history', ...thread.page() }); // last: Ledge's thread, whose items name those escalations
   };
   const preview = (id: string, lines: string[]) => {
@@ -1021,6 +1031,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'machines.set': {
         writeMachines(msg.machines, machinesFile); // first: a failing write leaves memory unchanged and reaches the sender
         machines = msg.machines; // already validated by parseClientMessage
+        remote?.setMachines(machines); // a machine gone takes its rigs and escalations with it
         return broadcast(machinesMsg()); // every local client, the sender included
       }
       case 'projects.set': {
@@ -1543,6 +1554,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     });
   });
 
+  remote?.setMachines(machines); // last: the peers dial this daemon's own /ssh/<alias>, now handled
+
   return {
     port,
     broadcast,
@@ -1554,6 +1567,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     asks,
     projects: () => projects,
     say: text => { thread.append({ kind: 'ledge', text }); },
-    close: () => new Promise<void>(res => { clearInterval(sweepTimer); unsubscribe(); unsubscribeBridge?.(); launches?.close(); stopRepoWatch?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
+    close: () => new Promise<void>(res => { clearInterval(sweepTimer); unsubscribe(); unsubscribeBridge?.(); unsubscribeAggregate?.(); remote?.close(); launches?.close(); stopRepoWatch?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
   };
 }
