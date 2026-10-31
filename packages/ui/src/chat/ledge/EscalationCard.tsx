@@ -20,8 +20,11 @@ export function answerLabel(e: Escalation, answers: Record<string, string>): str
  *  per button (the recommended one filled), and « En parler ». An update has a single « Vu »; an ask a one-line field (R16). */
 export function EscalationCard(p: { escalation: Escalation; answer: EscalationAnswerState; onAnswer(answers: Record<string, string>): void; onTalk(): void; compact?: boolean; now?: string }) {
   const copy = useLedgeThreadCopy(), w = copy.escalation, e = p.escalation;
-  const [picks, setPicks] = useState<Record<string, string>>({});
-  const [text, setText] = useState('');
+  // Picks and the ask's text belong to one escalation: a card reused for another one starts blank.
+  const [draft, setDraft] = useState<{ id: string; picks: Record<string, string>; text: string }>({ id: e.id, picks: {}, text: '' });
+  const own = draft.id === e.id ? draft : { id: e.id, picks: {}, text: '' };
+  const picks = own.picks, text = own.text;
+  const setText = (t: string) => setDraft({ ...own, text: t });
   const now = p.now ?? new Date().toISOString();
   const already = p.answer.state === 'refused' && p.answer.code === 'already_answered';
   const failed = p.answer.state === 'refused' && !already ? w.refused(p.answer.code ?? 'failed', p.answer.reason) : null;
@@ -32,17 +35,18 @@ export function EscalationCard(p: { escalation: Escalation; answer: EscalationAn
 
   const pick = (qid: string, option: string) => {
     const next = { ...picks, [qid]: option };
-    setPicks(next);
+    setDraft({ ...own, picks: next });
     if (e.questions.every(q => next[q.id] !== undefined)) p.onAnswer(next);
   };
   const submit = (ev: FormEvent) => { ev.preventDefault(); const t = text.trim(); if (t && !busy) p.onAnswer({ text: t }); };
 
-  let outcome: string | null = null;
+  // « Déjà répondu » first when this device's answer lost the race, then who won (Review Focus 1).
+  const outcomes: string[] = [];
+  if (already) outcomes.push(w.alreadyAnswered);
   if (e.state === 'answered' && e.answer) {
     const label = e.intent === 'update' ? w.seen : answerLabel(e, e.answer.answers);
-    outcome = e.answer.by === 'user' ? w.answeredByYou(label) : w.answeredByLedge(label);
-  } else if (already) outcome = w.alreadyAnswered;
-  else if (e.state === 'closed' || e.state === 'answered') outcome = w.closed;
+    outcomes.push(e.answer.by === 'user' ? w.answeredByYou(label) : w.answeredByLedge(label));
+  } else if (!already && (e.state === 'closed' || e.state === 'answered')) outcomes.push(w.closed);
 
   return (
     <article className="lt-card" data-compact={p.compact || undefined} data-tone={e.category && ALWAYS_USER.includes(e.category) ? 'amber' : undefined}>
@@ -56,7 +60,7 @@ export function EscalationCard(p: { escalation: Escalation; answer: EscalationAn
       {e.advice && <p className="lt-card-advice">{w.advice(e.advice)}</p>}
       {!settled && e.state === 'grace' && <p className="lt-card-note">{w.grace}</p>}
       {failed && <p className="lt-card-note" data-tone="danger" role="alert">{failed}</p>}
-      {outcome && <p className="lt-card-outcome">{outcome}</p>}
+      {outcomes.map(o => <p key={o} className="lt-card-outcome">{o}</p>)}
       {!settled && (
         <div className="lt-card-actions">
           {e.intent === 'update' ? (

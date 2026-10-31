@@ -104,16 +104,18 @@ describe('feedLines', () => {
 });
 
 describe('pinnedEscalation', () => {
-  it('is the oldest pending decision, grace included, updates excluded', () => {
+  it('is the oldest pending decision, grace included, updates and asks excluded', () => {
     const list = [
       esc({ id: 'new', createdAt: at(D3, '12:30') }),
       esc({ id: 'upd', intent: 'update', createdAt: at(D3, '11:00') }),
+      esc({ id: 'ask-1', source: 'ask', createdAt: at(D3, '09:00') }),
       esc({ id: 'done', state: 'answered', createdAt: at(D3, '10:00') }),
       esc({ id: 'grace', state: 'grace', createdAt: at(D3, '11:30') })
     ];
     expect(pinnedEscalation(list)?.id).toBe('grace');
     expect(pinnedEscalation(list.filter(e => e.id !== 'grace'))?.id).toBe('new');
     expect(pinnedEscalation([esc({ intent: 'update' })])).toBeUndefined();
+    expect(pinnedEscalation([esc({ source: 'ask' })])).toBeUndefined();
   });
 });
 

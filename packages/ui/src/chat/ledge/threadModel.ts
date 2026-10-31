@@ -105,11 +105,11 @@ export function feedLines(rows: readonly ThreadRow[], o: { onlyLedge: boolean; r
   return lines;
 }
 
-/** The pinned decision: the oldest waiting `decision` escalation (`pending` or `grace`). */
+/** The pinned decision: the oldest waiting `decision` escalation (`pending` or `grace`); asks keep their own card (R15). */
 export function pinnedEscalation(escalations: readonly Escalation[]): Escalation | undefined {
   let pinned: Escalation | undefined;
   for (const e of escalations) {
-    if (e.intent !== 'decision' || (e.state !== 'pending' && e.state !== 'grace')) continue;
+    if (e.intent !== 'decision' || e.source === 'ask' || (e.state !== 'pending' && e.state !== 'grace')) continue;
     if (!pinned || Date.parse(e.createdAt) < Date.parse(pinned.createdAt)) pinned = e;
   }
   return pinned;

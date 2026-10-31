@@ -67,6 +67,28 @@ describe('EscalationCard', () => {
     expect(screen.queryByRole('button', { name: 'SQLite' })).toBeNull();
   });
 
+  it('already_answered stays said when the escalation arrives answered, then the winner line', () => {
+    card({ escalation: { ...sqlite, state: 'answered', answer: { by: 'ledge', answers: { q1: 'json' }, at: NOW } }, answer: { state: 'refused', code: 'already_answered' } });
+    const outcomes = [...document.querySelectorAll('.lt-card-outcome')].map(n => n.textContent);
+    expect(outcomes).toEqual(['Déjà répondu', 'Tranché par Ledge : Garder le JSON']);
+    expect(screen.queryByRole('button', { name: 'SQLite' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Garder le JSON' })).toBeNull();
+  });
+
+  it('forgets the picks of a previous escalation', () => {
+    const qs = [
+      { id: 'a', question: 'Base ?', options: [{ id: 'sqlite', label: 'SQLite' }, { id: 'json', label: 'JSON' }] },
+      { id: 'b', question: 'Quand ?', options: [{ id: 'now', label: 'Maintenant' }, { id: 'later', label: 'Plus tard' }] }];
+    const onAnswer = vi.fn();
+    const at = (id: string) => <Fr><EscalationCard escalation={{ ...sqlite, id, questions: qs }} answer={{ state: 'idle' }} onAnswer={onAnswer} onTalk={vi.fn()} now={NOW} /></Fr>;
+    const { rerender } = render(at('one'));
+    fireEvent.click(screen.getByRole('button', { name: 'JSON' }));
+    rerender(at('two'));
+    expect(screen.getByRole('button', { name: 'JSON' })).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(screen.getByRole('button', { name: 'Plus tard' }));
+    expect(onAnswer).not.toHaveBeenCalled();
+  });
+
   it('another refusal shows the reason and gives the buttons back', () => {
     const p = card({ answer: { state: 'refused', code: 'openrig_down', reason: 'OpenRig ne répond pas' } });
     expect(screen.getByText('OpenRig ne répond pas')).toBeVisible();
