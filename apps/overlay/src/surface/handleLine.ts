@@ -61,7 +61,8 @@ const waitsOnUser = (s: Session) => !s.offline && (s.state === 'waiting_permissi
  *  `attentionOf` does), and the one waiting longest (by its last activity) with what it asks. */
 export function waitingOf(sessions: readonly Session[], rigs: readonly Rig[], escalations: readonly Escalation[] = []): { attention: number; waiting?: WaitingSession } {
   const asking = new Set(escalations.filter(e => e.source === 'ask' && open(e)).map(e => `${e.machine}\u0000${e.from}`));
-  const waiting = sessions.filter(s => waitsOnUser(s) && isStandalone(s, rigs) && !asking.has(`${s.machineId ?? 'local'}\u0000${s.name}`));
+  // The brain session (lot 7) is in no list, but what it asks the user must reach the notch.
+  const waiting = sessions.filter(s => waitsOnUser(s) && (s.brain || isStandalone(s, rigs)) && !asking.has(`${s.machineId ?? 'local'}\u0000${s.name}`));
   if (waiting.length === 0) return { attention: 0 };
   const oldest = waiting.reduce((a, b) => (Date.parse(b.lastActivityAt) < Date.parse(a.lastActivityAt) ? b : a));
   return { attention: waiting.length, waiting: { name: oldest.name, text: oldest.pending?.text ?? '' } };

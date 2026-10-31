@@ -31,13 +31,24 @@ describe('the notch and Ledge\'s brain (lot 7)', () => {
     expect(screen.getByText('Rebase sur main avant la revue.')).toBeInTheDocument();
   });
 
-  it('the brain session is not one of the notch\'s sessions', () => {
+  it('an idle brain session is not one of the notch\'s sessions', () => {
     render(<Surface screenH={1080} theme="dark" client={client()} dnd={false} onToggleDnd={() => {}} />);
     act(() => {
       daemonStore.setStatus('open');
-      daemonStore.apply({ type: 'snapshot', sessions: [fakeSession('a', { name: 'Otto' }), fakeSession('brain', { name: 'Cerveau', brain: true, state: 'waiting_input', pending: { kind: 'question', text: 'Trust?', source: 'hook' } })] });
+      daemonStore.apply({ type: 'snapshot', sessions: [fakeSession('a', { name: 'Otto' }), fakeSession('brain', { name: 'Cerveau', brain: true, state: 'idle' })] });
     });
     expect(screen.queryByText('Cerveau')).toBeNull();
     expect(screen.queryAllByText(/Otto/).length).toBeGreaterThan(0);
+  });
+
+  it('a waiting brain reaches the notch: the handle line names it', () => {
+    render(<Surface screenH={1080} theme="dark" client={client()} dnd={false} onToggleDnd={() => {}} />);
+    act(() => {
+      daemonStore.setStatus('open');
+      daemonStore.apply({ type: 'snapshot', sessions: [fakeSession('brain', { name: 'Cerveau', brain: true, state: 'idle' })] });
+    });
+    act(() => { daemonStore.apply({ type: 'session.updated', session: fakeSession('brain', { name: 'Cerveau', brain: true, state: 'waiting_input', pending: { kind: 'question', text: 'Trust this folder?', source: 'hook' } }) }); });
+    act(() => { vi.advanceTimersByTime(600); });
+    expect(screen.queryAllByText(/Cerveau/).length).toBeGreaterThan(0);
   });
 });

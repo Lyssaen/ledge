@@ -5,7 +5,7 @@ import { useRigExchanges } from './rigs/useRigExchanges';
 import type { Project, Projects, Rig, Session } from '@ledge/protocol';
 import { LangProvider, loadLang, messagesFor, saveLang, useI18n, type Lang } from './i18n/lang';
 import { loadMessages } from './i18n/messages';
-import { useFleet } from './fleet/useFleet';
+import { attending, useFleet } from './fleet/useFleet';
 import { useDecisions } from './fleet/decisions';
 import { useWaits } from './fleet/waits';
 import { useAlerts, usePairingAlerts } from './notify/useAlerts';
@@ -141,7 +141,9 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // Toasts and sounds from session changes (spec 2026-10-14 §10); `test()` is the Sounds section's Test.
   // Read at the moment an alert fires, never captured: set below once the place and the prefs are known.
   const watching = useRef<() => string | null>(() => null);
-  const alerts = useAlerts({ sessions, machines, status, daemonUpdating: daemonUpdates.updating.has('local') }, { watching: () => watching.current() });
+  // The brain session is in no list, but its asks (folder trust, a permission) reach the user: alerts, « À toi », its page (lot 7).
+  const attend = useMemo(() => attending(fleetView), [fleetView.sessions, fleetView.brains]); // eslint-disable-line react-hooks/exhaustive-deps
+  const alerts = useAlerts({ sessions: attend, machines, status, daemonUpdating: daemonUpdates.updating.has('local') }, { watching: () => watching.current() });
   // A device asking to be linked: the dialog below opens on any screen, the notification only while Desktop is behind.
   usePairingAlerts(mobile);
   // Decided here, at render: the dialog and the `inert` below change in one commit, so the Modal's focus return is not refused.
@@ -186,7 +188,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // A session or a project that went away takes the place back to what still exists (only a fleet change can make it
   // stale, hence the dependencies); reconcile returns the same state when nothing changes, and then nothing is dispatched.
   // An archived session keeps its page (it reads, read-only): only a session the daemon no longer lists at all takes the place away.
-  const known = useMemo(() => [...sessions, ...fleetView.archived], [sessions, fleetView.archived]);
+  const known = useMemo(() => [...attend, ...fleetView.archived], [attend, fleetView.archived]);
   // A rig filter (the sidebar's double click) lives as long as its rig is listed (`rigs` is a stable snapshot between fleet changes).
   useEffect(() => { if (reconcile(nav, known, projects, rigs) !== nav) dispatch({ type: 'reconcile', sessions: known, projects, rigs }); }, [known, projects, rigs]);
 
@@ -195,7 +197,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     const id = projectIdOf(s);
     return (id && projects?.projects.find(p => p.id === id)?.name) || t.side.unassigned;
   }, [projectIdOf, projects, t]);
-  const waits = useWaits(sessions);
+  const waits = useWaits(attend);
   const order = useMemo(() => mainOrder(sessions, projects), [sessions, projects]);
   // Putting an agent away: drag and drop or « Ranger dans… » write a folder rule; the toast says how it went.
   const { notice, action: noticeAction, notify, undo } = useToast();
@@ -207,7 +209,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const sessionMenu = useSessionMenu({ client: fleetClient, sessions, onShowTerminal: showTerminal });
   // Acting on rigs and seats (lot 5): the Rigs tab, the rig rooms, the top bar and a paired session's menu share it; « Arrêter… » shows here.
   const rigControls = useRigControlsHost({ client: fleetClient, notify, rigs, projects, dispatch });
-  const decisions = useDecisions({ client: fleetClient, sessions, errors, notify });
+  const decisions = useDecisions({ client: fleetClient, sessions: attend, errors, notify });
   const screenKeys = useRef<ScreenKeys>({ current: null }).current;
   // Drafts, reading positions and the last item seen, per session and subagent: they survive navigation, not a restart.
   const memory = useRef(createSessionMemory()).current;
@@ -303,9 +305,9 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const blocked = nav.modal !== null || actions.pending !== null || sessionMenu.renaming !== null || whatsNew || pairing !== null || rigControls.blocking;
   return (
     <ScreenKeysContext.Provider value={screenKeys}><TermStoreContext.Provider value={termStore}><RigControlsContext.Provider value={rigControls.controls}>
-      {!nav.fullscreen && <TitleBar dispatch={dispatch} sessions={sessions} waits={waits} blocked={blocked} />}
+      {!nav.fullscreen && <TitleBar dispatch={dispatch} sessions={attend} waits={waits} blocked={blocked} />}
       <div className={`application ${nav.fullscreen ? 'immersive' : ''} ${filing.dragging ? 'is-dragging' : ''}`} data-readonly={localDown ? 'true' : undefined} inert={blocked}>
-        <Sidebar nav={nav} dispatch={dispatch} sessions={sessions} archived={fleetView.archived} machines={machines} updating={daemonUpdates.updating} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing}
+        <Sidebar nav={nav} dispatch={dispatch} sessions={sessions} brains={fleetView.brains} archived={fleetView.archived} machines={machines} updating={daemonUpdates.updating} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing}
           actions={actions} decisions={decisions} waits={waits} menu={{ open: (id, at, opener) => sessionMenu.open(id, at, opener ?? null) }}
           onTerminal={sessionMenu.terminal} revealArchives={revealArchives} revealCurrent={revealCurrent}
           relief={relief} asks={asks} onAnswerAsk={(a, text) => fleet.answerAsk(a.machine, a.id, text)}

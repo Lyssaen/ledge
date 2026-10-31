@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import type { ChatTurn, LedgeDecision, LedgeRule, LedgeThreadItem } from '@ledge/protocol';
+import userEvent from '@testing-library/user-event';
+import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { boot, closeDaemons, PROJECTS, type MockDaemon } from './helpers';
 
 const LOCAL = [{ id: 'local', label: 'Local' }];
@@ -61,6 +63,31 @@ describe('the brain in Ledge’s thread (lot 7)', () => {
     expect(thread().queryByText('Ledge est arrêté · Démarrer')).toBeNull();
     await user.click(thread().getByRole('button', { name: 'Start' }));
     await waitFor(() => expect(sent(d, 'brain.set')).toEqual([{ type: 'brain.set', rid: expect.any(String), enabled: true }]));
+  });
+
+  it('Start shows only while the brain is not running, and holds after a click until brain.status changes', async () => {
+    const { d, user } = await openHome();
+    d.push({ type: 'brain.status', status: { state: 'on', tool: 'claude', enabled: true } });
+    push(d, [{ kind: 'ledge', id: 'l1', at: ago(1), text: 'Ledge est arrêté · Démarrer' }]);
+    expect(await thread().findByText('Ledge is stopped')).toBeVisible();
+    expect(thread().queryByRole('button', { name: 'Start' })).toBeNull();
+    d.push({ type: 'brain.status', status: { state: 'down', tool: 'claude', enabled: true, reason: 'binaire absent' } });
+    const start = await thread().findByRole('button', { name: 'Start' });
+    await user.click(start);
+    expect(thread().getByRole('button', { name: 'Start' })).toBeDisabled();
+    d.push({ type: 'brain.status', status: { state: 'down', tool: 'claude', enabled: true, reason: 'encore' } });
+    await waitFor(() => expect(thread().getByRole('button', { name: 'Start' })).toBeEnabled());
+  });
+
+  it('a waiting brain shows in « Your turn » and its page opens to answer it', async () => {
+    const brain = fakeSession('brain', { name: 'Ledge brain', brain: true, cwd: '/home/u/.ledge/brain', state: 'waiting_input', pending: { kind: 'question', text: 'Trust this folder?', source: 'hook' } });
+    const { d } = await openHome();
+    d.upsert(brain);   // after boot: boot counts the atelier's sessions, where the brain never is
+    const row = (await rail().findByText('Trust this folder?')).closest('li') as HTMLElement;
+    expect(rail().getByText('Your turn · 1')).toBeVisible();
+    await userEvent.setup().click(within(row).getByRole('button', { name: 'Reply' }));
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Home: Ledge, the operator' })).toBeNull());
+    expect(screen.getAllByText('Ledge brain').length).toBeGreaterThan(0);
   });
 
   it('a rig the brain proposes shows « Launch this rig », which opens the launch window prefilled', async () => {

@@ -168,6 +168,7 @@ describe('the other thread pieces', () => {
     expect(screen.getByText("J'ai tranché pour build : merge, pas de rebase.")).toBeVisible();
     expect(screen.getByText('Règle du 26/10')).toBeVisible();
     expect(screen.getByText('branche partagée')).toBeVisible();
+    expect(document.querySelector('.lt-decided')!.textContent).toBe("J'ai tranché pour build : merge, pas de rebase. Règle du 26/10 · branche partagée · Revenir dessus");
     fireEvent.click(screen.getByRole('button', { name: 'Revenir dessus' }));
     expect(onRevisit).toHaveBeenCalled();
   });

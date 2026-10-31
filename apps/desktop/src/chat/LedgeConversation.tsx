@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent } from 'react';
-import { answerEscalation, revisitDecision, sayToLedge, setBrain, useAnswerState, useDaemon, useEscalations, useLedgeDecisionList, useLedgeDecisions, useLedgeRules, useLedgeThread, useOpenRig, useRigs, type DaemonClient } from '@ledge/fleet';
+import { answerEscalation, revisitDecision, sayToLedge, setBrain, useAnswerState, useBrainStatus, useDaemon, useEscalations, useLedgeDecisionList, useLedgeDecisions, useLedgeRules, useLedgeThread, useOpenRig, useRigs, type DaemonClient } from '@ledge/fleet';
 import { hideProposal, type ChatRigLaunch, type Escalation, type Projects } from '@ledge/protocol';
 import { ChatAnswer, TurnCards } from '@ledge/ui/chat/ChatView';
 import { ChatCopyProvider } from '@ledge/ui/chat/copy';
@@ -98,6 +98,12 @@ export function LedgeConversation(p: LedgeConversationProps): JSX.Element {
   const rules = useLedgeRules();
   const rulesById = useMemo(() => new Map(rules.map(r => [r.id, r])), [rules]);
   const settled = useMemo(() => decisionsToday(decisionList, today, 'ledge'), [decisionList, today]);
+  // « Démarrer » under « Ledge est arrêté »: only while the brain is not running, and held after a click until brain.status changes.
+  const brain = useBrainStatus();
+  const running = brain?.enabled === true && (brain.state === 'on' || brain.state === 'starting');
+  const [startedOn, setStartedOn] = useState<{ status: typeof brain } | null>(null);
+  const starting = startedOn !== null && startedOn.status === brain;
+  const startBrain = () => { setStartedOn({ status: brain }); setBrain(client, { enabled: true }); };
   const rows = useMemo(() => threadRows(items, { escalations: escById, exchanges: (m, id) => exchanges.get(`${m}/${id}`), chat, decisions: ledgeDecisions, today, days: threadC.days }),
     [items, escById, exchanges, chat, ledgeDecisions, today, threadC]);
   const lastGroup = rows.reduce((at, r, i) => (r.kind === 'exchanges' ? i : at), -1);
@@ -210,7 +216,7 @@ export function LedgeConversation(p: LedgeConversationProps): JSX.Element {
                   case 'user': return <UserBubble key={row.item.id} at={row.item.at} text={row.item.text} {...(row.to ? { to: row.to } : {})} />;
                   case 'ledge': {
                     if (isBrainStopped(row.item.text)) {
-                      return <LedgeBubble key={row.item.id} at={row.item.at} avatar={mascot}><BrainStopped onStartBrain={offline ? undefined : () => setBrain(client, { enabled: true })} /></LedgeBubble>;
+                      return <LedgeBubble key={row.item.id} at={row.item.at} avatar={mascot}><BrainStopped onStartBrain={offline || running ? undefined : startBrain} starting={starting} /></LedgeBubble>;
                     }
                     const live = row.turn && chatLive?.qid === row.turn.qid ? hideProposal(chatLive.text) : '';
                     const text = row.item.text || live;

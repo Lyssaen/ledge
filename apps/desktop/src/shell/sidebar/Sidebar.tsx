@@ -31,6 +31,8 @@ const NO_STATUSES: readonly OpenRigStatus[] = [];
 export function Sidebar(p: {
   nav: NavState; dispatch: (a: NavAction) => void;
   sessions: readonly Session[]; archived: readonly Session[];
+  /** The brain session(s) (lot 7): in no list, but in « À toi » when they ask the user something. */
+  brains?: readonly Session[];
   machines: readonly MachineState[]; projects: Projects | null;
   /** The machines whose daemon is updating (#48): their restart is expected. */
   updating?: ReadonlySet<string>;
@@ -62,7 +64,7 @@ export function Sidebar(p: {
   const rigRows = useMemo(() => rigsModel(rigs, byId, p.projects), [rigs, byId, p.projects]);
   const line = useMemo(() => ledgeLine(p.escalations ?? NO_ESCALATIONS, rigs), [p.escalations, rigs]);
   const standalone = useMemo(() => p.sessions.filter(s => isStandalone(s, rigs)), [p.sessions, rigs]);
-  const attn = useMemo(() => attentionOf(p.sessions, p.waits, p.escalations ?? NO_ESCALATIONS, rigs, p.asks), [p.sessions, p.waits, p.escalations, rigs, p.asks]);
+  const attn = useMemo(() => attentionOf(p.brains?.length ? [...p.sessions, ...p.brains] : p.sessions, p.waits, p.escalations ?? NO_ESCALATIONS, rigs, p.asks), [p.sessions, p.brains, p.waits, p.escalations, rigs, p.asks]);
   // Sessions near their context limit, less those put away with « Plus tard » (context handover spec §3.2).
   const near = useMemo(() => nearLimit(standalone, p.relief?.later, p.relief?.near), [standalone, p.relief?.later, p.relief?.near]);
   const root = useRef<HTMLElement>(null);

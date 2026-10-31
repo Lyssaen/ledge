@@ -122,7 +122,8 @@ export function attentionOf(
   const items: AttnItem[] = [];
   for (const session of sessions) {
     if (session.offline) continue;
-    if (!isStandalone(session, rigs ?? [])) continue;
+    // The brain session is in no list, but what it asks the user (folder trust, a permission) must reach « À toi » (lot 7).
+    if (!session.brain && !isStandalone(session, rigs ?? [])) continue;
     if (asking.has(`${session.machineId ?? 'local'}\u0000${session.name}`)) continue;
     const kind = attnKind(session.state);
     if (!kind) continue;

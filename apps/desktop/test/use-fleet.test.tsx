@@ -24,6 +24,8 @@ describe('useFleet', () => {
     const { result, unmount } = renderHook(() => useFleet(client));
     await waitFor(() => expect(result.current.machines[0]?.status).toBe('open'));
     await waitFor(() => expect(result.current.sessions.map(s => s.id)).toEqual(['local:otto']));
+    expect(result.current.brains?.map(s => s.id)).toEqual(['local:brain']);
+    expect(result.current.archived).toEqual([]);
     unmount(); await d.close();
   });
   it('flags localDown only once local is unreachable, never while connecting', async () => {

@@ -78,6 +78,10 @@ describe('waitingOf', () => {
     expect(waitingOf(sessions, rigs)).toEqual({ attention: 2, waiting: { name: 'Otto', text: 'npm test' } });
     expect(waitingOf([], rigs)).toEqual({ attention: 0 });
   });
+  it('a waiting brain session counts (its prompts must reach the user, lot 7)', () => {
+    const brain = session({ id: 'b', name: 'Ledge', brain: true, state: 'waiting_input', pending: { kind: 'question', text: 'Trust this folder?', source: 'hook' } });
+    expect(waitingOf([brain], [])).toEqual({ attention: 1, waiting: { name: 'Ledge', text: 'Trust this folder?' } });
+  });
   it('a waiting session with an open ask is counted once, as the ask (same machine and name)', () => {
     const otto = session({ id: 'a', name: 'Otto', state: 'waiting_input', pending: { kind: 'question', text: 'Quel nom ?', source: 'hook' } });
     const ask = esc({ id: 'k1', source: 'ask', machine: 'local', from: 'Otto', category: undefined, summary: 'Quel nom ?' });

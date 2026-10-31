@@ -33,13 +33,14 @@ export function UserBubble({ at, text, to }: { at: string; text: string; to?: st
 /** Whether a Ledge bubble is the daemon's « Ledge est arrêté · Démarrer » (lot 7): the app draws `BrainStopped` instead of the text. */
 export const isBrainStopped = (text: string): boolean => text === BRAIN_STOPPED_TEXT;
 
-/** « Ledge est arrêté » and « Démarrer », which turns the brain on (`onStartBrain` sends `brain.set { enabled: true }`). */
-export function BrainStopped({ onStartBrain }: { onStartBrain?: () => void }) {
+/** « Ledge est arrêté » and « Démarrer », which turns the brain on (`onStartBrain` sends `brain.set { enabled: true }`); no button
+ *  without `onStartBrain` (the brain runs), a disabled one while `starting` (sent, no new status yet). */
+export function BrainStopped({ onStartBrain, starting }: { onStartBrain?: () => void; starting?: boolean }) {
   const copy = useLedgeThreadCopy();
   return (
     <div className="lt-brain-stopped">
       <span>{copy.brain.stopped}</span>
-      {onStartBrain && <button type="button" className="ledge-btn lt-btn" data-variant="outline" onClick={onStartBrain}>{copy.brain.start}</button>}
+      {onStartBrain && <button type="button" className="ledge-btn lt-btn" data-variant="outline" disabled={starting} onClick={onStartBrain}>{copy.brain.start}</button>}
     </div>
   );
 }

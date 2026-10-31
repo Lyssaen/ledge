@@ -4,7 +4,7 @@ import type { Escalation, LedgeDecision, Rig, Session } from '@ledge/protocol';
 import { Bot } from '@ledge/ui/bots/Bot';
 import { seatName } from '@ledge/ui/chat/ledge/threadModel';
 import { rigFilter, seatSession, workingCount } from '@ledge/ui/rigs/model';
-import type { FleetView } from '../fleet/useFleet';
+import { attending, type FleetView } from '../fleet/useFleet';
 import type { Decisions } from '../fleet/decisions';
 import { useI18n } from '../i18n/lang';
 import { useMotionPreferences } from '../motionPreferences';
@@ -66,7 +66,8 @@ export function LedgeRail(p: {
   const openrig = useOpenRig(client);
   const rigs = useMemo(() => visibleRigs(allRigs, openrig).filter(r => !r.kernel), [allRigs, openrig]);
   const count = rigsCount(allRigs, openrig);
-  const items = useAttention(client, view.sessions, allRigs, p.waits);
+  const attend = useMemo(() => attending(view), [view.sessions, view.brains]); // eslint-disable-line react-hooks/exhaustive-deps
+  const items = useAttention(client, attend, allRigs, p.waits);
   const paused = p.paused ?? false;
   const settled = (p.settled ?? []).filter(d => d.by === 'ledge');
 

@@ -12,6 +12,7 @@ export function DecidedLine({ decision, to, rule, onRevisit }: { decision: Ledge
       <span className="lt-decided-text">{copy.decided.line(to, decision.summary)}{(ruleText || decision.why) && !/[.!?…]$/.test(decision.summary) ? '.' : ''}</span>
       {ruleText && <> <span className="lt-decided-rule">{ruleText}</span></>}
       {decision.why && <>{ruleText ? sep : ' '}<span className="lt-decided-why">{decision.why}</span></>}
+      {onRevisit && (ruleText || decision.why) && sep}
       {onRevisit && <button type="button" className="ledge-btn lt-btn" data-variant="outline" onClick={onRevisit}>{copy.decided.revisit}</button>}
     </div>
   );
