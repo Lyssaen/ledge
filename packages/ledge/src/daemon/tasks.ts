@@ -25,7 +25,12 @@ export interface TasksDeps {
   /** How long a session sits idle holding tasks before Ledge reminds it of them; PARKED_MS by default. */
   parkedMs?: number;
 }
-export interface Tasks { run(cmd: TaskCmd): TaskResult; all(): Task[]; close(): void }
+export interface Tasks {
+  run(cmd: TaskCmd): TaskResult; all(): Task[];
+  /** A team purged (issue #146): its tasks lose its id and stay their owner's and giver's, as any task out of a team. */
+  forgetTeam(team: string): void;
+  close(): void;
+}
 
 /** Closed tasks kept for `list --all` and `show`: a week, 300 at most. */
 const CLOSED_TTL_MS = 7 * 24 * 3600 * 1000;
@@ -258,7 +263,16 @@ export function createTasks(d: TasksDeps): Tasks {
     return refuse('opération inconnue');
   }
 
-  return { run, all: () => [...tasks.values()].sort((a, b) => a.at.localeCompare(b.at)), close: () => { unsubscribe(); for (const timer of timers.values()) clearTimeout(timer); timers.clear(); } };
+  const forgetTeam = (team: string) => {
+    const held = [...tasks.values()].filter(t => t.team === team);
+    if (!held.length) return;
+    // No log entry: the task did not change hands, only lost a team no one can name any more (like `seen`, fronts told without one).
+    const out = held.map(({ team: _team, ...rest }) => rest);
+    for (const t of out) tasks.set(t.id, t);
+    save();
+    for (const t of out) d.onTask?.(t);
+  };
+  return { run, all: () => [...tasks.values()].sort((a, b) => a.at.localeCompare(b.at)), forgetTeam, close: () => { unsubscribe(); for (const timer of timers.values()) clearTimeout(timer); timers.clear(); } };
 }
 
 export function tasksJournal(path: string): TasksJournal & { flush(): Promise<void> } {

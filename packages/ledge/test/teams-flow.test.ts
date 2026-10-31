@@ -171,3 +171,19 @@ describe('the tasks of a role', () => {
     await c.close();
   }, 30_000);
 });
+
+describe('the tasks of a purged team (issue #146)', () => {
+  it('lose their team when the daemon starts without it, and stay their owner\'s and Ledge\'s', async () => {
+    const at = new Date().toISOString();
+    store.upsert({ id: 'pim', name: 'Pim', tool: 'claude', cwd: work, project: 'p', title: 'Pim', tmuxSession: 'ledge-pim', state: 'working', helpers: [], startedAt: at, lastActivityAt: at, source: 'launcher' });
+    writeFileSync(join(process.env.LEDGE_HOME!, 'tasks.json'), JSON.stringify([{ id: 't0000aa', title: 'Finir', giver: 'ledge', giverName: 'Ledge', owner: 'pim', ownerName: 'Pim', team: 'team-dead', state: 'open', at, updatedAt: at, log: [] }]));
+    await start();
+    const c = await client();
+    c.send({ type: 'task.cmd', rid: 'l1', by: 'pim', op: 'list' });
+    const r = await c.next('task.result');
+    expect(r.tasks).toMatchObject([{ id: 't0000aa', owner: 'pim' }]);
+    expect(r.tasks![0]!.team).toBeUndefined();
+    await until(() => !readFileSync(join(process.env.LEDGE_HOME!, 'tasks.json'), 'utf8').includes('team-dead'));
+    await c.close();
+  });
+});

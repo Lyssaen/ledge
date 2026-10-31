@@ -16,6 +16,8 @@ export interface TeamsLiveDeps {
   /** A session taken out of a team it sat in, still in its record (its `team` is cleared, `teamLeft` set): `leave`, the
    *  team `dissolve`d, `moved` to the seat of another team (`to`), or `removed` by a composition once its seat went. */
   onLeft?: (session: string, team: Team, why: 'leave' | 'dissolve' | 'moved' | 'removed', to?: Team) => void;
+  /** A dissolved team purged past DISSOLVED_TTL_MS: its tasks lose its id (issue #146). */
+  onPurged?: (team: Team) => void;
 }
 
 export interface TeamsLive {
@@ -60,8 +62,10 @@ export function createTeamsLive(d: TeamsLiveDeps): TeamsLive {
 
   const save = () => {
     const oldest = Date.parse(now()) - DISSOLVED_TTL_MS;
-    for (const t of [...teams.values()]) if (t.state === 'dissolved' && Date.parse(t.dissolvedAt ?? t.updatedAt) < oldest) teams.delete(t.id);
+    const purged = [...teams.values()].filter(t => t.state === 'dissolved' && Date.parse(t.dissolvedAt ?? t.updatedAt) < oldest);
+    for (const t of purged) teams.delete(t.id);
     d.journal?.save([...teams.values()]);
+    for (const t of purged) d.onPurged?.(t);
   };
   const put = (t: Team): Team => {
     const next = { ...t, updatedAt: now() };

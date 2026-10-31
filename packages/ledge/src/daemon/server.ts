@@ -308,7 +308,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   });
   const relay = createRelay({ threads: cardThreads, store, replyTo: replyText, now, typing, closing, next: id => mailbox.kick(id) });
   /** The live teams (spec 2026-10-25 roles §3.3): every change reaches the local fronts. */
-  const teams = createTeamsLive({ store, now, onLeft: toldOfLeaving, ...(opts.teams ? { journal: opts.teams } : {}) });
+  // A purged team's tasks lose its id (issue #146); `tasks` is made below, before any team changes.
+  const teams = createTeamsLive({ store, now, onLeft: toldOfLeaving, onPurged: t => tasks.forgetTeam(t.id), ...(opts.teams ? { journal: opts.teams } : {}) });
   /** A seat that loses its team is told at once, in one line (its next start would not name the team any more); the
    *  others of the team read the change at their next turn, without being woken (seatChange in cli/hook.ts). */
   function toldOfLeaving(id: string, t: Team, why: 'leave' | 'dissolve' | 'moved' | 'removed', to?: Team): void {
@@ -333,6 +334,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     if (tr && tr.from !== LEDGE_GIVER) history?.recordTask(tr.from, { task, tr, ...(tr.to !== LEDGE_GIVER ? { peer: tr.to } : {}) });
     if (tr?.op === 'give' && tr.to === LEDGE_GIVER) notifyDecision?.(task);
   } });
+  // Tasks of a team purged while the daemon was down, or before purges were told: the same.
+  for (const team of new Set(tasks.all().map(t => t.team))) if (team && !teams.get(team)) tasks.forgetTeam(team);
   // The relief of a session whose context is nearly full (context handover spec §3.3). `launch` and `closeSession` are hoisted.
   const handovers = createHandovers({ store, mailbox, tasks, teams, launch: req => launch(req), close: s => closeSession(s),
     dir: join(paths().dir, 'handovers'), now, ...(opts.handoverBriefMs !== undefined ? { briefMs: opts.handoverBriefMs } : {}) });
