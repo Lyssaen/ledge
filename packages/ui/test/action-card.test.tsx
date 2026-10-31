@@ -413,6 +413,9 @@ describe('the action card (#94): its words from the row\'s vars, in the front\'s
     expect(w['session.model']!({ session: 'Nova' })).toBe('Switch **Nova** to its default model and effort');
     expect(w['session.decide']!({ session: 'Nova', decision: 'deny', kind: 'plan', note: 'x' })).toBe('Deny **Nova**’s plan request, with a note');
     expect(actionWords.fr.line['task.pass']!({ task: 'Relire', owner: 'Max', session: 'Gus' })).toBe('Passer la tâche « Relire » de **Max** à **Gus**');
+    expect(actionWords.fr.line['task.answer']!({ task: 'Fusionner ?', session: 'Otto', answer: 'oui' })).toBe('Répondre à la décision « Fusionner ? » de **Otto**');
+    expect(w['task.answer']!({ task: 'Merge?', session: 'Otto' })).toBe('Answer **Otto**’s decision “Merge?”');
+    expect(actionWords.fr.why('not_decision', 'task.answer', { task: 'Relire' })).toBe('la tâche « Relire » n’est pas une décision qui t’est posée.');
     const generic = ACTIONS.filter(a => a.card === 'generic').map(a => a.id).sort();
     for (const l of ['fr', 'en'] as const) expect(generic.filter(id => !actionWords[l].line[id]), l).toEqual([]);
   });

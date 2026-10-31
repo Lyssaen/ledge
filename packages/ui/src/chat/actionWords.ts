@@ -41,7 +41,8 @@ const fr: ActionWords = {
     'team.dissolve': v => need(v, ['team'], w => `Dissoudre l’équipe ${b(w.team)}`),
     'team.save': v => need(v, ['team', 'name'], w => (v.replaces ? `Remplacer le modèle « ${w.name} » par ${b(w.team)}` : `Enregistrer ${b(w.team)} comme modèle « ${w.name} »`)),
     'task.cancel': v => need(v, ['task', 'owner'], w => `Annuler la tâche « ${short(w.task)} » de ${b(w.owner)}`),
-    'task.pass': v => need(v, ['task', 'owner', 'session'], w => `Passer la tâche « ${short(w.task)} » de ${b(w.owner)} à ${b(w.session)}`)
+    'task.pass': v => need(v, ['task', 'owner', 'session'], w => `Passer la tâche « ${short(w.task)} » de ${b(w.owner)} à ${b(w.session)}`),
+    'task.answer': v => need(v, ['task', 'session'], w => `Répondre à la décision « ${short(w.task)} » de ${b(w.session)}`)
   },
   why: (code, action, v) => {
     const s = v.session ? b(v.session) : undefined, t = v.team ? b(v.team) : undefined, k = v.task ? `« ${short(v.task)} »` : undefined;
@@ -67,6 +68,7 @@ const fr: ActionWords = {
       case 'no_seat': return t ? `l’équipe ${t} n’a aucun poste : rien à enregistrer comme modèle.` : gone;
       case 'closed': return k ? `la tâche ${k} est déjà close.` : gone;
       case 'holder': return s && k ? `${s} tient déjà la tâche ${k}.` : gone;
+      case 'not_decision': return k ? `la tâche ${k} n’est pas une décision qui t’est posée.` : gone;
       case 'changed': return 'la situation a changé depuis ma réponse : redemande-moi.';
       case 'failed': return 'l’action est partie, mais n’a pas abouti.';
       default: return gone;
@@ -91,7 +93,8 @@ const en: ActionWords = {
     'team.dissolve': v => need(v, ['team'], w => `Dissolve the team ${b(w.team)}`),
     'team.save': v => need(v, ['team', 'name'], w => (v.replaces ? `Replace the template “${w.name}” with ${b(w.team)}` : `Save ${b(w.team)} as the template “${w.name}”`)),
     'task.cancel': v => need(v, ['task', 'owner'], w => `Cancel ${b(w.owner)}’s task “${short(w.task)}”`),
-    'task.pass': v => need(v, ['task', 'owner', 'session'], w => `Pass ${b(w.owner)}’s task “${short(w.task)}” to ${b(w.session)}`)
+    'task.pass': v => need(v, ['task', 'owner', 'session'], w => `Pass ${b(w.owner)}’s task “${short(w.task)}” to ${b(w.session)}`),
+    'task.answer': v => need(v, ['task', 'session'], w => `Answer ${b(w.session)}’s decision “${short(w.task)}”`)
   },
   why: (code, action, v) => {
     const s = v.session ? b(v.session) : undefined, t = v.team ? b(v.team) : undefined, k = v.task ? `“${short(v.task)}”` : undefined;
@@ -117,6 +120,7 @@ const en: ActionWords = {
       case 'no_seat': return t ? `the team ${t} has no seat: nothing to save as a template.` : gone;
       case 'closed': return k ? `the task ${k} is already closed.` : gone;
       case 'holder': return s && k ? `${s} already holds the task ${k}.` : gone;
+      case 'not_decision': return k ? `the task ${k} is not a decision put to you.` : gone;
       case 'changed': return 'things have changed since my answer: ask me again.';
       case 'failed': return 'the action was sent but did not go through.';
       default: return gone;
