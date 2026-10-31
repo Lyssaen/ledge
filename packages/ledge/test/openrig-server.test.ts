@@ -98,7 +98,10 @@ describe('server with the OpenRig bridge', () => {
     const c = await client(server.port);
     c.send({ type: 'rig.send', rid: 's1', machine: 'local', seatRef: 'dev-build@starter', text: 'relance' });
     c.send({ type: 'rig.send', rid: 's2', machine: 'mac', seatRef: 'dev-build@starter', text: 'relance' });
-    await until(() => c.of('rig.result').length === 2);
+    c.send({ type: 'rig.send', rid: 's4', machine: 'local', seatRef: '-x', text: 'a' });
+    c.send({ type: 'rig.send', rid: 's5', machine: 'local', seatRef: 'dev-build@starter', text: '  ' });
+    await until(() => c.of('rig.result').length === 4);
+    expect(c.of('rig.result').filter(r => r.rid === 's4' || r.rid === 's5')).toEqual([expect.objectContaining({ ok: false, code: 'invalid' }), expect.objectContaining({ ok: false, code: 'invalid' })]);
     expect(c.of('rig.result').find(r => r.rid === 's1')).toMatchObject({ ok: true });
     expect(c.of('rig.result').find(r => r.rid === 's2')).toMatchObject({ ok: false, code: 'unreachable' });
     expect(rigExec!.calls.filter(a => a[0] === 'send')).toEqual([['send', 'dev-build@starter', '[Ledge] relance']]);

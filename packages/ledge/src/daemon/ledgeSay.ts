@@ -6,7 +6,7 @@ import { log } from '../log.js';
 
 type UserItem = Extract<LedgeThreadItem, { kind: 'user' }>;
 /** What writing to a rig seat gave (task 6 re-exports it from openrig/seatSend.ts). */
-export type SeatSendResult = { ok: true; to: string } | { ok: false; reason: string };
+export type SeatSendResult = { ok: true; to: string } | { ok: false; reason: string; /** the seat word the user aimed at (the user item keeps it) */ to?: string };
 /** Answers a user item of Ledge's thread; lot 7 sets the brain in place of the one-shot runner. */
 export type Responder = (item: UserItem, about?: Escalation) => Promise<void>;
 export interface LedgeSay {
@@ -127,7 +127,7 @@ export function createLedgeSay(d: {
         let sent: SeatSendResult | null;
         try { sent = await d.toSeat(rid, text); } catch (e) { sent = { ok: false, reason: (e as Error).message }; }
         if (sent?.ok) { place?.release(); d.thread.upsert({ ...user, to: sent.to }); return; }
-        if (sent) { place?.release(); d.thread.append({ kind: 'ledge', text: sent.reason }); return; }
+        if (sent) { place?.release(); if (sent.to) d.thread.upsert({ ...user, to: sent.to }); d.thread.append({ kind: 'ledge', text: sent.reason }); return; }
         // No seat by that name: a question to Ledge.
         if (!place) return refuse();
         place.toLedge(d.thread.upsert({ ...user, qid: user.id }) as UserItem, about);

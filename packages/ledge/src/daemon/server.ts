@@ -1321,6 +1321,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       // Writing to a seat; to the sender only. The Desktop routes another machine's seats to its own daemon (lot 6).
       case 'rig.send': {
         if (msg.machine !== 'local') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'unreachable', reason: `machine ${msg.machine} is not this daemon's` });
+        if (msg.text.trim() === '' || msg.seatRef.startsWith('-')) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'invalid', reason: 'empty message or bad seat' });
         if (!bridge || !seatSend) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'openrig_down', reason: "OpenRig n'est pas branché" });
         const r = await seatSend.send(msg.machine, msg.seatRef, msg.text);
         return reply(r.ok ? { type: 'rig.result', rid: msg.rid, ok: true } : { type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: r.reason });

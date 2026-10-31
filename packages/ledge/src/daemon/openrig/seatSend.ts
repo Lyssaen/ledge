@@ -15,22 +15,27 @@ export function leadingAddress(text: string): { word: string; rest: string } | n
   return word === '@' ? null : { word, rest: (m[2] ?? '').trim() };
 }
 
-/** null: the word is no seat's address at all (in a running or partial rig). */
+const SEAT_DOWN: Partial<Record<RigSeat['state'], string>> = { stopped: 'arrêté', crashed: 'planté' };
+const RIG_DOWN: Partial<Record<Rig['lifecycle'], string>> = { stopped: 'arrêté', launching: 'en cours de lancement', unreachable: 'injoignable' };
+
+/** null: the word is no seat's address anywhere. */
 function lookup(word: string, rigs: Rig[]): SeatTarget | null {
   const at = word.indexOf('@', 1);
   const address = at < 0 ? word : word.slice(0, at);
   const rigName = at < 0 ? null : word.slice(at + 1);
-  const hits = rigs.filter(r => ACTIVE.has(r.lifecycle) && (rigName === null || r.name === rigName))
+  const hits = rigs.filter(r => rigName === null || r.name === rigName)
     .flatMap(rig => rig.seats.filter(s => s.address === address).map(seat => ({ rig, seat })));
   if (hits.length === 0) return null;
-  const live = hits.filter(h => !DOWN.has(h.seat.state));
+  const live = hits.filter(h => ACTIVE.has(h.rig.lifecycle) && !DOWN.has(h.seat.state));
   if (live.length === 1) return { ok: true, ...live[0]! };
   if (live.length > 1) {
     const candidates = live.map(h => `${h.seat.address}@${h.rig.name}`).sort();
     return { ok: false, reason: `Plusieurs agents s'appellent ${address} : ${candidates.join(', ')}`, candidates };
   }
-  const h = hits[0]!;
-  return { ok: false, reason: `${h.seat.address} est arrêté (${h.rig.name})` };
+  const why = hits.map(h => !ACTIVE.has(h.rig.lifecycle)
+    ? `${h.seat.address} : le rig ${h.rig.name} est ${RIG_DOWN[h.rig.lifecycle] ?? h.rig.lifecycle}`
+    : `${h.seat.address} est ${SEAT_DOWN[h.seat.state] ?? h.seat.state} (${h.rig.name})`).sort();
+  return { ok: false, reason: why.join(' ; ') };
 }
 
 /** `@build` (unique among the running rigs) or `@build@factory`. */
@@ -58,7 +63,7 @@ export function createSeatSend(d: { bridge: SeatSendBridge }): {
     async fromSay(_rid, text) {
       const head = leadingAddress(text); if (!head) return null;
       const target = lookup(head.word, d.bridge.rigs()); if (!target) return null;
-      if (!target.ok) return { ok: false, reason: target.reason };
+      if (!target.ok) return { ok: false, reason: target.reason, to: head.word };
       if (head.rest === '') return { ok: false, reason: `Que dire à ${head.word} ? Ajoute ton message après l'adresse.` };
       return send('local', target.seat.ref, head.rest, head.word);
     }

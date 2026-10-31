@@ -16,7 +16,10 @@ const rig = (name: string, seats: RigSeat[], lifecycle: Rig['lifecycle'] = 'runn
 const rigs: Rig[] = [
   rig('factory', [seat('build', 'factory'), seat('review-a', 'factory'), seat('qa', 'factory', 'stopped')]),
   rig('starter', [seat('build', 'starter')]),
-  rig('old', [seat('ghost', 'old')], 'stopped')
+  rig('old', [seat('ghost', 'old'), seat('build', 'old')], 'stopped'),
+  rig('boot', [seat('lau', 'boot')], 'launching'),
+  rig('far', [seat('rem', 'far')], 'unreachable'),
+  rig('crash', [seat('cr', 'crash', 'crashed')])
 ];
 
 describe('seat address', () => {
@@ -32,9 +35,17 @@ describe('seat address', () => {
   it('a stopped seat is refused with its state', () => {
     expect(resolveSeatAddress('@qa', rigs)).toMatchObject({ ok: false, reason: '@qa est arrêté (factory)' });
   });
-  it('a seat of a stopped rig is no seat', () => {
-    expect(resolveSeatAddress('@ghost', rigs)).toMatchObject({ ok: false });
+  it('a seat of a rig that is not running is refused with the rig state', () => {
+    expect(resolveSeatAddress('@ghost', rigs)).toMatchObject({ ok: false, reason: '@ghost : le rig old est arrêté' });
+    expect(resolveSeatAddress('@build@old', rigs)).toMatchObject({ ok: false, reason: '@build : le rig old est arrêté' });
+    expect(resolveSeatAddress('@lau', rigs)).toMatchObject({ ok: false, reason: '@lau : le rig boot est en cours de lancement' });
+    expect(resolveSeatAddress('@rem', rigs)).toMatchObject({ ok: false, reason: '@rem : le rig far est injoignable' });
   });
+  it('a crashed seat says planté; ambiguity counts only sendable seats', () => {
+    expect(resolveSeatAddress('@cr', rigs)).toMatchObject({ ok: false, reason: '@cr est planté (crash)' });
+    expect(resolveSeatAddress('@build', rigs)).toMatchObject({ candidates: ['@build@factory', '@build@starter'] });
+  });
+  it('a word that matches no seat anywhere is unknown', () => { expect(resolveSeatAddress('@nobody', rigs)).toMatchObject({ ok: false }); });
   it('leadingAddress splits the head word', () => {
     expect(leadingAddress('@build relance les tests')).toEqual({ word: '@build', rest: 'relance les tests' });
     expect(leadingAddress('  @build@factory, go')).toEqual({ word: '@build@factory', rest: 'go' });
@@ -69,7 +80,7 @@ describe('seatSend', () => {
     expect(exec.calls.at(-1)).toEqual(['send', 'dev-review-a@factory', '[Ledge] regarde ça']);
     const n = exec.calls.length;
     expect(await s.fromSay('r', '@build go')).toMatchObject({ ok: false, reason: expect.stringContaining('@build@factory') });
-    expect(await s.fromSay('r', '@qa go')).toEqual({ ok: false, reason: '@qa est arrêté (factory)' });
+    expect(await s.fromSay('r', '@qa go')).toEqual({ ok: false, reason: '@qa est arrêté (factory)', to: '@qa' });
     expect(await s.fromSay('r', '@review-a')).toMatchObject({ ok: false });
     expect(exec.calls.length).toBe(n);
   });
@@ -84,5 +95,16 @@ describe('seatSend', () => {
     expect(asked).toBe(0);
     await say.say('r2', '@build relance');
     expect(thread.page().items.map(i => i.kind)).toEqual(['user', 'user', 'ledge']);
+  });
+
+  it('say "@ghost …" (stopped rig): nothing sent, no ask, user item keeps to, the bubble names the rig state', async () => {
+    const thread = createLedgeThread({ path: join(mkdtempSync(join(tmpdir(), 'ledge-seat-')), 't.jsonl') });
+    let asked = 0;
+    const chat = { async ask() { asked++; }, idle: async () => {} } as unknown as Chat;
+    const say = createLedgeSay({ thread, chat, escalations: () => undefined, toSeat: make().fromSay, tool: () => 'codex', broadcast: () => {} });
+    await say.say('r1', '@ghost réveille-toi');
+    expect(thread.page().items).toEqual([expect.objectContaining({ kind: 'user', to: '@ghost' }), expect.objectContaining({ kind: 'ledge', text: '@ghost : le rig old est arrêté' })]);
+    expect(asked).toBe(0);
+    expect(exec.calls.filter(a => a[0] === 'send')).toEqual([]);
   });
 });
