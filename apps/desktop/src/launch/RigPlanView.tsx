@@ -56,7 +56,8 @@ export function RigPlanView(p: {
           <span className="rig-flag" aria-hidden="true">⚑</span>
           <span><span className="preview-line"><strong>{c.planFoot(n, kinds)}</strong></span><small><code>{plan.command}</code></small></span>
         </div>
-        <Button variant="ghost" type="button" onClick={p.onBack}>{c.back}</Button>
+        {/* A launch in flight is not left: its answer closes the window on Rigs › En cours. */}
+        <Button variant="ghost" type="button" aria-disabled={p.busy === 'launching'} onClick={() => { if (p.busy !== 'launching') p.onBack(); }}>{c.back}</Button>
         <Button variant="primary" type="submit" aria-disabled={busy}>{p.busy === 'launching' ? c.launching : c.launch}<Kbd>Ctrl ↵</Kbd></Button>
       </footer>
       {p.busy === 'preparing' ? <p className="rig-launch-status" role="status">{c.preparing}</p>

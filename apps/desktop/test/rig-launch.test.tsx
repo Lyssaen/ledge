@@ -132,6 +132,23 @@ describe('RigLaunch', () => {
     expect((screen.getByRole('radio', { name: /Local/ }) as HTMLInputElement).disabled).toBe(false);
   });
 
+  it('pendant le lancement, « Retour » est inactif : le rig lancé ferme quand même la fenêtre sur Rigs › En cours', async () => {
+    show({ wanted: { project: 'ledge', goal: 'Corriger les tests qui échouent' } });
+    await screen.findByText('Recommandé par Ledge');
+    await user.click(screen.getByRole('button', { name: 'Voir le plan' }));
+    const prepare = last('rig.prepare')!;
+    answer({ type: 'rig.plan', rid: prepare.rid, plan: planFor(prepare) });
+    await screen.findByRole('heading', { name: 'Plan du rig starter' });
+    await user.click(screen.getByRole('button', { name: /^Lancer le rig/ }));
+    const back = screen.getByRole('button', { name: 'Retour' });
+    expect(back.getAttribute('aria-disabled')).toBe('true');
+    await user.click(back);
+    expect(screen.getByRole('heading', { name: 'Plan du rig starter' })).toBeTruthy();
+    answer({ type: 'rig.result', rid: last('rig.launch')!.rid, ok: true });
+    await waitFor(() => expect(closed).toBe(1));
+    expect(dispatched).toContainEqual({ type: 'ledge', tab: 'rigs', rigs: 'live' });
+  });
+
   it('refus « plan already launched » : dit dans la fenêtre, à l’étape du plan', async () => {
     show({ wanted: { project: 'ledge', goal: 'Corriger les tests qui échouent' } });
     await screen.findByText('Recommandé par Ledge');

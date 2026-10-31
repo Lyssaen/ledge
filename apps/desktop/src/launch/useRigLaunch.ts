@@ -99,7 +99,8 @@ export function useRigLaunch(client: DaemonClient, onLaunched?: () => void): {
     sendLaunch(plan, shown.current.step === 'form' ? 'form' : 'plan');
   }, [prepare, sendLaunch]);
 
-  const back = useCallback(() => { pending.current = null; setState({ step: 'form' }); }, []);
+  // A launch in flight is kept: dropping it would ignore its answer (a rig launched, the window still open).
+  const back = useCallback(() => { if (pending.current?.kind === 'launch') return; pending.current = null; setState({ step: 'form' }); }, []);
 
   return { state, prepare, launch, back };
 }
