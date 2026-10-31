@@ -25,8 +25,20 @@ export const fr = {
     label: 'Barre latérale', newSession: 'Nouvelle session', searchLabel: 'Rechercher une session',
     views: 'Vues', atelier: 'Atelier', chat: 'Chat Ledge', projects: 'Projets', newProject: 'Nouveau projet', unassigned: 'Sans projet',
     machines: 'Machines', manageMachines: 'Gérer les machines', agents: (n: number) => plural(n, `${n} agent`, `${n} agents`), offline: 'hors ligne', daemonUpdating: 'mise à jour du daemon', settings: 'Réglages', shortcuts: 'Raccourcis clavier',
-    ledgeHome: 'Accueil : Ledge, l’opérateur', ledgeLine: (yours: number) => `${yours} à toi`,
-    askLedge: 'Demander à Ledge', askPlaceholder: 'Demander à Ledge…',
+    ledgeHome: 'Accueil : Ledge, l’opérateur',
+    /** Ledge's line (mockup 1a): what waits for the user, else what Ledge last said, else calm. */
+    ledge: {
+      decision: (n: number, rig?: string) => (n > 1 ? `${n} décisions t’attendent` : `Une décision t’attend${rig ? ` · ${rig}` : ''}`),
+      grace: (rig?: string) => `Ledge s’en occupe…${rig ? ` · ${rig}` : ''}`,
+      calm: (n: number) => (n === 0 ? 'Rien ne t’attend' : `J’orchestre ${n} ${plural(n, 'rig', 'rigs')}`),
+      unread: (n: number) => `${n} non ${plural(n, 'lu', 'lus')}`
+    },
+    rigs: {
+      title: 'Rigs', tree: 'Rigs', launch: 'Lancer un rig', seats: (n: number) => `rig · ${n}`, off: 'hors projet', unreachable: 'injoignable',
+      kernel: 'Noyau OpenRig', kernelTag: 'noyau', more: (n: number) => `+${n}`, room: (name: string) => `Voir ${name} dans l’atelier (double-clic ou Entrée)`,
+      absent: 'OpenRig n’est pas installé', stopped: 'OpenRig est arrêté', error: 'OpenRig est en erreur', unsupported: (v?: string) => (v ? `OpenRig ${v} non pris en charge` : 'Cette version d’OpenRig n’est pas prise en charge'),
+      ghost: 'Siège sans session Ledge'
+    },
     ask: { kicker: 'Décision', from: (n: string) => `de ${n}`, placeholder: 'Ta réponse…', send: 'Répondre', sending: 'Envoi…', sent: (n: string) => `Réponse envoyée à ${n}`, refused: (r: string) => `Refusé : ${r}` },
     openChat: 'Ouvrir la conversation avec Ledge',
     active: (n: number) => plural(n, `${n} actif`, `${n} actifs`),
@@ -346,7 +358,8 @@ export const fr = {
   },
   chunkFailed: 'Cette partie de Ledge n’a pas pu se charger. Relancez l’application.',
   close: 'Fermer',
-  modalTitles: { launch: 'Nouvelle session' },
+  modalTitles: { launch: 'Nouvelle session', rigLaunch: 'Nouveau rig' },
+  rigLaunch: { soon: 'Le lancement d’un rig arrive bientôt.', close: 'Fermer' },
   search: {
     title: 'Aller à une session', placeholder: 'Agent, tâche, projet ou machine…', empty: 'Aucune session ne correspond à cette recherche.', results: 'Sessions',
     browse: 'Parcourir', open: 'Ouvrir', closeKey: 'Fermer', enter: 'Entrée', escape: 'Échap'

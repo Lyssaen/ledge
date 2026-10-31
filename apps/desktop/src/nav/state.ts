@@ -25,6 +25,8 @@ export type Modal =
   // edit : id du projet à modifier ; file : id de la session à y ranger (lot 8) ; delete : ouvert sur sa vue de suppression (Réglages › Projets, lot 10) ;
   // proposal : le pid d'une proposition de Ledge retenue par rememberProposal (lot 11), ouverte pour être vérifiée
   | { kind: 'project'; edit?: string; file?: string; delete?: true; proposal?: string }
+  // Lancer un rig (lot 3 : fenêtre d'attente ; le lot 5 la remplit) : pré-remplissage du projet, de la spec, du but et de la machine.
+  | { kind: 'rig-launch'; project?: string; spec?: string; goal?: string; machine?: string }
   | null;
 /** chatFocus: bumped each time the chat is asked for (/, an open button), even already open: its field takes the focus again. */
 export interface NavState { place: Place; modal: Modal; chat: boolean; chatFocus: number; fullscreen: boolean; helpers: boolean; paused: boolean }

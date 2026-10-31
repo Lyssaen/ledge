@@ -163,8 +163,8 @@ describe('the Atelier shell', () => {
     expect(declarations('sidebar.css', '.st-time.t-error')).toBe('color:var(--danger-text)');
   });
 
-  it('Ask Ledge and the Atelier view are set apart, as far as the field is from the title bar', () => {
-    expect(declarations('sidebar.css', '.st-ask')).toContain('margin:10px10px0');
+  it('Ledge’s line and the Atelier view are set apart, as far as the line is from the title bar', () => {
+    expect(declarations('sidebar.css', '.st .st-ledge')).toContain('margin:10px10px0');
     expect(declarations('sidebar.css', '.st-views')).toContain('margin:10px10px6px');
   });
 

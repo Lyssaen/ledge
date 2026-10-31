@@ -11,8 +11,19 @@ export const en: Messages = {
     label: 'Sidebar', newSession: 'New session', searchLabel: 'Search a session',
     views: 'Views', atelier: 'Atelier', chat: 'Chat Ledge', projects: 'Projects', newProject: 'New project', unassigned: 'No project',
     machines: 'Machines', manageMachines: 'Manage machines', agents: (n) => pluralEn(n, `${n} agent`, `${n} agents`), offline: 'offline', daemonUpdating: 'daemon updating', settings: 'Settings', shortcuts: 'Keyboard shortcuts',
-    ledgeHome: 'Home: Ledge, the operator', ledgeLine: (yours: number) => `${yours} yours`,
-    askLedge: 'Ask Ledge', askPlaceholder: 'Ask Ledge…',
+    ledgeHome: 'Home: Ledge, the operator',
+    ledge: {
+      decision: (n, rig) => (n > 1 ? `${n} decisions are waiting for you` : `A decision is waiting for you${rig ? ` · ${rig}` : ''}`),
+      grace: (rig) => `Ledge is on it…${rig ? ` · ${rig}` : ''}`,
+      calm: (n) => (n === 0 ? 'Nothing is waiting for you' : `Orchestrating ${n} ${pluralEn(n, 'rig', 'rigs')}`),
+      unread: (n) => `${n} unread`
+    },
+    rigs: {
+      title: 'Rigs', tree: 'Rigs', launch: 'Launch a rig', seats: (n) => `rig · ${n}`, off: 'off project', unreachable: 'unreachable',
+      kernel: 'OpenRig kernel', kernelTag: 'kernel', more: (n) => `+${n}`, room: (name) => `Show ${name} in the atelier (double-click or Enter)`,
+      absent: 'OpenRig is not installed', stopped: 'OpenRig is stopped', error: 'OpenRig is in error', unsupported: (v) => (v ? `OpenRig ${v} is not supported` : 'This OpenRig version is not supported'),
+      ghost: 'Seat without a Ledge session'
+    },
     ask: { kicker: 'Decision', from: n => `from ${n}`, placeholder: 'Your answer…', send: 'Answer', sending: 'Sending…', sent: n => `Answer sent to ${n}`, refused: r => `Refused: ${r}` },
     openChat: 'Open the conversation with Ledge',
     active: (n) => `${n} active`,
@@ -329,7 +340,8 @@ export const en: Messages = {
   },
   chunkFailed: 'This part of Ledge could not load. Restart the app.',
   close: 'Close',
-  modalTitles: { launch: 'New session' },
+  modalTitles: { launch: 'New session', rigLaunch: 'New rig' },
+  rigLaunch: { soon: 'Launching a rig is coming soon.', close: 'Close' },
   search: {
     title: 'Go to a session', placeholder: 'Agent, task, project or machine…', empty: 'No session matches this search.', results: 'Sessions',
     browse: 'Browse', open: 'Open', closeKey: 'Close', enter: 'Enter', escape: 'Esc'

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Page, WebSocketRoute } from '@playwright/test';
-import type { Ask, ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, FoundRepo, IslandPrefs, Machines, ModelChoice, Projects, Recent, Session, ThreadItem, Tool } from '@ledge/protocol';
+import type { Ask, ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, Escalation, Exchange, FoundRepo, IslandPrefs, Machines, ModelChoice, OpenRigStatus, Projects, Recent, Rig, RigSpecInfo, Session, ThreadItem, Tool } from '@ledge/protocol';
 
 /** How long a launched session stays `starting` in the fake daemon before it is `working`. */
 export const LAUNCH_SETTLE_MS = 1500;
@@ -36,8 +36,12 @@ export type Found = { repos: FoundRepo[]; truncated?: boolean } | 'offline' | 'o
  *  replaces them and is broadcast back as `island`; `island: 'unknown'` plays a daemon too old to speak of them.
  *  It speaks of the decisions sessions asked (`asks` after the snapshot): `extras.asks`, none by default; an `ask.answer` closes its ask (`ask.updated`
  *  `answered`, then `ask.result`), and one already closed is refused as the daemon does (`code` `closed`, `déjà répondue`).
+ *  It speaks of OpenRig (lot 3) after the snapshot: `openrig.status` (`extras.openrig`, none by default), one `rig.snapshot` per machine of
+ *  `extras.rigs` (the local one always, empty when there are none), then an `escalation.updated` per `extras.escalations`. A `rig.specs.request`
+ *  is answered `rig.specs` from `extras.specs` (none by default); a `rig.exchanges.request` is answered `rig.exchanges` from `extras.exchanges`,
+ *  keyed by rig id. `pushRig`, `removeRig` and `exchange` play the daemon's later news. Every client message is kept in `received`.
  *  The route is anchored so it never catches `/ssh/<alias>` (see `fakeRemote`). Register before `page.goto`. */
-export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual'; chat?: ChatReply; found?: Record<string, Found>; scanDelayMs?: number; island?: IslandPrefs | null | 'unknown'; models?: Partial<Record<Tool, ModelChoice[]>>; asks?: Ask[] } = {}) {
+export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual'; chat?: ChatReply; found?: Record<string, Found>; scanDelayMs?: number; island?: IslandPrefs | null | 'unknown'; models?: Partial<Record<Tool, ModelChoice[]>>; asks?: Ask[]; rigs?: Rig[]; escalations?: Escalation[]; openrig?: OpenRigStatus; specs?: RigSpecInfo[]; exchanges?: Record<string, Exchange[]> } = {}) {
   const threads = new Map(Object.entries(extras.threads ?? {}).map(([id, items]) => [id, [...items]]));
   const sessions = new Map(initial.map(s => [s.id, s]));
   const received: ClientMessage[] = [];
@@ -48,6 +52,8 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
   let up = true;
   let launches = 0;
   const asks = new Map((extras.asks ?? []).map(a => [a.id, a]));
+  const rigs = new Map((extras.rigs ?? []).map(r => [`${r.machine}/${r.id}`, r]));
+  const exchanges = new Map(Object.entries(extras.exchanges ?? {}).map(([rigId, items]) => [rigId, [...items]]));
   const turns = new Map<string, ChatTurn>();
   const images = new Map<string, { mime: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; data: string; preview: boolean }>();
   await page.routeWebSocket(/127\.0\.0\.1:47831\/?$/, ws => {
@@ -58,6 +64,11 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
     if (projects) ws.send(JSON.stringify({ type: 'projects', projects }));
     if (island !== 'unknown') ws.send(JSON.stringify({ type: 'island', prefs: island }));
     ws.send(JSON.stringify({ type: 'asks', asks: [...asks.values()] }));
+    if (extras.openrig) ws.send(JSON.stringify({ type: 'openrig.status', status: extras.openrig }));
+    const byMachine = new Map<string, Rig[]>([['local', []]]);
+    for (const r of rigs.values()) byMachine.set(r.machine, [...(byMachine.get(r.machine) ?? []), r]);
+    for (const [machine, list] of byMachine) ws.send(JSON.stringify({ type: 'rig.snapshot', machine, rigs: list }));
+    for (const escalation of extras.escalations ?? []) ws.send(JSON.stringify({ type: 'escalation.updated', escalation }));
     ws.onMessage(m => {
       let msg: ClientMessage;
       try { msg = JSON.parse(String(m)); } catch { return; }
@@ -98,6 +109,8 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
           ws.send(JSON.stringify({ type: 'ask.result', rid: msg.rid, ask: answered }));
         }
       }
+      if (msg.type === 'rig.specs.request') ws.send(JSON.stringify({ type: 'rig.specs', requestId: msg.requestId, machine: 'local', specs: extras.specs ?? [] }));
+      if (msg.type === 'rig.exchanges.request') ws.send(JSON.stringify({ type: 'rig.exchanges', machine: msg.machine, rigId: msg.rigId, items: exchanges.get(msg.rigId) ?? [] }));
       if (msg.type === 'models.list') ws.send(JSON.stringify({ type: 'models.listing', requestId: msg.requestId, tool: msg.tool, models: extras.models?.[msg.tool] ?? [] }));
       if (msg.type === 'repos.inspect') {
         ws.send(JSON.stringify({ type: 'repos.info', requestId: msg.requestId, repos: msg.paths.map(path => ({ path, ...(extras.repoInfo?.[path] ?? { exists: true, branch: 'main' }) })) }));
@@ -168,6 +181,12 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
     stored(id: string) { const i = images.get(id); if (!i) throw new Error(`no stored image ${id}`); return { id, mime: i.mime, width: 1440, height: 900, bytes: Math.floor(i.data.length * 3 / 4), preview: i.preview }; },
     upsert(s: Session) { sessions.set(s.id, s); push({ type: 'session.updated', session: s }); },
     remove(id: string) { sessions.delete(id); push({ type: 'session.removed', id }); },
+    /** Adds or replaces a rig, broadcast as `rig.updated`. */
+    pushRig(rig: Rig) { rigs.set(`${rig.machine}/${rig.id}`, rig); push({ type: 'rig.updated', rig }); },
+    /** Removes a rig, broadcast as `rig.removed`. */
+    removeRig(machine: string, id: string) { rigs.delete(`${machine}/${id}`); push({ type: 'rig.removed', machine, rigId: id }); },
+    /** Stores an exchange between a rig's agents (kept for `rig.exchanges.request`) and broadcasts it as `rig.exchange`. */
+    exchange(e: Exchange) { exchanges.set(e.rigId, [...(exchanges.get(e.rigId) ?? []), e]); push({ type: 'rig.exchange', exchange: e }); },
     /** Answers a `session.launch` as the daemon does: the session is broadcast first, then `session.launched` with its raw id. */
     launched(s: Session) { sessions.set(s.id, s); push({ type: 'session.updated', session: s }); push({ type: 'session.launched', id: s.id }); },
     /** Refuses a launch as the daemon does: an `error` with no id, naming its request (spec §9.2). */

@@ -1,4 +1,4 @@
-/* The sidebar as an IDE explorer, from docs/mockups/session-management/sidebar-tree.css: ask field, views,
+/* The sidebar as an IDE explorer, from docs/mockups/session-management/sidebar-tree.css: Ledge's line, views,
    « À toi », the project › branch › session tree. No search row, no auto-hide, no word mark (the titlebar owns the brand).
    `.side-swatch` and `.machine-dot` stay: they are used across the app; `.side-footer` is an alias of `.st-foot`. */
 .sidebar.st{position:relative;width:288px;display:flex;flex-direction:column;padding:0;gap:0;background:var(--sidebar);border-right:1px solid var(--sidebar-border)}
@@ -6,10 +6,16 @@
 .st button:focus-visible{outline:2px solid var(--ring);outline-offset:-2px;border-radius:var(--radius-sm)}
 .st .mono{font-family:'Geist Mono',monospace}
 .st-fill{flex:1}
-.st-ask{margin:10px 10px 0;height:36px;flex:none;display:flex;align-items:center;gap:8px;padding:0 8px 0 8px;border:1px solid var(--input);border-radius:var(--radius-md);background:var(--well);cursor:text}
-.st-ask:focus-within,.st-ask.on{border-color:var(--ring)}
-.st-ask input{flex:1;min-width:0;border:0;background:transparent;color:var(--sidebar-foreground);font:13px 'Geist',system-ui,sans-serif;outline:none}
-.st-ask input::placeholder{color:var(--muted-foreground)}
+/* Ledge's line (OpenRig spec §8.1, mockup 1a): the resident, « Ledge. », the time, a one-line preview and the unread count; lit while Ledge's screen shows. */
+.st .st-ledge{margin:10px 10px 0;flex:none;display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--well);color:var(--sidebar-foreground)}
+.st .st-ledge:hover{background:var(--sidebar-accent)}
+.st .st-ledge.on{border-color:var(--ring);background:color-mix(in srgb,var(--sidebar-primary) 8%,var(--well))}
+.st-ledge-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.st-ledge-top,.st-ledge-bottom{display:flex;align-items:center;gap:6px;min-width:0}
+.st-ledge-brand{flex:1;font-size:14px;font-weight:650}
+.st-ledge-at{font:11px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.st-ledge-preview{flex:1;min-width:0;font-size:12px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-ledge-unread{min-width:18px;height:18px;padding:0 5px;border-radius:999px;display:grid;place-items:center;font:600 10px 'Geist Mono',monospace;background:var(--sidebar-primary);color:var(--sidebar-primary-foreground,var(--primary-foreground))}
 .st .st-mascot{display:inline-flex;flex:none}
 .st-views{display:flex;gap:2px;margin:10px 10px 6px;padding:2px;flex:none;border-radius:var(--radius-md);background:var(--well);border:1px solid var(--border)}
 .st .st-views button{flex:1;height:28px;display:flex;align-items:center;gap:7px;padding:0 8px;border-radius:var(--radius-sm);font-size:12px;color:var(--muted-foreground)}
@@ -136,7 +142,8 @@
  .st kbd{display:none!important}
  .st .st-keys-tip kbd{display:inline-flex!important}
  .st-keys-tip{left:calc(100% + 6px);bottom:8px} /* the rail's foot is a column: the tooltip opens beside it */
- .st-ask{margin:10px 8px 0;padding:0;justify-content:center;border:0;background:none}.st-ask input,.st-ask kbd{display:none}
+ .st .st-ledge{margin:10px 8px 0;padding:4px 0;justify-content:center;border:0;background:none}.st-ledge-body{display:none}
+ .st-kernel,.st-rig-invite{display:none}
  .st-views{flex-direction:column;margin:10px 8px 6px}.st .st-views button{font-size:0;gap:0}.st-views small{display:none}
  .st-attn,.st-label,.st-help,.st-agent,.st-branch,.st-more,.st-archives{display:none}
  .st .st-views button{justify-content:center;padding:0}.st-views .st-fill{display:none}
@@ -146,15 +153,13 @@
  .st-foot{flex-direction:column;height:auto;padding:8px 0;gap:8px}.st .st-mach{font-size:0}.st-mach small{display:none}.st-foot .st-fill{display:none}
 }
 
-/* Ledge's entry (ledge home spec §2.1): the resident, « Ledge. », the live line and /, the question field under it; lit while the home view shows. */
-.st-ask.st-ledge{height:auto;flex-direction:column;align-items:stretch;gap:4px;padding:6px 8px 6px;cursor:default}
-.st-ledge .st-ledge-entry{display:flex;align-items:center;gap:8px;width:100%;padding:2px 0;border:0;background:none;color:var(--sidebar-foreground);text-align:left;cursor:pointer}
-.st-ledge .st-ledge-names{display:flex;flex-direction:column;flex:1;min-width:0;line-height:14px}
-.st-ledge .st-ledge-brand{font-size:13px;font-weight:650}
-.st-ledge .st-ledge-line{font-size:11px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.st-ledge input{height:26px;padding:0 6px;border:1px solid var(--input)!important;border-radius:var(--radius-sm);background:var(--sidebar)!important}
-.st-ledge.on{background:color-mix(in srgb,var(--sidebar-primary) 8%,var(--well))}
-@media(max-width:850px){.st-ask.st-ledge{padding:0}.st-ledge .st-ledge-names{display:none}.st-ledge .st-ledge-entry{justify-content:center}}
+/* Rigs (OpenRig spec §8.1): rig rows read as project rows; the kernel last; a seat with no Ledge session is read-only. */
+.st-rig-off,.st-rig-machine,.st-rig-down{flex:none;font-size:11px;color:var(--muted-foreground);white-space:nowrap}
+.st-rig-down{color:var(--warning)}
+.st-kernel-swatch{background:var(--muted-foreground)}
+.st-seat.ghost .st-main{cursor:default}
+.st-rig-invite{margin:0;padding:2px 8px 4px;display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted-foreground)}
+.st-rig-install{padding:3px 6px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--well);font:11px 'Geist Mono',monospace;color:var(--sidebar-foreground);user-select:all;overflow-wrap:anywhere}
 .st-card.st-near .st-near-mark{display:grid;place-items:center;width:18px;height:18px;font-size:12px;color:var(--warning,#e5b85c)}
 .st-decision .st-card-body{gap:4px}
 .st-decision-kicker{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--sidebar-primary)}

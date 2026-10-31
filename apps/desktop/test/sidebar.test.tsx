@@ -13,21 +13,23 @@ afterEach(async () => { cleanup(); await closeDaemons(); });
 const banner = () => within(screen.getByRole('banner'));
 
 describe('the sidebar shell', () => {
-  it('has Ask Ledge and Atelier, and neither New session button, brand nor search', async () => {
+  it('has Ledge’s line and Atelier, and neither question field, New session button, brand nor search', async () => {
     const sessions = listSessions();
     const { side } = await boot({ projects: TWO_PROJECTS, sessions });
     expect(side.queryByRole('button', { name: /^New session N/ })).toBeNull();
     expect(document.querySelector('.st-brand')).toBeNull();
-    expect(side.getByRole('textbox', { name: 'Ask Ledge' })).toBeVisible();
+    // OpenRig spec §8.1: the « Ask Ledge… » field left the sidebar; Ledge's line (mockup 1a) opens its screen.
+    expect(side.getByRole('button', { name: /^Home: Ledge, the operator · Ledge\./ })).toBeVisible();
+    expect(side.queryByRole('textbox', { name: 'Ask Ledge' })).toBeNull();
     expect(side.getByRole('button', { name: /Atelier/ })).toHaveTextContent(String(activeCount(sessions)));
     expect(document.querySelector('.sidebar [data-brand]')).toBeNull();
     expect(side.queryByRole('button', { name: /Search/ })).toBeNull();
   });
 
-  it('Ledge’s entry (ledge home spec §2.1): its live line, and a click goes to the home view, lit, with its composer focused', async () => {
+  it('Ledge’s line (OpenRig spec §8.1): its live preview, and a click goes to the home view, lit, with its composer focused', async () => {
     const { side, user } = await boot({ projects: TWO_PROJECTS, sessions: listSessions() });
-    const entry = side.getByRole('button', { name: 'Home: Ledge, the operator' });
-    expect(entry).toHaveTextContent(/\d+ yours/);
+    const entry = side.getByRole('button', { name: /^Home: Ledge, the operator · Ledge\./ });
+    expect(entry).toHaveTextContent('Nothing is waiting for you');
     await user.click(entry);
     const home = await screen.findByRole('region', { name: 'Home: Ledge, the operator' });
     await waitFor(() => expect(within(home).getByRole('textbox', { name: 'Ask Ledge' })).toHaveFocus());
@@ -35,16 +37,19 @@ describe('the sidebar shell', () => {
     expect(screen.queryByRole('complementary', { name: 'Chat Ledge' })).toBeNull();
   });
 
-  it('Your turn lists open asks after the waiting sessions, and the Ledge line counts them', async () => {
+  it('Your turn lists open asks after the waiting sessions, and the Ledge line counts the decisions waiting for the user', async () => {
     const at = new Date().toISOString();
     const near = fakeSession('pim', { name: 'Pim', cwd: '/w/ledge', state: 'idle', context: { used: 170_000, window: 200_000, at } });
     const { d, side, user } = await boot({ projects: TWO_PROJECTS, sessions: [...listSessions(), near] });
-    const entry = side.getByRole('button', { name: 'Home: Ledge, the operator' });
-    await waitFor(() => expect(entry).toHaveTextContent('3 yours'));
+    const entry = side.getByRole('button', { name: /^Home: Ledge, the operator · Ledge\./ });
     d.push({ type: 'asks', asks: [{ id: 'a1b2c34', from: 'nova', fromName: 'Nova', question: 'Which database?', options: 'A or B (I recommend B)', at, state: 'open' }] });
     const yours = within(side.getByRole('region', { name: 'Your turn' }));
     await yours.findByText('Which database?');
-    await waitFor(() => expect(entry).toHaveTextContent('4 yours'));
+    // What Ledge raised (an OpenRig escalation) is counted on its line, with the rig it comes from.
+    d.push({ type: 'rig.snapshot', machine: 'local', rigs: [{ id: 'r1', name: 'factory', machine: 'local', cwd: '/w/ledge', projectId: null, offProject: false, lifecycle: 'running', kernel: false, seats: [], repos: [] }] });
+    d.push({ type: 'escalation.updated', escalation: { id: 'q1', source: 'rig', machine: 'local', rigId: 'r1', from: 'orch-lead@factory', intent: 'decision', summary: 'JSON or SQLite?', questions: [], createdAt: at, state: 'pending' } });
+    await waitFor(() => expect(entry).toHaveTextContent('A decision is waiting for you · factory'));
+    expect(entry).toHaveAccessibleName(/1 unread$/);
     const cards = [...document.querySelectorAll('.st-attn .st-card')];
     expect(cards.map(c => (c.matches('[data-ask]') ? 'ask' : c.matches('[data-near]') ? 'near' : 'session'))).toEqual(['session', 'session', 'ask', 'near']);
     const card = document.querySelector<HTMLElement>('[data-ask="a1b2c34"]')!;
@@ -70,13 +75,17 @@ describe('the sidebar shell', () => {
     expect(tree.getByText('main')).toBeVisible();
   });
 
-  it('the question field under the entry: Enter with text goes home and sends chat.ask', async () => {
+  it('no question field in the sidebar any more: / goes home, its composer focused, and Enter there sends chat.ask', async () => {
     // One machine: with two, the fleet sends chat.route instead of chat.ask (chat.test boots the same way).
     const { d, user, side } = await boot({ projects: TWO_PROJECTS, sessions: listSessions(), machines: [{ id: 'local', label: 'Local' }] });
-    await user.type(side.getByRole('textbox', { name: 'Ask Ledge' }), 'hello{Enter}');
-    expect(await screen.findByRole('region', { name: 'Home: Ledge, the operator' })).toBeVisible();
+    expect(side.queryByRole('textbox')).toBeNull();
+    await user.keyboard('/');
+    const home = await screen.findByRole('region', { name: 'Home: Ledge, the operator' });
+    const field = within(home).getByRole('textbox', { name: 'Ask Ledge' });
+    await waitFor(() => expect(field).toHaveFocus());
+    await user.keyboard('hello{Enter}');
     expect(screen.queryByRole('complementary', { name: 'Chat Ledge' })).toBeNull();
-    expect(d.received).toContainEqual({ type: 'chat.ask', qid: expect.stringMatching(/^q-/), text: 'hello', tool: 'claude' });
+    await waitFor(() => expect(d.received).toContainEqual({ type: 'chat.ask', qid: expect.stringMatching(/^q-/), text: 'hello', tool: 'claude' }));
   });
 
   it('a ? beside Settings lists the shortcuts in its tooltip and opens their dialog', async () => {

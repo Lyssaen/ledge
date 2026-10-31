@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { daemonStore, projectOf, useAsks, useDaemon, useIsland, useMobile, useMobileError, useProjects, useTokenMissing, type DaemonClient } from '@ledge/fleet';
+import { daemonStore, projectOf, useAsks, useDaemon, useEscalations, useIsland, useMobile, useMobileError, useOpenRig, useProjects, useRigs, useTokenMissing, type DaemonClient } from '@ledge/fleet';
 import type { Project, Projects, Session } from '@ledge/protocol';
 import { LangProvider, loadLang, messagesFor, saveLang, useI18n, type Lang } from './i18n/lang';
 import { loadMessages } from './i18n/messages';
@@ -26,6 +26,7 @@ import { TitleBar } from './shell/TitleBar';
 import { TopBar } from './shell/TopBar';
 import { Footer } from './shell/Footer';
 import { LaunchPlace } from './launch/lazy';
+import { RigLaunch } from './launch/RigLaunch';
 import { ChatPlace, HomePlace } from './chat/lazy';
 import { SettingsPlace } from './settings/lazy';
 import type { SettingsContext } from './settings/SettingsPage';
@@ -61,7 +62,6 @@ import { termTheme } from './term/theme';
 import { TermStoreContext } from './term/useTerms';
 import { isNative } from './term/mode';
 import { ProjectDialog } from './projects/ProjectDialog';
-import { useDefaultTool } from './settings/tool';
 import { PairingDialog, usePairingDialogState } from './settings/PairingDialog';
 
 const NO_PROJECTS: readonly Project[] = [];
@@ -113,6 +113,10 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const projects = useProjects(fleetClient);
   const relief = useRelief(fleetClient);
   const asks = useAsks(fleetClient);
+  // OpenRig (lot 3): the sidebar's Rigs section and Ledge's line.
+  const rigs = useRigs(fleetClient);
+  const escalations = useEscalations(fleetClient);
+  const openrig = useOpenRig(fleetClient);
   const island = useIsland(fleetClient);
   const mobile = useMobile(fleetClient);
   const mobileError = useMobileError(fleetClient);
@@ -196,14 +200,6 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // The session menu, from the atelier's seats and the session page's header « … » (one at a time).
   const sessionMenu = useSessionMenu({ client: fleetClient, sessions, onShowTerminal: showTerminal });
   const decisions = useDecisions({ client: fleetClient, sessions, errors, notify });
-  // The sidebar's Ask Ledge, the same send as the chat panel: nothing goes out while the local daemon is offline (the chat still opens).
-  const [tool] = useDefaultTool();
-  const askLedge = (text: string) => {
-    if (!fleetView.machines.find(m => m.id === 'local')?.ready) { dispatch({ type: 'ledge', tab: 'conversation' }); return; }
-    const qid = `q-${crypto.randomUUID()}`;
-    daemonStore.beginTurn({ qid, question: text, askedAt: new Date().toISOString(), steps: [] });
-    fleetClient.send({ type: 'chat.ask', qid, text, tool });
-  };
   const screenKeys = useRef<ScreenKeys>({ current: null }).current;
   // Drafts, reading positions and the last item seen, per session and subagent: they survive navigation, not a restart.
   const memory = useRef(createSessionMemory()).current;
@@ -303,8 +299,9 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       <div className={`application ${nav.fullscreen ? 'immersive' : ''} ${filing.dragging ? 'is-dragging' : ''}`} data-readonly={localDown ? 'true' : undefined} inert={blocked}>
         <Sidebar nav={nav} dispatch={dispatch} sessions={sessions} archived={fleetView.archived} machines={machines} updating={daemonUpdates.updating} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing}
           actions={actions} decisions={decisions} waits={waits} menu={{ open: (id, at, opener) => sessionMenu.open(id, at, opener ?? null) }}
-          onAsk={askLedge} onTerminal={sessionMenu.terminal} revealArchives={revealArchives} revealCurrent={revealCurrent}
-          relief={relief} asks={asks} onAnswerAsk={(a, text) => fleet.answerAsk(a.machine, a.id, text)} />
+          onTerminal={sessionMenu.terminal} revealArchives={revealArchives} revealCurrent={revealCurrent}
+          relief={relief} asks={asks} onAnswerAsk={(a, text) => fleet.answerAsk(a.machine, a.id, text)}
+          rigs={rigs} escalations={escalations} openrig={openrig} />
         <section className="workspace">
           {tokenMissing && <DaemonOutdated />}
           <TopBar nav={nav} dispatch={dispatch} session={session} helper={helper} projects={projects} projectIdOf={projectIdOf} terminal={sessionPrefs.terminal} onTerminal={toggleTerminal}
@@ -336,6 +333,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
             launch={launcher.state} onLaunch={(msg, preview) => { launched.current = preview; launcher.launch(msg); }} onCancel={close} paused={nav.paused} />
         </Modal>
       )}
+      {nav.modal?.kind === 'rig-launch' && <RigLaunch onClose={close} />}
       {nav.modal?.kind === 'project' && (
         <ProjectDialog key={`${nav.modal.edit ?? ''}|${nav.modal.file ?? ''}|${nav.modal.delete ? 'delete' : ''}|${nav.modal.proposal ?? ''}`} edit={nav.modal.edit} file={nav.modal.file} startDeleting={nav.modal.delete}
           proposal={nav.modal.proposal} projects={projects} sessions={sessions} machines={machines} client={fleetClient} fleet={fleet} projectIdOf={projectIdOf} paused={nav.paused}
