@@ -51,7 +51,7 @@ import type { Bridge } from './openrig/bridge.js';
 import { createRemotePeers } from './openrig/remote.js';
 import { createRigAggregate } from './openrig/aggregate.js';
 import { createRigRouter, isRigCommand } from './openrig/router.js';
-import type { AnswerQueue } from './openrig/answerQueue.js';
+import { createAnswerQueue } from './openrig/answerQueue.js';
 import type { DaemonClient } from '@ledge/fleet/client';
 import { listSpecs } from './openrig/specs.js';
 import { OpenRigUnreachable } from './openrig/http.js';
@@ -363,13 +363,12 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     if (m.type === 'escalation.updated' && m.escalation.machine !== 'local' && !thread.hasEscalation(m.escalation.id)) thread.append({ kind: 'escalation', escalationId: m.escalation.id });
     if (m.type === 'rig.exchange' && m.exchange.machine !== 'local') thread.exchange(m.exchange);
   });
-  // PLACEHOLDER until lot 6 Task 6 (createAnswerQueue): an answer to an unreachable machine is refused instead of queued.
-  const answerQueue: AnswerQueue = {
-    enqueue: (a, reply) => reply({ type: 'rig.result', rid: a.rid, ok: false, code: 'unreachable', reason: `${machines.find(m => m.id === a.machine)?.label ?? a.machine} est injoignable` }),
-    pending: () => [], flush: () => {}, settle: () => {}, drop: () => {}
-  };
+  /** Answers to an unreachable machine's escalations, kept in openrig.json until its daemon takes them (sent once, same rid);
+   *  what does not go is said in Ledge's thread. Follows the peers itself (open, its OpenRig running, rig.result, removed). */
+  const answerQueue = aggregate && remote ? createAnswerQueue({ remote, aggregate, notice: text => { thread.append({ kind: 'ledge', text }); },
+    labelOf: id => machines.find(m => m.id === id)?.label ?? id }) : null;
   /** Rig commands and answers go to their machine: 'local' to `handle` (its rid memo), another one to its peer. */
-  const rigRouter = aggregate && remote ? createRigRouter({ aggregate, remote, answers: answerQueue, local: (msg, reply) => handle(msg, reply),
+  const rigRouter = aggregate && remote && answerQueue ? createRigRouter({ aggregate, remote, answers: answerQueue, local: (msg, reply) => handle(msg, reply),
     labelOf: id => machines.find(m => m.id === id)?.label ?? id }) : null;
   // Local side effects only: the fronts get the bridge's messages through the aggregate.
   const unsubscribeBridge = bridge?.onMessage(m => {
