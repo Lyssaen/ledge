@@ -317,6 +317,27 @@ describe('task transmissions (issue #92)', () => {
     expect(strip(cmd('otto', 'refuse', { task: b.id, text: 'plus besoin' }).task!).at(-1)).toEqual({ index: 1, op: 'cancel', from: 'otto', to: 'pim', fromName: 'Otto', toName: 'Pim' });
   });
 
+  it('writes a cancel by its giver as cancel, as its refusal does', () => {
+    const t = give();
+    const c = cmd('otto', 'cancel', { task: t.id, text: 'plus besoin' }).task!;
+    expect(c.log.at(-1)).toMatchObject({ op: 'cancel', from: 'otto', to: 'pim', fromName: 'Otto', toName: 'Pim' });
+    expect(strip(c).at(-1)).toEqual({ index: 1, op: 'cancel', from: 'otto', to: 'pim', fromName: 'Otto', toName: 'Pim' });
+    expect(updates.at(-1)![1]).toMatchObject({ op: 'cancel' });
+  });
+
+  it('writes a cancel by Ledge of a task Ledge gave as cancel from Ledge', () => {
+    const t = cmd(LEDGE_GIVER, 'give', { to: 'Pim', title: 'x' }).task!;
+    const c = cmd(LEDGE_GIVER, 'cancel', { task: t.id }).task!;
+    expect(strip(c).at(-1)).toEqual({ index: 1, op: 'cancel', from: 'ledge', to: 'pim', fromName: 'Ledge', toName: 'Pim' });
+  });
+
+  it('writes a cancel by Ledge of a task a seat gave from its giver, Ledge as the one who did it', () => {
+    const t = give();
+    const c = cmd(LEDGE_GIVER, 'cancel', { task: t.id }).task!;
+    expect(c.log.at(-1)).toMatchObject({ by: 'Ledge', op: 'cancel', from: 'otto', to: 'pim', fromName: 'Otto', toName: 'Pim' });
+    expect(transmissions(c).map(x => x.op)).toEqual(['give', 'cancel']);
+  });
+
   it('writes a drop without sides', () => {
     const t = give();
     store.upsert({ ...store.get('pim')!, state: 'exited' });
