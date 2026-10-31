@@ -22,7 +22,7 @@ const waiting: { rid: string; type: RigCallMessage['type']; settle(r: RigCallRes
 export function rigCall(client: DaemonClient, msg: RigCallMessage): Promise<RigCallResult> {
   return new Promise(resolve => {
     const offs: (() => void)[] = [];
-    const entry = { rid: msg.rid, type: msg.type, settle: (r: RigCallResult) => { clearTimeout(timer); offs.forEach(off => off()); waiting.splice(waiting.indexOf(entry), 1); resolve(r); } };
+    const entry = { rid: msg.rid, type: msg.type, settle: (r: RigCallResult) => { clearTimeout(timer); offs.forEach(off => off()); const i = waiting.indexOf(entry); if (i < 0) return; waiting.splice(i, 1); resolve(r); } };
     const timer = setTimeout(() => entry.settle({ ok: false, code: 'failed', reason: 'timeout' }), RIG_CALL_MS);
     const result = (m: ServerMessage) => {
       if (m.type === 'rig.result' && m.rid === msg.rid) entry.settle({ ok: m.ok, ...(m.code ? { code: m.code } : {}), ...(m.reason ? { reason: m.reason } : {}) });

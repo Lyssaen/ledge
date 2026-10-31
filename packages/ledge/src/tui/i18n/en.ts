@@ -113,7 +113,7 @@ export const en: Messages = {
     repos: 'Repos found on the way', how: { cloned: 'cloned by', opened: 'opened by', created: 'created by' },
     found: 'Spotted from the workspace’s git folders, then tied to the seat that cloned or opened them (hooks).',
     already: (repo, project) => `${repo} is already a repo of the project ${project}.`, noRepo: 'No repo found yet.',
-    done: { down: rig => `${rig} is stopping`, stop: seat => `${seat} is stopping`, restart: seat => `${seat} is restarting`, restore: rig => `${rig} is resuming`, adopted: (rig, project) => `${rig} filed in ${project}` },
+    done: { down: rig => `${rig} is stopping`, stop: seat => `${seat} is stopping`, restart: seat => `${seat} is restarting`, up: rig => `${rig} is resuming`, adopted: (rig, project) => `${rig} filed in ${project}` },
     refused: {
       rig_managed: 'This seat belongs to its rig: stop or restart it from its room.', openrig_down: 'OpenRig is not answering.',
       unreachable: 'Machine unreachable.', failed: 'The action failed.', timeout: 'OpenRig did not answer (5 s).'

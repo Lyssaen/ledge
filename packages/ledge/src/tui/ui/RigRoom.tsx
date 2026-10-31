@@ -33,7 +33,7 @@ const QUEUE_W = 44;
  * tucked away, Ledge's orders to the operator and the queue of every rig. Its keys go through `keys`, its key bar through `onBar`:
  * j k the seats (past the ends, the home's left column), ↵ the seat's session, a attaches it, w writes to it through Ledge.
  * A rig's life goes through OpenRig (rig.act, rig.adopt): r restarts the chosen seat, S stops the rig or only that seat, u resumes a
- * stopped rig, p files an off-project rig in a project; each asks first (but u), and ends in a toast.
+ * stopped rig (`up`), p files an off-project rig in a project; each asks first (but u), and ends in a toast.
  */
 export function RigRoom({ target, side, height, keys, onBar }: { target: RoomTarget; side: boolean; height: number; keys: MutableRefObject<KeyHandler | null>; onBar(b: Keys): void }) {
   const tui = useTui();
@@ -124,20 +124,22 @@ export function RigRoom({ target, side, height, keys, onBar }: { target: RoomTar
     if (dialog) { dialogKeys(input, k, dialog); return true; }
     if (input === 'j' || k.downArrow) { if (on < rows.length - 1) { setChosen(on + 1); return true; } return false; }
     if (input === 'k' || k.upArrow) { if (on > 0) { setChosen(on - 1); return true; } return false; }
-    if (!row) return false;
-    if (k.return) { if (live) openSeat(row); return true; }
-    if (input === 'a') { if (live) attachSeat(row); return true; }
-    if (input === 'w' && !kernel) { if (live && writable) writeTo(row); return true; }
+    if (row) {
+      if (k.return) { if (live) openSeat(row); return true; }
+      if (input === 'a') { if (live) attachSeat(row); return true; }
+      if (input === 'w' && !kernel) { if (live && writable) writeTo(row); return true; }
+    }
     if (kernel || !rig) return false;
-    if (input === 'r') { if (acts) setDialog({ kind: 'restart', seat: row.seat }); return true; }
-    if (input === 'S') { if (acts && !stopped) setDialog({ kind: 'stop', seat: row.seat.state === 'stopped' ? undefined : row.seat, on: 0 }); return true; }
-    if (input === 'u') { if (acts && stopped) call({ type: 'rig.act', machine: rig.machine, rigId: rig.id, verb: 'restore' }, t.rigAct.done.restore(rig.name)); return true; }
+    // r and « Seulement ce siège » need a seat; S, u and p act on the rig, even with no seat listed.
+    if (input === 'r') { if (acts && row) setDialog({ kind: 'restart', seat: row.seat }); return true; }
+    if (input === 'S') { if (acts && !stopped) setDialog({ kind: 'stop', seat: row && row.seat.state !== 'stopped' ? row.seat : undefined, on: 0 }); return true; }
+    if (input === 'u') { if (acts && stopped) call({ type: 'rig.act', machine: rig.machine, rigId: rig.id, verb: 'up' }, t.rigAct.done.up(rig.name)); return true; }
     if (input === 'p') { if (acts && filing) setDialog({ kind: 'adopt', on: 0 }); return true; }
     return false;
   };
   useEffect(() => () => { keys.current = null; }, [keys]);
   const ak = t.rigAct.keys;
-  const rigKeys: Keys = acts && row ? [['r', ak.restart], ...(stopped ? [['u', ak.resume] as const] : [['S', ak.stop] as const]), ...(filing ? [['p', ak.adopt] as const] : [])] : [];
+  const rigKeys: Keys = acts ? [...(row ? [['r', ak.restart] as const] : []), ...(stopped ? [['u', ak.resume] as const] : [['S', ak.stop] as const]), ...(filing ? [['p', ak.adopt] as const] : [])] : [];
   const bar: Keys = dialog ? [...(dialog.kind === 'restart' ? [] : [['j k', ak.choose] as const]), ['↵', ak.confirm], ['esc', ak.cancel]]
     : [['j k', t.keys.seats], ...(live && row ? [...(row.session ? [['↵', t.keys.openSeat] as const] : []), ['a', t.keys.attachSeat] as const, ...(writable ? [['w', t.keys.write] as const] : [])] : []), ...rigKeys, ['1', t.keys.ledge]];
   const barKey = bar.map(b => b.join(' ')).join('|');

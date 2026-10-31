@@ -94,7 +94,7 @@ describe('ledge tui: a rig\'s actions through OpenRig', () => {
     } finally { await tui.cleanup(); }
   });
 
-  it('a stopped rig offers « Reprendre » (restore)', async () => {
+  it('a stopped rig offers « Reprendre » (up)', async () => {
     const rigs = mockupRigs().map(r => (r.id === 'factory' ? { ...r, lifecycle: 'stopped' as const, seats: r.seats.map(s => ({ ...s, state: 'stopped' as const })) } : r));
     const tui = await startTui({ openrig: { rigs } });
     answer(tui.daemon, { ok: true });
@@ -104,8 +104,23 @@ describe('ledge tui: a rig\'s actions through OpenRig', () => {
       expect(tui.frame()).not.toMatch(/S +arrêter…/);
       await tui.press('u');
       await until(() => sent(tui.daemon.received, 'rig.act').length === 1);
-      expect(sent(tui.daemon.received, 'rig.act')[0]).toMatchObject({ rigId: 'factory', verb: 'restore' });
+      expect(sent(tui.daemon.received, 'rig.act')[0]).toMatchObject({ rigId: 'factory', verb: 'up' });
       await until(() => tui.frame().includes('factory reprend'));
+    } finally { await tui.cleanup(); }
+  });
+
+  it('a stopped rig with no seat listed still resumes with u', async () => {
+    const rigs = mockupRigs().map(r => (r.id === 'factory' ? { ...r, lifecycle: 'stopped' as const, seats: [] } : r));
+    const tui = await startTui({ openrig: { rigs } });
+    answer(tui.daemon, { ok: true });
+    try {
+      await openRoom(tui, 'factory');
+      expect(tui.frame()).toMatch(/u +reprendre/);
+      expect(tui.frame()).not.toMatch(/r +relancer/);
+      await tui.press('u');
+      await until(() => sent(tui.daemon.received, 'rig.act').length === 1);
+      expect(sent(tui.daemon.received, 'rig.act')[0]).toMatchObject({ machine: 'local', rigId: 'factory', verb: 'up' });
+      expect(sent(tui.daemon.received, 'rig.act')[0]).not.toHaveProperty('seatRef');
     } finally { await tui.cleanup(); }
   });
 

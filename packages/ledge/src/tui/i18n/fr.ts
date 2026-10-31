@@ -124,7 +124,7 @@ export const fr = {
     already: (repo: string, project: string) => `${repo} est déjà un dépôt du projet ${project}.`, noRepo: 'Aucun dépôt trouvé pour l’instant.',
     done: {
       down: (rig: string) => `${rig} s’arrête`, stop: (seat: string) => `${seat} s’arrête`, restart: (seat: string) => `${seat} redémarre`,
-      restore: (rig: string) => `${rig} reprend`, adopted: (rig: string, project: string) => `${rig} rangé dans ${project}`
+      up: (rig: string) => `${rig} reprend`, adopted: (rig: string, project: string) => `${rig} rangé dans ${project}`
     },
     refused: {
       rig_managed: 'Ce siège appartient à son rig : arrête-le ou relance-le dans sa pièce.', openrig_down: 'OpenRig ne répond pas.',
