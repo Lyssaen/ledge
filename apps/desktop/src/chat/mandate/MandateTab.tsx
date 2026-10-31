@@ -98,7 +98,7 @@ export function MandateTab({ client, view }: { client: DaemonClient; view: Fleet
               {category && (
                 <CategoryDetail category={category} isSelf={sides.self.includes(category)} week={stats[category].week} pending={stats[category].pending}
                   rules={rules} decisions={decisions} files={files} offline={offline}
-                  onEscalate={c => escalateCategory(client, c)} onSetRule={onSetRule} onRevisit={revisit}
+                  onEscalate={c => { setChosen(c); escalateCategory(client, c); }} onSetRule={onSetRule} onRevisit={revisit}
                   onOpen={() => { setError(null); setEditing(true); }} />
               )}
             </div>

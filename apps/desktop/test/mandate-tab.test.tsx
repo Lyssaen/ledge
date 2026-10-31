@@ -99,6 +99,15 @@ describe('the Mandat tab (lot 7)', () => {
     expect(detail().queryByRole('button', { name: 'Escalate it to me from now on' })).toBeNull();
   });
 
+  it('after « Escalate it to me from now on » the detail stays on the category, now under « always yours »', async () => {
+    const { d, user } = await openMandate();
+    await user.click(detail().getByRole('button', { name: 'Escalate it to me from now on' }));
+    d.push({ type: 'mandate', text: GIT_UP, path: '/home/paradow/.ledge/mandat.md' });
+    await waitFor(() => expect(userList().getByRole('option', { name: /Git and branches/ })).toHaveAttribute('aria-selected', 'true'));
+    expect(detail().getByRole('heading', { name: 'Git and branches' })).toBeVisible();
+    expect(detail().queryByRole('button', { name: 'Escalate it to me from now on' })).toBeNull();
+  });
+
   it('the rules table: since, where it comes from, applied; a proposed rule is blue with « to approve », approving sends rule.set active', async () => {
     const { d, user } = await openMandate();
     const table = within(detail().getByRole('table', { name: 'Rules kept' }));
