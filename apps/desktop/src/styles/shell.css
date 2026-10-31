@@ -381,3 +381,6 @@ span.ra-name { cursor: default; }
 .md-editor-field { display: block; width: 100%; min-height: 320px; box-sizing: border-box; padding: 10px 12px; background: var(--well); color: inherit; border: 1px solid var(--input); border-radius: var(--radius-md); font: 12px/1.6 'Geist Mono', ui-monospace, monospace; resize: vertical; }
 .confirm-content .md-editor-error { margin-top: 10px; color: var(--danger-text); }
 @media (max-width: 760px) { .md-settles { grid-template-columns: 1fr; } .md-dec { grid-template-columns: 52px minmax(0, 1fr); } }
+.home-brain-offer { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; margin: 0 0 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
+.home-brain-offer p { margin: 0; font-size: 13px; line-height: 18px; color: var(--foreground); }
+.home-brain-offer > div { display: flex; gap: 8px; }

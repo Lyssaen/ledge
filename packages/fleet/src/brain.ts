@@ -27,9 +27,11 @@ export const useBrainStatus = (): BrainStatus | undefined => pick(s => s.brain);
 export function revisitDecision(client: DaemonClient, id: string, text?: string): void {
   client.send({ type: 'decision.revisit', rid: rid('revisit'), id, ...(text !== undefined ? { text } : {}) });
 }
-/** Turns the brain on or off (`first`: the user's first yes, which the daemon announces). */
-export function setBrain(client: DaemonClient, o: { enabled: boolean; tool?: BrainStatus['tool']; first?: boolean }): void {
-  client.send({ type: 'brain.set', rid: rid('brain'), enabled: o.enabled, ...(o.tool ? { tool: o.tool } : {}), ...(o.first ? { first: true as const } : {}) });
+/** Turns the brain on or off (`first`: the user's first yes, which the daemon announces); returns the rid, whose `rig.result` says why a refusal. */
+export function setBrain(client: DaemonClient, o: { enabled: boolean; tool?: BrainStatus['tool']; first?: boolean }): string {
+  const r = rid('brain');
+  client.send({ type: 'brain.set', rid: r, enabled: o.enabled, ...(o.tool ? { tool: o.tool } : {}), ...(o.first ? { first: true as const } : {}) });
+  return r;
 }
 /** « Me le remonter désormais »: the daemon moves the category's line into « Te revient toujours ». */
 export function escalateCategory(client: DaemonClient, category: MandateCategory): void {

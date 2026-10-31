@@ -230,7 +230,7 @@ describe('the Mobile access section in the app', () => {
     await user.keyboard('{Control>},{/Control}');
     await screen.findByRole('heading', { level: 1, name: 'General' });
     const nav = within(screen.getByRole('navigation', { name: 'Settings sections' }));
-    expect(nav.getAllByRole('button').map(b => b.textContent).slice(6, 9)).toEqual(['Machines', 'Mobile access', 'Projects']);
+    expect(nav.getAllByRole('button').map(b => b.textContent).slice(7, 10)).toEqual(['Machines', 'Mobile access', 'Projects']);
     const tab = nav.getByRole('button', { name: /^Mobile access/ });
     await waitFor(() => expect(within(tab).getAllByRole('img').map(i => i.getAttribute('aria-label'))).toEqual(['Mobile access is offline', 'A device asks for access']));
     await user.click(tab);

@@ -73,12 +73,13 @@ export const en: Messages = {
   },
   foot: { sessions: 'Local and SSH sessions', islandOn: 'Notch active', islandOff: 'Notch hidden', islandTitle: 'Notch settings' },
   daemonOutdated: { title: 'The Ledge daemon must be updated', body: 'This Ledge Desktop needs a newer daemon in WSL. Run one of these commands in WSL; Ledge reconnects by itself.', npm: 'Installed with npm', git: 'Installed from a git clone' },
-  sections: { general: 'General', appearance: 'Appearance', island: 'Notch', notifications: 'Notifications', sounds: 'Sounds', machines: 'Machines', mobile: 'Mobile access', projects: 'Projects', shortcuts: 'Keyboard shortcuts', about: 'About' },
+  sections: { general: 'General', ledge: 'Ledge', appearance: 'Appearance', island: 'Notch', notifications: 'Notifications', sounds: 'Sounds', machines: 'Machines', mobile: 'Mobile access', projects: 'Projects', shortcuts: 'Keyboard shortcuts', about: 'About' },
   settings: {
     nav: 'Settings sections', back: 'Back to the atelier',
     saved: (what) => `Setting saved · ${what}`,
     hints: {
       general: 'Language, start-up, default agent, max context and updates.',
+      ledge: 'Ledge’s brain: thinking continuously, the tool that carries it and its state.',
       appearance: 'Theme, Ledge’s color, scale and motion.',
       island: 'The notch at the top of the screen: where it sits and what it signals.',
       notifications: 'Who lets you know, and when to leave you alone.',
@@ -91,6 +92,12 @@ export const en: Messages = {
     },
     machineOffline: 'A machine is offline', updateWaiting: 'An update is available',
     mobileOffline: 'Mobile access is offline', mobileAsks: 'A device asks for access',
+    ledge: {
+      title: 'Brain', think: 'Ledge thinks continuously', thinkHint: 'Ledge reads the rigs’ escalations and settles what its mandate allows.',
+      tool: 'Tool', toolHint: 'The change takes effect at the next relief or start.',
+      status: { on: 'Running', context: (pct) => `Running · ${pct} % of context`, starting: 'Starting…', off: 'Stopped', down: (reason) => (reason ? `Down: ${reason}` : 'Down'), restart: 'Restart' },
+      refused: (reason) => `Ledge could not: ${reason}`
+    },
     general: {
       lang: 'Language', langHint: 'Applies at once, the notification area menu included.',
       langs: { fr: 'Français', en: 'English' },
@@ -453,6 +460,7 @@ export const en: Messages = {
     solo,
     tabsLabel: 'Ledge views',
     tabs: { conversation: 'Conversation', rigs: 'Rigs', mandat: 'Mandate' },
+    brainOffer: { text: 'I can think continuously: I read the rigs’ escalations, I settle what my mandate allows after a minute, and I pass you the rest.', activate: 'Activate', later: 'Later' },
     rigsCount: (n) => (n > 0 ? `Rigs · ${n}` : 'Rigs'),
     toAtelier: 'Back to the atelier',
     thread: 'Ledge’s thread', older: 'See older',

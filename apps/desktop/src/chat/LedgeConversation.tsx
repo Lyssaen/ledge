@@ -17,6 +17,7 @@ import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import type { FleetView } from '../fleet/useFleet';
 import type { Decisions } from '../fleet/decisions';
 import { LedgeRail } from './LedgeRail';
+import { BrainOffer } from './BrainOffer';
 import { chatCopy, ledgeThreadCopy, useI18n } from '../i18n/lang';
 import { useMotionPreferences } from '../motionPreferences';
 import { useTheme } from '../shell/theme';
@@ -209,6 +210,7 @@ export function LedgeConversation(p: LedgeConversationProps): JSX.Element {
           <div className="home-conv-main">
             <div ref={scroller} className="home-thread ledge-scroll" role="log" aria-label={t.home.thread}
               onScroll={e => { const el = e.currentTarget; stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < STICK_PX; }}>
+              <BrainOffer client={client} view={view} />
               {hasOlder && <button type="button" className="home-older lt-link" onClick={loadOlder}>{t.home.older}</button>}
               {rows.map((row, i) => {
                 switch (row.kind) {

@@ -88,12 +88,13 @@ export const fr = {
   },
   foot: { sessions: 'Sessions locales et SSH', islandOn: 'Encoche active', islandOff: 'Encoche masquée', islandTitle: 'Réglages de l’encoche' },
   daemonOutdated: { title: 'Le démon Ledge doit être mis à jour', body: 'Ce Ledge Desktop a besoin d’un démon plus récent dans WSL. Lancez une de ces commandes dans WSL ; Ledge se reconnecte tout seul.', npm: 'Installé avec npm', git: 'Installé depuis un clone git' },
-  sections: { general: 'Général', appearance: 'Apparence', island: 'Encoche', notifications: 'Notifications', sounds: 'Sons', machines: 'Machines', mobile: 'Accès mobile', projects: 'Projets', shortcuts: 'Raccourcis clavier', about: 'À propos' } as Record<SectionId, string>,
+  sections: { general: 'Général', ledge: 'Ledge', appearance: 'Apparence', island: 'Encoche', notifications: 'Notifications', sounds: 'Sons', machines: 'Machines', mobile: 'Accès mobile', projects: 'Projets', shortcuts: 'Raccourcis clavier', about: 'À propos' } as Record<SectionId, string>,
   settings: {
     nav: 'Sections des réglages', back: 'Retour à l’atelier',
     saved: (what: string) => `Réglage enregistré · ${what}`,
     hints: {
       general: 'Langue, démarrage, agent par défaut, contexte max et mises à jour.',
+      ledge: 'Le cerveau de Ledge : penser en continu, l’outil qui le porte et son état.',
       appearance: 'Thème, couleur de Ledge, échelle et mouvements.',
       island: 'L’encoche en haut de l’écran : où elle se pose et ce qu’elle signale.',
       notifications: 'Qui vous prévient, et quand vous laisser tranquille.',
@@ -106,6 +107,12 @@ export const fr = {
     } as Record<SectionId, string>,
     machineOffline: 'Une machine est hors ligne', updateWaiting: 'Une mise à jour est disponible',
     mobileOffline: "L'accès mobile est hors ligne", mobileAsks: "Un appareil demande l'accès",
+    ledge: {
+      title: 'Cerveau', think: 'Ledge pense en continu', thinkHint: 'Ledge lit les escalades des rigs et tranche ce que son mandat permet.',
+      tool: 'Outil', toolHint: 'Le changement prend effet à la prochaine relève ou au prochain démarrage.',
+      status: { on: 'En marche', context: (pct: number) => `En marche · ${pct} % de contexte`, starting: 'Démarre…', off: 'Arrêté', down: (reason?: string) => (reason ? `En panne : ${reason}` : 'En panne'), restart: 'Redémarrer' },
+      refused: (reason: string) => `Ledge n’a pas pu : ${reason}`
+    },
     general: {
       lang: 'Langue', langHint: 'S’applique tout de suite, menu de la zone de notification compris.',
       langs: { fr: 'Français', en: 'English' } as Record<'fr' | 'en', string>,
@@ -475,6 +482,7 @@ export const fr = {
     solo,
     tabsLabel: 'Vues de Ledge',
     tabs: { conversation: 'Conversation', rigs: 'Rigs', mandat: 'Mandat' },
+    brainOffer: { text: 'Je peux penser en continu : je lis les escalades des rigs, je tranche ce que mon mandat permet après une minute, et je te passe le reste.', activate: 'Activer', later: 'Plus tard' },
     rigsCount: (n: number) => (n > 0 ? `Rigs · ${n}` : 'Rigs'),
     toAtelier: 'Retour à l’atelier',
     thread: 'Fil de Ledge', older: 'Voir plus ancien',

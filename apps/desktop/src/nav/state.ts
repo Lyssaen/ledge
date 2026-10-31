@@ -5,8 +5,8 @@ import type { Overview } from './overview';
 export type View = 'atelier';
 /** 'all', 'none' (Sans projet), a project id, a rig (`rig:<machine>/<id>`) or a machine's kernel (`kernel:<machine>`). */
 export type ProjectFilter = string;
-export type SectionId = 'general' | 'appearance' | 'island' | 'notifications' | 'sounds' | 'machines' | 'mobile' | 'projects' | 'shortcuts' | 'about';
-export const SECTIONS: readonly SectionId[] = ['general', 'appearance', 'island', 'notifications', 'sounds', 'machines', 'mobile', 'projects', 'shortcuts', 'about'];
+export type SectionId = 'general' | 'ledge' | 'appearance' | 'island' | 'notifications' | 'sounds' | 'machines' | 'mobile' | 'projects' | 'shortcuts' | 'about';
+export const SECTIONS: readonly SectionId[] = ['general', 'ledge', 'appearance', 'island', 'notifications', 'sounds', 'machines', 'mobile', 'projects', 'shortcuts', 'about'];
 /** The tabs of the Ledge screen (spec §8, lot 4): its thread, its rigs and its mandate. */
 export type HomeTab = 'conversation' | 'rigs' | 'mandat';
 export const HOME_TABS: readonly HomeTab[] = ['conversation', 'rigs', 'mandat'];

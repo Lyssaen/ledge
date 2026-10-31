@@ -11,6 +11,7 @@ import type { Alerts } from '../notify/useAlerts';
 import type { DaemonUpdates } from '../update/daemon';
 import { updateReady, useUpdate } from '../update/store';
 import { General } from './General';
+import { Ledge } from './Ledge';
 import { Appearance } from './Appearance';
 import { Island } from './Island';
 import { Notifications } from './Notifications';
@@ -53,6 +54,7 @@ export interface SettingsContext {
 /** The sections' line icons, as the mockup draws them (settings.tsx, SECTIONS). */
 const SECTION_ICONS: Record<SectionId, readonly string[]> = {
   general: ['M4 21v-7', 'M4 10V3', 'M12 21v-9', 'M12 8V3', 'M20 21v-5', 'M20 12V3', 'M1 14h6', 'M9 8h6', 'M17 16h6'],
+  ledge: ['M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z', 'M8 13a4 4 0 0 0 8 0', 'M9 9.5h.01', 'M15 9.5h.01'],
   appearance: ['M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z', 'M12 3v18'],
   island: ['M3 5h18v14H3z', 'M9 5h6v1.5a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 6.5z'],
   notifications: ['M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9', 'M10.3 21a1.94 1.94 0 0 0 3.4 0'],
@@ -67,6 +69,7 @@ const SECTION_ICONS: Record<SectionId, readonly string[]> = {
 /** A section's cards. */
 function SectionBody({ section, ctx }: { section: SectionId; ctx: SettingsContext }): JSX.Element {
   if (section === 'general') return <General ctx={ctx} />;
+  if (section === 'ledge') return <Ledge ctx={ctx} />;
   if (section === 'appearance') return <Appearance ctx={ctx} />;
   if (section === 'island') return <Island ctx={ctx} />;
   if (section === 'notifications') return <Notifications ctx={ctx} />;
