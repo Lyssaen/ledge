@@ -284,6 +284,30 @@ describe('server rig.launch', () => {
     expect(JSON.parse(readFileSync(join(dir, 'rig-launches.json'), 'utf8'))).toMatchObject([{ rigId: 'r9', planId: plan.id, goal: 'G' }]);
     ws.close();
   });
+  it('rig.act down on a launching rig cancels the pending launch first', async () => {
+    vi.useRealTimers();
+    const dir = tmp(); process.env.LEDGE_HOME = dir;
+    f = await createFakeOpenRig(); f.specs = [{ id: 'b:factory', name: 'factory', sourceType: 'builtin', yaml: FACTORY }];
+    const exec = fakeRigCli(f, { up: spec => ({ code: 0, stdout: JSON.stringify({ rigId: 'r9', rigName: spec }), stderr: '' }) });
+    const fr = f;
+    bridge = createBridge({ env: async () => ({ OPENRIG_PORT: String(fr.port) }), exec, sessionName: () => undefined, projects: () => ({ projects: [], rules: [] }) as Projects, home: dir, file: join(dir, 'openrig.json'), probeMs: 20, outboxMs: 30, resyncMs: 50 });
+    srv = await startServer({ store: new Store(), tmux: noTmux, port: 0, home: dir, daemon: { version: '0.0.0', install: 'git', systemd: false }, agentEnv: async () => ({ ...process.env }), openrig: bridge });
+    await bridge.start(); await until(() => bridge!.status().state === 'running');
+    const ws = new WebSocket(`ws://127.0.0.1:${srv.port}`, { headers: authHeaders() });
+    const msgs: ServerMessage[] = []; ws.on('message', x => msgs.push(parseServerMessage(JSON.parse(String(x)))));
+    await new Promise<void>((res, rej) => { ws.once('open', () => res()); ws.once('error', rej); });
+    const send = (m: ClientMessage) => ws.send(JSON.stringify(m));
+    send({ type: 'rig.prepare', rid: 'p', machine: 'local', spec: 'factory', goal: 'G', where: { kind: 'off-project', name: 'ok' } });
+    await until(() => msgs.some(m => m.type === 'rig.plan'));
+    const plan = (msgs.find(m => m.type === 'rig.plan') as Extract<ServerMessage, { type: 'rig.plan' }>).plan;
+    send({ type: 'rig.launch', rid: 'l1', planId: plan.id });
+    await until(() => msgs.some(m => m.type === 'rig.result' && m.rid === 'l1'));
+    expect(JSON.parse(readFileSync(join(dir, 'rig-launches.json'), 'utf8'))).toHaveLength(1);
+    send({ type: 'rig.act', rid: 'd1', machine: 'local', rigId: 'r9', verb: 'down' });
+    await until(() => msgs.some(m => m.type === 'rig.result' && m.rid === 'd1'));
+    expect(JSON.parse(readFileSync(join(dir, 'rig-launches.json'), 'utf8'))).toEqual([]);
+    ws.close();
+  });
 });
 
 describe('trust', () => {

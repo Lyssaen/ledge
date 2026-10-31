@@ -709,6 +709,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
    * default where left out): session.resume, and a model change on a live session. Null once spawned, the refusal otherwise.
    */
   async function respawn(s: Session, key: string, model: string | undefined, effort: string | undefined): Promise<string | null> {
+    { const r = rigManaged(s); if (r) return r.message; }
     if (s.tool === 'omp') return respawnOmp(s, key, model, effort);
     // Marked live before the first await: a second resume arriving while this one spawns is then refused.
     const { archivedAt: _a, exitedAt: _e, exitCode: _c, modelNext: _n, ...rest } = s;
@@ -1210,6 +1211,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       case 'session.resume': {
         const s = store.get(msg.id); if (!s) return refuse(unknownSession(), msg.id);
+        { const r = rigManaged(s); if (r) return refuse(r, msg.id); }
         if (s.state !== 'exited') return refuse(new Refusal('the session is still running', 'busy'), msg.id);
         const key = resumeKey(s); if (!key) return refuse({ message: 'no conversation to resume', code: 'no_conversation' }, msg.id);
         const refused = await respawn(s, key, s.model, s.effort);
@@ -1352,6 +1354,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'rig.act': {
         if (msg.machine !== 'local') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'unreachable', reason: `machine ${msg.machine} is not this daemon's` });
         if (!bridge) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'openrig_down', reason: "OpenRig n'est pas branché" });
+        // Cancelling a launch: forget it first, so a seat turning ready while `down` runs cannot get the goal.
+        if (msg.verb === 'down' && msg.rigId !== undefined && launches?.pending().some(l => l.rigId === msg.rigId)) await launches.cancel(msg.rigId);
         const r = await actOnRig({ http: () => bridge.http(), ensureRunning: why => bridge.ensureRunning(why), operator: HUMAN_ADDRESS },
           { verb: msg.verb, ...(msg.rigId !== undefined ? { rigId: msg.rigId } : {}), ...(msg.seatRef !== undefined ? { seatRef: msg.seatRef } : {}) });
         return reply(r.ok ? { type: 'rig.result', rid: msg.rid, ok: true } : { type: 'rig.result', rid: msg.rid, ok: false, code: r.code, reason: r.reason });

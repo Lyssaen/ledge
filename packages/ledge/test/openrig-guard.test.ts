@@ -66,6 +66,13 @@ describe('rig_managed: a seat of a rig is never ended by Ledge', () => {
       close();
     });
 
+  it('session.resume on an exited seat: error rig_managed, nothing respawned', async () => {
+    const { send, store, close } = await serverWith([session('b', { rig: SEAT_RIG, state: 'exited', agentSessionId: 'conv-1' })]);
+    expect(await send({ type: 'session.resume', id: 'b' })).toMatchObject({ type: 'error', id: 'b', code: 'rig_managed', request: 'session.resume' });
+    expect(store.get('b')?.state).toBe('exited');
+    close();
+  });
+
   it('a card close aimed at a seat fails with rig_managed and kills nothing', async () => {
     const { close } = await serverWith([session('b', { rig: SEAT_RIG })]);
     await expect(srv!.closeSession('b')).rejects.toMatchObject({ code: 'rig_managed' });
