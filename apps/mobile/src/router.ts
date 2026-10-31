@@ -21,6 +21,10 @@ export type Route =
   | { name: 'live'; teamId: string }
   | { name: 'compose'; teamId: string };
 
+/** Every route, as the Ledge guide (docs/ledge-guide.md) must describe them: a Record, so a new route fails to compile until it is listed here. */
+const ROUTE_NAME: Record<Route['name'], true> = { inbox: true, agents: true, chat: true, thread: true, terminal: true, request: true, connection: true, login: true, link: true, 'key-changed': true, update: true, teams: true, team: true, 'team-copy': true, role: true, live: true, compose: true };
+export const ROUTE_NAMES = Object.keys(ROUTE_NAME) as Route['name'][];
+
 const SIMPLE = ['agents', 'chat', 'connection', 'login', 'link', 'key-changed', 'update', 'teams'] as const;
 
 export function parseRoute(hash: string): Route {
