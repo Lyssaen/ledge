@@ -141,7 +141,7 @@ export const RigResultSchema = z.object({ type: z.literal('rig.result'), rid: z.
 
 // Client messages.
 export const RigActSchema = z.object({ type: z.literal('rig.act'), rid: z.string(), machine: z.string(), rigId: z.string().optional(), seatRef: z.string().optional(), verb: RigVerbSchema });
-export const RigPrepareSchema = z.object({ type: z.literal('rig.prepare'), rid: z.string(), machine: z.string(), spec: z.string(), goal: z.string(), where: RigLaunchWhereSchema });
+export const RigPrepareSchema = z.object({ type: z.literal('rig.prepare'), rid: z.string(), machine: z.string(), spec: z.string(), goal: z.string().max(8000), where: RigLaunchWhereSchema });
 export const RigLaunchSchema = z.object({ type: z.literal('rig.launch'), rid: z.string(), planId: z.string() });
 export const RigAdoptSchema = z.object({ type: z.literal('rig.adopt'), rid: z.string(), machine: z.string(), rigId: z.string(), projectId: z.string() });
 export const RigSendSchema = z.object({ type: z.literal('rig.send'), rid: z.string(), machine: z.string(), seatRef: z.string(), text: z.string() });
