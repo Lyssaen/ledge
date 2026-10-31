@@ -1,5 +1,6 @@
 // In-process fake OpenRig 0.6.14 (HTTP + SSE) for tests; shapes copied from daemon/dist/routes/*.js.
-import { createServer, type Server, type ServerResponse } from 'node:http';
+import { readFileSync } from 'node:fs';
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { RigExec } from '../../src/daemon/openrig/cli.js';
 
@@ -21,7 +22,8 @@ export interface FakeOpenRig {
   emit(event: { type: string } & Record<string, unknown>): number;   // appends to the journal, returns seq
   stop(): Promise<void>;                           // closes the port and destroys open SSE streams (journal kept)
   restart(): Promise<void>;                        // reopens on the same port, same journal
-  requests: { method: string; path: string; search?: string; lastEventId?: string }[];
+  /** POST requests also keep their parsed JSON `body` and their `headers` (names lower-cased). */
+  requests: { method: string; path: string; search?: string; lastEventId?: string; body?: unknown; headers?: Record<string, string> }[];
   /** The next n `/api/events` requests are accepted but never answered (no headers), until stop(). */
   hangEvents: number;
 }
@@ -51,10 +53,33 @@ export async function createFakeOpenRig(opts: { port?: number; version?: string 
 
   const entry = (s: FakeSpec) => ({ id: s.id, kind: 'rig', name: s.name, version: '0.2', sourceType: s.sourceType, sourcePath: s.sourcePath ?? `/specs/${s.name}/rig.yaml` });
 
-  function handle(req: import('node:http').IncomingMessage, res: ServerResponse) {
+  /** POST /api/mission-control/action: `approve` closes a pending row (done); a terminal one answers 409 qitem_already_terminal (facts D7). */
+  function action(body: unknown, res: ServerResponse) {
+    const b = (body ?? {}) as { verb?: unknown; qitemId?: unknown };
+    const row = f.queue.find(r => r.qitemId === b.qitemId);
+    if (!row) return json(res, { error: 'qitem_not_found' }, 404);
+    if (row.state === 'done') return json(res, { error: 'qitem_already_terminal', message: `qitem ${row.qitemId} is already terminal (state=done)`, state: 'done' }, 409);
+    if (b.verb !== 'approve' && b.verb !== 'resolve') return json(res, { error: 'unsupported_verb' }, 400);
+    row.state = b.verb === 'approve' ? 'done' : 'in-progress';
+    json(res, { ok: true, qitemId: row.qitemId, state: row.state });
+  }
+
+  function handle(req: IncomingMessage, res: ServerResponse) {
     const u = new URL(req.url ?? '/', 'http://x'); const path = u.pathname; const q = u.searchParams;
     const lastEventId = req.headers['last-event-id'] as string | undefined;
-    f.requests.push({ method: req.method ?? 'GET', path, ...(u.search ? { search: u.search } : {}), ...(lastEventId !== undefined ? { lastEventId } : {}) });
+    const rec = { method: req.method ?? 'GET', path, ...(u.search ? { search: u.search } : {}), ...(lastEventId !== undefined ? { lastEventId } : {}) };
+    f.requests.push(rec);
+    if (req.method === 'POST') {
+      let raw = ''; req.on('data', d => { raw += d; });
+      req.on('end', () => {
+        let body: unknown = raw; try { body = JSON.parse(raw); } catch { /* kept as text */ }
+        const headers: Record<string, string> = {}; for (const [k, v] of Object.entries(req.headers)) if (typeof v === 'string') headers[k.toLowerCase()] = v;
+        Object.assign(rec, { body, headers });
+        if (path === '/api/mission-control/action') return action(body, res);
+        json(res, { error: 'not_found' }, 404);
+      });
+      return;
+    }
     if (req.method !== 'GET') return json(res, { error: 'not_found' }, 404);
     if (path === '/healthz') return json(res, { status: 'ok', pid: process.pid, ...(f.version !== null ? { semver: f.version } : {}) });
     if (path === '/api/ps') return json(res, f.rigs.map(ps));
@@ -75,7 +100,7 @@ export async function createFakeOpenRig(opts: { port?: number; version?: string 
   }
 
   // Same semantics as events.js: Last-Event-ID wins, else ?replay=n = newest n (0 = from now on), else the whole log.
-  function sse(_req: import('node:http').IncomingMessage, res: ServerResponse, q: URLSearchParams, lastEventId: string | undefined) {
+  function sse(_req: IncomingMessage, res: ServerResponse, q: URLSearchParams, lastEventId: string | undefined) {
     const rigId = q.get('rigId'); const replay = q.get('replay');
     const replayCount = replay !== null && /^\d+$/.test(replay) ? Number(replay) : null;
     const rows = journal.filter(e => !rigId || e.rigId === rigId);
@@ -98,6 +123,7 @@ export async function createFakeOpenRig(opts: { port?: number; version?: string 
 /**
  * Simulates the `rig` binary. `calls` records every argv.
  * `gateway human list --json` prints an array of objects with `id`: `[{ "id": "ledge" }]` (Task 6 parses it).
+ * `queue create … --json` appends a pending row to `rig.queue` (body read from `--body-file`) and prints it with its `qitemId`.
  */
 export function fakeRigCli(rig: FakeOpenRig | null, opts: { startFails?: boolean; version?: string } = {}): RigExec & { calls: string[][] } {
   const calls: string[][] = [];
@@ -118,6 +144,16 @@ export function fakeRigCli(rig: FakeOpenRig | null, opts: { startFails?: boolean
       if (rig.humans.length && !rig.humans.includes(id) && !args.includes('--replace'))
         return fail(1, `refused: a human is already configured (${rig.humans[0]}). OpenRig supports one configured human ... remove the existing one first (\`rig gateway human remove <entityId>\`)`);
       rig.humans.splice(0, rig.humans.length, id); return ok(`added ${id}\n`);
+    }
+    if (args[0] === 'queue' && args[1] === 'create') {
+      const flag = (name: string) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined; };
+      const source = flag('--source'), destination = flag('--destination');
+      if (!source || !destination) return fail(2, 'queue create: --source and --destination are required');
+      let body: string | undefined; const file = flag('--body-file');
+      if (file) { try { body = readFileSync(file, 'utf8'); } catch { return fail(1, `queue create: cannot read ${file}`); } }
+      const row: FakeQueueRow = { qitemId: `qitem-fake-${rig.queue.length + 1}`, sourceSession: source, destinationSession: destination, state: 'pending',
+        summary: flag('--summary') ?? '', ...(body !== undefined ? { body } : {}), replyTo: flag('--reply-to') ?? null, createdAt: '2026-10-30 10:00:00' };
+      rig.queue.push(row); return ok(JSON.stringify(row));
     }
     return fail(2, `unknown command: ${j}`);
   }) as RigExec & { calls: string[][] };

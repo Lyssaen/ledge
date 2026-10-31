@@ -1,8 +1,10 @@
 import { spawn } from 'node:child_process';
 import { HUMAN_BINDING, HUMAN_ID } from './facts.js';
 
-/** Runs the `rig` binary (always through agentEnv()); injected so tests can use fakeRigCli. */
-export type RigExec = (args: string[], opts?: { timeoutMs?: number }) => Promise<{ code: number; stdout: string; stderr: string }>;
+/** Runs the `rig` binary (always through agentEnv()); injected so tests can use fakeRigCli. `env` is laid over the agent environment. */
+export type RigExec = (args: string[], opts?: { timeoutMs?: number; env?: Record<string, string> }) => Promise<{ code: number; stdout: string; stderr: string }>;
+
+export interface QueueCreate { source: string; destination: string; summary: string; bodyFile: string; /** `--reply-to <qitemId>` */ replyTo?: string }
 
 export interface RigCli {
   /** `rig --version` answers. */
@@ -15,12 +17,14 @@ export interface RigCli {
   humans(): Promise<string[] | null>;
   /** Register Ledge as the human (D2 argv); `replace` appends `--replace` (R3). */
   addHuman(opts?: { replace?: boolean }): Promise<{ ok: boolean; detail?: string }>;
+  /** `rig queue create … --json` (facts D6); `qitemId` = the new row's id when the output names one. */
+  queueCreate(o: QueueCreate): Promise<{ ok: boolean; qitemId?: string; detail?: string }>;
 }
 
 /** Spawns `rig` with the agent environment; ENOENT -> 127, timeout -> kill + code 124. */
 export function realRigExec(env: () => Promise<NodeJS.ProcessEnv>): RigExec {
   return async (args, opts) => {
-    const e = await env();
+    const e = opts?.env ? { ...(await env()), ...opts.env } : await env();
     return new Promise(resolve => {
       let stdout = '', stderr = '', done = false, timer: NodeJS.Timeout | undefined;
       const finish = (r: { code: number; stdout: string; stderr: string }): void => { if (done) return; done = true; if (timer) clearTimeout(timer); resolve(r); };
@@ -42,6 +46,19 @@ const idOf = (x: unknown): string | null => {
   return typeof v === 'string' ? v : null;
 };
 
+/** The new row's id in `queue create --json`: `qitemId`/`id` at the top or under `item`/`qitem`/`row`, else the first `qitem-…` token. */
+function createdId(stdout: string): string | undefined {
+  let j: unknown; try { j = JSON.parse(stdout); } catch { j = undefined; }
+  const pick = (o: unknown): string | undefined => {
+    const r = o as { qitemId?: unknown; id?: unknown } | null | undefined;
+    const v = r && typeof r === 'object' ? (r.qitemId ?? r.id) : undefined;
+    return typeof v === 'string' && v !== '' ? v : undefined;
+  };
+  const o = j as Record<string, unknown> | undefined;
+  const found = pick(o) ?? pick(o?.item) ?? pick(o?.qitem) ?? pick(o?.row);
+  return found ?? (j === undefined ? /\bqitem-[\w-]+/.exec(stdout)?.[0] : undefined);
+}
+
 export function createRigCli(exec: RigExec): RigCli {
   const detail = (r: { stdout: string; stderr: string; code: number }): string => (r.stderr || r.stdout).trim() || `exit ${r.code}`;
   const outcome = (r: { code: number; stdout: string; stderr: string }): { ok: boolean; detail?: string } => r.code === 0 ? { ok: true } : { ok: false, detail: detail(r) };
@@ -62,5 +79,11 @@ export function createRigCli(exec: RigExec): RigCli {
     },
     addHuman: async opts => outcome(await exec(['gateway', 'human', 'add', HUMAN_ID, '--display-name', 'Ledge', '--binding', HUMAN_BINDING,
       '--delivery-class', 'D', '--actor', 'ledge', ...(opts?.replace ? ['--replace'] : [])])),
+    queueCreate: async o => {
+      const r = await exec(['queue', 'create', '--source', o.source, '--destination', o.destination, '--summary', o.summary, '--body-file', o.bodyFile,
+        ...(o.replyTo ? ['--reply-to', o.replyTo] : []), '--json'], { timeoutMs: 30_000 });
+      if (r.code !== 0) return { ok: false, detail: detail(r) };
+      const id = createdId(r.stdout); return id ? { ok: true, qitemId: id } : { ok: true };
+    },
   };
 }

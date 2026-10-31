@@ -18,6 +18,9 @@ export interface OpenRigHttp {
   specs(): Promise<SpecEntry[]>;
   /** GET /api/specs/library/:id */
   spec(id: string): Promise<{ entry: SpecEntry; yaml: string }>;
+  /** POST /api/mission-control/action as `session` (header `X-OpenRig-Session`, facts D8). Any HTTP status resolves (409
+   *  `qitem_already_terminal` included, D7); `json` is null for a body that is no JSON. Only an unreachable OpenRig rejects. */
+  action(body: Record<string, unknown>, o: { session: string }): Promise<{ status: number; json: unknown }>;
 }
 
 const NETWORK_CODES = new Set(['ECONNREFUSED', 'ECONNRESET', 'EPIPE', 'ETIMEDOUT', 'UND_ERR_SOCKET', 'UND_ERR_CONNECT_TIMEOUT']);
@@ -26,17 +29,21 @@ const isUnreachable = (e: unknown): boolean => {
   return err?.name === 'TimeoutError' || err?.name === 'AbortError' || NETWORK_CODES.has(err?.code ?? '') || NETWORK_CODES.has(err?.cause?.code ?? '');
 };
 
-export function createOpenRigHttp(opts: { base: string; fetch?: Fetch; timeoutMs?: number }): OpenRigHttp {
+/** `token`: OPENRIG_AUTH_BEARER_TOKEN, sent as `Authorization: Bearer` on writes when set. */
+export function createOpenRigHttp(opts: { base: string; fetch?: Fetch; timeoutMs?: number; token?: string }): OpenRigHttp {
   const doFetch = opts.fetch ?? fetch; const timeoutMs = opts.timeoutMs ?? 3000;
   const warned = new Set<string>();
 
-  async function get(path: string): Promise<unknown> {
-    let res: Response;
-    try { res = await doFetch(`${opts.base}${path}`, { signal: AbortSignal.timeout(timeoutMs) }); }
+  async function send(path: string, init: RequestInit = {}): Promise<Response> {
+    try { return await doFetch(`${opts.base}${path}`, { ...init, signal: AbortSignal.timeout(timeoutMs) }); }
     catch (e) {
       if (isUnreachable(e)) throw new OpenRigUnreachable(`OpenRig unreachable at ${opts.base}: ${(e as { cause?: { code?: string } }).cause?.code ?? (e as Error).name}`);
       throw e;
     }
+  }
+
+  async function get(path: string): Promise<unknown> {
+    const res = await send(path);
     if (!res.ok) throw new Error(`OpenRig ${path} answered ${res.status}`);
     try { return await res.json(); }
     catch (e) { if (isUnreachable(e)) throw new OpenRigUnreachable(`OpenRig unreachable at ${opts.base}: body ${(e as Error).name}`); throw e; }
@@ -71,5 +78,15 @@ export function createOpenRigHttp(opts: { base: string; fetch?: Fetch; timeoutMs
     async specs() { return rows('spec', SpecEntrySchema, await get('/api/specs/library?kind=rig')); },
     async spec(id) { return SpecDetailSchema.parse(await get(`/api/specs/library/${encodeURIComponent(id)}`)); },
     async outbox(senderSession) { return rows('outbox', OutboxRowSchema, await get(`/api/queue/outbox/list?senderSession=${encodeURIComponent(senderSession)}`)); },
+    async action(body, o) {
+      const headers: Record<string, string> = { 'content-type': 'application/json', 'x-openrig-session': o.session };
+      if (opts.token) headers.authorization = `Bearer ${opts.token}`;
+      const res = await send('/api/mission-control/action', { method: 'POST', headers, body: JSON.stringify(body) });
+      let text: string;
+      try { text = await res.text(); }
+      catch (e) { if (isUnreachable(e)) throw new OpenRigUnreachable(`OpenRig unreachable at ${opts.base}: body ${(e as Error).name}`); throw e; }
+      let json: unknown = null; try { json = JSON.parse(text); } catch { /* not JSON */ }
+      return { status: res.status, json };
+    },
   };
 }

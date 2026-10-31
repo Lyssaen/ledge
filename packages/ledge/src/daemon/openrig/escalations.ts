@@ -64,13 +64,13 @@ export interface EscalationBook {
   replace(list: Escalation[]): { updated: Escalation[]; removed: string[] };
   /** Null when identical to the stored one (no rebroadcast). */
   upsert(e: Escalation): Escalation | null;
-  remove(id: string): boolean; all(): Escalation[];
+  remove(id: string): boolean; all(): Escalation[]; get(id: string): Escalation | undefined;
 }
 
 export function createEscalationBook(): EscalationBook {
   const m = new Map<string, Escalation>();
   const upsert = (e: Escalation) => { const old = m.get(e.id); if (old && isDeepStrictEqual(old, e)) return null; m.set(e.id, e); return e; };
-  return { upsert, all: () => [...m.values()], remove: id => m.delete(id),
+  return { upsert, all: () => [...m.values()], get: id => m.get(id), remove: id => m.delete(id),
     replace(list) {
       const keep = new Set(list.map(e => e.id)); const removed = [...m.keys()].filter(id => !keep.has(id));
       for (const id of removed) m.delete(id);
