@@ -22,8 +22,9 @@ export function brainResponder(d: {
   /** Whether a brain session exists (starting or on). */
   hasSession: () => boolean;
   onStatus: (fn: (s: BrainStatus) => void) => () => void;
+  waitMs?: number;
 }): Responder {
-  type Waiting = { item: UserItem; about?: Escalation; done: () => void };
+  type Waiting = { item: UserItem; about?: Escalation; done: () => void; timer: ReturnType<typeof setTimeout> };
   let waiting: Waiting[] = [];
   let announced = false;
 
@@ -46,10 +47,10 @@ export function brainResponder(d: {
     if (waiting.length === 0) return;
     if (d.hasSession()) {
       const batch = waiting; waiting = [];
-      for (const w of batch) void send(w.item, w.about).catch(e => log(`brain responder: ${(e as Error).message}`)).finally(w.done);
+      for (const w of batch) { clearTimeout(w.timer); void send(w.item, w.about).catch(e => log(`brain responder: ${(e as Error).message}`)).finally(w.done); }
     } else if (s.state !== 'starting') {
       const batch = waiting; waiting = [];
-      for (const w of batch) void serve(w.item, w.about).catch(e => log(`brain responder: ${(e as Error).message}`)).finally(w.done);
+      for (const w of batch) { clearTimeout(w.timer); void serve(w.item, w.about).catch(e => log(`brain responder: ${(e as Error).message}`)).finally(w.done); }
     }
   });
 
@@ -57,7 +58,13 @@ export function brainResponder(d: {
     const s = d.status();
     if (s.enabled !== true) return d.fallback(item, about);
     if (d.hasSession()) return send(item, about);
-    if (s.state === 'starting') return new Promise<void>(done => { waiting.push({ item, about, done }); });
+    if (s.state === 'starting') return new Promise<void>(done => {
+      const w: Waiting = { item, about, done, timer: setTimeout(() => {
+        waiting = waiting.filter(x => x !== w);
+        void serve(item, about).catch(e => log(`brain responder: ${(e as Error).message}`)).finally(done);
+      }, d.waitMs ?? 60_000) };
+      waiting.push(w);
+    });
     return serve(item, about);
   };
 }

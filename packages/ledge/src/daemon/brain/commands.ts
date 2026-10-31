@@ -29,7 +29,8 @@ export type BrainCall =
   | { op: 'propose'; rigLaunch: ChatRigLaunch }
   | { op: 'propose'; action: ActionId; args: Record<string, unknown> }
   | { op: 'remember'; text: string; from: string[]; category?: string }
-  | { op: 'who' | 'rigs' | 'escalations' | 'rules' };
+  | { op: 'who' | 'rigs' | 'escalations' | 'rules' }
+  | { op: 'handover'; text: string };
 
 export type BrainOutcome = { ok: boolean; line: string; code?: BrainResultCode };
 export type RigResult = { ok: true } | { ok: false; code: RigResultCode; reason?: string };
@@ -45,6 +46,7 @@ const USAGE: Record<BrainOp, string> = {
   propose: "ledge brain propose <action> --args '<json>' | propose rig-launch --goal \"…\" [--spec <spec>] [--project <id> | --off-project <nom>] [--machine <m>]",
   remember: 'ledge brain remember "<règle>" --from <decisionIds> [--category <c>]',
   who: 'ledge brain who', rigs: 'ledge brain rigs', escalations: 'ledge brain escalations', rules: 'ledge brain rules',
+  handover: 'ledge brain handover "<bilan>"',
 };
 
 type Parsed = { pos: string[]; one: Record<string, string>; many: Record<string, string[]> };
@@ -76,7 +78,7 @@ export function parseBrainArgs(op: BrainOp, args: string[]): { ok: true; value: 
 function parse(op: BrainOp, args: string[]): BrainCall | null {
   switch (op) {
     case 'who': case 'rigs': case 'escalations': case 'rules': return args.length === 0 ? { op } : null;
-    case 'say': {
+    case 'say': case 'handover': {
       const p = flags(args, []); if (!p || p.pos.length === 0) return null;
       return { op, text: p.pos.join(' ') };
     }
@@ -156,6 +158,8 @@ export interface BrainCommandDeps {
   emit: (m: ChatMessage) => void;
   /** The daemon's `rig.act` handler. */
   rigAct: (msg: RigActMsg) => Promise<RigResult>;
+  /** The brain's relief brief (`ledge brain handover`), handed to the reliefs as `ledge handover` would (daemon/handover.ts): null once taken, else why not. */
+  handover?: (by: string, text: string) => string | null;
   /** The daemon's `rig.prepare` handler, without keeping the plan. */
   rigPrepare: (msg: RigPrepareMsg) => Promise<RigPlan | { code: RigResultCode; reason: string }>;
   now?: () => number;
@@ -172,7 +176,7 @@ const OPENRIG_OFF = "OpenRig n'est pas branché : rien n'est parti.";
  * What `ledge brain <op>` does, once the daemon knows the caller is the brain. Nothing here launches a rig: `rig up` and
  * `propose rig-launch` post a card the user clicks. `--because` user items are kept in memory once used (lost on restart).
  */
-export function createBrainCommands(d: BrainCommandDeps): { run(call: BrainCall): Promise<BrainOutcome> } {
+export function createBrainCommands(d: BrainCommandDeps): { run(call: BrainCall, by?: string): Promise<BrainOutcome> } {
   const now = d.now ?? Date.now;
   const uuid = d.uuid ?? randomUUID;
   /** The user items a `rig up` / `rig down` already went through (or is going through). */
@@ -233,8 +237,13 @@ export function createBrainCommands(d: BrainCommandDeps): { run(call: BrainCall)
     return { ok: true, line: "Carte « Lancer ce rig » posée : l'utilisateur la lance lui-même." };
   };
 
-  async function run(c: BrainCall): Promise<BrainOutcome> {
+  async function run(c: BrainCall, by?: string): Promise<BrainOutcome> {
     switch (c.op) {
+      case 'handover': {
+        if (!d.handover || by === undefined) return fail('failed', "Ledge ne sait pas recevoir de bilan ici.");
+        const reason = d.handover(by, c.text);
+        return reason === null ? { ok: true, line: 'Bilan reçu : ta relève démarre.' } : fail('refused', `Bilan refusé : ${reason}`);
+      }
       case 'say': {
         const text = c.text.trim();
         if (!text) return fail('invalid', 'Le message est vide.');
@@ -290,7 +299,9 @@ export function createBrainCommands(d: BrainCommandDeps): { run(call: BrainCall)
         const from = c.from.map(id => known.find(x => x.id === id));
         const missing = c.from.filter((_, i) => !from[i]);
         if (missing.length) return fail('invalid', `Décisions inconnues : ${missing.join(', ')}.`);
-        const cat = MandateCategorySchema.safeParse(c.category ?? from[0]!.category);
+        if (from.some(decision => decision?.category === undefined)) return fail('invalid', 'Une décision sans catégorie ne peut pas servir de source à une règle.');
+        const claimed = c.category ?? from[0]!.category;
+        const cat = MandateCategorySchema.safeParse(claimed);
         if (!cat.success) return fail('invalid', `Catégorie inconnue : ${c.category}.`);
         const rule = d.memory.propose(text, cat.data, c.from.join(','));
         return { ok: true, line: `Règle ${rule.id} proposée : elle ne s'applique qu'une fois validée par l'utilisateur.` };

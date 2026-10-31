@@ -25,10 +25,10 @@ export type GuardVerdict =
 
 /** Steps 1-3 and 5 of the guard; `validAnswers` (step 4) is the caller's. */
 export function guardDecide(e: Escalation, claimed: string, _answers: Record<string, string>, mandate: Mandate): GuardVerdict {
-  const parsed = MandateCategorySchema.safeParse(claimed);
-  if (!parsed.success) return { ok: false, convert: 'ask', category: undefined, reason: 'catégorie inconnue' };
   const word = criticalIn(e);
   if (word) return { ok: false, convert: 'ask', category: 'critical', reason: `contient « ${word} »` };
+  const parsed = MandateCategorySchema.safeParse(claimed);
+  if (!parsed.success) return { ok: false, convert: 'ask', category: undefined, reason: 'catégorie inconnue' };
   const category = parsed.data;
   if ((ALWAYS_USER as readonly string[]).includes(category) || !mandate.self.includes(category)) return { ok: false, convert: 'ask', category, reason: 'te revient' };
   return { ok: true, category };

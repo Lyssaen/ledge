@@ -17,12 +17,14 @@ export function mandateSides(text: string): { self: MandateCategory[]; user: Man
   return { self: m.self, user: CATEGORIES.filter(c => !m.self.includes(c)), readable: m.readable };
 }
 
-/** Per category (C20): `week` = its decisions (Ledge's and the user's) of the last 7 days up to `now`; `pending` = its escalations still
- *  `pending` (an escalation in grace is Ledge's for now, not yet the user's). */
+/** Per category (C20): `week` = Ledge's own decisions of the last 7 days up to `now` (« Ledge tranche seul · n décisions cette semaine »);
+ *  `pending` = its escalations still `pending` (an escalation in grace is Ledge's for now, not yet the user's). A decision without a
+ *  category (a user answer on an uncategorised escalation) counts nowhere. */
 export function categoryStats(decisions: readonly LedgeDecision[], escalations: readonly Escalation[], now: string): Record<MandateCategory, { week: number; pending: number }> {
   const end = Date.parse(now);
   const out = Object.fromEntries(CATEGORIES.map(c => [c, { week: 0, pending: 0 }])) as Record<MandateCategory, { week: number; pending: number }>;
   for (const d of decisions) {
+    if (d.by !== 'ledge' || d.category === undefined) continue;
     const t = Date.parse(d.at);
     if (t <= end && end - t < WEEK_MS) out[d.category].week += 1;
   }
@@ -30,7 +32,8 @@ export function categoryStats(decisions: readonly LedgeDecision[], escalations: 
   return out;
 }
 
-/** Souvenirs' filters: who decided, the category, the rig (by id); each one left out keeps everything. */
+/** Souvenirs' filters: who decided, the category, the rig (by id); each one left out keeps everything (a decision without a category
+ *  only shows when no category is chosen). */
 export function filterMemories(decisions: readonly LedgeDecision[], f: { by?: 'ledge' | 'user'; category?: MandateCategory; rig?: string }): LedgeDecision[] {
   return decisions.filter(d => (f.by === undefined || d.by === f.by) && (f.category === undefined || d.category === f.category) && (f.rig === undefined || d.rigId === f.rig));
 }

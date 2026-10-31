@@ -150,8 +150,11 @@ export function createHandovers(d: HandoverDeps): Handovers {
       if (s.tool === 'omp' || !s.tmuxSession) return `${s.name} n'a pas de terminal où demander son bilan`;
       if (waiting.has(id) || s.handover?.state === 'briefing' || s.handover?.state === 'launching') return `la relève de ${s.name} est déjà en cours`;
       const share = s.context && s.context.window > 0 ? ` (${Math.round((s.context.used / s.context.window) * 100)} %)` : '';
-      const why = s.brain === true ? `C'est l'heure de ta relève${share}` : `Ton contexte est presque plein${share}`;
-      const asked = d.mailbox.notify(id, `<ledge-handover>${why} : une nouvelle session va prendre ta place. Écris ton bilan de relève en une seule commande : ledge handover "<bilan>", avec ces sections : Fait : … En cours : … Suite : … Décisions : … (chacune avec sa raison), puis les pièges et les fichiers clés. Un bilan sans l'une d'elles est refusé. Ne commence rien d'autre ensuite.</ledge-handover>`, `handover:${id}:${now()}`, { first: true });
+      const brain = s.brain === true && d.brainRelief !== undefined;
+      const why = brain ? `C'est l'heure de ta relève${share}` : `Ton contexte est presque plein${share}`;
+      // The brain acts only through `ledge brain …` (its allowlist, C12): its brief goes through `ledge brain handover` (F-I2).
+      const command = brain ? 'ledge brain handover "<bilan>"' : 'ledge handover "<bilan>"';
+      const asked = d.mailbox.notify(id, `<ledge-handover>${why} : une nouvelle session va prendre ta place. Écris ton bilan de relève en une seule commande : ${command}, avec ces sections : Fait : … En cours : … Suite : … Décisions : … (chacune avec sa raison), puis les pièges et les fichiers clés. Un bilan sans l'une d'elles est refusé. Ne commence rien d'autre ensuite.</ledge-handover>`, `handover:${id}:${now()}`, { first: true });
       if (!asked) return `impossible d'écrire à ${s.name}`;
       const auto = o.auto === true;
       waiting.set(id, { timer: setTimeout(() => finish(id, undefined), briefMs), auto });

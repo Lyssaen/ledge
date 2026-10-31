@@ -27,7 +27,7 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-const make = () => brainResponder({ inbox: { push: e => { pushed.push(e); return pushOk; } }, thread,
+const make = (waitMs?: number) => brainResponder({ waitMs, inbox: { push: e => { pushed.push(e); return pushOk; } }, thread,
   fallback: async item => { served.push(item.id); }, status: () => status, hasSession: () => session,
   onStatus: fn => { listeners.push(fn); return () => {}; } });
 const change = (s: Partial<BrainStatus>, hasSession: boolean) => { status = { ...status, ...s }; session = hasSession; for (const l of listeners) l(status); };
@@ -50,6 +50,13 @@ describe('brainResponder', () => {
     await until(() => done);
     expect(pushed).toEqual([{ kind: 'user', item: user('u1'), about: undefined }]);
     expect(served).toEqual([]);
+  });
+  test('a stalled start falls back once and does not deliver twice after recovery', async () => {
+    change({ state: 'starting' }, false);
+    await make(10)(user('timeout'));
+    expect(served).toEqual(['timeout']);
+    change({ state: 'on' }, true);
+    expect(pushed).toEqual([]);
   });
   test('brain starting with a session: the inbox queues, no wait', async () => {
     change({ state: 'starting' }, true);

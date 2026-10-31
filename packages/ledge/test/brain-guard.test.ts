@@ -35,6 +35,9 @@ describe('guardDecide', () => {
     expect(guardDecide(gitEsc, 'architecture', {}, mandate)).toEqual({ ok: false, convert: 'ask', category: 'architecture', reason: 'te revient' });
     expect(guardDecide(gitEsc, 'design', {}, mandate)).toMatchObject({ ok: false, category: 'design' });
   });
+  it('a critical escalation stays critical even with an unknown category', () => {
+    expect(guardDecide(esc({ summary: 'deploy to prod' }), 'unknown', {}, mandate)).toMatchObject({ ok: false, category: 'critical' });
+  });
   it('an unknown category becomes an ask without category', () => {
     expect(guardDecide(gitEsc, 'ops', {}, mandate)).toEqual({ ok: false, convert: 'ask', category: undefined, reason: 'catégorie inconnue' });
   });

@@ -5,7 +5,7 @@ import { callerOf, DAEMON_DOWN } from './action.js';
 
 /** The one refusal of `ledge brain` outside Ledge's brain session (CLI and daemon). */
 export const NOT_BRAIN_LINE = 'ledge brain ne marche que dans la session du cerveau de Ledge.';
-export const BRAIN_USAGE = "ledge brain <say|decide|ask|rig|send|propose|remember|who|rigs|escalations|rules> …   only from Ledge's brain session";
+export const BRAIN_USAGE = "ledge brain <say|decide|ask|rig|send|propose|remember|who|rigs|escalations|rules|handover> …   only from Ledge's brain session";
 
 const isOp = (s: string | undefined): s is BrainOp => (BRAIN_OPS as readonly string[]).includes(s ?? '');
 

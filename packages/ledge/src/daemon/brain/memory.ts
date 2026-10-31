@@ -122,20 +122,22 @@ export function createMemory(o: { dir: string; now?: () => string; uuid?: () => 
       return next;
     },
     repeatedUserAnswer(d, escalations) {
-      if (d.by !== 'user') return null;
+      // An uncategorised decision never makes a rule: a guessed category could let the brain apply it where it must not (F-I1).
+      if (d.by !== 'user' || d.category === undefined) return null;
+      const category = d.category;
       const label = answerLabel(d, escalations(d.escalationId));
       if (!label) return null;
       const want = norm(label);
       if (d.revisitedBy) return null;
-      const prev = readDecisions().reverse().find(p => p.id !== d.id && !p.revisitedBy && p.by === 'user' && p.category === d.category
+      const prev = readDecisions().reverse().find(p => p.id !== d.id && !p.revisitedBy && p.by === 'user' && p.category === category
         && norm(answerLabel(p, escalations(p.escalationId)) ?? '') === want);
       if (!prev) return null;
       // Already covered: an active or proposed rule of this category that came from either decision (its `from` is "id1,id2"),
       // or whose label (the part after " → " of its text) equals this one once normalized.
-      const covered = readRules().some(r => r.category === d.category
+      const covered = readRules().some(r => r.category === category
         && (r.from.split(',').map(s => s.trim()).some(id => id === d.id || id === prev.id) || ruleLabel(r.text) === want));
       if (covered) return null;
-      return { category: d.category, label, decisions: [prev.id, d.id] };
+      return { category, label, decisions: [prev.id, d.id] };
     },
     onChange(fn) { listeners.add(fn); return () => { listeners.delete(fn); }; }
   };

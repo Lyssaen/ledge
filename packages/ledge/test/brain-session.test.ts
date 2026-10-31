@@ -47,12 +47,14 @@ afterEach(() => { brain.dispose(); rmSync(root, { recursive: true, force: true }
 describe('brain settings', () => {
   it('default to never asked with claude, and round-trip', async () => {
     expect(readBrainSettings(settingsPath)).toEqual({ enabled: null, tool: 'claude' });
-    await writeBrainSettings(settingsPath, { enabled: true, tool: 'codex', day: '2026-10-31' });
-    expect(readBrainSettings(settingsPath)).toEqual({ enabled: true, tool: 'codex', day: '2026-10-31' });
+    await writeBrainSettings(settingsPath, { enabled: true, tool: 'cursor', day: '2026-10-31' });
+    expect(readBrainSettings(settingsPath)).toEqual({ enabled: true, tool: 'cursor', day: '2026-10-31' });
   });
   it('fall back to the defaults on a broken file or an OMP tool', () => {
     writeFileSync(settingsPath, '{oops');
     expect(readBrainSettings(settingsPath)).toEqual({ enabled: null, tool: 'claude' });
+    writeFileSync(settingsPath, JSON.stringify({ enabled: true, tool: 'codex' }));
+    expect(readBrainSettings(settingsPath)).toEqual({ enabled: false, tool: 'claude' });
     writeFileSync(settingsPath, JSON.stringify({ enabled: false, tool: 'omp' }));
     expect(readBrainSettings(settingsPath)).toEqual({ enabled: false, tool: 'claude' });
   });
@@ -218,10 +220,10 @@ describe('the brain session', () => {
 
   it('changing the tool replaces the session', async () => {
     await brain.set({ enabled: true });
-    await brain.set({ enabled: true, tool: 'codex' }); await brain.settled();
+    await brain.set({ enabled: true, tool: 'cursor' }); await brain.settled();
     expect(closed).toEqual(['brain']);
     expect(launched).toHaveLength(2);
-    expect(launched[1]).toMatchObject({ tool: 'codex', name: 'Ledge' });
+    expect(launched[1]).toMatchObject({ tool: 'cursor', name: 'Ledge' });
     expect(launched[1]!.resume).toBeUndefined();
     expect(launched[1]!.id).toMatch(/^brain-[0-9a-f]+$/);
     expect(existsSync(join(brainDir, 'AGENTS.md'))).toBe(true);
@@ -265,19 +267,13 @@ describe('the brain in the daemon', () => {
     c.close();
   });
 
-  it('a codex brain is pinned non-autonomous at launch and on resume', async () => {
-    const store = new Store(); const s = await serve(store);
+  it('refuses Codex until its shared server environment is isolated', async () => {
+    const s = await serve(new Store());
     const c = await client(s.port);
     c.send({ type: 'brain.set', rid: 'r1', enabled: true, tool: 'codex' });
     await until(() => c.msgs.some(m => m.type === 'rig.result' && m.rid === 'r1'));
-    const codex = spawned[0]!.command.join(' ');
-    expect(codex).toContain('--ask-for-approval on-request');
-    expect(codex).not.toMatch(/--ask-for-approval never|--dangerously|--full-auto|--yolo|danger-full-access/);
-    // Resumed after an exit: still pinned.
-    store.upsert({ ...store.get('brain')!, state: 'exited', exitedAt: at(1), agentSessionId: 'thread-1' });
-    await until(() => spawned.length === 2);
-    expect(spawned[1]!.command).toEqual(expect.arrayContaining(['resume', 'thread-1']));
-    expect(spawned[1]!.command.join(' ')).toContain('--ask-for-approval on-request');
+    expect(c.msgs.find(m => m.type === 'rig.result' && m.rid === 'r1')).toMatchObject({ ok: false });
+    expect(spawned).toHaveLength(0);
     c.close();
   });
 

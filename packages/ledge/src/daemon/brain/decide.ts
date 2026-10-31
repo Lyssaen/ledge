@@ -91,7 +91,10 @@ export function createDeciding(d: DecidingDeps): Deciding {
     if (!e) return { ok: false, code: 'failed', line: `Aucune escalade ${id}.` };
     const r = await d.answers.answer(id, x.answers, 'ledge', x.rule ? { rule: x.rule } : {});
     if (!r.ok) {
-      if (graced.has(id) && !caps.has(id)) armCap(id);
+      // A failed answer puts the escalation back as it was (grace): released meanwhile, or with the brain off, nobody would take
+      // it out of grace again, so it goes back to pending (F-I10).
+      if (!graced.has(id) || !d.brainOn()) ungrace(id);
+      else if (!caps.has(id)) armCap(id);
       return { ok: false, code: r.code, line: `Pas appliqué : ${r.reason}.` };
     }
     clearCap(id); graced.delete(id);
@@ -120,8 +123,8 @@ export function createDeciding(d: DecidingDeps): Deciding {
   const unsubscribe = d.answers.onAnswered(e => {
     if (e.answer?.by !== 'user') return;   // a Ledge answer is recorded by `apply`
     clearCap(e.id); dropDeferred(e.id); graced.delete(e.id);
-    const category = e.category ?? 'code';
-    const decision = d.memory.record({ by: 'user', category, escalationId: e.id, summary: summaryOf(e, e.answer.answers), answers: e.answer.answers,
+    // An uncategorised escalation is recorded without a category, never a guessed one (F-I1).
+    const decision = d.memory.record({ by: 'user', ...(e.category ? { category: e.category } : {}), escalationId: e.id, summary: summaryOf(e, e.answer.answers), answers: e.answer.answers,
       at: e.answer.at, from: e.from, ...(e.rigId ? { rigId: e.rigId } : {}) });
     // A correction (« Revenir dessus »): the corrected decision points to this one.
     if (e.correcting) d.memory.markRevisited(e.correcting, decision.id);

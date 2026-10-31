@@ -166,14 +166,14 @@ describe('the brain relief (Lot 7, Task 10)', () => {
   it('changing the tool while the brain writes its brief: one live brain, on the new tool', async () => {
     await seated();
     expect(brain.checkRelief({ context: ctx(150_000), today: '2099-01-02', idle: true })).toBe('context');
-    await brain.set({ enabled: true, tool: 'codex' });
+    await brain.set({ enabled: true, tool: 'cursor' });
     await until(() => store.get('brain')?.handover?.state === 'failed');
     await brain.settled();
     expect(reliefs).toHaveLength(0);
     const alive = store.all().filter(x => x.brain && x.state !== 'exited');
     expect(alive).toHaveLength(1);
-    expect(alive[0]).toMatchObject({ tool: 'codex' });
-    expect(brain.session()?.tool).toBe('codex');
+    expect(alive[0]).toMatchObject({ tool: 'cursor' });
+    expect(brain.session()?.tool).toBe('cursor');
   });
 
   it('a brain that died during its relief, whose relief then failed, is relaunched by the breaker', async () => {

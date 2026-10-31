@@ -23,7 +23,7 @@ describe('brain contract', () => {
   });
   it('an unknown op is rejected', () => {
     expect(() => ClientMessageSchema.parse({ type: 'brain.cmd', rid: 'r', by: 'b', key: 'k', op: 'rm', args: [] })).toThrow();
-    expect(BRAIN_OPS).toEqual(['say', 'decide', 'ask', 'rig', 'send', 'propose', 'remember', 'who', 'rigs', 'escalations', 'rules']);
+    expect(BRAIN_OPS).toEqual(['say', 'decide', 'ask', 'rig', 'send', 'propose', 'remember', 'who', 'rigs', 'escalations', 'rules', 'handover']);
   });
   it('brain.result codes', () => {
     expect(BRAIN_RESULT_CODES).toEqual(['not_brain', 'identity', 'mandate', 'grace', 'invalid', 'refused', 'already_answered', 'failed', 'unreachable', 'openrig_down']);
@@ -43,6 +43,11 @@ describe('brain contract', () => {
   it('a decision names its seat and rig', () => {
     const d = LedgeDecisionSchema.parse({ id: 'd', escalationId: 'q', by: 'ledge', category: 'git', summary: 's', answers: {}, at: now, from: 'dev@r', rigId: 'r1' });
     expect(d.from).toBe('dev@r'); expect(d.rigId).toBe('r1');
+  });
+  it('a decision may have no category (a user answer on an uncategorised escalation)', () => {
+    const d = LedgeDecisionSchema.parse({ id: 'd', escalationId: 'q', by: 'user', summary: 's', answers: {}, at: now });
+    expect(d.category).toBeUndefined();
+    expect(LedgeDecisionSchema.safeParse({ id: 'd', escalationId: 'q', by: 'user', category: 'nope', summary: 's', answers: {}, at: now }).success).toBe(false);
   });
   it('category tags cover every category', () => {
     expect(Object.keys(MANDATE_CATEGORY_TAGS).sort()).toEqual([...MandateCategorySchema.options].sort());

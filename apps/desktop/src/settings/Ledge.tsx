@@ -7,7 +7,7 @@ import { Card, Row, Segmented, SwitchRow } from './controls';
 import type { SettingsContext } from './SettingsPage';
 
 /** The tools that can carry the brain: the tmux ones (OMP cannot, C13). */
-const BRAIN_TOOLS: readonly Tool[] = ['claude', 'codex', 'cursor'];
+const BRAIN_TOOLS: readonly Tool[] = ['claude', 'cursor'];
 
 /** Settings › Ledge (lot 7): the brain's switch, its tool and its state. Each change is a `brain.set` to the local daemon; a refusal
  *  (its `rig.result`) is said in a notice. */

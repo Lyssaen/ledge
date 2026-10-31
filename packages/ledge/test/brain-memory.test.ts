@@ -104,6 +104,16 @@ describe('brain memory', () => {
     expect(l.by).toBe('ledge');
   });
 
+  it('uncategorised user decisions never make a pair (F-I1)', () => {
+    const bare = (e: string) => { const { category: _c, ...x } = dec(e); return x; };
+    const a = mem.record(bare('e1'));
+    expect(a.category).toBeUndefined();
+    expect(mem.repeatedUserAnswer(mem.record(bare('e2')), lookup)).toBeNull();
+    // nor pairs with a categorised one
+    expect(mem.repeatedUserAnswer(mem.record(dec('e2')), lookup)).toBeNull();
+    expect(mem.decisions().map(d => d.category)).toEqual([dec('e2').category, undefined, undefined]);
+  });
+
   it('a rejected proposal is removed', () => {
     const r = mem.propose('t', 'git', 'd1,d2');
     expect(mem.setRule(r.id, 'rejected')).toEqual(r);

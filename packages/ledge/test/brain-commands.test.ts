@@ -194,6 +194,12 @@ describe('createBrainCommands', () => {
     expect(await make().run({ op: 'remember', text: 'x', from: [d.id], category: 'bogus' })).toMatchObject({ ok: false, code: 'invalid' });
   });
 
+  test('remember cannot use uncategorised decisions as sources (F-I1)', async () => {
+    const d = memory.record({ by: 'user', escalationId: 'qi-1', summary: 's', answers: {}, at: new Date(T0).toISOString() });
+    expect(await make().run({ op: 'remember', text: 'x', from: [d.id] })).toMatchObject({ ok: false, code: 'invalid', line: expect.stringContaining('sans catégorie') });
+    expect(await make().run({ op: 'remember', text: 'x', from: [d.id], category: 'git' })).toMatchObject({ ok: false, code: 'invalid' });
+  });
+
   test('who, rigs, escalations, rules: one line per element', async () => {
     escalations = [esc(), esc({ id: 'qi-2', state: 'answered' }), esc({ id: 'qi-3', state: 'grace', category: undefined, from: 'build' })];
     const lines = (await make().run({ op: 'escalations' })).line.split('\n');
@@ -288,6 +294,11 @@ describe('brain.cmd through the daemon', () => {
 
   test('an archived brain record is not the brain', async () => {
     expect(await cmd('old', sessionKey('old'), 'say', ['x'])).toMatchObject({ ok: false, code: 'not_brain' });
+  });
+
+  test('an exited but unarchived brain cannot issue commands', async () => {
+    store.upsert({ ...store.get('brain')!, state: 'exited' });
+    expect(await cmd('brain', sessionKey('brain'), 'say', ['x'])).toMatchObject({ ok: false, code: 'not_brain' });
   });
 
   test('say from the brain adds a ledge bubble; bad args get the usage', async () => {

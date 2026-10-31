@@ -77,7 +77,8 @@ export const THREAD_PAGE = 50;
 
 /** Named `Ledge*` because `Decision` / `Rule` already exist in decisions.ts and projects.ts. */
 export const LedgeDecisionSchema = z.object({ id: z.string(), escalationId: z.string(), by: z.enum(['ledge', 'user']),
-  category: MandateCategorySchema, summary: z.string(), answers: z.record(z.string()), rule: z.string().optional(),
+  category: MandateCategorySchema.optional(), // absent: a user answer on an uncategorised escalation (never guessed)
+  summary: z.string(), answers: z.record(z.string()), rule: z.string().optional(),
   from: z.string().optional(), rigId: z.string().optional(), // the seat and rig the decision was for
   why: z.string().optional(), at: z.string().datetime(), revisitedBy: z.string().optional() });
 export type LedgeDecision = z.infer<typeof LedgeDecisionSchema>;
@@ -126,8 +127,8 @@ export const RIG_RESULT_CODES = ['rig_managed', 'already_answered', 'openrig_dow
 export const RigResultCodeSchema = z.enum(RIG_RESULT_CODES);
 export type RigResultCode = z.infer<typeof RigResultCodeSchema>;
 
-/** The commands the brain session may run through `ledge brain <op>`. */
-export const BRAIN_OPS = ['say', 'decide', 'ask', 'rig', 'send', 'propose', 'remember', 'who', 'rigs', 'escalations', 'rules'] as const;
+/** The commands the brain session may run through `ledge brain <op>` (`handover`: its relief brief, F-I2). */
+export const BRAIN_OPS = ['say', 'decide', 'ask', 'rig', 'send', 'propose', 'remember', 'who', 'rigs', 'escalations', 'rules', 'handover'] as const;
 export type BrainOp = typeof BRAIN_OPS[number];
 /** Codes of a refused or failed `brain.cmd`. */
 export const BRAIN_RESULT_CODES = ['not_brain', 'identity', 'mandate', 'grace', 'invalid', 'refused', 'already_answered', 'failed', 'unreachable', 'openrig_down'] as const;

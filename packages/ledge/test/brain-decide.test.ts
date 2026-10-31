@@ -31,7 +31,7 @@ function book(list: Escalation[]) {
 
 let dir: string; let b: ReturnType<typeof book>; let replies: unknown[]; let answers: Answers; let answerCalls: unknown[][];
 let thread: LedgeThreadItem[]; let inboxPushed: BrainEvent[]; let memory: Memory; let mandate: Mandate; let on: boolean; let deciding: Deciding;
-let failApprove: number;
+let failApprove: number; let hold: Promise<void> | null;
 const fakeOpenRigReplies = () => replies;
 const kinds = (t: LedgeThreadItem[]) => t.map(i => i.kind);
 
@@ -39,7 +39,7 @@ function make() {
   const port: AnswerPort = {
     escalation: b.escalation, patch: b.patchEscalation, status: () => ({ machine: 'local', state: 'running' }),
     cli: () => ({ queueCreate: async () => ({ ok: true, qitemId: 'reply' }) }),
-    http: () => ({ async action(body) { if (failApprove > 0) { failApprove--; return { status: 500, json: { error: 'boom' } }; } replies.push(body); return { status: 200, json: { ok: true } }; } }),
+    http: () => ({ async action(body) { if (hold) await hold; if (failApprove > 0) { failApprove--; return { status: 500, json: { error: 'boom' } }; } replies.push(body); return { status: 200, json: { ok: true } }; } }),
     replyRow: () => undefined, setReplyRow: () => {},
   };
   const real = createAnswers({ port, path: { kind: 'approve-only' }, localMachine: 'local', now: () => new Date(Date.now()).toISOString() });
@@ -56,7 +56,7 @@ beforeEach(() => {
   b = book([esc(), esc({ id: 'qi-up', intent: 'update', questions: [], summary: 'Tests verts' }),
     esc({ id: 'ask-3', source: 'ask', from: 'otto', questions: [], summary: 'On merge ?' }),
     esc({ id: 'qi-arch', summary: 'Quel stockage ?' }), esc({ id: 'qi-2' })]);
-  replies = []; answerCalls = []; thread = []; inboxPushed = []; failApprove = 0; on = true;
+  replies = []; answerCalls = []; thread = []; inboxPushed = []; failApprove = 0; hold = null; on = true;
   let u = 0;
   memory = createMemory({ dir, now: () => new Date(Date.now()).toISOString(), uuid: () => `d${++u}` });
   mandate = parseMandate(DEFAULT_MANDATE);
@@ -131,7 +131,9 @@ describe('decide', () => {
     await vi.advanceTimersByTimeAsync(2_000);
     expect(fakeOpenRigReplies()).toHaveLength(1);
     expect(inboxPushed.at(-1)).toMatchObject({ kind: 'answered' });
-    expect(memory.decisions()).toEqual([expect.objectContaining({ by: 'user', category: 'code', answers: { q1: 'rebase' } })]);
+    // An uncategorised escalation: the user's answer is recorded without a category, never a guessed one (F-I1).
+    expect(memory.decisions()).toEqual([expect.objectContaining({ by: 'user', answers: { q1: 'rebase' } })]);
+    expect(memory.decisions()[0]!.category).toBeUndefined();
   });
 
   test('a decide after graceUntil is applied at once, with its rule', async () => {
@@ -203,6 +205,28 @@ describe('decide', () => {
     expect(b.escalation('qi-1')!.state).toBe('pending');
   });
 
+  test('a deferred decision that fails after a release goes back to pending, not grace', async () => {
+    deciding.arrived(b.escalation('qi-1')!);
+    await deciding.decide('qi-1', { q1: 'merge' }, 'git', {});
+    let open!: () => void; hold = new Promise<void>(r => { open = r; }); failApprove = 1;
+    await vi.advanceTimersByTimeAsync(60_000);   // the deferred answer is on its way
+    expect(answerCalls).toHaveLength(1);
+    deciding.release('brain down');
+    open(); await vi.advanceTimersByTimeAsync(0);
+    expect(b.escalation('qi-1')).toMatchObject({ state: 'pending' });
+    expect(b.escalation('qi-1')!.graceUntil).toBeUndefined();
+  });
+
+  test('a deferred decision that fails while the brain is off goes back to pending', async () => {
+    deciding.arrived(b.escalation('qi-1')!);
+    await deciding.decide('qi-1', { q1: 'merge' }, 'git', {});
+    failApprove = 1; on = false;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(answerCalls).toHaveLength(1);
+    expect(b.escalation('qi-1')).toMatchObject({ state: 'pending' });
+    expect(b.escalation('qi-1')!.graceUntil).toBeUndefined();
+  });
+
   test('an immediate failure returns the answer code', async () => {
     deciding.arrived(b.escalation('qi-1')!);
     await vi.advanceTimersByTimeAsync(61_000);
@@ -232,16 +256,27 @@ describe('ask', () => {
 });
 
 describe('user answers', () => {
-  const second = esc({ id: 'qi-9' });
+  const second = esc({ id: 'qi-9', category: 'code' });
   test('two identical user answers propose a fallback rule when the brain is off', async () => {
-    on = false; b.m.set('qi-9', second);
+    on = false; b.m.set('qi-9', second); b.m.set('qi-1', esc({ category: 'code' }));
     await answers.answer('qi-1', { q1: 'merge' }, 'user');
     await answers.answer('qi-9', { q1: 'merge' }, 'user');
     expect(memory.rules()).toEqual([expect.objectContaining({ status: 'proposed', text: 'Fusion → Merge', category: 'code', from: 'd1,d2' })]);
   });
 
+  test('two identical answers on uncategorised escalations propose no rule (F-I1)', async () => {
+    on = false; b.m.set('qi-9', esc({ id: 'qi-9' }));
+    await answers.answer('qi-1', { q1: 'merge' }, 'user');
+    await answers.answer('qi-9', { q1: 'merge' }, 'user');
+    expect(memory.decisions().map(d => d.category)).toEqual([undefined, undefined]);
+    expect(memory.rules()).toEqual([]);
+    on = true; b.m.set('qi-8', esc({ id: 'qi-8' }));
+    await answers.answer('qi-8', { q1: 'merge' }, 'user');
+    expect(inboxPushed.filter(e => e.kind === 'state')).toEqual([]);
+  });
+
   test('with the brain on, it is asked to word the rule', async () => {
-    b.m.set('qi-9', second);
+    b.m.set('qi-9', second); b.m.set('qi-1', esc({ category: 'code' }));
     await answers.answer('qi-1', { q1: 'merge' }, 'user');
     await answers.answer('qi-9', { q1: 'merge' }, 'user');
     expect(memory.rules()).toEqual([]);

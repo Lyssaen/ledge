@@ -25,8 +25,10 @@ const esc = (id: string, category: MandateCategory | undefined, state: Escalatio
   intent: 'decision', summary: id, questions: [], createdAt: NOW, state, ...(category ? { category } : {}) });
 
 describe('categoryStats', () => {
-  it('counts this week and pending', () => {
-    const decisions = [mk('a'), mk('b', { by: 'user', at: ago(6.9) }), mk('old', { at: ago(7.5) }), mk('t', { category: 'tests' }), mk('later', { at: '2026-11-02T00:00:00.000Z' })];
+  it('counts this week (Ledge\'s decisions only) and pending', () => {
+    const { category: _c, ...bare } = mk('none');
+    const decisions = [mk('a'), mk('a2', { at: ago(6.9) }), mk('b', { by: 'user', at: ago(1) }), mk('old', { at: ago(7.5) }), mk('t', { category: 'tests' }),
+      mk('later', { at: '2026-11-02T00:00:00.000Z' }), bare, { ...bare, id: 'none-user', by: 'user' as const }];
     const escalations = [esc('p1', 'architecture'), esc('p2', 'architecture', 'grace'), esc('p3', 'architecture', 'answered'), esc('p4', 'git'), esc('p5', undefined)];
     const s = categoryStats(decisions, escalations, NOW);
     expect(s.git).toEqual({ week: 2, pending: 1 });
@@ -55,6 +57,12 @@ describe('filterMemories', () => {
     expect(filterMemories(list, { by: 'user' }).map(d => d.id)).toEqual(['b', 'c']);
     expect(filterMemories(list, { category: 'git' }).map(d => d.id)).toEqual(['a', 'c']);
     expect(filterMemories(list, { rig: 'r1', by: 'user' }).map(d => d.id)).toEqual(['c']);
+  });
+  it('a decision without a category shows in the full history only', () => {
+    const { category: _c, ...bare } = mk('u', { by: 'user' });
+    expect(filterMemories([...list, bare], {}).map(d => d.id)).toEqual(['a', 'b', 'c', 'u']);
+    expect(filterMemories([...list, bare], { by: 'user' }).map(d => d.id)).toEqual(['b', 'c', 'u']);
+    expect(filterMemories([...list, bare], { category: 'git' }).map(d => d.id)).toEqual(['a', 'c']);
   });
 });
 

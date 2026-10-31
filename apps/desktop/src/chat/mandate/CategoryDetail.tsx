@@ -70,7 +70,7 @@ export function DecisionRow({ d, rules, onRevisit, disabled, withCategory = fals
     <li className={cls('md-dec', d.revisitedBy && 'revisited')} data-decision={d.id}>
       <span className="md-when">{when(d.at)}</span>
       <span className="md-what"><b>{d.from ?? who}</b> {d.summary}
-        {(withCategory || d.from) && <small> · {withCategory ? `${m.category(d.category)} · ` : ''}{who}</small>}</span>
+        {(withCategory || d.from) && <small> · {withCategory ? `${d.category ? m.category(d.category) : '—'} · ` : ''}{who}</small>}</span>
       <span className="md-ruleof">{rule ? m.ruleOf(rule.since) : ''}</span>
       <button type="button" className="md-revisit" disabled={disabled || Boolean(d.revisitedBy)} onClick={() => onRevisit(d)}>{m.revisit}</button>
     </li>

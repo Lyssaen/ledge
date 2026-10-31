@@ -394,7 +394,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     try { return parseMandate(existsSync(f) ? readFileSync(f, 'utf8') : DEFAULT_MANDATE); } catch { return parseMandate(''); }
   };
   if (bridge && answers) deciding = createDeciding({ escalations: { escalation: bridge.escalation, patchEscalation: bridge.patchEscalation },
-    answers, thread, memory, inbox: brainInbox, mandate: readMandate, brainOn: () => brain.status().state === 'on', now: Date.now });
+    answers, thread, memory, inbox: brainInbox, mandate: readMandate, brainOn: () => brain.status().state === 'on' && ['idle', 'working'].includes(brain.session()?.state ?? ''), now: Date.now });
   /** « Revenir dessus » (Lot 7): a correction while the seat has not taken the reply, a conversation once it has. */
   const revisits = bridge && answers ? createRevisit({ memory, escalations: { escalation: bridge.escalation, patchEscalation: bridge.patchEscalation },
     answers, thread, inbox: brainInbox, brainOn: () => brain.status().state === 'on', bridge }) : null;
@@ -423,7 +423,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const unsubscribeMemory = memory.onChange(() => { broadcast(rulesMsg()); broadcast(decisionsMsg()); });
   const unsubscribeBrain = brain.onStatus(status => {
     broadcast({ type: 'brain.status', status });
-    if (status.state === 'down' || status.state === 'off') deciding?.release(`brain ${status.state}`);
+    if (status.state !== 'on') deciding?.release(`brain ${status.state}`);
   });
   /** Each session's state last seen: a turn's end (→ idle) is when its context is read again. */
   const lastState = new Map<string, Session['state']>();
@@ -995,11 +995,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     return r.ok ? { ok: true } : { ok: false, code: r.code, reason: r.reason };
   }
   /** A launch plan (`rig.prepare`, and the brain's check of a launch card); the caller keeps it or not. */
-  async function rigPrepare(msg: RigPrepareMsg): Promise<RigPlan | { code: RigResultCode; reason: string }> {
+  async function rigPrepare(msg: RigPrepareMsg, allowStart = true): Promise<RigPlan | { code: RigResultCode; reason: string }> {
     if (msg.machine !== 'local') return { code: 'unreachable', reason: `machine ${msg.machine} is not this daemon's` };
     if (!bridge) return { code: 'openrig_down', reason: "OpenRig n'est pas branché" };
     // Ledge starts OpenRig itself for a launch, and says so in its thread (the bridge's notice); only a start that fails is refused.
-    const status = await bridge.ensureRunning('launch');
+    const status = allowStart ? await bridge.ensureRunning('launch') : bridge.status();
     const http = bridge.http();
     if (!http || status.state !== 'running') return { code: 'openrig_down', reason: status.detail ?? `OpenRig ${status.state}` };
     try {
@@ -1012,7 +1012,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   }
   /** `ledge brain …` (Lot 7): what the brain session may do, once the daemon knows it is the brain. */
   const brainCommands = createBrainCommands({ deciding, thread, seatSend, memory, rigs: () => bridge?.rigs() ?? [], escalations: () => bridge?.escalations() ?? [],
-    sessions: () => store.all(), projects: () => projects, chat, emit: broadcast, rigAct, rigPrepare });
+    sessions: () => store.all(), projects: () => projects, chat, emit: broadcast, rigAct, rigPrepare: msg => rigPrepare(msg, false),
+    handover: (by, text) => handovers.brief(by, text) });
   /**
    * `brain.cmd`: only from the brain session, as its key says; any refusal leaves no trace (no thread item, nothing sent to
    * OpenRig). Then the args are parsed and the op runs.
@@ -1021,10 +1022,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     const answer = (r: { ok: boolean; line: string; code?: Extract<ServerMessage, { type: 'brain.result' }>['code'] }) => reply({ type: 'brain.result', rid: msg.rid, ...r });
     if (!msg.by || !verifySessionKey(msg.by, msg.key).ok) return answer({ ok: false, code: 'identity', line: NOT_BRAIN_LINE });
     const s = store.get(msg.by);
-    if (s?.brain !== true || s.archivedAt !== undefined) return answer({ ok: false, code: 'not_brain', line: NOT_BRAIN_LINE });
+    if (s?.brain !== true || s.state === 'exited' || s.archivedAt !== undefined) return answer({ ok: false, code: 'not_brain', line: NOT_BRAIN_LINE });
     const parsed = parseBrainArgs(msg.op, msg.args);
     if (!parsed.ok) return answer({ ok: false, code: 'invalid', line: parsed.usage });
-    try { return answer(await brainCommands.run(parsed.value)); }
+    try { return answer(await brainCommands.run(parsed.value, msg.by)); }
     catch (e) { log(`brain: ${msg.op} failed: ${(e as Error).message}`); return answer({ ok: false, code: 'failed', line: `Échec : ${(e as Error).message}` }); }
   }
   /**

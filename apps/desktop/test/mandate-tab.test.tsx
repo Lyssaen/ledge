@@ -73,8 +73,8 @@ describe('the Mandat tab (lot 7)', () => {
     expect(self.map(o => o.querySelector('strong')?.textContent)).toEqual(['Git and branches', 'Tests and reviews', 'Context and handovers', 'Small code choices']);
     expect(self[0]).toHaveAttribute('aria-selected', 'true');
     expect(self[0]).toHaveTextContent('merge');
-    expect(self[0]).toHaveTextContent('2 this week');
-    expect(self[1]).toHaveTextContent(/^Tests and reviews1/);
+    expect(self[0]).toHaveTextContent('1 this week'); // Ledge's decisions only: d2 is the user's
+    expect(self[1]).toHaveTextContent(/^Tests and reviews0/); // d3 is the user's
     const mine = userList().getAllByRole('option');
     expect(mine.map(o => o.querySelector('strong')?.textContent)).toEqual(['Design', 'Architecture', 'Critical']);
     expect(mine[1]).toHaveTextContent('1 pending');
@@ -91,7 +91,7 @@ describe('the Mandat tab (lot 7)', () => {
 
   it('« Escalate it to me from now on » sends category.escalate and is absent for design', async () => {
     const { d, user } = await openMandate();
-    expect(detail().getByText('Ledge settles alone · 2 decisions this week ·', { exact: false })).toBeVisible();
+    expect(detail().getByText('Ledge settles alone · 1 decision this week ·', { exact: false })).toBeVisible();
     await user.click(detail().getByRole('button', { name: 'Escalate it to me from now on' }));
     await waitFor(() => expect(sent(d, 'category.escalate')).toEqual([{ type: 'category.escalate', rid: expect.any(String), category: 'git' }]));
     await user.click(userList().getByRole('option', { name: /Design/ }));
@@ -189,6 +189,21 @@ describe('the Mandat tab (lot 7)', () => {
     expect(lines()).toHaveLength(1);
     await user.click(within(lines()[0]!).getByRole('button', { name: 'Revisit' }));
     await waitFor(() => expect(sent(d, 'decision.revisit')).toEqual([{ type: 'decision.revisit', rid: expect.any(String), id: 'd2' }]));
+  });
+
+  it('a decision without a category shows only in Memories, with « — », and counts in no category', async () => {
+    const { d, user } = await openMandate();
+    const { category: _c, ...bare } = dec('dx', { by: 'user', summary: 'sans catégorie', from: 'build@factory', rigId: 'rf', at: ago(5) });
+    d.push({ type: 'decisions', items: [bare, ...DECISIONS] });
+    await waitFor(() => expect(selfList().getAllByRole('option')[0]).toHaveTextContent('1 this week'));
+    expect(detail().queryByText(/sans catégorie/)).toBeNull();
+    await user.click(tab().getByRole('tab', { name: 'Memories · 3' }));
+    const mem = within(tab().getByRole('region', { name: 'Memories' }));
+    const lines = () => within(mem.getByRole('list', { name: 'Decisions' })).queryAllByRole('listitem');
+    expect(lines()).toHaveLength(5);
+    expect(lines()[0]).toHaveTextContent('sans catégorie · — · you');
+    await user.selectOptions(mem.getByRole('combobox', { name: 'Category' }), 'git');
+    expect(lines().map(l => l.textContent)).not.toContainEqual(expect.stringContaining('sans catégorie'));
   });
 
   it('the Mandat tab never turns the brain on', async () => {

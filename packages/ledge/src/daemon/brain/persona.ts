@@ -19,7 +19,8 @@ const COMMANDS: [string, string, string][] = [
   ['who', 'les sessions et sièges, une ligne chacun', 'ledge brain who'],
   ['rigs', 'les rigs, une ligne chacun', 'ledge brain rigs'],
   ['escalations', 'les escalades ouvertes, une ligne chacune', 'ledge brain escalations'],
-  ['rules', 'les règles retenues, une ligne chacune', 'ledge brain rules']
+  ['rules', 'les règles retenues, une ligne chacune', 'ledge brain rules'],
+  ['handover "<bilan>"', 'ton bilan de relève, seulement quand Ledge te le demande', 'ledge brain handover "Fait : … En cours : … Suite : … Décisions : …"']
 ];
 
 const oneLine = (s: string): string => s.replace(/\s+/g, ' ').trim();
@@ -49,7 +50,7 @@ export function brainInstructions(o: { mandate: string; rules: LedgeRule[]; deci
     '',
     `## Dernières décisions (${decisions.length} au plus récent)`,
     '',
-    ...(decisions.length ? decisions.map(d => `- ${d.at.slice(0, 16).replace('T', ' ')} [${d.category}] ${d.by === 'user' ? "l'utilisateur" : 'toi'} : ${oneLine(d.summary)}${d.why ? ` (${oneLine(d.why)})` : ''}`) : ['- aucune pour l\'instant']),
+    ...(decisions.length ? decisions.map(d => `- ${d.at.slice(0, 16).replace('T', ' ')} [${d.category ?? '—'}] ${d.by === 'user' ? "l'utilisateur" : 'toi'} : ${oneLine(d.summary)}${d.why ? ` (${oneLine(d.why)})` : ''}`) : ['- aucune pour l\'instant']),
     '',
     '## Ce que tu reçois',
     '',

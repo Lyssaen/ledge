@@ -27,18 +27,18 @@ describe('Settings › Ledge', () => {
     expect(nav().getAllByRole('button').map(b => b.textContent).slice(1, 4)).toEqual(['General', 'Ledge', 'Appearance']);
   });
 
-  it('toggles the brain and picks the tool (Claude Code, Codex, Cursor Agent only)', async () => {
+  it('toggles the brain and picks the tool (Claude Code and Cursor Agent only)', async () => {
     const { d, user } = await open({ state: 'off', tool: 'claude', enabled: false });
     const tools = within(screen.getByRole('radiogroup', { name: 'Tool' }));
-    expect(tools.getAllByRole('radio').map(r => r.parentElement!.textContent)).toEqual(['Claude Code', 'Codex', 'Cursor Agent']);
+    expect(tools.getAllByRole('radio').map(r => r.parentElement!.textContent)).toEqual(['Claude Code', 'Cursor Agent']);
     expect(screen.getByText(/at the next relief or start/)).toBeVisible();
     const sw = screen.getByRole('switch', { name: 'Ledge thinks continuously' });
     expect(sw).toHaveAttribute('aria-checked', 'false');
     await user.click(sw);
     await waitFor(() => expect(setsOf(d)).toEqual([{ type: 'brain.set', rid: expect.any(String), enabled: true }]));
     d.push({ type: 'brain.status', status: { state: 'starting', tool: 'claude', enabled: true } });
-    await user.click(tools.getByRole('radio', { name: 'Codex' }));
-    await waitFor(() => expect(setsOf(d)[1]).toEqual({ type: 'brain.set', rid: expect.any(String), enabled: true, tool: 'codex' }));
+    await user.click(tools.getByRole('radio', { name: 'Cursor Agent' }));
+    await waitFor(() => expect(setsOf(d)[1]).toEqual({ type: 'brain.set', rid: expect.any(String), enabled: true, tool: 'cursor' }));
   });
 
   it('the tool change keeps the brain off when it is off', async () => {
