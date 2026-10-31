@@ -39,7 +39,7 @@ function EscalationItem(p: { client: DaemonClient; escalation: Escalation; rigs:
     <li className="rail-row" data-escalation={e.id}>
       <span className="rail-bot"><Bot tool={tool} state="question" pose={1} size={18} theme={theme} seed={e.from} paused={p.paused} reducedMotion={reduced} /></span>
       <span className="rail-text"><b>{seatName(e.from)}</b> <span title={e.summary}>{q?.question ?? e.summary}</span></span>
-      {q && q.options.length <= 2
+      {q && q.options.length > 0 && q.options.length <= 2
         ? q.options.map(o => <button key={o.id} type="button" className={cls('st-qa', o.recommended && 'pri')} disabled={busy}
             onClick={() => { answerEscalation(p.client, e.id, { [q.id]: o.id }); }}>{o.label}</button>)
         : <button type="button" className="st-qa" onClick={() => p.dispatch({ type: 'ledge', tab: 'conversation', focus: e.id })}>{t.side.see}</button>}

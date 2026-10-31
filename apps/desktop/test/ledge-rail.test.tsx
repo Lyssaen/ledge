@@ -5,6 +5,7 @@ import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import type { ClientMessage, Escalation, LedgeThreadItem, OpenRigStatus, Rig, RigSeat } from '@ledge/protocol';
 import { boot, closeDaemons, PROJECTS, type MockDaemon } from './helpers';
 import { LedgeRail } from '../src/chat/LedgeRail';
+import { Attention } from '../src/shell/sidebar/Attention';
 import { LangProvider } from '../src/i18n/lang';
 
 const LOCAL = [{ id: 'local', label: 'Local' }];
@@ -108,6 +109,23 @@ describe('the Ledge screen rail', () => {
     scroll.mockClear();
     await user.click(within(side.getByRole('region', { name: 'Your turn' })).getByRole('button', { name: 'View' }));
     await waitFor(() => expect(scroll).toHaveBeenCalledTimes(1));
+  });
+
+  it('a single question without options falls back to View, in the rail and the sidebar', async () => {
+    // The wire schema asks 2 options at least: a malformed escalation is handed to the components directly.
+    const NONE: Escalation = { ...ESC, id: 'qi-3', summary: 'Free answer', questions: [{ id: 'q1', question: 'Which port?', options: [] }] };
+    const list = [NONE]; const fleet = { subscribe: () => () => {}, escalations: () => list };
+    const client = { send: vi.fn(), onMessage: () => () => {}, fleet } as never;
+    render(<LangProvider lang="en"><LedgeRail client={client} view={{ sessions: [], machines: [] } as never} dispatch={() => {}} /></LangProvider>);
+    const row = within(document.querySelector('[data-escalation="qi-3"]') as HTMLElement);
+    expect(row.getByRole('button', { name: 'View' })).toBeVisible();
+    cleanup();
+    const onSee = vi.fn();
+    render(<LangProvider lang="en"><Attention items={[{ kind: 'escalation', escalation: NONE, since: NONE.createdAt } as never]} current={null} projectOf={() => null}
+      onOpen={() => {}} onDecide={() => {}} onMenu={() => {}} paused onSeeEscalation={onSee} /></LangProvider>);
+    const card = within(document.querySelector('[data-escalation="qi-3"]') as HTMLElement);
+    await userEvent.setup().click(card.getByRole('button', { name: 'View' }));
+    expect(onSee).toHaveBeenCalledWith(NONE);
   });
 
   it('narrow: one collapsed line, expandable', async () => {

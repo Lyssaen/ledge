@@ -50,7 +50,7 @@ function EscalationRow(p: {
         </div>
         <div className="st-l2">
           <span className="st-req" title={lead}>{lead}</span>
-          {q && q.options.length <= 2 ? q.options.map(o => (
+          {q && q.options.length > 0 && q.options.length <= 2 ? q.options.map(o => (
             <button key={o.id} type="button" className={cls('st-qa', o.recommended && 'pri')} disabled={busy}
               onClick={() => p.onAnswer?.(e.id, { [q.id]: o.id })}>{o.label}</button>
           )) : <button type="button" className="st-qa" onClick={() => p.onSee?.(e)}>{t.side.see}</button>}
