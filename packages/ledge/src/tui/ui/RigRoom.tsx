@@ -52,6 +52,8 @@ export function RigRoom({ target, side, height, keys, onBar }: { target: RoomTar
     ? rigs.flatMap(r => queueOf(r, exchanges.get(rigKey(r)) ?? [], escalations, { long: true })).sort((a, b) => b.at.localeCompare(a.at))
     : rig ? queueOf(rig, own ?? [], escalations) : []), [kernel, rigs, rig, exchanges, own, escalations]);
   const live = !!rig && rig.lifecycle !== 'unreachable' && status?.state !== 'unreachable';
+  // `w` goes through the local Ledge, which resolves @… against its own machine's rigs only: not for a remote rig, nor the kernel.
+  const writable = !kernel && rig?.machine === 'local';
   const machineLabel = (id: string) => machines.find(m => m.id === id)?.label ?? id;
   const where = kernel ? t.room.kernelWhere : rig?.name ?? '';
 
@@ -82,11 +84,11 @@ export function RigRoom({ target, side, height, keys, onBar }: { target: RoomTar
     if (!row) return false;
     if (k.return) { if (live) openSeat(row); return true; }
     if (input === 'a') { if (live) attachSeat(row); return true; }
-    if (input === 'w' && !kernel) { if (live) writeTo(row); return true; }
+    if (input === 'w' && !kernel) { if (live && writable) writeTo(row); return true; }
     return false;
   };
   useEffect(() => () => { keys.current = null; }, [keys]);
-  const bar: Keys = [['j k', t.keys.seats], ...(live && row ? [...(row.session ? [['↵', t.keys.openSeat] as const] : []), ['a', t.keys.attachSeat] as const, ...(kernel ? [] : [['w', t.keys.write] as const])] : []), ['1', t.keys.ledge]];
+  const bar: Keys = [['j k', t.keys.seats], ...(live && row ? [...(row.session ? [['↵', t.keys.openSeat] as const] : []), ['a', t.keys.attachSeat] as const, ...(writable ? [['w', t.keys.write] as const] : [])] : []), ['1', t.keys.ledge]];
   const barKey = bar.map(b => b.join(' ')).join('|');
   useEffect(() => onBar(bar), [barKey]); // eslint-disable-line react-hooks/exhaustive-deps
 

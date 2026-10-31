@@ -50,10 +50,14 @@ export function Home() {
   useEffect(() => { if (!ledgeish) setLedgeFocus(LEDGE_FOCUS.left); }, [ledgeish, setLedgeFocus]);
   const conv = useRef<KeyHandler | null>(null);
   const [convBar, setConvBar] = useState<Array<readonly [string, string]>>([]);
-  // A rig's room or the kernel's, on the right when wide: its keys (j k its seats, ↵ a w) and its key bar.
+  // A rig's room or the kernel's: on the right when wide; narrow, on the whole screen once ↵ or 2 opened it (esc, 1 close it).
+  // Its keys (j k its seats, ↵ a w) and its key bar.
   const room = useRef<KeyHandler | null>(null);
   const [roomBar, setRoomBar] = useState<Array<readonly [string, string]>>([]);
-  const roomShown = wide && (focus.kind === 'rig' || focus.kind === 'kernel');
+  const roomy = focus.kind === 'rig' || focus.kind === 'kernel';
+  const [roomOpen, setRoomOpen] = useState(false);
+  useEffect(() => { if (!roomy || wide) setRoomOpen(false); }, [roomy, wide]);
+  const roomShown = roomy && (wide || roomOpen);
   const showConv = ledgeish && (wide || active);
   // Ledge's tabs (an escalation of « À toi » is talked over in the conversation), and the rail opened over the left column.
   const [tabState, setTab] = useState<LedgeTab>('conversation');
@@ -86,8 +90,15 @@ export function Home() {
       // m: the mandate, on the whole screen when narrow.
       if (input === 'm' && focus.kind === 'ledge') { setTab('mandat'); if (!wide) setLedgeFocus(LEDGE_FOCUS.convo); return true; }
     }
+    // 2, narrow: the App chooses the rig, its room opens on the whole screen (a question selected takes its digits first).
+    if (input === '2' && !wide && selected?.pending?.kind !== 'question') setRoomOpen(true);
     if (active) return false;
     if (roomShown && room.current?.(input, key)) return true;
+    if (roomShown && !wide) {
+      // The room on the whole screen: esc back to the left column; j k past its seats stay in it.
+      if (key.escape) { setRoomOpen(false); return true; }
+      if (input === 'j' || input === 'k' || key.upArrow || key.downArrow) return true;
+    }
     if (input === 'H') {
       const s = (selected && selected.source === 'launcher' && selected.state !== 'exited' && selected.tool !== 'omp' && (!selected.handover || selected.handover.state === 'failed') ? selected : undefined) ?? near.find(x => x.handover?.state !== 'failed') ?? near[0];
       if (!s) return true;
@@ -104,6 +115,7 @@ export function Home() {
       // Ledge's field; on an escalation of « À toi », the conversation with it.
       // Narrow, the conversation opens on the whole screen with the keyboard on it: 1-9 answer the decision, / writes.
       if (focus.kind === 'ledge' || (focus.kind === 'yours' && !selected)) { setFocus(focus.kind === 'yours' && !yoursEsc ? { kind: 'ledge' } : focus); setLedgeFocus(wide ? LEDGE_FOCUS.field : LEDGE_FOCUS.convo); return true; }
+      if (roomy && !wide) { setRoomOpen(true); return true; }
       if (selected) go('session');
       return true;
     }
@@ -117,7 +129,7 @@ export function Home() {
     return false;
   });
 
-  const keys: Array<readonly [string, string]> = active ? convBar : roomShown ? [...roomBar, ['/', t.keys.ask], ['+', t.keys.launch], [',', t.keys.settings], ['?', t.keys.help], ['q', t.keys.quit]] : [
+  const keys: Array<readonly [string, string]> = active ? convBar : roomShown ? [...roomBar, ...(wide ? [] : [['esc', t.keys.back] as const]), ['/', t.keys.ask], ['+', t.keys.launch], [',', t.keys.settings], ['?', t.keys.help], ['q', t.keys.quit]] : [
     ['j k', t.keys.navigate], ['↵', ledgeish ? t.keys.write : t.keys.open], ...(showConv ? convBar : []), ...(yoursCount ? [['tab', t.keys.next] as const] : []), ...(selected?.pending ? [['y n', t.keys.answer] as const] : []),
     ...(selected ? [['a', t.keys.attach] as const] : []), ...(near.length ? [['H', t.keys.handover] as const] : []),
     ...(ledgeish && folded ? [[']', railOpen ? t.keys.close : t.keys.point] as const] : []), ...(ledgeish ? [['R', t.keys.summarize] as const] : []),
@@ -127,10 +139,10 @@ export function Home() {
   return (
     <Frame crumb={crumb} keys={keys} kept={tui.kept.drafts.has('ledge')}>
       <Box flexGrow={1}>
-        {(wide ? !(railShown && folded) : !active) ? <LeftColumn rows={rows} width={leftW} height={height - 2 - (tui.lastToast ? 1 : 0)} asks={shownAsks} near={near} /> : null}
+        {(wide ? !(railShown && folded) : !active && !roomShown) ? <LeftColumn rows={rows} width={leftW} height={height - 2 - (tui.lastToast ? 1 : 0)} asks={shownAsks} near={near} /> : null}
         {showConv ? <LedgeTabs tab={tab} width={!wide ? columns : columns - (railShown ? RAIL_W : 0) - (railShown && folded ? 0 : leftW)} folded={folded && !railShown}
           {...(yoursEsc ? { escalation: yoursEsc } : {})} keys={conv} onBar={setConvBar} onTab={moveTab} />
-          : wide ? <Box flexDirection="column" flexGrow={1}><Content focus={focus} room={room} onRoomBar={setRoomBar} side={three} height={height - 2 - (tui.lastToast ? 1 : 0)} /></Box> : null}
+          : wide || roomShown ? <Box flexDirection="column" flexGrow={1}><Content focus={focus} room={room} onRoomBar={setRoomBar} side={three} height={height - 2 - (tui.lastToast ? 1 : 0)} /></Box> : null}
         {railShown ? <LedgeRail width={RAIL_W} /> : null}
       </Box>
     </Frame>

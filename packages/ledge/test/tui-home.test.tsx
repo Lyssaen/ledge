@@ -412,6 +412,50 @@ describe('ledge tui: a rig\'s room and the kernel\'s', () => {
     } finally { await tui.cleanup(); }
   });
 
+  it('below 100 columns, 2 and ↵ open a rig\'s room or the kernel\'s on the whole screen; esc and 1 go back', async () => {
+    const tui = await startTui({ openrig: {} });
+    try {
+      await tui.resize(90, 40);
+      await until(() => tui.frame().includes('factory'));
+      await tui.press('2');
+      await until(() => tui.frame().includes('▣ FACTORY · RIG'));
+      expect(tui.frame()).not.toContain('PROJETS · SESSIONS SEULES');
+      expect(tui.frame()).toMatch(/esc +retour/);
+      // j k choose its seats, and stay in the room past them.
+      for (let i = 0; i < 8; i++) await tui.press('j');
+      await until(() => tui.frame().includes('TERMINAL · DESIGN · FACTORY'));
+      expect(tui.frame()).toContain('▣ FACTORY · RIG');
+      await tui.press(ESC);
+      await until(() => tui.frame().includes('PROJETS · SESSIONS SEULES'));
+      // The kernel's row, ↵: its room.
+      for (let i = 0; i < 40 && !/▌◈ Noyau/.test(tui.frame()); i++) await tui.press('k');
+      await tui.press('\r');
+      await until(() => tui.frame().includes('◈ NOYAU OPENRIG · LA MÉCANIQUE'));
+      expect(tui.frame()).toContain('@operator');
+      await tui.press('1');
+      await until(() => tui.frame().includes('PROJETS · SESSIONS SEULES') && !tui.frame().includes('LA MÉCANIQUE'));
+    } finally { await tui.cleanup(); }
+  });
+
+  it('w is off for a remote rig\'s seat: the local Ledge would resolve its address against its own rigs', async () => {
+    const remote = { ...mockupRigs()[1]!, id: 'remote', name: 'remote', machine: 'ec2', seats: [{ ref: 'build@remote', address: '@build', name: 'build', runtime: 'claude-code', state: 'working' as const }] };
+    const tui = await startTui({ openrig: { rigs: [...mockupRigs(), remote] } });
+    try {
+      await tui.resize(160, 46);
+      await until(() => tui.frame().includes('remote'));
+      await tui.press('2');
+      await until(() => tui.frame().includes('▣ FACTORY · RIG'));
+      for (let i = 0; i < 40 && !tui.frame().includes('▣ REMOTE · RIG'); i++) await tui.press('j');
+      await until(() => tui.frame().includes('▣ REMOTE · RIG'));
+      expect(tui.frame()).toMatch(/a +attacher/);
+      expect(tui.frame()).not.toMatch(/w +écrire/);
+      await tui.press('w');
+      await new Promise(r => setTimeout(r, 100));
+      expect(tui.frame()).toContain('▣ REMOTE · RIG');
+      expect(tui.frame()).not.toContain('❯ @build');
+    } finally { await tui.cleanup(); }
+  });
+
   it('the kernel room shows operator and queue, and the hidden seats as +2', async () => {
     const tui = await startTui({ openrig: { status: { machine: 'local', state: 'running', version: '0.6.14', human: 'registered' } } });
     answerExchanges(tui.daemon, {
