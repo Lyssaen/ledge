@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { taskClosed, type Session, type SessionEvent, type Task, type Team, type Tool } from '@ledge/protocol';
+import { MESSAGE_MAX, taskClosed, type Session, type SessionEvent, type Task, type Team, type Tool } from '@ledge/protocol';
 import { findRole } from '../daemon/roles.js';
 import { resolveRoleAddress, seatContext, teammates } from '../daemon/seat.js';
 import { connect, sendMessageAndAwaitAck, type Client } from '../client.js';
@@ -22,16 +22,14 @@ import { paths } from '../paths.js';
 type Payload = Record<string, unknown>;
 const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
 
-/** The longest first prompt sent as a topic candidate; the reducer cuts it to one line of TOPIC_MAX. */
-const PROMPT_MAX = 500;
-/** Claude Code hands a backgrounded helper's report back, another session's message, or its harness's notice about one
- *  (`[Cross-session idle notice]`…), as a prompt: that text is the report, message or notice, capped like a tool input. */
-const fromAgent = (t: string) => t.startsWith('<agent-message from="') || t.startsWith('<cross-session-message ') || t.startsWith('[Cross-session ');
+/** The longest prompt sent: the thread shows it whole (a typed reply, a Ledge message or notice, another agent's report),
+ *  and the reducer cuts the topic it yields to one line of TOPIC_MAX. */
+const PROMPT_MAX = MESSAGE_MAX;
 /** The prompt's text, cut; the brackets Ledge typed for images in its store leave it as `attachments` ids. */
 const promptText = (p: Payload) => {
   const raw = str(p.prompt)?.trim(); if (!raw) return {};
   const taken = takeImages(raw, paths().attachments); const ids = taken.ids; const t = ids.length ? taken.text : raw; // untouched without brackets
-  return { ...(t ? { text: t.slice(0, fromAgent(t) ? INPUT_MAX : PROMPT_MAX) } : {}), ...(ids.length ? { attachments: ids } : {}) };
+  return { ...(t ? { text: t.slice(0, PROMPT_MAX) } : {}), ...(ids.length ? { attachments: ids } : {}) };
 };
 
 function describeTool(tool: string | undefined, input: unknown): string {

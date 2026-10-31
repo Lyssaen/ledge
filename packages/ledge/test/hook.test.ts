@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { createServer } from 'node:net';
 import { spawnSync } from 'node:child_process';
 import { formatWho } from '../src/cli/who.js';
+import { MESSAGE_MAX } from '@ledge/protocol';
 import { mapClaudeHook, mapHook, mapCursorHook, runHook, codexLedgeId, underCodexDaemon, identityContext, tasksContext, REPLY_MAX, INPUT_MAX, toolOutput, trimInput } from '../src/cli/hook.js';
 import type { Session } from '@ledge/protocol';
 import { startServer } from '../src/daemon/server.js';
@@ -732,15 +733,15 @@ describe('ledge hook (CLI)', () => {
 
 describe('prompts and the chat marker', () => {
   const at = '2026-10-11T10:00:00.000Z';
-  it('UserPromptSubmit carries the prompt, cut to 500 characters', () => {
-    const m = mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt: 'x'.repeat(600) }, at);
-    expect(m?.event.name).toBe('UserPromptSubmit'); expect(m?.event.text).toHaveLength(500);
+  it('UserPromptSubmit carries the prompt, cut to MESSAGE_MAX characters', () => {
+    const m = mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt: 'x'.repeat(MESSAGE_MAX + 100) }, at);
+    expect(m?.event.name).toBe('UserPromptSubmit'); expect(m?.event.text).toHaveLength(MESSAGE_MAX);
     expect(mapClaudeHook('UserPromptSubmit', { session_id: 's' }, at)?.event.text).toBeUndefined();
-    // A helper's hand-back is its report: kept whole up to the tool input cap.
+    // A helper's hand-back is its report: kept whole, under the same cap.
     const back = `<agent-message from="a82b">\n[Subagent hand-back] The text below is the final report.\n${'  ligne du rapport\n'.repeat(160)}</agent-message>`;
     expect(back.length).toBeGreaterThan(3000);
     expect(mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt: back }, at)?.event.text).toBe(back);
-    expect(mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt: back + 'x'.repeat(INPUT_MAX) }, at)?.event.text).toHaveLength(INPUT_MAX);
+    expect(mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt: back + 'x'.repeat(MESSAGE_MAX) }, at)?.event.text).toHaveLength(MESSAGE_MAX);
   });
   it('takes the store brackets out of the prompt into attachments, keeping other brackets', () => {
     const dir = paths().attachments;
@@ -748,18 +749,27 @@ describe('prompts and the chat marker', () => {
     const brackets = `[Image attached: ${dir}/${a}.webp] [Image attached: ${dir}/${b}.png]`;
     const prompt = 'x'.repeat(700) + ' ' + brackets;
     const m = mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt }, at);
-    expect(m?.event.text).toBe('x'.repeat(500)); expect(m?.event.attachments).toEqual([a, b]);
+    expect(m?.event.text).toBe('x'.repeat(700)); expect(m?.event.attachments).toEqual([a, b]);
     const other = mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt: 'Regarde [Image attached: /tmp/x.png]' }, at);
     expect(other?.event.text).toBe('Regarde [Image attached: /tmp/x.png]'); expect(other?.event.attachments).toBeUndefined();
     const cursor = mapCursorHook('beforeSubmitPrompt', { session_id: 's', prompt: `Regarde ${brackets}` }, at, {});
     expect(cursor?.event.text).toBe('Regarde'); expect(cursor?.event.attachments).toEqual([a, b]);
   });
-  it('keeps a cross-session message whole (up to INPUT_MAX)', () => {
+  it('carries a long prompt whole: the thread shows it, only the topic is cut', () => {
+    const prompt = 'Contexte : '.padEnd(480, 'x') + ' les sessions communiquent (messages, tâches) via Ledge.';
+    expect(prompt.length).toBeGreaterThan(500);
+    expect(mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt }, at)?.event.text).toBe(prompt);
+    expect(mapCursorHook('beforeSubmitPrompt', { session_id: 's', prompt }, at, {})?.event.text).toBe(prompt);
+  });
+  it('carries a Ledge message typed whole (under INLINE_MAX) uncut', () => {
+    const prompt = `<ledge-message from="Zoe" tool="claude">${'y'.repeat(700)}</ledge-message>`;
+    expect(mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt }, at)?.event.text).toBe(prompt);
+  });
+  it('keeps a cross-session message whole', () => {
     const prompt = '<cross-session-message from="uds:/run/user/1000/cc-socks/1.sock" from-name="a-2d" from-mode="prompting">\n' + 'x'.repeat(3000);
     expect(mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt }, at)?.event.text).toHaveLength(prompt.length);
-    expect(mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt: 'x'.repeat(3000) }, at)?.event.text).toHaveLength(500);
   });
-  it('keeps a cross-session notice whole (up to INPUT_MAX), not cut like a prompt', () => {
+  it('keeps a cross-session notice whole', () => {
     const prompt = '[Cross-session idle notice] "a-2d", which you asked to be notified about, is idle now. Its harness reports: «' + 'x'.repeat(3000) + '».';
     expect(mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt }, at)?.event.text).toHaveLength(prompt.length);
   });
