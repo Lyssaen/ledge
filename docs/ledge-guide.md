@@ -218,22 +218,6 @@ Une demande seule : autorisation, question, plan ou modifications. On l'approuve
 
 S'ouvre depuis l'état de la liaison en en-tête. On y voit le PC, le compte, le serveur et les empreintes, et on y règle l'apparence. « Le PC » met à jour ou redémarre le daemon du PC. On peut aussi s'y déconnecter.
 
-### Connexion GitHub (`login`)
-
-S'affiche quand le téléphone n'est pas lié : « Continuer avec GitHub ».
-
-### Liaison (`link`)
-
-Route déclarée mais pas affichée par l'application : la liaison passe par la connexion GitHub, puis par la comparaison de code.
-
-### Clé changée (`key-changed`)
-
-S'affiche si la clé du PC a changé : « Refaire la liaison » ou « Se déconnecter ».
-
-### Nouvelle version (`update`)
-
-S'affiche quand une nouvelle version de l'application mobile est prête : « Mettre à jour » ou « Plus tard ».
-
 ### Équipes (`teams`)
 
 Les équipes et les rôles. « Nouvelle équipe », « Nouveau rôle ». « Lever » lance une équipe dans un projet, après confirmation par passkey.
@@ -257,6 +241,13 @@ La fiche d'une équipe active : ses sièges, sa consigne, « Modifier la composi
 ### Composition (`compose`)
 
 Modifier les sièges d'une équipe en cours, puis « Appliquer ».
+
+### Écrans qui s'affichent d'eux-mêmes
+
+Ces écrans ne sont pas des adresses : l'application les montre d'elle-même, selon l'état de la liaison avec le PC.
+- **Connexion GitHub :** quand le téléphone n'est pas lié, « Continuer avec GitHub », puis la comparaison du code avec le PC.
+- **Clé changée :** si la clé du PC a changé, « Refaire la liaison » ou « Se déconnecter ».
+- **Nouvelle version :** quand une nouvelle version de l'application mobile est prête, « Mettre à jour » ou « Plus tard ».
 
 ## Où renvoyer l'utilisateur
 
