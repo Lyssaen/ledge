@@ -123,7 +123,13 @@ export function createAnswers(d: AnswersDeps): Answers {
     const seen = e.intent === 'update' && Object.keys(answers).length === 0;
     if (seen) return act(http, { verb: 'approve', qitemId: e.id, annotation: 'Vu' });
     switch (d.path.kind) {
-      case 'reply-and-approve': return (await replyRow(e, answers)) ?? act(http, { verb: 'approve', qitemId: e.id, annotation: body });
+      case 'reply-and-approve': {
+        // A reply row noted before this try means an earlier try sent it, then lost its approve's answer (a timeout): if
+        // OpenRig applied that approve, the retry's 409 terminal is our own answer landing, not someone else's.
+        const retry = d.port.replyRow(e.id) !== undefined;
+        const r = (await replyRow(e, answers)) ?? await act(http, { verb: 'approve', qitemId: e.id, annotation: body });
+        return retry && r && !r.ok && r.code === 'already_answered' ? null : r;
+      }
       case 'approve-only': return act(http, { verb: 'approve', qitemId: e.id, annotation: body });
       case 'resolve': return act(http, { verb: 'resolve', qitemId: e.id, decision: body });   // facts D9 (plan B, not used)
     }
@@ -140,12 +146,12 @@ export function createAnswers(d: AnswersDeps): Answers {
     async answer(id, answers, by, o) {
       const e = d.port.escalation(id);
       if (!e) return refuse('failed', `aucune escalade ${id}`);
+      // Check and mark, synchronously (no await before inFlight.add): the first answer wins, whatever a later one holds.
+      if (inFlight.has(id) || e.state === 'answered' || e.state === 'closed') return refuse('already_answered', 'déjà répondue');
       const bad = invalid(e, answers); if (bad) return refuse('invalid', bad);
       if (e.machine !== d.localMachine) return refuse('unreachable', 'réponse à distance : lot 6');
       const ask = e.source === 'ask';
       if (!ask && d.port.status().state !== 'running') return refuse('openrig_down', "OpenRig n'est pas lancé");
-      // Check and mark, synchronously: the first answer wins.
-      if (inFlight.has(id) || e.state === 'answered' || e.state === 'closed') return refuse('already_answered', 'déjà répondue');
       inFlight.add(id);
       const before: EscalationPatch = { state: e.state, graceUntil: e.graceUntil, answer: undefined };
       d.port.patch(id, { state: 'answered', answer: { by, answers, at: now(), ...(o?.rule ? { rule: o.rule } : {}) } });

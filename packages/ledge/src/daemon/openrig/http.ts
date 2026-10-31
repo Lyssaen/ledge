@@ -29,13 +29,18 @@ const isUnreachable = (e: unknown): boolean => {
   return err?.name === 'TimeoutError' || err?.name === 'AbortError' || NETWORK_CODES.has(err?.code ?? '') || NETWORK_CODES.has(err?.cause?.code ?? '');
 };
 
-/** `token`: OPENRIG_AUTH_BEARER_TOKEN, sent as `Authorization: Bearer` on writes when set. */
-export function createOpenRigHttp(opts: { base: string; fetch?: Fetch; timeoutMs?: number; token?: string }): OpenRigHttp {
-  const doFetch = opts.fetch ?? fetch; const timeoutMs = opts.timeoutMs ?? 3000;
+/** How long a mission-control action may take: an approve can be slow, and giving up early turns an applied answer into a
+ *  retry that OpenRig refuses (409 terminal). */
+export const ACTION_TIMEOUT_MS = 15_000;
+
+/** `token`: OPENRIG_AUTH_BEARER_TOKEN, sent as `Authorization: Bearer` on writes when set. `timeoutMs` is for reads,
+ *  `actionTimeoutMs` for `action`. */
+export function createOpenRigHttp(opts: { base: string; fetch?: Fetch; timeoutMs?: number; actionTimeoutMs?: number; token?: string }): OpenRigHttp {
+  const doFetch = opts.fetch ?? fetch; const timeoutMs = opts.timeoutMs ?? 3000; const actionTimeoutMs = opts.actionTimeoutMs ?? ACTION_TIMEOUT_MS;
   const warned = new Set<string>();
 
-  async function send(path: string, init: RequestInit = {}): Promise<Response> {
-    try { return await doFetch(`${opts.base}${path}`, { ...init, signal: AbortSignal.timeout(timeoutMs) }); }
+  async function send(path: string, init: RequestInit = {}, ms = timeoutMs): Promise<Response> {
+    try { return await doFetch(`${opts.base}${path}`, { ...init, signal: AbortSignal.timeout(ms) }); }
     catch (e) {
       if (isUnreachable(e)) throw new OpenRigUnreachable(`OpenRig unreachable at ${opts.base}: ${(e as { cause?: { code?: string } }).cause?.code ?? (e as Error).name}`);
       throw e;
@@ -81,7 +86,7 @@ export function createOpenRigHttp(opts: { base: string; fetch?: Fetch; timeoutMs
     async action(body, o) {
       const headers: Record<string, string> = { 'content-type': 'application/json', 'x-openrig-session': o.session };
       if (opts.token) headers.authorization = `Bearer ${opts.token}`;
-      const res = await send('/api/mission-control/action', { method: 'POST', headers, body: JSON.stringify(body) });
+      const res = await send('/api/mission-control/action', { method: 'POST', headers, body: JSON.stringify(body) }, actionTimeoutMs);
       let text: string;
       try { text = await res.text(); }
       catch (e) { if (isUnreachable(e)) throw new OpenRigUnreachable(`OpenRig unreachable at ${opts.base}: body ${(e as Error).name}`); throw e; }

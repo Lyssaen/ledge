@@ -4,8 +4,9 @@ import type { DaemonClient } from './client';
 import { daemonStore, mergeThread, type AnswerAttempt } from './store';
 
 export { mergeThread };
-/** An answer with no `rig.result` after this long is refused (code `failed`). OpenRig can be slower than an ask. */
-const ANSWER_MS = 20_000;
+/** An answer with no `rig.result` after this long is refused (code `failed`). It outlasts the daemon's worst case (rig queue
+ *  create 15 s + approve 15 s), so a slow answer is never refused here while the daemon still delivers it. */
+const ANSWER_MS = 45_000;
 let next = 0;
 const rid = (kind: string) => `${kind}-${Date.now().toString(36)}-${++next}`;
 const get = () => daemonStore.getState();

@@ -85,12 +85,14 @@ describe('answers', () => {
     act(() => daemonStore.apply({ type: 'rig.result', rid: r2, ok: true }));
     expect(result.current.state).toBe('done');
   });
-  it('no result in time is refused with code failed', () => {
+  it('no result within 45 s is refused with code failed, not before the daemon gives up', () => {
     vi.useFakeTimers();
     const { client } = fake();
     const { result } = renderHook(() => useAnswerState('e1'));
     act(() => { answerEscalation(client, 'e1', {}); });
-    act(() => { vi.advanceTimersByTime(30_000); });
+    act(() => { vi.advanceTimersByTime(30_000); });   // daemon worst case (queue create 15 s + approve 15 s): still waiting
+    expect(result.current.state).toBe('sending');
+    act(() => { vi.advanceTimersByTime(15_000); });
     expect(result.current.state).toBe('refused');
     expect(result.current.code).toBe('failed');
   });

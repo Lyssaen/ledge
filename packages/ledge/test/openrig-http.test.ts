@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createFakeOpenRig, type FakeOpenRig } from './fakes/openrig.js';
-import { createOpenRigHttp, OpenRigUnreachable } from '../src/daemon/openrig/http.js';
+import { ACTION_TIMEOUT_MS, createOpenRigHttp, OpenRigUnreachable, type Fetch } from '../src/daemon/openrig/http.js';
 import { OPEN_QUEUE_STATES } from '../src/daemon/openrig/facts.js';
 
 let fake: FakeOpenRig;
@@ -69,5 +69,16 @@ describe('OpenRig http client', () => {
     await expect(reset.health()).rejects.toBeInstanceOf(OpenRigUnreachable);
     const slow = createOpenRigHttp({ base: fake.url, timeoutMs: 20, fetch: (_i, init) => new Promise((_r, rej) => init!.signal!.addEventListener('abort', () => rej(init!.signal!.reason))) });
     await expect(slow.health()).rejects.toBeInstanceOf(OpenRigUnreachable);
+  });
+
+  it('gives action its own longer timeout (15 s by default), reads keep theirs', async () => {
+    expect(ACTION_TIMEOUT_MS).toBe(15_000);
+    const late: Fetch = (_i, init) => new Promise((res, rej) => {
+      const t = setTimeout(() => res(new Response('{"ok":true}', { status: 200 })), 80);
+      init!.signal!.addEventListener('abort', () => { clearTimeout(t); rej(init!.signal!.reason); });
+    });
+    const h = createOpenRigHttp({ base: fake.url, timeoutMs: 20, actionTimeoutMs: 1000, fetch: late });
+    await expect(h.health()).rejects.toBeInstanceOf(OpenRigUnreachable);
+    await expect(h.action({ verb: 'approve', qitemId: 'q' }, { session: 'ledge@external' })).resolves.toEqual({ status: 200, json: { ok: true } });
   });
 });

@@ -107,11 +107,37 @@ describe('answers', () => {
     expect(fake.calls).toHaveLength(2);
   });
 
+  test('an answered escalation is already_answered before any other refusal', async () => {
+    expect((await answers.answer('qi-1', { q1: 'sqlite' }, 'user')).ok).toBe(true);
+    expect(await answers.answer('qi-1', {}, 'ledge')).toMatchObject({ ok: false, code: 'already_answered' });   // not invalid
+    fake.setState('stopped');
+    expect(await answers.answer('qi-1', { q1: 'json' }, 'ledge')).toMatchObject({ ok: false, code: 'already_answered' });   // not openrig_down
+    fake.port.patch('qi-far', { state: 'closed' });
+    expect(await answers.answer('qi-far', { q1: 'json' }, 'ledge')).toMatchObject({ ok: false, code: 'already_answered' });   // not unreachable
+    expect(fake.calls).toHaveLength(2);
+  });
+
   test('a 409 qitem_already_terminal from approve is already_answered, not failed', async () => {   // fixé par la fiche de faits, D7
     fake.failNext('http:/api/mission-control/action', { status: 409, body: { error: 'qitem_already_terminal', state: 'done' } });
     expect(await answers.answer('qi-1', { q1: 'sqlite' }, 'user')).toEqual({ ok: false, code: 'already_answered', reason: expect.any(String) });
     expect(fake.port.escalation('qi-1')).toMatchObject({ state: 'closed' });
     expect(fake.port.escalation('qi-1')).not.toHaveProperty('answer');
+  });
+
+  test('a retry whose approve gets 409 terminal after its own approve timed out is ok, still answered', async () => {
+    const http = fake.port.http()!;
+    let first = true;
+    fake.port.http = () => ({ async action(body, o) {
+      if (first) { first = false; await http.action(body, o); throw new Error('OpenRig unreachable at http://x: TimeoutError'); }   // OpenRig applied it anyway
+      return http.action(body, o);
+    } });
+    expect(await answers.answer('qi-1', { q1: 'sqlite' }, 'user')).toMatchObject({ ok: false, code: 'failed' });
+    expect(fake.port.escalation('qi-1')?.state).toBe('pending');
+    fake.failNext('http:/api/mission-control/action', { status: 409, body: { error: 'qitem_already_terminal', state: 'done' } });
+    const r = await answers.answer('qi-1', { q1: 'sqlite' }, 'user');
+    expect(r).toMatchObject({ ok: true, escalation: { id: 'qi-1', state: 'answered' } });
+    expect(fake.port.escalation('qi-1')).toMatchObject({ state: 'answered', answer: { by: 'user', answers: { q1: 'sqlite' } } });
+    expect(fake.calls.filter(c => c.kind === 'cli:queue create')).toHaveLength(1);
   });
 
   test('retry after a failed approve reuses the reply row', async () => {

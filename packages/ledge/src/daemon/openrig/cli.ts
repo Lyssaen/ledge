@@ -89,7 +89,7 @@ export function createRigCli(exec: RigExec): RigCli {
     send: async (ref, text) => outcome(await exec(['send', ref, `${SEND_SIGNATURE}${text}`], { timeoutMs: 30_000, env: { OPENRIG_SESSION_NAME: SEND_SESSION_NAME } })),
     queueCreate: async o => {
       const r = await exec(['queue', 'create', '--source', o.source, '--destination', o.destination, '--summary', o.summary, '--body-file', o.bodyFile,
-        ...(o.replyTo ? ['--reply-to', o.replyTo] : []), '--json'], { timeoutMs: 30_000 });
+        ...(o.replyTo ? ['--reply-to', o.replyTo] : []), '--json'], { timeoutMs: 15_000 });
       if (r.code !== 0) return { ok: false, detail: detail(r) };
       const id = createdId(r.stdout); return id ? { ok: true, qitemId: id } : { ok: true };
     },
