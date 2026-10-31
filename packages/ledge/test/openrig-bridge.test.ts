@@ -137,6 +137,7 @@ describe('OpenRig bridge', () => {
     const asks: Ask[] = [{ id: 'a000002', from: 's1', fromName: 'solo', question: 'Q?', options: '', at: '2026-10-30T10:00:00.000Z', state: 'open' }];
     const { b, of } = setup({ exec: fakeRigCli(null), sessionName: id => (id === 's1' ? 'ledge-solo' : undefined), asks: { all: () => asks, onChange: () => () => {} } });
     await b.start(); await until(() => b.status().state === 'absent');
+    expect(b.status()).toEqual({ machine: 'local', state: 'absent', install: 'npm install -g @openrig/cli@0.6.14 && rig setup' });
     expect(of('escalation.updated')[0]!.escalation).toMatchObject({ id: 'ask-a000002', source: 'ask', from: 'ledge-solo', state: 'pending' });
     expect(b.replay().map(m => m.type)).toEqual(['openrig.status', 'rig.snapshot', 'escalation.updated']);
   });

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as P from '../src/index.js';
-import { RigSpecInfoSchema, ALWAYS_USER, EXCHANGES_MAX, EscalationSchema, RIG_RESULT_CODES, SessionSchema, parseClientMessage, parseServerMessage } from '../src/index.js';
+import { DaemonInfoSchema, OpenRigStatusSchema, RigSpecInfoSchema, ALWAYS_USER, EXCHANGES_MAX, EscalationSchema, RIG_RESULT_CODES, SessionSchema, parseClientMessage, parseServerMessage } from '../src/index.js';
 
 const now = '2026-10-30T10:00:00.000Z';
 const seat = { ref: 'dev-build@starter', address: '@build', name: 'build', runtime: 'claude-code', state: 'working' as const };
@@ -97,5 +97,13 @@ describe('lot 5 contract', () => {
   it('RIG_NAME refuses ../x, a b, Factory, 41 chars and accepts a-b', () => {
     for (const bad of ['../x', 'a b', 'Factory', 'a'.repeat(41), '-a', '']) expect(P.RIG_NAME.test(bad), bad).toBe(false);
     for (const ok of ['a-b', 'a'.repeat(40), '0x']) expect(P.RIG_NAME.test(ok), ok).toBe(true);
+  });
+  it('lot 6 contract: unreachable state, answer delivery, openrigFleet', () => {
+    expect(OpenRigStatusSchema.parse({ machine: 'ec2', state: 'unreachable' })).toEqual({ machine: 'ec2', state: 'unreachable' });
+    expect(OpenRigStatusSchema.parse({ machine: 'ec2', state: 'absent', install: 'npm i' }).install).toBe('npm i');
+    const answer = { by: 'user', answers: { q1: 'a' }, at: now, delivery: 'queued' };
+    expect(EscalationSchema.parse({ ...esc([]), answer }).answer?.delivery).toBe('queued');
+    expect(EscalationSchema.safeParse({ ...esc([]), answer: { ...answer, delivery: 'later' } }).success).toBe(false);
+    expect(DaemonInfoSchema.parse({ version: '1', install: 'npm', systemd: true, openrigFleet: true }).openrigFleet).toBe(true);
   });
 });

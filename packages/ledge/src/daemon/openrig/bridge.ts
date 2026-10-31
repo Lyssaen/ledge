@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { Ask, Escalation, Exchange, OpenRigStatus, Projects, Rig, RigLaunchInfo, RigRepo, ServerMessage, SessionRig, Tool } from '@ledge/protocol';
 import { log } from '../../log.js';
-import { EVENTS, EVENTS_UNOBSERVED, HUMAN_ADDRESS, HUMAN_GATE_TIER, HUMAN_ID, OPERATOR_HUMAN_SESSIONS, REGISTRATION, openrigBase } from './facts.js';
+import { EVENTS, INSTALL_COMMAND, EVENTS_UNOBSERVED, HUMAN_ADDRESS, HUMAN_GATE_TIER, HUMAN_ID, OPERATOR_HUMAN_SESSIONS, REGISTRATION, openrigBase } from './facts.js';
 import { createOpenRigHttp, OpenRigUnreachable, type Fetch, type OpenRigHttp } from './http.js';
 import { openEventStream, type EventStream, type OpenRigEvent } from './sse.js';
 import { createCursorWriter, readOpenRigFile } from './cursor.js';
@@ -119,8 +119,8 @@ export function createBridge(deps: BridgeDeps): Bridge {
   const emit = (m: BridgeMessage) => { if (!active) return;
     if (m.type === 'rig.updated') m = { ...m, rig: annotated(m.rig) }; else if (m.type === 'rig.snapshot') m = { ...m, rigs: m.rigs.map(annotated) };
     for (const fn of listeners) { try { fn(m); } catch (e) { log(`openrig: listener threw: ${(e as Error).message}`); } } };
-  function setStatus(state: OpenRigStatus['state'], extra: { version?: string; detail?: string } = {}) {
-    const next: OpenRigStatus = { machine, state, ...(extra.version ? { version: extra.version } : {}), ...(state === 'running' ? { human } : {}), ...(extra.detail ? { detail: extra.detail } : {}) };
+  function setStatus(state: OpenRigStatus['state'], extra: { version?: string; detail?: string; install?: string } = {}) {
+    const next: OpenRigStatus = { machine, state, ...(extra.version ? { version: extra.version } : {}), ...(state === 'running' ? { human } : {}), ...(extra.detail ? { detail: extra.detail } : {}), ...(extra.install ? { install: extra.install } : {}) };
     if (isDeepStrictEqual(next, status)) return;
     status = next; emit({ type: 'openrig.status', status });
   }
@@ -320,7 +320,7 @@ export function createBridge(deps: BridgeDeps): Bridge {
     }
     if (live || stream) disconnect();
     if (p.state === 'unsupported') return setStatus('unsupported', { version: p.version, detail: p.detail });
-    if (p.state === 'absent') { failedAt = null; return setStatus('absent'); }
+    if (p.state === 'absent') { failedAt = null; return setStatus('absent', { install: INSTALL_COMMAND }); }
     if (starting) return; // keeps 'starting'
     if (failedAt !== null) {
       if (Date.now() - failedAt < retryMs) return; // keeps 'error'

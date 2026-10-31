@@ -88,7 +88,8 @@ export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(
   /** Takes `approval` on an OMP `session.launch` (auto mode). */ ompApproval: z.boolean().optional(),
   /** Its home folder, so a client shows the folders under it as `~` (absent from older daemons). */ home: z.string().optional(), mobile: z.boolean().optional(),
   /** Knows `ask.create` / `ask.answer`: a session's decision for the user (`ledge ask`). */ asks: z.boolean().optional(),
-  /** Reads OpenRig (rigs, escalations, exchanges) through its local bridge. */ openrig: z.boolean().optional() });
+  /** Reads OpenRig (rigs, escalations, exchanges) through its local bridge. */ openrig: z.boolean().optional(),
+  /** Relays the rigs of its remote machines (lot 6): a client reading several daemons shows each remote rig once. */ openrigFleet: z.boolean().optional() });
 export type DaemonInfo = z.infer<typeof DaemonInfoSchema>;
 export const UpdateFailureSchema = z.enum(['git-install', 'no-systemd', 'sessions-at-risk', 'npm-failed', 'busy']);
 export type UpdateFailure = z.infer<typeof UpdateFailureSchema>;
