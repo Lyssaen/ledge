@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Fil d'un rig</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#a1a1a1}a:hover{color:#fafafa}
+</style>
+</helmet>
+<div style="width: 600px; height: 820px; box-sizing: border-box; display: flex; flex-direction: column; background: #0a0a0a; font-family: 'Geist', system-ui, sans-serif; color: #fafafa; overflow: hidden; border-left: 1px solid #ffffff1a;">
+
+  <div style="padding: 16px 20px 12px; border-bottom: 1px solid #ffffff1a; display: flex; flex-direction: column; gap: 10px;">
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <span style="font-size: 18px; font-weight: 600;">factory</span>
+      <span style="font-size: 11px; font-weight: 600; color: #d4d4d4; background: #27272a; padding: 2px 8px; border-radius: 6px;">rig</span>
+      <span style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #a1a1a1;">feat/rigs</span>
+      <div style="margin-left: auto; display: flex; gap: 6px;">
+        <button style="height: 30px; padding: 0 10px; border-radius: 8px; border: 1px solid #ffffff26; background: transparent; color: #fafafa; font: 500 12px 'Geist', sans-serif;">Terminaux</button>
+        <button style="height: 30px; padding: 0 10px; border-radius: 8px; border: 1px solid #ffffff26; background: transparent; color: #fafafa; font: 500 12px 'Geist', sans-serif;">Arrêter…</button>
+      </div>
+    </div>
+    <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+      <button style="height: 26px; padding: 0 10px; border-radius: 9999px; border: 0; background: #27272a; color: #fafafa; font: 500 12px 'Geist', sans-serif;">Tout</button>
+      <button style="height: 26px; padding: 0 10px; border-radius: 9999px; border: 1px solid #ffffff1a; background: transparent; color: #a1a1a1; font: 500 12px 'Geist', sans-serif;">Messages</button>
+      <button style="height: 26px; padding: 0 10px; border-radius: 9999px; border: 1px solid #ffffff1a; background: transparent; color: #a1a1a1; font: 500 12px 'Geist', sans-serif;">Tâches</button>
+      <button style="height: 26px; padding: 0 10px; border-radius: 9999px; border: 1px solid #ffffff1a; background: transparent; color: #a1a1a1; font: 500 12px 'Geist', sans-serif;">Décisions</button>
+    </div>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 12px; padding: 16px 20px; overflow: hidden;">
+
+    <div style="padding: 12px 14px; border-radius: 10px; background: #171717; border: 1px solid #ffffff1a; display: flex; flex-direction: column; gap: 6px;">
+      <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #a1a1a1;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="1.5" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"></rect><path d="m8 12 3 3 5-6"></path></svg>
+        <span>Tâche confiée · <span style="color: #fafafa;">orch-lead</span> → <span style="color: #fafafa;">build</span></span>
+        <span style="margin-left: auto;">16:12</span>
+      </div>
+      <span style="font-size: 14px; font-weight: 500;">Reprendre les rigs après un reboot de WSL</span>
+      <span style="font-size: 12px; color: #60a5fa;">prise par build · en cours</span>
+    </div>
+
+    <div style="padding: 12px 14px; border-radius: 10px; background: #171717; border: 1px solid #ffffff1a; display: flex; flex-direction: column; gap: 6px;">
+      <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #a1a1a1;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a1a1a1" stroke-width="1.5" aria-hidden="true"><path d="M4 6h16v10H8l-4 4z"></path></svg>
+        <span>Message · <span style="color: #fafafa;">orch-lead</span> → <span style="color: #fca5a5;">Ledge</span> · décision</span>
+        <span style="margin-left: auto;">16:36</span>
+      </div>
+      <span style="font-size: 14px; font-weight: 500;">Rebase ou merge pour remettre feat/rigs à jour ?</span>
+      <div style="display: flex; gap: 8px; align-items: flex-start; padding: 10px; border-radius: 8px; background: #1a0c0c; border: 1px solid #7f1d1d66;">
+        <svg width="22" height="18" viewBox="0 0 36 32" aria-hidden="true" style="flex-shrink: 0;"><rect x="5" y="8" width="26" height="18" rx="9" fill="#c25a53"></rect><circle cx="13" cy="17" r="2.4" fill="#1a1112"></circle><circle cx="23" cy="17" r="2.4" fill="#1a1112"></circle><line x1="18" y1="2" x2="18" y2="8" stroke="#a63c37" stroke-width="2"></line><circle cx="18" cy="3" r="2.4" fill="#f2b09c"></circle></svg>
+        <div style="display: flex; flex-direction: column; gap: 4px; flex-grow: 1;">
+          <span style="font-size: 13px; line-height: 19px; color: #fecaca;"><b style="font-weight: 600;">Ledge a tranché : merge.</b> Le force-push est refusé sur ce dépôt ; un rebase finirait en branche -rebased.</span>
+          <span style="font-size: 11px; color: #a1a1a1;">souvenir : « force-push bloqué », 26/10</span>
+        </div>
+        <a href="#" style="font-size: 12px; text-decoration: none; white-space: nowrap;">Revenir dessus</a>
+      </div>
+    </div>
+
+    <div style="padding: 12px 14px; border-radius: 10px; background: #171717; border: 1px solid #ffffff1a; display: flex; flex-direction: column; gap: 6px;">
+      <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #a1a1a1;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a1a1a1" stroke-width="1.5" aria-hidden="true"><path d="M4 6h16v10H8l-4 4z"></path></svg>
+        <span>Message · <span style="color: #fafafa;">build</span> → <span style="color: #fafafa;">review-a</span></span>
+        <span style="margin-left: auto;">16:42</span>
+      </div>
+      <span style="font-size: 13px; line-height: 19px; color: #d4d4d4;">Candidat prêt sur feat/rigs (3f2a1c0). Tests ciblés verts : daemon 48, desktop 12. Reprise vérifiée sur starter.</span>
+      <div style="display: flex; gap: 12px; font-size: 12px;"><span style="color: #34d399;">Lu par review-a</span><a href="#" style="text-decoration: none;">Voir dans le fil de review-a</a></div>
+    </div>
+
+    <div style="padding: 12px 14px; border-radius: 10px; background: #171717; border: 1px solid #b4530999; display: flex; flex-direction: column; gap: 8px;">
+      <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #a1a1a1;">
+        <span style="font-size: 11px; font-weight: 600; color: #fbbf24; background: #422006; padding: 1px 6px; border-radius: 6px;">Remontée à toi</span>
+        <span><span style="color: #fafafa;">orch-lead</span> → <span style="color: #fca5a5;">Ledge</span> → toi</span>
+        <span style="margin-left: auto;">16:44</span>
+      </div>
+      <span style="font-size: 14px; font-weight: 500;">Sessions : passer du fichier JSON à SQLite ?</span>
+      <span style="font-size: 12px; color: #a1a1a1;">Architecture : hors du mandat de Ledge. Avis de Ledge : SQLite.</span>
+      <div style="display: flex; gap: 8px;">
+        <button style="height: 30px; padding: 0 12px; border-radius: 8px; border: 0; background: #991b1b; color: #fef2f2; font: 500 12px 'Geist', sans-serif;">SQLite</button>
+        <button style="height: 30px; padding: 0 12px; border-radius: 8px; border: 1px solid #ffffff26; background: transparent; color: #fafafa; font: 500 12px 'Geist', sans-serif;">Garder le JSON</button>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #a1a1a1; padding: 0 4px;">
+      <span style="width: 8px; height: 8px; border-radius: 9999px; background: #34d399;"></span>
+      <span>operator : review-b relancé (contexte à 82 %), relève remise</span>
+      <span style="margin-left: auto;">16:47</span>
+    </div>
+  </div>
+
+  <div style="padding: 12px 20px 16px; border-top: 1px solid #ffffff1a; display: flex; gap: 8px; align-items: center;">
+    <label for="dest" style="position: absolute; left: -9999px;">Destinataire</label>
+    <select id="dest" style="height: 36px; padding: 0 8px; border-radius: 8px; border: 1px solid #ffffff26; background: #171717; color: #fafafa; font: 500 12px 'Geist', sans-serif;"><option>à orch-lead</option><option>à build</option><option>à tout le rig</option></select>
+    <label for="msg" style="position: absolute; left: -9999px;">Message</label>
+    <input id="msg" placeholder="Écrire au rig, Ledge le voit aussi…" style="flex-grow: 1; height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid #ffffff26; background: transparent; color: #fafafa; font: 400 13px 'Geist', sans-serif;">
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":600,"height":820}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

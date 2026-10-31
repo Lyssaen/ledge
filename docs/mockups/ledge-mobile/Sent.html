@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Après l'envoi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;display=swap">
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#000}
+.scroll{overflow-y:auto;min-height:0;overscroll-behavior:contain;scrollbar-width:none}.scroll::-webkit-scrollbar{display:none}
+a{color:#fafafa;text-decoration:none}a:hover{color:#fff}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.ico{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.badge{font-size:12px;line-height:16px;font-weight:600;padding:2px 8px;border-radius:6px;white-space:nowrap}
+.b-info{color:#60a5fa;background:#172554}
+.bot .shell{fill:url(#sig);stroke:#859397;stroke-width:.8}.bot .visor{fill:#172124;stroke:#00000055;stroke-width:1}.bot .foot{fill:#273238}.bot .ant{stroke:#273238;stroke-width:2;stroke-linecap:round}.bot .lamp,.bot .eye{fill:var(--eye)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.live{width:8px;height:8px;border-radius:9999px;background:#60a5fa;animation:pulse 1.2s ease-in-out infinite}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:44px;padding:0 16px;border-radius:10px;font:500 14px/20px 'Geist',system-ui,sans-serif;box-sizing:border-box;cursor:pointer}
+.btn-outline{background:transparent;color:#fafafa;border:1px solid #ffffff26}
+</style>
+<style>
+body{display:flex;justify-content:center}
+[data-if]{display:contents}[data-if][hidden]{display:none}
+</style>
+</head>
+<body>
+<div style="width: 390px; height: 100vh; max-height: 844px; box-sizing: border-box; background: #000; color: #fafafa; font-family: 'Geist', system-ui, sans-serif; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; overflow: hidden;">
+  <svg width="0" height="0" style="position: absolute;" aria-hidden="true"><defs><linearGradient id="sig" x1=".2" y1="0" x2=".75" y2="1"><stop stop-color="#34434b"></stop><stop offset="1" stop-color="#273238"></stop></linearGradient></defs></svg>
+
+  <header style="display: flex; align-items: center; gap: 8px; padding: 52px 8px 12px; border-bottom: 1px solid #ffffff1a;">
+    <a href="Main.html" aria-label="Retour aux sessions" style="width: 44px; height: 44px; display: grid; place-items: center; border-radius: 8px;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg></a>
+    <svg class="bot" width="36" height="36" viewBox="0 0 96 96" aria-hidden="true" style="--eye: #90c7f2; flex-shrink: 0;"><path class="ant" d="M49 22V14"></path><circle class="lamp" cx="49" cy="12" r="3"></circle><rect class="foot" x="29" y="75" width="13" height="8" rx="4"></rect><rect class="foot" x="54" y="75" width="13" height="8" rx="4"></rect><rect class="shell" x="15" y="22" width="66" height="56" rx="20"></rect><rect class="visor" x="25" y="35" width="47" height="29" rx="13"></rect><rect class="eye" x="36" y="43" width="6" height="12" rx="3"></rect><rect class="eye" x="55" y="43" width="6" height="12" rx="3"></rect></svg>
+    <div style="display: flex; flex-direction: column; flex-grow: 1; min-width: 0;">
+      <span style="font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Bix · Badge de durée d'attente</span>
+      <span style="font-size: 12px; line-height: 16px; color: #a1a1a1;">harness-assistant · <span class="mono">wait-badge</span> · Claude Code</span>
+    </div>
+    <button type="button" aria-label="Plus d'actions" style="width: 44px; height: 44px; display: grid; place-items: center; background: transparent; border: 0; color: #fafafa; border-radius: 8px;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button>
+  </header>
+
+  <main class="scroll" style="flex-grow: 1; display: flex; flex-direction: column; gap: 16px; padding: 20px 16px 16px;">
+    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
+      <div style="max-width: 300px; padding: 12px 14px; border-radius: 14px 14px 4px 14px; background: #262626; color: #fafafa;">Oui, fusionne et pousse sur main. Ensuite relance le build Windows.</div>
+      <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; line-height: 16px; color: #a1a1a1;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 14px; height: 14px; color: #34d399;"><path d="M20 6 9 17l-5-5"></path></svg>Pris par le terminal · à l'instant</span>
+    </div>
+
+    <div style="display: flex; align-items: center; justify-content: space-between;">
+      <span style="display: inline-flex; align-items: center; gap: 8px; font-weight: 500;"><span class="live" aria-hidden="true"></span>Bix travaille</span>
+      <span class="badge b-info">Au travail</span>
+    </div>
+
+    <section aria-label="Terminal en direct" style="flex-grow: 1; display: flex; flex-direction: column; border: 1px solid #ffffff1a; border-radius: 12px; background: #0a0a0a; overflow: hidden;">
+      <div style="display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px; border-bottom: 1px solid #ffffff1a;">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 16px; height: 16px; color: #a1a1a1;"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" x2="20" y1="19" y2="19"></line></svg>
+        <span style="font-size: 13px; font-weight: 500;">Terminal</span>
+        <span style="font-size: 12px; color: #a1a1a1;">en direct · lecture seule</span>
+      </div>
+      <pre class="mono" style="margin: 0; padding: 12px 14px; font-size: 11px; line-height: 17px; color: #a1a1a1; white-space: pre-wrap; flex-grow: 1;">&gt; Oui, fusionne et pousse sur main.
+  Ensuite relance le build Windows.
+
+● Bash(git checkout main &amp;&amp; git merge
+       --no-ff wait-badge)
+  ⎿ Merge made by the 'ort' strategy.
+     4 files changed, 96 insertions(+)
+
+● Bash(git push origin main)
+  ⎿ main -&gt; main
+
+● Je relance le build Windows…
+  ✻ Building… (12s · esc to interrupt)</pre>
+    </section>
+  </main>
+
+  <footer style="display: flex; flex-direction: column; gap: 10px; padding: 12px 16px 34px; border-top: 1px solid #ffffff1a;">
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <label for="next" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);">Consigne pour la suite</label>
+      <input id="next" type="text" placeholder="Ajouter une consigne pour la suite…" style="flex-grow: 1; height: 48px; box-sizing: border-box; padding: 0 14px; border-radius: 14px; border: 1px solid #ffffff26; background: #0a0a0a; color: #fafafa; font: 400 15px/20px 'Geist', system-ui, sans-serif;">
+      <button type="button" class="btn btn-outline" style="height: 48px;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 16px; height: 16px;"><rect x="6" y="6" width="12" height="12" rx="1"></rect></svg>Interrompre</button>
+    </div>
+  </footer>
+</div>
+</body>
+</html>

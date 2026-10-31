@@ -15,6 +15,15 @@ const SHELLS: Record<BotProps['tool'], string> = {
   omp: 'M17 22H79Q83 22 83 26V48Q83 52 79 52H71V79Q71 83 67 83H58Q54 83 54 79V52H41V67Q41 71 37 71H28Q24 71 24 67V52H17Q13 52 13 48V26Q13 22 17 22Z'
 };
 const NAMES = { claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor', omp: 'omp' };
+// No visor: every logo carries its eyes on the shell itself.
+const FACES: Record<BotProps['tool'], string | undefined> = {
+  claude: 'translate(0 -8)',
+  codex: undefined,
+  cursor: 'translate(31.5 58) skewY(27) scale(.86) translate(-48.5 -49)',
+  omp: 'translate(0 -12)'
+};
+/** The eyes follow the pointer up to this many pixels beyond the bot's edges. */
+const GAZE_REACH = 240;
 const EYES = { starting: 'open', working: 'open', approval: 'open', question: 'wide', idle: 'happy', error: 'error', done: 'sleep', readonly: 'open' };
 
 export function LogoBot({ tool, state, size, theme, seed, reducedMotion = false, frozen = false, nodKey, askKey, branded = true }: Pick<BotProps, 'tool' | 'state' | 'size' | 'theme' | 'seed' | 'reducedMotion' | 'frozen' | 'nodKey' | 'askKey'> & { branded?: boolean }) {
@@ -28,7 +37,7 @@ export function LogoBot({ tool, state, size, theme, seed, reducedMotion = false,
   const h = seedHash(seed);
   const copy = useUiCopy();
   useBotVisibility(ref);
-  useBotMotion(ref, { seed, state, askKey, nodKey, enabled });
+  useBotMotion(ref, { seed, state, askKey, nodKey, enabled, gazeReach: GAZE_REACH });
   useBotNod(ref, nodKey, enabled, state, askKey);
   const style = {
     '--bot-size': `${size}px`, '--bot-eye': `var(--bot-eye-${readonly ? 'done' : state})`,
@@ -60,11 +69,10 @@ export function LogoBot({ tool, state, size, theme, seed, reducedMotion = false,
         <path className="cube-edge" d="M17 32L48 49L79 32M48 49V83" />
       </g>}
       {tool === 'claude' && <path className="shine" d="M27 28H69" />}
-      <g transform={tool === 'omp' ? 'translate(0 -7)' : tool === 'claude' ? 'translate(0 -6)' : tool === 'cursor' ? 'translate(0 5)' : undefined}>
-        <rect className="visor" x="25" y="35" width="47" height={tool === 'omp' ? 22 : 29} rx={tool === 'omp' ? 9 : 13} />
-        <path className="reflection" d="M39 37H60Q68 37 69 44H28Q29 37 39 37" />
+      <g transform={FACES[tool]}>
         <g className="gaze"><g className="eye-blink">
-          <g className="eye-open"><rect x="36" y="43" width="6" height="12" rx="3" /><rect x="55" y="43" width="6" height="12" rx="3" /></g>
+          <g className="eye-open"><rect x="36" y="43" width="6" height="12" rx={tool === 'claude' ? .6 : 3} /><rect x="55" y="43" width="6" height="12" rx={tool === 'claude' ? .6 : 3} /></g>
+          <g className="eye-glint"><rect x="37.5" y="44.5" width="2.4" height="2.4" rx={tool === 'claude' ? 0 : 1.2} /><rect x="56.5" y="44.5" width="2.4" height="2.4" rx={tool === 'claude' ? 0 : 1.2} /></g>
           <path className="eye-happy" d="M35 51Q39 43 43 51M54 51Q58 43 62 51" />
           <path className="eye-error" d="m35 45 8 3m11 0 8-3M38 54h2m16 0h2" />
           <path className="eye-sleep" d="M35 50q4 3 8 0m11 0q4 3 8 0" />

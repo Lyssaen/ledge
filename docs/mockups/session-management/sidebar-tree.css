@@ -1,0 +1,144 @@
+/* The sidebar as an IDE explorer (sidebar-tree.tsx): ask field, views, « À toi », the project › branch › session tree. */
+.sidebar.st{width:288px;display:flex;flex-direction:column;padding:0;gap:0;background:var(--sidebar);border-right:1px solid var(--sidebar-border)}
+.st button{font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;text-align:left}
+.st button:focus-visible{outline:2px solid var(--ring);outline-offset:-2px;border-radius:var(--radius-sm)}
+.st .mono{font-family:'Geist Mono',monospace}
+.st-fill{flex:1}
+.st-brand{height:52px;flex:none;display:flex;align-items:center;gap:8px;padding:0 10px 0 16px;border-bottom:1px solid var(--sidebar-border)}
+.st-brand strong{font-size:17px;font-weight:650;letter-spacing:-.02em}
+.st-brand strong span{color:var(--sidebar-primary)}
+.st .st-new{height:28px;display:flex;align-items:center;gap:6px;padding:0 5px 0 8px;border-radius:var(--radius-md);background:var(--primary);color:var(--primary-foreground);font-size:12px;font-weight:500}
+.st .st-new:hover{background:var(--primary-hover)}
+.st-ask{margin:10px 10px 0;height:36px;flex:none;display:flex;align-items:center;gap:8px;padding:0 8px 0 8px;border:1px solid var(--input);border-radius:var(--radius-md);background:var(--well);cursor:text}
+.st-ask:focus-within,.st-ask.on{border-color:var(--ring)}
+.st-ask input{flex:1;min-width:0;border:0;background:transparent;color:var(--sidebar-foreground);font:13px 'Geist',system-ui,sans-serif;outline:none}
+.st-ask input::placeholder{color:var(--muted-foreground)}
+.st .st-mascot{display:inline-flex;flex:none}
+.st .st-search{margin:8px 10px;height:32px;flex:none;display:flex;align-items:center;gap:8px;padding:0 9px;border:1px solid var(--border);border-radius:var(--radius-md);font-size:12px;color:var(--muted-foreground)}
+.st .st-search span{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st .st-search:hover{border-color:var(--input);color:var(--foreground)}
+.st-views{display:flex;gap:2px;margin:0 10px 6px;padding:2px;flex:none;border-radius:var(--radius-md);background:var(--well);border:1px solid var(--border)}
+.st .st-views button{flex:1;height:28px;display:flex;align-items:center;gap:7px;padding:0 8px;border-radius:var(--radius-sm);font-size:12px;color:var(--muted-foreground)}
+.st .st-views button:hover{color:var(--sidebar-foreground)}
+.st .st-views button.on{background:var(--sidebar-accent);color:var(--sidebar-foreground)}
+.st .st-views button.on svg{color:var(--sidebar-primary)}
+.st-views small{font:10px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.st-scroll{flex:1;min-height:0;overflow:auto;padding:2px 8px 8px;display:flex;flex-direction:column;gap:10px}
+.st-label{display:flex;align-items:center;gap:4px;height:26px;padding:0 2px 0 8px;font-size:11px;color:var(--muted-foreground)}
+.st-badge{min-width:18px;height:18px;padding:0 5px;border-radius:999px;display:grid;place-items:center;font:600 10px 'Geist Mono',monospace;background:var(--sidebar-primary);color:var(--sidebar-primary-foreground,var(--primary-foreground))}
+.st .st-icon{width:24px;height:24px;display:grid;place-items:center;border-radius:var(--radius-sm);color:var(--muted-foreground)}
+.st .st-icon:hover,.st .st-icon.on{background:var(--sidebar-accent);color:var(--sidebar-foreground)}
+/* « À toi » */
+.st-card{display:flex;gap:8px;padding:6px 6px 6px 8px;border-radius:var(--radius-md)}
+.st-card:hover,.st-card.sel{background:var(--sidebar-accent)}
+.st-card-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.st-l1{display:flex;align-items:center;gap:6px;font-size:13px}
+.st .st-name{font-weight:500;color:var(--sidebar-foreground)}
+.st .st-name:hover{text-decoration:underline}
+.st-where{flex:1;min-width:0;display:flex;align-items:center;gap:2px;font:11px 'Geist Mono',monospace;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-where .side-swatch{width:7px;height:7px;margin:0 3px 0 0}
+.st-l2{display:flex;align-items:center;gap:5px}
+.st-req{flex:1;min-width:0;font-size:12px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st .st-qa{height:22px;padding:0 8px;border-radius:var(--radius-sm);font-size:11px;font-weight:500;border:1px solid var(--input);color:var(--sidebar-foreground)}
+.st .st-qa:hover{background:var(--sidebar-accent)}
+.st .st-qa.pri{background:var(--primary);border-color:var(--primary);color:var(--primary-foreground)}
+.st .st-qa.pri:hover{background:var(--primary-hover)}
+.st .st-showall{margin:2px 0 0 34px;font-size:12px;color:var(--muted-foreground)}
+.st .st-showall:hover{color:var(--sidebar-foreground)}
+/* The tree */
+.st-tree{display:flex;flex-direction:column;gap:1px}
+.st-row{--d:0;position:relative;display:flex;align-items:center;gap:6px;min-height:28px;padding:0 6px 0 calc(4px + var(--d) * 14px);border-radius:var(--radius-sm);font-size:13px;color:var(--muted-foreground)}
+.st-row:hover{background:var(--sidebar-accent);color:var(--sidebar-foreground)}
+.st-row.sel{background:var(--sidebar-accent);color:var(--sidebar-foreground)}
+.st-row.drop-over{background:color-mix(in srgb,var(--sidebar-primary) 16%,var(--sidebar-accent));outline:1.5px solid var(--sidebar-primary)}
+.is-dragging .st-project:not(.drop-over){outline:1px dashed var(--input);outline-offset:-1px}
+.st .st-chev{width:16px;height:16px;flex:none;display:grid;place-items:center;color:var(--muted-foreground);border-radius:4px}
+.st .st-chev:hover{color:var(--sidebar-foreground)}
+.st-chev span{display:grid;transition:transform .15s}
+.st-chev span.open{transform:rotate(90deg)}
+.st-gap{width:16px;flex:none}
+.st-none{background:none!important;border:1px dashed var(--muted-foreground)}
+.st .st-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;padding:4px 0}
+.st-main strong{font-weight:500;color:var(--sidebar-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-main span{font-size:12px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-project .st-main{flex-direction:row;align-items:baseline;gap:6px}
+.st-project .st-main strong{font-weight:600;flex:none;max-width:60%}
+.st-project .st-main span{font-size:11px}
+.st-branch{color:var(--muted-foreground)}
+.st-branch .st-main span{font:12px 'Geist Mono',monospace;color:var(--sidebar-foreground)}
+.st-wt{font:500 9px 'Geist Mono',monospace;padding:1px 4px;border-radius:4px;border:1px solid var(--input);color:var(--muted-foreground);flex:none}
+.st-count{font:10px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.st-tally{display:flex;gap:7px;flex:none;font:500 10px 'Geist Mono',monospace}
+.st-tally span{display:flex;align-items:center;gap:3px}
+.st-tally i{width:6px;height:6px;border-radius:50%;background:currentColor}
+.t-need{color:var(--sidebar-primary)}.t-work{color:var(--info)}.t-done{color:var(--muted-foreground)}
+.t-off{color:var(--muted-foreground)}.t-off i{background:none;border:1px solid currentColor}
+.st-agent{align-items:flex-start;min-height:40px}
+.st-agent>.st-chev,.st-agent>.st-gap{margin-top:7px}
+.st-bot{width:18px;height:18px;flex:none;display:grid;place-items:center;margin-top:5px}
+.st-card .st-bot{margin-top:1px}
+.st-agent.helper{min-height:28px;align-items:center}
+.st-agent.helper .st-main{flex-direction:row;gap:6px;align-items:baseline}
+.st-agent.helper .st-main strong,.st-dense .st-agent .st-main strong{flex:none}
+.st-agent.helper>.st-chev,.st-agent.helper>.st-gap,.st-agent.helper .st-bot,.st-agent.helper .st-time,.st-agent.helper .st-kids{margin-top:0}
+.st-agent.done{opacity:.6}
+.st-agent.off .st-main strong{color:var(--muted-foreground)}
+.st-time{font:11px 'Geist Mono',monospace;color:var(--muted-foreground);flex:none;margin-top:6px}
+.st-time.t-approval{color:var(--sidebar-primary)}.st-time.t-question{color:var(--warning)}.st-time.t-error{color:var(--danger-text)}
+.st-kids{flex:none;margin-top:5px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;border:1px solid var(--input);display:grid;place-items:center;font:500 10px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.st-acts{position:absolute;right:4px;top:4px;display:none;gap:1px;padding:1px;border-radius:var(--radius-sm);background:var(--sidebar-accent)}
+.st-project .st-acts,.st-branch .st-acts,.st-agent.helper .st-acts{top:2px}
+.st-row:hover .st-acts,.st-row:focus-within .st-acts{display:flex}
+.st .st-acts button{width:22px;height:22px;display:grid;place-items:center;border-radius:5px;color:var(--muted-foreground)}
+.st .st-acts button:hover{background:color-mix(in srgb,var(--foreground) 8%,transparent);color:var(--sidebar-foreground)}
+.st-more{min-height:26px;font-size:12px}
+.st .st-more button{color:var(--muted-foreground)}
+.st .st-more button:hover{color:var(--sidebar-foreground)}
+.st .st-link{display:flex;align-items:center;gap:4px;font-size:11px}
+/* Archives, at the foot of the tree: folded, filterable, each session read, put back, resumed or deleted from its row. */
+.st-archives{border-top:1px solid var(--sidebar-border);padding-top:6px}
+.st .st-arch-toggle{display:flex;align-items:center;gap:6px;height:24px;font-size:11px;color:var(--muted-foreground)}
+.st .st-arch-toggle:hover{color:var(--sidebar-foreground)}
+.st-arch-toggle>span{display:grid;transition:transform .15s}
+.st-arch-toggle>span.open{transform:rotate(90deg)}
+.st-arch-toggle small{font:10px 'Geist Mono',monospace}
+.st-arch-q{display:flex;align-items:center;gap:6px;height:28px;margin:2px 4px 4px;padding:0 8px;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--muted-foreground)}
+.st-arch-q input{flex:1;min-width:0;border:0;background:transparent;color:var(--sidebar-foreground);font:12px 'Geist',system-ui,sans-serif;outline:none}
+.st-arch{padding-left:8px}
+.st-arch .st-main strong{display:flex;align-items:center;gap:0;color:var(--muted-foreground)}
+.st-arch .st-main strong .side-swatch{width:7px;height:7px;margin:0 6px 0 0}
+.st-arch.sel .st-main strong{color:var(--sidebar-foreground)}
+.st-arch .st-bot{opacity:.7}
+.st .st-acts button.danger:hover{color:var(--danger-text)}
+.st-auto{display:flex;align-items:center;gap:8px;margin:6px 4px 0;padding:0 4px;font-size:11px;color:var(--muted-foreground)}
+.st-auto span{flex:1}
+.st-auto select{height:24px;padding:0 4px;border:1px solid var(--input);border-radius:var(--radius-sm);background:var(--well);color:var(--sidebar-foreground);font:11px 'Geist',system-ui,sans-serif}
+.st-help{margin:6px 8px 0;font-size:11px;line-height:15px;color:var(--muted-foreground)}
+.st-hint{margin:auto 0 0;padding:6px 8px 0;font-size:11px;color:var(--muted-foreground);display:flex;flex-wrap:wrap;gap:4px 6px;align-items:center}
+/* Compact: one line per session. */
+.st-dense .st-agent{min-height:26px;align-items:center}
+.st-dense .st-agent .st-main{flex-direction:row;gap:6px;align-items:baseline;padding:2px 0}
+.st-dense .st-agent>.st-chev,.st-dense .st-agent>.st-gap,.st-dense .st-bot,.st-dense .st-time,.st-dense .st-kids{margin-top:0}
+.st-dense .st-acts{top:1px}
+/* Machines and Settings at the foot. */
+.st-foot{height:44px;flex:none;display:flex;align-items:center;gap:10px;padding:0 6px 0 14px;border-top:1px solid var(--sidebar-border);font-size:11px;color:var(--muted-foreground);overflow:hidden}
+.st .st-mach{display:flex;align-items:center;gap:5px;white-space:nowrap}
+.st .st-mach:hover{color:var(--sidebar-foreground)}
+.st-mach small{font:10px 'Geist Mono',monospace}
+.st-mach .machine-dot{margin:0}
+@media(max-width:1250px){.sidebar.st{width:256px}.st-hint{display:none}}
+/* A narrow window: a 64 px rail, the projects as swatches with their tally, the rest behind icons. */
+@media(max-width:850px){
+ .sidebar.st{width:64px}
+ .st kbd{display:none!important}
+ .st-brand{justify-content:center;padding:0}.st-brand strong,.st-brand .st-fill,.st .st-new span,.st .st-new kbd{display:none}
+ .st-ask{margin:10px 8px 0;padding:0;justify-content:center;border:0;background:none}.st-ask input,.st-ask kbd{display:none}
+ .st .st-search{margin:6px 8px;justify-content:center;padding:0}.st .st-search span,.st .st-search kbd{display:none}
+ .st-views{flex-direction:column;margin:0 8px 6px}.st .st-views button{font-size:0;gap:0}.st-views small{display:none}
+ .st-attn,.st-label,.st-hint,.st-help,.st-agent,.st-branch,.st-more,.st-archives{display:none}
+ .st .st-views button{justify-content:center;padding:0}.st-views .st-fill{display:none}
+ .st-project{justify-content:center;padding:0;min-height:36px}.st-project>.st-chev,.st-project>.st-gap,.st-project .st-main,.st-project .st-acts{display:none}
+ .st-project .side-swatch{width:16px;height:16px;border-radius:5px}
+ .st-tally{position:absolute;top:2px;right:6px}.st-tally span:not(.t-need){display:none}
+ .st-foot{flex-direction:column;height:auto;padding:8px 0;gap:8px}.st .st-mach{font-size:0}.st-mach small{display:none}.st-foot .st-fill{display:none}
+}

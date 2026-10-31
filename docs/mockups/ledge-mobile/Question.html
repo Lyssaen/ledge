@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Question</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;display=swap">
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#000}
+.scroll{overflow-y:auto;min-height:0;overscroll-behavior:contain;scrollbar-width:none}.scroll::-webkit-scrollbar{display:none}
+a{color:#fafafa;text-decoration:none}a:hover{color:#fff}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.ico{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.badge{font-size:12px;line-height:16px;font-weight:600;padding:2px 8px;border-radius:6px;white-space:nowrap}
+.b-warn{color:#fbbf24;background:#422006}
+.bot .shell{fill:url(#sig);stroke:#859397;stroke-width:.8}.bot .visor{fill:#172124;stroke:#00000055;stroke-width:1}.bot .foot{fill:#273238}.bot .ant{stroke:#273238;stroke-width:2;stroke-linecap:round}.bot .lamp,.bot .eye{fill:var(--eye)}
+.opt{display:flex;align-items:center;gap:12px;width:100%;min-height:56px;padding:12px 14px;border-radius:12px;border:1px solid #ffffff1a;background:#0a0a0a;color:#fafafa;font:500 15px/20px 'Geist',system-ui,sans-serif;text-align:left;box-sizing:border-box;cursor:pointer}
+.opt:hover{background:#171717}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:52px;padding:0 16px;border-radius:10px;font:600 15px/20px 'Geist',system-ui,sans-serif;box-sizing:border-box;cursor:pointer}
+.btn-primary{background:#9f0712;color:#fef2f2;border:0}
+</style>
+<style>
+body{display:flex;justify-content:center}
+[data-if]{display:contents}[data-if][hidden]{display:none}
+</style>
+</head>
+<body>
+<div style="width: 390px; height: 100vh; max-height: 844px; box-sizing: border-box; background: #000; color: #fafafa; font-family: 'Geist', system-ui, sans-serif; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; overflow: hidden;">
+  <svg width="0" height="0" style="position: absolute;" aria-hidden="true"><defs><linearGradient id="sig" x1=".2" y1="0" x2=".75" y2="1"><stop stop-color="#34434b"></stop><stop offset="1" stop-color="#273238"></stop></linearGradient></defs></svg>
+
+  <header style="display: flex; align-items: center; gap: 8px; padding: 52px 8px 12px; border-bottom: 1px solid #ffffff1a;">
+    <a href="Main.html" aria-label="Retour aux sessions" style="width: 44px; height: 44px; display: grid; place-items: center; border-radius: 8px;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg></a>
+    <svg class="bot" width="36" height="36" viewBox="0 0 96 96" aria-hidden="true" style="--eye: #f6d487; filter: drop-shadow(0 0 5px #fbbf2477); flex-shrink: 0;"><path class="ant" d="M49 22V14"></path><circle class="lamp" cx="49" cy="12" r="3"></circle><rect class="foot" x="29" y="75" width="13" height="8" rx="4"></rect><rect class="foot" x="54" y="75" width="13" height="8" rx="4"></rect><ellipse class="shell" cx="48" cy="49" rx="32" ry="31"></ellipse><rect class="visor" x="25" y="35" width="47" height="29" rx="13"></rect><rect class="eye" x="36" y="42" width="6" height="14" rx="3"></rect><rect class="eye" x="55" y="42" width="6" height="14" rx="3"></rect></svg>
+    <div style="display: flex; flex-direction: column; flex-grow: 1; min-width: 0;">
+      <span style="font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Nova · Thème par défaut</span>
+      <span style="font-size: 12px; line-height: 16px; color: #a1a1a1;">design-system · <span class="mono">main</span> · Codex</span>
+    </div>
+    <button type="button" aria-label="Plus d'actions" style="width: 44px; height: 44px; display: grid; place-items: center; background: transparent; border: 0; color: #fafafa; border-radius: 8px;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button>
+  </header>
+
+  <main class="scroll" style="flex-grow: 1; display: flex; flex-direction: column; gap: 16px; padding: 20px 16px;">
+    <div style="display: flex; align-items: center; justify-content: space-between;">
+      <span style="font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: #a1a1a1;">À vous de jouer · 1 min</span>
+      <span class="badge b-warn">Une question</span>
+    </div>
+    <h1 style="margin: 0; font-size: 22px; line-height: 28px; font-weight: 600; letter-spacing: -0.02em;">Quel thème utiliser par défaut ?</h1>
+    <p style="margin: 0; color: #a1a1a1;">Le thème s'applique au premier lancement, avant tout réglage de l'utilisateur.</p>
+
+    <div role="radiogroup" aria-label="Options" style="display: flex; flex-direction: column; gap: 8px;">
+      <button type="button" role="radio" aria-checked="false" class="opt" data-opt="0">
+          <span class="mono" style="width: 24px; height: 24px; display: grid; place-items: center; border-radius: 6px; background: #171717; border: 1px solid #ffffff26; font-size: 12px; color: #a1a1a1; flex-shrink: 0;">1</span>
+          <span style="flex-grow: 1;">Sombre · Signal</span>
+          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: #ff6467;" data-check><path d="M20 6 9 17l-5-5"></path></svg>
+        </button>
+        <button type="button" role="radio" aria-checked="false" class="opt" data-opt="1">
+          <span class="mono" style="width: 24px; height: 24px; display: grid; place-items: center; border-radius: 6px; background: #171717; border: 1px solid #ffffff26; font-size: 12px; color: #a1a1a1; flex-shrink: 0;">2</span>
+          <span style="flex-grow: 1;">Clair · Galet</span>
+          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: #ff6467;" data-check><path d="M20 6 9 17l-5-5"></path></svg>
+        </button>
+        <button type="button" role="radio" aria-checked="false" class="opt" data-opt="2">
+          <span class="mono" style="width: 24px; height: 24px; display: grid; place-items: center; border-radius: 6px; background: #171717; border: 1px solid #ffffff26; font-size: 12px; color: #a1a1a1; flex-shrink: 0;">3</span>
+          <span style="flex-grow: 1;">Suivre le système</span>
+          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: #ff6467;" data-check><path d="M20 6 9 17l-5-5"></path></svg>
+        </button>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 6px;">
+      <label for="other" style="font-size: 12px; line-height: 16px; color: #a1a1a1;">Ou une autre réponse</label>
+      <input id="other" type="text" placeholder="Écrire votre réponse à Nova…" style="height: 48px; box-sizing: border-box; padding: 0 14px; border-radius: 12px; border: 1px solid #ffffff26; background: #0a0a0a; color: #fafafa; font: 400 15px/20px 'Geist', system-ui, sans-serif;">
+    </div>
+  </main>
+
+  <footer style="padding: 14px 16px 34px; border-top: 1px solid #ffffff1a;">
+    <a href="Main.html" class="btn btn-primary" style="width: 100%; color: #fef2f2;">Envoyer « <span data-text="pickedLabel"></span> »</a>
+  </footer>
+</div>
+<script>
+const opts = [...document.querySelectorAll('[data-opt]')];
+function pick(i) {
+  opts.forEach((b, j) => {
+    const on = i === j;
+    b.setAttribute('aria-checked', String(on));
+    b.style.borderColor = on ? '#ff6467' : '';
+    b.style.background = on ? '#1c0a0a' : '';
+    b.querySelector('[data-check]').style.visibility = on ? 'visible' : 'hidden';
+  });
+  document.querySelector('[data-text="pickedLabel"]').textContent = opts[i].children[1].textContent;
+}
+opts.forEach((b, i) => b.addEventListener('click', () => pick(i)));
+pick(0);
+</script>
+</body>
+</html>

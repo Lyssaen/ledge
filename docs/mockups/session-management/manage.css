@@ -1,0 +1,64 @@
+/* Session management: the session menu, the confirmations, the undo toast and the archived-session banner. */
+.session-menu{position:fixed;z-index:40;min-width:248px;max-width:300px;padding:4px;display:flex;flex-direction:column;background:var(--popover);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-overlay);animation:menu-in .12s ease-out}
+@keyframes menu-in{from{opacity:0;transform:translateY(-3px)}}
+.session-menu-head{padding:7px 8px 6px;display:flex;flex-direction:column;gap:1px}
+.session-menu-head strong{font-size:12px;font-weight:600}
+.session-menu-head small{font-size:11px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.session-menu hr{border:0;border-top:1px solid var(--border);margin:4px -4px}
+.session-menu [role=menuitem]{display:flex;align-items:center;justify-content:space-between;gap:12px;height:32px;padding:0 8px;border-radius:var(--radius-sm);font-size:13px}
+.session-menu [role=menuitem]>span{display:flex;align-items:center;gap:9px}
+.session-menu [role=menuitem] svg{color:var(--muted-foreground)}
+.session-menu [role=menuitem]:hover:not(:disabled),.session-menu [role=menuitem]:focus-visible{background:var(--accent);outline:none}
+.session-menu [role=menuitem]:disabled{opacity:.45}
+.session-menu [role=menuitem].danger,.session-menu [role=menuitem].danger svg,.assign-menu .danger,.assign-menu .danger svg{color:var(--danger-text)}
+.session-menu [role=menuitem].danger:hover,.session-menu [role=menuitem].danger:focus-visible{background:color-mix(in srgb,var(--danger-text) 12%,transparent)}
+.session-menu kbd,.session-menu [data-kbd]{font-size:10px}
+.session-menu-note{margin:0;padding:2px 8px 6px 31px;font-size:11px;line-height:15px;color:var(--muted-foreground)}
+
+/* The "…" beside a seat, shown at hover (a sibling: a button cannot nest in the seat's button). */
+.office-shell .seat-more{position:absolute;z-index:4;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;color:var(--muted-foreground);background:var(--popover);border:1px solid var(--border)!important;opacity:0;transition:opacity .12s}
+.office-shell .seat-more.place-t{top:14px}
+.office-shell .seat-more.place-b{top:290px}
+.agent-seat:hover+.seat-more,.agent-seat:focus-visible+.seat-more,.seat-more:hover,.seat-more:focus-visible,.seat-more[aria-expanded=true]{opacity:1}
+.seat-more:hover{color:var(--foreground)}
+/* An agent leaving its seat: it rises, shrinks and fades before the table closes the gap. */
+.leaving{animation:leave .45s ease-in forwards;pointer-events:none}
+@keyframes leave{to{opacity:0;transform:translateY(-18px) scale(.82);filter:blur(1px)}}
+.lrow.leaving{animation:leave-row .4s ease-in forwards}
+@keyframes leave-row{to{opacity:0;transform:translateX(24px)}}
+
+/* Confirmations */
+.confirm-modal{width:420px;padding:22px 22px 18px}
+.confirm-modal h2{margin:12px 0 6px;font-size:16px;font-weight:600;letter-spacing:-.2px}
+.confirm-modal p{margin:0;font-size:13px;line-height:20px}
+.confirm-modal .confirm-extra{margin-top:10px;font-size:12px;line-height:18px}
+.confirm-icon{width:36px;height:36px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;background:var(--secondary);color:var(--foreground)}
+.confirm-icon.delete{background:color-mix(in srgb,var(--danger-text) 14%,transparent);color:var(--danger-text)}
+.confirm-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+.ledge-btn.danger-btn{background:var(--destructive)!important;border-color:var(--destructive)!important;color:var(--destructive-foreground)!important}
+:root[data-theme=dark] .ledge-btn.danger-btn{color:oklch(0.2 0 0)!important}
+.ledge-btn.danger-outline{color:var(--danger-text)!important}
+
+/* Undo toast, with the time left drawn under it */
+.undo-toast{display:flex;align-items:center;gap:14px;padding:10px 10px 10px 16px;overflow:hidden}
+.undo-toast button{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 8px;border-radius:var(--radius-sm);font-size:12px;font-weight:500;color:var(--foreground)}
+.undo-toast button:hover{background:var(--accent)}
+.undo-toast>i{position:absolute;left:0;bottom:0;height:2px;width:100%;background:var(--primary);transform-origin:left;animation:undo-time linear forwards}
+@keyframes undo-time{to{transform:scaleX(0)}}
+
+/* Bulk action in a group header and in a table's menu */
+.g-archive{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 8px;border-radius:var(--radius-sm);font-size:12px;color:var(--muted-foreground)}
+.g-archive:hover{background:var(--accent);color:var(--foreground)}
+.r-more{width:28px!important;padding:0!important}
+
+/* Archived session banner, on the session page */
+.archived-banner{display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--secondary) 70%,transparent);font-size:12px}
+.archived-banner>svg{color:var(--muted-foreground)}
+.archived-banner .ledge-btn{height:28px!important;font-size:12px!important;padding:0 10px!important}
+.conversation-workspace.is-archived{grid-template-rows:auto 1fr}
+.side-archive.active>svg{color:var(--sidebar-primary)}
+
+.archived-pill{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:999px;border:1px solid var(--border);font-size:11px;color:var(--muted-foreground)}
+.confirm-backdrop{z-index:50}
+.session-menu-sub{display:flex;flex-direction:column;margin:0 0 2px 22px;padding-left:6px;border-left:1px solid var(--border)}
+.session-menu-sub [role=menuitem] .side-swatch{width:8px;height:8px;border-radius:3px;display:inline-block}

@@ -1,20 +1,33 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Bot, type BotProps } from '../bots/Bot';
 import type { BotState } from '../bots/poseFor';
 import { useUiCopy } from '../i18n/copy';
 import { LogoBot } from './LogoBot';
+import { LedgeSketch, type LedgePalette } from './LedgeSketch';
 import '../styles/tokens.css';
 import '../bots/bots.css';
 import './mascots.css';
 import './mascots-logos.css';
+import './ledge-sketch.css';
 
 const FAMILY: { tool: BotProps['tool']; name: string; title: string; detail: string; source: string }[] = [
-  { tool: 'claude', name: 'Claude Code', title: 'Clawd, version Ledge', detail: 'Le corps en pixels, les pattes et les petits bras de Clawd. La visière et les yeux arrondis de Ledge, sans changer sa silhouette.', source: 'https://github.com/Vvkmnn/clawd' },
-  { tool: 'codex', name: 'Codex', title: 'Le nuage terminal', detail: 'Le nuage de l’app Codex accueille la visière et le regard expressif de Ledge.', source: 'https://openai.com/index/introducing-the-codex-app/' },
-  { tool: 'cursor', name: 'Cursor', title: 'Le cube adouci', detail: 'Le volume du logo, avec des coins arrondis, des facettes douces et une visière Ledge. Un petit cube moins anguleux, plus accueillant.', source: 'https://cursor.com/brand' },
-  { tool: 'omp', name: 'omp', title: 'Le petit pi', detail: 'La barre du π porte la visière. Ses deux jambes restent asymétriques.', source: 'https://omp.sh/' }
+  { tool: 'claude', name: 'Claude Code', title: 'Clawd, version Ledge', detail: 'Le corps en pixels, les pattes et les petits bras de Clawd. Pas de visière : deux yeux pixel posés sur le corps, comme l’original, avec un reflet à la couleur de l’état.', source: 'https://github.com/Vvkmnn/clawd' },
+  { tool: 'codex', name: 'Codex', title: 'Le nuage terminal', detail: 'Le nuage de l’app Codex, avec les mêmes yeux posés sur le corps que le reste de la famille.', source: 'https://openai.com/index/introducing-the-codex-app/' },
+  { tool: 'cursor', name: 'Cursor', title: 'Le cube adouci', detail: 'Le volume du logo, avec des coins arrondis et des facettes douces. Le regard suit la face avant du cube, sans visière.', source: 'https://cursor.com/brand' },
+  { tool: 'omp', name: 'omp', title: 'Le petit pi', detail: 'Les yeux se posent directement sur la barre du π. Ses deux jambes restent asymétriques.', source: 'https://omp.sh/' }
 ];
+const LEDGE_PALETTES: { key: LedgePalette; name: string; note: string; a: string; b: string }[] = [
+  { key: 'darkred', name: 'Rouge foncé', note: 'Rouge profond, mat', a: '#dd7f78', b: '#a63c37' },
+  { key: 'red', name: 'Rouge pastel', note: 'Rouge adouci, franc', a: '#f8bfb8', b: '#e27c74' },
+  { key: 'sage', name: 'Sauge', note: 'Vert doux, calme', a: '#dcefe4', b: '#a3c8b5' },
+  { key: 'rose', name: 'Rose poudré', note: 'Tendre, chaleureux', a: '#fae3e6', b: '#e4aeb6' },
+  { key: 'peach', name: 'Pêche', note: 'Abricot léger', a: '#fde7d6', b: '#f1ba98' },
+  { key: 'sky', name: 'Bleu ciel', note: 'Frais, aérien', a: '#e0f0fb', b: '#a8cbe6' },
+  { key: 'lilac', name: 'Lilas', note: 'Mauve très clair', a: '#ece5f7', b: '#c1b1de' },
+  { key: 'vanilla', name: 'Vanille', note: 'Crème jaune pâle', a: '#fcf5d8', b: '#e7d699' }
+];
+
 const STATES: BotState[] = ['starting', 'working', 'approval', 'question', 'idle', 'error', 'done', 'readonly'];
 const SIZES = [12, 16, 20, 22, 32, 48, 92];
 
@@ -26,6 +39,7 @@ function LogoStudy() {
   const [reduced, setReduced] = useState(false);
   const [frozen, setFrozen] = useState(false);
   const [nod, setNod] = useState(0);
+  const [ledgePalette, setLedgePalette] = useState<LedgePalette>('darkred');
   const copy = useUiCopy();
   useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
   const shared = { theme, state, reducedMotion: reduced, frozen, nodKey: nod, askKey: state };
@@ -49,6 +63,22 @@ function LogoStudy() {
       <label><input type="checkbox" checked={reduced} onChange={e => setReduced(e.target.checked)} /> Mouvements réduits</label>
       <label><input type="checkbox" checked={frozen} onChange={e => setFrozen(e.target.checked)} /> Connexion perdue</label>
       <button onClick={() => setNod(n => n + 1)} disabled={reduced || frozen || state === 'readonly' || state === 'done'}>Acquiescer</button>
+    </section>
+    <section className="sketch-section" aria-labelledby="sketch-title">
+      <div className="watcher-hero">
+        <div className="watcher-stage"><LedgeSketch palette={ledgePalette} size={190} theme={theme} label="Ledge · le guetteur" /></div>
+        <div className="concept-copy">
+          <p className="comparison-label">Nouveau Ledge</p>
+          <h2 id="sketch-title">Le guetteur</h2>
+          <p>Accroché à son rebord, il garde un œil sur tous tes agents. Couleurs pastel, yeux sombres, halo léger.</p>
+          <div className="sketch-swatches">{LEDGE_PALETTES.map(item => <button key={item.key} aria-pressed={ledgePalette === item.key} onClick={() => setLedgePalette(item.key)} style={{ '--a': item.a, '--b': item.b } as CSSProperties}><i />{item.name}</button>)}</div>
+        </div>
+      </div>
+      <div className="palette-strip">{LEDGE_PALETTES.map(item => <button key={item.key} aria-pressed={ledgePalette === item.key} onClick={() => setLedgePalette(item.key)}>
+        <LedgeSketch palette={item.key} size={96} theme={theme} label={`Ledge · ${item.name}`} />
+        <span className="sketch-minis">{[24, 32].map(size => <LedgeSketch key={size} palette={item.key} size={size} theme={theme} label={`Ledge · ${item.name} · ${size} px`} />)}</span>
+        <strong>{item.name}</strong><small>{item.note}</small>
+      </button>)}</div>
     </section>
     <section className="comparison-grid" aria-label="Bots actuels et propositions inspirées des logos">
       {FAMILY.map(item => <article key={item.tool}>

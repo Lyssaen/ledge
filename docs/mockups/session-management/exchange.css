@@ -1,0 +1,66 @@
+/* Messages between agents: thread cards (exchange.tsx), the atelier's bubble and wire, the seats' « ↔ » tag.
+   Neutral on purpose: the state colours (blue, red, amber, green) stay for what the agents need from you. */
+
+/* ---------- Thread ---------- */
+.exchange-head{display:flex;align-items:center;gap:6px;margin:14px 0 6px;font-size:11px;color:var(--muted-foreground)}
+.exchange-head strong{color:var(--foreground);font-weight:500}
+.exchange-fold{display:inline-flex;align-items:center;gap:3px;height:22px;padding:0 7px;border:1px solid var(--border);border-radius:999px;background:transparent;color:var(--muted-foreground);font:inherit;cursor:pointer}
+.exchange-fold:hover{color:var(--foreground);background:var(--accent)}
+.exchange-fold[aria-expanded=false] svg{transform:rotate(-90deg)}
+
+.exchange-card{position:relative;margin:10px 0;padding:10px 12px 8px 14px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--card);transition:box-shadow .3s,border-color .3s}
+/* The edge tells the direction at a glance: a solid edge for what this agent sent, a dashed one for what came in. */
+.exchange-card:before{content:'';position:absolute;left:-1px;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--foreground);opacity:.55}
+.exchange-card.received{background:transparent;border-style:dashed;border-color:var(--input)}
+.exchange-card.received:before{background:repeating-linear-gradient(var(--muted-foreground) 0 4px,transparent 4px 7px);opacity:.8}
+.exchange-card.lit{border-color:var(--ring);box-shadow:0 0 0 3px color-mix(in srgb,var(--ring) 28%,transparent)}
+.exchange-card-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-height:22px}
+.exchange-card-head .spacer,.exchange-foot .spacer,.exchange-head .spacer{flex:1}
+.exchange-kicker{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:500;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-foreground)}
+.exchange-route{display:inline-flex;align-items:center;gap:5px;font-size:12px}
+.exchange-route strong{font-weight:500}
+.exchange-route>svg{color:var(--muted-foreground)}
+.exchange-summary{margin:6px 0 0;font-size:13px;font-weight:500;line-height:19px}
+.exchange-body{margin-top:4px;font-size:13px;line-height:20px;color:var(--foreground)}
+.exchange-body>*:first-child{margin-top:0}.exchange-body>*:last-child{margin-bottom:0}
+.exchange-body.clamped{max-height:62px;overflow:hidden;-webkit-mask-image:linear-gradient(#000 60%,transparent);mask-image:linear-gradient(#000 60%,transparent)}
+.exchange-foot{display:flex;align-items:center;gap:8px;margin-top:6px;font-size:11px}
+.exchange-link{display:inline-flex;align-items:center;gap:3px;padding:2px 0;border:0;background:none;color:var(--muted-foreground);font:inherit;cursor:pointer}
+.exchange-link:hover{color:var(--foreground);text-decoration:underline;text-underline-offset:3px}
+.exchange-read{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--muted-foreground);white-space:nowrap}
+.exchange-read i{font-style:normal;font-size:10px;letter-spacing:-2px;padding-right:2px}
+.exchange-read.is-read i{color:var(--foreground)}
+
+/* Folded: one line per message, still in its place in the thread. */
+.exchange-line{display:flex;align-items:center;gap:8px;width:100%;margin:4px 0;padding:5px 10px;border:1px solid var(--border)!important;border-radius:var(--radius-md);background:transparent;color:var(--foreground);font:inherit;font-size:12px;text-align:left;cursor:pointer}
+.exchange-line.received{border-style:dashed!important}
+.exchange-line .exchange-route{flex:none;font-size:11px;color:var(--muted-foreground)}
+.exchange-line .exchange-route strong{color:var(--foreground)}
+.exchange-line:hover{background:var(--accent)}
+.exchange-line .exchange-route{gap:3px}
+.exchange-line-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ---------- Atelier ---------- */
+.overview-scroll.atelier .office-shell{position:relative}
+.exchange-layer{position:absolute;inset:0;pointer-events:none;z-index:6}
+.exchange-wire{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.exchange-wire path{fill:none;stroke:var(--foreground);stroke-opacity:.5;stroke-width:1.5;stroke-dasharray:2 5;stroke-linecap:round;animation:wire-draw .5s ease-out both,wire-flow 1s linear infinite}
+.exchange-wire circle{fill:var(--foreground);offset-rotate:0deg;animation:letter-fly 1.3s cubic-bezier(.45,0,.3,1) both}
+.exchange-bubble{position:absolute;transform:translate(-50%,-100%);display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:max-content;max-width:240px;padding:6px 10px 7px;border:1px solid var(--input);border-radius:10px 10px 10px 2px;background:var(--popover);color:var(--popover-foreground);box-shadow:0 3px 0 var(--border);font:inherit;text-align:left;cursor:pointer;pointer-events:auto;animation:bubble-in .25s cubic-bezier(.3,1.4,.5,1) both,bubble-out .35s ease-in 4.65s forwards}
+.exchange-bubble:hover,.exchange-bubble:focus-visible{border-color:var(--ring);outline:none}
+.exchange-bubble-to{display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--muted-foreground)}
+.exchange-bubble-text{font-size:11px;line-height:15px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.is-paused .exchange-bubble{animation:none}
+
+.office-shell .agent-seat.exchange-lit{outline:2px solid var(--ring);outline-offset:3px;border-radius:var(--radius-lg)}
+.office-shell .agent-seat.exchange-arrived:after{content:'';position:absolute;inset:-6px;border-radius:var(--radius-lg);border:2px solid var(--foreground);opacity:.5;animation:seat-ring 1.4s ease-out forwards;pointer-events:none}
+
+/* Top-left of the seat: the « … » button holds the top-right corner. */
+.peer-tag{position:absolute;top:-2px;left:2px;display:inline-flex;align-items:center;gap:3px;height:16px;padding:0 5px;border:1px solid var(--border);border-radius:999px;background:var(--popover);color:var(--muted-foreground);font:10px/14px 'Geist',system-ui,sans-serif;white-space:nowrap;pointer-events:none}
+
+@keyframes wire-draw{from{opacity:0}to{opacity:1}}
+@keyframes wire-flow{to{stroke-dashoffset:-14}}
+@keyframes letter-fly{from{offset-distance:0%;opacity:0}12%{opacity:1}88%{opacity:1}to{offset-distance:100%;opacity:0}}
+@keyframes bubble-in{from{opacity:0;transform:translate(-50%,-90%) scale(.92)}}
+@keyframes bubble-out{to{opacity:0}}
+@media(prefers-reduced-motion:reduce){.exchange-wire path,.exchange-wire circle,.exchange-bubble{animation:none}.exchange-wire circle{display:none}}

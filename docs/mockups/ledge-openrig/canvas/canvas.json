@@ -1,0 +1,330 @@
+{
+ "v": 3,
+ "attachments": {},
+ "boards": {
+  "Accueil.dc.html": {
+   "h": 1008,
+   "title": "Desktop · accueil de Ledge, Projets + Rigs",
+   "w": 1507,
+   "x": -67,
+   "y": 1175
+  },
+  "ApresProjet.dc.html": {
+   "h": 1000,
+   "title": "Après · un projet = une table",
+   "w": 1440,
+   "x": 1520,
+   "y": 6080
+  },
+  "ApresRig.dc.html": {
+   "h": 1000,
+   "title": "Après · un rig = une table, ses actions",
+   "w": 1440,
+   "x": 3040,
+   "y": 6080
+  },
+  "Atelier.dc.html": {
+   "h": 1000,
+   "title": "Atelier · vue d’ensemble, sessions seules et rigs",
+   "w": 1440,
+   "x": 0,
+   "y": 2240
+  },
+  "AtelierFactory.dc.html": {
+   "h": 1000,
+   "title": "Atelier · rig factory, un échange en cours",
+   "w": 1440,
+   "x": 1520,
+   "y": 1000
+  },
+  "AvantLedge.dc.html": {
+   "h": 1000,
+   "title": "Avant · un projet, deux tables (0.29)",
+   "w": 1440,
+   "x": 0,
+   "y": 6021
+  },
+  "ChatA.dc.html": {
+   "h": 1000,
+   "title": "A · Messagerie : bulles, échanges repliés, point en rail",
+   "w": 1440,
+   "x": 0,
+   "y": 9920
+  },
+  "ChatB.dc.html": {
+   "h": 1000,
+   "title": "B · Deux colonnes : Ledge | fil des rigs",
+   "w": 1440,
+   "x": 1520,
+   "y": 9920
+  },
+  "ChatC.dc.html": {
+   "h": 1000,
+   "title": "C · Ledge résume : des points, pas de flux brut",
+   "w": 1440,
+   "x": 3040,
+   "y": 9920
+  },
+  "EncocheOuverte.dc.html": {
+   "h": 680,
+   "title": "Encoche ouverte · le fil, et Ledge toujours là",
+   "w": 600,
+   "x": 840,
+   "y": 0
+  },
+  "HorsProjetEnCours.dc.html": {
+   "h": 1000,
+   "title": "2 · Les dépôts trouvés en route",
+   "w": 1440,
+   "x": 1520,
+   "y": 8620
+  },
+  "HorsProjetNouveau.dc.html": {
+   "h": 1000,
+   "title": "1 · Nouvel espace, hors projet",
+   "w": 1440,
+   "x": 0,
+   "y": 8620
+  },
+  "HorsProjetPiece.dc.html": {
+   "h": 1000,
+   "title": "3 · Sa pièce dans l’atelier",
+   "w": 1440,
+   "x": 3040,
+   "y": 8620
+  },
+  "LedgeConversation.dc.html": {
+   "h": 1000,
+   "title": "Proposition · Ledge, conversation et fil",
+   "w": 1440,
+   "x": 0,
+   "y": 3600
+  },
+  "LedgeMandat.dc.html": {
+   "h": 1000,
+   "title": "Proposition · Ledge, mandat et souvenirs",
+   "w": 1440,
+   "x": 1520,
+   "y": 3600
+  },
+  "Main.dc.html": {
+   "h": 560,
+   "title": "Encoche fermée · quatre états (app réelle 0.29)",
+   "w": 760,
+   "x": 0,
+   "y": 0
+  },
+  "RigDemarrage.dc.html": {
+   "h": 1000,
+   "title": "3 · Le rig démarre, Ledge garde le but",
+   "w": 1440,
+   "x": 3040,
+   "y": 7320
+  },
+  "RigNouveau.dc.html": {
+   "h": 1000,
+   "title": "1 · Nouveau rig : le but, la spec, où",
+   "w": 1440,
+   "x": 28,
+   "y": 7290
+  },
+  "RigPlan.dc.html": {
+   "h": 1000,
+   "title": "2 · Le plan : ce qui démarre, ce qui change",
+   "w": 1440,
+   "x": 1600,
+   "y": 7320
+  },
+  "RigsEnCours.dc.html": {
+   "h": 1000,
+   "title": "Rigs · en cours",
+   "w": 1440,
+   "x": 0,
+   "y": 4840
+  },
+  "RigsSpecs.dc.html": {
+   "h": 1000,
+   "title": "Rigs · specs OpenRig",
+   "w": 1440,
+   "x": 1520,
+   "y": 4840
+  },
+  "Side1.dc.html": {
+   "x": 0,
+   "y": 11220,
+   "w": 1440,
+   "h": 1000,
+   "title": "1 · Conversation épinglée : son dernier mot en aperçu"
+  },
+  "Side2.dc.html": {
+   "x": 1520,
+   "y": 11220,
+   "w": 1440,
+   "h": 1000,
+   "title": "2 · Ledge absorbe « À toi »"
+  },
+  "Side3.dc.html": {
+   "x": 3040,
+   "y": 11220,
+   "w": 1440,
+   "h": 1000,
+   "title": "3 · Ledge en dock, en bas"
+  },
+  "Pin1a.dc.html": {
+   "x": 0,
+   "y": 12520,
+   "w": 400,
+   "h": 760,
+   "title": "1a · Une ligne de messagerie"
+  },
+  "Pin1b.dc.html": {
+   "x": 480,
+   "y": 12520,
+   "w": 400,
+   "h": 760,
+   "title": "1b · La mascotte parle"
+  },
+  "Pin1c.dc.html": {
+   "x": 960,
+   "y": 12520,
+   "w": 400,
+   "h": 760,
+   "title": "1c · La question en aperçu"
+  },
+  "Pin1d.dc.html": {
+   "x": 1440,
+   "y": 12520,
+   "w": 400,
+   "h": 760,
+   "title": "1d · Mini-fil des 3 derniers"
+  }
+ },
+ "createdOnFiles": {
+  "at": "2026-10-30T16:00:00Z",
+  "v": 1
+ },
+ "designSystems": [
+  {
+   "artifact": "https://claude.ai/artifact/QBv4bfYYVqV2aAfDjPW3JV",
+   "copiedAt": "2026-10-30T16:00:00Z",
+   "namespace": "shadcn-red",
+   "title": "Shadcn Red",
+   "version": "1792488592-3c07"
+  }
+ ],
+ "launch": {
+  "view": "canvas"
+ },
+ "notes": {
+  "t1": {
+   "kind": "title1",
+   "maxW": 1440,
+   "text": "L'encoche : seul Ledge parle",
+   "w": 240,
+   "x": 0,
+   "y": -260
+  },
+  "t2": {
+   "kind": "title1",
+   "maxW": 2960,
+   "text": "Desktop : Projets pour les sessions seules, Rigs à part",
+   "w": 240,
+   "x": 0,
+   "y": 740
+  },
+  "t3": {
+   "kind": "title1",
+   "maxW": 2960,
+   "text": "Proposition · l'écran Ledge",
+   "w": 240,
+   "x": 0,
+   "y": 3340
+  },
+  "t4": {
+   "kind": "title1",
+   "maxW": 4480,
+   "text": "Gestion des rigs",
+   "w": 240,
+   "x": 0,
+   "y": 4580
+  },
+  "t5": {
+   "kind": "title1",
+   "maxW": 4480,
+   "text": "Une pièce, une table : projet ou rig",
+   "w": 240,
+   "x": 0,
+   "y": 5820
+  },
+  "t6": {
+   "kind": "title1",
+   "maxW": 4480,
+   "text": "Lancer un rig, en trois temps",
+   "w": 240,
+   "x": 0,
+   "y": 7060
+  },
+  "t7": {
+   "kind": "title1",
+   "maxW": 4480,
+   "text": "Un rig hors projet, dans un espace créé à la volée",
+   "w": 240,
+   "x": 0,
+   "y": 8360
+  },
+  "t8": {
+   "kind": "title1",
+   "maxW": 4480,
+   "text": "L'écran Ledge : trois façons d'afficher le chat",
+   "w": 240,
+   "x": 0,
+   "y": 9660
+  },
+  "t9": {
+   "kind": "title1",
+   "maxW": 4480,
+   "text": "Ledge dans la barre latérale",
+   "x": 0,
+   "y": 10960
+  },
+  "t10": {
+   "kind": "title1",
+   "maxW": 1840,
+   "text": "Variantes de la conversation épinglée",
+   "x": 0,
+   "y": 12260
+  }
+ },
+ "order": [
+  "Main.dc.html",
+  "EncocheOuverte.dc.html",
+  "Accueil.dc.html",
+  "AtelierFactory.dc.html",
+  "Atelier.dc.html",
+  "LedgeConversation.dc.html",
+  "LedgeMandat.dc.html",
+  "RigsEnCours.dc.html",
+  "RigsSpecs.dc.html",
+  "AvantLedge.dc.html",
+  "ApresProjet.dc.html",
+  "ApresRig.dc.html",
+  "RigNouveau.dc.html",
+  "RigPlan.dc.html",
+  "RigDemarrage.dc.html",
+  "HorsProjetNouveau.dc.html",
+  "HorsProjetEnCours.dc.html",
+  "HorsProjetPiece.dc.html",
+  "ChatA.dc.html",
+  "ChatB.dc.html",
+  "ChatC.dc.html",
+  "Side1.dc.html",
+  "Side2.dc.html",
+  "Side3.dc.html",
+  "Pin1a.dc.html",
+  "Pin1b.dc.html",
+  "Pin1c.dc.html",
+  "Pin1d.dc.html"
+ ],
+ "pages": [],
+ "title": "Ledge orchestrateur OpenRig"
+}

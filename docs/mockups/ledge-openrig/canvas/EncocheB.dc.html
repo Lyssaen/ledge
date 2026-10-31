@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Encoche B, Ledge et fil des équipes</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#a1a1a1}a:hover{color:#fafafa}
+</style>
+</helmet>
+<div style="width: 760px; height: 640px; box-sizing: border-box; position: relative; overflow: hidden; background: linear-gradient(180deg, #1c1f24 0%, #121417 100%); font-family: 'Geist', system-ui, sans-serif; color: #fafafa;">
+
+  <div style="position: absolute; left: 40px; top: 120px; width: 680px; height: 480px; border-radius: 10px; background: #0d0f12; border: 1px solid #ffffff12;"></div>
+
+  <div style="position: absolute; left: 50%; top: 0; transform: translateX(-50%); width: 440px; background: #000; border-radius: 0 0 14px 14px; box-shadow: 0 20px 40px -12px rgba(0,0,0,0.7); display: flex; flex-direction: column;">
+
+    <div style="display: flex; align-items: center; gap: 12px; padding: 14px 16px 12px; border-bottom: 1px solid #ffffff1a;">
+      <svg width="36" height="32" viewBox="0 0 36 32" aria-hidden="true"><defs><linearGradient id="wb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#dd7f78"></stop><stop offset="1" stop-color="#a63c37"></stop></linearGradient></defs><line x1="18" y1="2" x2="18" y2="8" stroke="#a63c37" stroke-width="2"></line><circle cx="18" cy="3" r="2.4" fill="#f2b09c"></circle><rect x="5" y="8" width="26" height="18" rx="9" fill="url(#wb)"></rect><circle cx="13" cy="17" r="2.4" fill="#1a1112"></circle><circle cx="23" cy="17" r="2.4" fill="#1a1112"></circle><rect x="0" y="25" width="36" height="5" rx="2.5" fill="#6a2422"></rect><rect x="6" y="23" width="6" height="4" rx="2" fill="#dd7f78"></rect><rect x="24" y="23" width="6" height="4" rx="2" fill="#dd7f78"></rect></svg>
+      <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1;">
+        <span style="font-size: 14px; font-weight: 600;">Ledge</span>
+        <span style="font-size: 12px; color: #a1a1a1;">factory · starter · noyau</span>
+      </div>
+      <div style="display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: #171717;">
+        <button style="height: 26px; padding: 0 10px; border-radius: 6px; border: 0; background: #27272a; color: #fafafa; font: 500 12px 'Geist', sans-serif;">Fil</button>
+        <button style="height: 26px; padding: 0 10px; border-radius: 6px; border: 0; background: transparent; color: #a1a1a1; font: 500 12px 'Geist', sans-serif;">Pour toi · 1</button>
+      </div>
+    </div>
+
+    <div style="margin: 10px 12px 0; padding: 10px 12px; border-radius: 8px; background: #171717; border: 1px solid #ffffff1a; display: flex; align-items: center; gap: 10px;">
+      <span style="font-size: 12px; font-weight: 600; color: #fbbf24; background: #422006; padding: 2px 8px; border-radius: 6px;">Architecture</span>
+      <span style="font-size: 13px; flex-grow: 1;">JSON ou SQLite pour les sessions ?</span>
+      <a href="#" style="font-size: 12px; text-decoration: none; color: #fafafa;">Trancher</a>
+    </div>
+
+    <div style="display: flex; flex-direction: column; padding: 8px 12px 4px; gap: 2px;">
+
+      <div style="font-size: 12px; color: #a1a1a1; padding: 6px 4px 2px;">factory</div>
+      <div style="display: flex; gap: 10px; padding: 6px 4px; align-items: flex-start;">
+        <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #a1a1a1; width: 34px; flex-shrink: 0; padding-top: 2px;">16:42</span>
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <span style="font-size: 12px; color: #a1a1a1;"><span style="color: #fafafa; font-weight: 500;">build</span> → <span style="color: #fafafa; font-weight: 500;">review-a</span> · message</span>
+          <span style="font-size: 13px; line-height: 19px; color: #d4d4d4;">Candidat prêt sur feat/rigs (3f2a1c0), tests ciblés verts.</span>
+        </div>
+      </div>
+      <div style="display: flex; gap: 10px; padding: 6px 4px; align-items: flex-start;">
+        <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #a1a1a1; width: 34px; flex-shrink: 0; padding-top: 2px;">16:40</span>
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <span style="font-size: 12px; color: #a1a1a1;"><span style="color: #fafafa; font-weight: 500;">orch-lead</span> → <span style="color: #fafafa; font-weight: 500;">qa</span> · tâche confiée</span>
+          <span style="font-size: 13px; line-height: 19px; color: #d4d4d4;">Vérifier la reprise après reboot sur deux rigs.</span>
+        </div>
+      </div>
+      <div style="display: flex; gap: 10px; padding: 8px; align-items: flex-start; border-radius: 8px; background: #1a0c0c;">
+        <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #a1a1a1; width: 30px; flex-shrink: 0; padding-top: 2px;">16:38</span>
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <span style="font-size: 12px; color: #a1a1a1;"><span style="color: #fca5a5; font-weight: 500;">Ledge</span> → <span style="color: #fafafa; font-weight: 500;">build</span> · décision</span>
+          <span style="font-size: 13px; line-height: 19px; color: #fecaca;">Merge, pas de rebase : le force-push est interdit ici.</span>
+        </div>
+      </div>
+
+      <div style="font-size: 12px; color: #a1a1a1; padding: 10px 4px 2px;">starter</div>
+      <div style="display: flex; gap: 10px; padding: 6px 4px; align-items: flex-start;">
+        <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #a1a1a1; width: 34px; flex-shrink: 0; padding-top: 2px;">16:31</span>
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <span style="font-size: 12px; color: #a1a1a1;"><span style="color: #fafafa; font-weight: 500;">dev-review</span> → <span style="color: #fafafa; font-weight: 500;">dev-build</span> · message</span>
+          <span style="font-size: 13px; line-height: 19px; color: #d4d4d4;">Deux remarques mineures, rien de bloquant.</span>
+        </div>
+      </div>
+
+      <div style="font-size: 12px; color: #a1a1a1; padding: 10px 4px 2px;">noyau</div>
+      <div style="display: flex; gap: 10px; padding: 6px 4px; align-items: flex-start;">
+        <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #a1a1a1; width: 34px; flex-shrink: 0; padding-top: 2px;">16:20</span>
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <span style="font-size: 12px; color: #a1a1a1;"><span style="color: #fafafa; font-weight: 500;">operator</span> → <span style="color: #fca5a5; font-weight: 500;">Ledge</span> · pour info</span>
+          <span style="font-size: 13px; line-height: 19px; color: #d4d4d4;">starter restauré depuis son snapshot, 2 sièges prêts.</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin: 8px 12px 12px; display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid #ffffff26;">
+      <label for="askB" style="position: absolute; left: -9999px;">Demander à Ledge</label>
+      <input id="askB" placeholder="Demander à Ledge…" style="flex-grow: 1; background: transparent; border: 0; outline: none; color: #fafafa; font: 400 13px 'Geist', sans-serif;">
+      <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #a1a1a1;">Ctrl Alt L</span>
+    </div>
+  </div>
+
+  <div style="position: absolute; left: 24px; bottom: 20px; display: flex; align-items: center; gap: 12px;">
+    <span style="font-size: 12px; color: #a1a1a1;">Au repos</span>
+    <div style="display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px; background: #000; border-radius: 0 0 14px 14px; max-width: 420px;">
+      <svg width="22" height="18" viewBox="0 0 36 32" aria-hidden="true"><rect x="5" y="8" width="26" height="18" rx="9" fill="#c25a53"></rect><circle cx="13" cy="17" r="2.4" fill="#1a1112"></circle><circle cx="23" cy="17" r="2.4" fill="#1a1112"></circle><line x1="18" y1="2" x2="18" y2="8" stroke="#a63c37" stroke-width="2"></line><circle cx="18" cy="3" r="2.4" fill="#f2b09c"></circle></svg>
+      <span style="font-size: 12px; color: #a1a1a1; white-space: nowrap;"><span style="color: #fafafa;">build → review-a</span> · Candidat prêt sur feat/rigs</span>
+      <span style="font-size: 11px; font-weight: 600; color: #f87171; background: #450a0a; padding: 1px 6px; border-radius: 6px;">1</span>
+    </div>
+    <span style="font-size: 12px; color: #a1a1a1;">le dernier échange défile</span>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":760,"height":640}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

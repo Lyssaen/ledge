@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>À traiter</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;display=swap">
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#000}
+.scroll{overflow-y:auto;min-height:0;overscroll-behavior:contain;scrollbar-width:none}.scroll::-webkit-scrollbar{display:none}
+a{color:#fafafa;text-decoration:none}a:hover{color:#fff}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.ico{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.badge{font-size:12px;line-height:16px;font-weight:600;padding:2px 8px;border-radius:6px;white-space:nowrap}
+.b-danger{color:#ff6467;background:#450a0a}.b-warn{color:#fbbf24;background:#422006}.b-ok{color:#34d399;background:#052e16}
+.bot .shell{fill:url(#sig);stroke:#859397;stroke-width:.8}.bot .visor{fill:#172124;stroke:#00000055;stroke-width:1}.bot .foot{fill:#273238}.bot .ant{stroke:#273238;stroke-width:2;stroke-linecap:round}.bot .lamp,.bot .eye{fill:var(--eye)}.bot .happy{fill:none;stroke:var(--eye);stroke-width:3.4;stroke-linecap:round}
+.story{display:flex;flex-direction:column;align-items:center;gap:6px;width:60px;font-size:12px;line-height:16px;color:#d4d4d4}
+.story-ring{width:56px;height:56px;border-radius:9999px;display:grid;place-items:center;background:#0a0a0a}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:56px;padding:0 16px;border-radius:12px;font:600 16px/20px 'Geist',system-ui,sans-serif;box-sizing:border-box;cursor:pointer}
+.btn-primary{background:#9f0712;color:#fef2f2;border:0}.btn-primary:hover{background:#82181a}.btn-outline{background:transparent;color:#fafafa;border:1px solid #ffffff26}.btn-outline:hover{background:#171717}
+.opt{display:flex;align-items:center;gap:12px;width:100%;height:52px;padding:0 14px;border-radius:12px;border:1px solid #ffffff1a;background:#171717;color:#fafafa;font:500 15px/20px 'Geist',system-ui,sans-serif;text-align:left;box-sizing:border-box;cursor:pointer}
+.opt:hover{background:#262626}
+.tab{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;height:52px;color:#a1a1a1;font:500 11px/14px 'Geist',system-ui,sans-serif;background:none;border:0;position:relative;cursor:pointer}
+.tab-on{color:#fafafa}
+</style>
+</helmet>
+<div style="width: 390px; height: 100vh; max-height: 844px; box-sizing: border-box; background: #000; color: #fafafa; font-family: 'Geist', system-ui, sans-serif; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; overflow: hidden;">
+  <svg width="0" height="0" style="position: absolute;" aria-hidden="true"><defs><linearGradient id="sig" x1=".2" y1="0" x2=".75" y2="1"><stop stop-color="#34434b"></stop><stop offset="1" stop-color="#273238"></stop></linearGradient></defs></svg>
+
+  <header style="display: flex; align-items: flex-end; justify-content: space-between; padding: 56px 20px 12px;">
+    <div style="display: flex; flex-direction: column; gap: 2px;">
+      <h1 style="margin: 0; font-size: 28px; line-height: 34px; font-weight: 700; letter-spacing: -0.025em;">À traiter</h1>
+      <p style="margin: 0; font-size: 13px; color: #a1a1a1;">{{ subtitle }}</p>
+    </div>
+    <span style="display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid #ffffff1a; border-radius: 9999px; font-size: 12px; color: #a1a1a1;"><span style="width: 8px; height: 8px; border-radius: 9999px; background: #34d399;"></span>PC-Desan</span>
+  </header>
+
+  <nav aria-label="Agents" style="display: flex; flex-shrink: 0; gap: 10px; padding: 4px 16px 16px; overflow-x: auto; scrollbar-width: none;">
+    <a href="Thread.dc.html" class="story">
+      <span class="story-ring" style="box-shadow: 0 0 0 2px #ff6467;"><svg class="bot" width="38" height="38" viewBox="0 0 96 96" aria-hidden="true" style="--eye: #f2b09c;"><path class="ant" d="M49 22V14"></path><circle class="lamp" cx="49" cy="12" r="3"></circle><rect class="foot" x="29" y="75" width="13" height="8" rx="4"></rect><rect class="foot" x="54" y="75" width="13" height="8" rx="4"></rect><rect class="shell" x="15" y="22" width="66" height="56" rx="20"></rect><rect class="visor" x="25" y="35" width="47" height="29" rx="13"></rect><rect class="eye" x="36" y="43" width="6" height="12" rx="3"></rect><rect class="eye" x="55" y="43" width="6" height="12" rx="3"></rect></svg></span>Otto</a>
+    <a href="Thread.dc.html" class="story">
+      <span class="story-ring" style="box-shadow: 0 0 0 2px #fbbf24;"><svg class="bot" width="38" height="38" viewBox="0 0 96 96" aria-hidden="true" style="--eye: #f6d487;"><path class="ant" d="M49 22V14"></path><circle class="lamp" cx="49" cy="12" r="3"></circle><rect class="foot" x="29" y="75" width="13" height="8" rx="4"></rect><rect class="foot" x="54" y="75" width="13" height="8" rx="4"></rect><ellipse class="shell" cx="48" cy="49" rx="32" ry="31"></ellipse><rect class="visor" x="25" y="35" width="47" height="29" rx="13"></rect><rect class="eye" x="36" y="42" width="6" height="14" rx="3"></rect><rect class="eye" x="55" y="42" width="6" height="14" rx="3"></rect></svg></span>Nova</a>
+    <a href="Thread.dc.html" class="story">
+      <span class="story-ring" style="box-shadow: 0 0 0 2px #60a5fa;"><svg class="bot" width="38" height="38" viewBox="0 0 96 96" aria-hidden="true" style="--eye: #90c7f2;"><path class="ant" d="M49 22V14"></path><circle class="lamp" cx="49" cy="12" r="3"></circle><rect class="foot" x="29" y="75" width="13" height="8" rx="4"></rect><rect class="foot" x="54" y="75" width="13" height="8" rx="4"></rect><path class="shell" d="M23 77 Q14 78 17 66 L30 22 Q33 12 42 20 L79 54 Q88 63 77 67 L58 71 46 83 Q40 88 36 80 L32 73Z"></path><rect class="visor" x="25" y="35" width="47" height="29" rx="13"></rect><rect class="eye" x="36" y="43" width="6" height="12" rx="3"></rect><rect class="eye" x="55" y="43" width="6" height="12" rx="3"></rect></svg></span>Pim</a>
+    <a href="Thread.dc.html" class="story">
+      <span class="story-ring" style="box-shadow: 0 0 0 2px #34d399;"><svg class="bot" width="38" height="38" viewBox="0 0 96 96" aria-hidden="true" style="--eye: #a9dfc7;"><path class="ant" d="M49 22V14"></path><circle class="lamp" cx="49" cy="12" r="3"></circle><rect class="foot" x="29" y="75" width="13" height="8" rx="4"></rect><rect class="foot" x="54" y="75" width="13" height="8" rx="4"></rect><rect class="shell" x="15" y="22" width="66" height="56" rx="20"></rect><rect class="visor" x="25" y="35" width="47" height="29" rx="13"></rect><path class="happy" d="M35 51Q39 43 43 51M54 51Q58 43 62 51"></path></svg></span>Bix</a>
+    <a href="Thread.dc.html" class="story">
+      <span class="story-ring" style="box-shadow: 0 0 0 2px #60a5fa;"><svg class="bot" width="38" height="38" viewBox="0 0 96 96" aria-hidden="true" style="--eye: #90c7f2;"><path class="ant" d="M49 22V14"></path><circle class="lamp" cx="49" cy="12" r="3"></circle><rect class="foot" x="29" y="75" width="13" height="8" rx="4"></rect><rect class="foot" x="54" y="75" width="13" height="8" rx="4"></rect><ellipse class="shell" cx="48" cy="49" rx="32" ry="31"></ellipse><rect class="visor" x="25" y="35" width="47" height="29" rx="13"></rect><rect class="eye" x="36" y="43" width="6" height="12" rx="3"></rect><rect class="eye" x="55" y="43" width="6" height="12" rx="3"></rect></svg></span>Kai</a>
+  </nav>
+
+  <main class="scroll" style="flex-grow: 1; position: relative; display: flex; flex-direction: column; padding: 8px 16px 24px;">
+    <sc-if value="{{ showOtto }}" hint-placeholder-val="{{ true }}">
+      <div style="position: relative; display: flex; flex-direction: column;">
+        <div aria-hidden="true" style="position: absolute; left: 24px; right: 24px; bottom: -16px; height: 40px; border-radius: 18px; background: #0f0f0f; border: 1px solid #ffffff12;"></div>
+        <div aria-hidden="true" style="position: absolute; left: 12px; right: 12px; bottom: -8px; height: 40px; border-radius: 18px; background: #141414; border: 1px solid #ffffff17;"></div>
+        <article style="position: relative; display: flex; flex-direction: column; gap: 14px; padding: 18px; border-radius: 20px; background: #171717; border: 1px solid #ffffff1a; box-shadow: 0 20px 40px -12px rgba(0,0,0,0.7);">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <svg class="bot" width="36" height="36" viewBox="0 0 96 96" aria-hidden="true" style="--eye: #f2b09c; filter: drop-shadow(0 0 5px #ff646788);"><path class="ant" d="M49 22V14"></path><circle class="lamp" cx="49" cy="12" r="3"></circle><rect class="foot" x="29" y="75" width="13" height="8" rx="4"></rect><rect class="foot" x="54" y="75" width="13" height="8" rx="4"></rect><rect class="shell" x="15" y="22" width="66" height="56" rx="20"></rect><rect class="visor" x="25" y="35" width="47" height="29" rx="13"></rect><rect class="eye" x="36" y="43" width="6" height="12" rx="3"></rect><rect class="eye" x="55" y="43" width="6" height="12" rx="3"></rect></svg>
+            <div style="display: flex; flex-direction: column; flex-grow: 1;">
+              <span style="font-weight: 600;">Otto</span>
+              <span style="font-size: 12px; line-height: 16px; color: #a1a1a1;">harness-assistant · il y a 3 min</span>
+            </div>
+            <span class="badge b-danger">Votre accord</span>
+          </div>
+          <h2 style="margin: 0; font-size: 20px; line-height: 26px; font-weight: 600; letter-spacing: -0.02em;">Lancer les tests de l'overlay</h2>
+          <code class="mono" style="display: block; padding: 12px; border-radius: 10px; background: #0a0a0a; border: 1px solid #ffffff1a; font-size: 14px; line-height: 20px; white-space: pre-wrap;">pnpm test --filter overlay</code>
+          <span style="display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; padding: 4px 10px; border-radius: 9999px; background: #052e16; color: #34d399; font-size: 12px; line-height: 16px; font-weight: 600;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 14px; height: 14px;"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"></path><path d="m9 12 2 2 4-4"></path></svg>Risque faible · reste sur le PC</span>
+          <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 4px;">
+            <button type="button" class="btn btn-outline" onClick="{{ deny }}">Refuser</button>
+            <button type="button" class="btn btn-primary" onClick="{{ approve }}">Autoriser</button>
+          </div>
+        </article>
+      </div>
+      <p style="margin: 28px 0 0; text-align: center; font-size: 12px; line-height: 16px; color: #a1a1a1;">Glissez la carte : à droite pour autoriser, à gauche pour refuser.</p>
+    </sc-if>
+
+    <sc-if value="{{ showNova }}" hint-placeholder-val="{{ false }}">
+      <div style="position: relative; display: flex; flex-direction: column;">
+        <div aria-hidden="true" style="position: absolute; left: 12px; right: 12px; bottom: -8px; height: 40px; border-radius: 18px; background: #141414; border: 1px solid #ffffff17;"></div>
+        <article style="position: relative; display: flex; flex-direction: column; gap: 14px; padding: 18px; border-radius: 20px; background: #171717; border: 1px solid #ffffff1a; box-shadow: 0 20px 40px -12px rgba(0,0,0,0.7);">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <svg class="bot" width="36" height="36" viewBox="0 0 96 96" aria-hidden="true" style="--eye: #f6d487; filter: drop-shadow(0 0 5px #fbbf2477);"><path class="ant" d="M49 22V14"></path><circle class="lamp" cx="49" cy="12" r="3"></circle><rect class="foot" x="29" y="75" width="13" height="8" rx="4"></rect><rect class="foot" x="54" y="75" width="13" height="8" rx="4"></rect><ellipse class="shell" cx="48" cy="49" rx="32" ry="31"></ellipse><rect class="visor" x="25" y="35" width="47" height="29" rx="13"></rect><rect class="eye" x="36" y="42" width="6" height="14" rx="3"></rect><rect class="eye" x="55" y="42" width="6" height="14" rx="3"></rect></svg>
+            <div style="display: flex; flex-direction: column; flex-grow: 1;">
+              <span style="font-weight: 600;">Nova</span>
+              <span style="font-size: 12px; line-height: 16px; color: #a1a1a1;">design-system · il y a 1 min</span>
+            </div>
+            <span class="badge b-warn">Une question</span>
+          </div>
+          <h2 style="margin: 0; font-size: 20px; line-height: 26px; font-weight: 600; letter-spacing: -0.02em;">Quel thème utiliser par défaut ?</h2>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <button type="button" class="opt" onClick="{{ answer }}"><span class="mono" style="font-size: 12px; color: #a1a1a1;">1</span>Sombre · Signal</button>
+            <button type="button" class="opt" onClick="{{ answer }}"><span class="mono" style="font-size: 12px; color: #a1a1a1;">2</span>Clair · Galet</button>
+            <button type="button" class="opt" onClick="{{ answer }}"><span class="mono" style="font-size: 12px; color: #a1a1a1;">3</span>Suivre le système</button>
+          </div>
+          <a href="Thread.dc.html" style="align-self: center; display: inline-flex; align-items: center; height: 44px; padding: 0 12px; color: #a1a1a1; font-weight: 500;">Répondre autre chose dans le fil</a>
+        </article>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ showEmpty }}" hint-placeholder-val="{{ false }}">
+      <div style="flex-grow: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; padding-bottom: 60px;">
+        <svg class="bot" width="88" height="88" viewBox="0 0 96 96" aria-hidden="true" style="--eye: #a9dfc7;"><path class="ant" d="M49 22V14"></path><circle class="lamp" cx="49" cy="12" r="3"></circle><rect class="foot" x="29" y="75" width="13" height="8" rx="4"></rect><rect class="foot" x="54" y="75" width="13" height="8" rx="4"></rect><rect class="shell" x="15" y="22" width="66" height="56" rx="20"></rect><rect class="visor" x="25" y="35" width="47" height="29" rx="13"></rect><path class="happy" d="M35 51Q39 43 43 51M54 51Q58 43 62 51"></path></svg>
+        <h2 style="margin: 0; font-size: 20px; line-height: 26px; font-weight: 600;">Rien à traiter</h2>
+        <p style="margin: 0; color: #a1a1a1; max-width: 260px;">Trois agents travaillent, Bix attend votre prochaine consigne.</p>
+        <a href="Agents.dc.html" class="btn btn-outline" style="height: 44px; margin-top: 8px; font-size: 14px; font-weight: 500;">Voir les agents</a>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ showUndo }}" hint-placeholder-val="{{ false }}">
+      <div role="status" style="position: absolute; left: 16px; right: 16px; bottom: 16px; display: flex; align-items: center; gap: 10px; height: 52px; padding: 0 8px 0 16px; border-radius: 14px; background: #262626; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.4);">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 16px; height: 16px; color: #34d399;"><path d="M20 6 9 17l-5-5"></path></svg>
+        <span style="flex-grow: 1;">{{ undoText }}</span>
+        <button type="button" onClick="{{ undo }}" style="height: 40px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent; color: #fafafa; font: 600 14px/20px 'Geist', system-ui, sans-serif; cursor: pointer;">Annuler · 5 s</button>
+      </div>
+    </sc-if>
+  </main>
+
+  <nav aria-label="Navigation principale" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 6px 8px 30px; border-top: 1px solid #ffffff1a; background: #000;">
+    <a href="Inbox.dc.html" class="tab tab-on" aria-current="page">
+      <span style="position: relative; display: grid;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 24px; height: 24px;"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"></polyline><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path></svg>
+        <sc-if value="{{ hasCount }}" hint-placeholder-val="{{ true }}"><span style="position: absolute; top: -6px; right: -12px; min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 9999px; background: #fb2c36; color: #fff; font: 600 11px/18px 'Geist', system-ui, sans-serif; text-align: center;">{{ count }}</span></sc-if>
+      </span>À traiter</a>
+    <a href="Agents.dc.html" class="tab"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 24px; height: 24px;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>Agents</a>
+    <button type="button" class="tab"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 24px; height: 24px;"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>Demander à Ledge</button>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { step: 0, undoText: '' };
+  }
+  renderVals() {
+    const step = this.state.step;
+    const count = Math.max(0, 2 - step);
+    const subtitles = ['2 demandes · la plus ancienne il y a 3 min', '1 demande · il y a 1 min', 'Tout est calme'];
+    return {
+      showOtto: step === 0,
+      showNova: step === 1,
+      showEmpty: step >= 2,
+      showUndo: step > 0 && this.state.undoText !== '',
+      undoText: this.state.undoText,
+      count: String(count),
+      hasCount: count > 0,
+      subtitle: subtitles[Math.min(step, 2)],
+      approve: () => this.setState({ step: 1, undoText: 'Autorisé · pnpm test' }),
+      deny: () => this.setState({ step: 1, undoText: 'Refusé · pnpm test' }),
+      answer: () => this.setState({ step: 2, undoText: 'Réponse envoyée à Nova' }),
+      undo: () => this.setState({ step: Math.max(0, step - 1), undoText: '' }),
+    };
+  }
+}
+</script>
+</body>
+</html>

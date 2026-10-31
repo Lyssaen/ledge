@@ -1,0 +1,163 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1793401816923,
+  "projectRoot": "/home/paradow/Workspace/harness-assistant/apps/desktop",
+  "techStack": {
+    "languages": [
+      {
+        "name": "JavaScript/TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "package.json"
+        ]
+      },
+      {
+        "name": "TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "tsconfig.json"
+        ]
+      }
+    ],
+    "frameworks": [
+      {
+        "name": "react",
+        "version": "19.0.0",
+        "category": "frontend"
+      },
+      {
+        "name": "react-dom",
+        "version": "19.0.0",
+        "category": "frontend"
+      },
+      {
+        "name": "@playwright/test",
+        "version": "1.64.1",
+        "category": "testing"
+      },
+      {
+        "name": "vite",
+        "version": "6.0.0",
+        "category": "build"
+      },
+      {
+        "name": "vitest",
+        "version": "4.1.12",
+        "category": "testing"
+      }
+    ],
+    "packageManager": "npm",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": "npm run build",
+    "testCommand": "npm test",
+    "lintCommand": null,
+    "devCommand": "npm run dev",
+    "scripts": {
+      "dev": "vite",
+      "build": "tsc --noEmit && vite build && node scripts/notch.mjs build && node scripts/copy-notch.mjs",
+      "dev:notch": "node scripts/notch.mjs dev",
+      "dev:all": "pnpm --parallel --filter desktop run \"/^dev(:notch)?$/\"",
+      "test": "vitest run",
+      "typecheck": "tsc --noEmit",
+      "tauri": "tauri",
+      "e2e": "playwright test",
+      "test:e2e": "playwright test"
+    }
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": "*.test.ts",
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "scripts",
+      "src",
+      "test"
+    ],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "e2e": {
+      "path": "e2e",
+      "purpose": null,
+      "fileCount": 16,
+      "lastAccessed": 1793401816913,
+      "keyFiles": [
+        "atelier.spec.ts",
+        "boot.spec.ts",
+        "chat.spec.ts",
+        "daemon.ts",
+        "fixtures.ts"
+      ]
+    },
+    "scripts": {
+      "path": "scripts",
+      "purpose": "Build/utility scripts",
+      "fileCount": 2,
+      "lastAccessed": 1793401816913,
+      "keyFiles": [
+        "copy-notch.mjs",
+        "notch.mjs"
+      ]
+    },
+    "src": {
+      "path": "src",
+      "purpose": "Source code",
+      "fileCount": 3,
+      "lastAccessed": 1793401816916,
+      "keyFiles": [
+        "App.tsx",
+        "main.tsx",
+        "motionPreferences.ts"
+      ]
+    },
+    "src-tauri": {
+      "path": "src-tauri",
+      "purpose": null,
+      "fileCount": 4,
+      "lastAccessed": 1793401816917,
+      "keyFiles": [
+        "Cargo.toml",
+        "build.rs",
+        "tauri.conf.json"
+      ]
+    },
+    "test": {
+      "path": "test",
+      "purpose": "Test files",
+      "fileCount": 81,
+      "lastAccessed": 1793401816917,
+      "keyFiles": [
+        "alerts.test.ts",
+        "app-theme.test.tsx",
+        "app-tray.test.tsx",
+        "app.test.tsx",
+        "atelier-filing.test.tsx"
+      ]
+    },
+    "src-tauri/src": {
+      "path": "src-tauri/src",
+      "purpose": "Source code",
+      "fileCount": 2,
+      "lastAccessed": 1793401816920,
+      "keyFiles": [
+        "main.rs",
+        "notch.rs"
+      ]
+    }
+  },
+  "hotPaths": [],
+  "userDirectives": []
+}

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Encoche fermée, quatre états</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 760px; height: 560px; box-sizing: border-box; padding: 24px 80px; display: flex; flex-direction: column; gap: 18px; background: #101215; font-family: 'Geist', system-ui, sans-serif; color: #a1a1a1;">
+  <div style="display: flex; flex-direction: column; gap: 6px;">
+    <span style="font-size: 12px;">1 · Calme : seul Ledge, plus de rangée de bots</span>
+    <img src="/_blob/e1d518212faa531ffc37bd3e2d527495" alt="Encoche fermée calme : la mascotte de Ledge et « 9 au travail · 2 rigs »" style="width: 600px; height: 90px; display: block;">
+  </div>
+  <div style="display: flex; flex-direction: column; gap: 6px;">
+    <span style="font-size: 12px;">2 · Un échange passe dans un rig, affiché 5 s</span>
+    <img src="/_blob/ba306639665f25f7244c8d03d2d3dc61" alt="Encoche fermée : factory, build vers review-a, candidat prêt" style="width: 600px; height: 90px; display: block;">
+  </div>
+  <div style="display: flex; flex-direction: column; gap: 6px;">
+    <span style="font-size: 12px;">3 · Ledge a tranché seul : il te prévient, sans rien demander</span>
+    <img src="/_blob/acc3d59613e13cf17591b0dae4cafba9" alt="Encoche fermée : J’ai tranché pour build, merge pas de rebase, Revenir dessus" style="width: 600px; height: 90px; display: block;">
+  </div>
+  <div style="display: flex; flex-direction: column; gap: 6px;">
+    <span style="font-size: 12px;">4 · Pour toi : reste jusqu’à ta réponse</span>
+    <img src="/_blob/da758cca745e7e81acac6c9ea24d5ca7" alt="Encoche fermée : Architecture, orch-lead JSON ou SQLite, 1" style="width: 600px; height: 90px; display: block;">
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":760,"height":560}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

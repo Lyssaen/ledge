@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Encoche C, le fil et Ledge</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#a1a1a1}a:hover{color:#fafafa}
+.fil-item .ask{opacity:0;transition:opacity 150ms ease-out}
+.fil-item:hover .ask,.fil-item:focus-within .ask{opacity:1}
+.fil-item:hover{background:#111113}
+</style>
+</helmet>
+<div style="width: 760px; height: 720px; box-sizing: border-box; position: relative; overflow: hidden; background: linear-gradient(180deg, #1c1f24 0%, #121417 100%); font-family: 'Geist', system-ui, sans-serif; color: #fafafa;">
+
+  <div style="position: absolute; left: 40px; top: 140px; width: 680px; height: 540px; border-radius: 10px; background: #0d0f12; border: 1px solid #ffffff12;"></div>
+
+  <div style="position: absolute; left: 50%; top: 0; transform: translateX(-50%); width: 460px; height: 660px; background: #000; border-radius: 0 0 14px 14px; box-shadow: 0 20px 40px -12px rgba(0,0,0,0.7); display: flex; flex-direction: column;">
+
+    <div style="display: flex; align-items: center; gap: 12px; padding: 14px 16px 12px; border-bottom: 1px solid #ffffff1a; flex-shrink: 0;">
+      <svg width="36" height="32" viewBox="0 0 36 32" aria-hidden="true"><defs><linearGradient id="wc" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#dd7f78"></stop><stop offset="1" stop-color="#a63c37"></stop></linearGradient></defs><line x1="18" y1="2" x2="18" y2="8" stroke="#a63c37" stroke-width="2"></line><circle cx="18" cy="3" r="2.4" fill="{{antenna}}"></circle><rect x="5" y="8" width="26" height="18" rx="9" fill="url(#wc)"></rect><circle cx="13" cy="17" r="2.4" fill="#1a1112"></circle><circle cx="23" cy="17" r="2.4" fill="#1a1112"></circle><rect x="0" y="25" width="36" height="5" rx="2.5" fill="#6a2422"></rect><rect x="6" y="23" width="6" height="4" rx="2" fill="#dd7f78"></rect><rect x="24" y="23" width="6" height="4" rx="2" fill="#dd7f78"></rect></svg>
+      <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1;">
+        <span style="font-size: 14px; font-weight: 600;">Ledge</span>
+        <span style="font-size: 12px; color: #a1a1a1;">{{status}}</span>
+      </div>
+      <button aria-label="Fermer l'encoche" style="width: 28px; height: 28px; border-radius: 8px; border: 0; background: transparent; color: #a1a1a1; display: flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m18 15-6-6-6 6"></path></svg></button>
+    </div>
+
+    <sc-if value="{{pending}}" hint-placeholder-val="{{ true }}">
+      <div style="margin: 10px 12px 2px; padding: 12px; border-radius: 10px; background: #171717; border: 1px solid #b4530999; display: flex; flex-direction: column; gap: 8px; flex-shrink: 0;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 11px; font-weight: 600; color: #fbbf24; background: #422006; padding: 2px 6px; border-radius: 6px;">Architecture</span>
+          <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #a1a1a1;">orch-lead@factory</span>
+        </div>
+        <span style="font-size: 13px; font-weight: 600;">Sessions : passer du fichier JSON à SQLite ?</span>
+        <span style="font-size: 12px; line-height: 17px; color: #fecaca;">Mon avis : SQLite, tu as écarté deux fois les fichiers plats pour l'état partagé.</span>
+        <div style="display: flex; gap: 6px;">
+          <button onClick="{{pickSqlite}}" style="height: 28px; padding: 0 12px; border-radius: 8px; border: 0; background: #991b1b; color: #fef2f2; font: 500 12px 'Geist', sans-serif; cursor: pointer;">SQLite</button>
+          <button onClick="{{pickJson}}" style="height: 28px; padding: 0 12px; border-radius: 8px; border: 1px solid #ffffff26; background: transparent; color: #fafafa; font: 500 12px 'Geist', sans-serif; cursor: pointer;">Garder le JSON</button>
+          <button onClick="{{discuss}}" style="height: 28px; padding: 0 10px; border-radius: 8px; border: 0; background: transparent; color: #a1a1a1; font: 500 12px 'Geist', sans-serif; margin-left: auto; cursor: pointer;">En parler à Ledge</button>
+        </div>
+      </div>
+    </sc-if>
+
+    <div style="flex-grow: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; padding: 6px 8px;">
+      <sc-for list="{{items}}" as="it" hint-placeholder-count="6">
+        <div class="fil-item" style="{{it.rowStyle}}">
+          <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #a1a1a1; width: 34px; flex-shrink: 0; padding-top: 2px;">{{it.time}}</span>
+          <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1; min-width: 0;">
+            <span style="font-size: 12px; color: #a1a1a1;"><span style="{{it.fromStyle}}">{{it.from}}</span>{{it.arrow}}<span style="color: #fafafa; font-weight: 500;">{{it.to}}</span>{{it.meta}}</span>
+            <span style="{{it.textStyle}}">{{it.text}}</span>
+          </div>
+          <sc-if value="{{it.askable}}" hint-placeholder-val="{{ false }}">
+            <button class="ask" onClick="{{it.ask}}" style="height: 24px; padding: 0 8px; border-radius: 6px; border: 1px solid #ffffff26; background: #000; color: #fafafa; font: 500 11px 'Geist', sans-serif; white-space: nowrap; cursor: pointer; flex-shrink: 0;">Demander à Ledge</button>
+          </sc-if>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="padding: 8px 12px 12px; border-top: 1px solid #ffffff1a; display: flex; flex-direction: column; gap: 6px; flex-shrink: 0;">
+      <sc-if value="{{hasContext}}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #a1a1a1;"><span>À propos de</span><span style="color: #fafafa; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 300px;">{{context}}</span><button onClick="{{clearContext}}" aria-label="Retirer le contexte" style="border: 0; background: transparent; color: #a1a1a1; cursor: pointer; font: 500 12px 'Geist', sans-serif;">×</button></div>
+      </sc-if>
+      <div style="display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 6px 0 12px; border-radius: 8px; border: 1px solid #ffffff26; background: #0a0a0a;">
+        <label for="askC" style="position: absolute; left: -9999px;">Écrire à Ledge</label>
+        <input id="askC" value="{{draft}}" onChange="{{onDraft}}" onKeyDown="{{onKey}}" placeholder="Écrire à Ledge… (@build pour un agent)" style="flex-grow: 1; background: transparent; border: 0; outline: none; color: #fafafa; font: 400 13px 'Geist', sans-serif;">
+        <button onClick="{{send}}" aria-label="Envoyer" style="width: 28px; height: 28px; border-radius: 6px; border: 0; background: #991b1b; color: #fef2f2; display: flex; align-items: center; justify-content: center; cursor: pointer;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg></button>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":760,"height":720}}'>
+class Component extends DCLogic {
+constructor(props) {
+super(props);
+this.state = {
+pending: true,
+draft: '',
+context: '',
+log: [
+{ k: 'x', time: '16:31', rig: 'starter', from: 'dev-review', to: 'dev-build', meta: ' · message', text: 'Deux remarques mineures, rien de bloquant.' },
+{ k: 'x', time: '16:36', rig: 'factory', from: 'orch-lead', to: 'qa', meta: ' · tâche confiée', text: 'Vérifier la reprise après reboot sur deux rigs.' },
+{ k: 'l', time: '16:38', from: 'Ledge', to: 'build', meta: ' · décision', text: 'Merge, pas de rebase : le force-push est interdit ici.' },
+{ k: 'x', time: '16:42', rig: 'factory', from: 'build', to: 'review-a', meta: ' · message', text: 'Candidat prêt sur feat/rigs (3f2a1c0), tests ciblés verts.' },
+{ k: 'x', time: '16:47', rig: 'noyau', from: 'operator', to: 'Ledge', meta: ' · pour info', text: 'review-b relancé : contexte à 82 %, relève remise.' }
+]
+};
+}
+now() { var d = new Date(); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
+answer(text) {
+var t = text.toLowerCase();
+if (t.indexOf('pourquoi') >= 0 || t.indexOf('review-b') >= 0) return 'review-b approchait 82 % de contexte. L’operator l’a relevé, la relève a repris sa revue en cours.';
+if (t.indexOf('@') === 0) return 'Transmis à ' + text.split(' ')[0].slice(1) + '. Je te dis quand il répond.';
+if (t.indexOf('sqlite') >= 0 || t.indexOf('json') >= 0) return 'SQLite tient 200 sessions sans tout relire, et la migration garde l’ancien fichier lisible. Le JSON reste plus simple à déboguer.';
+return 'Noté. Je le garde en mémoire et je l’applique aux prochaines décisions des équipes.';
+}
+push(entries) { this.setState({ log: this.state.log.concat(entries) }); }
+sendText(text) {
+if (!text.trim()) return;
+var ctx = this.state.context;
+var mine = { k: 'me', time: this.now(), from: 'Toi', to: 'Ledge', meta: ctx ? ' · à propos de ' + ctx.split(' : ')[0] : '', text: text };
+var reply = { k: 'l', time: this.now(), from: 'Ledge', to: 'toi', meta: '', text: this.answer(ctx + ' ' + text) };
+this.setState({ draft: '', context: '', log: this.state.log.concat([mine, reply]) });
+}
+decide(choice) {
+this.setState({ pending: false });
+this.push([
+{ k: 'me', time: this.now(), from: 'Toi', to: 'orch-lead', meta: ' · via Ledge', text: 'Décision : ' + choice + '.' },
+{ k: 'l', time: this.now(), from: 'Ledge', to: 'orch-lead', meta: ' · transmis', text: 'Retenu : ' + choice + '. Je le note pour les prochaines questions de stockage.' }
+]);
+}
+renderVals() {
+var self = this;
+var rows = this.state.log.map(function (e) {
+var isLedge = e.k === 'l', isMe = e.k === 'me';
+return {
+time: e.time,
+from: e.from,
+to: e.to,
+arrow: ' → ',
+meta: (e.rig ? ' · ' + e.rig : '') + e.meta,
+text: e.text,
+askable: e.k === 'x',
+ask: function () { self.setState({ context: e.from + ' → ' + e.to + ' : ' + e.text }); },
+rowStyle: 'display: flex; gap: 10px; padding: 8px; border-radius: 8px; align-items: flex-start;' + (isLedge ? ' background: #1a0c0c;' : '') + (isMe ? ' background: #141416;' : ''),
+fromStyle: isLedge ? 'color: #fca5a5; font-weight: 500;' : 'color: #fafafa; font-weight: 500;',
+textStyle: 'font-size: 13px; line-height: 19px;' + (isLedge ? ' color: #fecaca;' : ' color: #d4d4d4;')
+};
+});
+return {
+items: rows,
+pending: this.state.pending,
+antenna: this.state.pending ? '#f6d487' : '#a9dfc7',
+status: this.state.pending ? '9 agents au travail · 1 décision pour toi' : '9 agents au travail · rien pour toi',
+draft: this.state.draft,
+hasContext: !!this.state.context,
+context: this.state.context,
+clearContext: function () { self.setState({ context: '' }); },
+onDraft: function (ev) { self.setState({ draft: ev.target.value }); },
+onKey: function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); self.sendText(self.state.draft); } },
+send: function () { self.sendText(self.state.draft); },
+pickSqlite: function () { self.decide('SQLite'); },
+pickJson: function () { self.decide('garder le JSON'); },
+discuss: function () { self.setState({ context: 'orch-lead : JSON ou SQLite ?' }); }
+};
+}
+}
+</script>
+</body>
+</html>

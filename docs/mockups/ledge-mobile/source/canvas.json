@@ -1,0 +1,33 @@
+{
+  "v": 3,
+  "createdOnFiles": { "v": 1, "at": "2026-10-14T10:00:00Z" },
+  "title": "Ledge mobile",
+  "launch": { "view": "canvas", "page": "v2" },
+  "pages": [
+    { "id": "v2", "name": "V2 · pensée mobile" },
+    { "id": "v1", "name": "V1 · portage de l'overlay" }
+  ],
+  "boards": {
+    "Inbox.dc.html": { "x": 0, "y": 0, "w": 390, "h": 844, "title": "1 · À traiter", "is_interactive": true, "radius": 44, "page": "v2" },
+    "Risk.dc.html": { "x": 470, "y": 0, "w": 390, "h": 844, "title": "2 · Commande à risque", "radius": 44, "page": "v2" },
+    "Thread.dc.html": { "x": 940, "y": 0, "w": 390, "h": 844, "title": "3 · Fil d'un agent", "is_interactive": true, "radius": 44, "page": "v2" },
+    "Terminal.dc.html": { "x": 1410, "y": 0, "w": 390, "h": 844, "title": "4 · Terminal en panneau", "is_interactive": true, "radius": 44, "page": "v2" },
+    "Agents.dc.html": { "x": 1880, "y": 0, "w": 390, "h": 844, "title": "5 · Agents", "is_interactive": true, "radius": 44, "page": "v2" },
+    "Offline.dc.html": { "x": 2350, "y": 0, "w": 390, "h": 844, "title": "6 · PC en veille", "radius": 44, "page": "v2" },
+    "Notification.dc.html": { "x": 2820, "y": 0, "w": 390, "h": 844, "title": "7 · Notification push", "radius": 44, "page": "v2" },
+    "Pairing.dc.html": { "x": 3290, "y": 0, "w": 390, "h": 844, "title": "8 · Appairer le téléphone", "radius": 44, "page": "v2" },
+    "Main.dc.html": { "x": 0, "y": 0, "w": 390, "h": 844, "title": "1 · Sessions", "is_interactive": true, "radius": 44, "page": "v1" },
+    "Permission.dc.html": { "x": 470, "y": 0, "w": 390, "h": 844, "title": "2 · Une permission", "is_interactive": true, "radius": 44, "page": "v1" },
+    "Question.dc.html": { "x": 940, "y": 0, "w": 390, "h": 844, "title": "3 · Une question", "is_interactive": true, "radius": 44, "page": "v1" },
+    "Continue.dc.html": { "x": 1410, "y": 0, "w": 390, "h": 844, "title": "4 · Continuer la session", "is_interactive": true, "radius": 44, "page": "v1" },
+    "Sent.dc.html": { "x": 1880, "y": 0, "w": 390, "h": 844, "title": "5 · Après l'envoi", "is_interactive": true, "radius": 44, "page": "v1" }
+  },
+  "order": ["Inbox.dc.html", "Risk.dc.html", "Thread.dc.html", "Terminal.dc.html", "Agents.dc.html", "Offline.dc.html", "Notification.dc.html", "Pairing.dc.html", "Main.dc.html", "Permission.dc.html", "Question.dc.html", "Continue.dc.html", "Sent.dc.html"],
+  "notes": {
+    "title": { "x": 0, "y": -300, "text": "Ledge mobile · V1, le portage de l'overlay", "kind": "title1", "maxW": 2270, "page": "v1" },
+    "titlev2": { "x": 0, "y": -300, "text": "Ledge mobile · V2, une messagerie avec tes agents", "kind": "title1", "maxW": 3680, "page": "v2" }
+  },
+  "designSystems": [
+    { "title": "Shadcn Red", "namespace": "shadcn-red", "artifact": "https://claude.ai/artifact/QBv4bfYYVqV2aAfDjPW3JV", "version": "1791734754-2174", "copiedAt": "2026-10-14T10:00:00Z" }
+  ]
+}

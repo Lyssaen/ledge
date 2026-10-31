@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ledge mobile · Design validé</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap');
+*{box-sizing:border-box}body{margin:0;background:#101213;color:#f2f1ed;font:14px/1.6 Geist,system-ui,sans-serif}main{max-width:1810px;margin:auto;padding:56px 28px}a{color:inherit;text-decoration:none}a:focus-visible{outline:2px solid #a6c8f0;outline-offset:4px}.eyebrow{font-size:11px;letter-spacing:2px;color:#a6d6bf;text-transform:uppercase}.intro{display:flex;justify-content:space-between;gap:28px;align-items:flex-end;flex-wrap:wrap;border-bottom:1px solid #ffffff18;padding:16px 0 32px}h1{font-size:clamp(32px,4vw,52px);font-weight:500;letter-spacing:-2px;line-height:1.2;margin:0 0 16px}h2{font-size:24px;letter-spacing:-.5px;font-weight:500;margin:40px 0 8px}p{margin:0;color:#a2a6ab;max-width:720px}.intro p{font-size:16px}.launch{display:inline-flex;min-height:48px;align-items:center;border-radius:12px;padding:10px 20px;background:#f2f1ed;color:#141618;font-weight:500}.notes{font-size:12px;margin-top:16px}.notes a{text-decoration:underline}.scenarios{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0 30px}.scenarios a{min-height:44px;display:flex;align-items:center;border:1px solid #ffffff20;border-radius:10px;padding:8px 14px;font-size:12px;background:#17191b}.scenarios a:hover{background:#24282b}.grid{display:flex;gap:32px;flex-wrap:wrap;margin-top:24px;align-items:flex-start}figure{margin:0;width:390px;max-width:100%}.board-title{display:flex;gap:12px;align-items:center;margin-bottom:12px;font-size:13px}.board-title span{font-size:11px;color:#a6d6bf;font-variant-numeric:tabular-nums}.board-title a:hover{text-decoration:underline}iframe{display:block;width:390px;max-width:100%;height:844px;border:1px solid #ffffff20;border-radius:24px;background:#0c0d0e;box-shadow:0 18px 50px #0003}figcaption{font-size:12px;color:#a2a6ab;margin-top:12px;max-width:360px}figcaption span{color:#a6c8f0}.legacy{margin-top:64px;border-top:1px solid #ffffff18}.legacy summary{cursor:pointer;padding:24px 0;font-size:16px}.legacy summary small{font-size:12px;color:#a2a6ab}.legacy h2{margin-top:0}@media(max-width:450px){main{padding:28px 16px}.grid{gap:28px}iframe{height:780px}}
+</style>
+</head>
+<body><main>
+<div class="eyebrow">Ledge · Mobile / Design validé le 14 octobre 2026</div>
+<div class="intro"><div><h1>Vos agents avancent.<br>Vous gardez la main.</h1><p>Une liste pour choisir ce qui compte, le contexte pour décider et un fil pour continuer. La V2 révisée, à explorer sur téléphone.</p></div><a class="launch" href="Inbox.html?reset=1">Essayer le parcours ↗</a></div>
+<p class="notes">Maquette interactive : aucune connexion au PC ni commande réelle. Les décisions sont mémorisées dans cet onglet pour explorer le parcours. « Essayer le parcours » les réinitialise.</p>
+<h2>Parcours et situations à éprouver</h2>
+<p>Deux onglets. Pas de glissement pour autoriser, pas d’annulation après transmission. Chaque demande s’examine avant de décider.</p>
+<div class="scenarios">
+<a href="Inbox.html?scenario=many&amp;reset=1" target="_blank" rel="noopener">10 demandes simultanées ↗</a>
+<a href="Request.html?scenario=long&amp;reset=1" target="_blank" rel="noopener">Commande longue ↗</a>
+<a href="Request.html?scenario=resolved&amp;reset=1" target="_blank" rel="noopener">Déjà traitée sur le PC ↗</a>
+<a href="Request.html?scenario=disconnect&amp;reset=1" target="_blank" rel="noopener">Coupure après autorisation ↗</a>
+<a href="Thread.html?scenario=send-failure" target="_blank" rel="noopener">Message non envoyé ↗</a>
+<a href="Thread.html?agent=otto&amp;reset=1" target="_blank" rel="noopener">Décision attendue dans un fil ↗</a>
+</div>
+<div class="grid"><figure><div class="board-title"><span>01</span><a href="Inbox.html" target="_blank" rel="noopener">Choisir une demande ↗</a></div><iframe src="Inbox.html" title="Choisir une demande" loading="lazy"></iframe><figcaption>Toutes les demandes restent accessibles.</figcaption></figure>
+<figure><div class="board-title"><span>02</span><a href="Request.html" target="_blank" rel="noopener">Décider avec le contexte ↗</a></div><iframe src="Request.html" title="Décider avec le contexte" loading="lazy"></iframe><figcaption>Tâche, branche, commande et contexte.</figcaption></figure>
+<figure><div class="board-title"><span>03</span><a href="Risk.html" target="_blank" rel="noopener">Comprendre l’impact ↗</a></div><iframe src="Risk.html" title="Comprendre l’impact" loading="lazy"></iframe><figcaption>La conséquence reste visible à la confirmation.</figcaption></figure>
+<figure><div class="board-title"><span>04</span><a href="Request.html?id=theme-nova-01" target="_blank" rel="noopener">Répondre à une question ↗</a></div><iframe src="Request.html?id=theme-nova-01" title="Répondre à une question" loading="lazy"></iframe><figcaption>Sélection explicite, puis envoi.</figcaption></figure>
+<figure><div class="board-title"><span>05</span><a href="Thread.html" target="_blank" rel="noopener">Continuer une conversation ↗</a></div><iframe src="Thread.html" title="Continuer une conversation" loading="lazy"></iframe><figcaption>Suggestions distinctes des décisions attendues.</figcaption></figure>
+<figure><div class="board-title"><span>06</span><a href="Agents.html" target="_blank" rel="noopener">Retrouver une tâche ↗</a></div><iframe src="Agents.html" title="Retrouver une tâche" loading="lazy"></iframe><figcaption>Le titre de tâche précède le nom du bot.</figcaption></figure>
+<figure><div class="board-title"><span>07</span><a href="Terminal.html" target="_blank" rel="noopener">Consulter le terminal ↗</a></div><iframe src="Terminal.html" title="Consulter le terminal" loading="lazy"></iframe><figcaption>Lecture seule et interruption explicite.</figcaption></figure>
+<figure><div class="board-title"><span>08</span><a href="Offline.html" target="_blank" rel="noopener">Garder le dernier état lisible ↗</a></div><iframe src="Offline.html" title="Garder le dernier état lisible" loading="lazy"></iframe><figcaption>Aucune décision envoyée hors connexion.</figcaption></figure>
+<figure><div class="board-title"><span>09</span><a href="Notification.html" target="_blank" rel="noopener">Ouvrir depuis une notification ↗</a></div><iframe src="Notification.html" title="Ouvrir depuis une notification" loading="lazy"></iframe><figcaption>Un accès direct à la demande, sans autorisation aveugle.</figcaption></figure>
+<figure><div class="board-title"><span>10</span><a href="Pairing.html" target="_blank" rel="noopener">Connecter le téléphone ↗</a></div><iframe src="Pairing.html" title="Connecter le téléphone" loading="lazy"></iframe><figcaption>Du réseau privé à l’activation des notifications.</figcaption></figure></div>
+<p class="notes" style="margin-top:32px">La version révisée est portée par les pages HTML, <code>mobile.css</code> et <code>mobile.js</code>. Les exports dans <code>source/</code> conservent le canevas initial, antérieur à cette revue. <a href="../../superpowers/specs/2026-10-14-ledge-mobile-design.md">Lire la spécification</a>.</p>
+<details class="legacy"><summary>V1 · Voir le portage initial de l’overlay <small>— pour comparaison</small></summary>  <section>
+    <h2>V1 · portage de l’overlay</h2>
+    <p>Première version, conservée pour comparaison : les vues de l’overlay transposées sur un téléphone.</p>
+    <div class="grid">
+      <figure>
+        <iframe src="Main.html" title="1 · Sessions" loading="lazy"></iframe>
+        <figcaption><a href="Main.html">1 · Sessions</a> <span>interactif</span></figcaption>
+      </figure>
+      <figure>
+        <iframe src="Permission.html" title="2 · Une permission" loading="lazy"></iframe>
+        <figcaption><a href="Permission.html">2 · Une permission</a> <span>interactif</span></figcaption>
+      </figure>
+      <figure>
+        <iframe src="Question.html" title="3 · Une question" loading="lazy"></iframe>
+        <figcaption><a href="Question.html">3 · Une question</a> <span>interactif</span></figcaption>
+      </figure>
+      <figure>
+        <iframe src="Continue.html" title="4 · Continuer la session" loading="lazy"></iframe>
+        <figcaption><a href="Continue.html">4 · Continuer la session</a> <span>interactif</span></figcaption>
+      </figure>
+      <figure>
+        <iframe src="Sent.html" title="5 · Après l'envoi" loading="lazy"></iframe>
+        <figcaption><a href="Sent.html">5 · Après l'envoi</a> <span>interactif</span></figcaption>
+      </figure>
+    </div>
+  </section>
+</details>
+</main></body></html>

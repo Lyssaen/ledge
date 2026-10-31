@@ -21,6 +21,13 @@
 .logo-bot .cube-edge { fill: none; stroke: var(--bot-shell-line); stroke-width: 1; stroke-linejoin: round; opacity: .3; }
 .logo-bot .shell { stroke-linejoin: round; }
 .logo-bot[data-simplified="true"] .cube-edge { display: none; }
+/* Bare faces: dark eyes on the shell, the state colour survives as a glint. */
+.logo-bot .eye-open { fill: var(--bot-visor); }
+.logo-bot .eye-glint { fill: var(--bot-eye); transition: opacity var(--bot-eye-ms, 260ms) var(--bot-ease); }
+.logo-bot :is(.eye-happy, .eye-error, .eye-sleep) { stroke: var(--bot-visor); }
+.logo-bot:is([data-eyes="happy"], [data-eyes="error"], [data-eyes="sleep"]) .eye-glint { opacity: 0; }
+.logo-bot[data-eyes="wide"] .eye-glint { transform: translateY(-1px); }
+.logo-bot[data-simplified="true"] .eye-glint { display: none; }
 /* Brand-inspired materials stay separate from the semantic eye and halo colours. */
 .logo-bot[data-branded="true"][data-tool="claude"][data-material="signal"] { --bot-shell-top: #c78669; --bot-shell-bottom: #8c503d; --bot-shell-line: #e0ab8f; --bot-visor: #33231f; }
 .logo-bot[data-branded="true"][data-tool="claude"][data-material="pebble"] { --bot-shell-top: #eab69b; --bot-shell-bottom: #c8876a; --bot-shell-line: #f5d6c4; --bot-visor: #392824; }
@@ -31,7 +38,7 @@
 .logo-bot[data-branded="true"][data-tool="omp"][data-material="signal"] { --bot-shell-top: #cf6bbd; --bot-shell-bottom: #6989bc; --bot-shell-line: #dba4df; --bot-visor: #2d213b; }
 .logo-bot[data-branded="true"][data-tool="omp"][data-material="pebble"] { --bot-shell-top: #f0bee3; --bot-shell-bottom: #a7c4e5; --bot-shell-line: #f8ddf4; --bot-visor: #34283e; }
 @media (max-width: 850px) {
-  .comparison-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+          .comparison-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 500px) {
   .comparison-grid { gap: 10px; }
