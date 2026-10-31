@@ -70,3 +70,35 @@ test('in the rail (< 850 px) seats and the kernel hide; a rig keeps its swatch, 
   await expect(rigs.getByRole('button', { name: /^build/ })).toBeHidden();
   await expect(rigs.locator('.st-kernel')).toBeHidden();
 });
+
+test('atelier: a double-click on factory shows its room alone; an exchange bubbles on its table; removed, the atelier comes back whole', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+  page.on('pageerror', e => errors.push(String(e)));
+  // design is a placeholder seat (no Ledge session): drawn, inert.
+  const factory: Rig = { ...FACTORY, seats: [...FACTORY.seats, seat('design', { state: 'ready' })] };
+  const daemon = await fakeDaemon(page, [otto, buildSeat, orchLead], { projects: twoProjects, rigs: [factory, KERNEL], openrig: RUNNING });
+  await page.goto('/'); await openAtelier(page);
+  const atelier = page.locator('.office-shell');
+  await expect(atelier.locator('[data-room="local/r-factory"]')).toBeVisible();
+  await expect(atelier.locator('[data-room="local/r-factory"] .room-plaque')).toContainText('rig · 3 seats');
+  await page.locator('section[aria-label="Rigs"]').getByRole('button', { name: 'factory rig · 3' }).dblclick();
+  await expect(page.locator('.project-filter[data-filter="rig"]')).toContainText('factory');
+  await expect(atelier.locator('[data-room]')).toHaveCount(1);
+  const room = atelier.locator('[data-room="local/r-factory"]');
+  // The placeholder: no session page, no menu.
+  const ghost = room.locator('.agent-seat.seat-ghost');
+  await expect(ghost).toContainText('design');
+  await expect(ghost).not.toHaveAttribute('data-agent');
+  await expect(room.getByRole('button', { name: /design/ })).toHaveCount(0);
+  daemon.exchange({ id: 'x1', machine: 'local', rigId: 'r-factory', from: 'build@factory', to: '@orch-lead', kind: 'message', text: 'Candidat prêt', at: new Date().toISOString() });
+  const bubble = atelier.locator('.exchange-bubble', { hasText: 'Candidat prêt' });
+  await expect(bubble).toBeVisible();
+  await expect(bubble).toContainText('to orch-lead');
+  await expect(bubble).toHaveCount(0, { timeout: 8000 });
+  daemon.removeRig('local', 'r-factory');
+  await expect(atelier.locator('[data-room="local/r-factory"]')).toHaveCount(0);
+  await expect(page.locator('.project-filter[data-filter="rig"]')).toHaveCount(0);
+  await expect(atelier.locator('[data-room]').first()).toBeVisible();
+  expect(errors).toEqual([]);
+});

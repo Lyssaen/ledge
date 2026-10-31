@@ -1,7 +1,7 @@
 import type { Helper, Session } from '@ledge/protocol';
 import type { BotState } from '@ledge/ui/bots/poseFor';
 import { isSeatPlaceholder } from '@ledge/ui/rigs/model';
-import type { AtelierScene } from '@ledge/ui/rigs/scene';
+import { tableSeats, type AtelierScene } from '@ledge/ui/rigs/scene';
 
 /** The mockup's constants (observatory.tsx). MAX_SEATS is the default seat count; Settings › Appearance chooses another (seats.ts). */
 export const STEP = 70, MAX_SEATS = 6, END_SEATS = 2, RUG_SIDE = 130;
@@ -81,9 +81,10 @@ export const helperState = (h: Helper): BotState => HELPER_STATE[h.state];
 /** The scene (rooms, « Sans projet », the empty project) is pure and shared: `@ledge/ui/rigs/scene`. */
 export { sceneOf, type AtelierRoom, type AtelierScene, type AtelierTable } from '@ledge/ui/rigs/scene';
 
-/** Room, then table, then seat (Alt ←/→, Alt 1…9, J / K); `MAX_SEATS` applies per table; a seat without a session (a placeholder) is skipped. */
+/** Room, then table, then seat (Alt ←/→, Alt 1…9, J / K): the seats a table draws (`tableSeats`: those with a session before the
+ *  placeholders, `maxSeats` per table), placeholders skipped, then « Sans projet ». */
 export function walkOrder(scene: AtelierScene, maxSeats = MAX_SEATS): Session[] {
-  return [...scene.rooms.flatMap(r => r.tables.flatMap(t => t.mains.slice(0, maxSeats))).filter(s => !isSeatPlaceholder(s.id)), ...scene.unassigned];
+  return [...scene.rooms.flatMap(r => r.tables.flatMap(t => tableSeats(t.mains, maxSeats).seated)).filter(s => !isSeatPlaceholder(s.id)), ...scene.unassigned];
 }
 
 /** Room margins (atelier units, before zoom): 110 px at the sides and front, 150 px at the back. */

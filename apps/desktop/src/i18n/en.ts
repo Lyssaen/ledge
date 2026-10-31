@@ -392,6 +392,8 @@ export const en: Messages = {
     messageLabel: (sender, n, summary) => `${sender} writes to ${n}: ${summary}. Open the conversation`,
     desk: 'Talk to Ledge',
     watching: (n) => pluralEn(n, `I'm watching over ${n} agent.`, `I'm watching over ${n} agents.`),
+    orchestrating: (n, d) => `I'm orchestrating ${n} ${pluralEn(n, 'rig', 'rigs')}${d > 0 ? ` · ${d} ${pluralEn(d, 'decision', 'decisions')} for you` : ''}.`,
+    exchangeTicket: (n) => `ticket for ${n}`,
     listening: "I'm listening.",
     assistant: 'Your assistant',
     unassignedHint: 'Ledge links these sessions to no project. Drag them onto a table, or use “Move to…”.',
@@ -441,7 +443,13 @@ export const en: Messages = {
     plaqueCounts: (sessions: number) => `${sessions} ${sessions === 1 ? 'session' : 'sessions'}`,
     waiting: (n: number) => `${n} waiting`, working: (n: number) => `${n} working`,
     roomMenu: (name: string) => `Actions of the ${name} room`, roomMenuTitle: 'Room actions',
-    newSessionHere: 'New session here', entrance: 'ENTRANCE'
+    newSessionHere: 'New session here', entrance: 'ENTRANCE',
+    rigSeats: (n) => `rig · ${n} ${pluralEn(n, 'seat', 'seats')}`,
+    inProject: (name) => `in ${name}`, offProject: (cwd) => `off project · ${cwd}`, onMachine: (m) => `on ${m}`,
+    kernelWhat: 'the machinery · operator and queue',
+    rigMenu: (name) => `Actions of the ${name} rig`, rigMenuTitle: 'Rig actions',
+    terminals: 'Terminals', rigThread: 'Rig thread',
+    hidden: (n) => pluralEn(n, `${n} seat tucked away (advisor, terminal)`, `${n} seats tucked away (advisor, terminal)`)
   },
   zoom: {
     bar: 'Atelier zoom', out: 'Zoom out', outTitle: 'Zoom out (−)', in: 'Zoom in', inTitle: 'Zoom in (+)',

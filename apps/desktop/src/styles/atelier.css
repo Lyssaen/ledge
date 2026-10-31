@@ -420,8 +420,11 @@
 .atelier-table:has(.room-menu),.atelier-room:has(.room-plaque .room-menu){z-index:6}
 .is-dragging .atelier-table.drop-over .room-heading,.atelier-table.drop-over .room-heading{border-color:var(--sidebar-primary)}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
-/* Rig and kernel rooms, drawn simply until RigRoom (lot 3, task 7). */
-.rig-room .room-tables{display:flex;flex-wrap:wrap;justify-content:center;gap:12px;position:relative;z-index:1;padding:24px 0}
-.rig-seat{display:inline-flex;flex-direction:column;align-items:center;gap:4px;font-size:12px;background:none;border:0;color:inherit;border-radius:var(--radius-md)}
-.rig-seat.ghost{opacity:.6}
-.rig-seat.focused,.rig-seat:focus-visible{outline:2px solid var(--sidebar-primary)}
+/* Rig and kernel rooms (lot 3): placeholder seats are only drawn; a task or handoff between seats is a ticket. Kept plain: « Bureaux » replaces it. */
+.agent-seat.seat-ghost{opacity:.55;cursor:default;pointer-events:none}
+.rig-room.rig-unreachable .room-walls{opacity:.5}
+.room-plaque .plaque-off{color:var(--destructive)}
+.room-menu .menu-sub{padding-left:22px}
+.rig-table .rug-labels{display:flex;justify-content:flex-end;gap:6px}
+.rig-table .table-more{cursor:default}
+.exchange-bubble.exchange-ticket{border-style:dashed;border-radius:4px}

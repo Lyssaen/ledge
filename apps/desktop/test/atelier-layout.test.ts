@@ -98,6 +98,9 @@ it('walkOrder goes through rig and kernel tables too, placeholders skipped', () 
   expect(scene.rooms.map(r => r.kind)).toEqual(['project', 'rig', 'kernel']);
   expect(walkOrder(scene).map(s => s.name)).toEqual(['otto', 'build']);
   expect(walkOrder(sceneOf(order, projects, idOf, 'rig:local/r1', [factory, kernel], new Map(order.map(s => [s.id, s])))).map(s => s.name)).toEqual(['build']);
+  // Placeholders do not use up the seats J / K walks: build, after three of them, is still reached on a 2-seat table.
+  const crowded: Rig = { ...factory, seats: [seat('a'), seat('b'), seat('c'), seat('build', { sessionId: 'local:build', state: 'working' })] };
+  expect(walkOrder(sceneOf(order, projects, idOf, 'rig:local/r1', [crowded], new Map(order.map(s => [s.id, s]))), 2).map(s => s.name)).toEqual(['build']);
 });
 it('mosaic rows and zoom arithmetic', () => {
   expect([1, 2, 3].map(k => widestRow([230, 750, 470, 420], k))).toEqual([1918, 1004, 762]);

@@ -412,6 +412,8 @@ export const fr = {
     messageLabel: (sender: string, n: string, summary: string) => `${sender} écrit à ${n} : ${summary}. Ouvrir l’échange`,
     desk: 'Parler à Ledge',
     watching: (n: number) => plural(n, `Je veille sur ${n} agent.`, `Je veille sur ${n} agents.`),
+    orchestrating: (n: number, d: number) => `J’orchestre ${n} ${plural(n, 'rig', 'rigs')}${d > 0 ? ` · ${d} ${plural(d, 'décision', 'décisions')} pour toi` : ''}.`,
+    exchangeTicket: (n: string) => `ticket pour ${n}`,
     listening: 'Je vous écoute.',
     assistant: 'Votre assistant',
     unassignedHint: 'Ledge ne relie ces sessions à aucun projet. Glissez-les vers une table, ou utilisez « Ranger dans… ».',
@@ -461,7 +463,13 @@ export const fr = {
     plaqueCounts: (sessions: number) => plural(sessions, `${sessions} session`, `${sessions} sessions`),
     waiting: (n: number) => plural(n, `${n} attend`, `${n} attendent`), working: (n: number) => plural(n, `${n} au travail`, `${n} au travail`),
     roomMenu: (name: string) => `Actions de la pièce ${name}`, roomMenuTitle: 'Actions de la pièce',
-    newSessionHere: 'Nouvelle session ici', entrance: 'ENTRÉE'
+    newSessionHere: 'Nouvelle session ici', entrance: 'ENTRÉE',
+    rigSeats: (n: number) => `rig · ${n} ${plural(n, 'siège', 'sièges')}`,
+    inProject: (name: string) => `dans ${name}`, offProject: (cwd: string) => `hors projet · ${cwd}`, onMachine: (m: string) => `sur ${m}`,
+    kernelWhat: 'la mécanique · operator et queue',
+    rigMenu: (name: string) => `Actions du rig ${name}`, rigMenuTitle: 'Actions du rig',
+    terminals: 'Terminaux', rigThread: 'Fil du rig',
+    hidden: (n: number) => plural(n, `${n} siège rangé (advisor, terminal)`, `${n} sièges rangés (advisor, terminal)`)
   },
   zoom: {
     bar: "Zoom de l'atelier", out: 'Dézoomer', outTitle: 'Dézoomer (−)', in: 'Zoomer', inTitle: 'Zoomer (+)',

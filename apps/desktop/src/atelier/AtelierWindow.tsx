@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { projectOf, useProjects, useRigs, type DaemonClient } from '@ledge/fleet';
+import { projectOf, useEscalations, useProjects, useRigs, type DaemonClient } from '@ledge/fleet';
+import { openSeatTerminal } from '../rigs/terminal';
+import { useRigExchanges } from '../rigs/useRigExchanges';
 import type { Session } from '@ledge/protocol';
 import { MarkdownLinks } from '@ledge/ui/documents/links';
 import { Button } from '@ledge/ui/ui/Button';
@@ -65,6 +67,8 @@ function AtelierAlone({ client }: { client?: DaemonClient }) {
   const { sessions, machines, fleet, client: fleetClient, errors } = fleetView;
   const projects = useProjects(fleetClient);
   const rigs = useRigs(fleetClient);
+  const escalations = useEscalations(fleetClient);
+  const exchanges = useRigExchanges(fleetClient, rigs);
   const relief = useRelief(fleetClient);
   const [nav, local] = useReducer(navReducer, undefined, () => initialNav(loadOverview(), 'atelier'));
   const dispatch = useCallback((a: NavAction) => { if (STAYS.has(a.type)) local(a); else toMain(a); }, []);
@@ -87,7 +91,7 @@ function AtelierAlone({ client }: { client?: DaemonClient }) {
       <div className={`application atelier-alone ${nav.fullscreen ? 'immersive' : ''} ${filing.dragging ? 'is-dragging' : ''}`} inert={blocked}>
         <section className="workspace">
           <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} rigs={rigs} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu}
-           
+            escalations={escalations} exchanges={exchanges} onSeatTerminal={(rig, seat) => { void openSeatTerminal(fleetClient, rig, seat, new Map(sessions.map(s => [s.id, s]))).then(ok => { if (!ok) notify(t.session.terminal.openFailed(seat.name)); }); }}
             tools={nav.fullscreen && <>
               <span className="zoom-sep" />
               <Button variant="ghost" size="icon" aria-label={t.top.fullscreenExit} title={t.top.fullscreenExit} onClick={() => dispatch({ type: 'fullscreen', on: false })}>
