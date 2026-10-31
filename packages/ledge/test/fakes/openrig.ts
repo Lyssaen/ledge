@@ -133,18 +133,20 @@ export async function createFakeOpenRig(opts: { port?: number; version?: string 
   return f;
 }
 
+/** `envs`: the env laid over the agent environment, one entry per call (undefined without). */
+export type FakeRigCli = RigExec & { calls: string[][]; envs: (Record<string, string> | undefined)[] };
 /**
- * Simulates the `rig` binary. `calls` records every argv.
+ * Simulates the `rig` binary. `calls` records every argv, `envs` the env of each call (`send` prints a confirmation).
  * `gateway human list --json` prints an array of objects with `id`: `[{ "id": "ledge" }]` (Task 6 parses it).
  * `queue create … --json` appends a pending row to `rig.queue` (body read from `--body-file`) and prints it with its `qitemId`;
  * with `hold`, it waits for that promise first (the call is recorded at once).
  */
-export function fakeRigCli(rig: FakeOpenRig | null, opts: { startFails?: boolean; version?: string; hold?: Promise<unknown> } = {}): RigExec & { calls: string[][] } {
-  const calls: string[][] = [];
+export function fakeRigCli(rig: FakeOpenRig | null, opts: { startFails?: boolean; version?: string; hold?: Promise<unknown> } = {}): FakeRigCli {
+  const calls: string[][] = []; const envs: (Record<string, string> | undefined)[] = [];
   const ok = (stdout = ''): { code: number; stdout: string; stderr: string } => ({ code: 0, stdout, stderr: '' });
   const fail = (code: number, stderr: string) => ({ code, stdout: '', stderr });
-  const exec = (async (args: string[]) => {
-    calls.push([...args]); const j = args.join(' ');
+  const exec = (async (args: string[], o?: { env?: Record<string, string> }) => {
+    calls.push([...args]); envs.push(o?.env); const j = args.join(' ');
     if (args[0] === '--version') { const v = opts.version ?? rig?.version; return rig === null && opts.version === undefined ? fail(127, 'rig: command not found') : ok(`${v ?? '0.0.0'} (fake)\n`); }
     if (j === 'daemon start') {
       if (opts.startFails) return fail(1, 'daemon failed to start: port busy (fake)');
@@ -159,6 +161,7 @@ export function fakeRigCli(rig: FakeOpenRig | null, opts: { startFails?: boolean
         return fail(1, `refused: a human is already configured (${rig.humans[0]}). OpenRig supports one configured human ... remove the existing one first (\`rig gateway human remove <entityId>\`)`);
       rig.humans.splice(0, rig.humans.length, id); return ok(`added ${id}\n`);
     }
+    if (args[0] === 'send') return args.length === 3 ? ok(`sent to ${args[1]}\n`) : fail(2, 'send: usage: rig send <session> <text>');
     if (args[0] === 'queue' && args[1] === 'create') {
       if (opts.hold) await opts.hold;
       const flag = (name: string) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined; };
@@ -171,6 +174,6 @@ export function fakeRigCli(rig: FakeOpenRig | null, opts: { startFails?: boolean
       rig.queue.push(row); return ok(JSON.stringify(row));
     }
     return fail(2, `unknown command: ${j}`);
-  }) as RigExec & { calls: string[][] };
-  exec.calls = calls; return exec;
+  }) as FakeRigCli;
+  exec.calls = calls; exec.envs = envs; return exec;
 }

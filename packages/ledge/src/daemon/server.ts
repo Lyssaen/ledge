@@ -53,6 +53,7 @@ import { createAnswers, type Answers } from './openrig/answer.js';
 import { ANSWER_PATH } from './openrig/facts.js';
 import { createLedgeThread } from './ledgeThread.js';
 import { createLedgeSay } from './ledgeSay.js';
+import { createSeatSend } from './openrig/seatSend.js';
 import { createHandovers, heldNames } from './handover.js';
 import { readContext } from './context.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
@@ -309,10 +310,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** Ledge's thread (with or without OpenRig): every item, new or grown, reaches the local fronts. */
   const thread = createLedgeThread({ path: paths().ledgeThread, now });
   const unsubscribeThread = thread.onItem(item => broadcast({ type: 'ledge.thread.item', item }));
+  const seatSend = bridge ? createSeatSend({ bridge }) : null;
   /** Messages to Ledge (`ledge.say`): one at a time through the desktop chat, whose `chat.*` every front gets. */
   const ledgeSay = createLedgeSay({ thread, chat, escalations: id => bridge?.escalation(id), broadcast, tool: () => threads.deviceTool(),
-    // Task 6 seam: `@seat …` texts go to seatSend.fromSay; until then every text is a question to Ledge.
-    toSeat: async () => null });
+    // `@seat …` goes to a rig seat; without OpenRig every text is a question to Ledge.
+    toSeat: (rid, text) => (seatSend ? seatSend.fromSay(rid, text) : Promise.resolve(null)) });
   /** Answers to escalations, the one way to answer them (only with an OpenRig bridge). */
   const answers: Answers | null = bridge ? createAnswers({
     port: { escalation: bridge.escalation, patch: bridge.patchEscalation, status: bridge.status, cli: bridge.cli, http: bridge.http,
@@ -1316,7 +1318,14 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         reply({ type: 'rig.result', rid: msg.rid, ok: true });
         return answered;
       }
-      case 'rig.act': case 'rig.prepare': case 'rig.launch': case 'rig.adopt': case 'rig.send':
+      // Writing to a seat; to the sender only. The Desktop routes another machine's seats to its own daemon (lot 6).
+      case 'rig.send': {
+        if (msg.machine !== 'local') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'unreachable', reason: `machine ${msg.machine} is not this daemon's` });
+        if (!bridge || !seatSend) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'openrig_down', reason: "OpenRig n'est pas branché" });
+        const r = await seatSend.send(msg.machine, msg.seatRef, msg.text);
+        return reply(r.ok ? { type: 'rig.result', rid: msg.rid, ok: true } : { type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: r.reason });
+      }
+      case 'rig.act': case 'rig.prepare': case 'rig.launch': case 'rig.adopt':
       case 'mandate.update': case 'rule.set': case 'decision.revisit': case 'category.escalate': case 'brain.set':
         return notYet();
       // A refusal of the service (an unknown pairing, a sign-in while disabled) reaches the sender as an `error`.

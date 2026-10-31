@@ -19,7 +19,14 @@ export interface RigCli {
   addHuman(opts?: { replace?: boolean }): Promise<{ ok: boolean; detail?: string }>;
   /** `rig queue create … --json` (facts D6); `qitemId` = the new row's id when the output names one. */
   queueCreate(o: QueueCreate): Promise<{ ok: boolean; qitemId?: string; detail?: string }>;
+  /** `rig send <ref> "[Ledge] <text>"` as `ledge@external` (the signed send is unverified on a real OpenRig: first real try). */
+  send(ref: string, text: string): Promise<{ ok: boolean; detail?: string }>;
 }
+
+/** Without an identity OpenRig delivers `rig send` unsigned. */
+export const SEND_SESSION_NAME = 'ledge@external';
+/** The signature that opens every message Ledge sends to a seat. */
+export const SEND_SIGNATURE = '[Ledge] ';
 
 /** Spawns `rig` with the agent environment; ENOENT -> 127, timeout -> kill + code 124. */
 export function realRigExec(env: () => Promise<NodeJS.ProcessEnv>): RigExec {
@@ -79,6 +86,7 @@ export function createRigCli(exec: RigExec): RigCli {
     },
     addHuman: async opts => outcome(await exec(['gateway', 'human', 'add', HUMAN_ID, '--display-name', 'Ledge', '--binding', HUMAN_BINDING,
       '--delivery-class', 'D', '--actor', 'ledge', ...(opts?.replace ? ['--replace'] : [])])),
+    send: async (ref, text) => outcome(await exec(['send', ref, `${SEND_SIGNATURE}${text}`], { timeoutMs: 30_000, env: { OPENRIG_SESSION_NAME: SEND_SESSION_NAME } })),
     queueCreate: async o => {
       const r = await exec(['queue', 'create', '--source', o.source, '--destination', o.destination, '--summary', o.summary, '--body-file', o.bodyFile,
         ...(o.replyTo ? ['--reply-to', o.replyTo] : []), '--json'], { timeoutMs: 30_000 });
