@@ -334,3 +334,12 @@ button.rc-seat-main:hover { background: var(--sidebar-accent); }
 .ra-name { border: 0; background: none; padding: 0; color: inherit; font: inherit; font-weight: 600; cursor: pointer; }
 span.ra-name { cursor: default; }
 .ra-rig { display: inline-flex; align-items: center; gap: 6px; }
+.rc-repos { margin: 8px 0 0; padding: 10px 12px; border: 1px solid var(--sidebar-border); border-radius: var(--radius-md); font-size: 13px; line-height: 1.5; }
+.rc-repos-head { display: flex; align-items: baseline; gap: 8px; }
+.rc-repos-head strong { font-weight: 600; }
+.rc-repo-list { margin: 6px 0 0; padding: 0; list-style: none; }
+.rc-repo { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; }
+.rc-repos-none { margin: 6px 0 0; }
+.rc-propose { display: flex; gap: 10px; align-items: baseline; justify-content: space-between; margin: 8px 0 0; padding: 8px 10px; border-radius: var(--radius-md); background: var(--well); }
+.adopt-projects { display: grid; gap: 6px; margin: 0 0 12px; padding: 0; border: 0; }
+.adopt-project { display: flex; align-items: center; gap: 8px; cursor: pointer; }

@@ -1,5 +1,5 @@
 import { useState, type JSX, type ReactNode } from 'react';
-import type { OpenRigStatus, Rig, RigSeat, Session } from '@ledge/protocol';
+import type { OpenRigStatus, Projects, Rig, RigSeat, Session } from '@ledge/protocol';
 import { rigFilter, type rigsModel } from '@ledge/ui/rigs/model';
 import { Icon } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
@@ -8,6 +8,7 @@ import { Menu, MenuItem } from '../shell/Menu';
 import { SHELL_ICONS } from '../shell/icons';
 import { KernelCard, RigCard } from './RigCard';
 import { isLaunching, LaunchNote } from './LaunchNote';
+import { RigRepos } from './RigRepos';
 import { useRigControls, type RigControls } from './useRigActions';
 
 /** A « … » of the Rigs tab: a rig's or a seat's menu. */
@@ -59,10 +60,13 @@ function rigActions(c: RigControls, rig: Rig, onTerminal: (seat: RigSeat) => voi
   };
 }
 
+/** A rig in a space off any project that no project holds yet (once filed, `projectId` is set; the daemon keeps `offProject`). */
+export const isUnfiled = (rig: Rig): boolean => rig.offProject && !rig.projectId && rig.lifecycle !== 'unreachable';
+
 /** « En cours » (spec §8.2): one card per rig, by name, then the kernels (the local one first). Without the app's rig gestures
  *  (`RigControlsContext`), the cards only show. */
-export function RigsLive({ model, openrig, byId, dispatch, onTerminal }: {
-  model: ReturnType<typeof rigsModel>; openrig: readonly OpenRigStatus[]; byId: ReadonlyMap<string, Session>;
+export function RigsLive({ model, openrig, byId, projects, dispatch, onTerminal }: {
+  model: ReturnType<typeof rigsModel>; openrig: readonly OpenRigStatus[]; byId: ReadonlyMap<string, Session>; projects: Projects | null;
   dispatch: (a: NavAction) => void; onTerminal(rig: Rig, seat: RigSeat): void;
 }): JSX.Element {
   const { t } = useI18n();
@@ -71,11 +75,19 @@ export function RigsLive({ model, openrig, byId, dispatch, onTerminal }: {
   if (model.rigs.length === 0 && model.kernels.length === 0) return <p className="lp-none">{t.rigsTab.noRigs}</p>;
   return (
     <div className="rigs-live">
-      {model.rigs.map(row => (
-        <RigCard key={row.key} rig={row.rig} place={row.place} byId={byId} onOpen={open}
-          onTable={() => dispatch({ type: 'home', project: rigFilter(row.rig) })} onTerminal={seat => onTerminal(row.rig, seat)}
-          {...(controls ? rigActions(controls, row.rig, seat => onTerminal(row.rig, seat), t) : {})} />
-      ))}
+      {model.rigs.map(row => {
+        const acts = controls ? rigActions(controls, row.rig, seat => onTerminal(row.rig, seat), t) : {};
+        // Off any project, not filed yet: the repositories the rig found, and the way to file it (spec §8.2).
+        const repos = controls && projects && isUnfiled(row.rig)
+          ? <RigRepos rig={row.rig} projects={projects} onChoose={() => controls.askAdopt(row.rig)} onAdopt={id => { void controls.adopt(row.rig.machine, row.rig.id, id); }} />
+          : null;
+        const footer = acts.footer || repos ? <>{acts.footer}{repos}</> : undefined;
+        return (
+          <RigCard key={row.key} rig={row.rig} place={row.place} byId={byId} onOpen={open}
+            onTable={() => dispatch({ type: 'home', project: rigFilter(row.rig) })} onTerminal={seat => onTerminal(row.rig, seat)}
+            {...acts} {...(footer ? { footer } : {})} />
+        );
+      })}
       {model.kernels.map(k => <KernelCard key={k.key} rig={k.rig} byId={byId} status={openrig.find(s => s.machine === k.rig.machine)} onOpen={open} />)}
     </div>
   );

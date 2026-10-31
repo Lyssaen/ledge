@@ -554,6 +554,18 @@ export const fr = {
     rigThread: 'Fil du rig', repos: (n: number) => `Dépôts · ${n}`, adopt: 'Ranger dans un projet…',
     openrigDown: (machine: string) => `OpenRig ne répond pas sur ${machine}`, refused: (reason: string) => `Action refusée : ${reason}`
   },
+  rigRepos: {
+    title: (n: number) => `Dépôts trouvés · ${n}`, sub: 'ce que le rig a cloné ou ouvert', none: 'Aucun dépôt trouvé pour l’instant. Je regarde toutes les 30 s.',
+    branch: (b: string) => `⎇ ${b}`, modified: (m: number) => `${m} ${plural(m, 'fichier modifié', 'fichiers modifiés')}`,
+    cloned: (by?: string) => (by ? `cloné par ${by}` : 'cloné'), opened: (by?: string) => (by ? `lu par ${by}` : 'lu'),
+    created: (by?: string) => (by ? `créé par ${by}` : 'créé'), noRemote: 'pas encore de dépôt distant',
+    proposeOnly: (rig: string, project: string) => `Je propose de ranger ${rig} dans ${project} : c’est le seul dépôt modifié. Je ne déplace rien sans toi.`,
+    proposeName: (rig: string, project: string) => `Je propose de ranger ${rig} dans ${project} : un de ses dépôts porte ce nom. Je ne déplace rien sans toi.`,
+    fileIn: (project: string) => `Ranger dans ${project}`, choose: 'Ranger dans un projet…',
+    adoptTitle: (rig: string) => `Ranger ${rig} dans un projet`, projects: 'Projets', noProjects: 'Aucun projet pour l’instant.',
+    adoptNote: (project: string) => `Le rig garde sa pièce et ses fichiers ; sa plaque dira « dans ${project} ».`,
+    adoptPick: 'Choisis un projet.', adopt: 'Ranger', cancel: 'Annuler', plaque: (n: number, names: string) => `${n} ${plural(n, 'dépôt', 'dépôts')} · ${names}`
+  },
   handover: {
     nearShort: (name: string, pct: number) => `${name} · contexte ${pct} %`, nearHint: 'limite proche', failedShort: (name: string) => `Relève de ${name} échouée`, retry: 'Réessayer',
     pass: 'Passer le relais', passTitle: 'Une nouvelle session prend sa place : il écrit son bilan', later: 'Plus tard',

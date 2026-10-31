@@ -206,7 +206,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // The session menu, from the atelier's seats and the session page's header « … » (one at a time).
   const sessionMenu = useSessionMenu({ client: fleetClient, sessions, onShowTerminal: showTerminal });
   // Acting on rigs and seats (lot 5): the Rigs tab, the rig rooms, the top bar and a paired session's menu share it; « Arrêter… » shows here.
-  const rigControls = useRigControlsHost({ client: fleetClient, notify, rigs, dispatch });
+  const rigControls = useRigControlsHost({ client: fleetClient, notify, rigs, projects, dispatch });
   const decisions = useDecisions({ client: fleetClient, sessions, errors, notify });
   const screenKeys = useRef<ScreenKeys>({ current: null }).current;
   // Drafts, reading positions and the last item seen, per session and subagent: they survive navigation, not a restart.

@@ -526,6 +526,18 @@ export const en: Messages = {
     rigThread: 'Rig thread', repos: (n) => `Repositories · ${n}`, adopt: 'File in a project…',
     openrigDown: (machine) => `OpenRig is not answering on ${machine}`, refused: (reason) => `Action refused: ${reason}`
   },
+  rigRepos: {
+    title: (n) => `Repositories found · ${n}`, sub: 'what the rig cloned or opened', none: 'No repository found yet. I look every 30 s.',
+    branch: (b) => `⎇ ${b}`, modified: (m) => `${m} modified ${m === 1 ? 'file' : 'files'}`,
+    cloned: (by) => (by ? `cloned by ${by}` : 'cloned'), opened: (by) => (by ? `read by ${by}` : 'read'),
+    created: (by) => (by ? `created by ${by}` : 'created'), noRemote: 'no remote repository yet',
+    proposeOnly: (rig, project) => `I suggest filing ${rig} in ${project}: it is the only modified repository. I move nothing without you.`,
+    proposeName: (rig, project) => `I suggest filing ${rig} in ${project}: one of its repositories has that name. I move nothing without you.`,
+    fileIn: (project) => `File in ${project}`, choose: 'File in a project…',
+    adoptTitle: (rig) => `File ${rig} in a project`, projects: 'Projects', noProjects: 'No project yet.',
+    adoptNote: (project) => `The rig keeps its room and its files; its plaque will say “in ${project}”.`,
+    adoptPick: 'Pick a project.', adopt: 'File', cancel: 'Cancel', plaque: (n, names) => `${n} ${n === 1 ? 'repository' : 'repositories'} · ${names}`
+  },
   handover: {
     nearShort: (name: string, pct: number) => `${name} · context ${pct} %`, nearHint: 'near its limit', failedShort: (name: string) => `Relief of ${name} failed`, retry: 'Retry',
     pass: 'Hand over', passTitle: 'A fresh session takes its place: it writes its brief', later: 'Later',

@@ -23,7 +23,7 @@ function RigBar({ rig, dispatch }: { rig: Rig; dispatch: (a: NavAction) => void 
   return (
     <span className="rig-bar">
       <Button size="sm" onClick={() => dispatch({ type: 'ledge', tab: 'conversation' })}>{a.rigThread}</Button>
-      {controls && rig.offProject && <>
+      {controls && rig.offProject && !rig.projectId && <>
         <Button size="sm" onClick={() => controls.showRepos(rig)}>{a.repos(rig.repos.length)}</Button>
         <Button size="sm" onClick={() => controls.askAdopt(rig)}>{a.adopt}</Button>
       </>}

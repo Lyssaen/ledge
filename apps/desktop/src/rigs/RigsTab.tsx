@@ -76,7 +76,7 @@ export function RigsTab({ nav, dispatch, client, sessions, projects, notify }: {
         </p>
       )}
       <div className="rigs-body">
-        {sub === 'live' && <RigsLive model={model} openrig={openrig} byId={byId} dispatch={dispatch}
+        {sub === 'live' && <RigsLive model={model} openrig={openrig} byId={byId} projects={projects} dispatch={dispatch}
           onTerminal={(rig, seat) => { void openSeatTerminal(client, rig, seat, byId).then(ok => { if (!ok) notify?.(t.session.terminal.openFailed(seat.name)); }); }} />}
         {sub === 'specs' && <RigsSpecs specs={specs} selected={home?.spec} rigs={allRigs} machine={machine}
           version={openrig.find(s => s.machine === machine)?.version} dispatch={dispatch} />}

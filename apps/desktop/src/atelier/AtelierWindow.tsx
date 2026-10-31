@@ -83,7 +83,7 @@ function AtelierAlone({ client }: { client?: DaemonClient }) {
   const filing = useFiling({ fleet, projects, sessions, projectIdOf, notify });
   const actions = useSessionActions({ client: fleetClient, sessions, archived: fleetView.archived, machines, errors, notify });
   const sessionMenu = useSessionMenu({ client: fleetClient, sessions, onShowTerminal: terminalToMain });
-  const rigControls = useRigControlsHost({ client: fleetClient, notify, rigs, dispatch });
+  const rigControls = useRigControlsHost({ client: fleetClient, notify, rigs, projects, dispatch });
   const screenKeys = useRef<ScreenKeys>({ current: null }).current;
   useKeys(dispatch, { state: nav, order, screen: screenKeys, undo, confirming: actions.pending ? { cancel: actions.cancel } : null });
   const blocked = actions.pending !== null || sessionMenu.renaming !== null || rigControls.blocking;

@@ -50,6 +50,9 @@ export function RigRoom({ room, width, dispatch, onTerminal, children, extraActi
           : <span className="plaque-counts">{t.rooms.rigSeats(room.tables[0].mains.length)}</span>}
         {room.kind === 'rig' && room.place.kind === 'project' && <span className="plaque-counts">{t.rooms.inProject(room.place.name)}</span>}
         {room.kind === 'rig' && room.place.kind === 'off' && <span className="plaque-counts" title={room.place.cwd}>{t.rooms.offProject(shortCwd(room.place.cwd))}</span>}
+        {room.kind === 'rig' && room.place.kind === 'off' && rig.repos.length > 0 && (
+          <span className="plaque-counts" title={rig.repos.map(r => r.path).join('\n')}>{t.rigRepos.plaque(rig.repos.length, rig.repos.map(r => r.name).join(', '))}</span>
+        )}
         {rig.machine !== 'local' && <span className="plaque-counts">{t.rooms.onMachine(rig.machine)}</span>}
         {rig.lifecycle === 'unreachable' && <span className="plaque-counts plaque-off">{t.side.rigs.unreachable}</span>}
         {working > 0 && <span className="plaque-working"><i className="live-dot" />{t.rooms.working(working)}</span>}
@@ -72,7 +75,7 @@ export function RigRoom({ room, width, dispatch, onTerminal, children, extraActi
           {controls && room.kind === 'rig' && rig.lifecycle !== 'unreachable' && rig.lifecycle !== 'stopped' && (
             <MenuItem onSelect={() => controls.askStop(rig)}><span>{t.rigActions.stop}</span></MenuItem>
           )}
-          {controls && room.kind === 'rig' && rig.offProject && <MenuItem onSelect={() => controls.askAdopt(rig)}><span>{t.rigActions.adopt}</span></MenuItem>}
+          {controls && room.kind === 'rig' && rig.offProject && !rig.projectId && <MenuItem onSelect={() => controls.askAdopt(rig)}><span>{t.rigActions.adopt}</span></MenuItem>}
         </Menu>
       </div>
       <div className="room-tables">{children}</div>

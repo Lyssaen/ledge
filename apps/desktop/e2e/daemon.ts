@@ -156,6 +156,20 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
       }
       // A rig action (lot 5) is accepted (`rig.result` ok), or refused as `extras.rigAct` says; the rig itself is left as it is.
       if (msg.type === 'rig.act') ws.send(JSON.stringify({ type: 'rig.result', rid: msg.rid, ...(extras.rigAct ?? { ok: true }) }));
+      // Filing a rig (lot 5): the project holds the rig (`projects` again), then the rig comes back with its `projectId` (`offProject` stays, as the daemon keeps it).
+      if (msg.type === 'rig.adopt') {
+        const rig = rigs.get(`${msg.machine}/${msg.rigId}`);
+        const project = projects?.projects.find(p => p.id === msg.projectId);
+        if (!rig || !projects || !project) ws.send(JSON.stringify({ type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: 'unknown rig or project' }));
+        else {
+          projects = { ...projects, projects: projects.projects.map(p => (p.id === project.id ? { ...p, rigs: [...p.rigs.filter(x => x !== rig.id), rig.id] } : p)) };
+          ws.send(JSON.stringify({ type: 'projects', projects }));
+          const filed = { ...rig, projectId: project.id };
+          rigs.set(`${msg.machine}/${msg.rigId}`, filed);
+          ws.send(JSON.stringify({ type: 'rig.updated', rig: filed }));
+          ws.send(JSON.stringify({ type: 'rig.result', rid: msg.rid, ok: true }));
+        }
+      }
       if (msg.type === 'models.list') ws.send(JSON.stringify({ type: 'models.listing', requestId: msg.requestId, tool: msg.tool, models: extras.models?.[msg.tool] ?? [] }));
       if (msg.type === 'repos.inspect') {
         ws.send(JSON.stringify({ type: 'repos.info', requestId: msg.requestId, repos: msg.paths.map(path => ({ path, ...(extras.repoInfo?.[path] ?? { exists: true, branch: 'main' }) })) }));
