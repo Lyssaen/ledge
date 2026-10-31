@@ -1,12 +1,12 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { Socket } from 'node:net';
 import { randomUUID } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
 import { actionById, autonomyArgs, contextNear, ompApprovalFor, askShown, type ChatAction, type Autonomy } from '@ledge/protocol';
-import { ATTACHMENT_LOCAL_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type RigPlan, type RigResultCode, type DaemonInfo, type Projects, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, type ModelRefusal, type RefusalCode, backendOf } from '@ledge/protocol';
+import { ATTACHMENT_LOCAL_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type RigPlan, type RigResultCode, type DaemonInfo, type Projects, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, type ModelRefusal, type RefusalCode, backendOf, MANDATE_CATEGORY_LABEL } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
 import { AttachmentError, AttachmentStore } from './attachments.js';
@@ -68,7 +68,7 @@ import { createHandovers, heldNames } from './handover.js';
 import { createBrain, brainArgs, brainEnv, localDay } from './brain/session.js';
 import { isBrainTool } from './brain/settings.js';
 import { createMemory } from './brain/memory.js';
-import { DEFAULT_MANDATE, ensureMandate, parseMandate } from './brain/mandate.js';
+import { DEFAULT_MANDATE, ensureMandate, escalateCategory, parseMandate } from './brain/mandate.js';
 import { createBrainInbox } from './brain/inbox.js';
 import { brainResponder, BRAIN_FIRST_TEXT } from './brain/responder.js';
 import { createDeciding, type Deciding } from './brain/decide.js';
@@ -406,6 +406,21 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     if (s) brain.checkRelief({ today: localDay(), idle: s.state === 'idle' });
   }, 60_000);
   brainDayTimer.unref?.();
+  /** mandat.md as clients read it: a missing file is created with the default text. */
+  const mandateText = (): string => {
+    const f = paths().mandate;
+    try { return readFileSync(f, 'utf8'); } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') return ''; }
+    try { writeMandate(DEFAULT_MANDATE); } catch (e) { log(`mandate not created: ${(e as Error).message}`); }
+    return DEFAULT_MANDATE;
+  };
+  const writeMandate = (text: string): void => {
+    const f = paths().mandate; mkdirSync(dirname(f), { recursive: true });
+    const tmp = `${f}.${process.pid}.tmp`; writeFileSync(tmp, text); renameSync(tmp, f);
+  };
+  const mandateMsg = (): ServerMessage => ({ type: 'mandate', text: mandateText(), path: paths().mandate });
+  const rulesMsg = (): ServerMessage => ({ type: 'rules', items: memory.rules() });
+  const decisionsMsg = (): ServerMessage => ({ type: 'decisions', items: memory.decisions({ limit: 200 }) });
+  const unsubscribeMemory = memory.onChange(() => { broadcast(rulesMsg()); broadcast(decisionsMsg()); });
   const unsubscribeBrain = brain.onStatus(status => {
     broadcast({ type: 'brain.status', status });
     if (status.state === 'down' || status.state === 'off') deciding?.release(`brain ${status.state}`);
@@ -475,6 +490,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     reply(contextMsg()); // the context threshold (context handover spec §3.2)
     if (bridge) for (const m of bridge.replay()) reply(m); // then the OpenRig mirror (status, rigs, escalations)
     reply({ type: 'brain.status', status: brain.status() }); // then the brain's state (Lot 7)
+    reply(mandateMsg()); reply(rulesMsg()); reply(decisionsMsg()); // then its mandate, rules and decisions
     reply({ type: 'ledge.thread.history', ...thread.page() }); // last: Ledge's thread, whose items name those escalations
   };
   const preview = (id: string, lines: string[]) => {
@@ -1518,8 +1534,25 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         const r = await revisits.revisit(msg.id, msg.text);
         return reply({ type: 'rig.result', rid: msg.rid, ok: r.ok, ...(r.reason !== undefined ? { reason: r.reason } : {}) });
       }
-      case 'mandate.update': case 'rule.set': case 'category.escalate':
-        return notYet();
+      case 'mandate.update': {
+        try { writeMandate(msg.text); } catch (e) { return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: (e as Error).message }); }
+        broadcast(mandateMsg());
+        return reply({ type: 'rig.result', rid: msg.rid, ok: true, ...(parseMandate(msg.text).readable ? {} : { reason: 'le mandat illisible fait tout remonter à toi' }) });
+      }
+      case 'rule.set': {
+        const r = memory.setRule(msg.id, msg.status);
+        return reply(r ? { type: 'rig.result', rid: msg.rid, ok: true } : { type: 'rig.result', rid: msg.rid, ok: false, code: 'invalid', reason: 'règle inconnue' });
+      }
+      case 'category.escalate': {
+        const text = mandateText();
+        if (parseMandate(text).user.includes(msg.category)) return reply({ type: 'rig.result', rid: msg.rid, ok: true });
+        const next = escalateCategory(text, msg.category);
+        if (next === text) return reply({ type: 'rig.result', rid: msg.rid, ok: true }); // not in the first list: nothing to move
+        try { writeMandate(next); } catch (e) { return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: (e as Error).message }); }
+        broadcast(mandateMsg());
+        brainInbox.push({ kind: 'state', text: `L'utilisateur se fait remonter ${MANDATE_CATEGORY_LABEL[msg.category].fr} désormais.` });
+        return reply({ type: 'rig.result', rid: msg.rid, ok: true });
+      }
       case 'brain.set': {
         if (msg.tool !== undefined && !isBrainTool(msg.tool)) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'invalid', reason: `${msg.tool === 'omp' ? 'OMP' : msg.tool} ne peut pas être le cerveau de Ledge : choisis Claude Code, Codex ou Cursor.` });
         try { await brain.set({ enabled: msg.enabled, ...(msg.tool ? { tool: msg.tool } : {}) }); }
@@ -1671,6 +1704,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     asks,
     projects: () => projects,
     say: text => { thread.append({ kind: 'ledge', text }); },
-    close: () => new Promise<void>(res => { clearInterval(sweepTimer); clearInterval(brainDayTimer); unsubscribe(); unsubscribeBrain(); deciding?.dispose(); brain.dispose(); unsubscribeBridge?.(); launches?.close(); stopRepoWatch?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
+    close: () => new Promise<void>(res => { clearInterval(sweepTimer); clearInterval(brainDayTimer); unsubscribe(); unsubscribeBrain(); unsubscribeMemory(); deciding?.dispose(); brain.dispose(); unsubscribeBridge?.(); launches?.close(); stopRepoWatch?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
   };
 }
