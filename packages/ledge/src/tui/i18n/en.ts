@@ -24,7 +24,7 @@ export const en: Messages = {
     interrupt: 'interrupt', next: 'next waiting', unfold: 'unfold', send: 'send / launch', nextCard: 'next card',
     newChat: 'new conversation', stopAnswer: 'stop the answer', nextField: 'next field', choose: 'choose', tick: 'tick',
     start: 'launch', cancel: 'cancel', change: 'change', scroll: 'scroll', space: 'space', redraw: 'another name',
-    save: 'save the team', tasks: 'team tasks', join: 'join a team', resume: 'resume the team', teamMode: 'session or team', handover: 'hand over',
+    save: 'save the team', tasks: 'team tasks', join: 'join a team', resume: 'resume the team', teamMode: 'session or team', handover: 'hand over', decide: 'answer the decision', sendAnswer: 'send the answer', edit: 'edit',
     sendOnly: 'send', newLine: 'new line', keepAndLeave: 'keep and leave', lineHistory: 'line · history', history: 'history',
     word: 'word', clear: 'clear', resend: 'send again', backToDraft: 'back to the draft', keep: 'keep', wipe: 'clear',
     line: 'line', page: 'page', end: 'end', question: 'question', conversation: 'conversation', cycle: 'cards · conversation',
@@ -46,6 +46,9 @@ export const en: Messages = {
     relief: { briefing: 'relief: brief asked', launching: 'relief: launching…', done: 'relieved', failed: 'relief failed' },
     relievedBy: name => `relieved by ${name}`, relieves: name => `relieves ${name}`,
     ledgeTask: (owner, title, state) => `${owner} ${state === 'done' ? 'finished' : state === 'refused' ? 'refused' : 'dropped'} “${title}” · Ledge’s task`,
+    decision: (giver, title) => `${giver} asks you: ${title}`,
+    decisionTitle: (giver, title) => `Answer ${giver} · ${title}`, decisionHint: 'Your answer, as the session will read it…',
+    confirmAnswer: giver => `Send to ${giver}? An answer cannot be taken back`,
     joinWhich: name => `${name} joins which team? (↑↓ ↵, esc)`, noTeamHere: 'No team in this project.', notInTeam: 'This session is in no team.'
   },
   session: {
@@ -142,6 +145,7 @@ export const en: Messages = {
     openFailed: (why: string) => `Image not opened: ${why}`
   },
   toast: {
+    answerFailed: why => `Answer not sent: ${why}`,
     handover: n => `${n} is writing its brief: a fresh session will take its place`, handoverRefused: why => `Relief refused: ${why}`,
     accept: n => `✓ ${n}: allowed`, deny: n => `✓ ${n}: denied`, always: n => `✓ ${n}: always allowed`,
     option: (n, k) => `✓ ${n}: option ${k} sent`, reply: n => `✓ Reply sent to ${n}`,

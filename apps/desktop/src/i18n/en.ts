@@ -347,7 +347,8 @@ export const en: Messages = {
     failed: (name) => `${name} ran into an error`,
     manyTitle: 'Your team',
     many: (n) => `${n} sessions need you or have finished`,
-    pairing: 'A device asks for access'
+    pairing: 'A device asks for access',
+    decision: (name) => `${name} needs your decision`
   },
   pairing: {
     title: 'Link a device',
@@ -423,7 +424,7 @@ export const en: Messages = {
     readOnly: 'read only · nothing without your click',
     mentions: 'Mention', mentionSession: (name: string) => `session ${name}`, mentionTeam: (name: string) => `team ${name}`,
     tasks: {
-      filters: 'Filters', all: 'All', open: 'Open', closed: 'Closed', giver: 'Giver', anyGiver: 'Anyone', ledge: 'Ledge', seats: 'The seats', team: 'Team', anyTeam: 'All',
+      filters: 'Filters', all: 'All', open: 'Open', closed: 'Closed', giver: 'Giver', anyGiver: 'Anyone', ledge: 'Ledge', seats: 'The seats', decisions: 'Decisions', team: 'Team', anyTeam: 'All',
       none: 'No task.', result: 'Result', reason: 'Reason', log: 'History', from: (giver: string, owner: string) => `from ${giver} to ${owner}`, close: 'Close'
     },
     teams: { none: 'No team at work. Ask Ledge to set one up.', dissolved: 'dissolved' },
@@ -464,6 +465,14 @@ export const en: Messages = {
       templateReadOnly: 'Read only: a template is changed in its file; « Save » on a chat team card writes one.'
     },
     history: { none: 'No conversation today.', open: 'See in the conversation' }
+  },
+  decision: {
+    asks: (giver: string) => `${giver} needs your decision`, answer: 'Answer',
+    form: (title: string) => `Answer to “${title}”`, field: 'Your answer', placeholder: 'Write your answer, or pick an option…', options: 'Options offered',
+    send: 'Send the answer', cancel: 'Cancel',
+    review: (giver: string) => `Your answer to ${giver}, as it will go. An answer cannot be taken back.`, confirm: 'Confirm and send', edit: 'Edit', sending: 'Sending…',
+    failed: (reason: string) => `Answer refused: ${reason}`,
+    silent: 'Ledge did not confirm the answer. Check the task before trying again.'
   },
   handover: {
     nearShort: (name: string, pct: number) => `${name} · context ${pct} %`, nearHint: 'near its limit', failedShort: (name: string) => `Relief of ${name} failed`, retry: 'Retry',

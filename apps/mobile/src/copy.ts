@@ -1,6 +1,7 @@
 import { MESSAGE_MAX, type ActionErrorCode } from '@ledge/protocol';
 import { actionWords, type ActionVars } from '@ledge/ui/chat/actionWords';
 
+/** The lines of the generic card the shared words have not had yet, as the PC's summary says them (names in **bold**). */
 /** Every French string of the phone app lives here (decision D13). */
 export const copy = {
   appName: 'Ledge',
@@ -53,7 +54,11 @@ export const copy = {
       progress: (done: number, given: number) => `${done}/${given}`,
       state: { open: 'ouverte', taken: 'prise', done: 'finie', refused: 'refusée', dropped: 'abandonnée' },
       calm: 'Rien ne t’attend. Demande à Ledge ce que tu veux savoir ou faire.',
-      near: (pct: number) => `contexte ${pct} %`, nearHint: 'La relève se lance depuis le PC.'
+      near: (pct: number) => `contexte ${pct} %`, nearHint: 'La relève se lance depuis le PC.',
+      /** A decision a session put to the user: answered in the chat, through the card Ledge proposes. */
+      decision: 'Décision', asks: 'te demande', answer: 'Répondre', answerLabel: (title: string) => `Répondre à « ${title} »`,
+      someone: 'Une session',
+      answerDraft: (title: string, id: string, name: string) => `Réponse à la décision « ${title} » (${id}) de ${name} : `
     },
     team: {
       label: 'Équipe proposée', team: 'Équipe', seats: 'Postes', newTable: (project: string) => `nouvelle table dans la pièce ${project}`,
@@ -107,7 +112,7 @@ export const copy = {
       verbs: {
         'session.model': 'Changer', 'session.interrupt': 'Interrompre', 'session.archive': 'Archiver', 'session.restore': 'Restaurer', 'session.resume': 'Reprendre',
         'session.decide': 'Accepter', 'team.join': 'Ajouter', 'team.leave': 'Retirer', 'team.resume': 'Reprendre', 'team.dissolve': 'Dissoudre', 'team.save': 'Enregistrer',
-        'task.cancel': 'Abandonner', 'task.pass': 'Passer le relais'
+        'task.cancel': 'Abandonner', 'task.pass': 'Passer le relais', 'task.answer': 'Répondre'
       } as Record<string, string>,
       apply: 'Appliquer', deny: 'Refuser', ignore: 'Ignorer', review: 'Revoir', retry: 'Réessayer', running: 'En cours…',
       done: (at: string) => `Appliquée${at ? ` · ${at}` : ''}`, refusedState: 'Refusée', denied: (at: string) => `Refus envoyé${at ? ` · ${at}` : ''}`,
@@ -138,6 +143,7 @@ export const copy = {
       /** Why a row was refused or failed: the PC's words, but the phone says « vous » where it asks something of the user. */
       why: (code: ActionErrorCode | undefined, action: string | undefined, v: ActionVars): string => {
         if (code === 'changed') return 'la situation a changé depuis : redemandez à Ledge.';
+        if (code === 'not_decision') return v.task ? `la tâche « ${v.task} » n’est pas une décision qui vous est posée.` : 'cette tâche n’est pas une décision qui vous est posée.';
         return actionWords.fr.why(code, action, v).replace('redemande à Ledge', 'redemandez à Ledge');
       }
     },

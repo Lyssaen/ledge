@@ -225,6 +225,8 @@ export type PhoneTeam = z.infer<typeof PhoneTeamSchema>;
 /** A task Ledge gave, as the phone sees it: its owner, its team, its state and the start of its result. */
 export const PhoneTaskSchema = z.object({
   id: z.string().max(40), title: z.string().max(200), owner: z.string().max(100), ownerName: z.string().max(80), ownerRole: z.string().max(40).optional(),
+  /** Who gave it: `ledge` for Ledge's own; a session for a decision it put to the user (owner `ledge`), with its detail (the options). */
+  giver: z.string().max(100).optional(), giverName: z.string().max(80).optional(), text: z.string().max(TOOL_TEXT_MAX).optional(),
   team: z.string().max(40).optional(), teamName: z.string().max(60).optional(),
   state: z.enum(['open', 'taken', 'done', 'refused', 'dropped']), result: z.string().max(TOOL_TEXT_MAX).optional(), cut: z.literal(true).optional(),
   at: z.string(), updatedAt: z.string(), seen: z.literal(true).optional()

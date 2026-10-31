@@ -365,7 +365,9 @@ export const fr = {
     manyTitle: 'Votre équipe',
     many: (n: number) => `${n} sessions vous attendent ou ont terminé`,
     /** A pairing waits for its code to be compared (the dialog « Lier un appareil »); the body is the device's label. */
-    pairing: "Un appareil demande l'accès"
+    pairing: "Un appareil demande l'accès",
+    /** A session put a decision to the user (`ledge task give ledge …`); the body is its title. */
+    decision: (name: string) => `${name} attend votre décision`
   },
   /** The dialog « Lier un appareil » (docs/mockups/mobile-access, scenario « pairing »). */
   pairing: {
@@ -442,7 +444,7 @@ export const fr = {
     readOnly: 'lecture seule · rien sans ton clic',
     mentions: 'Mentionner', mentionSession: (name: string) => `session ${name}`, mentionTeam: (name: string) => `équipe ${name}`,
     tasks: {
-      filters: 'Filtres', all: 'Toutes', open: 'Ouvertes', closed: 'Closes', giver: 'Donneur', anyGiver: 'Tous', ledge: 'Ledge', seats: 'Les sièges', team: 'Équipe', anyTeam: 'Toutes',
+      filters: 'Filtres', all: 'Toutes', open: 'Ouvertes', closed: 'Closes', giver: 'Donneur', anyGiver: 'Tous', ledge: 'Ledge', seats: 'Les sièges', decisions: 'Décisions', team: 'Équipe', anyTeam: 'Toutes',
       none: 'Aucune tâche.', result: 'Résultat', reason: 'Raison', log: 'Historique', from: (giver: string, owner: string) => `de ${giver} à ${owner}`, close: 'Fermer'
     },
     teams: { none: 'Aucune équipe en cours. Demande à Ledge d’en monter une.', dissolved: 'dissoute' },
@@ -483,6 +485,15 @@ export const fr = {
       templateReadOnly: 'Lecture seule : un modèle se modifie dans son fichier ; « Enregistrer » sur une carte d’équipe du chat en crée un.'
     },
     history: { none: 'Aucune conversation aujourd’hui.', open: 'Voir dans la conversation' }
+  },
+  /** A decision a session put to the user (`ledge task give ledge …`), answered from « À toi » or « Tâches » (task.answer). */
+  decision: {
+    asks: (giver: string) => `${giver} attend ta décision`, answer: 'Répondre',
+    form: (title: string) => `Réponse à « ${title} »`, field: 'Ta réponse', placeholder: 'Écris ta réponse, ou choisis une option…', options: 'Options proposées',
+    send: 'Envoyer la réponse', cancel: 'Annuler',
+    review: (giver: string) => `Ta réponse à ${giver}, telle qu’elle partira. Une réponse ne se reprend pas.`, confirm: 'Confirmer l’envoi', edit: 'Modifier', sending: 'Envoi…',
+    failed: (reason: string) => `Réponse refusée : ${reason}`,
+    silent: 'Ledge n’a pas confirmé la réponse. Regarde la tâche avant de réessayer.'
   },
   handover: {
     nearShort: (name: string, pct: number) => `${name} · contexte ${pct} %`, nearHint: 'limite proche', failedShort: (name: string) => `Relève de ${name} échouée`, retry: 'Réessayer',

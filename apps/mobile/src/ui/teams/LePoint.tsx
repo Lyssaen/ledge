@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { CONTEXT_NEAR, type PhoneSession, type PhoneTask, type PhoneTeam } from '@ledge/protocol';
 import { copy } from '../../copy';
-import { closedTasks, openTasks } from '../../model/teams';
+import { closedTasks, openDecisions, openTasks } from '../../model/teams';
 import { ageLabel, headline, requestsOf } from '../../model/requests';
 import { href, navigate } from '../../router';
 import type { MobileStore } from '../../state/store';
 import { useNow } from '../../useNow';
 import { Flag, Progress, RolePill } from './RolePill';
 import { buttonClass } from '../Button';
+import { Tag } from '../Tag';
 
 const SMALL = buttonClass({ size: 'sm', className: 'min-w-[64px] flex-none' });
 const YES = buttonClass({ variant: 'primary', size: 'sm', className: 'min-w-[64px] flex-none' });
@@ -24,20 +25,22 @@ function closedLine(t: PhoneTask): string {
 
 /**
  * « Le point » (ledge home spec §2.4), built from the PC's state, not asked of Ledge: what waits for the user (a plain
- * authorisation answered in place, the rest opened; the closed tasks Ledge gave), the teams with Ledge's progress, and
- * the tasks Ledge gave that are still open.
+ * authorisation answered in place, the rest opened; the decisions sessions put to the user, answered through the chat;
+ * the closed tasks Ledge gave), the teams with Ledge's progress, and the tasks Ledge gave that are still open.
+ * `onAnswer` puts a decision's answer in the making into the chat's field: the phone never answers by itself.
  */
-export function LePoint({ store, sessions, teams, tasks, syncedAt, fresh, threshold = CONTEXT_NEAR }: { store: MobileStore; sessions: PhoneSession[]; teams: PhoneTeam[]; tasks: Map<string, PhoneTask>; syncedAt: string | null; fresh: boolean; threshold?: number }) {
+export function LePoint({ store, sessions, teams, tasks, syncedAt, fresh, threshold = CONTEXT_NEAR, onAnswer }: { store: MobileStore; sessions: PhoneSession[]; teams: PhoneTeam[]; tasks: Map<string, PhoneTask>; syncedAt: string | null; fresh: boolean; threshold?: number; onAnswer?: (t: PhoneTask) => void }) {
   const now = useNow();
   const [busy, setBusy] = useState<string | null>(null);
   const byId = new Map(sessions.map(s => [s.id, s]));
   const requests = requestsOf(sessions);
+  const decisions = openDecisions(tasks.values());
   const closed = closedTasks(tasks.values());
   // Near their context limit (context handover spec §3.2): opened here, handed over from the PC.
   const near = sessions.filter(s => s.state !== 'exited' && !s.handover && s.context && s.context.used / s.context.window >= threshold);
   const open = openTasks(tasks.values()).slice(0, 5);
   const P = copy.chat.point;
-  const yours = requests.length + closed.length + near.length;
+  const yours = requests.length + decisions.length + closed.length + near.length;
   const decide = (sessionId: string, key: string, decision: 'accept' | 'deny') => {
     const item = requests.find(r => r.sessionId === sessionId && r.key === key);
     if (!item) return;
@@ -72,6 +75,20 @@ export function LePoint({ store, sessions, teams, tasks, syncedAt, fresh, thresh
               </div>
             );
           })}
+          {decisions.map(t => (
+            <div key={`decision:${t.id}`} className="flex items-start gap-2">
+              <span className="mt-2 flex"><Dot tone="attention" /></span>
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-body">
+                <span className="flex flex-wrap items-center gap-1.5">
+                  <Tag tone="attention" label={P.decision} />
+                  <span className="font-medium">{t.giverName ?? P.someone}</span><span className="text-muted">{P.asks}</span>
+                </span>
+                <span className="break-words">{t.title}</span>
+                {t.text && <span className="whitespace-pre-wrap break-words text-small text-muted">{t.text}</span>}
+              </div>
+              {onAnswer && <button type="button" className={SMALL} aria-label={P.answerLabel(t.title)} onClick={() => onAnswer(t)}>{P.answer}</button>}
+            </div>
+          ))}
           {closed.map(t => (
             <div key={t.id} className="flex items-center gap-2">
               <Dot tone={t.state === 'done' ? 'ok' : 'attention'} />

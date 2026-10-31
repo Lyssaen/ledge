@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { LEDGE_GIVER, TASK_TEXT_MAX } from '@ledge/protocol';
 import { connect } from '../client.js';
+import { runOnClient } from './action.js';
 import { CODEX_HOOK_VAR } from '../spawn.js';
 
 export const DECIDE_USAGE = `ledge decide                       les décisions que les sessions attendent de toi
@@ -31,10 +32,10 @@ export async function runDecide(args: string[], opts: { port?: number; env?: Nod
       if (!asked.length) return { line: 'aucune décision en attente', code: 0 };
       return { line: asked.map(t => [`${t.id}  de ${t.giverName}  ${t.title}`, ...(t.text ? t.text.split('\n').map(l => `    ${l}`) : [])].join('\n')).join('\n\n'), code: 0 };
     }
-    client.send({ type: 'task.cmd', rid: randomUUID(), by: LEDGE_GIVER, op: 'done', task: op.task, text: op.text });
-    const r = await client.next('task.result', DECIDE_MS);
+    // The one way an answer goes (task.answer, as the chat's card): typed here by the user, so confirmed.
+    const r = await runOnClient(client, 'task.answer', { task: op.task, answer: op.text }, { confirmed: true, ms: DECIDE_MS });
     if (r.reason !== undefined) return { line: `refusé : ${r.reason}`, code: 1 };
-    return { line: `réponse envoyée à ${r.task!.giverName}`, code: 0 };
+    return { line: `réponse envoyée à ${r.row?.vars?.session ?? 'la session'}`, code: 0 };
   } catch (e) {
     return { line: `pas de réponse de Ledge : ${(e as Error).message}`, code: 1 };
   } finally { await client.close(); }

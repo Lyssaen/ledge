@@ -172,3 +172,4 @@
 .st .role-pill{margin:0 0 0 6px;font-size:10px;line-height:14px;vertical-align:baseline;overflow:visible;color:color-mix(in srgb,var(--sidebar-primary) 70%,var(--foreground))}
 .st-card.st-task .st-task-mark{display:grid;place-items:center;width:18px;height:18px;font-size:12px;color:var(--success,#16a34a)}
 .st-card.st-near .st-task-mark{color:var(--warning,#e5b85c)}
+.st-card.st-decision .st-task-mark{color:var(--sidebar-primary);font-weight:700}

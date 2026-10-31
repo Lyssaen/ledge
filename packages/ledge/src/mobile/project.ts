@@ -1,4 +1,4 @@
-import { LEDGE_GIVER, pendingKey, PENDING_BODY_MAX, SNAPSHOT_BODY_MAX, taskClosed, THREAD_BUDGET, THREAD_ITEMS_MAX, THREAD_TEXT_MAX, TOOL_TEXT_MAX, TOPIC_MAX, ToolSchema } from '@ledge/protocol';
+import { LEDGE_GIVER, openDecision, pendingKey, PENDING_BODY_MAX, SNAPSHOT_BODY_MAX, taskClosed, THREAD_BUDGET, THREAD_ITEMS_MAX, THREAD_TEXT_MAX, TOOL_TEXT_MAX, TOPIC_MAX, ToolSchema } from '@ledge/protocol';
 import { PhoneRoleSchema, PhoneTemplateSchema } from '@ledge/protocol';
 import { EffortSchema, PhoneModelChoiceSchema, type ModelChoice, type PhoneModelChoice } from '@ledge/protocol';
 import { CHECKLIST_TASKS_MAX, CHECKLIST_TEXT_MAX, doneCount } from '@ledge/protocol';
@@ -310,17 +310,24 @@ export function toPhoneRole(l: DefinitionsListing, projectName: (id: string | nu
   return ok.success ? ok.data : undefined;
 }
 
-/** A task Ledge gave, as the phone sees it: the start of its result only. */
+/** A task Ledge gave, or a decision a session put to the user, as the phone sees it: the start of its result and detail only. */
 export function toPhoneTask(x: Task, owner: Session | undefined, teamName: string | undefined): PhoneTask {
   const result = x.result !== undefined ? clip(x.result, TOOL_TEXT_MAX) : undefined;
+  // A decision's detail is the options its session offers: the phone shows them where it is answered.
+  const text = x.owner === LEDGE_GIVER && x.text !== undefined ? clip(x.text, TOOL_TEXT_MAX).text : undefined;
   return { id: x.id, title: x.title.slice(0, 200), owner: x.owner, ownerName: x.ownerName.slice(0, 80), ...(owner?.role ? { ownerRole: owner.role } : {}),
+    giver: x.giver.slice(0, 100), giverName: x.giverName.slice(0, 80), ...(text ? { text } : {}),
     ...(x.team ? { team: x.team } : {}), ...(teamName ? { teamName: teamName.slice(0, 60) } : {}), state: x.state,
     ...(result ? { result: result.text, ...(result.cut ? { cut: true as const } : {}) } : {}), at: x.at, updatedAt: x.updatedAt, ...(x.seen ? { seen: true as const } : {}) };
 }
 
-/** The tasks Ledge gave that the phone lists: open ones, and those closed in the last day not put away. */
+/** Ledge's tasks the phone is sent: the ones Ledge gave or that a session put to the user as a decision. */
+export const forPhone = (x: Pick<Task, 'giver' | 'owner'>): boolean => x.giver === LEDGE_GIVER || x.owner === LEDGE_GIVER;
+
+/** The tasks the phone lists: Ledge's open ones, and those closed in the last day not put away; the decisions still waiting
+ *  (an answered one is its session's, and is never put away). Its updates still reach the phone (`forPhone`), so it leaves the list. */
 export const phoneTasks = (tasks: readonly Task[], now: number): Task[] =>
-  tasks.filter(x => x.giver === LEDGE_GIVER && (!taskClosed(x) || (!x.seen && now - Date.parse(x.updatedAt) < 86_400_000))).slice(-200);
+  tasks.filter(x => openDecision(x) || (x.giver === LEDGE_GIVER && (!taskClosed(x) || (!x.seen && now - Date.parse(x.updatedAt) < 86_400_000)))).slice(-200);
 
 /** The bounds of a model id and an effort (`ModelIdSchema`, `EffortSchema`): what the phone shows of a session's. */
 const MODEL_MAX = 200;

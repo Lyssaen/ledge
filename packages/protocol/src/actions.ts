@@ -21,7 +21,7 @@ export type ActionPhoneCheck = 'launch' | 'close' | 'decide' | 'act';
 export const ACTION_IDS = [
   'session.launch', 'session.relay', 'session.close', 'project.propose', 'team.launch', 'task.give',
   'session.model', 'session.interrupt', 'session.archive', 'session.restore', 'session.resume', 'session.decide',
-  'team.join', 'team.leave', 'team.resume', 'team.dissolve', 'team.save', 'task.cancel', 'task.pass'
+  'team.join', 'team.leave', 'team.resume', 'team.dissolve', 'team.save', 'task.cancel', 'task.pass', 'task.answer'
 ] as const;
 export const ActionIdSchema = z.enum(ACTION_IDS);
 export type ActionId = z.infer<typeof ActionIdSchema>;
@@ -164,6 +164,12 @@ export const ACTIONS: readonly ActionDef[] = [
     summary: 'passer une tâche de tasks.md à une autre session (elle redevient ouverte)',
     when: 'quand l\'utilisateur demande de réassigner ou de passer une tâche à une autre session',
     example: { task: 't91b0d4', to: 'Bix' }
+  }),
+  def({
+    id: 'task.answer', args: z.object({ task: TaskRef, answer: z.string().trim().min(1).max(TASK_TEXT_MAX) }), card: 'generic', phone: 'act', risk: 'destructive', max: 1,
+    summary: 'répondre, au nom de l\'utilisateur, à une décision qu\'une session lui a posée (tasks.md : owner Ledge) ; la session reprend avec cette réponse ; irréversible',
+    when: 'seulement quand l\'utilisateur donne lui-même sa réponse à une décision ouverte : answer reprend ses mots, ou l\'option qu\'il a choisie parmi celles de la session, sans rien inventer ni choisir à sa place ; si sa réponse manque, cite les options et demande-la',
+    example: { task: 't91b0d4', answer: 'Oui, fusionne feat/roles' }
   })
 ];
 

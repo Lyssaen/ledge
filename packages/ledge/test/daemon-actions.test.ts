@@ -17,7 +17,8 @@ const ctx = (over: Partial<ResolveCtx> = {}): ResolveCtx => ({
   sessions: [mk('nova', 'Nova', { model: 'claude-sonnet-5-5', pending: permission, state: 'waiting_permission' }), mk('lu', 'Lu', { tool: 'codex' }), mk('bix', 'Bix'),
     mk('old', 'Old', { state: 'exited' }), mk('ro', 'Ro', { source: 'hook_only' }), mk('arch', 'Arch', { state: 'exited', archivedAt: T0 })],
   teams: [team(), team({ id: 'team-77aa', name: 'nap', state: 'resting', seats: [] }), team({ id: 'team-dead', name: 'old', state: 'dissolved' })],
-  tasks: [task(), task({ id: 'tdone00', state: 'done' })],
+  tasks: [task(), task({ id: 'tdone00', state: 'done' }), task({ id: 'tdeci01', title: 'Fusionner feat/roles ?', giver: 'nova', giverName: 'Nova', owner: 'ledge', ownerName: 'Ledge', state: 'open', team: 'team-3fa2' }),
+    task({ id: 'tdeci02', giver: 'nova', giverName: 'Nova', owner: 'ledge', ownerName: 'Ledge', state: 'done' })],
   findRole: id => (['dev-back', 'rev-back'].includes(id) ? role(id) : undefined),
   ...over
 });
@@ -38,7 +39,7 @@ const refused = (id: ActionId, args: unknown, c = ctx()): string => {
 describe('resolveAction', () => {
   it('covers every generic action of the registry', () => {
     expect([...GENERIC_ACTIONS].sort()).toEqual(['session.archive', 'session.decide', 'session.interrupt', 'session.model', 'session.restore', 'session.resume',
-      'task.cancel', 'task.pass', 'team.dissolve', 'team.join', 'team.leave', 'team.resume', 'team.save']);
+      'task.answer', 'task.cancel', 'task.pass', 'team.dissolve', 'team.join', 'team.leave', 'team.resume', 'team.save']);
   });
   it('names a session by id or by bot name, and refuses an unknown or ambiguous one', () => {
     expect(ok('session.interrupt', { session: 'Bix' }).args).toEqual({ session: 'bix' });
@@ -182,6 +183,16 @@ describe('resolveAction', () => {
     expect(refused('task.pass', { task: 't91b0d4', to: 'Nova' })).toBe('Nova already holds it');
     expect(refused('task.pass', { task: 't91b0d4', to: 'Ro' })).toBe('Ro is read-only');
   });
+  it('task.answer: the user\'s answer to an open decision, shown whole, destructive; never a task that is not one', () => {
+    expect(ok('task.answer', { task: 'tdeci01', answer: 'Oui, fusionne' })).toMatchObject({ action: 'task.answer', risk: 'destructive', args: { task: 'tdeci01', answer: 'Oui, fusionne' },
+      summary: 'Répondre à la décision « Fusionner feat/roles ? » de **Nova**', vars: { task: 'Fusionner feat/roles ?', session: 'Nova', answer: 'Oui, fusionne' },
+      session: 'nova', team: 'team-3fa2', detail: 'Oui, fusionne' });
+    expect(ok('task.answer', { task: 'tdeci01', answer: 'x'.repeat(TASK_TEXT_MAX) })).toMatchObject({ detailCut: true });
+    expect(code('task.answer', { task: 't91b0d4', answer: 'oui' })).toBe('not_decision');
+    expect(code('task.answer', { task: 'tdeci02', answer: 'oui' })).toBe('closed');
+    expect(code('task.answer', { task: 'tnope00', answer: 'oui' })).toBe('unknown');
+    expect(actionById('task.answer')!.args.safeParse({ task: 'tdeci01', answer: '  ' }).success).toBe(false);
+  });
 });
 
 describe('actionMessage', () => {
@@ -201,11 +212,12 @@ describe('actionMessage', () => {
     expect(msg('team.save', { team: 'api', name: 'duo' })).toMatchObject({ type: 'team.save', rid: 'r1', name: 'duo', seats: [{ role: 'dev-back' }, { role: 'rev-back' }] });
     expect(msg('task.cancel', { task: 't91b0d4', reason: 'non' })).toEqual({ type: 'task.cmd', rid: 'r1', by: 'ledge', op: 'cancel', task: 't91b0d4', text: 'non' });
     expect(msg('task.pass', { task: 't91b0d4', to: 'Bix' })).toEqual({ type: 'task.cmd', rid: 'r1', by: 'ledge', op: 'pass', task: 't91b0d4', to: 'bix' });
+    expect(msg('task.answer', { task: 'tdeci01', answer: 'Oui' })).toEqual({ type: 'task.cmd', rid: 'r1', by: 'ledge', op: 'done', task: 'tdeci01', text: 'Oui' });
   });
   it('every message it builds is a valid client message', async () => {
     const { parseClientMessage } = await import('@ledge/protocol');
     const c = ctx();
-    for (const [id, args] of [['session.decide', { session: 'Nova', decision: 'deny', note: 'non' }], ['team.save', { team: 'api', name: 'duo' }], ['task.pass', { task: 't91b0d4', to: 'Bix', note: 'à toi' }]] as const)
+    for (const [id, args] of [['session.decide', { session: 'Nova', decision: 'deny', note: 'non' }], ['team.save', { team: 'api', name: 'duo' }], ['task.pass', { task: 't91b0d4', to: 'Bix', note: 'à toi' }], ['task.answer', { task: 'tdeci01', answer: 'non' }]] as const)
       expect(() => parseClientMessage(actionMessage(ok(id, args, c), 'r1'))).not.toThrow();
   });
 });

@@ -321,12 +321,20 @@ describe('the pinned service worker', () => {
       const o = origin();
       const w = await firstVisit(o);
       const show = w.self.registration.showNotification;
-      for (const kind of ['request', 'question', 'chat', 'finished'] as const) {
+      for (const kind of ['request', 'question', 'chat', 'decision', 'finished'] as const) {
         show.mockClear();
         await w.push({ ...payload, kind });
         expect((show.mock.calls[0] as unknown as [string, { tag: string; renotify?: boolean }])[1]).toMatchObject({ tag: 's1-k1', ...(kind === 'finished' ? {} : { renotify: true }) });
         if (kind === 'finished') expect((show.mock.calls[0] as unknown as [string, object])[1]).not.toHaveProperty('renotify', true);
       }
+    });
+
+    it('a decision put to the user shows as itself and opens Ledge\'s chat', async () => {
+      const o = origin();
+      const w = await firstVisit(o);
+      await w.push({ ...payload, kind: 'decision', title: 'Otto attend votre décision', body: 'Fusionner feat/roles ?', url: '/#/chat', tag: 't91b0d4', badge: 2 });
+      expect(w.self.registration.showNotification).toHaveBeenCalledWith('Otto attend votre décision', { body: 'Fusionner feat/roles ?', tag: 't91b0d4', data: { url: '/#/chat' }, icon: '/icon-192.png', renotify: true });
+      expect(w.self.registration.setAppBadge).toHaveBeenCalledWith(2);
     });
 
     it('a push still shows when the badge API is missing', async () => {
@@ -345,6 +353,7 @@ describe('the pinned service worker', () => {
         valid: payload,
         'v 2': { ...payload, v: 2 },
         'kind chat': { ...payload, kind: 'chat', title: 'Ledge a répondu', body: 'Touchez pour lire la réponse.', url: '/#/chat', tag: 'chat' },
+        'kind decision': { ...payload, kind: 'decision', title: 'Otto attend votre décision', body: 'Fusionner feat/roles ?', url: '/#/chat', tag: 't91b0d4' },
         'bad kind': { ...payload, kind: 'other' },
         'title 80': { ...payload, title: 't'.repeat(80) },
         'title 81': { ...payload, title: 't'.repeat(81) },

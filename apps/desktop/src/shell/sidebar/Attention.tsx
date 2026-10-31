@@ -5,6 +5,8 @@ import { useI18n } from '../../i18n/lang';
 import { spanOf } from '../../list/time';
 import { taskOf } from '../../nav/agents';
 import { ProjectSwatch } from '../../projects/ProjectSwatch';
+import { DecisionAnswer } from '../../teams/DecisionAnswer';
+import type { TeamsApi } from '../../teams/useTeamsApi';
 import { cls } from '../cls';
 import { HelperBot, SessionBot } from '../SessionBot';
 import { quickDecide, type AttnItem } from './model';
@@ -27,6 +29,10 @@ export function Attention(p: {
   onDecide(s: Session, ok: boolean): void;
   onMenu(id: string, e: MouseEvent): void;
   paused: boolean;
+  /** The decisions sessions put to the user, open (`ledge task give ledge …`): who asks, the title, the options, and
+   *  « Répondre », answered in place through `answer` (task.answer). */
+  decisions?: readonly Task[];
+  answer?: TeamsApi['answer'];
   /** The closed tasks Ledge gave, not put away (roles spec §3.7): « ✓ Otto a fini … · tâche de Ledge », with « Voir ». */
   ledgeTasks?: readonly Task[];
   onSeeTask?(id: string): void;
@@ -38,16 +44,19 @@ export function Attention(p: {
 }): JSX.Element | null {
   const { t } = useI18n();
   const [all, setAll] = useState(false);
+  const [answering, setAnswering] = useState<string | null>(null);
   const tasks = p.ledgeTasks ?? [];
   const near = p.near ?? [];
-  if (p.items.length === 0 && tasks.length === 0 && near.length === 0) return null;
+  const asked = p.decisions ?? [];
+  const count = p.items.length + asked.length + tasks.length + near.length;
+  if (count === 0) return null;
   const shown = all ? p.items : p.items.slice(0, CAP);
   const units = t.list.when.units;
   return (
     <section className="st-attn" aria-label={t.side.yours}>
       <div className="st-label">
         <span>{t.side.yours}</span>
-        <b className="st-badge">{p.items.length + tasks.length + near.length}</b>
+        <b className="st-badge">{count}</b>
         <span className="st-fill" />
         <Kbd>Alt ↓</Kbd>
       </div>
@@ -82,6 +91,19 @@ export function Attention(p: {
           </div>
         );
       })}
+      {asked.map(x => (
+        <div key={x.id} className="st-card st-task st-decision" data-decision={x.id}>
+          <span className="st-bot st-task-mark" aria-hidden="true">?</span>
+          <div className="st-card-body">
+            <div className="st-l1"><span className="st-req" title={t.decision.asks(x.giverName)}><strong>{x.giverName}</strong> {x.title}</span></div>
+            <div className="st-l2">
+              <span className="st-where" title={x.text}>{x.text ?? ''}</span>
+              {answering !== x.id && p.answer && <button type="button" className="st-qa pri" onClick={() => setAnswering(x.id)}>{t.decision.answer}</button>}
+            </div>
+            {answering === x.id && p.answer && <DecisionAnswer task={x} teams={{ answer: p.answer }} onClose={() => setAnswering(null)} />}
+          </div>
+        </div>
+      ))}
       {tasks.map(x => (
         <div key={x.id} className="st-card st-task" data-task={x.id}>
           <span className="st-bot st-task-mark" aria-hidden="true">{x.state === 'done' ? '✓' : '!'}</span>

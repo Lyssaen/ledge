@@ -228,6 +228,17 @@ button.lp-row:hover, .lp-row.sel { background: var(--sidebar-accent); }
 .lp-mark.lp-done { color: var(--success, #16a34a); }
 .lp-mark.lp-refused, .lp-mark.lp-dropped { color: var(--warning, #d97706); }
 .lp-mark.lp-near-mark { color: var(--warning, #d97706); }
+.lp-mark.lp-asked { color: var(--sidebar-primary); font-weight: 700; }
+.lp-decision .lp-detail { margin: 0 0 2px 14px; color: var(--muted-foreground); font-size: 12px; white-space: pre-wrap; }
+/* « Répondre » to a decision (teams/DecisionAnswer), in « Le point », « Tâches » and the sidebar's « À toi ». */
+.decision-answer { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 6px; }
+.decision-options { display: flex; flex-wrap: wrap; gap: 4px; }
+.decision-options .st-qa { height: auto; min-height: 22px; max-width: 100%; white-space: normal; text-align: left; }
+.decision-answer textarea { width: 100%; box-sizing: border-box; resize: vertical; padding: 5px 8px; border: 1px solid var(--input); border-radius: var(--radius-sm); background: var(--well); color: inherit; font: inherit; font-size: 12.5px; }
+.decision-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.decision-review { margin: 0; color: var(--muted-foreground); font-size: 12px; }
+.decision-text { margin: 0; padding: 6px 10px; border-left: 3px solid var(--sidebar-primary); background: var(--well); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12.5px; }
+.decision-error { margin: 0; color: var(--destructive, #dc2626); font-size: 12px; }
 .lp-progress { width: 56px; height: 5px; flex: none; border-radius: 999px; background: var(--secondary); overflow: hidden; }
 .lp-progress i { display: block; height: 100%; background: var(--sidebar-primary); }
 .lp-resting { opacity: .7; }

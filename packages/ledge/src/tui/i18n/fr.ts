@@ -27,7 +27,7 @@ export const fr = {
     interrupt: 'interrompre', next: 'suivante en attente', unfold: 'déplier', send: 'envoyer / lancer', nextCard: 'carte suivante',
     newChat: 'nouvelle conversation', stopAnswer: 'arrêter la réponse', nextField: 'champ suivant', choose: 'choisir', tick: 'cocher',
     start: 'lancer', cancel: 'annuler', change: 'changer', scroll: 'défiler', space: 'espace', redraw: 'autre nom',
-    save: 'enregistrer l’équipe', tasks: 'tâches de l’équipe', join: 'rejoindre une équipe', resume: 'reprendre l’équipe', teamMode: 'session ou équipe', handover: 'passer le relais',
+    save: 'enregistrer l’équipe', tasks: 'tâches de l’équipe', join: 'rejoindre une équipe', resume: 'reprendre l’équipe', teamMode: 'session ou équipe', handover: 'passer le relais', decide: 'répondre à la décision', sendAnswer: 'envoyer la réponse', edit: 'modifier',
     sendOnly: 'envoyer', newLine: 'nouvelle ligne', keepAndLeave: 'garder et sortir', lineHistory: 'ligne · historique', history: 'historique',
     word: 'mot', clear: 'effacer', resend: 'renvoyer', backToDraft: 'revenir au brouillon', keep: 'garder', wipe: 'effacer',
     line: 'ligne', page: 'page', end: 'fin', question: 'question', conversation: 'conversation', cycle: 'cartes · conversation',
@@ -49,6 +49,9 @@ export const fr = {
     relief: { briefing: 'relève : bilan demandé', launching: 'relève : lancement…', done: 'relevée', failed: 'relève échouée' } as Record<'briefing' | 'launching' | 'done' | 'failed', string>,
     relievedBy: (name: string) => `relevée par ${name}`, relieves: (name: string) => `relève de ${name}`,
     ledgeTask: (owner: string, title: string, state: 'done' | 'refused' | 'dropped') => `${owner} a ${state === 'done' ? 'fini' : state === 'refused' ? 'refusé' : 'abandonné'} « ${title} » · tâche de Ledge`,
+    decision: (giver: string, title: string) => `${giver} te demande : ${title}`,
+    decisionTitle: (giver: string, title: string) => `Répondre à ${giver} · ${title}`, decisionHint: 'Ta réponse, telle que la session la lira…',
+    confirmAnswer: (giver: string) => `Envoyer à ${giver} ? Une réponse ne se reprend pas`,
     joinWhich: (name: string) => `${name} rejoint quelle équipe ? (↑↓ ↵, esc)`, noTeamHere: 'Aucune équipe dans ce projet.', notInTeam: 'Cette session n’est dans aucune équipe.'
   },
   session: {
@@ -150,6 +153,7 @@ export const fr = {
     openFailed: (why: string) => `Image non ouverte : ${why}`
   },
   toast: {
+    answerFailed: (why: string) => `Réponse non envoyée : ${why}`,
     handover: (n: string) => `${n} écrit son bilan : une nouvelle session prendra sa place`, handoverRefused: (why: string) => `Relève refusée : ${why}`,
     accept: (n: string) => `✓ ${n} : autorisé`, deny: (n: string) => `✓ ${n} : refusé`, always: (n: string) => `✓ ${n} : toujours autorisé`,
     option: (n: string, k: number) => `✓ ${n} : option ${k} envoyée`, reply: (n: string) => `✓ Réponse envoyée à ${n}`,

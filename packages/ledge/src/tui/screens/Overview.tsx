@@ -1,16 +1,18 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Box, Text } from 'ink';
 import { randomUUID } from 'node:crypto';
 import { useState } from 'react';
 import { isPending, useContextNear, useTasks, useTeams } from '@ledge/fleet';
-import { LEDGE_GIVER, taskClosed, type Session, type Team } from '@ledge/protocol';
+import { LEDGE_GIVER, taskClosed, type Session, type Task, type Team } from '@ledge/protocol';
 import { botState } from '@ledge/ui/bots/poseFor';
-import { useScreenKeys, useScreenSize, useTui } from '../context.js';
-import { closedLedgeTasks, exchanges, helperCount, nearContext, nextWaiting, overview, step } from '../model/overview.js';
+import { useEditing, useScreenKeys, useScreenSize, useTui } from '../context.js';
+import { closedLedgeTasks, exchanges, helperCount, nearContext, nextWaiting, openDecisions, overview, step } from '../model/overview.js';
+import { wrap } from '../model/thread.js';
 import { fit, machineLabel, paneName } from '../model/labels.js';
 import { clock, oneLine } from '../model/time.js';
 import { Ago } from '../ui/Ago.js';
 import { C, projectColor, STATE_COLOR } from '../theme.js';
+import { Field, fieldRows } from '../ui/Field.js';
 import { Frame } from '../ui/Frame.js';
 import { SessionCard } from '../ui/SessionCard.js';
 import { Tail } from '../ui/Tail.js';
@@ -44,6 +46,24 @@ export function Overview() {
   const view = useMemo(() => overview(d.sessions, projects, teams ?? [], tasks), [d.sessions, projects, teams, tasks]);
   const sel = selected?.id ?? null;
   const closed = closedLedgeTasks(tasks);
+  // The decisions sessions put to the user: D answers the first one, written, read again whole, then confirmed (y). Only
+  // the task.answer action answers one: an answer cannot be taken back.
+  const decisions = useMemo(() => openDecisions(tasks), [tasks]);
+  const [deciding, setDeciding] = useState<{ id: string; draft: string; confirm: boolean } | null>(null);
+  const decision = deciding ? decisions.find(x => x.id === deciding.id) : undefined;
+  // Answered elsewhere meanwhile (the phone, Desktop, the chat): the field goes with it.
+  useEffect(() => { if (deciding && !decision) setDeciding(null); }, [deciding, decision]);
+  useEditing(!!deciding && !deciding.confirm);
+  const answer = (x: Task, text: string) => {
+    const rid = randomUUID();
+    const off = tui.client.onMessage(m => {
+      if (m.type !== 'action.result' || m.rid !== rid) return;
+      off();
+      tui.toast(m.reason === undefined ? { text: t.toast.reply(x.giverName), tone: 'ok' } : { text: t.toast.answerFailed(m.reason), tone: 'error' });
+    });
+    setTimeout(off, 10_000);
+    tui.client.send({ type: 'action.run', rid, action: 'task.answer', args: { task: x.id, answer: text }, confirmed: true });
+  };
   // Sessions near their context limit (context handover spec §3.2): H hands the selected one (else the first) over.
   const threshold = useContextNear(tui.client);
   const near = useMemo(() => nearContext(d.sessions, threshold), [d.sessions, threshold]);
@@ -55,6 +75,14 @@ export function Overview() {
   const choices = node?.teams.map(x => x.team).filter(x => x.state !== 'dissolved' && x.id !== selected?.team) ?? [];
 
   useScreenKeys((input, key) => {
+    // The answer read again: y sends it, n or esc goes back to the field; nothing else goes through.
+    if (deciding) {
+      if (!deciding.confirm) { if (key.escape) setDeciding(null); return true; }
+      if (input === 'y' && decision) { setDeciding(null); answer(decision, deciding.draft.trim()); return true; }
+      if (input === 'n' || key.escape) { setDeciding({ ...deciding, confirm: false }); return true; }
+      return true;
+    }
+    if (input === 'D') { if (decisions[0]) setDeciding({ id: decisions[0].id, draft: '', confirm: false }); return true; }
     // J: the selected session joins one of its project's teams, in its role, else the team's first free one.
     if (joining) {
       if (key.escape) { setJoining(null); return true; }
@@ -115,11 +143,14 @@ export function Overview() {
       ...n.teams.flatMap(x => [{ kind: 'team' as const, key: x.key, team: x.team, done: x.done, given: x.given }, ...x.sessions.map(s => ({ kind: 'session' as const, key: s.id, s, indent: 2 }))])
     ];
   });
-  const yoursCount = view.yours.length + closed.length + near.length;
+  const yoursCount = view.yours.length + decisions.length + closed.length + near.length;
   const yoursHeight = Math.max(1, Math.min(yoursCount, 6));
   // The status bar, the key bar, the toast, the boxes' borders and titles.
   const joinHeight = joining && selected ? Math.max(1, choices.length) + 2 : 0;
-  const treeHeight = Math.max(3, height - 3 - (yoursHeight + 2) - joinHeight - 3);
+  // The answer's field, or the answer read again whole, across the screen under the boxes.
+  const answerLines = deciding?.confirm ? wrap(deciding.draft.trim(), Math.max(10, columns - 4)) : [];
+  const decideHeight = !deciding ? 0 : deciding.confirm ? Math.min(answerLines.length, Math.max(1, height - 12)) + 2 : fieldRows(columns, height) + 2;
+  const treeHeight = Math.max(3, height - 3 - (yoursHeight + 2) - joinHeight - decideHeight - 3);
   // Inside the box (borders and padding: 4): a row's fixed parts, then what is left for its text.
   const inner = left - 4, nameW = 7;
   const stateW = Math.max(...Object.values(t.state).map(x => x.length)) + 1;
@@ -137,9 +168,11 @@ export function Overview() {
             <Text color={C.faint}> <Ago iso={s.lastActivityAt} /></Text>
           </Text>
         );
-      }), ...closed.slice(0, Math.max(0, yoursHeight - view.yours.length)).map(x => (
+      }), ...decisions.slice(0, Math.max(0, yoursHeight - view.yours.length)).map(x => (
+        <Text key={`decision:${x.id}`} wrap="truncate"><Text color={C.red}>{g.question} </Text><Text color={C.fg}>{t.overview.decision(x.giverName, x.title)}</Text>{x.text ? <Text color={C.dim}> · {oneLine(x.text)}</Text> : null}</Text>
+      )), ...closed.slice(0, Math.max(0, yoursHeight - view.yours.length - decisions.length)).map(x => (
         <Text key={x.id} wrap="truncate"><Text color={x.state === 'done' ? C.green : C.yellow}>{x.state === 'done' ? g.ok : g.fail} </Text><Text color={C.fg}>{t.overview.ledgeTask(x.ownerName, x.title, x.state as 'done' | 'refused' | 'dropped')}</Text></Text>
-      )), ...near.slice(0, Math.max(0, yoursHeight - view.yours.length - closed.length)).map(s => (
+      )), ...near.slice(0, Math.max(0, yoursHeight - view.yours.length - decisions.length - closed.length)).map(s => (
         <Text key={`near:${s.id}`} wrap="truncate" backgroundColor={s.id === sel ? C.sel : undefined}><Text color={C.yellow}>{s.handover?.state === 'failed' ? g.fail : '◔'} </Text><Text color={C.fg}>{s.handover?.state === 'failed' ? t.overview.reliefFailed(s.name, s.handover.reason ?? '?') : t.overview.near(`${s.name}${s.role ? ` @${s.role}` : ''}`, Math.round(((s.context?.used ?? 0) / (s.context?.window ?? 1)) * 100))}</Text></Text>
       ))]}
     </TitledBox>
@@ -158,11 +191,12 @@ export function Overview() {
     </TitledBox>
   );
 
-  const keys: Array<readonly [string, string]> = [
+  const keys: Array<readonly [string, string]> = deciding?.confirm ? [['y', t.keys.sendAnswer], ['n esc', t.keys.edit]]
+    : deciding ? [['↵', t.keys.review], ['alt+↵', t.keys.newLine], ['esc', t.keys.cancel]] : [
     ['j k', t.keys.navigate], ['↵', t.keys.open], ...(view.yours.length ? [['tab', t.keys.next] as const, ['y n', t.keys.answer] as const] : []),
     ['a', t.keys.attach], ...(seatTeam ? [['T', t.keys.tasks] as const] : []), ...(choices.length ? [['J', t.keys.join] as const] : []),
     ...(view.tree.some(n => n.teams.some(x => x.team.state === 'resting')) ? [['R', t.keys.resume] as const] : []),
-    ...(near.length ? [['H', t.keys.handover] as const] : []),
+    ...(decisions.length ? [['D', t.keys.decide] as const] : []), ...(near.length ? [['H', t.keys.handover] as const] : []),
     ['/', t.keys.ask], ['+', t.keys.launch], [',', t.keys.settings], ['?', t.keys.help], ['q', t.keys.quit]
   ];
   const teamTasks = seatTeam ? tasks.filter(x => x.team === seatTeam.id && (!taskClosed(x) || x.updatedAt.slice(0, 10) === new Date().toISOString().slice(0, 10))).slice(-4) : [];
@@ -204,6 +238,12 @@ export function Overview() {
           </Box>
         ) : null}
       </Box>
+      {deciding && decision ? (deciding.confirm
+        ? <TitledBox title={t.overview.confirmAnswer(decision.giverName)} color={C.red} titleColor={C.red} height={decideHeight} flexShrink={0}>
+          {answerLines.slice(0, decideHeight - 2).map((l, i) => <Text key={i} color={C.fg} wrap="truncate">{l || ' '}</Text>)}
+        </TitledBox>
+        : <Field title={t.overview.decisionTitle(decision.giverName, decision.title)} value={deciding.draft} onChange={v => setDeciding(x => (x ? { ...x, draft: v } : x))}
+          onSubmit={v => { if (!v.trim()) return false; setDeciding(x => (x ? { ...x, draft: v, confirm: true } : x)); }} onEscape={() => setDeciding(null)} active placeholder={t.overview.decisionHint} />) : null}
     </Frame>
   );
 }
