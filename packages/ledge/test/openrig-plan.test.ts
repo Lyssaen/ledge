@@ -109,4 +109,26 @@ describe('server rig.prepare', () => {
     expect(msgs.find(m => m.type === 'rig.result' && m.rid === 'r3')).toMatchObject({ ok: false, code: 'unreachable' });
     ws.close();
   });
+
+  it('OpenRig stopped: Ledge starts it (rig daemon start, through the fake), says so in its thread, then answers rig.plan', async () => {
+    const dir = tmp(); process.env.LEDGE_HOME = dir;
+    const f = fake = await createFakeOpenRig(); f.specs = [{ id: 'b:factory', name: 'factory', sourceType: 'builtin', yaml: FACTORY }];
+    await f.stop(); // OpenRig is installed but not running
+    const exec = fakeRigCli(f);
+    let say: (text: string) => void = () => {};
+    bridge = createBridge({ env: async () => ({ OPENRIG_PORT: String(f.port) }), exec, notice: text => say(text), sessionName: () => undefined, projects: () => projects, home: dir, file: join(dir, 'openrig.json'), probeMs: 20, outboxMs: 30, resyncMs: 50 });
+    const server = srv = await startServer({ store: new Store(), tmux: noTmux, port: 0, home: dir, daemon: { version: '0.0.0', install: 'git', systemd: false }, agentEnv: async () => ({ ...process.env }), openrig: bridge });
+    say = text => server.say(text);
+    await bridge.start(); await until(() => bridge!.status().state === 'stopped');
+    const ws = new WebSocket(`ws://127.0.0.1:${srv.port}`, { headers: authHeaders() });
+    const msgs: ServerMessage[] = []; ws.on('message', x => msgs.push(parseServerMessage(JSON.parse(String(x)))));
+    await new Promise<void>((res, rej) => { ws.once('open', () => res()); ws.once('error', rej); });
+    ws.send(JSON.stringify({ type: 'rig.prepare', rid: 'r1', machine: 'local', spec: 'factory', goal: 'G', where: { kind: 'off-project', name: 'ok' } } satisfies ClientMessage));
+    await until(() => msgs.some(m => (m.type === 'rig.plan' || m.type === 'rig.result') && m.rid === 'r1'), 10_000);
+    expect(msgs.find(m => m.type === 'rig.result' && m.rid === 'r1')).toBeUndefined();
+    expect(msgs.find(m => m.type === 'rig.plan')).toMatchObject({ rid: 'r1', plan: { machine: 'local', spec: 'factory' } });
+    expect(exec.calls.some(c => c.join(' ') === 'daemon start')).toBe(true);
+    expect(msgs.some(m => m.type === 'ledge.thread.item' && m.item.kind === 'ledge' && m.item.text === "J'ai démarré OpenRig sur local")).toBe(true);
+    ws.close();
+  });
 });

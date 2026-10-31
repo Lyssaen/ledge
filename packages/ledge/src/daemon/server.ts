@@ -1366,8 +1366,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       case 'rig.prepare': {
         if (msg.machine !== 'local') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'unreachable', reason: `machine ${msg.machine} is not this daemon's` });
-        const http = bridge?.http();
-        if (!bridge || !http || bridge.status().state !== 'running') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'openrig_down', reason: "OpenRig n'est pas branché" });
+        if (!bridge) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'openrig_down', reason: "OpenRig n'est pas branché" });
+        // Ledge starts OpenRig itself for a launch, and says so in its thread (the bridge's notice); only a start that fails is refused.
+        const status = await bridge.ensureRunning('launch');
+        const http = bridge.http();
+        if (!http || status.state !== 'running') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'openrig_down', reason: status.detail ?? `OpenRig ${status.state}` });
         try {
           const plan = await prepareRigPlan({ http, home: paths().dir, projects: () => projects, machine: msg.machine }, msg);
           if ('refused' in plan) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: plan.refused });
