@@ -51,5 +51,8 @@ describe('ledge tui: @seat completion', () => {
   it('the most active rig is the one with the most seats at work, kernel aside', () => {
     expect(mostActiveRig(mockupRigs())?.name).toBe('factory');
     expect(mostActiveRig([])).toBeUndefined();
+    const stopped = mockupRigs().map(r => ({ ...r, lifecycle: 'stopped' as const }));
+    expect(mostActiveRig(stopped)).toBeUndefined();
+    expect(mostActiveRig([stopped[0]!, mockupRigs()[1]!])?.name).toBe('starter');
   });
 });
