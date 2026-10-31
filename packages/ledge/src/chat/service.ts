@@ -102,6 +102,17 @@ const HOMES = /^\/(?:home|Users|mnt\/[^/]+(?:\/Users)?)$/;
 /** Why a project path from the chat is too wide to propose (it would swallow every repository below it), or null: the root, a home
  *  (anyone's, WSL's Windows ones included, or the user's), a folder of homes, a folder that holds the user's home, a top-level folder
  *  (`/x`). `path` and `userHome` are resolved. */
+/** What a turn tells its reader when its card holds fewer actions than the answer proposed (the daemon dropped the rest, with a
+ *  log line each): the count, then the reasons the daemon knows, the others counted together. Empty when nothing was dropped. */
+export function droppedNote(total: number, kept: number, reasons: readonly string[], counted: number): string {
+  const dropped = total - kept;
+  if (dropped <= 0) return '';
+  const rest = dropped - counted;
+  const why = reasons.length === 0 ? [] : [...reasons, ...(rest > 0 ? [`${rest} autre${rest > 1 ? 's' : ''}`] : [])];
+  const head = total === 1 ? 'Note : la carte ne reprend pas l’action proposée' : kept === 0 ? `Note : la carte ne reprend aucune des ${total} actions proposées` : `Note : la carte ne reprend que ${kept} des ${total} actions proposées`;
+  return why.length ? `${head} (${why.join(' ; ')}).` : `${head}.`;
+}
+
 export function tooWide(path: string, userHome: string): string | null {
   if (path === '/') return 'the root';
   if (HOME.test(path) || path === userHome) return 'a home folder';
@@ -263,20 +274,29 @@ export function createChat(deps: ChatDeps): Chat {
   }
   /** The generic blocks as rows (spec §9.2, one plan): each resolved against the state now, at most `max` per action and 8 in all; a refused,
    *  repeated or capped one is dropped with a log line. */
-  function actionsFrom(blocks: Array<{ id: string; args: unknown; max: number }>, qid: string, closing: ReadonlySet<string>): ChatAction[] {
+  function actionsFrom(blocks: Array<{ id: string; args: unknown; max: number }>, qid: string, closing: ReadonlySet<string>): { rows: ChatAction[]; reasons: string[]; counted: number } {
     const ctx = { sessions: deps.store.all(), teams: deps.teams?.() ?? [], tasks: deps.tasks?.() ?? [], findRole, templateHash: (name: string) => templateHash(name), closing };
     const rows: ChatAction[] = []; const per = new Map<string, number>(); const over = new Map<string, number>(); let beyond = 0;
+    const refused: string[] = []; let duplicates = 0;
     for (const b of blocks) {
       if ((per.get(b.id) ?? 0) >= b.max) { over.set(b.id, (over.get(b.id) ?? 0) + 1); continue; }
       if (rows.length >= MAX_PROPOSALS) { beyond++; continue; }
       const r = resolveAction(b.id, b.args, ctx);
-      if ('refused' in r) { log(`chat ${qid}: action ignored: ${r.refused}`); continue; }
-      if (rows.some(x => x.action === r.action && JSON.stringify(x.args) === JSON.stringify(r.args))) { log(`chat ${qid}: action ignored: duplicate ${r.action}`); continue; }
+      if ('refused' in r) { log(`chat ${qid}: action ignored: ${r.refused}`); refused.push(b.id); continue; }
+      if (rows.some(x => x.action === r.action && JSON.stringify(x.args) === JSON.stringify(r.args))) { log(`chat ${qid}: action ignored: duplicate ${r.action}`); duplicates++; continue; }
       per.set(b.id, (per.get(b.id) ?? 0) + 1); rows.push(r);
     }
     for (const [id, n] of over) log(`chat ${qid}: ${n} ${id} beyond ${actionMax(blocks, id)} ignored`);
     if (beyond > 0) log(`chat ${qid}: ${beyond} actions beyond ${MAX_PROPOSALS} ignored`);
-    return rows;
+    // The reader's words for what was dropped, in French as the persona's (the log keeps the daemon's detail).
+    const reasons = [
+      ...[...over].map(([id, n]) => { const max = actionMax(blocks, id); return `${n} ${id} de trop : ${max === 1 ? 'une seule' : `${max} au plus`} par réponse`; }),
+      ...(beyond > 0 ? [`${beyond} au-delà de ${MAX_PROPOSALS} actions par réponse`] : []),
+      ...(refused.length > 0 ? [`${refused.length} impossible${refused.length > 1 ? 's' : ''} pour l’instant : ${[...new Set(refused)].join(', ')}`] : []),
+      ...(duplicates > 0 ? [`${duplicates} en double`] : [])
+    ];
+    const counted = [...over.values()].reduce((a, n) => a + n, 0) + beyond + refused.length + duplicates;
+    return { rows, reasons, counted };
   }
   const actionMax = (blocks: Array<{ id: string; max: number }>, id: string) => blocks.find(b => b.id === id)!.max;
   const turnOf = (qid: string) => turns.find(t => t.qid === qid);
@@ -316,13 +336,13 @@ export function createChat(deps: ChatDeps): Chat {
     if (r.code !== 0) return { ok: false, message: r.code === null ? `${label} could not start: ${r.stderr.trim() || 'not found in PATH'}` : r.stderr.trim() || `${label} exited with code ${r.code}`, resumed: resume };
     if (resultError) return { ok: false, message: resultError, resumed: false };
     // The proposal block never reaches the reader: the card stands for it (spec 2026-10-12 §3-4).
-    const { text, blocks: found } = extractProposal(answer);
+    const { text: answerText, blocks: found } = extractProposal(answer);
     // A ledge-action block for an earlier card is read as that card's fence; the generic ones never decide which earlier card the turn gets.
-    const blocks: Array<{ kind: BlockKind; raw: string }> = []; const generic: Array<{ id: string; args: unknown; max: number }> = [];
+    const blocks: Array<{ kind: BlockKind; raw: string }> = []; const generic: Array<{ id: string; args: unknown; max: number }> = []; let unreadable = 0;
     for (const b of found) {
       if (b.kind !== 'action') { blocks.push(b); continue; }
       const r = parseActionBlock('action', b.raw);
-      if ('error' in r) { log(`chat ${turn.qid}: action ignored: ${r.error}`); continue; }
+      if ('error' in r) { log(`chat ${turn.qid}: action ignored: ${r.error}`); unreadable++; continue; }
       if (r.action.card === 'generic') generic.push({ id: r.action.id, args: r.args, max: r.action.max });
       else blocks.push({ kind: FENCE_OF.get(r.action.id)!, raw: JSON.stringify(r.args) });
     }
@@ -344,7 +364,11 @@ export function createChat(deps: ChatDeps): Chat {
     const taskBlocks = blocks.filter(b => b.kind === 'task');
     if (taskBlocks.length > MAX_PROPOSALS) log(`chat ${turn.qid}: ${taskBlocks.length - MAX_PROPOSALS} tasks beyond ${MAX_PROPOSALS} ignored`);
     const tasks = tasksFrom(taskBlocks.slice(0, MAX_PROPOSALS), turn.qid, team);
-    const actions = actionsFrom(generic, turn.qid, new Set(closes.map(c => c.id)));
+    const { rows: actions, reasons, counted } = actionsFrom(generic, turn.qid, new Set(closes.map(c => c.id)));
+    // A block the card does not take is said under the answer: the reader never counts on a step that is not there.
+    const kept = proposals.length + (relay ? 1 : 0) + closes.length + (projectProposal ? 1 : 0) + (team ? 1 : 0) + tasks.length + actions.length;
+    const note = droppedNote(found.length, kept, [...reasons, ...(unreadable > 0 ? [`${unreadable} illisible${unreadable > 1 ? 's' : ''}`] : [])], counted + unreadable);
+    const text = note ? (answerText ? `${answerText}\n\n${note}` : note) : answerText;
     turn.answer = text; turn.answeredAt = now();
     if (proposal) { turn.proposal = proposal; turn.proposals = proposals; }
     if (relay) turn.relay = relay;

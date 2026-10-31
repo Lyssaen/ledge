@@ -8,7 +8,7 @@ import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { NOTE_MAX, parseServerMessage, type Projects, type ServerMessage, type Session, type Team } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
-import { createChat, tooWide, TOO_MANY } from '../src/chat/service.js';
+import { createChat, droppedNote, tooWide, TOO_MANY } from '../src/chat/service.js';
 
 // The daemon's log lines, read here (a dropped project path is logged with its reason).
 const logged = vi.hoisted(() => [] as string[]);
@@ -314,7 +314,7 @@ describe('chat service', () => {
       const out: ServerMessage[] = [];
       await chat.ask('q1', 'x', m => out.push(m));
       const done = out.find(m => m.type === 'chat.done');
-      expect(done).toEqual({ type: 'chat.done', qid: 'q1', text: 'Je te propose cette session.', at: expect.any(String) });
+      expect(done).toEqual({ type: 'chat.done', qid: 'q1', text: 'Je te propose cette session.\n\nNote : la carte ne reprend pas l’action proposée.', at: expect.any(String) });
       expect(chat.proposal('q1')).toBeUndefined();
     }
   });
@@ -361,7 +361,7 @@ describe('chat service', () => {
         const { chat } = setup({ env: async () => ({ ...process.env, FAKE_ANSWER: projectFence(json) }) });
         const out: ServerMessage[] = [];
         await chat.ask('q1', 'x', m => out.push(m));
-        expect(out.find(m => m.type === 'chat.done')).toEqual({ type: 'chat.done', qid: 'q1', text: 'Je propose **Paper** avec ses dépôts.', at: expect.any(String) });
+        expect(out.find(m => m.type === 'chat.done')).toEqual({ type: 'chat.done', qid: 'q1', text: 'Je propose **Paper** avec ses dépôts.\n\nNote : la carte ne reprend pas l’action proposée.', at: expect.any(String) });
         expect(chat.history()[0]).not.toHaveProperty('projectProposal');
       }
     });
@@ -507,7 +507,7 @@ describe('chat service', () => {
       ['bash-mode', '{"session": "s1", "text": "  !rm -rf ~"}', [session('s1')]]
     ])('an %s session gives no card, the text stays', async (_why, block, sessions) => {
       const { chat, out } = await askWith(block, sessions);
-      expect(out.find(m => m.type === 'chat.done')).toEqual({ type: 'chat.done', qid: 'q1', text: 'Je transmets à Otto.', at: expect.any(String) });
+      expect(out.find(m => m.type === 'chat.done')).toEqual({ type: 'chat.done', qid: 'q1', text: 'Je transmets à Otto.\n\nNote : la carte ne reprend pas l’action proposée.', at: expect.any(String) });
       expect(chat.relay('q1')).toBeUndefined();
     });
 
@@ -634,6 +634,27 @@ describe('ledge-action blocks (spec 2026-10-26 action registry §3)', () => {
     expect(done.actions?.map(a => a.args)).toEqual(ids.map(t => ({ team: t })));
     expect(done.actions!.every(a => a.risk === 'destructive')).toBe(true);
     expect(logged.some(l => l.includes('team.dissolve beyond'))).toBe(false);
+  });
+  it('droppedNote: nothing when the card holds every action; else the count, the reasons, the others counted together', () => {
+    expect(droppedNote(0, 0, [], 0)).toBe('');
+    expect(droppedNote(3, 3, [], 0)).toBe('');
+    expect(droppedNote(1, 0, [], 0)).toBe('Note : la carte ne reprend pas l’action proposée.');
+    expect(droppedNote(4, 1, ['3 team.dissolve de trop : une seule par réponse'], 3)).toBe('Note : la carte ne reprend que 1 des 4 actions proposées (3 team.dissolve de trop : une seule par réponse).');
+    expect(droppedNote(4, 0, ['1 en double'], 1)).toBe('Note : la carte ne reprend aucune des 4 actions proposées (1 en double ; 3 autres).');
+  });
+  it('says under the answer what the card dropped: an action past its cap, a target Ledge cannot find, a block it cannot read', async () => {
+    const pending = { kind: 'permission' as const, text: 'Bash: rm x', source: 'hook' as const };
+    const answer = 'Je réponds et je range.\n\n' + act('session.decide', { session: 's0', decision: 'deny' }) + act('session.decide', { session: 's0', decision: 'deny', note: 'non' })
+      + act('session.archive', { session: 'Zed' }) + '```ledge-action\n{"action":\n```';
+    const { chat, done } = await askWith(answer, [session('s0', { state: 'waiting_permission', pending })]);
+    const text = 'Je réponds et je range.\n\nNote : la carte ne reprend que 1 des 4 actions proposées (1 session.decide de trop : une seule par réponse ; 1 impossible pour l’instant : session.archive ; 1 illisible).';
+    expect(done.actions).toHaveLength(1);
+    expect(done.text).toBe(text);
+    expect(chat.history()[0]!.answer).toBe(text);
+  });
+  it('says nothing more when the card holds every action proposed', async () => {
+    const { done } = await askWith('Je range Arlo.\n\n' + act('session.archive', { session: 'Arlo' }), [session('a1', { name: 'Arlo', state: 'exited' })]);
+    expect(done.text).toBe('Je range Arlo.');
   });
   it('caps rows per action and at 8 in all', async () => {
     const pending = { kind: 'permission' as const, text: 'Bash: rm x', source: 'hook' as const };
