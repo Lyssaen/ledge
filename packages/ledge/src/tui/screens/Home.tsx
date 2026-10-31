@@ -1,16 +1,16 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text } from 'ink';
 import { randomUUID } from 'node:crypto';
 import { useAsks, useContextNear } from '@ledge/fleet';
 import { askShown, type Escalation, type Rig, type RigSeat } from '@ledge/protocol';
 import { kernelSplit } from '@ledge/ui/rigs/model';
-import { useScreenKeys, useScreenSize, useTui, type Focus } from '../context.js';
+import { LEDGE_FOCUS, useScreenKeys, useScreenSize, useTui, type Focus, type KeyHandler } from '../context.js';
 import { focusOrder, nextYours, seatStateLabel, stepFocus, unmirroredAsks, type LeftRow } from '../model/left.js';
 import { nearContext } from '../model/overview.js';
-import { oneLine } from '../model/time.js';
 import { C } from '../theme.js';
 import { Frame } from '../ui/Frame.js';
 import { LeftColumn } from '../ui/LeftColumn.js';
+import { LedgeConversation } from '../ui/LedgeConversation.js';
 import { SessionDetail } from '../ui/SessionDetail.js';
 import { TitledBox } from '../ui/TitledBox.js';
 
@@ -35,8 +35,20 @@ export function Home() {
   const threshold = useContextNear(tui.client);
   const near = useMemo(() => nearContext(d.sessions, threshold), [d.sessions, threshold]);
   const yoursCount = rows.filter(r => r.kind === 'yours').length;
+  // Ledge's conversation is on the right for Ledge and for an escalation of « À toi »; it has the keyboard once ↵ or / opened
+  // its field (`ledgeFocus` past the left column). Narrow, it then takes the whole screen.
+  const yoursEsc = focus.kind === 'yours' ? rows.find((r): r is Extract<LeftRow, { kind: 'yours' }> => r.kind === 'yours' && r.item.id === focus.id)?.item.escalation : undefined;
+  const ledgeish = focus.kind === 'ledge' || !!yoursEsc;
+  const active = ledgeish && tui.ledgeFocus !== LEDGE_FOCUS.left;
+  const { setLedgeFocus } = tui;
+  useEffect(() => { if (!ledgeish) setLedgeFocus(LEDGE_FOCUS.left); }, [ledgeish, setLedgeFocus]);
+  const conv = useRef<KeyHandler | null>(null);
+  const [convBar, setConvBar] = useState<Array<readonly [string, string]>>([]);
+  const showConv = ledgeish && (wide || active);
 
   useScreenKeys((input, key) => {
+    if (showConv && conv.current?.(input, key)) return true;
+    if (active) return false;
     if (input === 'H') {
       const s = (selected && selected.source === 'launcher' && selected.state !== 'exited' && selected.tool !== 'omp' && (!selected.handover || selected.handover.state === 'failed') ? selected : undefined) ?? near.find(x => x.handover?.state !== 'failed') ?? near[0];
       if (!s) return true;
@@ -50,8 +62,8 @@ export function Home() {
     if (input === 'k' || key.upArrow) { setFocus(stepFocus(order, focus, -1)); return true; }
     if (key.tab) { setFocus(nextYours(order, focus)); return true; }
     if (key.return) {
-      // Ledge's field is Ask Ledge's until its conversation is drawn here (lot 8 task 6); an escalation is answered there too.
-      if (focus.kind === 'ledge' || (focus.kind === 'yours' && !selected)) { go('ask'); return true; }
+      // Ledge's field; on an escalation of « À toi », the conversation with it.
+      if (focus.kind === 'ledge' || (focus.kind === 'yours' && !selected)) { setFocus(focus.kind === 'yours' && !yoursEsc ? { kind: 'ledge' } : focus); setLedgeFocus(LEDGE_FOCUS.field); return true; }
       if (selected) go('session');
       return true;
     }
@@ -65,63 +77,45 @@ export function Home() {
     return false;
   });
 
-  const keys: Array<readonly [string, string]> = [
-    ['j k', t.keys.navigate], ['↵', t.keys.open], ...(yoursCount ? [['tab', t.keys.next] as const] : []), ...(selected?.pending ? [['y n', t.keys.answer] as const] : []),
+  const keys: Array<readonly [string, string]> = active ? convBar : [
+    ['j k', t.keys.navigate], ['↵', ledgeish ? t.keys.write : t.keys.open], ...(showConv ? convBar : []), ...(yoursCount ? [['tab', t.keys.next] as const] : []), ...(selected?.pending ? [['y n', t.keys.answer] as const] : []),
     ...(selected ? [['a', t.keys.attach] as const] : []), ...(near.length ? [['H', t.keys.handover] as const] : []),
     ['1 2 3', t.keys.screens], ['/', t.keys.ask], ['+', t.keys.launch], [',', t.keys.settings], ['?', t.keys.help], ['q', t.keys.quit]
   ];
   const crumb = focus.kind === 'ledge' ? t.home.crumb : machines.map(m => `${m.label} ${m.ready ? g.machine : '○'}`).join('  ');
   return (
-    <Frame crumb={crumb} keys={keys}>
+    <Frame crumb={crumb} keys={keys} kept={tui.kept.drafts.has('ledge')}>
       <Box flexGrow={1}>
-        <LeftColumn rows={rows} width={leftW} height={height - 2 - (tui.lastToast ? 1 : 0)} asks={shownAsks} near={near} />
-        {wide ? <Box flexDirection="column" flexGrow={1}><Content focus={focus} /></Box> : null}
+        {wide || !active ? <LeftColumn rows={rows} width={leftW} height={height - 2 - (tui.lastToast ? 1 : 0)} asks={shownAsks} near={near} /> : null}
+        {showConv ? <LedgeConversation width={wide ? columns - leftW : columns} {...(yoursEsc ? { escalation: yoursEsc } : {})} keys={conv} onBar={setConvBar} />
+          : wide ? <Box flexDirection="column" flexGrow={1}><Content focus={focus} /></Box> : null}
       </Box>
     </Frame>
   );
 }
 
-/** What the right of the home shows for the focus. Tasks 6 to 9 fill Ledge's conversation, its rail and a rig's room here. */
+/** What the right of the home shows for a focus other than Ledge's conversation. Tasks 8 and 9 fill a rig's room here. */
 function Content({ focus }: { focus: Focus }) {
-  const { selected, left: rows, rigs, escalations } = useTui();
+  const { selected, rigs, escalations } = useTui();
+  // A rig or a seat gone: the focus moves on at the next render.
+  const none = <Box flexGrow={1} />;
   switch (focus.kind) {
-    case 'ledge': return <LedgeConversation />;
-    case 'yours': {
-      const row = rows.find((r): r is Extract<LeftRow, { kind: 'yours' }> => r.kind === 'yours' && r.item.id === focus.id);
-      return row?.item.escalation ? <LedgeConversation escalation={row.item.escalation} /> : <SessionDetail s={selected} />;
-    }
-    case 'session': return <SessionDetail s={selected} />;
+    case 'ledge': case 'yours': case 'session': return <SessionDetail s={selected} />;
     case 'rig': {
       const rig = rigs.find(r => r.machine === focus.machine && r.id === focus.rigId);
-      return rig ? <RigRoom rig={rig} seats={rig.seats.filter(s => s.state !== 'stopped')} escalations={escalations} /> : <LedgeConversation />;
+      return rig ? <RigRoom rig={rig} seats={rig.seats.filter(s => s.state !== 'stopped')} escalations={escalations} /> : none;
     }
     case 'seat': {
       if (selected) return <SessionDetail s={selected} />;
       const rig = rigs.find(r => r.machine === focus.machine && r.id === focus.rigId);
       const seat = rig?.seats.find(s => s.ref === focus.ref);
-      return rig && seat ? <SeatAlone rig={rig} seat={seat} escalations={escalations} /> : <LedgeConversation />;
+      return rig && seat ? <SeatAlone rig={rig} seat={seat} escalations={escalations} /> : none;
     }
     case 'kernel': {
       const rig = rigs.find(r => r.kernel && r.machine === focus.machine);
       return <RigRoom rig={rig} kernel seats={rig ? kernelSplit({ ...rig, seats: rig.seats.filter(s => s.state !== 'stopped') }).shown : []} escalations={escalations} />;
     }
   }
-}
-
-/** Ledge's conversation: drawn by task 6; here its box, and the escalation chosen in « À toi ». */
-function LedgeConversation({ escalation }: { escalation?: Escalation }) {
-  const { t } = useTui();
-  return (
-    <TitledBox title={t.home.conversation} flexGrow={1}>
-      {escalation ? (
-        <>
-          <Text color={C.fg} bold wrap="truncate">{oneLine(escalation.summary)}</Text>
-          {escalation.advice ? <Text color={C.dim} wrap="truncate">{oneLine(escalation.advice)}</Text> : null}
-        </>
-      ) : null}
-      <Text color={C.faint}>{t.home.conversationHint}</Text>
-    </TitledBox>
-  );
 }
 
 /** A rig's room (task 9 draws it whole): its seats and their state. The kernel's room is the same, its seats tucked away aside. */

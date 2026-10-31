@@ -32,7 +32,8 @@ export const en: Messages = {
     line: 'line', page: 'page', end: 'end', question: 'question', conversation: 'conversation', cycle: 'cards · conversation',
     applyRow: 'apply the line', apply: 'apply', applyAll: 'apply all', deny: 'deny', ignore: 'ignore', review: 'review',
     openSession: name => `open ${name}`,
-    screens: 'Ledge · rig · session'
+    screens: 'Ledge · rig · session',
+    decide: 'decide', revisit: 'revisit', fold: 'fold', talk: 'talk it over'
   },
   home: {
     ledge: 'Ledge', crumb: '1 Ledge · 2 Rig · 3 Session',
@@ -45,8 +46,23 @@ export const en: Messages = {
     kernel: 'OpenRig kernel',
     kernelState: { idle: 'resting', working: 'working', absent: 'absent', stopped: 'stopped', starting: 'starting', unsupported: 'unsupported', error: 'in error', unreachable: 'unreachable' },
     noOpenRig: 'OpenRig is not installed · + to launch a rig',
-    conversation: 'Ledge · Conversation', conversationHint: '↵ or / to write to Ledge.',
+    conversation: 'Ledge · Conversation',
     noSeat: 'No seat.', seatAlone: 'This seat has no Ledge session: nothing to show here yet.'
+  },
+  conv: {
+    days: { today: 'Today', yesterday: 'Yesterday', date: day => `${day.slice(8, 10)}/${day.slice(5, 7)}` },
+    age: { now: 'just now', minutes: n => `${n} min`, hours: n => `${n} h`, days: n => `${n} d`, ago: span => `${span} ago` },
+    you: 'you', ledge: 'Ledge',
+    advice: text => `My take: ${text}`, talk: 'Talk it over', seen: 'Seen',
+    by: { user: 'by you', ledge: 'by Ledge' },
+    already: 'Already answered', closed: 'Settled elsewhere', grace: 'Ledge is on it…', sending: 'sending…',
+    refused: (code, reason) => `Refused: ${reason ?? code}`,
+    decided: { before: 'I settled for ', after: summary => `: ${summary.replace(/[.\s]+$/, '')}.` },
+    rule: rule => `Rule ${rule}`, revisit: 'Revisit',
+    revisitRefused: reason => `Revisit: ${reason === 'not supported yet' ? 'not possible yet, Ledge’s brain is coming' : reason}`,
+    exchanges: n => (n === 1 ? '1 exchange' : `${n} exchanges between agents`),
+    unfold: '↵ unfold', fold: 'z fold', missing: n => `${n} older ${plural(n, 'exchange', 'exchanges')} not loaded yet`,
+    about: summary => `Question · about ${summary}`
   },
   seat: { waitsLedge: 'Waits for Ledge', working: 'Working', idle: 'Available', starting: 'Starting', stopped: 'Stopped', crashed: 'Crashed', unreachable: 'Unreachable' },
   overview: {

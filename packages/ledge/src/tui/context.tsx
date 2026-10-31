@@ -5,14 +5,14 @@ import type { Escalation, OpenRigStatus, Projects, Rig, Session } from '@ledge/p
 import type { Actions, Toast } from './actions.js';
 import type { Asked } from './model/chat.js';
 import type { LeftRow } from './model/left.js';
+import type { Brain } from './brain.js';
 import type { ClipboardImage } from './clipboard.js';
 import type { Glyphs } from './glyphs.js';
 import type { Lang, Messages } from './i18n/lang.js';
 import type { ThemeChoice, Tone } from './theme.js';
 
-/** The screens; `ask` (Ask Ledge, opened by `/` and by ↵ on Ledge's row) is not one of them: it stays until Ledge's
- *  conversation is drawn in the home (lot 8 task 6) and is reached by no digit. */
-export type Screen = 'home' | 'session' | 'launch' | 'settings' | 'help' | 'ask';
+/** The screens. */
+export type Screen = 'home' | 'session' | 'launch' | 'settings' | 'help';
 /** The screens the digits name: `1` Ledge and `2` a rig are the home, focused on one or the other; `3` the session. */
 export const SCREENS: readonly Screen[] = ['home', 'home', 'session'];
 
@@ -20,7 +20,11 @@ export const SCREENS: readonly Screen[] = ['home', 'home', 'session'];
 export type Focus = { kind: 'ledge' } | { kind: 'yours'; id: string } | { kind: 'session'; id: string }
   | { kind: 'rig'; machine: string; rigId: string } | { kind: 'seat'; machine: string; rigId: string; ref: string } | { kind: 'kernel'; machine: string };
 
-/** What the fields keep while the TUI runs, a screen left or not: each one's draft and what it sent, by field (`ask`, or a
+/** Where the keyboard is in Ledge's conversation: the home's left column (`left`), the conversation read with j k (`convo`), its
+ *  field (`field`); 0… one of the action cards drawn under it. */
+export const LEDGE_FOCUS = { left: -3, convo: -2, field: -1 } as const;
+
+/** What the fields keep while the TUI runs, a screen left or not: each one's draft and what it sent, by field (`ledge`, or a
  *  session's id). */
 export interface Kept { drafts: Map<string, string>; sent: Map<string, string[]>; asked: Asked[] }
 
@@ -40,6 +44,10 @@ export interface Tui {
   selected: Session | null; select(id: string | null): void;
   /** The home's left column, and what it is drawn from. */
   left: LeftRow[]; rigs: Rig[]; escalations: Escalation[]; openrig: OpenRigStatus[];
+  /** Where the keyboard is in Ledge's conversation (`LEDGE_FOCUS`, or a card's index): `/` puts it in the field from anywhere. */
+  ledgeFocus: number; setLedgeFocus(f: number | ((f: number) => number)): void;
+  /** What Ledge's brain sent: its decisions, rules and mandate (undefined until the daemon sends them). */
+  brain: Brain;
   toast(t: Toast): void; lastToast: Toast | null; actions: Actions;
   /** A field has the keyboard: the global keys are off. */
   editing: boolean; setEditing(on: boolean): void;

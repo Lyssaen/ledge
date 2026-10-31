@@ -1,6 +1,15 @@
 import { describe, it, expect } from 'vitest';
+import type { ClientMessage, LedgeThreadItem } from '@ledge/protocol';
 import { until } from './helpers.js';
 import { startTui } from './tui-fixture.js';
+
+const sent = <T extends ClientMessage['type']>(received: ClientMessage[], type: T) => received.filter((m): m is Extract<ClientMessage, { type: T }> => m.type === type);
+const ago = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
+/** The thread with the mockup's decision in it, pushed as the daemon sends it after connecting. */
+const decisionInThread: LedgeThreadItem[] = [
+  { kind: 'ledge', id: 'l1', at: ago(5), text: 'factory avance sur la reprise après reboot. Une décision t’attend :' },
+  { kind: 'escalation', id: 'i-q117', at: ago(5), escalationId: 'q-117' }
+];
 
 describe('ledge tui: home', () => {
   it('home opens on Ledge and 1 2 3 move between Ledge, the rig and the session', async () => {
@@ -82,6 +91,98 @@ describe('ledge tui: home', () => {
       expect(f).not.toContain('ledge decide');
       expect(f.split('Quelle base ?').length - 1).toBe(1);
       expect(f).toMatch(/\? Nova +● Local +Quelle base \?/);
+    } finally { await tui.cleanup(); }
+  });
+
+  it('pressing 1 answers the pinned escalation once', async () => {
+    const tui = await startTui({ openrig: {} });
+    try {
+      await tui.resize(160, 46);
+      tui.daemon.push({ type: 'ledge.thread.history', items: decisionInThread });
+      await until(() => tui.frame().includes('ARCHITECTURE · ORCH-LEAD@FACTORY'));
+      expect(tui.frame()).toContain(' 1 · SQLite 1 ');
+      await tui.press('1');
+      await until(() => sent(tui.daemon.received, 'escalation.answer').length === 1);
+      expect(sent(tui.daemon.received, 'escalation.answer')[0]).toMatchObject({ id: 'q-117', answers: { q1: 'sqlite' }, by: 'user' });
+      await tui.press('1');
+      await new Promise(r => setTimeout(r, 100));
+      expect(sent(tui.daemon.received, 'escalation.answer')).toHaveLength(1);
+    } finally { await tui.cleanup(); }
+  });
+
+  it('an escalation answered elsewhere shows Déjà répondu and ignores its keys', async () => {
+    const tui = await startTui({ openrig: {} });
+    tui.daemon.onMessage(m => { if (m.type === 'escalation.answer') tui.daemon.reply({ type: 'rig.result', rid: m.rid, ok: false, code: 'already_answered' }); });
+    try {
+      await tui.resize(160, 46);
+      tui.daemon.push({ type: 'ledge.thread.history', items: decisionInThread });
+      await until(() => tui.frame().includes('ARCHITECTURE · ORCH-LEAD@FACTORY'));
+      await tui.press('1');
+      await until(() => tui.frame().includes('Déjà répondu'));
+      await tui.press('2');
+      await tui.press('1');
+      await new Promise(r => setTimeout(r, 100));
+      expect(sent(tui.daemon.received, 'escalation.answer')).toHaveLength(1);
+      // The key was the card's: 2 did not leave for the rig either.
+      expect(tui.frame()).toContain('Déjà répondu');
+    } finally { await tui.cleanup(); }
+  });
+
+  it('e talks about the escalation: the next message carries it', async () => {
+    const tui = await startTui({ openrig: {} });
+    try {
+      await tui.resize(160, 46);
+      tui.daemon.push({ type: 'ledge.thread.history', items: decisionInThread });
+      await until(() => tui.frame().includes('ARCHITECTURE · ORCH-LEAD@FACTORY'));
+      await tui.press('e');
+      await until(() => tui.frame().includes('À PROPOS DE'));
+      await tui.press('Pourquoi SQLite ?');
+      await tui.press('\r');
+      await until(() => sent(tui.daemon.received, 'ledge.say').length === 1);
+      expect(sent(tui.daemon.received, 'ledge.say')[0]).toMatchObject({ text: 'Pourquoi SQLite ?', about: 'q-117' });
+      expect(sent(tui.daemon.received, 'chat.ask')).toEqual([]);
+    } finally { await tui.cleanup(); }
+  });
+
+  it('u revisits a decided item; the daemon’s refusal ends in a toast', async () => {
+    const tui = await startTui({ openrig: {} });
+    tui.daemon.onMessage(m => { if (m.type === 'decision.revisit') tui.daemon.reply({ type: 'error', message: 'not supported yet', request: 'decision.revisit', code: 'unavailable' }); });
+    try {
+      await tui.resize(160, 46);
+      tui.daemon.push({ type: 'decisions', items: [{ id: 'd-1', escalationId: 'q-9', by: 'ledge', category: 'git', summary: 'merge, pas de rebase', answers: {}, at: ago(10) }] });
+      tui.daemon.push({ type: 'ledge.thread.history', items: [{ kind: 'decided', id: 'i-d1', at: ago(10), decisionId: 'd-1' }] });
+      await until(() => tui.frame().includes('merge, pas de rebase'));
+      await tui.press('u');
+      await until(() => sent(tui.daemon.received, 'decision.revisit').length === 1);
+      expect(sent(tui.daemon.received, 'decision.revisit')[0]).toMatchObject({ id: 'd-1' });
+      await until(() => tui.frame().includes('pas encore possible'));
+    } finally { await tui.cleanup(); }
+  });
+
+  it('a group of exchanges is asked for, drawn open as the latest, and z folds it', async () => {
+    const tui = await startTui({ openrig: {} });
+    try {
+      await tui.resize(160, 46);
+      tui.daemon.push({ type: 'ledge.thread.history', items: [{ kind: 'exchanges', id: 'g1', at: ago(6), machine: 'local', rigId: 'factory', from: ago(12), to: ago(6), exchangeIds: ['x1'] }] });
+      await until(() => sent(tui.daemon.received, 'rig.exchanges.request').some(m => m.rigId === 'factory'));
+      tui.daemon.push({ type: 'rig.exchanges', machine: 'local', rigId: 'factory', items: [{ id: 'x1', machine: 'local', rigId: 'factory', from: 'orch-lead@factory', to: 'qa@factory', kind: 'task', text: 'Vérifier la reprise après reboot.', at: ago(12) }] });
+      await until(() => tui.frame().includes('Vérifier la reprise après reboot.'));
+      expect(tui.frame()).toContain('z replier');
+      await tui.press('z');
+      await until(() => !tui.frame().includes('Vérifier la reprise après reboot.'));
+      expect(tui.frame()).toContain('↵ déplier');
+    } finally { await tui.cleanup(); }
+  });
+
+  it('/ opens Ledge’s field in the home, wherever the selection was', async () => {
+    const tui = await startTui();
+    try {
+      await tui.pick('Otto');
+      await tui.press('/');
+      await until(() => tui.frame().includes('LEDGE · CONVERSATION') && tui.frame().includes('alt+↵'));
+      await tui.press('Qui ?');
+      await tui.press('\r');
+      await until(() => sent(tui.daemon.received, 'chat.ask').length === 1);
     } finally { await tui.cleanup(); }
   });
 });

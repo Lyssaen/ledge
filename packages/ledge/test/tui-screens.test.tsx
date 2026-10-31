@@ -245,7 +245,7 @@ describe('ledge tui: ask Ledge', () => {
     const tui = await startTui();
     try {
       await tui.press('/');
-      await until(() => tui.frame().includes('LEDGE · OPÉRATEUR · VOIT 4 SESSIONS'));
+      await until(() => tui.frame().includes('LEDGE · CONVERSATION'));
       await tui.press('Qui a besoin de moi ?');
       await tui.press('\r');
       await until(() => sent(tui.daemon.received, 'chat.ask').length === 1);
@@ -290,11 +290,13 @@ describe('ledge tui: the action card (#94, docs/mockups/ledge-action-card.html, 
     const m = sent(tui.daemon.received, 'chat.act')[index]!;
     tui.daemon.reply({ type: 'chat.acted', rid: m.rid as string, qid: m.qid as string, done: (m.rows as number[] | undefined) ?? [0], failed: [] });
   };
-  /** The Ask screen with this turn in the conversation, the card focused (tab). */
+  /** Ledge’s conversation with this turn in the conversation, the card focused (tab). */
   async function ask(t: ChatTurn) {
     const tui = await startTui();
+    // Beside the home's left column, as wide as the Ask screen was at 100 columns.
+    await tui.resize(160, 24);
     await tui.press('/');
-    await until(() => tui.frame().includes('LEDGE · OPÉRATEUR'));
+    await until(() => tui.frame().includes('LEDGE · CONVERSATION'));
     tui.daemon.push({ type: 'chat.history', turns: [t] });
     await until(() => tui.frame().includes('Voici le plan.'));
     await tui.press('\t');
@@ -394,7 +396,7 @@ describe('ledge tui: the action card (#94, docs/mockups/ledge-action-card.html, 
       await tui.resize(80, 24);
       await until(() => tui.frame().includes('… (tronqué, voir la session : o)'));
       expect(tui.frame()).toContain('coupée');
-      expect(tui.frame()).toContain('LEDGE · OPÉRATEUR');
+      expect(tui.frame()).toContain('LEDGE · CONVERSATION');
       await tui.press('\r');
       await tui.press('y');
       await new Promise(r => setTimeout(r, 100));
@@ -436,7 +438,7 @@ describe('ledge tui: the action card (#94, docs/mockups/ledge-action-card.html, 
     try {
       await tui.resize(80, 24);
       await tui.press('/');
-      await until(() => tui.frame().includes('LEDGE · OPÉRATEUR'));
+      await until(() => tui.frame().includes('LEDGE · CONVERSATION'));
       tui.daemon.push({ type: 'chat.history', turns: [turn([dissolve, decide({ detail: 'TAIL_AFTER_OTHER_DETAILS' })])] });
       await until(() => tui.frame().includes('Team detail 0'));
       await tui.press('\t');
@@ -452,7 +454,7 @@ describe('ledge tui: the action card (#94, docs/mockups/ledge-action-card.html, 
     const tui = await startTui();
     try {
       await tui.press('/');
-      await until(() => tui.frame().includes('LEDGE · OPÉRATEUR'));
+      await until(() => tui.frame().includes('LEDGE · CONVERSATION'));
       const card = (qid: string, at: number, detail: string) => turn([decide({ detail })], { qid, askedAt: NOW(at), answeredAt: NOW(at + 1), answer: qid });
       tui.daemon.push({ type: 'chat.history', turns: [card('oldest', 1, 'HIDDEN_THIRD_PERMISSION'), card('middle', 3, 'middle'), card('newest', 5, 'newest')] });
       await until(() => tui.frame().includes('newest'));
@@ -521,13 +523,19 @@ const CTRL = { left: '\u001b[1;5D', right: '\u001b[1;5C', a: '\u0001', e: '\u000
 const UP = '\u001b[A', DOWN = '\u001b[B', LEFT = '\u001b[D', DEL = '\u001b[3~';
 const paste = (text: string) => `\u001b[200~${text}\u001b[201~`;
 /** The rows of the box whose title is `title`, between its borders. */
-const boxRows = (frame: string, title: string) => {
+/** The frame's lines from the column where the box titled `title` starts (the home draws Ledge's conversation right of its left column). */
+const fromBox = (frame: string, title: string) => {
   const lines = frame.split('\n'), i = lines.findIndex(l => l.includes(title));
+  const col = i < 0 ? 0 : Math.max(0, lines[i]!.lastIndexOf('╭', lines[i]!.indexOf(title)));
+  return { lines: lines.map(l => l.slice(col)), i };
+};
+const boxRows = (frame: string, title: string) => {
+  const { lines, i } = fromBox(frame, title);
   const out: string[] = [];
   for (const l of lines.slice(i + 1)) { if (!l.startsWith('│')) break; out.push(l.replace(/^│ ?/, '').replace(/ ?│$/, '').trimEnd()); }
   return out;
 };
-const bottom = (frame: string, title: string) => { const lines = frame.split('\n'); return lines.slice(lines.findIndex(l => l.includes(title))).find(l => l.startsWith('╰')) ?? ''; };
+const bottom = (frame: string, title: string) => { const { lines, i } = fromBox(frame, title); return lines.slice(i).find(l => l.startsWith('╰')) ?? ''; };
 
 describe('ledge tui: the field (#95 lot B)', () => {
   /** Bix's session open, its field open. */
@@ -670,6 +678,8 @@ describe('ledge tui: the field (#95 lot B)', () => {
   it('ctrl+n asks first: n or esc keeps the conversation, y clears it; the draft stays', async () => {
     const tui = await startTui();
     try {
+      // The question on one line, beside the home's left column.
+      await tui.resize(160, 24);
       await tui.press('/');
       await tui.press('Qui a besoin de moi ?'); await tui.press('\r');
       await until(() => sent(tui.daemon.received, 'chat.ask').length === 1);
@@ -1002,7 +1012,7 @@ describe('ledge tui: lot A, second review', () => {
     const tui = await startTui();
     try {
       await tui.press('/');
-      await until(() => tui.frame().includes('LEDGE · OPÉRATEUR'));
+      await until(() => tui.frame().includes('LEDGE · CONVERSATION'));
       await tui.resize(52, 14);
       await until(() => tui.frame().includes('Fenêtre trop petite'));
       await tui.press('\u000e');
@@ -1010,7 +1020,7 @@ describe('ledge tui: lot A, second review', () => {
       await new Promise(r => setTimeout(r, 100));
       expect(sent(tui.daemon.received, 'chat.reset')).toEqual([]);
       await tui.resize(100, 30);
-      await until(() => tui.frame().includes('LEDGE · OPÉRATEUR'));
+      await until(() => tui.frame().includes('LEDGE · CONVERSATION'));
       expect(tui.frame()).toContain('alt+↵');
     } finally { await tui.cleanup(); }
   });
@@ -1068,7 +1078,7 @@ describe('ledge tui: lot A, second review', () => {
 });
 
 describe('ledge tui: ask Ledge scrolls, in Markdown (#95 lot C)', () => {
-  const OP = 'LEDGE · OPÉRATEUR';
+  const OP = 'LEDGE · CONVERSATION';
   // Of today: the fleet keeps only the day's conversation.
   const at = (i: number) => new Date(Date.now() - (60 - i) * 1000).toISOString();
   const turns = (n: number) => Array.from({ length: n }, (_, i) => ({

@@ -19,9 +19,11 @@ const inHistory = (b: Browse | null): b is Browse => b !== null && b.i < b.items
  *  ← → by grapheme, ctrl or alt ← → by word, home end (ctrl+a ctrl+e) on the line, ↑ ↓ from row to row, suppr, ctrl+w the
  *  word before, ctrl+u all. ↑ on the first row goes back through `history` (oldest first), ↓ comes down to the draft, as it
  *  was; ↵ on an entry sends it and comes back to the draft, `fromHistory` telling the caller to keep it; `onSubmit` false, refused, the entry stays. The caller owns the draft; `active` false leaves the keys to the screen. */
-export function Field({ value, onChange, onSubmit, onEscape, onBrowse, history = [], active, placeholder, title, color = C.coral, titleColor }: {
+export function Field({ value, onChange, onSubmit, onEscape, onBrowse, history = [], active, placeholder, title, color = C.coral, titleColor, width: inner }: {
   value: string; onChange(v: string): void; onSubmit(v: string, o: { fromHistory: boolean }): boolean | void; onEscape?(): void; onBrowse?(on: boolean): void;
   history?: readonly string[]; active: boolean; placeholder?: string; title: string; color?: string; titleColor?: string;
+  /** The cells inside its box; the screen's width less the box by default (a field in a column passes its own). */
+  width?: number;
 }) {
   const { t, g } = useTui();
   const { columns, rows: height } = useScreenSize();
@@ -32,7 +34,7 @@ export function Field({ value, onChange, onSubmit, onEscape, onBrowse, history =
   if (value !== told.current) { told.current = value; st.current = { f: { text: value, cursor: value.length }, browse: null, pasted: 0 }; }
   const [, render] = useReducer((n: number) => n + 1, 0);
   const top = useRef(0);
-  const width = Math.max(10, columns - 4);
+  const width = Math.max(10, inner ?? columns - 4);
   const max = fieldRows(columns, height);
 
   const set = (f: State, o: { paste?: number } = {}) => {

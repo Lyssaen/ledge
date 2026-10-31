@@ -7,7 +7,8 @@ import { useActions, type Toast } from './actions.js';
 import { attachCommand, runAttached } from './attach.js';
 import { readClipboardImage, type ClipboardImage } from './clipboard.js';
 import { openImage } from './openImage.js';
-import { screenSize, TuiContext, type Focus, type Kept, type KeyHandler, type Screen, type Tui } from './context.js';
+import { useBrain } from './brain.js';
+import { LEDGE_FOCUS, screenSize, TuiContext, type Focus, type Kept, type KeyHandler, type Screen, type Tui } from './context.js';
 import type { Glyphs } from './glyphs.js';
 import { I18nProvider, MESSAGES, type Lang } from './i18n/lang.js';
 import { listed } from './model/overview.js';
@@ -15,7 +16,6 @@ import { focusKey, focusOrder, focusSession, keepFocus, leftRows } from './model
 import { asked, notification, title, type NotifyMode } from './notify.js';
 import { Home } from './screens/Home.js';
 import { SessionScreen } from './screens/Session.js';
-import { Ask } from './screens/Ask.js';
 import { Launch } from './screens/Launch.js';
 import { Settings } from './screens/Settings.js';
 import { Help } from './screens/Help.js';
@@ -72,6 +72,8 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
   const [screen, setScreen] = useState<Screen>('home');
   const [back, setBack] = useState<Screen>('home');
   const [focus, setFocus] = useState<Focus>({ kind: 'ledge' });
+  const [ledgeFocus, setLedgeFocus] = useState<number>(LEDGE_FOCUS.left);
+  const brain = useBrain(client);
   const [lastToast, setToast] = useState<Toast | null>(null);
   const [editing, setEditingState] = useState(false);
   const keys = useRef<KeyHandler | null>(null);
@@ -155,7 +157,7 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
   const small = size.columns < MIN.columns || size.rows < MIN.rows;
   const tui: Tui = {
     client, fleet, d, machines, projects, t, lang, setLang, theme, setTheme, tone, background, g: glyphs, screen, go, focus, setFocus, selected, select, left, rigs, escalations, openrig,
-    toast, lastToast, actions, editing, setEditing, small, attach, runInTerminal, env, keys, kept,
+    ledgeFocus, setLedgeFocus, brain, toast, lastToast, actions, editing, setEditing, small, attach, runInTerminal, env, keys, kept,
     readImage: readImage ?? (() => readClipboardImage(env)), openFile: openFile ?? (file => openImage(file, env))
   };
 
@@ -164,7 +166,7 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
       if (keys.current?.(input, key)) return;
       // A draft is not lost by reflex: the first ctrl+c says so, a second one within 2 s quits. A session gone since takes
       // its draft with it: there is nowhere to send it.
-      const drafts = [...kept.drafts].some(([id, x]) => x.trim() && (id === 'ask' || d.byId.has(id)));
+      const drafts = [...kept.drafts].some(([id, x]) => x.trim() && (id === 'ledge' || d.byId.has(id)));
       if (drafts && Date.now() - armed.current > QUIT_MS) {
         armed.current = Date.now();
         toast({ text: t.toast.draftQuit, tone: 'info', ms: QUIT_MS });
@@ -173,7 +175,7 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
       exit(); return;
     }
     // Too small, the field is not drawn: esc leaves it (the screen keeps the draft), or the screen.
-    if (editing) { if (small && key.escape && !keys.current?.(input, key)) go('home'); return; }
+    if (editing) { if (small && key.escape && !keys.current?.(input, key)) { setLedgeFocus(LEDGE_FOCUS.left); go('home'); } return; }
     // Too small, the screen is not drawn: y, n, a… would act on a request out of view. esc and q still go.
     if (small && !key.escape && input !== 'q') return;
     if (keys.current?.(input, key)) return;
@@ -181,7 +183,8 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
     if (key.escape) { go(screen === 'help' || screen === 'settings' ? back : 'home'); return; }
     if (input === '?') { go('help'); return; }
     if (input === ',') { go('settings'); return; }
-    if (input === '/') { go('ask'); return; }
+    // `/` writes to Ledge, from anywhere: the home on Ledge, its field.
+    if (input === '/') { setFocus({ kind: 'ledge' }); setLedgeFocus(LEDGE_FOCUS.field); go('home'); return; }
     if (input === '+') { go('launch'); return; }
     // 1 Ledge, 2 the rig of the selection (else the first), 3 the session chosen.
     if (input === '1') { setFocus({ kind: 'ledge' }); go('home'); return; }
@@ -195,6 +198,6 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
     if (input === '3') { if (selected) go('session'); return; }
   });
 
-  const Body = { home: Home, session: SessionScreen, ask: Ask, launch: Launch, settings: Settings, help: Help }[screen];
+  const Body = { home: Home, session: SessionScreen, launch: Launch, settings: Settings, help: Help }[screen];
   return <TuiContext.Provider value={tui}><Body /></TuiContext.Provider>;
 }

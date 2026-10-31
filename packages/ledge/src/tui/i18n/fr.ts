@@ -35,7 +35,8 @@ export const fr = {
     line: 'ligne', page: 'page', end: 'fin', question: 'question', conversation: 'conversation', cycle: 'cartes · conversation',
     applyRow: 'appliquer la ligne', apply: 'appliquer', applyAll: 'tout appliquer', deny: 'refuser', ignore: 'ignorer', review: 'revoir',
     openSession: (name: string) => `ouvrir ${name}`,
-    screens: 'Ledge · rig · session'
+    screens: 'Ledge · rig · session',
+    decide: 'trancher', revisit: 'revenir dessus', fold: 'replier', talk: 'en parler'
   },
   home: {
     ledge: 'Ledge', crumb: '1 Ledge · 2 Rig · 3 Session',
@@ -48,8 +49,24 @@ export const fr = {
     kernel: 'Noyau OpenRig',
     kernelState: { idle: 'au repos', working: 'au travail', absent: 'absent', stopped: 'arrêté', starting: 'démarre', unsupported: 'non pris en charge', error: 'en erreur', unreachable: 'injoignable' } as Record<'idle' | 'working' | 'absent' | 'stopped' | 'starting' | 'unsupported' | 'error' | 'unreachable', string>,
     noOpenRig: 'OpenRig n’est pas installé · + pour lancer un rig',
-    conversation: 'Ledge · Conversation', conversationHint: '↵ ou / pour écrire à Ledge.',
+    conversation: 'Ledge · Conversation',
     noSeat: 'Aucun siège.', seatAlone: 'Ce siège n’a pas de session Ledge : rien à afficher ici pour l’instant.'
+  },
+  /** Ledge's conversation in the home: its thread, the decisions drawn in its messages, the exchanges between agents. */
+  conv: {
+    days: { today: 'Aujourd’hui', yesterday: 'Hier', date: (day: string) => `${day.slice(8, 10)}/${day.slice(5, 7)}` },
+    age: { now: 'à l’instant', minutes: (n: number) => `${n} min`, hours: (n: number) => `${n} h`, days: (n: number) => `${n} j`, ago: (span: string) => `il y a ${span}` },
+    you: 'toi', ledge: 'Ledge',
+    advice: (text: string) => `Mon avis : ${text}`, talk: 'En parler', seen: 'Vu',
+    by: { user: 'par toi', ledge: 'par Ledge' } as Record<'user' | 'ledge', string>,
+    already: 'Déjà répondu', closed: 'Réglée ailleurs', grace: 'Ledge s’en occupe…', sending: 'envoi…',
+    refused: (code: string, reason?: string) => `Refusé : ${reason ?? code}`,
+    decided: { before: 'J’ai tranché pour ', after: (summary: string) => ` : ${summary.replace(/[.\s]+$/, '')}.` },
+    rule: (rule: string) => `Règle ${rule}`, revisit: 'Revenir dessus',
+    revisitRefused: (reason: string) => `Revenir dessus : ${reason === 'not supported yet' ? 'pas encore possible, le cerveau de Ledge arrive' : reason}`,
+    exchanges: (n: number) => (n === 1 ? '1 échange' : `${n} échanges entre agents`),
+    unfold: '↵ déplier', fold: 'z replier', missing: (n: number) => `${n} ${plural(n, 'échange plus ancien', 'échanges plus anciens')} pas encore chargé${n > 1 ? 's' : ''}`,
+    about: (summary: string) => `Question · à propos de ${summary}`
   },
   /** A rig seat's state (« Attend Ledge »: an escalation of this seat is open). */
   seat: { waitsLedge: 'Attend Ledge', working: 'Au travail', idle: 'Disponible', starting: 'Démarrage', stopped: 'Arrêté', crashed: 'Planté', unreachable: 'Injoignable' },
