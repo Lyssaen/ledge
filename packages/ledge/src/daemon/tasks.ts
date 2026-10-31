@@ -224,7 +224,9 @@ export function createTasks(d: TasksDeps): Tasks {
         // Its giver, or Ledge for any task (the user is the operator, action registry spec §6.3): closed as a giver's refusal is.
         if (!giver && !ledge) return refuse(`seul celui qui l'a confiée (${t.giverName}) peut l'annuler`);
         const reason = cmd.text?.trim();
-        const cancelled = put({ ...t, state: 'refused', ...(reason ? { result: reason } : {}) }, me.name, `annulée${reason ? ` : ${reason}` : ''}`);
+        // Handed back from its giver to its owner, whoever cancels it: `by` keeps who did (as for a pass by Ledge).
+        const cancelled = put({ ...t, state: 'refused', ...(reason ? { result: reason } : {}) }, me.name, `annulée${reason ? ` : ${reason}` : ''}`,
+          sides('cancel', giverOf(t), ownerOf(t)));
         d.mailbox.notify(t.owner, formatLedgeTask({ id: t.id, from: me.name, text: `Tâche « ${t.title} » annulée par ${me.name}${reason ? ` : ${quote(reason)}` : ''}. Arrête d'y travailler.` }), `${t.id}:${cancelled.log.length}`);
         // A task a seat gave another, cancelled by Ledge: its giver learns it too.
         if (!giver) tellGiver(cancelled, me.name, `annulée par ${me.name}${reason ? ` : ${quote(reason)}` : ''}`);

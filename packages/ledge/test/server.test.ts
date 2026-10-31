@@ -770,6 +770,46 @@ describe('server', () => {
       expect([history.items('a').length, history.items('b').length]).toEqual(before);
       c.close();
     });
+    it('the giver’s thread gets the card of the task it cancelled, as of the one it refused (#92)', async () => {
+      await srv.close();
+      const history = new History({ dir: tmpDir() }); srv = await startServer({ store, tmux, port: 0, history });
+      store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'idle' }));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'task.cmd', rid: 'g1', by: 'a', op: 'give', to: 'Pim', title: 'A' });
+      const a = (await c.next('task.result', 3000)).task!;
+      c.send({ type: 'task.cmd', rid: 'g2', by: 'a', op: 'give', to: 'Pim', title: 'B' });
+      const b = (await c.next('task.result', 3000)).task!;
+      c.send({ type: 'task.cmd', rid: 'r', by: 'a', op: 'refuse', task: a.id, text: 'plus besoin' });
+      await c.next('task.result', 3000);
+      c.send({ type: 'task.cmd', rid: 'x', by: 'a', op: 'cancel', task: b.id, text: 'plus besoin' });
+      await c.next('task.result', 3000);
+      const cancels = history.items('a').filter(i => i.kind === 'notice' && i.taskOp === 'cancel');
+      expect(cancels.map(i => i.id)).toEqual([`task-${a.id}-1`, `task-${b.id}-1`]);
+      c.close();
+    });
+    it('a task a seat gave, cancelled by Ledge, reaches its giver’s thread; one Ledge gave reaches no thread (#92)', async () => {
+      await srv.close();
+      const history = new History({ dir: tmpDir() }); srv = await startServer({ store, tmux, port: 0, history });
+      store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'idle' }));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'task.cmd', rid: 'g1', by: 'a', op: 'give', to: 'Pim', title: 'A' });
+      const a = (await c.next('task.result', 3000)).task!;
+      // Ledge cancels over a seat's head only as the user's action (the chat's card, action.run), never as a client's task.cmd.
+      const cancel = async (task: string) => {
+        c.send({ type: 'action.run', rid: `x-${task}`, action: 'task.cancel', args: { task }, confirmed: true } as never);
+        expect((await c.next('action.result', 3000)).reason).toBeUndefined();
+        c.send({ type: 'task.cmd', rid: `s-${task}`, by: 'ledge', op: 'show', task });
+        return (await c.next('task.result', 3000)).task!;
+      };
+      expect((await cancel(a.id)).log.at(-1)).toMatchObject({ by: 'Ledge', op: 'cancel', from: 'a', to: 'b' });
+      expect(history.items('a').filter(i => i.kind === 'notice' && i.taskOp === 'cancel')).toEqual([expect.objectContaining({ id: `task-${a.id}-1`, outgoing: true, name: 'Pim', peer: 'b' })]);
+      c.send({ type: 'task.cmd', rid: 'g2', by: 'ledge', op: 'give', to: 'Pim', title: 'B' });
+      const b = (await c.next('task.result', 3000)).task!;
+      const before = [history.items('a').length, history.items('b').length];
+      expect((await cancel(b.id)).log.at(-1)).toMatchObject({ op: 'cancel', from: 'ledge', to: 'b' });
+      expect([history.items('a').length, history.items('b').length]).toEqual(before);
+      c.close();
+    });
     it('message.read gives a long body whole to its receiver, and refuses anyone else', async () => {
       store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'working' }));
       const c = await connect({ port: srv.port }); await c.next('snapshot');
