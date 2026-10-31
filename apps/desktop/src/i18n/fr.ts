@@ -24,6 +24,7 @@ const andList = (xs: readonly string[]) => new Intl.ListFormat('fr', { type: 'co
 /** Desktop's copy in French: the source of truth, whose shape is `Messages` (see messages.ts, which loads it on demand). */
 export const fr = {
   side: {
+    brainStarting: 'Ledge attend dans son terminal',
     label: 'Barre latérale', newSession: 'Nouvelle session', searchLabel: 'Rechercher une session',
     views: 'Vues', atelier: 'Atelier', chat: 'Chat Ledge', projects: 'Projets', newProject: 'Nouveau projet', unassigned: 'Sans projet',
     machines: 'Machines', manageMachines: 'Gérer les machines', agents: (n: number) => plural(n, `${n} agent`, `${n} agents`), offline: 'hors ligne', daemonUpdating: 'mise à jour du daemon', settings: 'Réglages', shortcuts: 'Raccourcis clavier',

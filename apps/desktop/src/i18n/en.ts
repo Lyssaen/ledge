@@ -10,6 +10,7 @@ const andList = (xs: readonly string[]) => new Intl.ListFormat('en', { type: 'co
 /** Desktop's copy in English, shaped by the French (see messages.ts, which loads it on demand). */
 export const en: Messages = {
   side: {
+    brainStarting: 'Ledge is waiting in its terminal',
     label: 'Sidebar', newSession: 'New session', searchLabel: 'Search a session',
     views: 'Views', atelier: 'Atelier', chat: 'Chat Ledge', projects: 'Projects', newProject: 'New project', unassigned: 'No project',
     machines: 'Machines', manageMachines: 'Manage machines', agents: (n) => pluralEn(n, `${n} agent`, `${n} agents`), offline: 'offline', daemonUpdating: 'daemon updating', settings: 'Settings', shortcuts: 'Keyboard shortcuts',

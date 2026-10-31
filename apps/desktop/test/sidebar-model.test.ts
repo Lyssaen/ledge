@@ -92,6 +92,13 @@ describe('attentionOf', () => {
     expect(items[0]!.since).toBe('2026-10-18T09:48:00.000Z');
   });
 
+  it('shows a brain still starting after 30 seconds', () => {
+    const at = '2026-10-18T10:00:00.000Z';
+    const brain = fakeSession('brain', { brain: true, state: 'starting', lastActivityAt: at });
+    expect(attentionOf([brain], new Map(), [], [], [], Date.parse(at) + 29_999)).toEqual([]);
+    expect(attentionOf([brain], new Map(), [], [], [], Date.parse(at) + 30_000)).toMatchObject([{ kind: 'brainStarting', session: { id: 'brain' } }]);
+  });
+
   it('a waiting brain lands in À toi (its prompts must reach the user); an idle one does not', () => {
     const brain = fakeSession('brain', { name: 'Ledge', brain: true, state: 'waiting_input', pending: { kind: 'question', text: 'Trust?', source: 'hook' } });
     expect(attentionOf([brain], new Map(), [], [aRig('r1')]).map(i => (i.kind === 'escalation' ? 'esc' : i.session.id))).toEqual(['brain']);
