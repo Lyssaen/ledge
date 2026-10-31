@@ -110,7 +110,9 @@ export function createLaunches(d: LaunchDeps): Launches {
     const waiting = ready ? [] : rig.seats.filter(s => !READY.has(s.state)).map(s => s.ref);
     if (waiting.length) p.lateNotice = true;
     const launch = info(p);
-    forget(rigId); // sent: the file no longer holds it; the rig keeps `launch` with goalSentAt
+    const t = timers.get(rigId); if (t) d.clearTimer(t);
+    timers.delete(rigId); due.delete(rigId); seen.add(rigId);
+    save(); // sent: the entry stays in the file with goalSentAt, until the rig stops or goes
     d.bridge.annotate(rigId, { launch });
     d.say(waiting.length
       ? `Les sièges de ${p.rigName} ne sont pas tous prêts après 10 min : j'ai quand même donné le but à ${lead.ref}. ${waiting.join(', ')} attend encore.`
@@ -121,7 +123,8 @@ export function createLaunches(d: LaunchDeps): Launches {
   const onRig = (rig: Rig): void => {
     const p = live.get(rig.id); if (!p) return;
     seen.add(rig.id);
-    if (!rig.launch && rig.lifecycle !== 'stopped') d.bridge.annotate(rig.id, { launch: info(p) });
+    if (rig.lifecycle === 'stopped') { forget(rig.id); d.bridge.annotate(rig.id, { launch: null }); return; }
+    if (!rig.launch) d.bridge.annotate(rig.id, { launch: info(p) });
     void check(rig.id, rig);
   };
   const unsubscribe = d.bridge.onMessage((m: BridgeMessage) => {
@@ -129,7 +132,12 @@ export function createLaunches(d: LaunchDeps): Launches {
     else if (m.type === 'rig.removed') forget(m.rigId);
     else if (m.type === 'rig.snapshot') {
       const ids = new Set(m.rigs.map(r => r.id));
-      for (const id of [...live.keys()]) if (!ids.has(id) && (seen.has(id) || due.has(id))) forget(id);
+      for (const id of [...live.keys()]) {
+        if (ids.has(id) || !(seen.has(id) || due.has(id))) continue;
+        const p = live.get(id)!;
+        if (!p.goalSentAt && !seen.has(id)) d.say(`${p.rigName} n'est jamais apparu : le but n'est pas parti.`);
+        forget(id);
+      }
       for (const r of m.rigs) onRig(r);
     }
   });
@@ -154,18 +162,19 @@ export function createLaunches(d: LaunchDeps): Launches {
       if (known) void check(p.rigId, known);
       return { ok: true, rigId: up.rigId };
     },
-    pending: () => [...live.values()].map(p => ({ ...p })),
+    pending: () => [...live.values()].filter(p => !p.goalSentAt).map(p => ({ ...p })),
     resume() {
       let list: unknown;
       try { list = JSON.parse(readFileSync(d.file, 'utf8')); } catch { return; }
       if (!Array.isArray(list)) return;
       for (const x of list as PendingLaunch[]) {
         if (!x || typeof x.rigId !== 'string' || typeof x.goal !== 'string' || typeof x.startedAt !== 'string' || Number.isNaN(Date.parse(x.startedAt))) continue;
-        if (x.goalSentAt || live.has(x.rigId)) continue; // sent before the restart: never again
-        live.set(x.rigId, { ...x }); arm(x);
+        if (live.has(x.rigId)) continue;
+        live.set(x.rigId, { ...x });
+        if (!x.goalSentAt) arm(x); // sent before the restart: annotated again, never sent again
         const rig = rigNow(x.rigId); if (rig) onRig(rig);
       }
-      if (live.size !== list.length) save(); // sent or unreadable entries leave the file
+      if (live.size !== list.length) save(); // unreadable entries leave the file
     },
     async cancel(rigId) { const had = live.has(rigId); forget(rigId); if (had) d.bridge.annotate(rigId, { launch: null }); },
     close() { unsubscribe(); for (const t of timers.values()) d.clearTimer(t); timers.clear(); },

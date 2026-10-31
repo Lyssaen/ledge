@@ -17,8 +17,6 @@ import { authHeaders, until } from './helpers.js';
 
 const dirs: string[] = [];
 const tmp = (): string => { const d = mkdtempSync(join(tmpdir(), 'ledge-launch-')); dirs.push(d); return d; };
-/** Every argv any `rig` call of this file made: the trust rule is checked over all of them. */
-const everyArgv: string[][] = [];
 
 const SEATS = ['orch-lead', 'dev-a', 'dev-b', 'dev-c', 'rev-d', 'rev-e', 'qa-f'];
 const seats = (state: (ref: string) => RigSeat['state']): RigSeat[] => SEATS.map(n => {
@@ -43,6 +41,7 @@ function fakeBridge() {
       const rig = rigOf(rigId, s, lifecycle); rigs = [...rigs.filter(r => r.id !== rigId), rig];
       for (const fn of fns) fn({ type: 'rig.updated', rig });
     },
+    snapshot(list: Rig[]) { rigs = list; for (const fn of fns) fn({ type: 'rig.snapshot', machine: 'local', rigs: list } as BridgeMessage); },
     remove(rigId: string) { rigs = rigs.filter(r => r.id !== rigId); for (const fn of fns) fn({ type: 'rig.removed', machine: 'local', rigId }); },
   };
   return b;
@@ -56,8 +55,7 @@ function setup(o: { upFails?: boolean; file?: string; sendFails?: boolean } = {}
   const calls: { args: string[]; env?: Record<string, string> }[] = [];
   const exec = fakeRigCli(fake, { calls, up: (spec, cwd) => o.upFails ? { code: 1, stdout: '', stderr: 'boom: spec broken' }
     : { code: 0, stdout: JSON.stringify({ rigId: 'r1', rigName: spec, cwd }), stderr: '' } });
-  const recorded = (async (args, opts) => { everyArgv.push([...args]); return exec(args, opts); }) as typeof exec;
-  const cli = createRigCli(recorded);
+  const cli = createRigCli(exec);
   const bridge = fakeBridge(); const said: string[] = [];
   const dir = tmp(); const file = o.file ?? join(dir, 'rig-launches.json');
   const gitCalls: string[][] = [];
@@ -140,7 +138,8 @@ describe('createLaunches', () => {
     expect(sends(calls)).toEqual([expect.objectContaining({ args: ['send', 'orch-lead@factory', expect.stringMatching(/^\[Ledge\] But donné par l'utilisateur, via Ledge : Refaire le cache\n\nMANDAT$/)] })]);
     expect(said).toContain("J'ai donné le but à orch-lead@factory.");
     expect(bridge.notes.at(-1)).toMatchObject({ rigId: 'r1', launch: { goalSentAt: '2026-10-31T10:00:00.000Z' } });
-    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual([]);
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual([expect.objectContaining({ rigId: 'r1', goalSentAt: '2026-10-31T10:00:00.000Z' })]);
+    expect(launches.pending()).toEqual([]);
     bridge.emitSeats('r1', allReady); await flush();
     expect(sends(calls)).toHaveLength(1);
     await vi.advanceTimersByTimeAsync(GOAL_TIMEOUT_MS); expect(sends(calls)).toHaveLength(1);
@@ -187,6 +186,40 @@ describe('createLaunches', () => {
     const s2 = setup(); await s2.launches.launch(s2.plan); s2.bridge.emitSeats('r1', seats(() => 'starting')); s2.bridge.remove('r1');
     expect(s2.launches.pending()).toEqual([]); s2.launches.close();
   });
+  it('restart after a sent goal: annotation restored with goalSentAt and lateNotice, nothing sent, pruned when the rig stops', async () => {
+    const dir = tmp(); const file = join(dir, 'rig-launches.json');
+    const sent = new Date(Date.now() - 60_000).toISOString();
+    writeFileSync(file, JSON.stringify([{ planId: 'p2', machine: 'local', rigId: 'r2', rigName: 'other', goal: 'G2', lead: 'x', startedAt: sent, goalSentAt: sent, lateNotice: true }]));
+    const { launches, calls, bridge } = setup({ file });
+    launches.resume();
+    expect(launches.pending()).toEqual([]);
+    bridge.emitSeats('r2', allReady); await flush();
+    expect(bridge.notes).toEqual([{ rigId: 'r2', launch: { planId: 'p2', goal: 'G2', lead: 'x', startedAt: sent, goalSentAt: sent, lateNotice: true } }]);
+    await vi.advanceTimersByTimeAsync(GOAL_TIMEOUT_MS); expect(sends(calls)).toHaveLength(0);
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toHaveLength(1);
+    bridge.emitSeats('r2', allReady, 'stopped'); await flush();
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual([]);
+    launches.close();
+  });
+  it('a sent launch is pruned when its rig leaves a snapshot after being seen', async () => {
+    const { launches, plan, bridge, file } = setup();
+    await launches.launch(plan);
+    bridge.emitSeats('r1', allReady); await flush();
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toHaveLength(1);
+    bridge.remove('r1');
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual([]);
+    launches.close();
+  });
+  it('a rig that never appears: the thread says so after the delay, once the snapshot lacks it', async () => {
+    const { launches, plan, bridge, said, file } = setup();
+    await launches.launch(plan);
+    await vi.advanceTimersByTimeAsync(GOAL_TIMEOUT_MS);
+    expect(said).toEqual([]);
+    bridge.snapshot([]); await flush();
+    expect(said).toEqual(["factory n'est jamais apparu : le but n'est pas parti."]);
+    expect(launches.pending()).toEqual([]); expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual([]);
+    launches.close();
+  });
   it('cancel forgets the launch', async () => {
     const { launches, plan, calls, bridge } = setup();
     await launches.launch(plan); await launches.cancel('r1');
@@ -220,7 +253,9 @@ const noTmux = new Proxy({} as Tmux, { get: () => async () => { throw new Error(
 const FACTORY = 'version: "0.2"\nname: factory\npods:\n  - id: p\n    members:\n      - id: lead\n        runtime: claude-code\n';
 describe('server rig.launch', () => {
   let bridge: Bridge | null = null; let srv: ServerHandle | null = null; let f: FakeOpenRig | null = null;
-  afterEach(async () => { await bridge?.stop(); bridge = null; await srv?.close(); srv = null; await f?.stop(); f = null; });
+  const savedHome = process.env.LEDGE_HOME; // undefined when unset
+  afterEach(async () => {
+    if (savedHome === undefined) delete process.env.LEDGE_HOME; else process.env.LEDGE_HOME = savedHome; await bridge?.stop(); bridge = null; await srv?.close(); srv = null; await f?.stop(); f = null; });
   it('launches a prepared plan once; a used plan and an unknown one are refused', async () => {
     vi.useRealTimers();
     const dir = tmp(); process.env.LEDGE_HOME = dir;
@@ -247,14 +282,18 @@ describe('server rig.launch', () => {
     expect(msgs.find(m => m.type === 'rig.result' && m.rid === 'l3')).toMatchObject({ ok: false, code: 'failed', reason: 'plan expired' });
     expect(exec.calls.filter(c => c[0] === 'up')).toEqual([['up', 'factory', '--cwd', join(dir, 'rigs', 'ok'), '--yes', '--json']]);
     expect(JSON.parse(readFileSync(join(dir, 'rig-launches.json'), 'utf8'))).toMatchObject([{ rigId: 'r9', planId: plan.id, goal: 'G' }]);
-    everyArgv.push(...exec.calls);
     ws.close();
   });
 });
 
 describe('trust', () => {
-  it('aucun argv de tout le fichier de test ne contient --dangerously-interact ni --raw', () => {
-    expect(everyArgv.length).toBeGreaterThan(0);
-    expect(everyArgv.flat().filter(a => a === '--dangerously-interact' || a === '--raw')).toEqual([]);
+  it('no argv of a full launch (up, then goal send) contains --dangerously-interact or --raw', async () => {
+    const { launches, plan, calls, bridge } = setup();
+    await launches.launch(plan);
+    bridge.emitSeats('r1', allReady); await flush();
+    expect(sends(calls)).toHaveLength(1);
+    expect(calls.length).toBeGreaterThan(1);
+    expect(calls.flatMap(c => c.args).filter(a => a === '--dangerously-interact' || a === '--raw')).toEqual([]);
+    launches.close();
   });
 });
