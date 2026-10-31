@@ -71,7 +71,7 @@ export function Launch() {
   useEffect(() => {
     if (!launching) return;
     if ((d.lastLaunched?.seq ?? 0) > launching.seq) {
-      select(d.lastLaunched!.id); toast({ text: t.launch.launched(launching.name), tone: 'ok' }); setLaunching(null); go('overview'); return;
+      select(d.lastLaunched!.id); toast({ text: t.launch.launched(launching.name), tone: 'ok' }); setLaunching(null); go('home'); return;
     }
     const refused = d.errors.find(e => e.seq > launching.errorSeq && e.id === undefined);
     if (refused) { toast({ text: refused.message, tone: 'error' }); setLaunching(null); return; }
@@ -89,7 +89,7 @@ export function Launch() {
   useInput((input, key) => {
     // Too small, the form is not drawn: only esc goes.
     if (small && !key.escape) return;
-    if (key.escape) { go('overview'); return; }
+    if (key.escape) { go('home'); return; }
     if (key.ctrl && input === 's') { launch(); return; }
     if (key.ctrl && input === 'r') { setName(pickName([...d.sessions.map(s => s.name), shownName])); return; }
     if (key.tab || key.downArrow || (key.return && field !== 'name')) { setField(f => cycle(FIELDS, f, key.shift ? -1 : 1)); return; }

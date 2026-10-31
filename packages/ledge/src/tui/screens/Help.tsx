@@ -40,7 +40,7 @@ export function Help() {
   const { columns } = useScreenSize();
   const k = t.keys;
   const groups: Array<[string, Array<[string, string]>]> = [
-    [t.help.global, [['1…5', t.help.screens], ['/', k.ask], ['+', k.launch], [',', k.settings], ['?', k.help], ['esc', k.back], ['q', k.quit]]],
+    [t.help.global, [['1 2 3', k.screens], ['/', k.ask], ['+', k.launch], [',', k.settings], ['?', k.help], ['esc', k.back], ['q', k.quit]]],
     [t.help.overview, [['j k ↑ ↓', k.navigate], ['tab', k.next], ['↵', k.open], ['y n A', k.answer], ['1…9', k.answer], ['r', t.overview.denyWithNote], ['a', k.attach], ['i', k.interrupt]]],
     [t.help.session, [['y n A 1…9', k.answer], ['r ↵', k.write], ['j k PgUp PgDn', k.scroll], [t.keys.space, k.unfold], ['d', k.diffs], ['t', k.terminal], ['a', k.attach], ['m', k.model], ['i', k.interrupt]]],
     [t.help.ask, [['↵', k.send], ['tab', k.cycle], ['PgUp PgDn', k.scroll], ['j k G', k.scroll], ['ctrl+n', k.newChat], ['ctrl+c', k.stopAnswer]]],

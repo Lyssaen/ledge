@@ -11,10 +11,12 @@ export const fr = {
   time: {
     now: 'à l’instant', decimal: ',', s: (n: number) => `${n} s`, min: (n: number) => `${n} min`, h: (n: number) => `${n} h`, d: (n: number) => `${n} j`
   },
-  tabs: { overview: 'Vue d’ensemble', session: 'Session', ask: 'Demander à Ledge', launch: 'Nouvelle session', settings: 'Réglages' },
+  tabs: { overview: 'Accueil', session: 'Session', ask: 'Demander à Ledge', launch: 'Nouvelle session', settings: 'Réglages' },
   bar: {
-    sessions: (n: number) => `${n} ${plural(n, 'session', 'sessions')}`,
     machines: (n: number) => `${n} ${plural(n, 'machine', 'machines')}`,
+    rigs: (n: number) => `${n} ${plural(n, 'rig', 'rigs')}`,
+    agents: (n: number) => `${n} ${plural(n, 'agent', 'agents')}`,
+    solo: (n: number) => `${n} ${plural(n, 'session seule', 'sessions seules')}`,
     waiting: (n: number) => `${n} t’${plural(n, 'attend', 'attendent')}`,
     connecting: 'connexion au daemon…',
     unreachable: 'daemon injoignable, nouvel essai…',
@@ -32,8 +34,25 @@ export const fr = {
     word: 'mot', clear: 'effacer', resend: 'renvoyer', backToDraft: 'revenir au brouillon', keep: 'garder', wipe: 'effacer',
     line: 'ligne', page: 'page', end: 'fin', question: 'question', conversation: 'conversation', cycle: 'cartes · conversation',
     applyRow: 'appliquer la ligne', apply: 'appliquer', applyAll: 'tout appliquer', deny: 'refuser', ignore: 'ignorer', review: 'revoir',
-    openSession: (name: string) => `ouvrir ${name}`
+    openSession: (name: string) => `ouvrir ${name}`,
+    screens: 'Ledge · rig · session'
   },
+  home: {
+    ledge: 'Ledge', crumb: '1 Ledge · 2 Rig · 3 Session',
+    decision: (n: number) => `${n > 1 ? `${n} décisions t’attendent` : 'Une décision t’attend'}`,
+    grace: 'Ledge s’en occupe…', calm: 'Rien à trancher.',
+    projects: 'Projets · sessions seules', rigs: 'Rigs',
+    working: (w: number, n: number) => `${w}/${n} au travail`,
+    inProject: (name: string) => `dans ${name}`, offProject: 'hors projet', onMachine: (m: string) => `sur ${m}`,
+    available: (names: string, n: number) => `${names} · ${plural(n, 'disponible', 'disponibles')}`,
+    kernel: 'Noyau OpenRig',
+    kernelState: { idle: 'au repos', working: 'au travail', absent: 'absent', stopped: 'arrêté', starting: 'démarre', unsupported: 'non pris en charge', error: 'en erreur', unreachable: 'injoignable' } as Record<'idle' | 'working' | 'absent' | 'stopped' | 'starting' | 'unsupported' | 'error' | 'unreachable', string>,
+    noOpenRig: 'OpenRig n’est pas installé · + pour lancer un rig',
+    conversation: 'Ledge · Conversation', conversationHint: '↵ ou / pour écrire à Ledge.',
+    noSeat: 'Aucun siège.', seatAlone: 'Ce siège n’a pas de session Ledge : rien à afficher ici pour l’instant.'
+  },
+  /** A rig seat's state (« Attend Ledge »: an escalation of this seat is open). */
+  seat: { waitsLedge: 'Attend Ledge', working: 'Au travail', idle: 'Disponible', starting: 'Démarrage', stopped: 'Arrêté', crashed: 'Planté', unreachable: 'Injoignable' },
   overview: {
     yours: (n: number) => `À toi · ${n}`, projects: 'Projets', exchanges: 'Échanges', terminal: (name: string) => `Terminal · ${name}`, inColor: '· en couleurs',
     nobodyWaits: 'Personne ne t’attend.', noSession: 'Aucune session. + pour en lancer une.', noPreview: 'Pas d’aperçu.', noExchange: 'Aucun échange.',
@@ -59,7 +78,7 @@ export const fr = {
     replyTo: (name: string) => `Répondre à ${name}…`, noteFor: (name: string) => `Expliquer le refus à ${name}…`,
     replyTitle: (name: string) => `Répondre à ${name}`, noteTitle: (name: string) => `Refuser en expliquant à ${name}`, writeDraft: 'Écrire · brouillon',
     draftLines: (n: number) => `${n} ${plural(n, 'ligne', 'lignes')} · r pour reprendre`,
-    loading: 'Chargement du fil…', empty: 'Rien encore dans ce fil.', noSession: 'Choisissez une session dans la vue d’ensemble.',
+    loading: 'Chargement du fil…', empty: 'Rien encore dans ce fil.', noSession: 'Choisissez une session dans l’accueil.',
     model: (m: string) => `modèle : ${m}`, defaultModel: 'par défaut', notice: 'Ledge'
   },
   ask: {
@@ -104,7 +123,7 @@ export const fr = {
   },
   settings: { title: 'Réglages', language: 'Langue', theme: 'Thème', themes: { auto: 'Auto', dark: 'Sombre', light: 'Clair' }, themeAuto: (tone: 'dark' | 'light') => `Auto (fond ${tone === 'light' ? 'clair' : 'sombre'})`, context: 'Contexte max', contextHint: 'au-delà : passer le relais', contextUnknown: 'mettez à jour le daemon', contextSaved: (pct: number) => `Contexte max : ${pct} %`, saved: 'Réglage enregistré.', saveFailed: (m: string) => `Réglage appliqué, mais non enregistré : ${m}` },
   help: {
-    title: 'Aide', global: 'Partout', overview: 'Vue d’ensemble', session: 'Session', ask: 'Demander à Ledge', launch: 'Nouvelle session', settings: 'Réglages',
+    title: 'Aide', global: 'Partout', overview: 'Accueil', session: 'Session', ask: 'Demander à Ledge', launch: 'Nouvelle session', settings: 'Réglages',
     screens: 'changer d’écran', field: 'Saisie', wordBefore: 'effacer le mot avant',
     more: (above: number, below: number) => [above ? `↑ ${above} plus haut` : '', below ? `↓ ${below} plus bas` : ''].filter(Boolean).join(' · ')
   },

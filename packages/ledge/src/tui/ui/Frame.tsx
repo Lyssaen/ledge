@@ -6,6 +6,7 @@ import { cells } from '../model/cells.js';
 import { C } from '../theme.js';
 import { fitKeys, KeyBar } from './KeyBar.js';
 import { listed } from '../model/overview.js';
+import { waitingCount } from '../model/left.js';
 
 /** The smallest terminal the screens are drawn in; below, the frame says so (the screen keeps its state). */
 export const MIN = { columns: 60, rows: 16 } as const;
@@ -15,11 +16,15 @@ export const MIN = { columns: 60, rows: 16 } as const;
 export function Frame({ crumb, crumbShort, keys, kept, children }: {
   crumb: string; crumbShort?: string; keys: ReadonlyArray<readonly [string, string]>; kept?: boolean; children: ReactNode;
 }) {
-  const { d, machines, t, g, lastToast, editing } = useTui();
+  const { d, machines, t, g, lastToast, editing, left: home, rigs } = useTui();
   const { rows, columns } = useScreenSize();
   const live = listed(d.sessions);
   const pending = live.filter(isPending);
-  const waiting = pending.length;
+  // Who waits: what « À toi » lists for an answer (escalations pending, standalone sessions waiting).
+  const waiting = waitingCount(home);
+  const crew = rigs.filter(r => !r.kernel);
+  const counts = [t.bar.rigs(crew.length), t.bar.agents(crew.reduce((n, r) => n + r.seats.filter(s => s.state !== 'stopped').length, 0)),
+    t.bar.solo(home.filter(r => r.kind === 'session').length), t.bar.machines(Math.max(1, machines.length))].join(' · ');
   const status = d.status === 'open' ? null : d.status === 'connecting' ? t.bar.connecting : t.bar.unreachable;
 
   if (columns < MIN.columns || rows < MIN.rows) {
@@ -34,7 +39,7 @@ export function Frame({ crumb, crumbShort, keys, kept, children }: {
     );
   }
 
-  const left = cells(` ${g.logo} ledge  ${t.bar.sessions(live.length)} · ${t.bar.machines(Math.max(1, machines.length))}`)
+  const left = cells(` ${g.logo} ledge  ${counts}`)
     + (waiting > 0 ? cells(` · ${t.bar.waiting(waiting)}`) : 0) + (status ? cells(`  ${status}`) : 0);
   const room = columns - left - 2;
   const shown = cells(crumb) <= room ? crumb : crumbShort && cells(crumbShort) <= room ? crumbShort : '';
@@ -43,7 +48,7 @@ export function Frame({ crumb, crumbShort, keys, kept, children }: {
       <Box paddingX={1} justifyContent="space-between" height={1} backgroundColor={C.bar}>
         <Text wrap="truncate">
           <Text color={C.coral}>{g.logo} ledge</Text>
-          <Text color={C.dim}>  {t.bar.sessions(live.length)} · {t.bar.machines(Math.max(1, machines.length))}</Text>
+          <Text color={C.dim}>  {counts}</Text>
           {waiting > 0 ? <Text color={C.red}> · {t.bar.waiting(waiting)}</Text> : null}
           {status ? <Text color={C.yellow}>  {status}</Text> : null}
         </Text>

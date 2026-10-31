@@ -285,7 +285,7 @@ export function Ask() {
           <Text color={C.fg}>{t.ask.resetBody(d.chat.length, d.chat[0] ? clock(d.chat[0].askedAt) : '')}{draft.trim() ? ` ${t.ask.draftStays}` : ''}</Text>
           <Box marginTop={1} columnGap={2}><Button label={t.ask.keep} k="n · esc" primary /><Button label={t.ask.wipe} k="y" /></Box>
         </TitledBox>
-        : <><ChipsLine chips={chips.items} /><Field title={t.ask.question} value={draft} onChange={setDraft} onSubmit={ask} onEscape={() => { if (!draft) go('overview'); }} onBrowse={setBrowsing}
+        : <><ChipsLine chips={chips.items} /><Field title={t.ask.question} value={draft} onChange={setDraft} onSubmit={ask} onEscape={() => { if (!draft) go('home'); }} onBrowse={setBrowsing}
           history={history} active={focus === -1} placeholder={t.ask.placeholder} /></>}
     </Frame>
   );

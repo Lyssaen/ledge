@@ -12,10 +12,9 @@ const BACKSPACE = '\u007f';
 const T = (s: number) => new Date(Date.parse('2026-10-09T18:00:00.000Z') + s * 1000).toISOString();
 
 const pasted = (data = 'cGl4ZWxz'): ClipboardImage => ({ image: { mime: 'image/jpeg', data }, width: 1440, height: 900, bytes: 6 });
-/** Bix is idle and replyable: j j then ↵ opens it. */
+/** Bix is idle and replyable: chosen in the home, ↵ opens it. */
 const openBix = async (tui: Awaited<ReturnType<typeof startTui>>) => {
-  await tui.press('j'); await tui.press('j');
-  await until(() => tui.frame().includes('BIX · DOCUMENTER'));
+  await tui.pick('Bix');
   await tui.press('\r');
   await until(() => tui.frame().includes('Rien encore') || tui.frame().includes('Regarde'));
 };

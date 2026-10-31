@@ -8,10 +8,12 @@ export const en: Messages = {
   lang: { fr: 'Français', en: 'English' },
   state: { approval: 'Needs you', question: 'A question', starting: 'Starting', idle: 'Available', working: 'Working', done: 'Finished', error: 'Error', readonly: 'Read-only' },
   time: { now: 'just now', decimal: '.', s: n => `${n}s`, min: n => `${n} min`, h: n => `${n} h`, d: n => `${n} d` },
-  tabs: { overview: 'Overview', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings' },
+  tabs: { overview: 'Home', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings' },
   bar: {
-    sessions: n => `${n} ${plural(n, 'session', 'sessions')}`,
     machines: n => `${n} ${plural(n, 'machine', 'machines')}`,
+    rigs: n => `${n} ${plural(n, 'rig', 'rigs')}`,
+    agents: n => `${n} ${plural(n, 'agent', 'agents')}`,
+    solo: n => `${n} ${plural(n, 'standalone session', 'standalone sessions')}`,
     waiting: n => `${n} waiting for you`,
     connecting: 'connecting to the daemon…',
     unreachable: 'daemon unreachable, retrying…',
@@ -29,8 +31,24 @@ export const en: Messages = {
     word: 'word', clear: 'clear', resend: 'send again', backToDraft: 'back to the draft', keep: 'keep', wipe: 'clear',
     line: 'line', page: 'page', end: 'end', question: 'question', conversation: 'conversation', cycle: 'cards · conversation',
     applyRow: 'apply the line', apply: 'apply', applyAll: 'apply all', deny: 'deny', ignore: 'ignore', review: 'review',
-    openSession: name => `open ${name}`
+    openSession: name => `open ${name}`,
+    screens: 'Ledge · rig · session'
   },
+  home: {
+    ledge: 'Ledge', crumb: '1 Ledge · 2 Rig · 3 Session',
+    decision: n => (n > 1 ? `${n} decisions wait for you` : 'A decision waits for you'),
+    grace: 'Ledge is on it…', calm: 'Nothing to decide.',
+    projects: 'Projects · standalone sessions', rigs: 'Rigs',
+    working: (w, n) => `${w}/${n} working`,
+    inProject: name => `in ${name}`, offProject: 'outside any project', onMachine: m => `on ${m}`,
+    available: names => `${names} · available`,
+    kernel: 'OpenRig kernel',
+    kernelState: { idle: 'resting', working: 'working', absent: 'absent', stopped: 'stopped', starting: 'starting', unsupported: 'unsupported', error: 'in error', unreachable: 'unreachable' },
+    noOpenRig: 'OpenRig is not installed · + to launch a rig',
+    conversation: 'Ledge · Conversation', conversationHint: '↵ or / to write to Ledge.',
+    noSeat: 'No seat.', seatAlone: 'This seat has no Ledge session: nothing to show here yet.'
+  },
+  seat: { waitsLedge: 'Waits for Ledge', working: 'Working', idle: 'Available', starting: 'Starting', stopped: 'Stopped', crashed: 'Crashed', unreachable: 'Unreachable' },
   overview: {
     yours: n => `Yours · ${n}`, projects: 'Projects', exchanges: 'Messages', terminal: name => `Terminal · ${name}`, inColor: '· in color',
     nobodyWaits: 'Nobody is waiting for you.', noSession: 'No session. Press + to start one.', noPreview: 'No preview.', noExchange: 'No message yet.',
@@ -56,7 +74,7 @@ export const en: Messages = {
     replyTo: name => `Reply to ${name}…`, noteFor: name => `Tell ${name} why…`,
     replyTitle: name => `Reply to ${name}`, noteTitle: name => `Deny and tell ${name} why`, writeDraft: 'Write · draft',
     draftLines: n => `${n} ${plural(n, 'line', 'lines')} · r to pick it up`,
-    loading: 'Loading the thread…', empty: 'Nothing in this thread yet.', noSession: 'Pick a session in the overview.',
+    loading: 'Loading the thread…', empty: 'Nothing in this thread yet.', noSession: 'Pick a session on the home screen.',
     model: m => `model: ${m}`, defaultModel: 'default', notice: 'Ledge'
   },
   ask: {
@@ -103,7 +121,7 @@ export const en: Messages = {
     launching: 'Launching…', launched: name => `✓ ${name} is started`,
   },
   settings: { title: 'Settings', language: 'Language', theme: 'Theme', themes: { auto: 'Auto', dark: 'Dark', light: 'Light' }, themeAuto: tone => `Auto (${tone} background)`, context: 'Max context', contextHint: 'past it: hand over', contextUnknown: 'update the daemon', contextSaved: pct => `Max context: ${pct} %`, saved: 'Setting saved.', saveFailed: m => `Setting applied, but not saved: ${m}` },
-  help: { title: 'Help', global: 'Everywhere', overview: 'Overview', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings', screens: 'switch screen', field: 'Typing', wordBefore: 'delete the word before',
+  help: { title: 'Help', global: 'Everywhere', overview: 'Home', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings', screens: 'switch screen', field: 'Typing', wordBefore: 'delete the word before',
     more: (above, below) => [above ? `↑ ${above} above` : '', below ? `↓ ${below} below` : ''].filter(Boolean).join(' · ') },
   images: {
     capture: 'capture', size: (n: number) => formatBytes(n, 'en'), open: (key: string) => `${key} open in viewer`,

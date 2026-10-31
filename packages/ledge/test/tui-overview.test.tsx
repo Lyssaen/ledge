@@ -5,17 +5,18 @@ import { mockupSessions, startTui } from './tui-fixture.js';
 
 const sent = <T extends ClientMessage['type']>(received: ClientMessage[], type: T) => received.filter((m): m is Extract<ClientMessage, { type: T }> => m.type === type);
 
-describe('ledge tui: overview', () => {
+describe('ledge tui: the home on a session', () => {
   it('draws who waits, the projects by branch and the selected session’s request', async () => {
     const tui = await startTui();
     try {
+      // tab chooses the first one waiting: its request and its keys on the right.
+      await tui.press('\t');
+      await until(() => tui.frame().includes('OTTO · CÂBLER LA LISTE DES SESSIONS'));
       const f = tui.frame();
       expect(f).toContain('À TOI · 2');
       expect(f).toContain('2 t’attendent');
       expect(f).toMatch(/■ Ledge 3 sessions/);
       expect(f).toContain('⎇ release/LEDGE-42-v0.5.0');
-      // The first one waiting is selected at start, its request and its keys on the right.
-      expect(f).toContain('OTTO · CÂBLER LA LISTE DES SESSIONS');
       expect(f).toContain('Veut exécuter : npm test');
       expect(f).toMatch(/Autoriser y .*Refuser n .*Toujours A/);
     } finally { await tui.cleanup(); }
@@ -24,6 +25,7 @@ describe('ledge tui: overview', () => {
   it('y allows the selected request, with the request it saw', async () => {
     const tui = await startTui();
     try {
+      await tui.press('\t');
       await tui.press('y');
       await until(() => sent(tui.daemon.received, 'session.decide').length === 1);
       const otto = mockupSessions()[0]!;
@@ -37,7 +39,7 @@ describe('ledge tui: overview', () => {
   it('tab goes to the next one waiting, a digit answers its question', async () => {
     const tui = await startTui();
     try {
-      await tui.press('\t');
+      await tui.press('\t'); await tui.press('\t');
       await until(() => tui.frame().includes('Demande : Quel port pour le serveur de dev ?'));
       expect(tui.frame()).toMatch(/1 · 3000 1 .*2 · 5173 2 .*3 · 8080 3/);
       await tui.press('2');
@@ -46,15 +48,16 @@ describe('ledge tui: overview', () => {
     } finally { await tui.cleanup(); }
   });
 
-  it('j and k walk the tree; a digit on a session without question switches screens', async () => {
+  it('j and k walk the column; a digit on a session without question switches screens', async () => {
     const tui = await startTui();
     try {
-      await tui.press('j');
-      await until(() => tui.frame().includes('NOVA · RECONNEXION SSH DU FLEET'));
+      await tui.pick('Nova');
       await tui.press('k');
       await until(() => tui.frame().includes('OTTO · CÂBLER'));
-      await tui.press('4');
-      await until(() => tui.frame().includes('NOUVELLE SESSION'));
+      await tui.press('j');
+      await until(() => tui.frame().includes('NOVA · RECONNEXION SSH DU FLEET'));
+      await tui.press('3');
+      await until(() => tui.frame().includes('ÉCRIRE'));
     } finally { await tui.cleanup(); }
   });
 
@@ -62,6 +65,7 @@ describe('ledge tui: overview', () => {
     const runs: string[][] = [];
     const tui = await startTui({ run: async argv => { runs.push(argv); return 0; } });
     try {
+      await tui.press('\t');
       await tui.press('a');
       await until(() => runs.length === 1);
       expect(runs[0]).toEqual(['node', '/opt/ledge/cli.js', 'attach', 'otto']);
@@ -75,6 +79,7 @@ describe('ledge tui: overview', () => {
     try {
       await until(() => titles() > 0);
       const before = titles();
+      await tui.press('\t');
       await tui.press('a');
       await until(() => runs.length === 1);
       await until(() => titles() === before + 1);
@@ -85,8 +90,7 @@ describe('ledge tui: overview', () => {
     const runs: string[][] = [];
     const tui = await startTui({ sessions: [mockupSessions()[0]!, { ...mockupSessions()[1]!, id: 'omp1', name: 'Milo', tool: 'omp', backend: 'omp-rpc', tmuxSession: null }], run: async argv => { runs.push(argv); return 0; } });
     try {
-      await tui.press('j');
-      await until(() => tui.frame().includes('MILO'));
+      await tui.pick('Milo');
       await tui.press('a');
       await until(() => tui.frame().includes('pas de terminal à attacher'));
       expect(runs).toEqual([]);
@@ -104,7 +108,7 @@ describe('ledge tui: overview', () => {
   it('the terminal pane asks for colors and draws them', async () => {
     const tui = await startTui({ colorLines: ['\x1b[32m● Bash\x1b[39m(pnpm dev)\x1b]0;x\x07', '\x1b[31mrouge'] });
     try {
-      await tui.press('\t'); // luna
+      await tui.press('\t'); await tui.press('\t'); // luna
       await until(() => tui.daemon.received.some(m => m.type === 'session.preview.subscribe' && m.id === 'luna' && m.color === true));
       await until(() => tui.frame().includes('● Bash'));
       expect(tui.frame()).toContain('TERMINAL · LEDGE-LUNA · EN COULEURS');

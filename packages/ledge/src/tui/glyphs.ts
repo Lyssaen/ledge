@@ -9,6 +9,8 @@ const UNICODE = {
   cross: '┼',
   /** An action card's row (#94): proposed is `idle`, applied `ok`, failed or refused `fail`. */
   running: '◐', held: '·', stale: '!',
+  /** A rig, OpenRig's kernel, an OMP session. */
+  rig: '▣', kernel: '◈', omp: 'π',
   /** Links are clickable (OSC 8); without, their address follows them. */
   links: true as boolean
 };
@@ -20,6 +22,7 @@ const ASCII: Glyphs = {
   bullet: '-', subBullet: 'o', quote: '|', rule: '-', codeTop: '+', codeEnd: '+', link: '', caret: '_',
   cross: '+',
   running: '~', held: '.', stale: '!',
+  rig: '[R]', kernel: '<>', omp: 'pi',
   links: false
 };
 

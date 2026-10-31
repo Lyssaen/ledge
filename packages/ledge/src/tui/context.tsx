@@ -1,16 +1,24 @@
 import { createContext, useContext, useEffect, useRef } from 'react';
 import { useWindowSize, type Key } from 'ink';
 import type { DaemonClient, DaemonState, Fleet, MachineState } from '@ledge/fleet';
-import type { Projects, Session } from '@ledge/protocol';
+import type { Escalation, OpenRigStatus, Projects, Rig, Session } from '@ledge/protocol';
 import type { Actions, Toast } from './actions.js';
 import type { Asked } from './model/chat.js';
+import type { LeftRow } from './model/left.js';
 import type { ClipboardImage } from './clipboard.js';
 import type { Glyphs } from './glyphs.js';
 import type { Lang, Messages } from './i18n/lang.js';
 import type { ThemeChoice, Tone } from './theme.js';
 
-export type Screen = 'overview' | 'session' | 'ask' | 'launch' | 'settings' | 'help';
-export const SCREENS: readonly Screen[] = ['overview', 'session', 'ask', 'launch', 'settings'];
+/** The screens; `ask` (Ask Ledge, opened by `/` and by ↵ on Ledge's row) is not one of them: it stays until Ledge's
+ *  conversation is drawn in the home (lot 8 task 6) and is reached by no digit. */
+export type Screen = 'home' | 'session' | 'launch' | 'settings' | 'help' | 'ask';
+/** The screens the digits name: `1` Ledge and `2` a rig are the home, focused on one or the other; `3` the session. */
+export const SCREENS: readonly Screen[] = ['home', 'home', 'session'];
+
+/** What the home shows on its right, chosen in its left column. */
+export type Focus = { kind: 'ledge' } | { kind: 'yours'; id: string } | { kind: 'session'; id: string }
+  | { kind: 'rig'; machine: string; rigId: string } | { kind: 'seat'; machine: string; rigId: string; ref: string } | { kind: 'kernel'; machine: string };
 
 /** What the fields keep while the TUI runs, a screen left or not: each one's draft and what it sent, by field (`ask`, or a
  *  session's id). */
@@ -26,8 +34,12 @@ export interface Tui {
    *  (undefined: not asked, the theme was forced). */
   theme: ThemeChoice; setTheme(theme: ThemeChoice): void; tone: Tone; background: Tone | undefined;
   screen: Screen; go(screen: Screen): void;
-  /** The session the overview and the session screen show. */
+  /** What the home's left column has chosen; `selected` is its session (a session, a waiting one, a paired seat), and
+   *  `select(id)` chooses a session (null: Ledge). */
+  focus: Focus; setFocus(f: Focus): void;
   selected: Session | null; select(id: string | null): void;
+  /** The home's left column, and what it is drawn from. */
+  left: LeftRow[]; rigs: Rig[]; escalations: Escalation[]; openrig: OpenRigStatus[];
   toast(t: Toast): void; lastToast: Toast | null; actions: Actions;
   /** A field has the keyboard: the global keys are off. */
   editing: boolean; setEditing(on: boolean): void;

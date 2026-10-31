@@ -19,8 +19,7 @@ describe('ledge tui: session', () => {
       { kind: 'reply', id: 'r1', at: T(2), turn: 1, text: 'Section Protocol mise à jour.' }
     ]);
     try {
-      await tui.press('j'); await tui.press('j');
-      await until(() => tui.frame().includes('BIX · DOCUMENTER'));
+      await tui.pick('Bix');
       await tui.press('\r');
       await until(() => tui.frame().includes('Section Protocol mise à jour.'));
       expect(sent(tui.daemon.received, 'session.thread')).toEqual([{ type: 'session.thread', id: 'bix' }]);
@@ -38,6 +37,7 @@ describe('ledge tui: session', () => {
   it('r on a permission explains a refusal to the agent', async () => {
     const tui = await startTui();
     try {
+      await tui.press('\t'); // the first one waiting: Otto
       await tui.press('\r');
       await until(() => tui.frame().includes('Otto veut exécuter'));
       await tui.press('r');
@@ -51,8 +51,7 @@ describe('ledge tui: session', () => {
   it('a reply longer than the field shows its end, where the cursor is', async () => {
     const tui = await startTui();
     try {
-      await tui.press('j'); await tui.press('j');
-      await until(() => tui.frame().includes('BIX · DOCUMENTER'));
+      await tui.pick('Bix');
       await tui.press('\r');
       await tui.press('r');
       await tui.press(`${'d'.repeat(150)}FIN`);
@@ -63,6 +62,7 @@ describe('ledge tui: session', () => {
   it('m changes the model of a running session', async () => {
     const tui = await startTui();
     try {
+      await tui.press('\t'); // the first one waiting: Otto
       await tui.press('\r');
       await until(() => tui.frame().includes('Otto veut exécuter'));
       await tui.press('m');
@@ -83,6 +83,7 @@ describe('ledge tui: Windows Terminal', () => {
   it('leaves the last column empty: the boxes close one column early', async () => {
     const tui = await startTui({ env: { WT_SESSION: 'x' } });
     try {
+      await tui.press('\t'); // the first one waiting: Otto
       await tui.resize(100, 30);
       const edges = () => tui.frame().split('\n').filter(l => /^[╭│╰]/.test(l)).map(l => [cells(l), l.at(-1)]);
       await until(() => edges().every(([w, c]) => w === 99 && /[╮│╯]/.test(c as string)));
@@ -106,8 +107,7 @@ describe('ledge tui: the session thread (#95 lot A)', () => {
     ...Array.from({ length: n }, (_, i) => ({ kind: 'tool' as const, id: `t${i}`, at: T(1 + i), turn: 1, tool: 'Read', label: `src/fichier-${i}.ts`, status: 'success' as const, durationMs: 100, files: [] }))
   ];
   const openBix = async (tui: Awaited<ReturnType<typeof startTui>>) => {
-    await tui.press('j'); await tui.press('j');
-    await until(() => tui.frame().includes('BIX · DOCUMENTER'));
+    await tui.pick('Bix');
     await tui.press('\r');
     await until(() => tui.frame().includes('fichier-'));
   };
@@ -134,8 +134,7 @@ describe('ledge tui: the session thread (#95 lot A)', () => {
     tui.daemon.thread('bix', [{ kind: 'prompt', id: 'p1', at: T(0), turn: 1, text: 'Relis tout' },
       ...Array.from({ length: 30 }, (_, i) => ({ kind: 'message' as const, id: `m${i}`, at: T(1 + i), turn: 1, text: `Message ${i} : ${'des mots qui se replient selon la largeur '.repeat(2)}fin` }))]);
     try {
-      await tui.press('j'); await tui.press('j');
-      await until(() => tui.frame().includes('BIX · DOCUMENTER'));
+      await tui.pick('Bix');
       await tui.press('\r');
       await until(() => tui.frame().includes('Message 29'));
       for (let i = 0; i < 12; i++) await tui.press('k');
@@ -151,6 +150,7 @@ describe('ledge tui: the session thread (#95 lot A)', () => {
   it('below 60×16 says the window is too small, who waits and that the draft is kept; the draft is still there after', async () => {
     const tui = await startTui();
     try {
+      await tui.press('\t'); // the first one waiting: Otto
       await tui.press('\r');
       await until(() => tui.frame().includes('Otto veut exécuter'));
       await tui.press('r'); await tui.press('Pas ce test');
@@ -177,6 +177,7 @@ describe('ledge tui: the session thread (#95 lot A)', () => {
     const runs: string[][] = [];
     const tui = await startTui({ run: async argv => { runs.push(argv); return 0; } });
     try {
+      await tui.press('\t'); // the first one waiting: Otto
       await tui.press('\r');
       await until(() => tui.frame().includes('Otto veut exécuter'));
       await tui.resize(52, 14);
@@ -196,6 +197,7 @@ describe('ledge tui: the session thread (#95 lot A)', () => {
     const otto = mockupSessions()[0]!;
     const tui = await startTui({ sessions: [{ ...otto, pending: { ...otto.pending!, text: long } }, ...mockupSessions().slice(1)] });
     try {
+      await tui.press('\t'); // the first one waiting: Otto
       await tui.resize(60, 16);
       await tui.press('\r');
       await until(() => tui.frame().includes('Otto veut exécuter (Bash) :'));
@@ -223,6 +225,7 @@ describe('ledge tui: the session thread (#95 lot A)', () => {
     const otto = mockupSessions()[0]!;
     const tui = await startTui({ sessions: [{ ...otto, pending: { ...otto.pending!, text: long } }, ...mockupSessions().slice(1)] });
     try {
+      await tui.press('\t'); // the first one waiting: Otto
       await tui.resize(64, 30);
       await tui.press('\r');
       await until(() => tui.frame().includes('Otto veut exécuter (Bash) :'));
@@ -530,8 +533,7 @@ describe('ledge tui: the field (#95 lot B)', () => {
   /** Bix's session open, its field open. */
   async function replying() {
     const tui = await startTui();
-    await tui.press('j'); await tui.press('j');
-    await until(() => tui.frame().includes('BIX · DOCUMENTER'));
+    await tui.pick('Bix');
     await tui.press('\r');
     await tui.press('r');
     await until(() => tui.frame().includes('RÉPONDRE À BIX'));
@@ -657,6 +659,7 @@ describe('ledge tui: the field (#95 lot B)', () => {
   it('r on a permission: « Refuser en expliquant à Otto »', async () => {
     const tui = await startTui();
     try {
+      await tui.press('\t'); // the first one waiting: Otto
       await tui.press('\r');
       await until(() => tui.frame().includes('Otto veut exécuter'));
       await tui.press('r');
@@ -772,6 +775,7 @@ describe('ledge tui: the field (#95 lot B)', () => {
   it('a note past 4,000 characters is not sent and stays in the field, with why', async () => {
     const tui = await startTui();
     try {
+      await tui.press('\t'); // the first one waiting: Otto
       await tui.press('\r');
       await until(() => tui.frame().includes('Otto veut exécuter'));
       await tui.press('r'); await tui.press(`${'n'.repeat(4000)}FIN`); await tui.press('\r');
@@ -800,6 +804,7 @@ describe('ledge tui: the field (#95 lot B)', () => {
   it('a note refused at once says why as a reply would: offline first, « no note » only when the tool takes none', async () => {
     const tui = await startTui();
     try {
+      await tui.press('\t'); // the first one waiting: Otto
       await tui.press('\r');
       await until(() => tui.frame().includes('Otto veut exécuter'));
       await tui.press('r'); await tui.press('non');
@@ -820,6 +825,7 @@ describe('ledge tui: the field (#95 lot B)', () => {
   ])('a note refused at once: %s', async (_, change, why) => {
     const tui = await startTui();
     try {
+      await tui.press('\t'); // the first one waiting: Otto
       await tui.press('\r');
       await until(() => tui.frame().includes('Otto veut exécuter'));
       await tui.press('r'); await tui.press('non');
@@ -834,6 +840,7 @@ describe('ledge tui: the field (#95 lot B)', () => {
   it('a note refused at once: a send under way', async () => {
     const tui = await startTui();
     try {
+      await tui.press('\t'); // the first one waiting: Otto
       await tui.press('\r');
       await until(() => tui.frame().includes('Otto veut exécuter'));
       await tui.press('r'); await tui.press('non'); await tui.press('\r');
@@ -1011,6 +1018,7 @@ describe('ledge tui: lot A, second review', () => {
   it('below 60×16, writing, esc leaves the field and keeps the draft', async () => {
     const tui = await startTui();
     try {
+      await tui.press('\t'); // the first one waiting: Otto
       await tui.press('\r');
       await until(() => tui.frame().includes('Otto veut exécuter'));
       await tui.press('r'); await tui.press('Pas ce test');
@@ -1031,6 +1039,7 @@ describe('ledge tui: lot A, second review', () => {
     const text = `Quel port ${'longuement '.repeat(60)}fin ?`;
     const tui = await startTui({ sessions: [{ ...otto!, state: 'waiting_input', pending: { kind: 'question', text, options: ['3000', '5173'], source: 'hook' } }, ...rest] });
     try {
+      await tui.press('\t'); // the first one waiting: Otto
       await tui.resize(80, 30);
       await tui.press('\r');
       await until(() => tui.frame().includes('Quel port'));
@@ -1047,8 +1056,7 @@ describe('ledge tui: lot A, second review', () => {
     tui.daemon.thread('bix', [{ kind: 'prompt', id: 'p1', at: T(0), turn: 1, text: 'Relis tout' },
       ...Array.from({ length: 40 }, (_, i) => ({ kind: 'tool' as const, id: `t${i}`, at: T(1 + i), turn: 1, tool: 'Read', label: `src/fichier-${i}.ts`, status: 'success' as const, durationMs: 100, files: [] }))]);
     try {
-      await tui.press('j'); await tui.press('j');
-      await until(() => tui.frame().includes('BIX · DOCUMENTER'));
+      await tui.pick('Bix');
       await tui.press('\r');
       await until(() => tui.frame().includes('fichier-'));
       for (let i = 0; i < 4; i++) await tui.press('\u001b[5~');
@@ -1211,6 +1219,7 @@ describe('ledge tui: settings', () => {
   it('switches to English at once and saves it', async () => {
     const tui = await startTui();
     try {
+      await tui.press('\t'); // the first one waiting: Otto
       await tui.press(',');
       await until(() => tui.frame().includes('RÉGLAGES'));
       await tui.press('\u001b[C'); // →
@@ -1276,7 +1285,7 @@ describe('ledge tui: a session near its context limit (context handover spec §3
     tui.daemon.onMessage(m => { if (m.type === 'session.handover') tui.daemon.push({ type: 'session.handover.result', rid: m.rid, ok: true }); });
     try {
       await until(() => tui.frame().includes('◔ Nova · ctx 85 %'));
-      await tui.press('j');
+      await tui.pick('Nova');
       await until(() => tui.frame().includes('ctx 85 %'));
       await tui.press('H');
       await until(() => sent(tui.daemon.received, 'session.handover').length === 1);
