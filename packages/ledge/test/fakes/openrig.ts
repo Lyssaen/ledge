@@ -26,6 +26,10 @@ export interface FakeOpenRig {
   requests: { method: string; path: string; search?: string; lastEventId?: string; body?: unknown; headers?: Record<string, string> }[];
   /** The next n `/api/events` requests are accepted but never answered (no headers), until stop(). */
   hangEvents: number;
+  /** A human row (to `ledge@external` unless given): added with `queue.created`, or replaced with `queue.updated` when its id is known. */
+  pushEscalation(row: Partial<FakeQueueRow> & { qitemId: string }): number;
+  /** A seat-to-seat queue row: `queue.created` from `from` to `to` (no row kept). */
+  pushExchange(x: { qitemId: string; from: string; to: string; summary?: string }): number;
 }
 
 export async function createFakeOpenRig(opts: { port?: number; version?: string | null } = {}): Promise<FakeOpenRig> {
@@ -46,6 +50,15 @@ export async function createFakeOpenRig(opts: { port?: number; version?: string 
       await new Promise<void>(r => { s.close(() => r()); s.closeAllConnections(); });
     },
     async restart() { await f.stop(); await listen(); },
+    pushEscalation(o) {
+      const row: FakeQueueRow = { sourceSession: 'dev-build@starter', destinationSession: 'ledge@external', state: 'pending', summary: `question ${o.qitemId}`, createdAt: '2026-10-30 10:00:00', ...o };
+      const i = f.queue.findIndex(r => r.qitemId === row.qitemId);
+      if (i >= 0) f.queue[i] = row; else f.queue.push(row);
+      return f.emit({ type: i >= 0 ? 'queue.updated' : 'queue.created', qitemId: row.qitemId, sourceSession: row.sourceSession, destinationSession: row.destinationSession });
+    },
+    pushExchange(x) {
+      return f.emit({ type: 'queue.created', qitemId: x.qitemId, sourceSession: x.from, destinationSession: x.to, summary: x.summary ?? `do ${x.qitemId}` });
+    },
   };
   const write = (res: ServerResponse, e: { seq: number }) => { if (!res.destroyed) res.write(`data: ${JSON.stringify(e)}\nid: ${e.seq}\n\n`); };
   const json = (res: ServerResponse, body: unknown, code = 200) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
@@ -123,9 +136,10 @@ export async function createFakeOpenRig(opts: { port?: number; version?: string 
 /**
  * Simulates the `rig` binary. `calls` records every argv.
  * `gateway human list --json` prints an array of objects with `id`: `[{ "id": "ledge" }]` (Task 6 parses it).
- * `queue create … --json` appends a pending row to `rig.queue` (body read from `--body-file`) and prints it with its `qitemId`.
+ * `queue create … --json` appends a pending row to `rig.queue` (body read from `--body-file`) and prints it with its `qitemId`;
+ * with `hold`, it waits for that promise first (the call is recorded at once).
  */
-export function fakeRigCli(rig: FakeOpenRig | null, opts: { startFails?: boolean; version?: string } = {}): RigExec & { calls: string[][] } {
+export function fakeRigCli(rig: FakeOpenRig | null, opts: { startFails?: boolean; version?: string; hold?: Promise<unknown> } = {}): RigExec & { calls: string[][] } {
   const calls: string[][] = [];
   const ok = (stdout = ''): { code: number; stdout: string; stderr: string } => ({ code: 0, stdout, stderr: '' });
   const fail = (code: number, stderr: string) => ({ code, stdout: '', stderr });
@@ -146,6 +160,7 @@ export function fakeRigCli(rig: FakeOpenRig | null, opts: { startFails?: boolean
       rig.humans.splice(0, rig.humans.length, id); return ok(`added ${id}\n`);
     }
     if (args[0] === 'queue' && args[1] === 'create') {
+      if (opts.hold) await opts.hold;
       const flag = (name: string) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined; };
       const source = flag('--source'), destination = flag('--destination');
       if (!source || !destination) return fail(2, 'queue create: --source and --destination are required');

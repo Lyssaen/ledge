@@ -7,10 +7,11 @@ interface Ctx { machine: string; rigOf(ref: string): string | undefined }
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v ? v : undefined);
 /** Human rows are escalations, not exchanges. */
 const isHuman = (to: string | undefined, tier?: string) => to === HUMAN_ADDRESS || (!!to && OPERATOR_HUMAN_SESSIONS.includes(to)) || tier === HUMAN_GATE_TIER;
+/** Ledge's own rows (its reply rows, its `rig send`) are kind `ledge`: the thread already shows them as Ledge's words. */
 const build = (id: string, kind: Exchange['kind'], from: string | undefined, to: string | undefined, text: string, at: string, ctx: Ctx): Exchange | null => {
   if (!from || !to) return null;
   const rigId = ctx.rigOf(from) ?? ctx.rigOf(to);
-  return rigId ? { id, machine: ctx.machine, rigId, from, to, kind, text, at } : null;
+  return rigId ? { id, machine: ctx.machine, rigId, from, to, kind: from === HUMAN_ADDRESS ? 'ledge' : kind, text, at } : null;
 };
 
 /** Seat-to-seat queue events as exchanges; human rows and other events give null. */

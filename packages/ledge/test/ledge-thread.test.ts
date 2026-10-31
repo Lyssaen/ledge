@@ -81,6 +81,17 @@ describe('ledge thread store', () => {
     expect((g as { exchangeIds: string[] }).exchangeIds).toEqual(['e1']);
   });
 
+  it('a replayed exchange id makes no second group, even after the group closed or a restart', async () => {
+    const t = open();
+    t.exchange(ex('e1', '16:36')); t.append({ kind: 'ledge', text: 'hm' });
+    const g = t.exchange(ex('e1', '16:37'));
+    expect(t.page().items.map(i => i.kind)).toEqual(['exchanges', 'ledge']);
+    expect(g).toMatchObject({ kind: 'exchanges', exchangeIds: ['e1'] });
+    await t.flush();
+    const r = open(); r.exchange(ex('e1', '16:38'));
+    expect(r.page().items.map(i => i.kind)).toEqual(['exchanges', 'ledge']);
+  });
+
   it('a group keeps growing after a restart, until another kind comes in', async () => {
     const t = open();
     t.exchange(ex('e1', '16:36')); await t.flush();

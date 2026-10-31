@@ -14,7 +14,8 @@ export interface LedgeThread {
   get(id: string): LedgeThreadItem | undefined;
   /** Items oldest to newest; `before` is the id of the oldest one when older items remain. */
   page(before?: string, size?: number): { items: LedgeThreadItem[]; before?: string };
-  /** The group created or grown; null for Ledge's own messages (the user / decided item already shows them). */
+  /** The group created or grown (or the one already holding this exchange id); null for Ledge's own messages (the user /
+   *  decided item already shows them). */
   exchange(x: Exchange): LedgeThreadItem | null;
   hasEscalation(escalationId: string): boolean;
   onItem(fn: (item: LedgeThreadItem) => void): () => void;
@@ -31,6 +32,7 @@ export function createLedgeThread(o: { path: string; now?: () => string; uuid?: 
   const items = new Map<string, LedgeThreadItem>();
   const escalations = new Set<string>();
   const openGroups = new Map<string, string>(); // machine/rigId -> id of the group still open
+  const exchangeGroup = new Map<string, string>(); // exchange id -> id of the group holding it (a replayed exchange is no news)
   const listeners = new Set<(item: LedgeThreadItem) => void>();
 
   const track = (item: LedgeThreadItem, fresh: boolean): void => {
@@ -39,7 +41,10 @@ export function createLedgeThread(o: { path: string; now?: () => string; uuid?: 
       if (item.kind !== 'exchanges') openGroups.clear(); // a user/ledge/escalation/decided/card item closes every open group
     }
     items.set(item.id, item);
-    if (item.kind === 'exchanges') openGroups.set(groupKey(item.machine, item.rigId), item.id);
+    if (item.kind === 'exchanges') {
+      openGroups.set(groupKey(item.machine, item.rigId), item.id);
+      for (const x of item.exchangeIds) exchangeGroup.set(x, item.id);
+    }
     if (item.kind === 'escalation') escalations.add(item.escalationId);
   };
 
@@ -92,9 +97,9 @@ export function createLedgeThread(o: { path: string; now?: () => string; uuid?: 
     },
     exchange(x) {
       if (x.kind === 'ledge') return null;
+      const known = exchangeGroup.get(x.id); if (known !== undefined) return items.get(known) ?? null;
       const open = items.get(openGroups.get(groupKey(x.machine, x.rigId)) ?? '') as Group | undefined;
       if (open) {
-        if (open.exchangeIds.includes(x.id)) return open;
         if (Date.parse(x.at) - Date.parse(open.to) <= groupMs) {
           return store({ ...open, to: x.at > open.to ? x.at : open.to, exchangeIds: [...open.exchangeIds, x.id] });
         }
