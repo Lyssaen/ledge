@@ -7,7 +7,9 @@ const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
 /** Keeps the colours (`ESC [ … m`) and removes every other escape: a CSI that is not SGR, an OSC, a lone ESC. */
 export function sgrOnly(line: string): string {
-  return line.replace(ESC, (all, params: string | undefined, final: string | undefined) => (final === 'm' && /^[0-9;:]*$/.test(params ?? '') ? all : ''));
+  const cleaned = line.replace(ESC, (all, params: string | undefined, final: string | undefined) => (final === 'm' && /^[0-9;:]*$/.test(params ?? '') ? all : ''));
+  // Captures may also contain bare C0/C1 controls (including CR, BEL, and the 8-bit CSI/OSC forms). Keep only complete SGR.
+  return cleaned.replace(/(\x1b\[[0-9;:]*m)|[\x00-\x1f\x7f-\x9f]/g, (_all, sgr: string | undefined) => sgr ?? '');
 }
 
 /** `line` (SGR only, see `sgrOnly`) cut to `width` visible cells, never inside a sequence; it ends with a reset so the colours

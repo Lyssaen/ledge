@@ -1389,6 +1389,21 @@ describe('ledge tui: a rig seat\'s session screen (lot 8 task 11)', () => {
     } finally { await tui.cleanup(); }
   });
 
+  it('keeps the seat reply when its session goes offline while writing', async () => {
+    const { mockupSeatSession } = await import('./tui-fixture.js');
+    const tui = await startTui({ openrig: {} });
+    try {
+      await openBuild(tui);
+      await tui.press('\r');
+      await tui.press('keep this');
+      tui.daemon.upsert({ ...mockupSeatSession(), offline: true });
+      await until(() => daemonStore.getState().sessions.find(x => x.id === 'local:build')?.offline === true);
+      await tui.press('\r');
+      expect(sent(tui.daemon.received, 'ledge.say')).toEqual([]);
+      expect(tui.frame()).toContain('keep this');
+    } finally { await tui.cleanup(); }
+  });
+
   it('← goes back to the rig room', async () => {
     const tui = await startTui({ openrig: {} });
     try {

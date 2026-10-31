@@ -96,6 +96,8 @@ function SessionView({ s }: { s: Session }) {
     const back = (x: string) => { if (!kept.drafts.get(s.id)) setDraft(x); if (taken.length) chips.putBack(taken); };
     const how = taken.length ? { attachments: taken.flatMap(c => (c.id ? [c.id] : [])) } : undefined;
     if (seat && mode === 'reply') {
+      // The connection may have dropped while the user was typing: retain the draft until Ledge can accept it.
+      if (s.offline || !machines.find(m => m.id === 'local')?.ready) { toast({ text: t.toast.offline(s.name), tone: 'info' }); return false; }
       sayToLedge(client, `${seat.long} ${text.trim()}`);
       kept.sent.set(s.id, [...(kept.sent.get(s.id) ?? []), text]);
       if (!fromHistory) setDraft('');

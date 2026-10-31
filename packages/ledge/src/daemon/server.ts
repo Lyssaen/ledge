@@ -429,6 +429,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const colorWanted = (id: string) => { for (const v of colorFollow.values()) if (v === id) return true; return false; };
   const colorCached = (id: string) => colorLast.has(id);
   const sendColorPreview = (id: string, lines: string[]) => {
+    // A capture can finish after its final subscriber leaves. Do not retain that stale frame.
+    if (!colorWanted(id)) return;
     colorLast.set(id, lines);
     for (const [ws, followed] of colorFollow) if (followed === id) send(ws, { type: 'session.preview.color', id, lines });
   };

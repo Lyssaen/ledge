@@ -6,6 +6,9 @@ describe('ansi', () => {
     expect(sgrOnly('\x1b[32m● ok\x1b[0m\x1b]0;title\x07\x1b[2K')).toBe('\x1b[32m● ok\x1b[0m');
     expect(sgrOnly('a\x1bb\x1b[?25lc\x1b]8;;http://x\x1b\\d')).toBe('acd');
   });
+  it('removes bare control characters while retaining SGR', () => {
+    expect(sgrOnly('before\r\x07\x9b2J\x9d0;title\x9c\x1b[31mred\x1b[0m')).toBe('before2J0;title\x1b[31mred\x1b[0m');
+  });
   it('cutAnsi counts visible cells and never cuts inside a sequence', () => {
     expect(cutAnsi('\x1b[38;5;77m● Bash\x1b[39m(pnpm dev)', 6)).toBe('\x1b[38;5;77m● Bash\x1b[39m\x1b[0m');
     expect(cutAnsi('\x1b[38;5;77mabcdef', 3)).toBe('\x1b[38;5;77mabc\x1b[0m');

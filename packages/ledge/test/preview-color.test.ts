@@ -77,6 +77,20 @@ describe('color previews', () => {
     await poller.tick();
     expect(fake.colorCalls('s1')).toBe(before);
   });
+  it('discards a capture that completes after its last subscriber leaves', async () => {
+    const a = await connect({ port: srv.port }); await a.next('snapshot');
+    a.send({ type: 'session.preview.subscribe', id: 's1', color: true });
+    await until(() => srv.colorWanted('s1'));
+    await a.close(); await until(() => !srv.colorWanted('s1'));
+    srv.sendColorPreview('s1', ['stale']);
+    expect(srv.colorCached('s1')).toBe(false);
+    const b = await connect({ port: srv.port }); await b.next('snapshot');
+    b.send({ type: 'session.preview.subscribe', id: 's1', color: true });
+    await until(() => srv.colorWanted('s1'));
+    await poller.tick();
+    expect((await b.next('session.preview.color')).lines).toEqual([GREEN]);
+    await b.close();
+  });
   it('subscribing to another session moves the color capture', async () => {
     const a = await connect({ port: srv.port }); await a.next('snapshot');
     a.send({ type: 'session.preview.subscribe', id: 's1', color: true });
