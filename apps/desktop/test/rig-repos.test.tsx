@@ -8,7 +8,7 @@ import { LangProvider } from '../src/i18n/lang';
 import { RigsTab } from '../src/rigs/RigsTab';
 import { useRigControlsHost } from '../src/rigs/StopRig';
 import { RigControlsContext } from '../src/rigs/useRigActions';
-import { proposeProject } from '../src/rigs/proposal';
+import { isUnfiled, proposeProject } from '../src/rigs/proposal';
 import { initialNav, navReducer } from '../src/nav/state';
 
 const PROJECTS: Projects = { projects: [
@@ -129,5 +129,13 @@ describe('Dépôts trouvés', () => {
   it('un rig rangé ou dans un projet n’a pas de bloc de dépôts', () => {
     renderTab([rigWith(THREE, { projectId: 'ledge' })]);
     expect(within(card()).queryByText(/Dépôts trouvés/)).toBeNull();
+  });
+
+  it('un rig sans projet d’une autre machine : ni proposition ni « Ranger dans un projet… »', () => {
+    renderTab([rigWith(THREE, { machine: 'mac' })]);
+    expect(within(card()).queryByText(/Dépôts trouvés/)).toBeNull();
+    expect(within(card()).queryByRole('button', { name: /Ranger/ })).toBeNull();
+    expect(isUnfiled(rigWith(THREE, { machine: 'mac' }))).toBe(false);
+    expect(isUnfiled(rigWith(THREE))).toBe(true);
   });
 });

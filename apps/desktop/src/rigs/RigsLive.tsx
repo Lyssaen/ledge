@@ -10,6 +10,7 @@ import { KernelCard, RigCard } from './RigCard';
 import { isLaunching, LaunchNote } from './LaunchNote';
 import { RigRepos } from './RigRepos';
 import { useRigControls, type RigControls } from './useRigActions';
+import { isUnfiled } from './proposal';
 
 /** A « … » of the Rigs tab: a rig's or a seat's menu. */
 function More({ label, disabled, children }: { label: string; disabled?: boolean; children: ReactNode }): JSX.Element {
@@ -59,9 +60,6 @@ function rigActions(c: RigControls, rig: Rig, onTerminal: (seat: RigSeat) => voi
     </>
   };
 }
-
-/** A rig in a space off any project that no project holds yet (once filed, `projectId` is set; the daemon keeps `offProject`). */
-export const isUnfiled = (rig: Rig): boolean => rig.offProject && !rig.projectId && rig.lifecycle !== 'unreachable';
 
 /** « En cours » (spec §8.2): one card per rig, by name, then the kernels (the local one first). Without the app's rig gestures
  *  (`RigControlsContext`), the cards only show. */

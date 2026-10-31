@@ -12,6 +12,7 @@ import { Menu, MenuItem } from '../shell/Menu';
 import { SHELL_ICONS } from '../shell/icons';
 import { SessionBot, StateBadge } from '../shell/SessionBot';
 import { useRigControls } from '../rigs/useRigActions';
+import { isUnfiled } from '../rigs/proposal';
 import { ROOM_BACK, ROOM_SIDE, RUG_SIDE, layoutTable, type AtelierRoom } from './layout';
 
 export type RigAtelierRoom = Extract<AtelierRoom, { kind: 'rig' | 'kernel' }>;
@@ -75,7 +76,7 @@ export function RigRoom({ room, width, dispatch, onTerminal, children, extraActi
           {controls && room.kind === 'rig' && rig.lifecycle !== 'unreachable' && rig.lifecycle !== 'stopped' && (
             <MenuItem onSelect={() => controls.askStop(rig)}><span>{t.rigActions.stop}</span></MenuItem>
           )}
-          {controls && room.kind === 'rig' && rig.offProject && !rig.projectId && <MenuItem onSelect={() => controls.askAdopt(rig)}><span>{t.rigActions.adopt}</span></MenuItem>}
+          {controls && room.kind === 'rig' && isUnfiled(rig) && <MenuItem onSelect={() => controls.askAdopt(rig)}><span>{t.rigActions.adopt}</span></MenuItem>}
         </Menu>
       </div>
       <div className="room-tables">{children}</div>

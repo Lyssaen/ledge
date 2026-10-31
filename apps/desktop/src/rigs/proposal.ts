@@ -18,3 +18,7 @@ export function proposeProject(rig: Rig, projects: Projects): { projectId: strin
   const ids = new Set(rig.repos.flatMap(r => owning(projects, r.name)));
   return ids.size === 1 ? { projectId: [...ids][0]!, why: 'name' } : null;
 }
+
+/** A rig of this daemon in a space off any project that no project holds yet (once filed, `projectId` is set; the daemon keeps
+ *  `offProject`). Another machine's rig is never offered: projects belong to the local daemon, `rig.adopt` cannot file it there. */
+export const isUnfiled = (rig: Rig): boolean => rig.machine === 'local' && rig.offProject && !rig.projectId && rig.lifecycle !== 'unreachable';

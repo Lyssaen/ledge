@@ -12,6 +12,7 @@ import { SHELL_ICONS } from './icons';
 import { ApprovalBadge, HelperBot, SessionBot, StateBadge } from './SessionBot';
 import { ProjectSwatch } from '../projects/ProjectSwatch';
 import { useRigControls } from '../rigs/useRigActions';
+import { isUnfiled } from '../rigs/proposal';
 
 /** An isolated rig room's bar (maquette w-3): « Fil du rig », then, off any project, « Dépôts · n » and « Ranger dans un projet… », then
  *  « Arrêter le rig… » (its confirmation). Without the app's rig gestures, only the thread. */
@@ -23,7 +24,7 @@ function RigBar({ rig, dispatch }: { rig: Rig; dispatch: (a: NavAction) => void 
   return (
     <span className="rig-bar">
       <Button size="sm" onClick={() => dispatch({ type: 'ledge', tab: 'conversation' })}>{a.rigThread}</Button>
-      {controls && rig.offProject && !rig.projectId && <>
+      {controls && isUnfiled(rig) && <>
         <Button size="sm" onClick={() => controls.showRepos(rig)}>{a.repos(rig.repos.length)}</Button>
         <Button size="sm" onClick={() => controls.askAdopt(rig)}>{a.adopt}</Button>
       </>}
