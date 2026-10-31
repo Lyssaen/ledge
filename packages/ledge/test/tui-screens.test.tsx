@@ -1343,3 +1343,57 @@ describe('ledge tui: « Contexte max » (context handover spec §3.2)', () => {
     } finally { await tui.cleanup(); }
   });
 });
+
+describe('ledge tui: a rig seat\'s session screen (lot 8 task 11)', () => {
+  const openBuild = async (tui: Awaited<ReturnType<typeof startTui>>) => {
+    await tui.resize(160, 46);
+    await until(() => tui.frame().includes('factory'));
+    await tui.pick('build');
+    await tui.press('\r');
+    await until(() => tui.frame().includes('Rigs › ▣ factory › @build'));
+  };
+
+  it('shows its rig crumb and writes through Ledge, never into the pane', async () => {
+    const tui = await startTui({ openrig: {} });
+    try {
+      await openBuild(tui);
+      expect(tui.frame()).toContain('Rigs › ▣ factory › @build › build · Local');
+      expect(tui.frame()).toMatch(/BUILD · @BUILD · ▣ FACTORY · CLAUDE CODE/);
+      await tui.press('\r');
+      await until(() => tui.frame().includes('ÉCRIRE À BUILD · @BUILD · FACTORY'));
+      expect(tui.frame()).toContain('rig send signé Ledge');
+      await tui.press('go');
+      await tui.press('\r');
+      await until(() => sent(tui.daemon.received, 'ledge.say').length === 1);
+      expect(sent(tui.daemon.received, 'ledge.say')[0]).toMatchObject({ type: 'ledge.say', text: '@build@factory go' });
+      expect(sent(tui.daemon.received, 'session.reply')).toEqual([]);
+    } finally { await tui.cleanup(); }
+  });
+
+  it('← goes back to the rig room', async () => {
+    const tui = await startTui({ openrig: {} });
+    try {
+      await openBuild(tui);
+      await tui.press('\x1b[D');
+      await until(() => tui.frame().includes('SIÈGE') && tui.frame().includes('orch-lead'));
+      expect(tui.frame()).not.toContain('Rigs › ▣ factory › @build');
+    } finally { await tui.cleanup(); }
+  });
+
+  it('a standalone session still types into its pane', async () => {
+    const tui = await startTui({ openrig: {} });
+    try {
+      await tui.resize(160, 46);
+      await until(() => tui.frame().includes('factory'));
+      await tui.pick('Bix');
+      await tui.press('\r');
+      await until(() => tui.frame().includes('Répondre à Bix') || tui.frame().includes('écrire'));
+      await tui.press('r');
+      await tui.press('Ajoute un exemple');
+      await tui.press('\r');
+      await until(() => sent(tui.daemon.received, 'session.reply').length === 1);
+      expect(sent(tui.daemon.received, 'session.reply')[0]).toEqual({ type: 'session.reply', id: 'bix', text: 'Ajoute un exemple' });
+      expect(sent(tui.daemon.received, 'ledge.say')).toEqual([]);
+    } finally { await tui.cleanup(); }
+  });
+});

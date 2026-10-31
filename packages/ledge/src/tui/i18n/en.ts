@@ -146,7 +146,9 @@ export const en: Messages = {
     replyTitle: name => `Reply to ${name}`, noteTitle: name => `Deny and tell ${name} why`, writeDraft: 'Write · draft',
     draftLines: n => `${n} ${plural(n, 'line', 'lines')} · r to pick it up`,
     loading: 'Loading the thread…', empty: 'Nothing in this thread yet.', noSession: 'Pick a session on the home screen.',
-    model: m => `model: ${m}`, defaultModel: 'default', notice: 'Ledge'
+    model: m => `model: ${m}`, defaultModel: 'default', notice: 'Ledge',
+    seatTitle: (name, address, rig) => `Write to ${name} · ${address} · ${rig}`, seatPlaceholder: name => `Write to ${name}…`,
+    seatFoot: 'rig send signed by Ledge · the exchange also shows in Ledge’s thread'
   },
   ask: {
     title: (s, m) => `Ledge · sees ${s} ${plural(s, 'session', 'sessions')}, ${m} ${plural(m, 'machine', 'machines')}`,

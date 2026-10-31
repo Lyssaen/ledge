@@ -158,7 +158,9 @@ export const fr = {
     replyTitle: (name: string) => `Répondre à ${name}`, noteTitle: (name: string) => `Refuser en expliquant à ${name}`, writeDraft: 'Écrire · brouillon',
     draftLines: (n: number) => `${n} ${plural(n, 'ligne', 'lignes')} · r pour reprendre`,
     loading: 'Chargement du fil…', empty: 'Rien encore dans ce fil.', noSession: 'Choisissez une session dans l’accueil.',
-    model: (m: string) => `modèle : ${m}`, defaultModel: 'par défaut', notice: 'Ledge'
+    model: (m: string) => `modèle : ${m}`, defaultModel: 'par défaut', notice: 'Ledge',
+    seatTitle: (name: string, address: string, rig: string) => `Écrire à ${name} · ${address} · ${rig}`, seatPlaceholder: (name: string) => `Écrire à ${name}…`,
+    seatFoot: 'rig send signé Ledge · l’échange s’affiche aussi dans le fil de Ledge'
   },
   ask: {
     title: (s: number, m: number) => `Ledge · voit ${s} ${plural(s, 'session', 'sessions')}, ${m} ${plural(m, 'machine', 'machines')}`,

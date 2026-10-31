@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { isPending, putImage, splitId, useColorPreview } from '@ledge/fleet';
+import { isPending, putImage, sayToLedge, splitId, useColorPreview } from '@ledge/fleet';
 import { offers, type Pending, type Session } from '@ledge/protocol';
 import { botState } from '@ledge/ui/bots/poseFor';
 import { useEditing, useScreenKeys, useScreenSize, useTui } from '../context.js';
@@ -32,7 +32,7 @@ export function SessionScreen() {
 }
 
 function SessionView({ s }: { s: Session }) {
-  const { client, d, t, g, actions, attach, toast, machines, kept, lastToast, tone } = useTui();
+  const { client, d, t, g, actions, attach, toast, machines, kept, lastToast, tone, rigs, setFocus, go } = useTui();
   const { columns, rows } = useScreenSize();
   const [mode, setMode] = useState<Mode>('read');
   // The draft outlives the field, the screen and ctrl+c: it is kept by the TUI, by session.
@@ -75,6 +75,12 @@ function SessionView({ s }: { s: Session }) {
   const openImage = useOpenImage();
 
   const machine = splitId(s.id)?.machine ?? 'local';
+  // A rig seat: written to through Ledge (`@seat@rig`, always the long form), its lifecycle left to OpenRig.
+  const seat = s.rig ? (() => {
+    const r = s.rig!, mine = rigs.find(x => x.machine === r.machine && x.id === r.rigId);
+    const address = mine?.seats.find(x => x.ref === r.seat)?.address ?? `@${r.member}`;
+    return { rigId: r.rigId, rigName: r.rigName, machine: r.machine, address, long: `${address}@${r.rigId}`, label: `${g.rig} ${r.rigName}` };
+  })() : null;
   const canSwitch = machines.find(m => m.id === machine)?.daemon?.modelSwitch === true;
 
   /** false when refused at once: the field keeps the text. */
@@ -88,6 +94,13 @@ function SessionView({ s }: { s: Session }) {
     const taken = withImages ? chips.clear() : [];
     const back = (x: string) => { if (!kept.drafts.get(s.id)) setDraft(x); if (taken.length) chips.putBack(taken); };
     const how = taken.length ? { attachments: taken.flatMap(c => (c.id ? [c.id] : [])) } : undefined;
+    if (seat && mode === 'reply') {
+      sayToLedge(client, `${seat.long} ${text.trim()}`);
+      kept.sent.set(s.id, [...(kept.sent.get(s.id) ?? []), text]);
+      if (!fromHistory) setDraft('');
+      setMode('read');
+      return true;
+    }
     if (!(mode === 'note' ? actions.denyWithNote(s, text.trim(), back) : actions.reply(s, text, back, how))) { if (taken.length) chips.putBack(taken); return false; }
     if (text.trim()) kept.sent.set(s.id, [...(kept.sent.get(s.id) ?? []), text]);
     // An entry of the history sent again leaves the draft as it was.
@@ -113,6 +126,7 @@ function SessionView({ s }: { s: Session }) {
       if (key.escape) { leave(); return true; }
       return false;
     }
+    if (key.leftArrow && seat) { setFocus({ kind: 'rig', machine: seat.machine, rigId: seat.rigId }); go('home'); return true; }
     if (key.pageUp) { scroll(up + view - 1); return true; }
     if (key.pageDown) { scroll(up - view + 1); return true; }
     if (input === 'k' || key.upArrow) { scroll(up + 1); return true; }
@@ -144,14 +158,14 @@ function SessionView({ s }: { s: Session }) {
     return false;
   });
 
-  const title = `${s.name} · ${oneLine(s.topic ?? s.title)} · ${TOOL_NAME[s.tool]} · ${modelLabel(s, t.session.defaultModel)}`;
+  const title = `${seat ? `${s.name} · ${seat.address} · ${seat.label}` : `${s.name} · ${oneLine(s.topic ?? s.title)}`} · ${TOOL_NAME[s.tool]} · ${modelLabel(s, t.session.defaultModel)}`;
   const showsThread = mode !== 'model' && !terminal && !!items && lines.length > 0;
   const above = lines.length - view - up;
   const foot = up > 0 ? t.session.scrolled(above, up) : lines.length > view ? t.session.above(lines.length - view) : undefined;
   const keys: Array<readonly [string, string]> = mode === 'model' ? [['↑ ↓', t.keys.choose], ['← →', t.launch.effort], ['↵', t.keys.choose], ['esc', t.keys.cancel]]
     : mode !== 'read' && browsing ? [['↵', t.keys.resend], ['↑ ↓', t.keys.history], ['esc', t.keys.backToDraft]]
     : mode !== 'read' ? [['↵', t.keys.sendOnly], ...(mode === 'reply' ? [['alt+v', t.keys.image] as const] : []), ['alt+↵', t.keys.newLine], ['esc', t.keys.keepAndLeave], ['↑ ↓', t.keys.lineHistory], ['ctrl ← →', t.keys.word], ['ctrl+u', t.keys.clear]]
-    : [['esc', t.keys.back], ...(p ? [['y n A', t.keys.answer] as const] : []), ['r', t.keys.write], ['j k', t.keys.scroll], [t.keys.space, t.keys.unfold], ['d', t.keys.diffs], ['t', t.keys.terminal], ['a', t.keys.attach], ...(s.rig ? [] : [['m', t.keys.model] as const]), ['i', t.keys.interrupt], ...(images.length ? [['o', t.keys.openImage] as const] : [])];
+    : [['esc', t.keys.back], ...(seat ? [['←', seat.label] as const] : []), ...(p ? [['y n A', t.keys.answer] as const] : []), ['r', t.keys.write], ['j k', t.keys.scroll], [t.keys.space, t.keys.unfold], ['d', t.keys.diffs], ['t', t.keys.terminal], ['a', t.keys.attach], ...(s.rig ? [] : [['m', t.keys.model] as const]), ['i', t.keys.interrupt], ...(images.length ? [['o', t.keys.openImage] as const] : [])];
   // The rows, in this order: the request (its keys left out while writing), the field, the thread with what is left, drawn
   // only with room for a line. The request is cut only when even that does not fit.
   const editing = mode === 'reply' || mode === 'note';
@@ -166,7 +180,7 @@ function SessionView({ s }: { s: Session }) {
   const room = body - below - (request ? askRows(request, inner) : 0);
   const drawsThread = mode === 'model' || room >= 3;
   return (
-    <Frame crumb={`${s.repo ?? s.project}${s.branch ? ` › ${g.branch} ${s.branch}` : ''} › ${s.name} · ${machineLabel(s)}`} crumbShort={s.name} keys={keys} kept={draft !== ''}>
+    <Frame crumb={seat ? `${t.home.rigs} › ${seat.label} › ${seat.address} › ${s.name} · ${machineLabel(s)}` : `${s.repo ?? s.project}${s.branch ? ` › ${g.branch} ${s.branch}` : ''} › ${s.name} · ${machineLabel(s)}`} crumbShort={s.name} keys={keys} kept={draft !== ''}>
       {drawsThread ? <TitledBox title={terminal ? `${t.overview.terminal(paneName(s))}${colored ? ` ${t.overview.inColor}` : ''}` : title} flexGrow={1} minHeight={3} foot={showsThread ? foot : undefined}>
         {mode === 'model'
           ? <ModelPicker machine={machine} tool={s.tool} current={{ model: s.model ?? null, effort: s.effort ?? null }} onCancel={() => setMode('read')}
@@ -179,11 +193,11 @@ function SessionView({ s }: { s: Session }) {
       {p && request ? <PendingBox s={s} a={request} /> : null}
       <ChipsLine chips={chips.items} />
       {mode === 'reply' || mode === 'note'
-        ? <Field title={mode === 'note' ? t.session.noteTitle(s.name) : t.session.replyTitle(s.name)} value={draft} onChange={setDraft} onSubmit={send} onEscape={leave}
-          onBrowse={setBrowsing} history={kept.sent.get(s.id) ?? []} active placeholder={mode === 'note' ? t.session.noteFor(s.name) : t.session.replyTo(s.name)} />
+        ? <Field title={mode === 'note' ? t.session.noteTitle(s.name) : seat ? t.session.seatTitle(s.name, seat.address, seat.rigName) : t.session.replyTitle(s.name)} value={draft} onChange={setDraft} onSubmit={send} onEscape={leave}
+          onBrowse={setBrowsing} history={kept.sent.get(s.id) ?? []} active placeholder={mode === 'note' ? t.session.noteFor(s.name) : seat ? t.session.seatPlaceholder(s.name) : t.session.replyTo(s.name)} foot={seat && mode === 'reply' ? t.session.seatFoot : undefined} />
         // Read: the draft kept, its first line dimmed; or what r does.
-        : <TitledBox title={draft ? t.session.writeDraft : t.keys.write} foot={draft ? t.session.draftLines(draft.split('\n').length) : undefined} flexShrink={0}>
-          <Text wrap="truncate"><Text color={C.coral}>{g.cursor} </Text>{draft ? <Text color={C.dim}>{draft.split('\n')[0]}</Text> : <Text color={C.faint}>{t.session.replyTo(s.name)}</Text>}</Text>
+        : <TitledBox title={draft ? t.session.writeDraft : seat ? t.session.seatTitle(s.name, seat.address, seat.rigName) : t.keys.write} foot={draft ? t.session.draftLines(draft.split('\n').length) : seat ? t.session.seatFoot : undefined} flexShrink={0}>
+          <Text wrap="truncate"><Text color={C.coral}>{g.cursor} </Text>{draft ? <Text color={C.dim}>{draft.split('\n')[0]}</Text> : <Text color={C.faint}>{seat ? t.session.seatPlaceholder(s.name) : t.session.replyTo(s.name)}</Text>}</Text>
         </TitledBox>}
     </Frame>
   );
