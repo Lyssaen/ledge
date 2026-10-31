@@ -41,7 +41,7 @@ test('« New folder » in the folder browser: the folder is made on Local, liste
   await expect(editor.getByText('Working folders and repositories · 1')).toBeVisible();
   await editor.getByRole('button', { name: /Create the project/ }).click();
   await expect(editor).toBeHidden();
-  expect(sets(daemon.received)[0]!.projects.projects).toContainEqual({ id: 'atlas', name: 'Atlas', color: 'amber', description: '', repos: [{ machine: 'local', path: '/home/me/Workspace/atlas' }] });
+  expect(sets(daemon.received)[0]!.projects.projects).toContainEqual({ id: 'atlas', name: 'Atlas', color: 'amber', description: '', rigs: [], repos: [{ machine: 'local', path: '/home/me/Workspace/atlas' }] });
 });
 
 /** Kit works in a folder no project knows: « No project ». */
@@ -77,7 +77,7 @@ test('+ Projects, a name, Workspace › paper-fonts on main from the folder brow
   await expect(editor).toBeHidden();
   const sent = sets(daemon.received);
   expect(sent).toHaveLength(1);
-  expect(sent[0]!.projects.projects).toContainEqual({ id: 'paper-rendering', name: 'Paper Rendering', color: 'amber', description: '', repos: [{ machine: 'local', path: '/home/me/Workspace/paper-fonts' }] });
+  expect(sent[0]!.projects.projects).toContainEqual({ id: 'paper-rendering', name: 'Paper Rendering', color: 'amber', description: '', rigs: [], repos: [{ machine: 'local', path: '/home/me/Workspace/paper-fonts' }] });
   const entry = sidebarProjects(page).getByRole('button', { name: /^Paper Rendering/ });
   await expect(entry).toBeVisible();
   await expect(entry.locator('xpath=ancestor::*[@role="treeitem"][1]').locator('.side-swatch')).toHaveCSS('background-color', 'rgb(245, 158, 11)');
