@@ -42,7 +42,7 @@ const flip = (set: Set<string>, put: (n: Set<string>) => void, k: string) => {
 };
 
 /** « 12 min » / « 1 h » / « 3 d », or the list's « just now ». Same units as the List. */
-function shortWhen(iso: string, units: { min: string; h: string; d: string }, nowLabel: string): string {
+export function shortWhen(iso: string, units: { min: string; h: string; d: string }, nowLabel: string): string {
   const span = spanOf(Date.now() - (Date.parse(iso) || 0));
   return span === 'now' ? nowLabel : `${span.n} ${units[span.unit]}`;
 }

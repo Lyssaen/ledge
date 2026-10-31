@@ -38,11 +38,12 @@ test('an ask from the fake daemon shows in Your turn and is answered', async ({ 
   await expect(card).toContainText('from Otto');
   await expect(card).toContainText('Which database?');
   await expect(card).toContainText('A or B (I recommend B)');
-  await expect(page.getByRole('button', { name: 'Home: Ledge, the operator' })).toContainText('1 yours');
+  // « Your turn » counts it (Ledge's line counts what Ledge raised, OpenRig spec §8.1).
+  await expect(yours.locator('.st-badge')).toHaveText('1');
   await expect(card.getByRole('button', { name: 'Answer' })).toBeDisabled();
   await card.getByPlaceholder('Your answer…').fill('B');
   await card.getByRole('button', { name: 'Answer' }).click();
   await expect.poll(() => daemon.received.filter(m => m.type === 'ask.answer')).toEqual([{ type: 'ask.answer', rid: expect.any(String), id: 'a1b2c34', text: 'B' }]);
   await expect(card).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Home: Ledge, the operator' })).toContainText('0 yours');
+  await expect(page.getByRole('region', { name: 'Your turn' })).toHaveCount(0);
 });

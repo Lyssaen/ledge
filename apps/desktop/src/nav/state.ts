@@ -1,18 +1,22 @@
-import type { Projects, Session } from '@ledge/protocol';
+import type { Projects, Rig, Session } from '@ledge/protocol';
+import { parseRigFilter } from '@ledge/ui/rigs/model';
 import type { Overview } from './overview';
 
 export type View = 'atelier';
-/** 'all', 'none' (Sans projet) or a project id. */
+/** 'all', 'none' (Sans projet), a project id, a rig (`rig:<machine>/<id>`) or a machine's kernel (`kernel:<machine>`). */
 export type ProjectFilter = string;
 export type SectionId = 'general' | 'appearance' | 'island' | 'notifications' | 'sounds' | 'machines' | 'mobile' | 'projects' | 'shortcuts' | 'about';
 export const SECTIONS: readonly SectionId[] = ['general', 'appearance', 'island', 'notifications', 'sounds', 'machines', 'mobile', 'projects', 'shortcuts', 'about'];
 /** The tabs of Ledge's home view (ledge home spec §2.2). */
-export type HomeTab = 'conversation' | 'history';
-export const HOME_TABS: readonly HomeTab[] = ['conversation', 'history'];
+export type HomeTab = 'conversation' | 'rigs' | 'history';
+export const HOME_TABS: readonly HomeTab[] = ['conversation', 'rigs', 'history'];
+/** The sub-tabs of the Rigs tab (spec §8.2): the running rigs, the specs a machine offers, every seat. */
+export type RigsSub = 'live' | 'specs' | 'agents';
 export type Place =
   /** Ledge's home view, where the app opens (ledge home spec §2.1): `view` and `project` are the atelier's, kept for the
-   *  way back; `back` is the place Échap returns to (none at start: the atelier). */
-  | { kind: 'home'; tab: HomeTab; view: View; project: ProjectFilter; back?: Exclude<Place, { kind: 'settings' } | { kind: 'home' }> }
+   *  way back; `back` is the place Échap returns to (none at start: the atelier); `rigs` the Rigs tab's sub-tab and `spec` the spec
+   *  chosen in its Specs, kept while the user goes from tab to tab. */
+  | { kind: 'home'; tab: HomeTab; view: View; project: ProjectFilter; back?: Exclude<Place, { kind: 'settings' } | { kind: 'home' }>; rigs?: RigsSub; spec?: string }
   | { kind: 'overview'; view: View; project: ProjectFilter }
   /** helper : la page d'un sous-agent de `id` ; focus : la réponse prend le focus à l'arrivée (« Répondre ») ; item : le message (id du fil) que la page met en vue et allume (« Voir dans le fil de X »). */
   | { kind: 'session'; id: string; helper?: string; focus?: 'reply'; item?: string; view: View; project: ProjectFilter }
@@ -25,14 +29,16 @@ export type Modal =
   // edit : id du projet à modifier ; file : id de la session à y ranger (lot 8) ; delete : ouvert sur sa vue de suppression (Réglages › Projets, lot 10) ;
   // proposal : le pid d'une proposition de Ledge retenue par rememberProposal (lot 11), ouverte pour être vérifiée
   | { kind: 'project'; edit?: string; file?: string; delete?: true; proposal?: string }
+  // Lancer un rig (lot 3 : fenêtre d'attente ; le lot 5 la remplit) : pré-remplissage du projet, de la spec, du but et de la machine.
+  | { kind: 'rig-launch'; project?: string; spec?: string; goal?: string; machine?: string }
   | null;
 /** chatFocus: bumped each time the chat is asked for (/, an open button), even already open: its field takes the focus again. */
 export interface NavState { place: Place; modal: Modal; chat: boolean; chatFocus: number; fullscreen: boolean; helpers: boolean; paused: boolean }
 export type NavAction =
   /** The atelier (the overview), on a project filter. */
   | { type: 'home'; project?: ProjectFilter }
-  /** Ledge's home view, on a tab; its composer takes the focus (`chatFocus`). */
-  | { type: 'ledge'; tab?: HomeTab }
+  /** Ledge's home view, on a tab (and the Rigs tab's sub-tab, the spec chosen in Specs); its composer takes the focus (`chatFocus`). */
+  | { type: 'ledge'; tab?: HomeTab; rigs?: RigsSub; spec?: string }
   /** Sets the current place's project filter without going anywhere (a session page stays open; in Settings, the place behind). */
   | { type: 'filter'; project: ProjectFilter }
   | { type: 'open'; id: string; helper?: string; focus?: 'reply'; item?: string }
@@ -60,8 +66,11 @@ export function navReducer(s: NavState, a: NavAction): NavState {
       const b = baseOf(place);
       const back = b.kind === 'home' ? b.back : b;
       const tab = a.tab ?? (place.kind === 'home' ? place.tab : 'conversation');
+      const rigs = a.rigs ?? (place.kind === 'home' ? place.rigs : undefined);
+      const spec = a.spec ?? (place.kind === 'home' ? place.spec : undefined);
       // The docked chat closes: the home view is the same conversation, wider.
-      return { ...s, place: { kind: 'home', tab, view: b.view, project: b.project, ...(back ? { back } : {}) }, modal: null, chat: false, chatFocus: s.chatFocus + 1 };
+      return { ...s, place: { kind: 'home', tab, view: b.view, project: b.project, ...(back ? { back } : {}), ...(rigs ? { rigs } : {}), ...(spec !== undefined ? { spec } : {}) },
+        modal: null, chat: false, chatFocus: s.chatFocus + 1 };
     }
     case 'filter': {
       if (baseOf(place).project === a.project) return s;
@@ -95,8 +104,14 @@ export function navReducer(s: NavState, a: NavAction): NavState {
   }
 }
 
-export function reconcile(s: NavState, sessions: readonly Session[], projects: Projects | null): NavState {
-  const known = (f: ProjectFilter) => f === 'all' || f === 'none' || (projects !== null && projects.projects.some(p => p.id === f));
+/** A rig filter is known while its rig (a kernel on that machine for `kernel:`) is listed: before the rigs load, it goes back to 'all'. */
+export function reconcile(s: NavState, sessions: readonly Session[], projects: Projects | null, rigs: readonly Rig[] = []): NavState {
+  const known = (f: ProjectFilter) => {
+    if (f === 'all' || f === 'none') return true;
+    const r = parseRigFilter(f);
+    if (r) return rigs.some(x => x.machine === r.machine && (r.kind === 'kernel' ? x.kernel : !x.kernel && x.id === r.rigId));
+    return projects !== null && projects.projects.some(p => p.id === f);
+  };
   const fix = (b: Base): Base => {
     const project = known(b.project) ? b.project : 'all';
     if (b.kind === 'session' && !sessions.some(x => x.id === b.id)) return { kind: 'overview', view: b.view, project };

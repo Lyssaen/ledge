@@ -3,7 +3,7 @@ import type { ClientMessage, ServerMessage } from '@ledge/protocol';
 import { createFleetClient } from '../src/fleet';
 import { daemonStore, attachClient } from '../src/store';
 import type { DaemonClient, DaemonStatus } from '../src/client';
-import { LOCAL_MACHINE, canManage, parseMachines, probeMachine, shellCommand, sshProblem, terminalCommand, type MachineState } from '../src/machines';
+import { LOCAL_MACHINE, canManage, parseMachines, probeMachine, seatTerminalCommand, shellCommand, sshProblem, terminalCommand, type MachineState } from '../src/machines';
 import { fakeSession } from './mockDaemon';
 import { createTokenSource, type TokenRead } from '../src/token';
 
@@ -835,5 +835,23 @@ describe('attachments', () => {
     client.send({ type: 'chat.ask', qid: 'q2', text: 'Autre' });
     expect(got.some(m => m.type === 'chat.error' && m.message === 'one question at a time')).toBe(false);
     expect(local.sent.at(-1)).toMatchObject({ type: 'chat.route', qid: 'q2' });
+  });
+});
+describe('seatTerminalCommand', () => {
+  const at = (ssh: string | undefined) => ({ ...LOCAL_MACHINE, ssh, launcher: ['node'], status: 'open', ready: true, recents: [], sessions: [] }) as MachineState;
+  it('local: tmux attach-session -t <ref>', () =>
+    expect(seatTerminalCommand(at(undefined), 'dev-build@starter')).toEqual(['tmux', 'attach-session', '-t', 'dev-build@starter']));
+  it('remote: wrapped in ssh -t, ref quoted', () =>
+    expect(seatTerminalCommand(at('ec2-build'), 'dev-build@starter')).toEqual(['ssh', '-t', '--', 'ec2-build', "tmux attach-session -t 'dev-build@starter'"]));
+  it('none for an empty ref or one wsl.exe would mangle', () => {
+    expect(seatTerminalCommand(at(undefined), '')).toBeNull();
+    expect(seatTerminalCommand(at(undefined), 'a"b')).toBeNull();
+    expect(seatTerminalCommand(at('ec2-build'), "a'b")!.at(-1)).toBe("tmux attach-session -t 'a'\\''b'");
+  });
+  it('Fleet.seatTerminal looks the machine up; null when unknown', () => {
+    const { client } = setup();
+    expect(client.fleet!.seatTerminal('local', 'dev@r')).toEqual(['tmux', 'attach-session', '-t', 'dev@r']);
+    expect(client.fleet!.seatTerminal('server', 'dev@r')![0]).toBe('ssh');
+    expect(client.fleet!.seatTerminal('nope', 'dev@r')).toBeNull();
   });
 });

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type JSX, type MouseEvent, type ReactNode } from 'react';
-import type { Project, Projects, Session } from '@ledge/protocol';
+import type { Escalation, Exchange, Project, Projects, Rig, RigSeat, Session } from '@ledge/protocol';
+import { ledgeLine } from '@ledge/ui/rigs/model';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
@@ -12,7 +13,8 @@ import type { NavAction, NavState } from '../nav/state';
 import { roomTileWidth, sceneOf, walkOrder } from './layout';
 import { ProjectRoom } from './ProjectRoom';
 import { LedgeDesk } from './LedgeDesk';
-import { MessageLayer, useMessageClock } from './MessageLayer';
+import { MessageLayer, useExchangeArcs, useMessageClock } from './MessageLayer';
+import { RigRoom, RigTable } from './RigRoom';
 import { ProjectTable } from './ProjectTable';
 import { useSeats } from './seats';
 import { Unassigned } from './Unassigned';
@@ -24,6 +26,13 @@ import { ProjectSwatch } from '../projects/ProjectSwatch';
 export interface AtelierProps {
   nav: NavState; dispatch: (a: NavAction) => void;
   sessions: readonly Session[]; projects: Projects | null; order: readonly Session[];
+  /** OpenRig's rigs (lot 3): a room per rig, then the kernel's; their paired sessions leave the project rooms. */
+  rigs?: readonly Rig[];
+  /** The escalations (Ledge's desk counts the decisions waiting) and the rigs' exchanges by rigKey (bubbles between seats). */
+  escalations?: readonly Escalation[];
+  exchanges?: ReadonlyMap<string, readonly Exchange[]>;
+  /** « … › Terminaux › {siège} » of a rig's room. */
+  onSeatTerminal?(rig: Rig, seat: RigSeat): void;
   projectIdOf: (s: Session) => string | null;
   /** Putting the agents of « Sans projet » away: the tables are targets, the cards drag, « Ranger dans… » files. */
   filing: Filing;
@@ -51,15 +60,18 @@ function EmptyProject({ project, dispatch }: { project: Project; dispatch: (a: N
   );
 }
 
+const NO_RIGS: readonly Rig[] = [], NO_ESCALATIONS: readonly Escalation[] = [], NO_EXCHANGES: ReadonlyMap<string, readonly Exchange[]> = new Map();
+
 /** The atelier (observatory.tsx, atelier mode): Ledge's desk, a table per project with agents, the filtered project's
  *  empty state, « Sans projet », then the legend; the zoom bar beside it. The mosaic is fitted to the space, zoomed and panned
  *  (useAtelierView). J / K (or ↓ / ↑) walk the agents shown, Entrée opens the chosen one; + / − / 0 zoom, Space pans. */
-export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf, filing, actions, menu, tools }: AtelierProps): JSX.Element {
+export function Atelier({ nav, dispatch, sessions, projects, rigs = NO_RIGS, escalations = NO_ESCALATIONS, exchanges = NO_EXCHANGES, onSeatTerminal, order, projectIdOf, filing, actions, menu, tools }: AtelierProps): JSX.Element {
   const { t } = useI18n();
   const { reduced } = useMotionPreferences();
   const { place } = nav;
   const filter = place.kind === 'settings' ? place.back.project : place.project;
-  const scene = useMemo(() => sceneOf(order, projects, projectIdOf, filter), [order, projects, projectIdOf, filter]);
+  const byId = useMemo(() => new Map(sessions.map(s => [s.id, s])), [sessions]);
+  const scene = useMemo(() => sceneOf(order, projects, projectIdOf, filter, rigs, byId), [order, projects, projectIdOf, filter, rigs, byId]);
   // A seat carried to another room's table: its session is filed in that project (the folder rule).
   const carried = useRef<Session | null>(null);
   const [overRoom, setOverRoom] = useState<string | null>(null);
@@ -82,6 +94,9 @@ export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf,
   const [seats] = useSeats();
   const walk = useMemo(() => walkOrder(scene, seats), [scene, seats]);
   const clock = useMessageClock(sessions);
+  const arcs = useExchangeArcs(scene.rooms, exchanges, byId);
+  const line = useMemo(() => ledgeLine(escalations, rigs), [escalations, rigs]);
+  const rigCount = rigs.filter(r => !r.kernel).length;
 
   const [focusedId, setFocusedId] = useState<string | null>(null);
   // The chosen agent left the walk (gone, filed elsewhere, filtered out): nothing stays chosen.
@@ -99,7 +114,7 @@ export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf,
 
   // The mosaic's tiles, in render order: the tables, then the empty project or « Sans projet » (Ledge sits in the corner, outside it).
   const tiles = useMemo(() => [
-    ...scene.rooms.map(r => roomTileWidth(r.mains.length, seats)), ...(scene.empty || scene.unassigned.length > 0 ? [ZONE_TILE] : [])
+    ...scene.rooms.map(r => roomTileWidth(r.tables[0]!.mains.length, seats)), ...(scene.empty || scene.unassigned.length > 0 ? [ZONE_TILE] : [])
   ], [scene, seats]);
   const view = useAtelierView(tiles, [nav.helpers, nav.fullscreen, nav.chat, filter, sessions.length]);
   useScreenKeys(e => {
@@ -150,16 +165,25 @@ export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf,
     <div className="overview-scroll atelier" id="view-panel-atelier" role="region" aria-label={t.side.atelier} ref={view.scrollRef}>
       <div ref={view.floorRef} className="atelier-floor">
         <div ref={view.shellRef} className={`office-shell ${nav.paused ? 'office-paused' : ''} ${reduced ? 'office-reduced' : ''}`}>
-          <MessageLayer sessions={sessions} clock={clock} paused={nav.paused} reduced={reduced} dispatch={dispatch} />
-          <LedgeDesk count={activeCount(sessions)} chat={nav.chat} paused={nav.paused} onClick={() => dispatch({ type: 'chat' })} />
+          <MessageLayer sessions={sessions} clock={clock} paused={nav.paused} reduced={reduced} dispatch={dispatch} arcs={arcs} />
+          <LedgeDesk count={activeCount(sessions)} rigs={rigCount} decisions={line.unread} chat={nav.chat} paused={nav.paused} onClick={() => dispatch({ type: 'chat' })} />
           <div className={`project-grid ${scene.rooms.length === 1 ? 'focused' : ''}`}>
-            {scene.rooms.map(({ project, mains }) => (
+            {scene.rooms.map(room => {
+              const mains = room.tables[0]!.mains;
+              if (room.kind !== 'project') return (
+                <RigRoom key={room.key} room={room} width={roomTileWidth(mains.length, seats)} dispatch={dispatch} onTerminal={seat => onSeatTerminal?.(room.rig, seat)}>
+                  <RigTable room={room} maxSeats={seats} paused={nav.paused} focusedId={focusedId} order={order} dispatch={dispatch} menuId={menu.menu?.id ?? null} onMenu={menuAt} />
+                </RigRoom>
+              );
+              const { project } = room;
+              return (
               <ProjectRoom key={project.id} project={project} sessions={mains} width={roomTileWidth(mains.length, seats)} dispatch={dispatch}>
                 <ProjectTable project={project} mains={mains} order={order} helpers={nav.helpers} seats={seats} paused={nav.paused}
                   isolated={filter === project.id} focusedId={focusedId} seated={filing.seated} dispatch={dispatch} filing={filing}
                   actions={actions} menuId={menu.menu?.id ?? null} onMenu={menuAt} seatDrag={seatDrag} tableDrop={tableDrop(project.id)} />
               </ProjectRoom>
-            ))}
+              );
+            })}
           </div>
           {scene.empty && <EmptyProject project={scene.empty} dispatch={dispatch} />}
           <Unassigned sessions={scene.unassigned} order={order} focusedId={focusedId} paused={nav.paused} dispatch={dispatch}

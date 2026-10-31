@@ -35,6 +35,8 @@ export interface BridgeDeps {
 }
 export interface Bridge {
   start(): Promise<void>; stop(): Promise<void>;
+  /** The HTTP client of the current OpenRig, null before the first probe. */
+  http(): OpenRigHttp | null;
   status(): OpenRigStatus; rigs(): Rig[]; escalations(): Escalation[]; exchanges(rigId: string): Exchange[];
   /** Messages to replay after each `snapshot`: openrig.status, rig.snapshot, then one escalation.updated per escalation. */
   replay(): BridgeMessage[];
@@ -310,6 +312,7 @@ export function createBridge(deps: BridgeDeps): Bridge {
       unsubAsks?.(); unsubAsks = null;
       await writer?.flush();
     },
+    http: () => http,
     status: () => status, rigs: () => mirror.rigs(), exchanges: rigId => xlog.list(rigId),
     escalations,
     replay() {

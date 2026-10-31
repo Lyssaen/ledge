@@ -35,9 +35,23 @@ describe('Ledge’s home view (ledge home spec)', () => {
     expect(home().getByRole('button', { name: 'Who needs me?' })).toBeVisible();
   });
 
-  it('Ledge home has two tabs: Conversation and History', async () => {
+  it('Ledge home has three tabs: Conversation, Rigs and History', async () => {
     await openHome();
-    expect(home().getAllByRole('tab').map(t => t.textContent)).toEqual(['Conversation', 'History']);
+    expect(home().getAllByRole('tab').map(t => t.textContent)).toEqual(['Conversation', 'Rigs', 'History']);
+  });
+
+  it('the Rigs tab shows the rigs, its sub-tabs and keeps the way back', async () => {
+    const { user } = await openHome();
+    await user.click(home().getByRole('tab', { name: 'Rigs' }));
+    expect(home().getByRole('tab', { name: 'Rigs' })).toHaveAttribute('aria-selected', 'true');
+    const sub = within(home().getByRole('tablist', { name: 'Rig views' }));
+    expect(sub.getByRole('tab', { name: 'Running · 0' })).toHaveAttribute('aria-selected', 'true');
+    await user.click(sub.getByRole('tab', { name: /^Agents/ }));
+    expect(sub.getByRole('tab', { name: /^Agents/ })).toHaveAttribute('aria-selected', 'true');
+    // Back on the conversation, then on Rigs: the sub-tab is remembered.
+    await user.click(home().getByRole('tab', { name: 'Conversation' }));
+    await user.click(home().getByRole('tab', { name: 'Rigs' }));
+    expect(within(home().getByRole('tablist', { name: 'Rig views' })).getByRole('tab', { name: /^Agents/ })).toHaveAttribute('aria-selected', 'true');
   });
 
   it('@ completes a session in the composer; # completes nothing', () => {

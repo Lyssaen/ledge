@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { projectOf } from '@ledge/fleet';
-import type { Helper, Projects, Session } from '@ledge/protocol';
+import type { Helper, Projects, Rig, RigSeat, Session } from '@ledge/protocol';
 import type { BotState } from '@ledge/ui/bots/poseFor';
 import { mainOrder } from '../src/nav/agents';
 import { layoutTable, tableLength, roomWidth, roomTileWidth, noteX, tableBranch, sheetState, helperState, sceneOf, walkOrder, type AtelierScene } from '../src/atelier/layout';
@@ -66,7 +66,7 @@ it('the scene of each filter, and the J / K order', () => {
   const projects: Projects = { projects: ['ledge', 'pay', 'docs'].map(id => ({ id, name: id, color: 'blue' as const, description: '', repos: [{ machine: 'local', path: `/w/${id}` }] })), rules: [] };
   const idOf = (s: Session) => projectOf(s, projects);
   const order = mainOrder([main('otto'), main('nova', { cwd: '/w/pay' }), main('kit', { cwd: '/tmp' })], projects);
-  const names = (sc: AtelierScene) => [sc.rooms.map(r => `${r.project.id}:${r.mains.map(m => m.name).join(',')}`), sc.unassigned.map(s => s.name), sc.empty?.id ?? null];
+  const names = (sc: AtelierScene) => [sc.rooms.map(r => `${r.key}:${r.tables[0]!.mains.map(m => m.name).join(',')}`), sc.unassigned.map(s => s.name), sc.empty?.id ?? null];
   expect(names(sceneOf(order, projects, idOf, 'all'))).toEqual([['ledge:otto', 'pay:nova'], ['kit'], null]);
   expect(names(sceneOf(order, projects, idOf, 'ledge'))).toEqual([['ledge:otto'], [], null]);
   expect(names(sceneOf(order, projects, idOf, 'docs'))).toEqual([[], [], 'docs']);
@@ -81,9 +81,26 @@ it('a project room has one table with all its sessions, whatever their old team 
   const idOf = (s: Session) => projectOf(s, projects);
   const order = mainOrder([main('otto'), main('nova'), main('pim'), main('kit', { cwd: '/w/pay' }), main('zed', { cwd: '/w/pay' })], projects);
   const scene = sceneOf(order, projects, idOf, 'all');
-  expect(scene.rooms.map(r => [r.project.id, r.mains.map(m => m.name)])).toEqual([['ledge', ['nova', 'otto', 'pim']], ['pay', ['kit', 'zed']]]);
+  expect(scene.rooms.map(r => [r.key, r.tables[0]!.mains.map(m => m.name)])).toEqual([['ledge', ['nova', 'otto', 'pim']], ['pay', ['kit', 'zed']]]);
   expect(walkOrder(scene).map(s => s.name)).toEqual(['nova', 'otto', 'pim', 'kit', 'zed']);
   expect(roomTileWidth(2)).toBe(roomWidth(2) + 220);
+});
+it('walkOrder goes through rig and kernel tables too, placeholders skipped', () => {
+  const projects: Projects = { projects: [{ id: 'ledge', name: 'ledge', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] }], rules: [] };
+  const idOf = (s: Session) => projectOf(s, projects);
+  const build = main('build', { rig: { machine: 'local', rigId: 'r1', rigName: 'factory', seat: 's', pod: 'p', member: 'm' } });
+  const order = mainOrder([main('otto'), build], projects);
+  const seat = (name: string, over: Partial<RigSeat> = {}): RigSeat => ({ ref: `${name}@f`, address: `@${name}`, name, runtime: 'claude-code', state: 'ready', ...over });
+  const factory: Rig = { id: 'r1', name: 'factory', machine: 'local', cwd: '/w/ledge', projectId: 'ledge', offProject: false, lifecycle: 'running', kernel: false, repos: [],
+    seats: [seat('lead'), seat('build', { sessionId: 'local:build', state: 'working' })] };
+  const kernel: Rig = { ...factory, id: 'k', name: 'kernel', kernel: true, seats: [seat('orch')] };
+  const scene = sceneOf(order, projects, idOf, 'all', [factory, kernel], new Map(order.map(s => [s.id, s])));
+  expect(scene.rooms.map(r => r.kind)).toEqual(['project', 'rig', 'kernel']);
+  expect(walkOrder(scene).map(s => s.name)).toEqual(['otto', 'build']);
+  expect(walkOrder(sceneOf(order, projects, idOf, 'rig:local/r1', [factory, kernel], new Map(order.map(s => [s.id, s])))).map(s => s.name)).toEqual(['build']);
+  // Placeholders do not use up the seats J / K walks: build, after three of them, is still reached on a 2-seat table.
+  const crowded: Rig = { ...factory, seats: [seat('a'), seat('b'), seat('c'), seat('build', { sessionId: 'local:build', state: 'working' })] };
+  expect(walkOrder(sceneOf(order, projects, idOf, 'rig:local/r1', [crowded], new Map(order.map(s => [s.id, s]))), 2).map(s => s.name)).toEqual(['build']);
 });
 it('mosaic rows and zoom arithmetic', () => {
   expect([1, 2, 3].map(k => widestRow([230, 750, 470, 420], k))).toEqual([1918, 1004, 762]);

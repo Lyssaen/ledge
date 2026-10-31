@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { daemonStore, projectOf, useAsks, useDaemon, useIsland, useMobile, useMobileError, useProjects, useTokenMissing, type DaemonClient } from '@ledge/fleet';
-import type { Project, Projects, Session } from '@ledge/protocol';
+import { daemonStore, projectOf, useAsks, useDaemon, useEscalations, useIsland, useMobile, useMobileError, useOpenRig, useProjects, useRigs, useTokenMissing, type DaemonClient } from '@ledge/fleet';
+import { openSeatTerminal } from './rigs/terminal';
+import { useRigExchanges } from './rigs/useRigExchanges';
+import type { Project, Projects, Rig, Session } from '@ledge/protocol';
 import { LangProvider, loadLang, messagesFor, saveLang, useI18n, type Lang } from './i18n/lang';
 import { loadMessages } from './i18n/messages';
 import { useFleet } from './fleet/useFleet';
@@ -26,6 +28,7 @@ import { TitleBar } from './shell/TitleBar';
 import { TopBar } from './shell/TopBar';
 import { Footer } from './shell/Footer';
 import { LaunchPlace } from './launch/lazy';
+import { RigLaunch } from './launch/RigLaunch';
 import { ChatPlace, HomePlace } from './chat/lazy';
 import { SettingsPlace } from './settings/lazy';
 import type { SettingsContext } from './settings/SettingsPage';
@@ -61,7 +64,6 @@ import { termTheme } from './term/theme';
 import { TermStoreContext } from './term/useTerms';
 import { isNative } from './term/mode';
 import { ProjectDialog } from './projects/ProjectDialog';
-import { useDefaultTool } from './settings/tool';
 import { PairingDialog, usePairingDialogState } from './settings/PairingDialog';
 
 const NO_PROJECTS: readonly Project[] = [];
@@ -101,8 +103,8 @@ function useTermStore(client: DaemonClient): TermStore {
 }
 
 /** The navigation reducer, plus the fleet's corrections: a place naming a session or a project that is gone falls back. */
-type ShellAction = NavAction | { type: 'reconcile'; sessions: readonly Session[]; projects: Projects | null };
-const shellReducer = (s: NavState, a: ShellAction): NavState => (a.type === 'reconcile' ? reconcile(s, a.sessions, a.projects) : navReducer(s, a));
+type ShellAction = NavAction | { type: 'reconcile'; sessions: readonly Session[]; projects: Projects | null; rigs: readonly Rig[] };
+const shellReducer = (s: NavState, a: ShellAction): NavState => (a.type === 'reconcile' ? reconcile(s, a.sessions, a.projects, a.rigs) : navReducer(s, a));
 
 /** The Atelier's shell: sidebar, top bar, the current place (the atelier, a session, Settings), footer, chat and dialogs;
  *  the real fleet, toasts and sounds, and the tray. */
@@ -113,6 +115,11 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const projects = useProjects(fleetClient);
   const relief = useRelief(fleetClient);
   const asks = useAsks(fleetClient);
+  // OpenRig (lot 3): the sidebar's Rigs section and Ledge's line.
+  const rigs = useRigs(fleetClient);
+  const escalations = useEscalations(fleetClient);
+  const openrig = useOpenRig(fleetClient);
+  const exchanges = useRigExchanges(fleetClient, rigs);
   const island = useIsland(fleetClient);
   const mobile = useMobile(fleetClient);
   const mobileError = useMobileError(fleetClient);
@@ -178,7 +185,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // stale, hence the dependencies); reconcile returns the same state when nothing changes, and then nothing is dispatched.
   // An archived session keeps its page (it reads, read-only): only a session the daemon no longer lists at all takes the place away.
   const known = useMemo(() => [...sessions, ...fleetView.archived], [sessions, fleetView.archived]);
-  useEffect(() => { if (reconcile(nav, known, projects) !== nav) dispatch({ type: 'reconcile', sessions: known, projects }); }, [known, projects]);
+  // A rig filter (the sidebar's double click) lives as long as its rig is listed (`rigs` is a stable snapshot between fleet changes).
+  useEffect(() => { if (reconcile(nav, known, projects, rigs) !== nav) dispatch({ type: 'reconcile', sessions: known, projects, rigs }); }, [known, projects, rigs]);
 
   const projectIdOf = useCallback((s: Session) => (projects ? projectOf(s, projects) : null), [projects]);
   const projectName = useCallback((s: Session) => {
@@ -196,14 +204,6 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // The session menu, from the atelier's seats and the session page's header « … » (one at a time).
   const sessionMenu = useSessionMenu({ client: fleetClient, sessions, onShowTerminal: showTerminal });
   const decisions = useDecisions({ client: fleetClient, sessions, errors, notify });
-  // The sidebar's Ask Ledge, the same send as the chat panel: nothing goes out while the local daemon is offline (the chat still opens).
-  const [tool] = useDefaultTool();
-  const askLedge = (text: string) => {
-    if (!fleetView.machines.find(m => m.id === 'local')?.ready) { dispatch({ type: 'ledge', tab: 'conversation' }); return; }
-    const qid = `q-${crypto.randomUUID()}`;
-    daemonStore.beginTurn({ qid, question: text, askedAt: new Date().toISOString(), steps: [] });
-    fleetClient.send({ type: 'chat.ask', qid, text, tool });
-  };
   const screenKeys = useRef<ScreenKeys>({ current: null }).current;
   // Drafts, reading positions and the last item seen, per session and subagent: they survive navigation, not a restart.
   const memory = useRef(createSessionMemory()).current;
@@ -303,21 +303,23 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       <div className={`application ${nav.fullscreen ? 'immersive' : ''} ${filing.dragging ? 'is-dragging' : ''}`} data-readonly={localDown ? 'true' : undefined} inert={blocked}>
         <Sidebar nav={nav} dispatch={dispatch} sessions={sessions} archived={fleetView.archived} machines={machines} updating={daemonUpdates.updating} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing}
           actions={actions} decisions={decisions} waits={waits} menu={{ open: (id, at, opener) => sessionMenu.open(id, at, opener ?? null) }}
-          onAsk={askLedge} onTerminal={sessionMenu.terminal} revealArchives={revealArchives} revealCurrent={revealCurrent}
-          relief={relief} asks={asks} onAnswerAsk={(a, text) => fleet.answerAsk(a.machine, a.id, text)} />
+          onTerminal={sessionMenu.terminal} revealArchives={revealArchives} revealCurrent={revealCurrent}
+          relief={relief} asks={asks} onAnswerAsk={(a, text) => fleet.answerAsk(a.machine, a.id, text)}
+          rigs={rigs} escalations={escalations} openrig={openrig} />
         <section className="workspace">
           {tokenMissing && <DaemonOutdated />}
-          <TopBar nav={nav} dispatch={dispatch} session={session} helper={helper} projects={projects} projectIdOf={projectIdOf} terminal={sessionPrefs.terminal} onTerminal={toggleTerminal}
+          <TopBar nav={nav} dispatch={dispatch} session={session} helper={helper} projects={projects} rigs={rigs} projectIdOf={projectIdOf} terminal={sessionPrefs.terminal} onTerminal={toggleTerminal}
             onRevealArchives={() => setRevealArchives(n => n + 1)} onDetach={canDetach() && !detached ? detach : undefined}
             manage={{ open: sessionMenu.menu?.id === session?.id && sessionMenu.menu !== null, onOpen: (at, opener) => session && sessionMenu.open(session.id, at, opener) }} />
           {place.kind === 'settings' ? <SettingsPlace section={place.section} ctx={settings} />
-            : place.kind === 'home' ? <HomePlace label={t.side.ledgeHome} client={fleetClient} view={fleetView} relief={relief} decisions={decisions} waits={waits} tab={place.tab} dispatch={dispatch}
+            : place.kind === 'home' ? <HomePlace label={t.side.ledgeHome} client={fleetClient} view={fleetView} relief={relief} decisions={decisions} waits={waits} tab={place.tab} nav={nav} dispatch={dispatch}
                 paused={nav.paused} focus={nav.chatFocus} projects={projects} onLaunched={chatLaunched} onTerminal={showTerminal} notify={notify} onProposal={openProposal} />
             : session && place.kind === 'session' ? <SessionPlace client={fleetClient} session={session} nav={nav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify} actions={actions}
                 prefs={sessionPrefs} setPrefs={setSessionPrefs} onRevealCurrent={() => setRevealCurrent(n => n + 1)} />
             : detached ? <AtelierAway onShow={detach} onAttach={attach} />
-            : <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu}
-                />}
+            : <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} rigs={rigs} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu}
+                escalations={escalations} exchanges={exchanges}
+                onSeatTerminal={(rig, seat) => { void openSeatTerminal(fleetClient, rig, seat, new Map(sessions.map(s => [s.id, s]))).then(ok => { if (!ok) notify(t.session.terminal.openFailed(seat.name)); }); }} />}
           {(onOverview || place.kind === 'home') && <Footer dispatch={dispatch} localDown={localDown} island={island} />}
         </section>
         {nav.chat && (
@@ -336,6 +338,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
             launch={launcher.state} onLaunch={(msg, preview) => { launched.current = preview; launcher.launch(msg); }} onCancel={close} paused={nav.paused} />
         </Modal>
       )}
+      {nav.modal?.kind === 'rig-launch' && <RigLaunch onClose={close} />}
       {nav.modal?.kind === 'project' && (
         <ProjectDialog key={`${nav.modal.edit ?? ''}|${nav.modal.file ?? ''}|${nav.modal.delete ? 'delete' : ''}|${nav.modal.proposal ?? ''}`} edit={nav.modal.edit} file={nav.modal.file} startDeleting={nav.modal.delete}
           proposal={nav.modal.proposal} projects={projects} sessions={sessions} machines={machines} client={fleetClient} fleet={fleet} projectIdOf={projectIdOf} paused={nav.paused}

@@ -11,8 +11,19 @@ export const en: Messages = {
     label: 'Sidebar', newSession: 'New session', searchLabel: 'Search a session',
     views: 'Views', atelier: 'Atelier', chat: 'Chat Ledge', projects: 'Projects', newProject: 'New project', unassigned: 'No project',
     machines: 'Machines', manageMachines: 'Manage machines', agents: (n) => pluralEn(n, `${n} agent`, `${n} agents`), offline: 'offline', daemonUpdating: 'daemon updating', settings: 'Settings', shortcuts: 'Keyboard shortcuts',
-    ledgeHome: 'Home: Ledge, the operator', ledgeLine: (yours: number) => `${yours} yours`,
-    askLedge: 'Ask Ledge', askPlaceholder: 'Ask Ledge…',
+    ledgeHome: 'Home: Ledge, the operator',
+    ledge: {
+      decision: (n, rig) => (n > 1 ? `${n} decisions are waiting for you` : `A decision is waiting for you${rig ? ` · ${rig}` : ''}`),
+      grace: (rig) => `Ledge is on it…${rig ? ` · ${rig}` : ''}`,
+      calm: (n) => (n === 0 ? 'Nothing is waiting for you' : `Orchestrating ${n} ${pluralEn(n, 'rig', 'rigs')}`),
+      unread: (n) => `${n} unread`
+    },
+    rigs: {
+      title: 'Rigs', tree: 'Rigs', launch: 'Launch a rig', seats: (n) => `rig · ${n}`, off: 'off project', unreachable: 'unreachable',
+      kernel: 'OpenRig kernel', kernelTag: 'kernel', more: (n) => `+${n}`, room: (name) => `Show ${name} in the atelier (double-click or Enter)`,
+      absent: 'OpenRig is not installed', stopped: 'OpenRig is stopped', error: 'OpenRig is in error', unsupported: (v) => (v ? `OpenRig ${v} is not supported` : 'This OpenRig version is not supported'),
+      ghost: 'Seat without a Ledge session'
+    },
     ask: { kicker: 'Decision', from: n => `from ${n}`, placeholder: 'Your answer…', send: 'Answer', sending: 'Sending…', sent: n => `Answer sent to ${n}`, refused: r => `Refused: ${r}` },
     openChat: 'Open the conversation with Ledge',
     active: (n) => `${n} active`,
@@ -329,7 +340,8 @@ export const en: Messages = {
   },
   chunkFailed: 'This part of Ledge could not load. Restart the app.',
   close: 'Close',
-  modalTitles: { launch: 'New session' },
+  modalTitles: { launch: 'New session', rigLaunch: 'New rig' },
+  rigLaunch: { soon: 'Launching a rig is coming soon.', close: 'Close' },
   search: {
     title: 'Go to a session', placeholder: 'Agent, task, project or machine…', empty: 'No session matches this search.', results: 'Sessions',
     browse: 'Browse', open: 'Open', closeKey: 'Close', enter: 'Enter', escape: 'Esc'
@@ -380,6 +392,8 @@ export const en: Messages = {
     messageLabel: (sender, n, summary) => `${sender} writes to ${n}: ${summary}. Open the conversation`,
     desk: 'Talk to Ledge',
     watching: (n) => pluralEn(n, `I'm watching over ${n} agent.`, `I'm watching over ${n} agents.`),
+    orchestrating: (n, d) => `I'm orchestrating ${n} ${pluralEn(n, 'rig', 'rigs')}${d > 0 ? ` · ${d} ${pluralEn(d, 'decision', 'decisions')} for you` : ''}.`,
+    exchangeTicket: (n) => `ticket for ${n}`,
     listening: "I'm listening.",
     assistant: 'Your assistant',
     unassignedHint: 'Ledge links these sessions to no project. Drag them onto a table, or use “Move to…”.',
@@ -404,7 +418,8 @@ export const en: Messages = {
   home: {
     operator: (sessions: number, machines: number) => `Operator · sees ${sessions} ${sessions === 1 ? 'session' : 'sessions'}, ${machines} ${machines === 1 ? 'machine' : 'machines'} · read only`,
     tabsLabel: 'Ledge views',
-    tabs: { conversation: 'Conversation', history: 'History' },
+    tabs: { conversation: 'Conversation', rigs: 'Rigs', history: 'History' },
+    rigsCount: (n) => (n > 0 ? `Rigs · ${n}` : 'Rigs'),
     toAtelier: 'Back to the atelier',
     point: {
       title: 'The point', yours: 'Yours',
@@ -415,6 +430,32 @@ export const en: Messages = {
     readOnly: 'read only · nothing without your click',
     mentions: 'Mention', mentionSession: (name: string) => `session ${name}`,
     history: { none: 'No conversation today.', open: 'See in the conversation' }
+  },
+  rigsTab: {
+    tabs: 'Rig views',
+    sub: { live: (n) => `Running · ${n}`, specs: (n) => (n === undefined ? 'Specs' : `Specs · ${n}`), agents: (n) => `Agents · ${n}` },
+    rig: 'rig', seats: (n) => `${n} ${pluralEn(n, 'seat', 'seats')}`, inProject: (name) => `in ${name}`, off: 'off project',
+    branch: (b) => `⎇ ${b}`, spec: 'spec', onMachine: (m) => `on ${m}`,
+    working: (w, n) => `${w}/${n} working`, ready: (r, n) => `${r}/${n} ready`,
+    table: 'Table', tableTitle: (name) => `Show ${name} in the atelier`, terminals: 'Terminals', terminalsOf: (name) => `Terminals of ${name}`,
+    seatState: { working: 'Working', ready: 'Available', idle: 'Available', starting: 'starting…', trust: 'waits for you to trust the folder',
+      stopped: 'stopped', crashed: 'crashed', unreachable: 'unreachable' },
+    context: (p) => `context ${p} %`, open: (name) => `Open ${name}’s session`,
+    kernelWhat: 'the machinery · operator and queue · always on', rest: 'at rest', health: 'Health',
+    version: (v) => (v ? `OpenRig ${v}` : 'OpenRig, unknown version'),
+    openrigState: { absent: 'absent', stopped: 'stopped', starting: 'starting', running: 'running', unsupported: 'not supported', error: 'in error', unreachable: 'unreachable' },
+    human: { registered: 'human registered', missing: 'human not registered', failed: 'human registration failed' },
+    noRigs: 'No rig running.',
+    library: 'Library · ~/.openrig/specs', registry: 'Registry · openrig.dev/rigs', registryNone: 'Nothing read from the registry',
+    specsList: 'Specs', specOf: (name) => `Spec ${name}`, specSeats: (n) => `${n} ${pluralEn(n, 'seat', 'seats')}`,
+    specLine: (n, source) => `OpenRig spec · ${n} ${pluralEn(n, 'seat', 'seats')} · ${source}`,
+    source: { builtin: 'built-in', library: 'library', registry: 'registry' },
+    seatsTitle: 'Seats', cols: { seat: 'Seat', role: 'Role', tool: 'Tool · model · effort', autonomy: 'Autonomy' },
+    file: 'File', copy: 'Copy', copied: 'Copied', born: 'Rigs born', bornNone: 'None yet',
+    lifecycle: { launching: 'launching', running: 'active', partial: 'partial', stopped: 'stopped', unreachable: 'unreachable' },
+    launch: 'Launch this rig…', machine: 'Machine',
+    loading: 'Reading the specs…', none: 'No spec in the library.', failed: 'The specs could not be read.',
+    agents: 'Agents', agentCols: { address: 'Address', name: 'Name', rig: 'Rig', state: 'State', tool: 'Tool · model', context: 'Context' }, noAgents: 'No seat.'
   },
   handover: {
     nearShort: (name: string, pct: number) => `${name} · context ${pct} %`, nearHint: 'near its limit', failedShort: (name: string) => `Relief of ${name} failed`, retry: 'Retry',
@@ -429,7 +470,13 @@ export const en: Messages = {
     plaqueCounts: (sessions: number) => `${sessions} ${sessions === 1 ? 'session' : 'sessions'}`,
     waiting: (n: number) => `${n} waiting`, working: (n: number) => `${n} working`,
     roomMenu: (name: string) => `Actions of the ${name} room`, roomMenuTitle: 'Room actions',
-    newSessionHere: 'New session here', entrance: 'ENTRANCE'
+    newSessionHere: 'New session here', entrance: 'ENTRANCE',
+    rigSeats: (n) => `rig · ${n} ${pluralEn(n, 'seat', 'seats')}`,
+    inProject: (name) => `in ${name}`, offProject: (cwd) => `off project · ${cwd}`, onMachine: (m) => `on ${m}`,
+    kernelWhat: 'the machinery · operator and queue',
+    rigMenu: (name) => `Actions of the ${name} rig`, rigMenuTitle: 'Rig actions',
+    terminals: 'Terminals', rigThread: 'Rig thread',
+    hidden: (n) => pluralEn(n, `${n} seat tucked away (advisor, terminal)`, `${n} seats tucked away (advisor, terminal)`)
   },
   zoom: {
     bar: 'Atelier zoom', out: 'Zoom out', outTitle: 'Zoom out (−)', in: 'Zoom in', inTitle: 'Zoom in (+)',

@@ -215,6 +215,12 @@ Ajustements fixés par le lot 2 :
 - **Hors chantier (0.6.14)** : la liste du registre d'OpenRig (pas de route locale ; « Depuis le registre… » reste visible mais désactivé, avec « bientôt »), « Préparer un dépôt », et l'adaptation d'une spec aux fournisseurs disponibles.
 - **Idempotence par `rid`** dans chaque daemon, pour `escalation.answer`, `rig.act`, `rig.launch`, `rig.send` et `rig.prepare`. Le lot 6 l'apporte en enveloppant les gestionnaires des lots 4 et 5.
 
+- **Ajout du lot 3** (liste des specs pour l'onglet Rigs, seule addition daemon du lot) :
+  - `RigSpecSeatSchema` : `{ address, member, pod, runtime, model?, effort?, profile? }` ;
+  - `RigSpecInfoSchema` : `{ id, name, summary?, source: 'builtin' | 'library' | 'registry', path?, seats: RigSpecSeat[] }` (`registry` prévu, jamais listé : pas de réseau) ;
+  - client `rig.specs.request { requestId, machineId? }` ; serveur `rig.specs { requestId, machine, specs, error?: 'openrig_down' | 'unsupported' | 'failed' }` ;
+  - `OpenRigHttp.specs()` et `spec(id)` existent dès le lot 3 (le lot 5 les réutilise), ainsi que `listSpecs` et `specSeats(yaml)` dans `daemon/openrig/specs.ts` et `Bridge.http()`. Dépendance `yaml` ^2 ajoutée dès le lot 3.
+
 ## Correspondance mobile (`PhoneOrchestrator`, plan de Mobi)
 
 | Besoin du téléphone | Contrat ci-dessus |

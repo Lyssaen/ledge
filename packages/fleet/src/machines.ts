@@ -28,6 +28,8 @@ export interface Fleet {
   /** Reconnects a machine now instead of waiting for the next backoff. */
   retry(id: string): void;
   terminal(id: string, opts?: { readOnly?: boolean }): string[] | null;
+  /** Attaches to an OpenRig seat's tmux session (`ref`) on `machine`, or null when the machine is unknown or the ref cannot be passed on. */
+  seatTerminal(machine: string, ref: string): string[] | null;
   /** A login shell in the session's folder (`workdir ?? cwd`), or null when it cannot be opened. */
   shell(id: string): string[] | null;
   turnMachine(qid: string): MachineState | undefined;
@@ -144,6 +146,12 @@ export function terminalCommand(machine: MachineState, rawId: string, opts: { re
   const command = [...machine.launcher, 'attach', ...(opts.readOnly ? ['--read-only'] : []), rawId];
   // The launcher and the id come from the machine's daemon: through ssh, the remote shell reads them quoted.
   const argv = machine.ssh ? ['ssh', '-t', '--', machine.ssh, command.map(quote).join(' ')] : command;
+  return argv.every(wslArg) ? argv : null;
+}
+/** Attaches to an OpenRig seat's tmux session (`ref`, from the machine's own OpenRig): through ssh, the remote shell reads it quoted. */
+export function seatTerminalCommand(machine: MachineState, tmux: string): string[] | null {
+  if (!tmux) return null;
+  const argv = machine.ssh ? ['ssh', '-t', '--', machine.ssh, `tmux attach-session -t ${quote(tmux)}`] : ['tmux', 'attach-session', '-t', tmux];
   return argv.every(wslArg) ? argv : null;
 }
 /** A login shell in `dir` (home when it is gone): the user's own shell, read from passwd here and from `$SHELL` over ssh. */
