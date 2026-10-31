@@ -1,6 +1,7 @@
-import type { Helper, Project, Projects, Session } from '@ledge/protocol';
+import type { Helper, Session } from '@ledge/protocol';
 import type { BotState } from '@ledge/ui/bots/poseFor';
-import type { ProjectFilter } from '../nav/state';
+import { isSeatPlaceholder } from '@ledge/ui/rigs/model';
+import type { AtelierScene } from '@ledge/ui/rigs/scene';
 
 /** The mockup's constants (observatory.tsx). MAX_SEATS is the default seat count; Settings › Appearance chooses another (seats.ts). */
 export const STEP = 70, MAX_SEATS = 6, END_SEATS = 2, RUG_SIDE = 130;
@@ -77,31 +78,12 @@ export function sheetState(state: BotState, offline?: boolean): 'approval' | 'qu
 const HELPER_STATE: Record<Helper['state'], BotState> = { starting: 'starting', working: 'working', waiting_input: 'question', waiting_permission: 'approval', idle: 'idle', exited: 'done', error: 'error' };
 export const helperState = (h: Helper): BotState => HELPER_STATE[h.state];
 
-/** A project's room (atelier rooms spec §2): its walls hold the project's one table, with its main agents. */
-export interface AtelierRoom { project: Project; mains: Session[] }
-export interface AtelierScene { rooms: AtelierRoom[]; unassigned: Session[]; empty: Project | null }
+/** The scene (rooms, « Sans projet », the empty project) is pure and shared: `@ledge/ui/rigs/scene`. */
+export { sceneOf, type AtelierRoom, type AtelierScene, type AtelierTable } from '@ledge/ui/rigs/scene';
 
-/**
- * The rooms of the atelier (atelier rooms spec §3.1): one per project with a session, holding that project's table.
- * « Sans projet » is the sessions no project claims.
- */
-export function sceneOf(order: readonly Session[], projects: Projects | null, projectIdOf: (s: Session) => string | null, filter: ProjectFilter): AtelierScene {
-  const list = projects?.projects ?? [];
-  const known = new Set(list.map(p => p.id));
-  const idOf = (s: Session) => { const id = projectIdOf(s); return id !== null && known.has(id) ? id : null; };
-  const showTables = filter === 'all' || filter !== 'none';
-  const rooms = showTables
-    ? list.filter(p => filter === 'all' || p.id === filter).map(project => ({ project, mains: order.filter(s => idOf(s) === project.id) })).filter(r => r.mains.length > 0)
-    : [];
-  const unassigned = filter === 'all' || filter === 'none' ? order.filter(s => idOf(s) === null) : [];
-  const target = filter === 'all' || filter === 'none' ? undefined : list.find(p => p.id === filter);
-  const empty = target && rooms.length === 0 ? target : null;
-  return { rooms, unassigned, empty };
-}
-
-/** Room, then seat (Alt ←/→, Alt 1…9, J / K); `MAX_SEATS` applies per table. */
+/** Room, then table, then seat (Alt ←/→, Alt 1…9, J / K); `MAX_SEATS` applies per table; a seat without a session (a placeholder) is skipped. */
 export function walkOrder(scene: AtelierScene, maxSeats = MAX_SEATS): Session[] {
-  return [...scene.rooms.flatMap(r => r.mains.slice(0, maxSeats)), ...scene.unassigned];
+  return [...scene.rooms.flatMap(r => r.tables.flatMap(t => t.mains.slice(0, maxSeats))).filter(s => !isSeatPlaceholder(s.id)), ...scene.unassigned];
 }
 
 /** Room margins (atelier units, before zoom): 110 px at the sides and front, 150 px at the back. */

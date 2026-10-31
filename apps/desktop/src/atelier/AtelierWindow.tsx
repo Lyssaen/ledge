@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { projectOf, useProjects, type DaemonClient } from '@ledge/fleet';
+import { projectOf, useProjects, useRigs, type DaemonClient } from '@ledge/fleet';
 import type { Session } from '@ledge/protocol';
 import { MarkdownLinks } from '@ledge/ui/documents/links';
 import { Button } from '@ledge/ui/ui/Button';
@@ -64,6 +64,7 @@ function AtelierAlone({ client }: { client?: DaemonClient }) {
   const fleetView = useFleet(client);
   const { sessions, machines, fleet, client: fleetClient, errors } = fleetView;
   const projects = useProjects(fleetClient);
+  const rigs = useRigs(fleetClient);
   const relief = useRelief(fleetClient);
   const [nav, local] = useReducer(navReducer, undefined, () => initialNav(loadOverview(), 'atelier'));
   const dispatch = useCallback((a: NavAction) => { if (STAYS.has(a.type)) local(a); else toMain(a); }, []);
@@ -85,7 +86,7 @@ function AtelierAlone({ client }: { client?: DaemonClient }) {
       {!nav.fullscreen && <AtelierBar blocked={blocked} dispatch={dispatch} />}
       <div className={`application atelier-alone ${nav.fullscreen ? 'immersive' : ''} ${filing.dragging ? 'is-dragging' : ''}`} inert={blocked}>
         <section className="workspace">
-          <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu}
+          <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} rigs={rigs} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu}
            
             tools={nav.fullscreen && <>
               <span className="zoom-sep" />

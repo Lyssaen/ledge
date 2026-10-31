@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent, type JSX, type MouseEvent, type ReactNode } from 'react';
-import type { Project, Projects, Session } from '@ledge/protocol';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type JSX, type MouseEvent, type ReactNode } from 'react';
+import { PROJECT_COLORS, type Project, type Projects, type Rig, type Session } from '@ledge/protocol';
+import { isSeatPlaceholder, rigColor } from '@ledge/ui/rigs/model';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
@@ -9,7 +10,7 @@ import type { SessionMenuState } from '../manage/useSessionMenu';
 import type { SessionActions } from '../manage/useSessionActions';
 import { useScreenKeys } from '../nav/screenKeys';
 import type { NavAction, NavState } from '../nav/state';
-import { roomTileWidth, sceneOf, walkOrder } from './layout';
+import { ROOM_BACK, ROOM_SIDE, roomTileWidth, sceneOf, walkOrder, type AtelierRoom } from './layout';
 import { ProjectRoom } from './ProjectRoom';
 import { LedgeDesk } from './LedgeDesk';
 import { MessageLayer, useMessageClock } from './MessageLayer';
@@ -20,10 +21,13 @@ import { useAtelierView } from './useAtelierView';
 import { folderOf, type Filing } from './filing';
 import { ZONE_TILE } from './zoom';
 import { ProjectSwatch } from '../projects/ProjectSwatch';
+import { SessionBot } from '../shell/SessionBot';
 
 export interface AtelierProps {
   nav: NavState; dispatch: (a: NavAction) => void;
   sessions: readonly Session[]; projects: Projects | null; order: readonly Session[];
+  /** OpenRig's rigs (lot 3): a room per rig, then the kernel's; their paired sessions leave the project rooms. */
+  rigs?: readonly Rig[];
   projectIdOf: (s: Session) => string | null;
   /** Putting the agents of « Sans projet » away: the tables are targets, the cards drag, « Ranger dans… » files. */
   filing: Filing;
@@ -51,15 +55,46 @@ function EmptyProject({ project, dispatch }: { project: Project; dispatch: (a: N
   );
 }
 
+/**
+ * A rig's or a kernel's room, drawn simply until RigRoom (lot 3, task 7): walls in the rig's colour, its name, and its seats
+ * (a paired session opens its page; a seat without a Ledge session is only shown).
+ */
+function RigRoomStub({ room, width, paused, focusedId, dispatch }: { room: Exclude<AtelierRoom, { kind: 'project' }>; width: number; paused: boolean; focusedId: string | null; dispatch: (a: NavAction) => void }): JSX.Element {
+  const { t } = useI18n();
+  const table = room.tables[0];
+  const name = room.kind === 'kernel' ? t.side.rigs.kernel : room.rig.name;
+  const color = room.kind === 'kernel' ? 'var(--muted-foreground)' : PROJECT_COLORS[rigColor(room.rig)];
+  return (
+    <section className="project-room atelier-room rig-room" data-room={room.key} data-kind={room.kind} aria-label={t.rooms.room(name)}
+      style={{ '--room': `${width}px`, '--project': color, '--room-side': `${ROOM_SIDE}px`, '--room-back': `${ROOM_BACK}px` } as CSSProperties}>
+      <div className="room-walls" aria-hidden="true"><i className="wall-back" /><i className="wall-left" /><i className="wall-right" /><i className="wall-front" /></div>
+      <div className="room-plaque">
+        <i className="side-swatch" style={{ background: color }} />
+        <strong className="plaque-name" title={name}>{name}</strong>
+        <span className="plaque-counts">{t.side.rigs.seats(table.mains.length)}</span>
+        {table.hidden ? <span className="plaque-counts">{t.side.rigs.more(table.hidden)}</span> : null}
+      </div>
+      <div className="room-tables">
+        {table.mains.map(s => isSeatPlaceholder(s.id)
+          ? <span key={s.id} className="rig-seat ghost" title={t.side.rigs.ghost}><SessionBot session={s} size={28} paused={paused} />{s.name}</span>
+          : <button key={s.id} type="button" className={`rig-seat ${focusedId === s.id ? 'focused' : ''}`} data-agent={s.id} onClick={() => dispatch({ type: 'open', id: s.id })}>
+              <SessionBot session={s} size={28} paused={paused} />{s.name}
+            </button>)}
+      </div>
+    </section>
+  );
+}
+
 /** The atelier (observatory.tsx, atelier mode): Ledge's desk, a table per project with agents, the filtered project's
  *  empty state, « Sans projet », then the legend; the zoom bar beside it. The mosaic is fitted to the space, zoomed and panned
  *  (useAtelierView). J / K (or ↓ / ↑) walk the agents shown, Entrée opens the chosen one; + / − / 0 zoom, Space pans. */
-export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf, filing, actions, menu, tools }: AtelierProps): JSX.Element {
+export function Atelier({ nav, dispatch, sessions, projects, rigs, order, projectIdOf, filing, actions, menu, tools }: AtelierProps): JSX.Element {
   const { t } = useI18n();
   const { reduced } = useMotionPreferences();
   const { place } = nav;
   const filter = place.kind === 'settings' ? place.back.project : place.project;
-  const scene = useMemo(() => sceneOf(order, projects, projectIdOf, filter), [order, projects, projectIdOf, filter]);
+  const byId = useMemo(() => new Map(sessions.map(s => [s.id, s])), [sessions]);
+  const scene = useMemo(() => sceneOf(order, projects, projectIdOf, filter, rigs, byId), [order, projects, projectIdOf, filter, rigs, byId]);
   // A seat carried to another room's table: its session is filed in that project (the folder rule).
   const carried = useRef<Session | null>(null);
   const [overRoom, setOverRoom] = useState<string | null>(null);
@@ -99,7 +134,7 @@ export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf,
 
   // The mosaic's tiles, in render order: the tables, then the empty project or « Sans projet » (Ledge sits in the corner, outside it).
   const tiles = useMemo(() => [
-    ...scene.rooms.map(r => roomTileWidth(r.mains.length, seats)), ...(scene.empty || scene.unassigned.length > 0 ? [ZONE_TILE] : [])
+    ...scene.rooms.map(r => roomTileWidth(r.tables[0]!.mains.length, seats)), ...(scene.empty || scene.unassigned.length > 0 ? [ZONE_TILE] : [])
   ], [scene, seats]);
   const view = useAtelierView(tiles, [nav.helpers, nav.fullscreen, nav.chat, filter, sessions.length]);
   useScreenKeys(e => {
@@ -153,13 +188,18 @@ export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf,
           <MessageLayer sessions={sessions} clock={clock} paused={nav.paused} reduced={reduced} dispatch={dispatch} />
           <LedgeDesk count={activeCount(sessions)} chat={nav.chat} paused={nav.paused} onClick={() => dispatch({ type: 'chat' })} />
           <div className={`project-grid ${scene.rooms.length === 1 ? 'focused' : ''}`}>
-            {scene.rooms.map(({ project, mains }) => (
+            {scene.rooms.map(room => {
+              const mains = room.tables[0]!.mains;
+              if (room.kind !== 'project') return <RigRoomStub key={room.key} room={room} width={roomTileWidth(mains.length, seats)} paused={nav.paused} focusedId={focusedId} dispatch={dispatch} />;
+              const { project } = room;
+              return (
               <ProjectRoom key={project.id} project={project} sessions={mains} width={roomTileWidth(mains.length, seats)} dispatch={dispatch}>
                 <ProjectTable project={project} mains={mains} order={order} helpers={nav.helpers} seats={seats} paused={nav.paused}
                   isolated={filter === project.id} focusedId={focusedId} seated={filing.seated} dispatch={dispatch} filing={filing}
                   actions={actions} menuId={menu.menu?.id ?? null} onMenu={menuAt} seatDrag={seatDrag} tableDrop={tableDrop(project.id)} />
               </ProjectRoom>
-            ))}
+              );
+            })}
           </div>
           {scene.empty && <EmptyProject project={scene.empty} dispatch={dispatch} />}
           <Unassigned sessions={scene.unassigned} order={order} focusedId={focusedId} paused={nav.paused} dispatch={dispatch}

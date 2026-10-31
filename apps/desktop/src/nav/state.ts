@@ -1,8 +1,9 @@
-import type { Projects, Session } from '@ledge/protocol';
+import type { Projects, Rig, Session } from '@ledge/protocol';
+import { parseRigFilter } from '@ledge/ui/rigs/model';
 import type { Overview } from './overview';
 
 export type View = 'atelier';
-/** 'all', 'none' (Sans projet) or a project id. */
+/** 'all', 'none' (Sans projet), a project id, a rig (`rig:<machine>/<id>`) or a machine's kernel (`kernel:<machine>`). */
 export type ProjectFilter = string;
 export type SectionId = 'general' | 'appearance' | 'island' | 'notifications' | 'sounds' | 'machines' | 'mobile' | 'projects' | 'shortcuts' | 'about';
 export const SECTIONS: readonly SectionId[] = ['general', 'appearance', 'island', 'notifications', 'sounds', 'machines', 'mobile', 'projects', 'shortcuts', 'about'];
@@ -97,8 +98,14 @@ export function navReducer(s: NavState, a: NavAction): NavState {
   }
 }
 
-export function reconcile(s: NavState, sessions: readonly Session[], projects: Projects | null): NavState {
-  const known = (f: ProjectFilter) => f === 'all' || f === 'none' || (projects !== null && projects.projects.some(p => p.id === f));
+/** A rig filter is known while its rig (a kernel on that machine for `kernel:`) is listed: before the rigs load, it goes back to 'all'. */
+export function reconcile(s: NavState, sessions: readonly Session[], projects: Projects | null, rigs: readonly Rig[] = []): NavState {
+  const known = (f: ProjectFilter) => {
+    if (f === 'all' || f === 'none') return true;
+    const r = parseRigFilter(f);
+    if (r) return rigs.some(x => x.machine === r.machine && (r.kind === 'kernel' ? x.kernel : !x.kernel && x.id === r.rigId));
+    return projects !== null && projects.projects.some(p => p.id === f);
+  };
   const fix = (b: Base): Base => {
     const project = known(b.project) ? b.project : 'all';
     if (b.kind === 'session' && !sessions.some(x => x.id === b.id)) return { kind: 'overview', view: b.view, project };

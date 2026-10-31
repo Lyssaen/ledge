@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest';
-import type { Projects, Session } from '@ledge/protocol';
+import type { Projects, Rig, Session } from '@ledge/protocol';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { initialNav, navReducer, reconcile, type NavState } from '../src/nav/state';
 import { loadOverview, saveOverview, type Overview } from '../src/nav/overview';
@@ -104,6 +104,21 @@ describe('nav state', () => {
     expect(reconcile(s, [], { projects: [], rules: [] }).place).toEqual({ kind: 'overview', view: 'atelier', project: 'all' });
     expect(reconcile(navReducer(s0, { type: 'home', project: 'ledge' }), [], null).place).toMatchObject({ project: 'all' });
     expect(reconcile(navReducer(s0, { type: 'home', project: 'none' }), [], null).place).toMatchObject({ project: 'none' });
+  });
+  it('reconcile keeps a rig or kernel filter while that rig (or a kernel on that machine) is listed, else back to « all »', () => {
+    const factory: Rig = { id: 'r1', name: 'factory', machine: 'local', cwd: '/w', projectId: null, offProject: false, lifecycle: 'running', kernel: false, seats: [], repos: [] };
+    const kernel: Rig = { ...factory, id: 'k', name: 'kernel', kernel: true };
+    const onRig = navReducer(s0, { type: 'home', project: 'rig:local/r1' });
+    expect(reconcile(onRig, [], null, [factory])).toBe(onRig);
+    expect(reconcile(onRig, [], null, []).place).toMatchObject({ kind: 'overview', project: 'all' });
+    expect(reconcile(onRig, [], null).place).toMatchObject({ kind: 'overview', project: 'all' });
+    expect(reconcile(onRig, [], null, [{ ...factory, machine: 'nas' }]).place).toMatchObject({ project: 'all' });
+    const onKernel = navReducer(s0, { type: 'home', project: 'kernel:local' });
+    expect(reconcile(onKernel, [], null, [kernel])).toBe(onKernel);
+    expect(reconcile(onKernel, [], null, [factory]).place).toMatchObject({ project: 'all' });
+    // A session page over a rig filter keeps it too.
+    const page = navReducer(onRig, { type: 'open', id: 'local:otto' });
+    expect(reconcile(page, [sess('otto', { id: 'local:otto' })], null, [factory])).toBe(page);
   });
   it('overview storage survives garbage and reads a stored list as the atelier', () => {
     localStorage.setItem('desktop.overview', JSON.stringify({ view: 'room', helpers: 'yes', paused: true }));

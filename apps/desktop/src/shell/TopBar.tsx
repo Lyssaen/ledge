@@ -1,4 +1,5 @@
-import type { Helper, Projects, Session } from '@ledge/protocol';
+import { PROJECT_COLORS, type Helper, type Projects, type Rig, type Session } from '@ledge/protocol';
+import { parseRigFilter, rigColor } from '@ledge/ui/rigs/model';
 import { botState } from '@ledge/ui/bots/poseFor';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
@@ -17,8 +18,10 @@ const MENU_WIDTH = 260;
 /** The mockup's top bar: the breadcrumb on the left (no page title; on a subagent's page, its parent before it); on the right,
  *  icons only, in groups: display (overview only), or the open agent's state, the terminal toggle and the session menu; then
  *  shortcuts and full screen (search and chat are in the title bar). */
-export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, terminal, onTerminal, manage, onRevealArchives, onDetach }: {
+export function TopBar({ nav, dispatch, session, helper, projects, rigs = [], projectIdOf, terminal, onTerminal, manage, onRevealArchives, onDetach }: {
   nav: NavState; dispatch: (a: NavAction) => void; session: Session | null; projects: Projects | null; projectIdOf: (s: Session) => string | null;
+  /** OpenRig's rigs: a rig filter's chip shows its colour and name. */
+  rigs?: readonly Rig[];
   /** The subagent whose page is open (session is then its parent). */
   helper: Helper | null; terminal: boolean; onTerminal(): void;
   /** The session menu from the header « … » (a principal session that is not archived): whether it is open, and opening it at a point under the button. */
@@ -70,12 +73,18 @@ export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, 
     const filter = place.project;
     if (filter === 'all') return <strong>{t.crumb.atelier}</strong>;
     const color = project(filter)?.color;
+    // A rig filter: the rig's colour and name; a kernel filter: « Noyau OpenRig ».
+    const rf = parseRigFilter(filter);
+    const rig = rf?.kind === 'rig' ? rigs.find(r => !r.kernel && r.machine === rf.machine && r.id === rf.rigId) : undefined;
+    const label = rf?.kind === 'kernel' ? t.side.rigs.kernel : rf ? rig?.name ?? rf.rigId : filterName(filter);
     return <>
       <button className="crumb-link" onClick={() => dispatch({ type: 'home' })}>{t.crumb.atelier}</button>
       <span className="muted">/</span>
-      <span className="project-filter">
-        <ProjectSwatch project={filter !== 'none' && color ? { color } : null} />
-        <span title={filterName(filter)}>{filterName(filter)}</span>
+      <span className="project-filter" data-filter={rf?.kind ?? 'project'}>
+        {rf?.kind === 'kernel' ? <i className="side-swatch st-kernel-swatch" style={{ background: 'var(--muted-foreground)' }} />
+          : rf ? <i className="side-swatch" style={{ background: PROJECT_COLORS[rigColor({ name: rig?.name ?? rf.rigId })] }} />
+          : <ProjectSwatch project={filter !== 'none' && color ? { color } : null} />}
+        <span title={label}>{label}</span>
         <button aria-label={t.crumb.clearFilter} title={t.crumb.clearFilterTitle} onClick={() => dispatch({ type: 'home' })}><Icon d={ICONS.close.d} size={12} /></button>
       </span>
     </>;

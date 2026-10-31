@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { daemonStore, projectOf, useAsks, useDaemon, useEscalations, useIsland, useMobile, useMobileError, useOpenRig, useProjects, useRigs, useTokenMissing, type DaemonClient } from '@ledge/fleet';
-import type { Project, Projects, Session } from '@ledge/protocol';
+import type { Project, Projects, Rig, Session } from '@ledge/protocol';
 import { LangProvider, loadLang, messagesFor, saveLang, useI18n, type Lang } from './i18n/lang';
 import { loadMessages } from './i18n/messages';
 import { useFleet } from './fleet/useFleet';
@@ -101,8 +101,8 @@ function useTermStore(client: DaemonClient): TermStore {
 }
 
 /** The navigation reducer, plus the fleet's corrections: a place naming a session or a project that is gone falls back. */
-type ShellAction = NavAction | { type: 'reconcile'; sessions: readonly Session[]; projects: Projects | null };
-const shellReducer = (s: NavState, a: ShellAction): NavState => (a.type === 'reconcile' ? reconcile(s, a.sessions, a.projects) : navReducer(s, a));
+type ShellAction = NavAction | { type: 'reconcile'; sessions: readonly Session[]; projects: Projects | null; rigs: readonly Rig[] };
+const shellReducer = (s: NavState, a: ShellAction): NavState => (a.type === 'reconcile' ? reconcile(s, a.sessions, a.projects, a.rigs) : navReducer(s, a));
 
 /** The Atelier's shell: sidebar, top bar, the current place (the atelier, a session, Settings), footer, chat and dialogs;
  *  the real fleet, toasts and sounds, and the tray. */
@@ -182,7 +182,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // stale, hence the dependencies); reconcile returns the same state when nothing changes, and then nothing is dispatched.
   // An archived session keeps its page (it reads, read-only): only a session the daemon no longer lists at all takes the place away.
   const known = useMemo(() => [...sessions, ...fleetView.archived], [sessions, fleetView.archived]);
-  useEffect(() => { if (reconcile(nav, known, projects) !== nav) dispatch({ type: 'reconcile', sessions: known, projects }); }, [known, projects]);
+  // A rig filter (the sidebar's double click) lives as long as its rig is listed (`rigs` is a stable snapshot between fleet changes).
+  useEffect(() => { if (reconcile(nav, known, projects, rigs) !== nav) dispatch({ type: 'reconcile', sessions: known, projects, rigs }); }, [known, projects, rigs]);
 
   const projectIdOf = useCallback((s: Session) => (projects ? projectOf(s, projects) : null), [projects]);
   const projectName = useCallback((s: Session) => {
@@ -304,7 +305,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           rigs={rigs} escalations={escalations} openrig={openrig} />
         <section className="workspace">
           {tokenMissing && <DaemonOutdated />}
-          <TopBar nav={nav} dispatch={dispatch} session={session} helper={helper} projects={projects} projectIdOf={projectIdOf} terminal={sessionPrefs.terminal} onTerminal={toggleTerminal}
+          <TopBar nav={nav} dispatch={dispatch} session={session} helper={helper} projects={projects} rigs={rigs} projectIdOf={projectIdOf} terminal={sessionPrefs.terminal} onTerminal={toggleTerminal}
             onRevealArchives={() => setRevealArchives(n => n + 1)} onDetach={canDetach() && !detached ? detach : undefined}
             manage={{ open: sessionMenu.menu?.id === session?.id && sessionMenu.menu !== null, onOpen: (at, opener) => session && sessionMenu.open(session.id, at, opener) }} />
           {place.kind === 'settings' ? <SettingsPlace section={place.section} ctx={settings} />
@@ -313,7 +314,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
             : session && place.kind === 'session' ? <SessionPlace client={fleetClient} session={session} nav={nav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify} actions={actions}
                 prefs={sessionPrefs} setPrefs={setSessionPrefs} onRevealCurrent={() => setRevealCurrent(n => n + 1)} />
             : detached ? <AtelierAway onShow={detach} onAttach={attach} />
-            : <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu}
+            : <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} rigs={rigs} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu}
                 />}
           {(onOverview || place.kind === 'home') && <Footer dispatch={dispatch} localDown={localDown} island={island} />}
         </section>
