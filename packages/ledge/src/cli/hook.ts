@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { MESSAGE_MAX, taskClosed, type Session, type SessionEvent, type Task, type Team, type Tool } from '@ledge/protocol';
 import { findRole } from '../daemon/roles.js';
-import { resolveRoleAddress, seatContext, teammates } from '../daemon/seat.js';
+import { resolveRoleAddress, seatContext, seatKey, seatView, teamChangeLine, teammates } from '../daemon/seat.js';
 import { connect, sendMessageAndAwaitAck, type Client } from '../client.js';
 import { log } from '../log.js';
 import { QUESTION_TOOLS } from '../daemon/state.js';
@@ -425,6 +425,26 @@ function seatOf(known: Session | undefined, dir: string, live: { sessions: Sessi
   return seat ? { seat } : {};
 }
 
+/** A turn's look at its team waits this long for the snapshot: past it, the turn goes on and the next one looks again. */
+const SEAT_REFRESH_MS = 500;
+
+/**
+ * Its team as it is now, against what the seat was last told (`teamSeen`): the line to add to its turn when it changed,
+ * and the new view recorded once it is said. Nothing to say (same team, or never told: recorded silently) is undefined.
+ */
+async function seatChange(client: Client, id: string, deadline: number): Promise<string | undefined> {
+  const left = () => Math.max(0, deadline - Date.now());
+  const snapshot = await client.next('snapshot', left()).catch(() => undefined);
+  const me = snapshot?.sessions.find(s => s.id === id);
+  if (!snapshot || !me || (!me.team && !me.teamSeen)) return undefined;
+  const teams = me.team ? (await client.next('teams', left()).catch(() => undefined))?.teams : [];
+  if (!teams) return undefined;
+  const key = seatKey(seatView(id, snapshot.sessions, teams));
+  if (key === me.teamSeen) return undefined;
+  client.send({ type: 'seat.seen', id, key });
+  return teamChangeLine(me.teamSeen, key);
+}
+
 /** A Claude `SendMessage` waits this long for the daemon's ack: the message is typed into a Codex, not just recorded. */
 const SEND_MESSAGE_MS = 1500;
 
@@ -502,6 +522,7 @@ export async function runHook(eventName: string, stdin: string, opts: { port?: n
   let mapped: MappedHook | null = null;
   let identify = false; let known: Session | undefined; let live = { sessions: [] as Session[], teams: [] as Team[] }; let deadline = Date.now() + (opts.timeoutMs ?? 100);
   let relayed: string | undefined;
+  let seatLine: string | undefined;
   let held: Task[] = [];
   try {
     const payload = JSON.parse(stdin || '{}');
@@ -509,12 +530,14 @@ export async function runHook(eventName: string, stdin: string, opts: { port?: n
     if (!mapped) { log(`hook ${label} ignored: unknown event, malformed payload, non-terminal SessionEnd or subagent event without a session of its own`); return undefined; }
     const launchedId = agent === 'codex' ? codexLedgeId() : agent === 'claude' ? process.env.LEDGE_SESSION : undefined;
     identify = eventName === 'SessionStart' && !!launchedId && mapped.id === launchedId;
+    // A turn of a session Ledge launched reads what changed in its team since it was last told (Claude Code and Codex add it).
+    const refresh = eventName === 'UserPromptSubmit' && agent !== 'cursor' && !!launchedId && mapped.id === launchedId;
     const input = ((payload as Payload).tool_input ?? {}) as Payload;
     const intercept = agent === 'claude' && eventName === 'PreToolUse' && str((payload as Payload).tool_name) === 'SendMessage'
       && typeof input.to === 'string' && typeof input.message === 'string' && !!input.message;
     const command = agent === 'codex' && eventName === 'PreToolUse' && str((payload as Payload).tool_name) === 'Bash' && typeof input.command === 'string'
       ? parseLedgeCommand(input.command) : undefined;
-    const timeoutMs = opts.timeoutMs ?? (identify ? 1000 : intercept || command ? SEND_MESSAGE_MS : 100);
+    const timeoutMs = opts.timeoutMs ?? (identify ? 1000 : intercept || command ? SEND_MESSAGE_MS : refresh ? SEAT_REFRESH_MS : 100);
     deadline = Date.now() + timeoutMs;
     const client = await connect({ port: opts.port, timeoutMs });
     client.send({ type: 'session.event', id: mapped.id, event: mapped.event, agent: mapped.agent, ...(mapped.cwd ? { cwd: mapped.cwd } : {}) });
@@ -524,11 +547,14 @@ export async function runHook(eventName: string, stdin: string, opts: { port?: n
       // A seat's team follows the snapshot (`teams`): its line names the teammates as they are now.
       const teamList = known?.team ? (await client.next('teams', Math.max(0, deadline - Date.now())).catch(() => undefined))?.teams : undefined;
       live = { sessions: snapshot?.sessions ?? [], teams: teamList ?? [] };
+      // What its start tells it of its team, recorded: its turns are told only what changes after.
+      if (snapshot && known && (!known.team || teamList)) client.send({ type: 'seat.seen', id: known.id, key: seatKey(seatView(known.id, live.sessions, live.teams)) });
       // Its own open tasks (§2), within the same deadline: none known is no block.
       client.send({ type: 'task.cmd', rid: randomUUID(), by: mapped.id, op: 'list' });
       const listed = await client.next('task.result', Math.max(0, deadline - Date.now())).catch(() => undefined);
       held = (listed?.tasks ?? []).filter(t => t.owner === mapped!.id && !taskClosed(t));
     }
+    if (refresh) seatLine = await seatChange(client, mapped.id, deadline);
     if (intercept) relayed = await relayMessage(client, mapped.id, str((payload as Payload).tool_use_id), input, deadline);
     if (command) relayed = await runLedgeCommand(client, command, mapped.id, deadline);
     // close() resolves once the handshake completes, i.e. after the send is flushed; one shared deadline
@@ -537,6 +563,7 @@ export async function runHook(eventName: string, stdin: string, opts: { port?: n
     log(`hook ${label} dropped: ${(e as Error).message}`);
   }
   if (relayed) return relayed;
+  if (seatLine) return JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: seatLine } });
   if (!identify || !mapped) return undefined;
   const found = await identity(agent, mapped.cwd, known, deadline, live);
   const who = found ? { ...found, ...(held.length ? { tasks: held } : {}), ...(known?.relieves ? { relieves: known.relieves } : {}) } : undefined;

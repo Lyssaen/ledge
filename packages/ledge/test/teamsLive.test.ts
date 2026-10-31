@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import type { Session, Team } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
 import { createTeamsLive, teamsJournal, type TeamsLive } from '../src/daemon/teamsLive.js';
-import { resolveRoleAddress, seatContext, teammates } from '../src/daemon/seat.js';
+import { resolveRoleAddress, seatContext, seatKey, seatView, teamChangeLine, teammates } from '../src/daemon/seat.js';
 import { identityContext } from '../src/cli/hook.js';
 
 const T0 = '2026-10-26T08:00:00.000Z';
@@ -213,5 +213,49 @@ describe('a seat’s context and @role', () => {
     expect(resolveRoleAddress('@build', 'mila', store.all(), teams.all())).toEqual({ reason: "@build n'existe que dans une équipe" });
     store.upsert({ ...store.get('otto')!, state: 'exited' });
     expect(resolveRoleAddress('@build', 'pim', store.all(), teams.all())).toMatchObject({ reason: expect.stringContaining('personne ne tient @build') });
+  });
+});
+
+describe('a seat taken out of its team, and what it was last told', () => {
+  it('leave, dissolve and a seat in another team name the team left (teamLeft), report it once, and a new seat clears it', () => {
+    const left: string[][] = [];
+    teams = createTeamsLive({ store, now: () => T0, onLeft: (id, t, why, to) => left.push([id, t.name, why, ...(to ? [to.name] : [])]) });
+    const t = make();
+    teams.seat(t.id, 'lead', store.get('pim')!, 'Chef'); teams.seat(t.id, 'build', store.get('otto')!, 'Build'); teams.seat(t.id, 'review', store.get('nova')!, 'Relecteur');
+    teams.leave(t.id, 'otto');
+    expect(store.get('otto')).toMatchObject({ team: undefined, teamLeft: 'ledge-roles' });
+    expect(resolveRoleAddress('@lead', 'otto', store.all(), teams.all())).toEqual({ reason: "tu n'es plus dans l'équipe ledge-roles : @lead ne te sert plus (ledge team list)" });
+    const other = teams.create({ name: 'api', project: 'api', cwd: '/w/api', roles: ['lead'] });
+    teams.join(other.id, 'nova', 'lead', 'Chef');
+    // Seated in the other team at once: nothing left behind to say to a refused @role.
+    expect(store.get('nova')).toMatchObject({ team: other.id, teamLeft: undefined });
+    teams.dissolve(t.id);
+    expect(store.get('pim')).toMatchObject({ team: undefined, teamLeft: 'ledge-roles' });
+    expect(left).toEqual([['otto', 'ledge-roles', 'leave'], ['nova', 'ledge-roles', 'moved', 'api'], ['pim', 'ledge-roles', 'dissolve']]);
+    // Seated again: no team left behind.
+    teams.join(other.id, 'otto', 'build', 'Build');
+    expect(store.get('otto')!.teamLeft).toBeUndefined();
+  });
+
+  it('seatKey: the team and its live teammates but the seat itself; none is the empty key', () => {
+    const t = make();
+    teams.seat(t.id, 'lead', store.get('pim')!, 'Chef'); teams.seat(t.id, 'build', store.get('otto')!, 'Build');
+    expect(seatView('pim', store.all(), teams.all())).toEqual({ id: t.id, name: 'ledge-roles', members: [{ name: 'Otto', role: 'build' }] });
+    expect(seatKey(seatView('mila', store.all(), teams.all()))).toBe('');
+    expect(JSON.parse(seatKey(seatView('pim', store.all(), teams.all())))).toEqual({ t: t.id, n: 'ledge-roles', m: ['Otto@build'] });
+  });
+
+  it('teamChangeLine: who came, who went, who took whose seat; nothing when the same or never told', () => {
+    const key = (m: string[], t = 'team-1', n = 'workshop') => JSON.stringify({ t, n, m });
+    const before = key(['Otto@build', 'Nova@review']);
+    expect(teamChangeLine(undefined, before)).toBeUndefined();
+    expect(teamChangeLine(before, before)).toBeUndefined();
+    expect(teamChangeLine(before, key(['Otto@build', 'Nova@review', 'Mila@qa']))).toBe('Ledge : ton équipe workshop a changé (Mila (qa) arrive). Ton équipe : Otto (build), Nova (review), Mila (qa). Écris-leur par leur rôle : ledge send @rôle "…".');
+    expect(teamChangeLine(before, key(['Kai@build', 'Nova@review']))).toContain('(Kai remplace Otto (build))');
+    expect(teamChangeLine(before, key(['Nova@review']))).toContain('(Otto (build) part)');
+    expect(teamChangeLine(before, key([]))).toContain('Ton équipe : personne d\'autre pour l\'instant.');
+    expect(teamChangeLine(before, '')).toBe('Ledge : tu n\'es plus dans l\'équipe workshop ; les adresses @rôle ne te servent plus (ledge team list).');
+    expect(teamChangeLine('', key(['Otto@build'], 'team-2', 'api'))).toBe('Ledge : tu es maintenant dans l\'équipe api. Ton équipe : Otto (build). Écris-leur par leur rôle : ledge send @rôle "…".');
+    expect(teamChangeLine('', '')).toBeUndefined();
   });
 });

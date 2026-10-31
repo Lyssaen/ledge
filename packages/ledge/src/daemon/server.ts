@@ -52,7 +52,7 @@ import { readContext } from './context.js';
 import { autonomyArgs, findRole, loadRole, ompApprovalFor } from './roles.js';
 import { listDefinitions, resolveSeats, saveTemplate, templateExists, templateId, type ResolvedSeat } from './teams.js';
 import { deleteDefinition, promptRecipients, roleText, scopeDefinitions, scopeDir, templateText, writeDefinition } from './definitions.js';
-import { resolveRoleAddress, seatContext, teammates } from './seat.js';
+import { resolveRoleAddress, seatContext, seatKey, seatView, teammates } from './seat.js';
 import { formatRoleNotice, formatTeamNotice } from './crossSession.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
 import { createRouter } from '../chat/routing.js';
@@ -303,7 +303,20 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   });
   const relay = createRelay({ threads: cardThreads, store, replyTo: replyText, now, typing, closing, next: id => mailbox.kick(id) });
   /** The live teams (spec 2026-10-25 roles §3.3): every change reaches the local fronts. */
-  const teams = createTeamsLive({ store, now, ...(opts.teams ? { journal: opts.teams } : {}) });
+  const teams = createTeamsLive({ store, now, onLeft: toldOfLeaving, ...(opts.teams ? { journal: opts.teams } : {}) });
+  /** A seat that loses its team is told at once, in one line (its next start would not name the team any more); the
+   *  others of the team read the change at their next turn, without being woken (seatChange in cli/hook.ts). */
+  function toldOfLeaving(id: string, t: Team, why: 'leave' | 'dissolve' | 'moved' | 'removed', to?: Team): void {
+    const s = store.get(id);
+    if (!s || s.state === 'exited' || isArchived(s)) return;
+    const gone = 'les adresses @rôle ne te servent plus (ledge team list)';
+    const text = why === 'dissolve' ? `L'équipe ${t.name} est dissoute : ${gone}.`
+      : why === 'moved' ? `Tu n'es plus dans l'équipe ${t.name} : tu sièges maintenant dans l'équipe ${to?.name ?? '?'}.`
+      : why === 'removed' ? `Ton siège dans l'équipe ${t.name} a été retiré : ${gone}.`
+      : `Tu n'es plus dans l'équipe ${t.name} : ${gone}.`;
+    // Told already: its next turn has nothing more to say of it (a move is told its new team by the join's own notice).
+    if (mailbox.notify(id, formatTeamNotice({ team: t.id, text }), `${t.id}:left:${id}:${now()}`) && why !== 'moved') store.patch(id, { teamSeen: '' });
+  }
   const unsubscribeTeams = teams.onChange(team => broadcast({ type: 'team.updated', team }));
   const tasks = createTasks({ store, mailbox, now, teams, ...(opts.tasks ? { journal: opts.tasks } : {}), onTask: (task, entry) => {
     broadcast({ type: 'task.updated', task });
@@ -1370,6 +1383,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       case 'session.thread':
         return reply({ type: 'session.thread', id: msg.id, items: history?.items(msg.id) ?? [] });
+      case 'seat.seen': {
+        if (store.get(msg.id)) store.patch(msg.id, { teamSeen: msg.key });
+        return;
+      }
       case 'session.rename': {
         if (!store.get(msg.id)) return refuse(unknownSession(), msg.id);
         store.apply(msg.id, { name: 'Renamed', at: now(), source: 'daemon', text: msg.topic });
@@ -1520,7 +1537,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         if (typeof r === 'string') return refuse(r);
         // Its role and its teammates reach it at its next free moment, as its next start would tell it.
         const text = seatContext({ role, team: { name: r.name, members: teammates(r, store.all()).filter(m => m.name !== s.name) } });
-        mailbox.notify(s.id, formatTeamNotice({ team: r.id, text }), `${r.id}:join:${s.id}:${now()}`);
+        if (mailbox.notify(s.id, formatTeamNotice({ team: r.id, text }), `${r.id}:join:${s.id}:${now()}`)) store.patch(s.id, { teamSeen: seatKey(seatView(s.id, store.all(), teams.all())) });
         log(`${s.name} joined team ${r.id} as @${role.id}`);
         return;
       }
