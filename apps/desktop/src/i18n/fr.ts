@@ -361,7 +361,39 @@ export const fr = {
   chunkFailed: 'Cette partie de Ledge n’a pas pu se charger. Relancez l’application.',
   close: 'Fermer',
   modalTitles: { launch: 'Nouvelle session', rigLaunch: 'Nouveau rig' },
-  rigLaunch: { soon: 'Le lancement d’un rig arrive bientôt.', close: 'Fermer' },
+  // « Nouveau rig » en trois temps (spec §4.6, maquettes l-1, l-2, w-1).
+  rigLaunch: {
+    goal: 'But donné au lead', suggestions: 'Idées de but',
+    ideas: ['Corriger les tests qui échouent', 'Livrer une issue', 'Relire une PR'],
+    ideasOff: ['Explorer un dépôt inconnu', 'Comparer deux dépôts', 'Prototyper une idée'],
+    spec: 'Spec OpenRig', specHint: 'L’équipe qu’OpenRig monte', recommended: 'Recommandé par Ledge', change: 'Changer', noSpec: 'Choisis une spec',
+    specsLoading: 'Lecture des specs…', specsFailed: 'Les specs n’ont pas pu être lues.',
+    chooseFor: 'Choisir pour ce rig', seatsOf: (n: number, what: string) => `${n} ${plural(n, 'siège', 'sièges')} · ${what}`,
+    registry: 'Depuis le registre…', registryWhat: 'openrig.dev/rigs', soon: 'Bientôt',
+    recommends: (spec: string, why: 'bounded' | 'long') => `Ledge recommande ${spec} : ${why === 'long' ? 'un travail suivi sur plusieurs jours, avec des relectures.' : 'une modification bornée, vite relue.'}`,
+    providers: 'Fournisseurs', providerSeats: (n: number, label: string) => `${n} ${plural(n, 'siège', 'sièges')} ${label}`,
+    where: 'Où travaille le rig', project: 'Projet', offProject: '+ Nouvel espace, hors projet', machine: 'Machine',
+    why: {
+      absent: (m: string) => `OpenRig n’est pas installé sur ${m}`, unsupported: (v: string) => `OpenRig ${v} non pris en charge`,
+      offline: 'hors ligne', unreachable: 'OpenRig injoignable'
+    },
+    copyInstall: 'Copier la commande', copied: 'Copié',
+    repos: (m: string) => `Dossiers et dépôts sur ${m}`, noRepo: (p: string, m: string) => `${p} n’a pas de dépôt sur ${m}.`,
+    branch: 'nouvelle branche', copy: 'Travailler dans une copie',
+    workspace: 'Espace de travail', workspaceHelp: 'Ledge le crée vide, nommé d’après le but. OpenRig y installe le rig.', invalidName: 'Nom invalide',
+    opens: 'ouvrira sa pièce', opensOff: 'ouvrira sa pièce, hors projet',
+    summary: (n: number, where: string, machine: string) => `1 table · ${n} ${plural(n, 'siège', 'sièges')} · ${where} · ${machine}`, inProject: (p: string) => `dans ${p}`,
+    cancel: 'Annuler', seePlan: 'Voir le plan', launch: 'Lancer le rig', preparing: 'Préparation du plan…', launching: 'Lancement…',
+    missing: { goal: 'Donne un but au lead.', spec: 'Choisis une spec.', repo: 'Choisis un dépôt.', branch: 'Nomme la nouvelle branche.', name: 'Nom invalide', machine: 'Choisis une machine où OpenRig peut lancer le rig.' },
+    planTitle: (spec: string) => `Plan du rig ${spec}`,
+    starts: (n: number) => `Ce qui démarre · ${n} ${plural(n, 'siège', 'sièges')}`,
+    changes: (cwd: string) => `Ce qui change dans ${cwd}`, writes: 'OpenRig ajoute',
+    copyChip: (spec: string) => `Travailler dans une copie : .worktrees/rig-${spec}`,
+    after: 'Après le lancement',
+    afterText: (lead: string, n: number) => `Je donne le but à ${lead} dès que les ${n} sièges sont prêts. Je tranche Git, tests et relèves ; je te remonte le design, l’architecture et le critique.`,
+    planFoot: (n: number, k: number) => `${n} ${plural(n, 'siège', 'sièges')} · ${k} ${plural(k, 'fournisseur', 'fournisseurs')}`,
+    back: 'Retour', refused: (why: string) => `Refusé : ${why}`
+  },
   search: {
     title: 'Aller à une session', placeholder: 'Agent, tâche, projet ou machine…', empty: 'Aucune session ne correspond à cette recherche.', results: 'Sessions',
     browse: 'Parcourir', open: 'Ouvrir', closeKey: 'Fermer', enter: 'Entrée', escape: 'Échap'

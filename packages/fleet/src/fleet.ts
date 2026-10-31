@@ -436,6 +436,9 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       }
       if (msg.type === 'rig.exchanges.request') { machine = msg.machine; outgoing = { ...msg, machine: 'local' }; }
       if (msg.type === 'rig.send') { machine = msg.machine; outgoing = { ...msg, machine: 'local' }; }
+      // A rig action, a launch plan and a filing go to the rig's machine, whose daemon calls itself 'local'. `rig.launch` names no machine:
+      // its sender sends it with `sendTo` to the machine that made the plan.
+      if (msg.type === 'rig.act' || msg.type === 'rig.prepare' || msg.type === 'rig.adopt') { machine = msg.machine; outgoing = { ...msg, machine: 'local' }; }
       // The Ledge thread and the escalation answers live with the brain's daemon (local), never the selected machine.
       if (msg.type === 'ledge.say' || msg.type === 'ledge.thread.request' || msg.type === 'escalation.answer') machine = 'local';
       if (msg.type === 'update.daemon') machine = 'local';

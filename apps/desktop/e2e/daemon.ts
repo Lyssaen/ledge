@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Page, WebSocketRoute } from '@playwright/test';
-import type { Ask, ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, Escalation, Exchange, FoundRepo, LedgeThreadItem, IslandPrefs, Machines, ModelChoice, OpenRigStatus, Projects, Recent, Rig, RigSpecInfo, Session, ThreadItem, Tool } from '@ledge/protocol';
+import type { Ask, ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, Escalation, Exchange, FoundRepo, LedgeThreadItem, IslandPrefs, Machines, ModelChoice, OpenRigStatus, Projects, Recent, Rig, RigPlan, RigSpecInfo, Session, ThreadItem, Tool } from '@ledge/protocol';
 
 /** How long a launched session stays `starting` in the fake daemon before it is `working`. */
 export const LAUNCH_SETTLE_MS = 1500;
@@ -40,12 +40,15 @@ export type Found = { repos: FoundRepo[]; truncated?: boolean } | 'offline' | 'o
  *  `extras.rigs` (the local one always, empty when there are none), then an `escalation.updated` per `extras.escalations`. A `rig.specs.request`
  *  is answered `rig.specs` from `extras.specs` (none by default); a `rig.exchanges.request` is answered `rig.exchanges` from `extras.exchanges`,
  *  keyed by rig id. `pushRig`, `removeRig` and `exchange` play the daemon's later news.
+ *  Launching (lot 5): a `rig.prepare` is answered `rig.plan`, computed from the spec in `extras.specs` (its fields overridden by `extras.plans[spec]`),
+ *  or `rig.result` failed for an unknown spec; a `rig.launch` takes its plan once (`rig.result` ok, then the rig pushed `launching`),
+ *  a plan taken again is refused `plan already launched`, an unknown one `plan expired`.
  *  Ledge's thread (lot 4): after the escalations, `ledge.thread.history` from `extras.thread`; `ledge.thread.request` answers the same. An `escalation.answer`
  *  is accepted after `extras.answerDelayMs` (`escalation.updated` answered, `rig.result` ok), a later one gets `rig.result` `already_answered`. A `ledge.say` adds the
  *  user's item (`to` for a leading `@seat`, which is all it does), else plays `extras.chat` as `chat.ask` does (`chat.history` first) and finishes Ledge's bubble.
  *  `pushEscalation`, `pushExchange` and `threadItem` play the later news. Every client message is kept in `received`.
  *  The route is anchored so it never catches `/ssh/<alias>` (see `fakeRemote`). Register before `page.goto`. */
-export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual'; chat?: ChatReply; found?: Record<string, Found>; scanDelayMs?: number; island?: IslandPrefs | null | 'unknown'; models?: Partial<Record<Tool, ModelChoice[]>>; asks?: Ask[]; rigs?: Rig[]; escalations?: Escalation[]; openrig?: OpenRigStatus; specs?: RigSpecInfo[]; exchanges?: Record<string, Exchange[]>; thread?: LedgeThreadItem[]; answerDelayMs?: number } = {}) {
+export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual'; chat?: ChatReply; found?: Record<string, Found>; scanDelayMs?: number; island?: IslandPrefs | null | 'unknown'; models?: Partial<Record<Tool, ModelChoice[]>>; asks?: Ask[]; rigs?: Rig[]; escalations?: Escalation[]; openrig?: OpenRigStatus; specs?: RigSpecInfo[]; exchanges?: Record<string, Exchange[]>; thread?: LedgeThreadItem[]; answerDelayMs?: number; plans?: Record<string, Partial<RigPlan>> } = {}) {
   const threads = new Map(Object.entries(extras.threads ?? {}).map(([id, items]) => [id, [...items]]));
   const sessions = new Map(initial.map(s => [s.id, s]));
   const received: ClientMessage[] = [];
@@ -62,6 +65,7 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
   const escalations = new Map((extras.escalations ?? []).map(e => [e.id, e]));
   const thread: LedgeThreadItem[] = [...(extras.thread ?? [])];
   let says = 0;
+  const plans = new Map<string, RigPlan | 'used'>();
   const turns = new Map<string, ChatTurn>();
   const images = new Map<string, { mime: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; data: string; preview: boolean }>();
   await page.routeWebSocket(/127\.0\.0\.1:47831\/?$/, ws => {
@@ -120,6 +124,36 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
       }
       if (msg.type === 'rig.specs.request') ws.send(JSON.stringify({ type: 'rig.specs', requestId: msg.requestId, machine: 'local', specs: extras.specs ?? [] }));
       if (msg.type === 'rig.exchanges.request') ws.send(JSON.stringify({ type: 'rig.exchanges', machine: msg.machine, rigId: msg.rigId, items: exchanges.get(msg.rigId) ?? [] }));
+      if (msg.type === 'rig.prepare') {
+        const spec = extras.specs?.find(x => x.id === msg.spec || x.name === msg.spec);
+        if (!spec) ws.send(JSON.stringify({ type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: `unknown spec ${msg.spec}` }));
+        else {
+          const w = msg.where;
+          const cwd = w.kind === 'off-project' ? `/home/me/.ledge/rigs/${w.name}` : w.copy ? `${w.repo}/.worktrees/rig-${msg.spec}` : w.repo;
+          const plan: RigPlan = { id: `plan-${plans.size + 1}`, machine: 'local', spec: msg.spec, goal: msg.goal, where: w, cwd,
+            seats: spec.seats.map(x => ({ address: x.address, runtime: x.runtime, ...(x.model ? { model: x.model } : {}), autonomy: x.profile ?? 'default' })),
+            writes: ['.openrig/', '.mcp.json', 'CLAUDE.md', '.claude/settings.local.json'], command: `rig up ${msg.spec} --cwd ${cwd} --yes --json`,
+            required: w.kind === 'project' && !w.copy, ...extras.plans?.[msg.spec] };
+          plans.set(plan.id, plan);
+          ws.send(JSON.stringify({ type: 'rig.plan', rid: msg.rid, plan }));
+        }
+      }
+      // A plan is taken once, as the daemon does; the launched rig is then pushed `launching`, its seats `starting`.
+      if (msg.type === 'rig.launch') {
+        const plan = plans.get(msg.planId);
+        if (plan === undefined || plan === 'used') ws.send(JSON.stringify({ type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: plan ? 'plan already launched' : 'plan expired' }));
+        else {
+          plans.set(plan.id, 'used');
+          ws.send(JSON.stringify({ type: 'rig.result', rid: msg.rid, ok: true }));
+          const w = plan.where;
+          const rig: Rig = { id: `r-${plan.spec}`, name: plan.spec, machine: 'local', spec: plan.spec, cwd: plan.cwd, projectId: w.kind === 'project' ? w.projectId : null,
+            offProject: w.kind === 'off-project', ...(w.kind === 'project' ? { branch: w.branch } : {}), lifecycle: 'launching', kernel: false, repos: [],
+            seats: plan.seats.map(x => ({ ref: `${x.address.slice(1)}@${plan.spec}`, address: x.address, name: x.address.slice(1), runtime: x.runtime, ...(x.model ? { model: x.model } : {}), state: 'starting' as const })),
+            launch: { planId: plan.id, goal: plan.goal, lead: plan.seats[0]?.address ?? '', startedAt: new Date().toISOString() } };
+          rigs.set(`local/${rig.id}`, rig);
+          ws.send(JSON.stringify({ type: 'rig.updated', rig }));
+        }
+      }
       if (msg.type === 'models.list') ws.send(JSON.stringify({ type: 'models.listing', requestId: msg.requestId, tool: msg.tool, models: extras.models?.[msg.tool] ?? [] }));
       if (msg.type === 'repos.inspect') {
         ws.send(JSON.stringify({ type: 'repos.info', requestId: msg.requestId, repos: msg.paths.map(path => ({ path, ...(extras.repoInfo?.[path] ?? { exists: true, branch: 'main' }) })) }));

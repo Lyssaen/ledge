@@ -133,6 +133,22 @@ describe('fleet routing', () => {
     expect(local.sent).toEqual([]);
     expect(ec2.sent).toEqual([{ type: 'rig.send', rid: 'r3', machine: 'local', seatRef: 'dev@r', text: 'go' }]);
   });
+  it('rig.prepare, rig.act and rig.adopt go to msg.machine, rewritten to local; never the selected machine', () => {
+    const { api, local, ec2 } = setup();
+    const where = { kind: 'off-project' as const, name: 'reprise-wsl' };
+    api.send({ type: 'rig.prepare', rid: 'p1', machine: 'ec2', spec: 'starter', goal: 'go', where });
+    api.send({ type: 'rig.act', rid: 'a1', machine: 'ec2', rigId: 'r1', verb: 'down' });
+    api.send({ type: 'rig.adopt', rid: 'd1', machine: 'ec2', rigId: 'r1', projectId: 'ledge' });
+    expect(local.sent).toEqual([]);
+    expect(ec2.sent).toEqual([
+      { type: 'rig.prepare', rid: 'p1', machine: 'local', spec: 'starter', goal: 'go', where },
+      { type: 'rig.act', rid: 'a1', machine: 'local', rigId: 'r1', verb: 'down' },
+      { type: 'rig.adopt', rid: 'd1', machine: 'local', rigId: 'r1', projectId: 'ledge' }
+    ]);
+    api.fleet!.select('ec2');
+    api.send({ type: 'rig.prepare', rid: 'p2', machine: 'local', spec: 'starter', goal: 'go', where });
+    expect(local.sent.map(m => m.rid)).toEqual(['p2']);
+  });
   it('ledge.thread.* and rig.result from a remote daemon are ignored; the local ones reach the store', () => {
     const { api, local, ec2 } = setup();
     const seen: ServerMessage[] = []; api.onMessage(m => seen.push(m));

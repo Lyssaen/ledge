@@ -339,7 +339,10 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
             launch={launcher.state} onLaunch={(msg, preview) => { launched.current = preview; launcher.launch(msg); }} onCancel={close} paused={nav.paused} />
         </Modal>
       )}
-      {nav.modal?.kind === 'rig-launch' && <RigLaunch onClose={close} />}
+      {nav.modal?.kind === 'rig-launch' && (
+        <RigLaunch client={fleetClient} projects={projects?.projects ?? NO_PROJECTS} machines={machines} dispatch={dispatch} onClose={close}
+          wanted={nav.modal.project === undefined && filter ? { ...nav.modal, project: filter } : nav.modal} />
+      )}
       {nav.modal?.kind === 'project' && (
         <ProjectDialog key={`${nav.modal.edit ?? ''}|${nav.modal.file ?? ''}|${nav.modal.delete ? 'delete' : ''}|${nav.modal.proposal ?? ''}`} edit={nav.modal.edit} file={nav.modal.file} startDeleting={nav.modal.delete}
           proposal={nav.modal.proposal} projects={projects} sessions={sessions} machines={machines} client={fleetClient} fleet={fleet} projectIdOf={projectIdOf} paused={nav.paused}
