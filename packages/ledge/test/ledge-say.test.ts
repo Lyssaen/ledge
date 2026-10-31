@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import type { Escalation, LedgeThreadItem, ServerMessage, Tool } from '@ledge/protocol';
 import { createLedgeThread, type LedgeThread } from '../src/daemon/ledgeThread.js';
 import { createLedgeSay, type SeatSendResult } from '../src/daemon/ledgeSay.js';
-import { ONE_AT_A_TIME, type Chat, type ChatMessage } from '../src/chat/service.js';
+import { ONE_AT_A_TIME, TOO_MANY, type Chat, type ChatMessage } from '../src/chat/service.js';
 
 const AT = '2026-10-31T10:00:00.000Z';
 let thread: LedgeThread;
@@ -171,5 +171,35 @@ describe('ledge.say by the one-shot runner', () => {
     // A word that is no seat: a question to Ledge.
     await say.say('r3', '@Otto où en es-tu ?');
     expect(f.asked.map(a => a.text)).toEqual(['@Otto où en es-tu ?']);
+  });
+  it('an @word message that falls back to Ledge is not overtaken by a plain message sent while toSeat is awaited', async () => {
+    const f = fakeChat({ auto: 'ok' });
+    let release!: (v: SeatSendResult | null) => void;
+    const say = make(f.chat, { toSeat: () => new Promise(r => { release = r; }) });
+    const a = say.say('r1', '@Otto où en es-tu ?');
+    const b = say.say('r2', 'puis ça ?');
+    await flushAll();
+    expect(f.asked).toEqual([]);          // b waits behind a's reserved place
+    release(null);
+    await Promise.all([a, b]);
+    expect(f.asked.map(x => x.text)).toEqual(['@Otto où en es-tu ?', 'puis ça ?']);
+  });
+
+  it('a sent @seat message frees its place at once', async () => {
+    const f = fakeChat({ auto: 'ok' });
+    const say = make(f.chat, { toSeat: async () => ({ ok: true, to: '@build' }) });
+    await say.say('r1', '@build go');
+    await say.say('r2', 'bonjour');
+    expect(f.asked.map(x => x.text)).toEqual(['bonjour']);
+  });
+
+  it('gives up after 30 TOO_MANY retries and ends the bubble with the failure', async () => {
+    let asks = 0;
+    const chat = { async ask(qid: string, _t: string, emit: (m: ChatMessage) => void) { asks++; emit({ type: 'chat.error', qid, message: TOO_MANY }); }, idle: async () => {} } as unknown as Chat;
+    const say = make(chat, { retryMs: 0 });
+    await say.say('r1', 'bonjour');
+    expect(asks).toBe(30);
+    expect(last()).toMatchObject({ kind: 'ledge', text: `Je n'ai pas pu répondre : ${TOO_MANY}` });
+    expect((last() as { pending?: boolean }).pending).toBeUndefined();
   });
 });

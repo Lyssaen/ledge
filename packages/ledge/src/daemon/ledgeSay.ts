@@ -20,6 +20,8 @@ export interface LedgeSay {
 /** How many messages may wait while Ledge answers one. */
 export const MAX_WAITING = 5;
 export const BUSY_TEXT = 'Je réponds encore à tes messages précédents : renvoie celui-ci dans un instant.';
+/** Tries before giving up when every shared chat place stays taken. */
+const MAX_TOO_MANY = 30;
 const failed = (message: string) => `Je n'ai pas pu répondre : ${message}`;
 
 /** The line that tells the chat which escalation the user speaks of (« En parler »). */
@@ -56,6 +58,7 @@ export function createLedgeSay(d: {
     let outcome: { text: string } | { error: string } | null = null;
     try {
       const tool = await d.tool();
+      let tooMany = 0;
       for (;;) {
         let held: string | null = null;
         const emit = (m: ChatMessage): void => {
@@ -68,6 +71,7 @@ export function createLedgeSay(d: {
         await d.chat.ask(qid, question, emit, tool);
         if (held === null) break;
         if (held === ONE_AT_A_TIME) await d.chat.idle();
+        else if (++tooMany >= MAX_TOO_MANY) { outcome = { error: held }; break; }
         else await new Promise(r => setTimeout(r, d.retryMs ?? 1000));
       }
     } catch (e) { outcome = { error: (e as Error).message }; }
@@ -78,21 +82,38 @@ export function createLedgeSay(d: {
   let responder: Responder = oneShot;
 
   // Ledge's own FIFO: the chat refuses a second question rather than queueing it.
+  type Job = { run: () => Promise<void> };
   let running = false;
-  const waiting: Array<() => Promise<void>> = [];
+  const waiting: Job[] = [];
   const full = () => running && waiting.length >= maxWaiting;
   const pump = (): void => {
     if (running) return;
     const next = waiting.shift(); if (!next) return;
     running = true;
-    void next().finally(() => { running = false; pump(); });
+    void next.run().finally(() => { running = false; pump(); });
+  };
+  const respond = async (item: UserItem, about?: Escalation): Promise<void> => {
+    try { await responder(item, about); } catch (e) { log(`ledge.say: responder failed (${(e as Error).message})`); }
   };
   const enqueue = (item: UserItem, about?: Escalation): Promise<void> => new Promise(done => {
-    waiting.push(async () => {
-      try { await responder(item, about); } catch (e) { log(`ledge.say: responder failed (${(e as Error).message})`); } finally { done(); }
-    });
+    waiting.push({ run: async () => { try { await respond(item, about); } finally { done(); } } });
     pump();
   });
+  /** A place kept in the FIFO for a message whose route (a seat or Ledge) is not known yet: later messages queue behind it. */
+  const reserve = () => {
+    let settle!: (v: { item: UserItem; about?: Escalation } | null) => void;
+    const decided = new Promise<{ item: UserItem; about?: Escalation } | null>(r => { settle = r; });
+    let finish!: () => void;
+    const finished = new Promise<void>(r => { finish = r; });
+    const job: Job = { run: async () => { try { const v = await decided; if (v) await respond(v.item, v.about); } finally { finish(); } } };
+    waiting.push(job); pump();
+    return {
+      finished,
+      toLedge: (item: UserItem, about?: Escalation) => settle({ item, about }),
+      /** Not for Ledge after all: the place is given back. */
+      release: () => { const i = waiting.indexOf(job); if (i >= 0) waiting.splice(i, 1); settle(null); finish(); }
+    };
+  };
   const refuse = (): void => { d.thread.append({ kind: 'ledge', text: BUSY_TEXT }); };
 
   return {
@@ -101,13 +122,16 @@ export function createLedgeSay(d: {
       const id = uuid();
       if (/^@\S/.test(text.trimStart())) {
         const user = d.thread.append({ kind: 'user', id, text }) as UserItem;
+        // The place is kept before toSeat is awaited, so a plain message sent meanwhile cannot overtake this one.
+        const place = full() ? null : reserve();
         let sent: SeatSendResult | null;
         try { sent = await d.toSeat(rid, text); } catch (e) { sent = { ok: false, reason: (e as Error).message }; }
-        if (sent?.ok) { d.thread.upsert({ ...user, to: sent.to }); return; }
-        if (sent) { d.thread.append({ kind: 'ledge', text: sent.reason }); return; }
+        if (sent?.ok) { place?.release(); d.thread.upsert({ ...user, to: sent.to }); return; }
+        if (sent) { place?.release(); d.thread.append({ kind: 'ledge', text: sent.reason }); return; }
         // No seat by that name: a question to Ledge.
-        if (full()) return refuse();
-        return enqueue(d.thread.upsert({ ...user, qid: user.id }) as UserItem, about);
+        if (!place) return refuse();
+        place.toLedge(d.thread.upsert({ ...user, qid: user.id }) as UserItem, about);
+        return place.finished;
       }
       if (full()) { d.thread.append({ kind: 'user', id, text }); return refuse(); }
       return enqueue(d.thread.append({ kind: 'user', id, text, qid: id }) as UserItem, about);
