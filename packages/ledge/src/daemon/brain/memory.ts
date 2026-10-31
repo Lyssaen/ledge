@@ -22,6 +22,7 @@ export interface Memory {
 export function fallbackRuleText(question: string, label: string): string { return `${question} → ${label}`; }
 
 /** Lowercase, collapsed spaces, no trailing punctuation. */
+const ruleLabel = (text: string): string | undefined => { const i = text.lastIndexOf(' → '); return i < 0 ? undefined : norm(text.slice(i + 3)); };
 const norm = (s: string): string => s.toLowerCase().replace(/\s+/g, ' ').trim().replace(/[\s.,;:!?…]+$/u, '');
 
 export function createMemory(o: { dir: string; now?: () => string; uuid?: () => string }): Memory {
@@ -56,14 +57,16 @@ export function createMemory(o: { dir: string; now?: () => string; uuid?: () => 
       try { json = JSON.parse(line); } catch { continue; }
       const p = LedgeDecisionSchema.safeParse(json);
       if (!p.success) continue;
-      byId.delete(p.data.id); // keeps first-appearance order irrelevant: re-set below
       byId.set(p.data.id, p.data);
     }
     return [...byId.values()];
   };
   const appendDecision = (d: LedgeDecision): void => {
     mkdirSync(o.dir, { recursive: true });
-    appendFileSync(decisionsPath, `${JSON.stringify(d)}\n`);
+    // A crash mid-append can leave a last line without its newline: start on a fresh line so the new one is not glued to it.
+    let torn = false;
+    try { const t = readFileSync(decisionsPath, 'utf8'); torn = t.length > 0 && !t.endsWith('\n'); } catch { /* no file yet */ }
+    appendFileSync(decisionsPath, `${torn ? '\n' : ''}${JSON.stringify(d)}\n`);
   };
 
   /** What an answer says: the label of the chosen option of the escalation's only question (or the raw answer when it matches no option). */
@@ -79,7 +82,7 @@ export function createMemory(o: { dir: string; now?: () => string; uuid?: () => 
     rules: readRules,
     decisions(opt = {}) {
       let all = readDecisions().reverse();
-      // Order by `at`, newest first; ties keep the later-written line first (stable on the reversed list).
+      // Newest `at` first; on equal `at`, the later-written line comes first.
       all = all.map((d, i) => ({ d, i })).sort((a, b) => (a.d.at < b.d.at ? 1 : a.d.at > b.d.at ? -1 : a.i - b.i)).map(x => x.d);
       if (opt.since) all = all.filter(d => d.at >= opt.since!);
       return opt.limit === undefined ? all : all.slice(0, opt.limit);
@@ -123,17 +126,17 @@ export function createMemory(o: { dir: string; now?: () => string; uuid?: () => 
       const label = answerLabel(d, escalations(d.escalationId));
       if (!label) return null;
       const want = norm(label);
-      const prev = readDecisions().reverse().find(p => p.id !== d.id && p.by === 'user' && p.category === d.category
+      if (d.revisitedBy) return null;
+      const prev = readDecisions().reverse().find(p => p.id !== d.id && !p.revisitedBy && p.by === 'user' && p.category === d.category
         && norm(answerLabel(p, escalations(p.escalationId)) ?? '') === want);
       if (!prev) return null;
       // Already covered: an active or proposed rule of this category that came from either decision (its `from` is "id1,id2"),
-      // or whose normalized text contains the normalized label.
+      // or whose label (the part after " → " of its text) equals this one once normalized.
       const covered = readRules().some(r => r.category === d.category
-        && (r.from.split(',').map(s => s.trim()).some(id => id === d.id || id === prev.id) || norm(r.text).includes(want)));
+        && (r.from.split(',').map(s => s.trim()).some(id => id === d.id || id === prev.id) || ruleLabel(r.text) === want));
       if (covered) return null;
       return { category: d.category, label, decisions: [prev.id, d.id] };
-    }
-    ,
+    },
     onChange(fn) { listeners.add(fn); return () => { listeners.delete(fn); }; }
   };
 }

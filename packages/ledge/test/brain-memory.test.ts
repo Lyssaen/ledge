@@ -61,6 +61,39 @@ describe('brain memory', () => {
     expect(mem.repeatedUserAnswer(d2, lookup)).toBeNull();
   });
 
+  it('a rule text covers the pair only on an exact label after the arrow', () => {
+    const d1 = mem.record(dec('e1')); const d2 = mem.record(dec('e2'));
+    const r = mem.propose(fallbackRuleText('Autre question ?', 'merge'), 'git', 'x,y');
+    expect(mem.repeatedUserAnswer(d2, lookup)).toBeNull();
+    mem.setRule(r.id, 'rejected');
+    mem.propose('Pousser: non-fast-forward → rebase', 'git', 'x,y');
+    expect(mem.repeatedUserAnswer(d2, lookup)).not.toBeNull();
+    expect(d1.id).toBeTruthy();
+  });
+
+  it('a short label is not covered by a longer word in a rule text', () => {
+    const e = { ...escs, n1: esc('n1', 'Non'), n2: esc('n2', 'non') };
+    const l = (id: string): Escalation | undefined => e[id as keyof typeof e];
+    mem.record(dec('n1')); const d2 = mem.record(dec('n2'));
+    mem.propose('Pousser en non-fast-forward → rebase', 'git', 'x,y');
+    expect(mem.repeatedUserAnswer(d2, l)).toMatchObject({ label: 'non' });
+  });
+
+  it('revisited decisions are not paired', () => {
+    const d1 = mem.record(dec('e1')); mem.record(dec('e3'));
+    mem.markRevisited(d1.id, 'dx');
+    const d2 = mem.record(dec('e2'));
+    expect(mem.repeatedUserAnswer(d2, lookup)?.decisions[0]).not.toBe(d1.id);
+    expect(mem.repeatedUserAnswer({ ...d2, revisitedBy: 'z' }, lookup)).toBeNull();
+  });
+
+  it('an append after a torn line without newline keeps the new decision', () => {
+    mem.record(dec('e1'));
+    appendFileSync(join(dir, 'decisions.jsonl'), '{"id":"zz","escal');
+    mem.record(dec('e2'));
+    expect(mem.decisions().map(d => d.escalationId)).toEqual(['e2', 'e1']);
+  });
+
   it('different labels, categories or Ledge decisions do not count', () => {
     mem.record(dec('e1'));
     expect(mem.repeatedUserAnswer(mem.record(dec('e4')), lookup)).toBeNull();
