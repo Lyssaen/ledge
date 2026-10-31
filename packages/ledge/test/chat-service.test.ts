@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn as nodeSpawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
-import { NOTE_MAX, parseServerMessage, type Projects, type ServerMessage, type Session } from '@ledge/protocol';
+import { NOTE_MAX, parseServerMessage, type Projects, type ServerMessage, type Session, type Team } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
 import { createChat, tooWide, TOO_MANY } from '../src/chat/service.js';
 
@@ -624,6 +624,16 @@ describe('ledge-action blocks (spec 2026-10-26 action registry §3)', () => {
     expect(done.closes).toEqual([{ id: 'a1', name: 'Arlo', tool: 'claude' }]);
     expect(done.actions).toEqual([expect.objectContaining({ action: 'session.archive', args: { session: 'a1' } })]);
     expect(logged).toContain('chat q1: action ignored: Bram is still running: close it first');
+  });
+  it('a plan of three team.dissolve keeps its three rows: none is dropped past the first', async () => {
+    const T0 = '2026-10-11T08:00:00.000Z';
+    const team = (id: string): Team => ({ id, name: id, project: null, machine: 'local', cwd: '/w/ledge', state: 'active', seats: [], createdAt: T0, updatedAt: T0 });
+    const ids = ['team-a1', 'team-b2', 'team-c3'];
+    const answer = 'Je dissous les trois équipes.\n\n' + ids.map(t => act('team.dissolve', { team: t })).join('\n');
+    const { done } = await askWith(answer, [], { teams: () => ids.map(team) });
+    expect(done.actions?.map(a => a.args)).toEqual(ids.map(t => ({ team: t })));
+    expect(done.actions!.every(a => a.risk === 'destructive')).toBe(true);
+    expect(logged.some(l => l.includes('team.dissolve beyond'))).toBe(false);
   });
   it('caps rows per action and at 8 in all', async () => {
     const pending = { kind: 'permission' as const, text: 'Bash: rm x', source: 'hook' as const };

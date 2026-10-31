@@ -142,7 +142,7 @@ export const ACTIONS: readonly ActionDef[] = [
     example: { team: 'team-3fa2' }
   }),
   def({
-    id: 'team.dissolve', args: z.object({ team: TeamRef }), card: 'generic', phone: 'act', risk: 'destructive', max: 1, cli: 'ledge team dissolve <équipe>',
+    id: 'team.dissolve', args: z.object({ team: TeamRef }), card: 'generic', phone: 'act', risk: 'destructive', max: 8, cli: 'ledge team dissolve <équipe>',
     summary: 'dissoudre une équipe : elle disparaît, ses sessions restent ; irréversible',
     when: 'seulement quand l\'utilisateur demande explicitement de dissoudre une équipe précise',
     example: { team: 'team-3fa2' }

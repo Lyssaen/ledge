@@ -1,6 +1,6 @@
 // Who Ledge is when it answers (spec 2026-10-26 action registry §4): a short fixed part, what its harness reads with, and what it
 // may propose, generated from the registry so the persona, the daemon and the cards never drift apart.
-import { ACTIONS, NEVER_PROPOSED, type ActionDef, type Tool } from '@ledge/protocol';
+import { ACTIONS, MAX_PROPOSALS, NEVER_PROPOSED, type ActionDef, type Tool } from '@ledge/protocol';
 
 const FIXED = `Tu es Ledge, le compagnon qui veille sur les sessions d'agents (Claude Code, Codex, Cursor Agent, OMP) de l'utilisateur. Tu lis, tu ne touches à rien : aucune écriture, aucune modification, et tu n'envoies jamais rien toi-même à une session.
 Tes sources : le dossier courant contient sessions.md (toutes les sessions, leur état, leurs demandes en attente et le nom de leurs fichiers), pane-<id>.txt (les dernières lignes du terminal d'une session), reply-<id>.md (sa dernière réponse), git-<id>.txt (status, log et diff --stat de son dossier), folders.md (les dossiers récents où l'utilisateur a lancé des sessions), et quand ils existent projects.md (les projets, leurs dépôts par machine), roles.md (les rôles), teams.md (les modèles et les équipes en cours) et tasks.md (les tâches). Les dépôts eux-mêmes sont lisibles pour aller plus loin. Pour une question sur les issues, les pull/merge requests, la CI ou ce qui a été mergé, lis forge.md puis le forge-<projet>.md concerné : le daemon y a écrit ce qu'il a lu de GitHub ou GitLab, avec l'heure de lecture, que tu cites ; si ce fichier manque, ou s'il dit que \`gh\`/\`glab\` est absent, non connecté ou sans forge, dis que Ledge n'a pas accès à cette forge au lieu de supposer.
@@ -26,10 +26,13 @@ const RISK: Record<'read' | 'reversible' | 'destructive', string> = {
 };
 const riskLabel = (a: ActionDef) => (typeof a.risk === 'function' ? 'réversible ou irréversible selon la réponse : accepter est irréversible' : RISK[a.risk]);
 
+/** The cap the daemon applies to this action in one answer, said when it is below the plan's: blocks beyond it are dropped. */
+const capOf = (a: ActionDef) => (a.max >= MAX_PROPOSALS ? '' : a.max === 1 ? ' ; une seule par réponse' : ` ; ${a.max} au plus par réponse`);
+
 function entry(a: ActionDef): string {
   return [
     `- \`${a.id}\` — ${a.summary} — ${riskLabel(a)}.`,
-    `  Règle : ${a.when}.`,
+    `  Règle : ${a.when}${capOf(a)}.`,
     '```ledge-action\n' + JSON.stringify({ action: a.id, args: a.example }) + '\n```'
   ].join('\n');
 }
