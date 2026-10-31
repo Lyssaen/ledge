@@ -106,6 +106,12 @@ describe('ledge tui: an OMP session in the home', () => {
       await until(() => tui.frame().includes('π FIL · OMP'));
       expect(tui.frame()).toContain('Fait, avec un test.');
       expect(tui.daemon.received.filter(m => m.type === 'session.preview.subscribe' && (m as { color?: boolean }).color && (m as { id: string | null }).id === 'omp1')).toEqual([]);
+      // The session's other keys still work there: i interrupts, t toggles back to the thread.
+      await tui.press('i');
+      await until(() => tui.daemon.received.some(m => m.type === 'session.interrupt' && m.id === 'omp1'));
+      await tui.press('t');
+      await until(() => !tui.frame().includes('π FIL · OMP'));
+      expect(tui.frame()).toContain('Fait, avec un test.');
     } finally { await tui.cleanup(); }
   });
 });

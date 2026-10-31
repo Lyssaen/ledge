@@ -129,7 +129,7 @@ function SessionView({ s }: { s: Session }) {
     }
     if (key.leftArrow && seat) { setFocus({ kind: 'rig', machine: seat.machine, rigId: seat.rigId }); go('home'); return true; }
     // The OMP pane (t) scrolls itself.
-    if (terminal && s.tool === 'omp') return false;
+    if (terminal && s.tool === 'omp' && (key.pageUp || key.pageDown)) return false;
     if (key.pageUp) { scroll(up + view - 1); return true; }
     if (key.pageDown) { scroll(up - view + 1); return true; }
     if (input === 'k' || key.upArrow) { scroll(up + 1); return true; }
@@ -170,7 +170,7 @@ function SessionView({ s }: { s: Session }) {
   const keys: Array<readonly [string, string]> = mode === 'model' ? [['↑ ↓', t.keys.choose], ['← →', t.launch.effort], ['↵', t.keys.choose], ['esc', t.keys.cancel]]
     : mode !== 'read' && browsing ? [['↵', t.keys.resend], ['↑ ↓', t.keys.history], ['esc', t.keys.backToDraft]]
     : mode !== 'read' ? [['↵', t.keys.sendOnly], ...(mode === 'reply' && !seat ? [['alt+v', t.keys.image] as const] : []), ['alt+↵', t.keys.newLine], ['esc', t.keys.keepAndLeave], ['↑ ↓', t.keys.lineHistory], ['ctrl ← →', t.keys.word], ['ctrl+u', t.keys.clear]]
-    : [['esc', t.keys.back], ...(seat ? [['←', seat.label] as const] : []), ...(p ? [['y n A', t.keys.answer] as const] : []), ['r', t.keys.write], ['j k', t.keys.scroll], [t.keys.space, t.keys.unfold], ['d', t.keys.diffs], ['t', t.keys.terminal], ['a', t.keys.attach], ...(s.rig ? [] : [['m', t.keys.model] as const]), ['i', t.keys.interrupt], ...(images.length ? [['o', t.keys.openImage] as const] : [])];
+    : [['esc', t.keys.back], ...(seat ? [['←', seat.label] as const] : []), ...(p ? [['y n A', t.keys.answer] as const] : []), ['r', t.keys.write], ...(terminal && s.tool === 'omp' ? [] : [['j k', t.keys.scroll] as const]), [t.keys.space, t.keys.unfold], ['d', t.keys.diffs], ['t', t.keys.terminal], ['a', t.keys.attach], ...(s.rig ? [] : [['m', t.keys.model] as const]), ['i', t.keys.interrupt], ...(images.length ? [['o', t.keys.openImage] as const] : [])];
   // The rows, in this order: the request (its keys left out while writing), the field, the thread with what is left, drawn
   // only with room for a line. The request is cut only when even that does not fit.
   const editing = mode === 'reply' || mode === 'note';

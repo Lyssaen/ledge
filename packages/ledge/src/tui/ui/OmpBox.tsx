@@ -9,7 +9,7 @@ import { TitledBox } from './TitledBox.js';
 
 /** An OMP session's right pane: its thread drawn as a terminal, anchored at the bottom (PgUp goes up). Ledge drives OMP over
  *  RPC: there is no pane to follow, so no colour preview is asked for. */
-export function OmpBox({ s, active = true }: { s: Session; active?: boolean }) {
+export function OmpBox({ s }: { s: Session }) {
   const { client, d, t, g, tone } = useTui();
   const items = d.threads.get(s.id);
   // The thread is asked once per opening (and again after a reconnect drops it); its items then arrive one by one.
@@ -27,7 +27,7 @@ export function OmpBox({ s, active = true }: { s: Session; active?: boolean }) {
   useInput((_, key) => {
     if (key.pageUp) setUp(u => Math.min(top, u + view - 1));
     else if (key.pageDown) setUp(u => Math.max(0, u - view + 1));
-  }, { isActive: active });
+  });
   return (
     <Box ref={ref} flexDirection="column" flexGrow={1}>
       <TitledBox title="" heads={[{ text: g.omp, color: C.omp, raw: true }, { text: ` ${t.omp.title}`, color: C.omp }]} color={C.line} foot={t.omp.foot} flexGrow={1}>
