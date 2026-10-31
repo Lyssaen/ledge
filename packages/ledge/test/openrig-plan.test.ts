@@ -46,6 +46,13 @@ describe('pure helpers', () => {
     plans.put(p); expect(plans.get('plan-1')).toBe(p); expect(plans.take('plan-1')).toBe(p); expect(plans.take('plan-1')).toBe('used');
     plans.put({ id: 'plan-2' } as RigPlan); t = PLAN_TTL_MS + 1; expect(plans.take('plan-2')).toBeNull();
   });
+  it('Plans.giveBack: a plan taken then given back (a launch refused « not now ») can be taken again, within its first 30 min', () => {
+    let t = 0; const plans = createPlans(() => t); const p = { id: 'plan-1' } as RigPlan;
+    plans.put(p); t = 10; expect(plans.take('plan-1')).toBe(p);
+    plans.giveBack('plan-1'); expect(plans.take('plan-1')).toBe(p); expect(plans.take('plan-1')).toBe('used');
+    plans.giveBack('plan-1'); t = PLAN_TTL_MS + 1; expect(plans.take('plan-1')).toBeNull();
+    plans.giveBack('nope'); expect(plans.take('nope')).toBeNull();
+  });
 });
 
 describe('prepareRigPlan', () => {

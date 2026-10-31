@@ -1,5 +1,6 @@
-import { projectOf, type Escalation, type Exchange, type Machines, type OpenRigStatus, type Projects, type Rig } from '@ledge/protocol';
+import { type Escalation, type Exchange, type Machines, type OpenRigStatus, type Projects, type Rig } from '@ledge/protocol';
 import { log } from '../../log.js';
+import { rigProjectId } from './adopt.js';
 import type { Bridge, BridgeMessage } from './bridge.js';
 import type { RemoteMessage, RemotePeers } from './remote.js';
 
@@ -51,8 +52,10 @@ export function createRigAggregate(opts: { bridge: Bridge; remote: RemotePeers; 
     return [...peers.keys()].sort((a, b) => (ids.indexOf(a) + 1 || Infinity) - (ids.indexOf(b) + 1 || Infinity));
   };
   const labelOf = (machine: string) => opts.machines().find(m => m.id === machine)?.label ?? machine;
-  /** The projects live on this machine: a remote rig's project is computed here, from its machine and folder. */
-  const filed = (machine: string, rig: Rig): Rig => ({ ...rig, projectId: rig.cwd ? projectOf({ machineId: machine, cwd: rig.cwd }, opts.projects()) : null });
+  /** The projects live on this machine: a remote rig's project is computed here, as the mirror does for a local one — the
+   *  project that lists its id, else the one whose repository holds its folder on its machine. A project's `rigs` are bare
+   *  rig ids (no machine): a rig id is OpenRig's, unique per machine only, so a clash between machines would file both. */
+  const filed = (machine: string, rig: Rig): Rig => ({ ...rig, projectId: rigProjectId({ id: rig.id, cwd: rig.cwd, machine }, opts.projects()) });
   const over = (e: Escalation): Escalation => { const o = overlays.get(e.id); return o ? { ...e, ...o } : e; };
   const remoteEsc = (id: string): Escalation | undefined => { const m = owner.get(id); return m ? peers.get(m)?.escs.get(id) : undefined; };
 

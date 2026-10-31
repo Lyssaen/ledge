@@ -1,4 +1,4 @@
-import type { ClientMessage, Escalation, ServerMessage } from '@ledge/protocol';
+import type { ClientMessage, Escalation, Machines, ServerMessage } from '@ledge/protocol';
 import { paths } from '../../paths.js';
 import type { Reply } from '../server.js';
 import type { RigAggregate } from './aggregate.js';
@@ -9,12 +9,14 @@ import type { RemotePeers } from './remote.js';
 export interface QueuedAnswer { rid: string; machine: string; id: string; answers: Record<string, string>; by: 'user' | 'ledge'; at: string; sentAt?: string }
 
 export interface AnswerQueue {
-  /** Answers rig.result { rid, ok: true } at once; overlays { state: 'answered', answer: { …, delivery: 'queued' } }. */
+  /** Answers rig.result { rid, ok: true } at once; overlays { state: 'answered', answer: { …, delivery: 'queued' } }. A `sentAt` is kept
+   *  (an answer relayed whose ack the dropped link lost). */
   enqueue(a: QueuedAnswer, reply: Reply): void;
   pending(machine?: string): QueuedAnswer[];
   /** When the peer opens and each time its OpenRig turns `running`: resends each answer of the machine once, in order, same `rid`. */
   flush(machine: string): void;
-  /** The peer's rig.result for a queued rid: ok or already_answered → removed, overlay removed (the peer's escalation rules); openrig_down → kept; other → removed, notice. */
+  /** The peer's rig.result for a queued rid: ok or already_answered → removed, overlay removed (the peer's escalation rules); openrig_down → kept;
+   *  `failed` for a resent answer (its first send's ack lost) to an escalation no longer listed → delivered, removed quietly; other → removed, notice. */
   settle(machine: string, result: Extract<ServerMessage, { type: 'rig.result' }>): void;
   /** Machine removed: dropped, with a notice. */
   drop(machine: string): void;
@@ -36,6 +38,9 @@ interface Conn {
   /** Rids sent for the first time on this connection to an escalation the peer did not list: a definite « unknown » or
    *  « already answered » from its daemon means the question was closed over there. */
   unlisted: Set<string>;
+  /** Rids sent before (`sentAt`, the ack lost) and sent again to an escalation the peer no longer lists: the first send
+   *  arrived, and a remote daemon restarted since (its rid memo gone) says « unknown » or « already answered » — delivered. */
+  resent: Set<string>;
   /** A listing under way: a peer's replay (at `open`) or its OpenRig coming up (`running`) sends its status, its rig.snapshot,
    *  then every escalation it has, in one burst (bridge.replay / bridge connect). */
   listing: { snapshot: boolean; timer: NodeJS.Timeout | null } | null;
@@ -50,7 +55,9 @@ interface Conn {
  * closed over there, the answer is abandoned and Ledge's thread says so; « not read yet » (`openrig_down`) keeps it.
  */
 export function createAnswerQueue(opts: { remote: RemotePeers; aggregate: RigAggregate; file?: string; notice: (text: string) => void; now?: () => string;
-  labelOf?: (id: string) => string; settleMs?: number }): AnswerQueue {
+  labelOf?: (id: string) => string; settleMs?: number;
+  /** machines.json as it is at startup: the answers of a machine no longer in it (or no longer reached by ssh) are abandoned. */
+  machines?: () => Machines }): AnswerQueue {
   const { remote, aggregate, notice } = opts;
   const file = opts.file ?? paths().openrig; const now = opts.now ?? (() => new Date().toISOString());
   const labelOf = opts.labelOf ?? ((id: string) => id); const settleMs = opts.settleMs ?? SETTLE_MS;
@@ -72,7 +79,9 @@ export function createAnswerQueue(opts: { remote: RemotePeers; aggregate: RigAgg
     // Only `by: 'user'` is queued (enqueue refuses the rest): the protocol carries no other over the wire.
     const msg: ClientMessage = { type: 'escalation.answer', rid: a.rid, id: a.id, answers: a.answers, by: 'user' };
     if (!remote.send(a.machine, msg)) return false;
-    if (!c.listed.has(a.id) && !a.sentAt) c.unlisted.add(a.rid); else c.unlisted.delete(a.rid);
+    const unlisted = !c.listed.has(a.id);
+    if (unlisted && !a.sentAt) c.unlisted.add(a.rid); else c.unlisted.delete(a.rid);
+    if (unlisted && a.sentAt) c.resent.add(a.rid); else c.resent.delete(a.rid);
     c.sent.add(a.rid); a.sentAt = now(); save();
     aggregate.overlay(a.id, patch(a, 'sent'));
     return true;
@@ -119,6 +128,12 @@ export function createAnswerQueue(opts: { remote: RemotePeers; aggregate: RigAgg
     for (const a of items) if (a.machine === machine && c.sent.has(a.rid)) aggregate.overlay(a.id, patch(a, 'queued'));
   };
 
+  const removedWhy = (machine: string) => `${labelOf(machine)} a été retirée des machines`;
+  if (opts.machines) {
+    // Removed while this daemon was down: no peer will ever say `removed` for it.
+    const listed = new Set(opts.machines().filter(m => m.ssh && m.id !== 'local').map(m => m.id));
+    for (const machine of new Set(items.map(a => a.machine))) if (!listed.has(machine)) abandon(machine, removedWhy(machine));
+  }
   // Overlays are the aggregate's memory only: laid again after a restart of this daemon.
   for (const a of items) aggregate.overlay(a.id, patch(a, 'queued'));
 
@@ -131,7 +146,7 @@ export function createAnswerQueue(opts: { remote: RemotePeers; aggregate: RigAgg
     }
     if (s !== 'open') return lost(machine);
     lost(machine);
-    conns.set(machine, { running: false, listed: new Set(), sent: new Set(), unlisted: new Set(), listing: { snapshot: false, timer: null } });
+    conns.set(machine, { running: false, listed: new Set(), sent: new Set(), unlisted: new Set(), resent: new Set(), listing: { snapshot: false, timer: null } });
     flush(machine);
   });
 
@@ -170,7 +185,8 @@ export function createAnswerQueue(opts: { remote: RemotePeers; aggregate: RigAgg
       if (same && same.rid !== a.rid) return reply({ type: 'rig.result', rid: a.rid, ok: false, code: 'already_answered', reason: 'déjà répondue' });
       if (!same) {
         const s = aggregate.escalation(a.id)?.summary; if (s) summaries.set(a.id, s);
-        const entry: QueuedAnswer = { rid: a.rid, machine: a.machine, id: a.id, answers: a.answers, by: a.by, at: a.at };
+        // `sentAt`: an answer the router had relayed when the link dropped, its ack lost: it may have arrived.
+        const entry: QueuedAnswer = { rid: a.rid, machine: a.machine, id: a.id, answers: a.answers, by: a.by, at: a.at, ...(a.sentAt ? { sentAt: a.sentAt } : {}) };
         items = [...items, entry]; save();
         aggregate.overlay(a.id, patch(entry, 'queued'));
       }
@@ -185,6 +201,8 @@ export function createAnswerQueue(opts: { remote: RemotePeers; aggregate: RigAgg
       // First sent to an escalation the peer did not list, and its daemon (its queue read) does not know it or has it answered: closed there.
       if (!result.ok && c?.unlisted.has(a.rid) && (result.code === 'already_answered' || result.code === 'failed')) return remove(a, closedThere(a));
       if (result.ok || result.code === 'already_answered') return remove(a);
+      // Sent before, its ack lost, no longer listed: the remote daemon (restarted, its rid memo gone) no longer knows it — it went.
+      if (c?.resent.has(a.rid) && result.code === 'failed') return remove(a);
       if (result.code === 'openrig_down') {
         // Kept (OpenRig down there, or its queue not read yet): it goes again on the peer's next word about it — its OpenRig
         // `running`, the escalation listed, the end of a listing — each once (a refusal sends nothing back: no loop).
@@ -194,7 +212,7 @@ export function createAnswerQueue(opts: { remote: RemotePeers; aggregate: RigAgg
       }
       remove(a, `Ma réponse à ${summary(a.id)} n'est pas partie sur ${labelOf(machine)} : ${result.reason ?? result.code ?? 'refusée'}`);
     },
-    drop(machine) { abandon(machine, `${labelOf(machine)} a été retirée des machines`); }
+    drop(machine) { abandon(machine, removedWhy(machine)); }
   };
   return queue;
 }

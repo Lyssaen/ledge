@@ -104,6 +104,20 @@ describe('RemotePeers', () => {
     expect(peers.status('ec2')).toBe('unreachable');
   });
 
+  it('a changed ssh alias reconnects on the new alias: unreachable, never removed', () => {
+    const { peers, f, states, fakes, urls, got } = openEc2();
+    peers.setMachines([LOCAL, { ...EC2, ssh: 'ec2-new' }]);
+    expect(f.o.closed).toBe(1);
+    expect(states.slice(1)).toEqual([['ec2', 'unreachable']]);
+    expect(urls.at(-1)).toBe('ws://127.0.0.1:47831/ssh/ec2-new');
+    expect(peers.status('ec2')).toBe('connecting');
+    // the old client says nothing more
+    f.emit({ type: 'rig.snapshot', machine: 'local', rigs: [rig('r1')] }); expect(got).toEqual([]);
+    const g = fakes[1]!; g.set('open'); g.emit(snap(true));
+    expect(states.at(-1)).toEqual(['ec2', 'open']);
+    expect(states.some(([, s]) => s === 'removed')).toBe(false);
+  });
+
   it('close() closes every peer; a listener can unsubscribe', () => {
     const s = setup(); const off = s.peers.onStatus(() => { throw new Error('off'); }); off();
     s.peers.setMachines([LOCAL, EC2]); s.peers.close();

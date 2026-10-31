@@ -208,6 +208,16 @@ describe('RigAggregate', () => {
     expect(s.out.find(m => m.type === 'rig.updated')).toMatchObject({ rig: { id: 'r4', projectId: 'app' } });
   });
 
+  it('files a remote rig listed in a project\'s rigs there, whatever its folder', () => {
+    const projects = { projects: [{ id: 'app', name: 'App', color: 'red', description: '', repos: [], rigs: ['r2'] }], rules: [] } as unknown as Projects;
+    const s = setup(projects);
+    s.ec2Replay([rig('r2', 'ec2', { cwd: '/srv/elsewhere' })]);
+    s.msg('ec2', { type: 'rig.updated', rig: rig('r2', 'ec2', { cwd: '' }) });
+    expect(s.agg.rigs().find(r => r.id === 'r2')?.projectId).toBe('app');
+    expect(s.out.find(m => m.type === 'rig.snapshot' && m.machine === 'ec2')).toMatchObject({ rigs: [{ id: 'r2', projectId: 'app' }] });
+    expect(s.out.find(m => m.type === 'rig.updated')).toMatchObject({ rig: { id: 'r2', projectId: 'app' } });
+  });
+
   it('a peer removes only its own escalations', () => {
     const s = setup();
     s.ec2Replay([], [esc('E1', 'ec2')]);

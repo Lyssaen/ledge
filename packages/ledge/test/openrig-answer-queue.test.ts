@@ -3,15 +3,16 @@ import { copyFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import WebSocket from 'ws';
-import { parseServerMessage, type ClientMessage, type Escalation, type Machine, type Projects, type ServerMessage } from '@ledge/protocol';
-import { createDaemonClient, type DaemonClient } from '@ledge/fleet/client';
+import { parseServerMessage, type ClientMessage, type Escalation, type Machine, type OpenRigStatus, type Projects, type Rig, type ServerMessage } from '@ledge/protocol';
+import { createDaemonClient, type DaemonClient, type DaemonStatus } from '@ledge/fleet/client';
 import { createTokenSource } from '@ledge/fleet/token';
 import { readDaemonToken } from '../src/auth.js';
 import { createBridge, type Bridge } from '../src/daemon/openrig/bridge.js';
 import { createCursorWriter, readOpenRigFile } from '../src/daemon/openrig/cursor.js';
 import { createAnswerQueue, type QueuedAnswer } from '../src/daemon/openrig/answerQueue.js';
-import type { RigAggregate } from '../src/daemon/openrig/aggregate.js';
-import type { PeerStatus, RemoteMessage, RemotePeers } from '../src/daemon/openrig/remote.js';
+import { createRigAggregate, type RigAggregate } from '../src/daemon/openrig/aggregate.js';
+import type { BridgeMessage } from '../src/daemon/openrig/bridge.js';
+import { createRemotePeers, type PeerStatus, type RemoteMessage, type RemotePeers } from '../src/daemon/openrig/remote.js';
 import { writeMachines } from '../src/daemon/machines.js';
 import { startServer, type ServerHandle } from '../src/daemon/server.js';
 import { Store } from '../src/daemon/store.js';
@@ -27,7 +28,7 @@ const ok = (rid: string): Extract<ServerMessage, { type: 'rig.result' }> => ({ t
 
 // ---- The queue against a fake peer and a fake aggregate.
 
-function setup(file: string, opts: { settleMs?: number } = {}) {
+function setup(file: string, opts: { settleMs?: number; machines?: Machine[] } = {}) {
   const sent: ClientMessage[] = [];
   const msgFns = new Set<(machine: string, m: RemoteMessage) => void>();
   const stFns = new Set<(machine: string, s: 'open' | 'unreachable' | 'unsupported' | 'removed') => void>();
@@ -43,7 +44,8 @@ function setup(file: string, opts: { settleMs?: number } = {}) {
   const known = new Map<string, Escalation>([['E1', esc('E1', 'ec2')], ['E2', esc('E2', 'ec2')]]);
   const aggregate = { escalation: (id: string) => known.get(id), overlay: (id: string, p: Partial<Escalation> | null) => { overlays.push([id, p]); } } as unknown as RigAggregate;
   const notices: string[] = [];
-  const queue = createAnswerQueue({ remote, aggregate, file, notice: t => { notices.push(t); }, now: () => T, labelOf: id => (id === 'ec2' ? 'EC2' : id), settleMs: opts.settleMs ?? 20 });
+  const queue = createAnswerQueue({ remote, aggregate, file, notice: t => { notices.push(t); }, now: () => T, labelOf: id => (id === 'ec2' ? 'EC2' : id), settleMs: opts.settleMs ?? 20,
+    ...(opts.machines ? { machines: () => opts.machines! } : {}) });
   const peer = (m: RemoteMessage) => msgFns.forEach(f => f('ec2', m));
   const peerStatus = (s: 'open' | 'unreachable' | 'unsupported' | 'removed') => { status = s === 'removed' ? 'unreachable' : s; stFns.forEach(f => f('ec2', s)); };
   /** The peer opens and replays: its OpenRig status, its rigs, then its escalations. */
@@ -99,6 +101,17 @@ describe('answer queue', () => {
     expect(readOpenRigFile(file)).toEqual({ version: 1, machines: { local: { lastEventId: 4, rigs: [], at: 'NOW' } }, replyRows: { 'qi-1': 'row-1' } });
   });
 
+  it('at startup, drops the answers of a machine no longer in machines.json, with one notice per machine', () => {
+    const file = join(tmp(), 'openrig.json');
+    const a = (rid: string, machine: string, id: string) => ({ rid, machine, id, answers: { q: 'a' }, by: 'user', at: T });
+    writeFileSync(file, JSON.stringify({ version: 1, machines: {}, outbox: [a('r1', 'ec2', 'E1'), a('r2', 'nas', 'N1'), a('r3', 'nas', 'N2')] }));
+    const s = setup(file, { machines: [{ id: 'local', label: 'PC' }, { id: 'ec2', label: 'EC2', ssh: 'ec2' }] });
+    expect(s.queue.pending().map(x => x.rid)).toEqual(['r1']);
+    expect(readOpenRigFile(file).outbox?.map(x => x.rid)).toEqual(['r1']);
+    expect(s.notices).toEqual(["Mes 2 réponses en attente pour nas ne sont pas parties : nas a été retirée des machines"]);
+    expect(s.overlays.filter(([, p]) => p)).toEqual([['E1', expect.objectContaining({ state: 'answered' })]]);
+  });
+
   it('drops a malformed outbox entry when reading openrig.json', () => {
     const file = join(tmp(), 'openrig.json');
     const good = { rid: 'r1', machine: 'ec2', id: 'E1', answers: { q: 'a' }, by: 'user', at: T };
@@ -140,6 +153,33 @@ describe('answer queue', () => {
     await until(() => s.answersSent().length === 2, 1000);
     expect(s.answersSent().map(m => m.rid)).toEqual(['r1', 'r1']);
     s.peer(ok('r1')); // the peer's rid memo answers the resend as the first one
+    expect(s.queue.pending()).toEqual([]);
+    expect(s.notices).toEqual([]);
+  });
+
+  it('lost ack and the remote daemon restarted (its rid memo gone): « unknown » or « already answered » for a resent answer is delivered, no notice', async () => {
+    for (const code of ['failed', 'already_answered'] as const) {
+      const s = setup(join(tmp(), 'openrig.json'));
+      s.queue.enqueue(s.answer('r1'), s.reply);
+      s.replay('running', ['E1']);
+      expect(s.answersSent().map(m => m.rid)).toEqual(['r1']);
+      s.peerStatus('unreachable'); // cut before its rig.result; the remote daemon restarts meanwhile
+      s.replay('running', []); // the answer arrived: E1 is gone over there
+      await until(() => s.answersSent().length === 2, 1000);
+      s.peer({ type: 'rig.result', rid: 'r1', ok: false, code, reason: code === 'failed' ? 'aucune escalade E1' : 'déjà répondue' });
+      expect(s.queue.pending()).toEqual([]);
+      expect(s.notices).toEqual([]);
+      expect(s.overlays.at(-1)).toEqual(['E1', null]);
+    }
+  });
+
+  it('an answer the router had sent when the link dropped (sentAt): kept as sent, then a restarted peer\'s « unknown » is quiet', async () => {
+    const s = setup(join(tmp(), 'openrig.json'));
+    s.queue.enqueue({ ...s.answer('r1'), sentAt: T }, s.reply);
+    expect(s.queue.pending()).toEqual([{ ...s.answer('r1'), sentAt: T }]);
+    s.replay('running', []);
+    await until(() => s.answersSent().length === 1, 1000);
+    s.peer({ type: 'rig.result', rid: 'r1', ok: false, code: 'failed', reason: 'aucune escalade E1' });
     expect(s.queue.pending()).toEqual([]);
     expect(s.notices).toEqual([]);
   });
@@ -236,6 +276,49 @@ describe('answer queue', () => {
     expect(s.notices[0]).toContain('EC2');
     s.queue.drop('ec2'); // nothing left: no second notice
     expect(s.notices).toHaveLength(1);
+  });
+});
+
+// ---- The real peers, aggregate and queue together: a machine whose ssh alias changes stays the same machine.
+
+describe('ssh alias change', () => {
+  it('keeps the queued answers, the rigs (unreachable) and the escalations; nothing is abandoned', () => {
+    const clients: Array<{ set(s: DaemonStatus): void; emit(m: ServerMessage): void; closed: number }> = [];
+    const remote = createRemotePeers({ port: 1, connect: () => {
+      let onMsg = (_: ServerMessage) => {}, onSt = (_: DaemonStatus) => {}, status: DaemonStatus = 'connecting';
+      const c = { closed: 0, set(s: DaemonStatus) { status = s; onSt(s); }, emit(m: ServerMessage) { onMsg(m); } }; clients.push(c);
+      return { connect() {}, close() { c.closed++; }, send() {}, status: () => status, onMessage(fn) { onMsg = fn; return () => {}; }, onStatus(fn) { onSt = fn; return () => {}; } } as DaemonClient;
+    } });
+    const fns = new Set<(m: BridgeMessage) => void>();
+    const bridge = { status: () => ({ machine: 'local', state: 'running' }) as OpenRigStatus, rigs: () => [], escalations: () => [], escalation: () => undefined, replay: () => [],
+      onMessage: (fn: (m: BridgeMessage) => void) => { fns.add(fn); return () => { fns.delete(fn); }; } } as unknown as Bridge;
+    let machines: Machine[] = [{ id: 'local', label: 'PC' }, { id: 'ec2', label: 'EC2', ssh: 'ec2-old' }];
+    const aggregate = createRigAggregate({ bridge, remote, machines: () => machines, projects: () => none, settleMs: 20 });
+    const out: BridgeMessage[] = []; aggregate.onMessage(m => out.push(m));
+    const notices: string[] = [];
+    const queue = createAnswerQueue({ remote, aggregate, file: join(tmp(), 'openrig.json'), notice: t => { notices.push(t); }, now: () => T, labelOf: id => (id === 'ec2' ? 'EC2' : id), settleMs: 20 });
+    remote.setMachines(machines);
+    const c0 = clients[0]!; c0.set('open');
+    c0.emit({ type: 'snapshot', sessions: [], recents: [], daemon: { version: '0.30.0', install: 'npm', systemd: true, openrig: true } } as ServerMessage);
+    const r2: Rig = { id: 'r2', name: 'r2', machine: 'local', cwd: '/w', projectId: null, offProject: false, lifecycle: 'running', kernel: false, seats: [], repos: [] };
+    c0.emit({ type: 'openrig.status', status: { machine: 'local', state: 'running' } });
+    c0.emit({ type: 'rig.snapshot', machine: 'local', rigs: [r2] });
+    c0.emit({ type: 'escalation.updated', escalation: esc('E1') });
+    c0.set('unreachable');
+    const replies: ServerMessage[] = [];
+    queue.enqueue({ rid: 'r1', machine: 'ec2', id: 'E1', answers: { q1: 'a' }, by: 'user', at: T }, m => { replies.push(m); });
+    expect(replies).toEqual([ok('r1')]);
+    out.length = 0;
+
+    machines = [machines[0]!, { id: 'ec2', label: 'EC2', ssh: 'ec2-new' }];
+    remote.setMachines(machines);
+    expect(c0.closed).toBe(1);
+    expect(clients).toHaveLength(2);
+    expect(queue.pending('ec2').map(a => a.rid)).toEqual(['r1']);
+    expect(notices).toEqual([]);
+    expect(out.some(m => m.type === 'rig.removed' || m.type === 'escalation.removed')).toBe(false);
+    expect(aggregate.rigs().find(r => r.id === 'r2')).toMatchObject({ machine: 'ec2', lifecycle: 'unreachable' });
+    expect(aggregate.escalation('E1')).toMatchObject({ machine: 'ec2', state: 'answered', answer: { delivery: 'queued' } });
   });
 });
 

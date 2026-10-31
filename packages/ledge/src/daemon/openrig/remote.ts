@@ -86,12 +86,17 @@ export function createRemotePeers(opts: { port: number | (() => number); connect
     peers.set(machine.id, p);
     client.connect();
   }
-  function drop(p: Peer) { p.off.forEach(f => f()); peers.delete(p.machine.id); p.client.close(); emitStatus(p.machine.id, 'removed'); }
+  /** `removed`: the machine left the list; `unreachable`: it stays, reached another way (its ssh alias changed). */
+  function drop(p: Peer, why: 'removed' | 'unreachable') {
+    p.off.forEach(f => f()); peers.delete(p.machine.id); p.client.close();
+    if (why === 'removed' || p.status !== 'unreachable') emitStatus(p.machine.id, why);
+  }
 
   return {
     setMachines(list) {
       const wanted = new Map(list.filter(m => m.ssh && m.id !== 'local').map(m => [m.id, m]));
-      for (const p of [...peers.values()]) { const w = wanted.get(p.machine.id); if (!w || w.ssh !== p.machine.ssh) drop(p); }
+      // A changed alias is the same machine: its rigs, escalations and queued answers stay, they wait for the new link.
+      for (const p of [...peers.values()]) { const w = wanted.get(p.machine.id); if (!w) drop(p, 'removed'); else if (w.ssh !== p.machine.ssh) drop(p, 'unreachable'); }
       for (const m of wanted.values()) if (!peers.has(m.id)) start(m);
     },
     status: machine => peers.get(machine)?.status ?? 'unreachable',

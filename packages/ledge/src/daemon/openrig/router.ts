@@ -35,7 +35,7 @@ export function createRigRouter(opts: { aggregate: RigAggregate; remote: RemoteP
   const labelOf = opts.labelOf ?? ((id: string) => id);
   const plans = new Map<string, string>();
   /** `${machine}\0${rid}` → its requesters (a client may resend the same rid while it waits). */
-  const pending = new Map<string, { machine: string; rid: string; replies: Reply[] }>();
+  const pending = new Map<string, { machine: string; rid: string; msg: RigCommand; at: string; replies: Reply[] }>();
   /** `${machine}\0${rigId}` → the requesters of that rig's exchanges (rig.exchanges carries no rid). */
   const exchanges = new Map<string, { machine: string; rigId: string; replies: Reply[] }>();
   const key = (machine: string, x: string) => `${machine}\u0000${x}`;
@@ -43,6 +43,7 @@ export function createRigRouter(opts: { aggregate: RigAggregate; remote: RemoteP
     plans.delete(planId); plans.set(planId, machine);
     while (plans.size > PLANS_MAX) plans.delete(plans.keys().next().value as string);
   };
+  const outdated = (machine: string) => { const v = remote.version(machine); return `Ledge ${v ? `${v} ` : ''}sur ${labelOf(machine)} ne connaît pas OpenRig : mets-le à jour`; };
   const unreachable = (machine: string, rid: string): Result => ({ type: 'rig.result', rid, ok: false, code: 'unreachable', reason: `${labelOf(machine)} est injoignable` });
 
   const offMsg = remote.onMessage((machine, m) => {
@@ -62,10 +63,18 @@ export function createRigRouter(opts: { aggregate: RigAggregate; remote: RemoteP
       for (const reply of w.replies) reply(m);
     }
   });
-  /** A peer gone or no longer usable: what waits on it will not come back. */
+  /** A peer gone or no longer usable: what waits on it will not come back. An answer whose link dropped waits in the queue
+   *  (same rid, marked sent: it may have arrived); its requesters get the queue's ok. */
   const offStatus = remote.onStatus((machine, s) => {
     if (s === 'open') return;
-    for (const [k, p] of pending) if (p.machine === machine) { pending.delete(k); for (const reply of p.replies) reply(unreachable(machine, p.rid)); }
+    for (const [k, p] of pending) {
+      if (p.machine !== machine) continue;
+      pending.delete(k);
+      const replyAll: Reply = m => { for (const reply of p.replies) reply(m); };
+      if (s === 'unreachable' && p.msg.type === 'escalation.answer') {
+        answers.enqueue({ rid: p.rid, machine, id: p.msg.id, answers: p.msg.answers, by: p.msg.by, at: p.at, sentAt: new Date().toISOString() }, replyAll);
+      } else replyAll(unreachable(machine, p.rid));
+    }
     for (const [k, w] of exchanges) if (w.machine === machine) {
       exchanges.delete(k);
       for (const reply of w.replies) reply({ type: 'error', message: `${labelOf(machine)} est injoignable`, request: 'rig.exchanges.request', code: 'unreachable' });
@@ -86,7 +95,7 @@ export function createRigRouter(opts: { aggregate: RigAggregate; remote: RemoteP
     if (msg.type === 'rig.exchanges.request') {
       const status = remote.status(machine);
       if (status !== 'open' || !remote.send(machine, out)) {
-        return reply({ type: 'error', message: status === 'unsupported' ? `Ledge sur ${labelOf(machine)} ne connaît pas OpenRig : mets-le à jour` : `${labelOf(machine)} est injoignable`,
+        return reply({ type: 'error', message: status === 'unsupported' ? outdated(machine) : `${labelOf(machine)} est injoignable`,
           request: msg.type, code: status === 'unsupported' ? 'unsupported' : 'unreachable' });
       }
       const k = key(machine, msg.rigId); const w = exchanges.get(k);
@@ -100,7 +109,7 @@ export function createRigRouter(opts: { aggregate: RigAggregate; remote: RemoteP
       answers.enqueue({ rid, machine, id: msg.id, answers: msg.answers, by: msg.by, at: new Date().toISOString() }, reply);
     };
     const status = remote.status(machine);
-    if (status === 'unsupported') return reply({ type: 'rig.result', rid, ok: false, code: 'unsupported', reason: `Ledge sur ${labelOf(machine)} ne connaît pas OpenRig : mets-le à jour` });
+    if (status === 'unsupported') return reply({ type: 'rig.result', rid, ok: false, code: 'unsupported', reason: outdated(machine) });
     if (status !== 'open') return queue();
     if (msg.type === 'rig.prepare' || msg.type === 'rig.launch') {
       const st = aggregate.statuses().find(x => x.machine === machine);
@@ -109,7 +118,7 @@ export function createRigRouter(opts: { aggregate: RigAggregate; remote: RemoteP
     const k = key(machine, rid); const p = pending.get(k);
     if (p) { p.replies.push(reply); return; } // already relayed: this requester gets the same outcome
     if (!remote.send(machine, out)) return queue();
-    pending.set(k, { machine, rid, replies: [reply] });
+    pending.set(k, { machine, rid, msg, at: new Date().toISOString(), replies: [reply] });
   }
 
   return { route, close() { offMsg(); offStatus(); pending.clear(); exchanges.clear(); } };

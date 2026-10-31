@@ -21,14 +21,14 @@ const T = '2026-10-30T08:00:00.000Z';
 const esc = (id: string, machine: string): Escalation => ({ id, source: 'rig', machine, from: 'dev@r', intent: 'decision', summary: 'Which?', questions: [], createdAt: T, state: 'pending' });
 const plan = (id: string, machine: string): RigPlan => ({ id, machine, spec: 'duo', goal: 'g', where: { kind: 'off-project', name: 'x' }, cwd: '/w', command: 'rig up', writes: [], seats: [], required: false } as unknown as RigPlan);
 
-function setup(opts: { status?: PeerStatus; statuses?: OpenRigStatus[] } = {}) {
+function setup(opts: { status?: PeerStatus; statuses?: OpenRigStatus[]; version?: string } = {}) {
   const sent: Array<{ machine: string; msg: ClientMessage }> = [];
   const msgFns = new Set<(machine: string, m: RemoteMessage) => void>();
   const stFns = new Set<(machine: string, s: 'open' | 'unreachable' | 'unsupported' | 'removed') => void>();
   const peerStatus = new Map<string, PeerStatus>([['ec2', opts.status ?? 'open']]);
   const remote: RemotePeers = {
     setMachines() {}, close() {},
-    status: m => peerStatus.get(m) ?? 'unreachable', version: () => undefined,
+    status: m => peerStatus.get(m) ?? 'unreachable', version: m => (m === 'ec2' ? opts.version : undefined),
     send(machine, msg) { if (peerStatus.get(machine) !== 'open') return false; sent.push({ machine, msg }); return true; },
     onMessage(fn) { msgFns.add(fn); return () => { msgFns.delete(fn); }; },
     onStatus(fn) { stFns.add(fn); return () => { stFns.delete(fn); }; }
@@ -129,6 +129,16 @@ describe('rig router', () => {
     expect(s.sent).toEqual([]);
   });
 
+  it('the unsupported refusals name the peer\'s Ledge version when it gave one', async () => {
+    for (const [version, text] of [['0.20.0', 'Ledge 0.20.0 sur ec2-build ne connaît pas OpenRig : mets-le à jour'], [undefined, 'Ledge sur ec2-build ne connaît pas OpenRig : mets-le à jour']] as const) {
+      const s = setup({ status: 'unsupported', ...(version ? { version } : {}) }); const a = s.client();
+      await s.router.route({ type: 'rig.send', rid: 'r1', machine: 'ec2', seatRef: 'dev@x', text: 'hi' }, a.reply);
+      await s.router.route({ type: 'rig.exchanges.request', machine: 'ec2', rigId: 'rig1' }, a.reply);
+      expect(a.got).toEqual([{ type: 'rig.result', rid: 'r1', ok: false, code: 'unsupported', reason: text },
+        { type: 'error', message: text, request: 'rig.exchanges.request', code: 'unsupported' }]);
+    }
+  });
+
   it('refuses rig.prepare on a machine without OpenRig, with the install command', async () => {
     const s = setup({ statuses: [{ machine: 'local', state: 'running' }, { machine: 'ec2', state: 'absent', install: 'npm install -g @openrig/cli@0.6.14 && rig setup' }] }); const a = s.client();
     await s.router.route({ type: 'rig.prepare', rid: 'p1', machine: 'ec2', spec: 'duo', goal: 'g', where: { kind: 'off-project', name: 'x' } }, a.reply);
@@ -183,6 +193,20 @@ describe('rig router', () => {
     expect(b.got).toEqual([expect.objectContaining({ type: 'error', request: 'rig.exchanges.request', code: 'unreachable' })]);
     s.peerStatus('open');
     s.peer({ type: 'rig.result', rid: 'r1', ok: true }); // dropped: no second answer
+    expect(a.got).toHaveLength(1);
+  });
+
+  it('an answer relayed but not acknowledged when the link drops goes to the queue, same rid, marked sent; its requesters get the queue\'s ok', async () => {
+    const s = setup(); const a = s.client(), b = s.client();
+    await s.router.route({ type: 'escalation.answer', rid: 'r2', id: 'E1', answers: { q1: 'a' }, by: 'user' }, a.reply);
+    await s.router.route({ type: 'escalation.answer', rid: 'r2', id: 'E1', answers: { q1: 'a' }, by: 'user' }, b.reply);
+    expect(s.sent).toHaveLength(1);
+    s.peerStatus('unreachable');
+    expect(s.enqueued).toEqual([{ rid: 'r2', machine: 'ec2', id: 'E1', answers: { q1: 'a' }, by: 'user', at: expect.any(String), sentAt: expect.any(String) }]);
+    expect(a.got).toEqual([{ type: 'rig.result', rid: 'r2', ok: true }]);
+    expect(b.got).toEqual(a.got);
+    s.peerStatus('open');
+    s.peer({ type: 'rig.result', rid: 'r2', ok: true }); // the queue's now: no second answer from the router
     expect(a.got).toHaveLength(1);
   });
 

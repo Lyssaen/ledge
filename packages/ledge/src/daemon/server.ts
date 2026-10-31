@@ -366,7 +366,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** Answers to an unreachable machine's escalations, kept in openrig.json until its daemon takes them (sent once, same rid);
    *  what does not go is said in Ledge's thread. Follows the peers itself (open, its OpenRig running, rig.result, removed). */
   const answerQueue = aggregate && remote ? createAnswerQueue({ remote, aggregate, notice: text => { thread.append({ kind: 'ledge', text }); },
-    labelOf: id => machines.find(m => m.id === id)?.label ?? id }) : null;
+    labelOf: id => machines.find(m => m.id === id)?.label ?? id, machines: () => machines }) : null;
   /** Rig commands and answers go to their machine: 'local' to `handle` (its rid memo), another one to its peer. */
   const rigRouter = aggregate && remote && answerQueue ? createRigRouter({ aggregate, remote, answers: answerQueue, local: (msg, reply) => handle(msg, reply),
     labelOf: id => machines.find(m => m.id === id)?.label ?? id }) : null;
@@ -1422,6 +1422,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         if (plan === null) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: 'plan expired' });
         try {
           const r = await launches.launch(plan);
+          // « Not now »: the plan stays, the same rid (not memoized) launches it later.
+          if (!r.ok && r.code === 'openrig_down') rigPlans.giveBack(plan.id);
           return reply(r.ok ? { type: 'rig.result', rid: msg.rid, ok: true } : { type: 'rig.result', rid: msg.rid, ok: false, code: r.code, reason: r.reason });
         } catch (e) {
           log(`openrig: launch failed: ${(e as Error).message}`);
