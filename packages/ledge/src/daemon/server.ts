@@ -65,7 +65,7 @@ import { mandateSummary } from './openrig/seatContext.js';
 import { execGitSlow } from './openrig/workspace.js';
 import { watchRigRepos } from './openrig/repos.js';
 import { createHandovers, heldNames } from './handover.js';
-import { createBrain, brainArgs, brainEnv } from './brain/session.js';
+import { createBrain, brainArgs, brainEnv, localDay } from './brain/session.js';
 import { isBrainTool } from './brain/settings.js';
 import { createMemory } from './brain/memory.js';
 import { DEFAULT_MANDATE, ensureMandate, parseMandate } from './brain/mandate.js';
@@ -364,7 +364,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     if (m.type === 'rig.exchange') thread.exchange(m.exchange);
   });
   // The relief of a session whose context is nearly full (context handover spec §3.3). `launch` and `closeSession` are hoisted.
-  const handovers = createHandovers({ store, mailbox, launch: req => launch(req), close: s => closeSession(s),
+  // The brain's relief (Lot 7, Task 10) is prepared by the brain, created just below: only called once both exist.
+  const handovers = createHandovers({ store, mailbox, launch: req => launch(req), close: s => closeSession(s), brainRelief: s => brain.relief(s),
     dir: join(paths().dir, 'handovers'), now, ...(opts.handoverBriefMs !== undefined ? { briefMs: opts.handoverBriefMs } : {}) });
   /** Ledge's memory (rules and decisions), injected into the brain's instructions. */
   const memory = createMemory({ dir: paths().memoryDir, now });
@@ -372,7 +373,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
    * The permanent brain session (Lot 7): launched through `session.launch`'s path with `brain: true`, an exited brain taken up
    * through `session.resume`'s, closed through `session.close`'s. Started below once the daemon serves, if the user enabled it.
    */
-  const brain = createBrain({ store, settingsPath: paths().brainSettings, dir: paths().brainDir, memory, env: agentEnv,
+  const brain = createBrain({ store, settingsPath: paths().brainSettings, dir: paths().brainDir, memory, env: agentEnv, handovers,
     mandate: () => ensureMandate(paths().mandate),
     close: s => closeSession(s),
     launch: async o => {
@@ -395,6 +396,12 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     answers, thread, memory, inbox: brainInbox, mandate: readMandate, brainOn: () => brain.status().state === 'on', now: Date.now });
   // Ledge's thread is answered by the brain; the one-shot runner serves when there is none (it reads the status itself).
   ledgeSay.setResponder(brainResponder({ inbox: brainInbox, thread, fallback: ledgeSay.oneShot, status: brain.status, hasSession: () => brain.session() !== undefined, onStatus: brain.onStatus }));
+  // The brain's daily relief, at its first free moment after local midnight (Lot 7, Task 10).
+  const brainDayTimer = setInterval(() => {
+    const s = brain.session();
+    if (s) brain.checkRelief({ today: localDay(), idle: s.state === 'idle' });
+  }, 60_000);
+  brainDayTimer.unref?.();
   const unsubscribeBrain = brain.onStatus(status => {
     broadcast({ type: 'brain.status', status });
     if (status.state === 'down' || status.state === 'off') deciding?.release(`brain ${status.state}`);
@@ -408,6 +415,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     const cur = store.get(id);
     if (!context || !cur) return;
     if (cur.context?.used !== context.used || cur.context.window !== context.window) store.upsert({ ...cur, context });
+    // The brain has its own relief, at 70 % and every day (Lot 7, Task 10), never the generic one (ruling C11).
+    if (cur.brain === true) { brain.checkRelief({ context, today: localDay(), idle: cur.state === 'idle' }); return; }
     const h = cur.handover?.state;
     if (contextNear(context, contextPrefs.near) && cur.autonomy === 'auto' && h !== 'briefing' && h !== 'launching' && h !== 'done' && h !== 'failed') {
       const refused = handovers.start(id, { auto: true });
@@ -759,15 +768,18 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     { const r = rigManaged(s); if (r) return r.message; }
     if (s.tool === 'omp') return respawnOmp(s, key, model, effort);
     // Marked live before the first await: a second resume arriving while this one spawns is then refused.
-    const { archivedAt: _a, exitedAt: _e, exitCode: _c, modelNext: _n, ...rest } = s;
-    store.upsert({ ...rest, state: 'starting', source: 'launcher', agentSessionId: key });
+    const { archivedAt: _a, exitedAt: _e, exitCode: _c, modelNext: _n, ...kept } = s;
+    // A brain never works without asking: an autonomy it carries is dropped (Task 10).
+    const { autonomy: _au, ...rest } = kept;
+    const autonomy = s.brain ? undefined : s.autonomy;
+    store.upsert({ ...rest, ...(autonomy ? { autonomy } : {}), state: 'starting', source: 'launcher', agentSessionId: key });
     try {
       const cwd = await resolveFolder(s.cwd, opts.home);
       const base = await agentEnv();
       // A brain keeps its shims and LEDGE_BRAIN on a resume (C9), and its brain mark.
       const env = s.brain ? { ...base, ...brainEnv(paths().brainDir, base) } : base;
       const spawned = await spawnSession({ tool: s.tool, id: s.id, name: s.name, ...(s.brain ? { brain: true as const } : {}), args: [...RESUME_ARGS[s.tool](key), ...(model ? MODEL_ARGS[s.tool](model) : []), ...(effort ? EFFORT_ARGS[s.tool]?.(effort) ?? [] : []), ...(s.brain ? brainArgs(s.tool) : autonomyArgs(s.tool, s.autonomy))], cwd, tmux, now, env,
-        ...(s.autonomy ? { autonomy: s.autonomy } : {}), taken: { names: store.all().filter(o => o.id !== s.id && o.state !== 'exited').map(o => o.name), ids: [] } });
+        ...(autonomy ? { autonomy } : {}), taken: { names: store.all().filter(o => o.id !== s.id && o.state !== 'exited').map(o => o.name), ids: [] } });
       // Deleted or archived while it spawned: that request wins, the agent just started is stopped and not recorded.
       const cur = store.get(s.id);
       if (!cur || cur.archivedAt !== undefined) {
@@ -1058,13 +1070,15 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     if (req.effort && !EFFORT_ARGS[req.tool]) throw new Error(`launch: ${req.tool} takes its effort in the model id`);
     const cwd = req.cwd;
     const dirs = req.dirs?.length ? await Promise.all(req.dirs.map(d => resolveFolder(d, opts.home))) : undefined;
-    const live = store.all();
+    const all = store.all();
+    // A brain's relief takes « Ledge » from the brain it relieves (ruling C10): brain names are not taken for a brain.
+    const live = req.brain ? all.filter(s => s.brain !== true) : all;
     const base = await agentEnv();
     const env = req.env ? { ...base, ...req.env } : base;
     const autonomy = req.autonomy;
     const spawned = await spawnSession({ tool: req.tool, args: [...(req.brain ? brainArgs(req.tool) : []), ...launchArgs({ ...req, dirs, autonomy })], name: req.name, cwd, tmux, now, env,
       ...(autonomy ? { autonomy } : {}), ...(req.id ? { id: req.id } : {}), ...(req.brain ? { brain: true as const } : {}),
-      taken: { names: [...live.filter(s => s.state !== 'exited').map(s => s.name), ...heldNames(live)], ids: live.map(s => s.id) } });
+      taken: { names: [...live.filter(s => s.state !== 'exited').map(s => s.name), ...heldNames(live)], ids: all.map(s => s.id) } });
     const session: Session = { ...spawned, ...(req.model ? { model: req.model } : {}), ...(req.effort ? { effort: req.effort } : {}) };
     store.upsert(session);
     store.touchRecent(session.cwd, session.project, session.startedAt);
@@ -1648,6 +1662,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     asks,
     projects: () => projects,
     say: text => { thread.append({ kind: 'ledge', text }); },
-    close: () => new Promise<void>(res => { clearInterval(sweepTimer); unsubscribe(); unsubscribeBrain(); deciding?.dispose(); brain.dispose(); unsubscribeBridge?.(); launches?.close(); stopRepoWatch?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
+    close: () => new Promise<void>(res => { clearInterval(sweepTimer); clearInterval(brainDayTimer); unsubscribe(); unsubscribeBrain(); deciding?.dispose(); brain.dispose(); unsubscribeBridge?.(); launches?.close(); stopRepoWatch?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
   };
 }

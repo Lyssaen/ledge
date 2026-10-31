@@ -9,6 +9,15 @@ import { isBrainTool, readBrainSettings, writeBrainSettings, type BrainSettings 
 import { log } from '../../log.js';
 
 export const RESTARTS_MAX = 3, RESTART_WINDOW_MS = 600_000;
+/** The share of its context past which the brain is relieved (Global Constraints). */
+export const BRAIN_CONTEXT_RELIEF = 0.7;
+/** The tools whose context Ledge measures (`readContext`): a Cursor brain is relieved by the day only (ruling C11). */
+const MEASURED: readonly Tool[] = ['claude', 'codex'];
+
+/** A local date, YYYY-MM-DD: the brain's day starts at local midnight. */
+export function localDay(d: Date = new Date()): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 /** The first brain's id (tmux `ledge-brain`); a relief or a replacement takes `brain-<hex>`. */
 export const BRAIN_ID = 'brain';
 export const BRAIN_NAME = 'Ledge';
@@ -47,6 +56,9 @@ export interface BrainLaunch {
   resume?: Session;
 }
 
+/** What the brain's relief launches with (Task 10): its own id, the name « Ledge », its folder, env and fresh instructions. */
+export interface BrainRelief { id: string; name: string; cwd: string; env: Record<string, string>; instructions: string }
+
 export interface Brain {
   status(): BrainStatus;
   /** The live `brain: true` session. */
@@ -58,6 +70,13 @@ export interface Brain {
   stop(): Promise<void>;
   /** An exit of this session about to happen is not a death: a relief closing the old brain (Task 10). */
   expectExit(id: string): void;
+  /**
+   * Starts the brain's relief when it is due (Task 10): its context at 70 % (Claude, Codex), or a new day once it is free.
+   * Never while one runs. The day is rewritten when a relief starts.
+   */
+  checkRelief(o: { context?: Session['context']; today: string; idle: boolean }): 'context' | 'day' | null;
+  /** Prepares the relief of brain `s` (instructions rewritten with fresh memory, shims): what `handovers` launches it with. */
+  relief(s: Session): Promise<BrainRelief>;
   onStatus(fn: (s: BrainStatus) => void): () => void;
   /** Resolves once no launch is under way (tests, and callers that need the outcome of a relaunch). */
   settled(): Promise<void>;
@@ -73,6 +92,8 @@ export interface BrainDeps {
   /** The agents' environment (login shell): its PATH goes after the shims. */
   env?: () => Promise<NodeJS.ProcessEnv>;
   now?: () => number;
+  /** The reliefs (daemon/handover.ts), which `checkRelief` starts. */
+  handovers?: { start(id: string, o?: { auto?: boolean }): string | null };
 }
 
 const liveBrain = (s: Session): boolean => s.brain === true && s.state !== 'exited' && s.archivedAt === undefined;
@@ -81,6 +102,12 @@ export function createBrain(d: BrainDeps): Brain {
   const now = d.now ?? Date.now;
   const env = d.env ?? (async () => process.env);
   let settings: BrainSettings = readBrainSettings(d.settingsPath);
+  /** brain.json read again, keeping the latest relief day (one written here may not have reached the file yet). */
+  const reread = (): BrainSettings => {
+    const f = readBrainSettings(d.settingsPath);
+    const day = [f.day, settings.day].filter((x): x is string => !!x).sort().at(-1);
+    return { ...f, ...(day ? { day } : {}) };
+  };
   /** Relaunch times inside the window. */
   let restarts: number[] = [];
   let down: string | undefined;
@@ -95,7 +122,25 @@ export function createBrain(d: BrainDeps): Brain {
   const listeners = new Set<(s: BrainStatus) => void>();
   let last = '';
 
-  const session = (): Session | undefined => d.store.all().find(liveBrain);
+  /** The live brain; while a relief is under way, the relief (the one being handed over is on its way out). */
+  const session = (): Session | undefined => {
+    const live = d.store.all().filter(liveBrain);
+    return live.find(s => s.handover?.state !== 'launching' && s.handover?.state !== 'done') ?? live[0];
+  };
+
+  /** brain.json writes, one at a time (they share a temporary file), in the order asked. */
+  let writing: Promise<void> = Promise.resolve();
+  const save = (make: () => BrainSettings): Promise<void> => {
+    const p = writing.then(() => writeBrainSettings(d.settingsPath, make()));
+    writing = p.catch(() => undefined);
+    return p;
+  };
+  /** The day of the last relief (or of a fresh launch), kept in brain.json. */
+  const markDay = (day: string): void => {
+    if (settings.day === day) return;
+    settings = { ...settings, day };
+    save(() => ({ ...reread(), day })).catch(e => log(`brain day not written: ${(e as Error).message}`));
+  };
 
   const status = (): BrainStatus => {
     const s = session();
@@ -119,7 +164,7 @@ export function createBrain(d: BrainDeps): Brain {
   };
 
   /** CLAUDE.md, AGENTS.md, the shims and (Claude) the narrow allowlist, rewritten at every start. */
-  async function prepare(tool: Tool): Promise<void> {
+  async function prepare(tool: Tool): Promise<string> {
     const bin = join(d.dir, 'bin');
     await mkdir(bin, { recursive: true });
     for (const shim of ['rig', 'tmux']) { const f = join(bin, shim); await writeFile(f, SHIM); await chmod(f, 0o755); }
@@ -130,6 +175,7 @@ export function createBrain(d: BrainDeps): Brain {
       await mkdir(join(d.dir, '.claude'), { recursive: true });
       await writeFile(join(d.dir, '.claude', 'settings.json'), `${JSON.stringify(BRAIN_CLAUDE_SETTINGS, null, 2)}\n`);
     }
+    return text;
   }
 
   const freeId = (): string => {
@@ -149,6 +195,7 @@ export function createBrain(d: BrainDeps): Brain {
         const usable = resume && resume.tool === tool ? resume : undefined;
         const s = await d.launch({ tool, cwd: d.dir, env: e, id: usable?.id ?? freeId(), name: BRAIN_NAME, ...(usable ? { resume: usable } : {}) });
         seen.set(s.id, s.state);
+        if (!usable) markDay(localDay(new Date(now()))); // a fresh brain is not relieved the day it starts
       } catch (err) {
         down = `Le cerveau n'a pas pu démarrer : ${(err as Error).message}`;
         log(`brain launch failed: ${(err as Error).message}`);
@@ -167,7 +214,7 @@ export function createBrain(d: BrainDeps): Brain {
   }
 
   async function start(): Promise<void> {
-    settings = readBrainSettings(d.settingsPath);
+    settings = reread();
     if (settings.enabled !== true || down !== undefined) return emit();
     if (launching) return launching;
     const alive = session();
@@ -190,8 +237,9 @@ export function createBrain(d: BrainDeps): Brain {
     if (o.tool !== undefined && !isBrainTool(o.tool)) throw new Error(`${o.tool === 'omp' ? 'OMP' : o.tool} ne peut pas être le cerveau de Ledge : choisis Claude Code, Codex ou Cursor.`);
     const tool = o.tool ?? settings.tool;
     const changed = tool !== settings.tool;
-    settings = { ...readBrainSettings(d.settingsPath), enabled: o.enabled, tool };
-    await writeBrainSettings(d.settingsPath, settings);
+    settings = { ...reread(), enabled: o.enabled, tool };
+    const next = settings;
+    await save(() => next);
     if (!o.enabled) { down = undefined; restarts = []; await stop(); return emit(); }
     if (down !== undefined) { down = undefined; restarts = []; }
     const alive = session();
@@ -224,6 +272,29 @@ export function createBrain(d: BrainDeps): Brain {
     void run(s);
   }
 
+  function checkRelief(o: { context?: Session['context']; today: string; idle: boolean }): 'context' | 'day' | null {
+    const s = session();
+    if (!s || !d.handovers) return null;
+    const h = s.handover?.state;
+    if (h === 'briefing' || h === 'launching' || h === 'done') return null;
+    const c = o.context;
+    // A relief that failed is not retried on the context at every turn: the next day's relief takes over.
+    const kind = c && c.window > 0 && c.used / c.window >= BRAIN_CONTEXT_RELIEF && MEASURED.includes(s.tool) && h !== 'failed' ? 'context'
+      : settings.day !== o.today && o.idle ? 'day' : null;
+    if (!kind) return null;
+    const refused = d.handovers.start(s.id, { auto: true });
+    if (refused) { log(`brain relief (${kind}) not started: ${refused}`); return null; }
+    markDay(o.today);
+    log(`brain relief (${kind}) of ${s.id} started`);
+    return kind;
+  }
+
+  async function relief(s: Session): Promise<BrainRelief> {
+    const tool = s.tool;
+    const instructions = await prepare(tool);
+    return { id: freeId(), name: BRAIN_NAME, cwd: d.dir, env: brainEnv(d.dir, await env()), instructions };
+  }
+
   for (const s of d.store.all()) if (s.brain === true) seen.set(s.id, s.state); // a brain loaded from the journal dies like any other
   const unsubscribe = d.store.onChange(c => {
     if (c.type === 'removed') { seen.delete(c.id); expected.delete(c.id); return emit(); }
@@ -234,7 +305,7 @@ export function createBrain(d: BrainDeps): Brain {
   });
 
   return {
-    status, session, set, start, stop,
+    status, session, set, start, stop, checkRelief, relief,
     expectExit: id => { expected.add(id); },
     onStatus: fn => { listeners.add(fn); return () => listeners.delete(fn); },
     settled: async () => { while (launching) await launching; },
