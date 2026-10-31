@@ -16,6 +16,9 @@ const SUBS: readonly RigsSub[] = ['live', 'specs', 'agents'];
 const down = (s: OpenRigStatus | undefined) => !!s && (s.state === 'absent' || s.state === 'stopped' || s.state === 'error' || s.state === 'unsupported');
 /** The rigs the tab shows: those of a machine where OpenRig answers. The Ledge home's « Rigs · n » counts the same ones. */
 export const visibleRigs = (all: readonly Rig[], openrig: readonly OpenRigStatus[]): Rig[] => all.filter(x => !down(openrig.find(s => s.machine === x.machine)));
+/** The one count of rigs (R13): the visible rigs outside the kernels, stopped ones included (the kernel is a trailing row « au repos »,
+ *  not a rig). « Rigs · n » of the Ledge screen, « En cours · n » here and the rail's « Rigs · n » all read it. */
+export const rigsCount = (all: readonly Rig[], openrig: readonly OpenRigStatus[]): number => visibleRigs(all, openrig).filter(r => !r.kernel).length;
 
 /**
  * The Rigs tab of the Ledge screen (spec §8.2), read only: sub-tabs « En cours · Specs · Agents » (the sub-tab and the chosen spec live in
@@ -50,7 +53,7 @@ export function RigsTab({ nav, dispatch, client, sessions, projects, notify }: {
     : t.side.rigs.unsupported(local!.version);
 
   const specCount = specs.status === 'ready' && !specs.error ? specs.specs.length : undefined;
-  const labels: Record<RigsSub, string> = { live: r.sub.live(model.rigs.length + model.kernels.length), specs: r.sub.specs(specCount), agents: r.sub.agents(allSeats(rigs).length) };
+  const labels: Record<RigsSub, string> = { live: r.sub.live(rigsCount(allRigs, openrig)), specs: r.sub.specs(specCount), agents: r.sub.agents(allSeats(rigs).length) };
   return (
     <div className="rigs-tab" role="tabpanel" aria-label={t.home.tabs.rigs}>
       <div className="rigs-bar">
