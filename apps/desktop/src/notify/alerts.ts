@@ -1,5 +1,5 @@
 import { changeOf, splitId, type MachineState, type SessionChange } from '@ledge/fleet';
-import type { Session } from '@ledge/protocol';
+import type { Session, Task } from '@ledge/protocol';
 import type { Cue } from '@ledge/ui/sounds/cues';
 import type { Messages } from '../i18n/messages';
 import type { FinishedNotify } from './prefs';
@@ -62,4 +62,11 @@ export function toastFor(changes: readonly SessionChange[], sessions: readonly S
   const name = s?.name ?? id;
   const body = (kind === 'approval' || kind === 'question') && s?.pending?.text ? clip(s.pending.text) : (s?.project ?? '');
   return { title: copy[kind](name), body };
+}
+
+/** The toast for decisions new to the user (sessions asking it, `ledge task give ledge …`): the session's own when alone. */
+export function decisionToast(decisions: readonly Task[], copy: Messages['notify']): Toast | null {
+  if (decisions.length === 0) return null;
+  if (decisions.length > 1) return { title: copy.manyTitle, body: copy.many(decisions.length) };
+  return { title: copy.decision(decisions[0]!.giverName), body: clip(decisions[0]!.title) };
 }

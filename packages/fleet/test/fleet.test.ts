@@ -302,6 +302,15 @@ describe('multi-machine connections', () => {
     local.emit({ type: 'repos.info', requestId: 'r2', repos: [{ path: '/w/b', exists: true, branch: 'dev' }] });
     expect(got.filter(m => m.type === 'repos.info').map(m => m.type === 'repos.info' && m.requestId)).toEqual(['r1', 'r2']);
   });
+  it('sends action.run to the local daemon, whichever machine is selected: the registry and Ledge\'s tasks are its own', () => {
+    const { client, local, server, got } = setup();
+    client.fleet!.select('server');
+    client.send({ type: 'action.run', rid: 'a1', action: 'task.answer', args: { task: 't1a2b3c', answer: 'oui' }, confirmed: true });
+    expect(server.sent.filter(m => m.type === 'action.run')).toEqual([]);
+    expect(local.sent.filter(m => m.type === 'action.run')).toEqual([{ type: 'action.run', rid: 'a1', action: 'task.answer', args: { task: 't1a2b3c', answer: 'oui' }, confirmed: true }]);
+    local.emit({ type: 'action.result', rid: 'a1', action: 'task.answer' });
+    expect(got.filter(m => m.type === 'action.result')).toEqual([{ type: 'action.result', rid: 'a1', action: 'task.answer' }]);
+  });
   it('routes repos.scan to its machine without machineId (local by default) and relays only that machine\'s repos.found', () => {
     const { client, local, server, got } = setup();
     client.fleet!.select('server');

@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import type { DaemonStatus, MachineState } from '@ledge/fleet';
-import type { Session } from '@ledge/protocol';
+import type { Session, Task } from '@ledge/protocol';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { TOAST_WINDOW_MS, useAlerts, type AlertDeps } from '../src/notify/useAlerts';
 import { resetDndForTests, resetSoundPrefsForTests, setDnd, setNotifyMode, setSounds } from '../src/notify/prefs';
 import { machine } from './fleet-helpers';
 
-type Props = { sessions: Session[]; machines: MachineState[]; status: DaemonStatus; daemonUpdating?: boolean };
+type Props = { sessions: Session[]; machines: MachineState[]; status: DaemonStatus; daemonUpdating?: boolean; tasks?: Task[] };
 const ask = (id: string, name: string, state: Session['state'] = 'waiting_permission') => fakeSession(id, { name, state, ...(state.startsWith('waiting') ? { pending: { kind: state === 'waiting_input' ? 'question' : 'permission', source: 'hook', text: `${name} asks` } } : {}) });
 let now = 100_000;
 function setup(focused = false) {
@@ -231,5 +231,57 @@ describe('toasts over a real burst (one fleet update per session)', () => {
     act(() => { vi.advanceTimersByTime(TOAST_WINDOW_MS + 100); });
     expect(s.deps.toast).toHaveBeenCalledTimes(1);
     expect(s.deps.toast).toHaveBeenCalledWith('Rio needs your approval', 'Rio asks');
+  });
+});
+
+describe('a decision a session puts to the user (`ledge task give ledge …`)', () => {
+  const decision = (id: string, at: number, extra: Partial<Task> = {}): Task => ({ id, title: 'Fusionner feat/roles ?', giver: 'local:otto', giverName: 'Otto', owner: 'ledge', ownerName: 'Ledge', state: 'open', at: new Date(at).toISOString(), updatedAt: new Date(at).toISOString(), log: [], ...extra });
+  function connected(focused = false) {
+    const s = setup(focused);
+    s.h.rerender({ sessions: [], machines: [s.local], status: 'open', tasks: [] });
+    return s;
+  }
+  it('a new one plays the question cue (« A bot needs you ») and toasts while Desktop is behind', async () => {
+    const { deps, local, h } = connected();
+    h.rerender({ sessions: [], machines: [local], status: 'open', tasks: [decision('t00000d', now + 1)] });
+    await vi.waitFor(() => expect(deps.player.play).toHaveBeenCalledWith('question', 1));
+    expect(deps.toast).toHaveBeenCalledWith('Otto needs your decision', 'Fusionner feat/roles ?');
+    // Once per decision: the same one again, or answered, is no news.
+    h.rerender({ sessions: [], machines: [local], status: 'open', tasks: [decision('t00000d', now + 1, { updatedAt: new Date(now + 2).toISOString() })] });
+    h.rerender({ sessions: [], machines: [local], status: 'open', tasks: [decision('t00000d', now + 1, { state: 'done' })] });
+    await Promise.resolve();
+    expect(deps.toast).toHaveBeenCalledTimes(1);
+    expect(deps.player.play).toHaveBeenCalledTimes(1);
+  });
+  it('those given before the connection, a task given by Ledge, and a closed decision are silent', async () => {
+    const { deps, local, h } = connected();
+    h.rerender({ sessions: [], machines: [local], status: 'open', tasks: [
+      decision('t000old', now - 60_000),
+      decision('t000002', now + 1, { giver: 'ledge', giverName: 'Ledge', owner: 'local:otto', ownerName: 'Otto' }),
+      decision('t000003', now + 1, { state: 'refused' })
+    ] });
+    await Promise.resolve(); await Promise.resolve();
+    expect(deps.toast).not.toHaveBeenCalled();
+    expect(deps.player.play).not.toHaveBeenCalled();
+  });
+  it('follows the preferences: no toast while Desktop has the focus; Do not disturb cuts both; the requests category its sound', async () => {
+    const focused = connected(true);
+    focused.h.rerender({ sessions: [], machines: [focused.local], status: 'open', tasks: [decision('t00000d', now + 1)] });
+    await vi.waitFor(() => expect(focused.deps.player.play).toHaveBeenCalledWith('question', 1));
+    expect(focused.deps.toast).not.toHaveBeenCalled();
+
+    setSounds({ categories: { requests: false, finished: true, errors: true, decisions: true, team: false } });
+    const muted = connected();
+    muted.h.rerender({ sessions: [], machines: [muted.local], status: 'open', tasks: [decision('t00000e', now + 1)] });
+    await vi.waitFor(() => expect(muted.deps.toast).toHaveBeenCalledTimes(1));
+    await new Promise(r => setTimeout(r, 0));   // the cue's decision waits for the terminal check
+    expect(muted.deps.player.play).not.toHaveBeenCalled();
+
+    setDnd(true);
+    const dnd = connected();
+    dnd.h.rerender({ sessions: [], machines: [dnd.local], status: 'open', tasks: [decision('t00000f', now + 1)] });
+    await Promise.resolve(); await Promise.resolve();
+    expect(dnd.deps.toast).not.toHaveBeenCalled();
+    expect(dnd.deps.player.play).not.toHaveBeenCalled();
   });
 });

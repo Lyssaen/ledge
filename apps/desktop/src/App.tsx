@@ -132,7 +132,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // Toasts and sounds from session changes (spec 2026-10-14 §10); `test()` is the Sounds section's Test.
   // Read at the moment an alert fires, never captured: set below once the place and the prefs are known.
   const watching = useRef<() => string | null>(() => null);
-  const alerts = useAlerts({ sessions, machines, status, daemonUpdating: daemonUpdates.updating.has('local') }, { watching: () => watching.current() });
+  const alerts = useAlerts({ sessions, machines, status, daemonUpdating: daemonUpdates.updating.has('local'), tasks: teams.tasks }, { watching: () => watching.current() });
   // A device asking to be linked: the dialog below opens on any screen, the notification only while Desktop is behind.
   usePairingAlerts(mobile);
   // Decided here, at render: the dialog and the `inert` below change in one commit, so the Modal's focus return is not refused.

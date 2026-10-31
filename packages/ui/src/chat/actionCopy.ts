@@ -14,7 +14,7 @@ const fr: ActionCopy = {
   verbs: {
     'session.model': 'Changer', 'session.interrupt': 'Interrompre', 'session.archive': 'Archiver', 'session.restore': 'Restaurer', 'session.resume': 'Reprendre',
     'session.decide': 'Accepter', 'team.join': 'Ajouter', 'team.leave': 'Retirer', 'team.resume': 'Reprendre', 'team.dissolve': 'Dissoudre', 'team.save': 'Enregistrer',
-    'task.cancel': 'Abandonner', 'task.pass': 'Passer le relais'
+    'task.cancel': 'Abandonner', 'task.pass': 'Passer le relais', 'task.answer': 'Répondre'
   } as Record<string, string>,
   apply: 'Appliquer', deny: 'Refuser', ignore: 'Ignorer', review: 'Revoir', retry: 'Réessayer', running: 'En cours…',
   done: (at: string) => `Appliquée${at ? ` · ${at}` : ''}`, refusedState: 'Refusée', denied: (at: string) => `Refus envoyé${at ? ` · ${at}` : ''}`, open: (name: string) => `Ouvrir ${name}`,
@@ -53,7 +53,7 @@ const en: ActionCopy = {
   verbs: {
     'session.model': 'Change', 'session.interrupt': 'Interrupt', 'session.archive': 'Archive', 'session.restore': 'Restore', 'session.resume': 'Resume',
     'session.decide': 'Accept', 'team.join': 'Add', 'team.leave': 'Remove', 'team.resume': 'Resume', 'team.dissolve': 'Dissolve', 'team.save': 'Save',
-    'task.cancel': 'Drop', 'task.pass': 'Hand over'
+    'task.cancel': 'Drop', 'task.pass': 'Hand over', 'task.answer': 'Answer'
   } as Record<string, string>,
   apply: 'Apply', deny: 'Deny', ignore: 'Ignore', review: 'Review', retry: 'Retry', running: 'Running…',
   done: (at: string) => `Applied${at ? ` · ${at}` : ''}`, refusedState: 'Refused', denied: (at: string) => `Denial sent${at ? ` · ${at}` : ''}`, open: (name: string) => `Open ${name}`,

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent } from 'react';
 import { daemonStore, useDaemon, type DaemonClient } from '@ledge/fleet';
-import { contextShare, LEDGE_GIVER, taskClosed, type ChatTurn, type Projects, type Session, type Task, type Team } from '@ledge/protocol';
+import { contextShare, LEDGE_GIVER, openDecision, taskClosed, type ChatTurn, type Projects, type Session, type Task, type Team } from '@ledge/protocol';
 import { ChatView } from '@ledge/ui/chat/ChatView';
 import { ChatCopyProvider } from '@ledge/ui/chat/copy';
 import { useActionCards } from '@ledge/ui/chat/useActionCards';
@@ -21,7 +21,8 @@ import { attentionOf, quickDecide } from '../shell/sidebar/model';
 import { useDefaultTool } from '../settings/tool';
 import { HOME_TABS, type HomeTab, type NavAction } from '../nav/state';
 import { teamProject } from '../atelier/layout';
-import { closedLedgeTasks, ledgeProgress, nearLimit, type TeamsApi } from '../teams/useTeamsApi';
+import { closedLedgeTasks, ledgeProgress, nearLimit, openDecisions, type TeamsApi } from '../teams/useTeamsApi';
+import { DecisionAnswer } from '../teams/DecisionAnswer';
 import { CatalogView, ScopePicker, stateKey, useCatalog, useScope, type CatalogMachine, type CatalogPick, type TeamsView } from '../teams/Catalog';
 import type { Wait } from '../list/time';
 import { useAgentHighlight } from './useAgentHighlight';
@@ -48,7 +49,7 @@ const clock = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-d
 
 /**
  * « Le point » (ledge home spec §2.2): built here from the daemon's state, never by the model, so it is instant and true.
- * What waits for the user (answerable in place) and the closed tasks Ledge gave; the live teams with the progress of
+ * What waits for the user (answerable in place: the decisions sessions put to it too) and the closed tasks Ledge gave; the live teams with the progress of
  * Ledge's tasks; the tasks Ledge gave, open or closed today. « Résumer la journée » is an ordinary question.
  */
 export function LePoint({ view, teams, decisions, waits, projects, dispatch, onAsk, onShowTask, busy }: {
@@ -59,11 +60,14 @@ export function LePoint({ view, teams, decisions, waits, projects, dispatch, onA
   const p = t.home.point;
   const attn = useMemo(() => attentionOf(view.sessions, waits), [view.sessions, waits]);
   const closed = closedLedgeTasks(teams.tasks);
+  const asked = openDecisions(teams.tasks);
+  const [answering, setAnswering] = useState<string | null>(null);
   // Near their context limit (context handover spec §3.2), as « À toi » lists them.
   const near = useMemo(() => nearLimit(view.sessions, teams.later, teams.near), [view.sessions, teams.later, teams.near]);
   const given = teams.tasks.filter(x => x.giver === LEDGE_GIVER && (!taskClosed(x) || isToday(x.updatedAt)));
   const live = teams.teams ?? [];
   const state = (x: Task) => t.chat.task.state[x.state];
+  const count = attn.length + asked.length + closed.length + near.length;
   return (
     <section className="le-point" aria-label={p.title}>
       <div className="lp-head">
@@ -73,8 +77,8 @@ export function LePoint({ view, teams, decisions, waits, projects, dispatch, onA
       </div>
       <div className="lp-cols">
         <div className="lp-col" aria-label={p.yours}>
-          <h3>{p.yours} {attn.length + closed.length + near.length > 0 && <b className="st-badge">{attn.length + closed.length + near.length}</b>}</h3>
-          {attn.length + closed.length + near.length === 0 && <p className="lp-none">{p.nothingYours}</p>}
+          <h3>{p.yours} {count > 0 && <b className="st-badge">{count}</b>}</h3>
+          {count === 0 && <p className="lp-none">{p.nothingYours}</p>}
           {attn.map(item => (
             <div key={item.session.id} className="lp-row">
               <SessionBot session={item.session} size={16} paused />
@@ -83,6 +87,17 @@ export function LePoint({ view, teams, decisions, waits, projects, dispatch, onA
                 <button type="button" className="st-qa pri" onClick={() => decisions.decide(item.session, 'accept')}>{p.allow}</button>
                 <button type="button" className="st-qa" onClick={() => decisions.decide(item.session, 'deny')}>{p.deny}</button>
               </> : <button type="button" className="st-qa" onClick={() => dispatch({ type: 'open', id: item.session.id, ...(item.helper ? { helper: item.helper.id } : {}), ...(item.kind === 'question' ? { focus: 'reply' as const } : {}) })}>{p.see}</button>}
+            </div>
+          ))}
+          {asked.map(x => (
+            <div key={x.id} className="lp-decision" data-decision={x.id}>
+              <div className="lp-row">
+                <span className="lp-mark lp-asked" aria-hidden>?</span>
+                <span className="lp-text" title={t.decision.asks(x.giverName)}><strong>{x.giverName}</strong> {x.title}</span>
+                {answering !== x.id && <button type="button" className="st-qa pri" onClick={() => setAnswering(x.id)}>{t.decision.answer}</button>}
+              </div>
+              {x.text && <p className="lp-detail">{x.text}</p>}
+              {answering === x.id && <DecisionAnswer task={x} teams={teams} onClose={() => setAnswering(null)} />}
             </div>
           ))}
           {closed.map(x => (
@@ -216,17 +231,21 @@ function TeamsTab({ client, teams, sessions, projects, machines, dispatch, notif
 }
 
 type StateFilter = 'all' | 'open' | 'closed';
-type GiverFilter = 'all' | 'ledge' | 'seats';
+type GiverFilter = 'all' | 'ledge' | 'seats' | 'decisions';
+/** Who a task comes from: Ledge, a seat for another, or a session asking the user (a decision, owner Ledge). */
+const giverOf = (x: Task): Exclude<GiverFilter, 'all'> => x.owner === LEDGE_GIVER ? 'decisions' : x.giver === LEDGE_GIVER ? 'ledge' : 'seats';
 
-/** « Tâches »: Ledge's tasks and the teams' own, with filters (team, state, giver); a task opens on its detail and history. */
+/** « Tâches »: Ledge's tasks, the teams' own and the decisions put to the user, with filters (team, state, giver); a task opens
+ *  on its detail and history, an open decision with « Répondre » too. */
 function TasksTab({ teams, shown, onShow }: { teams: TeamsApi; shown: string | null; onShow(id: string | null): void }): JSX.Element {
   const { t } = useI18n();
   const c = t.home.tasks;
   const [state, setState] = useState<StateFilter>('all');
   const [giver, setGiver] = useState<GiverFilter>('all');
   const [team, setTeam] = useState<string>('all');
+  const [answering, setAnswering] = useState<string | null>(null);
   const list = teams.tasks.filter(x => (state === 'all' || (state === 'open') !== taskClosed(x))
-    && (giver === 'all' || (giver === 'ledge') === (x.giver === LEDGE_GIVER)) && (team === 'all' || x.team === team)).slice().reverse();
+    && (giver === 'all' || giver === giverOf(x)) && (team === 'all' || x.team === team)).slice().reverse();
   const detail = shown ? teams.tasks.find(x => x.id === shown) : undefined;
   return (
     <div className="home-list" role="tabpanel" aria-label={t.home.tabs.tasks(teams.tasks.length)}>
@@ -235,7 +254,7 @@ function TasksTab({ teams, shown, onShow }: { teams: TeamsApi; shown: string | n
           <option value="all">{c.all}</option><option value="open">{c.open}</option><option value="closed">{c.closed}</option>
         </select>
         <select aria-label={c.giver} value={giver} onChange={e => setGiver(e.target.value as GiverFilter)}>
-          <option value="all">{c.anyGiver}</option><option value="ledge">{c.ledge}</option><option value="seats">{c.seats}</option>
+          <option value="all">{c.anyGiver}</option><option value="ledge">{c.ledge}</option><option value="seats">{c.seats}</option><option value="decisions">{c.decisions}</option>
         </select>
         <select aria-label={c.team} value={team} onChange={e => setTeam(e.target.value)}>
           <option value="all">{c.anyTeam}</option>
@@ -256,6 +275,9 @@ function TasksTab({ teams, shown, onShow }: { teams: TeamsApi; shown: string | n
           <p className="lp-none">{c.from(detail.giverName, detail.ownerName)} · {t.chat.task.state[detail.state]}</p>
           {detail.text && <p className="home-task-text">{detail.text}</p>}
           {detail.result && <p><strong>{detail.state === 'done' ? c.result : c.reason} :</strong> {detail.result}</p>}
+          {openDecision(detail) && (answering === detail.id
+            ? <DecisionAnswer task={detail} teams={teams} onClose={() => setAnswering(null)} />
+            : <Button variant="primary" size="sm" onClick={() => setAnswering(detail.id)}>{t.decision.answer}</Button>)}
           <h4>{c.log}</h4>
           <ul>{detail.log.map((l, i) => <li key={i}><small>{clock(l.at)}</small> {l.by} : {l.what}</li>)}</ul>
           <Button variant="ghost" size="sm" onClick={() => onShow(null)}>{c.close}</Button>
