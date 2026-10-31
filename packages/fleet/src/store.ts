@@ -38,11 +38,11 @@ export interface DaemonState {
   daemon: DaemonInfo | null;
   /** How many snapshots arrived (one per connection), so a reconnect after a restart is detectable. */
   snapshotSeq: number;
-  /** The daemon's last update.progress / update.failed message; `seq` tells two identical ones apart. */
   /** The Ledge thread (local daemon only), oldest first; `threadBefore` = cursor of the older page, absent when none. */
   ledgeThread: LedgeThreadItem[]; threadBefore?: string; threadLoading: boolean;
   /** The escalation answers sent, by rid, with the daemon's `rig.result` once it came. */
   answering: Map<string, AnswerAttempt>;
+  /** The daemon's last update.progress / update.failed message; `seq` tells two identical ones apart. */
   lastUpdate: { msg: Extract<ServerMessage, { type: 'update.progress' | 'update.failed' }>; seq: number } | null;
 }
 /** The daemon's last `folder.listing` answer (to this client's `folder.list` or `folder.create`); `seq` tells two apart. */
