@@ -86,11 +86,12 @@ export async function readMessage(args: string[], opts: { port?: number; env?: N
 }
 
 /**
- * Reads a shell command as exactly one `ledge who`, `ledge send …`, `ledge read …`, or `ledge ask …`, nothing else: Codex's hook runs it itself, outside
+ * Reads a shell command as exactly one `ledge who`, `ledge send …`, `ledge read …`, `ledge ask …`, `ledge handover …` or
+ * `ledge brain …`, nothing else: Codex's hook runs it itself, outside
  * the sandbox, so anything a shell would do beyond a plain word list (chaining, pipes, redirections, substitution,
  * comments, an unquoted backslash, newline or glob/tilde character) makes it `undefined`, as does an unclosed quote.
  */
-export function parseLedgeCommand(command: string): { cmd: 'who' } | { cmd: 'send' | 'read' | 'handover' | 'ask'; args: string[] } | undefined {
+export function parseLedgeCommand(command: string): { cmd: 'who' } | { cmd: 'send' | 'read' | 'handover' | 'ask' | 'brain'; args: string[] } | undefined {
   command = command.replace(/[\r\n\s]+$/, ''); // a trailing newline ends the one command, it chains nothing
   const words: string[] = [];
   let word = ''; let inWord = false; let quote: '"' | "'" | undefined;
@@ -118,5 +119,6 @@ export function parseLedgeCommand(command: string): { cmd: 'who' } | { cmd: 'sen
   if (words[1] === 'read') return { cmd: 'read', args: words.slice(2) };
   if (words[1] === 'ask') return { cmd: 'ask', args: words.slice(2) };
   if (words[1] === 'handover') return { cmd: 'handover', args: words.slice(2) };
+  if (words[1] === 'brain') return { cmd: 'brain', args: words.slice(2) };
   return undefined;
 }
