@@ -374,7 +374,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       }
       if (msg.type === 'chat.cancel' && routing?.qid === msg.qid) { peers.get(routing.coordinator)?.client.send(msg); routing = null; fail(msg.qid, 'cancelled'); return; }
       let machine = selected; let outgoing: ClientMessage = msg;
-      if ('id' in msg && msg.id !== undefined && msg.type !== 'escalation.answer') { const origin = splitId(msg.id); if (!origin) { if (msg.type === 'attachment.put' || msg.type === 'attachment.get') emit({ type: 'attachment.error', requestId: msg.requestId, reason: 'offline' }); else emit({ type: 'error', id: msg.id, message: 'Unknown machine', request: msg.type }); return; } machine = origin.machine; outgoing = { ...msg, id: origin.id }; }
+      if ('id' in msg && msg.id != null && msg.type !== 'escalation.answer') { const origin = splitId(msg.id); if (!origin) { if (msg.type === 'attachment.put' || msg.type === 'attachment.get') emit({ type: 'attachment.error', requestId: msg.requestId, reason: 'offline' }); else emit({ type: 'error', id: msg.id, message: 'Unknown machine', request: msg.type }); return; } machine = origin.machine; outgoing = { ...msg, id: origin.id }; }
       if ('qid' in msg && msg.qid) { const b = bindings.get(msg.qid); if (!b) { emit({ type: 'error', message: 'Unknown conversation destination', request: msg.type }); return; } machine = b.machine; outgoing = { ...outgoing, qid: b.raw } as ClientMessage; }
       if (msg.type === 'attachment.put' || msg.type === 'attachment.get') {
         // A session's id routes (qualified above); a chat turn's image names its `machine`; neither is the local machine, never the selected one.
@@ -446,7 +446,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       const target = peers.get(machine);
       if (!available(target)) {
         if (msg.type === 'document.read') { documents.delete(msg.requestId); emit({ type: 'document.error', requestId: msg.requestId, path: msg.path, code: 'read_failed' }); }
-        else emit({ type: 'error', ...('id' in msg ? { id: msg.id } : {}), message: `${target?.config.label ?? machine} is offline`, request: msg.type });
+        else emit({ type: 'error', ...('id' in msg && typeof msg.id === 'string' ? { id: msg.id } : {}), message: `${target?.config.label ?? machine} is offline`, request: msg.type });
         return;
       }
       if (outgoing.type === 'session.launch' || outgoing.type === 'session.relay' || outgoing.type === 'session.relay.cancel') { closeRows.delete(machine); operations.set(machine, outgoing.qid ?? 'launch'); }
