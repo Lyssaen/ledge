@@ -68,7 +68,9 @@ import { createHandovers, heldNames } from './handover.js';
 import { createBrain, brainArgs, brainEnv } from './brain/session.js';
 import { isBrainTool } from './brain/settings.js';
 import { createMemory } from './brain/memory.js';
-import { ensureMandate } from './brain/mandate.js';
+import { DEFAULT_MANDATE, ensureMandate, parseMandate } from './brain/mandate.js';
+import { createBrainInbox } from './brain/inbox.js';
+import { createDeciding, type Deciding } from './brain/decide.js';
 import { readContext } from './context.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
 import { createRouter } from '../chat/routing.js';
@@ -346,12 +348,17 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     port: { escalation: bridge.escalation, patch: bridge.patchEscalation, status: bridge.status, cli: bridge.cli, http: bridge.http,
       replyRow: bridge.replyRow, setReplyRow: bridge.setReplyRow },
     asks, path: { kind: ANSWER_PATH }, localMachine: 'local', now }) : null;
+  /** Grace and the brain's decisions (Lot 7), set below once the brain exists; null without OpenRig. */
+  let deciding: Deciding | null = null;
   const unsubscribeBridge = bridge?.onMessage(m => {
     broadcast(m);
     if (m.type === 'rig.snapshot' || m.type === 'rig.removed') unpairGone(store, bridge.rigs());
     if (m.type === 'rig.snapshot') restorePairs(store, bridge);
     // The bridge sends escalation.updated on every change and again after a reconnect: only an id the thread lacks is new.
-    if (m.type === 'escalation.updated' && !thread.hasEscalation(m.escalation.id)) thread.append({ kind: 'escalation', escalationId: m.escalation.id });
+    if (m.type === 'escalation.updated' && !thread.hasEscalation(m.escalation.id)) {
+      thread.append({ kind: 'escalation', escalationId: m.escalation.id });
+      deciding?.arrived(m.escalation);   // grace when the brain is on (Lot 7)
+    }
     if (m.type === 'rig.exchange') thread.exchange(m.exchange);
   });
   // The relief of a session whose context is nearly full (context handover spec §3.3). `launch` and `closeSession` are hoisted.
@@ -375,7 +382,19 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       return launch({ tool: o.tool, cwd: o.cwd, name: o.name, id: o.id, env: o.env, brain: true, ...(o.prompt ? { prompt: o.prompt } : {}) });
     } });
-  const unsubscribeBrain = brain.onStatus(status => broadcast({ type: 'brain.status', status }));
+  /** What the brain is told, typed into its session through the mailbox. */
+  const brainInbox = createBrainInbox({ mailbox, brainId: () => brain.session()?.id });
+  /** The mandate as it reads now: a missing file is the default one (ensureMandate writes it), an unreadable one decides nothing. */
+  const readMandate = () => {
+    const f = paths().mandate;
+    try { return parseMandate(existsSync(f) ? readFileSync(f, 'utf8') : DEFAULT_MANDATE); } catch { return parseMandate(''); }
+  };
+  if (bridge && answers) deciding = createDeciding({ escalations: { escalation: bridge.escalation, patchEscalation: bridge.patchEscalation },
+    answers, thread, memory, inbox: brainInbox, mandate: readMandate, brainOn: () => brain.status().state === 'on', now: Date.now });
+  const unsubscribeBrain = brain.onStatus(status => {
+    broadcast({ type: 'brain.status', status });
+    if (status.state === 'down' || status.state === 'off') deciding?.release(`brain ${status.state}`);
+  });
   /** Each session's state last seen: a turn's end (→ idle) is when its context is read again. */
   const lastState = new Map<string, Session['state']>();
   /** Reads a session's context after a turn (§3.1); a session working without asking is relieved by Ledge past the threshold (§3.2). */
@@ -1592,6 +1611,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     asks,
     projects: () => projects,
     say: text => { thread.append({ kind: 'ledge', text }); },
-    close: () => new Promise<void>(res => { clearInterval(sweepTimer); unsubscribe(); unsubscribeBrain(); brain.dispose(); unsubscribeBridge?.(); launches?.close(); stopRepoWatch?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
+    close: () => new Promise<void>(res => { clearInterval(sweepTimer); unsubscribe(); unsubscribeBrain(); deciding?.dispose(); brain.dispose(); unsubscribeBridge?.(); launches?.close(); stopRepoWatch?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
   };
 }
