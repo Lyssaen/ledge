@@ -374,7 +374,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       }
       if (msg.type === 'chat.cancel' && routing?.qid === msg.qid) { peers.get(routing.coordinator)?.client.send(msg); routing = null; fail(msg.qid, 'cancelled'); return; }
       let machine = selected; let outgoing: ClientMessage = msg;
-      if ('id' in msg && msg.id !== undefined) { const origin = splitId(msg.id); if (!origin) { if (msg.type === 'attachment.put' || msg.type === 'attachment.get') emit({ type: 'attachment.error', requestId: msg.requestId, reason: 'offline' }); else emit({ type: 'error', id: msg.id, message: 'Unknown machine', request: msg.type }); return; } machine = origin.machine; outgoing = { ...msg, id: origin.id }; }
+      if ('id' in msg && msg.id !== undefined && msg.type !== 'escalation.answer') { const origin = splitId(msg.id); if (!origin) { if (msg.type === 'attachment.put' || msg.type === 'attachment.get') emit({ type: 'attachment.error', requestId: msg.requestId, reason: 'offline' }); else emit({ type: 'error', id: msg.id, message: 'Unknown machine', request: msg.type }); return; } machine = origin.machine; outgoing = { ...msg, id: origin.id }; }
       if ('qid' in msg && msg.qid) { const b = bindings.get(msg.qid); if (!b) { emit({ type: 'error', message: 'Unknown conversation destination', request: msg.type }); return; } machine = b.machine; outgoing = { ...outgoing, qid: b.raw } as ClientMessage; }
       if (msg.type === 'attachment.put' || msg.type === 'attachment.get') {
         // A session's id routes (qualified above); a chat turn's image names its `machine`; neither is the local machine, never the selected one.
@@ -435,6 +435,9 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         }
       }
       if (msg.type === 'rig.exchanges.request') { machine = msg.machine; outgoing = { ...msg, machine: 'local' }; }
+      if (msg.type === 'rig.send') { machine = msg.machine; outgoing = { ...msg, machine: 'local' }; }
+      // The Ledge thread and the escalation answers live with the brain's daemon (local), never the selected machine.
+      if (msg.type === 'ledge.say' || msg.type === 'ledge.thread.request' || msg.type === 'escalation.answer') machine = 'local';
       if (msg.type === 'update.daemon') machine = 'local';
       if (msg.type === 'snapshot.request') { publish(); history(); return; }
       const target = peers.get(machine);
