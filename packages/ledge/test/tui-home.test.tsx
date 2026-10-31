@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { ClientMessage, LedgeThreadItem } from '@ledge/protocol';
 import { until } from './helpers.js';
-import { mockupEscalations, startTui } from './tui-fixture.js';
+import { mockupEscalations, mockupRigs, startTui } from './tui-fixture.js';
 
 const sent = <T extends ClientMessage['type']>(received: ClientMessage[], type: T) => received.filter((m): m is Extract<ClientMessage, { type: T }> => m.type === type);
 const ago = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
@@ -72,7 +72,7 @@ describe('ledge tui: home', () => {
       await tui.press('1');
       await until(() => tui.frame().includes('LEDGE · CONVERSATION'));
       await tui.press('\r');
-      await until(() => tui.frame().includes('QUESTION'));
+      await until(() => tui.frame().includes('alt+↵'));
     } finally { await tui.cleanup(); }
   });
 
@@ -198,7 +198,112 @@ describe('ledge tui: home', () => {
       await until(() => tui.frame().includes('LEDGE · CONVERSATION') && tui.frame().includes('alt+↵'));
       await tui.press('Qui ?');
       await tui.press('\r');
-      await until(() => sent(tui.daemon.received, 'chat.ask').length === 1);
+      await until(() => sent(tui.daemon.received, 'ledge.say').length === 1);
+      expect(sent(tui.daemon.received, 'ledge.say')[0]).toMatchObject({ text: 'Qui ?' });
+      expect(sent(tui.daemon.received, 'ledge.say')[0]).not.toHaveProperty('about');
+      expect(sent(tui.daemon.received, 'chat.ask')).toEqual([]);
+    } finally { await tui.cleanup(); }
+  });
+});
+
+const ALT = (k: string) => `\u001b${k}`;
+const TAB = '\t', UP = '\u001b[A', DOWN = '\u001b[B', ESC = '\u001b';
+/** The mockup's rigs, starter's dev-build answering to `@build` too. */
+const homonyms = () => mockupRigs().map(r => (r.id === 'starter' ? { ...r, seats: r.seats.map(s => (s.name === 'dev-build' ? { ...s, address: '@build' } : s)) } : r));
+
+describe('ledge tui: writing to Ledge', () => {
+  it('the field says whom it writes to, with its suggestions above', async () => {
+    const tui = await startTui({ openrig: {} });
+    try {
+      await tui.resize(160, 46);
+      await until(() => tui.frame().includes('ÉCRIRE À LEDGE'));
+      const f = tui.frame();
+      expect(f).toContain('Écrire à Ledge… (@build pour un agent d’un rig)');
+      expect(f).toContain('tranche dans son mandat · design, architecture et critique te reviennent');
+      expect(f).toMatch(/Lance un rig… +Où en est factory \? +Qu’as-tu tranché \? +Qui a besoin de moi \? +alt\+1…4/);
+      // Under 80 columns for the field, the short foot.
+      await tui.resize(110, 40);
+      await until(() => tui.frame().includes('design, architecture, critique te reviennent'));
+    } finally { await tui.cleanup(); }
+  });
+
+  it('alt+2 asks where the most active rig is; alt+1 opens the launch instead of sending', async () => {
+    const tui = await startTui({ openrig: {} });
+    try {
+      await tui.resize(160, 46);
+      await until(() => tui.frame().includes('Où en est factory ?'));
+      await tui.press(ALT('2'));
+      await until(() => sent(tui.daemon.received, 'ledge.say').length === 1);
+      expect(sent(tui.daemon.received, 'ledge.say')[0]).toMatchObject({ text: 'Où en est factory ?' });
+      await tui.press('/');
+      await tui.press(ALT('4'));
+      await until(() => sent(tui.daemon.received, 'ledge.say').length === 2);
+      expect(sent(tui.daemon.received, 'ledge.say')[1]).toMatchObject({ text: 'Qui a besoin de moi ?' });
+      await tui.press(ALT('1'));
+      await until(() => tui.frame().includes('NOUVELLE SESSION'));
+      expect(sent(tui.daemon.received, 'ledge.say')).toHaveLength(2);
+    } finally { await tui.cleanup(); }
+  });
+
+  it('tab completes and ↵ sends a ledge.say', async () => {
+    const tui = await startTui({ openrig: {} });
+    try {
+      await tui.resize(160, 46);
+      await tui.press('/');
+      await tui.press('@bu');
+      await until(() => tui.frame().includes('@ UN AGENT D’UN RIG'));
+      expect(tui.frame()).toMatch(/@build +factory · Reprise après reboot · Au travail/);
+      expect(tui.frame()).toMatch(/↑ ↓ +choisir +tab +compléter +↵ +envoyer +esc +garder et sortir/);
+      await tui.press(TAB);
+      await until(() => tui.frame().includes('❯ @build ') && !tui.frame().includes('@ UN AGENT D’UN RIG'));
+      // The completion keeps the focus in the field.
+      await tui.press('relance les tests');
+      await tui.press('\r');
+      await until(() => sent(tui.daemon.received, 'ledge.say').length === 1);
+      expect(sent(tui.daemon.received, 'ledge.say')[0]).toMatchObject({ text: '@build relance les tests' });
+      expect(sent(tui.daemon.received, 'chat.ask')).toEqual([]);
+    } finally { await tui.cleanup(); }
+  });
+
+  it('homonyms are offered under their long address; ↑ ↓ choose, esc closes the list and keeps the text', async () => {
+    const tui = await startTui({ openrig: { rigs: homonyms() } });
+    try {
+      await tui.resize(160, 46);
+      await tui.press('/');
+      await tui.press('@bu');
+      await until(() => tui.frame().includes('@build@starter'));
+      expect(tui.frame()).toMatch(/@build@factory +factory/);
+      expect(tui.frame()).toMatch(/@build@starter +starter · dev-build/);
+      await tui.press(DOWN);
+      await tui.press(TAB);
+      await until(() => tui.frame().includes('❯ @build@starter '));
+      await tui.press('\u0015'); // ctrl+u: the field emptied
+      await tui.press('@bu');
+      await until(() => tui.frame().includes('@ UN AGENT D’UN RIG'));
+      await tui.press(DOWN); await tui.press(UP);
+      await tui.press(ESC);
+      await until(() => !tui.frame().includes('@ UN AGENT D’UN RIG'));
+      expect(tui.frame()).toContain('❯ @bu');
+      // Still in the field: what is typed goes on.
+      await tui.press('ild');
+      await until(() => tui.frame().includes('❯ @build'));
+    } finally { await tui.cleanup(); }
+  });
+
+  it('a refused send keeps the reason in the thread and nothing is lost', async () => {
+    const tui = await startTui({ openrig: {} });
+    tui.daemon.onMessage(m => {
+      if (m.type !== 'ledge.say') return;
+      tui.daemon.push({ type: 'ledge.thread.item', item: { kind: 'user', id: 'u1', at: new Date().toISOString(), text: m.text, to: '@build' } });
+      tui.daemon.push({ type: 'ledge.thread.item', item: { kind: 'ledge', id: 'l1', at: new Date().toISOString(), text: '@build est arrêté (factory)' } });
+    });
+    try {
+      await tui.resize(160, 46);
+      await tui.press('/');
+      await tui.press('@build relance les tests ciblés');
+      await tui.press('\r');
+      await until(() => tui.frame().includes('@build est arrêté (factory)'));
+      expect(tui.frame()).toContain('relance les tests ciblés');
     } finally { await tui.cleanup(); }
   });
 });

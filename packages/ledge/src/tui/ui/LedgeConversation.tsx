@@ -18,7 +18,7 @@ import { C, projectColor } from '../theme.js';
 import { Button } from './SessionCard.js';
 import { Lines } from './Lines.js';
 import { useThrottled } from './throttle.js';
-import { Field } from './Field.js';
+import { LedgeComposer } from './LedgeComposer.js';
 import { TitledBox } from './TitledBox.js';
 import { ActionBox } from './ActionBox.js';
 
@@ -61,6 +61,9 @@ export function LedgeConversation({ width, escalation, keys: keysRef, onBar }: L
   // « En parler » (e): the escalation the next message is about.
   const [about, setAbout] = useState<Escalation | null>(null);
   const [browsing, setBrowsing] = useState(false);
+  // The field's keys (suggestions, the `@` list), asked before the conversation's; whether its `@` list is open.
+  const composer = useRef<KeyHandler | null>(null);
+  const [listOpen, setListOpen] = useState(false);
   // ctrl+n asks first: « Garder » by default.
   const [confirm, setConfirm] = useState(false);
   // The thread item j k have chosen; the exchange groups z flipped; the options picked in a decision of several questions.
@@ -139,15 +142,29 @@ export function LedgeConversation({ width, escalation, keys: keysRef, onBar }: L
       if (!fromHistory) setDraft('');
       return true;
     }
-    const qid = `q-${randomUUID()}`;
     const asked = { question: text.trim(), askedAt: new Date().toISOString() };
-    daemonStore.beginTurn({ qid, ...asked, steps: [] });
-    client.send({ type: 'chat.ask', qid, text: asked.question, ...(images.length ? { images } : {}) });
     kept.asked.push(asked);
-    if (images.length) sentAsk.current = { qid, taken: chips.clear(), text: asked.question };
+    if (images.length) {
+      // Images travel with a chat question: `ledge.say` carries text only.
+      const qid = `q-${randomUUID()}`;
+      daemonStore.beginTurn({ qid, ...asked, steps: [] });
+      client.send({ type: 'chat.ask', qid, text: asked.question, images });
+      sentAsk.current = { qid, taken: chips.clear(), text: asked.question };
+    } else {
+      // To Ledge's thread: the daemon sends `@seat …` to the seat, or tells why not, in the thread; the rest Ledge answers there,
+      // its chat turn (and the cards it carries) under the user item's qid.
+      sayToLedge(client, asked.question);
+    }
     // An entry of the history asked again leaves the draft as it was.
     if (!fromHistory) setDraft('');
     return true;
+  };
+
+  /** A suggestion (alt+2…4): to Ledge as it reads, about nothing, the draft and its images left as they are. */
+  const say = (text: string) => {
+    if (!local?.ready) { toast({ text: t.ask.offline, tone: 'info' }); return; }
+    kept.asked.push({ question: text, askedAt: new Date().toISOString() });
+    sayToLedge(client, text);
   };
 
   /** 1-9 on the escalation the keys act on: its option, sent once; an escalation answered (here or elsewhere) takes the key and
@@ -224,6 +241,8 @@ export function LedgeConversation({ width, escalation, keys: keysRef, onBar }: L
     if (small) return;
     const l = latest.current;
     if (l.confirm) return;
+    // The field's own keys first: alt+1…4 from anywhere in the conversation; ↑ ↓ tab while its `@` list is open.
+    if (composer.current?.(input, key)) return;
     if (key.pageUp) { l.scroll(l.up + l.view - 1); return; }
     if (key.pageDown) { l.scroll(l.up - l.view + 1); return; }
     // The left column has the keyboard: the rest is the home's.
@@ -247,6 +266,8 @@ export function LedgeConversation({ width, escalation, keys: keysRef, onBar }: L
       else if (input === 'n' || key.escape) setConfirm(false);
       return true;
     }
+    // alt+1…4 are the suggestions' (the field's keys took them): never a decision's option.
+    if (key.meta && /^[1-9]$/.test(input)) return true;
     if (focus === LEFT || focus === CONVO) {
       if (/^[1-9]$/.test(input)) return decide(input);
       if (input === 'e' && target) { setAbout(target); setFocus(FIELD); return true; }
@@ -281,6 +302,7 @@ export function LedgeConversation({ width, escalation, keys: keysRef, onBar }: L
   const history = askHistory(d.chat, kept.asked);
   const bar: Keys = focus === LEFT ? acts
     : confirm ? [['n esc', t.keys.keep], ['y', t.keys.wipe]]
+    : focus === FIELD && listOpen ? [['↑ ↓', t.keys.choose], ['tab', t.keys.complete], ['↵', t.keys.sendOnly], ['esc', t.keys.keepAndLeave]]
     : focus === FIELD && browsing ? [['↵', t.keys.resend], ['↑ ↓', t.keys.history], ['esc', t.keys.backToDraft]]
     // ctrl+r near the front while a card is set aside: the bar drops what does not fit, from its end.
     : focus === FIELD ? [['↵', t.keys.sendOnly], ...review$, ['alt+↵', t.keys.newLine], ['esc', t.keys.back], ['PgUp PgDn', t.keys.scroll], ['↑ ↓', t.keys.history], ['tab', cards.cards.length ? t.keys.nextCard : t.keys.conversation], ['alt+v', t.keys.image], ...(turnImages.length ? [['alt+o', t.keys.openImage] as const] : []), ['ctrl+n', t.keys.newChat], ...stop]
@@ -313,8 +335,9 @@ export function LedgeConversation({ width, escalation, keys: keysRef, onBar }: L
           <Text color={C.fg}>{t.ask.resetBody(d.chat.length, d.chat[0] ? clock(d.chat[0].askedAt) : '')}{draft.trim() ? ` ${t.ask.draftStays}` : ''}</Text>
           <Box marginTop={1} columnGap={2}><Button label={t.ask.keep} k="n · esc" primary /><Button label={t.ask.wipe} k="y" /></Box>
         </TitledBox>
-        : <><ChipsLine chips={chips.items} /><Field title={about ? t.conv.about(oneLine(about.summary || about.questions[0]?.question || about.id)) : t.ask.question} value={draft} onChange={setDraft} onSubmit={ask}
-          onEscape={() => { if (!draft) { setAbout(null); setFocus(LEFT); } }} onBrowse={setBrowsing} history={history} active={focus === FIELD} placeholder={t.ask.placeholder} width={width - 4} /></>}
+        : <><ChipsLine chips={chips.items} /><LedgeComposer title={about ? t.conv.about(oneLine(about.summary || about.questions[0]?.question || about.id)) : t.compose.title} draft={draft} setDraft={setDraft} onSubmit={ask}
+          onSay={say} onEscape={() => { if (!draft) { setAbout(null); setFocus(LEFT); } }} browsing={browsing} onBrowse={setBrowsing} history={history}
+          active={focus === FIELD} width={width - 4} keys={composer} onList={setListOpen} /></>}
     </Box>
   );
 }

@@ -36,7 +36,7 @@ export const fr = {
     applyRow: 'appliquer la ligne', apply: 'appliquer', applyAll: 'tout appliquer', deny: 'refuser', ignore: 'ignorer', review: 'revoir',
     openSession: (name: string) => `ouvrir ${name}`,
     screens: 'Ledge · rig · session',
-    decide: 'trancher', revisit: 'revenir dessus', fold: 'replier', talk: 'en parler'
+    decide: 'trancher', revisit: 'revenir dessus', fold: 'replier', talk: 'en parler', complete: 'compléter'
   },
   home: {
     ledge: 'Ledge', crumb: '1 Ledge · 2 Rig · 3 Session',
@@ -68,6 +68,13 @@ export const fr = {
     unfold: '↵ déplier', fold: 'z replier', missing: (n: number) => `${n} ${plural(n, 'échange plus ancien', 'échanges plus anciens')} pas encore chargé${n > 1 ? 's' : ''}`,
     choose: 'j k pour la choisir, puis 1 2…',
     about: (summary: string) => `Question · à propos de ${summary}`
+  },
+  /** The field to write to Ledge, its suggestions and its `@` list. */
+  compose: {
+    title: 'Écrire à Ledge', placeholder: 'Écrire à Ledge… (@build pour un agent d’un rig)',
+    foot: 'tranche dans son mandat · design, architecture et critique te reviennent', footShort: 'design, architecture, critique te reviennent',
+    launchRig: 'Lance un rig…', whereIs: (rig: string) => `Où en est ${rig} ?`, decided: 'Qu’as-tu tranché ?', needsMe: 'Qui a besoin de moi ?',
+    alt: (n: number) => `alt+1…${n}`, mentionTitle: '@ un agent d’un rig'
   },
   /** A rig seat's state (« Attend Ledge »: an escalation of this seat is open). */
   seat: { waitsLedge: 'Attend Ledge', working: 'Au travail', idle: 'Disponible', starting: 'Démarrage', stopped: 'Arrêté', crashed: 'Planté', unreachable: 'Injoignable' },
@@ -101,14 +108,13 @@ export const fr = {
   },
   ask: {
     title: (s: number, m: number) => `Ledge · voit ${s} ${plural(s, 'session', 'sessions')}, ${m} ${plural(m, 'machine', 'machines')}`,
-    question: 'Question', read: 'lu', reading: 'Ledge lit…', you: 'vous', empty: 'Posez une question : qui a besoin de moi, où en est une session, que lancer…',
+    read: 'lu', reading: 'Ledge lit…', you: 'vous', empty: 'Posez une question : qui a besoin de moi, où en est une session, que lancer…',
     launchCard: 'Nouvelle session', relayCard: (name: string) => `Relayer à ${name}`, closeCard: 'Fermer des sessions', launch: 'Lancer la session',
     relay: 'Envoyer', cancelRelay: 'Retirer de la file', close: 'Fermer', ignore: 'Ignorer', nothingWithoutYou: 'Ledge ne lance rien sans toi.',
     folder: 'Dossier', agent: 'Agent', instruction: 'Instruction', launched: 'lancée', queued: 'en file', sentAt: 'envoyée', closed: 'fermée',
     offline: 'Le daemon local est hors ligne : la question attendra.',
     steps: { sessions: 'les sessions', pane: (n: string) => `le terminal de ${n}`, reply: (n: string) => `la réponse de ${n}`, git: (n: string) => `l’état git de ${n}`, repo: (p: string) => p },
     operator: (s: number, m: number) => `Ledge · Opérateur · voit ${s} ${plural(s, 'session', 'sessions')}, ${m} ${plural(m, 'machine', 'machines')}`,
-    placeholder: 'Une question pour Ledge…',
     resetTitle: 'Nouvelle conversation ?',
     resetBody: (n: number, since: string) => `La conversation du jour (${n} ${plural(n, 'question', 'questions')}, depuis ${since}) sera effacée.`,
     draftStays: 'Ton brouillon reste.', keep: 'Garder', wipe: 'Effacer et repartir',

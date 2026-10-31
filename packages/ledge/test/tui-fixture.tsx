@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { render } from 'ink-testing-library';
 import { attachClient, daemonStore, type DaemonClient } from '@ledge/fleet';
 import { createMockDaemon, fakeSession } from '@ledge/fleet/test/mockDaemon';
-import type { AttachmentErrorReason, Escalation, ImageMime, OpenRigStatus, Projects, Rig, RigSeat, Session } from '@ledge/protocol';
+import type { AttachmentErrorReason, ChatTurn, Escalation, ImageMime, OpenRigStatus, Projects, Rig, RigSeat, Session } from '@ledge/protocol';
 import { App } from '../src/tui/App.js';
 import type { ClipboardImage } from '../src/tui/clipboard.js';
 import { createTuiFleet } from '../src/tui/fleet.js';
@@ -62,6 +62,33 @@ export function mockupEscalations(): Escalation[] {
   return [{ id: 'q-117', source: 'rig', machine: 'local', rigId: 'factory', from: 'orch-lead@factory', intent: 'decision', summary: question,
     questions: [{ id: 'q1', question, options: [{ id: 'sqlite', label: 'SQLite', recommended: true }, { id: 'json', label: 'Garder le JSON' }] }],
     createdAt: ago(6), state: 'pending', category: 'architecture', advice: 'SQLite. Tu as écarté deux fois les fichiers plats.' }];
+}
+
+/**
+ * The daemon's one-shot Ledge (lot 4 `ledgeSay`), on a mock daemon: each `ledge.say` becomes a user item and Ledge's pending bubble in
+ * the thread, its chat turn under the item's qid (every client gets `chat.*`); `answer(i, …)` ends the `i`th, its bubble and its turn.
+ */
+export function oneShotLedge(daemon: Awaited<ReturnType<typeof createMockDaemon>>) {
+  const turns: ChatTurn[] = [];
+  daemon.onMessage(m => {
+    if (m.type !== 'ledge.say') return;
+    const qid = `say-${turns.length + 1}`, at = new Date().toISOString();
+    turns.push({ qid, question: m.text, askedAt: at, steps: [] });
+    daemon.push({ type: 'ledge.thread.item', item: { kind: 'user', id: qid, at, text: m.text, qid } });
+    daemon.push({ type: 'ledge.thread.item', item: { kind: 'ledge', id: `b-${qid}`, at, text: '', qid, pending: true } });
+    daemon.push({ type: 'chat.history', turns: [...turns] });
+  });
+  return {
+    /** How many `ledge.say` it has taken. */
+    get count() { return turns.length; },
+    qid: (i: number) => turns[i]!.qid,
+    answer(i: number, text: string, extra: Partial<ChatTurn> = {}) {
+      const turn = turns[i]!, at = new Date().toISOString();
+      turns[i] = { ...turn, answer: text, answeredAt: at, ...extra };
+      daemon.push({ type: 'chat.done', qid: turn.qid, text, at, ...extra } as never);
+      daemon.push({ type: 'ledge.thread.item', item: { kind: 'ledge', id: `b-${turn.qid}`, at: turn.askedAt, text, qid: turn.qid } });
+    }
+  };
 }
 
 export const MOCKUP_OPENRIG: OpenRigStatus = { machine: 'local', state: 'running', version: '0.6.14' };

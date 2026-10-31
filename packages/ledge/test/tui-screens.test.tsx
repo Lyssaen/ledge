@@ -3,11 +3,13 @@ import type { ChatAction, ChatTurn, ClientMessage } from '@ledge/protocol';
 import { daemonStore } from '@ledge/fleet';
 import { until } from './helpers.js';
 import { cells } from '../src/tui/model/cells.js';
-import { mockupSessions, PROJECTS, startTui } from './tui-fixture.js';
+import { mockupSessions, oneShotLedge, PROJECTS, startTui } from './tui-fixture.js';
 
 const sent = <T extends ClientMessage['type']>(received: ClientMessage[], type: T) => received.filter((m): m is Extract<ClientMessage, { type: T }> => m.type === type);
 const T = (s: number) => new Date(Date.parse('2026-10-09T18:00:00.000Z') + s * 1000).toISOString();
 const ESC = '\u001b';
+/** The title of the field to write to Ledge. */
+const FIELD = 'ÉCRIRE À LEDGE';
 
 describe('ledge tui: session', () => {
   it('asks for the thread, shows it, and sends a reply typed after r', async () => {
@@ -243,18 +245,22 @@ describe('ledge tui: the session thread (#95 lot A)', () => {
 describe('ledge tui: ask Ledge', () => {
   it('sends the question, streams the answer and launches the card’s session on ↵', async () => {
     const tui = await startTui();
+    const ledge = oneShotLedge(tui.daemon);
     try {
       await tui.press('/');
       await until(() => tui.frame().includes('LEDGE · CONVERSATION'));
       await tui.press('Qui a besoin de moi ?');
       await tui.press('\r');
-      await until(() => sent(tui.daemon.received, 'chat.ask').length === 1);
-      const { qid } = sent(tui.daemon.received, 'chat.ask')[0]!;
-      expect(sent(tui.daemon.received, 'chat.ask')[0]!.text).toBe('Qui a besoin de moi ?');
+      // To Ledge's thread: its answer comes as the chat turn of the user item, whose cards still act.
+      await until(() => ledge.count === 1);
+      expect(sent(tui.daemon.received, 'ledge.say')[0]!.text).toBe('Qui a besoin de moi ?');
+      expect(sent(tui.daemon.received, 'chat.ask')).toEqual([]);
+      const qid = ledge.qid(0);
+      await until(() => tui.frame().includes('Ledge lit…'));
       tui.daemon.push({ type: 'chat.step', qid, step: { kind: 'sessions' } });
       tui.daemon.push({ type: 'chat.delta', qid, text: 'Otto attend ton accord.' });
       await until(() => tui.frame().includes('Otto attend ton accord.'));
-      tui.daemon.push({ type: 'chat.done', qid, text: 'Otto attend ton accord. Je peux lancer une session.', at: T(9), proposals: [{ cwd: '/w/ledge', project: 'ledge', tool: 'claude', prompt: 'Corrige les tests de l’overlay' }] });
+      ledge.answer(0, 'Otto attend ton accord. Je peux lancer une session.', { proposals: [{ cwd: '/w/ledge', project: 'ledge', tool: 'claude', prompt: 'Corrige les tests de l’overlay' }] });
       await until(() => tui.frame().includes('Corrige les tests de l’overlay'));
       await tui.press('\t');
       await tui.press('\r');
@@ -611,26 +617,27 @@ describe('ledge tui: the field (#95 lot B)', () => {
 
   it('↑ goes back through what was asked, ↓ comes down to the draft as it was; esc goes back to it', async () => {
     const tui = await startTui();
+    const ledge = oneShotLedge(tui.daemon);
     try {
       await tui.press('/');
       for (const [i, q] of ['Qui travaille sur la TUI ?', 'Et les tests ?'].entries()) {
         await tui.press(q); await tui.press('\r');
-        await until(() => sent(tui.daemon.received, 'chat.ask').length === i + 1);
-        tui.daemon.push({ type: 'chat.done', qid: sent(tui.daemon.received, 'chat.ask')[i]!.qid, text: 'Oui.', at: T(i) });
+        await until(() => ledge.count === i + 1);
+        ledge.answer(i, 'Oui.');
         await until(() => !tui.frame().includes('Ledge lit…'));
       }
       await tui.press('Et Luna');
       await tui.press(UP);
-      await until(() => boxRows(tui.frame(), 'QUESTION')[0] === '❯ Et les tests ?');
-      expect(bottom(tui.frame(), 'QUESTION')).toContain('historique 2/2 · ↓ ton brouillon');
+      await until(() => boxRows(tui.frame(), FIELD)[0] === '❯ Et les tests ?');
+      expect(bottom(tui.frame(), FIELD)).toContain('historique 2/2 · ↓ ton brouillon');
       expect(tui.frame().split('\n').at(-1)).toMatch(/↵ +renvoyer.*esc +revenir au brouillon/);
       await tui.press(UP);
-      await until(() => boxRows(tui.frame(), 'QUESTION')[0] === '❯ Qui travaille sur la TUI ?');
+      await until(() => boxRows(tui.frame(), FIELD)[0] === '❯ Qui travaille sur la TUI ?');
       await tui.press(DOWN); await tui.press(DOWN);
-      await until(() => boxRows(tui.frame(), 'QUESTION')[0] === '❯ Et Luna');
-      expect(bottom(tui.frame(), 'QUESTION')).not.toContain('historique');
+      await until(() => boxRows(tui.frame(), FIELD)[0] === '❯ Et Luna');
+      expect(bottom(tui.frame(), FIELD)).not.toContain('historique');
       await tui.press(UP); await tui.press(UP); await tui.press(ESC);
-      await until(() => boxRows(tui.frame(), 'QUESTION')[0] === '❯ Et Luna');
+      await until(() => boxRows(tui.frame(), FIELD)[0] === '❯ Et Luna');
     } finally { await tui.cleanup(); }
   });
 
@@ -677,13 +684,14 @@ describe('ledge tui: the field (#95 lot B)', () => {
 
   it('ctrl+n asks first: n or esc keeps the conversation, y clears it; the draft stays', async () => {
     const tui = await startTui();
+    const ledge = oneShotLedge(tui.daemon);
     try {
       // The question on one line, beside the home's left column.
       await tui.resize(160, 24);
       await tui.press('/');
       await tui.press('Qui a besoin de moi ?'); await tui.press('\r');
-      await until(() => sent(tui.daemon.received, 'chat.ask').length === 1);
-      tui.daemon.push({ type: 'chat.done', qid: sent(tui.daemon.received, 'chat.ask')[0]!.qid, text: 'Otto.', at: T(1) });
+      await until(() => ledge.count === 1);
+      ledge.answer(0, 'Otto.');
       await until(() => !tui.frame().includes('Ledge lit…'));
       await tui.press('Et Luna');
       await tui.press(CTRL.n);
@@ -695,10 +703,10 @@ describe('ledge tui: the field (#95 lot B)', () => {
       await tui.press(CTRL.n); await tui.press(ESC);
       await until(() => !tui.frame().includes('NOUVELLE CONVERSATION ?'));
       expect(sent(tui.daemon.received, 'chat.reset')).toEqual([]);
-      expect(boxRows(tui.frame(), 'QUESTION')[0]).toBe('❯ Et Luna');
+      expect(boxRows(tui.frame(), FIELD)[0]).toBe('❯ Et Luna');
       await tui.press(CTRL.n); await tui.press('y');
       await until(() => sent(tui.daemon.received, 'chat.reset').length === 1);
-      await until(() => boxRows(tui.frame(), 'QUESTION')[0] === '❯ Et Luna');
+      await until(() => boxRows(tui.frame(), FIELD)[0] === '❯ Et Luna');
     } finally { await tui.cleanup(); }
   });
 
@@ -864,40 +872,42 @@ describe('ledge tui: the field (#95 lot B)', () => {
 
   it('Ask offline: an entry of the history, retouched, stays in the field; esc brings the draft back', async () => {
     const tui = await startTui();
+    const ledge = oneShotLedge(tui.daemon);
     try {
       await tui.press('/');
       await tui.press('Qui a besoin de moi ?'); await tui.press('\r');
-      await until(() => sent(tui.daemon.received, 'chat.ask').length === 1);
-      tui.daemon.push({ type: 'chat.done', qid: sent(tui.daemon.received, 'chat.ask')[0]!.qid, text: 'Otto.', at: T(1) });
+      await until(() => ledge.count === 1);
+      ledge.answer(0, 'Otto.');
       await until(() => !tui.frame().includes('Ledge lit…'));
       await tui.press('Et Luna'); await tui.press(UP); await tui.press(' bis');
-      await until(() => boxRows(tui.frame(), 'QUESTION')[0] === '❯ Qui a besoin de moi ? bis');
+      await until(() => boxRows(tui.frame(), FIELD)[0] === '❯ Qui a besoin de moi ? bis');
       await tui.daemon.close();
       await new Promise(r => setTimeout(r, 800));
       await tui.press('\r');
       await until(() => tui.frame().includes('Le daemon local est hors ligne'));
-      expect(boxRows(tui.frame(), 'QUESTION')[0]).toBe('❯ Qui a besoin de moi ? bis');
-      expect(sent(tui.daemon.received, 'chat.ask')).toHaveLength(1);
+      expect(boxRows(tui.frame(), FIELD)[0]).toBe('❯ Qui a besoin de moi ? bis');
+      expect(sent(tui.daemon.received, 'ledge.say')).toHaveLength(1);
       await tui.press(ESC);
-      await until(() => boxRows(tui.frame(), 'QUESTION')[0] === '❯ Et Luna');
+      await until(() => boxRows(tui.frame(), FIELD)[0] === '❯ Et Luna');
     } finally { await tui.cleanup(); }
   });
 
   it('Ask: ctrl+n while going through the history, then « garder »: the draft is back, not the entry', async () => {
     const tui = await startTui();
+    const ledge = oneShotLedge(tui.daemon);
     try {
       await tui.press('/');
       await tui.press('Qui a besoin de moi ?'); await tui.press('\r');
-      await until(() => sent(tui.daemon.received, 'chat.ask').length === 1);
-      tui.daemon.push({ type: 'chat.done', qid: sent(tui.daemon.received, 'chat.ask')[0]!.qid, text: 'Otto.', at: T(1) });
+      await until(() => ledge.count === 1);
+      ledge.answer(0, 'Otto.');
       await until(() => !tui.frame().includes('Ledge lit…'));
       await tui.press('Et Luna'); await tui.press(UP);
-      await until(() => boxRows(tui.frame(), 'QUESTION')[0] === '❯ Qui a besoin de moi ?');
+      await until(() => boxRows(tui.frame(), FIELD)[0] === '❯ Qui a besoin de moi ?');
       await tui.press(CTRL.n);
       await until(() => tui.frame().includes('NOUVELLE CONVERSATION ?'));
       await tui.press('n');
       await until(() => !tui.frame().includes('NOUVELLE CONVERSATION ?'));
-      expect(boxRows(tui.frame(), 'QUESTION')[0]).toBe('❯ Et Luna');
+      expect(boxRows(tui.frame(), FIELD)[0]).toBe('❯ Et Luna');
     } finally { await tui.cleanup(); }
   });
 
@@ -915,35 +925,37 @@ describe('ledge tui: the field (#95 lot B)', () => {
 
   it('Ask: a fix and ↵ read together: the question asked leaves the field', async () => {
     const tui = await startTui();
+    const ledge = oneShotLedge(tui.daemon);
     try {
       await tui.press('/');
       await tui.press('Qui a besoin de moi ??'); await tui.press('\u007f\r');
-      await until(() => sent(tui.daemon.received, 'chat.ask').length === 1);
-      expect(sent(tui.daemon.received, 'chat.ask')[0]!.text).toBe('Qui a besoin de moi ?');
-      tui.daemon.push({ type: 'chat.done', qid: sent(tui.daemon.received, 'chat.ask')[0]!.qid, text: 'Otto.', at: T(1) });
+      await until(() => ledge.count === 1);
+      expect(sent(tui.daemon.received, 'ledge.say')[0]!.text).toBe('Qui a besoin de moi ?');
+      ledge.answer(0, 'Otto.');
       await until(() => !tui.frame().includes('Ledge lit…'));
       await tui.press('X');
-      await until(() => boxRows(tui.frame(), 'QUESTION')[0]?.startsWith('❯ X') === true);
+      await until(() => boxRows(tui.frame(), FIELD)[0]?.startsWith('❯ X') === true);
     } finally { await tui.cleanup(); }
   });
 
   it('Ask: an entry of the history asked again, the field is back to the draft', async () => {
     const tui = await startTui();
+    const ledge = oneShotLedge(tui.daemon);
     try {
       await tui.press('/');
       await tui.press('Qui a besoin de moi ?'); await tui.press('\r');
-      await until(() => sent(tui.daemon.received, 'chat.ask').length === 1);
-      tui.daemon.push({ type: 'chat.done', qid: sent(tui.daemon.received, 'chat.ask')[0]!.qid, text: 'Otto.', at: T(1) });
+      await until(() => ledge.count === 1);
+      ledge.answer(0, 'Otto.');
       await until(() => !tui.frame().includes('Ledge lit…'));
       await tui.press('Et Luna'); await tui.press(UP);
-      await until(() => boxRows(tui.frame(), 'QUESTION')[0] === '❯ Qui a besoin de moi ?');
+      await until(() => boxRows(tui.frame(), FIELD)[0] === '❯ Qui a besoin de moi ?');
       await tui.press('\r');
-      await until(() => sent(tui.daemon.received, 'chat.ask').length === 2);
-      expect(sent(tui.daemon.received, 'chat.ask')[1]!.text).toBe('Qui a besoin de moi ?');
-      tui.daemon.push({ type: 'chat.done', qid: sent(tui.daemon.received, 'chat.ask')[1]!.qid, text: 'Otto.', at: T(2) });
+      await until(() => ledge.count === 2);
+      expect(sent(tui.daemon.received, 'ledge.say')[1]!.text).toBe('Qui a besoin de moi ?');
+      ledge.answer(1, 'Otto.');
       await until(() => !tui.frame().includes('Ledge lit…'));
       await tui.press('X');
-      await until(() => boxRows(tui.frame(), 'QUESTION')[0] === '❯ Et LunaX');
+      await until(() => boxRows(tui.frame(), FIELD)[0] === '❯ Et LunaX');
     } finally { await tui.cleanup(); }
   });
 
@@ -952,7 +964,7 @@ describe('ledge tui: the field (#95 lot B)', () => {
     try {
       await tui.press('/');
       await tui.press(`ab${LEFT}cd\u007f`);
-      await until(() => boxRows(tui.frame(), 'QUESTION')[0] === '❯ acb');
+      await until(() => boxRows(tui.frame(), FIELD)[0] === '❯ acb');
     } finally { await tui.cleanup(); }
   });
 
@@ -983,7 +995,7 @@ describe('ledge tui: the field (#95 lot B)', () => {
       expect(tui.frame()).not.toContain('Brouillon en cours');
       // Gone: a key goes nowhere.
       await tui.press('/');
-      expect(tui.frame()).not.toContain('QUESTION');
+      expect(tui.frame()).not.toContain(FIELD);
     } finally { await tui.cleanup(); }
   });
 });
@@ -1112,12 +1124,22 @@ describe('ledge tui: ask Ledge scrolls, in Markdown (#95 lot C)', () => {
     try {
       await tui.resize(80, 24);
       await tui.press('/');
-      tui.daemon.push({ type: 'chat.history', turns: turns(6) });
+      const done = turns(6);
+      tui.daemon.push({ type: 'chat.history', turns: done });
       await until(() => tui.frame().includes('Fin 5.'));
+      // The daemon's one-shot Ledge, after the day's turns: the user item and Ledge's bubble, the turn under the item's qid.
+      tui.daemon.onMessage(m => {
+        if (m.type !== 'ledge.say') return;
+        const now = new Date().toISOString();
+        tui.daemon.push({ type: 'ledge.thread.item', item: { kind: 'user', id: 'u1', at: now, text: m.text, qid: 'u1' } });
+        tui.daemon.push({ type: 'ledge.thread.item', item: { kind: 'ledge', id: 'b1', at: now, text: '', qid: 'u1', pending: true } });
+        tui.daemon.push({ type: 'chat.history', turns: [...done, { qid: 'u1', question: m.text, askedAt: now, steps: [] }] });
+      });
       await tui.press('Qui ?');
       await tui.press('\r');
-      await until(() => sent(tui.daemon.received, 'chat.ask').length === 1);
-      const { qid } = sent(tui.daemon.received, 'chat.ask')[0]!;
+      await until(() => sent(tui.daemon.received, 'ledge.say').length === 1);
+      const qid = 'u1';
+      await until(() => tui.frame().includes('Ledge lit…'));
       tui.daemon.push({ type: 'chat.delta', qid, text: 'Otto attend.' });
       await until(() => tui.frame().includes('Otto attend.'));
       await tui.press('\t');
@@ -1145,9 +1167,9 @@ describe('ledge tui: ask Ledge scrolls, in Markdown (#95 lot C)', () => {
       tui.daemon.push({ type: 'chat.history', turns: turns(2) });
       await until(() => tui.frame().includes('Fin 1.'));
       await tui.press(UP);
-      await until(() => boxRows(tui.frame(), 'QUESTION').some(l => l.includes('Question 1 ?')));
+      await until(() => boxRows(tui.frame(), FIELD).some(l => l.includes('Question 1 ?')));
       await tui.press(UP);
-      await until(() => boxRows(tui.frame(), 'QUESTION').some(l => l.includes('Question 0 ?')));
+      await until(() => boxRows(tui.frame(), FIELD).some(l => l.includes('Question 0 ?')));
     } finally { await tui.cleanup(); }
   });
 

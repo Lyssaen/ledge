@@ -33,7 +33,7 @@ export const en: Messages = {
     applyRow: 'apply the line', apply: 'apply', applyAll: 'apply all', deny: 'deny', ignore: 'ignore', review: 'review',
     openSession: name => `open ${name}`,
     screens: 'Ledge · rig · session',
-    decide: 'decide', revisit: 'revisit', fold: 'fold', talk: 'talk it over'
+    decide: 'decide', revisit: 'revisit', fold: 'fold', talk: 'talk it over', complete: 'complete'
   },
   home: {
     ledge: 'Ledge', crumb: '1 Ledge · 2 Rig · 3 Session',
@@ -64,6 +64,12 @@ export const en: Messages = {
     unfold: '↵ unfold', fold: 'z fold', missing: n => `${n} older ${plural(n, 'exchange', 'exchanges')} not loaded yet`,
     choose: 'j k to choose it, then 1 2…',
     about: summary => `Question · about ${summary}`
+  },
+  compose: {
+    title: 'Write to Ledge', placeholder: 'Write to Ledge… (@build for an agent of a rig)',
+    foot: 'decides within its mandate · design, architecture and critique are yours', footShort: 'design, architecture, critique are yours',
+    launchRig: 'Launch a rig…', whereIs: rig => `Where is ${rig}?`, decided: 'What did you decide?', needsMe: 'Who needs me?',
+    alt: n => `alt+1…${n}`, mentionTitle: '@ an agent of a rig'
   },
   seat: { waitsLedge: 'Waits for Ledge', working: 'Working', idle: 'Available', starting: 'Starting', stopped: 'Stopped', crashed: 'Crashed', unreachable: 'Unreachable' },
   overview: {
@@ -96,14 +102,13 @@ export const en: Messages = {
   },
   ask: {
     title: (s, m) => `Ledge · sees ${s} ${plural(s, 'session', 'sessions')}, ${m} ${plural(m, 'machine', 'machines')}`,
-    question: 'Question', read: 'read', reading: 'Ledge is reading…', you: 'you', empty: 'Ask anything: who needs me, how a session is doing, what to start…',
+    read: 'read', reading: 'Ledge is reading…', you: 'you', empty: 'Ask anything: who needs me, how a session is doing, what to start…',
     launchCard: 'New session', relayCard: name => `Relay to ${name}`, closeCard: 'Close sessions', launch: 'Launch the session',
     relay: 'Send', cancelRelay: 'Take it back', close: 'Close', ignore: 'Ignore', nothingWithoutYou: 'Ledge starts nothing without you.',
     folder: 'Folder', agent: 'Agent', instruction: 'Instruction', launched: 'launched', queued: 'queued', sentAt: 'sent', closed: 'closed',
     offline: 'The local daemon is offline: the question will wait.',
     steps: { sessions: 'the sessions', pane: n => `${n}'s terminal`, reply: n => `${n}'s reply`, git: n => `${n}'s git state`, repo: p => p },
     operator: (s, m) => `Ledge · Operator · sees ${s} ${plural(s, 'session', 'sessions')}, ${m} ${plural(m, 'machine', 'machines')}`,
-    placeholder: 'A question for Ledge…',
     resetTitle: 'New conversation?',
     resetBody: (n, since) => `Today's conversation (${n} ${plural(n, 'question', 'questions')}, since ${since}) will be cleared.`,
     draftStays: 'Your draft stays.', keep: 'Keep', wipe: 'Clear and start over',
