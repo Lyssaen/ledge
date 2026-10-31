@@ -6,9 +6,9 @@ export const GRACE_MS = 60_000;
 const WORDS = ['rm', 'rm -rf', 'drop', 'delete', 'truncate', 'force', 'force-push', '--force', 'reset --hard', 'prod', 'production', 'secret', 'secrets',
   'token', 'credentials', 'billing', 'supprimer', 'suppression', 'facturation'];
 const escapeRe = (w: string): string => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ /g, '\\s+');
-/** Whole words only: « product » is not « prod ». Longest first, so « force-push » wins over « force ». */
+/** Whole words only (`-` and `_` are separators, so « api-token » and « db_prod » count): « product » is not « prod ». Longest first, so « force-push » wins over « force ». */
 const entries = [...WORDS].sort((a, b) => b.length - a.length)
-  .map(w => ({ word: w, re: new RegExp(`(?<![\\p{L}\\p{N}_-])${escapeRe(w)}(?![\\p{L}\\p{N}_])`, 'iu') }));
+  .map(w => ({ word: w, re: new RegExp(`(?<![\\p{L}\\p{N}])${escapeRe(w)}(?![\\p{L}\\p{N}])`, 'iu') }));
 export const CRITICAL_WORDS: readonly RegExp[] = entries.map(e => e.re);
 
 /** The longest critical word found in the summary, detail, a question or an option label, or null. */

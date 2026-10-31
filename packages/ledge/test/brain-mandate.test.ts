@@ -25,6 +25,21 @@ describe('mandate', () => {
     expect(parseMandate(out).user).toContain('git');
     expect(escalateCategory(out, 'git')).toBe(out);
   });
+  it('a category in both lists goes to the user; a duplicated line is moved whole', () => {
+    expect(parseMandate(`${DEFAULT_MANDATE}- git : moi\n`).self).not.toContain('git');
+    const dup = DEFAULT_MANDATE.replace('- git : git et branches\n', '- git : git et branches\n- git : encore\n');
+    expect(parseMandate(dup).self).toContain('git');
+    const out = escalateCategory(dup, 'git');
+    expect(parseMandate(out).self).not.toContain('git'); expect(parseMandate(out).user).toContain('git');
+  });
+  it('uppercase headings and always-user ids under self are handled', () => {
+    const m = parseMandate('## LEDGE TRANCHE SEUL\n- git : g\n- critical : c\n\n## TE REVIENT TOUJOURS\n- tests : t\n');
+    expect(m).toEqual({ self: ['git'], user: ['tests', 'critical'], readable: true });
+  });
+  it('ensureMandate rethrows errors other than a missing file', async () => {
+    const d = mkdtempSync(join(tmpdir(), 'ledge-mandate-')); dirs.push(d);
+    await expect(ensureMandate(d)).rejects.toThrow();
+  });
   it('ensureMandate creates the default once and keeps edits; paths has the brain files', async () => {
     const d = mkdtempSync(join(tmpdir(), 'ledge-mandate-')); dirs.push(d);
     const f = join(d, 'sub', 'mandat.md');

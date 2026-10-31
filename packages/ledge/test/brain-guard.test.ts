@@ -17,12 +17,19 @@ describe('guardDecide', () => {
   it.each(['rm -rf build', 'DROP TABLE sessions', 'déployer en prod', 'rotate the secret', 'supprimer la branche', 'git reset   --hard', 'use --force'])('« %s » is critical', summary => {
     expect(criticalIn(esc({ summary }))).not.toBeNull();
   });
+  it.each(['rotate the api-token', 'GITHUB_TOKEN leak', 'client_secret', 'pre-prod deploy', 'db_prod', 'hard-delete rows', 'prod-db', 'deploy to prod.', 'run (rm) now'])('« %s » is critical (joined or next to punctuation)', summary => {
+    expect(criticalIn(esc({ summary }))).not.toBeNull();
+  });
+  it('the longest word is reported', () => {
+    expect(criticalIn(esc({ summary: 'git push --force' }))).toBe('--force');
+    expect(criticalIn(esc({ summary: 'use force-push' }))).toBe('force-push');
+  });
   it('scans detail, question text and labels', () => {
     expect(criticalIn(esc({ detail: 'a token leaks' }))).toBe('token');
     expect(criticalIn(esc({ questions: [{ id: 'q1', question: 'Supprimer ?', options: [{ id: 'a', label: 'oui' }, { id: 'b', label: 'non' }] }] }))).toBe('supprimer');
   });
   it('words inside other words are not critical', () => {
-    expect(criticalIn(esc({ summary: 'format the product page, deleted-at column? no: undelete' }))).toBeNull();
+    expect(criticalIn(esc({ summary: 'Format the product page, deleted rows, undelete' }))).toBeNull();
   });
   it('architecture and design are never decided', () => {
     expect(guardDecide(gitEsc, 'architecture', {}, mandate)).toEqual({ ok: false, convert: 'ask', category: 'architecture', reason: 'te revient' });

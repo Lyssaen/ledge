@@ -58,34 +58,35 @@ export function parseMandate(text: string): Mandate {
   const e = mandateEntries(text);
   if (!e.readable) return { self: [], user: [], readable: false };
   const uniq = (xs: (MandateCategory | null)[]): MandateCategory[] => [...new Set(xs.filter((x): x is MandateCategory => x !== null))];
-  return { self: uniq(e.self.map(x => known(x.id))), user: uniq([...e.user, ...e.always].map(x => known(x.id))), readable: true };
+  const user = uniq([...e.user, ...e.always].map(x => known(x.id)));
+  return { self: uniq(e.self.map(x => known(x.id))).filter(c => !user.includes(c)), user, readable: true }; // in both lists: the user wins
 }
 
 /** Moves the line of `c` into « Te revient toujours » (the line is kept as is). */
 export function escalateCategory(text: string, c: MandateCategory): string {
   const lines = text.split('\n');
   const isLine = (l: string): boolean => new RegExp(`^\\s*[-*]\\s+${c}\\s+:`).test(l);
-  let list: 'self' | 'user' | null = null; let moved: string | null = null; let userHeadingAt = -1;
+  let list: 'self' | 'user' | null = null; const moved: string[] = []; let userHeadingAt = -1;
   const kept: string[] = [];
   for (const l of lines) {
     if (l.trim().startsWith('#')) {
       const title = l.replace(/^\s*#+\s*/, '').toLowerCase();
       list = title.startsWith(SELF_TITLE) ? 'self' : title.startsWith(USER_TITLE) ? 'user' : null;
       if (list === 'user') userHeadingAt = kept.length;
-    } else if (list === 'self' && moved === null && isLine(l)) { moved = l; continue; }
+    } else if (list === 'self' && isLine(l)) { moved.push(l.trim()); continue; }
     kept.push(l);
   }
-  if (moved === null) return text;
-  if (userHeadingAt < 0) return `${kept.join('\n').trimEnd()}\n\n## Te revient toujours\n${moved.trim()}\n`;
+  if (moved.length === 0) return text;
+  if (userHeadingAt < 0) return `${kept.join('\n').trimEnd()}\n\n## Te revient toujours\n${moved[0]}\n`;
   let at = userHeadingAt + 1;
   for (let i = at; i < kept.length && !kept[i]!.trim().startsWith('#'); i++) if (/^\s*[-*]\s+/.test(kept[i]!)) at = i + 1;
-  kept.splice(at, 0, moved.trim());
+  kept.splice(at, 0, moved[0]!);
   return kept.join('\n');
 }
 
 /** Creates the mandate file with the default text when missing; returns its text. */
 export async function ensureMandate(path: string): Promise<string> {
-  try { return await readFile(path, 'utf8'); } catch { /* none yet */ }
+  try { return await readFile(path, 'utf8'); } catch (err) { if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err; }
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, DEFAULT_MANDATE);
   return DEFAULT_MANDATE;
