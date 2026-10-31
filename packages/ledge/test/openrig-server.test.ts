@@ -79,9 +79,9 @@ describe('server with the OpenRig bridge', () => {
     expect(c.of('error').find(e => e.request === 'rig.exchanges.request')).toMatchObject({ code: 'unreachable' });
 
     // Writes come in later lots.
-    c.send({ type: 'rig.act', rid: 'a1', machine: 'local', rigId: 'r1', verb: 'up' } as ClientMessage);
-    await until(() => c.of('error').some(e => e.request === 'rig.act'));
-    expect(c.of('error').find(e => e.request === 'rig.act')).toMatchObject({ code: 'unavailable', message: 'not supported yet' });
+    c.send({ type: 'rig.adopt', rid: 'a1', machine: 'local', rigId: 'r1', projectId: 'p' } as ClientMessage);
+    await until(() => c.of('error').some(e => e.request === 'rig.adopt'));
+    expect(c.of('error').find(e => e.request === 'rig.adopt')).toMatchObject({ code: 'unavailable', message: 'not supported yet' });
 
     // A hook from a seat pairs its session.
     c.send({ type: 'session.event', id: 's1', agent: 'claude', cwd: '/w/app', openrig: { sessionName: 'dev-build@starter' }, event: { name: 'SessionStart', at: T, source: 'hook' } } as ClientMessage);
@@ -117,7 +117,7 @@ describe('server with the OpenRig bridge', () => {
     await until(() => c.of('snapshot').length === 1);
     expect(c.of('snapshot')[0]!.daemon?.openrig).toBeUndefined();
     c.send({ type: 'rig.exchanges.request', machine: 'local', rigId: 'r1' });
-    c.send({ type: 'rig.act', rid: 'a1', machine: 'local', rigId: 'r1', verb: 'up' } as ClientMessage);
+    c.send({ type: 'rig.adopt', rid: 'a1', machine: 'local', rigId: 'r1', projectId: 'p' } as ClientMessage);
     await until(() => c.of('error').length === 2);
     for (const e of c.of('error')) expect(e).toMatchObject({ code: 'unavailable' });
     c.send({ type: 'rig.send', rid: 's1', machine: 'local', seatRef: 'dev-build@starter', text: 'x' });

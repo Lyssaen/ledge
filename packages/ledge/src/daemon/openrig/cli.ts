@@ -21,6 +21,8 @@ export interface RigCli {
   queueCreate(o: QueueCreate): Promise<{ ok: boolean; qitemId?: string; detail?: string }>;
   /** `rig send <ref> "[Ledge] <text>"` as `ledge@external` (the signed send is unverified on a real OpenRig: first real try). */
   send(ref: string, text: string): Promise<{ ok: boolean; detail?: string }>;
+  /** `rig up <spec> --cwd <cwd> --yes --json`, 300 s: launches a rig. `rigId`/`rigName` read from the JSON (top level or nested). */
+  up(spec: string, cwd: string): Promise<{ ok: true; rigId: string; rigName: string } | { ok: false; detail: string }>;
 }
 
 /** Without an identity OpenRig delivers `rig send` unsigned. */
@@ -66,6 +68,19 @@ function createdId(stdout: string): string | undefined {
   return found ?? (j === undefined ? /\bqitem-[\w-]+/.exec(stdout)?.[0] : undefined);
 }
 
+/** First `rigId` (+ `rigName`) found in the JSON of `rig up`, at the top or nested up to three levels (OpenRig may wrap its answer). */
+function launched(stdout: string): { rigId: string; rigName: string } | null {
+  let j: unknown; try { j = JSON.parse(stdout); } catch { return null; }
+  const find = (o: unknown, depth: number): { rigId: string; rigName: string } | null => {
+    if (!o || typeof o !== 'object' || depth > 3) return null;
+    const r = o as Record<string, unknown>;
+    if (typeof r.rigId === 'string' && r.rigId !== '') return { rigId: r.rigId, rigName: typeof r.rigName === 'string' ? r.rigName : typeof r.name === 'string' ? r.name : r.rigId };
+    for (const v of Object.values(r)) { const f = find(v, depth + 1); if (f) return f; }
+    return null;
+  };
+  return find(j, 0);
+}
+
 export function createRigCli(exec: RigExec): RigCli {
   const detail = (r: { stdout: string; stderr: string; code: number }): string => (r.stderr || r.stdout).trim() || `exit ${r.code}`;
   const outcome = (r: { code: number; stdout: string; stderr: string }): { ok: boolean; detail?: string } => r.code === 0 ? { ok: true } : { ok: false, detail: detail(r) };
@@ -87,6 +102,12 @@ export function createRigCli(exec: RigExec): RigCli {
     addHuman: async opts => outcome(await exec(['gateway', 'human', 'add', HUMAN_ID, '--display-name', 'Ledge', '--binding', HUMAN_BINDING,
       '--delivery-class', 'D', '--actor', 'ledge', ...(opts?.replace ? ['--replace'] : [])])),
     send: async (ref, text) => outcome(await exec(['send', ref, `${SEND_SIGNATURE}${text}`], { timeoutMs: 30_000, env: { OPENRIG_SESSION_NAME: SEND_SESSION_NAME } })),
+    up: async (spec, cwd) => {
+      const r = await exec(['up', spec, '--cwd', cwd, '--yes', '--json'], { timeoutMs: 300_000 });
+      if (r.code !== 0) return { ok: false, detail: detail(r) };
+      const l = launched(r.stdout);
+      return l ? { ok: true, ...l } : { ok: false, detail: `rig up gave no rigId: ${(r.stderr || r.stdout).trim().slice(-300) || 'empty output'}` };
+    },
     queueCreate: async o => {
       const r = await exec(['queue', 'create', '--source', o.source, '--destination', o.destination, '--summary', o.summary, '--body-file', o.bodyFile,
         ...(o.replyTo ? ['--reply-to', o.replyTo] : []), '--json'], { timeoutMs: 30_000 });

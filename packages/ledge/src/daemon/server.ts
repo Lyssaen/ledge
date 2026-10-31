@@ -52,6 +52,8 @@ import { OpenRigUnreachable } from './openrig/http.js';
 import { pairSession, restorePairs, unpairGone } from './openrig/pairing.js';
 import { createAnswers, type Answers } from './openrig/answer.js';
 import { ANSWER_PATH } from './openrig/facts.js';
+import { actOnRig } from './openrig/actions.js';
+import { HUMAN_ADDRESS } from './openrig/facts.js';
 import { createLedgeThread } from './ledgeThread.js';
 import { createLedgeSay } from './ledgeSay.js';
 import { createSeatSend } from './openrig/seatSend.js';
@@ -169,6 +171,8 @@ export interface ServerHandle {
   asks: Asks;
   /** The shared projects, as last set. */
   projects(): Projects;
+  /** Ledge's voice: a line in its thread (what it did on its own, e.g. starting OpenRig). */
+  say(text: string): void;
 }
 
 /**
@@ -1326,6 +1330,14 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         reply({ type: 'rig.result', rid: msg.rid, ok: true });
         return answered;
       }
+      // Lifecycle of a rig or a seat, through OpenRig; to the sender only (the mirror shows the effect by SSE).
+      case 'rig.act': {
+        if (msg.machine !== 'local') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'unreachable', reason: `machine ${msg.machine} is not this daemon's` });
+        if (!bridge) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'openrig_down', reason: "OpenRig n'est pas branché" });
+        const r = await actOnRig({ http: () => bridge.http(), ensureRunning: why => bridge.ensureRunning(why), operator: HUMAN_ADDRESS },
+          { verb: msg.verb, ...(msg.rigId !== undefined ? { rigId: msg.rigId } : {}), ...(msg.seatRef !== undefined ? { seatRef: msg.seatRef } : {}) });
+        return reply(r.ok ? { type: 'rig.result', rid: msg.rid, ok: true } : { type: 'rig.result', rid: msg.rid, ok: false, code: r.code, reason: r.reason });
+      }
       // Writing to a seat; to the sender only. The Desktop routes another machine's seats to its own daemon (lot 6).
       case 'rig.send': {
         if (msg.machine !== 'local') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'unreachable', reason: `machine ${msg.machine} is not this daemon's` });
@@ -1334,7 +1346,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         const r = await seatSend.send(msg.machine, msg.seatRef, msg.text);
         return reply(r.ok ? { type: 'rig.result', rid: msg.rid, ok: true } : { type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: r.reason });
       }
-      case 'rig.act': case 'rig.prepare': case 'rig.launch': case 'rig.adopt':
+      case 'rig.prepare': case 'rig.launch': case 'rig.adopt':
       case 'mandate.update': case 'rule.set': case 'decision.revisit': case 'category.escalate': case 'brain.set':
         return notYet();
       // A refusal of the service (an unknown pairing, a sign-in while disabled) reaches the sender as an `error`.
@@ -1474,6 +1486,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     labelExited,
     asks,
     projects: () => projects,
+    say: text => { thread.append({ kind: 'ledge', text }); },
     close: () => new Promise<void>(res => { clearInterval(sweepTimer); unsubscribe(); unsubscribeBridge?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
   };
 }
