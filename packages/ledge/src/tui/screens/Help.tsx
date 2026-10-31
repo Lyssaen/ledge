@@ -40,10 +40,11 @@ export function Help() {
   const { columns } = useScreenSize();
   const k = t.keys;
   const groups: Array<[string, Array<[string, string]>]> = [
-    [t.help.global, [['1 2 3', k.screens], ['/', k.ask], ['+', k.launch], [',', k.settings], ['?', k.help], ['esc', k.back], ['q', k.quit]]],
-    [t.help.overview, [['j k ↑ ↓', k.navigate], ['tab', k.next], ['↵', k.open], ['y n A', k.answer], ['1…9', k.answer], ['r', t.overview.denyWithNote], ['a', k.attach], ['i', k.interrupt]]],
+    [t.help.global, [['1 2 3', k.screens], ['/', k.ask], ['+', t.help.launchRig], [',', k.settings], ['?', k.help], ['esc', k.back], ['q', k.quit]]],
+    [t.help.overview, [['j k ↑ ↓', k.navigate], ['tab', k.next], ['↵', k.open], ['y n A', k.answer], ['a', k.attach], ['i', k.interrupt]]],
+    [t.help.ledge, [['1-9', t.help.answerFocus], ['e', k.talk], ['u', k.revisit], ['z', t.help.foldExchanges], ['PgUp PgDn', k.scroll], ['← →', t.help.tabsKeys], ['R', k.summarize], [']', t.help.rail], ['m', k.mandate], ['alt+1…4', t.help.suggestions], ['@ tab', k.complete], ['ctrl+n', k.newChat], ['ctrl+c', k.stopAnswer]]],
+    [t.help.rig, [['j k', k.seats], ['↵', k.openSeat], ['a', k.attachSeat], ['w', t.help.writeToSeat], ['r', t.rigAct.keys.restart], ['S', t.rigAct.keys.stop], ['u', t.help.resumeSent], ['p', t.help.fileIn], ['esc', t.help.backNarrow]]],
     [t.help.session, [['y n A 1…9', k.answer], ['r ↵', k.write], ['j k PgUp PgDn', k.scroll], [t.keys.space, k.unfold], ['d', k.diffs], ['t', k.terminal], ['a', k.attach], ['m', k.model], ['i', k.interrupt]]],
-    [t.help.ask, [['↵', k.send], ['tab', k.cycle], ['PgUp PgDn', k.scroll], ['j k G', k.scroll], ['ctrl+n', k.newChat], ['ctrl+c', k.stopAnswer]]],
     [t.help.field, [['↵', k.sendOnly], ['alt+↵ ctrl+j', k.newLine], ['↑ ↓', k.lineHistory], ['ctrl ← →', k.word], ['ctrl+w', t.help.wordBefore], ['ctrl+u', k.clear], ['esc', k.keepAndLeave]]],
     [t.help.launch, [['tab ↑ ↓', k.nextField], ['← →', k.choose], [t.keys.space, k.tick], ['ctrl+t', t.rigLaunch.keys.mode], ['ctrl+r', t.keys.redraw], ['ctrl+s', k.start], ['v', t.rigLaunch.keys.seePlan], ['esc', k.cancel]]],
     [t.help.settings, [['↑ ↓', k.navigate], ['← →', k.change]]]

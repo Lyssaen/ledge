@@ -246,8 +246,8 @@ export const fr = {
   },
   settings: { title: 'Réglages', language: 'Langue', theme: 'Thème', themes: { auto: 'Auto', dark: 'Sombre', light: 'Clair' }, themeAuto: (tone: 'dark' | 'light') => `Auto (fond ${tone === 'light' ? 'clair' : 'sombre'})`, context: 'Contexte max', contextHint: 'au-delà : passer le relais', contextUnknown: 'mettez à jour le daemon', contextSaved: (pct: number) => `Contexte max : ${pct} %`, saved: 'Réglage enregistré.', saveFailed: (m: string) => `Réglage appliqué, mais non enregistré : ${m}` },
   help: {
-    title: 'Aide', global: 'Partout', overview: 'Accueil', session: 'Session', ask: 'Demander à Ledge', launch: 'Nouvelle session', settings: 'Réglages',
-    screens: 'changer d’écran', field: 'Saisie', wordBefore: 'effacer le mot avant',
+    title: 'Aide', global: 'Partout', overview: 'Accueil', ledge: 'Écran Ledge', rig: 'Pièce d’un rig', session: 'Session', launch: 'Lancer', settings: 'Réglages',
+    screens: 'changer d’écran', writeToSeat: 'écrire (rig local)', suggestions: 'suggestions', foldExchanges: 'replier échanges', backNarrow: 'retour (étroit)', launchRig: 'nouveau rig/session', resumeSent: 'reprendre', answerFocus: 'trancher', tabsKeys: 'onglets', rail: 'le point · 100-139', fileIn: 'ranger (hors projet)', field: 'Saisie', wordBefore: 'effacer le mot avant',
     more: (above: number, below: number) => [above ? `↑ ${above} plus haut` : '', below ? `↓ ${below} plus bas` : ''].filter(Boolean).join(' · ')
   },
   field: {

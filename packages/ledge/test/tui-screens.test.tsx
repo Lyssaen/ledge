@@ -1198,6 +1198,24 @@ describe('ledge tui: ask Ledge scrolls, in Markdown (#95 lot C)', () => {
     } finally { await tui.cleanup(); }
   });
 
+  it('help lists the keys of Ledge and of a rig room, and nothing of teams', async () => {
+    const tui = await startTui();
+    try {
+      await tui.resize(160, 60);
+      await tui.press('?');
+      await until(() => tui.frame().includes('PIÈCE D’UN RIG') || tui.frame().includes('Pièce d’un rig'));
+      const f = tui.frame();
+      expect(f).toContain('Écran Ledge');
+      expect(f).toMatch(/1-9 +trancher/);
+      expect(f).toMatch(/S +arrêter…/);
+      expect(f).toMatch(/alt\+1…4/);
+      expect(f).not.toMatch(/Nouvelle session/);
+      expect(f).not.toMatch(/rejoindre|équipe|team/i);
+      expect(f).not.toMatch(/(^|\s)[JT] {2,}/m);
+      expect(f).not.toMatch(/R +reprendre/);
+    } finally { await tui.cleanup(); }
+  });
+
   it('the help fits 80×24 from its top: the bar, the « Saisie » group, j k for the rest', async () => {
     const tui = await startTui();
     try {

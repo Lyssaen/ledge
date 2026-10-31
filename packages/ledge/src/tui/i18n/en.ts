@@ -235,7 +235,7 @@ export const en: Messages = {
     keys: { mode: 'rig or session', seePlan: 'see the plan', openRoom: 'open its room', trust: 'open the prompt', cancelLaunch: 'cancel the launch', ledge: 'Ledge' }
   },
   settings: { title: 'Settings', language: 'Language', theme: 'Theme', themes: { auto: 'Auto', dark: 'Dark', light: 'Light' }, themeAuto: tone => `Auto (${tone} background)`, context: 'Max context', contextHint: 'past it: hand over', contextUnknown: 'update the daemon', contextSaved: pct => `Max context: ${pct} %`, saved: 'Setting saved.', saveFailed: m => `Setting applied, but not saved: ${m}` },
-  help: { title: 'Help', global: 'Everywhere', overview: 'Home', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings', screens: 'switch screen', field: 'Typing', wordBefore: 'delete the word before',
+  help: { title: 'Help', global: 'Everywhere', overview: 'Home', ledge: 'Ledge screen', rig: 'A rig’s room', session: 'Session', launch: 'Launch', settings: 'Settings', screens: 'switch screen', writeToSeat: 'write (local rig)', suggestions: 'suggestions', foldExchanges: 'fold exchanges', backNarrow: 'back (narrow)', launchRig: 'new rig/session', resumeSent: 'resume', answerFocus: 'decide', tabsKeys: 'tabs', rail: 'the summary · 100-139', fileIn: 'file (off-project)', field: 'Typing', wordBefore: 'delete the word before',
     more: (above, below) => [above ? `↑ ${above} above` : '', below ? `↓ ${below} below` : ''].filter(Boolean).join(' · ') },
   images: {
     capture: 'capture', size: (n: number) => formatBytes(n, 'en'), open: (key: string) => `${key} open in viewer`,
