@@ -131,7 +131,7 @@ export const fr = {
       unreachable: 'Machine injoignable.', failed: 'L’action a échoué.', timeout: 'OpenRig n’a pas répondu (5 s).'
     } as Record<string, string>
   },
-  seat: { waitsLedge: 'Attend Ledge', working: 'Au travail', idle: 'Disponible', starting: 'Démarrage', stopped: 'Arrêté', crashed: 'Planté', unreachable: 'Injoignable' },
+  seat: { waitsLedge: 'Attend Ledge', working: 'Au travail', idle: 'Disponible', attention: 'Intervention requise', starting: 'Démarrage', stopped: 'Arrêté', crashed: 'Planté', unreachable: 'Injoignable' },
   omp: { title: 'fil · OMP', foot: 'piloté par RPC · rien n’est tapé dans un terminal', you: 'toi', writing: 'écrit…', empty: 'Le fil arrive…' },
   overview: {
     yours: (n: number) => `À toi · ${n}`, projects: 'Projets', exchanges: 'Échanges', terminal: (name: string) => `Terminal · ${name}`, inColor: '· en couleurs',
@@ -236,6 +236,7 @@ export const fr = {
       upDetail: (spec: string, n: number) => `spec ${spec} · ${n} ${plural(n, 'siège', 'sièges')}`,
       seats: 'Sièges', ready: (k: number, n: number) => `${k}/${n} ${plural(k, 'prêt', 'prêts')}`,
       coming: (names: readonly string[]) => `${names.length > 1 ? `${names.slice(0, -1).join(', ')} et ${names.at(-1)}` : names[0]} ${plural(names.length, 'démarre', 'démarrent')}…`,
+      attention: (names: readonly string[]) => `${names.join(', ')} : intervention requise`,
       tasks: 'Premières tâches', tasksWait: 'dans la file dès que les sièges sont prêts', tasksSent: (lead: string) => `but donné à ${lead}`
     },
     trust: (seat: string) => `${seat} attend ta confiance dans le dossier · ↵ ouvrir l’invite`,

@@ -183,6 +183,7 @@ export function seatStateLabel(seat: RigSeat, escalations: readonly Escalation[]
   switch (seat.state) {
     case 'working': return { glyph: 'working', color: C.blue, label: words.working };
     case 'idle': case 'ready': return { glyph: 'idle', color: C.green, label: words.idle };
+    case 'attention': return { glyph: 'approval', color: C.yellow, label: words.attention };
     case 'starting': case 'trust': return { glyph: 'starting', color: C.blue, label: words.starting };
     case 'stopped': return { glyph: 'done', color: C.faint, label: words.stopped };
     case 'crashed': return { glyph: 'error', color: C.red, label: words.crashed };

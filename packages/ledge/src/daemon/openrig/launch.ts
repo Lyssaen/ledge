@@ -92,6 +92,8 @@ export function createLaunches(d: LaunchDeps): Launches {
     const ready = rig.seats.every(s => READY.has(s.state));
     const late = due.has(rigId) || d.now() - Date.parse(p.startedAt) >= GOAL_TIMEOUT_MS;
     if (!ready && !late) return;
+    // A failed startup may have returned to a shell; never type the goal there, even after the timeout.
+    if (lead.state === 'attention') return;
     if (lead.state === 'trust') {
       if (!p.trustNotice) { p.trustNotice = true; save(); d.say(`${lead.ref} attend ta confiance dans le dossier : le but partira après.`); }
       return;

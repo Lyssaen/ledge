@@ -168,6 +168,16 @@ describe('createLaunches', () => {
     expect(sends(calls).map(c => c.args[1])).toEqual(['orch-lead@factory']);
     launches.close();
   });
+  it('never sends the goal to a lead needing intervention, even after the timeout', async () => {
+    const { launches, plan, calls, bridge } = setup();
+    await launches.launch(plan);
+    bridge.emitSeats('r1', seats(r => r === 'orch-lead@factory' ? 'attention' : 'ready')); await flush();
+    await vi.advanceTimersByTimeAsync(GOAL_TIMEOUT_MS);
+    expect(sends(calls)).toHaveLength(0);
+    bridge.emitSeats('r1', allReady); await flush();
+    expect(sends(calls)).toHaveLength(1);
+    launches.close();
+  });
   it('a send failing: said once, retried at the next update', async () => {
     const { launches, plan, bridge, said } = setup({ sendFails: true });
     await launches.launch(plan);

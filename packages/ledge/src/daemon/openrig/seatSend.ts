@@ -6,7 +6,7 @@ export type { SeatSendResult };
 export type SeatTarget = { ok: true; rig: Rig; seat: RigSeat } | { ok: false; reason: string; candidates?: string[] };
 
 const ACTIVE = new Set<Rig['lifecycle']>(['running', 'partial']);
-const DOWN = new Set<RigSeat['state']>(['stopped', 'crashed']);
+const DOWN = new Set<RigSeat['state']>(['stopped', 'crashed', 'attention']);
 
 /** The `@…` word at the head of the text and the rest; null when the text does not start with `@`. */
 export function leadingAddress(text: string): { word: string; rest: string } | null {
@@ -15,7 +15,7 @@ export function leadingAddress(text: string): { word: string; rest: string } | n
   return word === '@' ? null : { word, rest: (m[2] ?? '').trim() };
 }
 
-const SEAT_DOWN: Partial<Record<RigSeat['state'], string>> = { stopped: 'arrêté', crashed: 'planté' };
+const SEAT_DOWN: Partial<Record<RigSeat['state'], string>> = { stopped: 'arrêté', crashed: 'planté', attention: 'en attente d’une intervention' };
 const RIG_DOWN: Partial<Record<Rig['lifecycle'], string>> = { stopped: 'arrêté', launching: 'en cours de lancement', unreachable: 'injoignable' };
 
 /** null: the word is no seat's address anywhere. */

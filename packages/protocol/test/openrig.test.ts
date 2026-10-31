@@ -38,6 +38,9 @@ describe('openrig contract', () => {
     ]) expect(() => parseServerMessage(m), m.type).not.toThrow();
     expect(() => parseServerMessage({ type: 'rig.result', rid: 'x', ok: false, code: 'bogus' })).toThrow();
   });
+  it('accepts a seat needing intervention in a rig update', () => {
+    expect(parseServerMessage({ type: 'rig.updated', rig: { ...rig, seats: [{ ...seat, state: 'attention' }] } })).toMatchObject({ rig: { seats: [{ state: 'attention' }] } });
+  });
   it('rig.prepare caps the goal at 8000 characters', () => {
     const m = (goal: string) => ({ type: 'rig.prepare', rid: 'x', machine: 'local', spec: 's', goal, where: { kind: 'off-project', name: 'n' } });
     expect(parseClientMessage(m('g'.repeat(8000)))).toMatchObject({ type: 'rig.prepare' });

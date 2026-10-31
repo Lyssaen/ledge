@@ -21,6 +21,10 @@ describe('seats', () => {
   it('maps states', () => {
     expect(seatState(node({ startupStatus: 'pending' }))).toBe('starting');
     expect(seatState(node({ startupStatus: 'challenged' }))).toBe('trust');
+    expect(seatState(node({ startupStatus: 'failed' }))).toBe('attention');
+    expect(seatState(node({ startupStatus: 'attention_required' }))).toBe('attention');
+    expect(seatState(node({ startupStatus: 'ready', lifecycleState: 'attention_required' }))).toBe('attention');
+    expect(seatState(node({ startupStatus: 'failed', sessionStatus: 'exited' }))).toBe('crashed');
     expect(seatState(node({ sessionStatus: 'detached' }))).toBe('stopped');
     expect(seatState(node({ sessionStatus: 'failed' }))).toBe('crashed');
     expect(seatState(node())).toBe('ready');

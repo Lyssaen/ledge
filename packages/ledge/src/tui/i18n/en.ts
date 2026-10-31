@@ -119,7 +119,7 @@ export const en: Messages = {
       unreachable: 'Machine unreachable.', failed: 'The action failed.', timeout: 'OpenRig did not answer (5 s).'
     }
   },
-  seat: { waitsLedge: 'Waits for Ledge', working: 'Working', idle: 'Available', starting: 'Starting', stopped: 'Stopped', crashed: 'Crashed', unreachable: 'Unreachable' },
+  seat: { waitsLedge: 'Waits for Ledge', working: 'Working', idle: 'Available', attention: 'Needs attention', starting: 'Starting', stopped: 'Stopped', crashed: 'Crashed', unreachable: 'Unreachable' },
   omp: { title: 'thread · OMP', foot: 'driven over RPC · nothing is typed in a terminal', you: 'you', writing: 'writing…', empty: 'The thread is coming…' },
   overview: {
     yours: n => `Yours · ${n}`, projects: 'Projects', exchanges: 'Messages', terminal: name => `Terminal · ${name}`, inColor: '· in color',
@@ -226,6 +226,7 @@ export const en: Messages = {
       upDetail: (spec, n) => `spec ${spec} · ${n} ${plural(n, 'seat', 'seats')}`,
       seats: 'Seats', ready: (k, n) => `${k}/${n} ready`,
       coming: names => `${names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0]} ${names.length > 1 ? 'are' : 'is'} starting…`,
+      attention: names => `${names.join(', ')}: needs attention`,
       tasks: 'First tasks', tasksWait: 'queued as soon as the seats are ready', tasksSent: lead => `goal given to ${lead}`
     },
     trust: seat => `${seat} waits for your trust in the folder · ↵ open the prompt`,

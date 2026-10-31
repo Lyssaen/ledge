@@ -53,6 +53,13 @@ describe('ledge tui: launching a rig (model)', () => {
     expect(done[5]!.detail).toBe('but donné à lead@reboot');
   });
 
+  it('does not count a blocked seat as ready or call it starting, in both languages', () => {
+    const r = rig([seat('build', 'attention'), seat('review', 'working')]);
+    const p = plan({ seats: plan().seats.slice(0, 2) });
+    expect(startingLines(r, p)[4]).toEqual({ glyph: 'held', label: 'Sièges', detail: '1/2 prêt · build : intervention requise' });
+    expect(startingLines(r, p, en.rigLaunch)[4]).toEqual({ glyph: 'held', label: 'Seats', detail: '1/2 ready · build: needs attention' });
+  });
+
   it('names the folder for a real repository and the space off any project, in English too', () => {
     expect(startingLines(undefined, plan({ where: { kind: 'project', projectId: 'ledge', repo: '/w/ledge', branch: 'feat/x', copy: false }, cwd: '/w/ledge' }))[1])
       .toEqual({ glyph: 'held', label: 'Dossier', detail: '/w/ledge · ⎇ feat/x' });

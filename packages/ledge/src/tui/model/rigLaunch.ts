@@ -69,7 +69,8 @@ export function startingLines(rig: Rig | undefined, plan: RigPlan, words: Messag
     ];
   }
   const ready = rig.seats.filter(s => READY.has(s.state));
-  const coming = rig.seats.filter(s => !READY.has(s.state)).map(s => s.name);
+  const coming = rig.seats.filter(s => !READY.has(s.state) && s.state !== 'attention').map(s => s.name);
+  const attention = rig.seats.filter(s => s.state === 'attention').map(s => s.name);
   const all = total > 0 && ready.length === total;
   const sent = !!rig.launch?.goalSentAt;
   return [
@@ -77,7 +78,7 @@ export function startingLines(rig: Rig | undefined, plan: RigPlan, words: Messag
     { ...folder, glyph: 'ok' },
     { glyph: 'ok', label: w.human, detail: w.humanCommand },
     { glyph: 'ok', label: w.up(rig.name), detail: w.upDetail(plan.spec, total) },
-    { glyph: all ? 'ok' : 'running', label: w.seats, detail: all ? w.ready(ready.length, total) : `${w.ready(ready.length, total)}${coming.length ? ` · ${w.coming(coming)}` : ''}` },
+    { glyph: all ? 'ok' : attention.length ? 'held' : 'running', label: w.seats, detail: [w.ready(ready.length, total), ...(coming.length ? [w.coming(coming)] : []), ...(attention.length ? [w.attention(attention)] : [])].join(' · ') },
     sent ? { glyph: 'ok', label: w.tasks, detail: w.tasksSent(rig.launch!.lead) } : { glyph: 'held', label: w.tasks, detail: w.tasksWait }
   ];
 }
