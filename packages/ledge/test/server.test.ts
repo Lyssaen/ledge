@@ -1612,7 +1612,7 @@ describe('server', () => {
         proposal: qid => (qid === 'q1' ? proposal : undefined),
         markLaunched(qid, id, emit) { marks.push(['launched', qid, id]); proposal = { ...proposal!, launchedId: id }; emit({ type: 'chat.history', turns: [] }); },
         markFailed(qid, message, emit) { marks.push(['failed', qid, message]); proposal = { ...proposal!, error: message }; emit({ type: 'chat.history', turns: [] }); },
-        relay: () => undefined, markRelay() {}, queuedRelays: () => [], close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}, action: () => undefined, markAction() {}, ignore: () => null, ignored: () => false
+        relay: () => undefined, markRelay() {}, queuedRelays: () => [], close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}, action: () => undefined, markAction() {}, ignore: () => null, ignored: () => false, post() {}
       };
       return { chat, marks };
     }
@@ -1685,7 +1685,7 @@ describe('server', () => {
           proposal: (qid, row = 0) => (qid === 'q1' ? rows[row] : undefined),
           markLaunched(_qid, id, emit, row = 0) { marks.push(['launched', row, id]); rows[row] = { ...rows[row]!, launchedId: id }; emit({ type: 'chat.history', turns: [] }); },
           markFailed(_qid, message, emit, row = 0) { marks.push(['failed', row, message]); rows[row] = { ...rows[row]!, error: message }; emit({ type: 'chat.history', turns: [] }); },
-          relay: () => undefined, markRelay() {}, queuedRelays: () => [], close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}, action: () => undefined, markAction() {}, ignore: () => null, ignored: () => false
+          relay: () => undefined, markRelay() {}, queuedRelays: () => [], close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}, action: () => undefined, markAction() {}, ignore: () => null, ignored: () => false, post() {}
         };
         return { chat, marks };
       }
@@ -1739,7 +1739,7 @@ describe('server', () => {
         relay: qid => (qid === 'q1' ? r : undefined),
         markRelay(_qid, patch, emit) { const { id, name, tool, text } = r!; r = { id, name, tool, text, ...patch }; emit({ type: 'chat.history', turns: [] }); },
         queuedRelays: () => (r?.status === 'queued' ? [{ qid: 'q1', relay: r, askedAt: '2026-10-12T08:00:00.000Z' }] : []),
-        close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}, action: () => undefined, markAction() {}, ignore: () => null, ignored: () => false
+        close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}, action: () => undefined, markAction() {}, ignore: () => null, ignored: () => false, post() {}
       };
       return { chat, current: () => r };
     }
@@ -2754,7 +2754,7 @@ describe('close a session', () => {
         close: (qid, row) => (qid === 'q1' ? rows[row] : undefined),
         markClosed(_qid, row, how, emit) { marks.push(['closed', row, how]); rows[row] = { ...rows[row]!, closedAt: new Date().toISOString(), how }; emit({ type: 'chat.history', turns: [] }); },
         markCloseFailed(_qid, row, message, emit) { marks.push(['failed', row, message]); rows[row] = { ...rows[row]!, error: message }; emit({ type: 'chat.history', turns: [] }); },
-        idle: async () => {}, action: () => undefined, markAction() {}, ignore: () => null, ignored: () => false
+        idle: async () => {}, action: () => undefined, markAction() {}, ignore: () => null, ignored: () => false, post() {}
       };
       return { chat, marks };
     }
@@ -2929,7 +2929,7 @@ describe('close a session', () => {
       relay: qid => (qid === 'q1' ? r : undefined),
       markRelay(_qid, patch, emit) { const { id, name, tool, text } = r!; r = { id, name, tool, text, ...patch }; emit({ type: 'chat.history', turns: [] }); },
       queuedRelays: () => (r?.status === 'queued' ? [{ qid: 'q1', relay: r, askedAt: '2026-10-12T08:00:00.000Z' }] : []),
-      close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}, action: () => undefined, markAction() {}, ignore: () => null, ignored: () => false
+      close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}, action: () => undefined, markAction() {}, ignore: () => null, ignored: () => false, post() {}
     };
     const history = new History({ dir: tmpDir() });
     await closing({ 'ledge-a': ['Running…'] }, { history, chat });

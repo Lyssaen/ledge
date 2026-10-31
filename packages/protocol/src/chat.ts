@@ -86,6 +86,12 @@ export type ChatAction = z.infer<typeof ChatActionSchema>;
 /** Every generic row an answer proposes, in the order Ledge wrote them: one plan (spec §9.2). */
 export const ChatActionsSchema = z.array(ChatActionSchema).min(1).max(MAX_PROPOSALS);
 
+/** A « Lancer ce rig » card the brain posted (lot 7): the client opens the lot-5 launch window prefilled with it (on the plan when
+ *  the spec is given and the plan imposed); the daemon never launches it. `project` is a project id, `off` an off-project name. */
+export const ChatRigLaunchSchema = z.object({ spec: z.string().min(1).max(200).optional(), goal: z.string().min(1).max(8000),
+  project: z.string().min(1).optional(), off: z.string().min(1).max(40).optional(), machine: z.string().min(1).optional() });
+export type ChatRigLaunch = z.infer<typeof ChatRigLaunchSchema>;
+
 /** One question to Ledge and its answer; `error` set when it could not answer, both absent while it is still reading.
  *  `ignoredAt`: the user set the turn's cards aside (on any device): nothing of them applies until `chat.ignore` with `undo`. */
 export const ChatTurnSchema = z.object({
@@ -93,7 +99,7 @@ export const ChatTurnSchema = z.object({
   qid: z.string().min(1), question: z.string(), askedAt: z.string().datetime(),
   steps: z.array(ChatStepSchema), answer: z.string().optional(), answeredAt: z.string().datetime().optional(), error: z.string().optional(), proposal: ChatProposalSchema.optional(), proposals: ChatProposalsSchema.optional(), relay: ChatRelaySchema.optional(), closes: ChatClosesSchema.optional(),
   projectProposal: ChatProjectProposalSchema.optional(),
-  actions: ChatActionsSchema.optional(),
+  actions: ChatActionsSchema.optional(), rigLaunch: ChatRigLaunchSchema.optional(),
   ignoredAt: z.string().datetime().optional(), attachments: z.array(AttachmentRefSchema).optional()
 });
 export type ChatTurn = z.infer<typeof ChatTurnSchema>;

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { SessionSchema, BrainStatusSchema, ClientMessageSchema, ServerMessageSchema, EscalationSchema, LedgeDecisionSchema,
-  BRAIN_OPS, BRAIN_RESULT_CODES, MANDATE_CATEGORY_TAGS, MandateCategorySchema } from '../src/index.js';
+  BRAIN_OPS, BRAIN_RESULT_CODES, MANDATE_CATEGORY_TAGS, MandateCategorySchema, ChatTurnSchema } from '../src/index.js';
 
 const now = '2026-10-30T10:00:00.000Z';
 const base = { id: '7f3a', name: 'Ledge', tool: 'claude', cwd: '/w', project: 'w', title: 'Ledge', tmuxSession: 'ledge-7f3a', state: 'idle', helpers: [], startedAt: now, lastActivityAt: now, source: 'launcher' };
@@ -48,5 +48,11 @@ describe('brain contract', () => {
     expect(Object.keys(MANDATE_CATEGORY_TAGS).sort()).toEqual([...MandateCategorySchema.options].sort());
     expect(MANDATE_CATEGORY_TAGS.git).toEqual(['merge', 'branches']);
     expect(MANDATE_CATEGORY_TAGS.critical).toEqual(['données', 'sécurité', 'suppression', 'coûts']);
+  });
+  it('a chat turn may carry a rig launch card (brain, lot 7)', () => {
+    const turn = { qid: 'b1', question: '', askedAt: now, steps: [], answer: 'Je propose…', answeredAt: now };
+    expect(ChatTurnSchema.parse({ ...turn, rigLaunch: { goal: 'G', spec: 'factory', project: 'ledge', machine: 'local' } }).rigLaunch).toEqual({ goal: 'G', spec: 'factory', project: 'ledge', machine: 'local' });
+    expect(ChatTurnSchema.safeParse({ ...turn, rigLaunch: { goal: '' } }).success).toBe(false);
+    expect(ChatTurnSchema.safeParse({ ...turn, rigLaunch: { spec: 'factory' } }).success).toBe(false);
   });
 });

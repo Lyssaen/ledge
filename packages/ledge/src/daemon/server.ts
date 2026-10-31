@@ -6,7 +6,7 @@ import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
 import { actionById, autonomyArgs, contextNear, ompApprovalFor, askShown, type ChatAction, type Autonomy } from '@ledge/protocol';
-import { ATTACHMENT_LOCAL_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type DaemonInfo, type Projects, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, type ModelRefusal, type RefusalCode, backendOf } from '@ledge/protocol';
+import { ATTACHMENT_LOCAL_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type RigPlan, type RigResultCode, type DaemonInfo, type Projects, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, type ModelRefusal, type RefusalCode, backendOf } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
 import { AttachmentError, AttachmentStore } from './attachments.js';
@@ -71,6 +71,7 @@ import { createMemory } from './brain/memory.js';
 import { DEFAULT_MANDATE, ensureMandate, parseMandate } from './brain/mandate.js';
 import { createBrainInbox } from './brain/inbox.js';
 import { createDeciding, type Deciding } from './brain/decide.js';
+import { createBrainCommands, parseBrainArgs, NOT_BRAIN_LINE, type RigActMsg, type RigPrepareMsg, type RigResult } from './brain/commands.js';
 import { readContext } from './context.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
 import { createRouter } from '../chat/routing.js';
@@ -940,6 +941,57 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     await handle(out, m => { if (m.type === 'error') failure ??= m.message; });
     return failure !== undefined ? { failure } : {};
   }
+  /** Whether `key` is the one Ledge gave session `by` (#93), shared by `action.run` and `brain.cmd`. */
+  function verifySessionKey(by: string, key: string | undefined): { ok: true } | { ok: false; reason: string } {
+    // Without a key, the session was most likely launched before Ledge gave one: it is relaunched, not suspected.
+    if (!key) return { ok: false, reason: `la session ${by} n'a pas de clé (lancée avant cette version de Ledge, ou hors de Ledge) : reprends-la depuis Ledge, ou demande à l'utilisateur` };
+    const want = sessionKey(by, token);
+    if (!want || !tokenEquals(key, want)) return { ok: false, reason: `la clé ne correspond pas à la session ${by} : lance la commande depuis cette session, telle que Ledge l'a lancée` };
+    return { ok: true };
+  }
+  /** Lifecycle of a rig or a seat, through OpenRig (`rig.act`, and the brain's `rig down|restart|handover`). */
+  async function rigAct(msg: RigActMsg): Promise<RigResult> {
+    if (msg.machine !== 'local') return { ok: false, code: 'unreachable', reason: `machine ${msg.machine} is not this daemon's` };
+    if (!bridge) return { ok: false, code: 'openrig_down', reason: "OpenRig n'est pas branché" };
+    // Cancelling a launch: forget it first, so a seat turning ready while `down` runs cannot get the goal.
+    if (msg.verb === 'down' && msg.rigId !== undefined && launches?.pending().some(l => l.rigId === msg.rigId)) await launches.cancel(msg.rigId);
+    const r = await actOnRig({ http: () => bridge.http(), ensureRunning: why => bridge.ensureRunning(why), operator: HUMAN_ADDRESS },
+      { verb: msg.verb, ...(msg.rigId !== undefined ? { rigId: msg.rigId } : {}), ...(msg.seatRef !== undefined ? { seatRef: msg.seatRef } : {}) });
+    return r.ok ? { ok: true } : { ok: false, code: r.code, reason: r.reason };
+  }
+  /** A launch plan (`rig.prepare`, and the brain's check of a launch card); the caller keeps it or not. */
+  async function rigPrepare(msg: RigPrepareMsg): Promise<RigPlan | { code: RigResultCode; reason: string }> {
+    if (msg.machine !== 'local') return { code: 'unreachable', reason: `machine ${msg.machine} is not this daemon's` };
+    if (!bridge) return { code: 'openrig_down', reason: "OpenRig n'est pas branché" };
+    // Ledge starts OpenRig itself for a launch, and says so in its thread (the bridge's notice); only a start that fails is refused.
+    const status = await bridge.ensureRunning('launch');
+    const http = bridge.http();
+    if (!http || status.state !== 'running') return { code: 'openrig_down', reason: status.detail ?? `OpenRig ${status.state}` };
+    try {
+      const plan = await prepareRigPlan({ http, home: paths().dir, projects: () => projects, machine: msg.machine }, msg);
+      return 'refused' in plan ? { code: 'failed', reason: plan.refused } : plan;
+    } catch (e) {
+      log(`openrig: plan not made: ${(e as Error).message}`);
+      return { code: e instanceof OpenRigUnreachable ? 'openrig_down' : 'failed', reason: (e as Error).message };
+    }
+  }
+  /** `ledge brain …` (Lot 7): what the brain session may do, once the daemon knows it is the brain. */
+  const brainCommands = createBrainCommands({ deciding, thread, seatSend, memory, rigs: () => bridge?.rigs() ?? [], escalations: () => bridge?.escalations() ?? [],
+    sessions: () => store.all(), projects: () => projects, chat, emit: broadcast, rigAct, rigPrepare });
+  /**
+   * `brain.cmd`: only from the brain session, as its key says; any refusal leaves no trace (no thread item, nothing sent to
+   * OpenRig). Then the args are parsed and the op runs.
+   */
+  async function runBrainCmd(msg: Extract<ClientMessage, { type: 'brain.cmd' }>, reply: Reply): Promise<void> {
+    const answer = (r: { ok: boolean; line: string; code?: Extract<ServerMessage, { type: 'brain.result' }>['code'] }) => reply({ type: 'brain.result', rid: msg.rid, ...r });
+    if (!msg.by || !verifySessionKey(msg.by, msg.key).ok) return answer({ ok: false, code: 'identity', line: NOT_BRAIN_LINE });
+    const s = store.get(msg.by);
+    if (s?.brain !== true || s.archivedAt !== undefined) return answer({ ok: false, code: 'not_brain', line: NOT_BRAIN_LINE });
+    const parsed = parseBrainArgs(msg.op, msg.args);
+    if (!parsed.ok) return answer({ ok: false, code: 'invalid', line: parsed.usage });
+    try { return answer(await brainCommands.run(parsed.value)); }
+    catch (e) { log(`brain: ${msg.op} failed: ${(e as Error).message}`); return answer({ ok: false, code: 'failed', line: `Échec : ${(e as Error).message}` }); }
+  }
   /**
    * `action.run` (#93): an action of the registry outside the chat, resolved and applied as a generic card's row, so the CLI
    * writes no rule of its own. A destructive one asks again (`confirmed`), and the guard decides who may run it at all.
@@ -949,12 +1001,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     const parsed = actionById(msg.action)!.args.safeParse(msg.args);
     if (!parsed.success) return answer({ reason: `invalid args: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'} ${i.message}`).join('; ')}`, code: 'refused' });
     // A session is who its key says (#93): a `by` from another environment, or none, is refused before anything is resolved.
-    const want = msg.by === undefined ? undefined : sessionKey(msg.by, token);
-    // Without a key, the session was most likely launched before Ledge gave one: it is relaunched, not suspected.
-    if (msg.by !== undefined && !msg.key)
-      return answer({ reason: `la session ${msg.by} n'a pas de clé (lancée avant cette version de Ledge, ou hors de Ledge) : reprends-la depuis Ledge, ou demande à l'utilisateur`, code: 'identity' });
-    if (msg.by !== undefined && (!want || !tokenEquals(msg.key!, want)))
-      return answer({ reason: `la clé ne correspond pas à la session ${msg.by} : lance la commande depuis cette session, telle que Ledge l'a lancée`, code: 'identity' });
+    if (msg.by !== undefined) { const v = verifySessionKey(msg.by, msg.key); if (!v.ok) return answer({ reason: v.reason, code: 'identity' }); }
     const ctx = { sessions: store.all() };
     const r: Resolved = resolveRun(msg.action, parsed.data, ctx);
     if ('refused' in r) return answer({ reason: r.refused, code: 'refused' });
@@ -1401,13 +1448,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       // Lifecycle of a rig or a seat, through OpenRig; to the sender only (the mirror shows the effect by SSE).
       case 'rig.act': {
-        if (msg.machine !== 'local') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'unreachable', reason: `machine ${msg.machine} is not this daemon's` });
-        if (!bridge) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'openrig_down', reason: "OpenRig n'est pas branché" });
-        // Cancelling a launch: forget it first, so a seat turning ready while `down` runs cannot get the goal.
-        if (msg.verb === 'down' && msg.rigId !== undefined && launches?.pending().some(l => l.rigId === msg.rigId)) await launches.cancel(msg.rigId);
-        const r = await actOnRig({ http: () => bridge.http(), ensureRunning: why => bridge.ensureRunning(why), operator: HUMAN_ADDRESS },
-          { verb: msg.verb, ...(msg.rigId !== undefined ? { rigId: msg.rigId } : {}), ...(msg.seatRef !== undefined ? { seatRef: msg.seatRef } : {}) });
-        return reply(r.ok ? { type: 'rig.result', rid: msg.rid, ok: true } : { type: 'rig.result', rid: msg.rid, ok: false, code: r.code, reason: r.reason });
+        const r = await rigAct(msg);
+        return reply(r.ok ? { type: 'rig.result', rid: msg.rid, ok: true } : { type: 'rig.result', rid: msg.rid, ok: false, code: r.code, ...(r.reason !== undefined ? { reason: r.reason } : {}) });
       }
       // Writing to a seat; to the sender only. The Desktop routes another machine's seats to its own daemon (lot 6).
       case 'rig.send': {
@@ -1418,21 +1460,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return reply(r.ok ? { type: 'rig.result', rid: msg.rid, ok: true } : { type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: r.reason });
       }
       case 'rig.prepare': {
-        if (msg.machine !== 'local') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'unreachable', reason: `machine ${msg.machine} is not this daemon's` });
-        if (!bridge) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'openrig_down', reason: "OpenRig n'est pas branché" });
-        // Ledge starts OpenRig itself for a launch, and says so in its thread (the bridge's notice); only a start that fails is refused.
-        const status = await bridge.ensureRunning('launch');
-        const http = bridge.http();
-        if (!http || status.state !== 'running') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'openrig_down', reason: status.detail ?? `OpenRig ${status.state}` });
-        try {
-          const plan = await prepareRigPlan({ http, home: paths().dir, projects: () => projects, machine: msg.machine }, msg);
-          if ('refused' in plan) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: plan.refused });
-          rigPlans.put(plan);
-          return reply({ type: 'rig.plan', rid: msg.rid, plan });
-        } catch (e) {
-          log(`openrig: plan not made: ${(e as Error).message}`);
-          return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: e instanceof OpenRigUnreachable ? 'openrig_down' : 'failed', reason: (e as Error).message });
-        }
+        const plan = await rigPrepare(msg);
+        if ('code' in plan) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: plan.code, reason: plan.reason });
+        rigPlans.put(plan);
+        return reply({ type: 'rig.plan', rid: msg.rid, plan });
       }
       // A plan `rig.prepare` made, launched once; to the sender only (the mirror and the thread show the rest).
       case 'rig.launch': {
@@ -1460,6 +1491,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         projects = next; bridge.refresh(); broadcast(projectsMsg());
         return result({ ok: true });
       }
+      case 'brain.cmd': return runBrainCmd(msg, reply);
       case 'mandate.update': case 'rule.set': case 'decision.revisit': case 'category.escalate':
         return notYet();
       case 'brain.set': {

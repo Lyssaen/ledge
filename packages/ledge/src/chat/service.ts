@@ -3,7 +3,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { spawn as nodeSpawn } from 'node:child_process';
-import { extractProposal, isArchived, LEGACY_FENCE_ACTION, MAX_PROPOSALS, proposalRows, parseActionBlock, parseProjectBlock, parseCloseBlock, parseRelayBlock, projectOf, type BlockKind, type ChatAction, type ChatClose, type ChatProjectProposal, type ChatProposal, type ChatRelay, type CloseHow, type ChatTurn, type AttachmentRef, type Projects, type ServerMessage, type Session, type Tool, type Rig, type Escalation } from '@ledge/protocol';
+import { extractProposal, isArchived, LEGACY_FENCE_ACTION, MAX_PROPOSALS, proposalRows, parseActionBlock, parseProjectBlock, parseCloseBlock, parseRelayBlock, projectOf, type BlockKind, type ChatAction, type ChatRigLaunch, type ChatClose, type ChatProjectProposal, type ChatProposal, type ChatRelay, type CloseHow, type ChatTurn, type AttachmentRef, type Projects, type ServerMessage, type Session, type Tool, type Rig, type Escalation } from '@ledge/protocol';
 import { resolveAction, sessionOf } from '../daemon/actions.js';
 import { resolveFolder } from '../daemon/folders.js';
 import type { Store } from '../daemon/store.js';
@@ -50,6 +50,8 @@ export interface Chat {
   ignored(qid: string): boolean;
   /** Resolves once no question is running (at once when there is none). */
   idle(): Promise<void>;
+  /** A turn the brain posts (lot 7): no question, already answered, with its cards; every client gets the new history. */
+  post(turn: { qid: string; answer: string; actions?: ChatAction[]; rigLaunch?: ChatRigLaunch }, emit: (m: ChatMessage) => void): void;
 }
 export interface ChatDeps {
   store: Store; tmux: Pick<Tmux, 'capture'>; home: string;
@@ -341,7 +343,7 @@ export function createChat(deps: ChatDeps): Chat {
       rollDay();
       const t = turnOf(qid);
       if (!t) return 'unknown card';
-      if (!t.proposal && !t.relay && !t.closes && !t.projectProposal && !t.actions) return 'no card to ignore';
+      if (!t.proposal && !t.relay && !t.closes && !t.projectProposal && !t.actions && !t.rigLaunch) return 'no card to ignore';
       if (undo) {
         if (!t.ignoredAt) return null;
         delete t.ignoredAt; setAside.delete(qid);
@@ -355,6 +357,14 @@ export function createChat(deps: ChatDeps): Chat {
       return null;
     },
     ignored: qid => turnOf(qid)?.ignoredAt !== undefined,
+    post(p, emit) {
+      rollDay();
+      const at = now();
+      const turn: ChatTurn = { qid: p.qid, question: '', askedAt: at, steps: [], answer: p.answer, answeredAt: at,
+        ...(p.actions?.length ? { actions: p.actions } : {}), ...(p.rigLaunch ? { rigLaunch: p.rigLaunch } : {}) };
+      turns = [...turns, turn].slice(-HISTORY_MAX);
+      emit({ type: 'chat.history', turns });
+    },
     idle: () => (busy ? new Promise<void>(res => { idleWaiters.push(res); }) : Promise.resolve()),
     cancel(qid) { if (current?.qid === qid) { current.cancelled = true; current.handle?.kill(); } },
     async reset(emit) {
