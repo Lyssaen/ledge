@@ -215,7 +215,8 @@ describe('ledge tui: writing to Ledge', () => {
   it('the field says whom it writes to, with its suggestions above', async () => {
     const tui = await startTui({ openrig: {} });
     try {
-      await tui.resize(160, 46);
+      // The suggestions' line is wider than the mockup's 80 columns of conversation (it runs under the rail there): past the rail.
+      await tui.resize(200, 46);
       await until(() => tui.frame().includes('ÉCRIRE À LEDGE'));
       const f = tui.frame();
       expect(f).toContain('Écrire à Ledge… (@build pour un agent d’un rig)');

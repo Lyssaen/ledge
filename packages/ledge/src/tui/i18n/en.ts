@@ -33,7 +33,8 @@ export const en: Messages = {
     applyRow: 'apply the line', apply: 'apply', applyAll: 'apply all', deny: 'deny', ignore: 'ignore', review: 'review',
     openSession: name => `open ${name}`,
     screens: 'Ledge · rig · session',
-    decide: 'decide', revisit: 'revisit', fold: 'fold', talk: 'talk it over', complete: 'complete'
+    decide: 'decide', revisit: 'revisit', fold: 'fold', talk: 'talk it over', complete: 'complete',
+    tabs: 'tabs', summarize: 'sum up', point: 'the summary', close: 'close', mandate: 'the mandate'
   },
   home: {
     ledge: 'Ledge', crumb: '1 Ledge · 2 Rig · 3 Session',
@@ -48,6 +49,18 @@ export const en: Messages = {
     noOpenRig: 'OpenRig is not installed · + to launch a rig',
     conversation: 'Ledge · Conversation',
     noSeat: 'No seat.', seatAlone: 'This seat has no Ledge session: nothing to show here yet.'
+  },
+  ledgeTabs: { conversation: 'Conversation', rigs: 'Rigs', mandat: 'Mandate' },
+  rail: {
+    rigs: n => `Rigs · ${n}`, kernel: 'kernel', room: '2 · the rig’s room',
+    settled: n => `Settled today · ${n}`, revisit: 'u revisit',
+    mandate: 'Mandate', alone: 'Ledge settles alone:', always: 'Always yours:', more: 'm the mandate and its memories',
+    summary: 'Sum up the day',
+    summaryAsk: 'Sum up my day: what the rigs did, what I settled, what awaits me.',
+    folded: n => `${n} settled`, detail: 'detail',
+    noRig: 'No rig.', spec: s => `spec ${s}`,
+    coming: 'The mandate comes with Ledge’s brain.', rules: 'Rules', toValidate: 'to approve',
+    applied: n => `applied ${n} ${plural(n, 'time', 'times')}`
   },
   conv: {
     days: { today: 'Today', yesterday: 'Yesterday', date: day => `${day.slice(8, 10)}/${day.slice(5, 7)}` },

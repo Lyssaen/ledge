@@ -13,6 +13,8 @@ const UNICODE = {
   rig: '▣', kernel: '◈', omp: 'π',
   /** A task handed between two agents of a rig (an exchange; a message is `message`, one to Ledge `approval`). */
   task: '▤',
+  /** A rig's bar in the rail: its seats at work, the others. */
+  full: '█', empty: '░',
   /** Links are clickable (OSC 8); without, their address follows them. */
   links: true as boolean
 };
@@ -26,6 +28,7 @@ const ASCII: Glyphs = {
   running: '~', held: '.', stale: '!',
   rig: '[R]', kernel: '<>', omp: 'pi',
   task: '[]',
+  full: '#', empty: '.',
   links: false
 };
 

@@ -36,7 +36,8 @@ export const fr = {
     applyRow: 'appliquer la ligne', apply: 'appliquer', applyAll: 'tout appliquer', deny: 'refuser', ignore: 'ignorer', review: 'revoir',
     openSession: (name: string) => `ouvrir ${name}`,
     screens: 'Ledge · rig · session',
-    decide: 'trancher', revisit: 'revenir dessus', fold: 'replier', talk: 'en parler', complete: 'compléter'
+    decide: 'trancher', revisit: 'revenir dessus', fold: 'replier', talk: 'en parler', complete: 'compléter',
+    tabs: 'onglets', summarize: 'résumer', point: 'le point', close: 'fermer', mandate: 'le mandat'
   },
   home: {
     ledge: 'Ledge', crumb: '1 Ledge · 2 Rig · 3 Session',
@@ -51,6 +52,19 @@ export const fr = {
     noOpenRig: 'OpenRig n’est pas installé · + pour lancer un rig',
     conversation: 'Ledge · Conversation',
     noSeat: 'Aucun siège.', seatAlone: 'Ce siège n’a pas de session Ledge : rien à afficher ici pour l’instant.'
+  },
+  /** The home's centre for Ledge: its tabs, and the rail on its right (folded into one line from 100 to 139 columns). */
+  ledgeTabs: { conversation: 'Conversation', rigs: 'Rigs', mandat: 'Mandat' },
+  rail: {
+    rigs: (n: number) => `Rigs · ${n}`, kernel: 'noyau', room: '2 · la pièce du rig',
+    settled: (n: number) => `Tranché aujourd’hui · ${n}`, revisit: 'u revenir dessus',
+    mandate: 'Mandat', alone: 'Ledge tranche seul :', always: 'Te reviennent toujours :', more: 'm le mandat et ses souvenirs',
+    summary: 'Résumer la journée',
+    summaryAsk: 'Résume ma journée : ce que les rigs ont fait, ce que j\'ai tranché, ce qui m\'attend.',
+    folded: (n: number) => `${n} ${plural(n, 'tranchée', 'tranchées')}`, detail: 'détail',
+    noRig: 'Aucun rig.', spec: (s: string) => `spec ${s}`,
+    coming: 'Le mandat arrive avec le cerveau de Ledge.', rules: 'Règles', toValidate: 'à valider',
+    applied: (n: number) => `appliquée ${n} fois`
   },
   /** Ledge's conversation in the home: its thread, the decisions drawn in its messages, the exchanges between agents. */
   conv: {

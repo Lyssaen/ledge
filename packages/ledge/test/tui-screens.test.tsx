@@ -686,8 +686,8 @@ describe('ledge tui: the field (#95 lot B)', () => {
     const tui = await startTui();
     const ledge = oneShotLedge(tui.daemon);
     try {
-      // The question on one line, beside the home's left column.
-      await tui.resize(160, 24);
+      // The question on one line, beside the home's left column and Ledge's rail.
+      await tui.resize(200, 24);
       await tui.press('/');
       await tui.press('Qui a besoin de moi ?'); await tui.press('\r');
       await until(() => ledge.count === 1);

@@ -186,8 +186,8 @@ describe('ledge tui: images in Ask', () => {
   it('refuses the chip that would push the question past the frame budget', async () => {
     const tui = await startTui({ readImage: async () => pasted('A'.repeat(1_500_000)) });
     try {
-      // Three chips and the reason on the one line the field's chips have, beside the home's left column.
-      await tui.resize(160, 24);
+      // Three chips and the reason on the one line the field's chips have, beside the home's left column and Ledge's rail.
+      await tui.resize(200, 24);
       await tui.press('/');
       await until(() => tui.frame().includes('LEDGE · CONVERSATION'));
       for (let n = 1; n <= 3; n++) { await tui.press(ALT_V); await until(() => tui.frame().split('▣ capture').length - 1 === n); }

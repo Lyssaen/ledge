@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { DaemonClient } from '@ledge/fleet';
 import type { Exchange, LedgeDecision, LedgeRule } from '@ledge/protocol';
@@ -16,6 +17,16 @@ export function useBrain(client: DaemonClient): Brain {
     else if (m.type === 'mandate') setBrain(b => ({ ...b, mandate: { text: m.text, path: m.path } }));
   }), [client]);
   return brain;
+}
+
+/** u: Ledge's decision `id` questioned again, sent to the local daemon (ruling R5). The daemon refuses it until Ledge's brain is
+ *  there: `refused` gets its reason; `offline` when nothing could be sent. */
+export function revisitDecision(client: DaemonClient, id: string, on: { refused(message: string): void; offline(): void }): void {
+  const rid = randomUUID();
+  const msg = { type: 'decision.revisit' as const, rid, id };
+  const off = client.onMessage(m => { if (m.type === 'error' && m.request === 'decision.revisit') { off(); clearTimeout(timer); on.refused(m.message); } });
+  const timer = setTimeout(off, 5000);
+  if (client.fleet ? !client.fleet.sendTo('local', msg) : (client.send(msg), false)) { off(); clearTimeout(timer); on.offline(); }
 }
 
 const noop = () => () => {};

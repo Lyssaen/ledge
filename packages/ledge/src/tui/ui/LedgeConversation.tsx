@@ -5,7 +5,7 @@ import { answerEscalation, daemonStore, sayToLedge, type DaemonState } from '@le
 import { proposalRows, type ChatTurn, type Escalation, type LedgeThreadItem } from '@ledge/protocol';
 import { localDay, pinnedEscalation, threadRows, type ThreadRow } from '@ledge/ui/chat/ledge/threadModel';
 import { LEDGE_FOCUS, useEditing, useScreenSize, useTui, type KeyHandler } from '../context.js';
-import { useRigExchanges } from '../brain.js';
+import { revisitDecision, useRigExchanges } from '../brain.js';
 import { ChipsLine, type Chip, useChips, useOpenImage, usePaste } from '../images.js';
 import { useCards } from '../model/cards.js';
 import { askHistory, chatView, type Card } from '../model/chat.js';
@@ -44,6 +44,10 @@ export interface LedgeConversationProps {
   keys: MutableRefObject<KeyHandler | null>;
   /** The key bar for where the keyboard is; in the left column, only the keys the conversation adds there. */
   onBar(keys: Keys): void;
+  /** The box's title in pieces (Ledge's tabs); « Ledge · Conversation » without. */
+  heads?: { text: string; color: string; bold?: boolean }[];
+  /** ← → with the field empty, from the field or the conversation: the next tab (1) or the one before (-1). */
+  onTab?(dir: 1 | -1): void;
 }
 
 /**
@@ -52,7 +56,7 @@ export interface LedgeConversationProps {
  * follow `ledgeFocus`: in the left column 1-9 e u z act on the conversation; tab goes round the field, the cards and the
  * conversation, where j k move between the decisions, what Ledge settled and the exchange groups.
  */
-export function LedgeConversation({ width, escalation, keys: keysRef, onBar }: LedgeConversationProps) {
+export function LedgeConversation({ width, escalation, keys: keysRef, onBar, heads, onTab }: LedgeConversationProps) {
   const { client, d, machines, t, g, toast, go, kept, small, tone, select, lang, rigs, escalations, projects, brain, ledgeFocus: focus, setLedgeFocus: setFocus } = useTui();
   const { rows: height } = useScreenSize();
   // Kept by the TUI: ctrl+c and another screen leave it as it is.
@@ -183,13 +187,7 @@ export function LedgeConversation({ width, escalation, keys: keysRef, onBar }: L
     return true;
   };
   /** u: Ledge's decision questioned again (ruling R5); the daemon refuses it until Ledge's brain is there, in a toast. */
-  const revisit = (id: string) => {
-    const rid = randomUUID();
-    const msg = { type: 'decision.revisit' as const, rid, id };
-    const off = client.onMessage(m => { if (m.type === 'error' && m.request === 'decision.revisit') { off(); clearTimeout(timer); toast({ text: t.conv.revisitRefused(m.message), tone: 'info' }); } });
-    const timer = setTimeout(off, 5000);
-    if (client.fleet ? !client.fleet.sendTo('local', msg) : (client.send(msg), false)) { off(); clearTimeout(timer); toast({ text: t.ask.offline, tone: 'info' }); }
-  };
+  const revisit = (id: string) => revisitDecision(client, id, { refused: m => toast({ text: t.conv.revisitRefused(m), tone: 'info' }), offline: () => toast({ text: t.ask.offline, tone: 'info' }) });
   const flip = (id: string) => setFlipped(s => { const x = new Set(s); if (x.has(id)) x.delete(id); else x.add(id); return x; });
 
   const convW = Math.max(20, width - 4);
@@ -234,8 +232,8 @@ export function LedgeConversation({ width, escalation, keys: keysRef, onBar }: L
   // ctrl+c stops the answer being written; ctrl+n starts a new conversation (once confirmed, when there is one); tab goes
   // round, from the field to the cards, the conversation and back; PgUp PgDn scroll the conversation, from the field and the left
   // column too; alt+v pastes an image in the field, alt+o opens the conversation's newest.
-  const latest = useRef({ asking, cards: cards.cards, focus, confirm, turns: d.chat.length, scroll, up, view, reopen: cards.reopen, draft, turnImages });
-  latest.current = { asking, cards: cards.cards, focus, confirm, turns: d.chat.length, scroll, up, view, reopen: cards.reopen, draft, turnImages };
+  const latest = useRef({ asking, cards: cards.cards, focus, confirm, turns: d.chat.length, scroll, up, view, reopen: cards.reopen, draft, turnImages, onTab, browsing });
+  latest.current = { asking, cards: cards.cards, focus, confirm, turns: d.chat.length, scroll, up, view, reopen: cards.reopen, draft, turnImages, onTab, browsing };
   useInput((input, key) => {
     // Too small, nothing is drawn: esc is the app's.
     if (small) return;
@@ -252,6 +250,9 @@ export function LedgeConversation({ width, escalation, keys: keysRef, onBar }: L
     if (key.ctrl && input === 'r') { l.reopen(); return; }
     if (key.meta && input === 'v' && l.focus === FIELD) { paste(); return; }
     if ((key.backspace || key.delete) && l.focus === FIELD && l.draft === '') { chips.removeLast(); return; }
+    // ← → in the field move its cursor; empty, they go to the next tab (the field's keys are the only ones while it has the keyboard).
+    // The draft as the field left it for this very key (several keys read together come before a render).
+    if ((key.leftArrow || key.rightArrow) && l.focus === FIELD && !kept.drafts.get('ledge') && !l.browsing && l.onTab) { l.onTab(key.rightArrow ? 1 : -1); return; }
     if (key.meta && input === 'o' && l.turnImages.length) { openImage(l.turnImages); return; }
     if (key.tab) { const n = l.cards.length; setFocus(f => (f === CONVO ? FIELD : f + 1 < n ? f + 1 : CONVO)); }
   });
@@ -279,6 +280,7 @@ export function LedgeConversation({ width, escalation, keys: keysRef, onBar }: L
       if (input === 'k' || key.upArrow) { if (steps.length) step(-1); else scroll(up + 1); return true; }
       if (input === 'j' || key.downArrow) { if (steps.length) step(1); else scroll(up - 1); return true; }
       if (input === 'G' || key.end) { setAnchor(null); return true; }
+      if ((key.leftArrow || key.rightArrow) && onTab && draft === '') { onTab(key.rightArrow ? 1 : -1); return true; }
       if (key.escape) { setFocus(FIELD); return true; }
       return false;
     }
@@ -300,13 +302,14 @@ export function LedgeConversation({ width, escalation, keys: keysRef, onBar }: L
     ...(decided?.decision ? [['u', t.keys.revisit] as const] : []), ...(group ? [['z', t.keys.fold] as const] : [])];
   // What was asked: the conversation's questions, not only this run's.
   const history = askHistory(d.chat, kept.asked);
+  const tabs$ = onTab && draft === '' ? [['← →', t.keys.tabs] as const] : [];
   const bar: Keys = focus === LEFT ? acts
     : confirm ? [['n esc', t.keys.keep], ['y', t.keys.wipe]]
     : focus === FIELD && listOpen ? [['↑ ↓', t.keys.choose], ['tab', t.keys.complete], ['↵', t.keys.sendOnly], ['esc', t.keys.keepAndLeave]]
     : focus === FIELD && browsing ? [['↵', t.keys.resend], ['↑ ↓', t.keys.history], ['esc', t.keys.backToDraft]]
     // ctrl+r near the front while a card is set aside: the bar drops what does not fit, from its end.
-    : focus === FIELD ? [['↵', t.keys.sendOnly], ...review$, ['alt+↵', t.keys.newLine], ['esc', t.keys.back], ['PgUp PgDn', t.keys.scroll], ['↑ ↓', t.keys.history], ['tab', cards.cards.length ? t.keys.nextCard : t.keys.conversation], ['alt+v', t.keys.image], ...(turnImages.length ? [['alt+o', t.keys.openImage] as const] : []), ['ctrl+n', t.keys.newChat], ...stop]
-    : focus === CONVO ? [['j k', steps.length ? t.keys.navigate : t.keys.line], ...acts, ['PgUp PgDn', t.keys.page], ['G', t.keys.end], ...stop, ['tab', t.keys.question], ['esc', t.keys.question]]
+    : focus === FIELD ? [['↵', t.keys.sendOnly], ...review$, ['alt+↵', t.keys.newLine], ['esc', t.keys.back], ['PgUp PgDn', t.keys.scroll], ['↑ ↓', t.keys.history], ['tab', cards.cards.length ? t.keys.nextCard : t.keys.conversation], ['alt+v', t.keys.image], ...(turnImages.length ? [['alt+o', t.keys.openImage] as const] : []), ['ctrl+n', t.keys.newChat], ...stop, ...tabs$]
+    : focus === CONVO ? [['j k', steps.length ? t.keys.navigate : t.keys.line], ...acts, ['PgUp PgDn', t.keys.page], ['G', t.keys.end], ...stop, ['tab', t.keys.question], ['esc', t.keys.question], ...tabs$]
     : card?.kind === 'action' ? [...cards.actionKeys(card.qid), ...stop, ...review$]
     : [['↵', t.keys.send], ['tab', focus + 1 < cards.cards.length ? t.keys.nextCard : t.keys.conversation], ['ctrl+n', t.keys.newChat], ...stop, ['esc', t.keys.back]];
   const barKey = bar.map(k => k.join(' ')).join('|');
@@ -318,7 +321,7 @@ export function LedgeConversation({ width, escalation, keys: keysRef, onBar }: L
   const reading = focus === CONVO;
   return (
     <Box flexDirection="column" flexGrow={1} width={width}>
-      <TitledBox title={t.home.conversation} flexGrow={1} color={reading ? C.coral : C.line} titleColor={reading ? C.coral : C.fg} titleBold
+      <TitledBox title={t.home.conversation} {...(heads ? { heads } : {})} flexGrow={1} color={reading ? C.coral : C.line} titleColor={reading ? C.coral : C.fg} titleBold
         foot={foot} footColor={reading || up > 0 ? C.coral : C.faint}>
         {lines.length === 0 ? <Text color={C.faint}>{t.ask.empty}</Text>
           : <Lines lines={lines} up={up} onHeight={setView} />}

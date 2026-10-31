@@ -54,7 +54,8 @@ export function LeftColumn({ rows, width, height, asks, near }: { rows: readonly
 
   const yoursCount = yours.length + asks.length + near.length;
   // An ask takes two rows: the question, then how to answer it.
-  const yoursHeight = Math.max(1, Math.min(yours.length + asks.length * 2 + near.length, 6));
+  // At most what leaves the two boxes below a row each (Ledge 4, three boxes' borders 6, two rows): nothing goes past the screen.
+  const yoursHeight = Math.max(1, Math.min(yours.length + asks.length * 2 + near.length, 6, height - 12));
   // Ledge's box (4), « À toi », and two borders for each of the last two boxes.
   const room = Math.max(2, height - 4 - (yoursHeight + 2) - 4);
   // Not installed: one line, or two when it does not fit (« OpenRig n’est pas installé », then « + pour lancer un rig »).
