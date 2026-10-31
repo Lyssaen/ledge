@@ -22,19 +22,22 @@ type ReliefReq = Parameters<HandoverDeps['launch']>[0];
 let root: string; let brainDir: string; let settingsPath: string; let store: Store; let memory: Memory;
 let clock: number; let launched: BrainLaunch[]; let reliefs: ReliefReq[]; let closed: string[]; let notified: string[];
 let brain: Brain; let handovers: Handovers;
+/** A relief launch held before its record exists, or failing. */
+let reliefGate: Promise<void> | null; let reliefFails: boolean;
 
 const record = (id: string, name: string, tool: Session['tool'], cwd: string, extra: Partial<Session> = {}): Session => ({ id, name, tool, cwd, project: 'brain',
   title: `${name} · brain`, tmuxSession: `ledge-${id}`, state: 'starting', helpers: [], startedAt: at(clock), lastActivityAt: at(clock), source: 'launcher', brain: true, ...extra });
 const close = async (s: Session): Promise<void> => { closed.push(s.id); store.upsert({ ...store.get(s.id)!, state: 'exited', exitedAt: at(clock) }); };
 
 function make(): void {
+  // The handovers first, as in the daemon: they see a store change before the brain does.
+  handovers = createHandovers({ store, close, dir: join(root, 'handovers'), now: () => at(clock),
+    mailbox: { notify: id => { notified.push(id); return true; } },
+    launch: async req => { reliefs.push(req); if (reliefGate) await reliefGate; if (reliefFails) throw new Error('tmux gone'); const s = record(req.id ?? 'x', req.name ?? 'Pim', req.tool, req.cwd); store.upsert(s); return s; },
+    brainRelief: s => brain.relief(s) });
   brain = createBrain({ store, settingsPath, dir: brainDir, mandate: async () => DEFAULT_MANDATE, memory, env: async () => ({ PATH: '/usr/bin' }), now: () => clock, close,
     launch: async o => { launched.push(o); const s = record(o.resume?.id ?? o.id, o.name, o.tool, o.cwd); store.upsert(s); return s; },
     handovers: { start: (id, o) => handovers.start(id, o) } });
-  handovers = createHandovers({ store, close, dir: join(root, 'handovers'), now: () => at(clock),
-    mailbox: { notify: id => { notified.push(id); return true; } },
-    launch: async req => { reliefs.push(req); const s = record(req.id ?? 'x', req.name ?? 'Pim', req.tool, req.cwd); store.upsert(s); return s; },
-    brainRelief: s => brain.relief(s) });
 }
 
 /** The brain enabled, launched, and idle. */
@@ -50,7 +53,7 @@ async function seated(tool: Session['tool'] = 'claude'): Promise<Session> {
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'brain-relief-')); brainDir = join(root, 'brain'); settingsPath = join(root, 'brain.json');
   store = new Store({ journalPath: join(root, 'sessions.json') }); memory = createMemory({ dir: join(root, 'memoire') });
-  clock = 0; launched = []; reliefs = []; closed = []; notified = [];
+  clock = 0; launched = []; reliefs = []; closed = []; notified = []; reliefGate = null; reliefFails = false;
 });
 afterEach(() => { brain?.dispose(); handovers?.close(); rmSync(root, { recursive: true, force: true }); });
 
@@ -128,6 +131,62 @@ describe('the brain relief (Lot 7, Task 10)', () => {
     await brain.settled();
     expect(launched).toHaveLength(1 + 1);
     expect(brain.status().restarts).toBe(1);
+  });
+
+  it('disabling the brain while it writes its brief: no relief is launched', async () => {
+    await seated();
+    expect(brain.checkRelief({ context: ctx(150_000), today: '2099-01-02', idle: true })).toBe('context');
+    await brain.set({ enabled: false });
+    await until(() => store.get('brain')?.handover?.state === 'failed');
+    await brain.settled();
+    expect(reliefs).toHaveLength(0);
+    expect(launched).toHaveLength(1);
+    expect(brain.session()).toBeUndefined();
+    expect(brain.status()).toMatchObject({ state: 'off', enabled: false });
+  });
+
+  it('disabling the brain while its relief launches: the relief is closed, the brain stays off', async () => {
+    await seated();
+    let open!: () => void; reliefGate = new Promise<void>(r => { open = r; });
+    expect(brain.checkRelief({ context: ctx(150_000), today: '2099-01-02', idle: true })).toBe('context');
+    expect(handovers.brief('brain', BRIEF)).toBeNull();
+    await until(() => reliefs.length === 1);
+    await brain.set({ enabled: false });
+    open();
+    await until(() => store.get('brain')?.handover?.state === 'done');
+    const to = reliefs[0]!.id!;
+    await until(() => store.get(to)?.state === 'exited');
+    expect(closed).toEqual(['brain', to]);
+    await brain.settled();
+    expect(launched).toHaveLength(1);
+    expect(brain.session()).toBeUndefined();
+    expect(brain.status()).toMatchObject({ state: 'off', enabled: false });
+  });
+
+  it('changing the tool while the brain writes its brief: one live brain, on the new tool', async () => {
+    await seated();
+    expect(brain.checkRelief({ context: ctx(150_000), today: '2099-01-02', idle: true })).toBe('context');
+    await brain.set({ enabled: true, tool: 'codex' });
+    await until(() => store.get('brain')?.handover?.state === 'failed');
+    await brain.settled();
+    expect(reliefs).toHaveLength(0);
+    const alive = store.all().filter(x => x.brain && x.state !== 'exited');
+    expect(alive).toHaveLength(1);
+    expect(alive[0]).toMatchObject({ tool: 'codex' });
+    expect(brain.session()?.tool).toBe('codex');
+  });
+
+  it('a brain that died during its relief, whose relief then failed, is relaunched by the breaker', async () => {
+    await seated();
+    reliefFails = true;
+    expect(brain.checkRelief({ context: ctx(150_000), today: '2099-01-02', idle: true })).toBe('context');
+    store.upsert({ ...store.get('brain')!, state: 'exited', exitedAt: at(1), exitCode: 1 });
+    // The relief is tried (and fails); only then is the death counted.
+    await until(() => launched.length === 2);
+    expect(reliefs).toHaveLength(1);
+    await brain.settled();
+    expect(launched[1]!.resume?.id).toBe('brain');
+    expect(brain.status()).toMatchObject({ restarts: 1, sessionId: 'brain' });
   });
 
   it('a relief of an ordinary session is unchanged', async () => {

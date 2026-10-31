@@ -117,6 +117,10 @@ export function createBrain(d: BrainDeps): Brain {
   let deferred: string | undefined;
   /** Ids whose next exit is intended (stop, disable, relief). */
   const expected = new Set<string>();
+  /** Reliefs prepared and not yet seen alive: one that comes up once the brain is off, or on another tool, is closed. */
+  const relieving = new Set<string>();
+  /** Brains whose exit was left to their relief (handover launching): judged as a death if that relief fails. */
+  const leftToRelief = new Set<string>();
   /** Each brain session's state last seen, so a death is seen once, on the change to exited. */
   const seen = new Map<string, Session['state']>();
   const listeners = new Set<(s: BrainStatus) => void>();
@@ -257,7 +261,7 @@ export function createBrain(d: BrainDeps): Brain {
   function onExit(s: Session): void {
     if (expected.delete(s.id)) return;
     const h = s.handover?.state;
-    if (h === 'launching' || h === 'done') return; // the relief closes the old brain (C10; Task 10 completes it)
+    if (h === 'launching' || h === 'done') { if (h === 'launching') leftToRelief.add(s.id); return; } // its relief takes over (C10)
     if (launching) { deferred = s.id; return; } // looked at again once that launch is over
     if (settings.enabled !== true || down !== undefined || session()) return;
     const t = now();
@@ -289,18 +293,37 @@ export function createBrain(d: BrainDeps): Brain {
     return kind;
   }
 
+  /** Why a relief of `s` must not be launched now (the brain disabled, or moved to another tool), else undefined. */
+  const stale = (tool: Tool): string | undefined => settings.enabled !== true ? 'le cerveau de Ledge est arrêté'
+    : tool !== settings.tool ? 'le cerveau de Ledge a changé d\'outil' : undefined;
+
   async function relief(s: Session): Promise<BrainRelief> {
     const tool = s.tool;
+    { const why = stale(tool); if (why) throw new Error(why); }
     const instructions = await prepare(tool);
-    return { id: freeId(), name: BRAIN_NAME, cwd: d.dir, env: brainEnv(d.dir, await env()), instructions };
+    const e = brainEnv(d.dir, await env());
+    { const why = stale(tool); if (why) throw new Error(why); } // the user may have stopped it meanwhile
+    const id = freeId();
+    relieving.add(id);
+    return { id, name: BRAIN_NAME, cwd: d.dir, env: e, instructions };
   }
 
   for (const s of d.store.all()) if (s.brain === true) seen.set(s.id, s.state); // a brain loaded from the journal dies like any other
   const unsubscribe = d.store.onChange(c => {
-    if (c.type === 'removed') { seen.delete(c.id); expected.delete(c.id); return emit(); }
+    if (c.type === 'removed') { seen.delete(c.id); expected.delete(c.id); relieving.delete(c.id); leftToRelief.delete(c.id); return emit(); }
     if (c.type !== 'updated' || c.session.brain !== true) return;
-    const was = seen.get(c.session.id); seen.set(c.session.id, c.session.state);
-    if (c.session.state === 'exited' && was !== undefined && was !== 'exited') onExit(c.session);
+    const s = c.session;
+    const was = seen.get(s.id); seen.set(s.id, s.state);
+    // A relief whose launch was in flight when the user stopped the brain (or changed its tool) does not bring it back.
+    if (relieving.delete(s.id) && s.state !== 'exited' && stale(s.tool)) {
+      expected.add(s.id);
+      log(`brain relief ${s.id} closed: ${stale(s.tool)}`);
+      void d.close(s).catch(e => { expected.delete(s.id); log(`brain relief ${s.id} not closed: ${(e as Error).message}`); });
+    }
+    if (s.state === 'exited' && was !== undefined && was !== 'exited') onExit(s);
+    // A brain that died while its relief was launching, and that relief failed: a death after all.
+    else if (s.state === 'exited' && s.handover?.state === 'failed' && leftToRelief.delete(s.id)) onExit(s);
+    if (s.handover?.state === 'done') leftToRelief.delete(s.id);
     emit();
   });
 
