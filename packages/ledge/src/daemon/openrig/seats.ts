@@ -15,6 +15,8 @@ export function seatState(n: NodeEntry, activity?: string): SeatState {
   if (startup === 'challenged') return 'trust';
   if (session === 'stopped' || session === 'detached') return 'stopped';
   if (session === 'exited' || session === 'crashed' || session === 'failed') return 'crashed';
+  // OpenRig reports failed startup in the node API and attention_required in its lifecycle view.
+  if (startup === 'failed' || startup === 'attention_required' || n.lifecycleState === 'attention_required') return 'attention';
   return (activity ?? n.activityState?.activity) === 'working' ? 'working' : 'ready';
 }
 

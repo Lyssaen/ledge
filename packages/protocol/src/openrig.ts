@@ -24,7 +24,7 @@ export const OpenRigStatusSchema = z.object({ machine: z.string(), state: OpenRi
   install: z.string().optional() }); // install command when OpenRig is absent (lot 6)
 export type OpenRigStatus = z.infer<typeof OpenRigStatusSchema>;
 
-export const SeatStateSchema = z.enum(['starting', 'trust', 'ready', 'working', 'idle', 'stopped', 'crashed', 'unreachable']);
+export const SeatStateSchema = z.enum(['starting', 'trust', 'attention', 'ready', 'working', 'idle', 'stopped', 'crashed', 'unreachable']);
 export type SeatState = z.infer<typeof SeatStateSchema>;
 export const RigSeatSchema = z.object({ ref: z.string(), // OpenRig session name: "dev-build@starter"
   address: z.string(), // "@build"

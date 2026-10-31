@@ -562,7 +562,7 @@ export const fr = {
     working: (w: number, n: number) => `${w}/${n} au travail`, ready: (r: number, n: number) => `${r}/${n} prêts`,
     table: 'Table', tableTitle: (name: string) => `Voir ${name} dans l’atelier`, terminals: 'Terminaux', terminalsOf: (name: string) => `Terminaux de ${name}`,
     seatState: { working: 'Au travail', ready: 'Disponible', idle: 'Disponible', starting: 'démarre…', trust: 'attend ta confiance dans le dossier',
-      stopped: 'arrêté', crashed: 'en panne', unreachable: 'injoignable' } as Record<SeatState, string>,
+      attention: 'intervention requise', stopped: 'arrêté', crashed: 'en panne', unreachable: 'injoignable' } as Record<SeatState, string>,
     context: (p: number) => `contexte ${p} %`, open: (name: string) => `Ouvrir la session de ${name}`,
     kernelWhat: 'la mécanique · operator et queue · toujours allumé', rest: 'au repos', health: 'Santé',
     version: (v?: string) => (v ? `OpenRig ${v}` : 'OpenRig, version inconnue'),

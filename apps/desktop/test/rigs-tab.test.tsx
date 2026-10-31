@@ -55,9 +55,9 @@ function Harness({ client, start }: { client: DaemonClient; start?: Partial<Extr
 }
 
 const RIGS = [KERNEL, FACTORY, STARTER];
-function renderTab({ rigs = RIGS, openrig = [RUNNING], specs = SPECS, start }: { rigs?: Rig[]; openrig?: OpenRigStatus[]; specs?: RigSpecInfo[]; start?: Partial<Extract<NavState['place'], { kind: 'home' }>> } = {}) {
+function renderTab({ rigs = RIGS, openrig = [RUNNING], specs = SPECS, start, lang = 'fr' }: { rigs?: Rig[]; openrig?: OpenRigStatus[]; specs?: RigSpecInfo[]; start?: Partial<Extract<NavState['place'], { kind: 'home' }>>; lang?: 'fr' | 'en' } = {}) {
   const client = clientOf(rigs, openrig, specs);
-  return render(<LangProvider lang="fr"><Harness client={client} {...(start ? { start } : {})} /></LangProvider>);
+  return render(<LangProvider lang={lang}><Harness client={client} {...(start ? { start } : {})} /></LangProvider>);
 }
 const card = (name: string) => screen.getByRole('article', { name });
 
@@ -90,6 +90,19 @@ describe('the Rigs tab of the Ledge screen', () => {
     await user.click(within(kernel).getByRole('button', { name: 'Santé' }));
     expect(kernel).toHaveTextContent('OpenRig 0.6.14');
     expect(kernel).toHaveTextContent('humain inscrit');
+  });
+
+  it('shows a seat needing intervention instead of available', async () => {
+    const blocked = { ...STARTER, seats: STARTER.seats.map((seat, i) => i === 0 ? { ...seat, state: 'attention' as const } : seat) };
+    renderTab({ rigs: [blocked] });
+    await screen.findByText('intervention requise');
+    expect(card('starter')).toHaveTextContent('intervention requise');
+  });
+
+  it('shows the intervention state in English', async () => {
+    const blocked = { ...STARTER, seats: STARTER.seats.map((seat, i) => i === 0 ? { ...seat, state: 'attention' as const } : seat) };
+    renderTab({ rigs: [blocked], lang: 'en' });
+    expect(await screen.findByText('needs attention')).toBeVisible();
   });
 
   it('Table navigue vers la pièce du rig', async () => {

@@ -291,7 +291,7 @@ button.rc-seat-main:hover { background: var(--sidebar-accent); }
 .rc-name { flex: none; font-weight: 600; }
 .rc-state { flex: none; font-size: 11.5px; }
 .rc-working { color: var(--sidebar-foreground); }
-.rc-trust, .rc-starting { color: var(--warning, #d97706); }
+.rc-trust, .rc-attention, .rc-starting { color: var(--warning, #d97706); }
 .rc-crashed { color: var(--destructive); }
 .rc-stopped, .rc-unreachable, .rc-ready, .rc-idle { color: var(--muted-foreground); }
 .rc-rest { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; }

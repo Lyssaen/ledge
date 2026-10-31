@@ -175,6 +175,12 @@ export interface ServerHandle {
   port: number; close(): Promise<void>; broadcast(msg: ServerMessage): void;
   /** Remembers a session's terminal preview and broadcasts it; a client that connects later gets it after the snapshot. */
   preview(id: string, lines: string[]): void;
+  /** Whether some client follows this session in color (`session.preview.subscribe`). */
+  colorWanted(id: string): boolean;
+  /** Whether a colored image of this session is held (dropped when no client follows it any more). */
+  colorCached(id: string): boolean;
+  /** Sends the colored preview to the clients that follow `id`, and to them only. */
+  sendColorPreview(id: string, lines: string[]): void;
   /** The OMP processes this daemon owns. */
   omp: OmpHost;
   /** Closes a session cleanly (its exit command, a kill as a last resort); rejects with a Refusal. */
@@ -478,7 +484,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const sendSnapshot = (reply: Reply) => {
-    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true, asks: true, ...(mobile || unavailable ? { mobile: true } : {}), ...(bridge ? { openrig: true } : {}) } } : {}) });
+    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true, asks: true, ...(mobile || unavailable ? { mobile: true } : {}), ...(bridge ? { openrig: true } : {}), colorPreview: true } } : {}) });
     reply(machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
     reply(projectsMsg()); // then the shared projects (build spec §5)
     reply({ type: 'asks', asks: asks.all().filter(askShown) }); // then the decisions waiting for the user
@@ -492,6 +498,17 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     reply({ type: 'brain.status', status: brain.status() }); // then the brain's state (Lot 7)
     reply(mandateMsg()); reply(rulesMsg()); reply(decisionsMsg()); // then its mandate, rules and decisions
     reply({ type: 'ledge.thread.history', ...thread.page() }); // last: Ledge's thread, whose items name those escalations
+  };
+  /** The session each local client follows in color (one at most), and the last colored image per followed session. */
+  const colorFollow = new Map<WebSocket, string>();
+  const colorLast = new Map<string, string[]>();
+  const colorWanted = (id: string) => { for (const v of colorFollow.values()) if (v === id) return true; return false; };
+  const colorCached = (id: string) => colorLast.has(id);
+  const sendColorPreview = (id: string, lines: string[]) => {
+    // A capture can finish after its final subscriber leaves. Do not retain that stale frame.
+    if (!colorWanted(id)) return;
+    colorLast.set(id, lines);
+    for (const [ws, followed] of colorFollow) if (followed === id) send(ws, { type: 'session.preview.color', id, lines });
   };
   const preview = (id: string, lines: string[]) => {
     if (!store.get(id)) return;
@@ -1580,7 +1597,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     return handle(msg, reply).catch(e => {
       if (msg.type === 'document.read') return reply({ type: 'document.error', requestId: msg.requestId, path: msg.path, code: 'read_failed' });
       log(`${msg.type} failed: ${(e as Error).message}`);
-      reply({ type: 'error', ...(msg.type.startsWith('session.') && 'id' in msg ? { id: msg.id } : {}), message: (e as Error).message, request: msg.type, ...(e instanceof Refusal ? { code: e.code } : {}) });
+      reply({ type: 'error', ...(msg.type.startsWith('session.') && 'id' in msg && typeof msg.id === 'string' ? { id: msg.id } : {}), message: (e as Error).message, request: msg.type, ...(e instanceof Refusal ? { code: e.code } : {}) });
     });
   }
 
@@ -1671,7 +1688,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         .catch(e => { send(ws, { type: 'error', message: (e as Error).message }); ws.close(1011); });
       return;
     }
-    localClients.add(ws); ws.once('close', () => localClients.delete(ws));
+    localClients.add(ws);
+    ws.once('close', () => { localClients.delete(ws); colorFollow.delete(ws); for (const id of colorLast.keys()) if (!colorWanted(id)) colorLast.delete(id); });
     const reply: Reply = m => send(ws, m);
     sendSnapshot(reply);
     ws.on('message', data => {
@@ -1687,6 +1705,14 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         const named = typeof type === 'string' && type.length <= 64 ? type : undefined;
         return reply({ type: 'error', message: 'invalid message', ...(named?.startsWith('session.') && typeof id === 'string' && id.length <= 200 ? { id } : {}), ...(named ? { request: named } : {}), code: 'invalid' });
       }
+      if (msg.type === 'session.preview.subscribe') {
+        // Per client, so it lives here and not in `dispatch` (which has no socket).
+        if (msg.id === null) colorFollow.delete(ws); else colorFollow.set(ws, msg.id);
+        for (const id of colorLast.keys()) if (!colorWanted(id)) colorLast.delete(id);
+        const last = msg.id === null ? undefined : colorLast.get(msg.id);
+        if (last) reply({ type: 'session.preview.color', id: msg.id!, lines: last });
+        return;
+      }
       void dispatch(msg, reply);
     });
   });
@@ -1698,6 +1724,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     port,
     broadcast,
     preview,
+    colorWanted,
+    colorCached,
+    sendColorPreview,
     omp,
     sweepAttachments,
     closeSession: id => { const s = store.get(id); return s ? closeSession(s) : Promise.reject(unknownSession()); },

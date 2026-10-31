@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { render } from 'ink-testing-library';
 import { attachClient, daemonStore, type DaemonClient } from '@ledge/fleet';
 import { createMockDaemon, fakeSession } from '@ledge/fleet/test/mockDaemon';
-import type { AttachmentErrorReason, ImageMime, Projects, Session } from '@ledge/protocol';
+import type { AttachmentErrorReason, ChatTurn, Escalation, ImageMime, OpenRigStatus, Projects, Rig, RigSeat, Session } from '@ledge/protocol';
 import { App } from '../src/tui/App.js';
 import type { ClipboardImage } from '../src/tui/clipboard.js';
 import { createTuiFleet } from '../src/tui/fleet.js';
@@ -33,15 +33,80 @@ export const PROJECTS: Projects = {
   rules: []
 };
 
+/** A seat of the mockup's rigs: `ref` is `name@rig`, its address `@name` (orch-lead answers to `@lead`). */
+const seat = (rig: string, name: string, state: RigSeat['state'], extra: Partial<RigSeat> = {}): RigSeat =>
+  ({ ref: `${name}@${rig}`, address: `@${name === 'orch-lead' ? 'lead' : name}`, name, runtime: 'claude-code', model: 'opus', state, ...extra });
+const rig = (id: string, seats: RigSeat[], extra: Partial<Rig> = {}): Rig =>
+  ({ id, name: id, machine: 'local', cwd: '/w/ledge', projectId: 'ledge', offProject: false, lifecycle: 'running', kernel: false, seats, repos: [], ...extra });
+
+/** The mockup's rigs on the local machine: factory (6 seats in Ledge, build paired to a session), starter (2 seats), the kernel. */
+export function mockupRigs(): Rig[] {
+  return [
+    rig('factory', [seat('factory', 'orch-lead', 'working'), seat('factory', 'build', 'working', { sessionId: 'build' }), seat('factory', 'qa', 'working'),
+      seat('factory', 'review-a', 'working'), seat('factory', 'review-b', 'idle'), seat('factory', 'design', 'idle')]),
+    rig('starter', [seat('starter', 'dev-build', 'working'), seat('starter', 'dev-review', 'idle')]),
+    rig('kernel', [seat('kernel', 'operator', 'idle', { runtime: 'codex' }), seat('kernel', 'queue', 'idle', { runtime: 'codex' }),
+      seat('kernel', 'advisor', 'idle'), seat('kernel', 'human', 'idle', { runtime: 'terminal' })], { name: 'openrig', kernel: true, projectId: null, cwd: '/home/u/.openrig' })
+  ];
+}
+
+/** The session paired to factory's build seat: a seat, not a standalone session. */
+export function mockupSeatSession(): Session {
+  return fakeSession('build', { name: 'build', cwd: '/w/ledge', repo: 'ledge', repoPath: '/w/ledge', project: 'ledge', branch: 'feat/rigs', topic: 'Reprise après reboot', state: 'working', lastActivityAt: ago(1),
+    rig: { machine: 'local', rigId: 'factory', rigName: 'factory', seat: 'build@factory', pod: 'dev', member: 'build' } });
+}
+
+/** The mockup's one decision waiting: orch-lead@factory asks JSON or SQLite. */
+export function mockupEscalations(): Escalation[] {
+  const question = 'Sessions : passer du fichier JSON à SQLite ?';
+  return [{ id: 'q-117', source: 'rig', machine: 'local', rigId: 'factory', from: 'orch-lead@factory', intent: 'decision', summary: question,
+    questions: [{ id: 'q1', question, options: [{ id: 'sqlite', label: 'SQLite', recommended: true }, { id: 'json', label: 'Garder le JSON' }] }],
+    createdAt: ago(6), state: 'pending', category: 'architecture', advice: 'SQLite. Tu as écarté deux fois les fichiers plats.' }];
+}
+
+/**
+ * The daemon's one-shot Ledge (lot 4 `ledgeSay`), on a mock daemon: each `ledge.say` becomes a user item and Ledge's pending bubble in
+ * the thread, its chat turn under the item's qid (every client gets `chat.*`); `answer(i, …)` ends the `i`th, its bubble and its turn.
+ */
+export function oneShotLedge(daemon: Awaited<ReturnType<typeof createMockDaemon>>) {
+  const turns: ChatTurn[] = [];
+  daemon.onMessage(m => {
+    if (m.type !== 'ledge.say') return;
+    const qid = `say-${turns.length + 1}`, at = new Date().toISOString();
+    turns.push({ qid, question: m.text, askedAt: at, steps: [] });
+    daemon.push({ type: 'ledge.thread.item', item: { kind: 'user', id: qid, at, text: m.text, qid } });
+    daemon.push({ type: 'ledge.thread.item', item: { kind: 'ledge', id: `b-${qid}`, at, text: '', qid, pending: true } });
+    daemon.push({ type: 'chat.history', turns: [...turns] });
+  });
+  return {
+    /** How many `ledge.say` it has taken. */
+    get count() { return turns.length; },
+    qid: (i: number) => turns[i]!.qid,
+    answer(i: number, text: string, extra: Partial<ChatTurn> = {}) {
+      const turn = turns[i]!, at = new Date().toISOString();
+      turns[i] = { ...turn, answer: text, answeredAt: at, ...extra };
+      daemon.push({ type: 'chat.done', qid: turn.qid, text, at, ...extra } as never);
+      daemon.push({ type: 'ledge.thread.item', item: { kind: 'ledge', id: `b-${turn.qid}`, at: turn.askedAt, text, qid: turn.qid } });
+    }
+  };
+}
+
+export const MOCKUP_OPENRIG: OpenRigStatus = { machine: 'local', state: 'running', version: '0.6.14' };
+
 /** A TUI on a mock daemon: its frame, its keyboard, the daemon, and a cleanup. */
 export async function startTui(o: { sessions?: Session[]; projects?: Projects; lang?: Lang; run?: (argv: string[]) => Promise<number>; save?: (l: Lang) => void; theme?: ThemeChoice; background?: Tone; env?: NodeJS.ProcessEnv;
   /** The clipboard reader and the viewer launcher the TUI is given (none by default: no image, nothing opened). `refusePut`: the daemon's reason for refusing every `attachment.put`. */
-  readImage?: () => Promise<ClipboardImage | null>; openFile?: (file: string) => Promise<void>; refusePut?: AttachmentErrorReason } = {}) {
+  readImage?: () => Promise<ClipboardImage | null>; openFile?: (file: string) => Promise<void>; refusePut?: AttachmentErrorReason;
+  /** The daemon announces `colorPreview` and answers a color subscription with these lines. */
+  colorLines?: string[];
+  /** OpenRig on the local daemon: the mockup's rigs, escalations and status pushed once connected, the seat's session listed. */
+  openrig?: { rigs?: Rig[]; escalations?: Escalation[]; status?: OpenRigStatus } } = {}) {
   daemonStore.reset();
   const daemon = await createMockDaemon();
-  for (const s of o.sessions ?? mockupSessions()) daemon.sessions.set(s.id, s);
+  for (const s of o.sessions ?? [...mockupSessions(), ...(o.openrig ? [mockupSeatSession()] : [])]) daemon.sessions.set(s.id, s);
   if (o.projects ?? PROJECTS) daemon.projects(o.projects ?? PROJECTS);
-  daemon.extras.daemon = { version: '0.16.0', install: 'npm', systemd: false, models: true, modelSwitch: true, archive: true };
+  daemon.extras.daemon = { version: '0.16.0', install: 'npm', systemd: false, models: true, modelSwitch: true, archive: true, ...(o.colorLines ? { colorPreview: true } : {}), ...(o.openrig ? { openrig: true } : {}) };
+  if (o.colorLines) daemon.options.colorLines = o.colorLines;
   daemon.extras.launcher = ['node', '/opt/ledge/cli.js'];
   // The daemon's attachment store: a put keeps the bytes under their sha256, a get gives them back.
   const attachments = new Map<string, { mime: ImageMime; data: string }>();
@@ -64,10 +129,23 @@ export async function startTui(o: { sessions?: Session[]; projects?: Projects; l
   const ui = render(<App client={client} lang={o.lang ?? 'fr'} saveLang={l => { (o.save ?? (x => saved.push(x)))(l); }} theme={o.theme} background={o.background} saveTheme={x => { themes.push(x); }} notify="off" glyphs={glyphsFor({})} env={o.env ?? {}} run={o.run} readImage={o.readImage ?? (async () => null)} openFile={o.openFile ?? (async () => {})} />);
   await until(() => daemonStore.getState().sessions.length > 0);
   await until(() => (ui.lastFrame() ?? '').includes('Otto') || (o.sessions !== undefined && o.sessions.length === 0));
+  // The rig book is reset by each snapshot: OpenRig's messages come after it, as the daemon sends them.
+  if (o.openrig) {
+    const rigs = o.openrig.rigs ?? mockupRigs();
+    daemon.push({ type: 'openrig.status', status: o.openrig.status ?? MOCKUP_OPENRIG });
+    daemon.push({ type: 'rig.snapshot', machine: 'local', rigs });
+    for (const escalation of o.openrig.escalations ?? mockupEscalations()) daemon.push({ type: 'escalation.updated', escalation });
+    await until(() => client.fleet!.rigs().length === rigs.length);
+  }
   const press = async (keys: string) => { ui.stdin.write(keys); await new Promise(r => setTimeout(r, 30)); };
+  const frame = () => ui.lastFrame() ?? '';
   return {
-    stdin: ui.stdin as { write(data: string): void }, daemon, client, attachments, saved, themes, press,
-    frame: () => ui.lastFrame() ?? '',
+    stdin: ui.stdin as { write(data: string): void }, daemon, client, attachments, saved, themes, press, frame,
+    /** The home's selection moved with j until `name`'s session shows on the right (a terminal 100 columns wide or more). */
+    async pick(name: string) {
+      for (let i = 0; i < 30 && !frame().includes(`${name.toUpperCase()} · `); i++) await press('j');
+      await until(() => frame().includes(`${name.toUpperCase()} · `));
+    },
     /** All that went to the terminal, the frames and the sequences written beside them (a title, a bell). */
     written: () => ui.stdout.frames.join(''),
     /** The terminal resized to `columns` × `rows`, as a real one says it (a `resize` on stdout). */

@@ -19,9 +19,17 @@ const inHistory = (b: Browse | null): b is Browse => b !== null && b.i < b.items
  *  ← → by grapheme, ctrl or alt ← → by word, home end (ctrl+a ctrl+e) on the line, ↑ ↓ from row to row, suppr, ctrl+w the
  *  word before, ctrl+u all. ↑ on the first row goes back through `history` (oldest first), ↓ comes down to the draft, as it
  *  was; ↵ on an entry sends it and comes back to the draft, `fromHistory` telling the caller to keep it; `onSubmit` false, refused, the entry stays. The caller owns the draft; `active` false leaves the keys to the screen. */
-export function Field({ value, onChange, onSubmit, onEscape, onBrowse, history = [], active, placeholder, title, color = C.coral, titleColor }: {
+export function Field({ value, onChange, onSubmit, onEscape, onBrowse, onCursor, history = [], active, arrows = true, placeholder, title, foot: hint, color = C.coral, titleColor, width: inner }: {
   value: string; onChange(v: string): void; onSubmit(v: string, o: { fromHistory: boolean }): boolean | void; onEscape?(): void; onBrowse?(on: boolean): void;
+  /** What is shown and where the cursor is, at each change (an entry of the history included). */
+  onCursor?(f: State): void;
   history?: readonly string[]; active: boolean; placeholder?: string; title: string; color?: string; titleColor?: string;
+  /** false leaves ↑ ↓ to the caller (a list open above the field). */
+  arrows?: boolean;
+  /** The foot when the field has nothing of its own to say there (history, scroll, lines). */
+  foot?: string;
+  /** The cells inside its box; the screen's width less the box by default (a field in a column passes its own). */
+  width?: number;
 }) {
   const { t, g } = useTui();
   const { columns, rows: height } = useScreenSize();
@@ -32,7 +40,7 @@ export function Field({ value, onChange, onSubmit, onEscape, onBrowse, history =
   if (value !== told.current) { told.current = value; st.current = { f: { text: value, cursor: value.length }, browse: null, pasted: 0 }; }
   const [, render] = useReducer((n: number) => n + 1, 0);
   const top = useRef(0);
-  const width = Math.max(10, columns - 4);
+  const width = Math.max(10, inner ?? columns - 4);
   const max = fieldRows(columns, height);
 
   const set = (f: State, o: { paste?: number } = {}) => {
@@ -41,6 +49,7 @@ export function Field({ value, onChange, onSubmit, onEscape, onBrowse, history =
     if (browse && changed) { const items = [...browse.items]; items[browse.i] = f.text; browse = { ...browse, items }; }
     st.current = { f, browse, pasted: o.paste ?? 0 };
     render();
+    onCursor?.(f);
     // Only the draft goes to the caller: an entry of the history, edited, stays the field's.
     if (changed && !inHistory(browse)) { told.current = f.text; onChange(f.text); }
   };
@@ -49,6 +58,7 @@ export function Field({ value, onChange, onSubmit, onEscape, onBrowse, history =
     const text = next ? next.items[next.i]! : st.current.f.text;
     st.current = { f: { text, cursor: text.length }, browse: next, pasted: 0 };
     render();
+    onCursor?.(st.current.f);
     onBrowse?.(inHistory(next));
   };
 
@@ -79,6 +89,7 @@ export function Field({ value, onChange, onSubmit, onEscape, onBrowse, history =
     if ((key.ctrl && input === 'e') || key.end) { set(end(f)); return; }
     if (key.leftArrow || (key.meta && input === 'b')) { set(key.ctrl || key.meta ? wordLeft(f) : left(f)); return; }
     if (key.rightArrow || (key.meta && input === 'f')) { set(key.ctrl || key.meta ? wordRight(f) : right(f)); return; }
+    if ((key.upArrow || key.downArrow) && !arrows) return;
     if (key.upArrow) {
       // Up the rows of what is shown first, an entry of several lines too; then to the entry before.
       const up = vertical(f, width - 2, -1);
@@ -109,7 +120,7 @@ export function Field({ value, onChange, onSubmit, onEscape, onBrowse, history =
   const where = lineAt(f);
   const foot = inHistory(browse) ? t.field.history(browse.i + 1, browse.items.length - 1)
     : [top.current > 0 ? t.field.above(top.current) : '', below > 0 ? t.field.below(below) : '',
-      pasted > 1 ? t.field.pasted(pasted) : active && where.lines > 1 ? t.field.line(where.line, where.lines) : ''].filter(Boolean).join(' · ');
+      pasted > 1 ? t.field.pasted(pasted) : active && where.lines > 1 ? t.field.line(where.line, where.lines) : ''].filter(Boolean).join(' · ') || hint;
   return (
     <TitledBox title={title} color={active ? color : C.line} titleColor={titleColor ?? (active ? color : C.dim)} foot={foot || undefined} flexShrink={0}>
       {shown.map((l, i) => <Box key={i} flexShrink={0}><LineText line={l} /></Box>)}

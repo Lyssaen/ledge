@@ -532,7 +532,7 @@ export const en: Messages = {
     working: (w, n) => `${w}/${n} working`, ready: (r, n) => `${r}/${n} ready`,
     table: 'Table', tableTitle: (name) => `Show ${name} in the atelier`, terminals: 'Terminals', terminalsOf: (name) => `Terminals of ${name}`,
     seatState: { working: 'Working', ready: 'Available', idle: 'Available', starting: 'starting…', trust: 'waits for you to trust the folder',
-      stopped: 'stopped', crashed: 'crashed', unreachable: 'unreachable' },
+      attention: 'needs attention', stopped: 'stopped', crashed: 'crashed', unreachable: 'unreachable' },
     context: (p) => `context ${p} %`, open: (name) => `Open ${name}’s session`,
     kernelWhat: 'the machinery · operator and queue · always on', rest: 'at rest', health: 'Health',
     version: (v) => (v ? `OpenRig ${v}` : 'OpenRig, unknown version'),

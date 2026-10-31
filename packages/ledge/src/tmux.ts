@@ -10,7 +10,7 @@ export interface Tmux {
   sendText(name: string, text: string): Promise<void>;
   sendKeys(name: string, keys: string[]): Promise<void>;
   /** Last `lines` lines, or null when the capture failed (distinct from an empty pane). */
-  capture(name: string, lines: number): Promise<string | null>;
+  capture(name: string, lines: number, o?: { color?: boolean }): Promise<string | null>;
   /** The pane's width in columns, or null when tmux cannot tell. */
   width?(name: string): Promise<number | null>;
   hasSession(name: string): Promise<boolean>;
@@ -94,9 +94,9 @@ export function realTmux(socket = 'ledge', opts: { scope?: () => Promise<boolean
       const r = await t(['send-keys', '-t', `=${name}:`, ...keys]);
       if (r.code !== 0) throw new Error(`tmux send-keys failed: ${r.stderr.trim()}`);
     },
-    async capture(name, lines) {
-      // History included, then trimmed to exactly the last `lines` lines.
-      const r = await t(['capture-pane', '-p', '-J', '-t', `=${name}:`, '-S', String(-lines)]);
+    async capture(name, lines, o) {
+      // History included, then trimmed to exactly the last `lines` lines. `color` keeps the SGR codes (-e).
+      const r = await t(['capture-pane', '-p', '-J', ...(o?.color ? ['-e'] : []), '-t', `=${name}:`, '-S', String(-lines)]);
       if (r.code !== 0) return null;
       return r.stdout.replace(/\s+$/g, '').split('\n').slice(-lines).join('\n');
     },

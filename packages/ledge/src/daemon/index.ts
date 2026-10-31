@@ -82,7 +82,7 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   say = text => server.say(text);
   await bridge.start();
   ompLive = () => server.omp.liveCount();
-  const poller = startPoller({ store, tmux, broadcastPreview: server.preview, labelExited: server.labelExited });
+  const poller = startPoller({ store, tmux, broadcastPreview: server.preview, colorWanted: server.colorWanted, colorCached: server.colorCached, sendColorPreview: server.sendColorPreview, labelExited: server.labelExited });
   await writeFile(paths().pid, String(process.pid));
   log(`daemon started on ${server.port} with ${store.all().length} sessions`);
   let stopping: Promise<void> | null = null;

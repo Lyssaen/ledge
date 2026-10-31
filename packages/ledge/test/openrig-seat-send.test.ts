@@ -35,6 +35,9 @@ describe('seat address', () => {
   it('a stopped seat is refused with its state', () => {
     expect(resolveSeatAddress('@qa', rigs)).toMatchObject({ ok: false, reason: '@qa est arrêté (factory)' });
   });
+  it('does not send to a seat needing intervention', () => {
+    expect(resolveSeatAddress('@build', [rig('r', [seat('build', 'r', 'attention')])])).toMatchObject({ ok: false, reason: expect.stringContaining('intervention') });
+  });
   it('a seat of a rig that is not running is refused with the rig state', () => {
     expect(resolveSeatAddress('@ghost', rigs)).toMatchObject({ ok: false, reason: '@ghost : le rig old est arrêté' });
     expect(resolveSeatAddress('@build@old', rigs)).toMatchObject({ ok: false, reason: '@build : le rig old est arrêté' });

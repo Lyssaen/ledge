@@ -88,7 +88,8 @@ export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(
   /** Takes `approval` on an OMP `session.launch` (auto mode). */ ompApproval: z.boolean().optional(),
   /** Its home folder, so a client shows the folders under it as `~` (absent from older daemons). */ home: z.string().optional(), mobile: z.boolean().optional(),
   /** Knows `ask.create` / `ask.answer`: a session's decision for the user (`ledge ask`). */ asks: z.boolean().optional(),
-  /** Reads OpenRig (rigs, escalations, exchanges) through its local bridge. */ openrig: z.boolean().optional() });
+  /** Reads OpenRig (rigs, escalations, exchanges) through its local bridge. */ openrig: z.boolean().optional(),
+  /** Takes `session.preview.subscribe` and sends `session.preview.color` to the client that follows a session. */ colorPreview: z.boolean().optional() });
 export type DaemonInfo = z.infer<typeof DaemonInfoSchema>;
 export const UpdateFailureSchema = z.enum(['git-install', 'no-systemd', 'sessions-at-risk', 'npm-failed', 'busy']);
 export type UpdateFailure = z.infer<typeof UpdateFailureSchema>;
@@ -115,6 +116,8 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
     entries: z.array(z.object({ text: z.string(), attachments: z.array(AttachmentIdSchema).optional() })).optional(), imagesDropped: z.boolean().optional() }),
   z.object({ type: z.literal('session.removed'), id: z.string() }),
   z.object({ type: z.literal('session.preview'), id: z.string(), lines: z.array(z.string()) }),
+  /** The session's terminal in color (SGR codes kept), sent only to the client that subscribed to it. */
+  z.object({ type: z.literal('session.preview.color'), id: z.string(), lines: z.array(z.string()) }),
   /** A session's thread, on request (spec 2026-10-13 §5); then each created or updated item, broadcast. */
   z.object({ type: z.literal('session.thread'), id: z.string(), items: z.array(ThreadItemSchema) }),
   z.object({ type: z.literal('session.thread.item'), id: z.string(), item: ThreadItemSchema }),
@@ -251,6 +254,8 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session.delete'), id: z.string() }),
   /** The user names the session's topic from the overlay (500 characters at most, the hook's prompt cap); an empty topic hands back to the automatic sources. */
   z.object({ type: z.literal('session.rename'), id: z.string(), topic: z.string().max(500) }),
+  /** The one session this client follows in color; `id: null` follows none. */
+  z.object({ type: z.literal('session.preview.subscribe'), id: z.string().nullable(), color: z.literal(true) }),
   z.object({ type: z.literal('session.thread'), id: z.string() }),
   z.object({ type: z.literal('session.register'), session: SessionSchema }),
   /** `agent` and `cwd` describe the session when the daemon does not know it yet (a hook from an agent started without ledge). */
