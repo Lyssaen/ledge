@@ -49,6 +49,14 @@ const fr = {
     },
     decided: { line: (to: string, summary: string) => `J'ai tranché pour ${to} : ${summary}`, rule: (rule: string) => `Règle ${rule}`, revisit: 'Revenir dessus' }
   },
+  /** The open notch (lot 4, `nn-open.png`): Ledge's mixed feed, its filter and its composer. */
+  feed: {
+    subtitle: (rigs: number, agents: number) => `Orchestre ${rigs} ${plural(rigs, 'rig', 'rigs')} · ${agents} ${plural(agents, 'agent', 'agents')} · tranche dans son mandat`,
+    onlyLedge: 'Seulement Ledge', placeholder: 'Écrire à Ledge… (@build pour un agent)', thread: 'Fil de Ledge', settings: 'Réglages',
+    you: 'Toi', ledge: 'Ledge', toYou: 'toi', decision: 'décision',
+    talkAbout: (summary: string) => `À propos de « ${summary} » : `,
+    emptyTitle: 'Rien dans le fil pour l’instant.', emptyHint: 'Les échanges de tes agents, ce que Ledge tranche et tes messages arriveront ici.'
+  },
   resident: { name: 'Ledge', offline: 'Ledge · connexion perdue', tip: (n: number) => n === 0 ? 'Aucune session · cliquer pour ouvrir' : `${n} session${n > 1 ? 's' : ''} · cliquer pour ouvrir`, unread: 'a répondu', unreadTip: 'Ledge a répondu · cliquer pour ouvrir', strip: (n: number) => n === 0 ? 'Ledge, aucune session, ouvrir' : `Ledge, ${n} session${n > 1 ? 's' : ''}, ouvrir`, more: (n: number) => `${n} autre${n > 1 ? 's' : ''} session${n > 1 ? 's' : ''}, ouvrir la liste` },
   say: {
     ledge: ['Hey ! Je t’ai répondu !', 'C’est prêt, jette un œil.', 'Voilà ce que j’en pense.', 'Je t’attendais là-dessus.'],
@@ -312,6 +320,13 @@ const en: Messages = {
       kind: { task: 'task', message: 'message', handoff: 'handover', ledge: 'Ledge' }
     },
     decided: { line: (to, summary) => `I settled for ${to}: ${summary}`, rule: (rule) => `Rule ${rule}`, revisit: 'Revisit' }
+  },
+  feed: {
+    subtitle: (rigs, agents) => `Orchestrates ${rigs} ${plural(rigs, 'rig', 'rigs')} · ${agents} ${plural(agents, 'agent', 'agents')} · settles within its mandate`,
+    onlyLedge: 'Only Ledge', placeholder: 'Write to Ledge… (@build for an agent)', thread: 'Ledge’s thread', settings: 'Settings',
+    you: 'You', ledge: 'Ledge', toYou: 'you', decision: 'decision',
+    talkAbout: (summary) => `About « ${summary} »: `,
+    emptyTitle: 'Nothing in the thread yet.', emptyHint: 'Your agents’ exchanges, what Ledge settles and your messages will show up here.'
   },
   resident: { name: 'Ledge', offline: 'Ledge · connection lost', tip: (n: number) => n === 0 ? 'No sessions · click to open' : `${n} session${n > 1 ? 's' : ''} · click to open`, unread: 'replied', unreadTip: 'Ledge replied · click to open', strip: (n: number) => n === 0 ? 'Ledge, no sessions, open' : `Ledge, ${n} session${n > 1 ? 's' : ''}, open`, more: (n: number) => `${n} more session${n > 1 ? 's' : ''}, open the list` },
   say: {

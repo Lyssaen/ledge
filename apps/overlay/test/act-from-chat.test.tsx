@@ -5,6 +5,7 @@ import type { DaemonClient } from '../src/daemon/client';
 import { daemonStore } from '../src/daemon/store';
 import { Surface } from '../src/surface/Surface';
 import { fakeSession } from './mockDaemon';
+import { answerSay } from './ledgeSay';
 
 const bridge = vi.hoisted(() => ({ focusOverlay: vi.fn(async () => {}), releaseFocus: vi.fn(async () => {}), focusTerminal: vi.fn(async (_t: string) => true) }));
 vi.mock('../src/tauri/bridge', async orig => ({ ...(await orig<typeof import('../src/tauri/bridge')>()), ...bridge }));
@@ -23,8 +24,7 @@ function askAndAct(): string {
   act(() => { fireEvent.keyDown(window, { key: 'l', ctrlKey: true, altKey: true }); });
   const input = screen.getByRole('textbox', { name: 'Ask Ledge' });
   fireEvent.change(input, { target: { value: 'range' } }); fireEvent.keyDown(input, { key: 'Enter' });
-  const ask = sent.find(m => m.type === 'chat.ask') as Extract<ClientMessage, { type: 'chat.ask' }>;
-  apply({ type: 'chat.done', qid: ask.qid, text: 'Voici.', at: new Date().toISOString(), actions });
+  const ask = answerSay(sent, { answer: 'Voici.', actions });
   return ask.qid;
 }
 const card = () => screen.getByRole('region', { name: 'Plan of 2 actions' });
@@ -54,9 +54,8 @@ describe('the island\'s generic card (#94)', () => {
     act(() => { fireEvent.keyDown(window, { key: 'l', ctrlKey: true, altKey: true }); });
     const input = screen.getByRole('textbox', { name: 'Ask Ledge' });
     fireEvent.change(input, { target: { value: 'otto ?' } }); fireEvent.keyDown(input, { key: 'Enter' });
-    const ask = sent.find(m => m.type === 'chat.ask') as Extract<ClientMessage, { type: 'chat.ask' }>;
     const decide: ChatAction = { action: 'session.decide', args: { session: 'a', decision: 'accept' }, summary: 'Accepter', vars: { session: 'Otto', decision: 'accept', kind: 'permission' }, risk: 'destructive', session: 'a', detail: 'npm test' };
-    apply({ type: 'chat.done', qid: ask.qid, text: 'Voici.', at: new Date().toISOString(), actions: [decide] });
+    const ask = answerSay(sent, { answer: 'Voici.', actions: [decide] });
     fireEvent.click(within(screen.getByRole('region', { name: 'Proposed action' })).getByRole('button', { name: 'Deny' }));
     expect(sent.filter(m => m.type === 'chat.act')).toEqual([{ type: 'chat.act', rid: expect.any(String), qid: ask.qid, rows: [0], deny: true }]);
   });

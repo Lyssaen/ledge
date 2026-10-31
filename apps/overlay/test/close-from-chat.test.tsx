@@ -5,6 +5,7 @@ import type { DaemonClient } from '../src/daemon/client';
 import { daemonStore } from '../src/daemon/store';
 import { Surface } from '../src/surface/Surface';
 import { fakeSession } from './mockDaemon';
+import { answerSay } from './ledgeSay';
 
 const bridge = vi.hoisted(() => ({ focusOverlay: vi.fn(async () => {}), releaseFocus: vi.fn(async () => {}), focusTerminal: vi.fn(async (_t: string) => true) }));
 vi.mock('../src/tauri/bridge', async orig => ({ ...(await orig<typeof import('../src/tauri/bridge')>()), ...bridge }));
@@ -23,9 +24,8 @@ function askAndClose(): { qid: string; turn: (c: ChatClose[]) => ChatTurn } {
   act(() => { fireEvent.keyDown(window, { key: 'l', ctrlKey: true, altKey: true }); });
   const input = screen.getByRole('textbox', { name: 'Ask Ledge' });
   fireEvent.change(input, { target: { value: 'close Otto and Pim' } }); fireEvent.keyDown(input, { key: 'Enter' });
-  const ask = sent.find(m => m.type === 'chat.ask') as Extract<ClientMessage, { type: 'chat.ask' }>;
   const at = new Date().toISOString();
-  apply({ type: 'chat.done', qid: ask.qid, text: 'I would close these two.', at, closes });
+  const ask = answerSay(sent, { answer: 'I would close these two.', closes });
   return { qid: ask.qid, turn: c => ({ qid: ask.qid, question: ask.text, askedAt: at, steps: [], answer: 'I would close these two.', answeredAt: at, closes: c }) };
 }
 const card = () => screen.getByRole('region', { name: '2 sessions to close' });
@@ -94,6 +94,7 @@ describe('closing from a chat card', () => {
     const { turn } = askAndClose();
     const at = new Date().toISOString();
     apply({ type: 'chat.history', turns: [turn(closes), { qid: 'q2', question: 'open one', askedAt: at, steps: [], answer: 'Here it is.', answeredAt: at, proposal: { cwd: '/home/u/ledge', project: 'ledge', tool: 'claude', prompt: 'Fix the build' } }] });
+    apply({ type: 'ledge.thread.item', item: { kind: 'ledge', id: 'l-q2', at, text: 'Here it is.', qid: 'q2' } });
   };
   it('does nothing while a launch is in flight', () => {
     withLaunchCard();

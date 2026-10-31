@@ -142,15 +142,34 @@ describe('<Surface>', () => {
     expect(mock.received.some(m => m.type === 'session.launch')).toBe(false);
   });
 
-  it('an ask to Ledge names the stored default harness', async () => {
-    localStorage.setItem('ledge.defaultTool', 'codex');
+  it('writing to Ledge from the open notch sends ledge.say, never chat.ask (lot 4)', async () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
     fireEvent.click(screen.getByRole('button', { name: /Ledge, open/ }));
     await act(async () => { vi.advanceTimersByTime(180); });
     const input = screen.getByRole('textbox', { name: 'Ask Ledge' });
+    expect(input).toHaveAttribute('placeholder', 'Write to Ledge… (@build for an agent)');
     fireEvent.change(input, { target: { value: 'How are the others doing?' } });
     fireEvent.keyDown(input, { key: 'Enter' });
-    await waitFor(() => expect(mock.received).toContainEqual({ type: 'chat.ask', qid: expect.any(String), text: 'How are the others doing?', tool: 'codex' }));
+    await waitFor(() => expect(mock.received).toContainEqual({ type: 'ledge.say', rid: expect.any(String), text: 'How are the others doing?' }));
+    expect(mock.received.some(m => m.type === 'chat.ask')).toBe(false);
+  });
+
+  it('a Ledge answer in the thread is unread while the notch is closed; history on connect is not', async () => {
+    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
+    const say = () => document.querySelector('[data-unread-say]') as HTMLElement;
+    const item = (id: string, extra: object = {}) => ({ kind: 'ledge' as const, id, at: new Date().toISOString(), text: 'Voilà.', ...extra });
+    await act(async () => { mock.push({ type: 'ledge.thread.history', items: [item('old')] }); await sleep(50); });
+    expect(say()).toHaveStyle({ opacity: '0' });
+    // The user's own message, an exchange group and a pending bubble are not news.
+    await act(async () => {
+      mock.push({ type: 'ledge.thread.item', item: { kind: 'user', id: 'u1', at: new Date().toISOString(), text: 'Alors ?' } });
+      mock.push({ type: 'ledge.thread.item', item: item('l1', { text: '', pending: true }) });
+      await sleep(50);
+    });
+    expect(say()).toHaveStyle({ opacity: '0' });
+    await act(async () => { mock.push({ type: 'ledge.thread.item', item: item('l1') }); await sleep(50); });
+    expect(say()).toHaveAttribute('data-say-kind', 'ledge');
+    expect(say()).toHaveStyle({ opacity: '1' });
   });
 
   it('a session that stops on an error, with nothing left to decide, unfolds an error notice', async () => {
@@ -269,6 +288,8 @@ describe('<Surface>', () => {
       daemonStore.beginTurn({ qid: 'q1', question: 'How are the others doing?', askedAt: '2026-10-11T10:00:00.000Z', steps: [] });
       await sleep(20);
       daemonStore.apply({ type: 'chat.done', qid: 'q1', text: 'Deux bots travaillent.', at: '2026-10-11T10:01:20.000Z' });
+      // Ledge's bubble in its thread (lot 4): the open notch shows it, and it is what makes Ledge unread.
+      mock.push({ type: 'ledge.thread.item', item: { kind: 'ledge', id: 'l1', at: '2026-10-11T10:00:00.000Z', text: 'Deux bots travaillent.', qid: 'q1' } });
       await sleep(50);
     });
     expect(surface()).toHaveStyle({ width: `${filetWidth([])}px` });
@@ -288,6 +309,8 @@ describe('<Surface>', () => {
       daemonStore.beginTurn({ qid: 'q1', question: 'How are the others doing?', askedAt: '2026-10-11T10:00:00.000Z', steps: [] });
       await sleep(20);
       daemonStore.apply({ type: 'chat.done', qid: 'q1', text: 'Deux bots travaillent.', at: '2026-10-11T10:01:20.000Z' });
+      // Ledge's bubble in its thread (lot 4): the open notch shows it, and it is what makes Ledge unread.
+      mock.push({ type: 'ledge.thread.item', item: { kind: 'ledge', id: 'l1', at: '2026-10-11T10:00:00.000Z', text: 'Deux bots travaillent.', qid: 'q1' } });
       await sleep(50);
     });
     const say = () => document.querySelector('[data-unread-say]') as HTMLElement;
@@ -361,6 +384,8 @@ describe('<Surface>', () => {
       daemonStore.beginTurn({ qid: 'q1', question: 'How are the others doing?', askedAt: '2026-10-11T10:00:00.000Z', steps: [] });
       await sleep(20);
       daemonStore.apply({ type: 'chat.done', qid: 'q1', text: 'Deux bots travaillent.', at: '2026-10-11T10:01:20.000Z' });
+      // Ledge's bubble in its thread (lot 4): the open notch shows it, and it is what makes Ledge unread.
+      mock.push({ type: 'ledge.thread.item', item: { kind: 'ledge', id: 'l1', at: '2026-10-11T10:00:00.000Z', text: 'Deux bots travaillent.', qid: 'q1' } });
       await sleep(50);
     });
     await act(async () => { mock.upsert(pimAsks()); await sleep(50); vi.advanceTimersByTime(540); });

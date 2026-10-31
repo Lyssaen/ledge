@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import WebSocket from 'ws';
 import { createMockDaemon, fakeSession } from './mockDaemon';
+import { sayAnswer } from './ledgeSay';
 import { frameOf, unionFrame, FRAME_PAD } from '../src/surface/frame';
 import { SHOULDER_R } from '../src/surface/Shoulders';
 // The native side, stubbed: `invoke` records commands, the window's `listen` keeps the handler so a test can emit a shell event,
@@ -252,10 +253,10 @@ describe('<Surface> under Tauri', () => {
     const ask = document.querySelector('[data-chat-input]') as HTMLInputElement;
     fireEvent.change(ask, { target: { value: 'ouvre une session' } });
     fireEvent.keyDown(ask, { key: 'Enter' });
-    await vi.waitFor(() => expect(mock.received.some(m => m.type === 'chat.ask')).toBe(true));
-    const qid = mock.received.find(m => m.type === 'chat.ask')!.qid;
+    await vi.waitFor(() => expect(mock.received.some(m => m.type === 'ledge.say')).toBe(true));
+    const say = mock.received.find((m): m is Extract<typeof m, { type: 'ledge.say' }> => m.type === 'ledge.say')!;
     const proposal = { cwd: '/w/api-gateway', project: 'api-gateway', tool: 'claude' as const, prompt: 'Fix it' };
-    await act(async () => { mock.push({ type: 'chat.done', qid, text: 'Voici.', at: new Date().toISOString(), proposal }); await sleep(20); });
+    await act(async () => { for (const m of sayAnswer(say, { answer: 'Voici.', proposal }).messages) mock.push(m); await sleep(20); });
     fireEvent.click(document.querySelector('[data-launch-card] button') as HTMLElement);
     await vi.waitFor(() => expect(mock.received.some(m => m.type === 'session.launch')).toBe(true));
     native.invoke.mockImplementation(async (cmd: string) => (cmd === 'focus_terminal' ? false : cmd === 'open_terminal' ? true : undefined));

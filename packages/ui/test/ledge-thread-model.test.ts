@@ -83,9 +83,15 @@ describe('feedLines', () => {
     const rigName = (m: string, r: string) => `${r}@${m}`;
     const all = feedLines(rows, { onlyLedge: false, rigName });
     expect(all).toHaveLength(4);
-    expect(all[0]).toMatchObject({ kind: 'exchange', rigName: 'factory@local', at: at(D3, '12:20') });
-    expect(all[3]).toEqual({ at: at(D3, '12:30'), kind: 'user', text: 'Pourquoi ?', to: '@build' });
+    expect(all[0]).toMatchObject({ id: 'x1', kind: 'exchange', rigName: 'factory@local', at: at(D3, '12:20') });
+    expect(all[3]).toEqual({ id: 'u1', at: at(D3, '12:30'), kind: 'user', text: 'Pourquoi ?', to: '@build' });
     expect(feedLines(rows, { onlyLedge: true, rigName })).toHaveLength(1);
+  });
+
+  it('a bubble carries the turn the thread resolved (its cards)', () => {
+    const items: LedgeThreadItem[] = [{ kind: 'ledge', id: 'l1', at: at(D3, '12:00'), text: 'Voilà', qid: 'q-1' }];
+    const lines = feedLines(threadRows(items, ctx({ chat: [turn('local:q-1')] })), { onlyLedge: false, rigName: () => '' });
+    expect(lines).toEqual([{ id: 'l1', at: at(D3, '12:00'), kind: 'ledge', text: 'Voilà', turn: turn('local:q-1') }]);
   });
 
   it('keeps Ledge bubbles and decisions, skips empty pending bubbles', () => {
@@ -97,8 +103,8 @@ describe('feedLines', () => {
     ];
     const rows = threadRows(items, ctx({ decisions: new Map([['d1', decision]]), escalations: new Map([['qi-1', esc({ from: 'build@factory' })]]) }));
     expect(feedLines(rows, { onlyLedge: true, rigName: () => '' })).toEqual([
-      { at: at(D3, '12:00'), kind: 'ledge', text: 'Il approchait 82 %' },
-      { at: at(D3, '12:10'), kind: 'decided', text: 'merge', to: 'build' }
+      { id: 'l1', at: at(D3, '12:00'), kind: 'ledge', text: 'Il approchait 82 %' },
+      { id: 'dd', at: at(D3, '12:10'), kind: 'decided', text: 'merge', to: 'build' }
     ]);
   });
 });

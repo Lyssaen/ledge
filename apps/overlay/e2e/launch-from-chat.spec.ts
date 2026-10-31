@@ -1,22 +1,22 @@
 import { test, expect, layer, expectMode, ready, received } from './fixtures';
 import { fakeDaemon, session } from './daemon';
 import { openChat } from './scenarios';
+import type { ChatProposal } from '@ledge/protocol';
 
 /* The chat proposes a session, the user starts it from the card (spec 2026-10-12). */
-const proposal = { cwd: '/home/u/ledge', project: 'ledge', tool: 'claude', prompt: 'Fix the overlay build' };
+const proposal: ChatProposal = { cwd: '/home/u/ledge', project: 'ledge', tool: 'claude', prompt: 'Fix the overlay build' };
 
 async function askForSession(page: Parameters<typeof fakeDaemon>[0]) {
-  const d = await fakeDaemon(page, [session('otto'), session('pim', { name: 'Pim' })]);
+  // Lot 4: the notch writes to Ledge (`ledge.say`); the answer and its card come back in Ledge's thread.
+  const d = await fakeDaemon(page, [session('otto'), session('pim', { name: 'Pim' })], { chat: { text: 'Here is the session I would start.', proposal } });
   await ready(page, 2);
   await openChat(page);
   await layer(page, 'chat').getByRole('textbox', { name: 'Ask Ledge' }).fill('open a session in ledge to fix the overlay build');
   await page.keyboard.press('Enter');
   await expectMode(page, 'chat');
-  const ask = await received(d.received, 'chat.ask');
-  const answeredAt = new Date().toISOString();
-  const turn = { qid: ask.qid, question: ask.text, askedAt: new Date().toISOString(), steps: [], answer: 'Here is the session I would start.', answeredAt };
-  d.emit({ type: 'chat.done', qid: ask.qid, text: turn.answer, at: answeredAt, proposal });
-  return { d, ask, turn };
+  await received(d.received, 'ledge.say');
+  const turn = d.said(1);
+  return { d, ask: { qid: turn.qid }, turn };
 }
 
 test('a proposal shows a card; Start sends its qid; the card turns into the started companion', async ({ page }) => {

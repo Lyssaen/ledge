@@ -8,7 +8,7 @@ import type { DaemonClient } from '../daemon/client';
 import { useMachines } from '../daemon/machines';
 import type { DocumentOrigin } from '../documents/useDocumentReader';
 import type { ResidentGesture } from '../bots/ResidentMascot';
-import { groupSessions } from '@ledge/fleet';
+import { groupSessions, sayToLedge } from '@ledge/fleet';
 import { displayOrder, headersBefore } from './groups';
 import { FILET, LEDGE_ID, scaledLayout, SIZES, SURFACE_CHROME_Y, type IslandPosition, type Layout } from './geometry';
 import { createSurfaceController } from './controller';
@@ -25,7 +25,8 @@ import { HelpView } from './HelpView';
 import { HelperView } from './HelperView';
 import { TurnThumbs } from './TurnThumbs';
 import { LaunchView, LAUNCH_FOOTER_H, type LaunchRequest } from './LaunchView';
-import { ChatView, CHAT_HEADER_H, CHAT_COMPOSER_H } from './ChatView';
+import { CHAT_HEADER_H, CHAT_COMPOSER_H } from './ChatView';
+import { LedgeFeed } from './LedgeFeed';
 import { loadOpenTab } from './openTabPreference';
 import { DETAIL_HEADER_H } from './DetailHeader';
 import { useMeasuredHeight } from './useMeasuredHeight';
@@ -382,10 +383,18 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
       setLedgePreview(turn.answer?.trim() || undefined);
       sounds.onChange({ kind: 'finished', id: LEDGE_ID });
       if (finishedBubble && !dnd) dispatch({ type: 'finished', id: LEDGE_ID });
-      if (ctl.state().mode !== 'chat') { setLedgeUnread(true); setLedgeSaySeed(turn.qid); }
       setResidentSignal({ key: ++signalCounter.current, kind: 'happy' });
     }
   }, [chat]); // eslint-disable-line react-hooks/exhaustive-deps -- finishedBubble/dnd/sounds read the live values of this render
+  // Unread: a new element of Ledge's thread while the notch is not open on it (an answer finished, a decision in message, one
+  // Ledge settled), never the user's own messages nor the exchanges between agents (the closed notch already shows those).
+  // Live items only: the history sent on connect is not news.
+  useEffect(() => client.onMessage(m => {
+    if (m.type !== 'ledge.thread.item') return;
+    const i = m.item;
+    const news = (i.kind === 'ledge' && !i.pending && !!i.text) || i.kind === 'decided' || i.kind === 'escalation';
+    if (news && ctl.state().mode !== 'chat') { setLedgeUnread(true); setLedgeSaySeed(i.id); }
+  }), [client, ctl]);
   useEffect(() => { if (st.mode === 'chat') setLedgeUnread(false); }, [st.mode]);
   useEffect(() => {
     if ((st.mode !== 'session' && st.mode !== 'peek') || !st.selectedId) return;
@@ -718,11 +727,9 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
     r.click(); r.focus();
   };
   const openRow = (id: string) => dispatch({ type: 'rowClick', id });
-  /** Asks Ledge: the turn appears at once in the store, the daemon streams its steps and answer back. */
+  /** Writes to Ledge (`ledge.say`, lot 4): the message and Ledge's answer come back in its thread, which the open notch shows. */
   const ask = (text: string) => {
-    const qid = `q-${crypto.randomUUID()}`;
-    daemonStore.beginTurn({ qid, question: text, askedAt: new Date().toISOString(), steps: [] });
-    send({ type: 'chat.ask', qid, text, tool: defaultTool });
+    sayToLedge(client, text);
     if (ctl.state().mode !== 'chat') dispatch({ type: 'chat' });
   };
   useKeyboard({
@@ -786,16 +793,16 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
               onAsk={ask} onOpenChat={() => dispatch({ type: 'chat' })} onTyping={on => dispatch({ type: 'typing', on })} askDisabled={chatOffline !== null} />
           </div>
           <div aria-hidden={st.mode !== 'chat' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'chat' ? 'auto' : 'none', transform: `translateX(${st.mode === 'chat' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
-            <ChatView contentRef={chatRef} turnImages={turn => <TurnThumbs client={client} turn={turn} />} turns={chat} live={chatLive} sessions={sessions} visible={st.mode === 'chat'} enterDelay={enter} offline={chatOffline}
-              showBack={false}
+            <LedgeFeed client={client} contentRef={chatRef} sessions={sessions} visible={st.mode === 'chat'} enterDelay={enter} offline={chatOffline}
               headerExtra={<IslandMenu open={menuOpen && st.mode === 'chat'} dnd={dnd} onToggle={() => setMenuOpen(o => !o)} onClose={() => setMenuOpen(false)} onSettings={() => { setMenuOpen(false); openInLedge({ kind: 'settings' }); }} onDnd={onToggleDnd} onQuit={() => { setMenuOpen(false); void quitApp(); }} />}
-              turnAvailable={turnReady}
-              onAsk={ask} onCancel={qid => send({ type: 'chat.cancel', qid })} onReset={() => send({ type: 'chat.reset' })} onClose={() => { setMenuOpen(false); dispatch({ type: 'close' }); }} onOpenSession={id => openInLedge({ kind: 'session', id })}
-              launchingQid={chatLaunching} launchingRows={chatLaunching ? launchedFrom.current.map(x => x.row) : null} onLaunchProposal={launchProposal} onTerminal={id => openInLedge({ kind: 'terminal', id })}
-              closingQid={chatClosing} closingRows={chatClosing ? closedFrom.current.map(x => x.row) : null} onCloseSessions={closeSessions}
-              onAct={actionCards.act} actingQid={actionCards.actingQid} actingRows={actionCards.actingRows} onIgnoreCards={actionCards.ignore} onDenyAction={actionCards.deny}
-              relayingQid={relaying} onRelay={qid => relayCard('session.relay', qid)} onRelayCancel={qid => relayCard('session.relay.cancel', qid)}
-              theme={theme} frozen={unreachable} reducedMotion={reducedMotion} onDocument={ref => openInLedge({ kind: 'document', path: ref.path })} />
+              onSettings={() => openInLedge({ kind: 'settings' })} onClose={() => { setMenuOpen(false); dispatch({ type: 'close' }); }} onOpenSession={id => openInLedge({ kind: 'session', id })}
+              onDocument={ref => openInLedge({ kind: 'document', path: ref.path })} theme={theme} frozen={unreachable} reducedMotion={reducedMotion}
+              cards={{ sessions, offline: chatOffline, turnAvailable: turnReady, onOpenSession: id => openInLedge({ kind: 'session', id }), onTerminal: id => openInLedge({ kind: 'terminal', id }),
+                launchingQid: chatLaunching, launchingRows: chatLaunching ? launchedFrom.current.map(x => x.row) : null, onLaunchProposal: launchProposal,
+                closingQid: chatClosing, closingRows: chatClosing ? closedFrom.current.map(x => x.row) : null, onCloseSessions: closeSessions,
+                onAct: actionCards.act, actingQid: actionCards.actingQid, actingRows: actionCards.actingRows, onIgnoreCards: actionCards.ignore, onDenyAction: actionCards.deny,
+                relayingQid: relaying, onRelay: qid => relayCard('session.relay', qid), onRelayCancel: qid => relayCard('session.relay.cancel', qid),
+                theme, reducedMotion }} />
           </div>
           <div aria-hidden={st.mode !== 'launch' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'launch' ? 'auto' : 'none', transform: `translateX(${st.mode === 'launch' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
             <LaunchView key={`${launchOpen}-${launchMachine ?? ''}`} contentRef={launchRef} visible={st.mode === 'launch'} enterDelay={enter} recents={recents} sessions={sessions.filter(s => !launchMachine || s.machineId === launchMachine)} offline={unreachable || (chosenMachine && !chosenMachine.ready) ? t.offline : null} busy={!!launching} failure={launchFailure}

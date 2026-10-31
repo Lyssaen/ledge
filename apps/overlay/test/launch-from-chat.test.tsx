@@ -5,6 +5,7 @@ import type { DaemonClient } from '../src/daemon/client';
 import { daemonStore } from '../src/daemon/store';
 import { Surface } from '../src/surface/Surface';
 import { fakeSession } from './mockDaemon';
+import { answerSay } from './ledgeSay';
 
 const bridge = vi.hoisted(() => ({ focusOverlay: vi.fn(async () => {}), releaseFocus: vi.fn(async () => {}), focusTerminal: vi.fn(async (_t: string) => true) }));
 vi.mock('../src/tauri/bridge', async orig => ({ ...(await orig<typeof import('../src/tauri/bridge')>()), ...bridge }));
@@ -23,8 +24,7 @@ function askAndPropose(): string {
   act(() => { fireEvent.keyDown(window, { key: 'l', ctrlKey: true, altKey: true }); });
   const input = screen.getByRole('textbox', { name: 'Ask Ledge' });
   fireEvent.change(input, { target: { value: 'open a session in ledge to fix the build' } }); fireEvent.keyDown(input, { key: 'Enter' });
-  const ask = sent.find(m => m.type === 'chat.ask') as Extract<ClientMessage, { type: 'chat.ask' }>;
-  apply({ type: 'chat.done', qid: ask.qid, text: 'Here is the session I would start.', at: new Date().toISOString(), proposal });
+  const ask = answerSay(sent, { answer: 'Here is the session I would start.', proposal });
   return ask.qid;
 }
 const card = () => screen.getByRole('region', { name: 'Proposed session' });
@@ -94,9 +94,8 @@ describe('launching from a chat card', () => {
     act(() => { fireEvent.keyDown(window, { key: 'l', ctrlKey: true, altKey: true }); });
     const input = screen.getByRole('textbox', { name: 'Ask Ledge' });
     fireEvent.change(input, { target: { value: 'open ledge and docs' } }); fireEvent.keyDown(input, { key: 'Enter' });
-    const qid = (sent.find(m => m.type === 'chat.ask') as Extract<ClientMessage, { type: 'chat.ask' }>).qid;
     const docs: ChatProposal = { cwd: '/home/u/docs', project: 'docs', tool: 'claude' };
-    apply({ type: 'chat.done', qid, text: 'Two sessions.', at: new Date().toISOString(), proposal, proposals: [proposal, docs] });
+    const { qid } = answerSay(sent, { answer: 'Two sessions.', proposal, proposals: [proposal, docs] });
     const group = () => screen.getByRole('region', { name: '2 proposed sessions' });
     fireEvent.click(within(group()).getByRole('button', { name: /Start all \(2\)/ }));
     expect(sent.filter(m => m.type === 'session.launch')).toEqual([{ type: 'session.launch', tool: 'claude', cwd: '/home/u/ledge', prompt: 'Fix the build', qid, rows: [0, 1] }]);

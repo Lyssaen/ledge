@@ -84,12 +84,13 @@ export function threadRows(items: readonly LedgeThreadItem[], ctx: ThreadContext
   return rows;
 }
 
-/** The notch's mixed feed: one exchange per line, plus the messages, the bubbles and the decisions; `onlyLedge` drops the exchanges. */
+/** The notch's mixed feed: one exchange per line, plus the messages, the bubbles and the decisions; `onlyLedge` drops the exchanges.
+ *  `id` keys the line (the item's, or the exchange's); a bubble carries its turn when the thread resolved it (its cards). */
 export type FeedLine =
-  | { at: string; kind: 'exchange'; exchange: Exchange; rigName: string }
-  | { at: string; kind: 'user'; text: string; to?: string }
-  | { at: string; kind: 'ledge'; text: string }
-  | { at: string; kind: 'decided'; text: string; to: string };
+  | { id: string; at: string; kind: 'exchange'; exchange: Exchange; rigName: string }
+  | { id: string; at: string; kind: 'user'; text: string; to?: string }
+  | { id: string; at: string; kind: 'ledge'; text: string; turn?: ChatTurn }
+  | { id: string; at: string; kind: 'decided'; text: string; to: string };
 
 export function feedLines(rows: readonly ThreadRow[], o: { onlyLedge: boolean; rigName(machine: string, rigId: string): string }): FeedLine[] {
   const lines: FeedLine[] = [];
@@ -97,10 +98,10 @@ export function feedLines(rows: readonly ThreadRow[], o: { onlyLedge: boolean; r
     if (row.kind === 'exchanges') {
       if (o.onlyLedge) continue;
       const rigName = o.rigName(row.item.machine, row.item.rigId);
-      for (const exchange of row.exchanges) lines.push({ at: exchange.at, kind: 'exchange', exchange, rigName });
-    } else if (row.kind === 'user') lines.push({ at: row.item.at, kind: 'user', text: row.item.text, ...(row.to ? { to: row.to } : {}) });
-    else if (row.kind === 'ledge') { if (row.item.text) lines.push({ at: row.item.at, kind: 'ledge', text: row.item.text }); }
-    else if (row.kind === 'decided' && row.decision) lines.push({ at: row.item.at, kind: 'decided', text: row.decision.summary, to: row.to ?? '' });
+      for (const exchange of row.exchanges) lines.push({ id: exchange.id, at: exchange.at, kind: 'exchange', exchange, rigName });
+    } else if (row.kind === 'user') lines.push({ id: row.item.id, at: row.item.at, kind: 'user', text: row.item.text, ...(row.to ? { to: row.to } : {}) });
+    else if (row.kind === 'ledge') { if (row.item.text) lines.push({ id: row.item.id, at: row.item.at, kind: 'ledge', text: row.item.text, ...(row.turn ? { turn: row.turn } : {}) }); }
+    else if (row.kind === 'decided' && row.decision) lines.push({ id: row.item.id, at: row.item.at, kind: 'decided', text: row.decision.summary, to: row.to ?? '' });
   }
   return lines;
 }

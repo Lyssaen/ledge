@@ -1,22 +1,22 @@
 import { test, expect, layer, expectMode, ready, received } from './fixtures';
 import { fakeDaemon, session } from './daemon';
 import { openChat } from './scenarios';
+import type { ChatRelay } from '@ledge/protocol';
 
 /* The chat proposes an instruction for Otto, the user sends it from the card (spec 2026-10-12 relay). */
-const relay = { id: 'otto', name: 'Otto', tool: 'claude', text: 'Run the overlay tests' };
+const relay: ChatRelay = { id: 'otto', name: 'Otto', tool: 'claude', text: 'Run the overlay tests' };
 
 async function askForRelay(page: Parameters<typeof fakeDaemon>[0], ottoState: 'working' | 'idle') {
-  const d = await fakeDaemon(page, [session('otto', { name: 'Otto', state: ottoState }), session('pim', { name: 'Pim' })]);
+  // Lot 4: the notch writes to Ledge (`ledge.say`); the answer and its card come back in Ledge's thread.
+  const d = await fakeDaemon(page, [session('otto', { name: 'Otto', state: ottoState }), session('pim', { name: 'Pim' })], { chat: { text: 'I will pass it on to Otto.', relay } });
   await ready(page, 2);
   await openChat(page);
   await layer(page, 'chat').getByRole('textbox', { name: 'Ask Ledge' }).fill('tell Otto to run the overlay tests');
   await page.keyboard.press('Enter');
   await expectMode(page, 'chat');
-  const ask = await received(d.received, 'chat.ask');
-  const answeredAt = new Date().toISOString();
-  const turn = { qid: ask.qid, question: ask.text, askedAt: answeredAt, steps: [], answer: 'I will pass it on to Otto.', answeredAt };
-  d.emit({ type: 'chat.done', qid: ask.qid, text: turn.answer, at: answeredAt, relay });
-  return { d, ask, turn };
+  await received(d.received, 'ledge.say');
+  const turn = d.said(1);
+  return { d, ask: { qid: turn.qid }, turn };
 }
 
 test('a busy session: the card waits, then reads sent once the daemon sends it', async ({ page }) => {
