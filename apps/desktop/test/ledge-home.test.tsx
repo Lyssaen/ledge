@@ -139,10 +139,10 @@ describe('the Ledge screen, on Ledge’s thread', () => {
     expect(field()).toHaveValue('ask @build ');
   });
 
-  it('Mandate shows the placeholder until lot 7; the Rigs tab keeps its sub-tab', async () => {
+  it('Mandate shows the Mandat tab (lot 7); the Rigs tab keeps its sub-tab', async () => {
     const { user } = await openHome();
     await user.click(home().getByRole('tab', { name: 'Mandate' }));
-    expect(home().getByText("Ledge's mandate arrives with its brain.")).toBeVisible();
+    expect(within(home().getByRole('tabpanel', { name: 'Mandate' })).getByRole('tab', { name: 'What Ledge settles' })).toBeVisible();
     await user.click(home().getByRole('tab', { name: 'Rigs · 2' }));
     const sub = within(home().getByRole('tablist', { name: 'Rig views' }));
     expect(sub.getByRole('tab', { name: 'Running · 2' })).toHaveAttribute('aria-selected', 'true');
@@ -167,7 +167,6 @@ describe('the Ledge screen, on Ledge’s thread', () => {
     expect(fr.home.footer).toBe('tranche dans son mandat · design, architecture et critique te reviennent');
     expect(fr.home.header(2, 8, 4)).toBe('Orchestrateur OpenRig · 2 rigs, 8 agents · 4 sessions seules · tranche dans son mandat');
     expect(fr.home.solo(4)).toBe('4 sessions seules');
-    expect(fr.home.mandat).toEqual({ title: 'Mandat', body: 'Le mandat de Ledge arrive avec son cerveau.' });
     expect(fr.ledgeThread.escalation.talk).toBe('En parler');
     expect(fr.home.talkAbout('Sessions : JSON ou SQLite ?')).toBe('À propos de « Sessions : JSON ou SQLite ? » : ');
   });

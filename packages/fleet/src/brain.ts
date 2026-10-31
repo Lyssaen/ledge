@@ -1,5 +1,5 @@
 import { useMemo, useSyncExternalStore } from 'react';
-import type { BrainStatus, LedgeDecision, LedgeRule } from '@ledge/protocol';
+import type { BrainStatus, LedgeDecision, LedgeRule, MandateCategory } from '@ledge/protocol';
 import type { DaemonClient } from './client';
 import { daemonStore } from './store';
 
@@ -30,4 +30,18 @@ export function revisitDecision(client: DaemonClient, id: string, text?: string)
 /** Turns the brain on or off (`first`: the user's first yes, which the daemon announces). */
 export function setBrain(client: DaemonClient, o: { enabled: boolean; tool?: BrainStatus['tool']; first?: boolean }): void {
   client.send({ type: 'brain.set', rid: rid('brain'), enabled: o.enabled, ...(o.tool ? { tool: o.tool } : {}), ...(o.first ? { first: true as const } : {}) });
+}
+/** « Me le remonter désormais »: the daemon moves the category's line into « Te revient toujours ». */
+export function escalateCategory(client: DaemonClient, category: MandateCategory): void {
+  client.send({ type: 'category.escalate', rid: rid('escalate'), category });
+}
+/** « à valider »: a proposed rule is approved (`active`) or rejected (the daemon drops it). */
+export function setRule(client: DaemonClient, id: string, status: 'active' | 'rejected'): void {
+  client.send({ type: 'rule.set', rid: rid('rule'), id, status });
+}
+/** Writes `~/.ledge/mandat.md`; returns the rid, whose `rig.result` says whether it was saved and why it may not apply (an unreadable mandate). */
+export function updateMandate(client: DaemonClient, text: string): string {
+  const r = rid('mandate');
+  client.send({ type: 'mandate.update', rid: r, text });
+  return r;
 }

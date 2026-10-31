@@ -15,8 +15,8 @@ import { HOME_TABS, type HomeTab, type NavAction, type NavState } from '../nav/s
 import { RigsTab, rigsCount, visibleRigs } from '../rigs/RigsTab';
 import type { Relief } from '../session/useRelief';
 import type { Wait } from '../list/time';
-import { HomePlaceholder } from './HomePlaceholder';
 import { LedgeConversation } from './LedgeConversation';
+import { MandateTab } from './mandate/MandateTab';
 
 /** `decisions` and `waits` feed the rail (« À toi »). */
 export interface LedgeHomeProps {
@@ -29,7 +29,7 @@ export interface LedgeHomeProps {
 
 /**
  * The Ledge screen (spec §8, `c-A.png`), where the app opens: « Ledge. » and what it orchestrates, the tabs « Conversation · Rigs · n ·
- * Mandat », then the tab: Ledge's thread and its composer, the Rigs tab of lot 3, or the mandate's placeholder until lot 7.
+ * Mandat », then the tab: Ledge's thread and its composer, the Rigs tab of lot 3, or the Mandat tab (lot 7).
  */
 export function LedgeHome(p: LedgeHomeProps): JSX.Element {
   const { client, view, tab, dispatch } = p;
@@ -66,7 +66,7 @@ export function LedgeHome(p: LedgeHomeProps): JSX.Element {
             focusCard={p.nav.place.kind === 'home' ? p.nav.place.focus : undefined} onFocused={() => dispatch({ type: 'ledge-focused' })}
             onLaunched={p.onLaunched} onTerminal={p.onTerminal} notify={p.notify} onProposal={p.onProposal} />}
           {tab === 'rigs' && <RigsTab nav={p.nav} dispatch={dispatch} client={client} sessions={view.sessions} projects={p.projects} notify={p.notify} />}
-          {tab === 'mandat' && <HomePlaceholder title={t.home.mandat.title} body={t.home.mandat.body} />}
+          {tab === 'mandat' && <MandateTab client={client} view={view} />}
         </div>
       </div>
     </section>

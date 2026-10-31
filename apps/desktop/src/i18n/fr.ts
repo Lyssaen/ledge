@@ -485,7 +485,6 @@ export const fr = {
     mentions: 'Mentionner', mentionSession: (name: string) => `session ${name}`,
     /** « En parler » of a decision: the field starts with this, the next message carries the escalation. */
     talkAbout: (summary: string) => `À propos de « ${summary} » : `,
-    mandat: { title: 'Mandat', body: 'Le mandat de Ledge arrive avec son cerveau.' },
     /** The right rail of the Conversation tab (spec §8, `c-A.png`). */
     rail: {
       label: 'Rail de Ledge', yours: (n: number) => `À toi · ${n}`, rigs: (n: number) => `Rigs · ${n}`,
@@ -515,6 +514,35 @@ export const fr = {
     decided: { line: (to: string, summary: string) => `J'ai tranché pour ${to} : ${summary}`, rule: (rule: string) => `Règle ${rule}`,
       ruleOf: (since: string) => `Règle du ${since.slice(8, 10)}/${since.slice(5, 7)}`, revisit: 'Revenir dessus' },
     brain: { stopped: 'Ledge est arrêté', start: 'Démarrer' }
+  },
+  /** The Mandat tab of the Ledge screen (lot 7, maquette p-ledge-mandat): what Ledge settles alone, its rules, its decisions, its memories. */
+  mandate: {
+    views: 'Vues du mandat', settles: 'Ce que Ledge tranche', memories: (n: number) => `Souvenirs · ${n}`, readIn: 'Mandat lu dans',
+    loading: 'Le mandat arrive du démon…',
+    category: (c: MandateCategory) => MANDATE_CATEGORY_LABEL[c].fr, categoryOf: (label: string) => `Catégorie ${label}`,
+    selfTitle: 'LEDGE TRANCHE SEUL', userTitle: 'TE REVIENT TOUJOURS',
+    /** The count beside a category: « 6 cette semaine » for the chosen one, the number alone for the others. */
+    week: (n: number, chosen: boolean) => (chosen ? `${n} cette semaine` : `${n}`), pending: (n: number) => `${n} en attente`, none: '—',
+    selfLine: (n: number) => `Ledge tranche seul · ${n} ${plural(n, 'décision', 'décisions')} cette semaine ·`,
+    userLine: (n: number) => `Te revient toujours · ${n} en attente ·`, pill: 'mandat',
+    escalate: 'Me le remonter désormais',
+    rules: 'Règles retenues', noRules: 'Aucune règle retenue.',
+    cols: { rule: 'Règle', since: 'Depuis', from: "D'où elle vient", applied: 'Appliquée', category: 'Catégorie' },
+    since: (since: string | null) => (since ? `${since.slice(8, 10)}/${since.slice(5, 7)}` : 'proposée'),
+    applied: (n: number) => (n === 0 ? '0' : `${n} fois`),
+    toApprove: 'à valider', ruleMenu: (text: string) => `Règle proposée : ${text}`, approve: 'Valider', reject: 'Rejeter',
+    /** « bleu » is written in the proposed rules' blue; the rest follows. */
+    blueWord: 'bleu', blueRest: " : une règle que Ledge propose ; elle ne s'applique qu'une fois validée.",
+    last: 'Dernières décisions', noDecisions: 'Aucune décision pour l’instant.', yesterday: 'hier',
+    ruleOf: (since: string) => `règle du ${since.slice(8, 10)}/${since.slice(5, 7)}`, revisit: 'Revenir dessus', byYou: 'toi',
+    files: { label: 'Fichiers', mandate: 'Mandat', memory: 'Souvenirs',
+      count: (r: number, d: number) => `${r} ${plural(r, 'règle', 'règles')}, ${d} ${plural(d, 'décision', 'décisions')}` },
+    open: 'Ouvrir',
+    footnote: "Ledge propose une règle quand tu tranches deux fois pareil. Le design, l'architecture et le critique ne passent jamais dans « Ledge tranche seul ».",
+    source: { twice: 'tu as tranché deux fois pareil', order: 'ta consigne', answerTo: (seat: string) => `ta réponse à ${seat}` },
+    editor: { title: 'Le mandat', save: 'Enregistrer', cancel: 'Annuler', saving: 'Enregistrement…', refused: (reason: string) => `Non enregistré : ${reason}` },
+    memoriesTitle: 'Souvenirs', decisions: 'Décisions',
+    filters: { who: 'Qui', everyone: 'Tous', ledge: 'Ledge', you: 'toi', category: 'Catégorie', allCategories: 'Toutes', rig: 'Rig', allRigs: 'Tous' }
   },
   /** The Rigs tab of the Ledge screen (spec §8.2): En cours · Specs · Agents. */
   rigsTab: {
