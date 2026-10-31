@@ -135,6 +135,7 @@ export function createHandovers(d: HandoverDeps): Handovers {
     start(id, o = {}) {
       const s = d.store.get(id);
       if (!s) return 'session inconnue';
+      if (s.rig) { log(`relief of ${s.name} (${id}) ignored: seat of a rig, its handover goes through the rig`); return `${s.name} est un siège d'un rig : sa relève passe par son rig`; }
       if (s.source !== 'launcher') return `${s.name} n'a pas été lancée par Ledge`;
       if (s.state === 'exited' || isArchived(s)) return `${s.name} est terminée`;
       if (s.tool === 'omp' || !s.tmuxSession) return `${s.name} n'a pas de terminal où demander son bilan`;

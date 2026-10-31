@@ -39,6 +39,7 @@ import { readDocument } from './documents.js';
 import { createModels, type Models } from './models.js';
 import { createRelay, free } from './relay.js';
 import { launchFromChat, LaunchRefused } from '../chat/launch.js';
+import { rigManaged, RigManagedError } from './openrig/guard.js';
 import { cardOf, closeFromChat, CloseRefused } from '../chat/close.js';
 import { actFromChat, ActRefused } from '../chat/act.js';
 import type { ChatMessage } from '../chat/service.js';
@@ -537,6 +538,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
 
   /** A live session Ledge launched is stopped (its tmux killed, a failure only logged) and marked exited; any other is left as it is. */
   async function endSession(s: Session): Promise<void> {
+    if (s.rig) throw new RigManagedError();
     if (s.source !== 'launcher' || s.state === 'exited') return;
     if (backendOf(s) === 'omp-rpc') { await omp.close(s.id).catch(e => log(`close of omp ${s.id} failed: ${(e as Error).message}`)); store.apply(s.id, { name: 'PaneGone', at: now(), source: 'daemon' }); return; }
     if (s.tmuxSession) await tmux.killSession(s.tmuxSession).catch(e => log(`kill of ${s.tmuxSession} failed: ${(e as Error).message}`));
@@ -569,6 +571,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     const id = s.id; const cur = store.get(id);
     if (!cur) throw unknownSession();
     if (cur.source === 'hook_only') throw readOnly();
+    if (cur.rig) throw new RigManagedError();
     if (cur.state === 'exited') throw new Refusal('the session has already exited', 'busy');
     if (closing.has(id)) throw new Refusal('a close is already in progress', 'busy');
     closing.add(id);
@@ -840,6 +843,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     const running = cardSessionCloses.get(id);
     if (running) return running;
     const s = store.get(id); if (!s) throw unknownSession();
+    if (s.rig) return Promise.reject(new RigManagedError());
     const p = closeSession(s);
     cardSessionCloses.set(id, p);
     const done = () => { if (cardSessionCloses.get(id) === p) cardSessionCloses.delete(id); };
@@ -1155,6 +1159,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'session.kill': {
         const s = store.get(msg.id); if (!s) return;
         if (s.source === 'hook_only') return refuse(readOnly(), msg.id);
+        { const r = rigManaged(s); if (r) return refuse(r, msg.id); }
         if (backendOf(s) === 'omp-rpc') return endSession(s);
         if (s.tmuxSession) await tmux.killSession(s.tmuxSession);
         store.apply(msg.id, { name: 'PaneGone', at: now(), source: 'daemon' });
@@ -1171,6 +1176,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       case 'session.archive': {
         const s = store.get(msg.id); if (!s) return refuse(unknownSession(), msg.id);
+        { const r = rigManaged(s); if (r) return refuse(r, msg.id); }
         await endSession(s);
         store.archive(msg.id, now());
         return;
@@ -1189,7 +1195,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return;
       }
       case 'session.model': {
-        if (!store.get(msg.id)) return refuse('unknown session', msg.id);
+        const target = store.get(msg.id); if (!target) return refuse('unknown session', msg.id);
+        { const r = rigManaged(target); if (r) return refuse(r, msg.id); }
         // Answered as soon as decided: a failure once applied reaches every front as an `error` with the same id.
         const r = await changeModel(msg.id, msg.model, msg.effort);
         if ('refused' in r) return refuse({ message: r.message, code: r.refused }, msg.id);
@@ -1197,6 +1204,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       case 'session.delete': {
         const s = store.get(msg.id); if (!s) return refuse(unknownSession(), msg.id);
+        { const r = rigManaged(s); if (r) return refuse(r, msg.id); }
         // A running hook_only session is not stopped by Ledge: like a dismissed one, its next hook brings it back.
         if (s.source === 'launcher' || s.state === 'exited') markDeleted(msg.id);
         await endSession(s);
