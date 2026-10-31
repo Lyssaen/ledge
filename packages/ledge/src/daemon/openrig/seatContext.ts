@@ -1,7 +1,5 @@
-import { ALWAYS_USER } from '@ledge/protocol';
+import { mandateEntries } from '../brain/mandate.js';
 
-const SELF_TITLE = 'ledge tranche seul';
-const USER_TITLE = 'te revient toujours';
 const DEFAULT_SELF = 'git et branches, tests et relectures, contexte et relèves, petits choix de code';
 const DEFAULT_USER = 'design, architecture, critique (données, sécurité, suppression, coûts)';
 
@@ -15,23 +13,10 @@ const sentences = (self: readonly string[] | string, user: readonly string[] | s
  */
 export function mandateSummary(text: string | null): string {
   if (text === null) return sentences(DEFAULT_SELF, DEFAULT_USER);
-  const self: string[] = []; const user: string[] = []; const always: string[] = [];
-  let list: string[] | null = null;
-  for (const raw of text.split('\n')) {
-    const line = raw.trim();
-    if (line.startsWith('#')) {
-      const title = line.replace(/^#+\s*/, '').toLowerCase();
-      list = title.startsWith(SELF_TITLE) ? self : title.startsWith(USER_TITLE) ? user : null;
-      continue;
-    }
-    const item = /^[-*]\s+(.+)$/.exec(line)?.[1]; if (!list || !item) continue;
-    const m = /^(\S+)\s+:\s+(.+)$/.exec(item);
-    const id = m?.[1]; const said = (m?.[2] ?? item).trim();
-    if (list === self && id && (ALWAYS_USER as readonly string[]).includes(id)) always.push(said); else list.push(said);
-  }
-  const toUser = [...user, ...always];
-  if (self.length === 0) return "Ledge ne tranche rien seul : tout revient, via Ledge, à l'utilisateur.";
-  return sentences(self, toUser.length ? toUser : DEFAULT_USER);
+  const e = mandateEntries(text);
+  const toUser = [...e.user, ...e.always].map(x => x.said);
+  if (e.self.length === 0) return "Ledge ne tranche rien seul : tout revient, via Ledge, à l'utilisateur.";
+  return sentences(e.self.map(x => x.said), toUser.length ? toUser : DEFAULT_USER);
 }
 
 /** What an OpenRig seat (one Ledge did not launch) is told at SessionStart: who its human is, how to escalate, the mandate. */
