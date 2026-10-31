@@ -132,6 +132,7 @@ export const fr = {
     } as Record<string, string>
   },
   seat: { waitsLedge: 'Attend Ledge', working: 'Au travail', idle: 'Disponible', starting: 'Démarrage', stopped: 'Arrêté', crashed: 'Planté', unreachable: 'Injoignable' },
+  omp: { title: 'fil · OMP', foot: 'piloté par RPC · rien n’est tapé dans un terminal', you: 'toi', writing: 'écrit…', empty: 'Le fil arrive…' },
   overview: {
     yours: (n: number) => `À toi · ${n}`, projects: 'Projets', exchanges: 'Échanges', terminal: (name: string) => `Terminal · ${name}`, inColor: '· en couleurs',
     nobodyWaits: 'Personne ne t’attend.', noSession: 'Aucune session. + pour en lancer une.', noPreview: 'Pas d’aperçu.', noExchange: 'Aucun échange.',

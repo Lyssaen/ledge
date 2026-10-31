@@ -6,9 +6,10 @@ import { C } from '../theme.js';
 /** A rounded box with its title in the top border, as the mockup draws them (Ink's borders take no title); `mark`, when
  *  given, follows the title in its own colour (a machine's ●); `foot` at the right of the bottom border. `double`: a
  *  double line, for a box that asks to confirm (it reads as another state even where its red and the coral are close).
- *  `heads`, when given, draws the title in pieces of their own colour and weight (the tabs of Ledge's centre). */
+ *  `heads`, when given, draws the title in pieces of their own colour and weight (the tabs of Ledge's centre); a `raw` piece
+ *  keeps its case (OMP's `π`, which capitals would turn into `Π`). */
 export function TitledBox({ title, heads, mark, color = C.line, titleColor = C.dim, titleBold, double, foot, footColor = C.faint, children, flexGrow, height, width, flexShrink, minHeight }: {
-  title: string; heads?: { text: string; color: string; bold?: boolean }[]; mark?: { text: string; color: string }; color?: string; titleColor?: string; titleBold?: boolean; double?: boolean; foot?: string; footColor?: string; children?: ReactNode;
+  title: string; heads?: { text: string; color: string; bold?: boolean; raw?: boolean }[]; mark?: { text: string; color: string }; color?: string; titleColor?: string; titleBold?: boolean; double?: boolean; foot?: string; footColor?: string; children?: ReactNode;
   flexGrow?: number; flexShrink?: number; height?: number | string; width?: number | string; minHeight?: number;
 }) {
   const b = double ? { tl: '╔', h: '═', tr: '╗', bl: '╚', br: '╝' } : { tl: '╭', h: '─', tr: '╮', bl: '╰', br: '╯' };
@@ -19,7 +20,7 @@ export function TitledBox({ title, heads, mark, color = C.line, titleColor = C.d
   const tail = mark ? [{ text: ` ${mark.text.toUpperCase()}`, color: mark.color }] : [];
   const room = Math.max(0, w - 4 - (cells(text(tail)) < w - 8 ? cells(text(tail)) : 0));
   const head: { text: string; color: string; bold?: boolean }[] = heads
-    ? heads.map((h, i) => ({ ...h, text: `${i === 0 ? ' ' : ''}${h.text.toUpperCase()}` }))
+    ? heads.map((h, i) => ({ ...h, text: `${i === 0 ? ' ' : ''}${h.raw ? h.text : h.text.toUpperCase()}` }))
     : [{ text: ` ${title.toUpperCase()}`, color: titleColor }];
   const shown = cells(text([...head, ...tail])) > w - 4
     ? [...cut(head, room), ...(cells(text(tail)) < w - 8 ? tail : []), { text: ' ', color: titleColor }]

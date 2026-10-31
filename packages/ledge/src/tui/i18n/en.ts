@@ -120,6 +120,7 @@ export const en: Messages = {
     }
   },
   seat: { waitsLedge: 'Waits for Ledge', working: 'Working', idle: 'Available', starting: 'Starting', stopped: 'Stopped', crashed: 'Crashed', unreachable: 'Unreachable' },
+  omp: { title: 'thread · OMP', foot: 'driven over RPC · nothing is typed in a terminal', you: 'you', writing: 'writing…', empty: 'The thread is coming…' },
   overview: {
     yours: n => `Yours · ${n}`, projects: 'Projects', exchanges: 'Messages', terminal: name => `Terminal · ${name}`, inColor: '· in color',
     nobodyWaits: 'Nobody is waiting for you.', noSession: 'No session. Press + to start one.', noPreview: 'No preview.', noExchange: 'No message yet.',

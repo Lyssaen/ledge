@@ -5,6 +5,7 @@ import { useTui } from '../context.js';
 import { exchanges } from '../model/overview.js';
 import { clock, oneLine } from '../model/time.js';
 import { C } from '../theme.js';
+import { OmpBox } from './OmpBox.js';
 import { SessionCard } from './SessionCard.js';
 import { TerminalBox } from './TerminalBox.js';
 import { TitledBox } from './TitledBox.js';
@@ -19,7 +20,7 @@ export function SessionDetail({ s }: { s: Session | null }) {
           <TitledBox title={`${s.name} · ${oneLine(s.topic ?? s.title)}`} color={isPending(s) ? C.red : C.line} titleColor={isPending(s) ? C.red : C.dim}>
             <SessionCard s={s} note />
           </TitledBox>
-          <TerminalBox s={s} />
+          {s.tool === 'omp' ? <OmpBox s={s} /> : <TerminalBox s={s} />}
         </>
       ) : <TitledBox title={t.tabs.session} flexGrow={1}><Text color={C.faint}>{t.session.noSession}</Text></TitledBox>}
       <TitledBox title={t.overview.exchanges} height={5}>
