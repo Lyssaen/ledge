@@ -108,6 +108,29 @@ export const fr = {
     roles: { operator: 'fait tourner OpenRig, reçoit les ordres de Ledge', queue: 'range le flux entrant en tâches' } as Record<string, string>,
     you: 'toi', noTerminalCommand: (seat: string) => `Pas de terminal à attacher pour ${seat}.`
   },
+  /** A rig's actions through OpenRig (rig.act, rig.adopt): « Arrêter… », « Relancer un siège… », « Reprendre », « Ranger dans un projet… ». */
+  rigAct: {
+    keys: { restart: 'relancer', stop: 'arrêter…', adopt: 'ranger dans un projet…', resume: 'reprendre', choose: 'choisir', confirm: 'confirmer', cancel: 'annuler' },
+    restartSeat: 'Relancer un siège…', stopRig: 'Arrêter le rig…', adoptRig: 'Ranger dans un projet…', resumeRig: 'Reprendre',
+    viaOpenRig: 'Relancer et arrêter passent par OpenRig : un kill côté Ledge serait vu comme un crash.',
+    restartAsk: (seat: string) => `Relancer ${seat} par OpenRig ?`, yes: '↵ oui', no: 'esc non',
+    stopTitle: (rig: string) => `Arrêter ${rig} ?`, stopAll: 'Arrêter le rig', stopSeat: (seat: string) => `Seulement ce siège · ${seat}`,
+    stopBody: (n: number) => `${n > 1 ? `Ses ${n} sièges s’arrêtent` : 'Son siège s’arrête'}. OpenRig garde un instantané pour le reprendre. Les fichiers restent.`,
+    adoptTitle: (rig: string) => `Ranger ${rig} dans un projet ?`, holds: (repos: string) => `contient déjà ${repos}`, leaveOut: 'Laisser hors projet',
+    adoptNote: (rig: string, project: string) => `${rig} garde sa pièce ; sa plaque dira « dans ${project} ». Il ne devient pas une seconde table de ${project}.`,
+    stayNote: (rig: string) => `${rig} garde sa pièce, hors projet.`, adopt: 'Ranger', cancel: 'Annuler',
+    repos: 'Dépôts trouvés en route', how: { cloned: 'cloné par', opened: 'ouvert par', created: 'créé par' } as Record<'cloned' | 'opened' | 'created', string>,
+    found: 'Repérés par les dossiers git de l’espace, puis rattachés au siège qui les a clonés ou ouverts (hooks).',
+    already: (repo: string, project: string) => `${repo} est déjà un dépôt du projet ${project}.`, noRepo: 'Aucun dépôt trouvé pour l’instant.',
+    done: {
+      down: (rig: string) => `${rig} s’arrête`, stop: (seat: string) => `${seat} s’arrête`, restart: (seat: string) => `${seat} redémarre`,
+      restore: (rig: string) => `${rig} reprend`, adopted: (rig: string, project: string) => `${rig} rangé dans ${project}`
+    },
+    refused: {
+      rig_managed: 'Ce siège appartient à son rig : arrête-le ou relance-le dans sa pièce.', openrig_down: 'OpenRig ne répond pas.',
+      unreachable: 'Machine injoignable.', failed: 'L’action a échoué.', timeout: 'OpenRig n’a pas répondu (5 s).'
+    } as Record<string, string>
+  },
   seat: { waitsLedge: 'Attend Ledge', working: 'Au travail', idle: 'Disponible', starting: 'Démarrage', stopped: 'Arrêté', crashed: 'Planté', unreachable: 'Injoignable' },
   overview: {
     yours: (n: number) => `À toi · ${n}`, projects: 'Projets', exchanges: 'Échanges', terminal: (name: string) => `Terminal · ${name}`, inColor: '· en couleurs',

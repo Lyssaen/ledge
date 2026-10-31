@@ -100,6 +100,25 @@ export const en: Messages = {
     roles: { operator: 'runs OpenRig, takes Ledge’s orders', queue: 'sorts the incoming flow into tasks' },
     you: 'you', noTerminalCommand: (seat: string) => `No terminal to attach for ${seat}.`
   },
+  rigAct: {
+    keys: { restart: 'restart', stop: 'stop…', adopt: 'file in a project…', resume: 'resume', choose: 'choose', confirm: 'confirm', cancel: 'cancel' },
+    restartSeat: 'Restart a seat…', stopRig: 'Stop the rig…', adoptRig: 'File in a project…', resumeRig: 'Resume',
+    viaOpenRig: 'Restarting and stopping go through OpenRig: a kill on Ledge’s side would read as a crash.',
+    restartAsk: seat => `Restart ${seat} through OpenRig?`, yes: '↵ yes', no: 'esc no',
+    stopTitle: rig => `Stop ${rig}?`, stopAll: 'Stop the rig', stopSeat: seat => `Only this seat · ${seat}`,
+    stopBody: n => `${n > 1 ? `Its ${n} seats stop` : 'Its seat stops'}. OpenRig keeps a snapshot to resume it. The files stay.`,
+    adoptTitle: rig => `File ${rig} in a project?`, holds: repos => `already holds ${repos}`, leaveOut: 'Leave outside any project',
+    adoptNote: (rig, project) => `${rig} keeps its room; its plate will say “in ${project}”. It does not become a second table of ${project}.`,
+    stayNote: rig => `${rig} keeps its room, outside any project.`, adopt: 'File', cancel: 'Cancel',
+    repos: 'Repos found on the way', how: { cloned: 'cloned by', opened: 'opened by', created: 'created by' },
+    found: 'Spotted from the workspace’s git folders, then tied to the seat that cloned or opened them (hooks).',
+    already: (repo, project) => `${repo} is already a repo of the project ${project}.`, noRepo: 'No repo found yet.',
+    done: { down: rig => `${rig} is stopping`, stop: seat => `${seat} is stopping`, restart: seat => `${seat} is restarting`, restore: rig => `${rig} is resuming`, adopted: (rig, project) => `${rig} filed in ${project}` },
+    refused: {
+      rig_managed: 'This seat belongs to its rig: stop or restart it from its room.', openrig_down: 'OpenRig is not answering.',
+      unreachable: 'Machine unreachable.', failed: 'The action failed.', timeout: 'OpenRig did not answer (5 s).'
+    }
+  },
   seat: { waitsLedge: 'Waits for Ledge', working: 'Working', idle: 'Available', starting: 'Starting', stopped: 'Stopped', crashed: 'Crashed', unreachable: 'Unreachable' },
   overview: {
     yours: n => `Yours · ${n}`, projects: 'Projects', exchanges: 'Messages', terminal: name => `Terminal · ${name}`, inColor: '· in color',

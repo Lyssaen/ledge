@@ -124,7 +124,8 @@ function SessionView({ s }: { s: Session }) {
     if (input === 'o' && images.length) { openImage(images); return true; }
     if (input === 'a') { attach(s); return true; }
     if (input === 'i') { actions.interrupt(s); return true; }
-    if (input === 'm') {
+    // A rig seat's model is OpenRig's (the daemon refuses session.model with rig_managed): no m.
+    if (input === 'm' && !s.rig) {
       if (!canSwitch) toast({ text: t.toast.modelSwitch, tone: 'info' }); else setMode('model');
       return true;
     }
@@ -150,7 +151,7 @@ function SessionView({ s }: { s: Session }) {
   const keys: Array<readonly [string, string]> = mode === 'model' ? [['↑ ↓', t.keys.choose], ['← →', t.launch.effort], ['↵', t.keys.choose], ['esc', t.keys.cancel]]
     : mode !== 'read' && browsing ? [['↵', t.keys.resend], ['↑ ↓', t.keys.history], ['esc', t.keys.backToDraft]]
     : mode !== 'read' ? [['↵', t.keys.sendOnly], ...(mode === 'reply' ? [['alt+v', t.keys.image] as const] : []), ['alt+↵', t.keys.newLine], ['esc', t.keys.keepAndLeave], ['↑ ↓', t.keys.lineHistory], ['ctrl ← →', t.keys.word], ['ctrl+u', t.keys.clear]]
-    : [['esc', t.keys.back], ...(p ? [['y n A', t.keys.answer] as const] : []), ['r', t.keys.write], ['j k', t.keys.scroll], [t.keys.space, t.keys.unfold], ['d', t.keys.diffs], ['t', t.keys.terminal], ['a', t.keys.attach], ['m', t.keys.model], ['i', t.keys.interrupt], ...(images.length ? [['o', t.keys.openImage] as const] : [])];
+    : [['esc', t.keys.back], ...(p ? [['y n A', t.keys.answer] as const] : []), ['r', t.keys.write], ['j k', t.keys.scroll], [t.keys.space, t.keys.unfold], ['d', t.keys.diffs], ['t', t.keys.terminal], ['a', t.keys.attach], ...(s.rig ? [] : [['m', t.keys.model] as const]), ['i', t.keys.interrupt], ...(images.length ? [['o', t.keys.openImage] as const] : [])];
   // The rows, in this order: the request (its keys left out while writing), the field, the thread with what is left, drawn
   // only with room for a line. The request is cut only when even that does not fit.
   const editing = mode === 'reply' || mode === 'note';

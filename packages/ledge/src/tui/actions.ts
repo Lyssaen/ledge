@@ -33,6 +33,12 @@ export function useActions(o: { client: DaemonClient; sessions: readonly Session
     const text = onLand.current.get(id);
     if (text) { onLand.current.delete(id); toast({ text, tone: 'ok' }); }
   }, [decisions.landed]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A seat's life is OpenRig's: the daemon refuses ending, archiving, resuming… a paired session (`rig_managed`), said in a toast.
+  const seenError = useRef(o.errors.at(-1)?.seq ?? 0);
+  useEffect(() => {
+    for (const e of o.errors) if (e.seq > seenError.current && e.code === 'rig_managed') toast({ text: t.rigAct.refused.rig_managed!, tone: 'error' });
+    seenError.current = o.errors.at(-1)?.seq ?? seenError.current;
+  }, [o.errors]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return useMemo<Actions>(() => {
     /** Why a reply or a note was not sent, as reply always said it: offline, read only, a send under way. Then, for a note,

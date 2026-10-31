@@ -129,7 +129,7 @@ export function Home() {
     return false;
   });
 
-  const keys: Array<readonly [string, string]> = active ? convBar : roomShown ? [...roomBar, ...(wide ? [] : [['esc', t.keys.back] as const]), ['/', t.keys.ask], ['+', t.keys.launch], [',', t.keys.settings], ['?', t.keys.help], ['q', t.keys.quit]] : [
+  const keys: Array<readonly [string, string]> = active ? convBar : roomShown ? [...(wide || roomBar.some(([k]) => k === 'esc') ? [] : [['esc', t.keys.back] as const]), ...roomBar, ['/', t.keys.ask], ['+', t.keys.launch], [',', t.keys.settings], ['?', t.keys.help], ['q', t.keys.quit]] : [
     ['j k', t.keys.navigate], ['↵', ledgeish ? t.keys.write : t.keys.open], ...(showConv ? convBar : []), ...(yoursCount ? [['tab', t.keys.next] as const] : []), ...(selected?.pending ? [['y n', t.keys.answer] as const] : []),
     ...(selected ? [['a', t.keys.attach] as const] : []), ...(near.length ? [['H', t.keys.handover] as const] : []),
     ...(ledgeish && folded ? [[']', railOpen ? t.keys.close : t.keys.point] as const] : []), ...(ledgeish ? [['R', t.keys.summarize] as const] : []),

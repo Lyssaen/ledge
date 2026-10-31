@@ -1,16 +1,20 @@
+import { randomUUID } from 'node:crypto';
 import { useEffect, useMemo, useState, type MutableRefObject } from 'react';
 import { Box, Text } from 'ink';
 import { useColorPreview, useContextNear } from '@ledge/fleet';
-import type { Exchange, Rig, Session } from '@ledge/protocol';
+import type { Exchange, Rig, RigRepo, Session } from '@ledge/protocol';
 import { hhmm, seatName } from '@ledge/ui/chat/ledge/threadModel';
 import { kernelSplit, rigColor, rigKey, rigPlace, shortCwd, workingCount } from '@ledge/ui/rigs/model';
 import { HUMAN_ADDRESS, openrigBase } from '../../daemon/openrig/facts.js';
 import { useRigExchanges } from '../brain.js';
 import { LEDGE_FOCUS, useTui, type KeyHandler } from '../context.js';
 import type { Line } from '../model/cells.js';
+import { adoptable, adoptChoices, heldRepos, refusalText, rigCall, type RigCallMessage, type RigCallRequest } from '../model/rigActions.js';
 import { queueOf, seatAddress, seatRows, type QueueItem, type SeatRow } from '../model/rigRoom.js';
 import { C, projectColor } from '../theme.js';
 import { BAR, barCells } from './LedgeRail.js';
+import { AdoptBox, RestartLine, StopBox, type RigDialog } from './RigConfirm.js';
+import { Button } from './SessionCard.js';
 import { Lines } from './Lines.js';
 import { Tail } from './Tail.js';
 import { TitledBox } from './TitledBox.js';
@@ -28,6 +32,8 @@ const QUEUE_W = 44;
  * The kernel's room (`target.kind === 'kernel'`) is the same, its plate saying OpenRig's daemon, advisor and the human's terminal
  * tucked away, Ledge's orders to the operator and the queue of every rig. Its keys go through `keys`, its key bar through `onBar`:
  * j k the seats (past the ends, the home's left column), ↵ the seat's session, a attaches it, w writes to it through Ledge.
+ * A rig's life goes through OpenRig (rig.act, rig.adopt): r restarts the chosen seat, S stops the rig or only that seat, u resumes a
+ * stopped rig, p files an off-project rig in a project; each asks first (but u), and ends in a toast.
  */
 export function RigRoom({ target, side, height, keys, onBar }: { target: RoomTarget; side: boolean; height: number; keys: MutableRefObject<KeyHandler | null>; onBar(b: Keys): void }) {
   const tui = useTui();
@@ -41,7 +47,9 @@ export function RigRoom({ target, side, height, keys, onBar }: { target: RoomTar
   const rows = useMemo(() => (rig ? seatRows(split ? { ...rig, seats: split.shown } : rig, d.byId, escalations, t.seat) : []), [rig, split, d.byId, escalations, t]);
   const [chosen, setChosen] = useState(0);
   const key = kernel ? `kernel|${target.machine}` : `rig|${target.machine}|${target.rigId}`;
-  useEffect(() => setChosen(0), [key]);
+  const [dialog, setDialog] = useState<RigDialog | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setChosen(0); setDialog(null); }, [key]);
   const on = Math.min(chosen, Math.max(0, rows.length - 1));
   const row = rows[on];
   // The exchanges: this rig's; for the kernel, its own and every rig's (its queue is all of them).
@@ -55,6 +63,11 @@ export function RigRoom({ target, side, height, keys, onBar }: { target: RoomTar
   // `w` goes through the local Ledge, which resolves @… against its own machine's rigs only: not for a remote rig, nor the kernel.
   const writable = !kernel && rig?.machine === 'local';
   const machineLabel = (id: string) => machines.find(m => m.id === id)?.label ?? id;
+  // A rig's actions (never the kernel's: stopping it would stop OpenRig), off while unreachable or while one is in flight.
+  const acts = !kernel && live && !busy && !!rig;
+  const stopped = rig?.lifecycle === 'stopped';
+  const filing = !!rig && !kernel && adoptable(rig);
+  const choices = useMemo(() => (rig && filing ? adoptChoices(rig, projects, t.rigAct) : []), [rig, filing, projects, t]);
   const where = kernel ? t.room.kernelWhere : rig?.name ?? '';
 
   const openSeat = (r: SeatRow) => {
@@ -78,17 +91,55 @@ export function RigRoom({ target, side, height, keys, onBar }: { target: RoomTar
     tui.setLedgeFocus(LEDGE_FOCUS.field);
   };
 
+  /** Sends the action, says its outcome in a toast: `done` when OpenRig took it, the refusal's reason otherwise. */
+  const call = (msg: RigCallRequest, done: string) => {
+    setDialog(null); setBusy(true);
+    void rigCall(client, { ...msg, rid: randomUUID() } as RigCallMessage).then(r => {
+      setBusy(false);
+      tui.toast(r.ok ? { text: done, tone: 'ok' } : { text: refusalText(r, t.rigAct), tone: 'error' });
+    });
+  };
+  const dialogKeys = (input: string, k: Parameters<KeyHandler>[1], d: RigDialog): void => {
+    if (!rig) return;
+    if (k.escape) { setDialog(null); return; }
+    const count = d.kind === 'stop' ? (d.seat ? 2 : 1) : d.kind === 'adopt' ? choices.length : 1;
+    if (d.kind !== 'restart' && (input === 'j' || k.downArrow)) { setDialog({ ...d, on: Math.min(count - 1, d.on + 1) }); return; }
+    if (d.kind !== 'restart' && (input === 'k' || k.upArrow)) { setDialog({ ...d, on: Math.max(0, d.on - 1) }); return; }
+    if (!k.return) return;
+    const at = { machine: rig.machine, rigId: rig.id };
+    if (d.kind === 'restart') call({ type: 'rig.act', ...at, seatRef: d.seat.ref, verb: 'restart' }, t.rigAct.done.restart(d.seat.name));
+    else if (d.kind === 'stop') {
+      if (d.on === 1 && d.seat) call({ type: 'rig.act', ...at, seatRef: d.seat.ref, verb: 'stop' }, t.rigAct.done.stop(d.seat.name));
+      else call({ type: 'rig.act', ...at, verb: 'down' }, t.rigAct.done.down(rig.name));
+    } else {
+      const c = choices[d.on];
+      // « Laisser hors projet »: nothing to send, the rig stays where it is.
+      if (c?.projectId) call({ type: 'rig.adopt', ...at, projectId: c.projectId }, t.rigAct.done.adopted(rig.name, c.label));
+      else setDialog(null);
+    }
+  };
+
   keys.current = (input, k) => {
+    // A dialog has the keyboard while it is open.
+    if (dialog) { dialogKeys(input, k, dialog); return true; }
     if (input === 'j' || k.downArrow) { if (on < rows.length - 1) { setChosen(on + 1); return true; } return false; }
     if (input === 'k' || k.upArrow) { if (on > 0) { setChosen(on - 1); return true; } return false; }
     if (!row) return false;
     if (k.return) { if (live) openSeat(row); return true; }
     if (input === 'a') { if (live) attachSeat(row); return true; }
     if (input === 'w' && !kernel) { if (live && writable) writeTo(row); return true; }
+    if (kernel || !rig) return false;
+    if (input === 'r') { if (acts) setDialog({ kind: 'restart', seat: row.seat }); return true; }
+    if (input === 'S') { if (acts && !stopped) setDialog({ kind: 'stop', seat: row.seat.state === 'stopped' ? undefined : row.seat, on: 0 }); return true; }
+    if (input === 'u') { if (acts && stopped) call({ type: 'rig.act', machine: rig.machine, rigId: rig.id, verb: 'restore' }, t.rigAct.done.restore(rig.name)); return true; }
+    if (input === 'p') { if (acts && filing) setDialog({ kind: 'adopt', on: 0 }); return true; }
     return false;
   };
   useEffect(() => () => { keys.current = null; }, [keys]);
-  const bar: Keys = [['j k', t.keys.seats], ...(live && row ? [...(row.session ? [['↵', t.keys.openSeat] as const] : []), ['a', t.keys.attachSeat] as const, ...(writable ? [['w', t.keys.write] as const] : [])] : []), ['1', t.keys.ledge]];
+  const ak = t.rigAct.keys;
+  const rigKeys: Keys = acts && row ? [['r', ak.restart], ...(stopped ? [['u', ak.resume] as const] : [['S', ak.stop] as const]), ...(filing ? [['p', ak.adopt] as const] : [])] : [];
+  const bar: Keys = dialog ? [...(dialog.kind === 'restart' ? [] : [['j k', ak.choose] as const]), ['↵', ak.confirm], ['esc', ak.cancel]]
+    : [['j k', t.keys.seats], ...(live && row ? [...(row.session ? [['↵', t.keys.openSeat] as const] : []), ['a', t.keys.attachSeat] as const, ...(writable ? [['w', t.keys.write] as const] : [])] : []), ...rigKeys, ['1', t.keys.ledge]];
   const barKey = bar.map(b => b.join(' ')).join('|');
   useEffect(() => onBar(bar), [barKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -132,8 +183,14 @@ export function RigRoom({ target, side, height, keys, onBar }: { target: RoomTar
     ? <Text color={C.faint} wrap="truncate">  {col(h.seat, 12)}{col(h.name, 12)}{col(h.state, 15)}{col(h.agent, 23)}{h.role}</Text>
     : <Text color={C.faint} wrap="truncate">  {col(h.seat, 11)}{col(h.name, 12)}{col(h.state, 15)}{col(h.agent, 25)}{col(h.context, 10)}{h.on}</Text>;
   const hidden = split?.hidden ?? [];
-  const plateH = 5 + Math.max(1, rows.length) + (hidden.length ? 1 : 0);
-  const rest = Math.max(0, height - plateH);
+  const buttons = !kernel && !!rig;
+  const plateH = 5 + Math.max(1, rows.length) + (hidden.length ? 1 : 0) + (buttons ? 3 : 0);
+  // An off-project rig's repos found on the way, and the projects already holding some of them.
+  const repos = rig && !kernel && rig.offProject && !rig.projectId ? rig.repos : null;
+  const held = useMemo(() => (repos && rig ? [...heldRepos(rig, projects)].flatMap(([id, rs]) => rs.map(r => ({ repo: r.name, project: projects?.projects.find(p => p.id === id)?.name ?? id }))) : []), [repos, rig, projects]);
+  const reposH = repos ? 3 + Math.max(1, repos.length) + 1 + held.length : 0;
+  const dialogH = dialog?.kind === 'stop' ? 4 + (dialog.seat ? 2 : 1) : dialog?.kind === 'adopt' ? 4 + choices.length : 0;
+  const rest = Math.max(0, height - plateH - reposH - dialogH);
   const midH = side ? Math.max(6, Math.min(15, Math.floor(rest / 2))) : Math.max(4, Math.floor(rest / 3));
 
   const exchangeBox = (
@@ -185,12 +242,45 @@ export function RigRoom({ target, side, height, keys, onBar }: { target: RoomTar
             {hidden.map((s, i) => <Text key={s.ref}><Text color={C.dim}>{s.name}</Text><Text color={C.faint}> {s.name.startsWith('advisor') ? t.room.advisor : t.room.humanSeat}{i < hidden.length - 1 ? ' · ' : ''}</Text></Text>)}
           </Text>
         ) : null}
+        {buttons && rig ? <>
+          <Text> </Text>
+          {dialog?.kind === 'restart' ? <RestartLine seat={dialog.seat} /> : (
+            <Box columnGap={2}>
+              <Button label={t.rigAct.restartSeat} k="r" off={!acts} />
+              {filing ? <Button label={t.rigAct.adoptRig} k="p" primary off={!acts} /> : null}
+              {stopped ? <Button label={t.rigAct.resumeRig} k="u" primary off={!acts} /> : <Button label={t.rigAct.stopRig} k="S" danger off={!acts} />}
+            </Box>
+          )}
+          <Text color={C.faint} wrap="truncate">{t.rigAct.viaOpenRig}</Text>
+        </> : null}
       </TitledBox>
+      {repos ? (
+        <TitledBox title={t.rigAct.repos} mark={{ text: `· ${repos.length}`, color: C.faint }} titleColor={C.dim} flexShrink={0}>
+          {repos.length === 0 ? <Text color={C.faint}>{t.rigAct.noRepo}</Text> : repos.map(r => <RepoLine key={r.path} repo={r} />)}
+          <Text> </Text>
+          <Text color={C.faint} wrap="truncate">{t.rigAct.found}</Text>
+          {held.map(h => <Text key={`${h.repo}|${h.project}`} color={C.dim} wrap="truncate">{t.rigAct.already(h.repo, h.project)}</Text>)}
+        </TitledBox>
+      ) : null}
+      {rig && dialog?.kind === 'stop' ? <StopBox rig={rig} seat={dialog.seat} on={dialog.on} /> : null}
+      {rig && dialog?.kind === 'adopt' ? <AdoptBox rig={rig} choices={choices} on={dialog.on} projects={projects} /> : null}
       {side
         ? <Box flexDirection="row" height={midH} flexShrink={0}>{exchangeBox}{queueBox}</Box>
         : <>{exchangeBox}{queueBox}</>}
       <SeatTerminal title={t.room.terminal(row?.seat.name ?? '—', where)} session={row?.session} />
     </Box>
+  );
+}
+
+/** A repo found on the way: « ⎇ api  github.com/…  cloné par dev · ⎇ feat/client ». */
+function RepoLine({ repo }: { repo: RigRepo }) {
+  const { t, g } = useTui();
+  const how = repo.how && repo.by ? `${t.rigAct.how[repo.how]} ${seatName(repo.by)}` : '';
+  return (
+    <Text wrap="truncate">
+      <Text color={C.faint}>{g.branch} </Text><Text color={C.fg} bold>{col(repo.name, 8)}</Text><Text color={C.dim}>{col(repo.remote ?? shortCwd(repo.path), 36)}</Text>
+      <Text color={C.faint}>{[how, repo.branch ? `${g.branch} ${repo.branch}` : ''].filter(Boolean).join(' · ')}</Text>
+    </Text>
   );
 }
 
