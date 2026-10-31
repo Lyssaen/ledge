@@ -7,9 +7,13 @@ export type View = 'atelier';
 export type ProjectFilter = string;
 export type SectionId = 'general' | 'appearance' | 'island' | 'notifications' | 'sounds' | 'machines' | 'mobile' | 'projects' | 'shortcuts' | 'about';
 export const SECTIONS: readonly SectionId[] = ['general', 'appearance', 'island', 'notifications', 'sounds', 'machines', 'mobile', 'projects', 'shortcuts', 'about'];
-/** The tabs of Ledge's home view (ledge home spec §2.2). */
-export type HomeTab = 'conversation' | 'rigs' | 'history';
-export const HOME_TABS: readonly HomeTab[] = ['conversation', 'rigs', 'history'];
+/** The tabs of the Ledge screen (spec §8, lot 4): its thread, its rigs and its mandate. */
+export type HomeTab = 'conversation' | 'rigs' | 'mandat';
+export const HOME_TABS: readonly HomeTab[] = ['conversation', 'rigs', 'mandat'];
+/** A saved tab: an old one (`history`, `teams`, `tasks`) or anything unknown reads as the conversation. */
+export function readHomeTab(saved: string | null): HomeTab {
+  return (HOME_TABS as readonly string[]).includes(saved ?? '') ? saved as HomeTab : 'conversation';
+}
 /** The sub-tabs of the Rigs tab (spec §8.2): the running rigs, the specs a machine offers, every seat. */
 export type RigsSub = 'live' | 'specs' | 'agents';
 export type Place =
@@ -32,8 +36,11 @@ export type Modal =
   // Lancer un rig (lot 3 : fenêtre d'attente ; le lot 5 la remplit) : pré-remplissage du projet, de la spec, du but et de la machine.
   | { kind: 'rig-launch'; project?: string; spec?: string; goal?: string; machine?: string }
   | null;
-/** chatFocus: bumped each time the chat is asked for (/, an open button), even already open: its field takes the focus again. */
-export interface NavState { place: Place; modal: Modal; chat: boolean; chatFocus: number; fullscreen: boolean; helpers: boolean; paused: boolean }
+/** What the Ledge screen was on when the user left it: its tab, the Rigs sub-tab, the spec chosen in Specs. */
+export interface HomeMemo { tab: HomeTab; rigs?: RigsSub; spec?: string }
+/** chatFocus: bumped each time the chat is asked for (/, an open button), even already open: its field takes the focus again.
+ *  homeMemo: the Ledge screen as it was left, restored by `{ type: 'ledge' }` without values (set once the user has left it). */
+export interface NavState { place: Place; modal: Modal; chat: boolean; chatFocus: number; fullscreen: boolean; helpers: boolean; paused: boolean; homeMemo?: HomeMemo }
 export type NavAction =
   /** The atelier (the overview), on a project filter. */
   | { type: 'home'; project?: ProjectFilter }
@@ -57,7 +64,15 @@ export function initialNav(overview: Overview, start: 'home' | 'atelier' = 'home
 type Base = Exclude<Place, { kind: 'settings' }>;
 const baseOf = (p: Place): Base => (p.kind === 'settings' ? p.back : p);
 
+/** Leaving the Ledge screen notes its tab, sub-tab and spec (lot-3 minor): they come back with it. */
 export function navReducer(s: NavState, a: NavAction): NavState {
+  const next = reduce(s, a);
+  if (s.place.kind !== 'home' || next.place.kind === 'home') return next;
+  const { tab, rigs, spec } = s.place;
+  return { ...next, homeMemo: { tab, ...(rigs ? { rigs } : {}), ...(spec !== undefined ? { spec } : {}) } };
+}
+
+function reduce(s: NavState, a: NavAction): NavState {
   const { place } = s;
   switch (a.type) {
     case 'home':
@@ -65,9 +80,10 @@ export function navReducer(s: NavState, a: NavAction): NavState {
     case 'ledge': {
       const b = baseOf(place);
       const back = b.kind === 'home' ? b.back : b;
-      const tab = a.tab ?? (place.kind === 'home' ? place.tab : 'conversation');
-      const rigs = a.rigs ?? (place.kind === 'home' ? place.rigs : undefined);
-      const spec = a.spec ?? (place.kind === 'home' ? place.spec : undefined);
+      const was: HomeMemo | undefined = place.kind === 'home' ? place : s.homeMemo;
+      const tab = a.tab ?? was?.tab ?? 'conversation';
+      const rigs = a.rigs ?? was?.rigs;
+      const spec = a.spec ?? was?.spec;
       // The docked chat closes: the home view is the same conversation, wider.
       return { ...s, place: { kind: 'home', tab, view: b.view, project: b.project, ...(back ? { back } : {}), ...(rigs ? { rigs } : {}), ...(spec !== undefined ? { spec } : {}) },
         modal: null, chat: false, chatFocus: s.chatFocus + 1 };

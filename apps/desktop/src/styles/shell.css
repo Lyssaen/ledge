@@ -200,7 +200,7 @@ body:has(.titlebar) .modal-backdrop { top: var(--titlebar-h); }
 .approval-badge.yolo{border-color:transparent;background:color-mix(in srgb,var(--destructive) 16%,transparent);color:var(--destructive)}
 .auto-mark{display:inline-flex;vertical-align:-1px;margin-left:5px;color:var(--destructive)}
 
-/* Ledge's home view (ledge home spec §2.2): the conversation column, 920 px at most, centred; « Le point » pinned over it. */
+/* The Ledge screen (spec §8, c-A.png): header, tabs, Ledge's thread and its composer; the rail beside it comes with task 10. */
 .ledge-home { flex: 1; min-width: 0; min-height: 0; display: flex; justify-content: center; background: var(--sidebar); overflow: hidden; }
 .ledge-home .home-column { width: 100%; max-width: 920px; min-height: 0; display: flex; flex-direction: column; border-left: 1px solid var(--sidebar-border); border-right: 1px solid var(--sidebar-border); }
 .ledge-home a[href^="ledge://session/"] { color: var(--sidebar-primary); text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
@@ -213,21 +213,7 @@ body:has(.titlebar) .modal-backdrop { top: var(--titlebar-h); }
 .home-tabs button.on { color: var(--sidebar-foreground); border-bottom-color: var(--sidebar-primary); font-weight: 600; }
 .home-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .home-body > [data-layer="chat"] { flex: 1; }
-.le-point { padding: 10px 16px 12px; font-size: 12.5px; }
-.le-point .lp-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.le-point .lp-head strong { font-size: 13px; }
-.lp-cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
-@media (max-width: 1100px) { .lp-cols { grid-template-columns: 1fr; gap: 8px; } }
-.lp-col h3 { display: flex; align-items: center; gap: 6px; margin: 0 0 4px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-foreground); font-weight: 600; }
 .lp-none { margin: 2px 0; color: var(--muted-foreground); font-size: 12px; }
-.lp-row { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 26px; padding: 2px 0; border: 0; background: none; color: inherit; text-align: left; font-size: 12.5px; }
-button.lp-row { cursor: pointer; border-radius: var(--radius-sm); }
-button.lp-row:hover, .lp-row.sel { background: var(--sidebar-accent); }
-.lp-row .lp-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.lp-row small { color: var(--muted-foreground); white-space: nowrap; }
-.lp-mark.lp-done { color: var(--success, #16a34a); }
-.lp-mark.lp-refused, .lp-mark.lp-dropped { color: var(--warning, #d97706); }
-.lp-mark.lp-near-mark { color: var(--warning, #d97706); }
 .ledge-home .st-qa { height: 22px; padding: 0 8px; border-radius: var(--radius-sm); font-size: 11px; font-weight: 500; border: 1px solid var(--input); background: none; color: var(--sidebar-foreground); cursor: pointer; flex: none; }
 .ledge-home .st-qa:hover { background: var(--sidebar-accent); }
 .ledge-home .st-qa.pri { background: var(--primary); border-color: var(--primary); color: var(--primary-foreground); }
@@ -240,8 +226,23 @@ button.lp-row:hover, .lp-row.sel { background: var(--sidebar-accent); }
 .home-mentions { display: flex; flex-direction: column; border: 1px solid var(--input); border-radius: var(--radius-md); background: var(--sidebar); overflow: hidden; }
 .home-mentions button { padding: 5px 10px; border: 0; background: none; color: inherit; text-align: left; font-size: 12.5px; cursor: pointer; }
 .home-mentions button.sel { background: var(--sidebar-accent); }
-.home-readonly { font-size: 11px; color: var(--muted-foreground); }
-.home-list { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 4px; }
+.home-conv { flex: 1; min-height: 0; display: flex; }
+.home-conv-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.home-rail:empty { display: none; }
+.home-thread { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 14px; padding: 14px 16px 10px; font-size: 13px; line-height: 19px; }
+.home-older { align-self: center; font-size: 12px; }
+.home-day { display: flex; align-items: center; gap: 12px; color: var(--muted-foreground); font-size: 11px; letter-spacing: .08em; }
+.home-day::before, .home-day::after { content: ''; flex: 1; border-top: 1px solid var(--sidebar-border); }
+.home-thinking { color: var(--muted-foreground); font-size: 12px; }
+.home-turn-cards { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.home-turn-cards:empty { display: none; }
+.home-composer { flex: none; display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--sidebar-border); }
+.home-offline { font-size: 12px; line-height: 16px; color: var(--muted-foreground); }
+.home-field { display: flex; align-items: flex-end; gap: 8px; }
+.home-field textarea { flex: 1; min-width: 0; box-sizing: border-box; padding: 8px 10px; background: var(--well); color: inherit; border: 1px solid var(--input); border-radius: var(--radius-md); font: inherit; font-size: 13px; line-height: 19px; resize: none; }
+.home-field button { width: 34px; height: 34px; }
+.home-footnote { font-size: 11px; color: var(--muted-foreground); }
+.home-placeholder { flex: 1; display: grid; place-items: center; padding: 24px; color: var(--muted-foreground); font-size: 13px; }
 
 /* The Rigs tab of the Ledge screen (spec §8.2, maquettes p-rigs-live / p-rigs-spec): sub-tabs, rig cards, specs, agents. */
 .rigs-tab { flex: 1; min-height: 0; display: flex; flex-direction: column; font-size: 12.5px; }

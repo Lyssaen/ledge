@@ -29,7 +29,7 @@ test('sidebar: Ledge line, standalone projects, rigs and kernel', async ({ page 
   await expect(rigs.getByRole('treeitem', { name: /OpenRig kernel/ })).toContainText('kernel');
   await page.keyboard.press('/');
   await expect(page.locator('section.ledge-home')).toBeVisible();
-  await page.getByRole('button', { name: 'Launch a rig' }).click();
+  await page.getByRole('button', { name: 'Launch a rig', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'New rig' })).toBeVisible();
   await page.getByRole('dialog', { name: 'New rig' }).getByRole('button', { name: 'Close' }).last().click(); // the title bar's × is « Close » too
   await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -111,7 +111,7 @@ test('Ledge screen › Rigs: running rigs, the daemon’s spec, the seats, and n
   const home = page.locator('section.ledge-home');
   await home.getByRole('tab', { name: 'Rigs · 1' }).click();
   const sub = home.getByRole('tablist', { name: 'Rig views' });
-  await expect(sub.getByRole('tab', { name: 'Running · 2' })).toHaveAttribute('aria-selected', 'true');
+  await expect(sub.getByRole('tab', { name: 'Running · 1' })).toHaveAttribute('aria-selected', 'true');
   await expect(home.getByRole('article', { name: 'factory' })).toContainText('1/2 working');
   await expect(home.getByRole('article', { name: 'OpenRig kernel' })).toBeVisible();
   await sub.getByRole('tab', { name: 'Specs · 1' }).click();

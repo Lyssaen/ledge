@@ -13,10 +13,12 @@ afterEach(async () => { setCodecForTests(null); cleanup(); await closeDaemons();
 
 const asks = (d: { received: ClientMessage[] }) => d.received.filter((m): m is Extract<ClientMessage, { type: 'chat.ask' }> => m.type === 'chat.ask');
 const chips = () => [...document.querySelectorAll('[data-chip]')];
-const home = () => within(screen.getByRole('region', { name: 'Home: Ledge, the operator' }));
+// The Ledge screen writes to Ledge's thread without images (lot 4); the docked chat keeps them.
+const home = () => within(screen.getByRole('complementary', { name: 'Chat Ledge' }));
 async function openHome() {
-  const env = await boot({ home: true, machines: [{ id: 'local', label: 'Local' }], projects: PROJECTS, sessions: [fakeSession('pim', { name: 'Pim', cwd: '/w/ledge', state: 'working' })] });
-  await screen.findByRole('region', { name: 'The point' });
+  const env = await boot({ machines: [{ id: 'local', label: 'Local' }], projects: PROJECTS, sessions: [fakeSession('pim', { name: 'Pim', cwd: '/w/ledge', state: 'working' })] });
+  await env.user.keyboard('{Control>}/{/Control}');
+  await screen.findByRole('complementary', { name: 'Chat Ledge' });
   const field = home().getByRole('textbox', { name: 'Ask Ledge' });
   fireEvent.paste(field, { clipboardData: { files: [new File([new Uint8Array(8)], 's.png', { type: 'image/png' })], items: [], types: ['Files'], getData: () => '' } });
   await waitFor(() => expect(chips()).toHaveLength(1));
@@ -31,9 +33,9 @@ describe('images in Ledge’s chat', () => {
     expect(asks(d)[0]).toMatchObject({ text: '', images: [{ mime: 'image/webp' }] });
     expect(chips()).toHaveLength(0);
   });
-  it('« Summarise the day » sends no image and leaves the chip', async () => {
+  it('a starter sends no image and leaves the chip', async () => {
     const { d, user } = await openHome();
-    await user.click(screen.getByRole('button', { name: 'Summarise the day' }));
+    await user.click(home().getByRole('button', { name: 'How are the others doing?' }));
     await waitFor(() => expect(asks(d)).toHaveLength(1));
     expect(asks(d)[0]).not.toHaveProperty('images');
     expect(chips()).toHaveLength(1);

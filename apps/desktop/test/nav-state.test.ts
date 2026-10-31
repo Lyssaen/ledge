@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import type { Projects, Rig, Session } from '@ledge/protocol';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
-import { initialNav, navReducer, reconcile, type NavState } from '../src/nav/state';
+import { HOME_TABS, initialNav, navReducer, readHomeTab, reconcile, type NavState } from '../src/nav/state';
 import { loadOverview, saveOverview, type Overview } from '../src/nav/overview';
 
 const o: Overview = { view: 'atelier', helpers: true, paused: false };
@@ -26,9 +26,9 @@ describe('nav state', () => {
     expect(home.chat).toBe(false);
     expect(home.chatFocus).toBe(chatOpen.chatFocus + 1);
     // Another tab keeps the way back.
-    const history = navReducer(home, { type: 'ledge', tab: 'history' });
-    expect(history.place).toMatchObject({ kind: 'home', tab: 'history', back: { kind: 'session', id: 'a' } });
-    expect(navReducer(history, { type: 'ledge' }).place).toMatchObject({ tab: 'history' });
+    const history = navReducer(home, { type: 'ledge', tab: 'mandat' });
+    expect(history.place).toMatchObject({ kind: 'home', tab: 'mandat', back: { kind: 'session', id: 'a' } });
+    expect(navReducer(history, { type: 'ledge' }).place).toMatchObject({ tab: 'mandat' });
     expect(navReducer(history, { type: 'escape' }).place).toEqual({ kind: 'session', id: 'a', view: 'atelier', project: 'ledge' });
     // From Settings: back to what Settings was over.
     const fromSettings = navReducer(navReducer(page, { type: 'settings' }), { type: 'ledge' });
@@ -40,6 +40,24 @@ describe('nav state', () => {
     const back = navReducer(navReducer(specs, { type: 'ledge', tab: 'conversation' }), { type: 'ledge', tab: 'rigs' });
     expect(back.place).toMatchObject({ tab: 'rigs', rigs: 'specs', spec: 'factory' });
     expect(navReducer(s0, { type: 'ledge', tab: 'rigs' }).place).not.toHaveProperty('rigs');
+  });
+  it('leaving the Ledge screen keeps its tab, the Rigs sub-tab and the chosen spec; coming back without values restores them', () => {
+    const specs = navReducer(navReducer(s0, { type: 'ledge', tab: 'rigs', rigs: 'specs' }), { type: 'ledge', tab: 'rigs', spec: 'factory' });
+    for (const away of [navReducer(specs, { type: 'open', id: 'local:otto' }), navReducer(specs, { type: 'home' }), navReducer(specs, { type: 'escape' }), navReducer(specs, { type: 'settings' })]) {
+      expect(away.place.kind).not.toBe('home');
+      expect(navReducer(away, { type: 'ledge' }).place).toMatchObject({ kind: 'home', tab: 'rigs', rigs: 'specs', spec: 'factory' });
+      // An explicit tab wins; the sub-tab and the spec stay remembered.
+      expect(navReducer(away, { type: 'ledge', tab: 'conversation' }).place).toMatchObject({ tab: 'conversation', rigs: 'specs', spec: 'factory' });
+    }
+    // Two hops away (a session, then another): still remembered.
+    const far = navReducer(navReducer(navReducer(specs, { type: 'open', id: 'a' }), { type: 'open', id: 'b' }), { type: 'ledge' });
+    expect(far.place).toMatchObject({ tab: 'rigs', rigs: 'specs', spec: 'factory' });
+  });
+  it('the tabs are Conversation · Rigs · Mandat; an old or unknown saved tab reads as the conversation', () => {
+    expect(HOME_TABS).toEqual(['conversation', 'rigs', 'mandat']);
+    expect(readHomeTab('rigs')).toBe('rigs');
+    expect(readHomeTab('mandat')).toBe('mandat');
+    for (const old of ['history', 'teams', 'tasks', 'garbage', null]) expect(readHomeTab(old)).toBe('conversation');
   });
   it('asking for the chat when it is already open asks its field for the focus again; closing it does not', () => {
     const opened = navReducer(s0, { type: 'chat', open: true });

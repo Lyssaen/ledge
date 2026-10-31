@@ -18,7 +18,7 @@ describe('screen keys', () => {
     expect(fireEvent.keyDown(document.body, { key: 'j' })).toBe(false);
     expect(dispatch).not.toHaveBeenCalled();
     fireEvent.keyDown(document.body, { key: '/' });
-    expect(dispatch).toHaveBeenCalledWith({ type: 'ledge' });
+    expect(dispatch).toHaveBeenCalledWith({ type: 'ledge', tab: 'conversation' });
   });
   it('never while typing, under a dialog or with the chat open; Escape and Alt stay global', () => {
     const handler = vi.fn(() => true);

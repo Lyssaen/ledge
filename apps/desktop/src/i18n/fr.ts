@@ -2,6 +2,7 @@ import { actionCopy } from '@ledge/ui/chat/actionCopy';
 import type { BotState } from '@ledge/ui/bots/poseFor';
 import type { SectionId } from '../nav/state';
 import type { Bucket, GroupBy } from '../list/model';
+import { MANDATE_CATEGORY_LABEL, type Exchange, type MandateCategory } from '@ledge/protocol';
 import type { DaemonInfo, OmpApproval, OpenRigState, ProjectColor, RigLifecycle, RigSpecInfo, SeatState, ToolStatus, UpdateFailure, TodoStatus } from '@ledge/protocol';
 import type { PlanDoc, ToolKind, Verb } from '../session/exchanges';
 import type { Change } from '../session/changedFiles';
@@ -15,6 +16,7 @@ type PlanStatus = PlanDoc['status'];
 
 /** French counts 0 and 1 as singular. */
 const plural = (n: number, one: string, many: string) => (n > 1 ? many : one);
+const solo = (n: number) => `${n} ${plural(n, 'session seule', 'sessions seules')}`;
 /** « de Otto », « d’Iris ». */
 const deName = (n: string) => (/^[aeiouyhàâéèêîôûAEIOUYHÀÂÉÈÊÎÔÛ]/.test(n) ? `d’${n}` : `de ${n}`);
 const andList = (xs: readonly string[]) => new Intl.ListFormat('fr', { type: 'conjunction' }).format(xs);
@@ -436,20 +438,41 @@ export const fr = {
     unconfirmed: (name: string) => `${name} n'a pas été rangé : Ledge n'a pas confirmé. Réessayez.`
   },
   home: {
-    operator: (sessions: number, machines: number) => `Opérateur · voit ${plural(sessions, `${sessions} session`, `${sessions} sessions`)}, ${plural(machines, `${machines} machine`, `${machines} machines`)} · lecture seule`,
+    /** The header of the Ledge screen (spec §8): with OpenRig, what Ledge orchestrates and the standalone sessions; without, those only. */
+    header: (rigs: number, agents: number, sessions: number) => `Orchestrateur OpenRig · ${rigs} ${plural(rigs, 'rig', 'rigs')}, ${agents} ${plural(agents, 'agent', 'agents')} · ${solo(sessions)} · tranche dans son mandat`,
+    solo,
     tabsLabel: 'Vues de Ledge',
-    tabs: { conversation: 'Conversation', rigs: 'Rigs', history: 'Historique' },
+    tabs: { conversation: 'Conversation', rigs: 'Rigs', mandat: 'Mandat' },
     rigsCount: (n: number) => (n > 0 ? `Rigs · ${n}` : 'Rigs'),
     toAtelier: 'Retour à l’atelier',
-    point: {
-      title: 'Le point', yours: 'À toi',
-      summarize: 'Résumer la journée', summarizeQuestion: 'Résume la journée : ce qui a avancé, ce qui attend ma décision, ce qui bloque.',
-      nothingYours: 'Rien ne t’attend.', allow: 'Oui', deny: 'Non', see: 'Voir'
-    },
-    suggestions: ['Qui a besoin de moi ?', 'Où en sont mes sessions ?'] as readonly string[],
-    readOnly: 'lecture seule · rien sans ton clic',
+    thread: 'Fil de Ledge', older: 'Voir plus ancien',
+    placeholder: "Écrire à Ledge… (@build pour un agent d'un rig)",
+    /** The suggestions over the field; one ending in « … » fills the field instead of sending. */
+    suggest: { launch: 'Lance un rig…', whereIs: (rig: string) => `Où en est ${rig} ?`, sessions: 'Où en sont mes sessions ?', decided: "Qu'as-tu tranché ?", needsMe: 'Qui a besoin de moi ?' },
+    footer: 'tranche dans son mandat · design, architecture et critique te reviennent',
     mentions: 'Mentionner', mentionSession: (name: string) => `session ${name}`,
-    history: { none: 'Aucune conversation aujourd’hui.', open: 'Voir dans la conversation' }
+    /** « En parler » of a decision: the field starts with this, the next message carries the escalation. */
+    talkAbout: (summary: string) => `À propos de « ${summary} » : `,
+    mandat: { title: 'Mandat', body: 'Le mandat de Ledge arrive avec son cerveau.' }
+  },
+  /** Ledge's thread (lot 4): `ledgeThreadCopy` hands it to `@ledge/ui`'s thread components. */
+  ledgeThread: {
+    days: { today: 'AUJOURD’HUI', yesterday: 'HIER', date: (day: string) => `${day.slice(8, 10)}/${day.slice(5, 7)}` },
+    age: { now: 'à l’instant', minutes: (n: number) => `${n} min`, hours: (n: number) => `${n} h`, days: (n: number) => `${n} j`, ago: (span: string) => `il y a ${span}` },
+    category: (c: MandateCategory) => MANDATE_CATEGORY_LABEL[c].fr,
+    bubbles: { ledge: 'Ledge', you: 'Toi' },
+    escalation: {
+      advice: (text: string) => `Mon avis : ${text}`, talk: 'En parler', grace: 'Ledge s\'en occupe…',
+      answeredByYou: (label: string) => `Répondu par toi : ${label}`, answeredByLedge: (label: string) => `Tranché par Ledge : ${label}`,
+      alreadyAnswered: 'Déjà répondu', closed: 'Fermée', refused: (code: string, reason?: string) => reason ?? `Échec (${code})`,
+      seen: 'Vu', askLabel: 'Ta réponse', askPlaceholder: 'Répondre…', send: 'Envoyer'
+    },
+    exchanges: {
+      count: (n: number) => (n === 1 ? '1 échange' : `${n} échanges entre agents`), fold: 'Replier', unfold: 'Voir',
+      missing: (n: number) => (n === 1 ? '1 échange plus disponible' : `${n} échanges plus disponibles`),
+      kind: { task: 'tâche', message: 'message', handoff: 'relève', ledge: 'Ledge' } as Record<Exchange['kind'], string>
+    },
+    decided: { line: (to: string, summary: string) => `J'ai tranché pour ${to} : ${summary}`, rule: (rule: string) => `Règle ${rule}`, revisit: 'Revenir dessus' }
   },
   /** The Rigs tab of the Ledge screen (spec §8.2): En cours · Specs · Agents. */
   rigsTab: {

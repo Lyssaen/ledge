@@ -8,7 +8,7 @@ const EMPTY: ReadonlyMap<string, Exchange[]> = new Map();
 
 /** The exchanges of the rigs shown, by `rigKey`: asked once per rig (`requestExchanges`, again if the machine was not reachable yet),
  *  then read from the fleet at each of its changes (a new `rig.exchange` notifies its subscribers). */
-export function useRigExchanges(client: DaemonClient, rigs: readonly Rig[]): ReadonlyMap<string, Exchange[]> {
+export function useRigExchanges(client: DaemonClient, rigs: readonly Pick<Rig, 'machine' | 'id'>[]): ReadonlyMap<string, Exchange[]> {
   const fleet = client.fleet;
   const asked = useRef(new Set<string>());
   useEffect(() => {

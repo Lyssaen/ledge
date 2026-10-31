@@ -99,6 +99,51 @@ function Answer({ text, sessions, onOpen, onDocument }: { text: string; sessions
   );
 }
 
+/** What a turn of Ledge's answers carries under its text: the destination line, the session, relay or close card, the generic card and
+ *  the project card. ChatView draws it under each answer; the Ledge screen under the Ledge bubble of that turn (lot 4). */
+export type TurnCardsProps = Pick<ChatViewProps, 'sessions' | 'offline' | 'docked' | 'turnAvailable' | 'onOpenSession' | 'onTerminal' | 'renderModel'
+  | 'launchingQid' | 'launchingRows' | 'onLaunchProposal' | 'closingQid' | 'closingRows' | 'onCloseSessions' | 'relayingQid' | 'onRelay' | 'onRelayCancel'
+  | 'onProject' | 'projectNamed' | 'onAct' | 'actingQid' | 'actingRows' | 'onIgnoreCards' | 'onDenyAction' | 'theme' | 'reducedMotion'> & { turn: ChatTurn };
+
+export function TurnCards({ turn, ...p }: TurnCardsProps) {
+  const t = useChatCopy();
+  return (
+    <>
+      {turn.machineName && (turn.proposal || turn.relay || turn.closes || (turn.actions && p.onAct) || (turn.projectProposal && p.onProject)) && <div style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{t.machines.destination} : <strong style={{ color: 'var(--sidebar-foreground)' }}>{turn.machineId === 'local' ? t.machines.local : turn.machineName}</strong>{p.turnAvailable?.(turn.qid) === false && ` · ${t.machines.offline}`}</div>}
+      {/* An ignored turn is set aside whole (chat.ignore): the daemon refuses its launch, relay and close, so their cards wait too. */}
+      {turn.answeredAt !== undefined && turn.closes ? (
+        <CloseGroupCard closes={turn.closes} sessions={p.sessions} busy={p.closingQid === turn.qid} busyRows={p.closingQid === turn.qid ? p.closingRows ?? [] : []}
+          disabled={!!p.offline || p.turnAvailable?.(turn.qid) === false || !!turn.ignoredAt || (!!p.closingQid && p.closingQid !== turn.qid) || !!p.launchingQid || !!p.relayingQid}
+          onClose={rows => p.onCloseSessions?.(turn.qid, rows)} onOpenSession={p.onOpenSession} />
+      ) : turn.answeredAt !== undefined && turn.relay ? (
+        <RelayCard relay={turn.relay} session={p.sessions.find(s => s.id === turn.relay!.id)} busy={p.relayingQid === turn.qid}
+          disabled={!!p.offline || p.turnAvailable?.(turn.qid) === false || !!turn.ignoredAt || (!!p.relayingQid && p.relayingQid !== turn.qid) || !!p.launchingQid || !!p.closingQid} theme={p.theme ?? 'dark'} reducedMotion={p.reducedMotion}
+          onSend={() => p.onRelay?.(turn.qid)} onCancel={() => p.onRelayCancel?.(turn.qid)} onOpenSession={p.onOpenSession} />
+      ) : turn.answeredAt !== undefined && (turn.proposals?.length ?? 0) > 1 ? (
+        <LaunchGroupCard proposals={turn.proposals!} sessions={p.sessions} busy={p.launchingQid === turn.qid} busyRows={p.launchingQid === turn.qid ? p.launchingRows ?? [] : []}
+          disabled={!!p.offline || p.turnAvailable?.(turn.qid) === false || !!turn.ignoredAt || (!!p.launchingQid && p.launchingQid !== turn.qid) || !!p.relayingQid || !!p.closingQid}
+          model={turn.proposals!.some(x => x.launchedId === undefined) ? p.renderModel?.(turn.qid, turn.proposals![0]!.tool, p.launchingQid === turn.qid) : undefined}
+          onLaunch={rows => p.onLaunchProposal?.(turn.qid, rows)} onOpenSession={p.onOpenSession} onTerminal={id => p.onTerminal?.(id)} />
+      ) : turn.answeredAt !== undefined && turn.proposal && (
+        <LaunchCard proposal={turn.proposal} session={p.sessions.find(s => s.id === turn.proposal!.launchedId)} busy={p.launchingQid === turn.qid}
+          disabled={!!p.offline || p.turnAvailable?.(turn.qid) === false || !!turn.ignoredAt || (!!p.launchingQid && p.launchingQid !== turn.qid) || !!p.relayingQid || !!p.closingQid}
+          model={turn.proposal.launchedId === undefined ? p.renderModel?.(turn.qid, turn.proposal.tool, p.launchingQid === turn.qid) : undefined}
+          onLaunch={() => p.onLaunchProposal?.(turn.qid)} onOpenSession={p.onOpenSession} onTerminal={id => p.onTerminal?.(id)} />
+      )}
+      {turn.answeredAt !== undefined && turn.actions && p.onAct && t.chat.action && (
+        <ActionCard rows={turn.actions.map((a, i) => (p.actingQid === turn.qid && p.actingRows?.includes(i) && !a.state ? { ...actionRowOf(a), state: 'running' as const } : actionRowOf(a)))}
+          ignoredAt={turn.ignoredAt} narrow={!p.docked} disabled={!!p.offline || p.turnAvailable?.(turn.qid) === false || !!p.actingQid}
+          onApply={(rows, o) => p.onAct!(turn.qid, rows, o.confirmed)} onDeny={row => p.onDenyAction?.(turn.qid, row)}
+          onIgnore={() => p.onIgnoreCards?.(turn.qid, false)} onReview={() => p.onIgnoreCards?.(turn.qid, true)}
+          onOpen={row => { const a = turn.actions![row]; if (a?.session) p.onOpenSession(a.session); }} />
+      )}
+      {turn.answeredAt !== undefined && turn.projectProposal && p.onProject && (
+        <ProjectCard proposal={turn.projectProposal} target={turn.projectProposal.addTo === undefined ? undefined : p.projectNamed?.(turn.projectProposal.addTo)} onReview={() => p.onProject!(turn.qid)} />
+      )}
+    </>
+  );
+}
+
 export function ChatView(p: ChatViewProps) {
   const t = useChatCopy();
   const { turns, live, visible, enterDelay = 120 } = p;
@@ -210,37 +255,7 @@ export function ChatView(p: ChatViewProps) {
                       return text && <Answer text={text} sessions={p.sessions.filter(s => !turn.machineId || s.machineId === turn.machineId)} onOpen={p.onOpenSession} onDocument={p.onDocument ? ref => p.onDocument!(ref, turn.qid) : undefined} />;
                     })()}
                     {!!turn.choices?.length && turn === turns.at(-1) && <><div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{turn.choices.map(c => <Button key={c.id} variant="outline" size="sm" disabled={busy || !!p.offline} onClick={() => submit(t.machines.choose(c.label))} style={{ height: 30, padding: '0 10px', fontSize: 12 }}>{c.label}</Button>)}</div><small style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>{t.machines.clarification}</small></>}
-                    {turn.machineName && (turn.proposal || turn.relay || turn.closes || (turn.actions && p.onAct) || (turn.projectProposal && p.onProject)) && <div style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{t.machines.destination} : <strong style={{ color: 'var(--sidebar-foreground)' }}>{turn.machineId === 'local' ? t.machines.local : turn.machineName}</strong>{p.turnAvailable?.(turn.qid) === false && ` · ${t.machines.offline}`}</div>}
-                    {/* An ignored turn is set aside whole (chat.ignore): the daemon refuses its launch, relay and close, so their cards wait too. */}
-                    {turn.answeredAt !== undefined && turn.closes ? (
-                      <CloseGroupCard closes={turn.closes} sessions={p.sessions} busy={p.closingQid === turn.qid} busyRows={p.closingQid === turn.qid ? p.closingRows ?? [] : []}
-                        disabled={!!p.offline || p.turnAvailable?.(turn.qid) === false || !!turn.ignoredAt || (!!p.closingQid && p.closingQid !== turn.qid) || !!p.launchingQid || !!p.relayingQid}
-                        onClose={rows => p.onCloseSessions?.(turn.qid, rows)} onOpenSession={p.onOpenSession} />
-                    ) : turn.answeredAt !== undefined && turn.relay ? (
-                      <RelayCard relay={turn.relay} session={p.sessions.find(s => s.id === turn.relay!.id)} busy={p.relayingQid === turn.qid}
-                        disabled={!!p.offline || p.turnAvailable?.(turn.qid) === false || !!turn.ignoredAt || (!!p.relayingQid && p.relayingQid !== turn.qid) || !!p.launchingQid || !!p.closingQid} theme={p.theme ?? 'dark'} reducedMotion={p.reducedMotion}
-                        onSend={() => p.onRelay?.(turn.qid)} onCancel={() => p.onRelayCancel?.(turn.qid)} onOpenSession={p.onOpenSession} />
-                    ) : turn.answeredAt !== undefined && (turn.proposals?.length ?? 0) > 1 ? (
-                      <LaunchGroupCard proposals={turn.proposals!} sessions={p.sessions} busy={p.launchingQid === turn.qid} busyRows={p.launchingQid === turn.qid ? p.launchingRows ?? [] : []}
-                        disabled={!!p.offline || p.turnAvailable?.(turn.qid) === false || !!turn.ignoredAt || (!!p.launchingQid && p.launchingQid !== turn.qid) || !!p.relayingQid || !!p.closingQid}
-                        model={turn.proposals!.some(x => x.launchedId === undefined) ? p.renderModel?.(turn.qid, turn.proposals![0]!.tool, p.launchingQid === turn.qid) : undefined}
-                        onLaunch={rows => p.onLaunchProposal?.(turn.qid, rows)} onOpenSession={p.onOpenSession} onTerminal={id => p.onTerminal?.(id)} />
-                    ) : turn.answeredAt !== undefined && turn.proposal && (
-                      <LaunchCard proposal={turn.proposal} session={p.sessions.find(s => s.id === turn.proposal!.launchedId)} busy={p.launchingQid === turn.qid}
-                        disabled={!!p.offline || p.turnAvailable?.(turn.qid) === false || !!turn.ignoredAt || (!!p.launchingQid && p.launchingQid !== turn.qid) || !!p.relayingQid || !!p.closingQid}
-                        model={turn.proposal.launchedId === undefined ? p.renderModel?.(turn.qid, turn.proposal.tool, p.launchingQid === turn.qid) : undefined}
-                        onLaunch={() => p.onLaunchProposal?.(turn.qid)} onOpenSession={p.onOpenSession} onTerminal={id => p.onTerminal?.(id)} />
-                    )}
-                    {turn.answeredAt !== undefined && turn.actions && p.onAct && t.chat.action && (
-                      <ActionCard rows={turn.actions.map((a, i) => (p.actingQid === turn.qid && p.actingRows?.includes(i) && !a.state ? { ...actionRowOf(a), state: 'running' as const } : actionRowOf(a)))}
-                        ignoredAt={turn.ignoredAt} narrow={!p.docked} disabled={!!p.offline || p.turnAvailable?.(turn.qid) === false || !!p.actingQid}
-                        onApply={(rows, o) => p.onAct!(turn.qid, rows, o.confirmed)} onDeny={row => p.onDenyAction?.(turn.qid, row)}
-                        onIgnore={() => p.onIgnoreCards?.(turn.qid, false)} onReview={() => p.onIgnoreCards?.(turn.qid, true)}
-                        onOpen={row => { const a = turn.actions![row]; if (a?.session) p.onOpenSession(a.session); }} />
-                    )}
-                    {turn.answeredAt !== undefined && turn.projectProposal && p.onProject && (
-                      <ProjectCard proposal={turn.projectProposal} target={turn.projectProposal.addTo === undefined ? undefined : p.projectNamed?.(turn.projectProposal.addTo)} onReview={() => p.onProject!(turn.qid)} />
-                    )}
+                    <TurnCards {...p} turn={turn} />
                     {turn.answeredAt !== undefined && (
                       <div data-sources style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 8px', paddingTop: 6, borderTop: '1px solid var(--sidebar-border)', fontSize: 11, lineHeight: '16px', color: 'var(--muted-foreground)' }}>
                         <span style={{ fontWeight: 500 }}>{t.chat.sources}</span>
@@ -283,3 +298,4 @@ export function ChatView(p: ChatViewProps) {
     </div>
   );
 }
+export { Answer as ChatAnswer };
