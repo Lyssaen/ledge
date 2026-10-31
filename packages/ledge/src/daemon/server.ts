@@ -58,6 +58,7 @@ import { HUMAN_ADDRESS } from './openrig/facts.js';
 import { createLedgeThread } from './ledgeThread.js';
 import { createLedgeSay } from './ledgeSay.js';
 import { createSeatSend } from './openrig/seatSend.js';
+import { createRidMemo } from './openrig/ridMemo.js';
 import { createPlans, prepareRigPlan } from './openrig/plan.js';
 import { createLaunches } from './openrig/launch.js';
 import { adoptRig } from './openrig/adopt.js';
@@ -116,7 +117,7 @@ export { resolveFolder };
 class NoteNotTyped extends Refusal { constructor() { super('denied, but the note could not be typed', NOTE_NOT_TYPED); } }
 
 /** Where `handle` sends its answers: the one socket that asked, or the phone gateway's device. */
-type Reply = (m: ServerMessage) => void;
+export type Reply = (m: ServerMessage) => void;
 
 /**
  * Origins allowed to open a WebSocket: the Tauri overlay (packaged and dev server). A browser always
@@ -325,6 +326,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const seatSend = bridge ? createSeatSend({ bridge }) : null;
   /** The launch plans `rig.prepare` made, taken once by `rig.launch`. */
   const rigPlans = createPlans(Date.now);
+  /** A resent rig command (same rid) is answered from the first run, not run twice (24 h). */
+  const ridMemo = createRidMemo();
   /** Rigs launched from a plan, until their lead has the goal; picked up again after a restart. */
   const launches = bridge && seatSend ? createLaunches({ cli: bridge.cli(), bridge, git: execGitSlow,
     send: (ref, text) => seatSend.send('local', ref, text), say: text => { thread.append({ kind: 'ledge', text }); },
@@ -1338,11 +1341,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       // OpenRig writes and Ledge's own voice come in later lots.
       case 'ledge.thread.request': return reply({ type: 'ledge.thread.history', ...thread.page(msg.before) });
       // To the sender only: every client learns the escalation's new state from the bridge's escalation.updated.
-      case 'escalation.answer': {
+      case 'escalation.answer': return ridMemo.once('escalation.answer', msg.rid, reply, async reply => {
         if (!answers) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'openrig_down', reason: "OpenRig n'est pas branché" });
         const r = await answers.answer(msg.id, msg.answers, msg.by);
         return reply(r.ok ? { type: 'rig.result', rid: msg.rid, ok: true } : { type: 'rig.result', rid: msg.rid, ok: false, code: r.code, reason: r.reason });
-      }
+      });
       // To the sender: accepted as soon as the user item is in the thread; the answer reaches every front through the thread.
       case 'ledge.say': {
         if (msg.text.trim() === '') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'invalid', reason: 'empty message' });
@@ -1351,7 +1354,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return answered;
       }
       // Lifecycle of a rig or a seat, through OpenRig; to the sender only (the mirror shows the effect by SSE).
-      case 'rig.act': {
+      case 'rig.act': return ridMemo.once('rig.act', msg.rid, reply, async reply => {
         if (msg.machine !== 'local') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'unreachable', reason: `machine ${msg.machine} is not this daemon's` });
         if (!bridge) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'openrig_down', reason: "OpenRig n'est pas branché" });
         // Cancelling a launch: forget it first, so a seat turning ready while `down` runs cannot get the goal.
@@ -1359,16 +1362,16 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         const r = await actOnRig({ http: () => bridge.http(), ensureRunning: why => bridge.ensureRunning(why), operator: HUMAN_ADDRESS },
           { verb: msg.verb, ...(msg.rigId !== undefined ? { rigId: msg.rigId } : {}), ...(msg.seatRef !== undefined ? { seatRef: msg.seatRef } : {}) });
         return reply(r.ok ? { type: 'rig.result', rid: msg.rid, ok: true } : { type: 'rig.result', rid: msg.rid, ok: false, code: r.code, reason: r.reason });
-      }
+      });
       // Writing to a seat; to the sender only. The Desktop routes another machine's seats to its own daemon (lot 6).
-      case 'rig.send': {
+      case 'rig.send': return ridMemo.once('rig.send', msg.rid, reply, async reply => {
         if (msg.machine !== 'local') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'unreachable', reason: `machine ${msg.machine} is not this daemon's` });
         if (msg.text.trim() === '' || msg.seatRef.startsWith('-')) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'invalid', reason: 'empty message or bad seat' });
         if (!bridge || !seatSend) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'openrig_down', reason: "OpenRig n'est pas branché" });
         const r = await seatSend.send(msg.machine, msg.seatRef, msg.text);
         return reply(r.ok ? { type: 'rig.result', rid: msg.rid, ok: true } : { type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: r.reason });
-      }
-      case 'rig.prepare': {
+      });
+      case 'rig.prepare': return ridMemo.once('rig.prepare', msg.rid, reply, async reply => {
         if (msg.machine !== 'local') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'unreachable', reason: `machine ${msg.machine} is not this daemon's` });
         if (!bridge) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'openrig_down', reason: "OpenRig n'est pas branché" });
         // Ledge starts OpenRig itself for a launch, and says so in its thread (the bridge's notice); only a start that fails is refused.
@@ -1384,9 +1387,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
           log(`openrig: plan not made: ${(e as Error).message}`);
           return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: e instanceof OpenRigUnreachable ? 'openrig_down' : 'failed', reason: (e as Error).message });
         }
-      }
+      });
       // A plan `rig.prepare` made, launched once; to the sender only (the mirror and the thread show the rest).
-      case 'rig.launch': {
+      case 'rig.launch': return ridMemo.once('rig.launch', msg.rid, reply, async reply => {
         if (!bridge || !launches) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'openrig_down', reason: "OpenRig n'est pas branché" });
         const plan = rigPlans.take(msg.planId);
         if (plan === 'used') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: 'plan already launched' });
@@ -1398,7 +1401,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
           log(`openrig: launch failed: ${(e as Error).message}`);
           return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: (e as Error).message });
         }
-      }
+      });
       // Files a rig in a project: only projects.json changes; the mirror recomputes the rig's project.
       case 'rig.adopt': {
         const result = (r: { ok: true } | { ok: false; code: 'failed' | 'unreachable' | 'openrig_down'; reason: string }): void => reply({ type: 'rig.result', rid: msg.rid, ...r });
