@@ -36,17 +36,24 @@ describe('handleLine', () => {
     expect(handleLine({ escalations: [], attention: 0, lastDecided, lastExchange, now: now + 5001 })).toMatchObject({ kind: 'exchange' });
     expect(handleLine({ escalations: [], attention: 0, lastDecided, now: now + 5001 })).toEqual({ kind: 'calm' });
   });
-  it('counts pending and grace decisions with the waiting sessions; the oldest escalation speaks; asks, updates and settled ones do not count', () => {
+  it('counts pending and grace decisions, open asks included, with the waiting sessions; the oldest escalation speaks; updates and settled ones do not count', () => {
     const escalations = [
       esc({ id: 'new', createdAt: at(now - 1000), summary: 'Merge ?', category: 'git', from: 'build@factory' }),
       esc({ id: 'old', createdAt: at(now - 90_000), state: 'grace', category: undefined, summary: '', questions: [{ id: 'a', question: 'Quel port ?', options: [{ id: '1', label: '80' }, { id: '2', label: '443' }] }] }),
-      esc({ id: 'ask', source: 'ask', createdAt: at(now - 900_000), from: 'Otto' }),
+      esc({ id: 'ask', source: 'ask', createdAt: at(now - 30_000), from: 'Lu' }),
+      esc({ id: 'shutAsk', source: 'ask', state: 'answered', createdAt: at(now - 900_000), from: 'Mo' }),
       esc({ id: 'upd', intent: 'update', createdAt: at(now - 900_000) }),
       esc({ id: 'done', state: 'answered', createdAt: at(now - 900_000) }),
       esc({ id: 'shut', state: 'closed', createdAt: at(now - 900_000) })
     ];
     expect(handleLine({ escalations, attention: 1, waiting: { name: 'Otto', text: 'npm test' }, now }))
-      .toEqual({ kind: 'forYou', summary: 'orch-lead : Quel port ?', count: 3 });
+      .toEqual({ kind: 'forYou', summary: 'orch-lead : Quel port ?', count: 4 });
+  });
+  it('an open ask whose session keeps working is for you: count 1, its summary', () => {
+    const ask = esc({ id: 'k1', source: 'ask', rigId: undefined, from: 'Otto', category: undefined, summary: 'Quel nom pour la table ?' });
+    const sessions = [{ id: 'a', name: 'Otto', state: 'working', lastActivityAt: at(now) }] as unknown as Session[];
+    expect(handleLine({ escalations: [ask], ...waitingOf(sessions, [], [ask]), now }))
+      .toEqual({ kind: 'forYou', summary: 'Otto : Quel nom pour la table ?', count: 1 });
   });
   it('says the summary through the given words', () => {
     expect(handleLine({ escalations: [], attention: 1, waiting: { name: 'Otto', text: 'npm test' }, now, summary: (who, what) => `${who}: ${what}` }))
@@ -70,5 +77,14 @@ describe('waitingOf', () => {
     const rigs = [{ id: 'factory', machine: 'local', seats: [{ ref: 'dev@factory', address: '@dev', name: 'dev', runtime: 'claude', state: 'working', sessionId: 'c' }] }] as unknown as Rig[];
     expect(waitingOf(sessions, rigs)).toEqual({ attention: 2, waiting: { name: 'Otto', text: 'npm test' } });
     expect(waitingOf([], rigs)).toEqual({ attention: 0 });
+  });
+  it('a waiting session with an open ask is counted once, as the ask (same machine and name)', () => {
+    const otto = session({ id: 'a', name: 'Otto', state: 'waiting_input', pending: { kind: 'question', text: 'Quel nom ?', source: 'hook' } });
+    const ask = esc({ id: 'k1', source: 'ask', machine: 'local', from: 'Otto', category: undefined, summary: 'Quel nom ?' });
+    expect(waitingOf([otto], [], [ask])).toEqual({ attention: 0 });
+    expect(handleLine({ escalations: [ask], ...waitingOf([otto], [], [ask]), now })).toMatchObject({ kind: 'forYou', count: 1, summary: 'Otto : Quel nom ?' });
+    // Another machine's Otto, or a settled ask: the session counts again.
+    expect(waitingOf([otto], [], [{ ...ask, machine: 'srv' }]).attention).toBe(1);
+    expect(waitingOf([otto], [], [{ ...ask, state: 'answered' }]).attention).toBe(1);
   });
 });

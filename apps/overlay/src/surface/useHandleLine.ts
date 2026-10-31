@@ -57,7 +57,7 @@ export function useHandleLine(client: DaemonClient, sessions: readonly Session[]
 
   const [, tick] = useState(0);
   const now = Date.now();
-  const line = handleLine({ escalations, ...waitingOf(sessions, rigs), lastExchange, lastDecided, now, summary: t.notchLine.summary });
+  const line = handleLine({ escalations, ...waitingOf(sessions, rigs, escalations), lastExchange, lastDecided, now, summary: t.notchLine.summary });
   // Wake up when the newest piece of news stops being news.
   const expiry = Math.max(lastExchange?.seenAt ?? -Infinity, lastDecided?.seenAt ?? -Infinity) + LINE_LINGER_MS;
   useEffect(() => {
