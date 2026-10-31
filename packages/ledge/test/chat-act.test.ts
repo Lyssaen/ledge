@@ -73,6 +73,13 @@ describe('actFromChat (spec 2026-10-26 action registry §9.2)', () => {
     expect(applied).toEqual([]); expect(c.marks).toEqual([]);
     expect(await actFromChat(d, 'q1', undefined, true)).toEqual({ done: [0, 1], failed: [] });
   });
+  it('one confirmation applies every team.dissolve of a plan, in order', async () => {
+    const c = card(['t1', 't2', 't3'].map(t => row('team.dissolve', { team: t }, { risk: 'destructive' })));
+    const { d, applied } = deps(c);
+    await expect(actFromChat(d, 'q1')).rejects.toThrow(ActRefused);
+    expect(await actFromChat(d, 'q1', undefined, true)).toEqual({ done: [0, 1, 2], failed: [] });
+    expect(applied).toEqual(['t1', 't2', 't3']);
+  });
   it('re-resolves each row first: a refused one, or one whose target changed, is refused without being sent, and stops the plan', async () => {
     const c = card([row('session.decide', { session: 'a', decision: 'accept', expect: { key: 'k1' } }, { risk: 'destructive' }), row('session.archive', { session: 'b' })]);
     const { d, applied } = deps(c, { resolve: r => (r.action === 'session.decide' ? { ...r, args: { ...r.args, expect: { key: 'k2' } } } : r) });
