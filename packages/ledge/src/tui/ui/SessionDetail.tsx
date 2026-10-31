@@ -12,7 +12,7 @@ import { TitledBox } from './TitledBox.js';
 
 /** The home's right side for a session: its card with its request, its terminal, the latest exchanges between sessions. */
 export function SessionDetail({ s }: { s: Session | null }) {
-  const { d, t, g } = useTui();
+  const { d, t, g, focus } = useTui();
   return (
     <Box flexDirection="column" flexGrow={1}>
       {s ? (
@@ -20,7 +20,7 @@ export function SessionDetail({ s }: { s: Session | null }) {
           <TitledBox title={`${s.name} · ${oneLine(s.topic ?? s.title)}`} color={isPending(s) ? C.red : C.line} titleColor={isPending(s) ? C.red : C.dim}>
             <SessionCard s={s} note />
           </TitledBox>
-          {s.tool === 'omp' ? <OmpBox s={s} /> : <TerminalBox s={s} />}
+          {s.tool === 'omp' ? <OmpBox key={s.id} s={s} active={focus.kind !== 'ledge' && focus.kind !== 'yours'} /> : <TerminalBox s={s} />}
         </>
       ) : <TitledBox title={t.tabs.session} flexGrow={1}><Text color={C.faint}>{t.session.noSession}</Text></TitledBox>}
       <TitledBox title={t.overview.exchanges} height={5}>

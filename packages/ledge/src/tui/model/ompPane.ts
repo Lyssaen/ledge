@@ -2,10 +2,13 @@ import type { ThreadItem } from '@ledge/protocol';
 import type { Glyphs } from '../glyphs.js';
 import type { Messages } from '../i18n/lang.js';
 import { C } from '../theme.js';
-import { pad, row, type Line } from './cells.js';
+import { cut, pad, row, type Line } from './cells.js';
 import { markdownLines } from './markdown.js';
 import { toolLines } from './thread.js';
 import { clock, oneLine, took } from './time.js';
+
+/** The most lines of a tool's output the pane shows (the last ones). */
+export const OUTPUT_LINES = 3;
 
 /** An OMP session's thread drawn as a terminal (spec « OMP », screen « Une session OMP »): `❯` for what was asked, `π name`
  *  for its words, one line per action (a running one with its time ticking), diffs under a bar, the helpers it started, and
@@ -39,6 +42,9 @@ export function ompPaneLines(items: readonly ThreadItem[], o: { t: Messages; g: 
         // The mockup's spinner is a still ◐ in blue; the running time beside it ticks.
         if (it.status === 'running') lines[0] = lines[0]!.map(s => (s.live && 'spin' in s.live ? { text: g.running, color: C.blue } : s));
         out.push(...lines);
+        // Its output (a test run), the last lines under the same bar the diffs hang from.
+        const shown = (it.output ?? '').replace(/\x1b\[[0-9;:]*m/g, '').replace(/\r/g, '').split('\n').map(l => l.trimEnd()).filter(Boolean).slice(-OUTPUT_LINES);
+        for (const l of shown) out.push(cut([{ text: `      ${g.bar} `, color: C.faint }, { text: l, color: it.status === 'failed' ? C.red : C.dim }], width));
         break;
       }
       case 'helper': {

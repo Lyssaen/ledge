@@ -59,6 +59,13 @@ describe('ledge tui: OMP thread as a terminal', () => {
     expect(text(lines[lines.length - 1]!)).toContain('f199.ts');
   });
 
+  it('a tool\'s output shows its last lines under the bar', () => {
+    const output = ['one', 'two', '\x1b[32m✓ test/client.test.ts (4 tests) 212ms\x1b[0m', '', '  ✓ réessaie après un 429'].join('\n');
+    const rows = ompPaneLines([tool('t', { tool: 'bash', label: 'pnpm vitest', output })], o({ width: 30 })).map(text);
+    expect(rows.slice(1)).toEqual(['      │ two', '      │ ✓ test/client.test.ts…', '      │   ✓ réessaie après un…']);
+    expect(rows.every(r => r.length <= 30)).toBe(true);
+  });
+
   it('draws nothing for what OMP does not send', () => {
     expect(ompPaneLines([], o())).toEqual([]);
   });
@@ -82,6 +89,22 @@ describe('ledge tui: an OMP session in the home', () => {
       expect(f).toContain('piloté par RPC · rien n’est tapé dans un terminal');
       expect(f).toContain('❯ Ajoute la gestion du 429');
       expect(f).not.toContain('TERMINAL · ');
+      expect(tui.daemon.received.filter(m => m.type === 'session.preview.subscribe' && (m as { color?: boolean }).color && (m as { id: string | null }).id === 'omp1')).toEqual([]);
+    } finally { await tui.cleanup(); }
+  });
+
+  it('t on screen 3 shows the OMP pane and asks for no colour preview', async () => {
+    const omp = { ...mockupSessions()[1]!, id: 'omp1', name: 'Lyra', tool: 'omp' as const, backend: 'omp-rpc' as const, tmuxSession: null };
+    const tui = await startTui({ sessions: [mockupSessions()[0]!, omp], colorLines: ['\x1b[31mrouge\x1b[0m'] });
+    try {
+      tui.daemon.thread('omp1', [{ kind: 'reply', id: 'r', turn: 1, at: at(1), text: 'Fait, avec un test.' }] as ThreadItem[]);
+      await tui.resize(160, 46);
+      await tui.pick('Lyra');
+      await tui.press('\r');
+      await until(() => tui.frame().includes('Fait, avec un test.'));
+      await tui.press('t');
+      await until(() => tui.frame().includes('π FIL · OMP'));
+      expect(tui.frame()).toContain('Fait, avec un test.');
       expect(tui.daemon.received.filter(m => m.type === 'session.preview.subscribe' && (m as { color?: boolean }).color && (m as { id: string | null }).id === 'omp1')).toEqual([]);
     } finally { await tui.cleanup(); }
   });

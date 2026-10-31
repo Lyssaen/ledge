@@ -20,6 +20,7 @@ import { Tail } from '../ui/Tail.js';
 import { Field, fieldRows } from '../ui/Field.js';
 import { layout } from '../model/field.js';
 import type { Messages } from '../i18n/lang.js';
+import { OmpBox } from '../ui/OmpBox.js';
 import { TitledBox } from '../ui/TitledBox.js';
 
 type Mode = 'read' | 'reply' | 'note' | 'model';
@@ -42,7 +43,7 @@ function SessionView({ s }: { s: Session }) {
   const [diffs, setDiffs] = useState(false);
   const [unfolded, setUnfolded] = useState(false);
   const [terminal, setTerminal] = useState(false);
-  const colored = useColorPreview(client, terminal ? s.id : null);
+  const colored = useColorPreview(client, terminal && s.tool !== 'omp' ? s.id : null);
   // The line at the top of the box once scrolled, as an item and a line in it, so that a resize, a fold or new lines below
   // keep it in place; null follows the bottom of the thread.
   const [anchor, setAnchor] = useState<{ key: string; offset: number } | null>(null);
@@ -127,6 +128,8 @@ function SessionView({ s }: { s: Session }) {
       return false;
     }
     if (key.leftArrow && seat) { setFocus({ kind: 'rig', machine: seat.machine, rigId: seat.rigId }); go('home'); return true; }
+    // The OMP pane (t) scrolls itself.
+    if (terminal && s.tool === 'omp') return false;
     if (key.pageUp) { scroll(up + view - 1); return true; }
     if (key.pageDown) { scroll(up - view + 1); return true; }
     if (input === 'k' || key.upArrow) { scroll(up + 1); return true; }
@@ -183,7 +186,7 @@ function SessionView({ s }: { s: Session }) {
   const drawsThread = mode === 'model' || room >= 3;
   return (
     <Frame crumb={seat ? `${t.home.rigs} › ${seat.label} › ${seat.address} › ${s.name} · ${machineLabel(s)}` : `${s.repo ?? s.project}${s.branch ? ` › ${g.branch} ${s.branch}` : ''} › ${s.name} · ${machineLabel(s)}`} crumbShort={s.name} keys={keys} kept={draft !== ''}>
-      {drawsThread ? <TitledBox title={terminal ? `${t.overview.terminal(paneName(s))}${colored ? ` ${t.overview.inColor}` : ''}` : title} flexGrow={1} minHeight={3} foot={showsThread ? foot : undefined}>
+      {drawsThread && terminal && s.tool === 'omp' && mode !== 'model' ? <OmpBox key={s.id} s={s} /> : drawsThread ? <TitledBox title={terminal ? `${t.overview.terminal(paneName(s))}${colored ? ` ${t.overview.inColor}` : ''}` : title} flexGrow={1} minHeight={3} foot={showsThread ? foot : undefined}>
         {mode === 'model'
           ? <ModelPicker machine={machine} tool={s.tool} current={{ model: s.model ?? null, effort: s.effort ?? null }} onCancel={() => setMode('read')}
             onPick={pick => { client.send({ type: 'session.model', id: s.id, model: pick.model, effort: pick.effort }); toast({ text: t.toast.model(s.name, pick.model ?? t.session.defaultModel), tone: 'ok' }); setMode('read'); }} />
