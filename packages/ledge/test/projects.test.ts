@@ -9,8 +9,8 @@ import { paths } from '../src/paths.js';
 const file = () => join(mkdtempSync(join(tmpdir(), 'ledge-projects-')), 'projects.json');
 const state: Projects = {
   projects: [
-    { id: 'ledge', name: 'Ledge', color: 'blue', description: 'Agents', repos: [{ machine: 'local', path: '/w/ledge' }] },
-    { id: 'api', name: 'Payment Service', color: 'green', description: '', repos: [{ machine: 'devbox', path: '/srv/api' }] }
+    { id: 'ledge', name: 'Ledge', color: 'blue', description: 'Agents', rigs: [], repos: [{ machine: 'local', path: '/w/ledge' }] },
+    { id: 'api', name: 'Payment Service', color: 'green', description: '', rigs: [], repos: [{ machine: 'devbox', path: '/srv/api' }] }
   ],
   rules: [{ machine: 'local', path: '/tmp/scratch', project: 'api' }]
 };

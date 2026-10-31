@@ -11,9 +11,9 @@ afterEach(async () => { vi.useRealTimers(); vi.restoreAllMocks(); cleanup(); awa
 
 /** Ledge holds /w/ledge (Otto) and remembers /w/scratch (Bix); Payment Service has /w/pay (Nova) and /srv/pay on NAS, and remembers
  *  /w/billing; Docs has no repository and nobody. Kit has no project. */
-const LEDGE: Project = { id: 'ledge', name: 'Ledge', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] };
-const PAYMENT: Project = { id: 'payment', name: 'Payment Service', color: 'green', description: '', repos: [{ machine: 'local', path: '/w/pay' }, { machine: 'nas', path: '/srv/pay' }] };
-const DOCS: Project = { id: 'docs', name: 'Docs', color: 'amber', description: '', repos: [] };
+const LEDGE: Project = { id: 'ledge', name: 'Ledge', color: 'blue', description: '', rigs: [], repos: [{ machine: 'local', path: '/w/ledge' }] };
+const PAYMENT: Project = { id: 'payment', name: 'Payment Service', color: 'green', description: '', rigs: [], repos: [{ machine: 'local', path: '/w/pay' }, { machine: 'nas', path: '/srv/pay' }] };
+const DOCS: Project = { id: 'docs', name: 'Docs', color: 'amber', description: '', rigs: [], repos: [] };
 const STATE: Projects = {
   projects: [LEDGE, PAYMENT, DOCS],
   rules: [{ machine: 'local', path: '/w/scratch', project: 'ledge' }, { machine: 'local', path: '/w/billing', project: 'payment' }]

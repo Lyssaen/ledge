@@ -61,7 +61,7 @@ describe('chat service', () => {
     const s = setup({ spawn, projects: () => { reads++; return projects; } });
     home = s.home;
     await s.chat.ask('q1', 'x', () => {});
-    projects = { projects: [{ id: 'ledge', name: 'Ledge', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] }], rules: [] };
+    projects = { projects: [{ id: 'ledge', name: 'Ledge', color: 'blue', description: '', rigs: [], repos: [{ machine: 'local', path: '/w/ledge' }] }], rules: [] };
     await s.chat.ask('q2', 'y', () => {});
     expect(reads).toBe(2);
     expect(seen[0]).toBeNull();
@@ -74,7 +74,7 @@ describe('chat service', () => {
       const f = join(home, 'chat', 'context', 'forge.md'); seen.push(existsSync(f) ? readFileSync(f, 'utf8') : null);
       return nodeSpawn(file, a, o as never);
     }) as unknown as typeof nodeSpawn;
-    const projects: Projects = { projects: [{ id: 'ledge', name: 'Ledge', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] }], rules: [] };
+    const projects: Projects = { projects: [{ id: 'ledge', name: 'Ledge', color: 'blue', description: '', rigs: [], repos: [{ machine: 'local', path: '/w/ledge' }] }], rules: [] };
     const writes: string[] = [];
     const forge = { async write(ctx: { dir: string; steps: Map<string, unknown> }, p: Projects) { writes.push(p.projects[0]!.id); writeFileSync(join(ctx.dir, 'forge.md'), '- Ledge: forge-ledge.md'); } };
     const s = setup({ spawn, projects: () => projects, forge }); home = s.home;

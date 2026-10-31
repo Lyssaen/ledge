@@ -5,8 +5,8 @@ import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { activeCount, dotOf, mainOrder, searchSessions } from '../src/nav/agents';
 
 const projects: Projects = { projects: [
-  { id: 'b', name: 'Payment Service', color: 'green', description: '', repos: [{ machine: 'local', path: '/w/pay' }] },
-  { id: 'a', name: 'Ledge', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] }
+  { id: 'b', name: 'Payment Service', color: 'green', description: '', rigs: [], repos: [{ machine: 'local', path: '/w/pay' }] },
+  { id: 'a', name: 'Ledge', color: 'blue', description: '', rigs: [], repos: [{ machine: 'local', path: '/w/ledge' }] }
 ], rules: [] };
 const s = (id: string, cwd: string, startedAt: string, extra: Partial<Session> = {}) => fakeSession(id, { id: `local:${id}`, machineId: 'local', cwd, startedAt, ...extra });
 const list = [s('kit', '/tmp', '2026-10-16T08:00:00.000Z'), s('otto', '/w/ledge', '2026-10-16T09:00:00.000Z'), s('nova', '/w/pay/api', '2026-10-16T10:00:00.000Z'), s('rio', '/w/ledge', '2026-10-16T07:00:00.000Z')];

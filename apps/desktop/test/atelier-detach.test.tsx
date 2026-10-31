@@ -135,7 +135,7 @@ describe('the detached Atelier’s window (#21)', () => {
   async function atelier() {
     const d = await createMockDaemon();
     d.machines([{ id: 'local', label: 'Local' }]);
-    d.projects({ projects: [{ id: 'ledge', name: 'Ledge', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] }], rules: [] });
+    d.projects({ projects: [{ id: 'ledge', name: 'Ledge', color: 'blue', description: '', rigs: [], repos: [{ machine: 'local', path: '/w/ledge' }] }], rules: [] });
     d.upsert(fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'waiting_permission' }));
     d.upsert(fakeSession('kit', { name: 'Kit', cwd: '/tmp', state: 'waiting_input' }));
     render(<AtelierApp client={createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket })} />);

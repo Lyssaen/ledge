@@ -444,7 +444,7 @@ describe('a project proposed in the chat (lot 11 task 5)', () => {
     await env.user.click(prop.getByRole('button', { name: /^Create the project/ }));
     await waitFor(() => expect(setsOf(env.d)).toHaveLength(1));
     expect(setsOf(env.d)[0]!.projects.projects.at(-1)).toEqual({ id: 'paper', name: 'Paper', color: 'violet', description: 'The fonts and templates',
-      repos: [{ machine: 'local', path: '/home/me/paper-fonts' }, { machine: 'local', path: '/home/me/paper-templates' }] });
+      rigs: [], repos: [{ machine: 'local', path: '/home/me/paper-fonts' }, { machine: 'local', path: '/home/me/paper-templates' }] });
   });
 
   it('with an addTo that exists (case aside), the card says « Complete Ledge » and the editor « Add to Ledge »', async () => {

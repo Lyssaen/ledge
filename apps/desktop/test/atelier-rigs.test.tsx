@@ -16,7 +16,7 @@ import { saveSeats } from '../src/atelier/seats';
 beforeEach(() => localStorage.clear());
 afterEach(() => cleanup());
 
-const PROJECTS: Projects = { projects: [{ id: 'ledge', name: 'Ledge', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] }], rules: [] };
+const PROJECTS: Projects = { projects: [{ id: 'ledge', name: 'Ledge', color: 'blue', description: '', rigs: [], repos: [{ machine: 'local', path: '/w/ledge' }] }], rules: [] };
 const seat = (name: string, extra: Partial<RigSeat> = {}): RigSeat => ({ ref: `${name}@factory`, address: `@${name}`, name, runtime: 'claude-code', state: 'working', ...extra });
 const rigOf = (name: string): Session['rig'] => ({ machine: 'local', rigId: 'r1', rigName: 'factory', seat: `${name}@factory`, pod: 'dev', member: name });
 const paired = (name: string) => fakeSession(`local:${name}`, { name, cwd: '/w/ledge', state: 'working', machineId: 'local', topic: `Task of ${name}`, rig: rigOf(name) });

@@ -87,7 +87,7 @@ describe('Settings › Projects: Ledge proposes', () => {
     const { d, user } = await open();
     await ask(user);
     await waitFor(() => expect(cards()).toHaveLength(3));
-    const created: Projects = { ...PROJECTS, projects: [...PROJECTS.projects, { id: 'notes', name: 'Notes', color: 'violet', description: '', repos: [{ machine: 'local', path: '/srv/lab/notes' }, { machine: 'local', path: '/home/me/dev/paper-fonts' }] }] };
+    const created: Projects = { ...PROJECTS, projects: [...PROJECTS.projects, { id: 'notes', name: 'Notes', color: 'violet', description: '', rigs: [], repos: [{ machine: 'local', path: '/srv/lab/notes' }, { machine: 'local', path: '/home/me/dev/paper-fonts' }] }] };
     act(() => d.projects(created));
     await waitFor(() => expect(cards()).toEqual(['Proposal Ledge', 'Proposal Paper']));
     expect(card('Proposal Paper').queryByText('paper-fonts · Local')).toBeNull();

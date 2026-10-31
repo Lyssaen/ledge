@@ -9,8 +9,8 @@ const session = (id: string, name: string, cwd: string, machineId?: string): Ses
 
 const projects: Projects = {
   projects: [
-    { id: 'ledge', name: 'Ledge', color: 'blue', description: 'Une nouvelle façon de travailler.', repos: [{ machine: 'local', path: '/home/me/Workspace/ledge/application' }, { machine: 'dev', path: '/home/dev/ledge' }] },
-    { id: 'commerce', name: 'Payment Service', color: 'green', description: '', repos: [{ machine: 'dev', path: '/home/dev/payment/api' }] }
+    { id: 'ledge', name: 'Ledge', color: 'blue', description: 'Une nouvelle façon de travailler.', rigs: [], repos: [{ machine: 'local', path: '/home/me/Workspace/ledge/application' }, { machine: 'dev', path: '/home/dev/ledge' }] },
+    { id: 'commerce', name: 'Payment Service', color: 'green', description: '', rigs: [], repos: [{ machine: 'dev', path: '/home/dev/payment/api' }] }
   ],
   rules: []
 };
@@ -79,7 +79,7 @@ describe('proposeProjects', () => {
   });
 
   it("an agents' proposal retargets only on its own folders", () => {
-    const taken: Projects = { ...projects, projects: [...projects.projects, { id: 'logs', name: 'log', color: 'red', description: '', repos: [] }] };
+    const taken: Projects = { ...projects, projects: [...projects.projects, { id: 'logs', name: 'log', color: 'red', description: '', rigs: [], repos: [] }] };
     const r = proposeProjects({ ...input, projects: taken });
     expect(r.find(x => x.file.includes('dev:zed'))!.targetId).toBe('logs');
     expect(r.find(x => x.file.includes('local:kit'))!.targetId).toBeUndefined();
@@ -132,7 +132,7 @@ describe('proposeProjects', () => {
 
   it('a repository next to a project repository is a new proposal, not an « add to »', () => {
     const scans = [{ ...local, repos: [...local.repos, { path: '/home/me/development/ledge', branch: 'main' }, { path: '/home/me/development/a', branch: 'main' }, { path: '/home/me/development/b', branch: null }] }, dev];
-    const near: Projects = { ...projects, projects: [...projects.projects, { id: 'ledge-dev', name: 'Ledge dev', color: 'pink', description: '', repos: [{ machine: 'local', path: '/home/me/development/ledge' }] }] };
+    const near: Projects = { ...projects, projects: [...projects.projects, { id: 'ledge-dev', name: 'Ledge dev', color: 'pink', description: '', rigs: [], repos: [{ machine: 'local', path: '/home/me/development/ledge' }] }] };
     const r = proposeProjects({ ...input, projects: near, scans });
     const p = containing('/home/me/development/a', 'local', r)!;
     expect(p.targetId).toBeUndefined();
@@ -144,7 +144,7 @@ describe('proposeProjects', () => {
   });
 
   it('a name already taken (case and accents aside) is an « add to » that project', () => {
-    const taken: Projects = { ...projects, projects: [...projects.projects, { id: 'bac', name: 'SCRÂTCH', color: 'red', description: '', repos: [] }] };
+    const taken: Projects = { ...projects, projects: [...projects.projects, { id: 'bac', name: 'SCRÂTCH', color: 'red', description: '', rigs: [], repos: [] }] };
     const p = containing('/home/me/Workspace/scratch/notes', 'local', proposeProjects({ ...input, projects: taken }))!;
     expect(p).toMatchObject({ targetId: 'bac', name: 'SCRÂTCH', color: 'red', summary: { target: 'SCRÂTCH' } });
   });
@@ -165,7 +165,7 @@ describe('proposeProjects', () => {
       ['Log', 'teal', undefined],
       ['Scratch', 'pink', undefined]
     ]);
-    const full: Projects = { projects: (['blue', 'green', 'amber', 'violet', 'teal', 'pink', 'red', 'slate'] as const).map((color, i) => ({ id: `p${i}`, name: `P${i}`, color, description: '', repos: [] })), rules: [] };
+    const full: Projects = { projects: (['blue', 'green', 'amber', 'violet', 'teal', 'pink', 'red', 'slate'] as const).map((color, i) => ({ id: `p${i}`, name: `P${i}`, color, description: '', rigs: [], repos: [] })), rules: [] };
     expect(proposeProjects({ ...input, projects: full }).map(p => p.color)[0]).toBe('blue');
   });
 
@@ -305,7 +305,7 @@ describe('proposeFor', () => {
   it('null when nothing is free', () => {
     const none = { projects, scans: [], sessions: [] };
     expect(proposeFor({ name: 'paper', file: [] }, proposeProjects(none), none)).toBeNull();
-    const owned: Projects = { projects: [{ id: 'all', name: 'All', color: 'blue', description: '', repos: [{ machine: 'local', path: '/home/me' }, { machine: 'dev', path: '/home/dev' }, { machine: 'dev', path: '/srv' }] }], rules: [] };
+    const owned: Projects = { projects: [{ id: 'all', name: 'All', color: 'blue', description: '', rigs: [], repos: [{ machine: 'local', path: '/home/me' }, { machine: 'dev', path: '/home/dev' }, { machine: 'dev', path: '/srv' }] }], rules: [] };
     const taken = { projects: owned, scans: [local, dev], sessions: [session('local:otto', 'Otto', '/home/me/Workspace')] };
     expect(proposeProjects(taken)).toEqual([]);
     expect(proposeFor({ name: 'paper', file: ['local:otto'] }, proposeProjects(taken), taken)).toBeNull();

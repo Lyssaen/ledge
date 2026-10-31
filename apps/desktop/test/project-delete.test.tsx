@@ -21,9 +21,9 @@ const named = (name: string) => Object.assign(new Error(name), { name });
 const tick = () => new Promise(r => setTimeout(r, 50));
 
 /** Ledge holds /w/ledge (Otto) and remembers /w/scratch (Bix): two agents at its table, one rule. Payment Service has Nova, Docs nobody; Kit has no project. */
-const LEDGE: Project = { id: 'ledge', name: 'Ledge', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] };
-const PAYMENT: Project = { id: 'payment', name: 'Payment Service', color: 'green', description: '', repos: [{ machine: 'local', path: '/w/pay' }] };
-const DOCS: Project = { id: 'docs', name: 'Docs', color: 'amber', description: '', repos: [{ machine: 'local', path: '/w/docs' }] };
+const LEDGE: Project = { id: 'ledge', name: 'Ledge', color: 'blue', description: '', rigs: [], repos: [{ machine: 'local', path: '/w/ledge' }] };
+const PAYMENT: Project = { id: 'payment', name: 'Payment Service', color: 'green', description: '', rigs: [], repos: [{ machine: 'local', path: '/w/pay' }] };
+const DOCS: Project = { id: 'docs', name: 'Docs', color: 'amber', description: '', rigs: [], repos: [{ machine: 'local', path: '/w/docs' }] };
 const STATE: Projects = {
   projects: [LEDGE, PAYMENT, DOCS],
   rules: [{ machine: 'local', path: '/w/scratch', project: 'ledge' }, { machine: 'local', path: '/w/billing', project: 'payment' }]

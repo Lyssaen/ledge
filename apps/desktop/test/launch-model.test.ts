@@ -7,8 +7,8 @@ import { effective, effortsFor } from '../src/launch/ModelPicker';
 import { loadPick, savePick } from '../src/launch/modelPrefs';
 
 const projects: Project[] = [
-  { id: 'ledge', name: 'Ledge', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge/app' }, { machine: 'local', path: '/w/ledge/docs' }, { machine: 'nas', path: '/srv/ledge' }] },
-  { id: 'payment', name: 'Payment', color: 'green', description: '', repos: [{ machine: 'local', path: '/w/payment/api' }] }
+  { id: 'ledge', name: 'Ledge', color: 'blue', description: '', rigs: [], repos: [{ machine: 'local', path: '/w/ledge/app' }, { machine: 'local', path: '/w/ledge/docs' }, { machine: 'nas', path: '/srv/ledge' }] },
+  { id: 'payment', name: 'Payment', color: 'green', description: '', rigs: [], repos: [{ machine: 'local', path: '/w/payment/api' }] }
 ];
 const local = machine('local'), nas = machine('nas');
 const machines = [local, nas];

@@ -580,3 +580,7 @@ describe('chat.done without team or tasks', () => {
     expect(n).not.toHaveProperty('task'); expect(n).not.toHaveProperty('team'); expect(n).not.toHaveProperty('taskOp'); expect(n).not.toHaveProperty('outgoing');
   });
 });
+
+describe('rig_managed refusal', () => {
+  it('RefusalCodeSchema knows rig_managed', () => expect(RefusalCodeSchema.parse('rig_managed')).toBe('rig_managed'));
+});

@@ -122,7 +122,7 @@ describe('nav state', () => {
     expect(navReducer(s0, { type: 'home', project: 'ledge' }).place).toEqual({ kind: 'overview', view: 'atelier', project: 'ledge' });
   });
   it('reconcile drops a gone session and a gone project filter, keeps an offline session, returns the same object when nothing changes', () => {
-    const projects: Projects = { projects: [{ id: 'ledge', name: 'Ledge', color: 'blue', description: '', repos: [] }], rules: [] };
+    const projects: Projects = { projects: [{ id: 'ledge', name: 'Ledge', color: 'blue', description: '', rigs: [], repos: [] }], rules: [] };
     const s = navReducer(navReducer(s0, { type: 'home', project: 'ledge' }), { type: 'open', id: 'local:otto' });
     expect(reconcile(s, [sess('otto', { id: 'local:otto', offline: true })], projects)).toBe(s);
     expect(reconcile(s, [], projects).place).toEqual({ kind: 'overview', view: 'atelier', project: 'ledge' });

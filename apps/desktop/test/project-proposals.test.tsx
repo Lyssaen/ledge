@@ -99,7 +99,7 @@ describe('« Let Ledge do it » in the project editor', () => {
     await waitFor(() => expect(setsOf(d)).toHaveLength(1));
     const sent = setsOf(d)[0]!.projects;
     expect(sent.projects.slice(0, 3)).toEqual(PROJECTS.projects);
-    expect(sent.projects[3]).toEqual({ id: 'paper', name: 'Paper', color: 'violet', description: '', repos: [{ machine: 'local', path: '/home/me/dev/paper-fonts' }] });
+    expect(sent.projects[3]).toEqual({ id: 'paper', name: 'Paper', color: 'violet', description: '', rigs: [], repos: [{ machine: 'local', path: '/home/me/dev/paper-fonts' }] });
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(screen.getByRole('status')).toHaveTextContent('Project Paper created.');
   });
@@ -309,7 +309,7 @@ describe('a proposal opened by the navigation', () => {
     dialog.getByRole('button', { name: /^Create the project/ }).click();
     await waitFor(() => expect(setProjects).toHaveBeenCalledTimes(1));
     const next = setProjects.mock.calls[0]![0];
-    expect(next.projects[3]).toEqual({ id: 'tmp', name: 'Tmp', color: 'violet', description: '', repos: [{ machine: 'local', path: '/tmp' }] });
+    expect(next.projects[3]).toEqual({ id: 'tmp', name: 'Tmp', color: 'violet', description: '', rigs: [], repos: [{ machine: 'local', path: '/tmp' }] });
     expect(next.rules).toEqual([{ machine: 'local', path: '/tmp', project: 'tmp' }]);
   });
 

@@ -22,7 +22,7 @@ const noActions: SessionActions = { request: () => {}, resume: () => {}, restore
 describe('a project table', () => {
 const main = (id: string, extra: Partial<Session> = {}) => fakeSession(id, { id: `local:${id}`, name: id, machineId: 'local', cwd: '/w/ledge', ...extra });
 const helper = (id: string, state: Helper['state'] = 'working'): Helper => ({ id, kind: 'Explore', task: `Task ${id}`, state });
-const ledge: Project = { id: 'ledge', name: 'Ledge', color: 'blue', description: '', repos: [] };
+const ledge: Project = { id: 'ledge', name: 'Ledge', color: 'blue', description: '', rigs: [], repos: [] };
 
 type Overrides = Partial<Omit<ProjectTableProps, 'mains' | 'dispatch'>>;
 function tableElement(mains: readonly Session[], overrides: Overrides = {}, dispatch: ProjectTableProps['dispatch'] = vi.fn()) {
@@ -81,7 +81,7 @@ it('with eight seats chosen, eight agents sit and only the ninth goes into +N', 
 });
 it('the label: colour, a long name cut with its full name in title, the main branch', () => {
   const long = 'Payment Service Platform Migration Europe';
-  renderTable([main('a', { branch: 'desktop' })], { project: { id: 'pay', name: long, color: 'green', description: '', repos: [] } });
+  renderTable([main('a', { branch: 'desktop' })], { project: { id: 'pay', name: long, color: 'green', description: '', rigs: [], repos: [] } });
   const table = screen.getByRole('region', { name: `${long} table` });
   expect(table.style.getPropertyValue('--project')).toBe('#10b981');
   expect(within(table).getByRole('button', { name: `Conversations of project ${long}` })).toHaveAttribute('title', long);

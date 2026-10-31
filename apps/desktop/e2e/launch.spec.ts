@@ -6,8 +6,8 @@ import { eight, fakeDaemon, fakeRemote, session, openAtelier } from './daemon';
 /** Ledge with two repositories on this machine, Website with one. */
 const projects: Projects = {
   projects: [
-    { id: 'ledge', name: 'Ledge', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }, { machine: 'local', path: '/w/ledge-docs' }] },
-    { id: 'website', name: 'Website', color: 'green', description: '', repos: [{ machine: 'local', path: '/w/website' }] }
+    { id: 'ledge', name: 'Ledge', color: 'blue', description: '', rigs: [], repos: [{ machine: 'local', path: '/w/ledge' }, { machine: 'local', path: '/w/ledge-docs' }] },
+    { id: 'website', name: 'Website', color: 'green', description: '', rigs: [], repos: [{ machine: 'local', path: '/w/website' }] }
   ],
   rules: []
 };

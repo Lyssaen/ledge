@@ -63,7 +63,7 @@ it('sheet states: idle reads as done, offline wins', () => {
   expect(helperState(helper('h', 'waiting_permission'))).toBe('approval');
 });
 it('the scene of each filter, and the J / K order', () => {
-  const projects: Projects = { projects: ['ledge', 'pay', 'docs'].map(id => ({ id, name: id, color: 'blue' as const, description: '', repos: [{ machine: 'local', path: `/w/${id}` }] })), rules: [] };
+  const projects: Projects = { projects: ['ledge', 'pay', 'docs'].map(id => ({ id, name: id, color: 'blue' as const, description: '', rigs: [], repos: [{ machine: 'local', path: `/w/${id}` }] })), rules: [] };
   const idOf = (s: Session) => projectOf(s, projects);
   const order = mainOrder([main('otto'), main('nova', { cwd: '/w/pay' }), main('kit', { cwd: '/tmp' })], projects);
   const names = (sc: AtelierScene) => [sc.rooms.map(r => `${r.key}:${r.tables[0]!.mains.map(m => m.name).join(',')}`), sc.unassigned.map(s => s.name), sc.empty?.id ?? null];
@@ -77,7 +77,7 @@ it('the scene of each filter, and the J / K order', () => {
   expect(walkOrder(sceneOf(crowd, projects, idOf, 'all'), 4).map(s => s.name)).toEqual(['a', 'b', 'c', 'd']);
 });
 it('a project room has one table with all its sessions, whatever their old team or role', () => {
-  const projects: Projects = { projects: ['ledge', 'pay'].map(id => ({ id, name: id, color: 'blue' as const, description: '', repos: [{ machine: 'local', path: `/w/${id}` }] })), rules: [] };
+  const projects: Projects = { projects: ['ledge', 'pay'].map(id => ({ id, name: id, color: 'blue' as const, description: '', rigs: [], repos: [{ machine: 'local', path: `/w/${id}` }] })), rules: [] };
   const idOf = (s: Session) => projectOf(s, projects);
   const order = mainOrder([main('otto'), main('nova'), main('pim'), main('kit', { cwd: '/w/pay' }), main('zed', { cwd: '/w/pay' })], projects);
   const scene = sceneOf(order, projects, idOf, 'all');
@@ -86,7 +86,7 @@ it('a project room has one table with all its sessions, whatever their old team 
   expect(roomTileWidth(2)).toBe(roomWidth(2) + 220);
 });
 it('walkOrder goes through rig and kernel tables too, placeholders skipped', () => {
-  const projects: Projects = { projects: [{ id: 'ledge', name: 'ledge', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] }], rules: [] };
+  const projects: Projects = { projects: [{ id: 'ledge', name: 'ledge', color: 'blue', description: '', rigs: [], repos: [{ machine: 'local', path: '/w/ledge' }] }], rules: [] };
   const idOf = (s: Session) => projectOf(s, projects);
   const build = main('build', { rig: { machine: 'local', rigId: 'r1', rigName: 'factory', seat: 's', pod: 'p', member: 'm' } });
   const order = mainOrder([main('otto'), build], projects);

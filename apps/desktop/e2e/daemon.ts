@@ -288,8 +288,8 @@ export async function fakeRemote(page: Page, alias: string, initial: Session[], 
 
 export const twoProjects: Projects = {
   projects: [
-    { id: 'ledge', name: 'Ledge', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] },
-    { id: 'website', name: 'Website', color: 'green', description: '', repos: [{ machine: 'local', path: '/w/website' }] }
+    { id: 'ledge', name: 'Ledge', color: 'blue', description: '', rigs: [], repos: [{ machine: 'local', path: '/w/ledge' }] },
+    { id: 'website', name: 'Website', color: 'green', description: '', rigs: [], repos: [{ machine: 'local', path: '/w/website' }] }
   ],
   rules: []
 };
