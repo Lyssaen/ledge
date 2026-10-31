@@ -5,7 +5,7 @@ import { useAsks, useContextNear } from '@ledge/fleet';
 import { askShown, type Escalation, type Rig, type RigSeat } from '@ledge/protocol';
 import { kernelSplit } from '@ledge/ui/rigs/model';
 import { useScreenKeys, useScreenSize, useTui, type Focus } from '../context.js';
-import { focusOrder, nextYours, seatStateLabel, stepFocus, type LeftRow } from '../model/left.js';
+import { focusOrder, nextYours, seatStateLabel, stepFocus, unmirroredAsks, type LeftRow } from '../model/left.js';
 import { nearContext } from '../model/overview.js';
 import { oneLine } from '../model/time.js';
 import { C } from '../theme.js';
@@ -28,7 +28,8 @@ export function Home() {
   // The mockup's 46 columns, and one for the selection's bar (the mockup draws it in the box's padding).
   const leftW = wide ? (columns >= THREE ? 47 : 44) : columns;
   const asks = useAsks(tui.client);
-  const shownAsks = useMemo(() => asks.filter(askShown), [asks]);
+  // An ask mirrored as an escalation is already an item of « À toi »: its own row would list and count it twice.
+  const shownAsks = useMemo(() => unmirroredAsks(asks.filter(askShown), tui.escalations), [asks, tui.escalations]);
   const order = useMemo(() => focusOrder(rows), [rows]);
   // Sessions near their context limit (context handover spec §3.2): H hands the selected one (else the first) over.
   const threshold = useContextNear(tui.client);

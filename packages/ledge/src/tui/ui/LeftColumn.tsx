@@ -148,11 +148,13 @@ export function LeftColumn({ rows, width, height, asks, near }: { rows: readonly
           const color = grace ? C.dim : it.glyph === 'question' ? C.yellow : C.red;
           // Where it waits: the rig's ▣ in its colour, or the session's project ■ in the project's.
           const project = it.session ? rows.find((x): x is Extract<LeftRow, { kind: 'project' }> => x.kind === 'project' && x.label === it.where) : undefined;
-          const where = it.escalation ? { glyph: g.rig, color: projectColor(rigColor({ name: it.where })) } : { glyph: g.project, color: project?.color ?? C.dim };
+          const where = it.escalation?.rigId ? { glyph: g.rig, color: projectColor(rigColor({ name: it.where })), label: it.where }
+            : it.escalation ? { glyph: g.machine, color: C.dim, label: machineName(it.where) }
+            : { glyph: g.project, color: project?.color ?? C.dim, label: it.where };
           return (
             <Box key={key}><Row on={on(r)} right={<Text color={C.faint}> <Ago iso={it.at} /></Text>}>
               <Text color={color}>{g[it.glyph]} </Text><Text color={C.fg} bold>{fit(it.who, NAME_W)}</Text>
-              <Text color={where.color}>{where.glyph} </Text><Text color={C.dim}>{fit(it.where, 8)}</Text>
+              <Text color={where.color}>{where.glyph} </Text><Text color={C.dim}>{fit(where.label, 8)}</Text>
               <Text color={color}>{fit(oneLine(grace ? t.home.grace : it.text), askW)}</Text>
             </Row></Box>
           );

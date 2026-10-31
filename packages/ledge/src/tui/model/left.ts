@@ -1,5 +1,5 @@
 import type { Escalation, OpenRigStatus, Projects, Rig, RigSeat, Session } from '@ledge/protocol';
-import { isPending } from '@ledge/fleet';
+import { isPending, type FleetAsk } from '@ledge/fleet';
 import { kernelSplit, rigPlace, workingCount, type RigPlace } from '@ledge/ui/rigs/model';
 import type { Focus } from '../context.js';
 import type { Glyphs } from '../glyphs.js';
@@ -53,7 +53,8 @@ export function leftRows(i: LeftInput): LeftRow[] {
   const projectLabel = new Map(view.tree.flatMap(n => n.branches.flatMap(b => b.sessions.map(s => [s.id, n.label] as const))));
   const yours: LeftRow[] = [
     ...view.escalations.map((e): LeftRow => ({ kind: 'yours', item: {
-      id: escalationItemId(e), glyph: 'approval', who: seatName(e), where: rigName(e) ?? e.machine,
+      // A rig's escalation says its rig; one without (a `ledge ask`, the operator's) its machine: the caller draws it so.
+      id: escalationItemId(e), glyph: e.source === 'ask' ? 'question' : 'approval', who: seatName(e), where: rigName(e) ?? e.machine,
       text: e.state === 'grace' ? (i.t ?? fr).home.grace : e.summary, at: e.createdAt, escalation: e
     } })),
     ...view.yours.map((s): LeftRow => ({ kind: 'yours', item: {
@@ -93,6 +94,13 @@ export function leftRows(i: LeftInput): LeftRow[] {
   }
   const kernelRows = [...kernels.values()].sort((a, b) => Number(b.machine === 'local') - Number(a.machine === 'local') || a.machine.localeCompare(b.machine));
   return [{ kind: 'ledge', ...i.ledge }, ...yours, ...tree, ...rigs, ...kernelRows];
+}
+
+/** The `ledge ask` rows « À toi » still draws on their own: those the daemon does not mirror as an escalation (`ask-<id>`, same
+ *  machine), as a daemon without OpenRig's bridge. A mirrored one is its escalation's item, listed and counted once. */
+export function unmirroredAsks<A extends Pick<FleetAsk, 'id' | 'machine'>>(asks: readonly A[], escalations: readonly Escalation[]): A[] {
+  const mirrored = new Set(escalations.filter(e => e.source === 'ask').map(e => `${e.machine}\0${e.id}`));
+  return asks.filter(a => !mirrored.has(`${a.machine}\0ask-${a.id}`));
 }
 
 /** Whether OpenRig runs, or ran, on some machine: else the Rigs section says it is not installed. */

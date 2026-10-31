@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Escalation } from '@ledge/protocol';
-import { focusOrder, leftRows, seatStateLabel, type LeftRow } from '../src/tui/model/left.js';
+import { focusOrder, leftRows, seatStateLabel, unmirroredAsks, type LeftRow } from '../src/tui/model/left.js';
 import { C } from '../src/tui/theme.js';
 import { MOCKUP_OPENRIG, mockupEscalations, mockupRigs, mockupSeatSession, mockupSessions, PROJECTS } from './tui-fixture.js';
 
@@ -72,5 +72,18 @@ describe('ledge tui: the left column', () => {
     expect(order).toContainEqual({ kind: 'rig', machine: 'local', rigId: 'factory' });
     expect(order).toContainEqual({ kind: 'seat', machine: 'local', rigId: 'factory', ref: 'build@factory' });
     expect(order.at(-1)).toEqual({ kind: 'kernel', machine: 'local' });
+  });
+
+  it('a `ledge ask` mirrored as an escalation is listed once, as a question from its machine', () => {
+    const at = new Date(Date.now() - 120_000).toISOString();
+    const ask = { id: 'a1b2c3d', from: 'nova', fromName: 'Nova', question: 'Quelle base ?', options: 'sqlite, postgres', at, state: 'open' as const, machine: 'local' };
+    const mirror: Escalation = { id: 'ask-a1b2c3d', source: 'ask', machine: 'local', from: 'Nova', intent: 'decision', summary: 'Quelle base ?',
+      questions: [], createdAt: at, state: 'pending' };
+    expect(unmirroredAsks([ask], [mirror])).toEqual([]);
+    expect(unmirroredAsks([ask], [])).toEqual([ask]);
+    expect(unmirroredAsks([ask], [{ ...mirror, machine: 'ec2' }])).toEqual([ask]);
+    const yours = rowsOf({ escalations: [mirror] }).filter((r): r is Extract<LeftRow, { kind: 'yours' }> => r.kind === 'yours');
+    expect(yours.map(r => r.item.id)).toEqual(['e:local:ask-a1b2c3d', 'otto', 'luna']);
+    expect(yours[0]!.item).toMatchObject({ glyph: 'question', who: 'Nova', where: 'local', text: 'Quelle base ?' });
   });
 });

@@ -66,4 +66,22 @@ describe('ledge tui: home', () => {
       await until(() => tui.frame().includes('QUESTION'));
     } finally { await tui.cleanup(); }
   });
+
+  it('a `ledge ask` the daemon mirrors as an escalation is listed and counted once', async () => {
+    const at = new Date(Date.now() - 120_000).toISOString();
+    const tui = await startTui({ openrig: { rigs: [], escalations: [{ id: 'ask-a1b2c3d', source: 'ask', machine: 'local', from: 'Nova', intent: 'decision', summary: 'Quelle base ?', questions: [], createdAt: at, state: 'pending' }] } });
+    try {
+      await tui.resize(160, 46);
+      tui.daemon.push({ type: 'asks', asks: [{ id: 'a1b2c3d', from: 'nova', fromName: 'Nova', question: 'Quelle base ?', options: 'sqlite, postgres', at, state: 'open' }] });
+      await until(() => tui.frame().includes('Quelle base ?'));
+      await new Promise(r => setTimeout(r, 100));
+      const f = tui.frame();
+      expect(f).toContain('À TOI · 3');
+      expect(f).toContain('3 t’attendent');
+      expect(f).not.toContain('? Nova : Quelle base ?');
+      expect(f).not.toContain('ledge decide');
+      expect(f.split('Quelle base ?').length - 1).toBe(1);
+      expect(f).toMatch(/\? Nova +● Local +Quelle base \?/);
+    } finally { await tui.cleanup(); }
+  });
 });
