@@ -132,6 +132,10 @@ export const SessionSchema =z.object({
   role: z.string().optional(), roleLabel: z.string().optional(),
   /** The live team it sits in (`team-…`); left out, the project's common table. */
   team: z.string().optional(),
+  /** The name of the team it was last taken out of (a leave, a dissolution, a seat in another team): a refused `@role` says so. */
+  teamLeft: z.string().optional(),
+  /** Its team as it was last told it (`seatKey`): its next turn is told again when the team has changed since. */
+  teamSeen: z.string().optional(),
   /** Its role's autonomy, as launched (kept by a resume); left out, `ask`. */
   autonomy: AutonomySchema.optional(),
   /** Its context as its agent last reported it, after a turn (context handover spec §3.1); left out, not measured. */

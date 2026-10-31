@@ -254,6 +254,8 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session.delete'), id: z.string() }),
   /** The user names the session's topic from the overlay (500 characters at most, the hook's prompt cap); an empty topic hands back to the automatic sources. */
   z.object({ type: z.literal('session.rename'), id: z.string(), topic: z.string().max(500) }),
+  /** A seat's hook told it its team as `key` names it (`seatKey`): at its start, or at a turn after the team changed. */
+  z.object({ type: z.literal('seat.seen'), id: z.string(), key: z.string().max(4000) }),
   z.object({ type: z.literal('session.thread'), id: z.string() }),
   z.object({ type: z.literal('session.register'), session: SessionSchema }),
   /** `agent` and `cwd` describe the session when the daemon does not know it yet (a hook from an agent started without ledge). */

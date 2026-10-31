@@ -9,14 +9,15 @@ import { startServer } from '../src/daemon/server.js';
 import { connect, type Client } from '../src/client.js';
 import type { Tmux } from '../src/tmux.js';
 import { until } from './helpers.js';
+import { runHook } from '../src/cli/hook.js';
 
 type NewSession = { name: string; cwd: string; env: Record<string, string>; command: string[] };
-function fakeTmux(failOn?: (o: NewSession) => boolean): Tmux & { created: NewSession[]; killed: string[]; gate: { hold?: Promise<void>; held: number } } {
-  const created: NewSession[] = []; const killed: string[] = []; const gate: { hold?: Promise<void>; held: number } = { held: 0 }; const panes = new Set<string>();
+function fakeTmux(failOn?: (o: NewSession) => boolean): Tmux & { created: NewSession[]; killed: string[]; typed: Array<[string, string]>; gate: { hold?: Promise<void>; held: number } } {
+  const created: NewSession[] = []; const killed: string[] = []; const typed: Array<[string, string]> = []; const gate: { hold?: Promise<void>; held: number } = { held: 0 }; const panes = new Set<string>();
   return {
-    created, killed, gate,
+    created, killed, typed, gate,
     async newSession(o) { if (failOn?.(o)) throw new Error('tmux: no server'); created.push(o); panes.add(o.name); },
-    async sendText() { if (gate.hold) { gate.held++; await gate.hold; } }, async sendKeys() { if (gate.hold) { gate.held++; await gate.hold; } }, async capture() { return ''; },
+    async sendText(n, text) { typed.push([n, text]); if (gate.hold) { gate.held++; await gate.hold; } }, async sendKeys() { if (gate.hold) { gate.held++; await gate.hold; } }, async capture() { return ''; },
     async hasSession(n) { return panes.has(n); }, async listSessions() { return [...panes]; },
     async setOption() {}, async killSession(n) { killed.push(n); panes.delete(n); }, attachArgs: n => ['attach', n]
   };
@@ -448,6 +449,138 @@ describe('live composition', () => {
     expect(tmux.created).toHaveLength(before + 1);
     expect(tmux.created.at(-1)!.command).toEqual(expect.arrayContaining(['--resume', '--model', 'opus']));
     expect(store.get(build)!.state).toBe('exited');
+    await c.close();
+  });
+});
+
+/**
+ * Who hears of a change to their team (#ta8042d, fixed as C + B). A seat that loses its team is told at once, one
+ * `<ledge-notice team>` line (B); the others are not woken, they read what changed at their next turn, through the
+ * UserPromptSubmit hook (C).
+ */
+describe('team changes and the seats told of them', () => {
+  const idle = (id: string) => store.upsert({ ...store.get(id)!, state: 'idle' });
+  const name = (id: string) => store.get(id)!.name;
+  const notices = (id: string) => tmux.typed.filter(([n, t]) => n === store.get(id)!.tmuxSession && t.startsWith('<ledge-notice team=')).map(([, t]) => t);
+  const quiet = () => new Promise(r => setTimeout(r, 400));
+  /** The hook of `id` as its agent runs it, Ledge's session in its environment. */
+  async function hook(id: string, event: 'SessionStart' | 'UserPromptSubmit'): Promise<string | undefined> {
+    process.env.LEDGE_SESSION = id;
+    try {
+      const out = await runHook(event, JSON.stringify({ session_id: `u-${id}`, cwd: work, ...(event === 'SessionStart' ? { source: 'startup' } : { prompt: 'continue' }) }), { port: srv.port });
+      return out ? (JSON.parse(out) as { hookSpecificOutput: { additionalContext: string } }).hookSpecificOutput.additionalContext : undefined;
+    } finally { delete process.env.LEDGE_SESSION; }
+  }
+  /** Each seat started (its hook records what it was told of its team), then free. */
+  async function started(...ids: string[]) {
+    for (const id of ids) { await hook(id, 'SessionStart'); await until(() => store.get(id)?.teamSeen !== undefined); idle(id); }
+  }
+  async function workshop(c: Client) {
+    c.send({ type: 'team.launch', rid: 'r1', cwd: work, name: 'workshop', seats: [{ role: 'lead' }, { role: 'build' }] });
+    const { team } = await c.next('team.launched', 5000);
+    const lead = team.seats[0]!.sessionId!; const build = team.seats[1]!.sessionId!;
+    await started(lead, build);
+    return { team, lead, build };
+  }
+
+  it('team.join: the newcomer is told its team; the others are not woken, their next turn reads who came, once', async () => {
+    await start();
+    const c = await client();
+    const { team, lead, build } = await workshop(c);
+    c.send({ type: 'session.launch', tool: 'claude', cwd: work });
+    const { id: mila } = await c.next('session.launched');
+    idle(mila);
+    c.send({ type: 'team.join', team: team.id, session: mila, role: 'review' });
+    await until(() => notices(mila).length === 1);
+    expect(notices(mila)[0]).toContain('Ton rôle : Relecteur (review), dans l\'équipe workshop');
+    await quiet();
+    expect(notices(lead)).toEqual([]);
+    expect(notices(build)).toEqual([]);
+    // Its next turn: the change, then the team as it is. The one after has nothing more to say.
+    expect(await hook(lead, 'UserPromptSubmit')).toBe(`Ledge : ton équipe workshop a changé (${name(mila)} (review) arrive). Ton équipe : ${name(build)} (build), ${name(mila)} (review). Écris-leur par leur rôle : ledge send @rôle "…".`);
+    await until(() => !!store.get(lead)?.teamSeen?.includes('@review'));
+    expect(await hook(lead, 'UserPromptSubmit')).toBeUndefined();
+    // The newcomer was told by its notice: its turn adds nothing.
+    expect(await hook(mila, 'UserPromptSubmit')).toBeUndefined();
+    await c.close();
+  });
+
+  it('team.leave: the session that leaves is told at once, and its @role messages and tasks say why they are refused', async () => {
+    await start();
+    const c = await client();
+    const { team, lead, build } = await workshop(c);
+    c.send({ type: 'team.leave', team: team.id, session: build });
+    await until(() => notices(build).length === 1);
+    expect(notices(build)[0]).toBe(`<ledge-notice team="${team.id}">Tu n'es plus dans l'équipe workshop : les adresses @rôle ne te servent plus (ledge team list).</ledge-notice>`);
+    await quiet();
+    expect(notices(lead)).toEqual([]);
+    const gone = 'tu n\'es plus dans l\'équipe workshop : @lead ne te sert plus (ledge team list)';
+    c.send({ type: 'session.message', rid: 'm1', from: build, to: '@lead', text: 'fini' });
+    expect(await c.next('message.ack')).toMatchObject({ outcome: 'refused', reason: gone });
+    c.send({ type: 'task.cmd', rid: 't1', by: build, op: 'give', to: '@lead', title: 'Relire' });
+    expect(await c.next('task.result')).toMatchObject({ reason: gone });
+    // Told already: its own turn adds nothing; the lead's says who went.
+    expect(await hook(build, 'UserPromptSubmit')).toBeUndefined();
+    expect(await hook(lead, 'UserPromptSubmit')).toContain(`(${name(build)} (build) part)`);
+    await c.close();
+  });
+
+  it('team.compose adding a seat: the seats there are not woken, their next turn reads the new role', async () => {
+    await start();
+    const c = await client();
+    const { team, lead, build } = await workshop(c);
+    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'lead' }, { role: 'build' }, { role: 'review' }] });
+    const changed = await c.next('team.changed', 5000);
+    const review = changed.team!.seats.find(s => s.role === 'review')!.sessionId!;
+    await quiet();
+    expect(notices(lead)).toEqual([]);
+    expect(notices(build)).toEqual([]);
+    expect(await hook(lead, 'UserPromptSubmit')).toContain(`(${name(review)} (review) arrive)`);
+    await c.close();
+  });
+
+  it('team.compose removing a seat: the seat is closed, the others read at their next turn that it went', async () => {
+    await start();
+    const c = await client();
+    const { team, lead, build } = await workshop(c);
+    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'lead' }] });
+    await c.next('team.changed');
+    await until(() => store.get(build)?.state === 'exited');
+    await quiet();
+    // Closed by Ledge, nothing left to tell it; the lead is not woken.
+    expect(notices(build)).toEqual([]);
+    expect(notices(lead)).toEqual([]);
+    expect(await hook(lead, 'UserPromptSubmit')).toContain(`(${name(build)} (build) part)`);
+    await c.close();
+  });
+
+  it('team.seat restart: no one is woken, and a seat taken back under the same name has nothing to tell', async () => {
+    await start();
+    const c = await client();
+    const { team, lead, build } = await workshop(c);
+    const before = name(build);
+    c.send({ type: 'team.seat', rid: 's1', team: team.id, role: 'build', action: 'restart' });
+    const changed = await c.next('team.changed', 5000);
+    const fresh = changed.team!.seats.find(s => s.role === 'build')!.sessionId!;
+    await quiet();
+    expect(notices(lead)).toEqual([]);
+    // The fresh session takes the first free name back, its predecessor's: same name, same role, nothing to say. Under
+    // another name it would read « <new> remplace <old> (build) » (teamsLive.test.ts).
+    expect(name(fresh)).toBe(before);
+    expect(await hook(lead, 'UserPromptSubmit')).toBeUndefined();
+    await c.close();
+  });
+
+  it('team.dissolve: every live seat is told at once, and @role says why it is refused', async () => {
+    await start();
+    const c = await client();
+    const { team, lead, build } = await workshop(c);
+    c.send({ type: 'team.dissolve', team: team.id });
+    await until(() => notices(lead).length === 1 && notices(build).length === 1);
+    expect(notices(lead)[0]).toBe(`<ledge-notice team="${team.id}">L'équipe workshop est dissoute : les adresses @rôle ne te servent plus (ledge team list).</ledge-notice>`);
+    c.send({ type: 'session.message', rid: 'm1', from: lead, to: '@build', text: 'go' });
+    expect(await c.next('message.ack')).toMatchObject({ outcome: 'refused', reason: 'tu n\'es plus dans l\'équipe workshop : @build ne te sert plus (ledge team list)' });
+    expect(await hook(lead, 'UserPromptSubmit')).toBeUndefined();
     await c.close();
   });
 });

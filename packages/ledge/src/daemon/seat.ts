@@ -27,6 +27,48 @@ export function seatContext(o: { role?: Pick<Role, 'id' | 'label' | 'prompt'>; r
   return lines.join('\n');
 }
 
+/** Why `@role` reaches no one for a sender in no team: the team it was taken out of, when Ledge knows it. */
+export function noTeamReason(to: string, sender: Pick<Session, 'teamLeft'> | undefined): string {
+  return sender?.teamLeft ? `tu n'es plus dans l'équipe ${sender.teamLeft} : ${to} ne te sert plus (ledge team list)` : `${to} n'existe que dans une équipe`;
+}
+
+/** A seat's team as its context names it: the team it sits in (not dissolved) and its live teammates but itself; null in none. */
+export function seatView(id: string, sessions: readonly Session[], teams: readonly Team[]): { id: string; name: string; members: Array<{ name: string; role: string }> } | null {
+  const s = sessions.find(x => x.id === id);
+  const team = s?.team ? teams.find(t => t.id === s.team && t.state !== 'dissolved') : undefined;
+  if (!s || !team) return null;
+  return { id: team.id, name: team.name, members: teammates(team, sessions).filter(m => m.name !== s.name) };
+}
+
+type SeatKey = { t: string; n: string; m: string[] };
+/** What a seat was told of its team, as `Session.teamSeen` keeps it: '' for no team. */
+export const seatKey = (v: ReturnType<typeof seatView>): string => (v ? JSON.stringify({ t: v.id, n: v.name, m: v.members.map(m => `${m.name}@${m.role}`) } satisfies SeatKey) : '');
+const parseKey = (k: string): SeatKey | null => { try { return k ? JSON.parse(k) as SeatKey : null; } catch { return null; } };
+const member = (m: string) => { const at = m.lastIndexOf('@'); return { name: m.slice(0, at), role: m.slice(at + 1) }; };
+const listOf = (k: SeatKey) => k.m.map(member).map(m => `${m.name} (${m.role})`).join(', ') || 'personne d\'autre pour l\'instant';
+
+/**
+ * The line a seat reads at its next turn when its team changed since it was last told it (`seen`, `Session.teamSeen`): who
+ * came, who went, who took whose seat, then its team as it is. Nothing when it is the same, or when what it was told is unknown
+ * (a session from before `teamSeen`: it is recorded, not told).
+ */
+export function teamChangeLine(seen: string | undefined, now: string): string | undefined {
+  if (seen === undefined || seen === now) return undefined;
+  const before = parseKey(seen); const after = parseKey(now);
+  if (!after) return before ? `Ledge : tu n'es plus dans l'équipe ${before.n} ; les adresses @rôle ne te servent plus (ledge team list).` : undefined;
+  const reach = 'Écris-leur par leur rôle : ledge send @rôle "…".';
+  if (!before || before.t !== after.t) return `Ledge : tu es maintenant dans l'équipe ${after.n}. Ton équipe : ${listOf(after)}. ${reach}`;
+  const was = before.m.map(member); const is = after.m.map(member);
+  const changes: string[] = [];
+  for (const m of is) {
+    if (was.some(w => w.name === m.name && w.role === m.role)) continue;
+    const prior = was.find(w => w.role === m.role && !is.some(x => x.name === w.name && x.role === w.role));
+    changes.push(prior ? `${m.name} remplace ${prior.name} (${m.role})` : `${m.name} (${m.role}) arrive`);
+  }
+  for (const w of was) if (!is.some(m => m.name === w.name && m.role === w.role) && !is.some(m => m.role === w.role)) changes.push(`${w.name} (${w.role}) part`);
+  return `Ledge : ton équipe ${after.n} a changé${changes.length ? ` (${changes.join(', ')})` : ''}. Ton équipe : ${listOf(after)}. ${reach}`;
+}
+
 /**
  * `@role` as an address (spec 2026-10-25 roles §3.6): the live seat holding that role in the sender's team. A sender in
  * no team, or a role nobody (or more than one) holds, is refused with the candidates. Any other `to` is left as it is.
@@ -35,7 +77,7 @@ export function resolveRoleAddress(to: string, from: string, sessions: readonly 
   if (!to.startsWith('@')) return { to };
   const role = to.slice(1);
   const team = teams.find(t => t.state !== 'dissolved' && t.seats.some(s => s.sessionId === from));
-  if (!team) return { reason: `${to} n'existe que dans une équipe` };
+  if (!team) return { reason: noTeamReason(to, sessions.find(s => s.id === from)) };
   const byId = new Map(sessions.map(s => [s.id, s]));
   const held = team.seats.filter(s => s.role === role && s.sessionId).map(s => byId.get(s.sessionId!)).filter((s): s is Session => !!s && s.state !== 'exited' && !isArchived(s));
   if (held.length === 1) return { to: held[0]!.name };

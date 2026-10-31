@@ -13,6 +13,9 @@ export interface TeamsLiveDeps {
   store: Pick<Store, 'get' | 'all' | 'onChange' | 'patch'>;
   journal?: TeamsJournal;
   now?: () => string;
+  /** A session taken out of a team it sat in, still in its record (its `team` is cleared, `teamLeft` set): `leave`, the
+   *  team `dissolve`d, `moved` to the seat of another team (`to`), or `removed` by a composition once its seat went. */
+  onLeft?: (session: string, team: Team, why: 'leave' | 'dissolve' | 'moved' | 'removed', to?: Team) => void;
 }
 
 export interface TeamsLive {
@@ -66,6 +69,12 @@ export function createTeamsLive(d: TeamsLiveDeps): TeamsLive {
     for (const l of listeners) l(next);
     return next;
   };
+  /** The session's record leaves the team: `teamLeft` names it, for a refused `@role` and the seat's own notice. */
+  const takeOut = (session: string, t: Team, why: 'leave' | 'dissolve' | 'moved' | 'removed', to?: Team) => {
+    if (d.store.get(session)?.team !== t.id) return;
+    d.store.patch(session, { team: undefined, teamLeft: t.name });
+    d.onLeft?.(session, t, why, to);
+  };
   const newId = (): string => { for (;;) { const id = `team-${randomBytes(2).toString('hex')}`; if (!teams.has(id)) return id; } };
   const teamOf = (session: string): Team | undefined =>
     [...teams.values()].find(t => t.state !== 'dissolved' && t.seats.some(s => s.sessionId === session));
@@ -79,7 +88,7 @@ export function createTeamsLive(d: TeamsLiveDeps): TeamsLive {
     if (stale.length) {
       const id = t.id;
       t = put({ ...t, seats: t.seats.filter(s => !stale.includes(s)) });
-      for (const s of stale) if (s.sessionId && d.store.get(s.sessionId)?.team === id) d.store.patch(s.sessionId, { team: undefined });
+      for (const s of stale) if (s.sessionId) takeOut(s.sessionId, t, 'removed');
     }
     const seated = t.seats.filter(s => s.sessionId);
     if (!seated.length) return;
@@ -105,6 +114,7 @@ export function createTeamsLive(d: TeamsLiveDeps): TeamsLive {
     for (const t of [...teams.values()]) {
       if (t.id === keep || t.state === 'dissolved' || !t.seats.some(s => s.sessionId === session)) continue;
       put({ ...t, seats: t.seats.map(s => (s.sessionId === session ? { ...s, sessionId: null } : s)) });
+      takeOut(session, t, 'moved', teams.get(keep));
       settle(teams.get(t.id)!);
     }
   };
@@ -124,7 +134,7 @@ export function createTeamsLive(d: TeamsLiveDeps): TeamsLive {
       const prev = t.seats.find(s => s.role === role)?.sessionId;
       if (prev && prev !== session.id && d.store.get(prev)?.team === id) d.store.patch(prev, { team: undefined });
       const seats = t.seats.some(s => s.role === role) ? t.seats.map(s => (s.role === role ? { ...s, sessionId: session.id } : s)) : [...t.seats, { role, sessionId: session.id }];
-      d.store.patch(session.id, { team: id, role, roleLabel });
+      d.store.patch(session.id, { team: id, role, roleLabel, teamLeft: undefined });
       const next = put({ ...t, seats });
       settle(next);
       return teams.get(id)!;
@@ -145,7 +155,7 @@ export function createTeamsLive(d: TeamsLiveDeps): TeamsLive {
     leave(id, sessionId) {
       const t = teams.get(id); if (!t) return `aucune équipe ${id}`;
       if (!t.seats.some(s => s.sessionId === sessionId)) return 'cette session n\'est pas dans cette équipe';
-      d.store.patch(sessionId, { team: undefined });
+      takeOut(sessionId, t, 'leave');
       const next = put({ ...t, seats: t.seats.map(s => (s.sessionId === sessionId ? { ...s, sessionId: null } : s)) });
       settle(next);
       return teams.get(id)!;
@@ -154,7 +164,7 @@ export function createTeamsLive(d: TeamsLiveDeps): TeamsLive {
       const t = teams.get(id); if (!t) return `aucune équipe ${id}`;
       if (t.state === 'dissolved') return `l'équipe ${t.name} est déjà dissoute`;
       // The sessions go back to the common table; they stay as they are (archived, live) otherwise.
-      for (const s of t.seats) if (s.sessionId && d.store.get(s.sessionId)?.team === id) d.store.patch(s.sessionId, { team: undefined });
+      for (const s of t.seats) if (s.sessionId) takeOut(s.sessionId, t, 'dissolve');
       const at = now();
       log(`team ${t.id} (${t.name}) dissolved`);
       return put({ ...t, state: 'dissolved', dissolvedAt: at });

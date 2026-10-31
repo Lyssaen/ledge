@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { backendOf, givenByLedge, isArchived, LEDGE_GIVER, taskClosed, type ClientMessage, type ServerMessage, type Session, type Task, type TaskLogEntry, type Team } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { Mailbox } from './mailbox.js';
+import { noTeamReason } from './seat.js';
 import { formatLedgeTask } from './crossSession.js';
 import { bareName } from './peers.js';
 import { jsonJournal, type Journal } from './journal.js';
@@ -60,10 +61,10 @@ export function createTasks(d: TasksDeps): Tasks {
   const newId = (): string => { for (;;) { const id = `t${randomBytes(3).toString('hex')}`; if (!tasks.has(id)) return id; } };
   const live = (s: Session) => s.state !== 'exited' && !isArchived(s);
   /** The session `to` names: a Ledge name, a session id (the chat's cards), or `@role` in `team` (the giver's own team for a session). */
-  const target = (to: string, team: Team | undefined): Session | string => {
+  const target = (to: string, team: Team | undefined, me?: Pick<Session, 'teamLeft'>): Session | string => {
     if (to.startsWith('@')) {
       const role = to.slice(1);
-      if (!team) return `${to} n'existe que dans une équipe`;
+      if (!team) return noTeamReason(to, me);
       const held = team.seats.filter(x => x.role === role).map(x => (x.sessionId ? d.store.get(x.sessionId) : undefined)).filter((s): s is Session => !!s && live(s));
       if (held.length === 1) return held[0]!;
       const roles = [...new Set(team.seats.filter(x => x.sessionId && live(d.store.get(x.sessionId)!)).map(x => `@${x.role}`))];
@@ -168,7 +169,7 @@ export function createTasks(d: TasksDeps): Tasks {
         d.onTask?.(task, task.log[0]);
         return ok(task);
       }
-      const t = target(cmd.to, ledge ? team : teamOf(me.id));
+      const t = target(cmd.to, ledge ? team : teamOf(me.id), ledge ? undefined : d.store.get(me.id));
       if (typeof t === 'string') return refuse(t);
       if (t.id === me.id) return refuse('tu ne peux pas te confier une tâche');
       if (!reachable(t)) return refuse(`${t.name} n'a pas été lancée par Ledge : impossible de lui confier une tâche`);
@@ -236,7 +237,7 @@ export function createTasks(d: TasksDeps): Tasks {
         // Its giver too (a lead moving work between seats), without the cancel-and-give-again that loses its history; and Ledge.
         if (!owner && !giver && !ledge) return refuse(`seule la session qui la tient (${t.ownerName}) ou celle qui l'a confiée (${t.giverName}) peut la passer`);
         if (!cmd.to) return refuse('il faut le nom de la session à qui la passer');
-        const next = target(cmd.to, teamOf(me.id));
+        const next = target(cmd.to, teamOf(me.id), d.store.get(me.id));
         if (typeof next === 'string') return refuse(next);
         if (next.id === t.owner) return refuse(owner ? 'elle est déjà à toi' : `elle est déjà à ${t.ownerName}`);
         if (!reachable(next)) return refuse(`${next.name} n'a pas été lancée par Ledge : impossible de lui passer une tâche`);
