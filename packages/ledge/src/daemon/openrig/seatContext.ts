@@ -33,3 +33,13 @@ export function mandateSummary(text: string | null): string {
   if (self.length === 0) return "Ledge ne tranche rien seul : tout revient, via Ledge, à l'utilisateur.";
   return sentences(self, toUser.length ? toUser : DEFAULT_USER);
 }
+
+/** What an OpenRig seat (one Ledge did not launch) is told at SessionStart: who its human is, how to escalate, the mandate. */
+export function rigSeatContext(p: { seat: string; rig: string; human: string; mandate: string }): string {
+  return [
+    `Tu es ${p.seat}, siège du rig ${p.rig}.`,
+    `Ton humain est Ledge (${p.human}) : il lit tes escalades et tranche pour l'utilisateur, ou les lui remonte.`,
+    `Pour une décision qui ne t'appartient pas, escalade vers ${p.human} avec le skill messaging-the-human d'OpenRig (\`rig queue create --destination ${p.human} --human-intent decision …\`).`,
+    p.mandate,
+  ].join('\n');
+}
