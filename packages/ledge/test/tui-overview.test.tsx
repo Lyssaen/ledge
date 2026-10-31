@@ -101,4 +101,15 @@ describe('ledge tui: overview', () => {
       expect(tui.frame()).toContain('Otto');
     } finally { await tui.cleanup(); }
   });
+  it('the terminal pane asks for colors and draws them', async () => {
+    const tui = await startTui({ colorLines: ['\x1b[32m● Bash\x1b[39m(pnpm dev)\x1b]0;x\x07', '\x1b[31mrouge'] });
+    try {
+      await tui.press('\t'); // luna
+      await until(() => tui.daemon.received.some(m => m.type === 'session.preview.subscribe' && m.id === 'luna' && m.color === true));
+      await until(() => tui.frame().includes('● Bash'));
+      expect(tui.frame()).toContain('TERMINAL · LEDGE-LUNA · EN COULEURS');
+      expect(tui.frame()).not.toContain(']0;x');
+      expect(tui.written()).toContain('\x1b[32m● Bash');
+    } finally { await tui.cleanup(); }
+  });
 });

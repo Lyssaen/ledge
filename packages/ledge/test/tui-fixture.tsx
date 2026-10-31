@@ -36,12 +36,15 @@ export const PROJECTS: Projects = {
 /** A TUI on a mock daemon: its frame, its keyboard, the daemon, and a cleanup. */
 export async function startTui(o: { sessions?: Session[]; projects?: Projects; lang?: Lang; run?: (argv: string[]) => Promise<number>; save?: (l: Lang) => void; theme?: ThemeChoice; background?: Tone; env?: NodeJS.ProcessEnv;
   /** The clipboard reader and the viewer launcher the TUI is given (none by default: no image, nothing opened). `refusePut`: the daemon's reason for refusing every `attachment.put`. */
-  readImage?: () => Promise<ClipboardImage | null>; openFile?: (file: string) => Promise<void>; refusePut?: AttachmentErrorReason } = {}) {
+  readImage?: () => Promise<ClipboardImage | null>; openFile?: (file: string) => Promise<void>; refusePut?: AttachmentErrorReason;
+  /** The daemon announces `colorPreview` and answers a color subscription with these lines. */
+  colorLines?: string[] } = {}) {
   daemonStore.reset();
   const daemon = await createMockDaemon();
   for (const s of o.sessions ?? mockupSessions()) daemon.sessions.set(s.id, s);
   if (o.projects ?? PROJECTS) daemon.projects(o.projects ?? PROJECTS);
-  daemon.extras.daemon = { version: '0.16.0', install: 'npm', systemd: false, models: true, modelSwitch: true, archive: true };
+  daemon.extras.daemon = { version: '0.16.0', install: 'npm', systemd: false, models: true, modelSwitch: true, archive: true, ...(o.colorLines ? { colorPreview: true } : {}) };
+  if (o.colorLines) daemon.options.colorLines = o.colorLines;
   daemon.extras.launcher = ['node', '/opt/ledge/cli.js'];
   // The daemon's attachment store: a put keeps the bytes under their sha256, a get gives them back.
   const attachments = new Map<string, { mime: ImageMime; data: string }>();

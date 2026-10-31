@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { isPending, putImage, splitId } from '@ledge/fleet';
+import { isPending, putImage, splitId, useColorPreview } from '@ledge/fleet';
 import { offers, type Pending, type Session } from '@ledge/protocol';
 import { botState } from '@ledge/ui/bots/poseFor';
 import { useEditing, useScreenKeys, useScreenSize, useTui } from '../context.js';
@@ -42,6 +42,7 @@ function SessionView({ s }: { s: Session }) {
   const [diffs, setDiffs] = useState(false);
   const [unfolded, setUnfolded] = useState(false);
   const [terminal, setTerminal] = useState(false);
+  const colored = useColorPreview(client, terminal ? s.id : null);
   // The line at the top of the box once scrolled, as an item and a line in it, so that a resize, a fold or new lines below
   // keep it in place; null follows the bottom of the thread.
   const [anchor, setAnchor] = useState<{ key: string; offset: number } | null>(null);
@@ -165,11 +166,11 @@ function SessionView({ s }: { s: Session }) {
   const drawsThread = mode === 'model' || room >= 3;
   return (
     <Frame crumb={`${s.repo ?? s.project}${s.branch ? ` › ${g.branch} ${s.branch}` : ''} › ${s.name} · ${machineLabel(s)}`} crumbShort={s.name} keys={keys} kept={draft !== ''}>
-      {drawsThread ? <TitledBox title={terminal ? t.overview.terminal(paneName(s)) : title} flexGrow={1} minHeight={3} foot={showsThread ? foot : undefined}>
+      {drawsThread ? <TitledBox title={terminal ? `${t.overview.terminal(paneName(s))}${colored ? ` ${t.overview.inColor}` : ''}` : title} flexGrow={1} minHeight={3} foot={showsThread ? foot : undefined}>
         {mode === 'model'
           ? <ModelPicker machine={machine} tool={s.tool} current={{ model: s.model ?? null, effort: s.effort ?? null }} onCancel={() => setMode('read')}
             onPick={pick => { client.send({ type: 'session.model', id: s.id, model: pick.model, effort: pick.effort }); toast({ text: t.toast.model(s.name, pick.model ?? t.session.defaultModel), tone: 'ok' }); setMode('read'); }} />
-          : terminal ? <Tail lines={d.previews.get(s.id) ?? []} color={C.dim} empty={t.overview.noPreview} emptyColor={C.faint} />
+          : terminal ? <Tail lines={colored ?? d.previews.get(s.id) ?? []} ansi={colored !== undefined} color={C.dim} empty={t.overview.noPreview} emptyColor={C.faint} />
           : !items ? <Text color={C.faint}>{t.session.loading}</Text>
           : lines.length === 0 ? <Text color={C.faint}>{t.session.empty}</Text>
           : <Lines lines={lines} up={up} onHeight={setView} />}

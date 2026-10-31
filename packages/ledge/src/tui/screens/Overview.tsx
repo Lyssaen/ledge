@@ -12,7 +12,7 @@ import { Ago } from '../ui/Ago.js';
 import { C, projectColor, STATE_COLOR } from '../theme.js';
 import { Frame } from '../ui/Frame.js';
 import { SessionCard } from '../ui/SessionCard.js';
-import { Tail } from '../ui/Tail.js';
+import { TerminalBox } from '../ui/TerminalBox.js';
 import { TitledBox } from '../ui/TitledBox.js';
 
 /** Under this many columns the overview is one column: the session card opens with ↵. */
@@ -126,9 +126,7 @@ export function Overview() {
                 <TitledBox title={`${selected.name} · ${oneLine(selected.topic ?? selected.title)}`} color={isPending(selected) ? C.red : C.line} titleColor={isPending(selected) ? C.red : C.dim}>
                   <SessionCard s={selected} note />
                 </TitledBox>
-                <TitledBox title={t.overview.terminal(paneName(selected))} flexGrow={1}>
-                  <Tail lines={d.previews.get(selected.id) ?? []} color={C.dim} empty={t.overview.noPreview} emptyColor={C.faint} />
-                </TitledBox>
+                <TerminalBox s={selected} />
               </>
             ) : <TitledBox title={t.tabs.session} flexGrow={1}><Text color={C.faint}>{t.session.noSession}</Text></TitledBox>}
             <TitledBox title={t.overview.exchanges} height={5}>
