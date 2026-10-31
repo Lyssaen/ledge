@@ -65,6 +65,7 @@ describe('the sidebar’s Ledge line and Rigs section', () => {
     render(<SidebarHarness rigs={[FACTORY, KERNEL]} />);
     const line = screen.getByRole('button', { name: /Ledge\..*J’orchestre 1 rig/ });
     expect(line.querySelector('.st-ledge-unread')).toBeNull();
+    expect(line).not.toHaveAttribute('aria-current');
   });
 
   it('Projets ne liste pas build (siège de factory) ; Rigs le liste sous factory', async () => {

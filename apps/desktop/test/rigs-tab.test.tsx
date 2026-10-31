@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useReducer } from 'react';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -6,7 +6,7 @@ import type { ClientMessage, OpenRigStatus, Projects, Rig, RigSeat, RigSpecInfo,
 import { forgetRigSpecs, type DaemonClient } from '@ledge/fleet';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { LangProvider } from '../src/i18n/lang';
-import { RigsTab } from '../src/rigs/RigsTab';
+import { RigsTab, visibleRigs } from '../src/rigs/RigsTab';
 import { initialNav, navReducer, type NavAction, type NavState } from '../src/nav/state';
 
 const PROJECTS: Projects = { projects: [{ id: 'ledge', name: 'Ledge', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] }], rules: [] };
@@ -31,6 +31,7 @@ const build = fakeSession('local:build', { name: 'build', cwd: '/w/ledge', state
 
 let dispatched: NavAction[] = [];
 let sent: ClientMessage[] = [];
+let notified: string[] = [];
 const user = userEvent.setup();
 
 function clientOf(rigs: Rig[], openrig: OpenRigStatus[], specs: RigSpecInfo[]): DaemonClient {
@@ -50,7 +51,7 @@ function Harness({ client, start }: { client: DaemonClient; start?: Partial<Extr
     const n = initialNav({ view: 'atelier', helpers: true, paused: true });
     return { ...n, place: { kind: 'home' as const, tab: 'rigs' as const, view: 'atelier' as const, project: 'all', ...start } };
   });
-  return <RigsTab nav={nav} dispatch={a => { dispatched.push(a); apply(a); }} client={client} sessions={[build]} projects={PROJECTS} />;
+  return <RigsTab nav={nav} dispatch={a => { dispatched.push(a); apply(a); }} client={client} sessions={[build]} projects={PROJECTS} notify={t => { notified.push(t); }} />;
 }
 
 const RIGS = [KERNEL, FACTORY, STARTER];
@@ -60,7 +61,7 @@ function renderTab({ rigs = RIGS, openrig = [RUNNING], specs = SPECS, start }: {
 }
 const card = (name: string) => screen.getByRole('article', { name });
 
-beforeEach(() => { dispatched = []; sent = []; forgetRigSpecs(); localStorage.clear(); });
+beforeEach(() => { dispatched = []; sent = []; notified = []; forgetRigSpecs(); localStorage.clear(); });
 afterEach(() => cleanup());
 
 describe('the Rigs tab of the Ledge screen', () => {
@@ -110,6 +111,29 @@ describe('the Rigs tab of the Ledge screen', () => {
     await user.click(within(card('starter')).getByRole('button', { name: 'Terminaux' }));
     const menu = within(screen.getByRole('menu', { name: 'Terminaux de starter' }));
     expect(menu.getAllByRole('menuitem').map(m => m.textContent)).toEqual(['dev-build', 'dev-review']);
+  });
+
+  it('un terminal de siège qui ne s’ouvre pas le dit (toast), comme l’atelier', async () => {
+    renderTab();
+    await user.click(within(card('starter')).getByRole('button', { name: 'Terminaux' }));
+    await user.click(within(screen.getByRole('menu', { name: 'Terminaux de starter' })).getByRole('menuitem', { name: 'dev-build' }));
+    await vi.waitFor(() => expect(notified).toEqual(['Le terminal de dev-build n’a pas pu s’ouvrir.']));
+  });
+
+  it('un siège arrêté ne compte nulle part : ni « n sièges », ni le dénominateur, ni la liste, ni « +n » du noyau', async () => {
+    const half: Rig = { ...STARTER, seats: [...STARTER.seats, seat('dev-qa', { ref: 'dev-qa@starter', state: 'stopped' })] };
+    const kernel: Rig = { ...KERNEL, seats: [...KERNEL.seats, seat('advisor-old', { ref: 'advisor-old@kernel', state: 'stopped' })] };
+    renderTab({ rigs: [kernel, half] });
+    expect(card('starter')).toHaveTextContent('rig · 2 sièges');
+    expect(within(card('starter')).getByText('1/2 au travail')).toBeVisible();
+    expect(within(card('starter')).queryByText('dev-qa')).toBeNull();
+    await user.click(within(card('Noyau OpenRig')).getByRole('button', { name: '+2' }));
+    expect(within(card('Noyau OpenRig')).queryByText('advisor-old')).toBeNull();
+  });
+
+  it('visibleRigs : les rigs d’une machine où OpenRig ne répond pas ne comptent pas', () => {
+    const remote: Rig = { ...STARTER, id: 'r9', machine: 'dev' };
+    expect(visibleRigs([FACTORY, remote], [RUNNING, { machine: 'dev', state: 'stopped' }])).toEqual([FACTORY]);
   });
 
   it('lancement en cours : « 4/7 prêts » et « attend ta confiance dans le dossier »', () => {

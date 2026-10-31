@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent } from 'react';
-import { daemonStore, useDaemon, useRigs, type DaemonClient } from '@ledge/fleet';
+import { daemonStore, useDaemon, useOpenRig, useRigs, type DaemonClient } from '@ledge/fleet';
 import { contextShare, type ChatTurn, type Projects } from '@ledge/protocol';
 import { ChatView } from '@ledge/ui/chat/ChatView';
 import { ChatCopyProvider } from '@ledge/ui/chat/copy';
@@ -19,7 +19,7 @@ import { SessionBot } from '../shell/SessionBot';
 import { attentionOf, quickDecide } from '../shell/sidebar/model';
 import { useDefaultTool } from '../settings/tool';
 import { HOME_TABS, type HomeTab, type NavAction, type NavState } from '../nav/state';
-import { RigsTab } from '../rigs/RigsTab';
+import { RigsTab, visibleRigs } from '../rigs/RigsTab';
 import { nearLimit, type Relief } from '../session/useRelief';
 import type { Wait } from '../list/time';
 import { useAgentHighlight } from './useAgentHighlight';
@@ -194,7 +194,7 @@ export function LedgeHome(p: LedgeHomeProps): JSX.Element {
       <Button variant="ghost" size="icon" aria-label={t.home.toAtelier} title={t.home.toAtelier} onClick={() => dispatch({ type: 'escape' })}><Icon {...ICONS.close} /></Button>
     </div>
   );
-  const rigCount = useRigs(client).filter(r => !r.kernel).length;
+  const rigCount = visibleRigs(useRigs(client), useOpenRig(client)).filter(r => !r.kernel).length;
   const counts: Record<HomeTab, string> = { conversation: t.home.tabs.conversation, rigs: t.home.rigsCount(rigCount), history: t.home.tabs.history };
   return (
     <section className="ledge-home" aria-label={t.side.ledgeHome}>
@@ -224,7 +224,7 @@ export function LedgeHome(p: LedgeHomeProps): JSX.Element {
                 theme={theme} frozen={offline !== null} reducedMotion={p.paused || reduced} />
             </ChatCopyProvider>
           )}
-          {tab === 'rigs' && <RigsTab nav={p.nav} dispatch={dispatch} client={client} sessions={view.sessions} projects={p.projects} />}
+          {tab === 'rigs' && <RigsTab nav={p.nav} dispatch={dispatch} client={client} sessions={view.sessions} projects={p.projects} notify={p.notify} />}
           {tab === 'history' && <HistoryTab chat={chat} onOpen={qid => {
             dispatch({ type: 'ledge', tab: 'conversation' });
             requestAnimationFrame(() => [...document.querySelectorAll<HTMLElement>('[data-turn]')][chat.findIndex(x => x.qid === qid)]?.scrollIntoView({ block: 'start' }));

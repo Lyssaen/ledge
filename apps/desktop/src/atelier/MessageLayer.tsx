@@ -216,7 +216,7 @@ export function MessageLayer({ sessions, clock, paused, reduced, dispatch, arcs 
       })}
       {arcs.map(a => {
         const ticket = a.kind === 'task' || a.kind === 'handoff';
-        return <Wire key={`arc\n${a.id}`} from={a.fromId} to={a.toId} still={still} layer={layer} ticket={ticket}
+        return <Wire key={`arc\n${a.fromId}\n${a.id}`} from={a.fromId} to={a.toId} still={still} layer={layer} ticket={ticket}
           label={t.atelier.messageLabel(a.fromName, a.toName, a.text)}
           head={<><Icon d={SHELL_ICONS.mail} size={11} />{ticket ? t.atelier.exchangeTicket(a.toName) : t.atelier.messageTo(a.toName)}</>}
           text={a.text} onOpen={() => dispatch({ type: 'ledge', tab: 'conversation' })} />;

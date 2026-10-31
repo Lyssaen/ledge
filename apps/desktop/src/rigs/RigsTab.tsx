@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type JSX } from 'react';
-import type { OpenRigStatus, Projects, Session } from '@ledge/protocol';
+import type { OpenRigStatus, Projects, Rig, Session } from '@ledge/protocol';
 import { useOpenRig, useRigs, useRigSpecs, type DaemonClient } from '@ledge/fleet';
 import { allSeats, rigsModel } from '@ledge/ui/rigs/model';
 import { useI18n } from '../i18n/lang';
@@ -14,14 +14,16 @@ export type { RigsSub } from '../nav/state';
 const SUBS: readonly RigsSub[] = ['live', 'specs', 'agents'];
 /** OpenRig cannot answer on that machine: no rig of it is shown, the Rigs tab says why. */
 const down = (s: OpenRigStatus | undefined) => !!s && (s.state === 'absent' || s.state === 'stopped' || s.state === 'error' || s.state === 'unsupported');
+/** The rigs the tab shows: those of a machine where OpenRig answers. The Ledge home's « Rigs · n » counts the same ones. */
+export const visibleRigs = (all: readonly Rig[], openrig: readonly OpenRigStatus[]): Rig[] => all.filter(x => !down(openrig.find(s => s.machine === x.machine)));
 
 /**
  * The Rigs tab of the Ledge screen (spec §8.2), read only: sub-tabs « En cours · Specs · Agents » (the sub-tab and the chosen spec live in
  * the nav's home place). When the local OpenRig is absent, stopped, refused or in error, a banner says so in the sidebar's words and no card
  * of that machine shows. The specs are those of the local machine, or of the machine picked in a list when several run OpenRig.
  */
-export function RigsTab({ nav, dispatch, client, sessions, projects }: {
-  nav: NavState; dispatch: (a: NavAction) => void; client: DaemonClient; sessions: readonly Session[]; projects: Projects | null;
+export function RigsTab({ nav, dispatch, client, sessions, projects, notify }: {
+  nav: NavState; dispatch: (a: NavAction) => void; client: DaemonClient; sessions: readonly Session[]; projects: Projects | null; notify?(text: string): void;
 }): JSX.Element {
   const { t } = useI18n();
   const r = t.rigsTab;
@@ -30,7 +32,7 @@ export function RigsTab({ nav, dispatch, client, sessions, projects }: {
   const home = nav.place.kind === 'home' ? nav.place : null;
   const sub = home?.rigs ?? 'live';
   const byId = useMemo(() => new Map(sessions.map(s => [s.id, s])), [sessions]);
-  const rigs = useMemo(() => allRigs.filter(x => !down(openrig.find(s => s.machine === x.machine))), [allRigs, openrig]);
+  const rigs = useMemo(() => visibleRigs(allRigs, openrig), [allRigs, openrig]);
   const model = useMemo(() => rigsModel(rigs, byId, projects), [rigs, byId, projects]);
 
   // The local machine, then every other one running OpenRig.
@@ -72,7 +74,7 @@ export function RigsTab({ nav, dispatch, client, sessions, projects }: {
       )}
       <div className="rigs-body">
         {sub === 'live' && <RigsLive model={model} openrig={openrig} byId={byId} dispatch={dispatch}
-          onTerminal={(rig, seat) => { void openSeatTerminal(client, rig, seat, byId); }} />}
+          onTerminal={(rig, seat) => { void openSeatTerminal(client, rig, seat, byId).then(ok => { if (!ok) notify?.(t.session.terminal.openFailed(seat.name)); }); }} />}
         {sub === 'specs' && <RigsSpecs specs={specs} selected={home?.spec} rigs={allRigs} machine={machine}
           version={openrig.find(s => s.machine === machine)?.version} dispatch={dispatch} />}
         {sub === 'agents' && <RigsAgents rigs={rigs} byId={byId} dispatch={dispatch} />}

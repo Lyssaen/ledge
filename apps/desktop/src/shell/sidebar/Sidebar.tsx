@@ -101,7 +101,7 @@ export function Sidebar(p: {
   const homeOn = place.kind === 'home';
   return (
     <aside ref={root} className={cls('sidebar st', prefs.dense && 'st-dense')} aria-label={t.side.label}>
-      <LedgeLine line={line} on={homeOn || p.nav.chat} paused={p.nav.paused} onOpen={() => p.dispatch({ type: 'ledge', tab: 'conversation' })} />
+      <LedgeLine line={line} on={homeOn || p.nav.chat} current={homeOn} paused={p.nav.paused} onOpen={() => p.dispatch({ type: 'ledge', tab: 'conversation' })} />
       <nav className="st-views" aria-label={t.side.views}>
         <button type="button" className={atelierOn ? 'on' : undefined} aria-current={atelierOn ? 'page' : undefined} onClick={() => p.dispatch({ type: 'home' })}>
           <Icon d={SHELL_ICONS.grid} size={13} /><span>{t.side.atelier}</span><span className="st-fill" /><small>{t.side.active(active)}</small>

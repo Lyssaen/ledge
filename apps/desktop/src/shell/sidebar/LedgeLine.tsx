@@ -13,9 +13,9 @@ const clock = (iso: string): string => {
 };
 
 /** Ledge as a messaging line (mockup 1a): the resident, « Ledge. », the time, a one-line preview and the unread count.
- *  Its name reads as the line (« Accueil : Ledge, l’opérateur · Ledge. 16:44 Une décision t’attend · factory 1 non lu »); a click opens
+ *  Its name reads as the line (« Accueil : Ledge, l’opérateur · Ledge. 16:44 Une décision t’attend · factory 1 non lu »); `on` styles it (home or chat), `current` is the home page itself; a click opens
  *  Ledge's screen on the conversation. */
-export function LedgeLine(p: { line: Line; on: boolean; paused: boolean; onOpen(): void }): JSX.Element {
+export function LedgeLine(p: { line: Line; on: boolean; current: boolean; paused: boolean; onOpen(): void }): JSX.Element {
   const { t } = useI18n();
   const theme = useTheme();
   const { reduced } = useMotionPreferences();
@@ -29,7 +29,7 @@ export function LedgeLine(p: { line: Line; on: boolean; paused: boolean; onOpen(
   // it never starts with « Ledge », the name a project row may have.
   const label = `${t.side.ledgeHome} · ${['Ledge.', at, text, p.line.unread > 0 ? t.side.ledge.unread(p.line.unread) : ''].filter(Boolean).join(' ')}`;
   return (
-    <button type="button" className={cls('st-ledge', p.on && 'on')} aria-current={p.on ? 'page' : undefined} aria-label={label} title={t.side.ledgeHome} onClick={p.onOpen}>
+    <button type="button" className={cls('st-ledge', p.on && 'on')} aria-current={p.current ? 'page' : undefined} aria-label={label} title={t.side.ledgeHome} onClick={p.onOpen}>
       <span className="st-mascot" aria-hidden="true"><ResidentMascot size={30} theme={theme} paused={p.paused} reducedMotion={reduced} /></span>
       <span className="st-ledge-body">
         <span className="st-ledge-top">

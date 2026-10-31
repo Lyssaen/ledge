@@ -53,7 +53,8 @@ export function RigCard(p: {
 }): JSX.Element {
   const { t } = useI18n();
   const r = t.rigsTab;
-  const { rig } = p;
+  // One rule everywhere (sidebar, atelier plaque): a stopped seat is not at the table.
+  const rig = { ...p.rig, seats: p.rig.seats.filter(x => x.state !== 'stopped') };
   const n = rig.seats.length;
   const launching = rig.lifecycle === 'launching';
   const count = launching ? readyCount(rig) : workingCount(rig);
@@ -95,7 +96,7 @@ export function KernelCard({ rig, byId, status, onOpen }: { rig: Rig; byId: Read
   const r = t.rigsTab;
   const [more, setMore] = useState(false);
   const [health, setHealth] = useState(false);
-  const { shown, hidden } = kernelSplit(rig);
+  const { shown, hidden } = kernelSplit({ ...rig, seats: rig.seats.filter(x => x.state !== 'stopped') });
   const seats = more ? [...shown, ...hidden] : shown;
   const name = t.side.rigs.kernel;
   return (
