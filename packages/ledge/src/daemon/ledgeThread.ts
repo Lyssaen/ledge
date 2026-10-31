@@ -4,6 +4,7 @@ import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { EXCHANGE_GROUP_MS, LedgeThreadItemSchema, THREAD_PAGE, type Exchange, type LedgeThreadItem } from '@ledge/protocol';
 import { log } from '../log.js';
+import { RESTARTED_TEXT } from './ledgeSay.js';
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 type Group = Extract<LedgeThreadItem, { kind: 'exchanges' }>;
@@ -74,15 +75,26 @@ export function createLedgeThread(o: { path: string; now?: () => string; uuid?: 
 
   let queue: Promise<void> = Promise.resolve();
   const persist = (item: LedgeThreadItem): void => {
-    const prefix = needsNewline ? '\n' : '';
-    needsNewline = false;
     queue = queue.then(async () => {
+      const prefix = needsNewline ? '\n' : ''; // read in turn: a failed write before this one sets it again
+      needsNewline = false;
       await mkdir(dirname(o.path), { recursive: true });
       await appendFile(o.path, `${prefix}${JSON.stringify(item)}\n`);
-    }).catch(e => { log(`ledge thread: write failed (${(e as Error).message})`); });
+    }).catch(e => {
+      needsNewline = true; // the line may be torn: the next one starts fresh
+      log(`ledge thread: write failed (${(e as Error).message})`);
+    });
   };
   const emit = (item: LedgeThreadItem): void => { for (const fn of [...listeners]) { try { fn(item); } catch (e) { log(`ledge thread: listener failed (${(e as Error).message})`); } } };
   const store = (item: LedgeThreadItem): LedgeThreadItem => { track(item, !items.has(item.id)); persist(item); emit(item); return item; };
+
+  // A bubble still pending lost its runner with the previous daemon: it says so instead of « Ledge lit… » forever.
+  for (const id of order) {
+    const item = items.get(id)!;
+    if (item.kind !== 'ledge' || !item.pending) continue;
+    const { pending: _pending, ...rest } = item;
+    store({ ...rest, text: RESTARTED_TEXT });
+  }
 
   return {
     append(item) {

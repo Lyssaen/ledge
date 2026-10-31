@@ -23,6 +23,8 @@ export const BUSY_TEXT = 'Je réponds encore à tes messages précédents : renv
 /** Tries before giving up when every shared chat place stays taken. */
 const MAX_TOO_MANY = 30;
 const failed = (message: string) => `Je n'ai pas pu répondre : ${message}`;
+/** A Ledge bubble still pending when the daemon starts again: its answer was lost with the old daemon. */
+export const RESTARTED_TEXT = failed('le daemon a redémarré');
 
 /** The line that tells the chat which escalation the user speaks of (« En parler »). */
 export function aboutLine(e: Escalation): string {

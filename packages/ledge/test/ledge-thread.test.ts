@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Exchange, LedgeThreadItem } from '@ledge/protocol';
 import { createLedgeThread, type LedgeThread } from '../src/daemon/ledgeThread.js';
+import { RESTARTED_TEXT } from '../src/daemon/ledgeSay.js';
 
 let path: string;
 let n: number;
@@ -110,6 +111,22 @@ describe('ledge thread store', () => {
     expect(t.page().items.length).toBe(1);
     t.append(user('u3')); await t.flush();
     expect(open().page().items.map(i => i.id)).toEqual(['u1', 'u3']);
+  });
+
+  it('a ledge bubble still pending at load is finished as « le daemon a redémarré », and stays finished', async () => {
+    const t = open();
+    t.append({ kind: 'ledge', id: 'l1', text: '', qid: 'q1', pending: true });
+    t.append({ kind: 'ledge', id: 'l2', text: 'done' });
+    await t.flush();
+    const r = open();
+    const l1 = r.get('l1') as Extract<LedgeThreadItem, { kind: 'ledge' }>;
+    expect(l1).toEqual({ kind: 'ledge', id: 'l1', at: '2026-10-30T16:00:00.000Z', text: RESTARTED_TEXT, qid: 'q1' });
+    expect(RESTARTED_TEXT).toBe("Je n'ai pas pu répondre : le daemon a redémarré");
+    expect((r.get('l2') as { text: string }).text).toBe('done');
+    await r.flush();
+    const s = open();
+    expect(s.get('l1')).toEqual(l1);
+    expect(s.page().items.map(i => i.id)).toEqual(['l1', 'l2']);
   });
 
   it('a garbage line in the middle is skipped, the rest is intact', async () => {
