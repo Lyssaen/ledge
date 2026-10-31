@@ -1,6 +1,6 @@
 import { existsSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
-import { SeatsSchema, TeamNameSchema, type DefinitionProblem, type Role, type Seat, type TeamTemplate, type Tool } from '@ledge/protocol';
+import { SeatsSchema, TeamNameSchema, TemplateIdSchema, type DefinitionProblem, type Role, type Seat, type TeamTemplate, type Tool } from '@ledge/protocol';
 import { definitionDirs, definitionFiles, definitionHash, listRoles, quoteScalar, readSmall, scalarValue } from './roles.js';
 import { ledgeDir } from '../paths.js';
 import { log } from '../log.js';
@@ -66,6 +66,8 @@ export function parseTemplateText(text: string): Record<string, Value> {
 
 /** One template file as a template, or the reason it is not one. The role ids are checked at launch, not here. */
 export function parseTemplate(id: string, text: string, source: 'repo' | 'home', path: string): TeamTemplate | string {
+  // The id is the file name: one the fronts could not write or delete is refused here, not listed half usable (issue #145).
+  if (!TemplateIdSchema.safeParse(id).success) return 'nom de fichier invalide : lettres, chiffres, - et _ seulement (64 au plus, sans point), puis .yaml';
   let raw: Record<string, Value>;
   try { raw = parseTemplateText(text); } catch (e) { return (e as Error).message; }
   const name = TeamNameSchema.safeParse(typeof raw.name === 'string' ? raw.name : id);
