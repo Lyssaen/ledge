@@ -142,6 +142,36 @@ describe('definitions over the protocol', () => {
     await c.close();
   });
 
+  it('an autonomy change is told to the seats whose autonomy differs: it only holds for a new session of the role (issue #147)', async () => {
+    await start();
+    mkdirSync(join(repo1, '.ledge', 'roles'), { recursive: true });
+    writeFileSync(join(repo1, '.ledge', 'roles', 'dev.md'), '---\nlabel: Dev\n---\nTu codes.\n');
+    const hash = definitionHash(readFileSync(join(repo1, '.ledge', 'roles', 'dev.md'), 'utf8'));
+    store.upsert(mk('asks', { role: 'dev', cwd: repo1 }));
+    store.upsert(mk('auto', { role: 'dev', cwd: repo1, autonomy: 'auto' }));
+    const c = await client();
+    // Only the autonomy changes: no prompt to send again, but the seat launched with another autonomy is told it keeps it.
+    c.send({ type: 'role.write', rid: 'w1', scope: 'repo', project: 'p1', role: draft('dev', { autonomy: 'auto' }), base: hash });
+    const first = await c.next('definition.result');
+    await until(() => sent.length >= 1);
+    await new Promise(r => setTimeout(r, 300));
+    expect(sent.map(s => s[0])).toEqual(['ledge-asks']);
+    expect(sent[0]![1]).toMatch(/^<ledge-notice role="dev">L'autonomie de ton rôle a changé \(@dev, Dev\) : autonome\./);
+    expect(sent[0]![1]).toContain('cette session garde « demande »');
+    expect(sent[0]![1]).not.toContain('Tu codes.');
+    // Prompt and autonomy at once: the prompt notice carries the autonomy line, for the seat it concerns only.
+    await until(() => store.get('asks')!.state === 'working');
+    store.upsert({ ...store.get('asks')!, state: 'idle' });
+    c.send({ type: 'role.write', rid: 'w2', scope: 'repo', project: 'p1', role: draft('dev', { prompt: 'Tu codes vite.', autonomy: 'edits' }), base: first.hash! });
+    await c.next('definition.result');
+    await until(() => sent.length >= 3);
+    const byPane = new Map(sent.slice(1).map(([n, t]) => [n, t]));
+    expect(byPane.get('ledge-asks')).toContain('Tu codes vite.');
+    expect(byPane.get('ledge-asks')).toContain('cette session garde « demande »');
+    expect(byPane.get('ledge-auto')).toContain('cette session garde « autonome »');
+    await c.close();
+  });
+
   it('a role whose label is its id is told as (@id), with no comma', async () => {
     await start();
     store.upsert(mk('in', { role: 'dev', cwd: repo1 }));

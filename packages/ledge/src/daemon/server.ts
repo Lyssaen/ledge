@@ -88,6 +88,9 @@ export const MODEL_ARGS: Record<TmuxTool, (model: string) => string[]> = { claud
 /** How each agent takes an effort; Cursor Agent has none apart from its model id (`gpt-5.3-codex-high`). */
 export const EFFORT_ARGS: Partial<Record<TmuxTool, (effort: string) => string[]>> = { claude: e => ['--effort', e], codex: e => ['-c', `model_reasoning_effort="${e}"`] };
 
+/** An autonomy as a seat is told it, in the words of the TUI. */
+const AUTONOMY_FR: Record<Autonomy, string> = { ask: 'demande', edits: 'modifie sans demander', auto: 'autonome' };
+
 /** The agent's arguments for a `session.launch`: the resume flag, the model and effort, then the first instruction as the positional prompt. */
 export function launchArgs(msg: { tool: TmuxTool; prompt?: string; continue?: boolean; dirs?: string[]; model?: string; effort?: string; autonomy?: Autonomy }): string[] {
   const prompt = msg.prompt?.trim();
@@ -1005,9 +1008,23 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         if ('code' in r) return { id, code: r.code };
         const now = loadRole(id, path, msg.scope, []);
         // The prompt or the label changed (or the file is new, which switches the sessions whose home role it now shadows): the seats holding it are told.
-        if (now && (!before || before.prompt !== now.prompt || before.label !== now.label)) {
-          const notice = formatRoleNotice({ role: id, text: `Ta consigne de rôle a changé (@${id}${now.label && now.label !== id ? `, ${now.label}` : ''}). La voici en entier ; elle remplace la précédente :\n\n${now.prompt}` });
-          for (const s of promptRecipients(id, path, store.all(), findRole)) mailbox.notify(s.id, notice, `role:${id}:${r.hash}:${s.id}`);
+        // An autonomy is the agent's permission switch, given at launch and kept by a resume (issue #147): a seat launched with
+        // another one is told it keeps it, and that only a new session of the role gets the new one.
+        const promptChanged = !!now && (!before || before.prompt !== now.prompt || before.label !== now.label);
+        const autonomyChanged = !!now && (!before || (before.autonomy ?? 'ask') !== (now.autonomy ?? 'ask'));
+        if (now && (promptChanged || autonomyChanged)) {
+          const head = `@${id}${now.label && now.label !== id ? `, ${now.label}` : ''}`;
+          const next = now.autonomy ?? 'ask';
+          for (const s of promptRecipients(id, path, store.all(), findRole)) {
+            const mine = s.autonomy ?? 'ask';
+            const keeps = autonomyChanged && mine !== next
+              ? `cette session garde « ${AUTONOMY_FR[mine]} » : l'autonomie se fixe au lancement, et une reprise garde la sienne ; seule une nouvelle session de ce rôle partira en « ${AUTONOMY_FR[next]} ».`
+              : undefined;
+            const text = promptChanged
+              ? `Ta consigne de rôle a changé (${head}). ${keeps ? `Son autonomie aussi, maintenant « ${AUTONOMY_FR[next]} », mais ${keeps} La consigne en entier, qui remplace la précédente :` : 'La voici en entier ; elle remplace la précédente :'}\n\n${now.prompt}`
+              : keeps && `L'autonomie de ton rôle a changé (${head}) : ${AUTONOMY_FR[next]}. Mais ${keeps}`;
+            if (text) mailbox.notify(s.id, formatRoleNotice({ role: id, text }), `role:${id}:${r.hash}:${s.id}`);
+          }
         }
         return { id, hash: r.hash };
       }
