@@ -48,3 +48,13 @@ describe('buildPersona (spec 2026-10-26 action registry §4)', () => {
 describe('buildPersona: no team', () => {
   it('the persona speaks of no team', () => expect(buildPersona('claude')).not.toMatch(/teams\.md|tasks\.md|équipe/));
 });
+
+describe('buildPersona: rigs (lot 4)', () => {
+  it('the persona names rigs.md and escalations.md, not teams.md', () => {
+    for (const tool of TOOLS) {
+      const p = buildPersona(tool);
+      expect(p).toContain('rigs.md'); expect(p).toContain('escalations.md');
+      expect(p).not.toMatch(/teams\.md|tasks\.md/);
+    }
+  });
+});

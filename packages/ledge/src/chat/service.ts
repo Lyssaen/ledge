@@ -3,7 +3,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { spawn as nodeSpawn } from 'node:child_process';
-import { extractProposal, isArchived, LEGACY_FENCE_ACTION, MAX_PROPOSALS, proposalRows, parseActionBlock, parseProjectBlock, parseCloseBlock, parseRelayBlock, projectOf, type BlockKind, type ChatAction, type ChatClose, type ChatProjectProposal, type ChatProposal, type ChatRelay, type CloseHow, type ChatTurn, type AttachmentRef, type Projects, type ServerMessage, type Session, type Tool } from '@ledge/protocol';
+import { extractProposal, isArchived, LEGACY_FENCE_ACTION, MAX_PROPOSALS, proposalRows, parseActionBlock, parseProjectBlock, parseCloseBlock, parseRelayBlock, projectOf, type BlockKind, type ChatAction, type ChatClose, type ChatProjectProposal, type ChatProposal, type ChatRelay, type CloseHow, type ChatTurn, type AttachmentRef, type Projects, type ServerMessage, type Session, type Tool, type Rig, type Escalation } from '@ledge/protocol';
 import { resolveAction, sessionOf } from '../daemon/actions.js';
 import { resolveFolder } from '../daemon/folders.js';
 import type { Store } from '../daemon/store.js';
@@ -63,6 +63,8 @@ export interface ChatDeps {
   forge?: Forge;
   /** A pool shared by several chats: a question takes a place while it runs. */
   slots?: { take(): boolean; give(): void };
+  /** The OpenRig mirror as the daemon holds it now (read at each question, lot 4): `rigs.md` and `escalations.md`; a daemon without a bridge omits it. */
+  openrig?: () => { rigs: Rig[]; escalations: Escalation[] };
   /** Resolves an attached image's id to its file (the daemon's attachment store). */
   attachments?: { path(id: string): string | null };
   now?: () => string; today?: () => string; uuid?: () => string; bin?: string[]; bins?: Partial<Record<Tool, string[]>>; spawn?: typeof nodeSpawn; timeoutMs?: number;
@@ -234,7 +236,7 @@ export function createChat(deps: ChatDeps): Chat {
   }
 
   async function run(turn: ChatTurn, emit: (m: ChatMessage) => void, fresh: boolean, mine: Running, tool: Tool): Promise<{ ok: true } | { ok: false; message: string; resumed: boolean }> {
-    const ctx = await writeContext(contextDir, { sessions: deps.store.all().filter(s => !isArchived(s)), recents: deps.store.recents(), projects: deps.projects?.(), now: now(), capture, git: cwd => gitSummary(cwd) });
+    const ctx = await writeContext(contextDir, { sessions: deps.store.all().filter(s => !isArchived(s)), recents: deps.store.recents(), projects: deps.projects?.(), ...deps.openrig?.(), now: now(), capture, git: cwd => gitSummary(cwd) });
     // Only a question about the forge runs gh/glab: the others never wait on the network.
     if (deps.forge && asksForge(turn.question)) await deps.forge.write(ctx, deps.projects?.() ?? { projects: [], rules: [] }).catch(e => log(`chat ${turn.qid}: forge files not written (${e instanceof Error ? e.message : String(e)})`));
     if (mine.cancelled) return CANCELLED;

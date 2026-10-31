@@ -52,6 +52,7 @@ import { pairSession, restorePairs, unpairGone } from './openrig/pairing.js';
 import { createAnswers, type Answers } from './openrig/answer.js';
 import { ANSWER_PATH } from './openrig/facts.js';
 import { createLedgeThread } from './ledgeThread.js';
+import { createLedgeSay } from './ledgeSay.js';
 import { createHandovers, heldNames } from './handover.js';
 import { readContext } from './context.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
@@ -194,7 +195,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   // the login shell's on top of it, as a terminal would.
   const agentEnv = opts.agentEnv ?? (async () => ({ ...process.env, ...(await loginShellEnv()) }));
   const attachments = opts.attachments ?? new AttachmentStore(paths().attachments);
-  const threads = createChatThreads({ attachments, store, tmux, home: paths().dir, userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now, projects: () => projects, forge: createForge({ env: agentEnv }) });
+  const mirror = opts.openrig;
+  const threads = createChatThreads({ attachments, store, tmux, home: paths().dir, userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now, projects: () => projects, forge: createForge({ env: agentEnv }),
+    ...(mirror ? { openrig: () => ({ rigs: mirror.rigs(), escalations: mirror.escalations() }) } : {}) });
   const chat: Chat = opts.chat ?? threads.desktop;
   const router = createRouter({ env: agentEnv });
   const omp = opts.omp ?? createOmpHost({ store, env: agentEnv, dir: join(paths().dir, 'omp'), now, attachments });
@@ -306,6 +309,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** Ledge's thread (with or without OpenRig): every item, new or grown, reaches the local fronts. */
   const thread = createLedgeThread({ path: paths().ledgeThread, now });
   const unsubscribeThread = thread.onItem(item => broadcast({ type: 'ledge.thread.item', item }));
+  /** Messages to Ledge (`ledge.say`): one at a time through the desktop chat, whose `chat.*` every front gets. */
+  const ledgeSay = createLedgeSay({ thread, chat, escalations: id => bridge?.escalation(id), broadcast, tool: () => threads.deviceTool(),
+    // Task 6 seam: `@seat …` texts go to seatSend.fromSay; until then every text is a question to Ledge.
+    toSeat: async () => null });
   /** Answers to escalations, the one way to answer them (only with an OpenRig bridge). */
   const answers: Answers | null = bridge ? createAnswers({
     port: { escalation: bridge.escalation, patch: bridge.patchEscalation, status: bridge.status, cli: bridge.cli, http: bridge.http,
@@ -1302,7 +1309,14 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         const r = await answers.answer(msg.id, msg.answers, msg.by);
         return reply(r.ok ? { type: 'rig.result', rid: msg.rid, ok: true } : { type: 'rig.result', rid: msg.rid, ok: false, code: r.code, reason: r.reason });
       }
-      case 'rig.act': case 'rig.prepare': case 'rig.launch': case 'rig.adopt': case 'rig.send': case 'ledge.say':
+      // To the sender: accepted as soon as the user item is in the thread; the answer reaches every front through the thread.
+      case 'ledge.say': {
+        if (msg.text.trim() === '') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'invalid', reason: 'empty message' });
+        const answered = ledgeSay.say(msg.rid, msg.text, msg.about);
+        reply({ type: 'rig.result', rid: msg.rid, ok: true });
+        return answered;
+      }
+      case 'rig.act': case 'rig.prepare': case 'rig.launch': case 'rig.adopt': case 'rig.send':
       case 'mandate.update': case 'rule.set': case 'decision.revisit': case 'category.escalate': case 'brain.set':
         return notYet();
       // A refusal of the service (an unknown pairing, a sign-in while disabled) reaches the sender as an `error`.

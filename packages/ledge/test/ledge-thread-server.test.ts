@@ -8,6 +8,7 @@ import { Store } from '../src/daemon/store.js';
 import { startServer, type ServerHandle } from '../src/daemon/server.js';
 import { createBridge, type Bridge } from '../src/daemon/openrig/bridge.js';
 import type { Tmux } from '../src/tmux.js';
+import type { Chat, ChatMessage } from '../src/chat/service.js';
 import { createFakeOpenRig, fakeRigCli, type FakeOpenRig, type FakeRig } from './fakes/openrig.js';
 import { authHeaders, until } from './helpers.js';
 
@@ -34,7 +35,7 @@ let srv: ServerHandle | null = null; let bridge: Bridge | null = null; let fake:
 afterEach(async () => { await bridge?.stop(); bridge = null; await srv?.close(); srv = null; await fake?.stop(); fake = null; for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }); });
 
 /** A fresh LEDGE_HOME (so a fresh ledge-thread.jsonl) per test; `lines` are written to the thread file first. */
-async function setup(o: { bridge: boolean; lines?: LedgeThreadItem[]; hold?: Promise<unknown> }) {
+async function setup(o: { bridge: boolean; lines?: LedgeThreadItem[]; hold?: Promise<unknown>; chat?: Chat }) {
   const dir = mkdtempSync(join(tmpdir(), 'ledge-thread-srv-')); dirs.push(dir); process.env.LEDGE_HOME = dir;
   if (o.lines) writeFileSync(join(dir, 'ledge-thread.jsonl'), o.lines.map(l => `${JSON.stringify(l)}\n`).join(''));
   const store = new Store();
@@ -46,7 +47,7 @@ async function setup(o: { bridge: boolean; lines?: LedgeThreadItem[]; hold?: Pro
       asks: { all: () => server!.asks.all(), onChange: f => server!.asks.onChange(f) }, sessionName: id => store.get(id)?.name, probeMs: 20, outboxMs: 30, resyncMs: 50 });
   }
   server = srv = await startServer({ store, tmux: noTmux, port: 0, home: dir, daemon: { version: '0.0.0', install: 'git', systemd: false }, agentEnv: async () => ({ ...process.env }),
-    ...(bridge ? { openrig: bridge } : {}) });
+    ...(bridge ? { openrig: bridge } : {}), ...(o.chat ? { chat: o.chat } : {}) });
   if (bridge) {
     await bridge.start();
     await until(() => bridge!.status().state === 'running' && bridge!.rigs().length === 1 && bridge!.escalations().length === 1);
@@ -168,5 +169,29 @@ describe('the ledge thread served', () => {
     expect(fake!.queue.filter(r => r.sourceSession === 'ledge@external')).toHaveLength(1);
     expect(fake!.requests.filter(r => r.method === 'POST' && r.path === '/api/mission-control/action')).toHaveLength(1);
     await a.close(); await b.close();
+  });
+
+  it('ledge.say: rig.result at once, then the answer in the thread', async () => {
+    let release!: () => void; const held = new Promise<void>(r => { release = r; });
+    const own = { idle: async () => {}, history: () => [], attachmentIds: () => [], queuedRelays: () => [], async ask(qid: string, text: string, emit: (m: ChatMessage) => void) {
+      emit({ type: 'chat.history', turns: [{ qid, question: text, askedAt: '2026-10-30T10:00:00.000Z', steps: [] }] });
+      await held; emit({ type: 'chat.done', qid, text: 'Rien ne tourne.', at: '2026-10-30T10:00:01.000Z' });
+    } };
+    // Whatever else the daemon asks the chat (snapshot, day roll) does nothing here.
+    const chat = new Proxy(own, { get: (t, k) => (k in t ? t[k as keyof typeof t] : () => undefined) }) as unknown as Chat;
+    const { server } = await setup({ bridge: false, chat });
+    const c = await client(server.port);
+    await until(() => c.of('ledge.thread.history').length === 1);
+    c.send({ type: 'ledge.say', rid: 's1', text: 'Où en est factory ?' });
+    await until(() => c.of('rig.result').length === 1);
+    expect(c.of('rig.result')[0]).toEqual({ type: 'rig.result', rid: 's1', ok: true });
+    expect(threadItems(c).some(i => i.kind === 'ledge' && i.pending === true)).toBe(true);
+    release();
+    await until(() => threadItems(c).some(i => i.kind === 'ledge' && i.text === 'Rien ne tourne.' && i.pending === undefined));
+    expect(c.of('chat.done')).toHaveLength(1);
+    c.send({ type: 'ledge.say', rid: 's2', text: '  ' });
+    await until(() => c.of('rig.result').length === 2);
+    expect(c.of('rig.result')[1]).toMatchObject({ rid: 's2', ok: false, code: 'invalid' });
+    await c.close();
   });
 });
