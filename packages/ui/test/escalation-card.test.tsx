@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { cleanup, render, screen, fireEvent } from '@testing-library/react';
 import type { Escalation } from '@ledge/protocol';
 import { EscalationCard } from '../src/chat/ledge/EscalationCard';
 import { CategoryChip } from '../src/chat/ledge/CategoryChip';
@@ -61,8 +61,18 @@ describe('EscalationCard', () => {
     expect(screen.getByRole('button', { name: 'SQLite' })).toBeDisabled();
   });
 
-  it('already_answered shows « Déjà répondu » without buttons', () => {
+  it('already_answered on an escalation back to pending or grace keeps the note and the buttons', () => {
     card({ answer: { state: 'refused', code: 'already_answered' } });
+    expect(screen.getByText('Déjà répondu')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'SQLite' })).toBeEnabled();
+    cleanup();
+    card({ escalation: { ...sqlite, state: 'grace', graceUntil: NOW }, answer: { state: 'refused', code: 'already_answered' } });
+    expect(screen.getByText('Déjà répondu')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'SQLite' })).toBeEnabled();
+  });
+
+  it('already_answered on a closed escalation shows « Déjà répondu » without buttons', () => {
+    card({ escalation: { ...sqlite, state: 'closed' }, answer: { state: 'refused', code: 'already_answered' } });
     expect(screen.getByText('Déjà répondu')).toBeVisible();
     expect(screen.queryByRole('button', { name: 'SQLite' })).toBeNull();
   });

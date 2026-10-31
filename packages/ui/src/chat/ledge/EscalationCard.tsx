@@ -28,7 +28,8 @@ export function EscalationCard(p: { escalation: Escalation; answer: EscalationAn
   const now = p.now ?? new Date().toISOString();
   const already = p.answer.state === 'refused' && p.answer.code === 'already_answered';
   const failed = p.answer.state === 'refused' && !already ? w.refused(p.answer.code ?? 'failed', p.answer.reason) : null;
-  const settled = e.state === 'answered' || e.state === 'closed' || already;
+  // « Déjà répondu » alone (the escalation back to pending or grace) keeps the buttons: the note says it, a new answer may follow.
+  const settled = e.state === 'answered' || e.state === 'closed';
   const busy = p.answer.state === 'sending' || p.answer.state === 'done';
   const ask = e.intent === 'decision' && e.questions.length === 0;
   const title = e.summary || e.questions[0]?.question || '';
