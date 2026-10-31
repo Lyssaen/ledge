@@ -89,7 +89,7 @@ describe('roles and teams over the protocol', () => {
     await late.close(); await c.close();
   });
 
-  it('team.launch refuses an unknown role before spawning anything; a seat that fails leaves the others', async () => {
+  it('team.launch refuses an unknown role before spawning anything; a seat that fails leaves the others, every seat tried (#140)', async () => {
     await start(o => o.env.LEDGE_ROLE === 'review');
     const c = await client();
     c.send({ type: 'team.launch', rid: 'r1', cwd: work, seats: [{ role: 'lead' }, { role: 'qa' }] });
@@ -98,8 +98,8 @@ describe('roles and teams over the protocol', () => {
     c.send({ type: 'team.launch', rid: 'r2', cwd: work, seats: [{ role: 'lead' }, { role: 'review' }, { role: 'build' }] });
     const failed = await c.next('team.failed', 5000);
     expect(failed.reason).toBe('@review : tmux: no server');
-    expect(failed.team!.seats.map(s => [s.role, !!s.sessionId])).toEqual([['lead', true], ['review', false], ['build', false]]);
-    expect(tmux.created).toHaveLength(1);
+    expect(failed.team!.seats.map(s => [s.role, !!s.sessionId])).toEqual([['lead', true], ['review', false], ['build', true]]);
+    expect(tmux.created.map(o => o.env.LEDGE_ROLE)).toEqual(['lead', 'build']);
     await c.close();
   });
 

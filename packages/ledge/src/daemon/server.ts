@@ -1043,6 +1043,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   async function startSeats(team: Team, seats: readonly Seat[]): Promise<string | null> {
     const resolved = resolveSeats(seats, listDefinitions(team.cwd).roles);
     if ('unknown' in resolved) return `rôle inconnu : ${resolved.unknown.join(', ')} (écris .ledge/roles/<id>.md)`;
+    return spawnSeats(team, resolved);
+  }
+  /** Spawns each resolved seat in order, every one tried: the roles that failed and why, null when none did. */
+  async function spawnSeats(team: Team, resolved: readonly ResolvedSeat[]): Promise<string | null> {
     const failures: string[] = [];
     for (const seat of resolved) {
       try { await launchSeat(team, team.cwd, seat); }
@@ -1052,7 +1056,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   }
 
   /** `team.launch` (roles spec §3.4): resolves the folder, its project and every role (one unknown refuses the whole
-   *  launch), creates the live team and spawns its seats in order. A seat that fails stops there: the others stay.
+   *  launch), creates the live team and spawns its seats in order, every one tried as `startSeats` does (#140): what failed
+   *  stays a free seat, named in the reason with the team, what started stays.
    *  With `seats` given, `template` is only recorded on the team (a phone's launch of a team it composed, from a template). */
   async function launchTeam(req: { cwd: string; template?: string; seats?: Seat[]; name?: string; defaults?: { tool: Tool; model?: string; effort?: string } }): Promise<{ team: Team } | { reason: string; team?: Team }> {
     const cwd = await resolveFolder(req.cwd, opts.home);
@@ -1067,14 +1072,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     const recorded = req.seats ? req.template : template?.id;
     const team = teams.create({ name, ...(recorded ? { template: recorded } : {}), project: projectOf({ cwd }, projects), cwd, roles: seats });
     log(`team ${team.id} (${name}) launching ${resolved.length} seats in ${cwd}`);
-    for (const seat of resolved) {
-      try { await launchSeat(team, cwd, seat); }
-      catch (e) {
-        log(`team ${team.id}: seat @${seat.role.id} failed: ${(e as Error).message}`);
-        return { reason: `@${seat.role.id} : ${(e as Error).message}`, team: teams.get(team.id)! };
-      }
-    }
-    return { team: teams.get(team.id)! };
+    const failed = await spawnSeats(team, resolved);
+    return failed ? { reason: failed, team: teams.get(team.id)! } : { team: teams.get(team.id)! };
   }
 
   /**
