@@ -39,6 +39,6 @@ export function completeMention(text: string, at: { start: number; query: string
 /** The rig « Où en est … ? » asks about: the most seats at work, kernel aside; the first listed on a tie. */
 export function mostActiveRig(rigs: readonly Rig[]): Rig | undefined {
   let best: Rig | undefined;
-  for (const r of rigs) if (!r.kernel && (!best || workingCount(r) > workingCount(best))) best = r;
+  for (const r of rigs) if (!r.kernel && (r.lifecycle === 'running' || r.lifecycle === 'partial') && (!best || workingCount(r) > workingCount(best))) best = r;
   return best;
 }
