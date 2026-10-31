@@ -133,7 +133,7 @@ test('notifications: turned on while pairing, a push shows a notification, an un
 
   await test.step('every screen loads without a CSP violation or an error', async () => {
     await h.daemon.update(waiting());
-    for (const hash of ['#/', '#/agents', '#/request/s1/p1', '#/thread/s1', '#/terminal/s1', '#/connection', '#/update']) {
+    for (const hash of ['#/', '#/agents', '#/request/s1/p1', '#/thread/s1', '#/terminal/s1', '#/connection']) {
       await page.evaluate((x) => { location.hash = x; }, hash);
       await page.waitForTimeout(300);
       expect(await violations(page), hash).toEqual([]);

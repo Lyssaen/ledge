@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 
-/** Hash routes of the phone app. `#/thread/<sid>` and `#/request/<sid>/<key>` are also the entry points of a shared link. */
+/** Hash routes of the phone app. The sign-in, a changed key and a new version are not routes: the link's state shows them (App.tsx). `#/thread/<sid>` and `#/request/<sid>/<key>` are also the entry points of a shared link. */
 export type Route =
   | { name: 'inbox' }
   | { name: 'agents' }
@@ -9,10 +9,6 @@ export type Route =
   | { name: 'terminal'; sessionId: string }
   | { name: 'request'; sessionId: string; key: string }
   | { name: 'connection' }
-  | { name: 'login' }
-  | { name: 'link' }
-  | { name: 'key-changed' }
-  | { name: 'update' }
   /** The Équipes tab. `team`: the editor of a team definition (`key` is `new` or a catalog key, `model/catalog.ts`); `team-copy`: a live team's composition as a new team; `role`: a role's editor. */
   | { name: 'teams' }
   | { name: 'team'; key: string }
@@ -22,10 +18,10 @@ export type Route =
   | { name: 'compose'; teamId: string };
 
 /** Every route, as the Ledge guide (docs/ledge-guide.md) must describe them: a Record, so a new route fails to compile until it is listed here. */
-const ROUTE_NAME: Record<Route['name'], true> = { inbox: true, agents: true, chat: true, thread: true, terminal: true, request: true, connection: true, login: true, link: true, 'key-changed': true, update: true, teams: true, team: true, 'team-copy': true, role: true, live: true, compose: true };
+const ROUTE_NAME: Record<Route['name'], true> = { inbox: true, agents: true, chat: true, thread: true, terminal: true, request: true, connection: true, teams: true, team: true, 'team-copy': true, role: true, live: true, compose: true };
 export const ROUTE_NAMES = Object.keys(ROUTE_NAME) as Route['name'][];
 
-const SIMPLE = ['agents', 'chat', 'connection', 'login', 'link', 'key-changed', 'update', 'teams'] as const;
+const SIMPLE = ['agents', 'chat', 'connection', 'teams'] as const;
 
 export function parseRoute(hash: string): Route {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean);
