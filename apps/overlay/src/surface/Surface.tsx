@@ -8,7 +8,7 @@ import type { DaemonClient } from '../daemon/client';
 import { useMachines } from '../daemon/machines';
 import type { DocumentOrigin } from '../documents/useDocumentReader';
 import type { ResidentGesture } from '../bots/ResidentMascot';
-import { groupSessions, sayToLedge } from '@ledge/fleet';
+import { groupSessions, sayToLedge, useLedgeDecisions } from '@ledge/fleet';
 import { displayOrder, headersBefore } from './groups';
 import { FILET, LEDGE_ID, scaledLayout, SIZES, SURFACE_CHROME_Y, type IslandPosition, type Layout } from './geometry';
 import { createSurfaceController } from './controller';
@@ -118,7 +118,10 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const chosenMachine = machines.find(m => m.id === launchMachine);
   const disconnected = machines.filter(m => !m.ready).map(m => m.label);
   // Everything indexed (digits, J/K, the handle, the coachmark row) follows the order the list displays: grouped by repository.
-  const sessions = useMemo(() => displayOrder(daemonSessions), [daemonSessions]);
+  // Ledge's brain session (lot 7) is the daemon's own, never one of the notch's sessions (C27).
+  const sessions = useMemo(() => displayOrder(daemonSessions.filter(s => !s.brain)), [daemonSessions]);
+  // What Ledge settled, by id: the feed's « décision » lines (lot 4 tf94a73).
+  const ledgeDecisions = useLedgeDecisions();
   const groups = useMemo(() => groupSessions(sessions), [sessions]);
   const { t } = useI18n();
   // One app-level motion preference drives every bot in every layer.
@@ -792,7 +795,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
               onAsk={ask} onOpenChat={() => dispatch({ type: 'chat' })} onTyping={on => dispatch({ type: 'typing', on })} askDisabled={chatOffline !== null} />
           </div>
           <div aria-hidden={st.mode !== 'chat' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'chat' ? 'auto' : 'none', transform: `translateX(${st.mode === 'chat' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
-            <LedgeFeed client={client} contentRef={chatRef} sessions={sessions} visible={st.mode === 'chat'} enterDelay={enter} offline={chatOffline}
+            <LedgeFeed client={client} contentRef={chatRef} sessions={sessions} decisions={ledgeDecisions} visible={st.mode === 'chat'} enterDelay={enter} offline={chatOffline}
               headerExtra={<IslandMenu open={menuOpen && st.mode === 'chat'} dnd={dnd} onToggle={() => setMenuOpen(o => !o)} onClose={() => setMenuOpen(false)} onSettings={() => { setMenuOpen(false); openInLedge({ kind: 'settings' }); }} onDnd={onToggleDnd} onQuit={() => { setMenuOpen(false); void quitApp(); }} />}
               onSettings={() => openInLedge({ kind: 'settings' })} onClose={() => { setMenuOpen(false); dispatch({ type: 'close' }); }} onOpenSession={id => openInLedge({ kind: 'session', id })}
               onDocument={ref => openInLedge({ kind: 'document', path: ref.path })} theme={theme} frozen={unreachable} reducedMotion={reducedMotion}
