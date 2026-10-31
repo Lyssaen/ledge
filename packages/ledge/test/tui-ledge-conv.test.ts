@@ -25,7 +25,7 @@ const group = (id: string, from: string, to: string, exchanges: Exchange[]): Thr
 
 describe('ledge tui: Ledge’s conversation', () => {
   it('an escalation draws inside a double box with its options and keys', () => {
-    const { lines, keys } = convLines([escRow(escalation())], opts());
+    const { lines, keys } = convLines([escRow(escalation())], opts({ target: 'q-117' }));
     const all = lines.map(text);
     expect(all.some(l => l.includes('╔═ ARCHITECTURE · ORCH-LEAD@FACTORY · IL Y A 4 MIN'))).toBe(true);
     expect(all.some(l => l.includes(' 1 · SQLite 1 ') && l.includes(' 2 · Garder le JSON 2 '))).toBe(true);
@@ -38,6 +38,35 @@ describe('ledge tui: Ledge’s conversation', () => {
     const buttons = lines.find(l => text(l).includes(' 1 · SQLite '))!;
     expect(buttons.find(s => s.text === ' 1 · SQLite ')?.bg).toBe(C.primary);
     expect(buttons.find(s => s.text === ' 2 · Garder le JSON ')?.bg).toBe(C.key);
+  });
+
+  it('only the target escalation draws its keys; another one waiting shows its options and how to choose it', () => {
+    const other = escalation({ id: 'q-200', from: 'build@starter', summary: 'Garder la branche ?', questions: [{ id: 'q1', question: 'Garder la branche ?', options: [{ id: 'yes', label: 'Oui' }, { id: 'no', label: 'Non' }] }] });
+    const rows: ThreadRow[] = [escRow(escalation()), { kind: 'escalation', item: { kind: 'escalation', id: 'i-200', at: ago(1), escalationId: 'q-200' }, escalation: other }];
+    const { lines, keys } = convLines(rows, opts({ target: 'q-200' }));
+    const of = (id: string) => lines.filter((_, i) => keys[i] === id).map(text);
+    expect(of('i-200').some(l => l.includes(' 1 · Oui 1 ') && l.includes(' 2 · Non 2 '))).toBe(true);
+    expect(of('i-esc').some(l => l.includes(' SQLite ') && l.includes(' Garder le JSON '))).toBe(true);
+    expect(of('i-esc').some(l => /\d · SQLite/.test(l) || l.includes('En parler e'))).toBe(false);
+    expect(of('i-esc').some(l => l.includes('j k pour la choisir'))).toBe(true);
+    // No target: no card has keys.
+    expect(convLines(rows, opts()).lines.map(text).some(l => l.includes(' 1 · '))).toBe(false);
+  });
+
+  it('an escalation right after Ledge’s message is drawn inside that bubble, under its text', () => {
+    const rows: ThreadRow[] = [{ kind: 'ledge', item: { kind: 'ledge', id: 'l1', at: ago(5), text: 'Une décision t’attend :' } }, escRow(escalation())];
+    const { lines, keys } = convLines(rows, opts({ target: 'q-117' }));
+    const all = lines.map(text);
+    expect(all.filter(l => l.includes('◖ Ledge'))).toHaveLength(1);
+    const said = all.findIndex(l => l.includes('Une décision t’attend :'));
+    const box = all.findIndex(l => l.includes('╔═ ARCHITECTURE'));
+    expect(said).toBeGreaterThan(0);
+    expect(box).toBeGreaterThan(said);
+    // Inside the rounded bubble: its border on both sides.
+    expect(all[box]).toMatch(/^│ ╔═.*╗ +│$/);
+    expect(all.at(-1)).toMatch(/^╰─+╯$/);
+    // One element, the escalation's: what j k focus.
+    expect(new Set(keys)).toEqual(new Set(['i-esc']));
   });
 
   it('decisionKeys numbers options across questions', () => {
@@ -54,7 +83,7 @@ describe('ledge tui: Ledge’s conversation', () => {
   });
 
   it('an escalation answered elsewhere says so and its buttons go out', () => {
-    const refused = convLines([escRow(escalation())], opts({ answer: () => ({ state: 'refused', code: 'already_answered' }) })).lines;
+    const refused = convLines([escRow(escalation())], opts({ target: 'q-117', answer: () => ({ state: 'refused', code: 'already_answered' }) })).lines;
     expect(refused.some(l => text(l).includes('Déjà répondu'))).toBe(true);
     const off = refused.find(l => text(l).includes(' 1 · SQLite '))!;
     expect(off.filter(s => /SQLite|JSON|^[12] $/.test(s.text)).every(s => s.bg === undefined)).toBe(true);

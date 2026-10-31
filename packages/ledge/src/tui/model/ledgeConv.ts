@@ -15,6 +15,8 @@ export interface ConvOpts {
   open: ReadonlySet<string>;
   /** The thread item that has the focus (j k in the conversation): its head is drawn on the selection's background. */
   focused?: string;
+  /** The escalation 1-9 answer: only its card draws its keys; another one waiting shows its options and how to choose it. */
+  target?: string;
   answer(id: string): AnswerView;
   /** Now, for the escalations' age (« il y a 4 min »); the clock by default. */
   now?: string;
@@ -108,6 +110,13 @@ function escalationBox(e: Escalation, width: number, o: ConvOpts): Line[] {
   else if (e.state === 'grace') notes.push([{ text: w.grace, color: C.dim }]);
   const picks = o.picks?.get(e.id) ?? {};
   const several = e.questions.length > 1;
+  // The keys are the target's alone: a digit never answers a card the user is not on (two decisions waiting, the pin moved).
+  if (e.id !== o.target) {
+    const options = e.intent === 'update' ? [w.seen] : decisionKeys(e).map(k => k.label);
+    body.push([], ...notes, ...(notes.length ? [[] as Line] : []), ...buttonRows(options.map(l => [{ text: ` ${l} `, color: live ? C.dim : C.faint }]), inner));
+    if (live) body.push([{ text: w.choose, color: C.faint }]);
+    return boxed(body, width, { color: C.yellow, title, double: true });
+  }
   const buttons: Line[] = e.intent === 'update' ? [button(w.seen, '1', live ? 'primary' : 'off')]
     : decisionKeys(e).map(k => {
       const chosen = several && picks[k.questionId] === k.optionId;
@@ -147,7 +156,10 @@ export function convLines(rows: readonly ThreadRow[], o: ConvOpts): { lines: Lin
     const h = head(at, o);
     return [focused ? [...h, pad(width - lineCells(h))].map(s => ({ ...s, bg: C.sel })) : h, ...boxed(body, bw, { color: focused ? C.coral : C.line })];
   };
-  for (const row of rows) {
+  rows.forEach((row, i) => {
+    // An escalation right after Ledge's message goes inside that bubble, under its text (the mockup); it was drawn there.
+    const prev = rows[i - 1];
+    if (row.kind === 'escalation' && row.escalation && prev?.kind === 'ledge') return;
     let out: Line[] = [];
     let key: string;
     switch (row.kind) {
@@ -180,6 +192,9 @@ export function convLines(rows: readonly ThreadRow[], o: ConvOpts): { lines: Lin
         const text = row.item.text || live;
         const body: Line[] = text ? markdownLines(text, { width: bw - 4, g, color: C.fg }) : row.item.pending ? [[{ text: t.ask.reading, color: C.faint }]] : [];
         if (row.item.pending && text) body.push([{ text: g.caret, color: C.coral }]);
+        const next = rows[i + 1];
+        // Its decision drawn inside: the whole bubble is the escalation's (what j k focus, what a scroll stays on).
+        if (next?.kind === 'escalation' && next.escalation) { key = next.item.id; body.push(...(body.length ? [[] as Line] : []), ...escalationBox(next.escalation, bw - 4, o)); }
         out = bubble(key, row.item.at, body);
         break;
       }
@@ -190,14 +205,14 @@ export function convLines(rows: readonly ThreadRow[], o: ConvOpts): { lines: Lin
       }
       case 'escalation': {
         key = row.item.id;
-        if (!row.escalation) continue;
+        if (!row.escalation) return;
         out = bubble(key, row.item.at, escalationBox(row.escalation, bw - 4, o));
         break;
       }
       case 'decided': {
         key = row.item.id;
         const d = row.decision;
-        if (!d) continue;
+        if (!d) return;
         const body: Line[] = [...wrapped([{ text: w.decided.before, color: C.fg }, { text: row.to ?? g.ellipsis, color: C.fg, bold: true }, { text: w.decided.after(d.summary), color: C.fg }], bw - 4)];
         if (d.rule) body.push(...wrapped([{ text: w.rule(d.rule), color: C.dim }], bw - 4));
         body.push([], button(w.revisit, 'u', 'key'));
@@ -222,7 +237,7 @@ export function convLines(rows: readonly ThreadRow[], o: ConvOpts): { lines: Lin
     }
     if (lines.length) { lines.push([]); keys.push(key); }
     for (const l of out) { lines.push(l); keys.push(key); }
-  }
+  });
   return { lines, keys };
 }
 

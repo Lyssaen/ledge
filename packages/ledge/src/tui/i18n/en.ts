@@ -62,6 +62,7 @@ export const en: Messages = {
     revisitRefused: reason => `Revisit: ${reason === 'not supported yet' ? 'not possible yet, Ledge’s brain is coming' : reason}`,
     exchanges: n => (n === 1 ? '1 exchange' : `${n} exchanges between agents`),
     unfold: '↵ unfold', fold: 'z fold', missing: n => `${n} older ${plural(n, 'exchange', 'exchanges')} not loaded yet`,
+    choose: 'j k to choose it, then 1 2…',
     about: summary => `Question · about ${summary}`
   },
   seat: { waitsLedge: 'Waits for Ledge', working: 'Working', idle: 'Available', starting: 'Starting', stopped: 'Stopped', crashed: 'Crashed', unreachable: 'Unreachable' },

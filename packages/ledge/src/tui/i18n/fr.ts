@@ -66,6 +66,7 @@ export const fr = {
     revisitRefused: (reason: string) => `Revenir dessus : ${reason === 'not supported yet' ? 'pas encore possible, le cerveau de Ledge arrive' : reason}`,
     exchanges: (n: number) => (n === 1 ? '1 échange' : `${n} échanges entre agents`),
     unfold: '↵ déplier', fold: 'z replier', missing: (n: number) => `${n} ${plural(n, 'échange plus ancien', 'échanges plus anciens')} pas encore chargé${n > 1 ? 's' : ''}`,
+    choose: 'j k pour la choisir, puis 1 2…',
     about: (summary: string) => `Question · à propos de ${summary}`
   },
   /** A rig seat's state (« Attend Ledge »: an escalation of this seat is open). */

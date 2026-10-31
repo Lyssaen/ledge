@@ -183,7 +183,7 @@ export function LedgeConversation({ width, escalation, keys: keysRef, onBar }: L
     return r ? { name: r.name, color: projectColor(projects?.projects.find(p => p.id === r.projectId)?.color) } : undefined;
   };
   const conv = useMemo(() => {
-    const thread = convLines(rows, { t, g, width: convW, open: flipped, ...(focus === CONVO && item ? { focused: item } : {}), answer, rig: rigOf, live, picks, lang });
+    const thread = convLines(rows, { t, g, width: convW, open: flipped, ...(focus === CONVO && item ? { focused: item } : {}), ...(target ? { target: target.id } : {}), answer, rig: rigOf, live, picks, lang });
     const at = new Map(rows.flatMap(r => (r.kind === 'day' ? [] : [[r.item.id, r.item.at] as const])));
     // The chat turns no item of the thread names: asked here or from the docked chat.
     const named = new Set(items.flatMap(i => ((i.kind === 'ledge' || i.kind === 'user') && i.qid ? [i.qid, `local:${i.qid}`] : [])));
@@ -191,7 +191,7 @@ export function LedgeConversation({ width, escalation, keys: keysRef, onBar }: L
     const chat = chatView(loose, live, { t, g, width: Math.max(20, width - 6) });
     const asked = new Map(loose.map(x => [x.qid, x.askedAt]));
     return { ...interleave([{ ...thread, at: k => at.get(k) }, { ...chat, at: k => asked.get(k) }]), turns: new Map<string, string>() };
-  }, [rows, flipped, focus, item, d.answering, live, picks, lang, d.chat, items, t, g, convW, width, tone, rigs, projects]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [rows, flipped, focus, item, target?.id, d.answering, live, picks, lang, d.chat, items, t, g, convW, width, tone, rigs, projects]); // eslint-disable-line react-hooks/exhaustive-deps
   const { lines } = conv;
   const maxUp = Math.max(0, lines.length - view);
   const at = anchor ? anchorLine(conv, anchor) : -1;

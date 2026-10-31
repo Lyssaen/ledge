@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { ClientMessage, LedgeThreadItem } from '@ledge/protocol';
 import { until } from './helpers.js';
-import { startTui } from './tui-fixture.js';
+import { mockupEscalations, startTui } from './tui-fixture.js';
 
 const sent = <T extends ClientMessage['type']>(received: ClientMessage[], type: T) => received.filter((m): m is Extract<ClientMessage, { type: T }> => m.type === type);
 const ago = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
@@ -125,6 +125,22 @@ describe('ledge tui: home', () => {
       expect(sent(tui.daemon.received, 'escalation.answer')).toHaveLength(1);
       // The key was the card's: 2 did not leave for the rig either.
       expect(tui.frame()).toContain('Déjà répondu');
+    } finally { await tui.cleanup(); }
+  });
+
+  it('an escalation answered elsewhere while shown: its card says by whom, its buttons go out, 1 sends nothing', async () => {
+    const tui = await startTui({ openrig: {} });
+    try {
+      await tui.resize(160, 46);
+      tui.daemon.push({ type: 'ledge.thread.history', items: decisionInThread });
+      await until(() => tui.frame().includes(' 1 · SQLite 1 '));
+      const [q117] = mockupEscalations();
+      tui.daemon.push({ type: 'escalation.updated', escalation: { ...q117!, state: 'answered', answer: { by: 'user', answers: { q1: 'sqlite' }, at: ago(0) } } });
+      await until(() => tui.frame().includes('→ SQLite · par toi'));
+      expect(tui.frame()).not.toContain(' 1 · SQLite 1 ');
+      await tui.press('1');
+      await new Promise(r => setTimeout(r, 100));
+      expect(sent(tui.daemon.received, 'escalation.answer')).toEqual([]);
     } finally { await tui.cleanup(); }
   });
 
