@@ -19,7 +19,7 @@ describe('openrig contract', () => {
   it('ALWAYS_USER and constants', () => {
     expect(ALWAYS_USER).toEqual(['design', 'architecture', 'critical']);
     expect(EXCHANGES_MAX).toBe(200);
-    expect(RIG_RESULT_CODES).toEqual(['rig_managed', 'already_answered', 'openrig_down', 'unsupported', 'mandate', 'unreachable', 'failed']);
+    expect(RIG_RESULT_CODES).toEqual(['rig_managed', 'already_answered', 'openrig_down', 'unsupported', 'mandate', 'unreachable', 'failed', 'invalid']);
   });
   it('server messages parse', () => {
     const e = esc([]);

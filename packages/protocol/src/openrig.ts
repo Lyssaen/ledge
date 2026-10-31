@@ -5,6 +5,16 @@ import { ChatActionSchema } from './chat.js';
 export const MandateCategorySchema = z.enum(['git', 'tests', 'context', 'code', 'design', 'architecture', 'critical']);
 export type MandateCategory = z.infer<typeof MandateCategorySchema>;
 export const ALWAYS_USER: readonly MandateCategory[] = ['design', 'architecture', 'critical'];
+/** Category labels as people read them (lot 4). */
+export const MANDATE_CATEGORY_LABEL: Record<MandateCategory, { fr: string; en: string }> = {
+  git: { fr: 'Git et branches', en: 'Git and branches' },
+  tests: { fr: 'Tests et relectures', en: 'Tests and reviews' },
+  context: { fr: 'Contexte et relèves', en: 'Context and handovers' },
+  code: { fr: 'Petits choix de code', en: 'Small code choices' },
+  design: { fr: 'Design', en: 'Design' },
+  architecture: { fr: 'Architecture', en: 'Architecture' },
+  critical: { fr: 'Critique', en: 'Critical' },
+};
 
 export const OpenRigStateSchema = z.enum(['absent', 'stopped', 'starting', 'running', 'unsupported', 'error', 'unreachable']); // unreachable: remote machine (lot 6)
 export type OpenRigState = z.infer<typeof OpenRigStateSchema>;
@@ -53,6 +63,10 @@ export const ExchangeSchema = z.object({ id: z.string(), machine: z.string(), ri
 export type Exchange = z.infer<typeof ExchangeSchema>;
 /** The last exchanges kept per rig, in memory only. */
 export const EXCHANGES_MAX = 200;
+/** An exchange group in the thread closes after 10 minutes without an exchange. */
+export const EXCHANGE_GROUP_MS = 600_000;
+/** Thread items per page; the most recent first when a client connects. */
+export const THREAD_PAGE = 50;
 
 /** Named `Ledge*` because `Decision` / `Rule` already exist in decisions.ts and projects.ts. */
 export const LedgeDecisionSchema = z.object({ id: z.string(), escalationId: z.string(), by: z.enum(['ledge', 'user']),
@@ -63,9 +77,17 @@ export const LedgeRuleSchema = z.object({ id: z.string(), text: z.string(), cate
   from: z.string(), appliedCount: z.number().int().min(0), status: z.enum(['active', 'proposed']) });
 export type LedgeRule = z.infer<typeof LedgeRuleSchema>;
 
+/**
+ * Upsert rule: a `ledge.thread.item` whose `id` already exists REPLACES that item on the client
+ * (an exchange group that grows, a bubble that finishes).
+ * `qid` = the one-shot runner's chat turn whose action cards follow the bubble;
+ * `pending` = the « Ledge reads… » bubble until the turn is over.
+ */
 export const LedgeThreadItemSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('user'), id: z.string(), at: z.string().datetime(), text: z.string(), to: z.string().optional() }), // to = "@build"
-  z.object({ kind: z.literal('ledge'), id: z.string(), at: z.string().datetime(), text: z.string() }),
+  z.object({ kind: z.literal('user'), id: z.string(), at: z.string().datetime(), text: z.string(), to: z.string().optional(), // to = "@build"
+    qid: z.string().optional() }),
+  z.object({ kind: z.literal('ledge'), id: z.string(), at: z.string().datetime(), text: z.string(), qid: z.string().optional(),
+    pending: z.literal(true).optional() }),
   z.object({ kind: z.literal('escalation'), id: z.string(), at: z.string().datetime(), escalationId: z.string() }),
   z.object({ kind: z.literal('decided'), id: z.string(), at: z.string().datetime(), decisionId: z.string() }),
   z.object({ kind: z.literal('exchanges'), id: z.string(), at: z.string().datetime(), machine: z.string(), rigId: z.string(),
@@ -90,7 +112,7 @@ export const RigVerbSchema = z.enum(['up', 'down', 'restore', 'restart', 'stop',
 export type RigVerb = z.infer<typeof RigVerbSchema>;
 
 /** Codes of a `rig.result` failure. */
-export const RIG_RESULT_CODES = ['rig_managed', 'already_answered', 'openrig_down', 'unsupported', 'mandate', 'unreachable', 'failed'] as const;
+export const RIG_RESULT_CODES = ['rig_managed', 'already_answered', 'openrig_down', 'unsupported', 'mandate', 'unreachable', 'failed', 'invalid'] as const; // invalid: empty answer, or a question left unanswered
 export const RigResultCodeSchema = z.enum(RIG_RESULT_CODES);
 export type RigResultCode = z.infer<typeof RigResultCodeSchema>;
 
@@ -129,7 +151,7 @@ export const RigSpecsSchema = z.object({ type: z.literal('rig.specs'), requestId
   error: z.enum(['openrig_down', 'unsupported', 'failed']).optional() });
 export const RigExchangesRequestSchema = z.object({ type: z.literal('rig.exchanges.request'), machine: z.string(), rigId: z.string() });
 export const EscalationAnswerSchema = z.object({ type: z.literal('escalation.answer'), rid: z.string(), id: z.string(), answers: z.record(z.string()), by: z.literal('user') });
-export const LedgeSaySchema = z.object({ type: z.literal('ledge.say'), rid: z.string(), text: z.string() });
+export const LedgeSaySchema = z.object({ type: z.literal('ledge.say'), rid: z.string(), text: z.string(), about: z.string().optional() }); // about = escalation id (« En parler »)
 export const LedgeThreadRequestSchema = z.object({ type: z.literal('ledge.thread.request'), before: z.string().optional() });
 export const MandateUpdateSchema = z.object({ type: z.literal('mandate.update'), rid: z.string(), text: z.string() });
 export const RuleSetSchema = z.object({ type: z.literal('rule.set'), rid: z.string(), id: z.string(), status: z.enum(['active', 'rejected']) });
