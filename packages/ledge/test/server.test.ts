@@ -10,6 +10,7 @@ import type { Chat } from '../src/chat/service.js';
 import { sessionKey } from '../src/auth.js';
 import { resolveAction } from '../src/daemon/actions.js';
 import { Store } from '../src/daemon/store.js';
+import { ledgeCard } from './helpers/ledge-card.js';
 import WebSocket from 'ws';
 import { startServer, ALLOWED_ORIGINS, launchArgs, resolveFolder } from '../src/daemon/server.js';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -751,13 +752,13 @@ describe('server', () => {
     });
     it('the sender’s thread gets the card of the task it handed over; Ledge’s give and seen add none (#92)', async () => {
       await srv.close();
-      const history = new History({ dir: tmpDir() }); srv = await startServer({ store, tmux, port: 0, history });
+      const card = ledgeCard(); const history = new History({ dir: tmpDir() }); srv = await startServer({ store, tmux, port: 0, history, chat: card.chat });
       store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'idle' }));
       const c = await connect({ port: srv.port }); await c.next('snapshot');
       c.send({ type: 'task.cmd', rid: 'g1', by: 'a', op: 'give', to: 'Pim', title: 'Lance les tests' });
       const given = (await c.next('task.result', 3000)).task!;
       expect(history.items('a')).toEqual([expect.objectContaining({ kind: 'notice', id: `task-${given.id}-0`, taskOp: 'give', outgoing: true, name: 'Pim', peer: 'b' })]);
-      c.send({ type: 'task.cmd', rid: 'g2', by: 'ledge', op: 'give', to: 'Pim', title: 'Relis' });
+      card.give(c, 'g2', { to: 'Pim', title: 'Relis' });
       const mine = (await c.next('task.result', 3000)).task!;
       c.send({ type: 'task.cmd', rid: 'd', by: 'b', op: 'done', task: mine.id, text: 'ok' });
       await c.next('task.result', 3000);
@@ -789,7 +790,7 @@ describe('server', () => {
     });
     it('a task a seat gave, cancelled by Ledge, reaches its giver’s thread; one Ledge gave reaches no thread (#92)', async () => {
       await srv.close();
-      const history = new History({ dir: tmpDir() }); srv = await startServer({ store, tmux, port: 0, history });
+      const card = ledgeCard(); const history = new History({ dir: tmpDir() }); srv = await startServer({ store, tmux, port: 0, history, chat: card.chat });
       store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'idle' }));
       const c = await connect({ port: srv.port }); await c.next('snapshot');
       c.send({ type: 'task.cmd', rid: 'g1', by: 'a', op: 'give', to: 'Pim', title: 'A' });
@@ -803,7 +804,7 @@ describe('server', () => {
       };
       expect((await cancel(a.id)).log.at(-1)).toMatchObject({ by: 'Ledge', op: 'cancel', from: 'a', to: 'b' });
       expect(history.items('a').filter(i => i.kind === 'notice' && i.taskOp === 'cancel')).toEqual([expect.objectContaining({ id: `task-${a.id}-1`, outgoing: true, name: 'Pim', peer: 'b' })]);
-      c.send({ type: 'task.cmd', rid: 'g2', by: 'ledge', op: 'give', to: 'Pim', title: 'B' });
+      card.give(c, 'g2', { to: 'Pim', title: 'B' });
       const b = (await c.next('task.result', 3000)).task!;
       const before = [history.items('a').length, history.items('b').length];
       expect((await cancel(b.id)).log.at(-1)).toMatchObject({ op: 'cancel', from: 'ledge', to: 'b' });
@@ -2978,13 +2979,54 @@ describe('close a session', () => {
         c.send({ type: 'task.cmd', rid: 't1', by: 'a', op: 'give', to: 'Pim', title: 'Lance les tests' });
         const id = (await c.next('task.result', 3000)).task!.id;
         c.send({ type: 'task.cmd', rid: 't2', by: 'ledge', op: 'cancel', task: id });
-        expect((await c.next('task.result', 3000)).reason).toBe('seul le chat de Ledge annule ou passe une tâche au nom de Ledge');
+        expect((await c.next('task.result', 3000)).reason).toBe('seul le chat de Ledge, ou ledge decide, agit sur une tâche au nom de Ledge');
         c.send({ type: 'task.cmd', rid: 't3', by: 'ledge', op: 'pass', task: id, to: 'a' });
-        expect((await c.next('task.result', 3000)).reason).toBe('seul le chat de Ledge annule ou passe une tâche au nom de Ledge');
+        expect((await c.next('task.result', 3000)).reason).toBe('seul le chat de Ledge, ou ledge decide, agit sur une tâche au nom de Ledge');
         // The card's own row goes through: Ledge cancels it.
         rows.push({ action: 'task.cancel', args: { task: id }, summary: 'x', risk: 'destructive', session: 'b' });
         c.send({ type: 'chat.act', rid: 'r1', qid: 'q1', confirmed: true });
         expect(await c.next('chat.acted', 3000)).toMatchObject({ done: [0], failed: [] });
+        c.close();
+      });
+      it('#142: a client naming itself ledge only reads (list, show, seen): a decision is answered through task.answer alone', async () => {
+        const { chat, rows } = actChat([]);
+        await closing({}, { chat });
+        store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'idle' }));
+        const c = await connect({ port: srv.port }); await c.next('snapshot');
+        c.send({ type: 'task.cmd', rid: 't1', by: 'a', op: 'give', to: 'ledge', title: 'Merger ?', text: 'oui / non' });
+        const id = (await c.next('task.result', 3000)).task!.id;
+        const refused = 'seul le chat de Ledge, ou ledge decide, agit sur une tâche au nom de Ledge';
+        for (const op of [
+          { op: 'done', task: id, text: 'oui' }, { op: 'take', task: id }, { op: 'refuse', task: id, text: 'non' },
+          { op: 'give', to: 'Pim', title: 'Relire' }
+        ] as const) {
+          c.send({ type: 'task.cmd', rid: `x-${op.op}`, by: 'ledge', ...op });
+          expect((await c.next('task.result', 3000)).reason, op.op).toBe(refused);
+        }
+        c.send({ type: 'task.cmd', rid: 'l', by: 'ledge', op: 'list' });
+        expect((await c.next('task.result', 3000)).tasks?.map(t => t.id)).toEqual([id]);
+        c.send({ type: 'task.cmd', rid: 's', by: 'ledge', op: 'show', task: id });
+        expect((await c.next('task.result', 3000)).task).toMatchObject({ id, state: 'open' });
+        // The user's answer, through the card's row (task.answer), still goes.
+        rows.push({ action: 'task.answer', args: { task: id, answer: 'oui' }, summary: 'x', risk: 'destructive', session: 'a' });
+        c.send({ type: 'chat.act', rid: 'r1', qid: 'q1', confirmed: true });
+        expect(await c.next('chat.acted', 3000)).toMatchObject({ done: [0], failed: [] });
+        c.send({ type: 'task.cmd', rid: 's2', by: 'ledge', op: 'show', task: id });
+        expect((await c.next('task.result', 3000)).task).toMatchObject({ id, state: 'done', result: 'oui' });
+        c.close();
+      });
+      it('#142: `ledge task` from a session still gives, takes, passes, refuses and closes in its own name', async () => {
+        const { taskOnClient } = await import('../src/cli/task.js');
+        await closing({});
+        store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'idle' })); store.upsert(mk('c', { name: 'Ida', state: 'idle' }));
+        const c = await connect({ port: srv.port }); await c.next('snapshot');
+        const run = async (by: string, ...args: string[]) => (await taskOnClient(c, args, by, 3000)).line;
+        const id = (await run('a', 'give', 'Pim', 'Lance les tests')).match(/t[0-9a-f]{6}/)![0];
+        expect(await run('b', 'take', id)).toBe(`tâche ${id} prise`);
+        expect(await run('b', 'pass', id, 'Ida')).toBe(`tâche ${id} passée à Ida`);
+        expect(await run('c', 'refuse', id, 'pas pour moi')).toBe(`tâche ${id} refusée ; Ledge prévient Otto`);
+        const again = (await run('a', 'give', 'Pim', 'Relis')).match(/t[0-9a-f]{6}/)![0];
+        expect(await run('b', 'done', again, 'relu')).toBe(`tâche ${again} terminée ; Ledge prévient Otto`);
         c.close();
       });
     });
