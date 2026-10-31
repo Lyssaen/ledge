@@ -293,7 +293,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const leaverCloses = new Set<string>();
   // An injected chat (tests) is the only thread there is; otherwise the relay and the close cards work across the PC's and every device's.
   const cardThreads: Pick<typeof threads, 'all' | 'owner' | 'emitterOf' | 'queuedRelays'> = opts.chat ? {
-    all: () => [['desktop', chat]], owner: qid => (chat.relay(qid) || chat.close(qid, 0) || chat.action(qid, 0) ? 'desktop' : undefined), emitterOf: () => broadcast,
+    all: () => [['desktop', chat]], owner: qid => (chat.relay(qid) || chat.close(qid, 0) || chat.action(qid, 0) || chat.task(qid, 0) || chat.team(qid) ? 'desktop' : undefined), emitterOf: () => broadcast,
     queuedRelays: () => chat.queuedRelays(broadcast).map(q => ({ thread: 'desktop' as const, ...q }))
   } : threads;
   /** `replyTo` for the mailbox and the relay, which keep the refusal's text. */
@@ -863,6 +863,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** The turn's cards were set aside (« Ignorer », on any thread's device): nothing of them applies until opened again. */
   const setAside = (qid: string) => cardThreads.all().some(([, c]) => c.ignored(qid));
   const SET_ASIDE = 'ignored card: open it again first';
+  /** What a front may still send as `ledge` (#142): its lists, a task shown, a closed one marked seen. */
+  const LEDGE_READS: ReadonlySet<Extract<ClientMessage, { type: 'task.cmd' }>['op']> = new Set(['list', 'show', 'seen']);
   /** A resolved row through the daemon's own handler: its failure is the handler's `error`, or the reason its `team.saved` or
    *  `task.result` carries; `path` the template a `team.save` wrote. Ledge's own task commands go straight to the tasks:
    *  `by: 'ledge'` is never taken from a client (handle refuses it). */
@@ -1515,8 +1517,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'task.cmd': {
         // The chat's task card (roles spec §3.8) gives through its turn, which then follows its task.
         if (msg.qid !== undefined && msg.op === 'give') return setAside(msg.qid) ? reply({ type: 'task.result', rid: msg.rid, reason: SET_ASIDE }) : giveFromCard(msg, reply);
-        // Over another's head, Ledge acts only from its chat's card (actOnCard): a client naming itself `ledge` cannot.
-        if (msg.by === LEDGE_GIVER && (msg.op === 'cancel' || msg.op === 'pass')) return reply({ type: 'task.result', rid: msg.rid, reason: 'seul le chat de Ledge annule ou passe une tâche au nom de Ledge' });
+        // A client naming itself `ledge` only reads (#142): Ledge acts from its chat's cards (giveFromCard above, actOnCard) and
+        // answers a decision through task.answer (the user's, confirmed), both straight to the tasks, never through here.
+        if (msg.by === LEDGE_GIVER && !LEDGE_READS.has(msg.op)) return reply({ type: 'task.result', rid: msg.rid, reason: 'seul le chat de Ledge, ou ledge decide, agit sur une tâche au nom de Ledge' });
         return reply(tasks.run(msg));
       }
       case 'roles.list': {

@@ -13,6 +13,7 @@ import { parseLedgeCommand } from '../src/cli/send.js';
 import { connect, type Client } from '../src/client.js';
 import type { Tmux } from '../src/tmux.js';
 import { until } from './helpers.js';
+import { ledgeCard } from './helpers/ledge-card.js';
 
 const AT = '2026-10-26T08:00:00.000Z';
 const claudeLine = (used: number, extra: Record<string, unknown> = {}) => JSON.stringify({ type: 'assistant', message: { model: 'claude-opus', usage: { input_tokens: 10, cache_creation_input_tokens: 0, cache_read_input_tokens: used - 30, output_tokens: 20 } }, ...extra });
@@ -63,10 +64,10 @@ function fakeTmux(): Tmux & { created: NewSession[]; typed: Array<{ pane: string
 
 let srv: Awaited<ReturnType<typeof startServer>> | undefined; let store: Store; let tmux: ReturnType<typeof fakeTmux>; let work: string; let c: Client;
 const role = (id: string, front: string) => { mkdirSync(join(process.env.LEDGE_HOME!, 'roles'), { recursive: true }); writeFileSync(join(process.env.LEDGE_HOME!, 'roles', `${id}.md`), `---\n${front}\n---\nTu es ${id}.\n`); };
-let history: History;
+let history: History; let card: ReturnType<typeof ledgeCard>;
 async function start(briefMs = 60_000) {
-  tmux = fakeTmux(); history = new History({ dir: mkdtempSync(join(tmpdir(), 'ledge-history-')) });
-  srv = await startServer({ store, tmux, port: 0, history, verify: { attempts: 2, intervalMs: 10 }, close: { freeMs: 200, exitMs: 200 }, handoverBriefMs: briefMs });
+  tmux = fakeTmux(); history = new History({ dir: mkdtempSync(join(tmpdir(), 'ledge-history-')) }); card = ledgeCard();
+  srv = await startServer({ store, tmux, port: 0, history, chat: card.chat, verify: { attempts: 2, intervalMs: 10 }, close: { freeMs: 200, exitMs: 200 }, handoverBriefMs: briefMs });
   c = await connect({ port: srv.port }); await c.next('snapshot');
 }
 const set = (id: string, patch: Partial<Session>) => store.upsert({ ...store.get(id)!, ...patch });
@@ -126,7 +127,7 @@ describe('the relief of a session (context handover spec §3.3)', () => {
     expect(store.get(id)!.context).toMatchObject({ used: 170_000, window: 200_000 });
     // Not a seat working without asking: nothing happens by itself.
     expect(store.get(id)!.handover).toBeUndefined();
-    c.send({ type: 'task.cmd', rid: 'g', by: 'ledge', op: 'give', team: team.id, to: '@build', title: 'Implémenter les rôles' });
+    card.give(c, 'g', { team: team.id, to: '@build', title: 'Implémenter les rôles' });
     const task = (await c.next('task.result')).task!;
     const pane = store.get(id)!.tmuxSession!;
     c.send({ type: 'session.handover', rid: 'h1', id });
@@ -162,7 +163,7 @@ describe('the relief of a session (context handover spec §3.3)', () => {
     const { team, id } = await seated(170_000);
     const pane = store.get(id)!.tmuxSession!;
     set(id, { state: 'working' });
-    c.send({ type: 'task.cmd', rid: 'g', by: 'ledge', op: 'give', team: team.id, to: '@build', title: 'Implémenter les rôles' });
+    card.give(c, 'g', { team: team.id, to: '@build', title: 'Implémenter les rôles' });
     await c.next('task.result');
     c.send({ type: 'session.handover', rid: 'h1', id });
     expect(await c.next('session.handover.result')).toMatchObject({ ok: true });
@@ -188,7 +189,7 @@ describe('the relief of a session (context handover spec §3.3)', () => {
     await start();
     const { team, id } = await seated(170_000);
     for (const title of ['Un', 'Deux']) {
-      c.send({ type: 'task.cmd', rid: title, by: 'ledge', op: 'give', team: team.id, to: '@build', title });
+      card.give(c, title, { team: team.id, to: '@build', title });
       await c.next('task.result');
     }
     c.send({ type: 'session.handover', rid: 'h1', id });
@@ -217,7 +218,7 @@ describe('the relief of a session (context handover spec §3.3)', () => {
     await start(150);
     const { id } = await seated(100_000);
     set(id, { lastReply: { text: 'Étape 1 finie, tests verts.', at: AT }, branch: 'feat/roles', cwd: work });
-    c.send({ type: 'task.cmd', rid: 'g', by: 'ledge', op: 'give', to: store.get(id)!.name, title: 'Écrire les rôles' }); await c.next('task.result');
+    card.give(c, 'g', { to: store.get(id)!.name, title: 'Écrire les rôles' }); await c.next('task.result');
     c.send({ type: 'session.handover', rid: 'h', id });
     await c.next('session.handover.result');
     await until(() => store.get(id)?.handover?.state === 'done', 5000);
@@ -232,7 +233,7 @@ describe('the relief of a session (context handover spec §3.3)', () => {
   it('a launch refused leaves the session as it was, with its tasks', async () => {
     await start();
     const { team, id } = await seated(170_000);
-    c.send({ type: 'task.cmd', rid: 'g', by: 'ledge', op: 'give', team: team.id, to: '@build', title: 'T' });
+    card.give(c, 'g', { team: team.id, to: '@build', title: 'T' });
     const task = (await c.next('task.result')).task!;
     c.send({ type: 'session.handover', rid: 'h', id }); await c.next('session.handover.result');
     rmSync(join(process.env.LEDGE_HOME!, 'roles', 'build.md'));
