@@ -57,6 +57,8 @@ export interface Bridge {
   setReplyRow(id: string, row: string): void;
   /** Messages to replay after each `snapshot`: openrig.status, rig.snapshot, then one escalation.updated per escalation. */
   replay(): BridgeMessage[];
+  /** OpenRig's human queue was read at least once: an id missing from escalations() is not open there (before, it may only be unread). */
+  humanRead(): boolean;
   onMessage(fn: (m: BridgeMessage) => void): () => void;
   /** Start cases 2 and 3 (lot 5): starts OpenRig when stopped, waits for `running` (60 s), returns the final status. */
   ensureRunning(reason: 'launch' | 'action'): Promise<OpenRigStatus>;
@@ -104,6 +106,7 @@ export function createBridge(deps: BridgeDeps): Bridge {
   let gen = 0; let stream: EventStream | null = null; let live = false;
   let probing: Promise<void> | null = null; let starting: Promise<void> | null = null; let failedAt: number | null = null; let autoFailed = false;
   let registering = false; let humanOk = false; let regAt: number | null = null;
+  let humanRead = false; // the human queue was read once (a failed read keeps the books as they were: empty after a restart)
   let probeTimer: NodeJS.Timeout | null = null; const connTimers: NodeJS.Timeout[] = []; let humanTimer: NodeJS.Timeout | null = null;
   let unsubAsks: (() => void) | null = null;
   const opening = new Set<() => void>(); // cancels of streams not open yet
@@ -150,7 +153,7 @@ export function createBridge(deps: BridgeDeps): Bridge {
     for (const id of [...nodesByRig.keys()]) if (!snap.rigs.some(r => r.rigId === id)) nodesByRig.delete(id);
     for (const [id, list] of snap.nodes) nodesByRig.set(id, list);
   };
-  const applyHuman = (rows: QueueRow[]) => { emitEsc(rigBook.replace(rows.map(r => rowToEscalation(r, ctx)))); firstSeen.retain(new Set(rows.map(r => r.qitemId))); };
+  const applyHuman = (rows: QueueRow[]) => { humanRead = true; emitEsc(rigBook.replace(rows.map(r => rowToEscalation(r, ctx)))); firstSeen.retain(new Set(rows.map(r => r.qitemId))); };
   const syncAsks = () => {
     if (!deps.asks) return;
     emitEsc(askBook.replace(deps.asks.all().filter(a => a.state === 'open').map(a => askToEscalation(a, { machine, nameOf: deps.sessionName }))));
@@ -376,6 +379,7 @@ export function createBridge(deps: BridgeDeps): Bridge {
       emit({ type: 'escalation.updated', escalation: next });
       return next;
     },
+    humanRead: () => humanRead,
     replyRow: id => cursorFile().replyRow(id),
     setReplyRow: (id, row) => cursorFile().setReplyRow(id, row),
     replay() {

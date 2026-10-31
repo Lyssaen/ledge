@@ -351,7 +351,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** Answers to escalations, the one way to answer them (only with an OpenRig bridge). */
   const answers: Answers | null = bridge ? createAnswers({
     port: { escalation: bridge.escalation, patch: bridge.patchEscalation, status: bridge.status, cli: bridge.cli, http: bridge.http,
-      replyRow: bridge.replyRow, setReplyRow: bridge.setReplyRow },
+      replyRow: bridge.replyRow, setReplyRow: bridge.setReplyRow, humanRead: bridge.humanRead },
     asks, path: { kind: ANSWER_PATH }, localMachine: 'local', now }) : null;
   /** The daemons of the remote machines (lot 6), dialled through this daemon's own `/ssh/<alias>` once it listens (end of startServer). */
   const remote = bridge ? createRemotePeers({ port, ...(opts.remoteConnect ? { connect: opts.remoteConnect } : {}) }) : null;

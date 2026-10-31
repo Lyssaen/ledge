@@ -223,6 +223,16 @@ describe('answers', () => {
     expect(await answers.answer('nope', { q1: 'sqlite' }, 'user')).toMatchObject({ ok: false, code: 'failed' });
   });
 
+  test('an unknown escalation before the human queue was ever read is no definite « unknown »: openrig_down (lot 6)', async () => {
+    let read = false;
+    const a = createAnswers({ port: { ...fake.port, humanRead: () => read }, path: { kind: 'reply-and-approve' }, localMachine: 'local', now: () => T });
+    expect(await a.answer('nope', { q1: 'sqlite' }, 'user')).toMatchObject({ ok: false, code: 'openrig_down' });
+    expect(await a.answer('ask-9', { text: 'x' }, 'user')).toMatchObject({ ok: false, code: 'failed' }); // asks are Ledge's own
+    read = true;
+    expect(await a.answer('nope', { q1: 'sqlite' }, 'user')).toMatchObject({ ok: false, code: 'failed' });
+    expect(fake.calls).toEqual([]);
+  });
+
   test('approve-only approves with the answer as annotation, no reply row', async () => {
     answers = make({ kind: 'approve-only' });
     expect((await answers.answer('qi-1', { q1: 'json' }, 'ledge', { rule: 'r-git' })).ok).toBe(true);

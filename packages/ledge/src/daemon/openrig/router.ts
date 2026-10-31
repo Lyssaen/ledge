@@ -75,9 +75,10 @@ export function createRigRouter(opts: { aggregate: RigAggregate; remote: RemoteP
 
   async function route(msg: RigCommand, reply: Reply): Promise<void> {
     const known = machineOf(msg, { aggregate, plans });
-    // A plan no peer made is this daemon's own (or expired: its handler says so, `failed`).
-    const machine = known ?? (msg.type === 'rig.launch' ? 'local' : null);
-    if (machine === null) return reply({ type: 'rig.result', rid: (msg as Extract<RigCommand, { type: 'escalation.answer' }>).rid, ok: false, code: 'failed', reason: 'escalade inconnue' });
+    // A plan no peer made is this daemon's own (or expired: its handler says so, `failed`). An escalation no machine lists goes
+    // to the local handler too, behind its rid memo: a resend whose first send was delivered (its escalation closed since, the
+    // ack lost) gets the first outcome again; otherwise the handler refuses it itself.
+    const machine = known ?? 'local';
     if (machine === 'local') return opts.local(msg, reply);
     // The peer's own message: no machine to rewrite for escalation.answer / rig.launch.
     const out = ('machine' in msg ? { ...msg, machine: 'local' } : msg) as ClientMessage;

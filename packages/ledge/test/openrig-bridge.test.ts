@@ -266,6 +266,20 @@ describe('OpenRig bridge', () => {
     expect(readOpenRigFile(file).machines.local!.lastEventId).toBe(2);
   });
 
+  it('humanRead: false while the human queue never loaded (a failed first read lists nothing), true once read', async () => {
+    fake = await createFakeOpenRig(); fake.rigs.push(starter()); fake.humans.push('ledge'); fake.queue.push(humanRow('E1'));
+    let broken = true; const base = fetch;
+    const f = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (broken && String(input).includes('/api/queue/list')) return new Response('{}', { status: 200 });
+      return base(input, init);
+    }) as typeof fetch;
+    const { b } = setup({ exec: fakeRigCli(fake), fetch: f, resyncMs: 40 });
+    await b.start(); await until(() => b.status().state === 'running');
+    expect(b.humanRead()).toBe(false); expect(b.escalations()).toEqual([]);
+    broken = false;
+    await until(() => b.humanRead() && b.escalations().some(e => e.id === 'E1'));
+  });
+
   it('a failed read changes nothing (body that is no list)', async () => {
     fake = await createFakeOpenRig(); fake.rigs.push(starter()); fake.humans.push('ledge'); fake.queue.push(humanRow('E1'));
     let broken = false; const base = fetch;

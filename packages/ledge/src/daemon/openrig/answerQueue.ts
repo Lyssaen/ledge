@@ -33,6 +33,9 @@ interface Conn {
   listed: Set<string>;
   /** Rids sent on this connection: never twice. */
   sent: Set<string>;
+  /** Rids sent for the first time on this connection to an escalation the peer did not list: a definite « unknown » or
+   *  « already answered » from its daemon means the question was closed over there. */
+  unlisted: Set<string>;
   /** A listing under way: a peer's replay (at `open`) or its OpenRig coming up (`running`) sends its status, its rig.snapshot,
    *  then every escalation it has, in one burst (bridge.replay / bridge connect). */
   listing: { snapshot: boolean; timer: NodeJS.Timeout | null } | null;
@@ -40,10 +43,11 @@ interface Conn {
 
 /**
  * The answers to escalations of a machine this daemon cannot reach, kept in openrig.json (`outbox`) until the machine's
- * daemon takes them. An answer goes when the peer is open, its OpenRig running, and it lists the escalation; an answer
- * already sent once (its ack may have been lost) goes again with the same rid when the peer's listing ends, listed or not:
- * the remote daemon's rid memo answers it as the first time. An answer never sent whose escalation the peer, OpenRig
- * running, does not list at the end of a listing was closed there: it is abandoned, and Ledge's thread says so.
+ * daemon takes them. An answer goes when the peer is open, its OpenRig running, and it lists the escalation. One the peer
+ * did not list goes when its listing ends, same rid: an answer sent before (its ack lost) gets the first outcome again from
+ * the remote daemon's rid memo; one never sent is judged by the remote daemon's own reply, never by the listing alone (a
+ * remote OpenRig whose queue failed to load lists nothing): « unknown » there (its queue read) or « already answered » means
+ * closed over there, the answer is abandoned and Ledge's thread says so; « not read yet » (`openrig_down`) keeps it.
  */
 export function createAnswerQueue(opts: { remote: RemotePeers; aggregate: RigAggregate; file?: string; notice: (text: string) => void; now?: () => string;
   labelOf?: (id: string) => string; settleMs?: number }): AnswerQueue {
@@ -65,9 +69,10 @@ export function createAnswerQueue(opts: { remote: RemotePeers; aggregate: RigAgg
     if (text) notice(text);
   };
   const send = (a: QueuedAnswer, c: Conn): boolean => {
-    // Only `by: 'user'` reaches a queue today (the router queues client answers).
-    const msg = { type: 'escalation.answer', rid: a.rid, id: a.id, answers: a.answers, by: a.by } as ClientMessage;
+    // Only `by: 'user'` is queued (enqueue refuses the rest): the protocol carries no other over the wire.
+    const msg: ClientMessage = { type: 'escalation.answer', rid: a.rid, id: a.id, answers: a.answers, by: 'user' };
     if (!remote.send(a.machine, msg)) return false;
+    if (!c.listed.has(a.id) && !a.sentAt) c.unlisted.add(a.rid); else c.unlisted.delete(a.rid);
     c.sent.add(a.rid); a.sentAt = now(); save();
     aggregate.overlay(a.id, patch(a, 'sent'));
     return true;
@@ -83,16 +88,24 @@ export function createAnswerQueue(opts: { remote: RemotePeers; aggregate: RigAgg
   }
 
   const stopListing = (c: Conn) => { if (c.listing?.timer) clearTimeout(c.listing.timer); c.listing = null; };
-  /** The listing is over: what the peer, OpenRig running, did not list is closed there (or answered, for an answer sent before). */
+  /** The listing is over: what the peer, OpenRig running, did not list goes anyway; its daemon's reply says what became of it. */
   const endListing = (machine: string, c: Conn) => {
     const l = c.listing; if (!l) return; stopListing(c);
     if (!c.running || remote.status(machine) !== 'open') return;
     for (const a of items.filter(x => x.machine === machine)) {
       if (c.listed.has(a.id) || c.sent.has(a.rid)) continue;
-      if (a.sentAt) { if (!send(a, c)) return; continue; }
-      remove(a, `Ma réponse à ${summary(a.id)} n'est pas partie : la question a été fermée sur ${labelOf(machine)}`);
+      if (!send(a, c)) return;
     }
     flush(machine);
+  };
+  const closedThere = (a: QueuedAnswer) => `Ma réponse à ${summary(a.id)} n'est pas partie : la question a été fermée sur ${labelOf(a.machine)}`;
+  /** Every answer of the machine abandoned, with one notice saying `why`. */
+  const abandon = (machine: string, why: string): void => {
+    const gone = items.filter(a => a.machine === machine); if (!gone.length) return;
+    items = items.filter(a => a.machine !== machine); save();
+    for (const a of gone) aggregate.overlay(a.id, null);
+    notice(gone.length === 1 ? `Ma réponse à ${summary(gone[0]!.id)} n'est pas partie : ${why}`
+      : `Mes ${gone.length} réponses en attente pour ${labelOf(machine)} ne sont pas parties : ${why}`);
   };
   const arm = (machine: string, c: Conn) => {
     const l = c.listing; if (!l) return;
@@ -111,9 +124,14 @@ export function createAnswerQueue(opts: { remote: RemotePeers; aggregate: RigAgg
 
   remote.onStatus((machine, s) => {
     if (s === 'removed') { lost(machine); return queue.drop(machine); }
+    if (s === 'unsupported') {
+      // Its Ledge does not know OpenRig: nothing will take these answers until it is updated.
+      lost(machine); const v = remote.version(machine);
+      return abandon(machine, `Ledge ${v ? `${v} ` : ''}sur ${labelOf(machine)} ne connaît pas OpenRig : mets-le à jour`);
+    }
     if (s !== 'open') return lost(machine);
     lost(machine);
-    conns.set(machine, { running: false, listed: new Set(), sent: new Set(), listing: { snapshot: false, timer: null } });
+    conns.set(machine, { running: false, listed: new Set(), sent: new Set(), unlisted: new Set(), listing: { snapshot: false, timer: null } });
     flush(machine);
   });
 
@@ -138,7 +156,7 @@ export function createAnswerQueue(opts: { remote: RemotePeers; aggregate: RigAgg
         c.listed.delete(m.id);
         // Closed over there while this answer waits, never sent: it will not go.
         const a = items.find(x => x.machine === machine && x.id === m.id);
-        if (a && !a.sentAt && c.running) remove(a, `Ma réponse à ${summary(a.id)} n'est pas partie : la question a été fermée sur ${labelOf(machine)}`);
+        if (a && !a.sentAt && c.running) remove(a, closedThere(a));
         return;
       }
       default: return;
@@ -147,6 +165,7 @@ export function createAnswerQueue(opts: { remote: RemotePeers; aggregate: RigAgg
 
   const queue: AnswerQueue = {
     enqueue(a, reply) {
+      if (a.by !== 'user') return reply({ type: 'rig.result', rid: a.rid, ok: false, code: 'failed', reason: "seule une réponse de l'utilisateur peut attendre une machine injoignable" });
       const same = items.find(x => x.machine === a.machine && x.id === a.id);
       if (same && same.rid !== a.rid) return reply({ type: 'rig.result', rid: a.rid, ok: false, code: 'already_answered', reason: 'déjà répondue' });
       if (!same) {
@@ -162,23 +181,20 @@ export function createAnswerQueue(opts: { remote: RemotePeers; aggregate: RigAgg
     flush,
     settle(machine, result: Result) {
       const a = items.find(x => x.machine === machine && x.rid === result.rid); if (!a) return;
+      const c = conn(machine);
+      // First sent to an escalation the peer did not list, and its daemon (its queue read) does not know it or has it answered: closed there.
+      if (!result.ok && c?.unlisted.has(a.rid) && (result.code === 'already_answered' || result.code === 'failed')) return remove(a, closedThere(a));
       if (result.ok || result.code === 'already_answered') return remove(a);
       if (result.code === 'openrig_down') {
-        // Kept: it goes again once the peer says its OpenRig is running (not before: no resend loop on its escalation updates).
-        const c = conn(machine); if (c) { c.sent.delete(a.rid); c.running = false; }
+        // Kept (OpenRig down there, or its queue not read yet): it goes again on the peer's next word about it — its OpenRig
+        // `running`, the escalation listed, the end of a listing — each once (a refusal sends nothing back: no loop).
+        c?.sent.delete(a.rid); delete a.sentAt; save(); // refused: it did not arrive
         aggregate.overlay(a.id, patch(a, 'queued'));
         return;
       }
       remove(a, `Ma réponse à ${summary(a.id)} n'est pas partie sur ${labelOf(machine)} : ${result.reason ?? result.code ?? 'refusée'}`);
     },
-    drop(machine) {
-      const gone = items.filter(a => a.machine === machine); if (!gone.length) return;
-      items = items.filter(a => a.machine !== machine); save();
-      for (const a of gone) aggregate.overlay(a.id, null);
-      notice(gone.length === 1
-        ? `Ma réponse à ${summary(gone[0]!.id)} n'est pas partie : ${labelOf(machine)} a été retirée des machines`
-        : `Mes ${gone.length} réponses en attente pour ${labelOf(machine)} ne sont pas parties : la machine a été retirée`);
-    }
+    drop(machine) { abandon(machine, `${labelOf(machine)} a été retirée des machines`); }
   };
   return queue;
 }

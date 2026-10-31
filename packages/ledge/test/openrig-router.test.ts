@@ -149,13 +149,14 @@ describe('rig router', () => {
     expect(a.got).toEqual([{ type: 'rig.result', rid: 'r1', ok: true }, { type: 'rig.result', rid: 'r2', ok: true }]);
   });
 
-  it('fails an answer to an unknown escalation; a plan no peer made goes to the local handlers (which own the expired ones)', async () => {
+  it('an answer to an escalation no machine lists, and a plan no peer made, go to the local handlers (their rid memo, their refusals)', async () => {
     const s = setup(); const a = s.client();
+    s.setLocalReply(msg => ('rid' in msg ? { type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: 'aucune escalade nope' } : null));
     await s.router.route({ type: 'escalation.answer', rid: 'r1', id: 'nope', answers: {}, by: 'user' }, a.reply);
     expect(a.got).toEqual([expect.objectContaining({ type: 'rig.result', rid: 'r1', ok: false, code: 'failed' })]);
-    expect(s.localCalls).toEqual([]);
+    expect(s.localCalls.map(m => m.type)).toEqual(['escalation.answer']);
     await s.router.route({ type: 'rig.launch', rid: 'r2', planId: 'nope' }, a.reply);
-    expect(s.localCalls.map(m => m.type)).toEqual(['rig.launch']);
+    expect(s.localCalls.map(m => m.type)).toEqual(['escalation.answer', 'rig.launch']);
     expect(s.sent).toEqual([]);
   });
 

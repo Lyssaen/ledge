@@ -33,7 +33,7 @@ function setup(file: string, opts: { settleMs?: number } = {}) {
   const stFns = new Set<(machine: string, s: 'open' | 'unreachable' | 'unsupported' | 'removed') => void>();
   let status: PeerStatus = 'unreachable';
   const remote: RemotePeers = {
-    setMachines() {}, close() {}, version: () => undefined,
+    setMachines() {}, close() {}, version: () => '0.20.0',
     status: m => (m === 'ec2' ? status : 'unreachable'),
     send(machine, msg) { if (machine !== 'ec2' || status !== 'open') return false; sent.push(msg); return true; },
     onMessage(fn) { msgFns.add(fn); return () => { msgFns.delete(fn); }; },
@@ -144,16 +144,49 @@ describe('answer queue', () => {
     expect(s.notices).toEqual([]);
   });
 
-  it('abandons an answer never sent whose escalation the returning peer no longer lists', async () => {
+  it('an escalation the returning peer no longer lists: the answer goes anyway, its daemon\'s « unknown » abandons it with the notice', async () => {
     const s = setup(join(tmp(), 'openrig.json'));
     s.queue.enqueue(s.answer('r1'), s.reply);
     s.queue.enqueue(s.answer('r2', 'E2'), s.reply);
     s.replay('running', ['E2']);
-    await until(() => s.notices.length === 1, 1000);
+    expect(s.answersSent().map(m => m.rid)).toEqual(['r2']);
+    await until(() => s.answersSent().length === 2, 1000); // the listing is over: r1 goes, same rid
+    expect(s.notices).toEqual([]); // the listing alone never abandons
+    s.peer({ type: 'rig.result', rid: 'r1', ok: false, code: 'failed', reason: 'aucune escalade E1' });
     expect(s.notices).toEqual(["Ma réponse à question E1 n'est pas partie : la question a été fermée sur EC2"]);
     expect(s.queue.pending().map(a => a.rid)).toEqual(['r2']);
-    expect(s.answersSent().map(m => m.rid)).toEqual(['r2']);
     expect(s.overlays).toContainEqual(['E1', null]);
+  });
+
+  it('a remote queue not read yet (failed read after a restart) never abandons: kept, sent again once listed', async () => {
+    const s = setup(join(tmp(), 'openrig.json'));
+    s.queue.enqueue(s.answer('r1'), s.reply);
+    s.replay('running', []); // its OpenRig runs, its human queue failed to load: lists nothing
+    await until(() => s.answersSent().length === 1, 1000);
+    s.peer({ type: 'rig.result', rid: 'r1', ok: false, code: 'openrig_down', reason: "les escalades d'OpenRig ne sont pas encore lues" });
+    expect(s.queue.pending()).toEqual([s.answer('r1')]); // kept, `sentAt` cleared: it did not arrive
+    expect(s.notices).toEqual([]);
+    expect(s.overlays.at(-1)).toEqual(['E1', expect.objectContaining({ answer: expect.objectContaining({ delivery: 'queued' }) })]);
+    s.peer({ type: 'escalation.updated', escalation: esc('E1', 'ec2') }); // its next read finds E1
+    expect(s.answersSent().map(m => m.rid)).toEqual(['r1', 'r1']);
+    s.peer({ type: 'rig.result', rid: 'r1', ok: false, code: 'already_answered', reason: 'déjà répondue' }); // listed: someone else answered
+    expect(s.queue.pending()).toEqual([]); expect(s.notices).toEqual([]);
+  });
+
+  it('a peer whose Ledge does not know OpenRig: its answers abandoned with one notice', () => {
+    const s = setup(join(tmp(), 'openrig.json'));
+    s.queue.enqueue(s.answer('r1'), s.reply);
+    s.peerStatus('unsupported');
+    expect(s.queue.pending()).toEqual([]);
+    expect(s.notices).toEqual(["Ma réponse à question E1 n'est pas partie : Ledge 0.20.0 sur EC2 ne connaît pas OpenRig : mets-le à jour"]);
+    expect(s.overlays.at(-1)).toEqual(['E1', null]);
+  });
+
+  it('refuses an answer by Ledge (the wire carries only the user\'s)', () => {
+    const s = setup(join(tmp(), 'openrig.json'));
+    s.queue.enqueue({ ...s.answer('r1'), by: 'ledge' }, s.reply);
+    expect(s.replies).toEqual([expect.objectContaining({ type: 'rig.result', rid: 'r1', ok: false, code: 'failed' })]);
+    expect(s.queue.pending()).toEqual([]);
   });
 
   it('judges nothing while the peer\'s OpenRig is not running; openrig_down keeps the answer for its next start', async () => {
@@ -216,9 +249,11 @@ const humanRow = (id: string) => ({ qitemId: id, sourceSession: 'dev-build@start
 
 interface Daemon { srv: ServerHandle; bridge: Bridge }
 let running: Daemon[] = []; let fakes: FakeOpenRig[] = [];
+const homeBefore = process.env.LEDGE_HOME;
 afterEach(async () => {
   for (const d of running.splice(0)) { await d.bridge.stop(); await d.srv.close(); }
   for (const f of fakes.splice(0)) await f.stop();
+  if (homeBefore === undefined) delete process.env.LEDGE_HOME; else process.env.LEDGE_HOME = homeBefore;
 });
 
 /** A daemon in `home` (LEDGE_HOME while it starts: its thread, token and openrig.json live there). */
@@ -256,15 +291,15 @@ describe('Review Focus 1: answers wait for an unreachable machine and go once', 
     const fakeB = await createFakeOpenRig(); fakes.push(fakeB);
     const machinesFile = join(homeB, 'machines.json');
     writeMachines([{ id: 'local', label: 'PC' }, { id: 'ec2', label: 'EC2', ssh: 'ec2' }], machinesFile);
-    const toPeer: ClientMessage[] = []; let cutOn: string | null = null; let peerClient: DaemonClient | null = null;
+    const toPeer: ClientMessage[] = []; let cutOn: string | null = null; let cut = false; let peerClient: DaemonClient | null = null;
     const token = createTokenSource(async () => { const t = readDaemonToken(); return t ? { kind: 'token', token: t } : { kind: 'absent' }; });
     const remoteConnect = (): DaemonClient => {
       const c = createDaemonClient({ url: `ws://127.0.0.1:${portA}`, WebSocketImpl: WebSocket as never, token, minBackoffMs: 30, maxBackoffMs: 150 });
       peerClient = c;
       return { ...c,
         send: m => { toPeer.push(m); c.send(m); },
-        // The « lost ack »: the peer's rig.result for `cutOn` never arrives, the link drops and comes back.
-        onMessage: fn => c.onMessage(m => { if (cutOn && m.type === 'rig.result' && m.rid === cutOn) { cutOn = null; c.connect(); return; } fn(m); }) };
+        // The « lost ack »: the peer's rig.result for `cutOn` never arrives (the test then drops the link and brings it back).
+        onMessage: fn => c.onMessage(m => { if (cutOn && m.type === 'rig.result' && m.rid === cutOn) { cutOn = null; cut = true; return; } fn(m); }) };
     };
     const b = await daemon(homeB, fakeB, { machinesFile, remoteConnect });
     process.env.LEDGE_HOME = homeB;
@@ -321,14 +356,19 @@ describe('Review Focus 1: answers wait for an unreachable machine and go once', 
     process.env.LEDGE_HOME = homeA;
     a = await daemon(homeA, fakeA, { exec: execA, port: portA, shift: () => shift });
     process.env.LEDGE_HOME = homeB;
-    await until(() => answersTo('r2') === 2, 8000); // resent with the same rid after the link came back
+    await until(() => cut, 8000);
+    expect(answersTo('r2')).toBe(1);
+    // Before the link comes back, E2 (and E1) close over there: the remote bridge's answered patches expire.
+    shift = 25 * 3600_000;
+    await until(() => !a.bridge.escalations().some(x => x.id === 'E2') && msgs.some(m => m.type === 'escalation.removed' && m.id === 'E1'), 8000);
+    peerClient!.connect(); // the link drops and comes back
+    await until(() => answersTo('r2') === 2, 8000); // resent with the same rid, though no machine lists E2 any more
     await until(() => readOpenRigFile(join(homeB, 'openrig.json')).outbox === undefined, 8000);
     expect(delivered() - before2).toBe(1); // OpenRig got one answer (the remote daemon's rid memo, Task 2)
     expect(answersTo('r1')).toBe(1);
-
-    // E leaves when it closes over there (the remote bridge's answered patch expires).
-    shift = 25 * 3600_000;
-    await until(() => msgs.some(m => m.type === 'escalation.removed' && m.id === 'E1'), 8000);
+    // Settled by the memo's ok: no « n'est pas partie » in Ledge's thread.
+    await new Promise(r => setTimeout(r, 100));
+    expect(msgs.some(m => m.type === 'ledge.thread.item' && m.item.kind === 'ledge' && 'text' in m.item && String(m.item.text).includes("n'est pas partie"))).toBe(false);
     await new Promise<void>(r => { ws.once('close', () => r()); ws.close(); });
   }, 30_000);
 });
