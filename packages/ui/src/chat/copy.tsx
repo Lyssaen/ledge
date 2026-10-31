@@ -35,7 +35,7 @@ export interface ChatCopy {
     /** The team card (roles spec §3.8); left out by a front that does not show it yet (the card is then not drawn). */
     team?: {
       label: string; folder: string; table: Say; newTable: Say; seats: string; autonomy: Record<'ask' | 'edits' | 'auto', string>;
-      autoWarning: (roles: string) => string; launch: string; launching: string; retry: string; save: string; saved: Say;
+      autoWarning: (roles: string) => string; launch: string; launching: string; retry: string; save: string; saved: Say; notSaved: Say;
       launched: Say; openTable: string; failed: Say; template: Say;
     };
     /** The task cards (roles spec §3.8), with the team card. `state` names a given task's state as the daemon tells it. */

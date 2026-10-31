@@ -991,7 +991,7 @@ export const en: Messages = {
       label: 'Proposed team', folder: 'Folder', table: (project: string) => `Table`, newTable: (project: string) => `new table in the ${project} room`, seats: 'Seats',
       autonomy: { ask: 'asks before acting', edits: 'edits without asking', auto: 'autonomous' },
       autoWarning: (roles: string) => `${roles} will work without asking: edits and commands without your approval.`,
-      launch: 'Launch the team', launching: 'Launching…', retry: 'Retry', save: 'Save', saved: (path: string) => `Saved: ${path}`,
+      launch: 'Launch the team', launching: 'Launching…', retry: 'Retry', save: 'Save', saved: (path: string) => `Saved: ${path}`, notSaved: (why: string) => `Not saved: ${why}`,
       launched: (at: string) => `Team launched at ${at}`, openTable: 'Open the table', failed: (why: string) => `Failed: ${why}`, template: (id: string) => `template ${id}`
     },
     task: {

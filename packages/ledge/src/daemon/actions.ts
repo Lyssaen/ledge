@@ -8,8 +8,8 @@ export interface ResolveCtx {
   findRole: (id: string, cwd?: string) => Role | undefined;
   /** The sessions the same answer closes (its close card): archived once closed, they count as ended for session.archive. */
   closing?: ReadonlySet<string>;
-  /** Whether a template of that name is already saved (team.save replaces it). */
-  templateExists?: (name: string) => boolean;
+  /** The hash of the template of that name already saved (team.save replaces it, at that version only); undefined when there is none. */
+  templateHash?: (name: string) => string | undefined;
 }
 /** Why not: the daemon's words (the log, the PC's error) and a code for a front's own. */
 export type Refusal = { refused: string; code: ActionErrorCode };
@@ -119,16 +119,18 @@ const IMPLS: Partial<Record<ActionId, Impl>> = {
   'team.resume': (a, ctx) => withTeam(ctx, a.team, t => (t.state !== 'resting' ? no('not_resting', `team ${t.name} is not resting`)
     : row('team.resume', { team: t.id }, `Reprendre l'équipe ${b(t.name)}`, { team: t.name }, { team: t.id }))),
   'team.dissolve': (a, ctx) => withTeam(ctx, a.team, t => row('team.dissolve', { team: t.id }, `Dissoudre l'équipe ${b(t.name)}`, { team: t.name }, { team: t.id })),
-  // Saving over a template of the same file replaces it for good: asked again, as any destructive row.
+  // Saving over a template of the same file replaces it for good: asked again, as any destructive row, and only at the version
+  // the row read (`base`): a template edited by hand since is left as it is (#143). Each seat keeps the bot name it asks for (#144).
   'team.save': (a, ctx) => withTeam(ctx, a.team, t => {
     const seats = t.seats.flatMap(x => {
       const s = x.sessionId ? ctx.sessions.find(y => y.id === x.sessionId) : undefined;
-      return [{ role: x.role, ...(s ? { tool: s.tool, ...(s.model ? { model: s.model } : {}), ...(s.effort ? { effort: s.effort } : {}) } : {}) }];
+      return [{ role: x.role, ...(s ? { tool: s.tool, ...(s.model ? { model: s.model } : {}), ...(s.effort ? { effort: s.effort } : {}) } : {}), ...(x.name ? { name: x.name } : {}) }];
     }).filter((x, i, all) => all.findIndex(y => y.role === x.role) === i);
     if (seats.length === 0) return no('no_seat', `team ${t.name} has no seat`);
     const name = String(a.name);
-    const replaces = ctx.templateExists?.(name) ?? false;
-    return row('team.save', { team: t.id, name, seats }, replaces ? `Remplacer le modèle « ${name} » par ${b(t.name)}` : `Enregistrer ${b(t.name)} comme modèle « ${name} »`,
+    const base = ctx.templateHash?.(name);
+    const replaces = base !== undefined;
+    return row('team.save', { team: t.id, name, seats, ...(base ? { base } : {}) }, replaces ? `Remplacer le modèle « ${name} » par ${b(t.name)}` : `Enregistrer ${b(t.name)} comme modèle « ${name} »`,
       { team: t.name, name, replaces: replaces ? '1' : undefined }, { team: t.id, ...(replaces ? { risk: 'destructive' as const } : {}) });
   }),
   'task.cancel': (a, ctx) => {
@@ -225,7 +227,7 @@ export function actionMessage(r: Pick<ChatAction, 'action' | 'args'>, rid: strin
     case 'team.leave': return { type: 'team.leave', team, session: s };
     case 'team.resume': return { type: 'team.resume', team };
     case 'team.dissolve': return { type: 'team.dissolve', team };
-    case 'team.save': return { type: 'team.save', rid, name: String(a.name), seats: a.seats as Extract<ClientMessage, { type: 'team.save' }>['seats'] };
+    case 'team.save': return { type: 'team.save', rid, name: String(a.name), seats: a.seats as Extract<ClientMessage, { type: 'team.save' }>['seats'], ...(a.base ? { base: String(a.base) } : {}) };
     case 'task.cancel': return { type: 'task.cmd', rid, by: LEDGE_GIVER, op: 'cancel', task: String(a.task), ...(a.reason ? { text: String(a.reason) } : {}) };
     case 'task.answer': return { type: 'task.cmd', rid, by: LEDGE_GIVER, op: 'done', task: String(a.task), text: String(a.answer) };
     case 'task.pass': return { type: 'task.cmd', rid, by: LEDGE_GIVER, op: 'pass', task: String(a.task), to: String(a.to), ...(a.note ? { text: String(a.note) } : {}) };

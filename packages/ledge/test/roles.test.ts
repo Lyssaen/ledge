@@ -113,7 +113,7 @@ describe('team templates', () => {
   });
 
   it('saves an ad hoc team as a template that reads back the same', () => {
-    const path = saveTemplate('Équipe rôles', [{ role: 'lead' }, { role: 'build', tool: 'claude', model: 'claude-opus-4.5' }]);
+    const { path } = saveTemplate('Équipe rôles', [{ role: 'lead' }, { role: 'build', tool: 'claude', model: 'claude-opus-4.5' }]);
     expect(path).toBe(join(home, 'teams', 'equipe-roles.yaml'));
     expect(readFileSync(path, 'utf8')).toContain('name: "Équipe rôles"');
     expect(listTemplates().templates).toEqual([{ id: 'equipe-roles', name: 'Équipe rôles', seats: [{ role: 'lead' }, { role: 'build', tool: 'claude', model: 'claude-opus-4.5' }], source: 'home', path, hash: expect.stringMatching(/^[0-9a-f]{16}$/) }]);

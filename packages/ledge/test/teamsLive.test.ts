@@ -121,6 +121,13 @@ describe('live teams', () => {
   });
 });
 
+describe('create', () => {
+  it('keeps each seat\'s overrides and the name it asks for (#144)', () => {
+    const t = teams.create({ name: 'duo', project: 'ledge', cwd: '/w/ledge', roles: ['lead', { role: 'dev', tool: 'codex', name: 'Zed' }] });
+    expect(t.seats).toEqual([{ role: 'lead', sessionId: null }, { role: 'dev', sessionId: null, tool: 'codex', name: 'Zed' }]);
+  });
+});
+
 describe('compose', () => {
   const seated = () => {
     const t = teams.create({ name: 'ledge-roles', project: 'ledge', cwd: '/w/ledge', roles: ['lead', 'dev', 'qa'] });
@@ -128,13 +135,13 @@ describe('compose', () => {
     return t;
   };
 
-  it('keeps the given order and the kept roles’ sessions; adds a free seat; drops a free seat; the overrides are stored as given, the name ignored', () => {
+  it('keeps the given order and the kept roles’ sessions; adds a free seat; drops a free seat; the overrides and the name are stored as given', () => {
     const t = seated();
-    const r = teams.compose(t.id, [{ role: 'lead', model: 'sonnet', name: 'Zed' }, { role: 'dev' }, { role: 'rev', tool: 'codex', effort: 'high' }]);
+    const r = teams.compose(t.id, [{ role: 'lead', model: 'sonnet', name: 'Zed' }, { role: 'dev' }, { role: 'rev', tool: 'codex', effort: 'high', name: 'Ari' }]);
     expect(typeof r).toBe('object');
     const done = r as Exclude<typeof r, string>;
     expect(done.added).toEqual(['rev']); expect(done.removed).toEqual(['qa']);
-    expect(done.team.seats).toEqual([{ role: 'lead', sessionId: 'pim', model: 'sonnet' }, { role: 'dev', sessionId: 'otto' }, { role: 'rev', sessionId: null, tool: 'codex', effort: 'high' }]);
+    expect(done.team.seats).toEqual([{ role: 'lead', sessionId: 'pim', model: 'sonnet', name: 'Zed' }, { role: 'dev', sessionId: 'otto' }, { role: 'rev', sessionId: null, tool: 'codex', effort: 'high', name: 'Ari' }]);
     expect(teams.get(t.id)!.seats).toEqual(done.team.seats);
     expect(changes.at(-1)!.seats).toEqual(done.team.seats);
   });

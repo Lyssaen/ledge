@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Role, RoleDraft, Session } from '@ledge/protocol';
 import { listRoles, parseRole, quoteScalar } from '../src/daemon/roles.js';
-import { listTemplates, parseTemplate, parseTemplateText, saveTemplate } from '../src/daemon/teams.js';
+import { listTemplates, parseTemplate, parseTemplateText, saveTemplate, templateHash } from '../src/daemon/teams.js';
 import { definitionHash, deleteDefinition, promptRecipients, roleText, scopeDefinitions, scopeDir, templateText, writeDefinition } from '../src/daemon/definitions.js';
 
 let home: string; let repo: string; let dir: string;
@@ -73,9 +73,25 @@ describe('templateText', () => {
 
   it('is what saveTemplate writes', () => {
     const seats = [{ role: 'lead' }, { role: 'build', tool: 'claude' as const }];
-    const path = saveTemplate('Équipe #1', seats);
-    expect(readFileSync(path, 'utf8')).toBe(templateText('Équipe #1', seats));
+    const r = saveTemplate('Équipe #1', seats);
+    expect(r).toEqual({ path: join(home, 'teams', 'equipe-1.yaml') });
+    expect(readFileSync(r.path, 'utf8')).toBe(templateText('Équipe #1', seats));
     expect(listTemplates().templates[0]).toMatchObject({ name: 'Équipe #1', seats });
+  });
+});
+
+describe('saveTemplate over a template already saved (#143)', () => {
+  it('leaves it as it is without the hash of the version to replace, or with another one; replaces it at that version', () => {
+    const path = join(home, 'teams', 'duo.yaml');
+    write(path, 'name: Duo\nseats:\n  - role: lead # à la main\n');
+    const hand = readFileSync(path, 'utf8');
+    expect(saveTemplate('Duo', [{ role: 'dev' }])).toEqual({ code: 'exists', path });
+    expect(saveTemplate('Duo', [{ role: 'dev' }], definitionHash('autre chose'))).toEqual({ code: 'changed', path });
+    expect(readFileSync(path, 'utf8')).toBe(hand);
+    expect(templateHash('Duo')).toBe(definitionHash(hand));
+    expect(saveTemplate('Duo', [{ role: 'dev' }], definitionHash(hand))).toEqual({ path });
+    expect(readFileSync(path, 'utf8')).toBe(templateText('Duo', [{ role: 'dev' }]));
+    expect(templateHash('Personne')).toBeUndefined();
   });
 });
 

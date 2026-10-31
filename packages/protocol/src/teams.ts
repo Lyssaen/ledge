@@ -52,11 +52,11 @@ export type TeamState = z.infer<typeof TeamStateSchema>;
 export const TeamSchema = z.object({
   id: TeamIdSchema, name: TeamNameSchema, template: z.string().optional(), project: z.string().nullable(), machine: z.string(), cwd: z.string(),
   state: TeamStateSchema,
-  /** A live seat: `tool`, `model` and `effort` are what it was composed with over the role's defaults; `leaving` marks a seat removed
-   *  from the composition that finishes its turn and then is closed. */
+  /** A live seat: `tool`, `model` and `effort` are what it was composed with over the role's defaults, `name` the bot name it asks
+   *  for (its template's or its composition's); `leaving` marks a seat removed from the composition that finishes its turn and then is closed. */
   seats: z.array(z.object({
     role: RoleIdSchema, sessionId: z.string().nullable(),
-    tool: ToolSchema.optional(), model: ModelIdSchema.optional(), effort: EffortSchema.optional(), leaving: z.literal(true).optional()
+    tool: ToolSchema.optional(), model: ModelIdSchema.optional(), effort: EffortSchema.optional(), name: SeatSchema.shape.name, leaving: z.literal(true).optional()
   })).max(TEAM_SEATS_MAX * 2),
   createdAt: z.string(), updatedAt: z.string(), restingAt: z.string().optional(), dissolvedAt: z.string().optional()
 });
@@ -78,8 +78,9 @@ export const TeamJoinSchema = z.object({ type: z.literal('team.join'), team: Tea
 export const TeamLeaveSchema = z.object({ type: z.literal('team.leave'), team: TeamIdSchema, session: z.string().min(1) });
 export const TeamResumeSchema = z.object({ type: z.literal('team.resume'), team: TeamIdSchema });
 export const TeamDissolveSchema = z.object({ type: z.literal('team.dissolve'), team: TeamIdSchema });
-/** The chat's « Enregistrer »: an ad hoc team written as `~/.ledge/teams/<name>.yaml`. */
-export const TeamSaveSchema = z.object({ type: z.literal('team.save'), rid: z.string().min(1).max(100), name: TeamNameSchema, seats: SeatsSchema, qid: z.string().min(1).optional() });
+/** The chat's « Enregistrer »: an ad hoc team written as `~/.ledge/teams/<name>.yaml`. A template already saved under that file is
+ *  replaced only at the version `base` names (its hash), as `template.write` does: without it, the file is left as it is (#143). */
+export const TeamSaveSchema = z.object({ type: z.literal('team.save'), rid: z.string().min(1).max(100), name: TeamNameSchema, seats: SeatsSchema, qid: z.string().min(1).optional(), base: DefinitionHashSchema.optional() });
 
 /** Where a definition lives: the home (`~/.ledge`), or a project's repository. A client names a project, never a path. */
 export const DefinitionScopeSchema = z.enum(['home', 'repo']);
@@ -127,7 +128,9 @@ export const TeamUpdatedSchema = z.object({ type: z.literal('team.updated'), tea
 export const TeamLaunchedSchema = z.object({ type: z.literal('team.launched'), rid: z.string(), team: TeamSchema });
 /** A launch refused, or stopped part way: the seats already started stay (`team`), the user sees them and may close them. */
 export const TeamFailedSchema = z.object({ type: z.literal('team.failed'), rid: z.string(), reason: z.string(), team: TeamSchema.optional() });
-export const TeamSavedSchema = z.object({ type: z.literal('team.saved'), rid: z.string(), path: z.string().optional(), reason: z.string().optional() });
+/** A template written (`path`), or why not (`reason`); `code` when a template is already there at `path`: `exists` (no `base` given),
+ *  `changed` (another version than `base`). */
+export const TeamSavedSchema = z.object({ type: z.literal('team.saved'), rid: z.string(), path: z.string().optional(), reason: z.string().optional(), code: z.enum(['exists', 'changed']).optional() });
 
 /** A team's live seats, as `@role` would name them. */
 export const isTeamLive = (t: Pick<Team, 'state'>): boolean => t.state !== 'dissolved';

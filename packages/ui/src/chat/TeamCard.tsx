@@ -49,6 +49,7 @@ export function TeamCard(p: TeamCardProps) {
       </dl>
       {auto.length > 0 && !launched && <div role="note" data-autonomy-warning style={{ padding: '6px 12px', color: 'var(--warning, #b45309)', background: 'color-mix(in srgb, var(--warning, #d97706) 12%, transparent)' }}>{c.autoWarning(auto.map(s => `@${s.role}`).join(', '))}</div>}
       {tm.error !== undefined && <div role="alert" style={{ padding: '6px 12px', color: 'var(--destructive)', background: 'color-mix(in srgb, var(--destructive) 12%, transparent)' }}>{c.failed(tm.error)}</div>}
+      {tm.saveError !== undefined && !tm.savedPath && <div role="alert" data-save-error style={{ padding: '6px 12px', color: 'var(--destructive)', background: 'color-mix(in srgb, var(--destructive) 12%, transparent)' }}>{c.notSaved(tm.saveError)}</div>}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderTop: '1px solid var(--sidebar-border)' }}>
         {launched ? (
           <>
