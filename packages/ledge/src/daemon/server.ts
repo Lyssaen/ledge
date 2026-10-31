@@ -6,7 +6,7 @@ import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
 import { actionById, autonomyArgs, contextNear, ompApprovalFor, askShown, type ChatAction, type Autonomy } from '@ledge/protocol';
-import { ATTACHMENT_LOCAL_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type DaemonInfo, type Projects, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, type ModelRefusal, type RefusalCode, backendOf } from '@ledge/protocol';
+import { ATTACHMENT_LOCAL_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type DaemonInfo, type Projects, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Machine, type Tool, type OmpApproval, type CloseHow, type ModelRefusal, type RefusalCode, backendOf } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
 import { AttachmentError, AttachmentStore } from './attachments.js';
@@ -48,6 +48,11 @@ import { actionMessage, resolveAction, resolveRun, runGuard, type Resolved } fro
 import { createMailbox, type MailJournal } from './mailbox.js';
 import { createAsks, type Asks, type AsksJournal } from './asks.js';
 import type { Bridge } from './openrig/bridge.js';
+import { createRemotePeers } from './openrig/remote.js';
+import { createRigAggregate } from './openrig/aggregate.js';
+import { createRigRouter, isRigCommand } from './openrig/router.js';
+import { createAnswerQueue } from './openrig/answerQueue.js';
+import type { DaemonClient } from '@ledge/fleet/client';
 import { listSpecs } from './openrig/specs.js';
 import { OpenRigUnreachable } from './openrig/http.js';
 import { pairSession, restorePairs, unpairGone } from './openrig/pairing.js';
@@ -58,6 +63,7 @@ import { HUMAN_ADDRESS } from './openrig/facts.js';
 import { createLedgeThread } from './ledgeThread.js';
 import { createLedgeSay } from './ledgeSay.js';
 import { createSeatSend } from './openrig/seatSend.js';
+import { createRidMemo } from './openrig/ridMemo.js';
 import { createPlans, prepareRigPlan } from './openrig/plan.js';
 import { createLaunches } from './openrig/launch.js';
 import { adoptRig } from './openrig/adopt.js';
@@ -116,7 +122,7 @@ export { resolveFolder };
 class NoteNotTyped extends Refusal { constructor() { super('denied, but the note could not be typed', NOTE_NOT_TYPED); } }
 
 /** Where `handle` sends its answers: the one socket that asked, or the phone gateway's device. */
-type Reply = (m: ServerMessage) => void;
+export type Reply = (m: ServerMessage) => void;
 
 /**
  * Origins allowed to open a WebSocket: the Tauri overlay (packaged and dev server). A browser always
@@ -200,7 +206,9 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; asks?: AsksJournal; handoverBriefMs?: number; attachments?: AttachmentStore; openrig?: Bridge }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; asks?: AsksJournal; handoverBriefMs?: number; attachments?: AttachmentStore; openrig?: Bridge;
+  /** How the remote peers reach a machine's daemon (default: this daemon's own `/ssh/<alias>`); tests point it at another daemon. */
+  remoteConnect?: (machine: Machine, url: string) => DaemonClient }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -210,7 +218,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const attachments = opts.attachments ?? new AttachmentStore(paths().attachments);
   const mirror = opts.openrig;
   const threads = createChatThreads({ attachments, store, tmux, home: paths().dir, userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now, projects: () => projects, forge: createForge({ env: agentEnv }),
-    ...(mirror ? { openrig: () => ({ rigs: mirror.rigs(), escalations: mirror.escalations() }) } : {}) });
+    // Every machine's rigs and escalations (the aggregate, made further down once the server listens).
+    ...(mirror ? { openrig: () => ({ rigs: aggregate?.rigs() ?? mirror.rigs(), escalations: aggregate?.escalations() ?? mirror.escalations() }) } : {}) });
   const chat: Chat = opts.chat ?? threads.desktop;
   const router = createRouter({ env: agentEnv });
   const omp = opts.omp ?? createOmpHost({ store, env: agentEnv, dir: join(paths().dir, 'omp'), now, attachments });
@@ -325,6 +334,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const seatSend = bridge ? createSeatSend({ bridge }) : null;
   /** The launch plans `rig.prepare` made, taken once by `rig.launch`. */
   const rigPlans = createPlans(Date.now);
+  /** A resent rig command (same rid) is answered from the first run, not run twice (24 h). */
+  const ridMemo = createRidMemo();
   /** Rigs launched from a plan, until their lead has the goal; picked up again after a restart. */
   const launches = bridge && seatSend ? createLaunches({ cli: bridge.cli(), bridge, git: execGitSlow,
     send: (ref, text) => seatSend.send('local', ref, text), say: text => { thread.append({ kind: 'ledge', text }); },
@@ -334,16 +345,33 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** The repositories off-project rigs work in, looked for every 30 s. */
   const stopRepoWatch = bridge ? watchRigRepos({ bridge, sessions: () => store.all() }) : null;
   /** Messages to Ledge (`ledge.say`): one at a time through the desktop chat, whose `chat.*` every front gets. */
-  const ledgeSay = createLedgeSay({ thread, chat, escalations: id => bridge?.escalation(id), broadcast, tool: () => threads.deviceTool(),
+  const ledgeSay = createLedgeSay({ thread, chat, escalations: id => aggregate?.escalation(id) ?? bridge?.escalation(id), broadcast, tool: () => threads.deviceTool(),
     // `@seat …` goes to a rig seat; without OpenRig every text is a question to Ledge.
     toSeat: (rid, text) => (seatSend ? seatSend.fromSay(rid, text) : Promise.resolve(null)) });
   /** Answers to escalations, the one way to answer them (only with an OpenRig bridge). */
   const answers: Answers | null = bridge ? createAnswers({
     port: { escalation: bridge.escalation, patch: bridge.patchEscalation, status: bridge.status, cli: bridge.cli, http: bridge.http,
-      replyRow: bridge.replyRow, setReplyRow: bridge.setReplyRow },
+      replyRow: bridge.replyRow, setReplyRow: bridge.setReplyRow, humanRead: bridge.humanRead },
     asks, path: { kind: ANSWER_PATH }, localMachine: 'local', now }) : null;
-  const unsubscribeBridge = bridge?.onMessage(m => {
+  /** The daemons of the remote machines (lot 6), dialled through this daemon's own `/ssh/<alias>` once it listens (end of startServer). */
+  const remote = bridge ? createRemotePeers({ port, ...(opts.remoteConnect ? { connect: opts.remoteConnect } : {}) }) : null;
+  /** The local mirror and the remote peers as one view: what every front gets, each rig with its real machine. */
+  const aggregate = bridge && remote ? createRigAggregate({ bridge, remote, machines: () => machines, projects: () => projects }) : null;
+  const unsubscribeAggregate = aggregate?.onMessage(m => {
     broadcast(m);
+    // Ledge's thread names the remote escalations and exchanges too (the local ones come from the bridge, below), once per id.
+    if (m.type === 'escalation.updated' && m.escalation.machine !== 'local' && !thread.hasEscalation(m.escalation.id)) thread.append({ kind: 'escalation', escalationId: m.escalation.id });
+    if (m.type === 'rig.exchange' && m.exchange.machine !== 'local') thread.exchange(m.exchange);
+  });
+  /** Answers to an unreachable machine's escalations, kept in openrig.json until its daemon takes them (sent once, same rid);
+   *  what does not go is said in Ledge's thread. Follows the peers itself (open, its OpenRig running, rig.result, removed). */
+  const answerQueue = aggregate && remote ? createAnswerQueue({ remote, aggregate, notice: text => { thread.append({ kind: 'ledge', text }); },
+    labelOf: id => machines.find(m => m.id === id)?.label ?? id, machines: () => machines }) : null;
+  /** Rig commands and answers go to their machine: 'local' to `handle` (its rid memo), another one to its peer. */
+  const rigRouter = aggregate && remote && answerQueue ? createRigRouter({ aggregate, remote, answers: answerQueue, local: (msg, reply) => handle(msg, reply),
+    labelOf: id => machines.find(m => m.id === id)?.label ?? id }) : null;
+  // Local side effects only: the fronts get the bridge's messages through the aggregate.
+  const unsubscribeBridge = bridge?.onMessage(m => {
     if (m.type === 'rig.snapshot' || m.type === 'rig.removed') unpairGone(store, bridge.rigs());
     if (m.type === 'rig.snapshot') restorePairs(store, bridge);
     // The bridge sends escalation.updated on every change and again after a reconnect: only an id the thread lacks is new.
@@ -404,7 +432,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const sendSnapshot = (reply: Reply) => {
-    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true, asks: true, ...(mobile || unavailable ? { mobile: true } : {}), ...(bridge ? { openrig: true } : {}) } } : {}) });
+    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true, asks: true, ...(mobile || unavailable ? { mobile: true } : {}), ...(bridge ? { openrig: true } : {}), ...(aggregate ? { openrigFleet: true } : {}) } } : {}) });
     reply(machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
     reply(projectsMsg()); // then the shared projects (build spec §5)
     reply({ type: 'asks', asks: asks.all().filter(askShown) }); // then the decisions waiting for the user
@@ -414,7 +442,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     for (const [id, lines] of previews) if (store.get(id)) reply({ type: 'session.preview', id, lines });
     reply({ type: 'chat.history', turns: chat.history() });
     reply(contextMsg()); // the context threshold (context handover spec §3.2)
-    if (bridge) for (const m of bridge.replay()) reply(m); // then the OpenRig mirror (status, rigs, escalations)
+    if (aggregate) for (const m of aggregate.replay()) reply(m); // then the OpenRig mirror of every machine (statuses, rigs, escalations)
     reply({ type: 'ledge.thread.history', ...thread.page() }); // last: Ledge's thread, whose items name those escalations
   };
   const preview = (id: string, lines: string[]) => {
@@ -1018,12 +1046,13 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'machines.set': {
         writeMachines(msg.machines, machinesFile); // first: a failing write leaves memory unchanged and reaches the sender
         machines = msg.machines; // already validated by parseClientMessage
+        remote?.setMachines(machines); // a machine gone takes its rigs and escalations with it
         return broadcast(machinesMsg()); // every local client, the sender included
       }
       case 'projects.set': {
         writeProjects(msg.projects, projectsFile); // first: a failing write leaves memory unchanged and reaches the sender
         projects = msg.projects; // already validated by parseClientMessage
-        bridge?.refresh(); // the rigs filed in a project follow it
+        bridge?.refresh(); aggregate?.refresh(); // the rigs filed in a project follow it, remote ones too
         return broadcast(projectsMsg());
       }
       case 'context.set': {
@@ -1338,11 +1367,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       // OpenRig writes and Ledge's own voice come in later lots.
       case 'ledge.thread.request': return reply({ type: 'ledge.thread.history', ...thread.page(msg.before) });
       // To the sender only: every client learns the escalation's new state from the bridge's escalation.updated.
-      case 'escalation.answer': {
+      case 'escalation.answer': return ridMemo.once('escalation.answer', msg.rid, reply, async reply => {
         if (!answers) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'openrig_down', reason: "OpenRig n'est pas branché" });
         const r = await answers.answer(msg.id, msg.answers, msg.by);
         return reply(r.ok ? { type: 'rig.result', rid: msg.rid, ok: true } : { type: 'rig.result', rid: msg.rid, ok: false, code: r.code, reason: r.reason });
-      }
+      });
       // To the sender: accepted as soon as the user item is in the thread; the answer reaches every front through the thread.
       case 'ledge.say': {
         if (msg.text.trim() === '') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'invalid', reason: 'empty message' });
@@ -1351,7 +1380,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return answered;
       }
       // Lifecycle of a rig or a seat, through OpenRig; to the sender only (the mirror shows the effect by SSE).
-      case 'rig.act': {
+      case 'rig.act': return ridMemo.once('rig.act', msg.rid, reply, async reply => {
         if (msg.machine !== 'local') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'unreachable', reason: `machine ${msg.machine} is not this daemon's` });
         if (!bridge) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'openrig_down', reason: "OpenRig n'est pas branché" });
         // Cancelling a launch: forget it first, so a seat turning ready while `down` runs cannot get the goal.
@@ -1359,16 +1388,16 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         const r = await actOnRig({ http: () => bridge.http(), ensureRunning: why => bridge.ensureRunning(why), operator: HUMAN_ADDRESS },
           { verb: msg.verb, ...(msg.rigId !== undefined ? { rigId: msg.rigId } : {}), ...(msg.seatRef !== undefined ? { seatRef: msg.seatRef } : {}) });
         return reply(r.ok ? { type: 'rig.result', rid: msg.rid, ok: true } : { type: 'rig.result', rid: msg.rid, ok: false, code: r.code, reason: r.reason });
-      }
+      });
       // Writing to a seat; to the sender only. The Desktop routes another machine's seats to its own daemon (lot 6).
-      case 'rig.send': {
+      case 'rig.send': return ridMemo.once('rig.send', msg.rid, reply, async reply => {
         if (msg.machine !== 'local') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'unreachable', reason: `machine ${msg.machine} is not this daemon's` });
         if (msg.text.trim() === '' || msg.seatRef.startsWith('-')) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'invalid', reason: 'empty message or bad seat' });
         if (!bridge || !seatSend) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'openrig_down', reason: "OpenRig n'est pas branché" });
         const r = await seatSend.send(msg.machine, msg.seatRef, msg.text);
         return reply(r.ok ? { type: 'rig.result', rid: msg.rid, ok: true } : { type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: r.reason });
-      }
-      case 'rig.prepare': {
+      });
+      case 'rig.prepare': return ridMemo.once('rig.prepare', msg.rid, reply, async reply => {
         if (msg.machine !== 'local') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'unreachable', reason: `machine ${msg.machine} is not this daemon's` });
         if (!bridge) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'openrig_down', reason: "OpenRig n'est pas branché" });
         // Ledge starts OpenRig itself for a launch, and says so in its thread (the bridge's notice); only a start that fails is refused.
@@ -1384,21 +1413,23 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
           log(`openrig: plan not made: ${(e as Error).message}`);
           return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: e instanceof OpenRigUnreachable ? 'openrig_down' : 'failed', reason: (e as Error).message });
         }
-      }
+      });
       // A plan `rig.prepare` made, launched once; to the sender only (the mirror and the thread show the rest).
-      case 'rig.launch': {
+      case 'rig.launch': return ridMemo.once('rig.launch', msg.rid, reply, async reply => {
         if (!bridge || !launches) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'openrig_down', reason: "OpenRig n'est pas branché" });
         const plan = rigPlans.take(msg.planId);
         if (plan === 'used') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: 'plan already launched' });
         if (plan === null) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: 'plan expired' });
         try {
           const r = await launches.launch(plan);
+          // « Not now »: the plan stays, the same rid (not memoized) launches it later.
+          if (!r.ok && r.code === 'openrig_down') rigPlans.giveBack(plan.id);
           return reply(r.ok ? { type: 'rig.result', rid: msg.rid, ok: true } : { type: 'rig.result', rid: msg.rid, ok: false, code: r.code, reason: r.reason });
         } catch (e) {
           log(`openrig: launch failed: ${(e as Error).message}`);
           return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: (e as Error).message });
         }
-      }
+      });
       // Files a rig in a project: only projects.json changes; the mirror recomputes the rig's project.
       case 'rig.adopt': {
         const result = (r: { ok: true } | { ok: false; code: 'failed' | 'unreachable' | 'openrig_down'; reason: string }): void => reply({ type: 'rig.result', rid: msg.rid, ...r });
@@ -1408,7 +1439,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         const next = adoptRig(projects, msg.projectId, msg.rigId);
         if ('refused' in next) return result({ ok: false, code: 'failed', reason: next.refused });
         try { writeProjects(next, projectsFile); } catch (e) { log(`openrig: adopt not saved: ${(e as Error).message}`); return result({ ok: false, code: 'failed', reason: (e as Error).message }); }
-        projects = next; bridge.refresh(); broadcast(projectsMsg());
+        projects = next; bridge.refresh(); aggregate?.refresh(); broadcast(projectsMsg());
         return result({ ok: true });
       }
       case 'mandate.update': case 'rule.set': case 'decision.revisit': case 'category.escalate': case 'brain.set':
@@ -1426,7 +1457,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
    * is only a session's (a mobile.* id names a pairing or a device). Never rejects.
    */
   function dispatch(msg: ClientMessage, reply: Reply): Promise<void> {
-    return handle(msg, reply).catch(e => {
+    return (rigRouter && isRigCommand(msg) ? rigRouter.route(msg, reply) : handle(msg, reply)).catch(e => {
       if (msg.type === 'document.read') return reply({ type: 'document.error', requestId: msg.requestId, path: msg.path, code: 'read_failed' });
       log(`${msg.type} failed: ${(e as Error).message}`);
       reply({ type: 'error', ...(msg.type.startsWith('session.') && 'id' in msg ? { id: msg.id } : {}), message: (e as Error).message, request: msg.type, ...(e instanceof Refusal ? { code: e.code } : {}) });
@@ -1540,6 +1571,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     });
   });
 
+  remote?.setMachines(machines); // last: the peers dial this daemon's own /ssh/<alias>, now handled
+
   return {
     port,
     broadcast,
@@ -1551,6 +1584,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     asks,
     projects: () => projects,
     say: text => { thread.append({ kind: 'ledge', text }); },
-    close: () => new Promise<void>(res => { clearInterval(sweepTimer); unsubscribe(); unsubscribeBridge?.(); launches?.close(); stopRepoWatch?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
+    close: () => new Promise<void>(res => { clearInterval(sweepTimer); unsubscribe(); unsubscribeBridge?.(); unsubscribeAggregate?.(); rigRouter?.close(); remote?.close(); launches?.close(); stopRepoWatch?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
   };
 }

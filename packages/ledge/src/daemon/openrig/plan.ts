@@ -27,13 +27,19 @@ export function plannedWrites(seats: readonly RigSpecSeat[]): string[] {
 
 export function upCommand(spec: string, cwd: string): string { return `rig up ${spec} --cwd ${cwd} --yes --json`; }
 
-export interface Plans { put(p: RigPlan): void; take(id: string): RigPlan | 'used' | null; get(id: string): RigPlan | null }
+export interface Plans {
+  put(p: RigPlan): void; take(id: string): RigPlan | 'used' | null; get(id: string): RigPlan | null;
+  /** A plan taken whose launch was refused « not now » (`openrig_down`): it can be taken again, until its first 30 min are over. */
+  giveBack(id: string): void;
+}
 
 /** Plans in memory: a plan is taken once, and is gone after PLAN_TTL_MS. */
 export function createPlans(now: () => number): Plans {
   const live = new Map<string, { plan: RigPlan; at: number }>();
   const used = new Set<string>();
-  const sweep = (): void => { for (const [id, e] of live) if (now() - e.at > PLAN_TTL_MS) live.delete(id); };
+  /** The plans taken, kept for `giveBack` until their time is over. */
+  const taken = new Map<string, { plan: RigPlan; at: number }>();
+  const sweep = (): void => { for (const m of [live, taken]) for (const [id, e] of m) if (now() - e.at > PLAN_TTL_MS) m.delete(id); };
   return {
     put(p) { sweep(); live.set(p.id, { plan: p, at: now() }); },
     get(id) { sweep(); return live.get(id)?.plan ?? null; },
@@ -41,8 +47,13 @@ export function createPlans(now: () => number): Plans {
       sweep();
       const e = live.get(id);
       if (!e) return used.has(id) ? 'used' : null;
-      live.delete(id); used.add(id);
+      live.delete(id); used.add(id); taken.set(id, e);
       return e.plan;
+    },
+    giveBack(id) {
+      sweep();
+      const e = taken.get(id); if (!e) return;
+      taken.delete(id); used.delete(id); live.set(id, e);
     }
   };
 }

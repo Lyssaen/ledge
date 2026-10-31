@@ -137,6 +137,7 @@ describe('OpenRig bridge', () => {
     const asks: Ask[] = [{ id: 'a000002', from: 's1', fromName: 'solo', question: 'Q?', options: '', at: '2026-10-30T10:00:00.000Z', state: 'open' }];
     const { b, of } = setup({ exec: fakeRigCli(null), sessionName: id => (id === 's1' ? 'ledge-solo' : undefined), asks: { all: () => asks, onChange: () => () => {} } });
     await b.start(); await until(() => b.status().state === 'absent');
+    expect(b.status()).toEqual({ machine: 'local', state: 'absent', install: 'npm install -g @openrig/cli@0.6.14 && rig setup' });
     expect(of('escalation.updated')[0]!.escalation).toMatchObject({ id: 'ask-a000002', source: 'ask', from: 'ledge-solo', state: 'pending' });
     expect(b.replay().map(m => m.type)).toEqual(['openrig.status', 'rig.snapshot', 'escalation.updated']);
   });
@@ -263,6 +264,20 @@ describe('OpenRig bridge', () => {
     await until(() => of('escalation.updated').some(m => m.escalation.id === 'J1') && of('rig.exchange').some(m => m.exchange.id === 'q-J2'));
     await b.stop(); bridge = null;
     expect(readOpenRigFile(file).machines.local!.lastEventId).toBe(2);
+  });
+
+  it('humanRead: false while the human queue never loaded (a failed first read lists nothing), true once read', async () => {
+    fake = await createFakeOpenRig(); fake.rigs.push(starter()); fake.humans.push('ledge'); fake.queue.push(humanRow('E1'));
+    let broken = true; const base = fetch;
+    const f = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (broken && String(input).includes('/api/queue/list')) return new Response('{}', { status: 200 });
+      return base(input, init);
+    }) as typeof fetch;
+    const { b } = setup({ exec: fakeRigCli(fake), fetch: f, resyncMs: 40 });
+    await b.start(); await until(() => b.status().state === 'running');
+    expect(b.humanRead()).toBe(false); expect(b.escalations()).toEqual([]);
+    broken = false;
+    await until(() => b.humanRead() && b.escalations().some(e => e.id === 'E1'));
   });
 
   it('a failed read changes nothing (body that is no list)', async () => {
