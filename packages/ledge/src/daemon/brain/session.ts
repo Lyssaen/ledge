@@ -22,9 +22,18 @@ const SHIM = `#!/bin/sh\necho "${SHIM_TEXT.replace(/[`"$\\]/g, c => `\\${c}`)}" 
 export const BRAIN_CLAUDE_SETTINGS = { permissions: { defaultMode: 'default', allow: ['Bash(ledge brain:*)'],
   deny: ['Bash(rig:*)', 'Bash(tmux:*)', 'Bash(curl:*)', 'Bash(wget:*)', 'WebFetch'] } };
 
-/** Arguments every brain launch and resume carries: a Claude brain never inherits auto or bypass mode from the user's settings. */
+/**
+ * Arguments every brain launch and resume carries, so the brain never inherits an autonomous mode from the user's own config:
+ * Claude in its default permission mode, Codex asking on request (what `autonomyArgs` gives `edits`, never `never` nor a bypass).
+ * Cursor Agent has no flag that forces asking: it is left without `--force` (its only autonomous switch here), and its own
+ * config still applies.
+ */
 export function brainArgs(tool: Tool): string[] {
-  return tool === 'claude' ? ['--permission-mode', 'default'] : [];
+  switch (tool) {
+    case 'claude': return ['--permission-mode', 'default'];
+    case 'codex': return ['--ask-for-approval', 'on-request'];
+    default: return [];
+  }
 }
 
 /** The brain's own environment on top of the agent's: the shims first in PATH, and LEDGE_BRAIN. */

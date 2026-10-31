@@ -265,6 +265,41 @@ describe('the brain in the daemon', () => {
     c.close();
   });
 
+  it('a codex brain is pinned non-autonomous at launch and on resume', async () => {
+    const store = new Store(); const s = await serve(store);
+    const c = await client(s.port);
+    c.send({ type: 'brain.set', rid: 'r1', enabled: true, tool: 'codex' });
+    await until(() => c.msgs.some(m => m.type === 'rig.result' && m.rid === 'r1'));
+    const codex = spawned[0]!.command.join(' ');
+    expect(codex).toContain('--ask-for-approval on-request');
+    expect(codex).not.toMatch(/--ask-for-approval never|--dangerously|--full-auto|--yolo|danger-full-access/);
+    // Resumed after an exit: still pinned.
+    store.upsert({ ...store.get('brain')!, state: 'exited', exitedAt: at(1), agentSessionId: 'thread-1' });
+    await until(() => spawned.length === 2);
+    expect(spawned[1]!.command).toEqual(expect.arrayContaining(['resume', 'thread-1']));
+    expect(spawned[1]!.command.join(' ')).toContain('--ask-for-approval on-request');
+    c.close();
+  });
+
+  it('a cursor brain is launched without --force', async () => {
+    await writeBrainSettings(join(home, 'brain.json'), { enabled: true, tool: 'cursor' });
+    await serve(new Store());
+    await until(() => spawned.length === 1);
+    const cursor = spawned[0]!.command;
+    expect(cursor).not.toContain('--force');
+    expect(cursor.join(' ')).not.toMatch(/--yolo|--permission-mode|--ask-for-approval/);
+  });
+
+  it('a cursor brain is resumed without --force', async () => {
+    await writeBrainSettings(join(home, 'brain.json'), { enabled: true, tool: 'cursor' });
+    const store = new Store();
+    store.upsert({ id: 'brain', name: 'Ledge', tool: 'cursor', cwd: join(home, 'brain'), project: 'brain', title: 'Ledge · brain', tmuxSession: 'ledge-brain', state: 'exited', exitedAt: at(0), helpers: [], startedAt: at(0), lastActivityAt: at(0), source: 'launcher', brain: true, agentSessionId: 'chat-1', autonomy: 'auto' });
+    await serve(store);
+    await until(() => spawned.length === 1);
+    expect(spawned[0]!.command).toEqual(expect.arrayContaining(['--resume', 'chat-1']));
+    expect(spawned[0]!.command).not.toContain('--force');
+  });
+
   it('never gives another session the brain arguments', async () => {
     const store = new Store(); const s = await serve(store);
     const c = await client(s.port);
