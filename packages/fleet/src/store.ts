@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { isArchived, type ChatTurn, type LedgeThreadItem, type DaemonInfo, type Recent, type ServerMessage, type Session, type ThreadItem } from '@ledge/protocol';
+import { isArchived, type BrainStatus, type ChatTurn, type LedgeDecision, type LedgeRule, type LedgeThreadItem, type DaemonInfo, type Recent, type ServerMessage, type Session, type ThreadItem } from '@ledge/protocol';
 import type { DaemonClient, DaemonStatus } from './client';
 
 /** A daemon `error` reply; `seq` tells two identical messages apart. */
@@ -42,12 +42,15 @@ export interface DaemonState {
   ledgeThread: LedgeThreadItem[]; threadBefore?: string; threadLoading: boolean;
   /** The escalation answers sent, by rid, with the daemon's `rig.result` once it came. */
   answering: Map<string, AnswerAttempt>;
+  /** Ledge's brain (lot 7, local daemon only): the mandate file, the rules and the decisions (newest first, as sent), the brain's state.
+   *  Each message replaces what was held; a snapshot keeps them (the daemon sends them again after it on a new connection). */
+  mandate: { text: string; path: string } | undefined; rules: LedgeRule[]; decisions: LedgeDecision[]; brain: BrainStatus | undefined;
   /** The daemon's last update.progress / update.failed message; `seq` tells two identical ones apart. */
   lastUpdate: { msg: Extract<ServerMessage, { type: 'update.progress' | 'update.failed' }>; seq: number } | null;
 }
 /** The daemon's last `folder.listing` answer (to this client's `folder.list` or `folder.create`); `seq` tells two apart. */
 export type FolderListing = Omit<Extract<ServerMessage, { type: 'folder.listing' }>, 'type'> & { seq: number };
-const empty = (): DaemonState => ({ sessions: [], archived: [], byId: new Map(), status: 'connecting', previews: new Map(), threads: new Map(), lastError: null, errors: [], recents: [], launcher: null, lastLaunched: null, lastListing: null, chat: [], chatLive: null, daemon: null, snapshotSeq: 0, ledgeThread: [], threadLoading: false, answering: new Map(), lastUpdate: null });
+const empty = (): DaemonState => ({ sessions: [], archived: [], byId: new Map(), status: 'connecting', previews: new Map(), threads: new Map(), lastError: null, errors: [], recents: [], launcher: null, lastLaunched: null, lastListing: null, chat: [], chatLive: null, daemon: null, snapshotSeq: 0, ledgeThread: [], threadLoading: false, answering: new Map(), lastUpdate: null, mandate: undefined, rules: [], decisions: [], brain: undefined });
 const archivedOf = (m: Map<string, Session>) => [...m.values()].filter(isArchived).sort((a, b) => (b.archivedAt ?? '').localeCompare(a.archivedAt ?? '') || a.id.localeCompare(b.id));
 let state: DaemonState = empty();
 const subs = new Set<() => void>();
@@ -84,6 +87,10 @@ export const daemonStore = {
       const a = state.answering.get(m.rid); if (!a) return;
       state = { ...state, answering: new Map(state.answering).set(m.rid, { ...a, result: { ok: m.ok, ...(m.code ? { code: m.code } : {}), ...(m.reason ? { reason: m.reason } : {}) } }) }; emit(); return;
     }
+    if (m.type === 'mandate') { state = { ...state, mandate: { text: m.text, path: m.path } }; emit(); return; }
+    if (m.type === 'rules') { state = { ...state, rules: m.items }; emit(); return; }
+    if (m.type === 'decisions') { state = { ...state, decisions: m.items }; emit(); return; }
+    if (m.type === 'brain.status') { state = { ...state, brain: m.status }; emit(); return; }
     if (m.type === 'chat.history') { state = { ...state, chat: m.turns, chatLive: null }; emit(); return; }
     if (m.type === 'chat.step' || m.type === 'chat.delta' || m.type === 'chat.done' || m.type === 'chat.error') {
       const chat = state.chat.map(t => t.qid !== m.qid ? t
