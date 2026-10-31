@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type Ref } from 'react';
 import { answerEscalation, sayToLedge, useAnswerState, useEscalations, useLedgeThread, useRigs, type DaemonClient } from '@ledge/fleet';
 import { qualify } from '@ledge/fleet/machines';
-import { hideProposal, type Escalation, type Exchange, type Session } from '@ledge/protocol';
+import { hideProposal, type Escalation, type Exchange, type LedgeDecision, type Session } from '@ledge/protocol';
 import { ChatAnswer, TurnCards, type TurnCardsProps } from '@ledge/ui/chat/ChatView';
 import { ChatCopyProvider } from '@ledge/ui/chat/copy';
 import { LedgeThreadCopyProvider } from '@ledge/ui/chat/ledge/copy';
@@ -43,6 +43,8 @@ export interface LedgeFeedProps {
   /** A document link in an answer (`[x](./README.md)`). */
   onDocument?(ref: DocumentReference): void;
   theme?: 'dark' | 'light'; frozen?: boolean; reducedMotion?: boolean;
+  /** What Ledge settled, by id: a `decided` item is a line « Ledge → seat · décision » once its decision is known (the store comes with lot 7). */
+  decisions?: ReadonlyMap<string, LedgeDecision>;
 }
 
 /** The exchanges of the rigs the thread names: asked once per rig, then read from the fleet at each of its changes. */
@@ -87,7 +89,7 @@ function Line({ at, tone, head, children }: { at: string; tone: 'user' | 'ledge'
 }
 
 /**
- * The open notch (spec §8.5, `nn-open.png`): the header (Ledge, what it orchestrates, « + », the menu, close), the waiting decision
+ * The open notch (spec §8.5, `nn-open.png`): the header (Ledge, what it orchestrates, the menu, close), the waiting decision
  * pinned on top with its buttons, « Seulement Ledge », then one mixed feed (exchanges between agents, what Ledge settled, the user's
  * messages and Ledge's answers with their cards), and the composer, always there, that writes to Ledge (`ledge.say`).
  */
@@ -112,7 +114,7 @@ export function LedgeFeed(p: LedgeFeedProps) {
   const exchanges = useNamedExchanges(client, named);
   const today = localDay(new Date().toISOString());
   const [onlyLedge, setOnlyLedge] = useState(readOnlyLedge);
-  const rows = threadRows(items, { escalations: escById, exchanges, chat, today, days: threadC.days });
+  const rows = threadRows(items, { escalations: escById, exchanges, chat, today, days: threadC.days, ...(p.decisions ? { decisions: p.decisions } : {}) });
   const lines = feedLines(rows, { onlyLedge, rigName: (m, id) => rigs.find(r => r.machine === m && r.id === id)?.name ?? id }).map((l): FeedLine => {
     if (l.kind !== 'ledge' || l.turn || client.fleet) return l;
     const item = items.find(i => i.id === l.id);
@@ -186,7 +188,7 @@ export function LedgeFeed(p: LedgeFeedProps) {
                 <span data-brand style={{ fontSize: 14, lineHeight: '18px', fontWeight: 650 }}>{chatC.chat.title}<span style={{ color: 'var(--sidebar-primary)' }}>.</span></span>
                 <span style={{ fontSize: 11, lineHeight: '14px', color: 'var(--muted-foreground)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ownRigs.length > 0 ? t.feed.subtitle(ownRigs.length, agents) : chatC.chat.subtitle(sessions.length, repos)}</span>
               </div>
-              <Button variant="ghost" size="icon" aria-label={chatC.chat.reset} title={chatC.chat.reset} disabled={!!offline || items.length === 0} onClick={() => client.send({ type: 'chat.reset' })}><Icon {...ICONS.plus} /></Button>
+              {/* No « + » (final review ruling): chat.reset would clear the shared chat's cards while the feed stays. */}
               {p.headerExtra ?? <Button variant="ghost" size="icon" aria-label={t.feed.settings} title={t.feed.settings} onClick={p.onSettings}><Icon {...ICONS.gear} /></Button>}
               <Button variant="ghost" size="icon" aria-label={chatC.chat.close} title={chatC.chat.close} onClick={p.onClose}><Icon {...ICONS.close} /></Button>
             </div>

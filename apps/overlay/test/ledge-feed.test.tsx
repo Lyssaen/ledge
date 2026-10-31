@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act, within } from '@testing-library/react';
-import type { ClientMessage, Escalation, Exchange, LedgeThreadItem, Rig } from '@ledge/protocol';
+import type { ClientMessage, Escalation, Exchange, LedgeDecision, LedgeThreadItem, Rig } from '@ledge/protocol';
 import type { DaemonClient } from '../src/daemon/client';
 import { daemonStore } from '../src/daemon/store';
 import { LangProvider } from '../src/i18n/lang';
@@ -54,6 +54,8 @@ describe('the open notch: Ledge’s mixed feed', () => {
     expect(lines()[3]).toHaveAttribute('data-tone', 'ledge');
     // The header: Ledge orchestrates 1 rig and its 4 agents.
     expect(screen.getByText('Orchestre 1 rig · 4 agents · tranche dans son mandat')).toBeInTheDocument();
+    // No « + »: chat.reset would clear the shared chat's cards while the feed stays (final review ruling).
+    expect(screen.queryByRole('button', { name: 'Nouvelle conversation' })).toBeNull();
   });
 
   it('« Seulement Ledge » hides agent exchanges, and is remembered', async () => {
@@ -84,6 +86,19 @@ describe('the open notch: Ledge’s mixed feed', () => {
     expect(sent).toEqual([{ type: 'ledge.say', rid: expect.any(String), text: '@build relance les tests' }]);
     expect(field).toHaveValue('');
     expect(sent.some(m => m.type === 'chat.ask')).toBe(false);
+  });
+
+  it('a decision Ledge settled is one line « Ledge → build · décision »', () => {
+    const settled: Escalation = { ...DECISION, id: 'qi-9', from: 'build@factory', state: 'answered', answer: { by: 'ledge', answers: { q1: 'sqlite' }, at: at(16, 50) } };
+    escalations = [settled];
+    const decision: LedgeDecision = { id: 'd1', escalationId: 'qi-9', by: 'ledge', category: 'git', summary: 'Rebase sur main avant la revue.', answers: { q1: 'sqlite' }, at: at(16, 50) };
+    act(() => { daemonStore.setStatus('open'); daemonStore.apply({ type: 'ledge.thread.history', items: [{ kind: 'decided', id: 'dd1', at: at(16, 50), decisionId: 'd1' }] }); });
+    render(<LangProvider lang="fr"><LedgeFeed client={client()} onClose={() => {}} onSettings={() => {}} decisions={new Map([['d1', decision]])} /></LangProvider>);
+    expect(lines()).toHaveLength(1);
+    expect(lines()[0]).toHaveTextContent('Ledge → build · décision');
+    expect(lines()[0]).toHaveTextContent('Rebase sur main avant la revue.');
+    expect(lines()[0]).toHaveAttribute('data-tone', 'ledge');
+    expect(lines()[0]!.querySelector('[data-feed-time]')).toHaveTextContent('16:50');
   });
 
   it('answering the pinned decision sends escalation.answer', () => {

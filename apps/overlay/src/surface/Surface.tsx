@@ -23,7 +23,6 @@ import { openInLedge, subscribeOpenInLedge } from '../desktop/openInLedge';
 import { SettingsView } from './SettingsView';
 import { HelpView } from './HelpView';
 import { HelperView } from './HelperView';
-import { TurnThumbs } from './TurnThumbs';
 import { LaunchView, LAUNCH_FOOTER_H, type LaunchRequest } from './LaunchView';
 import { CHAT_HEADER_H, CHAT_COMPOSER_H } from './ChatView';
 import { LedgeFeed } from './LedgeFeed';
@@ -113,7 +112,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   // Geometry, pointer and frames are in real px; the handle layer is zoomed by `hs`, the opened views by `ps`. A
   // measured view (bubble, session, settings, help) reports its base height: its client rect divided by `ps`.
   const hs = handleScale, ps = panelScale;
-  const { sessions: daemonSessions, byId, status, previews, threads, lastError, errors, recents, launcher, lastLaunched, lastListing, chat, chatLive } = useDaemon();
+  const { sessions: daemonSessions, byId, status, previews, threads, lastError, errors, recents, launcher, lastLaunched, lastListing, chat } = useDaemon();
   const machines = useMachines(client);
   const launchMachine = client.fleet?.selected();
   const chosenMachine = machines.find(m => m.id === launchMachine);
