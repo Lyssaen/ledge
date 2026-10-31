@@ -1,4 +1,4 @@
-import { PROJECT_COLORS, type Escalation, type Projects, type ProjectColor, type Rig, type RigSeat, type SeatState, type Session } from '@ledge/protocol';
+import { PROJECT_COLORS, type Escalation, type Exchange, type Projects, type ProjectColor, type Rig, type RigSeat, type SeatState, type Session } from '@ledge/protocol';
 
 export const rigKey = (r: Pick<Rig, 'machine' | 'id'>): string => `${r.machine}/${r.id}`;
 /** The Atelier filter naming one rig. */
@@ -150,4 +150,35 @@ export function ledgeLine(escalations: readonly Escalation[], rigs: readonly Rig
   if (grace) return { preview: { kind: 'grace', ...rigOf(grace) }, at: grace.createdAt, unread: open.length };
   if (said) return { preview: { kind: 'said', text: said.text }, at: said.at, unread: 0 };
   return { preview: { kind: 'calm', rigs: rigs.filter(r => !r.kernel).length }, unread: 0 };
+}
+
+/** A rig's cwd for a plaque: the home folder (`/home/<user>`, `/root`) read as `~`. */
+export function shortCwd(cwd: string): string {
+  const m = /^(\/home\/[^/]+|\/root)(?=\/|$)/.exec(cwd);
+  return m ? `~${cwd.slice(m[0].length)}` : cwd;
+}
+
+/** An exchange between two seats of a rig's table, drawn as a bubble over `fromId` and a line to `toId` (session or placeholder ids). */
+export interface Arc { id: string; fromId: string; toId: string; text: string; at: string; kind: Exchange['kind']; fromName: string; toName: string }
+
+/**
+ * The rig's recent exchanges between two seats of its table: `from`/`to` resolved by ref, address or name (`seatAt`), then to the
+ * seat's session (paired, or the placeholder). Only those less than `ms` old (the atelier's bubble time) and whose two ends sit at the
+ * table (a seat still running) are kept; an exchange of another rig or machine, or naming no seat (Ledge's own), is left out.
+ */
+export function exchangeArcs(exchanges: readonly Exchange[], rig: Rig, byId: ReadonlyMap<string, Session>, now: number, ms = 5000): Arc[] {
+  const arcs: Arc[] = [];
+  const end = (who: string) => {
+    const seat = seatAt([rig], rig.machine, rig.id, who);
+    return seat && seat.state !== 'stopped' ? seatSession(seat, rig, byId) : undefined;
+  };
+  for (const x of exchanges) {
+    if (x.machine !== rig.machine || x.rigId !== rig.id) continue;
+    const at = Date.parse(x.at);
+    if (!(now - at < ms)) continue;
+    const from = end(x.from), to = end(x.to);
+    if (!from || !to || from.id === to.id) continue;
+    arcs.push({ id: x.id, fromId: from.id, toId: to.id, text: x.text, at: x.at, kind: x.kind, fromName: from.name, toName: to.name });
+  }
+  return arcs;
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Project, Projects, Rig, RigSeat, Session } from '@ledge/protocol';
-import { sceneOf, type AtelierScene } from '../src/rigs/scene';
+import { sceneOf, tableSeats, type AtelierScene } from '../src/rigs/scene';
 
 const seat = (name: string, over: Partial<RigSeat> = {}): RigSeat => ({ ref: `${name}@x`, address: `@${name}`, name, runtime: 'claude-code', state: 'ready', ...over });
 const rig = (machine: string, id: string, over: Partial<Rig> = {}): Rig => ({ id, name: id, machine, cwd: '/w', projectId: null, offProject: false,
@@ -74,5 +74,20 @@ describe('sceneOf', () => {
     expect(sceneOf(order, twoProjects, pid, 'ledge', RIGS, byId).rooms.map(r => r.key)).toEqual(['ledge']);
     expect(sceneOf(order, twoProjects, pid, 'none', RIGS, byId)).toMatchObject({ rooms: [], unassigned: [{ id: 'local:kit' }] });
     expect(sceneOf(order, twoProjects, pid, 'docs', RIGS, byId)).toMatchObject({ rooms: [], empty: { id: 'docs' } });
+  });
+});
+
+describe('tableSeats', () => {
+  const ph = (n: string) => ({ id: `seat:local/r1/${n}`, name: n } as Session);
+  const real = (n: string) => ({ id: `local:${n}`, name: n } as Session);
+  it('les sièges appariés passent avant les fantômes, l’ordre du rig gardé, le reste en « +N »', () => {
+    const mains = [ph('a'), ph('b'), real('c'), ph('d'), real('e')];
+    const { seated, extra } = tableSeats(mains, 3);
+    expect(seated.map(s => s.name)).toEqual(['a', 'c', 'e']);
+    expect(extra.map(s => s.name)).toEqual(['b', 'd']);
+  });
+  it('sans fantôme, c’est un simple découpage', () => {
+    const mains = [real('a'), real('b'), real('c')];
+    expect(tableSeats(mains, 2)).toEqual({ seated: [mains[0], mains[1]], extra: [mains[2]] });
   });
 });

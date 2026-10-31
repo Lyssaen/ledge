@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { PROJECT_COLORS, type Projects, type Rig, type RigSeat, type Session } from '@ledge/protocol';
-import { allSeats, isSeatPlaceholder, kernelFilter, kernelSplit, parseRigFilter, readyCount, rigColor, rigFilter, rigKey, rigPlace, SEAT_ORDER, seatAt, seatSession, workingCount } from '../src/rigs/model';
+import { PROJECT_COLORS, type Exchange, type Projects, type Rig, type RigSeat, type Session } from '@ledge/protocol';
+import { allSeats, exchangeArcs, isSeatPlaceholder, shortCwd, kernelFilter, kernelSplit, parseRigFilter, readyCount, rigColor, rigFilter, rigKey, rigPlace, SEAT_ORDER, seatAt, seatSession, workingCount } from '../src/rigs/model';
 
 const seat = (name: string, over: Partial<RigSeat> = {}): RigSeat => ({ ref: `${name}@factory`, address: `@${name}`, name, runtime: 'claude-code', state: 'ready', ...over });
 const rig = (over: Partial<Rig> = {}): Rig => ({ id: 'r1', name: 'factory', machine: 'local', cwd: '/w/ledge', projectId: null, offProject: false,
@@ -82,5 +82,45 @@ describe('rigs model', () => {
     expect(seatAt([r], 'local', 'r1', '@design')).toBe(SEAT);
     expect(seatAt([r], 'local', 'r1', 'design')).toBe(SEAT);
     expect(seatAt([r], 'nas', 'r1', 'design')).toBeUndefined();
+  });
+
+  it('shortCwd abrège le dossier personnel en ~', () => {
+    expect(shortCwd('/home/me/rigs/reprise-wsl')).toBe('~/rigs/reprise-wsl');
+    expect(shortCwd('/home/me')).toBe('~');
+    expect(shortCwd('/root/x')).toBe('~/x');
+    expect(shortCwd('/w/ledge')).toBe('/w/ledge');
+  });
+});
+
+describe('exchangeArcs', () => {
+  const T = Date.parse('2026-10-30T14:00:00.000Z');
+  const iso = (ms: number) => new Date(ms).toISOString();
+  const FACTORY = rig({ seats: [
+    seat('build', { ref: 'dev-build@factory', address: '@build', sessionId: 'build' }),
+    seat('review-a', { ref: 'review-a@factory', address: '@review-a', sessionId: 'reviewa' }),
+    seat('design', { ref: 'design@factory', address: '@design' }),
+    seat('gone', { state: 'stopped', sessionId: 'gone' })
+  ] });
+  const byId = new Map(['build', 'reviewa', 'gone'].map(id => [id, { id, name: id } as Session]));
+  const EX: Exchange = { id: 'e1', machine: 'local', rigId: 'r1', from: 'x', to: 'y', kind: 'message', text: 'Candidat prêt', at: iso(T) };
+
+  it('build → review-a par adresse, gardé 5 s puis oublié', () => {
+    const ex = [{ ...EX, from: 'dev-build@factory', to: '@review-a', at: iso(T) }];
+    const arcs = exchangeArcs(ex, FACTORY, byId, T + 1000);
+    expect(arcs).toEqual([expect.objectContaining({ id: 'e1', fromId: 'build', toId: 'reviewa', text: 'Candidat prêt', kind: 'message', fromName: 'build', toName: 'reviewa' })]);
+    expect(exchangeArcs(ex, FACTORY, byId, T + 6000)).toEqual([]);
+    expect(exchangeArcs(ex, FACTORY, byId, T + 6000, 10_000)).toHaveLength(1);
+  });
+
+  it('un siège fantôme est un bout valable : son id seat:…', () => {
+    const arcs = exchangeArcs([{ ...EX, from: 'build', to: 'design', kind: 'task' }], FACTORY, byId, T);
+    expect(arcs).toEqual([expect.objectContaining({ fromId: 'build', toId: 'seat:local/r1/design@factory', kind: 'task' })]);
+  });
+
+  it('un bout inconnu, arrêté, ou un autre rig : rien', () => {
+    expect(exchangeArcs([{ ...EX, from: 'build', to: '@nobody' }], FACTORY, byId, T)).toEqual([]);
+    expect(exchangeArcs([{ ...EX, from: 'build', to: 'gone' }], FACTORY, byId, T)).toEqual([]);
+    expect(exchangeArcs([{ ...EX, from: 'build', to: 'design', rigId: 'r9' }], FACTORY, byId, T)).toEqual([]);
+    expect(exchangeArcs([{ ...EX, from: 'build', to: 'design', machine: 'nas' }], FACTORY, byId, T)).toEqual([]);
   });
 });

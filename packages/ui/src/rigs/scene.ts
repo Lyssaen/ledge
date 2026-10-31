@@ -1,5 +1,5 @@
 import type { Project, Projects, Rig, Session } from '@ledge/protocol';
-import { isStandalone, parseRigFilter, rigsModel, type RigPlace } from './model';
+import { isSeatPlaceholder, isStandalone, parseRigFilter, rigsModel, type RigPlace } from './model';
 
 /**
  * The Atelier's pure scene (« une pièce = une table »), shared by Desktop's Atelier and the future « Bureaux ».
@@ -52,4 +52,14 @@ export function sceneOf(order: readonly Session[], projects: Projects | null, pr
   const target = all || filter === 'none' || rf ? undefined : list.find(p => p.id === filter);
   const empty = target && rooms.length === 0 ? target : null;
   return { rooms, unassigned, empty };
+}
+
+/**
+ * Who sits at a table of `max` seats, the rest going to « +N »: the seats with a session first (so J / K, which walks only them, always
+ * finds them drawn), then the placeholders in the room left, each group keeping the table's order. Without placeholders, a plain cut.
+ */
+export function tableSeats(mains: readonly Session[], max: number): { seated: Session[]; extra: Session[] } {
+  const real = mains.filter(s => !isSeatPlaceholder(s.id));
+  const keep = new Set([...real.slice(0, max), ...mains.filter(s => isSeatPlaceholder(s.id)).slice(0, Math.max(0, max - real.length))]);
+  return { seated: mains.filter(s => keep.has(s)), extra: mains.filter(s => !keep.has(s)) };
 }
