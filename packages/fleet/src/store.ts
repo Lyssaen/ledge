@@ -21,7 +21,9 @@ export interface DaemonState {
   /** The live sessions (archived ones excluded). */
   sessions: Session[];
   /** The archived sessions, most recently archived first. */
-  archived: Session[]; byId: Map<string, Session>; status: DaemonStatus; previews: Map<string, string[]>; lastError: DaemonError | null;
+  archived: Session[]; byId: Map<string, Session>; status: DaemonStatus; previews: Map<string, string[]>;
+  /** The color preview (SGR sequences kept) of the session being followed, by qualified id. */
+  colorPreviews: Map<string, string[]>; lastError: DaemonError | null;
   /** Les ERRORS_KEPT derniers `error`, du plus ancien au plus récent; `lastError` est le dernier. */
   errors: readonly DaemonError[];
   /** Native tracking: the threads received so far, by session (asked for when a session opens). */
@@ -47,7 +49,7 @@ export interface DaemonState {
 }
 /** The daemon's last `folder.listing` answer (to this client's `folder.list` or `folder.create`); `seq` tells two apart. */
 export type FolderListing = Omit<Extract<ServerMessage, { type: 'folder.listing' }>, 'type'> & { seq: number };
-const empty = (): DaemonState => ({ sessions: [], archived: [], byId: new Map(), status: 'connecting', previews: new Map(), threads: new Map(), lastError: null, errors: [], recents: [], launcher: null, lastLaunched: null, lastListing: null, chat: [], chatLive: null, daemon: null, snapshotSeq: 0, ledgeThread: [], threadLoading: false, answering: new Map(), lastUpdate: null });
+const empty = (): DaemonState => ({ sessions: [], archived: [], byId: new Map(), status: 'connecting', previews: new Map(), colorPreviews: new Map(), threads: new Map(), lastError: null, errors: [], recents: [], launcher: null, lastLaunched: null, lastListing: null, chat: [], chatLive: null, daemon: null, snapshotSeq: 0, ledgeThread: [], threadLoading: false, answering: new Map(), lastUpdate: null });
 const archivedOf = (m: Map<string, Session>) => [...m.values()].filter(isArchived).sort((a, b) => (b.archivedAt ?? '').localeCompare(a.archivedAt ?? '') || a.id.localeCompare(b.id));
 let state: DaemonState = empty();
 const subs = new Set<() => void>();
@@ -101,11 +103,12 @@ export const daemonStore = {
     if (m.type === 'folder.listing') { const { type: _, ...l } = m; state = { ...state, lastListing: { ...l, seq: (state.lastListing?.seq ?? 0) + 1 } }; emit(); return; }
     if (m.type === 'update.progress' || m.type === 'update.failed') { state = { ...state, lastUpdate: { msg: m, seq: (state.lastUpdate?.seq ?? 0) + 1 } }; emit(); return; }
     if (m.type === 'recents') { state = { ...state, recents: m.recents }; emit(); return; }
-    const byId = new Map(state.byId); const previews = new Map(state.previews); const threads = new Map(state.threads);
+    const byId = new Map(state.byId); const previews = new Map(state.previews); const colorPreviews = new Map(state.colorPreviews); const threads = new Map(state.threads);
     let { recents, launcher, daemon, snapshotSeq } = state;
     switch (m.type) {
       case 'snapshot':
         byId.clear(); for (const s of m.sessions) byId.set(s.id, s); for (const id of previews.keys()) if (!byId.has(id)) previews.delete(id);
+        for (const id of colorPreviews.keys()) if (!byId.has(id)) colorPreviews.delete(id);
         recents = m.recents ?? []; launcher = m.launcher ?? null;
         daemon = m.daemon ?? null; snapshotSeq += 1;
         // A session frozen by keepStale (spec 2026-10-14 §6) keeps the thread already received: its machine cannot be
@@ -113,8 +116,9 @@ export const daemonStore = {
         for (const id of [...threads.keys()]) if (!byId.get(id)?.offline) threads.delete(id);
         break;
       case 'session.updated': byId.set(m.session.id, m.session); break;
-      case 'session.removed': byId.delete(m.id); previews.delete(m.id); threads.delete(m.id); break;
+      case 'session.removed': byId.delete(m.id); previews.delete(m.id); colorPreviews.delete(m.id); threads.delete(m.id); break;
       case 'session.preview': previews.set(m.id, m.lines); break;
+      case 'session.preview.color': colorPreviews.set(m.id, m.lines); break;
       case 'session.thread': threads.set(m.id, m.items); break;
       case 'session.thread.item': {
         const cur = threads.get(m.id);
@@ -124,7 +128,7 @@ export const daemonStore = {
         break;
       }
     }
-    state = { ...state, byId, previews, threads, sessions: sorted(byId), archived: archivedOf(byId), recents, launcher, daemon, snapshotSeq }; emit();
+    state = { ...state, byId, previews, colorPreviews, threads, sessions: sorted(byId), archived: archivedOf(byId), recents, launcher, daemon, snapshotSeq }; emit();
   }
 };
 

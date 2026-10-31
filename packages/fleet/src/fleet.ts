@@ -244,6 +244,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     if (m.type === 'session.removed') { if (p.snapshot) p.snapshot = { ...p.snapshot, sessions: p.snapshot.sessions.filter(s => s.id !== m.id) }; p.previews.delete(m.id); emit({ ...m, id: qualify(machine, m.id) }); refresh(); return; }
     if (m.type === 'recents') { if (p.snapshot) p.snapshot = { ...p.snapshot, recents: m.recents }; if (machine === selected && available(p)) emit(m); refresh(); return; }
     if (m.type === 'session.preview') { p.previews.set(m.id, m.lines); if (available(p)) emit({ ...m, id: qualify(machine, m.id) }); return; }
+    // The color preview goes only to the connection that followed the session: qualified like the plain one, and not kept for a stale peer.
+    if (m.type === 'session.preview.color') { if (available(p)) emit({ ...m, id: qualify(machine, m.id) }); return; }
     if (m.type === 'session.thread' || m.type === 'session.thread.item' || m.type === 'session.queue.restored') { if (available(p)) emit({ ...m, id: qualify(machine, m.id) }); return; }
     if (m.type === 'session.launched') { if (!closeRows.has(machine)) operations.delete(machine); emit({ ...m, id: qualify(machine, m.id) }); return; }
     if (m.type === 'session.closed') { emit({ ...m, qid: globalQid(machine, m.qid), id: qualify(machine, m.id) }); return; }
