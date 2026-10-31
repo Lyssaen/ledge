@@ -117,7 +117,7 @@ export function Sidebar(p: {
           onOpen={(id, helper, focus) => p.dispatch({ type: 'open', id, ...(helper !== undefined ? { helper } : {}), ...(focus !== undefined ? { focus } : {}) })}
           onDecide={(s, ok) => { p.decisions.decide(s, ok ? 'accept' : 'deny'); }}
           asks={p.asks} onAnswerAsk={p.onAnswerAsk}
-          rigs={rigs} onAnswerEscalation={p.onAnswerEscalation} onSeeEscalation={() => p.dispatch({ type: 'ledge', tab: 'conversation' })}
+          rigs={rigs} onAnswerEscalation={p.onAnswerEscalation} onSeeEscalation={e => p.dispatch({ type: 'ledge', tab: 'conversation', focus: e.id })}
           near={near} onHandover={id => { void p.relief?.handover(id); }}
           onLater={id => { const s = p.sessions.find(x => x.id === id); if (s) p.relief?.putLater(s); }}
           onMenu={(id, e) => {

@@ -15,6 +15,8 @@ import { ResidentMascot } from '@ledge/ui/bots/ResidentMascot';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import type { FleetView } from '../fleet/useFleet';
+import type { Decisions } from '../fleet/decisions';
+import { LedgeRail } from './LedgeRail';
 import { chatCopy, ledgeThreadCopy, useI18n } from '../i18n/lang';
 import { useMotionPreferences } from '../motionPreferences';
 import { useTheme } from '../shell/theme';
@@ -30,6 +32,9 @@ export interface LedgeConversationProps {
   client: DaemonClient; view: FleetView; dispatch: (a: NavAction) => void;
   /** Bumped each time the screen is asked for (`/`): the field takes the focus. */
   focus?: number;
+  /** The escalation whose card the thread scrolls to (`{type:'ledge', focus}`); spent through `onFocused`. */
+  focusCard?: string; onFocused?(): void;
+  waits?: ReadonlyMap<string, { since: string }>; decisions?: Decisions;
   projects?: Projects | null; paused?: boolean;
   onLaunched?(id: string): void; onTerminal?(id: string): void; notify?(text: string): void; onProposal?(pid: string): void;
 }
@@ -43,6 +48,8 @@ export function mentionAt(text: string): { sigil: '@'; query: string; start: num
 /** Stuck to the bottom while the user is within this many pixels of it. */
 const STICK_PX = 48;
 const MENTIONS_MAX = 8;
+/** The rail sits beside the thread from this width of the conversation. */
+const RAIL_MIN_PX = 1100;
 const noop = () => {};
 
 /** A decision in message: its card answers through the daemon (`escalation.answer`), its state follows the latest attempt. */
@@ -112,6 +119,28 @@ export function LedgeConversation(p: LedgeConversationProps): JSX.Element {
   const stick = useRef(true);
   useLayoutEffect(() => { const el = scroller.current; if (el && stick.current) el.scrollTop = el.scrollHeight; }, [rows, chatLive?.text]);
 
+  // « Voir »: the thread scrolls to that escalation's card, once the card is drawn.
+  const { focusCard, onFocused } = p;
+  useEffect(() => {
+    if (!focusCard) return;
+    const card = scroller.current?.querySelector<HTMLElement>(`[data-escalation-card="${CSS.escape(focusCard)}"]`);
+    if (!card) return;
+    stick.current = false;
+    card.scrollIntoView?.({ block: 'center', behavior: reduced ? 'auto' : 'smooth' });
+    onFocused?.();
+  }, [focusCard, rows, reduced, onFocused]);
+
+  // Wide: the rail beside the thread. Narrow: one collapsed line under the header. Unmeasurable (tests): wide.
+  const conv = useRef<HTMLDivElement>(null);
+  const [compact, setCompact] = useState(false);
+  useLayoutEffect(() => {
+    const el = conv.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => { const w = el.clientWidth; setCompact(w > 0 && w < RAIL_MIN_PX); });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   // The composer.
   const [draft, setDraft] = useState('');
   const [about, setAbout] = useState<string | null>(null);
@@ -160,7 +189,7 @@ export function LedgeConversation(p: LedgeConversationProps): JSX.Element {
   return (
     <ChatCopyProvider value={chatC}>
       <LedgeThreadCopyProvider value={threadC}>
-        <div className="home-conv" role="tabpanel" aria-label={t.home.tabs.conversation}>
+        <div ref={conv} className={cls('home-conv', compact && 'narrow')} role="tabpanel" aria-label={t.home.tabs.conversation}>
           <div className="home-conv-main">
             <div ref={scroller} className="home-thread ledge-scroll" role="log" aria-label={t.home.thread}
               onScroll={e => { const el = e.currentTarget; stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < STICK_PX; }}>
@@ -183,7 +212,7 @@ export function LedgeConversation(p: LedgeConversationProps): JSX.Element {
                   case 'escalation':
                     return row.escalation ? (
                       <LedgeBubble key={row.item.id} at={row.item.at} avatar={mascot}>
-                        <EscalationRow client={client} escalation={row.escalation} onTalk={talk} />
+                        <div data-escalation-card={row.escalation.id}><EscalationRow client={client} escalation={row.escalation} onTalk={talk} /></div>
                       </LedgeBubble>
                     ) : null;
                   case 'decided':
@@ -220,8 +249,7 @@ export function LedgeConversation(p: LedgeConversationProps): JSX.Element {
               <small className="home-footnote">{t.home.footer}</small>
             </div>
           </div>
-          {/* The rail (À toi, Rigs, Tranché aujourd'hui) comes with task 10. */}
-          <div className="home-rail" data-rail />
+          <LedgeRail client={client} view={view} dispatch={dispatch} waits={p.waits} decisions={p.decisions} paused={p.paused} compact={compact} />
         </div>
       </LedgeThreadCopyProvider>
     </ChatCopyProvider>

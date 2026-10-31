@@ -18,7 +18,7 @@ import type { Wait } from '../list/time';
 import { HomePlaceholder } from './HomePlaceholder';
 import { LedgeConversation } from './LedgeConversation';
 
-/** `relief`, `decisions` and `waits` feed the rail (« À toi ») of task 10. */
+/** `decisions` and `waits` feed the rail (« À toi »). */
 export interface LedgeHomeProps {
   client: DaemonClient; view: FleetView; relief: Relief; decisions: Decisions; waits: ReadonlyMap<string, Wait>;
   tab: HomeTab; nav: NavState; dispatch: (a: NavAction) => void;
@@ -62,7 +62,8 @@ export function LedgeHome(p: LedgeHomeProps): JSX.Element {
           {HOME_TABS.map(x => <button key={x} type="button" role="tab" aria-selected={tab === x} className={cls(tab === x && 'on')} onClick={() => dispatch({ type: 'ledge', tab: x })}>{labels[x]}</button>)}
         </div>
         <div className="home-body">
-          {tab === 'conversation' && <LedgeConversation client={client} view={view} dispatch={dispatch} focus={p.focus} projects={p.projects} paused={p.paused}
+          {tab === 'conversation' && <LedgeConversation client={client} view={view} dispatch={dispatch} focus={p.focus} projects={p.projects} paused={p.paused} waits={p.waits} decisions={p.decisions}
+            focusCard={p.nav.place.kind === 'home' ? p.nav.place.focus : undefined} onFocused={() => dispatch({ type: 'ledge-focused' })}
             onLaunched={p.onLaunched} onTerminal={p.onTerminal} notify={p.notify} onProposal={p.onProposal} />}
           {tab === 'rigs' && <RigsTab nav={p.nav} dispatch={dispatch} client={client} sessions={view.sessions} projects={p.projects} notify={p.notify} />}
           {tab === 'mandat' && <HomePlaceholder title={t.home.mandat.title} body={t.home.mandat.body} />}

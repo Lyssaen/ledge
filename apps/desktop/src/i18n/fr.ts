@@ -453,7 +453,15 @@ export const fr = {
     mentions: 'Mentionner', mentionSession: (name: string) => `session ${name}`,
     /** « En parler » of a decision: the field starts with this, the next message carries the escalation. */
     talkAbout: (summary: string) => `À propos de « ${summary} » : `,
-    mandat: { title: 'Mandat', body: 'Le mandat de Ledge arrive avec son cerveau.' }
+    mandat: { title: 'Mandat', body: 'Le mandat de Ledge arrive avec son cerveau.' },
+    /** The right rail of the Conversation tab (spec §8, `c-A.png`). */
+    rail: {
+      label: 'Rail de Ledge', yours: (n: number) => `À toi · ${n}`, rigs: (n: number) => `Rigs · ${n}`,
+      collapsed: (yours: number, rigs: number) => `À toi · ${yours} · Rigs · ${rigs}`,
+      atWork: (name: string, n: number, m: number) => `${name} ${n}/${m} au travail`, table: 'Table',
+      settled: (n: number) => `Tranché aujourd'hui · ${n}`, revisit: 'Revenir',
+      summarise: 'Résumer la journée', summarisePrompt: "Résume ma journée : ce que les rigs ont fait, ce que j'ai tranché, ce qui m'attend."
+    }
   },
   /** Ledge's thread (lot 4): `ledgeThreadCopy` hands it to `@ledge/ui`'s thread components. */
   ledgeThread: {

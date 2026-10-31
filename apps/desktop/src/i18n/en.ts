@@ -430,7 +430,14 @@ export const en: Messages = {
     footer: 'settles within its mandate · design, architecture and critical calls come back to you',
     mentions: 'Mention', mentionSession: (name: string) => `session ${name}`,
     talkAbout: (summary) => `About « ${summary} »: `,
-    mandat: { title: 'Mandate', body: "Ledge's mandate arrives with its brain." }
+    mandat: { title: 'Mandate', body: "Ledge's mandate arrives with its brain." },
+    rail: {
+      label: 'Ledge rail', yours: (n) => `Your turn · ${n}`, rigs: (n) => `Rigs · ${n}`,
+      collapsed: (yours, rigs) => `Your turn · ${yours} · Rigs · ${rigs}`,
+      atWork: (name, n, m) => `${name} ${n}/${m} at work`, table: 'Table',
+      settled: (n) => `Settled today · ${n}`, revisit: 'Revisit',
+      summarise: 'Summarise the day', summarisePrompt: 'Summarise my day: what the rigs did, what I settled, what is waiting for me.'
+    }
   },
   ledgeThread: {
     days: { today: 'TODAY', yesterday: 'YESTERDAY', date: (day) => `${day.slice(8, 10)}/${day.slice(5, 7)}` },

@@ -20,7 +20,7 @@ export type Place =
   /** Ledge's home view, where the app opens (ledge home spec §2.1): `view` and `project` are the atelier's, kept for the
    *  way back; `back` is the place Échap returns to (none at start: the atelier); `rigs` the Rigs tab's sub-tab and `spec` the spec
    *  chosen in its Specs, kept while the user goes from tab to tab. */
-  | { kind: 'home'; tab: HomeTab; view: View; project: ProjectFilter; back?: Exclude<Place, { kind: 'settings' } | { kind: 'home' }>; rigs?: RigsSub; spec?: string }
+  | { kind: 'home'; tab: HomeTab; view: View; project: ProjectFilter; focus?: string; back?: Exclude<Place, { kind: 'settings' } | { kind: 'home' }>; rigs?: RigsSub; spec?: string }
   | { kind: 'overview'; view: View; project: ProjectFilter }
   /** helper : la page d'un sous-agent de `id` ; focus : la réponse prend le focus à l'arrivée (« Répondre ») ; item : le message (id du fil) que la page met en vue et allume (« Voir dans le fil de X »). */
   | { kind: 'session'; id: string; helper?: string; focus?: 'reply'; item?: string; view: View; project: ProjectFilter }
@@ -45,7 +45,9 @@ export type NavAction =
   /** The atelier (the overview), on a project filter. */
   | { type: 'home'; project?: ProjectFilter }
   /** Ledge's home view, on a tab (and the Rigs tab's sub-tab, the spec chosen in Specs); its composer takes the focus (`chatFocus`). */
-  | { type: 'ledge'; tab?: HomeTab; rigs?: RigsSub; spec?: string }
+  | { type: 'ledge'; tab?: HomeTab; rigs?: RigsSub; spec?: string; focus?: string }
+  /** The thread scrolled to the escalation `focus` named: the request is spent. */
+  | { type: 'ledge-focused' }
   /** Sets the current place's project filter without going anywhere (a session page stays open; in Settings, the place behind). */
   | { type: 'filter'; project: ProjectFilter }
   | { type: 'open'; id: string; helper?: string; focus?: 'reply'; item?: string }
@@ -85,8 +87,13 @@ function reduce(s: NavState, a: NavAction): NavState {
       const rigs = a.rigs ?? was?.rigs;
       const spec = a.spec ?? was?.spec;
       // The docked chat closes: the home view is the same conversation, wider.
-      return { ...s, place: { kind: 'home', tab, view: b.view, project: b.project, ...(back ? { back } : {}), ...(rigs ? { rigs } : {}), ...(spec !== undefined ? { spec } : {}) },
+      return { ...s, place: { kind: 'home', tab, view: b.view, project: b.project, ...(back ? { back } : {}), ...(rigs ? { rigs } : {}), ...(spec !== undefined ? { spec } : {}), ...(a.focus ? { focus: a.focus } : {}) },
         modal: null, chat: false, chatFocus: s.chatFocus + 1 };
+    }
+    case 'ledge-focused': {
+      if (place.kind !== 'home' || place.focus === undefined) return s;
+      const { focus: _spent, ...rest } = place;
+      return { ...s, place: rest };
     }
     case 'filter': {
       if (baseOf(place).project === a.project) return s;
