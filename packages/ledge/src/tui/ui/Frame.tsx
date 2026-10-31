@@ -1,11 +1,11 @@
 import type { ReactNode } from 'react';
 import { Box, Text } from 'ink';
-import { isPending } from '@ledge/fleet';
+import { isPending, useTasks } from '@ledge/fleet';
 import { useScreenSize, useTui } from '../context.js';
 import { cells } from '../model/cells.js';
 import { C } from '../theme.js';
 import { fitKeys, KeyBar } from './KeyBar.js';
-import { listed } from '../model/overview.js';
+import { listed, openDecisions } from '../model/overview.js';
 
 /** The smallest terminal the screens are drawn in; below, the frame says so (the screen keeps its state). */
 export const MIN = { columns: 60, rows: 16 } as const;
@@ -15,11 +15,12 @@ export const MIN = { columns: 60, rows: 16 } as const;
 export function Frame({ crumb, crumbShort, keys, kept, children }: {
   crumb: string; crumbShort?: string; keys: ReadonlyArray<readonly [string, string]>; kept?: boolean; children: ReactNode;
 }) {
-  const { d, machines, t, g, lastToast, editing } = useTui();
+  const { d, machines, t, g, lastToast, editing, client } = useTui();
   const { rows, columns } = useScreenSize();
   const live = listed(d.sessions);
   const pending = live.filter(isPending);
-  const waiting = pending.length;
+  // Who waits: the sessions' requests and the decisions they put to the user.
+  const waiting = pending.length + openDecisions(useTasks(client)).length;
   const status = d.status === 'open' ? null : d.status === 'connecting' ? t.bar.connecting : t.bar.unreachable;
 
   if (columns < MIN.columns || rows < MIN.rows) {

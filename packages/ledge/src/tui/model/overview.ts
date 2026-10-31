@@ -1,5 +1,5 @@
 import { isPending, liveHelpers, splitId } from '@ledge/fleet';
-import { contextNear, LEDGE_GIVER, projectOf, taskClosed, transmissions, type Project, type ProjectColor, type Projects, type Session, type Task, type Team } from '@ledge/protocol';
+import { contextNear, LEDGE_GIVER, openDecision, projectOf, taskClosed, transmissions, type Project, type ProjectColor, type Projects, type Session, type Task, type Team } from '@ledge/protocol';
 
 /** A session row of the tree under its branch. */
 export interface BranchRow { branch: string; sessions: Session[] }
@@ -108,3 +108,6 @@ export const nearContext = (sessions: readonly Session[], near?: number): Sessio
   sessions.filter(s => s.state !== 'exited' && !s.archivedAt && (s.handover ? s.handover.state === 'failed' : contextNear(s.context, near)));
 
 export const closedLedgeTasks = (tasks: readonly Task[]): Task[] => tasks.filter(x => x.giver === LEDGE_GIVER && taskClosed(x) && !x.seen);
+
+/** The decisions sessions put to the user (`ledge task give ledge …`) not answered yet, oldest first: items of « À toi », answered with D. */
+export const openDecisions = (tasks: readonly Task[]): Task[] => tasks.filter(openDecision);
