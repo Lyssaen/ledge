@@ -1,9 +1,10 @@
 import { isDeepStrictEqual } from 'node:util';
-import { join, relative, isAbsolute, sep } from 'node:path';
+import { relative, isAbsolute, sep } from 'node:path';
 import { type Projects, type Rig, type RigLifecycle, type RigSeat } from '@ledge/protocol';
 import { EVENTS, EVENTS_UNOBSERVED } from './facts.js';
 import type { OpenRigEvent } from './sse.js';
 import { toSeat } from './seats.js';
+import { paths } from '../../paths.js';
 import { rigProjectId } from './adopt.js';
 import type { KernelStatus, NodeEntry, PsEntry } from './wire.js';
 
@@ -20,10 +21,10 @@ export interface Mirror {
 interface Entry { ps: PsEntry; nodes: NodeEntry[] }
 const REFETCH = new Set<string>([EVENTS.rigImported, EVENTS.nodeLaunched, EVENTS.nodeStartupReady, ...Object.values(EVENTS_UNOBSERVED)]);
 
-export function createMirror(opts: { machine: string; projects: () => Projects; home: string }): Mirror {
+export function createMirror(opts: { machine: string; projects: () => Projects; rigsRoot?: string }): Mirror {
   const entries = new Map<string, Entry>(); const pairs = new Map<string, string>(); // seat ref -> Ledge session id
   let kernel: KernelStatus | null = null; let unreachable = false;
-  const rigsRoot = join(opts.home, '.ledge', 'rigs');
+  const rigsRoot = opts.rigsRoot ?? paths().rigs;
   const underRigs = (cwd: string) => { const r = relative(rigsRoot, cwd); return r !== '' && r !== '..' && !r.startsWith('..' + sep) && !isAbsolute(r); };
   const nameOf = (ps: PsEntry) => String(ps.rigName ?? ps.name ?? ps.rigId);
   const isKernel = (ps: PsEntry) => {

@@ -7,6 +7,7 @@ import { openEventStream, type EventStream, type OpenRigEvent } from './sse.js';
 import { createCursorWriter, readOpenRigFile } from './cursor.js';
 import { createRigCli, realRigExec, type RigCli, type RigExec } from './cli.js';
 import { probeOpenRig } from './presence.js';
+import { paths } from '../../paths.js';
 import { createMirror } from './mirror.js';
 import { parseSessionName } from './seats.js';
 import { createEscalationBook, createFirstSeen, rowToEscalation } from './escalations.js';
@@ -90,7 +91,7 @@ export function createBridge(deps: BridgeDeps): Bridge {
   const outboxMs = deps.outboxMs ?? 5000; const resyncMs = deps.resyncMs ?? 60_000; const openMs = deps.openMs ?? 5000;
   const now = deps.now ?? (() => new Date().toISOString()); const notice = deps.notice ?? (() => {});
   const cli = createRigCli(deps.exec ?? realRigExec(deps.env)); const probeWith = versionCache(cli);
-  const mirror = createMirror({ machine, projects: deps.projects, home: deps.home });
+  const mirror = createMirror({ machine, projects: deps.projects, rigsRoot: paths().rigs });
   const rigBook = createEscalationBook(); const askBook = createEscalationBook(); const xlog = createExchangeLog();
   const listeners = new Set<(m: BridgeMessage) => void>();
   const firstSeen = createFirstSeen(now);
