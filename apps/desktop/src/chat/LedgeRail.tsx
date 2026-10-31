@@ -49,7 +49,7 @@ function EscalationItem(p: { client: DaemonClient; escalation: Escalation; rigs:
 
 /**
  * The right rail of the Ledge screen (spec §8.2, `c-A.png`): « À toi · n » (answered in place), « Rigs · n » with who is at work,
- * « Tranché aujourd'hui · n » (only with decisions: the store arrives with lot 7) and « Résumer la journée ». `compact` is the narrow
+ * « Tranché aujourd'hui · n » (Ledge's decisions of the day, with « Revenir »; hidden while none) and « Résumer la journée ». `compact` is the narrow
  * layout: one line « À toi · 3 · Rigs · 2 », expandable.
  */
 export function LedgeRail(p: {

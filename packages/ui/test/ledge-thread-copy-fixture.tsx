@@ -19,7 +19,8 @@ export const frThread: LedgeThreadCopy = {
     missing: n => (n === 1 ? '1 échange plus disponible' : `${n} échanges plus disponibles`),
     kind: { task: 'tâche', message: 'message', handoff: 'relève', ledge: 'Ledge' }
   },
-  decided: { line: (to, summary) => `J'ai tranché pour ${to} : ${summary}`, rule: rule => `Règle ${rule}`, revisit: 'Revenir dessus' }
+  decided: { line: (to, summary) => `J'ai tranché pour ${to} : ${summary}`, rule: rule => `Règle ${rule}`, ruleOf: since => `Règle du ${since.slice(8, 10)}/${since.slice(5, 7)}`, revisit: 'Revenir dessus' },
+  brain: { stopped: 'Ledge est arrêté', start: 'Démarrer' }
 };
 
 export function Fr({ children }: { children: ReactNode }) {

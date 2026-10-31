@@ -1,4 +1,4 @@
-import type { Projects, Rig, Session } from '@ledge/protocol';
+import type { ChatRigLaunch, Projects, Rig, Session } from '@ledge/protocol';
 import { parseRigFilter } from '@ledge/ui/rigs/model';
 import type { Overview } from './overview';
 
@@ -33,9 +33,15 @@ export type Modal =
   // edit : id du projet à modifier ; file : id de la session à y ranger (lot 8) ; delete : ouvert sur sa vue de suppression (Réglages › Projets, lot 10) ;
   // proposal : le pid d'une proposition de Ledge retenue par rememberProposal (lot 11), ouverte pour être vérifiée
   | { kind: 'project'; edit?: string; file?: string; delete?: true; proposal?: string }
-  // Lancer un rig (lot 3 : fenêtre d'attente ; le lot 5 la remplit) : pré-remplissage du projet, de la spec, du but et de la machine.
-  | { kind: 'rig-launch'; project?: string; spec?: string; goal?: string; machine?: string }
+  // Lancer un rig (lot 3 : fenêtre d'attente ; le lot 5 la remplit) : pré-remplissage du projet, de la spec, du but et de la machine ;
+  // off : le nom de l'espace hors projet (la carte « Lancer ce rig » du cerveau, lot 7).
+  | { kind: 'rig-launch'; project?: string; spec?: string; goal?: string; machine?: string; off?: string }
   | null;
+/** The launch window a « Lancer ce rig » card opens (lot 7): its project or off-project name, spec, goal and machine. */
+export function rigLaunchModal(c: ChatRigLaunch): Extract<Modal, { kind: 'rig-launch' }> {
+  return { kind: 'rig-launch', goal: c.goal, ...(c.spec ? { spec: c.spec } : {}), ...(c.project ? { project: c.project } : {}),
+    ...(c.off ? { off: c.off } : {}), ...(c.machine ? { machine: c.machine } : {}) };
+}
 /** What the Ledge screen was on when the user left it: its tab, the Rigs sub-tab, the spec chosen in Specs. */
 export interface HomeMemo { tab: HomeTab; rigs?: RigsSub; spec?: string }
 /** chatFocus: bumped each time the chat is asked for (/, an open button), even already open: its field takes the focus again.

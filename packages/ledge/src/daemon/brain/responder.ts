@@ -1,3 +1,4 @@
+import { BRAIN_STOPPED_TEXT } from '@ledge/protocol';
 import type { BrainStatus, Escalation, LedgeThreadItem } from '@ledge/protocol';
 import type { BrainInbox } from './inbox.js';
 import type { LedgeThread } from '../ledgeThread.js';
@@ -5,8 +6,8 @@ import type { Responder } from '../ledgeSay.js';
 import { log } from '../../log.js';
 
 type UserItem = Extract<LedgeThreadItem, { kind: 'user' }>;
-/** The thread bubble that tells the brain is stopped; the UI renders its « Démarrer » button on exactly this text. */
-export const BRAIN_STOPPED_TEXT = 'Ledge est arrêté · Démarrer';
+/** The thread bubble that tells the brain is stopped; the UI renders its « Démarrer » button on exactly this text (protocol). */
+export { BRAIN_STOPPED_TEXT };
 /** Announced once, when the user accepts the first activation offer. */
 export const BRAIN_FIRST_TEXT = 'Je pense en continu désormais : je lis les escalades des rigs, je tranche ce que mon mandat permet après une minute, et je te passe le reste.';
 

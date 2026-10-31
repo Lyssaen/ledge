@@ -29,13 +29,14 @@ export function slugOfGoal(goal: string): string {
 
 export function rigFormDefaults(p: {
   projects: readonly Project[]; machines: readonly MachineState[];
-  wanted: { project?: string; spec?: string; goal?: string; machine?: string };
+  wanted: { project?: string; spec?: string; goal?: string; machine?: string; off?: string };
 }): RigForm {
   const goal = p.wanted.goal ?? '';
   const spec = p.wanted.spec ?? null;
   const machine = p.machines.find((m) => m.id === p.wanted.machine)?.id ?? p.machines.find((m) => m.id === 'local')?.id ?? p.machines[0]?.id ?? 'local';
   const project = p.projects.find((x) => x.id === p.wanted.project);
-  if (!project) return { goal, spec, machine, place: { kind: 'off', name: slugOfGoal(goal), nameTouched: false } };
+  // An off-project name given (the brain's card) is kept as the user's; otherwise it follows the goal.
+  if (!project) return { goal, spec, machine, place: p.wanted.off ? { kind: 'off', name: p.wanted.off, nameTouched: true } : { kind: 'off', name: slugOfGoal(goal), nameTouched: false } };
   const repo = project.repos.find((r) => r.machine === machine)?.path ?? null;
   return { goal, spec, machine, place: { kind: 'project', projectId: project.id, repo, branch: spec ? `feat/${spec}` : '', copy: true } };
 }

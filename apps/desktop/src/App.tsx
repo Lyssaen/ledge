@@ -18,7 +18,7 @@ import { DaemonOutdated } from './shell/DaemonOutdated';
 import { daemonTokenSource, onOpenTarget, onTrayAction, openUrl, setTrayLabels } from './tauri/bridge';
 import { parseTarget, targetAction } from './open/target';
 import { useAppearance } from './shell/theme';
-import { initialNav, navReducer, reconcile, type NavAction, type NavState } from './nav/state';
+import { initialNav, navReducer, reconcile, rigLaunchModal, type NavAction, type NavState } from './nav/state';
 import { loadOverview, saveOverview } from './nav/overview';
 import { ScreenKeysContext, type ScreenKeys } from './nav/screenKeys';
 import { mainOrder } from './nav/agents';
@@ -330,7 +330,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         {nav.chat && (
           <ChatPlace label={t.side.chat} client={fleetClient} view={fleetView} paused={nav.paused} focus={nav.chatFocus} onClose={() => dispatch({ type: 'chat', open: false })}
             onOpenSession={id => dispatch({ type: 'open', id })} onTerminal={showTerminal} onLaunched={chatLaunched}
-            projects={projects} notify={notify} onProposal={openProposal} />
+            projects={projects} notify={notify} onProposal={openProposal} onRigLaunch={card => dispatch({ type: 'modal', modal: rigLaunchModal(card) })} />
         )}
       </div>
       {nav.modal?.kind === 'search' && <SearchPalette sessions={sessions} projectName={projectName} order={order} onOpen={id => dispatch({ type: 'open', id })} onClose={close} />}

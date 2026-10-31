@@ -133,6 +133,8 @@ export type BrainOp = typeof BRAIN_OPS[number];
 export const BRAIN_RESULT_CODES = ['not_brain', 'identity', 'mandate', 'grace', 'invalid', 'refused', 'already_answered', 'failed', 'unreachable', 'openrig_down'] as const;
 export const BrainResultCodeSchema = z.enum(BRAIN_RESULT_CODES);
 export type BrainResultCode = z.infer<typeof BrainResultCodeSchema>;
+/** The thread bubble that tells the brain is stopped (posted by the daemon); the UI renders « Démarrer » on exactly this text. */
+export const BRAIN_STOPPED_TEXT = 'Ledge est arrêté · Démarrer';
 /** The labels shown under each category of the Mandat tab. */
 export const MANDATE_CATEGORY_TAGS: Record<MandateCategory, string[]> = {
   git: ['merge', 'branches'], tests: ['ciblés', 'relance'], context: ['operator'], code: ['nommage', 'style'],

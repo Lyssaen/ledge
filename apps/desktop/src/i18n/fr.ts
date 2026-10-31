@@ -512,7 +512,9 @@ export const fr = {
       missing: (n: number) => (n === 1 ? '1 échange plus disponible' : `${n} échanges plus disponibles`),
       kind: { task: 'tâche', message: 'message', handoff: 'relève', ledge: 'Ledge' } as Record<Exchange['kind'], string>
     },
-    decided: { line: (to: string, summary: string) => `J'ai tranché pour ${to} : ${summary}`, rule: (rule: string) => `Règle ${rule}`, revisit: 'Revenir dessus' }
+    decided: { line: (to: string, summary: string) => `J'ai tranché pour ${to} : ${summary}`, rule: (rule: string) => `Règle ${rule}`,
+      ruleOf: (since: string) => `Règle du ${since.slice(8, 10)}/${since.slice(5, 7)}`, revisit: 'Revenir dessus' },
+    brain: { stopped: 'Ledge est arrêté', start: 'Démarrer' }
   },
   /** The Rigs tab of the Ledge screen (spec §8.2): En cours · Specs · Agents. */
   rigsTab: {
@@ -1075,6 +1077,8 @@ export const fr = {
     },
     // #94 : la carte générique, une ligne par action, un plan au-delà d’une (docs/mockups/ledge-action-card.html).
     action: actionCopy.fr,
+    // Lot 7 : la carte que le cerveau pose ; son bouton ouvre la fenêtre de lancement pré-remplie.
+    rigLaunch: { label: 'Rig à lancer', launch: 'Lancer ce rig' },
     project: {
       label: 'Proposition de projet', title: (name: string) => `Proposition de projet · ${name}`, complete: (name: string) => `Compléter ${name}`,
       repos: (n: number) => `${n} dépôt${n > 1 ? 's' : ''}`, review: 'Vérifier la proposition'

@@ -41,10 +41,14 @@ export interface LedgeThreadCopy {
   decided: {
     /** « J'ai tranché pour build : merge, pas de rebase ». */
     line: (to: string, summary: string) => string;
-    /** The rule a decision applied (`LedgeDecision.rule`). */
+    /** The rule a decision applied, by its id, when the rule is no longer known (`LedgeDecision.rule`). */
     rule: (rule: string) => string;
+    /** The rule a decision applied, by the local day it holds since (`LedgeRule.since`, `YYYY-MM-DD`): « Règle du 26/10 ». */
+    ruleOf: (since: string) => string;
     revisit: string;
   };
+  /** The bubble « Ledge est arrêté · Démarrer » (lot 7): its text and its button, which turns the brain on. */
+  brain: { stopped: string; start: string };
 }
 
 const LedgeThreadCopyContext = createContext<LedgeThreadCopy | null>(null);

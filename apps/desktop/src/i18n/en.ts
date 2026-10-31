@@ -486,7 +486,9 @@ export const en: Messages = {
       missing: (n) => (n === 1 ? '1 exchange no longer available' : `${n} exchanges no longer available`),
       kind: { task: 'task', message: 'message', handoff: 'handover', ledge: 'Ledge' }
     },
-    decided: { line: (to, summary) => `I settled for ${to}: ${summary}`, rule: (rule) => `Rule ${rule}`, revisit: 'Revisit' }
+    decided: { line: (to, summary) => `I settled for ${to}: ${summary}`, rule: (rule) => `Rule ${rule}`,
+      ruleOf: (since) => `Rule from ${since.slice(8, 10)}/${since.slice(5, 7)}`, revisit: 'Revisit' },
+    brain: { stopped: 'Ledge is stopped', start: 'Start' }
   },
   rigsTab: {
     tabs: 'Rig views',
@@ -1024,6 +1026,7 @@ export const en: Messages = {
     },
     // #94: the generic card, a row per action, a plan past one (docs/mockups/ledge-action-card.html).
     action: actionCopy.en,
+    rigLaunch: { label: 'Rig to launch', launch: 'Launch this rig' },
     project: {
       label: 'Project proposal', title: (name: string) => `Project proposal · ${name}`, complete: (name: string) => `Complete ${name}`,
       repos: (n: number) => `${n} ${n === 1 ? 'repository' : 'repositories'}`, review: 'Review the proposal'

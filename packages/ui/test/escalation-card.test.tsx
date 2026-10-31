@@ -4,7 +4,7 @@ import type { Escalation } from '@ledge/protocol';
 import { EscalationCard } from '../src/chat/ledge/EscalationCard';
 import { CategoryChip } from '../src/chat/ledge/CategoryChip';
 import { DecidedLine } from '../src/chat/ledge/DecidedLine';
-import { LedgeBubble, UserBubble } from '../src/chat/ledge/ThreadBubbles';
+import { BrainStopped, isBrainStopped, LedgeBubble, UserBubble } from '../src/chat/ledge/ThreadBubbles';
 import { useLedgeThreadCopy } from '../src/chat/ledge/copy';
 import { Fr } from './ledge-thread-copy-fixture';
 
@@ -163,11 +163,26 @@ describe('the other thread pieces', () => {
 
   it('DecidedLine says what Ledge settled and offers to revisit', () => {
     const onRevisit = vi.fn();
-    render(<Fr><DecidedLine decision={{ id: 'd1', escalationId: 'qi-1', by: 'ledge', category: 'git', summary: 'merge, pas de rebase', answers: {}, rule: 'du 26/10', at: NOW }} to="build" onRevisit={onRevisit} /></Fr>);
-    expect(screen.getByText("J'ai tranché pour build : merge, pas de rebase")).toBeVisible();
+    const rule = { id: 'r1', text: 'merge', category: 'git' as const, since: '2026-10-26', from: 'user', appliedCount: 1, status: 'active' as const };
+    render(<Fr><DecidedLine decision={{ id: 'd1', escalationId: 'qi-1', by: 'ledge', category: 'git', summary: 'merge, pas de rebase', answers: {}, rule: 'r1', why: 'branche partagée', at: NOW }} to="build" rule={rule} onRevisit={onRevisit} /></Fr>);
+    expect(screen.getByText("J'ai tranché pour build : merge, pas de rebase.")).toBeVisible();
     expect(screen.getByText('Règle du 26/10')).toBeVisible();
+    expect(screen.getByText('branche partagée')).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'Revenir dessus' }));
     expect(onRevisit).toHaveBeenCalled();
+  });
+
+  it('DecidedLine falls back to the rule id when the rule is gone; BrainStopped offers Démarrer', () => {
+    const onStart = vi.fn();
+    render(<Fr><DecidedLine decision={{ id: 'd2', escalationId: 'qi-2', by: 'ledge', category: 'git', summary: 'relancer', answers: {}, rule: 'r9', at: NOW }} to="qa" />
+      <BrainStopped onStartBrain={onStart} /></Fr>);
+    expect(screen.getByText('Règle r9')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Revenir dessus' })).toBeNull();
+    expect(screen.getByText('Ledge est arrêté')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Démarrer' }));
+    expect(onStart).toHaveBeenCalled();
+    expect(isBrainStopped('Ledge est arrêté · Démarrer')).toBe(true);
+    expect(isBrainStopped('Ledge est arrêté')).toBe(false);
   });
 
   it('bubbles carry their author and time', () => {

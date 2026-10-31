@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent } from 'react';
-import { answerEscalation, sayToLedge, useAnswerState, useDaemon, useEscalations, useLedgeThread, useOpenRig, useRigs, type DaemonClient } from '@ledge/fleet';
-import { hideProposal, type Escalation, type Projects } from '@ledge/protocol';
+import { answerEscalation, revisitDecision, sayToLedge, setBrain, useAnswerState, useDaemon, useEscalations, useLedgeDecisionList, useLedgeDecisions, useLedgeRules, useLedgeThread, useOpenRig, useRigs, type DaemonClient } from '@ledge/fleet';
+import { hideProposal, type ChatRigLaunch, type Escalation, type Projects } from '@ledge/protocol';
 import { ChatAnswer, TurnCards } from '@ledge/ui/chat/ChatView';
 import { ChatCopyProvider } from '@ledge/ui/chat/copy';
 import { useActionCards } from '@ledge/ui/chat/useActionCards';
@@ -8,7 +8,7 @@ import { LedgeThreadCopyProvider } from '@ledge/ui/chat/ledge/copy';
 import { DecidedLine } from '@ledge/ui/chat/ledge/DecidedLine';
 import { EscalationCard } from '@ledge/ui/chat/ledge/EscalationCard';
 import { ExchangeGroup } from '@ledge/ui/chat/ledge/ExchangeGroup';
-import { LedgeBubble, UserBubble } from '@ledge/ui/chat/ledge/ThreadBubbles';
+import { BrainStopped, isBrainStopped, LedgeBubble, UserBubble } from '@ledge/ui/chat/ledge/ThreadBubbles';
 import { localDay, threadRows } from '@ledge/ui/chat/ledge/threadModel';
 import { isStandalone, seatMentions } from '@ledge/ui/rigs/model';
 import { ResidentMascot } from '@ledge/ui/bots/ResidentMascot';
@@ -21,12 +21,13 @@ import { chatCopy, ledgeThreadCopy, useI18n } from '../i18n/lang';
 import { useMotionPreferences } from '../motionPreferences';
 import { useTheme } from '../shell/theme';
 import { cls } from '../shell/cls';
-import type { NavAction } from '../nav/state';
+import { rigLaunchModal, type NavAction } from '../nav/state';
 import { visibleRigs } from '../rigs/RigsTab';
 import { useRigExchanges } from '../rigs/useRigExchanges';
 import { useChatCards } from './useChatCards';
 import { CardModelPick } from './CardModelPick';
 import { useProjectReview } from './projectReview';
+import { decisionsToday } from './mandate/model';
 
 export interface LedgeConversationProps {
   client: DaemonClient; view: FleetView; dispatch: (a: NavAction) => void;
@@ -34,6 +35,7 @@ export interface LedgeConversationProps {
   focus?: number;
   /** The escalation whose card the thread scrolls to (`{type:'ledge', focus}`); spent through `onFocused`. */
   focusCard?: string; onFocused?(): void;
+  /** `decisions`: the session permissions (Allow/Deny), not what Ledge settled (those come from the fleet store). */
   waits?: ReadonlyMap<string, { since: string }>; decisions?: Decisions;
   projects?: Projects | null; paused?: boolean;
   onLaunched?(id: string): void; onTerminal?(id: string): void; notify?(text: string): void; onProposal?(pid: string): void;
@@ -90,8 +92,14 @@ export function LedgeConversation(p: LedgeConversationProps): JSX.Element {
   }, [items]);
   const exchanges = useRigExchanges(client, named);
   const today = localDay(new Date().toISOString());
-  const rows = useMemo(() => threadRows(items, { escalations: escById, exchanges: (m, id) => exchanges.get(`${m}/${id}`), chat, today, days: threadC.days }),
-    [items, escById, exchanges, chat, today, threadC]);
+  // What Ledge settled (lot 7): the thread's `decided` lines, their rule's day, and the rail's « Tranché aujourd'hui ».
+  const ledgeDecisions = useLedgeDecisions();
+  const decisionList = useLedgeDecisionList();
+  const rules = useLedgeRules();
+  const rulesById = useMemo(() => new Map(rules.map(r => [r.id, r])), [rules]);
+  const settled = useMemo(() => decisionsToday(decisionList, today, 'ledge'), [decisionList, today]);
+  const rows = useMemo(() => threadRows(items, { escalations: escById, exchanges: (m, id) => exchanges.get(`${m}/${id}`), chat, decisions: ledgeDecisions, today, days: threadC.days }),
+    [items, escById, exchanges, chat, ledgeDecisions, today, threadC]);
   const lastGroup = rows.reduce((at, r, i) => (r.kind === 'exchanges' ? i : at), -1);
 
   // The turns' cards, as the docked chat draws them.
@@ -103,13 +111,15 @@ export function LedgeConversation(p: LedgeConversationProps): JSX.Element {
   const actionCards = useActionCards({ send, chat, errors: view.errors, turnReady, onMessage });
   const project = useProjectReview({ chat, projects: p.projects ?? null, machines: view.machines, notify: p.notify ?? noop, onProposal: p.onProposal ?? noop });
   const open = (id: string) => dispatch({ type: 'open', id });
+  // « Lancer ce rig » (the brain's card): the lot-5 launch window, prefilled; it prepares the plan again.
+  const launchRig = useCallback((c: ChatRigLaunch) => dispatch({ type: 'modal', modal: rigLaunchModal(c) }), [dispatch]);
   const cardProps = {
     sessions: view.sessions, offline, docked: true, turnAvailable: turnReady, onOpenSession: open, onTerminal: p.onTerminal,
     renderModel: (qid: string, agent: Parameters<typeof CardModelPick>[0]['tool'], b: boolean) => <CardModelPick client={client} machine={turnMachine(qid)} tool={agent} pick={cards.pick(qid)} disabled={b} onPick={next => cards.setPick(qid, next)} />,
     launchingQid: cards.launchingQid, launchingRows: cards.launchingRows, onLaunchProposal: cards.launch,
     closingQid: cards.closingQid, closingRows: cards.closingRows, onCloseSessions: cards.close,
     relayingQid: cards.relayingQid, onRelay: cards.relay, onRelayCancel: cards.cancelRelay,
-    onProject: project.review, projectNamed: project.projectNamed,
+    onProject: project.review, projectNamed: project.projectNamed, onRigLaunch: launchRig,
     onAct: actionCards.act, actingQid: actionCards.actingQid, actingRows: actionCards.actingRows, onIgnoreCards: actionCards.ignore, onDenyAction: actionCards.deny,
     theme, reducedMotion: p.paused || reduced
   };
@@ -199,6 +209,9 @@ export function LedgeConversation(p: LedgeConversationProps): JSX.Element {
                   case 'day': return <div key={`day-${row.day}`} className="home-day" role="separator"><span>{row.label}</span></div>;
                   case 'user': return <UserBubble key={row.item.id} at={row.item.at} text={row.item.text} {...(row.to ? { to: row.to } : {})} />;
                   case 'ledge': {
+                    if (isBrainStopped(row.item.text)) {
+                      return <LedgeBubble key={row.item.id} at={row.item.at} avatar={mascot}><BrainStopped onStartBrain={offline ? undefined : () => setBrain(client, { enabled: true })} /></LedgeBubble>;
+                    }
                     const live = row.turn && chatLive?.qid === row.turn.qid ? hideProposal(chatLive.text) : '';
                     const text = row.item.text || live;
                     return (
@@ -217,7 +230,10 @@ export function LedgeConversation(p: LedgeConversationProps): JSX.Element {
                     ) : null;
                   case 'decided':
                     return row.decision ? (
-                      <LedgeBubble key={row.item.id} at={row.item.at} avatar={mascot}><DecidedLine decision={row.decision} to={row.to ?? ''} /></LedgeBubble>
+                      <LedgeBubble key={row.item.id} at={row.item.at} avatar={mascot}>
+                        <DecidedLine decision={row.decision} to={row.to ?? ''} rule={row.decision.rule ? rulesById.get(row.decision.rule) : undefined}
+                          onRevisit={() => revisitDecision(client, row.decision!.id)} />
+                      </LedgeBubble>
                     ) : null;
                   case 'exchanges': {
                     const name = allRigs.find(r => r.machine === row.item.machine && r.id === row.item.rigId)?.name ?? row.item.rigId;
@@ -249,7 +265,8 @@ export function LedgeConversation(p: LedgeConversationProps): JSX.Element {
               <small className="home-footnote">{t.home.footer}</small>
             </div>
           </div>
-          <LedgeRail client={client} view={view} dispatch={dispatch} waits={p.waits} decisions={p.decisions} paused={p.paused} compact={compact} />
+          <LedgeRail client={client} view={view} dispatch={dispatch} waits={p.waits} decisions={p.decisions} paused={p.paused} compact={compact}
+            settled={settled} onRevisit={d => revisitDecision(client, d.id)} />
         </div>
       </LedgeThreadCopyProvider>
     </ChatCopyProvider>
