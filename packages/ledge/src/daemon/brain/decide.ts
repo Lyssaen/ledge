@@ -123,6 +123,8 @@ export function createDeciding(d: DecidingDeps): Deciding {
     const category = e.category ?? 'code';
     const decision = d.memory.record({ by: 'user', category, escalationId: e.id, summary: summaryOf(e, e.answer.answers), answers: e.answer.answers,
       at: e.answer.at, from: e.from, ...(e.rigId ? { rigId: e.rigId } : {}) });
+    // A correction (« Revenir dessus »): the corrected decision points to this one.
+    if (e.correcting) d.memory.markRevisited(e.correcting, decision.id);
     push({ kind: 'answered', escalation: e });
     const pair = d.memory.repeatedUserAnswer(decision, id => d.escalations.escalation(id));
     if (!pair) return;

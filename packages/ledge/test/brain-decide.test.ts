@@ -43,7 +43,7 @@ function make() {
     replyRow: () => undefined, setReplyRow: () => {},
   };
   const real = createAnswers({ port, path: { kind: 'approve-only' }, localMachine: 'local', now: () => new Date(Date.now()).toISOString() });
-  answers = { answer: (...a) => { answerCalls.push(a); return real.answer(...a); }, onAnswered: fn => real.onAnswered(fn) };
+  answers = { answer: (...a) => { answerCalls.push(a); return real.answer(...a); }, correct: (...a) => real.correct(...a), onAnswered: fn => real.onAnswered(fn) };
   let n = 0;
   deciding = createDeciding({ escalations: b, answers,
     thread: { append: item => { const full = { ...item, id: `t${++n}`, at: new Date(Date.now()).toISOString() } as LedgeThreadItem; thread.push(full); return full; } },

@@ -72,6 +72,7 @@ import { DEFAULT_MANDATE, ensureMandate, parseMandate } from './brain/mandate.js
 import { createBrainInbox } from './brain/inbox.js';
 import { brainResponder, BRAIN_FIRST_TEXT } from './brain/responder.js';
 import { createDeciding, type Deciding } from './brain/decide.js';
+import { createRevisit } from './brain/revisit.js';
 import { createBrainCommands, parseBrainArgs, NOT_BRAIN_LINE, type RigActMsg, type RigPrepareMsg, type RigResult } from './brain/commands.js';
 import { readContext } from './context.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
@@ -394,6 +395,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   };
   if (bridge && answers) deciding = createDeciding({ escalations: { escalation: bridge.escalation, patchEscalation: bridge.patchEscalation },
     answers, thread, memory, inbox: brainInbox, mandate: readMandate, brainOn: () => brain.status().state === 'on', now: Date.now });
+  /** « Revenir dessus » (Lot 7): a correction while the seat has not taken the reply, a conversation once it has. */
+  const revisits = bridge && answers ? createRevisit({ memory, escalations: { escalation: bridge.escalation, patchEscalation: bridge.patchEscalation },
+    answers, thread, inbox: brainInbox, brainOn: () => brain.status().state === 'on', bridge }) : null;
   // Ledge's thread is answered by the brain; the one-shot runner serves when there is none (it reads the status itself).
   ledgeSay.setResponder(brainResponder({ inbox: brainInbox, thread, fallback: ledgeSay.oneShot, status: brain.status, hasSession: () => brain.session() !== undefined, onStatus: brain.onStatus }));
   // The brain's daily relief, at its first free moment after local midnight (Lot 7, Task 10).
@@ -1509,7 +1513,12 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return result({ ok: true });
       }
       case 'brain.cmd': return runBrainCmd(msg, reply);
-      case 'mandate.update': case 'rule.set': case 'decision.revisit': case 'category.escalate':
+      case 'decision.revisit': {
+        if (!revisits) return reply({ type: 'rig.result', rid: msg.rid, ok: false, reason: "OpenRig n'est pas branché" });
+        const r = await revisits.revisit(msg.id, msg.text);
+        return reply({ type: 'rig.result', rid: msg.rid, ok: r.ok, ...(r.reason !== undefined ? { reason: r.reason } : {}) });
+      }
+      case 'mandate.update': case 'rule.set': case 'category.escalate':
         return notYet();
       case 'brain.set': {
         if (msg.tool !== undefined && !isBrainTool(msg.tool)) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'invalid', reason: `${msg.tool === 'omp' ? 'OMP' : msg.tool} ne peut pas être le cerveau de Ledge : choisis Claude Code, Codex ou Cursor.` });
