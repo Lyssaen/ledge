@@ -1,12 +1,16 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Session, Team } from '@ledge/protocol';
+import { TEAM_SEATS_MAX, type Session, type Team } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
 import { createTeamsLive, teamsJournal, type TeamsLive } from '../src/daemon/teamsLive.js';
 import { resolveRoleAddress, seatContext, seatKey, seatView, teamChangeLine, teammates } from '../src/daemon/seat.js';
 import { identityContext } from '../src/cli/hook.js';
+
+// The daemon's log lines, read here (a team rejected at load is logged with its reason).
+const logged = vi.hoisted(() => [] as string[]);
+vi.mock('../src/log.js', () => ({ log: (line: string) => { logged.push(line); } }));
 
 const T0 = '2026-10-26T08:00:00.000Z';
 const mk = (id: string, name: string, extra: Partial<Session> = {}): Session => ({ id, name, tool: 'claude', cwd: '/w/ledge', project: 'ledge', title: `${name} · ledge`,
@@ -95,6 +99,25 @@ describe('live teams', () => {
     store.upsert({ ...store.get('otto')!, state: 'exited' });
     const again = createTeamsLive({ store, journal: teamsJournal(path), now: () => T0 });
     expect(again.get(t.id)).toMatchObject({ name: 'w', state: 'resting', seats: [{ role: 'build', sessionId: 'otto' }] });
+  });
+
+  it('join refuses a new role past the seats a team can keep; a free or held role is still taken there (#141)', () => {
+    const max = TEAM_SEATS_MAX * 2;
+    const t = teams.create({ name: 'full', project: 'ledge', cwd: '/w/ledge', roles: Array.from({ length: max }, (_, i) => `r${i}`) });
+    expect(teams.join(t.id, 'mila', 'qa', 'QA')).toBe(`l'équipe full a déjà ${max} sièges, le plus qu'elle puisse garder : libère un siège ou prends un rôle qu'elle a déjà`);
+    expect(teams.get(t.id)!.seats).toHaveLength(max);
+    expect(store.get('mila')!.team).toBeUndefined();
+    expect((teams.join(t.id, 'mila', 'r3', 'R3') as Team).seats.find(s => s.role === 'r3')!.sessionId).toBe('mila');
+  });
+
+  it('a team the journal cannot read back is logged at load, not dropped silently (#141)', () => {
+    logged.length = 0;
+    const bad = { id: 'team-abcd', name: 'big', project: 'ledge', machine: 'local', cwd: '/w/ledge', state: 'active', createdAt: T0, updatedAt: T0,
+      seats: Array.from({ length: TEAM_SEATS_MAX * 2 + 1 }, (_, i) => ({ role: `r${i}`, sessionId: null })) };
+    const again = createTeamsLive({ store, journal: { load: () => [bad as Team], save() {} }, now: () => T0 });
+    expect(again.get('team-abcd')).toBeUndefined();
+    expect(logged).toEqual([expect.stringMatching(/^teams journal: team team-abcd \(big\) rejected: .*seats/)]);
+    again.close();
   });
 });
 

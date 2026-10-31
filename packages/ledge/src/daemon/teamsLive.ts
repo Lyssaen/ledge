@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { isArchived, TeamSchema, type Seat, type Session, type Team } from '@ledge/protocol';
+import { isArchived, TEAM_SEATS_MAX, TeamSchema, type Seat, type Session, type Team } from '@ledge/protocol';
 import type { Store } from './store.js';
 import { jsonJournal, type Journal } from './journal.js';
 import { log } from '../log.js';
@@ -55,7 +55,13 @@ const live = (s: Session | undefined): boolean => !!s && s.state !== 'exited' &&
 export function createTeamsLive(d: TeamsLiveDeps): TeamsLive {
   const now = d.now ?? (() => new Date().toISOString());
   const teams = new Map<string, Team>();
-  for (const raw of d.journal?.load() ?? []) { const r = TeamSchema.safeParse(raw); if (r.success) teams.set(r.data.id, r.data); }
+  for (const raw of d.journal?.load() ?? []) {
+    const r = TeamSchema.safeParse(raw);
+    if (r.success) { teams.set(r.data.id, r.data); continue; }
+    // A team that no longer reads back is lost: said in the log, with what the schema refused.
+    const { id, name } = (raw ?? {}) as { id?: unknown; name?: unknown };
+    log(`teams journal: team ${String(id)} (${String(name)}) rejected: ${r.error.issues.map(i => `${i.path.join('.') || '(team)'} ${i.message}`).join(' ; ')}`);
+  }
   const listeners = new Set<(t: Team) => void>();
 
   const save = () => {
@@ -147,6 +153,8 @@ export function createTeamsLive(d: TeamsLiveDeps): TeamsLive {
       if (s.source !== 'launcher') return `${s.name} n'a pas été lancée par Ledge`;
       const held = t.seats.find(x => x.role === role && x.sessionId && x.sessionId !== sessionId && live(d.store.get(x.sessionId)));
       if (held) return `le rôle @${role} est déjà tenu dans ${t.name} par ${d.store.get(held.sessionId!)?.name ?? held.sessionId}`;
+      // A new role is a new seat: never past what the journal keeps (TeamSchema), or the team would be lost at the next start.
+      if (!t.seats.some(x => x.role === role) && t.seats.length >= TEAM_SEATS_MAX * 2) return `l'équipe ${t.name} a déjà ${t.seats.length} sièges, le plus qu'elle puisse garder : libère un siège ou prends un rôle qu'elle a déjà`;
       // The session's old seat in this team, under another role, is freed: one seat per session.
       const freed = { ...t, seats: t.seats.map(x => (x.sessionId === sessionId && x.role !== role ? { ...x, sessionId: null } : x)) };
       teams.set(id, freed);
