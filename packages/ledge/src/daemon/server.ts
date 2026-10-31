@@ -57,6 +57,7 @@ import { HUMAN_ADDRESS } from './openrig/facts.js';
 import { createLedgeThread } from './ledgeThread.js';
 import { createLedgeSay } from './ledgeSay.js';
 import { createSeatSend } from './openrig/seatSend.js';
+import { createPlans, prepareRigPlan } from './openrig/plan.js';
 import { createHandovers, heldNames } from './handover.js';
 import { readContext } from './context.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
@@ -316,6 +317,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const thread = createLedgeThread({ path: paths().ledgeThread, now });
   const unsubscribeThread = thread.onItem(item => broadcast({ type: 'ledge.thread.item', item }));
   const seatSend = bridge ? createSeatSend({ bridge }) : null;
+  /** The launch plans `rig.prepare` made, taken once by `rig.launch`. */
+  const rigPlans = createPlans(Date.now);
   /** Messages to Ledge (`ledge.say`): one at a time through the desktop chat, whose `chat.*` every front gets. */
   const ledgeSay = createLedgeSay({ thread, chat, escalations: id => bridge?.escalation(id), broadcast, tool: () => threads.deviceTool(),
     // `@seat …` goes to a rig seat; without OpenRig every text is a question to Ledge.
@@ -1346,7 +1349,21 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         const r = await seatSend.send(msg.machine, msg.seatRef, msg.text);
         return reply(r.ok ? { type: 'rig.result', rid: msg.rid, ok: true } : { type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: r.reason });
       }
-      case 'rig.prepare': case 'rig.launch': case 'rig.adopt':
+      case 'rig.prepare': {
+        if (msg.machine !== 'local') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'unreachable', reason: `machine ${msg.machine} is not this daemon's` });
+        const http = bridge?.http();
+        if (!bridge || !http || bridge.status().state !== 'running') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'openrig_down', reason: "OpenRig n'est pas branché" });
+        try {
+          const plan = await prepareRigPlan({ http, home: paths().dir, projects: () => projects, machine: msg.machine }, msg);
+          if ('refused' in plan) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: plan.refused });
+          rigPlans.put(plan);
+          return reply({ type: 'rig.plan', rid: msg.rid, plan });
+        } catch (e) {
+          log(`openrig: plan not made: ${(e as Error).message}`);
+          return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: e instanceof OpenRigUnreachable ? 'openrig_down' : 'failed', reason: (e as Error).message });
+        }
+      }
+      case 'rig.launch': case 'rig.adopt':
       case 'mandate.update': case 'rule.set': case 'decision.revisit': case 'category.escalate': case 'brain.set':
         return notYet();
       // A refusal of the service (an unknown pairing, a sign-in while disabled) reaches the sender as an `error`.
