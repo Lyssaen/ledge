@@ -55,7 +55,8 @@ export function formatBrainEvent(e: BrainEvent): string {
   }
 }
 
-export function createBrainInbox(d: { mailbox: Pick<Mailbox, 'notify'>; brainId: () => string | undefined }): { push(e: BrainEvent): boolean } {
+export type BrainInbox = { push(e: BrainEvent): boolean };
+export function createBrainInbox(d: { mailbox: Pick<Mailbox, 'notify'>; brainId: () => string | undefined }): BrainInbox {
   return {
     push(e) {
       const to = d.brainId();

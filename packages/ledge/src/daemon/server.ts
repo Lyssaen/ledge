@@ -70,6 +70,7 @@ import { isBrainTool } from './brain/settings.js';
 import { createMemory } from './brain/memory.js';
 import { DEFAULT_MANDATE, ensureMandate, parseMandate } from './brain/mandate.js';
 import { createBrainInbox } from './brain/inbox.js';
+import { brainResponder, BRAIN_FIRST_TEXT } from './brain/responder.js';
 import { createDeciding, type Deciding } from './brain/decide.js';
 import { createBrainCommands, parseBrainArgs, NOT_BRAIN_LINE, type RigActMsg, type RigPrepareMsg, type RigResult } from './brain/commands.js';
 import { readContext } from './context.js';
@@ -392,6 +393,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   };
   if (bridge && answers) deciding = createDeciding({ escalations: { escalation: bridge.escalation, patchEscalation: bridge.patchEscalation },
     answers, thread, memory, inbox: brainInbox, mandate: readMandate, brainOn: () => brain.status().state === 'on', now: Date.now });
+  // Ledge's thread is answered by the brain; the one-shot runner serves when there is none (it reads the status itself).
+  ledgeSay.setResponder(brainResponder({ inbox: brainInbox, thread, fallback: ledgeSay.oneShot, status: brain.status, hasSession: () => brain.session() !== undefined, onStatus: brain.onStatus }));
   const unsubscribeBrain = brain.onStatus(status => {
     broadcast({ type: 'brain.status', status });
     if (status.state === 'down' || status.state === 'off') deciding?.release(`brain ${status.state}`);
@@ -1500,7 +1503,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         catch (e) { return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: (e as Error).message }); }
         const st = brain.status();
         if (!msg.enabled && brain.session()) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: "Le cerveau de Ledge tourne encore : sa fermeture n'a pas abouti." });
-        return reply(st.state === 'down' ? { type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', ...(st.reason ? { reason: st.reason } : {}) } : { type: 'rig.result', rid: msg.rid, ok: true });
+        if (st.state === 'down') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', ...(st.reason ? { reason: st.reason } : {}) });
+        if (msg.first && msg.enabled) thread.append({ kind: 'ledge', text: BRAIN_FIRST_TEXT }); // the first activation says what Ledge now does
+        return reply({ type: 'rig.result', rid: msg.rid, ok: true });
       }
       // A refusal of the service (an unknown pairing, a sign-in while disabled) reaches the sender as an `error`.
       case 'mobile.set': case 'mobile.signin': case 'mobile.signin.cancel': case 'mobile.signout': case 'mobile.retry':

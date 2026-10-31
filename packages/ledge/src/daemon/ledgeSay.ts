@@ -15,6 +15,8 @@ export interface LedgeSay {
   say(rid: string, text: string, about?: string): Promise<void>;
   /** Lot 7 replaces the responder while the brain runs; null brings the one-shot runner back. */
   setResponder(r: Responder | null): void;
+  /** The one-shot runner itself: the brain's fallback. */
+  readonly oneShot: Responder;
 }
 
 /** How many messages may wait while Ledge answers one. */
@@ -139,5 +141,6 @@ export function createLedgeSay(d: {
       return enqueue(d.thread.append({ kind: 'user', id, text, qid: id }) as UserItem, about);
     },
     setResponder(r) { responder = r ?? oneShot; },
+    oneShot,
   };
 }
