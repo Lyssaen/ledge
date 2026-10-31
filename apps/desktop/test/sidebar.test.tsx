@@ -51,7 +51,7 @@ describe('the sidebar shell', () => {
     await waitFor(() => expect(entry).toHaveTextContent('A decision is waiting for you · factory'));
     expect(entry).toHaveAccessibleName(/1 unread$/);
     const cards = [...document.querySelectorAll('.st-attn .st-card')];
-    expect(cards.map(c => (c.matches('[data-ask]') ? 'ask' : c.matches('[data-near]') ? 'near' : 'session'))).toEqual(['session', 'session', 'ask', 'near']);
+    expect(cards.map(c => (c.matches('[data-ask]') ? 'ask' : c.matches('[data-near]') ? 'near' : c.matches('[data-escalation]') ? 'escalation' : 'session'))).toEqual(['session', 'session', 'escalation', 'ask', 'near']);
     const card = document.querySelector<HTMLElement>('[data-ask="a1b2c34"]')!;
     expect(within(card).getByText('Decision')).toBeVisible();
     expect(within(card).getByText('from Nova')).toBeVisible();
