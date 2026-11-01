@@ -83,7 +83,7 @@ const phaseHint = (p: UpdatePhase, c: ReturnType<typeof useI18n>['t']['settings'
 export function UpdatesCard({ saved }: { saved(what: string): void }): JSX.Element {
   const { t } = useI18n();
   const c = t.settings.updates;
-  const { phase, auto, checkedAt, app } = useUpdate();
+  const { phase, auto, checkedAt, app, channel } = useUpdate();
   // « Checked 3 min ago » stays true while the page is open.
   const [now, setNow] = useState(Date.now);
   useEffect(() => { const id = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(id); }, []);
@@ -102,6 +102,10 @@ export function UpdatesCard({ saved }: { saved(what: string): void }): JSX.Eleme
         {installable && <Button size="sm" variant="primary" onClick={() => void updater.install()}>{phase.kind === 'failed' ? c.retry : c.install}</Button>}
       </Row>
       <SwitchRow label={c.auto} hint={c.autoHint} checked={auto} onChange={on => { updater.setAuto(on); saved(on ? c.autoOn : c.autoOff); }} />
+      <Row label={c.channel} hint={c.channelHint}>
+        <Segmented label={c.channel} value={channel} disabled={installing} onChange={v => { updater.setChannel(v); saved(v === 'snapshot' ? c.snapshot : c.stable); }}
+          options={[{ value: 'stable', label: c.stable }, { value: 'snapshot', label: c.snapshot }]} />
+      </Row>
       <Row label={checkedLabel} hint={c.source}>
         <Button size="sm" variant="outline" disabled={checking || installing} onClick={() => void updater.check()}>
           <span className={checking ? 'ledge-spin' : undefined} style={{ display: 'inline-flex' }}><Icon d={ICONS.refresh.d} size={14} /></span>{c.check}

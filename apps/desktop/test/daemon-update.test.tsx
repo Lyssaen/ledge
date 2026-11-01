@@ -21,9 +21,9 @@ describe('daemonOffer', () => {
     expect(daemonOffer(local('0.5.0'), '0.6.0')).toBe('offer');
   });
   it('the target is the release on offer, else the running app', () => {
-    expect(daemonTarget({ phase: { kind: 'available', version: '0.6.0', notes: '' }, auto: true, checkedAt: 1, app: '0.5.0', latest: '0.6.0' })).toBe('0.6.0');
-    expect(daemonTarget({ phase: { kind: 'current' }, auto: true, checkedAt: 1, app: '0.5.0', latest: null })).toBe('0.5.0');
-    expect(daemonTarget({ phase: { kind: 'idle' }, auto: true, checkedAt: null, app: null, latest: null })).toBeNull();
+    expect(daemonTarget({ phase: { kind: 'available', version: '0.6.0', notes: '' }, auto: true, checkedAt: 1, app: '0.5.0', latest: '0.6.0', channel: 'stable' })).toBe('0.6.0');
+    expect(daemonTarget({ phase: { kind: 'current' }, auto: true, checkedAt: 1, app: '0.5.0', latest: null, channel: 'stable' })).toBe('0.5.0');
+    expect(daemonTarget({ phase: { kind: 'idle' }, auto: true, checkedAt: null, app: null, latest: null, channel: 'stable' })).toBeNull();
   });
 });
 

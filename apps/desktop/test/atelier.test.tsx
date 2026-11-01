@@ -28,7 +28,7 @@ describe('the atelier', () => {
     await boot({ sessions: [] });
     expect(screen.getByRole('button', { name: 'Talk to Ledge' })).toHaveTextContent("I'm watching over 0 agents.");
     expect(screen.queryAllByRole('region', { name: / table$/ })).toHaveLength(0);
-    expect(screen.queryByRole('region', { name: 'No project' })).toBeNull();
+    expect(screen.getByRole('region', { name: 'No project' })).toBeVisible();
   });
   it('a filter shows its table; a project without agents proposes New session; No project shows the zone only', async () => {
     const { side, user } = await boot();

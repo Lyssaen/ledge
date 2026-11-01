@@ -4,10 +4,13 @@ import { isTauri } from '../tauri/bridge';
 export interface AvailableUpdate { version: string; notes: string; downloadAndInstall(onProgress: (done: number, total: number | null) => void): Promise<void> }
 
 /** The newer release from latest-desktop.json, or null (none, or not in the app: browser, tests). Throws on network errors. */
-export async function checkForUpdate(): Promise<AvailableUpdate | null> {
+export async function checkForUpdate(channel: 'stable' | 'snapshot' = 'stable'): Promise<AvailableUpdate | null> {
   if (!isTauri()) return null;
-  const { check } = await import('@tauri-apps/plugin-updater');
-  const u = await check();
+  const { check, Update } = await import('@tauri-apps/plugin-updater');
+  const metadata = channel === 'snapshot'
+    ? await (await import('@tauri-apps/api/core')).invoke<ConstructorParameters<typeof Update>[0] | null>('check_snapshot_update')
+    : null;
+  const u = channel === 'snapshot' ? (metadata ? new Update(metadata) : null) : await check();
   if (!u) return null;
   return {
     version: u.version, notes: u.body ?? '',

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type JSX, type MouseEvent } from 'react';
+import type { MachineState } from '@ledge/fleet';
 import type { Project, Projects, Session } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
@@ -22,6 +23,7 @@ import { ProjectSwatch } from '../projects/ProjectSwatch';
 export interface AtelierProps {
   nav: NavState; dispatch: (a: NavAction) => void;
   sessions: readonly Session[]; projects: Projects | null; order: readonly Session[];
+  machines: readonly MachineState[];
   projectIdOf: (s: Session) => string | null;
   /** Putting the agents of « Sans projet » away: the tables are targets, the cards drag, « Ranger dans… » files. */
   filing: Filing;
@@ -50,12 +52,15 @@ function EmptyProject({ project, dispatch }: { project: Project; dispatch: (a: N
 /** The atelier (observatory.tsx, atelier mode): Ledge's desk, a table per project with agents, the filtered project's
  *  empty state, « Sans projet », then the legend; the zoom bar beside it. The mosaic is fitted to the space, zoomed and panned
  *  (useAtelierView). J / K (or ↓ / ↑) walk the agents shown, Entrée opens the chosen one; + / − / 0 zoom, Space pans. */
-export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf, filing, actions, menu }: AtelierProps): JSX.Element {
+export function Atelier({ nav, dispatch, sessions, projects, order, machines, projectIdOf, filing, actions, menu }: AtelierProps): JSX.Element {
   const { t } = useI18n();
   const { reduced } = useMotionPreferences();
   const { place } = nav;
   const filter = place.kind === 'settings' ? place.back.project : place.project;
-  const scene = useMemo(() => sceneOf(order, projects, projectIdOf, filter), [order, projects, projectIdOf, filter]);
+  // Kernel-only sessions are read-only hooks: they are shown in the server room, never seated at project tables.
+  const seatedOrder = useMemo(() => order.filter(s => s.source !== 'hook_only'), [order]);
+  const kernelSessions = useMemo(() => order.filter(s => s.source === 'hook_only'), [order]);
+  const scene = useMemo(() => sceneOf(seatedOrder, projects, projectIdOf, filter), [seatedOrder, projects, projectIdOf, filter]);
   const walk = useMemo(() => walkOrder(scene), [scene]);
   const clock = useMessageClock(sessions);
 
@@ -74,9 +79,13 @@ export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf,
   };
 
   // The mosaic's tiles, in render order: Ledge's desk, the tables, then the empty project or « Sans projet ».
+  const showZones = filter === 'all' || filter === 'none';
   const tiles = useMemo(() => [
-    LEDGE_TILE, ...scene.tables.map(t => roomWidth(t.mains.length)), ...(scene.empty || scene.unassigned.length > 0 ? [ZONE_TILE] : [])
-  ], [scene]);
+    LEDGE_TILE,
+    ...scene.tables.map(t => roomWidth(t.mains.length)),
+    ...(scene.empty ? [ZONE_TILE] : []),
+    ...(showZones ? [ZONE_TILE, ZONE_TILE] : [])
+  ], [scene, showZones]);
   const view = useAtelierView(tiles, [nav.helpers, nav.fullscreen, nav.chat, filter, sessions.length]);
   useScreenKeys(e => {
     if (view.keys(e)) return true;
@@ -134,8 +143,14 @@ export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf,
           ))}
         </div>
         {scene.empty && <EmptyProject project={scene.empty} dispatch={dispatch} />}
-        <Unassigned sessions={scene.unassigned} order={order} focusedId={focusedId} paused={nav.paused} dispatch={dispatch}
-          filing={filing} projects={projects?.projects ?? []} onMenu={menuAt} />
+        {showZones && (
+          <Unassigned kind="server" sessions={kernelSessions} order={order} focusedId={focusedId} paused={nav.paused} dispatch={dispatch}
+            filing={filing} projects={projects?.projects ?? []} machines={machines} onMenu={menuAt} />
+        )}
+        {showZones && (
+          <Unassigned kind="unassigned" sessions={scene.unassigned} order={order} focusedId={focusedId} paused={nav.paused} dispatch={dispatch}
+            filing={filing} projects={projects?.projects ?? []} machines={machines} onMenu={menuAt} />
+        )}
       </div>
       <div className="workspace-legend">
         <span><i className="live-dot" />{t.atelier.legend.working}</span>

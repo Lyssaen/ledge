@@ -225,7 +225,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           {place.kind === 'settings' ? <SettingsPlace section={place.section} ctx={settings} />
             : session && place.kind === 'session' ? <SessionPlace client={fleetClient} session={session} nav={nav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify} actions={actions}
                 prefs={sessionPrefs} setPrefs={setSessionPrefs} order={order} projects={projects} projectIdOf={projectIdOf} onRevealCurrent={() => setRevealCurrent(n => n + 1)} />
-            : <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu} />}
+            : <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} machines={machines}
+                projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu} />}
           {onOverview && <Footer dispatch={dispatch} localDown={localDown} island={island} />}
         </section>
         {nav.chat && (
