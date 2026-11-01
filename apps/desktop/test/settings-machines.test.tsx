@@ -43,9 +43,39 @@ describe('Settings › Machines', () => {
     // The mock's remotes never connect (its snapshot names no SSH alias): offline, so « Reconnect » is there.
     expect(screen.getByRole('article', { name: 'NAS' })).toHaveTextContent('SSH · nas · Unknown version · 0 sessions');
     expect(entry('NAS').getByText('Offline')).toBeVisible();
-    expect(entry('NAS').getAllByRole('button').map(b => b.textContent)).toEqual(['Reconnect', 'Test', 'Edit', 'Remove']);
+    expect(entry('NAS').getAllByRole('button').map(b => b.textContent)).toEqual(['Reconnect', 'Test', 'Edit', 'Disable', 'Remove']);
     expect(screen.getByText('3 machines · 20 at most')).toBeVisible();
     expect(saved()).toEqual([]);
+  });
+
+  it('« Disable » keeps the machine listed, sends it disabled, and « Enable » brings it back', async () => {
+    const { d, user } = await open(THREE);
+    await user.click(entry('NAS').getByRole('button', { name: 'Disable' }));
+    await waitFor(() => expect(sets(d)).toHaveLength(1));
+    const off = sets(d)[0]!.machines;
+    expect(off).toEqual([THREE[0], THREE[1], { ...THREE[2], disabled: true }]);
+    expect(saved()).toEqual([]);   // nothing optimistic
+    act(() => d.machines(off));
+    await waitFor(() => expect(saved()).toEqual(['Setting saved · NAS disabled']));
+    expect(names()).toEqual(['Local', 'Dev SSH', 'NAS']);
+    expect(entry('NAS').getByText('Disabled')).toBeVisible();
+    expect(screen.getByRole('article', { name: 'NAS' })).toHaveTextContent('Ledge no longer connects to it.');
+    expect(entry('NAS').getAllByRole('button').map(b => b.textContent)).toEqual(['Enable', 'Test', 'Edit', 'Remove']);
+    // Editing a disabled machine keeps it disabled.
+    await user.click(entry('NAS').getByRole('button', { name: 'Edit' }));
+    await user.clear(form().getByRole('textbox', { name: 'Machine name' }));
+    await user.type(form().getByRole('textbox', { name: 'Machine name' }), 'Nas box');
+    await user.click(form().getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(sets(d)).toHaveLength(2));
+    expect(sets(d)[1]!.machines[2]).toEqual({ id: 'nas', label: 'Nas box', ssh: 'nas', disabled: true });
+    act(() => d.machines(sets(d)[1]!.machines));
+    await screen.findByRole('article', { name: 'Nas box' });
+    await user.click(entry('Nas box').getByRole('button', { name: 'Enable' }));
+    await waitFor(() => expect(sets(d)).toHaveLength(3));
+    expect(sets(d)[2]!.machines[2]).toEqual({ id: 'nas', label: 'Nas box', ssh: 'nas' });
+    act(() => d.machines(sets(d)[2]!.machines));
+    await waitFor(() => expect(saved()).toContain('Setting saved · Nas box enabled'));
+    expect(entry('Nas box').queryByText('Disabled')).toBeNull();
   });
 
   it('« Reconnect » asks the fleet to reconnect that machine now', async () => {

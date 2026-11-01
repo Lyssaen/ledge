@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Fleet, MachineConfig, MachineState, ProbeResult } from '@ledge/fleet';
+import type { Fleet, MachineConfig, ProbeResult } from '@ledge/fleet';
 import { sameMachines } from './machineDrafts';
 
 export type MachineFleet = Pick<Fleet, 'configure' | 'probe' | 'retry' | 'onMachineMessage'>;
@@ -10,10 +10,10 @@ export interface MachineEditor { saving: boolean; save(next: MachineConfig[]): P
 
 /**
  * Saving waits for the daemon (spec §5.3): `configure` sends `machines.set`, and the save is done only when the fleet's
- * list equals the one sent (the daemon's `machines` broadcast). A closed local daemon, an `error` without id from it,
+ * configured list (disabled machines included) equals the one sent (the daemon's `machines` broadcast). A closed local daemon, an `error` without id from it,
  * or `timeoutMs` without an answer end it with nothing applied. One save at a time: a second call gets the first's promise.
  */
-export function useMachineEditor(fleet: MachineFleet, machines: readonly MachineState[], timeoutMs = SAVE_TIMEOUT_MS): MachineEditor {
+export function useMachineEditor(fleet: MachineFleet, machines: readonly MachineConfig[], timeoutMs = SAVE_TIMEOUT_MS): MachineEditor {
   const [saving, setSaving] = useState(false);
   const [probing, setProbing] = useState<ProbeState | null>(null);
   const busy = useRef<Promise<SaveOutcome> | null>(null);
