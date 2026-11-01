@@ -8,6 +8,8 @@ export { createSoundPrefs } from './sounds/preferences';
 export * from './i18n/lang';
 export * from './bots/poseFor';
 export * from './bots/Bot';
+export * from './bots/LogoBot';
+export * from './bots/LedgeSketch';
 export * from './bots/ResidentMascot';
 export * from './bots/material';
 export * from './bots/useBotMotion';

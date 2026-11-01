@@ -1,0 +1,3044 @@
+{
+ "height": 192,
+ "grid": 16,
+ "sizes": {
+  "s": {
+   "maxMains": 2,
+   "variants": {
+    "S-win": {
+     "file": "office-s-S-win.png",
+     "table_file": "office-s-S-win-table.png",
+     "front_file": "office-s-S-win-front.png",
+     "w": 176,
+     "h": 192,
+     "door": {
+      "x": 74,
+      "width": 28,
+      "side": "S"
+     },
+     "chair": [
+      15,
+      13
+     ],
+     "table": [
+      63,
+      100,
+      50,
+      34
+     ],
+     "seats": {
+      "t": [
+       {
+        "side": "t",
+        "x": 77,
+        "y": 89
+       }
+      ],
+      "b": [
+       {
+        "side": "b",
+        "x": 77,
+        "y": 133
+       }
+      ]
+     },
+     "ends": [
+      {
+       "end": "left",
+       "slot": 0,
+       "x": 45,
+       "y": 102
+      },
+      {
+       "end": "right",
+       "slot": 0,
+       "x": 116,
+       "y": 102
+      },
+      {
+       "end": "left",
+       "slot": 1,
+       "x": 45,
+       "y": 119
+      },
+      {
+       "end": "right",
+       "slot": 1,
+       "x": 116,
+       "y": 119
+      }
+     ]
+    },
+    "S-wall": {
+     "file": "office-s-S-wall.png",
+     "table_file": "office-s-S-wall-table.png",
+     "front_file": "office-s-S-wall-front.png",
+     "w": 176,
+     "h": 192,
+     "door": {
+      "x": 74,
+      "width": 28,
+      "side": "S"
+     },
+     "chair": [
+      15,
+      13
+     ],
+     "table": [
+      63,
+      100,
+      50,
+      34
+     ],
+     "seats": {
+      "t": [
+       {
+        "side": "t",
+        "x": 77,
+        "y": 89
+       }
+      ],
+      "b": [
+       {
+        "side": "b",
+        "x": 77,
+        "y": 133
+       }
+      ]
+     },
+     "ends": [
+      {
+       "end": "left",
+       "slot": 0,
+       "x": 45,
+       "y": 102
+      },
+      {
+       "end": "right",
+       "slot": 0,
+       "x": 116,
+       "y": 102
+      },
+      {
+       "end": "left",
+       "slot": 1,
+       "x": 45,
+       "y": 119
+      },
+      {
+       "end": "right",
+       "slot": 1,
+       "x": 116,
+       "y": 119
+      }
+     ]
+    },
+    "N-win": {
+     "file": "office-s-N-win.png",
+     "table_file": "office-s-N-win-table.png",
+     "front_file": "office-s-N-win-front.png",
+     "w": 176,
+     "h": 192,
+     "door": {
+      "x": 74,
+      "width": 28,
+      "side": "N"
+     },
+     "chair": [
+      15,
+      13
+     ],
+     "table": [
+      63,
+      75,
+      50,
+      34
+     ],
+     "seats": {
+      "t": [
+       {
+        "side": "t",
+        "x": 77,
+        "y": 64
+       }
+      ],
+      "b": [
+       {
+        "side": "b",
+        "x": 77,
+        "y": 108
+       }
+      ]
+     },
+     "ends": [
+      {
+       "end": "left",
+       "slot": 0,
+       "x": 45,
+       "y": 77
+      },
+      {
+       "end": "right",
+       "slot": 0,
+       "x": 116,
+       "y": 77
+      },
+      {
+       "end": "left",
+       "slot": 1,
+       "x": 45,
+       "y": 94
+      },
+      {
+       "end": "right",
+       "slot": 1,
+       "x": 116,
+       "y": 94
+      }
+     ]
+    },
+    "N-wall": {
+     "file": "office-s-N-wall.png",
+     "table_file": "office-s-N-wall-table.png",
+     "front_file": "office-s-N-wall-front.png",
+     "w": 176,
+     "h": 192,
+     "door": {
+      "x": 74,
+      "width": 28,
+      "side": "N"
+     },
+     "chair": [
+      15,
+      13
+     ],
+     "table": [
+      63,
+      75,
+      50,
+      34
+     ],
+     "seats": {
+      "t": [
+       {
+        "side": "t",
+        "x": 77,
+        "y": 64
+       }
+      ],
+      "b": [
+       {
+        "side": "b",
+        "x": 77,
+        "y": 108
+       }
+      ]
+     },
+     "ends": [
+      {
+       "end": "left",
+       "slot": 0,
+       "x": 45,
+       "y": 77
+      },
+      {
+       "end": "right",
+       "slot": 0,
+       "x": 116,
+       "y": 77
+      },
+      {
+       "end": "left",
+       "slot": 1,
+       "x": 45,
+       "y": 94
+      },
+      {
+       "end": "right",
+       "slot": 1,
+       "x": 116,
+       "y": 94
+      }
+     ]
+    }
+   },
+   "w": 176
+  },
+  "m": {
+   "maxMains": 4,
+   "variants": {
+    "S-win": {
+     "file": "office-m-S-win.png",
+     "table_file": "office-m-S-win-table.png",
+     "front_file": "office-m-S-win-front.png",
+     "w": 208,
+     "h": 192,
+     "door": {
+      "x": 90,
+      "width": 28,
+      "side": "S"
+     },
+     "chair": [
+      15,
+      13
+     ],
+     "table": [
+      64,
+      100,
+      80,
+      34
+     ],
+     "seats": {
+      "t": [
+       {
+        "side": "t",
+        "x": 78,
+        "y": 89
+       },
+       {
+        "side": "t",
+        "x": 108,
+        "y": 89
+       }
+      ],
+      "b": [
+       {
+        "side": "b",
+        "x": 78,
+        "y": 133
+       },
+       {
+        "side": "b",
+        "x": 108,
+        "y": 133
+       }
+      ]
+     },
+     "ends": [
+      {
+       "end": "left",
+       "slot": 0,
+       "x": 46,
+       "y": 102
+      },
+      {
+       "end": "right",
+       "slot": 0,
+       "x": 147,
+       "y": 102
+      },
+      {
+       "end": "left",
+       "slot": 1,
+       "x": 46,
+       "y": 119
+      },
+      {
+       "end": "right",
+       "slot": 1,
+       "x": 147,
+       "y": 119
+      }
+     ]
+    },
+    "S-wall": {
+     "file": "office-m-S-wall.png",
+     "table_file": "office-m-S-wall-table.png",
+     "front_file": "office-m-S-wall-front.png",
+     "w": 208,
+     "h": 192,
+     "door": {
+      "x": 90,
+      "width": 28,
+      "side": "S"
+     },
+     "chair": [
+      15,
+      13
+     ],
+     "table": [
+      64,
+      100,
+      80,
+      34
+     ],
+     "seats": {
+      "t": [
+       {
+        "side": "t",
+        "x": 78,
+        "y": 89
+       },
+       {
+        "side": "t",
+        "x": 108,
+        "y": 89
+       }
+      ],
+      "b": [
+       {
+        "side": "b",
+        "x": 78,
+        "y": 133
+       },
+       {
+        "side": "b",
+        "x": 108,
+        "y": 133
+       }
+      ]
+     },
+     "ends": [
+      {
+       "end": "left",
+       "slot": 0,
+       "x": 46,
+       "y": 102
+      },
+      {
+       "end": "right",
+       "slot": 0,
+       "x": 147,
+       "y": 102
+      },
+      {
+       "end": "left",
+       "slot": 1,
+       "x": 46,
+       "y": 119
+      },
+      {
+       "end": "right",
+       "slot": 1,
+       "x": 147,
+       "y": 119
+      }
+     ]
+    },
+    "N-win": {
+     "file": "office-m-N-win.png",
+     "table_file": "office-m-N-win-table.png",
+     "front_file": "office-m-N-win-front.png",
+     "w": 208,
+     "h": 192,
+     "door": {
+      "x": 90,
+      "width": 28,
+      "side": "N"
+     },
+     "chair": [
+      15,
+      13
+     ],
+     "table": [
+      64,
+      75,
+      80,
+      34
+     ],
+     "seats": {
+      "t": [
+       {
+        "side": "t",
+        "x": 78,
+        "y": 64
+       },
+       {
+        "side": "t",
+        "x": 108,
+        "y": 64
+       }
+      ],
+      "b": [
+       {
+        "side": "b",
+        "x": 78,
+        "y": 108
+       },
+       {
+        "side": "b",
+        "x": 108,
+        "y": 108
+       }
+      ]
+     },
+     "ends": [
+      {
+       "end": "left",
+       "slot": 0,
+       "x": 46,
+       "y": 77
+      },
+      {
+       "end": "right",
+       "slot": 0,
+       "x": 147,
+       "y": 77
+      },
+      {
+       "end": "left",
+       "slot": 1,
+       "x": 46,
+       "y": 94
+      },
+      {
+       "end": "right",
+       "slot": 1,
+       "x": 147,
+       "y": 94
+      }
+     ]
+    },
+    "N-wall": {
+     "file": "office-m-N-wall.png",
+     "table_file": "office-m-N-wall-table.png",
+     "front_file": "office-m-N-wall-front.png",
+     "w": 208,
+     "h": 192,
+     "door": {
+      "x": 90,
+      "width": 28,
+      "side": "N"
+     },
+     "chair": [
+      15,
+      13
+     ],
+     "table": [
+      64,
+      75,
+      80,
+      34
+     ],
+     "seats": {
+      "t": [
+       {
+        "side": "t",
+        "x": 78,
+        "y": 64
+       },
+       {
+        "side": "t",
+        "x": 108,
+        "y": 64
+       }
+      ],
+      "b": [
+       {
+        "side": "b",
+        "x": 78,
+        "y": 108
+       },
+       {
+        "side": "b",
+        "x": 108,
+        "y": 108
+       }
+      ]
+     },
+     "ends": [
+      {
+       "end": "left",
+       "slot": 0,
+       "x": 46,
+       "y": 77
+      },
+      {
+       "end": "right",
+       "slot": 0,
+       "x": 147,
+       "y": 77
+      },
+      {
+       "end": "left",
+       "slot": 1,
+       "x": 46,
+       "y": 94
+      },
+      {
+       "end": "right",
+       "slot": 1,
+       "x": 147,
+       "y": 94
+      }
+     ]
+    }
+   },
+   "w": 208
+  },
+  "l": {
+   "maxMains": 6,
+   "variants": {
+    "S-win": {
+     "file": "office-l-S-win.png",
+     "table_file": "office-l-S-win-table.png",
+     "front_file": "office-l-S-win-front.png",
+     "w": 240,
+     "h": 192,
+     "door": {
+      "x": 106,
+      "width": 28,
+      "side": "S"
+     },
+     "chair": [
+      15,
+      13
+     ],
+     "table": [
+      65,
+      100,
+      110,
+      34
+     ],
+     "seats": {
+      "t": [
+       {
+        "side": "t",
+        "x": 79,
+        "y": 89
+       },
+       {
+        "side": "t",
+        "x": 109,
+        "y": 89
+       },
+       {
+        "side": "t",
+        "x": 139,
+        "y": 89
+       }
+      ],
+      "b": [
+       {
+        "side": "b",
+        "x": 79,
+        "y": 133
+       },
+       {
+        "side": "b",
+        "x": 109,
+        "y": 133
+       },
+       {
+        "side": "b",
+        "x": 139,
+        "y": 133
+       }
+      ]
+     },
+     "ends": [
+      {
+       "end": "left",
+       "slot": 0,
+       "x": 47,
+       "y": 102
+      },
+      {
+       "end": "right",
+       "slot": 0,
+       "x": 178,
+       "y": 102
+      },
+      {
+       "end": "left",
+       "slot": 1,
+       "x": 47,
+       "y": 119
+      },
+      {
+       "end": "right",
+       "slot": 1,
+       "x": 178,
+       "y": 119
+      }
+     ]
+    },
+    "S-wall": {
+     "file": "office-l-S-wall.png",
+     "table_file": "office-l-S-wall-table.png",
+     "front_file": "office-l-S-wall-front.png",
+     "w": 240,
+     "h": 192,
+     "door": {
+      "x": 106,
+      "width": 28,
+      "side": "S"
+     },
+     "chair": [
+      15,
+      13
+     ],
+     "table": [
+      65,
+      100,
+      110,
+      34
+     ],
+     "seats": {
+      "t": [
+       {
+        "side": "t",
+        "x": 79,
+        "y": 89
+       },
+       {
+        "side": "t",
+        "x": 109,
+        "y": 89
+       },
+       {
+        "side": "t",
+        "x": 139,
+        "y": 89
+       }
+      ],
+      "b": [
+       {
+        "side": "b",
+        "x": 79,
+        "y": 133
+       },
+       {
+        "side": "b",
+        "x": 109,
+        "y": 133
+       },
+       {
+        "side": "b",
+        "x": 139,
+        "y": 133
+       }
+      ]
+     },
+     "ends": [
+      {
+       "end": "left",
+       "slot": 0,
+       "x": 47,
+       "y": 102
+      },
+      {
+       "end": "right",
+       "slot": 0,
+       "x": 178,
+       "y": 102
+      },
+      {
+       "end": "left",
+       "slot": 1,
+       "x": 47,
+       "y": 119
+      },
+      {
+       "end": "right",
+       "slot": 1,
+       "x": 178,
+       "y": 119
+      }
+     ]
+    },
+    "N-win": {
+     "file": "office-l-N-win.png",
+     "table_file": "office-l-N-win-table.png",
+     "front_file": "office-l-N-win-front.png",
+     "w": 240,
+     "h": 192,
+     "door": {
+      "x": 106,
+      "width": 28,
+      "side": "N"
+     },
+     "chair": [
+      15,
+      13
+     ],
+     "table": [
+      65,
+      75,
+      110,
+      34
+     ],
+     "seats": {
+      "t": [
+       {
+        "side": "t",
+        "x": 79,
+        "y": 64
+       },
+       {
+        "side": "t",
+        "x": 109,
+        "y": 64
+       },
+       {
+        "side": "t",
+        "x": 139,
+        "y": 64
+       }
+      ],
+      "b": [
+       {
+        "side": "b",
+        "x": 79,
+        "y": 108
+       },
+       {
+        "side": "b",
+        "x": 109,
+        "y": 108
+       },
+       {
+        "side": "b",
+        "x": 139,
+        "y": 108
+       }
+      ]
+     },
+     "ends": [
+      {
+       "end": "left",
+       "slot": 0,
+       "x": 47,
+       "y": 77
+      },
+      {
+       "end": "right",
+       "slot": 0,
+       "x": 178,
+       "y": 77
+      },
+      {
+       "end": "left",
+       "slot": 1,
+       "x": 47,
+       "y": 94
+      },
+      {
+       "end": "right",
+       "slot": 1,
+       "x": 178,
+       "y": 94
+      }
+     ]
+    },
+    "N-wall": {
+     "file": "office-l-N-wall.png",
+     "table_file": "office-l-N-wall-table.png",
+     "front_file": "office-l-N-wall-front.png",
+     "w": 240,
+     "h": 192,
+     "door": {
+      "x": 106,
+      "width": 28,
+      "side": "N"
+     },
+     "chair": [
+      15,
+      13
+     ],
+     "table": [
+      65,
+      75,
+      110,
+      34
+     ],
+     "seats": {
+      "t": [
+       {
+        "side": "t",
+        "x": 79,
+        "y": 64
+       },
+       {
+        "side": "t",
+        "x": 109,
+        "y": 64
+       },
+       {
+        "side": "t",
+        "x": 139,
+        "y": 64
+       }
+      ],
+      "b": [
+       {
+        "side": "b",
+        "x": 79,
+        "y": 108
+       },
+       {
+        "side": "b",
+        "x": 109,
+        "y": 108
+       },
+       {
+        "side": "b",
+        "x": 139,
+        "y": 108
+       }
+      ]
+     },
+     "ends": [
+      {
+       "end": "left",
+       "slot": 0,
+       "x": 47,
+       "y": 77
+      },
+      {
+       "end": "right",
+       "slot": 0,
+       "x": 178,
+       "y": 77
+      },
+      {
+       "end": "left",
+       "slot": 1,
+       "x": 47,
+       "y": 94
+      },
+      {
+       "end": "right",
+       "slot": 1,
+       "x": 178,
+       "y": 94
+      }
+     ]
+    }
+   },
+   "w": 240
+  },
+  "o2": {
+   "maxMains": 4,
+   "variants": {
+    "S-win": {
+     "file": "office-o2-S-win.png",
+     "table_file": "office-o2-S-win-table.png",
+     "front_file": "office-o2-S-win-front.png",
+     "w": 208,
+     "h": 192,
+     "door": {
+      "x": 90,
+      "width": 28,
+      "side": "S"
+     },
+     "chair": [
+      15,
+      13
+     ],
+     "table": [
+      47,
+      100,
+      114,
+      34
+     ],
+     "seats": {
+      "t": [
+       {
+        "side": "t",
+        "x": 51,
+        "y": 89
+       },
+       {
+        "side": "t",
+        "x": 142,
+        "y": 89
+       }
+      ],
+      "b": [
+       {
+        "side": "b",
+        "x": 51,
+        "y": 133
+       },
+       {
+        "side": "b",
+        "x": 142,
+        "y": 133
+       }
+      ]
+     },
+     "ends": [
+      {
+       "end": "left",
+       "slot": 0,
+       "x": 29,
+       "y": 102
+      },
+      {
+       "end": "right",
+       "slot": 0,
+       "x": 164,
+       "y": 102
+      },
+      {
+       "end": "left",
+       "slot": 1,
+       "x": 29,
+       "y": 119
+      },
+      {
+       "end": "right",
+       "slot": 1,
+       "x": 164,
+       "y": 119
+      }
+     ],
+     "islands": [
+      [
+       47,
+       70
+      ],
+      [
+       138,
+       161
+      ]
+     ]
+    },
+    "S-wall": {
+     "file": "office-o2-S-wall.png",
+     "table_file": "office-o2-S-wall-table.png",
+     "front_file": "office-o2-S-wall-front.png",
+     "w": 208,
+     "h": 192,
+     "door": {
+      "x": 90,
+      "width": 28,
+      "side": "S"
+     },
+     "chair": [
+      15,
+      13
+     ],
+     "table": [
+      47,
+      100,
+      114,
+      34
+     ],
+     "seats": {
+      "t": [
+       {
+        "side": "t",
+        "x": 51,
+        "y": 89
+       },
+       {
+        "side": "t",
+        "x": 142,
+        "y": 89
+       }
+      ],
+      "b": [
+       {
+        "side": "b",
+        "x": 51,
+        "y": 133
+       },
+       {
+        "side": "b",
+        "x": 142,
+        "y": 133
+       }
+      ]
+     },
+     "ends": [
+      {
+       "end": "left",
+       "slot": 0,
+       "x": 29,
+       "y": 102
+      },
+      {
+       "end": "right",
+       "slot": 0,
+       "x": 164,
+       "y": 102
+      },
+      {
+       "end": "left",
+       "slot": 1,
+       "x": 29,
+       "y": 119
+      },
+      {
+       "end": "right",
+       "slot": 1,
+       "x": 164,
+       "y": 119
+      }
+     ],
+     "islands": [
+      [
+       47,
+       70
+      ],
+      [
+       138,
+       161
+      ]
+     ]
+    },
+    "N-win": {
+     "file": "office-o2-N-win.png",
+     "table_file": "office-o2-N-win-table.png",
+     "front_file": "office-o2-N-win-front.png",
+     "w": 208,
+     "h": 192,
+     "door": {
+      "x": 90,
+      "width": 28,
+      "side": "N"
+     },
+     "chair": [
+      15,
+      13
+     ],
+     "table": [
+      47,
+      75,
+      114,
+      34
+     ],
+     "seats": {
+      "t": [
+       {
+        "side": "t",
+        "x": 51,
+        "y": 64
+       },
+       {
+        "side": "t",
+        "x": 142,
+        "y": 64
+       }
+      ],
+      "b": [
+       {
+        "side": "b",
+        "x": 51,
+        "y": 108
+       },
+       {
+        "side": "b",
+        "x": 142,
+        "y": 108
+       }
+      ]
+     },
+     "ends": [
+      {
+       "end": "left",
+       "slot": 0,
+       "x": 29,
+       "y": 77
+      },
+      {
+       "end": "right",
+       "slot": 0,
+       "x": 164,
+       "y": 77
+      },
+      {
+       "end": "left",
+       "slot": 1,
+       "x": 29,
+       "y": 94
+      },
+      {
+       "end": "right",
+       "slot": 1,
+       "x": 164,
+       "y": 94
+      }
+     ],
+     "islands": [
+      [
+       47,
+       70
+      ],
+      [
+       138,
+       161
+      ]
+     ]
+    },
+    "N-wall": {
+     "file": "office-o2-N-wall.png",
+     "table_file": "office-o2-N-wall-table.png",
+     "front_file": "office-o2-N-wall-front.png",
+     "w": 208,
+     "h": 192,
+     "door": {
+      "x": 90,
+      "width": 28,
+      "side": "N"
+     },
+     "chair": [
+      15,
+      13
+     ],
+     "table": [
+      47,
+      75,
+      114,
+      34
+     ],
+     "seats": {
+      "t": [
+       {
+        "side": "t",
+        "x": 51,
+        "y": 64
+       },
+       {
+        "side": "t",
+        "x": 142,
+        "y": 64
+       }
+      ],
+      "b": [
+       {
+        "side": "b",
+        "x": 51,
+        "y": 108
+       },
+       {
+        "side": "b",
+        "x": 142,
+        "y": 108
+       }
+      ]
+     },
+     "ends": [
+      {
+       "end": "left",
+       "slot": 0,
+       "x": 29,
+       "y": 77
+      },
+      {
+       "end": "right",
+       "slot": 0,
+       "x": 164,
+       "y": 77
+      },
+      {
+       "end": "left",
+       "slot": 1,
+       "x": 29,
+       "y": 94
+      },
+      {
+       "end": "right",
+       "slot": 1,
+       "x": 164,
+       "y": 94
+      }
+     ],
+     "islands": [
+      [
+       47,
+       70
+      ],
+      [
+       138,
+       161
+      ]
+     ]
+    }
+   },
+   "w": 208
+  },
+  "o4": {
+   "maxMains": 8,
+   "variants": {
+    "S-win": {
+     "file": "office-o4-S-win.png",
+     "table_file": "office-o4-S-win-table.png",
+     "front_file": "office-o4-S-win-front.png",
+     "w": 272,
+     "h": 192,
+     "door": {
+      "x": 122,
+      "width": 28,
+      "side": "S"
+     },
+     "chair": [
+      15,
+      13
+     ],
+     "table": [
+      47,
+      100,
+      178,
+      34
+     ],
+     "seats": {
+      "t": [
+       {
+        "side": "t",
+        "x": 51,
+        "y": 89
+       },
+       {
+        "side": "t",
+        "x": 81,
+        "y": 89
+       },
+       {
+        "side": "t",
+        "x": 176,
+        "y": 89
+       },
+       {
+        "side": "t",
+        "x": 206,
+        "y": 89
+       }
+      ],
+      "b": [
+       {
+        "side": "b",
+        "x": 51,
+        "y": 133
+       },
+       {
+        "side": "b",
+        "x": 81,
+        "y": 133
+       },
+       {
+        "side": "b",
+        "x": 176,
+        "y": 133
+       },
+       {
+        "side": "b",
+        "x": 206,
+        "y": 133
+       }
+      ]
+     },
+     "ends": [
+      {
+       "end": "left",
+       "slot": 0,
+       "x": 29,
+       "y": 102
+      },
+      {
+       "end": "right",
+       "slot": 0,
+       "x": 228,
+       "y": 102
+      },
+      {
+       "end": "left",
+       "slot": 1,
+       "x": 29,
+       "y": 119
+      },
+      {
+       "end": "right",
+       "slot": 1,
+       "x": 228,
+       "y": 119
+      }
+     ],
+     "islands": [
+      [
+       47,
+       100
+      ],
+      [
+       172,
+       225
+      ]
+     ]
+    },
+    "S-wall": {
+     "file": "office-o4-S-wall.png",
+     "table_file": "office-o4-S-wall-table.png",
+     "front_file": "office-o4-S-wall-front.png",
+     "w": 272,
+     "h": 192,
+     "door": {
+      "x": 122,
+      "width": 28,
+      "side": "S"
+     },
+     "chair": [
+      15,
+      13
+     ],
+     "table": [
+      47,
+      100,
+      178,
+      34
+     ],
+     "seats": {
+      "t": [
+       {
+        "side": "t",
+        "x": 51,
+        "y": 89
+       },
+       {
+        "side": "t",
+        "x": 81,
+        "y": 89
+       },
+       {
+        "side": "t",
+        "x": 176,
+        "y": 89
+       },
+       {
+        "side": "t",
+        "x": 206,
+        "y": 89
+       }
+      ],
+      "b": [
+       {
+        "side": "b",
+        "x": 51,
+        "y": 133
+       },
+       {
+        "side": "b",
+        "x": 81,
+        "y": 133
+       },
+       {
+        "side": "b",
+        "x": 176,
+        "y": 133
+       },
+       {
+        "side": "b",
+        "x": 206,
+        "y": 133
+       }
+      ]
+     },
+     "ends": [
+      {
+       "end": "left",
+       "slot": 0,
+       "x": 29,
+       "y": 102
+      },
+      {
+       "end": "right",
+       "slot": 0,
+       "x": 228,
+       "y": 102
+      },
+      {
+       "end": "left",
+       "slot": 1,
+       "x": 29,
+       "y": 119
+      },
+      {
+       "end": "right",
+       "slot": 1,
+       "x": 228,
+       "y": 119
+      }
+     ],
+     "islands": [
+      [
+       47,
+       100
+      ],
+      [
+       172,
+       225
+      ]
+     ]
+    },
+    "N-win": {
+     "file": "office-o4-N-win.png",
+     "table_file": "office-o4-N-win-table.png",
+     "front_file": "office-o4-N-win-front.png",
+     "w": 272,
+     "h": 192,
+     "door": {
+      "x": 122,
+      "width": 28,
+      "side": "N"
+     },
+     "chair": [
+      15,
+      13
+     ],
+     "table": [
+      47,
+      75,
+      178,
+      34
+     ],
+     "seats": {
+      "t": [
+       {
+        "side": "t",
+        "x": 51,
+        "y": 64
+       },
+       {
+        "side": "t",
+        "x": 81,
+        "y": 64
+       },
+       {
+        "side": "t",
+        "x": 176,
+        "y": 64
+       },
+       {
+        "side": "t",
+        "x": 206,
+        "y": 64
+       }
+      ],
+      "b": [
+       {
+        "side": "b",
+        "x": 51,
+        "y": 108
+       },
+       {
+        "side": "b",
+        "x": 81,
+        "y": 108
+       },
+       {
+        "side": "b",
+        "x": 176,
+        "y": 108
+       },
+       {
+        "side": "b",
+        "x": 206,
+        "y": 108
+       }
+      ]
+     },
+     "ends": [
+      {
+       "end": "left",
+       "slot": 0,
+       "x": 29,
+       "y": 77
+      },
+      {
+       "end": "right",
+       "slot": 0,
+       "x": 228,
+       "y": 77
+      },
+      {
+       "end": "left",
+       "slot": 1,
+       "x": 29,
+       "y": 94
+      },
+      {
+       "end": "right",
+       "slot": 1,
+       "x": 228,
+       "y": 94
+      }
+     ],
+     "islands": [
+      [
+       47,
+       100
+      ],
+      [
+       172,
+       225
+      ]
+     ]
+    },
+    "N-wall": {
+     "file": "office-o4-N-wall.png",
+     "table_file": "office-o4-N-wall-table.png",
+     "front_file": "office-o4-N-wall-front.png",
+     "w": 272,
+     "h": 192,
+     "door": {
+      "x": 122,
+      "width": 28,
+      "side": "N"
+     },
+     "chair": [
+      15,
+      13
+     ],
+     "table": [
+      47,
+      75,
+      178,
+      34
+     ],
+     "seats": {
+      "t": [
+       {
+        "side": "t",
+        "x": 51,
+        "y": 64
+       },
+       {
+        "side": "t",
+        "x": 81,
+        "y": 64
+       },
+       {
+        "side": "t",
+        "x": 176,
+        "y": 64
+       },
+       {
+        "side": "t",
+        "x": 206,
+        "y": 64
+       }
+      ],
+      "b": [
+       {
+        "side": "b",
+        "x": 51,
+        "y": 108
+       },
+       {
+        "side": "b",
+        "x": 81,
+        "y": 108
+       },
+       {
+        "side": "b",
+        "x": 176,
+        "y": 108
+       },
+       {
+        "side": "b",
+        "x": 206,
+        "y": 108
+       }
+      ]
+     },
+     "ends": [
+      {
+       "end": "left",
+       "slot": 0,
+       "x": 29,
+       "y": 77
+      },
+      {
+       "end": "right",
+       "slot": 0,
+       "x": 228,
+       "y": 77
+      },
+      {
+       "end": "left",
+       "slot": 1,
+       "x": 29,
+       "y": 94
+      },
+      {
+       "end": "right",
+       "slot": 1,
+       "x": 228,
+       "y": 94
+      }
+     ],
+     "islands": [
+      [
+       47,
+       100
+      ],
+      [
+       172,
+       225
+      ]
+     ]
+    }
+   },
+   "w": 272
+  },
+  "o6": {
+   "maxMains": 12,
+   "variants": {
+    "S-win": {
+     "file": "office-o6-S-win.png",
+     "table_file": "office-o6-S-win-table.png",
+     "front_file": "office-o6-S-win-front.png",
+     "w": 320,
+     "h": 192,
+     "door": {
+      "x": 146,
+      "width": 28,
+      "side": "S"
+     },
+     "chair": [
+      15,
+      13
+     ],
+     "table": [
+      47,
+      100,
+      226,
+      34
+     ],
+     "seats": {
+      "t": [
+       {
+        "side": "t",
+        "x": 51,
+        "y": 89
+       },
+       {
+        "side": "t",
+        "x": 81,
+        "y": 89
+       },
+       {
+        "side": "t",
+        "x": 138,
+        "y": 89
+       },
+       {
+        "side": "t",
+        "x": 168,
+        "y": 89
+       },
+       {
+        "side": "t",
+        "x": 224,
+        "y": 89
+       },
+       {
+        "side": "t",
+        "x": 254,
+        "y": 89
+       }
+      ],
+      "b": [
+       {
+        "side": "b",
+        "x": 51,
+        "y": 133
+       },
+       {
+        "side": "b",
+        "x": 81,
+        "y": 133
+       },
+       {
+        "side": "b",
+        "x": 138,
+        "y": 133
+       },
+       {
+        "side": "b",
+        "x": 168,
+        "y": 133
+       },
+       {
+        "side": "b",
+        "x": 224,
+        "y": 133
+       },
+       {
+        "side": "b",
+        "x": 254,
+        "y": 133
+       }
+      ]
+     },
+     "ends": [
+      {
+       "end": "left",
+       "slot": 0,
+       "x": 29,
+       "y": 102
+      },
+      {
+       "end": "right",
+       "slot": 0,
+       "x": 276,
+       "y": 102
+      },
+      {
+       "end": "left",
+       "slot": 1,
+       "x": 29,
+       "y": 119
+      },
+      {
+       "end": "right",
+       "slot": 1,
+       "x": 276,
+       "y": 119
+      }
+     ],
+     "islands": [
+      [
+       47,
+       100
+      ],
+      [
+       134,
+       187
+      ],
+      [
+       220,
+       273
+      ]
+     ]
+    },
+    "S-wall": {
+     "file": "office-o6-S-wall.png",
+     "table_file": "office-o6-S-wall-table.png",
+     "front_file": "office-o6-S-wall-front.png",
+     "w": 320,
+     "h": 192,
+     "door": {
+      "x": 146,
+      "width": 28,
+      "side": "S"
+     },
+     "chair": [
+      15,
+      13
+     ],
+     "table": [
+      47,
+      100,
+      226,
+      34
+     ],
+     "seats": {
+      "t": [
+       {
+        "side": "t",
+        "x": 51,
+        "y": 89
+       },
+       {
+        "side": "t",
+        "x": 81,
+        "y": 89
+       },
+       {
+        "side": "t",
+        "x": 138,
+        "y": 89
+       },
+       {
+        "side": "t",
+        "x": 168,
+        "y": 89
+       },
+       {
+        "side": "t",
+        "x": 224,
+        "y": 89
+       },
+       {
+        "side": "t",
+        "x": 254,
+        "y": 89
+       }
+      ],
+      "b": [
+       {
+        "side": "b",
+        "x": 51,
+        "y": 133
+       },
+       {
+        "side": "b",
+        "x": 81,
+        "y": 133
+       },
+       {
+        "side": "b",
+        "x": 138,
+        "y": 133
+       },
+       {
+        "side": "b",
+        "x": 168,
+        "y": 133
+       },
+       {
+        "side": "b",
+        "x": 224,
+        "y": 133
+       },
+       {
+        "side": "b",
+        "x": 254,
+        "y": 133
+       }
+      ]
+     },
+     "ends": [
+      {
+       "end": "left",
+       "slot": 0,
+       "x": 29,
+       "y": 102
+      },
+      {
+       "end": "right",
+       "slot": 0,
+       "x": 276,
+       "y": 102
+      },
+      {
+       "end": "left",
+       "slot": 1,
+       "x": 29,
+       "y": 119
+      },
+      {
+       "end": "right",
+       "slot": 1,
+       "x": 276,
+       "y": 119
+      }
+     ],
+     "islands": [
+      [
+       47,
+       100
+      ],
+      [
+       134,
+       187
+      ],
+      [
+       220,
+       273
+      ]
+     ]
+    },
+    "N-win": {
+     "file": "office-o6-N-win.png",
+     "table_file": "office-o6-N-win-table.png",
+     "front_file": "office-o6-N-win-front.png",
+     "w": 320,
+     "h": 192,
+     "door": {
+      "x": 146,
+      "width": 28,
+      "side": "N"
+     },
+     "chair": [
+      15,
+      13
+     ],
+     "table": [
+      47,
+      75,
+      226,
+      34
+     ],
+     "seats": {
+      "t": [
+       {
+        "side": "t",
+        "x": 51,
+        "y": 64
+       },
+       {
+        "side": "t",
+        "x": 81,
+        "y": 64
+       },
+       {
+        "side": "t",
+        "x": 138,
+        "y": 64
+       },
+       {
+        "side": "t",
+        "x": 168,
+        "y": 64
+       },
+       {
+        "side": "t",
+        "x": 224,
+        "y": 64
+       },
+       {
+        "side": "t",
+        "x": 254,
+        "y": 64
+       }
+      ],
+      "b": [
+       {
+        "side": "b",
+        "x": 51,
+        "y": 108
+       },
+       {
+        "side": "b",
+        "x": 81,
+        "y": 108
+       },
+       {
+        "side": "b",
+        "x": 138,
+        "y": 108
+       },
+       {
+        "side": "b",
+        "x": 168,
+        "y": 108
+       },
+       {
+        "side": "b",
+        "x": 224,
+        "y": 108
+       },
+       {
+        "side": "b",
+        "x": 254,
+        "y": 108
+       }
+      ]
+     },
+     "ends": [
+      {
+       "end": "left",
+       "slot": 0,
+       "x": 29,
+       "y": 77
+      },
+      {
+       "end": "right",
+       "slot": 0,
+       "x": 276,
+       "y": 77
+      },
+      {
+       "end": "left",
+       "slot": 1,
+       "x": 29,
+       "y": 94
+      },
+      {
+       "end": "right",
+       "slot": 1,
+       "x": 276,
+       "y": 94
+      }
+     ],
+     "islands": [
+      [
+       47,
+       100
+      ],
+      [
+       134,
+       187
+      ],
+      [
+       220,
+       273
+      ]
+     ]
+    },
+    "N-wall": {
+     "file": "office-o6-N-wall.png",
+     "table_file": "office-o6-N-wall-table.png",
+     "front_file": "office-o6-N-wall-front.png",
+     "w": 320,
+     "h": 192,
+     "door": {
+      "x": 146,
+      "width": 28,
+      "side": "N"
+     },
+     "chair": [
+      15,
+      13
+     ],
+     "table": [
+      47,
+      75,
+      226,
+      34
+     ],
+     "seats": {
+      "t": [
+       {
+        "side": "t",
+        "x": 51,
+        "y": 64
+       },
+       {
+        "side": "t",
+        "x": 81,
+        "y": 64
+       },
+       {
+        "side": "t",
+        "x": 138,
+        "y": 64
+       },
+       {
+        "side": "t",
+        "x": 168,
+        "y": 64
+       },
+       {
+        "side": "t",
+        "x": 224,
+        "y": 64
+       },
+       {
+        "side": "t",
+        "x": 254,
+        "y": 64
+       }
+      ],
+      "b": [
+       {
+        "side": "b",
+        "x": 51,
+        "y": 108
+       },
+       {
+        "side": "b",
+        "x": 81,
+        "y": 108
+       },
+       {
+        "side": "b",
+        "x": 138,
+        "y": 108
+       },
+       {
+        "side": "b",
+        "x": 168,
+        "y": 108
+       },
+       {
+        "side": "b",
+        "x": 224,
+        "y": 108
+       },
+       {
+        "side": "b",
+        "x": 254,
+        "y": 108
+       }
+      ]
+     },
+     "ends": [
+      {
+       "end": "left",
+       "slot": 0,
+       "x": 29,
+       "y": 77
+      },
+      {
+       "end": "right",
+       "slot": 0,
+       "x": 276,
+       "y": 77
+      },
+      {
+       "end": "left",
+       "slot": 1,
+       "x": 29,
+       "y": 94
+      },
+      {
+       "end": "right",
+       "slot": 1,
+       "x": 276,
+       "y": 94
+      }
+     ],
+     "islands": [
+      [
+       47,
+       100
+      ],
+      [
+       134,
+       187
+      ],
+      [
+       220,
+       273
+      ]
+     ]
+    }
+   },
+   "w": 320
+  }
+ },
+ "zones": {
+  "lounge": {
+   "w": 112,
+   "h": 96,
+   "file": "zone-lounge.png",
+   "spots": [
+    {
+     "x": 34,
+     "y": 39
+    },
+    {
+     "x": 55,
+     "y": 39
+    },
+    {
+     "x": 76,
+     "y": 39
+    },
+    {
+     "x": 17,
+     "y": 78
+    },
+    {
+     "x": 95,
+     "y": 78
+    }
+   ]
+  },
+  "cafe": {
+   "w": 112,
+   "h": 96,
+   "file": "zone-cafe.png",
+   "spots": [
+    {
+     "x": 21,
+     "y": 64
+    },
+    {
+     "x": 44,
+     "y": 64
+    },
+    {
+     "x": 67,
+     "y": 80
+    },
+    {
+     "x": 90,
+     "y": 80
+    }
+   ]
+  },
+  "reading": {
+   "w": 96,
+   "h": 96,
+   "file": "zone-reading.png",
+   "spots": [
+    {
+     "x": 27,
+     "y": 52
+    },
+    {
+     "x": 69,
+     "y": 52
+    },
+    {
+     "x": 48,
+     "y": 82
+    }
+   ]
+  },
+  "games": {
+   "w": 112,
+   "h": 96,
+   "file": "zone-games.png",
+   "spots": [
+    {
+     "x": 22,
+     "y": 41
+    },
+    {
+     "x": 90,
+     "y": 41
+    },
+    {
+     "x": 32,
+     "y": 78
+    },
+    {
+     "x": 80,
+     "y": 78
+    }
+   ]
+  },
+  "nook-coffee": {
+   "w": 56,
+   "h": 96,
+   "file": "zone-nook-coffee.png",
+   "spots": [
+    {
+     "x": 17,
+     "y": 74
+    },
+    {
+     "x": 40,
+     "y": 74
+    }
+   ]
+  },
+  "nook-chair": {
+   "w": 48,
+   "h": 96,
+   "file": "zone-nook-chair.png",
+   "spots": [
+    {
+     "x": 24,
+     "y": 60
+    }
+   ]
+  },
+  "nook-bench": {
+   "w": 48,
+   "h": 96,
+   "file": "zone-nook-bench.png",
+   "spots": [
+    {
+     "x": 14,
+     "y": 60
+    },
+    {
+     "x": 33,
+     "y": 60
+    }
+   ]
+  },
+  "nook-poufs": {
+   "w": 56,
+   "h": 96,
+   "file": "zone-nook-poufs.png",
+   "spots": [
+    {
+     "x": 13,
+     "y": 52
+    },
+    {
+     "x": 43,
+     "y": 52
+    }
+   ]
+  }
+ },
+ "rest": {
+  "rs": {
+   "w": 144,
+   "variants": {
+    "S-win": {
+     "file": "rest-rs-S-win.png",
+     "w": 144,
+     "h": 192,
+     "door": {
+      "x": 58,
+      "width": 28,
+      "side": "S"
+     },
+     "spots": [
+      {
+       "x": 50,
+       "y": 88
+      },
+      {
+       "x": 71,
+       "y": 88
+      },
+      {
+       "x": 92,
+       "y": 88
+      },
+      {
+       "x": 33,
+       "y": 127
+      },
+      {
+       "x": 111,
+       "y": 127
+      }
+     ]
+    },
+    "S-wall": {
+     "file": "rest-rs-S-wall.png",
+     "w": 144,
+     "h": 192,
+     "door": {
+      "x": 58,
+      "width": 28,
+      "side": "S"
+     },
+     "spots": [
+      {
+       "x": 50,
+       "y": 88
+      },
+      {
+       "x": 71,
+       "y": 88
+      },
+      {
+       "x": 92,
+       "y": 88
+      },
+      {
+       "x": 33,
+       "y": 127
+      },
+      {
+       "x": 111,
+       "y": 127
+      }
+     ]
+    },
+    "N-win": {
+     "file": "rest-rs-N-win.png",
+     "w": 144,
+     "h": 192,
+     "door": {
+      "x": 58,
+      "width": 28,
+      "side": "N"
+     },
+     "spots": [
+      {
+       "x": 50,
+       "y": 80
+      },
+      {
+       "x": 71,
+       "y": 80
+      },
+      {
+       "x": 92,
+       "y": 80
+      },
+      {
+       "x": 33,
+       "y": 119
+      },
+      {
+       "x": 111,
+       "y": 119
+      }
+     ]
+    },
+    "N-wall": {
+     "file": "rest-rs-N-wall.png",
+     "w": 144,
+     "h": 192,
+     "door": {
+      "x": 58,
+      "width": 28,
+      "side": "N"
+     },
+     "spots": [
+      {
+       "x": 50,
+       "y": 80
+      },
+      {
+       "x": 71,
+       "y": 80
+      },
+      {
+       "x": 92,
+       "y": 80
+      },
+      {
+       "x": 33,
+       "y": 119
+      },
+      {
+       "x": 111,
+       "y": 119
+      }
+     ]
+    }
+   },
+   "cap": 5
+  },
+  "rm": {
+   "w": 272,
+   "variants": {
+    "S-win": {
+     "file": "rest-rm-S-win.png",
+     "w": 272,
+     "h": 192,
+     "door": {
+      "x": 122,
+      "width": 28,
+      "side": "S"
+     },
+     "spots": [
+      {
+       "x": 39,
+       "y": 113
+      },
+      {
+       "x": 62,
+       "y": 113
+      },
+      {
+       "x": 85,
+       "y": 129
+      },
+      {
+       "x": 108,
+       "y": 129
+      },
+      {
+       "x": 175,
+       "y": 88
+      },
+      {
+       "x": 196,
+       "y": 88
+      },
+      {
+       "x": 217,
+       "y": 88
+      },
+      {
+       "x": 158,
+       "y": 127
+      },
+      {
+       "x": 236,
+       "y": 127
+      }
+     ]
+    },
+    "S-wall": {
+     "file": "rest-rm-S-wall.png",
+     "w": 272,
+     "h": 192,
+     "door": {
+      "x": 122,
+      "width": 28,
+      "side": "S"
+     },
+     "spots": [
+      {
+       "x": 39,
+       "y": 113
+      },
+      {
+       "x": 62,
+       "y": 113
+      },
+      {
+       "x": 85,
+       "y": 129
+      },
+      {
+       "x": 108,
+       "y": 129
+      },
+      {
+       "x": 175,
+       "y": 88
+      },
+      {
+       "x": 196,
+       "y": 88
+      },
+      {
+       "x": 217,
+       "y": 88
+      },
+      {
+       "x": 158,
+       "y": 127
+      },
+      {
+       "x": 236,
+       "y": 127
+      }
+     ]
+    },
+    "N-win": {
+     "file": "rest-rm-N-win.png",
+     "w": 272,
+     "h": 192,
+     "door": {
+      "x": 122,
+      "width": 28,
+      "side": "N"
+     },
+     "spots": [
+      {
+       "x": 39,
+       "y": 105
+      },
+      {
+       "x": 62,
+       "y": 105
+      },
+      {
+       "x": 85,
+       "y": 121
+      },
+      {
+       "x": 108,
+       "y": 121
+      },
+      {
+       "x": 175,
+       "y": 80
+      },
+      {
+       "x": 196,
+       "y": 80
+      },
+      {
+       "x": 217,
+       "y": 80
+      },
+      {
+       "x": 158,
+       "y": 119
+      },
+      {
+       "x": 236,
+       "y": 119
+      }
+     ]
+    },
+    "N-wall": {
+     "file": "rest-rm-N-wall.png",
+     "w": 272,
+     "h": 192,
+     "door": {
+      "x": 122,
+      "width": 28,
+      "side": "N"
+     },
+     "spots": [
+      {
+       "x": 39,
+       "y": 105
+      },
+      {
+       "x": 62,
+       "y": 105
+      },
+      {
+       "x": 85,
+       "y": 121
+      },
+      {
+       "x": 108,
+       "y": 121
+      },
+      {
+       "x": 175,
+       "y": 80
+      },
+      {
+       "x": 196,
+       "y": 80
+      },
+      {
+       "x": 217,
+       "y": 80
+      },
+      {
+       "x": 158,
+       "y": 119
+      },
+      {
+       "x": 236,
+       "y": 119
+      }
+     ]
+    }
+   },
+   "cap": 9
+  },
+  "rl": {
+   "w": 384,
+   "variants": {
+    "S-win": {
+     "file": "rest-rl-S-win.png",
+     "w": 384,
+     "h": 192,
+     "door": {
+      "x": 178,
+      "width": 28,
+      "side": "S"
+     },
+     "spots": [
+      {
+       "x": 36,
+       "y": 113
+      },
+      {
+       "x": 59,
+       "y": 113
+      },
+      {
+       "x": 82,
+       "y": 129
+      },
+      {
+       "x": 105,
+       "y": 129
+      },
+      {
+       "x": 169,
+       "y": 88
+      },
+      {
+       "x": 190,
+       "y": 88
+      },
+      {
+       "x": 211,
+       "y": 88
+      },
+      {
+       "x": 152,
+       "y": 127
+      },
+      {
+       "x": 230,
+       "y": 127
+      },
+      {
+       "x": 277,
+       "y": 90
+      },
+      {
+       "x": 345,
+       "y": 90
+      },
+      {
+       "x": 287,
+       "y": 127
+      },
+      {
+       "x": 335,
+       "y": 127
+      }
+     ]
+    },
+    "S-wall": {
+     "file": "rest-rl-S-wall.png",
+     "w": 384,
+     "h": 192,
+     "door": {
+      "x": 178,
+      "width": 28,
+      "side": "S"
+     },
+     "spots": [
+      {
+       "x": 36,
+       "y": 113
+      },
+      {
+       "x": 59,
+       "y": 113
+      },
+      {
+       "x": 82,
+       "y": 129
+      },
+      {
+       "x": 105,
+       "y": 129
+      },
+      {
+       "x": 169,
+       "y": 88
+      },
+      {
+       "x": 190,
+       "y": 88
+      },
+      {
+       "x": 211,
+       "y": 88
+      },
+      {
+       "x": 152,
+       "y": 127
+      },
+      {
+       "x": 230,
+       "y": 127
+      },
+      {
+       "x": 277,
+       "y": 90
+      },
+      {
+       "x": 345,
+       "y": 90
+      },
+      {
+       "x": 287,
+       "y": 127
+      },
+      {
+       "x": 335,
+       "y": 127
+      }
+     ]
+    },
+    "N-win": {
+     "file": "rest-rl-N-win.png",
+     "w": 384,
+     "h": 192,
+     "door": {
+      "x": 178,
+      "width": 28,
+      "side": "N"
+     },
+     "spots": [
+      {
+       "x": 36,
+       "y": 105
+      },
+      {
+       "x": 59,
+       "y": 105
+      },
+      {
+       "x": 82,
+       "y": 121
+      },
+      {
+       "x": 105,
+       "y": 121
+      },
+      {
+       "x": 169,
+       "y": 80
+      },
+      {
+       "x": 190,
+       "y": 80
+      },
+      {
+       "x": 211,
+       "y": 80
+      },
+      {
+       "x": 152,
+       "y": 119
+      },
+      {
+       "x": 230,
+       "y": 119
+      },
+      {
+       "x": 277,
+       "y": 82
+      },
+      {
+       "x": 345,
+       "y": 82
+      },
+      {
+       "x": 287,
+       "y": 119
+      },
+      {
+       "x": 335,
+       "y": 119
+      }
+     ]
+    },
+    "N-wall": {
+     "file": "rest-rl-N-wall.png",
+     "w": 384,
+     "h": 192,
+     "door": {
+      "x": 178,
+      "width": 28,
+      "side": "N"
+     },
+     "spots": [
+      {
+       "x": 36,
+       "y": 105
+      },
+      {
+       "x": 59,
+       "y": 105
+      },
+      {
+       "x": 82,
+       "y": 121
+      },
+      {
+       "x": 105,
+       "y": 121
+      },
+      {
+       "x": 169,
+       "y": 80
+      },
+      {
+       "x": 190,
+       "y": 80
+      },
+      {
+       "x": 211,
+       "y": 80
+      },
+      {
+       "x": 152,
+       "y": 119
+      },
+      {
+       "x": 230,
+       "y": 119
+      },
+      {
+       "x": 277,
+       "y": 82
+      },
+      {
+       "x": 345,
+       "y": 82
+      },
+      {
+       "x": 287,
+       "y": 119
+      },
+      {
+       "x": 335,
+       "y": 119
+      }
+     ]
+    }
+   },
+   "cap": 13
+  }
+ },
+ "tech": {
+  "w": 144,
+  "cap": 4,
+  "variants": {
+   "S": {
+    "file": "tech-S.png",
+    "w": 144,
+    "h": 192,
+    "door": {
+     "x": 58,
+     "width": 28,
+     "side": "S"
+    },
+    "racks": [
+     {
+      "x": 15,
+      "y": 94,
+      "w": 22,
+      "h": 46
+     },
+     {
+      "x": 45,
+      "y": 94,
+      "w": 22,
+      "h": 46
+     },
+     {
+      "x": 75,
+      "y": 94,
+      "w": 22,
+      "h": 46
+     },
+     {
+      "x": 105,
+      "y": 94,
+      "w": 22,
+      "h": 46
+     }
+    ]
+   },
+   "N": {
+    "file": "tech-N.png",
+    "w": 144,
+    "h": 192,
+    "door": {
+     "x": 58,
+     "width": 28,
+     "side": "N"
+    },
+    "racks": [
+     {
+      "x": 15,
+      "y": 69,
+      "w": 22,
+      "h": 46
+     },
+     {
+      "x": 45,
+      "y": 69,
+      "w": 22,
+      "h": 46
+     },
+     {
+      "x": 75,
+      "y": 69,
+      "w": 22,
+      "h": 46
+     },
+     {
+      "x": 105,
+      "y": 69,
+      "w": 22,
+      "h": 46
+     }
+    ]
+   }
+  }
+ },
+ "ledge": {
+  "w": 160,
+  "h": 192,
+  "file": "office-ledge.png",
+  "desk_file": "office-ledge-desk.png",
+  "door": {
+   "x": 66,
+   "width": 28,
+   "side": "S"
+  },
+  "ledge": {
+   "x": 58,
+   "y": 64,
+   "size": 44
+  },
+  "guests": [
+   {
+    "x": 61,
+    "y": 153
+   },
+   {
+    "x": 99,
+    "y": 153
+   }
+  ]
+ }
+}
