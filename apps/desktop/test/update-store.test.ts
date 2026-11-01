@@ -17,6 +17,30 @@ function deps(check: () => Promise<AvailableUpdate | null>) {
 
 beforeEach(() => localStorage.clear());
 
+describe('update channels', () => {
+  it('persists the selected channel and checks its feed', async () => {
+    const { d } = deps(async () => null);
+    const up = createUpdater(d);
+    await up.start();
+    expect(d.check).toHaveBeenCalledWith('stable');
+    up.setChannel('snapshot');
+    await vi.waitFor(() => expect(d.check).toHaveBeenCalledWith('snapshot'));
+    expect(localStorage.getItem('desktop.update.channel')).toBe('snapshot');
+    expect(createUpdater(d).get().channel).toBe('snapshot');
+  });
+  it('ignores a late result from the previous channel', async () => {
+    let resolve!: (value: AvailableUpdate | null) => void;
+    const first = new Promise<AvailableUpdate | null>(r => { resolve = r; });
+    const { d } = deps(async () => first);
+    d.check.mockImplementationOnce(() => first).mockImplementationOnce(async () => null);
+    const up = createUpdater(d); const started = up.start();
+    await vi.waitFor(() => expect(d.check).toHaveBeenCalledTimes(1));
+    up.setChannel('snapshot'); resolve(release().u); await started;
+    await vi.waitFor(() => expect(up.get().phase.kind).toBe('current'));
+    expect(up.get().channel).toBe('snapshot');
+  });
+});
+
 describe('nothing is installed without a click (Review Focus 5)', () => {
   it('the start-up and the 6-hour checks only check', async () => {
     const r = release();
