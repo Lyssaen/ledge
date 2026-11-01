@@ -94,7 +94,7 @@ export function Agents({ store, onReconnect }: { store: MobileStore; onReconnect
           </div>
         )}
       </main>
-      <TabBar openrig={state.openrig} count={requestsOf(sessions).length} active={state.openrig ? 'projects' : 'agents'} chat={!!state.device?.chat} />
+      <TabBar openrig={state.openrig} count={requestsOf(sessions).length + (state.openrig ? [...state.escalations.values()].filter(e => e.state === 'pending').length : 0)} active={state.openrig ? 'projects' : 'agents'} chat={!!state.device?.chat} />
     </>
   );
 }
