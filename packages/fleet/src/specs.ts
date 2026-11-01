@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { DaemonClient } from './client';
 import type { RigSpecInfo } from '@ledge/protocol';
 
@@ -11,7 +11,14 @@ let next = 0;
 
 /** The rig specs a machine offers (OpenRig library, registry, built-ins): one `rig.specs.request` per machine, with its own requestId.
  *  A failure (OpenRig down, an older daemon: `unsupported`, machine offline: `failed`) is ready with its `error`, and not kept, so the next visit asks again. */
-export function useRigSpecs(client: DaemonClient, machine: string | null): RigSpecsState {
+export function useRigSpecs(client: DaemonClient, machine: string | null): RigSpecsState & { refresh: () => void } {
+  const [revision, setRevision] = useState(0);
+  const refresh = useCallback(() => {
+    if (machine === null) return;
+    known.delete(machine);
+    setAnswer(null);
+    setRevision(n => n + 1);
+  }, [machine]);
   const [answer, setAnswer] = useState<{ machine: string; state: RigSpecsState } | null>(null);
   useEffect(() => {
     if (machine === null || known.has(machine)) return;
@@ -24,9 +31,9 @@ export function useRigSpecs(client: DaemonClient, machine: string | null): RigSp
     });
     client.send({ type: 'rig.specs.request', requestId, machineId: machine });
     return off;
-  }, [client, machine]);
-  if (machine === null) return IDLE;
-  return known.get(machine) ?? (answer && answer.machine === machine ? answer.state : LOADING);
+  }, [client, machine, revision]);
+  const state = machine === null ? IDLE : known.get(machine) ?? (answer && answer.machine === machine ? answer.state : LOADING);
+  return { ...state, refresh };
 }
 
 /** For tests: forget the answers kept this run. */

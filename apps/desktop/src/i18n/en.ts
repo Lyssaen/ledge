@@ -313,6 +313,17 @@ export const en: Messages = {
       refused: {
         offline: 'The local daemon is offline: nothing changed.', outdated: 'The local daemon is too old for the notch’s settings: update it.',
         invalid: 'The daemon refused this change. Nothing changed.', timeout: 'The daemon did not confirm this change.'
+      },
+      music: {
+        title: 'Music', hint: 'The track playing on your PC, at the right of the notch.',
+        show: 'Show the music playing', showHint: 'The cover, then previous, play/pause and next on hover. No connection to your account.',
+        shownOn: 'Music shown', shownOff: 'Music hidden',
+        paused: 'When paused', pausedHint: 'How long the cover stays visible after a pause.',
+        pausedOptions: { always: 'Always', '5min': '5 min', hide: 'Hide' }, pausedSaved: (label) => `When paused: ${label}`,
+        hover: 'On hover', hoverHint: 'What is added to the cover.',
+        hoverOptions: { controls: 'Controls', 'controls-title': 'Controls and title' }, hoverSaved: (label) => `On hover: ${label}`,
+        detected: (title, artist, source) => artist ? `Detected: ${title} · ${artist}, played by ${source}` : `Detected: ${title}, played by ${source}`,
+        nothing: 'Nothing is playing right now', windowsOnly: 'Music in the notch only works on Windows.'
       }
     },
     shortcuts: {
@@ -358,7 +369,7 @@ export const en: Messages = {
     ideasOff: ['Explore an unknown repository', 'Compare two repositories', 'Prototype an idea'],
     spec: 'OpenRig spec', specHint: 'The team OpenRig sets up', recommended: 'Recommended by Ledge', change: 'Change', noSpec: 'Choose a spec',
     specsLoading: 'Reading the specs…', specsFailed: 'The specs could not be read.',
-    chooseFor: 'Choose for this rig', seatsOf: (n, what) => `${n} ${pluralEn(n, 'seat', 'seats')} · ${what}`,
+    refreshSpecs: 'Refresh', chooseFor: 'Choose for this rig', seatsOf: (n, what) => `${n} ${pluralEn(n, 'seat', 'seats')} · ${what}`,
     registry: 'From the registry…', registryWhat: 'openrig.dev/rigs', soon: 'Soon',
     recommends: (spec, why) => `Ledge recommends ${spec}: ${why === 'long' ? 'work followed over several days, with reviews.' : 'a bounded change, quickly reviewed.'}`,
     providers: 'Providers', providerSeats: (n, label) => `${n} ${label} ${pluralEn(n, 'seat', 'seats')}`,

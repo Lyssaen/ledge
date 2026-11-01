@@ -4,6 +4,15 @@ export const SIZES = { bubbleW: 440, bubbleH: 128, listW: 380, sessionW: 480, re
 export const ISLAND = { h: 38, padL: 12, padR: 14, resident: 22, sepGap: 8, companion: 22, gap: 8, max: 6, pill: 30, moon: 12, stripH: 10, stripPad: 10, dotW: 6, dotH: 4, dotGap: 4 } as const;
 /** The resting notch (the validated filet): 10 px, Ledge's rectangle, a hairline before each machine, one dash per session. */
 export const FILET = { h: 10, pad: 6, ledge: 9, sep: 7, dash: 5, gap: 2, pip: 5 } as const;
+/** The now-playing slot: the rule's gap, the 24 px cover, and the controls that open beside it. */
+export const MUSIC = { sepGap: 12, cover: 24, coverRadius: 5, coverGap: 6, ctl: 28, title: 150 } as const;
+/** The width the music adds: the rule and its gap and the cover; open, the three buttons; with the title, that column too. */
+export function musicWidth(o: { open: boolean; withTitle: boolean }): number {
+  let w = SIZES.separatorH + MUSIC.sepGap + MUSIC.cover;
+  if (o.open) w += MUSIC.coverGap + 3 * MUSIC.ctl;
+  if (o.open && o.withTitle) w += MUSIC.title + MUSIC.coverGap;
+  return w;
+}
 /** Ledge's line in the closed notch (lot 4, `nn-closed-*`): the gap after the mascot, the message's widest span before it is cut. */
 export const LINE = { gap: 10, text: 360 } as const;
 /** What the closed notch holds besides Ledge, measured in handle px: Ledge's line, and the trailing slot at the right (another
@@ -85,7 +94,8 @@ export const expandedWidth = (screenW: number, min: number) => clamp(Math.round(
 
 /** `detailH` is the measured height of the settings or help view (the fixed sizes are fallbacks). `listExtraH` is the extra height of the list: an expanded (focused) row, the notice, the update card. `bubbleH` is the measured bubble height; `SIZES.bubbleH` is only the fallback before the first measurement. `strip` draws the discreet strip instead of the compact island (handle mode only). */
 export interface LayoutInput { bots: Array<{ id: string; pending: boolean; machine?: string }>; mode: Mode; screenH: number; screenW: number; position?: IslandPosition; strip?: boolean; /** The update dash on the resting notch. */ pip?: boolean; /** The pointer is over the notch: the compact island instead of the filet (handle mode). */ awake?: boolean; dnd?: boolean; readerExpanded?: boolean; bubbleH?: number; sessionH?: number; /** Measured height of the open helper view. */ helperH?: number; reading?: boolean; listExtraH?: number; groups?: number; detailH?: number; /** Extra height of the ask field above the list rows (`ASK_H`). */ askH?: number;
-  /** The closed notch's measured line and trailing slot (handle px): with Ledge alone, they alone widen it, never the sessions. */ line?: number; trailing?: number }
+  /** The closed notch's measured line and trailing slot (handle px): with Ledge alone, they alone widen it, never the sessions. */ line?: number; trailing?: number;
+  /** Width hung to the right of the centred closed notch (the open music controls), so the cover does not slide left. */ growRight?: number }
 
 /** Everything hangs from the top edge of the work area, centred on the island's axis; `left` is clamped into the screen. */
 export function layout(input: LayoutInput): Layout {
@@ -99,9 +109,11 @@ export function layout(input: LayoutInput): Layout {
   const filet = mode === 'handle' && !input.awake;
   const extras = { line: input.line, trailing: input.trailing };
   const handleW = filet ? filetWidth([], !!input.pip, extras) : islandWidth(0, input.dnd, 0, extras);
-  const handle = { left: place(handleW), w: handleW, h: filet ? FILET.h : ISLAND.h };
+  const grow = Math.min(Math.max(0, input.growRight ?? 0), handleW);
+  const left = clamp(place(handleW - grow), 0, Math.max(0, screenW - handleW));
+  const handle = { left, w: handleW, h: filet ? FILET.h : ISLAND.h };
   const view = (w: number, h: number): Layout => ({ left: place(w), top: 0, w, h: Math.min(maxH, h), handle });
-  if (mode === 'handle') return { left: handle.left, top: 0, w: handleW, h: handle.h, handle };
+  if (mode === 'handle') return { left, top: 0, w: handleW, h: handle.h, handle };
   if (mode === 'bubble') return view(SIZES.bubbleW, input.bubbleH ?? SIZES.bubbleH);
   if (mode === 'peek') return view(360, input.bubbleH ?? 160);
   // The native frame adds a small shadow outside this width.

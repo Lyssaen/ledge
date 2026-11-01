@@ -65,7 +65,7 @@ export function RigLaunch(p: {
         <RigPlanView plan={plan} busy={busy} refused={refused} onCopy={() => toggleCopy(plan)} onBack={flow.back} onLaunch={() => flow.launch(plan)} />
       ) : (
         <RigLaunchForm form={form} projects={p.projects} machines={p.machines} openrig={openrig} specs={specs} missing={missing} tried={tried}
-          busy={busy} refused={refused}
+          busy={busy} refused={refused} onRefreshSpecs={specs.refresh}
           onGoal={goal => setForm(f => withGoal(f, goal))}
           onSpec={spec => { setTouched(x => ({ ...x, spec: true })); setForm(f => withSpec(f, spec)); }}
           onProject={id => setForm(f => {

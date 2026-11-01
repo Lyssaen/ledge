@@ -60,6 +60,7 @@ export function RigsTab({ nav, dispatch, client, sessions, projects, notify }: {
         <div className="rigs-subtabs" role="tablist" aria-label={r.tabs}>
           {SUBS.map(x => <button key={x} type="button" role="tab" aria-selected={sub === x} className={cls(sub === x && 'on')} onClick={() => dispatch({ type: 'ledge', tab: 'rigs', rigs: x })}>{labels[x]}</button>)}
         </div>
+        {sub === 'specs' && <button type="button" className="st-qa" onClick={specs.refresh} disabled={specs.status === 'loading'}>{t.rigLaunch.refreshSpecs}</button>}
         {sub === 'specs' && machines.length > 1 && (
           <label className="rigs-machine">
             <span>{r.machine}</span>

@@ -16,6 +16,7 @@ import { DND_KEY, UPDATE_KEY, loadDesktopUpdate, loadDnd, onStorageKey } from '.
 import { createWebAudioPlayer } from './sounds/player';
 import { applyAccent, loadAccent, saveAccent } from './accent';
 import { loadIslandPosition, saveIslandPosition, loadDiscreet, saveDiscreet, loadIslandPrefs, saveIslandPrefs, localIslandPrefs, type IslandPosition } from './island';
+import { useNowPlaying } from './music/nowPlaying';
 
 export function App() {
   // An isolated browser demo can point at a fake daemon without disturbing the live WSL daemon.
@@ -59,6 +60,7 @@ export function App() {
   const island = useIsland(client);
   const [kept] = useState(loadIslandPrefs);
   const applied = island ?? kept ?? DEFAULT_ISLAND_PREFS;
+  const playing = useNowPlaying(applied.music, applied.visible);
   useEffect(() => {
     if (!island) return;
     saveIslandPrefs(island); setIslandPosition(island.position); setDiscreet(island.discreet);
@@ -99,7 +101,8 @@ export function App() {
         monitors={monitors} monitor={monitor} onMonitor={setMonitorChoice} onSettingsOpen={onSettingsOpen}
         theme={theme} client={client} dnd={dnd} soundPlayer={player} onToggleDnd={() => setDnd(d => !d)} onToggleTheme={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}
         accent={accent} onAccent={setAccent} islandPosition={islandPosition} onIslandPosition={setIslandPosition} discreet={discreet} onDiscreet={setDiscreet}
-        visible={applied.visible} shows={applied.shows} shortcut={applied.shortcut} />
+        visible={applied.visible} shows={applied.shows} shortcut={applied.shortcut}
+        music={{ now: playing.now, shown: playing.shown, hover: applied.music.hover, control: playing.control }} />
     </LangProvider>
   );
 }

@@ -43,7 +43,8 @@ const filled = (n: ReactNode) => n !== undefined && n !== null && n !== false;
 
 /** The resting notch, or the compact island while the pointer is over it: Ledge alone, its line, the trailing slot. */
 export function Handle(p: HandleProps) {
-  return p.awake ? <CompactIsland {...p} /> : <Filet {...p} />;
+  const trailing = p.strip ? undefined : p.trailing;
+  return p.awake ? <CompactIsland {...p} trailing={trailing} /> : <Filet {...p} trailing={trailing} />;
 }
 
 /** Measures the line and the trailing slot (their client rect is zoomed by the handle scale) and reports them on every change. */

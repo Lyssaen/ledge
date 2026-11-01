@@ -71,6 +71,10 @@ describe('<Handle> Ledge alone', () => {
     expect(strip).toHaveStyle({ height: '10px' });
     expect(strip.querySelector('[data-ledge-mark]')).not.toBeNull();
     expect(strip.querySelectorAll('[data-dot]')).toHaveLength(0);
+    const { unmount } = render(<Handle {...base} strip trailing={<span data-testid="music">♪</span>} />);
+    expect(document.querySelector('[data-trailing]')).toBeNull();
+    expect(screen.queryByTestId('music')).toBeNull();
+    unmount();
   });
   it('do not disturb mutes Ledge’s rectangle, and the island keeps its moon', () => {
     const { rerender } = render(<Handle {...base} />);

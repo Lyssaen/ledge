@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, renderHook, screen, waitFor, within } from '@testing-library/react';
-import { DEFAULT_ISLAND_PREFS, type ClientMessage, type IslandPrefs } from '@ledge/protocol';
+import { DEFAULT_ISLAND_PREFS, IslandPrefsSchema, type ClientMessage, type IslandPrefs, type NowPlaying } from '@ledge/protocol';
 import { boot, closeDaemons, recordToasts, savedNotices, TWO_PROJECTS, type MockDaemon } from './helpers';
 import { comboOf, shownKeys } from '../src/settings/Island';
 import { sameIsland, useIslandSave } from '../src/settings/useIslandSave';
@@ -46,9 +46,10 @@ describe('Settings › Notch', () => {
     expect(screen.getByRole('note')).toHaveTextContent('The notch has no settings of its own any more.');
     expect([...document.querySelectorAll('.set-card .set-label')].map(l => l.textContent)).toEqual([
       'Show the notch', 'Screen', 'Notch position', 'Discreet under a window', 'Notch size', 'Notch windows size',
-      'Allow and answer from the notch', 'Bubble when an agent is done', 'Agents’ words', 'Subagents in the notch', 'Shortcut to open the notch'
+      'Allow and answer from the notch', 'Bubble when an agent is done', 'Agents’ words', 'Subagents in the notch', 'Shortcut to open the notch',
+      'Show the music playing', 'When paused', 'On hover'
     ]);
-    expect(screen.getAllByRole('heading', { level: 2 }).map(h => h.textContent)).toEqual(['What the notch does']);
+    expect(screen.getAllByRole('heading', { level: 2 }).map(h => h.textContent)).toEqual(['What the notch does', 'Music']);
     for (const name of ['Show the notch', 'Discreet under a window', 'Allow and answer from the notch', 'Bubble when an agent is done', 'Agents’ words', 'Subagents in the notch']) expect(sw(name)).toHaveAttribute('aria-checked', 'true');
     expect(group('Screen').getByRole('radio', { name: 'Main' })).toBeChecked();
     expect(group('Notch position').getByRole('radio', { name: 'Centre' })).toBeChecked();
@@ -77,8 +78,8 @@ describe('Settings › Notch', () => {
     await waitFor(() => expect(saved()).toEqual(['Setting saved · Notch hidden']));
     expect(sw('Show the notch')).toHaveAttribute('aria-checked', 'false');
     expect(sw('Show the notch')).toBeEnabled();
-    for (const name of ['Discreet under a window', 'Allow and answer from the notch', 'Bubble when an agent is done', 'Agents’ words', 'Subagents in the notch']) expect(sw(name)).toBeDisabled();
-    for (const name of ['Screen', 'Notch position', 'Notch size', 'Notch windows size']) {
+    for (const name of ['Discreet under a window', 'Allow and answer from the notch', 'Bubble when an agent is done', 'Agents’ words', 'Subagents in the notch', 'Show the music playing']) expect(sw(name)).toBeDisabled();
+    for (const name of ['Screen', 'Notch position', 'Notch size', 'Notch windows size', 'When paused', 'On hover']) {
       expect(screen.getByRole('radiogroup', { name })).toHaveAttribute('aria-disabled', 'true');
       for (const r of group(name).getAllByRole('radio')) expect(r).toBeDisabled();
     }
@@ -91,6 +92,41 @@ describe('Settings › Notch', () => {
     await confirm(d, 2);
     await waitFor(() => expect(saved()).toEqual(['Setting saved · Notch hidden', 'Setting saved · Notch shown']));
     expect(sw('Agents’ words')).toBeEnabled();
+  });
+
+  const NOW: NowPlaying = { title: 'Quai 9', artist: 'Mira Volant', playing: true, cover: null, canPrev: true, canNext: true, source: 'Chrome' };
+  const play = (detail: NowPlaying | null) => window.dispatchEvent(new CustomEvent('ledge:media', { detail }));
+
+  it('the music switch sends music.enabled and the two choices stay disabled until it is on', async () => {
+    const { d, user } = await open();
+    expect(sw('Show the music playing')).toHaveAttribute('aria-checked', 'false');
+    for (const name of ['5 min', 'Always', 'Hide']) expect(group('When paused').getByRole('radio', { name })).toBeDisabled();
+    expect(group('When paused').getByRole('radio', { name: '5 min' })).toBeChecked();
+    await user.click(sw('Show the music playing'));
+    expect((await confirm(d, 1)).music.enabled).toBe(true);
+    await waitFor(() => expect(saved()).toEqual(['Setting saved · Music shown']));
+    expect(group('When paused').getByRole('radio', { name: 'Always' })).toBeEnabled();
+    await user.click(group('When paused').getByRole('radio', { name: 'Always' }));
+    expect((await confirm(d, 2)).music.paused).toBe('always');
+  });
+
+  it('the detected line names the track, drops a missing artist, and says when nothing plays', async () => {
+    const { d, user } = await open();
+    await user.click(sw('Show the music playing'));
+    await confirm(d, 1);
+    play(NOW);
+    expect(await screen.findByText('Detected: Quai 9 · Mira Volant, played by Chrome')).toBeVisible();
+    play({ ...NOW, artist: '' });
+    expect(await screen.findByText('Detected: Quai 9, played by Chrome')).toBeVisible();
+    play(null);
+    expect(await screen.findByText('Nothing is playing right now')).toBeVisible();
+  });
+
+  it('a daemon that never stored music shows the card off', async () => {
+    const { music: _, ...old } = DEFAULT_ISLAND_PREFS;
+    await open(IslandPrefsSchema.parse(old));
+    expect(sw('Show the music playing')).toHaveAttribute('aria-checked', 'false');
+    expect(group('When paused').getByRole('radio', { name: '5 min' })).toBeChecked();
   });
 
   it('screen, position, discreet, sizes and what the notch does: each change sends the whole settings and is said once confirmed; the preview follows', async () => {

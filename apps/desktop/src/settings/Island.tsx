@@ -10,6 +10,7 @@ import { useMotionPreferences } from '../motionPreferences';
 import { useDnd } from '../notify/prefs';
 import { useTheme } from '../shell/theme';
 import { Card, Row, Segmented, SwitchRow } from './controls';
+import { MusicCard } from './MusicCard';
 import { screenHere, screenValue, useIslandScreens, type IslandScreen } from './screens';
 import { useIslandSave } from './useIslandSave';
 import type { SettingsContext } from './SettingsPage';
@@ -124,6 +125,7 @@ export function Island({ ctx }: { ctx: SettingsContext }): JSX.Element {
           )}
         </Row>
       </Card>
+      <MusicCard music={p.music} off={off} errorOf={errorOf} set={set} />
     </>
   );
 }

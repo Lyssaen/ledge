@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod media;
 mod notch;
 mod pty;
 
@@ -248,10 +249,12 @@ fn main() {
         .manage(notch::PrevForeground::default())
         .manage(notch::Screen::default())
         .manage(pty::PtyState::default())
+        .manage(media::MediaState::default())
         .invoke_handler(tauri::generate_handler![
             focus_terminal, foreground_is_terminal, open_terminal, open_url, daemon_token, get_autostart, set_autostart, set_tray_labels, take_open_target, check_snapshot_update,
             open_in_ledge, notch::set_frame, notch::set_hot_zone, notch::set_outside_watch, notch::focus_overlay, notch::release_focus,
             notch::list_monitors, notch::set_monitor, open_atelier, pty::pty_open, pty::pty_write, pty::pty_resize, pty::pty_close,
+            media::media_watch, media::media_now, media::media_control,
         ])
         .setup(|app| {
             // WSL stops once no `wsl.exe` holds it: Ledge holds one from login until it quits, so the daemon stays reachable.

@@ -26,7 +26,7 @@ export function RigLaunchForm(p: {
   missing: readonly FormMissing[]; tried: boolean; busy: 'preparing' | 'launching' | null; refused: string | null;
   onGoal(goal: string): void; onSpec(spec: string): void; onProject(id: string | null): void; onMachine(id: string): void;
   onRepo(path: string): void; onBranch(branch: string): void; onCopy(): void; onName(name: string): void;
-  onCancel(): void; onPlan(): void; onLaunch(): void;
+  onCancel(): void; onPlan(): void; onLaunch(): void; onRefreshSpecs(): void;
 }): JSX.Element {
   const { t } = useI18n();
   const c = t.rigLaunch;
@@ -92,7 +92,8 @@ export function RigLaunchForm(p: {
           </div>
           {choosing && (
             <div id="rig-spec-choices" className="harness-choice-panel">
-              <span className="composer-label">{c.chooseFor}</span>
+              <div className="rig-spec-choice-heading"><span className="composer-label">{c.chooseFor}</span>
+                <button type="button" className="rig-spec-change" onClick={p.onRefreshSpecs} disabled={p.specs.status === 'loading'}>{c.refreshSpecs}</button></div>
               <div className="composer-tools rig-spec-tiles">
                 {specs.map(s => (
                   <button type="button" key={s.id} className={cls('tool-tile', spec?.id === s.id && 'selected')} aria-pressed={spec?.id === s.id}

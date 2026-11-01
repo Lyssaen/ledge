@@ -24,6 +24,7 @@
  * itself never knows about any zoom.
  */
 import { createTokenSource, type TokenRead, type TokenSource } from '@ledge/fleet';
+import { MEDIA_EVENT, NowPlayingSchema, type MediaAction, type NowPlaying } from '@ledge/protocol';
 import { resolveMonitor, type MonitorInfo } from '../monitor';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { EventCallback, UnlistenFn } from '@tauri-apps/api/event';
@@ -247,6 +248,45 @@ function globalShortcut(key: string, fn: () => void): () => void {
 export const onShortcut = (fn: () => void) => globalShortcut('l', fn);
 /** Ctrl+Alt+N: ask Ledge Desktop for a new session. The island no longer has the form. */
 export const onNewSessionShortcut = (fn: () => void) => globalShortcut('n', fn);
+
+const playingOf = (raw: unknown): NowPlaying | null => {
+  if (raw == null) return null;
+  const parsed = NowPlayingSchema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+};
+
+/** The track Windows is playing. In the browser, a `ledge:media` CustomEvent stands in for `ledge://media`. */
+export function onNowPlaying(fn: (now: NowPlaying | null) => void): () => void {
+  if (!inTauri()) {
+    const h = (e: Event) => fn(playingOf((e as CustomEvent<unknown>).detail));
+    window.addEventListener('ledge:media', h);
+    return () => window.removeEventListener('ledge:media', h);
+  }
+  let off = () => {}; let disposed = false;
+  void listenHere<unknown>(MEDIA_EVENT, e => { if (!disposed) fn(playingOf(e.payload)); }).then(un => {
+    off = un;
+    if (disposed) un();
+  }).catch(() => {});
+  return () => { disposed = true; off(); };
+}
+
+/** Asks the shell to poll (or to stop). Outside the shell there is nothing to poll. */
+export function mediaWatch(on: boolean): void {
+  if (!inTauri()) return;
+  void invoke('media_watch', { on }).catch(() => {});
+}
+
+/** The last track the shell read. `null` in the browser, or when nothing is playing. */
+export async function mediaNow(): Promise<NowPlaying | null> {
+  if (!inTauri()) return null;
+  try { return playingOf(await invoke<unknown>('media_now')); } catch { return null; }
+}
+
+/** Previous, play/pause or next. A refusal is swallowed: the buttons stay as they are. */
+export async function mediaControl(action: MediaAction): Promise<void> {
+  if (!inTauri()) return;
+  await invoke('media_control', { action }).catch(() => {});
+}
 
 /** Quits Ledge: the notch and Desktop are one process. A no-op in the browser and in tests. */
 export async function quitApp(): Promise<void> {

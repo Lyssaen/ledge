@@ -1,0 +1,361 @@
+<title>Musique dans l'encoche</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a desk band with the live notch on top, then artboards of each state, then the Réglages card and the open points. */
+:root {
+  color-scheme: dark;
+  --desk: #1c1e22;
+  --desk-2: #23262b;
+  --notch: #000;
+  --fg: #f2f2f3;
+  --muted: #9a9ca3;
+  --faint: #5d6068;
+  --line: #2e3137;
+  --hair: #34363b;
+  --accent: #e0645c;
+  --accent-soft: #3a1714;
+  --amber: #f0b429;
+  --amber-soft: #3b2a08;
+  --card: #18191c;
+  --sans: "Geist", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --mono: "Geist Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  /* Invented album covers, no real artwork. */
+  --c1: linear-gradient(135deg, #e8a33c 0%, #c2452f 55%, #3b1530 100%);
+  --c2: linear-gradient(160deg, #9fd3c7 0%, #3a7a8c 50%, #162a3d 100%);
+  --c3: conic-gradient(from 210deg at 35% 40%, #f2e6d0, #b78ad9, #4b2a7a, #f2e6d0);
+}
+* { box-sizing: border-box; }
+body { background: var(--desk); color: var(--fg); font-family: var(--sans); font-size: 14px; line-height: 1.5; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 0 64px; }
+.wrap { max-width: 1040px; margin: 0 auto; display: grid; gap: 48px; }
+h1, h2 { text-wrap: balance; margin: 0; font-weight: 600; letter-spacing: -0.015em; }
+h1 { font-size: 24px; }
+h2 { font-size: 17px; }
+p { margin: 0; }
+.lead { color: var(--muted); max-width: 64ch; }
+.eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+
+/* ---- the notch ---- */
+.screen { position: relative; display: flex; justify-content: center; background: var(--desk-2); border: 1px solid var(--line); border-top: 0; border-radius: 0 0 12px 12px; padding-bottom: 40px; overflow: hidden; }
+.screen.small { padding-bottom: 22px; }
+.notch { position: relative; display: flex; align-items: center; gap: 12px; height: 40px; padding: 0 16px 0 12px; background: var(--notch); border-radius: 0 0 20px 20px; transition: padding .2s ease; max-width: 100%; }
+.mascot { flex: none; width: 28px; height: 24px; background-image: url(data:image/png;base64,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); background-size: 600px 90px; background-position: -229px -8px; }
+.msg { min-width: 0; display: flex; gap: 8px; align-items: baseline; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14px; color: var(--muted); }
+.msg b { color: var(--fg); font-weight: 600; }
+.msg .rig { color: var(--faint); }
+.cat { flex: none; padding: 2px 7px; border-radius: 6px; background: var(--amber-soft); color: var(--amber); font-weight: 600; font-size: 13px; }
+.count { flex: none; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); font: 600 12px/20px var(--mono); text-align: center; }
+.sep { flex: none; width: 1px; height: 16px; background: var(--hair); }
+
+.music { position: relative; flex: none; display: flex; align-items: center; gap: 2px; }
+.cover { position: relative; flex: none; width: 24px; height: 24px; border: 0; padding: 0; border-radius: 5px; cursor: pointer; background: var(--c, #444); box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); }
+.cover::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: radial-gradient(circle at 50% 50%, rgba(0,0,0,.55) 0 3px, transparent 3.5px); }
+.paused .cover { filter: grayscale(.85) brightness(.6); }
+.paused .cover .pz { opacity: 1; }
+.pz { position: absolute; inset: 0; display: grid; place-items: center; opacity: 0; }
+.pz i { display: block; width: 8px; height: 9px; border-left: 2.5px solid #fff; border-right: 2.5px solid #fff; }
+.eq { position: absolute; right: -3px; bottom: -3px; display: flex; gap: 1px; align-items: flex-end; height: 8px; padding: 1px 2px; border-radius: 3px; background: var(--notch); }
+.eq span { width: 2px; background: var(--accent); border-radius: 1px; animation: eq 1s ease-in-out infinite; }
+.eq span:nth-child(2) { animation-delay: -.35s; }
+.eq span:nth-child(3) { animation-delay: -.7s; }
+@keyframes eq { 0%,100% { height: 2px; } 50% { height: 6px; } }
+.paused .eq { display: none; }
+.ctl { flex: none; display: grid; place-items: center; width: 0; height: 28px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--fg); cursor: pointer; opacity: 0; overflow: hidden; transition: width .18s ease, opacity .14s ease, background-color .12s; }
+.ctl svg { width: 15px; height: 15px; }
+.ctl:hover { background: #1d1e21; }
+.ctl:focus-visible, .cover:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ctl.play { color: #000; }
+.ctl.play .disc { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--fg); }
+.ctl.play svg { width: 11px; height: 11px; }
+.music.open .ctl, .music.static-open .ctl { width: 28px; opacity: 1; }
+.music.open .cover, .music.static-open .cover { margin-right: 6px; }
+.music.open .eq, .music.static-open .eq { display: none; }
+.titleline { flex: none; max-width: 0; overflow: hidden; white-space: nowrap; font-size: 12px; color: var(--muted); line-height: 1.25; opacity: 0; transition: max-width .18s ease, opacity .14s; }
+.titleline b { display: block; color: var(--fg); font-weight: 500; font-size: 12.5px; }
+.with-title.open .titleline, .with-title.static-open .titleline { max-width: 150px; opacity: 1; margin-right: 6px; }
+
+/* ---- page parts ---- */
+.hero { display: grid; gap: 14px; }
+.hero .screen { padding-bottom: 72px; }
+.toggles { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); color: var(--muted); font: 500 13px var(--sans); cursor: pointer; }
+.chip[aria-pressed="true"] { border-color: #5a2a26; background: var(--accent-soft); color: var(--fg); }
+.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hint { position: absolute; bottom: 18px; left: 0; right: 0; text-align: center; color: var(--faint); font-size: 12.5px; }
+.now { position: absolute; bottom: 40px; left: 0; right: 0; text-align: center; color: var(--muted); font-size: 12.5px; font-family: var(--mono); }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 470px), 1fr)); gap: 20px; }
+.board { display: grid; gap: 10px; min-width: 0; align-content: start; }
+.board .cap { display: grid; gap: 2px; }
+.board .cap strong { font-weight: 600; font-size: 14px; }
+.board .cap span { color: var(--muted); font-size: 13px; }
+.tag { font-family: var(--mono); font-size: 11px; color: var(--accent); }
+
+.compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 470px), 1fr)); gap: 20px; }
+.opt { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); min-width: 0; }
+.opt h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.opt p { color: var(--muted); font-size: 13px; }
+.opt .screen { border-radius: 8px; }
+
+/* ---- settings ---- */
+.settings { display: grid; grid-template-columns: 190px minmax(0, 1fr); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--card); }
+.side { padding: 14px 10px; border-right: 1px solid var(--line); display: grid; gap: 2px; align-content: start; font-size: 13px; color: var(--muted); }
+.side span { padding: 6px 10px; border-radius: 6px; }
+.side .on { background: #26282c; color: var(--fg); }
+.pane { padding: 20px; display: grid; gap: 14px; min-width: 0; }
+.pane h3 { margin: 0; font-size: 16px; font-weight: 600; }
+.setcard { border: 1px solid var(--line); border-radius: 10px; }
+.setcard .head { padding: 12px 16px; border-bottom: 1px solid var(--line); display: grid; gap: 2px; }
+.setcard .head strong { font-size: 13.5px; }
+.setcard .head span { color: var(--muted); font-size: 12.5px; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 16px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.row:first-of-type { border-top: 0; }
+.row .l { display: grid; gap: 2px; min-width: 0; flex: 1 1 260px; }
+.row .l b { font-weight: 500; font-size: 13.5px; }
+.row .l span { color: var(--muted); font-size: 12.5px; }
+.switch { position: relative; flex: none; width: 34px; height: 20px; border-radius: 999px; border: 0; background: #3a3c41; cursor: pointer; transition: background-color .15s; }
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.switch[aria-checked="true"] { background: var(--accent); }
+.switch[aria-checked="true"]::after { transform: translateX(14px); }
+.switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.seg { display: inline-flex; flex-wrap: wrap; padding: 2px; border-radius: 8px; background: #222428; gap: 2px; }
+.seg button { padding: 5px 10px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font: 500 12.5px var(--sans); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: #33353a; color: var(--fg); }
+.seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.off .row:not(.master) { opacity: .45; pointer-events: none; }
+.status { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; background: #1f2124; font-size: 12.5px; color: var(--muted); }
+.status .dot { width: 7px; height: 7px; border-radius: 50%; background: #3fb27f; flex: none; }
+.status .mini { width: 22px; height: 22px; border-radius: 4px; flex: none; }
+
+/* ---- open points ---- */
+.points { display: grid; gap: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.point { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 12px; padding: 14px 16px; border-top: 1px solid var(--line); }
+.point:first-child { border-top: 0; }
+.point .n { font: 500 12px/22px var(--mono); color: var(--faint); }
+.point b { font-weight: 600; }
+.point p { color: var(--muted); font-size: 13.5px; margin-top: 2px; }
+.point .reco { color: var(--fg); }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 12px; }
+.fact { padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); display: grid; gap: 4px; }
+.fact b { font-size: 13.5px; }
+.fact span { font-size: 13px; color: var(--muted); }
+.fact.no b { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--faint); }
+
+@media (max-width: 640px) {
+  .settings { grid-template-columns: 1fr; }
+  .side { display: none; }
+  .notch { gap: 8px; padding: 0 12px 0 10px; }
+  .msg { font-size: 13px; }
+}
+@media (prefers-reduced-motion: reduce) { .eq span { animation: none; height: 5px; } .ctl, .titleline, .switch, .switch::after { transition: none; } }
+</style>
+
+<div class="wrap">
+
+  <section class="hero" aria-labelledby="live">
+    <div class="screen" id="liveScreen">
+      <div class="notch">
+        <span class="mascot" role="img" aria-label="Ledge"></span>
+        <span class="msg" id="liveMsg"><span class="rig">factory</span><b>build → review-a</b><span>Candidat prêt, tests verts</span></span>
+        <span class="sep" id="liveSep"></span>
+        <div class="music" id="live" data-variant="a">
+          <button class="cover" id="liveCover" type="button" aria-label="Morceau en cours, afficher les commandes"><span class="pz"><i></i></span><span class="eq" aria-hidden="true"><span></span><span></span><span></span></span></button>
+          <span class="titleline" id="liveTitle"></span>
+          <button class="ctl" type="button" data-act="prev" aria-label="Précédent" tabindex="-1"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2v14H6zM20 5v14L9.5 12z"/></svg></button>
+          <button class="ctl play" type="button" data-act="play" aria-label="Pause" tabindex="-1"><span class="disc"><svg viewBox="0 0 24 24" fill="currentColor" id="playIcon"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg></span></button>
+          <button class="ctl" type="button" data-act="next" aria-label="Suivant" tabindex="-1"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 5h2v14h-2zM4 5v14l10.5-7z"/></svg></button>
+        </div>
+      </div>
+      <p class="now" id="nowLine"></p>
+      <p class="hint">Survole la pochette. Les commandes pilotent le lecteur en cours.</p>
+    </div>
+    <div style="display:grid;gap:10px">
+      <span class="eyebrow">Maquette · Ledge · encoche fermée</span>
+      <h1>La musique dans l'encoche</h1>
+      <p class="lead">La pochette du morceau en cours se range à droite du message de Ledge. Au survol, elle s'accompagne de précédent, lecture/pause et suivant. Le morceau vient des contrôles média de Windows : un onglet YouTube Music, Spotify, VLC, tout lecteur qui s'y déclare. Aucune connexion à un compte.</p>
+      <div class="toggles" role="group" aria-label="Essayer un état">
+        <button class="chip" type="button" id="tMsg" aria-pressed="true">Avec message</button>
+        <button class="chip" type="button" id="tPlay" aria-pressed="true">En lecture</button>
+        <button class="chip" type="button" id="tTitle" aria-pressed="false">Titre au survol (variante B)</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="board-set" aria-labelledby="h-states" style="display:grid;gap:16px">
+    <div style="display:grid;gap:4px"><span class="eyebrow">Les états, encoche fermée</span><h2 id="h-states">Ce que tu vois sans toucher</h2></div>
+    <div class="grid">
+      <div class="board">
+        <div class="screen small"><div class="notch">
+          <span class="mascot"></span>
+          <span class="msg"><span class="rig">factory</span><b>build → review-a</b><span>Candidat prêt</span></span>
+          <span class="sep"></span>
+          <div class="music"><span class="cover" style="--c:var(--c1)"><span class="pz"><i></i></span><span class="eq"><span></span><span></span><span></span></span></span></div>
+        </div></div>
+        <div class="cap"><span class="tag">1 · échange + musique</span><strong>Ledge | message | pochette</strong><span>Un filet sépare le message de la pochette. Trois barres rouges disent que ça joue.</span></div>
+      </div>
+      <div class="board">
+        <div class="screen small"><div class="notch">
+          <span class="mascot"></span>
+          <span class="sep"></span>
+          <div class="music"><span class="cover" style="--c:var(--c2)"><span class="pz"><i></i></span><span class="eq"><span></span><span></span><span></span></span></span></div>
+        </div></div>
+        <div class="cap"><span class="tag">2 · calme + musique</span><strong>Pas de message</strong><span>Ledge et la pochette seuls, l'encoche reste courte.</span></div>
+      </div>
+      <div class="board">
+        <div class="screen small"><div class="notch">
+          <span class="mascot"></span>
+          <span class="msg"><span class="cat">Architecture</span><b style="font-weight:500">orch-lead : JSON ou SQLite ?</b></span>
+          <span class="count">1</span>
+          <span class="sep"></span>
+          <div class="music"><span class="cover" style="--c:var(--c3)"><span class="pz"><i></i></span><span class="eq"><span></span><span></span><span></span></span></span></div>
+        </div></div>
+        <div class="cap"><span class="tag">3 · pour toi + musique</span><strong>Une décision t'attend</strong><span>La pochette reste. Si la place manque, c'est le message qui se coupe, jamais la pochette.</span></div>
+      </div>
+      <div class="board">
+        <div class="screen small"><div class="notch">
+          <span class="mascot"></span>
+          <span class="msg"><span>9 au travail · 2 rigs</span></span>
+          <span class="sep"></span>
+          <div class="music paused"><span class="cover" style="--c:var(--c1)"><span class="pz"><i></i></span></span></div>
+        </div></div>
+        <div class="cap"><span class="tag">4 · en pause</span><strong>Pochette éteinte</strong><span>Grisée avec le signe pause. Elle part après le délai choisi dans Réglages.</span></div>
+      </div>
+      <div class="board">
+        <div class="screen small"><div class="notch">
+          <span class="mascot"></span>
+          <span class="msg"><span>9 au travail · 2 rigs</span></span>
+        </div></div>
+        <div class="cap"><span class="tag">5 · rien ne joue</span><strong>Comme aujourd'hui</strong><span>Onglet fermé ou option coupée : ni filet ni pochette.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-hover" style="display:grid;gap:16px">
+    <div style="display:grid;gap:4px"><span class="eyebrow">Au survol de la pochette</span><h2 id="h-hover">Deux façons de l'ouvrir</h2><p class="lead">Ton exemple, c'est A. B ajoute le titre et l'artiste, parce qu'une pochette seule ne dit pas toujours ce qui joue.</p></div>
+    <div class="compare">
+      <div class="opt">
+        <h3>A · Commandes seules</h3>
+        <div class="screen small"><div class="notch">
+          <span class="mascot"></span>
+          <span class="msg"><span class="rig">factory</span><b>build → review-a</b></span>
+          <span class="sep"></span>
+          <div class="music static-open">
+            <span class="cover" style="--c:var(--c1)"></span>
+            <span class="ctl"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2v14H6zM20 5v14L9.5 12z"/></svg></span>
+            <span class="ctl play"><span class="disc"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg></span></span>
+            <span class="ctl"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 5h2v14h-2zM4 5v14l10.5-7z"/></svg></span>
+          </div>
+        </div></div>
+        <p>L'encoche s'élargit de 90 px vers la droite. Le titre reste dans l'info-bulle de la pochette.</p>
+      </div>
+      <div class="opt">
+        <h3>B · Commandes et titre</h3>
+        <div class="screen small"><div class="notch">
+          <span class="mascot"></span>
+          <span class="msg"><span class="rig">factory</span><b>build → review-a</b></span>
+          <span class="sep"></span>
+          <div class="music with-title static-open">
+            <span class="cover" style="--c:var(--c1)"></span>
+            <span class="titleline"><b>Lignes de fuite</b>Atelier Nord</span>
+            <span class="ctl"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2v14H6zM20 5v14L9.5 12z"/></svg></span>
+            <span class="ctl play"><span class="disc"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg></span></span>
+            <span class="ctl"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 5h2v14h-2zM4 5v14l10.5-7z"/></svg></span>
+          </div>
+        </div></div>
+        <p>Environ 150 px de plus. Un titre trop long se coupe avec « … ».</p>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-set" style="display:grid;gap:16px">
+    <div style="display:grid;gap:4px"><span class="eyebrow">Ledge Desktop · Réglages › Encoche</span><h2 id="h-set">Activer et régler</h2><p class="lead">Une nouvelle carte « Musique » sous « Ce que fait l'encoche ». Comme les autres réglages de l'encoche, elle passe par le daemon. Désactivée par défaut.</p></div>
+    <div class="settings">
+      <nav class="side" aria-label="Réglages"><span>Général</span><span>Apparence</span><span class="on">Encoche</span><span>Notifications</span><span>Machines</span><span>Mobile</span></nav>
+      <div class="pane">
+        <h3>Encoche</h3>
+        <div class="setcard" id="musicCard">
+          <div class="head"><strong>Musique</strong><span>Le morceau en cours sur ton PC, à droite de l'encoche.</span></div>
+          <div class="row master"><div class="l"><b>Afficher la musique en cours</b><span>Pochette, puis précédent, lecture/pause et suivant au survol. Aucune connexion à ton compte.</span></div><button class="switch" type="button" role="switch" id="sMusic" aria-checked="true" aria-label="Afficher la musique en cours"></button></div>
+          <div class="row"><div class="l"><b>En pause</b><span>Combien de temps la pochette reste visible après une pause.</span></div>
+            <div class="seg" role="group" aria-label="En pause"><button type="button" aria-pressed="false">Toujours</button><button type="button" aria-pressed="true">5 min</button><button type="button" aria-pressed="false">Masquer</button></div></div>
+          <div class="row"><div class="l"><b>Au survol</b><span>Ce qui s'ajoute à la pochette.</span></div>
+            <div class="seg" role="group" aria-label="Au survol"><button type="button" aria-pressed="true">Commandes</button><button type="button" aria-pressed="false">Commandes et titre</button></div></div>
+          <div class="row"><div class="status"><span class="mini" style="background:var(--c1)"></span><span class="dot"></span><span>Détecté : <b style="color:var(--fg);font-weight:500">Lignes de fuite · Atelier Nord</b>, lu par Chrome</span></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-facts" style="display:grid;gap:16px">
+    <div style="display:grid;gap:4px"><span class="eyebrow">Ce que Windows donne</span><h2 id="h-facts">Le périmètre de la première version</h2></div>
+    <div class="facts">
+      <div class="fact"><b>Pochette, titre, artiste</b><span>Tout lecteur qui se déclare à Windows les publie : navigateur, Spotify, VLC…</span></div>
+      <div class="fact"><b>Précédent, lecture/pause, suivant</b><span>Les mêmes touches que le panneau média de Windows.</span></div>
+      <div class="fact no"><b>J'aime</b><span>Pas exposé. Il faudrait une extension ou un compte Google : retiré de la première version.</span></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-open" style="display:grid;gap:16px">
+    <div style="display:grid;gap:4px"><span class="eyebrow">À trancher</span><h2 id="h-open">Ce que j'ai choisi à ta place</h2></div>
+    <div class="points">
+      <div class="point"><span class="n">1</span><div><b>Au survol : A ou B ?</b><p>A suit ton exemple. B ajoute titre et artiste. <span class="reco">Je propose A par défaut, B en option dans Réglages.</span></p></div></div>
+      <div class="point"><span class="n">2</span><div><b>Lecteurs suivis · tranché</b><p>Tous, sans réglage ni cas particulier. <span class="reco">S'il y en a plusieurs, l'encoche suit celui que Windows met en avant dans son panneau média.</span></p></div></div>
+      <div class="point"><span class="n">3</span><div><b>Après une pause</b><p>Garder la pochette grisée, pour combien de temps ? <span class="reco">5 minutes, puis elle part.</span></p></div></div>
+      <div class="point"><span class="n">4</span><div><b>Encoche ouverte</b><p>Quand le fil de Ledge est ouvert, la musique n'y apparaît pas. Elle ne vit que dans l'encoche fermée.</p></div></div>
+      <div class="point"><span class="n">5</span><div><b>Ne pas déranger</b><p>La musique reste visible : c'est toi qui l'as lancée, rien ne t'interrompt.</p></div></div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+(() => {
+  const TRACKS = [
+    { t: 'Lignes de fuite', a: 'Atelier Nord', c: 'var(--c1)' },
+    { t: 'Halogène', a: 'Les Basses Terres', c: 'var(--c2)' },
+    { t: 'Quai 9', a: 'Mira Volant', c: 'var(--c3)' }
+  ];
+
+  const $ = id => document.getElementById(id);
+  const music = $('live'), cover = $('liveCover'), title = $('liveTitle'), now = $('nowLine');
+  const ctls = [...music.querySelectorAll('.ctl')];
+  const PAUSE = '<path d="M6 4h4v16H6zM14 4h4v16h-4z"/>', PLAY = '<path d="M7 4v16l13-8z"/>';
+  let i = 0, playing = true, withTitle = false, closeT;
+
+  function render() {
+    const tr = TRACKS[i];
+    cover.style.setProperty('--c', tr.c);
+    cover.title = `${tr.t} · ${tr.a}`;
+    title.innerHTML = `<b>${tr.t}</b>${tr.a}`;
+    music.classList.toggle('paused', !playing);
+    music.classList.toggle('with-title', withTitle);
+    $('playIcon').innerHTML = playing ? PAUSE : PLAY;
+    music.querySelector('[data-act="play"]').setAttribute('aria-label', playing ? 'Pause' : 'Lecture');
+    now.textContent = `${playing ? '▶' : '❚❚'}  ${tr.t} · ${tr.a}`;
+  }
+  const open = () => { clearTimeout(closeT); music.classList.add('open'); ctls.forEach(c => c.tabIndex = 0); };
+  const close = () => { closeT = setTimeout(() => { if (!music.matches(':focus-within')) { music.classList.remove('open'); ctls.forEach(c => c.tabIndex = -1); } }, 250); };
+  cover.addEventListener('mouseenter', open);
+  cover.addEventListener('focus', open);
+  cover.addEventListener('click', open);
+  music.addEventListener('mouseenter', () => { if (music.classList.contains('open')) clearTimeout(closeT); });
+  music.addEventListener('mouseleave', close);
+  music.addEventListener('focusout', close);
+  music.addEventListener('click', e => {
+    const b = e.target.closest('[data-act]'); if (!b) return;
+    if (b.dataset.act === 'play') playing = !playing;
+    if (b.dataset.act === 'next') { i = (i + 1) % TRACKS.length; playing = true; }
+    if (b.dataset.act === 'prev') { i = (i + TRACKS.length - 1) % TRACKS.length; playing = true; }
+    render();
+  });
+  const chip = (id, fn) => $(id).addEventListener('click', e => { const on = e.currentTarget.getAttribute('aria-pressed') !== 'true'; e.currentTarget.setAttribute('aria-pressed', on); fn(on); render(); });
+  chip('tMsg', on => { $('liveMsg').hidden = !on; });
+  chip('tPlay', on => { playing = on; });
+  chip('tTitle', on => { withTitle = on; });
+
+  $('sMusic').addEventListener('click', e => { const on = e.currentTarget.getAttribute('aria-checked') !== 'true'; e.currentTarget.setAttribute('aria-checked', on); $('musicCard').classList.toggle('off', !on); });
+  document.querySelectorAll('.seg').forEach(g => g.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; g.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); }));
+  render();
+})();
+</script>

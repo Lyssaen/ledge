@@ -58,6 +58,11 @@ describe('island geometry', () => {
       // The hot zone and the window follow the handle: centred on the axis, as wide as the notch.
       expect(g(40).handle).toEqual({ left: Math.round(W / 2 - g(40).w / 2), w: g(40).w, h: g().h });
     }
+    const closed = layout({ bots: bots(1), mode: 'handle', awake: true, trailing: 24, screenH: H, screenW: W });
+    const opened = layout({ bots: bots(1), mode: 'handle', awake: true, trailing: 114, growRight: 90, screenH: H, screenW: W });
+    expect(opened.w).toBe(closed.w + 90);
+    expect(opened.left).toBe(closed.left);
+    expect(opened.handle).toMatchObject({ left: opened.left, w: opened.w });
     const s = scaledLayout({ bots: bots(2), mode: 'list', line: 120, trailing: 40, screenH: H, screenW: W }, { handle: 2, panel: 1 });
     expect(s.handle.w).toBe(2 * filetWidth([], false, { line: 120, trailing: 40 }));
   });
