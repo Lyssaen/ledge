@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Exchange, LedgeThreadItem } from '@ledge/protocol';
@@ -26,6 +26,16 @@ describe('ledge thread store', () => {
     const r = open();
     expect((r.get('l1') as { text: string }).text).toBe('b');
     expect(r.page().items.length).toBe(1);
+  });
+
+  it('strict flush reports write errors and can succeed after storage is repaired', async () => {
+    writeFileSync(path, 'blocking directory');
+    const t = createLedgeThread({ path: join(path, 'thread.jsonl') });
+    t.append({ kind: 'user', text: 'first' });
+    await expect(t.flushStrict()).rejects.toThrow('ledge thread write failed');
+    rmSync(path);
+    t.append({ kind: 'user', text: 'retry' });
+    await expect(t.flushStrict()).resolves.toBeUndefined();
   });
 
   it('page returns the latest 50 then the older ones', async () => {

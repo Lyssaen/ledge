@@ -4,7 +4,7 @@ import { dirname } from 'node:path';
 import type { Tool } from '@ledge/protocol';
 
 /** The harnesses that can be the brain: tmux-driven ones only (OMP has no pane, no env, no hook; ruling C13). */
-export const BRAIN_TOOLS = ['claude', 'cursor'] as const satisfies readonly Tool[];
+export const BRAIN_TOOLS = ['claude', 'codex', 'cursor'] as const satisfies readonly Tool[];
 export type BrainTool = typeof BRAIN_TOOLS[number];
 export const isBrainTool = (t: unknown): t is BrainTool => (BRAIN_TOOLS as readonly unknown[]).includes(t);
 
@@ -16,7 +16,7 @@ export function readBrainSettings(path: string): BrainSettings {
   let raw: unknown;
   try { raw = JSON.parse(readFileSync(path, 'utf8')); } catch { return { enabled: null, tool: 'claude' }; }
   const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
-  const enabled = o.tool === 'codex' ? false : typeof o.enabled === 'boolean' ? o.enabled : null;
+  const enabled = typeof o.enabled === 'boolean' ? o.enabled : null;
   const tool: Tool = isBrainTool(o.tool) ? o.tool : 'claude';
   return { enabled, tool, ...(typeof o.day === 'string' ? { day: o.day } : {}) };
 }

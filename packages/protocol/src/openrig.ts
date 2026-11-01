@@ -158,6 +158,13 @@ export const MandateMessageSchema = z.object({ type: z.literal('mandate'), text:
 export const BrainStatusMessageSchema = z.object({ type: z.literal('brain.status'), status: BrainStatusSchema });
 export const RigPlanMessageSchema = z.object({ type: z.literal('rig.plan'), rid: z.string(), plan: RigPlanSchema });
 export const BrainResultSchema = z.object({ type: z.literal('brain.result'), rid: z.string(), ok: z.boolean(), line: z.string(), code: BrainResultCodeSchema.optional() });
+/** Delegation is negotiated explicitly. Tokens are scoped to one authenticated peer connection. */
+export const BrainDelegateClaimSchema = z.object({ type: z.literal('brain.delegate.claim'), rid: z.string().min(1).max(100), id: z.string().min(1).max(200) });
+export const BrainDelegateDecideSchema = z.object({ type: z.literal('brain.delegate.decide'), rid: z.string().min(1).max(100), id: z.string().min(1).max(200), token: z.string().min(1).max(100), answers: z.record(z.string().max(8000)), category: MandateCategorySchema });
+export const BrainDelegateQuerySchema = z.object({ type: z.literal('brain.delegate.query'), rid: z.string().min(1).max(100), operation: z.string().min(1).max(100), token: z.string().min(1).max(100) });
+export const BrainDelegateReleaseSchema = z.object({ type: z.literal('brain.delegate.release'), rid: z.string().min(1).max(100), id: z.string().min(1).max(200), token: z.string().min(1).max(100), advice: z.string().max(8000).optional(), category: MandateCategorySchema.optional() });
+export const BrainDelegateResultSchema = z.object({ type: z.literal('brain.delegate.result'), rid: z.string().min(1).max(100), ok: z.boolean(), token: z.string().optional(), graceUntil: z.string().datetime().optional(), status: z.enum(['applied']).optional(), code: z.string().optional(), reason: z.string().optional() });
+
 export const RigResultSchema = z.object({ type: z.literal('rig.result'), rid: z.string(), ok: z.boolean(), code: RigResultCodeSchema.optional(), reason: z.string().optional() });
 
 // Client messages.

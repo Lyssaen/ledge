@@ -8,7 +8,7 @@ import { resolveRun } from '../actions.js';
 import type { LedgeThread } from '../ledgeThread.js';
 import type { SeatSendResult } from '../ledgeSay.js';
 import { resolveSeatAddress } from '../openrig/seatSend.js';
-import type { Deciding } from './decide.js';
+import type { AskResult, Deciding } from './decide.js';
 import type { Memory } from './memory.js';
 
 export { NOT_BRAIN_LINE } from '../../cli/brain.js';
@@ -144,7 +144,7 @@ function parse(op: BrainOp, args: string[]): BrainCall | null {
 
 export interface BrainCommandDeps {
   /** Grace and decisions; null without OpenRig. */
-  deciding: Pick<Deciding, 'decide' | 'ask'> | null;
+  deciding: (Pick<Deciding, 'decide'> & { ask(id: string, category: string | undefined, advice: string): AskResult | Promise<AskResult> }) | null;
   thread: Pick<LedgeThread, 'append' | 'get'>;
   /** Writing to a seat; null without OpenRig. */
   seatSend: { send(machine: string, seatRef: string, text: string): Promise<SeatSendResult> } | null;

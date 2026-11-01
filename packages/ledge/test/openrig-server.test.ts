@@ -132,6 +132,28 @@ describe('server with the OpenRig bridge', () => {
     await c.close();
   });
 
+  it('binds a delegated grace to its peer connection and releases it on disconnect', async () => {
+    const { server } = await setup(true);
+    const a = await client(server.port), b = await client(server.port);
+    try {
+      await until(() => a.of('snapshot').length > 0);
+      expect(a.of('snapshot')[0]!.daemon?.brainDelegate).toBe(true);
+      fake!.pushEscalation({ qitemId: 'E2', humanIntent: 'decision', humanQuestions: [{ id: 'q', question: 'Branch?', options: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }] }] });
+      await until(() => bridge!.escalation('E2')?.questions.length === 1);
+      a.send({ type: 'brain.delegate.claim', rid: 'c', id: 'E2' });
+      await until(() => a.of('brain.delegate.result').some(m => m.rid === 'c'));
+      const grant = a.of('brain.delegate.result').find(m => m.rid === 'c')!;
+      expect(grant).toMatchObject({ ok: true, token: expect.any(String), graceUntil: expect.any(String) });
+      expect(bridge!.escalation('E2')?.state).toBe('grace');
+      b.send({ type: 'brain.delegate.release', rid: 'wrong', id: 'E2', token: grant.token! });
+      await until(() => b.of('brain.delegate.result').some(m => m.rid === 'wrong'));
+      expect(b.of('brain.delegate.result').find(m => m.rid === 'wrong')).toMatchObject({ ok: false });
+      expect(bridge!.escalation('E2')?.state).toBe('grace');
+      await a.close();
+      await until(() => bridge!.escalation('E2')?.state === 'pending');
+    } finally { await b.close(); }
+  });
+
   it('without a bridge: no openrig flag, rig requests are refused as unavailable', async () => {
     const { server } = await setup(false);
     const c = await client(server.port);

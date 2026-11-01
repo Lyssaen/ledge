@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { appendFile, mkdir } from 'node:fs/promises';
-import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, fsyncSync, openSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { EXCHANGE_GROUP_MS, LedgeThreadItemSchema, THREAD_PAGE, type Exchange, type LedgeThreadItem } from '@ledge/protocol';
 import { log } from '../log.js';
@@ -21,6 +21,8 @@ export interface LedgeThread {
   hasEscalation(escalationId: string): boolean;
   onItem(fn: (item: LedgeThreadItem) => void): () => void;
   flush(): Promise<void>;
+  /** Like flush, but report failed writes and sync the journal before returning. */
+  flushStrict(): Promise<void>;
 }
 
 const groupKey = (machine: string, rigId: string) => `${machine}/${rigId}`;
@@ -74,6 +76,7 @@ export function createLedgeThread(o: { path: string; now?: () => string; uuid?: 
   } catch (e) { log(`ledge thread: load failed (${(e as Error).message})`); }
 
   let queue: Promise<void> = Promise.resolve();
+  let failedWrites = 0;
   const persist = (item: LedgeThreadItem): void => {
     queue = queue.then(async () => {
       const prefix = needsNewline ? '\n' : ''; // read in turn: a failed write before this one sets it again
@@ -81,6 +84,7 @@ export function createLedgeThread(o: { path: string; now?: () => string; uuid?: 
       await mkdir(dirname(o.path), { recursive: true });
       await appendFile(o.path, `${prefix}${JSON.stringify(item)}\n`);
     }).catch(e => {
+      failedWrites++;
       needsNewline = true; // the line may be torn: the next one starts fresh
       log(`ledge thread: write failed (${(e as Error).message})`);
     });
@@ -121,5 +125,11 @@ export function createLedgeThread(o: { path: string; now?: () => string; uuid?: 
     hasEscalation: id => escalations.has(id),
     onItem(fn) { listeners.add(fn); return () => { listeners.delete(fn); }; },
     flush: () => queue,
+    async flushStrict() {
+      await queue;
+      if (failedWrites) { failedWrites = 0; throw new Error('ledge thread write failed'); }
+      const fd = openSync(o.path, 'r'); try { fsyncSync(fd); } finally { closeSync(fd); }
+      const dir = openSync(dirname(o.path), 'r'); try { fsyncSync(dir); } finally { closeSync(dir); }
+    },
   };
 }
