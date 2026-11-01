@@ -94,6 +94,16 @@ describe('chat service', () => {
     expect(sessions).toContain('Visible'); expect(sessions).not.toContain('Hidden');
   });
 
+  it('the chat context leaves the brain out: it is no team seat nor task target', async () => {
+    let home = ''; let sessions = '';
+    const spawn = ((file: string, a: string[], o: object) => { sessions = readFileSync(join(home, 'chat', 'context', 'sessions.md'), 'utf8'); return nodeSpawn(file, a, o as never); }) as unknown as typeof nodeSpawn;
+    const s = setup({ spawn }); home = s.home;
+    const mkS = (id: string, name: string, extra: Partial<Session> = {}): Session => ({ id, name, tool: 'claude', cwd: '/w', project: 'w', title: `${name} · w`, tmuxSession: null, state: 'working', helpers: [], startedAt: '2026-10-11T08:00:00.000Z', lastActivityAt: '2026-10-11T08:00:00.000Z', source: 'launcher', ...extra });
+    s.store.upsert(mkS('a', 'Visible')); s.store.upsert(mkS('b', 'Cerveau', { brain: true }));
+    await s.chat.ask('q1', 'x', () => {});
+    expect(sessions).toContain('Visible'); expect(sessions).not.toContain('Cerveau');
+  });
+
   it('reset clears the turns, forgets the day file, and the next question starts a new session (--session-id, not --resume)', async () => {
     const args: string[][] = [];
     const spawn = ((file: string, a: string[], o: object) => { args.push(a); return nodeSpawn(file, a, o as never); }) as unknown as typeof nodeSpawn;

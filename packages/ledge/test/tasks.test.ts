@@ -38,6 +38,12 @@ describe('createTasks', () => {
     expect(line).toContain(`ledge task done ${t.id}`);
   });
 
+  it('give refuses the brain: nobody gives it a task', () => {
+    store.upsert(mk('brain', 'Cerveau', { brain: true }));
+    expect(cmd('otto', 'give', { to: 'Cerveau', title: 'x' }).reason).toBe('Cerveau est le cerveau de Ledge : on ne lui confie pas de tâche');
+    expect(tasks.all()).toEqual([]);
+  });
+
   it('give refuses an unknown, an ended, a hook-only session, and oneself', () => {
     expect(cmd('otto', 'give', { to: 'Zed', title: 'x' }).reason).toBe('aucune session Ledge nommée Zed');
     store.upsert(mk('arlo', 'Arlo', { state: 'exited' }));

@@ -99,7 +99,7 @@ import { createPhoneGateway, type PhoneGateway } from '../mobile/gateway.js';
 import { createAnswerReceipts } from '../mobile/answerReceipts.js';
 import { createNotifier } from '../mobile/push/notifier.js';
 import { chatEndPayload, decisionPayload } from '../mobile/push/triggers.js';
-import { decidedPush, escalationPush, pushFor } from '../mobile/push/triggers.js';
+import { badgeOf, decidedPush, escalationPush, pushFor } from '../mobile/push/triggers.js';
 import { createDecisionBatch } from '../mobile/push/decisions.js';
 import { createChallengeStore } from '../mobile/challenges.js';
 import { rpOf } from '../mobile/webauthn.js';
@@ -2200,8 +2200,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   let decisionPushBatch: ReturnType<typeof createDecisionBatch> | undefined;
   if (mobile) {
     const notifier = createNotifier({ mobile, presence: id => gateway?.visible(id) ?? false, log });
+    /** Waiting sessions, pending escalations and open task decisions: the one badge every push carries. */
+    const badgeExtra = () => (aggregate?.escalations().filter(e => e.state === 'pending').length ?? 0) + tasks.all().filter(openDecision).length;
+    const appBadge = () => badgeOf(store.all(), badgeExtra());
     notifyChatEnd = (deviceId, code) => {
-      const badge = store.all().filter(s => s.pending).length;
+      const badge = appBadge();
       void notifier.notify(chatEndPayload(code, badge), undefined, deviceId).catch(e => log(`push failed (${e instanceof Error ? e.name : 'error'})`));
     };
     const seenEscalations = new Map<string, import('@ledge/protocol').Escalation>();
@@ -2214,7 +2217,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         pushScheduled.delete(id); if (!aggregate || aggregate.escalationAmbiguous(id)) return;
         const current = aggregate.escalation(id); if (!current) return;
         const previous = seenEscalations.get(id); seenEscalations.set(id, current);
-        const badge = aggregate.escalations().filter(e => e.state === 'pending').length + store.all().filter(s => s.pending && !s.rig && !s.brain).length;
+        const badge = appBadge();
         const p = escalationPush(previous, current, badge);
         if (p) void notifier.notify(p, undefined).catch(e => log(`push failed (${e instanceof Error ? e.name : 'error'})`));
       });
@@ -2226,17 +2229,17 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     });
     if (aggregate) {
       decisionPushBatch = createDecisionBatch(() => memory.decisions({ limit: 200 }), count => {
-        const badge = aggregate.escalations().filter(e => e.state === 'pending').length + store.all().filter(s => s.pending && !s.rig && !s.brain).length;
+        const badge = appBadge();
         void notifier.notify(decidedPush(count, badge), undefined).catch(e => log(`push failed (${e instanceof Error ? e.name : 'error'})`));
       });
       unsubscribeDecisionPush = memory.onChange(() => decisionPushBatch?.changed());
     }
     notifyDecision = task => {
-      const badge = store.all().filter(s => s.pending).length + tasks.all().filter(openDecision).length;
+      const badge = appBadge();
       void notifier.notify(decisionPayload(task, badge), undefined).catch(e => log(`push failed (${e instanceof Error ? e.name : 'error'})`));
     };
     unsubscribePush = store.onApply((before, after) => {
-      const p = pushFor(before, after, store.all());
+      const p = pushFor(before, after, store.all(), badgeExtra());
       if (p) void notifier.notify(p, after.id).catch(e => log(`push failed (${e instanceof Error ? e.name : 'error'})`));
     });
   }

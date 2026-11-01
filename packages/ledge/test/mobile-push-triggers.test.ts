@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { PushPayloadSchema, pendingKey, type Session } from '@ledge/protocol';
-import { pushFor, safeTag } from '../src/mobile/push/triggers.js';
+import { badgeOf, pushFor, safeTag } from '../src/mobile/push/triggers.js';
 
 const T0 = '2026-10-09T18:00:00.000Z';
 const mk = (over: Partial<Session> = {}): Session => ({
@@ -67,5 +67,20 @@ describe('pushFor', () => {
   it('counts the sessions with a request as the badge', () => {
     const a = mk({ pending: req('x') }), b = mk({ id: 's2', pending: req('y') });
     expect(pushFor(mk(), a, [a, b, mk({ id: 's3' })])!.badge).toBe(2);
+  });
+});
+
+describe('badgeOf', () => {
+  it('counts the waiting sessions but a rig\'s and the brain\'s, plus the extra, within 0..999', () => {
+    const p = { pending: req('Run ls') };
+    const all = [mk({ id: 'a', ...p }), mk({ id: 'b', ...p }), mk({ id: 'c', ...p, rig: { id: 'r', node: 'n' } as never }), mk({ id: 'd', ...p, brain: true }), mk({ id: 'e' })];
+    expect(badgeOf(all)).toBe(2);
+    expect(badgeOf(all, 3)).toBe(5);
+    expect(badgeOf([], 5000)).toBe(999);
+    expect(badgeOf([], -4)).toBe(0);
+  });
+  it('pushFor carries the extra in its badge', () => {
+    const a = mk({ state: 'idle', pending: req('Run ls') });
+    expect(pushFor(mk(), a, [a], 2)!.badge).toBe(3);
   });
 });

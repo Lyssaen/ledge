@@ -77,7 +77,9 @@ export function createTasks(d: TasksDeps): Tasks {
         : `personne ne tient ${to} dans l'équipe ${team.name}${roles.length ? ` (rôles tenus : ${roles.join(', ')})` : ''}`;
     }
     const name = bareName(to);
-    return d.store.all().find(s => (s.name === name || s.id === to) && live(s)) ?? `aucune session Ledge nommée ${to}`;
+    const named = d.store.all().find(s => (s.name === name || s.id === to) && live(s));
+    if (named?.brain) return `${named.name} est le cerveau de Ledge : on ne lui confie pas de tâche`;
+    return named ?? `aucune session Ledge nommée ${to}`;
   };
   const teamOf = (id: string) => d.teams?.teamOf(id);
   /** Who handed the task to whom: two sessions (or Ledge), as ids and as their names then. */

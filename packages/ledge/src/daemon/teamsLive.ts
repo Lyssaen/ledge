@@ -3,6 +3,7 @@ import { isArchived, TEAM_SEATS_MAX, TeamSchema, type Seat, type Session, type T
 import type { Store } from './store.js';
 import { jsonJournal, type Journal } from './journal.js';
 import { log } from '../log.js';
+import { findRole } from './roles.js';
 
 export type TeamsJournal = Journal<Team[]>;
 
@@ -106,6 +107,17 @@ export function createTeamsLive(d: TeamsLiveDeps): TeamsLive {
     if (anyLive && t.state === 'resting') { const { restingAt: _r, ...rest } = t; put({ ...rest, state: 'active' }); }
     else if (!anyLive && t.state === 'active') { put({ ...t, state: 'resting', restingAt: now() }); log(`team ${t.id} (${t.name}) is resting: all its seats have ended`); }
   };
+  // A seat's membership lives on its session (`team`, `role`); a store written by another daemon (one that does not know those
+  // fields) drops it while the team journal keeps the seat: the session is put back at its table, once, before the teams settle.
+  for (const t of [...teams.values()]) {
+    if (t.state === 'dissolved') continue;
+    for (const seat of t.seats) {
+      const s = seat.sessionId ? d.store.get(seat.sessionId) : undefined;
+      if (!s || s.team || !live(s)) continue;
+      d.store.patch(s.id, { team: t.id, role: seat.role, roleLabel: findRole(seat.role, s.cwd)?.label ?? seat.role });
+      log(`team ${t.id} (${t.name}): seat @${seat.role} rebuilt on ${s.name}`);
+    }
+  }
   for (const t of [...teams.values()]) settle(t);
 
   const unsubscribe = d.store.onChange(c => {
@@ -139,6 +151,7 @@ export function createTeamsLive(d: TeamsLiveDeps): TeamsLive {
     },
     seat(id, role, session, roleLabel) {
       const t = teams.get(id); if (!t) throw new Error(`unknown team ${id}`);
+      if (session.brain) throw new Error(`${session.name} est le cerveau de Ledge : il ne prend pas de siège dans une équipe`);
       unseatElsewhere(session.id, id);
       // A session replaced on its seat (a restart) is out of the team.
       const prev = t.seats.find(s => s.role === role)?.sessionId;
@@ -154,6 +167,7 @@ export function createTeamsLive(d: TeamsLiveDeps): TeamsLive {
       if (t.state === 'dissolved') return `l'équipe ${t.name} est dissoute`;
       const s = d.store.get(sessionId); if (!s) return 'session inconnue';
       if (!live(s)) return `${s.name} n'est pas en cours`;
+      if (s.brain) return `${s.name} est le cerveau de Ledge : il ne prend pas de siège dans une équipe`;
       if (s.source !== 'launcher') return `${s.name} n'a pas été lancée par Ledge`;
       const held = t.seats.find(x => x.role === role && x.sessionId && x.sessionId !== sessionId && live(d.store.get(x.sessionId)));
       if (held) return `le rôle @${role} est déjà tenu dans ${t.name} par ${d.store.get(held.sessionId!)?.name ?? held.sessionId}`;

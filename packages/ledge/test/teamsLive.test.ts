@@ -27,6 +27,14 @@ beforeEach(() => {
 });
 
 describe('live teams', () => {
+  it('the brain takes no seat: join and seat refuse it', () => {
+    store.upsert(mk('brain', 'Cerveau', { brain: true }));
+    const t = make();
+    expect(teams.join(t.id, 'brain', 'build', 'Build')).toBe('Cerveau est le cerveau de Ledge : il ne prend pas de siège dans une équipe');
+    expect(() => teams.seat(t.id, 'build', store.get('brain')!, 'Build')).toThrow('cerveau de Ledge');
+    expect(store.get('brain')!.team).toBeUndefined();
+  });
+
   it('a new team is active with free seats; seating tells each session its team and role', () => {
     const t = make();
     expect(t).toMatchObject({ id: expect.stringMatching(/^team-[0-9a-f]{4}$/), state: 'active', seats: [{ role: 'lead', sessionId: null }, { role: 'build', sessionId: null }, { role: 'review', sessionId: null }] });

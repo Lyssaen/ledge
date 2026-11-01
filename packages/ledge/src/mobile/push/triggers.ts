@@ -21,6 +21,12 @@ export function cut(s: string, n: number): string {
   return `${out}…`;
 }
 
+/** The app badge, one way for every push: the sessions waiting on the user (a rig's and the brain's are not his), plus `extra` (the
+ *  pending escalations and the open task decisions, which the caller counts), within what a push may carry. */
+export function badgeOf(sessions: readonly Session[], extra = 0): number {
+  return Math.max(0, Math.min(999, sessions.filter(s => s.pending && !s.rig && !s.brain).length + extra));
+}
+
 function requestBody(s: Session): string {
   const p = s.pending!;
   const text = p.text.trim();
@@ -32,9 +38,9 @@ function requestBody(s: Session): string {
  * What the phone should be told about this change of a session, or nothing: a new request or question, or a turn that
  * just ended. Pure; the one-minute spacing of `finished` is the notifier's.
  */
-export function pushFor(before: Session | undefined, after: Session, all: readonly Session[]): PushPayload | null {
+export function pushFor(before: Session | undefined, after: Session, all: readonly Session[], extra = 0): PushPayload | null {
   if (after.rig || after.brain) return null;
-  const badge = Math.min(999, all.filter(s => s.pending && !s.rig && !s.brain).length);
+  const badge = badgeOf(all, extra);
   const tag = safeTag(after.id);
   const p = after.pending;
   if (p && (!before?.pending || pendingKey(p) !== pendingKey(before.pending))) {

@@ -108,6 +108,22 @@ describe('SSH application transport', () => {
     expect(got.some(m => m.type === 'error')).toBe(false);
     expect(ws.readyState).toBe(WebSocket.OPEN);
   });
+  it('forwards the frozen 0.32 teams and roles.listing frames, with content, link up and no error frame', async () => {
+    const fixtures = new URL('../../protocol/test/fixtures/ledge-0.32/', import.meta.url).pathname;
+    const { wss, port } = await wsServer(); let child!: ChildProcessWithoutNullStreams;
+    wss.on('connection', ws => serveSsh(ws, 'server', { spawn: () => {
+      child = spawn(process.execPath, ['--input-type=module', '-e', `import {readFileSync} from 'node:fs'; console.log(JSON.stringify({type:'snapshot',sessions:[]})); for (const f of ['teams','roles.listing']) console.log(JSON.stringify(JSON.parse(readFileSync(${JSON.stringify(fixtures)}+f+'.json','utf8')))); setInterval(()=>{},1000);`]);
+      cleanup.push(() => { child.kill('SIGKILL'); }); return child;
+    } }));
+    const ws = new WebSocket(`ws://127.0.0.1:${port}`), got: { type: string; teams?: unknown[]; roles?: unknown[] }[] = [];
+    ws.on('message', b => got.push(JSON.parse(String(b)))); cleanup.push(() => ws.terminate());
+    await until(() => got.length >= 3);
+    expect(got.map(m => m.type)).toEqual(['snapshot', 'teams', 'roles.listing']);
+    expect(got[1]?.teams).toHaveLength(2); expect(got[2]?.roles).toHaveLength(2);
+    await new Promise(r => setTimeout(r, 150));
+    expect(got.some(m => m.type === 'error')).toBe(false);
+    expect(ws.readyState).toBe(WebSocket.OPEN);
+  });
   it('reports a missing remote bridge without marking the host ready', async () => {
     const { wss, port } = await wsServer();
     wss.on('connection', ws => serveSsh(ws, 'server', { spawn: () => spawn(process.execPath, ['-e', 'console.error("ledge: command not found"); process.exit(127)']) }));

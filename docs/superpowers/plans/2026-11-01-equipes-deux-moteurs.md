@@ -21,6 +21,7 @@
 - **`ledge ask` reste** tel que le lot 1 de Joffrey l'a livré (`770d2b1c`).
 - **Écrans repris de `main`** : chacun reste isolé (son dossier ou composant, branché à un seul endroit), pour être remplacé par ceux de Joffrey plus tard.
 - **Un lead par modèle d'équipe, exactement** : c'est le siège de rôle `leader` (`LEADER_ROLE`, `packages/ledge/src/daemon/actions.ts`).
+- **Compatibilité du fil** : les schémas d'équipe et de tâche du protocole ne gagnent que des champs optionnels ; la règle « un lead exactement » vit dans le chargeur de modèles, pas dans un schéma du fil. Les trames figées de `packages/protocol/test/fixtures/ledge-0.32/` doivent toujours passer.
 - **Pas de priorité de messages, de rôles enrichis ni de file avancée** dans ce projet (deuxième étape).
 - **Textes** en français dans `i18n/fr.ts`, avec l'anglais à côté dans `en.ts`.
 - **Chaque tâche finit verte** : `pnpm typecheck` à la racine et les tests des paquets touchés (`pnpm --filter <pkg> test`). Un commit par tâche, en Conventional Commits avec un scope de paquet, terminé par `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
