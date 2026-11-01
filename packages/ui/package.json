@@ -11,6 +11,8 @@
     "./reply/parse": "./src/reply/parse.ts",
     "./bots/poseFor": "./src/bots/poseFor.ts",
     "./bots/Bot": "./src/bots/Bot.tsx",
+    "./bots/LogoBot": "./src/bots/LogoBot.tsx",
+    "./bots/LedgeSketch": "./src/bots/LedgeSketch.tsx",
     "./bots/ResidentMascot": "./src/bots/ResidentMascot.tsx",
     "./bots/material": "./src/bots/material.ts",
     "./bots/useBotMotion": "./src/bots/useBotMotion.ts",

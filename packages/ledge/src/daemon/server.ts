@@ -17,7 +17,7 @@ import { Refusal, STALE, bottomLines, dialogMismatch } from '../adapters/types.j
 import { verifyGone } from '../adapters/verify.js';
 import { DETECT_LINES } from './poller.js';
 import { answeredBy, pendingTool } from './state.js';
-import { claudeOpenCall, claudeToolAnswered, labelTranscript, resumeLabel } from './transcript.js';
+import { agentThought, claudeOpenCall, claudeToolAnswered, labelTranscript, resumeLabel } from './transcript.js';
 import { pickName } from '../names.js';
 import { readPeers, type ClaudePeer } from './peers.js';
 import { spawnSession, type TmuxTool } from '../spawn.js';
@@ -299,7 +299,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** The notifier is made after the gateway: a chat end reaches it through this. */
   let notifyChatEnd: ((deviceId: string, code?: ChatErrorCode) => void) | undefined;
   /** Every local front gets it; the phone gateway passes on only what it knows. */
-  const broadcast = (msg: ServerMessage) => { for (const c of localClients) send(c, msg); gateway?.forward(msg); };
+  const broadcast = (msg: ServerMessage) => { for (const c of localClients) send(c, msg); if (msg.type !== 'session.thought') gateway?.forward(msg); };
   threads.setEmitter('desktop', broadcast);
   const history = opts.history;
   await attachments.load().catch(e => log(`attachments not loaded: ${(e as Error).message}`));
@@ -578,6 +578,17 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     previews.set(id, lines);
     broadcast({ type: 'session.preview', id, lines });
   };
+  const thoughtLast = new Map<string, string>();
+  const thoughtTimer = setInterval(() => {
+    for (const s of store.all()) {
+      if (s.offline || s.state === 'exited' || s.state === 'idle') continue;
+      const text = (s.transcriptPath ? agentThought(s.transcriptPath) : undefined) ?? s.lastMessage?.summary ?? s.lastReply?.text;
+      const excerpt = text?.replace(/\s+/g, ' ').trim().slice(0, 80);
+      if (!excerpt || thoughtLast.get(s.id) === excerpt) continue;
+      thoughtLast.set(s.id, excerpt);
+      broadcast({ type: 'session.thought', id: s.id, text: excerpt, at: new Date().toISOString() });
+    }
+  }, 10_000); thoughtTimer.unref();
 
   /** How long an `until` step waits for the screen the next keys are meant for, polled every UNTIL_POLL_MS. */
   const UNTIL_MS = opts.untilMs ?? 1500;
@@ -1849,6 +1860,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     asks,
     projects: () => projects,
     say: text => { thread.append({ kind: 'ledge', text }); },
-    close: () => new Promise<void>(res => { clearInterval(sweepTimer); clearInterval(brainDayTimer); unsubscribe(); unsubscribeBrain(); unsubscribeMemory(); deciding?.dispose(); unsubscribeRemoteSettled?.(); remoteBrainCoordinator?.close(); remoteBrainOwner?.close(); brain.dispose(); unsubscribeBridge?.(); unsubscribeAggregate?.(); rigRouter?.close(); remote?.close(); launches?.close(); stopRepoWatch?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); unsubscribeAnswerSettled?.(); unsubscribePhoneSync?.(); unsubscribeEscalationPush?.(); unsubscribeDecisionPush?.(); decisionPushBatch?.close(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
+    close: () => new Promise<void>(res => { clearInterval(sweepTimer); clearInterval(brainDayTimer); clearInterval(thoughtTimer); unsubscribe(); unsubscribeBrain(); unsubscribeMemory(); deciding?.dispose(); unsubscribeRemoteSettled?.(); remoteBrainCoordinator?.close(); remoteBrainOwner?.close(); brain.dispose(); unsubscribeBridge?.(); unsubscribeAggregate?.(); rigRouter?.close(); remote?.close(); launches?.close(); stopRepoWatch?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); unsubscribeAnswerSettled?.(); unsubscribePhoneSync?.(); unsubscribeEscalationPush?.(); unsubscribeDecisionPush?.(); decisionPushBatch?.close(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
   };
 }

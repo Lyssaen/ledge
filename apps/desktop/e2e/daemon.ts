@@ -454,8 +454,9 @@ export const eight = [
 ];
 
 /** The app opens on Ledge's home view (ledge home spec §2.1); a test about the atelier goes there from the sidebar. */
-export async function openAtelier(page: Page): Promise<void> {
+export async function openAtelier(page: Page, bureaux = false): Promise<void> {
   await page.locator('section.ledge-home').waitFor();
+  await page.evaluate(enabled => localStorage.setItem('desktop.legacyAtelier', enabled ? '0' : '1'), bureaux);
   // The sidebar's « Atelier »; in a narrow window, where the sidebar is hidden, the home view's own way back.
   const entry = page.locator('aside.sidebar').getByRole('button', { name: /^Atelier/ });
   if (await entry.isVisible()) await entry.click();

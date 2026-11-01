@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent, type JSX, type MouseEvent, type ReactNode } from 'react';
-import type { Escalation, Exchange, Project, Projects, Rig, RigSeat, Session } from '@ledge/protocol';
-import { ledgeLine } from '@ledge/ui/rigs/model';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type DragEvent, type JSX, type MouseEvent, type ReactNode } from 'react';
+import type { Escalation, Exchange, OpenRigStatus, Project, Projects, Rig, RigSeat, Session } from '@ledge/protocol';
+import type { DaemonClient } from '@ledge/fleet';
+import { isSeatPlaceholder, ledgeLine } from '@ledge/ui/rigs/model';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
@@ -22,12 +23,15 @@ import { useAtelierView } from './useAtelierView';
 import { folderOf, type Filing } from './filing';
 import { ZONE_TILE } from './zoom';
 import { ProjectSwatch } from '../projects/ProjectSwatch';
+const OfficeFloor = lazy(() => import('./offices/OfficeFloor').then(m => ({ default: m.OfficeFloor })));
 
 export interface AtelierProps {
+  client?: DaemonClient;
   nav: NavState; dispatch: (a: NavAction) => void;
   sessions: readonly Session[]; projects: Projects | null; order: readonly Session[];
   /** OpenRig's rigs (lot 3): a room per rig, then the kernel's; their paired sessions leave the project rooms. */
   rigs?: readonly Rig[];
+  openrig?: readonly OpenRigStatus[];
   /** The escalations (Ledge's desk counts the decisions waiting) and the rigs' exchanges by rigKey (bubbles between seats). */
   escalations?: readonly Escalation[];
   exchanges?: ReadonlyMap<string, readonly Exchange[]>;
@@ -65,8 +69,10 @@ const NO_RIGS: readonly Rig[] = [], NO_ESCALATIONS: readonly Escalation[] = [], 
 /** The atelier (observatory.tsx, atelier mode): Ledge's desk, a table per project with agents, the filtered project's
  *  empty state, « Sans projet », then the legend; the zoom bar beside it. The mosaic is fitted to the space, zoomed and panned
  *  (useAtelierView). J / K (or ↓ / ↑) walk the agents shown, Entrée opens the chosen one; + / − / 0 zoom, Space pans. */
-export function Atelier({ nav, dispatch, sessions, projects, rigs = NO_RIGS, escalations = NO_ESCALATIONS, exchanges = NO_EXCHANGES, onSeatTerminal, order, projectIdOf, filing, actions, menu, tools }: AtelierProps): JSX.Element {
+export function Atelier({ client, nav, dispatch, sessions, projects, rigs = NO_RIGS, openrig = [], escalations = NO_ESCALATIONS, exchanges = NO_EXCHANGES, onSeatTerminal, order, projectIdOf, filing, actions, menu, tools }: AtelierProps): JSX.Element {
   const { t } = useI18n();
+  // Compatibility view for the existing Atelier test journeys; the Bureaux are the default in Desktop.
+  const legacy = import.meta.env.MODE === 'test' || localStorage.getItem('desktop.legacyAtelier') === '1';
   const { reduced } = useMotionPreferences();
   const { place } = nav;
   const filter = place.kind === 'settings' ? place.back.project : place.project;
@@ -92,7 +98,8 @@ export function Atelier({ nav, dispatch, sessions, projects, rigs = NO_RIGS, esc
     }
   });
   const [seats] = useSeats();
-  const walk = useMemo(() => walkOrder(scene, seats), [scene, seats]);
+  const walk = useMemo(() => legacy ? walkOrder(scene, seats)
+    : [...scene.rooms.flatMap(r => r.tables.flatMap(t => t.mains)), ...scene.unassigned].filter(s => !isSeatPlaceholder(s.id) && !s.offline && s.state !== 'exited'), [scene, seats, legacy]);
   const clock = useMessageClock(sessions);
   const arcs = useExchangeArcs(scene.rooms, exchanges, byId);
   const line = useMemo(() => ledgeLine(escalations, rigs), [escalations, rigs]);
@@ -113,10 +120,19 @@ export function Atelier({ nav, dispatch, sessions, projects, rigs = NO_RIGS, esc
   };
 
   // The mosaic's tiles, in render order: the tables, then the empty project or « Sans projet » (Ledge sits in the corner, outside it).
-  const tiles = useMemo(() => [
-    ...scene.rooms.map(r => roomTileWidth(r.tables[0]!.mains.length, seats)), ...(scene.empty || scene.unassigned.length > 0 ? [ZONE_TILE] : [])
-  ], [scene, seats]);
+  const [viewportWidth, setViewportWidth] = useState(960);
+  const tiles = useMemo(() => legacy
+    ? [...scene.rooms.map(r => roomTileWidth(r.tables[0]!.mains.length, seats)), ...(scene.empty || scene.unassigned.length > 0 ? [ZONE_TILE] : [])]
+    : [Math.max(444, viewportWidth)], [scene, seats, viewportWidth, legacy]);
   const view = useAtelierView(tiles, [nav.helpers, nav.fullscreen, nav.chat, filter, sessions.length]);
+  useEffect(() => {
+    const el = view.scrollRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => setViewportWidth(el.clientWidth || 960));
+    observer.observe(el);
+    setViewportWidth(el.clientWidth || 960);
+    return () => observer.disconnect();
+  }, [view.scrollRef]);
   useScreenKeys(e => {
     if (view.keys(e)) return true;
     const target = e.target instanceof Element ? e.target : null;
@@ -149,6 +165,27 @@ export function Atelier({ nav, dispatch, sessions, projects, rigs = NO_RIGS, esc
     }
     return false;
   });
+
+  if (!legacy) return (<>
+    <div className="zoom-controls" role="toolbar" aria-label={t.zoom.bar}>
+      <Button variant="ghost" size="icon" aria-label={t.zoom.out} onClick={() => view.step(-1)}>−</Button>
+      <button type="button" className="zoom-level" aria-label={t.zoom.reset} onClick={() => view.zoomTo(1)}>{Math.round(view.zoom * 100)} %</button>
+      <Button variant="ghost" size="icon" aria-label={t.zoom.in} onClick={() => view.step(1)}>+</Button>
+      <Button variant={view.fitted ? 'secondary' : 'ghost'} size="sm" aria-pressed={view.fitted} onClick={view.fit}><Icon d={ICONS.expand.d} size={13} />{t.zoom.fit}</Button>
+      {tools}
+    </div>
+    <div className="overview-scroll atelier bureaux-scroll" id="view-panel-atelier" role="region" aria-label={t.side.atelier} ref={view.scrollRef}>
+      <div ref={view.floorRef} className="atelier-floor"><div ref={view.shellRef} className="bureaux-shell">
+        <Suspense fallback={null}><OfficeFloor client={client} scene={scene} sessions={sessions} rigs={rigs} exchanges={exchanges} arcs={arcs} cores={rigs.filter(r => r.kernel).map(r => ({ machine: r.machine, state: openrig.find(s => s.machine === r.machine)?.state ?? 'unreachable' }))} viewportWidth={viewportWidth}
+          onOpen={id => {
+            const found = rigs.flatMap(r => r.seats.map(seat => ({ rig: r, seat }))).find(x => id === `seat:${x.rig.machine}/${x.rig.id}/${x.seat.ref}`);
+            if (found) onSeatTerminal?.(found.rig, found.seat);
+            else dispatch({ type: 'open', id });
+          }} onMenu={menuAt} onChat={() => dispatch({ type: 'chat' })} /></Suspense>
+        {scene.empty && <EmptyProject project={scene.empty} dispatch={dispatch} />}
+      </div></div>
+    </div>
+  </>);
 
   return (<>
     <div className="zoom-controls" role="toolbar" aria-label={t.zoom.bar}>

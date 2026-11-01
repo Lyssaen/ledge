@@ -1,0 +1,50 @@
+.logo-study { max-width: 1120px; }
+.study-intro { padding: 32px 0 24px; }
+.study-intro > p:not(.eyebrow) { max-width: 720px; }
+.original-link { display: inline-block; margin-top: 14px; color: var(--foreground); font-size: 12px; text-underline-offset: 4px; }
+.logo-study .controls { gap: 14px; }
+.logo-study .controls label { font-size: 11px; }
+.comparison-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin: 24px 0 30px; }
+.comparison-grid article { overflow: hidden; background: var(--sidebar); border: 1px solid var(--border); border-radius: 14px; }
+.comparison-grid article > h2 { padding: 16px 18px 0; }
+.comparison-label { color: var(--muted-foreground); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
+.before { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 18px 12px; border-bottom: 1px solid var(--border); }
+.after { min-height: 192px; display: flex; align-items: center; flex-direction: column; justify-content: center; gap: 12px; padding: 16px; }
+.after .comparison-label { color: var(--foreground); }
+.concept-copy { padding: 4px 18px 18px; }
+.concept-copy h3 { font-size: 14px; font-weight: 550; margin: 0 0 8px; }
+.concept-copy p { font-size: 12px; min-height: 54px; }
+.concept-copy a { display: inline-block; margin-top: 12px; font-size: 10px; color: var(--muted-foreground); text-underline-offset: 3px; }
+.detail-study .section-heading label { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted-foreground); }
+.logo-bot .cube-top { fill: var(--bot-shine); opacity: .35; }
+.logo-bot .cube-side { fill: var(--bot-visor); opacity: .14; }
+.logo-bot .cube-edge { fill: none; stroke: var(--bot-shell-line); stroke-width: 1; stroke-linejoin: round; opacity: .3; }
+.logo-bot .shell { stroke-linejoin: round; }
+.logo-bot[data-simplified="true"] .cube-edge { display: none; }
+/* Bare faces: dark eyes on the shell, the state colour survives as a glint. */
+.logo-bot .eye-open { fill: var(--bot-visor); }
+.logo-bot .eye-glint { fill: var(--bot-eye); transition: opacity var(--bot-eye-ms, 260ms) var(--bot-ease); }
+.logo-bot :is(.eye-happy, .eye-error, .eye-sleep) { stroke: var(--bot-visor); }
+.logo-bot:is([data-eyes="happy"], [data-eyes="error"], [data-eyes="sleep"]) .eye-glint { opacity: 0; }
+.logo-bot[data-eyes="wide"] .eye-glint { transform: translateY(-1px); }
+.logo-bot[data-simplified="true"] .eye-glint { display: none; }
+/* Brand-inspired materials stay separate from the semantic eye and halo colours. */
+.logo-bot[data-branded="true"][data-tool="claude"][data-material="signal"] { --bot-shell-top: #c78669; --bot-shell-bottom: #8c503d; --bot-shell-line: #e0ab8f; --bot-visor: #33231f; }
+.logo-bot[data-branded="true"][data-tool="claude"][data-material="pebble"] { --bot-shell-top: #eab69b; --bot-shell-bottom: #c8876a; --bot-shell-line: #f5d6c4; --bot-visor: #392824; }
+.logo-bot[data-branded="true"][data-tool="codex"][data-material="signal"] { --bot-shell-top: #7774ce; --bot-shell-bottom: #40488b; --bot-shell-line: #a9b1ee; --bot-visor: #20243f; }
+.logo-bot[data-branded="true"][data-tool="codex"][data-material="pebble"] { --bot-shell-top: #e0dffb; --bot-shell-bottom: #a5a5d8; --bot-shell-line: #eeedff; --bot-visor: #292b48; }
+.logo-bot[data-branded="true"][data-tool="cursor"][data-material="signal"] { --bot-shell-top: #656763; --bot-shell-bottom: #343733; --bot-shell-line: #bdc0b9; --bot-visor: #191d1a; }
+.logo-bot[data-branded="true"][data-tool="cursor"][data-material="pebble"] { --bot-shell-top: #faf9f3; --bot-shell-bottom: #babcb4; --bot-shell-line: #e3e4dc; --bot-visor: #232824; }
+.logo-bot[data-branded="true"][data-tool="omp"][data-material="signal"] { --bot-shell-top: #cf6bbd; --bot-shell-bottom: #6989bc; --bot-shell-line: #dba4df; --bot-visor: #2d213b; }
+.logo-bot[data-branded="true"][data-tool="omp"][data-material="pebble"] { --bot-shell-top: #f0bee3; --bot-shell-bottom: #a7c4e5; --bot-shell-line: #f8ddf4; --bot-visor: #34283e; }
+@media (max-width: 850px) {
+          .comparison-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 500px) {
+  .comparison-grid { gap: 10px; }
+  .comparison-grid article > h2 { padding: 14px 12px 0; }
+  .before { flex-direction: column; padding: 12px; gap: 4px; }
+  .concept-copy { padding: 4px 12px 16px; }
+  .concept-copy p { min-height: 90px; }
+  .detail-study .section-heading { align-items: start; flex-direction: column; }
+}
