@@ -147,7 +147,8 @@ describe('the detached Atelier’s window (#21)', () => {
     const { user, close } = await atelier();
     try {
       expect(screen.queryByRole('complementary', { name: 'Sidebar' })).toBeNull();
-      expect(screen.getByRole('region', { name: 'Ledge table' })).toBeVisible();
+      // Sessions and projects arrive separately; Otto can appear before his project's table.
+      expect(await screen.findByRole('region', { name: 'Ledge table' })).toBeVisible();
       await user.click(screen.getByRole('button', { name: /^Otto,/ }));
       expect(win.toMain).toHaveBeenCalledWith({ type: 'open', id: 'local:otto' });
       expect(screen.getByRole('region', { name: 'Ledge table' })).toBeVisible();
