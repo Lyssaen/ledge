@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import type { PhoneEscalation, PhoneSession } from '@ledge/protocol';
+import { MANDATE_CATEGORY_LABEL, type PhoneEscalation, type PhoneSession } from '@ledge/protocol';
 import { copy } from '../copy';
 import { ageLabel, filterItems, headline, requestsOf, type Filter, type InboxItem } from '../model/requests';
 import { href } from '../router';
@@ -41,8 +41,8 @@ function ViaLedge({ escalation, store, offline }: { escalation: PhoneEscalation;
   const phase = op ? state.ops[op]?.phase : undefined;
   const busy = !!op && phase !== 'rejected' && phase !== 'failed';
   const question = escalation.questions.length === 1 ? escalation.questions[0] : undefined;
-  return <section className="rounded-card border border-line bg-surface p-4"><a className="block" href={href({ name: 'escalation', id: escalation.id })}><p className="mb-2 flex items-center gap-2 text-small text-muted"><Mascot size={30} />Ledge te passe une question de {escalation.from}{escalation.rigName ? ` · ${escalation.rigName}` : ''}</p><strong>{escalation.summary}</strong>{escalation.advice && <p className="mt-2 text-small text-muted">Mon avis : {escalation.advice}</p>}{escalation.state === 'grace' && <p>Ledge s’en occupe…</p>}</a>
-    {question && <div className="mt-2 flex flex-wrap gap-2">{[...question.options].sort((a, b) => Number(!!b.recommended) - Number(!!a.recommended)).map(option => <button key={option.id} type="button" className={buttonClass({ size: 'sm' })} disabled={offline || busy} onClick={() => setOp(store.answerEscalation(escalation.id, { [question.id]: option.id }))}>{option.label}{option.recommended ? ' · recommandé' : ''}</button>)}</div>}
+  return <section className="rounded-card border border-line bg-surface p-4"><a className="block" href={href({ name: 'escalation', id: escalation.id })}><p className="mb-2 flex items-center gap-2 text-small text-muted"><Mascot size={30} />Ledge te passe une question de {escalation.from}{escalation.rigName ? ` · ${escalation.rigName}` : ''}</p>{escalation.category && <p className="text-meta text-attention">{MANDATE_CATEGORY_LABEL[escalation.category].fr}</p>}<strong>{escalation.summary}</strong>{escalation.advice && <p className="mt-2 text-small text-muted">Mon avis : {escalation.advice}</p>}{escalation.state === 'grace' && <p>Ledge s’en occupe…</p>}</a>
+    {question && <div className="mt-2 flex flex-wrap gap-2">{[...question.options].sort((a, b) => Number(!!b.recommended) - Number(!!a.recommended)).map(option => <button key={option.id} type="button" className={buttonClass({ size: 'sm', variant: option.recommended ? 'primary' : 'outline' })} disabled={offline || busy} onClick={() => setOp(store.answerEscalation(escalation.id, { [question.id]: option.id }))}>{option.label}{option.recommended ? ' · recommandé' : ''}</button>)}</div>}
     {phase === 'rejected' || phase === 'failed' ? <p role="alert">Réponse non acceptée. Vérifie la demande.</p> : busy ? <p role="status">Réponse envoyée, en attente de confirmation.</p> : null}
   </section>;
 }

@@ -11,6 +11,12 @@ const e: PhoneEscalation = { id: 'e1', source: 'rig', rigKey: 'abc', from: '@bui
 function initial() { const m = snapshot([]); if (m.type !== 'snapshot') throw new Error(); return { ...m, daemon: { version: '1', name: 'PC', openrig: true as const }, rigs: [{ key: 'abc', name: 'factory', project: null, offProject: true, lifecycle: 'running' as const, kernel: false, seats: [] as PhoneRig['seats'], repos: 0 }], escalations: [e] }; }
 describe('OpenRig screens', () => {
  it('shows and links a rig', () => { const t = setup(); t.deliver(initial()); render(<Rigs store={t.store} />); expect(screen.getByRole('link', { name: /factory/ })).toHaveAttribute('href', '#/rig/abc/seats'); });
+ it('loads the latest rig exchange for its card', () => {
+   const t = setup(); t.deliver(initial()); render(<Rigs store={t.store} />);
+   expect(t.of('rig.exchanges.request')).toMatchObject([{ key: 'abc' }]);
+   act(() => t.deliver({ type: 'rig.exchanges', key: 'abc', items: [{ id: 'x1', rigKey: 'abc', from: '@a', to: '@b', kind: 'message', text: 'Dernier échange', at }] }));
+   expect(screen.getByText('Dernier échange')).toBeInTheDocument();
+ });
  it('shows the pending escalation in À toi and filters it by source', () => { const t = setup(); t.deliver(initial()); render(<Inbox store={t.store} />); expect(screen.getByText(/1 décision\./)).toBeInTheDocument(); expect(screen.getByRole('link', { name: /Choisir/ })).toBeInTheDocument(); fireEvent.click(screen.getByRole('button', { name: 'Sessions' })); expect(screen.queryByRole('link', { name: /Choisir/ })).not.toBeInTheDocument(); fireEvent.click(screen.getByRole('button', { name: 'Via Ledge' })); expect(screen.getByRole('link', { name: /Choisir/ })).toBeInTheDocument(); });
  it('opens Le point and asks Ledge to summarize the day', () => { const t = setup(); t.deliver(initial()); render(<LedgeThread store={t.store} />); fireEvent.click(screen.getByRole('button', { name: 'Tranché 0' })); expect(screen.getByRole('dialog', { name: 'Le point' })).toBeInTheDocument(); fireEvent.click(screen.getByRole('button', { name: 'Résumer la journée' })); expect(t.of('ledge.say')).toMatchObject([{ text: 'Résume ma journée.' }]); });
  it('opens a discussion without sending and carries its escalation with the next message', () => {

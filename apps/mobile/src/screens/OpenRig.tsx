@@ -20,6 +20,8 @@ const answerLabels = (e: PhoneEscalation): string => Object.entries(e.answer?.an
 export function Rigs({ store }: { store: MobileStore }) {
   const s = useMobile(store); const rigs = sortRigs([...s.rigs.values()], [...s.escalations.values()]);
   const count = point({ rigs, sessions: s.sessions.values(), escalations: s.escalations.values(), decisionsToday: s.decisionsToday }).toYou;
+  const rigKeys = JSON.stringify(rigs.map(r => r.key));
+  useEffect(() => { if (s.fresh) for (const key of JSON.parse(rigKeys) as string[]) store.requestExchanges(key); }, [store, s.fresh, rigKeys]);
   const totalSeats = rigs.reduce((n, r) => n + r.seats.length, 0);
   const status = s.openrigStatus ? ` · noyau OpenRig${s.openrigStatus.version ? ` ${s.openrigStatus.version}` : ''} ${statusLabel[s.openrigStatus.state]}` : '';
   return <><Header title="Rigs" subtitle={`${rigs.length} rigs · ${totalSeats} agents${status}`} link={linkView(s)} /><main className="min-h-0 flex-1 space-y-3 overflow-y-auto">
@@ -30,7 +32,7 @@ export function Rigs({ store }: { store: MobileStore }) {
 
 export function RigPage({ store, rigKey, view }: { store: MobileStore; rigKey: string; view: 'seats' | 'exchanges' | 'queue' }) {
   const s = useMobile(store); const rig = s.rigs.get(rigKey); const [notice, setNotice] = useState(''); const [message, setMessage] = useState('');
-  useEffect(() => { if (view !== 'seats') store.requestExchanges(rigKey); }, [store, rigKey, view]);
+  useEffect(() => { store.requestExchanges(rigKey); }, [store, rigKey]);
   const count = point({ rigs: s.rigs.values(), sessions: s.sessions.values(), escalations: s.escalations.values(), decisionsToday: s.decisionsToday }).toYou;
   const exchanges = (s.rigExchanges.get(rigKey) ?? []).filter(e => view !== 'queue' || e.kind === 'task' || e.kind === 'handoff');
   const action = async (verb: 'down' | 'restart', seatRef?: string) => { const result = await store.rigAction({ type: 'rig.act', key: rigKey, verb, ...(seatRef ? { seatRef } : {}) }); setNotice(result.status === 'applied' ? 'Demande acceptée.' : `Action non appliquée : ${result.status}`); };
@@ -61,7 +63,7 @@ function Item({ item, store, talk }: { item: PhoneThreadItem; store: MobileStore
   if (item.kind === 'ledge') return <div className="flex items-start gap-2"><Mascot size={32} /><div className="min-w-0 flex-1"><p className="mb-1 text-meta text-muted">Ledge</p><p className="rounded-[4px_18px_18px_18px] border border-line bg-surface p-3 text-body">{item.text}{item.pending && <span role="status"> …</span>}</p></div></div>;
   if (item.kind === 'escalation') { const e = item.escalation; const q = e.questions.length === 1 ? e.questions[0] : undefined; return <section className="rounded-[4px_18px_18px_18px] border border-attention bg-surface p-4"><p className="mb-2 text-meta text-muted">{e.category ? `${MANDATE_CATEGORY_LABEL[e.category].fr} · ` : ''}Ledge · {e.from}{e.rigName ? ` · ${e.rigName}` : ''}</p><a href={href({ name: 'escalation', id: e.id })}><strong>{e.summary}</strong></a>{e.advice && <p>{e.advice}</p>}{e.state === 'grace' && <p>Ledge s’en occupe…</p>}{e.answer ? <p>{e.answer.by === 'user' ? 'Tu as choisi' : 'Ledge a tranché'} · {answerLabels(e)}</p> : <>{q?.options.map(o => <button key={o.id} className={button} disabled={!state.fresh || (!!answerOp && !['rejected', 'failed'].includes(state.ops[answerOp]?.phase ?? 'sending'))} onClick={() => setAnswerOp(store.answerEscalation(e.id, { [q.id]: o.id }))}>{o.label}{o.recommended ? ' · recommandé' : ''}</button>)}{answerOp && ['rejected', 'failed'].includes(state.ops[answerOp]?.phase ?? '') && <p role="alert">La réponse n’a pas été acceptée. Vérifie la demande avant de réessayer.</p>}<button className={button} onClick={() => talk(e.id)}>En parler</button></>}</section>; }
   if (item.kind === 'exchanges') return <details className={card}><summary>{item.rigName} · {foldLabel(item)} · Voir ▸</summary>{item.items.map(e => <p className={e.kind === 'ledge' ? 'rounded-control bg-raised p-2' : 'py-1'} key={e.id}>{e.kind === 'ledge' ? 'Ledge · ' : ''}{e.from} → {e.to} · {e.text}</p>)}<a href={href({ name: 'rig', key: item.rigKey, view: 'exchanges' })}>Ouvrir le fil de {item.rigName} ›</a></details>;
-  if (item.kind === 'decided') return <div className={card}><p>{item.decision.summary}</p><button className={button} onClick={() => store.revisitDecision(item.decision.id)}>Revenir dessus</button></div>;
+  if (item.kind === 'decided') return <div className={card}><p className="text-meta text-muted">Ledge a tranché · {new Date(item.decision.at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</p><p>{item.decision.summary}</p><button className={button} onClick={() => store.revisitDecision(item.decision.id)}>Revenir dessus</button></div>;
   if (item.kind === 'card') return <p className={card}>{item.action.summary}</p>;
   const launched = [...state.rigs.values()].find(r => r.launch?.planId === item.plan.id);
   const launch = () => void store.rigAction({ type: 'rig.launch', planId: item.plan.id }).then(r => setStatus(r.status === 'applied' ? 'Lancé par toi' : r.status === 'rejected' && r.reason === 'invalid' ? 'Plan expiré. Redemander à Ledge.' : `Non lancé : ${r.status}`));
