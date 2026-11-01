@@ -25,3 +25,16 @@ describe('Bureaux placement', () => {
     expect(planRest(14)).toEqual(['rl', 'rs']);
   });
 });
+
+describe('office routes', () => {
+  it('connects two wings through the western corridor', async () => {
+    const { buildWorld, route } = await import('../src/atelier/offices/presence');
+    const floor = buildLayout(448, [team('p', 6), team('q', 6), team('r', 6)], 0);
+    const world = buildWorld(floor);
+    const a = world.seats.get('p-0')!, b = world.seats.get('r-0')!;
+    expect(a.corY).not.toBe(b.corY);
+    const path = route(a, b);
+    expect(path).toContainEqual({ x: 31, y: a.corY });
+    expect(path).toContainEqual({ x: 31, y: b.corY });
+  });
+});

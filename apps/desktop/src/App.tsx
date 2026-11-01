@@ -324,7 +324,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
             : session && place.kind === 'session' ? <SessionPlace client={fleetClient} session={session} nav={nav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify} actions={actions}
                 prefs={sessionPrefs} setPrefs={setSessionPrefs} onRevealCurrent={() => setRevealCurrent(n => n + 1)} />
             : detached ? <AtelierAway onShow={detach} onAttach={attach} />
-            : <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} rigs={rigs} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu}
+            : <Atelier client={fleetClient} nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} rigs={rigs} openrig={openrig} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu}
                 escalations={escalations} exchanges={exchanges}
                 onSeatTerminal={(rig, seat) => { void openSeatTerminal(fleetClient, rig, seat, new Map(sessions.map(s => [s.id, s]))).then(ok => { if (!ok) notify(t.session.terminal.openFailed(seat.name)); }); }} />}
           {(onOverview || place.kind === 'home') && <Footer dispatch={dispatch} localDown={localDown} island={island} />}

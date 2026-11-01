@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { projectOf, useEscalations, useProjects, useRigs, type DaemonClient } from '@ledge/fleet';
+import { projectOf, useEscalations, useOpenRig, useProjects, useRigs, type DaemonClient } from '@ledge/fleet';
 import { openSeatTerminal } from '../rigs/terminal';
 import { useRigExchanges } from '../rigs/useRigExchanges';
 import type { Session } from '@ledge/protocol';
@@ -69,6 +69,7 @@ function AtelierAlone({ client }: { client?: DaemonClient }) {
   const { sessions, machines, fleet, client: fleetClient, errors } = fleetView;
   const projects = useProjects(fleetClient);
   const rigs = useRigs(fleetClient);
+  const openrig = useOpenRig(fleetClient);
   const escalations = useEscalations(fleetClient);
   const exchanges = useRigExchanges(fleetClient, rigs);
   const relief = useRelief(fleetClient);
@@ -93,7 +94,7 @@ function AtelierAlone({ client }: { client?: DaemonClient }) {
       {!nav.fullscreen && <AtelierBar blocked={blocked} dispatch={dispatch} />}
       <div className={`application atelier-alone ${nav.fullscreen ? 'immersive' : ''} ${filing.dragging ? 'is-dragging' : ''}`} inert={blocked}>
         <section className="workspace">
-          <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} rigs={rigs} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu}
+          <Atelier client={fleetClient} nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} rigs={rigs} openrig={openrig} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu}
             escalations={escalations} exchanges={exchanges} onSeatTerminal={(rig, seat) => { void openSeatTerminal(fleetClient, rig, seat, new Map(sessions.map(s => [s.id, s]))).then(ok => { if (!ok) notify(t.session.terminal.openFailed(seat.name)); }); }}
             tools={nav.fullscreen && <>
               <span className="zoom-sep" />

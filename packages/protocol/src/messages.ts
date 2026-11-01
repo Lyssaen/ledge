@@ -111,6 +111,8 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
    *  from daemons older than the auto-update. */
   z.object({ type: z.literal('snapshot'), sessions: z.array(SessionSchema), recents: z.array(RecentSchema).optional(), launcher: z.array(z.string()).optional(), daemon: DaemonInfoSchema.optional(), sshAlias: SshAliasSchema.optional() }),
   z.object({ type: z.literal('session.updated'), session: SessionSchema }),
+  /** Ephemeral office bubble; never included in snapshots or phone relay. */
+  z.object({ type: z.literal('session.thought'), id: z.string(), text: z.string().max(80), at: z.string().datetime() }),
   /** OMP: the instructions taken back from its queue by an interrupt that restores it; the asker puts them back in its draft. */
   z.object({ type: z.literal('session.queue.restored'), id: z.string(), texts: z.array(z.string()),
     /** The same instructions with the images they carried; `imagesDropped`: some images could not be put back. */

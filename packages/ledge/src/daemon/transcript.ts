@@ -28,6 +28,21 @@ type Block = { type?: string; text?: string };
 const texts = (blocks: unknown, kind: string): string =>
   (Array.isArray(blocks) ? blocks as Block[] : []).filter(b => b?.type === kind && typeof b.text === 'string').map(b => b.text!.trim()).filter(Boolean).join('\n\n');
 
+/** Latest transient thinking excerpt for the office floor. It is read from a bounded tail and never persisted by Ledge. */
+export function agentThought(path: string): string | undefined {
+  let latest: string | undefined;
+  for (const line of tailLines(path, 64 * 1024)) {
+    let e: { type?: string; isSidechain?: boolean; message?: { content?: unknown }; payload?: { type?: string; item?: { type?: string; text?: unknown; summary?: unknown; content?: unknown } } };
+    try { e = JSON.parse(line); } catch { continue; }
+    if (e.type === 'assistant' && e.isSidechain !== true) latest = texts(e.message?.content, 'thinking') || latest;
+    if (e.type === 'event_msg' && (e.payload?.type === 'item_completed' || e.payload?.type === 'item_updated')) {
+      const item = e.payload.item;
+      if (item?.type === 'AgentReasoning') latest = (typeof item.text === 'string' ? item.text : typeof item.summary === 'string' ? item.summary : texts(item.content, 'Text')) || latest;
+    }
+  }
+  return latest?.replace(/\s+/g, ' ').trim().slice(0, 80) || undefined;
+}
+
 /** `sidechain`: the file is a helper's own transcript. Claude Code marks every entry of it `isSidechain: true`, so the
  *  filter that keeps a helper's lines out of the main transcript would leave a helper with no message at all. */
 export function agentMessages(path: string, opts: { sidechain?: boolean; bytes?: number } = {}): AgentText[] {
