@@ -89,6 +89,7 @@ import { createRouter } from '../chat/routing.js';
 import { serveSsh } from '../transport/ssh.js';
 import type { MobileService } from '../mobile/service.js';
 import { createPhoneGateway, type PhoneGateway } from '../mobile/gateway.js';
+import { createAnswerReceipts } from '../mobile/answerReceipts.js';
 import { createNotifier } from '../mobile/push/notifier.js';
 import { chatEndPayload } from '../mobile/push/triggers.js';
 import { decidedPush, escalationPush, pushFor } from '../mobile/push/triggers.js';
@@ -1666,8 +1667,13 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     });
   }
 
+  let answerReceipts: ReturnType<typeof createAnswerReceipts> | null = null;
+  if (mobile) {
+    try { answerReceipts = createAnswerReceipts(join(paths().dir, 'phone-answer-receipts.json')); }
+    catch (e) { log(`phone answer journal unavailable (${e instanceof Error ? e.name : 'error'})`); }
+  }
   if (mobile) gateway = createPhoneGateway({
-    mobile,
+    mobile, answerReceipts,
     ...(aggregate ? { openrig: { rigs: aggregate.rigs, statuses: aggregate.statuses, escalations: aggregate.escalations, escalation: aggregate.escalation, escalationAmbiguous: aggregate.escalationAmbiguous, exchanges: aggregate.exchanges, rules: memory.rules, decisions: () => memory.decisions({ limit: 200 }), projects: () => projects, thread: (before?: string) => thread.page(before) } } : {}),
     // A dropped device thread takes its queued cards with it: the sessions they waited for go on to what else waits.
     chats: { ...threads, async drop(id: string) {

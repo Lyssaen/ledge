@@ -23,6 +23,7 @@ import { CloseRefused } from '../chat/close.js';
 import { ActRefused } from '../chat/act.js';
 import { AttachmentError, type AttachmentStore } from '../daemon/attachments.js';
 import { createOutbox } from './outbox.js';
+import { receiptHash, type AnswerReceipts } from './answerReceipts.js';
 import { fingerprint, OperationRegistry, type Outcome, type PhoneOperation } from './operations.js';
 import { capabilities, clip, toPhoneFullRequest, toPhoneItem, toPhoneSession, toPhoneThread } from './project.js';
 import { canSwitch, toPhoneModels } from './project.js';
@@ -69,6 +70,8 @@ const MODELS_WAIT_MS = 20_000;
 export function createPhoneGateway(deps: {
   mobile: Pick<MobileService, 'send' | 'onMessage' | 'state' | 'onChange' | 'revoke' | 'pushOf' | 'setPush' | 'relayPushKey'>;
   /** Authoritative OpenRig view; absent until the daemon connects an orchestrator. */
+  /** Null means the durable receipt journal is unavailable: remote answers fail closed. */
+  answerReceipts?: AnswerReceipts | null;
   openrig?: {
     rigs(): import('@ledge/protocol').Rig[];
     statuses?(): import('@ledge/protocol').OpenRigStatus[];
@@ -637,6 +640,12 @@ export function createPhoneGateway(deps: {
       const matches = view.escalations().filter(e => e.id === msg.id);
       const target = view.escalation(msg.id);
       if (view.escalationAmbiguous(msg.id) || matches.length !== 1 || !target || matches[0]?.machine !== target.machine) return { status: 'rejected', reason: 'invalid' };
+      if (target.machine !== 'local') {
+        if (deps.answerReceipts === null) return { status: 'rejected', reason: 'unavailable' };
+        if (deps.answerReceipts) try {
+          deps.answerReceipts.putPending({ op: msg.op, owner: deviceId, fingerprint: receiptHash(fingerprint(msg)), machine: target.machine, id: msg.id, answers: receiptHash(canonicalJson(msg.answers)), status: 'received', at: Date.now() });
+        } catch (e) { log(`phone answer journal failed (${e instanceof Error ? e.name : 'error'})`); return { status: 'rejected', reason: 'unavailable' }; }
+      }
       for (const op of pendingAnswers.keys()) if (!registry.get(op)) pendingAnswers.delete(op);
       pendingAnswers.set(msg.op, { deviceId, machine: target.machine, id: msg.id, answers: canonicalJson(msg.answers) });
     }
@@ -710,7 +719,17 @@ export function createPhoneGateway(deps: {
   };
 
   const write = async (deviceId: string, msg: PhoneOperation) => {
-    const begun = registry.begin(deviceId, msg.op, fingerprint(msg));
+    const fp = fingerprint(msg);
+    const durable = deps.answerReceipts?.get(msg.op);
+    if (durable) {
+      if (msg.type !== 'escalation.answer' || durable.owner !== deviceId || durable.fingerprint !== receiptHash(fp)) return result(deviceId, msg.op, 'rejected', 'conflict');
+      if (durable.status === 'applied') return result(deviceId, msg.op, 'applied');
+      const replay = registry.begin(deviceId, msg.op, fp);
+      if (replay.kind === 'conflict') return result(deviceId, msg.op, 'rejected', 'conflict');
+      pendingAnswers.set(msg.op, { deviceId, machine: durable.machine, id: durable.id, answers: canonicalJson(msg.answers) });
+      return result(deviceId, msg.op, replay.record.status, replay.record.reason, replay.record.how);
+    }
+    const begun = registry.begin(deviceId, msg.op, fp);
     if (begun.kind === 'conflict') return result(deviceId, msg.op, 'rejected', 'conflict');
     if (begun.kind === 'replay') return result(deviceId, msg.op, begun.record.status, begun.record.reason, begun.record.how);
     let outcome: Outcome;
@@ -721,6 +740,11 @@ export function createPhoneGateway(deps: {
     catch (e) {
       log(`phone ${msg.type} failed (${e instanceof Error ? e.name : 'error'})`);
       outcome = { status: 'failed' };
+    }
+    // A positive remote result is sent only after its proof is durable.
+    if (msg.type === 'escalation.answer' && outcome.status === 'applied' && deps.answerReceipts?.get(msg.op)) {
+      try { deps.answerReceipts.markApplied(msg.op); }
+      catch (e) { log(`phone answer proof not stored (${e instanceof Error ? e.name : 'error'})`); outcome = { status: 'received' }; }
     }
     // A queue receipt can arrive while the dispatch promise is still returning; never overwrite that final result.
     const current = registry.get(msg.op);
@@ -1077,11 +1101,22 @@ export function createPhoneGateway(deps: {
     },
     visible: deviceId => followers.get(deviceId)?.visible === true,
     answerSettled(answer, outcome) {
+      const durable = deps.answerReceipts?.get(answer.rid);
       const held = pendingAnswers.get(answer.rid);
-      if (!held || held.machine !== answer.machine || held.id !== answer.id || held.answers !== canonicalJson(answer.answers)) return;
-      const record = registry.get(answer.rid); if (!record || record.status !== 'received' || record.owner !== held.deviceId) return;
-      registry.finish(answer.rid, outcome.status, outcome.reason);
-      result(held.deviceId, answer.rid, outcome.status, outcome.reason);
+      if (durable) {
+        if (durable.machine !== answer.machine || durable.id !== answer.id || durable.answers !== receiptHash(canonicalJson(answer.answers))) return;
+        if (outcome.status !== 'applied') return;
+        try { deps.answerReceipts!.markApplied(answer.rid); }
+        catch (e) { log(`phone answer proof not stored (${e instanceof Error ? e.name : 'error'})`); return; }
+        const record = registry.get(answer.rid);
+        if (record && record.owner === durable.owner && receiptHash(record.fingerprint) === durable.fingerprint) registry.finish(answer.rid, 'applied');
+        result(durable.owner, answer.rid, 'applied');
+      } else {
+        if (!held || held.machine !== answer.machine || held.id !== answer.id || held.answers !== canonicalJson(answer.answers)) return;
+        const record = registry.get(answer.rid); if (!record || record.status !== 'received' || record.owner !== held.deviceId) return;
+        registry.finish(answer.rid, outcome.status, outcome.reason);
+        result(held.deviceId, answer.rid, outcome.status, outcome.reason);
+      }
       pendingAnswers.delete(answer.rid);
       for (const [deviceId, f] of followers) if (f.subscribed) push(deviceId, snapshot(deviceId), 'snapshot');
     },

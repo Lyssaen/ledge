@@ -11,6 +11,7 @@ import { createTokenSource } from '@ledge/fleet/token';
 import { readDaemonToken } from '../src/auth.js';
 import { createBridge, type Bridge } from '../src/daemon/openrig/bridge.js';
 import { createCursorWriter, readOpenRigFile } from '../src/daemon/openrig/cursor.js';
+import { createAnswerReceipts } from '../src/mobile/answerReceipts.js';
 import { createAnswerQueue, type QueuedAnswer } from '../src/daemon/openrig/answerQueue.js';
 import { createRigAggregate, type RigAggregate } from '../src/daemon/openrig/aggregate.js';
 import type { BridgeMessage } from '../src/daemon/openrig/bridge.js';
@@ -129,6 +130,17 @@ describe('answer queue', () => {
     s.peer({ ...ok(op), ...(confirmed ? { confirmed: true as const } : {}) }); await flushGateway();
     g.send('dev1', msg); await flushGateway();
     expect(g.results('dev1').at(-1)).toMatchObject({ op, status: confirmed ? 'applied' : 'received' });
+  });
+  it('recovers a durable phone receipt when both the queue and gateway restart before the peer confirms', async () => {
+    const dir = tmp(); const queueFile = join(dir, 'openrig.json'); const receiptFile = join(dir, 'receipts.json'); const op = randomUUID();
+    const e = esc('E1', 'ec2'); const view = { rigs: () => [], escalations: () => [e], escalation: (id: string) => id === e.id ? e : undefined, escalationAmbiguous: () => false, rules: () => [], decisions: () => [], projects: () => ({ projects: [], rules: [] }), thread: () => ({ items: [] }), exchanges: () => [] };
+    const firstQueue = setup(queueFile); const first = setupGateway({ deps: { openrig: view, answerReceipts: createAnswerReceipts(receiptFile) }, dispatch: async (msg, reply) => { if (msg.type === 'escalation.answer') firstQueue.queue.enqueue({ rid: msg.rid, machine: 'ec2', id: msg.id, answers: msg.answers, by: msg.by, at: T }, reply); } });
+    const message = { type: 'escalation.answer', op, id: 'E1', answers: { q1: 'a' } }; first.send('dev1', message); await flushGateway(); first.gw.stop();
+    const restartedQueue = setup(queueFile); const second = setupGateway({ deps: { openrig: view, answerReceipts: createAnswerReceipts(receiptFile) } });
+    restartedQueue.queue.onSettled((answer, result) => second.gw.answerSettled(answer, result));
+    restartedQueue.replay('running', ['E1']); restartedQueue.peer({ ...ok(op), confirmed: true }); await flushGateway(); second.gw.stop();
+    const third = setupGateway({ deps: { openrig: view, answerReceipts: createAnswerReceipts(receiptFile) } }); third.send('dev1', message); await flushGateway();
+    expect(third.results('dev1').at(-1)).toMatchObject({ op, status: 'applied' }); expect(third.dispatched).toEqual([]);
   });
   it('shares openrig.json with the cursor writer: neither drops the other one\'s part', async () => {
     const file = join(tmp(), 'openrig.json');

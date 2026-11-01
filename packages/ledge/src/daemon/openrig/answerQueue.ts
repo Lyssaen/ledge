@@ -205,7 +205,7 @@ export function createAnswerQueue(opts: { remote: RemotePeers; aggregate: RigAgg
       const c = conn(machine);
       // First sent to an escalation the peer did not list, and its daemon (its queue read) does not know it or has it answered: closed there.
       if (!result.ok && c?.unlisted.has(a.rid) && (result.code === 'already_answered' || result.code === 'failed')) return remove(a, closedThere(a));
-      if (result.ok) { const proven = result.confirmed && c?.sent.has(a.rid); remove(a); if (proven) settled(a, { status: 'applied' }); return; }
+      if (result.ok) { if (result.confirmed && c?.sent.has(a.rid)) settled(a, { status: 'applied' }); return remove(a); }
       if (result.code === 'already_answered') return remove(a);
       // Sent before, its ack lost, no longer listed: the remote daemon (restarted, its rid memo gone) no longer knows it — it went.
       if (c?.resent.has(a.rid) && result.code === 'failed') return remove(a);
