@@ -1,3 +1,4 @@
+import { phoneText } from './orchestrator.js';
 import { pendingKey, PENDING_BODY_MAX, SNAPSHOT_BODY_MAX, THREAD_BUDGET, THREAD_ITEMS_MAX, THREAD_TEXT_MAX, TOOL_TEXT_MAX, TOPIC_MAX, ToolSchema } from '@ledge/protocol';
 import { EffortSchema, PhoneModelChoiceSchema, type ModelChoice, type PhoneModelChoice } from '@ledge/protocol';
 import { CHECKLIST_TASKS_MAX, CHECKLIST_TEXT_MAX, doneCount } from '@ledge/protocol';
@@ -77,6 +78,7 @@ export function toPhoneSession(s: Session, readAt: string, checklist?: PhoneChec
   const pending = toPhoneRequest(s, SNAPSHOT_BODY_MAX);
   return {
     id: s.id, name: s.name, tool: s.tool, project: s.project, title: s.title, state: s.state,
+    ...(s.brain ? { brain: true as const } : {}), ...(s.rig ? { rig: { rigName: phoneText(s.rig.rigName, 80), seat: phoneText(s.rig.seat, 120) } } : {}),
     startedAt: s.startedAt, lastActivityAt: s.lastActivityAt,
     // Topics are already cut to TOPIC_MAX where they are set; clipped again so no source can swell a snapshot.
     ...(s.topic !== undefined ? { topic: clip(s.topic, TOPIC_MAX).text } : {}),
@@ -92,7 +94,7 @@ export function toPhoneSession(s: Session, readAt: string, checklist?: PhoneChec
       ...(s.modelNext.model !== undefined ? { model: clip(s.modelNext.model, MODEL_MAX).text } : {}),
       ...(s.modelNext.effort !== undefined ? { effort: clip(s.modelNext.effort, EFFORT_MAX).text } : {})
     } } : {}),
-    ...(canSwitch(s) ? { canSwitch: true as const } : {}),
+    ...(!s.rig && canSwitch(s) ? { canSwitch: true as const } : {}),
     helpers: s.helpers.map(h => ({ id: h.id, kind: h.kind, task: h.task, state: h.state, ...pickSet(h, ['finishedAt']) })),
     // A preview only: the whole reply is in the thread.
     ...(s.lastReply ? { lastReply: { text: clip(s.lastReply.text, TOOL_TEXT_MAX).text, at: s.lastReply.at, ...pickSet(s.lastReply, ['plan']) } } : {}),

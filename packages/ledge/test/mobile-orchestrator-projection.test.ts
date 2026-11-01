@@ -13,3 +13,18 @@ describe('phone OpenRig projections', () => {
 it('does not silently change an id the phone would later send back', () => {
   expect(() => toPhoneEscalation({ ...esc, id: 'q'.repeat(121) }, [], [rig])).toThrow(/unsafe phone identifier/);
 });
+
+it('maps only opaque rig keys and never accepts an unknown one', async () => {
+  const { fromPhone } = await import('../src/mobile/orchestrator.js');
+  const keys = new Map([[rigKey('local', 'same'), { machine: 'local', rigId: 'same' }], [rigKey('remote', 'same'), { machine: 'remote', rigId: 'same' }]]);
+  const op = 'a931d7a0-0098-432a-90c8-57e54ab8ed1a';
+  expect(fromPhone({ type: 'rig.act', op, key: rigKey('remote', 'same'), verb: 'down' }, keys)).toMatchObject({ type: 'rig.act', machine: 'remote', rigId: 'same' });
+  expect(fromPhone({ type: 'rig.act', op, key: 'unknown', verb: 'down' }, keys)).toEqual({ refused: 'invalid' });
+});
+
+it('omits absolute paths from plans and thread text', async () => {
+  const { toPhonePlan, toPhoneThreadItem } = await import('../src/mobile/orchestrator.js');
+  const plan = toPhonePlan({ id: 'p', machine: 'local', spec: 'starter', goal: 'Inspect /home/owner/private', where: { kind: 'project', projectId: 'p', repo: '/home/owner/private', branch: 'main', copy: true }, cwd: '/home/owner/private', seats: [], writes: ['/home/owner/private/AGENTS.md'], command: 'rig up /home/owner/private', required: false }, () => 'Project');
+  const item = toPhoneThreadItem({ kind: 'user', id: 'u', at: '2026-11-01T10:00:00.000Z', text: 'Inspect /home/owner/private' }, { rigs: [], rules: [], decisions: [], escalation: () => undefined, exchanges: () => null });
+  expect(JSON.stringify({ plan, item })).not.toMatch(/\/home\/owner|cwd|machine|command|repo/);
+});

@@ -3,8 +3,12 @@
 // the devices that follow it. Logs carry a type, a code or an error's name, never a message's content.
 import { hostname } from 'node:os';
 import { randomUUID } from 'node:crypto';
+import { slugOfGoal } from '@ledge/ui/launch/rigModel';
+import { inspectRepos } from '../daemon/repos.js';
+import { rigKey, toPhoneRig, toPhoneEscalation, toPhoneDecision, toPhoneExchange, toPhoneThreadItem, toPhonePlan, fromPhone } from './orchestrator.js';
+import { rigSubject } from '@ledge/protocol';
 import {
-  ATTACHMENT_MAX, OperationIdSchema, PHONE_PROTOCOL, actionById, TOOL_TEXT_MAX, proposalRows, PhoneClientMessageSchema, pushEndpointAllowed, RefusalCodeSchema, UNTYPABLE, backendOf, isArchived, pendingKey,
+  ATTACHMENT_MAX, EXCHANGES_MAX, THREAD_PAGE, OperationIdSchema, PHONE_PROTOCOL, actionById, TOOL_TEXT_MAX, proposalRows, PhoneClientMessageSchema, pushEndpointAllowed, RefusalCodeSchema, UNTYPABLE, backendOf, isArchived, pendingKey,
   SEMVER, pcSubject, type AttachmentRef, type ChatErrorCode, type ChatTurn, type CloseHow, type ClientMessage, type OperationReason, type OperationStatus, type PhoneClientMessage, type PhoneServerMessage, type ServerMessage, type Session, type ThreadItem
 } from '@ledge/protocol';
 import { ModelRefusalSchema, type ModelRefusal, type Tool } from '@ledge/protocol';
@@ -62,6 +66,17 @@ const MODELS_WAIT_MS = 20_000;
 
 export function createPhoneGateway(deps: {
   mobile: Pick<MobileService, 'send' | 'onMessage' | 'state' | 'onChange' | 'revoke' | 'pushOf' | 'setPush' | 'relayPushKey'>;
+  /** Authoritative OpenRig view; absent until the daemon connects an orchestrator. */
+  openrig?: {
+    rigs(): import('@ledge/protocol').Rig[];
+    escalations(): import('@ledge/protocol').Escalation[];
+    escalation(id: string): import('@ledge/protocol').Escalation | undefined;
+    rules(): import('@ledge/protocol').LedgeRule[];
+    decisions(): import('@ledge/protocol').LedgeDecision[];
+    projects(): import('@ledge/protocol').Projects;
+    thread(before?: string): { items: import('@ledge/protocol').LedgeThreadItem[]; before?: string };
+    exchanges(machine: string, rigId: string): import('@ledge/protocol').Exchange[] | null;
+  };
   /** The relying party of the current relay; none when it is not served over https or from localhost. */
   rp: () => Rp | null;
   challenges: ChallengeStore;
@@ -182,14 +197,27 @@ export function createPhoneGateway(deps: {
     if (!p) return 'off';
     return key !== undefined && p.key !== key ? 'stale' : 'on';
   };
+  const projectName = (id: string) => deps.openrig?.projects().projects.find(p => p.id === id)?.name;
+  const threadContext = () => ({ rigs: deps.openrig?.rigs() ?? [], rules: deps.openrig?.rules() ?? [], decisions: deps.openrig?.decisions() ?? [], escalation: (id: string) => deps.openrig?.escalation(id), exchanges: (machine: string, rigId: string) => deps.openrig?.exchanges(machine, rigId) ?? null });
+  const keys = () => new Map((deps.openrig?.rigs() ?? []).map(r => [rigKey(r.machine, r.id), { machine: r.machine, rigId: r.id }]));
+  const day = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   const snapshot = (deviceId: string): PhoneServerMessage => {
     const push = pushStatus(deviceId);
     const f = followers.get(deviceId);
     if (f) f.pushStatus = push;
     const message: Extract<PhoneServerMessage, { type: 'snapshot' }> = {
-    type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, boot: deps.boot, name: clip(hostname(), 40).text, ...(deps.pc?.canUpdate ? { update: true as const } : {}), ...(deps.pc?.canRestart ? { restart: true as const } : {}), checklist: true as const, ...(deps.closeSession ? { sessionClose: true as const } : {}) },
+    type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s) && !s.brain).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, boot: deps.boot, name: clip(hostname(), 40).text, ...(deps.pc?.canUpdate ? { update: true as const } : {}), ...(deps.pc?.canRestart ? { restart: true as const } : {}), checklist: true as const, ...(deps.closeSession ? { sessionClose: true as const } : {}) },
     device: { confirm: deps.credential(deviceId) !== null, push, ...(deps.chats ? { chat: true as const } : {}), ...(deps.contextNear ? { contextNear: deps.contextNear() } : {}) }
     };
+    // Each record is validated before it enters the encrypted payload; malformed source records are omitted, never partially routed.
+    if (deps.openrig) {
+      const view = deps.openrig; const rigs = view.rigs(); const rules = view.rules();
+      const safeMap = <A, B>(items: A[], f: (a: A) => B): B[] => items.flatMap(a => { try { return [f(a)]; } catch { return []; } });
+      message.daemon.openrig = true;
+      message.rigs = safeMap(rigs.slice(0, 40), r => toPhoneRig(r, projectName));
+      message.escalations = safeMap(view.escalations().slice(0, 40), e => toPhoneEscalation(e, rules, rigs));
+      message.decisionsToday = safeMap(view.decisions().filter(d => d.by === 'ledge' && day(new Date(d.at)) === day(new Date(deps.now ? deps.now() : Date.now()))).slice(-50), d => toPhoneDecision(d, rigs));
+    }
     // The daemon takes `session.model` and lists an agent's models (#58).
     return deps.models ? { ...message, daemon: { ...message.daemon, models: true } } : message;
   };
@@ -573,6 +601,53 @@ export function createPhoneGateway(deps: {
     return { status: 'applied' };
   };
 
+  type OpenRigOperation = Extract<PhoneOperation, { type: 'rig.act' | 'rig.launch' | 'rig.prepare' | 'ledge.say' | 'escalation.answer' | 'decision.revisit' }>;
+  /** Wait for the daemon's actual result; remote routing may reply after dispatch has returned. */
+  const rigRequest = (message: ClientMessage): Promise<ServerMessage | undefined> => new Promise(resolve => {
+    let settled = false;
+    const timer = setTimeout(() => finish(undefined), 20_000);
+    const finish = (m: ServerMessage | undefined) => { if (settled) return; settled = true; clearTimeout(timer); resolve(m); };
+    void deps.dispatch(message, m => { if (m.type === 'rig.result' || m.type === 'rig.plan' || m.type === 'error') finish(m); }).catch(() => finish(undefined));
+  });
+  const openrigOperation = async (deviceId: string, msg: OpenRigOperation): Promise<Outcome> => {
+    const view = deps.openrig;
+    if (!view) return { status: 'rejected', reason: 'unsupported' };
+    if (msg.type === 'rig.act') {
+      const target = keys().get(msg.key); const rig = target && view.rigs().find(r => r.machine === target.machine && r.id === target.rigId);
+      if (!rig || (msg.verb === 'down' && msg.seatRef) || (msg.verb === 'restart' && (!msg.seatRef || !rig.seats.some(s => s.ref === msg.seatRef)))) return { status: 'rejected', reason: 'invalid' };
+      const refused = checkAssertion(deviceId, msg.assertion, 'rig', rigSubject(msg)); if (refused) return refused;
+    }
+    if (msg.type === 'rig.launch') { const refused = checkAssertion(deviceId, msg.assertion, 'rig', rigSubject(msg)); if (refused) return refused; }
+    let out: ClientMessage | { refused: import('@ledge/protocol').RigResultCode };
+    if (msg.type === 'rig.prepare') {
+      const spec = msg.spec?.trim() || 'starter';
+      if (msg.project === null) out = { type: 'rig.prepare', rid: msg.op, machine: 'local', spec, goal: msg.goal, where: { kind: 'off-project', name: slugOfGoal(msg.goal) } };
+      else {
+        const candidates = view.projects().projects.filter(p => p.id === msg.project || p.name === msg.project);
+        if (candidates.length !== 1) return { status: 'rejected', reason: 'invalid' };
+        const project = candidates[0]!; const repo = project.repos.find(r => r.machine === 'local');
+        if (!repo) return { status: 'rejected', reason: 'invalid' };
+        const info = (await inspectRepos([repo.path]))[0]; if (!info?.exists || !info.branch) return { status: 'rejected', reason: 'invalid' };
+        out = { type: 'rig.prepare', rid: msg.op, machine: 'local', spec, goal: msg.goal, where: { kind: 'project', projectId: project.id, repo: repo.path, branch: info.branch, copy: true } };
+      }
+    } else out = fromPhone(msg, keys());
+    if ('refused' in out) return { status: 'rejected', reason: out.refused };
+    const result = await rigRequest(out);
+    if (!result) return { status: 'failed' };
+    if (result.type === 'error') return { status: 'rejected', reason: 'failed' };
+    if (result.type === 'rig.plan') {
+      const plan = toPhonePlan(result.plan, projectName);
+      push(deviceId, { type: 'rig.plan', plan });
+      push(deviceId, { type: 'ledge.thread.item', item: { kind: 'plan', id: `plan-${plan.id}`, at: new Date(deps.now ? deps.now() : Date.now()).toISOString(), plan } });
+      return { status: 'applied' };
+    }
+    if (result.type !== 'rig.result') return { status: 'failed' };
+    if (!result.ok) return { status: 'rejected', reason: result.code ?? 'failed' };
+    // The remote daemon can acknowledge a queued answer before delivery; it is not an applied decision.
+    if (msg.type === 'escalation.answer' && view.escalation(msg.id)?.answer?.delivery) return { status: 'received' };
+    return { status: 'applied' };
+  };
+
   const run = async (deviceId: string, msg: PhoneOperation): Promise<Outcome> => {
     if (msg.type === 'daemon.update' || msg.type === 'daemon.restart') return pcOperation(deviceId, msg);
     if (msg.type === 'chat.ignore') return chatIgnore(deviceId, msg);
@@ -594,8 +669,7 @@ export function createPhoneGateway(deps: {
     if (msg.type === 'chat.close') return chatClose(deviceId, msg);
     if (msg.type === 'chat.act') return chatAct(deviceId, msg);
     if (msg.type === 'session.close' || msg.type === 'session.resume') return sessionEnd(deviceId, msg);
-    // Until the OpenRig gateway is connected, fail closed instead of dispatching a new operation unchecked.
-    if (msg.type === 'rig.act' || msg.type === 'rig.launch' || msg.type === 'rig.prepare' || msg.type === 'ledge.say' || msg.type === 'escalation.answer' || msg.type === 'decision.revisit') return { status: 'rejected', reason: 'unsupported' };
+    if (msg.type === 'rig.act' || msg.type === 'rig.launch' || msg.type === 'rig.prepare' || msg.type === 'ledge.say' || msg.type === 'escalation.answer' || msg.type === 'decision.revisit') return openrigOperation(deviceId, msg);
     const refused = precheck(deviceId, msg);
     if (refused) return refused;
     const out = local(msg);
@@ -693,6 +767,20 @@ export function createPhoneGateway(deps: {
 
   const read = (deviceId: string, msg: Exclude<PhoneClientMessage, PhoneOperation>) => {
     switch (msg.type) {
+      case 'ledge.thread.request': {
+        if (!deps.openrig) return push(deviceId, { type: 'error', code: 'invalid', request: msg.type });
+        const page = deps.openrig.thread(msg.before); const ctx = threadContext();
+        const items = page.items.slice(-THREAD_PAGE).flatMap(item => { try { const projected = toPhoneThreadItem(item, ctx); return projected ? [projected] : []; } catch { return []; } });
+        return push(deviceId, { type: 'ledge.thread.history', items, ...(page.before ? { before: page.before } : {}) });
+      }
+      case 'rig.exchanges.request': {
+        const target = keys().get(msg.key);
+        if (!target || !deps.openrig) return push(deviceId, { type: 'error', code: 'invalid', request: msg.type });
+        const all = deps.openrig.exchanges(target.machine, target.rigId);
+        if (!all) return push(deviceId, { type: 'error', code: 'invalid', request: msg.type });
+        const items = all.slice(-EXCHANGES_MAX).flatMap(item => { try { return [toPhoneExchange(item)]; } catch { return []; } });
+        return push(deviceId, { type: 'rig.exchanges', key: msg.key, items, ...(all.length > EXCHANGES_MAX ? { cut: true as const } : {}) });
+      }
       case 'attachment.put': case 'attachment.get':
         void attachment(deviceId, msg);
         return;
@@ -787,8 +875,13 @@ export function createPhoneGateway(deps: {
           const challenge = deps.challenges.issue({ deviceId, purpose: 'pc', subject: pcSubject(msg.action, msg.version) });
           return push(deviceId, { type: 'confirm.challenge', purpose: 'pc', challenge, rpId: rp.rpId, credentialId: cred.id, expiresInMs: CHALLENGE_TTL_MS });
         }
-        // Never issue an unbound rig challenge before the orchestrator is connected.
-        if (msg.purpose === 'rig') return invalid();
+        if (msg.purpose === 'rig') {
+          if (!deps.openrig || !msg.rig || msg.rig.assertion) return invalid();
+          if (msg.rig.type === 'rig.act' && !keys().has(msg.rig.key)) return invalid();
+          const cred = deps.credential(deviceId); if (!cred || cred.rpId !== rp.rpId) return invalid();
+          const challenge = deps.challenges.issue({ deviceId, purpose: 'rig', subject: rigSubject(msg.rig) });
+          return push(deviceId, { type: 'confirm.challenge', purpose: 'rig', challenge, rpId: rp.rpId, credentialId: cred.id, expiresInMs: CHALLENGE_TTL_MS });
+        }
         // A purpose added to the enum without a branch above fails to compile here.
         const unhandled: never = msg.purpose;
         void unhandled;
@@ -809,7 +902,7 @@ export function createPhoneGateway(deps: {
   };
 
   const receive = (deviceId: string, text: string) => {
-    if (stopped) return;
+    if (stopped || !approved(deviceId)) return;
     let raw: unknown;
     try { raw = JSON.parse(text); } catch { raw = undefined; }
     const parsed = raw === undefined ? undefined : PhoneClientMessageSchema.safeParse(raw);
@@ -887,6 +980,16 @@ export function createPhoneGateway(deps: {
       if (followers.size === 0) { checklists.clear(); return; }
       try {
         switch (m.type) {
+          case 'rig.snapshot': case 'rig.updated': case 'rig.removed': case 'escalation.updated': case 'escalation.removed':
+            if (!deps.openrig) return;
+            for (const [deviceId, f] of followers) if (f.subscribed) push(deviceId, snapshot(deviceId), 'snapshot');
+            return;
+          case 'ledge.thread.item': {
+            if (!deps.openrig) return;
+            const item = toPhoneThreadItem(m.item, threadContext()); if (!item) return;
+            for (const [deviceId, f] of followers) if (f.subscribed) push(deviceId, { type: 'ledge.thread.item', item });
+            return;
+          }
           case 'session.updated':
             if (isArchived(m.session)) return removed(m.session.id);
             for (const [deviceId, f] of followers) {

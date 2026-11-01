@@ -48,3 +48,25 @@ export function fromPhone(m: RigMessage, keys: Map<string, { machine: string; ri
     case 'rig.launch': return { type: 'rig.launch', rid: m.op, planId: m.planId };
   }
 }
+
+export interface PhoneThreadContext {
+  rigs: Rig[]; rules: LedgeRule[]; decisions: LedgeDecision[];
+  escalation(id: string): Escalation | undefined;
+  exchanges(machine: string, rigId: string): Exchange[] | null;
+}
+/** Unknown references are omitted rather than inventing routing details on the phone. */
+export function toPhoneThreadItem(i: import('@ledge/protocol').LedgeThreadItem, ctx: PhoneThreadContext): import('@ledge/protocol').PhoneThreadItem | null {
+  const base = { id: stable(i.id), at: i.at };
+  switch (i.kind) {
+    case 'user': return { kind: 'user', ...base, text: text(i.text), ...(i.to ? { to: safe(i.to) } : {}), ...(i.qid ? { qid: stable(i.qid) } : {}) };
+    case 'ledge': return { kind: 'ledge', ...base, text: text(i.text), ...(i.qid ? { qid: stable(i.qid) } : {}), ...(i.pending ? { pending: true } : {}) };
+    case 'escalation': { const e = ctx.escalation(i.escalationId); return e ? { kind: 'escalation', ...base, escalation: toPhoneEscalation(e, ctx.rules, ctx.rigs) } : null; }
+    case 'decided': { const d = ctx.decisions.find(x => x.id === i.decisionId); return d ? { kind: 'decided', ...base, decision: toPhoneDecision(d, ctx.rigs) } : null; }
+    case 'exchanges': { const rig = ctx.rigs.find(r => r.machine === i.machine && r.id === i.rigId); if (!rig) return null;
+      const all = ctx.exchanges(i.machine, i.rigId) ?? []; const wanted = new Set(i.exchangeIds); const items = all.filter(e => wanted.has(e.id)).slice(-20).map(toPhoneExchange);
+      return { kind: 'exchanges', ...base, rigKey: rigKey(i.machine, i.rigId), rigName: safe(rig.name, 60), from: safe(i.from), to: safe(i.to), count: i.exchangeIds.length, items }; }
+    case 'card': { const a = i.action; return { kind: 'card', ...base, action: { action: safe(a.action, 40), summary: text(a.summary, 300), risk: a.risk,
+      ...(a.detail ? { detail: text(a.detail), ...(text(a.detail) !== a.detail ? { detailCut: true as const } : {}) } : {}),
+      ...(a.state ? { state: a.state } : {}), ...(a.doneAt ? { doneAt: a.doneAt } : {}), ...(a.code ? { code: safe(a.code, 40) } : {}) } }; }
+  }
+}
