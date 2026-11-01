@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
-import { RoleIdSchema, SeatsSchema, ToolSchema, type ActionId, type Seat, type Session, type Team } from '@ledge/protocol';
+import { RoleIdSchema, SeatsSchema, ToolSchema, type ActionId, type Seat, type TeamObjective, type Session, type Team } from '@ledge/protocol';
 import { connect } from '../client.js';
 import { listDefinitions } from '../daemon/teams.js';
 import { actionArgs, callerOf, DAEMON_DOWN, resultLine, runOnClient, type ActionResult, type Caller } from './action.js';
 
-export const TEAM_USAGE = `ledge team up <modèle> [--cwd <dossier>] [--name <nom>]   lancer une équipe d'après .ledge/teams/<modèle>.yaml
-ledge team up --seat <rôle>[:<outil>]… [--cwd <dossier>] [--name <nom>]   lancer une équipe de sièges ad hoc
+export const TEAM_USAGE = `ledge team up <modèle> [--goal "<quoi>" [--branch <branche>] [--done "<fini quand>"]] [--cwd <dossier>] [--name <nom>]   lancer une équipe ; son lead reçoit l'objectif
+ledge team up --seat <rôle>[:<outil>]… [--goal "<quoi>" [--branch <branche>] [--done "<fini quand>"]] [--cwd <dossier>] [--name <nom>]   lancer une équipe de sièges ad hoc
 ledge team list [--cwd <dossier>]                           les modèles, les rôles et les équipes en cours
 ledge team join <équipe> <session> <@rôle>                  faire entrer une session dans une équipe, à un rôle
 ledge team leave <équipe> <session>                         faire sortir une session d'une équipe (elle continue)
@@ -19,7 +19,7 @@ l'@leader d'une équipe peut aussi la dissoudre, en retirer un membre ou en ferm
 const UP_MS = 60_000;
 
 export type TeamCmd =
-  | { op: 'up'; template?: string; seats?: Seat[]; cwd?: string; name?: string; json?: true }
+  | { op: 'up'; template?: string; seats?: Seat[]; objective?: TeamObjective; cwd?: string; name?: string; json?: true }
   | { op: 'list'; cwd?: string; json?: true }
   | { op: 'run'; action: ActionId; args: Record<string, unknown>; closeSessions?: true; yes?: true; json?: true };
 
@@ -43,11 +43,14 @@ function seatOf(v: string): Seat | undefined {
 export function teamArgs(args: string[]): TeamCmd | undefined {
   const [op, ...rest] = args;
   const positional: string[] = []; const seats: Seat[] = [];
-  let cwd: string | undefined; let name: string | undefined; let json = false; let yes = false; let closeSessions = false;
+  let cwd: string | undefined; let name: string | undefined; let goal: string | undefined; let branch: string | undefined; let done: string | undefined; let json = false; let yes = false; let closeSessions = false;
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i]!;
     if (a === '--cwd') { cwd = rest[++i]; if (!cwd) return undefined; }
     else if (a === '--name') { name = rest[++i]; if (!name) return undefined; }
+    else if (a === '--goal') { goal = rest[++i]; if (!goal) return undefined; }
+    else if (a === '--branch') { branch = rest[++i]; if (!branch) return undefined; }
+    else if (a === '--done') { done = rest[++i]; if (!done) return undefined; }
     else if (a === '--seat') { const s = seatOf(rest[++i] ?? ''); if (!s) return undefined; seats.push(s); }
     else if (a === '--json') json = true;
     else if (a === '--yes') yes = true;
@@ -58,13 +61,15 @@ export function teamArgs(args: string[]): TeamCmd | undefined {
   const j = json ? { json: true as const } : {};
   const where = { ...(cwd ? { cwd } : {}), ...(name ? { name } : {}) };
   if (op === 'up' && !yes && !closeSessions) {
-    if (positional.length === 1 && !seats.length) return { op, template: positional[0]!, ...where, ...j };
-    if (positional.length === 0 && seats.length && SeatsSchema.safeParse(seats).success) return { op, seats, ...where, ...j };
+    if (!goal && (branch || done)) return undefined;
+    const obj = goal ? { objective: { goal, ...(branch ? { branch } : {}), ...(done ? { done } : {}) } } : {};
+    if (positional.length === 1 && !seats.length) return { op, template: positional[0]!, ...obj, ...where, ...j };
+    if (positional.length === 0 && seats.length && SeatsSchema.safeParse(seats).success) return { op, seats, ...obj, ...where, ...j };
     return undefined;
   }
-  if (op === 'list') return positional.length === 0 && !name && !seats.length && !yes && !closeSessions ? { op, ...(cwd ? { cwd } : {}), ...j } : undefined;
+  if (op === 'list') return positional.length === 0 && !name && !goal && !branch && !done && !seats.length && !yes && !closeSessions ? { op, ...(cwd ? { cwd } : {}), ...j } : undefined;
   const verb = op ? VERBS[op] : undefined;
-  if (!verb || positional.length !== verb.n || cwd || name || seats.length || (closeSessions && op !== 'dissolve')) return undefined;
+  if (!verb || positional.length !== verb.n || cwd || goal || branch || done || name || seats.length || (closeSessions && op !== 'dissolve')) return undefined;
   const parsed = actionArgs(verb.action, verb.args(positional)!);
   if (!parsed) return undefined;
   return { op: 'run', action: verb.action, args: parsed, ...(closeSessions ? { closeSessions: true as const } : {}), ...(yes ? { yes: true as const } : {}), ...j };
@@ -120,7 +125,7 @@ export async function runTeam(args: string[], opts: { port?: number; cwd?: strin
   catch { return { line: DAEMON_DOWN, code: 1 }; }
   try {
     const rid = randomUUID();
-    client.send({ type: 'team.launch', rid, cwd, ...(parsed.template ? { template: parsed.template } : {}), ...(parsed.seats ? { seats: parsed.seats } : {}), ...(parsed.name ? { name: parsed.name } : {}) });
+    client.send({ type: 'team.launch', rid, cwd, ...(parsed.template ? { template: parsed.template } : {}), ...(parsed.seats ? { seats: parsed.seats } : {}), ...(parsed.name ? { name: parsed.name } : {}), ...(parsed.objective ? { objective: parsed.objective } : {}) });
     const r = await Promise.race([client.next('team.launched', UP_MS), client.next('team.failed', UP_MS)]);
     const snapshot = await client.next('snapshot', 500).catch(() => undefined);
     if (r.type === 'team.failed') {
@@ -130,7 +135,8 @@ export async function runTeam(args: string[], opts: { port?: number; cwd?: strin
     client.send({ type: 'snapshot.request' });
     const fresh = await client.next('snapshot', 1500).catch(() => snapshot);
     if (parsed.json) return { line: JSON.stringify({ ok: true, team: teamJson(r.team, fresh?.sessions ?? []) }), code: 0 };
-    return { line: `équipe ${r.team.name} lancée\n${formatTeam(r.team, fresh?.sessions ?? [])}`, code: 0 };
+    const given = r.team.objectiveTask ? `\nobjectif donné au lead (tâche ${r.team.objectiveTask})` : '';
+    return { line: `équipe ${r.team.name} lancée${given}\n${formatTeam(r.team, fresh?.sessions ?? [])}`, code: 0 };
   } catch (e) {
     return { line: `pas de réponse de Ledge : ${(e as Error).message}`, code: 1 };
   } finally { await client.close(); }

@@ -37,6 +37,8 @@ export interface ChatCopy {
       label: string; folder: string; table: Say; newTable: Say; seats: string; autonomy: Record<'ask' | 'edits' | 'auto', string>;
       autoWarning: (roles: string) => string; launch: string; launching: string; retry: string; save: string; saved: Say; notSaved: Say;
       launched: Say; openTable: string; failed: Say; template: Say;
+      /** « Objectif : … », under the team's name, when the proposal carries one. */
+      objective?: Say;
     };
     /** The task cards (roles spec §3.8), with the team card. `state` names a given task's state as the daemon tells it. */
     task?: {

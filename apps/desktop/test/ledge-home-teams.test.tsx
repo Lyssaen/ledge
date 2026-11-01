@@ -135,6 +135,26 @@ describe('« Teams »: the catalog of templates, roles and skipped files (#97)',
     await waitFor(() => expect(d.received).toContainEqual({ type: 'team.launch', rid: expect.any(String), cwd: REPO, name: 'workshop', template: 'workshop' }));
   });
 
+  it('the team form sends the objective trimmed, nothing when the fields are empty, and refuses a branch without a goal', async () => {
+    const { d, user } = await openHome();
+    answerRoles(d);
+    d.onMessage(m => { if (m.type === 'team.launch') d.push({ type: 'team.launched', rid: m.rid, team: { ...team, id: 'team-e5f6', name: 'workshop' } }); });
+    await user.click(home().getByRole('tab', { name: /^Teams/ }));
+    await user.click(await tabs().findByRole('tab', { name: 'Templates · 1' }));
+    await user.click(within(home().getByRole('region', { name: 'workshop' })).getByRole('button', { name: 'Launch this team…' }));
+    const form = await screen.findByRole('dialog', { name: 'New team · Ledge' });
+    await within(form).findByRole('combobox', { name: 'Template' });
+    const launch = within(form).getByRole('button', { name: 'Launch the team' });
+    await user.type(within(form).getByRole('textbox', { name: 'Branch' }), 'feat/p');
+    expect(launch).toBeDisabled();
+    expect(within(form).getByText('Write the objective, or clear the branch and "done when"')).toBeVisible();
+    await user.type(within(form).getByRole('textbox', { name: 'Objective' }), '  Pagination  ');
+    expect(launch).toBeEnabled();
+    expect(within(form).queryByText(/^Write the objective/)).toBeNull();
+    await user.click(launch);
+    await waitFor(() => expect(d.received).toContainEqual({ type: 'team.launch', rid: expect.any(String), cwd: REPO, name: 'workshop', template: 'workshop', objective: { goal: 'Pagination', branch: 'feat/p' } }));
+  });
+
   it('« Open » shows the file beside the detail, read without a session: a role in the Markdown reader, a template as YAML', async () => {
     const { d, user } = await openHome();
     answerRoles(d);

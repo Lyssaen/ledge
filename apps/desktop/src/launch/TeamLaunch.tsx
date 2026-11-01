@@ -31,6 +31,9 @@ export function TeamLaunch({ client, teams, project, initial, onLaunched, onCanc
   const [template, setTemplate] = useState<string>('');
   const [rows, setRows] = useState<Row[]>([]);
   const [name, setName] = useState(project.name);
+  const [goal, setGoal] = useState('');
+  const [branch, setBranch] = useState('');
+  const [done, setDone] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const live = useRef(true);
@@ -60,7 +63,9 @@ export function TeamLaunch({ client, teams, project, initial, onLaunched, onCanc
   }, [template, defs, rows]);
   const auto = chosen.filter(x => x.role?.autonomy === 'auto').map(x => `@${x.id}`);
   const unknown = chosen.filter(x => !x.role).map(x => x.id);
-  const ready = !!cwd && chosen.length > 0 && unknown.length === 0 && name.trim().length > 0 && !sending;
+  // A branch or a « done when » only qualifies an objective: without a goal they would be dropped, so the form says so.
+  const goalNeeded = goal.trim() === '' && (branch.trim() !== '' || done.trim() !== '');
+  const ready = !!cwd && chosen.length > 0 && unknown.length === 0 && name.trim().length > 0 && !goalNeeded && !sending;
 
   const launch = () => {
     if (!ready) return;
@@ -75,7 +80,8 @@ export function TeamLaunch({ client, teams, project, initial, onLaunched, onCanc
     });
     const timer = setTimeout(() => { off(); if (live.current) { setSending(false); setError(c.noAnswer); } }, 60_000);
     const seats: Seat[] = chosen.map(x => ({ role: x.id, tool: x.tool }));
-    client.send({ type: 'team.launch', rid, cwd, name: name.trim(), ...(template ? { template } : { seats }) });
+    const objective = goal.trim() ? { goal: goal.trim(), ...(branch.trim() ? { branch: branch.trim() } : {}), ...(done.trim() ? { done: done.trim() } : {}) } : undefined;
+    client.send({ type: 'team.launch', rid, cwd, name: name.trim(), ...(template ? { template } : { seats }), ...(objective ? { objective } : {}) });
   };
 
   return (
@@ -110,6 +116,11 @@ export function TeamLaunch({ client, teams, project, initial, onLaunched, onCanc
             </fieldset>
           )}
           <label className="field"><span>{c.name}</span><input type="text" value={name} onChange={e => setName(e.target.value)} /></label>
+          <label className="field"><span>{c.goal}</span><textarea rows={2} value={goal} onChange={e => setGoal(e.target.value)} aria-describedby="team-goal-hint" /></label>
+          <p id="team-goal-hint" className="muted">{c.goalHint}</p>
+          <label className="field"><span>{c.branch}</span><input type="text" value={branch} onChange={e => setBranch(e.target.value)} /></label>
+          <label className="field"><span>{c.done}</span><input type="text" value={done} onChange={e => setDone(e.target.value)} /></label>
+          {goalNeeded && <p role="alert" className="error">{c.goalNeeded}</p>}
           <div className="team-preview" role="status">
             <p>{c.preview(name.trim() || project.name, project.name)}</p>
             <ul>{chosen.map(x => <li key={x.id}><span className="role-pill">@{x.id}</span> {toolName(x.tool)} · {t.chat.team.autonomy[x.role?.autonomy ?? 'ask']}</li>)}</ul>

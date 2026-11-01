@@ -20,6 +20,15 @@ describe('teamArgs', () => {
     expect(teamArgs(['up', '--seat', 'lead', '--seat', 'lead'])).toBeUndefined();
     expect(teamArgs(['up', '--seat', 'lead:vim'])).toBeUndefined();
     expect(teamArgs(['up'])).toBeUndefined();
+  });
+
+  it('takes the objective of a team: --goal, with --branch and --done only beside it', () => {
+    expect(teamArgs(['up', 'api', '--goal', 'Pagination', '--branch', 'feat/p', '--done', 'tests verts'])).toEqual({ op: 'up', template: 'api', objective: { goal: 'Pagination', branch: 'feat/p', done: 'tests verts' } });
+    expect(teamArgs(['up', '--seat', 'leader', '--goal', 'Pagination'])).toEqual({ op: 'up', seats: [{ role: 'leader' }], objective: { goal: 'Pagination' } });
+    expect(teamArgs(['up', 'api', '--branch', 'x'])).toBeUndefined();
+    expect(teamArgs(['up', 'api', '--done', 'x'])).toBeUndefined();
+    expect(teamArgs(['up', 'api', '--goal'])).toBeUndefined();
+    expect(teamArgs(['up', 'api'])).not.toHaveProperty('objective');
     expect(teamArgs(['list', '--json'])).toEqual({ op: 'list', json: true });
   });
 
@@ -90,6 +99,16 @@ describe('ledge team and ledge close against a daemon', () => {
     expect(done.line.split('\n')).toContain('fait : Dissoudre l\'équipe api');
     expect(store.get(lead)!.state).toBe('exited');
     expect(store.get(build)!.state).toBe('exited');
+  });
+
+  it('up with an objective sends it, and says the lead got it', async () => {
+    const up = await runTeam(['up', '--seat', 'leader', '--seat', 'build', '--name', 'api', '--goal', 'Pagination', '--branch', 'feat/p'], user());
+    expect(up.code).toBe(0);
+    const lines = up.line.split('\n');
+    expect(lines[0]).toBe('équipe api lancée');
+    expect(lines[1]).toMatch(/^objectif donné au lead \(tâche \S+\)$/);
+    const json = JSON.parse((await runTeam(['up', '--seat', 'leader', '--name', 'b', '--goal', 'X', '--json'], user())).line);
+    expect(json.team.objectiveTask).toEqual(expect.any(String));
   });
 
   it('dissolve --close-sessions by its @leader: the other seats closed first, the team dissolved, the leader itself last', async () => {

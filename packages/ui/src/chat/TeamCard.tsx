@@ -33,6 +33,7 @@ export function TeamCard(p: TeamCardProps) {
         <strong style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{tm.name}</strong>
         {tm.template && <span style={muted}>{c.template(tm.template)}</span>}
       </div>
+      {tm.objective && c.objective && <div data-team-objective style={{ padding: '2px 12px 0 32px', overflowWrap: 'anywhere' }}>{c.objective(tm.objective.goal)}</div>}
       <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 12px', padding: '8px 12px 10px' }}>
         <dt style={muted}>{c.folder}</dt><dd style={{ margin: 0, minWidth: 0 }}><span style={mono}>{tm.cwd}</span></dd>
         <dt style={muted}>{c.table(tm.projectName ?? tm.project)}</dt><dd style={{ margin: 0 }}>{c.newTable(tm.projectName ?? tm.project)}</dd>
