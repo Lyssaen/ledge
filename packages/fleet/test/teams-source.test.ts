@@ -65,4 +65,14 @@ describe('teams and tasks from the local daemon', () => {
       { type: 'team.launch', rid: 'r3', cwd: '/w', template: 'workshop' }
     ]);
   });
+
+  it('the user’s team.broadcast goes to the local daemon, its machine dropped, whatever machine is selected', () => {
+    const local = peer(); const remote = peer();
+    const api = createFleetClient([LOCAL_MACHINE, { id: 'srv', label: 'Serveur', ssh: 'srv' }], o => (o.url === LOCAL_MACHINE.url ? local : remote).client, {});
+    api.connect(); local.set('open'); local.emit(snap); remote.set('open'); remote.emit(snap);
+    api.fleet!.select('srv');
+    api.send({ type: 'team.broadcast', rid: 'b1', team: 'team-a1b2', text: 'Pause', machineId: 'srv' });
+    expect(local.sent.filter(m => m.type === 'team.broadcast')).toEqual([{ type: 'team.broadcast', rid: 'b1', team: 'team-a1b2', text: 'Pause' }]);
+    expect(remote.sent.some(m => m.type === 'team.broadcast')).toBe(false);
+  });
 });

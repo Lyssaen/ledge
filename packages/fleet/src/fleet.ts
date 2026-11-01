@@ -512,6 +512,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         const { machineId: _m, ...rest } = outgoing as typeof msg; outgoing = rest as ClientMessage;
       }
       if (msg.type === 'team.join' || msg.type === 'team.leave' || msg.type === 'team.resume' || msg.type === 'team.dissolve' || msg.type === 'team.save' || (msg.type === 'task.cmd' && !msg.qid) || msg.type === 'action.run') machine = 'local';
+      // The user's message to a whole team: the fleet keeps the local daemon's teams only, so it goes there, its machine dropped.
+      if (outgoing.type === 'team.broadcast') { machine = 'local'; const { machineId: _m, ...rest } = outgoing; outgoing = rest; }
       if (outgoing.type === 'team.join' || outgoing.type === 'team.leave') { const o = splitId(outgoing.session); if (o) { machine = o.machine; outgoing = { ...outgoing, session: o.id }; } }
       if (outgoing.type === 'task.cmd') { const o = outgoing.to ? splitId(outgoing.to) : null; if (o && !outgoing.to!.startsWith('@')) outgoing = { ...outgoing, to: o.id }; const b = splitId(outgoing.by); if (b && outgoing.by !== LEDGE_GIVER) outgoing = { ...outgoing, by: b.id }; }
       if (msg.type === 'snapshot.request') { publish(); history(); return; }

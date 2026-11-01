@@ -86,7 +86,7 @@ import { createPendingJournal, createReceiptJournal } from './brain/remoteJourna
 import { createRevisit } from './brain/revisit.js';
 import { createBrainCommands, parseBrainArgs, NOT_BRAIN_LINE, type RigActMsg, type RigPrepareMsg, type RigResult } from './brain/commands.js';
 import { readContext } from './context.js';
-import { findRole, loadRole } from './roles.js';
+import { findRole, loadRole, reservedRole } from './roles.js';
 import { leaderIssue } from './leader.js';
 import { crewOf, LEAD_NOT_STARTED, leadNotice, waitNotice } from './objective.js';
 import { ignoredTemplate, listDefinitions, resolveSeats, saveTemplate, templateHash, templateId, type ResolvedSeat } from './teams.js';
@@ -1306,6 +1306,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'role.write': {
         const id = msg.role.id; const path = asRole(id); const text = roleText(msg.role);
         if (!path) return invalid(`identifiant de rôle invalide : ${id}`);
+        const reserved = reservedRole(id);
+        if (reserved) return invalid(reserved); // refused before writing, as parseRole would list it
         if (text === null) return invalid('une valeur du rôle ne peut pas s\'écrire dans le fichier');
         // A file that does not parse reads as none: the write then counts as a create and its recipients are told.
         const before = existsSync(path) ? loadRole(id, path, msg.scope, []) : undefined;
@@ -1847,7 +1849,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       // An agent's message to another session: acked at once, typed when the target is free.
       case 'session.message': {
         // `@team`, the lead's: every other live seat, before `@role` is resolved.
-        if (msg.to === TEAM_ADDRESS) return reply(broadcastFromLead({ store, teams, mailbox }, msg));
+        if (msg.to === TEAM_ADDRESS) {
+          const ack = broadcastFromLead({ store, teams, mailbox }, msg);
+          if (ack.outcome !== 'refused') history?.adoptBroadcast(msg.rid);
+          return reply(ack);
+        }
         // `@role` names a seat of the sender's team (roles spec §3.6).
         const r = resolveRoleAddress(msg.to, msg.from, store.all(), teams.all());
         if ('reason' in r) return reply({ type: 'message.ack', rid: msg.rid, outcome: 'refused', reason: r.reason });

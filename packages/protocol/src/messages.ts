@@ -106,6 +106,8 @@ export const SUMMARY_MAX = 500;
 export const TeamBroadcastSchema = z.object({ type: z.literal('team.broadcast'), rid: z.string().min(1).max(100), team: TeamIdSchema, text: z.string().trim().min(1).max(MESSAGE_MAX), machineId: z.string().optional() });
 /** The answer to a `team.broadcast`: how many seats it reached, or the refusal's `reason`. */
 export const TeamBroadcastResultSchema = z.object({ type: z.literal('team.broadcast.result'), rid: z.string(), team: z.string(), sent: z.number().int().min(0).optional(), reason: z.string().optional() });
+export type TeamBroadcast = z.infer<typeof TeamBroadcastSchema>;
+export type TeamBroadcastResult = z.infer<typeof TeamBroadcastResultSchema>;
 
 export const ServerMessageSchema = z.discriminatedUnion('type', [
   SessionModelAcceptedSchema,

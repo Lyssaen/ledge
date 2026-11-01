@@ -85,9 +85,14 @@ export const unquote = (v: string): string => (v.length >= 2 && (v[0] === '"' ||
 
 const ROLE_KEYS = new Set(['label', 'tool', 'model', 'effort', 'autonomy']);
 
+/** Why a role id cannot be used (`team` is the whole team's address), or undefined. */
+export const reservedRole = (id: string): string | undefined =>
+  id === TEAM_ADDRESS.slice(1) ? 'team est réservé (ledge send @team parle à toute l\'équipe) : renomme ce rôle' : undefined;
+
 /** One role file as a role, or the reason it is not one. */
 export function parseRole(id: string, text: string, source: 'repo' | 'home', path: string): Role | string {
-  if (id === TEAM_ADDRESS.slice(1)) return 'team est réservé (ledge send @team parle à toute l\'équipe) : renomme ce rôle';
+  const reserved = reservedRole(id);
+  if (reserved) return reserved;
   let parsed;
   try { parsed = frontMatter(text); } catch (e) { return (e as Error).message; }
   const { fields, body } = parsed;

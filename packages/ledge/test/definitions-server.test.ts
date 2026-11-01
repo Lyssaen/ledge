@@ -67,6 +67,15 @@ describe('definitions over the protocol', () => {
     await c.close();
   });
 
+  it('role.write refuses the reserved id team before writing, with parseRole\'s reason', async () => {
+    await start();
+    const c = await client();
+    c.send({ type: 'role.write', rid: 'w1', scope: 'home', role: draft('team'), base: null });
+    expect(await c.next('definition.result')).toMatchObject({ rid: 'w1', code: 'invalid', reason: "team est réservé (ledge send @team parle à toute l'équipe) : renomme ce rôle" });
+    expect(existsSync(join(process.env.LEDGE_HOME!, 'roles', 'team.md'))).toBe(false);
+    await c.close();
+  });
+
   it('role.write to a repo scope writes under the local repo of the project; a project with no local repo is unknown_project', async () => {
     await start();
     const c = await client();

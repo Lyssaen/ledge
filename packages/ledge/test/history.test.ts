@@ -465,6 +465,21 @@ describe('messages through the Ledge mailbox', () => {
     expect(h.items('fce8')[0]).toMatchObject({ status: 'delivered' });
   });
 
+  it('a hook @team: the per-seat cards only, no card of the tool\'s own, none failed; a refused one is a failed card', () => {
+    const h = new History({ peerOf });
+    const team = { tool: 'SendMessage', toolUseId: 'toolu_9', toolInput: { to: '@team', message: 'Pause' } };
+    h.record('fce8', ev('PreToolUse', team));
+    h.recordSent('fce8', { ...msg, rid: 'toolu_9:b', to: 'Pim' });
+    h.recordSent('fce8', { ...msg, rid: 'toolu_9:c', to: 'Max' });
+    h.adoptBroadcast('toolu_9');
+    h.record('fce8', ev('PostToolUseFailure', { ...team, error: 'denied' }, 1));
+    expect(h.items('fce8').map(i => i.kind === 'sent' && `${i.id}:${i.status}`)).toEqual(['toolu_9:b:sending', 'toolu_9:c:sending']);
+    const refused = { tool: 'SendMessage', toolUseId: 'toolu_10', toolInput: { to: '@team', message: 'Pause' } };
+    h.record('fce8', ev('PreToolUse', refused, 2));
+    h.record('fce8', ev('PostToolUseFailure', { ...refused, error: 'denied' }, 2));
+    expect(h.items('fce8').at(-1)).toMatchObject({ kind: 'sent', id: 'toolu_10', to: '@team', status: 'failed' });
+  });
+
   it('a typed Ledge message is a received card, paired with the sender\'s open card, now read', () => {
     const h = new History({ peerOf });
     h.recordSent('c0de', { ...msg, to: 'Otto', peer: 'fce8', text: 'Bonjour' });

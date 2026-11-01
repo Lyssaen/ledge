@@ -7,7 +7,7 @@ import { log } from '../log.js';
 import { QUESTION_TOOLS } from '../daemon/state.js';
 import { codexPlan } from '../daemon/transcript.js';
 import { gitInfo } from '../daemon/git.js';
-import { readPeers, resolveTarget } from '../daemon/peers.js';
+import { ledgePeer, readPeers, resolveTarget } from '../daemon/peers.js';
 import { messageNote } from '../daemon/crossSession.js';
 import { readFileSync, openSync, fstatSync, readSync, closeSync } from 'node:fs';
 import { basename, join } from 'node:path';
@@ -397,8 +397,9 @@ export function tasksContext(tasks: readonly Task[]): string | undefined {
 }
 
 /** What a session Ledge launched is told of itself when it starts, resumes or is cleared (#20): its Ledge name, project,
- *  branch and worktree, and how to find the other sessions. A Claude addresses the others by Ledge name: its hook
- *  rewrites that name to the target's live address (Claude's own peer names are not Ledge's). */
+ *  branch and worktree, and how to find the other sessions. A Claude addresses the others by Ledge name (Claude's own
+ *  peer names are not Ledge's): a Claude seat is told that inside its team Ledge carries the message itself, in order
+ *  (`@role`, `@team` for the lead); a Claude outside a team that its hook rewrites the name to the target's live address. */
 export function identityContext(s: Identity): string {
   const where = [`projet ${s.repo ?? s.project}`, ...(s.branch ? [`branche ${s.branch}`] : []), ...(s.worktree ? [`worktree ${basename(s.cwd) || s.cwd}`] : [])].join(', ');
   return [
@@ -471,10 +472,12 @@ const SEND_MESSAGE_MS = 1500;
 const deny = (reason: string) => JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } });
 
 /**
- * Routes a Ledge-launched Claude's `SendMessage`: to a Claude, the real tool proceeds with `to` rewritten to the target's
- * live address and the message naming its sender; to a Codex, the daemon types it and its ack becomes the deny reason
- * (delivered or queued: it went through Ledge). A dead or ambiguous target is refused; an unknown one, a sender Ledge
- * did not launch, or any failure leaves the real tool to proceed unchanged.
+ * Routes a Ledge-launched Claude's `SendMessage`. Through Ledge's mailbox, its ack becoming the deny reason (delivered or
+ * queued: it went through Ledge): `@team` (the lead's, to every other seat), any message to a seat of the sender's live
+ * team (Claude or not, with or without a live Claude peer: Ledge types it), and a message to a Codex, a Cursor or an OMP.
+ * `@role` is first resolved to that seat's Ledge name. To a Claude outside the team, the real tool proceeds with `to`
+ * rewritten to the target's live address and the message naming its sender. A dead or ambiguous target is refused; an
+ * unknown one, a sender Ledge did not launch, or any failure leaves the real tool to proceed unchanged.
  */
 async function relayMessage(client: Client, from: string, toolUseId: string | undefined, input: Payload, deadline: number): Promise<string | undefined> {
   if (!toolUseId) return undefined;
@@ -483,15 +486,19 @@ async function relayMessage(client: Client, from: string, toolUseId: string | un
   const snapshot = await client.next('snapshot', left());
   const sender = snapshot.sessions.find(s => s.id === from);
   if (sender?.source !== 'launcher') return undefined;
-  // Through the daemon's mailbox, intercepted: its ack becomes the deny reason (delivered or queued: it went through Ledge).
-  // `target` names the recipient in the report, `to` is what the sender wrote (in a refusal).
-  const viaLedge = async (target: string, address: string) => {
+  // Through the daemon's mailbox: its ack becomes the deny reason. `target` names the recipient in the report, `to` is what
+  // the sender wrote (in a refusal), `address` the Ledge name (or `@team`) the mailbox resolves. `intercept` only for a
+  // target outside the team, where the daemon may hand a Claude back (`native`); a team message never comes back native,
+  // and if it did it would be lost: it is reported refused.
+  const viaLedge = async (target: string, address: string, intercept = false) => {
     const summary = str(input.summary);
-    const ack = await sendMessageAndAwaitAck(client, { type: 'session.message', rid: toolUseId, from, to: address, text: input.message as string, ...(summary ? { summary } : {}), intercept: true }, left());
+    const ack = await sendMessageAndAwaitAck(client, { type: 'session.message', rid: toolUseId, from, to: address, text: input.message as string, ...(summary ? { summary } : {}), ...(intercept ? { intercept: true } : {}) }, left());
     const sent = address === TEAM_ADDRESS ? `Message transmis par Ledge à toute l'équipe (${ack.recipients ?? 0} sièges).` : undefined;
+    const refused = (why: string) => `Ledge n'a pas pu transmettre le message à ${to} : ${why}`;
     const reason = ack.outcome === 'accepted' ? sent ?? `Message transmis par Ledge à ${target} : il le reçoit maintenant.`
       : ack.outcome === 'queued' ? sent ?? `Message transmis par Ledge à ${target} : il le recevra dès qu'il sera libre.`
-      : ack.outcome === 'refused' ? `Ledge n'a pas pu transmettre le message à ${to} : ${ack.reason ?? 'raison inconnue'}` : undefined;
+      : ack.outcome === 'refused' ? refused(ack.reason ?? 'raison inconnue')
+      : !intercept ? refused('le démon l\'a rendu à Claude (« native ») au lieu de le mettre dans sa file : renvoie-le avec `ledge send`') : undefined;
     return reason ? deny(reason) : undefined;
   };
   if (to === TEAM_ADDRESS) return viaLedge(to, TEAM_ADDRESS);
@@ -504,15 +511,19 @@ async function relayMessage(client: Client, from: string, toolUseId: string | un
     if ('reason' in role) return deny(`Ledge n'a pas pu transmettre le message à ${to} : ${role.reason}`);
     address = role.to;
   }
-  const r = resolveTarget(address, snapshot.sessions, readPeers());
+  const peers = readPeers();
+  // A Claude seat of the sender's live team: Ledge's mailbox carries it (ordered, one path), not Claude's own. Decided
+  // before Claude's address is needed: a teammate with no live peer socket is still typed into by Ledge. Past MESSAGE_MAX
+  // it goes natively (a documented exception); a teams fetch that fails falls back to the native path too.
+  const mate = ledgePeer(address, peers, snapshot.sessions);
+  if (mate?.tool === 'claude' && sender.team && sender.team === mate.team && mate.source !== 'hook_only' && (input.message as string).length <= MESSAGE_MAX) {
+    teams ??= (await client.next('teams', left()).catch(() => undefined))?.teams ?? [];
+    if (teams.some(t => t.id === sender.team && t.state !== 'dissolved')) return viaLedge(mate.name, mate.name);
+  }
+  const r = resolveTarget(address, snapshot.sessions, peers);
   if (r.outcome === 'unknown') return undefined;
   if (r.outcome === 'refused') return deny(`Ledge n'a pas pu transmettre le message à ${to} : ${r.reason}`);
   if (r.outcome === 'native') {
-    // Two Claude seats of the same live team: Ledge's mailbox carries it (ordered, one path), not Claude's own.
-    if (sender.team && sender.team === r.target.team && (input.message as string).length <= MESSAGE_MAX) {
-      teams ??= (await client.next('teams', left()).catch(() => undefined))?.teams ?? [];
-      if (teams.some(t => t.id === sender.team && t.state !== 'dissolved')) return viaLedge(to, address);
-    }
     // Already named when Ledge's hook runs twice (installed in user and project settings): never twice.
     const note = messageNote(sender.name, 'claude');
     const named = (text: string) => (text.startsWith(note) ? text : `${note} ${text}`);
@@ -521,7 +532,7 @@ async function relayMessage(client: Client, from: string, toolUseId: string | un
   }
   // Too long for Ledge: a Codex, a Cursor or an OMP can only be reached through it, refused with the length
   // (Claude's own tool, which cannot reach them, would only fail later).
-  return viaLedge(`${to} (${r.target.tool})`, address);
+  return viaLedge(`${to} (${r.target.tool})`, r.target.name, true);
 }
 
 /**

@@ -1,6 +1,6 @@
 import { appendFile, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { AttachmentRef, NoticeItem, ReceivedItem, SentItem, SessionEvent, Task, TaskTransmission, ThreadItem, ToolItem } from '@ledge/protocol';
+import { TEAM_ADDRESS, type AttachmentRef, type NoticeItem, type ReceivedItem, type SentItem, type SessionEvent, type Task, type TaskTransmission, type ThreadItem, type ToolItem } from '@ledge/protocol';
 import { paths } from '../paths.js';
 import { log } from '../log.js';
 import { filesOf } from './files.js';
@@ -197,6 +197,8 @@ export class History {
         if (!ev.tool) return undefined;
         const existing = ev.toolUseId && this.items(id).find(i => i.id === ev.toolUseId);
         if (existing) return existing; // the result came first (parallel hooks): keep what it said
+        // `@team`: the mailbox records one card per seat; a refused one gets its failed card from the tool's result.
+        if (ev.tool === 'SendMessage' && ev.toolInput?.to === TEAM_ADDRESS) return undefined;
         if (ev.tool === 'SendMessage') return this.put(id, this.sentOf(ev, common, 'sending')); // a message to another agent: its card, not an action row
         const input = inputText(ev.toolInput);
         return this.put(id, { kind: 'tool', id: ev.toolUseId ?? `tool-${ev.at}-${this.items(id).length}`, ...common, tool: ev.tool, label: ev.text ?? ev.tool, ...(input ? { input } : {}), status: 'running', files: filesOf(ev.tool, ev.toolInput) });
@@ -300,6 +302,9 @@ export class History {
     if (existing) return this.put(senderId, { ...existing, ...(m.peer ? { peer: m.peer } : {}), via: 'ledge' });
     return this.put(senderId, { kind: 'sent', id: m.rid, at: m.at, turn: this.turns.get(senderId) ?? 0, to: m.to, ...(m.peer ? { peer: m.peer } : {}), ...(m.summary ? { summary: m.summary } : {}), text: m.text, status: 'sending', via: 'ledge' });
   }
+
+  /** The lead's `@team` went through the mailbox (rid, its per-seat cards `rid:<seat>`): the tool's own result, the hook's deny, is not a card. */
+  adoptBroadcast(rid: string): void { this.mailed.add(rid); }
 
   /**
    * A task the session handed over (issue #92): its card in the sender's thread, in the turn it is in (not a prompt).

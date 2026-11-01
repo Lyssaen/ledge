@@ -436,7 +436,7 @@ describe('runHook: SendMessage inside a Ledge team goes through Ledge', () => {
   afterEach(() => { if (saved === undefined) delete process.env.CLAUDE_CONFIG_DIR; else process.env.CLAUDE_CONFIG_DIR = saved; });
   const peer = () => { mkdirSync(join(config, 'sessions'), { recursive: true }); writeFileSync(join(config, 'sessions', `${process.pid}.json`), JSON.stringify({ pid: process.pid, sessionId: ID, name: 'api', messagingSocketPath: '/s/x.sock' })); };
 
-  it('a seat writing to a Claude seat of its team goes through the mailbox, intercepted, with no rewritten input', async () => {
+  it('a seat writing to a Claude seat of its team goes through the mailbox, not intercepted, with no rewritten input', async () => {
     peer();
     const d = await fake([claude('a', 'Otto', { team: 'team-a1b2' }), claude('b', 'Pim', { team: 'team-a1b2' })], [team()], { outcome: 'accepted' });
     try {
@@ -444,7 +444,18 @@ describe('runHook: SendMessage inside a Ledge team goes through Ledge', () => {
       expect(out.permissionDecision).toBe('deny');
       expect(out.permissionDecisionReason).toBe('Message transmis par Ledge à Pim : il le reçoit maintenant.');
       expect(out).not.toHaveProperty('updatedInput');
-      expect(d.got.find(m => m.type === 'session.message')).toMatchObject({ from: 'a', to: 'Pim', text: 'Salut', intercept: true });
+      const frame = d.got.find(m => m.type === 'session.message');
+      expect(frame).toMatchObject({ from: 'a', to: 'Pim', text: 'Salut' });
+      expect(frame).not.toHaveProperty('intercept');
+    } finally { d.close(); }
+  });
+  it('a team message the daemon hands back native is reported refused, never left to Claude', async () => {
+    peer();
+    const d = await fake([claude('a', 'Otto', { team: 'team-a1b2' }), claude('b', 'Pim', { team: 'team-a1b2' })], [team()], { outcome: 'native' });
+    try {
+      const out = decision(await runHook('PreToolUse', send('Pim'), { port: d.port }));
+      expect(out.permissionDecision).toBe('deny');
+      expect(out.permissionDecisionReason).toBe("Ledge n'a pas pu transmettre le message à Pim : le démon l'a rendu à Claude (« native ») au lieu de le mettre dans sa file : renvoie-le avec `ledge send`");
     } finally { d.close(); }
   });
   it('queued: it will be received once the seat is free', async () => {
@@ -475,7 +486,9 @@ describe('runHook: SendMessage inside a Ledge team goes through Ledge', () => {
       const out = decision(await runHook('PreToolUse', send('@team'), { port: d.port }));
       expect(out.permissionDecision).toBe('deny');
       expect(out.permissionDecisionReason).toBe("Message transmis par Ledge à toute l'équipe (2 sièges).");
-      expect(d.got.find(m => m.type === 'session.message')).toMatchObject({ to: '@team', intercept: true });
+      const frame = d.got.find(m => m.type === 'session.message');
+      expect(frame).toMatchObject({ to: '@team' });
+      expect(frame).not.toHaveProperty('intercept');
     } finally { d.close(); }
   });
   it('@team refused by the daemon says why', async () => {

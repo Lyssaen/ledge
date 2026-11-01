@@ -10,9 +10,12 @@ import type { MailState } from '../src/daemon/mailbox.js';
 import { formatTeamNotice } from '../src/daemon/crossSession.js';
 import { listRoles, parseRole } from '../src/daemon/roles.js';
 import { seatContext } from '../src/daemon/seat.js';
-import { liveSeatSessions } from '../src/daemon/broadcast.js';
+import { liveSeatSessions, TEAM_MESSAGE_PREFIX } from '../src/daemon/broadcast.js';
 import { connect, type Client } from '../src/client.js';
 import type { Tmux } from '../src/tmux.js';
+import { History } from '../src/daemon/history.js';
+import { runHook } from '../src/cli/hook.js';
+import { until } from './helpers.js';
 
 // Lot C, task 2: the lead writes to the whole team with `@team`, the user with `team.broadcast`; `team` is a reserved role.
 
@@ -27,12 +30,12 @@ function fakeTmux(): Tmux {
 }
 
 type Item = MailState['queue'][number];
-let srv: Awaited<ReturnType<typeof startServer>>; let store: Store; let work: string; let queued: Map<string, Item>; let home: string | undefined;
+let srv: Awaited<ReturnType<typeof startServer>>; let store: Store; let work: string; let queued: Map<string, Item>; let home: string | undefined; let history: History;
 const role = (id: string) => { mkdirSync(join(process.env.LEDGE_HOME!, 'roles'), { recursive: true }); writeFileSync(join(process.env.LEDGE_HOME!, 'roles', `${id}.md`), `---\nlabel: ${id}\n---\nTu es ${id}.\n`); };
 async function start() {
-  store = new Store(); queued = new Map();
+  store = new Store(); queued = new Map(); history = new History({ dir: mkdtempSync(join(tmpdir(), 'ledge-history-')) });
   const mail = { load: () => undefined, save: (s: MailState) => { for (const q of s.queue) queued.set(q.id, q); } };
-  srv = await startServer({ store, tmux: fakeTmux(), port: 0, mail, agentEnv: async () => ({ ...process.env }), claudeBin: [process.execPath, fileURLToPath(new URL('./fake-claude.mjs', import.meta.url))] });
+  srv = await startServer({ store, tmux: fakeTmux(), port: 0, mail, history, agentEnv: async () => ({ ...process.env }), claudeBin: [process.execPath, fileURLToPath(new URL('./fake-claude.mjs', import.meta.url))] });
 }
 async function client(): Promise<Client> { const c = await connect({ port: srv.port }); await c.next('snapshot'); return c; }
 async function launch(c: Client, roles: string[]): Promise<Team> {
@@ -64,8 +67,19 @@ describe('@team, from the lead', () => {
     c.send({ type: 'session.message', rid: 'm1', from: lead.id, to: '@team', text: 'On fusionne à 17h' });
     const ack = await c.next('message.ack');
     expect(ack).toMatchObject({ rid: 'm1', outcome: 'accepted', recipients: 2 });
-    for (const s of [build, review]) expect(itemsTo(s.id)).toMatchObject([{ kind: 'message', text: 'On fusionne à 17h', from: lead.id, sender: { name: lead.name }, rid: `m1:${s.id}` }]);
+    // Each seat reads that it went to the whole team, not to it alone.
+    for (const s of [build, review]) expect(itemsTo(s.id)).toMatchObject([{ kind: 'message', text: "(à toute l'équipe) On fusionne à 17h", from: lead.id, sender: { name: lead.name }, rid: `m1:${s.id}` }]);
     expect(itemsTo(lead.id)).toEqual([]);
+    await c.close();
+  });
+
+  it('opens the text with the team prefix once, never twice', async () => {
+    await start(); const c = await client();
+    const team = await launch(c, ['leader', 'build']);
+    const [lead, build] = [seat(team, 'leader'), seat(team, 'build')];
+    c.send({ type: 'session.message', rid: 'm1', from: lead.id, to: '@team', text: `${TEAM_MESSAGE_PREFIX}Déjà dit` });
+    await c.next('message.ack');
+    expect(itemsTo(build.id).map(i => i.kind === 'message' && i.text)).toEqual(["(à toute l'équipe) Déjà dit"]);
     await c.close();
   });
 
@@ -97,6 +111,90 @@ describe('@team, from the lead', () => {
     const team = await launch(c, ['leader']);
     c.send({ type: 'session.message', rid: 'm1', from: seat(team, 'leader').id, to: '@team', text: 'Salut' });
     expect(await c.next('message.ack')).toMatchObject({ outcome: 'refused', reason: `personne d'autre dans l'équipe ${team.name}` });
+    await c.close();
+  });
+});
+
+// The review of lot C: the hook's frames carried `intercept`, so the mailbox answered `native` for a Claude seat and
+// nothing was queued. These run the real hook against the real daemon and its mailbox.
+describe('through the real hook and the real mailbox', () => {
+  const ID = '3c1d9e2a-0000-4000-8000-000000000001';
+  let config: string; let savedConfig: string | undefined; let savedSession: string | undefined;
+  beforeEach(() => {
+    savedConfig = process.env.CLAUDE_CONFIG_DIR; savedSession = process.env.LEDGE_SESSION;
+    config = mkdtempSync(join(tmpdir(), 'ledge-claude-')); process.env.CLAUDE_CONFIG_DIR = config;
+  });
+  afterEach(() => {
+    if (savedConfig === undefined) delete process.env.CLAUDE_CONFIG_DIR; else process.env.CLAUDE_CONFIG_DIR = savedConfig;
+    if (savedSession === undefined) delete process.env.LEDGE_SESSION; else process.env.LEDGE_SESSION = savedSession;
+  });
+  /** `s` is a live Claude peer at `uds:/s/x.sock`: Claude's own path could reach it. */
+  const livePeer = (s: Session) => {
+    store.upsert({ ...store.get(s.id)!, agentSessionId: ID });
+    mkdirSync(join(config, 'sessions'), { recursive: true });
+    writeFileSync(join(config, 'sessions', `${process.pid}.json`), JSON.stringify({ pid: process.pid, sessionId: ID, name: 'api', messagingSocketPath: '/s/x.sock' }));
+  };
+  const hook = async (from: Session, to: string, tu = 'tu1') => {
+    process.env.LEDGE_SESSION = from.id;
+    const out = await runHook('PreToolUse', JSON.stringify({ session_id: 'uuid-x', hook_event_name: 'PreToolUse', tool_name: 'SendMessage', tool_use_id: tu, tool_input: { to, message: 'Salut', summary: 'Un salut' } }), { port: srv.port });
+    return (JSON.parse(out!) as { hookSpecificOutput: Record<string, unknown> }).hookSpecificOutput;
+  };
+
+  it('a Claude seat writing to a Claude seat of its team: queued for it by the mailbox, the real tool denied', async () => {
+    await start(); const c = await client();
+    const team = await launch(c, ['leader', 'build']);
+    const [lead, build] = [seat(team, 'leader'), seat(team, 'build')];
+    idle(build.id); livePeer(build);
+    const out = await hook(lead, build.name);
+    expect(out).toMatchObject({ permissionDecision: 'deny', permissionDecisionReason: `Message transmis par Ledge à ${build.name} : il le reçoit maintenant.` });
+    expect(out).not.toHaveProperty('updatedInput');
+    expect(itemsTo(build.id)).toMatchObject([{ kind: 'message', rid: 'tu1', from: lead.id, to: build.name, text: 'Salut' }]);
+    await c.close();
+  });
+
+  it('a uds: address of a teammate reaches it by its Ledge name', async () => {
+    await start(); const c = await client();
+    const team = await launch(c, ['leader', 'build']);
+    const [lead, build] = [seat(team, 'leader'), seat(team, 'build')];
+    idle(build.id); livePeer(build);
+    expect((await hook(lead, 'uds:/s/x.sock')).permissionDecisionReason).toBe(`Message transmis par Ledge à ${build.name} : il le reçoit maintenant.`);
+    expect(itemsTo(build.id)).toMatchObject([{ kind: 'message', to: build.name, text: 'Salut' }]);
+    await c.close();
+  });
+
+  it('a teammate with no live Claude peer is still reached: Ledge types into it', async () => {
+    await start(); const c = await client();
+    const team = await launch(c, ['leader', 'build']);
+    const [lead, build] = [seat(team, 'leader'), seat(team, 'build')];
+    const out = await hook(lead, build.name);
+    expect(out.permissionDecision).toBe('deny');
+    expect(out.permissionDecisionReason).toMatch(new RegExp(`^Message transmis par Ledge à ${build.name} : `));
+    expect(itemsTo(build.id)).toMatchObject([{ kind: 'message', text: 'Salut' }]);
+    await c.close();
+  });
+
+  it('@team sent with intercept still reaches a Claude seat and a Codex seat: both queued, 2 recipients', async () => {
+    await start(); const c = await client();
+    const team = await launch(c, ['leader', 'build', 'review']);
+    const [lead, build, review] = [seat(team, 'leader'), seat(team, 'build'), seat(team, 'review')];
+    store.upsert({ ...store.get(review.id)!, tool: 'codex' });
+    c.send({ type: 'session.message', rid: 'm1', from: lead.id, to: '@team', text: 'Pause', intercept: true });
+    expect(await c.next('message.ack')).toMatchObject({ rid: 'm1', recipients: 2 });
+    for (const s of [build, review]) expect(itemsTo(s.id)).toMatchObject([{ kind: 'message', rid: `m1:${s.id}` }]);
+    await c.close();
+  });
+
+  it('a hook @team: every seat queued, and the lead’s thread holds exactly the per-seat cards, none failed', async () => {
+    await start(); const c = await client();
+    const team = await launch(c, ['leader', 'build', 'review']);
+    const [lead, build, review] = [seat(team, 'leader'), seat(team, 'build'), seat(team, 'review')];
+    expect((await hook(lead, '@team', 'tu9')).permissionDecisionReason).toBe("Message transmis par Ledge à toute l'équipe (2 sièges).");
+    for (const s of [build, review]) expect(itemsTo(s.id)).toMatchObject([{ kind: 'message', rid: `tu9:${s.id}` }]);
+    const sent = () => history.items(lead.id).filter(i => i.kind === 'sent');
+    await until(() => sent().length >= 2);
+    store.apply(lead.id, { name: 'PostToolUseFailure', at: at(), source: 'hook', tool: 'SendMessage', toolUseId: 'tu9', toolInput: { to: '@team', message: 'Salut' }, error: 'denied' });
+    expect(sent().map(i => i.id).sort()).toEqual([`tu9:${build.id}`, `tu9:${review.id}`].sort());
+    expect(sent().some(i => i.kind === 'sent' && i.status === 'failed')).toBe(false);
     await c.close();
   });
 });
