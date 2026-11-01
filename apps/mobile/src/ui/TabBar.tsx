@@ -12,7 +12,7 @@ const tab = (on: boolean, four: boolean) => `relative flex min-h-12 min-w-0 item
 export function TabBar({ count, active = 'inbox', chat = false, openrig = false }: { count: number; active?: 'inbox' | 'agents' | 'chat' | 'rigs' | 'projects'; chat?: boolean; openrig?: boolean }) {
   if (openrig) return (
     <nav aria-label={copy.nav.label} className="tabbar grid grid-cols-4 flex-none border-t border-line bg-bg pt-2 pb-3">
-      {([{ name: 'chat', label: copy.nav.chat, icon: 'chat' }, { name: 'inbox', label: copy.nav.toYou, icon: 'inbox' }, { name: 'rigs', label: copy.nav.rigs, icon: 'grid' }, { name: 'projects', label: copy.nav.projects, icon: 'folder' }] as const).map(item => <a key={item.name} href={href({ name: item.name })} aria-current={active === item.name ? 'page' : undefined} className={tab(active === item.name, true)}><Icon name={item.icon} />{item.label}{item.name === 'inbox' && count > 0 && <span className="absolute top-1 right-3 rounded-md bg-primary px-1 text-meta text-primary-fg">{count}</span>}</a>)}
+      {([{ name: 'chat', label: copy.nav.chat, icon: 'chat' }, { name: 'inbox', label: copy.nav.toYou, icon: 'inbox' }, { name: 'rigs', label: copy.nav.rigs, icon: 'flag' }, { name: 'projects', label: copy.nav.projects, icon: 'folder' }] as const).map(item => <a key={item.name} href={href({ name: item.name })} aria-current={active === item.name ? 'page' : undefined} className={tab(active === item.name, true)}><Icon name={item.icon} />{item.label}{item.name === 'inbox' && count > 0 && <span className="absolute top-1 right-3 rounded-md bg-primary px-1 text-meta text-primary-fg">{count}</span>}</a>)}
     </nav>
   );
   return (

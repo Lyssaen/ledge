@@ -1,3 +1,5 @@
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { devices, expect, test } from '@playwright/test';
 import type { PhoneClientMessage } from '@ledge/protocol';
 import { copy } from '../src/copy';
@@ -17,6 +19,9 @@ test.beforeAll(async () => {
 test.afterAll(async () => { await h?.close(); });
 test('pair, answer an escalation, read a rig and confirm a new rig with a passkey', async ({ page }) => {
   test.setTimeout(90_000);
+  const shots = process.env.OPENRIG_SHOTS; if (shots) mkdirSync(shots, { recursive: true });
+  const capture = async (name: string) => { if (shots) await page.screenshot({ path: join(shots, `${name}.png`) }); };
+  if (shots) await page.emulateMedia({ colorScheme: 'dark' });
   const cdp = await page.context().newCDPSession(page); await cdp.send('WebAuthn.enable');
   await cdp.send('WebAuthn.addVirtualAuthenticator', { options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true } });
   await page.goto(h.url); await page.getByRole('link', { name: copy.login.github }).click();
@@ -25,12 +30,13 @@ test('pair, answer an escalation, read a rig and confirm a new rig with a passke
   await page.getByRole('button', { name: copy.enroll.go }).click(); await expect(page.getByText(copy.enroll.done)).toBeVisible();
   await page.getByRole('link', { name: copy.compare.seePending }).click();
   await page.getByRole('link', { name: copy.nav.chat, exact: true }).click();
+  await expect(page.getByRole('button', { name: 'SQLite' })).toBeVisible(); await capture('conversation');
   await page.getByRole('button', { name: 'SQLite' }).click();
   await expect.poll(() => h.pc.received.map(x => JSON.parse(x) as PhoneClientMessage).some(m => m.type === 'escalation.answer' && m.answers.q1 === 'sqlite')).toBe(true);
   await page.getByRole('link', { name: copy.nav.rigs, exact: true }).click();
-  await page.getByRole('link', { name: /factory/ }).click(); await page.getByRole('link', { name: /^Échanges/ }).click(); await expect(page.getByText('Tests terminés')).toBeVisible();
+  await capture('rigs'); await page.getByRole('link', { name: /factory/ }).click(); await capture('rig-seats'); await page.getByRole('link', { name: /^Échanges/ }).click(); await expect(page.getByText('Tests terminés')).toBeVisible();
   await page.getByRole('link', { name: copy.nav.rigs, exact: true }).click(); await page.getByRole('link', { name: 'Lancer un rig…' }).click();
   await page.getByLabel('But').fill('Créer un nouveau service'); await page.getByRole('button', { name: 'Demander le plan à Ledge' }).click();
-  await page.getByRole('button', { name: 'Voir le plan' }).click(); await page.getByRole('button', { name: 'Lancer · confirmer avec la clé d’accès' }).click();
+  await page.getByRole('button', { name: 'Voir le plan' }).click(); await capture('plan'); await page.getByRole('button', { name: 'Lancer · confirmer avec la clé d’accès' }).click();
   await expect(page.getByText('Lancé par toi')).toBeVisible(); expect(h.daemon.launched).toContain('plan1');
 });
