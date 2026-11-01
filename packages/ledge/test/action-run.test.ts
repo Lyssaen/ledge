@@ -36,14 +36,14 @@ async function run(action: string, args: Record<string, unknown>, extra: { by?: 
   return r;
 }
 async function team(): Promise<Team> {
-  c.send({ type: 'team.launch', rid: 'launch', cwd: work, name: 'api', seats: [{ role: 'lead' }, { role: 'build' }] });
+  c.send({ type: 'team.launch', rid: 'launch', cwd: work, name: 'api', seats: [{ role: 'lead' }, { role: 'build' }, { role: 'leader' }] });
   return (await c.next('team.launched', 5000)).team;
 }
 
 beforeEach(async () => {
   process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-run-'));
   work = mkdtempSync(join(tmpdir(), 'ledge-work-'));
-  role('lead'); role('build');
+  role('lead'); role('build'); role('leader');
   store = new Store();
   srv = await startServer({ store, tmux: fakeTmux(), port: 0, close: { freeMs: 50, exitMs: 50 }, agentEnv: async () => ({ ...process.env }), claudeBin: [process.execPath, fileURLToPath(new URL('./fake-claude.mjs', import.meta.url))] });
   c = await connect({ port: srv.port }); await c.next('snapshot');
@@ -115,7 +115,7 @@ describe('action.run', () => {
     expect(await run('team.leave', { team: t.id, session: build! }, { by: build!, key: sessionKey(lead!) })).toMatchObject({ code: 'identity', reason: expect.stringContaining('ne correspond pas') });
     // No key at all: a session launched before Ledge gave keys, told to be resumed rather than suspected.
     expect(await run('team.leave', { team: t.id, session: build! }, { by: build!, key: null })).toMatchObject({ code: 'identity', reason: expect.stringContaining('pas de clé') });
-    expect(t.seats.length).toBe(2);
+    expect(t.seats.length).toBe(3);
     expect(await run('team.leave', { team: t.id, session: build! }, { by: build! })).not.toHaveProperty('reason');
   });
 

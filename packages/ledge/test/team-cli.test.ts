@@ -69,18 +69,18 @@ describe('ledge team and ledge close against a daemon', () => {
     process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-cli-'));
     work = mkdtempSync(join(tmpdir(), 'ledge-work-'));
     mkdirSync(join(process.env.LEDGE_HOME, 'roles'));
-    for (const r of ['lead', 'build']) writeFileSync(join(process.env.LEDGE_HOME, 'roles', `${r}.md`), `---\nlabel: ${r}\n---\nTu es ${r}.\n`);
+    for (const r of ['lead', 'build', 'leader']) writeFileSync(join(process.env.LEDGE_HOME, 'roles', `${r}.md`), `---\nlabel: ${r}\n---\nTu es ${r}.\n`);
     store = new Store();
     srv = await startServer({ store, tmux: tmux(), port: 0, close: { freeMs: 50, exitMs: 50 }, agentEnv: async () => ({ ...process.env }), claudeBin: [process.execPath, fileURLToPath(new URL('./fake-claude.mjs', import.meta.url))] });
   });
   afterEach(async () => { await srv.close(); });
 
   it('up with ad hoc seats, list --json, a destructive verb asked again, refused to an agent, then dissolved with its sessions closed', async () => {
-    const up = await runTeam(['up', '--seat', 'lead', '--seat', 'build', '--name', 'api'], user());
+    const up = await runTeam(['up', '--seat', 'lead', '--seat', 'build', '--seat', 'leader', '--name', 'api'], user());
     expect(up).toMatchObject({ code: 0, line: expect.stringContaining('équipe api lancée') });
     const listed = JSON.parse((await runTeam(['list', '--json'], user())).line);
     const team = listed.teams.find((t: { name: string }) => t.name === 'api');
-    expect(team.seats.map((s: { role: string; session?: { tool: string } }) => [s.role, s.session?.tool])).toEqual([['lead', 'claude'], ['build', 'claude']]);
+    expect(team.seats.map((s: { role: string; session?: { tool: string } }) => [s.role, s.session?.tool])).toEqual([['lead', 'claude'], ['build', 'claude'], ['leader', 'claude']]);
     const [lead, build] = team.seats.map((s: { sessionId: string }) => s.sessionId) as [string, string];
 
     expect(await runTeam(['dissolve', 'api'], user())).toEqual({ line: 'Dissoudre l\'équipe api : irréversible ; relance avec --yes pour confirmer', code: 1 });
@@ -108,7 +108,7 @@ describe('ledge team and ledge close against a daemon', () => {
     expect(JSON.parse((await runTeam(['list', '--json'], user())).line).teams).toEqual([]);
   });
   it('dissolve --close-sessions refused to an agent closes nothing', async () => {
-    await runTeam(['up', '--seat', 'lead', '--seat', 'build', '--name', 'api'], user());
+    await runTeam(['up', '--seat', 'lead', '--seat', 'build', '--seat', 'leader', '--name', 'api'], user());
     const team = JSON.parse((await runTeam(['list', '--json'], user())).line).teams[0];
     const [lead, build] = team.seats.map((s: { sessionId: string }) => s.sessionId) as [string, string];
     expect(await runTeam(['dissolve', 'api', '--yes', '--close-sessions'], { ...user(), env: { LEDGE_SESSION: lead, LEDGE_SESSION_KEY: sessionKey(lead) } })).toMatchObject({ code: 1 });

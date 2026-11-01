@@ -186,12 +186,12 @@ describe('definitions over the protocol', () => {
   it('template.write with no id names the file after the name; a second create with it answers exists; a stale delete answers changed', async () => {
     await start();
     const c = await client();
-    c.send({ type: 'template.write', rid: 't1', scope: 'home', name: 'Revue MR', seats: [{ role: 'dev' }, { role: 'lead' }], base: null });
+    c.send({ type: 'template.write', rid: 't1', scope: 'home', name: 'Revue MR', seats: [{ role: 'dev' }, { role: 'leader' }], base: null });
     const r = await c.next('definition.result');
     expect(r).toMatchObject({ rid: 't1', id: 'revue-mr', hash: expect.stringMatching(/^[0-9a-f]{16}$/) });
     const file = join(process.env.LEDGE_HOME!, 'teams', 'revue-mr.yaml');
     expect(existsSync(file)).toBe(true);
-    c.send({ type: 'template.write', rid: 't2', scope: 'home', name: 'Revue MR', seats: [{ role: 'dev' }], base: null });
+    c.send({ type: 'template.write', rid: 't2', scope: 'home', name: 'Revue MR', seats: [{ role: 'leader' }], base: null });
     expect(await c.next('definition.result')).toMatchObject({ rid: 't2', code: 'exists' });
     c.send({ type: 'template.delete', rid: 't3', scope: 'home', id: 'revue-mr', base: '0123456789abcdef' });
     expect(await c.next('definition.result')).toMatchObject({ rid: 't3', code: 'changed' });
@@ -199,7 +199,7 @@ describe('definitions over the protocol', () => {
     c.send({ type: 'definitions.list' });
     expect((await c.next('definitions.listing')).scopes[0]!.templates).toMatchObject([{ id: 'revue-mr', name: 'Revue MR', hash: r.hash }]);
     // Renaming keeps the id: the write names it.
-    c.send({ type: 'template.write', rid: 't4', scope: 'home', id: 'revue-mr', name: 'Revue des MR', seats: [{ role: 'dev' }], base: r.hash! });
+    c.send({ type: 'template.write', rid: 't4', scope: 'home', id: 'revue-mr', name: 'Revue des MR', seats: [{ role: 'leader' }], base: r.hash! });
     expect(await c.next('definition.result')).toMatchObject({ rid: 't4', id: 'revue-mr' });
     expect(readFileSync(file, 'utf8')).toContain('Revue des MR');
     c.send({ type: 'template.delete', rid: 't5', scope: 'home', id: 'revue-mr', base: definitionHash(readFileSync(file, 'utf8')) });
@@ -212,10 +212,10 @@ describe('definitions over the protocol', () => {
     await start();
     mkdirSync(join(process.env.LEDGE_HOME!, 'teams'), { recursive: true });
     const file = join(process.env.LEDGE_HOME!, 'teams', 'old.yml');
-    const text = 'name: Old\nseats:\n  - { role: dev }\n';
+    const text = 'name: Old\nseats:\n  - { role: leader }\n';
     writeFileSync(file, text);
     const c = await client();
-    c.send({ type: 'template.write', rid: 't1', scope: 'home', id: 'old', name: 'Old 2', seats: [{ role: 'dev' }], base: definitionHash(text) });
+    c.send({ type: 'template.write', rid: 't1', scope: 'home', id: 'old', name: 'Old 2', seats: [{ role: 'leader' }], base: definitionHash(text) });
     expect((await c.next('definition.result')).code).toBeUndefined();
     expect(readFileSync(file, 'utf8')).toContain('Old 2');
     expect(existsSync(join(process.env.LEDGE_HOME!, 'teams', 'old.yaml'))).toBe(false);

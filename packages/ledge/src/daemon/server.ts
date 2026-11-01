@@ -87,6 +87,7 @@ import { createRevisit } from './brain/revisit.js';
 import { createBrainCommands, parseBrainArgs, NOT_BRAIN_LINE, type RigActMsg, type RigPrepareMsg, type RigResult } from './brain/commands.js';
 import { readContext } from './context.js';
 import { findRole, loadRole } from './roles.js';
+import { leaderIssue } from './leader.js';
 import { listDefinitions, resolveSeats, saveTemplate, templateHash, templateId, type ResolvedSeat } from './teams.js';
 import { deleteDefinition, promptRecipients, roleText, scopeDefinitions, scopeDir, templateText, writeDefinition } from './definitions.js';
 import { resolveRoleAddress, seatContext, seatKey, seatView, teammates } from './seat.js';
@@ -1340,6 +1341,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         const id = msg.id ?? templateId(msg.name); const path = asTemplate(id); const text = templateText(msg.name, msg.seats);
         if (!path) return invalid(`identifiant d'équipe invalide : ${id}`);
         if (text === null) return invalid('une valeur de l\'équipe ne peut pas s\'écrire dans le fichier');
+        const lead = leaderIssue(msg.seats); if (lead) return invalid(lead);
         const r = writeDefinition(path, text, msg.base);
         return 'code' in r ? { id, code: r.code } : { id, hash: r.hash };
       }
@@ -1385,6 +1387,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     if (!req.seats && req.template && !template) return { reason: `aucun modèle d'équipe ${req.template} (.ledge/teams/${req.template}.yaml)` };
     const seats = req.seats ?? template?.seats;
     if (!seats?.length) return { reason: 'une équipe a au moins un siège' };
+    const lead = leaderIssue(seats); if (lead) return { reason: lead };
     const resolved = resolveSeats(seats, defs.roles, req.defaults);
     if ('unknown' in resolved) return { reason: `rôle inconnu : ${resolved.unknown.join(', ')} (écris .ledge/roles/<id>.md)` };
     const name = req.name ?? template?.name ?? (basename(cwd) || cwd);
@@ -1452,6 +1455,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   async function composeTeam(msg: Extract<ClientMessage, { type: 'team.compose' }>): Promise<Extract<ServerMessage, { type: 'team.changed' }>> {
     const changed = (extra: { team?: Team; reason?: string; models?: SeatModelOutcome[] }) => ({ type: 'team.changed' as const, rid: msg.rid, ...extra });
     const t = teams.get(msg.team); if (!t) return changed({ reason: `aucune équipe ${msg.team}` });
+    const lead = leaderIssue(msg.seats); if (lead) return changed({ reason: lead });
     const known = new Set(t.seats.map(s => s.role));
     const added = msg.seats.filter(s => !known.has(s.role));
     if (added.length) {

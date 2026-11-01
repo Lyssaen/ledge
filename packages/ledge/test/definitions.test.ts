@@ -53,14 +53,14 @@ describe('roleText', () => {
 
 describe('templateText', () => {
   it('round-trips through parseTemplate', () => {
-    const seats = [{ role: 'lead', tool: 'claude' as const, model: 'opus' }, { role: 'dev' }];
+    const seats = [{ role: 'leader', tool: 'claude' as const, model: 'opus' }, { role: 'dev' }];
     const text = templateText('Revue #2: "MR"', seats)!;
     const path = join(home, 'teams', 'revue.yaml'); write(path, text);
     expect(parseTemplate('revue', readFileSync(path, 'utf8'), 'home', path)).toEqual({ id: 'revue', name: 'Revue #2: "MR"', seats, source: 'home', path });
   });
 
   it('keeps a seat name with a comma and a colon', () => {
-    const seats = [{ role: 'dev', name: 'Zoe, the {dev}: one' }];
+    const seats = [{ role: 'leader' }, { role: 'dev', name: 'Zoe, the {dev}: one' }];
     const path = join(home, 'teams', 'z.yaml'); write(path, templateText('Z', seats)!);
     expect(parseTemplate('z', readFileSync(path, 'utf8'), 'home', path)).toMatchObject({ name: 'Z', seats });
   });
@@ -72,7 +72,7 @@ describe('templateText', () => {
   });
 
   it('is what saveTemplate writes', () => {
-    const seats = [{ role: 'lead' }, { role: 'build', tool: 'claude' as const }];
+    const seats = [{ role: 'leader' }, { role: 'build', tool: 'claude' as const }];
     const r = saveTemplate('Équipe #1', seats);
     expect(r).toEqual({ path: join(home, 'teams', 'equipe-1.yaml') });
     expect(readFileSync(r.path, 'utf8')).toBe(templateText('Équipe #1', seats));
@@ -85,12 +85,12 @@ describe('saveTemplate over a template already saved (#143)', () => {
     const path = join(home, 'teams', 'duo.yaml');
     write(path, 'name: Duo\nseats:\n  - role: lead # à la main\n');
     const hand = readFileSync(path, 'utf8');
-    expect(saveTemplate('Duo', [{ role: 'dev' }])).toEqual({ code: 'exists', path });
-    expect(saveTemplate('Duo', [{ role: 'dev' }], definitionHash('autre chose'))).toEqual({ code: 'changed', path });
+    expect(saveTemplate('Duo', [{ role: 'leader' }, { role: 'dev' }])).toEqual({ code: 'exists', path });
+    expect(saveTemplate('Duo', [{ role: 'leader' }, { role: 'dev' }], definitionHash('autre chose'))).toEqual({ code: 'changed', path });
     expect(readFileSync(path, 'utf8')).toBe(hand);
     expect(templateHash('Duo')).toBe(definitionHash(hand));
-    expect(saveTemplate('Duo', [{ role: 'dev' }], definitionHash(hand))).toEqual({ path });
-    expect(readFileSync(path, 'utf8')).toBe(templateText('Duo', [{ role: 'dev' }]));
+    expect(saveTemplate('Duo', [{ role: 'leader' }, { role: 'dev' }], definitionHash(hand))).toEqual({ path });
+    expect(readFileSync(path, 'utf8')).toBe(templateText('Duo', [{ role: 'leader' }, { role: 'dev' }]));
     expect(templateHash('Personne')).toBeUndefined();
   });
 });
@@ -157,15 +157,15 @@ describe('deleteDefinition', () => {
 describe('listing', () => {
   it('gives each role and template the hash of its file', () => {
     write(join(home, 'roles', 'lead.md'), '---\nlabel: Chef\n---\nlead');
-    write(join(home, 'teams', 'duo.yaml'), 'name: Duo\nseats:\n  - { role: lead }\n');
+    write(join(home, 'teams', 'duo.yaml'), 'name: Duo\nseats:\n  - { role: leader }\n');
     const role = listRoles().roles[0]!;
     expect(role.hash).toBe(definitionHash(readFileSync(join(home, 'roles', 'lead.md'), 'utf8')));
     expect(listTemplates().templates[0]!.hash).toBe(definitionHash(readFileSync(join(home, 'teams', 'duo.yaml'), 'utf8')));
   });
 
   it('tells a template whose file name is not a template id in problems, instead of listing it (issue #145)', () => {
-    write(join(home, 'teams', 'mon.equipe.yaml'), 'name: Mon équipe\nseats:\n  - { role: lead }\n');
-    write(join(home, 'teams', 'duo.yaml'), 'name: Duo\nseats:\n  - { role: lead }\n');
+    write(join(home, 'teams', 'mon.equipe.yaml'), 'name: Mon équipe\nseats:\n  - { role: leader }\n');
+    write(join(home, 'teams', 'duo.yaml'), 'name: Duo\nseats:\n  - { role: leader }\n');
     const { templates, problems } = listTemplates();
     expect(templates.map(t => t.id)).toEqual(['duo']);
     expect(problems).toEqual([{ path: join(home, 'teams', 'mon.equipe.yaml'), reason: expect.stringContaining('nom de fichier invalide') }]);
@@ -173,9 +173,9 @@ describe('listing', () => {
 
   it('keeps a quoted value holding " #" whole in a role and a template', () => {
     write(join(home, 'roles', 'q.md'), '---\nlabel: "C# · a #b" # trailing\ntool: codex # the agent\n---\np');
-    write(join(home, 'teams', 'q.yaml'), 'name: "Revue #2" # c\nseats:\n  - role: lead # c\n    name: "Zoe #1"\n');
+    write(join(home, 'teams', 'q.yaml'), 'name: "Revue #2" # c\nseats:\n  - role: leader # c\n    name: "Zoe #1"\n');
     expect(listRoles().roles[0]).toMatchObject({ label: 'C# · a #b', tool: 'codex' });
-    expect(listTemplates().templates[0]).toMatchObject({ name: 'Revue #2', seats: [{ role: 'lead', name: 'Zoe #1' }] });
+    expect(listTemplates().templates[0]).toMatchObject({ name: 'Revue #2', seats: [{ role: 'leader', name: 'Zoe #1' }] });
   });
 });
 
@@ -200,7 +200,7 @@ describe('scopeDir and scopeDefinitions', () => {
     write(join(home, 'roles', 'dev.md'), '---\nlabel: Home dev\n---\nh');
     write(join(repo, '.ledge', 'roles', 'dev.md'), '---\nlabel: Repo dev\n---\nr');
     write(join(repo, '.ledge', 'roles', 'bad.md'), '---\ntool: vim\n---\n');
-    write(join(repo, '.ledge', 'teams', 'duo.yaml'), 'name: Duo\nseats:\n  - { role: dev }\n');
+    write(join(repo, '.ledge', 'teams', 'duo.yaml'), 'name: Duo\nseats:\n  - { role: leader }\n');
     const r = scopeDefinitions({ roles: scopeDir('roles', 'repo', repo), teams: scopeDir('teams', 'repo', repo) }, 'repo');
     expect(r.roles.map(x => [x.id, x.label, x.source, x.shadows, x.hash !== undefined])).toEqual([['dev', 'Repo dev', 'repo', undefined, true]]);
     expect(r.templates.map(t => [t.id, t.source, t.hash !== undefined])).toEqual([['duo', 'repo', true]]);

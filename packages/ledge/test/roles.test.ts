@@ -95,7 +95,7 @@ describe('team templates', () => {
     expect(parseTemplate('w', 'seats:\n  - { role: a }\n  - { role: a }\n', 'home', '/w')).toMatch(/a role twice/);
     expect(parseTemplate('w', 'name: w\n', 'home', '/w')).toMatch(/^seats/);
     expect(parseTemplate('w', `seats:\n${Array.from({ length: 9 }, (_, i) => `  - { role: r${i} }`).join('\n')}\n`, 'home', '/w')).toMatch(/^seats/);
-    expect(parseTemplate('w', 'seats:\n  - { role: a }\n', 'repo', '/w')).toEqual({ id: 'w', name: 'w', seats: [{ role: 'a' }], source: 'repo', path: '/w' });
+    expect(parseTemplate('w', 'seats:\n  - { role: leader }\n', 'repo', '/w')).toEqual({ id: 'w', name: 'w', seats: [{ role: 'leader' }], source: 'repo', path: '/w' });
   });
 
   it("a seat's agent, model and effort are the seat's, else the role's, else the form's; unknown roles are named", () => {
@@ -113,10 +113,10 @@ describe('team templates', () => {
   });
 
   it('saves an ad hoc team as a template that reads back the same', () => {
-    const { path } = saveTemplate('Équipe rôles', [{ role: 'lead' }, { role: 'build', tool: 'claude', model: 'claude-opus-4.5' }]);
+    const { path } = saveTemplate('Équipe rôles', [{ role: 'leader' }, { role: 'build', tool: 'claude', model: 'claude-opus-4.5' }]);
     expect(path).toBe(join(home, 'teams', 'equipe-roles.yaml'));
     expect(readFileSync(path, 'utf8')).toContain('name: "Équipe rôles"');
-    expect(listTemplates().templates).toEqual([{ id: 'equipe-roles', name: 'Équipe rôles', seats: [{ role: 'lead' }, { role: 'build', tool: 'claude', model: 'claude-opus-4.5' }], source: 'home', path, hash: expect.stringMatching(/^[0-9a-f]{16}$/) }]);
+    expect(listTemplates().templates).toEqual([{ id: 'equipe-roles', name: 'Équipe rôles', seats: [{ role: 'leader' }, { role: 'build', tool: 'claude', model: 'claude-opus-4.5' }], source: 'home', path, hash: expect.stringMatching(/^[0-9a-f]{16}$/) }]);
     expect(templateId('  ')).toBe('team');
   });
 });

@@ -71,11 +71,11 @@ async function start(briefMs = 60_000) {
   c = await connect({ port: srv.port }); await c.next('snapshot');
 }
 const set = (id: string, patch: Partial<Session>) => store.upsert({ ...store.get(id)!, ...patch });
-/** A team with one seat `build`, its transcript at `used` tokens of 200 000; the turn ends (→ idle) and Ledge reads it. */
+/** A team with a `leader` seat and a seat `build` (the one it returns), its transcript at `used` tokens of 200 000; the turn ends (→ idle) and Ledge reads it. */
 async function seated(used: number) {
-  c.send({ type: 'team.launch', rid: 'r1', cwd: work, name: 'ledge-roles', seats: [{ role: 'build' }] });
+  c.send({ type: 'team.launch', rid: 'r1', cwd: work, name: 'ledge-roles', seats: [{ role: 'leader' }, { role: 'build' }] });
   const { team } = await c.next('team.launched', 5000);
-  const id = team.seats[0]!.sessionId!;
+  const id = team.seats.find(s => s.role === 'build')!.sessionId!;
   const transcript = join(work, `${id}.jsonl`); writeFileSync(transcript, `${claudeLine(used)}\n`);
   set(id, { state: 'working', transcriptPath: transcript });
   set(id, { state: 'idle' });
@@ -90,6 +90,7 @@ beforeEach(() => {
   work = mkdtempSync(join(tmpdir(), 'ledge-work-'));
   store = new Store();
   role('build', 'label: Build\nmodel: opus\nautonomy: edits');
+  role('leader', 'label: Chef');
 });
 afterEach(async () => { await c?.close(); await srv?.close(); srv = undefined; });
 

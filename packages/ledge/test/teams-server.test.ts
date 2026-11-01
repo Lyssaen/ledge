@@ -37,7 +37,7 @@ beforeEach(async () => {
   process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-teams-'));
   work = mkdtempSync(join(tmpdir(), 'ledge-work-'));
   answer = undefined;
-  role('lead', 'label: Chef');
+  role('leader', 'label: Chef');
   role('build', 'label: Build\nmodel: opus\nautonomy: edits');
   role('review', 'label: Relecteur\ntool: codex\neffort: high\nautonomy: auto');
 });
@@ -47,13 +47,13 @@ describe('roles and teams over the protocol', () => {
   it('roles.list answers the roles and templates of a folder, with the files skipped', async () => {
     await start();
     mkdirSync(join(process.env.LEDGE_HOME!, 'teams'));
-    writeFileSync(join(process.env.LEDGE_HOME!, 'teams', 'workshop.yaml'), 'name: workshop\nseats:\n  - { role: lead }\n  - { role: build }\n');
+    writeFileSync(join(process.env.LEDGE_HOME!, 'teams', 'workshop.yaml'), 'name: workshop\nseats:\n  - { role: leader }\n  - { role: build }\n');
     role('bad', 'tool: vim');
     const c = await client();
     c.send({ type: 'roles.list', cwd: work, requestId: 'q1' });
     const r = await c.next('roles.listing');
     expect(r.requestId).toBe('q1');
-    expect(r.roles.map(x => x.id)).toEqual(['build', 'lead', 'review']);
+    expect(r.roles.map(x => x.id)).toEqual(['build', 'leader', 'review']);
     expect(r.templates.map(t => t.id)).toEqual(['workshop']);
     expect(r.problems).toEqual([{ path: expect.stringContaining('bad.md'), reason: expect.stringMatching(/^tool/) }]);
     await c.close();
@@ -75,13 +75,13 @@ describe('roles and teams over the protocol', () => {
   it('team.launch: a live team, every seat spawned with its role and team, broadcast to the fronts', async () => {
     await start();
     const c = await client();
-    c.send({ type: 'team.launch', rid: 'r1', cwd: work, name: 'ledge-roles', seats: [{ role: 'lead' }, { role: 'build' }, { role: 'review' }] });
+    c.send({ type: 'team.launch', rid: 'r1', cwd: work, name: 'ledge-roles', seats: [{ role: 'leader' }, { role: 'build' }, { role: 'review' }] });
     const { team } = await c.next('team.launched', 5000);
     expect(team).toMatchObject({ name: 'ledge-roles', state: 'active', cwd: work });
-    expect(team.seats.map(s => s.role)).toEqual(['lead', 'build', 'review']);
+    expect(team.seats.map(s => s.role)).toEqual(['leader', 'build', 'review']);
     expect(team.seats.every(s => s.sessionId)).toBe(true);
     const seats = team.seats.map(s => store.get(s.sessionId!)!);
-    expect(seats.map(s => [s.role, s.team, s.tool])).toEqual([['lead', team.id, 'claude'], ['build', team.id, 'claude'], ['review', team.id, 'codex']]);
+    expect(seats.map(s => [s.role, s.team, s.tool])).toEqual([['leader', team.id, 'claude'], ['build', team.id, 'claude'], ['review', team.id, 'codex']]);
     expect(tmux.created.map(o => o.env.LEDGE_TEAM)).toEqual([team.id, team.id, team.id]);
     expect(tmux.created[2]!.command).toEqual(expect.arrayContaining(['--ask-for-approval', 'never', '--sandbox', 'workspace-write']));
     // A late client gets the teams right after the projects.
@@ -93,21 +93,21 @@ describe('roles and teams over the protocol', () => {
   it('team.launch refuses an unknown role before spawning anything; a seat that fails leaves the others, every seat tried (#140)', async () => {
     await start(o => o.env.LEDGE_ROLE === 'review');
     const c = await client();
-    c.send({ type: 'team.launch', rid: 'r1', cwd: work, seats: [{ role: 'lead' }, { role: 'qa' }] });
+    c.send({ type: 'team.launch', rid: 'r1', cwd: work, seats: [{ role: 'leader' }, { role: 'qa' }] });
     expect(await c.next('team.failed')).toEqual({ type: 'team.failed', rid: 'r1', reason: 'rôle inconnu : qa (écris .ledge/roles/<id>.md)' });
     expect(tmux.created).toEqual([]);
-    c.send({ type: 'team.launch', rid: 'r2', cwd: work, seats: [{ role: 'lead' }, { role: 'review' }, { role: 'build' }] });
+    c.send({ type: 'team.launch', rid: 'r2', cwd: work, seats: [{ role: 'leader' }, { role: 'review' }, { role: 'build' }] });
     const failed = await c.next('team.failed', 5000);
     expect(failed.reason).toBe('@review : tmux: no server');
-    expect(failed.team!.seats.map(s => [s.role, !!s.sessionId])).toEqual([['lead', true], ['review', false], ['build', true]]);
-    expect(tmux.created.map(o => o.env.LEDGE_ROLE)).toEqual(['lead', 'build']);
+    expect(failed.team!.seats.map(s => [s.role, !!s.sessionId])).toEqual([['leader', true], ['review', false], ['build', true]]);
+    expect(tmux.created.map(o => o.env.LEDGE_ROLE)).toEqual(['leader', 'build']);
     await c.close();
   });
 
   it('team.join tells the session its team at its next free moment; @role messages resolve in the sender’s team', async () => {
     await start();
     const c = await client();
-    c.send({ type: 'team.launch', rid: 'r1', cwd: work, seats: [{ role: 'lead' }, { role: 'build' }] });
+    c.send({ type: 'team.launch', rid: 'r1', cwd: work, seats: [{ role: 'leader' }, { role: 'build' }] });
     const { team } = await c.next('team.launched', 5000);
     const lead = team.seats[0]!.sessionId!; const build = team.seats[1]!.sessionId!;
     c.send({ type: 'session.launch', tool: 'claude', cwd: work });
@@ -130,12 +130,12 @@ describe('roles and teams over the protocol', () => {
   });
 
   it('the chat’s team card launches its team, then its task cards give to @role and follow their task', async () => {
-    answer = `Je propose une équipe.\n\`\`\`ledge-team\n{"cwd": "${work}", "name": "ledge-roles", "seats": [{"role": "lead"}, {"role": "build"}]}\n\`\`\`\n\`\`\`ledge-task\n{"to": "@build", "title": "Implémenter les rôles", "text": "roles.ts"}\n\`\`\``;
+    answer = `Je propose une équipe.\n\`\`\`ledge-team\n{"cwd": "${work}", "name": "ledge-roles", "seats": [{"role": "leader"}, {"role": "build"}]}\n\`\`\`\n\`\`\`ledge-task\n{"to": "@build", "title": "Implémenter les rôles", "text": "roles.ts"}\n\`\`\``;
     await start();
     const c = await client();
     c.send({ type: 'chat.ask', qid: 'q1', text: 'Monte une équipe' });
     const done = await c.next('chat.done', 10_000);
-    expect(done.team).toMatchObject({ name: 'ledge-roles', cwd: work, seats: [{ role: 'lead', label: 'Chef', tool: 'claude' }, { role: 'build', label: 'Build', model: 'opus', autonomy: 'edits' }] });
+    expect(done.team).toMatchObject({ name: 'ledge-roles', cwd: work, seats: [{ role: 'leader', label: 'Chef', tool: 'claude' }, { role: 'build', label: 'Build', model: 'opus', autonomy: 'edits' }] });
     expect(done.tasks).toEqual([{ to: '@build', title: 'Implémenter les rôles', text: 'roles.ts' }]);
     // Before the team: the task card waits.
     c.send({ type: 'task.cmd', rid: 't0', by: 'ledge', op: 'give', qid: 'q1', row: 0 });
@@ -157,20 +157,20 @@ describe('roles and teams over the protocol', () => {
     await c.next('task.result');
     await until(async () => turnOf((await c.next('chat.history')).turns)?.tasks?.[0]?.state === 'taken');
     // « Enregistrer » writes the ad hoc team as a template, and the card says so.
-    c.send({ type: 'team.save', rid: 's1', qid: 'q1', name: 'ledge-roles', seats: [{ role: 'lead' }, { role: 'build' }] });
+    c.send({ type: 'team.save', rid: 's1', qid: 'q1', name: 'ledge-roles', seats: [{ role: 'leader' }, { role: 'build' }] });
     const saved = await c.next('team.saved');
     expect(existsSync(saved.path!)).toBe(true);
     expect(readFileSync(saved.path!, 'utf8')).toContain('role: build');
     // Saved again under that name, the template is not replaced behind the user's back (#143): the card says why.
     const kept = readFileSync(saved.path!, 'utf8');
-    c.send({ type: 'team.save', rid: 's2', qid: 'q1', name: 'ledge-roles', seats: [{ role: 'lead' }] });
+    c.send({ type: 'team.save', rid: 's2', qid: 'q1', name: 'ledge-roles', seats: [{ role: 'leader' }] });
     const again = await c.next('team.saved');
     expect(again).toMatchObject({ path: saved.path, code: 'exists' });
     expect(again.reason).toContain('existe déjà');
     expect(readFileSync(saved.path!, 'utf8')).toBe(kept);
     await until(async () => turnOf((await c.next('chat.history')).turns)?.team?.saveError !== undefined);
     // At the version it was shown, it is replaced, and the card's refusal goes.
-    c.send({ type: 'team.save', rid: 's3', qid: 'q1', name: 'ledge-roles', seats: [{ role: 'lead' }], base: definitionHash(kept) });
+    c.send({ type: 'team.save', rid: 's3', qid: 'q1', name: 'ledge-roles', seats: [{ role: 'leader' }], base: definitionHash(kept) });
     expect(await c.next('team.saved')).toEqual({ type: 'team.saved', rid: 's3', path: saved.path });
     expect(readFileSync(saved.path!, 'utf8')).not.toContain('role: build');
     await until(async () => { const tm = turnOf((await c.next('chat.history')).turns)?.team; return !!tm && tm.saveError === undefined; });
@@ -191,9 +191,9 @@ describe('roles and teams over the protocol', () => {
   it('a seat resumed keeps its role and team; team.resume brings a resting team back', async () => {
     await start();
     const c = await client();
-    c.send({ type: 'team.launch', rid: 'r1', cwd: work, seats: [{ role: 'build' }] });
+    c.send({ type: 'team.launch', rid: 'r1', cwd: work, seats: [{ role: 'leader' }, { role: 'build' }] });
     const { team } = await c.next('team.launched', 5000);
-    const id = team.seats[0]!.sessionId!;
+    const id = team.seats.find(s => s.role === 'build')!.sessionId!;
     store.upsert({ ...store.get(id)!, state: 'exited', exitedAt: new Date().toISOString() } as Session);
     await until(() => true);
     c.send({ type: 'team.resume', team: team.id });
@@ -217,12 +217,12 @@ describe('live composition', () => {
   it('a removed seat on a permission prompt is not closed; at its next free moment it is closed exactly once, and the seat goes', async () => {
     await start();
     const c = await client();
-    const team = await launched(c, [{ role: 'lead' }, { role: 'build' }]);
+    const team = await launched(c, [{ role: 'leader' }, { role: 'build' }]);
     const build = sid(team, 'build');
     edit(build, { state: 'waiting_permission', pending: { kind: 'permission', text: 'Bash: ls', source: 'hook' } });
-    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'lead' }] });
+    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'leader' }] });
     const changed = await c.next('team.changed');
-    expect(changed).toMatchObject({ rid: 'c1', team: { seats: [{ role: 'lead' }, { role: 'build', leaving: true }] } });
+    expect(changed).toMatchObject({ rid: 'c1', team: { seats: [{ role: 'leader' }, { role: 'build', leaving: true }] } });
     expect(changed.reason).toBeUndefined();
     // Store changes while the prompt waits: nothing is closed.
     for (let i = 0; i < 3; i++) edit(build, { title: `t${i}` });
@@ -246,14 +246,14 @@ describe('live composition', () => {
   it('a removed seat whose session is mid-reply is not closed until the lock clears', async () => {
     await start();
     const c = await client();
-    const team = await launched(c, [{ role: 'lead' }, { role: 'build' }]);
+    const team = await launched(c, [{ role: 'leader' }, { role: 'build' }]);
     const build = sid(team, 'build');
     edit(build, { state: 'idle' });
     // The typing is held by the fake tmux; releasing it makes the injection fail, which ends the lock.
     let release = () => {}; tmux.gate.hold = new Promise<void>((_, reject) => { release = () => reject(new Error('released')); });
     c.send({ type: 'session.reply', id: build, text: 'continue' });
     await until(() => tmux.gate.held > 0);
-    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'lead' }] });
+    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'leader' }] });
     await c.next('team.changed');
     for (let i = 0; i < 3; i++) edit(build, { title: `w${i}` });
     await new Promise(r => setTimeout(r, 400));
@@ -269,10 +269,10 @@ describe('live composition', () => {
   it('a removed seat whose session Ledge cannot close (read only) is let go: the seat goes, the session stays', async () => {
     await start();
     const c = await client();
-    const team = await launched(c, [{ role: 'lead' }, { role: 'build' }]);
+    const team = await launched(c, [{ role: 'leader' }, { role: 'build' }]);
     const build = sid(team, 'build');
     edit(build, { state: 'working' });
-    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'lead' }] });
+    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'leader' }] });
     await c.next('team.changed');
     edit(build, { source: 'hook_only', state: 'idle' });
     await until(async () => !(await teamNow(team.id)).seats.some(s => s.role === 'build'));
@@ -284,10 +284,10 @@ describe('live composition', () => {
   it('a removed seat the user closes on the PC meanwhile still goes', async () => {
     await start();
     const c = await client();
-    const team = await launched(c, [{ role: 'lead' }, { role: 'build' }]);
+    const team = await launched(c, [{ role: 'leader' }, { role: 'build' }]);
     const build = sid(team, 'build');
     edit(build, { state: 'waiting_permission', pending: { kind: 'permission', text: 'Bash: ls', source: 'hook' } });
-    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'lead' }] });
+    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'leader' }] });
     await c.next('team.changed');
     store.upsert({ ...store.get(build)!, state: 'exited', pending: undefined } as Session);
     await until(async () => (await teamNow(team.id)).seats.length === 1);
@@ -296,20 +296,21 @@ describe('live composition', () => {
   });
 
   it('adding a role launches one session in it, seated in the team; a role that fails to launch is named and the composition stays', async () => {
+    role('lead', 'label: Chef');
     await start(o => o.env.LEDGE_ROLE === 'lead');
     const c = await client();
-    const team = await launched(c, [{ role: 'build' }]);
-    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'build' }, { role: 'review' }] });
+    const team = await launched(c, [{ role: 'leader' }, { role: 'build' }]);
+    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'leader' }, { role: 'build' }, { role: 'review' }] });
     const changed = await c.next('team.changed', 5000);
     expect(changed.reason).toBeUndefined();
     const review = changed.team!.seats.find(s => s.role === 'review')!;
     expect(review.sessionId).toBeTruthy();
     expect(store.get(review.sessionId!)).toMatchObject({ role: 'review', team: team.id, tool: 'codex' });
-    expect(tmux.created).toHaveLength(2);
-    c.send({ type: 'team.compose', rid: 'c2', team: team.id, seats: [{ role: 'build' }, { role: 'review' }, { role: 'lead' }] });
+    expect(tmux.created).toHaveLength(3);
+    c.send({ type: 'team.compose', rid: 'c2', team: team.id, seats: [{ role: 'leader' }, { role: 'build' }, { role: 'review' }, { role: 'lead' }] });
     const failed = await c.next('team.changed', 5000);
     expect(failed.reason).toContain('@lead');
-    expect(failed.team!.seats.map(s => [s.role, !!s.sessionId])).toEqual([['build', true], ['review', true], ['lead', false]]);
+    expect(failed.team!.seats.map(s => [s.role, !!s.sessionId])).toEqual([['leader', true], ['build', true], ['review', true], ['lead', false]]);
     c.send({ type: 'team.compose', rid: 'c3', team: 'team-0000', seats: [{ role: 'build' }] });
     expect(await c.next('team.changed')).toMatchObject({ rid: 'c3', reason: expect.stringContaining('team-0000') });
     await c.close();
@@ -318,18 +319,18 @@ describe('live composition', () => {
   it('team.seat restart closes the old session and launches one with the seat’s tool; start fills a free seat', async () => {
     await start();
     const c = await client();
-    const team = await launched(c, [{ role: 'lead' }, { role: 'build' }]);
-    const old = sid(team, 'lead');
-    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'lead', tool: 'codex' }, { role: 'build' }, { role: 'review', model: 'o3' }] });
+    const team = await launched(c, [{ role: 'leader' }, { role: 'build' }]);
+    const old = sid(team, 'leader');
+    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'leader', tool: 'codex' }, { role: 'build' }, { role: 'review', model: 'o3' }] });
     await c.next('team.changed', 5000);
-    c.send({ type: 'team.seat', rid: 's1', team: team.id, role: 'lead', action: 'restart' });
+    c.send({ type: 'team.seat', rid: 's1', team: team.id, role: 'leader', action: 'restart' });
     const r = await c.next('team.changed', 5000);
     expect(r).toMatchObject({ rid: 's1' }); expect(r.reason).toBeUndefined();
-    const fresh = r.team!.seats.find(s => s.role === 'lead')!.sessionId!;
+    const fresh = r.team!.seats.find(s => s.role === 'leader')!.sessionId!;
     expect(fresh).not.toBe(old);
     expect(tmux.killed).toContain(store.get(old)!.tmuxSession);
     expect(store.get(old)!.state).toBe('exited');
-    expect(store.get(fresh)).toMatchObject({ tool: 'codex', role: 'lead', team: team.id });
+    expect(store.get(fresh)).toMatchObject({ tool: 'codex', role: 'leader', team: team.id });
     // A live seat cannot be started again.
     c.send({ type: 'team.seat', rid: 's2', team: team.id, role: 'build', action: 'start' });
     expect((await c.next('team.changed')).reason).toContain('@build');
@@ -342,8 +343,8 @@ describe('live composition', () => {
     let down = true;
     await start(o => down && o.env.LEDGE_ROLE === 'review');
     const c = await client();
-    const team = await launched(c, [{ role: 'build' }]);
-    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'build' }, { role: 'review' }] });
+    const team = await launched(c, [{ role: 'leader' }, { role: 'build' }]);
+    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'leader' }, { role: 'build' }, { role: 'review' }] });
     expect((await c.next('team.changed', 5000)).reason).toContain('@review');
     down = false;
     c.send({ type: 'team.seat', rid: 's1', team: team.id, role: 'review', action: 'start' });
@@ -357,8 +358,8 @@ describe('live composition', () => {
     let down = true;
     await start(o => down && o.env.LEDGE_ROLE === 'review');
     const c = await client();
-    const team = await launched(c, [{ role: 'build' }]);
-    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'build' }, { role: 'review' }] });
+    const team = await launched(c, [{ role: 'leader' }, { role: 'build' }]);
+    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'leader' }, { role: 'build' }, { role: 'review' }] });
     expect((await c.next('team.changed', 5000)).reason).toContain('@review');
     down = false;
     const before = tmux.created.length;
@@ -376,10 +377,10 @@ describe('live composition', () => {
   it('team.launch with a project and no folder: the project’s local folder, else team.failed; seats given, the template is only recorded', async () => {
     await start();
     const c = await client();
-    c.send({ type: 'team.launch', rid: 'p1', project: 'nowhere', seats: [{ role: 'lead' }] });
+    c.send({ type: 'team.launch', rid: 'p1', project: 'nowhere', seats: [{ role: 'leader' }] });
     expect(await c.next('team.failed')).toEqual({ type: 'team.failed', rid: 'p1', reason: 'aucun dossier local pour ce projet' });
     expect(tmux.created).toEqual([]);
-    c.send({ type: 'team.launch', rid: 'p2', cwd: work, template: 'not-a-file', seats: [{ role: 'lead' }] });
+    c.send({ type: 'team.launch', rid: 'p2', cwd: work, template: 'not-a-file', seats: [{ role: 'leader' }] });
     const { team } = await c.next('team.launched', 5000);
     expect(team.template).toBe('not-a-file');
     await c.close();
@@ -388,11 +389,11 @@ describe('live composition', () => {
   it('compose applies a held seat\'s new model to its session', async () => {
     await start();
     const c = await client();
-    const team = await launched(c, [{ role: 'lead' }, { role: 'build' }]);
+    const team = await launched(c, [{ role: 'leader' }, { role: 'build' }]);
     const build = sid(team, 'build');
     edit(build, { state: 'idle', agentSessionId: 'u-1' });
     const before = tmux.created.length;
-    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'lead' }, { role: 'build', model: 'sonnet' }] });
+    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'leader' }, { role: 'build', model: 'sonnet' }] });
     const changed = await c.next('team.changed', 5000);
     expect(changed.reason).toBeUndefined();
     expect(changed.models).toEqual([{ role: 'build', session: build, when: 'now' }]);
@@ -405,12 +406,12 @@ describe('live composition', () => {
   it('compose on a free seat sends no model change', async () => {
     await start(o => o.env.LEDGE_ROLE === 'review');
     const c = await client();
-    const team = await launched(c, [{ role: 'build' }]);
-    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'build' }, { role: 'review' }] });
+    const team = await launched(c, [{ role: 'leader' }, { role: 'build' }]);
+    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'leader' }, { role: 'build' }, { role: 'review' }] });
     expect((await c.next('team.changed', 5000)).reason).toContain('@review');
-    c.send({ type: 'team.compose', rid: 'c2', team: team.id, seats: [{ role: 'build' }, { role: 'review', model: 'o3' }] });
+    c.send({ type: 'team.compose', rid: 'c2', team: team.id, seats: [{ role: 'leader' }, { role: 'build' }, { role: 'review', model: 'o3' }] });
     const changed = await c.next('team.changed', 5000);
-    expect(changed).toMatchObject({ rid: 'c2', team: { seats: [{ role: 'build' }, { role: 'review', model: 'o3', sessionId: null }] } });
+    expect(changed).toMatchObject({ rid: 'c2', team: { seats: [{ role: 'leader' }, { role: 'build' }, { role: 'review', model: 'o3', sessionId: null }] } });
     expect(changed.models).toBeUndefined();
     await c.close();
   });
@@ -418,11 +419,11 @@ describe('live composition', () => {
   it('compose on a seat held by a hook_only session reports not_launched', async () => {
     await start();
     const c = await client();
-    const team = await launched(c, [{ role: 'lead' }, { role: 'build' }]);
+    const team = await launched(c, [{ role: 'leader' }, { role: 'build' }]);
     const build = sid(team, 'build');
     edit(build, { state: 'idle', agentSessionId: 'u-1', source: 'hook_only' });
     const before = tmux.created.length;
-    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'lead' }, { role: 'build', model: 'sonnet' }] });
+    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'leader' }, { role: 'build', model: 'sonnet' }] });
     const changed = await c.next('team.changed', 5000);
     expect(changed.reason).toBeUndefined();
     expect(changed.models).toEqual([{ role: 'build', session: build, code: 'not_launched' }]);
@@ -436,11 +437,11 @@ describe('live composition', () => {
   it('compose changing a held seat\'s tool reports nothing', async () => {
     await start();
     const c = await client();
-    const team = await launched(c, [{ role: 'lead' }, { role: 'build' }]);
+    const team = await launched(c, [{ role: 'leader' }, { role: 'build' }]);
     const build = sid(team, 'build');
     edit(build, { state: 'idle', agentSessionId: 'u-1' });
     const before = tmux.created.length;
-    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'lead' }, { role: 'build', tool: 'codex', model: 'o3' }] });
+    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'leader' }, { role: 'build', tool: 'codex', model: 'o3' }] });
     const changed = await c.next('team.changed', 5000);
     expect(changed.models).toBeUndefined();
     await new Promise(r => setTimeout(r, 200));
@@ -452,9 +453,9 @@ describe('live composition', () => {
   it('team.resume resumes a seat with the seat’s model override; a seat whose tool changed is not resumed', async () => {
     await start();
     const c = await client();
-    const team = await launched(c, [{ role: 'lead', model: 'sonnet' }, { role: 'build' }]);
-    const lead = sid(team, 'lead'); const build = sid(team, 'build');
-    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'lead', model: 'opus' }, { role: 'build', tool: 'codex' }] });
+    const team = await launched(c, [{ role: 'leader', model: 'sonnet' }, { role: 'build' }]);
+    const lead = sid(team, 'leader'); const build = sid(team, 'build');
+    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'leader', model: 'opus' }, { role: 'build', tool: 'codex' }] });
     await c.next('team.changed', 5000);
     for (const id of [lead, build]) store.upsert({ ...store.get(id)!, state: 'exited', exitedAt: new Date().toISOString(), agentSessionId: 'abc' } as Session);
     const before = tmux.created.length;
@@ -490,7 +491,7 @@ describe('team changes and the seats told of them', () => {
     for (const id of ids) { await hook(id, 'SessionStart'); await until(() => store.get(id)?.teamSeen !== undefined); idle(id); }
   }
   async function workshop(c: Client) {
-    c.send({ type: 'team.launch', rid: 'r1', cwd: work, name: 'workshop', seats: [{ role: 'lead' }, { role: 'build' }] });
+    c.send({ type: 'team.launch', rid: 'r1', cwd: work, name: 'workshop', seats: [{ role: 'leader' }, { role: 'build' }] });
     const { team } = await c.next('team.launched', 5000);
     const lead = team.seats[0]!.sessionId!; const build = team.seats[1]!.sessionId!;
     await started(lead, build);
@@ -543,7 +544,7 @@ describe('team changes and the seats told of them', () => {
     await start();
     const c = await client();
     const { team, lead, build } = await workshop(c);
-    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'lead' }, { role: 'build' }, { role: 'review' }] });
+    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'leader' }, { role: 'build' }, { role: 'review' }] });
     const changed = await c.next('team.changed', 5000);
     const review = changed.team!.seats.find(s => s.role === 'review')!.sessionId!;
     await quiet();
@@ -557,7 +558,7 @@ describe('team changes and the seats told of them', () => {
     await start();
     const c = await client();
     const { team, lead, build } = await workshop(c);
-    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'lead' }] });
+    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'leader' }] });
     await c.next('team.changed');
     await until(() => store.get(build)?.state === 'exited');
     await quiet();

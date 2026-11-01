@@ -5,6 +5,7 @@ import { definitionDirs, definitionFiles, definitionHash, listRoles, quoteScalar
 import { writeDefinition } from './definitions.js';
 import { ledgeDir } from '../paths.js';
 import { log } from '../log.js';
+import { leaderIssue } from './leader.js';
 
 type Value = string | Value[] | { [k: string]: Value };
 
@@ -75,6 +76,7 @@ export function parseTemplate(id: string, text: string, source: 'repo' | 'home',
   if (!name.success) return 'name: a name of 1 to 60 characters';
   const seats = SeatsSchema.safeParse(raw.seats);
   if (!seats.success) { const issue = seats.error.issues[0]!; return `seats${issue.path.length ? `.${issue.path.join('.')}` : ''}: ${issue.message}`; }
+  const lead = leaderIssue(seats.data); if (lead) return lead;
   return { id, name: name.data, seats: seats.data, source, path };
 }
 
@@ -160,6 +162,7 @@ export function templateHash(name: string, dir = join(ledgeDir(), 'teams')): str
 /** The chat's « Enregistrer » (§3.8): an ad hoc team written to `~/.ledge/teams/<id>.yaml`, a template from then on. A template
  *  already there is replaced only at the version `base` names (#143): without it `exists`, at another version `changed`, the file untouched. */
 export function saveTemplate(name: string, seats: readonly Seat[], base?: string, dir = join(ledgeDir(), 'teams')): { path: string; code?: 'exists' | 'changed' } {
+  const lead = leaderIssue(seats); if (lead) throw new Error(lead);
   const path = templatePath(name, dir);
   const text = templateText(name, seats);
   if (text === null) throw new Error('a team name or seat value cannot be written as YAML');

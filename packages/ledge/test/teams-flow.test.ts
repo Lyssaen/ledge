@@ -46,26 +46,26 @@ beforeEach(() => {
   work = mkdtempSync(join(tmpdir(), 'ledge-work-'));
   store = new Store();
   answer = undefined;
-  role('lead', 'label: Chef');
+  role('leader', 'label: Chef');
   role('build', 'label: Build\nmodel: opus\nautonomy: edits');
 });
 afterEach(async () => { await srv?.close(); srv = undefined; });
 
 describe('a team made with Ledge’s chat', () => {
   it('is launched from the card, kept across a restart, resumed, saved as a template and launched again from it', async () => {
-    answer = `Je propose une équipe.\n\`\`\`ledge-team\n{"cwd": "${work}", "name": "ledge-roles", "seats": [{"role": "lead"}, {"role": "build"}]}\n\`\`\``;
+    answer = `Je propose une équipe.\n\`\`\`ledge-team\n{"cwd": "${work}", "name": "ledge-roles", "seats": [{"role": "leader"}, {"role": "build"}]}\n\`\`\``;
     await start();
     let c = await client();
     c.send({ type: 'chat.ask', qid: 'q1', text: 'Monte une équipe sur ledge' });
     const done = await c.next('chat.done', 10_000);
-    expect(done.team).toMatchObject({ name: 'ledge-roles', seats: [{ role: 'lead' }, { role: 'build' }] });
+    expect(done.team).toMatchObject({ name: 'ledge-roles', seats: [{ role: 'leader' }, { role: 'build' }] });
     c.send({ type: 'team.launch', rid: 'r1', qid: 'q1' });
     const { team } = await c.next('team.launched', 5000);
     expect(team).toMatchObject({ name: 'ledge-roles', state: 'active', cwd: work });
     // Written to its journal at once.
     await until(() => existsSync(join(process.env.LEDGE_HOME!, 'teams-live.json')) && readFileSync(join(process.env.LEDGE_HOME!, 'teams-live.json'), 'utf8').includes(team.id));
     // « Enregistrer »: the team becomes a template of the home's teams.
-    c.send({ type: 'team.save', rid: 's1', qid: 'q1', name: 'ledge-roles', seats: [{ role: 'lead' }, { role: 'build' }] });
+    c.send({ type: 'team.save', rid: 's1', qid: 'q1', name: 'ledge-roles', seats: [{ role: 'leader' }, { role: 'build' }] });
     const saved = await c.next('team.saved');
     expect(readFileSync(saved.path!, 'utf8')).toContain('role: build');
     await c.close();
@@ -77,21 +77,21 @@ describe('a team made with Ledge’s chat', () => {
     c = await client();
     const teams = await c.next('teams');
     const kept = teams.teams.find(t => t.id === team.id);
-    expect(kept).toMatchObject({ name: 'ledge-roles', state: 'resting', seats: [{ role: 'lead' }, { role: 'build' }] });
+    expect(kept).toMatchObject({ name: 'ledge-roles', state: 'resting', seats: [{ role: 'leader' }, { role: 'build' }] });
     // « Reprendre »: every seat comes back with its role, in its team.
     c.send({ type: 'team.resume', team: team.id });
     await until(() => team.seats.every(s => store.get(s.sessionId!)?.state === 'starting'));
-    expect(tmux.created.map(o => o.env.LEDGE_ROLE).sort()).toEqual(['build', 'lead']);
+    expect(tmux.created.map(o => o.env.LEDGE_ROLE).sort()).toEqual(['build', 'leader']);
     expect(new Set(tmux.created.map(o => o.env.LEDGE_TEAM))).toEqual(new Set([team.id]));
     // The saved template is offered for the folder, and launches a second team.
     c.send({ type: 'roles.list', requestId: 'l1', cwd: work });
     const listing = await c.next('roles.listing');
     const template = listing.templates.find(x => x.name === 'ledge-roles')!;
-    expect(template.seats.map(s => s.role)).toEqual(['lead', 'build']);
+    expect(template.seats.map(s => s.role)).toEqual(['leader', 'build']);
     c.send({ type: 'team.launch', rid: 'r2', cwd: work, template: template.id });
     const again = await c.next('team.launched', 5000);
     expect(again.team.id).not.toBe(team.id);
-    expect(again.team.seats.map(s => s.role)).toEqual(['lead', 'build']);
+    expect(again.team.seats.map(s => s.role)).toEqual(['leader', 'build']);
     await c.close();
   }, 30_000);
 });
@@ -101,13 +101,13 @@ describe('a live team recomposed from the phone', () => {
     role('rev', 'label: Rev');
     await start();
     const c = await client();
-    c.send({ type: 'team.launch', rid: 'r1', cwd: work, name: 'duo', seats: [{ role: 'lead' }] });
+    c.send({ type: 'team.launch', rid: 'r1', cwd: work, name: 'duo', seats: [{ role: 'leader' }] });
     const { team } = await c.next('team.launched', 5000);
     // @rev takes a while to spawn: the window in which the seat exists and holds no session yet.
     const spawn = tmux.newSession.bind(tmux);
     tmux.newSession = async o => { if (o.env.LEDGE_ROLE === 'rev') await new Promise(r => setTimeout(r, 150)); return spawn(o); };
     // Both arrive together: the compose adds @rev and starts it, the start finds the seat already there.
-    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'lead' }, { role: 'rev' }] });
+    c.send({ type: 'team.compose', rid: 'c1', team: team.id, seats: [{ role: 'leader' }, { role: 'rev' }] });
     c.send({ type: 'team.seat', rid: 's1', team: team.id, role: 'rev', action: 'start' });
     const first = await c.next('team.changed', 5000);
     const second = await c.next('team.changed', 5000);
@@ -122,7 +122,7 @@ describe('a live team recomposed from the phone', () => {
 describe('the tasks of a role', () => {
   it('Ledge gives @build three tasks: its seat gets them one at a time, oldest first, each once it is free again', async () => {
     const tasks = ['Écrire roles.ts', 'Tester roles.ts', 'Documenter les rôles'];
-    answer = `Je confie trois tâches.\n\`\`\`ledge-team\n{"cwd": "${work}", "name": "ledge-roles", "seats": [{"role": "lead"}, {"role": "build"}]}\n\`\`\`\n${tasks.map(t => `\`\`\`ledge-task\n{"to": "@build", "title": "${t}"}\n\`\`\``).join('\n')}`;
+    answer = `Je confie trois tâches.\n\`\`\`ledge-team\n{"cwd": "${work}", "name": "ledge-roles", "seats": [{"role": "leader"}, {"role": "build"}]}\n\`\`\`\n${tasks.map(t => `\`\`\`ledge-task\n{"to": "@build", "title": "${t}"}\n\`\`\``).join('\n')}`;
     await start();
     const c = await client();
     c.send({ type: 'chat.ask', qid: 'q1', text: 'Monte une équipe et confie le travail à @build' });
