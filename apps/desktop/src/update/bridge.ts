@@ -4,10 +4,11 @@ import { isTauri } from '../tauri/bridge';
 export interface AvailableUpdate { version: string; notes: string; downloadAndInstall(onProgress: (done: number, total: number | null) => void): Promise<void> }
 
 /** The newer release from latest-desktop.json, or null (none, or not in the app: browser, tests). Throws on network errors. */
-export async function checkForUpdate(): Promise<AvailableUpdate | null> {
+export async function checkForUpdate(channel: 'stable' | 'snapshot' = 'stable'): Promise<AvailableUpdate | null> {
   if (!isTauri()) return null;
-  const { check } = await import('@tauri-apps/plugin-updater');
-  const u = await check();
+  const { check, Update } = await import('@tauri-apps/plugin-updater');
+  const metadata = channel === 'snapshot' ? await (await import('@tauri-apps/api/core')).invoke<ConstructorParameters<typeof Update>[0] | null>('check_snapshot_update') : null;
+  const u = channel === 'snapshot' ? (metadata ? new Update(metadata) : null) : await check();
   if (!u) return null;
   return {
     version: u.version, notes: u.body ?? '',
@@ -31,6 +32,7 @@ export async function appVersion(): Promise<string | null> {
   // The e2e build only (VITE_LEDGE_E2E): Playwright stands in for the app's version, so the daemons' update (#48) runs in the browser.
   if (import.meta.env.VITE_LEDGE_E2E) { const v = (window as unknown as { __ledgeAppVersion?: string }).__ledgeAppVersion; if (v) return v; }
   if (!isTauri()) return null;
+  if (import.meta.env.VITE_LEDGE_SNAPSHOT_VERSION) return import.meta.env.VITE_LEDGE_SNAPSHOT_VERSION;
   const { getVersion } = await import('@tauri-apps/api/app');
   return getVersion();
 }

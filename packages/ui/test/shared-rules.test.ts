@@ -30,5 +30,8 @@ describe('compareVersions', () => {
     expect(compareVersions('0.4.9', '0.5.0')).toBe(-1);
     expect(compareVersions('0.5.0', '0.5.0')).toBe(0);
     expect(compareVersions('0.5.0-dev', '0.5.0')).toBe(-1);
+    expect(compareVersions('0.5.0-snapshot.100.1', '0.5.0-snapshot.99.2')).toBe(1);
+    expect(compareVersions('0.5.0-snapshot.100.2', '0.5.0-snapshot.100.1')).toBe(1);
+    expect(compareVersions('0.5.0-snapshot.100.1', '0.5.0')).toBe(-1);
   });
 });

@@ -143,6 +143,7 @@ export const fr = {
       install: 'Installer', retry: 'Réessayer',
       auto: 'Rechercher les mises à jour', autoHint: 'Au démarrage, puis toutes les 6 heures. Ledge ne met jamais à jour sans votre clic.',
       autoOn: 'Recherche automatique des mises à jour', autoOff: 'Recherche manuelle des mises à jour',
+      channel: 'Canal de mise à jour', channelHint: 'Les snapshots sont expérimentaux et peuvent remplacer une version stable plus récente. Le retour au canal stable peut nécessiter une réinstallation.', stable: 'Stable', snapshot: 'Snapshot',
       checking: 'Vérification…', never: 'Jamais vérifié', checkedNow: 'Vérifié à l’instant', checkedAgo: (d: string) => `Vérifié il y a ${d}`,
       source: 'Sur les releases GitHub de Lyssaen/ledge.', check: 'Vérifier'
     },

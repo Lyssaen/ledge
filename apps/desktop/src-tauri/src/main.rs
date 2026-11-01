@@ -9,6 +9,47 @@ use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Manager, Wry};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 use tauri_plugin_window_state::StateFlags;
+use tauri_plugin_updater::UpdaterExt;
+
+const SNAPSHOT_FEED: &str = "https://github.com/Lyssaen/ledge/releases/download/snapshot/latest-desktop.json";
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SnapshotMetadata {
+    rid: u32,
+    current_version: String,
+    version: String,
+    date: Option<String>,
+    body: Option<String>,
+    raw_json: serde_json::Value,
+}
+
+fn snapshot_sequence(version: &str) -> Option<(u64, u64)> {
+    let (_, suffix) = version.split_once("-snapshot.")?;
+    let (run, attempt) = suffix.split_once('.')?;
+    Some((run.parse().ok()?, attempt.parse().ok()?))
+}
+
+#[tauri::command]
+async fn check_snapshot_update(webview: tauri::Webview<Wry>) -> Result<Option<SnapshotMetadata>, String> {
+    let url = SNAPSHOT_FEED.parse::<tauri::Url>().map_err(|e| e.to_string())?;
+    let updater = webview.updater_builder().endpoints(vec![url]).map_err(|e| e.to_string())?
+        .version_comparator(|_, remote| {
+            let next = snapshot_sequence(&remote.version.to_string());
+            match (option_env!("LEDGE_SNAPSHOT_VERSION").and_then(snapshot_sequence), next) {
+                (_, None) => false,
+                (None, Some(_)) => true,
+                (Some(current), Some(next)) => next > current,
+            }
+        }).build().map_err(|e| e.to_string())?;
+    let Some(update) = updater.check().await.map_err(|e| e.to_string())? else { return Ok(None); };
+    let current_version = update.current_version.clone();
+    let version = update.version.clone();
+    let body = update.body.clone();
+    let raw_json = update.raw_json.clone();
+    let rid = webview.resources_table().add(update);
+    Ok(Some(SnapshotMetadata { rid, current_version, version, date: None, body, raw_json }))
+}
 
 const TRAY_OPEN: &str = "open";
 const TRAY_NEW: &str = "new";
@@ -208,7 +249,7 @@ fn main() {
         .manage(notch::Screen::default())
         .manage(pty::PtyState::default())
         .invoke_handler(tauri::generate_handler![
-            focus_terminal, foreground_is_terminal, open_terminal, open_url, daemon_token, get_autostart, set_autostart, set_tray_labels, take_open_target,
+            focus_terminal, foreground_is_terminal, open_terminal, open_url, daemon_token, get_autostart, set_autostart, set_tray_labels, take_open_target, check_snapshot_update,
             open_in_ledge, notch::set_frame, notch::set_hot_zone, notch::set_outside_watch, notch::focus_overlay, notch::release_focus,
             notch::list_monitors, notch::set_monitor, open_atelier, pty::pty_open, pty::pty_write, pty::pty_resize, pty::pty_close,
         ])
@@ -250,7 +291,14 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{checked_target, launched_minimized, on_close, tray_shows_window, tray_title, CloseAction};
+    use super::{checked_target, launched_minimized, on_close, snapshot_sequence, tray_shows_window, tray_title, CloseAction};
+    #[test]
+    fn snapshot_builds_have_ordered_run_and_retry_numbers() {
+        assert!(snapshot_sequence("0.29.0-snapshot.123.2") > snapshot_sequence("0.29.0-snapshot.123.1"));
+        assert!(snapshot_sequence("0.29.0-snapshot.124.1") > snapshot_sequence("0.29.0-snapshot.123.9"));
+        assert_eq!(snapshot_sequence("0.29.0"), None);
+        assert_eq!(snapshot_sequence("0.29.0-snapshot.not-a-number.1"), None);
+    }
     #[test]
     fn the_tray_tells_a_dev_build_from_an_installed_one() {
         assert_eq!(tray_title("0.5.2", false), "Ledge Desktop 0.5.2");
