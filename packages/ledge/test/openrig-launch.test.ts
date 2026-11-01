@@ -13,7 +13,7 @@ import { Store } from '../src/daemon/store.js';
 import { startServer, type ServerHandle } from '../src/daemon/server.js';
 import type { Tmux } from '../src/tmux.js';
 import { createFakeOpenRig, fakeRigCli, type FakeOpenRig } from './fakes/openrig.js';
-import { authHeaders, until } from './helpers.js';
+import { authHeaders, until, openrigEngine } from './helpers.js';
 
 const dirs: string[] = [];
 const tmp = (): string => { const d = mkdtempSync(join(tmpdir(), 'ledge-launch-')); dirs.push(d); return d; };
@@ -268,7 +268,7 @@ describe('server rig.launch', () => {
     if (savedHome === undefined) delete process.env.LEDGE_HOME; else process.env.LEDGE_HOME = savedHome; await bridge?.stop(); bridge = null; await srv?.close(); srv = null; await f?.stop(); f = null; });
   it('launches a prepared plan once; a used plan and an unknown one are refused', async () => {
     vi.useRealTimers();
-    const dir = tmp(); process.env.LEDGE_HOME = dir;
+    const dir = tmp(); process.env.LEDGE_HOME = dir; openrigEngine();
     f = await createFakeOpenRig(); f.specs = [{ id: 'b:factory', name: 'factory', sourceType: 'builtin', yaml: FACTORY }];
     const exec = fakeRigCli(f, { up: spec => ({ code: 0, stdout: JSON.stringify({ rigId: 'r9', rigName: spec }), stderr: '' }) });
     const fr = f;
@@ -296,7 +296,7 @@ describe('server rig.launch', () => {
   });
   it('a launch refused « not now » (OpenRig down) keeps its plan: the same rid launches it once OpenRig is back', async () => {
     vi.useRealTimers();
-    const dir = tmp(); process.env.LEDGE_HOME = dir;
+    const dir = tmp(); process.env.LEDGE_HOME = dir; openrigEngine();
     f = await createFakeOpenRig(); f.specs = [{ id: 'b:factory', name: 'factory', sourceType: 'builtin', yaml: FACTORY }];
     const exec = fakeRigCli(f, { up: spec => ({ code: 0, stdout: JSON.stringify({ rigId: 'r9', rigName: spec }), stderr: '' }) });
     const fr = f;
@@ -325,7 +325,7 @@ describe('server rig.launch', () => {
   });
   it('rig.act down on a launching rig cancels the pending launch first', async () => {
     vi.useRealTimers();
-    const dir = tmp(); process.env.LEDGE_HOME = dir;
+    const dir = tmp(); process.env.LEDGE_HOME = dir; openrigEngine();
     f = await createFakeOpenRig(); f.specs = [{ id: 'b:factory', name: 'factory', sourceType: 'builtin', yaml: FACTORY }];
     const exec = fakeRigCli(f, { up: spec => ({ code: 0, stdout: JSON.stringify({ rigId: 'r9', rigName: spec }), stderr: '' }) });
     const fr = f;

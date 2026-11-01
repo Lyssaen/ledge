@@ -142,6 +142,53 @@ describe('OpenRig bridge', () => {
     expect(b.replay().map(m => m.type)).toEqual(['openrig.status', 'rig.snapshot', 'escalation.updated']);
   });
 
+  it('probe only (Ledge engine): sees OpenRig, never starts it, registers, mirrors nor streams; leaving it is whole again', async () => {
+    fake = await createFakeOpenRig(); fake.rigs.push(starter()); fake.queue.push(humanRow('E1'));
+    const asks: Ask[] = [{ id: 'a000003', from: 's1', fromName: 'solo', question: 'Q?', options: '', at: '2026-10-30T10:00:00.000Z', state: 'open' }];
+    const exec = fakeRigCli(fake); const { b, of } = setup({ exec, rigs: ['starter'], asks: { all: () => asks, onChange: () => () => {} } });
+    b.setProbeOnly(true); b.setProbeOnly(true); // idempotent
+    await b.start(); await until(() => b.status().state === 'running'); await sleep(100);
+    expect(of('openrig.status').at(-1)!.status).toMatchObject({ machine: 'local', state: 'running', version: '0.6.14' });
+    expect(exec.calls.some(c => c.join(' ') === 'daemon start')).toBe(false);
+    expect(exec.calls.some(c => c[0] === 'gateway')).toBe(false);
+    expect(fake.requests.some(r => r.path === '/api/events' || r.path === '/api/queue/outbox/list' || r.path === '/api/queue/list')).toBe(false);
+    expect(b.rigs()).toEqual([]); expect(of('rig.snapshot')).toEqual([]); expect(of('rig.updated')).toEqual([]);
+    // Ledge's own asks are kept; OpenRig's escalations are not mirrored.
+    expect(b.escalations().map(e => e.id)).toEqual(['ask-a000003']);
+    expect(of('escalation.updated').map(m => m.escalation.id)).toEqual(['ask-a000003']);
+    expect(b.replay()).toEqual([{ type: 'openrig.status', status: b.status() }, { type: 'rig.snapshot', machine: 'local', rigs: [] },
+      { type: 'escalation.updated', escalation: expect.objectContaining({ id: 'ask-a000003' }) }]);
+    await expect(b.ensureRunning('launch')).rejects.toThrow("le moteur d'équipes est Ledge : les rigs OpenRig sont coupés (Réglages › Équipes)");
+    b.setProbeOnly(false);
+    await until(() => exec.calls.some(c => c.slice(0, 3).join(' ') === 'gateway human add'));
+    await until(() => of('rig.snapshot').some(m => m.rigs.some(r => r.name === 'starter')));
+    await until(() => b.escalations().some(e => e.id === 'E1'));
+  });
+
+  it('probe only with OpenRig stopped and rigs known: no auto start; leaving the probe starts it as a daemon start would', async () => {
+    fake = await createFakeOpenRig(); fake.rigs.push(starter()); fake.humans.push('ledge'); await fake.stop();
+    const exec = fakeRigCli(fake); const { b, notices } = setup({ exec, rigs: ['starter'] });
+    b.setProbeOnly(true);
+    await b.start(); await until(() => exec.calls.filter(c => c[0] === '--version').length >= 3);
+    expect(exec.calls.some(c => c.join(' ') === 'daemon start')).toBe(false); expect(b.status().state).toBe('stopped');
+    expect(notices).toEqual([]);
+    b.setProbeOnly(false);
+    await until(() => b.status().state === 'running');
+    expect(exec.calls.filter(c => c.join(' ') === 'daemon start')).toHaveLength(1);
+  });
+
+  it('entering the probe drops the connection: the rigs and OpenRig\'s escalations go, nothing of OpenRig is emitted', async () => {
+    fake = await createFakeOpenRig(); fake.rigs.push(starter()); fake.humans.push('ledge'); fake.queue.push(humanRow('E1'));
+    const { b, msgs } = setup({ exec: fakeRigCli(fake) });
+    await b.start(); await until(() => b.escalations().some(e => e.id === 'E1'));
+    const from = msgs.length;
+    b.setProbeOnly(true); await sleep(100);
+    expect(msgs.slice(from).filter(m => m.type !== 'openrig.status')).toEqual([]);
+    expect(b.rigs()).toEqual([]); expect(b.escalations()).toEqual([]); expect(b.escalation('E1')).toBeUndefined();
+    const events = fake.requests.filter(r => r.path === '/api/events').length; await sleep(100);
+    expect(fake.requests.filter(r => r.path === '/api/events').length).toBe(events);
+  });
+
   it('resumes after an OpenRig restart', async () => {
     fake = await createFakeOpenRig(); fake.rigs.push(starter()); fake.humans.push('ledge'); fake.queue.push(humanRow('E1'));
     const { b, of, msgs, file } = setup({ exec: fakeRigCli(fake) });

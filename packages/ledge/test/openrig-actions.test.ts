@@ -13,7 +13,7 @@ import { actOnRig, rigActRequest } from '../src/daemon/openrig/actions.js';
 import type { OpenRigStatus } from '@ledge/protocol';
 import type { Tmux } from '../src/tmux.js';
 import { createFakeOpenRig, fakeRigCli, type FakeOpenRig, type FakeRig } from './fakes/openrig.js';
-import { authHeaders, until } from './helpers.js';
+import { authHeaders, until, openrigEngine } from './helpers.js';
 
 const noTmux = new Proxy({} as Tmux, { get: () => async () => { throw new Error('no tmux in this test'); } });
 const none = { version: 1, projects: [], rules: [] } as unknown as Projects;
@@ -141,7 +141,7 @@ async function client(port: number) {
   return { msgs, of, send: (m: ClientMessage) => ws.send(JSON.stringify(m)), close: () => new Promise<void>(r => { ws.once('close', () => r()); ws.close(); }) };
 }
 async function serve(withBridge: boolean) {
-  const dir = mkdtempSync(join(tmpdir(), 'ledge-act-srv-')); dirs.push(dir); process.env.LEDGE_HOME = dir;
+  const dir = mkdtempSync(join(tmpdir(), 'ledge-act-srv-')); dirs.push(dir); process.env.LEDGE_HOME = dir; openrigEngine();
   const store = new Store();
   if (withBridge) {
     const rig = fake = await createFakeOpenRig(); rig.rigs.push(FACTORY_FAKE()); rig.humans.push('ledge');

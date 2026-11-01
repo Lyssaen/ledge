@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { type TeamObjective, TEAM_ADDRESS, actionById, autonomyArgs, contextNear, ompApprovalFor, askShown, isArchived, RoleIdSchema, TemplateIdSchema, type DefinitionCode, givenByLedge, LEDGE_GIVER, openDecision, transmissions, type Task, projectOf, type ChatAction, type Autonomy, type Role, type Seat, type Team } from '@ledge/protocol';
+import { type TeamObjective, type TeamsEngine, TEAM_ADDRESS, actionById, autonomyArgs, contextNear, ompApprovalFor, askShown, isArchived, RoleIdSchema, TemplateIdSchema, type DefinitionCode, givenByLedge, LEDGE_GIVER, openDecision, transmissions, type Task, projectOf, type ChatAction, type Autonomy, type Role, type Seat, type Team } from '@ledge/protocol';
 import { ATTACHMENT_LOCAL_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type RigPlan, type RigResultCode, type DaemonInfo, type Projects, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Machine, type Tool, type OmpApproval, type CloseHow, type ModelRefusal, type RefusalCode, backendOf, MANDATE_CATEGORY_LABEL } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
@@ -36,6 +36,7 @@ import { ensureDaemonToken, hostAllowed, requestAuthorized, selectDaemonProtocol
 import { readMachines, writeMachines } from './machines.js';
 import { readProjects, writeProjects } from './projects.js';
 import { readTeamsEngine, writeTeamsEngine, engineRunning, openrigAvailable, switchRefusal } from './engine/setting.js';
+import { engineRefusal } from './engine/guard.js';
 import { readContextPrefs, readIsland, writeContextPrefs, writeIsland } from './island.js';
 import { readDocument } from './documents.js';
 import { createModels, type Models } from './models.js';
@@ -254,7 +255,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const agentEnv = opts.agentEnv ?? (async () => ({ ...process.env, ...(await loginShellEnv()) }));
   const attachments = opts.attachments ?? new AttachmentStore(paths().attachments);
   const mirror = opts.openrig;
-  const threads = createChatThreads({ attachments, store, tmux, home: paths().dir, notesDir: join(paths().dir, 'context'), userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now, projects: () => projects, forge: createForge({ env: agentEnv }), teams: () => teams.all(), tasks: () => tasks.all(),
+  const threads = createChatThreads({ attachments, store, tmux, home: paths().dir, notesDir: join(paths().dir, 'context'), userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now, projects: () => projects, forge: createForge({ env: agentEnv }), teams: () => teams.all(), tasks: () => tasks.all(), engine: () => teamsEngine,
     // Every machine's rigs and escalations (the aggregate, made further down once the server listens).
     ...(mirror ? { openrig: () => ({ rigs: aggregate?.rigs() ?? mirror.rigs(), escalations: aggregate?.escalations() ?? mirror.escalations() }) } : {}) });
   const chat: Chat = opts.chat ?? threads.desktop;
@@ -400,6 +401,17 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   let deciding: Deciding | null = null;
   let remoteBrainCoordinator: ReturnType<typeof createRemoteBrainCoordinator> | null = null;
   const remote = bridge ? createRemotePeers({ port, ...(opts.remoteConnect ? { connect: opts.remoteConnect } : {}) }) : null;
+  /** The teams engine (`teams.engine`): Ledge's own or OpenRig; one global setting, in teams-engine.json. Made before the
+   *  aggregate's subscription, which broadcasts it; `teams` is read lazily (made below, before anything emits). */
+  let teamsEngine = readTeamsEngine(paths().teamsEngine);
+  const engineData = () => ({ teams: teams.all(), rigs: aggregate?.rigs() ?? bridge?.rigs() ?? [], statuses: aggregate?.statuses() ?? (bridge ? [bridge.status()] : []) });
+  const engineMsg = (): ServerMessage => { const d = engineData(); return { type: 'teams.engine', engine: teamsEngine, openrigAvailable: openrigAvailable(d.statuses), running: engineRunning(teamsEngine, d) }; };
+  let engineSent = '';
+  /** Broadcast only when one of the three fields changed since the last message sent. */
+  const broadcastEngine = () => { const m = engineMsg(); const k = JSON.stringify(m); if (k === engineSent) return; engineSent = k; broadcast(m); };
+  /** The engine not chosen is off: under Ledge, OpenRig is only probed and nothing of its rigs reaches the fronts. The aggregate
+   *  first (it takes OpenRig's escalations off the fronts while the bridge still holds them). Same engine again: nothing. */
+  const engines = { apply: (e: TeamsEngine): void => { aggregate?.setEngine(e); bridge?.setProbeOnly(e === 'ledge'); } };
   const aggregate = bridge && remote ? createRigAggregate({ bridge, remote, machines: () => machines, projects: () => projects }) : null;
   const unsubscribeAggregate = aggregate?.onMessage(m => {
     broadcast(m);
@@ -443,16 +455,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     // Told already: its next turn has nothing more to say of it (a move is told its new team by the join's own notice).
     if (mailbox.notify(id, formatTeamNotice({ team: t.id, text }), `${t.id}:left:${id}:${now()}`) && why !== 'moved') store.patch(id, { teamSeen: '' });
   }
-  /** The teams engine (`teams.engine`): Ledge's own or OpenRig; one global setting, in teams-engine.json. */
-  let teamsEngine = readTeamsEngine(paths().teamsEngine);
-  const engineData = () => ({ teams: teams.all(), rigs: aggregate?.rigs() ?? bridge?.rigs() ?? [], statuses: aggregate?.statuses() ?? (bridge ? [bridge.status()] : []) });
-  const engineMsg = (): ServerMessage => { const d = engineData(); return { type: 'teams.engine', engine: teamsEngine, openrigAvailable: openrigAvailable(d.statuses), running: engineRunning(teamsEngine, d) }; };
-  let engineSent = '';
-  /** Broadcast only when one of the three fields changed since the last message sent. */
-  const broadcastEngine = () => { const m = engineMsg(); const k = JSON.stringify(m); if (k === engineSent) return; engineSent = k; broadcast(m); };
-  /** Engine switching hook: task 3 wires the projection and the teams' move here. */
-  const engines = { apply: (_engine: typeof teamsEngine): void => { /* wired by task 3 */ } };
   const unsubscribeTeams = teams.onChange(team => { broadcast({ type: 'team.updated', team }); broadcastEngine(); });
+  // The engine read at start, before the daemon starts the bridge (index.ts): under Ledge, its first turn is a probe already.
+  engines.apply(teamsEngine);
   const tasks = createTasks({ store, mailbox, now, teams, ...(opts.tasks ? { journal: opts.tasks } : {}), onTask: (task, entry) => {
     broadcast({ type: 'task.updated', task });
     // The card that gave it follows it, on whichever thread holds it: only Ledge gives from a card.
@@ -2169,11 +2174,35 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
    * is only a session's (a mobile.* id names a pairing or a device). Never rejects.
    */
   function dispatch(msg: ClientMessage, reply: Reply): Promise<void> {
+    const refused = engineRefusal(teamsEngine, msg);
+    if (refused !== null) { refuseForEngine(msg, refused, reply); return Promise.resolve(); }
+    if (teamsEngine === 'ledge' && ledgeTeamRig(msg, reply)) return Promise.resolve();
     return (rigRouter && isRigCommand(msg) ? rigRouter.route(msg, reply) : handle(msg, reply)).catch(e => {
       if (msg.type === 'document.read') return reply({ type: 'document.error', requestId: msg.requestId, path: msg.path, code: 'read_failed' });
       log(`${msg.type} failed: ${(e as Error).message}`);
       reply({ type: 'error', ...(msg.type.startsWith('session.') && 'id' in msg && typeof msg.id === 'string' ? { id: msg.id } : {}), message: (e as Error).message, request: msg.type, ...(e instanceof Refusal ? { code: e.code } : {}) });
     });
+  }
+
+  /** The engine's refusal, in the answer each message waits for. */
+  function refuseForEngine(msg: ClientMessage, reason: string, reply: Reply): void {
+    switch (msg.type) {
+      case 'rig.act': case 'rig.prepare': case 'rig.launch': case 'rig.adopt': case 'rig.send': case 'escalation.answer':
+        return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'unsupported', reason });
+      case 'team.launch': return reply({ type: 'team.failed', rid: msg.rid, reason });
+      case 'team.save': return reply({ type: 'team.saved', rid: msg.rid, reason });
+      case 'team.compose': case 'team.seat': return reply({ type: 'team.changed', rid: msg.rid, reason });
+      case 'task.cmd': return reply({ type: 'task.result', rid: msg.rid, reason });
+      case 'action.run': return reply({ type: 'action.result', rid: msg.rid, action: msg.action, reason, code: 'refused' });
+      default: return reply({ type: 'error', message: reason, request: msg.type }); // team.join, team.resume: their handlers' refuse
+    }
+  }
+  /** Under Ledge, a rig id `team-…` is a Ledge team as the Rigs tab shows it: task 4 acts on it; until then it answers here. True when answered. */
+  function ledgeTeamRig(msg: ClientMessage, reply: Reply): boolean {
+    if (msg.type === 'rig.act' && msg.rigId?.startsWith('team-')) { reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'unsupported', reason: 'pas encore' }); return true; }
+    // Nothing of OpenRig is mirrored under Ledge: no exchanges to show (a Ledge team's come with task 4).
+    if (msg.type === 'rig.exchanges.request') { reply({ type: 'rig.exchanges', machine: msg.machine, rigId: msg.rigId, items: [] }); return true; }
+    return false;
   }
 
   let answerReceipts: ReturnType<typeof createAnswerReceipts> | null = null;

@@ -14,7 +14,7 @@ import { createBridge } from '../src/daemon/openrig/bridge.js';
 import { writeMachines } from '../src/daemon/machines.js';
 import type { Tmux } from '../src/tmux.js';
 import { createFakeOpenRig, fakeRigCli, type FakeOpenRig, type FakeRig } from './fakes/openrig.js';
-import { authHeaders, until } from './helpers.js';
+import { authHeaders, until, openrigEngine } from './helpers.js';
 
 const T = '2026-10-30T08:00:00.000Z';
 const LOCAL: Machine = { id: 'local', label: 'PC' };
@@ -79,6 +79,37 @@ describe('RigAggregate', () => {
     expect(s.agg.statuses().map(x => x.machine)).toEqual(['local', 'ec2']);
     expect(s.agg.escalation('E1')?.machine).toBe('ec2');
     expect(s.agg.escalation('L1')?.machine).toBe('local');
+  });
+
+  it('Ledge engine: empties every machine at once, then shows only the statuses and Ledge\'s asks; OpenRig back shows the peers again', () => {
+    const s = setup();
+    const ask = { ...esc('ask-a1', 'ec2'), source: 'ask' as const };
+    s.ec2Replay([rig('r2', 'ec2')], [esc('E1', 'ec2'), ask]);
+    s.out.length = 0;
+    s.agg.setEngine('ledge'); s.agg.setEngine('ledge'); // idempotent
+    expect(s.out).toEqual([{ type: 'rig.snapshot', machine: 'local', rigs: [] }, { type: 'rig.snapshot', machine: 'ec2', rigs: [] },
+      { type: 'escalation.removed', id: 'L1' }, { type: 'escalation.removed', id: 'E1' }]);
+    expect(s.agg.rigs()).toEqual([]); expect(s.agg.escalations().map(e => e.id)).toEqual(['ask-a1']);
+    expect(s.agg.escalation('E1')).toBeUndefined(); expect(s.agg.escalation('ask-a1')?.machine).toBe('ec2');
+    expect(s.agg.replay()).toEqual([{ type: 'openrig.status', status: { machine: 'local', state: 'running' } }, { type: 'openrig.status', status: { machine: 'ec2', state: 'running' } },
+      { type: 'rig.snapshot', machine: 'local', rigs: [] }, { type: 'rig.snapshot', machine: 'ec2', rigs: [] }, { type: 'escalation.updated', escalation: ask }]);
+    s.out.length = 0;
+    s.msg('ec2', { type: 'rig.snapshot', machine: 'ec2', rigs: [rig('r3', 'ec2')] });
+    s.msg('ec2', { type: 'rig.updated', rig: rig('r3', 'ec2') });
+    s.msg('ec2', { type: 'rig.exchange', exchange: exch('ec2') });
+    s.msg('ec2', { type: 'escalation.updated', escalation: esc('E2', 'ec2') });
+    s.msg('ec2', { type: 'escalation.removed', id: 'E1' });
+    s.emit({ type: 'rig.updated', rig: rig('r1', 'local') });
+    s.emit({ type: 'escalation.updated', escalation: esc('L2', 'local') });
+    s.msg('ec2', { type: 'openrig.status', status: { machine: 'ec2', state: 'stopped' } });
+    s.msg('ec2', { type: 'escalation.updated', escalation: { ...ask, summary: 'Again?' } });
+    expect(s.out).toEqual([{ type: 'openrig.status', status: { machine: 'ec2', state: 'stopped' } }, { type: 'escalation.updated', escalation: { ...ask, summary: 'Again?' } }]);
+    s.status('ec2', 'unreachable');
+    expect(s.out.filter(m => m.type === 'rig.updated')).toEqual([]);
+    s.out.length = 0;
+    s.agg.setEngine('openrig');
+    expect(s.out).toEqual([{ type: 'rig.snapshot', machine: 'ec2', rigs: [{ ...rig('r3', 'ec2'), lifecycle: 'unreachable' }] }, { type: 'escalation.updated', escalation: esc('E2', 'ec2') }]);
+    expect(s.agg.rigs().map(r => r.id)).toEqual(['r1', 'r3']);
   });
 
   it('remembers collisions between local and remote, and between remote machines', () => {
@@ -308,7 +339,7 @@ afterEach(async () => { await bridgeS?.stop(); bridgeS = null; await srv?.close(
 
 describe('server with the rig aggregate', () => {
   it('announces openrigFleet, replays both machines after the snapshot and broadcasts remote changes', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'ledge-openrig-agg-')); dirs.push(dir); process.env.LEDGE_HOME = dir;
+    const dir = mkdtempSync(join(tmpdir(), 'ledge-openrig-agg-')); dirs.push(dir); process.env.LEDGE_HOME = dir; openrigEngine();
     const machinesFile = join(dir, 'machines.json'); writeMachines([LOCAL, EC2], machinesFile);
     const store = new Store();
     fake = await createFakeOpenRig(); fake.rigs.push(starter());

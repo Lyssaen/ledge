@@ -11,7 +11,7 @@ import { startServer, type ServerHandle } from '../src/daemon/server.js';
 import { Store } from '../src/daemon/store.js';
 import type { Tmux } from '../src/tmux.js';
 import { createFakeOpenRig, fakeRigCli, type FakeOpenRig } from './fakes/openrig.js';
-import { authHeaders, until } from './helpers.js';
+import { authHeaders, until, openrigEngine } from './helpers.js';
 import type { RigAggregate } from '../src/daemon/openrig/aggregate.js';
 import type { AnswerQueue, QueuedAnswer } from '../src/daemon/openrig/answerQueue.js';
 import type { RemoteMessage, RemotePeers, PeerStatus } from '../src/daemon/openrig/remote.js';
@@ -231,7 +231,7 @@ afterEach(async () => { await bridgeS?.stop(); bridgeS = null; await srv?.close(
 
 describe('server with the rig router', () => {
   it('relays a remote rig.act to its peer and gives the peer rig.result to the requester only', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'ledge-openrig-router-')); dirs.push(dir); process.env.LEDGE_HOME = dir;
+    const dir = mkdtempSync(join(tmpdir(), 'ledge-openrig-router-')); dirs.push(dir); process.env.LEDGE_HOME = dir; openrigEngine();
     const machinesFile = join(dir, 'machines.json');
     writeMachines([{ id: 'local', label: 'PC' }, { id: 'ec2', label: 'ec2-build', ssh: 'ec2-build' } satisfies Machine], machinesFile);
     const store = new Store();
@@ -270,7 +270,7 @@ describe('server with the rig router', () => {
     for (const c of [a, b]) await new Promise<void>(r => { c.ws.once('close', () => r()); c.ws.close(); });
   });
   it('gives a remote escalation grace when the local brain is active', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'ledge-brain-remote-')); dirs.push(dir); process.env.LEDGE_HOME = dir;
+    const dir = mkdtempSync(join(tmpdir(), 'ledge-brain-remote-')); dirs.push(dir); process.env.LEDGE_HOME = dir; openrigEngine();
     writeFileSync(join(dir, 'brain.json'), JSON.stringify({ enabled: true, tool: 'claude' }));
     const machinesFile = join(dir, 'machines.json');
     writeMachines([{ id: 'local', label: 'PC' }, { id: 'ec2', label: 'ec2-build', ssh: 'ec2-build' } satisfies Machine], machinesFile);

@@ -1,4 +1,5 @@
 import { readDaemonToken } from '../src/auth.js';
+import { writeTeamsEngine } from '../src/daemon/engine/setting.js';
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { run } from '../src/tmux.js';
@@ -24,4 +25,10 @@ export async function until(pred: () => boolean | Promise<boolean>, ms = 4000): 
 /** Handshake headers for a raw socket opened against a daemon started in this test's LEDGE_HOME. */
 export function authHeaders(): { authorization: string } {
   return { authorization: `Bearer ${readDaemonToken()}` };
+}
+
+/** The OpenRig teams engine in this test's LEDGE_HOME (or `dir`), before the daemon starts: its bridge is then whole, as before
+ *  the engine setting (the default, Ledge, only probes OpenRig and refuses the rig commands). */
+export function openrigEngine(dir = process.env.LEDGE_HOME!): void {
+  writeTeamsEngine(join(dir, 'teams-engine.json'), 'openrig');
 }

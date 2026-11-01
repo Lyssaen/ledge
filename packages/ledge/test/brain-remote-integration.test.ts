@@ -16,7 +16,7 @@ import { createPendingJournal, createReceiptJournal } from '../src/daemon/brain/
 import { remoteBrainId } from '../src/daemon/brain/remoteCoordinator.js';
 import type { Tmux } from '../src/tmux.js';
 import { createFakeOpenRig, fakeRigCli, type FakeOpenRig } from './fakes/openrig.js';
-import { until } from './helpers.js';
+import { until, openrigEngine } from './helpers.js';
 
 const noTmux: Tmux = { async newSession() {}, async sendText() {}, async sendKeys() {}, async capture() { return ''; }, async hasSession() { return true; }, async listSessions() { return []; }, async setOption() {}, async killSession() {}, attachArgs: name => ['attach', name] };
 const none = { version: 1, projects: [], rules: [] } as unknown as Projects;
@@ -30,7 +30,7 @@ afterEach(async () => {
   for (const dir of homes.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 async function daemon(home: string, fake: FakeOpenRig, o: { store?: Store; machinesFile?: string; remoteConnect?: (m: Machine, url: string) => DaemonClient; fetch?: typeof fetch; graceMs?: number } = {}) {
-  process.env.LEDGE_HOME = home;
+  process.env.LEDGE_HOME = home; openrigEngine();
   const store = o.store ?? new Store(); let srv: ServerHandle | null = null;
   const bridge = createBridge({ env: async () => ({ OPENRIG_PORT: String(fake.port) }), exec: fakeRigCli(fake), projects: () => none, home, file: join(home, 'openrig.json'),
     ...(o.fetch ? { fetch: o.fetch } : {}), asks: { all: () => srv!.asks.all(), onChange: f => srv!.asks.onChange(f) }, sessionName: id => store.get(id)?.name, probeMs: 20, outboxMs: 30, resyncMs: 50 });

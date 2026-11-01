@@ -10,7 +10,7 @@ import { createBridge, type Bridge } from '../src/daemon/openrig/bridge.js';
 import type { Tmux } from '../src/tmux.js';
 import type { Chat, ChatMessage } from '../src/chat/service.js';
 import { createFakeOpenRig, fakeRigCli, type FakeOpenRig, type FakeRig } from './fakes/openrig.js';
-import { authHeaders, until } from './helpers.js';
+import { authHeaders, until, openrigEngine } from './helpers.js';
 
 const noTmux = new Proxy({} as Tmux, { get: () => async () => { throw new Error('no tmux in this test'); } });
 const none = { version: 1, projects: [], rules: [] } as unknown as Projects;
@@ -36,7 +36,7 @@ afterEach(async () => { await bridge?.stop(); bridge = null; await srv?.close();
 
 /** A fresh LEDGE_HOME (so a fresh ledge-thread.jsonl) per test; `lines` are written to the thread file first. */
 async function setup(o: { bridge: boolean; lines?: LedgeThreadItem[]; hold?: Promise<unknown>; chat?: Chat }) {
-  const dir = mkdtempSync(join(tmpdir(), 'ledge-thread-srv-')); dirs.push(dir); process.env.LEDGE_HOME = dir;
+  const dir = mkdtempSync(join(tmpdir(), 'ledge-thread-srv-')); dirs.push(dir); process.env.LEDGE_HOME = dir; openrigEngine();
   if (o.lines) writeFileSync(join(dir, 'ledge-thread.jsonl'), o.lines.map(l => `${JSON.stringify(l)}\n`).join(''));
   const store = new Store();
   let server: ServerHandle | null = null;

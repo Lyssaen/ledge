@@ -11,7 +11,7 @@ import { Store } from '../src/daemon/store.js';
 import { startServer, type ServerHandle } from '../src/daemon/server.js';
 import type { Tmux } from '../src/tmux.js';
 import { createFakeOpenRig, fakeRigCli, type FakeOpenRig } from './fakes/openrig.js';
-import { authHeaders, until } from './helpers.js';
+import { authHeaders, until, openrigEngine } from './helpers.js';
 
 const members = ['lead', 'a', 'b', 'c', 'd', 'e', 'f'].map((id, i) => `      - id: ${id}\n        runtime: ${i % 2 ? 'codex' : 'claude-code'}\n${i === 1 ? '        profile: auto\n' : ''}`).join('');
 const FACTORY = `version: "0.2"\nname: factory\npods:\n  - id: p\n    members:\n${members}`;
@@ -98,7 +98,7 @@ describe('prepareRigPlan', () => {
 
 describe('server rig.prepare', () => {
   it('answers rig.plan, a refusal as rig.result failed, other machine unreachable', async () => {
-    const dir = tmp(); process.env.LEDGE_HOME = dir;
+    const dir = tmp(); process.env.LEDGE_HOME = dir; openrigEngine();
     const f = fake = await createFakeOpenRig(); f.specs = [{ id: 'b:factory', name: 'factory', sourceType: 'builtin', yaml: FACTORY }];
     bridge = createBridge({ env: async () => ({ OPENRIG_PORT: String(f.port) }), exec: fakeRigCli(f), sessionName: () => undefined, projects: () => projects, home: dir, file: join(dir, 'openrig.json'), probeMs: 20, outboxMs: 30, resyncMs: 50 });
     srv = await startServer({ store: new Store(), tmux: noTmux, port: 0, home: dir, daemon: { version: '0.0.0', install: 'git', systemd: false }, agentEnv: async () => ({ ...process.env }), openrig: bridge });
@@ -118,7 +118,7 @@ describe('server rig.prepare', () => {
   });
 
   it('OpenRig stopped: Ledge starts it (rig daemon start, through the fake), says so in its thread, then answers rig.plan', async () => {
-    const dir = tmp(); process.env.LEDGE_HOME = dir;
+    const dir = tmp(); process.env.LEDGE_HOME = dir; openrigEngine();
     const f = fake = await createFakeOpenRig(); f.specs = [{ id: 'b:factory', name: 'factory', sourceType: 'builtin', yaml: FACTORY }];
     await f.stop(); // OpenRig is installed but not running
     const exec = fakeRigCli(f);

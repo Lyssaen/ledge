@@ -9,7 +9,7 @@ import { startServer, type ServerHandle } from '../src/daemon/server.js';
 import { createBridge, type Bridge } from '../src/daemon/openrig/bridge.js';
 import type { Tmux } from '../src/tmux.js';
 import { createFakeOpenRig, fakeRigCli, type FakeOpenRig, type FakeRig, type FakeRigCli } from './fakes/openrig.js';
-import { authHeaders, until } from './helpers.js';
+import { authHeaders, until, openrigEngine } from './helpers.js';
 import { createMemory } from '../src/daemon/brain/memory.js';
 import { paths } from '../src/paths.js';
 
@@ -36,7 +36,7 @@ let srv: ServerHandle | null = null; let bridge: Bridge | null = null; let fake:
 afterEach(async () => { await bridge?.stop(); bridge = null; await srv?.close(); srv = null; await fake?.stop(); fake = null; for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }); });
 
 async function setup(withBridge: boolean) {
-  const dir = mkdtempSync(join(tmpdir(), 'ledge-openrig-srv-')); dirs.push(dir); process.env.LEDGE_HOME = dir;
+  const dir = mkdtempSync(join(tmpdir(), 'ledge-openrig-srv-')); dirs.push(dir); process.env.LEDGE_HOME = dir; openrigEngine();
   const store = new Store();
   let server: ServerHandle | null = null;
   if (withBridge) {

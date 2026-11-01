@@ -1,4 +1,4 @@
-import { type Escalation, type Exchange, type Machines, type OpenRigStatus, type Projects, type Rig } from '@ledge/protocol';
+import { type Escalation, type Exchange, type Machines, type OpenRigStatus, type Projects, type Rig, type TeamsEngine } from '@ledge/protocol';
 import { log } from '../../log.js';
 import { rigProjectId } from './adopt.js';
 import type { Bridge, BridgeMessage } from './bridge.js';
@@ -21,6 +21,10 @@ export interface RigAggregate {
   overlay(id: string, patch: Partial<Escalation> | null): void;
   /** The projects changed: a rig.snapshot again for each remote machine, its rigs filed in the projects as they are now. */
   refresh(): void;
+  /** The teams engine (default `openrig`). `ledge`: nothing of OpenRig leaves but the statuses and Ledge's own escalations (its
+   *  asks, any machine's); an empty rig.snapshot per machine and the removal of OpenRig's escalations empty the clients at once.
+   *  Back to `openrig`: the peers' rigs and escalations again (the local bridge's come with its reconnection). Same value: nothing. */
+  setEngine(e: TeamsEngine): void;
 }
 
 interface Resync { seen: Set<string>; snapshot: boolean; timer: NodeJS.Timeout | null }
@@ -54,7 +58,13 @@ export function createRigAggregate(opts: { bridge: Bridge; remote: RemotePeers; 
   const overlays = new Map<string, Partial<Escalation>>();
   const listeners = new Set<(m: BridgeMessage) => void>();
   const syncListeners = new Set<() => void>();
-  const emit = (m: BridgeMessage) => { for (const fn of listeners) { try { fn(m); } catch (e) { log(`openrig: aggregate listener threw: ${(e as Error).message}`); } } };
+  let engine: TeamsEngine = 'openrig';
+  /** Ledge's own escalations (asks) show in either engine; OpenRig's, its rigs and exchanges only under OpenRig. */
+  const shown = (e: Escalation) => engine === 'openrig' || e.source === 'ask';
+  const passes = (m: BridgeMessage) => engine === 'openrig' || m.type === 'openrig.status' || (m.type === 'escalation.updated' && shown(m.escalation));
+  const send = (m: BridgeMessage) => { for (const fn of listeners) { try { fn(m); } catch (e) { log(`openrig: aggregate listener threw: ${(e as Error).message}`); } } };
+  /** What leaves goes through the engine; an escalation.removed passes when its escalation was shown (`was`). */
+  const emit = (m: BridgeMessage, was?: Escalation) => { if (passes(m) || (m.type === 'escalation.removed' && (!was || shown(was)))) send(m); };
   const signalSynced = () => { if (![...peers.values()].some(p => p.resync)) for (const fn of syncListeners) { try { fn(); } catch (e) { log(`openrig: sync listener threw: ${(e as Error).message}`); } } };
 
   const peer = (machine: string): Remote => {
@@ -74,7 +84,7 @@ export function createRigAggregate(opts: { bridge: Bridge; remote: RemotePeers; 
   const over = (e: Escalation): Escalation => { const o = overlays.get(e.id); return o ? { ...e, ...o } : e; };
   const remoteEsc = (id: string): Escalation | undefined => { const m = owner.get(id); return m ? peers.get(m)?.escs.get(id) : undefined; };
 
-  const dropEscalation = (p: Remote, id: string) => { p.escs.delete(id); owner.delete(id); emit({ type: 'escalation.removed', id }); };
+  const dropEscalation = (p: Remote, id: string) => { const was = p.escs.get(id); p.escs.delete(id); owner.delete(id); emit({ type: 'escalation.removed', id }, was); };
   const stopResync = (p: Remote) => { if (p.resync?.timer) clearTimeout(p.resync.timer); p.resync = null; };
   const finishResync = (p: Remote) => {
     const r = p.resync; if (!r) return; stopResync(p);
@@ -100,6 +110,8 @@ export function createRigAggregate(opts: { bridge: Bridge; remote: RemotePeers; 
 
   bridge.onMessage(m => {
     if (m.type === 'escalation.updated') { observeOrigin(m.escalation.id, m.escalation.machine); if (owner.has(m.escalation.id)) collisions.add(m.escalation.id); }
+    // The bridge, probe only under Ledge, sends no OpenRig escalation then: a removal it sends is one of Ledge's own.
+    if (m.type === 'escalation.removed') return send(m);
     emit(m.type === 'escalation.updated' ? { ...m, escalation: over(m.escalation) } : m);
   });
 
@@ -157,6 +169,8 @@ export function createRigAggregate(opts: { bridge: Bridge; remote: RemotePeers; 
 
   const remoteRigs = (machine: string, p: Remote) => [...p.rigs.values()].map(rig => filed(machine, rig));
   const remoteEscs = () => order().flatMap(machine => [...peers.get(machine)!.escs.values()].map(over));
+  const allEscs = () => [...bridge.escalations().map(over), ...remoteEscs()];
+  const machinesNow = () => ['local', ...order()];
 
   return {
     replay() {
@@ -164,20 +178,21 @@ export function createRigAggregate(opts: { bridge: Bridge; remote: RemotePeers; 
       const ids = order();
       const statuses = [...local.filter(m => m.type === 'openrig.status'),
         ...ids.flatMap((machine): BridgeMessage[] => { const s = peers.get(machine)!.status; return s ? [{ type: 'openrig.status', status: s }] : []; })];
-      const snapshots = [...local.filter(m => m.type === 'rig.snapshot'),
+      const snapshots = engine === 'ledge' ? machinesNow().map((machine): BridgeMessage => ({ type: 'rig.snapshot', machine, rigs: [] })) : [...local.filter(m => m.type === 'rig.snapshot'),
         ...ids.map((machine): BridgeMessage => ({ type: 'rig.snapshot', machine, rigs: remoteRigs(machine, peers.get(machine)!) }))];
       const escs = [...local.flatMap((m): BridgeMessage[] => m.type === 'escalation.updated' ? [{ ...m, escalation: over(m.escalation) }] : []),
-        ...remoteEscs().map((escalation): BridgeMessage => ({ type: 'escalation.updated', escalation }))];
+        ...remoteEscs().map((escalation): BridgeMessage => ({ type: 'escalation.updated', escalation }))].filter(passes);
       return [...statuses, ...snapshots, ...escs];
     },
     onMessage(fn) { listeners.add(fn); return () => { listeners.delete(fn); }; },
     onSynced(fn) { syncListeners.add(fn); return () => { syncListeners.delete(fn); }; },
-    rigs: () => [...bridge.rigs(), ...order().flatMap(machine => remoteRigs(machine, peers.get(machine)!))],
-    escalations: () => [...bridge.escalations().map(over), ...remoteEscs()],
+    rigs: () => engine === 'ledge' ? [] : [...bridge.rigs(), ...order().flatMap(machine => remoteRigs(machine, peers.get(machine)!))],
+    escalations: () => allEscs().filter(shown),
     statuses: () => [bridge.status(), ...order().flatMap(machine => { const s = peers.get(machine)!.status; return s ? [s] : []; })],
-    escalation(id) { const e = bridge.escalation(id) ?? remoteEsc(id); return e ? over(e) : undefined; },
+    escalation(id) { const e = bridge.escalation(id) ?? remoteEsc(id); return e && shown(e) ? over(e) : undefined; },
     escalationAmbiguous(id) { return collisions.has(id) || (!!bridge.escalation(id) && owner.has(id)) || [...peers.values()].some(p => p.resync !== null); },
     exchanges(machine, rigId) {
+      if (engine === 'ledge') return [];
       if (machine === 'local') return bridge.exchanges(rigId);
       return peers.get(machine)?.exchanges.get(rigId) ?? null;
     },
@@ -187,11 +202,24 @@ export function createRigAggregate(opts: { bridge: Bridge; remote: RemotePeers; 
       if (e) emit({ type: 'escalation.updated', escalation: over(e) });
     },
     refresh() {
+      if (engine === 'ledge') return;
       for (const machine of order()) {
         const p = peers.get(machine)!;
         const rigs = remoteRigs(machine, p); p.rigs = new Map(rigs.map(rig => [rig.id, rig]));
         emit({ type: 'rig.snapshot', machine, rigs });
       }
+    },
+    setEngine(e) {
+      if (e === engine) return;
+      if (e === 'ledge') {
+        const before = allEscs(); engine = e;
+        for (const machine of machinesNow()) send({ type: 'rig.snapshot', machine, rigs: [] });
+        for (const x of before) if (!shown(x)) send({ type: 'escalation.removed', id: x.id });
+        return;
+      }
+      engine = e;
+      for (const machine of order()) send({ type: 'rig.snapshot', machine, rigs: remoteRigs(machine, peers.get(machine)!) });
+      for (const x of remoteEscs()) if (x.source !== 'ask') send({ type: 'escalation.updated', escalation: x });
     }
   };
 }

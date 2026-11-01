@@ -10,7 +10,7 @@ import { createBridge, type Bridge } from '../src/daemon/openrig/bridge.js';
 import { createRidMemo } from '../src/daemon/openrig/ridMemo.js';
 import type { Tmux } from '../src/tmux.js';
 import { createFakeOpenRig, fakeRigCli, type FakeOpenRig, type FakeRig, type FakeRigCli } from './fakes/openrig.js';
-import { authHeaders, until } from './helpers.js';
+import { authHeaders, until, openrigEngine } from './helpers.js';
 
 const ok = (rid: string): ServerMessage => ({ type: 'rig.result', rid, ok: true });
 
@@ -79,7 +79,7 @@ afterEach(async () => { await bridge?.stop(); bridge = null; await srv?.close();
 
 describe('server: a resent escalation.answer', () => {
   it('reaches OpenRig once and answers rig.result ok twice', async () => {
-    dir = mkdtempSync(join(tmpdir(), 'ledge-openrig-rid-')); process.env.LEDGE_HOME = dir;
+    dir = mkdtempSync(join(tmpdir(), 'ledge-openrig-rid-')); process.env.LEDGE_HOME = dir; openrigEngine();
     const store = new Store(); let server: ServerHandle | null = null;
     fake = await createFakeOpenRig(); fake.rigs.push(starter()); fake.humans.push('ledge'); fake.queue.push(humanRow('E1'));
     bridge = createBridge({ env: async () => ({ OPENRIG_PORT: String(fake!.port) }), exec: (exec = fakeRigCli(fake)), projects: () => none, home: dir, file: join(dir, 'openrig.json'),

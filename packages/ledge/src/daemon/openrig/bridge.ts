@@ -16,6 +16,7 @@ import { createExchangeLog, exchangeFromEvent, exchangeFromOutbox } from './exch
 import { readHumanQueue, readRigs, versionCache } from './bridge-read.js';
 import type { NodeEntry, QueueRow } from './wire.js';
 import type { MirrorSnapshot } from './mirror.js';
+import { ENGINE_LEDGE } from '../engine/guard.js';
 
 export type BridgeMessage = Extract<ServerMessage, { type: 'openrig.status' | 'rig.snapshot' | 'rig.updated' | 'rig.removed' | 'rig.exchange' | 'escalation.updated' | 'escalation.removed' }>;
 export interface BridgeDeps {
@@ -63,7 +64,12 @@ export interface Bridge {
   /** OpenRig's human queue was read at least once: an id missing from escalations() is not open there (before, it may only be unread). */
   humanRead(): boolean;
   onMessage(fn: (m: BridgeMessage) => void): () => void;
-  /** Start cases 2 and 3 (lot 5): starts OpenRig when stopped, waits for `running` (60 s), returns the final status. */
+  /** Probe only (the Ledge teams engine): OpenRig is still probed every turn (`status()`, `openrig.status`), but never started,
+   *  registered with, streamed or mirrored; `rigs()` is empty and `escalations()` holds only Ledge's own (its asks). Off again,
+   *  the next turn is whole, as at a daemon start. Setting the same value again does nothing. */
+  setProbeOnly(on: boolean): void;
+  /** Start cases 2 and 3 (lot 5): starts OpenRig when stopped, waits for `running` (60 s), returns the final status. Throws
+   *  ENGINE_LEDGE in probe only. */
   ensureRunning(reason: 'launch' | 'action'): Promise<OpenRigStatus>;
   /** Ledge-only fields of a rig (`launch`, `repos`), kept per rig id and laid over every rig the mirror rebuilds; emits `rig.updated`.
    *  `launch: null` clears it. Returns the annotated rig, null for an unknown rig. */
@@ -97,13 +103,15 @@ export function createBridge(deps: BridgeDeps): Bridge {
   const now = deps.now ?? (() => new Date().toISOString()); const notice = deps.notice ?? (() => {});
   const cli = createRigCli(deps.exec ?? realRigExec(deps.env)); const probeWith = versionCache(cli);
   const mirror = createMirror({ machine, projects: deps.projects, rigsRoot: paths().rigs });
+  /** OpenRig's escalations (its human queue), and Ledge's own (its asks; lot E's decisions join them): only the latter live in probe only. */
   const rigBook = createEscalationBook(); const askBook = createEscalationBook(); const xlog = createExchangeLog();
+  const ledgeBooks = [askBook];
   const listeners = new Set<(m: BridgeMessage) => void>();
   const firstSeen = createFirstSeen(now);
   const ctx = { machine, rigOf: (ref: string) => mirror.byRef(ref)?.rig.id, isKernelSeat: (ref: string) => mirror.byRef(ref)?.rig.kernel === true, seenAt: firstSeen.at };
 
   let status: OpenRigStatus = { machine, state: 'stopped' }; let human: 'registered' | 'missing' | 'failed' = 'missing';
-  let active = false; let armed = false; let probed = false;
+  let active = false; let armed = false; let probed = false; let probeOnly = false;
   let base = ''; let bearer: string | undefined; let http: OpenRigHttp | null = null;
   let writer: ReturnType<typeof createCursorWriter> | null = null; let cursor: number | null = null; let knownRigs: string[] = [];
   let gen = 0; let stream: EventStream | null = null; let live = false;
@@ -122,7 +130,8 @@ export function createBridge(deps: BridgeDeps): Bridge {
     return { ...rig, ...(a.repos ? { repos: a.repos } : {}), ...(a.launch ? { launch: a.launch } : {}) };
   };
   const rigsNow = () => mirror.rigs().map(annotated);
-  const emit = (m: BridgeMessage) => { if (!active) return;
+  // Probe only: nothing of OpenRig's rigs leaves (its escalations are not read then, and a stale overlay of one is kept back by sweep).
+  const emit = (m: BridgeMessage) => { if (!active || (probeOnly && m.type.startsWith('rig.'))) return;
     if (m.type === 'rig.updated') m = { ...m, rig: annotated(m.rig) }; else if (m.type === 'rig.snapshot') m = { ...m, rigs: m.rigs.map(annotated) };
     for (const fn of listeners) { try { fn(m); } catch (e) { log(`openrig: listener threw: ${(e as Error).message}`); } } };
   function setStatus(state: OpenRigStatus['state'], extra: { version?: string; detail?: string; install?: string } = {}) {
@@ -136,12 +145,17 @@ export function createBridge(deps: BridgeDeps): Bridge {
   // Patched escalations (answered, in flight, rolled to grace…), laid over the books: a re-read rebuilds rows as `pending` and
   // drops closed ones, which would erase « Répondu par toi ». Masked ids get no broadcast from the books.
   const overlay = new Map<string, { e: Escalation; at: number }>();
-  const booked = (id: string) => rigBook.get(id) ?? askBook.get(id);
+  const books = () => (probeOnly ? ledgeBooks : [rigBook, ...ledgeBooks]);
+  const booked = (id: string) => { for (const b of books()) { const e = b.get(id); if (e) return e; } return undefined; };
+  /** An escalation of Ledge's own, shown in either mode (an overlay outlives its row, so its source says where it came from). */
+  const ledgeSide = (e: Escalation) => e.source === 'ask';
+  const shown = (e: Escalation) => !probeOnly || ledgeSide(e);
   const sweep = () => {
     const t = Date.parse(now());
     for (const [id, o] of [...overlay]) {
       if (t - o.at <= PATCH_TTL_MS) continue;
-      overlay.delete(id); const b = booked(id);
+      overlay.delete(id); if (!shown(o.e)) continue;
+      const b = booked(id);
       emit(b ? { type: 'escalation.updated', escalation: b } : { type: 'escalation.removed', id });
     }
   };
@@ -253,7 +267,7 @@ export function createBridge(deps: BridgeDeps): Bridge {
       cursor = null; writer?.set(machine, { lastEventId: null }); ({ stream: s } = await openStream(g, null, buffer));
     }
     if (!s) return; // /healthz answers but /api/events does not: the next probe tries again from the same cursor
-    if (g !== gen || !active) return s.close();
+    if (g !== gen || !active || probeOnly) return s.close();
     stream = s; const h = http!;
     let snap, rows;
     try { snap = await readRigs(h); }
@@ -280,7 +294,7 @@ export function createBridge(deps: BridgeDeps): Bridge {
   }
 
   async function register() {
-    if (REGISTRATION !== 'external' || registering || !live || humanOk) return;
+    if (REGISTRATION !== 'external' || probeOnly || registering || !live || humanOk) return;
     if (regAt !== null && Date.now() - regAt < retryMs) return;
     if (!mirror.rigs().some(r => !r.kernel)) return;
     registering = true; const g = gen;
@@ -318,7 +332,16 @@ export function createBridge(deps: BridgeDeps): Bridge {
     else if (token !== bearer) { bearer = token; http = createOpenRigHttp({ base, fetch: deps.fetch, token }); } // same daemon, new token: the connection stays
     const p = await probeOpenRig(probeWith(http));
     if (!active) return;
-    const first = armed; armed = false; probed = true;
+    probed = true;
+    // Probe only: the state, nothing more. `armed` waits for the first whole turn, so leaving the probe starts as a daemon start.
+    if (probeOnly) {
+      if (live || stream) disconnect();
+      if (p.state === 'running') return setStatus('running', { version: p.version });
+      if (p.state === 'unsupported') return setStatus('unsupported', { version: p.version, detail: p.detail });
+      if (p.state === 'absent') return setStatus('absent', { install: INSTALL_COMMAND });
+      return setStatus('stopped');
+    }
+    const first = armed; armed = false;
     if (p.state === 'running') {
       failedAt = null; autoFailed = false;
       if (!live) await connect(p.version); else setStatus('running', { version: p.version });
@@ -341,6 +364,7 @@ export function createBridge(deps: BridgeDeps): Bridge {
   }
 
   function pair(sessionId: string, sessionName: string): SessionRig | null {
+    if (probeOnly) return null; // no rig in probe only: a seat's session stays a plain one
     const hit = mirror.byRef(sessionName); const p = parseSessionName(sessionName); if (!hit || !p) return null;
     if (hit.seat.sessionId !== sessionId) { const rig = mirror.pair(hit.rig.id, sessionName, sessionId); if (rig) emit({ type: 'rig.updated', rig }); }
     return { machine, rigId: hit.rig.id, rigName: hit.rig.name, seat: sessionName, pod: p.pod, member: p.member };
@@ -348,10 +372,10 @@ export function createBridge(deps: BridgeDeps): Bridge {
 
   const escalations = () => {
     sweep();
-    const list = [...rigBook.all(), ...askBook.all()]; const ids = new Set(list.map(e => e.id));
-    return [...list.map(e => overlay.get(e.id)?.e ?? e), ...[...overlay.values()].filter(o => !ids.has(o.e.id)).map(o => o.e)];
+    const list = books().flatMap(b => b.all()); const ids = new Set(list.map(e => e.id));
+    return [...list.map(e => overlay.get(e.id)?.e ?? e), ...[...overlay.values()].filter(o => !ids.has(o.e.id) && shown(o.e)).map(o => o.e)];
   };
-  const escalation = (id: string) => { sweep(); return overlay.get(id)?.e ?? booked(id); };
+  const escalation = (id: string) => { sweep(); const o = overlay.get(id)?.e; return o && shown(o) ? o : booked(id); };
   const cursorFile = () => (writer ??= createCursorWriter({ file: deps.file, now }));
 
   return {
@@ -369,7 +393,7 @@ export function createBridge(deps: BridgeDeps): Bridge {
       await writer?.flush();
     },
     http: () => http, cli: () => cli,
-    status: () => status, rigs: rigsNow, exchanges: rigId => xlog.list(rigId),
+    status: () => status, rigs: () => (probeOnly ? [] : rigsNow()), exchanges: rigId => (probeOnly ? [] : xlog.list(rigId)),
     escalations, escalation,
     patchEscalation(id, p) {
       const cur = escalation(id); if (!cur) return undefined;
@@ -392,11 +416,21 @@ export function createBridge(deps: BridgeDeps): Bridge {
       catch (e) { log(`openrig: reply row ${row} unreadable, taken as claimed: ${(e as Error).message}`); return true; }
     },
     replay() {
-      return [{ type: 'openrig.status', status }, { type: 'rig.snapshot', machine, rigs: rigsNow() },
+      return [{ type: 'openrig.status', status }, { type: 'rig.snapshot', machine, rigs: probeOnly ? [] : rigsNow() },
         ...escalations().map((escalation): BridgeMessage => ({ type: 'escalation.updated', escalation }))];
     },
     onMessage(fn) { listeners.add(fn); return () => { listeners.delete(fn); }; },
+    setProbeOnly(on) {
+      if (on === probeOnly) return;
+      probeOnly = on;
+      if (on) {
+        // OpenRig's state goes with the connection: the next whole turn re-reads it all (rig.snapshot, every escalation anew).
+        disconnect(); rigBook.replace([]); humanRead = false; humanOk = false;
+      }
+      if (active) void tick();
+    },
     async ensureRunning() {
+      if (probeOnly) throw new Error(ENGINE_LEDGE);
       if (!probed) await tick();
       if (status.state === 'stopped' || status.state === 'error') void startOpenRig(false);
       const end = Date.now() + ENSURE_MS;
@@ -405,6 +439,7 @@ export function createBridge(deps: BridgeDeps): Bridge {
       return status;
     },
     annotate(rigId, extra) {
+      if (probeOnly) return null;
       const rig = mirror.rigs().find(r => r.id === rigId); if (!rig) return null;
       const next = { ...annotations.get(rigId) };
       if (extra.launch === null) delete next.launch; else if (extra.launch) next.launch = extra.launch;
@@ -416,11 +451,12 @@ export function createBridge(deps: BridgeDeps): Bridge {
     refresh() { for (const rig of rigsNow()) emit({ type: 'rig.updated', rig }); },
     pair,
     pairByCwd(sessionId, cwd, tool) {
+      if (probeOnly) return null;
       const cwdOf = (rigId: string, ref: string) => nodesByRig.get(rigId)?.find(n => (n.canonicalSessionName ?? n.logicalId) === ref)?.cwd;
       const seats = mirror.rigs().flatMap(r => r.seats.filter(s => cwdOf(r.id, s.ref) === cwd)).filter(s => toolOf(s.runtime) === tool);
       const mine = seats.find(s => s.sessionId === sessionId); if (mine) return pair(sessionId, mine.ref);
       const free = seats.filter(s => !s.sessionId || deps.alive?.(s.sessionId) === false); return free.length === 1 ? pair(sessionId, free[0]!.ref) : null;
     },
-    unpairedRefs: () => mirror.rigs().flatMap(r => r.seats.filter(s => !s.sessionId || deps.alive?.(s.sessionId) === false).map(s => s.ref)),
+    unpairedRefs: () => probeOnly ? [] : mirror.rigs().flatMap(r => r.seats.filter(s => !s.sessionId || deps.alive?.(s.sessionId) === false).map(s => s.ref)),
   };
 }

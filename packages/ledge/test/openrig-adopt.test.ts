@@ -10,7 +10,7 @@ import { Store } from '../src/daemon/store.js';
 import { startServer, type ServerHandle } from '../src/daemon/server.js';
 import type { Tmux } from '../src/tmux.js';
 import { createFakeOpenRig, fakeRigCli, type FakeOpenRig } from './fakes/openrig.js';
-import { authHeaders, until } from './helpers.js';
+import { authHeaders, until, openrigEngine } from './helpers.js';
 
 const proj = (id: string, rigs: string[] = [], repos: { machine: string; path: string }[] = []) => ({ id, name: id, color: 'blue', description: '', repos, rigs });
 const state = (...projects: ReturnType<typeof proj>[]): Projects => ({ projects, rules: [] }) as unknown as Projects;
@@ -61,7 +61,7 @@ afterEach(async () => {
 
 async function setup() {
   saved = process.env.LEDGE_HOME;
-  const dir = mkdtempSync(join(tmpdir(), 'ledge-adopt-')); dirs.push(dir); process.env.LEDGE_HOME = dir;
+  const dir = mkdtempSync(join(tmpdir(), 'ledge-adopt-')); dirs.push(dir); process.env.LEDGE_HOME = dir; openrigEngine();
   const rigDir = join(dir, 'rigs', 'starter'); mkdirSync(rigDir, { recursive: true }); writeFileSync(join(rigDir, 'notes.md'), 'hello');
   const projectsFile = join(dir, 'projects.json');
   const initial = state(proj('website', ['r1']), proj('ledge'));

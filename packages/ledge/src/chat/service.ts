@@ -3,7 +3,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { spawn as nodeSpawn } from 'node:child_process';
-import { extractProposal, isArchived, LEGACY_FENCE_ACTION, MAX_PROPOSALS, proposalRows, parseActionBlock, parseProjectBlock, parseCloseBlock, parseRelayBlock, parseTaskBlock, parseTeamBlock, projectOf, type BlockKind, type ChatAction, type ChatRigLaunch, type ChatClose, type ChatProjectProposal, type ChatProposal, type ChatRelay, type ChatTaskProposal, type ChatTeamProposal, type CloseHow, type ChatTurn, type AttachmentRef, type Projects, type ServerMessage, type Session, type Task, type Team, type Tool, type Rig, type Escalation } from '@ledge/protocol';
+import { extractProposal, isArchived, LEGACY_FENCE_ACTION, MAX_PROPOSALS, proposalRows, parseActionBlock, parseProjectBlock, parseCloseBlock, parseRelayBlock, parseTaskBlock, parseTeamBlock, projectOf, type BlockKind, type ChatAction, type ChatRigLaunch, type ChatClose, type ChatProjectProposal, type ChatProposal, type ChatRelay, type ChatTaskProposal, type ChatTeamProposal, type CloseHow, type ChatTurn, type AttachmentRef, type Projects, type ServerMessage, type Session, type Task, type Team, type Tool, type Rig, type Escalation, type TeamsEngine } from '@ledge/protocol';
 import { ignoredSeats, ignoredTemplate, listDefinitions, resolveSeats, templateHash } from '../daemon/teams.js';
 import { resolveAction, sessionOf } from '../daemon/actions.js';
 import { findRole } from '../daemon/roles.js';
@@ -19,6 +19,7 @@ import { runClaude, type ClaudeEvent, type RunHandle, type RunOptions } from './
 import { runCodex } from './codex.js';
 import { runCursor } from './cursor.js';
 import { runOmp } from './omp.js';
+import { actionsFor, buildPersona } from './persona.js';
 import { log } from '../log.js';
 
 export type ChatMessage = Extract<ServerMessage, { type: 'chat.history' | 'chat.step' | 'chat.delta' | 'chat.done' | 'chat.error' }>;
@@ -84,6 +85,8 @@ export interface ChatDeps {
   slots?: { take(): boolean; give(): void };
   /** The OpenRig mirror as the daemon holds it now (read at each question, lot 4): `rigs.md` and `escalations.md`; a daemon without a bridge omits it. */
   openrig?: () => { rigs: Rig[]; escalations: Escalation[] };
+  /** The teams engine in force (read at each question): the persona and ledge.md list only its actions; all of them when left out. */
+  engine?: () => TeamsEngine;
   /** Resolves an attached image's id to its file (the daemon's attachment store). */
   attachments?: { path(id: string): string | null };
   /** The user's notes folder (`~/.ledge/context`), copied into the context at each question; none when left out. */
@@ -326,7 +329,8 @@ export function createChat(deps: ChatDeps): Chat {
   async function run(turn: ChatTurn, emit: (m: ChatMessage) => void, fresh: boolean, mine: Running, tool: Tool): Promise<{ ok: true } | { ok: false; message: string; resumed: boolean }> {
     // The chat runs on the CLI's own login: an API key the daemon inherited is never billed (spec §5.2).
     const env: NodeJS.ProcessEnv = { ...(await deps.env()), LEDGE_CHAT: '1' }; delete env.LEDGE_SESSION; delete env.LEDGE_NAME; delete env.ANTHROPIC_API_KEY;
-    const ledge = { guide: await readGuide(), version: LEDGE_VERSION, agents: await installedAgents(env.PATH) };
+    const offered = deps.engine ? actionsFor(deps.engine()) : undefined;
+    const ledge = { guide: await readGuide(), version: LEDGE_VERSION, agents: await installedAgents(env.PATH), ...(offered ? { actions: offered } : {}) };
     const ctx = await writeContext(contextDir, { sessions: deps.store.all().filter(s => !isArchived(s) && !s.brain), recents: deps.store.recents(), projects: deps.projects?.(), teams: deps.teams?.(), tasks: deps.tasks?.(), ...deps.openrig?.(), now: now(), capture, git: cwd => gitSummary(cwd), ledge, ...(deps.notesDir ? { notesDir: deps.notesDir } : {}) });
     // Only a question about the forge runs gh/glab: the others never wait on the network.
     if (deps.forge && asksForge(turn.question)) await deps.forge.write(ctx, deps.projects?.() ?? { projects: [], rules: [] }).catch(e => log(`chat ${turn.qid}: forge files not written (${e instanceof Error ? e.message : String(e)})`));
@@ -335,7 +339,7 @@ export function createChat(deps: ChatDeps): Chat {
     const label = TOOL_LABEL[tool];
     const images = (turn.attachments ?? []).flatMap(a => { const path = deps.attachments?.path(a.id); return path ? [{ path, mime: a.mime }] : []; });
     let answer = ''; let resultError: string | null = null;
-    const handle = runTool(tool, { question: mine.told.text ? `${mine.told.text}\n\n${turn.question}` : turn.question, cwd: ctx.dir, addDirs: ctx.repoPaths, sessionId, resume, env, bin: deps.bins?.[tool] ?? deps.bin, ...(images.length > 0 ? { images } : {}), ...(tool === 'omp' ? { sessionDir: join(deps.home, 'chat', 'omp', sessionId) } : {}) }, e => {
+    const handle = runTool(tool, { question: mine.told.text ? `${mine.told.text}\n\n${turn.question}` : turn.question, cwd: ctx.dir, addDirs: ctx.repoPaths, sessionId, resume, env, bin: deps.bins?.[tool] ?? deps.bin, ...(offered ? { persona: buildPersona(tool, offered) } : {}), ...(images.length > 0 ? { images } : {}), ...(tool === 'omp' ? { sessionDir: join(deps.home, 'chat', 'omp', sessionId) } : {}) }, e => {
       if (e.type === 'tool') { const step = e.path ? stepFor(e.path, ctx) : null; if (step && !turn.steps.some(s => sameStep(s, step))) { turn.steps.push(step); emit({ type: 'chat.step', qid: turn.qid, step }); } }
       else if (e.type === 'delta') { answer += e.text; emit({ type: 'chat.delta', qid: turn.qid, text: e.text }); }
       else if (e.type === 'result') { if (e.text) answer = e.text; if (e.isError) resultError = e.text || `${label} reported an error`; }

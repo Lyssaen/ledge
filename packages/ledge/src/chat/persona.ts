@@ -1,6 +1,7 @@
 // Who Ledge is when it answers (spec 2026-10-26 action registry §4): a short fixed part, what its harness reads with, and what it
 // may propose, generated from the registry so the persona, the daemon and the cards never drift apart.
-import { ACTIONS, MAX_PROPOSALS, NEVER_PROPOSED, type ActionDef, type Tool } from '@ledge/protocol';
+import { ACTIONS, MAX_PROPOSALS, NEVER_PROPOSED, type ActionDef, type TeamsEngine, type Tool } from '@ledge/protocol';
+import { actionAllowed } from '../daemon/engine/guard.js';
 
 const FIXED = `Tu es Ledge, le compagnon qui veille sur les sessions d'agents (Claude Code, Codex, Cursor Agent, OMP) de l'utilisateur. Tu lis, tu ne touches à rien : aucune écriture, aucune modification, et tu n'envoies jamais rien toi-même à une session.
 Tes sources : le dossier courant contient sessions.md (toutes les sessions, leur état, leurs demandes en attente et le nom de leurs fichiers), pane-<id>.txt (les dernières lignes du terminal d'une session), reply-<id>.md (sa dernière réponse), git-<id>.txt (status, log et diff --stat de son dossier), folders.md (les dossiers récents où l'utilisateur a lancé des sessions), quand ils existent projects.md (les projets, leurs dépôts par machine), roles.md (les rôles), teams.md (les modèles et les équipes en cours) et tasks.md (les tâches), et quand OpenRig est branché rigs.md (les rigs, leurs agents @adresse et combien travaillent) et escalations.md (les questions des agents des rigs qui attendent l'utilisateur : id, auteur, résumé, options). Les dépôts eux-mêmes sont lisibles pour aller plus loin. Pour une question sur les issues, les pull/merge requests, la CI ou ce qui a été mergé, lis forge.md puis le forge-<projet>.md concerné : le daemon y a écrit ce qu'il a lu de GitHub ou GitLab, avec l'heure de lecture, que tu cites ; si ce fichier manque, ou s'il dit que \`gh\`/\`glab\` est absent, non connecté ou sans forge, dis que Ledge n'a pas accès à cette forge au lieu de supposer.
@@ -38,6 +39,10 @@ function entry(a: ActionDef): string {
     '```ledge-action\n' + JSON.stringify({ action: a.id, args: a.example }) + '\n```'
   ].join('\n');
 }
+
+/** The actions the engine in force runs (the guard's rule): OpenRig mode leaves `ledge team` and `ledge task` out, but dissolve
+ *  and leave; Ledge mode any rig action. */
+export const actionsFor = (engine: TeamsEngine, actions: readonly ActionDef[] = ACTIONS): ActionDef[] => actions.filter(a => actionAllowed(engine, a.id));
 
 /** The persona for this harness; `actions` is the registry (a test may pass fewer). */
 export function buildPersona(tool: Tool, actions: readonly ActionDef[] = ACTIONS): string {

@@ -21,7 +21,7 @@ import { startServer, type ServerHandle } from '../src/daemon/server.js';
 import { Store } from '../src/daemon/store.js';
 import type { Tmux } from '../src/tmux.js';
 import { createFakeOpenRig, fakeRigCli, type FakeOpenRig, type FakeRig, type FakeRigCli } from './fakes/openrig.js';
-import { until } from './helpers.js';
+import { until, openrigEngine } from './helpers.js';
 
 const T = '2026-10-30T08:00:00.000Z';
 const dirs: string[] = [];
@@ -396,7 +396,7 @@ afterEach(async () => {
 
 /** A daemon in `home` (LEDGE_HOME while it starts: its thread, token and openrig.json live there). */
 async function daemon(home: string, fake: FakeOpenRig, o: { port?: number; exec?: FakeRigCli; machinesFile?: string; remoteConnect?: (m: Machine, url: string) => DaemonClient; shift?: () => number; fetch?: typeof fetch } = {}): Promise<Daemon> {
-  const was = process.env.LEDGE_HOME; process.env.LEDGE_HOME = home;
+  const was = process.env.LEDGE_HOME; process.env.LEDGE_HOME = home; openrigEngine();
   try {
     const store = new Store(); let srv: ServerHandle | null = null;
     const now = () => new Date(Date.now() + (o.shift?.() ?? 0)).toISOString();

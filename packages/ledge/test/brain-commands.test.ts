@@ -15,7 +15,7 @@ import { parseServerMessage } from '@ledge/protocol';
 import { sessionKey } from '../src/auth.js';
 import type { Tmux } from '../src/tmux.js';
 import { createFakeOpenRig, fakeRigCli, type FakeOpenRig, type FakeRig } from './fakes/openrig.js';
-import { authHeaders, until } from './helpers.js';
+import { authHeaders, until, openrigEngine } from './helpers.js';
 
 const T0 = Date.parse('2026-10-31T10:00:00.000Z');
 const HOUR = 3_600_000;
@@ -239,7 +239,7 @@ describe('brain.cmd through the daemon', () => {
   let store: Store; let ws: WebSocket; let home: string; let tmux: Tmux; let msgs: ServerMessage[];
   beforeEach(async () => {
     saved = Object.fromEntries(VARS.map(k => [k, process.env[k]]));
-    home = mkdtempSync(join(tmpdir(), 'ledge-brain-srv-')); process.env.LEDGE_HOME = home;
+    home = mkdtempSync(join(tmpdir(), 'ledge-brain-srv-')); process.env.LEDGE_HOME = home; openrigEngine();
     store = new Store(); tmux = fakeTmux();
     fake = await createFakeOpenRig(); fake.rigs.push(starter()); fake.humans.push('ledge'); fake.queue.push(humanRow('E1'));
     bridge = createBridge({ env: async () => ({ OPENRIG_PORT: String(fake!.port) }), exec: fakeRigCli(fake), projects: () => ({ version: 1, projects: [], rules: [] }) as unknown as Projects, home, file: join(home, 'openrig.json'),
