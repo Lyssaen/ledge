@@ -9,13 +9,21 @@ const rig = (machine: string): Rig => ({ id: 'same', machine, name: `rig-${machi
 const project: Projects = { projects: [], rules: [] };
 const escalation: Escalation = { id: 'q1', machine: 'remote', rigId: 'same', source: 'rig', from: 'build@starter', intent: 'decision', summary: 'Choose', questions: [{ id: 'q', question: 'Choose', options: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }] }], createdAt: at, state: 'pending' };
 const rigs = [rig('local'), rig('remote')];
-const data = () => ({ rigs: () => rigs, escalations: () => [escalation], escalation: (id: string) => id === escalation.id ? escalation : undefined, rules: () => [], decisions: () => [], projects: () => project, thread: () => ({ items: [] }), exchanges: () => [] });
+const data = () => ({ rigs: () => rigs, escalations: () => [escalation], escalation: (id: string) => id === escalation.id ? escalation : undefined, escalationAmbiguous: () => false, rules: () => [], decisions: () => [], projects: () => project, thread: () => ({ items: [] }), exchanges: () => [] });
 afterEach(stopAll);
 describe('phone OpenRig gateway', () => {
   it('sends bounded snapshots without routing or path information', async () => {
     const g = setup({ deps: { openrig: data() } }); g.send('dev1', { type: 'snapshot.request' }); await flush();
     const snap = g.got('dev1').find(m => m.type === 'snapshot'); expect(snap).toMatchObject({ daemon: { openrig: true }, rigs: [{ key: rigKey('local', 'same') }, { key: rigKey('remote', 'same') }] });
     expect(JSON.stringify(snap)).not.toMatch(/machine|cwd|\/home\/private/);
+  });
+  it('lists idle projects by safe identity without sending their repository paths', async () => {
+    const projects: Projects = { projects: [{ id: 'website', name: 'Website', color: 'blue', description: '', repos: [{ machine: 'local', path: '/home/private/website' }], rigs: [] }], rules: [] };
+    const g = setup({ deps: { openrig: { ...data(), projects: () => projects } } });
+    g.send('dev1', { type: 'snapshot.request' }); await flush();
+    const snap = g.got('dev1').find(m => m.type === 'snapshot');
+    expect(snap).toMatchObject({ projects: [{ id: 'website', name: 'Website', hasLocalRepo: true }] });
+    expect(JSON.stringify(snap)).not.toContain('/home/private');
   });
   it('refuses a rig act without a passkey before dispatch', async () => {
     const g = setup({ deps: { openrig: data() } }); const op = randomUUID(); g.send('dev1', { type: 'rig.act', op, key: rigKey('remote', 'same'), verb: 'down' }); await flush();
@@ -25,11 +33,36 @@ describe('phone OpenRig gateway', () => {
     const g = setup({ deps: { openrig: data() }, dispatch: async (msg, reply) => { if (msg.type === 'escalation.answer') reply({ type: 'rig.result', rid: msg.rid, ok: true }); } });
     const op = randomUUID(); g.send('dev1', { type: 'escalation.answer', op, id: 'q1', answers: { q: 'a' } }); await flush();
     expect(g.dispatched).toContainEqual({ type: 'escalation.answer', rid: op, id: 'q1', by: 'user', answers: { q: 'a' } });
-    expect(g.results('dev1')).toContainEqual({ type: 'operation.result', op, status: 'applied' });
+    expect(g.results('dev1')).toContainEqual({ type: 'operation.result', op, status: 'received' });
   });
-  it('never marks a queued remote answer as applied', async () => {
+  it('refuses duplicate ids across local and remote machines without dispatch', async () => {
+    const local = { ...escalation, machine: 'local' };
+    const view = { ...data(), escalations: () => [local, escalation], escalation: () => local, escalationAmbiguous: () => true };
+    const g = setup({ deps: { openrig: view } }); const op = randomUUID();
+    g.send('dev1', { type: 'escalation.answer', op, id: 'q1', answers: { q: 'a' } }); await flush();
+    expect(g.results('dev1').at(-1)).toMatchObject({ status: 'rejected', reason: 'invalid' }); expect(g.dispatched).toEqual([]);
+  });
+  it('refuses a collision remembered after an aggregate replaced its former owner', async () => {
+    const view = { ...data(), escalationAmbiguous: () => true };
+    const g = setup({ deps: { openrig: view } }); const op = randomUUID();
+    g.send('dev1', { type: 'escalation.answer', op, id: 'q1', answers: { q: 'a' } }); await flush();
+    expect(g.results('dev1').at(-1)).toMatchObject({ status: 'rejected', reason: 'invalid' }); expect(g.dispatched).toEqual([]);
+  });
+  it('a remote success without a visible queue overlay stays received', async () => {
+    const g = setup({ deps: { openrig: data() }, dispatch: async (msg, reply) => { if (msg.type === 'escalation.answer') reply({ type: 'rig.result', rid: msg.rid, ok: true }); } });
+    const op = randomUUID(); g.send('dev1', { type: 'escalation.answer', op, id: 'q1', answers: { q: 'a' } }); await flush();
+    expect(g.dispatched).toHaveLength(1); expect(g.results('dev1').at(-1)).toMatchObject({ op, status: 'received' });
+    expect(g.results('dev1').some(m => m.type === 'operation.result' && m.op === op && m.status === 'applied')).toBe(false);
+  });
+  it('reports an actual local answer as applied', async () => {
+    const local = { ...escalation, machine: 'local' }; const view = { ...data(), escalations: () => [local], escalation: () => local };
+    const g = setup({ deps: { openrig: view }, dispatch: async (msg, reply) => { if (msg.type === 'escalation.answer') reply({ type: 'rig.result', rid: msg.rid, ok: true }); } });
+    const op = randomUUID(); g.send('dev1', { type: 'escalation.answer', op, id: 'q1', answers: { q: 'a' } }); await flush();
+    expect(g.results('dev1').at(-1)).toMatchObject({ op, status: 'applied' });
+  });
+  it.each(['queued', 'sent'] as const)('never marks a %s remote answer as applied', async (delivery) => {
     const e = { ...escalation }; const d = { ...data(), escalation: () => e, escalations: () => [e] };
-    const g = setup({ deps: { openrig: d }, dispatch: async (msg, reply) => { if (msg.type === 'escalation.answer') { Object.assign(e, { state: 'answered', answer: { by: 'user', answers: msg.answers, at, delivery: 'queued' } }); reply({ type: 'rig.result', rid: msg.rid, ok: true }); } } });
+    const g = setup({ deps: { openrig: d }, dispatch: async (msg, reply) => { if (msg.type === 'escalation.answer') { Object.assign(e, { state: 'answered', answer: { by: 'user', answers: msg.answers, at, delivery } }); reply({ type: 'rig.result', rid: msg.rid, ok: true }); } } });
     const op = randomUUID(); g.send('dev1', { type: 'escalation.answer', op, id: 'q1', answers: { q: 'a' } }); await flush();
     expect(g.dispatched).toContainEqual({ type: 'escalation.answer', rid: op, id: 'q1', by: 'user', answers: { q: 'a' } });
     expect(g.results('dev1')).toContainEqual({ type: 'operation.result', op, status: 'received' });

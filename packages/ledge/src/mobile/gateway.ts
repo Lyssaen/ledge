@@ -5,10 +5,10 @@ import { hostname } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { slugOfGoal } from '@ledge/ui/launch/rigModel';
 import { inspectRepos } from '../daemon/repos.js';
-import { rigKey, toPhoneRig, toPhoneEscalation, toPhoneDecision, toPhoneExchange, toPhoneThreadItem, toPhonePlan, fromPhone } from './orchestrator.js';
+import { phoneText, rigKey, toPhoneRig, toPhoneEscalation, toPhoneDecision, toPhoneExchange, toPhoneThreadItem, toPhonePlan, fromPhone } from './orchestrator.js';
 import { rigSubject } from '@ledge/protocol';
 import {
-  ATTACHMENT_MAX, EXCHANGES_MAX, THREAD_PAGE, OperationIdSchema, PHONE_PROTOCOL, actionById, TOOL_TEXT_MAX, proposalRows, PhoneClientMessageSchema, pushEndpointAllowed, RefusalCodeSchema, UNTYPABLE, backendOf, isArchived, pendingKey,
+  ATTACHMENT_MAX, EXCHANGES_MAX, THREAD_PAGE, PLAIN_MAX, OperationIdSchema, PHONE_PROTOCOL, actionById, TOOL_TEXT_MAX, proposalRows, PhoneClientMessageSchema, pushEndpointAllowed, RefusalCodeSchema, UNTYPABLE, backendOf, isArchived, pendingKey,
   SEMVER, pcSubject, type AttachmentRef, type ChatErrorCode, type ChatTurn, type CloseHow, type ClientMessage, type OperationReason, type OperationStatus, type PhoneClientMessage, type PhoneServerMessage, type ServerMessage, type Session, type ThreadItem
 } from '@ledge/protocol';
 import { ModelRefusalSchema, type ModelRefusal, type Tool } from '@ledge/protocol';
@@ -71,6 +71,7 @@ export function createPhoneGateway(deps: {
     rigs(): import('@ledge/protocol').Rig[];
     escalations(): import('@ledge/protocol').Escalation[];
     escalation(id: string): import('@ledge/protocol').Escalation | undefined;
+    escalationAmbiguous(id: string): boolean;
     rules(): import('@ledge/protocol').LedgeRule[];
     decisions(): import('@ledge/protocol').LedgeDecision[];
     projects(): import('@ledge/protocol').Projects;
@@ -214,9 +215,18 @@ export function createPhoneGateway(deps: {
       const view = deps.openrig; const rigs = view.rigs(); const rules = view.rules();
       const safeMap = <A, B>(items: A[], f: (a: A) => B): B[] => items.flatMap(a => { try { return [f(a)]; } catch { return []; } });
       message.daemon.openrig = true;
+      message.projects = view.projects().projects.filter(p => p.id.length > 0 && p.id.length <= 80 && phoneText(p.id, 80) === p.id).slice(0, 100).map(p => ({ id: p.id, name: phoneText(p.name, 80) || '?', hasLocalRepo: p.repos.some(r => r.machine === 'local') }));
       message.rigs = safeMap(rigs.slice(0, 40), r => toPhoneRig(r, projectName));
-      message.escalations = safeMap(view.escalations().slice(0, 40), e => toPhoneEscalation(e, rules, rigs));
-      message.decisionsToday = safeMap(view.decisions().filter(d => d.by === 'ledge' && day(new Date(d.at)) === day(new Date(deps.now ? deps.now() : Date.now()))).slice(-50), d => toPhoneDecision(d, rigs));
+      message.escalations = safeMap([...view.escalations()].sort((a, b) => Number(b.state === 'pending' || b.state === 'grace') - Number(a.state === 'pending' || a.state === 'grace')).slice(0, 40), e => toPhoneEscalation(e, rules, rigs));
+      message.decisionsToday = safeMap(view.decisions().filter(d => d.by === 'ledge' && day(new Date(d.at)) === day(new Date(deps.now ? deps.now() : Date.now()))).slice(0, 50), d => toPhoneDecision(d, rigs));
+      // Individual records are bounded, but their combination must still fit the sealed frame.
+      while (Buffer.byteLength(JSON.stringify(message), 'utf8') > PLAIN_MAX - 4_096) {
+        if (message.decisionsToday.pop()) continue;
+        if (message.escalations.pop()) continue;
+        if (message.rigs.pop()) continue;
+        if (message.projects.pop()) continue;
+        break;
+      }
     }
     // The daemon takes `session.model` and lists an agent's models (#58).
     return deps.models ? { ...message, daemon: { ...message.daemon, models: true } } : message;
@@ -612,6 +622,13 @@ export function createPhoneGateway(deps: {
   const openrigOperation = async (deviceId: string, msg: OpenRigOperation): Promise<Outcome> => {
     const view = deps.openrig;
     if (!view) return { status: 'rejected', reason: 'unsupported' };
+    let answerMachine: string | undefined;
+    if (msg.type === 'escalation.answer') {
+      const matches = view.escalations().filter(e => e.id === msg.id);
+      const target = view.escalation(msg.id);
+      if (view.escalationAmbiguous(msg.id) || matches.length !== 1 || !target || matches[0]?.machine !== target.machine) return { status: 'rejected', reason: 'invalid' };
+      answerMachine = target.machine;
+    }
     if (msg.type === 'rig.act') {
       const target = keys().get(msg.key); const rig = target && view.rigs().find(r => r.machine === target.machine && r.id === target.rigId);
       if (!rig || (msg.verb === 'down' && msg.seatRef) || (msg.verb === 'restart' && (!msg.seatRef || !rig.seats.some(s => s.ref === msg.seatRef)))) return { status: 'rejected', reason: 'invalid' };
@@ -644,7 +661,7 @@ export function createPhoneGateway(deps: {
     if (result.type !== 'rig.result') return { status: 'failed' };
     if (!result.ok) return { status: 'rejected', reason: msg.type === 'rig.launch' && result.code === 'failed' && result.reason === 'plan expired' ? 'invalid' : result.code ?? 'failed' };
     // The remote daemon can acknowledge a queued answer before delivery; it is not an applied decision.
-    if (msg.type === 'escalation.answer' && view.escalation(msg.id)?.answer?.delivery) return { status: 'received' };
+    if (msg.type === 'escalation.answer' && answerMachine !== 'local') return { status: 'received' };
     return { status: 'applied' };
   };
 
@@ -986,7 +1003,7 @@ export function createPhoneGateway(deps: {
       if (followers.size === 0) { checklists.clear(); return; }
       try {
         switch (m.type) {
-          case 'rig.snapshot': case 'rig.updated': case 'rig.removed': case 'escalation.updated': case 'escalation.removed':
+          case 'rig.snapshot': case 'rig.updated': case 'rig.removed': case 'escalation.updated': case 'escalation.removed': case 'decisions': case 'rules': case 'projects':
             if (!deps.openrig) return;
             for (const [deviceId, f] of followers) if (f.subscribed) push(deviceId, snapshot(deviceId), 'snapshot');
             return;

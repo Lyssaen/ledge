@@ -11,6 +11,8 @@ export interface RigAggregate {
   onMessage(fn: (m: BridgeMessage) => void): () => void;
   rigs(): Rig[]; escalations(): Escalation[]; statuses(): OpenRigStatus[];
   escalation(id: string): Escalation | undefined;
+  /** True after an id has been observed on more than one machine. */
+  escalationAmbiguous(id: string): boolean;
   /** Remote: the last `rig.exchanges` the peer sent for that rig (null before any); local: the bridge's log. */
   exchanges(machine: string, rigId: string): Exchange[] | null;
   /** Lays a local state (an answer waiting in the queue, lot 6 Task 6) over a remote escalation, broadcast again; null takes it off. */
@@ -38,6 +40,15 @@ export function createRigAggregate(opts: { bridge: Bridge; remote: RemotePeers; 
   const peers = new Map<string, Remote>();
   /** Which peer owns each remote escalation id (escalation.removed has no machine). Ids are OpenRig's: a clash between machines is not expected. */
   const owner = new Map<string, string>();
+  // Remote collision handling keeps only one owner; retain the ambiguity so clients never route an unsafe id.
+  const collisions = new Set<string>();
+  const observedOrigins = new Map<string, string>();
+  const observeOrigin = (id: string, machine: string) => {
+    const previous = observedOrigins.get(id);
+    if (previous !== undefined && previous !== machine) collisions.add(id);
+    else if (previous === undefined) observedOrigins.set(id, machine);
+  };
+  for (const escalation of bridge.escalations()) observeOrigin(escalation.id, escalation.machine);
   const overlays = new Map<string, Partial<Escalation>>();
   const listeners = new Set<(m: BridgeMessage) => void>();
   const emit = (m: BridgeMessage) => { for (const fn of listeners) { try { fn(m); } catch (e) { log(`openrig: aggregate listener threw: ${(e as Error).message}`); } } };
@@ -80,7 +91,10 @@ export function createRigAggregate(opts: { bridge: Bridge; remote: RemotePeers; 
     }
   };
 
-  bridge.onMessage(m => emit(m.type === 'escalation.updated' ? { ...m, escalation: over(m.escalation) } : m));
+  bridge.onMessage(m => {
+    if (m.type === 'escalation.updated') { observeOrigin(m.escalation.id, m.escalation.machine); if (owner.has(m.escalation.id)) collisions.add(m.escalation.id); }
+    emit(m.type === 'escalation.updated' ? { ...m, escalation: over(m.escalation) } : m);
+  });
 
   remote.onStatus((machine, s) => {
     if (s === 'removed') {
@@ -121,7 +135,9 @@ export function createRigAggregate(opts: { bridge: Bridge; remote: RemotePeers; 
       }
       case 'rig.exchanges': p.exchanges.set(m.rigId, m.items); return;
       case 'escalation.updated': {
+        observeOrigin(m.escalation.id, machine);
         const prev = owner.get(m.escalation.id);
+        if ((prev && prev !== machine) || bridge.escalation(m.escalation.id)) collisions.add(m.escalation.id);
         if (prev && prev !== machine) { log(`openrig: escalation ${m.escalation.id} of ${machine} has the id of one of ${prev}: the last one wins`); peers.get(prev)?.escs.delete(m.escalation.id); }
         p.escs.set(m.escalation.id, m.escalation); owner.set(m.escalation.id, machine);
         return emit({ type: 'escalation.updated', escalation: over(m.escalation) });
@@ -151,6 +167,7 @@ export function createRigAggregate(opts: { bridge: Bridge; remote: RemotePeers; 
     escalations: () => [...bridge.escalations().map(over), ...remoteEscs()],
     statuses: () => [bridge.status(), ...order().flatMap(machine => { const s = peers.get(machine)!.status; return s ? [s] : []; })],
     escalation(id) { const e = bridge.escalation(id) ?? remoteEsc(id); return e ? over(e) : undefined; },
+    escalationAmbiguous(id) { return collisions.has(id) || (!!bridge.escalation(id) && owner.has(id)) || [...peers.values()].some(p => p.resync !== null); },
     exchanges(machine, rigId) {
       if (machine === 'local') return bridge.exchanges(rigId);
       return peers.get(machine)?.exchanges.get(rigId) ?? null;

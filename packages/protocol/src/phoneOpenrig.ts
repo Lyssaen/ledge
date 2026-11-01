@@ -36,7 +36,7 @@ export const rigSubject = (m: PhoneRigAction): string => m.type === 'rig.launch'
 export const phoneOpenRigClientMessages = [
   z.object({ type: z.literal('ledge.say'), op, text: z.string().trim().min(1).max(messageMax), about: id.optional() }).strict(),
   z.object({ type: z.literal('ledge.thread.request'), before: id.optional() }).strict(),
-  z.object({ type: z.literal('escalation.answer'), op, id, answers: z.record(z.string().max(64), z.string().max(messageMax)) }).strict(),
+  z.object({ type: z.literal('escalation.answer'), op, id, answers: z.record(z.string().max(64), z.string().max(messageMax)).refine(value => Object.keys(value).length <= 4) }).strict(),
   z.object({ type: z.literal('decision.revisit'), op, id, text: z.string().max(messageMax).optional() }).strict(),
   z.object({ type: z.literal('rig.exchanges.request'), key }).strict(),
   z.object({ type: z.literal('rig.prepare'), op, goal: z.string().trim().min(1).max(600), spec: z.string().max(64).optional(), project: z.string().max(80).nullable() }).strict(),

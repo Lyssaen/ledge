@@ -21,6 +21,7 @@ describe('phone OpenRig protocol', () => {
   });
   it('does not accept assertions on answer or prepare, and limits rig actions', () => {
     expect(PhoneClientMessageSchema.safeParse({ type: 'escalation.answer', op, id: 'q1', answers: { q1: 'a' }, assertion: {} }).success).toBe(false);
+    expect(PhoneClientMessageSchema.safeParse({ type: 'escalation.answer', op, id: 'q1', answers: { q1: 'a', q2: 'a', q3: 'a', q4: 'a', q5: 'a' } }).success).toBe(false);
     expect(PhoneClientMessageSchema.safeParse({ type: 'rig.prepare', op, goal: 'go', project: null, assertion: {} }).success).toBe(false);
     expect(PhoneClientMessageSchema.safeParse({ type: 'rig.act', op, key: 'key', verb: 'up' }).success).toBe(false);
     expect(PhoneClientMessageSchema.safeParse({ type: 'rig.act', op, key: 'key', verb: 'down' }).success).toBe(true);

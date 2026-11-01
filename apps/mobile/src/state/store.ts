@@ -26,6 +26,7 @@ export interface ThreadState {
 
 export interface MobileState {
   openrig: boolean;
+  projects: { id: string; name: string; hasLocalRepo: boolean }[];
   rigs: Map<string, PhoneRig>;
   escalations: Map<string, PhoneEscalation>;
   decisionsToday: PhoneLedgeDecision[];
@@ -197,7 +198,7 @@ function failuresKept(failures: Record<string, ModelRefusal>, before: Map<string
 export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
   const last = loadLastState(storage);
   let state: MobileState = {
-    openrig: false, rigs: new Map(), escalations: new Map(), decisionsToday: [], ledgeThread: [], rigExchanges: new Map(), rigExchangeCuts: new Set(),
+    openrig: false, projects: [], rigs: new Map(), escalations: new Map(), decisionsToday: [], ledgeThread: [], rigExchanges: new Map(), rigExchangeCuts: new Set(),
     sessions: new Map((last?.sessions ?? []).map(s => [s.id, s])),
     threads: new Map(),
     previews: new Map(Object.entries(last?.previews ?? {})),
@@ -376,7 +377,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         const checklists = new Map([...state.checklists].filter(([id]) => sessions.has(id)));
         const escalations = new Map((m.escalations ?? []).map(e => [e.id, e]));
         const ledgeThread = bootChanged || !m.daemon.openrig ? [] : state.ledgeThread.map(i => i.kind === 'escalation' && escalations.has(i.escalation.id) ? { ...i, escalation: escalations.get(i.escalation.id)! } : i);
-        set({ ledgeThread, ...(bootChanged || !m.daemon.openrig ? { ledgeBefore: undefined, rigExchanges: new Map<string, PhoneExchange[]>(), rigExchangeCuts: new Set<string>() } : {}), openrig: m.daemon.openrig === true, rigs: new Map((m.rigs ?? []).map(r => [r.key, r])), escalations, decisionsToday: m.decisionsToday ?? [], sessions, previews, threads, checklists, capabilities: m.capabilities, device: m.device ?? null, daemon: m.daemon, fresh: true, syncedAt: now, pc, modelFailures: failuresKept(state.modelFailures, state.sessions, sessions), ...(bootChanged ? { models: {} } : {}) });
+        set({ ledgeThread, ...(bootChanged || !m.daemon.openrig ? { ledgeBefore: undefined, rigExchanges: new Map<string, PhoneExchange[]>(), rigExchangeCuts: new Set<string>() } : {}), openrig: m.daemon.openrig === true, projects: m.projects ?? [], rigs: new Map((m.rigs ?? []).map(r => [r.key, r])), escalations, decisionsToday: m.decisionsToday ?? [], sessions, previews, threads, checklists, capabilities: m.capabilities, device: m.device ?? null, daemon: m.daemon, fresh: true, syncedAt: now, pc, modelFailures: failuresKept(state.modelFailures, state.sessions, sessions), ...(bootChanged ? { models: {} } : {}) });
         persist();
         // The instructions and interrupts left uncertain (those in flight on this link are `sending`) go again if this PC may not have applied them.
         if (ready()) resend(o => o.phase === 'uncertain' && expectKey(o.message) === undefined);
@@ -589,7 +590,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     previewsDirty = false;
     clearLastState(storage);
     clearOps(storage);
-    set({ openrig: false, rigs: new Map(), escalations: new Map(), decisionsToday: [], ledgeThread: [], ledgeAbout: undefined, ledgeBefore: undefined, rigExchanges: new Map(), rigExchangeCuts: new Set(), sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, fresh: false, syncedAt: null, ops: {}, checklists: new Map(), pc: null, models: {}, modelFailures: {} });
+    set({ openrig: false, projects: [], rigs: new Map(), escalations: new Map(), decisionsToday: [], ledgeThread: [], ledgeAbout: undefined, ledgeBefore: undefined, rigExchanges: new Map(), rigExchangeCuts: new Set(), sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, fresh: false, syncedAt: null, ops: {}, checklists: new Map(), pc: null, models: {}, modelFailures: {} });
     modelAsks.clear();
     stopPcWatch();
   }
