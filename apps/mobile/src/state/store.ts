@@ -32,6 +32,7 @@ export interface MobileState {
   ledgeThread: PhoneThreadItem[];
   ledgeBefore?: string;
   rigExchanges: Map<string, PhoneExchange[]>;
+  rigExchangeCuts: Set<string>;
   /** In the PC's order. */
   sessions: Map<string, PhoneSession>;
   threads: Map<string, ThreadState>;
@@ -194,7 +195,7 @@ function failuresKept(failures: Record<string, ModelRefusal>, before: Map<string
 export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
   const last = loadLastState(storage);
   let state: MobileState = {
-    openrig: false, rigs: new Map(), escalations: new Map(), decisionsToday: [], ledgeThread: [], rigExchanges: new Map(),
+    openrig: false, rigs: new Map(), escalations: new Map(), decisionsToday: [], ledgeThread: [], rigExchanges: new Map(), rigExchangeCuts: new Set(),
     sessions: new Map((last?.sessions ?? []).map(s => [s.id, s])),
     threads: new Map(),
     previews: new Map(Object.entries(last?.previews ?? {})),
@@ -373,7 +374,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         const checklists = new Map([...state.checklists].filter(([id]) => sessions.has(id)));
         const escalations = new Map((m.escalations ?? []).map(e => [e.id, e]));
         const ledgeThread = bootChanged || !m.daemon.openrig ? [] : state.ledgeThread.map(i => i.kind === 'escalation' && escalations.has(i.escalation.id) ? { ...i, escalation: escalations.get(i.escalation.id)! } : i);
-        set({ ledgeThread, ...(bootChanged || !m.daemon.openrig ? { ledgeBefore: undefined, rigExchanges: new Map<string, PhoneExchange[]>() } : {}), openrig: m.daemon.openrig === true, rigs: new Map((m.rigs ?? []).map(r => [r.key, r])), escalations, decisionsToday: m.decisionsToday ?? [], sessions, previews, threads, checklists, capabilities: m.capabilities, device: m.device ?? null, daemon: m.daemon, fresh: true, syncedAt: now, pc, modelFailures: failuresKept(state.modelFailures, state.sessions, sessions), ...(bootChanged ? { models: {} } : {}) });
+        set({ ledgeThread, ...(bootChanged || !m.daemon.openrig ? { ledgeBefore: undefined, rigExchanges: new Map<string, PhoneExchange[]>(), rigExchangeCuts: new Set<string>() } : {}), openrig: m.daemon.openrig === true, rigs: new Map((m.rigs ?? []).map(r => [r.key, r])), escalations, decisionsToday: m.decisionsToday ?? [], sessions, previews, threads, checklists, capabilities: m.capabilities, device: m.device ?? null, daemon: m.daemon, fresh: true, syncedAt: now, pc, modelFailures: failuresKept(state.modelFailures, state.sessions, sessions), ...(bootChanged ? { models: {} } : {}) });
         persist();
         // The instructions and interrupts left uncertain (those in flight on this link are `sending`) go again if this PC may not have applied them.
         if (ready()) resend(o => o.phase === 'uncertain' && expectKey(o.message) === undefined);
@@ -382,10 +383,10 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         return;
       }
       case 'rig.updated': set({ rigs: new Map(state.rigs).set(m.rig.key, m.rig) }); return;
-      case 'rig.removed': { const rigs = new Map(state.rigs); rigs.delete(m.key); set({ rigs }); return; }
+      case 'rig.removed': { const rigs = new Map(state.rigs); rigs.delete(m.key); const rigExchanges = new Map(state.rigExchanges); rigExchanges.delete(m.key); const rigExchangeCuts = new Set(state.rigExchangeCuts); rigExchangeCuts.delete(m.key); set({ rigs, rigExchanges, rigExchangeCuts }); return; }
       case 'escalation.updated': set({ escalations: new Map(state.escalations).set(m.escalation.id, m.escalation), ledgeThread: state.ledgeThread.map(i => i.kind === 'escalation' && i.escalation.id === m.escalation.id ? { ...i, escalation: m.escalation } : i) }); return;
       case 'escalation.removed': { const escalations = new Map(state.escalations); escalations.delete(m.id); set({ escalations }); return; }
-      case 'rig.exchanges': set({ rigExchanges: new Map(state.rigExchanges).set(m.key, m.items) }); return;
+      case 'rig.exchanges': { const rigExchangeCuts = new Set(state.rigExchangeCuts); if (m.cut) rigExchangeCuts.add(m.key); else rigExchangeCuts.delete(m.key); set({ rigExchanges: new Map(state.rigExchanges).set(m.key, m.items), rigExchangeCuts }); return; }
       case 'ledge.thread.item': {
         const items = [...state.ledgeThread]; const index = items.findIndex(i => i.id === m.item.id);
         if (index < 0) items.push(m.item); else items[index] = m.item;
@@ -586,7 +587,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     previewsDirty = false;
     clearLastState(storage);
     clearOps(storage);
-    set({ openrig: false, rigs: new Map(), escalations: new Map(), decisionsToday: [], ledgeThread: [], ledgeBefore: undefined, rigExchanges: new Map(), sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, fresh: false, syncedAt: null, ops: {}, checklists: new Map(), pc: null, models: {}, modelFailures: {} });
+    set({ openrig: false, rigs: new Map(), escalations: new Map(), decisionsToday: [], ledgeThread: [], ledgeBefore: undefined, rigExchanges: new Map(), rigExchangeCuts: new Set(), sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, fresh: false, syncedAt: null, ops: {}, checklists: new Map(), pc: null, models: {}, modelFailures: {} });
     modelAsks.clear();
     stopPcWatch();
   }

@@ -1,6 +1,6 @@
 import { CONTEXT_NEAR, type PhoneSession } from '@ledge/protocol';
 import { copy } from '../copy';
-import { agentsOf, type AgentRow } from '../model/agents';
+import { agentsOf, loneSessions, rigsIn, type AgentRow } from '../model/agents';
 import { closingHere, endedAtLabel } from '../model/sessionEnd';
 import { useNow } from '../useNow';
 import { requestsOf } from '../model/requests';
@@ -63,11 +63,14 @@ function Row({ row, session, offline, threshold, plan, closing, now }: { row: Ag
 export function Agents({ store, onReconnect }: { store: MobileStore; onReconnect?: () => void }) {
   const state = useMobile(store);
   const now = useNow();
-  const sessions = [...state.sessions.values()].filter(s => !state.openrig || (!s.rig && !s.brain));
-  const groups = agentsOf(sessions);
+  const allSessions = [...state.sessions.values()];
+  const sessions = state.openrig ? loneSessions(allSessions) : allSessions;
+  const groups = agentsOf(state.openrig ? sessions.map(s => ({ ...s, repo: undefined })) : sessions);
+  const rigs = [...state.rigs.values()];
+  if (state.openrig) for (const rig of rigs) if (rig.project && !groups.some(g => g.label === rig.project)) groups.push({ label: rig.project, rows: [] });
   const closing = new Set(sessions.filter(s => closingHere(s, state.ops, now)).map(s => s.id));
   const offline = !state.fresh;
-  const subtitle = offline ? copy.agents.offline : copy.agents.subtitle(sessions.length, groups.length);
+  const subtitle = offline ? copy.agents.offline : state.openrig ? `${sessions.length} sessions seules · ${groups.length} projets sur ce PC` : copy.agents.subtitle(sessions.length, groups.length);
   return (
     <>
       <Header title={state.openrig ? copy.nav.projects : copy.agents.title} subtitle={subtitle} link={linkView(state)} />
@@ -75,8 +78,9 @@ export function Agents({ store, onReconnect }: { store: MobileStore; onReconnect
         {offline && <div className="mb-3"><OfflineBanner onReconnect={onReconnect} /></div>}
         {groups.map(g => (
           // Two groups can share a name (a repository and a project); a session belongs to one group only.
-          <section key={g.rows[0]!.sessionId} aria-label={g.label}>
+          <section key={g.rows[0]?.sessionId ?? `rigs:${g.label}`} aria-label={g.label}>
             <div className="py-3 text-meta tracking-[.4px] text-muted">{g.label}</div>
+            {state.openrig && rigsIn(g.label, rigs).length > 0 && <a href={href({ name: 'rigs' })} className="block py-2 text-small text-muted">{rigsIn(g.label, rigs).length} rigs travaillent aussi ici : {rigsIn(g.label, rigs).map(r => r.name).join(', ')} · Rigs ›</a>}
             {g.rows.map(r => <Row key={r.sessionId} row={r} session={state.sessions.get(r.sessionId)} offline={offline} threshold={state.device?.contextNear ?? CONTEXT_NEAR} plan={!!state.daemon?.checklist} closing={closing.has(r.sessionId)} now={now} />)}
           </section>
         ))}

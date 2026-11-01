@@ -20,13 +20,15 @@ export function Rigs({ store }: { store: MobileStore }) {
 }
 
 export function RigPage({ store, rigKey, view }: { store: MobileStore; rigKey: string; view: 'seats' | 'exchanges' | 'queue' }) {
-  const s = useMobile(store); const rig = s.rigs.get(rigKey); const [notice, setNotice] = useState('');
+  const s = useMobile(store); const rig = s.rigs.get(rigKey); const [notice, setNotice] = useState(''); const [message, setMessage] = useState('');
   useEffect(() => { if (view !== 'seats') store.requestExchanges(rigKey); }, [store, rigKey, view]);
   const exchanges = (s.rigExchanges.get(rigKey) ?? []).filter(e => view !== 'queue' || e.kind === 'task' || e.kind === 'handoff');
   const action = async (verb: 'down' | 'restart', seatRef?: string) => { const result = await store.rigAction({ type: 'rig.act', key: rigKey, verb, ...(seatRef ? { seatRef } : {}) }); setNotice(result.status === 'applied' ? 'Demande acceptée.' : `Action non appliquée : ${result.status}`); };
   if (!rig) return <main><p>Ce rig est arrêté</p><a href={href({ name: 'rigs' })}>Retour aux rigs</a></main>;
   return <><Header title={rig.name} subtitle={rigPlace(rig)} link={linkView(s)} /><main className="min-h-0 flex-1 space-y-3 overflow-y-auto"><nav className="flex gap-2">{(['seats', 'exchanges', 'queue'] as const).map(v => <a className={button} key={v} href={href({ name: 'rig', key: rigKey, view: v })}>{v === 'seats' ? 'Sièges' : v === 'exchanges' ? 'Échanges' : 'Queue'}</a>)}</nav>
+    {view !== 'seats' && s.rigExchangeCuts.has(rigKey) && <p>Les 200 derniers échanges sont affichés.</p>}
     {view === 'seats' ? rig.seats.map(seat => <div className={card} key={seat.ref}><strong>{seat.address} · {seat.name}</strong><p>{seat.runtime}{seat.model ? ` · ${seat.model}` : ''} · {seat.state}{seat.contextPct !== undefined ? ` · ${seat.contextPct}%` : ''}</p>{seat.sessionId && <a href={href({ name: 'thread', sessionId: seat.sessionId })}>Ouvrir le siège</a>} <button className={button} disabled={!s.fresh} onClick={() => void action('restart', seat.ref)}>Relancer le siège…</button></div>) : exchanges.map(e => <div className={card} key={e.id}><strong>{e.from} → {e.to}</strong><p>{e.text}</p></div>)}
+    <form className="flex gap-2" onSubmit={event => { event.preventDefault(); if (message.trim() && store.sayLedge(`@${rig.name} ${message.trim()}`)) navigate({ name: 'chat' }); }}><input className={field} aria-label={`Écrire à Ledge sur ${rig.name}`} value={message} onChange={event => setMessage(event.target.value)} /><button className={button} disabled={!s.fresh || !message.trim()}>Envoyer</button></form>
     <button className={button} disabled={!s.fresh} onClick={() => void action('down')}>Arrêter le rig…</button>{notice && <p role="status">{notice}</p>}
   </main><TabBar count={0} active="rigs" openrig /></>;
 }
@@ -44,9 +46,9 @@ export function EscalationPage({ store, id }: { store: MobileStore; id: string }
 }
 
 function Item({ item, store, talk }: { item: PhoneThreadItem; store: MobileStore; talk: (id: string) => void }) {
-  const [status, setStatus] = useState(''); const [review, setReview] = useState(false); const state = useMobile(store);
+  const [status, setStatus] = useState(''); const [review, setReview] = useState(false); const [answerOp, setAnswerOp] = useState<string | null>(null); const state = useMobile(store);
   if (item.kind === 'user' || item.kind === 'ledge') return <p className={card}>{item.text}</p>;
-  if (item.kind === 'escalation') { const e = item.escalation; const q = e.questions.length === 1 ? e.questions[0] : undefined; return <section className={card}><a href={href({ name: 'escalation', id: e.id })}><strong>{e.summary}</strong></a>{e.advice && <p>{e.advice}</p>}{e.state === 'grace' && <p>Ledge s’en occupe…</p>}{e.answer ? <p>{e.answer.by === 'user' ? 'Tu as choisi' : 'Ledge a tranché'} · {Object.values(e.answer.answers).join(', ')}</p> : <>{q?.options.map(o => <button key={o.id} className={button} onClick={() => store.answerEscalation(e.id, { [q.id]: o.id })}>{o.label}{o.recommended ? ' · recommandé' : ''}</button>)}<button className={button} onClick={() => talk(e.id)}>En parler</button></>}</section>; }
+  if (item.kind === 'escalation') { const e = item.escalation; const q = e.questions.length === 1 ? e.questions[0] : undefined; return <section className={card}><a href={href({ name: 'escalation', id: e.id })}><strong>{e.summary}</strong></a>{e.advice && <p>{e.advice}</p>}{e.state === 'grace' && <p>Ledge s’en occupe…</p>}{e.answer ? <p>{e.answer.by === 'user' ? 'Tu as choisi' : 'Ledge a tranché'} · {Object.values(e.answer.answers).join(', ')}</p> : <>{q?.options.map(o => <button key={o.id} className={button} disabled={!state.fresh || (!!answerOp && !['rejected', 'failed'].includes(state.ops[answerOp]?.phase ?? 'sending'))} onClick={() => setAnswerOp(store.answerEscalation(e.id, { [q.id]: o.id }))}>{o.label}{o.recommended ? ' · recommandé' : ''}</button>)}{answerOp && ['rejected', 'failed'].includes(state.ops[answerOp]?.phase ?? '') && <p role="alert">La réponse n’a pas été acceptée. Vérifie la demande avant de réessayer.</p>}<button className={button} onClick={() => talk(e.id)}>En parler</button></>}</section>; }
   if (item.kind === 'exchanges') return <details className={card}><summary>{foldLabel(item)}</summary>{item.items.map(e => <p key={e.id}>{e.from} → {e.to} · {e.text}</p>)}</details>;
   if (item.kind === 'decided') return <div className={card}><p>{item.decision.summary}</p><button className={button} onClick={() => store.revisitDecision(item.decision.id)}>Revenir dessus</button></div>;
   if (item.kind === 'card') return <p className={card}>{item.action.summary}</p>;
