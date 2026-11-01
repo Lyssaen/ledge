@@ -277,29 +277,29 @@ export function Tree(p: {
       base = 1; parent = ckey;
     }
     if (commonOpen && (!teamed || common.length > 0)) {
-    if (g.flatten) rows.push(...sessionRows(common, 1 + base, parent, parent));
-    else for (const b of g.branches) {
-      const bkey = `${pkey}:${b.branch}`;
-      const bopen = !closed.has(bkey);
-      const btoggle = () => flip(closed, setClosed, bkey);
-      const visible = b.sessions.filter(s => !p.hideDone || shown.has(bkey) || !isFinished(s)).length;
-      nav.current.set(bkey, { toggle: btoggle, open: bopen, parent });
-      rows.push(
-        <div key={bkey} role="treeitem" aria-level={2 + base} aria-expanded={bopen} className="st-row st-branch" style={{ '--d': 1 + base } as CSSProperties}>
-          <Chevron open={bopen} label={bopen ? t.side.fold(b.branch) : t.side.unfold(b.branch)} onClick={btoggle} />
-          <Icon d={branchIcon} size={13} />
-          <button type="button" className="st-main mono" data-tree-key={bkey} tabIndex={tabOf(bkey)} onClick={btoggle}><span>{b.branch}</span></button>
-          {b.worktree && <span className="st-wt" title={t.side.wt}>wt</span>}
-          <span className="st-fill" />
-          <span className="st-count">{visible}</span>
-          <span className="st-acts">
-            <button type="button" tabIndex={-1} aria-label={t.side.newOn(b.branch)} title={t.side.newOn(b.branch)} onClick={() => p.onLaunch(g.id ?? undefined)}><Icon d={ICONS.plus.d} size={13} /></button>
-            <button type="button" tabIndex={-1} aria-label={t.side.terminalOne(b.branch)} title="Terminal" onClick={() => { const s = b.sessions[0]; if (s) p.onTerminal(s); }}><Icon d={SHELL_ICONS.terminal} size={13} /></button>
-          </span>
-        </div>
-      );
-      if (bopen) rows.push(...sessionRows(b.sessions, 2 + base, bkey, bkey));
-    }
+      if (g.flatten) rows.push(...sessionRows(common, 1 + base, parent, parent));
+      else for (const b of g.branches) {
+        const bkey = `${pkey}:${b.branch}`;
+        const bopen = !closed.has(bkey);
+        const btoggle = () => flip(closed, setClosed, bkey);
+        const visible = b.sessions.filter(s => !p.hideDone || shown.has(bkey) || !isFinished(s)).length;
+        nav.current.set(bkey, { toggle: btoggle, open: bopen, parent });
+        rows.push(
+          <div key={bkey} role="treeitem" aria-level={2 + base} aria-expanded={bopen} className="st-row st-branch" style={{ '--d': 1 + base } as CSSProperties}>
+            <Chevron open={bopen} label={bopen ? t.side.fold(b.branch) : t.side.unfold(b.branch)} onClick={btoggle} />
+            <Icon d={branchIcon} size={13} />
+            <button type="button" className="st-main mono" data-tree-key={bkey} tabIndex={tabOf(bkey)} onClick={btoggle}><span>{b.branch}</span></button>
+            {b.worktree && <span className="st-wt" title={t.side.wt}>wt</span>}
+            <span className="st-fill" />
+            <span className="st-count">{visible}</span>
+            <span className="st-acts">
+              <button type="button" tabIndex={-1} aria-label={t.side.newOn(b.branch)} title={t.side.newOn(b.branch)} onClick={() => p.onLaunch(g.id ?? undefined)}><Icon d={ICONS.plus.d} size={13} /></button>
+              <button type="button" tabIndex={-1} aria-label={t.side.terminalOne(b.branch)} title="Terminal" onClick={() => { const s = b.sessions[0]; if (s) p.onTerminal(s); }}><Icon d={SHELL_ICONS.terminal} size={13} /></button>
+            </span>
+          </div>
+        );
+        if (bopen) rows.push(...sessionRows(b.sessions, 2 + base, bkey, bkey));
+      }
     }
     for (const { team, sessions: seats } of g.teams) {
       const tkey = `${pkey}:team:${team.id}`;

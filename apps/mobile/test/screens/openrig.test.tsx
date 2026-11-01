@@ -33,6 +33,14 @@ describe('OpenRig screens', () => {
    expect(t.of('ledge.thread.request').filter(m => m.before === 'older')).toHaveLength(1);
  });
  it('lists a configured project with no active session', () => { const t = setup(); t.deliver({ ...initial(), projects: [{ id: 'website', name: 'Website', hasLocalRepo: true }] }); render(<Agents store={t.store} />); expect(screen.getByRole('region', { name: 'Website' })).toBeInTheDocument(); });
+ it('keeps the projects view when the PC also speaks of teams: the empty project and the rigs working there', () => {
+   const t = setup(); const snap = initial(); const rig: PhoneRig = { ...snap.rigs[0]!, project: 'Website', offProject: false };
+   t.deliver({ ...snap, rigs: [rig], projects: [{ id: 'website', name: 'Website', hasLocalRepo: true }] });
+   t.deliver({ type: 'teams', teams: [] });
+   render(<Agents store={t.store} />);
+   expect(screen.getByRole('region', { name: 'Website' })).toBeInTheDocument();
+   expect(screen.getByRole('link', { name: /1 rigs travaillent aussi ici : factory · Rigs ›/ })).toHaveAttribute('href', '#/rigs');
+ });
  it('offers a project even when it has no active rig', () => { const t = setup(); t.deliver({ ...initial(), projects: [{ id: 'website', name: 'Website', hasLocalRepo: true }] }); render(<NewRig store={t.store} />); expect(screen.getByRole('option', { name: 'Website' })).toHaveValue('website'); });
  it('sends a free-text ask and shows a recorded option label', () => {
    const t = setup(); const free = { ...e, questions: [], source: 'ask' as const }; t.deliver({ ...initial(), escalations: [free] });

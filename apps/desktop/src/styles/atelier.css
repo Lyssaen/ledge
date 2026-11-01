@@ -435,6 +435,7 @@
 .room-heading.team-heading .heading-names{display:flex;align-items:baseline;gap:6px;min-width:0}
 .room-heading .team-resume{font-size:11px;padding:2px 8px;border:1px solid var(--input);border-radius:var(--radius-md);background:var(--secondary);color:var(--foreground);cursor:pointer}
 .room-heading .team-resume:hover{border-color:var(--sidebar-primary)}
+/* One @role pill for every place (seat, sidebar, top bar, catalog, forms); shell.css and sidebar.css only adapt it. */
 .office-shell .agent-seat .seat-role,.role-pill{display:inline-block;font:10px/14px 'Geist Mono',monospace;padding:0 6px;border-radius:999px;background:color-mix(in srgb,var(--project,var(--sidebar-primary)) 16%,transparent);color:color-mix(in srgb,var(--project,var(--sidebar-primary)) 70%,var(--foreground));margin-bottom:2px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .role-menu .role-label{margin-left:8px;color:var(--muted-foreground);font-size:11px}
 .role-chooser{position:fixed;width:0;height:0}

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Box, Text } from 'ink';
 import type { FleetAsk } from '@ledge/fleet';
-import type { Session } from '@ledge/protocol';
+import type { Session, Task } from '@ledge/protocol';
 import { botState } from '@ledge/ui/bots/poseFor';
 import { rigColor } from '@ledge/ui/rigs/model';
 import { useTui } from '../context.js';
@@ -37,9 +37,10 @@ function Row({ on, children, right }: { on: boolean; children: ReactNode; right?
 
 /**
  * The home's left column (the mockup's `left()`): Ledge, « À toi », « Projets · sessions seules », « Rigs ». `height` is what the
- * terminal leaves it; « Projets » and « Rigs » share what the first two leave, each scrolled to the row chosen.
+ * terminal leaves it; « Projets » and « Rigs » share what the first two leave, each scrolled to the row chosen. `decisions`: the
+ * decisions seats put to the user (`ledge task give ledge`), two lines each in « À toi » (who asks and what, then the options).
  */
-export function LeftColumn({ rows, width, height, asks, near }: { rows: readonly LeftRow[]; width: number; height: number; asks: readonly FleetAsk[]; near: readonly Session[] }) {
+export function LeftColumn({ rows, width, height, asks, near, decisions = [] }: { rows: readonly LeftRow[]; width: number; height: number; asks: readonly FleetAsk[]; near: readonly Session[]; decisions?: readonly Task[] }) {
   const { t, g, focus, rigs, escalations, machines, openrig } = useTui();
   const chosen = focusKey(focus);
   const on = (r: LeftRow) => { const f = rowFocus(r); return !!f && focusKey(f) === chosen; };
@@ -48,14 +49,14 @@ export function LeftColumn({ rows, width, height, asks, near }: { rows: readonly
 
   const ledge = rows.find((r): r is Extract<LeftRow, { kind: 'ledge' }> => r.kind === 'ledge');
   const yours = rows.filter((r): r is Extract<LeftRow, { kind: 'yours' }> => r.kind === 'yours');
-  const tree = rows.filter(r => r.kind === 'project' || r.kind === 'branch' || r.kind === 'session');
+  const tree = rows.filter(r => r.kind === 'project' || r.kind === 'common' || r.kind === 'team' || r.kind === 'branch' || r.kind === 'session');
   const rigRows = rows.filter(r => r.kind === 'rig' || r.kind === 'seat' || r.kind === 'idle' || r.kind === 'kernel');
   const installed = hasOpenRig(rigs, openrig);
 
-  const yoursCount = yours.length + asks.length + near.length;
-  // An ask takes two rows: the question, then how to answer it.
+  const yoursCount = yours.length + decisions.length + asks.length + near.length;
+  // An ask or a decision takes two rows: the question, then how to answer it (an ask) or its options (a decision).
   // At most what leaves the two boxes below a row each (Ledge 4, three boxes' borders 6, two rows): nothing goes past the screen.
-  const yoursHeight = Math.max(1, Math.min(yours.length + asks.length * 2 + near.length, 6, height - 12));
+  const yoursHeight = Math.max(1, Math.min(yours.length + decisions.length * 2 + asks.length * 2 + near.length, 6, height - 12));
   // Ledge's box (4), « À toi », and two borders for each of the last two boxes.
   const room = Math.max(2, height - 4 - (yoursHeight + 2) - 4);
   // Not installed: one line, or two when it does not fit (« OpenRig n’est pas installé », then « + pour lancer un rig »).
@@ -79,7 +80,8 @@ export function LeftColumn({ rows, width, height, asks, near }: { rows: readonly
         <Text>{' '.repeat(2 + indent)}</Text>
         <Text color={s.offline ? C.faint : STATE_COLOR[st]}>{g[st]} </Text>
         <Text color={s.offline ? C.dim : C.fg} bold>{fit(s.name, NAME_W)}</Text>
-        <Text color={C.dim}>{fit(oneLine(s.topic ?? s.title), Math.max(6, topicW - indent))} </Text>
+        {s.role ? <Text color={C.violet}>@{s.role} </Text> : null}
+        <Text color={C.dim}>{fit(oneLine(s.topic ?? s.title), Math.max(6, topicW - indent - (s.role ? s.role.length + 2 : 0)))} </Text>
         <Text color={s.offline ? C.faint : STATE_COLOR[st]}>{fit(s.offline ? t.overview.offline : t.state[st], stateW).trimEnd()}</Text>
         {n > 0 ? <Text color={C.violet}> +{n}</Text> : null}
         {s.machineName && s.machineId !== 'local' ? <Text color={C.faint}> · {machineLabel(s)}</Text> : null}
@@ -90,8 +92,12 @@ export function LeftColumn({ rows, width, height, asks, near }: { rows: readonly
   const draw = (r: LeftRow, key: string): ReactNode => {
     switch (r.kind) {
       case 'project': return <Text key={key} wrap="truncate"> <Text color={r.color}>{g.project}</Text> <Text color={C.fg} bold>{r.label}</Text> <Text color={C.faint}>{t.overview.sessions(r.count)}</Text></Text>;
-      case 'branch': return <Text key={key} wrap="truncate" color={C.faint}>   {g.branch} {r.branch}</Text>;
-      case 'session': return <Box key={key}>{sessionRow(r.s, on(r))}</Box>;
+      case 'branch': return <Text key={key} wrap="truncate" color={C.faint}>{' '.repeat(3 + (r.indent ?? 0))}{g.branch} {r.branch}</Text>;
+      case 'common': return <Text key={key} wrap="truncate" color={C.faint}>   {g.common} {t.overview.common}</Text>;
+      case 'team': return (
+        <Text key={key} wrap="truncate"><Text>   </Text><Text color={C.coral}>{g.team}</Text> <Text color={r.team.state === 'resting' ? C.dim : C.fg} bold>{r.team.name}</Text> <Text color={C.faint}>{r.team.state === 'resting' ? t.overview.resting : t.overview.teamLine(r.done, r.given)}</Text></Text>
+      );
+      case 'session': return <Box key={key}>{sessionRow(r.s, on(r), r.indent ?? 0)}</Box>;
       case 'rig': {
         const where = [r.place.kind === 'project' ? t.home.inProject(r.place.name) : r.place.kind === 'off' ? t.home.offProject : '', r.rig.machine !== 'local' ? t.home.onMachine(machineName(r.rig.machine)) : ''].filter(Boolean);
         return (
@@ -160,11 +166,15 @@ export function LeftColumn({ rows, width, height, asks, near }: { rows: readonly
             </Row></Box>
           );
         }),
-        ...asks.slice(0, Math.max(0, Math.floor((yoursHeight - yours.length) / 2))).flatMap(a => [
+        ...decisions.slice(0, Math.max(0, Math.floor((yoursHeight - yours.length) / 2))).flatMap(x => [
+          <Text key={`decision:${x.id}`} wrap="truncate"><Text color={C.red}>{g.question} </Text><Text color={C.fg}>{t.overview.decision(x.giverName, x.title)}</Text></Text>,
+          <Text key={`options:${x.id}`} wrap="truncate" color={C.dim}>  {x.text ? oneLine(x.text) : `D  ${t.keys.answerDecision}`}</Text>
+        ]),
+        ...asks.slice(0, Math.max(0, Math.floor((yoursHeight - yours.length - Math.min(decisions.length, Math.floor((yoursHeight - yours.length) / 2)) * 2) / 2))).flatMap(a => [
           <Text key={`ask:${a.id}`} wrap="truncate"><Text color={C.yellow}>{t.overview.askLine(a.fromName, a.question)}</Text></Text>,
           <Text key={`hint:${a.id}`} wrap="truncate" color={C.faint}>  {t.overview.askHint(a.id)}</Text>
         ]),
-        ...near.slice(0, Math.max(0, yoursHeight - yours.length - Math.min(asks.length, Math.floor((yoursHeight - yours.length) / 2)) * 2)).map(s => (
+        ...near.slice(0, Math.max(0, yoursHeight - yours.length - Math.min(decisions.length + asks.length, Math.floor((yoursHeight - yours.length) / 2)) * 2)).map(s => (
           <Text key={`near:${s.id}`} wrap="truncate"><Text color={C.yellow}>{s.handover?.state === 'failed' ? g.fail : '◔'} </Text><Text color={C.fg}>{s.handover?.state === 'failed' ? t.overview.reliefFailed(s.name, s.handover.reason ?? '?') : t.overview.near(s.name, Math.round(((s.context?.used ?? 0) / (s.context?.window ?? 1)) * 100))}</Text></Text>
         ))
       ]}

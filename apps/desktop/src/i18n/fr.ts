@@ -511,13 +511,14 @@ export const fr = {
       summarise: 'Résumer la journée', summarisePrompt: "Résume ma journée : ce que les rigs ont fait, ce que j'ai tranché, ce qui m'attend."
     },
     point: {
-      title: 'Le point', yours: 'À toi', teams: 'Équipes', given: 'Confiées par Ledge',
-      summarize: 'Résumer la journée', summarizeQuestion: 'Résume la journée : ce qui a avancé, ce qui attend ma décision, ce qui bloque.',
-      nothingYours: 'Rien ne t’attend.', noTeam: 'Aucune équipe en cours.', noTask: 'Ledge n’a confié aucune tâche aujourd’hui.',
-      seats: (n: number) => plural(n, `${n} siège`, `${n} sièges`), progress: (done: number, given: number) => `${done}/${given} ${plural(given, 'tâche', 'tâches')} de Ledge`,
-      table: 'Table', resume: 'Reprendre', resting: 'au repos', allow: 'Oui', deny: 'Non', see: 'Voir', dismiss: 'Ranger',
+      seats: (n: number) => plural(n, `${n} siège`, `${n} sièges`),
+      progress: (done: number, given: number) => `${done}/${given} ${plural(given, 'tâche', 'tâches')} de Ledge`,
+      table: 'Table',
+      resume: 'Reprendre',
+      resting: 'au repos',
+      dismiss: 'Ranger',
       closed: (owner: string, title: string, state: 'done' | 'refused' | 'dropped') => state === 'done' ? `${owner} a fini « ${title} »` : state === 'refused' ? `${owner} a refusé « ${title} »` : `${owner} a abandonné « ${title} »`,
-      ofLedge: 'tâche de Ledge', owner: (owner: string, state: string) => `${owner} · ${state}`
+      ofLedge: 'tâche de Ledge'
     },
     tasks: {
       filters: 'Filtres', all: 'Toutes', open: 'Ouvertes', closed: 'Closes', giver: 'Donneur', anyGiver: 'Tous', ledge: 'Ledge', seats: 'Les sièges', decisions: 'Décisions', team: 'Équipe', anyTeam: 'Toutes',

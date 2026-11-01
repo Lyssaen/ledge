@@ -351,6 +351,21 @@ describe('multi-machine connections', () => {
     expect(got.filter(m => m.type === 'models.listing').at(-1)).toMatchObject({ requestId: 'm2' });
     expect(got.filter(m => m.type === 'error')).toEqual([]);
   });
+  it('a remote machine\'s teams and task.updated are ignored without error; the local daemon\'s are kept', () => {
+    const { client, local, server, got } = setup();
+    const before = got.length;
+    const team = { id: 'team-a1b2', name: 'ledge-roles', project: 'ledge', machine: 'local', cwd: '/w/ledge', state: 'active' as const, seats: [], createdAt: '2026-11-01T08:00:00.000Z', updatedAt: '2026-11-01T08:00:00.000Z' };
+    const task = { id: 't000001', title: 'Relire', giver: 'ledge', giverName: 'Ledge', owner: 'same', ownerName: 'Same', state: 'open' as const, at: '2026-11-01T08:00:00.000Z', updatedAt: '2026-11-01T08:00:00.000Z', log: [] };
+    server.emit({ type: 'teams', teams: [team] });
+    server.emit({ type: 'task.updated', task });
+    expect(client.fleet!.teams()).toBeNull();
+    expect(client.fleet!.tasks()).toEqual([]);
+    local.emit({ type: 'teams', teams: [team] });
+    local.emit({ type: 'task.updated', task });
+    expect(client.fleet!.teams()!.map(t => t.id)).toEqual(['team-a1b2']);
+    expect(client.fleet!.tasks().map(t => t.id)).toEqual(['t000001']);
+    expect(got.slice(before).filter(m => m.type === 'teams' || m.type === 'task.updated' || m.type === 'error')).toEqual([]);
+  });
   it('routes roles.list to the project\'s machine (local by default), relays only that machine\'s listing, answers offline and outdated (#99)', () => {
     const { client, local, server, got } = setup();
     const listings = () => got.filter(m => m.type === 'roles.listing');

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent } from 'react';
-import { answerEscalation, revisitDecision, sayToLedge, setBrain, useAnswerState, useBrainStatus, useDaemon, useEscalations, useLedgeDecisionList, useLedgeDecisions, useLedgeRules, useLedgeThread, useOpenRig, useRigs, type DaemonClient } from '@ledge/fleet';
+import { answerEscalation, revisitDecision, sayToLedge, setBrain, useAnswerState, useBrainStatus, useDaemon, useEscalations, useLedgeDecisionList, useLedgeDecisions, useLedgeRules, useLedgeThread, useOpenRig, useRigs, useTeams, type DaemonClient } from '@ledge/fleet';
 import { hideProposal, type ChatRigLaunch, type Escalation, type Projects } from '@ledge/protocol';
 import { ChatAnswer, TurnCards } from '@ledge/ui/chat/ChatView';
 import { ChatCopyProvider } from '@ledge/ui/chat/copy';
@@ -26,6 +26,8 @@ import { rigLaunchModal, type NavAction } from '../nav/state';
 import { visibleRigs } from '../rigs/RigsTab';
 import { useRigExchanges } from '../rigs/useRigExchanges';
 import { useChatCards } from './useChatCards';
+import { useTeamCards } from './useTeamCards';
+import { teamProject } from '../atelier/layout';
 import { CardModelPick } from './CardModelPick';
 import { useProjectReview } from './projectReview';
 import { decisionsToday } from './mandate/model';
@@ -117,6 +119,14 @@ export function LedgeConversation(p: LedgeConversationProps): JSX.Element {
   const cards = useChatCards({ send, chat, lastLaunched: view.lastLaunched, errors: view.errors, sessions: view.sessions, turnReady, turnMachine, onLaunched: p.onLaunched ?? noop });
   const actionCards = useActionCards({ send, chat, errors: view.errors, turnReady, onMessage });
   const project = useProjectReview({ chat, projects: p.projects ?? null, machines: view.machines, notify: p.notify ?? noop, onProposal: p.onProposal ?? noop });
+  // The team and task cards (roles spec §3.8), as main's home drew them: « Ouvrir la table » goes to the team's room.
+  const teamCards = useTeamCards({ send, onMessage, chat });
+  const teams = useTeams(client);
+  const openTable = (teamId: string) => {
+    const team = teams?.find(x => x.id === teamId);
+    const room = team ? teamProject(team, p.projects ?? null) : null;
+    dispatch({ type: 'home', ...(room ? { project: room } : {}) });
+  };
   const open = (id: string) => dispatch({ type: 'open', id });
   // « Lancer ce rig » (the brain's card): the lot-5 launch window, prefilled; it prepares the plan again.
   const launchRig = useCallback((c: ChatRigLaunch) => dispatch({ type: 'modal', modal: rigLaunchModal(c) }), [dispatch]);
@@ -128,6 +138,8 @@ export function LedgeConversation(p: LedgeConversationProps): JSX.Element {
     relayingQid: cards.relayingQid, onRelay: cards.relay, onRelayCancel: cards.cancelRelay,
     onProject: project.review, projectNamed: project.projectNamed, onRigLaunch: launchRig,
     onAct: actionCards.act, actingQid: actionCards.actingQid, actingRows: actionCards.actingRows, onIgnoreCards: actionCards.ignore, onDenyAction: actionCards.deny,
+    onLaunchTeam: teamCards.launchTeam, onSaveTeam: teamCards.saveTeam, onOpenTeam: openTable, onGiveTask: teamCards.giveTask,
+    teamBusy: teamCards.teamBusy, taskBusy: teamCards.taskBusy, clock: (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     theme, reducedMotion: p.paused || reduced
   };
 

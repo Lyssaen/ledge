@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApp, useInput, useStdout, useWindowSize } from 'ink';
-import { isPending, useDaemon, useEscalations, useLedgeThread, useMachines, useOpenRig, useProjects, useRigs, useTasks, type DaemonClient, type Fleet } from '@ledge/fleet';
+import { isPending, useDaemon, useEscalations, useLedgeThread, useMachines, useOpenRig, useProjects, useRigs, useTasks, useTeams, type DaemonClient, type Fleet } from '@ledge/fleet';
 import { ledgeLine } from '@ledge/ui/rigs/model';
 import type { Session } from '@ledge/protocol';
 import { useActions, type Toast } from './actions.js';
@@ -70,6 +70,7 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
   const openrig = useOpenRig(client);
   const thread = useLedgeThread(client).items;
   const tasks = useTasks(client);
+  const teams = useTeams(client);
   const fleet = client.fleet as Fleet;
   const t = MESSAGES[lang];
   const [screen, setScreen] = useState<Screen>('home');
@@ -103,7 +104,7 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
     const preview = p.kind === 'decision' ? t.home.decision(p.count) + on : p.kind === 'grace' ? t.home.grace + on : p.kind === 'said' ? p.text : t.home.calm;
     return { preview, ...(l.at ? { at: l.at } : {}), unread: l.unread };
   }, [escalations, rigs, said, t]);
-  const left = useMemo(() => leftRows({ sessions: d.sessions, projects, rigs, escalations, openrig, ledge, t }), [d.sessions, projects, rigs, escalations, openrig, ledge, t]);
+  const left = useMemo(() => leftRows({ sessions: d.sessions, projects, rigs, escalations, openrig, ledge, t, teams: teams ?? [], tasks }), [d.sessions, projects, rigs, escalations, openrig, ledge, t, teams, tasks]);
   // The focus follows its row; a row gone, the one now at its place.
   const order = useMemo(() => focusOrder(left), [left]);
   const lastOrder = useRef(order);

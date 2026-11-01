@@ -23,9 +23,7 @@ describe('tui: the decisions a session puts to the user', () => {
     expect(openDecisions([])).toEqual([]);
   });
 
-  // Main's Overview (0.30) drew the decisions in « À toi » with D to answer; the OpenRig branch replaced it with the Home, which
-  // does not list them yet (merge of lot A, task 1: to port). `ledge decide`, Desktop and the phone answer them.
-  it.skip('« À toi » lists the decision and counts it; D, the answer, its confirmation send exactly task.answer', async () => {
+  it('« À toi » lists the decision and counts it; D, the answer, its confirmation send exactly task.answer', async () => {
     const tui = await startTui();
     try {
       await tui.resize(160, 40);
@@ -34,7 +32,8 @@ describe('tui: the decisions a session puts to the user', () => {
       const f = tui.frame();
       expect(f).toContain('À TOI · 3');
       expect(f).toContain('3 t’attendent');
-      expect(f).toContain('Fusionner feat/roles ? · Options : oui');
+      // Joffrey's Home draws a decision on two lines, as an ask: who asks and what, then its options.
+      expect(f).toMatch(/Otto te demande : Fusionner feat\/roles \?[^\n]*\n[^\n]*Options : oui \/ non/);
       expect(f).toMatch(/D +répondre à la décision/);
 
       await tui.press('D');
@@ -65,9 +64,7 @@ describe('tui: the decisions a session puts to the user', () => {
     } finally { await tui.cleanup(); }
   }, 20_000);
 
-  // Main's Overview (0.30) drew the decisions in « À toi » with D to answer; the OpenRig branch replaced it with the Home, which
-  // does not list them yet (merge of lot A, task 1: to port). `ledge decide`, Desktop and the phone answer them.
-  it.skip('esc in the field leaves it, nothing sent; D does nothing without a decision', async () => {
+  it('esc in the field leaves it, nothing sent; D does nothing without a decision', async () => {
     const tui = await startTui();
     try {
       await tui.press('D');

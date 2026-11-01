@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { Box, Text } from 'ink';
 import { randomUUID } from 'node:crypto';
-import { sayToLedge, useAsks, useContextNear } from '@ledge/fleet';
-import { askShown, type Escalation, type Rig, type RigSeat } from '@ledge/protocol';
+import { sayToLedge, useAsks, useContextNear, useTasks, useTeams } from '@ledge/fleet';
+import { askShown, type Escalation, type Rig, type RigSeat, type Task } from '@ledge/protocol';
 import { revisitDecision } from '../brain.js';
-import { LEDGE_FOCUS, useScreenKeys, useScreenSize, useTui, type Focus, type KeyHandler } from '../context.js';
+import { LEDGE_FOCUS, useEditing, useScreenKeys, useScreenSize, useTui, type Focus, type KeyHandler } from '../context.js';
 import { focusOrder, nextYours, seatStateLabel, stepFocus, unmirroredAsks, type LeftRow } from '../model/left.js';
-import { nearContext } from '../model/overview.js';
+import { nearContext, openDecisions } from '../model/overview.js';
+import { wrap } from '../model/thread.js';
+import { Field, fieldRows } from '../ui/Field.js';
 import { C } from '../theme.js';
 import { Frame } from '../ui/Frame.js';
 import { LeftColumn } from '../ui/LeftColumn.js';
@@ -41,6 +43,34 @@ export function Home() {
   const threshold = useContextNear(tui.client);
   const near = useMemo(() => nearContext(d.sessions, threshold), [d.sessions, threshold]);
   const yoursCount = rows.filter(r => r.kind === 'yours').length;
+  // The decisions seats put to the user (`ledge task give ledge`, roles spec 0.30): D answers the first one, written, read again
+  // whole, then confirmed (y). Only the task.answer action answers one: an answer cannot be taken back.
+  const tasks = useTasks(tui.client);
+  const decisions = useMemo(() => openDecisions(tasks), [tasks]);
+  const [deciding, setDeciding] = useState<{ id: string; draft: string; confirm: boolean } | null>(null);
+  const decision = deciding ? decisions.find(x => x.id === deciding.id) : undefined;
+  // Answered elsewhere meanwhile (the phone, Desktop, the chat): the field goes with it.
+  useEffect(() => { if (deciding && !decision) setDeciding(null); }, [deciding, decision]);
+  useEditing(!!deciding && !deciding.confirm);
+  const answer = (x: Task, text: string) => {
+    const rid = randomUUID();
+    const off = tui.client.onMessage(m => {
+      if (m.type !== 'action.result' || m.rid !== rid) return;
+      off();
+      tui.toast(m.reason === undefined ? { text: t.toast.reply(x.giverName), tone: 'ok' } : { text: t.toast.answerFailed(m.reason), tone: 'error' });
+    });
+    setTimeout(off, 10_000);
+    tui.client.send({ type: 'action.run', rid, action: 'task.answer', args: { task: x.id, answer: text }, confirmed: true });
+  };
+  // The Ledge teams (roles spec §3.9) of the tree: J seats the selected session in one of its project's teams, R resumes a resting one.
+  const teams = useTeams(tui.client);
+  const [joining, setJoining] = useState<{ index: number } | null>(null);
+  const teamRows = rows.filter((r): r is Extract<LeftRow, { kind: 'team' }> => r.kind === 'team');
+  const projectOf = (at: number) => { for (let i = at; i >= 0; i--) if (rows[i]!.kind === 'project') return i; return -1; };
+  const selectedAt = selected ? rows.findIndex(r => r.kind === 'session' && r.s.id === selected.id) : -1;
+  const sameProject = (r: LeftRow) => selectedAt >= 0 && projectOf(rows.indexOf(r)) === projectOf(selectedAt);
+  const choices = teamRows.filter(sameProject).map(r => r.team).filter(x => x.state !== 'dissolved' && x.id !== selected?.team);
+  const seatTeam = selected?.team ? teams?.find(x => x.id === selected.team && x.state !== 'dissolved') : undefined;
   // Ledge's conversation is on the right for Ledge and for an escalation of « À toi »; it has the keyboard once ↵ or / opened
   // its field (`ledgeFocus` past the left column). Narrow, it then takes the whole screen.
   const yoursEsc = focus.kind === 'yours' ? rows.find((r): r is Extract<LeftRow, { kind: 'yours' }> => r.kind === 'yours' && r.item.id === focus.id)?.item.escalation : undefined;
@@ -71,6 +101,29 @@ export function Home() {
   const say = (text: string) => tui.toast({ text, tone: 'info' });
 
   useScreenKeys((input, key) => {
+    // The answer to a decision: its field has the keys; read again, y sends it, n or esc goes back to the field, nothing else goes through.
+    if (deciding) {
+      if (!deciding.confirm) { if (key.escape) setDeciding(null); return true; }
+      if (input === 'y' && decision) { setDeciding(null); answer(decision, deciding.draft.trim()); return true; }
+      if (input === 'n' || key.escape) { setDeciding({ ...deciding, confirm: false }); return true; }
+      return true;
+    }
+    // J's chooser: j k move, ↵ seats the session in its role, else the team's first free one; esc leaves.
+    if (joining) {
+      if (key.escape) { setJoining(null); return true; }
+      if (input === 'j' || key.downArrow) { setJoining({ index: (joining.index + 1) % Math.max(1, choices.length) }); return true; }
+      if (input === 'k' || key.upArrow) { setJoining({ index: (joining.index + choices.length - 1) % Math.max(1, choices.length) }); return true; }
+      if (key.return && selected && choices[joining.index]) {
+        const team = choices[joining.index]!;
+        const role = selected.role ?? team.seats.find(x => x.sessionId === null)?.role;
+        setJoining(null);
+        if (!role) { tui.toast({ text: t.overview.noTeamHere, tone: 'info' }); return true; }
+        tui.client.send({ type: 'team.join', team: team.id, session: selected.id, role });
+        tui.toast({ text: t.toast.joined(selected.name, team.name), tone: 'ok' });
+      }
+      return true;
+    }
+    if (!active && input === 'D') { if (decisions[0]) setDeciding({ id: decisions[0].id, draft: '', confirm: false }); return true; }
     // The rail opened over the left column: esc closes it before anything else.
     if (railOpen && key.escape) { setRailOpen(false); return true; }
     // + on Ledge's Rigs tab launches a rig.
@@ -100,6 +153,13 @@ export function Home() {
       // The room on the whole screen: esc back to the left column; j k past its seats stay in it.
       if (key.escape) { setRoomOpen(false); return true; }
       if (input === 'j' || input === 'k' || key.upArrow || key.downArrow) return true;
+    }
+    if (input === 'J' && selected) { if (choices.length) setJoining({ index: 0 }); else tui.toast({ text: t.overview.noTeamHere, tone: 'info' }); return true; }
+    // R, off Ledge (where it sums up the day): resume a resting team, the selected seat's, else its project's first, else the first.
+    if (input === 'R') {
+      const resting = (seatTeam?.state === 'resting' ? seatTeam : undefined) ?? teamRows.find(r => r.team.state === 'resting' && sameProject(r))?.team ?? teamRows.find(r => r.team.state === 'resting')?.team;
+      if (resting) { tui.client.send({ type: 'team.resume', team: resting.id }); tui.toast({ text: t.toast.resumed(resting.name), tone: 'ok' }); }
+      return true;
     }
     if (input === 'H') {
       const s = (selected && selected.source === 'launcher' && selected.state !== 'exited' && selected.tool !== 'omp' && (!selected.handover || selected.handover.state === 'failed') ? selected : undefined) ?? near.find(x => x.handover?.state !== 'failed') ?? near[0];
@@ -131,22 +191,43 @@ export function Home() {
     return false;
   });
 
-  const keys: Array<readonly [string, string]> = active ? convBar : roomShown ? [...(wide || roomBar.some(([k]) => k === 'esc') ? [] : [['esc', t.keys.back] as const]), ...roomBar, ['/', t.keys.ask], ['+', t.keys.launch], [',', t.keys.settings], ['?', t.keys.help], ['q', t.keys.quit]] : [
+  const keys: Array<readonly [string, string]> = deciding?.confirm ? [['y', t.keys.sendAnswer], ['n esc', t.keys.edit]]
+    : deciding ? [['↵', t.keys.review], ['alt+↵', t.keys.newLine], ['esc', t.keys.cancel]]
+    : joining ? [['j k', t.keys.navigate], ['↵', t.keys.join], ['esc', t.keys.cancel]]
+    : active ? convBar : roomShown ? [...(wide || roomBar.some(([k]) => k === 'esc') ? [] : [['esc', t.keys.back] as const]), ...roomBar, ['/', t.keys.ask], ['+', t.keys.launch], [',', t.keys.settings], ['?', t.keys.help], ['q', t.keys.quit]] : [
+    ...(decisions.length ? [['D', t.keys.answerDecision] as const] : []),
     ['j k', t.keys.navigate], ['↵', ledgeish ? t.keys.write : t.keys.open], ...(showConv ? convBar : []), ...(yoursCount ? [['tab', t.keys.next] as const] : []), ...(selected?.pending ? [['y n', t.keys.answer] as const] : []),
-    ...(selected ? [['a', t.keys.attach] as const] : []), ...(near.length ? [['H', t.keys.handover] as const] : []),
+    ...(selected ? [['a', t.keys.attach] as const] : []), ...(choices.length ? [['J', t.keys.join] as const] : []),
+    ...(!ledgeish && teamRows.some(r => r.team.state === 'resting') ? [['R', t.keys.resume] as const] : []), ...(near.length ? [['H', t.keys.handover] as const] : []),
     ...(ledgeish && folded ? [[']', railOpen ? t.keys.close : t.keys.point] as const] : []), ...(ledgeish ? [['R', t.keys.summarize] as const] : []),
     ['1 2 3', t.keys.screens], ['/', t.keys.ask], ['+', t.keys.launch], [',', t.keys.settings], ['?', t.keys.help], ['q', t.keys.quit]
   ];
+  // The answer's field, or the answer read again whole, across the screen under the columns; J's chooser likewise.
+  const answerLines = deciding?.confirm ? wrap(deciding.draft.trim(), Math.max(10, columns - 4)) : [];
+  const decideHeight = !deciding ? 0 : deciding.confirm ? Math.min(answerLines.length, Math.max(1, height - 12)) + 2 : fieldRows(columns, height) + 2;
+  const joinHeight = joining && selected ? Math.max(1, choices.length) + 2 : 0;
+  const bodyHeight = height - 2 - (tui.lastToast ? 1 : 0) - decideHeight - joinHeight;
   const crumb = focus.kind === 'ledge' ? t.home.crumb : machines.map(m => `${m.label} ${m.ready ? g.machine : '○'}`).join('  ');
   return (
     <Frame crumb={crumb} keys={keys} kept={tui.kept.drafts.has('ledge')}>
       <Box flexGrow={1}>
-        {(wide ? !(railShown && folded) : !active && !roomShown) ? <LeftColumn rows={rows} width={leftW} height={height - 2 - (tui.lastToast ? 1 : 0)} asks={shownAsks} near={near} /> : null}
+        {(wide ? !(railShown && folded) : !active && !roomShown) ? <LeftColumn rows={rows} width={leftW} height={bodyHeight} asks={shownAsks} near={near} decisions={decisions} /> : null}
         {showConv ? <LedgeTabs tab={tab} width={!wide ? columns : columns - (railShown ? RAIL_W : 0) - (railShown && folded ? 0 : leftW)} folded={folded && !railShown}
           {...(yoursEsc ? { escalation: yoursEsc } : {})} keys={conv} onBar={setConvBar} onTab={moveTab} />
-          : wide || roomShown ? <Box flexDirection="column" flexGrow={1}><Content focus={focus} room={room} onRoomBar={setRoomBar} side={three} height={height - 2 - (tui.lastToast ? 1 : 0)} /></Box> : null}
+          : wide || roomShown ? <Box flexDirection="column" flexGrow={1}><Content focus={focus} room={room} onRoomBar={setRoomBar} side={three} height={bodyHeight} /></Box> : null}
         {railShown ? <LedgeRail width={RAIL_W} /> : null}
       </Box>
+      {joining && selected ? (
+        <TitledBox title={t.overview.joinWhich(selected.name)} color={C.coral} titleColor={C.coral} height={joinHeight} flexShrink={0}>
+          {choices.map((x, i) => <Text key={x.id} wrap="truncate" backgroundColor={i === joining.index ? C.sel : undefined}><Text color={C.coral}>{g.team}</Text> {x.name}</Text>)}
+        </TitledBox>
+      ) : null}
+      {deciding && decision ? (deciding.confirm
+        ? <TitledBox title={t.overview.confirmAnswer(decision.giverName)} color={C.red} titleColor={C.red} height={decideHeight} flexShrink={0}>
+          {answerLines.slice(0, decideHeight - 2).map((l, i) => <Text key={i} color={C.fg} wrap="truncate">{l || ' '}</Text>)}
+        </TitledBox>
+        : <Field title={t.overview.decisionTitle(decision.giverName, decision.title)} value={deciding.draft} onChange={v => setDeciding(x => (x ? { ...x, draft: v } : x))}
+          onSubmit={v => { if (!v.trim()) return false; setDeciding(x => (x ? { ...x, draft: v, confirm: true } : x)); }} onEscape={() => setDeciding(null)} active placeholder={t.overview.decisionHint} />) : null}
     </Frame>
   );
 }

@@ -485,13 +485,14 @@ export const en: Messages = {
       summarise: 'Summarise the day', summarisePrompt: 'Summarise my day: what the rigs did, what I settled, what is waiting for me.'
     },
     point: {
-      title: 'The point', yours: 'Yours', teams: 'Teams', given: 'Given by Ledge',
-      summarize: 'Summarise the day', summarizeQuestion: 'Summarise the day: what moved, what waits for my decision, what is stuck.',
-      nothingYours: 'Nothing waits for you.', noTeam: 'No team at work.', noTask: 'Ledge gave no task today.',
-      seats: (n: number) => `${n} ${n === 1 ? 'seat' : 'seats'}`, progress: (done: number, given: number) => `${done}/${given} Ledge ${given === 1 ? 'task' : 'tasks'}`,
-      table: 'Table', resume: 'Resume', resting: 'resting', allow: 'Yes', deny: 'No', see: 'See', dismiss: 'Dismiss',
+      seats: (n: number) => `${n} ${n === 1 ? 'seat' : 'seats'}`,
+      progress: (done: number, given: number) => `${done}/${given} Ledge ${given === 1 ? 'task' : 'tasks'}`,
+      table: 'Table',
+      resume: 'Resume',
+      resting: 'resting',
+      dismiss: 'Dismiss',
       closed: (owner: string, title: string, state: 'done' | 'refused' | 'dropped') => state === 'done' ? `${owner} finished “${title}”` : state === 'refused' ? `${owner} refused “${title}”` : `${owner} dropped “${title}”`,
-      ofLedge: 'Ledge’s task', owner: (owner: string, state: string) => `${owner} · ${state}`
+      ofLedge: 'Ledge’s task'
     },
     tasks: {
       filters: 'Filters', all: 'All', open: 'Open', closed: 'Closed', giver: 'Giver', anyGiver: 'Anyone', ledge: 'Ledge', seats: 'The seats', decisions: 'Decisions', team: 'Team', anyTeam: 'All',

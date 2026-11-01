@@ -1,4 +1,4 @@
-import type { Escalation, OpenRigStatus, Projects, Rig, RigSeat, Session } from '@ledge/protocol';
+import type { Escalation, OpenRigStatus, Projects, Rig, RigSeat, Session, Task, Team } from '@ledge/protocol';
 import { isPending, type FleetAsk } from '@ledge/fleet';
 import { kernelSplit, rigPlace, workingCount, type RigPlace } from '@ledge/ui/rigs/model';
 import type { Focus } from '../context.js';
@@ -15,8 +15,10 @@ export interface YoursItem {
 export type LeftRow =
   | { kind: 'ledge'; preview: string; at?: string; unread: number }
   | { kind: 'yours'; item: YoursItem }
-  | { kind: 'project'; label: string; color: string; count: number } | { kind: 'branch'; branch: string }
-  | { kind: 'session'; s: Session }
+  | { kind: 'project'; label: string; color: string; count: number } | { kind: 'branch'; branch: string; indent?: number }
+  /** A project with Ledge teams (roles spec §3.9): ▭ its common table, then ▣ each live team, its seats under it. */
+  | { kind: 'common' } | { kind: 'team'; team: Team; done: number; given: number }
+  | { kind: 'session'; s: Session; indent?: number }
   | { kind: 'rig'; rig: Rig; place: RigPlace; working: number; total: number }
   | { kind: 'seat'; rig: Rig; seat: RigSeat; session?: Session } | { kind: 'idle'; rig: Rig; names: string[] }
   /** OpenRig's kernel of a machine: its state, its seats shown (advisor and the human's terminal tucked away), how many work. */
@@ -24,6 +26,8 @@ export type LeftRow =
 
 export interface LeftInput {
   sessions: Session[]; projects: Projects | null; rigs: Rig[]; escalations: Escalation[]; openrig: OpenRigStatus[];
+  /** The local daemon's live Ledge teams and the tasks (the team rows' progress); none when left out. */
+  teams?: readonly Team[]; tasks?: readonly Task[];
   ledge: { preview: string; at?: string; unread: number };
   /** The words of the rows (« Ledge s’en occupe… »); French by default. */
   t?: Messages;
@@ -38,19 +42,19 @@ const AVAILABLE = new Set<RigSeat['state']>(['idle', 'ready']);
 
 /**
  * The home's left column, top to bottom: Ledge's row; « À toi » (the open escalations, then the standalone sessions waiting, each the
- * oldest first); « Projets · sessions seules » (the tree, standalone sessions only); « Rigs » (each rig by name, its active seats, its
+ * oldest first); « Projets · sessions seules » (the tree, standalone sessions only, a project's Ledge teams after its common table); « Rigs » (each rig by name, its active seats, its
  * available ones folded in one line), the kernels last. `project`'s colour is the project's (`projectColor` is the caller's: the tree
  * gives the raw colour name or none, see `ProjectNode.color`).
  */
 export function leftRows(i: LeftInput): LeftRow[] {
-  const view = overview(i.sessions, i.projects, [], i.rigs, i.escalations);
+  const view = overview(i.sessions, i.projects, [], i.rigs, i.escalations, i.teams ?? [], i.tasks ?? []);
   const byId = new Map(i.sessions.map(s => [s.id, s]));
   const rigName = (e: Escalation) => (e.rigId ? i.rigs.find(r => r.machine === e.machine && r.id === e.rigId)?.name : undefined);
   const seatName = (e: Escalation) => {
     const rig = e.rigId ? i.rigs.find(r => r.machine === e.machine && r.id === e.rigId) : undefined;
     return rig?.seats.find(s => fromSeat(e, rig, s))?.name ?? e.from.split('@')[0]!;
   };
-  const projectLabel = new Map(view.tree.flatMap(n => n.branches.flatMap(b => b.sessions.map(s => [s.id, n.label] as const))));
+  const projectLabel = new Map(view.tree.flatMap(n => [...n.branches.flatMap(b => b.sessions), ...n.teams.flatMap(x => x.sessions)].map(s => [s.id, n.label] as const)));
   const yours: LeftRow[] = [
     ...view.escalations.map((e): LeftRow => ({ kind: 'yours', item: {
       // A rig's escalation says its rig; one without (a `ledge ask`, the operator's) its machine: the caller draws it so.
@@ -62,10 +66,16 @@ export function leftRows(i: LeftInput): LeftRow[] {
       text: s.pending?.text ?? '', at: s.lastActivityAt, session: s
     } }))
   ];
-  const tree: LeftRow[] = view.tree.flatMap(n => [
-    { kind: 'project' as const, label: n.label, color: projectColor(n.color), count: n.count },
-    ...n.branches.flatMap(b => [{ kind: 'branch' as const, branch: b.branch }, ...b.sessions.map(s => ({ kind: 'session' as const, s }))])
-  ]);
+  const tree: LeftRow[] = view.tree.flatMap(n => {
+    // With Ledge teams: ▭ the common table (when it has sessions), then ▣ each team with its seats; without, as before.
+    const teamed = n.teams.length > 0;
+    return [
+      { kind: 'project' as const, label: n.label, color: projectColor(n.color), count: n.count },
+      ...(teamed && n.branches.length ? [{ kind: 'common' as const }] : []),
+      ...n.branches.flatMap(b => [{ kind: 'branch' as const, branch: b.branch, ...(teamed ? { indent: 2 } : {}) }, ...b.sessions.map(s => ({ kind: 'session' as const, s, ...(teamed ? { indent: 2 } : {}) }))]),
+      ...n.teams.flatMap(x => [{ kind: 'team' as const, team: x.team, done: x.done, given: x.given }, ...x.sessions.map(s => ({ kind: 'session' as const, s, indent: 2 }))])
+    ];
+  });
   const rigs: LeftRow[] = i.rigs.filter(r => !r.kernel).sort((a, b) => a.name.localeCompare(b.name) || a.machine.localeCompare(b.machine)).flatMap(rig => {
     const seats = rig.seats.filter(s => s.state !== 'stopped');
     const waits = (s: RigSeat) => i.escalations.some(e => isOpen(e) && fromSeat(e, rig, s));

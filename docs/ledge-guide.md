@@ -46,14 +46,14 @@ Raccourcis principaux :
 
 ### Accueil (`home`)
 
-L'application s'ouvre ici. On y vient aussi par `/` ou par l'entrée « Accueil » de la barre latérale. C'est la vue de Ledge, l'opérateur, en lecture seule. Elle a quatre onglets.
+L'application s'ouvre ici. On y vient aussi par `/` ou par l'entrée « Accueil » de la barre latérale. C'est la vue de Ledge, l'opérateur. Elle a cinq onglets : Conversation, Rigs, Équipes, Tâches et Mandat.
 
 #### Conversation (`conversation`)
 
-C'est la conversation avec Ledge, en pleine largeur.
-- On y pose des questions et on mentionne une session ou une équipe.
-- On y valide les cartes que Ledge propose.
-- Le panneau « Le point » résume trois sections : « À toi », « Équipes » et « Confiées par Ledge ». Le bouton « Résumer la journée » est là aussi.
+C'est le fil de Ledge, en pleine largeur.
+- On y écrit à Ledge, ou à un agent d'un rig avec `@siège`.
+- On y valide les cartes que Ledge propose : sessions, équipes et tâches, actions, rigs.
+- Les décisions des agents des rigs s'y tranchent ; les suggestions proposent de faire le point sur la journée.
 
 Y renvoyer l'utilisateur pour une longue discussion avec Ledge, ou pour faire le point sur la journée.
 
@@ -87,10 +87,6 @@ Y renvoyer l'utilisateur pour suivre un rig OpenRig, ses sièges, ou lancer un r
 Ce que le cerveau de Ledge tranche seul et ce qui revient toujours à l'utilisateur : le mandat (un fichier), les règles retenues et les dernières décisions, avec leurs souvenirs.
 
 Y renvoyer l'utilisateur pour régler ce que Ledge peut décider sans lui, ou revenir sur une décision prise.
-
-#### Historique (`history`)
-
-Les conversations du jour avec Ledge, chacune avec « Voir dans la conversation ».
 
 ### Atelier (`overview`)
 

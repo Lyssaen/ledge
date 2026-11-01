@@ -1294,12 +1294,12 @@ describe('ledge tui: settings', () => {
 });
 
 describe('ledge tui: teams (roles spec §3.9)', () => {
-  // Main's Overview drew the team tables with J / R; the OpenRig branch replaced it with the Home, whose tree has no team rows yet
-  // (merge of lot A, task 1: to port). « Équipes » (4) and the Desktop show the teams.
-  it.skip('the overview draws ▭ the common table and ▣ a team with its seats’ roles; J joins, R resumes', async () => {
+  it('the overview draws ▭ the common table and ▣ a team with its seats’ roles; J joins, R resumes', async () => {
     const sessions = mockupSessions().map(s => (s.id === 'nova' ? { ...s, team: 'team-a1b2', role: 'build' } : s));
     const tui = await startTui({ sessions });
     try {
+      // Tall enough for the whole tree in Joffrey's Home (its « Projets » box shares the column with Ledge, « À toi » and « Rigs »).
+      await tui.resize(160, 50);
       tui.daemon.push({ type: 'teams', teams: [
         { id: 'team-a1b2', name: 'ledge-roles', project: 'ledge', machine: 'local', cwd: '/w/ledge', state: 'active', seats: [{ role: 'build', sessionId: 'nova' }, { role: 'qa', sessionId: null }], createdAt: T(0), updatedAt: T(0) },
         { id: 'team-c3d4', name: 'mobile', project: 'ledge', machine: 'local', cwd: '/w/ledge', state: 'resting', seats: [], createdAt: T(1), updatedAt: T(1) }
@@ -1308,10 +1308,12 @@ describe('ledge tui: teams (roles spec §3.9)', () => {
       expect(tui.frame()).toContain('▭ table commune');
       expect(tui.frame()).toContain('@build');
       expect(tui.frame()).toContain('au repos · R pour reprendre');
+      // On Ledge, R sums up the day (Joffrey's Home): the team keys act from the tree, Otto chosen.
+      await tui.pick('Otto');
       await tui.press('R');
       await until(() => sent(tui.daemon.received, 'team.resume').length === 1);
       expect(sent(tui.daemon.received, 'team.resume')[0]).toEqual({ type: 'team.resume', team: 'team-c3d4' });
-      // Otto (selected first) joins ledge-roles in its first free role.
+      // Otto joins ledge-roles in its first free role.
       await tui.press('J');
       await until(() => tui.frame().includes('OTTO REJOINT QUELLE ÉQUIPE'));
       await tui.press('\r');

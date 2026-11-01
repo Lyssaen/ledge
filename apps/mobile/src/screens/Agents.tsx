@@ -96,7 +96,8 @@ export function Agents({ store, onReconnect }: { store: MobileStore; onReconnect
   const closing = new Set(sessions.filter(s => closingHere(s, state.ops, now)).map(s => s.id));
   const offline = !state.fresh;
   // A PC that knows teams: each project's sessions by table (ledge home spec §2.4).
-  const tables = state.teams ? tablesOf(sessions, state.teams) : null;
+  // An OpenRig phone keeps its projects view (empty projects, the rigs working there): the team tables are the Ledge engine's.
+  const tables = state.teams && !state.openrig ? tablesOf(sessions, state.teams) : null;
   const working = state.teams?.filter(t => t.state === 'active').length ?? 0;
   const subtitle = offline ? copy.agents.offline : state.openrig ? `${sessions.length} sessions seules · ${groups.length} projets sur ce PC` : copy.agents.subtitle(sessions.length, groups.length) + copy.agents.teamsWorking(working);
   return (

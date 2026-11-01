@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
-import type { ChatAction, ClientMessage, Escalation, LedgeThreadItem, OpenRigStatus, Rig, RigSeat } from '@ledge/protocol';
+import type { ChatAction, ChatTurn, ClientMessage, Escalation, LedgeThreadItem, OpenRigStatus, Rig, RigSeat, Team } from '@ledge/protocol';
 import { boot, closeDaemons, PROJECTS, type MockDaemon } from './helpers';
 import { mentionAt } from '../src/chat/LedgeConversation';
 import { fr } from '../src/i18n/fr';
@@ -101,6 +101,29 @@ describe('the Ledge screen, on Ledge’s thread', () => {
     thread(d, [{ kind: 'user', id: 'q-1', at, text: 'Range', qid: 'q-1' }, { kind: 'ledge', id: 'l1', at, text: 'Voici.', qid: 'q-1' }]);
     const bubble = (await home().findByText('Voici.')).closest('[data-author="ledge"]') as HTMLElement;
     expect(within(bubble).getByRole('region', { name: 'Plan of 2 actions' })).toBeVisible();
+  });
+
+  it('a ledge bubble shows its team and task cards: the team launches, then its task is given (roles spec §3.8)', async () => {
+    const { d, user } = await openHome();
+    const at = ago(1);
+    const proposed: ChatTurn = { qid: 'q-2', question: 'Monte une équipe', askedAt: at, steps: [], answer: 'Une équipe.', answeredAt: at,
+      team: { cwd: '/w/ledge', project: 'ledge', projectName: 'Ledge', name: 'ledge-roles', seats: [{ role: 'build', label: 'Build', tool: 'claude', model: 'opus', autonomy: 'edits' }, { role: 'review', label: 'Relecteur', tool: 'codex', autonomy: 'auto' }] },
+      tasks: [{ to: '@build', title: 'Implémenter les rôles' }] };
+    d.push({ type: 'chat.history', turns: [proposed] });
+    thread(d, [{ kind: 'user', id: 'q-2', at, text: 'Monte une équipe', qid: 'q-2' }, { kind: 'ledge', id: 'l2', at, text: 'Une équipe.', qid: 'q-2' }]);
+    const card = await home().findByRole('region', { name: 'Proposed team' });
+    expect(within(card).getByText('@review')).toBeVisible();
+    const tasks = home().getByRole('region', { name: 'Task to give' });
+    expect(within(tasks).getByRole('button', { name: 'Give' })).toBeDisabled();
+    await user.click(within(card).getByRole('button', { name: /Launch the team/ }));
+    await waitFor(() => expect(d.received).toContainEqual({ type: 'team.launch', rid: expect.any(String), qid: 'q-2' }));
+    const rid = (d.received.find(m => m.type === 'team.launch') as { rid: string }).rid;
+    const team: Team = { id: 'team-a1b2', name: 'ledge-roles', project: 'ledge', machine: 'local', cwd: '/w/ledge', state: 'active', seats: [], createdAt: at, updatedAt: at };
+    d.push({ type: 'team.launched', rid, team });
+    d.push({ type: 'chat.history', turns: [{ ...proposed, team: { ...proposed.team!, teamId: team.id, launchedAt: at } }] });
+    await within(card).findByText(/Team launched at/);
+    await user.click(within(tasks).getByRole('button', { name: 'Give' }));
+    await waitFor(() => expect(d.received).toContainEqual({ type: 'task.cmd', rid: expect.any(String), by: 'ledge', op: 'give', qid: 'q-2', row: 0 }));
   });
 
   it('a decision in message answers with the option id', async () => {

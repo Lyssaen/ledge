@@ -418,7 +418,7 @@ span.ra-name { cursor: default; }
 .home-task h3 { margin: 0 0 4px; font-size: 13px; }
 .home-task h4 { margin: 10px 0 2px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted-foreground); }
 .home-task-text { white-space: pre-wrap; }
-.role-pill { display: inline-block; font: 10.5px/15px 'Geist Mono', monospace; padding: 0 6px; border-radius: 999px; background: color-mix(in srgb, var(--sidebar-primary) 16%, transparent); }
+/* .role-pill itself is atelier.css's (a seat's @role, tinted by its project, else the sidebar's primary): these only adapt it. */
 
 /* « Équipes »' catalog (#97): the views, the folder read, the list grouped by source and the detail on the right. */
 .home-list.home-teams { gap: 8px; }

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { boot, closeDaemons, PROJECTS } from './helpers';
-import { nearLimit } from '../src/teams/useTeamsApi';
+import { nearLimit } from '../src/session/useRelief';
 
 const AT = '2026-10-26T08:00:00.000Z';
 const ctx = (used: number) => ({ used, window: 200_000, at: AT });

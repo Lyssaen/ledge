@@ -40,8 +40,8 @@ export interface ProjectTableProps {
   menuId: string | null;
   /** A right click on a seat, or its « … »: the session menu. */
   onMenu(s: Session, e: MouseEvent<HTMLElement>): void;
-  /** Which table of its room this is (atelier rooms spec §3.1); left out, the project's one table, as before teams. */
-  table?: AtelierTable;
+  /** Which table of its room this is (atelier rooms spec §3.1): the common one or a team's. */
+  table: AtelierTable;
   /** The room has team tables: the common table says it is the common one. */
   roomHasTeams?: boolean;
   /** A team table's tasks (every state): its sheets and its heading's count. */
@@ -90,7 +90,7 @@ function TableTop({ sheets, length }: { sheets: Sheet[]; length: number }): JSX.
 export function ProjectTable({ project, mains, order, helpers, seats: maxSeats, paused, isolated, focusedId, seated, dispatch, filing, actions, menuId, onMenu, table, roomHasTeams, teamTasks = [], teamActions, seatDrag, tableDrop }: ProjectTableProps): JSX.Element {
   const { t } = useI18n();
   const { id, name } = project;
-  const team = table?.team;
+  const team = table.team;
   const resting = team?.state === 'resting';
   // A team's sheets are its open tasks, each in front of the seat that holds it (§3.2).
   const openTask = (s: Session) => teamTasks.find(x => x.owner === s.id && !taskClosed(x));
@@ -179,8 +179,8 @@ export function ProjectTable({ project, mains, order, helpers, seats: maxSeats, 
   });
 
   return (
-    <section className={cls(table ? 'atelier-table' : 'project-room', (filing.over === id || tableDrop?.over) && 'drop-over', team && 'team-table', resting && 'table-resting')}
-      data-project={id} data-table={table?.key} aria-label={team ? t.rooms.teamTable(team.name) : t.atelier.table(name)}
+    <section className={cls('atelier-table', (filing.over === id || tableDrop?.over) && 'drop-over', team && 'team-table', resting && 'table-resting')}
+      data-project={id} data-table={table.key} aria-label={team ? t.rooms.teamTable(team.name) : t.atelier.table(name)}
       onDragOver={(e: DragEvent) => { filing.dropProps(id).onDragOver(e); tableDrop?.onDragOver(e); }}
       onDragLeave={(e: DragEvent) => { filing.dropProps(id).onDragLeave(e); tableDrop?.onDragLeave(e); }}
       onDrop={(e: DragEvent) => { filing.dropProps(id).onDrop(e); tableDrop?.onDrop(e); }}
@@ -196,7 +196,7 @@ export function ProjectTable({ project, mains, order, helpers, seats: maxSeats, 
             </button>
           )}
         </div>
-        <Plants projectId={table?.key ?? id} left={at(-RUG_SIDE)} width={length + 2 * RUG_SIDE} avoid={extraCount > 0 ? ['br'] : []} />
+        <Plants projectId={table.key} left={at(-RUG_SIDE)} width={length + 2 * RUG_SIDE} avoid={extraCount > 0 ? ['br'] : []} />
         {seats.map(({ session: s, x, side }) => <div key={s.id} className={`office-chair chair-${side}`} aria-hidden="true" style={{ left: at(x - 27) }} />)}
         <div className="worktable" aria-hidden="true" style={{ left: at(0), right: 'auto', width: length }}>
           <TableTop length={length} sheets={sheets} />
