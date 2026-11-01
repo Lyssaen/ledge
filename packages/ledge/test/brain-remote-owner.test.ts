@@ -36,10 +36,22 @@ describe('remote brain arbitration at the escalation origin', () => {
     replyRow = false; deliver = async () => ({ ok: false, code: 'already_answered', reason: 'closed elsewhere' });
     expect(await owner.decide('e1', 'peer-a', 'lease-1', { q: 'b' }, 'git')).toMatchObject({ ok: false, code: 'already_answered' });
   });
+  it('reports unknown when delivery fails after a reply row was created', async () => {
+    owner.claim('e1', 'peer-a'); await vi.advanceTimersByTimeAsync(REMOTE_GRACE_MS);
+    deliver = async () => { replyRow = true; return { ok: false, code: 'failed', reason: 'lost acknowledgement' }; };
+    expect(await owner.decide('e1', 'peer-a', 'lease-1', { q: 'a' }, 'git')).toMatchObject({ ok: false, code: 'unknown' });
+  });
   it('releases on owner disconnect or lease expiry without reviving an answered escalation', async () => {
     owner.claim('e1', 'peer-a'); owner.disconnect('peer-a'); expect(current.state).toBe('pending');
     owner.claim('e1', 'peer-b'); await vi.advanceTimersByTimeAsync(REMOTE_LEASE_MS); expect(current.state).toBe('pending');
     owner.claim('e1', 'peer-c'); current = { ...current, state: 'answered' }; owner.disconnect('peer-c'); expect(current.state).toBe('answered');
+  });
+  it('only the owner can release a lease with advice for the user', () => {
+    owner.claim('e1', 'peer-a');
+    expect(owner.release('e1', 'peer-b', 'lease-1', 'Consider B', 'git')).toMatchObject({ ok: false });
+    expect(current.state).toBe('grace');
+    expect(owner.release('e1', 'peer-a', 'lease-1', 'Consider B', 'git')).toEqual({ ok: true });
+    expect(current).toMatchObject({ state: 'pending', advice: 'Consider B', category: 'git' });
   });
   it('allows at most one candidate to be applying at a time', async () => {
     owner.claim('e1', 'peer-a'); await vi.advanceTimersByTimeAsync(REMOTE_GRACE_MS);

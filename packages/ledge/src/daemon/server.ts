@@ -78,6 +78,9 @@ import { DEFAULT_MANDATE, ensureMandate, escalateCategory, parseMandate } from '
 import { createBrainInbox } from './brain/inbox.js';
 import { brainResponder, BRAIN_FIRST_TEXT } from './brain/responder.js';
 import { createDeciding, type Deciding } from './brain/decide.js';
+import { createRemoteBrainOwner } from './brain/remoteOwner.js';
+import { createRemoteBrainCoordinator } from './brain/remoteCoordinator.js';
+import { createPendingJournal, createReceiptJournal } from './brain/remoteJournal.js';
 import { createRevisit } from './brain/revisit.js';
 import { createBrainCommands, parseBrainArgs, NOT_BRAIN_LINE, type RigActMsg, type RigPrepareMsg, type RigResult } from './brain/commands.js';
 import { readContext } from './context.js';
@@ -223,7 +226,7 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  */
 export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; asks?: AsksJournal; handoverBriefMs?: number; attachments?: AttachmentStore; openrig?: Bridge;
   /** How the remote peers reach a machine's daemon (default: this daemon's own `/ssh/<alias>`); tests point it at another daemon. */
-  remoteConnect?: (machine: Machine, url: string) => DaemonClient }): Promise<ServerHandle> {
+  remoteConnect?: (machine: Machine, url: string) => DaemonClient; remoteBrainGraceMs?: number }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -369,10 +372,12 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       replyRow: bridge.replyRow, setReplyRow: bridge.setReplyRow, humanRead: bridge.humanRead },
     asks, path: { kind: ANSWER_PATH }, localMachine: 'local', now }) : null;
   let deciding: Deciding | null = null;
+  let remoteBrainCoordinator: ReturnType<typeof createRemoteBrainCoordinator> | null = null;
   const remote = bridge ? createRemotePeers({ port, ...(opts.remoteConnect ? { connect: opts.remoteConnect } : {}) }) : null;
   const aggregate = bridge && remote ? createRigAggregate({ bridge, remote, machines: () => machines, projects: () => projects }) : null;
   const unsubscribeAggregate = aggregate?.onMessage(m => {
     broadcast(m);
+    if (m.type === 'escalation.updated' && m.escalation.machine !== 'local') remoteBrainCoordinator?.observe(m.escalation);
     // Ledge's thread names the remote escalations and exchanges too (the local ones come from the bridge, below), once per id.
     if (m.type === 'escalation.updated' && m.escalation.machine !== 'local' && !thread.hasEscalation(m.escalation.id)) thread.append({ kind: 'escalation', escalationId: m.escalation.id });
     if (m.type === 'rig.exchange' && m.exchange.machine !== 'local') thread.exchange(m.exchange);
@@ -426,6 +431,30 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   };
   if (bridge && answers) deciding = createDeciding({ escalations: { escalation: bridge.escalation, patchEscalation: bridge.patchEscalation },
     answers, thread, memory, inbox: brainInbox, mandate: readMandate, brainOn: () => brain.status().state === 'on' && ['idle', 'working'].includes(brain.session()?.state ?? ''), now: Date.now });
+  // Refuse delegation if durable proof cannot be read; never silently overwrite a damaged journal.
+  let remoteReceipts: ReturnType<typeof createReceiptJournal> | undefined;
+  try { remoteReceipts = createReceiptJournal(join(paths().dir, 'brain-delegation-receipts.json')); }
+  catch (e) { log(`brain: remote proof journal unavailable: ${(e as Error).message}`); }
+  // Delegated decisions are always arbitrated and applied on the machine that owns the escalation.
+  const remoteBrainOwner = bridge && answers && remoteReceipts ? createRemoteBrainOwner({
+    escalation: bridge.escalation, patch: bridge.patchEscalation, receipts: remoteReceipts,
+    localBrainOn: () => { const st = brain.status(); return st.enabled === true && (st.state === 'starting' || st.state === 'on'); },
+    mandate: readMandate, ...(opts.remoteBrainGraceMs !== undefined ? { graceMs: opts.remoteBrainGraceMs } : {}), hasReplyRow: id => bridge.replyRow(id) !== undefined,
+    answer: (id, selected) => answers.answer(id, selected, 'ledge')
+  }) : null;
+  const unsubscribeRemoteSettled = answers?.onAnswered(e => remoteBrainOwner?.settled(e.id));
+  const localBrainReady = () => brain.status().state === 'on' && ['idle', 'working'].includes(brain.session()?.state ?? '');
+  let remotePending: ReturnType<typeof createPendingJournal> | undefined;
+  try { remotePending = createPendingJournal(join(paths().dir, 'brain-delegation-pending.json')); }
+  catch (e) { log(`brain: remote pending journal unavailable: ${(e as Error).message}`); }
+  remoteBrainCoordinator = remote && remotePending ? createRemoteBrainCoordinator({ remote, brainOn: localBrainReady, inbox: brainInbox, memory, thread, mandate: readMandate, journal: remotePending }) : null;
+  const brainDecisionRouting = deciding ? {
+    decide: (id: string, selected: Record<string, string>, category: string, o: { rule?: string; why?: string }) =>
+      id.startsWith('remote~') && remoteBrainCoordinator ? remoteBrainCoordinator.decide(id, selected, category, o) : deciding!.decide(id, selected, category, o),
+    ask: (id: string, category: string | undefined, advice: string) =>
+      id.startsWith('remote~') && remoteBrainCoordinator ? remoteBrainCoordinator.ask(id, category, advice) : deciding!.ask(id, category, advice)
+  } : null;
+
   /** « Revenir dessus » (Lot 7): a correction while the seat has not taken the reply, a conversation once it has. */
   const revisits = bridge && answers ? createRevisit({ memory, escalations: { escalation: bridge.escalation, patchEscalation: bridge.patchEscalation },
     answers, thread, inbox: brainInbox, brainOn: () => brain.status().state === 'on', bridge }) : null;
@@ -455,6 +484,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const unsubscribeBrain = brain.onStatus(status => {
     broadcast({ type: 'brain.status', status });
     if (status.state !== 'on') deciding?.release(`brain ${status.state}`);
+    if (status.enabled === true && (status.state === 'starting' || status.state === 'on')) remoteBrainOwner?.close();
+    if (localBrainReady()) { for (const e of aggregate?.escalations() ?? []) if (e.machine !== 'local') remoteBrainCoordinator?.observe(e); }
+    else remoteBrainCoordinator?.releaseAll();
   });
   /** Each session's state last seen: a turn's end (→ idle) is when its context is read again. */
   const lastState = new Map<string, Session['state']>();
@@ -494,6 +526,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   };
   const labelExited = (): void => { for (const id of [...unlabelled]) { const s = store.get(id); if (s) labelExit(s); else unlabelled.delete(id); } };
   const unsubscribe = store.onChange(c => {
+    if (c.type !== 'recents' && (c.type === 'removed' || c.session.brain)) {
+      if (localBrainReady()) { for (const e of aggregate?.escalations() ?? []) if (e.machine !== 'local') remoteBrainCoordinator?.observe(e); }
+      else remoteBrainCoordinator?.releaseAll();
+    }
     if (c.type === 'recents') return broadcast({ type: 'recents', recents: c.recents });
     if (c.type === 'updated' && c.session.tmuxSession && titles.get(c.session.id) !== c.session.title) {
       titles.set(c.session.id, c.session.title);
@@ -509,7 +545,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const sendSnapshot = (reply: Reply) => {
-    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true, asks: true, ...(mobile || unavailable ? { mobile: true } : {}), ...(bridge ? { openrig: true } : {}), ...(aggregate ? { openrigFleet: true } : {}), colorPreview: true } } : {}) });
+    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true, asks: true, ...(mobile || unavailable ? { mobile: true } : {}), ...(bridge ? { openrig: true } : {}), ...(aggregate ? { openrigFleet: true } : {}), ...(remoteBrainOwner ? { brainDelegate: true } : {}), colorPreview: true } } : {}) });
     reply(machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
     reply(projectsMsg()); // then the shared projects (build spec §5)
     reply({ type: 'asks', asks: asks.all().filter(askShown) }); // then the decisions waiting for the user
@@ -1053,7 +1089,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     }
   }
   /** `ledge brain …` (Lot 7): what the brain session may do, once the daemon knows it is the brain. */
-  const brainCommands = createBrainCommands({ deciding, thread, seatSend, memory, rigs: () => bridge?.rigs() ?? [], escalations: () => bridge?.escalations() ?? [],
+  const brainCommands = createBrainCommands({ deciding: brainDecisionRouting, thread, seatSend, memory, rigs: () => aggregate?.rigs() ?? bridge?.rigs() ?? [], escalations: () => [...(bridge?.escalations() ?? []), ...(remoteBrainCoordinator?.list() ?? [])],
     sessions: () => store.all(), projects: () => projects, chat, emit: broadcast, rigAct, rigPrepare: msg => rigPrepare(msg, false),
     handover: (by, text) => handovers.brief(by, text) });
   /**
@@ -1717,7 +1753,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       return;
     }
     localClients.add(ws);
-    ws.once('close', () => { localClients.delete(ws); colorFollow.delete(ws); for (const id of colorLast.keys()) if (!colorWanted(id)) colorLast.delete(id); });
+    const delegateOwner = randomUUID();
+    ws.once('close', () => { remoteBrainOwner?.disconnect(delegateOwner); localClients.delete(ws); colorFollow.delete(ws); for (const id of colorLast.keys()) if (!colorWanted(id)) colorLast.delete(id); });
     const reply: Reply = m => send(ws, m);
     sendSnapshot(reply);
     ws.on('message', data => {
@@ -1732,6 +1769,15 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         const { type, id } = (raw ?? {}) as { type?: unknown; id?: unknown };
         const named = typeof type === 'string' && type.length <= 64 ? type : undefined;
         return reply({ type: 'error', message: 'invalid message', ...(named?.startsWith('session.') && typeof id === 'string' && id.length <= 200 ? { id } : {}), ...(named ? { request: named } : {}), code: 'invalid' });
+      }
+      if (msg.type === 'brain.delegate.claim' || msg.type === 'brain.delegate.decide' || msg.type === 'brain.delegate.release' || msg.type === 'brain.delegate.query') {
+        const respond = (r: { ok: boolean; token?: string; graceUntil?: string; status?: 'applied'; code?: string; reason?: string }) => reply({ type: 'brain.delegate.result', rid: msg.rid, ...r });
+        if (!remoteBrainOwner) { respond({ ok: false, code: 'openrig_down', reason: "OpenRig n'est pas branché" }); return; }
+        if (msg.type === 'brain.delegate.claim') { respond(remoteBrainOwner.claim(msg.id, delegateOwner)); return; }
+        if (msg.type === 'brain.delegate.query') { respond(remoteBrainOwner.query(msg.operation, msg.token)); return; }
+        if (msg.type === 'brain.delegate.release') { respond(remoteBrainOwner.release(msg.id, delegateOwner, msg.token, msg.advice, msg.category)); return; }
+        void remoteBrainOwner.decide(msg.id, delegateOwner, msg.token, msg.answers, msg.category, msg.rid).then(respond, () => respond({ ok: false, code: 'unknown', reason: 'résultat inconnu' }));
+        return;
       }
       if (msg.type === 'session.preview.subscribe') {
         // Per client, so it lives here and not in `dispatch` (which has no socket).
@@ -1762,6 +1808,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     asks,
     projects: () => projects,
     say: text => { thread.append({ kind: 'ledge', text }); },
-    close: () => new Promise<void>(res => { clearInterval(sweepTimer); clearInterval(brainDayTimer); unsubscribe(); unsubscribeBrain(); unsubscribeMemory(); deciding?.dispose(); brain.dispose(); unsubscribeBridge?.(); unsubscribeAggregate?.(); rigRouter?.close(); remote?.close(); launches?.close(); stopRepoWatch?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
+    close: () => new Promise<void>(res => { clearInterval(sweepTimer); clearInterval(brainDayTimer); unsubscribe(); unsubscribeBrain(); unsubscribeMemory(); deciding?.dispose(); unsubscribeRemoteSettled?.(); remoteBrainCoordinator?.close(); remoteBrainOwner?.close(); brain.dispose(); unsubscribeBridge?.(); unsubscribeAggregate?.(); rigRouter?.close(); remote?.close(); launches?.close(); stopRepoWatch?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
   };
 }

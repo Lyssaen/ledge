@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { appendFileSync, closeSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { LedgeDecisionSchema, LedgeRuleSchema, type Escalation, type LedgeDecision, type LedgeRule, type MandateCategory } from '@ledge/protocol';
@@ -8,7 +8,7 @@ export interface Memory {
   /** Newest first. `since` keeps decisions whose `at` is >= the ISO string. */
   decisions(o?: { limit?: number; since?: string }): LedgeDecision[];
   /** Appends a line to decisions.jsonl; bumps the rule's appliedCount when `d.rule` names one. */
-  record(d: Omit<LedgeDecision, 'id'>): LedgeDecision;
+  record(d: Omit<LedgeDecision, 'id'>, stableId?: string): LedgeDecision;
   propose(text: string, category: MandateCategory, from: string): LedgeRule;
   /** 'rejected' removes the rule from the file and returns the removed rule; null when the id is unknown. */
   setRule(id: string, status: 'active' | 'rejected'): LedgeRule | null;
@@ -61,12 +61,17 @@ export function createMemory(o: { dir: string; now?: () => string; uuid?: () => 
     }
     return [...byId.values()];
   };
-  const appendDecision = (d: LedgeDecision): void => {
+  const syncDecisions = () => {
+    const fd = openSync(decisionsPath, 'r'); try { fsyncSync(fd); } finally { closeSync(fd); }
+    const dir = openSync(o.dir, 'r'); try { fsyncSync(dir); } finally { closeSync(dir); }
+  };
+  const appendDecision = (d: LedgeDecision, durable = false): void => {
     mkdirSync(o.dir, { recursive: true });
     // A crash mid-append can leave a last line without its newline: start on a fresh line so the new one is not glued to it.
     let torn = false;
     try { const t = readFileSync(decisionsPath, 'utf8'); torn = t.length > 0 && !t.endsWith('\n'); } catch { /* no file yet */ }
     appendFileSync(decisionsPath, `${torn ? '\n' : ''}${JSON.stringify(d)}\n`);
+    if (durable) syncDecisions();
   };
 
   /** What an answer says: the label of the chosen option of the escalation's only question (or the raw answer when it matches no option). */
@@ -87,9 +92,10 @@ export function createMemory(o: { dir: string; now?: () => string; uuid?: () => 
       if (opt.since) all = all.filter(d => d.at >= opt.since!);
       return opt.limit === undefined ? all : all.slice(0, opt.limit);
     },
-    record(d) {
-      const full: LedgeDecision = { ...d, id: uuid() };
-      appendDecision(full);
+    record(d, stableId) {
+      if (stableId) { const existing = readDecisions().find(x => x.id === stableId); if (existing) { syncDecisions(); return existing; } }
+      const full: LedgeDecision = { ...d, id: stableId ?? uuid() };
+      appendDecision(full, stableId !== undefined);
       if (d.rule) {
         const rules = readRules();
         const r = rules.find(x => x.id === d.rule);

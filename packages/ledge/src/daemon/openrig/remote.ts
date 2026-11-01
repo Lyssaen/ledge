@@ -4,7 +4,7 @@ import { createDaemonClient, type DaemonClient, type DaemonStatus } from '@ledge
 import { createTokenSource, type TokenRead } from '@ledge/fleet/token';
 import { readDaemonToken } from '../../auth.js';
 
-export type RemoteMessage = Extract<ServerMessage, { type: 'openrig.status' | 'rig.snapshot' | 'rig.updated' | 'rig.removed' | 'rig.exchange' | 'rig.exchanges' | 'escalation.updated' | 'escalation.removed' | 'rig.result' | 'rig.plan' }>;
+export type RemoteMessage = Extract<ServerMessage, { type: 'openrig.status' | 'rig.snapshot' | 'rig.updated' | 'rig.removed' | 'rig.exchange' | 'rig.exchanges' | 'escalation.updated' | 'escalation.removed' | 'rig.result' | 'rig.plan' | 'brain.delegate.result' }>;
 export type PeerStatus = 'open' | 'connecting' | 'unreachable' | 'unsupported';
 
 export interface RemotePeers {
@@ -13,6 +13,8 @@ export interface RemotePeers {
   status(machine: string): PeerStatus;
   /** The Ledge version the peer's daemon gave in its last snapshot (undefined before one, or from a daemon that gives none). */
   version(machine: string): string | undefined;
+  /** False for old peers or peers whose snapshot has not arrived. */
+  supportsBrainDelegate?(machine: string): boolean;
   /** `machine` already rewritten to 'local' by the caller; false when the peer is not open. */
   send(machine: string, msg: ClientMessage): boolean;
   /** `machine` = the peer's id; the content is already rewritten. */
@@ -41,7 +43,7 @@ export function rewriteFromPeer(machine: string, m: ServerMessage): RemoteMessag
       return { ...m, machine, items: m.items.filter(e => e.machine === 'local').map(e => ({ ...e, machine })) };
     }
     case 'escalation.updated': return m.escalation.machine === 'local' ? { ...m, escalation: { ...m.escalation, machine } } : null;
-    case 'escalation.removed': case 'rig.result': return m;
+    case 'escalation.removed': case 'rig.result': case 'brain.delegate.result': return m;
     case 'rig.plan': return m.plan.machine === 'local' ? { ...m, plan: { ...m.plan, machine } } : null;
     default: return null;
   }
@@ -52,7 +54,7 @@ async function readToken(): Promise<TokenRead> {
   catch { return { kind: 'unavailable' }; }
 }
 
-interface Peer { machine: Machine; client: DaemonClient; status: PeerStatus; version?: string; off: Array<() => void> }
+interface Peer { machine: Machine; client: DaemonClient; status: PeerStatus; version?: string; brainDelegate?: boolean; off: Array<() => void> }
 
 /** `port` may be a function: the server creates its peers after it listens. Peers dial the local daemon's own `/ssh/<alias>`. */
 export function createRemotePeers(opts: { port: number | (() => number); connect?: (machine: Machine, url: string) => DaemonClient; labelOf?: (id: string) => string }): RemotePeers {
@@ -74,11 +76,11 @@ export function createRemotePeers(opts: { port: number | (() => number); connect
     p.off.push(client.onStatus((s: DaemonStatus) => {
       // `open` is only the socket: the peer is open at its snapshot, which says whether it knows OpenRig.
       if (s === 'unreachable') setStatus(p, 'unreachable');
-      else if (s === 'connecting' && p.status !== 'connecting') p.status = 'connecting';
+      else if (s === 'connecting' && p.status !== 'connecting') { setStatus(p, 'unreachable'); p.status = 'connecting'; }
     }));
     p.off.push(client.onMessage(m => {
       if (peers.get(machine.id) !== p) return;
-      if (m.type === 'snapshot') { p.version = m.daemon?.version; setStatus(p, m.daemon?.openrig ? 'open' : 'unsupported'); return; }
+      if (m.type === 'snapshot') { p.version = m.daemon?.version; p.brainDelegate = m.daemon?.brainDelegate === true; setStatus(p, m.daemon?.openrig ? 'open' : 'unsupported'); return; }
       if (p.status !== 'open') return;
       const out = rewriteFromPeer(machine.id, m);
       if (out) msgFns.forEach(f => f(machine.id, out));
@@ -101,6 +103,7 @@ export function createRemotePeers(opts: { port: number | (() => number); connect
     },
     status: machine => peers.get(machine)?.status ?? 'unreachable',
     version: machine => peers.get(machine)?.version,
+    supportsBrainDelegate: machine => peers.get(machine)?.status === 'open' && peers.get(machine)?.brainDelegate === true,
     send(machine, msg) {
       const p = peers.get(machine);
       if (!p || p.status !== 'open' || p.client.status() !== 'open') return false;

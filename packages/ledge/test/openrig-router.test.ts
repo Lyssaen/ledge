@@ -269,7 +269,6 @@ describe('server with the rig router', () => {
     expect(b.msgs.some(m => m.type === 'rig.result')).toBe(false);
     for (const c of [a, b]) await new Promise<void>(r => { c.ws.once('close', () => r()); c.ws.close(); });
   });
-  // Known integration gap: the home brain only subscribes to its local bridge, not remote escalations.
   it('gives a remote escalation grace when the local brain is active', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'ledge-brain-remote-')); dirs.push(dir); process.env.LEDGE_HOME = dir;
     writeFileSync(join(dir, 'brain.json'), JSON.stringify({ enabled: true, tool: 'claude' }));
@@ -282,12 +281,18 @@ describe('server with the rig router', () => {
     const bridge = bridgeS = createBridge({ env: async () => ({ OPENRIG_PORT: String(fake!.port) }), exec: fakeRigCli(fake), projects: () => ({ projects: [], rules: [] }), home: dir, file: join(dir, 'openrig.json'),
       asks: { all: () => server!.asks.all(), onChange: f => server!.asks.onChange(f) }, sessionName: id => store.get(id)?.name, probeMs: 20, outboxMs: 30, resyncMs: 50 });
     let onMsg = (_: ServerMessage) => {}, onSt = (_: DaemonStatus) => {}, status: DaemonStatus = 'connecting';
-    const client: DaemonClient = { connect() {}, close() {}, send() {}, status: () => status,
-      onMessage(fn) { onMsg = fn; return () => {}; }, onStatus(fn) { onSt = fn; return () => {}; } };
+    const remoteEsc = { ...esc('E1', 'local'), category: 'git' as const, questions: [{ id: 'q1', question: 'Merge?', options: [{ id: 'yes', label: 'Yes' }, { id: 'no', label: 'No' }] }] };
+    const client: DaemonClient = { connect() {}, close() {}, send(m) {
+      if (m.type === 'brain.delegate.claim') queueMicrotask(() => {
+        const graceUntil = new Date(Date.now() + 60_000).toISOString();
+        onMsg({ type: 'escalation.updated', escalation: { ...remoteEsc, state: 'grace', graceUntil } });
+        onMsg({ type: 'brain.delegate.result', rid: m.rid, ok: true, token: 'lease', graceUntil });
+      });
+    }, status: () => status, onMessage(fn) { onMsg = fn; return () => {}; }, onStatus(fn) { onSt = fn; return () => {}; } };
     server = srv = await startServer({ store, tmux: noTmux, port: 0, home: dir, machinesFile, daemon: { version: '0.0.0', install: 'git', systemd: false }, agentEnv: async () => ({ ...process.env }), openrig: bridge, remoteConnect: () => client });
     await bridge.start();
     status = 'open'; onSt('open');
-    onMsg({ type: 'snapshot', sessions: [], recents: [], daemon: { version: '0.30.0', install: 'npm', systemd: true, openrig: true } } as ServerMessage);
+    onMsg({ type: 'snapshot', sessions: [], recents: [], daemon: { version: '0.30.0', install: 'npm', systemd: true, openrig: true, brainDelegate: true } } as ServerMessage);
     onMsg({ type: 'openrig.status', status: { machine: 'local', state: 'running' } });
     const ws = new WebSocket(`ws://127.0.0.1:${server.port}`, { headers: authHeaders() });
     const msgs: ServerMessage[] = [];
@@ -295,8 +300,8 @@ describe('server with the rig router', () => {
     await new Promise<void>((res, rej) => { ws.once('open', () => res()); ws.once('error', rej); });
     try {
       await until(() => msgs.some(m => m.type === 'brain.status' && m.status.enabled === true && m.status.state === 'on'));
-      onMsg({ type: 'escalation.updated', escalation: { ...esc('E1', 'local'), category: 'git', questions: [{ id: 'q1', question: 'Merge?', options: [{ id: 'yes', label: 'Yes' }, { id: 'no', label: 'No' }] }] } });
-      await until(() => msgs.some(m => m.type === 'escalation.updated' && m.escalation.id === 'E1'));
+      onMsg({ type: 'escalation.updated', escalation: remoteEsc });
+      await until(() => msgs.some(m => m.type === 'escalation.updated' && m.escalation.id === 'E1' && m.escalation.state === 'grace'));
       const update = msgs.findLast(m => m.type === 'escalation.updated' && m.escalation.id === 'E1');
       expect(update).toMatchObject({ type: 'escalation.updated', escalation: { machine: 'ec2', state: 'grace' } });
     } finally { await new Promise<void>(resolve => { ws.once('close', () => resolve()); ws.close(); }); }
