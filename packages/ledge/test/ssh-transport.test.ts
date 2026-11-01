@@ -94,6 +94,20 @@ describe('SSH application transport', () => {
     expect(got.map(m => m.type)).toEqual(['snapshot', 'error']); expect(got[1]?.message).toBe('snapshot.request');
     expect(ws.readyState).toBe(WebSocket.OPEN);
   });
+  it('forwards a teams frame from an older remote daemon instead of closing the link', async () => {
+    const { wss, port } = await wsServer(); let child!: ChildProcessWithoutNullStreams;
+    wss.on('connection', ws => serveSsh(ws, 'server', { spawn: () => {
+      child = spawn(process.execPath, ['--input-type=module', '-e', `console.log(JSON.stringify({type:'snapshot',sessions:[]})); console.log(JSON.stringify({type:'teams',teams:[]})); setInterval(()=>{},1000);`]);
+      cleanup.push(() => { child.kill('SIGKILL'); }); return child;
+    } }));
+    const ws = new WebSocket(`ws://127.0.0.1:${port}`), got: { type: string }[] = [];
+    ws.on('message', b => got.push(JSON.parse(String(b)))); cleanup.push(() => ws.terminate());
+    await until(() => got.length >= 2);
+    expect(got.map(m => m.type)).toEqual(['snapshot', 'teams']);
+    await new Promise(r => setTimeout(r, 150));
+    expect(got.some(m => m.type === 'error')).toBe(false);
+    expect(ws.readyState).toBe(WebSocket.OPEN);
+  });
   it('reports a missing remote bridge without marking the host ready', async () => {
     const { wss, port } = await wsServer();
     wss.on('connection', ws => serveSsh(ws, 'server', { spawn: () => spawn(process.execPath, ['-e', 'console.error("ledge: command not found"); process.exit(127)']) }));
