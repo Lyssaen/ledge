@@ -7,6 +7,7 @@ import type { Memory } from './memory.js';
 import { brainInstructions, BRAIN_DECISIONS } from './persona.js';
 import { isBrainTool, readBrainSettings, writeBrainSettings, type BrainSettings } from './settings.js';
 import { log } from '../../log.js';
+import { checkCodexGuard } from './codexGuard.js';
 
 export const RESTARTS_MAX = 3, RESTART_WINDOW_MS = 600_000;
 /** The share of its context past which the brain is relieved (Global Constraints). */
@@ -40,7 +41,7 @@ export const BRAIN_CLAUDE_SETTINGS = { permissions: { defaultMode: 'default', al
 export function brainArgs(tool: Tool): string[] {
   switch (tool) {
     case 'claude': return ['--permission-mode', 'default'];
-    case 'codex': return ['--ask-for-approval', 'on-request'];
+    case 'codex': return ['--no-daemon', '--sandbox', 'workspace-write', '--ask-for-approval', 'on-request'];
     default: return [];
   }
 }
@@ -92,6 +93,8 @@ export interface BrainDeps {
   /** The agents' environment (login shell): its PATH goes after the shims. */
   env?: () => Promise<NodeJS.ProcessEnv>;
   now?: () => number;
+  /** Override the guard probe in tests. */
+  codexGuard?: (cwd: string, env: NodeJS.ProcessEnv) => Promise<boolean>;
   /** The reliefs (daemon/handover.ts), which `checkRelief` starts. */
   handovers?: { start(id: string, o?: { auto?: boolean }): string | null };
 }
@@ -195,7 +198,9 @@ export function createBrain(d: BrainDeps): Brain {
     const p = (async () => {
       try {
         await prepare(tool);
-        const e = brainEnv(d.dir, await env());
+        const base = await env();
+        if (tool === 'codex' && !(await (d.codexGuard ?? checkCodexGuard)(d.dir, base))) throw new Error('Le hook Codex Ledge doit être à jour, actif et approuvé avant de démarrer le cerveau.');
+        const e = brainEnv(d.dir, base);
         const usable = resume && resume.tool === tool ? resume : undefined;
         const s = await d.launch({ tool, cwd: d.dir, env: e, id: usable?.id ?? freeId(), name: BRAIN_NAME, ...(usable ? { resume: usable } : {}) });
         seen.set(s.id, s.state);
@@ -301,7 +306,9 @@ export function createBrain(d: BrainDeps): Brain {
     const tool = s.tool;
     { const why = stale(tool); if (why) throw new Error(why); }
     const instructions = await prepare(tool);
-    const e = brainEnv(d.dir, await env());
+    const base = await env();
+    if (tool === 'codex' && !(await (d.codexGuard ?? checkCodexGuard)(d.dir, base))) throw new Error('Le hook Codex Ledge doit être à jour, actif et approuvé avant la relève.');
+    const e = brainEnv(d.dir, base);
     { const why = stale(tool); if (why) throw new Error(why); } // the user may have stopped it meanwhile
     const id = freeId();
     relieving.add(id);
