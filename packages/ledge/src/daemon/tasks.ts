@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { backendOf, givenByLedge, isArchived, LEDGE_GIVER, taskClosed, type ClientMessage, type ServerMessage, type Session, type Task, type TaskLogEntry, type Team } from '@ledge/protocol';
+import { backendOf, givenByLedge, isArchived, LEDGE_GIVER, taskClosed, type ClientMessage, type ServerMessage, type Session, type Task, type TaskLogEntry, type Team, type TeamObjective } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { Mailbox } from './mailbox.js';
 import { noTeamReason } from './seat.js';
@@ -7,6 +7,7 @@ import { formatLedgeTask } from './crossSession.js';
 import { bareName } from './peers.js';
 import { jsonJournal, type Journal } from './journal.js';
 import { log } from '../log.js';
+import { objectiveText, objectiveTitle } from './objective.js';
 
 type TaskCmd = Extract<ClientMessage, { type: 'task.cmd' }>;
 type TaskResult = Extract<ServerMessage, { type: 'task.result' }>;
@@ -27,6 +28,9 @@ export interface TasksDeps {
 }
 export interface Tasks {
   run(cmd: TaskCmd): TaskResult; all(): Task[];
+  /** A team's objective, given by Ledge to its lead at launch as any given task is (`objective: true`); `notice` (given the
+   *  task, for its id and text) is what the lead is typed, first in its queue, instead of a plain task pointer. */
+  giveObjective(o: { team: Team; owner: Pick<Session, 'id' | 'name'>; objective: TeamObjective; notice: (task: Task) => string }): Task;
   /** A team purged (issue #146): its tasks lose its id and stay their owner's and giver's, as any task out of a team. */
   forgetTeam(team: string): void;
   close(): void;
@@ -265,6 +269,18 @@ export function createTasks(d: TasksDeps): Tasks {
     return refuse('opération inconnue');
   }
 
+  function giveObjective(o: { team: Team; owner: Pick<Session, 'id' | 'name'>; objective: TeamObjective; notice: (task: Task) => string }): Task {
+    const ledge = { id: LEDGE_GIVER, name: 'Ledge' };
+    const at = now();
+    const draft: Task = { id: newId(), title: objectiveTitle(o.objective.goal), text: objectiveText(o.team, o.objective), giver: LEDGE_GIVER, giverName: 'Ledge',
+      owner: o.owner.id, ownerName: o.owner.name, team: o.team.id, state: 'open', objective: true, at, updatedAt: at, log: [] };
+    const task = put(draft, 'Ledge', `confiée à ${o.owner.name}`, sides('give', ledge, o.owner));
+    d.mailbox.notify(o.owner.id, formatLedgeTask({ id: task.id, from: 'Ledge', text: o.notice(task) }), `${task.id}:0`, { first: true });
+    park(o.owner.id);
+    log(`task ${task.id}: objective of team ${o.team.id} given to ${o.owner.name}`);
+    return task;
+  }
+
   const forgetTeam = (team: string) => {
     const held = [...tasks.values()].filter(t => t.team === team);
     if (!held.length) return;
@@ -274,7 +290,7 @@ export function createTasks(d: TasksDeps): Tasks {
     save();
     for (const t of out) d.onTask?.(t);
   };
-  return { run, all: () => [...tasks.values()].sort((a, b) => a.at.localeCompare(b.at)), forgetTeam, close: () => { unsubscribe(); for (const timer of timers.values()) clearTimeout(timer); timers.clear(); } };
+  return { run, giveObjective, all: () => [...tasks.values()].sort((a, b) => a.at.localeCompare(b.at)), forgetTeam, close: () => { unsubscribe(); for (const timer of timers.values()) clearTimeout(timer); timers.clear(); } };
 }
 
 export function tasksJournal(path: string): TasksJournal & { flush(): Promise<void> } {

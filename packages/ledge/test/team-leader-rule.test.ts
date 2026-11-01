@@ -11,7 +11,8 @@ import { ensureLedgeDir, paths } from '../src/paths.js';
 import { connect } from '../src/client.js';
 import type { Tmux } from '../src/tmux.js';
 
-vi.mock('../src/log.js', () => ({ log: () => {} }));
+const logged = vi.hoisted(() => [] as string[]);
+vi.mock('../src/log.js', () => ({ log: (line: string) => { logged.push(line); } }));
 
 const ISSUE = 'il manque le siège @leader : une équipe a exactement un lead (ajoute un siège de rôle leader)';
 const T0 = '2026-11-01T08:00:00.000Z';
@@ -69,6 +70,20 @@ describe('a team has exactly one lead', () => {
       // The daemon seeded the default leader role on startup.
       expect(existsSync(join(process.env.LEDGE_HOME!, 'roles', 'leader.md'))).toBe(true);
     } finally { await c.close(); await d.stop(); }
+  });
+
+  it('an unwritable roles folder costs the default lead, never the daemon: it starts, says so in one line', async () => {
+    process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-lead-'));
+    await ensureLedgeDir();
+    // A file where the roles folder should be: the seed cannot write there.
+    writeFileSync(join(process.env.LEDGE_HOME, 'roles'), '');
+    logged.length = 0;
+    const tmux = { async listSessions() { return []; } } as unknown as Tmux;
+    const d = await startDaemon({ port: 0, tmux });
+    try {
+      expect(d.port).toBeGreaterThan(0);
+      expect(logged.filter(l => l.startsWith('default leader role not written: '))).toHaveLength(1);
+    } finally { await d.stop(); }
   });
 
   it('ensureLeaderRole seeds the role once, and a deleted file does not come back', () => {

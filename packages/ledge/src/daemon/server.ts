@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { actionById, autonomyArgs, contextNear, ompApprovalFor, askShown, isArchived, RoleIdSchema, TemplateIdSchema, type DefinitionCode, givenByLedge, LEDGE_GIVER, openDecision, transmissions, type Task, projectOf, type ChatAction, type Autonomy, type Role, type Seat, type Team } from '@ledge/protocol';
+import { LEADER_ROLE, type TeamObjective, actionById, autonomyArgs, contextNear, ompApprovalFor, askShown, isArchived, RoleIdSchema, TemplateIdSchema, type DefinitionCode, givenByLedge, LEDGE_GIVER, openDecision, transmissions, type Task, projectOf, type ChatAction, type Autonomy, type Role, type Seat, type Team } from '@ledge/protocol';
 import { ATTACHMENT_LOCAL_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type RigPlan, type RigResultCode, type DaemonInfo, type Projects, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Machine, type Tool, type OmpApproval, type CloseHow, type ModelRefusal, type RefusalCode, backendOf, MANDATE_CATEGORY_LABEL } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
@@ -88,6 +88,7 @@ import { createBrainCommands, parseBrainArgs, NOT_BRAIN_LINE, type RigActMsg, ty
 import { readContext } from './context.js';
 import { findRole, loadRole } from './roles.js';
 import { leaderIssue } from './leader.js';
+import { LEAD_NOT_STARTED, leadNotice, waitNotice } from './objective.js';
 import { listDefinitions, resolveSeats, saveTemplate, templateHash, templateId, type ResolvedSeat } from './teams.js';
 import { deleteDefinition, promptRecipients, roleText, scopeDefinitions, scopeDir, templateText, writeDefinition } from './definitions.js';
 import { resolveRoleAddress, seatContext, seatKey, seatView, teammates } from './seat.js';
@@ -1380,7 +1381,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
    *  launch), creates the live team and spawns its seats in order, every one tried as `startSeats` does (#140): what failed
    *  stays a free seat, named in the reason with the team, what started stays.
    *  With `seats` given, `template` is only recorded on the team (a phone's launch of a team it composed, from a template). */
-  async function launchTeam(req: { cwd: string; template?: string; seats?: Seat[]; name?: string; defaults?: { tool: Tool; model?: string; effort?: string } }): Promise<{ team: Team } | { reason: string; team?: Team }> {
+  async function launchTeam(req: { cwd: string; template?: string; seats?: Seat[]; name?: string; defaults?: { tool: Tool; model?: string; effort?: string }; objective?: TeamObjective }): Promise<{ team: Team } | { reason: string; team?: Team }> {
     const cwd = await resolveFolder(req.cwd, opts.home);
     const defs = listDefinitions(cwd);
     const template = !req.seats && req.template ? defs.templates.find(t => t.id === req.template) : undefined;
@@ -1394,8 +1395,26 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     const recorded = req.seats ? req.template : template?.id;
     const team = teams.create({ name, ...(recorded ? { template: recorded } : {}), project: projectOf({ cwd }, projects), cwd, roles: seats });
     log(`team ${team.id} (${name}) launching ${resolved.length} seats in ${cwd}`);
-    const failed = await spawnSeats(team, resolved);
-    return failed ? { reason: failed, team: teams.get(team.id)! } : { team: teams.get(team.id)! };
+    const failures = [await spawnSeats(team, resolved), req.objective ? giveObjective(team.id, req.objective) : null].filter((r): r is string => !!r);
+    return failures.length ? { reason: failures.join(' ; '), team: teams.get(team.id)! } : { team: teams.get(team.id)! };
+  }
+  /**
+   * A launched team's objective (lot B): a task Ledge gives the `leader` seat's session, with the whole starting notice, kept on
+   * the team; every other seat that started is told to wait for its task. A lead that did not start gets nothing: the reason says so.
+   */
+  function giveObjective(id: string, objective: TeamObjective): string | null {
+    const team = teams.get(id)!;
+    // A seat's session as it started: one already ended (or never spawned) is not there to be told anything.
+    const sessionOf = (seat: Team['seats'][number]) => { const s = seat.sessionId ? store.get(seat.sessionId) : undefined; return s && s.state !== 'exited' ? s : undefined; };
+    const lead = team.seats.find(s => s.role === LEADER_ROLE);
+    const leader = lead && sessionOf(lead);
+    if (!leader) { log(`team ${id}: objective not given, its lead did not start`); return LEAD_NOT_STARTED; }
+    const others = team.seats.filter(s => s !== lead).flatMap(s => { const x = sessionOf(s); return x ? [{ role: s.role, session: x }] : []; });
+    const crew = others.length ? others.map(o => `@${o.role} (${o.session.name}, ${o.session.tool})`).join(', ') : "personne d'autre";
+    const task = tasks.giveObjective({ team, owner: leader, objective, notice: t => leadNotice(team, t.id, t.text!, crew) });
+    teams.setObjective(id, task.id);
+    for (const o of others) mailbox.notify(o.session.id, formatTeamNotice({ team: id, text: waitNotice(team, o.role, leader.name) }), `${id}:wait:${o.session.id}`);
+    return null;
   }
 
   /**
@@ -1516,7 +1535,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     if (teamCardsInFlight.has(qid)) return reply({ type: 'team.failed', rid, reason: 'lancement déjà en cours' });
     teamCardsInFlight.add(qid);
     try {
-      const r = await launchTeam({ cwd: p.cwd, ...(p.template ? { template: p.template } : { seats: p.seats.map(s => ({ role: s.role, tool: s.tool, ...(s.model ? { model: s.model } : {}), ...(s.effort ? { effort: s.effort } : {}), ...(s.name ? { name: s.name } : {}) })) }), name: p.name });
+      const r = await launchTeam({ cwd: p.cwd, ...(p.template ? { template: p.template } : { seats: p.seats.map(s => ({ role: s.role, tool: s.tool, ...(s.model ? { model: s.model } : {}), ...(s.effort ? { effort: s.effort } : {}), ...(s.name ? { name: s.name } : {}) })) }), name: p.name, ...(p.objective ? { objective: p.objective } : {}) });
       if ('reason' in r) {
         card.chat.markTeam(qid, { error: r.reason, ...(r.team ? { teamId: r.team.id, launchedAt: now() } : {}) }, card.emit);
         return reply({ type: 'team.failed', rid, reason: r.reason, ...(r.team ? { team: r.team } : {}) });
@@ -1869,7 +1888,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         // A client that holds no path (the phone) names the project: its first local repo is the folder.
         const cwd = msg.cwd ?? (msg.project ? await projectFolder(msg.project) : undefined);
         if (!cwd) return reply({ type: 'team.failed', rid: msg.rid, reason: msg.project && !msg.cwd ? 'aucun dossier local pour ce projet' : 'il faut un dossier' });
-        const r = await launchTeam({ cwd, ...(msg.template ? { template: msg.template } : {}), ...(msg.seats ? { seats: msg.seats } : {}), ...(msg.name ? { name: msg.name } : {}) });
+        const r = await launchTeam({ cwd, ...(msg.template ? { template: msg.template } : {}), ...(msg.seats ? { seats: msg.seats } : {}), ...(msg.name ? { name: msg.name } : {}), ...(msg.objective ? { objective: msg.objective } : {}) });
         return reply('reason' in r ? { type: 'team.failed', rid: msg.rid, reason: r.reason, ...(r.team ? { team: r.team } : {}) } : { type: 'team.launched', rid: msg.rid, team: r.team });
       }
       case 'team.join': {

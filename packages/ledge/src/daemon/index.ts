@@ -25,7 +25,9 @@ import { ensureLeaderRole } from './leader.js';
 
 export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket?: string } = {}): Promise<{ stop(): Promise<void>; port: number }> {
   await ensureLedgeDir();
-  if (ensureLeaderRole(join(ledgeDir(), 'roles'))) log('default leader role written (roles/leader.md)');
+  // An unwritable roles folder costs the default lead, never the daemon.
+  try { if (ensureLeaderRole(join(ledgeDir(), 'roles'))) log('default leader role written (roles/leader.md)'); }
+  catch (e) { log(`default leader role not written: ${(e as Error).message}`); }
   const store = new Store();
   const loaded = await store.load();
   const tmux = opts.tmux ?? realTmux(opts.tmuxSocket ?? 'ledge');

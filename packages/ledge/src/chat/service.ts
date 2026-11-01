@@ -257,6 +257,7 @@ export function createChat(deps: ChatDeps): Chat {
     const project = projects ? projectOf({ cwd }, projects) : null;
     const projectName = project ? projects!.projects.find(p => p.id === project)?.name : undefined;
     return { cwd, project: project ?? basename(cwd), ...(projectName ? { projectName } : {}), name: block.name ?? template?.name ?? basename(cwd), ...(template ? { template: template.id } : {}),
+      ...(block.objective ? { objective: block.objective } : {}),
       seats: resolved.map(r => ({ role: r.role.id, label: r.role.label, tool: r.tool, ...(r.model ? { model: r.model } : {}), ...(r.effort ? { effort: r.effort } : {}), ...(r.role.autonomy ? { autonomy: r.role.autonomy } : {}), ...(r.name ? { name: r.name } : {}) })) };
   }
   /** The task blocks as rows: a session id must be a live session Ledge launched; `@role` is kept as written (resolved at the click). */

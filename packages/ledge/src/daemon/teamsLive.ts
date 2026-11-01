@@ -33,6 +33,8 @@ export interface TeamsLive {
   /** The session goes back to its project's common table; its open tasks stay its own. */
   leave(team: string, session: string): Team | string;
   dissolve(team: string): Team | string;
+  /** The team's objective task, given to its lead at launch: kept on the team (`objectiveTask`) and told to the fronts. */
+  setObjective(team: string, task: string): Team;
   /**
    * A live team's new composition (spec 2026-10-28 mobile teams §3.6). The seats keep the given order; a kept role keeps its session and
    * takes the given `tool`/`model`/`effort`/`name`; an added role is a free seat. A removed role with a live session
@@ -194,6 +196,10 @@ export function createTeamsLive(d: TeamsLiveDeps): TeamsLive {
       const at = now();
       log(`team ${t.id} (${t.name}) dissolved`);
       return put({ ...t, state: 'dissolved', dissolvedAt: at });
+    },
+    setObjective(id, task) {
+      const t = teams.get(id); if (!t) throw new Error(`unknown team ${id}`);
+      return put({ ...t, objectiveTask: task });
     },
     compose(id, given) {
       const t = teams.get(id); if (!t) return `aucune équipe ${id}`;
