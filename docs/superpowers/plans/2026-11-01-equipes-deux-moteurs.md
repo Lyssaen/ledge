@@ -95,6 +95,9 @@ Chaque lot a son propre plan détaillé, écrit au début du lot : le code dont 
   - Textes visibles « Rigs » → « Équipes » sur Desktop, le TUI et le téléphone.
   - Les équipes Ledge s'affichent dans les écrans de Joffrey : carte, section de barre latérale, fil, Bureaux.
   - La salle technique devient la salle du moteur actif : plaque « Équipes · Ledge » ou « Équipes · OpenRig », une baie par machine.
+  - Reports du lot A, à traiter ici :
+    - Les tables d'équipe Ledge apparaissent dans les Bureaux par défaut (`OfficeFloor`). Au lot A, elles ne vivent que dans l'Atelier « legacy ».
+    - Le téléphone en mode OpenRig donne un accès aux écrans d'équipe (onglet ou entrée depuis Projets). Au lot A, seuls les liens `#/live/<id>` y mènent.
   - Les écrans de `main` que l'interface de Joffrey couvre (affichage et lancement d'équipe, onglets Équipes et Tâches) sont retirés. Ceux qu'elle ne couvre pas restent, isolés et branchés sur la couche commune : éditeurs de modèles et de rôles, propositions d'équipe du chat, ajout ou retrait de sièges, rejoindre, quitter, reprendre. L'éditeur de modèle affiche la règle « exactement un lead ».
 - **Livrable** : une seule interface d'équipes, identique selon le moteur.
 - **Dépend de** : D, et E pour les escalades.
