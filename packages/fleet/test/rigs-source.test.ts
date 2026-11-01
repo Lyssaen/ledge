@@ -113,6 +113,120 @@ describe('rigs from every machine', () => {
   });
 });
 
+const fleetSnap = { ...snap, daemon: { ...(snap as Extract<ServerMessage, { type: 'snapshot' }>).daemon!, openrigFleet: true } } as ServerMessage;
+/** Local daemon announcing `openrigFleet` (lot 6): it relays the remote machines' rigs with their real machine. */
+function setupFleet() {
+  const s = setup(); s.local.emit(fleetSnap); return s;
+}
+const rigSent = (p: ReturnType<typeof peer>) => p.sent.filter(m => /^(rig\.|escalation\.)/.test(String(m.type)));
+
+describe('rigs from the aggregating local daemon (openrigFleet)', () => {
+  it('Review Focus 5: a remote rig seen through both peers appears once, with its real machine', () => {
+    const { api, local, ec2 } = setupFleet();
+    local.emit({ type: 'rig.snapshot', machine: 'ec2', rigs: [rig('r1', { machine: 'ec2' })] });
+    ec2.emit({ type: 'rig.snapshot', machine: 'local', rigs: [rig('r1')] });
+    expect(api.fleet!.rigs().map(r => [r.machine, r.id])).toEqual([['ec2', 'r1']]);
+    expect(api.fleet!.rigs()[0]!.seats[0]!.sessionId).toBe('ec2:ab12');
+  });
+
+  it('Review Focus 5: rig.act to a remote machine goes to the local peer, machine kept; without openrigFleet it goes to the machine as local', () => {
+    const f = setupFleet();
+    f.api.send({ type: 'rig.act', rid: 'a1', machine: 'ec2', rigId: 'r1', action: 'stop' } as never);
+    expect(rigSent(f.local)).toEqual([{ type: 'rig.act', rid: 'a1', machine: 'ec2', rigId: 'r1', action: 'stop' }]);
+    expect(rigSent(f.ec2)).toEqual([]);
+    const o = setup();
+    o.api.send({ type: 'rig.act', rid: 'a1', machine: 'ec2', rigId: 'r1', action: 'stop' } as never);
+    expect(rigSent(o.ec2)).toEqual([{ type: 'rig.act', rid: 'a1', machine: 'local', rigId: 'r1', action: 'stop' }]);
+    expect(rigSent(o.local)).toEqual([]);
+  });
+
+  it('ignores rig.*, escalation.* and openrig.status of remote peers; forgets what they gave before the announcement', () => {
+    const { api, local, ec2 } = setup();
+    ec2.emit({ type: 'openrig.status', status: { machine: 'local', state: 'running' } });
+    ec2.emit({ type: 'rig.updated', rig: rig('r9') });
+    ec2.emit({ type: 'escalation.updated', escalation: esc('q9') });
+    expect(api.fleet!.rigs()).toHaveLength(1);
+    local.emit(fleetSnap);
+    expect([api.fleet!.rigs(), api.fleet!.escalations(), api.fleet!.openrig()]).toEqual([[], [], []]);
+    ec2.emit({ type: 'openrig.status', status: { machine: 'local', state: 'stopped' } });
+    ec2.emit({ type: 'rig.updated', rig: rig('r9') });
+    ec2.emit({ type: 'escalation.updated', escalation: esc('q9') });
+    ec2.emit({ type: 'rig.exchanges', machine: 'local', rigId: 'r9', items: [exch('e1')] });
+    expect([api.fleet!.rigs(), api.fleet!.escalations(), api.fleet!.openrig()]).toEqual([[], [], []]);
+    expect(api.fleet!.exchanges('ec2', 'r9')).toBeNull();
+    local.emit({ type: 'openrig.status', status: { machine: 'ec2', state: 'running' } });
+    local.emit({ type: 'escalation.updated', escalation: esc('q9', { machine: 'ec2' }) });
+    expect(api.fleet!.openrig()).toEqual([{ machine: 'ec2', state: 'running' }]);
+    expect(api.fleet!.escalations().map(e => [e.machine, e.id])).toEqual([['ec2', 'q9']]);
+  });
+
+  it('every rig command, sendTo(rig.launch) and requestExchanges go to the local peer without rewriting machine', () => {
+    const { api, local, ec2 } = setupFleet();
+    api.send({ type: 'rig.prepare', rid: 'p1', machine: 'ec2', spec: 's', goal: 'g', where: { kind: 'off', cwd: '/w' } } as never);
+    api.send({ type: 'rig.send', rid: 's1', machine: 'ec2', rigId: 'r1', to: '@dev', text: 'hi' } as never);
+    api.send({ type: 'rig.exchanges.request', machine: 'ec2', rigId: 'r1' });
+    api.send({ type: 'escalation.answer', rid: 'q1', id: 'q1', text: 'yes' } as never);
+    expect(api.fleet!.sendTo('ec2', { type: 'rig.launch', rid: 'l1', planId: 'pl1' })).toBe(true);
+    expect(api.fleet!.requestExchanges('ec2', 'r2')).toBe(true);
+    expect(rigSent(local).map(m => [m.type, m.machine])).toEqual([['rig.prepare', 'ec2'], ['rig.send', 'ec2'], ['rig.exchanges.request', 'ec2'], ['escalation.answer', undefined], ['rig.launch', undefined], ['rig.exchanges.request', 'ec2']]);
+    expect(rigSent(ec2)).toEqual([]);
+    // Another message sent with sendTo keeps its machine (a daemon update goes to that daemon).
+    api.fleet!.sendTo('ec2', { type: 'update.daemon' } as never);
+    expect(ec2.sent.map(m => m.type)).toContain('update.daemon');
+  });
+
+  it('the local peer answers for a remote machine even when that machine\'s own peer is down', () => {
+    const { api, local, ec2 } = setupFleet();
+    ec2.set('unreachable');
+    expect(api.fleet!.sendTo('ec2', { type: 'rig.launch', rid: 'l1', planId: 'pl1' })).toBe(true);
+    expect(api.fleet!.requestExchanges('ec2', 'r1')).toBe(true);
+    expect(rigSent(local).map(m => m.type)).toEqual(['rig.launch', 'rig.exchanges.request']);
+    local.set('unreachable');
+    expect(api.fleet!.sendTo('ec2', { type: 'rig.launch', rid: 'l2', planId: 'pl1' })).toBe(false);
+    expect(api.fleet!.requestExchanges('ec2', 'r1')).toBe(false);
+  });
+
+  it('without openrigFleet, sendTo(rig.launch) and requestExchanges keep lot 2 routing', () => {
+    const { api, local, ec2 } = setup();
+    api.fleet!.sendTo('ec2', { type: 'rig.launch', rid: 'l1', planId: 'pl1' });
+    expect(rigSent(ec2)).toEqual([{ type: 'rig.launch', rid: 'l1', planId: 'pl1' }]);
+    expect(rigSent(local)).toEqual([]);
+  });
+
+  it('a new snapshot or a drop of the local peer covers the remote rigs, escalations and statuses it relayed', () => {
+    const { api, local, ec2 } = setupFleet();
+    const relay = () => {
+      local.emit({ type: 'openrig.status', status: { machine: 'ec2', state: 'running' } });
+      local.emit({ type: 'rig.snapshot', machine: 'ec2', rigs: [rig('r1', { machine: 'ec2' })] });
+      local.emit({ type: 'escalation.updated', escalation: esc('q1', { machine: 'ec2' }) });
+    };
+    relay();
+    // The direct ec2 peer falling says nothing of what the local daemon relays.
+    ec2.set('unreachable');
+    expect(api.fleet!.rigs()[0]!.lifecycle).toBe('running');
+    expect(api.fleet!.openrig()[0]!.state).toBe('running');
+    local.set('unreachable');
+    expect(api.fleet!.rigs().map(r => [r.machine, r.lifecycle])).toEqual([['ec2', 'unreachable']]);
+    expect(api.fleet!.openrig()).toEqual([{ machine: 'ec2', state: 'unreachable' }]);
+    expect(api.fleet!.escalations()).toHaveLength(1);
+    local.set('open'); local.emit(fleetSnap);
+    expect([api.fleet!.rigs(), api.fleet!.escalations(), api.fleet!.openrig()]).toEqual([[], [], []]);
+  });
+
+  it('a machine removed from the list loses its rigs, escalations and status', () => {
+    const { api, local } = setupFleet();
+    local.emit({ type: 'openrig.status', status: { machine: 'local', state: 'running' } });
+    local.emit({ type: 'openrig.status', status: { machine: 'ec2', state: 'running' } });
+    local.emit({ type: 'rig.snapshot', machine: 'ec2', rigs: [rig('r1', { machine: 'ec2' })] });
+    local.emit({ type: 'rig.updated', rig: rig('r2') });
+    local.emit({ type: 'escalation.updated', escalation: esc('q1', { machine: 'ec2' }) });
+    api.fleet!.configure([{ id: 'local', label: 'Local' }]);
+    expect(api.fleet!.openrig().map(s => s.machine)).toEqual(['local']);
+    expect(api.fleet!.rigs().map(r => `${r.machine}/${r.id}`)).toEqual(['local/r2']);
+    expect(api.fleet!.escalations()).toEqual([]);
+  });
+});
+
 describe('same (rig book equality)', () => {
   it('ignores key order and undefined fields, sees real changes', async () => {
     const { same } = await import('../src/rigs');

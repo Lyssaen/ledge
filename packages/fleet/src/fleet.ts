@@ -12,6 +12,8 @@ type Binding = { machine: string; raw: string };
 const OPERATIONS: ReadonlySet<string> = new Set(['session.launch', 'session.relay', 'session.relay.cancel', 'session.close']);
 /** How long an `ask.answer` waits for its `ask.result`. */
 const ANSWER_MS = 4000;
+/** The rig commands an aggregating local daemon (`DaemonInfo.openrigFleet`, lot 6) routes to their machine itself: sent to it, machine kept. */
+const RIG_COMMANDS: ReadonlySet<string> = new Set(['rig.act', 'rig.prepare', 'rig.launch', 'rig.send', 'rig.exchanges.request', 'escalation.answer']);
 type PendingRoute = { qid: string; text: string; tool?: Tool; images?: ImageUpload[]; coordinator: string };
 
 export interface FleetOptions {
@@ -179,12 +181,16 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     for (const [id, p] of peers) if (!next.some(c => c.id === id && c.url === p.config.url && c.ssh === p.config.ssh)) { p.client.close(); p.off.forEach(off => off()); peers.delete(id); }
     configs = next;
     for (const c of configs) { const p = peers.get(c.id); if (p) p.config = c; else add(c); }
+    // A machine gone from the list takes its rigs, escalations and OpenRig status with it (the aggregating daemon sends no removal for its status).
+    book.prune(configs.map(c => c.id));
     if (!peers.has(selected)) selected = 'local';
     // Daemon-sourced bindings are kept through the restore (the list is unknown until the daemon speaks), then pruned against the confirmed list.
     const gone = source === 'daemon' ? [...bindings].filter(([, b]) => !configs.some(c => c.id === b.machine)) : [];
     for (const [qid] of gone) bindings.delete(qid);
     configuring = false; publish(); if (gone.length) history();
   }
+  /** The local daemon aggregates the rigs of its remote machines (lot 6): rigs come from it, rig commands go to it. */
+  function relayed(): boolean { return peers.get('local')?.snapshot?.daemon?.openrigFleet === true; }
   function receive(p: Peer, m: ServerMessage) {
     const machine = p.config.id;
     // The daemon's machine list is consumed here, never relayed; from anyone else (or with the option off) it is ignored.
@@ -224,7 +230,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     if (m.type === 'ask.result') { const a = askAnswers.get(m.rid); if (a?.machine === machine) a.settle(m.ask ? { ok: true } : { ok: false, reason: m.reason ?? 'refusée' }); return; }
     // A daemon that does not know `ask.answer` says so: the answer was not taken.
     if (m.type === 'error' && m.request === 'ask.answer') { for (const a of [...askAnswers.values()]) if (a.machine === machine) a.settle({ ok: false, reason: m.message }); return; }
-    if (isRigMessage(m)) { if (book.apply(machine, m)) listeners.forEach(fn => fn()); return; }
+    // With an aggregating local daemon every rig comes from it, with its real machine: a remote peer's own would show it twice.
+    if (isRigMessage(m)) { if (machine !== 'local' && relayed()) return; if (book.apply(machine, m)) listeners.forEach(fn => fn()); return; }
     // Mobile access is the local daemon's alone (its relay session and approved devices): a remote machine's is ignored.
     if (m.type === 'mobile') {
       if (machine !== 'local') return;
@@ -237,7 +244,10 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     if (m.type === 'update.failed') p.restarting = false;
     if (m.type === 'snapshot') {
       if (p.config.ssh && m.sshAlias !== p.config.ssh) { p.error = 'Update the local Ledge daemon: SSH transport is unavailable'; p.client.close(); publish(); return; }
-      book.reset(machine); p.snapshot = m; p.fresh = true; p.error = undefined; p.restarting = false; p.previews.clear(); publish(); return;
+      book.reset(machine);
+      // The local daemon now aggregates: what remote peers gave directly is forgotten, the local replay brings it back.
+      if (machine === 'local' && m.daemon?.openrigFleet) for (const id of peers.keys()) if (id !== 'local') book.reset(id);
+      p.snapshot = m; p.fresh = true; p.error = undefined; p.restarting = false; p.previews.clear(); publish(); return;
     }
     // A session's traffic is relayed as it came, qualified; a peer without a snapshot yet has nothing to relay against.
     if (m.type === 'session.updated') { if (p.snapshot) p.snapshot = { ...p.snapshot, sessions: [...p.snapshot.sessions.filter(s => s.id !== m.session.id), m.session] }; if (available(p)) emit({ type: 'session.updated', session: session(p, m.session) }); refresh(); return; }
@@ -437,11 +447,13 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
           listings.set(msg.requestId, { machine, path: msg.parent, created: `${msg.parent === '/' ? '' : msg.parent}/${msg.name.trim()}` });
         }
       }
-      if (msg.type === 'rig.exchanges.request') { machine = msg.machine; outgoing = { ...msg, machine: 'local' }; }
-      if (msg.type === 'rig.send') { machine = msg.machine; outgoing = { ...msg, machine: 'local' }; }
-      // A rig action, a launch plan and a filing go to the rig's machine, whose daemon calls itself 'local'. `rig.launch` names no machine:
-      // its sender sends it with `sendTo` to the machine that made the plan.
-      if (msg.type === 'rig.act' || msg.type === 'rig.prepare' || msg.type === 'rig.adopt') { machine = msg.machine; outgoing = { ...msg, machine: 'local' }; }
+      // A rig action, a launch plan, a message, an exchanges request and a filing go to the rig's machine, whose daemon calls itself 'local'.
+      // `rig.launch` names no machine: its sender sends it with `sendTo` to the machine that made the plan. An aggregating local daemon
+      // (openrigFleet) routes the rig commands itself: they go to it as they are (a filing stays with the rig's machine: projects are local).
+      if (msg.type === 'rig.exchanges.request' || msg.type === 'rig.send' || msg.type === 'rig.act' || msg.type === 'rig.prepare' || msg.type === 'rig.adopt') {
+        if (relayed() && RIG_COMMANDS.has(msg.type)) { machine = 'local'; outgoing = msg; } else { machine = msg.machine; outgoing = { ...msg, machine: 'local' }; }
+      }
+      if (msg.type === 'rig.launch' && relayed()) machine = 'local';
       // The Ledge thread and the escalation answers live with the brain's daemon (local), never the selected machine.
       if (msg.type === 'ledge.say' || msg.type === 'ledge.thread.request' || msg.type === 'escalation.answer') machine = 'local';
       // So do the mandate, the memory and the brain itself (lot 7, C25).
@@ -492,7 +504,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       turnMachine(qid) { return state.find(m => m.id === bindings.get(qid)?.machine); },
       documentMachine(id) { return splitId(id)?.machine; },
       localSnapshot: () => peers.get('local')?.snapshot ?? null,
-      sendTo(machine, msg) { const p = peers.get(machine); if (!available(p)) return false; p!.client.send(msg); return true; },
+      sendTo(machine, msg) { const p = peers.get(relayed() && RIG_COMMANDS.has(msg.type) ? 'local' : machine); if (!available(p)) return false; p!.client.send(msg); return true; },
       onMachineMessage(fn) { machineMessages.add(fn); return () => { machineMessages.delete(fn); }; },
       projects: () => projects,
       setProjects(next) {
@@ -515,7 +527,12 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       mobileError: () => mobileError,
       asks: () => askList,
       rigs: () => book.rigs(), escalations: () => book.escalations(), openrig: () => book.statuses(), exchanges: (machine, rigId) => book.exchanges(machine, rigId),
-      requestExchanges(machine, rigId) { const p = peers.get(machine); if (!available(p)) return false; p!.client.send({ type: 'rig.exchanges.request', machine: 'local', rigId }); return true; },
+      requestExchanges(machine, rigId) {
+        // Through an aggregating local daemon, as is; else to the machine's own daemon, which calls itself 'local'.
+        const fleet = relayed(), p = peers.get(fleet ? 'local' : machine);
+        if (!available(p) || !peers.has(machine)) return false;
+        p!.client.send({ type: 'rig.exchanges.request', machine: fleet ? machine : 'local', rigId }); return true;
+      },
       answerAsk(machine, id, text) {
         const p = peers.get(machine);
         if (!available(p)) return Promise.resolve({ ok: false, reason: 'hors ligne' });

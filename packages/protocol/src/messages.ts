@@ -89,7 +89,8 @@ export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(
   /** Its home folder, so a client shows the folders under it as `~` (absent from older daemons). */ home: z.string().optional(), mobile: z.boolean().optional(),
   /** Knows `ask.create` / `ask.answer`: a session's decision for the user (`ledge ask`). */ asks: z.boolean().optional(),
   /** Reads OpenRig (rigs, escalations, exchanges) through its local bridge. */ openrig: z.boolean().optional(),
-  /** Takes `session.preview.subscribe` and sends `session.preview.color` to the client that follows a session. */ colorPreview: z.boolean().optional() });
+  /** Takes color-preview subscriptions. */ colorPreview: z.boolean().optional(),
+  /** Relays rigs of remote machines. */ openrigFleet: z.boolean().optional() });
 export type DaemonInfo = z.infer<typeof DaemonInfoSchema>;
 export const UpdateFailureSchema = z.enum(['git-install', 'no-systemd', 'sessions-at-risk', 'npm-failed', 'busy']);
 export type UpdateFailure = z.infer<typeof UpdateFailureSchema>;

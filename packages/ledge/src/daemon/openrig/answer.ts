@@ -36,6 +36,8 @@ export interface AnswerPort {
   http(): Pick<OpenRigHttp, 'action'> | null;
   replyRow(id: string): string | undefined;
   setReplyRow(id: string, row: string): void;
+  /** The human queue was read once (absent: assumed read). */
+  humanRead?(): boolean;
 }
 export interface AnswersDeps {
   port: AnswerPort;
@@ -213,7 +215,8 @@ export function createAnswers(d: AnswersDeps): Answers {
     correct,
     async answer(id, answers, by, o) {
       const e = d.port.escalation(id);
-      if (!e) return refuse('failed', `aucune escalade ${id}`);
+      // An unread remote queue is not a definite unknown escalation.
+      if (!e) return !id.startsWith('ask-') && d.port.humanRead?.() === false ? refuse('openrig_down', "les escalades d'OpenRig ne sont pas encore lues") : refuse('failed', `aucune escalade ${id}`);
       if (e.correcting) return by === 'user' ? correct(id, answers) : refuse('already_answered', "l'utilisateur revient sur cette décision");
       // Check and mark, synchronously (no await before inFlight.add): the first answer wins, whatever a later one holds.
       if (inFlight.has(id) || e.state === 'answered' || e.state === 'closed') return refuse('already_answered', 'déjà répondue');
