@@ -67,7 +67,10 @@ export function Agents({ store, onReconnect }: { store: MobileStore; onReconnect
   const sessions = state.openrig ? loneSessions(allSessions) : allSessions;
   const groups = agentsOf(state.openrig ? sessions.map(s => ({ ...s, repo: undefined })) : sessions);
   const rigs = [...state.rigs.values()];
-  if (state.openrig) for (const rig of rigs) if (rig.project && !groups.some(g => g.label === rig.project)) groups.push({ label: rig.project, rows: [] });
+  if (state.openrig) {
+    for (const project of state.projects) if (!groups.some(g => g.label === project.name)) groups.push({ label: project.name, rows: [] });
+    for (const rig of rigs) if (rig.project && !groups.some(g => g.label === rig.project)) groups.push({ label: rig.project, rows: [] });
+  }
   const closing = new Set(sessions.filter(s => closingHere(s, state.ops, now)).map(s => s.id));
   const offline = !state.fresh;
   const subtitle = offline ? copy.agents.offline : state.openrig ? `${sessions.length} sessions seules · ${groups.length} projets sur ce PC` : copy.agents.subtitle(sessions.length, groups.length);

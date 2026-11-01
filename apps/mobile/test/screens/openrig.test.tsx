@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { PhoneEscalation } from '@ledge/protocol';
 import { Inbox } from '../../src/screens/Inbox';
+import { Agents } from '../../src/screens/Agents';
 import { EscalationPage, LedgeThread, NewRig, Rigs } from '../../src/screens/OpenRig';
 import { setup } from './setup';
 import { snapshot } from '../state/helpers';
@@ -12,6 +13,7 @@ describe('OpenRig screens', () => {
  it('shows and links a rig', () => { const t = setup(); t.deliver(initial()); render(<Rigs store={t.store} />); expect(screen.getByRole('link', { name: /factory/ })).toHaveAttribute('href', '#/rig/abc/seats'); });
  it('shows the pending escalation in À toi and filters it by source', () => { const t = setup(); t.deliver(initial()); render(<Inbox store={t.store} />); expect(screen.getByText(/1 décision\./)).toBeInTheDocument(); expect(screen.getByRole('link', { name: /Choisir/ })).toBeInTheDocument(); fireEvent.click(screen.getByRole('button', { name: 'Sessions' })); expect(screen.queryByRole('link', { name: /Choisir/ })).not.toBeInTheDocument(); fireEvent.click(screen.getByRole('button', { name: 'Via Ledge' })); expect(screen.getByRole('link', { name: /Choisir/ })).toBeInTheDocument(); });
  it('opens Le point and asks Ledge to summarize the day', () => { const t = setup(); t.deliver(initial()); render(<LedgeThread store={t.store} />); fireEvent.click(screen.getByRole('button', { name: 'Tranché 0' })); expect(screen.getByRole('dialog', { name: 'Le point' })).toBeInTheDocument(); fireEvent.click(screen.getByRole('button', { name: 'Résumer la journée' })); expect(t.of('ledge.say')).toMatchObject([{ text: 'Résume ma journée.' }]); });
+ it('lists a configured project with no active session', () => { const t = setup(); t.deliver({ ...initial(), projects: [{ id: 'website', name: 'Website', hasLocalRepo: true }] }); render(<Agents store={t.store} />); expect(screen.getByRole('region', { name: 'Website' })).toBeInTheDocument(); });
  it('offers a project even when it has no active rig', () => { const t = setup(); t.deliver({ ...initial(), projects: [{ id: 'website', name: 'Website', hasLocalRepo: true }] }); render(<NewRig store={t.store} />); expect(screen.getByRole('option', { name: 'Website' })).toHaveValue('website'); });
  it('sends all answers together without a passkey', () => { const t = setup(); t.deliver(initial()); render(<EscalationPage store={t.store} id="e1" />); const send = screen.getByRole('button', { name: 'Envoyer la réponse' }); expect(send).toBeDisabled(); fireEvent.click(screen.getByLabelText('SQLite')); fireEvent.click(screen.getByLabelText('Oui')); fireEvent.click(send); expect(t.of('escalation.answer')).toMatchObject([{ id: 'e1', answers: { q1: 'x', q2: 'a' } }]); expect(t.of('confirm.prepare')).toEqual([]); });
 });
