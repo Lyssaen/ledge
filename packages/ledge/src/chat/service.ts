@@ -20,6 +20,7 @@ import { runCodex } from './codex.js';
 import { runCursor } from './cursor.js';
 import { runOmp } from './omp.js';
 import { actionsFor, buildPersona } from './persona.js';
+import { actionAllowed } from '../daemon/engine/guard.js';
 import { log } from '../log.js';
 
 export type ChatMessage = Extract<ServerMessage, { type: 'chat.history' | 'chat.step' | 'chat.delta' | 'chat.done' | 'chat.error' }>;
@@ -356,10 +357,14 @@ export function createChat(deps: ChatDeps): Chat {
     const { text: answerText, blocks: found } = extractProposal(answer);
     // A ledge-action block for an earlier card is read as that card's fence; the generic ones never decide which earlier card the turn gets.
     const blocks: Array<{ kind: BlockKind; raw: string }> = []; const generic: Array<{ id: string; args: unknown; max: number }> = []; let unreadable = 0;
+    // The engine in force now (it may have changed since the question): an action it does not run gets no card, as the daemon would refuse it.
+    const engine = deps.engine?.(); const offEngine: string[] = [];
+    const off = (id: string) => { if (!engine || actionAllowed(engine, id)) return false; log(`chat ${turn.qid}: action ignored: ${id} is off under the ${engine} teams engine`); offEngine.push(id); return true; };
     for (const b of found) {
-      if (b.kind !== 'action') { blocks.push(b); continue; }
+      if (b.kind !== 'action') { if (!off(LEGACY_FENCE_ACTION[b.kind])) blocks.push(b); continue; }
       const r = parseActionBlock('action', b.raw);
       if ('error' in r) { log(`chat ${turn.qid}: action ignored: ${r.error}`); unreadable++; continue; }
+      if (off(r.action.id)) continue;
       if (r.action.card === 'generic') generic.push({ id: r.action.id, args: r.args, max: r.action.max });
       else blocks.push({ kind: FENCE_OF.get(r.action.id)!, raw: JSON.stringify(r.args) });
     }
@@ -384,7 +389,8 @@ export function createChat(deps: ChatDeps): Chat {
     const { rows: actions, reasons, counted } = actionsFrom(generic, turn.qid, new Set(closes.map(c => c.id)));
     // A block the card does not take is said under the answer: the reader never counts on a step that is not there.
     const kept = proposals.length + (relay ? 1 : 0) + closes.length + (projectProposal ? 1 : 0) + (team ? 1 : 0) + tasks.length + actions.length;
-    const note = droppedNote(found.length, kept, [...reasons, ...(unreadable > 0 ? [`${unreadable} illisible${unreadable > 1 ? 's' : ''}`] : [])], counted + unreadable);
+    const engineOff = offEngine.length > 0 ? [`${offEngine.length} coupée${offEngine.length > 1 ? 's' : ''} par le moteur d'équipes : ${[...new Set(offEngine)].join(', ')}`] : [];
+    const note = droppedNote(found.length, kept, [...reasons, ...engineOff, ...(unreadable > 0 ? [`${unreadable} illisible${unreadable > 1 ? 's' : ''}`] : [])], counted + offEngine.length + unreadable);
     const text = note ? (answerText ? `${answerText}\n\n${note}` : note) : answerText;
     turn.answer = text; turn.answeredAt = now();
     if (proposal) { turn.proposal = proposal; turn.proposals = proposals; }

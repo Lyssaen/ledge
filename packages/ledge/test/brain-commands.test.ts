@@ -16,6 +16,7 @@ import { sessionKey } from '../src/auth.js';
 import type { Tmux } from '../src/tmux.js';
 import { createFakeOpenRig, fakeRigCli, type FakeOpenRig, type FakeRig } from './fakes/openrig.js';
 import { authHeaders, until, openrigEngine } from './helpers.js';
+import { ENGINE_LEDGE } from '../src/daemon/engine/guard.js';
 
 const T0 = Date.parse('2026-10-31T10:00:00.000Z');
 const HOUR = 3_600_000;
@@ -98,6 +99,20 @@ describe('createBrainCommands', () => {
     const off = make({ deciding: null });
     expect(await off.run({ op: 'decide', id: 'qi-1', answers: { q1: 'a' }, category: 'git' })).toMatchObject({ ok: false, code: 'unreachable', line: expect.stringMatching(/OpenRig/) });
     expect(await off.run({ op: 'ask', id: 'qi-1', advice: 'a' })).toMatchObject({ ok: false, code: 'unreachable' });
+  });
+
+  test('under the Ledge engine, rig up/down/restart/handover and propose rig-launch fail with ENGINE_LEDGE: nothing reaches OpenRig, no card', async () => {
+    const cmds = make({ rigsOff: () => ENGINE_LEDGE });
+    const u = userItem();
+    const off = { ok: false, code: 'refused', line: ENGINE_LEDGE };
+    expect(await cmds.run({ op: 'rig', verb: 'down', rig: 'factory', because: u })).toEqual(off);
+    expect(await cmds.run({ op: 'rig', verb: 'restart', seat: '@build' })).toEqual(off);
+    expect(await cmds.run({ op: 'rig', verb: 'handover', seat: '@nobody' })).toEqual(off);
+    expect(await cmds.run({ op: 'rig', verb: 'up', spec: 'factory', goal: 'G', because: u })).toEqual(off);
+    expect(await cmds.run({ op: 'propose', rigLaunch: { goal: 'G', off: 'essai' } })).toEqual(off);
+    expect(rigActs).toEqual([]); expect(prepares).toEqual([]); expect(posted).toEqual([]);
+    // The user item was not used up: the same one still authorises a down once the rigs are on again.
+    expect(await make().run({ op: 'rig', verb: 'down', rig: 'factory', because: u })).toMatchObject({ ok: true });
   });
 
   test('rig down without --because is refused', async () => {
@@ -239,14 +254,15 @@ describe('brain.cmd through the daemon', () => {
   let store: Store; let ws: WebSocket; let home: string; let tmux: Tmux; let msgs: ServerMessage[];
   beforeEach(async () => {
     saved = Object.fromEntries(VARS.map(k => [k, process.env[k]]));
-    home = mkdtempSync(join(tmpdir(), 'ledge-brain-srv-')); process.env.LEDGE_HOME = home; openrigEngine();
+    const ledgeEngine = expect.getState().currentTestName?.includes('[Ledge engine]') === true;
+    home = mkdtempSync(join(tmpdir(), 'ledge-brain-srv-')); process.env.LEDGE_HOME = home; if (!ledgeEngine) openrigEngine();
     store = new Store(); tmux = fakeTmux();
     fake = await createFakeOpenRig(); fake.rigs.push(starter()); fake.humans.push('ledge'); fake.queue.push(humanRow('E1'));
     bridge = createBridge({ env: async () => ({ OPENRIG_PORT: String(fake!.port) }), exec: fakeRigCli(fake), projects: () => ({ version: 1, projects: [], rules: [] }) as unknown as Projects, home, file: join(home, 'openrig.json'),
       asks: { all: () => srv!.asks.all(), onChange: f => srv!.asks.onChange(f) }, sessionName: id => store.get(id)?.name, probeMs: 20, outboxMs: 30, resyncMs: 50 });
     srv = await startServer({ store, tmux, port: 0, home, agentEnv: async () => ({ ...process.env }), openrig: bridge });
     await bridge.start();
-    await until(() => bridge!.status().state === 'running' && bridge!.escalations().length === 1);
+    await until(() => bridge!.status().state === 'running' && (ledgeEngine || bridge!.escalations().length === 1));
     const at = new Date().toISOString();
     for (const [id, name, extra] of [['brain', 'Ledge', { brain: true }], ['otto', 'Otto', {}], ['old', 'Ledge', { brain: true, archivedAt: at, state: 'exited' }]] as const) {
       await tmux.newSession({ name: `ledge-${id}` } as never);
@@ -273,6 +289,16 @@ describe('brain.cmd through the daemon', () => {
   };
   const threadItems = () => msgs.filter(m => m.type === 'ledge.thread.item').length;
   const actionPosts = () => fake!.requests.filter(r => r.method === 'POST').length;
+
+  test('[Ledge engine] the brain\'s rig commands and propose rig-launch fail with ENGINE_LEDGE, not « Aucun agent »', async () => {
+    const posts = actionPosts();
+    expect(await cmd('brain', sessionKey('brain'), 'rig', ['restart', '@build'])).toMatchObject({ ok: false, code: 'refused', line: ENGINE_LEDGE });
+    expect(await cmd('brain', sessionKey('brain'), 'rig', ['handover', '@build'])).toMatchObject({ ok: false, code: 'refused', line: ENGINE_LEDGE });
+    expect(await cmd('brain', sessionKey('brain'), 'rig', ['down', 'starter', '--because', 'u-1'])).toMatchObject({ ok: false, code: 'refused', line: ENGINE_LEDGE });
+    expect(await cmd('brain', sessionKey('brain'), 'propose', ['rig-launch', '--goal', 'G', '--off-project', 'essai'])).toMatchObject({ ok: false, code: 'refused', line: ENGINE_LEDGE });
+    expect(actionPosts()).toBe(posts);
+    expect(msgs.some(m => m.type === 'chat.history' && m.turns.some(t => t.rigLaunch))).toBe(false);
+  });
 
   test('brain.cmd from a non-brain session is refused', async () => {
     const before = threadItems(); const posts = actionPosts();

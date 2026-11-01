@@ -160,6 +160,8 @@ export interface BrainCommandDeps {
   rigAct: (msg: RigActMsg) => Promise<RigResult>;
   /** The brain's relief brief (`ledge brain handover`), handed to the reliefs as `ledge handover` would (daemon/handover.ts): null once taken, else why not. */
   handover?: (by: string, text: string) => string | null;
+  /** Why the rigs are off (the Ledge teams engine: its text), or null: `rig …` and `propose rig` then fail with it. */
+  rigsOff?: () => string | null;
   /** The daemon's `rig.prepare` handler, without keeping the plan. */
   rigPrepare: (msg: RigPrepareMsg) => Promise<RigPlan | { code: RigResultCode; reason: string }>;
   now?: () => number;
@@ -257,6 +259,7 @@ export function createBrainCommands(d: BrainCommandDeps): { run(call: BrainCall,
         if (!d.deciding) return fail('unreachable', OPENRIG_OFF);
         return d.deciding.ask(c.id, c.category, c.advice);
       case 'rig': {
+        { const off = d.rigsOff?.(); if (off) return fail('refused', off); }
         if (c.verb === 'restart' || c.verb === 'handover') {
           const t = seatOf(c.seat); if (!t.ok) return fail('invalid', t.reason);
           const r = await d.rigAct({ type: 'rig.act', rid: uuid(), machine: t.rig.machine, seatRef: t.seat.ref, verb: c.verb });
@@ -286,7 +289,10 @@ export function createBrainCommands(d: BrainCommandDeps): { run(call: BrainCall,
         return r.ok ? { ok: true, line: `Envoyé à ${r.to}.` } : fail('failed', r.reason);
       }
       case 'propose': {
-        if ('rigLaunch' in c) return launchCard(c.rigLaunch).catch(e => fail('failed', `Pas fait : ${(e as Error).message}.`));
+        if ('rigLaunch' in c) {
+          const off = d.rigsOff?.(); if (off) return fail('refused', off);
+          return launchCard(c.rigLaunch).catch(e => fail('failed', `Pas fait : ${(e as Error).message}.`));
+        }
         // The brain proposes session actions: no team, task or role is in its reach (Ledge teams are the user's and the chat's).
         const row = resolveRun(c.action, c.args, { sessions: d.sessions(), teams: [], tasks: [], findRole: () => undefined });
         if ('refused' in row) return fail('invalid', `Proposition refusée : ${row.refused}.`);

@@ -11,7 +11,7 @@ import { Store } from '../src/daemon/store.js';
 import { startServer, type ServerHandle } from '../src/daemon/server.js';
 import type { Tmux } from '../src/tmux.js';
 import { createFakeOpenRig, fakeRigCli, type FakeOpenRig } from './fakes/openrig.js';
-import { authHeaders, until } from './helpers.js';
+import { authHeaders, until, openrigEngine } from './helpers.js';
 
 const STARTER_YAML = readFileSync(new URL('./fixtures/starter-rig.yaml', import.meta.url), 'utf8');
 const MINE_YAML = 'version: "0.2"\nname: mine\npods:\n  - id: p\n    members:\n      - id: solo\n        runtime: claude-code\n        model: opus\n        effort: high\n';
@@ -51,7 +51,7 @@ describe('listSpecs', () => {
 
 describe('server rig.specs.request', () => {
   async function run(withBridge: boolean, stopFake: boolean) {
-    const dir = mkdtempSync(join(tmpdir(), 'ledge-openrig-specs-')); dirs.push(dir); process.env.LEDGE_HOME = dir;
+    const dir = mkdtempSync(join(tmpdir(), 'ledge-openrig-specs-')); dirs.push(dir); process.env.LEDGE_HOME = dir; openrigEngine();
     const store = new Store();
     const f = fake = await createFakeOpenRig(); f.specs = [{ id: 'b:starter', name: 'starter', sourceType: 'builtin', yaml: STARTER_YAML }];
     if (withBridge) bridge = createBridge({ env: async () => ({ OPENRIG_PORT: String(f.port) }), exec: fakeRigCli(f), sessionName: () => undefined, projects: () => none, home: dir, file: join(dir, 'openrig.json'), probeMs: 20, outboxMs: 30, resyncMs: 50 });

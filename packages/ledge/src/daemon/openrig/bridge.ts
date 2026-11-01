@@ -425,7 +425,7 @@ export function createBridge(deps: BridgeDeps): Bridge {
       probeOnly = on;
       if (on) {
         // OpenRig's state goes with the connection: the next whole turn re-reads it all (rig.snapshot, every escalation anew).
-        disconnect(); rigBook.replace([]); humanRead = false; humanOk = false;
+        disconnect(); rigBook.replace([]); humanRead = false; humanOk = false; human = 'missing'; // no stale « registered » while only probed
       }
       if (active) void tick();
     },

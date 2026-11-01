@@ -36,7 +36,7 @@ import { ensureDaemonToken, hostAllowed, requestAuthorized, selectDaemonProtocol
 import { readMachines, writeMachines } from './machines.js';
 import { readProjects, writeProjects } from './projects.js';
 import { readTeamsEngine, writeTeamsEngine, engineRunning, openrigAvailable, switchRefusal } from './engine/setting.js';
-import { engineRefusal } from './engine/guard.js';
+import { engineRefusal, ENGINE_LEDGE } from './engine/guard.js';
 import { readContextPrefs, readIsland, writeContextPrefs, writeIsland } from './island.js';
 import { readDocument } from './documents.js';
 import { createModels, type Models } from './models.js';
@@ -411,7 +411,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const broadcastEngine = () => { const m = engineMsg(); const k = JSON.stringify(m); if (k === engineSent) return; engineSent = k; broadcast(m); };
   /** The engine not chosen is off: under Ledge, OpenRig is only probed and nothing of its rigs reaches the fronts. The aggregate
    *  first (it takes OpenRig's escalations off the fronts while the bridge still holds them). Same engine again: nothing. */
-  const engines = { apply: (e: TeamsEngine): void => { aggregate?.setEngine(e); bridge?.setProbeOnly(e === 'ledge'); } };
+  const engines = { apply: (e: TeamsEngine): void => {
+    aggregate?.setEngine(e); bridge?.setProbeOnly(e === 'ledge');
+    // The other machines' OpenRig escalations this brain holds go back to them: the local brain must not decide a stale one.
+    if (e === 'ledge') remoteBrainCoordinator?.releaseAll();
+  } };
   const aggregate = bridge && remote ? createRigAggregate({ bridge, remote, machines: () => machines, projects: () => projects }) : null;
   const unsubscribeAggregate = aggregate?.onMessage(m => {
     broadcast(m);
@@ -1138,6 +1142,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
    *  `by: 'ledge'` is never taken from a client (handle refuses it). */
   async function applyRow(row: Pick<ChatAction, 'action' | 'args'>, rid: string): Promise<{ failure?: string; path?: string }> {
     const out = actionMessage(row, rid);
+    // A card's row is the engine's too (a card made before a switch, or applied from the phone): refused as action.run would be.
+    const off = engineRefusal(teamsEngine, out); if (off !== null) return { failure: off };
     if (out.type === 'task.cmd') { const r = tasks.run(out); return r.reason !== undefined ? { failure: r.reason } : {}; }
     let failure: string | undefined; let path: string | undefined;
     await handle(out, m => {
@@ -1184,6 +1190,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** `ledge brain …` (Lot 7): what the brain session may do, once the daemon knows it is the brain. */
   const brainCommands = createBrainCommands({ deciding: brainDecisionRouting, thread, seatSend, memory, rigs: () => aggregate?.rigs() ?? bridge?.rigs() ?? [], escalations: () => [...(bridge?.escalations() ?? []), ...(remoteBrainCoordinator?.list() ?? [])],
     sessions: () => store.all(), projects: () => projects, chat, emit: broadcast, rigAct, rigPrepare: msg => rigPrepare(msg, false),
+    rigsOff: () => (teamsEngine === 'ledge' ? ENGINE_LEDGE : null),
     handover: (by, text) => handovers.brief(by, text) });
   /**
    * `brain.cmd`: only from the brain session, as its key says; any refusal leaves no trace (no thread item, nothing sent to
@@ -2059,6 +2066,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       // The rig specs of this machine (the Rigs tab's « Specs »); the Desktop routes a remote machine's request to its own daemon.
       case 'rig.specs.request': {
         const base = { type: 'rig.specs' as const, requestId: msg.requestId, machine: 'local' };
+        // Under the Ledge engine OpenRig is only probed: its specs are not offered (nothing launches from them).
+        if (teamsEngine === 'ledge') return reply({ ...base, specs: [], error: 'failed', reason: ENGINE_LEDGE });
         const st = bridge?.status().state; const http = bridge?.http();
         if (!bridge || !http || st !== 'running') return reply({ ...base, specs: [], error: st === 'unsupported' ? 'unsupported' : 'openrig_down' });
         try { return reply({ ...base, specs: await listSpecs(http) }); }

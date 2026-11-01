@@ -184,7 +184,9 @@ export const RigSpecInfoSchema = z.object({ id: z.string(), name: z.string(), su
 export type RigSpecInfo = z.infer<typeof RigSpecInfoSchema>;
 export const RigSpecsRequestSchema = z.object({ type: z.literal('rig.specs.request'), requestId: z.string(), machineId: z.string().optional() });
 export const RigSpecsSchema = z.object({ type: z.literal('rig.specs'), requestId: z.string(), machine: z.string(), specs: z.array(RigSpecInfoSchema),
-  error: z.enum(['openrig_down', 'unsupported', 'failed']).optional() });
+  error: z.enum(['openrig_down', 'unsupported', 'failed']).optional(),
+  /** Why, in words, when the daemon has more to say than `error` (the teams engine is Ledge: OpenRig's specs are off). */
+  reason: z.string().optional() });
 export const RigExchangesRequestSchema = z.object({ type: z.literal('rig.exchanges.request'), machine: z.string(), rigId: z.string() });
 export const EscalationAnswerSchema = z.object({ type: z.literal('escalation.answer'), rid: z.string(), id: z.string(), answers: z.record(z.string()), by: z.literal('user') });
 export const LedgeSaySchema = z.object({ type: z.literal('ledge.say'), rid: z.string(), text: z.string(), about: z.string().optional() }); // about = escalation id (« En parler »)

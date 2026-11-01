@@ -180,9 +180,10 @@ describe('OpenRig bridge', () => {
   it('entering the probe drops the connection: the rigs and OpenRig\'s escalations go, nothing of OpenRig is emitted', async () => {
     fake = await createFakeOpenRig(); fake.rigs.push(starter()); fake.humans.push('ledge'); fake.queue.push(humanRow('E1'));
     const { b, msgs } = setup({ exec: fakeRigCli(fake) });
-    await b.start(); await until(() => b.escalations().some(e => e.id === 'E1'));
+    await b.start(); await until(() => b.escalations().some(e => e.id === 'E1') && b.status().human === 'registered');
     const from = msgs.length;
     b.setProbeOnly(true); await sleep(100);
+    expect(b.status()).toMatchObject({ state: 'running', human: 'missing' }); // no stale « registered » while only probed
     expect(msgs.slice(from).filter(m => m.type !== 'openrig.status')).toEqual([]);
     expect(b.rigs()).toEqual([]); expect(b.escalations()).toEqual([]); expect(b.escalation('E1')).toBeUndefined();
     const events = fake.requests.filter(r => r.path === '/api/events').length; await sleep(100);

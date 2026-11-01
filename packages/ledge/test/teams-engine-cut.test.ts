@@ -20,6 +20,7 @@ import { paths } from '../src/paths.js';
 import { authHeaders, until } from './helpers.js';
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+const T = '2026-11-01T10:00:00.000Z';
 
 describe('engineRefusal (the engine not chosen is off)', () => {
   const rigCmds: ClientMessage[] = [
@@ -107,10 +108,28 @@ describe('the chat\'s action list follows the engine (Review Focus 5)', () => {
   });
 });
 
+describe('a card the engine does not run is not made (fix round 1)', () => {
+  const FAKE = fileURLToPath(new URL('./fake-claude.mjs', import.meta.url));
+  const act = (action: string, args: object) => '```ledge-action\n' + JSON.stringify({ action, args }) + '\n```';
+  it('OpenRig mode: a team.resume or task.give the model writes anyway gets no card, and the answer says why', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'ledge-cut-card-'));
+    writeFileSync(join(home, 'chat.json'), JSON.stringify({ day: '2026-10-11', sessionId: '22222222-2222-4222-8222-222222222222' }));
+    const answer = 'Je reprends.\n\n' + act('team.resume', { team: 'team-abcd' }) + '\n' + act('task.give', { to: 's1', title: 'Tests' });
+    const chat = createChat({ store: new Store({ journalPath: join(home, 'j.json') }), tmux: { async capture() { return null; } } as never, home, today: () => '2026-10-11',
+      env: async () => ({ ...process.env, FAKE_ANSWER: answer }), bin: [process.execPath, FAKE], engine: () => 'openrig',
+      teams: () => [{ id: 'team-abcd', name: 'api', project: null, machine: 'local', cwd: '/w', state: 'resting', seats: [], createdAt: T, updatedAt: T }] });
+    const out: ServerMessage[] = [];
+    await chat.ask('q1', 'x', m => out.push(m));
+    const done = out.find(m => m.type === 'chat.done') as Extract<ServerMessage, { type: 'chat.done' }>;
+    expect(done.actions).toBeUndefined(); expect(done.tasks).toBeUndefined();
+    expect(done.text).toContain("coupées par le moteur d'équipes : team.resume, task.give");
+    rmSync(home, { recursive: true, force: true });
+  });
+});
+
 const panes = new Set<string>();
 const noTmux: Tmux = { async newSession(o) { panes.add(o.name); }, async sendText() {}, async sendKeys() {}, async capture() { return ''; }, async hasSession(n) { return panes.has(n); }, async listSessions() { return [...panes]; },
   async setOption() {}, async killSession(n) { panes.delete(n); }, attachArgs: n => ['attach', n] };
-const T = '2026-11-01T10:00:00.000Z';
 const mkS = (id: string, name: string): Session => ({ id, name, tool: 'claude', cwd: '/w', project: 'w', title: `${name} · w`, tmuxSession: `ledge-${name}`, state: 'idle', helpers: [], startedAt: T, lastActivityAt: T, source: 'launcher' });
 const factory = (): FakeRig => ({ rigId: 'r1', name: 'factory', status: 'running', nodes: [
   { logicalId: 'dev.build', canonicalSessionName: 'dev-build@factory', runtime: 'claude-code', sessionStatus: 'running', startupStatus: 'ready', cwd: '/w/app', activityState: { activity: 'idle-at-prompt' } }] });
@@ -121,15 +140,15 @@ describe('the daemon with the engine not chosen off', () => {
   beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'ledge-cut-')); process.env.LEDGE_HOME = dir; panes.clear(); });
   afterEach(async () => { for (const s of sockets.splice(0)) s.terminate(); await bridge?.stop(); bridge = null; await srv?.close(); srv = null; await fake?.stop(); fake = null; rmSync(dir, { recursive: true, force: true }); });
 
-  async function boot(o: { engine?: 'ledge' | 'openrig'; rigs?: FakeRig[]; teams?: Team[] } = {}) {
+  async function boot(o: { engine?: 'ledge' | 'openrig'; rigs?: FakeRig[]; teams?: Team[]; answer?: string } = {}) {
     if (o.engine) writeTeamsEngine(paths().teamsEngine, o.engine);
     fake = await createFakeOpenRig(); for (const r of o.rigs ?? []) fake.rigs.push(r);
     bridge = createBridge({ env: async () => ({ OPENRIG_PORT: String(fake!.port) }), exec: fakeRigCli(fake), projects: () => ({ version: 1, projects: [], rules: [] }) as never, home: dir, file: join(dir, 'openrig.json'),
       asks: { all: () => srv!.asks.all(), onChange: f => srv!.asks.onChange(f) }, sessionName: () => undefined, probeMs: 20, outboxMs: 30, resyncMs: 50 });
     if (o.teams) writeFileSync(paths().teams, JSON.stringify(o.teams));
     store = new Store();
-    srv = await startServer({ store, tmux: noTmux, port: 0, home: dir, daemon: { version: '0.0.0', install: 'git', systemd: false }, agentEnv: async () => ({ ...process.env }),
-      ...(o.teams ? { teams: teamsJournal(paths().teams) } : {}), openrig: bridge });
+    srv = await startServer({ store, tmux: noTmux, port: 0, home: dir, daemon: { version: '0.0.0', install: 'git', systemd: false }, agentEnv: async () => ({ ...process.env, ...(o.answer ? { FAKE_ANSWER: o.answer } : {}) }),
+      claudeBin: [process.execPath, fileURLToPath(new URL('./fake-claude.mjs', import.meta.url))], ...(o.teams ? { teams: teamsJournal(paths().teams) } : {}), openrig: bridge });
     await bridge.start(); await until(() => bridge!.status().state === 'running');
     const ws = new WebSocket(`ws://127.0.0.1:${srv.port}`, { headers: authHeaders() }); sockets.push(ws);
     const got: ServerMessage[] = [];
@@ -188,6 +207,24 @@ describe('the daemon with the engine not chosen off', () => {
     c.send({ type: 'team.dissolve', team: 'team-abcd' });
     await c.answer('team.updated', m => m.team.id === 'team-abcd' && m.team.state === 'dissolved');
     expect(c.got.some(m => m.type === 'error' && m.message === ENGINE_OPENRIG && m.request === 'team.dissolve')).toBe(false);
+  });
+
+  it('a chat card made under Ledge, applied after the switch to OpenRig, is refused by the engine (fix round 1)', async () => {
+    const team: Team = { id: 'team-abcd', name: 'api', project: null, machine: 'local', cwd: '/w', state: 'resting', seats: [{ role: 'leader', sessionId: null }], createdAt: T, updatedAt: T, restingAt: T };
+    const c = await boot({ teams: [team], answer: 'Je reprends.\n\n```ledge-action\n{"action":"team.resume","args":{"team":"team-abcd"}}\n```' });
+    c.send({ type: 'chat.ask', qid: 'q1', text: 'reprends api' });
+    expect((await c.answer('chat.done', m => m.qid === 'q1')).actions?.map(a => a.action)).toEqual(['team.resume']);
+    c.send({ type: 'teams.engine.set', rid: 's', engine: 'openrig' });
+    expect((await c.answer('teams.engine.result')).ok).toBe(true);
+    c.send({ type: 'chat.act', rid: 'r1', qid: 'q1' });
+    expect(await c.answer('chat.acted', m => m.rid === 'r1')).toMatchObject({ done: [], failed: [{ row: 0, message: ENGINE_OPENRIG }] });
+  });
+
+  it('Ledge mode: rig.specs.request lists no OpenRig spec and says why (fix round 1)', async () => {
+    const c = await boot();
+    c.send({ type: 'rig.specs.request', requestId: 'p1' });
+    expect(await c.answer('rig.specs', m => m.requestId === 'p1')).toEqual({ type: 'rig.specs', requestId: 'p1', machine: 'local', specs: [], error: 'failed', reason: ENGINE_LEDGE });
+    expect(fake!.requests.some(r => r.path.startsWith('/api/specs'))).toBe(false);
   });
 
   it('OpenRig mode: the bridge is whole (registers, mirrors the rigs)', async () => {
