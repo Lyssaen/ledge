@@ -39,7 +39,14 @@ describe('phone OpenRig gateway', () => {
     const local = { ...escalation, machine: 'local' };
     const view = { ...data(), escalations: () => [local, escalation], escalation: () => local, escalationAmbiguous: () => true };
     const g = setup({ deps: { openrig: view } }); const op = randomUUID();
+    g.send('dev1', { type: 'snapshot.request' }); await flush();
+    expect(g.got('dev1').find(m => m.type === 'snapshot')).toMatchObject({ escalations: [] });
     g.send('dev1', { type: 'escalation.answer', op, id: 'q1', answers: { q: 'a' } }); await flush();
+    expect(g.results('dev1').at(-1)).toMatchObject({ status: 'rejected', reason: 'invalid' }); expect(g.dispatched).toEqual([]);
+  });
+  it('does not attach an ambiguous escalation to a conversation', async () => {
+    const view = { ...data(), escalationAmbiguous: () => true }; const g = setup({ deps: { openrig: view } });
+    const op = randomUUID(); g.send('dev1', { type: 'ledge.say', op, text: 'En parler', about: 'q1' }); await flush();
     expect(g.results('dev1').at(-1)).toMatchObject({ status: 'rejected', reason: 'invalid' }); expect(g.dispatched).toEqual([]);
   });
   it('refuses a collision remembered after an aggregate replaced its former owner', async () => {

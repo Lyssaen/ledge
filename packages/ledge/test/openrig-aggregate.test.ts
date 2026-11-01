@@ -99,11 +99,17 @@ describe('RigAggregate', () => {
   });
 
   it('refuses to assert uniqueness while a peer replay is incomplete', async () => {
-    const s = setup(); s.status('ec2', 'open');
+    const s = setup(); let synced = 0; s.agg.onSynced(() => { synced += 1; }); s.status('ec2', 'open');
     expect(s.agg.escalationAmbiguous('L1')).toBe(true);
     s.msg('ec2', { type: 'rig.snapshot', machine: 'ec2', rigs: [] });
     await sleep(40);
-    expect(s.agg.escalationAmbiguous('L1')).toBe(false);
+    expect(s.agg.escalationAmbiguous('L1')).toBe(false); expect(synced).toBe(1);
+  });
+
+  it('ends the replay gate if a peer disconnects during its replay', () => {
+    const s = setup(); let synced = 0; s.agg.onSynced(() => { synced += 1; });
+    s.status('ec2', 'open'); expect(s.agg.escalationAmbiguous('L1')).toBe(true);
+    s.status('ec2', 'unreachable'); expect(s.agg.escalationAmbiguous('L1')).toBe(false); expect(synced).toBe(1);
   });
 
   it('passes the local bridge through and the peer messages on', () => {

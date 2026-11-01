@@ -1726,6 +1726,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
     } : {})
   });
+  let notifySyncedEscalations: (() => void) | undefined;
+  const unsubscribePhoneSync = aggregate?.onSynced(() => { gateway?.forward(rulesMsg()); notifySyncedEscalations?.(); });
   /** A hidden phone is told, through the relay, of what deserves it. */
   let unsubscribePush: (() => void) | undefined;
   let unsubscribeEscalationPush: (() => void) | undefined;
@@ -1739,18 +1741,23 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     };
     const seenEscalations = new Map<string, import('@ledge/protocol').Escalation>();
     const pushScheduled = new Set<string>();
-    unsubscribeEscalationPush = aggregate?.onMessage(m => {
-      if (m.type === 'escalation.removed') { seenEscalations.delete(m.id); return; }
-      if (m.type !== 'escalation.updated' || pushScheduled.has(m.escalation.id)) return;
-      const id = m.escalation.id; pushScheduled.add(id);
+    const queueEscalationPush = (id: string) => {
+      if (pushScheduled.has(id)) return;
+      pushScheduled.add(id);
       // The bridge can immediately put a new pending item into grace. Read the settled state before notifying.
       queueMicrotask(() => {
-        pushScheduled.delete(id); const current = aggregate.escalation(id); if (!current) return;
+        pushScheduled.delete(id); if (!aggregate || aggregate.escalationAmbiguous(id)) return;
+        const current = aggregate.escalation(id); if (!current) return;
         const previous = seenEscalations.get(id); seenEscalations.set(id, current);
         const badge = aggregate.escalations().filter(e => e.state === 'pending').length + store.all().filter(s => s.pending && !s.rig && !s.brain).length;
         const p = escalationPush(previous, current, badge);
         if (p) void notifier.notify(p, undefined).catch(e => log(`push failed (${e instanceof Error ? e.name : 'error'})`));
       });
+    };
+    notifySyncedEscalations = () => { for (const e of aggregate?.escalations() ?? []) queueEscalationPush(e.id); };
+    unsubscribeEscalationPush = aggregate?.onMessage(m => {
+      if (m.type === 'escalation.removed') { seenEscalations.delete(m.id); return; }
+      if (m.type === 'escalation.updated') queueEscalationPush(m.escalation.id);
     });
     const knownDecisions = new Set(memory.decisions({ limit: 200 }).map(d => d.id));
     let decisionCount = 0;
@@ -1845,6 +1852,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     asks,
     projects: () => projects,
     say: text => { thread.append({ kind: 'ledge', text }); },
-    close: () => new Promise<void>(res => { clearInterval(sweepTimer); clearInterval(brainDayTimer); unsubscribe(); unsubscribeBrain(); unsubscribeMemory(); deciding?.dispose(); unsubscribeRemoteSettled?.(); remoteBrainCoordinator?.close(); remoteBrainOwner?.close(); brain.dispose(); unsubscribeBridge?.(); unsubscribeAggregate?.(); rigRouter?.close(); remote?.close(); launches?.close(); stopRepoWatch?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); unsubscribeEscalationPush?.(); unsubscribeDecisionPush?.(); if (decisionPushTimer) clearTimeout(decisionPushTimer); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
+    close: () => new Promise<void>(res => { clearInterval(sweepTimer); clearInterval(brainDayTimer); unsubscribe(); unsubscribeBrain(); unsubscribeMemory(); deciding?.dispose(); unsubscribeRemoteSettled?.(); remoteBrainCoordinator?.close(); remoteBrainOwner?.close(); brain.dispose(); unsubscribeBridge?.(); unsubscribeAggregate?.(); rigRouter?.close(); remote?.close(); launches?.close(); stopRepoWatch?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); unsubscribePhoneSync?.(); unsubscribeEscalationPush?.(); unsubscribeDecisionPush?.(); if (decisionPushTimer) clearTimeout(decisionPushTimer); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
   };
 }

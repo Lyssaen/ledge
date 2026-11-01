@@ -199,7 +199,7 @@ export function createPhoneGateway(deps: {
     return key !== undefined && p.key !== key ? 'stale' : 'on';
   };
   const projectName = (id: string) => deps.openrig?.projects().projects.find(p => p.id === id)?.name;
-  const threadContext = () => ({ rigs: deps.openrig?.rigs() ?? [], rules: deps.openrig?.rules() ?? [], decisions: deps.openrig?.decisions() ?? [], escalation: (id: string) => deps.openrig?.escalation(id), exchanges: (machine: string, rigId: string) => deps.openrig?.exchanges(machine, rigId) ?? null });
+  const threadContext = () => ({ rigs: deps.openrig?.rigs() ?? [], rules: deps.openrig?.rules() ?? [], decisions: deps.openrig?.decisions() ?? [], escalation: (id: string) => deps.openrig?.escalationAmbiguous(id) ? undefined : deps.openrig?.escalation(id), exchanges: (machine: string, rigId: string) => deps.openrig?.exchanges(machine, rigId) ?? null });
   const keys = () => new Map((deps.openrig?.rigs() ?? []).map(r => [rigKey(r.machine, r.id), { machine: r.machine, rigId: r.id }]));
   const day = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   const snapshot = (deviceId: string): PhoneServerMessage => {
@@ -217,7 +217,7 @@ export function createPhoneGateway(deps: {
       message.daemon.openrig = true;
       message.projects = view.projects().projects.filter(p => p.id.length > 0 && p.id.length <= 80 && phoneText(p.id, 80) === p.id).slice(0, 100).map(p => ({ id: p.id, name: phoneText(p.name, 80) || '?', hasLocalRepo: p.repos.some(r => r.machine === 'local') }));
       message.rigs = safeMap(rigs.slice(0, 40), r => toPhoneRig(r, projectName));
-      message.escalations = safeMap([...view.escalations()].sort((a, b) => Number(b.state === 'pending' || b.state === 'grace') - Number(a.state === 'pending' || a.state === 'grace')).slice(0, 40), e => toPhoneEscalation(e, rules, rigs));
+      message.escalations = safeMap([...view.escalations()].filter(e => !view.escalationAmbiguous(e.id)).sort((a, b) => Number(b.state === 'pending' || b.state === 'grace') - Number(a.state === 'pending' || a.state === 'grace')).slice(0, 40), e => toPhoneEscalation(e, rules, rigs));
       message.decisionsToday = safeMap(view.decisions().filter(d => d.by === 'ledge' && day(new Date(d.at)) === day(new Date(deps.now ? deps.now() : Date.now()))).slice(0, 50), d => toPhoneDecision(d, rigs));
       // Individual records are bounded, but their combination must still fit the sealed frame.
       while (Buffer.byteLength(JSON.stringify(message), 'utf8') > PLAIN_MAX - 4_096) {
@@ -623,6 +623,7 @@ export function createPhoneGateway(deps: {
     const view = deps.openrig;
     if (!view) return { status: 'rejected', reason: 'unsupported' };
     let answerMachine: string | undefined;
+    if (msg.type === 'ledge.say' && msg.about && (view.escalationAmbiguous(msg.about) || view.escalations().filter(e => e.id === msg.about).length !== 1)) return { status: 'rejected', reason: 'invalid' };
     if (msg.type === 'escalation.answer') {
       const matches = view.escalations().filter(e => e.id === msg.id);
       const target = view.escalation(msg.id);

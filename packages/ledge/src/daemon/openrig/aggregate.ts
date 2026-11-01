@@ -9,6 +9,8 @@ export interface RigAggregate {
   /** One openrig.status per machine (remote ones included), one rig.snapshot per machine, then the escalations. */
   replay(): BridgeMessage[];
   onMessage(fn: (m: BridgeMessage) => void): () => void;
+  /** Every peer replay has completed: previously hidden ambiguous ids can be reconsidered. */
+  onSynced(fn: () => void): () => void;
   rigs(): Rig[]; escalations(): Escalation[]; statuses(): OpenRigStatus[];
   escalation(id: string): Escalation | undefined;
   /** True after an id has been observed on more than one machine. */
@@ -51,7 +53,9 @@ export function createRigAggregate(opts: { bridge: Bridge; remote: RemotePeers; 
   for (const escalation of bridge.escalations()) observeOrigin(escalation.id, escalation.machine);
   const overlays = new Map<string, Partial<Escalation>>();
   const listeners = new Set<(m: BridgeMessage) => void>();
+  const syncListeners = new Set<() => void>();
   const emit = (m: BridgeMessage) => { for (const fn of listeners) { try { fn(m); } catch (e) { log(`openrig: aggregate listener threw: ${(e as Error).message}`); } } };
+  const signalSynced = () => { if (![...peers.values()].some(p => p.resync)) for (const fn of syncListeners) { try { fn(); } catch (e) { log(`openrig: sync listener threw: ${(e as Error).message}`); } } };
 
   const peer = (machine: string): Remote => {
     let p = peers.get(machine);
@@ -75,6 +79,8 @@ export function createRigAggregate(opts: { bridge: Bridge; remote: RemotePeers; 
   const finishResync = (p: Remote) => {
     const r = p.resync; if (!r) return; stopResync(p);
     for (const id of [...p.escs.keys()]) if (!r.seen.has(id)) dropEscalation(p, id);
+    // A phone can expose ids again once every peer replay completes.
+    signalSynced();
   };
   const arm = (p: Remote) => {
     const r = p.resync; if (!r) return;
@@ -83,7 +89,8 @@ export function createRigAggregate(opts: { bridge: Bridge; remote: RemotePeers; 
   };
   /** Kept as they are, marked unreachable: they wait over there (spec §4.8). */
   const markUnreachable = (p: Remote, status: OpenRigStatus) => {
-    stopResync(p);
+    const hadResync = p.resync !== null; stopResync(p);
+    if (hadResync) signalSynced();
     p.status = status; emit({ type: 'openrig.status', status });
     for (const [id, rig] of p.rigs) {
       if (rig.lifecycle === 'unreachable') continue;
@@ -99,7 +106,8 @@ export function createRigAggregate(opts: { bridge: Bridge; remote: RemotePeers; 
   remote.onStatus((machine, s) => {
     if (s === 'removed') {
       const p = peers.get(machine); if (!p) return;
-      stopResync(p); peers.delete(machine);
+      const hadResync = p.resync !== null; stopResync(p); peers.delete(machine);
+      if (hadResync) signalSynced();
       for (const rigId of p.rigs.keys()) emit({ type: 'rig.removed', machine, rigId });
       for (const id of [...p.escs.keys()]) dropEscalation(p, id);
       return;
@@ -163,6 +171,7 @@ export function createRigAggregate(opts: { bridge: Bridge; remote: RemotePeers; 
       return [...statuses, ...snapshots, ...escs];
     },
     onMessage(fn) { listeners.add(fn); return () => { listeners.delete(fn); }; },
+    onSynced(fn) { syncListeners.add(fn); return () => { syncListeners.delete(fn); }; },
     rigs: () => [...bridge.rigs(), ...order().flatMap(machine => remoteRigs(machine, peers.get(machine)!))],
     escalations: () => [...bridge.escalations().map(over), ...remoteEscs()],
     statuses: () => [bridge.status(), ...order().flatMap(machine => { const s = peers.get(machine)!.status; return s ? [s] : []; })],
