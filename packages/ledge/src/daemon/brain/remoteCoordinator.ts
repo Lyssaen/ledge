@@ -102,7 +102,7 @@ export function createRemoteBrainCoordinator(d: {
     l.applying = true;
     const r = await send(l.machine, { type: 'brain.delegate.decide', rid: p.operation, id: l.nativeId, token: l.token, answers: c.answers, category: parsed.data });
     l.applying = false;
-    if (!r || r.code === 'unknown') { forget(l); note(`La décision sur ${l.id} n'est pas confirmée : vérifie la machine d'origine.`); return; }
+    if (!r || r.code === 'unknown') { forget(l); note(`La décision sur ${l.id} n'est pas confirmée : vérifie la machine d'origine.`); if (d.journal && d.remote.status(l.machine) === 'open') void reconcile(l.machine); return; }
     if (!r.ok) {
       try { d.journal?.remove(p.operation); } catch { forget(l); note(`Journal indisponible : réconciliation nécessaire pour ${l.id}.`); return; }
       if (r.code === 'too_early' && leases.has(l.id) && d.brainOn()) {
@@ -111,9 +111,9 @@ export function createRemoteBrainCoordinator(d: {
       }
       forget(l); void release(l); note(`La décision sur ${l.id} n'a pas été confirmée : ${r.reason ?? r.code ?? 'résultat inconnu'}.`); return;
     }
-    if (r.status !== 'applied') { forget(l); note(`La décision sur ${l.id} reste non confirmée.`); return; }
+    if (r.status !== 'applied') { forget(l); note(`La décision sur ${l.id} reste non confirmée.`); if (d.journal && d.remote.status(l.machine) === 'open') void reconcile(l.machine); return; }
     forget(l);
-    try { await confirmed(p); } catch { note(`La preuve de ${l.id} doit être réconciliée.`); }
+    try { await confirmed(p); } catch { note(`La preuve de ${l.id} doit être réconciliée.`); if (d.journal && d.remote.status(l.machine) === 'open') void reconcile(l.machine); }
   };
   const offMessage = d.remote.onMessage((machine, m) => {
     if (m.type !== 'brain.delegate.result') return;

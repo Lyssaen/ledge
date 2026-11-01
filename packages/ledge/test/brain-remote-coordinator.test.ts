@@ -60,7 +60,25 @@ describe('remote brain coordinator', () => {
     result('ec2', m.rid, { ok: false, code: 'unknown', reason: 'lost acknowledgement' }); await flush();
     expect(records).toEqual([]); expect(lines).toEqual([]); expect(events.some(e => e.kind === 'state' && /confirm/.test(e.text))).toBe(true);
   });
-  it('retains the pending proof if saving the thread fails, and reconciles after reconnection', async () => {
+  it('retries an unknown result until proven while the connection stays open', async () => {
+    c.close(); const dir = mkdtempSync(join(tmpdir(), 'brain-reconcile-')); const journal = createPendingJournal(join(dir, 'pending.json'));
+    start({ journal });
+    try {
+      const id = await granted(); await c.decide(id, { q: 'a' }, 'git', {}); await vi.advanceTimersByTimeAsync(60_000);
+      const m = sent.at(-1)!.msg; if (m.type !== 'brain.delegate.decide') throw Error('expected decide');
+      result('ec2', m.rid, { ok: false, code: 'unknown' }); await flush();
+      const first = sent.at(-1)!.msg; if (first.type !== 'brain.delegate.query') throw Error('expected query');
+      result('ec2', first.rid, { ok: false, code: 'unknown' }); await flush();
+      expect(records).toEqual([]); expect(journal.all()).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(30_000);
+      const second = sent.at(-1)!.msg; if (second.type !== 'brain.delegate.query') throw Error('expected retry');
+      expect(second.rid).not.toBe(first.rid);
+      result('ec2', second.rid, { ok: true, status: 'applied' }); await flush();
+      expect(records).toHaveLength(1); expect(journal.all()).toHaveLength(0);
+      expect(sent.filter(x => x.msg.type === 'brain.delegate.decide')).toHaveLength(1);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+  it('retains the pending proof if saving the thread fails, and reconciles without reconnecting', async () => {
     c.close(); const dir = mkdtempSync(join(tmpdir(), 'brain-reconcile-')); const journal = createPendingJournal(join(dir, 'pending.json'));
     let fail = true; start({ journal, flushStrict: async () => { if (fail) throw Error('disk'); } });
     try {
@@ -68,7 +86,7 @@ describe('remote brain coordinator', () => {
       const m = sent.at(-1)!.msg; if (m.type !== 'brain.delegate.decide') throw Error('expected decide');
       result('ec2', m.rid, { ok: true, status: 'applied' }); await flush();
       expect(journal.all()).toHaveLength(1);
-      fail = false; change('ec2', 'open'); const q = sent.at(-1)!.msg; if (q.type !== 'brain.delegate.query') throw Error('expected query');
+      fail = false; const q = sent.at(-1)!.msg; if (q.type !== 'brain.delegate.query') throw Error('expected query');
       result('ec2', q.rid, { ok: true, status: 'applied' }); await flush();
       expect(journal.all()).toHaveLength(0);
     } finally { rmSync(dir, { recursive: true, force: true }); }
