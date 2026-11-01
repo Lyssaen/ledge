@@ -17,6 +17,7 @@ const sess = (id: string, name: string): Session => ({ id, name, tool: 'claude',
 
 describe('ledge decide: asks and task decisions', () => {
   let srv: Awaited<ReturnType<typeof startServer>>; let store: Store; let sent: Array<[string, string]>;
+  const prior = process.env.LEDGE_HOME;
   const user = () => ({ port: srv.port, env: {} });
   /** Rex puts a decision to the user as a task given to Ledge. */
   async function taskDecision(): Promise<string> {
@@ -35,7 +36,7 @@ describe('ledge decide: asks and task decisions', () => {
       async listSessions() { return []; }, async setOption() {}, async killSession() {}, attachArgs: n => ['attach', n] };
     srv = await startServer({ store, tmux, port: 0 });
   });
-  afterEach(async () => { await srv.close(); });
+  afterEach(async () => { await srv.close(); if (prior === undefined) delete process.env.LEDGE_HOME; else process.env.LEDGE_HOME = prior; });
 
   it('lists a pending ask and a pending task decision together', async () => {
     const asked = await runAsk(['Quelle base ?', 'Postgres\nSQLite'], { port: srv.port, env: { LEDGE_SESSION: 'nova' } });
