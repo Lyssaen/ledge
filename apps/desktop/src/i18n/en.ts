@@ -313,6 +313,17 @@ export const en: Messages = {
       refused: {
         offline: 'The local daemon is offline: nothing changed.', outdated: 'The local daemon is too old for the notch’s settings: update it.',
         invalid: 'The daemon refused this change. Nothing changed.', timeout: 'The daemon did not confirm this change.'
+      },
+      music: {
+        title: 'Music', hint: 'The track playing on your PC, at the right of the notch.',
+        show: 'Show the music playing', showHint: 'The cover, then previous, play/pause and next on hover. No connection to your account.',
+        shownOn: 'Music shown', shownOff: 'Music hidden',
+        paused: 'When paused', pausedHint: 'How long the cover stays visible after a pause.',
+        pausedOptions: { always: 'Always', '5min': '5 min', hide: 'Hide' }, pausedSaved: (label) => `When paused: ${label}`,
+        hover: 'On hover', hoverHint: 'What is added to the cover.',
+        hoverOptions: { controls: 'Controls', 'controls-title': 'Controls and title' }, hoverSaved: (label) => `On hover: ${label}`,
+        detected: (title, artist, source) => artist ? `Detected: ${title} · ${artist}, played by ${source}` : `Detected: ${title}, played by ${source}`,
+        nothing: 'Nothing is playing right now', windowsOnly: 'Music in the notch only works on Windows.'
       }
     },
     shortcuts: {

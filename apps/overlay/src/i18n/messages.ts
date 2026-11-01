@@ -60,6 +60,7 @@ const fr = {
     emptyTitle: 'Rien dans le fil pour l’instant.', emptyHint: 'Les échanges de tes agents, ce que Ledge tranche et tes messages arriveront ici.'
   },
   resident: { name: 'Ledge', offline: 'Ledge · connexion perdue', tip: (n: number) => n === 0 ? 'Aucune session · cliquer pour ouvrir' : `${n} session${n > 1 ? 's' : ''} · cliquer pour ouvrir`, unread: 'a répondu', unreadTip: 'Ledge a répondu · cliquer pour ouvrir', strip: (n: number) => n === 0 ? 'Ledge, aucune session, ouvrir' : `Ledge, ${n} session${n > 1 ? 's' : ''}, ouvrir`, more: (n: number) => `${n} autre${n > 1 ? 's' : ''} session${n > 1 ? 's' : ''}, ouvrir la liste` },
+  music: { prev: 'Précédent', play: 'Lecture', pause: 'Pause', next: 'Suivant', cover: (title: string, artist: string) => artist ? `${title} · ${artist}` : title },
   say: {
     ledge: ['Hey ! Je t’ai répondu !', 'C’est prêt, jette un œil.', 'Voilà ce que j’en pense.', 'Je t’attendais là-dessus.'],
     finished: ['J’ai fini !', 'Mission accomplie.', 'C’est tout bon de mon côté.', 'Je te laisse relire.'],
@@ -333,6 +334,7 @@ const en: Messages = {
     emptyTitle: 'Nothing in the thread yet.', emptyHint: 'Your agents’ exchanges, what Ledge settles and your messages will show up here.'
   },
   resident: { name: 'Ledge', offline: 'Ledge · connection lost', tip: (n: number) => n === 0 ? 'No sessions · click to open' : `${n} session${n > 1 ? 's' : ''} · click to open`, unread: 'replied', unreadTip: 'Ledge replied · click to open', strip: (n: number) => n === 0 ? 'Ledge, no sessions, open' : `Ledge, ${n} session${n > 1 ? 's' : ''}, open`, more: (n: number) => `${n} more session${n > 1 ? 's' : ''}, open the list` },
+  music: { prev: 'Previous', play: 'Play', pause: 'Pause', next: 'Next', cover: (title, artist) => artist ? `${title} · ${artist}` : title },
   say: {
     ledge: ['Hey! I answered you!', "It's ready, take a look.", "Here's what I think.", "I've been waiting on this."],
     finished: ["I'm done!", 'Mission accomplished.', 'All good on my side.', "I'll let you review."],
