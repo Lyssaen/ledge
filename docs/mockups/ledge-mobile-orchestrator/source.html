@@ -1,0 +1,886 @@
+<title>Ledge mobile orchestrateur</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a canvas of phone screens (390 × 844, the app's own viewport), grouped by question, each with its note underneath.
+   Single dark look on purpose: the screens use the PWA's dark tokens (packages/ui tokens.css, apps/mobile styles.css). */
+:root {
+  color-scheme: dark;
+  --page: #121214; --page-line: #ffffff14; --page-muted: #8b8b90;
+  --bg: #0a0a0a; --surface: #171717; --raised: #262626; --fg: #fafafa; --muted: #a1a1a1;
+  --line: #ffffff1a; --input: #ffffff26;
+  --primary: #9f1218; --primary-fg: #fef2f2; --role: #fb2c36;
+  --approval: #ff6467; --attention: #fbbf24; --ok: #34d399; --info: #60a5fa; --task: #a78bfa;
+  --soft-warn: #422006; --soft-info: #172554; --soft-danger: #450a0a; --soft-ok: #052e16;
+  --ledge-bubble: #1c1112; --ledge-line: #5a1d20;
+  --rig-factory: #f59e0b; --rig-starter: #14b8a6; --rig-veille: #a78bfa; --core: #71717a;
+  --sans: "Geist", system-ui, -apple-system, sans-serif;
+  --mono: "Geist Mono", ui-monospace, monospace;
+  --r-card: 16px; --r-control: 12px;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--fg); font: 14px/1.5 var(--sans); }
+.wrap { max-width: 1680px; margin: 0 auto; padding-block: 40px 80px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+.intro { display: grid; gap: 14px; max-width: 78ch; }
+.intro h1 { font-size: 30px; letter-spacing: -.6px; line-height: 1.15; }
+.intro h1 b { color: var(--role); }
+.intro p { margin: 0; color: #c9c9cc; }
+.intro a { color: var(--info); }
+.tabdiff { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; margin-top: 4px; }
+.tabdiff .t { border: 1px solid var(--page-line); border-radius: 999px; padding: 3px 10px; color: var(--page-muted); }
+.tabdiff .t.new { color: var(--fg); border-color: #ffffff33; background: #ffffff0d; }
+.tabdiff .t.gone { text-decoration: line-through; }
+.keys { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px 28px; margin-top: 10px; padding: 0; list-style: none; font-size: 13px; color: #c9c9cc; }
+.keys li { padding-left: 14px; position: relative; }
+.keys li::before { content: ""; position: absolute; left: 0; top: .6em; width: 6px; height: 6px; border-radius: 2px; background: var(--role); }
+section.row { margin-top: 56px; display: grid; gap: 20px; }
+.row-head { display: grid; gap: 4px; max-width: 90ch; border-top: 1px solid var(--page-line); padding-top: 18px; }
+.row-head .eyebrow { font: 500 11px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--page-muted); }
+.row-head h2 { font-size: 22px; letter-spacing: -.3px; }
+.row-head p { margin: 0; color: #c9c9cc; font-size: 13.5px; }
+.screens { display: flex; gap: 28px; overflow-x: auto; padding-bottom: 12px; scroll-snap-type: x proximity; }
+figure { margin: 0; flex: none; width: 390px; display: grid; gap: 12px; align-content: start; scroll-snap-align: start; }
+figcaption { display: grid; gap: 4px; font-size: 13px; color: #c9c9cc; }
+figcaption b { color: var(--fg); font-weight: 600; font-size: 14px; }
+figcaption .tag { justify-self: start; font: 500 10.5px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; padding: 4px 7px; border-radius: 6px; background: #ffffff0f; color: var(--page-muted); }
+figcaption .tag.pick { background: #3b0a0d; color: #ff9b9e; }
+figcaption ul { margin: 2px 0 0; padding-left: 16px; display: grid; gap: 2px; }
+.shot { width: 390px; border-radius: 40px; border: 1px solid #ffffff1f; display: block; }
+
+/* ——— the phone ——— */
+.phone { width: 390px; height: 844px; border-radius: 44px; background: var(--bg); border: 1px solid #ffffff24; box-shadow: 0 0 0 6px #050505, 0 30px 60px -20px #000; overflow: hidden; display: flex; flex-direction: column; position: relative; font-size: 14px; }
+.sbar { flex: none; height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 28px 0 34px; font: 600 15px/1 var(--sans); }
+.sbar i { display: inline-flex; gap: 5px; align-items: center; }
+.sbar i span { width: 17px; height: 10px; border-radius: 3px; border: 1.5px solid var(--fg); display: inline-block; position: relative; }
+.sbar i span::after { content: ""; position: absolute; inset: 1px 5px 1px 1px; background: var(--fg); border-radius: 1px; }
+.sbar i em { width: 15px; height: 10px; display: inline-block; background: linear-gradient(90deg, var(--fg) 0 3px, transparent 3px 4px, var(--fg) 4px 7px, transparent 7px 8px, var(--fg) 8px 11px, transparent 11px 12px, #ffffff55 12px); clip-path: polygon(0 100%, 100% 0, 100% 100%); }
+.app { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0 18px; }
+.hd { flex: none; display: flex; align-items: center; gap: 12px; padding: 6px 0 12px; border-bottom: 1px solid var(--line); }
+.hd .mascot { width: 40px; height: 40px; flex: none; }
+.hd .who { min-width: 0; flex: 1; }
+.conn { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.conn::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
+.hd h1 { font-size: 21px; line-height: 26px; font-weight: 700; letter-spacing: -.4px; }
+.hd h1 .dot { color: var(--role); }
+.hd p { margin: 0; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ibtn { width: 44px; height: 44px; flex: none; display: grid; place-items: center; border-radius: var(--r-control); border: 1px solid transparent; color: var(--fg); background: none; }
+.ibtn.bordered { border-color: var(--input); }
+.ibtn svg { width: 22px; height: 22px; }
+.ptitle { flex: none; padding: 6px 0 14px; display: grid; gap: 6px; }
+.ptitle .top { display: flex; justify-content: space-between; align-items: center; }
+.ptitle h1 { font-size: 26px; letter-spacing: -.6px; line-height: 1.1; font-weight: 700; }
+.ptitle p { margin: 0; color: var(--muted); font-size: 14px; }
+main { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 14px; padding: 14px 0; }
+main.tight { gap: 10px; }
+main.chat { justify-content: flex-end; }
+main.chat > * { flex: none; }
+
+/* Le point : the rail of proposition A, folded into a strip */
+.point { flex: none; display: flex; gap: 6px; padding: 10px 0; border-bottom: 1px solid var(--line); overflow: hidden; }
+.chip { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 11px; border-radius: 999px; border: 1px solid var(--input); font-size: 12.5px; white-space: nowrap; color: var(--fg); background: none; }
+.chip .n { font: 600 11px/1 var(--sans); min-width: 18px; height: 18px; padding: 0 5px; border-radius: 6px; display: inline-grid; place-items: center; background: var(--raised); }
+.chip .n.hot { background: var(--primary); color: var(--primary-fg); }
+.chip.on { background: var(--raised); border-color: transparent; }
+.chip .bar { width: 26px; height: 3px; border-radius: 2px; background: #ffffff22; position: relative; overflow: hidden; }
+.chip .bar i { position: absolute; inset: 0 auto 0 0; background: var(--role); }
+
+/* conversation */
+.day { text-align: center; font: 500 10.5px/1 var(--sans); letter-spacing: .1em; color: var(--muted); }
+.msg { display: grid; grid-template-columns: 28px 1fr; gap: 8px; align-items: start; }
+.msg .av { width: 28px; height: 28px; margin-top: 18px; }
+.msg .meta { font-size: 11.5px; color: var(--muted); margin: 0 0 4px 2px; }
+.msg .meta b { color: var(--fg); font-weight: 600; }
+.bubble { background: var(--surface); border: 1px solid var(--line); border-radius: 4px 18px 18px 18px; padding: 10px 12px; display: grid; gap: 10px; line-height: 1.45; }
+.bubble .soft { color: var(--muted); }
+.me { justify-self: end; max-width: 80%; background: var(--raised); border-radius: 18px 18px 4px 18px; padding: 9px 13px; }
+.me-time { justify-self: end; font-size: 11px; color: var(--muted); margin-top: -8px; }
+.decision { border: 1px solid #a16207; background: #120d04; border-radius: 14px; padding: 11px 12px; display: grid; gap: 7px; }
+.decision .top { display: flex; align-items: center; gap: 8px; font: 12px/1 var(--mono); color: var(--muted); white-space: nowrap; overflow: hidden; }
+.kind { font: 600 11.5px/1 var(--sans); padding: 5px 7px; border-radius: 6px; background: var(--soft-warn); color: var(--attention); }
+.kind.design { background: #2e1065; color: #c4b5fd; }
+.kind.crit { background: var(--soft-danger); color: var(--approval); }
+.decision h3 { font-size: 15px; line-height: 1.3; font-weight: 600; }
+.decision p { margin: 0; color: var(--muted); font-size: 13px; }
+.btns { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.btn { height: 34px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--input); background: none; color: var(--fg); font: 500 13px/1 var(--sans); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.btn.primary { background: var(--primary); border-color: transparent; color: var(--primary-fg); }
+.btn.ghost { border-color: transparent; color: var(--muted); }
+.btn.big { height: 46px; border-radius: var(--r-control); font-size: 15px; justify-content: center; }
+.btn.small { height: 28px; padding: 0 9px; font-size: 12px; border-radius: 8px; }
+.btn .rec { font: 500 10px/1 var(--sans); opacity: .8; }
+.fold { margin-left: 36px; border-left: 2px solid var(--line); padding: 2px 0 2px 12px; display: grid; gap: 10px; }
+.fold .fh { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--muted); }
+.fold .fh b { color: var(--fg); font-weight: 600; }
+.fold .fh .go { margin-left: auto; color: var(--muted); font-size: 12px; }
+.flag { width: 13px; height: 13px; flex: none; color: var(--role); }
+.ex { display: grid; grid-template-columns: 22px 1fr; gap: 8px; }
+.ex img { width: 22px; height: 22px; }
+.ex .l { font-size: 12px; color: var(--muted); }
+.ex .l b { color: var(--fg); font-weight: 600; }
+.ex .t { font-size: 13px; }
+.sugg { flex: none; display: flex; gap: 6px; overflow: hidden; padding-top: 8px; }
+.sugg span { flex: none; font-size: 12.5px; padding: 6px 10px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); color: #d4d4d4; white-space: nowrap; }
+.composer { flex: none; display: flex; gap: 8px; align-items: end; padding: 8px 0 6px; }
+.composer .field { flex: 1; min-height: 44px; border-radius: 22px; border: 1px solid var(--input); background: var(--surface); padding: 11px 14px; color: var(--muted); font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.composer .field.typed { color: var(--fg); }
+.composer .round { width: 44px; height: 44px; border-radius: 50%; flex: none; display: grid; place-items: center; border: 1px solid var(--input); color: var(--fg); }
+.composer .round.send { background: var(--primary); border-color: transparent; color: var(--primary-fg); }
+.composer .round svg { width: 20px; height: 20px; }
+.mandate { flex: none; font-size: 11px; color: var(--muted); padding-bottom: 6px; }
+.at { color: var(--info); }
+
+/* tab bar, as the app's (grid of 4, raised current) */
+.tabs { flex: none; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--line); padding: 8px 0 22px; }
+.tabs a { position: relative; min-height: 48px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-radius: var(--r-control); font-size: 11px; color: var(--muted); text-decoration: none; }
+.tabs a.on { background: var(--raised); color: var(--fg); }
+.tabs a svg { width: 22px; height: 22px; }
+.tabs .badge { position: absolute; top: 4px; right: 18px; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 6px; background: var(--primary); color: var(--primary-fg); font: 700 11px/19px var(--sans); text-align: center; }
+.home-ind { position: absolute; bottom: 7px; left: 50%; translate: -50% 0; width: 134px; height: 5px; border-radius: 3px; background: #ffffffcc; }
+
+/* cards: inbox (À toi) */
+.seg { flex: none; display: flex; gap: 8px; }
+.seg span { height: 34px; padding: 0 14px; border-radius: 999px; display: inline-flex; align-items: center; color: var(--muted); font-size: 14px; }
+.seg span.on { background: var(--raised); color: var(--fg); border: 1px solid #ffffff33; }
+.label { display: flex; justify-content: space-between; font: 500 11px/1 var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); padding: 13px 14px; display: grid; gap: 8px; }
+.card .who { display: flex; align-items: center; gap: 9px; font-size: 13px; }
+.card .who img { width: 26px; height: 26px; }
+.card .who .time { margin-left: auto; color: var(--muted); font-size: 12px; }
+.card h3 { font-size: 16px; line-height: 1.3; font-weight: 600; }
+.card .sub { font-size: 12.5px; color: var(--muted); }
+.card .sub code, .mono { font-family: var(--mono); font-size: 12px; }
+.pill { justify-self: start; display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 500; padding: 4px 8px; border-radius: 7px; }
+.pill.q { background: var(--soft-warn); color: var(--attention); }
+.pill.a { background: var(--soft-danger); color: var(--approval); }
+.pill.w { background: var(--soft-info); color: var(--info); }
+.pill.ok { background: var(--soft-ok); color: var(--ok); }
+.pill.idle { background: #ffffff10; color: var(--muted); }
+.via { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); padding: 7px 9px; background: var(--ledge-bubble); border: 1px solid var(--ledge-line); border-radius: 10px; }
+.via img { width: 20px; height: 20px; }
+.via b { color: var(--fg); font-weight: 600; }
+
+/* rigs */
+.rig { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); padding: 12px 14px; display: grid; gap: 9px; }
+.rig .rh { display: flex; align-items: center; gap: 8px; }
+.rig .rh h3 { font-size: 16px; font-weight: 600; }
+.rig .rh .sp { font-size: 12px; color: var(--muted); }
+.rig .rh .chev { margin-left: auto; color: var(--muted); }
+.rdot { width: 9px; height: 9px; border-radius: 3px; flex: none; }
+.rig .where { font-size: 12.5px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
+.rig .where .in { color: var(--fg); }
+.prog { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.prog .track { flex: 1; height: 4px; border-radius: 2px; background: #ffffff1a; overflow: hidden; }
+.prog .track i { display: block; height: 100%; background: var(--role); border-radius: 2px; }
+.seats { display: flex; gap: 3px; flex-wrap: wrap; }
+.seat { display: inline-flex; align-items: center; gap: 4px; font: 12px/1 var(--mono); padding: 4px 6px; border-radius: 6px; background: #ffffff0a; color: #d4d4d4; }
+.seat i { width: 6px; height: 6px; border-radius: 50%; background: var(--info); }
+.seat i.q { background: var(--attention); }
+.seat i.ok { background: var(--ok); }
+.seat i.off { background: #71717a; }
+.lastex { font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 8px; }
+.lastex b { color: var(--fg); font-weight: 500; }
+.newrig { flex: none; }
+
+/* rig page */
+.back { display: flex; align-items: center; gap: 4px; color: var(--muted); font-size: 14px; padding: 4px 0 8px; }
+.back svg { width: 18px; height: 18px; }
+.seatrow { display: grid; grid-template-columns: 30px 1fr auto; gap: 10px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.seatrow:last-child { border-bottom: 0; }
+.seatrow img { width: 30px; height: 30px; }
+.seatrow .n { font-weight: 600; font-size: 14px; display: flex; gap: 6px; align-items: baseline; }
+.seatrow .n .role { font: 12px/1 var(--mono); color: var(--role); }
+.seatrow .d { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ctx { width: 34px; height: 4px; border-radius: 2px; background: #ffffff1a; display: inline-block; vertical-align: middle; overflow: hidden; }
+.ctx i { display: block; height: 100%; background: var(--muted); }
+.actions { flex: none; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 6px 0 4px; }
+.xrow { display: grid; grid-template-columns: 40px 1fr; gap: 8px; }
+.xrow .tm { font: 12px/1.6 var(--mono); color: var(--muted); }
+.xrow .l { font-size: 12.5px; color: var(--muted); }
+.xrow .l b { color: var(--fg); font-weight: 600; }
+.xrow .t { font-size: 13.5px; }
+.xrow.ledge { background: var(--ledge-bubble); border-radius: 10px; padding: 7px 8px 7px 0; margin-left: -8px; padding-left: 8px; grid-template-columns: 40px 1fr; }
+.xrow.ledge .l b:first-child { color: #ff8a8d; }
+
+/* projects (sessions seules) */
+.proj { display: grid; gap: 0; }
+.proj .ph { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); letter-spacing: .02em; padding: 4px 0 6px; }
+.proj .ph b { color: var(--fg); font-weight: 600; font-size: 14px; }
+.srow { display: grid; grid-template-columns: 36px 1fr auto; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); align-items: center; }
+.srow img { width: 36px; height: 36px; }
+.srow .t { font-weight: 600; font-size: 15px; line-height: 1.25; }
+.srow .s { font-size: 12.5px; color: var(--muted); }
+.srow .s code { font-family: var(--mono); font-size: 12px; }
+.rigline { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); padding: 9px 10px; border: 1px dashed #ffffff26; border-radius: 10px; margin-top: 8px; }
+.rigline b { color: var(--fg); font-weight: 600; }
+
+/* sheets */
+.dim { position: absolute; inset: 0; background: #000000a8; }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; background: #141414; border-top: 1px solid #ffffff26; border-radius: 22px 22px 0 0; padding: 8px 18px 30px; display: grid; gap: 12px; }
+.sheet .grab { justify-self: center; width: 38px; height: 5px; border-radius: 3px; background: #ffffff40; }
+.sheet h2 { font-size: 18px; }
+.sheet .sec { display: grid; gap: 6px; }
+.sheet .line { display: flex; align-items: center; gap: 9px; font-size: 13.5px; min-height: 36px; }
+.sheet .line img { width: 24px; height: 24px; }
+.sheet .line .r { margin-left: auto; display: flex; gap: 6px; }
+.sheet .line .muted { color: var(--muted); }
+.plan { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 5px; font-size: 13px; }
+.plan .rl { display: flex; gap: 8px; align-items: baseline; }
+.plan .rl code { font: 11.5px/1 var(--mono); color: var(--role); background: #3b0a0d; padding: 3px 5px; border-radius: 5px; flex: none; }
+.passkey { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--muted); }
+.passkey svg { width: 22px; height: 22px; color: var(--fg); flex: none; }
+
+/* launch card in the conversation */
+.launch { border: 1px solid var(--ledge-line); background: var(--ledge-bubble); border-radius: 14px; padding: 11px 12px; display: grid; gap: 8px; }
+.launch .lt { display: flex; align-items: center; gap: 8px; }
+.launch .lt b { font-size: 15px; }
+.launch .lt .rec { margin-left: auto; font-size: 11px; color: var(--muted); border: 1px solid var(--input); border-radius: 6px; padding: 3px 6px; }
+.launch dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: 12.5px; }
+.launch dt { color: var(--muted); }
+.launch dd { margin: 0; }
+.boot { display: grid; gap: 5px; font-size: 12.5px; }
+.boot div { display: flex; align-items: center; gap: 7px; }
+.boot .ok { color: var(--ok); }
+.boot .wait { color: var(--muted); }
+
+/* lock screen */
+.lock { background: radial-gradient(120% 70% at 30% 10%, #3a1214 0%, #160708 45%, #050505 100%); }
+.lock .clock { text-align: center; padding-top: 40px; }
+.lock .clock .d { font-size: 17px; font-weight: 500; color: #ffffffcc; }
+.lock .clock .h { font-size: 86px; font-weight: 600; letter-spacing: -2px; line-height: 1; margin-top: 4px; }
+.notif { margin: 26px 12px 0; background: #2a2a2ccc; backdrop-filter: blur(20px); border-radius: 22px; padding: 12px 14px; display: grid; gap: 4px; }
+.notif .nh { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: #ffffffb0; }
+.notif .nh .ic { width: 22px; height: 22px; border-radius: 6px; background: #0a0a0a; display: grid; place-items: center; overflow: hidden; }
+.notif .nh .ic img { width: 20px; height: 20px; }
+.notif .nh .tm { margin-left: auto; }
+.notif b { font-size: 14.5px; }
+.notif p { margin: 0; font-size: 14px; line-height: 1.35; }
+.nact { margin: 6px 12px 0; display: grid; gap: 1px; border-radius: 16px; overflow: hidden; }
+.nact span { background: #2a2a2ccc; padding: 12px 16px; font-size: 15px; }
+.nact span:first-child { color: #ff9b9e; }
+.notif.small { margin-top: 10px; opacity: .85; }
+
+.note-box { border: 1px solid var(--page-line); border-radius: 14px; padding: 14px 16px; display: grid; gap: 8px; max-width: 90ch; background: #ffffff05; font-size: 13.5px; color: #c9c9cc; }
+.note-box b { color: var(--fg); }
+.note-box ol { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+@media (prefers-reduced-motion: no-preference) { .screens { scroll-behavior: smooth; } }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></symbol>
+  <symbol id="i-inbox" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></symbol>
+  <symbol id="i-flag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/></symbol>
+  <symbol id="i-flagf" viewBox="0 0 24 24" fill="currentColor"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><rect x="3" y="14" width="2" height="8" rx="1"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 18v3c0 .6.4 1 1 1h4v-3h3v-3h2l1.4-1.4a6.5 6.5 0 1 0-4-4Z"/><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.4 2.6a2 2 0 0 1 3 3L12 15l-4 1 1-4Z"/></symbol>
+</svg>
+
+<div class="wrap">
+
+<header class="intro">
+  <h1>Ledge sur le téléphone, <b>orchestrateur</b> d'OpenRig</h1>
+  <p>Maquettes de l'app mobile (PWA) pour le nouveau Ledge. Elles partent de l'app réelle <span class="mono">origin/main</span> 0.29.0, lancée avec le relais et le faux PC de ses tests e2e : mêmes tokens sombres, même en-tête, même barre d'onglets, mêmes bots. Le texte et la structure suivent les décisions du brainstorm du 30/10 et l'écran Ledge retenu sur Desktop (proposition A). Page Desktop : <a href="https://claude.ai/artifact/FUfjAAe1tSUiK7FRMAt4JC">maquettes Ledge orchestrateur</a>.</p>
+  <div class="tabdiff" aria-label="Onglets avant et après">
+    <span class="mono" style="color:var(--page-muted)">onglets 0.29</span>
+    <span class="t">Ledge</span><span class="t">À traiter</span><span class="t">Agents</span><span class="t gone">Équipes</span>
+    <span style="color:var(--page-muted)">→</span>
+    <span class="t new">Ledge</span><span class="t new">À toi</span><span class="t new">Rigs</span><span class="t new">Projets</span>
+  </div>
+  <ul class="keys">
+    <li>Seul Ledge te parle des rigs : une décision d'un agent de rig arrive « via Ledge », avec son avis.</li>
+    <li>Ledge tranche dans son mandat. Design, architecture et critique remontent toujours, avec boutons.</li>
+    <li>Projets (sessions seules) et Rigs sont deux onglets distincts. Un rig a sa propre page, « dans ‹projet› » ou « hors projet ».</li>
+    <li>Les échanges entre agents se lisent dans la conversation (repliés par rig) et dans la page du rig.</li>
+    <li>Équipes disparaît : rôles, modèles d'équipe et tâches passent à OpenRig.</li>
+    <li>Lancer un rig se fait en le demandant à Ledge, ou par « Nouveau rig ». Le lancement se confirme avec la clé d'accès de l'appareil, comme aujourd'hui.</li>
+  </ul>
+</header>
+
+<!-- ————————————————————————————— 0 · today ————————————————————————————— -->
+<section class="row">
+  <div class="row-head">
+    <span class="eyebrow">Point de départ · app réelle 0.29.0</span>
+    <h2>Aujourd'hui sur le téléphone</h2>
+    <p>Captures de l'app mobile actuelle, avec les agents du brainstorm. Le fil de Ledge est une suite de questions-réponses, À traiter liste les demandes une par une, Agents regroupe les sessions par projet et les équipes Ledge y ont des tables.</p>
+  </div>
+  <div class="screens">
+    <figure><img class="shot" src="{{IMG:m-chat}}" alt="Écran Ledge actuel : questions et réponses"><figcaption><b>Ledge</b>Questions et réponses, cartes d'action. Pas de décision ni d'échange d'agents dans le fil.</figcaption></figure>
+    <figure><img class="shot" src="{{IMG:m-inbox}}" alt="Écran À traiter actuel"><figcaption><b>À traiter</b>Chaque demande arrive de sa session, même quand elle vient d'un agent d'équipe.</figcaption></figure>
+    <figure><img class="shot" src="{{IMG:m-agents}}" alt="Écran Agents actuel"><figcaption><b>Agents</b>Sessions par projet, rôles en <span class="mono">@lead</span>. L'onglet Équipes gère rôles et modèles.</figcaption></figure>
+  </div>
+</section>
+
+<!-- ————————————————————————————— 1 · Ledge ————————————————————————————— -->
+<section class="row">
+  <div class="row-head">
+    <span class="eyebrow">Onglet Ledge · proposition A adaptée</span>
+    <h2>La conversation avec Ledge</h2>
+    <p>Les bulles de la proposition A, en une colonne. Le rail de droite (À toi, Rigs, Tranché) devient un bandeau « Le point » sous l'en-tête ; une puce ouvre le détail en feuille. La décision arrive dans le message de Ledge avec ses boutons, les échanges d'un rig restent repliés sous le message.</p>
+  </div>
+  <div class="screens">
+
+    <!-- 1 · conversation -->
+    <figure>
+      <div class="phone">
+        <div class="sbar">16:45<i><em></em><span></span></i></div>
+        <div class="app">
+          <div class="hd">
+            <img class="mascot" src="{{IMG:a-mascot}}" alt="">
+            <div class="who"><div class="conn">PC-Desan · connecté</div><h1>Ledge<span class="dot">.</span></h1><p>Orchestre 2 rigs · 8 agents · tranche dans son mandat</p></div>
+            <button class="ibtn" aria-label="Nouvelle conversation"><svg><use href="#i-edit"/></svg></button>
+          </div>
+          <div class="point" aria-label="Le point">
+            <span class="chip">À toi <span class="n hot">3</span></span>
+            <span class="chip"><svg class="flag"><use href="#i-flagf"/></svg>factory <span class="bar"><i style="width:66%"></i></span>4/6</span>
+            <span class="chip"><svg class="flag"><use href="#i-flagf"/></svg>starter 1/2</span>
+            <span class="chip">Tranché <span class="n">3</span></span>
+          </div>
+          <main class="chat">
+            <div class="day">AUJOURD'HUI</div>
+            <div class="fold"><div class="fh"><svg class="flag"><use href="#i-flagf"/></svg><b>starter</b> · 1 échange · 16:31<span class="go">Voir ▸</span></div></div>
+          <div class="msg">
+              <img class="av" src="{{IMG:a-mascot}}" alt="">
+              <div>
+                <div class="meta"><b>Ledge</b> · 16:38</div>
+                <div class="bubble"><span>J'ai tranché pour <b>build</b> : merge, pas de rebase. <span class="soft">Règle du 26/10 · force-push refusé.</span></span><div class="btns"><span class="btn small">Revenir dessus</span></div></div>
+              </div>
+            </div>
+            <div class="msg">
+              <img class="av" src="{{IMG:a-mascot}}" alt="">
+              <div>
+                <div class="meta"><b>Ledge</b> · 16:44</div>
+                <div class="bubble">
+                  <span>factory avance sur la reprise après reboot. Une décision t'attend, je ne peux pas la prendre seul :</span>
+                  <div class="decision">
+                    <div class="top"><span class="kind">Architecture</span>orch-lead@factory · 4 min</div>
+                    <h3>Sessions : passer du fichier JSON à SQLite ?</h3>
+                    <p>Mon avis : SQLite. Tu as écarté deux fois les fichiers plats pour l'état partagé.</p>
+                    <div class="btns"><span class="btn primary">SQLite</span><span class="btn">Garder le JSON</span><span class="btn ghost">En parler</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="fold">
+              <div class="fh"><svg class="flag"><use href="#i-flagf"/></svg><b>factory</b> · 3 échanges · 16:36 → 16:42<span class="go">Voir ▾</span></div>
+            </div>
+            </main>
+          <div class="sugg"><span>Lance un rig…</span><span>Où en est factory ?</span><span>Qu'as-tu tranché ?</span></div>
+          <div class="composer"><span class="round"><svg><use href="#i-plus"/></svg></span><div class="field">Écrire à Ledge… (@build pour un agent)</div><span class="round send"><svg><use href="#i-up"/></svg></span></div>
+          <div class="mandate">tranche dans son mandat · design, architecture et critique te reviennent</div>
+        </div>
+        <nav class="tabs"><a class="on"><svg><use href="#i-chat"/></svg>Ledge</a><a><svg><use href="#i-inbox"/></svg>À toi<span class="badge">3</span></a><a><svg><use href="#i-flag"/></svg>Rigs</a><a><svg><use href="#i-folder"/></svg>Projets</a></nav>
+        <span class="home-ind"></span>
+      </div>
+      <figcaption><span class="tag pick">A1 · retenu le 30/10</span><b>1 · La conversation</b>
+        <ul><li>Bulles de la proposition A, mascotte à gauche, tes messages à droite.</li><li>« Le point » : le rail devient un bandeau de puces qui défile.</li><li>La barre de saisie réelle (joindre, envoyer) reste, avec ses suggestions.</li></ul></figcaption>
+    </figure>
+
+    <!-- 2 · échanges dépliés -->
+    <figure>
+      <div class="phone">
+        <div class="sbar">16:46<i><em></em><span></span></i></div>
+        <div class="app">
+          <div class="hd">
+            <img class="mascot" src="{{IMG:a-mascot}}" alt="">
+            <div class="who"><div class="conn">PC-Desan · connecté</div><h1>Ledge<span class="dot">.</span></h1><p>Orchestre 2 rigs · 8 agents · tranche dans son mandat</p></div>
+            <button class="ibtn" aria-label="Nouvelle conversation"><svg><use href="#i-edit"/></svg></button>
+          </div>
+          <div class="point"><span class="chip">À toi <span class="n hot">2</span></span><span class="chip"><svg class="flag"><use href="#i-flagf"/></svg>factory <span class="bar"><i style="width:66%"></i></span>4/6</span><span class="chip"><svg class="flag"><use href="#i-flagf"/></svg>starter 1/2</span><span class="chip">Tranché <span class="n">4</span></span></div>
+          <main class="tight chat">
+            <div class="msg">
+              <img class="av" src="{{IMG:a-mascot}}" alt="">
+              <div><div class="meta"><b>Ledge</b> · 16:44</div>
+                <div class="bubble"><span class="soft">Sessions : passer du fichier JSON à SQLite ?</span><span class="pill ok">✓ Tu as choisi SQLite · 16:45</span></div></div>
+            </div>
+            <div class="fold">
+              <div class="fh"><svg class="flag"><use href="#i-flagf"/></svg><b>factory</b> · 4 échanges · 16:36 → 16:45<span class="go">Replier ▴</span></div>
+              <div class="ex"><img src="{{IMG:a-bot-0}}" alt=""><div><div class="l"><b>orch-lead → qa</b> · tâche · 16:36</div><div class="t">Vérifier la reprise après reboot sur deux rigs.</div></div></div>
+              <div class="ex"><img src="{{IMG:a-bot-2}}" alt=""><div><div class="l"><b>build → review-a</b> · message · 16:42</div><div class="t">Candidat prêt sur feat/rigs (3f2a1c0), tests ciblés verts.</div></div></div>
+              <div class="ex"><img src="{{IMG:a-bot-6}}" alt=""><div><div class="l"><b>review-a → build</b> · message · 16:42</div><div class="t">Je relis, verdict dans 10 min.</div></div></div>
+              <div class="ex"><img src="{{IMG:a-mascot}}" alt=""><div><div class="l"><b style="color:#ff8a8d">Ledge → orch-lead</b> · ta décision · 16:45</div><div class="t">SQLite. Garde le JSON en lecture le temps de la migration.</div></div></div>
+              <div class="fh"><span class="go" style="margin-left:0">Ouvrir le fil de factory ›</span></div>
+            </div>
+            <div class="me">Pourquoi review-b a été relancé ?</div>
+            <div class="me-time">Toi · 16:46</div>
+            <div class="msg">
+              <img class="av" src="{{IMG:a-mascot}}" alt="">
+              <div><div class="meta"><b>Ledge</b> · 16:46</div><div class="bubble"><span>Il approchait 82 % de contexte. L'operator l'a relevé, la relève a repris sa revue.</span></div></div>
+            </div>
+          </main>
+          <div class="composer"><span class="round"><svg><use href="#i-plus"/></svg></span><div class="field typed">@build relance les tests e2e<span style="color:var(--muted)">|</span></div><span class="round send"><svg><use href="#i-up"/></svg></span></div>
+          <div class="mandate"><span class="at">@build</span> · factory · Ledge lui transmet ton message</div>
+        </div>
+        <nav class="tabs"><a class="on"><svg><use href="#i-chat"/></svg>Ledge</a><a><svg><use href="#i-inbox"/></svg>À toi<span class="badge">2</span></a><a><svg><use href="#i-flag"/></svg>Rigs</a><a><svg><use href="#i-folder"/></svg>Projets</a></nav>
+        <span class="home-ind"></span>
+      </div>
+      <figcaption><b>2 · Après la décision, échanges dépliés</b>
+        <ul><li>La décision se referme sur ton choix ; Ledge le transmet, et ça se lit dans les échanges du rig.</li><li>« Ouvrir le fil de factory » mène à la page du rig (écran 10).</li><li><span class="mono">@build</span> dans la saisie : Ledge relaie à l'agent, il ne lui parle pas à ta place.</li></ul></figcaption>
+    </figure>
+
+    <!-- 3 · le point en feuille -->
+    <figure>
+      <div class="phone">
+        <div class="sbar">16:45<i><em></em><span></span></i></div>
+        <div class="app">
+          <div class="hd">
+            <img class="mascot" src="{{IMG:a-mascot}}" alt="">
+            <div class="who"><div class="conn">PC-Desan · connecté</div><h1>Ledge<span class="dot">.</span></h1><p>Orchestre 2 rigs · 8 agents · tranche dans son mandat</p></div>
+            <button class="ibtn"><svg><use href="#i-edit"/></svg></button>
+          </div>
+          <div class="point"><span class="chip">À toi <span class="n hot">3</span></span><span class="chip"><svg class="flag"><use href="#i-flagf"/></svg>factory 4/6</span><span class="chip"><svg class="flag"><use href="#i-flagf"/></svg>starter 1/2</span><span class="chip on">Tranché <span class="n">3</span></span></div>
+          <main><div class="day">AUJOURD'HUI</div></main>
+        </div>
+        <div class="dim"></div>
+        <div class="sheet">
+          <span class="grab"></span>
+          <h2>Le point · 16:45</h2>
+          <div class="sec">
+            <div class="label"><span>À toi</span><span>3</span></div>
+            <div class="line"><img src="{{IMG:a-mascot}}" alt=""><span><b>orch-lead</b> JSON ou SQLite ?</span><span class="r"><span class="btn small">Voir</span></span></div>
+            <div class="line"><img src="{{IMG:a-bot-1}}" alt=""><span><b>Luna</b> Quel port ?</span><span class="r"><span class="btn small">Répondre</span></span></div>
+            <div class="line"><img src="{{IMG:a-bot-3}}" alt=""><span><b>Otto</b> <span class="mono">npm test</span></span><span class="r"><span class="btn small primary">Oui</span><span class="btn small">Non</span></span></div>
+          </div>
+          <div class="sec">
+            <div class="label"><span>Rigs</span><span>2</span></div>
+            <div class="line"><svg class="flag"><use href="#i-flagf"/></svg><span><b>factory</b> 4/6 au travail</span><span class="r"><span class="btn small">Ouvrir</span></span></div>
+            <div class="line"><svg class="flag"><use href="#i-flagf"/></svg><span><b>starter</b> 1/2 au travail</span><span class="r"><span class="btn small">Ouvrir</span></span></div>
+          </div>
+          <div class="sec">
+            <div class="label"><span>Tranché aujourd'hui</span><span>3</span></div>
+            <div class="line"><span><b>build</b> merge, pas de rebase</span><span class="r"><span class="btn small">Revenir</span></span></div>
+            <div class="line"><span><b>dev-review</b> tests ciblés</span><span class="r"><span class="btn small">Revenir</span></span></div>
+            <div class="line"><span><b>operator</b> starter relancé</span><span class="r"><span class="btn small">Voir</span></span></div>
+          </div>
+          <span class="btn big">Résumer la journée</span>
+        </div>
+        <span class="home-ind"></span>
+      </div>
+      <figcaption><b>3 · « Le point » en feuille</b>
+        <ul><li>Une puce du bandeau ouvre cette feuille, placée sur la bonne section.</li><li>Les trois blocs du rail Desktop, avec les mêmes boutons, et « Résumer la journée » en bas.</li><li>« Revenir » rouvre une décision tranchée par Ledge, dans la conversation.</li></ul></figcaption>
+    </figure>
+
+    <!-- 4 · variante A2 -->
+    <figure>
+      <div class="phone">
+        <div class="sbar">16:45<i><em></em><span></span></i></div>
+        <div class="app">
+          <div class="hd">
+            <img class="mascot" src="{{IMG:a-mascot}}" alt="">
+            <div class="who"><div class="conn">PC-Desan · connecté</div><h1>Ledge<span class="dot">.</span></h1><p>3 à toi · 2 rigs · 3 tranchées par Ledge</p></div>
+            <button class="ibtn"><svg><use href="#i-edit"/></svg></button>
+          </div>
+          <main class="tight">
+            <div class="decision" style="border-color:#a16207">
+              <div class="top"><span class="kind">Architecture</span>orch-lead@factory · 4 min</div>
+              <h3>Sessions : passer du fichier JSON à SQLite ?</h3>
+              <p>Mon avis : SQLite. Tu as écarté deux fois les fichiers plats pour l'état partagé. Je te la passe : c'est de l'architecture.</p>
+              <div class="btns"><span class="btn primary">SQLite</span><span class="btn">Garder le JSON</span><span class="btn ghost">En parler</span></div>
+              <div class="sub" style="font-size:12px;color:var(--muted)">+ 2 autres pour toi dans À toi</div>
+            </div>
+            <div class="xrow"><span class="tm">16:36</span><div><div class="l"><b>orch-lead → qa</b> · factory · tâche</div><div class="t">Vérifier la reprise après reboot sur deux rigs.</div></div></div>
+            <div class="xrow ledge"><span class="tm">16:38</span><div><div class="l"><b>Ledge</b> → <b>build</b> · décision</div><div class="t">Merge, pas de rebase : le force-push est interdit ici.</div></div></div>
+            <div class="xrow"><span class="tm">16:42</span><div><div class="l"><b>build → review-a</b> · factory</div><div class="t">Candidat prêt sur feat/rigs (3f2a1c0), tests ciblés verts.</div></div></div>
+            <div class="xrow" style="background:var(--raised);border-radius:10px;padding:7px 8px;margin-left:-8px"><span class="tm">16:44</span><div><div class="l"><b>Toi → Ledge</b></div><div class="t">Pourquoi review-b a été relancé ?</div></div></div>
+            <div class="xrow ledge"><span class="tm">16:44</span><div><div class="l"><b>Ledge</b> → <b>toi</b></div><div class="t">Il approchait 82 % de contexte. L'operator l'a relevé.</div></div></div>
+          </main>
+          <div class="composer"><span class="round"><svg><use href="#i-plus"/></svg></span><div class="field">Écrire à Ledge… (@build pour un agent)</div><span class="round send"><svg><use href="#i-up"/></svg></span></div>
+        </div>
+        <nav class="tabs"><a class="on"><svg><use href="#i-chat"/></svg>Ledge</a><a><svg><use href="#i-inbox"/></svg>À toi<span class="badge">3</span></a><a><svg><use href="#i-flag"/></svg>Rigs</a><a><svg><use href="#i-folder"/></svg>Projets</a></nav>
+        <span class="home-ind"></span>
+      </div>
+      <figcaption><span class="tag">A2 · écartée</span><b>4 · Décision épinglée, fil chronologique</b>
+        <ul><li>Reprend l'encoche ouverte (<span class="mono">nn-open</span>) : la décision la plus ancienne en haut, puis un seul fil mêlant rigs et conversation.</li><li>Plus dense, mais s'éloigne de la proposition A retenue sur Desktop.</li></ul></figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ————————————————————————————— 2 · décisions ————————————————————————————— -->
+<section class="row">
+  <div class="row-head">
+    <span class="eyebrow">Onglet À toi · notifications</span>
+    <h2>Les décisions qui te reviennent</h2>
+    <p>À toi remplace À traiter. Deux provenances : ce que Ledge te passe (les agents des rigs ne te contactent jamais en direct) et les demandes des sessions seules, inchangées. Le bouton recommandé est celui de Ledge.</p>
+  </div>
+  <div class="screens">
+
+    <!-- 5 · À toi -->
+    <figure>
+      <div class="phone">
+        <div class="sbar">16:45<i><em></em><span></span></i></div>
+        <div class="app">
+          <div class="ptitle"><div class="top"><span class="conn">PC-Desan · connecté</span><span class="ibtn bordered"><svg><use href="#i-gear"/></svg></span></div><h1>À toi</h1><p>3 décisions. Ledge en a tranché 3 autres.</p></div>
+          <div class="seg"><span class="on">Tout</span><span>Via Ledge</span><span>Sessions</span></div>
+          <main class="tight">
+            <div class="label"><span>Via Ledge · rigs</span><span>1</span></div>
+            <div class="card">
+              <div class="via"><img src="{{IMG:a-mascot}}" alt=""><span><b>Ledge</b> te passe une question d'<b>orch-lead</b> · factory</span></div>
+              <h3>Sessions : passer du fichier JSON à SQLite ?</h3>
+              <div class="sub">Mon avis : SQLite. Hors de mon mandat : architecture.</div>
+              <div class="btns"><span class="pill q">Architecture</span><span style="flex:1"></span><span class="btn small primary">SQLite</span><span class="btn small">JSON</span></div>
+            </div>
+            <div class="label" style="margin-top:6px"><span>Sessions seules</span><span>2</span></div>
+            <div class="card">
+              <div class="who"><img src="{{IMG:a-bot-1}}" alt=""><span><b>Luna</b> · Nouvelle page d'accueil</span><span class="time">5 min</span></div>
+              <h3>Quel port pour le serveur de preview ?</h3>
+              <div class="sub">Website · <code>feat/WEB-18</code></div>
+              <div class="btns"><span class="pill q">Une question</span><span style="flex:1"></span><span class="btn small">Répondre</span></div>
+            </div>
+            <div class="card">
+              <div class="who"><img src="{{IMG:a-bot-3}}" alt=""><span><b>Otto</b> · Préparer la release</span><span class="time">5 min</span></div>
+              <h3 class="mono" style="font-size:15px">npm test</h3>
+              <div class="btns"><span class="pill a">Votre accord</span><span style="flex:1"></span><span class="btn small primary">Oui</span><span class="btn small">Non</span></div>
+            </div>
+          </main>
+        </div>
+        <nav class="tabs"><a><svg><use href="#i-chat"/></svg>Ledge</a><a class="on"><svg><use href="#i-inbox"/></svg>À toi<span class="badge">3</span></a><a><svg><use href="#i-flag"/></svg>Rigs</a><a><svg><use href="#i-folder"/></svg>Projets</a></nav>
+        <span class="home-ind"></span>
+      </div>
+      <figcaption><b>5 · À toi</b>
+        <ul><li>Mêmes cartes qu'À traiter, avec les boutons sur la carte quand la réponse tient en un geste.</li><li>« Via Ledge » porte l'avis de Ledge et la raison de la remontée (design, architecture, critique).</li><li>Les filtres deviennent Tout / Via Ledge / Sessions.</li></ul></figcaption>
+    </figure>
+
+    <!-- 6 · détail + passkey -->
+    <figure>
+      <div class="phone">
+        <div class="sbar">16:45<i><em></em><span></span></i></div>
+        <div class="app">
+          <div class="back"><svg><use href="#i-back"/></svg>Retour à À toi</div>
+          <main class="tight" style="padding-top:4px">
+            <div class="via"><img src="{{IMG:a-mascot}}" alt=""><span><b>Ledge</b> · pour <b>orch-lead@factory</b> · il y a 4 min</span></div>
+            <h2 style="font-size:22px;letter-spacing:-.4px;line-height:1.2">Sessions : passer du fichier JSON à SQLite ?</h2>
+            <div class="btns"><span class="pill q">Architecture</span><span class="pill idle">Ledge · feat/rigs</span></div>
+            <div class="card" style="gap:6px">
+              <div class="label"><span>Ce que dit orch-lead</span></div>
+              <div style="font-size:13.5px">Le fichier <span class="mono">sessions.json</span> se corrompt quand deux sièges écrivent en même temps. SQLite règle l'accès concurrent mais ajoute une dépendance native.</div>
+            </div>
+            <div class="card" style="gap:6px;background:var(--ledge-bubble);border-color:var(--ledge-line)">
+              <div class="label"><span>L'avis de Ledge</span></div>
+              <div style="font-size:13.5px">SQLite. Tu as écarté deux fois les fichiers plats pour l'état partagé (19/10, 26/10). Je te la passe : c'est de l'architecture.</div>
+            </div>
+          </main>
+        </div>
+        <div class="dim" style="background:#00000080"></div>
+        <div class="sheet">
+          <span class="grab"></span>
+          <h2>Répondre à orch-lead</h2>
+          <span class="btn big primary">SQLite <span class="rec">· recommandé par Ledge</span></span>
+          <span class="btn big">Garder le JSON</span>
+          <span class="btn big ghost">En parler avec Ledge</span>
+          <div class="passkey"><svg><use href="#i-key"/></svg>Ta réponse part d'un geste. Seuls les actes (lancer, arrêter, relancer un rig, accords risqués) demandent la clé d'accès.</div>
+        </div>
+        <span class="home-ind"></span>
+      </div>
+      <figcaption><b>6 · La décision en entier</b>
+        <ul><li>La demande de l'agent, puis l'avis de Ledge avec ses souvenirs (dates des choix passés).</li><li>Le choix recommandé en premier. « En parler » ouvre la conversation sur cette décision.</li><li>Pas de clé d'accès pour répondre à une décision (retenu le 30/10) : elle reste pour ce qui agit, et la notification peut répondre directement.</li></ul></figcaption>
+    </figure>
+
+    <!-- 7 · lock screen -->
+    <figure>
+      <div class="phone lock">
+        <div class="sbar">&nbsp;<i><em></em><span></span></i></div>
+        <div class="clock"><div class="d">jeudi 30 octobre</div><div class="h">16:44</div></div>
+        <div class="notif">
+          <div class="nh"><span class="ic"><img src="{{IMG:a-mascot}}" alt=""></span>LEDGE<span class="tm">maintenant</span></div>
+          <b>Ledge · une décision pour toi</b>
+          <p>Architecture, factory : passer les sessions de JSON à SQLite ? Mon avis : SQLite.</p>
+        </div>
+        <div class="nact"><span>SQLite</span><span>Garder le JSON</span><span>Ouvrir</span></div>
+        <div class="notif small">
+          <div class="nh"><span class="ic"><img src="{{IMG:a-mascot}}" alt=""></span>LEDGE<span class="tm">il y a 6 min</span></div>
+          <b>Ledge · tranché pour toi</b>
+          <p>build : merge, pas de rebase (règle du 26/10).</p>
+        </div>
+        <span class="home-ind"></span>
+      </div>
+      <figcaption><b>7 · La notification</b>
+        <ul><li>Toutes les notifications viennent de Ledge, jamais d'un agent de rig.</li><li>Une décision remontée sonne ; ce que Ledge a tranché arrive en silencieux, groupé.</li><li>Les boutons d'action ne sont possibles que là où le navigateur les permet (Android) ; sinon « Ouvrir » mène à l'écran 6.</li></ul></figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ————————————————————————————— 3 · rigs & projets ————————————————————————————— -->
+<section class="row">
+  <div class="row-head">
+    <span class="eyebrow">Onglets Rigs et Projets</span>
+    <h2>Les rigs, leurs échanges, et les projets</h2>
+    <p>Rigs reprend Rigs › En cours de Desktop en cartes : où travaille le rig, son avancée, ses sièges, le dernier échange. Un rig ouvre sa propre page, comme sa pièce sur Desktop. Projets ne garde que les sessions seules ; un rig rangé dans un projet y est seulement signalé.</p>
+  </div>
+  <div class="screens">
+
+    <!-- 8 · Rigs -->
+    <figure>
+      <div class="phone">
+        <div class="sbar">16:45<i><em></em><span></span></i></div>
+        <div class="app">
+          <div class="ptitle"><div class="top"><span class="conn">PC-Desan · connecté</span><span class="ibtn bordered"><svg><use href="#i-plus"/></svg></span></div><h1>Rigs</h1><p>3 rigs · 9 agents · noyau OpenRig au repos</p></div>
+          <main class="tight" style="padding-top:2px">
+            <div class="rig">
+              <div class="rh"><span class="rdot" style="background:var(--rig-factory)"></span><h3>factory</h3><span class="sp">rig · 6 sièges</span><svg class="chev" width="18" height="18"><use href="#i-chev"/></svg></div>
+              <div class="where"><span>dans <span class="in">Ledge</span></span><span class="mono">⎇ feat/rigs</span><span>spec factory</span></div>
+              <div class="prog"><span class="track"><i style="width:66%"></i></span>4/6 au travail</div>
+              <div class="seats"><span class="seat"><i class="q"></i>lead</span><span class="seat"><i></i>build</span><span class="seat"><i></i>review-a</span><span class="seat"><i class="ok"></i>review-b</span><span class="seat"><i></i>qa</span><span class="seat"><i class="ok"></i>design</span></div>
+              <div class="lastex"><b>build → review-a</b> · Candidat prêt sur feat/rigs (3f2a1c0) · 16:42</div>
+            </div>
+            <div class="rig">
+              <div class="rh"><span class="rdot" style="background:var(--rig-starter)"></span><h3>starter</h3><span class="sp">rig · 2 sièges</span><svg class="chev" width="18" height="18"><use href="#i-chev"/></svg></div>
+              <div class="where"><span>dans <span class="in">Ledge</span></span><span class="mono">⎇ fix/notch</span></div>
+              <div class="prog"><span class="track"><i style="width:50%"></i></span>1/2 au travail</div>
+              <div class="lastex"><b>dev-review → dev-build</b> · Deux remarques mineures · 16:31</div>
+            </div>
+            <div class="rig">
+              <div class="rh"><span class="rdot" style="background:var(--rig-veille)"></span><h3>veille-deps</h3><span class="sp">rig · 1 siège</span><svg class="chev" width="18" height="18"><use href="#i-chev"/></svg></div>
+              <div class="where"><span class="in">hors projet</span><span>2 dépôts trouvés</span></div>
+              <div class="prog"><span class="track"><i style="width:0"></i></span>au repos</div>
+            </div>
+            <div class="rig" style="padding:10px 14px">
+              <div class="rh"><span class="rdot" style="background:var(--core)"></span><h3 style="font-size:14px">Noyau OpenRig</h3><span class="sp">operator · queue</span><span class="sp" style="margin-left:auto">au repos</span></div>
+            </div>
+          </main>
+        </div>
+        <nav class="tabs"><a><svg><use href="#i-chat"/></svg>Ledge</a><a><svg><use href="#i-inbox"/></svg>À toi<span class="badge">3</span></a><a class="on"><svg><use href="#i-flag"/></svg>Rigs</a><a><svg><use href="#i-folder"/></svg>Projets</a></nav>
+        <span class="home-ind"></span>
+      </div>
+      <figcaption><b>8 · Rigs</b>
+        <ul><li>Une carte par rig : « dans ‹projet› » ou « hors projet », branche, spec, avancée, sièges (point = état), dernier échange.</li><li>Le noyau (operator, queue) en bas, discret ; l'advisor n'y figure pas.</li><li>« + » ouvre Nouveau rig (écran 13).</li></ul></figcaption>
+    </figure>
+
+    <!-- 9 · rig sièges -->
+    <figure>
+      <div class="phone">
+        <div class="sbar">16:45<i><em></em><span></span></i></div>
+        <div class="app">
+          <div class="back"><svg><use href="#i-back"/></svg>Rigs</div>
+          <div style="display:grid;gap:6px;padding-bottom:10px">
+            <div style="display:flex;align-items:center;gap:8px"><span class="rdot" style="background:var(--rig-factory);width:11px;height:11px"></span><h1 style="font-size:24px;letter-spacing:-.5px">factory</h1><span class="pill w" style="margin-left:auto">4 au travail</span></div>
+            <div class="where" style="font-size:12.5px;color:var(--muted)">dans <b style="color:var(--fg);font-weight:500">Ledge</b> · <span class="mono">⎇ feat/rigs</span> · spec factory · depuis 14:02</div>
+          </div>
+          <div class="seg"><span class="on">Sièges · 6</span><span>Échanges · 12</span><span>Queue · 3</span></div>
+          <main class="tight" style="gap:0">
+            <div class="seatrow"><img src="{{IMG:a-bot-0}}" alt=""><div><div class="n">orch-lead <span class="role">@lead</span></div><div class="d">Mener le rig · Claude Code · opus</div></div><span class="pill q">Question</span></div>
+            <div class="seatrow"><img src="{{IMG:a-bot-2}}" alt=""><div><div class="n">build <span class="role">@build</span></div><div class="d">Reprise après reboot · ctx <span class="ctx"><i style="width:63%"></i></span> 63 %</div></div><span class="pill w">Au travail</span></div>
+            <div class="seatrow"><img src="{{IMG:a-bot-6}}" alt=""><div><div class="n">review-a <span class="role">@review-a</span></div><div class="d">Relire 3f2a1c0 · Codex · gpt-5.5</div></div><span class="pill w">Au travail</span></div>
+            <div class="seatrow"><img src="{{IMG:a-bot-8}}" alt=""><div><div class="n">review-b <span class="role">@review-b</span></div><div class="d">Relève de review-b · ctx 12 %</div></div><span class="pill ok">Disponible</span></div>
+            <div class="seatrow"><img src="{{IMG:a-bot-3}}" alt=""><div><div class="n">qa <span class="role">@qa</span></div><div class="d">Vérifier la reprise · sonnet</div></div><span class="pill w">Au travail</span></div>
+            <div class="seatrow"><img src="{{IMG:a-bot-5}}" alt=""><div><div class="n">design <span class="role">@design</span></div><div class="d">Maquettes de l'encoche · fini</div></div><span class="pill ok">Disponible</span></div>
+          </main>
+          <div class="actions"><span class="btn big">Relancer un siège…</span><span class="btn big">Arrêter le rig…</span></div>
+        </div>
+        <nav class="tabs"><a><svg><use href="#i-chat"/></svg>Ledge</a><a><svg><use href="#i-inbox"/></svg>À toi<span class="badge">3</span></a><a class="on"><svg><use href="#i-flag"/></svg>Rigs</a><a><svg><use href="#i-folder"/></svg>Projets</a></nav>
+        <span class="home-ind"></span>
+      </div>
+      <figcaption><b>9 · Un rig, sa page · Sièges</b>
+        <ul><li>La table du rig devient une liste de sièges : rôle, tâche, outil · modèle, contexte, état.</li><li>Un siège ouvre son fil et son terminal, comme une session aujourd'hui.</li><li>Relancer et Arrêter passent par OpenRig (pas de <span class="mono">kill</span> côté Ledge), confirmés par clé d'accès.</li></ul></figcaption>
+    </figure>
+
+    <!-- 10 · rig échanges -->
+    <figure>
+      <div class="phone">
+        <div class="sbar">16:46<i><em></em><span></span></i></div>
+        <div class="app">
+          <div class="back"><svg><use href="#i-back"/></svg>Rigs</div>
+          <div style="display:grid;gap:6px;padding-bottom:10px">
+            <div style="display:flex;align-items:center;gap:8px"><span class="rdot" style="background:var(--rig-factory);width:11px;height:11px"></span><h1 style="font-size:24px;letter-spacing:-.5px">factory</h1><span class="pill w" style="margin-left:auto">4 au travail</span></div>
+            <div class="where" style="font-size:12.5px;color:var(--muted)">dans <b style="color:var(--fg);font-weight:500">Ledge</b> · <span class="mono">⎇ feat/rigs</span> · spec factory · depuis 14:02</div>
+          </div>
+          <div class="seg"><span>Sièges · 6</span><span class="on">Échanges · 12</span><span>Queue · 3</span></div>
+          <main class="tight">
+            <div class="xrow"><span class="tm">16:12</span><div><div class="l"><b>operator → review-b</b> · relève</div><div class="t">Contexte à 82 %. Relève lancée, elle reprend la revue de 3f2a1c0.</div></div></div>
+            <div class="xrow"><span class="tm">16:36</span><div><div class="l"><b>orch-lead → qa</b> · tâche confiée</div><div class="t">Vérifier la reprise après reboot sur deux rigs.</div></div></div>
+            <div class="xrow ledge"><span class="tm">16:38</span><div><div class="l"><b>Ledge</b> → <b>build</b> · tranché</div><div class="t">Merge, pas de rebase : le force-push est interdit ici.</div></div></div>
+            <div class="xrow"><span class="tm">16:40</span><div><div class="l"><b>orch-lead → Ledge</b> · décision</div><div class="t">JSON ou SQLite pour les sessions ? Je penche pour SQLite.</div></div></div>
+            <div class="xrow"><span class="tm">16:42</span><div><div class="l"><b>build → review-a</b> · message</div><div class="t">Candidat prêt sur feat/rigs (3f2a1c0), tests ciblés verts.</div></div></div>
+            <div class="xrow"><span class="tm">16:42</span><div><div class="l"><b>review-a → build</b> · message</div><div class="t">Je relis, verdict dans 10 min.</div></div></div>
+            <div class="xrow ledge"><span class="tm">16:45</span><div><div class="l"><b>Ledge</b> → <b>orch-lead</b> · ta décision</div><div class="t">SQLite. Garde le JSON en lecture le temps de la migration.</div></div></div>
+          </main>
+          <div class="composer"><div class="field">Écrire à Ledge sur factory…</div><span class="round send"><svg><use href="#i-up"/></svg></span></div>
+        </div>
+        <nav class="tabs"><a><svg><use href="#i-chat"/></svg>Ledge</a><a><svg><use href="#i-inbox"/></svg>À toi<span class="badge">2</span></a><a class="on"><svg><use href="#i-flag"/></svg>Rigs</a><a><svg><use href="#i-folder"/></svg>Projets</a></nav>
+        <span class="home-ind"></span>
+      </div>
+      <figcaption><b>10 · Un rig, sa page · Échanges</b>
+        <ul><li>Tous les <span class="mono">rig send</span> du rig, dans l'ordre : les messages entre agents, ceux de l'operator, et ce que Ledge a tranché (fond rouge).</li><li>Queue : les tâches de la queue OpenRig pour ce rig, en lecture.</li><li>La saisie écrit à Ledge, à propos de ce rig. Ledge reste ton seul interlocuteur.</li></ul></figcaption>
+    </figure>
+
+    <!-- 11 · Projets -->
+    <figure>
+      <div class="phone">
+        <div class="sbar">16:45<i><em></em><span></span></i></div>
+        <div class="app">
+          <div class="ptitle"><div class="top"><span class="conn">PC-Desan · connecté</span><span class="ibtn bordered"><svg><use href="#i-gear"/></svg></span></div><h1>Projets</h1><p>4 sessions seules · 2 projets sur ce PC</p></div>
+          <main class="tight" style="gap:16px">
+            <div class="proj">
+              <div class="ph"><span class="rdot" style="background:#3b82f6"></span><b>Ledge</b><span style="margin-left:auto">2 sessions</span></div>
+              <div class="srow"><img src="{{IMG:a-bot-3}}" alt=""><div><div class="t">Préparer la release</div><div class="s">Otto · <code>release/LEDGE-0.30</code></div><span class="pill a" style="margin-top:5px">Votre accord</span></div><svg width="18" height="18" style="color:var(--muted)"><use href="#i-chev"/></svg></div>
+              <div class="srow"><img src="{{IMG:a-bot-7}}" alt=""><div><div class="t">Reconnexion ssh</div><div class="s">Nova · <code>fix/LEDGE-42</code></div><span class="pill idle" style="margin-top:5px">En attente</span></div><svg width="18" height="18" style="color:var(--muted)"><use href="#i-chev"/></svg></div>
+              <div class="rigline"><svg class="flag"><use href="#i-flagf"/></svg><span>2 rigs travaillent aussi ici : <b>factory</b>, <b>starter</b></span><span style="margin-left:auto">Rigs ›</span></div>
+            </div>
+            <div class="proj">
+              <div class="ph"><span class="rdot" style="background:#10b981"></span><b>Website</b><span style="margin-left:auto">2 sessions</span></div>
+              <div class="srow"><img src="{{IMG:a-bot-1}}" alt=""><div><div class="t">Nouvelle page d'accueil</div><div class="s">Luna · <code>feat/WEB-18</code></div><span class="pill q" style="margin-top:5px">Une question</span></div><svg width="18" height="18" style="color:var(--muted)"><use href="#i-chev"/></svg></div>
+              <div class="srow"><img src="{{IMG:a-bot-2}}" alt=""><div><div class="t">Mise en page mobile</div><div class="s">Milo · <code>fix/WEB-18-m</code></div><span class="pill w" style="margin-top:5px">Au travail</span></div><svg width="18" height="18" style="color:var(--muted)"><use href="#i-chev"/></svg></div>
+            </div>
+          </main>
+        </div>
+        <nav class="tabs"><a><svg><use href="#i-chat"/></svg>Ledge</a><a><svg><use href="#i-inbox"/></svg>À toi<span class="badge">3</span></a><a><svg><use href="#i-flag"/></svg>Rigs</a><a class="on"><svg><use href="#i-folder"/></svg>Projets</a></nav>
+        <span class="home-ind"></span>
+      </div>
+      <figcaption><b>11 · Projets</b>
+        <ul><li>L'onglet Agents renommé : les sessions seules par projet, rangées comme aujourd'hui.</li><li>Plus de table d'équipe dans un projet. Un rig rangé dans ce projet est seulement signalé, avec un lien vers sa page.</li></ul></figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ————————————————————————————— 4 · lancer ————————————————————————————— -->
+<section class="row">
+  <div class="row-head">
+    <span class="eyebrow">Lancer un rig depuis le téléphone</span>
+    <h2>Le demander à Ledge, ou Nouveau rig</h2>
+    <p>Sur le téléphone, le plus naturel est de le demander : Ledge choisit la spec et le lieu, puis propose une carte de lancement (comme la carte « Lancer une session » d'aujourd'hui). « + » sur Rigs ouvre la même chose en formulaire court. Le lancement se confirme par clé d'accès, puis Ledge raconte le démarrage dans la conversation.</p>
+  </div>
+  <div class="screens">
+
+    <!-- 12 · carte de lancement -->
+    <figure>
+      <div class="phone">
+        <div class="sbar">17:02<i><em></em><span></span></i></div>
+        <div class="app">
+          <div class="hd">
+            <img class="mascot" src="{{IMG:a-mascot}}" alt="">
+            <div class="who"><div class="conn">PC-Desan · connecté</div><h1>Ledge<span class="dot">.</span></h1><p>Orchestre 2 rigs · 8 agents · tranche dans son mandat</p></div>
+            <button class="ibtn"><svg><use href="#i-edit"/></svg></button>
+          </div>
+          <div class="point"><span class="chip">À toi <span class="n hot">2</span></span><span class="chip"><svg class="flag"><use href="#i-flagf"/></svg>factory 5/6</span><span class="chip"><svg class="flag"><use href="#i-flagf"/></svg>starter 2/2</span><span class="chip">Tranché <span class="n">4</span></span></div>
+          <main class="chat">
+            <div class="me">Lance un rig pour livrer l'issue #63 sur Website, avec une revue sérieuse.</div>
+            <div class="me-time">Toi · 17:01</div>
+            <div class="msg">
+              <img class="av" src="{{IMG:a-mascot}}" alt="">
+              <div><div class="meta"><b>Ledge</b> · 17:01</div>
+                <div class="bubble">
+                  <span>Je te propose <b>workshop</b> : un dépôt, quelques jours, avec relecture. factory serait trop lourd pour une issue.</span>
+                  <div class="launch">
+                    <div class="lt"><svg class="flag"><use href="#i-flagf"/></svg><b>web-63</b><span class="rec">spec workshop · 4 sièges</span></div>
+                    <dl>
+                      <dt>But</dt><dd>Livrer l'issue #63 : formulaire de contact, tests e2e.</dd>
+                      <dt>Où</dt><dd>dans <b>Website</b> · copie <span class="mono">.worktrees/rig-web-63</span></dd>
+                      <dt>Sièges</dt><dd><span class="mono" style="color:var(--role)">@lead @build @review @qa</span></dd>
+                      <dt>Outils</dt><dd>3 Claude Code, 1 Codex</dd>
+                    </dl>
+                    <div class="btns"><span class="btn primary">Lancer le rig</span><span class="btn">Voir le plan</span><span class="btn ghost">Changer</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </main>
+          <div class="composer"><span class="round"><svg><use href="#i-plus"/></svg></span><div class="field">Écrire à Ledge… (@build pour un agent)</div><span class="round send"><svg><use href="#i-up"/></svg></span></div>
+        </div>
+        <nav class="tabs"><a class="on"><svg><use href="#i-chat"/></svg>Ledge</a><a><svg><use href="#i-inbox"/></svg>À toi<span class="badge">2</span></a><a><svg><use href="#i-flag"/></svg>Rigs</a><a><svg><use href="#i-folder"/></svg>Projets</a></nav>
+        <span class="home-ind"></span>
+      </div>
+      <figcaption><b>12 · Demandé à Ledge : la carte de lancement</b>
+        <ul><li>Ledge explique son choix de spec, puis résume le but, le lieu, les sièges et les outils.</li><li>« Changer » ouvre le formulaire (spec, projet ou hors projet, but).</li><li>Le plan reste derrière « Voir le plan » : la question « plan obligatoire ou facultatif » est toujours ouverte.</li></ul></figcaption>
+    </figure>
+
+    <!-- 13 · plan + confirmation -->
+    <figure>
+      <div class="phone">
+        <div class="sbar">17:02<i><em></em><span></span></i></div>
+        <div class="app">
+          <div class="hd">
+            <img class="mascot" src="{{IMG:a-mascot}}" alt="">
+            <div class="who"><div class="conn">PC-Desan · connecté</div><h1>Ledge<span class="dot">.</span></h1><p>Orchestre 2 rigs · 8 agents</p></div>
+          </div>
+          <main></main>
+        </div>
+        <div class="dim"></div>
+        <div class="sheet" style="gap:10px">
+          <span class="grab"></span>
+          <h2>Plan du rig web-63</h2>
+          <div class="label"><span>Ce qui démarre · 4 sièges</span></div>
+          <div class="plan">
+            <div class="rl"><code>@lead</code>Claude Code · opus · demande avant d'agir</div>
+            <div class="rl"><code>@build</code>Claude Code · opus · modifie sans demander</div>
+            <div class="rl"><code>@review</code>Codex · gpt-5.5 · demande avant d'agir</div>
+            <div class="rl"><code>@qa</code>Claude Code · sonnet · modifie sans demander</div>
+          </div>
+          <div class="label"><span>Ce qui change dans Website</span></div>
+          <div class="plan" style="color:var(--muted)">Rien dans ta copie : le rig travaille dans <span class="mono" style="color:var(--fg)">.worktrees/rig-web-63</span>. OpenRig y ajoute <span class="mono">CLAUDE.md</span>, <span class="mono">.mcp.json</span>, <span class="mono">.openrig/</span>.</div>
+          <div class="label"><span>Après le lancement</span></div>
+          <div class="plan">Je donne le but à <b>@lead</b>. Je tranche Git, tests et relèves ; je te remonte le design, l'architecture et le critique.</div>
+          <span class="btn big primary"><svg width="18" height="18"><use href="#i-key"/></svg>Lancer · confirmer avec la clé d'accès</span>
+          <div class="passkey" style="justify-content:center"><span class="mono" style="font-size:11.5px">rig up workshop --cwd .worktrees/rig-web-63</span></div>
+        </div>
+        <span class="home-ind"></span>
+      </div>
+      <figcaption><b>13 · Le plan, puis la confirmation</b>
+        <ul><li>La version téléphone de <span class="mono">l-2-plan</span> : sièges, fichiers ajoutés, mandat de Ledge.</li><li>Par défaut le rig travaille dans une copie : rien ne bouge dans le dossier où tu travailles.</li><li>La clé d'accès est liée au plan exact (spec, sièges, dossier), comme pour <span class="mono">team.launch</span> aujourd'hui.</li></ul></figcaption>
+    </figure>
+
+    <!-- 14 · démarrage -->
+    <figure>
+      <div class="phone">
+        <div class="sbar">17:03<i><em></em><span></span></i></div>
+        <div class="app">
+          <div class="hd">
+            <img class="mascot" src="{{IMG:a-mascot}}" alt="">
+            <div class="who"><div class="conn">PC-Desan · connecté</div><h1>Ledge<span class="dot">.</span></h1><p>Orchestre 3 rigs · 12 agents · tranche dans son mandat</p></div>
+            <button class="ibtn"><svg><use href="#i-edit"/></svg></button>
+          </div>
+          <div class="point"><span class="chip">À toi <span class="n hot">2</span></span><span class="chip"><svg class="flag"><use href="#i-flagf"/></svg>web-63 <span class="bar"><i style="width:75%"></i></span>3/4</span><span class="chip"><svg class="flag"><use href="#i-flagf"/></svg>factory 5/6</span><span class="chip">Tranché <span class="n">4</span></span></div>
+          <main class="chat">
+            <div class="msg">
+              <img class="av" src="{{IMG:a-mascot}}" alt="">
+              <div><div class="meta"><b>Ledge</b> · 17:01</div>
+                <div class="bubble"><span class="soft">Rig web-63 · workshop · dans Website</span><span class="pill ok">✓ Lancé par toi · 17:02</span></div></div>
+            </div>
+            <div class="msg">
+              <img class="av" src="{{IMG:a-mascot}}" alt="">
+              <div><div class="meta"><b>Ledge</b> · 17:03</div>
+                <div class="bubble">
+                  <span>web-63 démarre :</span>
+                  <div class="boot">
+                    <div class="ok">✓ Copie <span class="mono">.worktrees/rig-web-63</span> créée</div>
+                    <div class="ok">✓ @lead, @build, @review prêts</div>
+                    <div class="wait">◌ @qa démarre…</div>
+                    <div class="wait">◌ Je donne le but à @lead dès que les 4 sont prêts</div>
+                  </div>
+                  <div class="btns"><span class="btn small">Ouvrir web-63</span></div>
+                </div>
+              </div>
+            </div>
+            <div class="fold"><div class="fh"><svg class="flag"><use href="#i-flagf"/></svg><b>web-63</b> · aucun échange encore<span class="go"></span></div></div>
+          </main>
+          <div class="sugg"><span>Où en est web-63 ?</span><span>Arrête web-63</span><span>Qui a besoin de moi ?</span></div>
+          <div class="composer"><span class="round"><svg><use href="#i-plus"/></svg></span><div class="field">Écrire à Ledge… (@build pour un agent)</div><span class="round send"><svg><use href="#i-up"/></svg></span></div>
+        </div>
+        <nav class="tabs"><a class="on"><svg><use href="#i-chat"/></svg>Ledge</a><a><svg><use href="#i-inbox"/></svg>À toi<span class="badge">2</span></a><a><svg><use href="#i-flag"/></svg>Rigs</a><a><svg><use href="#i-folder"/></svg>Projets</a></nav>
+        <span class="home-ind"></span>
+      </div>
+      <figcaption><b>14 · Le démarrage, raconté par Ledge</b>
+        <ul><li>La carte se referme sur « Lancé par toi » ; le message suivant suit les sièges qui arrivent.</li><li>Le nouveau rig prend sa place dans « Le point » et dans l'onglet Rigs.</li><li>Ses échanges se replieront sous les messages de Ledge, comme pour factory.</li></ul></figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="row">
+  <div class="note-box">
+    <b>Ce qui change dans l'app, en bref</b>
+    <ol>
+      <li><b>Onglets</b> : Ledge · À toi · Rigs · Projets. Équipes, l'éditeur de rôles et la page d'équipe levée disparaissent.</li>
+      <li><b>Ledge</b> : bulles, décisions dans les messages, échanges repliés par rig, « Le point » en bandeau et en feuille. Sur le PC, Ledge doit envoyer au téléphone des tours de conversation qui portent une décision et des groupes d'échanges, pas seulement du texte et des cartes.</li>
+      <li><b>À toi</b> : les demandes des agents de rig n'arrivent plus par leur session ; elles viennent de Ledge, avec son avis.</li>
+      <li><b>Rigs</b> : lecture de <span class="mono">/rigs</span>, <span class="mono">/rigs/:id/graph</span>, des <span class="mono">outbox_entries</span> et de la queue, relayée par le daemon de Ledge ; actions Relancer, Arrêter et Lancer passées à OpenRig, confirmées par clé d'accès.</li>
+      <li><b>Rien sur le téléphone n'est un chemin</b> : il nomme un rig, un projet, une spec ; le daemon résout le dossier, comme pour les équipes aujourd'hui.</li>
+    </ol>
+  </div>
+</section>
+
+</div>
