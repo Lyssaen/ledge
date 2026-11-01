@@ -102,7 +102,7 @@ describe('server: a resent escalation.answer', () => {
     await until(() => msgs.filter(m => m.type === 'rig.result' && m.rid === 'same-rid').length === 2);
     await new Promise(r => setTimeout(r, 150));
     expect({ posts: posts(), creates: queueCreates() }).toEqual(before);
-    expect(msgs.filter(m => m.type === 'rig.result' && m.rid === 'same-rid')).toEqual([ok('same-rid'), ok('same-rid')]);
+    expect(msgs.filter(m => m.type === 'rig.result' && m.rid === 'same-rid')).toEqual([{ ...ok('same-rid'), confirmed: true }, { ...ok('same-rid'), confirmed: true }]);
     ws.close();
   });
 });

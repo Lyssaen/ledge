@@ -137,7 +137,7 @@ describe('the ledge thread served', () => {
     await until(() => c.of('ledge.thread.history').length === 1 && other.of('ledge.thread.history').length === 1);
     c.send({ type: 'escalation.answer', rid: 'a1', id: 'E1', answers: { text: 'go ahead' }, by: 'user' });
     await until(() => c.of('rig.result').length === 1);
-    expect(c.of('rig.result')[0]).toEqual({ type: 'rig.result', rid: 'a1', ok: true });
+    expect(c.of('rig.result')[0]).toEqual({ type: 'rig.result', rid: 'a1', ok: true, confirmed: true });
     await until(() => other.of('escalation.updated').some(m => m.escalation.id === 'E1' && m.escalation.state === 'answered'));
     expect(other.of('escalation.updated').find(m => m.escalation.state === 'answered')!.escalation.answer).toMatchObject({ by: 'user', answers: { text: 'go ahead' } });
     // Through the real bridge: one reply row to the seat, then the human row approved as Ledge.

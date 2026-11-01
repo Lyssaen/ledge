@@ -82,7 +82,7 @@ describe('phone OpenRig gateway', () => {
     expect(after.escalations?.[0]?.answer?.delivery).toBeUndefined(); expect(g.results('dev1').at(-1)).toMatchObject({ status: 'applied' });
   });
   it('replays a verified queued receipt after the phone reconnects', async () => {
-    const view = { ...data(), answerQueued: () => true };
+    const view = data();
     const g = setup({ deps: { openrig: view }, dispatch: async (msg, reply) => { if (msg.type === 'escalation.answer') reply({ type: 'rig.result', rid: msg.rid, ok: true }); } });
     const op = randomUUID(); const answer = { type: 'escalation.answer', op, id: 'q1', answers: { q: 'a' } };
     g.send('dev1', answer); await flush(); expect(g.results('dev1').at(-1)).toMatchObject({ op, status: 'received' });
@@ -93,13 +93,13 @@ describe('phone OpenRig gateway', () => {
     expect(g.results('dev1').at(-1)).toMatchObject({ op, status: 'applied' }); expect(g.dispatched).toHaveLength(1);
   });
   it('reports a direct remote success only with explicit proof', async () => {
-    const view = { ...data(), answerQueued: () => false };
+    const view = data();
     const g = setup({ deps: { openrig: view }, dispatch: async (msg, reply) => { if (msg.type === 'escalation.answer') reply({ type: 'rig.result', rid: msg.rid, ok: true, confirmed: true }); } });
     const op = randomUUID(); g.send('dev1', { type: 'escalation.answer', op, id: 'q1', answers: { q: 'a' } }); await flush();
     expect(g.results('dev1').at(-1)).toMatchObject({ op, status: 'applied' });
   });
   it('keeps a receipt that arrives before the queued dispatch returns', async () => {
-    const view = { ...data(), answerQueued: () => true }; let g: ReturnType<typeof setup>;
+    const view = data(); let g: ReturnType<typeof setup>;
     g = setup({ deps: { openrig: view }, dispatch: async (msg, reply) => { if (msg.type === 'escalation.answer') { g.gw.answerSettled({ rid: msg.rid, machine: 'remote', id: msg.id, answers: msg.answers }, { status: 'applied' }); reply({ type: 'rig.result', rid: msg.rid, ok: true }); } } });
     const op = randomUUID(); g.send('dev1', { type: 'escalation.answer', op, id: 'q1', answers: { q: 'a' } }); await flush();
     expect(g.results('dev1').at(-1)).toMatchObject({ op, status: 'applied' });
