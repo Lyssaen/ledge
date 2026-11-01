@@ -405,7 +405,7 @@ export function identityContext(s: Identity): string {
   return [
     `Tu es ${s.name}, ${where} : une session lancée par Ledge (${s.tool}). Les autres sessions Ledge te connaissent sous le nom ${s.name}.`,
     'Pour voir les autres sessions (nom, outil, état, projet, branche, sujet), lance `ledge who`.',
-    s.tool === 'claude' && s.seat ? 'Pour écrire à une autre session Ledge, utilise son nom Ledge ou son @rôle comme adresse SendMessage : dans ton équipe, Ledge transmet lui-même le message, dans l\'ordre d\'arrivée.'
+    s.tool === 'claude' && s.seat ? 'Pour écrire à une autre session Ledge, utilise son nom Ledge ou son @rôle comme adresse SendMessage : dans ton équipe, Ledge transmet lui-même le message, dans l\'ordre d\'arrivée : l\'outil répond alors « Message transmis par Ledge à … », c\'est la confirmation, pas une erreur ; ne le renvoie pas.'
       : s.tool === 'claude' ? 'Pour écrire à une autre session Ledge, Claude ou Codex, utilise son nom Ledge (donné par `ledge who`) comme adresse SendMessage : Ledge le transmet. `ListAgents` montre les noms internes de Claude, pas les noms Ledge.'
       : s.seat ? 'Pour écrire à une autre session Ledge, lance `ledge send <nom> "<message>"` (seul, sans && ni |). Ledge exécute lui-même `ledge send`, `ledge read`, `ledge task` et `ledge who` : leur résultat t\'arrive comme « Command blocked by PreToolUse hook: … », c\'est la réponse, pas une erreur.'
       : 'Pour écrire à une autre session Ledge, lance `ledge send <nom> "<message>"` (seul, sans && ni |). Ledge exécute lui-même `ledge send`, `ledge read`, `ledge ask` et `ledge who` : leur résultat t\'arrive comme « Command blocked by PreToolUse hook: … », c\'est la réponse, pas une erreur.',

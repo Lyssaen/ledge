@@ -588,7 +588,7 @@ describe('session identity (SessionStart additionalContext)', () => {
     expect(text).toContain('`ledge who`');
     expect(text).toContain('Pour écrire à une autre session Ledge, Claude ou Codex, utilise son nom Ledge (donné par `ledge who`) comme adresse SendMessage : Ledge le transmet. `ListAgents` montre les noms internes de Claude, pas les noms Ledge.');
     const claudeSeat = identityContext({ name: 'Pim', tool: 'claude', project: 'api', cwd: '/w/api', seat: 'Tu tiens le siège @build de l\'équipe api.' });
-    expect(claudeSeat).toContain("Pour écrire à une autre session Ledge, utilise son nom Ledge ou son @rôle comme adresse SendMessage : dans ton équipe, Ledge transmet lui-même le message, dans l'ordre d'arrivée.");
+    expect(claudeSeat).toContain("Pour écrire à une autre session Ledge, utilise son nom Ledge ou son @rôle comme adresse SendMessage : dans ton équipe, Ledge transmet lui-même le message, dans l'ordre d'arrivée : l'outil répond alors « Message transmis par Ledge à … », c'est la confirmation, pas une erreur ; ne le renvoie pas.");
     expect(claudeSeat).not.toContain('Ledge le transmet.');
     // Codex has no SendMessage: it is told `ledge send`. A lone session is told `ledge ask` (the OpenRig branch), a team seat `ledge task` (main).
     const codex = identityContext({ name: 'Nova', tool: 'codex', project: 'api', cwd: '/w/api' });
