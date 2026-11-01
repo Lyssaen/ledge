@@ -98,6 +98,22 @@ export const copy = {
     queued: (name: string) => `En attente : ${name} est occupé.`,
     sentTo: (name: string) => `Envoyé à ${name} · `, launchedTo: 'Lancée · ', seeThread: 'voir son fil',
     notSent: 'Pas envoyé.', notLaunched: 'Pas lancée.',
+    relayCancel: 'Annuler', relayRetry: 'Réessayer',
+    /** The target's state on the relay card, as the PC's pill (in « vous »). */
+    relayPill: { yours: 'à vous', working: 'travaille', waiting: 'attend votre réponse', stopped: 'arrêtée' },
+    /** Why a relay failed, from the PC's code (never its text). */
+    relayFailed: (code?: string): string => ({
+      read_only: 'Pas envoyé : cette session n’a pas été lancée par Ledge.',
+      ended: 'Pas envoyé : la session s’est arrêtée avant de le recevoir.',
+      unknown_session: 'Pas envoyé : la session n’existe plus.',
+      busy: 'Pas envoyé : la session est en cours de fermeture ou de décision.',
+      not_taken: 'Pas envoyé : le terminal ne l’a pas pris.',
+      no_prompt: 'Pas envoyé : la session attend une réponse, répondez-lui d’abord.',
+      not_offered: 'Pas envoyé : la session attend une réponse, répondez-lui d’abord.',
+      free_text: 'Pas envoyé : la session attend une réponse, répondez-lui d’abord.',
+      stale: 'Pas envoyé : la carte a été ignorée entre-temps.'
+    } as Record<string, string>)[code ?? ''] ?? 'Pas envoyé.',
+    review: 'Revoir', ignoredRest: (at: string) => `Le reste ignoré à ${at}`,
     launchSetup: 'Protégez d\'abord vos accords depuis Connexion.',
     closeLabel: 'Sessions à fermer', closeRow: 'Fermer', closeAll: (n: number) => `Fermer tout (${n})`,
     closing: 'Fermeture…', closed: 'Fermée', killed: 'Fermée de force', ended: 'Terminée',

@@ -306,7 +306,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     relayQueued: id => cardThreads.queuedRelays().some(q => q.relay.id === id),
     sent: { record: (id, m) => { history?.recordSent(id, m); }, mark: (id, rid, status) => history?.markSent(id, rid, status) }
   });
-  const relay = createRelay({ threads: cardThreads, store, replyTo: replyText, now, typing, closing, next: id => mailbox.kick(id) });
+  // The relay keeps the refusal's code too: a phone words its card's failure from it, never from the PC's text.
+  const relay = createRelay({ threads: cardThreads, store, replyTo: async (id, text) => { const r = await replyTo(id, text); return r && { message: r.message, code: r.code }; }, now, typing, closing, next: id => mailbox.kick(id) });
   /** The live teams (spec 2026-10-25 roles §3.3): every change reaches the local fronts. */
   // A purged team's tasks lose its id (issue #146); `tasks` is made below, before any team changes.
   const teams = createTeamsLive({ store, now, onLeft: toldOfLeaving, onPurged: t => tasks.forgetTeam(t.id), ...(opts.teams ? { journal: opts.teams } : {}) });

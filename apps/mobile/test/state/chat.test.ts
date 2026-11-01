@@ -251,6 +251,17 @@ describe('the phone chat in the store', () => {
     await expect(done).resolves.toEqual({ status: 'applied' });
   });
 
+  it('cancelRelay sends chat.relay.cancel, kept out of local storage, and resolves at the operation.result', async () => {
+    const t = setup();
+    const qid = '0b0e6f4c-27e6-4c1a-9a53-0d8a7d2a3c11';
+    const done = t.store.cancelRelay(qid);
+    const [sent] = t.of('chat.relay.cancel');
+    expect(sent).toMatchObject({ type: 'chat.relay.cancel', qid });
+    expect(JSON.parse(t.storage.getItem(OPS_KEY) ?? '{}')).toEqual({});
+    t.deliver({ type: 'operation.result', op: sent!.op, status: 'rejected', reason: 'stale' });
+    await expect(done).resolves.toEqual({ status: 'rejected', reason: 'stale' });
+  });
+
   it('a second relay tap on the same turn shares the first', async () => {
     const t = setup();
     const qid = '0b0e6f4c-27e6-4c1a-9a53-0d8a7d2a3c11';

@@ -104,17 +104,59 @@ describe('the instruction card', () => {
     expect(screen.queryByRole('button', { name: 'Envoyer' })).toBeNull();
   });
 
+  it('a pill says what the target is doing until it is sent, as on the PC', () => {
+    open({ relay });
+    expect(within(screen.getByRole('region', { name: 'Consigne proposée' })).getByText('à vous')).toHaveAttribute('data-pill', 'yours');
+  });
+
+  it('the pill says « arrêtée » for a session gone from the list', () => {
+    open({ relay: { ...relay, id: 'gone' } });
+    expect(screen.getByText('arrêtée')).toHaveAttribute('data-pill', 'stopped');
+  });
+
+  it('no pill once sent', () => {
+    open({ relay: { ...relay, status: 'sent' } });
+    expect(document.querySelector('[data-pill]')).toBeNull();
+  });
+
   it('queued says the session is busy', () => {
     open({ relay: { ...relay, status: 'queued' } });
     expect(screen.getByText('En attente : Nova est occupé.')).toBeInTheDocument();
   });
 
-  it('« Ignorer » hides the card and sends nothing', () => {
+  it('queued offers « Annuler », which takes it back', async () => {
+    const t = open({ relay: { ...relay, status: 'queued' } });
+    const spy = vi.spyOn(t.store, 'cancelRelay').mockResolvedValue({ status: 'applied' });
+    fireEvent.click(screen.getByRole('button', { name: 'Annuler' }));
+    expect(spy).toHaveBeenCalledWith(QID);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Annuler' })).toBeDisabled());
+  });
+
+  it('a failure says why, from the PC\'s code, and offers « Réessayer »', async () => {
+    const t = open({ relay: { ...relay, failed: true, code: 'read_only' } });
+    expect(screen.getByRole('alert')).toHaveTextContent('Pas envoyé : cette session n’a pas été lancée par Ledge.');
+    const spy = vi.spyOn(t.store, 'relay').mockResolvedValue({ status: 'rejected', reason: 'stale' });
+    fireEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
+    expect(spy).toHaveBeenCalledWith(QID);
+    expect(await screen.findByText('Pas envoyé : la carte a été ignorée entre-temps.')).toBeInTheDocument();
+  });
+
+  it('« Ignorer » sets the turn aside on every device and sends nothing', () => {
     const t = open({ relay });
-    const spy = vi.spyOn(t.store, 'relay');
+    const relaySpy = vi.spyOn(t.store, 'relay');
+    const spy = vi.spyOn(t.store, 'ignoreTurn').mockResolvedValue({ status: 'applied' });
     fireEvent.click(screen.getByRole('button', { name: 'Ignorer' }));
+    expect(spy).toHaveBeenCalledWith(QID);
+    expect(relaySpy).not.toHaveBeenCalled();
+  });
+
+  it('a turn set aside (here or on the PC) folds into a line with « Revoir »', () => {
+    const t = open({ relay, ignoredAt: '2026-10-20T10:01:00.000Z' });
     expect(screen.queryByRole('region', { name: 'Consigne proposée' })).toBeNull();
-    expect(spy).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Envoyer' })).toBeNull();
+    const spy = vi.spyOn(t.store, 'ignoreTurn').mockResolvedValue({ status: 'applied' });
+    fireEvent.click(screen.getByRole('button', { name: 'Revoir' }));
+    expect(spy).toHaveBeenCalledWith(QID, true);
   });
 });
 
@@ -269,5 +311,21 @@ describe('the launch cards', () => {
     expect(screen.getByText(/Protégez d'abord vos accords depuis Connexion\./)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Connexion' })).toHaveAttribute('href', '#/connection');
     expect(screen.getByRole('button', { name: copy.confirm.go })).toBeDisabled();
+  });
+  it('« Ignorer » sets the turn aside on every device', () => {
+    const t = open({ proposals });
+    const spy = vi.spyOn(t.store, 'ignoreTurn').mockResolvedValue({ status: 'applied' });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Ignorer' })[0]!);
+    expect(spy).toHaveBeenCalledWith(QID);
+  });
+
+  it('a turn set aside keeps its launched rows and offers « Revoir » for the rest', () => {
+    const t = open({ proposals: [{ ...proposals[0]!, launchedId: 'a' }, proposals[1]!], ignoredAt: '2026-10-20T10:01:00.000Z' });
+    expect(screen.getAllByRole('region', { name: 'Session proposée' })).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: copy.confirm.go })).toBeNull();
+    expect(screen.getByText(/^Le reste ignoré à/)).toBeInTheDocument();
+    const spy = vi.spyOn(t.store, 'ignoreTurn').mockResolvedValue({ status: 'applied' });
+    fireEvent.click(screen.getByRole('button', { name: 'Revoir' }));
+    expect(spy).toHaveBeenCalledWith(QID, true);
   });
 });

@@ -169,7 +169,9 @@ export type PhoneChatProposal = z.infer<typeof PhoneChatProposalSchema>;
 
 export const PhoneChatRelaySchema = z.object({
   id: z.string().min(1), name: z.string(), tool: ToolSchema, text: z.string().max(TOOL_TEXT_MAX),
-  status: z.enum(['queued', 'sent']).optional(), sentAt: z.string().datetime().optional(), failed: z.literal(true).optional()
+  status: z.enum(['queued', 'sent']).optional(), sentAt: z.string().datetime().optional(), failed: z.literal(true).optional(),
+  /** With `failed`: why, as the PC's code (never its text). */
+  code: z.string().max(40).optional()
 }).strict();
 export type PhoneChatRelay = z.infer<typeof PhoneChatRelaySchema>;
 
@@ -326,6 +328,8 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   AttachmentPutSchema.pick({ type: true, requestId: true }).extend({ image: ImageUploadSchema.extend({ data: z.string().min(1).max(b64Max(ATTACHMENT_MAX)) }) }),
   AttachmentGetSchema.pick({ type: true, requestId: true, attachment: true, preview: true }),
   z.object({ type: z.literal('chat.relay'), op: OperationIdSchema, qid: OperationIdSchema }),
+  /** Takes the card's queued instruction back out of the queue, as the local `session.relay.cancel`. */
+  z.object({ type: z.literal('chat.relay.cancel'), op: OperationIdSchema, qid: OperationIdSchema }),
   z.object({ type: z.literal('chat.launch'), op: OperationIdSchema, qid: OperationIdSchema, rows: CardRowsSchema.optional(), assertion: AssertionSchema.optional() }),
   z.object({ type: z.literal('chat.close'), op: OperationIdSchema, qid: OperationIdSchema, rows: CardRowsSchema.optional(), assertion: AssertionSchema.optional() }),
   /** The turn's team card (roles spec §3.8): launched like a session card, with the device check (purpose `launch`, the turn). */

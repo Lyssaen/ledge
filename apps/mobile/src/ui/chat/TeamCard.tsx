@@ -5,21 +5,22 @@ import { href } from '../../router';
 import type { MobileStore } from '../../state/store';
 import { Flag, RolePill } from '../teams/RolePill';
 import { CARD, GHOST, PRIMARY } from './RelayCard';
+import { IgnoredNote } from './IgnoredNote';
 
 type Note = 'failed' | 'cancelled' | 'expired';
 const time = (iso: string) => new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 
 /**
  * The team Ledge proposes (roles spec §3.8): its name, the room it sits in, its seats with what they run and their
- * autonomy. Launching it is an accept like a launch card's: the device's own check confirms it.
+ * autonomy. Launching it is an accept like a launch card's: the device's own check confirms it. « Ignorer » sets the turn's cards
+ * aside on every device, as the PC's.
  */
-export function TeamCard({ store, qid, team, canConfirm }: { store: MobileStore; qid: string; team: PhoneChatTeam; canConfirm: boolean }) {
-  const [hidden, setHidden] = useState(false);
+export function TeamCard({ store, qid, team, canConfirm, ignoredAt }: { store: MobileStore; qid: string; team: PhoneChatTeam; canConfirm: boolean; ignoredAt?: string | undefined }) {
   const [note, setNote] = useState<Note | null>(null);
   const [busy, setBusy] = useState(false);
   const [applied, setApplied] = useState(false);
   const done = team.teamId !== undefined;
-  if (hidden && !done) return null;
+  if (ignoredAt !== undefined && !done) return <IgnoredNote store={store} qid={qid} at={ignoredAt} />;
   const go = () => {
     setBusy(true); setNote(null);
     void store.launchTeam(qid).then(r => { if (r.status === 'applied') setApplied(true); else if (r.status === 'cancelled' || r.status === 'expired') setNote(r.status); else setNote('failed'); }, () => setNote('failed')).finally(() => setBusy(false));
@@ -54,7 +55,7 @@ export function TeamCard({ store, qid, team, canConfirm }: { store: MobileStore;
       )}
       {!done && (
         <div className="flex gap-2">
-          {!applied && <button type="button" className={GHOST} onClick={() => setHidden(true)}>{copy.chat.ignore}</button>}
+          {!applied && <button type="button" className={GHOST} disabled={busy} onClick={() => { void store.ignoreTurn(qid); }}>{copy.chat.ignore}</button>}
           <button type="button" className={PRIMARY} disabled={busy || applied || !canConfirm} onClick={go}>{copy.chat.team.launch}</button>
         </div>
       )}

@@ -124,7 +124,7 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
           </div>
         )}
         {chat.turns.map(t => (
-          <TurnView key={t.qid} store={store} turn={t} list={sessions.map(x => ({ id: x.id, name: x.name, repo: x.repo, exited: x.state === 'exited' }))} canConfirm={!!state.device?.confirm} live={chat.live?.qid === t.qid ? chat.live : null} sessions={sessions.length} onStop={() => store.cancelAsk()} />
+          <TurnView key={t.qid} store={store} turn={t} list={sessions.map(x => ({ id: x.id, name: x.name, repo: x.repo, exited: x.state === 'exited', state: x.state, helpers: x.helpers }))} canConfirm={!!state.device?.confirm} live={chat.live?.qid === t.qid ? chat.live : null} sessions={sessions.length} onStop={() => store.cancelAsk()} />
         ))}
         <div ref={end} />
       </main>

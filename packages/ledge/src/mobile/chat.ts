@@ -39,7 +39,7 @@ export function toPhoneTurn(t: ChatTurn): PhoneChatTurn {
   if (proposals.length > 0) out.proposals = proposals;
   if (t.relay && t.relay.text.length <= TOOL_TEXT_MAX) {
     const r = t.relay;
-    out.relay = { id: r.id, name: r.name, tool: r.tool, text: r.text, ...(r.status ? { status: r.status } : {}), ...(r.sentAt ? { sentAt: r.sentAt } : {}), ...(r.error !== undefined ? { failed: true as const } : {}) };
+    out.relay = { id: r.id, name: r.name, tool: r.tool, text: r.text, ...(r.status ? { status: r.status } : {}), ...(r.sentAt ? { sentAt: r.sentAt } : {}), ...(r.error !== undefined ? { failed: true as const, ...(r.code ? { code: r.code } : {}) } : {}) };
   }
   // The team and task cards (roles spec §3.8), without their folder; a detail too long for the phone leaves its row out of nothing:
   // the card is all or nothing, as for the session card.

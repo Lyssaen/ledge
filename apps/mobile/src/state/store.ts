@@ -178,6 +178,8 @@ export interface MobileStore {
   clearChatError(): void;
   /** Sends the turn's instruction to its session; resolves when the operation is final. */
   relay(qid: string): Promise<ChatAction>;
+  /** Takes the turn's queued instruction back (the PC's « Annuler »); resolves when the operation is final. */
+  cancelRelay(qid: string): Promise<ChatAction>;
   /** Launches the turn's proposals (`rows`, or all of them), after the device's confirmation. */
   launch(qid: string, rows?: number[]): Promise<ChatAction>;
   /** Closes the turn's sessions (`rows`, or all of them), after the device's confirmation. (Not `close`: that stops the store.) */
@@ -865,6 +867,13 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     relay(qid) {
       return chatAction(`relay:${qid}`, async () => {
         const op = write(o => ({ type: 'chat.relay', op: o, qid }));
+        return op === null ? { status: 'failed' } : finalOf(op);
+      });
+    },
+
+    cancelRelay(qid) {
+      return chatAction(`relay-cancel:${qid}`, async () => {
+        const op = write(o => ({ type: 'chat.relay.cancel', op: o, qid }));
         return op === null ? { status: 'failed' } : finalOf(op);
       });
     },
