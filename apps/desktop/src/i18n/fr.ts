@@ -331,7 +331,18 @@ export const fr = {
       refused: {
         offline: 'Le daemon local est hors ligne : rien n’a changé.', outdated: 'Le daemon local est trop ancien pour les réglages de l’encoche : mettez-le à jour.',
         invalid: 'Le daemon a refusé ce changement. Rien n’a changé.', timeout: 'Le daemon n’a pas confirmé ce changement.'
-      } as Record<'offline' | 'outdated' | 'invalid' | 'timeout', string>
+      } as Record<'offline' | 'outdated' | 'invalid' | 'timeout', string>,
+      music: {
+        title: 'Musique', hint: 'Le morceau en cours sur ton PC, à droite de l’encoche.',
+        show: 'Afficher la musique en cours', showHint: 'Pochette, puis précédent, lecture/pause et suivant au survol. Aucune connexion à ton compte.',
+        shownOn: 'Musique affichée', shownOff: 'Musique masquée',
+        paused: 'En pause', pausedHint: 'Combien de temps la pochette reste visible après une pause.',
+        pausedOptions: { always: 'Toujours', '5min': '5 min', hide: 'Masquer' }, pausedSaved: (label: string) => `En pause : ${label}`,
+        hover: 'Au survol', hoverHint: 'Ce qui s’ajoute à la pochette.',
+        hoverOptions: { controls: 'Commandes', 'controls-title': 'Commandes et titre' }, hoverSaved: (label: string) => `Au survol : ${label}`,
+        detected: (title: string, artist: string, source: string) => artist ? `Détecté : ${title} · ${artist}, lu par ${source}` : `Détecté : ${title}, lu par ${source}`,
+        nothing: 'Rien ne joue en ce moment', windowsOnly: 'La musique dans l’encoche ne marche que sous Windows.'
+      }
     },
     shortcuts: {
       global: 'Partout dans Windows', globalNote: 'Ces raccourcis marchent même quand Ledge Desktop est fermé dans la zone de notification.',

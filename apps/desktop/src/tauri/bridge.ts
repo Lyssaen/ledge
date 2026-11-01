@@ -18,6 +18,7 @@
 import { listen } from '@tauri-apps/api/event';
 import type { PtyEvents, PtyHandle } from '../term/backend';
 import { createTokenSource, type TokenRead, type TokenSource } from '@ledge/fleet';
+import { MEDIA_EVENT, NowPlayingSchema, type NowPlaying } from '@ledge/protocol';
 
 export const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 export const TRAY_EVENT = 'ledge://tray';
@@ -150,6 +151,30 @@ export async function isWindowMaximized(): Promise<boolean> {
   if (!isTauri()) return false;
   try { return await (await appWindow()).isMaximized(); } catch { return false; }
 }
+const playingOf = (raw: unknown): NowPlaying | null => {
+  if (raw == null) return null;
+  const parsed = NowPlayingSchema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+};
+
+/** The track the shell is reading. In the browser, a `ledge:media` CustomEvent stands in for `ledge://media`. */
+export function onNowPlaying(fn: (now: NowPlaying | null) => void): () => void {
+  if (!isTauri()) {
+    const h = (e: Event) => fn(playingOf((e as CustomEvent<unknown>).detail));
+    window.addEventListener('ledge:media', h);
+    return () => window.removeEventListener('ledge:media', h);
+  }
+  let off = () => {}; let disposed = false;
+  void listen<unknown>(MEDIA_EVENT, e => { if (!disposed) fn(playingOf(e.payload)); }).then(un => { off = un; if (disposed) un(); });
+  return () => { disposed = true; off(); };
+}
+
+/** The last track the shell read. `null` in the browser, or when nothing is playing. */
+export async function mediaNow(): Promise<NowPlaying | null> {
+  if (!isTauri()) return null;
+  try { return playingOf(await invoke<unknown>('media_now')); } catch { return null; }
+}
+
 /** Calls back after each resize of the window (maximising and restoring resize it). Never fires outside Tauri; the
  *  unsubscription is safe before the subscription completes. */
 export function onWindowResized(fn: () => void): () => void {
