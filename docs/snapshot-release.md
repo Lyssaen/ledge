@@ -1,0 +1,7 @@
+# Snapshot releases
+
+The `Snapshot` workflow builds `ledge-open-rig` on each push and can also be run manually once the workflow exists on the default branch. It tests and builds the Windows Desktop installer before publishing `@paradow/ledge` under the npm `snapshot` dist-tag. Each run and retry gets a distinct npm prerelease version. The matching installer and its SHA-256 are attached to the fixed `snapshot` GitHub prerelease; neither npm `latest` nor GitHub's latest stable release is moved. The release notes identify the built commit: the fixed tag is only a download anchor on the default branch, not the source revision.
+
+Install the daemon in WSL with `npm i -g @paradow/ledge@snapshot`. Download `Ledge.Desktop.Snapshot-x64-setup.exe` from the matching snapshot prerelease. The installer currently shares the stable Desktop application identity: it can replace the existing installation, and its automatic updater continues to follow the stable channel. The installer is not Windows code-signed.
+
+Before the first publish, add `snapshot.yml` as an additional trusted publisher for `@paradow/ledge` on npm, with the `Lyssaen/ledge` repository and permission for `npm publish`. It is separate from the existing `release.yml` publisher. The workflow also requires the existing `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` GitHub Actions secrets. Publish the workflow to the default branch before relying on manual dispatch.
