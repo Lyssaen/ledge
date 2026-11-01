@@ -387,6 +387,17 @@ describe('the pinned service worker', () => {
       expect(w.self.clients.openWindow).not.toHaveBeenCalled();
     });
 
+    it('forwards an advertised answer to an open page, or opens the detail when closed', async () => {
+      const o = origin(); const w = await firstVisit(o);
+      const actions = [{ qId: 'q1', optId: 'a', label: 'SQLite' }];
+      const data = { url: '/#/escalation/e1', escalationId: 'e1', actions };
+      await w.dispatch('notificationclick', { action: 'answer:q1:a', notification: { close: vi.fn(), data } });
+      expect(o.pages[0]!.postMessage).toHaveBeenCalledWith({ type: 'ledge.answer', id: 'e1', qId: 'q1', optId: 'a', url: '/#/escalation/e1' });
+      w.self.clients.matchAll.mockImplementation(async () => []);
+      await w.dispatch('notificationclick', { action: 'answer:q1:a', notification: { close: vi.fn(), data } });
+      expect(w.self.clients.openWindow).toHaveBeenCalledWith('/#/escalation/e1');
+    });
+
     it('a click with no window opens one on the page', async () => {
       const o = origin();
       const w = await firstVisit(o);

@@ -94,7 +94,7 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
       </main>
       {note && <p role="status" className="flex-none pb-2 text-body text-attention">{note}</p>}
       <Composer value={text} onChange={setText} onSend={send} canSend={(text.trim() !== '' || images.items.length > 0) && images.ready && !running && !offline} images={images} attachDisabled={running || offline} />
-      <TabBar count={requestsOf(sessions).length} active="chat" chat />
+      <TabBar openrig={state.openrig} count={requestsOf(sessions).length} active="chat" chat />
     </>
   );
 }

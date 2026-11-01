@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from 'react';
 import {
   PhoneClientMessageSchema, type Assertion, type PcAction, type AttachmentRef, type CapabilitiesByTool, type Credential, type ImageUpload, type PhoneClientMessage, type PhonePending, type PhoneServerMessage,
-  type PhoneRig, type PhoneEscalation, type PhoneLedgeDecision, type PhoneThreadItem, type PhoneExchange, type ModelRefusal, type PhoneChecklist, type PhoneModelChoice, type PhoneSession, type PushSubscription, type ThreadItem
+  type PhoneRigAction, type PhoneRig, type PhoneEscalation, type PhoneLedgeDecision, type PhoneThreadItem, type PhoneExchange, type ModelRefusal, type PhoneChecklist, type PhoneModelChoice, type PhoneSession, type PushSubscription, type ThreadItem
 } from '@ledge/protocol';
 import type { PhoneLink } from '../link/link';
 import { getAssertion } from '../link/webauthn';
@@ -68,6 +68,7 @@ export type ConfirmRequest = { purpose: 'register' } | { purpose: 'decide'; id: 
   | { purpose: 'act'; qid: string }
   /** A session's own close (`session.close`) or resume (`session.resume`). */
   | { purpose: 'close' | 'act'; id: string }
+  | { purpose: 'rig'; rig: PhoneRigAction }
   | { purpose: 'pc'; action: 'update'; version: string } | { purpose: 'pc'; action: 'restart' };
 
 /** How long `prepareConfirm` waits for the PC's challenge. */
@@ -83,6 +84,10 @@ export interface ConfirmedExpect { key: string; kind: PhonePending['kind']; text
 export type Decision = Extract<PhoneClientMessage, { type: 'session.decide' }>['decision'];
 
 export interface MobileStore {
+  sayLedge(text: string, about?: string): string | null;
+  answerEscalation(id: string, answers: Record<string, string>): string | null;
+  prepareRig(goal: string, project: string | null, spec?: string): string | null;
+  rigAction(action: Omit<Extract<PhoneRigAction, {type: 'rig.act'}>, 'op' | 'assertion'> | Omit<Extract<PhoneRigAction, {type: 'rig.launch'}>, 'op' | 'assertion'>): Promise<ChatAction>;
   requestExchanges(key: string): void;
   loadOlderThread(): void;
   getState(): MobileState;
@@ -596,6 +601,14 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
   if (wasReady) onReady();
 
   const store: MobileStore = {
+    sayLedge(text, about) { return write(op => ({ type: 'ledge.say', op, text, ...(about ? { about } : {}) })); },
+    answerEscalation(id, answers) { return write(op => ({ type: 'escalation.answer', op, id, answers })); },
+    prepareRig(goal, project, spec) { return write(op => ({ type: 'rig.prepare', op, goal, project, ...(spec ? { spec } : {}) })); },
+    rigAction(action) {
+      if (!state.device?.confirm) return Promise.resolve({ status: 'rejected', reason: 'confirm_required' });
+      const rig = { ...action, op: newOperationId() } as PhoneRigAction;
+      return signedOperation({ purpose: 'rig', rig }, (op, assertion) => ({ ...action, op, assertion }));
+    },
     requestExchanges(key) { if (ready() && state.openrig) send({ type: 'rig.exchanges.request', key }); },
     loadOlderThread() { if (ready() && state.openrig) send({ type: 'ledge.thread.request', ...(state.ledgeBefore ? { before: state.ledgeBefore } : {}) }); },
     getState: () => state,

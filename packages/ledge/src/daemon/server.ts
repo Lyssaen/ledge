@@ -88,7 +88,7 @@ import type { MobileService } from '../mobile/service.js';
 import { createPhoneGateway, type PhoneGateway } from '../mobile/gateway.js';
 import { createNotifier } from '../mobile/push/notifier.js';
 import { chatEndPayload } from '../mobile/push/triggers.js';
-import { pushFor } from '../mobile/push/triggers.js';
+import { escalationPush, pushFor } from '../mobile/push/triggers.js';
 import { createChallengeStore } from '../mobile/challenges.js';
 import { rpOf } from '../mobile/webauthn.js';
 import { MAX_FRAME } from '../transport/frames.js';
@@ -1692,12 +1692,28 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   });
   /** A hidden phone is told, through the relay, of what deserves it. */
   let unsubscribePush: (() => void) | undefined;
+  let unsubscribeEscalationPush: (() => void) | undefined;
   if (mobile) {
     const notifier = createNotifier({ mobile, presence: id => gateway?.visible(id) ?? false, log });
     notifyChatEnd = (deviceId, code) => {
       const badge = store.all().filter(s => s.pending).length;
       void notifier.notify(chatEndPayload(code, badge), undefined, deviceId).catch(e => log(`push failed (${e instanceof Error ? e.name : 'error'})`));
     };
+    const seenEscalations = new Map<string, import('@ledge/protocol').Escalation>();
+    const pushScheduled = new Set<string>();
+    unsubscribeEscalationPush = aggregate?.onMessage(m => {
+      if (m.type === 'escalation.removed') { seenEscalations.delete(m.id); return; }
+      if (m.type !== 'escalation.updated' || pushScheduled.has(m.escalation.id)) return;
+      const id = m.escalation.id; pushScheduled.add(id);
+      // The bridge can immediately put a new pending item into grace. Read the settled state before notifying.
+      queueMicrotask(() => {
+        pushScheduled.delete(id); const current = aggregate.escalation(id); if (!current) return;
+        const previous = seenEscalations.get(id); seenEscalations.set(id, current);
+        const badge = aggregate.escalations().filter(e => e.state === 'pending').length + store.all().filter(s => s.pending && !s.rig && !s.brain).length;
+        const p = escalationPush(previous, current, badge);
+        if (p) void notifier.notify(p, undefined).catch(e => log(`push failed (${e instanceof Error ? e.name : 'error'})`));
+      });
+    });
     unsubscribePush = store.onApply((before, after) => {
       const p = pushFor(before, after, store.all());
       if (p) void notifier.notify(p, after.id).catch(e => log(`push failed (${e instanceof Error ? e.name : 'error'})`));
@@ -1763,6 +1779,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     asks,
     projects: () => projects,
     say: text => { thread.append({ kind: 'ledge', text }); },
-    close: () => new Promise<void>(res => { clearInterval(sweepTimer); clearInterval(brainDayTimer); unsubscribe(); unsubscribeBrain(); unsubscribeMemory(); deciding?.dispose(); brain.dispose(); unsubscribeBridge?.(); unsubscribeAggregate?.(); rigRouter?.close(); remote?.close(); launches?.close(); stopRepoWatch?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
+    close: () => new Promise<void>(res => { clearInterval(sweepTimer); clearInterval(brainDayTimer); unsubscribe(); unsubscribeBrain(); unsubscribeMemory(); deciding?.dispose(); brain.dispose(); unsubscribeBridge?.(); unsubscribeAggregate?.(); rigRouter?.close(); remote?.close(); launches?.close(); stopRepoWatch?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); unsubscribeEscalationPush?.(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
   };
 }

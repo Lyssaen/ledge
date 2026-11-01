@@ -63,14 +63,14 @@ function Row({ row, session, offline, threshold, plan, closing, now }: { row: Ag
 export function Agents({ store, onReconnect }: { store: MobileStore; onReconnect?: () => void }) {
   const state = useMobile(store);
   const now = useNow();
-  const sessions = [...state.sessions.values()];
+  const sessions = [...state.sessions.values()].filter(s => !state.openrig || (!s.rig && !s.brain));
   const groups = agentsOf(sessions);
   const closing = new Set(sessions.filter(s => closingHere(s, state.ops, now)).map(s => s.id));
   const offline = !state.fresh;
   const subtitle = offline ? copy.agents.offline : copy.agents.subtitle(sessions.length, groups.length);
   return (
     <>
-      <Header title={copy.agents.title} subtitle={subtitle} link={linkView(state)} />
+      <Header title={state.openrig ? copy.nav.projects : copy.agents.title} subtitle={subtitle} link={linkView(state)} />
       <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[22px]">
         {offline && <div className="mb-3"><OfflineBanner onReconnect={onReconnect} /></div>}
         {groups.map(g => (
@@ -87,7 +87,7 @@ export function Agents({ store, onReconnect }: { store: MobileStore; onReconnect
           </div>
         )}
       </main>
-      <TabBar count={requestsOf(sessions).length} active="agents" chat={!!state.device?.chat} />
+      <TabBar openrig={state.openrig} count={requestsOf(sessions).length} active={state.openrig ? 'projects' : 'agents'} chat={!!state.device?.chat} />
     </>
   );
 }

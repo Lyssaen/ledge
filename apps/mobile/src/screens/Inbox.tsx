@@ -44,7 +44,8 @@ export function Inbox({ store, onReconnect, notice }: { store: MobileStore; onRe
   const state = useMobile(store);
   const [filter, setFilter] = useState<Filter>('all');
   const now = useNow();
-  const all = requestsOf([...state.sessions.values()]);
+  const all = requestsOf([...state.sessions.values()].filter(s => !state.openrig || (!s.rig && !s.brain)));
+  const escalations = state.openrig ? [...state.escalations.values()].filter(e => e.state === 'pending' || e.state === 'grace') : [];
   const list = filterItems(all, filter);
   const waiting = all.length;
   const offline = !state.fresh;
@@ -52,7 +53,7 @@ export function Inbox({ store, onReconnect, notice }: { store: MobileStore; onRe
   const subtitle = offline ? (state.syncedAt ? copy.link.lastKnownAt(clock(state.syncedAt)) : copy.inbox.lastKnown) : copy.inbox.subtitle(all.length);
   return (
     <>
-      <Header title={copy.inbox.title} subtitle={subtitle} link={linkView(state)} />
+      <Header title={state.openrig ? copy.nav.toYou : copy.inbox.title} subtitle={subtitle} link={linkView(state)} />
       <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[22px]">
         {offline && <div className="mb-3">{notice ?? <OfflineBanner onReconnect={onReconnect} />}</div>}
         <div role="group" aria-label={copy.inbox.filtersLabel} className="mb-1.5 flex gap-1">
@@ -62,9 +63,10 @@ export function Inbox({ store, onReconnect, notice }: { store: MobileStore; onRe
         </div>
         <div className="flex items-center justify-between py-3 text-meta tracking-[.4px] text-muted"><span>{offline ? copy.inbox.lastKnown.toUpperCase() : copy.inbox.oldestFirst}</span><span>{list.length}</span></div>
         <div className="flex flex-col gap-3">
+          {escalations.map(e => <a key={e.id} className="block rounded-card border border-line bg-surface p-4" href={href({ name: 'escalation', id: e.id })}><p>Via Ledge · {e.rigName ?? e.from}</p><strong>{e.summary}</strong>{e.state === 'grace' && <p>Ledge s’en occupe…</p>}</a>)}
           {list.map(i => <Row key={`${i.sessionId}/${i.key}`} item={i} session={state.sessions.get(i.sessionId)} now={now} offline={offline} />)}
         </div>
-        {list.length === 0 && (
+        {list.length === 0 && escalations.length === 0 && (
           <div className="flex flex-col items-center gap-3 px-3 py-12 text-center">
             {!waiting && <div aria-hidden="true"><Mascot size={96} frozen={offline} /></div>}
             <h2 className="text-heading leading-[1.3] tracking-[-.5px]">{waiting ? copy.inbox.emptyFilter : copy.inbox.upToDate}</h2>
@@ -74,7 +76,7 @@ export function Inbox({ store, onReconnect, notice }: { store: MobileStore; onRe
         )}
         {offline && <p className="mt-4 text-small text-muted">{copy.inbox.offlineNote}</p>}
       </main>
-      <TabBar count={all.length} chat={!!state.device?.chat} />
+      <TabBar openrig={state.openrig} count={all.length + escalations.filter(e => e.state === 'pending').length} chat={!!state.device?.chat} />
     </>
   );
 }

@@ -1,4 +1,5 @@
-import { pendingKey, type ChatErrorCode, type PushPayload, type Session } from '@ledge/protocol';
+import { phoneText } from '../orchestrator.js';
+import { pendingKey, type ChatErrorCode, type PushPayload, type Session, type Escalation } from '@ledge/protocol';
 
 const TAG_MAX = 32;
 const TITLE_MAX = 80;
@@ -32,7 +33,8 @@ function requestBody(s: Session): string {
  * just ended. Pure; the one-minute spacing of `finished` is the notifier's.
  */
 export function pushFor(before: Session | undefined, after: Session, all: readonly Session[]): PushPayload | null {
-  const badge = Math.min(999, all.filter(s => s.pending).length);
+  if (after.rig || after.brain) return null;
+  const badge = Math.min(999, all.filter(s => s.pending && !s.rig && !s.brain).length);
   const tag = safeTag(after.id);
   const p = after.pending;
   if (p && (!before?.pending || pendingKey(p) !== pendingKey(before.pending))) {
@@ -60,4 +62,13 @@ export function chatEndPayload(code: ChatErrorCode | undefined, badge: number): 
     v: 1, kind: 'chat', title: 'Ledge a répondu', body: code ? CHAT_ERROR_BODY[code] : 'Touchez pour lire la réponse.',
     url: '/#/chat', badge: Math.max(0, Math.min(999, badge)), tag: 'chat'
   };
+}
+
+/** Only a newly pending escalation calls for the person's attention; grace is left to Ledge. */
+export function escalationPush(before: Escalation | undefined, after: Escalation, badge: number): PushPayload | null {
+  if (after.state !== 'pending' || before?.state === 'pending' || after.id.length > 120 || phoneText(after.id, 120) !== after.id) return null;
+  const q = after.questions.length === 1 ? after.questions[0] : undefined;
+  const actions = q && q.options.length <= 2 && q.id.length <= 64 && phoneText(q.id, 64) === q.id && q.options.every(o => o.id.length <= 64 && phoneText(o.id, 64) === o.id)
+    ? q.options.map(o => ({ qId: q.id, optId: o.id, label: cut(phoneText(o.label, 40), 40) })) : undefined;
+  return { v: 1, kind: 'escalation', escalationId: after.id, title: 'Ledge · une décision pour toi', body: cut(phoneText(after.summary, BODY_MAX), BODY_MAX), url: `/#/escalation/${encodeURIComponent(after.id)}`, badge: Math.min(999, Math.max(0, badge)), tag: safeTag(`escalation_${after.id}`), ...(actions ? { actions } : {}) };
 }
