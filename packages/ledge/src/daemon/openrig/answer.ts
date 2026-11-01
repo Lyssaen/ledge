@@ -128,8 +128,8 @@ export function createAnswers(d: AnswersDeps): Answers {
   }
 
   /** Reply row to the seat, unless one is already noted for this escalation. */
-  async function replyRow(e: Escalation, answers: Record<string, string>): Promise<AnswerResult | null> {
-    if (d.port.replyRow(e.id)) return null;
+  async function replyRow(e: Escalation, answers: Record<string, string>, reusedReply: () => void): Promise<AnswerResult | null> {
+    if (d.port.replyRow(e.id)) { reusedReply(); return null; }
     const dir = await mkdtemp(join(tmpdir(), 'ledge-reply-'));
     try {
       const file = join(dir, 'reply.md'); await writeFile(file, answerBody(e, answers));
@@ -143,7 +143,7 @@ export function createAnswers(d: AnswersDeps): Answers {
   }
 
   /** Sends the answer to OpenRig; null on success. */
-  async function deliver(e: Escalation, answers: Record<string, string>): Promise<AnswerResult | null> {
+  async function deliver(e: Escalation, answers: Record<string, string>, reusedReply: () => void): Promise<AnswerResult | null> {
     const http = d.port.http(); if (!http) return refuse('openrig_down', "OpenRig n'est pas joignable");
     const body = answerBody(e, answers);
     const seen = e.intent === 'update' && Object.keys(answers).length === 0;
@@ -152,8 +152,8 @@ export function createAnswers(d: AnswersDeps): Answers {
       case 'reply-and-approve': {
         // A reply row noted before this try means an earlier try sent it, then lost its approve's answer (a timeout): if
         // OpenRig applied that approve, the retry's 409 terminal is our own answer landing, not someone else's.
-        const retry = d.port.replyRow(e.id) !== undefined;
-        const r = (await replyRow(e, answers)) ?? await act(http, { verb: 'approve', qitemId: e.id, annotation: body });
+        let retry = false;
+        const r = (await replyRow(e, answers, () => { retry = true; reusedReply(); })) ?? await act(http, { verb: 'approve', qitemId: e.id, annotation: body });
         return retry && r && !r.ok && r.code === 'already_answered' ? null : r;
       }
       case 'approve-only': return act(http, { verb: 'approve', qitemId: e.id, annotation: body });
@@ -224,13 +224,13 @@ export function createAnswers(d: AnswersDeps): Answers {
       if (e.machine !== d.localMachine) return refuse('unreachable', 'réponse à distance : lot 6');
       const ask = e.source === 'ask';
       // A stored reply row is keyed only by escalation: its author and answer are not proof of this operation.
-      const uncertainRow = !ask && d.path.kind === 'reply-and-approve' && d.port.replyRow(e.id) !== undefined;
+      let uncertainRow = false;
       if (!ask && d.port.status().state !== 'running') return refuse('openrig_down', "OpenRig n'est pas lancé");
       inFlight.add(id);
       const before: EscalationPatch = { state: e.state, graceUntil: e.graceUntil, answer: undefined };
       d.port.patch(id, { state: 'answered', answer: { by, answers, at: now(), ...(o?.rule ? { rule: o.rule } : {}) } });
       let fail: AnswerResult | null;
-      try { fail = ask ? viaAsk(e, answers) : await deliver(e, answers); }
+      try { fail = ask ? viaAsk(e, answers) : await deliver(e, answers, () => { uncertainRow = true; }); }
       catch (err) { fail = refuse('failed', (err as Error).message); }
       finally { inFlight.delete(id); }
       if (fail) {

@@ -141,6 +141,14 @@ describe('answers', () => {
     expect(fake.calls.filter(c => c.kind === 'cli:queue create')).toHaveLength(1);
   });
 
+  test('a reply row appearing during the optimistic patch cannot prove a 409 retry', async () => {
+    const patch = fake.port.patch;
+    fake.port.patch = (id, value) => { const result = patch(id, value); if (id === 'qi-1' && value.state === 'answered') fake.port.setReplyRow(id, 'preexisting'); return result; };
+    fake.failNext('http:/api/mission-control/action', { status: 409, body: { error: 'qitem_already_terminal', state: 'done' } });
+    const r = await answers.answer('qi-1', { q1: 'sqlite' }, 'user');
+    expect(r).toMatchObject({ ok: true }); expect(r).not.toHaveProperty('confirmed');
+  });
+
   test('retry after a failed approve reuses the reply row', async () => {
     fake.failNext('http:/api/mission-control/action');
     expect((await answers.answer('qi-1', { q1: 'sqlite' }, 'user'))).toMatchObject({ ok: false, code: 'failed' });
