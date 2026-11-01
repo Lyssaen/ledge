@@ -291,7 +291,14 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{checked_target, launched_minimized, on_close, tray_shows_window, tray_title, CloseAction};
+    use super::{checked_target, launched_minimized, on_close, snapshot_sequence, tray_shows_window, tray_title, CloseAction};
+    #[test]
+    fn snapshot_builds_have_ordered_run_and_retry_numbers() {
+        assert!(snapshot_sequence("0.29.0-snapshot.123.2") > snapshot_sequence("0.29.0-snapshot.123.1"));
+        assert!(snapshot_sequence("0.29.0-snapshot.124.1") > snapshot_sequence("0.29.0-snapshot.123.9"));
+        assert_eq!(snapshot_sequence("0.29.0"), None);
+        assert_eq!(snapshot_sequence("0.29.0-snapshot.not-a-number.1"), None);
+    }
     #[test]
     fn the_tray_tells_a_dev_build_from_an_installed_one() {
         assert_eq!(tray_title("0.5.2", false), "Ledge Desktop 0.5.2");
