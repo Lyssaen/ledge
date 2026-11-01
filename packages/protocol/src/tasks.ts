@@ -33,6 +33,7 @@ export const TaskSchema = z.object({
   giver: z.string(), giverName: z.string(),
   owner: z.string(), ownerName: z.string(),
   state: z.enum(['open', 'taken', 'done', 'refused', 'dropped']),
+  /** Set on the task that carries a team's objective, given to its lead at launch. */ objective: z.literal(true).optional(),
   result: z.string().optional(),
   /** The live team its owner sat in when it was given (or passed), so a team's tasks can be listed. */
   team: z.string().optional(),

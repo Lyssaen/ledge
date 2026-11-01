@@ -2,6 +2,16 @@ import { z } from 'zod';
 import { AutonomySchema, ToolSchema } from './session.js';
 import { ModelIdSchema, EffortSchema, ModelRefusalSchema } from './models.js';
 import { ProjectIdSchema } from './projects.js';
+import { TASK_TEXT_MAX } from './tasks.js';
+
+/** The role that leads a team: the `@leader` seat (#93 (a)). */
+export const LEADER_ROLE = 'leader';
+
+/** What a team is for, given at launch: the lead receives it as its first task. `branch` and `done` only when the user said them. */
+export const TeamObjectiveSchema = z.object({
+  goal: z.string().trim().min(1).max(TASK_TEXT_MAX), branch: z.string().trim().min(1).max(200).optional(), done: z.string().trim().min(1).max(2000).optional()
+});
+export type TeamObjective = z.infer<typeof TeamObjectiveSchema>;
 
 /** A role id: the name of its file, `@<id>` inside a team. */
 export const RoleIdSchema = z.string().regex(/^[a-z0-9][a-z0-9_-]{0,39}$/);
@@ -52,6 +62,7 @@ export type TeamState = z.infer<typeof TeamStateSchema>;
 export const TeamSchema = z.object({
   id: TeamIdSchema, name: TeamNameSchema, template: z.string().optional(), project: z.string().nullable(), machine: z.string(), cwd: z.string(),
   state: TeamStateSchema,
+  /** The id of the objective task given to the lead at launch (absent without an objective, and from older daemons). */ objectiveTask: z.string().optional(),
   /** A live seat: `tool`, `model` and `effort` are what it was composed with over the role's defaults, `name` the bot name it asks
    *  for (its template's or its composition's); `leaving` marks a seat removed from the composition that finishes its turn and then is closed. */
   seats: z.array(z.object({
@@ -72,7 +83,8 @@ export const RolesListingSchema = z.object({ type: z.literal('roles.listing'), r
 export const TeamLaunchSchema = z.object({
   type: z.literal('team.launch'), rid: z.string().min(1).max(100), cwd: z.string().min(1).optional(), template: z.string().min(1).max(64).optional(),
   seats: SeatsSchema.optional(), name: TeamNameSchema.optional(), qid: z.string().min(1).optional(), machineId: z.string().optional(),
-  /** The project's name, for a client that holds no path (the phone): the daemon resolves its folder. */ project: ProjectIdSchema.optional()
+  /** The project's name, for a client that holds no path (the phone): the daemon resolves its folder. */ project: ProjectIdSchema.optional(),
+  /** What the team is for: the lead receives it at launch. */ objective: TeamObjectiveSchema.optional()
 });
 export const TeamJoinSchema = z.object({ type: z.literal('team.join'), team: TeamIdSchema, session: z.string().min(1), role: RoleIdSchema });
 export const TeamLeaveSchema = z.object({ type: z.literal('team.leave'), team: TeamIdSchema, session: z.string().min(1) });

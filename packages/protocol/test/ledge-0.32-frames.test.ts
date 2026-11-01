@@ -17,5 +17,9 @@ describe('frozen Ledge 0.32 server frames', () => {
       const raw = JSON.parse(readFileSync(join(dir, f), 'utf8'));
       expect(parseServerMessage(raw).type).toBe(raw.type);
     });
+    it(`${f} comes out of parseServerMessage equal to what went in: no field lost, none required`, () => {
+      const raw = JSON.parse(readFileSync(join(dir, f), 'utf8'));
+      expect(parseServerMessage(raw)).toEqual(raw);
+    });
   }
 });

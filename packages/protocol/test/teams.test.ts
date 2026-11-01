@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { RoleSchema, RolesListingSchema, TeamSchema, ClientMessageSchema, ServerMessageSchema, parseClientMessage } from '../src/index.js';
+import { TaskSchema, TeamTemplateSchema, RoleSchema, RolesListingSchema, TeamSchema, ClientMessageSchema, ServerMessageSchema, parseClientMessage } from '../src/index.js';
 
 const role = { id: 'review', label: 'Relecteur', prompt: 'Tu relis.', source: 'repo', path: '/r/.ledge/roles/review.md' };
 
@@ -99,5 +99,23 @@ describe('team.changed models', () => {
       expect(ServerMessageSchema.safeParse({ type: 'team.changed', rid: 'r', models }).success).toBe(true);
     expect(ServerMessageSchema.safeParse({ type: 'team.changed', rid: 'r', models: entry(17) }).success).toBe(false);
     expect(ServerMessageSchema.safeParse({ type: 'team.changed', rid: 'r', models: [{ role: 'r', session: 's', code: 'boom' }] }).success).toBe(false);
+  });
+});
+
+describe('a team\'s objective on the wire', () => {
+  const task = { id: 't1a2b3c', title: 'Objectif', giver: 'otto', giverName: 'Otto', owner: 'pim', ownerName: 'Pim', state: 'taken', seen: false, at: 'a', updatedAt: 'a', log: [] };
+  const team = { id: 'team-abcd', name: 'T', project: null, machine: 'local', cwd: '/r', state: 'active', seats: [{ role: 'dev', sessionId: 's1' }], createdAt: 'a', updatedAt: 'a' };
+  it('team.launch carries an optional objective, and still parses without one', () => {
+    expect(parseClientMessage({ type: 'team.launch', rid: 'r', template: 'api', objective: { goal: 'Pagination de /invoices', branch: 'feat/pages', done: 'tests verts' } }))
+      .toMatchObject({ objective: { goal: 'Pagination de /invoices', branch: 'feat/pages', done: 'tests verts' } });
+    expect(parseClientMessage({ type: 'team.launch', rid: 'r', template: 'api' })).not.toHaveProperty('objective');
+    expect(() => parseClientMessage({ type: 'team.launch', rid: 'r', template: 'api', objective: { goal: '  ' } })).toThrow();
+  });
+  it('a task may be the objective, a team names its objective task', () => {
+    expect(TaskSchema.parse({ ...task, objective: true }).objective).toBe(true);
+    expect(TeamSchema.parse({ ...team, objectiveTask: 't1a2b3c' }).objectiveTask).toBe('t1a2b3c');
+  });
+  it('a team template without a leader seat still parses on the wire (the rule is the loader\'s)', () => {
+    expect(TeamTemplateSchema.safeParse({ id: 'x', name: 'x', seats: [{ role: 'dev' }], source: 'home', path: '/p' }).success).toBe(true);
   });
 });

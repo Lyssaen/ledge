@@ -3,6 +3,7 @@ import { AutonomySchema, ToolSchema } from './session.js';
 import { EffortSchema, ModelIdSchema } from './models.js';
 import { ActionRiskSchema } from './actions.js';
 import { AttachmentRefSchema } from './attachments.js';
+import { TeamObjectiveSchema } from './teams.js';
 
 /** What Ledge consulted while answering: a context file (a session's pane, reply or git summary, the sessions list) or a repository file. */
 export const ChatStepSchema = z.object({
@@ -69,7 +70,7 @@ export const ChatTeamProposalSchema = z.object({
   cwd: z.string().min(1), project: z.string(), projectName: z.string().optional(), name: z.string().min(1), template: z.string().optional(),
   seats: z.array(ChatTeamSeatSchema).min(1).max(8),
   teamId: z.string().optional(), launchedAt: z.string().datetime().optional(), error: z.string().optional(), savedPath: z.string().optional(),
-  saveError: z.string().optional()
+  saveError: z.string().optional(), objective: TeamObjectiveSchema.optional()
 });
 export type ChatTeamProposal = z.infer<typeof ChatTeamProposalSchema>;
 

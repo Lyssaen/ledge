@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { TeamObjectiveSchema } from './teams.js';
 
 /** What the chat harness writes in its ```ledge-session block (spec 2026-10-12 §3); the daemon resolves `cwd`. */
 export const ProposalBlockSchema = z.object({ cwd: z.string().trim().min(1), prompt: z.string().optional() });
@@ -25,7 +26,8 @@ export type CloseBlock = z.infer<typeof CloseBlockSchema>;
  *  seats; the daemon checks the folder and the roles. */
 export const TeamBlockSchema = z.object({
   cwd: z.string().trim().min(1), template: z.string().trim().min(1).max(64).optional(), name: z.string().trim().min(1).max(60).optional(),
-  seats: z.array(z.object({ role: z.string().trim().min(1).max(40), tool: z.enum(['claude', 'codex', 'cursor', 'omp']).optional(), model: z.string().max(200).optional(), effort: z.string().max(20).optional(), name: z.string().max(40).optional() })).min(1).max(8).optional()
+  seats: z.array(z.object({ role: z.string().trim().min(1).max(40), tool: z.enum(['claude', 'codex', 'cursor', 'omp']).optional(), model: z.string().max(200).optional(), effort: z.string().max(20).optional(), name: z.string().max(40).optional() })).min(1).max(8).optional(),
+  objective: TeamObjectiveSchema.optional()
 }).refine(b => !!b.template || !!b.seats?.length, 'a template or seats');
 export type TeamBlock = z.infer<typeof TeamBlockSchema>;
 
