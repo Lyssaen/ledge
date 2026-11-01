@@ -15,6 +15,7 @@ import { ProjectsSchema } from './projects.js';
 import { ThreadItemSchema } from './thread.js';
 import { DecisionSchema, NOTE_MAX } from './decisions.js';
 import { MobileStateSchema, RelayUrlSchema } from './mobile.js';
+import { TeamsEngineStateSchema, TeamsEngineSetSchema, TeamsEngineResultSchema } from './engine.js';
 import { OpenRigStatusMessageSchema, RigSnapshotSchema, RigUpdatedSchema, RigRemovedSchema, RigExchangeSchema, RigExchangesSchema, EscalationUpdatedSchema, EscalationRemovedSchema, LedgeThreadItemMessageSchema, LedgeThreadHistorySchema, DecisionsMessageSchema, RulesMessageSchema, MandateMessageSchema, BrainStatusMessageSchema, RigPlanMessageSchema, RigResultSchema, BrainResultSchema, RigActSchema, RigPrepareSchema, RigLaunchSchema, RigAdoptSchema, RigSendSchema, RigExchangesRequestSchema, RigSpecsRequestSchema, RigSpecsSchema, EscalationAnswerSchema, LedgeSaySchema, LedgeThreadRequestSchema, MandateUpdateSchema, RuleSetSchema, DecisionRevisitSchema, CategoryEscalateSchema, BrainSetSchema, BrainCmdSchema, BrainDelegateClaimSchema, BrainDelegateDecideSchema, BrainDelegateReleaseSchema, BrainDelegateQuerySchema, BrainDelegateResultSchema } from './openrig.js';
 import { AskAnswerSchema, AskCreateSchema, AskResultSchema, AskUpdatedSchema, AsksMessageSchema } from './asks.js';
 import { TaskCmdSchema, TaskResultSchema, TaskUpdatedSchema } from './tasks.js';
@@ -185,7 +186,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   AsksMessageSchema, AskUpdatedSchema, AskResultSchema,
   OpenRigStatusMessageSchema, RigSnapshotSchema, RigUpdatedSchema, RigRemovedSchema, RigExchangeSchema, RigExchangesSchema, RigSpecsSchema, EscalationUpdatedSchema, EscalationRemovedSchema,
   LedgeThreadItemMessageSchema, LedgeThreadHistorySchema, DecisionsMessageSchema, RulesMessageSchema, MandateMessageSchema, BrainStatusMessageSchema, RigPlanMessageSchema, RigResultSchema, BrainResultSchema, BrainDelegateResultSchema,
-  TaskUpdatedSchema,
+  TaskUpdatedSchema, TeamsEngineStateSchema, TeamsEngineResultSchema,
   RolesListingSchema,
   TeamBroadcastResultSchema,
   TeamsMessageSchema, TeamUpdatedSchema, TeamLaunchedSchema, TeamFailedSchema, TeamSavedSchema,
@@ -320,6 +321,7 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   ContextSetSchema,
   HandoverBriefSchema,
   HandoverShowSchema,
+  TeamsEngineSetSchema,
   RigActSchema, RigPrepareSchema, RigLaunchSchema, RigAdoptSchema, RigSendSchema, RigExchangesRequestSchema, RigSpecsRequestSchema, EscalationAnswerSchema,
   LedgeSaySchema, LedgeThreadRequestSchema, MandateUpdateSchema, RuleSetSchema, DecisionRevisitSchema, CategoryEscalateSchema, BrainSetSchema, BrainCmdSchema, BrainDelegateClaimSchema, BrainDelegateDecideSchema, BrainDelegateReleaseSchema, BrainDelegateQuerySchema,
   RolesListSchema,

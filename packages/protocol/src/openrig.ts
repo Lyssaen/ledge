@@ -1,3 +1,4 @@
+import { TeamsEngineSchema } from './engine.js';
 import { z } from 'zod';
 import { ChatActionSchema } from './chat.js';
 import { ToolSchema } from './session.js';
@@ -45,7 +46,8 @@ export const RigLaunchInfoSchema = z.object({ planId: z.string(), goal: z.string
 export type RigLaunchInfo = z.infer<typeof RigLaunchInfoSchema>;
 export const RigSchema = z.object({ id: z.string(), name: z.string(), machine: z.string(), spec: z.string().optional(),
   cwd: z.string(), projectId: z.string().nullable(), offProject: z.boolean(), branch: z.string().optional(),
-  lifecycle: RigLifecycleSchema, kernel: z.boolean(), seats: z.array(RigSeatSchema), repos: z.array(RigRepoSchema), launch: RigLaunchInfoSchema.optional() });
+  lifecycle: RigLifecycleSchema, kernel: z.boolean(), seats: z.array(RigSeatSchema), repos: z.array(RigRepoSchema), launch: RigLaunchInfoSchema.optional(),
+  /** Where the rig comes from: a projected Ledge team carries 'ledge'; absent means an OpenRig rig. */ engine: TeamsEngineSchema.optional() });
 export type Rig = z.infer<typeof RigSchema>;
 
 export const EscalationQuestionSchema = z.object({ id: z.string(), question: z.string(),
