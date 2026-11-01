@@ -28,6 +28,12 @@ jobs:
         with:
           workspaces: .
       - run: pnpm install --frozen-lockfile
+      - name: Identify this snapshot
+        id: version
+        env:
+          SNAPSHOT_RUN_ID: ${{ github.run_id }}
+          SNAPSHOT_RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: node scripts/snapshot-version.mjs
       - name: Check Desktop and the notch
         run: |
           pnpm --filter overlay typecheck
@@ -37,6 +43,8 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          LEDGE_SNAPSHOT_VERSION: ${{ steps.version.outputs.version }}
+          VITE_LEDGE_SNAPSHOT_VERSION: ${{ steps.version.outputs.version }}
         run: pnpm tauri build
       - run: cargo test --workspace
       - name: Prepare the installer
@@ -108,7 +116,7 @@ jobs:
           SNAPSHOT_SHA: ${{ github.sha }}
         run: |
           sha256sum snapshot/Ledge.Desktop.Snapshot-x64-setup.exe > snapshot/SHA256SUMS.txt
-          printf 'Snapshot built from commit `%s`. The `snapshot` tag is a fixed download anchor on the default branch; it does not identify the source commit.\n\nInstall the daemon with `npm i -g @paradow/ledge@%s` (or `@paradow/ledge@snapshot`).\n\nThe installer uses the normal Desktop identity and can replace an existing release installation. Its updater still follows the stable release channel.\n' "$SNAPSHOT_SHA" "$SNAPSHOT_VERSION" > snapshot/notes.md
+          printf 'Snapshot built from commit `%s`. The `snapshot` tag is a fixed download anchor on the default branch; it does not identify the source commit.\n\nInstall the daemon with `npm i -g @paradow/ledge@%s` (or `@paradow/ledge@snapshot`).\n\nThe installer uses the normal Desktop identity and can replace an existing release installation. Choose the snapshot update channel in Desktop settings to follow snapshot builds.\n' "$SNAPSHOT_SHA" "$SNAPSHOT_VERSION" > snapshot/notes.md
           # A fixed prerelease gives the installer a stable download URL. Its tag points to the default branch:
           # GITHUB_TOKEN cannot create a tag at a feature commit that changes workflow files relative to that branch.
           if gh release view snapshot >/dev/null 2>&1; then
@@ -119,3 +127,5 @@ jobs:
             default_branch=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)
             gh release create snapshot snapshot/Ledge.Desktop.Snapshot-x64-setup.exe snapshot/Ledge.Desktop.Snapshot-x64-setup.exe.sig snapshot/SHA256SUMS.txt --target "$default_branch" --prerelease --title "Ledge snapshot $SNAPSHOT_VERSION" --notes-file snapshot/notes.md
           fi
+          node scripts/snapshot-manifest.mjs "$SNAPSHOT_VERSION" snapshot/Ledge.Desktop.Snapshot-x64-setup.exe.sig > snapshot/latest-desktop.json
+          gh release upload snapshot snapshot/latest-desktop.json --clobber

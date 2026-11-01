@@ -9,14 +9,15 @@ export type UpdatePhase =
   | { kind: 'available'; version: string; notes: string }
   | { kind: 'installing'; version: string; percent: number | null }
   | { kind: 'failed'; during: 'check' | 'install' };
-export interface UpdateSnapshot { phase: UpdatePhase; auto: boolean; checkedAt: number | null; app: string | null; latest: string | null }
+export type UpdateChannel = 'stable' | 'snapshot';
+export interface UpdateSnapshot { phase: UpdatePhase; auto: boolean; checkedAt: number | null; app: string | null; latest: string | null; channel: UpdateChannel }
 export interface UpdaterDeps {
-  check?: () => Promise<AvailableUpdate | null>; relaunch?: () => Promise<void>; version?: () => Promise<string | null>;
+  check?: (channel: UpdateChannel) => Promise<AvailableUpdate | null>; relaunch?: () => Promise<void>; version?: () => Promise<string | null>;
   now?: () => number; every?: (fn: () => void, ms: number) => () => void;
 }
 export interface Updater {
   get(): UpdateSnapshot; subscribe(fn: () => void): () => void;
-  start(): Promise<void>; check(): Promise<void>; install(): Promise<void>; setAuto(on: boolean): void; stop(): void;
+  start(): Promise<void>; check(): Promise<void>; install(): Promise<void>; setAuto(on: boolean): void; setChannel(channel: UpdateChannel): void; stop(): void;
 }
 /** The version waiting for the user while the phase is `available` or `installing`, absent otherwise: the notch reads it. */
 export const UPDATE_AVAILABLE_KEY = 'desktop.update.available';
@@ -33,9 +34,10 @@ const realEvery = (fn: () => void, ms: number) => { const t = setInterval(fn, ms
  * and one download at a time; a check during the install is ignored. Never throws.
  */
 export function createUpdater(deps: UpdaterDeps = {}): Updater {
-  let snap: UpdateSnapshot = { phase: { kind: 'idle' }, auto: get('desktop.update.auto') !== '0', checkedAt: loadCheckedAt(), app: null, latest: null };
+  let snap: UpdateSnapshot = { phase: { kind: 'idle' }, auto: get('desktop.update.auto') !== '0', checkedAt: loadCheckedAt(), app: null, latest: null, channel: get('desktop.update.channel') === 'snapshot' ? 'snapshot' : 'stable' };
   let held: AvailableUpdate | null = null;
   let checking: Promise<void> | null = null;
+  let generation = 0;
   let started = false;
   let stopTimer = () => {};
   const listeners = new Set<() => void>();
@@ -52,17 +54,20 @@ export function createUpdater(deps: UpdaterDeps = {}): Updater {
     if (snap.phase.kind === 'installing') return Promise.resolve();
     if (checking) return checking;
     const found = snap.phase.kind === 'available';   // a recheck never hides an update already found
+    const currentGeneration = generation;
+    const channel = snap.channel;
     if (!found) put({ phase: { kind: 'checking' } });
     checking = (async () => {
       try {
-        const u = await (deps.check ?? checkForUpdate)();
+        const u = await (deps.check ?? checkForUpdate)(channel);
+        if (currentGeneration !== generation) return;
         const at = (deps.now ?? Date.now)();
         set('desktop.update.checkedAt', String(at));
         if (installBusy()) { put({ checkedAt: at, latest: u?.version ?? null }); return; }   // an install started meanwhile: phase and held stay
         held = u;
         put({ checkedAt: at, latest: u?.version ?? null, phase: u ? { kind: 'available', version: u.version, notes: u.notes } : { kind: 'current' } });
       } catch {
-        if (!found && !installBusy()) put({ phase: { kind: 'failed', during: 'check' } });   // offline or unreachable: shown, retried by the next check
+        if (currentGeneration === generation && !found && !installBusy()) put({ phase: { kind: 'failed', during: 'check' } });   // offline or unreachable: shown, retried by the next check
       } finally { checking = null; }
     })();
     return checking;
@@ -102,6 +107,12 @@ export function createUpdater(deps: UpdaterDeps = {}): Updater {
       set('desktop.update.auto', on ? '1' : '0');
       put({ auto: on });
       if (on) void check();
+    },
+    setChannel(channel) {
+      if (channel === snap.channel || snap.phase.kind === 'installing') return;
+      generation++; held = null; set('desktop.update.channel', channel); set('desktop.update.checkedAt', null);
+      put({ channel, phase: { kind: 'idle' }, latest: null, checkedAt: null });
+      if (checking) void checking.then(() => check()); else void check();
     },
     stop() { stopTimer(); stopTimer = () => {}; }
   };

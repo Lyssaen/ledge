@@ -127,6 +127,7 @@ export const en: Messages = {
       install: 'Install', retry: 'Try again',
       auto: 'Check for updates', autoHint: 'At start-up, then every 6 hours. Ledge never updates without your click.',
       autoOn: 'Automatic update checks', autoOff: 'Manual update checks',
+      channel: 'Update channel', channelHint: 'Snapshot builds are experimental. Returning to stable may require reinstalling.', stable: 'Stable', snapshot: 'Snapshot',
       checking: 'Checking…', never: 'Never checked', checkedNow: 'Checked just now', checkedAgo: (d) => `Checked ${d} ago`,
       source: 'From the GitHub releases of Lyssaen/ledge.', check: 'Check'
     },

@@ -78,7 +78,7 @@ export const RecentSchema = z.object({ cwd: z.string().min(1), project: z.string
 export type Recent = z.infer<typeof RecentSchema>;
 
 /** A release version as the tag gives it, without the `v` and without a pre-release suffix. */
-export const SEMVER = /^\d+\.\d+\.\d+$/;
+export const SEMVER = /^\d+\.\d+\.\d+(?:-snapshot\.[1-9]\d*\.[1-9]\d*)?$/;
 /** What the daemon knows of itself (spec 2026-10-12 auto-update §6): its version, how it was installed, whether it runs
  *  as the systemd service, and the command a person runs by hand when it cannot update itself. */
 export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(['npm', 'git', 'unknown']), systemd: z.boolean(), manual: z.string().optional(), routing: z.boolean().optional(), archive: z.boolean().optional(),
