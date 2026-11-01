@@ -9,8 +9,12 @@ export interface RigAggregate {
   /** One openrig.status per machine (remote ones included), one rig.snapshot per machine, then the escalations. */
   replay(): BridgeMessage[];
   onMessage(fn: (m: BridgeMessage) => void): () => void;
+  /** Every peer replay has completed: previously hidden ambiguous ids can be reconsidered. */
+  onSynced(fn: () => void): () => void;
   rigs(): Rig[]; escalations(): Escalation[]; statuses(): OpenRigStatus[];
   escalation(id: string): Escalation | undefined;
+  /** True after an id has been observed on more than one machine. */
+  escalationAmbiguous(id: string): boolean;
   /** Remote: the last `rig.exchanges` the peer sent for that rig (null before any); local: the bridge's log. */
   exchanges(machine: string, rigId: string): Exchange[] | null;
   /** Lays a local state (an answer waiting in the queue, lot 6 Task 6) over a remote escalation, broadcast again; null takes it off. */
@@ -38,9 +42,20 @@ export function createRigAggregate(opts: { bridge: Bridge; remote: RemotePeers; 
   const peers = new Map<string, Remote>();
   /** Which peer owns each remote escalation id (escalation.removed has no machine). Ids are OpenRig's: a clash between machines is not expected. */
   const owner = new Map<string, string>();
+  // Remote collision handling keeps only one owner; retain the ambiguity so clients never route an unsafe id.
+  const collisions = new Set<string>();
+  const observedOrigins = new Map<string, string>();
+  const observeOrigin = (id: string, machine: string) => {
+    const previous = observedOrigins.get(id);
+    if (previous !== undefined && previous !== machine) collisions.add(id);
+    else if (previous === undefined) observedOrigins.set(id, machine);
+  };
+  for (const escalation of bridge.escalations()) observeOrigin(escalation.id, escalation.machine);
   const overlays = new Map<string, Partial<Escalation>>();
   const listeners = new Set<(m: BridgeMessage) => void>();
+  const syncListeners = new Set<() => void>();
   const emit = (m: BridgeMessage) => { for (const fn of listeners) { try { fn(m); } catch (e) { log(`openrig: aggregate listener threw: ${(e as Error).message}`); } } };
+  const signalSynced = () => { if (![...peers.values()].some(p => p.resync)) for (const fn of syncListeners) { try { fn(); } catch (e) { log(`openrig: sync listener threw: ${(e as Error).message}`); } } };
 
   const peer = (machine: string): Remote => {
     let p = peers.get(machine);
@@ -64,6 +79,8 @@ export function createRigAggregate(opts: { bridge: Bridge; remote: RemotePeers; 
   const finishResync = (p: Remote) => {
     const r = p.resync; if (!r) return; stopResync(p);
     for (const id of [...p.escs.keys()]) if (!r.seen.has(id)) dropEscalation(p, id);
+    // A phone can expose ids again once every peer replay completes.
+    signalSynced();
   };
   const arm = (p: Remote) => {
     const r = p.resync; if (!r) return;
@@ -72,7 +89,8 @@ export function createRigAggregate(opts: { bridge: Bridge; remote: RemotePeers; 
   };
   /** Kept as they are, marked unreachable: they wait over there (spec §4.8). */
   const markUnreachable = (p: Remote, status: OpenRigStatus) => {
-    stopResync(p);
+    const hadResync = p.resync !== null; stopResync(p);
+    if (hadResync) signalSynced();
     p.status = status; emit({ type: 'openrig.status', status });
     for (const [id, rig] of p.rigs) {
       if (rig.lifecycle === 'unreachable') continue;
@@ -80,12 +98,16 @@ export function createRigAggregate(opts: { bridge: Bridge; remote: RemotePeers; 
     }
   };
 
-  bridge.onMessage(m => emit(m.type === 'escalation.updated' ? { ...m, escalation: over(m.escalation) } : m));
+  bridge.onMessage(m => {
+    if (m.type === 'escalation.updated') { observeOrigin(m.escalation.id, m.escalation.machine); if (owner.has(m.escalation.id)) collisions.add(m.escalation.id); }
+    emit(m.type === 'escalation.updated' ? { ...m, escalation: over(m.escalation) } : m);
+  });
 
   remote.onStatus((machine, s) => {
     if (s === 'removed') {
       const p = peers.get(machine); if (!p) return;
-      stopResync(p); peers.delete(machine);
+      const hadResync = p.resync !== null; stopResync(p); peers.delete(machine);
+      if (hadResync) signalSynced();
       for (const rigId of p.rigs.keys()) emit({ type: 'rig.removed', machine, rigId });
       for (const id of [...p.escs.keys()]) dropEscalation(p, id);
       return;
@@ -121,7 +143,9 @@ export function createRigAggregate(opts: { bridge: Bridge; remote: RemotePeers; 
       }
       case 'rig.exchanges': p.exchanges.set(m.rigId, m.items); return;
       case 'escalation.updated': {
+        observeOrigin(m.escalation.id, machine);
         const prev = owner.get(m.escalation.id);
+        if ((prev && prev !== machine) || bridge.escalation(m.escalation.id)) collisions.add(m.escalation.id);
         if (prev && prev !== machine) { log(`openrig: escalation ${m.escalation.id} of ${machine} has the id of one of ${prev}: the last one wins`); peers.get(prev)?.escs.delete(m.escalation.id); }
         p.escs.set(m.escalation.id, m.escalation); owner.set(m.escalation.id, machine);
         return emit({ type: 'escalation.updated', escalation: over(m.escalation) });
@@ -147,10 +171,12 @@ export function createRigAggregate(opts: { bridge: Bridge; remote: RemotePeers; 
       return [...statuses, ...snapshots, ...escs];
     },
     onMessage(fn) { listeners.add(fn); return () => { listeners.delete(fn); }; },
+    onSynced(fn) { syncListeners.add(fn); return () => { syncListeners.delete(fn); }; },
     rigs: () => [...bridge.rigs(), ...order().flatMap(machine => remoteRigs(machine, peers.get(machine)!))],
     escalations: () => [...bridge.escalations().map(over), ...remoteEscs()],
     statuses: () => [bridge.status(), ...order().flatMap(machine => { const s = peers.get(machine)!.status; return s ? [s] : []; })],
     escalation(id) { const e = bridge.escalation(id) ?? remoteEsc(id); return e ? over(e) : undefined; },
+    escalationAmbiguous(id) { return collisions.has(id) || (!!bridge.escalation(id) && owner.has(id)) || [...peers.values()].some(p => p.resync !== null); },
     exchanges(machine, rigId) {
       if (machine === 'local') return bridge.exchanges(rigId);
       return peers.get(machine)?.exchanges.get(rigId) ?? null;

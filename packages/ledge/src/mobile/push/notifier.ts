@@ -69,7 +69,7 @@ export function createNotifier(deps: {
             endpoint: sub.endpoint,
             body: Buffer.from(encryptPush(plain, { p256dh: sub.p256dh, auth: sub.auth }, { padTo: PAD_TO })).toString('base64url'),
             ttl: TTL_S,
-            urgency: p.kind === 'finished' || p.kind === 'chat' ? 'normal' : 'high',
+            urgency: p.kind === 'finished' || p.kind === 'chat' || p.kind === 'decided' ? 'normal' : 'high',
             topic: p.tag
           };
           const r = await mobile.sendPush(msg);

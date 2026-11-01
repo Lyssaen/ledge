@@ -1,0 +1,36 @@
+import { devices, expect, test } from '@playwright/test';
+import type { PhoneClientMessage } from '@ledge/protocol';
+import { copy } from '../src/copy';
+import { createDeviceCheck } from '../test/fakePc';
+import { startHarness, type Harness } from './harness';
+const { defaultBrowserType: _browser, ...pixel } = devices['Pixel 7'];
+test.use(pixel);
+test.skip(({ browserName }) => browserName !== 'chromium', 'Requires the virtual passkey authenticator');
+let h: Harness;
+test.beforeAll(async () => {
+  h = await startHarness(); h.daemon.device = createDeviceCheck(h.url); h.daemon.openrig = true; h.daemon.sessions = [];
+  h.daemon.rigs = [{ key: 'factory', name: 'factory', project: 'Ledge', offProject: false, lifecycle: 'running', kernel: false, seats: [{ ref: 'build@factory', address: '@build', name: 'build', runtime: 'codex', state: 'attention' }], repos: 1 }];
+  const escalation = { id: 'e1', source: 'rig' as const, rigKey: 'factory', rigName: 'factory', from: '@build', intent: 'decision' as const, summary: 'Quelle base ?', questions: [{ id: 'q1', question: 'Quelle base ?', options: [{ id: 'sqlite', label: 'SQLite' }, { id: 'pg', label: 'Postgres' }] }], createdAt: '2026-10-20T08:00:00.000Z', state: 'pending' as const };
+  h.daemon.escalations = [escalation]; h.daemon.ledgeThread = [{ kind: 'escalation', id: 'item1', at: escalation.createdAt, escalation }];
+  h.daemon.exchanges = [{ id: 'x1', rigKey: 'factory', from: '@build', to: '@lead', kind: 'message', text: 'Tests terminés', at: escalation.createdAt }];
+});
+test.afterAll(async () => { await h?.close(); });
+test('pair, answer an escalation, read a rig and confirm a new rig with a passkey', async ({ page }) => {
+  test.setTimeout(90_000);
+  const cdp = await page.context().newCDPSession(page); await cdp.send('WebAuthn.enable');
+  await cdp.send('WebAuthn.addVirtualAuthenticator', { options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true } });
+  await page.goto(h.url); await page.getByRole('link', { name: copy.login.github }).click();
+  const code = await h.pc.code(); await expect(page.getByLabel(copy.compare.codeLabel(code))).toBeVisible();
+  await page.getByRole('button', { name: copy.compare.same }).click(); h.pc.ok();
+  await page.getByRole('button', { name: copy.enroll.go }).click(); await expect(page.getByText(copy.enroll.done)).toBeVisible();
+  await page.getByRole('link', { name: copy.compare.seePending }).click();
+  await page.getByRole('link', { name: copy.nav.chat, exact: true }).click();
+  await page.getByRole('button', { name: 'SQLite' }).click();
+  await expect.poll(() => h.pc.received.map(x => JSON.parse(x) as PhoneClientMessage).some(m => m.type === 'escalation.answer' && m.answers.q1 === 'sqlite')).toBe(true);
+  await page.getByRole('link', { name: copy.nav.rigs, exact: true }).click();
+  await page.getByRole('link', { name: /factory/ }).click(); await page.getByRole('link', { name: 'Échanges' }).click(); await expect(page.getByText('Tests terminés')).toBeVisible();
+  await page.getByRole('link', { name: copy.nav.rigs, exact: true }).click(); await page.getByRole('link', { name: 'Lancer un rig…' }).click();
+  await page.getByLabel('But').fill('Créer un nouveau service'); await page.getByRole('button', { name: 'Demander le plan à Ledge' }).click();
+  await page.getByRole('button', { name: 'Voir le plan' }).click(); await page.getByRole('button', { name: 'Lancer · confirmer avec la clé d’accès' }).click();
+  await expect(page.getByText('Lancé par toi')).toBeVisible(); expect(h.daemon.launched).toContain('plan1');
+});

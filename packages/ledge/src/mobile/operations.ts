@@ -1,11 +1,11 @@
 // Makes a phone's writes idempotent: an operation id (a uuid the phone picks) runs once, and a retry gets the stored outcome.
 // In memory only, so a daemon restart forgets every operation.
-import { type CloseHow, type OperationReason, type OperationStatus, type PhoneClientMessage } from '@ledge/protocol';
+import { canonicalJson, type CloseHow, type OperationReason, type OperationStatus, type PhoneClientMessage } from '@ledge/protocol';
 
 export type PhoneOperation = Extract<PhoneClientMessage, { op: string }>;
 
 /** What an operation came to: the answer the phone gets. `how`: how a `session.close` ended the agent. */
-export type Outcome = { status: Extract<OperationStatus, 'applied' | 'rejected' | 'failed'>; reason?: OperationReason; how?: CloseHow };
+export type Outcome = { status: OperationStatus; reason?: OperationReason; how?: CloseHow };
 
 export interface OperationRecord { op: string; owner: string; fingerprint: string; status: OperationStatus; reason?: OperationReason; how?: CloseHow; at: number }
 
@@ -13,6 +13,12 @@ export type BeginResult = { kind: 'fresh' | 'replay'; record: OperationRecord } 
 
 /** What the operation does, never its id. */
 export function fingerprint(m: PhoneOperation): string {
+  // For OpenRig operations, bind the operation id to every semantic field (but not a passkey's signed bytes).
+  if (m.type === 'rig.act' || m.type === 'rig.launch' || m.type === 'rig.prepare' || m.type === 'ledge.say' || m.type === 'escalation.answer' || m.type === 'decision.revisit') {
+    const { op: _op, ...data } = m;
+    if ('assertion' in data) delete data.assertion;
+    return canonicalJson(data);
+  }
   // Read as the union of every message's fields: a field the message lacks is null. The signed parts of a credential are not part of it.
   const f = m as { id?: string; decision?: string; note?: string; text?: string; expect?: { key: string } | null; credential?: { id: string }; requestId?: string; answers?: unknown; subscription?: { endpoint: string }; key?: string; qid?: string; rows?: number[]; row?: number; attachments?: string[] };
   return JSON.stringify([m.type, f.id ?? null, f.decision ?? null, f.note ?? null, f.text ?? null, f.expect?.key ?? null, f.credential?.id ?? null, f.requestId ?? null, f.answers ?? null, f.subscription?.endpoint ?? null, f.key ?? null, f.qid ?? null, f.rows ?? null,

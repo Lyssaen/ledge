@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from 'react';
 import {
   PhoneClientMessageSchema, type Assertion, type PcAction, type AttachmentRef, type CapabilitiesByTool, type Credential, type ImageUpload, type PhoneClientMessage, type PhonePending, type PhoneServerMessage,
-  type ModelRefusal, type PhoneChecklist, type PhoneModelChoice, type PhoneSession, type PushSubscription, type ThreadItem
+  type PhoneRigAction, type PhoneRig, type PhoneEscalation, type PhoneLedgeDecision, type PhoneThreadItem, type PhoneExchange, type ModelRefusal, type PhoneChecklist, type PhoneModelChoice, type PhoneSession, type PushSubscription, type ThreadItem
 } from '@ledge/protocol';
 import type { PhoneLink } from '../link/link';
 import { getAssertion } from '../link/webauthn';
@@ -25,6 +25,16 @@ export interface ThreadState {
 }
 
 export interface MobileState {
+  openrig: boolean;
+  projects: { id: string; name: string; hasLocalRepo: boolean }[];
+  rigs: Map<string, PhoneRig>;
+  escalations: Map<string, PhoneEscalation>;
+  decisionsToday: PhoneLedgeDecision[];
+  ledgeThread: PhoneThreadItem[];
+  ledgeAbout?: string;
+  ledgeBefore?: string;
+  rigExchanges: Map<string, PhoneExchange[]>;
+  rigExchangeCuts: Set<string>;
   /** In the PC's order. */
   sessions: Map<string, PhoneSession>;
   threads: Map<string, ThreadState>;
@@ -61,6 +71,7 @@ export type ConfirmRequest = { purpose: 'register' } | { purpose: 'decide'; id: 
   | { purpose: 'act'; qid: string }
   /** A session's own close (`session.close`) or resume (`session.resume`). */
   | { purpose: 'close' | 'act'; id: string }
+  | { purpose: 'rig'; rig: PhoneRigAction }
   | { purpose: 'pc'; action: 'update'; version: string } | { purpose: 'pc'; action: 'restart' };
 
 /** How long `prepareConfirm` waits for the PC's challenge. */
@@ -76,6 +87,14 @@ export interface ConfirmedExpect { key: string; kind: PhonePending['kind']; text
 export type Decision = Extract<PhoneClientMessage, { type: 'session.decide' }>['decision'];
 
 export interface MobileStore {
+  sayLedge(text: string, about?: string): string | null;
+  talkAbout(id: string | undefined): void;
+  answerEscalation(id: string, answers: Record<string, string>): string | null;
+  revisitDecision(id: string): string | null;
+  prepareRig(goal: string, project: string | null, spec?: string): string | null;
+  rigAction(action: Omit<Extract<PhoneRigAction, {type: 'rig.act'}>, 'op' | 'assertion'> | Omit<Extract<PhoneRigAction, {type: 'rig.launch'}>, 'op' | 'assertion'>): Promise<ChatAction>;
+  requestExchanges(key: string): void;
+  loadOlderThread(): void;
   getState(): MobileState;
   subscribe(fn: () => void): () => void;
   /** Answers the session's request. The op's id, or null when nothing was sent (no request, not ready, already answered). */
@@ -179,6 +198,7 @@ function failuresKept(failures: Record<string, ModelRefusal>, before: Map<string
 export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
   const last = loadLastState(storage);
   let state: MobileState = {
+    openrig: false, projects: [], rigs: new Map(), escalations: new Map(), decisionsToday: [], ledgeThread: [], rigExchanges: new Map(), rigExchangeCuts: new Set(),
     sessions: new Map((last?.sessions ?? []).map(s => [s.id, s])),
     threads: new Map(),
     previews: new Map(Object.entries(last?.previews ?? {})),
@@ -196,6 +216,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
   let reads = loadReads(storage);
   /** The tools whose model list was asked on this link and boot; an `error` listing is asked again. */
   const modelAsks = new Set<string>();
+  let ledgeHistoryAsked = false;
   /** The PC's boot id of this run, from its snapshot; null until one, and when the PC sends none. Never cached. */
   let boot: string | null = null;
   /** Ends a followed update or restart the PC never came back from: armed by the first step, cleared at the end. */
@@ -322,6 +343,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
 
   function onLost() {
     historyAsked = false;
+    ledgeHistoryAsked = false;
     askedSinceReady.clear();
     // A list asked on the lost channel never comes: it is asked again. Those already answered stay.
     for (const tool of [...modelAsks]) if (!state.models[tool]) modelAsks.delete(tool);
@@ -349,16 +371,33 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         // A new boot is a new PC process: what it offered may differ.
         const bootChanged = (m.daemon.boot ?? null) !== boot;
         boot = m.daemon.boot ?? null;
-        if (bootChanged) modelAsks.clear();
+        if (bootChanged) { modelAsks.clear(); ledgeHistoryAsked = false; }
         const pc = pcSnapshot(state.pc, m.daemon);
         if (!pcRunning(pc)) stopPcWatch();
         const checklists = new Map([...state.checklists].filter(([id]) => sessions.has(id)));
-        set({ sessions, previews, threads, checklists, capabilities: m.capabilities, device: m.device ?? null, daemon: m.daemon, fresh: true, syncedAt: now, pc, modelFailures: failuresKept(state.modelFailures, state.sessions, sessions), ...(bootChanged ? { models: {} } : {}) });
+        const escalations = new Map((m.escalations ?? []).map(e => [e.id, e]));
+        const ledgeThread = bootChanged || !m.daemon.openrig ? [] : state.ledgeThread.map(i => i.kind === 'escalation' && escalations.has(i.escalation.id) ? { ...i, escalation: escalations.get(i.escalation.id)! } : i);
+        set({ ledgeThread, ...(bootChanged || !m.daemon.openrig ? { ledgeBefore: undefined, rigExchanges: new Map<string, PhoneExchange[]>(), rigExchangeCuts: new Set<string>() } : {}), openrig: m.daemon.openrig === true, projects: m.projects ?? [], rigs: new Map((m.rigs ?? []).map(r => [r.key, r])), escalations, decisionsToday: m.decisionsToday ?? [], sessions, previews, threads, checklists, capabilities: m.capabilities, device: m.device ?? null, daemon: m.daemon, fresh: true, syncedAt: now, pc, modelFailures: failuresKept(state.modelFailures, state.sessions, sessions), ...(bootChanged ? { models: {} } : {}) });
         persist();
         // The instructions and interrupts left uncertain (those in flight on this link are `sending`) go again if this PC may not have applied them.
         if (ready()) resend(o => o.phase === 'uncertain' && expectKey(o.message) === undefined);
         if (m.device?.chat && !historyAsked && ready()) askHistory();
+        if (m.daemon.openrig && !ledgeHistoryAsked && ready()) { ledgeHistoryAsked = true; send({ type: 'ledge.thread.request' }); }
         return;
+      }
+      case 'rig.updated': set({ rigs: new Map(state.rigs).set(m.rig.key, m.rig) }); return;
+      case 'rig.removed': { const rigs = new Map(state.rigs); rigs.delete(m.key); const rigExchanges = new Map(state.rigExchanges); rigExchanges.delete(m.key); const rigExchangeCuts = new Set(state.rigExchangeCuts); rigExchangeCuts.delete(m.key); set({ rigs, rigExchanges, rigExchangeCuts }); return; }
+      case 'escalation.updated': set({ escalations: new Map(state.escalations).set(m.escalation.id, m.escalation), ledgeThread: state.ledgeThread.map(i => i.kind === 'escalation' && i.escalation.id === m.escalation.id ? { ...i, escalation: m.escalation } : i) }); return;
+      case 'escalation.removed': { const escalations = new Map(state.escalations); escalations.delete(m.id); set({ escalations }); return; }
+      case 'rig.exchanges': { const rigExchangeCuts = new Set(state.rigExchangeCuts); if (m.cut) rigExchangeCuts.add(m.key); else rigExchangeCuts.delete(m.key); set({ rigExchanges: new Map(state.rigExchanges).set(m.key, m.items), rigExchangeCuts }); return; }
+      case 'ledge.thread.item': {
+        const items = [...state.ledgeThread]; const index = items.findIndex(i => i.id === m.item.id);
+        if (index < 0) items.push(m.item); else items[index] = m.item;
+        set({ ledgeThread: items }); return;
+      }
+      case 'ledge.thread.history': {
+        const ids = new Set(state.ledgeThread.map(i => i.id));
+        set({ ledgeThread: [...m.items.filter(i => !ids.has(i.id)), ...state.ledgeThread], ledgeBefore: m.before }); return;
       }
       case 'attachment.stored': case 'attachment.data': case 'attachment.error':
         images.handle(m);
@@ -545,12 +584,13 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     lastThread = null;
     threadAsks = [];
     historyAsked = false;
+    ledgeHistoryAsked = false;
     chatState = emptyChat();
     settle(new Error('lost'));
     previewsDirty = false;
     clearLastState(storage);
     clearOps(storage);
-    set({ sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, fresh: false, syncedAt: null, ops: {}, checklists: new Map(), pc: null, models: {}, modelFailures: {} });
+    set({ openrig: false, projects: [], rigs: new Map(), escalations: new Map(), decisionsToday: [], ledgeThread: [], ledgeAbout: undefined, ledgeBefore: undefined, rigExchanges: new Map(), rigExchangeCuts: new Set(), sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, fresh: false, syncedAt: null, ops: {}, checklists: new Map(), pc: null, models: {}, modelFailures: {} });
     modelAsks.clear();
     stopPcWatch();
   }
@@ -568,6 +608,18 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
   if (wasReady) onReady();
 
   const store: MobileStore = {
+    talkAbout(id) { set({ ledgeAbout: id }); },
+    sayLedge(text, about) { return write(op => ({ type: 'ledge.say', op, text, ...(about ? { about } : {}) })); },
+    revisitDecision(id) { return write(op => ({ type: 'decision.revisit', op, id })); },
+    answerEscalation(id, answers) { return write(op => ({ type: 'escalation.answer', op, id, answers })); },
+    prepareRig(goal, project, spec) { return write(op => ({ type: 'rig.prepare', op, goal, project, ...(spec ? { spec } : {}) })); },
+    rigAction(action) {
+      if (!state.device?.confirm) return Promise.resolve({ status: 'rejected', reason: 'confirm_required' });
+      const rig = { ...action, op: newOperationId() } as PhoneRigAction;
+      return signedOperation({ purpose: 'rig', rig }, (op, assertion) => ({ ...action, op, assertion }));
+    },
+    requestExchanges(key) { if (ready() && state.openrig) send({ type: 'rig.exchanges.request', key }); },
+    loadOlderThread() { if (ready() && state.openrig) send({ type: 'ledge.thread.request', ...(state.ledgeBefore ? { before: state.ledgeBefore } : {}) }); },
     getState: () => state,
     subscribe(fn) { listeners.add(fn); return () => { listeners.delete(fn); }; },
 

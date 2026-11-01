@@ -20,13 +20,13 @@ declare const __BUILD_ID__: string;
 type Extendable = { waitUntil(p: Promise<unknown>): void };
 type FetchEvent = Extendable & { request: Request; respondWith(r: Promise<Response>): void };
 type PushEvent = Extendable & { data: { json(): unknown } | null };
-type ClickEvent = Extendable & { notification: { close(): void; data?: { url?: unknown } } };
+type ClickEvent = Extendable & { action?: string; notification: { close(): void; data?: { url?: unknown; escalationId?: unknown; actions?: unknown } } };
 type MessageEvent = Extendable & { data: unknown; ports: readonly { postMessage(m: unknown): void }[] };
 interface WorkerScope {
   location: { origin: string };
   registration: {
     active: object | null;
-    showNotification(title: string, o?: { body?: string; tag?: string; data?: { url: string }; icon?: string; renotify?: boolean }): Promise<void>;
+    showNotification(title: string, o?: { body?: string; tag?: string; data?: { url: string; escalationId?: string; actions?: PushPayload['actions'] }; icon?: string; renotify?: boolean; silent?: boolean; actions?: { action: string; title: string }[] }): Promise<void>;
     setAppBadge?(n: number): Promise<void>;
   };
   skipWaiting(): Promise<void>;
@@ -189,11 +189,14 @@ function payloadOf(raw: unknown): PushPayload | null {
   const p = raw as Record<string, unknown>;
   const str = (v: unknown, max: number): v is string => typeof v === 'string' && v.length <= max;
   const ok =
-    p.v === 1 && (p.kind === 'request' || p.kind === 'question' || p.kind === 'finished' || p.kind === 'chat') &&
+    p.v === 1 && (p.kind === 'request' || p.kind === 'question' || p.kind === 'finished' || p.kind === 'chat' || p.kind === 'escalation' || p.kind === 'decided') &&
     str(p.title, 80) && str(p.body, 120) && str(p.url, 300) && PUSH_URL.test(p.url) &&
     typeof p.badge === 'number' && Number.isInteger(p.badge) && p.badge >= 0 && p.badge <= 999 &&
     typeof p.tag === 'string' && PUSH_TAG.test(p.tag);
-  return ok ? (raw as PushPayload) : null;
+  const validActions = p.actions === undefined || (Array.isArray(p.actions) && p.actions.length <= 2 && p.actions.every(a => typeof a === 'object' && a !== null && str(a.qId, 64) && !!a.qId && str(a.optId, 64) && !!a.optId && str(a.label, 40)));
+  const validCount = p.count === undefined || (typeof p.count === 'number' && Number.isInteger(p.count) && p.count >= 1 && p.count <= 999);
+  const validId = p.escalationId === undefined || (str(p.escalationId, 120) && !!p.escalationId);
+  return ok && validActions && validId && validCount ? (raw as PushPayload) : null;
 }
 
 // Every push shows a notification, whatever it carries: Safari drops the subscription of a site that stays silent.
@@ -202,7 +205,7 @@ sw.addEventListener('push', (e) => {
   try { payload = payloadOf(e.data?.json()); } catch { /* unreadable: the fallback below */ }
   e.waitUntil((async () => {
     if (!payload) return sw.registration.showNotification('Ledge', { body: 'Une demande attend', tag: 'ledge', renotify: true });
-    await sw.registration.showNotification(payload.title, { body: payload.body, tag: payload.tag, data: { url: payload.url }, icon: '/icon-192.png', renotify: payload.kind !== 'finished' });
+    await sw.registration.showNotification(payload.title, { body: payload.body, tag: payload.tag, data: { url: payload.url, ...(payload.escalationId ? { escalationId: payload.escalationId } : {}), ...(payload.actions ? { actions: payload.actions } : {}) }, ...(payload.actions ? { actions: payload.actions.map(a => ({ action: `answer:${encodeURIComponent(a.qId)}:${encodeURIComponent(a.optId)}`, title: a.label })) } : {}), icon: '/icon-192.png', renotify: payload.kind !== 'finished' && payload.kind !== 'decided', ...(payload.kind === 'decided' ? { silent: true } : {}) });
     // The badge is a courtesy: neither a throw nor a rejection of it may fail the notification.
     try { await sw.registration.setAppBadge?.(payload.badge); } catch { /* ignored */ }
   })());
@@ -216,6 +219,13 @@ sw.addEventListener('notificationclick', (e) => {
     const [page] = await sw.clients.matchAll({ type: 'window', includeUncontrolled: true });
     if (!page) return void (await sw.clients.openWindow(url));
     await page.focus?.();
+    const action = e.action;
+    const actions = e.notification.data?.actions;
+    const escalationId = e.notification.data?.escalationId;
+    if (typeof action === 'string' && typeof escalationId === 'string' && Array.isArray(actions)) {
+      const match = actions.find(a => a && typeof a.qId === 'string' && typeof a.optId === 'string' && action === `answer:${encodeURIComponent(a.qId)}:${encodeURIComponent(a.optId)}`);
+      if (match) { page.postMessage({ type: 'ledge.answer', id: escalationId, qId: match.qId, optId: match.optId, url }); return; }
+    }
     page.postMessage({ type: 'ledge.open', url });
   })());
 });

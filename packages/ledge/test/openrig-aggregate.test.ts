@@ -81,6 +81,37 @@ describe('RigAggregate', () => {
     expect(s.agg.escalation('L1')?.machine).toBe('local');
   });
 
+  it('remembers collisions between local and remote, and between remote machines', () => {
+    const s = setup();
+    s.msg('ec2', { type: 'escalation.updated', escalation: esc('L1', 'ec2') });
+    expect(s.agg.escalationAmbiguous('L1')).toBe(true);
+    s.msg('ec2', { type: 'escalation.updated', escalation: esc('same', 'ec2') });
+    expect(s.agg.escalationAmbiguous('same')).toBe(false);
+    s.msg('other', { type: 'escalation.updated', escalation: esc('same', 'other') });
+    expect(s.agg.escalationAmbiguous('same')).toBe(true);
+    // The previous owner was replaced inside the aggregate, but the collision must still fail closed.
+    s.msg('other', { type: 'escalation.removed', id: 'same' });
+    expect(s.agg.escalationAmbiguous('same')).toBe(true);
+    s.msg('ec2', { type: 'escalation.updated', escalation: esc('reused', 'ec2') });
+    s.msg('ec2', { type: 'escalation.removed', id: 'reused' });
+    s.msg('other', { type: 'escalation.updated', escalation: esc('reused', 'other') });
+    expect(s.agg.escalationAmbiguous('reused')).toBe(true);
+  });
+
+  it('refuses to assert uniqueness while a peer replay is incomplete', async () => {
+    const s = setup(); let synced = 0; s.agg.onSynced(() => { synced += 1; }); s.status('ec2', 'open');
+    expect(s.agg.escalationAmbiguous('L1')).toBe(true);
+    s.msg('ec2', { type: 'rig.snapshot', machine: 'ec2', rigs: [] });
+    await sleep(40);
+    expect(s.agg.escalationAmbiguous('L1')).toBe(false); expect(synced).toBe(1);
+  });
+
+  it('ends the replay gate if a peer disconnects during its replay', () => {
+    const s = setup(); let synced = 0; s.agg.onSynced(() => { synced += 1; });
+    s.status('ec2', 'open'); expect(s.agg.escalationAmbiguous('L1')).toBe(true);
+    s.status('ec2', 'unreachable'); expect(s.agg.escalationAmbiguous('L1')).toBe(false); expect(synced).toBe(1);
+  });
+
   it('passes the local bridge through and the peer messages on', () => {
     const s = setup();
     s.emit({ type: 'rig.updated', rig: rig('r1', 'local', { lifecycle: 'partial' }) });

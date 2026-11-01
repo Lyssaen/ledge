@@ -5,6 +5,7 @@ import { MeResponseSchema } from '@ledge/protocol';
 import type { LinkState, PhoneLink } from './link/link';
 import { openFromWorker, replaceRoute, useRoute } from './router';
 import { Agents } from './screens/Agents';
+import { Rigs, RigPage, EscalationPage, LedgeThread, NewRig } from './screens/OpenRig';
 import { Chat } from './screens/Chat';
 import { Compare } from './screens/Compare';
 import { ProtectStep } from './screens/Enroll';
@@ -129,15 +130,23 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
   useEffect(() => {
     const sw = globalThis.navigator?.serviceWorker;
     if (!sw) return;
-    const onMessage = (e: MessageEvent) => openFromWorker(e.data);
+    const onMessage = (e: MessageEvent) => {
+      const m = e.data as { type?: unknown; id?: unknown; qId?: unknown; optId?: unknown; url?: unknown } | null;
+      if (m?.type === 'ledge.answer' && typeof m.id === 'string' && typeof m.qId === 'string' && typeof m.optId === 'string') {
+        const escalation = store.getState().escalations.get(m.id);
+        const question = escalation?.questions.length === 1 ? escalation.questions[0] : undefined;
+        if (question?.id === m.qId && question.options.some(o => o.id === m.optId) && (escalation?.state === 'pending' || escalation?.state === 'grace')) store.answerEscalation(m.id, { [m.qId]: m.optId });
+        openFromWorker({ type: 'ledge.open', url: m.url });
+      } else openFromWorker(e.data);
+    };
     sw.addEventListener('message', onMessage);
     return () => sw.removeEventListener('message', onMessage);
-  }, []);
+  }, [store]);
 
   // Opened at its root, the app lands on « Ledge » once the PC says it offers the chat (ledge home spec §2.4); an
   // address that names a screen (a shared link, a notification) stays where it is, and so does a later tap on « À traiter ».
   const landing = useRef(['', '#', '#/'].includes(globalThis.location.hash));
-  const toLedge = landing.current && kind === 'route' && route.name === 'inbox' && !!mobile.device?.chat;
+  const toLedge = landing.current && kind === 'route' && route.name === 'inbox' && (!!mobile.device?.chat || mobile.openrig);
   useEffect(() => {
     if (!toLedge) return;
     landing.current = false;
@@ -146,7 +155,7 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
   useEffect(() => { if (route.name !== 'inbox') landing.current = false; }, [route.name]);
 
   // `#/chat` without the chat announced goes to the inbox; before the PC's first snapshot nothing is known, so the address stays.
-  const chatOff = route.name === 'chat' && mobile.fresh && !mobile.device?.chat;
+  const chatOff = route.name === 'chat' && mobile.fresh && !mobile.device?.chat && !mobile.openrig;
   useEffect(() => { if (chatOff) replaceRoute({ name: 'inbox' }); }, [chatOff]);
 
   const pinned = link.pinned();
@@ -200,8 +209,13 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
         );
     }
     switch (route.name) {
+      case 'rigs': return <Rigs store={store} />;
+      case 'rig': return <RigPage store={store} rigKey={route.key} view={route.view} />;
+      case 'escalation': return <EscalationPage store={store} id={route.id} />;
+      case 'new-rig': return <NewRig store={store} />;
+      case 'projects': return <Agents store={store} onReconnect={retry} />;
       case 'agents': return <Agents store={store} onReconnect={retry} />;
-      case 'chat': return mobile.device?.chat ? <Chat store={store} onReconnect={retry} /> : <Inbox store={store} onReconnect={retry} />;
+      case 'chat': return mobile.openrig ? <LedgeThread store={store} /> : mobile.device?.chat ? <Chat store={store} onReconnect={retry} /> : <Inbox store={store} onReconnect={retry} />;
       case 'thread': return <Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} />;
       case 'terminal': return <Terminal key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} />;
       // Keyed by the session only: a request replaced in place rewrites the address, and must not start the screen over.

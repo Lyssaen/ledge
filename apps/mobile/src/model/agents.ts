@@ -1,4 +1,4 @@
-import type { PhoneSession, Tool } from '@ledge/protocol';
+import type { PhoneRig, PhoneSession, Tool } from '@ledge/protocol';
 import { copy } from '../copy';
 import { firstLine, requestsOf, type InboxItem } from './requests';
 
@@ -84,3 +84,7 @@ export function agentsOf(sessions: PhoneSession[]): Array<{ label: string; rows:
     })
   }));
 }
+
+/** Sessions controlled by OpenRig belong with their rig, not in the standalone projects list. */
+export const loneSessions = (sessions: readonly PhoneSession[]): PhoneSession[] => sessions.filter(s => !s.rig && !s.brain);
+export const rigsIn = (project: string, rigs: readonly PhoneRig[]): PhoneRig[] => rigs.filter(r => r.project === project);
