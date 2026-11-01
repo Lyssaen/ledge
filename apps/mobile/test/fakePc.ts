@@ -1,7 +1,7 @@
 // A fake PC on the real relay (dev tokens): with @ledge/seal it plays the `pc` side of the lot 3 fake device
 // (packages/ledge/test/mobile-fake-device.ts). Node only: it authenticates with an Authorization header (ruling R1).
 import {
-  RelayServerMessageSchema, SealedFrameSchema, padPlain,
+  RelayServerMessageSchema, SealedFrameSchema, padPlain, rigSubject,
   type PhoneClientMessage, type PhoneServerMessage, type RelayServerMessage, type SealedFrame
 } from '@ledge/protocol';
 import {
@@ -329,6 +329,10 @@ export function createDeviceCheck(publicUrl: string) {
       if (m.purpose === 'register') {
         return { type: 'confirm.challenge', purpose: 'register', challenge: challenges.issue({ deviceId, purpose: 'register', subject: '' }), rpId: rp.rpId, expiresInMs: CHALLENGE_TTL_MS };
       }
+      if (m.purpose === 'rig') {
+        if (!m.rig || !credential || credential.rpId !== rp.rpId) return 'invalid';
+        return { type: 'confirm.challenge', purpose: 'rig', challenge: challenges.issue({ deviceId, purpose: 'rig', subject: rigSubject(m.rig) }), rpId: rp.rpId, credentialId: credential.id, expiresInMs: CHALLENGE_TTL_MS };
+      }
       // A session's own close or resume: bound to the session.
       if ((m.purpose === 'close' || m.purpose === 'act') && !m.qid && m.id) {
         if (!live) return 'unknown_session';
@@ -358,6 +362,14 @@ export function createDeviceCheck(publicUrl: string) {
       if (!verified.ok) return 'assertion_invalid';
       credential = verified.credential;
       return 'applied';
+    },
+    assertRig(m: Extract<PhoneClientMessage, { type: 'rig.act' | 'rig.launch' }>): Reason | undefined {
+      if (!credential || !rp || !m.assertion) return 'confirm_required';
+      const challenge = challengeOf(m.assertion.clientDataJSON); if (challenge === null) return 'assertion_invalid';
+      const verdict = challenges.consume(challenge, { deviceId, purpose: 'rig', subject: rigSubject(m) });
+      if (verdict === 'expired') return 'assertion_expired'; if (verdict !== 'ok') return 'assertion_invalid';
+      const verified = verifyAssertion(m.assertion, credential, rp, challenge); if (!verified.ok) return 'assertion_invalid';
+      credential = { ...credential, counter: verified.counter }; return undefined;
     },
     /** The assertion of a launch of turn `qid`; undefined lets it through. The challenge is spent first. */
     assertLaunch(m: Extract<PhoneClientMessage, { type: 'chat.launch' }>): Reason | undefined {

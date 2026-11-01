@@ -88,7 +88,7 @@ import type { MobileService } from '../mobile/service.js';
 import { createPhoneGateway, type PhoneGateway } from '../mobile/gateway.js';
 import { createNotifier } from '../mobile/push/notifier.js';
 import { chatEndPayload } from '../mobile/push/triggers.js';
-import { escalationPush, pushFor } from '../mobile/push/triggers.js';
+import { decidedPush, escalationPush, pushFor } from '../mobile/push/triggers.js';
 import { createChallengeStore } from '../mobile/challenges.js';
 import { rpOf } from '../mobile/webauthn.js';
 import { MAX_FRAME } from '../transport/frames.js';
@@ -1693,6 +1693,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** A hidden phone is told, through the relay, of what deserves it. */
   let unsubscribePush: (() => void) | undefined;
   let unsubscribeEscalationPush: (() => void) | undefined;
+  let unsubscribeDecisionPush: (() => void) | undefined;
+  let decisionPushTimer: ReturnType<typeof setTimeout> | undefined;
   if (mobile) {
     const notifier = createNotifier({ mobile, presence: id => gateway?.visible(id) ?? false, log });
     notifyChatEnd = (deviceId, code) => {
@@ -1713,6 +1715,24 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         const p = escalationPush(previous, current, badge);
         if (p) void notifier.notify(p, undefined).catch(e => log(`push failed (${e instanceof Error ? e.name : 'error'})`));
       });
+    });
+    const knownDecisions = new Set(memory.decisions({ limit: 200 }).map(d => d.id));
+    let decisionCount = 0;
+    if (aggregate) unsubscribeDecisionPush = memory.onChange(() => {
+      const decisions = memory.decisions({ limit: 200 });
+      for (const decision of decisions) {
+        if (!knownDecisions.has(decision.id) && decision.by === 'ledge') decisionCount += 1;
+        knownDecisions.add(decision.id);
+      }
+      if (knownDecisions.size > 400) { knownDecisions.clear(); for (const decision of decisions) knownDecisions.add(decision.id); }
+      if (!decisionCount || decisionPushTimer) return;
+      decisionPushTimer = setTimeout(() => {
+        decisionPushTimer = undefined;
+        const count = decisionCount; decisionCount = 0;
+        const badge = (aggregate?.escalations().filter(e => e.state === 'pending').length ?? 0) + store.all().filter(s => s.pending && !s.rig && !s.brain).length;
+        void notifier.notify(decidedPush(count, badge), undefined).catch(e => log(`push failed (${e instanceof Error ? e.name : 'error'})`));
+      }, 60_000);
+      decisionPushTimer.unref?.();
     });
     unsubscribePush = store.onApply((before, after) => {
       const p = pushFor(before, after, store.all());
@@ -1779,6 +1799,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     asks,
     projects: () => projects,
     say: text => { thread.append({ kind: 'ledge', text }); },
-    close: () => new Promise<void>(res => { clearInterval(sweepTimer); clearInterval(brainDayTimer); unsubscribe(); unsubscribeBrain(); unsubscribeMemory(); deciding?.dispose(); brain.dispose(); unsubscribeBridge?.(); unsubscribeAggregate?.(); rigRouter?.close(); remote?.close(); launches?.close(); stopRepoWatch?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); unsubscribeEscalationPush?.(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
+    close: () => new Promise<void>(res => { clearInterval(sweepTimer); clearInterval(brainDayTimer); unsubscribe(); unsubscribeBrain(); unsubscribeMemory(); deciding?.dispose(); brain.dispose(); unsubscribeBridge?.(); unsubscribeAggregate?.(); rigRouter?.close(); remote?.close(); launches?.close(); stopRepoWatch?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); unsubscribeEscalationPush?.(); unsubscribeDecisionPush?.(); if (decisionPushTimer) clearTimeout(decisionPushTimer); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
   };
 }

@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { PushPayloadSchema, type Escalation } from '@ledge/protocol';
-import { escalationPush } from '../src/mobile/push/triggers.js';
+import { decidedPush, escalationPush } from '../src/mobile/push/triggers.js';
 const escalation: Escalation = { id: 'q1', machine: 'local', source: 'operator', from: '@lead', intent: 'decision', summary: 'Choisir /home/private/file', questions: [{ id: 'question', question: 'Base ?', options: [{ id: 'sqlite', label: 'SQLite' }, { id: 'postgres', label: 'Postgres' }] }], createdAt: '2026-11-01T10:00:00.000Z', state: 'grace' };
 describe('OpenRig notifications', () => {
+  it('groups Ledge decisions into one quiet notification payload', () => {
+    expect(PushPayloadSchema.parse(decidedPush(3, 2))).toMatchObject({ kind: 'decided', count: 3, tag: 'ledge-decided', badge: 2 });
+  });
   it('waits until grace ends and sends only once while pending', () => {
     expect(escalationPush(undefined, escalation, 1)).toBeNull();
     const pending = { ...escalation, state: 'pending' as const };

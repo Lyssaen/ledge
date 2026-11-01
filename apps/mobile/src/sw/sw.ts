@@ -194,8 +194,9 @@ function payloadOf(raw: unknown): PushPayload | null {
     typeof p.badge === 'number' && Number.isInteger(p.badge) && p.badge >= 0 && p.badge <= 999 &&
     typeof p.tag === 'string' && PUSH_TAG.test(p.tag);
   const validActions = p.actions === undefined || (Array.isArray(p.actions) && p.actions.length <= 2 && p.actions.every(a => typeof a === 'object' && a !== null && str(a.qId, 64) && !!a.qId && str(a.optId, 64) && !!a.optId && str(a.label, 40)));
+  const validCount = p.count === undefined || (typeof p.count === 'number' && Number.isInteger(p.count) && p.count >= 1 && p.count <= 999);
   const validId = p.escalationId === undefined || (str(p.escalationId, 120) && !!p.escalationId);
-  return ok && validActions && validId ? (raw as PushPayload) : null;
+  return ok && validActions && validId && validCount ? (raw as PushPayload) : null;
 }
 
 // Every push shows a notification, whatever it carries: Safari drops the subscription of a site that stays silent.

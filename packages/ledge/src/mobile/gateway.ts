@@ -496,7 +496,7 @@ export function createPhoneGateway(deps: {
     const closing = msg.type === 'session.close';
     const s = live(msg.id);
     if (!s) return { status: 'rejected', reason: 'unknown_session' };
-    if (s.source === 'hook_only') return { status: 'rejected', reason: 'read_only' };
+    if (s.source === 'hook_only' || s.rig) return { status: 'rejected', reason: 'read_only' };
     if (closing && s.state === 'exited') return { status: 'rejected', reason: 'ended' };
     if (!closing && s.state !== 'exited') return { status: 'rejected', reason: 'busy' };
     if (deps.credential(deviceId) === null) return { status: 'rejected', reason: 'confirm_required' };
@@ -642,7 +642,7 @@ export function createPhoneGateway(deps: {
       return { status: 'applied' };
     }
     if (result.type !== 'rig.result') return { status: 'failed' };
-    if (!result.ok) return { status: 'rejected', reason: result.code ?? 'failed' };
+    if (!result.ok) return { status: 'rejected', reason: msg.type === 'rig.launch' && result.code === 'failed' && result.reason === 'plan expired' ? 'invalid' : result.code ?? 'failed' };
     // The remote daemon can acknowledge a queued answer before delivery; it is not an applied decision.
     if (msg.type === 'escalation.answer' && view.escalation(msg.id)?.answer?.delivery) return { status: 'received' };
     return { status: 'applied' };

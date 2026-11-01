@@ -86,6 +86,7 @@ export type Decision = Extract<PhoneClientMessage, { type: 'session.decide' }>['
 export interface MobileStore {
   sayLedge(text: string, about?: string): string | null;
   answerEscalation(id: string, answers: Record<string, string>): string | null;
+  revisitDecision(id: string): string | null;
   prepareRig(goal: string, project: string | null, spec?: string): string | null;
   rigAction(action: Omit<Extract<PhoneRigAction, {type: 'rig.act'}>, 'op' | 'assertion'> | Omit<Extract<PhoneRigAction, {type: 'rig.launch'}>, 'op' | 'assertion'>): Promise<ChatAction>;
   requestExchanges(key: string): void;
@@ -370,7 +371,9 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         const pc = pcSnapshot(state.pc, m.daemon);
         if (!pcRunning(pc)) stopPcWatch();
         const checklists = new Map([...state.checklists].filter(([id]) => sessions.has(id)));
-        set({ ...(bootChanged || !m.daemon.openrig ? { ledgeThread: [], ledgeBefore: undefined, rigExchanges: new Map<string, PhoneExchange[]>() } : {}), openrig: m.daemon.openrig === true, rigs: new Map((m.rigs ?? []).map(r => [r.key, r])), escalations: new Map((m.escalations ?? []).map(e => [e.id, e])), decisionsToday: m.decisionsToday ?? [], sessions, previews, threads, checklists, capabilities: m.capabilities, device: m.device ?? null, daemon: m.daemon, fresh: true, syncedAt: now, pc, modelFailures: failuresKept(state.modelFailures, state.sessions, sessions), ...(bootChanged ? { models: {} } : {}) });
+        const escalations = new Map((m.escalations ?? []).map(e => [e.id, e]));
+        const ledgeThread = bootChanged || !m.daemon.openrig ? [] : state.ledgeThread.map(i => i.kind === 'escalation' && escalations.has(i.escalation.id) ? { ...i, escalation: escalations.get(i.escalation.id)! } : i);
+        set({ ledgeThread, ...(bootChanged || !m.daemon.openrig ? { ledgeBefore: undefined, rigExchanges: new Map<string, PhoneExchange[]>() } : {}), openrig: m.daemon.openrig === true, rigs: new Map((m.rigs ?? []).map(r => [r.key, r])), escalations, decisionsToday: m.decisionsToday ?? [], sessions, previews, threads, checklists, capabilities: m.capabilities, device: m.device ?? null, daemon: m.daemon, fresh: true, syncedAt: now, pc, modelFailures: failuresKept(state.modelFailures, state.sessions, sessions), ...(bootChanged ? { models: {} } : {}) });
         persist();
         // The instructions and interrupts left uncertain (those in flight on this link are `sending`) go again if this PC may not have applied them.
         if (ready()) resend(o => o.phase === 'uncertain' && expectKey(o.message) === undefined);
@@ -380,7 +383,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
       }
       case 'rig.updated': set({ rigs: new Map(state.rigs).set(m.rig.key, m.rig) }); return;
       case 'rig.removed': { const rigs = new Map(state.rigs); rigs.delete(m.key); set({ rigs }); return; }
-      case 'escalation.updated': set({ escalations: new Map(state.escalations).set(m.escalation.id, m.escalation) }); return;
+      case 'escalation.updated': set({ escalations: new Map(state.escalations).set(m.escalation.id, m.escalation), ledgeThread: state.ledgeThread.map(i => i.kind === 'escalation' && i.escalation.id === m.escalation.id ? { ...i, escalation: m.escalation } : i) }); return;
       case 'escalation.removed': { const escalations = new Map(state.escalations); escalations.delete(m.id); set({ escalations }); return; }
       case 'rig.exchanges': set({ rigExchanges: new Map(state.rigExchanges).set(m.key, m.items) }); return;
       case 'ledge.thread.item': {
@@ -602,6 +605,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
 
   const store: MobileStore = {
     sayLedge(text, about) { return write(op => ({ type: 'ledge.say', op, text, ...(about ? { about } : {}) })); },
+    revisitDecision(id) { return write(op => ({ type: 'decision.revisit', op, id })); },
     answerEscalation(id, answers) { return write(op => ({ type: 'escalation.answer', op, id, answers })); },
     prepareRig(goal, project, spec) { return write(op => ({ type: 'rig.prepare', op, goal, project, ...(spec ? { spec } : {}) })); },
     rigAction(action) {

@@ -9,7 +9,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
   DevicePollResponseSchema, DeviceStartResponseSchema, PHONE_PROTOCOL,
-  type PhoneChatTurn, type PhoneClientMessage, type PhoneServerMessage, type PhoneSession, type PushSubscription
+  type PhoneRig, type PhoneEscalation, type PhoneThreadItem, type PhoneExchange, type PhoneLedgeDecision, type PhoneChatTurn, type PhoneClientMessage, type PhoneServerMessage, type PhoneSession, type PushSubscription
 } from '@ledge/protocol';
 import { startAccountsRelay } from '../../relay/src/app';
 import type { AccountsConfig } from '../../relay/src/config';
@@ -40,6 +40,12 @@ export const waiting = (): PhoneSession => ({
  * by its `op`, however often the phone sends it; every copy is answered with the same `applied`.
  */
 export interface FakeDaemon {
+  openrig: boolean;
+  rigs: PhoneRig[];
+  escalations: PhoneEscalation[];
+  ledgeThread: PhoneThreadItem[];
+  decisionsToday: PhoneLedgeDecision[];
+  exchanges: PhoneExchange[];
   sessions: PhoneSession[];
   /** The `op` of every decision typed into a terminal, in order. */
   typed: string[];
@@ -80,7 +86,7 @@ function runDaemon(pc: FakePc): FakeDaemon {
   let seen = 0;
   let busy = false;
   const d: FakeDaemon = {
-    sessions: [waiting()], typed: [], answer: true, device: null, push: null, subscription: null, chat: false, hold: false, turns: [], launched: [], closeCard: false, closed: [], sessionClose: false, ended: [], resumed: [],
+    openrig: false, rigs: [], escalations: [], ledgeThread: [], decisionsToday: [], exchanges: [], sessions: [waiting()], typed: [], answer: true, device: null, push: null, subscription: null, chat: false, hold: false, turns: [], launched: [], closeCard: false, closed: [], sessionClose: false, ended: [], resumed: [],
     finishChat() { d.turns = d.turns.map((t) => (t.answer === undefined ? finished(t) : t)); },
     async update(s) {
       d.sessions = [...d.sessions.filter((x) => x.id !== s.id), s];
@@ -90,7 +96,8 @@ function runDaemon(pc: FakePc): FakeDaemon {
   };
   const snapshot = (): PhoneServerMessage => ({
     type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: d.sessions,
-    capabilities: { claude: CAPS, codex: CAPS, cursor: CAPS, omp: { freeTextAnswer: false } }, daemon: { version: '0.0.0-e2e', name: PC_NAME, boot, ...(d.sessionClose ? { sessionClose: true as const } : {}) },
+    capabilities: { claude: CAPS, codex: CAPS, cursor: CAPS, omp: { freeTextAnswer: false } }, daemon: { version: '0.0.0-e2e', name: PC_NAME, boot, ...(d.sessionClose ? { sessionClose: true as const } : {}), ...(d.openrig ? { openrig: true as const } : {}) },
+    ...(d.openrig ? { rigs: d.rigs, escalations: d.escalations, decisionsToday: d.decisionsToday } : {}),
     ...(d.device || d.push || d.chat ? { device: { confirm: d.device ? d.device.registered : true, ...(d.push ? { push: d.push } : {}), ...(d.chat ? { chat: true as const } : {}) } } : {})
   });
   /** The scripted answer: short on purpose, a card is never cut (TOOL_TEXT_MAX). */
@@ -154,6 +161,27 @@ function runDaemon(pc: FakePc): FakeDaemon {
   };
   const handle = async (m: PhoneClientMessage) => {
     if (m.type === 'snapshot.request') return pc.send(snapshot());
+    if (d.openrig && m.type === 'ledge.thread.request') return pc.send({ type: 'ledge.thread.history', items: d.ledgeThread });
+    if (d.openrig && m.type === 'rig.exchanges.request') return pc.send({ type: 'rig.exchanges', key: m.key, items: d.exchanges.filter(e => e.rigKey === m.key) });
+    if (d.openrig && m.type === 'escalation.answer') {
+      const current = d.escalations.find(e => e.id === m.id);
+      if (!current || current.answer) return pc.send({ type: 'operation.result', op: m.op, status: 'rejected', reason: 'already_answered' });
+      const answered: PhoneEscalation = { ...current, state: 'answered', answer: { by: 'user', answers: m.answers, at: new Date().toISOString() } };
+      d.escalations = d.escalations.map(e => e.id === m.id ? answered : e);
+      await pc.send({ type: 'escalation.updated', escalation: answered }); return pc.send({ type: 'operation.result', op: m.op, status: 'applied' });
+    }
+    if (d.openrig && m.type === 'rig.prepare') {
+      const plan = { id: 'plan1', spec: m.spec || 'starter', goal: m.goal, where: { kind: 'off-project' as const, name: 'demo' }, seats: [{ address: '@build', runtime: 'codex', autonomy: 'standard' }], writes: ['création du rig'], required: true };
+      const item: PhoneThreadItem = { kind: 'plan', id: 'plan-plan1', at: new Date().toISOString(), plan }; d.ledgeThread.push(item);
+      await pc.send({ type: 'ledge.thread.item', item }); return pc.send({ type: 'operation.result', op: m.op, status: 'applied' });
+    }
+    if (d.openrig && (m.type === 'rig.launch' || m.type === 'rig.act')) {
+      const refused = d.device?.assertRig(m) ?? (d.device ? undefined : 'confirm_required');
+      if (refused) return pc.send({ type: 'operation.result', op: m.op, status: 'rejected', reason: refused });
+      if (m.type === 'rig.launch') d.launched.push(m.planId);
+      return pc.send({ type: 'operation.result', op: m.op, status: 'applied' });
+    }
+
     if (d.chat && (m.type === 'chat.history' || m.type === 'chat.ask' || m.type === 'chat.relay' || m.type === 'chat.launch' || m.type === 'chat.close')) return chatMessage(m);
     if (m.type === 'session.pending') {
       const s = d.sessions.find((x) => x.id === m.id);

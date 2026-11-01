@@ -46,6 +46,7 @@ export const PushPayloadSchema = z.object({
   v: z.literal(1),
   kind: z.enum(['request', 'question', 'finished', 'chat', 'escalation', 'decided']),
   escalationId: z.string().min(1).max(120).optional(),
+  count: z.number().int().min(1).max(999).optional(),
   actions: z.array(z.object({ qId: z.string().min(1).max(64), optId: z.string().min(1).max(64), label: z.string().max(40) }).strict()).max(2).optional(),
   title: z.string().max(80),
   body: z.string().max(120),

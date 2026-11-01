@@ -72,3 +72,9 @@ export function escalationPush(before: Escalation | undefined, after: Escalation
     ? q.options.map(o => ({ qId: q.id, optId: o.id, label: cut(phoneText(o.label, 40), 40) })) : undefined;
   return { v: 1, kind: 'escalation', escalationId: after.id, title: 'Ledge · une décision pour toi', body: cut(phoneText(after.summary, BODY_MAX), BODY_MAX), url: `/#/escalation/${encodeURIComponent(after.id)}`, badge: Math.min(999, Math.max(0, badge)), tag: safeTag(`escalation_${after.id}`), ...(actions ? { actions } : {}) };
 }
+
+/** Several decisions made in a short window share one silent notification. */
+export function decidedPush(count: number, badge: number): PushPayload {
+  const n = Math.max(1, Math.min(999, Math.floor(count)));
+  return { v: 1, kind: 'decided', count: n, title: 'Ledge a tranché', body: `${n} décision${n > 1 ? 's' : ''} prise${n > 1 ? 's' : ''}.`, url: '/#/chat', badge: Math.max(0, Math.min(999, badge)), tag: 'ledge-decided' };
+}
