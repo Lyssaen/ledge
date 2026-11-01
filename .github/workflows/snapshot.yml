@@ -1,0 +1,121 @@
+# A snapshot is a prerelease from ledge-open-rig, independent of the v* release workflow.
+name: Snapshot
+
+on:
+  push:
+    branches: [ledge-open-rig]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ledge-snapshot
+  cancel-in-progress: false
+
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .
+      - run: pnpm install --frozen-lockfile
+      - name: Check Desktop and the notch
+        run: |
+          pnpm --filter overlay typecheck
+          pnpm --filter desktop typecheck
+      - name: Build the snapshot installer
+        working-directory: apps/desktop
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: pnpm tauri build
+      - run: cargo test --workspace
+      - name: Prepare the installer
+        shell: pwsh
+        run: |
+          $installers = @(Get-ChildItem 'target/release/bundle/nsis/*-setup.exe')
+          if ($installers.Count -ne 1) { throw "Expected one Desktop installer, found $($installers.Count)" }
+          Copy-Item $installers[0].FullName Ledge.Desktop.Snapshot-x64-setup.exe
+          if (-not (Test-Path "$($installers[0].FullName).sig")) { throw 'Missing updater signature' }
+          Copy-Item "$($installers[0].FullName).sig" Ledge.Desktop.Snapshot-x64-setup.exe.sig
+      - uses: actions/upload-artifact@v4
+        with:
+          name: snapshot-installer
+          path: |
+            Ledge.Desktop.Snapshot-x64-setup.exe
+            Ledge.Desktop.Snapshot-x64-setup.exe.sig
+          if-no-files-found: error
+
+  npm:
+    needs: windows-installer
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+      - run: sudo apt-get update && sudo apt-get install -y tmux
+      - run: pnpm install --frozen-lockfile
+      - name: Set a unique npm prerelease version
+        id: version
+        env:
+          SNAPSHOT_RUN_ID: ${{ github.run_id }}
+          SNAPSHOT_RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: node scripts/snapshot-version.mjs
+      - run: pnpm --filter @ledge/protocol test
+      - run: pnpm --filter @paradow/ledge test
+        env:
+          TERM: xterm
+      - run: pnpm --filter @paradow/ledge build
+      - name: Publish the snapshot tag to npm
+        working-directory: packages/ledge
+        run: |
+          npm install -g npm@11
+          npm publish --access public --provenance --tag snapshot
+
+  github-prerelease:
+    needs: [windows-installer, npm]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: snapshot-installer
+          path: snapshot
+      - name: Publish the matching prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SNAPSHOT_VERSION: ${{ needs.npm.outputs.version }}
+          SNAPSHOT_SHA: ${{ github.sha }}
+        run: |
+          sha256sum snapshot/Ledge.Desktop.Snapshot-x64-setup.exe > snapshot/SHA256SUMS.txt
+          printf 'Snapshot built from commit `%s`. The `snapshot` tag is a fixed download anchor on the default branch; it does not identify the source commit.\n\nInstall the daemon with `npm i -g @paradow/ledge@%s` (or `@paradow/ledge@snapshot`).\n\nThe installer uses the normal Desktop identity and can replace an existing release installation. Its updater still follows the stable release channel.\n' "$SNAPSHOT_SHA" "$SNAPSHOT_VERSION" > snapshot/notes.md
+          # A fixed prerelease gives the installer a stable download URL. Its tag points to the default branch:
+          # GITHUB_TOKEN cannot create a tag at a feature commit that changes workflow files relative to that branch.
+          if gh release view snapshot >/dev/null 2>&1; then
+            test "$(gh release view snapshot --json isPrerelease --jq .isPrerelease)" = true
+            gh release upload snapshot snapshot/Ledge.Desktop.Snapshot-x64-setup.exe snapshot/Ledge.Desktop.Snapshot-x64-setup.exe.sig snapshot/SHA256SUMS.txt --clobber
+            gh release edit snapshot --title "Ledge snapshot $SNAPSHOT_VERSION" --notes-file snapshot/notes.md
+          else
+            default_branch=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)
+            gh release create snapshot snapshot/Ledge.Desktop.Snapshot-x64-setup.exe snapshot/Ledge.Desktop.Snapshot-x64-setup.exe.sig snapshot/SHA256SUMS.txt --target "$default_branch" --prerelease --title "Ledge snapshot $SNAPSHOT_VERSION" --notes-file snapshot/notes.md
+          fi
