@@ -48,7 +48,7 @@ export interface MobileState {
   /**
    * `update`: it can install a version and restart; `restart`: it can restart (both absent from daemons before 0.27.0).
    */
-  daemon: { version: string; name: string; boot?: string; models?: true; update?: true; restart?: true; checklist?: true; sessionClose?: true } | null;
+  daemon: { version: string; name: string; boot?: string; models?: true; update?: true; restart?: true; checklist?: true; sessionClose?: true; answerReceipts?: true } | null;
   /** The models each agent offers on the PC, by tool, as `models.listing` said; kept for the link's life, reset when the PC boots again. `error`: the agent could not be asked. */
   models: Record<string, { models: PhoneModelChoice[]; error?: true }>;
   /** Why the last model change of a session failed after the PC accepted it, by session id. Kept until a new change is sent or the session's model or effort changes. */
@@ -217,6 +217,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
   let reads = loadReads(storage);
   /** The tools whose model list was asked on this link and boot; an `error` listing is asked again. */
   const modelAsks = new Set<string>();
+  const receiptAsked = new Set<string>();
   let ledgeHistoryAsked = false;
   let ledgeHistoryLoading = false;
   /** The PC's boot id of this run, from its snapshot; null until one, and when the PC sends none. Never cached. */
@@ -347,6 +348,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     historyAsked = false;
     ledgeHistoryAsked = false;
     ledgeHistoryLoading = false;
+    receiptAsked.clear();
     askedSinceReady.clear();
     // A list asked on the lost channel never comes: it is asked again. Those already answered stay.
     for (const tool of [...modelAsks]) if (!state.models[tool]) modelAsks.delete(tool);
@@ -374,7 +376,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         // A new boot is a new PC process: what it offered may differ.
         const bootChanged = (m.daemon.boot ?? null) !== boot;
         boot = m.daemon.boot ?? null;
-        if (bootChanged) { modelAsks.clear(); ledgeHistoryAsked = false; }
+        if (bootChanged) { modelAsks.clear(); ledgeHistoryAsked = false; receiptAsked.clear(); }
         const pc = pcSnapshot(state.pc, m.daemon);
         if (!pcRunning(pc)) stopPcWatch();
         const checklists = new Map([...state.checklists].filter(([id]) => sessions.has(id)));
@@ -383,7 +385,10 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         set({ ledgeThread, ...(bootChanged || !m.daemon.openrig ? { ledgeBefore: undefined, rigExchanges: new Map<string, PhoneExchange[]>(), rigExchangeCuts: new Set<string>() } : {}), openrig: m.daemon.openrig === true, openrigStatus: m.openrigStatus, projects: m.projects ?? [], rigs: new Map((m.rigs ?? []).map(r => [r.key, r])), escalations, decisionsToday: m.decisionsToday ?? [], sessions, previews, threads, checklists, capabilities: m.capabilities, device: m.device ?? null, daemon: m.daemon, fresh: true, syncedAt: now, pc, modelFailures: failuresKept(state.modelFailures, state.sessions, sessions), ...(bootChanged ? { models: {} } : {}) });
         persist();
         // The instructions and interrupts left uncertain (those in flight on this link are `sending`) go again if this PC may not have applied them.
-        if (ready()) resend(o => o.phase === 'uncertain' && expectKey(o.message) === undefined);
+        if (ready()) {
+          resend(o => o.phase === 'uncertain' && expectKey(o.message) === undefined && !(m.daemon.answerReceipts && o.received && o.message.type === 'escalation.answer'));
+          if (m.daemon.answerReceipts) for (const o of Object.values(state.ops)) if (isLive(o.phase) && o.received && o.message.type === 'escalation.answer' && !receiptAsked.has(o.op)) { receiptAsked.add(o.op); send({ type: 'answer.receipt.request', answer: o.message }); }
+        }
         if (m.device?.chat && !historyAsked && ready()) askHistory();
         if (m.daemon.openrig && !ledgeHistoryAsked && ready()) { ledgeHistoryAsked = true; ledgeHistoryLoading = true; send({ type: 'ledge.thread.request' }); }
         return;
@@ -473,6 +478,9 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         setThread(m.id, { ...t, items, cut });
         return;
       }
+      case 'answer.receipt':
+        if (m.status !== 'unknown') onMessage({ type: 'operation.result', op: m.op, status: m.status });
+        return;
       case 'operation.result': {
         if (forgetting?.op === m.op) {
           if (m.status !== 'received') settleForget(m.status === 'applied');
@@ -590,6 +598,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     historyAsked = false;
     ledgeHistoryAsked = false;
     ledgeHistoryLoading = false;
+    receiptAsked.clear();
     chatState = emptyChat();
     settle(new Error('lost'));
     previewsDirty = false;

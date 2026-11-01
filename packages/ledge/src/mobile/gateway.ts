@@ -226,6 +226,7 @@ export function createPhoneGateway(deps: {
       const view = deps.openrig; const rigs = view.rigs(); const rules = view.rules();
       const safeMap = <A, B>(items: A[], f: (a: A) => B): B[] => items.flatMap(a => { try { return [f(a)]; } catch { return []; } });
       message.daemon.openrig = true;
+      if (deps.answerReceipts) message.daemon.answerReceipts = true;
       const localStatus = view.statuses?.().find(s => s.machine === 'local');
       if (localStatus) message.openrigStatus = { state: localStatus.state, ...(localStatus.version ? { version: phoneText(localStatus.version, 80) } : {}) };
       message.projects = view.projects().projects.filter(p => p.id.length > 0 && p.id.length <= 80 && phoneText(p.id, 80) === p.id).slice(0, 100).map(p => ({ id: p.id, name: phoneText(p.name, 80) || '?', hasLocalRepo: p.repos.some(r => r.machine === 'local') }));
@@ -824,6 +825,11 @@ export function createPhoneGateway(deps: {
 
   const read = (deviceId: string, msg: Exclude<PhoneClientMessage, PhoneOperation>) => {
     switch (msg.type) {
+      case 'answer.receipt.request': {
+        const receipt = deps.answerReceipts?.get(msg.answer.op);
+        const matches = receipt && receipt.owner === deviceId && receipt.fingerprint === receiptHash(fingerprint(msg.answer));
+        return push(deviceId, { type: 'answer.receipt', op: msg.answer.op, status: matches ? receipt.status : 'unknown' });
+      }
       case 'ledge.thread.request': {
         if (!deps.openrig) return push(deviceId, { type: 'error', code: 'invalid', request: msg.type });
         const page = deps.openrig.thread(msg.before); const ctx = threadContext();

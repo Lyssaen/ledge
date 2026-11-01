@@ -40,6 +40,15 @@ describe('durable phone answer receipts', () => {
     g.send('dev1', { type: 'escalation.answer', op, id: 'q1', answers: { text: 'go' } }); await flush();
     expect(g.results('dev1').at(-1)).toMatchObject({ op, status: 'rejected', reason: 'unavailable' }); expect(g.dispatched).toEqual([]);
   });
+  it('answers read-only receipt queries only for the original device and exact answer', async () => {
+    const path = file(); const op = randomUUID(); const answer = { type: 'escalation.answer' as const, op, id: 'q1', answers: { text: 'go' } };
+    const g = setup({ deps: { openrig: view, answerReceipts: createAnswerReceipts(path) }, dispatch: async (m, reply) => { if (m.type === 'escalation.answer') reply({ type: 'rig.result', rid: m.rid, ok: true, confirmed: true }); } });
+    g.send('dev1', answer); await flush();
+    g.send('dev1', { type: 'answer.receipt.request', answer }); g.send('dev2', { type: 'answer.receipt.request', answer });
+    g.send('dev1', { type: 'answer.receipt.request', answer: { ...answer, answers: { text: 'other' } } }); await flush();
+    expect(g.got('dev1').filter(m => m.type === 'answer.receipt')).toMatchObject([{ op, status: 'applied' }, { op, status: 'unknown' }]);
+    expect(g.got('dev2').find(m => m.type === 'answer.receipt')).toMatchObject({ op, status: 'unknown' }); expect(g.dispatched).toHaveLength(1);
+  });
   it('never claims success when durable proof cannot be written', async () => {
     const path = file(); const journal = createAnswerReceipts(path); const broken = { ...journal, markApplied() { throw new Error('disk unavailable'); } };
     const g = setup({ deps: { openrig: view, answerReceipts: broken }, dispatch: async (m, reply) => { if (m.type === 'escalation.answer') reply({ type: 'rig.result', rid: m.rid, ok: true }); } });

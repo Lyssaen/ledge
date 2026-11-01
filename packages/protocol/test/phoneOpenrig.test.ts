@@ -26,6 +26,13 @@ describe('phone OpenRig protocol', () => {
     expect(PhoneClientMessageSchema.safeParse({ type: 'rig.act', op, key: 'key', verb: 'up' }).success).toBe(false);
     expect(PhoneClientMessageSchema.safeParse({ type: 'rig.act', op, key: 'key', verb: 'down' }).success).toBe(true);
   });
+  it('validates the read-only receipt request and response', () => {
+    const answer = { type: 'escalation.answer', op, id: 'q1', answers: { q1: 'a' } };
+    expect(PhoneClientMessageSchema.safeParse({ type: 'answer.receipt.request', answer }).success).toBe(true);
+    expect(PhoneClientMessageSchema.safeParse({ type: 'answer.receipt.request', answer: { ...answer, assertion: {} } }).success).toBe(false);
+    expect(PhoneServerMessageSchema.safeParse({ type: 'answer.receipt', op, status: 'applied' }).success).toBe(true);
+    expect(PhoneServerMessageSchema.safeParse({ type: 'answer.receipt', op, status: 'invented' }).success).toBe(false);
+  });
   it('binds the passkey subject to the precise rig operation', () => {
     expect(rigSubject({ type: 'rig.launch', op, planId: 'P' })).toBe('launch@P');
     expect(rigSubject({ type: 'rig.act', op, key: 'K', verb: 'restart', seatRef: 'build@starter' })).toBe('restart@K/build@starter');

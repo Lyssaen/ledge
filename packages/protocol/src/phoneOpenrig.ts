@@ -31,18 +31,21 @@ export const PhoneThreadItemSchema = z.discriminatedUnion('kind', [
 export type PhoneThreadItem = z.infer<typeof PhoneThreadItemSchema>;
 export const PhoneRigActSchema = z.object({ type: z.literal('rig.act'), op, key, verb: z.enum(['down', 'restart']), seatRef: id.optional(), assertion: z.lazy(() => AssertionSchema).optional() }).strict();
 export const PhoneRigLaunchSchema = z.object({ type: z.literal('rig.launch'), op, planId: id, assertion: z.lazy(() => AssertionSchema).optional() }).strict();
+export const PhoneEscalationAnswerSchema = z.object({ type: z.literal('escalation.answer'), op, id, answers: z.record(z.string().max(64), z.string().max(messageMax)).refine(value => Object.keys(value).length <= 4) }).strict();
 export type PhoneRigAction = z.infer<typeof PhoneRigActSchema> | z.infer<typeof PhoneRigLaunchSchema>;
 export const rigSubject = (m: PhoneRigAction): string => m.type === 'rig.launch' ? `launch@${m.planId}` : `${m.verb}@${m.key}${m.seatRef ? `/${m.seatRef}` : ''}`;
 export const phoneOpenRigClientMessages = [
   z.object({ type: z.literal('ledge.say'), op, text: z.string().trim().min(1).max(messageMax), about: id.optional() }).strict(),
   z.object({ type: z.literal('ledge.thread.request'), before: id.optional() }).strict(),
-  z.object({ type: z.literal('escalation.answer'), op, id, answers: z.record(z.string().max(64), z.string().max(messageMax)).refine(value => Object.keys(value).length <= 4) }).strict(),
+  PhoneEscalationAnswerSchema,
+  z.object({ type: z.literal('answer.receipt.request'), answer: PhoneEscalationAnswerSchema }).strict(),
   z.object({ type: z.literal('decision.revisit'), op, id, text: z.string().max(messageMax).optional() }).strict(),
   z.object({ type: z.literal('rig.exchanges.request'), key }).strict(),
   z.object({ type: z.literal('rig.prepare'), op, goal: z.string().trim().min(1).max(600), spec: z.string().max(64).optional(), project: z.string().max(80).nullable() }).strict(),
   PhoneRigLaunchSchema, PhoneRigActSchema
 ] as const;
 export const phoneOpenRigServerMessages = [
+  z.object({ type: z.literal('answer.receipt'), op, status: z.enum(['received', 'applied', 'unknown']) }).strict(),
   z.object({ type: z.literal('rig.updated'), rig: PhoneRigSchema }).strict(),
   z.object({ type: z.literal('rig.removed'), key }).strict(),
   z.object({ type: z.literal('rig.exchanges'), key, items: z.array(PhoneExchangeSchema).max(EXCHANGES_MAX), cut: z.literal(true).optional() }).strict(),
