@@ -30,6 +30,7 @@ export interface MobileState {
   escalations: Map<string, PhoneEscalation>;
   decisionsToday: PhoneLedgeDecision[];
   ledgeThread: PhoneThreadItem[];
+  ledgeAbout?: string;
   ledgeBefore?: string;
   rigExchanges: Map<string, PhoneExchange[]>;
   rigExchangeCuts: Set<string>;
@@ -86,6 +87,7 @@ export type Decision = Extract<PhoneClientMessage, { type: 'session.decide' }>['
 
 export interface MobileStore {
   sayLedge(text: string, about?: string): string | null;
+  talkAbout(id: string | undefined): void;
   answerEscalation(id: string, answers: Record<string, string>): string | null;
   revisitDecision(id: string): string | null;
   prepareRig(goal: string, project: string | null, spec?: string): string | null;
@@ -587,7 +589,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     previewsDirty = false;
     clearLastState(storage);
     clearOps(storage);
-    set({ openrig: false, rigs: new Map(), escalations: new Map(), decisionsToday: [], ledgeThread: [], ledgeBefore: undefined, rigExchanges: new Map(), rigExchangeCuts: new Set(), sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, fresh: false, syncedAt: null, ops: {}, checklists: new Map(), pc: null, models: {}, modelFailures: {} });
+    set({ openrig: false, rigs: new Map(), escalations: new Map(), decisionsToday: [], ledgeThread: [], ledgeAbout: undefined, ledgeBefore: undefined, rigExchanges: new Map(), rigExchangeCuts: new Set(), sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, fresh: false, syncedAt: null, ops: {}, checklists: new Map(), pc: null, models: {}, modelFailures: {} });
     modelAsks.clear();
     stopPcWatch();
   }
@@ -605,6 +607,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
   if (wasReady) onReady();
 
   const store: MobileStore = {
+    talkAbout(id) { set({ ledgeAbout: id }); },
     sayLedge(text, about) { return write(op => ({ type: 'ledge.say', op, text, ...(about ? { about } : {}) })); },
     revisitDecision(id) { return write(op => ({ type: 'decision.revisit', op, id })); },
     answerEscalation(id, answers) { return write(op => ({ type: 'escalation.answer', op, id, answers })); },
