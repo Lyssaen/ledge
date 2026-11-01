@@ -17,6 +17,12 @@ describe('phone OpenRig gateway', () => {
     const snap = g.got('dev1').find(m => m.type === 'snapshot'); expect(snap).toMatchObject({ daemon: { openrig: true }, rigs: [{ key: rigKey('local', 'same') }, { key: rigKey('remote', 'same') }] });
     expect(JSON.stringify(snap)).not.toMatch(/machine|cwd|\/home\/private/);
   });
+  it('exposes the local OpenRig status without installation commands or remote details', async () => {
+    const view = { ...data(), statuses: () => [{ machine: 'local', state: 'unsupported' as const, version: '1.2', install: '/home/private/install.sh' }, { machine: 'remote', state: 'running' as const }] };
+    const g = setup({ deps: { openrig: view } }); g.send('dev1', { type: 'snapshot.request' }); await flush();
+    const snap = g.got('dev1').find(m => m.type === 'snapshot'); expect(snap).toMatchObject({ openrigStatus: { state: 'unsupported', version: '1.2' } });
+    expect(JSON.stringify(snap)).not.toContain('/home/private');
+  });
   it('lists idle projects by safe identity without sending their repository paths', async () => {
     const projects: Projects = { projects: [{ id: 'website', name: 'Website', color: 'blue', description: '', repos: [{ machine: 'local', path: '/home/private/website' }], rigs: [] }], rules: [] };
     const g = setup({ deps: { openrig: { ...data(), projects: () => projects } } });

@@ -28,7 +28,7 @@ test('pair, answer an escalation, read a rig and confirm a new rig with a passke
   await page.getByRole('button', { name: 'SQLite' }).click();
   await expect.poll(() => h.pc.received.map(x => JSON.parse(x) as PhoneClientMessage).some(m => m.type === 'escalation.answer' && m.answers.q1 === 'sqlite')).toBe(true);
   await page.getByRole('link', { name: copy.nav.rigs, exact: true }).click();
-  await page.getByRole('link', { name: /factory/ }).click(); await page.getByRole('link', { name: 'Échanges' }).click(); await expect(page.getByText('Tests terminés')).toBeVisible();
+  await page.getByRole('link', { name: /factory/ }).click(); await page.getByRole('link', { name: /^Échanges/ }).click(); await expect(page.getByText('Tests terminés')).toBeVisible();
   await page.getByRole('link', { name: copy.nav.rigs, exact: true }).click(); await page.getByRole('link', { name: 'Lancer un rig…' }).click();
   await page.getByLabel('But').fill('Créer un nouveau service'); await page.getByRole('button', { name: 'Demander le plan à Ledge' }).click();
   await page.getByRole('button', { name: 'Voir le plan' }).click(); await page.getByRole('button', { name: 'Lancer · confirmer avec la clé d’accès' }).click();

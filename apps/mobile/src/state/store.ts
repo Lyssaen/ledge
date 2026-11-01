@@ -26,6 +26,7 @@ export interface ThreadState {
 
 export interface MobileState {
   openrig: boolean;
+  openrigStatus?: { state: 'absent' | 'stopped' | 'starting' | 'running' | 'unsupported' | 'error' | 'unreachable'; version?: string };
   projects: { id: string; name: string; hasLocalRepo: boolean }[];
   rigs: Map<string, PhoneRig>;
   escalations: Map<string, PhoneEscalation>;
@@ -217,6 +218,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
   /** The tools whose model list was asked on this link and boot; an `error` listing is asked again. */
   const modelAsks = new Set<string>();
   let ledgeHistoryAsked = false;
+  let ledgeHistoryLoading = false;
   /** The PC's boot id of this run, from its snapshot; null until one, and when the PC sends none. Never cached. */
   let boot: string | null = null;
   /** Ends a followed update or restart the PC never came back from: armed by the first step, cleared at the end. */
@@ -344,6 +346,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
   function onLost() {
     historyAsked = false;
     ledgeHistoryAsked = false;
+    ledgeHistoryLoading = false;
     askedSinceReady.clear();
     // A list asked on the lost channel never comes: it is asked again. Those already answered stay.
     for (const tool of [...modelAsks]) if (!state.models[tool]) modelAsks.delete(tool);
@@ -377,12 +380,12 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         const checklists = new Map([...state.checklists].filter(([id]) => sessions.has(id)));
         const escalations = new Map((m.escalations ?? []).map(e => [e.id, e]));
         const ledgeThread = bootChanged || !m.daemon.openrig ? [] : state.ledgeThread.map(i => i.kind === 'escalation' && escalations.has(i.escalation.id) ? { ...i, escalation: escalations.get(i.escalation.id)! } : i);
-        set({ ledgeThread, ...(bootChanged || !m.daemon.openrig ? { ledgeBefore: undefined, rigExchanges: new Map<string, PhoneExchange[]>(), rigExchangeCuts: new Set<string>() } : {}), openrig: m.daemon.openrig === true, projects: m.projects ?? [], rigs: new Map((m.rigs ?? []).map(r => [r.key, r])), escalations, decisionsToday: m.decisionsToday ?? [], sessions, previews, threads, checklists, capabilities: m.capabilities, device: m.device ?? null, daemon: m.daemon, fresh: true, syncedAt: now, pc, modelFailures: failuresKept(state.modelFailures, state.sessions, sessions), ...(bootChanged ? { models: {} } : {}) });
+        set({ ledgeThread, ...(bootChanged || !m.daemon.openrig ? { ledgeBefore: undefined, rigExchanges: new Map<string, PhoneExchange[]>(), rigExchangeCuts: new Set<string>() } : {}), openrig: m.daemon.openrig === true, openrigStatus: m.openrigStatus, projects: m.projects ?? [], rigs: new Map((m.rigs ?? []).map(r => [r.key, r])), escalations, decisionsToday: m.decisionsToday ?? [], sessions, previews, threads, checklists, capabilities: m.capabilities, device: m.device ?? null, daemon: m.daemon, fresh: true, syncedAt: now, pc, modelFailures: failuresKept(state.modelFailures, state.sessions, sessions), ...(bootChanged ? { models: {} } : {}) });
         persist();
         // The instructions and interrupts left uncertain (those in flight on this link are `sending`) go again if this PC may not have applied them.
         if (ready()) resend(o => o.phase === 'uncertain' && expectKey(o.message) === undefined);
         if (m.device?.chat && !historyAsked && ready()) askHistory();
-        if (m.daemon.openrig && !ledgeHistoryAsked && ready()) { ledgeHistoryAsked = true; send({ type: 'ledge.thread.request' }); }
+        if (m.daemon.openrig && !ledgeHistoryAsked && ready()) { ledgeHistoryAsked = true; ledgeHistoryLoading = true; send({ type: 'ledge.thread.request' }); }
         return;
       }
       case 'rig.updated': set({ rigs: new Map(state.rigs).set(m.rig.key, m.rig) }); return;
@@ -396,6 +399,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         set({ ledgeThread: items }); return;
       }
       case 'ledge.thread.history': {
+        ledgeHistoryLoading = false;
         const ids = new Set(state.ledgeThread.map(i => i.id));
         set({ ledgeThread: [...m.items.filter(i => !ids.has(i.id)), ...state.ledgeThread], ledgeBefore: m.before }); return;
       }
@@ -585,12 +589,13 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     threadAsks = [];
     historyAsked = false;
     ledgeHistoryAsked = false;
+    ledgeHistoryLoading = false;
     chatState = emptyChat();
     settle(new Error('lost'));
     previewsDirty = false;
     clearLastState(storage);
     clearOps(storage);
-    set({ openrig: false, projects: [], rigs: new Map(), escalations: new Map(), decisionsToday: [], ledgeThread: [], ledgeAbout: undefined, ledgeBefore: undefined, rigExchanges: new Map(), rigExchangeCuts: new Set(), sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, fresh: false, syncedAt: null, ops: {}, checklists: new Map(), pc: null, models: {}, modelFailures: {} });
+    set({ openrig: false, openrigStatus: undefined, projects: [], rigs: new Map(), escalations: new Map(), decisionsToday: [], ledgeThread: [], ledgeAbout: undefined, ledgeBefore: undefined, rigExchanges: new Map(), rigExchangeCuts: new Set(), sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, fresh: false, syncedAt: null, ops: {}, checklists: new Map(), pc: null, models: {}, modelFailures: {} });
     modelAsks.clear();
     stopPcWatch();
   }
@@ -619,7 +624,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
       return signedOperation({ purpose: 'rig', rig }, (op, assertion) => ({ ...action, op, assertion }));
     },
     requestExchanges(key) { if (ready() && state.openrig) send({ type: 'rig.exchanges.request', key }); },
-    loadOlderThread() { if (ready() && state.openrig) send({ type: 'ledge.thread.request', ...(state.ledgeBefore ? { before: state.ledgeBefore } : {}) }); },
+    loadOlderThread() { if (ready() && state.openrig && state.ledgeBefore && !ledgeHistoryLoading) { ledgeHistoryLoading = true; send({ type: 'ledge.thread.request', before: state.ledgeBefore }); } },
     getState: () => state,
     subscribe(fn) { listeners.add(fn); return () => { listeners.delete(fn); }; },
 

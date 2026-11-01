@@ -19,4 +19,16 @@ describe('OpenRig state', () => {
     f.deliver({ type: 'rig.removed', key: 'abc' }); expect(store.getState().rigs.size).toBe(0);
     f.deliver(snapshot([])); expect(store.getState().openrig).toBe(false); store.close();
   });
+  it('loads older pages once per response and retains the current ordering', () => {
+    const f = fakeLink('ready'); const store = createStore(f.link);
+    const initial = snapshot([]); if (initial.type !== 'snapshot') throw new Error('missing snapshot');
+    f.deliver({ ...initial, daemon: { version: '1.0', name: 'PC', openrig: true } });
+    f.deliver({ type: 'ledge.thread.history', items: [{ kind: 'ledge', id: 'new', at, text: 'récent' }], before: 'cursor' });
+    store.loadOlderThread(); store.loadOlderThread();
+    expect(f.of('ledge.thread.request').filter(m => m.before === 'cursor')).toHaveLength(1);
+    f.deliver({ type: 'ledge.thread.history', items: [{ kind: 'user', id: 'old', at, text: 'ancien' }], before: 'next' });
+    expect(store.getState().ledgeThread.map(i => i.id)).toEqual(['old', 'new']);
+    store.loadOlderThread(); expect(f.of('ledge.thread.request').some(m => m.before === 'next')).toBe(true); store.close();
+  });
+
 });

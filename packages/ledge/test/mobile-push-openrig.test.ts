@@ -18,3 +18,17 @@ describe('OpenRig notifications', () => {
     expect(escalationPush(undefined, pending, 1)?.actions).toBeUndefined();
   });
 });
+
+describe('grouped decisions', () => {
+  it('groups three new Ledge decisions in one minute and ignores human choices', async () => {
+    const { vi } = await import('vitest'); const { createDecisionBatch } = await import('../src/mobile/push/decisions.js');
+    vi.useFakeTimers();
+    try {
+      const decisions: import('@ledge/protocol').LedgeDecision[] = []; const sent: number[] = [];
+      const batch = createDecisionBatch(() => decisions, n => sent.push(n));
+      for (let i = 0; i < 3; i++) { decisions.push({ id: `d${i}`, escalationId: `e${i}`, by: 'ledge', summary: 'ok', answers: {}, at: '2026-11-01T10:00:00.000Z' }); batch.changed(); }
+      decisions.push({ id: 'human', escalationId: 'eh', by: 'user', summary: 'ok', answers: {}, at: '2026-11-01T10:00:00.000Z' }); batch.changed();
+      expect(sent).toEqual([]); vi.advanceTimersByTime(60_000); expect(sent).toEqual([3]); batch.close();
+    } finally { vi.useRealTimers(); }
+  });
+});

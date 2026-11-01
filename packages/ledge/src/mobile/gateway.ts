@@ -69,6 +69,7 @@ export function createPhoneGateway(deps: {
   /** Authoritative OpenRig view; absent until the daemon connects an orchestrator. */
   openrig?: {
     rigs(): import('@ledge/protocol').Rig[];
+    statuses?(): import('@ledge/protocol').OpenRigStatus[];
     escalations(): import('@ledge/protocol').Escalation[];
     escalation(id: string): import('@ledge/protocol').Escalation | undefined;
     escalationAmbiguous(id: string): boolean;
@@ -215,6 +216,8 @@ export function createPhoneGateway(deps: {
       const view = deps.openrig; const rigs = view.rigs(); const rules = view.rules();
       const safeMap = <A, B>(items: A[], f: (a: A) => B): B[] => items.flatMap(a => { try { return [f(a)]; } catch { return []; } });
       message.daemon.openrig = true;
+      const localStatus = view.statuses?.().find(s => s.machine === 'local');
+      if (localStatus) message.openrigStatus = { state: localStatus.state, ...(localStatus.version ? { version: phoneText(localStatus.version, 80) } : {}) };
       message.projects = view.projects().projects.filter(p => p.id.length > 0 && p.id.length <= 80 && phoneText(p.id, 80) === p.id).slice(0, 100).map(p => ({ id: p.id, name: phoneText(p.name, 80) || '?', hasLocalRepo: p.repos.some(r => r.machine === 'local') }));
       message.rigs = safeMap(rigs.slice(0, 40), r => toPhoneRig(r, projectName));
       message.escalations = safeMap([...view.escalations()].filter(e => !view.escalationAmbiguous(e.id)).sort((a, b) => Number(b.state === 'pending' || b.state === 'grace') - Number(a.state === 'pending' || a.state === 'grace')).slice(0, 40), e => toPhoneEscalation(e, rules, rigs));
@@ -1004,7 +1007,7 @@ export function createPhoneGateway(deps: {
       if (followers.size === 0) { checklists.clear(); return; }
       try {
         switch (m.type) {
-          case 'rig.snapshot': case 'rig.updated': case 'rig.removed': case 'escalation.updated': case 'escalation.removed': case 'decisions': case 'rules': case 'projects':
+          case 'rig.snapshot': case 'rig.updated': case 'rig.removed': case 'escalation.updated': case 'escalation.removed': case 'decisions': case 'rules': case 'projects': case 'openrig.status':
             if (!deps.openrig) return;
             for (const [deviceId, f] of followers) if (f.subscribed) push(deviceId, snapshot(deviceId), 'snapshot');
             return;
