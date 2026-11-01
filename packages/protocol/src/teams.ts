@@ -53,6 +53,9 @@ export const TemplateIdSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,63
 export const TeamTemplateSchema = z.object({ id: z.string().min(1).max(64), name: TeamNameSchema, seats: SeatsSchema, source: z.enum(['repo', 'home']), path: z.string(), hash: DefinitionHashSchema.optional() });
 export type TeamTemplate = z.infer<typeof TeamTemplateSchema>;
 
+/** The address that sends a message to every seat of the sender's team. */
+export const TEAM_ADDRESS = '@team';
+
 export const TeamIdSchema = z.string().regex(/^team-[0-9a-f]{4,8}$/);
 export const TeamStateSchema = z.enum(['active', 'resting', 'dissolved']);
 export type TeamState = z.infer<typeof TeamStateSchema>;

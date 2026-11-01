@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { TaskSchema, TeamTemplateSchema, RoleSchema, RolesListingSchema, TeamSchema, ClientMessageSchema, ServerMessageSchema, parseClientMessage } from '../src/index.js';
+import { TaskSchema, TeamTemplateSchema, RoleSchema, RolesListingSchema, TeamSchema, ClientMessageSchema, ServerMessageSchema, parseClientMessage, parseServerMessage, TEAM_ADDRESS } from '../src/index.js';
 
 const role = { id: 'review', label: 'Relecteur', prompt: 'Tu relis.', source: 'repo', path: '/r/.ledge/roles/review.md' };
 
@@ -117,5 +117,20 @@ describe('a team\'s objective on the wire', () => {
   });
   it('a team template without a leader seat still parses on the wire (the rule is the loader\'s)', () => {
     expect(TeamTemplateSchema.safeParse({ id: 'x', name: 'x', seats: [{ role: 'dev' }], source: 'home', path: '/p' }).success).toBe(true);
+  });
+});
+
+describe('team broadcast', () => {
+  it('parses a team.broadcast and refuses a blank text', () => {
+    expect(TEAM_ADDRESS).toBe('@team');
+    expect(parseClientMessage({ type: 'team.broadcast', rid: 'r', team: 'team-ab12', text: 'Pause' })).toMatchObject({ type: 'team.broadcast', text: 'Pause' });
+    expect(() => parseClientMessage({ type: 'team.broadcast', rid: 'r', team: 'team-ab12', text: '   ' })).toThrow();
+  });
+  it('message.ack keeps recipients, and is unchanged without', () => {
+    expect(parseServerMessage({ type: 'message.ack', rid: 'r', outcome: 'accepted', recipients: 2 })).toMatchObject({ recipients: 2 });
+    expect(parseServerMessage({ type: 'message.ack', rid: 'r', outcome: 'accepted' })).toEqual({ type: 'message.ack', rid: 'r', outcome: 'accepted' });
+  });
+  it('parses a team.broadcast.result', () => {
+    expect(parseServerMessage({ type: 'team.broadcast.result', rid: 'r', team: 'team-ab12', sent: 3 })).toMatchObject({ sent: 3 });
   });
 });

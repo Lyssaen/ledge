@@ -98,6 +98,15 @@ export type DaemonInfo = z.infer<typeof DaemonInfoSchema>;
 export const UpdateFailureSchema = z.enum(['git-install', 'no-systemd', 'sessions-at-risk', 'npm-failed', 'busy']);
 export type UpdateFailure = z.infer<typeof UpdateFailureSchema>;
 
+/** The longest text and summary a `session.message` may carry (as `chat.route` caps a routed text). */
+export const MESSAGE_MAX = 20000;
+export const SUMMARY_MAX = 500;
+
+/** A text to every seat of a live team (defined here, not in teams.ts, which MESSAGE_MAX would make a cycle). */
+export const TeamBroadcastSchema = z.object({ type: z.literal('team.broadcast'), rid: z.string().min(1).max(100), team: TeamIdSchema, text: z.string().trim().min(1).max(MESSAGE_MAX), machineId: z.string().optional() });
+/** The answer to a `team.broadcast`: how many seats it reached, or the refusal's `reason`. */
+export const TeamBroadcastResultSchema = z.object({ type: z.literal('team.broadcast.result'), rid: z.string(), team: z.string(), sent: z.number().int().min(0).optional(), reason: z.string().optional() });
+
 export const ServerMessageSchema = z.discriminatedUnion('type', [
   SessionModelAcceptedSchema,
   z.object({ type: z.literal('chat.routed'), qid: z.string(), result: RouteResultSchema }),
@@ -163,7 +172,8 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   /** Mobile access (lot 3), after the island in each snapshot and on every change. Local clients only. */
   z.object({ type: z.literal('mobile'), state: MobileStateSchema }),
   /** The daemon's immediate answer to a `session.message`: delivered (`accepted`), held for later (`queued`), left to Claude's own SendMessage (`native`), or refused with a `reason`. */
-  z.object({ type: z.literal('message.ack'), rid: z.string(), outcome: z.enum(['accepted', 'queued', 'native', 'refused']), reason: z.string().optional() }),
+  z.object({ type: z.literal('message.ack'), rid: z.string(), outcome: z.enum(['accepted', 'queued', 'native', 'refused']), reason: z.string().optional(),
+    /** For a message to `@team`: how many seats it reached. */ recipients: z.number().int().min(0).optional() }),
   /** The answer to a `message.read`: the body with its sender, target and time, or the refusal's `reason`. */
   z.object({ type: z.literal('message.body'), id: z.string(), from: z.string().optional(), to: z.string().optional(), at: z.string().optional(), text: z.string().optional(), reason: z.string().optional() }),
   TaskResultSchema,
@@ -175,6 +185,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   LedgeThreadItemMessageSchema, LedgeThreadHistorySchema, DecisionsMessageSchema, RulesMessageSchema, MandateMessageSchema, BrainStatusMessageSchema, RigPlanMessageSchema, RigResultSchema, BrainResultSchema, BrainDelegateResultSchema,
   TaskUpdatedSchema,
   RolesListingSchema,
+  TeamBroadcastResultSchema,
   TeamsMessageSchema, TeamUpdatedSchema, TeamLaunchedSchema, TeamFailedSchema, TeamSavedSchema,
   DefinitionsListingSchema, DefinitionResultSchema, TeamChangedSchema,
   z.object({ type: z.literal('error'), message: z.string(), id: z.string().optional(), /** Le type du message client refusé. */ request: z.string().optional(),
@@ -182,10 +193,6 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
 ]);
 export type ServerMessage = z.infer<typeof ServerMessageSchema>;
 export type MessageAck = Extract<ServerMessage, { type: 'message.ack' }>;
-
-/** The longest text and summary a `session.message` may carry (as `chat.route` caps a routed text). */
-export const MESSAGE_MAX = 20000;
-export const SUMMARY_MAX = 500;
 
 /** A card's rows to act on (#24), indexes into the turn's list, each once. */
 const launchRows = z.array(z.number().int().min(0).max(MAX_PROPOSALS - 1)).min(1).max(MAX_PROPOSALS).refine(r => new Set(r).size === r.length, 'a row twice');
@@ -314,6 +321,7 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   RigActSchema, RigPrepareSchema, RigLaunchSchema, RigAdoptSchema, RigSendSchema, RigExchangesRequestSchema, RigSpecsRequestSchema, EscalationAnswerSchema,
   LedgeSaySchema, LedgeThreadRequestSchema, MandateUpdateSchema, RuleSetSchema, DecisionRevisitSchema, CategoryEscalateSchema, BrainSetSchema, BrainCmdSchema, BrainDelegateClaimSchema, BrainDelegateDecideSchema, BrainDelegateReleaseSchema, BrainDelegateQuerySchema,
   RolesListSchema,
+  TeamBroadcastSchema,
   TeamLaunchSchema, TeamJoinSchema, TeamLeaveSchema, TeamResumeSchema, TeamDissolveSchema, TeamSaveSchema,
   DefinitionsListSchema, RoleWriteSchema, RoleDeleteSchema, TemplateWriteSchema, TemplateDeleteSchema, TeamComposeSchema, TeamSeatSchema
 ]).superRefine((m, ctx) => {
