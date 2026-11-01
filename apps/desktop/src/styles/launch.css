@@ -125,6 +125,7 @@ p.composer-missing{margin:0;white-space:normal;max-width:45%}
 .harness-chevron{display:flex;transform:rotate(90deg);color:var(--muted-foreground)}
 .harness-chevron.open{transform:rotate(-90deg)}
 .harness-choice-panel{padding:12px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--well)}
+.rig-spec-choice-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .harness-choice-panel .composer-tools{grid-template-columns:repeat(2,minmax(0,1fr))}
 .harness-choice-panel .tool-tile{gap:8px;padding:8px}
 .harness-choice-panel .tool-tile strong{display:flex;align-items:center;gap:6px;flex-wrap:wrap}

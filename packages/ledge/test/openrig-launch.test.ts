@@ -79,7 +79,7 @@ describe('helpers', () => {
     expect(leadOf(allReady.slice(1))?.ref).toBe('dev-a@factory');
     expect(leadOf([])).toBeUndefined();
   });
-  it('goalMessage', () => { expect(goalMessage('G', 'M')).toBe("But donné par l'utilisateur, via Ledge : G\n\nM"); });
+  it('goalMessage', () => { expect(goalMessage('G', 'M')).toContain("file OpenRig vers ledge@external"); expect(goalMessage('G', 'M')).toContain("--human-intent update"); });
 });
 
 describe('mandateSummary', () => {
@@ -135,7 +135,7 @@ describe('createLaunches', () => {
     bridge.emitSeats('r1', seats(r => r === 'qa-f@factory' ? 'starting' : 'ready')); await flush();
     expect(sends(calls)).toHaveLength(0);
     bridge.emitSeats('r1', allReady); await flush();
-    expect(sends(calls)).toEqual([expect.objectContaining({ args: ['send', 'orch-lead@factory', expect.stringMatching(/^\[Ledge\] But donné par l'utilisateur, via Ledge : Refaire le cache\n\nMANDAT$/)] })]);
+    expect(sends(calls)).toEqual([expect.objectContaining({ args: ['send', 'orch-lead@factory', expect.stringContaining(goalMessage('Refaire le cache', 'MANDAT'))] })]);
     expect(said).toContain("J'ai donné le but à orch-lead@factory.");
     expect(bridge.notes.at(-1)).toMatchObject({ rigId: 'r1', launch: { goalSentAt: '2026-10-31T10:00:00.000Z' } });
     expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual([expect.objectContaining({ rigId: 'r1', goalSentAt: '2026-10-31T10:00:00.000Z' })]);

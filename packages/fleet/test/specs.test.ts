@@ -63,13 +63,25 @@ describe('useRigSpecs', () => {
     expect(result.current.status).toBe('loading');
     expect(f.sent).toEqual([{ type: 'rig.specs.request', requestId: expect.any(String), machineId: 'ec2' }]);
     act(() => f.emit({ type: 'rig.specs', requestId: f.sent[0]!.requestId as string, machine: 'ec2', specs: [], error: 'failed' }));
-    expect(result.current).toEqual({ status: 'ready', specs: [], error: 'failed' });
+    expect(result.current).toMatchObject({ status: 'ready', specs: [], error: 'failed' });
     rerender({ m: null }); expect(result.current.status).toBe('idle');
     rerender({ m: 'ec2' }); expect(f.sent).toHaveLength(2); // error not kept: asked again
     act(() => f.emit({ type: 'rig.specs', requestId: f.sent[1]!.requestId as string, machine: 'ec2', specs: [spec] }));
-    expect(result.current).toEqual({ status: 'ready', specs: [spec] });
+    expect(result.current).toMatchObject({ status: 'ready', specs: [spec] });
     rerender({ m: null }); rerender({ m: 'ec2' });
     expect(f.sent).toHaveLength(2); expect(result.current.specs).toEqual([spec]); // kept
     rerender({ m: 'local' }); expect(f.sent).toHaveLength(3);
   });
+  it('refreshes a cached catalog for the selected machine', () => {
+    const f = fake();
+    const { result } = renderHook(() => useRigSpecs(f.client, 'local'));
+    act(() => f.emit({ type: 'rig.specs', requestId: f.sent[0]!.requestId as string, machine: 'local', specs: [spec] }));
+    act(() => result.current.refresh());
+    expect(result.current.status).toBe('loading');
+    expect(f.sent).toHaveLength(2);
+    const added = { ...spec, id: 'ledge-development', name: 'ledge-development' };
+    act(() => f.emit({ type: 'rig.specs', requestId: f.sent[1]!.requestId as string, machine: 'local', specs: [spec, added] }));
+    expect(result.current.specs).toEqual([spec, added]);
+  });
+
 });

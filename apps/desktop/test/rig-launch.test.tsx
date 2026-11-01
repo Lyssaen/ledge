@@ -66,6 +66,15 @@ beforeEach(() => { sent = []; listeners = new Set(); dispatched = []; closed = 0
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('RigLaunch', () => {
+  it('actualise les specs de la machine sélectionnée', async () => {
+    show();
+    await screen.findByText('Recommandé par Ledge');
+    await user.click(screen.getByRole('button', { name: 'Changer' }));
+    await user.click(screen.getByRole('button', { name: 'Actualiser' }));
+    await waitFor(() => expect(sent.filter(m => m.type === 'rig.specs.request')).toHaveLength(2));
+    expect(last('rig.specs.request')).toMatchObject({ machineId: 'local' });
+  });
+
   it('projet + copie : « Lancer le rig » à l’étape 1 envoie rig.prepare puis rig.launch', async () => {
     show({ wanted: { project: 'ledge', goal: 'Corriger les tests qui échouent' } });
     await screen.findByText('Recommandé par Ledge');

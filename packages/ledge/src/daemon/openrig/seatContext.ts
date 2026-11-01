@@ -19,12 +19,18 @@ export function mandateSummary(text: string | null): string {
   return sentences(e.self.map(x => x.said), toUser.length ? toUser : DEFAULT_USER);
 }
 
+/** Ledge reads the OpenRig queue directly; the required Slack binding is deliberately inert. */
+export function ledgeContact(human: string): string {
+  return `Pour contacter Ledge, crée une entrée dans la file OpenRig vers ${human}. Pour un compte rendu, utilise --human-intent update ; pour une décision, --human-intent decision avec les questions structurées. Fournis --summary, --body-file et --evidence-ref comme demandé par rig queue create --help. Ledge lit la file directement : le connecteur Slack non configuré est intentionnel et son état ne prouve pas que le message est perdu. Vérifie que la ligne existe et reste ouverte ; une confirmation de réception par Ledge est distincte de sa création.`;
+}
+
 /** What an OpenRig seat (one Ledge did not launch) is told at SessionStart: who its human is, how to escalate, the mandate. */
 export function rigSeatContext(p: { seat: string; rig: string; human: string; mandate: string }): string {
   return [
     `Tu es ${p.seat}, siège du rig ${p.rig}.`,
     `Ton humain est Ledge (${p.human}) : il lit tes escalades et tranche pour l'utilisateur, ou les lui remonte.`,
     `Pour une décision qui ne t'appartient pas, escalade vers ${p.human} avec le skill messaging-the-human d'OpenRig (\`rig queue create --destination ${p.human} --human-intent decision …\`).`,
+    ledgeContact(p.human),
     p.mandate,
   ].join('\n');
 }

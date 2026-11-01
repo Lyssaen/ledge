@@ -6,6 +6,8 @@ import type { Exec } from '../git.js';
 import type { Bridge, BridgeMessage } from './bridge.js';
 import type { RigCli } from './cli.js';
 import { prepareWorkspace } from './workspace.js';
+import { HUMAN_ADDRESS } from './facts.js';
+import { ledgeContact } from './seatContext.js';
 
 /** After this long the goal goes to the lead even when some seats are not ready. */
 export const GOAL_TIMEOUT_MS = 10 * 60_000;
@@ -19,7 +21,7 @@ export function leadOf(seats: readonly RigSeat[]): RigSeat | undefined {
   return seats.find(s => /lead/i.test(s.name) || /lead/i.test(s.address)) ?? seats[0];
 }
 
-export function goalMessage(goal: string, mandate: string): string { return `But donné par l'utilisateur, via Ledge : ${goal}\n\n${mandate}`; }
+export function goalMessage(goal: string, mandate: string): string { return `But donné par l'utilisateur, via Ledge : ${goal}\n\n${ledgeContact(HUMAN_ADDRESS)}\n\n${mandate}`; }
 
 export interface LaunchDeps {
   cli: Pick<RigCli, 'up'>;

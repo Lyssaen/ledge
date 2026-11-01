@@ -28,6 +28,8 @@ describe('rigSeatContext', () => {
     expect(c).toContain('Tu es a@r, siège du rig r.');
     expect(c).toContain('Ton humain est Ledge (ledge@external)');
     expect(c).toContain('`rig queue create --destination ledge@external --human-intent decision …`');
+    expect(c).toContain('--human-intent update');
+    expect(c).toContain('connecteur Slack non configuré est intentionnel');
     expect(c.endsWith('M.')).toBe(true);
   });
 });

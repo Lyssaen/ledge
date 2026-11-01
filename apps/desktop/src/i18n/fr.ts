@@ -377,7 +377,7 @@ export const fr = {
     ideasOff: ['Explorer un dépôt inconnu', 'Comparer deux dépôts', 'Prototyper une idée'],
     spec: 'Spec OpenRig', specHint: 'L’équipe qu’OpenRig monte', recommended: 'Recommandé par Ledge', change: 'Changer', noSpec: 'Choisis une spec',
     specsLoading: 'Lecture des specs…', specsFailed: 'Les specs n’ont pas pu être lues.',
-    chooseFor: 'Choisir pour ce rig', seatsOf: (n: number, what: string) => `${n} ${plural(n, 'siège', 'sièges')} · ${what}`,
+    refreshSpecs: 'Actualiser', chooseFor: 'Choisir pour ce rig', seatsOf: (n: number, what: string) => `${n} ${plural(n, 'siège', 'sièges')} · ${what}`,
     registry: 'Depuis le registre…', registryWhat: 'openrig.dev/rigs', soon: 'Bientôt',
     recommends: (spec: string, why: 'bounded' | 'long') => `Ledge recommande ${spec} : ${why === 'long' ? 'un travail suivi sur plusieurs jours, avec des relectures.' : 'une modification bornée, vite relue.'}`,
     providers: 'Fournisseurs', providerSeats: (n: number, label: string) => `${n} ${plural(n, 'siège', 'sièges')} ${label}`,
