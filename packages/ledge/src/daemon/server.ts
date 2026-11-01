@@ -35,6 +35,7 @@ import { paths } from '../paths.js';
 import { ensureDaemonToken, hostAllowed, requestAuthorized, selectDaemonProtocol, sessionKey, tokenEquals } from '../auth.js';
 import { readMachines, writeMachines } from './machines.js';
 import { readProjects, writeProjects } from './projects.js';
+import { readTeamsEngine, writeTeamsEngine, engineRunning, openrigAvailable, switchRefusal } from './engine/setting.js';
 import { readContextPrefs, readIsland, writeContextPrefs, writeIsland } from './island.js';
 import { readDocument } from './documents.js';
 import { createModels, type Models } from './models.js';
@@ -402,6 +403,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const aggregate = bridge && remote ? createRigAggregate({ bridge, remote, machines: () => machines, projects: () => projects }) : null;
   const unsubscribeAggregate = aggregate?.onMessage(m => {
     broadcast(m);
+    if (m.type === 'openrig.status' || m.type.startsWith('rig.')) broadcastEngine();
     if (m.type === 'escalation.updated' && m.escalation.machine !== 'local') remoteBrainCoordinator?.observe(m.escalation);
     // Ledge's thread names the remote escalations and exchanges too (the local ones come from the bridge, below), once per id.
     if (m.type === 'escalation.updated' && m.escalation.machine !== 'local' && !thread.hasEscalation(m.escalation.id)) thread.append({ kind: 'escalation', escalationId: m.escalation.id });
@@ -441,7 +443,16 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     // Told already: its next turn has nothing more to say of it (a move is told its new team by the join's own notice).
     if (mailbox.notify(id, formatTeamNotice({ team: t.id, text }), `${t.id}:left:${id}:${now()}`) && why !== 'moved') store.patch(id, { teamSeen: '' });
   }
-  const unsubscribeTeams = teams.onChange(team => broadcast({ type: 'team.updated', team }));
+  /** The teams engine (`teams.engine`): Ledge's own or OpenRig; one global setting, in teams-engine.json. */
+  let teamsEngine = readTeamsEngine(paths().teamsEngine);
+  const engineData = () => ({ teams: teams.all(), rigs: aggregate?.rigs() ?? bridge?.rigs() ?? [], statuses: aggregate?.statuses() ?? (bridge ? [bridge.status()] : []) });
+  const engineMsg = (): ServerMessage => { const d = engineData(); return { type: 'teams.engine', engine: teamsEngine, openrigAvailable: openrigAvailable(d.statuses), running: engineRunning(teamsEngine, d) }; };
+  let engineSent = '';
+  /** Broadcast only when one of the three fields changed since the last message sent. */
+  const broadcastEngine = () => { const m = engineMsg(); const k = JSON.stringify(m); if (k === engineSent) return; engineSent = k; broadcast(m); };
+  /** Engine switching hook: task 3 wires the projection and the teams' move here. */
+  const engines = { apply: (_engine: typeof teamsEngine): void => { /* wired by task 3 */ } };
+  const unsubscribeTeams = teams.onChange(team => { broadcast({ type: 'team.updated', team }); broadcastEngine(); });
   const tasks = createTasks({ store, mailbox, now, teams, ...(opts.tasks ? { journal: opts.tasks } : {}), onTask: (task, entry) => {
     broadcast({ type: 'task.updated', task });
     // The card that gave it follows it, on whichever thread holds it: only Ledge gives from a card.
@@ -612,6 +623,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     reply({ type: 'chat.history', turns: chat.history() });
     reply(contextMsg()); // the context threshold (context handover spec §3.2)
     if (aggregate) for (const m of aggregate.replay()) reply(m);
+    { const m = engineMsg(); engineSent = JSON.stringify(m); reply(m); } // after the OpenRig mirror, then the teams engine
     reply({ type: 'brain.status', status: brain.status() });
     reply(mandateMsg()); reply(rulesMsg()); reply(decisionsMsg());
     reply({ type: 'ledge.thread.history', ...thread.page() }); // last: Ledge's thread, whose items name those escalations
@@ -1638,6 +1650,17 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         contextPrefs = msg.prefs;
         // Sessions already past the new threshold: an `auto` session or seat is relieved at its next turn's end.
         return broadcast(contextMsg());
+      }
+      case 'teams.engine.set': {
+        const reason = switchRefusal(teamsEngine, msg.engine, engineData());
+        if (reason) return reply({ type: 'teams.engine.result', rid: msg.rid, ok: false, reason });
+        try { writeTeamsEngine(paths().teamsEngine, msg.engine); } // first: a failing write leaves memory unchanged
+        catch (e) { return reply({ type: 'teams.engine.result', rid: msg.rid, ok: false, reason: (e as Error).message }); }
+        teamsEngine = msg.engine;
+        reply({ type: 'teams.engine.result', rid: msg.rid, ok: true });
+        broadcastEngine();
+        engines.apply(teamsEngine);
+        return;
       }
       case 'island.set': {
         writeIsland(msg.prefs, islandFile); // first: a failing write leaves memory unchanged and reaches the sender
