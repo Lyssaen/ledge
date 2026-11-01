@@ -13,7 +13,7 @@ test.beforeAll(async () => {
   h = await startHarness(); h.daemon.device = createDeviceCheck(h.url); h.daemon.openrig = true; h.daemon.sessions = [];
   h.daemon.rigs = [{ key: 'factory', name: 'factory', project: 'Ledge', offProject: false, lifecycle: 'running', kernel: false, seats: [{ ref: 'build@factory', address: '@build', name: 'build', runtime: 'codex', state: 'attention' }], repos: 1 }];
   const escalation = { id: 'e1', source: 'rig' as const, rigKey: 'factory', rigName: 'factory', from: '@build', intent: 'decision' as const, summary: 'Quelle base ?', questions: [{ id: 'q1', question: 'Quelle base ?', options: [{ id: 'sqlite', label: 'SQLite' }, { id: 'pg', label: 'Postgres' }] }], createdAt: '2026-10-20T08:00:00.000Z', state: 'pending' as const };
-  h.daemon.escalations = [escalation]; h.daemon.ledgeThread = [{ kind: 'escalation', id: 'item1', at: escalation.createdAt, escalation }];
+  h.daemon.escalations = [escalation, { ...escalation, id: 'e2', summary: 'Quelle interface ?' }, { ...escalation, id: 'e3', summary: 'Quel déploiement ?' }]; h.daemon.ledgeThread = [{ kind: 'escalation', id: 'item1', at: escalation.createdAt, escalation }];
   h.daemon.exchanges = [{ id: 'x1', rigKey: 'factory', from: '@build', to: '@lead', kind: 'message', text: 'Tests terminés', at: escalation.createdAt }];
 });
 test.afterAll(async () => { await h?.close(); });
@@ -30,9 +30,13 @@ test('pair, answer an escalation, read a rig and confirm a new rig with a passke
   await page.getByRole('button', { name: copy.enroll.go }).click(); await expect(page.getByText(copy.enroll.done)).toBeVisible();
   await page.getByRole('link', { name: copy.compare.seePending }).click();
   await page.getByRole('link', { name: copy.nav.chat, exact: true }).click();
+  await expect(page.getByText('À toi 3', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'SQLite' })).toBeVisible(); await capture('conversation');
   await page.getByRole('button', { name: 'SQLite' }).click();
   await expect.poll(() => h.pc.received.map(x => JSON.parse(x) as PhoneClientMessage).some(m => m.type === 'escalation.answer' && m.answers.q1 === 'sqlite')).toBe(true);
+  const fold = page.locator('details').filter({ hasText: 'factory' });
+  await expect(fold).toBeVisible(); await expect(fold.getByText(/Ledge · Ledge → @build · SQLite/)).toBeHidden();
+  await fold.locator('summary').click(); await expect(fold.getByText(/Ledge · Ledge → @build · SQLite/)).toBeVisible();
   await page.getByRole('link', { name: copy.nav.rigs, exact: true }).click();
   await capture('rigs'); await page.getByRole('link', { name: /factory/ }).click(); await capture('rig-seats'); await page.getByRole('link', { name: /^Échanges/ }).click(); await expect(page.getByText('Tests terminés')).toBeVisible();
   await page.getByRole('link', { name: copy.nav.rigs, exact: true }).click(); await page.getByRole('link', { name: 'Lancer un rig…' }).click();

@@ -168,7 +168,12 @@ function runDaemon(pc: FakePc): FakeDaemon {
       if (!current || current.answer) return pc.send({ type: 'operation.result', op: m.op, status: 'rejected', reason: 'already_answered' });
       const answered: PhoneEscalation = { ...current, state: 'answered', answer: { by: 'user', answers: m.answers, at: new Date().toISOString() } };
       d.escalations = d.escalations.map(e => e.id === m.id ? answered : e);
-      await pc.send({ type: 'escalation.updated', escalation: answered }); return pc.send({ type: 'operation.result', op: m.op, status: 'applied' });
+      await pc.send({ type: 'escalation.updated', escalation: answered });
+      const at = answered.answer!.at;
+      const text = current.questions.map(q => q.options.find(o => o.id === m.answers[q.id])?.label ?? m.answers[q.id]).join(', ');
+      const item: PhoneThreadItem = { kind: 'exchanges', id: `answer-${m.id}`, at, rigKey: current.rigKey!, rigName: current.rigName!, from: at, to: at, count: 1, items: [{ id: `reply-${m.id}`, rigKey: current.rigKey!, from: 'Ledge', to: current.from, kind: 'ledge', text, at }] };
+      d.ledgeThread.push(item); await pc.send({ type: 'ledge.thread.item', item });
+      return pc.send({ type: 'operation.result', op: m.op, status: 'applied' });
     }
     if (d.openrig && m.type === 'rig.prepare') {
       const plan = { id: 'plan1', spec: m.spec || 'starter', goal: m.goal, where: { kind: 'off-project' as const, name: 'demo' }, seats: [{ address: '@build', runtime: 'codex', autonomy: 'standard' }], writes: ['création du rig'], required: true };
