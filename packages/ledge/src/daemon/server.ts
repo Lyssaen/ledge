@@ -1631,6 +1631,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
 
   if (mobile) gateway = createPhoneGateway({
     mobile,
+    ...(aggregate ? { openrig: { rigs: aggregate.rigs, escalations: aggregate.escalations, escalation: aggregate.escalation, exchanges: aggregate.exchanges, rules: memory.rules, decisions: () => memory.decisions({ limit: 200 }), projects: () => projects, thread: (before?: string) => thread.page(before) } } : {}),
     // A dropped device thread takes its queued cards with it: the sessions they waited for go on to what else waits.
     chats: { ...threads, async drop(id: string) {
       const waiting = [...new Set(threads.queuedRelays().filter(q => q.thread === `device:${id}`).map(q => q.relay.id))];

@@ -176,7 +176,7 @@ export function createPhoneGateway(deps: {
   /** A session the phone may see: an archived one is, for the phone, gone. */
   const live = (id: string): Session | undefined => {
     const s = deps.session(id);
-    return s && !isArchived(s) ? s : undefined;
+    return s && !s.brain && !isArchived(s) ? s : undefined;
   };
   /** Each session's checklist from its main thread, computed when first asked and kept while a device follows. */
   const checklists = new Map<string, { list: PhoneChecklist | null; summary: PhoneChecklistSummary | undefined }>();
@@ -776,10 +776,16 @@ export function createPhoneGateway(deps: {
       case 'rig.exchanges.request': {
         const target = keys().get(msg.key);
         if (!target || !deps.openrig) return push(deviceId, { type: 'error', code: 'invalid', request: msg.type });
-        const all = deps.openrig.exchanges(target.machine, target.rigId);
-        if (!all) return push(deviceId, { type: 'error', code: 'invalid', request: msg.type });
-        const items = all.slice(-EXCHANGES_MAX).flatMap(item => { try { return [toPhoneExchange(item)]; } catch { return []; } });
-        return push(deviceId, { type: 'rig.exchanges', key: msg.key, items, ...(all.length > EXCHANGES_MAX ? { cut: true as const } : {}) });
+        void deps.dispatch({ type: 'rig.exchanges.request', ...target }, response => {
+          if (response.type !== 'rig.exchanges' || response.machine !== target.machine || response.rigId !== target.rigId) {
+            if (response.type === 'error') push(deviceId, { type: 'error', code: 'invalid', request: msg.type });
+            return;
+          }
+          const all = response.items;
+          const items = all.slice(-EXCHANGES_MAX).flatMap(item => { try { return [toPhoneExchange(item)]; } catch { return []; } });
+          push(deviceId, { type: 'rig.exchanges', key: msg.key, items, ...(all.length > EXCHANGES_MAX ? { cut: true as const } : {}) });
+        }).catch(() => push(deviceId, { type: 'error', code: 'invalid', request: msg.type }));
+        return;
       }
       case 'attachment.put': case 'attachment.get':
         void attachment(deviceId, msg);
@@ -991,7 +997,7 @@ export function createPhoneGateway(deps: {
             return;
           }
           case 'session.updated':
-            if (isArchived(m.session)) return removed(m.session.id);
+            if (m.session.brain || isArchived(m.session)) return removed(m.session.id);
             for (const [deviceId, f] of followers) {
               if (f.subscribed) push(deviceId, { type: 'session.updated', session: projected(deviceId, m.session) }, `session.updated:${m.session.id}`);
             }

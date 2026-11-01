@@ -36,7 +36,7 @@ describe('phone OpenRig gateway', () => {
   });
   it('returns the most recent 200 exchanges without paths', async () => {
     const exchanges = Array.from({ length: 350 }, (_, n) => ({ id: `x${n}`, machine: 'remote', rigId: 'same', from: '@a', to: '@b', kind: 'message' as const, text: `hello /home/private/${n}`, at }));
-    const g = setup({ deps: { openrig: { ...data(), exchanges: () => exchanges } } });
+    const g = setup({ deps: { openrig: { ...data(), exchanges: () => exchanges } }, dispatch: async (msg, reply) => { if (msg.type === 'rig.exchanges.request') reply({ type: 'rig.exchanges', machine: msg.machine, rigId: msg.rigId, items: exchanges }); } });
     g.send('dev1', { type: 'rig.exchanges.request', key: rigKey('remote', 'same') }); await flush();
     const message = g.got('dev1').find(m => m.type === 'rig.exchanges');
     expect(message).toMatchObject({ cut: true });
