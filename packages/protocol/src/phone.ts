@@ -1,4 +1,7 @@
 import { z } from 'zod';
+import { RIG_RESULT_CODES } from './openrig.js';
+import { PhoneRigActSchema, PhoneRigLaunchSchema, PhoneRigSchema, PhoneEscalationSchema, PhoneLedgeDecisionSchema, phoneOpenRigClientMessages, phoneOpenRigServerMessages } from './phoneOpenrig.js';
+export * from './phoneOpenrig.js';
 import { ATTACHMENTS_MAX, ATTACHMENT_MAX, AttachmentDataSchema, AttachmentErrorSchema, AttachmentGetSchema, AttachmentIdSchema, AttachmentPutSchema, AttachmentRefSchema, AttachmentStoredSchema, ImageUploadSchema, b64Max } from './attachments.js';
 import { ContextPrefsSchema, HandoverStateSchema } from './handover.js';
 import { PendingSchema, SessionSchema, ToolSchema, type Tool } from './session.js';
@@ -72,7 +75,7 @@ export const OperationStatusSchema = z.enum(['received', 'applied', 'rejected', 
 export type OperationStatus = z.infer<typeof OperationStatusSchema>;
 
 /** Why an operation was refused: a refusal code of the local fronts, or one only a phone can meet.  */
-export const OperationReasonSchema = z.enum([...RefusalCodeSchema.options, 'untypable', 'confirm_required', 'conflict', 'assertion_invalid', 'assertion_expired', 'scheduled', ...ModelRefusalSchema.options]);
+export const OperationReasonSchema = z.enum([...RefusalCodeSchema.options, 'untypable', 'confirm_required', 'conflict', 'assertion_invalid', 'assertion_expired', 'scheduled', ...ModelRefusalSchema.options, ...RIG_RESULT_CODES]);
 export type OperationReason = z.infer<typeof OperationReasonSchema>;
 
 /** What an adapter knows how to type for a phone, beyond accept, deny and an option number. A phone hides an answer its session's tool cannot give. */
@@ -120,7 +123,7 @@ export const PhoneSessionSchema = SwitchableSessionSchema.pick({
   exitedAt: true
 }).extend({ pending: PhonePendingSchema.optional(), unread: z.boolean(), handover: z.object({ state: HandoverStateSchema, toName: z.string().max(80).optional() }).strict().optional(),
   /** Absent: the agent has no checklist. */ checklist: PhoneChecklistSummarySchema.optional(),
-  /** Started without Ledge (`hook_only`): the phone can neither close nor resume it. */ readOnly: z.literal(true).optional() });
+  /** Started without Ledge (`hook_only`): the phone can neither close nor resume it. */ readOnly: z.literal(true).optional(), rig: z.object({ rigName: z.string().max(80), seat: z.string().max(120) }).strict().optional(), brain: z.literal(true).optional() });
 export type PhoneSession = z.infer<typeof PhoneSessionSchema>;
 
 /** Base64url without padding: what WebAuthn fields look like once the phone encodes them. */
@@ -147,7 +150,7 @@ export const AssertionSchema = z.object({
 export type Assertion = z.infer<typeof AssertionSchema>;
 
 /** `pc`: updating or restarting the PC's daemon (spec 2026-10-28 mobile daemon update). */
-export const ConfirmPurposeSchema = z.enum(['register', 'decide', 'launch', 'close', 'act', 'pc']);
+export const ConfirmPurposeSchema = z.enum(['register', 'decide', 'launch', 'close', 'act', 'pc', 'rig']);
 export type ConfirmPurpose = z.infer<typeof ConfirmPurposeSchema>;
 
 /** The phone's chat: no folder, no path, no machine, no free error text; every object is strict, `pick` included. */
@@ -221,6 +224,7 @@ export const pcSubject = (action: PcAction, version?: string): string => (action
 /** What the daemon accepts from a phone: this union is the whitelist. */
 export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('snapshot.request') }),
+  ...phoneOpenRigClientMessages,
   z.object({ type: z.literal('session.thread'), id: sessionId }),
   /** The session's request with its whole body (up to `PENDING_BODY_MAX`). */
   z.object({ type: z.literal('session.pending'), id: sessionId }),
@@ -232,7 +236,7 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
    * or `act` names a turn of the chat (`qid`) or a session (`id`, for `session.close` and `session.resume`).
    */
   z.object({ type: z.literal('confirm.prepare'), purpose: ConfirmPurposeSchema, id: sessionId.optional(), expect: PhoneExpectSchema.optional(), qid: OperationIdSchema.optional(),
-    /** A `pc` challenge: what it is for, and for an update the version it covers. */ action: PcActionSchema.optional(), version: z.string().regex(SEMVER).optional() }),
+    /** A `pc` challenge: what it is for, and for an update the version it covers. */ action: PcActionSchema.optional(), version: z.string().regex(SEMVER).optional(), rig: z.discriminatedUnion('type', [PhoneRigLaunchSchema, PhoneRigActSchema]).optional() }),
   z.object({ type: z.literal('credential.register'), op: OperationIdSchema, credential: CredentialSchema }),
   z.object({
     type: z.literal('session.decide'), op: OperationIdSchema, id: sessionId, decision: DecisionSchema, note: z.string().trim().min(1).max(NOTE_MAX).optional(),
@@ -307,7 +311,8 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
     /** The daemon takes `session.model`. */ models: z.literal(true).optional(),
     /** The daemon sends `session.checklist` and a session's `checklist` summary. */ checklist: z.literal(true).optional(),
     /** `update`: the daemon can install a version and restart (npm, systemd); `restart`: it can restart (systemd). */ update: z.literal(true).optional(), restart: z.literal(true).optional(),
-    /** The daemon takes `session.close` and `session.resume`. */ sessionClose: z.literal(true).optional() }), device: z.object({ confirm: z.boolean(), push: z.enum(['on', 'off', 'stale', 'unavailable']).optional(), chat: z.literal(true).optional(), contextNear: ContextPrefsSchema.shape.near.optional() }).optional() }),
+    /** The daemon takes `session.close` and `session.resume`. */ sessionClose: z.literal(true).optional(), openrig: z.literal(true).optional() }), rigs: z.array(PhoneRigSchema).max(40).optional(), escalations: z.array(PhoneEscalationSchema).max(40).optional(), decisionsToday: z.array(PhoneLedgeDecisionSchema).max(50).optional(), device: z.object({ confirm: z.boolean(), push: z.enum(['on', 'off', 'stale', 'unavailable']).optional(), chat: z.literal(true).optional(), contextNear: ContextPrefsSchema.shape.near.optional() }).optional() }),
+  ...phoneOpenRigServerMessages,
   z.object({ type: z.literal('confirm.challenge'), purpose: ConfirmPurposeSchema, challenge: B64U.max(64), rpId: z.string().max(253), credentialId: B64U.max(1_366).optional(), expiresInMs: z.number().int().positive(),
   }),
   z.object({ type: z.literal('session.updated'), session: PhoneSessionSchema }),

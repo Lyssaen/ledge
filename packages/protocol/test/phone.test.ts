@@ -175,8 +175,8 @@ describe('phone device confirmation (lot 6a)', () => {
     expect(types.filter(t => /^(team|teams|role|task)(\.|$)/.test(t))).toEqual([]);
   });
   it('daemon.update still takes a passkey assertion', () => expect(PhoneClientMessageSchema.safeParse({ type: 'daemon.update', op: OP, version: '1.2.3', assertion }).success).toBe(true));
-  it('a challenge is for register, decide, launch, close, act or pc, and prepare carries no digest', () => {
-    expect(ConfirmPurposeSchema.options).toEqual(['register', 'decide', 'launch', 'close', 'act', 'pc']);
+  it('a challenge covers the supported purposes, and prepare carries no digest', () => {
+    expect(ConfirmPurposeSchema.options).toEqual(['register', 'decide', 'launch', 'close', 'act', 'pc', 'rig']);
     expect(PhoneClientMessageSchema.parse({ type: 'confirm.prepare', purpose: 'pc', digest: 'a'.repeat(64) })).not.toHaveProperty('digest');
   });
   it('a session carries no role, role label or team, and the snapshot no teams flag', () => {
