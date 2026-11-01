@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { type TeamObjective, actionById, autonomyArgs, contextNear, ompApprovalFor, askShown, isArchived, RoleIdSchema, TemplateIdSchema, type DefinitionCode, givenByLedge, LEDGE_GIVER, openDecision, transmissions, type Task, projectOf, type ChatAction, type Autonomy, type Role, type Seat, type Team } from '@ledge/protocol';
+import { type TeamObjective, TEAM_ADDRESS, actionById, autonomyArgs, contextNear, ompApprovalFor, askShown, isArchived, RoleIdSchema, TemplateIdSchema, type DefinitionCode, givenByLedge, LEDGE_GIVER, openDecision, transmissions, type Task, projectOf, type ChatAction, type Autonomy, type Role, type Seat, type Team } from '@ledge/protocol';
 import { ATTACHMENT_LOCAL_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type RigPlan, type RigResultCode, type DaemonInfo, type Projects, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Machine, type Tool, type OmpApproval, type CloseHow, type ModelRefusal, type RefusalCode, backendOf, MANDATE_CATEGORY_LABEL } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
@@ -91,6 +91,7 @@ import { leaderIssue } from './leader.js';
 import { crewOf, LEAD_NOT_STARTED, leadNotice, waitNotice } from './objective.js';
 import { ignoredTemplate, listDefinitions, resolveSeats, saveTemplate, templateHash, templateId, type ResolvedSeat } from './teams.js';
 import { deleteDefinition, promptRecipients, roleText, scopeDefinitions, scopeDir, templateText, writeDefinition } from './definitions.js';
+import { broadcastFromLead, broadcastFromUser } from './broadcast.js';
 import { resolveRoleAddress, seatContext, seatKey, seatView, teammates } from './seat.js';
 import { formatRoleNotice, formatTeamNotice } from './crossSession.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
@@ -1845,11 +1846,14 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       // An agent's message to another session: acked at once, typed when the target is free.
       case 'session.message': {
+        // `@team`, the lead's: every other live seat, before `@role` is resolved.
+        if (msg.to === TEAM_ADDRESS) return reply(broadcastFromLead({ store, teams, mailbox }, msg));
         // `@role` names a seat of the sender's team (roles spec §3.6).
         const r = resolveRoleAddress(msg.to, msg.from, store.all(), teams.all());
         if ('reason' in r) return reply({ type: 'message.ack', rid: msg.rid, outcome: 'refused', reason: r.reason });
         return reply(mailbox.submit({ ...msg, to: r.to }));
       }
+      case 'team.broadcast': return reply(broadcastFromUser({ store, teams, mailbox }, msg));
       case 'message.read': return reply(mailbox.read(msg));
       case 'session.handover': {
         const reason = handovers.start(msg.id);

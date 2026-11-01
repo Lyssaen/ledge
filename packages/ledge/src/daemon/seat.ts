@@ -1,4 +1,4 @@
-import { isArchived, type Role, type Session, type Team } from '@ledge/protocol';
+import { isArchived, LEADER_ROLE, TEAM_ADDRESS, type Role, type Session, type Team } from '@ledge/protocol';
 
 /** A seat's teammates as its context names them: live, in the team, in seat order. */
 export function teammates(team: Pick<Team, 'seats'>, sessions: readonly Session[]): Array<{ name: string; role: string }> {
@@ -22,6 +22,7 @@ export function seatContext(o: { role?: Pick<Role, 'id' | 'label' | 'prompt'>; r
   if (o.team) {
     const members = o.team.members.map(m => `${m.name} (${m.role})`).join(', ') || 'personne d\'autre pour l\'instant';
     lines.push(`Ton équipe : ${members}. Écris-leur par leur rôle : ledge send @build "…", ledge task give @qa "…".`,
+      ...(id === LEADER_ROLE ? [`Tu es le lead : ledge send ${TEAM_ADDRESS} "…" écrit à toute l'équipe d'un coup.`] : []),
       'L\'opérateur est Ledge : il t\'a confié ou te confiera ton travail par une <ledge-task>. Travaille en autonomie avec ton équipe ; ne t\'arrête pour l\'utilisateur que pour une décision qui lui revient. Termine toujours une tâche reçue (ledge task done <id> "<résultat>", ou refuse) : c\'est ainsi que Ledge et l\'utilisateur savent où en est l\'équipe.');
   }
   return lines.join('\n');

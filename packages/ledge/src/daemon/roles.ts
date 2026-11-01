@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { autonomyArgs, AutonomySchema, ompApprovalFor, RoleSchema, ROLE_LABEL_MAX, ROLE_PROMPT_MAX, type Autonomy, type DefinitionProblem, type Role } from '@ledge/protocol';
+import { autonomyArgs, AutonomySchema, ompApprovalFor, RoleSchema, ROLE_LABEL_MAX, ROLE_PROMPT_MAX, TEAM_ADDRESS, type Autonomy, type DefinitionProblem, type Role } from '@ledge/protocol';
 import { ledgeDir } from '../paths.js';
 import { log } from '../log.js';
 
@@ -87,6 +87,7 @@ const ROLE_KEYS = new Set(['label', 'tool', 'model', 'effort', 'autonomy']);
 
 /** One role file as a role, or the reason it is not one. */
 export function parseRole(id: string, text: string, source: 'repo' | 'home', path: string): Role | string {
+  if (id === TEAM_ADDRESS.slice(1)) return 'team est réservé (ledge send @team parle à toute l\'équipe) : renomme ce rôle';
   let parsed;
   try { parsed = frontMatter(text); } catch (e) { return (e as Error).message; }
   const { fields, body } = parsed;
