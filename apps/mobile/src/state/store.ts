@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from 'react';
 import {
   PhoneClientMessageSchema, type Assertion, type PcAction, type AttachmentRef, type CapabilitiesByTool, type Credential, type ImageUpload, type PhoneClientMessage, type PhonePending, type PhoneServerMessage,
-  type ModelRefusal, type PhoneChecklist, type PhoneModelChoice, type PhoneSession, type PushSubscription, type ThreadItem
+  type PhoneRig, type PhoneEscalation, type PhoneLedgeDecision, type PhoneThreadItem, type PhoneExchange, type ModelRefusal, type PhoneChecklist, type PhoneModelChoice, type PhoneSession, type PushSubscription, type ThreadItem
 } from '@ledge/protocol';
 import type { PhoneLink } from '../link/link';
 import { getAssertion } from '../link/webauthn';
@@ -25,6 +25,13 @@ export interface ThreadState {
 }
 
 export interface MobileState {
+  openrig: boolean;
+  rigs: Map<string, PhoneRig>;
+  escalations: Map<string, PhoneEscalation>;
+  decisionsToday: PhoneLedgeDecision[];
+  ledgeThread: PhoneThreadItem[];
+  ledgeBefore?: string;
+  rigExchanges: Map<string, PhoneExchange[]>;
   /** In the PC's order. */
   sessions: Map<string, PhoneSession>;
   threads: Map<string, ThreadState>;
@@ -76,6 +83,8 @@ export interface ConfirmedExpect { key: string; kind: PhonePending['kind']; text
 export type Decision = Extract<PhoneClientMessage, { type: 'session.decide' }>['decision'];
 
 export interface MobileStore {
+  requestExchanges(key: string): void;
+  loadOlderThread(): void;
   getState(): MobileState;
   subscribe(fn: () => void): () => void;
   /** Answers the session's request. The op's id, or null when nothing was sent (no request, not ready, already answered). */
@@ -179,6 +188,7 @@ function failuresKept(failures: Record<string, ModelRefusal>, before: Map<string
 export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
   const last = loadLastState(storage);
   let state: MobileState = {
+    openrig: false, rigs: new Map(), escalations: new Map(), decisionsToday: [], ledgeThread: [], rigExchanges: new Map(),
     sessions: new Map((last?.sessions ?? []).map(s => [s.id, s])),
     threads: new Map(),
     previews: new Map(Object.entries(last?.previews ?? {})),
@@ -196,6 +206,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
   let reads = loadReads(storage);
   /** The tools whose model list was asked on this link and boot; an `error` listing is asked again. */
   const modelAsks = new Set<string>();
+  let ledgeHistoryAsked = false;
   /** The PC's boot id of this run, from its snapshot; null until one, and when the PC sends none. Never cached. */
   let boot: string | null = null;
   /** Ends a followed update or restart the PC never came back from: armed by the first step, cleared at the end. */
@@ -322,6 +333,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
 
   function onLost() {
     historyAsked = false;
+    ledgeHistoryAsked = false;
     askedSinceReady.clear();
     // A list asked on the lost channel never comes: it is asked again. Those already answered stay.
     for (const tool of [...modelAsks]) if (!state.models[tool]) modelAsks.delete(tool);
@@ -349,16 +361,31 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         // A new boot is a new PC process: what it offered may differ.
         const bootChanged = (m.daemon.boot ?? null) !== boot;
         boot = m.daemon.boot ?? null;
-        if (bootChanged) modelAsks.clear();
+        if (bootChanged) { modelAsks.clear(); ledgeHistoryAsked = false; }
         const pc = pcSnapshot(state.pc, m.daemon);
         if (!pcRunning(pc)) stopPcWatch();
         const checklists = new Map([...state.checklists].filter(([id]) => sessions.has(id)));
-        set({ sessions, previews, threads, checklists, capabilities: m.capabilities, device: m.device ?? null, daemon: m.daemon, fresh: true, syncedAt: now, pc, modelFailures: failuresKept(state.modelFailures, state.sessions, sessions), ...(bootChanged ? { models: {} } : {}) });
+        set({ ...(bootChanged || !m.daemon.openrig ? { ledgeThread: [], ledgeBefore: undefined, rigExchanges: new Map<string, PhoneExchange[]>() } : {}), openrig: m.daemon.openrig === true, rigs: new Map((m.rigs ?? []).map(r => [r.key, r])), escalations: new Map((m.escalations ?? []).map(e => [e.id, e])), decisionsToday: m.decisionsToday ?? [], sessions, previews, threads, checklists, capabilities: m.capabilities, device: m.device ?? null, daemon: m.daemon, fresh: true, syncedAt: now, pc, modelFailures: failuresKept(state.modelFailures, state.sessions, sessions), ...(bootChanged ? { models: {} } : {}) });
         persist();
         // The instructions and interrupts left uncertain (those in flight on this link are `sending`) go again if this PC may not have applied them.
         if (ready()) resend(o => o.phase === 'uncertain' && expectKey(o.message) === undefined);
         if (m.device?.chat && !historyAsked && ready()) askHistory();
+        if (m.daemon.openrig && !ledgeHistoryAsked && ready()) { ledgeHistoryAsked = true; send({ type: 'ledge.thread.request' }); }
         return;
+      }
+      case 'rig.updated': set({ rigs: new Map(state.rigs).set(m.rig.key, m.rig) }); return;
+      case 'rig.removed': { const rigs = new Map(state.rigs); rigs.delete(m.key); set({ rigs }); return; }
+      case 'escalation.updated': set({ escalations: new Map(state.escalations).set(m.escalation.id, m.escalation) }); return;
+      case 'escalation.removed': { const escalations = new Map(state.escalations); escalations.delete(m.id); set({ escalations }); return; }
+      case 'rig.exchanges': set({ rigExchanges: new Map(state.rigExchanges).set(m.key, m.items) }); return;
+      case 'ledge.thread.item': {
+        const items = [...state.ledgeThread]; const index = items.findIndex(i => i.id === m.item.id);
+        if (index < 0) items.push(m.item); else items[index] = m.item;
+        set({ ledgeThread: items }); return;
+      }
+      case 'ledge.thread.history': {
+        const ids = new Set(state.ledgeThread.map(i => i.id));
+        set({ ledgeThread: [...m.items.filter(i => !ids.has(i.id)), ...state.ledgeThread], ledgeBefore: m.before }); return;
       }
       case 'attachment.stored': case 'attachment.data': case 'attachment.error':
         images.handle(m);
@@ -545,12 +572,13 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     lastThread = null;
     threadAsks = [];
     historyAsked = false;
+    ledgeHistoryAsked = false;
     chatState = emptyChat();
     settle(new Error('lost'));
     previewsDirty = false;
     clearLastState(storage);
     clearOps(storage);
-    set({ sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, fresh: false, syncedAt: null, ops: {}, checklists: new Map(), pc: null, models: {}, modelFailures: {} });
+    set({ openrig: false, rigs: new Map(), escalations: new Map(), decisionsToday: [], ledgeThread: [], ledgeBefore: undefined, rigExchanges: new Map(), sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, fresh: false, syncedAt: null, ops: {}, checklists: new Map(), pc: null, models: {}, modelFailures: {} });
     modelAsks.clear();
     stopPcWatch();
   }
@@ -568,6 +596,8 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
   if (wasReady) onReady();
 
   const store: MobileStore = {
+    requestExchanges(key) { if (ready() && state.openrig) send({ type: 'rig.exchanges.request', key }); },
+    loadOlderThread() { if (ready() && state.openrig) send({ type: 'ledge.thread.request', ...(state.ledgeBefore ? { before: state.ledgeBefore } : {}) }); },
     getState: () => state,
     subscribe(fn) { listeners.add(fn); return () => { listeners.delete(fn); }; },
 
