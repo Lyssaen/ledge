@@ -185,3 +185,5 @@ Ce qui est mesuré :
 - La priorité des tâches ne change pas l'ordre de travail des agents.
 
 **Compatibilité réseau à noter (hors périmètre).** `transport/ssh.ts` coupe tout le lien vers une machine distante dès qu'une trame est illisible. C'est ce qui fait boucler la reconnexion entre le snapshot et legion en 0.31 (message `teams`). Remettre les équipes supprime cette cause précise, mais la fragilité reste.
+
+**Décision du 2026-11-01 (Guillaume) : la tolérance du pont SSH est incluse dans le lot A.** Après le premier `snapshot`, `transport/ssh.ts` saute (et journalise une fois par type) une trame qu'il ne comprend pas au lieu de couper le lien, et le client du fleet ne remet son délai de reconnexion à zéro qu'après 10 s de lien stable.

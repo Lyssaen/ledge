@@ -2,6 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { WebSocket } from 'ws';
 import { parseClientMessage, parseServerMessage, SshAliasSchema } from '@ledge/protocol';
 import { MAX_FRAME, readFrames } from './frames.js';
+import { log } from '../log.js';
 
 /** Only the Ledge application command is exposed. OpenSSH resolves identities and ProxyCommand from user config. */
 export function sshArgs(alias: string): string[] {
@@ -25,15 +26,28 @@ export function serveSsh(ws: WebSocket, alias: string, opts: { spawn?: (args: st
   child.on('error', e => stop(`SSH: ${e.message}`));
   child.on('close', code => stop(`SSH connection closed (${code ?? 'signal'}). ${stderr.trim() || 'Check the alias and remote Ledge installation.'}`));
   child.stdin.on('error', e => stop(`SSH: ${e.message}`));
+  // Once the remote has started the protocol, a frame this Ledge does not understand (a newer or an older daemon's) is skipped and said once per
+  // type: the link stays up. Before the snapshot, and for a malformed snapshot, it still stops the link.
+  const skippedTypes = new Set<string>();
+  const skip = (type: string) => {
+    if (skippedTypes.has(type)) return;
+    skippedTypes.add(type); log(`ssh ${alias}: skipped frame type ${type} (not understood by this Ledge)`);
+  };
   off = readFrames(child.stdout, raw => {
-    const msg = parseServerMessage(raw);
+    let msg: ReturnType<typeof parseServerMessage>;
+    try { msg = parseServerMessage(raw); }
+    catch (e) {
+      const type = typeof (raw as { type?: unknown } | null)?.type === 'string' ? (raw as { type: string }).type : '?';
+      if (!ready || type === 'snapshot') throw e;
+      return skip(type);
+    }
     // The remote daemon's machine list, projects and island settings are meaningless to the front (spec §5.2, build spec §5), and an older peer rejects the unknown type (spec §14).
     if (msg.type === 'machines' || msg.type === 'projects' || msg.type === 'island') return;
     if (!ready && msg.type !== 'snapshot') throw new Error('Remote command did not start the Ledge protocol');
     if (msg.type === 'snapshot') { ready = true; clearTimeout(timer); }
     if (ws.bufferedAmount > MAX_FRAME) throw new Error('Ledge connection is overloaded');
     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg.type === 'snapshot' ? { ...msg, sshAlias: alias } : msg));
-  }, e => stop(`Remote Ledge: ${e.message}`));
+  }, e => stop(`Remote Ledge: ${e.message}`), { skipUnparsable: () => { if (!ready) return false; skip('?'); return true; } });
   ws.on('message', data => {
     if (stopped) return;
     try {

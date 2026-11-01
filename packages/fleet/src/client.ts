@@ -2,6 +2,9 @@ import { parseServerMessage, type ClientMessage, type ServerMessage } from '@led
 import type { Fleet } from './machines';
 import { DAEMON_PROTOCOL_PREFIX, type TokenSource } from './token';
 
+/** A link must stay up this long after its snapshot before the reconnect backoff starts over: one that drops right after it backs off, it does not loop. */
+export const STABLE_LINK_MS = 10_000;
+
 export type DaemonStatus = 'connecting' | 'open' | 'unreachable';
 export interface DaemonClient {
   fleet?: Fleet;
@@ -20,6 +23,8 @@ export function createDaemonClient(opts: { url: string; token?: TokenSource; Web
   let failed = false;
   /** Bumped by each open() and close(): a token read answers only the attempt that asked for it. */
   let attempt = 0;
+  let stable: ReturnType<typeof setTimeout> | null = null;
+  const unstable = () => { if (stable) { clearTimeout(stable); stable = null; } };
   const msgFns = new Set<(m: ServerMessage) => void>(), statusFns = new Set<(s: DaemonStatus) => void>();
   const setStatus = (s: DaemonStatus) => { if (s !== status) { status = s; statusFns.forEach(f => f(s)); } };
   const schedule = () => { if (closed) return; timer = setTimeout(open, backoff); backoff = Math.min(max, backoff * 2); };
@@ -40,14 +45,14 @@ export function createDaemonClient(opts: { url: string; token?: TokenSource; Web
     // Only a socket that never opened casts doubt on the cached token; a peer that opened and then dropped (remote offline) keeps it.
     let opened = false;
     sock.onopen = () => { if (ws !== sock) return; opened = true; setStatus('open'); };
-    sock.onmessage = ev => { if (ws !== sock) return; try { const m = parseServerMessage(JSON.parse(String(ev.data))); if (m.type === 'snapshot') { backoff = min; failed = false; } msgFns.forEach(f => f(m)); } catch { /* ignore malformed */ } };
+    sock.onmessage = ev => { if (ws !== sock) return; try { const m = parseServerMessage(JSON.parse(String(ev.data))); if (m.type === 'snapshot') { failed = false; unstable(); stable = setTimeout(() => { stable = null; if (ws === sock) backoff = min; }, STABLE_LINK_MS); } msgFns.forEach(f => f(m)); } catch { /* ignore malformed */ } };
     sock.onerror = () => { /* onclose follows */ };
-    sock.onclose = () => { if (ws !== sock) return; ws = null; if (!opened) failed = true; setStatus('unreachable'); schedule(); };
+    sock.onclose = () => { if (ws !== sock) return; unstable(); ws = null; if (!opened) failed = true; setStatus('unreachable'); schedule(); };
   }
   return {
     // An explicit connect (a « Reconnect ») says « connecting » at once, even after a drop: the automatic retries stay « unreachable ».
     connect: () => { closed = false; if (timer) { clearTimeout(timer); timer = null; } const old = ws; ws = null; old?.close(); setStatus('connecting'); open(); },
-    close: () => { closed = true; attempt++; if (timer) clearTimeout(timer); const old = ws; ws = null; old?.close(); setStatus('connecting'); },
+    close: () => { closed = true; attempt++; unstable(); if (timer) clearTimeout(timer); const old = ws; ws = null; old?.close(); setStatus('connecting'); },
     send: m => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m)); },
     status: () => status,
     onMessage: f => { msgFns.add(f); return () => msgFns.delete(f); },

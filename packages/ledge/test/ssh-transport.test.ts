@@ -1,6 +1,7 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_ISLAND_PREFS } from '@ledge/protocol';
 import { PassThrough } from 'node:stream';
+import { readFileSync } from 'node:fs';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { once } from 'node:events';
 import { WebSocket, WebSocketServer } from 'ws';
@@ -11,6 +12,10 @@ import { startServer } from '../src/daemon/server.js';
 import { Store } from '../src/daemon/store.js';
 import type { Tmux } from '../src/tmux.js';
 import { authHeaders, until } from './helpers.js';
+
+// The daemon's log lines, read here (a skipped frame is said once per type).
+const logged = vi.hoisted(() => [] as string[]);
+vi.mock('../src/log.js', () => ({ log: (line: string) => { logged.push(line); } }));
 
 const cleanup: (() => void | Promise<void>)[] = [];
 afterEach(async () => { for (const fn of cleanup.splice(0).reverse()) await fn(); });
@@ -123,6 +128,50 @@ describe('SSH application transport', () => {
     await new Promise(r => setTimeout(r, 150));
     expect(got.some(m => m.type === 'error')).toBe(false);
     expect(ws.readyState).toBe(WebSocket.OPEN);
+  });
+  /** A remote whose stdout is `lines` (raw NDJSON lines), kept open; what the front got, and its socket. */
+  async function remote(lines: string[]) {
+    const { wss, port } = await wsServer(); let child!: ChildProcessWithoutNullStreams;
+    wss.on('connection', ws => serveSsh(ws, 'server', { spawn: () => {
+      child = spawn(process.execPath, ['--input-type=module', '-e', `for (const l of ${JSON.stringify(lines)}) console.log(l); setInterval(()=>{},1000);`]);
+      cleanup.push(() => { child.kill('SIGKILL'); }); return child;
+    } }));
+    const ws = new WebSocket(`ws://127.0.0.1:${port}`), got: { type: string; message?: string }[] = [], closed: number[] = [];
+    ws.on('message', b => got.push(JSON.parse(String(b)))); ws.on('close', code => closed.push(code)); cleanup.push(() => ws.terminate());
+    return { ws, got, closed };
+  }
+  const snap = JSON.stringify({ type: 'snapshot', sessions: [] });
+  const fixture = (name: string) => JSON.stringify(JSON.parse(readFileSync(new URL(`../../protocol/test/fixtures/ledge-0.32/${name}.json`, import.meta.url), 'utf8')));
+
+  it('after the snapshot, a frame of an unknown type is skipped, said once, and the next valid frame is forwarded', async () => {
+    logged.length = 0;
+    const { ws, got } = await remote([snap, JSON.stringify({ type: 'future.thing', x: 1 }), JSON.stringify({ type: 'future.thing', x: 2 }), fixture('teams')]);
+    await until(() => got.length >= 2);
+    await new Promise(r => setTimeout(r, 150));
+    expect(got.map(m => m.type)).toEqual(['snapshot', 'teams']);
+    expect(ws.readyState).toBe(WebSocket.OPEN);
+    expect(logged.filter(l => l.includes('skipped frame type future.thing'))).toEqual(['ssh server: skipped frame type future.thing (not understood by this Ledge)']);
+  });
+  it('after the snapshot, a frame with no readable type or no JSON at all is skipped under « ? », once', async () => {
+    logged.length = 0;
+    const { ws, got } = await remote([snap, '{"x":1}', 'not json', '42', fixture('teams')]);
+    await until(() => got.length >= 2);
+    await new Promise(r => setTimeout(r, 150));
+    expect(got.map(m => m.type)).toEqual(['snapshot', 'teams']);
+    expect(ws.readyState).toBe(WebSocket.OPEN);
+    expect(logged.filter(l => l.includes('skipped frame type ?'))).toHaveLength(1);
+  });
+  it('a malformed snapshot after the first one still stops the link', async () => {
+    const { got, closed } = await remote([snap, JSON.stringify({ type: 'snapshot', sessions: 'nope' })]);
+    await until(() => closed.length > 0);
+    expect(closed[0]).toBe(1011);
+    expect(got.map(m => m.type)).toEqual(['snapshot', 'error']);
+  });
+  it('before the snapshot, a frame that does not parse still stops the link with an error frame', async () => {
+    const { got, closed } = await remote([JSON.stringify({ type: 'future.thing' }), snap]);
+    await until(() => closed.length > 0);
+    expect(closed[0]).toBe(1011);
+    expect(got.map(m => m.type)).toEqual(['error']);
   });
   it('reports a missing remote bridge without marking the host ready', async () => {
     const { wss, port } = await wsServer();
