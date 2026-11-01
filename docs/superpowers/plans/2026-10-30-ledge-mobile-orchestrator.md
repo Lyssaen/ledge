@@ -286,4 +286,8 @@ If lots 2 and 7 did not add them, Task 1 adds them (agreed with Plume, 2026-10-3
 
 ## Task 0 result
 
-_To fill at execution time._
+- 2026-11-01 : user directed execution from `ledge-open-rig` at `2c58b817`; lots 2, 4, 5 and 7 are ancestors. The earlier `origin/main` gate is superseded by that explicit direction.
+- Contract names are present. `SeatState` adds `attention`; escalation answer delivery adds `queued` / `sent`; decision category can be absent. Preserve those rather than treating a queued answer as applied. Remote brain grace is a known failing test; do not hide it.
+- `PhoneSessionSchema` currently excludes `rig` and `brain`. `SessionRigSchema` includes `machine`, so the phone must receive a separate safe projection, never pick the desktop object unchanged.
+- Daemon broadcast forwards to the gateway in `server.ts` (`broadcast`); aggregate emits rigs/escalations, `thread.onItem` emits thread items, and memory emits decisions. `handle` owns local actions and `dispatch` routes rig commands via the fleet router. `gateway.ts` subscribes via `mobile.onMessage`, projects snapshots in `snapshot`, and its `forward` accepts daemon broadcasts.
+- Branch/worktree: `feat/openrig-lot-9` / `.worktrees/openrig-lot-9`. Do not deploy as part of this lot.
