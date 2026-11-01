@@ -348,6 +348,34 @@ export function LedgeConversation({ width, escalation, keys: keysRef, onBar, hea
 function CardBox({ card, turn, focused, busy }: { card: Exclude<Card, { kind: 'action' }>; turn: ChatTurn; focused: boolean; busy: boolean }) {
   const { t, g } = useTui();
   const color = focused ? C.coral : C.line;
+  if (card.kind === 'team') {
+    const team = turn.team!;
+    const auto = team.seats.filter(x => x.autonomy === 'auto').map(x => `@${x.role}`);
+    return (
+      <TitledBox title={t.ask.teamCard(team.name)} flexShrink={0} color={color} titleColor={C.coral}>
+        <Text wrap="truncate"><Text color={C.dim}>{t.ask.folder.padEnd(13)}</Text><Text color={C.faint}>{team.cwd}</Text></Text>
+        <Text wrap="truncate"><Text color={C.dim}>{t.ask.table.padEnd(13)}</Text>{g.team} {t.ask.newTable(team.projectName ?? team.project)}</Text>
+        {team.seats.map(x => (
+          <Text key={x.role} wrap="truncate"><Text color={C.dim}>{''.padEnd(13)}</Text><Text color={C.violet}>@{x.role}</Text> {x.label} <Text color={C.faint}>{[TOOL_NAME[x.tool], x.model, x.effort].filter(Boolean).join(' · ')}</Text> <Text color={x.autonomy === 'auto' ? C.yellow : C.faint}>{t.ask.autonomy[x.autonomy ?? 'ask']}</Text></Text>
+        ))}
+        {auto.length ? <Text color={C.yellow} wrap="truncate">{t.ask.autoWarning(auto.join(', '))}</Text> : null}
+        {team.error ? <Text color={C.red} wrap="truncate">{team.error}</Text> : null}
+        <Box columnGap={2}><Button label={busy ? `${g.live} ${t.ask.launchTeam}` : t.ask.launchTeam} k="↵" primary={focused} /><Text color={C.faint}>{t.ask.nothingWithoutYou}</Text></Box>
+      </TitledBox>
+    );
+  }
+  if (card.kind === 'task') {
+    const tasks = turn.tasks!;
+    const waits = !!turn.team && !turn.team.teamId;
+    return (
+      <TitledBox title={t.ask.taskCard} flexShrink={0} color={color} titleColor={C.violet}>
+        {card.rows.map(r => { const c = tasks[r]!; return (
+          <Text key={r} wrap="truncate"><Text color={C.fg}>{c.title}</Text> <Text color={C.faint}>{c.toName ?? c.to}</Text>{c.error ? <Text color={C.red}>  {c.error}</Text> : null}</Text>
+        ); })}
+        <Box columnGap={2}><Button label={busy ? `${g.live} ${t.ask.give}` : t.ask.give} k="↵" primary={focused && !waits} />{waits ? <Text color={C.faint}>{t.ask.waitTeam}</Text> : null}</Box>
+      </TitledBox>
+    );
+  }
   if (card.kind === 'launch') {
     const rows = proposalRows(turn);
     return (

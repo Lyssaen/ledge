@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
-import { daemonStore, useDaemon, type DaemonClient } from '@ledge/fleet';
+import { daemonStore, useDaemon, useTeams, type DaemonClient } from '@ledge/fleet';
 import { ChatView } from '@ledge/ui/chat/ChatView';
 import { ChatCopyProvider } from '@ledge/ui/chat/copy';
 import { useActionCards } from '@ledge/ui/chat/useActionCards';
@@ -15,6 +15,8 @@ import { useAgentHighlight } from './useAgentHighlight';
 import { useChatCards } from './useChatCards';
 import { CardModelPick } from './CardModelPick';
 import { useProjectReview } from './projectReview';
+import { useTeamCards } from './useTeamCards';
+import { teamProject } from '../atelier/layout';
 
 export interface ChatPanelProps {
   client: DaemonClient; view: FleetView;
@@ -33,13 +35,15 @@ export interface ChatPanelProps {
   onProposal(pid: string): void;
   /** « Lancer ce rig » on a card Ledge's brain posted (lot 7): the app opens the launch window prefilled. */
   onRigLaunch?(card: ChatRigLaunch): void;
+  /** A team card's « Ouvrir la table »: the atelier on the team's room (its project id, null when it has none). */
+  onOpenTeam?(project: string | null): void;
 }
 
 /** Desktop's Ledge chat, docked on the right (observatory.tsx, `ledge-chat-panel`): the island's ChatView in its docked mode, on
  *  the real fleet. Questions go to the daemon with the default agent (Settings › General); nothing is sent while the local daemon is offline. A name hovered or
  *  focused lights its agent; a session card launches in one click and seats the agent (`onLaunched`); a relay card sends as in the island; a project card's « Review the proposal »
  *  opens the project editor prefilled (nothing is created before its button). */
-export function ChatPanel({ client, view, paused, focus, onClose, onOpenSession, onLaunched, onTerminal, projects, notify, onProposal, onRigLaunch }: ChatPanelProps): JSX.Element {
+export function ChatPanel({ client, view, paused, focus, onClose, onOpenSession, onLaunched, onTerminal, projects, notify, onProposal, onRigLaunch, onOpenTeam }: ChatPanelProps): JSX.Element {
   const { t } = useI18n();
   const copy = useMemo(() => chatCopy(t), [t]);
   const theme = useTheme();
@@ -56,6 +60,9 @@ export function ChatPanel({ client, view, paused, focus, onClose, onOpenSession,
   const project = useProjectReview({ chat, projects, machines: view.machines, notify, onProposal });
   const onMessage = useCallback((fn: Parameters<DaemonClient['onMessage']>[0]) => client.onMessage(fn), [client]);
   const actionCards = useActionCards({ send, chat, errors: view.errors, turnReady, onMessage });
+  const teamCards = useTeamCards({ send, onMessage, chat });
+  const teams = useTeams(client);
+  const openTeam = (id: string) => { const team = teams?.find(x => x.id === id); onOpenTeam?.(team ? teamProject(team, projects) : null); };
   const [hovered, setHovered] = useState<string | null>(null);
   useAgentHighlight(hovered);
   // Every way in (/, the sidebar, the top bar, the footer, Ledge's desk) mounts the panel: the field takes the focus; asked for
@@ -95,7 +102,8 @@ export function ChatPanel({ client, view, paused, focus, onClose, onOpenSession,
             renderModel={(qid, agent, busy) => <CardModelPick client={client} machine={turnMachine(qid)} tool={agent} pick={cards.pick(qid)} disabled={busy} onPick={next => cards.setPick(qid, next)} />}
             relayingQid={cards.relayingQid} onRelay={cards.relay} onRelayCancel={cards.cancelRelay}
             onProject={project.review} projectNamed={project.projectNamed} onRigLaunch={onRigLaunch}
-            clock={iso => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            onLaunchTeam={teamCards.launchTeam} onSaveTeam={teamCards.saveTeam} onOpenTeam={openTeam} onGiveTask={teamCards.giveTask}
+            teamBusy={teamCards.teamBusy} taskBusy={teamCards.taskBusy} clock={iso => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             onAgentHover={setHovered} inputRef={inputRef} attach={{ items: images.items, onFiles: images.add, onRemove: images.remove, ready: images.ready, error: images.error }}
             theme={theme} frozen={offline !== null} reducedMotion={paused || reduced} />
         </ChatCopyProvider>

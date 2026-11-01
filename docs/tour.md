@@ -6,7 +6,9 @@ All captures below are the real app, in French (its default language, English is
 
 ## Ledge Desktop
 
-Ledge Desktop is the main window. Its atelier gives each project a table: the agents sit around it, their topics lie on it as sheets, their subagents stand at the ends. The sidebar holds Ask Ledge, « À toi » (every request waiting, oldest first, answered in place) and the project tree by branch. When an agent writes to another, a bubble opens over the sender and a dotted line runs to the receiver's seat.
+Ledge Desktop is the main window. It opens on Ledge's home view, where you talk to Ledge, the operator: four tabs, « Conversation » (the chat at full width, with « Le point »: what waits for you, the teams, what Ledge handed out), « Équipes » (live teams, templates and roles), « Tâches » (every task, and the decisions waiting for you) and « Historique » (today's conversations). `/` comes back to it; « Retour à l'atelier » or Échap leads to the atelier.
+
+The atelier gives each project a table: the agents sit around it, their topics lie on it as sheets, their subagents stand at the ends. The sidebar holds « Accueil », « À toi » (every request waiting, oldest first, answered in place) and the project tree by branch. When an agent writes to another, a bubble opens over the sender and a dotted line runs to the receiver's seat.
 
 <p>
   <img src="screens/desktop-atelier-dark.png" alt="The atelier: Ledge and Website tables, eight agents, Otto writing to Nova" width="720">
@@ -24,7 +26,7 @@ A session opens on its thread: each exchange folds into one line, the current on
 
 <img src="screens/desktop-launch-dark.png" alt="New session: instruction, Claude Code, default model, project Ledge, machine Local, repository ledge" width="720">
 
-`/` asks Ledge. The chat docks on the right while the atelier stays in view; hovering a bot named in the answer lights its seat, and a proposal comes as a card you launch with one click.
+`Ctrl+/` asks Ledge from wherever you are: the chat docks on the right while the atelier stays in view; hovering a bot named in the answer lights its seat, and a proposal comes as a card you launch with one click.
 
 <img src="screens/desktop-chat-dark.png" alt="Ask Ledge: Otto and Luna are waiting, a card proposes a session to fix the tests" width="720">
 
@@ -41,7 +43,7 @@ Ledge's own mascot sits at the left of the island, grey with a peach antenna lig
 
 **The island lives.** A working bot hops every 3.6 to 4.4 s, 2 px high in the island, so you can tell a bot that works from one that waits without opening anything. Under reduced motion the antenna light pulses instead.
 
-**Discreet under a window.** When a maximised or full-screen window fills the island's screen, the island shrinks to a 10 px strip with one dot per session in the colour of its state, so the window's title and tabs stay clear. Resting the cursor on the strip, or on the band along the top edge around it, brings the island back; so do `Ctrl+Alt+L`, an ask and a finished turn. It becomes a strip again half a second after folding. Settings › Display › "Mode discret sous une fenêtre" turns this off; the island then stays compact.
+**Discreet under a window.** When a maximised or full-screen window fills the island's screen, the island shrinks to a 10 px strip with one dot per session in the colour of its state, so the window's title and tabs stay clear. Resting the cursor on the strip, or on the band along the top edge around it, brings the island back; so do `Ctrl+Alt+L`, an ask and a finished turn. It becomes a strip again half a second after folding. Ledge Desktop's Settings › Encoche › « Mode discret sous une fenêtre » turns this off; the island then stays compact.
 
 ## The bubble
 
@@ -52,7 +54,7 @@ When an agent asks something, the island itself stretches to 440 px for a few se
   <img src="screens/bubble-light.png" alt="The same bubble in light theme" width="364">
 </p>
 
-**Finished.** When a bot ends its turn, it grows in the island, which stretches the same way in green to say "Otto finished · 2m 40s of work · harness-assistant" for 6 s, with OK and Open. A request always comes before a notice. Settings › "When a bot finishes" chooses bubble, sound, both or the island only.
+**Finished.** When a bot ends its turn, it grows in the island, which stretches the same way in green to say "Otto finished · 2m 40s of work · harness-assistant" for 6 s, with OK and Open. A request always comes before a notice. Settings › Notifications › « Quand un agent a terminé » chooses bubble and sound, bubble, sound, or the session's state only.
 
 ## The list
 
@@ -69,17 +71,11 @@ It scales to a busy day: twelve sessions scroll inside the panel, with the count
 
 ## Asking Ledge
 
-Above the sessions, matching the notch's mascot above the bots, the "Demander à Ledge" field takes a question about your sessions, for example "Où en sont les autres ?". `/` focuses it from the list, `Enter` sends it. `Enter` on the empty field, or a click on the field's mascot, opens today's conversation without asking. The chat view opens: first the steps (the terminals, replies and repositories Ledge reads), then the answer writing itself live, with its sources underneath and the bots' names as links that open their session. A second question resumes the same conversation, one per day. `+` in the chat header starts a new one. Settings › Display › "Harnais par défaut" chooses which tool answers (Claude Code, Codex or Cursor Agent); new sessions open on the same choice. Ledge only reads: it never touches anything and never sends an instruction to a session.
+Above the sessions, matching the notch's mascot above the bots, the "Demander à Ledge" field takes a question about your sessions, for example "Où en sont les autres ?". `/` focuses it from the list, `Enter` sends it. `Enter` on the empty field, or a click on the field's mascot, opens today's conversation without asking. The chat view opens: first the steps (the terminals, replies and repositories Ledge reads), then the answer writing itself live, with its sources underneath and the bots' names as links that open their session. A second question resumes the same conversation, one per day. `+` in the chat header starts a new one. Ledge Desktop's Settings › Général › « Agent par défaut » chooses which tool answers (Claude Code, Codex, Cursor Agent or OMP); the sessions Ledge proposes open on the same choice. Ledge only reads: it never touches anything and never sends an instruction to a session.
 
 ## Starting a session from Ledge
 
-The `+` in the header (or the button of an empty list) opens "Nouvelle session": the folder (typed, or one of the recent ones, with who already works there), the tool, the companion's name (a die picks another), an optional first instruction, and two options: resume the folder's last conversation, open the terminal tab. The folder button next to the field browses the WSL folders: a breadcrumb back up, the subfolders one level at a time, "Nouveau dossier" to make one in place (a new project), "Choisir ce dossier" to fill the field; what was typed in the rest of the form stays. Entrée starts it. The session appears in the list at once with the Démarrage badge, a line says so for a few seconds, and the terminal tab is one click away when it was not opened straight away.
-
-<p>
-  <img src="screens/launch-dark.png" alt="New session: folder with recents, tool, companion, first instruction, options" width="408">
-  <img src="screens/launch-browse-dark.png" alt="Choosing a folder: breadcrumb, subfolders, a new folder being named" width="408">
-  <img src="screens/launch-empty-dark.png" alt="The empty list: nobody at work, a button to start a companion" width="408">
-</p>
+The island has no form of its own: `Ctrl+Alt+N`, from anywhere, opens « Nouvelle session » in Ledge Desktop (see above): the instruction, the agent with its model and effort, the project, the machine and the folders, optionally a role. The session appears in the island at once with the Démarrage badge.
 
 ## Answering from Ledge
 
@@ -124,7 +120,7 @@ A session started with plain `claude`, without the launcher, is still visible th
 
 ## Keyboard first
 
-`Ctrl+Alt+L` opens the list on the oldest ask. `J` and `K` move, `Alt ←` and `Alt →` go to the previous or next session (from an open session too), `Y` and `N` decide, digits choose a question's option, `Enter` opens, `Escape` goes back then folds. `Ctrl+Alt+N` opens the new-session form from anywhere. The first three keyboard opens show a coachmark; `?` opens the full list of shortcuts at any time.
+`Ctrl+Alt+L` opens the list on the oldest ask. `J` and `K` move, `Alt ←` and `Alt →` go to the previous or next session (from an open session too), `Y` and `N` decide, digits choose a question's option, `Enter` opens, `Escape` goes back then folds. `Ctrl+Alt+N` opens Ledge Desktop's new-session form from anywhere. The first three keyboard opens show a coachmark; `?` opens the full list of shortcuts at any time.
 
 <p>
   <img src="screens/keyboard-dark.png" alt="The list opened from the keyboard: inline Autoriser and Refuser, the coachmark" width="408">
@@ -164,9 +160,7 @@ A session started with plain `claude`, without the launcher, is still visible th
 
 ## Settings
 
-Four tabs, the last one opened remembered. Display: language, the default harness (new sessions and the Ledge chat), the screen the island sits on, "Position de l'île" (Centre, À gauche or À droite: the island's axis moves to a quarter of the screen width, to keep window titles and browser tabs clear), "Mode discret sous une fenêtre" (a switch, on by default: the strip under a maximised window), the size of the island and of the windows (auto or 100 to 200 percent), the theme (`Ctrl+Alt+T`) and reduced motion. Notifications: do-not-disturb and when a bot finishes (bubble and sound, bubble, sound, or island only). Sounds: everything below. About: versions and updates (see Updating).
-
-<img src="screens/settings-dark.png" alt="Settings, Display tab: language, screen, island position, discreet mode, island size, window size, theme, reduced motion" width="408">
+The island has no settings of its own: they live in Ledge Desktop's Settings (`Ctrl+,`), whose sections are Général, Apparence, Encoche, Notifications, Sons, Machines, Accès mobile, Projets, Raccourcis clavier and À propos. Encoche holds what concerns the island: whether it shows, the screen it sits on, « Position de l'encoche » (À gauche, Centre or À droite), « Mode discret sous une fenêtre » (on by default: the strip under a maximised window), the size of the island and of its windows, answering from the island, the bubble when an agent finishes, and the shortcut that opens it. Apparence has the theme (Galet or Signal), the interface scale and reduced motion; Notifications, do-not-disturb and what happens when an agent finishes.
 
 **Sounds.** Eight short synthesised cues, one family: asks rise or knock, results fall, your own decisions tick. Settings › Sounds has the switch, the volume with a Test button, one checkbox per category, and "Only when the terminal is behind", which keeps Ledge quiet while Windows Terminal is the front window. Do not disturb silences everything.
 

@@ -9,7 +9,7 @@ import { SESSION_KEY_VAR } from '../auth.js';
 
 export const CLOSE_USAGE = 'ledge close <session>… [--json]                 fermer proprement des sessions (leur conversation reste reprenable)';
 export const DAEMON_DOWN = 'daemon not running (start a session with `ledge claude`, or run `ledge daemon`)';
-/** A deadline, not a delay: a clean close waits for the prompt, then for the exit. */
+/** A deadline, not a delay: a clean close waits for the prompt, then for the exit; a resumed team starts its seats in turn. */
 export const RUN_MS = 60_000;
 
 export type ActionResult = Omit<Extract<ServerMessage, { type: 'action.result' }>, 'type' | 'rid'>;

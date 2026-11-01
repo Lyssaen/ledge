@@ -129,6 +129,8 @@ export async function startTui(o: { sessions?: Session[]; projects?: Projects; l
   const ui = render(<App client={client} lang={o.lang ?? 'fr'} saveLang={l => { (o.save ?? (x => saved.push(x)))(l); }} theme={o.theme} background={o.background} saveTheme={x => { themes.push(x); }} notify="off" glyphs={glyphsFor({})} env={o.env ?? {}} run={o.run} readImage={o.readImage ?? (async () => null)} openFile={o.openFile ?? (async () => {})} />);
   await until(() => daemonStore.getState().sessions.length > 0);
   await until(() => (ui.lastFrame() ?? '').includes('Otto') || (o.sessions !== undefined && o.sessions.length === 0));
+  // The projects come after the snapshot: a screen that reads them once at its opening (« Équipes ») finds them.
+  await until(() => !!client.fleet?.projects());
   // The rig book is reset by each snapshot: OpenRig's messages come after it, as the daemon sends them.
   if (o.openrig) {
     const rigs = o.openrig.rigs ?? mockupRigs();

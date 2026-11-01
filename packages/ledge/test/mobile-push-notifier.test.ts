@@ -86,6 +86,13 @@ describe('push notifier', () => {
     expect(t.sent).toHaveLength(1);
   });
 
+  it('a decision put to the user: to every hidden device, urgency high, its task as topic', async () => {
+    const t = setup();
+    await t.n.notify(payload('decision', { title: 'Otto attend votre décision', url: '/#/chat', tag: 't1a2b3c' }), undefined);
+    expect(t.sent).toHaveLength(1);
+    expect(t.sent[0]).toMatchObject({ urgency: 'high', topic: 't1a2b3c' });
+  });
+
   it('requests are not held back by the finished delay', async () => {
     const t = setup();
     await t.n.notify(payload('finished'), 'api');

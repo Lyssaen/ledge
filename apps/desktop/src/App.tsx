@@ -39,6 +39,8 @@ import { openWhatsNew, useWhatsNew } from './update/whatsNewView';
 import { WhatsNew } from './update/WhatsNew';
 import { useLaunch } from './launch/useLaunch';
 import { useRelief } from './session/useRelief';
+import { TeamLaunch } from './launch/TeamLaunch';
+import { useTeamsApi } from './teams/useTeamsApi';
 import { Atelier } from './atelier/Atelier';
 import { AtelierAway } from './atelier/Away';
 import { atelierOpen, attachAtelier, canDetach, detachAtelier, onAtelier, showMainWindow } from './atelier/detach';
@@ -117,6 +119,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const projects = useProjects(fleetClient);
   const relief = useRelief(fleetClient);
   const asks = useAsks(fleetClient);
+  const teams = useTeamsApi(fleetClient);
   // OpenRig (lot 3): the sidebar's Rigs section and Ledge's line.
   const rigs = useRigs(fleetClient);
   const escalations = useEscalations(fleetClient);
@@ -143,7 +146,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const watching = useRef<() => string | null>(() => null);
   // The brain session is in no list, but its asks (folder trust, a permission) reach the user: alerts, « À toi », its page (lot 7).
   const attend = useMemo(() => attending(fleetView), [fleetView.sessions, fleetView.brains]); // eslint-disable-line react-hooks/exhaustive-deps
-  const alerts = useAlerts({ sessions: attend, machines, status, daemonUpdating: daemonUpdates.updating.has('local') }, { watching: () => watching.current() });
+  const alerts = useAlerts({ sessions: attend, machines, status, daemonUpdating: daemonUpdates.updating.has('local'), tasks: teams.tasks }, { watching: () => watching.current() });
   // A device asking to be linked: the dialog below opens on any screen, the notification only while Desktop is behind.
   usePairingAlerts(mobile);
   // Decided here, at render: the dialog and the `inert` below change in one commit, so the Modal's focus return is not refused.
@@ -312,35 +315,46 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           onTerminal={sessionMenu.terminal} revealArchives={revealArchives} revealCurrent={revealCurrent}
           relief={relief} asks={asks} onAnswerAsk={(a, text) => fleet.answerAsk(a.machine, a.id, text)}
           onAnswerEscalation={(id, answers) => { answerEscalation(fleetClient, id, answers); }}
-          rigs={rigs} escalations={escalations} openrig={openrig} />
+          rigs={rigs} escalations={escalations} openrig={openrig} teams={teams} />
         <section className="workspace">
           {tokenMissing && <DaemonOutdated />}
           <TopBar nav={nav} dispatch={dispatch} session={session} helper={helper} projects={projects} rigs={rigs} projectIdOf={projectIdOf} terminal={sessionPrefs.terminal} onTerminal={toggleTerminal}
-            onRevealArchives={() => setRevealArchives(n => n + 1)} onDetach={canDetach() && !detached ? detach : undefined}
+            onRevealArchives={() => setRevealArchives(n => n + 1)} onDetach={canDetach() && !detached ? detach : undefined} teamOf={teams.teamOf}
             manage={{ open: sessionMenu.menu?.id === session?.id && sessionMenu.menu !== null, onOpen: (at, opener) => session && sessionMenu.open(session.id, at, opener) }} />
           {place.kind === 'settings' ? <SettingsPlace section={place.section} ctx={settings} />
-            : place.kind === 'home' ? <HomePlace label={t.side.ledgeHome} client={fleetClient} view={fleetView} relief={relief} decisions={decisions} waits={waits} tab={place.tab} nav={nav} dispatch={dispatch}
-                paused={nav.paused} focus={nav.chatFocus} projects={projects} onLaunched={chatLaunched} onTerminal={showTerminal} notify={notify} onProposal={openProposal} />
-            : session && place.kind === 'session' ? <SessionPlace client={fleetClient} session={session} nav={nav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify} actions={actions}
+            : place.kind === 'home' ? <HomePlace label={t.side.ledgeHome} client={fleetClient} view={fleetView} relief={relief} teams={teams} decisions={decisions} waits={waits} tab={place.tab} task={place.task} nav={nav} dispatch={dispatch}
+                paused={nav.paused} focus={nav.chatFocus} projects={projects} onLaunched={chatLaunched} onTerminal={showTerminal} notify={notify} onProposal={openProposal}
+                open={place.back?.kind === 'session' ? sessions.find(x => x.id === (place.back as { id: string }).id) : undefined} atelierProject={place.project} />
+            : session && place.kind === 'session' ? <SessionPlace client={fleetClient} session={session} nav={nav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify} actions={actions} teams={teams}
                 prefs={sessionPrefs} setPrefs={setSessionPrefs} onRevealCurrent={() => setRevealCurrent(n => n + 1)} />
             : detached ? <AtelierAway onShow={detach} onAttach={attach} />
             : <Atelier client={fleetClient} nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} rigs={rigs} openrig={openrig} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu}
-                escalations={escalations} exchanges={exchanges}
+                escalations={escalations} exchanges={exchanges} teams={teams} archived={fleetView.archived} notify={notify}
                 onSeatTerminal={(rig, seat) => { void openSeatTerminal(fleetClient, rig, seat, new Map(sessions.map(s => [s.id, s]))).then(ok => { if (!ok) notify(t.session.terminal.openFailed(seat.name)); }); }} />}
           {(onOverview || place.kind === 'home') && <Footer dispatch={dispatch} localDown={localDown} island={island} />}
         </section>
         {nav.chat && (
           <ChatPlace label={t.side.chat} client={fleetClient} view={fleetView} paused={nav.paused} focus={nav.chatFocus} onClose={() => dispatch({ type: 'chat', open: false })}
             onOpenSession={id => dispatch({ type: 'open', id })} onTerminal={showTerminal} onLaunched={chatLaunched}
-            projects={projects} notify={notify} onProposal={openProposal} onRigLaunch={card => dispatch({ type: 'modal', modal: rigLaunchModal(card) })} />
+            projects={projects} notify={notify} onProposal={openProposal} onRigLaunch={card => dispatch({ type: 'modal', modal: rigLaunchModal(card) })}
+            onOpenTeam={room => dispatch({ type: 'home', ...(room ? { project: room } : {}) })} />
         )}
       </div>
       {nav.modal?.kind === 'search' && <SearchPalette sessions={sessions} projectName={projectName} order={order} onOpen={id => dispatch({ type: 'open', id })} onClose={close} />}
       {nav.modal?.kind === 'shortcuts' && <ShortcutsHelp onClose={close} />}
-      {nav.modal?.kind === 'launch' && (
+      {nav.modal?.kind === 'launch' && nav.modal.team && projects?.projects.find(x => x.id === (nav.modal as { project?: string }).project) && (() => {
+        const room = projects.projects.find(x => x.id === (nav.modal as { project?: string }).project)!;
+        return (
+          <Modal title={t.teamLaunch.title(room.name)} wide onClose={close}>
+            <TeamLaunch client={fleetClient} teams={teams} project={room} onCancel={close} initial={nav.modal as { cwd?: string; template?: string; seat?: string }}
+              onLaunched={team => { close(); dispatch({ type: 'home', project: room.id }); notify(t.teamLaunch.launched(team.name, room.name)); }} />
+          </Modal>
+        );
+      })()}
+      {nav.modal?.kind === 'launch' && !nav.modal.team && (
         <Modal title={t.modalTitles.launch} wide onClose={close}>
           <LaunchPlace client={fleetClient} projects={projects?.projects ?? NO_PROJECTS} machines={machines} sessions={sessions} projectIdOf={projectIdOf}
-            wanted={{ ...(nav.modal.project !== undefined && { project: nav.modal.project }), ...(filter && { filter }), ...(nav.modal.cwd && { cwd: nav.modal.cwd }), ...(nav.modal.machine && { machine: nav.modal.machine }) }}
+            wanted={{ ...(nav.modal.project !== undefined && { project: nav.modal.project }), ...(filter && { filter }), ...(nav.modal.cwd && { cwd: nav.modal.cwd }), ...(nav.modal.machine && { machine: nav.modal.machine }), ...(nav.modal.role && { role: nav.modal.role }) }}
             onEditProject={id => dispatch({ type: 'modal', modal: { kind: 'project', edit: id } })} onNewProject={() => dispatch({ type: 'modal', modal: { kind: 'project' } })}
             launch={launcher.state} onLaunch={(msg, preview) => { launched.current = preview; launcher.launch(msg); }} onCancel={close} paused={nav.paused} />
         </Modal>

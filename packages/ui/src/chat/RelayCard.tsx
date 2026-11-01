@@ -5,6 +5,7 @@ import { Button } from '../ui/Button';
 import { Icon, ICONS } from '../ui/icons';
 import { useChatCopy } from './copy';
 import { toolName } from './format';
+import { relayPill } from './relayPill';
 
 export interface RelayCardProps {
   relay: ChatRelay;
@@ -14,13 +15,7 @@ export interface RelayCardProps {
   onSend: () => void; onCancel: () => void; onOpenSession: (id: string) => void;
 }
 
-type Pill = 'yours' | 'working' | 'waiting' | 'stopped';
-/** The session's state as the card words it: your turn, working, waiting for you, or stopped (gone, exited, error). */
-export function relayPill(s: Session | undefined): Pill {
-  if (!s || s.state === 'exited' || s.state === 'error') return 'stopped';
-  if (s.state === 'waiting_input' || s.state === 'waiting_permission') return 'waiting';
-  return botState(s) === 'idle' ? 'yours' : 'working';
-}
+export { relayPill } from './relayPill';
 
 const muted: React.CSSProperties = { color: 'var(--muted-foreground)' };
 const row: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px' };

@@ -1,4 +1,3 @@
-import { existsSync } from 'node:fs';
 import { writeFile, rm } from 'node:fs/promises';
 import { backendOf } from '@ledge/protocol';
 import { join } from 'node:path';
@@ -20,19 +19,11 @@ import { asksJournal } from './asks.js';
 import { createBridge } from './openrig/bridge.js';
 import { loginShellEnv } from '../shell-path.js';
 import { homedir } from 'node:os';
-
-/** What older Ledge versions left under the Ledge dir: never read, never removed, told once at startup (spec §7). */
-const OLD_TEAM_DATA = ['tasks.json', 'teams-live.json', 'teams', 'roles'] as const;
-export function logIgnoredTeamData(dir: string, log: (line: string) => void): void {
-  for (const name of OLD_TEAM_DATA) {
-    const path = join(dir, name);
-    if (existsSync(path)) log(`ignored ${path}: Ledge teams, roles and tasks were removed (2026-10-30-ledge-openrig-orchestrator-design §7)`);
-  }
-}
+import { tasksJournal } from './tasks.js';
+import { teamsJournal } from './teamsLive.js';
 
 export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket?: string } = {}): Promise<{ stop(): Promise<void>; port: number }> {
   await ensureLedgeDir();
-  logIgnoredTeamData(paths().dir, log);
   const store = new Store();
   const loaded = await store.load();
   const tmux = opts.tmux ?? realTmux(opts.tmuxSocket ?? 'ledge');
@@ -71,6 +62,8 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   catch (e) { log(`mobile access not available: ${(e as Error).message}`); mobileUnavailable = (e as Error).message.slice(0, 200); }
   const mail = fileJournal(paths().mail);
   const askJournal = asksJournal(paths().asks);
+  const taskJournal = tasksJournal(paths().tasks);
+  const teamJournal = teamsJournal(paths().teams);
   // One agent environment for the agents and for `rig` (facts: OpenRig runs under the user's login shell).
   const agentEnv = async () => ({ ...process.env, ...(await loginShellEnv()) });
   // The bridge reads the server's asks and projects only once started, after startServer: lazy adapters over `server`.
@@ -78,7 +71,7 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   const bridge = createBridge({ env: agentEnv, notice: text => say(text), projects: () => server.projects(), home: homedir(), sessionName: id => store.get(id)?.name,
     alive: id => { const s = store.get(id); return !!s && s.state !== 'exited'; },
     asks: { all: () => server.asks.all(), onChange: f => server.asks.onChange(f) } });
-  const server = await startServer({ store, tmux, port: opts.port, daemon, updater, history, mobile, mobileUnavailable, mail, asks: askJournal, attachments, agentEnv, openrig: bridge });
+  const server = await startServer({ store, tmux, port: opts.port, daemon, updater, history, mobile, mobileUnavailable, mail, asks: askJournal, tasks: taskJournal, teams: teamJournal, attachments, agentEnv, openrig: bridge });
   say = text => server.say(text);
   await bridge.start();
   ompLive = () => server.omp.liveCount();
@@ -88,7 +81,7 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   let stopping: Promise<void> | null = null;
   const stop = () => stopping ??= (async () => {
     process.off('SIGTERM', onSignal); process.off('SIGINT', onSignal);
-    poller.stop(); await bridge.stop(); await server.close(); await mobile?.stop(); await store.save(); await history.flush(); await mail.flush(); await askJournal.flush(); await rm(paths().pid, { force: true }); log('daemon stopped');
+    poller.stop(); await bridge.stop(); await server.close(); await mobile?.stop(); await store.save(); await history.flush(); await mail.flush(); await askJournal.flush(); await taskJournal.flush(); await teamJournal.flush(); await rm(paths().pid, { force: true }); log('daemon stopped');
   })();
   const onSignal = () => { stop().finally(() => process.exit(0)); };
   process.once('SIGTERM', onSignal);

@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { MANDATE_CATEGORY_LABEL, type PhoneEscalation, type PhoneSession } from '@ledge/protocol';
+import { MANDATE_CATEGORY_LABEL, type PhoneEscalation, type PhoneSession, type PhoneTask } from '@ledge/protocol';
 import { copy } from '../copy';
 import { ageLabel, filterItems, headline, requestsOf, type Filter, type InboxItem } from '../model/requests';
 import { href } from '../router';
@@ -10,9 +10,14 @@ import { Header, linkView } from '../ui/Header';
 import { Mascot, MobileBot } from '../ui/MobileBot';
 import { OfflineBanner } from '../ui/Notice';
 import { TabBar } from '../ui/TabBar';
+import { Flag, RolePill } from '../ui/teams/RolePill';
+import { closedTasks } from '../model/teams';
+import { navigate } from '../router';
 import { buttonClass, chipClass } from '../ui/Button';
 import { Icon } from '../ui/icons';
+import { Tag } from '../ui/Tag';
 
+type InboxFilter = Filter | 'tasks';
 const FILTERS: Filter[] = ['all', 'permission', 'question'];
 
 export const clock = (iso: string | null): string => iso ? new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '';
@@ -47,41 +52,68 @@ function ViaLedge({ escalation, store, offline }: { escalation: PhoneEscalation;
   </section>;
 }
 
+/** A closed task Ledge gave (ledge home spec §2.4): its owner with its role and team, the start of its result. */
+function TaskRow({ task, now, onSee }: { task: PhoneTask; now: number; onSee: () => void }) {
+  const title = task.state === 'done' ? copy.inbox.finishedTitle(task.title) : task.state === 'refused' ? copy.inbox.refusedTitle(task.title) : copy.inbox.droppedTitle(task.title);
+  return (
+    <article aria-label={title} className="rounded-card border border-line bg-surface p-4">
+      <div className="flex flex-wrap items-center gap-2 text-small">
+        <span className="font-medium">{task.ownerName}</span>{task.ownerRole && <RolePill role={task.ownerRole} />}
+        {task.teamName && <span className="flex items-center gap-1 text-team"><Flag />{task.teamName}</span>}
+        <span className="ml-auto text-meta text-muted">{ageLabel(task.updatedAt, now)}</span>
+      </div>
+      <h3 className="mt-[11px] mb-[3px] text-base leading-[1.4] font-semibold [overflow-wrap:anywhere]">{title}</h3>
+      <p className="line-clamp-2 text-meta [overflow-wrap:anywhere] text-muted">{copy.inbox.ledgeTask} · <code className="font-mono">{task.id}</code>{task.result ? ` · ${task.result}` : ''}</p>
+      <div className="mt-3 flex items-center justify-between gap-2.5 text-meta">
+        <Tag tone={task.state === 'done' ? 'ok' : 'attention'} label={task.state === 'done' ? `✓ ${copy.inbox.taskDone}` : copy.inbox.taskClosed} />
+        <button type="button" onClick={onSee} className="flex min-h-11 items-center gap-1 text-muted">{copy.inbox.seeResult}<Icon name="chevron" />
+        </button>
+      </div>
+    </article>
+  );
+}
+
 /**
  * « À traiter »: the requests waiting on the PC, the oldest first. Offline, the last known ones, said to be so: by
  * `notice` when given (the PC off the relay), else by the banner.
  */
 export function Inbox({ store, onReconnect, notice }: { store: MobileStore; onReconnect?: () => void; notice?: ReactNode }) {
   const state = useMobile(store);
-  const [filter, setFilter] = useState<Filter>('all');
+  const [filter, setFilter] = useState<InboxFilter>('all');
   const [via, setVia] = useState<'all' | 'ledge' | 'sessions'>('all');
   const now = useNow();
   const all = requestsOf([...state.sessions.values()].filter(s => !state.openrig || (!s.rig && !s.brain)));
   const escalations = state.openrig ? [...state.escalations.values()].filter(e => e.state === 'pending' || e.state === 'grace') : [];
-  const list = state.openrig ? (via === 'ledge' ? [] : all) : filterItems(all, filter);
+  const list = state.openrig ? (via === 'ledge' ? [] : all) : filter === 'tasks' ? [] : filterItems(all, filter);
   const shownEscalations = via === 'sessions' ? [] : escalations;
-  const waiting = all.length + escalations.filter(e => e.state === 'pending').length;
+  // The closed tasks Ledge gave (ledge home spec §2.4), not put away: with the sessions' requests (« Sessions »), or under « Tâches ».
+  const closed = closedTasks(state.tasks.values());
+  const tasks = state.openrig ? (via === 'ledge' ? [] : closed) : filter === 'all' || filter === 'tasks' ? closed : [];
+  const filters: InboxFilter[] = state.teams ? [...FILTERS, 'tasks'] : FILTERS;
+  const waiting = all.length + escalations.filter(e => e.state === 'pending').length + closed.length;
   const mixed = [...list.map(item => ({ kind: 'session' as const, item, at: item.since })), ...shownEscalations.map(item => ({ kind: 'escalation' as const, item, at: item.createdAt }))].sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+  const see = (t: PhoneTask) => { void store.seeTask(t.id); navigate({ name: 'thread', sessionId: t.owner }); };
   const offline = !state.fresh;
   // Offline before any state was received: no time to give, so no separator either.
-  const subtitle = offline ? (state.syncedAt ? copy.link.lastKnownAt(clock(state.syncedAt)) : copy.inbox.lastKnown) : state.openrig ? `${waiting} décision${waiting === 1 ? '' : 's'}. Ledge en a tranché ${state.decisionsToday.filter(d => d.by === 'ledge').length} autres.` : copy.inbox.subtitle(all.length);
+  const subtitle = offline ? (state.syncedAt ? copy.link.lastKnownAt(clock(state.syncedAt)) : copy.inbox.lastKnown) : state.openrig ? `${waiting} décision${waiting === 1 ? '' : 's'}. Ledge en a tranché ${state.decisionsToday.filter(d => d.by === 'ledge').length} autres.` : closed.length ? copy.inbox.subtitleTasks(all.length, closed.length) : copy.inbox.subtitle(all.length);
   return (
     <>
       <Header title={state.openrig ? copy.nav.toYou : copy.inbox.title} subtitle={subtitle} link={linkView(state)} />
       <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[22px]">
         {offline && <div className="mb-3">{notice ?? <OfflineBanner onReconnect={onReconnect} />}</div>}
         <div role="group" aria-label={copy.inbox.filtersLabel} className="mb-1.5 flex gap-1">
-          {state.openrig ? (['all', 'ledge', 'sessions'] as const).map(f => <button key={f} type="button" aria-pressed={via === f} onClick={() => setVia(f)} className={chipClass(via === f)}>{f === 'all' ? 'Tout' : f === 'ledge' ? 'Via Ledge' : 'Sessions'}</button>) : FILTERS.map(f => (
+          {state.openrig ? (['all', 'ledge', 'sessions'] as const).map(f => <button key={f} type="button" aria-pressed={via === f} onClick={() => setVia(f)} className={chipClass(via === f)}>{f === 'all' ? 'Tout' : f === 'ledge' ? 'Via Ledge' : 'Sessions'}</button>) : filters.map(f => (
             <button key={f} type="button" aria-pressed={filter === f} onClick={() => setFilter(f)} className={chipClass(filter === f)}>{copy.inbox.filters[f]}</button>
           ))}
         </div>
-        <div className="flex items-center justify-between py-3 text-meta tracking-[.4px] text-muted"><span>{offline ? copy.inbox.lastKnown.toUpperCase() : copy.inbox.oldestFirst}</span><span>{mixed.length}</span></div>
+        <div className="flex items-center justify-between py-3 text-meta tracking-[.4px] text-muted"><span>{offline ? copy.inbox.lastKnown.toUpperCase() : copy.inbox.oldestFirst}</span><span>{mixed.length + tasks.length}</span></div>
         <div className="flex flex-col gap-3">
           {mixed.map(row => row.kind === 'session'
             ? <Row key={`${row.item.sessionId}/${row.item.key}`} item={row.item} session={state.sessions.get(row.item.sessionId)} now={now} offline={offline} />
             : <ViaLedge key={row.item.id} escalation={row.item} store={store} offline={offline} />)}
+          {tasks.map(t => <TaskRow key={t.id} task={t} now={now} onSee={() => see(t)} />)}
         </div>
-        {mixed.length === 0 && (
+        {mixed.length === 0 && tasks.length === 0 && (
           <div className="flex flex-col items-center gap-3 px-3 py-12 text-center">
             {!waiting && <div aria-hidden="true"><Mascot size={96} frozen={offline} /></div>}
             <h2 className="text-heading leading-[1.3] tracking-[-.5px]">{waiting ? copy.inbox.emptyFilter : copy.inbox.upToDate}</h2>
@@ -91,7 +123,7 @@ export function Inbox({ store, onReconnect, notice }: { store: MobileStore; onRe
         )}
         {offline && <p className="mt-4 text-small text-muted">{copy.inbox.offlineNote}</p>}
       </main>
-      <TabBar openrig={state.openrig} count={all.length + escalations.filter(e => e.state === 'pending').length} chat={!!state.device?.chat} />
+      <TabBar openrig={state.openrig} count={all.length + escalations.filter(e => e.state === 'pending').length + closed.length} chat={!!state.device?.chat} />
     </>
   );
 }

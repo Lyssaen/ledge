@@ -9,12 +9,12 @@ export interface RelayDeps {
   /** Every chat thread (the PC's and each device's): an instruction lives in, and answers to, the thread that owns its qid. */
   threads: Pick<ChatThreads, 'all' | 'owner' | 'emitterOf'>; store: Pick<Store, 'get' | 'onChange'>;
   /**
-   * session.reply's path: null once typed and taken, the refusal otherwise; rejects when the injection fails.
+   * session.reply's path: null once typed and taken, the refusal (its text, and its code when it has one) otherwise; rejects when the injection fails.
    * The queue relies on this: once it resolves null, the session has already left idle (the server's verified injection applies
    * Decided -> working), which keeps a second queued card from following in the same free moment. On a failure the server moves the
    * session to `error`, which counts as free, so a Retry goes at once.
    */
-  replyTo: (id: string, text: string) => Promise<string | null>;
+  replyTo: (id: string, text: string) => Promise<string | { message: string; code?: string } | null>;
   now?: () => string;
   /** Sessions being typed into, shared with the mailbox so the two never type into one session at once. */
   typing?: Set<string>;
@@ -27,6 +27,9 @@ export interface RelayDeps {
 /** Free to take a typed instruction: its turn (or in error, where session.reply types too), nothing pending. */
 export const free = (s: Session | undefined): s is Session => !!s && (s.state === 'idle' || s.state === 'error') && !s.pending;
 const stopped = (name: string) => `${name} stopped before it got the instruction`;
+/** The code a front words a failed card with: the refusal's own, `ended` for a session gone, else `failed` (the machinery). */
+const STOPPED_CODE = 'ended';
+const codeOf = (e: unknown): string => { const c = (e as { code?: unknown } | null)?.code; return typeof c === 'string' && c.length <= 40 ? c : 'failed'; };
 
 /**
  * The chat cards' instructions (spec 2026-10-12 relay §4): typed now into a free session, else queued in the turn and typed at the
@@ -55,9 +58,13 @@ export function createRelay(d: RelayDeps): Relay {
   async function deliver(thread: ChatThreadId, qid: string, r: ChatRelay): Promise<string | null> {
     typing.add(r.id); sending.add(qid);
     try {
-      let refused: string | null;
-      try { refused = await d.replyTo(r.id, r.text); } catch (e) { refused = (e as Error).message; }
-      if (refused) { log(`relay ${qid} to ${r.id} failed: ${refused}`); mark(thread, qid, { error: refused }); }
+      let refused: string | null; let code = 'failed';
+      try {
+        const answer = await d.replyTo(r.id, r.text);
+        if (answer === null || typeof answer === 'string') refused = answer;
+        else { refused = answer.message; code = answer.code ?? 'failed'; }
+      } catch (e) { refused = (e as Error).message; code = codeOf(e); }
+      if (refused) { log(`relay ${qid} to ${r.id} failed: ${refused}`); mark(thread, qid, { error: refused, code }); }
       else mark(thread, qid, { status: 'sent', sentAt: now() });
       return refused;
     } finally { typing.delete(r.id); sending.delete(qid); }
@@ -86,7 +93,7 @@ export function createRelay(d: RelayDeps): Relay {
       const q = queued().filter(x => x.relay.id === id);
       if (q.length === 0) return;
       const s = c.type === 'updated' ? c.session : undefined;
-      if (!s || s.state === 'exited') { for (const x of q) if (!sending.has(x.qid)) { mark(x.thread, x.qid, { error: stopped(x.relay.name) }); } return; }
+      if (!s || s.state === 'exited') { for (const x of q) if (!sending.has(x.qid)) { mark(x.thread, x.qid, { error: stopped(x.relay.name), code: STOPPED_CODE }); } return; }
       if (open(id)) kick(id);
     } catch (e) { log(`relay change handler failed: ${(e as Error).message}`); }
   });
@@ -99,7 +106,7 @@ export function createRelay(d: RelayDeps): Relay {
       if (r.status === 'sent' || sending.has(qid)) throw new Error('already sent');
       if (r.status === 'queued') throw new Error('already queued');
       const s = d.store.get(r.id);
-      if (!s || s.state === 'exited') { const m = stopped(r.name); mark(thread, qid, { error: m }); throw new Error(m); }
+      if (!s || s.state === 'exited') { const m = stopped(r.name); mark(thread, qid, { error: m, code: STOPPED_CODE }); throw new Error(m); }
       if (open(r.id)) {
         if (queued().some(q => q.relay.id === r.id)) { markQueued(thread, qid); kick(r.id); return; }
         const refused = await deliverAndKick(thread, qid, r); if (refused) throw new Error(refused); return;

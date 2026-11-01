@@ -1,5 +1,5 @@
 import { phoneText } from '../orchestrator.js';
-import { pendingKey, type ChatErrorCode, type PushPayload, type Session, type Escalation } from '@ledge/protocol';
+import { pendingKey, type ChatErrorCode, type PushPayload, type Session, type Escalation, type Task } from '@ledge/protocol';
 
 const TAG_MAX = 32;
 const TITLE_MAX = 80;
@@ -77,4 +77,12 @@ export function escalationPush(before: Escalation | undefined, after: Escalation
 export function decidedPush(count: number, badge: number): PushPayload {
   const n = Math.max(1, Math.min(999, Math.floor(count)));
   return { v: 1, kind: 'decided', count: n, title: 'Ledge a tranché', body: `${n} décision${n > 1 ? 's' : ''} prise${n > 1 ? 's' : ''}.`, url: '/#/chat', badge: Math.max(0, Math.min(999, badge)), tag: 'ledge-decided' };
+}
+
+/** A decision a session just put to the user (`ledge task give ledge …`): it opens Ledge's chat, where « À toi » lists it. */
+export function decisionPayload(t: Task, badge: number): PushPayload {
+  return {
+    v: 1, kind: 'decision', title: cut(`${t.giverName} attend votre décision`, TITLE_MAX), body: cut(t.title.trim(), BODY_MAX),
+    url: '/#/chat', badge: Math.max(0, Math.min(999, badge)), tag: safeTag(t.id)
+  };
 }

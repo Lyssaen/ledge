@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { projectOf } from '@ledge/fleet';
-import type { Helper, Projects, Rig, RigSeat, Session } from '@ledge/protocol';
+import type { Helper, Projects, Rig, RigSeat, Session, Team } from '@ledge/protocol';
 import type { BotState } from '@ledge/ui/bots/poseFor';
 import { mainOrder } from '../src/nav/agents';
 import { layoutTable, tableLength, roomWidth, roomTileWidth, noteX, tableBranch, sheetState, helperState, sceneOf, walkOrder, type AtelierScene } from '../src/atelier/layout';
@@ -84,6 +84,28 @@ it('a project room has one table with all its sessions, whatever their old team 
   expect(scene.rooms.map(r => [r.key, r.tables[0]!.mains.map(m => m.name)])).toEqual([['ledge', ['nova', 'otto', 'pim']], ['pay', ['kit', 'zed']]]);
   expect(walkOrder(scene).map(s => s.name)).toEqual(['nova', 'otto', 'pim', 'kit', 'zed']);
   expect(roomTileWidth(2)).toBe(roomWidth(2) + 220);
+});
+it('rooms and tables (atelier rooms spec §3.1): a table per live team, the common table, resting kept, dissolved gone', () => {
+  const projects: Projects = { projects: ['ledge', 'pay'].map(id => ({ id, name: id, color: 'blue' as const, description: '', rigs: [], repos: [{ machine: 'local', path: `/w/${id}` }] })), rules: [] };
+  const idOf = (s: Session) => projectOf(s, projects);
+  const team = (id: string, extra: Partial<Team> = {}): Team => ({ id, name: id, project: 'ledge', machine: 'local', cwd: '/w/ledge', state: 'active', seats: [], createdAt: `2026-10-26T08:0${id.at(-1)}:00.000Z`, updatedAt: '', ...extra });
+  const roles = team('team-0001', { seats: [{ role: 'build', sessionId: 'otto' }, { role: 'review', sessionId: 'nova' }] });
+  const mobile = team('team-0002', { state: 'resting', seats: [{ role: 'build', sessionId: 'arlo' }] });
+  const gone = team('team-0003', { state: 'dissolved' });
+  const order = mainOrder([main('otto', { team: 'team-0001' }), main('nova', { team: 'team-0001' }), main('pim'), main('kit', { cwd: '/w/pay' }), main('zed', { cwd: '/w/pay', team: 'team-0001' })], projects);
+  const archived = main('arlo', { state: 'exited', archivedAt: '2026-10-26T09:00:00.000Z', team: 'team-0002' });
+  const scene = sceneOf(order, projects, idOf, 'all', [], undefined, [roles, mobile, gone], id => (id === 'arlo' ? archived : undefined));
+  const tables = (sc: AtelierScene) => sc.rooms.map(r => [r.key, r.tables.map(t => `${t.kind}${t.team ? `(${t.team.name})` : ''}:${t.mains.map(m => m.name).join(',')}`)]);
+  // A session whose team lives in another room sits at its own room's common table.
+  expect(tables(scene)).toEqual([['ledge', ['common:pim', 'team(team-0001):nova,otto', 'team(team-0002):arlo']], ['pay', ['common:kit,zed']]]);
+  // The resting team's seats are not walked.
+  expect(walkOrder(scene).map(s => s.name)).toEqual(['pim', 'nova', 'otto', 'kit', 'zed']);
+  // No session outside the teams: no common table; an empty team table still shows.
+  const alone = sceneOf(mainOrder([main('otto', { team: 'team-0001' })], projects), projects, idOf, 'ledge', [], undefined, [roles, team('team-0004')]);
+  expect(tables(alone)).toEqual([['ledge', ['team(team-0001):otto', 'team(team-0004):']]]);
+  // No team: today's one table per project, inside its room.
+  expect(tables(sceneOf(order, projects, idOf, 'all'))).toEqual([['ledge', ['common:nova,otto,pim']], ['pay', ['common:kit,zed']]]);
+  expect(roomTileWidth([{ mains: [1, 2] }, { mains: [1] }])).toBe(roomWidth(2) + roomWidth(1) + 70 + 220);
 });
 it('walkOrder goes through rig and kernel tables too, placeholders skipped', () => {
   const projects: Projects = { projects: [{ id: 'ledge', name: 'ledge', color: 'blue', description: '', rigs: [], repos: [{ machine: 'local', path: '/w/ledge' }] }], rules: [] };

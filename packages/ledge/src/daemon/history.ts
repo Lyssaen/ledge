@@ -1,12 +1,13 @@
 import { appendFile, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { AttachmentRef, NoticeItem, ReceivedItem, SentItem, SessionEvent, ThreadItem, ToolItem } from '@ledge/protocol';
+import type { AttachmentRef, NoticeItem, ReceivedItem, SentItem, SessionEvent, Task, TaskTransmission, ThreadItem, ToolItem } from '@ledge/protocol';
 import { paths } from '../paths.js';
 import { log } from '../log.js';
 import { filesOf } from './files.js';
 import { agentMessages } from './transcript.js';
 import { QUESTION_TOOLS } from './state.js';
-import { crossSession, crossSessionNotices, stripNote, ledgeBody, ledgeMessages, ledgeAnswer, ledgeNotice, mailId, type CrossSessionNotice } from './crossSession.js';
+import { quote } from './tasks.js';
+import { crossSession, crossSessionNotices, stripNote, ledgeBody, ledgeMessages, ledgeAnswer, ledgeNotice, ledgeTask, ledgeTeamNotice, mailId, type CrossSessionNotice } from './crossSession.js';
 export { crossSession } from './crossSession.js';
 
 /** Native tracking (spec 2026-10-13 §3–4): one thread per session, reduced from the events the store applies. */
@@ -177,6 +178,18 @@ export class History {
           this.turns.set(id, turn + 1);
           return this.put(id, { kind: 'notice', id: `notice-${turn + 1}-0`, at: ev.at, turn: turn + 1, notice: 'other', summary: answer.text.replaceAll(' ⏎ ', '\n'), text: answer.text });
         }
+        const task = ledgeTask(text);
+        if (task) { // Ledge's pointer about a task: a system event, no prompt
+          this.turns.set(id, turn + 1);
+          const peer = task.from ? this.peerOf(task.from) : undefined;
+          return this.put(id, { kind: 'notice', id: `notice-${turn + 1}-0`, at: ev.at, turn: turn + 1, notice: 'other', task: task.id,
+            ...(task.from ? { name: task.from } : {}), ...(peer ? { peer } : {}), summary: task.text.replaceAll(' ⏎ ', '\n'), text: task.text });
+        }
+        const joined = ledgeTeamNotice(text);
+        if (joined) { // Ledge seating this session in a team: a system event, no prompt
+          this.turns.set(id, turn + 1);
+          return this.put(id, { kind: 'notice', id: `notice-${turn + 1}-0`, at: ev.at, turn: turn + 1, notice: 'other', team: joined.team, summary: joined.text.replaceAll(' ⏎ ', '\n'), text: joined.text });
+        }
         this.turns.set(id, turn + 1);
         return this.put(id, { kind: 'prompt', id: `prompt-${turn + 1}`, at: ev.at, turn: turn + 1, text: text, ...(images.length ? { images } : {}) });
       }
@@ -268,7 +281,7 @@ export class History {
     if (!opts.force && now - (this.synced.get(key) ?? 0) < SYNC_MS) return [];
     this.synced.set(key, now);
     const items = this.items(id);
-    const since = opts.helperId ? items.find(i => i.id === opts.helperId)?.at : [...items].reverse().find(i => i.kind === 'prompt' || i.kind === 'received' || i.kind === 'notice')?.at;
+    const since = opts.helperId ? items.find(i => i.id === opts.helperId)?.at : [...items].reverse().find(i => i.kind === 'prompt' || i.kind === 'received' || (i.kind === 'notice' && !i.outgoing))?.at; // an outgoing task card is mid-turn: not an anchor
     if (!since) return []; // a daemon that joined mid-turn: the old tail would flood the thread
     const have = new Set(items.map(i => i.id));
     const turn = this.turns.get(id) ?? 0;
@@ -286,6 +299,19 @@ export class History {
     const existing = this.items(senderId).find((i): i is SentItem => i.kind === 'sent' && i.id === m.rid);
     if (existing) return this.put(senderId, { ...existing, ...(m.peer ? { peer: m.peer } : {}), via: 'ledge' });
     return this.put(senderId, { kind: 'sent', id: m.rid, at: m.at, turn: this.turns.get(senderId) ?? 0, to: m.to, ...(m.peer ? { peer: m.peer } : {}), ...(m.summary ? { summary: m.summary } : {}), text: m.text, status: 'sending', via: 'ledge' });
+  }
+
+  /**
+   * A task the session handed over (issue #92): its card in the sender's thread, in the turn it is in (not a prompt).
+   * One card per transmission: the same one again replaces it.
+   */
+  recordTask(senderId: string, n: { task: Task; tr: TaskTransmission; peer?: string }): ThreadItem {
+    const { task, tr } = n;
+    const what = { give: 'confiée à', pass: 'passée à', done: 'rendue à', refuse: 'refusée, rendue à', cancel: 'annulée pour' }[tr.op];
+    const said = tr.op === 'pass' ? tr.note : task.result;
+    return this.put(senderId, { kind: 'notice', id: `task-${task.id}-${tr.index}`, at: tr.at, turn: this.turns.get(senderId) ?? 0, notice: 'other',
+      task: task.id, taskOp: tr.op, outgoing: true, name: tr.toName, ...(n.peer ? { peer: n.peer } : {}),
+      summary: said ? `${task.title}\n${quote(said)}` : task.title, text: `Tâche « ${task.title} » ${what} ${tr.toName}${tr.op === 'done' ? ' (terminée)' : ''}` });
   }
 
   /** The mailbox's outcome for a card; a `read` card stays read. */

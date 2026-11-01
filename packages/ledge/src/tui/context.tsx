@@ -6,15 +6,16 @@ import type { Actions, Toast } from './actions.js';
 import type { Asked } from './model/chat.js';
 import type { LeftRow } from './model/left.js';
 import type { Brain } from './brain.js';
+import type { CatalogMemo } from './model/catalog.js';
 import type { ClipboardImage } from './clipboard.js';
 import type { Glyphs } from './glyphs.js';
 import type { Lang, Messages } from './i18n/lang.js';
 import type { ThemeChoice, Tone } from './theme.js';
 
 /** The screens. */
-export type Screen = 'home' | 'session' | 'launch' | 'settings' | 'help';
-/** The screens the digits name: `1` Ledge and `2` a rig are the home, focused on one or the other; `3` the session. */
-export const SCREENS: readonly Screen[] = ['home', 'home', 'session'];
+export type Screen = 'home' | 'session' | 'launch' | 'settings' | 'teams' | 'help';
+/** The screens the digits name: `1` Ledge and `2` a rig are the home, focused on one or the other; `3` the session; `4` the teams. */
+export const SCREENS: readonly Screen[] = ['home', 'home', 'session', 'teams'];
 /** What the launch screen launches: a session, or a rig (ctrl+t switches). */
 export type LaunchMode = 'session' | 'rig';
 
@@ -62,6 +63,8 @@ export interface Tui {
   /** Hands the terminal to `argv` (an editor) until it exits. */
   runInTerminal(argv: string[]): void;
   env: NodeJS.ProcessEnv;
+  /** « Équipes »' last folder, and the launch it prefills. */
+  catalog: { current: CatalogMemo };
   /** The clipboard picture (null when there is none) and the system viewer: injected so tests stub them. */
   readImage(): Promise<ClipboardImage | null>;
   openFile(file: string): Promise<void>;

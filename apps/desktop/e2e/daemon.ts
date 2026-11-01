@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Page, WebSocketRoute } from '@playwright/test';
-import type { Ask, BrainStatus, ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, Escalation, Exchange, FoundRepo, LedgeThreadItem, LedgeDecision, LedgeRule, IslandPrefs, MandateCategory, Machines, ModelChoice, OpenRigStatus, Projects, Recent, Rig, RigPlan, RigResultCode, RigSpecInfo, Session, ThreadItem, Tool } from '@ledge/protocol';
+import type { Ask, BrainStatus, ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, Escalation, Exchange, FoundRepo, LedgeThreadItem, LedgeDecision, LedgeRule, IslandPrefs, MandateCategory, Machines, ModelChoice, OpenRigStatus, Projects, Recent, Rig, RigPlan, RigResultCode, RigSpecInfo, Session, Team, ThreadItem, Tool } from '@ledge/protocol';
+import type { RolesListing } from '../src/teams/useTeamsApi';
 
 /** How long a launched session stays `starting` in the fake daemon before it is `working`. */
 export const LAUNCH_SETTLE_MS = 1500;
@@ -85,8 +86,10 @@ export type Found = { repos: FoundRepo[]; truncated?: boolean } | 'offline' | 'o
  *  `mandate`; `rule.set` validates (`active`) or drops (`rejected`) the rule, broadcast as `rules`; `decision.revisit` reopens the decision's
  *  escalation (`pending`, `correcting` = the decision, no answer) with a new thread item. An answer to a `correcting` escalation records the
  *  user's decision and marks the old one `revisitedBy` it (`decisions`).
+ *  With `extras.teams` it speaks of teams (`teams` after the snapshot), and a `roles.list` is answered from `extras.roles` by its `cwd`
+ *  (`~` without one), an unknown folder with nothing.
  *  The route is anchored so it never catches `/ssh/<alias>` (see `fakeRemote`). Register before `page.goto`. */
-export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual'; chat?: ChatReply; found?: Record<string, Found>; scanDelayMs?: number; island?: IslandPrefs | null | 'unknown'; models?: Partial<Record<Tool, ModelChoice[]>>; asks?: Ask[]; rigs?: Rig[]; escalations?: Escalation[]; openrig?: OpenRigStatus; specs?: RigSpecInfo[]; exchanges?: Record<string, Exchange[]>; thread?: LedgeThreadItem[]; answerDelayMs?: number; plans?: Record<string, Partial<RigPlan>>; rigAct?: { ok: false; code: RigResultCode; reason?: string }; brain?: { status: BrainStatus; mandate?: string; rules?: LedgeRule[]; decisions?: LedgeDecision[] } } = {}) {
+export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual'; chat?: ChatReply; found?: Record<string, Found>; scanDelayMs?: number; island?: IslandPrefs | null | 'unknown'; models?: Partial<Record<Tool, ModelChoice[]>>; asks?: Ask[]; rigs?: Rig[]; escalations?: Escalation[]; openrig?: OpenRigStatus; specs?: RigSpecInfo[]; exchanges?: Record<string, Exchange[]>; thread?: LedgeThreadItem[]; answerDelayMs?: number; plans?: Record<string, Partial<RigPlan>>; rigAct?: { ok: false; code: RigResultCode; reason?: string }; brain?: { status: BrainStatus; mandate?: string; rules?: LedgeRule[]; decisions?: LedgeDecision[] }; teams?: Team[]; roles?: Record<string, Omit<RolesListing, 'silent'>> } = {}) {
   const threads = new Map(Object.entries(extras.threads ?? {}).map(([id, items]) => [id, [...items]]));
   const sessions = new Map(initial.map(s => [s.id, s]));
   const received: ClientMessage[] = [];
@@ -128,6 +131,7 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
       ws.send(JSON.stringify({ type: 'decisions', items: brain.decisions }));
     }
     ws.send(JSON.stringify({ type: 'ledge.thread.history', items: thread }));
+    if (extras.teams) ws.send(JSON.stringify({ type: 'teams', teams: extras.teams }));
     ws.onMessage(m => {
       let msg: ClientMessage;
       try { msg = JSON.parse(String(m)); } catch { return; }
@@ -216,6 +220,7 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
           ws.send(JSON.stringify({ type: 'rig.result', rid: msg.rid, ok: true }));
         }
       }
+      if (msg.type === 'roles.list') ws.send(JSON.stringify({ type: 'roles.listing', requestId: msg.requestId, ...(extras.roles?.[msg.cwd ?? '~'] ?? { roles: [], templates: [], problems: [] }) }));
       if (msg.type === 'models.list') ws.send(JSON.stringify({ type: 'models.listing', requestId: msg.requestId, tool: msg.tool, models: extras.models?.[msg.tool] ?? [] }));
       if (msg.type === 'repos.inspect') {
         ws.send(JSON.stringify({ type: 'repos.info', requestId: msg.requestId, repos: msg.paths.map(path => ({ path, ...(extras.repoInfo?.[path] ?? { exists: true, branch: 'main' }) })) }));

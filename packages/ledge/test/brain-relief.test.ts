@@ -31,7 +31,7 @@ const close = async (s: Session): Promise<void> => { closed.push(s.id); store.up
 
 function make(): void {
   // The handovers first, as in the daemon: they see a store change before the brain does.
-  handovers = createHandovers({ store, close, dir: join(root, 'handovers'), now: () => at(clock),
+  handovers = createHandovers({ store, close, dir: join(root, 'handovers'), now: () => at(clock), tasks: { run: () => ({}), all: () => [] }, teams: { get: () => undefined },
     mailbox: { notify: id => { notified.push(id); return true; } },
     launch: async req => { reliefs.push(req); if (reliefGate) await reliefGate; if (reliefFails) throw new Error('tmux gone'); const s = record(req.id ?? 'x', req.name ?? 'Pim', req.tool, req.cwd); store.upsert(s); return s; },
     brainRelief: s => brain.relief(s) });

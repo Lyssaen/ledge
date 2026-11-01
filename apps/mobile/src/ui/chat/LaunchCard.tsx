@@ -6,17 +6,18 @@ import { isApple } from '../../screens/device';
 import type { MobileStore } from '../../state/store';
 import { CARD, GHOST, PRIMARY } from './RelayCard';
 import { threadLink } from './Answer';
+import { IgnoredNote } from './IgnoredNote';
 
 type Note = 'failed' | 'cancelled' | 'expired';
 
-function Row({ store, qid, row, proposal, canConfirm, known }: { store: MobileStore; qid: string; row: number; proposal: PhoneChatProposal; canConfirm: boolean; known: boolean }) {
-  const [hidden, setHidden] = useState(false);
+function Row({ store, qid, row, proposal, canConfirm, known, ignored }: { store: MobileStore; qid: string; row: number; proposal: PhoneChatProposal; canConfirm: boolean; known: boolean; ignored: boolean }) {
   const [note, setNote] = useState<Note | null>(null);
   const [busy, setBusy] = useState(false);
   // Applied: the PC's updated turn is on its way; until it lands the row must not offer a second launch.
   const [applied, setApplied] = useState(false);
   const done = proposal.launchedId !== undefined;
-  if (hidden && !done) return null;
+  // A turn set aside shows its launched rows only; the others are the card's « Revoir » (LaunchCards).
+  if (ignored && !done) return null;
   const go = () => {
     setBusy(true); setNote(null);
     // Cancelled or expired leaves the card proposed: the next tap asks again.
@@ -34,7 +35,7 @@ function Row({ store, qid, row, proposal, canConfirm, known }: { store: MobileSt
       )}
       {!done && (
         <div className="flex gap-2">
-          {!applied && <button type="button" className={GHOST} onClick={() => setHidden(true)}>{copy.chat.ignore}</button>}
+          {!applied && <button type="button" className={GHOST} disabled={busy} onClick={() => { void store.ignoreTurn(qid); }}>{copy.chat.ignore}</button>}
           <button type="button" className={PRIMARY} disabled={busy || applied || !canConfirm} onClick={go}>{isApple() ? copy.confirm.goApple : copy.confirm.go}</button>
         </div>
       )}
@@ -42,7 +43,12 @@ function Row({ store, qid, row, proposal, canConfirm, known }: { store: MobileSt
   );
 }
 
-/** What Ledge proposes to start, one card per proposal: the device's own check confirms it (the store asks for it). */
-export function LaunchCards({ store, qid, proposals, canConfirm, sessionIds }: { store: MobileStore; qid: string; proposals: PhoneChatProposal[]; canConfirm: boolean; sessionIds: ReadonlySet<string> }) {
-  return <>{proposals.map((p, i) => <Row key={i} store={store} qid={qid} row={i} proposal={p} canConfirm={canConfirm} known={sessionIds.has(p.launchedId ?? '')} />)}</>;
+/** What Ledge proposes to start, one card per proposal: the device's own check confirms it (the store asks for it). « Ignorer » sets
+ *  the turn's cards aside on every device, as the PC's; a turn set aside keeps its launched rows and offers « Revoir » for the rest. */
+export function LaunchCards({ store, qid, proposals, canConfirm, sessionIds, ignoredAt }: { store: MobileStore; qid: string; proposals: PhoneChatProposal[]; canConfirm: boolean; sessionIds: ReadonlySet<string>; ignoredAt?: string | undefined }) {
+  const ignored = ignoredAt !== undefined;
+  return <>
+    {proposals.map((p, i) => <Row key={i} store={store} qid={qid} row={i} proposal={p} canConfirm={canConfirm} known={sessionIds.has(p.launchedId ?? '')} ignored={ignored} />)}
+    {ignored && proposals.some(p => p.launchedId === undefined) && <IgnoredNote store={store} qid={qid} at={ignoredAt} rest={proposals.some(p => p.launchedId !== undefined)} />}
+  </>;
 }

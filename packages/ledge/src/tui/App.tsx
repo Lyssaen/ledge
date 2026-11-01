@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApp, useInput, useStdout, useWindowSize } from 'ink';
-import { isPending, useDaemon, useEscalations, useLedgeThread, useMachines, useOpenRig, useProjects, useRigs, type DaemonClient, type Fleet } from '@ledge/fleet';
+import { isPending, useDaemon, useEscalations, useLedgeThread, useMachines, useOpenRig, useProjects, useRigs, useTasks, type DaemonClient, type Fleet } from '@ledge/fleet';
 import { ledgeLine } from '@ledge/ui/rigs/model';
 import type { Session } from '@ledge/protocol';
 import { useActions, type Toast } from './actions.js';
@@ -11,7 +11,7 @@ import { useBrain } from './brain.js';
 import { LEDGE_FOCUS, screenSize, TuiContext, type Focus, type Kept, type KeyHandler, type LaunchMode, type Screen, type Tui } from './context.js';
 import type { Glyphs } from './glyphs.js';
 import { I18nProvider, MESSAGES, type Lang } from './i18n/lang.js';
-import { listed } from './model/overview.js';
+import { listed, openDecisions } from './model/overview.js';
 import { focusKey, focusOrder, focusSession, keepFocus, leftRows } from './model/left.js';
 import { asked, notification, title, type NotifyMode } from './notify.js';
 import { Home } from './screens/Home.js';
@@ -21,6 +21,8 @@ import { Settings } from './screens/Settings.js';
 import { Help } from './screens/Help.js';
 import { MIN } from './ui/Frame.js';
 import { setTone, tone as toneNow, toneFor, type ThemeChoice, type Tone } from './theme.js';
+import { Teams } from './screens/Teams.js';
+import type { CatalogMemo } from './model/catalog.js';
 
 /** How long a toast stays. */
 export const TOAST_MS = 5000;
@@ -67,6 +69,7 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
   const escalations = useEscalations(client);
   const openrig = useOpenRig(client);
   const thread = useLedgeThread(client).items;
+  const tasks = useTasks(client);
   const fleet = client.fleet as Fleet;
   const t = MESSAGES[lang];
   const [screen, setScreen] = useState<Screen>('home');
@@ -81,6 +84,7 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
   const kept = useRef<Kept>({ drafts: new Map(), sent: new Map(), asked: [] }).current;
   // When ctrl+c was last pressed with a draft waiting.
   const armed = useRef(0);
+  const catalog = useRef<CatalogMemo>({});
 
   useEffect(() => {
     if (!lastToast) return;
@@ -116,10 +120,10 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
   useEffect(() => {
     if (seen.current) for (const text of asked(seen.current, d.sessions, t.notify)) write(notification(text, notify, env));
     seen.current = d.byId;
-    // Written again only when it changes: every session update would otherwise send it.
-    const next = title(t.notify.title(listed(d.sessions).filter(isPending).length));
+    // Written again only when it changes: every session update would otherwise send it. The decisions waiting count too.
+    const next = title(t.notify.title(listed(d.sessions).filter(isPending).length + openDecisions(tasks).length));
     if (next !== titled.current) { titled.current = next; write(next); }
-  }, [d.byId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [d.byId, tasks]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const actions = useActions({ client, sessions: d.sessions, errors: d.errors, t, toast });
 
@@ -159,7 +163,7 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
   const small = size.columns < MIN.columns || size.rows < MIN.rows;
   const tui: Tui = {
     client, fleet, d, machines, projects, t, lang, setLang, theme, setTheme, tone, background, g: glyphs, screen, go, launchMode, setLaunchMode, focus, setFocus, selected, select, left, rigs, escalations, openrig,
-    ledgeFocus, setLedgeFocus, brain, toast, lastToast, actions, editing, setEditing, small, attach, runInTerminal, env, keys, kept,
+    ledgeFocus, setLedgeFocus, brain, toast, lastToast, actions, editing, setEditing, small, attach, runInTerminal, env, catalog, keys, kept,
     readImage: readImage ?? (() => readClipboardImage(env)), openFile: openFile ?? (file => openImage(file, env))
   };
 
@@ -199,8 +203,10 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
       return;
     }
     if (input === '3') { if (selected) go('session'); return; }
+    // 4 the live teams (roles spec §3.9).
+    if (input === '4') { go('teams'); return; }
   });
 
-  const Body = { home: Home, session: SessionScreen, launch: Launch, settings: Settings, help: Help }[screen];
+  const Body = { home: Home, session: SessionScreen, launch: Launch, settings: Settings, teams: Teams, help: Help }[screen];
   return <TuiContext.Provider value={tui}><Body /></TuiContext.Provider>;
 }

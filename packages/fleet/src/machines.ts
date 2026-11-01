@@ -1,6 +1,6 @@
 import { CONTEXT_NEAR, MachinesSchema, type Machine, type IslandPrefs, type MobileClientMessage, type MobileState } from '@ledge/protocol';
 import type { DaemonClient, DaemonStatus } from './client';
-import { parseServerMessage, type ClientMessage, type Ask, type DaemonInfo, type Projects, type Recent, type Session, type ServerMessage } from '@ledge/protocol';
+import { parseServerMessage, type ClientMessage, type Ask, type DaemonInfo, type Projects, type Recent, type Session, type ServerMessage, type Task, type Team } from '@ledge/protocol';
 import type { Escalation, Exchange, OpenRigStatus, Rig } from '@ledge/protocol';
 import { useSyncExternalStore } from 'react';
 import { DAEMON_PROTOCOL_PREFIX, type TokenSource } from './token';
@@ -67,6 +67,10 @@ export interface Fleet {
   exchanges(machine: string, rigId: string): Exchange[] | null;
   /** Asks the machine's daemon for a rig's recent exchanges; false when the machine is not reachable (nothing sent). */
   requestExchanges(machine: string, rigId: string): boolean;
+  /** The local daemon's live teams (roles spec §3.3), their seats' sessions qualified: null until it sends them, kept while it is down. */
+  teams(): Team[] | null;
+  /** The tasks Ledge gave and those of the live teams, known to the local daemon, oldest first; sessions qualified. */
+  tasks(): Task[];
   /** The context threshold the local daemon keeps (context handover spec §3.2): undefined until it speaks of it. */
   contextNear(): number | undefined;
   /** Sets it on the local daemon; the effect arrives on its broadcast. Throws `DaemonOffline` / `DaemonOutdated` as `setIsland`. */
@@ -169,6 +173,12 @@ export function useMachines(client: DaemonClient): MachineState[] {
 }
 const nullSnapshot = () => null;
 /** The local daemon's projects, null until it sends them. */
+const noTasks: Task[] = [];
+const emptyTasks = () => noTasks;
+/** The local daemon's live teams: null until it sends them (an older daemon never does). */
+export function useTeams(client: DaemonClient): Team[] | null {
+  return useSyncExternalStore(client.fleet?.subscribe ?? noopSubscribe, client.fleet?.teams ?? nullSnapshot, nullSnapshot);
+}
 /** The context threshold (context handover spec §3.2): the local daemon's, else the default. */
 const defaultNear = () => CONTEXT_NEAR;
 export function useContextNear(client: DaemonClient): number {
@@ -179,6 +189,10 @@ const noAsks: FleetAsk[] = [];
 const emptyAsks = () => noAsks;
 export function useAsks(client: DaemonClient): FleetAsk[] {
   return useSyncExternalStore(client.fleet?.subscribe ?? noopSubscribe, client.fleet?.asks ?? emptyAsks, emptyAsks);
+}
+/** The tasks Ledge gave, and those of the live teams. */
+export function useTasks(client: DaemonClient): Task[] {
+  return useSyncExternalStore(client.fleet?.subscribe ?? noopSubscribe, client.fleet?.tasks ?? emptyTasks, emptyTasks);
 }
 export function useProjects(client: DaemonClient): Projects | null {
   return useSyncExternalStore(client.fleet?.subscribe ?? noopSubscribe, client.fleet?.projects ?? nullSnapshot, nullSnapshot);

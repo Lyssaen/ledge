@@ -287,7 +287,8 @@ export function createBrainCommands(d: BrainCommandDeps): { run(call: BrainCall,
       }
       case 'propose': {
         if ('rigLaunch' in c) return launchCard(c.rigLaunch).catch(e => fail('failed', `Pas fait : ${(e as Error).message}.`));
-        const row = resolveRun(c.action, c.args, { sessions: d.sessions() });
+        // The brain proposes session actions: no team, task or role is in its reach (Ledge teams are the user's and the chat's).
+        const row = resolveRun(c.action, c.args, { sessions: d.sessions(), teams: [], tasks: [], findRole: () => undefined });
         if ('refused' in row) return fail('invalid', `Proposition refusée : ${row.refused}.`);
         post(`Je propose : ${row.summary.replace(/\*\*/g, '')}`, { actions: [row] });
         return { ok: true, line: "Carte posée : l'utilisateur la valide lui-même." };

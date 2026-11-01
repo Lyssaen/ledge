@@ -1,11 +1,12 @@
-import type { Project, Projects, Rig, Session } from '@ledge/protocol';
+import { projectOf, type Project, type Projects, type Rig, type Session, type Team } from '@ledge/protocol';
 import { isSeatPlaceholder, isStandalone, parseRigFilter, rigsModel, type RigPlace } from './model';
 
 /**
  * The Atelier's pure scene (« une pièce = une table »), shared by Desktop's Atelier and the future « Bureaux ».
  * No Desktop import here: `filter` is the plain string filter ('all', 'none', a project id, `rig:<machine>/<id>`, `kernel:<machine>`).
  */
-export interface AtelierTable { key: string; kind: 'common' | 'rig' | 'kernel'; mains: Session[]; hidden?: number }
+/** A table: a project room's common table or a live Ledge team's (atelier rooms spec §3.1), a rig's, or a kernel's. */
+export interface AtelierTable { key: string; kind: 'common' | 'team' | 'rig' | 'kernel'; team?: Team; mains: Session[]; hidden?: number }
 export type AtelierRoom =
   | { kind: 'project'; key: string; project: Project; tables: AtelierTable[] }
   | { kind: 'rig'; key: string; rig: Rig; place: RigPlace; tables: [AtelierTable] }
@@ -14,14 +15,27 @@ export interface AtelierScene { rooms: AtelierRoom[]; unassigned: Session[]; emp
 
 const noSessions: ReadonlyMap<string, Session> = new Map();
 
+/** The project a live Ledge team's room is: the one its folder falls in now, else the one it was created in. */
+export function teamProject(team: Team, projects: Projects | null): string | null {
+  if (!projects) return team.project;
+  const known = new Set(projects.projects.map(p => p.id));
+  const now = projectOf({ cwd: team.cwd, machineId: team.machine }, projects);
+  return now ?? (team.project !== null && known.has(team.project) ? team.project : null);
+}
+
 /**
  * The rooms of the atelier: one per project with a standalone session (a session paired to a running seat sits at its rig's
  * table instead), then one per rig outside the kernels (by name), then one kernel per machine. Rig and kernel tables follow
  * `rigsModel` (the sidebar's Rigs section): the seats still running, in the rig's order, the paired session or a placeholder;
  * the kernel's advisor and terminal seats are only counted (`hidden`). « Sans projet » is the standalone sessions no project claims.
+ * A project room holds its common table and its live Ledge teams' tables (atelier rooms spec §3.1): a session sits at its team's
+ * table when that team lives in its project's room. A team's table is drawn while the team is active or resting, even with no live
+ * seat (a resting team shows its seats' ended or archived sessions, found by `lookup`); the common table is drawn when it has
+ * sessions, or when the room has no team table.
  */
 export function sceneOf(order: readonly Session[], projects: Projects | null, projectIdOf: (s: Session) => string | null,
-  filter: string, rigs: readonly Rig[] = [], byId: ReadonlyMap<string, Session> = noSessions): AtelierScene {
+  filter: string, rigs: readonly Rig[] = [], byId: ReadonlyMap<string, Session> = noSessions,
+  teams: readonly Team[] = [], lookup: (id: string) => Session | undefined = () => undefined): AtelierScene {
   const list = projects?.projects ?? [];
   const known = new Set(list.map(p => p.id));
   const idOf = (s: Session) => { const id = projectIdOf(s); return id !== null && known.has(id) ? id : null; };
@@ -29,12 +43,24 @@ export function sceneOf(order: readonly Session[], projects: Projects | null, pr
   const rf = parseRigFilter(filter);
   const all = filter === 'all';
 
+  const live = teams.filter(t => t.state !== 'dissolved');
+  const roomOf = new Map(live.map(t => [t.id, teamProject(t, projects)]));
+
   const rooms: AtelierRoom[] = [];
   if (all || (filter !== 'none' && !rf)) {
     for (const project of list) {
       if (!all && project.id !== filter) continue;
       const mains = alone.filter(s => idOf(s) === project.id);
-      if (mains.length > 0) rooms.push({ kind: 'project', key: project.id, project, tables: [{ key: project.id, kind: 'common', mains }] });
+      const atTeam = (s: Session) => !!s.team && roomOf.get(s.team) === project.id;
+      const teamTables: AtelierTable[] = live.filter(t => roomOf.get(t.id) === project.id).map(team => {
+        const seated = mains.filter(s => s.team === team.id);
+        // A resting team keeps its seats' bots: their sessions, ended or archived, in seat order.
+        const resting = team.state === 'resting' ? team.seats.flatMap(x => { const s = x.sessionId ? (seated.find(m => m.id === x.sessionId) ?? lookup(x.sessionId)) : undefined; return s ? [s] : []; }) : [];
+        return { key: `team:${team.id}`, kind: 'team' as const, team, mains: seated.length ? seated : resting };
+      });
+      const common = mains.filter(s => !atTeam(s));
+      const tables: AtelierTable[] = [...(common.length > 0 || teamTables.length === 0 ? [{ key: project.id, kind: 'common' as const, mains: common }] : []), ...teamTables];
+      if (tables.some(t => t.mains.length > 0 || t.kind === 'team')) rooms.push({ kind: 'project', key: project.id, project, tables });
     }
   }
   if (all || rf) {

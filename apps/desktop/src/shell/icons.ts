@@ -41,6 +41,8 @@ export const SHELL_ICONS = {
   arrowRight: ['M5 12h14', 'm13 6 6 6-6 6'],
   // The pair in the Conversation tab's head.
   exchange: ['M4 8h14', 'm15 5 3 3-3 3', 'M20 16H6', 'm9 13-3 3 3 3'],
+  // A team's row in the tree: its flag, in the project's colour.
+  flag: ['M5 21V4', 'M5 4h11l-2 4 2 4H5'],
   // The thread's rail (issue #34): your node, as the app knows no name to draw initials from.
   user: ['M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8', 'M5 21v-1a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v1'],
   // session.tsx: the view switch (threadIcon, diffIcon), « Copier le chemin », a folded diff's unfold.

@@ -22,6 +22,7 @@ import { loadSidebarPrefs, saveSidebarPrefs } from './prefs';
 import { RigsSection } from './RigsSection';
 import { Tree } from './Tree';
 import { nearLimit, type Relief } from '../../session/useRelief';
+import { closedLedgeTasks, openDecisions, type TeamsApi } from '../../teams/useTeamsApi';
 
 const NO_RIGS: readonly Rig[] = [];
 const NO_ESCALATIONS: readonly Escalation[] = [];
@@ -51,6 +52,8 @@ export function Sidebar(p: {
   rigs?: readonly Rig[]; escalations?: readonly Escalation[]; openrig?: readonly OpenRigStatus[];
   /** Answers an escalation of « À toi » (`answerEscalation`, one send through the daemon). */
   onAnswerEscalation?(id: string, answers: Record<string, string>): void;
+  /** The live teams and Ledge's tasks: the tree's team rows (atelier rooms spec §3.4), « À toi »'s closed Ledge tasks (§3.7) and decisions (0.30). */
+  teams?: TeamsApi;
 }): JSX.Element {
   const { t } = useI18n();
   const keysTip = useId();
@@ -59,7 +62,7 @@ export function Sidebar(p: {
   const base = place.kind === 'settings' ? place.back : place;
   const current = base.kind === 'session' ? base.id : null;
   const rigs = p.rigs ?? NO_RIGS;
-  const groups = useMemo(() => treeModel(p.sessions, p.projects, p.projectIdOf, rigs), [p.sessions, p.projects, p.projectIdOf, rigs]);
+  const groups = useMemo(() => treeModel(p.sessions, p.projects, p.projectIdOf, rigs, p.teams?.teams ?? []), [p.sessions, p.projects, p.projectIdOf, rigs, p.teams?.teams]);
   const byId = useMemo(() => new Map(p.sessions.map(s => [s.id, s])), [p.sessions]);
   const rigRows = useMemo(() => rigsModel(rigs, byId, p.projects), [rigs, byId, p.projects]);
   const line = useMemo(() => ledgeLine(p.escalations ?? NO_ESCALATIONS, rigs), [p.escalations, rigs]);
@@ -73,6 +76,7 @@ export function Sidebar(p: {
   const attn = useMemo(() => attentionOf(p.brains?.length ? [...p.sessions, ...p.brains] : p.sessions, p.waits, p.escalations ?? NO_ESCALATIONS, rigs, p.asks, now), [p.sessions, p.brains, p.waits, p.escalations, rigs, p.asks, now]);
   // Sessions near their context limit, less those put away with « Plus tard » (context handover spec §3.2).
   const near = useMemo(() => nearLimit(standalone, p.relief?.later, p.relief?.near), [standalone, p.relief?.later, p.relief?.near]);
+  const decisions = useMemo(() => (p.teams ? openDecisions(p.teams.tasks) : []), [p.teams]);
   const root = useRef<HTMLElement>(null);
   const keys = useRef({ attn, current, dispatch: p.dispatch, quiet: false });
   keys.current = { attn, current, dispatch: p.dispatch, quiet: p.nav.modal !== null || p.nav.chat || p.actions.pending !== null };
@@ -128,6 +132,8 @@ export function Sidebar(p: {
           rigs={rigs} onAnswerEscalation={p.onAnswerEscalation} onSeeEscalation={e => p.dispatch({ type: 'ledge', tab: 'conversation', focus: e.id })}
           near={near} onHandover={id => { void p.relief?.handover(id); }}
           onLater={id => { const s = p.sessions.find(x => x.id === id); if (s) p.relief?.putLater(s); }}
+          decisions={decisions} answer={p.teams?.answer}
+          ledgeTasks={p.teams ? closedLedgeTasks(p.teams.tasks) : []} onSeeTask={id => p.dispatch({ type: 'ledge', tab: 'tasks', task: id })} onDismissTask={id => p.teams?.seen(id)}
           onMenu={(id, e) => {
             const host = e.currentTarget instanceof HTMLElement ? e.currentTarget : undefined;
             p.menu.open(id, { x: e.clientX, y: e.clientY }, host);
@@ -144,7 +150,7 @@ export function Sidebar(p: {
             }}
             onArchive={ids => p.actions.request('archive', ids)} onDelete={ids => p.actions.request('delete', ids)} onTerminal={p.onTerminal}
             onToggleHide={() => setPrefs(v => ({ ...v, hideDone: !v.hideDone }))} onToggleDense={() => setPrefs(v => ({ ...v, dense: !v.dense }))}
-            onNewProject={() => p.dispatch({ type: 'modal', modal: { kind: 'project' } })} />
+            onNewProject={() => p.dispatch({ type: 'modal', modal: { kind: 'project' } })} tasks={p.teams?.tasks} />
           {p.filing.dragging && <p className="st-help">{t.side.dropHelp(p.filing.dragging.name)}</p>}
         </section>
         <RigsSection model={rigRows} openrig={p.openrig ?? NO_STATUSES} current={current} byId={byId} paused={p.nav.paused} dense={prefs.dense}

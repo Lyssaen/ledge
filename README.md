@@ -111,6 +111,8 @@ One binary, `ledge`, with these commands. Source under `src/`:
 | `cli/send.ts` | `ledge send <name> "<message>" [--summary <text>]`: writes to another Ledge session through the daemon's mailbox; `ledge read <id>`: prints a long message whole. See [Messages between sessions](#messages-between-sessions). |
 | `cli/ask.ts`, `cli/decide.ts` | `ledge ask "<question>" "<options, recommendation>"`: a session asks the user a decision; `ledge decide [<id> "<answer>"]`: the user lists and answers them. See [Decisions](#decisions). |
 | `cli/action.ts` | `ledge close <session>…`: clean closes from a terminal or an agent, each verb a registry action sent as `action.run`. See [Closing sessions from the command line](#closing-sessions-from-the-command-line). |
+| `cli/task.ts` | `ledge task give\|list\|show\|take\|done\|refuse\|pass …`: work given to another session, taken and closed. See [Tasks between sessions](#tasks-between-sessions). |
+| `cli/team.ts`, `cli/action.ts` | `ledge team up\|list\|join\|leave\|resume\|dissolve\|save …` and `ledge close <session>…`: teams and clean closes from a terminal or an agent, each verb a registry action sent as `action.run`. See [Teams from the command line](#teams-from-the-command-line). |
 | `tui/` | `ledge tui [--notify bell\|osc9\|off]`: Ledge in a terminal (Ink, React). See [Ledge in a terminal](#ledge-in-a-terminal). |
 | `cli/bridge.ts` | `ledge bridge`: exchanges Ledge messages over SSH stdin/stdout, for a local daemon that reaches this machine (see [docs/multi-machine.md](docs/multi-machine.md)). |
 | `spawn.ts` | `spawnSession`: the tmux session that runs the agent (with `LEDGE_SESSION` and `LEDGE_NAME`) and the `starting` session record. Shared by the launcher and the daemon's `session.launch`. |
@@ -251,14 +253,36 @@ A message says something; a decision is a question that only the user can settle
 - **Ask.** `ledge ask "<question>" "<options, recommendation>"` asks the user. Nobody is typed to; the question waits in Ledge. It works only from a session Ledge launched. Codex's hook runs a lone `ledge ask …` itself, as it does `ledge send`.
 - **Answer.** The user lists the open decisions with `ledge decide` and answers with `ledge decide <id> "<answer>"` (never from a session), or answers from a front. The first answer wins; the asker is woken at its next free moment with a `<ledge-answer>` line.
 - **Never lost.** Decisions are journaled in `~/.ledge/asks.json` and outlive a daemon restart. One whose asker ends before the answer is dropped. A closed decision is kept 7 days, 200 at most.
-- **Agents.** The identity context tells every session to use `ledge ask` for a decision that is the user's, and a message only to say something.
+- **Agents.** The identity context tells a lone session to use `ledge ask` for a decision that is the user's, and a message only to say something; a team seat is told to use `ledge task give ledge` (see [Tasks between sessions](#tasks-between-sessions)). `ledge decide` lists and answers both.
+
+## Tasks between sessions
+
+A message says something; a task is work that must not get lost. Code: `cli/task.ts`, `daemon/tasks.ts`.
+
+- **Give.** `ledge task give <name> "<title>" ["<detail>"]` gives a live session a task (`t` + 6 hex). The owner gets one line at its next free moment, `<ledge-task id="…" from="…">`, naming the giver, the title and the commands that read and close it.
+- **Take, close.** The owner runs `take <id>`, then `done <id> "<result>"` (the result is required: the giver must learn what came of it) or `refuse <id> "<reason>"`. The giver is then told, with the start of the result or the reason. The giver can `refuse` its own task to cancel it, and the owner is then told to stop. A closed task takes no more changes.
+- **Pass.** `pass <id> <name> ["<note>"]` hands the task to another session. Its owner or its giver may pass it (a lead moving work between seats); the giver stays the same, the new owner is told, and an owner passed over its head is told to stop.
+- **Decisions.** `ledge task give ledge "<question>" "<options, recommendation>"` asks the user. Nobody is typed to; the user lists them with `ledge decide` and answers with `ledge decide <id> "<answer>"` (never from a session), which closes the task and wakes the asker. A decision outlives a daemon restart and drops if its asker ends.
+- **Parked.** A session idle for 15 min while it holds open tasks gets one reminder listing them (take, close, pass or refuse; nothing if it waits on someone). Once per set of tasks, so a lead waiting on its team is not woken each time it rests.
+- **Never lost.** Tasks are journaled in `~/.ledge/tasks.json`. An owner that ends or is removed with an open task drops it, and the giver is told. A closed task is kept 7 days, 300 at most.
+- **Read.** `list` shows the open tasks you hold or gave (`--all` adds the closed ones). `show <id>` prints one with its detail, result and history.
+- **Agents.** The identity context tells every session to use a task rather than a message for work. Codex's hook runs a lone `ledge task …` itself. A `<ledge-task>` line shows in the thread as a `notice`, never as the user's words.
+
+## Teams from the command line
+
+What the Desktop does to a team, an agent or a script does with `ledge team` (code: `cli/team.ts`, `cli/action.ts`). Every verb but `up` and `list` is an action of the registry the chat proposes from (`packages/protocol/src/actions.ts`): the CLI checks its arguments against the action's schema and sends `action.run`; the daemon resolves names to ids against the live state and applies it through the handler the Desktop's message reaches (`daemon/actions.ts`). No rule lives in the CLI.
+
+- **Launch.** `ledge team up <template> [--cwd <folder>] [--name <name>]` launches a template's team; `ledge team up --seat <role>[:<tool>] --seat …` launches ad hoc seats, as the Desktop's form does.
+- **List.** `ledge team list [--cwd <folder>]`: the templates, the roles and the live teams, each seat with the session that holds it.
+- **Change.** `join <team> <session> <@role>` seats a running session, `leave <team> <session>` frees its seat (the session goes on), `resume <team>` brings a resting team back, `save <team> <name>` writes the live team as `~/.ledge/teams/<name>.yaml`. A team is its id or its name, a session its id or its bot name.
+- **Dissolve.** `dissolve <team> --yes [--close-sessions]` cannot be undone: without `--yes` Ledge only says what it would do. `--close-sessions` also closes each live seat cleanly: the other seats first, then the team is dissolved, and the session that runs the command last.
+- **Close.** `ledge close <session>…` closes sessions as their user would (their conversation stays resumable), one after the other.
+- **What the seats are told.** A seat reads its role and teammates when it starts. After that, a seat that loses its team (it leaves, the team is dissolved, it takes a seat in another team) gets one `<ledge-notice team>` line at once; a refused `@role` then says « tu n'es plus dans l'équipe X ». The other seats are not woken: at their next turn, the `UserPromptSubmit` hook adds what changed (who came, who went, who took whose seat) and the team as it is now, once. The daemon keeps what each seat was last told (`Session.teamSeen`, recorded by the hook with `seat.seen`). Claude Code and Codex only: Cursor Agent's `beforeSubmitPrompt` cannot add context, and OMP has no hook, so both read their team again only at their next start.
+- **Agents.** `--json` prints one JSON line (`ok`, the resolved row, `reason`, `code`). Run from a session (`LEDGE_SESSION`), a command is allowed only when it closes that session or takes it out of its team, or when the session holds the `@leader` seat of the team it touches (dissolve it, take a member out, close one of its sessions, cancel one of its tasks through `action.run`). Anything else is refused, and the agent asks the user. The rule is `runGuard` in `daemon/actions.ts`. For these commands only (`ledge team`, `ledge close`), Ledge gives each session it launches a key (`LEDGE_SESSION_KEY`, derived from the daemon token) and the daemon refuses a session name without the matching one; `ledge task`, `ledge send` and `ledge handover` still take the name as given. This catches an agent's mistake, it does not stop an agent that means it: agents run as the same user and can read the token, and an agent that leaves `LEDGE_SESSION` out still passes for the user.
 
 ## Closing sessions from the command line
 
 What the Desktop does to a session, an agent or a script does with `ledge close` (code: `cli/action.ts`). The verb is an action of the registry the chat proposes from (`packages/protocol/src/actions.ts`): the CLI checks its arguments against the action's schema and sends `action.run`; the daemon resolves names to ids against the live state and applies it through the handler the Desktop's message reaches (`daemon/actions.ts`). No rule lives in the CLI.
-
-- **Close.** `ledge close <session>…` closes sessions as their user would (their conversation stays resumable), one after the other.
-- **Agents.** `--json` prints one JSON line (`ok`, the resolved row, `reason`, `code`). Run from a session (`LEDGE_SESSION`), a command is allowed only when it closes that session. Anything else is refused, and the agent asks the user. The rule is `runGuard` in `daemon/actions.ts`. For `ledge close`, Ledge gives each session it launches a key (`LEDGE_SESSION_KEY`, derived from the daemon token) and the daemon refuses a session name without the matching one; `ledge send` and `ledge handover` still take the name as given. This catches an agent's mistake, it does not stop an agent that means it: agents run as the same user and can read the token, and an agent that leaves `LEDGE_SESSION` out still passes for the user.
 
 ## Ledge in a terminal
 
@@ -312,6 +336,7 @@ Clients to daemon:
 | `session.unregister { id, exitCode }` | launcher | The agent ended. |
 | `session.decide { id, decision }` | overlay | `accept` or `deny` the pending request. Refused on `hook_only` sessions and when nothing is pending. |
 | `session.reply { id, text }` | overlay | Type text into the pane. On a question, only a single option number (`1`–`9`) is accepted: free text would pick the highlighted option. An `AskUserQuestion` with several questions is one number per dialog; the next question (or the review) coming up is success, not a refused answer. |
+| `seat.seen { id, key }` | hook | What a seat was just told of its team (`seatKey` in `daemon/seat.ts`): at its start, and at a turn that read a change. |
 | `session.rename { id, topic }` | overlay | Name the session's topic (500 characters at most, the hook's prompt cap). An empty topic hands back to the automatic sources (pane title, then first prompt). |
 | `session.interrupt { id }` | overlay | Send the adapter's interrupt keys (Esc for Claude Code). |
 | `session.kill { id }` | overlay | Kill the tmux session. |
@@ -559,7 +584,7 @@ docs/                design specs, implementation plans, mockups, the approved p
 
 ### Ledge Desktop
 
-`apps/desktop` is the Windows app: its main window (the atelier, sessions, settings), the notch as a second window (`apps/overlay`, built into `dist/notch/`), the tray and the updater. Run it with `pnpm --filter desktop dev` (UI) or `pnpm --filter desktop tauri dev` (Windows only), against a daemon in WSL.
+`apps/desktop` is the Windows app: its main window (the atelier, sessions, teams, settings), the notch as a second window (`apps/overlay`, built into `dist/notch/`), the tray and the updater. Run it with `pnpm --filter desktop dev` (UI) or `pnpm --filter desktop tauri dev` (Windows only), against a daemon in WSL.
 Its installer, `Ledge.Desktop_<version>_x64-setup.exe`, is the only one on a release, with its updater manifest (`latest-desktop.json`).
 The Desktop and overlay packages, the two crates and the npm package always carry the same version: `pnpm version:set <x.y.z>` stamps all of them, and the release workflow does it from the tag.
 

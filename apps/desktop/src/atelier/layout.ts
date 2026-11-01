@@ -80,14 +80,17 @@ export const helperState = (h: Helper): BotState => HELPER_STATE[h.state];
 
 /** The scene (rooms, « Sans projet », the empty project) is pure and shared: `@ledge/ui/rigs/scene`. */
 export { sceneOf, type AtelierRoom, type AtelierScene, type AtelierTable } from '@ledge/ui/rigs/scene';
+export { teamProject } from '@ledge/ui/rigs/scene';
 
 /** Room, then table, then seat (Alt ←/→, Alt 1…9, J / K): the seats a table draws (`tableSeats`: those with a session before the
- *  placeholders, `maxSeats` per table), placeholders skipped, then « Sans projet ». */
+ *  placeholders, `maxSeats` per table), placeholders skipped, then « Sans projet ». A resting team's seats are not walked. */
 export function walkOrder(scene: AtelierScene, maxSeats = MAX_SEATS): Session[] {
-  return [...scene.rooms.flatMap(r => r.tables.flatMap(t => tableSeats(t.mains, maxSeats).seated)).filter(s => !isSeatPlaceholder(s.id)), ...scene.unassigned];
+  return [...scene.rooms.flatMap(r => r.tables.flatMap(t => (t.team?.state === 'resting' ? [] : tableSeats(t.mains, maxSeats).seated))).filter(s => !isSeatPlaceholder(s.id)), ...scene.unassigned];
 }
 
-/** Room margins (atelier units, before zoom): 110 px at the sides and front, 150 px at the back. */
-export const ROOM_SIDE = 110, ROOM_BACK = 150;
-/** A room's width: its table and its two side margins. */
-export const roomTileWidth = (sessions: number, maxSeats = MAX_SEATS): number => roomWidth(sessions, maxSeats) + 2 * ROOM_SIDE;
+/** Room margins (atelier units, before zoom): 110 px at the sides and front, 150 px at the back; 70 px between tables. */
+export const ROOM_SIDE = 110, ROOM_BACK = 150, TABLE_GAP = 70;
+/** A room's width: its tables side by side (a count of sessions: one table), the gaps between them and its two side margins. */
+export const roomTileWidth = (tables: number | readonly { mains: readonly unknown[] }[], maxSeats = MAX_SEATS): number =>
+  typeof tables === 'number' ? roomWidth(tables, maxSeats) + 2 * ROOM_SIDE
+    : tables.reduce((w, t, i) => w + roomWidth(t.mains.length, maxSeats) + (i > 0 ? TABLE_GAP : 0), 0) + 2 * ROOM_SIDE;

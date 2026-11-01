@@ -1,12 +1,21 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
-import { DEFAULT_PROJECTS, MANDATE_CATEGORY_LABEL, projectOf, type ChatStep, type Escalation, type Projects, type Recent, type Rig, type Session } from '@ledge/protocol';
+import { DEFAULT_PROJECTS, MANDATE_CATEGORY_LABEL, projectOf, taskClosed, type ChatStep, type Escalation, type Projects, type Recent, type Rig, type Role, type Session, type Task, type Team, type TeamTemplate } from '@ledge/protocol';
 import { workingCount } from '@ledge/ui/rigs/model';
+import { listDefinitions } from '../daemon/teams.js';
+import { LEDGE_MD, writeLedgeMd, type LedgeInfo } from './guide.js';
+import { writeNotes } from './notes.js';
 
-export interface ContextInput { sessions: Session[]; recents?: Recent[]; projects?: Projects;
+export interface ContextInput { sessions: Session[]; recents?: Recent[]; projects?: Projects; teams?: Team[]; tasks?: Task[];
+  /** The roles and templates by folder (roles spec §3.8): the home's and each session's repository's; read from disk when left out. */
+  definitions?: (cwd?: string) => { roles: Role[]; templates: TeamTemplate[] };
   /** The OpenRig mirror (lot 4), only where the daemon has a bridge: `rigs.md` and `escalations.md`. */
   rigs?: Rig[]; escalations?: Escalation[];
+  /** What `ledge.md` holds (the guide, the version, the agents installed); no `ledge.md` when left out. */
+  ledge?: LedgeInfo;
+  /** The user's notes folder (`~/.ledge/context`): copied as `context-<name>.md` with `context-index.md`; none when left out. */
+  notesDir?: string;
   capture: (s: Session) => Promise<string[] | null>; git: (cwd: string) => Promise<string | null>; now: string }
 export interface Context { dir: string; steps: Map<string, ChatStep>; repoPaths: string[] }
 
@@ -17,7 +26,7 @@ const STATE: Record<Session['state'], string> = {
 
 /**
  * The folder Ledge reads before answering (spec 2026-10-11 §5.3): `sessions.md` names every session and the files that
- * describe it; `folders.md` lists the recent folders; `projects.md` the projects, their repositories and remembered folders (only where the daemon holds some); `pane-<id>.txt`, `reply-<id>.md` and `git-<id>.txt` exist only where there is something to read;
+ * describe it; `folders.md` lists the recent folders; `ledge.md` what Ledge is and does; `context-index.md` and `context-<name>.md` the user's notes; `projects.md` the projects, their repositories and remembered folders (only where the daemon holds some); `pane-<id>.txt`, `reply-<id>.md` and `git-<id>.txt` exist only where there is something to read;
  * `rigs.md` and `escalations.md` (lot 4) only where the daemon mirrors OpenRig.
  */
 export async function writeContext(dir: string, input: ContextInput): Promise<Context> {
@@ -32,10 +41,13 @@ export async function writeContext(dir: string, input: ContextInput): Promise<Co
     lines.push(`## ${s.name} (${s.tool}) — ${STATE[s.state]}`, `- id: ${s.id}`, `- topic: ${s.topic ?? '(none yet)'}`, `- folder: ${s.cwd}`,
       `- repository: ${s.repo ?? s.project}${s.branch ? `, branch ${s.branch}${s.worktree ? ' (linked worktree)' : ''}` : ''}`, `- started: ${s.startedAt}, last activity: ${s.lastActivityAt}`);
     if (withProjects) lines.push(`- Project: ${nameOf.get(projectOf(s, projects) ?? '') ?? 'no project'}`);
+    if (s.role) lines.push(`- role: ${oneLine(s.roleLabel ?? s.role)} (@${s.role})${s.autonomy ? `, autonomy ${s.autonomy}` : ''}`);
     // Its context (context handover spec §3.2): past 80 % the user may hand it over to a fresh session (« Passer le relais »).
     if (s.context) lines.push(`- context: ${Math.round((s.context.used / s.context.window) * 100)} % of ${s.context.window} tokens (the user's threshold decides when it is near its limit; a relief is started from its « ⋯ » menu)`);
     if (s.handover) lines.push(`- relief: ${s.handover.state}${s.handover.toName ? `, relieved by ${oneLine(s.handover.toName)}` : ''}${s.handover.reason ? ` (${oneLine(s.handover.reason)})` : ''}`);
     if (s.relieves) lines.push(`- relieves ${oneLine(s.relieves.name)} (its context was full)`);
+    const team = s.team ? input.teams?.find(t => t.id === s.team) : undefined;
+    if (team) lines.push(`- team: ${oneLine(team.name)} (${team.id})`);
     if (s.source === 'hook_only') lines.push('- read-only: Ledge cannot send to it');
     if (s.pending) lines.push(`- pending ${s.pending.kind}: ${s.pending.text}`);
     const live = s.helpers.filter(h => h.state !== 'exited');
@@ -57,6 +69,9 @@ export async function writeContext(dir: string, input: ContextInput): Promise<Co
     ...(projects.rules.length ? ['## Filed folders', '', ...projects.rules.map(r => `- ${r.machine}: ${r.path} → ${nameOf.get(r.project) ?? r.project}`), ''] : [])].join('\n'));
   if (input.rigs) await writeFile(join(dir, 'rigs.md'), rigsMd(input.rigs));
   if (input.escalations) await writeFile(join(dir, 'escalations.md'), escalationsMd(input.escalations));
+  if (input.teams || input.tasks) await writeTeamsContext(dir, input, steps);
+  if (input.ledge) { await writeLedgeMd(dir, input.ledge); steps.set(LEDGE_MD, { kind: 'repo', name: 'Ledge', path: LEDGE_MD }); }
+  if (input.notesDir) await writeNotes(dir, input.notesDir, steps);
   const repoPaths = [...new Set(input.sessions.map(s => s.repoPath ?? s.cwd).filter(p => p && !coversHome(p)).map(p => resolve(p)))];
   return { dir, steps, repoPaths };
 }
@@ -76,6 +91,48 @@ function escalationsMd(escalations: Escalation[]): string {
       const options = e.questions.map(q => `${oneLine(q.question)} → ${q.options.map(o => oneLine(o.label)).join(' / ')}`).join(' ; ');
       return `- ${e.id} — de ${oneLine(e.from)}${e.rigId ? `, rig ${e.rigId}` : ''}${e.category ? `, ${MANDATE_CATEGORY_LABEL[e.category].fr}` : ''}${e.state === 'grace' ? ', en délai de grâce' : ''} : « ${oneLine(e.summary)} »${options ? `. Options : ${options}` : ''}`;
     }) : ['- (aucune)']), ''].join('\n');
+}
+
+const STATE_FR: Record<Task['state'], string> = { open: 'open (not taken yet)', taken: 'taken', done: 'done', refused: 'refused', dropped: 'dropped (its owner ended)' };
+
+/**
+ * `roles.md`, `teams.md` and `tasks.md` (roles spec §3.8): the roles and templates Ledge may compose a team from (the
+ * home's, and each live session's repository's), the live teams with their seats, and the open tasks and those closed today.
+ */
+async function writeTeamsContext(dir: string, input: ContextInput, steps: Map<string, ChatStep>): Promise<void> {
+  const defsOf = input.definitions ?? (cwd => listDefinitions(cwd));
+  const folders = [undefined, ...new Set(input.sessions.filter(s => s.state !== 'exited').map(s => s.repoPath ?? s.cwd))];
+  const roles = new Map<string, Role & { folders: Set<string> }>(); const templates = new Map<string, TeamTemplate>();
+  for (const f of folders) {
+    let defs;
+    try { defs = defsOf(f); } catch { continue; }
+    for (const r of defs.roles) { const key = `${r.source}:${r.path}`; const cur = roles.get(key) ?? { ...r, folders: new Set<string>() }; if (f) cur.folders.add(f); roles.set(key, cur); }
+    for (const t of defs.templates) templates.set(`${t.source}:${t.path}`, t);
+  }
+  const roleLines = ['# Roles', '', 'A team is composed only of these roles. A role from the home folder is available everywhere; a repository role only in that repository.', ''];
+  if (!roles.size) roleLines.push('No roles yet. A role is a Markdown file `~/.ledge/roles/<id>.md` (or `<repo>/.ledge/roles/<id>.md`): a front matter with `label`, optionally `tool`, `model`, `effort`, `autonomy` (ask, edits, auto), then the role\'s prompt.', '');
+  for (const r of roles.values()) {
+    roleLines.push(`## @${r.id} — ${oneLine(r.label)}`, `- source: ${r.source === 'home' ? 'home (every folder)' : `repository ${[...r.folders].join(', ')}`}`,
+      `- defaults: agent ${r.tool ?? '(launch form)'}, model ${r.model ?? '(default)'}, effort ${r.effort ?? '(default)'}, autonomy ${r.autonomy ?? 'ask'}`, `- prompt: ${oneLine(r.prompt).slice(0, 300) || '(none)'}`, '');
+  }
+  await writeFile(join(dir, 'roles.md'), roleLines.join('\n'));
+  const nameOf = new Map(input.sessions.map(s => [s.id, s]));
+  const teams = (input.teams ?? []).filter(t => t.state !== 'dissolved');
+  const taskList = input.tasks ?? [];
+  const teamLines = ['# Teams', '', '## Templates', '', ...(templates.size ? [...templates.values()].map(t => `- ${t.id} (« ${oneLine(t.name)} », ${t.source}): ${t.seats.map(x => `@${x.role}${x.tool ? ` ${x.tool}` : ''}`).join(', ')}`) : ['- (none: a template is `~/.ledge/teams/<id>.yaml`)']), '', '## Live teams', ''];
+  if (!teams.length) teamLines.push('No live team.', '');
+  for (const t of teams) {
+    const mine = taskList.filter(x => x.team === t.id && x.giver === 'ledge');
+    teamLines.push(`### ${oneLine(t.name)} (${t.id}) — ${t.state}`, `- folder: ${t.cwd}`, `- project: ${t.project ?? 'no project'}`, ...(t.template ? [`- template: ${t.template}`] : []),
+      `- Ledge's tasks: ${mine.filter(x => x.state === 'done').length}/${mine.length} done`,
+      ...t.seats.map(seat => { const s = seat.sessionId ? nameOf.get(seat.sessionId) : undefined; return `- @${seat.role}: ${s ? `${s.name} (${s.id}), ${STATE[s.state]}` : 'free'}`; }), '');
+  }
+  await writeFile(join(dir, 'teams.md'), teamLines.join('\n'));
+  const day = new Date().toISOString().slice(0, 10);
+  const shown = taskList.filter(t => !taskClosed(t) || t.updatedAt.slice(0, 10) === day);
+  await writeFile(join(dir, 'tasks.md'), ['# Tasks', '', 'Open tasks and those closed today. A giver `Ledge` is the user, through you.', '',
+    ...(shown.length ? shown.map(t => `- ${t.id} « ${oneLine(t.title)} » — giver ${t.giverName}, owner ${t.ownerName}${t.team ? `, team ${t.team}` : ''}, ${STATE_FR[t.state]}${t.result ? `: ${oneLine(t.result).slice(0, 200)}` : ''} (updated ${t.updatedAt})`) : ['- (none)']), ''].join('\n'));
+  steps.set('roles.md', { kind: 'sessions' }); steps.set('teams.md', { kind: 'sessions' }); steps.set('tasks.md', { kind: 'sessions' });
 }
 
 /** Text written on one line of a Markdown file: its line breaks become spaces. */

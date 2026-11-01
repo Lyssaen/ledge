@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ACTIONS, NEVER_PROPOSED } from '@ledge/protocol';
+import { ACTIONS, MAX_PROPOSALS, NEVER_PROPOSED } from '@ledge/protocol';
 import { buildPersona } from '../src/chat/persona.js';
 import { PERSONA } from '../src/chat/claude.js';
 
@@ -30,6 +30,15 @@ describe('buildPersona (spec 2026-10-26 action registry §4)', () => {
       if (a.risk === 'reversible') expect(entry, a.id).toContain('réversible');
     }
   });
+  it('says the cap of an action held below the plan\'s, so the answer never announces rows the card drops', () => {
+    const p = buildPersona('claude');
+    for (const a of ACTIONS) {
+      const rule = p.split('\n').find(l => l.startsWith('  Règle : ') && l.includes(a.when))!;
+      if (a.max === 1) expect(rule, a.id).toContain('une seule par réponse');
+      else if (a.max < MAX_PROPOSALS) expect(rule, a.id).toContain(`${a.max} au plus par réponse`);
+      else expect(rule, a.id).not.toContain('par réponse');
+    }
+  });
   it('writes only ledge-action blocks, never the earlier fences', () => {
     expect(buildPersona('claude')).not.toMatch(/```ledge-(session|relay|close|project|team|task)\b/);
   });
@@ -45,16 +54,11 @@ describe('buildPersona (spec 2026-10-26 action registry §4)', () => {
   });
 });
 
-describe('buildPersona: no team', () => {
-  it('the persona speaks of no team', () => expect(buildPersona('claude')).not.toMatch(/teams\.md|tasks\.md|équipe/));
-});
-
 describe('buildPersona: rigs (lot 4)', () => {
-  it('the persona names rigs.md and escalations.md, not teams.md', () => {
+  it('the persona names rigs.md and escalations.md next to teams.md', () => {
     for (const tool of TOOLS) {
       const p = buildPersona(tool);
-      expect(p).toContain('rigs.md'); expect(p).toContain('escalations.md');
-      expect(p).not.toMatch(/teams\.md|tasks\.md/);
+      expect(p).toContain('rigs.md'); expect(p).toContain('escalations.md'); expect(p).toContain('teams.md');
     }
   });
 });

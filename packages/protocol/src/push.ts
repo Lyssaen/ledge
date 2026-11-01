@@ -44,7 +44,7 @@ export type PushSubscription = z.infer<typeof PushSubscriptionSchema>;
 /** The clear text of a push, before it is sealed: what the service worker shows. `url` stays inside the app. */
 export const PushPayloadSchema = z.object({
   v: z.literal(1),
-  kind: z.enum(['request', 'question', 'finished', 'chat', 'escalation', 'decided']),
+  kind: z.enum(['request', 'question', 'finished', 'chat', 'escalation', 'decided', 'decision']),
   escalationId: z.string().min(1).max(120).optional(),
   count: z.number().int().min(1).max(999).optional(),
   actions: z.array(z.object({ qId: z.string().min(1).max(64), optId: z.string().min(1).max(64), label: z.string().max(40) }).strict()).max(2).optional(),

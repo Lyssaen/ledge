@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 
-/** Hash routes of the phone app. `#/thread/<sid>` and `#/request/<sid>/<key>` are also the entry points of a shared link. */
+/** Hash routes of the phone app. The sign-in, a changed key and a new version are not routes: the link's state shows them (App.tsx). `#/thread/<sid>` and `#/request/<sid>/<key>` are also the entry points of a shared link. */
 export type Route =
   | { name: 'inbox' }
   | { name: 'agents' }
@@ -12,14 +12,19 @@ export type Route =
   | { name: 'terminal'; sessionId: string }
   | { name: 'request'; sessionId: string; key: string }
   | { name: 'connection' }
-  | { name: 'login' }
-  | { name: 'link' }
-  | { name: 'key-changed' }
-  | { name: 'update' };
+  /** The Équipes tab. `team`: the editor of a team definition (`key` is `new` or a catalog key, `model/catalog.ts`); `team-copy`: a live team's composition as a new team; `role`: a role's editor. */
+  | { name: 'teams' }
+  | { name: 'team'; key: string }
+  | { name: 'team-copy'; teamId: string }
+  | { name: 'role'; key: string }
+  | { name: 'live'; teamId: string }
+  | { name: 'compose'; teamId: string };
 
-const SIMPLE = ['rigs', 'projects', 'new-rig', 'agents', 'chat', 'connection', 'login', 'link', 'key-changed', 'update'] as const;
-/** Routes of the removed Équipes tab, which a bookmark or a cached app may still carry: they open the agents. */
-const REMOVED = ['teams', 'team', 'team-copy', 'role', 'live', 'compose'];
+/** Every route, as the Ledge guide (docs/ledge-guide.md) must describe them: a Record, so a new route fails to compile until it is listed here. */
+const ROUTE_NAME: Record<Route['name'], true> = { inbox: true, agents: true, chat: true, thread: true, terminal: true, request: true, connection: true, rigs: true, projects: true, 'new-rig': true, rig: true, escalation: true, teams: true, team: true, 'team-copy': true, role: true, live: true, compose: true };
+export const ROUTE_NAMES = Object.keys(ROUTE_NAME) as Route['name'][];
+
+const SIMPLE = ['rigs', 'projects', 'new-rig', 'agents', 'chat', 'connection', 'teams'] as const;
 
 export function parseRoute(hash: string): Route {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean);
@@ -27,9 +32,10 @@ export function parseRoute(hash: string): Route {
     if (parts[0] === 'escalation' && parts.length === 2) return { name: 'escalation', id: decodeURIComponent(parts[1]!) };
     if (parts[0] === 'rig' && (parts.length === 2 || parts.length === 3) && (!parts[2] || ['seats', 'exchanges', 'queue'].includes(parts[2]))) return { name: 'rig', key: decodeURIComponent(parts[1]!), view: (parts[2] ?? 'seats') as 'seats' | 'exchanges' | 'queue' };
     if (parts[0] === 'request' && parts.length === 3) return { name: 'request', sessionId: decodeURIComponent(parts[1]!), key: decodeURIComponent(parts[2]!) };
+    if ((parts[0] === 'team' || parts[0] === 'role') && parts.length === 2) return { name: parts[0], key: decodeURIComponent(parts[1]!) };
+    if ((parts[0] === 'team-copy' || parts[0] === 'live' || parts[0] === 'compose') && parts.length === 2) return { name: parts[0], teamId: decodeURIComponent(parts[1]!) };
     if ((parts[0] === 'thread' || parts[0] === 'terminal') && parts.length === 2) return { name: parts[0], sessionId: decodeURIComponent(parts[1]!) };
   } catch { /* malformed escape: fall through to the inbox */ }
-  if (REMOVED.includes(parts[0] ?? '')) return { name: 'agents' };
   const simple = SIMPLE.find((n) => n === parts[0]);
   if (simple && parts.length === 1) return { name: simple };
   return { name: 'inbox' };
@@ -39,6 +45,8 @@ export function href(r: Route): string {
   if (r.name === 'rig') return `#/rig/${encodeURIComponent(r.key)}/${r.view}`;
   if (r.name === 'escalation') return `#/escalation/${encodeURIComponent(r.id)}`;
   if (r.name === 'request') return `#/request/${encodeURIComponent(r.sessionId)}/${encodeURIComponent(r.key)}`;
+  if (r.name === 'team' || r.name === 'role') return `#/${r.name}/${encodeURIComponent(r.key)}`;
+  if (r.name === 'team-copy' || r.name === 'live' || r.name === 'compose') return `#/${r.name}/${encodeURIComponent(r.teamId)}`;
   if (r.name === 'thread' || r.name === 'terminal') return `#/${r.name}/${encodeURIComponent(r.sessionId)}`;
   return r.name === 'inbox' ? '#/' : `#/${r.name}`;
 }

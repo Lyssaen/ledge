@@ -2,8 +2,8 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, screen, waitFor, within } from '@testing-library/react';
-import { activeCount } from '../src/nav/agents';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
+import { activeCount } from '../src/nav/agents';
 import { boot, closeDaemons, listSessions, TWO_PROJECTS } from './helpers';
 import { MESSAGES } from '../src/i18n/messages';
 
@@ -61,18 +61,13 @@ describe('the sidebar shell', () => {
     await waitFor(() => expect(d.received).toContainEqual({ type: 'ask.answer', rid: expect.any(String), id: 'a1b2c34', text: 'B' }));
   });
 
-  it('the tree draws no team row; every session of a project sits under it by branch', async () => {
+  it('the tree draws a team row, its seats under it; the project’s other sessions sit by branch', async () => {
     const seat = (id: string, name: string, branch: string) => fakeSession(id, { name, cwd: '/w/ledge', state: 'working', branch, ...{ team: 'team-a1b2', role: 'build' } });
     const { d, side } = await boot({ projects: TWO_PROJECTS, sessions: [seat('otto', 'Otto', 'desktop'), seat('nova', 'Nova', 'main')] });
-    // An older daemon still speaks of teams: the front ignores them.
-    d.push({ type: 'teams', teams: [{ id: 'team-a1b2', name: 'ledge-dev', project: 'ledge', machine: 'local', cwd: '/w/ledge', state: 'active', seats: [{ role: 'build', sessionId: 'otto' }], createdAt: '2026-10-26T08:00:00.000Z', updatedAt: '2026-10-26T08:00:00.000Z' }] } as never);
+    d.push({ type: 'teams', teams: [{ id: 'team-a1b2', name: 'ledge-dev', project: 'ledge', machine: 'local', cwd: '/w/ledge', state: 'active', seats: [{ role: 'build', sessionId: 'otto' }, { role: 'build', sessionId: 'nova' }], createdAt: '2026-10-26T08:00:00.000Z', updatedAt: '2026-10-26T08:00:00.000Z' }] });
     const tree = within(side.getByRole('tree'));
-    expect(await tree.findByRole('button', { name: /^Otto/ })).toBeVisible();
-    expect(tree.getByRole('button', { name: /^Nova/ })).toBeVisible();
-    expect(document.querySelector('.st-team, .st-common')).toBeNull();
-    expect(tree.queryByText('ledge-dev')).toBeNull();
-    expect(tree.getByText('desktop')).toBeVisible();
-    expect(tree.getByText('main')).toBeVisible();
+    expect(await tree.findByText('ledge-dev')).toBeVisible();
+    expect(document.querySelector('.st-team')).not.toBeNull();
   });
 
   it('no question field in the sidebar any more: / goes home, its composer focused, and Enter there sends ledge.say', async () => {

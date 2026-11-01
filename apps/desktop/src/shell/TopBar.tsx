@@ -39,7 +39,7 @@ const MENU_WIDTH = 260;
 /** The mockup's top bar: the breadcrumb on the left (no page title; on a subagent's page, its parent before it); on the right,
  *  icons only, in groups: display (overview only), or the open agent's state, the terminal toggle and the session menu; then
  *  shortcuts and full screen (search and chat are in the title bar). */
-export function TopBar({ nav, dispatch, session, helper, projects, rigs = [], projectIdOf, terminal, onTerminal, manage, onRevealArchives, onDetach }: {
+export function TopBar({ nav, dispatch, session, helper, projects, rigs = [], projectIdOf, terminal, onTerminal, manage, onRevealArchives, onDetach, teamOf }: {
   nav: NavState; dispatch: (a: NavAction) => void; session: Session | null; projects: Projects | null; projectIdOf: (s: Session) => string | null;
   /** OpenRig's rigs: a rig filter's chip shows its colour and name. */
   rigs?: readonly Rig[];
@@ -51,6 +51,8 @@ export function TopBar({ nav, dispatch, session, helper, projects, rigs = [], pr
   onRevealArchives?: () => void;
   /** « Détacher l'Atelier » (#21), on the overview: only in Tauri, while the Atelier is in this window. */
   onDetach?: () => void;
+  /** A seat's team in its breadcrumb (atelier rooms spec §3.5): `Atelier / <project> / ⚑ <team> / <bot>`. */
+  teamOf?: (s: Session) => { name: string } | undefined;
 }) {
   const { t } = useI18n();
   const { place } = nav;
@@ -59,6 +61,7 @@ export function TopBar({ nav, dispatch, session, helper, projects, rigs = [], pr
   const overview = place.kind === 'overview';
   const crumbIcon = place.kind === 'settings' ? SHELL_ICONS.gear : place.kind === 'session' ? ICONS.folder.d : SHELL_ICONS.grid;
 
+  const team = session ? teamOf?.(session) : undefined;
   const crumbs = () => {
     if (place.kind === 'settings') return <>
       <button className="crumb-link" onClick={() => dispatch({ type: 'settings', section: 'general' })}>{t.crumb.settings}</button>
@@ -72,6 +75,7 @@ export function TopBar({ nav, dispatch, session, helper, projects, rigs = [], pr
         <span className="muted">/</span>
         <button className="crumb-link" onClick={() => dispatch({ type: 'home', project: pid })} title={filterName(pid)}>{filterName(pid)}</button>
         <span className="muted">/</span>
+        {team && <><button className="crumb-link crumb-team" onClick={() => dispatch({ type: 'home', project: pid })} title={team.name}>⚑ {team.name}</button><span className="muted">/</span></>}
         {helper ? <>
           <button className="crumb-link crumb-parent" onClick={() => dispatch({ type: 'open', id: session.id })} title={t.crumb.openParent(session.name)}>
             <SessionBot session={session} size={18} paused={nav.paused} />{session.name}
@@ -86,6 +90,7 @@ export function TopBar({ nav, dispatch, session, helper, projects, rigs = [], pr
           <span className="crumb-session">
             <SessionBot session={session} size={22} paused={nav.paused} />
             <strong>{session.name}</strong>
+            {session.role && <span className="role-pill" title={session.roleLabel ?? session.role}>@{session.role}</span>}
             {taskOf(session) && <span className="crumb-task" title={taskOf(session)}>{taskOf(session)}</span>}
           </span>
         )}

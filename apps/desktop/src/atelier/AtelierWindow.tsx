@@ -28,6 +28,7 @@ import { RigControlsContext } from '../rigs/useRigActions';
 import { ConfirmDialog } from '../manage/ConfirmDialog';
 import { Atelier } from './Atelier';
 import { useRelief } from '../session/useRelief';
+import { useTeamsApi } from '../teams/useTeamsApi';
 import { useFiling } from './filing';
 import { closeAtelierWindow, terminalToMain, toMain, watchAtelierWindow } from './detach';
 
@@ -73,6 +74,7 @@ function AtelierAlone({ client }: { client?: DaemonClient }) {
   const escalations = useEscalations(fleetClient);
   const exchanges = useRigExchanges(fleetClient, rigs);
   const relief = useRelief(fleetClient);
+  const teams = useTeamsApi(fleetClient);
   const [nav, local] = useReducer(navReducer, undefined, () => initialNav(loadOverview(), 'atelier'));
   const dispatch = useCallback((a: NavAction) => { if (STAYS.has(a.type)) local(a); else toMain(a); }, []);
   useEffect(watchAtelierWindow, []);
@@ -96,6 +98,7 @@ function AtelierAlone({ client }: { client?: DaemonClient }) {
         <section className="workspace">
           <Atelier client={fleetClient} nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} rigs={rigs} openrig={openrig} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu}
             escalations={escalations} exchanges={exchanges} onSeatTerminal={(rig, seat) => { void openSeatTerminal(fleetClient, rig, seat, new Map(sessions.map(s => [s.id, s]))).then(ok => { if (!ok) notify(t.session.terminal.openFailed(seat.name)); }); }}
+            teams={teams} archived={fleetView.archived} notify={notify}
             tools={nav.fullscreen && <>
               <span className="zoom-sep" />
               <Button variant="ghost" size="icon" aria-label={t.top.fullscreenExit} title={t.top.fullscreenExit} onClick={() => dispatch({ type: 'fullscreen', on: false })}>

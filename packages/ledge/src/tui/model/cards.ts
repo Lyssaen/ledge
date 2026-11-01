@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { useEffect, useMemo, useState } from 'react';
 import type { Key } from 'ink';
 import type { DaemonClient, DaemonState } from '@ledge/fleet';
-import { proposalRows, type ChatTurn } from '@ledge/protocol';
+import { LEDGE_GIVER, proposalRows, type ChatTurn } from '@ledge/protocol';
 import type { Screen } from '../context.js';
 import type { Messages } from '../i18n/lang.js';
 import { C } from '../theme.js';
@@ -72,8 +72,17 @@ export function useCards(o: {
     if (busy || card.kind === 'action') return;
     const turn = d.chat.find(x => x.qid === card.qid);
     if (!turn) return;
+    if (card.kind === 'task') {
+      // A task to `@role` waits for the team proposed with it (its card says so).
+      const row = card.rows.find(r => { const c = turn.tasks![r]!; return !c.to.startsWith('@') || c.team || turn.team?.teamId; });
+      if (row === undefined) return;
+      setBusy({ qid: card.qid, turn, errorSeq: d.errors.at(-1)?.seq ?? 0, at: Date.now() });
+      client.send({ type: 'task.cmd', rid: randomUUID(), by: LEDGE_GIVER, op: 'give', qid: card.qid, row });
+      return;
+    }
     setBusy({ qid: card.qid, turn, errorSeq: d.errors.at(-1)?.seq ?? 0, at: Date.now() });
-    if (card.kind === 'launch') {
+    if (card.kind === 'team') client.send({ type: 'team.launch', rid: randomUUID(), qid: card.qid });
+    else if (card.kind === 'launch') {
       const first = proposalRows(turn)[card.rows[0]!]!;
       client.send({ type: 'session.launch', tool: first.tool, cwd: first.cwd, ...(first.prompt ? { prompt: first.prompt } : {}), qid: card.qid, rows: card.rows });
     } else if (card.kind === 'relay') client.send({ type: turn.relay?.status === 'queued' ? 'session.relay.cancel' : 'session.relay', qid: card.qid });

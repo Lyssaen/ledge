@@ -11,7 +11,7 @@ export const fr = {
   time: {
     now: 'à l’instant', decimal: ',', s: (n: number) => `${n} s`, min: (n: number) => `${n} min`, h: (n: number) => `${n} h`, d: (n: number) => `${n} j`
   },
-  tabs: { overview: 'Accueil', session: 'Session', ask: 'Demander à Ledge', launch: 'Nouvelle session', settings: 'Réglages' },
+  tabs: { overview: 'Accueil', session: 'Session', ask: 'Demander à Ledge', launch: 'Nouvelle session', settings: 'Réglages', teams: 'Équipes' },
   bar: {
     machines: (n: number) => `${n} ${plural(n, 'machine', 'machines')}`,
     rigs: (n: number) => `${n} ${plural(n, 'rig', 'rigs')}`,
@@ -30,15 +30,16 @@ export const fr = {
     interrupt: 'interrompre', next: 'suivante en attente', unfold: 'déplier', send: 'envoyer / lancer', nextCard: 'carte suivante',
     newChat: 'nouvelle conversation', stopAnswer: 'arrêter la réponse', nextField: 'champ suivant', choose: 'choisir', tick: 'cocher',
     start: 'lancer', cancel: 'annuler', change: 'changer', scroll: 'défiler', space: 'espace', redraw: 'autre nom',
-    handover: 'passer le relais',
+    save: 'enregistrer l’équipe', tasks: 'tâches de l’équipe', join: 'rejoindre une équipe', resume: 'reprendre l’équipe', teamMode: 'session ou équipe', handover: 'passer le relais', sendAnswer: 'envoyer la réponse', edit: 'modifier',
     sendOnly: 'envoyer', newLine: 'nouvelle ligne', keepAndLeave: 'garder et sortir', lineHistory: 'ligne · historique', history: 'historique',
     word: 'mot', clear: 'effacer', resend: 'renvoyer', backToDraft: 'revenir au brouillon', keep: 'garder', wipe: 'effacer',
     line: 'ligne', page: 'page', end: 'fin', question: 'question', conversation: 'conversation', cycle: 'cartes · conversation',
     applyRow: 'appliquer la ligne', apply: 'appliquer', applyAll: 'tout appliquer', deny: 'refuser', ignore: 'ignorer', review: 'revoir',
     openSession: (name: string) => `ouvrir ${name}`,
-    screens: 'Ledge · rig · session',
+    screens: 'Ledge · rig · session · équipes',
     decide: 'trancher', revisit: 'revenir dessus', fold: 'replier', talk: 'en parler', complete: 'compléter',
-    tabs: 'onglets', summarize: 'résumer', point: 'le point', close: 'fermer', mandate: 'le mandat'
+    tabs: 'onglets', summarize: 'résumer', point: 'le point', close: 'fermer', mandate: 'le mandat',
+    rolesTemplates: 'rôles / modèles', folder: 'dossier', launchRole: 'lancer avec ce rôle', launchTeam: 'lancer cette équipe', openFile: 'ouvrir le fichier', ignored: 'ignorés', reread: 'relire'
   },
   home: {
     ledge: 'Ledge', crumb: '1 Ledge · 2 Rig · 3 Session',
@@ -140,11 +141,18 @@ export const fr = {
     wantsToRun: 'Veut exécuter :', asks: 'Demande :', plan: 'Propose un plan :', diff: 'Veut modifier :',
     allow: 'Autoriser', deny: 'Refuser', always: 'Toujours', denyWithNote: 'Refuser en expliquant',
     askLine: (name: string, question: string) => `? ${name} : ${question}`, askHint: (id: string) => `ledge decide ${id} "<réponse>"`,
+    common: 'table commune', teamLine: (done: number, given: number) => `équipe · ${done}/${given}`, resting: 'au repos · R pour reprendre',
+    tasks: (team: string) => `Tâches · ${team}`, noTask: 'Aucune tâche.', ledge: 'Ledge',
     near: (name: string, pct: number) => `${name} · ctx ${pct} % · H relève`,
     reliefFailed: (name: string, why: string) => `La relève de ${name} a échoué : ${why}`,
     context: (pct: number) => `ctx ${pct} %`,
     relief: { briefing: 'relève : bilan demandé', launching: 'relève : lancement…', done: 'relevée', failed: 'relève échouée' } as Record<'briefing' | 'launching' | 'done' | 'failed', string>,
     relievedBy: (name: string) => `relevée par ${name}`, relieves: (name: string) => `relève de ${name}`,
+    ledgeTask: (owner: string, title: string, state: 'done' | 'refused' | 'dropped') => `${owner} a ${state === 'done' ? 'fini' : state === 'refused' ? 'refusé' : 'abandonné'} « ${title} » · tâche de Ledge`,
+    decision: (giver: string, title: string) => `${giver} te demande : ${title}`,
+    decisionTitle: (giver: string, title: string) => `Répondre à ${giver} · ${title}`, decisionHint: 'Ta réponse, telle que la session la lira…',
+    confirmAnswer: (giver: string) => `Envoyer à ${giver} ? Une réponse ne se reprend pas`,
+    joinWhich: (name: string) => `${name} rejoint quelle équipe ? (↑↓ ↵, esc)`, noTeamHere: 'Aucune équipe dans ce projet.', notInTeam: 'Cette session n’est dans aucune équipe.'
   },
   session: {
     you: 'Vous', unfold: 'déplier', fold: 'replier', actions: (n: number) => `${n} ${plural(n, 'action', 'actions')}`,
@@ -173,6 +181,13 @@ export const fr = {
     offline: 'Le daemon local est hors ligne : la question attendra.',
     steps: { sessions: 'les sessions', pane: (n: string) => `le terminal de ${n}`, reply: (n: string) => `la réponse de ${n}`, git: (n: string) => `l’état git de ${n}`, repo: (p: string) => p },
     operator: (s: number, m: number) => `Ledge · Opérateur · voit ${s} ${plural(s, 'session', 'sessions')}, ${m} ${plural(m, 'machine', 'machines')}`,
+    teamCard: (name: string) => `Équipe · ${name}`, taskCard: 'Tâches à confier', launchTeam: 'Lancer l’équipe', save: 'Enregistrer', saved: 'enregistrée',
+    seats: 'Sièges', table: 'Table', newTable: (project: string) => `nouvelle table dans la pièce ${project}`,
+    autonomy: { ask: 'demande', edits: 'modifie sans demander', auto: 'autonome' } as Record<'ask' | 'edits' | 'auto', string>,
+    autoWarning: (roles: string) => `${roles} travaillera sans demander.`, teamLaunched: (at: string) => `✓ Équipe lancée à ${at}`,
+    give: 'Confier', waitTeam: 'active une fois l’équipe lancée',
+    given: (owner: string, id: string, state: string) => `✓ Confiée à ${owner} · ${id} · ${state}`,
+    taskState: { open: 'à prendre', taken: 'prise', done: 'finie', refused: 'refusée', dropped: 'abandonnée' } as Record<'open' | 'taken' | 'done' | 'refused' | 'dropped', string>,
     resetTitle: 'Nouvelle conversation ?',
     resetBody: (n: number, since: string) => `La conversation du jour (${n} ${plural(n, 'question', 'questions')}, depuis ${since}) sera effacée.`,
     draftStays: 'Ton brouillon reste.', keep: 'Garder', wipe: 'Effacer et repartir',
@@ -202,6 +217,25 @@ export const fr = {
     launch: 'Lancer', cancel: 'Annuler', thenAttach: 'puis a pour s’attacher à son terminal',
     missing: { prompt: 'Écrivez une instruction.', machine: 'Aucune machine en ligne.', repos: 'Choisissez un dépôt ou un dossier.' } as Record<'prompt' | 'machine' | 'repos', string>,
     launching: 'Lancement…', launched: (name: string) => `✓ ${name} est lancée`,
+    teamTitle: 'Nouvelle équipe', mode: 'Mode', session: 'session', team: 'équipe', template: 'Modèle', custom: 'sièges choisis un par un', seats: 'Sièges',
+    teamName: 'Nom', noRole: 'aucun rôle : écris ~/.ledge/roles/<id>.md', loadingRoles: 'lecture des rôles…',
+    teamPreview: (team: string, project: string) => `L’équipe ${team} s’installera à une nouvelle table de la pièce ${project}.`,
+    teamLaunched: (name: string) => `✓ Équipe ${name} lancée`, teamFailed: (why: string) => `Équipe non lancée : ${why}`, noSeat: 'Choisissez au moins un siège.'
+  },
+  catalog: {
+    roles: 'rôles', templates: 'modèles', homeOnly: 'Perso seulement',
+    repoRoles: 'dépôt · .ledge/roles', homeRoles: 'perso · ~/.ledge/roles', repoTeams: 'dépôt · .ledge/teams', homeTeams: 'perso · ~/.ledge/teams',
+    repo: 'dépôt', home: 'perso', tool: 'outil', model: 'modèle', effort: 'effort', autonomy: 'autonomie', file: 'fichier', usedIn: 'dans', heldBy: 'tenu par',
+    teams: 'équipes', replaces: (path: string) => `remplace ${path}`, toolDefault: 'défaut de l’outil', noTemplate: 'aucun modèle', nobody: 'personne', noTeam: 'aucune',
+    active: 'active', resting: 'au repos', instruction: (n: number, max: number) => `Consigne · ${n}/${max}`, noInstruction: 'Pas de consigne.',
+    seats: (n: number) => `${n} ${plural(n, 'poste', 'postes')}`,
+    autonomyShort: { ask: 'demande', edits: 'éditions', auto: 'auto' } as Record<'ask' | 'edits' | 'auto', string>,
+    ignored: (n: number) => `⚠ ${n} ${plural(n, 'fichier ignoré', 'fichiers ignorés')}`, see: 'voir', problems: 'Fichiers ignorés', noProblem: 'Aucun fichier ignoré.',
+    loading: 'lecture des rôles…', noAnswer: 'Le daemon n’a pas répondu.',
+    offline: (m: string) => `${m} est hors ligne.`, outdated: (m: string) => `Le daemon de ${m} est trop ancien pour le catalogue.`, onMachine: (m: string) => `sur ${m}`,
+    roleChecking: (id: string) => `@${id} : lecture du rôle dans ce dossier…`, roleReadIn: (cwd: string) => `celui de ${cwd}`,
+    roleElsewhere: (id: string, cwd: string) => `@${id} n’est lu que dans ${cwd} : lancé sans rôle`, noRole: 'Aucun rôle ici : écris .ledge/roles/<id>.md', noTemplateHere: 'Aucun modèle ici : écris .ledge/teams/<id>.yaml',
+    role: 'Rôle'
   },
   /** « Nouveau rig » in three steps: the form, Ledge's plan, the start. */
   rigLaunch: {
@@ -248,7 +282,7 @@ export const fr = {
   settings: { title: 'Réglages', language: 'Langue', theme: 'Thème', themes: { auto: 'Auto', dark: 'Sombre', light: 'Clair' }, themeAuto: (tone: 'dark' | 'light') => `Auto (fond ${tone === 'light' ? 'clair' : 'sombre'})`, context: 'Contexte max', contextHint: 'au-delà : passer le relais', contextUnknown: 'mettez à jour le daemon', contextSaved: (pct: number) => `Contexte max : ${pct} %`, saved: 'Réglage enregistré.', saveFailed: (m: string) => `Réglage appliqué, mais non enregistré : ${m}` },
   help: {
     title: 'Aide', global: 'Partout', overview: 'Accueil', ledge: 'Écran Ledge', rig: 'Pièce d’un rig', session: 'Session', launch: 'Lancer', settings: 'Réglages',
-    screens: 'changer d’écran', writeToSeat: 'écrire (rig local)', suggestions: 'suggestions', foldExchanges: 'replier échanges', backNarrow: 'retour (étroit)', launchRig: 'nouveau rig/session', resumeSent: 'reprendre', answerFocus: 'trancher', tabsKeys: 'onglets', rail: 'le point · 100-139', fileIn: 'ranger (hors projet)', field: 'Saisie', wordBefore: 'effacer le mot avant',
+    screens: 'changer d’écran', teams: 'Équipes', writeToSeat: 'écrire (rig local)', suggestions: 'suggestions', foldExchanges: 'replier échanges', backNarrow: 'retour (étroit)', launchRig: 'nouveau rig/session', resumeSent: 'reprendre', answerFocus: 'trancher', tabsKeys: 'onglets', rail: 'le point · 100-139', fileIn: 'ranger (hors projet)', field: 'Saisie', wordBefore: 'effacer le mot avant',
     more: (above: number, below: number) => [above ? `↑ ${above} plus haut` : '', below ? `↓ ${below} plus bas` : ''].filter(Boolean).join(' · ')
   },
   field: {
@@ -263,6 +297,7 @@ export const fr = {
     openFailed: (why: string) => `Image non ouverte : ${why}`
   },
   toast: {
+    answerFailed: (why: string) => `Réponse non envoyée : ${why}`,
     handover: (n: string) => `${n} écrit son bilan : une nouvelle session prendra sa place`, handoverRefused: (why: string) => `Relève refusée : ${why}`,
     accept: (n: string) => `✓ ${n} : autorisé`, deny: (n: string) => `✓ ${n} : refusé`, always: (n: string) => `✓ ${n} : toujours autorisé`,
     option: (n: string, k: number) => `✓ ${n} : option ${k} envoyée`, reply: (n: string) => `✓ Réponse envoyée à ${n}`,
@@ -274,6 +309,7 @@ export const fr = {
     noTerminalOmp: (n: string) => `${n} est piloté par Ledge via le protocole d’OMP : pas de terminal à attacher.`,
     noTerminal: (n: string) => `Pas de terminal pour ${n}.`, attachFailed: (code: number) => `tmux s’est arrêté avec le code ${code}.`,
     modelSwitch: 'Ce daemon ne change pas le modèle d’une session en cours.',
+    joined: (n: string, team: string) => `${n} rejoint ${team}.`, resumed: (team: string) => `Reprise de l’équipe ${team} demandée.`, saved: (path: string) => `Équipe enregistrée : ${path}`,
     draftKept: 'Brouillon gardé : r pour reprendre.', draftQuit: 'Brouillon en cours : ctrl+c encore pour quitter quand même (il sera perdu).',
     exited: (cmd: string, code: number) => `${cmd} s’est arrêté avec le code ${code}.`
   },

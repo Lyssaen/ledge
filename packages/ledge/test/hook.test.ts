@@ -6,7 +6,8 @@ import { createServer } from 'node:net';
 import { WebSocketServer } from 'ws';
 import { spawnSync } from 'node:child_process';
 import { formatWho } from '../src/cli/who.js';
-import { mapClaudeHook, mapHook, mapCursorHook, runHook, codexLedgeId, underCodexDaemon, openrigSeat, identityContext, REPLY_MAX, INPUT_MAX, toolOutput, trimInput } from '../src/cli/hook.js';
+import { MESSAGE_MAX } from '@ledge/protocol';
+import { mapClaudeHook, mapHook, mapCursorHook, runHook, codexLedgeId, underCodexDaemon, openrigSeat, identityContext, tasksContext, REPLY_MAX, INPUT_MAX, toolOutput, trimInput } from '../src/cli/hook.js';
 import type { Session } from '@ledge/protocol';
 import { startServer } from '../src/daemon/server.js';
 import { Store } from '../src/daemon/store.js';
@@ -387,11 +388,6 @@ describe('runHook: Claude SendMessage to a Claude', () => {
         { to: 'uds:/s/x.sock', message: `${note} Salut`, summary: 'Un salut', content: `${note} Salut` });
     } finally { await srv.close(); }
   });
-  it('a Claude SendMessage to @build is resolved as a plain name (unknown → the real tool proceeds)', async () => {
-    peer();
-    const srv = await serve();
-    try { expect(await runHook('PreToolUse', send('@build'), { port: srv.port })).toBeUndefined(); } finally { await srv.close(); }
-  });
   it('a target with no live peer is refused, never guessed', async () => {
     const srv = await serve();
     try {
@@ -509,23 +505,25 @@ describe('session identity (SessionStart additionalContext)', () => {
     expect(text).toContain('worktree ledge-wt');
     expect(text).toContain('`ledge who`');
     expect(text).toContain('Pour écrire à une autre session Ledge, Claude ou Codex, utilise son nom Ledge (donné par `ledge who`) comme adresse SendMessage : Ledge le transmet. `ListAgents` montre les noms internes de Claude, pas les noms Ledge.');
-    // Codex has no SendMessage: it is told `ledge send`.
+    // Codex has no SendMessage: it is told `ledge send`. A lone session is told `ledge ask` (the OpenRig branch), a team seat `ledge task` (main).
     const codex = identityContext({ name: 'Nova', tool: 'codex', project: 'api', cwd: '/w/api' });
+    const seat = identityContext({ name: 'Nova', tool: 'codex', project: 'api', cwd: '/w/api', seat: 'Tu tiens le siège @build de l\'équipe api.' });
     expect(codex).toContain('Tu es Nova, projet api');
     expect(codex).not.toMatch(/branche [^,]/);
     expect(codex).not.toContain('SendMessage');
     expect(codex).toContain('Pour écrire à une autre session Ledge, lance `ledge send <nom> "<message>"` (seul, sans && ni |). Ledge exécute lui-même `ledge send`, `ledge read`, `ledge ask` et `ledge who` : leur résultat t\'arrive comme « Command blocked by PreToolUse hook: … », c\'est la réponse, pas une erreur.');
-    // Both are told how to read a long message whole.
-    for (const t of [text, codex]) expect(t).toContain('lance `ledge read <id>` pour le lire en entier');
-    // A `<ledge-notice>` is not only an undelivered message: a change that concerns the session arrives the same way.
+    expect(seat).toContain('Pour écrire à une autre session Ledge, lance `ledge send <nom> "<message>"` (seul, sans && ni |). Ledge exécute lui-même `ledge send`, `ledge read`, `ledge task` et `ledge who` : leur résultat t\'arrive comme « Command blocked by PreToolUse hook: … », c\'est la réponse, pas une erreur.');
+    // All are told how to read a long message whole.
+    for (const t of [text, codex, seat]) expect(t).toContain('lance `ledge read <id>` pour le lire en entier');
+    // A seat's `<ledge-notice>` is not only an undelivered message: a role prompt or team change arrives the same way.
+    expect(seat).toContain('Une `<ledge-notice>` vient de Ledge : soit un de tes messages n\'a pas pu être remis, soit un changement te concerne (ta consigne de rôle, ton équipe).');
     for (const t of [text, codex]) expect(t).toContain('Une `<ledge-notice>` vient de Ledge : soit un de tes messages n\'a pas pu être remis, soit un changement te concerne.');
-  });
-
-  it('identityContext names ledge ask and no longer ledge task give ledge', () => {
-    const t = identityContext({ name: 'Pim', tool: 'claude', project: 'ledge', cwd: '/w' });
-    expect(t).toContain('ledge ask "<question>" "<options, ta recommandation>"');
-    expect(t).toContain('<ledge-answer>');
-    expect(t).not.toMatch(/ledge task give ledge/);
+    // A seat gives work that must not get lost, and puts a decision to the user, with `ledge task`.
+    expect(seat).toContain('`ledge task give <nom> "<titre>" "<détail>"`');
+    expect(seat).toContain('`ledge task give ledge "<question>" "<options, ta recommandation>"`');
+    // A lone session asks the user with `ledge ask`.
+    for (const t of [text, codex]) expect(t).toContain('ledge ask "<question>" "<options, ta recommandation>"');
+    for (const t of [text, codex]) expect(t).not.toContain('ledge task give');
   });
 
   it('a launched session is told its current Ledge name (a rename wins over LEDGE_NAME), with the daemon\'s branch', async () => {
@@ -540,22 +538,31 @@ describe('session identity (SessionStart additionalContext)', () => {
     } finally { await srv.close(); delete process.env.LEDGE_NAME; }
   });
 
-  it('SessionStart identity has no seat or tasks block, and makes no task.cmd request', async () => {
-    const { WebSocketServer } = await import('ws');
-    const got: Array<{ type?: string }> = [];
-    const wss = new WebSocketServer({ port: 0, host: '127.0.0.1' }); await new Promise(r => wss.once('listening', r));
-    wss.on('connection', ws => {
-      ws.send(JSON.stringify({ type: 'snapshot', sessions: [pim({ relieves: { id: '1b2c', name: 'Otto', at } })] }));
-      ws.on('message', d => got.push(JSON.parse(String(d))));
-    });
-    process.env.LEDGE_SESSION = '7f3a'; process.env.LEDGE_NAME = 'Pim'; process.env.LEDGE_ROLE = 'build';
+  it('after a compaction it is told the open tasks it holds (not those it gave, nor closed ones), and the relief it is (context handover §2)', async () => {
+    const store = new Store();
+    store.upsert(pim({ relieves: { id: '1b2c', name: 'Otto', at } }));
+    store.upsert(pim({ id: '9d8e', name: 'Bix', tmuxSession: 'ledge-9d8e' }));
+    const srv = await startServer({ store, tmux: {} as never, port: 0 });
+    const c = await connect({ port: srv.port });
+    const give = async (by: string, to: string, title: string) => { c.send({ type: 'task.cmd', rid: title, by, op: 'give', to, title }); return (await c.next('task.result')).task!; };
+    process.env.LEDGE_SESSION = '7f3a'; process.env.LEDGE_NAME = 'Pim';
     try {
-      const out = context(await runHook('SessionStart', JSON.stringify({ session_id: 'u-1', cwd: '/w/ledge-wt', source: 'compact' }), { port: (wss.address() as { port: number }).port }));
-      expect(out.additionalContext).toContain('Tu es Pim');
+      const mine = await give('9d8e', 'Pim', 'Tests de roles.ts');
+      const done = await give('9d8e', 'Pim', 'Déjà fini');
+      c.send({ type: 'task.cmd', rid: 'd', by: '7f3a', op: 'done', task: done.id, text: 'fait' }); await c.next('task.result');
+      await give('7f3a', 'Bix', 'Relire le hook');
+      const out = context(await runHook('SessionStart', JSON.stringify({ session_id: 'u-1', cwd: '/w/ledge-wt', source: 'compact' }), { port: srv.port }));
+      expect(out.additionalContext).toContain('Tes tâches en cours (elles sont gardées par Ledge, pas dans ta conversation) :');
+      expect(out.additionalContext).toContain(`- ${mine.id} · ouverte · « Tests de roles.ts » · confiée par Bix`);
+      expect(out.additionalContext).not.toContain('Déjà fini');
+      expect(out.additionalContext).not.toContain('Relire le hook');
       expect(out.additionalContext).toContain('Tu as pris la relève de Otto, dont le contexte était plein : relis son bilan avec `ledge handover show`.');
-      expect(out.additionalContext).not.toMatch(/Tes tâches en cours|rôle|équipe|@build/);
-      expect(got.map(m => m.type)).not.toContain('task.cmd');
-    } finally { wss.close(); delete process.env.LEDGE_NAME; delete process.env.LEDGE_ROLE; }
+    } finally { await c.close(); await srv.close(); delete process.env.LEDGE_NAME; }
+  });
+
+  it('a session without open tasks gets no tasks block', () => {
+    expect(tasksContext([])).toBeUndefined();
+    expect(identityContext({ name: 'Pim', tool: 'claude', project: 'ledge', cwd: '/w' })).not.toContain('Tes tâches en cours');
   });
 
   it('without a daemon, the name comes from LEDGE_NAME and the project from the folder', async () => {
@@ -741,15 +748,15 @@ describe('ledge hook (CLI)', () => {
 
 describe('prompts and the chat marker', () => {
   const at = '2026-10-11T10:00:00.000Z';
-  it('UserPromptSubmit carries the prompt, cut to 500 characters', () => {
-    const m = mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt: 'x'.repeat(600) }, at);
-    expect(m?.event.name).toBe('UserPromptSubmit'); expect(m?.event.text).toHaveLength(500);
+  it('UserPromptSubmit carries the prompt, cut to MESSAGE_MAX characters', () => {
+    const m = mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt: 'x'.repeat(MESSAGE_MAX + 100) }, at);
+    expect(m?.event.name).toBe('UserPromptSubmit'); expect(m?.event.text).toHaveLength(MESSAGE_MAX);
     expect(mapClaudeHook('UserPromptSubmit', { session_id: 's' }, at)?.event.text).toBeUndefined();
-    // A helper's hand-back is its report: kept whole up to the tool input cap.
+    // A helper's hand-back is its report: kept whole, under the same cap.
     const back = `<agent-message from="a82b">\n[Subagent hand-back] The text below is the final report.\n${'  ligne du rapport\n'.repeat(160)}</agent-message>`;
     expect(back.length).toBeGreaterThan(3000);
     expect(mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt: back }, at)?.event.text).toBe(back);
-    expect(mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt: back + 'x'.repeat(INPUT_MAX) }, at)?.event.text).toHaveLength(INPUT_MAX);
+    expect(mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt: back + 'x'.repeat(MESSAGE_MAX) }, at)?.event.text).toHaveLength(MESSAGE_MAX);
   });
   it('takes the store brackets out of the prompt into attachments, keeping other brackets', () => {
     const dir = paths().attachments;
@@ -757,18 +764,27 @@ describe('prompts and the chat marker', () => {
     const brackets = `[Image attached: ${dir}/${a}.webp] [Image attached: ${dir}/${b}.png]`;
     const prompt = 'x'.repeat(700) + ' ' + brackets;
     const m = mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt }, at);
-    expect(m?.event.text).toBe('x'.repeat(500)); expect(m?.event.attachments).toEqual([a, b]);
+    expect(m?.event.text).toBe('x'.repeat(700)); expect(m?.event.attachments).toEqual([a, b]);
     const other = mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt: 'Regarde [Image attached: /tmp/x.png]' }, at);
     expect(other?.event.text).toBe('Regarde [Image attached: /tmp/x.png]'); expect(other?.event.attachments).toBeUndefined();
     const cursor = mapCursorHook('beforeSubmitPrompt', { session_id: 's', prompt: `Regarde ${brackets}` }, at, {});
     expect(cursor?.event.text).toBe('Regarde'); expect(cursor?.event.attachments).toEqual([a, b]);
   });
-  it('keeps a cross-session message whole (up to INPUT_MAX)', () => {
+  it('carries a long prompt whole: the thread shows it, only the topic is cut', () => {
+    const prompt = 'Contexte : '.padEnd(480, 'x') + ' les sessions communiquent (messages, tâches) via Ledge.';
+    expect(prompt.length).toBeGreaterThan(500);
+    expect(mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt }, at)?.event.text).toBe(prompt);
+    expect(mapCursorHook('beforeSubmitPrompt', { session_id: 's', prompt }, at, {})?.event.text).toBe(prompt);
+  });
+  it('carries a Ledge message typed whole (under INLINE_MAX) uncut', () => {
+    const prompt = `<ledge-message from="Zoe" tool="claude">${'y'.repeat(700)}</ledge-message>`;
+    expect(mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt }, at)?.event.text).toBe(prompt);
+  });
+  it('keeps a cross-session message whole', () => {
     const prompt = '<cross-session-message from="uds:/run/user/1000/cc-socks/1.sock" from-name="a-2d" from-mode="prompting">\n' + 'x'.repeat(3000);
     expect(mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt }, at)?.event.text).toHaveLength(prompt.length);
-    expect(mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt: 'x'.repeat(3000) }, at)?.event.text).toHaveLength(500);
   });
-  it('keeps a cross-session notice whole (up to INPUT_MAX), not cut like a prompt', () => {
+  it('keeps a cross-session notice whole', () => {
     const prompt = '[Cross-session idle notice] "a-2d", which you asked to be notified about, is idle now. Its harness reports: «' + 'x'.repeat(3000) + '».';
     expect(mapClaudeHook('UserPromptSubmit', { session_id: 's', prompt }, at)?.event.text).toHaveLength(prompt.length);
   });

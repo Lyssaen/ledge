@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { DaemonStatus, MachineState, SessionChange } from '@ledge/fleet';
-import type { MobileState, Session } from '@ledge/protocol';
+import { openDecision, type MobileState, type Session, type Task } from '@ledge/protocol';
 import type { Cue } from '@ledge/ui/sounds/cues';
 import { decideSound } from '@ledge/ui/sounds/decide';
 import type { SoundPlayer } from '@ledge/ui/sounds/player';
 import { VOLUME_GAIN } from '@ledge/ui/sounds/preferences';
 import { useI18n } from '../i18n/lang';
 import { foregroundIsTerminal, showToast } from '../tauri/bridge';
-import { baselineOf, diffSessions, settledMachines, strongestCue, toastFor, type AlertBase } from './alerts';
+import { baselineOf, decisionToast, diffSessions, settledMachines, strongestCue, toastFor, type AlertBase } from './alerts';
 import { appPlayer } from './player';
 import { useDnd, useSoundPrefs } from './prefs';
 
@@ -26,9 +26,10 @@ const windowFocused = () => document.hasFocus();
  * Toasts and sounds from session changes (spec §10). A toast only while Desktop is behind or in the tray, never in Do
  * not disturb; a sound through the island's `decideSound` (sounds off by default on Desktop). The terminal check is async,
  * so a cue is decided once it answers; nothing on screen waits for it. `daemonUpdating`: a daemon update the user started
- * is running, so the local daemon's restart is expected and silent (final review M3).
+ * is running, so the local daemon's restart is expected and silent (final review M3). `tasks`: the local daemon's, whose new
+ * decisions (a session asking the user) alert as a question does.
  */
-export function useAlerts(input: { sessions: readonly Session[]; machines: readonly MachineState[]; status: DaemonStatus; daemonUpdating?: boolean }, deps: AlertDeps = {}): Alerts {
+export function useAlerts(input: { sessions: readonly Session[]; machines: readonly MachineState[]; status: DaemonStatus; daemonUpdating?: boolean; tasks?: readonly Task[] }, deps: AlertDeps = {}): Alerts {
   const { finished, sounds } = useSoundPrefs();
   const [dnd] = useDnd();
   const { t } = useI18n();
@@ -102,6 +103,22 @@ export function useAlerts(input: { sessions: readonly Session[]; machines: reado
     if (input.status === 'open') connectedAt.current = (live.current.deps.now ?? Date.now)();
     if (was === 'open' && input.status === 'unreachable' && !daemonUpdating.current) api.play('error');
   }, [input.status, api]);
+
+  // A decision a session puts to the user (`ledge task give ledge …`) is a request: the question's cue (« Un bot a besoin de
+  // vous ») and a toast, once per decision. Those given before the local daemon's connection come with its task list, silent.
+  const decisionsSeen = useRef(new Set<string>());
+  useEffect(() => {
+    const since = connectedAt.current;
+    const news = (input.tasks ?? []).filter(x => openDecision(x) && !decisionsSeen.current.has(x.id));
+    for (const x of news) decisionsSeen.current.add(x.id);
+    const fresh = since === null ? [] : news.filter(x => Date.parse(x.at) >= since);
+    if (fresh.length === 0) return;
+    api.play('question');
+    const l = live.current;
+    if (l.dnd || (l.deps.focused ?? windowFocused)()) return;
+    const toast = decisionToast(fresh, l.copy);
+    if (toast) (l.deps.toast ?? nativeToast)(toast.title, toast.body);
+  }, [input.tasks, api]);
 
   return useMemo(() => ({ user: api.user, test: api.test }), [api]);
 }

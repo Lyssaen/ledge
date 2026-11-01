@@ -99,6 +99,9 @@ describe('toPhoneTurn', () => {
     const p = toPhoneTurn(turn({ proposals: [{ cwd: '/w', project: 'p', tool: 'claude', launchedId: 'L', error: 'boom /w' }, { cwd: '/w', project: 'q', tool: 'claude' }] }));
     expect(p.proposals).toEqual([{ project: 'p', tool: 'claude', launchedId: 'L', failed: true }, { project: 'q', tool: 'claude' }]);
     expect(JSON.stringify(p)).not.toMatch(/boom/);
+    // A failed relay carries its code, never the PC's text.
+    const r = toPhoneTurn(turn({ relay: { id: 's', name: 'n', tool: 'claude', text: 'go', error: 'boom /w', code: 'read_only' } }));
+    expect(r.relay).toEqual({ id: 's', name: 'n', tool: 'claude', text: 'go', failed: true, code: 'read_only' });
   });
 });
 
