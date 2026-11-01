@@ -3,7 +3,7 @@ import { WebSocketServer } from 'ws';
 import { sendMessage, parseLedgeCommand } from '../src/cli/send.js';
 
 /** A daemon that answers every `session.message` with `ack`, and keeps what it received. */
-async function fakeDaemon(ack: { outcome: string; reason?: string } | null) {
+async function fakeDaemon(ack: { outcome: string; reason?: string; recipients?: number } | null) {
   const got: Array<Record<string, unknown>> = [];
   const wss = new WebSocketServer({ port: 0, host: '127.0.0.1' }); await new Promise(r => wss.once('listening', r));
   wss.on('connection', ws => {
@@ -14,6 +14,14 @@ async function fakeDaemon(ack: { outcome: string; reason?: string } | null) {
 }
 
 describe('ledge send', () => {
+  it('@team: reports how many seats were reached', async () => {
+    const d = await fakeDaemon({ outcome: 'accepted', recipients: 2 });
+    try { expect(await sendMessage(['@team', 'Pause'], { port: d.port, env: { LEDGE_SESSION: 'a' } })).toEqual({ line: "remis à toute l'équipe (2 sièges)", code: 0 }); } finally { d.close(); }
+  });
+  it('@team refused: says why', async () => {
+    const d = await fakeDaemon({ outcome: 'refused', reason: 'pas dans une équipe' });
+    try { expect(await sendMessage(['@team', 'Pause'], { port: d.port, env: { LEDGE_SESSION: 'a' } })).toEqual({ line: 'refusé : pas dans une équipe', code: 1 }); } finally { d.close(); }
+  });
   it('accepted: the message is handed over', async () => {
     const d = await fakeDaemon({ outcome: 'accepted' });
     try {

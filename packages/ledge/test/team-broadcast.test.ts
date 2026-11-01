@@ -3,13 +3,14 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Team } from '@ledge/protocol';
+import type { Session, Team } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
 import { startServer } from '../src/daemon/server.js';
 import type { MailState } from '../src/daemon/mailbox.js';
 import { formatTeamNotice } from '../src/daemon/crossSession.js';
 import { listRoles, parseRole } from '../src/daemon/roles.js';
 import { seatContext } from '../src/daemon/seat.js';
+import { liveSeatSessions } from '../src/daemon/broadcast.js';
 import { connect, type Client } from '../src/client.js';
 import type { Tmux } from '../src/tmux.js';
 
@@ -141,5 +142,16 @@ describe('the reserved role team and the lead’s context', () => {
     const line = 'Tu es le lead : ledge send @team "…" écrit à toute l\'équipe d\'un coup.';
     expect(seatContext({ roleId: 'leader', team }).split('\n')).toContain(line);
     expect(seatContext({ roleId: 'build', team })).not.toContain('@team');
+  });
+});
+
+describe('liveSeatSessions', () => {
+  const sess = (id: string): Session => ({ id, name: id, tool: 'claude', cwd: '/w', project: 'w', title: id, tmuxSession: id, state: 'idle', helpers: [], startedAt: '2026-11-01T00:00:00.000Z', lastActivityAt: '2026-11-01T00:00:00.000Z', source: 'launcher' });
+  it('skips a leaving seat, an exited session and the excepted one', () => {
+    const team = { id: 'team-a1b2', name: 'api', project: null, machine: 'm', cwd: '/w', state: 'active', createdAt: '', updatedAt: '',
+      seats: [{ role: 'leader', sessionId: 'a' }, { role: 'build', sessionId: 'b' }, { role: 'review', sessionId: 'c', leaving: true as const }, { role: 'qa', sessionId: 'd' }, { role: 'x', sessionId: null }] } as Team;
+    const all = [sess('a'), sess('b'), sess('c'), { ...sess('d'), state: 'exited' as const }];
+    expect(liveSeatSessions(team, all).map(s => s.id)).toEqual(['a', 'b']);
+    expect(liveSeatSessions(team, all, 'a').map(s => s.id)).toEqual(['b']);
   });
 });

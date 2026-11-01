@@ -415,6 +415,75 @@ describe('runHook: Claude SendMessage to a Claude', () => {
   });
 });
 
+describe('runHook: SendMessage inside a Ledge team goes through Ledge', () => {
+  const ID = '3c1d9e2a-0000-4000-8000-000000000001';
+  const claude = (id: string, name: string, extra: Partial<Session> = {}): Session => ({ id, name, tool: 'claude', cwd: '/w/api', project: 'api', title: `${name} · api`, tmuxSession: `ledge-${id}`, state: 'idle', helpers: [], startedAt: at, lastActivityAt: at, source: 'launcher', agentSessionId: ID, ...extra });
+  const team = (state: 'active' | 'dissolved' = 'active') => ({ id: 'team-a1b2', name: 'api', project: 'api', machine: 'm', cwd: '/w/api', state, seats: [{ role: 'leader', sessionId: 'a' }, { role: 'build', sessionId: 'b' }], createdAt: at, updatedAt: at });
+  const send = (to: string) => JSON.stringify({ session_id: 'uuid-a', hook_event_name: 'PreToolUse', tool_name: 'SendMessage', tool_use_id: 'tu1', tool_input: { to, message: 'Salut', summary: 'Un salut', content: 'Salut' } });
+  const decision = (out: string | undefined) => (JSON.parse(out!) as { hookSpecificOutput: Record<string, unknown> }).hookSpecificOutput;
+  /** A daemon showing `sessions` and `teams`, acking every session.message with `ack`; keeps what it received. */
+  async function fake(sessions: Session[], teams: unknown[], ack: Record<string, unknown>) {
+    const got: Array<Record<string, unknown>> = [];
+    const wss = new WebSocketServer({ port: 0, host: '127.0.0.1' }); await new Promise(r => wss.once('listening', r));
+    wss.on('connection', ws => {
+      ws.send(JSON.stringify({ type: 'snapshot', sessions })); ws.send(JSON.stringify({ type: 'teams', teams }));
+      ws.on('message', d => { const m = JSON.parse(String(d)); got.push(m); if (m.type === 'session.message') ws.send(JSON.stringify({ type: 'message.ack', rid: m.rid, ...ack })); });
+    });
+    return { got, port: (wss.address() as { port: number }).port, close: () => wss.close() };
+  }
+  let config: string; let saved: string | undefined;
+  beforeEach(() => { process.env.LEDGE_SESSION = 'a'; saved = process.env.CLAUDE_CONFIG_DIR; config = mkdtempSync(join(tmpdir(), 'ledge-claude-')); process.env.CLAUDE_CONFIG_DIR = config; });
+  afterEach(() => { if (saved === undefined) delete process.env.CLAUDE_CONFIG_DIR; else process.env.CLAUDE_CONFIG_DIR = saved; });
+  const peer = () => { mkdirSync(join(config, 'sessions'), { recursive: true }); writeFileSync(join(config, 'sessions', `${process.pid}.json`), JSON.stringify({ pid: process.pid, sessionId: ID, name: 'api', messagingSocketPath: '/s/x.sock' })); };
+
+  it('a seat writing to a Claude seat of its team goes through the mailbox, intercepted, with no rewritten input', async () => {
+    peer();
+    const d = await fake([claude('a', 'Otto', { team: 'team-a1b2' }), claude('b', 'Pim', { team: 'team-a1b2' })], [team()], { outcome: 'accepted' });
+    try {
+      const out = decision(await runHook('PreToolUse', send('Pim'), { port: d.port }));
+      expect(out.permissionDecision).toBe('deny');
+      expect(out.permissionDecisionReason).toBe('Message transmis par Ledge à Pim : il le reçoit maintenant.');
+      expect(out).not.toHaveProperty('updatedInput');
+      expect(d.got.find(m => m.type === 'session.message')).toMatchObject({ from: 'a', to: 'Pim', text: 'Salut', intercept: true });
+    } finally { d.close(); }
+  });
+  it('queued: it will be received once the seat is free', async () => {
+    peer();
+    const d = await fake([claude('a', 'Otto', { team: 'team-a1b2' }), claude('b', 'Pim', { team: 'team-a1b2' })], [team()], { outcome: 'queued' });
+    try { expect(decision(await runHook('PreToolUse', send('Pim'), { port: d.port })).permissionDecisionReason).toBe("Message transmis par Ledge à Pim : il le recevra dès qu'il sera libre."); } finally { d.close(); }
+  });
+  it('a Claude of another team, or outside any team, is still reached natively', async () => {
+    peer();
+    for (const other of [claude('b', 'Pim', { team: 'team-ffff' }), claude('b', 'Pim')]) {
+      const d = await fake([claude('a', 'Otto', { team: 'team-a1b2' }), other], [team()], { outcome: 'accepted' });
+      try {
+        const out = decision(await runHook('PreToolUse', send('Pim'), { port: d.port }));
+        expect(out.permissionDecision).toBe('allow');
+        expect((out.updatedInput as Record<string, unknown>).to).toBe('uds:/s/x.sock');
+        expect(d.got.some(m => m.type === 'session.message')).toBe(false);
+      } finally { d.close(); }
+    }
+  });
+  it('a dissolved team is left to Claude', async () => {
+    peer();
+    const d = await fake([claude('a', 'Otto', { team: 'team-a1b2' }), claude('b', 'Pim', { team: 'team-a1b2' })], [team('dissolved')], { outcome: 'accepted' });
+    try { expect(decision(await runHook('PreToolUse', send('Pim'), { port: d.port })).permissionDecision).toBe('allow'); } finally { d.close(); }
+  });
+  it('@team: the lead is told how many seats were reached', async () => {
+    const d = await fake([claude('a', 'Otto', { team: 'team-a1b2' }), claude('b', 'Pim', { team: 'team-a1b2' })], [team()], { outcome: 'accepted', recipients: 2 });
+    try {
+      const out = decision(await runHook('PreToolUse', send('@team'), { port: d.port }));
+      expect(out.permissionDecision).toBe('deny');
+      expect(out.permissionDecisionReason).toBe("Message transmis par Ledge à toute l'équipe (2 sièges).");
+      expect(d.got.find(m => m.type === 'session.message')).toMatchObject({ to: '@team', intercept: true });
+    } finally { d.close(); }
+  });
+  it('@team refused by the daemon says why', async () => {
+    const d = await fake([claude('a', 'Otto', { team: 'team-a1b2' })], [team()], { outcome: 'refused', reason: 'seul le lead parle à toute l\'équipe' });
+    try { expect(decision(await runHook('PreToolUse', send('@team'), { port: d.port })).permissionDecisionReason).toBe("Ledge n'a pas pu transmettre le message à @team : seul le lead parle à toute l'équipe"); } finally { d.close(); }
+  });
+});
+
 describe('runHook: Codex runs `ledge send` and `ledge who` itself', () => {
   const sess = (id: string, name: string, extra: Partial<Session> = {}): Session => ({ id, name, tool: 'codex', cwd: '/w/api', project: 'api', title: `${name} · api`, tmuxSession: `ledge-${id}`, state: 'idle', helpers: [], startedAt: at, lastActivityAt: at, source: 'launcher', ...extra });
   const bash = (command: unknown) => JSON.stringify({ session_id: 'thread-b', hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command } });
@@ -505,6 +574,9 @@ describe('session identity (SessionStart additionalContext)', () => {
     expect(text).toContain('worktree ledge-wt');
     expect(text).toContain('`ledge who`');
     expect(text).toContain('Pour écrire à une autre session Ledge, Claude ou Codex, utilise son nom Ledge (donné par `ledge who`) comme adresse SendMessage : Ledge le transmet. `ListAgents` montre les noms internes de Claude, pas les noms Ledge.');
+    const claudeSeat = identityContext({ name: 'Pim', tool: 'claude', project: 'api', cwd: '/w/api', seat: 'Tu tiens le siège @build de l\'équipe api.' });
+    expect(claudeSeat).toContain("Pour écrire à une autre session Ledge, utilise son nom Ledge ou son @rôle comme adresse SendMessage : dans ton équipe, Ledge transmet lui-même le message, dans l'ordre d'arrivée.");
+    expect(claudeSeat).not.toContain('Ledge le transmet.');
     // Codex has no SendMessage: it is told `ledge send`. A lone session is told `ledge ask` (the OpenRig branch), a team seat `ledge task` (main).
     const codex = identityContext({ name: 'Nova', tool: 'codex', project: 'api', cwd: '/w/api' });
     const seat = identityContext({ name: 'Nova', tool: 'codex', project: 'api', cwd: '/w/api', seat: 'Tu tiens le siège @build de l\'équipe api.' });

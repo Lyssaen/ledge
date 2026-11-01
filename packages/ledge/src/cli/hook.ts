@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { MESSAGE_MAX, taskClosed, type Session, type SessionEvent, type Task, type Team, type Tool } from '@ledge/protocol';
+import { MESSAGE_MAX, TEAM_ADDRESS, taskClosed, type Session, type SessionEvent, type Task, type Team, type Tool } from '@ledge/protocol';
 import { findRole } from '../daemon/roles.js';
 import { resolveRoleAddress, seatContext, seatKey, seatView, teamChangeLine, teammates } from '../daemon/seat.js';
 import { connect, sendMessageAndAwaitAck, type Client } from '../client.js';
@@ -404,7 +404,8 @@ export function identityContext(s: Identity): string {
   return [
     `Tu es ${s.name}, ${where} : une session lancée par Ledge (${s.tool}). Les autres sessions Ledge te connaissent sous le nom ${s.name}.`,
     'Pour voir les autres sessions (nom, outil, état, projet, branche, sujet), lance `ledge who`.',
-    s.tool === 'claude' ? 'Pour écrire à une autre session Ledge, Claude ou Codex, utilise son nom Ledge (donné par `ledge who`) comme adresse SendMessage : Ledge le transmet. `ListAgents` montre les noms internes de Claude, pas les noms Ledge.'
+    s.tool === 'claude' && s.seat ? 'Pour écrire à une autre session Ledge, utilise son nom Ledge ou son @rôle comme adresse SendMessage : dans ton équipe, Ledge transmet lui-même le message, dans l\'ordre d\'arrivée.'
+      : s.tool === 'claude' ? 'Pour écrire à une autre session Ledge, Claude ou Codex, utilise son nom Ledge (donné par `ledge who`) comme adresse SendMessage : Ledge le transmet. `ListAgents` montre les noms internes de Claude, pas les noms Ledge.'
       : s.seat ? 'Pour écrire à une autre session Ledge, lance `ledge send <nom> "<message>"` (seul, sans && ni |). Ledge exécute lui-même `ledge send`, `ledge read`, `ledge task` et `ledge who` : leur résultat t\'arrive comme « Command blocked by PreToolUse hook: … », c\'est la réponse, pas une erreur.'
       : 'Pour écrire à une autre session Ledge, lance `ledge send <nom> "<message>"` (seul, sans && ni |). Ledge exécute lui-même `ledge send`, `ledge read`, `ledge ask` et `ledge who` : leur résultat t\'arrive comme « Command blocked by PreToolUse hook: … », c\'est la réponse, pas une erreur.',
     s.seat ? 'Un long message d\'une autre session t\'arrive en aperçu avec son id : lance `ledge read <id>` pour le lire en entier. Une `<ledge-notice>` vient de Ledge : soit un de tes messages n\'a pas pu être remis, soit un changement te concerne (ta consigne de rôle, ton équipe).'
@@ -482,10 +483,23 @@ async function relayMessage(client: Client, from: string, toolUseId: string | un
   const snapshot = await client.next('snapshot', left());
   const sender = snapshot.sessions.find(s => s.id === from);
   if (sender?.source !== 'launcher') return undefined;
+  // Through the daemon's mailbox, intercepted: its ack becomes the deny reason (delivered or queued: it went through Ledge).
+  // `target` names the recipient in the report, `to` is what the sender wrote (in a refusal).
+  const viaLedge = async (target: string, address: string) => {
+    const summary = str(input.summary);
+    const ack = await sendMessageAndAwaitAck(client, { type: 'session.message', rid: toolUseId, from, to: address, text: input.message as string, ...(summary ? { summary } : {}), intercept: true }, left());
+    const sent = address === TEAM_ADDRESS ? `Message transmis par Ledge à toute l'équipe (${ack.recipients ?? 0} sièges).` : undefined;
+    const reason = ack.outcome === 'accepted' ? sent ?? `Message transmis par Ledge à ${target} : il le reçoit maintenant.`
+      : ack.outcome === 'queued' ? sent ?? `Message transmis par Ledge à ${target} : il le recevra dès qu'il sera libre.`
+      : ack.outcome === 'refused' ? `Ledge n'a pas pu transmettre le message à ${to} : ${ack.reason ?? 'raison inconnue'}` : undefined;
+    return reason ? deny(reason) : undefined;
+  };
+  if (to === TEAM_ADDRESS) return viaLedge(to, TEAM_ADDRESS);
   // `@build` names the seat of that role in the sender's team (roles spec §3.6): resolved to its Ledge name first.
   let address = to;
+  let teams: Team[] | undefined;
   if (to.startsWith('@')) {
-    const teams = sender.team ? (await client.next('teams', left()).catch(() => undefined))?.teams ?? [] : [];
+    teams = sender.team ? (await client.next('teams', left()).catch(() => undefined))?.teams ?? [] : [];
     const role = resolveRoleAddress(to, from, snapshot.sessions, teams);
     if ('reason' in role) return deny(`Ledge n'a pas pu transmettre le message à ${to} : ${role.reason}`);
     address = role.to;
@@ -494,22 +508,20 @@ async function relayMessage(client: Client, from: string, toolUseId: string | un
   if (r.outcome === 'unknown') return undefined;
   if (r.outcome === 'refused') return deny(`Ledge n'a pas pu transmettre le message à ${to} : ${r.reason}`);
   if (r.outcome === 'native') {
+    // Two Claude seats of the same live team: Ledge's mailbox carries it (ordered, one path), not Claude's own.
+    if (sender.team && sender.team === r.target.team && (input.message as string).length <= MESSAGE_MAX) {
+      teams ??= (await client.next('teams', left()).catch(() => undefined))?.teams ?? [];
+      if (teams.some(t => t.id === sender.team && t.state !== 'dissolved')) return viaLedge(to, address);
+    }
     // Already named when Ledge's hook runs twice (installed in user and project settings): never twice.
     const note = messageNote(sender.name, 'claude');
     const named = (text: string) => (text.startsWith(note) ? text : `${note} ${text}`);
     const updatedInput = { ...input, to: r.address, message: named(input.message as string), ...(typeof input.content === 'string' ? { content: named(input.content) } : {}) };
     return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow', updatedInput } });
   }
-  const tool = r.target.tool;
-  // Too long for Ledge: a Codex, a Cursor or an OMP can only be reached through it, refused below with the length
+  // Too long for Ledge: a Codex, a Cursor or an OMP can only be reached through it, refused with the length
   // (Claude's own tool, which cannot reach them, would only fail later).
-  const summary = str(input.summary);
-  const ack = await sendMessageAndAwaitAck(client, { type: 'session.message', rid: toolUseId, from, to: address, text: input.message as string, ...(summary ? { summary } : {}), intercept: true }, left());
-  const target = `${to} (${tool})`;
-  const reason = ack.outcome === 'accepted' ? `Message transmis par Ledge à ${target} : il le reçoit maintenant.`
-    : ack.outcome === 'queued' ? `Message transmis par Ledge à ${target} : il le recevra dès qu'il sera libre.`
-    : ack.outcome === 'refused' ? `Ledge n'a pas pu transmettre le message à ${to} : ${ack.reason ?? 'raison inconnue'}` : undefined;
-  return reason ? deny(reason) : undefined;
+  return viaLedge(`${to} (${r.target.tool})`, address);
 }
 
 /**

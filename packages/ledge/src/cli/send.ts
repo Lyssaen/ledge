@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { connect, sendMessageAndAwaitAck, type Client } from '../client.js';
+import { TEAM_ADDRESS } from '@ledge/protocol';
 import { CODEX_HOOK_VAR } from '../spawn.js';
 
 const USAGE = 'ledge send <nom> "<message>" [--summary <texte>]   write to another Ledge session';
@@ -29,6 +30,7 @@ export async function sendOnClient(client: Client, args: string[], from: string,
     const pending = sendMessageAndAwaitAck(client, { type: 'session.message', rid: randomUUID(), from, to, text, ...(summary ? { summary } : {}) }, ms);
     sent = true;
     const ack = await pending;
+    if (to === TEAM_ADDRESS && ack.outcome !== 'refused') return { line: `remis à toute l'équipe (${ack.recipients ?? 0} sièges)`, code: 0 };
     if (ack.outcome === 'accepted') return { line: `remis à ${to}`, code: 0 };
     if (ack.outcome === 'queued') return { line: `${to} est occupé : il le recevra dès qu'il sera libre`, code: 0 };
     return { line: `refusé : ${ack.reason ?? 'raison inconnue'}`, code: 1 };
