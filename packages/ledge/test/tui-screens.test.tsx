@@ -1198,7 +1198,7 @@ describe('ledge tui: ask Ledge scrolls, in Markdown (#95 lot C)', () => {
     } finally { await tui.cleanup(); }
   });
 
-  it('help lists the keys of Ledge and of a rig room, and the Équipes screen (4)', async () => {
+  it('help lists the keys of Ledge and of a rig room, the Équipes screen (4), and the team keys D, J, R', async () => {
     const tui = await startTui();
     try {
       await tui.resize(160, 60);
@@ -1212,8 +1212,10 @@ describe('ledge tui: ask Ledge scrolls, in Markdown (#95 lot C)', () => {
       expect(f).not.toMatch(/Nouvelle session/);
       expect(f).toMatch(/1 2 3 4 +Ledge · rig · session/);
       expect(f).toContain('Équipes');
-      expect(f).not.toMatch(/(^|\s)[JT] {2,}/m);
-      expect(f).not.toMatch(/R +reprendre/);
+      expect(f).toContain('Équipes et décisions (accueil)');
+      expect(f).toMatch(/D +répondre à la décision/);
+      expect(f).toMatch(/J +rejoindre une équipe/);
+      expect(f).toMatch(/R +reprendre l’équipe/);
     } finally { await tui.cleanup(); }
   });
 

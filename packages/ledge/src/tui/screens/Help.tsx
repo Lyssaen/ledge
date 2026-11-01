@@ -42,6 +42,7 @@ export function Help() {
   const groups: Array<[string, Array<[string, string]>]> = [
     [t.help.global, [['1 2 3 4', k.screens], ['/', k.ask], ['+', t.help.launchRig], [',', k.settings], ['?', k.help], ['esc', k.back], ['q', k.quit]]],
     [t.help.overview, [['j k ↑ ↓', k.navigate], ['tab', k.next], ['↵', k.open], ['y n A', k.answer], ['a', k.attach], ['i', k.interrupt]]],
+    [t.help.teamKeys, [['D', k.answerDecision], ['J', k.join], ['R', t.help.resumeTeam]]],
     [t.help.ledge, [['1-9', t.help.answerFocus], ['e', k.talk], ['u', k.revisit], ['z', t.help.foldExchanges], ['PgUp PgDn', k.scroll], ['← →', t.help.tabsKeys], ['R', k.summarize], [']', t.help.rail], ['m', k.mandate], ['alt+1…4', t.help.suggestions], ['@ tab', k.complete], ['ctrl+n', k.newChat], ['ctrl+c', k.stopAnswer]]],
     [t.help.rig, [['j k', k.seats], ['↵', k.openSeat], ['a', k.attachSeat], ['w', t.help.writeToSeat], ['r', t.rigAct.keys.restart], ['S', t.rigAct.keys.stop], ['u', t.help.resumeSent], ['p', t.help.fileIn], ['esc', t.help.backNarrow]]],
     [t.help.session, [['y n A 1…9', k.answer], ['r ↵', k.write], ['j k PgUp PgDn', k.scroll], [t.keys.space, k.unfold], ['d', k.diffs], ['t', k.terminal], ['a', k.attach], ['m', k.model], ['i', k.interrupt]]],
