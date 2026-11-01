@@ -165,7 +165,7 @@ export const BrainDelegateQuerySchema = z.object({ type: z.literal('brain.delega
 export const BrainDelegateReleaseSchema = z.object({ type: z.literal('brain.delegate.release'), rid: z.string().min(1).max(100), id: z.string().min(1).max(200), token: z.string().min(1).max(100), advice: z.string().max(8000).optional(), category: MandateCategorySchema.optional() });
 export const BrainDelegateResultSchema = z.object({ type: z.literal('brain.delegate.result'), rid: z.string().min(1).max(100), ok: z.boolean(), token: z.string().optional(), graceUntil: z.string().datetime().optional(), status: z.enum(['applied']).optional(), code: z.string().optional(), reason: z.string().optional() });
 
-export const RigResultSchema = z.object({ type: z.literal('rig.result'), rid: z.string(), ok: z.boolean(), code: RigResultCodeSchema.optional(), reason: z.string().optional() });
+export const RigResultSchema = z.object({ type: z.literal('rig.result'), rid: z.string(), ok: z.boolean(), confirmed: z.literal(true).optional(), code: RigResultCodeSchema.optional(), reason: z.string().optional() });
 
 // Client messages.
 export const RigActSchema = z.object({ type: z.literal('rig.act'), rid: z.string(), machine: z.string(), rigId: z.string().optional(), seatRef: z.string().optional(), verb: RigVerbSchema });

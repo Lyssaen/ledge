@@ -13,6 +13,8 @@ export interface AnswerQueue {
    *  (an answer relayed whose ack the dropped link lost). */
   enqueue(a: QueuedAnswer, reply: Reply): void;
   pending(machine?: string): QueuedAnswer[];
+  /** Definitive peer replies only; a lost acknowledgement or an inferred delivery is not a receipt. */
+  onSettled(fn: (answer: QueuedAnswer, result: { status: 'applied' | 'rejected'; reason?: 'already_answered' }) => void): () => void;
   /** When the peer opens and each time its OpenRig turns `running`: resends each answer of the machine once, in order, same `rid`. */
   flush(machine: string): void;
   /** The peer's rig.result for a queued rid: ok or already_answered → removed, overlay removed (the peer's escalation rules); openrig_down → kept;
@@ -63,6 +65,8 @@ export function createAnswerQueue(opts: { remote: RemotePeers; aggregate: RigAgg
   const labelOf = opts.labelOf ?? ((id: string) => id); const settleMs = opts.settleMs ?? SETTLE_MS;
   let items: QueuedAnswer[] = readOpenRigFile(file).outbox ?? [];
   const conns = new Map<string, Conn>();
+  const settledListeners = new Set<(answer: QueuedAnswer, result: { status: 'applied' | 'rejected'; reason?: 'already_answered' }) => void>();
+  const settled = (answer: QueuedAnswer, result: { status: 'applied' | 'rejected'; reason?: 'already_answered' }) => { for (const fn of settledListeners) { try { fn({ ...answer, answers: { ...answer.answers } }, result); } catch { /* a listener must not prevent queue settlement */ } } };
   /** Escalation summaries, for the notices (an escalation closed over there is gone from the aggregate). */
   const summaries = new Map<string, string>();
 
@@ -194,13 +198,15 @@ export function createAnswerQueue(opts: { remote: RemotePeers; aggregate: RigAgg
       if (!same) flush(a.machine); // a peer open again since the router looked
     },
     pending: machine => items.filter(a => machine === undefined || a.machine === machine).map(a => ({ ...a })),
+    onSettled(fn) { settledListeners.add(fn); return () => { settledListeners.delete(fn); }; },
     flush,
     settle(machine, result: Result) {
       const a = items.find(x => x.machine === machine && x.rid === result.rid); if (!a) return;
       const c = conn(machine);
       // First sent to an escalation the peer did not list, and its daemon (its queue read) does not know it or has it answered: closed there.
       if (!result.ok && c?.unlisted.has(a.rid) && (result.code === 'already_answered' || result.code === 'failed')) return remove(a, closedThere(a));
-      if (result.ok || result.code === 'already_answered') return remove(a);
+      if (result.ok) { const proven = result.confirmed && c?.sent.has(a.rid); remove(a); if (proven) settled(a, { status: 'applied' }); return; }
+      if (result.code === 'already_answered') return remove(a);
       // Sent before, its ack lost, no longer listed: the remote daemon (restarted, its rid memo gone) no longer knows it — it went.
       if (c?.resent.has(a.rid) && result.code === 'failed') return remove(a);
       if (result.code === 'openrig_down') {

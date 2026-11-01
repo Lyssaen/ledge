@@ -75,7 +75,7 @@ beforeEach(() => {
 describe('answers', () => {
   test('reply-and-approve creates the reply row then approves', async () => {
     const r = await answers.answer('qi-1', { q1: 'sqlite' }, 'user');
-    expect(r.ok).toBe(true);
+    expect(r).toMatchObject({ ok: true, confirmed: true });
     expect(fake.calls.map(c => c.kind)).toEqual(['cli:queue create', 'http:/api/mission-control/action']);
     expect(fake.calls[0]!.args).toEqual(['queue', 'create', '--source', 'ledge@external', '--destination', 'dev-build@factory', '--summary', 'Réponse de Ledge : Base → SQLite',
       '--body-file', expect.any(String), '--json']);
@@ -136,6 +136,7 @@ describe('answers', () => {
     fake.failNext('http:/api/mission-control/action', { status: 409, body: { error: 'qitem_already_terminal', state: 'done' } });
     const r = await answers.answer('qi-1', { q1: 'sqlite' }, 'user');
     expect(r).toMatchObject({ ok: true, escalation: { id: 'qi-1', state: 'answered' } });
+    expect(r).not.toHaveProperty('confirmed');
     expect(fake.port.escalation('qi-1')).toMatchObject({ state: 'answered', answer: { by: 'user', answers: { q1: 'sqlite' } } });
     expect(fake.calls.filter(c => c.kind === 'cli:queue create')).toHaveLength(1);
   });

@@ -1555,7 +1555,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'escalation.answer': return ridMemo.once('escalation.answer', msg.rid, reply, async reply => {
         if (!answers) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'openrig_down', reason: "OpenRig n'est pas branché" });
         const r = await answers.answer(msg.id, msg.answers, msg.by);
-        return reply(r.ok ? { type: 'rig.result', rid: msg.rid, ok: true } : { type: 'rig.result', rid: msg.rid, ok: false, code: r.code, reason: r.reason });
+        return reply(r.ok ? { type: 'rig.result', rid: msg.rid, ok: true, ...(r.confirmed ? { confirmed: true as const } : {}) } : { type: 'rig.result', rid: msg.rid, ok: false, code: r.code, reason: r.reason });
       });
       // To the sender: accepted as soon as the user item is in the thread; the answer reaches every front through the thread.
       case 'ledge.say': {
@@ -1727,6 +1727,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
     } : {})
   });
+  const unsubscribeAnswerSettled = answerQueue?.onSettled((answer, result) => gateway?.answerSettled(answer, result));
   let notifySyncedEscalations: (() => void) | undefined;
   const unsubscribePhoneSync = aggregate?.onSynced(() => { gateway?.forward(rulesMsg()); notifySyncedEscalations?.(); });
   /** A hidden phone is told, through the relay, of what deserves it. */
@@ -1842,6 +1843,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     asks,
     projects: () => projects,
     say: text => { thread.append({ kind: 'ledge', text }); },
-    close: () => new Promise<void>(res => { clearInterval(sweepTimer); clearInterval(brainDayTimer); unsubscribe(); unsubscribeBrain(); unsubscribeMemory(); deciding?.dispose(); unsubscribeRemoteSettled?.(); remoteBrainCoordinator?.close(); remoteBrainOwner?.close(); brain.dispose(); unsubscribeBridge?.(); unsubscribeAggregate?.(); rigRouter?.close(); remote?.close(); launches?.close(); stopRepoWatch?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); unsubscribePhoneSync?.(); unsubscribeEscalationPush?.(); unsubscribeDecisionPush?.(); decisionPushBatch?.close(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
+    close: () => new Promise<void>(res => { clearInterval(sweepTimer); clearInterval(brainDayTimer); unsubscribe(); unsubscribeBrain(); unsubscribeMemory(); deciding?.dispose(); unsubscribeRemoteSettled?.(); remoteBrainCoordinator?.close(); remoteBrainOwner?.close(); brain.dispose(); unsubscribeBridge?.(); unsubscribeAggregate?.(); rigRouter?.close(); remote?.close(); launches?.close(); stopRepoWatch?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); unsubscribeAnswerSettled?.(); unsubscribePhoneSync?.(); unsubscribeEscalationPush?.(); unsubscribeDecisionPush?.(); decisionPushBatch?.close(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
   };
 }

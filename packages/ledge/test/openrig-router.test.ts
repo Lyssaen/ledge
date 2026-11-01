@@ -42,7 +42,7 @@ function setup(opts: { status?: PeerStatus; statuses?: OpenRigStatus[]; version?
   const enqueued: QueuedAnswer[] = [];
   const answers: AnswerQueue = {
     enqueue(a, reply) { enqueued.push(a); reply({ type: 'rig.result', rid: a.rid, ok: true }); },
-    pending: () => enqueued, flush() {}, settle() {}, drop() {}
+    pending: () => enqueued, onSettled() { return () => {}; }, flush() {}, settle() {}, drop() {}
   };
   const localCalls: RigCommand[] = [];
   let localReply: ((msg: RigCommand) => ServerMessage | null) = msg => ('rid' in msg ? { type: 'rig.result', rid: msg.rid, ok: true } : null);

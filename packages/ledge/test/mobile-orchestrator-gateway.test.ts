@@ -67,9 +67,46 @@ describe('phone OpenRig gateway', () => {
     expect(g.dispatched).toHaveLength(1); expect(g.results('dev1').at(-1)).toMatchObject({ op, status: 'received' });
     expect(g.results('dev1').some(m => m.type === 'operation.result' && m.op === op && m.status === 'applied')).toBe(false);
   });
+  it('keeps an optimistic answer marked sent until a correlated receipt', async () => {
+    const e: Escalation = { ...escalation }; const view = { ...data(), escalation: () => e, escalations: () => [e] }; let g: ReturnType<typeof setup>;
+    g = setup({ deps: { openrig: view }, dispatch: async (msg, reply) => { if (msg.type === 'escalation.answer') {
+      Object.assign(e, { state: 'answered', answer: { by: 'user', answers: msg.answers, at } });
+      g.gw.forward({ type: 'escalation.updated', escalation: e }); reply({ type: 'rig.result', rid: msg.rid, ok: true });
+    } } });
+    g.send('dev1', { type: 'snapshot.request' }); await flush();
+    const op = randomUUID(); g.send('dev1', { type: 'escalation.answer', op, id: 'q1', answers: { q: 'a' } }); await flush();
+    const before = g.got('dev1').findLast(m => m.type === 'snapshot'); expect(before).toMatchObject({ escalations: [{ answer: { delivery: 'sent' } }] });
+    expect(g.results('dev1').at(-1)).toMatchObject({ status: 'received' });
+    g.gw.answerSettled({ rid: op, machine: 'remote', id: 'q1', answers: { q: 'a' } }, { status: 'applied' }); await flush();
+    const after = g.got('dev1').findLast(m => m.type === 'snapshot'); if (after?.type !== 'snapshot') throw new Error('snapshot missing');
+    expect(after.escalations?.[0]?.answer?.delivery).toBeUndefined(); expect(g.results('dev1').at(-1)).toMatchObject({ status: 'applied' });
+  });
+  it('replays a verified queued receipt after the phone reconnects', async () => {
+    const view = { ...data(), answerQueued: () => true };
+    const g = setup({ deps: { openrig: view }, dispatch: async (msg, reply) => { if (msg.type === 'escalation.answer') reply({ type: 'rig.result', rid: msg.rid, ok: true }); } });
+    const op = randomUUID(); const answer = { type: 'escalation.answer', op, id: 'q1', answers: { q: 'a' } };
+    g.send('dev1', answer); await flush(); expect(g.results('dev1').at(-1)).toMatchObject({ op, status: 'received' });
+    g.gw.answerSettled({ rid: op, machine: 'other', id: 'q1', answers: { q: 'a' } }, { status: 'applied' }); await flush();
+    expect(g.results('dev1').some(m => m.type === 'operation.result' && m.op === op && m.status === 'applied')).toBe(false);
+    g.fm.setOnline('dev1', false); g.gw.answerSettled({ rid: op, machine: 'remote', id: 'q1', answers: { q: 'a' } }, { status: 'applied' }); await flush();
+    g.fm.setOnline('dev1', true); g.send('dev1', answer); await flush();
+    expect(g.results('dev1').at(-1)).toMatchObject({ op, status: 'applied' }); expect(g.dispatched).toHaveLength(1);
+  });
+  it('reports a direct remote success only with explicit proof', async () => {
+    const view = { ...data(), answerQueued: () => false };
+    const g = setup({ deps: { openrig: view }, dispatch: async (msg, reply) => { if (msg.type === 'escalation.answer') reply({ type: 'rig.result', rid: msg.rid, ok: true, confirmed: true }); } });
+    const op = randomUUID(); g.send('dev1', { type: 'escalation.answer', op, id: 'q1', answers: { q: 'a' } }); await flush();
+    expect(g.results('dev1').at(-1)).toMatchObject({ op, status: 'applied' });
+  });
+  it('keeps a receipt that arrives before the queued dispatch returns', async () => {
+    const view = { ...data(), answerQueued: () => true }; let g: ReturnType<typeof setup>;
+    g = setup({ deps: { openrig: view }, dispatch: async (msg, reply) => { if (msg.type === 'escalation.answer') { g.gw.answerSettled({ rid: msg.rid, machine: 'remote', id: msg.id, answers: msg.answers }, { status: 'applied' }); reply({ type: 'rig.result', rid: msg.rid, ok: true }); } } });
+    const op = randomUUID(); g.send('dev1', { type: 'escalation.answer', op, id: 'q1', answers: { q: 'a' } }); await flush();
+    expect(g.results('dev1').at(-1)).toMatchObject({ op, status: 'applied' });
+  });
   it('reports an actual local answer as applied', async () => {
     const local = { ...escalation, machine: 'local' }; const view = { ...data(), escalations: () => [local], escalation: () => local };
-    const g = setup({ deps: { openrig: view }, dispatch: async (msg, reply) => { if (msg.type === 'escalation.answer') reply({ type: 'rig.result', rid: msg.rid, ok: true }); } });
+    const g = setup({ deps: { openrig: view }, dispatch: async (msg, reply) => { if (msg.type === 'escalation.answer') reply({ type: 'rig.result', rid: msg.rid, ok: true, confirmed: true }); } });
     const op = randomUUID(); g.send('dev1', { type: 'escalation.answer', op, id: 'q1', answers: { q: 'a' } }); await flush();
     expect(g.results('dev1').at(-1)).toMatchObject({ op, status: 'applied' });
   });

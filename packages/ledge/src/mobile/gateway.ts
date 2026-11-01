@@ -8,7 +8,7 @@ import { inspectRepos } from '../daemon/repos.js';
 import { phoneText, rigKey, toPhoneRig, toPhoneEscalation, toPhoneDecision, toPhoneExchange, toPhoneThreadItem, toPhonePlan, fromPhone } from './orchestrator.js';
 import { rigSubject } from '@ledge/protocol';
 import {
-  ATTACHMENT_MAX, EXCHANGES_MAX, THREAD_PAGE, PLAIN_MAX, OperationIdSchema, PHONE_PROTOCOL, actionById, TOOL_TEXT_MAX, proposalRows, PhoneClientMessageSchema, pushEndpointAllowed, RefusalCodeSchema, UNTYPABLE, backendOf, isArchived, pendingKey,
+  canonicalJson, ATTACHMENT_MAX, EXCHANGES_MAX, THREAD_PAGE, PLAIN_MAX, OperationIdSchema, PHONE_PROTOCOL, actionById, TOOL_TEXT_MAX, proposalRows, PhoneClientMessageSchema, pushEndpointAllowed, RefusalCodeSchema, UNTYPABLE, backendOf, isArchived, pendingKey,
   SEMVER, pcSubject, type AttachmentRef, type ChatErrorCode, type ChatTurn, type CloseHow, type ClientMessage, type OperationReason, type OperationStatus, type PhoneClientMessage, type PhoneServerMessage, type ServerMessage, type Session, type ThreadItem
 } from '@ledge/protocol';
 import { ModelRefusalSchema, type ModelRefusal, type Tool } from '@ledge/protocol';
@@ -36,6 +36,8 @@ export interface PhoneGateway {
   forward(m: ServerMessage): void;
   /** Whether the device's app is in front right now (it said so, and its channel is still up). */
   visible(deviceId: string): boolean;
+  /** A definitive, rid-correlated peer reply for a previously queued answer. */
+  answerSettled(answer: { rid: string; machine: string; id: string; answers: Record<string, string> }, result: { status: 'applied' | 'rejected'; reason?: 'already_answered' }): void;
   stop(): void;
 }
 
@@ -129,6 +131,7 @@ export function createPhoneGateway(deps: {
   /** The read mark of a session no device marked: what was replied before the gateway started counts as read. */
   const startedAt = new Date(deps.now ? deps.now() : Date.now()).toISOString();
   const registry = new OperationRegistry();
+  const pendingAnswers = new Map<string, { deviceId: string; machine: string; id: string; answers: string }>();
   const followers = new Map<string, Follower>();
   let stopped = false;
   /**
@@ -200,7 +203,11 @@ export function createPhoneGateway(deps: {
     return key !== undefined && p.key !== key ? 'stale' : 'on';
   };
   const projectName = (id: string) => deps.openrig?.projects().projects.find(p => p.id === id)?.name;
-  const threadContext = () => ({ rigs: deps.openrig?.rigs() ?? [], rules: deps.openrig?.rules() ?? [], decisions: deps.openrig?.decisions() ?? [], escalation: (id: string) => deps.openrig?.escalationAmbiguous(id) ? undefined : deps.openrig?.escalation(id), exchanges: (machine: string, rigId: string) => deps.openrig?.exchanges(machine, rigId) ?? null });
+  const phoneEscalation = (e: import('@ledge/protocol').Escalation) => {
+    const waiting = [...pendingAnswers.entries()].some(([op, answer]) => answer.machine === e.machine && answer.id === e.id && registry.get(op)?.status === 'received');
+    return waiting && e.answer && !e.answer.delivery ? { ...e, answer: { ...e.answer, delivery: 'sent' as const } } : e;
+  };
+  const threadContext = () => ({ rigs: deps.openrig?.rigs() ?? [], rules: deps.openrig?.rules() ?? [], decisions: deps.openrig?.decisions() ?? [], escalation: (id: string) => { const e = deps.openrig?.escalationAmbiguous(id) ? undefined : deps.openrig?.escalation(id); return e ? phoneEscalation(e) : undefined; }, exchanges: (machine: string, rigId: string) => deps.openrig?.exchanges(machine, rigId) ?? null });
   const keys = () => new Map((deps.openrig?.rigs() ?? []).map(r => [rigKey(r.machine, r.id), { machine: r.machine, rigId: r.id }]));
   const day = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   const snapshot = (deviceId: string): PhoneServerMessage => {
@@ -220,7 +227,7 @@ export function createPhoneGateway(deps: {
       if (localStatus) message.openrigStatus = { state: localStatus.state, ...(localStatus.version ? { version: phoneText(localStatus.version, 80) } : {}) };
       message.projects = view.projects().projects.filter(p => p.id.length > 0 && p.id.length <= 80 && phoneText(p.id, 80) === p.id).slice(0, 100).map(p => ({ id: p.id, name: phoneText(p.name, 80) || '?', hasLocalRepo: p.repos.some(r => r.machine === 'local') }));
       message.rigs = safeMap(rigs.slice(0, 40), r => toPhoneRig(r, projectName));
-      message.escalations = safeMap([...view.escalations()].filter(e => !view.escalationAmbiguous(e.id)).sort((a, b) => Number(b.state === 'pending' || b.state === 'grace') - Number(a.state === 'pending' || a.state === 'grace')).slice(0, 40), e => toPhoneEscalation(e, rules, rigs));
+      message.escalations = safeMap([...view.escalations()].filter(e => !view.escalationAmbiguous(e.id)).sort((a, b) => Number(b.state === 'pending' || b.state === 'grace') - Number(a.state === 'pending' || a.state === 'grace')).slice(0, 40), e => toPhoneEscalation(phoneEscalation(e), rules, rigs));
       message.decisionsToday = safeMap(view.decisions().filter(d => d.by === 'ledge' && day(new Date(d.at)) === day(new Date(deps.now ? deps.now() : Date.now()))).slice(0, 50), d => toPhoneDecision(d, rigs));
       // Individual records are bounded, but their combination must still fit the sealed frame.
       while (Buffer.byteLength(JSON.stringify(message), 'utf8') > PLAIN_MAX - 4_096) {
@@ -625,13 +632,13 @@ export function createPhoneGateway(deps: {
   const openrigOperation = async (deviceId: string, msg: OpenRigOperation): Promise<Outcome> => {
     const view = deps.openrig;
     if (!view) return { status: 'rejected', reason: 'unsupported' };
-    let answerMachine: string | undefined;
     if (msg.type === 'ledge.say' && msg.about && (view.escalationAmbiguous(msg.about) || view.escalations().filter(e => e.id === msg.about).length !== 1)) return { status: 'rejected', reason: 'invalid' };
     if (msg.type === 'escalation.answer') {
       const matches = view.escalations().filter(e => e.id === msg.id);
       const target = view.escalation(msg.id);
       if (view.escalationAmbiguous(msg.id) || matches.length !== 1 || !target || matches[0]?.machine !== target.machine) return { status: 'rejected', reason: 'invalid' };
-      answerMachine = target.machine;
+      for (const op of pendingAnswers.keys()) if (!registry.get(op)) pendingAnswers.delete(op);
+      pendingAnswers.set(msg.op, { deviceId, machine: target.machine, id: msg.id, answers: canonicalJson(msg.answers) });
     }
     if (msg.type === 'rig.act') {
       const target = keys().get(msg.key); const rig = target && view.rigs().find(r => r.machine === target.machine && r.id === target.rigId);
@@ -665,7 +672,7 @@ export function createPhoneGateway(deps: {
     if (result.type !== 'rig.result') return { status: 'failed' };
     if (!result.ok) return { status: 'rejected', reason: msg.type === 'rig.launch' && result.code === 'failed' && result.reason === 'plan expired' ? 'invalid' : result.code ?? 'failed' };
     // The remote daemon can acknowledge a queued answer before delivery; it is not an applied decision.
-    if (msg.type === 'escalation.answer' && answerMachine !== 'local') return { status: 'received' };
+    if (msg.type === 'escalation.answer' && !result.confirmed) return { status: 'received' };
     return { status: 'applied' };
   };
 
@@ -715,8 +722,13 @@ export function createPhoneGateway(deps: {
       log(`phone ${msg.type} failed (${e instanceof Error ? e.name : 'error'})`);
       outcome = { status: 'failed' };
     }
+    // A queue receipt can arrive while the dispatch promise is still returning; never overwrite that final result.
+    const current = registry.get(msg.op);
+    if (outcome.status === 'received' && current && current.status !== 'received') return;
     registry.finish(msg.op, outcome.status, outcome.reason, outcome.how);
+    if (outcome.status !== 'received') pendingAnswers.delete(msg.op);
     result(deviceId, msg.op, outcome.status, outcome.reason, outcome.how);
+    if (msg.type === 'escalation.answer' && outcome.status !== 'received') for (const [id, f] of followers) if (f.subscribed) push(id, snapshot(id), 'snapshot');
     // The phone learns it can confirm from the snapshot that follows.
     if (msg.type === 'credential.register' && outcome.status === 'applied' && approved(deviceId)) push(deviceId, snapshot(deviceId), 'snapshot');
     if (msg.type === 'device.forget' && outcome.status === 'applied') {
@@ -1064,6 +1076,15 @@ export function createPhoneGateway(deps: {
       }
     },
     visible: deviceId => followers.get(deviceId)?.visible === true,
+    answerSettled(answer, outcome) {
+      const held = pendingAnswers.get(answer.rid);
+      if (!held || held.machine !== answer.machine || held.id !== answer.id || held.answers !== canonicalJson(answer.answers)) return;
+      const record = registry.get(answer.rid); if (!record || record.status !== 'received' || record.owner !== held.deviceId) return;
+      registry.finish(answer.rid, outcome.status, outcome.reason);
+      result(held.deviceId, answer.rid, outcome.status, outcome.reason);
+      pendingAnswers.delete(answer.rid);
+      for (const [deviceId, f] of followers) if (f.subscribed) push(deviceId, snapshot(deviceId), 'snapshot');
+    },
     stop() {
       if (stopped) return;
       stopped = true;
@@ -1071,6 +1092,7 @@ export function createPhoneGateway(deps: {
       unsubscribeChange();
       outbox.close();
       followers.clear();
+      pendingAnswers.clear();
     }
   };
 }

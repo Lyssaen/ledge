@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
+import { setup as setupGateway, flush as flushGateway, stopAll as stopGateways } from './helpers/gateway.js';
 import { copyFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -62,7 +64,7 @@ function setup(file: string, opts: { settleMs?: number; machines?: Machine[] } =
   return { queue, sent, answersSent, overlays, notices, peer, peerStatus, replay, replies, reply, answer };
 }
 
-afterEach(() => { for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }); });
+afterEach(() => { stopGateways(); for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }); });
 
 describe('answer queue', () => {
   it('answers at once, overlays « queued » and keeps the answer in openrig.json across a restart of the local daemon', () => {
@@ -87,6 +89,47 @@ describe('answer queue', () => {
     expect(again.overlays).toEqual([['E1', expect.objectContaining({ state: 'answered', answer: expect.objectContaining({ delivery: 'queued' }) })]]);
   });
 
+  it('emits a correlated receipt only after a sent answer receives the peer’s result', () => {
+    const s = setup(join(tmp(), 'openrig.json')); const receipts: Array<unknown> = [];
+    s.queue.onSettled((answer, result) => receipts.push({ answer, result }));
+    s.queue.enqueue(s.answer('r1'), s.reply); expect(receipts).toEqual([]);
+    s.replay('running', ['E1']); expect(s.answersSent()).toHaveLength(1);
+    s.peer({ ...ok('r1'), confirmed: true });
+    expect(receipts).toEqual([{ answer: expect.objectContaining({ rid: 'r1', machine: 'ec2', id: 'E1', answers: { q1: 'a' } }), result: { status: 'applied' } }]);
+  });
+  it('emits the same rid receipt after the peer connection drops and the answer is resent', () => {
+    const s = setup(join(tmp(), 'openrig.json')); const receipts: Array<unknown> = [];
+    s.queue.onSettled((answer, result) => receipts.push({ answer, result }));
+    s.queue.enqueue(s.answer('r1'), s.reply); s.replay('running', ['E1']); s.peerStatus('unreachable');
+    expect(receipts).toEqual([]); s.replay('running', ['E1']);
+    expect(s.answersSent().filter(m => m.type === 'escalation.answer' && m.rid === 'r1')).toHaveLength(2);
+    s.peer({ ...ok('r1'), confirmed: true }); expect(receipts).toEqual([{ answer: expect.objectContaining({ rid: 'r1' }), result: { status: 'applied' } }]);
+  });
+  it('does not treat an unproven positive peer result as a receipt', () => {
+    const s = setup(join(tmp(), 'openrig.json')); const receipts: Array<unknown> = [];
+    s.queue.onSettled((answer, result) => receipts.push({ answer, result }));
+    s.queue.enqueue(s.answer('r1'), s.reply); s.replay('running', ['E1']); s.peer(ok('r1'));
+    expect(receipts).toEqual([]);
+  });
+  it('does not claim application from an inferred lost acknowledgement or an unsolicited result', () => {
+    const s = setup(join(tmp(), 'openrig.json')); const receipts: Array<unknown> = [];
+    s.queue.onSettled((answer, result) => receipts.push({ answer, result }));
+    s.queue.enqueue(s.answer('r1'), s.reply); s.peer(ok('r1')); expect(receipts).toEqual([]);
+    s.queue.enqueue(s.answer('r2'), s.reply); s.replay('running', ['E1']); s.peerStatus('unreachable'); s.replay('running', []);
+    s.peer({ type: 'rig.result', rid: 'r2', ok: false, code: 'failed' }); expect(receipts).toEqual([]);
+  });
+  it.each([true, false])('relays a queued peer reply to the phone only with proof: %s', async (confirmed) => {
+    const s = setup(join(tmp(), 'openrig.json')); const e = esc('E1', 'ec2');
+    const view = { rigs: () => [], escalations: () => [e], escalation: (id: string) => id === e.id ? e : undefined, escalationAmbiguous: () => false, rules: () => [], decisions: () => [], projects: () => ({ projects: [], rules: [] }), thread: () => ({ items: [] }), exchanges: () => [] };
+    const g = setupGateway({ deps: { openrig: view }, dispatch: async (msg, reply) => { if (msg.type === 'escalation.answer') s.queue.enqueue({ rid: msg.rid, machine: 'ec2', id: msg.id, answers: msg.answers, by: msg.by, at: T }, reply); } });
+    s.queue.onSettled((answer, result) => g.gw.answerSettled(answer, result));
+    const op = randomUUID(); const msg = { type: 'escalation.answer', op, id: 'E1', answers: { q1: 'a' } };
+    g.send('dev1', msg); await flushGateway(); expect(g.results('dev1').at(-1)).toMatchObject({ op, status: 'received' });
+    s.replay('running', ['E1']); s.peerStatus('unreachable'); s.replay('running', ['E1']);
+    s.peer({ ...ok(op), ...(confirmed ? { confirmed: true as const } : {}) }); await flushGateway();
+    g.send('dev1', msg); await flushGateway();
+    expect(g.results('dev1').at(-1)).toMatchObject({ op, status: confirmed ? 'applied' : 'received' });
+  });
   it('shares openrig.json with the cursor writer: neither drops the other one\'s part', async () => {
     const file = join(tmp(), 'openrig.json');
     const w = createCursorWriter({ file, now: () => 'NOW', minIntervalMs: 5 });
@@ -515,7 +558,7 @@ describe('Review Focus 1: answers wait for an unreachable machine and go once', 
     broken = false;
     await until(() => readOpenRigFile(join(homeB, 'openrig.json')).outbox === undefined, 8000);
     expect(answersTo('r1')).toBe(2);
-    expect(fromPeer.filter(m => m.type === 'rig.result' && m.rid === 'r1').at(-1)).toEqual(ok('r1'));
+    expect(fromPeer.filter(m => m.type === 'rig.result' && m.rid === 'r1').at(-1)).toEqual({ ...ok('r1'), confirmed: true });
     expect(delivered() - before).toBe(1);
     expect(msgs.some(m => m.type === 'ledge.thread.item' && m.item.kind === 'ledge' && 'text' in m.item && String(m.item.text).includes("n'est pas partie"))).toBe(false);
     await new Promise<void>(r => { ws.once('close', () => r()); ws.close(); });

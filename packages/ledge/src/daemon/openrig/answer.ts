@@ -13,7 +13,7 @@ import { HUMAN_ADDRESS, type AnswerPathKind } from './facts.js';
 export type AnswerPath = { kind: AnswerPathKind };
 export const ANSWER_CODES = ['already_answered', 'openrig_down', 'unreachable', 'failed', 'invalid'] as const satisfies readonly RigResultCode[];
 export type AnswerCode = typeof ANSWER_CODES[number];
-export type AnswerResult = { ok: true; escalation: Escalation } | { ok: false; code: AnswerCode; reason: string };
+export type AnswerResult = { ok: true; escalation: Escalation; confirmed?: true } | { ok: false; code: AnswerCode; reason: string };
 export interface Answers {
   /** A user answer to a card reopened by « Revenir dessus » (`correcting` set) goes to `correct`; a Ledge one is refused. */
   answer(id: string, answers: Record<string, string>, by: 'user' | 'ledge', o?: { rule?: string }): Promise<AnswerResult>;
@@ -208,7 +208,7 @@ export function createAnswers(d: AnswersDeps): Answers {
     }
     notify(d.port.escalation(id) ?? { ...e, state: 'answered' });   // `correcting` still set: the recorder links the decisions
     const done = d.port.patch(id, { correcting: undefined }) ?? { ...e, state: 'answered' as const, correcting: undefined };
-    return { ok: true, escalation: done };
+    return { ok: true, escalation: done, confirmed: true };
   }
 
   return {
@@ -223,6 +223,8 @@ export function createAnswers(d: AnswersDeps): Answers {
       const bad = invalid(e, answers); if (bad) return refuse('invalid', bad);
       if (e.machine !== d.localMachine) return refuse('unreachable', 'réponse à distance : lot 6');
       const ask = e.source === 'ask';
+      // A stored reply row is keyed only by escalation: its author and answer are not proof of this operation.
+      const uncertainRow = !ask && d.path.kind === 'reply-and-approve' && d.port.replyRow(e.id) !== undefined;
       if (!ask && d.port.status().state !== 'running') return refuse('openrig_down', "OpenRig n'est pas lancé");
       inFlight.add(id);
       const before: EscalationPatch = { state: e.state, graceUntil: e.graceUntil, answer: undefined };
@@ -239,7 +241,7 @@ export function createAnswers(d: AnswersDeps): Answers {
       }
       const done = d.port.escalation(id) ?? { ...e, state: 'answered' };
       notify(done);
-      return { ok: true, escalation: done };
+      return { ok: true, escalation: done, ...(!uncertainRow ? { confirmed: true as const } : {}) };
     },
     onAnswered(fn) { listeners.add(fn); return () => { listeners.delete(fn); }; },
   };
