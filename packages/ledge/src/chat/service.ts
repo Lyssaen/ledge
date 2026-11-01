@@ -34,7 +34,7 @@ export interface Chat {
   /** The turn's relay (spec 2026-10-12 relay §4), if the turn is still in the day's history. */
   relay(qid: string): ChatRelay | undefined;
   /** The card's state: queued, sent, failed, or `{}` back to proposed; every client gets the new history. */
-  markRelay(qid: string, patch: Pick<ChatRelay, 'status' | 'sentAt' | 'error'>, emit: (m: ChatMessage) => void): void;
+  markRelay(qid: string, patch: Pick<ChatRelay, 'status' | 'sentAt' | 'error' | 'code'>, emit: (m: ChatMessage) => void): void;
   /** Today's queued relays, oldest turn first. */
   queuedRelays(emit?: (m: ChatMessage) => void): Array<{ qid: string; relay: ChatRelay; askedAt: string }>;
   /** The turn's close card row (spec 2026-10-21 close §4), if the turn is still in the day's history. */

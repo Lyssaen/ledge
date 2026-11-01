@@ -1,4 +1,4 @@
-import type { ChatErrorCode, PhoneChatStep, PhoneChatTurn } from '@ledge/protocol';
+import type { ChatErrorCode, PhoneChatStep, PhoneChatTurn, PhoneSession } from '@ledge/protocol';
 import { copy } from '../../copy';
 import type { MobileStore } from '../../state/store';
 import { PhoneThumbs } from '../PhoneThumbs';
@@ -56,7 +56,7 @@ const ERROR: Record<ChatErrorCode, string> = { busy: copy.chat.busy, timeout: co
  * One question and what came of it. `live` is the question being answered: its steps and the text so far
  * (the answer's Markdown comes later, the text is shown as it is).
  */
-export function TurnView({ store, turn, live, sessions, list, canConfirm, onStop }: { store: MobileStore; turn: PhoneChatTurn; live: { steps: PhoneChatStep[]; text: string } | null; sessions: number; list: { id: string; name: string; repo?: string; exited?: boolean }[]; canConfirm: boolean; onStop: () => void }) {
+export function TurnView({ store, turn, live, sessions, list, canConfirm, onStop }: { store: MobileStore; turn: PhoneChatTurn; live: { steps: PhoneChatStep[]; text: string } | null; sessions: number; list: { id: string; name: string; repo?: string; exited?: boolean; state?: PhoneSession['state']; helpers?: PhoneSession['helpers'] }[]; canConfirm: boolean; onStop: () => void }) {
   const steps = live?.steps ?? turn.steps;
   const text = live ? live.text : turn.answer;
   // A name two sessions share says nothing about which one is meant: it is not linked.
@@ -76,9 +76,9 @@ export function TurnView({ store, turn, live, sessions, list, canConfirm, onStop
       {!live && turn.cut && <span className="px-1 text-small text-muted">{copy.chat.cut}</span>}
       {!live && turn.error && <p role="status" className="px-1 text-body text-danger-fg">{ERROR[turn.error]}</p>}
       {!live && turn.closes && <CloseCards store={store} qid={turn.qid} closes={turn.closes} canConfirm={canConfirm} sessions={list} />}
-      {!live && !turn.closes && relay && <RelayCard store={store} qid={turn.qid} relay={relay} repo={list.find(x => x.id === relay.id)?.repo} known={list.some(x => x.id === relay.id)} />}
-      {!live && !turn.closes && turn.proposals && turn.proposals.length > 0 && <LaunchCards store={store} qid={turn.qid} proposals={turn.proposals} canConfirm={canConfirm} sessionIds={new Set(list.map(x => x.id))} />}
-      {!live && turn.team && <TeamCard store={store} qid={turn.qid} team={turn.team} canConfirm={canConfirm} />}
+      {!live && !turn.closes && relay && <RelayCard store={store} qid={turn.qid} relay={relay} target={list.find(x => x.id === relay.id)} known={list.some(x => x.id === relay.id)} ignoredAt={turn.ignoredAt} />}
+      {!live && !turn.closes && turn.proposals && turn.proposals.length > 0 && <LaunchCards store={store} qid={turn.qid} proposals={turn.proposals} canConfirm={canConfirm} sessionIds={new Set(list.map(x => x.id))} ignoredAt={turn.ignoredAt} />}
+      {!live && turn.team && <TeamCard store={store} qid={turn.qid} team={turn.team} canConfirm={canConfirm} ignoredAt={turn.ignoredAt} />}
       {!live && turn.actions && <ActionCards store={store} qid={turn.qid} actions={turn.actions} ignoredAt={turn.ignoredAt} canConfirm={canConfirm} />}
       {!live && turn.tasks && turn.tasks.length > 0 && <TaskCards store={store} qid={turn.qid} tasks={turn.tasks} waiting={!!turn.team && turn.team.teamId === undefined} />}
       {live && (

@@ -1337,7 +1337,8 @@ describe('phone gateway: chat cards', () => {
       launch: async p => { launches.push({ cwd: p.cwd, prompt: p.prompt }); return `s${launches.length}`; },
       refuse: p => { const w = tooWide(p.cwd, '/home/me'); return w ? `the folder is ${w}` : null; }
     }, qid, r);
-    return { c, rows, launches, relays, launchChat, relay: { async request(qid: string) { relays.push(qid); } } };
+    const cancels: string[] = [];
+    return { c, rows, launches, relays, cancels, launchChat, relay: { async request(qid: string) { relays.push(qid); }, cancel(qid: string) { if (cancels.includes(qid)) throw new Error('nothing queued'); cancels.push(qid); } } };
   }
   const enroll = async (g: ReturnType<typeof setup>) => {
     const auth = softAuthenticator();
@@ -1372,6 +1373,17 @@ describe('phone gateway: chat cards', () => {
     expect(k.relays).toEqual([QA]);
   });
 
+  it('chat.relay.cancel takes back the device\'s queued instruction; a second one is stale, another thread\'s unknown_session', async () => {
+    const { k, g } = make([row('/w/repo')]);
+    g.send('dev1', { type: 'chat.relay.cancel', op: randomUUID(), qid: QA });
+    g.send('dev1', { type: 'chat.relay.cancel', op: randomUUID(), qid: QA });
+    g.send('dev1', { type: 'chat.relay.cancel', op: randomUUID(), qid: QPC });
+    g.send('dev1', { type: 'chat.relay.cancel', op: randomUUID(), qid: QB });
+    await flush();
+    expect(g.results('dev1').filter(r => r.status !== 'received').map(r => r.status === 'applied' ? 'applied' : r.reason)).toEqual(['applied', 'stale', 'unknown_session', 'unknown_session']);
+    expect(k.cancels).toEqual([QA]);
+  });
+
   it('chat.launch on a row of a card that is not projected is invalid, even when the targeted row is short', async () => {
     const { k, g } = make([row('/w/repo', 'short'), row('/w/other', 'x'.repeat(2049))]);
     await enroll(g);
@@ -1388,7 +1400,7 @@ describe('phone gateway: chat cards', () => {
     await flush();
     expect(last(long.g)).toMatchObject({ status: 'rejected', reason: 'invalid' });
     const k = cards([]);
-    const g = setup({ chats: k.c.chats, relay: { async request() { throw new Error('already sent'); } } });
+    const g = setup({ chats: k.c.chats, relay: { async request() { throw new Error('already sent'); }, cancel() {} } });
     g.send('dev1', { type: 'chat.relay', op: randomUUID(), qid: QA });
     await flush();
     expect(last(g)).toMatchObject({ status: 'failed' });

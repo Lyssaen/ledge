@@ -217,6 +217,9 @@ describe('phone chat', () => {
   const snap = { type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: [], capabilities: { claude: { freeTextAnswer: true }, codex: { freeTextAnswer: true }, cursor: { freeTextAnswer: true }, omp: { freeTextAnswer: true } }, daemon: { version: '1.0.0', name: 'pc' } };
   it('accepts a turn and refuses a cwd in a proposal or a path in a step', () => {
     expect(() => PhoneServerMessageSchema.parse({ type: 'chat.done', qid: QID, turn: { ...turn, answer: 'a', proposals: [{ project: 'p', tool: 'claude', prompt: 'go' }], relay: { id: 's1', name: 'api', tool: 'claude', text: 'x' } } })).not.toThrow();
+    // A failed relay carries the PC's code, never its text.
+    expect(() => PhoneServerMessageSchema.parse({ type: 'chat.done', qid: QID, turn: { ...turn, relay: { id: 's1', name: 'api', tool: 'claude', text: 'x', failed: true, code: 'read_only' } } })).not.toThrow();
+    expect(() => PhoneServerMessageSchema.parse({ type: 'chat.done', qid: QID, turn: { ...turn, relay: { id: 's1', name: 'api', tool: 'claude', text: 'x', failed: true, error: 'boom' } } })).toThrow();
     expect(() => PhoneServerMessageSchema.parse({ type: 'chat.done', qid: QID, turn: { ...turn, proposals: [{ project: 'p', tool: 'claude', cwd: '/home/x' }] } })).toThrow();
     expect(() => PhoneServerMessageSchema.parse({ type: 'chat.done', qid: QID, turn: { ...turn, steps: [{ kind: 'repo', path: '/etc/passwd' }] } })).toThrow();
   });
@@ -232,7 +235,7 @@ describe('phone chat', () => {
   it('checks the client messages', () => {
     for (const m of [
       { type: 'chat.ask', qid: QID, text: '  hi ' }, { type: 'chat.cancel', qid: QID }, { type: 'chat.reset' }, { type: 'chat.history' },
-      { type: 'chat.relay', op: OP, qid: QID }, { type: 'chat.launch', op: OP, qid: QID, rows: [0, 7] },
+      { type: 'chat.relay', op: OP, qid: QID }, { type: 'chat.relay.cancel', op: OP, qid: QID }, { type: 'chat.launch', op: OP, qid: QID, rows: [0, 7] },
       { type: 'confirm.prepare', purpose: 'launch', qid: QID }
     ]) expect(() => PhoneClientMessageSchema.parse(m)).not.toThrow();
     expect(PhoneClientMessageSchema.parse({ type: 'chat.ask', qid: QID, text: '  hi ' })).toMatchObject({ text: 'hi' });

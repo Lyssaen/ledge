@@ -30,7 +30,9 @@ export const ChatProposalsSchema = z.array(ChatProposalSchema).min(1).max(MAX_PR
  *  `status` once the card sent it or queued it, `error` when the last attempt failed. */
 export const ChatRelaySchema = z.object({
   id: z.string().min(1), name: z.string(), tool: ToolSchema, text: z.string().min(1),
-  status: z.enum(['queued', 'sent']).optional(), sentAt: z.string().datetime().optional(), error: z.string().optional()
+  status: z.enum(['queued', 'sent']).optional(), sentAt: z.string().datetime().optional(), error: z.string().optional(),
+  /** Why it failed, as a code a front words itself (a RefusalCode, `ended`, or `failed` for the machinery); goes with `error`. */
+  code: z.string().max(40).optional()
 });
 export type ChatRelay = z.infer<typeof ChatRelaySchema>;
 

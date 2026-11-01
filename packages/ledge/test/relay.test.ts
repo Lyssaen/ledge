@@ -45,7 +45,7 @@ function fakeChat(relays: Record<string, ChatRelay>) {
 }
 
 let store: Store; let typed: Array<[string, string]>;
-let answer: (id: string, text: string) => Promise<string | null>;
+let answer: (id: string, text: string) => Promise<string | { message: string; code?: string } | null>;
 const replyTo = (id: string, text: string) => { typed.push([id, text]); return answer(id, text); };
 const flush = () => new Promise(r => setTimeout(r, 0));
 const otto = (text: string): ChatRelay => ({ id: 's1', name: 'Otto', tool: 'claude', text });
@@ -130,7 +130,7 @@ describe('createRelay (spec 2026-10-12 relay §4)', () => {
     await relay.request('q1');
     if (how === 'exited') store.upsert(mk('s1', { state: 'exited' })); else store.remove('s1');
     await flush();
-    expect(c.map.get('q1')).toEqual({ ...otto('a'), error: 'Otto stopped before it got the instruction' });
+    expect(c.map.get('q1')).toEqual({ ...otto('a'), error: 'Otto stopped before it got the instruction', code: 'ended' });
     await expect(relay.request('q1')).rejects.toThrow('Otto stopped before it got the instruction');
     expect(typed).toEqual([]);
     relay.close();
@@ -142,11 +142,24 @@ describe('createRelay (spec 2026-10-12 relay §4)', () => {
     const c = fakeChat({ q1: otto('a') });
     const relay = createRelay({ threads: c.threads, store, replyTo });
     await expect(relay.request('q1')).rejects.toThrow('the agent did not take the answer');
-    expect(c.map.get('q1')).toEqual({ ...otto('a'), error: 'the agent did not take the answer' });
+    expect(c.map.get('q1')).toEqual({ ...otto('a'), error: 'the agent did not take the answer', code: 'failed' });
     answer = async () => null;
     await relay.request('q1');
     expect(c.map.get('q1')!.status).toBe('sent');
     expect(c.map.get('q1')).not.toHaveProperty('error');
+    relay.close();
+  });
+
+  it('a failed card keeps the refusal\'s code, or the thrown one, for a front to word it', async () => {
+    store.upsert(mk('s1', { state: 'idle' }));
+    answer = async () => ({ message: 'session started without ledge, read only', code: 'read_only' });
+    const c = fakeChat({ q1: otto('a') });
+    const relay = createRelay({ threads: c.threads, store, replyTo });
+    await expect(relay.request('q1')).rejects.toThrow('read only');
+    expect(c.map.get('q1')).toEqual({ ...otto('a'), error: 'session started without ledge, read only', code: 'read_only' });
+    answer = async () => { throw Object.assign(new Error('the terminal did not take it'), { code: 'not_taken' }); };
+    await expect(relay.request('q1')).rejects.toThrow('did not take it');
+    expect(c.map.get('q1')).toMatchObject({ error: 'the terminal did not take it', code: 'not_taken' });
     relay.close();
   });
 
@@ -254,7 +267,7 @@ describe('createRelay (spec 2026-10-12 relay §4)', () => {
     answer = async (_id, t) => (t === 'first' ? 'refused' : null);
     store.upsert(mk('s1', { state: 'idle' })); await flush(); await flush();
     expect(typed).toEqual([['s1', 'first'], ['s1', 'second']]);
-    expect(c.map.get('q1')).toEqual({ ...otto('first'), error: 'refused' });
+    expect(c.map.get('q1')).toEqual({ ...otto('first'), error: 'refused', code: 'failed' });
     expect(c.map.get('q2')!.status).toBe('sent');
     relay.close();
   });

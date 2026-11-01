@@ -83,7 +83,7 @@ export function createPhoneGateway(deps: {
   /** The chat threads: each device talks to its own. Without them the phone has no chat. */
   chats?: Pick<ChatThreads, 'device' | 'peek' | 'deviceTool' | 'owner' | 'drop' | 'setEmitter'>;
   /** The chat relay: hands a turn's instruction to its session. */
-  relay?: { request(qid: string): Promise<void> };
+  relay?: { request(qid: string): Promise<void>; cancel(qid: string): void };
   /** Starts the sessions of a turn's card, on that thread (its own emitter and refusals). */
   launchChat?: (thread: ChatThreadId, qid: string, rows?: number[]) => Promise<{ launched: string[]; failed: number }>;
   /** Closes the sessions of a turn's close card, on that thread (its own emitter and marks). */
@@ -256,7 +256,7 @@ export function createPhoneGateway(deps: {
   };
 
   /** The operations that act on a tracked session: the registry's own, the credential's, the device's and the chat's are handled before it. */
-  type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.launch' | 'chat.close' | 'chat.act' | 'chat.ignore' | 'chat.team' | 'chat.task' | 'team.resume' | 'task.seen' | 'daemon.update' | 'daemon.restart' | 'session.close' | 'session.resume' | (typeof TEAMS_OPERATION_TYPES)[number] }>;
+  type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.relay.cancel' | 'chat.launch' | 'chat.close' | 'chat.act' | 'chat.ignore' | 'chat.team' | 'chat.task' | 'team.resume' | 'task.seen' | 'daemon.update' | 'daemon.restart' | 'session.close' | 'session.resume' | (typeof TEAMS_OPERATION_TYPES)[number] }>;
   /** Whether the operation needs the device's own check: an accept of a request that is not low, or a reply to an OMP (rpc) dialog, which is never low. */
   const needsAssertion = (msg: SessionOperation, s: Session): boolean => {
     if (msg.type === 'session.decide') return msg.decision !== 'deny' && riskOf(s)?.risk !== 'low';
@@ -391,6 +391,13 @@ export function createPhoneGateway(deps: {
     if (turn.ignoredAt) return SET_ASIDE;
     if (!turn.relay || turn.relay.text.length > TOOL_TEXT_MAX) return { status: 'rejected', reason: 'invalid' };
     try { await deps.relay.request(msg.qid); } catch (e) { log(`phone chat.relay failed (${e instanceof Error ? e.name : 'error'})`); return { status: 'failed' }; }
+    return { status: 'applied' };
+  };
+  /** Takes the card's queued instruction back, as the PC's « Annuler »: refused once it has gone (or was never queued). */
+  const chatRelayCancel = (deviceId: string, msg: Extract<PhoneOperation, { type: 'chat.relay.cancel' }>): Outcome => {
+    const turn = ownTurn(deviceId, msg.qid);
+    if (!turn?.relay || !deps.relay) return { status: 'rejected', reason: 'unknown_session' };
+    try { deps.relay.cancel(msg.qid); } catch { return { status: 'rejected', reason: 'stale' }; }
     return { status: 'applied' };
   };
 
@@ -646,6 +653,7 @@ export function createPhoneGateway(deps: {
       return { status: 'applied' };
     }
     if (msg.type === 'chat.relay') return chatRelay(deviceId, msg);
+    if (msg.type === 'chat.relay.cancel') return chatRelayCancel(deviceId, msg);
     if (msg.type === 'chat.launch') return chatLaunch(deviceId, msg);
     if (msg.type === 'chat.close') return chatClose(deviceId, msg);
     if (msg.type === 'chat.act') return chatAct(deviceId, msg);
