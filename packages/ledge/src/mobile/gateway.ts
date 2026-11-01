@@ -237,7 +237,7 @@ export function createPhoneGateway(deps: {
   };
 
   /** The operations that act on a tracked session: the registry's own, the credential's, the device's and the chat's are handled before it. */
-  type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.launch' | 'chat.close' | 'chat.act' | 'chat.ignore' | 'daemon.update' | 'daemon.restart' | 'session.close' | 'session.resume' }>;
+  type SessionOperation = Extract<PhoneOperation, { type: 'session.decide' | 'session.reply' | 'session.answer' | 'session.interrupt' | 'session.model' }>;
   /** Whether the operation needs the device's own check: an accept of a request that is not low, or a reply to an OMP (rpc) dialog, which is never low. */
   const needsAssertion = (msg: SessionOperation, s: Session): boolean => {
     if (msg.type === 'session.decide') return msg.decision !== 'deny' && riskOf(s)?.risk !== 'low';
@@ -594,6 +594,8 @@ export function createPhoneGateway(deps: {
     if (msg.type === 'chat.close') return chatClose(deviceId, msg);
     if (msg.type === 'chat.act') return chatAct(deviceId, msg);
     if (msg.type === 'session.close' || msg.type === 'session.resume') return sessionEnd(deviceId, msg);
+    // Until the OpenRig gateway is connected, fail closed instead of dispatching a new operation unchecked.
+    if (msg.type === 'rig.act' || msg.type === 'rig.launch' || msg.type === 'rig.prepare' || msg.type === 'ledge.say' || msg.type === 'escalation.answer' || msg.type === 'decision.revisit') return { status: 'rejected', reason: 'unsupported' };
     const refused = precheck(deviceId, msg);
     if (refused) return refused;
     const out = local(msg);
@@ -785,6 +787,8 @@ export function createPhoneGateway(deps: {
           const challenge = deps.challenges.issue({ deviceId, purpose: 'pc', subject: pcSubject(msg.action, msg.version) });
           return push(deviceId, { type: 'confirm.challenge', purpose: 'pc', challenge, rpId: rp.rpId, credentialId: cred.id, expiresInMs: CHALLENGE_TTL_MS });
         }
+        // Never issue an unbound rig challenge before the orchestrator is connected.
+        if (msg.purpose === 'rig') return invalid();
         // A purpose added to the enum without a branch above fails to compile here.
         const unhandled: never = msg.purpose;
         void unhandled;
