@@ -1,7 +1,7 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
-import { DEFAULT_PROJECTS, MANDATE_CATEGORY_LABEL, projectOf, taskClosed, type ChatStep, type Escalation, type Projects, type Recent, type Rig, type Role, type Session, type Task, type Team, type TeamTemplate } from '@ledge/protocol';
+import { DEFAULT_PROJECTS, MANDATE_CATEGORY_LABEL, projectOf, taskClosed, type ChatStep, type Escalation, type Projects, type Recent, type Rig, type Role, type Session, type Task, type Team, type TeamTemplate, type DefinitionProblem } from '@ledge/protocol';
 import { workingCount } from '@ledge/ui/rigs/model';
 import { listDefinitions } from '../daemon/teams.js';
 import { LEDGE_MD, writeLedgeMd, type LedgeInfo } from './guide.js';
@@ -9,7 +9,7 @@ import { writeNotes } from './notes.js';
 
 export interface ContextInput { sessions: Session[]; recents?: Recent[]; projects?: Projects; teams?: Team[]; tasks?: Task[];
   /** The roles and templates by folder (roles spec §3.8): the home's and each session's repository's; read from disk when left out. */
-  definitions?: (cwd?: string) => { roles: Role[]; templates: TeamTemplate[] };
+  definitions?: (cwd?: string) => { roles: Role[]; templates: TeamTemplate[]; problems?: DefinitionProblem[] };
   /** The OpenRig mirror (lot 4), only where the daemon has a bridge: `rigs.md` and `escalations.md`. */
   rigs?: Rig[]; escalations?: Escalation[];
   /** What `ledge.md` holds (the guide, the version, the agents installed); no `ledge.md` when left out. */
@@ -103,11 +103,14 @@ async function writeTeamsContext(dir: string, input: ContextInput, steps: Map<st
   const defsOf = input.definitions ?? (cwd => listDefinitions(cwd));
   const folders = [undefined, ...new Set(input.sessions.filter(s => s.state !== 'exited').map(s => s.repoPath ?? s.cwd))];
   const roles = new Map<string, Role & { folders: Set<string> }>(); const templates = new Map<string, TeamTemplate>();
+  /** Template files ignored (a template with no lead, since lot B, or unreadable), by path: listed with why, so the chat can say it. */
+  const ignored = new Map<string, { id: string; reason: string }>();
   for (const f of folders) {
     let defs;
     try { defs = defsOf(f); } catch { continue; }
     for (const r of defs.roles) { const key = `${r.source}:${r.path}`; const cur = roles.get(key) ?? { ...r, folders: new Set<string>() }; if (f) cur.folders.add(f); roles.set(key, cur); }
     for (const t of defs.templates) templates.set(`${t.source}:${t.path}`, t);
+    for (const p of defs.problems ?? []) if (/\.ya?ml$/.test(p.path)) ignored.set(p.path, { id: basename(p.path).replace(/\.ya?ml$/, ''), reason: p.reason });
   }
   const roleLines = ['# Roles', '', 'A team is composed only of these roles. A role from the home folder is available everywhere; a repository role only in that repository.', ''];
   if (!roles.size) roleLines.push('No roles yet. A role is a Markdown file `~/.ledge/roles/<id>.md` (or `<repo>/.ledge/roles/<id>.md`): a front matter with `label`, optionally `tool`, `model`, `effort`, `autonomy` (ask, edits, auto), then the role\'s prompt.', '');
@@ -119,7 +122,8 @@ async function writeTeamsContext(dir: string, input: ContextInput, steps: Map<st
   const nameOf = new Map(input.sessions.map(s => [s.id, s]));
   const teams = (input.teams ?? []).filter(t => t.state !== 'dissolved');
   const taskList = input.tasks ?? [];
-  const teamLines = ['# Teams', '', '## Templates', '', ...(templates.size ? [...templates.values()].map(t => `- ${t.id} (« ${oneLine(t.name)} », ${t.source}): ${t.seats.map(x => `@${x.role}${x.tool ? ` ${x.tool}` : ''}`).join(', ')}`) : ['- (none: a template is `~/.ledge/teams/<id>.yaml`)']), '', '## Live teams', ''];
+  const teamLines = ['# Teams', '', '## Templates', '', ...(templates.size ? [...templates.values()].map(t => `- ${t.id} (« ${oneLine(t.name)} », ${t.source}): ${t.seats.map(x => `@${x.role}${x.tool ? ` ${x.tool}` : ''}`).join(', ')}`) : ['- (none: a template is `~/.ledge/teams/<id>.yaml`)']),
+    ...[...ignored.values()].map(x => `- ${x.id} (ignored: ${oneLine(x.reason)})`), '', '## Live teams', ''];
   if (!teams.length) teamLines.push('No live team.', '');
   for (const t of teams) {
     const mine = taskList.filter(x => x.team === t.id && x.giver === 'ledge');

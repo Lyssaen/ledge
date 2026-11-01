@@ -16,10 +16,12 @@ interface Row { role: Role; tool: Tool; on: boolean }
  * « Nouvelle équipe ici… » (atelier rooms spec §3.2): a team in one of the project's folders, from a template or from the
  * roles chosen one by one, each with its agent. The preview says where it sits (« nouvelle table dans la pièce Ledge ») and
  * warns of a seat that works without asking. Launching sends `team.launch`; the daemon's answer closes the form or says why.
+ * A `team.failed` that carries its team was launched in part (a seat did not start, the lead may hold the objective already):
+ * the form closes as launched, with the reason as `warning`, so the same team is never launched twice.
  * The catalog (#97) opens it filled: `initial` names the folder, the template, or the one role ticked of seats chosen one by one.
  */
 export function TeamLaunch({ client, teams, project, initial, onLaunched, onCancel }: {
-  client: DaemonClient; teams: TeamsApi; project: Project; initial?: { cwd?: string; template?: string; seat?: string }; onLaunched(team: Team): void; onCancel(): void;
+  client: DaemonClient; teams: TeamsApi; project: Project; initial?: { cwd?: string; template?: string; seat?: string }; onLaunched(team: Team, warning?: string): void; onCancel(): void;
 }): JSX.Element {
   const { t } = useI18n();
   const c = t.teamLaunch;
@@ -76,7 +78,9 @@ export function TeamLaunch({ client, teams, project, initial, onLaunched, onCanc
       off(); clearTimeout(timer);
       if (!live.current) return;
       setSending(false);
-      if (m.type === 'team.launched') onLaunched(m.team); else setError(m.reason);
+      if (m.type === 'team.launched') onLaunched(m.team);
+      else if (m.team) onLaunched(m.team, m.reason);
+      else setError(m.reason);
     });
     const timer = setTimeout(() => { off(); if (live.current) { setSending(false); setError(c.noAnswer); } }, 60_000);
     const seats: Seat[] = chosen.map(x => ({ role: x.id, tool: x.tool }));

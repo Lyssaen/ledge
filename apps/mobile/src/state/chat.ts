@@ -12,10 +12,11 @@ export interface ChatState {
 
 /** What a relay or a launch came to, once its operation is final. */
 export type ChatAction =
-  | { status: 'failed' }
+  /** `detail`: the PC's own words for why, when it gave them (a teams operation's leader rule, an ignored template). */
+  | { status: 'failed'; detail?: string }
   /** `warn`: a composition saved whose added seat did not start. `scheduled`: a model change that waits for the end of the turn. `models`: what a composition did to each seat's model. */
   | { status: 'applied'; warn?: 'seat_failed'; scheduled?: true; models?: PhoneSeatModel[] }
-  | { status: 'rejected'; reason: OperationReason }
+  | { status: 'rejected'; reason: OperationReason; detail?: string }
   | { status: 'cancelled' }
   | { status: 'expired' };
 

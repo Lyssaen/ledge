@@ -349,6 +349,40 @@ describe('phone gateway: teams operations behind the passkey', () => {
     expect(last(g)).toMatchObject({ status: 'failed' });
   });
 
+  it('the leader rule and an ignored template reach the phone in the daemon\'s words; any other reason does not (M6)', async () => {
+    const LEAD = 'il manque le siège @leader : une équipe a exactement un lead (ajoute un siège de rôle leader)';
+    const answers: ServerMessage[] = [];
+    const { g } = make({ answer: m => (m.type === 'team.launch' || m.type === 'template.write' || m.type === 'team.compose' ? { ...answers.shift()!, rid: m.rid } as ServerMessage : undefined) });
+    const auth = await enroll(g);
+    const launch = { type: 'team.launch' as const, project: 'Repo', name: 'Duo', seats: SEATS };
+    answers.push({ type: 'team.failed', rid: '', reason: LEAD });
+    await confirmed(g, auth, launch);
+    expect(last(g)).toMatchObject({ status: 'failed', detail: LEAD });
+    answers.push({ type: 'team.failed', rid: '', reason: `le modèle duo est ignoré : ${LEAD}` });
+    await confirmed(g, auth, { ...launch, name: 'Duo 2' }, 2);
+    expect(last(g)).toMatchObject({ status: 'failed', detail: `le modèle duo est ignoré : ${LEAD}` });
+    // An ignored template's other reason is the catalog's fixed phrase: no path.
+    answers.push({ type: 'team.failed', rid: '', reason: "le modèle duo est ignoré : cannot read /home/me/.ledge/teams/duo.yaml" });
+    await confirmed(g, auth, { ...launch, name: 'Duo 3' }, 3);
+    expect(last(g)).toMatchObject({ status: 'failed', detail: 'le modèle duo est ignoré : fichier illisible' });
+    // Any other reason may name a folder: not passed on.
+    answers.push({ type: 'team.failed', rid: '', reason: '@dev : cannot start in /home/me/secret' });
+    await confirmed(g, auth, { ...launch, name: 'Duo 4' }, 4);
+    expect(last(g)).toEqual({ type: 'operation.result', op: expect.any(String), status: 'failed' });
+    // template.write refused for the rule, and a compose without a lead.
+    answers.push({ type: 'definition.result', rid: '', code: 'invalid', reason: LEAD } as ServerMessage);
+    await confirmed(g, auth, { type: 'template.write', scope: 'home', name: 'Eq', seats: SEATS, base: null }, 5);
+    expect(last(g)).toMatchObject({ status: 'rejected', reason: 'invalid', detail: LEAD });
+    answers.push({ type: 'team.changed', rid: '', reason: LEAD });
+    await confirmed(g, auth, { type: 'team.compose', team: 'team-a1b2', seats: SEATS }, 6);
+    expect(last(g)).toMatchObject({ status: 'failed', detail: LEAD });
+    for (const r of finals(g)) expect(PhoneServerMessageSchema.safeParse(r).success).toBe(true);
+  });
+
+  it('a leader-rule problem shows on the phone catalog in its own words', () => {
+    expect(problemReason('il manque le siège @leader : une équipe a exactement un lead (ajoute un siège de rôle leader)')).toBe('il manque le siège @leader : une équipe a exactement un lead (ajoute un siège de rôle leader)');
+  });
+
   it('team.compose and team.seat use the team purpose; team.changed is applied, with a reason failed', async () => {
     let n = 0;
     const { g, writes } = make({ answer: m => (m.type === 'team.compose' || m.type === 'team.seat' ? { type: 'team.changed', rid: m.rid, ...(n++ === 1 ? { reason: 'a seat did not start' } : {}) } : undefined) });

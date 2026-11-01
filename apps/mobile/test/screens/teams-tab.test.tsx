@@ -144,6 +144,20 @@ describe('the Équipes tab', () => {
     expect(teamOp).toHaveBeenCalledTimes(3);
   });
 
+  it('a launch the PC refused in its own words says them: the leader rule, an ignored template (M6)', async () => {
+    const t = open();
+    vi.spyOn(t.store, 'teamOp')
+      .mockResolvedValueOnce({ status: 'failed', detail: 'il manque le siège @leader : une équipe a exactement un lead (ajoute un siège de rôle leader)' })
+      .mockResolvedValueOnce({ status: 'rejected', reason: 'invalid', detail: 'le modèle revue-mr est ignoré : il manque le siège @leader : une équipe a exactement un lead (ajoute un siège de rôle leader)' });
+    fireEvent.click(screen.getByRole('button', { name: 'Lever Feature TDD' }));
+    const go = () => within(screen.getByRole('dialog')).getByRole('button', { name: 'Lancer l\'équipe · 3 sièges' });
+    const status = () => within(screen.getByRole('dialog')).getByRole('status');
+    await act(async () => { fireEvent.click(go()); });
+    expect(status()).toHaveTextContent('il manque le siège @leader : une équipe a exactement un lead (ajoute un siège de rôle leader)');
+    await act(async () => { fireEvent.click(go()); });
+    expect(status()).toHaveTextContent('le modèle revue-mr est ignoré : il manque le siège @leader');
+  });
+
   it('offers no « Lever » when the PC has no project with a local repository, and says so', () => {
     open(catalog({ projects: [] }));
     expect(screen.queryByRole('button', { name: /^Lever / })).toBeNull();

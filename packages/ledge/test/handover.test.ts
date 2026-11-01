@@ -8,6 +8,7 @@ import { History } from '../src/daemon/history.js';
 import { startServer } from '../src/daemon/server.js';
 import { claudeUsage, codexUsage, readContext } from '../src/daemon/context.js';
 import { briefGaps, heldNames, reliefOf } from '../src/daemon/handover.js';
+import { leadNotice } from '../src/daemon/objective.js';
 import { handoverArgs } from '../src/cli/handover.js';
 import { parseLedgeCommand } from '../src/cli/send.js';
 import { connect, type Client } from '../src/client.js';
@@ -202,6 +203,58 @@ describe('the relief of a session (context handover spec §3.3)', () => {
     await until(() => history.items(id).filter(i => i.kind === 'notice' && i.outgoing).length === 2, 5000);
     expect(history.items(id).filter(i => i.kind === 'notice' && i.outgoing)).toEqual(['Un', 'Deux'].map(title =>
       expect.objectContaining({ taskOp: 'pass', name: relief.name, peer: relief.id, summary: expect.stringMatching(new RegExp(`^${title}\\n`)) })));
+  }, 20_000);
+
+  it('the relief of a lead gets the results of the tasks its predecessor gave, the old lead nothing (lot B, I1)', async () => {
+    await start();
+    const { team, id: build } = await seated(10_000);
+    const lead = team.seats.find(s => s.role === 'leader')!.sessionId!;
+    set(lead, { state: 'idle' });
+    c.send({ type: 'task.cmd', rid: 'g', by: lead, op: 'give', to: '@build', title: 'Écrire les rôles' });
+    const sub = (await c.next('task.result')).task!;
+    expect(sub).toMatchObject({ giver: lead, owner: build });
+    const oldPane = store.get(lead)!.tmuxSession!;
+    c.send({ type: 'session.handover', rid: 'h', id: lead });
+    expect(await c.next('session.handover.result')).toMatchObject({ ok: true });
+    c.send({ type: 'handover.brief', rid: 'b', by: lead, text: BRIEF }); await c.next('handover.result');
+    await until(() => store.get(lead)?.handover?.state === 'done' && store.get(lead)?.state === 'exited', 5000);
+    const relief = store.get(store.get(lead)!.handover!.to!)!;
+    // The task it gave is the relief's to hear of now: giver moved, with a line in its log.
+    c.send({ type: 'task.cmd', rid: 's', by: 'ledge', op: 'show', task: sub.id });
+    const moved = (await c.next('task.result')).task!;
+    expect(moved).toMatchObject({ giver: relief.id, giverName: relief.name, owner: build, state: 'open' });
+    expect(moved.log.at(-1)).toMatchObject({ by: 'Ledge', what: `donneur relevé par ${relief.name}` });
+    set(relief.id, { state: 'idle' });
+    c.send({ type: 'task.cmd', rid: 'd', by: build, op: 'done', task: sub.id, text: 'roles.ts écrit, tests verts' });
+    expect((await c.next('task.result')).task).toMatchObject({ state: 'done' });
+    await until(() => pointers(relief.tmuxSession!, 'terminée par').length === 1, 5000);
+    expect(pointers(relief.tmuxSession!, 'terminée par')[0]!.text).toContain('roles.ts écrit, tests verts');
+    expect(pointers(oldPane, 'terminée par')).toEqual([]);
+  }, 20_000);
+
+  it('the relief of a lead holding the objective gets the whole lead notice, with its own crew, not the pass pointer (lot B, M10)', async () => {
+    await start();
+    c.send({ type: 'team.launch', rid: 'r1', cwd: work, name: 'api', seats: [{ role: 'leader' }, { role: 'build' }], objective: { goal: 'Pagination de /invoices', done: 'tests verts' } });
+    const { team } = await c.next('team.launched', 5000);
+    const lead = team.seats.find(s => s.role === 'leader')!.sessionId!;
+    const build = store.get(team.seats.find(s => s.role === 'build')!.sessionId!)!;
+    set(lead, { state: 'idle' });
+    c.send({ type: 'session.handover', rid: 'h', id: lead });
+    expect(await c.next('session.handover.result')).toMatchObject({ ok: true });
+    c.send({ type: 'handover.brief', rid: 'b', by: lead, text: BRIEF }); await c.next('handover.result');
+    await until(() => store.get(lead)?.handover?.state === 'done', 5000);
+    const relief = store.get(store.get(lead)!.handover!.to!)!;
+    c.send({ type: 'task.cmd', rid: 's', by: 'ledge', op: 'show', task: team.objectiveTask! });
+    const t = (await c.next('task.result')).task!;
+    expect(t).toMatchObject({ owner: relief.id, giver: 'ledge', objective: true });
+    set(relief.id, { state: 'idle' });
+    await until(() => pointers(relief.tmuxSession!, team.objectiveTask!).length >= 1, 5000);
+    const told = pointers(relief.tmuxSession!, team.objectiveTask!);
+    expect(told).toHaveLength(1);
+    // Typed as the first lead's was (line breaks shown as ⏎, `<` as ‹ by the typing): the same notice, its crew as it is now.
+    const typed = (s: string) => s.replace(/\n/g, ' ⏎ ').replace(/</g, '‹');
+    expect(told[0]!.text).toContain(typed(leadNotice(team, t.id, t.text!, `@build (${build.name}, claude)`)));
+    expect(told[0]!.text).not.toContain('Tâche passée par');
   }, 20_000);
 
   it('a brief missing a section is refused, naming what is missing; the relief still waits for it', async () => {

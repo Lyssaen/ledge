@@ -99,6 +99,9 @@ function teamJson(t: Team, sessions: readonly Session[]) {
  * `ledge team …`: `up` asks the daemon to launch a template's team or ad hoc seats; `list` reads the definitions and the live
  * teams; every other verb is a registry action (`action.run`), run as the session in the environment, or as the user.
  */
+/** What a launch that failed in part, its lead given the objective, adds: relaunching would put a second lead on the same objective. */
+const PARTIAL = "équipe lancée en partie : relance les sièges manquants depuis l'équipe, pas une nouvelle équipe";
+
 export async function runTeam(args: string[], opts: { port?: number; cwd?: string; env?: NodeJS.ProcessEnv } = {}): Promise<{ line: string; code: number }> {
   const parsed = teamArgs(args);
   if (!parsed) return { line: TEAM_USAGE, code: args.length ? 1 : 0 };
@@ -130,7 +133,9 @@ export async function runTeam(args: string[], opts: { port?: number; cwd?: strin
     const snapshot = await client.next('snapshot', 500).catch(() => undefined);
     if (r.type === 'team.failed') {
       if (parsed.json) return { line: JSON.stringify({ ok: false, reason: r.reason, ...(r.team ? { team: teamJson(r.team, snapshot?.sessions ?? []) } : {}) }), code: 1 };
-      return { line: `refusé : ${r.reason}${r.team ? `\n${formatTeam(r.team, snapshot?.sessions ?? [])}` : ''}`, code: 1 };
+      // A seat failed but the lead has the objective: the team works already, so the line says to complete it, never to launch another.
+      const partial = r.team?.objectiveTask ? `\nobjectif donné au lead (tâche ${r.team.objectiveTask})\n${PARTIAL}` : '';
+      return { line: `refusé : ${r.reason}${partial}${r.team ? `\n${formatTeam(r.team, snapshot?.sessions ?? [])}` : ''}`, code: 1 };
     }
     client.send({ type: 'snapshot.request' });
     const fresh = await client.next('snapshot', 1500).catch(() => snapshot);

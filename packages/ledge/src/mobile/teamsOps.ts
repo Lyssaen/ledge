@@ -5,7 +5,8 @@
 import { randomUUID } from 'node:crypto';
 import { teamsDigest, teamsPurpose, type ClientMessage, type PhoneClientMessage, type PhoneSeatModel, type PhoneServerMessage, type ServerMessage, type TeamsOperation } from '@ledge/protocol';
 import type { Outcome, PhoneOperation } from './operations.js';
-import { toPhoneCatalog, toPhoneRole, type DefinitionsListing } from './project.js';
+import { problemReason, toPhoneCatalog, toPhoneRole, type DefinitionsListing } from './project.js';
+import { leaderIssue } from '../daemon/leader.js';
 
 type Assertion = NonNullable<Extract<PhoneOperation, { type: 'role.write' }>['assertion']>;
 
@@ -23,6 +24,17 @@ export interface TeamsOpsDeps {
 }
 
 const FAILED: Outcome = { status: 'failed' };
+const LEAD = leaderIssue([])!;
+const IGNORED = /^le modèle ([\w-]{1,64}) est ignoré : ([\s\S]*)$/;
+/**
+ * The daemon's words for a refusal the phone may show as they are (M6): the leader rule, or a template ignored, its own reason
+ * passed through `problemReason` (a fixed phrase, the leader rule kept). Any other reason may hold a folder: none, the phone's own text says it.
+ */
+export function phoneDetail(reason: string | undefined): { detail?: string } {
+  if (reason === LEAD) return { detail: LEAD };
+  const m = reason ? IGNORED.exec(reason) : null;
+  return m ? { detail: `le modèle ${m[1]} est ignoré : ${problemReason(m[2]!)}` } : {};
+}
 const invalid: Outcome = { status: 'rejected', reason: 'invalid' };
 
 /** What a composition did to its seats' models, as the phone reads it (#58): `now` applied, `turn` scheduled, a code refused; none, nothing. */
@@ -87,17 +99,17 @@ export function createTeamsOps(deps: TeamsOpsDeps) {
         if (m.rid !== rid) return undefined;
         if (!m.code) return true;
         if (m.code === 'missing') return FAILED;
-        return { status: 'rejected', reason: m.code };
+        return { status: 'rejected', reason: m.code, ...phoneDetail(m.reason) };
       case 'team.changed': {
         if (m.rid !== rid) return undefined;
         // What it did to the held seats' models rides with a saved composition's outcome.
         const seats = withSeats(m.models);
         // A composition answers with its team and a reason when it was saved but an added seat did not start: applied, with the warning.
         if (m.reason && m.team && type === 'team.compose') return { status: 'applied', reason: 'seat_failed', ...seats };
-        return m.reason ? FAILED : { status: 'applied', ...seats };
+        return m.reason ? { ...FAILED, ...phoneDetail(m.reason) } : { status: 'applied', ...seats };
       }
       case 'team.launched': return m.rid === rid ? true : undefined;
-      case 'team.failed': return m.rid === rid ? false : undefined;
+      case 'team.failed': return m.rid === rid ? { ...FAILED, ...phoneDetail(m.reason) } : undefined;
       default: return undefined;
     }
   };

@@ -68,7 +68,7 @@ describe('ledge team and ledge close against a daemon', () => {
   const tmux = (): Tmux => {
     const panes = new Set<string>();
     return {
-      async newSession(o) { panes.add(o.name); }, async sendText() {}, async sendKeys() {}, async capture() { return ''; },
+      async newSession(o) { if (o.env.LEDGE_ROLE === 'broken') throw new Error('tmux: no server'); panes.add(o.name); }, async sendText() {}, async sendKeys() {}, async capture() { return ''; },
       async hasSession(n) { return panes.has(n); }, async listSessions() { return [...panes]; },
       async setOption() {}, async killSession(n) { panes.delete(n); }, attachArgs: n => ['attach', n]
     };
@@ -78,7 +78,7 @@ describe('ledge team and ledge close against a daemon', () => {
     process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-cli-'));
     work = mkdtempSync(join(tmpdir(), 'ledge-work-'));
     mkdirSync(join(process.env.LEDGE_HOME, 'roles'));
-    for (const r of ['lead', 'build', 'leader']) writeFileSync(join(process.env.LEDGE_HOME, 'roles', `${r}.md`), `---\nlabel: ${r}\n---\nTu es ${r}.\n`);
+    for (const r of ['lead', 'build', 'leader', 'broken']) writeFileSync(join(process.env.LEDGE_HOME, 'roles', `${r}.md`), `---\nlabel: ${r}\n---\nTu es ${r}.\n`);
     store = new Store();
     srv = await startServer({ store, tmux: tmux(), port: 0, close: { freeMs: 50, exitMs: 50 }, agentEnv: async () => ({ ...process.env }), claudeBin: [process.execPath, fileURLToPath(new URL('./fake-claude.mjs', import.meta.url))] });
   });
@@ -109,6 +109,20 @@ describe('ledge team and ledge close against a daemon', () => {
     expect(lines[1]).toMatch(/^objectif donné au lead \(tâche \S+\)$/);
     const json = JSON.parse((await runTeam(['up', '--seat', 'leader', '--name', 'b', '--goal', 'X', '--json'], user())).line);
     expect(json.team.objectiveTask).toEqual(expect.any(String));
+  });
+
+  it('a partial launch with an objective says the lead has it, and that the team is launched in part: no second team (lot B, I2)', async () => {
+    const up = await runTeam(['up', '--seat', 'leader', '--seat', 'broken', '--name', 'api', '--goal', 'Pagination'], user());
+    expect(up.code).toBe(1);
+    const lines = up.line.split('\n');
+    expect(lines[0]).toBe('refusé : @broken : tmux: no server');
+    expect(lines[1]).toMatch(/^objectif donné au lead \(tâche t[0-9a-f]{6}\)$/);
+    expect(lines[2]).toBe('équipe lancée en partie : relance les sièges manquants depuis l\'équipe, pas une nouvelle équipe');
+    // Without an objective, as before: the failure and the team.
+    const plain = await runTeam(['up', '--seat', 'leader', '--seat', 'broken', '--name', 'b'], user());
+    expect(plain.code).toBe(1);
+    expect(plain.line).not.toContain('objectif');
+    expect(plain.line).not.toContain('en partie');
   });
 
   it('dissolve --close-sessions by its @leader: the other seats closed first, the team dissolved, the leader itself last', async () => {

@@ -65,6 +65,13 @@ describe('a team has exactly one lead', () => {
       expect(changed).toMatchObject({ rid: 'c1', reason: ISSUE });
       expect(changed.team).toBeUndefined();
       expect(JSON.parse(readFileSync(paths().teams, 'utf8')).find((t: Team) => t.id === team.id).seats.map((s: { role: string }) => s.role)).toEqual(['leader', 'dev']);
+      // A template ignored for its missing lead is said ignored, and why, never « aucun modèle » (I3).
+      mkdirSync(join(process.env.LEDGE_HOME!, 'teams'), { recursive: true });
+      writeFileSync(join(process.env.LEDGE_HOME!, 'teams', 'old.yaml'), 'name: old\nseats:\n  - role: dev\n');
+      c.send({ type: 'team.launch', rid: 'l2', cwd: work, template: 'old' });
+      expect(await c.next('team.failed', 3000)).toMatchObject({ rid: 'l2', reason: `le modèle old est ignoré : ${ISSUE}` });
+      c.send({ type: 'team.launch', rid: 'l3', cwd: work, template: 'nope' });
+      expect(await c.next('team.failed', 3000)).toMatchObject({ rid: 'l3', reason: "aucun modèle d'équipe nope (.ledge/teams/nope.yaml)" });
       // The launch created no team.
       expect(JSON.parse(readFileSync(paths().teams, 'utf8'))).toHaveLength(1);
       // The daemon seeded the default leader role on startup.

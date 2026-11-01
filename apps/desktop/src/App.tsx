@@ -347,7 +347,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         return (
           <Modal title={t.teamLaunch.title(room.name)} wide onClose={close}>
             <TeamLaunch client={fleetClient} teams={teams} project={room} onCancel={close} initial={nav.modal as { cwd?: string; template?: string; seat?: string }}
-              onLaunched={team => { close(); dispatch({ type: 'home', project: room.id }); notify(t.teamLaunch.launched(team.name, room.name)); }} />
+              onLaunched={(team, warning) => { close(); dispatch({ type: 'home', project: room.id }); notify(warning ? t.teamLaunch.partial(warning) : t.teamLaunch.launched(team.name, room.name)); }} />
           </Modal>
         );
       })()}

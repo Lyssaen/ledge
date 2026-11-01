@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { LEADER_ROLE, type TeamObjective, actionById, autonomyArgs, contextNear, ompApprovalFor, askShown, isArchived, RoleIdSchema, TemplateIdSchema, type DefinitionCode, givenByLedge, LEDGE_GIVER, openDecision, transmissions, type Task, projectOf, type ChatAction, type Autonomy, type Role, type Seat, type Team } from '@ledge/protocol';
+import { type TeamObjective, actionById, autonomyArgs, contextNear, ompApprovalFor, askShown, isArchived, RoleIdSchema, TemplateIdSchema, type DefinitionCode, givenByLedge, LEDGE_GIVER, openDecision, transmissions, type Task, projectOf, type ChatAction, type Autonomy, type Role, type Seat, type Team } from '@ledge/protocol';
 import { ATTACHMENT_LOCAL_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type RigPlan, type RigResultCode, type DaemonInfo, type Projects, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Machine, type Tool, type OmpApproval, type CloseHow, type ModelRefusal, type RefusalCode, backendOf, MANDATE_CATEGORY_LABEL } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
@@ -88,8 +88,8 @@ import { createBrainCommands, parseBrainArgs, NOT_BRAIN_LINE, type RigActMsg, ty
 import { readContext } from './context.js';
 import { findRole, loadRole } from './roles.js';
 import { leaderIssue } from './leader.js';
-import { LEAD_NOT_STARTED, leadNotice, waitNotice } from './objective.js';
-import { listDefinitions, resolveSeats, saveTemplate, templateHash, templateId, type ResolvedSeat } from './teams.js';
+import { crewOf, LEAD_NOT_STARTED, leadNotice, waitNotice } from './objective.js';
+import { ignoredTemplate, listDefinitions, resolveSeats, saveTemplate, templateHash, templateId, type ResolvedSeat } from './teams.js';
 import { deleteDefinition, promptRecipients, roleText, scopeDefinitions, scopeDir, templateText, writeDefinition } from './definitions.js';
 import { resolveRoleAddress, seatContext, seatKey, seatView, teammates } from './seat.js';
 import { formatRoleNotice, formatTeamNotice } from './crossSession.js';
@@ -1385,7 +1385,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     const cwd = await resolveFolder(req.cwd, opts.home);
     const defs = listDefinitions(cwd);
     const template = !req.seats && req.template ? defs.templates.find(t => t.id === req.template) : undefined;
-    if (!req.seats && req.template && !template) return { reason: `aucun modèle d'équipe ${req.template} (.ledge/teams/${req.template}.yaml)` };
+    if (!req.seats && req.template && !template) return { reason: ignoredTemplate(req.template, defs.problems)?.reason ?? `aucun modèle d'équipe ${req.template} (.ledge/teams/${req.template}.yaml)` };
     const seats = req.seats ?? template?.seats;
     if (!seats?.length) return { reason: 'une équipe a au moins un siège' };
     const lead = leaderIssue(seats); if (lead) return { reason: lead };
@@ -1396,21 +1396,21 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     const team = teams.create({ name, ...(recorded ? { template: recorded } : {}), project: projectOf({ cwd }, projects), cwd, roles: seats });
     log(`team ${team.id} (${name}) launching ${resolved.length} seats in ${cwd}`);
     const failures = [await spawnSeats(team, resolved), req.objective ? giveObjective(team.id, req.objective) : null].filter((r): r is string => !!r);
-    return failures.length ? { reason: failures.join(' ; '), team: teams.get(team.id)! } : { team: teams.get(team.id)! };
+    // A team purged during its spawn is answered as it was created: never a crash, never an answer without a team.
+    const now = teams.get(team.id) ?? team;
+    return failures.length ? { reason: failures.join(' ; '), team: now } : { team: now };
   }
   /**
    * A launched team's objective (lot B): a task Ledge gives the `leader` seat's session, with the whole starting notice, kept on
    * the team; every other seat that started is told to wait for its task. A lead that did not start gets nothing: the reason says so.
    */
   function giveObjective(id: string, objective: TeamObjective): string | null {
-    const team = teams.get(id)!;
+    // The spawn is async: a team dissolved or purged meanwhile gets no objective (and no crash).
+    const team = teams.get(id);
+    if (!team || team.state === 'dissolved') { log(`team ${id}: objective not given, the team is gone or dissolved since its launch`); return null; }
     // A seat's session as it started: one already ended (or never spawned) is not there to be told anything.
-    const sessionOf = (seat: Team['seats'][number]) => { const s = seat.sessionId ? store.get(seat.sessionId) : undefined; return s && s.state !== 'exited' ? s : undefined; };
-    const lead = team.seats.find(s => s.role === LEADER_ROLE);
-    const leader = lead && sessionOf(lead);
+    const { leader, others, crew } = crewOf(team, sid => store.get(sid));
     if (!leader) { log(`team ${id}: objective not given, its lead did not start`); return LEAD_NOT_STARTED; }
-    const others = team.seats.filter(s => s !== lead).flatMap(s => { const x = sessionOf(s); return x ? [{ role: s.role, session: x }] : []; });
-    const crew = others.length ? others.map(o => `@${o.role} (${o.session.name}, ${o.session.tool})`).join(', ') : "personne d'autre";
     const task = tasks.giveObjective({ team, owner: leader, objective, notice: t => leadNotice(team, t.id, t.text!, crew) });
     teams.setObjective(id, task.id);
     for (const o of others) mailbox.notify(o.session.id, formatTeamNotice({ team: id, text: waitNotice(team, o.role, leader.name) }), `${id}:wait:${o.session.id}`);

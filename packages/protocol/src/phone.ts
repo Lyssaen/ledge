@@ -409,7 +409,9 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session.thread'), id: z.string(), items: z.array(ThreadItemSchema), cut: z.array(z.string()), more: z.boolean() }),
   z.object({ type: z.literal('session.thread.item'), id: z.string(), item: ThreadItemSchema, cut: z.literal(true).optional() }),
   z.object({ type: z.literal('operation.result'), op: OperationIdSchema, status: OperationStatusSchema, reason: OperationReasonSchema.optional(), models: z.array(PhoneSeatModelSchema).max(16).optional(),
-    /** How an applied `session.close` ended the agent: `killed` when it had to be forced. */ how: CloseHowSchema.optional() }),
+    /** How an applied `session.close` ended the agent: `killed` when it had to be forced. */ how: CloseHowSchema.optional(),
+    /** The PC's own words for a teams operation it refused, when they are safe to show (the leader rule, an ignored template): never a path. */
+    detail: z.string().max(400).optional() }),
   /** The models an agent offers; `error`: it could not be asked, `models` is then what Ledge knows without it. */
   z.object({ type: z.literal('models.listing'), tool: ToolSchema, models: z.array(PhoneModelChoiceSchema).max(40), error: z.literal(true).optional() }),
   /** A model change that was accepted and then failed (the agent could not restart). */

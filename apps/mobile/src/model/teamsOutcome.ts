@@ -8,7 +8,8 @@ export interface OutcomeNote { text: string; quiet: boolean; warn?: true }
 
 /**
  * A passkey that was cancelled or expired is a quiet note; a refusal says why when the tab has words for it (`copy.teams.reason`,
- * `reasons` overriding it for a screen that says it its own way), otherwise `fallback` says only that nothing was done.
+ * `reasons` overriding it for a screen that says it its own way), otherwise `fallback` says only that nothing was done. A refusal or a
+ * failure the PC put in words (`detail`: the leader rule, an ignored template) says those words.
  * A composition saved whose added seats did not start is applied with a warning naming `unstarted` (the roles whose seat holds no session).
  */
 export function outcomeNote(r: ChatAction, fallback: string, reasons: Partial<Record<string, string>> = {}, unstarted: readonly string[] = []): OutcomeNote {
@@ -18,7 +19,9 @@ export function outcomeNote(r: ChatAction, fallback: string, reasons: Partial<Re
     case 'expired': return { text: copy.confirm.expired, quiet: true };
     case 'rejected':
       if (r.reason === 'assertion_expired') return { text: copy.confirm.expired, quiet: true };
-      return { text: reasons[r.reason] ?? copy.teams.reason[r.reason] ?? fallback, quiet: false };
+      // The PC's own words (the leader rule, an ignored template) say more than any phrase of the tab.
+      return { text: r.detail ?? reasons[r.reason] ?? copy.teams.reason[r.reason] ?? fallback, quiet: false };
+    case 'failed': return { text: r.detail ?? fallback, quiet: false };
     default: return { text: fallback, quiet: false };
   }
 }

@@ -9,6 +9,7 @@ import { startServer } from '../src/daemon/server.js';
 import type { MailState } from '../src/daemon/mailbox.js';
 import { formatLedgeTask, formatTeamNotice } from '../src/daemon/crossSession.js';
 import { closedLedgeTasks } from '../src/tui/model/overview.js';
+import { objectiveTitle } from '../src/daemon/objective.js';
 import { connect, type Client } from '../src/client.js';
 import type { Tmux } from '../src/tmux.js';
 import { until } from './helpers.js';
@@ -18,10 +19,10 @@ import { until } from './helpers.js';
 
 type NewSession = { name: string; cwd: string; env: Record<string, string>; command: string[] };
 /** The tmux of teams-server.test.ts: a launch fails for the sessions `failOn` names. */
-function fakeTmux(failOn?: (o: NewSession) => boolean): Tmux {
+function fakeTmux(failOn?: (o: NewSession) => boolean, hold?: (o: NewSession) => Promise<void>): Tmux {
   const panes = new Set<string>();
   return {
-    async newSession(o) { if (failOn?.(o)) throw new Error('tmux: no server'); panes.add(o.name); },
+    async newSession(o) { if (failOn?.(o)) throw new Error('tmux: no server'); await hold?.(o); panes.add(o.name); },
     async sendText() {}, async sendKeys() {}, async capture() { return ''; },
     async hasSession(n) { return panes.has(n); }, async listSessions() { return [...panes]; },
     async setOption() {}, async killSession(n) { panes.delete(n); }, attachArgs: n => ['attach', n]
@@ -33,11 +34,11 @@ let srv: Awaited<ReturnType<typeof startServer>>; let store: Store; let work: st
 /** Every item the mailbox ever queued, by id: a notice typed meanwhile (and so out of the queue) is still here. */
 let queued: Map<string, Notice>;
 const role = (id: string, front: string) => { mkdirSync(join(process.env.LEDGE_HOME!, 'roles'), { recursive: true }); writeFileSync(join(process.env.LEDGE_HOME!, 'roles', `${id}.md`), `---\n${front}\n---\nTu es ${id}.\n`); };
-async function start(failOn?: (o: NewSession) => boolean) {
+async function start(failOn?: (o: NewSession) => boolean, hold?: (o: NewSession) => Promise<void>) {
   store = new Store();
   queued = new Map();
   const mail = { load: () => undefined, save: (s: MailState) => { for (const q of s.queue) queued.set(q.id, q); } };
-  srv = await startServer({ store, tmux: fakeTmux(failOn), port: 0, mail, agentEnv: async () => ({ ...process.env, ...(answer ? { FAKE_ANSWER: answer } : {}) }), claudeBin: [process.execPath, fileURLToPath(new URL('./fake-claude.mjs', import.meta.url))] });
+  srv = await startServer({ store, tmux: fakeTmux(failOn, hold), port: 0, mail, agentEnv: async () => ({ ...process.env, ...(answer ? { FAKE_ANSWER: answer } : {}) }), claudeBin: [process.execPath, fileURLToPath(new URL('./fake-claude.mjs', import.meta.url))] });
 }
 async function client(): Promise<Client> { const c = await connect({ port: srv.port }); await c.next('snapshot'); return c; }
 const noticesTo = (id: string) => [...queued.values()].filter(q => q.target === id);
@@ -88,6 +89,22 @@ describe('a team launched with an objective', () => {
     // The lead is not told to wait, the review seat is not given the objective.
     expect(noticesTo(lead.id).some(n => n.rid.includes(':wait:'))).toBe(false);
     expect(noticesTo(review.id).some(n => n.text.startsWith('<ledge-task'))).toBe(false);
+    await c.close();
+  });
+
+  it('M9: a team dissolved while its seats spawn gets no objective, and the launch still answers', async () => {
+    let c!: Client;
+    // The last seat's spawn waits for the team to be dissolved meanwhile.
+    await start(undefined, async o => {
+      if (o.env.LEDGE_ROLE !== 'review') return;
+      c.send({ type: 'team.dissolve', team: o.env.LEDGE_TEAM! });
+      await until(async () => { const m = await c.next('team.updated'); return m.team.id === o.env.LEDGE_TEAM && m.team.state === 'dissolved'; });
+    });
+    c = await client();
+    c.send({ type: 'team.launch', rid: 'r1', cwd: work, name: 'api', seats: SEATS, objective: OBJECTIVE });
+    const { team } = await c.next('team.launched', 5000);
+    expect(team.objectiveTask).toBeUndefined();
+    expect(await allTasks(c)).toEqual([]);
     await c.close();
   });
 
@@ -177,6 +194,19 @@ describe('a team launched with an objective', () => {
   });
 });
 
+describe('the objective\'s title (M1)', () => {
+  it('is cut between code points: an emoji astride the cut is left out whole, never half a surrogate pair', () => {
+    // 198 letters, then an emoji (2 UTF-16 units) that would end at unit 200: past the 199 kept, it goes whole.
+    const t = objectiveTitle(`${'A'.repeat(198)}😀 et la suite`);
+    expect(t).toBe(`${'A'.repeat(198)}…`);
+    expect(t.length).toBeLessThanOrEqual(200);
+    expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(t)).toBe(false);
+    // An emoji that fits is kept whole.
+    expect(objectiveTitle(`${'A'.repeat(197)}😀${'B'.repeat(10)}`)).toBe(`${'A'.repeat(197)}😀…`);
+    expect(objectiveTitle('😀 court')).toBe('😀 court');
+  });
+});
+
 describe('a team launched from the chat\'s card', () => {
   it('Review Focus 5: a card whose seats have no leader is refused with the leader rule', async () => {
     answer = `Je propose une équipe.\n\`\`\`ledge-team\n{"cwd": "${work}", "name": "api", "seats": [{"role": "review"}]}\n\`\`\``;
@@ -188,6 +218,20 @@ describe('a team launched from the chat\'s card', () => {
     const failed = await c.next('team.failed', 5000);
     expect(failed.reason).toBe('il manque le siège @leader : une équipe a exactement un lead (ajoute un siège de rôle leader)');
     expect(failed.team).toBeUndefined();
+    await c.close();
+  });
+
+  it('a card naming a template ignored for its missing lead says why on the card, and its launch says it too (I3)', async () => {
+    mkdirSync(join(process.env.LEDGE_HOME!, 'teams'), { recursive: true });
+    writeFileSync(join(process.env.LEDGE_HOME!, 'teams', 'old.yaml'), 'name: old\nseats:\n  - role: review\n');
+    answer = `Je propose une équipe.\n\`\`\`ledge-team\n{"cwd": "${work}", "template": "old"}\n\`\`\``;
+    await start();
+    const c = await client();
+    c.send({ type: 'chat.ask', qid: 'q1', text: 'Monte l\'équipe old' });
+    const reason = 'le modèle old est ignoré : il manque le siège @leader : une équipe a exactement un lead (ajoute un siège de rôle leader)';
+    expect((await c.next('chat.done', 10_000)).team).toMatchObject({ name: 'old', template: 'old', seats: [{ role: 'review', tool: 'codex' }], error: reason });
+    c.send({ type: 'team.launch', rid: 'r1', qid: 'q1' });
+    expect((await c.next('team.failed', 5000)).reason).toBe(reason);
     await c.close();
   });
 

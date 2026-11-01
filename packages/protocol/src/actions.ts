@@ -73,7 +73,7 @@ export const ACTIONS: readonly ActionDef[] = [
     example: { name: 'Facturation', description: 'Le service et son front', repos: [{ path: '/home/alice/projets/billing-api', why: 'le service' }] }
   }),
   def({
-    id: 'team.launch', args: TeamBlockSchema, card: 'team', phone: 'launch', risk: 'reversible', max: 1, cli: 'ledge team up <modèle> --cwd <dossier>',
+    id: 'team.launch', args: TeamBlockSchema, card: 'team', phone: 'launch', risk: 'reversible', max: 1, cli: 'ledge team up <modèle> --goal "<quoi>" --cwd <dossier>',
     summary: 'monter une équipe dans un dossier : un modèle de teams.md (template), ou des sièges (rôle de roles.md, agent, et si demandé model, effort)',
     when: 'quand l\'utilisateur demande explicitement de monter, lancer ou composer une équipe, avec la même règle de dossier sûr qu\'une session ; 8 sièges au plus, un rôle une seule fois, seulement des rôles de roles.md disponibles dans ce dossier (s\'il en manque un, dis lequel et le fichier à écrire, ~/.ledge/roles/<id>.md). Ne choisis jamais l\'autonomie : c\'est celle du rôle ; une équipe a exactement un siège leader (son lead) ; quand l\'utilisateur a dit ce que l\'équipe doit faire, mets-le dans objective (goal, et branch et done s\'il les a dits) : le lead le reçoit au lancement',
     example: { cwd: '/home/alice/projets/api', name: 'api', seats: [{ role: 'leader', tool: 'claude' }, { role: 'rev-back', tool: 'codex' }], objective: { goal: 'Ajouter la pagination par curseur à /invoices', branch: 'feat/invoices-pages', done: 'tests verts et revue faite' } }

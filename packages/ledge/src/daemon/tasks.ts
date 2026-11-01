@@ -26,11 +26,16 @@ export interface TasksDeps {
   /** How long a session sits idle holding tasks before Ledge reminds it of them; PARKED_MS by default. */
   parkedMs?: number;
 }
+/** How a pass is told to its new owner: `notice` (given the task passed) instead of the plain pointer (a relief's objective, lot B). */
+export interface PassNotice { notice?: (task: Task) => string }
 export interface Tasks {
-  run(cmd: TaskCmd): TaskResult; all(): Task[];
+  run(cmd: TaskCmd, o?: PassNotice): TaskResult; all(): Task[];
   /** A team's objective, given by Ledge to its lead at launch as any given task is (`objective: true`); `notice` (given the
    *  task, for its id and text) is what the lead is typed, first in its queue, instead of a plain task pointer. */
   giveObjective(o: { team: Team; owner: Pick<Session, 'id' | 'name'>; objective: TeamObjective; notice: (task: Task) => string }): Task;
+  /** A relieved session's open tasks it gave now come back to its relief (`to`): its seats' results reach it, and it may pass or
+   *  cancel them. How many were moved. */
+  reassignGiver(from: string, to: Pick<Session, 'id' | 'name'>): number;
   /** A team purged (issue #146): its tasks lose its id and stay their owner's and giver's, as any task out of a team. */
   forgetTeam(team: string): void;
   close(): void;
@@ -153,7 +158,7 @@ export function createTasks(d: TasksDeps): Tasks {
     if (c.session.state === 'idle') park(c.session.id); else unpark(c.session.id);
   });
 
-  function run(cmd: TaskCmd): TaskResult {
+  function run(cmd: TaskCmd, o: PassNotice = {}): TaskResult {
     const refuse = (reason: string): TaskResult => ({ type: 'task.result', rid: cmd.rid, reason });
     const ok = (task: Task): TaskResult => ({ type: 'task.result', rid: cmd.rid, task });
     // Ledge (the user, through a front) gives as `ledge`; a session gives as itself.
@@ -259,7 +264,8 @@ export function createTasks(d: TasksDeps): Tasks {
         const { team: _team, ...rest } = t;
         const passed = put({ ...rest, ...(nextTeam ? { team: nextTeam } : {}), owner: next.id, ownerName: next.name, state: 'open' }, me.name, `passée à ${next.name}${note ? ` : ${note}` : ''}`,
           { ...sides('pass', ownerOf(t), next), ...(note ? { note } : {}) });
-        tellOwner(passed, me.name, `Tâche passée par ${me.name}${note ? ` (${quote(note)})` : ''}, confiée par ${t.giverName} :`);
+        if (o.notice) d.mailbox.notify(passed.owner, formatLedgeTask({ id: t.id, from: t.giverName, text: o.notice(passed) }), `${t.id}:${passed.log.length}`);
+        else tellOwner(passed, me.name, `Tâche passée par ${me.name}${note ? ` (${quote(note)})` : ''}, confiée par ${t.giverName} :`);
         park(next.id);
         // Passed over its owner's head (by its giver or by Ledge): the one who held it stops.
         if (!owner) d.mailbox.notify(t.owner, formatLedgeTask({ id: t.id, from: me.name, text: `Tâche « ${t.title} » passée à ${next.name} par ${me.name}. Arrête d'y travailler.` }), `${t.id}:${passed.log.length}:from`);
@@ -281,6 +287,16 @@ export function createTasks(d: TasksDeps): Tasks {
     return task;
   }
 
+  const reassignGiver = (from: string, to: Pick<Session, 'id' | 'name'>): number => {
+    const given = [...tasks.values()].filter(t => t.giver === from && !taskClosed(t));
+    for (const t of given) {
+      // Not a pass (its owner keeps it): a line in its log, no transmission between sessions.
+      put({ ...t, giver: to.id, giverName: to.name }, 'Ledge', `donneur relevé par ${to.name}`);
+      log(`task ${t.id}: giver ${t.giverName} relieved by ${to.name}`);
+    }
+    return given.length;
+  };
+
   const forgetTeam = (team: string) => {
     const held = [...tasks.values()].filter(t => t.team === team);
     if (!held.length) return;
@@ -290,7 +306,7 @@ export function createTasks(d: TasksDeps): Tasks {
     save();
     for (const t of out) d.onTask?.(t);
   };
-  return { run, giveObjective, all: () => [...tasks.values()].sort((a, b) => a.at.localeCompare(b.at)), forgetTeam, close: () => { unsubscribe(); for (const timer of timers.values()) clearTimeout(timer); timers.clear(); } };
+  return { run, giveObjective, reassignGiver, all: () => [...tasks.values()].sort((a, b) => a.at.localeCompare(b.at)), forgetTeam, close: () => { unsubscribe(); for (const timer of timers.values()) clearTimeout(timer); timers.clear(); } };
 }
 
 export function tasksJournal(path: string): TasksJournal & { flush(): Promise<void> } {

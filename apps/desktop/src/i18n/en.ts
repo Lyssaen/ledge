@@ -669,7 +669,7 @@ export const en: Messages = {
     goal: 'Objective', goalHint: 'What the team must do: its lead gets it at launch', branch: 'Branch', done: 'Done when',
     goalNeeded: 'Write the objective, or clear the branch and "done when"',
     unknown: (roles: string) => `Unknown roles in this folder: ${roles}`, launch: 'Launch the team', launching: 'Launching…',
-    failed: (why: string) => `The team was not launched: ${why}`, noAnswer: 'Ledge did not answer.', launched: (team: string, project: string) => `Team ${team} settles in the ${project} room.`
+    failed: (why: string) => `The team was not launched: ${why}`, partial: (reason: string) => `Team partly launched: ${reason}`, noAnswer: 'Ledge did not answer.', launched: (team: string, project: string) => `Team ${team} settles in the ${project} room.`
   },
   rooms: {
     tables: (n: number) => `${n} ${n === 1 ? 'table' : 'tables'}`,

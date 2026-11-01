@@ -155,6 +155,22 @@ describe('« Teams »: the catalog of templates, roles and skipped files (#97)',
     await waitFor(() => expect(d.received).toContainEqual({ type: 'team.launch', rid: expect.any(String), cwd: REPO, name: 'workshop', template: 'workshop', objective: { goal: 'Pagination', branch: 'feat/p' } }));
   });
 
+  it('a team launched in part (a seat failed, the lead has the objective) closes the form as launched and warns why: no second launch (lot B, I2)', async () => {
+    const { d, user } = await openHome();
+    answerRoles(d);
+    d.onMessage(m => { if (m.type === 'team.launch') d.push({ type: 'team.failed', rid: m.rid, reason: '@review : codex not found', team: { ...team, id: 'team-e5f6', name: 'workshop', objectiveTask: 't0a1b2c' } }); });
+    await user.click(home().getByRole('tab', { name: /^Teams/ }));
+    await user.click(await tabs().findByRole('tab', { name: 'Templates · 1' }));
+    await user.click(within(home().getByRole('region', { name: 'workshop' })).getByRole('button', { name: 'Launch this team…' }));
+    const form = await screen.findByRole('dialog', { name: 'New team · Ledge' });
+    await within(form).findByRole('combobox', { name: 'Template' });
+    await user.type(within(form).getByRole('textbox', { name: 'Objective' }), 'Pagination');
+    await user.click(within(form).getByRole('button', { name: 'Launch the team' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'New team · Ledge' })).toBeNull());
+    await waitFor(() => expect(document.querySelector('.toast')).toHaveTextContent('Team partly launched: @review : codex not found'));
+    expect(d.received.filter(m => m.type === 'team.launch')).toHaveLength(1);
+  });
+
   it('« Open » shows the file beside the detail, read without a session: a role in the Markdown reader, a template as YAML', async () => {
     const { d, user } = await openHome();
     answerRoles(d);

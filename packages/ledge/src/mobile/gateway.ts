@@ -302,10 +302,10 @@ export function createPhoneGateway(deps: {
     const s = live(m.id);
     if (reason.success && s) modelFailures.set(m.id, { reason: reason.data, model: s.model, effort: s.effort });
   };
-  const result = (deviceId: string, op: string, status: OperationStatus, reason?: OperationReason, models?: PhoneSeatModel[], how?: CloseHow) => {
+  const result = (deviceId: string, op: string, status: OperationStatus, reason?: OperationReason, models?: PhoneSeatModel[], how?: CloseHow, detail?: string) => {
     // A device revoked while its operation ran hears nothing more.
     if (stopped || !approved(deviceId)) return;
-    push(deviceId, { type: 'operation.result', op, status, ...(reason ? { reason } : {}), ...(models ? { models } : {}), ...(how ? { how } : {}) });
+    push(deviceId, { type: 'operation.result', op, status, ...(reason ? { reason } : {}), ...(models ? { models } : {}), ...(how ? { how } : {}), ...(detail ? { detail } : {}) });
   };
 
   /** The operations that act on a tracked session: the registry's own, the credential's, the device's and the chat's are handled before it. */
@@ -793,11 +793,11 @@ export function createPhoneGateway(deps: {
       const replay = registry.begin(deviceId, msg.op, fp);
       if (replay.kind === 'conflict') return result(deviceId, msg.op, 'rejected', 'conflict');
       pendingAnswers.set(msg.op, { deviceId, machine: durable.machine, id: durable.id, answers: canonicalJson(msg.answers) });
-      return result(deviceId, msg.op, replay.record.status, replay.record.reason, replay.record.models, replay.record.how);
+      return result(deviceId, msg.op, replay.record.status, replay.record.reason, replay.record.models, replay.record.how, replay.record.detail);
     }
     const begun = registry.begin(deviceId, msg.op, fp);
     if (begun.kind === 'conflict') return result(deviceId, msg.op, 'rejected', 'conflict');
-    if (begun.kind === 'replay') return result(deviceId, msg.op, begun.record.status, begun.record.reason, begun.record.models, begun.record.how);
+    if (begun.kind === 'replay') return result(deviceId, msg.op, begun.record.status, begun.record.reason, begun.record.models, begun.record.how, begun.record.detail);
     let outcome: Outcome;
     try {
       result(deviceId, msg.op, 'received');
@@ -815,9 +815,9 @@ export function createPhoneGateway(deps: {
     // A queue receipt can arrive while the dispatch promise is still returning; never overwrite that final result.
     const current = registry.get(msg.op);
     if (outcome.status === 'received' && current && current.status !== 'received') return;
-    registry.finish(msg.op, outcome.status, outcome.reason, outcome.models, outcome.how);
+    registry.finish(msg.op, outcome.status, outcome.reason, outcome.models, outcome.how, outcome.detail);
     if (outcome.status !== 'received') pendingAnswers.delete(msg.op);
-    result(deviceId, msg.op, outcome.status, outcome.reason, outcome.models, outcome.how);
+    result(deviceId, msg.op, outcome.status, outcome.reason, outcome.models, outcome.how, outcome.detail);
     if (msg.type === 'escalation.answer' && outcome.status !== 'received') for (const [id, f] of followers) if (f.subscribed) push(id, snapshot(id), 'snapshot');
     // The phone learns it can confirm from the snapshot that follows.
     if (msg.type === 'credential.register' && outcome.status === 'applied' && approved(deviceId)) push(deviceId, snapshot(deviceId), 'snapshot');

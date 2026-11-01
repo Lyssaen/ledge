@@ -23,6 +23,8 @@ export interface Op {
   models?: PhoneSeatModel[];
   /** How an applied `session.close` ended the agent. */
   how?: CloseHow;
+  /** The PC's own words for a teams operation it refused (the leader rule, an ignored template). */
+  detail?: string;
   /** A `session.close` or `session.resume`: the session's `startedAt` (the PC's) when it was sent. A new one says it was started again since. */
   startedAt?: string;
   /** When the phone first sent it. */

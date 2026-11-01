@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { spawn as nodeSpawn } from 'node:child_process';
 import { extractProposal, isArchived, LEGACY_FENCE_ACTION, MAX_PROPOSALS, proposalRows, parseActionBlock, parseProjectBlock, parseCloseBlock, parseRelayBlock, parseTaskBlock, parseTeamBlock, projectOf, type BlockKind, type ChatAction, type ChatRigLaunch, type ChatClose, type ChatProjectProposal, type ChatProposal, type ChatRelay, type ChatTaskProposal, type ChatTeamProposal, type CloseHow, type ChatTurn, type AttachmentRef, type Projects, type ServerMessage, type Session, type Task, type Team, type Tool, type Rig, type Escalation } from '@ledge/protocol';
-import { listDefinitions, resolveSeats, templateHash } from '../daemon/teams.js';
+import { ignoredSeats, ignoredTemplate, listDefinitions, resolveSeats, templateHash } from '../daemon/teams.js';
 import { resolveAction, sessionOf } from '../daemon/actions.js';
 import { findRole } from '../daemon/roles.js';
 import { resolveFolder } from '../daemon/folders.js';
@@ -239,7 +239,8 @@ export function createChat(deps: ChatDeps): Chat {
     return { name: block.name, ...(description ? { description } : {}), repos, ...(block.addTo ? { addTo: block.addTo } : {}) };
   }
   /** A team block as a card: its folder must exist and every role be known there; the seats are resolved as `team.launch`
-   *  would launch them, so the card shows each one's agent, model, effort and autonomy. Otherwise no card and a log line. */
+   *  would launch them, so the card shows each one's agent, model, effort and autonomy. Otherwise no card and a log line.
+   *  A template the folder ignored (no lead, since lot B) still gives its card, with why as its `error`: the launch says the same. */
   async function teamFrom(raw: string, tool: Tool, qid: string): Promise<ChatTeamProposal | undefined> {
     const block = parseTeamBlock(raw);
     if (!block) { log(`chat ${qid}: team ignored, invalid block: ${raw.slice(0, 200)}`); return undefined; }
@@ -249,15 +250,18 @@ export function createChat(deps: ChatDeps): Chat {
     if (wide) { log(`chat ${qid}: team ignored: the folder is ${wide}`); return undefined; }
     const defs = listDefinitions(cwd);
     const template = block.template ? defs.templates.find(t => t.id === block.template) : undefined;
-    if (block.template && !template) { log(`chat ${qid}: team ignored: unknown template ${block.template}`); return undefined; }
-    const seats = template?.seats ?? block.seats!;
+    const ignored = block.template && !template ? ignoredTemplate(block.template, defs.problems) : undefined;
+    const ignoredAs = ignored ? ignoredSeats(ignored.path) : undefined;
+    if (block.template && !template && !ignoredAs) { log(`chat ${qid}: team ignored: ${ignored ? `${ignored.reason}, its seats unreadable` : `unknown template ${block.template}`}`); return undefined; }
+    if (ignored) log(`chat ${qid}: team card with an error: ${ignored.reason}`);
+    const seats = template?.seats ?? ignoredAs ?? block.seats!;
     const resolved = resolveSeats(seats as Parameters<typeof resolveSeats>[0], defs.roles, { tool });
     if ('unknown' in resolved) { log(`chat ${qid}: team ignored: unknown roles ${resolved.unknown.join(', ')}`); return undefined; }
     const projects = deps.projects?.();
     const project = projects ? projectOf({ cwd }, projects) : null;
     const projectName = project ? projects!.projects.find(p => p.id === project)?.name : undefined;
-    return { cwd, project: project ?? basename(cwd), ...(projectName ? { projectName } : {}), name: block.name ?? template?.name ?? basename(cwd), ...(template ? { template: template.id } : {}),
-      ...(block.objective ? { objective: block.objective } : {}),
+    return { cwd, project: project ?? basename(cwd), ...(projectName ? { projectName } : {}), name: block.name ?? template?.name ?? (ignored ? block.template! : basename(cwd)), ...(template ? { template: template.id } : ignored ? { template: block.template! } : {}),
+      ...(block.objective ? { objective: block.objective } : {}), ...(ignored ? { error: ignored.reason } : {}),
       seats: resolved.map(r => ({ role: r.role.id, label: r.role.label, tool: r.tool, ...(r.model ? { model: r.model } : {}), ...(r.effort ? { effort: r.effort } : {}), ...(r.role.autonomy ? { autonomy: r.role.autonomy } : {}), ...(r.name ? { name: r.name } : {}) })) };
   }
   /** The task blocks as rows: a session id must be a live session Ledge launched; `@role` is kept as written (resolved at the click). */

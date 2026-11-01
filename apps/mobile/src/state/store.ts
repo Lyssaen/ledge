@@ -570,8 +570,8 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
           return;
         }
         stopTimer(m.op);
-        const { reason: _old, ...rest } = o;
-        patchOp(m.op, () => ({ ...rest, received: true, ...(boot ? { boot } : {}), phase: m.status as Op['phase'], ...(m.reason ? { reason: m.reason } : {}), ...(m.models ? { models: m.models } : {}), ...(m.how ? { how: m.how } : {}) }));
+        const { reason: _old, detail: _oldDetail, ...rest } = o;
+        patchOp(m.op, () => ({ ...rest, received: true, ...(boot ? { boot } : {}), phase: m.status as Op['phase'], ...(m.reason ? { reason: m.reason } : {}), ...(m.models ? { models: m.models } : {}), ...(m.how ? { how: m.how } : {}), ...(m.detail ? { detail: m.detail } : {}) }));
         // The request changed under this answer: ask for the one there now, with its body.
         if (m.status === 'rejected' && m.reason === 'stale' && ready() && o.message.type.startsWith('session.') && 'id' in o.message && typeof o.message.id === 'string') send({ type: 'session.pending', id: o.message.id });
         return;
@@ -618,8 +618,8 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         let out: ChatAction | null = null;
         if (!o) out = { status: 'expired' };
         else if (o.phase === 'applied') out = { status: 'applied', ...(o.reason === 'seat_failed' ? { warn: 'seat_failed' as const } : {}), ...(o.reason === 'scheduled' ? { scheduled: true as const } : {}), ...(o.models ? { models: o.models } : {}) };
-        else if (o.phase === 'failed') out = { status: 'failed' };
-        else if (o.phase === 'rejected') out = { status: 'rejected', reason: o.reason ?? 'invalid' };
+        else if (o.phase === 'failed') out = { status: 'failed', ...(o.detail ? { detail: o.detail } : {}) };
+        else if (o.phase === 'rejected') out = { status: 'rejected', reason: o.reason ?? 'invalid', ...(o.detail ? { detail: o.detail } : {}) };
         else if (o.phase === 'uncertain' && !resendable(o, boot)) out = { status: 'expired' };
         if (!out) return false;
         off();

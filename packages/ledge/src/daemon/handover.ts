@@ -4,6 +4,8 @@ import { BRIEF_MAX, isArchived, taskClosed, type Autonomy, type ClientMessage, t
 import type { Store } from './store.js';
 import type { Mailbox } from './mailbox.js';
 import { log } from '../log.js';
+import { crewOf, leadNotice } from './objective.js';
+import type { PassNotice } from './tasks.js';
 
 type TaskCmd = Extract<ClientMessage, { type: 'task.cmd' }>;
 
@@ -16,7 +18,8 @@ export interface HandoverDeps {
   store: Pick<Store, 'get' | 'all' | 'upsert' | 'patch' | 'onChange'>;
   /** The request for a brief goes before anything waiting: past the brief's deadline Ledge writes an empty one. */
   mailbox: Pick<Mailbox, 'notify'>;
-  tasks: { run(cmd: TaskCmd): { reason?: string }; all(): Task[] };
+  /** `reassignGiver`: the tasks the relieved session gave come back to its relief, so their results reach it (lot B, I1). */
+  tasks: { run(cmd: TaskCmd, o?: PassNotice): { reason?: string }; all(): Task[]; reassignGiver(from: string, to: Pick<Session, 'id' | 'name'>): number };
   teams: { get(id: string): Team | undefined };
   /** Launches the relief as `session.launch` would (its role seats it at its team's table); a brain's relief with its own id, name, env and the brain mark (C10). */
   launch(req: { tool: Tool; cwd: string; prompt: string; model?: string; effort?: string; autonomy?: Autonomy; role?: string; team?: string; id?: string; name?: string; env?: Record<string, string>; brain?: true }): Promise<Session>;
@@ -131,11 +134,17 @@ export function createHandovers(d: HandoverDeps): Handovers {
     const at = now();
     const fresh = d.store.get(relief.id) ?? relief;
     d.store.upsert({ ...fresh, relieves: { id, name: s.name, at } });
-    // Its open tasks follow it; their giver stays (a task Ledge gave still comes back to Ledge).
+    // Its open tasks follow it; their giver stays (a task Ledge gave still comes back to Ledge). A team's objective is told to the
+    // relief as it was told to the first lead: the whole lead notice, with the crew as it is now (lot B, M10).
     for (const t of openTasks(id)) {
-      const r = d.tasks.run({ type: 'task.cmd', rid: `handover-${t.id}`, by: id, op: 'pass', task: t.id, to: relief.id, text: `relève de ${s.name}` });
+      const objective = t.objective && live && t.team === live.id ? live : undefined;
+      const notice = objective ? { notice: (passed: Task) => leadNotice(objective, passed.id, passed.text ?? passed.title, crewOf(objective, x => d.store.get(x)).crew) } : {};
+      const r = d.tasks.run({ type: 'task.cmd', rid: `handover-${t.id}`, by: id, op: 'pass', task: t.id, to: relief.id, text: `relève de ${s.name}` }, notice);
       if (r.reason) log(`task ${t.id} not passed to ${relief.name}: ${r.reason}`);
     }
+    // The tasks it gave, still open, come back to the relief: their results reach it, and it may pass or cancel them.
+    const given = d.tasks.reassignGiver(id, relief);
+    if (given) log(`${given} task(s) given by ${s.name} now given by ${relief.name}`);
     // Its seat is the relief's now (the launch took it): the old record leaves the table.
     if (s.team) d.store.patch(id, { team: undefined });
     const cur = d.store.get(id);

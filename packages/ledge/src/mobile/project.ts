@@ -7,6 +7,7 @@ import type { PhoneChecklist, PhoneChecklistSummary, Todo } from '@ledge/protoco
 import type { CapabilitiesByTool, FileChange, Pending, PhoneCatalog, PhonePending, PhoneProblem, PhoneRole, PhoneSession, PhoneTask, PhoneTeam, PhoneTemplate, ServerMessage, Session, Task, Team, ThreadItem, Tool } from '@ledge/protocol';
 import { adapterFor } from '../adapters/index.js';
 import { riskOf } from './risk.js';
+import { leaderIssue } from '../daemon/leader.js';
 
 // Every object below is built field by field: a field added to a daemon type never reaches the phone unless it is named here.
 
@@ -225,7 +226,9 @@ const PROBLEM_KINDS: [RegExp, string][] = [
   [/^(front matter line without a key|line without a key|not a key: value pair|indented line outside a list|line outside a seat|tabs are not allowed)/, 'syntaxe illisible'],
   [/^name: /, 'nom d\'équipe invalide'],
   [/^seats(\.|: )/, 'sièges invalides'],
-  [/^(id|label|prompt|tool|model|effort|autonomy|source|path|hash|role)(\.[\w.]+)?: /, 'champ de rôle invalide']
+  [/^(id|label|prompt|tool|model|effort|autonomy|source|path|hash|role)(\.[\w.]+)?: /, 'champ de rôle invalide'],
+  // The leader rule (lot B): its text is fixed, and names no file.
+  [/^il manque le siège @leader : /, leaderIssue([])!]
 ];
 const UNREADABLE = 'fichier illisible';
 export const problemReason = (reason: string): string => PROBLEM_KINDS.find(([re]) => re.test(reason))?.[1] ?? UNREADABLE;

@@ -88,6 +88,19 @@ export function loadTemplate(id: string, path: string, source: 'repo' | 'home', 
   return t;
 }
 
+/** The template file of `id` a folder ignored (`problems`, as `listTemplates` tells them), with why: `le modèle <id> est ignoré : <reason>`.
+ *  None when no such file was ignored (the template is missing, or loaded). */
+export function ignoredTemplate(id: string, problems: readonly DefinitionProblem[]): { path: string; reason: string } | undefined {
+  const p = problems.find(x => /\.ya?ml$/.test(x.path) && x.path.split(/[\\/]/).pop()!.replace(/\.ya?ml$/, '') === id);
+  return p && { path: p.path, reason: `le modèle ${id} est ignoré : ${p.reason}` };
+}
+
+/** The seats an ignored template file names, read as far as they parse (none when they do not): what a chat card shows of it. */
+export function ignoredSeats(path: string): Seat[] | undefined {
+  try { const seats = SeatsSchema.safeParse(parseTemplateText(readSmall(path)).seats); return seats.success ? seats.data : undefined; }
+  catch { return undefined; }
+}
+
 /** The team templates of a folder: the repository's, then the home's of another id. */
 export function listTemplates(cwd?: string): { templates: TeamTemplate[]; problems: DefinitionProblem[] } {
   const templates = new Map<string, TeamTemplate>(); const problems: DefinitionProblem[] = [];

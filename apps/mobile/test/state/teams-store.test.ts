@@ -200,6 +200,18 @@ describe('define and teamOp', () => {
     await expect(done).resolves.toEqual({ status: 'applied', warn: 'seat_failed' });
   });
 
+  it('a compose the PC refused with its own words (the leader rule) resolves failed with them (M6)', async () => {
+    const t = setup();
+    vi.mocked(getAssertion).mockResolvedValue(ASSERTION);
+    const done = t.store.teamOp({ type: 'team.compose', team: 'team-a1b2', seats: [{ role: 'dev' }] });
+    await prepared(t);
+    t.deliver(challenge('team'));
+    await flush();
+    const [sent] = t.of('team.compose');
+    t.deliver({ type: 'operation.result', op: sent!.op, status: 'failed', detail: 'il manque le siège @leader : une équipe a exactement un lead (ajoute un siège de rôle leader)' });
+    await expect(done).resolves.toEqual({ status: 'failed', detail: 'il manque le siège @leader : une équipe a exactement un lead (ajoute un siège de rôle leader)' });
+  });
+
   it('teamOp compose resolves applied with models', async () => {
     const t = setup();
     vi.mocked(getAssertion).mockResolvedValue(ASSERTION);

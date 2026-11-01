@@ -135,7 +135,8 @@ describe('writeContext: roles, teams and tasks (roles spec §3.8)', () => {
     await writeContext(dir, {
       sessions: [mk('a', { role: 'build', roleLabel: 'Build', team: team.id, autonomy: 'edits' })], now: T0, capture: async () => null, git: async () => null,
       teams: [team], tasks: [task('t000001', { state: 'done', result: 'fait' }), task('t000002', {}), task('t000003', { state: 'done', updatedAt: '2020-01-01T00:00:00.000Z' })],
-      definitions: () => ({ roles: [{ id: 'build', label: 'Build', prompt: 'Tu construis.', autonomy: 'edits', source: 'home', path: '/h/build.md' }], templates: [{ id: 'workshop', name: 'workshop', seats: [{ role: 'build' }], source: 'home', path: '/h/w.yaml' }] })
+      definitions: () => ({ roles: [{ id: 'build', label: 'Build', prompt: 'Tu construis.', autonomy: 'edits', source: 'home', path: '/h/build.md' }], templates: [{ id: 'workshop', name: 'workshop', seats: [{ role: 'build' }], source: 'home', path: '/h/w.yaml' }],
+        problems: [{ path: '/h/teams/old.yaml', reason: 'il manque le siège @leader' }, { path: '/h/roles/Bad.md', reason: 'invalid file name' }] })
     });
     const sessions = readFileSync(join(dir, 'sessions.md'), 'utf8');
     expect(sessions).toContain('- role: Build (@build), autonomy edits');
@@ -145,6 +146,9 @@ describe('writeContext: roles, teams and tasks (roles spec §3.8)', () => {
     expect(roles).toContain('autonomy edits');
     const teams = readFileSync(join(dir, 'teams.md'), 'utf8');
     expect(teams).toContain('- workshop (« workshop », home): @build');
+    // A template the leader rule ignores is listed with why, so the chat can tell the user (I3); a role's problem is not a template.
+    expect(teams).toContain('- old (ignored: il manque le siège @leader)');
+    expect(teams).not.toContain('Bad');
     expect(teams).toContain('### ledge-roles (team-a1b2) — active');
     expect(teams).toContain("- Ledge's tasks: 2/3 done");
     expect(teams).toContain('- @build: Otto (a)');
