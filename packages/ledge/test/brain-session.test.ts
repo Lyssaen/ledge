@@ -9,7 +9,7 @@ import type { Tmux } from '../src/tmux.js';
 import { authHeaders, until } from './helpers.js';
 import { Store } from '../src/daemon/store.js';
 import { createMemory, type Memory } from '../src/daemon/brain/memory.js';
-import { createBrain, RESTARTS_MAX, RESTART_WINDOW_MS, type Brain, type BrainLaunch } from '../src/daemon/brain/session.js';
+import { brainArgs, createBrain, RESTARTS_MAX, RESTART_WINDOW_MS, type Brain, type BrainLaunch } from '../src/daemon/brain/session.js';
 import { brainInstructions, BRAIN_ROLE } from '../src/daemon/brain/persona.js';
 import { readBrainSettings, writeBrainSettings } from '../src/daemon/brain/settings.js';
 import { DEFAULT_MANDATE } from '../src/daemon/brain/mandate.js';
@@ -54,7 +54,7 @@ describe('brain settings', () => {
     writeFileSync(settingsPath, '{oops');
     expect(readBrainSettings(settingsPath)).toEqual({ enabled: null, tool: 'claude' });
     writeFileSync(settingsPath, JSON.stringify({ enabled: true, tool: 'codex' }));
-    expect(readBrainSettings(settingsPath)).toEqual({ enabled: false, tool: 'claude' });
+    expect(readBrainSettings(settingsPath)).toEqual({ enabled: true, tool: 'codex' });
     writeFileSync(settingsPath, JSON.stringify({ enabled: false, tool: 'omp' }));
     expect(readBrainSettings(settingsPath)).toEqual({ enabled: false, tool: 'claude' });
   });
@@ -218,6 +218,26 @@ describe('the brain session', () => {
     expect(brain.status().contextPct).toBeUndefined();
   });
 
+  it('launches a Codex brain only after its hook is trusted, and checks again on relief', async () => {
+    brain.dispose();
+    let trusted = false;
+    brain = createBrain({ store, settingsPath, dir: brainDir, launch, close, mandate: async () => DEFAULT_MANDATE, memory,
+      env: async () => ({ PATH: '/usr/bin:/bin' }), codexGuard: async () => trusted, now: () => clock });
+    await brain.set({ enabled: true, tool: 'codex' });
+    expect(launched).toHaveLength(0);
+    expect(brain.status()).toMatchObject({ state: 'down', reason: expect.stringContaining('hook Codex') });
+    trusted = true;
+    await brain.set({ enabled: true, tool: 'codex' });
+    expect(launched).toHaveLength(1);
+    expect(launched[0]).toMatchObject({ tool: 'codex', env: { LEDGE_BRAIN: '1' } });
+    trusted = false;
+    await expect(brain.relief(live())).rejects.toThrow('hook Codex');
+  });
+
+  it('pins Codex to a private server, workspace sandbox and user approvals', () => {
+    expect(brainArgs('codex')).toEqual(['--no-daemon', '--sandbox', 'workspace-write', '--ask-for-approval', 'on-request']);
+  });
+
   it('changing the tool replaces the session', async () => {
     await brain.set({ enabled: true });
     await brain.set({ enabled: true, tool: 'cursor' }); await brain.settled();
@@ -267,7 +287,7 @@ describe('the brain in the daemon', () => {
     c.close();
   });
 
-  it('refuses Codex until its shared server environment is isolated', async () => {
+  it('refuses Codex when its trusted Ledge hook cannot be verified', async () => {
     const s = await serve(new Store());
     const c = await client(s.port);
     c.send({ type: 'brain.set', rid: 'r1', enabled: true, tool: 'codex' });
