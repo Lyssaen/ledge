@@ -56,6 +56,16 @@ describe('RemotePeers', () => {
     expect((m as { rigs: Rig[] }).rigs[0]!.seats[0]!.sessionId).toBe('ab12');
   });
 
+  it('only negotiates delegated brain commands with a peer that announces the capability', () => {
+    const { peers, f, got } = openEc2();
+    expect(peers.supportsBrainDelegate?.('ec2')).toBe(false);
+    f.emit({ type: 'snapshot', sessions: [], recents: [], daemon: { version: '0.31.0', install: 'npm', systemd: true, openrig: true, brainDelegate: true } });
+    expect(peers.supportsBrainDelegate?.('ec2')).toBe(true);
+    f.emit({ type: 'brain.delegate.result', rid: 'r', ok: false, code: 'busy' });
+    expect(got.at(-1)).toEqual(['ec2', { type: 'brain.delegate.result', rid: 'r', ok: false, code: 'busy' }]);
+    f.set('unreachable'); expect(peers.supportsBrainDelegate?.('ec2')).toBe(false);
+  });
+
   it('ignores a message of another machine (no echo between two daemons)', () => {
     const { f, got } = openEc2();
     f.emit({ type: 'rig.updated', rig: rig('r2', { machine: 'pc' }) });
@@ -94,6 +104,14 @@ describe('RemotePeers', () => {
     expect(s.states.at(-1)).toEqual(['ec2', 'unreachable']);
     expect(s.peers.send('ec2', { type: 'rig.exchanges.request', machine: 'local', rigId: 'r1' })).toBe(false);
     expect(s.peers.send('nope', { type: 'rig.exchanges.request', machine: 'local', rigId: 'r1' })).toBe(false);
+  });
+
+  it('treats an explicit reconnect as a lost link before the next snapshot', () => {
+    const { peers, f, states } = openEc2();
+    f.set('connecting');
+    expect(states.at(-1)).toEqual(['ec2', 'unreachable']);
+    expect(peers.status('ec2')).toBe('connecting');
+    expect(peers.supportsBrainDelegate?.('ec2')).toBe(false);
   });
 
   it('a removed machine closes its peer and says removed', () => {

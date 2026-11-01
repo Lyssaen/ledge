@@ -41,6 +41,13 @@ describe('openrig contract', () => {
   it('accepts a seat needing intervention in a rig update', () => {
     expect(parseServerMessage({ type: 'rig.updated', rig: { ...rig, seats: [{ ...seat, state: 'attention' }] } })).toMatchObject({ rig: { seats: [{ state: 'attention' }] } });
   });
+  it('parses versioned remote brain delegation messages', () => {
+    expect(parseClientMessage({ type: 'brain.delegate.claim', rid: 'r', id: 'e' })).toMatchObject({ type: 'brain.delegate.claim' });
+    expect(parseClientMessage({ type: 'brain.delegate.decide', rid: 'r', id: 'e', token: 't', answers: { q: 'a' }, category: 'git' })).toMatchObject({ type: 'brain.delegate.decide' });
+    expect(parseClientMessage({ type: 'brain.delegate.release', rid: 'r', id: 'e', token: 't', advice: 'Ask' })).toMatchObject({ type: 'brain.delegate.release' });
+    expect(parseServerMessage({ type: 'brain.delegate.result', rid: 'r', ok: true, token: 't', graceUntil: now })).toMatchObject({ type: 'brain.delegate.result' });
+    expect(() => parseClientMessage({ type: 'brain.delegate.decide', rid: 'r', id: 'e', token: '', answers: {}, category: 'git' })).toThrow();
+  });
   it('rig.prepare caps the goal at 8000 characters', () => {
     const m = (goal: string) => ({ type: 'rig.prepare', rid: 'x', machine: 'local', spec: 's', goal, where: { kind: 'off-project', name: 'n' } });
     expect(parseClientMessage(m('g'.repeat(8000)))).toMatchObject({ type: 'rig.prepare' });
