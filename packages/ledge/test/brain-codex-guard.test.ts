@@ -11,6 +11,7 @@ const response = (h: unknown = hook) => ({ data: [{ errors: [], hooks: [h] }] })
 describe('Codex brain hook preflight', () => {
   it('accepts only a trusted, enabled, synchronous, unfiltered Ledge PreToolUse hook', () => {
     expect(trustedCodexGuard(response())).toBe(true);
+    expect(trustedCodexGuard(response({ ...hook, trustStatus: 'managed' }))).toBe(true);
     for (const change of [{ trustStatus: 'untrusted' }, { trustStatus: 'modified' }, { enabled: false }, { async: true },
       { matcher: 'Read' }, { command: 'echo ledge hook codex PreToolUse' }, { eventName: 'postToolUse' }]) {
       expect(trustedCodexGuard(response({ ...hook, ...change }))).toBe(false);
@@ -45,6 +46,8 @@ readline.createInterface({input:process.stdin}).on('line', line => {
       writeFileSync(ledge, `#!${process.execPath}\nprocess.stdout.write(JSON.stringify({hookSpecificOutput:{hookEventName:'PreToolUse',permissionDecision:'deny'}}));\n`);
       expect(await checkCodexGuard(root, { ...env, FAKE_HOOK_RESPONSE: JSON.stringify(response({ ...hook, trustStatus: 'untrusted' })) })).toBe(false);
       expect(await checkCodexGuard(root, { ...env, PATH: '/nonexistent' }, 250)).toBe(false);
+      writeFileSync(binary, `#!${process.execPath}\nsetInterval(() => {}, 1000);\n`);
+      expect(await checkCodexHookTrust(root, env, 100)).toBe(false);
     } finally { rmSync(root, { recursive: true, force: true }); }
   });
 });
