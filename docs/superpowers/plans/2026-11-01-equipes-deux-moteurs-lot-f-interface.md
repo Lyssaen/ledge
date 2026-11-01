@@ -74,6 +74,7 @@
   - **`RigCard` d'un rig Ledge.**
     - La ligne méta affiche le modèle (`spec` porte l'id du modèle quand il y en a un) au lieu de « spec … ».
     - Le texte d'arrêt n'évoque pas l'instantané d'OpenRig : `rigActions.stopBodyLedge`, en fr « Les sessions de l'équipe se ferment ; l'équipe reste au repos et se reprend d'un clic. », en en « The team's sessions close; the team stays at rest and resumes with one click. ».
+  - **Broadcast de l'utilisateur** (spec §6.2 : « un champ dans l'interface pour l'utilisateur »). La carte (`RigCard`) d'une équipe Ledge vivante gagne un champ « Écrire à toute l'équipe » (`rigsTab.broadcast`, fr « Écrire à toute l'équipe… », en « Write to the whole team… »). Il envoie `team.broadcast { team: rig.id, text }` par la fleet, vers le daemon local. Il affiche ensuite le résultat : `rigsTab.broadcastSent`, fr « Envoyé à {n} sièges », en « Sent to {n} seats », ou la raison d'un refus. Test : un envoi, puis l'affichage du compte.
   - **Catalogue.** `TemplateDetail` affiche une ligne `catalog.leadRule`, en fr « Une équipe a exactement un siège leader : son lead, qui reçoit l'objectif. », en en « A team has exactly one leader seat: its lead, who receives the objective. ». Un problème « il manque le siège @leader » s'y affiche via `ProblemsDetail`, sans changement.
 
 - [ ] **Step 1 : tests.**
