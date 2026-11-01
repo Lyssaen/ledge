@@ -5,7 +5,7 @@ import type { TokenSource } from './token';
 
 type Snapshot = Extract<ServerMessage, { type: 'snapshot' }>;
 type Peer = { config: MachineConfig; client: DaemonClient; status: DaemonStatus; fresh: boolean; snapshot: Snapshot | null; previews: Map<string, string[]>; off: (() => void)[]; error?: string; restarting?: boolean };
-const toWire = (list: MachineConfig[]): Machine[] => list.map(({ id, label, ssh }) => ({ id, label, ...(ssh ? { ssh } : {}) }));
+const toWire = (list: MachineConfig[]): Machine[] => list.map(({ id, label, ssh, disabled }) => ({ id, label, ...(ssh ? { ssh } : {}), ...(disabled ? { disabled: true } : {}) }));
 type Binding = { machine: string; raw: string };
 /** The commands tracked as a machine's operation in flight (`operations`, set in `send`): their answer, their refusal or the machine's drop ends it. */
 const OPERATIONS: ReadonlySet<string> = new Set(['session.launch', 'session.relay', 'session.relay.cancel', 'session.close']);
@@ -28,6 +28,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   const HISTORY_KEY = `${prefix}.fleet.history`, MACHINES_KEY = `${prefix}.machines`;
   let configs = parseMachines(config), selected = configs[0]!.id, connected = false, configuring = false, state: MachineState[] = [];
   const peers = new Map<string, Peer>();
+  /** The machines the fleet connects to: a disabled one stays in `configs` (Settings lists it) but has no peer and no state. */
+  const active = (): MachineConfig[] => configs.filter(c => !c.disabled);
   const machineMessages = new Set<(machine: string, m: ServerMessage) => void>();
   const messages = new Set<(m: ServerMessage) => void>(), statuses = new Set<(s: DaemonStatus) => void>(), listeners = new Set<() => void>();
   const turns = new Map<string, ChatTurn>(), bindings = new Map<string, Binding>();
@@ -140,13 +142,13 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     // Mid-`apply` a closing client may speak (« connecting », at once) while `configs` and the peers disagree: the final
     // `publish` tells it all.
     if (configuring) return;
-    state = configs.map(c => { const p = peers.get(c.id)!; return { ...c, status: p.status, ready: available(p), recents: p.snapshot?.recents ?? [], sessions: stateSessions(p), launcher: p.snapshot?.launcher ?? null, version: p.snapshot?.daemon?.version, daemon: p.snapshot?.daemon, error: p.error }; });
+    state = active().map(c => { const p = peers.get(c.id)!; return { ...c, status: p.status, ready: available(p), recents: p.snapshot?.recents ?? [], sessions: stateSessions(p), launcher: p.snapshot?.launcher ?? null, version: p.snapshot?.daemon?.version, daemon: p.snapshot?.daemon, error: p.error }; });
     const next = status(); if (next !== lastStatus) { lastStatus = next; statuses.forEach(fn => fn(next)); }
     listeners.forEach(fn => fn());
   }
   function publish() {
     if (configuring) return;
-    state = configs.map(c => { const p = peers.get(c.id)!; return { ...c, status: p.status, ready: available(p), recents: p.snapshot?.recents ?? [], sessions: stateSessions(p), launcher: p.snapshot?.launcher ?? null, version: p.snapshot?.daemon?.version, daemon: p.snapshot?.daemon, error: p.error }; });
+    state = active().map(c => { const p = peers.get(c.id)!; return { ...c, status: p.status, ready: available(p), recents: p.snapshot?.recents ?? [], sessions: stateSessions(p), launcher: p.snapshot?.launcher ?? null, version: p.snapshot?.daemon?.version, daemon: p.snapshot?.daemon, error: p.error }; });
     const primary = peers.get('local')?.snapshot;
     emit({ type: 'snapshot', sessions: [...peers.values()].filter(p => available(p) || stale(p)).flatMap(p => p.snapshot!.sessions.map(s => session(p, s))), recents: available(peers.get(selected)) ? peers.get(selected)!.snapshot!.recents : [], launcher: primary?.launcher, daemon: primary?.daemon });
     for (const p of peers.values()) if (available(p) || stale(p)) for (const [id, lines] of p.previews) emit({ type: 'session.preview', id: qualify(p.config.id, id), lines });
@@ -175,9 +177,9 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   /** Applies a confirmed list to the peers: no storage write, nothing for the overlay until `publish`. */
   function apply(next: MachineConfig[]) {
     configuring = true;
-    for (const [id, p] of peers) if (!next.some(c => c.id === id && c.url === p.config.url && c.ssh === p.config.ssh)) { p.client.close(); p.off.forEach(off => off()); peers.delete(id); }
+    for (const [id, p] of peers) if (!next.some(c => !c.disabled && c.id === id && c.url === p.config.url && c.ssh === p.config.ssh)) { p.client.close(); p.off.forEach(off => off()); peers.delete(id); }
     configs = next;
-    for (const c of configs) { const p = peers.get(c.id); if (p) p.config = c; else add(c); }
+    for (const c of active()) { const p = peers.get(c.id); if (p) p.config = c; else add(c); }
     if (!peers.has(selected)) selected = 'local';
     // Daemon-sourced bindings are kept through the restore (the list is unknown until the daemon speaks), then pruned against the confirmed list.
     const gone = source === 'daemon' ? [...bindings].filter(([, b]) => !configs.some(c => c.id === b.machine)) : [];
@@ -316,7 +318,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       if ((m.request === 'folder.list' || m.request === 'folder.create') && [...listings.values()].some(l => l.machine === machine)) { answerUnfoundListings(machine, m.message || 'not found'); return; }
       // Only the in-flight operation's own refusal ends it: another refused command leaves it waiting for its answer or the machine's drop.
       if (m.request !== undefined && OPERATIONS.has(m.request)) endOperation(machine);
-      emit({ ...m, ...(m.id ? { id: qualify(machine, m.id) } : {}), message: configs.length > 1 ? `${p.config.label}: ${m.message}` : m.message });
+      emit({ ...m, ...(m.id ? { id: qualify(machine, m.id) } : {}), message: active().length > 1 ? `${p.config.label}: ${m.message}` : m.message });
       return;
     }
     // A relief's answer comes from the machine the session runs on (context handover spec §3.3).
@@ -346,7 +348,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     }));
     if (connected) client.connect();
   }
-  for (const c of configs) add(c);
+  for (const c of active()) add(c);
   function inventory(): RoutingContext {
     return { machines: state.map(m => ({ id: m.id, label: m.label, online: m.ready, local: m.id === 'local', sessions: m.sessions.slice(0, 500).map(s => ({ id: s.id, name: s.name, project: s.repo ?? s.project, cwd: s.cwd, topic: s.topic, state: s.state, readOnly: s.source === 'hook_only' })), folders: m.recents.slice(0, 100).map(r => ({ project: r.project, cwd: r.cwd })) })), history: [...turns.values()].slice(-30).map(t => ({ question: t.question.slice(0, 20000), answer: t.answer?.slice(0, 20000), machineId: t.machineId })) };
   }
@@ -365,7 +367,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         if (routing || [...turns.values()].some(t => !t.answeredAt && !t.error)) { emit({ type: 'chat.error', qid: msg.qid, message: 'one question at a time' }); return; }
         const context = inventory();
         turns.set(msg.qid, { qid: msg.qid, question: msg.text, askedAt: new Date().toISOString(), steps: [] }); history();
-        if (configs.length === 1) {
+        if (active().length === 1) {
           const p = peers.get('local'); if (!available(p)) return fail(msg.qid, 'Local is offline');
           bindings.set(msg.qid, { machine: 'local', raw: msg.qid }); p!.client.send(msg); return;
         }
@@ -386,7 +388,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         attachmentAsks.set(msg.requestId, machine);
       }
       if (msg.type === 'document.read') {
-        if (configs.length > 1 && !msg.machineId && !msg.sessionId) { emit({ type: 'document.error', requestId: msg.requestId, path: msg.path, code: 'read_failed' }); return; }
+        if (active().length > 1 && !msg.machineId && !msg.sessionId) { emit({ type: 'document.error', requestId: msg.requestId, path: msg.path, code: 'read_failed' }); return; }
         if (msg.machineId) machine = msg.machineId;
         const origin = msg.sessionId ? splitId(msg.sessionId) : null;
         if (origin) { machine = origin.machine; outgoing = { ...msg, sessionId: origin.id }; }
@@ -476,6 +478,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         localStorage.setItem(MACHINES_KEY, JSON.stringify(next));
         apply(next);
       },
+      configured: () => configs,
       machinesSource: () => source,
       probe: ssh => probeMachine(configs[0]!.url!, ssh, { token: opts.token }),
       // The last try's error is forgotten: the machine is « connecting » until its next answer (a snapshot, or an error again).

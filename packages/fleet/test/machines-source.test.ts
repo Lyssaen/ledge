@@ -163,6 +163,39 @@ describe('configure and old daemons', () => {
   });
 });
 
+describe('a disabled machine', () => {
+  const wire = (disabled?: boolean) => [{ id: 'local', label: 'Local' }, { id: 'server', label: 'dev-server', ssh: 'dev-server', ...(disabled ? { disabled: true } : {}) }];
+  it('stays configured but gets no peer, no connection and no state', () => {
+    const { api, local, server, made } = setup();
+    local.emit(machinesMsg(wire(true)));
+    expect(api.fleet!.machines().map(m => m.id)).toEqual(['local']);
+    expect(api.fleet!.configured().map(m => [m.id, m.disabled ?? false])).toEqual([['local', false], ['server', true]]);
+    expect(server.connects()).toBe(0);
+    expect(made.filter(u => u.endsWith('/ssh/dev-server'))).toHaveLength(0);
+  });
+  it('disabling closes the live peer and drops its sessions; enabling connects it again', () => {
+    const { api, local, server, got } = setup();
+    local.emit(machinesMsg(wire()));
+    server.set('open'); server.emit(snap(['r1'], remote.ssh));
+    const sessions = () => (got.filter(m => m.type === 'snapshot').at(-1) as Extract<ServerMessage, { type: 'snapshot' }>).sessions.map(s => s.id);
+    expect(sessions()).toContain('server:r1');
+    local.emit(machinesMsg(wire(true)));
+    expect(server.closes()).toBe(1);
+    expect(api.fleet!.machines().map(m => m.id)).toEqual(['local']);
+    expect(sessions()).not.toContain('server:r1');
+    const before = server.connects();
+    local.emit(machinesMsg(wire()));
+    expect(server.connects()).toBe(before + 1);
+    expect(api.fleet!.machines().map(m => m.id)).toEqual(['local', 'server']);
+  });
+  it('configure carries the flag to the daemon', () => {
+    const { api, local } = setup();
+    local.emit(machinesMsg(wire()));
+    api.fleet!.configure([LOCAL_MACHINE, { ...remote, disabled: true }]);
+    expect(setSent(local).at(-1)).toEqual({ type: 'machines.set', machines: wire(true) });
+  });
+});
+
 describe('retry', () => {
   it('a remote whose last try ended in an error: retry forgets that error and reconnects; the next answer decides', () => {
     const { api, local, server } = setup();

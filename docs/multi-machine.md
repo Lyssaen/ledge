@@ -23,6 +23,8 @@ Dans **Réglages → Affichage → Machines → Ajouter une machine**, renseigne
 
 La liste des machines vit dans `~/.ledge/machines.json`, tenue par le daemon local et partagée par toutes les fenêtres Ledge ; la liste gardée par l'île dans le navigateur est remise au daemon au premier message `machines`, et seulement si la liste du daemon se réduit à `local` ; sinon, la liste du daemon l'emporte. Avec un daemon plus ancien que cette version, l'île garde sa propre liste dans le navigateur.
 
+Une machine distante peut être **désactivée** sans être retirée (bouton « Désactiver » dans Réglages → Machines ; `"disabled": true` dans `machines.json`). Elle reste listée dans les réglages, mais Ledge ne s'y connecte plus : pas de tentative de reconnexion, pas de sessions affichées, absente des choix de lancement et du chat. « Activer » la reconnecte. La machine locale ne peut pas être désactivée.
+
 `AllowTcpForwarding no` peut rester inchangé : le transport utilise une commande SSH distante autorisée, pas `ssh -L`/`-R`. Le daemon n'écoute jamais sur une interface publique. La version npm publiée 0.4.0 ne fournit pas encore `ledge bridge` ni le routage du chat ; installer le build correspondant sur les deux machines avant de tester cette fonctionnalité.
 
 L'overlay ouvre `/ssh/<alias>` sur le même WebSocket loopback que son daemon local. Les vérifications d'origine s'appliquent aussi à cet accès ; l'alias est validé, la commande distante est fixe, les trames sont validées et bornées. Les connexions distantes ne reçoivent jamais les broadcasts locaux. Une fermeture du front termine le processus SSH ; la reconnexion ne renvoie aucune commande en attente.
