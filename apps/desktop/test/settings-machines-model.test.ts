@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import type { MachineConfig, MachineState } from '@ledge/fleet';
-import { ALIAS, checkDraft, configsOf, MAX_MACHINES, newMachineId, sameMachines, withDraft, without } from '../src/settings/machineDrafts';
+import { ALIAS, checkDraft, configsOf, MAX_MACHINES, newMachineId, sameMachines, withDisabled, withDraft, without } from '../src/settings/machineDrafts';
 import { SAVE_TIMEOUT_MS, useMachineEditor, type SaveOutcome } from '../src/settings/useMachineEditor';
 import { fakeMachineFleet, machine, statesOf, type FakeMachineFleet } from './fleet-helpers';
 
@@ -163,5 +163,17 @@ describe('testing an alias (useMachineEditor.probe)', () => {
     act(() => result.current.probe('devbox', 'devbox'));
     await act(async () => f.probes[0]!.fail(new Error('socket closed')));
     expect(result.current.probing?.result).toEqual({ ok: false, error: 'socket closed' });
+  });
+});
+
+describe('withDisabled', () => {
+  const list = [{ id: 'local', label: 'Local' }, { id: 'nas', label: 'NAS', ssh: 'nas' }];
+  it('disables and enables a remote machine, never the local one, and sameMachines tells them apart', () => {
+    const off = withDisabled(list, 'nas', true);
+    expect(off[1]).toEqual({ id: 'nas', label: 'NAS', ssh: 'nas', disabled: true });
+    expect(sameMachines(list, off)).toBe(false);
+    expect(withDisabled(off, 'nas', false)).toEqual(list);
+    expect(sameMachines(withDisabled(off, 'nas', false), list)).toBe(true);
+    expect(withDisabled(list, 'local', true)).toEqual(list);
   });
 });

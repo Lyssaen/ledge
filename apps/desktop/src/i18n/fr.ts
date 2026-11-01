@@ -169,12 +169,13 @@ export const fr = {
     machines: {
       title: 'Vos machines',
       noteLead: 'Ledge rejoint vos serveurs par SSH, depuis WSL. ', noteShared: 'Liste partagée', noteRest: ' : le daemon local la garde, l’encoche et Ledge Desktop affichent les mêmes machines.',
-      status: { online: 'Connectée', connecting: 'Connexion…', offline: 'Hors ligne' } as Record<'online' | 'connecting' | 'offline', string>,
+      status: { online: 'Connectée', connecting: 'Connexion…', offline: 'Hors ligne', disabled: 'Désactivée' } as Record<'online' | 'connecting' | 'offline' | 'disabled', string>,
       local: 'Cette machine', localKind: 'Local · WSL',
       ssh: (alias: string) => `SSH · ${alias}`,
       version: (v: string | undefined) => (v ? `Ledge ${v}` : 'Version inconnue'),
       sessions: (n: number) => `${n} ${plural(n, 'session', 'sessions')}`,
-      reconnect: 'Reconnecter', test: 'Tester', edit: 'Modifier', remove: 'Retirer', cancel: 'Annuler',
+      reconnect: 'Reconnecter', test: 'Tester', edit: 'Modifier', remove: 'Retirer', cancel: 'Annuler', disable: 'Désactiver', enable: 'Activer',
+      disabledHint: 'Ledge ne s’y connecte plus. Ses sessions reviennent quand vous l’activez.',
       add: 'Ajouter une machine',
       count: (n: number, max: number) => `${n} ${plural(n, 'machine', 'machines')} · ${max} au plus`,
       addTitle: 'Ajouter une machine',
@@ -209,6 +210,8 @@ export const fr = {
       added: (label: string) => `${label} ajoutée`,
       edited: (label: string) => `${label} modifiée`,
       removed: (label: string) => `${label} retirée`,
+      disabledDone: (label: string) => `${label} désactivée`,
+      enabledDone: (label: string) => `${label} activée`,
       confirm: { before: 'Retirer ', after: ' ? Ses sessions disparaissent de la liste, dans l’encoche comme ici. Rien n’est arrêté ni supprimé sur le serveur.' }
     },
     mobile: {

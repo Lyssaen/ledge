@@ -21,6 +21,11 @@ describe('machines schema', () => {
     expect(() => MachinesSchema.parse([local, { id: 'bad id', label: 'x', ssh: 'h' }])).toThrow();
     expect(() => MachinesSchema.parse([local, { id: 'd', label: 'x'.repeat(81), ssh: 'h' }])).toThrow();
   });
+  it('keeps a remote machine disabled, never the local one', () => {
+    expect(MachinesSchema.parse([local, { ...dev, disabled: true }])).toEqual([local, { ...dev, disabled: true }]);
+    expect(() => MachinesSchema.parse([{ ...local, disabled: true }, dev])).toThrow();
+    expect(MachinesSchema.parse([local, { ...dev, disabled: false }])[1]!.disabled).toBe(false); // a hand-written false is not an invalid file
+  });
   it('rides in machines.set and machines messages', () => {
     expect(parseClientMessage({ type: 'machines.set', machines: [local, dev] })).toEqual({ type: 'machines.set', machines: [local, dev] });
     expect(parseServerMessage({ type: 'machines', machines: [local] })).toEqual({ type: 'machines', machines: [local] });

@@ -154,12 +154,13 @@ export const en: Messages = {
     machines: {
       title: 'Your machines',
       noteLead: 'Ledge reaches your servers over SSH, from WSL. ', noteShared: 'Shared list', noteRest: ': the local daemon keeps it, the notch and Ledge Desktop show the same machines.',
-      status: { online: 'Connected', connecting: 'Connecting…', offline: 'Offline' },
+      status: { online: 'Connected', connecting: 'Connecting…', offline: 'Offline', disabled: 'Disabled' },
       local: 'This machine', localKind: 'Local · WSL',
       ssh: (alias) => `SSH · ${alias}`,
       version: (v) => (v ? `Ledge ${v}` : 'Unknown version'),
       sessions: (n) => `${n} ${pluralEn(n, 'session', 'sessions')}`,
-      reconnect: 'Reconnect', test: 'Test', edit: 'Edit', remove: 'Remove', cancel: 'Cancel',
+      reconnect: 'Reconnect', test: 'Test', edit: 'Edit', remove: 'Remove', cancel: 'Cancel', disable: 'Disable', enable: 'Enable',
+      disabledHint: 'Ledge no longer connects to it. Its sessions come back when you enable it.',
       add: 'Add a machine',
       count: (n, max) => `${n} ${pluralEn(n, 'machine', 'machines')} · ${max} at most`,
       addTitle: 'Add a machine',
@@ -194,6 +195,8 @@ export const en: Messages = {
       added: (label) => `${label} added`,
       edited: (label) => `${label} edited`,
       removed: (label) => `${label} removed`,
+      disabledDone: (label) => `${label} disabled`,
+      enabledDone: (label) => `${label} enabled`,
       confirm: { before: 'Remove ', after: '? Its sessions leave the list, in the notch as here. Nothing is stopped or deleted on the server.' }
     },
     mobile: {

@@ -25,13 +25,13 @@ export function newMachineId(list: readonly MachineConfig[], random: () => numbe
 }
 
 /** The configured list behind the fleet's machine states (what `machines.set` carries). */
-export const configsOf = (machines: readonly MachineState[]): MachineConfig[] =>
-  machines.map(m => ({ id: m.id, label: m.label, ...(m.ssh ? { ssh: m.ssh } : {}) }));
+export const configsOf = (machines: readonly MachineConfig[]): MachineConfig[] =>
+  machines.map(m => ({ id: m.id, label: m.label, ...(m.ssh ? { ssh: m.ssh } : {}), ...(m.disabled ? { disabled: true } : {}) }));
 
 /** The list with the draft added, or replacing the machine being edited (in place). */
 export function withDraft(list: readonly MachineConfig[], draft: MachineDraft, editingId: string | null, random?: () => number): MachineConfig[] {
   const label = draft.label.trim(); const ssh = draft.ssh.trim();
-  if (editingId) return list.map(m => (m.id === editingId ? { id: m.id, label, ssh } : m));
+  if (editingId) return list.map(m => (m.id === editingId ? { id: m.id, label, ssh, ...(m.disabled ? { disabled: true } : {}) } : m));
   return [...list, { id: newMachineId(list, random), label, ssh }];
 }
 
@@ -40,7 +40,11 @@ export const without = (list: readonly MachineConfig[], id: string): MachineConf
 
 /** Same machines, same order, same names and aliases: the daemon's broadcast has reached the fleet. */
 export const sameMachines = (a: readonly MachineConfig[], b: readonly MachineConfig[]): boolean =>
-  a.length === b.length && a.every((m, i) => m.id === b[i]!.id && m.label === b[i]!.label && (m.ssh ?? null) === (b[i]!.ssh ?? null));
+  a.length === b.length && a.every((m, i) => m.id === b[i]!.id && m.label === b[i]!.label && (m.ssh ?? null) === (b[i]!.ssh ?? null) && !m.disabled === !b[i]!.disabled);
+
+/** The list with one remote machine disabled (kept, never connected to) or enabled again; the local one is never disabled. */
+export const withDisabled = (list: readonly MachineConfig[], id: string, disabled: boolean): MachineConfig[] =>
+  list.map(m => (m.id !== id || m.id === 'local' ? m : { id: m.id, label: m.label, ...(m.ssh ? { ssh: m.ssh } : {}), ...(disabled ? { disabled: true } : {}) }));
 
 export type Shown = 'online' | 'connecting' | 'offline';
 /** How a machine shows (its entry's status, the Machines tab's dot): « En ligne » is `ready`; a machine whose last try ended in an

@@ -18,6 +18,8 @@ export interface Fleet {
   selected(): string;
   select(id: string): void;
   configure(config: MachineConfig[]): void;
+  /** Every configured machine, disabled ones included, as `configure` takes them (`machines()` leaves the disabled out). */
+  configured(): MachineConfig[];
   /** Where the machine list comes from: the local daemon once it has sent one (`machinesFromDaemon`), else localStorage. */
   machinesSource(): 'daemon' | 'local';
   /** Tests an SSH alias over its own connection, without touching the configured machines. */
@@ -145,6 +147,12 @@ const noopSubscribe = () => () => {};
 const emptySnapshot = () => EMPTY;
 export function useMachines(client: DaemonClient): MachineState[] {
   return useSyncExternalStore(client.fleet?.subscribe ?? noopSubscribe, client.fleet?.machines ?? emptySnapshot, emptySnapshot);
+}
+const noConfigs: MachineConfig[] = [];
+const emptyConfigs = () => noConfigs;
+/** Every configured machine, disabled ones included: what Settings › Machines lists and saves. */
+export function useConfiguredMachines(client: DaemonClient): MachineConfig[] {
+  return useSyncExternalStore(client.fleet?.subscribe ?? noopSubscribe, client.fleet?.configured ?? emptyConfigs, emptyConfigs);
 }
 const nullSnapshot = () => null;
 /** The local daemon's projects, null until it sends them. */

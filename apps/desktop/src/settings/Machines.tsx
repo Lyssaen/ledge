@@ -1,10 +1,10 @@
 import { useId, useState, type FormEvent, type JSX, type ReactNode } from 'react';
-import { sshProblem, type MachineState, type ProbeResult } from '@ledge/fleet';
+import { sshProblem, useConfiguredMachines, type MachineConfig, type MachineState, type ProbeResult } from '@ledge/fleet';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import { Card } from './controls';
-import { ALIAS, checkDraft, configsOf, MAX_MACHINES, sameMachines, shownOf, without, withDraft, type MachineDraft } from './machineDrafts';
+import { ALIAS, checkDraft, configsOf, MAX_MACHINES, sameMachines, shownOf, withDisabled, without, withDraft, type MachineDraft } from './machineDrafts';
 import { useMachineEditor, type SaveOutcome } from './useMachineEditor';
 import { useEscapeLayer } from './escape';
 import type { SettingsContext } from './SettingsPage';
@@ -20,17 +20,19 @@ interface Failure { key: string; text: string }
 /** Settings › Machines (settings.tsx, `MachinesSection`; logic of origin/feat/desktop's MachinesPanel). The list is the local
  *  daemon's: every change goes through `machines.set` and shows, with « Setting saved », only once its broadcast brings the
  *  same list back. The local machine comes first and has no action. A test's result shows under the machine (or the form)
- *  it ran from, and nowhere else. */
+ *  it ran from, and nowhere else. A disabled machine is listed from the configured list (the fleet has no state for it): it
+ *  shows « Disabled », and can be enabled, edited or removed. */
 export function Machines({ ctx }: { ctx: SettingsContext }): JSX.Element {
   const { t } = useI18n();
   const c = t.settings.machines;
   const { machines, fleet, saved } = ctx;
-  const editor = useMachineEditor(fleet, machines);
+  const configured = useConfiguredMachines(ctx.client);
+  const list = configsOf(configured);
+  const editor = useMachineEditor(fleet, list);
   const [form, setForm] = useState<FormState | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [failure, setFailure] = useState<Failure | null>(null);
   const ids = useId();
-  const list = configsOf(machines);
   const localUp = machines.find(m => m.id === 'local')?.ready === true;
   const probeBusy = editor.probing !== null && editor.probing.result === null;
   const frozen = editor.saving;
@@ -45,7 +47,7 @@ export function Machines({ ctx }: { ctx: SettingsContext }): JSX.Element {
   const failureWell = (key: string): ReactNode => (failure?.key === key ? <div role="alert" className="set-well bad"><Icon d={ICONS.close.d} size={14} /><span>{failure.text}</span></div> : null);
   const failed = (o: Exclude<SaveOutcome, 'saved'>) => c.errors[o];
 
-  const openForm = (m?: MachineState) => {
+  const openForm = (m?: MachineConfig) => {
     editor.clearProbe(); setConfirming(null); setFailure(null);
     setForm({ editing: m?.id ?? null, draft: { label: m?.label ?? '', ssh: m?.ssh ?? '' }, help: !m });
   };
@@ -60,7 +62,7 @@ export function Machines({ ctx }: { ctx: SettingsContext }): JSX.Element {
   });
   const setDraft = (patch: Partial<MachineDraft>) => setForm(f => (f ? { ...f, draft: { ...f.draft, ...patch } } : f));
 
-  const editing = form?.editing ? machines.find(m => m.id === form.editing) : undefined;
+  const editing = form?.editing ? list.find(m => m.id === form.editing) : undefined;
   const alias = form?.draft.ssh.trim() ?? '';
   const aliasBad = alias !== '' && !ALIAS.test(alias);
   const duplicate = form !== null && list.some(m => m.id !== form.editing && m.ssh === alias);
@@ -82,11 +84,18 @@ export function Machines({ ctx }: { ctx: SettingsContext }): JSX.Element {
     closeForm();
     saved(form.editing ? c.edited(label) : c.added(label));
   };
-  const remove = async (m: MachineState) => {
+  const remove = async (m: MachineConfig) => {
     setFailure(null);
     const outcome = await editor.save(without(list, m.id));
     setConfirming(null);
     if (outcome === 'saved') saved(c.removed(m.label));
+    else setFailure({ key: m.id, text: failed(outcome) });
+  };
+  const toggle = async (m: MachineConfig) => {
+    setFailure(null);
+    const disabling = !m.disabled;
+    const outcome = await editor.save(withDisabled(list, m.id, disabling));
+    if (outcome === 'saved') saved(disabling ? c.disabledDone(m.label) : c.enabledDone(m.label));
     else setFailure({ key: m.id, text: failed(outcome) });
   };
   const testDraft = () => {
@@ -98,20 +107,24 @@ export function Machines({ ctx }: { ctx: SettingsContext }): JSX.Element {
   return (
     <Card title={c.title} hint={<>{c.noteLead}<strong>{c.noteShared}</strong>{c.noteRest}</>}>
       {!localUp && <div role="status" className="set-well"><span>{t.offline}</span></div>}
-      {machines.map(m => {
-        if (form?.editing === m.id) return null;
+      {list.map(config => {
+        if (form?.editing === config.id) return null;
+        const state: MachineState | undefined = machines.find(x => x.id === config.id);
         // A daemon restarting for its update (#48) is coming back: « Connecting… », not « Offline ».
-        const seen = shownOf(m);
-        const shown = seen === 'offline' && ctx.daemonUpdates.updating.has(m.id) ? 'connecting' : seen;
+        const seen = state ? shownOf(state) : 'connecting';
+        const shown = config.disabled ? 'disabled' : seen === 'offline' && ctx.daemonUpdates.updating.has(config.id) ? 'connecting' : seen;
+        const m = { ...config, sessions: state?.sessions ?? [], daemon: state?.daemon, version: state?.version };
         return (
-          <article key={m.id} className="machine-entry" aria-label={m.label}>
+          <article key={m.id} className={`machine-entry${m.disabled ? ' disabled' : ''}`} aria-label={m.label}>
             <span className="machine-glyph" aria-hidden="true"><Icon d={m.ssh ? SERVER_GLYPH : LOCAL_GLYPH} size={16} /></span>
             <div className="machine-main">
               <div className="machine-top">
                 <strong>{m.label}</strong>{m.id === 'local' && <span className="set-tag">{c.local}</span>}<span className="spacer" />
                 <span className={`set-status ${shown}`}><i aria-hidden="true" />{c.status[shown]}</span>
               </div>
-              <span className="set-hint mono">{m.ssh ? c.ssh(m.ssh) : c.localKind} · {c.version(m.daemon?.version ?? m.version)} · {c.sessions(m.sessions.length)}</span>
+              {m.disabled
+                ? <><span className="set-hint mono">{c.ssh(m.ssh!)}</span><span className="set-hint">{c.disabledHint}</span></>
+                : <span className="set-hint mono">{m.ssh ? c.ssh(m.ssh) : c.localKind} · {c.version(m.daemon?.version ?? m.version)} · {c.sessions(m.sessions.length)}</span>}
               {probeWell(m.id)}
               {failureWell(m.id)}
               {m.ssh && m.id !== 'local' && (confirming === m.id
@@ -127,8 +140,10 @@ export function Machines({ ctx }: { ctx: SettingsContext }): JSX.Element {
                 : (
                   <div className="set-actions">
                     {shown === 'offline' && <Button size="sm" variant="outline" onClick={() => fleet.retry(m.id)}><Icon d={ICONS.refresh.d} size={14} />{c.reconnect}</Button>}
+                    {m.disabled && <Button size="sm" variant="outline" disabled={frozen} onClick={() => void toggle(m)}>{c.enable}</Button>}
                     <Button size="sm" variant="ghost" disabled={probeBusy} onClick={() => editor.probe(m.id, m.ssh!)}>{c.test}</Button>
                     <Button size="sm" variant="ghost" disabled={frozen} onClick={() => openForm(m)}>{c.edit}</Button>
+                    {!m.disabled && <Button size="sm" variant="ghost" disabled={frozen} onClick={() => void toggle(m)}>{c.disable}</Button>}
                     <Button size="sm" variant="ghost" disabled={frozen} onClick={() => { setFailure(null); setConfirming(m.id); }}>{c.remove}</Button>
                   </div>
                 ))}

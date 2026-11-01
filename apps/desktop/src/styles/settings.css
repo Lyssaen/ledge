@@ -162,6 +162,8 @@ input[type=color]{width:34px;height:32px;padding:2px;border-radius:var(--radius-
 .set-status.offline{color:var(--warning)}
 .set-status.offline i{background:none;border:1.5px solid currentColor}
 .set-status.connecting i{animation:ledge-pulse 1s ease-in-out infinite}
+.set-status.disabled i{background:none;border:1.5px dashed currentColor}
+.machine-entry.disabled .machine-glyph,.machine-entry.disabled .machine-top strong{opacity:.55}
 .set-well{display:flex;align-items:flex-start;gap:8px;margin-top:6px;padding:9px 11px;border-radius:var(--radius-md);background:var(--well);border:1px solid var(--input);font-size:12px;line-height:18px;flex-wrap:wrap}
 .set-well>span:not(.ledge-spin){flex:1;min-width:0}
 .set-well>svg,.set-well .ledge-spin{margin-top:2px;flex-shrink:0;display:inline-flex}
